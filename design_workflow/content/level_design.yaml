@@ -1,154 +1,179 @@
 # BalloonFlow — Stage 2-4: Content — Level Design Rules
 # Level composition rules and templates
+# 정본 참조: concept.yaml, beat_chart.yaml, gimmick_spec.yaml
 
 domain: Content
 sub_doc: level_design
 
 # ─────────────────────────────────────
-# 1. Level Data Structure (level_meta mapping)
+# 1. Level Data Structure (Level Library Schema)
 # ─────────────────────────────────────
 level_meta_schema:
   level_id: "bf_{level_number:04d}"
   level_number: int
-  hard_tier: "0=Normal, 1=Hard, 2=Boss"
-  is_tutorial: bool
-  optimal_darts: int   # AI 시뮬레이션 산출
+  package: "int (1-5)"
+  position_in_package: "int (1-20)"
+  hard_tier: "0=노말/휴식, 1=하드, 2=슈퍼하드"
+  purpose_type: "튜토리얼 | 노말 | 하드 | 슈퍼하드 | 휴식"
   objective_type: "board_clear"
-  objective_target: "balloon_count (전체 풍선 수)"
-  moves_limit: "dart_count (다트 수 = 무브 제한)"
-  time_limit_sec: "null (타임어택만 60)"
+  objective_target: "보드 위 전체 오브젝트 제거"
+  board_type: "fixed (오브젝트 고정 배치) + spawner (Spawner 기믹 시 유입 있음)"
   num_colors: int
-  num_rail_segments: int
-  overflow_limit: int
-  special_mechanics: "JSON array of gimmick IDs"
+  holder_count: int   # 보관함 수 (= 사용 색상 수)
+  holder_slots: int   # 홀더(대기 영역) 슬롯 수
+  rail_capacity: int  # 레일 위 동시 대기 가능 다트 수
+  magazine_per_holder: int   # 보관함당 탄창 수
+  total_magazine: int   # 전체 탄창 합계
+  num_gimmicks: int   # 사용 기믹 종류 수
+  gimmick_flags:
+    Hidden: bool
+    Spawner_transparent: bool
+    Spawner_opaque: bool
+    BigObject: bool
+    Chain: bool
+  target_clear_rate: float   # 목표 클리어율 (0.0~1.0)
+  target_attempts: float     # 목표 평균 시도 횟수
+  emotion_curve: "string — 해당 레벨의 감정 곡선 태그"
   designer_note: string
+  fail_condition: >
+    홀더 초과 — 홀더(5칸) 대기 보관함이 5개를 초과하면 실패.
+    보관함이 레일(원형 루프)에서 한 바퀴 돌고 탄창이 남으면 홀더로 복귀 → 초과 시 실패.
 
 # ─────────────────────────────────────
 # 2. Level Composition Rules
 # ─────────────────────────────────────
 composition_rules:
-  balloon_count:
-    formula: "floor(8 + level_number * 0.35 + sin(level_number/5) * 3)"
+  object_count:
+    formula: "floor(8 + level_number * 0.64 + sin(level_number/5) * 3)"
     min: 8
-    max: 80
+    max: 72
+    note: "100레벨 기준. beat_chart.yaml의 패키지별 objects 범위 참조."
 
   color_distribution:
     rule: "각 색상 최소 2개 이상. 나머지 균등 랜덤."
     formula: >
       per_color_min = 2
-      remaining = balloon_count - (num_colors * per_color_min)
+      remaining = object_count - (num_colors * per_color_min)
       remaining은 균등 랜덤 분배 (±1 허용)
 
-  special_balloon_placement:
-    ratio_formula: "special_ratio = min(0.3, (level_number - 15) * 0.003)"
-    placement_rule: "레일 중간~후반부에 배치 (앞 30% 구간에는 배치 금지)"
-    constraint: "연속 3개 이상 특수 풍선 금지"
+  holder_setup:
+    description: "보관함 수 = 사용 색상 수. 각 보관함의 색상은 오브젝트 색상과 매칭."
+    holder_count: "num_colors"
+    magazine_distribution: >
+      total_magazine = ceil(optimal_darts * buffer_mult)
+      각 보관함의 탄창 수 = round(total_magazine * 해당 색 오브젝트 비율)
+      최소 보관함당 탄창 1개 보장.
 
-  rail_layout:
-    segments_formula: "segments = min(4, 1 + floor(level_number / 50))"
-    shapes_available:
-      chapter_1_2: [straight, s_curve]
-      chapter_3_4: [straight, s_curve, zigzag, loop]
-      chapter_5_plus: [straight, s_curve, zigzag, loop, spiral, branching]
+  board_layout:
+    type: "fixed (기본) + spawner (Spawner 기믹 레벨)"
+    description: "오브젝트는 보드에 고정 배치. Spawner 기믹 시 새 오브젝트 유입 가능."
+    placement: "레벨별 패턴 — 격자, 피라미드, 원형, 불규칙 등"
+    constraint: "오브젝트가 겹겹이 쌓여있는 형태 (concept.yaml)"
 
-  dart_queue:
-    initial_visible: 5
-    color_distribution: "레일 위 풍선 색상 비율에 비례 + 10% 랜덤 변동"
-    guaranteed_solvable: true
-    description: "AI 시뮬레이터로 최소 1개 풀이 경로 보장"
+  gimmick_placement:
+    ratio_reference: "beat_chart.yaml → gimmick_frequency_guidelines → per_gimmick_ratio"
+    constraint: "신규 기믹 튜토리얼 레벨에서는 해당 기믹만 단독 사용"
 
 # ─────────────────────────────────────
-# 3. Level Purpose Assignment
+# 3. Level Purpose Assignment (패키지 포지션 기반)
 # ─────────────────────────────────────
 purpose_assignment:
   rule: >
-    level_in_chapter = (level_number - 1) % 20 + 1
-    if level_in_chapter <= 2: learning (첫 2레벨 — 챕터 시작)
-    elif level_in_chapter == 20: boss (챕터 마지막)
-    elif level_in_chapter % 5 == 0: challenge (매 5번째)
-    elif level_in_chapter in [8, 14]: monetization (과금 포인트)
-    else: rest
+    pos = (level_number - 1) % 20 + 1
+    if pos in [4, 9, 14]: 하드
+    elif pos == 19 and package >= 2: 슈퍼하드
+    elif pos == 19 and package == 1: 하드   # PKG1은 슈퍼하드 없이 일반 하드
+    elif pos in [5, 10, 15, 20]: 휴식
+    elif 기믹 첫 등장 레벨: 튜토리얼
+    else: 노말
 
   distribution_target:
-    learning: "10% (20레벨 중 2개)"
-    rest: "55% (20레벨 중 11개)"
-    challenge: "20% (20레벨 중 4개 — 5, 10, 15 + boss)"
-    monetization: "10% (20레벨 중 2개)"
-    boss: "5% (20레벨 중 1개)"
+    튜토리얼: "가변 (PKG1: 6개, PKG2-4: 1-2개, PKG5: 0개)"
+    노말: "약 40% (20레벨 중 ~8개)"
+    하드: "15% (20레벨 중 pos 4,9,14 = 3개)"
+    슈퍼하드: "5% (20레벨 중 pos 19 = 1개)"
+    휴식: "20% (20레벨 중 pos 5,10,15,20 = 4개)"
+
+  hard_positions_detail:
+    pos_4: "하드 — 패키지 초반 도전"
+    pos_9: "하드 — 패키지 중반 도전"
+    pos_14: "하드 — 패키지 후반 도전"
+    pos_19: "슈퍼하드 — 패키지 클라이맥스"
+    pos_5_10_15_20: "휴식 — 하드 직후 쉬어가기"
 
 # ─────────────────────────────────────
-# 4. Tutorial Levels (1~5) Spec
+# 4. Tutorial Levels (1~5) — 보관함 기반
 # ─────────────────────────────────────
 tutorial_levels:
   level_1:
     balloons: 6
     colors: 2
-    darts: 12
+    holders: 2
+    magazine_each: 3
     gimmicks: []
-    guide: "full — 첫 탭 유도, 다트 발사 설명"
-    objective: "같은 색 풍선에 다트 맞추기 체험"
+    guide: "full — 보관함 탭 유도, 다트 배치→풍선 타격 체험"
+    objective: "보관함 탭으로 다트 발사 체험"
 
   level_2:
     balloons: 8
-    colors: 3
-    darts: 14
+    colors: 2
+    holders: 2
+    magazine_each: 4
     gimmicks: []
-    guide: "full — 연쇄 팝 체험 (인접 같은 색 2개 배치)"
-    objective: "연쇄 팝 발생시키기"
+    guide: "full — 2색 보관함 순서 선택 체험"
+    objective: "보관함 선택 순서의 중요성 체험"
 
   level_3:
     balloons: 10
     colors: 3
-    darts: 16
+    holders: 3
+    magazine_each: 4
     gimmicks: []
-    guide: "semi — 다트 큐 전환 가이드"
-    objective: "다트 큐 관리 체험"
+    guide: "semi — 3색 매칭 가이드 (올바른 보관함 하이라이트)"
+    objective: "3색 보관함 선택하여 색상별 풍선 제거 체험"
 
   level_4:
-    balloons: 12
-    colors: 3
-    darts: 10
-    gimmicks: []
-    guide: "semi — 일부러 어렵게 설정"
-    objective: "첫 실패 경험 (의도적) + 재도전 유도"
-
-  level_5:
     balloons: 10
     colors: 3
-    darts: 16
+    holders: 3
+    magazine_each: 3
+    gimmicks: []
+    guide: "semi — 탄창 부족 상황 (순서 최적화 필요)"
+    objective: "전략적 순서 선택이 필요한 첫 도전"
+
+  level_5:
+    balloons: 12
+    colors: 3
+    holders: 3
+    magazine_each: 5
     gimmicks: []
     guide: "light — 스타 시스템 안내"
     objective: "3스타 도전 + 보상 수령"
 
 # ─────────────────────────────────────
-# 5. Gimmick Introduction Tutorial Hints
+# 5. Gimmick Tutorial Hints (5종)
 # ─────────────────────────────────────
 gimmick_tutorial_hints:
   description: >
-    각 신규 기믹이 처음 등장하는 레벨에서 팝업 가이드를 표시한다.
-    첫 해당 기믹 풍선을 하이라이트하고 메커닉 설명 + 대응 방법을 안내.
-    TutorialManager.ShowHighlight() + 말풍선 텍스트 사용.
+    각 신규 기믹이 처음 등장하는 레벨에서 팝업 가이드를 표시.
+    기믹을 하이라이트하고 메커닉 설명 + 대응 방법 안내.
   hints:
-    - { level: 15, gimmick: "double_balloon", guide_type: "popup + highlight", text: "이중 풍선! 2번 명중해야 터져요.", tutorial_level: true }
-    - { level: 25, gimmick: "frozen_balloon", guide_type: "popup + highlight", text: "얼음 풍선! 옆 풍선을 먼저 터뜨려 해동하세요.", tutorial_level: true }
-    - { level: 35, gimmick: "bomb_balloon", guide_type: "popup + highlight", text: "폭탄 풍선! 아무 색 다트로 터뜨리면 주변이 폭발!", tutorial_level: true }
-    - { level: 40, gimmick: "lock_balloon", guide_type: "popup", text: "자물쇠 풍선! 키를 모아 해제하세요." }
-    - { level: 50, gimmick: "rainbow_balloon", guide_type: "popup + highlight", text: "무지개 풍선! 아무 색 다트로 같은 색 전체 제거!" }
-    - { level: 70, gimmick: "speed_rail", guide_type: "popup", text: "빠른 레일! 풍선이 더 빨리 움직여요." }
-    - { level: 90, gimmick: "branching_rail", guide_type: "popup", text: "분기 레일! 풍선이 두 방향으로 갈라져요." }
-  implementation_note: >
-    gimmick_intro 레벨은 해당 기믹 풍선을 쉬운 배치(learning purpose)로 구성.
-    buffer_multiplier = 1.8 (학습 레벨 수준 여유). 기믹 비율 낮게 (10~15%).
+    - { level: 11, gimmick: "hidden", guide_type: "popup + highlight", text: "숨겨진 보관함! 색상이 가려져 있어요. 터치 가능해지면 공개됩니다." }
+    - { level: 21, gimmick: "spawner_transparent", guide_type: "popup + highlight", text: "Spawner 등장! 오브젝트를 제거하면 새로 생성해요. 다음 색상을 확인하세요." }
+    - { level: 31, gimmick: "spawner_opaque", guide_type: "popup + highlight", text: "불투명 Spawner! 다음에 뭐가 나올지 모릅니다. 신중하게!" }
+    - { level: 41, gimmick: "big_object", guide_type: "popup + highlight", text: "대형 오브젝트! 여러 발의 다트가 필요해요. 라이프를 확인하세요." }
+    - { level: 61, gimmick: "chain", guide_type: "popup + highlight", text: "체인 보관함! 연결된 2개가 순차로 발사됩니다. A 전부 → B 전부!" }
 
 # ─────────────────────────────────────
-# 6. Boss Level Template
+# 6. 슈퍼하드 Level Template (패키지별 pos 19)
 # ─────────────────────────────────────
-boss_level:
-  frequency: "매 20레벨 (챕터 종료)"
+superhard_level:
+  frequency: "PKG2+ pos 19 (Lv.39, 59, 79, 99). PKG1 pos 19는 일반 하드."
   structure:
-    phase_1: "일반 풍선 웨이브 (전체의 40%)"
-    phase_2: "특수 풍선 혼합 웨이브 (전체의 40%)"
-    phase_3: "보스 풍선 (거대 풍선 — HP 5, 전체의 20%)"
-  dart_budget: "optimal * 1.1 (빡빡하게)"
+    description: "다량 오브젝트 + 최대 기믹 조합. 해당 패키지까지 도입된 기믹 3-5종 활용."
+    gimmick_types: { min: 3, max: 5 }
+  total_magazine_buffer: 1.1   # 빡빡하게
   time_limit: null
-  rewards: "코인 3x + 챕터 완료 보상 + 도감 풍선"
+  target_clear_rate: "50~60%"
+  target_attempts: "2.0~3.0"
+  rewards: "패키지 클라이맥스 보상"

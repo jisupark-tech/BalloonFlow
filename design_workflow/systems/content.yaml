@@ -1,5 +1,6 @@
 # BalloonFlow — Stage 2-2: Content System
 # Domain: Content | Tier: 1
+# 정본 참조: concept.yaml, beat_chart.yaml, gimmick_spec.yaml
 
 domain: Content
 tier: 1
@@ -8,83 +9,143 @@ tier: 1
 # Required Parameters (11/11)
 # ─────────────────────────────────────
 parameters:
-  total_level_count: 200
-  chapter_structure: "10 챕터 x 20 레벨 = 200 레벨 (출시 시)"
+  total_level_count: 100
+  package_structure: "5 패키지 x 20 레벨 = 100 레벨 (출시 시)"
   level_duration_avg: [30, 90]   # 초. 평균 목표 60초
-  new_mechanic_intro_cycle: 15   # 15레벨마다 신규 메커닉/기믹 도입
-  difficulty_spike_cycle: 5      # 매 5레벨마다 하드 레벨
+  new_mechanic_intro_cycle: "패키지별 도입 — beat_chart.yaml 참조"
+  difficulty_spike_cycle: "pos 4,9,14,19 = 하드/슈퍼하드"
   level_purpose_type:
-    - learning       # 신규 메커닉 학습 (10%)
-    - challenge      # 도전 레벨 (20%)
-    - monetization   # 과금 유도 (10%)
-    - rest           # 휴식/쉬운 레벨 (60%)
+    - 튜토리얼     # 신규 요소 학습
+    - 노말         # 일반 난이도
+    - 하드         # pos 4,9,14 — 도전 레벨
+    - 슈퍼하드     # pos 19 — 패키지 클라이맥스
+    - 휴식         # pos 5,10,15,20 — 쉬운 레벨
   object_count_curve:
-    description: "레벨별 풍선 수 증가 곡선"
-    formula: "balloon_count = floor(8 + level_number * 0.35 + sin(level_number/5) * 3)"
-    range: [8, 80]
+    description: "레벨별 오브젝트 수 증가 곡선 (100레벨 기준)"
+    formula: "object_count = floor(8 + level_number * 0.64 + sin(level_number/5) * 3)"
+    range: [8, 72]
     curve_type: "linear_with_oscillation"
     samples:
       level_1: 8
-      level_10: 12
-      level_50: 28
-      level_100: 45
-      level_200: 78
+      level_10: 17
+      level_20: 23
+      level_40: 37
+      level_60: 49
+      level_80: 62
+      level_100: 72
   color_intro_schedule:
-    - { level_range: [1, 5], colors: 3, note: "튜토리얼 — Red, Blue, Green" }
-    - { level_range: [6, 15], colors: 4, note: "Yellow 추가" }
-    - { level_range: [16, 30], colors: 5, note: "Pink 추가" }
-    - { level_range: [31, 60], colors: 6, note: "Orange 추가" }
-    - { level_range: [61, 120], colors: 7, note: "Purple 추가" }
-    - { level_range: [121, 200], colors: 8, note: "Sky 추가 (최대)" }
+    - { level_range: [1, 2], colors: 2, note: "튜토리얼 — Red, Blue" }
+    - { level_range: [3, 5], colors: 3, note: "Green 추가 (PKG1 pos3)" }
+    - { level_range: [6, 7], colors: 4, note: "Yellow 추가 (PKG1 pos6)" }
+    - { level_range: [8, 20], colors: 5, note: "Pink 추가 (PKG1 pos8)" }
+    - { level_range: [21, 25], colors: 5, note: "PKG2 시작, 5색 유지" }
+    - { level_range: [26, 40], colors: 6, note: "Orange 추가 (PKG2 pos6)" }
+    - { level_range: [41, 45], colors: 6, note: "PKG3 시작, 6색 유지" }
+    - { level_range: [46, 60], colors: 7, note: "Purple 추가 (PKG3 pos6)" }
+    - { level_range: [61, 65], colors: 7, note: "PKG4 시작, 7색 유지" }
+    - { level_range: [66, 100], colors: 8, note: "Sky 추가 (PKG4 pos6) — 최대" }
   tutorial_level_count: 5
   gimmick_intro_schedule:
-    - { level: 1, gimmick: "normal_balloon", description: "기본 풍선만" }
-    - { level: 15, gimmick: "double_balloon", description: "이중 풍선 — 2회 명중 필요" }
-    - { level: 25, gimmick: "frozen_balloon", description: "얼음 풍선 — 해동 필요" }
-    - { level: 35, gimmick: "bomb_balloon", description: "폭탄 풍선 — 범위 팝" }
-    - { level: 40, gimmick: "lock_balloon", description: "자물쇠 풍선 — 키 필요" }
-    - { level: 50, gimmick: "rainbow_balloon", description: "무지개 풍선 — 색 전체 제거" }
-    - { level: 70, gimmick: "speed_rail", description: "빠른 레일 — 풍선 이동 속도 1.5x" }
-    - { level: 90, gimmick: "branching_rail", description: "분기 레일 — 2방향 분기" }
-    - { level: 120, gimmick: "reverse_rail", description: "역방향 레일 구간" }
-    - { level: 150, gimmick: "portal", description: "포탈 — 풍선이 다른 레일로 이동" }
-    - { level: 180, gimmick: "darkness", description: "어둠 — 일부 풍선 색상 가려짐" }
+    - { level: 1, gimmick: "normal_object", description: "기본 오브젝트만. 보관함→다트→풍선 코어 루프 학습." }
+    - { level: 11, gimmick: "hidden", description: "Hidden — 보관함 색상 숨김. 터치 가능 시 공개." }
+    - { level: 21, gimmick: "spawner_transparent", description: "Spawner 투명 — 보드 위 생성기, 다음 색상 보임." }
+    - { level: 31, gimmick: "spawner_opaque", description: "Spawner 불투명 — 보드 위 생성기, 다음 색상 안 보임." }
+    - { level: 41, gimmick: "big_object", description: "Big Object — 1x1보다 큰 오브젝트, 라이프 시스템." }
+    - { level: 61, gimmick: "chain", description: "Chain — 2개 보관함 연결, 쌍으로 동시 활성화." }
+  gimmick_intro_note: >
+    5종 기믹. 상세 정의는 gimmick_spec.yaml 참조.
+    Beat Chart 디렉션은 beat_chart.yaml 참조.
   level_composition_params:
-    balloon_count: "8~80 (레벨별)"
-    rail_segment_count: "1~4 (레벨별)"
-    overflow_limit: "5~15 (레벨별)"
-    dart_count: "balloon_count * 1.2 + buffer (레벨별 설정)"
-    empty_rail_start: "0~3칸 빈 시작 슬롯"
-    special_balloon_ratio: "0%~30% (레벨별)"
+    object_count: "8~72 (레벨별)"
+    holder_count: "2~8 (색상 수에 비례)"
+    magazine_per_holder: "레벨별 설정 (탄창 수)"
+    board_layout: "고정 보드 — 오브젝트 배치 패턴"
+    gimmick_ratio: "기믹별 0%~60% (beat_chart.yaml 참조)"
 
 # ─────────────────────────────────────
 # Optional Parameters
 # ─────────────────────────────────────
   special_level_types:
-    - boss:
-        description: "챕터 마지막 레벨. 거대 풍선 보스 + 제한 시간"
-        frequency: "매 20레벨 (챕터 종료)"
-    - time_attack:
-        description: "시간 제한 60초. 최대한 많은 풍선 터뜨리기"
-        frequency: "매 10레벨 (챕터 중간)"
-    - dart_limit:
-        description: "극소 다트로 보드 클리어. 전략 극대화"
-        frequency: "매 15레벨"
+    - 슈퍼하드:
+        description: "패키지 pos 19. 최대 기믹 조합 + 제한 조건."
+        frequency: "매 패키지 1회 (pos 19)"
+    - 하드:
+        description: "패키지 pos 4,9,14. 기믹 2-3종 조합."
+        frequency: "매 패키지 3회"
 
 # ─────────────────────────────────────
-# Chapter Themes
+# Season Themes — concept.yaml _LOCKED
 # ─────────────────────────────────────
-chapters:
-  - { chapter: 1, name: "Sky Party", levels: [1, 20], theme: "하늘 파티", rail_type: straight }
-  - { chapter: 2, name: "Ocean Breeze", levels: [21, 40], theme: "바다 바람", rail_type: s_curve }
-  - { chapter: 3, name: "Forest Trail", levels: [41, 60], theme: "숲길", rail_type: zigzag }
-  - { chapter: 4, name: "Carnival Night", levels: [61, 80], theme: "카니발 밤", rail_type: loop }
-  - { chapter: 5, name: "Candy Land", levels: [81, 100], theme: "캔디 나라", rail_type: spiral }
-  - { chapter: 6, name: "Space Voyage", levels: [101, 120], theme: "우주 여행", rail_type: branching }
-  - { chapter: 7, name: "Garden Bloom", levels: [121, 140], theme: "정원", rail_type: mixed }
-  - { chapter: 8, name: "Ice Kingdom", levels: [141, 160], theme: "얼음 왕국", rail_type: mixed }
-  - { chapter: 9, name: "Volcano Peak", levels: [161, 180], theme: "화산", rail_type: mixed }
-  - { chapter: 10, name: "Rainbow Finale", levels: [181, 200], theme: "무지개 피날레", rail_type: mixed }
+# NOTE: 패키지별 테마가 아닌, 시즌별 오브젝트 비주얼 교체 방식.
+# 배경은 항상 깔끔한 파스텔 톤 단색 (concept.yaml art_direction _LOCKED)
+season_themes:
+  description: "풍선의 비주얼만 교체하면 시즌이 갱신. 배경은 고정 단색."
+  examples:
+    - "봄: 벚꽃 풍선"
+    - "여름: 수박 풍선"
+    - "할로윈: 호박 풍선"
+    - "크리스마스: 오너먼트 풍선"
+
+# ─────────────────────────────────────
+# Tutorial Levels (1~5) — 보관함 기반
+# ─────────────────────────────────────
+tutorial_levels:
+  level_1:
+    balloons: 6
+    colors: 2
+    holders: 2
+    magazine_each: 3
+    gimmicks: []
+    guide: "full — 보관함 탭 유도, 다트 배치→풍선 타격 체험"
+    objective: "보관함 탭 → 다트 → 풍선 터뜨리기 기본 체험"
+
+  level_2:
+    balloons: 8
+    colors: 2
+    holders: 2
+    magazine_each: 4
+    gimmicks: []
+    guide: "full — 2색 보관함 순서 선택 체험"
+    objective: "보관함 선택 순서의 중요성 체험"
+
+  level_3:
+    balloons: 10
+    colors: 3
+    holders: 3
+    magazine_each: 4
+    gimmicks: []
+    guide: "semi — 3색 매칭 체험 (올바른 보관함 하이라이트)"
+    objective: "3색 보관함 선택하여 색상별 풍선 제거 체험"
+
+  level_4:
+    balloons: 10
+    colors: 3
+    holders: 3
+    magazine_each: 3
+    gimmicks: []
+    guide: "semi — 살짝 부족한 탄창으로 전략 필요"
+    objective: "순서 최적화가 필요한 첫 도전 (여유 적음)"
+
+  level_5:
+    balloons: 12
+    colors: 3
+    holders: 3
+    magazine_each: 5
+    gimmicks: []
+    guide: "light — 스타 시스템 안내"
+    objective: "3스타 도전 + 보상 수령 체험"
+
+# ─────────────────────────────────────
+# Daily Challenge — concept.yaml _LOCKED
+# ─────────────────────────────────────
+daily_challenge:
+  name: "오늘의 풍선"
+  description: "매일 특수 조건의 레벨이 하나 열림"
+  examples:
+    - "빨간 풍선만 100개 터뜨리기"
+    - "30초 안에 전부 클리어"
+    - "보관함 3개로 보드 비우기"
+  reward: "클리어 시 시즌 패스 경험치 지급"
 
 # ─────────────────────────────────────
 # Systems List
@@ -92,6 +153,13 @@ chapters:
 systems:
   - LevelManager         # 레벨 로드, 진행, 완료 처리
   - LevelDataProvider    # 레벨 데이터(JSON) 로드 및 파싱
-  - ChapterManager       # 챕터 진행, 해금 관리
-  - GimmickManager       # 특수 기믹 활성화/비활성화
+  - PackageManager       # 패키지 진행, 해금 관리 (5 PKG)
+  - GimmickManager       # 5종 기믹 활성화/비활성화
   - TutorialController   # 튜토리얼 레벨 진행 제어
+
+# ─────────────────────────────────────
+# References
+# ─────────────────────────────────────
+references:
+  - beat_chart.yaml      # Beat Chart 디렉션 (패키지별 CR, 기믹 빈도, 감정 곡선)
+  - gimmick_spec.yaml    # 5종 기믹 상세 정의 및 상호작용 매트릭스
