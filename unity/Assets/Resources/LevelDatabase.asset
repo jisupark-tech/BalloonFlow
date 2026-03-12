@@ -1,0 +1,5127 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7357c3b2e8b793542aa295ffbfb7faf2, type: 3}
+  m_Name: LevelDatabase
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.LevelDatabase
+  levels:
+  - levelId: 1
+    packageId: 1
+    positionInPackage: 1
+    numColors: 2
+    balloonCount: 9
+    difficultyPurpose: tutorial
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 0
+      gridPosition: {x: -0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 1
+      color: 1
+      gridPosition: {x: 0, y: 1.1}
+      gimmickType: 
+    - balloonId: 2
+      color: 1
+      gridPosition: {x: 0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 3
+      color: 0
+      gridPosition: {x: -0.9, y: 2}
+      gimmickType: 
+    - balloonId: 4
+      color: 0
+      gridPosition: {x: 0, y: 2}
+      gimmickType: 
+    - balloonId: 5
+      color: 0
+      gridPosition: {x: 0.9, y: 2}
+      gimmickType: 
+    - balloonId: 6
+      color: 0
+      gridPosition: {x: -0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 7
+      color: 1
+      gridPosition: {x: 0, y: 2.9}
+      gimmickType: 
+    - balloonId: 8
+      color: 1
+      gridPosition: {x: 0.9, y: 2.9}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -2.4, y: 0.5, z: -0.39999998}
+      - {x: -0.816, y: 0.5, z: -0.39999998}
+      - {x: 0.8160001, y: 0.5, z: -0.39999998}
+      - {x: 2.4, y: 0.5, z: -0.39999998}
+      - {x: 2.4, y: 0.5, z: 1.1840001}
+      - {x: 2.4, y: 0.5, z: 2.8160002}
+      - {x: 2.4, y: 0.5, z: 4.4}
+      - {x: 0.816, y: 0.5, z: 4.4}
+      - {x: -0.8160001, y: 0.5, z: 4.4}
+      - {x: -2.4, y: 0.5, z: 4.4}
+      - {x: -2.4, y: 0.5, z: 2.816}
+      - {x: -2.4, y: 0.5, z: 1.184}
+      holderPositions:
+      - {x: -1.6, y: 0.5, z: -0.39999998}
+      - {x: -0.8, y: 0.5, z: -0.39999998}
+      - {x: 0, y: 0.5, z: -0.39999998}
+      - {x: 0.80000013, y: 0.5, z: -0.39999998}
+      - {x: 1.6, y: 0.5, z: -0.39999998}
+    star1Threshold: 900
+    star2Threshold: 1350
+    star3Threshold: 1980
+  - levelId: 2
+    packageId: 1
+    positionInPackage: 2
+    numColors: 2
+    balloonCount: 9
+    difficultyPurpose: tutorial
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 0
+      gridPosition: {x: -0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 1
+      color: 1
+      gridPosition: {x: 0, y: 1.1}
+      gimmickType: 
+    - balloonId: 2
+      color: 0
+      gridPosition: {x: 0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 3
+      color: 0
+      gridPosition: {x: -0.9, y: 2}
+      gimmickType: 
+    - balloonId: 4
+      color: 1
+      gridPosition: {x: 0, y: 2}
+      gimmickType: 
+    - balloonId: 5
+      color: 0
+      gridPosition: {x: 0.9, y: 2}
+      gimmickType: 
+    - balloonId: 6
+      color: 1
+      gridPosition: {x: -0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 7
+      color: 0
+      gridPosition: {x: 0, y: 2.9}
+      gimmickType: 
+    - balloonId: 8
+      color: 1
+      gridPosition: {x: 0.9, y: 2.9}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -2.4, y: 0.5, z: -0.39999998}
+      - {x: -0.816, y: 0.5, z: -0.39999998}
+      - {x: 0.8160001, y: 0.5, z: -0.39999998}
+      - {x: 2.4, y: 0.5, z: -0.39999998}
+      - {x: 2.4, y: 0.5, z: 1.1840001}
+      - {x: 2.4, y: 0.5, z: 2.8160002}
+      - {x: 2.4, y: 0.5, z: 4.4}
+      - {x: 0.816, y: 0.5, z: 4.4}
+      - {x: -0.8160001, y: 0.5, z: 4.4}
+      - {x: -2.4, y: 0.5, z: 4.4}
+      - {x: -2.4, y: 0.5, z: 2.816}
+      - {x: -2.4, y: 0.5, z: 1.184}
+      holderPositions:
+      - {x: -1.6, y: 0.5, z: -0.39999998}
+      - {x: -0.8, y: 0.5, z: -0.39999998}
+      - {x: 0, y: 0.5, z: -0.39999998}
+      - {x: 0.80000013, y: 0.5, z: -0.39999998}
+      - {x: 1.6, y: 0.5, z: -0.39999998}
+    star1Threshold: 900
+    star2Threshold: 1350
+    star3Threshold: 1980
+  - levelId: 3
+    packageId: 1
+    positionInPackage: 3
+    numColors: 3
+    balloonCount: 12
+    difficultyPurpose: intro
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 0
+      magazineCount: 5
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 2
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 1
+      gridPosition: {x: -1.3499999, y: 1.1}
+      gimmickType: 
+    - balloonId: 1
+      color: 1
+      gridPosition: {x: -0.44999993, y: 1.1}
+      gimmickType: 
+    - balloonId: 2
+      color: 0
+      gridPosition: {x: 0.45000005, y: 1.1}
+      gimmickType: 
+    - balloonId: 3
+      color: 2
+      gridPosition: {x: 1.35, y: 1.1}
+      gimmickType: 
+    - balloonId: 4
+      color: 0
+      gridPosition: {x: -1.3499999, y: 2}
+      gimmickType: 
+    - balloonId: 5
+      color: 1
+      gridPosition: {x: -0.44999993, y: 2}
+      gimmickType: 
+    - balloonId: 6
+      color: 2
+      gridPosition: {x: 0.45000005, y: 2}
+      gimmickType: 
+    - balloonId: 7
+      color: 0
+      gridPosition: {x: 1.35, y: 2}
+      gimmickType: 
+    - balloonId: 8
+      color: 2
+      gridPosition: {x: -1.3499999, y: 2.9}
+      gimmickType: 
+    - balloonId: 9
+      color: 1
+      gridPosition: {x: -0.44999993, y: 2.9}
+      gimmickType: 
+    - balloonId: 10
+      color: 0
+      gridPosition: {x: 0.45000005, y: 2.9}
+      gimmickType: 
+    - balloonId: 11
+      color: 2
+      gridPosition: {x: 1.35, y: 2.9}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -2.85, y: 0.5, z: -0.39999998}
+      - {x: -0.9689999, y: 0.5, z: -0.39999998}
+      - {x: 0.96900004, y: 0.5, z: -0.39999998}
+      - {x: 2.85, y: 0.5, z: -0.39999998}
+      - {x: 2.85, y: 0.5, z: 1.1840001}
+      - {x: 2.85, y: 0.5, z: 2.8160002}
+      - {x: 2.85, y: 0.5, z: 4.4}
+      - {x: 0.9689999, y: 0.5, z: 4.4}
+      - {x: -0.96900004, y: 0.5, z: 4.4}
+      - {x: -2.85, y: 0.5, z: 4.4}
+      - {x: -2.85, y: 0.5, z: 2.816}
+      - {x: -2.85, y: 0.5, z: 1.184}
+      holderPositions:
+      - {x: -1.8999999, y: 0.5, z: -0.39999998}
+      - {x: -0.9499999, y: 0.5, z: -0.39999998}
+      - {x: 0, y: 0.5, z: -0.39999998}
+      - {x: 0.9500001, y: 0.5, z: -0.39999998}
+      - {x: 1.8999999, y: 0.5, z: -0.39999998}
+    star1Threshold: 1200
+    star2Threshold: 1800
+    star3Threshold: 2640
+  - levelId: 4
+    packageId: 1
+    positionInPackage: 4
+    numColors: 3
+    balloonCount: 20
+    difficultyPurpose: hard
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 0
+      gridPosition: {x: -1.8, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 1
+      color: 1
+      gridPosition: {x: -0.9, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 2
+      color: 2
+      gridPosition: {x: 0, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 3
+      color: 2
+      gridPosition: {x: 0.9, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 4
+      color: 1
+      gridPosition: {x: 1.8, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 5
+      color: 1
+      gridPosition: {x: -1.8, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 6
+      color: 2
+      gridPosition: {x: -0.9, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 7
+      color: 2
+      gridPosition: {x: 0, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 8
+      color: 1
+      gridPosition: {x: 0.9, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 9
+      color: 1
+      gridPosition: {x: 1.8, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 10
+      color: 2
+      gridPosition: {x: -1.8, y: 2.45}
+      gimmickType: 
+    - balloonId: 11
+      color: 1
+      gridPosition: {x: -0.9, y: 2.45}
+      gimmickType: 
+    - balloonId: 12
+      color: 0
+      gridPosition: {x: 0, y: 2.45}
+      gimmickType: 
+    - balloonId: 13
+      color: 2
+      gridPosition: {x: 0.9, y: 2.45}
+      gimmickType: 
+    - balloonId: 14
+      color: 0
+      gridPosition: {x: 1.8, y: 2.45}
+      gimmickType: 
+    - balloonId: 15
+      color: 0
+      gridPosition: {x: -1.8, y: 3.35}
+      gimmickType: 
+    - balloonId: 16
+      color: 1
+      gridPosition: {x: -0.9, y: 3.35}
+      gimmickType: 
+    - balloonId: 17
+      color: 0
+      gridPosition: {x: 0, y: 3.35}
+      gimmickType: 
+    - balloonId: 18
+      color: 0
+      gridPosition: {x: 0.9, y: 3.35}
+      gimmickType: 
+    - balloonId: 19
+      color: 0
+      gridPosition: {x: 1.8, y: 3.35}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.3, y: 0.5, z: -0.8499999}
+      - {x: -1.1219999, y: 0.5, z: -0.8499999}
+      - {x: 1.1220001, y: 0.5, z: -0.8499999}
+      - {x: 3.3, y: 0.5, z: -0.8499999}
+      - {x: 3.3, y: 0.5, z: 1.0310001}
+      - {x: 3.3, y: 0.5, z: 2.969}
+      - {x: 3.3, y: 0.5, z: 4.85}
+      - {x: 1.1219999, y: 0.5, z: 4.85}
+      - {x: -1.1220001, y: 0.5, z: 4.85}
+      - {x: -3.3, y: 0.5, z: 4.85}
+      - {x: -3.3, y: 0.5, z: 2.9689999}
+      - {x: -3.3, y: 0.5, z: 1.0309999}
+      holderPositions:
+      - {x: -2.2, y: 0.5, z: -0.8499999}
+      - {x: -1.0999999, y: 0.5, z: -0.8499999}
+      - {x: 0, y: 0.5, z: -0.8499999}
+      - {x: 1.1000001, y: 0.5, z: -0.8499999}
+      - {x: 2.1999998, y: 0.5, z: -0.8499999}
+    star1Threshold: 2000
+    star2Threshold: 3000
+    star3Threshold: 4400
+  - levelId: 5
+    packageId: 1
+    positionInPackage: 5
+    numColors: 2
+    balloonCount: 9
+    difficultyPurpose: rest
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 1
+      gridPosition: {x: -0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 1
+      color: 1
+      gridPosition: {x: 0, y: 1.1}
+      gimmickType: 
+    - balloonId: 2
+      color: 0
+      gridPosition: {x: 0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 3
+      color: 1
+      gridPosition: {x: -0.9, y: 2}
+      gimmickType: 
+    - balloonId: 4
+      color: 0
+      gridPosition: {x: 0, y: 2}
+      gimmickType: 
+    - balloonId: 5
+      color: 1
+      gridPosition: {x: 0.9, y: 2}
+      gimmickType: 
+    - balloonId: 6
+      color: 0
+      gridPosition: {x: -0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 7
+      color: 0
+      gridPosition: {x: 0, y: 2.9}
+      gimmickType: 
+    - balloonId: 8
+      color: 0
+      gridPosition: {x: 0.9, y: 2.9}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -2.4, y: 0.5, z: -0.39999998}
+      - {x: -0.816, y: 0.5, z: -0.39999998}
+      - {x: 0.8160001, y: 0.5, z: -0.39999998}
+      - {x: 2.4, y: 0.5, z: -0.39999998}
+      - {x: 2.4, y: 0.5, z: 1.1840001}
+      - {x: 2.4, y: 0.5, z: 2.8160002}
+      - {x: 2.4, y: 0.5, z: 4.4}
+      - {x: 0.816, y: 0.5, z: 4.4}
+      - {x: -0.8160001, y: 0.5, z: 4.4}
+      - {x: -2.4, y: 0.5, z: 4.4}
+      - {x: -2.4, y: 0.5, z: 2.816}
+      - {x: -2.4, y: 0.5, z: 1.184}
+      holderPositions:
+      - {x: -1.6, y: 0.5, z: -0.39999998}
+      - {x: -0.8, y: 0.5, z: -0.39999998}
+      - {x: 0, y: 0.5, z: -0.39999998}
+      - {x: 0.80000013, y: 0.5, z: -0.39999998}
+      - {x: 1.6, y: 0.5, z: -0.39999998}
+    star1Threshold: 900
+    star2Threshold: 1350
+    star3Threshold: 1980
+  - levelId: 6
+    packageId: 1
+    positionInPackage: 6
+    numColors: 4
+    balloonCount: 16
+    difficultyPurpose: intro
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 3
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 1
+      gridPosition: {x: -1.3499999, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 1
+      color: 2
+      gridPosition: {x: -0.44999993, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 2
+      color: 1
+      gridPosition: {x: 0.45000005, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 3
+      color: 0
+      gridPosition: {x: 1.35, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 4
+      color: 0
+      gridPosition: {x: -1.3499999, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 5
+      color: 3
+      gridPosition: {x: -0.44999993, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 6
+      color: 3
+      gridPosition: {x: 0.45000005, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 7
+      color: 3
+      gridPosition: {x: 1.35, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 8
+      color: 2
+      gridPosition: {x: -1.3499999, y: 2.45}
+      gimmickType: 
+    - balloonId: 9
+      color: 0
+      gridPosition: {x: -0.44999993, y: 2.45}
+      gimmickType: 
+    - balloonId: 10
+      color: 0
+      gridPosition: {x: 0.45000005, y: 2.45}
+      gimmickType: 
+    - balloonId: 11
+      color: 1
+      gridPosition: {x: 1.35, y: 2.45}
+      gimmickType: 
+    - balloonId: 12
+      color: 3
+      gridPosition: {x: -1.3499999, y: 3.35}
+      gimmickType: 
+    - balloonId: 13
+      color: 2
+      gridPosition: {x: -0.44999993, y: 3.35}
+      gimmickType: 
+    - balloonId: 14
+      color: 1
+      gridPosition: {x: 0.45000005, y: 3.35}
+      gimmickType: 
+    - balloonId: 15
+      color: 2
+      gridPosition: {x: 1.35, y: 3.35}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -2.85, y: 0.5, z: -0.8499999}
+      - {x: -0.9689999, y: 0.5, z: -0.8499999}
+      - {x: 0.96900004, y: 0.5, z: -0.8499999}
+      - {x: 2.85, y: 0.5, z: -0.8499999}
+      - {x: 2.85, y: 0.5, z: 1.0310001}
+      - {x: 2.85, y: 0.5, z: 2.969}
+      - {x: 2.85, y: 0.5, z: 4.85}
+      - {x: 0.9689999, y: 0.5, z: 4.85}
+      - {x: -0.96900004, y: 0.5, z: 4.85}
+      - {x: -2.85, y: 0.5, z: 4.85}
+      - {x: -2.85, y: 0.5, z: 2.9689999}
+      - {x: -2.85, y: 0.5, z: 1.0309999}
+      holderPositions:
+      - {x: -1.8999999, y: 0.5, z: -0.8499999}
+      - {x: -0.9499999, y: 0.5, z: -0.8499999}
+      - {x: 0, y: 0.5, z: -0.8499999}
+      - {x: 0.9500001, y: 0.5, z: -0.8499999}
+      - {x: 1.8999999, y: 0.5, z: -0.8499999}
+    star1Threshold: 1600
+    star2Threshold: 2400
+    star3Threshold: 3520
+  - levelId: 7
+    packageId: 1
+    positionInPackage: 7
+    numColors: 4
+    balloonCount: 20
+    difficultyPurpose: normal
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 0
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 2
+      gridPosition: {x: -1.8, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 1
+      color: 0
+      gridPosition: {x: -0.9, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 2
+      color: 0
+      gridPosition: {x: 0, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 3
+      color: 3
+      gridPosition: {x: 0.9, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 4
+      color: 3
+      gridPosition: {x: 1.8, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 5
+      color: 1
+      gridPosition: {x: -1.8, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 6
+      color: 0
+      gridPosition: {x: -0.9, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 7
+      color: 3
+      gridPosition: {x: 0, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 8
+      color: 2
+      gridPosition: {x: 0.9, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 9
+      color: 2
+      gridPosition: {x: 1.8, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 10
+      color: 1
+      gridPosition: {x: -1.8, y: 2.45}
+      gimmickType: 
+    - balloonId: 11
+      color: 1
+      gridPosition: {x: -0.9, y: 2.45}
+      gimmickType: 
+    - balloonId: 12
+      color: 3
+      gridPosition: {x: 0, y: 2.45}
+      gimmickType: 
+    - balloonId: 13
+      color: 0
+      gridPosition: {x: 0.9, y: 2.45}
+      gimmickType: 
+    - balloonId: 14
+      color: 0
+      gridPosition: {x: 1.8, y: 2.45}
+      gimmickType: 
+    - balloonId: 15
+      color: 1
+      gridPosition: {x: -1.8, y: 3.35}
+      gimmickType: 
+    - balloonId: 16
+      color: 3
+      gridPosition: {x: -0.9, y: 3.35}
+      gimmickType: 
+    - balloonId: 17
+      color: 1
+      gridPosition: {x: 0, y: 3.35}
+      gimmickType: 
+    - balloonId: 18
+      color: 2
+      gridPosition: {x: 0.9, y: 3.35}
+      gimmickType: 
+    - balloonId: 19
+      color: 2
+      gridPosition: {x: 1.8, y: 3.35}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.3, y: 0.5, z: -0.8499999}
+      - {x: -1.1219999, y: 0.5, z: -0.8499999}
+      - {x: 1.1220001, y: 0.5, z: -0.8499999}
+      - {x: 3.3, y: 0.5, z: -0.8499999}
+      - {x: 3.3, y: 0.5, z: 1.0310001}
+      - {x: 3.3, y: 0.5, z: 2.969}
+      - {x: 3.3, y: 0.5, z: 4.85}
+      - {x: 1.1219999, y: 0.5, z: 4.85}
+      - {x: -1.1220001, y: 0.5, z: 4.85}
+      - {x: -3.3, y: 0.5, z: 4.85}
+      - {x: -3.3, y: 0.5, z: 2.9689999}
+      - {x: -3.3, y: 0.5, z: 1.0309999}
+      holderPositions:
+      - {x: -2.2, y: 0.5, z: -0.8499999}
+      - {x: -1.0999999, y: 0.5, z: -0.8499999}
+      - {x: 0, y: 0.5, z: -0.8499999}
+      - {x: 1.1000001, y: 0.5, z: -0.8499999}
+      - {x: 2.1999998, y: 0.5, z: -0.8499999}
+    star1Threshold: 2000
+    star2Threshold: 3000
+    star3Threshold: 4400
+  - levelId: 8
+    packageId: 1
+    positionInPackage: 8
+    numColors: 5
+    balloonCount: 16
+    difficultyPurpose: intro
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 4
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 3
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 4
+      gridPosition: {x: -1.3499999, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 1
+      color: 2
+      gridPosition: {x: -0.44999993, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 2
+      color: 1
+      gridPosition: {x: 0.45000005, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 3
+      color: 2
+      gridPosition: {x: 1.35, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 4
+      color: 1
+      gridPosition: {x: -1.3499999, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 5
+      color: 4
+      gridPosition: {x: -0.44999993, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 6
+      color: 0
+      gridPosition: {x: 0.45000005, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 7
+      color: 3
+      gridPosition: {x: 1.35, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 8
+      color: 0
+      gridPosition: {x: -1.3499999, y: 2.45}
+      gimmickType: 
+    - balloonId: 9
+      color: 0
+      gridPosition: {x: -0.44999993, y: 2.45}
+      gimmickType: 
+    - balloonId: 10
+      color: 3
+      gridPosition: {x: 0.45000005, y: 2.45}
+      gimmickType: 
+    - balloonId: 11
+      color: 1
+      gridPosition: {x: 1.35, y: 2.45}
+      gimmickType: 
+    - balloonId: 12
+      color: 3
+      gridPosition: {x: -1.3499999, y: 3.35}
+      gimmickType: 
+    - balloonId: 13
+      color: 0
+      gridPosition: {x: -0.44999993, y: 3.35}
+      gimmickType: 
+    - balloonId: 14
+      color: 2
+      gridPosition: {x: 0.45000005, y: 3.35}
+      gimmickType: 
+    - balloonId: 15
+      color: 4
+      gridPosition: {x: 1.35, y: 3.35}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -2.85, y: 0.5, z: -0.8499999}
+      - {x: -0.9689999, y: 0.5, z: -0.8499999}
+      - {x: 0.96900004, y: 0.5, z: -0.8499999}
+      - {x: 2.85, y: 0.5, z: -0.8499999}
+      - {x: 2.85, y: 0.5, z: 1.0310001}
+      - {x: 2.85, y: 0.5, z: 2.969}
+      - {x: 2.85, y: 0.5, z: 4.85}
+      - {x: 0.9689999, y: 0.5, z: 4.85}
+      - {x: -0.96900004, y: 0.5, z: 4.85}
+      - {x: -2.85, y: 0.5, z: 4.85}
+      - {x: -2.85, y: 0.5, z: 2.9689999}
+      - {x: -2.85, y: 0.5, z: 1.0309999}
+      holderPositions:
+      - {x: -1.8999999, y: 0.5, z: -0.8499999}
+      - {x: -0.9499999, y: 0.5, z: -0.8499999}
+      - {x: 0, y: 0.5, z: -0.8499999}
+      - {x: 0.9500001, y: 0.5, z: -0.8499999}
+      - {x: 1.8999999, y: 0.5, z: -0.8499999}
+    star1Threshold: 1600
+    star2Threshold: 2400
+    star3Threshold: 3520
+  - levelId: 9
+    packageId: 1
+    positionInPackage: 9
+    numColors: 5
+    balloonCount: 25
+    difficultyPurpose: hard
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 4
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 3
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 0
+      magazineCount: 7
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 1
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 3
+      gridPosition: {x: -1.8, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 1
+      color: 4
+      gridPosition: {x: -0.9, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 2
+      color: 4
+      gridPosition: {x: 0, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 3
+      color: 1
+      gridPosition: {x: 0.9, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 4
+      color: 0
+      gridPosition: {x: 1.8, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 5
+      color: 1
+      gridPosition: {x: -1.8, y: 1.1}
+      gimmickType: 
+    - balloonId: 6
+      color: 1
+      gridPosition: {x: -0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 7
+      color: 0
+      gridPosition: {x: 0, y: 1.1}
+      gimmickType: 
+    - balloonId: 8
+      color: 3
+      gridPosition: {x: 0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 9
+      color: 4
+      gridPosition: {x: 1.8, y: 1.1}
+      gimmickType: 
+    - balloonId: 10
+      color: 0
+      gridPosition: {x: -1.8, y: 2}
+      gimmickType: 
+    - balloonId: 11
+      color: 2
+      gridPosition: {x: -0.9, y: 2}
+      gimmickType: 
+    - balloonId: 12
+      color: 4
+      gridPosition: {x: 0, y: 2}
+      gimmickType: 
+    - balloonId: 13
+      color: 2
+      gridPosition: {x: 0.9, y: 2}
+      gimmickType: 
+    - balloonId: 14
+      color: 2
+      gridPosition: {x: 1.8, y: 2}
+      gimmickType: 
+    - balloonId: 15
+      color: 2
+      gridPosition: {x: -1.8, y: 2.9}
+      gimmickType: 
+    - balloonId: 16
+      color: 4
+      gridPosition: {x: -0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 17
+      color: 3
+      gridPosition: {x: 0, y: 2.9}
+      gimmickType: 
+    - balloonId: 18
+      color: 0
+      gridPosition: {x: 0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 19
+      color: 1
+      gridPosition: {x: 1.8, y: 2.9}
+      gimmickType: 
+    - balloonId: 20
+      color: 1
+      gridPosition: {x: -1.8, y: 3.8}
+      gimmickType: 
+    - balloonId: 21
+      color: 2
+      gridPosition: {x: -0.9, y: 3.8}
+      gimmickType: 
+    - balloonId: 22
+      color: 3
+      gridPosition: {x: 0, y: 3.8}
+      gimmickType: 
+    - balloonId: 23
+      color: 3
+      gridPosition: {x: 0.9, y: 3.8}
+      gimmickType: 
+    - balloonId: 24
+      color: 0
+      gridPosition: {x: 1.8, y: 3.8}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.3, y: 0.5, z: -1.3}
+      - {x: -1.1219999, y: 0.5, z: -1.3}
+      - {x: 1.1220001, y: 0.5, z: -1.3}
+      - {x: 3.3, y: 0.5, z: -1.3}
+      - {x: 3.3, y: 0.5, z: 0.8780002}
+      - {x: 3.3, y: 0.5, z: 3.1220002}
+      - {x: 3.3, y: 0.5, z: 5.3}
+      - {x: 1.1219999, y: 0.5, z: 5.3}
+      - {x: -1.1220001, y: 0.5, z: 5.3}
+      - {x: -3.3, y: 0.5, z: 5.3}
+      - {x: -3.3, y: 0.5, z: 3.122}
+      - {x: -3.3, y: 0.5, z: 0.87799996}
+      holderPositions:
+      - {x: -2.2, y: 0.5, z: -1.3}
+      - {x: -1.0999999, y: 0.5, z: -1.3}
+      - {x: 0, y: 0.5, z: -1.3}
+      - {x: 1.1000001, y: 0.5, z: -1.3}
+      - {x: 2.1999998, y: 0.5, z: -1.3}
+    star1Threshold: 2500
+    star2Threshold: 3750
+    star3Threshold: 5500
+  - levelId: 10
+    packageId: 1
+    positionInPackage: 10
+    numColors: 3
+    balloonCount: 9
+    difficultyPurpose: rest
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 1
+      gridPosition: {x: -0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 1
+      color: 0
+      gridPosition: {x: 0, y: 1.1}
+      gimmickType: 
+    - balloonId: 2
+      color: 2
+      gridPosition: {x: 0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 3
+      color: 2
+      gridPosition: {x: -0.9, y: 2}
+      gimmickType: 
+    - balloonId: 4
+      color: 1
+      gridPosition: {x: 0, y: 2}
+      gimmickType: 
+    - balloonId: 5
+      color: 0
+      gridPosition: {x: 0.9, y: 2}
+      gimmickType: 
+    - balloonId: 6
+      color: 0
+      gridPosition: {x: -0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 7
+      color: 2
+      gridPosition: {x: 0, y: 2.9}
+      gimmickType: 
+    - balloonId: 8
+      color: 1
+      gridPosition: {x: 0.9, y: 2.9}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -2.4, y: 0.5, z: -0.39999998}
+      - {x: -0.816, y: 0.5, z: -0.39999998}
+      - {x: 0.8160001, y: 0.5, z: -0.39999998}
+      - {x: 2.4, y: 0.5, z: -0.39999998}
+      - {x: 2.4, y: 0.5, z: 1.1840001}
+      - {x: 2.4, y: 0.5, z: 2.8160002}
+      - {x: 2.4, y: 0.5, z: 4.4}
+      - {x: 0.816, y: 0.5, z: 4.4}
+      - {x: -0.8160001, y: 0.5, z: 4.4}
+      - {x: -2.4, y: 0.5, z: 4.4}
+      - {x: -2.4, y: 0.5, z: 2.816}
+      - {x: -2.4, y: 0.5, z: 1.184}
+      holderPositions:
+      - {x: -1.6, y: 0.5, z: -0.39999998}
+      - {x: -0.8, y: 0.5, z: -0.39999998}
+      - {x: 0, y: 0.5, z: -0.39999998}
+      - {x: 0.80000013, y: 0.5, z: -0.39999998}
+      - {x: 1.6, y: 0.5, z: -0.39999998}
+    star1Threshold: 900
+    star2Threshold: 1350
+    star3Threshold: 1980
+  - levelId: 11
+    packageId: 1
+    positionInPackage: 11
+    numColors: 4
+    balloonCount: 16
+    difficultyPurpose: tutorial
+    gimmickTypes:
+    - hidden
+    holders:
+    - holderId: 0
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 1
+      magazineCount: 5
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 1
+      gridPosition: {x: -1.3499999, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 1
+      color: 0
+      gridPosition: {x: -0.44999993, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 2
+      color: 0
+      gridPosition: {x: 0.45000005, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 3
+      color: 2
+      gridPosition: {x: 1.35, y: 0.6500001}
+      gimmickType: hidden
+    - balloonId: 4
+      color: 3
+      gridPosition: {x: -1.3499999, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 5
+      color: 1
+      gridPosition: {x: -0.44999993, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 6
+      color: 1
+      gridPosition: {x: 0.45000005, y: 1.5500001}
+      gimmickType: hidden
+    - balloonId: 7
+      color: 2
+      gridPosition: {x: 1.35, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 8
+      color: 3
+      gridPosition: {x: -1.3499999, y: 2.45}
+      gimmickType: hidden
+    - balloonId: 9
+      color: 3
+      gridPosition: {x: -0.44999993, y: 2.45}
+      gimmickType: 
+    - balloonId: 10
+      color: 1
+      gridPosition: {x: 0.45000005, y: 2.45}
+      gimmickType: 
+    - balloonId: 11
+      color: 0
+      gridPosition: {x: 1.35, y: 2.45}
+      gimmickType: 
+    - balloonId: 12
+      color: 2
+      gridPosition: {x: -1.3499999, y: 3.35}
+      gimmickType: hidden
+    - balloonId: 13
+      color: 0
+      gridPosition: {x: -0.44999993, y: 3.35}
+      gimmickType: hidden
+    - balloonId: 14
+      color: 3
+      gridPosition: {x: 0.45000005, y: 3.35}
+      gimmickType: 
+    - balloonId: 15
+      color: 2
+      gridPosition: {x: 1.35, y: 3.35}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -2.85, y: 0.5, z: -0.8499999}
+      - {x: -0.9689999, y: 0.5, z: -0.8499999}
+      - {x: 0.96900004, y: 0.5, z: -0.8499999}
+      - {x: 2.85, y: 0.5, z: -0.8499999}
+      - {x: 2.85, y: 0.5, z: 1.0310001}
+      - {x: 2.85, y: 0.5, z: 2.969}
+      - {x: 2.85, y: 0.5, z: 4.85}
+      - {x: 0.9689999, y: 0.5, z: 4.85}
+      - {x: -0.96900004, y: 0.5, z: 4.85}
+      - {x: -2.85, y: 0.5, z: 4.85}
+      - {x: -2.85, y: 0.5, z: 2.9689999}
+      - {x: -2.85, y: 0.5, z: 1.0309999}
+      holderPositions:
+      - {x: -1.8999999, y: 0.5, z: -0.8499999}
+      - {x: -0.9499999, y: 0.5, z: -0.8499999}
+      - {x: 0, y: 0.5, z: -0.8499999}
+      - {x: 0.9500001, y: 0.5, z: -0.8499999}
+      - {x: 1.8999999, y: 0.5, z: -0.8499999}
+    star1Threshold: 1600
+    star2Threshold: 2400
+    star3Threshold: 3520
+  - levelId: 12
+    packageId: 1
+    positionInPackage: 12
+    numColors: 4
+    balloonCount: 20
+    difficultyPurpose: normal
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 2
+      magazineCount: 7
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 3
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 1
+      gridPosition: {x: -1.8, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 1
+      color: 1
+      gridPosition: {x: -0.9, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 2
+      color: 0
+      gridPosition: {x: 0, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 3
+      color: 3
+      gridPosition: {x: 0.9, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 4
+      color: 1
+      gridPosition: {x: 1.8, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 5
+      color: 3
+      gridPosition: {x: -1.8, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 6
+      color: 0
+      gridPosition: {x: -0.9, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 7
+      color: 0
+      gridPosition: {x: 0, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 8
+      color: 0
+      gridPosition: {x: 0.9, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 9
+      color: 3
+      gridPosition: {x: 1.8, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 10
+      color: 3
+      gridPosition: {x: -1.8, y: 2.45}
+      gimmickType: 
+    - balloonId: 11
+      color: 2
+      gridPosition: {x: -0.9, y: 2.45}
+      gimmickType: 
+    - balloonId: 12
+      color: 3
+      gridPosition: {x: 0, y: 2.45}
+      gimmickType: 
+    - balloonId: 13
+      color: 2
+      gridPosition: {x: 0.9, y: 2.45}
+      gimmickType: 
+    - balloonId: 14
+      color: 2
+      gridPosition: {x: 1.8, y: 2.45}
+      gimmickType: 
+    - balloonId: 15
+      color: 1
+      gridPosition: {x: -1.8, y: 3.35}
+      gimmickType: 
+    - balloonId: 16
+      color: 1
+      gridPosition: {x: -0.9, y: 3.35}
+      gimmickType: 
+    - balloonId: 17
+      color: 2
+      gridPosition: {x: 0, y: 3.35}
+      gimmickType: 
+    - balloonId: 18
+      color: 0
+      gridPosition: {x: 0.9, y: 3.35}
+      gimmickType: 
+    - balloonId: 19
+      color: 2
+      gridPosition: {x: 1.8, y: 3.35}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.3, y: 0.5, z: -0.8499999}
+      - {x: -1.1219999, y: 0.5, z: -0.8499999}
+      - {x: 1.1220001, y: 0.5, z: -0.8499999}
+      - {x: 3.3, y: 0.5, z: -0.8499999}
+      - {x: 3.3, y: 0.5, z: 1.0310001}
+      - {x: 3.3, y: 0.5, z: 2.969}
+      - {x: 3.3, y: 0.5, z: 4.85}
+      - {x: 1.1219999, y: 0.5, z: 4.85}
+      - {x: -1.1220001, y: 0.5, z: 4.85}
+      - {x: -3.3, y: 0.5, z: 4.85}
+      - {x: -3.3, y: 0.5, z: 2.9689999}
+      - {x: -3.3, y: 0.5, z: 1.0309999}
+      holderPositions:
+      - {x: -2.2, y: 0.5, z: -0.8499999}
+      - {x: -1.0999999, y: 0.5, z: -0.8499999}
+      - {x: 0, y: 0.5, z: -0.8499999}
+      - {x: 1.1000001, y: 0.5, z: -0.8499999}
+      - {x: 2.1999998, y: 0.5, z: -0.8499999}
+    star1Threshold: 2000
+    star2Threshold: 3000
+    star3Threshold: 4400
+  - levelId: 13
+    packageId: 1
+    positionInPackage: 13
+    numColors: 4
+    balloonCount: 20
+    difficultyPurpose: normal
+    gimmickTypes:
+    - hidden
+    holders:
+    - holderId: 0
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 0
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 3
+      gridPosition: {x: -1.8, y: 0.6500001}
+      gimmickType: hidden
+    - balloonId: 1
+      color: 2
+      gridPosition: {x: -0.9, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 2
+      color: 1
+      gridPosition: {x: 0, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 3
+      color: 0
+      gridPosition: {x: 0.9, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 4
+      color: 0
+      gridPosition: {x: 1.8, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 5
+      color: 3
+      gridPosition: {x: -1.8, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 6
+      color: 2
+      gridPosition: {x: -0.9, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 7
+      color: 1
+      gridPosition: {x: 0, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 8
+      color: 2
+      gridPosition: {x: 0.9, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 9
+      color: 0
+      gridPosition: {x: 1.8, y: 1.5500001}
+      gimmickType: hidden
+    - balloonId: 10
+      color: 3
+      gridPosition: {x: -1.8, y: 2.45}
+      gimmickType: hidden
+    - balloonId: 11
+      color: 2
+      gridPosition: {x: -0.9, y: 2.45}
+      gimmickType: 
+    - balloonId: 12
+      color: 3
+      gridPosition: {x: 0, y: 2.45}
+      gimmickType: hidden
+    - balloonId: 13
+      color: 1
+      gridPosition: {x: 0.9, y: 2.45}
+      gimmickType: 
+    - balloonId: 14
+      color: 2
+      gridPosition: {x: 1.8, y: 2.45}
+      gimmickType: 
+    - balloonId: 15
+      color: 1
+      gridPosition: {x: -1.8, y: 3.35}
+      gimmickType: 
+    - balloonId: 16
+      color: 0
+      gridPosition: {x: -0.9, y: 3.35}
+      gimmickType: 
+    - balloonId: 17
+      color: 1
+      gridPosition: {x: 0, y: 3.35}
+      gimmickType: hidden
+    - balloonId: 18
+      color: 0
+      gridPosition: {x: 0.9, y: 3.35}
+      gimmickType: 
+    - balloonId: 19
+      color: 3
+      gridPosition: {x: 1.8, y: 3.35}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.3, y: 0.5, z: -0.8499999}
+      - {x: -1.1219999, y: 0.5, z: -0.8499999}
+      - {x: 1.1220001, y: 0.5, z: -0.8499999}
+      - {x: 3.3, y: 0.5, z: -0.8499999}
+      - {x: 3.3, y: 0.5, z: 1.0310001}
+      - {x: 3.3, y: 0.5, z: 2.969}
+      - {x: 3.3, y: 0.5, z: 4.85}
+      - {x: 1.1219999, y: 0.5, z: 4.85}
+      - {x: -1.1220001, y: 0.5, z: 4.85}
+      - {x: -3.3, y: 0.5, z: 4.85}
+      - {x: -3.3, y: 0.5, z: 2.9689999}
+      - {x: -3.3, y: 0.5, z: 1.0309999}
+      holderPositions:
+      - {x: -2.2, y: 0.5, z: -0.8499999}
+      - {x: -1.0999999, y: 0.5, z: -0.8499999}
+      - {x: 0, y: 0.5, z: -0.8499999}
+      - {x: 1.1000001, y: 0.5, z: -0.8499999}
+      - {x: 2.1999998, y: 0.5, z: -0.8499999}
+    star1Threshold: 2000
+    star2Threshold: 3000
+    star3Threshold: 4400
+  - levelId: 14
+    packageId: 1
+    positionInPackage: 14
+    numColors: 5
+    balloonCount: 25
+    difficultyPurpose: normal
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 2
+      magazineCount: 7
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 4
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 4
+      gridPosition: {x: -1.8, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 1
+      color: 2
+      gridPosition: {x: -0.9, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 2
+      color: 0
+      gridPosition: {x: 0, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 3
+      color: 4
+      gridPosition: {x: 0.9, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 4
+      color: 1
+      gridPosition: {x: 1.8, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 5
+      color: 4
+      gridPosition: {x: -1.8, y: 1.1}
+      gimmickType: 
+    - balloonId: 6
+      color: 3
+      gridPosition: {x: -0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 7
+      color: 0
+      gridPosition: {x: 0, y: 1.1}
+      gimmickType: 
+    - balloonId: 8
+      color: 4
+      gridPosition: {x: 0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 9
+      color: 0
+      gridPosition: {x: 1.8, y: 1.1}
+      gimmickType: 
+    - balloonId: 10
+      color: 1
+      gridPosition: {x: -1.8, y: 2}
+      gimmickType: 
+    - balloonId: 11
+      color: 3
+      gridPosition: {x: -0.9, y: 2}
+      gimmickType: 
+    - balloonId: 12
+      color: 2
+      gridPosition: {x: 0, y: 2}
+      gimmickType: 
+    - balloonId: 13
+      color: 2
+      gridPosition: {x: 0.9, y: 2}
+      gimmickType: 
+    - balloonId: 14
+      color: 4
+      gridPosition: {x: 1.8, y: 2}
+      gimmickType: 
+    - balloonId: 15
+      color: 2
+      gridPosition: {x: -1.8, y: 2.9}
+      gimmickType: 
+    - balloonId: 16
+      color: 3
+      gridPosition: {x: -0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 17
+      color: 2
+      gridPosition: {x: 0, y: 2.9}
+      gimmickType: 
+    - balloonId: 18
+      color: 1
+      gridPosition: {x: 0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 19
+      color: 3
+      gridPosition: {x: 1.8, y: 2.9}
+      gimmickType: 
+    - balloonId: 20
+      color: 1
+      gridPosition: {x: -1.8, y: 3.8}
+      gimmickType: 
+    - balloonId: 21
+      color: 3
+      gridPosition: {x: -0.9, y: 3.8}
+      gimmickType: 
+    - balloonId: 22
+      color: 0
+      gridPosition: {x: 0, y: 3.8}
+      gimmickType: 
+    - balloonId: 23
+      color: 1
+      gridPosition: {x: 0.9, y: 3.8}
+      gimmickType: 
+    - balloonId: 24
+      color: 0
+      gridPosition: {x: 1.8, y: 3.8}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.3, y: 0.5, z: -1.3}
+      - {x: -1.1219999, y: 0.5, z: -1.3}
+      - {x: 1.1220001, y: 0.5, z: -1.3}
+      - {x: 3.3, y: 0.5, z: -1.3}
+      - {x: 3.3, y: 0.5, z: 0.8780002}
+      - {x: 3.3, y: 0.5, z: 3.1220002}
+      - {x: 3.3, y: 0.5, z: 5.3}
+      - {x: 1.1219999, y: 0.5, z: 5.3}
+      - {x: -1.1220001, y: 0.5, z: 5.3}
+      - {x: -3.3, y: 0.5, z: 5.3}
+      - {x: -3.3, y: 0.5, z: 3.122}
+      - {x: -3.3, y: 0.5, z: 0.87799996}
+      holderPositions:
+      - {x: -2.2, y: 0.5, z: -1.3}
+      - {x: -1.0999999, y: 0.5, z: -1.3}
+      - {x: 0, y: 0.5, z: -1.3}
+      - {x: 1.1000001, y: 0.5, z: -1.3}
+      - {x: 2.1999998, y: 0.5, z: -1.3}
+    star1Threshold: 2500
+    star2Threshold: 3750
+    star3Threshold: 5500
+  - levelId: 15
+    packageId: 1
+    positionInPackage: 15
+    numColors: 3
+    balloonCount: 12
+    difficultyPurpose: rest
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 2
+      gridPosition: {x: -1.3499999, y: 1.1}
+      gimmickType: 
+    - balloonId: 1
+      color: 1
+      gridPosition: {x: -0.44999993, y: 1.1}
+      gimmickType: 
+    - balloonId: 2
+      color: 2
+      gridPosition: {x: 0.45000005, y: 1.1}
+      gimmickType: 
+    - balloonId: 3
+      color: 1
+      gridPosition: {x: 1.35, y: 1.1}
+      gimmickType: 
+    - balloonId: 4
+      color: 0
+      gridPosition: {x: -1.3499999, y: 2}
+      gimmickType: 
+    - balloonId: 5
+      color: 1
+      gridPosition: {x: -0.44999993, y: 2}
+      gimmickType: 
+    - balloonId: 6
+      color: 0
+      gridPosition: {x: 0.45000005, y: 2}
+      gimmickType: 
+    - balloonId: 7
+      color: 2
+      gridPosition: {x: 1.35, y: 2}
+      gimmickType: 
+    - balloonId: 8
+      color: 0
+      gridPosition: {x: -1.3499999, y: 2.9}
+      gimmickType: 
+    - balloonId: 9
+      color: 1
+      gridPosition: {x: -0.44999993, y: 2.9}
+      gimmickType: 
+    - balloonId: 10
+      color: 2
+      gridPosition: {x: 0.45000005, y: 2.9}
+      gimmickType: 
+    - balloonId: 11
+      color: 0
+      gridPosition: {x: 1.35, y: 2.9}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -2.85, y: 0.5, z: -0.39999998}
+      - {x: -0.9689999, y: 0.5, z: -0.39999998}
+      - {x: 0.96900004, y: 0.5, z: -0.39999998}
+      - {x: 2.85, y: 0.5, z: -0.39999998}
+      - {x: 2.85, y: 0.5, z: 1.1840001}
+      - {x: 2.85, y: 0.5, z: 2.8160002}
+      - {x: 2.85, y: 0.5, z: 4.4}
+      - {x: 0.9689999, y: 0.5, z: 4.4}
+      - {x: -0.96900004, y: 0.5, z: 4.4}
+      - {x: -2.85, y: 0.5, z: 4.4}
+      - {x: -2.85, y: 0.5, z: 2.816}
+      - {x: -2.85, y: 0.5, z: 1.184}
+      holderPositions:
+      - {x: -1.8999999, y: 0.5, z: -0.39999998}
+      - {x: -0.9499999, y: 0.5, z: -0.39999998}
+      - {x: 0, y: 0.5, z: -0.39999998}
+      - {x: 0.9500001, y: 0.5, z: -0.39999998}
+      - {x: 1.8999999, y: 0.5, z: -0.39999998}
+    star1Threshold: 1200
+    star2Threshold: 1800
+    star3Threshold: 2640
+  - levelId: 16
+    packageId: 1
+    positionInPackage: 16
+    numColors: 5
+    balloonCount: 25
+    difficultyPurpose: normal
+    gimmickTypes:
+    - hidden
+    holders:
+    - holderId: 0
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 4
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 3
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 0
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 2
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 1
+      gridPosition: {x: -1.8, y: 0.20000005}
+      gimmickType: hidden
+    - balloonId: 1
+      color: 0
+      gridPosition: {x: -0.9, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 2
+      color: 3
+      gridPosition: {x: 0, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 3
+      color: 4
+      gridPosition: {x: 0.9, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 4
+      color: 3
+      gridPosition: {x: 1.8, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 5
+      color: 2
+      gridPosition: {x: -1.8, y: 1.1}
+      gimmickType: 
+    - balloonId: 6
+      color: 4
+      gridPosition: {x: -0.9, y: 1.1}
+      gimmickType: hidden
+    - balloonId: 7
+      color: 4
+      gridPosition: {x: 0, y: 1.1}
+      gimmickType: 
+    - balloonId: 8
+      color: 3
+      gridPosition: {x: 0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 9
+      color: 2
+      gridPosition: {x: 1.8, y: 1.1}
+      gimmickType: 
+    - balloonId: 10
+      color: 0
+      gridPosition: {x: -1.8, y: 2}
+      gimmickType: 
+    - balloonId: 11
+      color: 0
+      gridPosition: {x: -0.9, y: 2}
+      gimmickType: hidden
+    - balloonId: 12
+      color: 3
+      gridPosition: {x: 0, y: 2}
+      gimmickType: hidden
+    - balloonId: 13
+      color: 3
+      gridPosition: {x: 0.9, y: 2}
+      gimmickType: hidden
+    - balloonId: 14
+      color: 2
+      gridPosition: {x: 1.8, y: 2}
+      gimmickType: hidden
+    - balloonId: 15
+      color: 4
+      gridPosition: {x: -1.8, y: 2.9}
+      gimmickType: 
+    - balloonId: 16
+      color: 0
+      gridPosition: {x: -0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 17
+      color: 2
+      gridPosition: {x: 0, y: 2.9}
+      gimmickType: 
+    - balloonId: 18
+      color: 1
+      gridPosition: {x: 0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 19
+      color: 0
+      gridPosition: {x: 1.8, y: 2.9}
+      gimmickType: hidden
+    - balloonId: 20
+      color: 1
+      gridPosition: {x: -1.8, y: 3.8}
+      gimmickType: 
+    - balloonId: 21
+      color: 4
+      gridPosition: {x: -0.9, y: 3.8}
+      gimmickType: 
+    - balloonId: 22
+      color: 1
+      gridPosition: {x: 0, y: 3.8}
+      gimmickType: 
+    - balloonId: 23
+      color: 1
+      gridPosition: {x: 0.9, y: 3.8}
+      gimmickType: hidden
+    - balloonId: 24
+      color: 2
+      gridPosition: {x: 1.8, y: 3.8}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.3, y: 0.5, z: -1.3}
+      - {x: -1.1219999, y: 0.5, z: -1.3}
+      - {x: 1.1220001, y: 0.5, z: -1.3}
+      - {x: 3.3, y: 0.5, z: -1.3}
+      - {x: 3.3, y: 0.5, z: 0.8780002}
+      - {x: 3.3, y: 0.5, z: 3.1220002}
+      - {x: 3.3, y: 0.5, z: 5.3}
+      - {x: 1.1219999, y: 0.5, z: 5.3}
+      - {x: -1.1220001, y: 0.5, z: 5.3}
+      - {x: -3.3, y: 0.5, z: 5.3}
+      - {x: -3.3, y: 0.5, z: 3.122}
+      - {x: -3.3, y: 0.5, z: 0.87799996}
+      holderPositions:
+      - {x: -2.2, y: 0.5, z: -1.3}
+      - {x: -1.0999999, y: 0.5, z: -1.3}
+      - {x: 0, y: 0.5, z: -1.3}
+      - {x: 1.1000001, y: 0.5, z: -1.3}
+      - {x: 2.1999998, y: 0.5, z: -1.3}
+    star1Threshold: 2500
+    star2Threshold: 3750
+    star3Threshold: 5500
+  - levelId: 17
+    packageId: 1
+    positionInPackage: 17
+    numColors: 5
+    balloonCount: 30
+    difficultyPurpose: normal
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 4
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 3
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 3
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 4
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 2
+      magazineCount: 8
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 14
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 15
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 0
+      gridPosition: {x: -2.25, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 1
+      color: 3
+      gridPosition: {x: -1.35, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 2
+      color: 1
+      gridPosition: {x: -0.45000005, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 3
+      color: 4
+      gridPosition: {x: 0.44999993, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 4
+      color: 1
+      gridPosition: {x: 1.3499999, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 5
+      color: 1
+      gridPosition: {x: 2.25, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 6
+      color: 2
+      gridPosition: {x: -2.25, y: 1.1}
+      gimmickType: 
+    - balloonId: 7
+      color: 1
+      gridPosition: {x: -1.35, y: 1.1}
+      gimmickType: 
+    - balloonId: 8
+      color: 1
+      gridPosition: {x: -0.45000005, y: 1.1}
+      gimmickType: 
+    - balloonId: 9
+      color: 3
+      gridPosition: {x: 0.44999993, y: 1.1}
+      gimmickType: 
+    - balloonId: 10
+      color: 2
+      gridPosition: {x: 1.3499999, y: 1.1}
+      gimmickType: 
+    - balloonId: 11
+      color: 0
+      gridPosition: {x: 2.25, y: 1.1}
+      gimmickType: 
+    - balloonId: 12
+      color: 4
+      gridPosition: {x: -2.25, y: 2}
+      gimmickType: 
+    - balloonId: 13
+      color: 2
+      gridPosition: {x: -1.35, y: 2}
+      gimmickType: 
+    - balloonId: 14
+      color: 3
+      gridPosition: {x: -0.45000005, y: 2}
+      gimmickType: 
+    - balloonId: 15
+      color: 2
+      gridPosition: {x: 0.44999993, y: 2}
+      gimmickType: 
+    - balloonId: 16
+      color: 3
+      gridPosition: {x: 1.3499999, y: 2}
+      gimmickType: 
+    - balloonId: 17
+      color: 2
+      gridPosition: {x: 2.25, y: 2}
+      gimmickType: 
+    - balloonId: 18
+      color: 3
+      gridPosition: {x: -2.25, y: 2.9}
+      gimmickType: 
+    - balloonId: 19
+      color: 4
+      gridPosition: {x: -1.35, y: 2.9}
+      gimmickType: 
+    - balloonId: 20
+      color: 0
+      gridPosition: {x: -0.45000005, y: 2.9}
+      gimmickType: 
+    - balloonId: 21
+      color: 4
+      gridPosition: {x: 0.44999993, y: 2.9}
+      gimmickType: 
+    - balloonId: 22
+      color: 4
+      gridPosition: {x: 1.3499999, y: 2.9}
+      gimmickType: 
+    - balloonId: 23
+      color: 0
+      gridPosition: {x: 2.25, y: 2.9}
+      gimmickType: 
+    - balloonId: 24
+      color: 0
+      gridPosition: {x: -2.25, y: 3.8}
+      gimmickType: 
+    - balloonId: 25
+      color: 1
+      gridPosition: {x: -1.35, y: 3.8}
+      gimmickType: 
+    - balloonId: 26
+      color: 4
+      gridPosition: {x: -0.45000005, y: 3.8}
+      gimmickType: 
+    - balloonId: 27
+      color: 0
+      gridPosition: {x: 0.44999993, y: 3.8}
+      gimmickType: 
+    - balloonId: 28
+      color: 2
+      gridPosition: {x: 1.3499999, y: 3.8}
+      gimmickType: 
+    - balloonId: 29
+      color: 3
+      gridPosition: {x: 2.25, y: 3.8}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.75, y: 0.5, z: -1.3}
+      - {x: -1.2749999, y: 0.5, z: -1.3}
+      - {x: 1.2750001, y: 0.5, z: -1.3}
+      - {x: 3.75, y: 0.5, z: -1.3}
+      - {x: 3.75, y: 0.5, z: 0.8780002}
+      - {x: 3.75, y: 0.5, z: 3.1220002}
+      - {x: 3.75, y: 0.5, z: 5.3}
+      - {x: 1.2749999, y: 0.5, z: 5.3}
+      - {x: -1.2750001, y: 0.5, z: 5.3}
+      - {x: -3.75, y: 0.5, z: 5.3}
+      - {x: -3.75, y: 0.5, z: 3.122}
+      - {x: -3.75, y: 0.5, z: 0.87799996}
+      holderPositions:
+      - {x: -2.5, y: 0.5, z: -1.3}
+      - {x: -1.2499999, y: 0.5, z: -1.3}
+      - {x: 0, y: 0.5, z: -1.3}
+      - {x: 1.2500001, y: 0.5, z: -1.3}
+      - {x: 2.4999998, y: 0.5, z: -1.3}
+    star1Threshold: 3000
+    star2Threshold: 4500
+    star3Threshold: 6600
+  - levelId: 18
+    packageId: 1
+    positionInPackage: 18
+    numColors: 5
+    balloonCount: 30
+    difficultyPurpose: normal
+    gimmickTypes:
+    - hidden
+    holders:
+    - holderId: 0
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 2
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 4
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 4
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 2
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 14
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 15
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 2
+      gridPosition: {x: -2.25, y: 0.20000005}
+      gimmickType: hidden
+    - balloonId: 1
+      color: 3
+      gridPosition: {x: -1.35, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 2
+      color: 2
+      gridPosition: {x: -0.45000005, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 3
+      color: 1
+      gridPosition: {x: 0.44999993, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 4
+      color: 1
+      gridPosition: {x: 1.3499999, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 5
+      color: 3
+      gridPosition: {x: 2.25, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 6
+      color: 0
+      gridPosition: {x: -2.25, y: 1.1}
+      gimmickType: 
+    - balloonId: 7
+      color: 3
+      gridPosition: {x: -1.35, y: 1.1}
+      gimmickType: 
+    - balloonId: 8
+      color: 4
+      gridPosition: {x: -0.45000005, y: 1.1}
+      gimmickType: hidden
+    - balloonId: 9
+      color: 1
+      gridPosition: {x: 0.44999993, y: 1.1}
+      gimmickType: 
+    - balloonId: 10
+      color: 4
+      gridPosition: {x: 1.3499999, y: 1.1}
+      gimmickType: hidden
+    - balloonId: 11
+      color: 1
+      gridPosition: {x: 2.25, y: 1.1}
+      gimmickType: 
+    - balloonId: 12
+      color: 0
+      gridPosition: {x: -2.25, y: 2}
+      gimmickType: 
+    - balloonId: 13
+      color: 0
+      gridPosition: {x: -1.35, y: 2}
+      gimmickType: 
+    - balloonId: 14
+      color: 2
+      gridPosition: {x: -0.45000005, y: 2}
+      gimmickType: 
+    - balloonId: 15
+      color: 2
+      gridPosition: {x: 0.44999993, y: 2}
+      gimmickType: 
+    - balloonId: 16
+      color: 4
+      gridPosition: {x: 1.3499999, y: 2}
+      gimmickType: hidden
+    - balloonId: 17
+      color: 0
+      gridPosition: {x: 2.25, y: 2}
+      gimmickType: hidden
+    - balloonId: 18
+      color: 3
+      gridPosition: {x: -2.25, y: 2.9}
+      gimmickType: 
+    - balloonId: 19
+      color: 1
+      gridPosition: {x: -1.35, y: 2.9}
+      gimmickType: 
+    - balloonId: 20
+      color: 2
+      gridPosition: {x: -0.45000005, y: 2.9}
+      gimmickType: hidden
+    - balloonId: 21
+      color: 4
+      gridPosition: {x: 0.44999993, y: 2.9}
+      gimmickType: hidden
+    - balloonId: 22
+      color: 3
+      gridPosition: {x: 1.3499999, y: 2.9}
+      gimmickType: 
+    - balloonId: 23
+      color: 0
+      gridPosition: {x: 2.25, y: 2.9}
+      gimmickType: 
+    - balloonId: 24
+      color: 4
+      gridPosition: {x: -2.25, y: 3.8}
+      gimmickType: hidden
+    - balloonId: 25
+      color: 1
+      gridPosition: {x: -1.35, y: 3.8}
+      gimmickType: 
+    - balloonId: 26
+      color: 0
+      gridPosition: {x: -0.45000005, y: 3.8}
+      gimmickType: hidden
+    - balloonId: 27
+      color: 3
+      gridPosition: {x: 0.44999993, y: 3.8}
+      gimmickType: 
+    - balloonId: 28
+      color: 2
+      gridPosition: {x: 1.3499999, y: 3.8}
+      gimmickType: hidden
+    - balloonId: 29
+      color: 4
+      gridPosition: {x: 2.25, y: 3.8}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.75, y: 0.5, z: -1.3}
+      - {x: -1.2749999, y: 0.5, z: -1.3}
+      - {x: 1.2750001, y: 0.5, z: -1.3}
+      - {x: 3.75, y: 0.5, z: -1.3}
+      - {x: 3.75, y: 0.5, z: 0.8780002}
+      - {x: 3.75, y: 0.5, z: 3.1220002}
+      - {x: 3.75, y: 0.5, z: 5.3}
+      - {x: 1.2749999, y: 0.5, z: 5.3}
+      - {x: -1.2750001, y: 0.5, z: 5.3}
+      - {x: -3.75, y: 0.5, z: 5.3}
+      - {x: -3.75, y: 0.5, z: 3.122}
+      - {x: -3.75, y: 0.5, z: 0.87799996}
+      holderPositions:
+      - {x: -2.5, y: 0.5, z: -1.3}
+      - {x: -1.2499999, y: 0.5, z: -1.3}
+      - {x: 0, y: 0.5, z: -1.3}
+      - {x: 1.2500001, y: 0.5, z: -1.3}
+      - {x: 2.4999998, y: 0.5, z: -1.3}
+    star1Threshold: 3000
+    star2Threshold: 4500
+    star3Threshold: 6600
+  - levelId: 19
+    packageId: 1
+    positionInPackage: 19
+    numColors: 5
+    balloonCount: 36
+    difficultyPurpose: hard
+    gimmickTypes:
+    - hidden
+    holders:
+    - holderId: 0
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 4
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 9
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 14
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 15
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 16
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 17
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 0
+      gridPosition: {x: -2.25, y: -0.25}
+      gimmickType: 
+    - balloonId: 1
+      color: 2
+      gridPosition: {x: -1.35, y: -0.25}
+      gimmickType: 
+    - balloonId: 2
+      color: 0
+      gridPosition: {x: -0.45000005, y: -0.25}
+      gimmickType: 
+    - balloonId: 3
+      color: 1
+      gridPosition: {x: 0.44999993, y: -0.25}
+      gimmickType: 
+    - balloonId: 4
+      color: 0
+      gridPosition: {x: 1.3499999, y: -0.25}
+      gimmickType: hidden
+    - balloonId: 5
+      color: 4
+      gridPosition: {x: 2.25, y: -0.25}
+      gimmickType: hidden
+    - balloonId: 6
+      color: 2
+      gridPosition: {x: -2.25, y: 0.65}
+      gimmickType: 
+    - balloonId: 7
+      color: 1
+      gridPosition: {x: -1.35, y: 0.65}
+      gimmickType: hidden
+    - balloonId: 8
+      color: 3
+      gridPosition: {x: -0.45000005, y: 0.65}
+      gimmickType: 
+    - balloonId: 9
+      color: 3
+      gridPosition: {x: 0.44999993, y: 0.65}
+      gimmickType: 
+    - balloonId: 10
+      color: 2
+      gridPosition: {x: 1.3499999, y: 0.65}
+      gimmickType: hidden
+    - balloonId: 11
+      color: 2
+      gridPosition: {x: 2.25, y: 0.65}
+      gimmickType: 
+    - balloonId: 12
+      color: 2
+      gridPosition: {x: -2.25, y: 1.55}
+      gimmickType: hidden
+    - balloonId: 13
+      color: 1
+      gridPosition: {x: -1.35, y: 1.55}
+      gimmickType: 
+    - balloonId: 14
+      color: 2
+      gridPosition: {x: -0.45000005, y: 1.55}
+      gimmickType: 
+    - balloonId: 15
+      color: 0
+      gridPosition: {x: 0.44999993, y: 1.55}
+      gimmickType: hidden
+    - balloonId: 16
+      color: 3
+      gridPosition: {x: 1.3499999, y: 1.55}
+      gimmickType: 
+    - balloonId: 17
+      color: 1
+      gridPosition: {x: 2.25, y: 1.55}
+      gimmickType: 
+    - balloonId: 18
+      color: 4
+      gridPosition: {x: -2.25, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 19
+      color: 0
+      gridPosition: {x: -1.35, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 20
+      color: 0
+      gridPosition: {x: -0.45000005, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 21
+      color: 4
+      gridPosition: {x: 0.44999993, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 22
+      color: 4
+      gridPosition: {x: 1.3499999, y: 2.4499998}
+      gimmickType: hidden
+    - balloonId: 23
+      color: 1
+      gridPosition: {x: 2.25, y: 2.4499998}
+      gimmickType: hidden
+    - balloonId: 24
+      color: 3
+      gridPosition: {x: -2.25, y: 3.35}
+      gimmickType: hidden
+    - balloonId: 25
+      color: 4
+      gridPosition: {x: -1.35, y: 3.35}
+      gimmickType: 
+    - balloonId: 26
+      color: 0
+      gridPosition: {x: -0.45000005, y: 3.35}
+      gimmickType: hidden
+    - balloonId: 27
+      color: 2
+      gridPosition: {x: 0.44999993, y: 3.35}
+      gimmickType: hidden
+    - balloonId: 28
+      color: 4
+      gridPosition: {x: 1.3499999, y: 3.35}
+      gimmickType: 
+    - balloonId: 29
+      color: 3
+      gridPosition: {x: 2.25, y: 3.35}
+      gimmickType: 
+    - balloonId: 30
+      color: 4
+      gridPosition: {x: -2.25, y: 4.25}
+      gimmickType: hidden
+    - balloonId: 31
+      color: 1
+      gridPosition: {x: -1.35, y: 4.25}
+      gimmickType: hidden
+    - balloonId: 32
+      color: 3
+      gridPosition: {x: -0.45000005, y: 4.25}
+      gimmickType: 
+    - balloonId: 33
+      color: 1
+      gridPosition: {x: 0.44999993, y: 4.25}
+      gimmickType: 
+    - balloonId: 34
+      color: 3
+      gridPosition: {x: 1.3499999, y: 4.25}
+      gimmickType: hidden
+    - balloonId: 35
+      color: 0
+      gridPosition: {x: 2.25, y: 4.25}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.75, y: 0.5, z: -1.75}
+      - {x: -1.2749999, y: 0.5, z: -1.75}
+      - {x: 1.2750001, y: 0.5, z: -1.75}
+      - {x: 3.75, y: 0.5, z: -1.75}
+      - {x: 3.75, y: 0.5, z: 0.7250001}
+      - {x: 3.75, y: 0.5, z: 3.275}
+      - {x: 3.75, y: 0.5, z: 5.75}
+      - {x: 1.2749999, y: 0.5, z: 5.75}
+      - {x: -1.2750001, y: 0.5, z: 5.75}
+      - {x: -3.75, y: 0.5, z: 5.75}
+      - {x: -3.75, y: 0.5, z: 3.2749999}
+      - {x: -3.75, y: 0.5, z: 0.7249999}
+      holderPositions:
+      - {x: -2.5, y: 0.5, z: -1.75}
+      - {x: -1.2499999, y: 0.5, z: -1.75}
+      - {x: 0, y: 0.5, z: -1.75}
+      - {x: 1.2500001, y: 0.5, z: -1.75}
+      - {x: 2.4999998, y: 0.5, z: -1.75}
+    star1Threshold: 3600
+    star2Threshold: 5400
+    star3Threshold: 7920
+  - levelId: 20
+    packageId: 1
+    positionInPackage: 20
+    numColors: 3
+    balloonCount: 12
+    difficultyPurpose: rest
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 0
+      magazineCount: 5
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 1
+      gridPosition: {x: -1.3499999, y: 1.1}
+      gimmickType: 
+    - balloonId: 1
+      color: 2
+      gridPosition: {x: -0.44999993, y: 1.1}
+      gimmickType: 
+    - balloonId: 2
+      color: 0
+      gridPosition: {x: 0.45000005, y: 1.1}
+      gimmickType: 
+    - balloonId: 3
+      color: 1
+      gridPosition: {x: 1.35, y: 1.1}
+      gimmickType: 
+    - balloonId: 4
+      color: 1
+      gridPosition: {x: -1.3499999, y: 2}
+      gimmickType: 
+    - balloonId: 5
+      color: 1
+      gridPosition: {x: -0.44999993, y: 2}
+      gimmickType: 
+    - balloonId: 6
+      color: 2
+      gridPosition: {x: 0.45000005, y: 2}
+      gimmickType: 
+    - balloonId: 7
+      color: 0
+      gridPosition: {x: 1.35, y: 2}
+      gimmickType: 
+    - balloonId: 8
+      color: 2
+      gridPosition: {x: -1.3499999, y: 2.9}
+      gimmickType: 
+    - balloonId: 9
+      color: 0
+      gridPosition: {x: -0.44999993, y: 2.9}
+      gimmickType: 
+    - balloonId: 10
+      color: 2
+      gridPosition: {x: 0.45000005, y: 2.9}
+      gimmickType: 
+    - balloonId: 11
+      color: 0
+      gridPosition: {x: 1.35, y: 2.9}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -2.85, y: 0.5, z: -0.39999998}
+      - {x: -0.9689999, y: 0.5, z: -0.39999998}
+      - {x: 0.96900004, y: 0.5, z: -0.39999998}
+      - {x: 2.85, y: 0.5, z: -0.39999998}
+      - {x: 2.85, y: 0.5, z: 1.1840001}
+      - {x: 2.85, y: 0.5, z: 2.8160002}
+      - {x: 2.85, y: 0.5, z: 4.4}
+      - {x: 0.9689999, y: 0.5, z: 4.4}
+      - {x: -0.96900004, y: 0.5, z: 4.4}
+      - {x: -2.85, y: 0.5, z: 4.4}
+      - {x: -2.85, y: 0.5, z: 2.816}
+      - {x: -2.85, y: 0.5, z: 1.184}
+      holderPositions:
+      - {x: -1.8999999, y: 0.5, z: -0.39999998}
+      - {x: -0.9499999, y: 0.5, z: -0.39999998}
+      - {x: 0, y: 0.5, z: -0.39999998}
+      - {x: 0.9500001, y: 0.5, z: -0.39999998}
+      - {x: 1.8999999, y: 0.5, z: -0.39999998}
+    star1Threshold: 1200
+    star2Threshold: 1800
+    star3Threshold: 2640
+  - levelId: 21
+    packageId: 2
+    positionInPackage: 1
+    numColors: 4
+    balloonCount: 20
+    difficultyPurpose: tutorial
+    gimmickTypes:
+    - spawner_transparent
+    holders:
+    - holderId: 0
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 0
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 3
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 1
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 1
+      gridPosition: {x: -1.8, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 1
+      color: 3
+      gridPosition: {x: -0.9, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 2
+      color: 0
+      gridPosition: {x: 0, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 3
+      color: 2
+      gridPosition: {x: 0.9, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 4
+      color: 2
+      gridPosition: {x: 1.8, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 5
+      color: 0
+      gridPosition: {x: -1.8, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 6
+      color: 1
+      gridPosition: {x: -0.9, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 7
+      color: 3
+      gridPosition: {x: 0, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 8
+      color: 0
+      gridPosition: {x: 0.9, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 9
+      color: 3
+      gridPosition: {x: 1.8, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 10
+      color: 2
+      gridPosition: {x: -1.8, y: 2.45}
+      gimmickType: 
+    - balloonId: 11
+      color: 3
+      gridPosition: {x: -0.9, y: 2.45}
+      gimmickType: spawner_transparent
+    - balloonId: 12
+      color: 1
+      gridPosition: {x: 0, y: 2.45}
+      gimmickType: spawner_transparent
+    - balloonId: 13
+      color: 2
+      gridPosition: {x: 0.9, y: 2.45}
+      gimmickType: spawner_transparent
+    - balloonId: 14
+      color: 1
+      gridPosition: {x: 1.8, y: 2.45}
+      gimmickType: 
+    - balloonId: 15
+      color: 0
+      gridPosition: {x: -1.8, y: 3.35}
+      gimmickType: 
+    - balloonId: 16
+      color: 0
+      gridPosition: {x: -0.9, y: 3.35}
+      gimmickType: 
+    - balloonId: 17
+      color: 2
+      gridPosition: {x: 0, y: 3.35}
+      gimmickType: 
+    - balloonId: 18
+      color: 3
+      gridPosition: {x: 0.9, y: 3.35}
+      gimmickType: 
+    - balloonId: 19
+      color: 1
+      gridPosition: {x: 1.8, y: 3.35}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.3, y: 0.5, z: -0.8499999}
+      - {x: -1.1219999, y: 0.5, z: -0.8499999}
+      - {x: 1.1220001, y: 0.5, z: -0.8499999}
+      - {x: 3.3, y: 0.5, z: -0.8499999}
+      - {x: 3.3, y: 0.5, z: 1.0310001}
+      - {x: 3.3, y: 0.5, z: 2.969}
+      - {x: 3.3, y: 0.5, z: 4.85}
+      - {x: 1.1219999, y: 0.5, z: 4.85}
+      - {x: -1.1220001, y: 0.5, z: 4.85}
+      - {x: -3.3, y: 0.5, z: 4.85}
+      - {x: -3.3, y: 0.5, z: 2.9689999}
+      - {x: -3.3, y: 0.5, z: 1.0309999}
+      holderPositions:
+      - {x: -2.2, y: 0.5, z: -0.8499999}
+      - {x: -1.0999999, y: 0.5, z: -0.8499999}
+      - {x: 0, y: 0.5, z: -0.8499999}
+      - {x: 1.1000001, y: 0.5, z: -0.8499999}
+      - {x: 2.1999998, y: 0.5, z: -0.8499999}
+    star1Threshold: 2000
+    star2Threshold: 3000
+    star3Threshold: 4400
+  - levelId: 22
+    packageId: 2
+    positionInPackage: 2
+    numColors: 5
+    balloonCount: 25
+    difficultyPurpose: normal
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 3
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 2
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 0
+      magazineCount: 7
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 4
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 2
+      gridPosition: {x: -1.8, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 1
+      color: 1
+      gridPosition: {x: -0.9, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 2
+      color: 4
+      gridPosition: {x: 0, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 3
+      color: 1
+      gridPosition: {x: 0.9, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 4
+      color: 1
+      gridPosition: {x: 1.8, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 5
+      color: 0
+      gridPosition: {x: -1.8, y: 1.1}
+      gimmickType: 
+    - balloonId: 6
+      color: 2
+      gridPosition: {x: -0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 7
+      color: 3
+      gridPosition: {x: 0, y: 1.1}
+      gimmickType: 
+    - balloonId: 8
+      color: 0
+      gridPosition: {x: 0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 9
+      color: 2
+      gridPosition: {x: 1.8, y: 1.1}
+      gimmickType: 
+    - balloonId: 10
+      color: 0
+      gridPosition: {x: -1.8, y: 2}
+      gimmickType: 
+    - balloonId: 11
+      color: 3
+      gridPosition: {x: -0.9, y: 2}
+      gimmickType: 
+    - balloonId: 12
+      color: 4
+      gridPosition: {x: 0, y: 2}
+      gimmickType: 
+    - balloonId: 13
+      color: 3
+      gridPosition: {x: 0.9, y: 2}
+      gimmickType: 
+    - balloonId: 14
+      color: 3
+      gridPosition: {x: 1.8, y: 2}
+      gimmickType: 
+    - balloonId: 15
+      color: 4
+      gridPosition: {x: -1.8, y: 2.9}
+      gimmickType: 
+    - balloonId: 16
+      color: 0
+      gridPosition: {x: -0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 17
+      color: 0
+      gridPosition: {x: 0, y: 2.9}
+      gimmickType: 
+    - balloonId: 18
+      color: 2
+      gridPosition: {x: 0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 19
+      color: 4
+      gridPosition: {x: 1.8, y: 2.9}
+      gimmickType: 
+    - balloonId: 20
+      color: 1
+      gridPosition: {x: -1.8, y: 3.8}
+      gimmickType: 
+    - balloonId: 21
+      color: 2
+      gridPosition: {x: -0.9, y: 3.8}
+      gimmickType: 
+    - balloonId: 22
+      color: 1
+      gridPosition: {x: 0, y: 3.8}
+      gimmickType: 
+    - balloonId: 23
+      color: 4
+      gridPosition: {x: 0.9, y: 3.8}
+      gimmickType: 
+    - balloonId: 24
+      color: 3
+      gridPosition: {x: 1.8, y: 3.8}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.3, y: 0.5, z: -1.3}
+      - {x: -1.1219999, y: 0.5, z: -1.3}
+      - {x: 1.1220001, y: 0.5, z: -1.3}
+      - {x: 3.3, y: 0.5, z: -1.3}
+      - {x: 3.3, y: 0.5, z: 0.8780002}
+      - {x: 3.3, y: 0.5, z: 3.1220002}
+      - {x: 3.3, y: 0.5, z: 5.3}
+      - {x: 1.1219999, y: 0.5, z: 5.3}
+      - {x: -1.1220001, y: 0.5, z: 5.3}
+      - {x: -3.3, y: 0.5, z: 5.3}
+      - {x: -3.3, y: 0.5, z: 3.122}
+      - {x: -3.3, y: 0.5, z: 0.87799996}
+      holderPositions:
+      - {x: -2.2, y: 0.5, z: -1.3}
+      - {x: -1.0999999, y: 0.5, z: -1.3}
+      - {x: 0, y: 0.5, z: -1.3}
+      - {x: 1.1000001, y: 0.5, z: -1.3}
+      - {x: 2.1999998, y: 0.5, z: -1.3}
+    star1Threshold: 2500
+    star2Threshold: 3750
+    star3Threshold: 5500
+  - levelId: 23
+    packageId: 2
+    positionInPackage: 3
+    numColors: 5
+    balloonCount: 30
+    difficultyPurpose: normal
+    gimmickTypes:
+    - spawner_transparent
+    holders:
+    - holderId: 0
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 4
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 3
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 1
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 2
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 2
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 4
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 3
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 1
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 3
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 14
+      color: 3
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 15
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 2
+      gridPosition: {x: -2.25, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 1
+      color: 3
+      gridPosition: {x: -1.35, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 2
+      color: 3
+      gridPosition: {x: -0.45000005, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 3
+      color: 1
+      gridPosition: {x: 0.44999993, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 4
+      color: 4
+      gridPosition: {x: 1.3499999, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 5
+      color: 4
+      gridPosition: {x: 2.25, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 6
+      color: 0
+      gridPosition: {x: -2.25, y: 1.1}
+      gimmickType: 
+    - balloonId: 7
+      color: 3
+      gridPosition: {x: -1.35, y: 1.1}
+      gimmickType: 
+    - balloonId: 8
+      color: 1
+      gridPosition: {x: -0.45000005, y: 1.1}
+      gimmickType: 
+    - balloonId: 9
+      color: 0
+      gridPosition: {x: 0.44999993, y: 1.1}
+      gimmickType: spawner_transparent
+    - balloonId: 10
+      color: 3
+      gridPosition: {x: 1.3499999, y: 1.1}
+      gimmickType: 
+    - balloonId: 11
+      color: 4
+      gridPosition: {x: 2.25, y: 1.1}
+      gimmickType: 
+    - balloonId: 12
+      color: 0
+      gridPosition: {x: -2.25, y: 2}
+      gimmickType: 
+    - balloonId: 13
+      color: 4
+      gridPosition: {x: -1.35, y: 2}
+      gimmickType: 
+    - balloonId: 14
+      color: 2
+      gridPosition: {x: -0.45000005, y: 2}
+      gimmickType: 
+    - balloonId: 15
+      color: 3
+      gridPosition: {x: 0.44999993, y: 2}
+      gimmickType: 
+    - balloonId: 16
+      color: 0
+      gridPosition: {x: 1.3499999, y: 2}
+      gimmickType: 
+    - balloonId: 17
+      color: 1
+      gridPosition: {x: 2.25, y: 2}
+      gimmickType: spawner_transparent
+    - balloonId: 18
+      color: 1
+      gridPosition: {x: -2.25, y: 2.9}
+      gimmickType: 
+    - balloonId: 19
+      color: 2
+      gridPosition: {x: -1.35, y: 2.9}
+      gimmickType: 
+    - balloonId: 20
+      color: 2
+      gridPosition: {x: -0.45000005, y: 2.9}
+      gimmickType: 
+    - balloonId: 21
+      color: 4
+      gridPosition: {x: 0.44999993, y: 2.9}
+      gimmickType: 
+    - balloonId: 22
+      color: 2
+      gridPosition: {x: 1.3499999, y: 2.9}
+      gimmickType: 
+    - balloonId: 23
+      color: 2
+      gridPosition: {x: 2.25, y: 2.9}
+      gimmickType: 
+    - balloonId: 24
+      color: 3
+      gridPosition: {x: -2.25, y: 3.8}
+      gimmickType: 
+    - balloonId: 25
+      color: 1
+      gridPosition: {x: -1.35, y: 3.8}
+      gimmickType: 
+    - balloonId: 26
+      color: 1
+      gridPosition: {x: -0.45000005, y: 3.8}
+      gimmickType: 
+    - balloonId: 27
+      color: 0
+      gridPosition: {x: 0.44999993, y: 3.8}
+      gimmickType: spawner_transparent
+    - balloonId: 28
+      color: 0
+      gridPosition: {x: 1.3499999, y: 3.8}
+      gimmickType: 
+    - balloonId: 29
+      color: 4
+      gridPosition: {x: 2.25, y: 3.8}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.75, y: 0.5, z: -1.3}
+      - {x: -1.2749999, y: 0.5, z: -1.3}
+      - {x: 1.2750001, y: 0.5, z: -1.3}
+      - {x: 3.75, y: 0.5, z: -1.3}
+      - {x: 3.75, y: 0.5, z: 0.8780002}
+      - {x: 3.75, y: 0.5, z: 3.1220002}
+      - {x: 3.75, y: 0.5, z: 5.3}
+      - {x: 1.2749999, y: 0.5, z: 5.3}
+      - {x: -1.2750001, y: 0.5, z: 5.3}
+      - {x: -3.75, y: 0.5, z: 5.3}
+      - {x: -3.75, y: 0.5, z: 3.122}
+      - {x: -3.75, y: 0.5, z: 0.87799996}
+      holderPositions:
+      - {x: -2.5, y: 0.5, z: -1.3}
+      - {x: -1.2499999, y: 0.5, z: -1.3}
+      - {x: 0, y: 0.5, z: -1.3}
+      - {x: 1.2500001, y: 0.5, z: -1.3}
+      - {x: 2.4999998, y: 0.5, z: -1.3}
+    star1Threshold: 3000
+    star2Threshold: 4500
+    star3Threshold: 6600
+  - levelId: 24
+    packageId: 2
+    positionInPackage: 4
+    numColors: 5
+    balloonCount: 36
+    difficultyPurpose: hard
+    gimmickTypes:
+    - hidden
+    holders:
+    - holderId: 0
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 2
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 2
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 0
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 2
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 4
+      magazineCount: 5
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 1
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 14
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 15
+      color: 3
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 16
+      color: 4
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 17
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 4
+      gridPosition: {x: -2.25, y: -0.25}
+      gimmickType: hidden
+    - balloonId: 1
+      color: 2
+      gridPosition: {x: -1.35, y: -0.25}
+      gimmickType: 
+    - balloonId: 2
+      color: 1
+      gridPosition: {x: -0.45000005, y: -0.25}
+      gimmickType: hidden
+    - balloonId: 3
+      color: 3
+      gridPosition: {x: 0.44999993, y: -0.25}
+      gimmickType: 
+    - balloonId: 4
+      color: 3
+      gridPosition: {x: 1.3499999, y: -0.25}
+      gimmickType: 
+    - balloonId: 5
+      color: 4
+      gridPosition: {x: 2.25, y: -0.25}
+      gimmickType: 
+    - balloonId: 6
+      color: 2
+      gridPosition: {x: -2.25, y: 0.65}
+      gimmickType: 
+    - balloonId: 7
+      color: 0
+      gridPosition: {x: -1.35, y: 0.65}
+      gimmickType: 
+    - balloonId: 8
+      color: 2
+      gridPosition: {x: -0.45000005, y: 0.65}
+      gimmickType: 
+    - balloonId: 9
+      color: 1
+      gridPosition: {x: 0.44999993, y: 0.65}
+      gimmickType: 
+    - balloonId: 10
+      color: 4
+      gridPosition: {x: 1.3499999, y: 0.65}
+      gimmickType: 
+    - balloonId: 11
+      color: 0
+      gridPosition: {x: 2.25, y: 0.65}
+      gimmickType: 
+    - balloonId: 12
+      color: 4
+      gridPosition: {x: -2.25, y: 1.55}
+      gimmickType: 
+    - balloonId: 13
+      color: 1
+      gridPosition: {x: -1.35, y: 1.55}
+      gimmickType: 
+    - balloonId: 14
+      color: 2
+      gridPosition: {x: -0.45000005, y: 1.55}
+      gimmickType: hidden
+    - balloonId: 15
+      color: 1
+      gridPosition: {x: 0.44999993, y: 1.55}
+      gimmickType: 
+    - balloonId: 16
+      color: 0
+      gridPosition: {x: 1.3499999, y: 1.55}
+      gimmickType: hidden
+    - balloonId: 17
+      color: 2
+      gridPosition: {x: 2.25, y: 1.55}
+      gimmickType: hidden
+    - balloonId: 18
+      color: 3
+      gridPosition: {x: -2.25, y: 2.4499998}
+      gimmickType: hidden
+    - balloonId: 19
+      color: 4
+      gridPosition: {x: -1.35, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 20
+      color: 0
+      gridPosition: {x: -0.45000005, y: 2.4499998}
+      gimmickType: hidden
+    - balloonId: 21
+      color: 3
+      gridPosition: {x: 0.44999993, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 22
+      color: 0
+      gridPosition: {x: 1.3499999, y: 2.4499998}
+      gimmickType: hidden
+    - balloonId: 23
+      color: 2
+      gridPosition: {x: 2.25, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 24
+      color: 2
+      gridPosition: {x: -2.25, y: 3.35}
+      gimmickType: hidden
+    - balloonId: 25
+      color: 1
+      gridPosition: {x: -1.35, y: 3.35}
+      gimmickType: 
+    - balloonId: 26
+      color: 0
+      gridPosition: {x: -0.45000005, y: 3.35}
+      gimmickType: hidden
+    - balloonId: 27
+      color: 4
+      gridPosition: {x: 0.44999993, y: 3.35}
+      gimmickType: 
+    - balloonId: 28
+      color: 4
+      gridPosition: {x: 1.3499999, y: 3.35}
+      gimmickType: 
+    - balloonId: 29
+      color: 1
+      gridPosition: {x: 2.25, y: 3.35}
+      gimmickType: 
+    - balloonId: 30
+      color: 3
+      gridPosition: {x: -2.25, y: 4.25}
+      gimmickType: hidden
+    - balloonId: 31
+      color: 1
+      gridPosition: {x: -1.35, y: 4.25}
+      gimmickType: 
+    - balloonId: 32
+      color: 3
+      gridPosition: {x: -0.45000005, y: 4.25}
+      gimmickType: hidden
+    - balloonId: 33
+      color: 3
+      gridPosition: {x: 0.44999993, y: 4.25}
+      gimmickType: hidden
+    - balloonId: 34
+      color: 0
+      gridPosition: {x: 1.3499999, y: 4.25}
+      gimmickType: 
+    - balloonId: 35
+      color: 0
+      gridPosition: {x: 2.25, y: 4.25}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.75, y: 0.5, z: -1.75}
+      - {x: -1.2749999, y: 0.5, z: -1.75}
+      - {x: 1.2750001, y: 0.5, z: -1.75}
+      - {x: 3.75, y: 0.5, z: -1.75}
+      - {x: 3.75, y: 0.5, z: 0.7250001}
+      - {x: 3.75, y: 0.5, z: 3.275}
+      - {x: 3.75, y: 0.5, z: 5.75}
+      - {x: 1.2749999, y: 0.5, z: 5.75}
+      - {x: -1.2750001, y: 0.5, z: 5.75}
+      - {x: -3.75, y: 0.5, z: 5.75}
+      - {x: -3.75, y: 0.5, z: 3.2749999}
+      - {x: -3.75, y: 0.5, z: 0.7249999}
+      holderPositions:
+      - {x: -2.5, y: 0.5, z: -1.75}
+      - {x: -1.2499999, y: 0.5, z: -1.75}
+      - {x: 0, y: 0.5, z: -1.75}
+      - {x: 1.2500001, y: 0.5, z: -1.75}
+      - {x: 2.4999998, y: 0.5, z: -1.75}
+    star1Threshold: 3600
+    star2Threshold: 5400
+    star3Threshold: 7920
+  - levelId: 25
+    packageId: 2
+    positionInPackage: 5
+    numColors: 4
+    balloonCount: 16
+    difficultyPurpose: rest
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 3
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 0
+      gridPosition: {x: -1.3499999, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 1
+      color: 1
+      gridPosition: {x: -0.44999993, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 2
+      color: 2
+      gridPosition: {x: 0.45000005, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 3
+      color: 0
+      gridPosition: {x: 1.35, y: 0.6500001}
+      gimmickType: 
+    - balloonId: 4
+      color: 2
+      gridPosition: {x: -1.3499999, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 5
+      color: 2
+      gridPosition: {x: -0.44999993, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 6
+      color: 3
+      gridPosition: {x: 0.45000005, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 7
+      color: 3
+      gridPosition: {x: 1.35, y: 1.5500001}
+      gimmickType: 
+    - balloonId: 8
+      color: 3
+      gridPosition: {x: -1.3499999, y: 2.45}
+      gimmickType: 
+    - balloonId: 9
+      color: 0
+      gridPosition: {x: -0.44999993, y: 2.45}
+      gimmickType: 
+    - balloonId: 10
+      color: 2
+      gridPosition: {x: 0.45000005, y: 2.45}
+      gimmickType: 
+    - balloonId: 11
+      color: 0
+      gridPosition: {x: 1.35, y: 2.45}
+      gimmickType: 
+    - balloonId: 12
+      color: 1
+      gridPosition: {x: -1.3499999, y: 3.35}
+      gimmickType: 
+    - balloonId: 13
+      color: 1
+      gridPosition: {x: -0.44999993, y: 3.35}
+      gimmickType: 
+    - balloonId: 14
+      color: 3
+      gridPosition: {x: 0.45000005, y: 3.35}
+      gimmickType: 
+    - balloonId: 15
+      color: 1
+      gridPosition: {x: 1.35, y: 3.35}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -2.85, y: 0.5, z: -0.8499999}
+      - {x: -0.9689999, y: 0.5, z: -0.8499999}
+      - {x: 0.96900004, y: 0.5, z: -0.8499999}
+      - {x: 2.85, y: 0.5, z: -0.8499999}
+      - {x: 2.85, y: 0.5, z: 1.0310001}
+      - {x: 2.85, y: 0.5, z: 2.969}
+      - {x: 2.85, y: 0.5, z: 4.85}
+      - {x: 0.9689999, y: 0.5, z: 4.85}
+      - {x: -0.96900004, y: 0.5, z: 4.85}
+      - {x: -2.85, y: 0.5, z: 4.85}
+      - {x: -2.85, y: 0.5, z: 2.9689999}
+      - {x: -2.85, y: 0.5, z: 1.0309999}
+      holderPositions:
+      - {x: -1.8999999, y: 0.5, z: -0.8499999}
+      - {x: -0.9499999, y: 0.5, z: -0.8499999}
+      - {x: 0, y: 0.5, z: -0.8499999}
+      - {x: 0.9500001, y: 0.5, z: -0.8499999}
+      - {x: 1.8999999, y: 0.5, z: -0.8499999}
+    star1Threshold: 1600
+    star2Threshold: 2400
+    star3Threshold: 3520
+  - levelId: 26
+    packageId: 2
+    positionInPackage: 6
+    numColors: 6
+    balloonCount: 25
+    difficultyPurpose: intro
+    gimmickTypes: []
+    holders:
+    - holderId: 0
+      color: 4
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 5
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 0
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 5
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 2
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 3
+      gridPosition: {x: -1.8, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 1
+      color: 5
+      gridPosition: {x: -0.9, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 2
+      color: 3
+      gridPosition: {x: 0, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 3
+      color: 3
+      gridPosition: {x: 0.9, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 4
+      color: 2
+      gridPosition: {x: 1.8, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 5
+      color: 3
+      gridPosition: {x: -1.8, y: 1.1}
+      gimmickType: 
+    - balloonId: 6
+      color: 0
+      gridPosition: {x: -0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 7
+      color: 2
+      gridPosition: {x: 0, y: 1.1}
+      gimmickType: 
+    - balloonId: 8
+      color: 5
+      gridPosition: {x: 0.9, y: 1.1}
+      gimmickType: 
+    - balloonId: 9
+      color: 1
+      gridPosition: {x: 1.8, y: 1.1}
+      gimmickType: 
+    - balloonId: 10
+      color: 4
+      gridPosition: {x: -1.8, y: 2}
+      gimmickType: 
+    - balloonId: 11
+      color: 4
+      gridPosition: {x: -0.9, y: 2}
+      gimmickType: 
+    - balloonId: 12
+      color: 1
+      gridPosition: {x: 0, y: 2}
+      gimmickType: 
+    - balloonId: 13
+      color: 0
+      gridPosition: {x: 0.9, y: 2}
+      gimmickType: 
+    - balloonId: 14
+      color: 4
+      gridPosition: {x: 1.8, y: 2}
+      gimmickType: 
+    - balloonId: 15
+      color: 5
+      gridPosition: {x: -1.8, y: 2.9}
+      gimmickType: 
+    - balloonId: 16
+      color: 2
+      gridPosition: {x: -0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 17
+      color: 4
+      gridPosition: {x: 0, y: 2.9}
+      gimmickType: 
+    - balloonId: 18
+      color: 0
+      gridPosition: {x: 0.9, y: 2.9}
+      gimmickType: 
+    - balloonId: 19
+      color: 0
+      gridPosition: {x: 1.8, y: 2.9}
+      gimmickType: 
+    - balloonId: 20
+      color: 1
+      gridPosition: {x: -1.8, y: 3.8}
+      gimmickType: 
+    - balloonId: 21
+      color: 5
+      gridPosition: {x: -0.9, y: 3.8}
+      gimmickType: 
+    - balloonId: 22
+      color: 0
+      gridPosition: {x: 0, y: 3.8}
+      gimmickType: 
+    - balloonId: 23
+      color: 1
+      gridPosition: {x: 0.9, y: 3.8}
+      gimmickType: 
+    - balloonId: 24
+      color: 2
+      gridPosition: {x: 1.8, y: 3.8}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.3, y: 0.5, z: -1.3}
+      - {x: -1.1219999, y: 0.5, z: -1.3}
+      - {x: 1.1220001, y: 0.5, z: -1.3}
+      - {x: 3.3, y: 0.5, z: -1.3}
+      - {x: 3.3, y: 0.5, z: 0.8780002}
+      - {x: 3.3, y: 0.5, z: 3.1220002}
+      - {x: 3.3, y: 0.5, z: 5.3}
+      - {x: 1.1219999, y: 0.5, z: 5.3}
+      - {x: -1.1220001, y: 0.5, z: 5.3}
+      - {x: -3.3, y: 0.5, z: 5.3}
+      - {x: -3.3, y: 0.5, z: 3.122}
+      - {x: -3.3, y: 0.5, z: 0.87799996}
+      holderPositions:
+      - {x: -2.2, y: 0.5, z: -1.3}
+      - {x: -1.0999999, y: 0.5, z: -1.3}
+      - {x: 0, y: 0.5, z: -1.3}
+      - {x: 1.1000001, y: 0.5, z: -1.3}
+      - {x: 2.1999998, y: 0.5, z: -1.3}
+    star1Threshold: 2500
+    star2Threshold: 3750
+    star3Threshold: 5500
+  - levelId: 27
+    packageId: 2
+    positionInPackage: 7
+    numColors: 5
+    balloonCount: 30
+    difficultyPurpose: normal
+    gimmickTypes:
+    - hidden
+    holders:
+    - holderId: 0
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 0
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 0
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 4
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 14
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 15
+      color: 4
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 0
+      gridPosition: {x: -2.25, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 1
+      color: 2
+      gridPosition: {x: -1.35, y: 0.20000005}
+      gimmickType: hidden
+    - balloonId: 2
+      color: 0
+      gridPosition: {x: -0.45000005, y: 0.20000005}
+      gimmickType: hidden
+    - balloonId: 3
+      color: 3
+      gridPosition: {x: 0.44999993, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 4
+      color: 3
+      gridPosition: {x: 1.3499999, y: 0.20000005}
+      gimmickType: hidden
+    - balloonId: 5
+      color: 0
+      gridPosition: {x: 2.25, y: 0.20000005}
+      gimmickType: hidden
+    - balloonId: 6
+      color: 1
+      gridPosition: {x: -2.25, y: 1.1}
+      gimmickType: 
+    - balloonId: 7
+      color: 0
+      gridPosition: {x: -1.35, y: 1.1}
+      gimmickType: 
+    - balloonId: 8
+      color: 3
+      gridPosition: {x: -0.45000005, y: 1.1}
+      gimmickType: 
+    - balloonId: 9
+      color: 4
+      gridPosition: {x: 0.44999993, y: 1.1}
+      gimmickType: hidden
+    - balloonId: 10
+      color: 2
+      gridPosition: {x: 1.3499999, y: 1.1}
+      gimmickType: hidden
+    - balloonId: 11
+      color: 4
+      gridPosition: {x: 2.25, y: 1.1}
+      gimmickType: hidden
+    - balloonId: 12
+      color: 4
+      gridPosition: {x: -2.25, y: 2}
+      gimmickType: 
+    - balloonId: 13
+      color: 2
+      gridPosition: {x: -1.35, y: 2}
+      gimmickType: 
+    - balloonId: 14
+      color: 3
+      gridPosition: {x: -0.45000005, y: 2}
+      gimmickType: hidden
+    - balloonId: 15
+      color: 2
+      gridPosition: {x: 0.44999993, y: 2}
+      gimmickType: 
+    - balloonId: 16
+      color: 1
+      gridPosition: {x: 1.3499999, y: 2}
+      gimmickType: 
+    - balloonId: 17
+      color: 2
+      gridPosition: {x: 2.25, y: 2}
+      gimmickType: hidden
+    - balloonId: 18
+      color: 1
+      gridPosition: {x: -2.25, y: 2.9}
+      gimmickType: 
+    - balloonId: 19
+      color: 3
+      gridPosition: {x: -1.35, y: 2.9}
+      gimmickType: 
+    - balloonId: 20
+      color: 1
+      gridPosition: {x: -0.45000005, y: 2.9}
+      gimmickType: 
+    - balloonId: 21
+      color: 1
+      gridPosition: {x: 0.44999993, y: 2.9}
+      gimmickType: 
+    - balloonId: 22
+      color: 4
+      gridPosition: {x: 1.3499999, y: 2.9}
+      gimmickType: 
+    - balloonId: 23
+      color: 0
+      gridPosition: {x: 2.25, y: 2.9}
+      gimmickType: 
+    - balloonId: 24
+      color: 0
+      gridPosition: {x: -2.25, y: 3.8}
+      gimmickType: 
+    - balloonId: 25
+      color: 1
+      gridPosition: {x: -1.35, y: 3.8}
+      gimmickType: 
+    - balloonId: 26
+      color: 4
+      gridPosition: {x: -0.45000005, y: 3.8}
+      gimmickType: 
+    - balloonId: 27
+      color: 4
+      gridPosition: {x: 0.44999993, y: 3.8}
+      gimmickType: 
+    - balloonId: 28
+      color: 2
+      gridPosition: {x: 1.3499999, y: 3.8}
+      gimmickType: 
+    - balloonId: 29
+      color: 3
+      gridPosition: {x: 2.25, y: 3.8}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.75, y: 0.5, z: -1.3}
+      - {x: -1.2749999, y: 0.5, z: -1.3}
+      - {x: 1.2750001, y: 0.5, z: -1.3}
+      - {x: 3.75, y: 0.5, z: -1.3}
+      - {x: 3.75, y: 0.5, z: 0.8780002}
+      - {x: 3.75, y: 0.5, z: 3.1220002}
+      - {x: 3.75, y: 0.5, z: 5.3}
+      - {x: 1.2749999, y: 0.5, z: 5.3}
+      - {x: -1.2750001, y: 0.5, z: 5.3}
+      - {x: -3.75, y: 0.5, z: 5.3}
+      - {x: -3.75, y: 0.5, z: 3.122}
+      - {x: -3.75, y: 0.5, z: 0.87799996}
+      holderPositions:
+      - {x: -2.5, y: 0.5, z: -1.3}
+      - {x: -1.2499999, y: 0.5, z: -1.3}
+      - {x: 0, y: 0.5, z: -1.3}
+      - {x: 1.2500001, y: 0.5, z: -1.3}
+      - {x: 2.4999998, y: 0.5, z: -1.3}
+    star1Threshold: 3000
+    star2Threshold: 4500
+    star3Threshold: 6600
+  - levelId: 28
+    packageId: 2
+    positionInPackage: 8
+    numColors: 6
+    balloonCount: 36
+    difficultyPurpose: normal
+    gimmickTypes:
+    - spawner_transparent
+    holders:
+    - holderId: 0
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 5
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 4
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 2
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 4
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 5
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 5
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 14
+      color: 2
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 15
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 16
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 17
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 2
+      gridPosition: {x: -2.25, y: -0.25}
+      gimmickType: 
+    - balloonId: 1
+      color: 3
+      gridPosition: {x: -1.35, y: -0.25}
+      gimmickType: 
+    - balloonId: 2
+      color: 5
+      gridPosition: {x: -0.45000005, y: -0.25}
+      gimmickType: 
+    - balloonId: 3
+      color: 0
+      gridPosition: {x: 0.44999993, y: -0.25}
+      gimmickType: 
+    - balloonId: 4
+      color: 0
+      gridPosition: {x: 1.3499999, y: -0.25}
+      gimmickType: 
+    - balloonId: 5
+      color: 5
+      gridPosition: {x: 2.25, y: -0.25}
+      gimmickType: 
+    - balloonId: 6
+      color: 1
+      gridPosition: {x: -2.25, y: 0.65}
+      gimmickType: 
+    - balloonId: 7
+      color: 3
+      gridPosition: {x: -1.35, y: 0.65}
+      gimmickType: 
+    - balloonId: 8
+      color: 4
+      gridPosition: {x: -0.45000005, y: 0.65}
+      gimmickType: 
+    - balloonId: 9
+      color: 2
+      gridPosition: {x: 0.44999993, y: 0.65}
+      gimmickType: 
+    - balloonId: 10
+      color: 3
+      gridPosition: {x: 1.3499999, y: 0.65}
+      gimmickType: 
+    - balloonId: 11
+      color: 0
+      gridPosition: {x: 2.25, y: 0.65}
+      gimmickType: 
+    - balloonId: 12
+      color: 3
+      gridPosition: {x: -2.25, y: 1.55}
+      gimmickType: 
+    - balloonId: 13
+      color: 4
+      gridPosition: {x: -1.35, y: 1.55}
+      gimmickType: 
+    - balloonId: 14
+      color: 1
+      gridPosition: {x: -0.45000005, y: 1.55}
+      gimmickType: 
+    - balloonId: 15
+      color: 0
+      gridPosition: {x: 0.44999993, y: 1.55}
+      gimmickType: 
+    - balloonId: 16
+      color: 0
+      gridPosition: {x: 1.3499999, y: 1.55}
+      gimmickType: spawner_transparent
+    - balloonId: 17
+      color: 4
+      gridPosition: {x: 2.25, y: 1.55}
+      gimmickType: 
+    - balloonId: 18
+      color: 1
+      gridPosition: {x: -2.25, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 19
+      color: 5
+      gridPosition: {x: -1.35, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 20
+      color: 3
+      gridPosition: {x: -0.45000005, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 21
+      color: 5
+      gridPosition: {x: 0.44999993, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 22
+      color: 2
+      gridPosition: {x: 1.3499999, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 23
+      color: 0
+      gridPosition: {x: 2.25, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 24
+      color: 2
+      gridPosition: {x: -2.25, y: 3.35}
+      gimmickType: 
+    - balloonId: 25
+      color: 4
+      gridPosition: {x: -1.35, y: 3.35}
+      gimmickType: 
+    - balloonId: 26
+      color: 4
+      gridPosition: {x: -0.45000005, y: 3.35}
+      gimmickType: 
+    - balloonId: 27
+      color: 5
+      gridPosition: {x: 0.44999993, y: 3.35}
+      gimmickType: spawner_transparent
+    - balloonId: 28
+      color: 2
+      gridPosition: {x: 1.3499999, y: 3.35}
+      gimmickType: 
+    - balloonId: 29
+      color: 4
+      gridPosition: {x: 2.25, y: 3.35}
+      gimmickType: 
+    - balloonId: 30
+      color: 1
+      gridPosition: {x: -2.25, y: 4.25}
+      gimmickType: spawner_transparent
+    - balloonId: 31
+      color: 1
+      gridPosition: {x: -1.35, y: 4.25}
+      gimmickType: 
+    - balloonId: 32
+      color: 1
+      gridPosition: {x: -0.45000005, y: 4.25}
+      gimmickType: 
+    - balloonId: 33
+      color: 2
+      gridPosition: {x: 0.44999993, y: 4.25}
+      gimmickType: 
+    - balloonId: 34
+      color: 3
+      gridPosition: {x: 1.3499999, y: 4.25}
+      gimmickType: spawner_transparent
+    - balloonId: 35
+      color: 5
+      gridPosition: {x: 2.25, y: 4.25}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.75, y: 0.5, z: -1.75}
+      - {x: -1.2749999, y: 0.5, z: -1.75}
+      - {x: 1.2750001, y: 0.5, z: -1.75}
+      - {x: 3.75, y: 0.5, z: -1.75}
+      - {x: 3.75, y: 0.5, z: 0.7250001}
+      - {x: 3.75, y: 0.5, z: 3.275}
+      - {x: 3.75, y: 0.5, z: 5.75}
+      - {x: 1.2749999, y: 0.5, z: 5.75}
+      - {x: -1.2750001, y: 0.5, z: 5.75}
+      - {x: -3.75, y: 0.5, z: 5.75}
+      - {x: -3.75, y: 0.5, z: 3.2749999}
+      - {x: -3.75, y: 0.5, z: 0.7249999}
+      holderPositions:
+      - {x: -2.5, y: 0.5, z: -1.75}
+      - {x: -1.2499999, y: 0.5, z: -1.75}
+      - {x: 0, y: 0.5, z: -1.75}
+      - {x: 1.2500001, y: 0.5, z: -1.75}
+      - {x: 2.4999998, y: 0.5, z: -1.75}
+    star1Threshold: 3600
+    star2Threshold: 5400
+    star3Threshold: 7920
+  - levelId: 29
+    packageId: 2
+    positionInPackage: 9
+    numColors: 5
+    balloonCount: 35
+    difficultyPurpose: normal
+    gimmickTypes:
+    - hidden
+    holders:
+    - holderId: 0
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 3
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 1
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 4
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 2
+      magazineCount: 9
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 4
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 4
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 14
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 15
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 16
+      color: 0
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 17
+      color: 4
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 1
+      gridPosition: {x: -2.6999998, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 1
+      color: 3
+      gridPosition: {x: -1.7999998, y: 0.20000005}
+      gimmickType: 
+    - balloonId: 2
+      color: 2
+      gridPosition: {x: -0.89999986, y: 0.20000005}
+      gimmickType: hidden
+    - balloonId: 3
+      color: 1
+      gridPosition: {x: 0.00000011920929, y: 0.20000005}
+      gimmickType: hidden
+    - balloonId: 4
+      color: 3
+      gridPosition: {x: 0.9000001, y: 0.20000005}
+      gimmickType: hidden
+    - balloonId: 5
+      color: 0
+      gridPosition: {x: 1.8000001, y: 0.20000005}
+      gimmickType: hidden
+    - balloonId: 6
+      color: 4
+      gridPosition: {x: 2.7, y: 0.20000005}
+      gimmickType: hidden
+    - balloonId: 7
+      color: 0
+      gridPosition: {x: -2.6999998, y: 1.1}
+      gimmickType: 
+    - balloonId: 8
+      color: 4
+      gridPosition: {x: -1.7999998, y: 1.1}
+      gimmickType: hidden
+    - balloonId: 9
+      color: 2
+      gridPosition: {x: -0.89999986, y: 1.1}
+      gimmickType: 
+    - balloonId: 10
+      color: 0
+      gridPosition: {x: 0.00000011920929, y: 1.1}
+      gimmickType: hidden
+    - balloonId: 11
+      color: 0
+      gridPosition: {x: 0.9000001, y: 1.1}
+      gimmickType: 
+    - balloonId: 12
+      color: 3
+      gridPosition: {x: 1.8000001, y: 1.1}
+      gimmickType: 
+    - balloonId: 13
+      color: 2
+      gridPosition: {x: 2.7, y: 1.1}
+      gimmickType: 
+    - balloonId: 14
+      color: 0
+      gridPosition: {x: -2.6999998, y: 2}
+      gimmickType: 
+    - balloonId: 15
+      color: 3
+      gridPosition: {x: -1.7999998, y: 2}
+      gimmickType: 
+    - balloonId: 16
+      color: 2
+      gridPosition: {x: -0.89999986, y: 2}
+      gimmickType: 
+    - balloonId: 17
+      color: 1
+      gridPosition: {x: 0.00000011920929, y: 2}
+      gimmickType: hidden
+    - balloonId: 18
+      color: 1
+      gridPosition: {x: 0.9000001, y: 2}
+      gimmickType: 
+    - balloonId: 19
+      color: 2
+      gridPosition: {x: 1.8000001, y: 2}
+      gimmickType: 
+    - balloonId: 20
+      color: 0
+      gridPosition: {x: 2.7, y: 2}
+      gimmickType: 
+    - balloonId: 21
+      color: 2
+      gridPosition: {x: -2.6999998, y: 2.9}
+      gimmickType: hidden
+    - balloonId: 22
+      color: 1
+      gridPosition: {x: -1.7999998, y: 2.9}
+      gimmickType: 
+    - balloonId: 23
+      color: 4
+      gridPosition: {x: -0.89999986, y: 2.9}
+      gimmickType: hidden
+    - balloonId: 24
+      color: 2
+      gridPosition: {x: 0.00000011920929, y: 2.9}
+      gimmickType: 
+    - balloonId: 25
+      color: 4
+      gridPosition: {x: 0.9000001, y: 2.9}
+      gimmickType: hidden
+    - balloonId: 26
+      color: 4
+      gridPosition: {x: 1.8000001, y: 2.9}
+      gimmickType: 
+    - balloonId: 27
+      color: 3
+      gridPosition: {x: 2.7, y: 2.9}
+      gimmickType: hidden
+    - balloonId: 28
+      color: 3
+      gridPosition: {x: -2.6999998, y: 3.8}
+      gimmickType: 
+    - balloonId: 29
+      color: 1
+      gridPosition: {x: -1.7999998, y: 3.8}
+      gimmickType: 
+    - balloonId: 30
+      color: 1
+      gridPosition: {x: -0.89999986, y: 3.8}
+      gimmickType: 
+    - balloonId: 31
+      color: 4
+      gridPosition: {x: 0.00000011920929, y: 3.8}
+      gimmickType: 
+    - balloonId: 32
+      color: 4
+      gridPosition: {x: 0.9000001, y: 3.8}
+      gimmickType: 
+    - balloonId: 33
+      color: 3
+      gridPosition: {x: 1.8000001, y: 3.8}
+      gimmickType: 
+    - balloonId: 34
+      color: 0
+      gridPosition: {x: 2.7, y: 3.8}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -4.2, y: 0.5, z: -1.3}
+      - {x: -1.4279999, y: 0.5, z: -1.3}
+      - {x: 1.4280001, y: 0.5, z: -1.3}
+      - {x: 4.2, y: 0.5, z: -1.3}
+      - {x: 4.2, y: 0.5, z: 0.8780002}
+      - {x: 4.2, y: 0.5, z: 3.1220002}
+      - {x: 4.2, y: 0.5, z: 5.3}
+      - {x: 1.4279999, y: 0.5, z: 5.3}
+      - {x: -1.4280001, y: 0.5, z: 5.3}
+      - {x: -4.2, y: 0.5, z: 5.3}
+      - {x: -4.2, y: 0.5, z: 3.122}
+      - {x: -4.2, y: 0.5, z: 0.87799996}
+      holderPositions:
+      - {x: -2.7999997, y: 0.5, z: -1.3}
+      - {x: -1.3999999, y: 0.5, z: -1.3}
+      - {x: 0, y: 0.5, z: -1.3}
+      - {x: 1.4000001, y: 0.5, z: -1.3}
+      - {x: 2.7999997, y: 0.5, z: -1.3}
+    star1Threshold: 3500
+    star2Threshold: 5250
+    star3Threshold: 7700
+  - levelId: 30
+    packageId: 2
+    positionInPackage: 10
+    numColors: 6
+    balloonCount: 36
+    difficultyPurpose: normal
+    gimmickTypes:
+    - hidden
+    holders:
+    - holderId: 0
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 1
+      color: 5
+      magazineCount: 8
+      position: {x: 0, y: 0}
+    - holderId: 2
+      color: 2
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 3
+      color: 4
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 4
+      color: 2
+      magazineCount: 3
+      position: {x: 0, y: 0}
+    - holderId: 5
+      color: 0
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 6
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 7
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 8
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 9
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 10
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 11
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 12
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 13
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    - holderId: 14
+      color: 4
+      magazineCount: 4
+      position: {x: 0, y: 0}
+    - holderId: 15
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 16
+      color: 2
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 17
+      color: 3
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 18
+      color: 1
+      magazineCount: 2
+      position: {x: 0, y: 0}
+    - holderId: 19
+      color: 0
+      magazineCount: 1
+      position: {x: 0, y: 0}
+    balloons:
+    - balloonId: 0
+      color: 0
+      gridPosition: {x: -2.25, y: -0.25}
+      gimmickType: 
+    - balloonId: 1
+      color: 5
+      gridPosition: {x: -1.35, y: -0.25}
+      gimmickType: 
+    - balloonId: 2
+      color: 1
+      gridPosition: {x: -0.45000005, y: -0.25}
+      gimmickType: hidden
+    - balloonId: 3
+      color: 1
+      gridPosition: {x: 0.44999993, y: -0.25}
+      gimmickType: 
+    - balloonId: 4
+      color: 0
+      gridPosition: {x: 1.3499999, y: -0.25}
+      gimmickType: 
+    - balloonId: 5
+      color: 4
+      gridPosition: {x: 2.25, y: -0.25}
+      gimmickType: 
+    - balloonId: 6
+      color: 5
+      gridPosition: {x: -2.25, y: 0.65}
+      gimmickType: 
+    - balloonId: 7
+      color: 5
+      gridPosition: {x: -1.35, y: 0.65}
+      gimmickType: hidden
+    - balloonId: 8
+      color: 3
+      gridPosition: {x: -0.45000005, y: 0.65}
+      gimmickType: 
+    - balloonId: 9
+      color: 4
+      gridPosition: {x: 0.44999993, y: 0.65}
+      gimmickType: hidden
+    - balloonId: 10
+      color: 2
+      gridPosition: {x: 1.3499999, y: 0.65}
+      gimmickType: hidden
+    - balloonId: 11
+      color: 1
+      gridPosition: {x: 2.25, y: 0.65}
+      gimmickType: 
+    - balloonId: 12
+      color: 2
+      gridPosition: {x: -2.25, y: 1.55}
+      gimmickType: 
+    - balloonId: 13
+      color: 3
+      gridPosition: {x: -1.35, y: 1.55}
+      gimmickType: 
+    - balloonId: 14
+      color: 1
+      gridPosition: {x: -0.45000005, y: 1.55}
+      gimmickType: hidden
+    - balloonId: 15
+      color: 0
+      gridPosition: {x: 0.44999993, y: 1.55}
+      gimmickType: 
+    - balloonId: 16
+      color: 0
+      gridPosition: {x: 1.3499999, y: 1.55}
+      gimmickType: hidden
+    - balloonId: 17
+      color: 0
+      gridPosition: {x: 2.25, y: 1.55}
+      gimmickType: 
+    - balloonId: 18
+      color: 2
+      gridPosition: {x: -2.25, y: 2.4499998}
+      gimmickType: hidden
+    - balloonId: 19
+      color: 2
+      gridPosition: {x: -1.35, y: 2.4499998}
+      gimmickType: 
+    - balloonId: 20
+      color: 0
+      gridPosition: {x: -0.45000005, y: 2.4499998}
+      gimmickType: hidden
+    - balloonId: 21
+      color: 3
+      gridPosition: {x: 0.44999993, y: 2.4499998}
+      gimmickType: hidden
+    - balloonId: 22
+      color: 5
+      gridPosition: {x: 1.3499999, y: 2.4499998}
+      gimmickType: hidden
+    - balloonId: 23
+      color: 5
+      gridPosition: {x: 2.25, y: 2.4499998}
+      gimmickType: hidden
+    - balloonId: 24
+      color: 5
+      gridPosition: {x: -2.25, y: 3.35}
+      gimmickType: 
+    - balloonId: 25
+      color: 4
+      gridPosition: {x: -1.35, y: 3.35}
+      gimmickType: 
+    - balloonId: 26
+      color: 3
+      gridPosition: {x: -0.45000005, y: 3.35}
+      gimmickType: 
+    - balloonId: 27
+      color: 4
+      gridPosition: {x: 0.44999993, y: 3.35}
+      gimmickType: 
+    - balloonId: 28
+      color: 2
+      gridPosition: {x: 1.3499999, y: 3.35}
+      gimmickType: 
+    - balloonId: 29
+      color: 3
+      gridPosition: {x: 2.25, y: 3.35}
+      gimmickType: 
+    - balloonId: 30
+      color: 2
+      gridPosition: {x: -2.25, y: 4.25}
+      gimmickType: 
+    - balloonId: 31
+      color: 1
+      gridPosition: {x: -1.35, y: 4.25}
+      gimmickType: 
+    - balloonId: 32
+      color: 3
+      gridPosition: {x: -0.45000005, y: 4.25}
+      gimmickType: 
+    - balloonId: 33
+      color: 4
+      gridPosition: {x: 0.44999993, y: 4.25}
+      gimmickType: 
+    - balloonId: 34
+      color: 4
+      gridPosition: {x: 1.3499999, y: 4.25}
+      gimmickType: 
+    - balloonId: 35
+      color: 1
+      gridPosition: {x: 2.25, y: 4.25}
+      gimmickType: 
+    rail:
+      waypoints:
+      - {x: -3.75, y: 0.5, z: -1.75}
+      - {x: -1.2749999, y: 0.5, z: -1.75}
+      - {x: 1.2750001, y: 0.5, z: -1.75}
+      - {x: 3.75, y: 0.5, z: -1.75}
+      - {x: 3.75, y: 0.5, z: 0.7250001}
+      - {x: 3.75, y: 0.5, z: 3.275}
+      - {x: 3.75, y: 0.5, z: 5.75}
+      - {x: 1.2749999, y: 0.5, z: 5.75}
+      - {x: -1.2750001, y: 0.5, z: 5.75}
+      - {x: -3.75, y: 0.5, z: 5.75}
+      - {x: -3.75, y: 0.5, z: 3.2749999}
+      - {x: -3.75, y: 0.5, z: 0.7249999}
+      holderPositions:
+      - {x: -2.5, y: 0.5, z: -1.75}
+      - {x: -1.2499999, y: 0.5, z: -1.75}
+      - {x: 0, y: 0.5, z: -1.75}
+      - {x: 1.2500001, y: 0.5, z: -1.75}
+      - {x: 2.4999998, y: 0.5, z: -1.75}
+    star1Threshold: 3600
+    star2Threshold: 5400
+    star3Threshold: 7920

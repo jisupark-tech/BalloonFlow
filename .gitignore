@@ -1,0 +1,28 @@
+# Unity generated
+unity/Library/
+unity/Temp/
+unity/Obj/
+unity/Build/
+unity/Builds/
+unity/Logs/
+unity/UserSettings/
+unity/MemoryCaptures/
+unity/Recordings/
+
+# IDE
+.vs/
+.vscode/
+*.csproj
+*.sln
+*.suo
+*.user
+*.pidb
+*.booproj
+*.unityproj
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Crashlytics
+crashlytics-build.properties
