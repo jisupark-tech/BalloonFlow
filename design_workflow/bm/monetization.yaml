@@ -1,122 +1,151 @@
 # BalloonFlow — Stage 2-5: BM — Monetization Detail
-# Full monetization strategy and revenue projections
+# STATUS: confirmed — 1.0(소프트런칭) 범위
+# 정본 참조: 아웃게임디렉션.md, systems/outgame.yaml
 
 domain: BM
 sub_doc: monetization
+status: confirmed
 
 # ─────────────────────────────────────
-# 1. Revenue Model Mix
+# 1. 수익화 모델
 # ─────────────────────────────────────
-revenue_model:
-  type: "F2P + IAP + Ad (Hybrid)"
-  target_split:
-    iap: 55   # %
-    ad: 45    # %
-  note: "초기 광고 비중 높음 → 유저 성숙 후 IAP 비중 증가 목표"
+monetization_model: "F2P + IAP + Ad"
+scope: "1.0은 Static Pricing만. Dynamic Pricing은 소프트런칭 데이터 확인 후"
 
 # ─────────────────────────────────────
-# 2. Ad Strategy
+# 2. 가치 계산 체계 (단일 가치 시스템)
 # ─────────────────────────────────────
-ad_strategy:
-  rewarded:
-    placements:
-      - { id: "free_heart", trigger: "하트 0 상태 팝업", reward: "하트 1개", cap: "5/day" }
-      - { id: "free_continue", trigger: "레벨 실패 팝업", reward: "다트 +5 이어하기", cap: "3/day" }
-      - { id: "free_booster", trigger: "레벨 시작 부스터 슬롯", reward: "랜덤 부스터", cap: "3/day" }
-      - { id: "double_reward", trigger: "클리어 결과 화면", reward: "코인 2x", cap: "10/day" }
-      - { id: "free_coin", trigger: "상점 내 무료 코인 버튼", reward: "코인 200", cap: "5/day" }
-      - { id: "spin_wheel", trigger: "일일 룰렛 추가 스핀", reward: "랜덤 보상", cap: "3/day" }
-    avg_daily_views_target: 6
-    revenue_per_view: 0.02   # USD eCPM $20 기준
+value_system:
+  description: "모든 IAP 상품의 가치는 총가치(유저 관점 인지 가치) 단일 기준으로 관리"
+  base_rate:
+    reference: "Standard Coin T1 ($0.99 = 900코인)"
+    coins_per_dollar: 909.09
+    dollar_per_coin: 0.0011
 
-  interstitial:
-    frequency: "매 3레벨 클리어 후"
-    cooldown_sec: 120
-    skip_rules:
-      - "Level 1~5 (튜토리얼)"
-      - "첫 세션 15분"
-      - "IAP 유저 50% 감소"
-      - "연속 실패 3회 직후 (유저 이탈 방지)"
-    avg_daily_views_target: 4
-    revenue_per_view: 0.01   # eCPM $10 기준
+  formulas:
+    total_value_efficiency: "상품의 총가치($) / 판매 가격($)"
+    total_value_discount: "1 - (판매 가격($) / 상품의 총가치($))"
+    coin_efficiency: "제공 코인 총가치($) / 판매 가격($)"
+    coin_discount: "1 - (판매 가격($) / 제공 코인 총가치($))"
+    coin_ratio: "제공 코인 총가치 / 상품의 총가치"
+    continue_equiv: "제공 코인 / 900"
 
-  daily_ad_revenue_estimate:
-    rewarded: "6 * 0.02 = $0.12"
-    interstitial: "4 * 0.01 = $0.04"
-    total: "$0.16/DAU/day"
+  design_principles:
+    - "Tier 1($0.99) = 이어하기 1회(900코인). 경제의 기준점"
+    - "코인량은 이어하기 0.5회(450코인)의 배수"
+    - "100, 500, 1000 등 딱 떨어지는 명료한 숫자 단위 우선"
+    - "상위 가격 상품은 하위 가격 상품보다 총가치 반드시 높아야 함"
 
-# ─────────────────────────────────────
-# 3. IAP Strategy
-# ─────────────────────────────────────
-iap_strategy:
-  gem_packs:
-    - { id: "gem_xs", name: "소량 젬", gems: 80, price: 0.99, gem_per_dollar: 80.8, badge: "" }
-    - { id: "gem_s", name: "중간 젬", gems: 500, price: 4.99, gem_per_dollar: 100.2, badge: "인기" }
-    - { id: "gem_m", name: "대량 젬", gems: 1200, price: 9.99, gem_per_dollar: 120.1, badge: "추천" }
-    - { id: "gem_l", name: "메가 젬", gems: 3000, price: 19.99, gem_per_dollar: 150.1, badge: "핫딜" }
-    - { id: "gem_xl", name: "울트라 젬", gems: 8000, price: 49.99, gem_per_dollar: 160.0, badge: "최고 가치" }
-
-  special_offers:
-    starter_pack:
-      trigger: "Level 10 클리어"
-      time_limit: "24h"
-      price: 1.99
-      contents: ["젬 100", "부스터팩 (3종 x3)", "하트 풀 충전"]
-      value_ratio: 5.0
-      target_conversion: 0.05
-
-    level_rescue_pack:
-      trigger: "같은 레벨 3회 연속 실패"
-      time_limit: "6h"
-      price: 3.99
-      contents: ["젬 150", "Bomb Dart x5", "Rainbow Dart x5", "Extra Darts x5"]
-      value_ratio: 3.5
-      target_conversion: 0.08
-
-    weekend_pack:
-      trigger: "주말 첫 로그인"
-      time_limit: "48h"
-      price: 2.99
-      contents: ["젬 120", "코인 5000", "부스터 랜덤팩 x5"]
-      value_ratio: 4.0
-      target_conversion: 0.04
-
-  no_ads:
-    price: 4.99
-    type: "non_consumable"
-    effect: "전면 광고 완전 제거. 보상형 광고는 선택 유지."
-    target_conversion: 0.02
-
-  piggy_bank:
-    price: 2.99
-    fill_per_level: "젬 3~5개 (레벨 난이도 비례)"
-    fill_cycle: "8판 플레이 시 가득 참"
-    full_value: "젬 ~35"
-    value_ratio: 2.5
-    repeat_purchase: true
+  booster_unit_values:
+    tray_add: { coins: 300, usd: 0.33 }
+    shuffle: { coins: 500, usd: 0.55 }
+    hand: { coins: 633, usd: 0.70 }
+    color_remove: { coins: 967, usd: 1.06 }
+    set_of_4: { coins: 2400, usd: 2.64 }
 
 # ─────────────────────────────────────
-# 4. Conversion Funnel
+# 3. 표준 코인 상품 (6 Tiers)
 # ─────────────────────────────────────
-conversion_funnel:
-  D1_payer_rate: 0.01
-  D7_payer_rate: 0.03
-  D30_payer_rate: 0.05
-  avg_purchase_value: 3.50   # USD
-  ARPPU_D30: 15.00
-  whale_threshold: 50.00   # 총 지출 $50+ = whale
-  whale_rate: 0.005
+coin_packs:
+  description: "코인 100% 상품. 모든 가치 평가의 기준점"
+  dynamic_pricing: false
+  unlock: "Lv.1+"
+  purchase_limit: "없음 (상시)"
+  display: "상점 상시. 저가→고가 순"
+
+  # 필수 컬럼: 가격, 상품명, 코인 기준 할인율, 총가치, 총가치 할인율, 총가치 효율, 코인 비율, 코인 기준 효율, 코인, 부스터 구성, 이어하기 횟수 환산
+  table:
+    - { price: 0.99, name: "Standard Coin T1", coin_discount_pct: 0, total_value_usd: 0.99, total_discount_pct: 0, total_efficiency: 1.00, coin_ratio: 1.00, coin_efficiency: 1.00, coins: 900, boosters: "-", continues: 1.0 }
+    - { price: 2.99, name: "Standard Coin T2", coin_discount_pct: 24, total_value_usd: 3.96, total_discount_pct: 24, total_efficiency: 1.32, coin_ratio: 1.00, coin_efficiency: 1.32, coins: 3600, boosters: "-", continues: 4.0 }
+    - { price: 4.99, name: "Standard Coin T3", coin_discount_pct: 33, total_value_usd: 7.43, total_discount_pct: 33, total_efficiency: 1.49, coin_ratio: 1.00, coin_efficiency: 1.49, coins: 6750, boosters: "-", continues: 7.5 }
+    - { price: 9.99, name: "Standard Coin T4", coin_discount_pct: 37, total_value_usd: 15.84, total_discount_pct: 37, total_efficiency: 1.59, coin_ratio: 1.00, coin_efficiency: 1.59, coins: 14400, boosters: "-", continues: 16.0 }
+    - { price: 19.99, name: "Standard Coin T5", coin_discount_pct: 42, total_value_usd: 34.65, total_discount_pct: 42, total_efficiency: 1.73, coin_ratio: 1.00, coin_efficiency: 1.73, coins: 31500, boosters: "-", continues: 35.0 }
+    - { price: 99.99, name: "Standard Coin T6", coin_discount_pct: 50, total_value_usd: 198.00, total_discount_pct: 50, total_efficiency: 1.98, coin_ratio: 1.00, coin_efficiency: 1.98, coins: 180000, boosters: "-", continues: 200.0 }
 
 # ─────────────────────────────────────
-# 5. First Purchase Journey
+# 4. 표준 번들 상품 (5 Tiers)
 # ─────────────────────────────────────
-first_purchase_journey:
-  steps:
-    - { level: "1~5", action: "무료 체험. 광고 없음." }
-    - { level: "6~9", action: "첫 광고 노출. 보상형 광고 체험." }
-    - { level: 10, action: "스타터팩 오퍼 (24시간 제한)" }
-    - { level: "11~20", action: "자연스러운 부스터 필요 발생" }
-    - { level: 20, action: "피기뱅크 해금. 누적 시각화 시작." }
-    - { level: "20~30", action: "하트 부족 첫 경험. 젬 소비 시작." }
-    - { level: 30, action: "시즌패스 해금. 프리미엄 보상 미리보기." }
-  target_first_purchase: "Day 1~3, Level 10~30 구간"
+bundles:
+  description: "코인 + 부스터 조합. 핵심 가치는 부스터"
+  dynamic_pricing: false
+  unlock: "Lv.1+"
+  purchase_limit: "없음"
+  display: "상점 상시"
+  design_principle: >
+    가치 누적 구조(cumulative). 상위 티어는 하위 티어 구성 포함 + 수량 증가.
+    번들 코인 효율은 1.0~1.3배로 억제. 핵심 가치가 코인이 아닌 부스터임을 명확히.
+
+  table:
+    - { price: 4.99, name: "Standard Bundle T1", coin_discount_pct: 0, total_value_usd: 8.58, total_discount_pct: 42, total_efficiency: 1.72, coin_ratio: 0.69, coin_efficiency: 1.19, coins: 5400, boosters: "부스터 4종 각 1개", continues: 6.0 }
+    - { price: 9.99, name: "Standard Bundle T2", coin_discount_pct: 0, total_value_usd: 17.16, total_discount_pct: 42, total_efficiency: 1.72, coin_ratio: 0.69, coin_efficiency: 1.19, coins: 10800, boosters: "부스터 4종 각 2개", continues: 12.0 }
+    - { price: 19.99, name: "Standard Bundle T3", coin_discount_pct: 0, total_value_usd: 35.31, total_discount_pct: 43, total_efficiency: 1.77, coin_ratio: 0.70, coin_efficiency: 1.24, coins: 22500, boosters: "부스터 4종 각 4개", continues: 25.0 }
+    - { price: 49.99, name: "Standard Bundle T4", coin_discount_pct: 0, total_value_usd: 95.70, total_discount_pct: 48, total_efficiency: 1.91, coin_ratio: 0.72, coin_efficiency: 1.39, coins: 63000, boosters: "부스터 4종 각 10개", continues: 70.0 }
+    - { price: 99.99, name: "Standard Bundle T5", coin_discount_pct: 0, total_value_usd: 201.30, total_discount_pct: 50, total_efficiency: 2.01, coin_ratio: 0.74, coin_efficiency: 1.49, coins: 135000, boosters: "부스터 4종 각 20개", continues: 150.0 }
+
+# ─────────────────────────────────────
+# 5. 스타터팩 (첫 구매 유도)
+# ─────────────────────────────────────
+starter_pack:
+  description: "첫 결제 장벽을 낮추는 것이 목적"
+  dynamic_pricing: false
+  unlock: "Lv.10~20 (피어 분석 후 확정)"
+  purchase_limit: "1회 한정"
+  display: "해금 시 팝업 + 상점 한정 배너"
+
+  table:
+    - { price: 0.99, name: "스타터팩 I", coin_discount_pct: 0, total_value_usd: 3.63, total_discount_pct: 73, total_efficiency: 3.67, coin_ratio: 0.27, coin_efficiency: 1.00, coins: 900, boosters: "부스터 4종 각 1개", continues: 1.0 }
+    - { price: 1.99, name: "스타터팩 II", coin_discount_pct: 0, total_value_usd: 7.26, total_discount_pct: 73, total_efficiency: 3.65, coin_ratio: 0.27, coin_efficiency: 1.00, coins: 1800, boosters: "부스터 4종 각 2개", continues: 2.0 }
+
+# ─────────────────────────────────────
+# 6. 광고 제거
+# ─────────────────────────────────────
+ad_removal:
+  price: "2.99~4.99 (피어 분석 후 확정)"
+  dynamic_pricing: false
+  unlock: "Lv.20+ (전면 광고 시작 시점)"
+  purchase_limit: "1회 (영구)"
+  display: "상점 상시 + 전면 광고 노출 시 광고 제거 버튼"
+  effect: "전면 광고 영구 제거 (보상형 광고는 유저 선택이므로 유지)"
+
+# ─────────────────────────────────────
+# 7. 상품 간 가치 위계
+# ─────────────────────────────────────
+value_hierarchy:
+  - { category: "스타터팩", efficiency: "3.0x+", note: "1회 한정이라 최고 효율 허용" }
+  - { category: "번들", efficiency: "1.7x~2.5x", note: "코인 상품보다 항상 높아야 함" }
+  - { category: "코인", efficiency: "1.0x~2.0x", note: "모든 가치 평가의 기준점(1.0배)" }
+
+# ─────────────────────────────────────
+# 8. 시즌패스 (concept.yaml _LOCKED)
+# ─────────────────────────────────────
+season_pass:
+  structure: "업계 표준 구조"
+  free_track: "기능적 보상 (코인, 부스터, 라이프 리필)"
+  premium_track: "꾸미기 보상 (시즌 한정 풍선 이펙트, 다트/보관함 스킨)"
+  philosophy: "더 예쁘게 터뜨리는 경험이지, 더 쉽게 클리어하는 파워가 아님"
+  pricing:
+    status: _TBD
+    note: "피어 분석 후 확정. 업계 기준 $3.99~$6.99 예상"
+
+# ─────────────────────────────────────
+# 9. 이후 업데이트 상품 (1.0 미포함)
+# ─────────────────────────────────────
+future_products:
+  static:
+    - { name: "피기뱅크", price: 2.99, description: "플레이하면 코인 누적 → 구매하여 열기" }
+    - { name: "프리미엄 패스", price: "TBD", description: "시즌패스 (무료+유료 트랙)" }
+    - { name: "일일 행사", price: "TBD", description: "" }
+  dynamic:
+    - { name: "Best Value", price: "1~5 (5단계)", description: "상시 최고 효율 2.5배" }
+    - { name: "Mega Sale", price: "TBD", description: "NPU 첫 구매 전환 팝업" }
+    - { name: "주간 행사", price: "TBD", description: "" }
+    - { name: "주말 세일", price: "TBD", description: "" }
+    - { name: "어려운 레벨 번들", price: "TBD", description: "하드/슈퍼하드 실패 시 팝업" }
+
+# ─────────────────────────────────────
+# 아이템 컬럼 작성 규칙
+# ─────────────────────────────────────
+item_column_rules:
+  - "부스터 4종 전체 포함 시: '부스터 4종 각 N개'"
+  - "일부만 포함 시: 아이템명 명시 (예: '트레이 추가 2개, 셔플 3개')"
+  - "'부스터 3종 각 1개'처럼 불명확한 표현 금지"

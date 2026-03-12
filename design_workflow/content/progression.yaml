@@ -1,187 +1,185 @@
 # BalloonFlow — Stage 2-4: Content — Progression Schedule
-# Complete progression timeline: gimmicks, chapters, unlocks
+# Complete progression timeline: colors, gimmicks, packages
+# 정본 참조: concept.yaml, beat_chart.yaml, gimmick_spec.yaml
 
 domain: Content
 sub_doc: progression
 
 # ─────────────────────────────────────
-# 1. Full Progression Timeline
+# 1. Full Progression Timeline (100 Levels)
 # ─────────────────────────────────────
 timeline:
+  # === PKG1: LEARN (Lv.1-20) ===
   - level: 1
-    event: "게임 시작. 튜토리얼 Level 1-5."
-    unlocks: ["basic_balloon", "dart_launcher"]
-    colors: 3
+    event: "게임 시작. 튜토리얼 Level 1-5. 보관함+다트 기본 체험."
+    unlocks: [basic_object, holder_system]
+    colors: 2
     gimmicks: []
+    package: 1
+
+  - level: 3
+    event: "3번째 색상 (Green) 도입"
+    unlocks: [color_3]
+    colors: 3
+    package: 1
 
   - level: 6
-    event: "4번째 색상 (Yellow) 도입"
-    unlocks: ["color_4"]
+    event: "4번째 색상 (Yellow) + 4번째 보관함 도입"
+    unlocks: [color_4]
     colors: 4
-    gimmicks: []
+    package: 1
 
-  - level: 10
-    event: "스타터팩 해금 (24시간 제한 오퍼)"
-    unlocks: ["starter_pack", "shop"]
-    colors: 4
-    gimmicks: []
-
-  - level: 15
-    event: "이중 풍선 도입"
-    unlocks: ["double_balloon"]
-    colors: 4
-    gimmicks: [double_balloon]
-
-  - level: 16
+  - level: 8
     event: "5번째 색상 (Pink) 도입"
-    unlocks: ["color_5"]
+    unlocks: [color_5]
     colors: 5
-    gimmicks: [double_balloon]
+    package: 1
+
+  - level: 11
+    event: "Hidden 기믹 도입 — 보관함 색상 숨김"
+    unlocks: [hidden]
+    colors: 5
+    gimmicks: [hidden]
+    package: 1
 
   - level: 20
-    event: "챕터 1 보스. 피기뱅크 해금."
-    unlocks: ["piggy_bank", "chapter_2"]
+    event: "PKG1 완료."
+    unlocks: [package_2]
     colors: 5
-    gimmicks: [double_balloon]
-    boss: true
+    package: 1
 
-  - level: 25
-    event: "얼음 풍선 도입"
-    unlocks: ["frozen_balloon"]
+  # === PKG2: LEARN→GROW (Lv.21-40) ===
+  - level: 21
+    event: "Spawner 투명 기믹 도입 — 보드 위 생성기, 다음 색상 보임"
+    unlocks: [spawner_transparent]
     colors: 5
-    gimmicks: [double_balloon, frozen_balloon]
+    gimmicks: [hidden, spawner_transparent]
+    package: 2
 
-  - level: 30
-    event: "시즌패스 해금. 첫 번째 과금 압박점."
-    unlocks: ["season_pass"]
-    colors: 5
-    gimmicks: [double_balloon, frozen_balloon]
+  - level: 26
+    event: "6번째 색상 (Orange) 도입"
+    unlocks: [color_6]
+    colors: 6
+    package: 2
 
   - level: 31
-    event: "6번째 색상 (Orange) 도입"
-    unlocks: ["color_6"]
+    event: "Spawner 불투명 기믹 도입 — 다음 색상 안 보임"
+    unlocks: [spawner_opaque]
     colors: 6
-    gimmicks: [double_balloon, frozen_balloon]
-
-  - level: 35
-    event: "폭탄 풍선 도입"
-    unlocks: ["bomb_balloon"]
-    colors: 6
-    gimmicks: [double_balloon, frozen_balloon, bomb_balloon]
+    gimmicks: [hidden, spawner_transparent, spawner_opaque]
+    package: 2
 
   - level: 40
-    event: "자물쇠 풍선 도입. 챕터 2 보스."
-    unlocks: ["lock_balloon", "chapter_3"]
+    event: "PKG2 완료."
+    unlocks: [package_3]
     colors: 6
-    gimmicks: [double_balloon, frozen_balloon, bomb_balloon, lock_balloon]
-    boss: true
+    package: 2
 
-  - level: 50
-    event: "무지개 풍선 도입. 중간 과금 압박점."
-    unlocks: ["rainbow_balloon"]
+  # === PKG3: GROW (Lv.41-60) ===
+  - level: 41
+    event: "Big Object 기믹 도입 — 대형 오브젝트 + 라이프 시스템"
+    unlocks: [big_object]
     colors: 6
-    gimmicks: [double_balloon, frozen_balloon, bomb_balloon, lock_balloon, rainbow_balloon]
+    gimmicks: [hidden, spawner_transparent, spawner_opaque, big_object]
+    package: 3
+
+  - level: 46
+    event: "7번째 색상 (Purple) 도입"
+    unlocks: [color_7]
+    colors: 7
+    package: 3
 
   - level: 60
-    event: "챕터 3 보스."
-    unlocks: ["chapter_4"]
-    colors: 6
-    boss: true
+    event: "PKG3 완료."
+    unlocks: [package_4]
+    colors: 7
+    package: 3
 
+  # === PKG4: GROW→MASTER (Lv.61-80) ===
   - level: 61
-    event: "7번째 색상 (Purple) 도입"
-    unlocks: ["color_7"]
+    event: "Chain 기믹 도입 — 2개 보관함 연결, 동시 활성화. 5종 기믹 전부 활성화."
+    unlocks: [chain]
     colors: 7
+    gimmicks: [hidden, spawner_transparent, spawner_opaque, big_object, chain]
+    package: 4
 
-  - level: 70
-    event: "빠른 레일 기믹 도입"
-    unlocks: ["speed_rail"]
-    colors: 7
+  - level: 66
+    event: "8번째 색상 (Sky) 도입 — 최대 색상"
+    unlocks: [color_8]
+    colors: 8
+    package: 4
 
   - level: 80
-    event: "챕터 4 보스. 높은 과금 압박점."
-    unlocks: ["chapter_5"]
-    colors: 7
-    boss: true
+    event: "PKG4 완료."
+    unlocks: [package_5]
+    colors: 8
+    package: 4
 
-  - level: 90
-    event: "분기 레일 기믹 도입"
-    unlocks: ["branching_rail"]
-    colors: 7
+  # === PKG5: MASTER (Lv.81-100) ===
+  - level: 81
+    event: "PKG5 시작. 5종 기믹 최대 조합, 마스터리 레벨."
+    colors: 8
+    gimmicks: [hidden, spawner_transparent, spawner_opaque, big_object, chain]
+    package: 5
 
   - level: 100
-    event: "챕터 5 보스. 주간 랭킹 해금."
-    unlocks: ["chapter_6", "weekly_leaderboard"]
-    colors: 7
-    boss: true
-
-  - level: 120
-    event: "역방향 레일 기믹 도입. 챕터 6 보스. 최고 과금 압박점."
-    unlocks: ["reverse_rail", "chapter_7"]
-    colors: 7
-    boss: true
-
-  - level: 121
-    event: "8번째 색상 (Sky) 도입 — 최대 색상"
-    unlocks: ["color_8"]
+    event: "PKG5 완료. 엔딩."
+    unlocks: [ending]
     colors: 8
+    package: 5
 
-  - level: 140
-    event: "챕터 7 보스."
-    unlocks: ["chapter_8"]
-    colors: 8
-    boss: true
-
-  - level: 150
-    event: "포탈 기믹 도입"
-    unlocks: ["portal"]
-    colors: 8
-
-  - level: 160
-    event: "챕터 8 보스"
-    unlocks: ["chapter_9"]
-    colors: 8
-    boss: true
-
-  - level: 180
-    event: "어둠 기믹 도입. 챕터 9 보스."
-    unlocks: ["darkness", "chapter_10"]
-    colors: 8
-    boss: true
-
-  - level: 200
-    event: "챕터 10 보스. 엔딩 크레딧. 무한 모드 해금 검토."
-    unlocks: ["ending"]
-    colors: 8
-    boss: true
+  # NOTE: OutGame 시스템 해금 (스타터팩, 피기뱅크, 시즌패스, 리더보드 등)은
+  # OutGame/BM 확정 후 타임라인에 추가.
 
 # ─────────────────────────────────────
-# 2. Day-based Progression Estimate
+# 2. Color Introduction Summary
+# ─────────────────────────────────────
+color_schedule:
+  - { level: 1, colors: 2, added: "Red, Blue" }
+  - { level: 3, colors: 3, added: "Green" }
+  - { level: 6, colors: 4, added: "Yellow" }
+  - { level: 8, colors: 5, added: "Pink" }
+  - { level: 26, colors: 6, added: "Orange" }
+  - { level: 46, colors: 7, added: "Purple" }
+  - { level: 66, colors: 8, added: "Sky (최대)" }
+
+# ─────────────────────────────────────
+# 3. Gimmick Introduction Summary
+# ─────────────────────────────────────
+gimmick_schedule:
+  - { level: 11, gimmick: Hidden, package: PKG1 }
+  - { level: 21, gimmick: "Spawner 투명", package: PKG2 }
+  - { level: 31, gimmick: "Spawner 불투명", package: PKG2 }
+  - { level: 41, gimmick: "Big Object", package: PKG3 }
+  - { level: 61, gimmick: Chain, package: PKG4 }
+
+# ─────────────────────────────────────
+# 4. Day-based Progression Estimate
 # ─────────────────────────────────────
 day_progression:
   assumptions:
-    levels_per_day_casual: 8
-    levels_per_day_core: 15
+    levels_per_day_casual: 5
+    levels_per_day_core: 10
   estimates:
     casual:
-      D1: "Level 8"
-      D7: "Level 50"
-      D14: "Level 100"
-      D30: "Level 180"
+      D1: "Level 5"
+      D7: "Level 30"
+      D14: "Level 60"
+      D30: "Level 100 (완료)"
     core:
-      D1: "Level 15"
-      D7: "Level 90"
-      D14: "Level 170"
-      D30: "Level 200 (완료)"
+      D1: "Level 10"
+      D7: "Level 55"
+      D14: "Level 100 (완료)"
+      D30: "하드 모드 / 무한 모드 진행"
 
 # ─────────────────────────────────────
-# 3. Content Longevity
+# 5. Content Longevity
 # ─────────────────────────────────────
 longevity:
-  launch_content: "200 levels (10 chapters)"
-  update_plan: "4주마다 +20 levels (1 chapter)"
+  launch_content: "100 levels (5 packages)"
+  update_plan: "4주마다 +20 levels (1 package)"
   target_runway: "소프트런칭 후 6개월간 콘텐츠 고갈 방지"
-  post_200_plan:
+  post_100_plan:
     - "하드 모드 (기존 레벨 고난도 변형)"
     - "무한 모드 (랜덤 생성 레벨)"
     - "시즌 한정 레벨 (이벤트 테마)"

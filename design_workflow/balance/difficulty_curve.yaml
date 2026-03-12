@@ -1,5 +1,6 @@
 # BalloonFlow — Stage 2-3: Balance — Difficulty Curve
 # Detailed formulas for difficulty calculation
+# 정본 참조: concept.yaml, systems/ingame.yaml
 
 domain: Balance
 sub_doc: difficulty_curve
@@ -8,24 +9,51 @@ sub_doc: difficulty_curve
 # 1. Difficulty Score Formula
 # ─────────────────────────────────────
 difficulty_score:
+  description: >
+    홀더 초과 실패 메커닉에 맞춘 난이도 공식.
+    핵심: 색상 수↑ + 풍선 수↑ + 기믹 복잡도↑ + 홀더 복귀율↑ + 색상 편중↑ → 난이도↑
   formula: >
-    D(L) = W_color * (num_colors(L) - 3) / 5
+    D(L) = W_color * (num_colors(L) - 2) / 6
          + W_count * balloon_count(L) / 80
-         + W_special * special_ratio(L)
-         + W_buffer * (1 - (buffer_mult(L) - 1.0))
-         + W_rail * rail_complexity(L)
+         + W_gimmick * gimmick_weight(L)
+         + W_return * estimated_return_rate(L)
+         + W_skew * color_skew(L)
   weights:
-    W_color: 25
-    W_count: 25
-    W_special: 20
-    W_buffer: 15
-    W_rail: 15
+    W_color: 20       # 색상 수 (2~8) — 홀더 슬롯 압박의 근원
+    W_count: 20       # 풍선 수 (6~65) — 보드 복잡도
+    W_gimmick: 25     # 기믹 가중치 — 기믹별 독립 난이도 기여
+    W_return: 20      # 홀더 복귀 예상율 — 원형 루프 핵심 긴장감
+    W_skew: 15        # 색상 편중도 — 특정 색 과다 시 홀더 관리 난이도↑
   range: [0, 100]
+  gimmick_weight_table:
+    none: 0.0
+    Hidden: 0.15
+    Spawner_T: 0.20
+    Spawner_O: 0.25
+    BigObject: 0.30
+    Chain: 0.40
+    note: "복수 기믹 시 합산. max 1.0 clamp."
+  estimated_return_rate:
+    description: >
+      레벨 내 보관함이 한 바퀴 돌고도 탄창이 남아 홀더로 복귀할 확률 추정.
+      = 1 - (매칭 가능 풍선 수 / 보관함 탄창 수) per color, 평균.
+      높을수록 홀더 초과 위험↑.
+    formula: >
+      per_color_return = max(0, 1 - matching_balloons(color) / magazine(color))
+      estimated_return_rate = avg(per_color_return for each color)
+    range: [0, 1]
+  color_skew:
+    description: >
+      색상별 풍선 수 분포의 편중도. 균등하면 0, 한 색상에 몰리면 1에 가까움.
+      표준편차 기반: std(color_counts) / mean(color_counts), 정규화.
+    formula: "color_skew = min(1.0, std(color_counts) / mean(color_counts))"
+    range: [0, 1]
   examples:
-    - { level: 1, num_colors: 3, balloon_count: 8, special_ratio: 0.0, buffer_mult: 2.0, rail_complexity: 0.0, score: 2.5 }
-    - { level: 30, num_colors: 5, balloon_count: 19, special_ratio: 0.1, buffer_mult: 1.4, rail_complexity: 0.2, score: 29.9 }
-    - { level: 100, num_colors: 7, balloon_count: 45, special_ratio: 0.2, buffer_mult: 1.15, rail_complexity: 0.6, score: 59.8 }
-    - { level: 200, num_colors: 8, balloon_count: 78, special_ratio: 0.3, buffer_mult: 1.05, rail_complexity: 0.9, score: 83.1 }
+    - { level: 1, num_colors: 2, balloon_count: 6, gimmick_weight: 0.0, return_rate: 0.0, color_skew: 0.0, score: 2.2 }
+    - { level: 20, num_colors: 4, balloon_count: 15, gimmick_weight: 0.15, return_rate: 0.1, color_skew: 0.1, score: 16.8 }
+    - { level: 50, num_colors: 6, balloon_count: 30, gimmick_weight: 0.35, return_rate: 0.25, color_skew: 0.2, score: 42.0 }
+    - { level: 80, num_colors: 7, balloon_count: 50, gimmick_weight: 0.55, return_rate: 0.40, color_skew: 0.35, score: 65.5 }
+    - { level: 100, num_colors: 8, balloon_count: 65, gimmick_weight: 0.70, return_rate: 0.55, color_skew: 0.45, score: 82.0 }
 
 # ─────────────────────────────────────
 # 2. Sawtooth Modulation
@@ -34,8 +62,11 @@ sawtooth:
   cycle_length: 5
   modifiers: [0.7, 0.85, 0.95, 1.0, 0.6]
   description: >
-    5레벨 주기. Position 0(쉬움)→3(하드 스파이크)→4(휴식).
-    매 챕터 마지막 레벨(20, 40, 60...)은 보스 레벨로 별도 설정.
+    패키지 내 20레벨 톱니 패턴.
+    pos 4,9,14,19 = 하드/슈퍼하드 스파이크.
+    pos 5,10,15,20 = 휴식 (난이도 하락).
+    pos 1 or 11 = 기믹 도입 튜토리얼 (쉬움).
+    슈퍼하드: PKG2+ pos 19.
   formula: >
     position = (level_number - 1) % 5
     cycle_mod = modifiers[position]
@@ -45,54 +76,36 @@ sawtooth:
 # 3. Base Difficulty Progression
 # ─────────────────────────────────────
 base_progression:
-  formula: >
-    base_difficulty(L) = 5 + (L - 1) * 0.45
-  description: "선형 증가. Level 1 = 5, Level 200 = 94.55"
+  formula: "base_difficulty(L) = 5 + (L - 1) * 0.96"
+  description: "선형 증가. Level 1 = 5, Level 100 = 100.04"
   clamp: [0, 100]
 
 # ─────────────────────────────────────
-# 4. Dart Count (Move Limit) Formula
+# 4. Magazine Count (Move Limit) Formula
 # ─────────────────────────────────────
-dart_count:
+magazine_count:
+  description: >
+    무브 제한 = 모든 보관함의 탄창 합계.
+    보관함 수 = 사용 색상 수. 각 보관함의 탄창 수를 조정하여 총 무브 제한 결정.
   formula: >
     optimal_darts = simulate(level_data) OR ceil(balloon_count * 0.7)
     buffer_mult = purpose_buffer[level_purpose]
-    dart_count = ceil(optimal_darts * buffer_mult)
+    total_magazine = ceil(optimal_darts * buffer_mult)
+    magazine_per_holder = distribute(total_magazine, holder_count)
   purpose_buffer:
-    learning: 2.0
-    rest: 1.5
-    challenge: 1.15
-    monetization: 1.05
+    튜토리얼: 2.0
+    노말: 1.4
+    하드: 1.15
+    슈퍼하드: 1.05
+    휴식: 1.5
   examples:
-    - { level: 1, balloons: 8, optimal: 6, purpose: learning, buffer: 2.0, darts: 12 }
-    - { level: 50, balloons: 28, optimal: 20, purpose: rest, buffer: 1.5, darts: 30 }
-    - { level: 100, balloons: 45, optimal: 32, purpose: challenge, buffer: 1.15, darts: 37 }
-    - { level: 150, balloons: 60, optimal: 42, purpose: monetization, buffer: 1.05, darts: 45 }
+    - { level: 1, balloons: 6, colors: 2, holders: 2, optimal: 4, purpose: 튜토리얼, buffer: 2.0, total_magazine: 8, per_holder: 4 }
+    - { level: 25, balloons: 20, colors: 5, holders: 5, optimal: 14, purpose: 휴식, buffer: 1.5, total_magazine: 21, per_holder: ~4 }
+    - { level: 59, balloons: 35, colors: 6, holders: 6, optimal: 25, purpose: 하드, buffer: 1.15, total_magazine: 29, per_holder: ~5 }
+    - { level: 99, balloons: 60, colors: 8, holders: 8, optimal: 42, purpose: 슈퍼하드, buffer: 1.05, total_magazine: 45, per_holder: ~6 }
 
 # ─────────────────────────────────────
-# 5. Balloon Speed Formula
-# ─────────────────────────────────────
-balloon_speed:
-  formula: "speed(L) = 1.0 + (L / 200) * 0.8"
-  unit: "units/sec"
-  range: [1.0, 1.8]
-  speed_rail_multiplier: 1.5   # 빠른 레일 기믹 적용 시
-
-# ─────────────────────────────────────
-# 6. Overflow Limit Formula
-# ─────────────────────────────────────
-overflow_limit:
-  formula: "overflow(L) = max(5, 15 - floor(L / 25))"
-  range: [5, 15]
-  description: "초반 여유 → 후반 타이트"
-  examples:
-    - { level: 1, overflow: 15 }
-    - { level: 50, overflow: 13 }
-    - { level: 100, overflow: 11 }
-    - { level: 200, overflow: 7 }
-
-# ─────────────────────────────────────
-# 7. Star Score Thresholds
+# 5. Star Score Thresholds
 # ─────────────────────────────────────
 star_thresholds:
   # 정본: systems/ingame.yaml scoring.base_score_formula
@@ -102,20 +115,60 @@ star_thresholds:
     star_2 = ceil(base_score * 1.5)
     star_3 = ceil(base_score * 2.2)
   note: >
-    base_score는 모든 풍선을 1-chain으로 터뜨렸을 때의 최소 점수.
-    실제 플레이에서 chain bonus, clear_bonus, dart_bonus가 추가되므로
-    일반적인 플레이에서 star_2~3 달성이 가능하다.
-    예상 평균 점수 = base_score * 1.3~1.5 (chain 보너스 포함).
+    base_score는 모든 풍선을 기본 팝으로 터뜨렸을 때의 최소 점수.
+    실제 플레이에서 speed_bonus, clear_bonus, remaining_holder_bonus가
+    추가되어 star_2~3 달성이 가능.
+    체인 팝 메커닉 없음 — 순차 1:1 타격 기반.
 
 # ─────────────────────────────────────
-# 8. Clear Rate Prediction
+# 6. Clear Rate Prediction
 # ─────────────────────────────────────
 clear_rate_model:
   formula: >
-    predicted_clear_rate(L) = sigmoid(k * (buffer_mult - threshold))
-    k = 5.0
-    threshold = 1.1
+    predicted_clear_rate(L) = sigmoid(k * (excess_margin - threshold))
+    excess_margin = (total_magazine - optimal_darts) / optimal_darts
+    k = 6.0
+    threshold = 0.15
   description: >
-    buffer_multiplier가 1.1 근처일 때 클리어율 50%,
-    1.5 이상이면 85%+, 1.05 이하이면 35% 이하.
+    excess_margin은 최적 다트 수 대비 여유 탄창 비율.
+    0.15 근처에서 클리어율 50%. 0.5+ 이면 85%+, 0.05 이하이면 30% 이하.
+    홀더 복귀율과 기믹 가중치는 optimal_darts 산출에 이미 반영됨.
   calibration_note: "소프트런칭 데이터로 k, threshold 보정"
+
+# ─────────────────────────────────────
+# 7. Fail Condition (Prototype TBD)
+# ─────────────────────────────────────
+fail_condition:
+  status: _CONFIRMED
+  primary: >
+    홀더 초과. 홀더(5칸) 대기 보관함이 5개를 초과하면 실패.
+    보관함이 레일(원형 루프)에서 한 바퀴 돌고 탄창이 남으면 홀더로 복귀.
+    복귀된 보관함으로 홀더가 넘치는 것이 핵심 실패 메커니즘.
+  holder_slots: 5
+  candidates:
+    - name: "홀더 초과"
+      description: >
+        보관함이 홀더에서 대기 → 레일(원형 루프)에 올라가 한 바퀴 돌며 매칭 풍선에 다트 발사
+        → 레일 도중 탄창 0이 되면 즉시 제거 → 한 바퀴 후 탄창이 남아있으면 홀더로 복귀
+        → 홀더 대기 보관함이 5개를 초과하면 실패.
+  note: >
+    홀더 초과 확정 (Pixel Flow 동일). 탄창이 남은 보관함의 홀더 복귀가 핵심 긴장감.
+
+# ─────────────────────────────────────
+# 8. Per-Package Clear Rate Targets
+# ─────────────────────────────────────
+per_package_targets:
+  description: >
+    100레벨, 5패키지 × 20레벨 구조.
+    패키지별 CR/시도 횟수 목표. 정본: beat_chart.yaml
+  packages:
+    PKG1: { cr_range: [0.60, 0.95], cr_avg: 0.83, attempts_range: [1.0, 3.0], attempts_avg: 1.4 }
+    PKG2: { cr_range: [0.40, 0.92], cr_avg: 0.68, attempts_range: [1.0, 5.0], attempts_avg: 2.2 }
+    PKG3: { cr_range: [0.38, 0.92], cr_avg: 0.64, attempts_range: [1.0, 5.5], attempts_avg: 2.5 }
+    PKG4: { cr_range: [0.35, 0.92], cr_avg: 0.61, attempts_range: [1.0, 6.0], attempts_avg: 2.8 }
+    PKG5: { cr_range: [0.30, 0.92], cr_avg: 0.58, attempts_range: [1.0, 7.0], attempts_avg: 3.2 }
+  position_rules:
+    hard_positions: [4, 9, 14, 19]
+    rest_positions: [5, 10, 15, 20]
+    gimmick_intro_positions: [1, 11]
+    super_hard: "PKG2+ pos 19"

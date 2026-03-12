@@ -1,120 +1,162 @@
 # ═══════════════════════════════════════════
 # BalloonFlow — Layer 2: System Specification
 # ═══════════════════════════════════════════
-# 45 Systems across 9 Domains
-# Generated: 2026-03-11
+# 33 Confirmed Systems + Deferred Domains
+# 정본 참조: concept.yaml, systems/*.yaml
 
 project: BalloonFlow
-total_systems: 45
+total_confirmed_systems: 33
 
 # ═══════════════════════════════════════════
-# DOMAIN: InGame (8 systems)
+# DOMAIN: InGame (8 systems) — CONFIRMED
 # ═══════════════════════════════════════════
 InGame:
+
+  HolderManager:
+    layer: Domain
+    role: Manager
+    description: >
+      홀더(5칸) 관리. 보관함이 홀더에서 대기, 선택 시 레일(원형 루프)에 올라감.
+      레일에서 한 바퀴 돌고 탄창이 남으면 홀더로 복귀 대기.
+      홀더 대기 보관함이 5개를 초과하면 실패. 코어 메커닉의 입력 진입점.
+    provides:
+      - GetHolders() -> HolderData[]
+      - SelectHolder(holderId) -> bool
+      - GetCurrentHolder() -> HolderData
+      - GetMagazineCount(holderId) -> int
+      - IsHolderEmpty(holderId) -> bool
+      - ConsumeMagazine(holderId) -> int
+      - AreAllHoldersEmpty() -> bool
+      - GetHolderCapacity() -> int  # always 5
+      - ReturnToHolder(holderId) -> bool   # 레일에서 복귀
+      - GetHolderCount() -> int            # 현재 홀더 대기 수
+    requires:
+      - LevelDataProvider.GetHolderSetup()
+      - InputHandler.OnHolderTapped
+    events_published:
+      - OnHolderSelected(holderId, color, magazineCount)
+      - OnHolderEmpty(holderId)
+      - OnAllHoldersEmpty
+      - OnHolderReturned(holderId, remainingMagazine)   # 레일에서 복귀
+      - OnHolderOverflow   # 홀더 초과 실패
+    data: "HolderData(holderId, color, magazineCount, magazineRemaining, isReturned)"
+
+  DartManager:
+    layer: Domain
+    role: Manager
+    description: >
+      보관함이 레일(원형 루프)에 올라가 한 바퀴를 돌며 매칭 풍선에 다트를 발사.
+      레일 도중 탄창 0이면 즉시 제거. 한 바퀴 후 탄창 남으면 홀더로 복귀.
+    provides:
+      - StartRailLoop(holderId, color, magazineCount)
+      - GetActiveDarts() -> DartData[]
+      - GetDeployedCount() -> int
+      - IsLoopComplete() -> bool
+      - GetRemainingMagazine(holderId) -> int
+    requires:
+      - HolderManager.OnHolderSelected
+      - HolderManager.ConsumeMagazine()
+      - HolderManager.ReturnToHolder()
+      - RailManager.GetRailPath()
+      - ObjectPool.Get()
+      - ObjectPool.Return()
+    events_published:
+      - OnDartDeployed(dartId, color, position)
+      - OnDartHitBalloon(dartId, balloonId)
+      - OnLoopComplete(holderId, remainingMagazine)
+      - OnMagazineEmpty(holderId)   # 레일 도중 탄창 소진 → 즉시 제거
+    data: "DartData(dartId, color, railPosition)"
 
   RailManager:
     layer: Core
     role: Manager
-    description: "레일 생성, 풍선 이동 경로 관리, 레일 형태(직선/S자/지그재그 등) 설정"
+    description: >
+      레일(원형 루프) 경로 관리. 보관함이 레일 위를 한 바퀴 돌며 매칭 풍선에 다트 발사.
+      루프 완료 판정, 보관함 위치 추적.
     provides:
-      - CreateRail(railData)
-      - GetRailPath(railId) -> Vector3[]
-      - GetBalloonPositions() -> BalloonPosition[]
-      - SetRailSpeed(speed)
+      - GetRailPath() -> Vector3[]
+      - SetRailLayout(railData)
+      - GetHolderPosition(holderId) -> Vector3
+      - IsLoopComplete(holderId) -> bool
       - ResetRail()
     requires:
       - LevelDataProvider.GetRailLayout()
-    events_published:
-      - OnRailOverflow
-      - OnBalloonReachedEnd
-    data: "RailLayout, BalloonPosition"
+    data: "RailLayout(circular_loop), RailPath"
 
   BalloonController:
     layer: Domain
     role: Controller
-    description: "풍선 상태(색상, 타입, HP), 생성/파괴, 풍선 오브젝트 풀 관리"
+    description: >
+      풍선 상태 관리. 색상, 위치, HP. 고정 보드 위 풍선 배치.
+      BigObject 기믹: 1x1보다 큰 오브젝트, 생명력(lifePoints) 보유.
+      여러 번 타격해야 제거됨.
     provides:
-      - SpawnBalloon(color, type, position)
+      - GetBalloon(balloonId) -> BalloonData
+      - GetBalloonsByColor(color) -> BalloonData[]
       - PopBalloon(balloonId) -> PopResult
-      - GetBalloonColor(balloonId) -> ColorEnum
-      - GetBalloonType(balloonId) -> BalloonType
-      - GetAdjacentBalloons(balloonId) -> Balloon[]
-      - ThawBalloon(balloonId)
+      - GetAllBalloons() -> BalloonData[]
+      - GetRemainingCount() -> int
     requires:
-      - RailManager.GetBalloonPositions()
+      - LevelDataProvider.GetBalloonLayout()
       - ObjectPool.Get()
       - ObjectPool.Return()
     events_published:
       - OnBalloonPopped(balloonId, color, position)
       - OnBalloonSpawned(balloonId)
-    data: "BalloonData(color, type, hp, position)"
+    data: "BalloonData(balloonId, color, position, hp)"
 
-  DartManager:
+  BoardStateManager:
     layer: Domain
     role: Manager
-    description: "다트 큐 관리, 현재/다음 다트 표시, 다트 발사 실행"
+    description: "보드 전체 상태. 풍선 현황, 클리어/실패 판정."
     provides:
-      - GetCurrentDart() -> DartData
-      - GetDartQueue() -> DartData[]
-      - FireDart(targetBalloonId) -> FireResult
-      - DiscardDart() -> bool
-      - AddBonusDarts(count)
-      - GetRemainingDarts() -> int
+      - GetBoardState() -> BoardState
+      - GetRemainingBalloons() -> int
+      - IsBoardClear() -> bool
+      - CheckFailCondition() -> FailResult
     requires:
-      - LevelDataProvider.GetDartQueue()
-      - BalloonController.GetBalloonColor()
-      - InputHandler.OnBalloonTapped
+      - BalloonController.GetRemainingCount()
+      - HolderManager.AreAllHoldersEmpty()
     events_published:
-      - OnDartFired(dartColor, targetId)
-      - OnDartQueueEmpty
-      - OnBonusDartAwarded
-    data: "DartData(color, index)"
+      - OnBoardStateChanged
+      - OnBoardCleared
+      - OnBoardFailed(reason)
+    data: "BoardState"
+    note: >
+      실패 조건: 홀더 초과 확정 (Pixel Flow 동일). 홀더 대기 보관함이 5개를 초과하면 실패.
+      보관함이 홀더에서 대기 → 레일(원형 루프)에 올라가 한 바퀴 → 탄창 0이면 즉시 제거,
+      탄창 남으면 홀더로 복귀. 복귀한 보관함으로 홀더가 넘치면 게임 오버.
+      CheckFailCondition()은 홀더 용량 초과 여부를 검사 (HolderManager.OnHolderReturned 이벤트 수신 후).
 
   PopProcessor:
     layer: Domain
     role: Processor
-    description: "팝 판정 로직. 다트 명중 → 기본 팝 → 인접 같은 색 연쇄 팝 계산"
+    description: "팝 판정. 다트 → 풍선 1:1 타격 시 팝 처리 + 피드백 트리거."
     provides:
-      - ProcessPop(balloonId, dartColor) -> PopChainResult
-      - GetChainLength() -> int
+      - ProcessPop(balloonId, dartColor) -> PopResult
+      - GetPopCount() -> int
     requires:
       - BalloonController.PopBalloon()
-      - BalloonController.GetAdjacentBalloons()
-      - BalloonController.GetBalloonColor()
-      - ComboCalculator.CalculateComboScore()
+      - DartManager.OnDartHitBalloon
     events_published:
-      - OnChainPopComplete(chainLength, totalScore)
-    data: "PopChainResult(poppedBalloons[], chainLength, score)"
-
-  ComboCalculator:
-    layer: Domain
-    role: Calculator
-    description: "연쇄 팝 점수 계산. 체인 길이에 따른 배수 적용."
-    provides:
-      - CalculateComboScore(chainLength, baseScore) -> int
-      - GetComboMultiplier(chainLength) -> float
-      - ShouldAwardBonusDart(chainLength) -> bool
-    requires: []
-    data: "ComboMultiplierTable"
-    formulas:
-      multiplier: "[1.0, 1.5, 2.0, 3.0] (index = min(chainLength-1, 3))"
-      bonus_dart: "chainLength >= 4 → 보너스 다트 1개"
+      - OnPopComplete(balloonId, color, position, popIndex)
+    data: "PopResult(balloonId, color, position, score)"
+    note: "체인 팝 없음. 순차 1:1 타격."
 
   ScoreManager:
     layer: Core
     role: Manager
-    description: "점수 집계, 스타 판정, 클리어/실패 판정"
+    description: "점수 집계, 스타 판정, 보너스 계산."
     provides:
       - AddScore(amount)
       - GetCurrentScore() -> int
       - GetStarCount() -> int
-      - CheckClearCondition() -> bool
-      - CheckFailCondition() -> bool
       - GetClearBonus() -> int
+      - GetRemainingHolderBonus() -> int
     requires:
-      - PopProcessor.OnChainPopComplete
-      - DartManager.GetRemainingDarts()
-      - BoardStateManager.GetOverflowCount()
+      - PopProcessor.OnPopComplete
+      - BoardStateManager.OnBoardCleared
+      - HolderManager.AreAllHoldersEmpty()
       - LevelDataProvider.GetStarThresholds()
     events_published:
       - OnScoreChanged(newScore)
@@ -126,43 +168,25 @@ InGame:
   InputHandler:
     layer: Core
     role: Handler
-    description: "터치/탭 입력 처리. 풍선 탭 감지 → 다트 발사 명령."
+    description: "터치/탭 입력 처리. 홀더에 있는 보관함 탭 감지."
     provides:
       - EnableInput()
       - DisableInput()
       - IsInputEnabled() -> bool
     requires: []
     events_published:
-      - OnBalloonTapped(balloonId)
-      - OnEmptyTapped(position)
+      - OnHolderTapped(holderId)
     data: null
 
-  BoardStateManager:
-    layer: Domain
-    role: Manager
-    description: "보드 전체 상태 관리. 레일 + 대기 영역 + 풍선 현황 통합 조회."
-    provides:
-      - GetBoardState() -> BoardState
-      - GetOverflowCount() -> int
-      - GetRemainingBalloons() -> int
-      - IsBoardClear() -> bool
-      - SaveBoardSnapshot() -> BoardSnapshot
-    requires:
-      - RailManager.GetBalloonPositions()
-      - BalloonController.GetAllBalloons()
-    events_published:
-      - OnBoardStateChanged
-    data: "BoardState, BoardSnapshot"
-
 # ═══════════════════════════════════════════
-# DOMAIN: Content (5 systems)
+# DOMAIN: Content (5 systems) — CONFIRMED
 # ═══════════════════════════════════════════
 Content:
 
   LevelManager:
     layer: Domain
     role: Manager
-    description: "레벨 로드, 진행 제어, 완료/실패 처리, 다음 레벨 전환"
+    description: "레벨 로드, 진행, 완료/실패 처리, 다음 레벨 전환."
     provides:
       - LoadLevel(levelNumber)
       - StartLevel()
@@ -174,8 +198,6 @@ Content:
       - LevelDataProvider.LoadLevelData()
       - ScoreManager.OnLevelCleared
       - ScoreManager.OnLevelFailed
-      - LifeManager.ConsumeLife()
-      - CurrencyManager.AddCurrency()
     events_published:
       - OnLevelLoaded(levelNumber)
       - OnLevelStarted
@@ -185,77 +207,85 @@ Content:
   LevelDataProvider:
     layer: Domain
     role: Provider
-    description: "레벨 JSON 데이터 로드, 파싱, 풍선 배치/레일 레이아웃/다트 큐 제공"
+    description: "레벨 JSON 데이터 로드. 풍선 배치, 보관함 설정, 레일 레이아웃 제공."
     provides:
       - LoadLevelData(levelNumber) -> LevelData
-      - GetRailLayout() -> RailLayout
       - GetBalloonLayout() -> BalloonLayout[]
-      - GetDartQueue() -> DartData[]
+      - GetHolderSetup() -> HolderSetup[]
+      - GetRailLayout() -> RailLayout
       - GetStarThresholds() -> int[3]
-      - GetMoveLimit() -> int
-      - GetOverflowLimit() -> int
       - GetSpecialMechanics() -> string[]
     requires: []
     data: "LevelData JSON (level_meta schema)"
 
-  ChapterManager:
+  PackageManager:
     layer: Domain
     role: Manager
-    description: "챕터 진행, 해금 판정 (스타 게이트), 챕터 보상 관리"
+    description: >
+      패키지 진행, 해금 관리. 5패키지 × 20레벨 = 100레벨 구조.
+      패키지별 난이도 곡선 및 Beat Chart 목표 관리.
     provides:
-      - GetCurrentChapter() -> int
-      - IsChapterUnlocked(chapterId) -> bool
-      - GetChapterProgress(chapterId) -> float
-      - CompleteChapter(chapterId)
-      - GetStarGateRequirement(chapterId) -> int
+      - GetCurrentPackage() -> int
+      - IsPackageUnlocked(packageId) -> bool
+      - CompletePackage(packageId)
     requires:
-      - StarManager.GetTotalStars()
       - LevelManager.OnLevelCompleted
     events_published:
-      - OnChapterCompleted(chapterId)
-      - OnChapterUnlocked(chapterId)
+      - OnPackageCompleted(packageId)
+      - OnPackageUnlocked(packageId)
 
   GimmickManager:
     layer: Domain
     role: Manager
-    description: "특수 기믹(이중풍선, 얼음, 폭탄 등) 활성화, 해금 스케줄 관리"
+    description: >
+      5종 기믹 활성화, 해금 스케줄 관리.
+      Hidden(숨김풍선), Spawner(투명/불투명), BigObject(대형 오브젝트, 생명력),
+      Chain(연결 풍선). 각 기믹은 패키지 내 pos 1 or 11에서 튜토리얼로 도입.
     provides:
       - IsGimmickUnlocked(gimmickId) -> bool
       - GetActiveGimmicks(levelNumber) -> string[]
       - ApplyGimmick(gimmickId, target)
+      - ApplyHidden(target)
+      - ApplySpawner(target, isTransparent)
+      - ApplyBigObject(target, lifePoints)
+      - ApplyChain(targets)
     requires:
       - LevelDataProvider.GetSpecialMechanics()
-      - LevelManager.GetCurrentLevel()
     events_published:
       - OnGimmickActivated(gimmickId)
+    note: >
+      기믹 격리 원칙: 각 기믹은 독립적으로 동작하며 코어 루프에 영향을 주지 않음.
+      Spawner는 GimmickManager 내에서 처리 (별도 SpawnerManager 불필요).
 
   TutorialController:
     layer: Game
     role: Controller
-    description: "튜토리얼 레벨(1~5) 강제 가이드, 힌트, 단계별 진행 제어"
+    description: >
+      튜토리얼 레벨 강제 가이드. 보관함 탭 유도 중심.
+      PKG1 pos 1 기본 튜토리얼 + 각 패키지 기믹 도입 튜토리얼 (pos 1 or 11).
+      총 5회 튜토리얼 레벨 (패키지당 1회 기믹 소개).
     provides:
       - StartTutorial(step)
       - NextTutorialStep()
       - IsTutorialActive() -> bool
-      - GetTutorialStep() -> int
       - CompleteTutorial()
     requires:
       - LevelManager.OnLevelLoaded
-      - InputHandler.OnBalloonTapped
+      - InputHandler.OnHolderTapped
       - UIManager.ShowScreen()
     events_published:
       - OnTutorialStepCompleted(step)
       - OnTutorialCompleted
 
 # ═══════════════════════════════════════════
-# DOMAIN: Balance (3 systems)
+# DOMAIN: Balance (3 systems) — CONFIRMED
 # ═══════════════════════════════════════════
 Balance:
 
   DifficultyCalculator:
     layer: Domain
     role: Calculator
-    description: "레벨 난이도 점수 산출. 색상수, 풍선수, 특수비율, 여유계수, 레일복잡도 가중 합산."
+    description: "레벨 난이도 점수 산출. 정본: balance/difficulty_curve.yaml"
     provides:
       - CalculateDifficulty(levelData) -> float
       - GetSawtoothModifier(levelNumber) -> float
@@ -263,253 +293,42 @@ Balance:
     requires:
       - LevelDataProvider.LoadLevelData()
     formulas:
-      canonical_ref: "balance/difficulty_curve.yaml (정본)"
-      difficulty: "D(L) = 25*(colors-3)/5 + 25*balloons/80 + 20*special_ratio + 15*(1-(buffer-1)) + 15*rail_complexity"
-      sawtooth: "modifiers[(level-1)%5] where modifiers=[0.7, 0.85, 0.95, 1.0, 0.6]"
+      canonical_ref: "balance/difficulty_curve.yaml"
 
   BalanceProcessor:
     layer: Domain
     role: Processor
-    description: "밸런스 지표 수집/집계. 클리어율, 실패율, near-miss율 등 대시보드 데이터."
+    description: "밸런스 지표 수집/집계. 클리어율, 실패율 대시보드."
     provides:
       - RecordPlayResult(levelId, result, data)
       - GetLevelStats(levelId) -> LevelBalanceStats
-      - GetDailyReport() -> BalanceReport
     requires:
       - LevelManager.OnLevelCompleted
       - LevelManager.OnLevelFailed
-    data: "level_balance_daily schema 기반"
 
   ClearRateValidator:
     layer: Domain
     role: Validator
-    description: "클리어율 모니터링. 목표 범위 이탈 시 경고 생성."
+    description: "클리어율 모니터링. 목표 범위 이탈 시 경고."
     provides:
       - ValidateClearRate(levelId) -> ValidationResult
       - GetOutOfRangeLevels() -> LevelId[]
     requires:
       - BalanceProcessor.GetLevelStats()
-    thresholds:
-      fail_rate_max: 0.60
-      near_miss_target: 0.35
-      hopeless_fail_max: 0.10
 
 # ═══════════════════════════════════════════
-# DOMAIN: OutGame (6 systems)
-# ═══════════════════════════════════════════
-OutGame:
-
-  LifeManager:
-    layer: Domain
-    role: Manager
-    description: "하트 시스템. 최대 5개, 30분 자동 충전, 광고/젬 충전."
-    provides:
-      - GetCurrentLives() -> int
-      - ConsumeLife() -> bool
-      - AddLife(count)
-      - RefillLives(method)
-      - GetNextRegenTime() -> float
-      - HasLives() -> bool
-    requires:
-      - CurrencyManager.SpendCurrency() (for gem refill)
-    events_published:
-      - OnLivesChanged(current, max)
-      - OnLivesEmpty
-      - OnLifeRegenerated
-    config:
-      max_lives: 5
-      regen_minutes: 30
-
-  BoosterManager:
-    layer: Domain
-    role: Manager
-    description: "부스터 인벤토리, 사용, 획득 관리. Pre-play, In-play, Continue 카테고리."
-    provides:
-      - GetBoosterInventory() -> BoosterData[]
-      - UseBooster(boosterId) -> bool
-      - AddBooster(boosterId, count)
-      - GetBoosterCount(boosterId) -> int
-      - CanUseBooster(boosterId) -> bool
-    requires:
-      - CurrencyManager.SpendCurrency()
-    events_published:
-      - OnBoosterUsed(boosterId)
-      - OnBoosterAcquired(boosterId, count)
-
-  CurrencyManager:
-    layer: Core
-    role: Manager
-    description: "재화 원장 관리. 코인/젬 획득/소비 트랜잭션."
-    provides:
-      - GetBalance(currencyId) -> int
-      - AddCurrency(currencyId, amount, source)
-      - SpendCurrency(currencyId, amount, sink) -> bool
-      - CanAfford(currencyId, amount) -> bool
-      - GetTransactionHistory(currencyId) -> Transaction[]
-    requires: []
-    events_published:
-      - OnCurrencyChanged(currencyId, newBalance, delta, source)
-      - OnInsufficientFunds(currencyId, required, current)
-
-  ShopManager:
-    layer: Game
-    role: Manager
-    description: "상점 아이템 목록, 가격, 구매 처리."
-    provides:
-      - GetShopItems(category) -> ShopItem[]
-      - PurchaseItem(itemId) -> PurchaseResult
-      - RefreshShop()
-    requires:
-      - CurrencyManager.SpendCurrency()
-      - CurrencyManager.CanAfford()
-      - BoosterManager.AddBooster()
-      - IAPManager.ProcessIAP()
-
-  DailyRewardManager:
-    layer: Domain
-    role: Manager
-    description: "일일 출석 보상. 7일 주기, 연속 출석 보너스."
-    provides:
-      - GetDailyRewardStatus() -> DailyRewardData
-      - ClaimDailyReward() -> RewardData
-      - GetStreak() -> int
-    requires:
-      - CurrencyManager.AddCurrency()
-      - BoosterManager.AddBooster()
-    events_published:
-      - OnDailyRewardClaimed(day, rewards)
-
-  ContinueHandler:
-    layer: Domain
-    role: Handler
-    description: "실패 후 이어하기 로직. 광고/젬 비용, 에스컬레이션."
-    provides:
-      - GetContinueCost() -> ContinueCostData
-      - UseContinue(method) -> bool
-      - GetContinueCount() -> int
-      - ResetContinueCount()
-    requires:
-      - CurrencyManager.SpendCurrency()
-      - AdManager.ShowRewardedAd()
-      - DartManager.AddBonusDarts()
-    config:
-      first_cost_gem: 30
-      escalation_per_use: 10
-      max_per_level: 3
-      ad_first_free: true
-
-# ═══════════════════════════════════════════
-# DOMAIN: BM (5 systems)
-# ═══════════════════════════════════════════
-BM:
-
-  IAPManager:
-    layer: Core
-    role: Manager
-    description: "IAP 구매 처리. Unity IAP 래핑. 영수증 검증."
-    provides:
-      - ProcessIAP(productId) -> IAPResult
-      - GetProducts() -> IAPProduct[]
-      - RestorePurchases()
-      - IsProductOwned(productId) -> bool
-    requires:
-      - CurrencyManager.AddCurrency()
-    events_published:
-      - OnPurchaseCompleted(productId, price)
-      - OnPurchaseFailed(productId, reason)
-    sdk: "UNITY_IAP"
-
-  AdManager:
-    layer: Core
-    role: Manager
-    description: "광고 노출 관리. 보상형/전면 광고, 쿨다운, 일일 캡."
-    provides:
-      - ShowRewardedAd(placement) -> AdResult
-      - ShowInterstitial() -> bool
-      - IsRewardedAdReady() -> bool
-      - ShouldShowInterstitial() -> bool
-      - GetDailyAdCount(placement) -> int
-    requires: []
-    events_published:
-      - OnRewardedAdCompleted(placement, reward)
-      - OnInterstitialShown
-    sdk: "GOOGLE_MOBILE_ADS"
-    config:
-      interstitial_every_n_levels: 3
-      interstitial_cooldown_sec: 120
-
-  OfferManager:
-    layer: Domain
-    role: Manager
-    description: "특별 오퍼 타이밍, 노출 조건, 시간 제한 관리."
-    provides:
-      - CheckOfferTrigger(context) -> Offer[]
-      - GetActiveOffers() -> Offer[]
-      - DismissOffer(offerId)
-      - IsOfferAvailable(offerId) -> bool
-    requires:
-      - LevelManager.GetCurrentLevel()
-      - LevelManager.OnLevelFailed
-      - IAPManager.ProcessIAP()
-    events_published:
-      - OnOfferTriggered(offerId)
-      - OnOfferExpired(offerId)
-
-  PiggyBankManager:
-    layer: Domain
-    role: Manager
-    description: "피기뱅크 누적, 가득 참 감지, 구매 처리."
-    provides:
-      - GetPiggyBankStatus() -> PiggyBankData
-      - AddToPiggyBank(amount)
-      - PurchasePiggyBank() -> bool
-      - IsPiggyBankFull() -> bool
-      - IsPiggyBankUnlocked() -> bool
-    requires:
-      - LevelManager.OnLevelCompleted
-      - IAPManager.ProcessIAP()
-      - CurrencyManager.AddCurrency()
-    config:
-      unlock_level: 20
-      fill_cycle: 8
-      price: 2.99
-
-  SeasonPassManager:
-    layer: Domain
-    role: Manager
-    description: "시즌패스 진행, XP 누적, 무료/프리미엄 트랙 보상 지급."
-    provides:
-      - GetSeasonPassStatus() -> SeasonPassData
-      - AddXP(amount)
-      - ClaimReward(level, track) -> RewardData
-      - IsSeasonPassPremium() -> bool
-      - GetCurrentSeasonPassLevel() -> int
-    requires:
-      - LevelManager.OnLevelCompleted
-      - IAPManager.ProcessIAP()
-      - CurrencyManager.AddCurrency()
-      - BoosterManager.AddBooster()
-    config:
-      levels: 30
-      xp_per_clear: 10
-      xp_per_star: 5
-      price: 4.99
-
-# ═══════════════════════════════════════════
-# DOMAIN: UX (6 systems)
+# DOMAIN: UX (6 systems) — CONFIRMED
 # ═══════════════════════════════════════════
 UX:
 
   UIManager:
     layer: Core
     role: Manager
-    description: "전체 UI 상태 관리. Canvas, 화면 전환, 공통 UI 로직."
+    description: "전체 UI 상태 관리. Canvas, 화면 전환."
     provides:
       - ShowScreen(screenId)
       - HideScreen(screenId)
       - GetCurrentScreen() -> string
-      - ShowLoading()
-      - HideLoading()
     requires: []
     events_published:
       - OnScreenChanged(from, to)
@@ -517,36 +336,31 @@ UX:
   PageController:
     layer: Game
     role: Controller
-    description: "화면 전환 관리. Title → Main → Level → Result → Main 루프."
+    description: "화면 전환 관리. Title → Main → Level → Result → Main."
     provides:
       - NavigateTo(pageId)
       - GoBack()
-      - GetCurrentPage() -> string
     requires:
       - UIManager.ShowScreen()
 
   PopupManager:
     layer: Core
     role: Manager
-    description: "팝업 큐잉, 우선순위 관리. 동시 1개, 큐에 대기."
+    description: "팝업 큐잉, 우선순위 관리."
     provides:
       - ShowPopup(popupId, priority, data)
       - ClosePopup(popupId)
-      - GetActivePopup() -> string
-      - HasPendingPopups() -> bool
     requires:
       - UIManager
     config:
       max_concurrent: 1
-      priority_levels: 8
 
   TutorialManager:
     layer: Game
     role: Manager
-    description: "FTUE 전체 관리. 튜토리얼 진행 상태, 하이라이트, 화살표 표시."
+    description: "FTUE 관리. 하이라이트, 화살표, 가이드 표시."
     provides:
       - IsTutorialComplete() -> bool
-      - GetFTUEProgress() -> int
       - ShowHighlight(target)
       - ShowArrow(target, direction)
       - HideGuides()
@@ -557,214 +371,249 @@ UX:
   FeedbackController:
     layer: Game
     role: Controller
-    description: "시청각/햅틱 피드백 제어. 팝 이펙트, 사운드, 진동."
+    description: >
+      시청각/햅틱 피드백 제어. 비대칭 원칙: 다트=담백, 풍선팝=과하게.
+      피치 상승 파열음, 물/반짝이 파편, 진동.
     provides:
-      - PlayPopEffect(position, chainLength, color)
+      - PlayPopEffect(position, popIndex, color)
       - PlaySound(soundId)
       - PlayHaptic(intensity)
       - PlayClearCelebration()
       - PlayFailEffect()
     requires:
-      - PopProcessor.OnChainPopComplete
+      - PopProcessor.OnPopComplete
       - ScoreManager.OnLevelCleared
       - ScoreManager.OnLevelFailed
+    note: >
+      popIndex를 사용하여 피치 상승 효과 구현.
+      순차 팝마다 음높이가 올라감 (팡-팡-팡-팡-팡!!).
 
   HUDController:
     layer: Game
     role: Controller
-    description: "인게임 HUD 업데이트. 점수, 다트수, 목표, 스타바."
+    description: "인게임 HUD 업데이트. 점수, 남은 풍선, 보관함 탄창 수."
     provides:
       - UpdateScore(score)
-      - UpdateDartCount(remaining)
-      - UpdateObjective(current, total)
+      - UpdateRemainingBalloons(count)
+      - UpdateHolderMagazine(holderId, remaining)
       - UpdateStarProgress(progress)
-      - ShowComboText(multiplier)
     requires:
       - ScoreManager.OnScoreChanged
-      - DartManager.OnDartFired
-      - PopProcessor.OnChainPopComplete
+      - PopProcessor.OnPopComplete
+      - HolderManager.OnHolderSelected
 
 # ═══════════════════════════════════════════
-# DOMAIN: Meta (4 systems)
+# DOMAIN: OutGame (8 systems) — CONFIRMED
 # ═══════════════════════════════════════════
-Meta:
+OutGame:
 
-  CollectionManager:
+  LifeManager:
     layer: Domain
     role: Manager
-    description: "풍선 도감 관리. 수집 진행, 마일스톤 보상."
+    description: >
+      하트 시스템 관리. 최대 5개, 실패 시 1개 소모, 30분 자동 충전.
+      하트 0에서 과금/광고 접점 발생.
     provides:
-      - UnlockCollectible(collectibleId)
-      - GetCollectionProgress() -> CollectionData
-      - GetMilestoneRewards() -> MilestoneData[]
-      - ClaimMilestoneReward(milestoneId) -> RewardData
+      - GetLives() -> int
+      - ConsumeLive() -> bool
+      - RefillLives()
+      - GetRechargeTimeRemaining() -> float
+      - IsLiveFull() -> bool
     requires:
-      - LevelManager.OnLevelCompleted
-      - CurrencyManager.AddCurrency()
+      - LevelManager.OnLevelFailed
+      - CurrencyManager.SpendCurrency()
     events_published:
-      - OnCollectibleUnlocked(collectibleId)
-      - OnMilestoneReached(milestoneId)
+      - OnLiveConsumed(remaining)
+      - OnLiveRefilled(count)
+      - OnLivesEmpty
+    config:
+      max_lives: 5
+      recharge_min: 30
 
-  SkinManager:
+  BoosterManager:
     layer: Domain
     role: Manager
-    description: "다트/풍선 스킨 관리. 보유, 장착, 구매."
+    description: >
+      부스터 4종 관리. 트레이 추가(300), 손(1900/3), 셔플(1500/3), 색상 제거(2900/3).
+      판 진행 중(in_play) 사용. 보유 수량, 구매, 사용 처리.
     provides:
-      - GetOwnedSkins() -> SkinData[]
-      - EquipSkin(skinId, slot)
-      - GetEquippedSkin(slot) -> SkinData
-      - PurchaseSkin(skinId) -> bool
+      - GetBoosterCount(boosterId) -> int
+      - UseBooster(boosterId) -> bool
+      - PurchaseBooster(boosterId) -> bool
+      - GetAllBoosters() -> BoosterData[]
     requires:
       - CurrencyManager.SpendCurrency()
-
-  StarManager:
-    layer: Domain
-    role: Manager
-    description: "스타 누적 관리. 레벨별 최고 스타, 총 스타수, 게이트 판정."
-    provides:
-      - RecordStars(levelId, starCount)
-      - GetTotalStars() -> int
-      - GetLevelStars(levelId) -> int
-      - MeetsStarGate(requirement) -> bool
-    requires:
-      - ScoreManager.OnStarEarned
+      - HolderManager (셔플 시)
+      - BalloonController (색상 제거 시)
+      - GimmickManager (손 - Hidden 해제)
     events_published:
-      - OnTotalStarsChanged(total)
+      - OnBoosterUsed(boosterId, effect)
+      - OnBoosterPurchased(boosterId, count)
+    data: "BoosterData(boosterId, name, count, coinPrice, unitCount)"
+    price_table:
+      tray_add: { coin_price: 300, unit: 1, note: "홀더 슬롯 1칸 추가 — 가장 저렴한 보험" }
+      shuffle: { coin_price: 1500, unit: 3, note: "보드 풍선 배치 셔플" }
+      hand: { coin_price: 1900, unit: 3, note: "Hidden 풍선 1개 공개" }
+      color_remove: { coin_price: 2900, unit: 3, note: "지정 색상 풍선 전부 제거 — 가장 강력" }
 
-  AchievementManager:
-    layer: Domain
+  CurrencyManager:
+    layer: Core
     role: Manager
-    description: "도전과제 추적, 달성 판정, 보상 지급."
+    description: >
+      코인 관리 (소프트 재화). 소스(레벨 보상, IAP)와 싱크(부스터, 하트, 컨티뉴) 처리.
+      초기 2000코인 지급.
     provides:
-      - GetAchievements() -> AchievementData[]
-      - CheckAchievement(achievementId) -> bool
-      - ClaimAchievementReward(achievementId) -> RewardData
-      - GetProgress(achievementId) -> float
-    requires:
-      - PopProcessor.OnChainPopComplete
-      - LevelManager.OnLevelCompleted
-      - CurrencyManager.AddCurrency()
+      - GetBalance(currencyType) -> int
+      - AddCurrency(currencyType, amount, reason)
+      - SpendCurrency(currencyType, amount, reason) -> bool
+      - HasEnough(currencyType, amount) -> bool
+    requires: []
     events_published:
-      - OnAchievementUnlocked(achievementId)
-
-# ═══════════════════════════════════════════
-# DOMAIN: Social (2 systems)
-# ═══════════════════════════════════════════
-Social:
-
-  LeaderboardManager:
-    layer: Domain
-    role: Manager
-    description: "주간 랭킹 관리. 점수 제출, 랭킹 조회, 시즌 리셋."
-    provides:
-      - SubmitScore(metric, value)
-      - GetLeaderboard(type) -> LeaderboardEntry[]
-      - GetPlayerRank(type) -> int
-      - ClaimRankReward() -> RewardData
-    requires:
-      - StarManager.GetTotalStars()
-      - CurrencyManager.AddCurrency()
-    events_published:
-      - OnLeaderboardUpdated
-      - OnRankChanged(newRank)
-
-  FriendManager:
-    layer: Domain
-    role: Manager
-    description: "친구 목록, 하트 선물 보내기/받기."
-    provides:
-      - GetFriendList() -> FriendData[]
-      - SendGift(friendId, giftType) -> bool
-      - ReceiveGifts() -> GiftData[]
-      - GetDailySendCount() -> int
-    requires:
-      - LifeManager.AddLife()
+      - OnCurrencyChanged(currencyType, newBalance, delta, reason)
+      - OnInsufficientFunds(currencyType, required)
     config:
-      daily_send_limit: 20
-      daily_receive_limit: 20
+      initial_coins: 2000
+
+  ContinueHandler:
+    layer: Domain
+    role: Handler
+    description: >
+      이어하기 처리. 실패 시 팝업 노출, 첫 1회 무료, 이후 900→1900→2900코인 단계별 상승.
+      최대 3회. 재시도 시 1회차로 리셋.
+      컨티뉴 효과: 탄창이 남아 홀더에 쌓인 보관함을 홀더 윗부분 대기열로 이동.
+      유저가 터치할 때까지 대기열에서 머무르고, 터치하면 레일에 올라감. 자동으로 홀더에 내려오지 않음.
+    provides:
+      - ShowContinuePopup()
+      - ProcessContinue() -> bool
+      - GetContinueCost() -> int
+      - GetContinueUsedCount() -> int
+      - IsFreeContineAvailable() -> bool
+      - ResetContinueCount()   # 재시도 시 호출
+    requires:
+      - BoardStateManager.OnBoardFailed
+      - CurrencyManager.SpendCurrency()
+      - HolderManager (홀더 → 상단 대기열 이동)
+      - PopupManager.ShowPopup()
+    events_published:
+      - OnContinueUsed(isFree, cost, usedCount)
+      - OnContinueDeclined
+    config:
+      first_free: true
+      escalating_cost: [900, 1900, 2900]
+      max_uses: 3
+      reset_on_retry: true
+
+  ShopManager:
+    layer: Domain
+    role: Manager
+    description: >
+      상점 UI 및 구매 처리. 코인팩(6), 번들(5), 스타터팩, 광고 제거.
+      노출 순서: 스타터팩 → 번들 → 코인 → 광고 제거.
+    provides:
+      - GetShopProducts() -> ProductData[]
+      - PurchaseProduct(productId) -> PurchaseResult
+      - IsProductAvailable(productId) -> bool
+      - GetStarterPackStatus() -> StarterPackStatus
+    requires:
+      - CurrencyManager.AddCurrency()
+      - BoosterManager (부스터 지급)
+      - IAPManager (결제 처리)
+    events_published:
+      - OnProductPurchased(productId, price)
+    data: "ProductData(productId, name, price, contents, efficiency)"
+
+  DailyRewardManager:
+    layer: Domain
+    role: Manager
+    description: >
+      7일 주기 순차 보상. 연속 접속 끊어져도 이어감.
+      코인→코인→부스터→코인→코인→부스터→대량코인+부스터.
+    provides:
+      - GetCurrentDay() -> int
+      - GetReward(day) -> RewardData
+      - ClaimDailyReward() -> RewardData
+      - IsDailyRewardAvailable() -> bool
+    requires:
+      - CurrencyManager.AddCurrency()
+      - BoosterManager (부스터 지급)
+    events_published:
+      - OnDailyRewardClaimed(day, reward)
+    config:
+      cycle_days: 7
+
+  AdManager:
+    layer: Domain
+    role: Manager
+    domain_owner: BM   # BM 소속이나 OutGame 의존성으로 인해 여기에 배치
+    description: >
+      보상형 광고 + 전면 광고 관리. Lv.20까지 전면 광고 미노출 (FTUE 보호).
+      전면 광고는 레벨 결과 화면에서만, 30초 쿨다운.
+    provides:
+      - ShowRewardedAd(placement) -> bool
+      - ShowInterstitialAd() -> bool
+      - IsAdRemovalPurchased() -> bool
+      - IsInterstitialReady() -> bool
+    requires:
+      - LifeManager (하트 충전 보상)
+      - BoosterManager (부스터 무료 사용 보상)
+      - CurrencyManager (코인 보상)
+    events_published:
+      - OnAdCompleted(adType, placement, reward)
+      - OnAdSkipped(adType)
+    config:
+      interstitial_protection_level: 20
+      interstitial_cooldown_sec: 30
+
+  OfferManager:
+    layer: Domain
+    role: Manager
+    domain_owner: BM   # BM 소속이나 OutGame 의존성으로 인해 여기에 배치
+    description: >
+      상품 노출 정책/팝업 관리. 스페셜 오퍼 간 20분 쿨타임.
+      팝업 우선순위: 스타터팩 → 전면 광고.
+    provides:
+      - CheckOfferTrigger(trigger) -> OfferData
+      - ShowOffer(offerId)
+      - GetActiveOffers() -> OfferData[]
+    requires:
+      - PopupManager.ShowPopup()
+      - ShopManager.GetStarterPackStatus()
+      - AdManager.IsInterstitialReady()
+    events_published:
+      - OnOfferShown(offerId)
+      - OnOfferAccepted(offerId)
+      - OnOfferDeclined(offerId)
+    config:
+      popup_cooldown_min: 20
 
 # ═══════════════════════════════════════════
-# DOMAIN: LiveOps (6 systems)
+# DOMAIN: BM (3 confirmed + 1 deferred)
+# AdManager, OfferManager는 BM 소속이나 OutGame 의존성으로 OutGame 섹션에 배치 (domain_owner: BM 태그)
 # ═══════════════════════════════════════════
-LiveOps:
+BM:
 
-  EventManager:
+  IAPManager:
     layer: Domain
     role: Manager
-    description: "이벤트 스케줄, 활성화/비활성화, 이벤트 진행 관리."
+    description: >
+      IAP 결제 처리. 코인팩(6), 번들(5), 스타터팩, 광고 제거.
+      Unity IAP 래핑. 결제 완료 → 아이템 지급 → 영수증 검증.
     provides:
-      - GetActiveEvents() -> EventData[]
-      - IsEventActive(eventId) -> bool
-      - GetEventProgress(eventId) -> float
-      - ClaimEventReward(eventId) -> RewardData
+      - InitiatePurchase(productId) -> PurchaseResult
+      - RestorePurchases()
+      - GetProductPrice(productId) -> string
     requires:
-      - RemoteConfigService.GetConfig()
       - CurrencyManager.AddCurrency()
+      - BoosterManager (부스터 지급)
     events_published:
-      - OnEventStarted(eventId)
-      - OnEventEnded(eventId)
+      - OnPurchaseCompleted(productId, receipt)
+      - OnPurchaseFailed(productId, reason)
+    note: "조건부 컴파일: #if UNITY_IAP"
 
-  QuestManager:
-    layer: Domain
-    role: Manager
-    description: "일일/주간 퀘스트 관리. 진행 추적, 보상 수령."
-    provides:
-      - GetDailyQuests() -> QuestData[]
-      - UpdateQuestProgress(questType, amount)
-      - ClaimQuestReward(questId) -> RewardData
-      - AreAllDailyQuestsComplete() -> bool
-    requires:
-      - LevelManager.OnLevelCompleted
-      - PopProcessor.OnChainPopComplete
-      - CurrencyManager.AddCurrency()
-    events_published:
-      - OnQuestCompleted(questId)
-      - OnAllDailyQuestsComplete
-
-  SeasonManager:
-    layer: Domain
-    role: Manager
-    description: "시즌 진행, 리셋, 시즌별 테마 관리."
-    provides:
-      - GetCurrentSeason() -> SeasonData
-      - GetSeasonTimeRemaining() -> float
-      - ResetSeason()
-    requires:
-      - RemoteConfigService.GetConfig()
-    events_published:
-      - OnSeasonStarted(seasonId)
-      - OnSeasonEnded(seasonId)
-
-  NotificationManager:
-    layer: Core
-    role: Manager
-    description: "로컬/푸시 알림 스케줄링."
-    provides:
-      - ScheduleNotification(type, time, message)
-      - CancelNotification(type)
-      - GetScheduledNotifications() -> NotificationData[]
-    requires: []
-
-  ABTestManager:
-    layer: Core
-    role: Manager
-    description: "A/B 테스트 설정, 유저 그룹 배정, 변수 조회."
-    provides:
-      - GetVariant(testId) -> string
-      - IsInTest(testId) -> bool
-      - GetTestConfig(testId) -> object
-    requires:
-      - RemoteConfigService.GetConfig()
-
-  RemoteConfigService:
-    layer: Core
-    role: Service
-    description: "서버 설정값 동기화. Firebase Remote Config 래핑."
-    provides:
-      - GetConfig(key) -> object
-      - FetchConfig() -> bool
-      - GetLastFetchTime() -> DateTime
-    requires: []
-    events_published:
-      - OnConfigUpdated
-    sdk: "FIREBASE_ANALYTICS"
+# ═══════════════════════════════════════════
+# DEFERRED DOMAINS
+# ═══════════════════════════════════════════
+# BM deferred: SeasonPassManager (BM/LiveOps 디렉션 후), PiggyBankManager (소프트런칭 후)
+# LiveOps: _DEFERRED — SeasonManager, QuestManager, StreakManager + EventManager, ABTestManager, RemoteConfigService
+# Meta: _DEFERRED (리텐션 데이터 후)
+# Social: _DEFERRED (소프트런칭 후)

@@ -2,7 +2,7 @@
 # BalloonFlow — Layer 1: Game Design Document
 # ═══════════════════════════════════════════
 # Genre: Puzzle | Sub-genre: queue_sort | Platform: Unity
-# Generated: 2026-03-11
+# 정본 참조: concept.yaml (BalloonFlow_컨셉문서.docx)
 
 project: BalloonFlow
 title: "Balloon Flow! — Dart x Balloon — Oddly Satisfying Queue Puzzle"
@@ -16,66 +16,134 @@ orientation: portrait
 # 1. Vision
 # ─────────────────────────────────────
 vision:
-  one_liner: "다트를 쏘아 같은 색 풍선을 터뜨리는 큐 정리의 쾌감"
+  one_liner: >
+    어떤 색부터 터뜨릴지 고르는 전략적 고민,
+    그리고 선택 후 풍선이 팡팡팡 연쇄로 터져나가는 폭발적 쾌감
   core_fun: >
-    레일 위를 흘러가는 형형색색 풍선들에 같은 색 다트를 명중시켜 터뜨리는
-    Oddly Satisfying 큐 정리 퍼즐. 연쇄 팝의 시청각 쾌감과 전략적 큐 관리의
-    깊이가 결합된 모바일 캐주얼 퍼즐 게임.
+    Pixel Flow의 검증된 큐 매니지먼트 메카닉을 기반으로 한 컬러 매칭 퍼즐.
+    타겟을 픽셀에서 풍선으로 교체하여 터질 때의 감각적 피드백을 강화.
+    보관함이 레일(원형 루프) 위에서 다트를 발사하는 구조로, 홀더(5칸) 관리가 핵심 긴장감.
 
 # ─────────────────────────────────────
-# 2. Design Pillars
+# 2. Design Pillars (5개) — concept.yaml _LOCKED
 # ─────────────────────────────────────
 design_pillars:
-  - name: "Satisfying Pop"
+  - name: "선택의 긴장감"
     priority: 1
-    description: "풍선 팝의 ASMR급 시청각 피드백. 연쇄 팝 시 이펙트 증폭."
-  - name: "Strategic Queue"
+    description: "어떤 색 보관함을 먼저 열지가 클리어 여부를 가른다. 탄창이 남은 보관함이 홀더로 돌아와 홀더가 꽉 차는 긴장감."
+  - name: "터뜨리는 쾌감 극대화"
     priority: 2
-    description: "어떤 색 다트를 먼저 쏠지 전략적 판단. 큐 관리의 퍼즐 깊이."
-  - name: "Bite-Sized Flow"
+    description: "시각(파편) + 청각(피치 상승) + 촉각(진동)에 모든 연출 집중."
+  - name: "시각적 명확성"
     priority: 3
-    description: "한 판 30~90초. 자투리 시간에 딱 맞는 세션 단위."
+    description: "파스텔 단색 배경 위에 풍선과 다트만 존재. 100% 시선 집중."
+  - name: "1초 이해"
+    priority: 4
+    description: "보관함 탭 → 레일 위에서 다트 발사 → 풍선 터짐. 세계관 설명 불필요."
+  - name: "쏘는 쪽은 담백, 터지는 쪽은 과하게"
+    priority: 5
+    description: "다트/보관함은 절제, 풍선 터지는 순간에 연출 리소스 100% 집중."
 
 # ─────────────────────────────────────
-# 3. Target Audience
+# 3. Target Audience — concept.yaml _LOCKED
 # ─────────────────────────────────────
 target_audience:
-  primary: "25-45세, 여성 60%. 출퇴근 캐주얼 퍼즐러."
+  primary: "미국 시장. 여성 70% / 남성 30%. 평균 32세 (25-34세, 35-44세 핵심층)."
   secondary: "18-24세, ASMR/Satisfying 숏폼 세대."
+  reference: "Pixel Flow 유저 프로필(여성 71%, 평균 32세)과 거의 일치."
 
 # ─────────────────────────────────────
-# 4. Core Loop
+# 4. Core Mechanic — concept.yaml _LOCKED
+# ─────────────────────────────────────
+core_mechanic:
+  type: "Color Matching Queue Puzzle"
+  hit_structure: "1:1 (다트 1개 → 풍선 1개 순차 타격)"
+  rail_type: "circular_loop (원형 루프)"
+  flow: >
+    홀더(5칸)에서 보관함 선택(탭) → 보관함이 레일(원형 루프)에 올라가 한 바퀴 순회
+    → 매칭 풍선 만나면 다트 발사 → 동일 색 풍선 1:1 타격 → 팡 팝
+    → 레일 도중 탄창 0이면 즉시 제거 → 한 바퀴 후 탄창 남으면 홀더로 복귀 대기
+
+# ─────────────────────────────────────
+# 5. Core Loop
 # ─────────────────────────────────────
 core_loop:
-  inner: "[레벨진입] → [풍선관찰] → [다트발사(탭)] → [매칭팝+연쇄] → [클리어/실패] → [보상]"
-  outer: "[레벨진행] → [챕터완료] → [기믹해금] → [부스터활용] → [컬렉션수집] → [시즌이벤트]"
+  inner: >
+    [레벨 진입] → [보드 풍선 관찰] → [홀더(5칸)에서 보관함 선택(탭)]
+    → [보관함이 레일(원형 루프)에 올라가 한 바퀴→매칭 풍선에 다트 발사→1:1 타격→팡팡팡]
+    → [탄창 0=즉시 제거 / 탄창 남음=홀더 복귀] → [보드 비우기=클리어] or [홀더 초과=실패]
+    → [보상 획득] → [다음 레벨]
+  outer: >
+    [레벨 진행] → [패키지 완료] → [기믹 해금] → [부스터 활용]
+    → [컬렉션 수집] → [시즌 이벤트 참여]
 
 # ─────────────────────────────────────
-# 5. Systems Overview (9 Domains)
+# 5-1. Gimmicks (5종) — 정본: content/gimmick_spec.yaml
+# ─────────────────────────────────────
+gimmicks:
+  description: "패키지 진행에 따라 순차 해금되는 5종 기믹. 코어 루프에 변주를 부여."
+  list:
+    - name: "Hidden (숨겨진 풍선)"
+      unlock: "PKG1 Lv.11"
+      description: "풍선이 보드 위에 숨겨져 있어 보이지 않음. 주변 풍선을 터뜨리면 드러남."
+      difficulty_levers: ["숨김 풍선 비율", "숨김 풍선 위치"]
+    - name: "Spawner 투명 (Spawner_T)"
+      unlock: "PKG2 Lv.21"
+      description: "투명 Spawner가 레일 순회 중 새 풍선을 보드에 추가. Spawner 자체는 보이지 않음."
+      difficulty_levers: ["Spawner 수", "Spawn 간격", "Spawn 색상"]
+    - name: "Spawner 불투명 (Spawner_O)"
+      unlock: "PKG2 Lv.31"
+      description: "불투명 Spawner가 보드 위에 보이며, 레일 순회 중 새 풍선을 추가."
+      difficulty_levers: ["Spawner 수", "Spawn 간격", "Spawn 색상"]
+    - name: "Big Object"
+      unlock: "PKG3 Lv.41"
+      description: "1x1보다 큰 오브젝트. 생명력(lifePoints) 보유, 여러 번 타격해야 제거."
+      difficulty_levers: ["lifePoints", "크기", "배치 위치"]
+    - name: "Chain (연결 풍선)"
+      unlock: "PKG4 Lv.61"
+      description: >
+        2개 이상의 풍선이 연결. A 풍선 제거 후 B 풍선 해방.
+        원형 루프 특성: A 보관함 한 바퀴 → B 보관함 한 바퀴 → 각각 탄창 남으면 홀더 복귀.
+        동시에 2슬롯 소모 리스크.
+      difficulty_levers: ["체인 길이", "연결 색상 조합", "연결 위치"]
+
+# ─────────────────────────────────────
+# 6. Systems Overview (Confirmed vs Deferred)
 # ─────────────────────────────────────
 systems:
   InGame:
-    description: "코어 메커닉 — 레일, 풍선, 다트, 팝, 콤보, 점수"
+    status: confirmed
+    description: "코어 메커닉 — 보관함, 다트, 레일, 풍선, 보드, 팝, 점수"
     systems:
-      - RailManager
-      - BalloonController
-      - DartManager
-      - PopProcessor
-      - ComboCalculator
-      - ScoreManager
-      - InputHandler
-      - BoardStateManager
+      - HolderManager          # 보관함 관리 (탄창, 색상, 선택)
+      - DartManager            # 다트 생성, 레일 배치, 이동
+      - RailManager            # 레일 경로, 다트/풍선 이동
+      - BalloonController      # 풍선 상태 (색상, 위치, HP)
+      - BoardStateManager      # 보드 전체 상태 (풍선 배치, 클리어 판정)
+      - PopProcessor           # 풍선 팝 처리 (1:1 타격 판정)
+      - ScoreManager           # 점수 집계, 스타 판정
+      - InputHandler           # 보관함 탭 입력 처리
 
   Content:
-    description: "레벨 디자인 — 200레벨, 10챕터, 기믹 스케줄"
+    status: confirmed
+    description: "100레벨, 5패키지, Beat Chart 기반 레벨 디자인"
+    package_structure: "5 패키지 x 20 레벨 = 100 레벨 (출시 시)"
+    level_purpose_types: [튜토리얼, 노말, 하드, 슈퍼하드, 휴식]
+    gimmicks_5:
+      - Hidden           # 숨겨진 풍선
+      - Spawner_T        # Spawner 투명
+      - Spawner_O        # Spawner 불투명
+      - BigObject        # Big Object
+      - Chain            # Chain
     systems:
       - LevelManager
       - LevelDataProvider
-      - ChapterManager
+      - PackageManager
       - GimmickManager
       - TutorialController
 
   Balance:
+    status: confirmed
     description: "난이도 곡선 — 톱니형, 공식 기반 밸런스"
     systems:
       - DifficultyCalculator
@@ -83,26 +151,31 @@ systems:
       - ClearRateValidator
 
   OutGame:
-    description: "라이프, 부스터, 재화 관리"
+    status: confirmed
+    description: "라이프, 부스터 4종, 컨티뉴, 코인 경제, 상점, 광고, 데일리 보상 (1.0 범위)"
     systems:
       - LifeManager
       - BoosterManager
       - CurrencyManager
+      - ContinueHandler
       - ShopManager
       - DailyRewardManager
-      - ContinueHandler
+      - AdManager
+      - OfferManager
 
   BM:
-    description: "수익화 — IAP, 광고, 시즌패스, 피기뱅크"
+    status: confirmed
+    description: "IAP(코인팩/번들/스타터팩/광고제거) + 광고(보상형/전면) 확정 (1.0 범위). 시즌패스는 _DEFERRED"
     systems:
       - IAPManager
       - AdManager
       - OfferManager
-      - PiggyBankManager
-      - SeasonPassManager
+    deferred_systems:
+      - SeasonPassManager    # BM/LiveOps 디렉션 완료 후
 
   UX:
-    description: "유저 동선 — FTUE, HUD, 팝업, 피드백"
+    status: confirmed
+    description: "유저 동선 — FTUE, HUD, 팝업, 피드백(비대칭 원칙)"
     systems:
       - UIManager
       - PageController
@@ -112,56 +185,57 @@ systems:
       - HUDController
 
   Meta:
-    description: "장기 동기 — 도감, 스킨, 스타, 도전과제"
-    systems:
-      - CollectionManager
-      - SkinManager
-      - StarManager
-      - AchievementManager
+    status: _DEFERRED
+    description: "컬렉션, 꾸미기 등 — 리텐션 데이터 기반 도입 여부 검토"
+    deferred_reason: "컨셉 문서 명시: '리텐션 데이터를 기반으로 도입 여부를 검토'"
 
   Social:
-    description: "소셜 — 리더보드, 친구/선물"
-    systems:
-      - LeaderboardManager
-      - FriendManager
+    status: _DEFERRED
+    description: "소프트런칭 후 데이터 기반 검토"
 
   LiveOps:
-    description: "라이브 운영 — 이벤트, 퀘스트, 시즌, AB테스트"
-    systems:
+    status: _DEFERRED
+    description: "시즌 운영, 데일리 챌린지, 연승 보너스 — 컨셉 확정이나 BM/LiveOps 디렉션 완료 후 구현"
+    deferred_systems:
+      - SeasonManager          # 풍선 축제 (시즌 테마 스킨 교체)
+      - QuestManager           # 오늘의 풍선 (데일리 챌린지)
+      - StreakManager          # 연승 보너스 (3/5/10 연승)
       - EventManager
-      - QuestManager
-      - SeasonManager
-      - NotificationManager
       - ABTestManager
       - RemoteConfigService
 
 # ─────────────────────────────────────
-# 6. Total System Count
+# 7. System Count
 # ─────────────────────────────────────
 system_count:
-  InGame: 8
-  Content: 5
-  Balance: 3
-  OutGame: 6
-  BM: 5
-  UX: 6
-  Meta: 4
-  Social: 2
-  LiveOps: 6
-  total: 45
+  confirmed:
+    InGame: 8
+    Content: 5
+    Balance: 3
+    UX: 6
+    OutGame: 8
+    BM: 3            # IAPManager, AdManager, OfferManager (SeasonPassManager → deferred)
+    total_confirmed: 33
+  deferred:
+    BM_remaining: "SeasonPassManager, PiggyBankManager (BM/LiveOps 디렉션 후)"
+    LiveOps: "SeasonManager, QuestManager, StreakManager + EventManager, ABTestManager, RemoteConfigService"
+    Meta: "TBD (리텐션 데이터 후)"
+    Social: "TBD"
 
 # ─────────────────────────────────────
-# 7. Art Direction
+# 8. Art Direction — concept.yaml _LOCKED
 # ─────────────────────────────────────
 art_direction:
-  style: "Flat 2D + 파스텔 톤"
-  balloon: "둥글고 광택, 약간 투명"
-  dart: "귀여운 미니 다트"
-  pop_effect: "색종이 파티클 + 화면 흔들림"
-  background: "챕터별 테마 (하늘, 바다, 숲, 놀이공원 등)"
+  style: "깔끔하고 찰진 3D 하이퍼 캐주얼 스타일"
+  direction: "캐릭터화하지 않고 오브젝트 질감과 색감으로 승부. Yarn Loop 미감 지향."
+  balloon: "매끄럽고 쫀득한 고무 물풍선. 볼록하고 탱글탱글, 겹겹이 쌓임."
+  holder: "상자 형태, 숫자 뱃지, 볼륨감. 표정 없이 깨끗한 오브젝트."
+  dart: "핀/침 형태. 보관함과 동일 색상. 표정 없이 깨끗한 오브젝트."
+  background: "깔끔한 파스텔 톤 단색 배경 (민트 그라데이션 등). 풍선+다트에만 시선 100%."
+  pop_effect: "물/반짝이 파편 방사형 + 파열음 피치 상승 + 마지막 풍선 화면 흔들림. 레일 위에서 다트를 발사하는 정도(담백)"
 
 # ─────────────────────────────────────
-# 8. Technical Requirements
+# 9. Technical Requirements
 # ─────────────────────────────────────
 technical:
   min_android_sdk: 24
@@ -171,3 +245,12 @@ technical:
   max_balloon_on_screen: 80
   object_pool_required: true
   screen_orientation: portrait
+  render_pipeline: "3D (URP 권장)"
+
+# ─────────────────────────────────────
+# 10. References — concept.yaml _LOCKED
+# ─────────────────────────────────────
+references:
+  - { name: "Pixel Flow", role: "코어 루프 원본. 큐 매니지먼트 메카닉." }
+  - { name: "Yarn Loop", role: "3D 오브젝트 질감, 차분하고 정돈된 미감." }
+  - { name: "Pencil Loop", role: "보관함+다트, 레일 배치 구조 참고. UA/마케팅 전략 참고. (2026)" }

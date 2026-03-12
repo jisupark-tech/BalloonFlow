@@ -1,61 +1,82 @@
 # BalloonFlow — Stage 2-5: LiveOps — Operations Plan
-# Season cycle, events, update schedule
+# 정본 참조: concept.yaml — events_concept
 
 domain: LiveOps
 tier: 3
+status: _DEFERRED
+deferred_note: "BM/LiveOps 디렉션 완료 후 구현. 컨셉 가이드라인만 기록."
 
 # ─────────────────────────────────────
-# Optional Parameters (all LiveOps params are optional)
+# Confirmed: Season Operation — concept.yaml _LOCKED
 # ─────────────────────────────────────
-parameters:
-  season_cycle: 4   # weeks
-  event_calendar:
-    weekly:
-      - { name: "주간 랭킹", type: "competitive", duration: "7일", rewards: "젬 + 뱃지" }
-      - { name: "일일 퀘스트", type: "daily", duration: "24시간", rewards: "코인 + 부스터" }
-    biweekly:
-      - { name: "테마 이벤트", type: "collection", duration: "14일", description: "한정 풍선 수집", rewards: "한정 스킨 + 젬" }
-    monthly:
-      - { name: "시즌 챌린지", type: "season_pass", duration: "28일", rewards: "프리미엄 트랙 보상" }
-    special:
-      - { name: "런칭 이벤트", type: "limited", duration: "7일", rewards: "한정 다트 스킨 + 젬 100" }
-      - { name: "명절 이벤트", type: "holiday", duration: "10일", rewards: "테마 풍선 + 특별 레벨" }
-
-  update_cycle:
-    content: "4주마다 +20 levels (1 chapter)"
-    feature: "8주마다 신규 기능 or 기믹"
-    balance: "2주마다 밸런스 핫픽스 (데이터 기반)"
-    client: "4주마다 클라이언트 업데이트"
-
-  ab_test_plan:
-    soft_launch:
-      - { test: "fail_condition", variants: ["rail_overflow_10", "rail_overflow_8", "dart_limit_only"], metric: "D7 retention + clear_rate", duration: "2주" }
-      - { test: "interstitial_freq", variants: ["every_2_levels", "every_3_levels", "every_4_levels"], metric: "ad_revenue + D7_retention", duration: "2주" }
-      - { test: "starter_pack_price", variants: ["$0.99", "$1.99", "$2.99"], metric: "conversion_rate + LTV", duration: "2주" }
-      - { test: "piggy_bank_fill", variants: ["6판", "8판", "10판"], metric: "purchase_rate + satisfaction", duration: "2주" }
-    post_launch:
-      - { test: "season_pass_price", variants: ["$3.99", "$4.99", "$6.99"], metric: "purchase_rate + ARPPU" }
-      - { test: "booster_price", variants: ["current", "-20%", "+20%"], metric: "use_rate + revenue" }
-
-# ─────────────────────────────────────
-# Daily Quest System
-# ─────────────────────────────────────
-daily_quests:
-  count: 3
-  refresh: "매일 00:00 UTC"
+seasonal_operation:
+  name: "풍선 축제"
+  description: >
+    풍선의 비주얼만 교체하면 시즌이 갱신.
+    아트 리소스 교체 비용이 낮으면서 신선함 확보.
   examples:
-    - "레벨 5개 클리어 → 코인 500"
-    - "연쇄 팝 10회 달성 → 부스터 1개"
-    - "스타 10개 획득 → 젬 5"
-  bonus: "3개 전부 완료 시 추가 보상 (젬 10 + 부스터)"
+    - "봄: 벚꽃 풍선"
+    - "여름: 수박 풍선"
+    - "할로윈: 호박 풍선"
+    - "크리스마스: 오너먼트 풍선"
+  skins: "시즌 한정 다트/보관함 스킨으로 수집 동기 부여"
+  cycle: "4주 (예상)"
 
 # ─────────────────────────────────────
-# Systems List
+# Confirmed: Win Streak Bonus — concept.yaml _LOCKED
 # ─────────────────────────────────────
-systems:
-  - EventManager         # 이벤트 스케줄, 활성화/비활성화
-  - QuestManager         # 일일/주간 퀘스트 관리
-  - SeasonManager        # 시즌 진행, 리셋 관리
-  - NotificationManager  # 푸시 알림 스케줄
-  - ABTestManager        # A/B 테스트 설정 및 분기
-  - RemoteConfigService  # 서버 설정값 동기화
+win_streak_bonus:
+  description: >
+    한 세션 안에서 연속 플레이를 유도하는 구조.
+    보너스 자체가 "더 많이 터뜨리는 경험"이라는 점이 핵심.
+  streaks:
+    - { streak: 3, reward: "클리어 시 보너스 풍선이 화면에 추가 등장 → 터지며 추가 보상" }
+    - { streak: 5, reward: "골드 풍선이 섞여 터지며 추가 코인 지급" }
+    - { streak: 10, reward: "특별 풍선이 연쇄로 팡팡팡 터지며 대량 보상" }
+
+# ─────────────────────────────────────
+# Confirmed: Season Pass — concept.yaml _LOCKED (BM Domain 연계)
+# ─────────────────────────────────────
+season_pass:
+  structure: "업계 표준 구조"
+  free_track: "기능적 보상 (코인, 부스터, 라이프 리필)"
+  premium_track: "꾸미기 보상 (시즌 한정 풍선 이펙트, 다트/보관함 스킨)"
+  philosophy: "더 예쁘게 터뜨리는 경험이지, 더 쉽게 클리어하는 파워가 아님"
+
+# ─────────────────────────────────────
+# Confirmed: Daily Challenge — concept.yaml _LOCKED
+# ─────────────────────────────────────
+daily_challenge:
+  name: "오늘의 풍선"
+  description: "매일 특수 조건의 레벨이 하나 열림"
+  examples:
+    - "빨간 풍선만 100개 터뜨리기"
+    - "30초 안에 전부 클리어"
+    - "보관함 3개로 보드 비우기"
+  reward: "클리어 시 시즌 패스 경험치 지급"
+
+# ─────────────────────────────────────
+# Deferred Parameters
+# ─────────────────────────────────────
+deferred:
+  event_calendar:
+    status: _DEFERRED
+    note: "주간/격주/월간 이벤트는 소프트런칭 후 데이터 기반 설계"
+  update_cycle:
+    content: "4주마다 +20 levels (1 패키지) — 예상"
+    note: "소프트런칭 데이터로 주기 확정"
+  ab_test_plan:
+    status: _DEFERRED
+    note: "소프트런칭 시 설계"
+
+# ─────────────────────────────────────
+# All Systems — DEFERRED (BM/LiveOps 디렉션 후)
+# ─────────────────────────────────────
+deferred_systems:
+  - SeasonManager        # 풍선 축제 — 시즌 테마 스킨 교체 관리
+  - QuestManager         # 오늘의 풍선 — 데일리 챌린지 관리
+  - StreakManager        # 연승 보너스 (3/5/10) 관리
+  - EventManager         # 범용 이벤트 — 소프트런칭 후
+  - NotificationManager  # 푸시 알림 — 소프트런칭 후
+  - ABTestManager        # A/B 테스트 — 소프트런칭 후
+  - RemoteConfigService  # 서버 설정 — 소프트런칭 후

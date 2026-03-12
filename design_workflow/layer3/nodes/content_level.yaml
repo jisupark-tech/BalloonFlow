@@ -1,79 +1,58 @@
 # ═══════════════════════════════════════════
 # BalloonFlow — L3 Node: Content Level System
 # ═══════════════════════════════════════════
-# Phase 1 | Owner: Main(LevelManager) + SubA(LevelDataProvider)
+# Phase 1 | Owner: Sub Coder B
+# Systems: LevelDataProvider, LevelManager
 
 node_id: content_level
 phase: 1
-layer: Domain
-domain: Content
-owner: Main_SubA
+coder: sub_b
 
 systems:
-  LevelManager:
-    owner: MainCoder
-    description: "레벨 로드, 진행, 완료/실패 처리."
-    contract:
-      provides:
-        - "LoadLevel(int levelNumber)"
-        - "StartLevel()"
-        - "CompleteLevel(int score, int stars)"
-        - "FailLevel(string reason)"
-        - "RetryLevel()"
-        - "GetCurrentLevel() -> int"
-        - "GetCurrentLevelData() -> LevelData"
-      events_published:
-        - "OnLevelLoaded(int levelNumber)"
-        - "OnLevelStarted()"
-        - "OnLevelCompleted(int levelNumber, int score, int stars)"
-        - "OnLevelFailed(int levelNumber, string reason)"
-      requires:
-        - "LevelDataProvider.LoadLevelData()"
-        - "ScoreManager.OnLevelCleared"
-        - "ScoreManager.OnLevelFailed"
-        - "LifeManager.ConsumeLife()"
-        - "CurrencyManager.AddCurrency()"
-    implementation:
-      level_flow:
-        1_load: "LevelDataProvider에서 데이터 로드"
-        2_setup: "RailManager, BalloonController, DartManager 초기화"
-        3_start: "InputHandler 활성화, 타이머 시작"
-        4_play: "유저 플레이 (ScoreManager가 클리어/실패 감지)"
-        5_result: "CompleteLevel or FailLevel → 결과 화면"
-      rewards:
-        coin: "100 + level_number * 5"
-        star_bonus: "star_count * 50"
-        booster: "매 10레벨 클리어 시 랜덤 부스터"
+  - LevelDataProvider
+  - LevelManager
 
+contracts:
   LevelDataProvider:
-    owner: SubCoderA
-    description: "레벨 JSON 로드, 파싱."
-    contract:
-      provides:
-        - "LoadLevelData(int levelNumber) -> LevelData"
-        - "GetRailLayout() -> RailLayout"
-        - "GetBalloonLayout() -> BalloonLayout[]"
-        - "GetDartQueue() -> DartData[]"
-        - "GetStarThresholds() -> int[3]"
-        - "GetMoveLimit() -> int"
-        - "GetOverflowLimit() -> int"
-        - "GetSpecialMechanics() -> string[]"
-      requires: []
-    implementation:
-      data_source: "Resources/Levels/bf_XXXX.json"
-      json_schema:
-        level_number: int
-        rail_segments: "RailSegment[]"
-        balloons: "{ color: int, type: int, rail_index: int, position: int }[]"
-        dart_queue: "{ color: int }[]"
-        star_thresholds: [int, int, int]
-        move_limit: int
-        overflow_limit: int
-        special_mechanics: "string[]"
-        balloon_speed: float
-      caching: "현재 레벨 + 다음 레벨 프리로드"
+    provides:
+      - "LoadLevelData(levelNumber) -> LevelData"
+      - "GetBalloonLayout() -> BalloonLayout[]"
+      - "GetHolderSetup() -> HolderSetup[]"
+      - "GetRailLayout() -> RailLayout"
+      - "GetStarThresholds() -> int[3]"
+      - "GetSpecialMechanics() -> string[]"
+      - "GetGimmickFlags() -> GimmickFlags"
+    requires: []
+    data: >
+      LevelData JSON (Level Library schema): level_id, package_id, position_in_package,
+      level_purpose (튜토리얼/노말/하드/슈퍼하드/휴식), balloon_count, num_colors,
+      holder_count, magazine_per_holder, board_layout,
+      special_mechanics, gimmick_flags, star_thresholds
+    note: >
+      100레벨 (5패키지 × 20레벨).
+      GetGimmickFlags()는 해당 레벨의 활성 기믹 플래그를 반환.
+      level_purpose로 레벨 유형 구분 (튜토리얼/노말/하드/슈퍼하드/휴식).
+
+  LevelManager:
+    provides:
+      - "LoadLevel(levelNumber)"
+      - "StartLevel()"
+      - "CompleteLevel(score, stars)"
+      - "FailLevel(reason)"
+      - "RetryLevel()"
+      - "GetCurrentLevel() -> int"
+    requires:
+      - "LevelDataProvider.LoadLevelData()"
+      - "ScoreManager.OnLevelCleared"
+      - "ScoreManager.OnLevelFailed"
+    events_published:
+      - "OnLevelLoaded(levelNumber)"
+      - "OnLevelStarted"
+      - "OnLevelCompleted(levelNumber, score, stars)"
+      - "OnLevelFailed(levelNumber, reason)"
 
 output_files:
-  - "LevelManager.cs"
   - "LevelDataProvider.cs"
-  - "LevelData.cs (data class)"
+  - "LevelManager.cs"
+  - "LevelData.cs"
+  - "HolderSetup.cs"

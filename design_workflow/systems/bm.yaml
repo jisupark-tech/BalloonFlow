@@ -1,96 +1,88 @@
 # BalloonFlow — Stage 2-2: BM System
 # Domain: BM | Tier: 2
+# STATUS: confirmed (IAP/광고/오퍼) + _DEFERRED (시즌패스 — BM/LiveOps 디렉션 후)
+# 정본 참조: bm/monetization.yaml, systems/outgame.yaml
 
 domain: BM
 tier: 2
+status: partial
 
 # ─────────────────────────────────────
-# Required Parameters (6/6)
+# 수익화 모델
 # ─────────────────────────────────────
-parameters:
-  monetization_model: "F2P + IAP + Ad"
-
-  ad_free_period: 15   # 최초 15분 (약 Level 5~7) 광고 없음
-
-  rewarded_ad_placements:
-    - { placement: "free_heart", trigger: "하트 소진 팝업", reward: "하트 1개", daily_cap: 5 }
-    - { placement: "free_continue", trigger: "실패 팝업 (첫 번째)", reward: "다트 +5 이어하기", daily_cap: 3 }
-    - { placement: "free_booster", trigger: "레벨 시작 부스터 슬롯", reward: "랜덤 부스터 1개", daily_cap: 3 }
-    - { placement: "double_reward", trigger: "레벨 클리어 결과 화면", reward: "코인 보상 2배", daily_cap: 10 }
-    - { placement: "free_coin", trigger: "상점 버튼", reward: "코인 200", daily_cap: 5 }
-    - { placement: "spin_wheel", trigger: "일일 룰렛", reward: "랜덤 보상", daily_cap: 3 }
-
-  interstitial_frequency:
-    base: "매 3레벨 클리어 후 1회"
-    cooldown: "최소 120초 간격"
-    skip_conditions:
-      - "IAP 구매 이력 있는 유저 (광고 제거 미구매 시에도 빈도 50% 감소)"
-      - "튜토리얼 레벨 (1~5)"
-      - "첫 세션 15분 이내"
-
-  iap_price_range: [0.99, 49.99]   # USD
-
-  first_purchase_timing:
-    target: "Day 1, Level 20~30 구간"
-    mechanism: "스타터팩 제한 시간 오퍼 (24시간)"
-    expected_conversion: 0.03   # 3%
+monetization_model: "F2P + IAP + Ad"
+scope: "1.0은 Static Pricing만. Dynamic Pricing은 소프트런칭 후"
 
 # ─────────────────────────────────────
-# Optional Parameters
+# DEFERRED: Season Pass — BM/LiveOps 디렉션 완료 후
 # ─────────────────────────────────────
-  starter_pack:
-    price: 1.99   # USD
-    contents:
-      - "젬 100개"
-      - "부스터 팩 (Color Reveal x3, Extra Darts x3, Bomb Dart x3)"
-      - "하트 풀 충전"
-    unlock_condition: "Level 10 클리어"
-    time_limit: "24시간"
-    value_ratio: 5.0   # 정가 대비 5배 가치
+season_pass:
+  status: _DEFERRED
+  structure: "업계 표준 구조"
+  free_track:
+    type: "기능적 보상"
+    contents: "코인, 부스터, 라이프 리필"
+  premium_track:
+    type: "꾸미기 보상"
+    contents: "시즌 한정 풍선 이펙트, 다트/보관함 스킨"
+  philosophy: >
+    "더 예쁘게 터뜨리는 경험이지, 더 쉽게 클리어하는 파워가 아님."
+    프리미엄 트랙은 순수 코스메틱만 포함. 게임플레이 이점 없음.
+  xp_source: "레벨 클리어, 스타 획득, 데일리 챌린지 클리어"
+  pricing:
+    status: _TBD
+    note: "피어 분석 후 확정. 업계 기준 $3.99~$6.99 예상."
 
+# ─────────────────────────────────────
+# IAP 상품 구조 (1.0 범위)
+# ─────────────────────────────────────
+iap_structure:
+  description: "상세 상품 테이블은 bm/monetization.yaml 참조"
+  categories:
+    - { name: "표준 코인 상품", tiers: 6, price_range: "$0.99~$99.99", efficiency: "1.0x~2.0x" }
+    - { name: "표준 번들 상품", tiers: 5, price_range: "$4.99~$99.99", efficiency: "1.7x~2.0x" }
+    - { name: "스타터팩", tiers: 2, price_range: "$0.99~$1.99", efficiency: "3.0x+", limit: "1회 한정" }
+    - { name: "광고 제거", tiers: 1, price_range: "$2.99~$4.99", limit: "1회 영구" }
+  value_base: "Standard Coin T1 ($0.99 = 900코인) = 효율 1.0배"
+  value_principle: "스타터팩(3.0x+) > 번들(1.7~2.5x) > 코인(1.0~2.0x)"
+
+# ─────────────────────────────────────
+# 광고
+# ─────────────────────────────────────
+ad_placements:
+  rewarded:
+    - "하트 충전 (하트 4개 이하)"
+    - "부스터 1회 무료 사용 (판 진행 중)"
+    - "코인 보상 2배 (데일리 보상)"
+    - "컨티뉴 광고: 추후 추가 (피어 분석 필요)"
+  interstitial:
+    protection: "Lv.20까지 미노출 (FTUE 보호)"
+    timing: "레벨 결과 화면에서만"
+    cooldown: "30초"
+    removal: "광고 제거 IAP 구매 시 영구 제거"
+
+# ─────────────────────────────────────
+# 이후 업데이트 (1.0 미포함)
+# ─────────────────────────────────────
+deferred:
   piggy_bank:
-    price: 2.99   # USD
-    fill_cycle: 8   # 8판 플레이 시 가득 참
-    reward_composition: "100% 젬"
-    value_ratio: 2.5   # 구매가 대비 2.5배 가치
-    unlock_condition: "Level 20"
-    exposure: "가득 찼을 때 팝업 (레벨 클리어 후 6순위)"
-    visual_feedback: "풍선 모양 피기뱅크가 점점 부풀어 오름"
-
-  season_pass:
-    price: 4.99   # USD / 시즌 (4주)
-    free_track: "코인, 기본 부스터"
-    premium_track: "젬, 프리미엄 부스터, 한정 다트 스킨, 한정 풍선 스킨"
-    levels: 30
-    xp_source: "레벨 클리어 = 10xp, 스타 = 5xp/개, 일일 퀘스트 = 30xp"
-
-  vip_system:
-    enabled: false
-    note: "소프트런칭 후 데이터 기반 도입 검토"
-
-# ─────────────────────────────────────
-# IAP Packages
-# ─────────────────────────────────────
-iap_packages:
-  gem_packs:
-    - { name: "소량 젬", gems: 80, price: 0.99, bonus: 0 }
-    - { name: "중간 젬", gems: 500, price: 4.99, bonus: 50 }
-    - { name: "대량 젬", gems: 1200, price: 9.99, bonus: 200 }
-    - { name: "메가 젬", gems: 3000, price: 19.99, bonus: 800 }
-    - { name: "울트라 젬", gems: 8000, price: 49.99, bonus: 3000 }
-  special_offers:
-    - { name: "스타터팩", price: 1.99, trigger: "Level 10", time_limit: "24h" }
-    - { name: "레벨 팩", price: 3.99, trigger: "Level 50 실패 3회", time_limit: "6h" }
-    - { name: "위크엔드 팩", price: 2.99, trigger: "주말 진입", time_limit: "48h" }
-  no_ads:
-    - { name: "광고 제거", price: 4.99, type: "non_consumable" }
+    status: _DEFERRED
+    note: "소프트런칭 후 추가. $2.99, 코인 누적→구매하여 열기"
+  dynamic_pricing:
+    status: _DEFERRED
+    note: "소프트런칭 데이터 확인 후 도입 (Best Value, Mega Sale 등)"
+  revenue_projections:
+    status: _DEFERRED
+    note: "소프트런칭 데이터 필요"
 
 # ─────────────────────────────────────
 # Systems List
 # ─────────────────────────────────────
-systems:
+confirmed_systems:
   - IAPManager           # IAP 구매 처리
-  - AdManager            # 광고 노출/보상 처리
-  - OfferManager         # 특별 오퍼 타이밍/노출 관리
-  - PiggyBankManager     # 피기뱅크 누적/구매 관리
-  - SeasonPassManager    # 시즌패스 진행/보상 관리
+  - AdManager            # 보상형/전면 광고 관리
+  - OfferManager         # 상품 노출 정책/팝업 관리
+
+deferred_systems:
+  - SeasonPassManager    # 시즌패스 — BM/LiveOps 디렉션 완료 후
+  - PiggyBankManager     # 피기뱅크 — 소프트런칭 후
