@@ -51,6 +51,8 @@ namespace BalloonFlow.Editor
         private float _railPadding = 1.5f;
         private float _railHeight = 0.5f;
         private Vector2 _boardCenter = new Vector2(0f, 2f); // X, Z
+        private int _railVisualType = 0; // 0=Cylinder, 1=Flat2D, 2=Custom3D
+        private int _maxOnRail = 2;
 
         // --- Balloon grid ---
         private int _balloonGridCols = 4;
@@ -226,10 +228,15 @@ namespace BalloonFlow.Editor
 
         #region Draw — Rail Settings
 
+        private static readonly string[] RAIL_VISUAL_TYPES =
+            { "Cylinder (3D)", "Flat 2D (Quad)", "Custom 3D (Prefab)" };
+
         private void DrawRailSettings()
         {
             EditorGUI.indentLevel++;
             _railDirection = EditorGUILayout.Popup("Direction", _railDirection, RAIL_DIRECTIONS);
+            _railVisualType = EditorGUILayout.Popup("Visual Type", _railVisualType, RAIL_VISUAL_TYPES);
+            _maxOnRail = EditorGUILayout.IntSlider("Max Holders on Rail", _maxOnRail, 1, 5);
             _boardCenter = EditorGUILayout.Vector2Field("Board Center (X, Z)", _boardCenter);
             _railPadding = EditorGUILayout.FloatField("Rail Padding", _railPadding);
             _railHeight = EditorGUILayout.FloatField("Rail Height (Y)", _railHeight);
@@ -666,7 +673,9 @@ namespace BalloonFlow.Editor
             return new RailLayout
             {
                 waypoints = waypoints.ToArray(),
-                holderPositions = holderPositions
+                holderPositions = holderPositions,
+                visualType = _railVisualType,
+                maxOnRail = _maxOnRail
             };
         }
 

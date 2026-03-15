@@ -298,6 +298,19 @@ namespace BalloonFlow
                 }
             }
 
+            // Apply rail visual type to RailRenderer
+            var railRenderer = FindAnyObjectByType<RailRenderer>();
+            if (railRenderer != null && config.rail != null)
+            {
+                railRenderer.VisualType = config.rail.visualType;
+            }
+
+            // Apply max-on-rail limit
+            if (HolderVisualManager.HasInstance && config.rail != null && config.rail.maxOnRail > 0)
+            {
+                HolderVisualManager.Instance.SetMaxOnRail(config.rail.maxOnRail);
+            }
+
             // Initialize holders from level config
             if (HolderManager.HasInstance && config.holders != null)
             {
