@@ -266,8 +266,9 @@ namespace BalloonFlow
                 remainingMagazine = remainingMagazine
             });
 
-            // Check overflow after return
+            // Check warning/overflow after return
             int waitingCount = GetWaitingHolderCount();
+            CheckAndPublishWarning(waitingCount);
             if (waitingCount > MAX_HOLDER_SLOTS)
             {
                 PublishOverflow(waitingCount);
@@ -335,6 +336,7 @@ namespace BalloonFlow
             _holders.Add(holder);
 
             int waitingCount = GetWaitingHolderCount();
+            CheckAndPublishWarning(waitingCount);
             if (waitingCount > MAX_HOLDER_SLOTS)
             {
                 PublishOverflow(waitingCount);
@@ -367,6 +369,34 @@ namespace BalloonFlow
                 }
             }
             return null;
+        }
+
+        /// <summary>
+        /// Checks holder count and publishes warning events at 4/5 (warning) and 5/5 (danger).
+        /// Design ref: 피드백디렉션 P0 #2, #3
+        /// </summary>
+        private void CheckAndPublishWarning(int waitingCount)
+        {
+            if (waitingCount >= MAX_HOLDER_SLOTS)
+            {
+                // 5/5 danger — holder frame all red + screen border alert
+                EventBus.Publish(new OnHolderWarning
+                {
+                    waitingCount = waitingCount,
+                    maxSlots = MAX_HOLDER_SLOTS,
+                    isDanger = true
+                });
+            }
+            else if (waitingCount >= MAX_HOLDER_SLOTS - 1)
+            {
+                // 4/5 warning — holder frame red flicker
+                EventBus.Publish(new OnHolderWarning
+                {
+                    waitingCount = waitingCount,
+                    maxSlots = MAX_HOLDER_SLOTS,
+                    isDanger = false
+                });
+            }
         }
 
         private void PublishOverflow(int holderCount)

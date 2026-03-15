@@ -25,8 +25,8 @@ namespace BalloonFlow
 
         // Bonus type string constants
         public const string BONUS_NONE           = "none";
-        public const string BONUS_BOOSTER_TRAY   = "bf_pre_01";
-        public const string BONUS_BOOSTER_SHUFFLE = "bf_pre_02";
+        public const string BONUS_BOOSTER_TRAY   = BoosterManager.EXTRA_TRAY;
+        public const string BONUS_BOOSTER_SHUFFLE = BoosterManager.SHUFFLE;
         public const string BONUS_HEART_REFILL   = "heart_refill";
         public const string BONUS_MIXED          = "booster_mixed";
 

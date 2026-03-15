@@ -3,22 +3,26 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Handles "continue after fail" with gem-based escalating costs.
-    /// Design: cost = 30 + (continue_count - 1) * 10 gems.
-    /// 1st continue = 30 gem, 2nd = 40, 3rd = 50, 4th(max) = 60.
+    /// Handles "continue after fail" with free first + coin-based escalating costs.
+    /// Design ref: 아웃게임디렉션 §이어하기
+    ///   1st continue: FREE
+    ///   2nd: 900 coins
+    ///   3rd: 1900 coins
+    ///   4th: 2900 coins (max)
+    /// Restart resets cost back to free.
     /// </summary>
     /// <remarks>
     /// Layer: Domain | Genre: Puzzle | Role: Handler | Phase: 3
-    /// Design ref: outgame_life_booster.yaml §106-111, economy.yaml §gem_sinks
     /// </remarks>
     public class ContinueHandler : Singleton<ContinueHandler>
     {
         #region Constants
 
-        private const int MaxContinues = 4;
-        private const int BaseContinueCostGems = 30;
-        private const int CostEscalationPerContinue = 10;
+        private const int MaxContinues = 4;  // 1 free + 3 paid
         private const int ContinueMagazineBonus = 5;
+
+        // Escalating coin costs (index 0 = free, then 900 → 1900 → 2900)
+        private static readonly int[] ContinueCosts = { 0, 900, 1900, 2900 };
 
         #endregion
 
@@ -68,16 +72,26 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Returns the gem cost of the next continue.
-        /// Formula: 30 + continueCount * 10.
+        /// Returns true if the next continue is free (first continue).
         /// </summary>
-        public int GetContinueCost()
+        public bool IsNextContinueFree()
         {
-            return BaseContinueCostGems + (_continueCount * CostEscalationPerContinue);
+            return _continueCount < ContinueCosts.Length && ContinueCosts[_continueCount] == 0;
         }
 
         /// <summary>
-        /// Attempts to execute a continue. Deducts gems, then restores board state.
+        /// Returns the coin cost of the next continue.
+        /// Returns 0 for the first (free) continue.
+        /// </summary>
+        public int GetContinueCost()
+        {
+            if (_continueCount >= ContinueCosts.Length)
+                return ContinueCosts[ContinueCosts.Length - 1];
+            return ContinueCosts[_continueCount];
+        }
+
+        /// <summary>
+        /// Attempts to execute a continue. Free for the first, coin cost for subsequent.
         /// Returns true if continue succeeded.
         /// </summary>
         public bool Continue()
@@ -90,22 +104,26 @@ namespace BalloonFlow
 
             int cost = GetContinueCost();
 
-            if (!GemManager.HasInstance)
+            if (cost > 0)
             {
-                Debug.LogWarning("[ContinueHandler] GemManager not available.");
-                return false;
-            }
+                if (!CurrencyManager.HasInstance)
+                {
+                    Debug.LogWarning("[ContinueHandler] CurrencyManager not available.");
+                    return false;
+                }
 
-            if (!GemManager.Instance.SpendGems(cost, GemManager.GemSink.Continue))
-            {
-                Debug.LogWarning($"[ContinueHandler] Not enough gems to continue (needs {cost}).");
-                return false;
+                if (!CurrencyManager.Instance.SpendCoins(cost, CurrencyManager.CoinSink.Continue))
+                {
+                    Debug.LogWarning($"[ContinueHandler] Not enough coins to continue (needs {cost}).");
+                    return false;
+                }
             }
 
             _continueCount++;
             ApplyContinueRestore();
 
-            Debug.Log($"[ContinueHandler] Continue #{_continueCount} applied. Cost={cost} gems.");
+            string costLabel = cost > 0 ? $"{cost} coins" : "FREE";
+            Debug.Log($"[ContinueHandler] Continue #{_continueCount} applied. Cost={costLabel}.");
             return true;
         }
 
@@ -119,6 +137,7 @@ namespace BalloonFlow
 
         /// <summary>
         /// Resets the continue count (called on new level or explicit retry).
+        /// Design: restart resets cost back to free.
         /// </summary>
         public void ResetContinueCount()
         {

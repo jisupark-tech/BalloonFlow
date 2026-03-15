@@ -16,13 +16,13 @@ namespace BalloonFlow
         #region Constants
 
         private const string PREFS_KEY_COINS = "BalloonFlow_Coins";
-        private const int DEFAULT_INITIAL_COINS = 2000;
+        private const int DEFAULT_INITIAL_COINS = 1000;
         private const int MAX_TRANSACTION_HISTORY = 50;
 
-        // Star-based coin rewards
-        private const int COINS_PER_STAR_1 = 100;
-        private const int COINS_PER_STAR_2 = 200;
-        private const int COINS_PER_STAR_3 = 300;
+        // Level clear coin rewards (design: Normal 50, Hard 75, SuperHard 100)
+        private const int COINS_CLEAR_NORMAL    = 50;
+        private const int COINS_CLEAR_HARD      = 75;
+        private const int COINS_CLEAR_SUPERHARD = 100;
 
         #endregion
 
@@ -45,9 +45,9 @@ namespace BalloonFlow
         /// </summary>
         public enum CoinSink
         {
-            BoosterTrayAdd,
+            BoosterExtraTray,
+            BoosterSelectTool,
             BoosterShuffle,
-            BoosterHand,
             BoosterColorRemove,
             HeartRefill,
             Continue,
@@ -200,13 +200,18 @@ namespace BalloonFlow
         /// </summary>
         /// <param name="starCount">Stars earned (1-3).</param>
         /// <returns>Coin reward amount.</returns>
+        /// <summary>
+        /// Returns coin reward based on star count.
+        /// Design: Normal clear 50, Hard clear 75, SuperHard clear 100.
+        /// Maps stars as proxy: 1★=Normal(50), 2★=Hard(75), 3★=SuperHard(100).
+        /// </summary>
         public int GetCoinRewardForStars(int starCount)
         {
             switch (starCount)
             {
-                case 1: return COINS_PER_STAR_1;
-                case 2: return COINS_PER_STAR_2;
-                case 3: return COINS_PER_STAR_3;
+                case 1: return COINS_CLEAR_NORMAL;
+                case 2: return COINS_CLEAR_HARD;
+                case 3: return COINS_CLEAR_SUPERHARD;
                 default: return 0;
             }
         }

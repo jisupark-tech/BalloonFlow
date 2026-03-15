@@ -174,14 +174,12 @@ namespace BalloonFlow
             EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompleted);
             EventBus.Subscribe<OnLevelFailed>(HandleLevelFailed);
             EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
-            EventBus.Subscribe<OnGemChanged>(HandleGemChanged);
 
             if (_playButton != null) _playButton.onClick.AddListener(OnPlayClicked);
             if (_nextButton != null) _nextButton.onClick.AddListener(OnNextClicked);
             if (_retryButton != null) _retryButton.onClick.AddListener(OnRetryClicked);
             if (_homeButton != null) _homeButton.onClick.AddListener(OnHomeClicked);
             if (_coinButton != null) _coinButton.onClick.AddListener(OnShopClicked);
-            if (_gemButton != null) _gemButton.onClick.AddListener(OnShopClicked);
             if (_shopCloseButton != null) _shopCloseButton.onClick.AddListener(OnShopCloseClicked);
         }
 
@@ -190,14 +188,12 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnLevelCompleted>(HandleLevelCompleted);
             EventBus.Unsubscribe<OnLevelFailed>(HandleLevelFailed);
             EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
-            EventBus.Unsubscribe<OnGemChanged>(HandleGemChanged);
 
             if (_playButton != null) _playButton.onClick.RemoveListener(OnPlayClicked);
             if (_nextButton != null) _nextButton.onClick.RemoveListener(OnNextClicked);
             if (_retryButton != null) _retryButton.onClick.RemoveListener(OnRetryClicked);
             if (_homeButton != null) _homeButton.onClick.RemoveListener(OnHomeClicked);
             if (_coinButton != null) _coinButton.onClick.RemoveListener(OnShopClicked);
-            if (_gemButton != null) _gemButton.onClick.RemoveListener(OnShopClicked);
             if (_shopCloseButton != null) _shopCloseButton.onClick.RemoveListener(OnShopCloseClicked);
         }
 
@@ -335,24 +331,13 @@ namespace BalloonFlow
             _coinDisplayText = _coinButton.GetComponentInChildren<Text>();
             if (_coinDisplayText != null)
             {
-                _coinDisplayText.text = "2000";
+                _coinDisplayText.text = "1000";
                 _coinDisplayText.color = Color.white;
                 _coinDisplayText.alignment = TextAnchor.MiddleCenter;
             }
 
-            // Gem button (clickable → opens shop)
-            _gemButton = MakeButton("GemButton", currBar.transform, "", COL_GEM_BTN, 24,
-                                    V(0, 0), V(180, 55));
-            AnchorRight(_gemButton.gameObject);
-            var gemBtnRT = _gemButton.GetComponent<RectTransform>();
-            gemBtnRT.anchoredPosition = new Vector2(-110, 0);
-            _gemDisplayText = _gemButton.GetComponentInChildren<Text>();
-            if (_gemDisplayText != null)
-            {
-                _gemDisplayText.text = "50";
-                _gemDisplayText.color = Color.white;
-                _gemDisplayText.alignment = TextAnchor.MiddleCenter;
-            }
+            // Gem button hidden in v1.0 (no gem currency at launch)
+            // Will be re-enabled post-soft-launch per design direction
 
             // Play button with stage info
             _playButton = MakeButton("PlayButton", _mainPage.transform, "Stage 1", COL_PLAY, 36,
@@ -405,9 +390,7 @@ namespace BalloonFlow
             var shopCoinGO = MakeText("ShopCoins", shopHeader.transform, "", 22,
                              TextAnchor.MiddleLeft, Color.yellow, V(40, -10), V(200, 35));
             AnchorLeft(shopCoinGO);
-            var shopGemGO = MakeText("ShopGems", shopHeader.transform, "", 22,
-                            TextAnchor.MiddleRight, new Color(0.5f, 0.8f, 1f), V(-130, -10), V(160, 35));
-            AnchorRight(shopGemGO);
+            // Gem display hidden in v1.0 (no gem currency at launch)
 
             // Scrollable content area
             var shopScrollArea = MakePanel("ShopScrollArea", _shopPage.transform, new Color(0, 0, 0, 0));
@@ -512,7 +495,7 @@ namespace BalloonFlow
             EnsureSingleton<PageController>("Mgr_Page");
             EnsureSingleton<FeedbackController>("Mgr_Feedback");
             EnsureSingleton<CurrencyManager>("Mgr_Currency");
-            EnsureSingleton<GemManager>("Mgr_Gem");
+            // GemManager deferred to post-soft-launch (v1.0 = coin-only)
             EnsureSingleton<LifeManager>("Mgr_Life");
             EnsureSingleton<DailyRewardManager>("Mgr_DailyReward");
             EnsureSingleton<BoosterManager>("Mgr_Booster");
@@ -682,10 +665,7 @@ namespace BalloonFlow
             if (_coinDisplayText != null) _coinDisplayText.text = $"Coins: {evt.currentCoins:N0}";
         }
 
-        private void HandleGemChanged(OnGemChanged evt)
-        {
-            if (_gemDisplayText != null) _gemDisplayText.text = $"Gems: {evt.currentGems}";
-        }
+        // Gem event handler removed — v1.0 is coin-only per design direction
 
         #endregion
 
@@ -745,8 +725,7 @@ namespace BalloonFlow
         {
             if (_coinDisplayText != null && CurrencyManager.HasInstance)
                 _coinDisplayText.text = $"{CurrencyManager.Instance.Coins:N0}";
-            if (_gemDisplayText != null && GemManager.HasInstance)
-                _gemDisplayText.text = $"{GemManager.Instance.Gems}";
+            // Gem display removed — v1.0 is coin-only
         }
 
         /// <summary>

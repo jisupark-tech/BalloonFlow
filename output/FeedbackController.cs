@@ -59,6 +59,8 @@ namespace BalloonFlow
         [SerializeField] private AudioClip _clearClip;
         [SerializeField] private AudioClip _failClip;
         [SerializeField] private AudioClip _starEarnedClip;
+        [SerializeField] private AudioClip _holderWarningClip;
+        [SerializeField] private AudioClip _holderDangerClip;
 
         [Header("Audio Pitch")]
         [SerializeField] private float _basePitch = 1.0f;
@@ -99,6 +101,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnBoardFailed>(HandleBoardFailed);
             EventBus.Subscribe<OnScoreChanged>(HandleScoreChanged);
             EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompleted);
+            EventBus.Subscribe<OnHolderWarning>(HandleHolderWarning);
         }
 
         protected override void OnDestroy()
@@ -109,6 +112,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnBoardFailed>(HandleBoardFailed);
             EventBus.Unsubscribe<OnScoreChanged>(HandleScoreChanged);
             EventBus.Unsubscribe<OnLevelCompleted>(HandleLevelCompleted);
+            EventBus.Unsubscribe<OnHolderWarning>(HandleHolderWarning);
 
             base.OnDestroy();
         }
@@ -278,6 +282,34 @@ namespace BalloonFlow
         {
             // Level completed triggers clear feedback via OnBoardCleared;
             // additional celebration can layer here if needed
+        }
+
+        /// <summary>
+        /// P0 feedback: Holder warning (4/5) and danger (5/5).
+        /// Design ref: 피드백디렉션 P0 #2 (warning beep), #3 (danger tense loop).
+        /// </summary>
+        private void HandleHolderWarning(OnHolderWarning evt)
+        {
+            if (evt.isDanger)
+            {
+                // 5/5 danger — stronger shake + danger clip
+                TriggerScreenShake(_shakeIntensityMedium, _shakeDurationSmall);
+                if (_sfxSource != null && _holderDangerClip != null)
+                {
+                    _sfxSource.pitch = _basePitch;
+                    _sfxSource.PlayOneShot(_holderDangerClip);
+                }
+            }
+            else
+            {
+                // 4/5 warning — light shake + warning beep
+                TriggerScreenShake(_shakeIntensitySmall, _shakeDurationSmall);
+                if (_sfxSource != null && _holderWarningClip != null)
+                {
+                    _sfxSource.pitch = _basePitch * 1.2f;
+                    _sfxSource.PlayOneShot(_holderWarningClip);
+                }
+            }
         }
 
         #endregion

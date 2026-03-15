@@ -216,16 +216,11 @@ namespace BalloonFlow
             // ── Heart refill (IAP) ──
             _products.Add(MakeIAP(ProdHeartRefill, "Heart Refill", "Refill all lives instantly", "$0.99", "heart"));
 
-            // ── Booster packs (coin-purchasable) ──
-            // Pre-play boosters (design: outgame.yaml §19-32)
-            _products.Add(MakeCoin(BoosterManager.BF_PRE_01, "Extra Tray",   "Add +1 tray slot temporarily",     500,  "booster"));
-            _products.Add(MakeCoin(BoosterManager.BF_PRE_02, "Shuffle",      "Shuffle all balloon positions",    800,  "booster"));
-            // BF_PRE_03 (Color Hint, 20 gems) — handled via GemManager, not coin shop
-
-            // In-play boosters (design: outgame.yaml §34-45)
-            _products.Add(MakeCoin(BoosterManager.BF_IN_01,  "Extra Mag",    "Add +5 magazine to active holder", 600,  "booster"));
-            _products.Add(MakeCoin(BoosterManager.BF_IN_02,  "Pop Any",      "Pop any one balloon regardless",   700,  "booster"));
-            // BF_IN_03 (Remove Color, 15 gems) — handled via GemManager, not coin shop
+            // ── Boosters (4 types, all coin-based) — design: 아웃게임디렉션 §부스터 ──
+            _products.Add(MakeCoin(BoosterManager.EXTRA_TRAY,   "Extra Tray",    "+1 rail tray slot (overflow insurance)",          300,  "booster"));
+            _products.Add(MakeCoin(BoosterManager.SHUFFLE,      "Shuffle",       "Randomize queue order",                         1500,  "booster"));
+            _products.Add(MakeCoin(BoosterManager.SELECT_TOOL,  "Select Tool",   "Pick any queue container (ignore order)",       1900,  "booster"));
+            _products.Add(MakeCoin(BoosterManager.COLOR_REMOVE, "Color Remove",  "Remove all of one color (field+queue+rail)",    2900,  "booster"));
         }
 
         private ShopProduct MakeIAP(string id, string name, string desc, string price, string cat)
@@ -330,13 +325,13 @@ namespace BalloonFlow
                 case ProdCoins20000: CurrencyManager.Instance.AddCoins(20000, CurrencyManager.CoinSource.IAP); break;
                 case ProdStarterPack:
                     CurrencyManager.Instance.AddCoins(500, CurrencyManager.CoinSource.IAP);
-                    BoosterManager.Instance?.AddBooster(BoosterManager.BF_PRE_02, 1);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.SHUFFLE, 1);
                     PlayerPrefs.SetInt(PrefsStarterOwned, 1);
                     PlayerPrefs.Save();
                     break;
                 case ProdWeekend:
                     CurrencyManager.Instance.AddCoins(1200, CurrencyManager.CoinSource.IAP);
-                    BoosterManager.Instance?.AddBooster(BoosterManager.BF_IN_01, 1);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.EXTRA_TRAY, 1);
                     break;
                 case ProdNoAds:
                     PlayerPrefs.SetInt(PrefsNoAdsOwned, 1);
