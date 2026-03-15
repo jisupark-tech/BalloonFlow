@@ -475,13 +475,18 @@ namespace BalloonFlow
             Vector3 targetPos = RailManager.Instance.GetPositionAtNormalized(0f);
             const float moveSpeed = 10f;
 
-            // Use DOTween for smooth movement to rail entry
-            if (visual.gameObject != null)
+            // Move toward rail entry with per-frame avoidance to prevent overlapping
+            while (visual.gameObject != null)
             {
-                float dist = Vector3.Distance(visual.gameObject.transform.position, targetPos);
-                float duration = Mathf.Max(dist / moveSpeed, 0.1f);
-                Tween moveTween = visual.gameObject.transform.DOMove(targetPos, duration).SetEase(Ease.InOutQuad);
-                yield return moveTween.WaitForCompletion();
+                Vector3 currentPos = visual.gameObject.transform.position;
+                float dist = Vector3.Distance(currentPos, targetPos);
+                if (dist < 0.1f) break;
+
+                Vector3 dir = (targetPos - currentPos).normalized;
+                Vector3 avoidOffset = CalculateAvoidanceOffset(visual, currentPos, dir);
+
+                visual.gameObject.transform.position = currentPos + (dir + avoidOffset).normalized * moveSpeed * Time.deltaTime;
+                yield return null;
             }
 
             // Arrived at rail entry — snap to entry and start rail traversal
@@ -722,10 +727,20 @@ namespace BalloonFlow
 
         private bool TryFireDart(HolderVisual visual, Vector3 position, Vector3 direction, HashSet<int> firedThisSide = null)
         {
-            // Use the rail movement direction directly for targeting.
-            // The holder fires straight in the direction it's facing (from rail direction),
-            // hitting only balloons in the same column/row along that axis.
-            int targetId = DirectionalTargeting.FindTarget(position, direction, visual.color, firedThisSide);
+            // Determine firing direction: holder fires INWARD toward the board center.
+            // The rail side determines the cardinal direction (south rail → fire north, etc.).
+            // Use GetRailSide to get current side, then convert to inward-facing direction.
+            int side = GetRailSide(direction);
+            Vector3 fireDirection;
+            switch (side)
+            {
+                case 0: fireDirection = Vector3.forward;  break; // South rail → fire north (+Z)
+                case 1: fireDirection = Vector3.left;     break; // East rail  → fire west  (-X)
+                case 2: fireDirection = Vector3.back;     break; // North rail → fire south (-Z)
+                case 3: fireDirection = Vector3.right;    break; // West rail  → fire east  (+X)
+                default: fireDirection = Vector3.forward; break;
+            }
+            int targetId = DirectionalTargeting.FindTarget(position, fireDirection, visual.color, firedThisSide);
             if (targetId < 0)
             {
                 return false;

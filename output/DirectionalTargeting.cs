@@ -18,7 +18,7 @@ namespace BalloonFlow
         #region Constants
 
         private const float GRID_CELL_SIZE = 1f;
-        private const float PERPENDICULAR_TOLERANCE = 0.4f;
+        private const float PERPENDICULAR_TOLERANCE = 0.55f;
         private const float LOS_CHECK_RADIUS = 0.4f; // Radius for line-of-sight obstruction check
 
         #endregion
