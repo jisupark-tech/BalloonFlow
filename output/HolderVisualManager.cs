@@ -29,6 +29,7 @@ namespace BalloonFlow
         private const int HOLDERS_PER_ROW = 5;        // 5x5 grid layout
         private const float MIN_NORMALIZED_SPACING = 0.15f;
         private const int MAGAZINE_FONT_SIZE = 5;
+        private const int MAX_ON_RAIL = 2; // Maximum holders on the rail simultaneously
 
         #endregion
 
@@ -454,6 +455,20 @@ namespace BalloonFlow
             {
                 _isDeployingHolder = false;
                 TryProcessDeploymentQueue();
+                return;
+            }
+
+            // Limit concurrent holders on rail to prevent overlapping
+            int onRailCount = _onRailHolders.Count;
+            foreach (var kvp in _holderVisuals)
+            {
+                if (kvp.Value.isMovingToRail) onRailCount++;
+            }
+            if (onRailCount >= MAX_ON_RAIL)
+            {
+                // Re-queue and try later
+                _deploymentQueue.Enqueue(new OnHolderSelected { holderId = holderId, color = color, magazineCount = magazineCount });
+                _isDeployingHolder = false;
                 return;
             }
 

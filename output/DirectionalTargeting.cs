@@ -68,9 +68,15 @@ namespace BalloonFlow
             // Build occupancy set from all non-popped balloons for line-of-sight checks
             HashSet<Vector2Int> occupancy = BuildOccupancyMap();
 
-            // Find outermost valid targets along the scan direction
+            // Find the NEAREST balloon along the firing direction that is:
+            // 1. In the same column/row (within perpendicular tolerance)
+            // 2. The first one the dart would hit (closest along firing axis)
+            // 3. Not blocked by a different-color balloon
             int bestId = -1;
             float bestPerpendicularDist = float.MaxValue;
+            float bestFiringDist = float.MaxValue;
+
+            Debug.Log($"[DirectionalTargeting] FindTarget: pos={holderPosition}, dir={movementDirection}, scanDir={scanDir}, color={color}, candidates={candidates.Length}");
 
             for (int i = 0; i < candidates.Length; i++)
             {
@@ -86,15 +92,23 @@ namespace BalloonFlow
                     continue;
                 }
 
-                // Check if this balloon is outermost (no other balloon blocks from the scan edge)
-                if (!IsOutermost(balloon.position, scanDir, occupancy))
+                // Check perpendicular distance (column/row alignment)
+                float perpDist = GetPerpendicularDistance(holderPosition, balloon.position, scanDir);
+                if (perpDist > PERPENDICULAR_TOLERANCE)
                 {
                     continue;
                 }
 
-                // Among valid outermost targets, pick the one closest perpendicularly to the holder
-                float perpDist = GetPerpendicularDistance(holderPosition, balloon.position, scanDir);
-                if (perpDist > PERPENDICULAR_TOLERANCE)
+                // Check that balloon is in the firing direction (not behind the holder)
+                float firingDist = GetFiringAxisDistance(holderPosition, balloon.position, scanDir);
+                if (firingDist < 0f)
+                {
+                    continue; // Balloon is behind the holder
+                }
+
+                // Check the balloon is the nearest outermost from the holder's perspective
+                // (no same-color or different-color balloon closer along the firing axis in same column)
+                if (!IsNearestInColumn(balloon.position, scanDir, occupancy, firingDist))
                 {
                     continue;
                 }
@@ -105,8 +119,10 @@ namespace BalloonFlow
                     continue;
                 }
 
-                if (perpDist < bestPerpendicularDist)
+                // Prefer closest along firing axis, then closest perpendicular
+                if (firingDist < bestFiringDist || (Mathf.Approximately(firingDist, bestFiringDist) && perpDist < bestPerpendicularDist))
                 {
+                    bestFiringDist = firingDist;
                     bestPerpendicularDist = perpDist;
                     bestId = balloon.balloonId;
                 }
@@ -225,74 +241,71 @@ namespace BalloonFlow
             return occupancy;
         }
 
+        // IsOutermost removed — replaced by IsNearestInColumn which scans from holder side inward
+
         /// <summary>
-        /// Checks whether a balloon at the given position is outermost relative to the scan direction.
-        /// "Outermost" means no other balloon blocks the path between the rail edge and this balloon.
-        ///
-        /// For example, scanning from the RIGHT means we look for balloons that have no other
-        /// balloon to their right (higher X) in the same row.
+        /// Returns the signed distance along the firing axis from holder to balloon.
+        /// Positive means the balloon is in front (in firing direction), negative means behind.
         /// </summary>
-        private static bool IsOutermost(Vector3 balloonPosition, ScanDirection direction, HashSet<Vector2Int> occupancy)
+        private static float GetFiringAxisDistance(Vector3 holderPos, Vector3 balloonPos, ScanDirection direction)
         {
-            Vector2Int cell = WorldToGrid(balloonPosition);
-
-            // Determine the scan axis and step direction
-            // We scan FROM the balloon TOWARD the edge. If any occupied cell is found between
-            // the balloon and the edge, this balloon is NOT outermost.
-            //
-            // Actually, the correct interpretation: scan from the EDGE inward.
-            // A balloon is outermost if scanning from the edge along the scan axis,
-            // it is the first occupied cell in its row/column.
-            //
-            // Simplified: check if any occupied cell exists between the balloon and the
-            // direction edge. We scan a reasonable range (up to 20 cells).
-
-            const int MAX_SCAN_RANGE = 20;
-
             switch (direction)
             {
                 case ScanDirection.Right:
-                    // Moving right means darts approach from the right side.
-                    // Outermost = no balloon with higher X in the same row.
-                    for (int x = cell.x + 1; x <= cell.x + MAX_SCAN_RANGE; x++)
-                    {
-                        if (occupancy.Contains(new Vector2Int(x, cell.y)))
-                        {
-                            return false;
-                        }
-                    }
-                    return true;
-
+                    return balloonPos.x - holderPos.x;
                 case ScanDirection.Left:
-                    // Outermost from left = no balloon with lower X in the same row.
-                    for (int x = cell.x - 1; x >= cell.x - MAX_SCAN_RANGE; x--)
+                    return holderPos.x - balloonPos.x;
+                case ScanDirection.Up:
+                    return balloonPos.z - holderPos.z;
+                case ScanDirection.Down:
+                    return holderPos.z - balloonPos.z;
+                default:
+                    return float.MaxValue;
+            }
+        }
+
+        /// <summary>
+        /// Checks if a balloon is the nearest (first hit) in its column/row from the holder's side.
+        /// Returns true if no other non-popped balloon is closer to the holder along the firing axis
+        /// in the same grid column/row.
+        /// </summary>
+        private static bool IsNearestInColumn(Vector3 balloonPosition, ScanDirection direction, HashSet<Vector2Int> occupancy, float balloonFiringDist)
+        {
+            Vector2Int cell = WorldToGrid(balloonPosition);
+
+            // Check if any occupied cell is between the rail edge and this balloon
+            // along the firing axis. If so, this balloon is NOT the nearest.
+            switch (direction)
+            {
+                case ScanDirection.Up: // Firing north (+Z), nearest = lowest Z first
+                    for (int y = cell.y - 1; y >= cell.y - 20; y--)
+                    {
+                        if (occupancy.Contains(new Vector2Int(cell.x, y)))
+                            return false; // Something closer to the south rail
+                    }
+                    return true;
+
+                case ScanDirection.Down: // Firing south (-Z), nearest = highest Z first
+                    for (int y = cell.y + 1; y <= cell.y + 20; y++)
+                    {
+                        if (occupancy.Contains(new Vector2Int(cell.x, y)))
+                            return false;
+                    }
+                    return true;
+
+                case ScanDirection.Right: // Firing east (+X), nearest = lowest X first
+                    for (int x = cell.x - 1; x >= cell.x - 20; x--)
                     {
                         if (occupancy.Contains(new Vector2Int(x, cell.y)))
-                        {
                             return false;
-                        }
                     }
                     return true;
 
-                case ScanDirection.Up:
-                    // Outermost from top = no balloon with higher Y in the same column.
-                    for (int y = cell.y + 1; y <= cell.y + MAX_SCAN_RANGE; y++)
+                case ScanDirection.Left: // Firing west (-X), nearest = highest X first
+                    for (int x = cell.x + 1; x <= cell.x + 20; x++)
                     {
-                        if (occupancy.Contains(new Vector2Int(cell.x, y)))
-                        {
+                        if (occupancy.Contains(new Vector2Int(x, cell.y)))
                             return false;
-                        }
-                    }
-                    return true;
-
-                case ScanDirection.Down:
-                    // Outermost from bottom = no balloon with lower Y in the same column.
-                    for (int y = cell.y - 1; y >= cell.y - MAX_SCAN_RANGE; y--)
-                    {
-                        if (occupancy.Contains(new Vector2Int(cell.x, y)))
-                        {
-                            return false;
-                        }
                     }
                     return true;
 
