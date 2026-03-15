@@ -22,14 +22,14 @@ namespace BalloonFlow
         private const string HOLDER_POOL_KEY = "Holder";
         private const string DART_POOL_KEY = "Dart";
         private const float DEFAULT_RAIL_SPEED = 7f;
-        private const float DEFAULT_DART_FLIGHT_TIME = 0.06f; // 2x faster dart flight
+        private const float DEFAULT_DART_FLIGHT_TIME = 0.03f; // 4x original (very fast)
         private const float FRONT_ROW_Z = -5.0f;    // Front row (closest to board/rail)
         private const float ROW_Z_SPACING = 1.5f;    // Rows go southward (lower Z)
         private const float COLUMN_SPACING = 1.4f;
         private const int HOLDERS_PER_ROW = 5;        // 5x5 grid layout
         private const float MIN_NORMALIZED_SPACING = 0.15f;
         private const int MAGAZINE_FONT_SIZE = 5;
-        private const int MAX_ON_RAIL = 2; // Maximum holders on the rail simultaneously
+        private const int DEFAULT_MAX_ON_RAIL = 2;
 
         #endregion
 
@@ -100,6 +100,7 @@ namespace BalloonFlow
         // Deployment queue: prevents overlapping when clicking multiple holders quickly
         private readonly Queue<OnHolderSelected> _deploymentQueue = new Queue<OnHolderSelected>();
         private bool _isDeployingHolder;
+        private int _maxOnRail = DEFAULT_MAX_ON_RAIL;
 
         #endregion
 
@@ -193,6 +194,27 @@ namespace BalloonFlow
                 return COLORS[colorIndex];
             }
             return Color.white;
+        }
+
+        /// <summary>
+        /// Returns true if the rail is at capacity (no more holders can be deployed).
+        /// </summary>
+        public bool IsRailFull()
+        {
+            int onRailCount = _onRailHolders.Count;
+            foreach (var kvp in _holderVisuals)
+            {
+                if (kvp.Value.isMovingToRail) onRailCount++;
+            }
+            return onRailCount >= MAX_ON_RAIL;
+        }
+
+        /// <summary>
+        /// Sets the maximum number of holders allowed on the rail simultaneously.
+        /// </summary>
+        public void SetMaxOnRail(int max)
+        {
+            _maxOnRail = Mathf.Max(1, max);
         }
 
         /// <summary>
@@ -458,17 +480,16 @@ namespace BalloonFlow
                 return;
             }
 
-            // Limit concurrent holders on rail to prevent overlapping
-            int onRailCount = _onRailHolders.Count;
-            foreach (var kvp in _holderVisuals)
+            // Rail capacity check — block deployment if full
+            if (IsRailFull())
             {
-                if (kvp.Value.isMovingToRail) onRailCount++;
-            }
-            if (onRailCount >= MAX_ON_RAIL)
-            {
-                // Re-queue and try later
-                _deploymentQueue.Enqueue(new OnHolderSelected { holderId = holderId, color = color, magazineCount = magazineCount });
+                // Undo the deploy state in HolderManager
+                if (HolderManager.HasInstance)
+                {
+                    HolderManager.Instance.UndoDeploy(holderId);
+                }
                 _isDeployingHolder = false;
+                TryProcessDeploymentQueue();
                 return;
             }
 
@@ -590,7 +611,7 @@ namespace BalloonFlow
 
             float distanceTraveled = 0f;
             float lastFireTime = -999f;
-            float fireCooldown = _dartFlightTime + 0.04f; // Tight cooldown to avoid missing targets
+            float fireCooldown = _dartFlightTime + 0.02f; // Very tight cooldown
             const int MAX_LAPS = 50;
             int lapCount = 0;
 

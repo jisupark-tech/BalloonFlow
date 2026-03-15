@@ -126,6 +126,13 @@ namespace BalloonFlow
         /// </summary>
         public bool SelectHolder(int holderId)
         {
+            // Block selection if rail is at capacity
+            if (HolderVisualManager.HasInstance && HolderVisualManager.Instance.IsRailFull())
+            {
+                Debug.Log("[HolderManager] Rail is full. Cannot deploy more holders.");
+                return false;
+            }
+
             HolderData holder = FindHolder(holderId);
             if (holder == null)
             {
@@ -157,6 +164,19 @@ namespace BalloonFlow
             });
 
             return true;
+        }
+
+        /// <summary>
+        /// Reverts a holder's deploy state (called when rail capacity blocked deployment).
+        /// </summary>
+        public void UndoDeploy(int holderId)
+        {
+            HolderData holder = FindHolder(holderId);
+            if (holder != null)
+            {
+                holder.isDeployed = false;
+                holder.isOnRail = false;
+            }
         }
 
         /// <summary>

@@ -4,8 +4,9 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Visualizes the conveyor belt rail path using 3D cylinder segment primitives.
-    /// Reads waypoints from RailManager and renders a segmented cylindrical track.
+    /// Visualizes the conveyor belt rail path.
+    /// Supports multiple visual styles: Cylinder (3D tubes), Flat2D (quad strips),
+    /// Custom3D (user-provided prefab segments).
     /// </summary>
     /// <remarks>
     /// Layer: Game | Genre: Puzzle | Role: UX | Phase: 1
@@ -14,6 +15,10 @@ namespace BalloonFlow
     public class RailRenderer : MonoBehaviour
     {
         #region Constants
+
+        public const int VISUAL_CYLINDER = 0;
+        public const int VISUAL_FLAT2D = 1;
+        public const int VISUAL_CUSTOM3D = 2;
 
         private const float DEFAULT_TRACK_WIDTH = 0.3f;
         private static readonly Color DEFAULT_RAIL_COLOR = new Color(0.4f, 0.4f, 0.45f, 1f);
@@ -24,6 +29,8 @@ namespace BalloonFlow
 
         [SerializeField] private float _trackWidth = DEFAULT_TRACK_WIDTH;
         [SerializeField] private Color _railColor = DEFAULT_RAIL_COLOR;
+        [SerializeField] private int _visualType = VISUAL_CYLINDER;
+        [SerializeField] private GameObject _customSegmentPrefab; // For VISUAL_CUSTOM3D
 
         #endregion
 
@@ -32,6 +39,17 @@ namespace BalloonFlow
         private readonly List<GameObject> _trackSegments = new List<GameObject>();
         private Material _trackMaterial;
         private bool _isInitialized;
+
+        #endregion
+
+        #region Properties
+
+        /// <summary>Current visual type (0=Cylinder, 1=Flat2D, 2=Custom3D).</summary>
+        public int VisualType
+        {
+            get => _visualType;
+            set { _visualType = value; }
+        }
 
         #endregion
 
@@ -96,7 +114,6 @@ namespace BalloonFlow
             for (int i = 0; i < segmentCount; i++)
             {
                 Vector3 start = waypoints[i];
-                // Wrap to first waypoint for the closing segment of a loop
                 Vector3 end = (i == waypoints.Length - 1) ? waypoints[0] : waypoints[i + 1];
 
                 Vector3 midpoint = (start + end) * 0.5f;
@@ -107,14 +124,46 @@ namespace BalloonFlow
                     continue;
                 }
 
-                var segment = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                segment.name = $"RailSegment_{i}";
-                segment.transform.SetParent(transform);
+                GameObject segment;
 
-                segment.transform.position = midpoint;
-                // Cylinder default height is 2 units, so height scale = length / 2
-                segment.transform.localScale = new Vector3(_trackWidth, length * 0.5f, _trackWidth);
-                segment.transform.up = (end - start).normalized;
+                switch (_visualType)
+                {
+                    case VISUAL_FLAT2D:
+                        segment = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                        segment.name = $"RailSegment2D_{i}";
+                        segment.transform.SetParent(transform);
+                        segment.transform.position = midpoint;
+                        // Quad lies in XY by default; rotate to XZ plane, then align with direction
+                        Vector3 flatDir = (end - start).normalized;
+                        segment.transform.rotation = Quaternion.LookRotation(flatDir, Vector3.up);
+                        segment.transform.localScale = new Vector3(_trackWidth * 3f, length, 1f);
+                        break;
+
+                    case VISUAL_CUSTOM3D:
+                        if (_customSegmentPrefab != null)
+                        {
+                            segment = Instantiate(_customSegmentPrefab, midpoint, Quaternion.identity, transform);
+                        }
+                        else
+                        {
+                            segment = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                            segment.transform.SetParent(transform);
+                            segment.transform.position = midpoint;
+                        }
+                        segment.name = $"RailSegmentCustom_{i}";
+                        segment.transform.up = (end - start).normalized;
+                        segment.transform.localScale = new Vector3(_trackWidth * 2f, length * 0.5f, _trackWidth * 2f);
+                        break;
+
+                    default: // VISUAL_CYLINDER
+                        segment = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                        segment.name = $"RailSegment_{i}";
+                        segment.transform.SetParent(transform);
+                        segment.transform.position = midpoint;
+                        segment.transform.localScale = new Vector3(_trackWidth, length * 0.5f, _trackWidth);
+                        segment.transform.up = (end - start).normalized;
+                        break;
+                }
 
                 var meshRenderer = segment.GetComponent<MeshRenderer>();
                 if (meshRenderer != null)
@@ -122,7 +171,6 @@ namespace BalloonFlow
                     meshRenderer.material = _trackMaterial;
                 }
 
-                // Track is visual only — disable collider
                 var col = segment.GetComponent<Collider>();
                 if (col != null)
                 {

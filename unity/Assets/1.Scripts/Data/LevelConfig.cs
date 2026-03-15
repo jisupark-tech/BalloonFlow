@@ -105,5 +105,14 @@ namespace BalloonFlow
 
         /// <summary>World-space positions where holders wait on the rail.</summary>
         public Vector3[] holderPositions;
+
+        /// <summary>
+        /// Visual style of the conveyor belt.
+        /// 0 = Cylinder (default), 1 = Flat2D (quad strip), 2 = Custom3D (user prefab).
+        /// </summary>
+        public int visualType;
+
+        /// <summary>Maximum holders allowed on the rail simultaneously.</summary>
+        public int maxOnRail = 2;
     }
 }
