@@ -206,7 +206,7 @@ namespace BalloonFlow
             {
                 if (kvp.Value.isMovingToRail) onRailCount++;
             }
-            return onRailCount >= MAX_ON_RAIL;
+            return onRailCount >= _maxOnRail;
         }
 
         /// <summary>
