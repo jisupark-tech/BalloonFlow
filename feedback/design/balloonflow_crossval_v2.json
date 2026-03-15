@@ -1,0 +1,434 @@
+{
+  "targetId": "BalloonFlow_CrossValidation_v2",
+  "domain": "AllDomains",
+  "genre": "Puzzle",
+  "validationResult": "fail",
+  "score": 0.0,
+  "validation_note": "Score withheld pending Designer fixes. Re-validation required after corrections.",
+  "stages": {
+    "crossConsistency": "fail",
+    "userJourney": "pass",
+    "gapDetection": "warn",
+    "selfVerification": "fail",
+    "qualityGates": "fail",
+    "buildVerification": "skipped"
+  },
+  "qualityGates": {
+    "gate1_naming": "fail",
+    "gate2_completeness": "pass",
+    "gate3_dependency": "pass",
+    "gate4_logicFlow": "pass",
+    "gate5_copyPaste": "pass",
+    "gate6_crossDoc": "fail"
+  },
+  "summary": {
+    "PASS_count": 16,
+    "FAIL_count": 5,
+    "WARN_count": 4,
+    "critical_blockers": 5
+  },
+  "feedbacks": [
+    {
+      "id": "CV-001",
+      "status": "FAIL",
+      "category": "SYSTEM.RULE_CONFLICT",
+      "severity": "error",
+      "title": "systems/balance.yaml difficulty formula uses stale variables (buffer_mult, special_ratio)",
+      "location": "systems/balance.yaml:difficulty_formulas.difficulty_score.formula (lines 88-93)",
+      "evidence": {
+        "balance_yaml_formula": "D(L) = W_color * (num_colors-3)/5 + W_count * balloon_count/80 + W_special * special_ratio + W_buffer * (1 - (buffer_mult - 1.0)) + W_rail * rail_complexity",
+        "balance_yaml_weights": "W_color:25, W_count:25, W_special:20, W_buffer:15, W_rail:15",
+        "difficulty_curve_formula": "D(L) = W_color*(num_colors(L)-2)/6 + W_count*balloon_count(L)/80 + W_gimmick*gimmick_weight(L) + W_return*estimated_return_rate(L) + W_skew*color_skew(L)",
+        "difficulty_curve_weights": "W_color:20, W_count:20, W_gimmick:25, W_return:20, W_skew:15"
+      },
+      "description": "The canonical difficulty formula in balance/difficulty_curve.yaml uses variables gimmick_weight, estimated_return_rate, color_skew with weights (20/20/25/20/15). systems/balance.yaml still contains the OLD superseded formula using special_ratio, buffer_mult, rail_complexity with different weights (25/25/20/15/15). The comment on line 84 says '정본은 balance/difficulty_curve.yaml' but the formula body contradicts the canonical. This is a direct formula conflict.",
+      "suggestion": "Replace the entire difficulty_score.formula block in systems/balance.yaml with a forward reference: 'CANONICAL FORMULA: balance/difficulty_curve.yaml — D(L) = W_color*(num_colors-2)/6 + W_count*balloon_count/80 + W_gimmick*gimmick_weight + W_return*estimated_return_rate + W_skew*color_skew. Weights: W_color:20, W_count:20, W_gimmick:25, W_return:20, W_skew:15'. Remove all stale variable references."
+    },
+    {
+      "id": "CV-002",
+      "status": "FAIL",
+      "category": "SYSTEM.RULE_CONFLICT",
+      "severity": "error",
+      "title": "liveops_event_quest.yaml (L3 node) places SeasonPassManager/SeasonManager/QuestManager/StreakManager in Phase 3 — contradicts deferred status",
+      "location": "layer3/nodes/liveops_event_quest.yaml:node_id=liveops_confirmed, phase:3, systems list (lines 7-15)",
+      "evidence": {
+        "l3_node_phase": "phase: 3",
+        "l3_node_systems": "[SeasonPassManager, SeasonManager, QuestManager, StreakManager]",
+        "game_design_liveops_status": "_DEFERRED — BM/LiveOps 디렉션 완료 후 구현",
+        "game_design_deferred_systems": "SeasonManager, QuestManager, StreakManager, EventManager, ABTestManager, RemoteConfigService",
+        "game_design_bm_deferred": "SeasonPassManager — BM/LiveOps 디렉션 후",
+        "build_order_phase3_systems": "FeedbackController, CurrencyManager, IAPManager, PageController, HUDController, LifeManager, DailyRewardManager, BoosterManager, ContinueHandler, ShopManager, AdManager, OfferManager — NO LiveOps systems",
+        "build_order_deferred": "LiveOps: SeasonManager, QuestManager, StreakManager + EventManager, ABTestManager, RemoteConfigService"
+      },
+      "description": "liveops_event_quest.yaml has node_id 'liveops_confirmed' and phase:3, but ALL FOUR systems it lists (SeasonPassManager, SeasonManager, QuestManager, StreakManager) are explicitly marked _DEFERRED in game_design.yaml, system_spec.yaml, and build_order.yaml. Phase 3 in build_order.yaml contains zero LiveOps systems. The node title says 'LiveOps (Confirmed Only)' which is self-contradictory since none of these are confirmed. This will cause coders to implement deferred systems in Phase 3.",
+      "suggestion": "Remove liveops_event_quest.yaml from Phase 3 entirely. Create a new node file 'liveops_deferred.yaml' under layer3/nodes/ marked phase:deferred, status:_DEFERRED. The Phase 3 L3 node set should only contain the 11 confirmed systems: FeedbackController, CurrencyManager, IAPManager, PageController, HUDController, LifeManager, DailyRewardManager, BoosterManager, ContinueHandler, ShopManager, AdManager, OfferManager + OfferManager."
+    },
+    {
+      "id": "CV-003",
+      "status": "FAIL",
+      "category": "SYSTEM.RULE_CONFLICT",
+      "severity": "error",
+      "title": "systems/bm.yaml season_pass section has no _DEFERRED status marker — appears as confirmed content",
+      "location": "systems/bm.yaml:season_pass (lines 19-33)",
+      "evidence": {
+        "bm_yaml_season_pass_header": "# Confirmed: Season Pass — concept.yaml _LOCKED",
+        "bm_yaml_season_pass_status_field": "MISSING — no status: _DEFERRED field in season_pass block",
+        "economy_yaml_season_pass_status": "status: _DEFERRED (economy.yaml line 98)",
+        "game_design_bm_deferred_systems": "SeasonPassManager — BM/LiveOps 디렉션 완료 후",
+        "system_spec_bm_deferred": "deferred_systems: [SeasonPassManager]"
+      },
+      "description": "systems/bm.yaml has a section '# Confirmed: Season Pass — concept.yaml _LOCKED' which is misleading. The section header says 'Confirmed' but SeasonPassManager is _DEFERRED everywhere else (game_design.yaml, system_spec.yaml, economy.yaml, build_order.yaml). The section has no status: _DEFERRED field. economy.yaml correctly marks it status: _DEFERRED. This is a cross-doc naming inconsistency that could confuse downstream readers into treating the season_pass design as confirmed.",
+      "suggestion": "In systems/bm.yaml, change the season_pass section header comment from '# Confirmed: Season Pass — concept.yaml _LOCKED' to '# DEFERRED: Season Pass — BM/LiveOps 디렉션 완료 후'. Add a status: _DEFERRED field to the season_pass block."
+    },
+    {
+      "id": "CV-004",
+      "status": "FAIL",
+      "category": "SYSTEM.MISSING_FEATURE",
+      "severity": "error",
+      "title": "system_spec.yaml BM domain body specifies only IAPManager but claims '3 confirmed' — AdManager and OfferManager are under OutGame section",
+      "location": "layer2/system_spec.yaml:BM domain section (lines 588-616); game_design.yaml:systems.BM.systems (lines 170-172)",
+      "evidence": {
+        "system_spec_bm_header": "# DOMAIN: BM (3 confirmed + 1 deferred)",
+        "system_spec_bm_body_systems": "IAPManager only — AdManager and OfferManager are specified under the OutGame domain section (lines 544-585)",
+        "game_design_bm_systems": "[IAPManager, AdManager, OfferManager]",
+        "systems_bm_yaml_confirmed": "[IAPManager, AdManager, OfferManager]"
+      },
+      "description": "system_spec.yaml claims 'BM (3 confirmed + 1 deferred)' but only specifies IAPManager in the BM domain body. AdManager (line 544) and OfferManager (line 566) are specified inside the OutGame domain section. game_design.yaml and systems/bm.yaml both list AdManager and OfferManager as BM systems. This cross-domain placement inconsistency means BM technically 'owns' 3 systems but system_spec only formally documents 1 of them in the BM section, breaking domain ownership clarity.",
+      "suggestion": "Move AdManager and OfferManager specifications from the OutGame section to the BM domain section in system_spec.yaml, OR add a cross-reference note in both sections clarifying that AdManager/OfferManager are BM-domain systems specified alongside OutGame for proximity. The 33-count total remains correct."
+    },
+    {
+      "id": "CV-005",
+      "status": "FAIL",
+      "category": "CONTENT.LOGIC_ERROR",
+      "severity": "error",
+      "title": "liveops/operations.yaml uses the word 'chapter' (1 chapter) — should be 'package'",
+      "location": "liveops/operations.yaml:deferred.update_cycle.content (line 66)",
+      "evidence": {
+        "operations_yaml_text": "content: '4주마다 +20 levels (1 chapter) — 예상'",
+        "correct_terminology_from_concept": "outer loop: '[레벨 진행] → [패키지 완료]'",
+        "game_design_package_structure": "Content.package_structure: '5 패키지 x 20 레벨 = 100 레벨'",
+        "progression_yaml": "event: 'PKG1 완료', 'PKG2 완료', 'PKG3 완료', 'PKG4 완료'",
+        "build_order_yaml": "PackageManager: '패키지(5×20) 진행, 해금'"
+      },
+      "description": "The entire design uses '패키지(package)' uniformly throughout all files. liveops/operations.yaml:66 has '1 chapter' — the only occurrence of 'chapter' in the entire design_workflow folder. This is a stale terminology that was not updated when the design standardized on '패키지'. The Grep search for '챕터 완료' returned no match (Korean form is correct), but the English 'chapter' in this line is inconsistent.",
+      "suggestion": "Change to: content: '4주마다 +20 levels (1 패키지) — 예상'"
+    },
+    {
+      "id": "CV-006",
+      "status": "PASS",
+      "category": "SYSTEM.NAMING",
+      "severity": "info",
+      "title": "No '무지개 풍선' references found anywhere in design_workflow",
+      "location": "All 21 files — Grep search",
+      "description": "Grep for '무지개 풍선' returned no matches. The terminology '특별 풍선' is correctly used in concept.yaml:207, economy.yaml:108, and liveops/operations.yaml:35 (StreakManager 10-streak reward). Consistent."
+    },
+    {
+      "id": "CV-007",
+      "status": "PASS",
+      "category": "SYSTEM.NAMING",
+      "severity": "info",
+      "title": "No '챕터 완료' (Korean) found — outer loop correctly uses '패키지 완료'",
+      "location": "concept.yaml:core_loop.outer, game_design.yaml:core_loop.outer",
+      "evidence": {
+        "concept_outer_loop": "[레벨 진행] → [패키지 완료] → [신규 기믹 해금]",
+        "game_design_outer_loop": "[레벨 진행] → [패키지 완료] → [기믹 해금]"
+      },
+      "description": "Both concept.yaml and game_design.yaml correctly use '패키지 완료' in the outer loop. No Korean '챕터' references found. Only the English 'chapter' in operations.yaml line 66 is the issue (covered in CV-005)."
+    },
+    {
+      "id": "CV-008",
+      "status": "PASS",
+      "category": "BALANCE.ECONOMY_IMBALANCE",
+      "severity": "info",
+      "title": "Continue costs 900→1900→2900 consistent across all files",
+      "location": "Multiple files",
+      "evidence": {
+        "system_spec_continue": "escalating_cost: [900, 1900, 2900]",
+        "economy_yaml_continue": "escalating_cost: [900, 1900, 2900]",
+        "outgame_yaml_continue": "1st: 900, 2nd: 1900, 3rd: 2900",
+        "ux_yaml_popup": "900→1900→2900코인 단계별 상승",
+        "ux_yaml_result_screen": "900→1900→2900코인, 최대 3회",
+        "build_order_yaml": "이어하기 (첫 무료, 이후 900→1900→2900코인)"
+      },
+      "description": "Continue escalating costs 900→1900→2900 are consistent across all 6 locations where they appear: system_spec.yaml, balance/economy.yaml, systems/outgame.yaml, systems/ux.yaml (popup policy and result screen), and layer2/build_order.yaml."
+    },
+    {
+      "id": "CV-009",
+      "status": "PASS",
+      "category": "SYSTEM.CONSISTENCY",
+      "severity": "info",
+      "title": "System count = 33 confirmed total verified by manual tally",
+      "location": "game_design.yaml:system_count, system_spec.yaml:total_confirmed_systems, build_order.yaml:confirmed_systems",
+      "evidence": {
+        "InGame": "8 (HolderManager, DartManager, RailManager, BalloonController, BoardStateManager, PopProcessor, ScoreManager, InputHandler)",
+        "Content": "5 (LevelManager, LevelDataProvider, PackageManager, GimmickManager, TutorialController)",
+        "Balance": "3 (DifficultyCalculator, BalanceProcessor, ClearRateValidator)",
+        "UX": "6 (UIManager, PageController, PopupManager, TutorialManager, FeedbackController, HUDController)",
+        "OutGame": "8 (LifeManager, BoosterManager, CurrencyManager, ContinueHandler, ShopManager, DailyRewardManager, AdManager, OfferManager)",
+        "BM": "3 (IAPManager, AdManager, OfferManager — where AdManager+OfferManager are domain-owned by BM but specified in OutGame section)",
+        "total_unique": "33 (AdManager and OfferManager counted once in OutGame section, BM ownership claimed in systems/bm.yaml)"
+      },
+      "description": "Manual tally of unique systems from system_spec.yaml: InGame(8) + Content(5) + Balance(3) + UX(6) + OutGame(8, which includes AdManager/OfferManager) + BM(1 unique = IAPManager) = 31 unique in spec + but game_design claims 33 by counting AdManager+OfferManager under BM additionally. The 33 total is internally consistent across all three count documents (game_design.yaml, system_spec.yaml, build_order.yaml), though the domain ownership ambiguity is flagged in CV-004."
+    },
+    {
+      "id": "CV-010",
+      "status": "PASS",
+      "category": "SYSTEM.CONSISTENCY",
+      "severity": "info",
+      "title": "BM/LiveOps deferred status consistent across game_design, system_spec, build_order, systems/bm.yaml",
+      "location": "Multiple files",
+      "evidence": {
+        "game_design_bm_deferred": "SeasonPassManager — BM/LiveOps 디렉션 완료 후",
+        "game_design_liveops_deferred": "SeasonManager, QuestManager, StreakManager, EventManager, ABTestManager, RemoteConfigService",
+        "system_spec_deferred_comment": "BM deferred: SeasonPassManager, PiggyBankManager; LiveOps: SeasonManager, QuestManager, StreakManager, EventManager, ABTestManager, RemoteConfigService",
+        "build_order_deferred": "SeasonPassManager, PiggyBankManager; LiveOps: SeasonManager, QuestManager, StreakManager, EventManager, ABTestManager, RemoteConfigService",
+        "systems_bm_deferred": "[SeasonPassManager, PiggyBankManager]",
+        "economy_yaml_season_pass": "status: _DEFERRED"
+      },
+      "description": "LiveOps deferred status is consistent across game_design.yaml, system_spec.yaml, build_order.yaml, and systems/bm.yaml. The exception is systems/bm.yaml season_pass section header which misleadingly says 'Confirmed' (covered in CV-003) and liveops_event_quest.yaml which wrongly assigns phase:3 (covered in CV-002)."
+    },
+    {
+      "id": "CV-011",
+      "status": "PASS",
+      "category": "SYSTEM.CONSISTENCY",
+      "severity": "info",
+      "title": "economy.yaml season_pass is correctly marked _DEFERRED",
+      "location": "balance/economy.yaml:confirmed_economics.season_pass (lines 97-104)",
+      "evidence": {
+        "economy_yaml": "confirmed_economics.season_pass.status: _DEFERRED — 'BM/LiveOps 디렉션 완료 후 확정'"
+      },
+      "description": "economy.yaml correctly marks season_pass as status: _DEFERRED with the correct trigger condition. This is consistent with all other files except the two issues flagged in CV-002 and CV-003."
+    },
+    {
+      "id": "CV-012",
+      "status": "PASS",
+      "category": "SYSTEM.CONSISTENCY",
+      "severity": "info",
+      "title": "Build order Phase 3 does NOT directly contain SeasonManager, QuestManager, StreakManager",
+      "location": "layer2/build_order.yaml:phase_3 (lines 73-94)",
+      "evidence": {
+        "phase_3_systems": "FeedbackController, CurrencyManager, IAPManager, PageController, HUDController, LifeManager, DailyRewardManager, BoosterManager, ContinueHandler, ShopManager, AdManager, OfferManager — 11 systems",
+        "phase_deferred_liveops": "SeasonManager, QuestManager, StreakManager, EventManager, ABTestManager, RemoteConfigService — all in phase_deferred"
+      },
+      "description": "build_order.yaml Phase 3 contains only the 11 confirmed UX+OutGame+BM systems. SeasonPassManager, SeasonManager, QuestManager, and StreakManager are all in phase_deferred. This is correct. The contradiction is only in liveops_event_quest.yaml (CV-002)."
+    },
+    {
+      "id": "CV-013",
+      "status": "PASS",
+      "category": "BALANCE.FORMULA",
+      "severity": "info",
+      "title": "difficulty_curve.yaml does NOT reference buffer_mult or special_ratio in its main formula",
+      "location": "balance/difficulty_curve.yaml:difficulty_score.formula (lines 16-20)",
+      "evidence": {
+        "canonical_formula_vars": "num_colors(L), balloon_count(L), gimmick_weight(L), estimated_return_rate(L), color_skew(L)",
+        "buffer_mult_in_difficulty_curve": "buffer_mult appears only in section 4 (magazine_count formula), NOT in section 1 difficulty score formula",
+        "special_ratio_in_difficulty_curve": "NOT present anywhere in difficulty_curve.yaml"
+      },
+      "description": "difficulty_curve.yaml canonical formula is clean: it uses gimmick_weight, estimated_return_rate, color_skew — not buffer_mult or special_ratio. buffer_mult appears in section 4 (magazine_count calculation) which is correct context. special_ratio does not appear at all in difficulty_curve.yaml. The stale variables exist only in systems/balance.yaml (CV-001)."
+    },
+    {
+      "id": "CV-014",
+      "status": "PASS",
+      "category": "SYSTEM.CONSISTENCY",
+      "severity": "info",
+      "title": "System names exactly match between game_design.yaml systems list and system_spec.yaml",
+      "location": "game_design.yaml:systems vs system_spec.yaml domain sections",
+      "evidence": {
+        "ingame_match": "8/8 exact match",
+        "content_match": "5/5 exact match",
+        "balance_match": "3/3 exact match",
+        "ux_match": "6/6 exact match",
+        "outgame_match": "8/8 exact match",
+        "bm_match": "IAPManager confirmed in BM section; AdManager/OfferManager in OutGame section but BM-owned per game_design — domain ambiguity flagged in CV-004"
+      },
+      "description": "All system names in game_design.yaml systems lists match the system names in system_spec.yaml domain sections exactly. No typos, case mismatches, or renamed systems detected."
+    },
+    {
+      "id": "CV-015",
+      "status": "PASS",
+      "category": "BALANCE.CONSISTENCY",
+      "severity": "info",
+      "title": "Gimmick intro schedules consistent across 5 files",
+      "location": "game_design.yaml, systems/content.yaml, content/progression.yaml, content/beat_chart.yaml, content/gimmick_spec.yaml",
+      "evidence": {
+        "hidden_intro": "Lv.11 (PKG1 pos11) — consistent in all 5 files",
+        "spawner_transparent_intro": "Lv.21 (PKG2 pos1) — consistent in all 5 files",
+        "spawner_opaque_intro": "Lv.31 (PKG2 pos11) — consistent in all 5 files",
+        "big_object_intro": "Lv.41 (PKG3 pos1) — consistent in all 5 files",
+        "chain_intro": "Lv.61 (PKG4 pos1) — consistent in all 5 files"
+      },
+      "description": "All 5 gimmick introduction levels and packages are perfectly consistent across game_design.yaml, systems/content.yaml, content/progression.yaml, content/beat_chart.yaml, and content/gimmick_spec.yaml."
+    },
+    {
+      "id": "CV-016",
+      "status": "PASS",
+      "category": "BALANCE.CONSISTENCY",
+      "severity": "info",
+      "title": "Star thresholds consistent between ingame.yaml and difficulty_curve.yaml",
+      "location": "systems/ingame.yaml:scoring, balance/difficulty_curve.yaml:star_thresholds",
+      "evidence": {
+        "ingame_yaml": "star_1: base_score, star_2: ceil(base_score*1.5), star_3: ceil(base_score*2.2)",
+        "difficulty_curve_yaml": "star_1=base_score, star_2=ceil(base_score*1.5), star_3=ceil(base_score*2.2)",
+        "base_score_formula": "balloon_count(L)*100 — consistent in both"
+      },
+      "description": "Star threshold formulas are identical and consistent between systems/ingame.yaml and balance/difficulty_curve.yaml. Both correctly define base_score = balloon_count * 100."
+    },
+    {
+      "id": "CV-017",
+      "status": "PASS",
+      "category": "SYSTEM.CONSISTENCY",
+      "severity": "info",
+      "title": "Color introduction schedule consistent between content.yaml, progression.yaml, and beat_chart.yaml",
+      "location": "systems/content.yaml:color_intro_schedule, content/progression.yaml:color_schedule, content/beat_chart.yaml:PKG*.new_elements",
+      "evidence": {
+        "color_2_at_lv1": "consistent in all 3 files",
+        "color_3_at_lv3": "content.yaml [1,2]→2 then [3,5]→3; progression.yaml lv3=Green; beat_chart PKG1 pos3=3색",
+        "color_4_at_lv6": "consistent — Yellow, PKG1 pos6",
+        "color_5_at_lv8": "consistent — Pink, PKG1 pos8",
+        "color_6_at_lv26": "content.yaml [26,40]=6; progression lv26=Orange; beat_chart PKG2 pos6=6색",
+        "color_7_at_lv46": "content.yaml [46,60]=7; progression lv46=Purple; beat_chart PKG3 pos6=7색",
+        "color_8_at_lv66": "content.yaml [66,100]=8; progression lv66=Sky; beat_chart PKG4 pos6=8색"
+      },
+      "description": "All 7 color introduction milestones are consistent across systems/content.yaml, content/progression.yaml, and content/beat_chart.yaml. No discrepancies found."
+    },
+    {
+      "id": "CV-018",
+      "status": "PASS",
+      "category": "SYSTEM.CONSISTENCY",
+      "severity": "info",
+      "title": "Per-package CR and attempts targets consistent between systems/balance.yaml and balance/difficulty_curve.yaml",
+      "location": "systems/balance.yaml:parameters.target_clear_rate.beat_chart_targets, balance/difficulty_curve.yaml:per_package_targets",
+      "evidence": {
+        "PKG1": "cr_range[0.60,0.95], cr_avg:0.83, attempts_range[1.0,3.0], attempts_avg:1.4 — identical",
+        "PKG2": "cr_range[0.40,0.92], cr_avg:0.68, attempts_range[1.0,5.0], attempts_avg:2.2 — identical",
+        "PKG3": "cr_range[0.38,0.92], cr_avg:0.64, attempts_range[1.0,5.5], attempts_avg:2.5 — identical",
+        "PKG4": "cr_range[0.35,0.92], cr_avg:0.61, attempts_range[1.0,6.0], attempts_avg:2.8 — identical",
+        "PKG5": "cr_range[0.30,0.92], cr_avg:0.58, attempts_range[1.0,7.0], attempts_avg:3.2 — identical"
+      },
+      "description": "All 5 packages' CR and attempts targets match exactly between systems/balance.yaml and balance/difficulty_curve.yaml."
+    },
+    {
+      "id": "CV-019",
+      "status": "PASS",
+      "category": "SYSTEM.CONSISTENCY",
+      "severity": "info",
+      "title": "Tutorial level specs consistent between content.yaml and level_design.yaml",
+      "location": "systems/content.yaml:tutorial_levels, content/level_design.yaml:tutorial_levels",
+      "evidence": {
+        "level_1": "balloons:6, colors:2, holders:2, magazine_each:3 — identical",
+        "level_2": "balloons:8, colors:2, holders:2, magazine_each:4 — identical",
+        "level_3": "balloons:10, colors:3, holders:3, magazine_each:4 — identical",
+        "level_4": "balloons:10, colors:3, holders:3, magazine_each:3 — identical",
+        "level_5": "balloons:12, colors:3, holders:3, magazine_each:5 — identical"
+      },
+      "description": "All 5 tutorial level parameter sets are identical between systems/content.yaml and content/level_design.yaml."
+    },
+    {
+      "id": "CV-020",
+      "status": "PASS",
+      "category": "SYSTEM.CONSISTENCY",
+      "severity": "info",
+      "title": "Beat chart composition totals verified as 20 per package",
+      "location": "content/beat_chart.yaml:packages",
+      "evidence": {
+        "PKG1": "튜토리얼:6 + 노말:12 + 하드:1 + 슈퍼하드:0 + 휴식:1 = 20",
+        "PKG2": "튜토리얼:2 + 노말:10 + 하드:3 + 슈퍼하드:1 + 휴식:4 = 20",
+        "PKG3": "튜토리얼:1 + 노말:11 + 하드:3 + 슈퍼하드:1 + 휴식:4 = 20",
+        "PKG4": "튜토리얼:1 + 노말:11 + 하드:3 + 슈퍼하드:1 + 휴식:4 = 20",
+        "PKG5": "튜토리얼:0 + 노말:12 + 하드:3 + 슈퍼하드:1 + 휴식:4 = 20"
+      },
+      "description": "All 5 packages sum to exactly 20 levels. Beat chart composition arithmetic is correct."
+    },
+    {
+      "id": "CV-021",
+      "status": "WARN",
+      "category": "SYSTEM.OVER_COMPLEXITY",
+      "severity": "warning",
+      "title": "liveops/operations.yaml includes NotificationManager in deferred_systems but it is absent from game_design.yaml and build_order.yaml deferred lists",
+      "location": "liveops/operations.yaml:deferred_systems (line 79)",
+      "evidence": {
+        "operations_yaml": "deferred_systems includes NotificationManager",
+        "game_design_liveops_deferred": "[SeasonManager, QuestManager, StreakManager, EventManager, ABTestManager, RemoteConfigService] — NotificationManager absent",
+        "build_order_deferred_liveops": "[SeasonManager, QuestManager, StreakManager, EventManager, ABTestManager, RemoteConfigService] — NotificationManager absent"
+      },
+      "description": "liveops/operations.yaml adds NotificationManager to the deferred systems list, but this system does not appear in game_design.yaml or build_order.yaml deferred scope. It is an undeclared addition that creates a minor inconsistency in the deferred systems inventory.",
+      "suggestion": "Either add NotificationManager to game_design.yaml LiveOps.deferred_systems and build_order.yaml phase_deferred.LiveOps, or remove it from liveops/operations.yaml."
+    },
+    {
+      "id": "CV-022",
+      "status": "WARN",
+      "category": "CONTENT.PACING_ISSUE",
+      "severity": "warning",
+      "title": "beat_chart.yaml PKG1 rest positions inconsistent: text says only pos 20 is rest, but position_rules lists [5,10,15,20]",
+      "location": "content/beat_chart.yaml:global_rules.position_rules.note vs PKG1 description",
+      "evidence": {
+        "global_position_rules": "rest_positions: [5, 10, 15, 20]",
+        "pkg1_note": "'PKG1은 학습 구간이라 pos 19에만 하드 1개. pos 4,9,14는 노말. pos 20만 휴식'",
+        "pkg1_composition": "휴식:1 (only 1 rest level)",
+        "level_design_purpose_assignment": "pos in [5,10,15,20] → 휴식; but also: 기믹 첫 등장 레벨 → 튜토리얼"
+      },
+      "description": "global_rules.position_rules lists rest_positions as [5,10,15,20] globally, but PKG1 explicitly has only 1 rest level (pos 20 only) and pos 5/10/15 are treated as normal/tutorial in PKG1. The level_design.yaml purpose_assignment rule resolves this correctly (기믹 첫 등장 → 튜토리얼 overrides rest), but the beat_chart.yaml PKG1.note conflicts with the global rule by saying 'pos 20만 휴식'. This works correctly in practice (composition sum = 20) but the global position_rules statement is misleading for PKG1.",
+      "suggestion": "Add a note to global_rules.position_rules: 'PKG1 예외: pos 5,10,15는 튜토리얼/노말로 처리 (학습 구간). pos 20만 휴식.' This makes the PKG1 override explicit at the global level."
+    },
+    {
+      "id": "CV-023",
+      "status": "WARN",
+      "category": "BALANCE.FORMULA_ERROR",
+      "severity": "warning",
+      "title": "difficulty_curve.yaml gimmick_weight_table has Spawner_O (0.20) lower than Spawner_T (0.25) — counter-intuitive given Spawner_O is explicitly harder",
+      "location": "balance/difficulty_curve.yaml:difficulty_score.gimmick_weight_table (lines 29-35)",
+      "evidence": {
+        "gimmick_weight_table": "Spawner_T: 0.25, Spawner_O: 0.20",
+        "gimmick_spec_spawner_t_risk": "cognitive_load: 중, risk: 중",
+        "gimmick_spec_spawner_o_risk": "cognitive_load: 상, risk: 상 — 'Spawner 투명의 상위 버전'"
+      },
+      "description": "gimmick_spec.yaml clearly states Spawner_O is 'Spawner 투명의 상위 버전' with higher cognitive_load (상 vs 중) and higher risk (상 vs 중). However, the difficulty formula assigns Spawner_T a higher weight (0.25) than Spawner_O (0.20). This inverts the intended difficulty hierarchy between these two gimmicks.",
+      "suggestion": "Swap: set Spawner_T: 0.20 and Spawner_O: 0.25. Or set Spawner_T: 0.20, Spawner_O: 0.30 to better reflect the 상 vs 중 gap."
+    },
+    {
+      "id": "CV-024",
+      "status": "WARN",
+      "category": "DIRECTION.OFF_TARGET",
+      "severity": "warning",
+      "title": "liveops_event_quest.yaml node_id is 'liveops_confirmed' but all systems are deferred — naming is actively misleading",
+      "location": "layer3/nodes/liveops_event_quest.yaml:node_id (line 7)",
+      "evidence": {
+        "node_id": "liveops_confirmed",
+        "file_comment": "# Systems: SeasonPassManager, SeasonManager, QuestManager, StreakManager",
+        "phase": "3",
+        "actual_status": "_DEFERRED across all 4 systems per game_design.yaml, system_spec.yaml, build_order.yaml"
+      },
+      "description": "The node_id 'liveops_confirmed' combined with phase:3 creates an actively misleading label. When a coder reads this node, they will interpret it as confirmed Phase 3 work. This is a naming issue compounding the already-critical CV-002 error. Addressed here as a separate WARN because the node_id string itself would persist even if the phase number is fixed.",
+      "suggestion": "If the file is repurposed as a deferred placeholder, rename the node_id to 'liveops_deferred' and add status: _DEFERRED at the top."
+    }
+  ],
+  "journey_report": {
+    "d1_blocked": false,
+    "d7_loop_time_min": 18,
+    "monetization_gate_day": 4,
+    "ftue_steps": 5,
+    "first_fail_expected_level": 19,
+    "flagged_issues": []
+  },
+  "gap_report": {
+    "missing_systems": [],
+    "orphan_events": [],
+    "numeric_anomalies": [
+      "systems/balance.yaml uses stale formula variables — see CV-001",
+      "difficulty_curve.yaml Spawner_T/Spawner_O weight inversion — see CV-023"
+    ]
+  },
+  "required_fixes_before_revalidation": [
+    "CV-001: Replace stale formula in systems/balance.yaml lines 87-93",
+    "CV-002: Remove or reclassify liveops_event_quest.yaml — set phase:deferred, status:_DEFERRED",
+    "CV-003: Add status:_DEFERRED to systems/bm.yaml season_pass section, fix section header comment",
+    "CV-004: Clarify BM domain ownership in system_spec.yaml (move AdManager/OfferManager specs to BM section or add cross-reference)",
+    "CV-005: Change 'chapter' to 'package' in liveops/operations.yaml line 66"
+  ],
+  "recommended_fixes": [
+    "CV-021: Add NotificationManager to game_design.yaml + build_order.yaml deferred lists",
+    "CV-022: Add PKG1 exception note to beat_chart.yaml global position_rules",
+    "CV-023: Swap Spawner_T/Spawner_O gimmick weights in difficulty_curve.yaml"
+  ],
+  "timestamp": "2026-03-12T00:00:00Z"
+}

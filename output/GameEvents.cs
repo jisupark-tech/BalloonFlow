@@ -52,6 +52,15 @@ namespace BalloonFlow
         public int remainingMagazine;
     }
 
+    /// <summary>Holder waiting area is filling up — P0 feedback trigger.
+    /// Design: 4/5 = warning (yellow), 5/5 = danger (red).</summary>
+    public struct OnHolderWarning
+    {
+        public int waitingCount;
+        public int maxSlots;
+        public bool isDanger; // true = 5/5 (critical), false = 4/5 (warning)
+    }
+
     /// <summary>Holder waiting area exceeded capacity — fail trigger.</summary>
     public struct OnHolderOverflow
     {

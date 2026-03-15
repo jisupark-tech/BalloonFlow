@@ -4,27 +4,24 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Manages 6 booster types aligned with design spec (outgame.yaml §19-45).
-    /// Pre-play boosters: BF_PRE_01 (500 coin), BF_PRE_02 (800 coin), BF_PRE_03 (20 gem).
-    /// In-play boosters: BF_IN_01 (600 coin), BF_IN_02 (700 coin), BF_IN_03 (15 gem).
+    /// Manages 4 in-play booster types (all coin-based).
+    /// Design ref: 아웃게임디렉션 §부스터
+    ///   Extra Tray (300 coin, Lv.10) — +1 rail tray slot
+    ///   Select Tool (1900 coin, Lv.12) — pick any queue container
+    ///   Shuffle (1500 coin, Lv.15) — randomize queue order
+    ///   Color Remove (2900 coin, Lv.18) — remove all of one color
     /// </summary>
     /// <remarks>
     /// Layer: Domain | Genre: Puzzle | Role: Manager | Phase: 3
-    /// Design ref: outgame.yaml §19-45, economy.yaml §booster_costs
     /// </remarks>
     public class BoosterManager : Singleton<BoosterManager>
     {
         #region Constants — Design-aligned booster IDs
 
-        // Pre-play boosters
-        public const string BF_PRE_01 = "bf_pre_01"; // Extra tray slot
-        public const string BF_PRE_02 = "bf_pre_02"; // Board shuffle
-        public const string BF_PRE_03 = "bf_pre_03"; // Color hint (gem)
-
-        // In-play boosters
-        public const string BF_IN_01 = "bf_in_01";   // Extra magazine
-        public const string BF_IN_02 = "bf_in_02";   // Pop any color
-        public const string BF_IN_03 = "bf_in_03";   // Remove color (gem)
+        public const string EXTRA_TRAY   = "extra_tray";     // +1 rail tray slot
+        public const string SELECT_TOOL  = "select_tool";    // pick any container
+        public const string SHUFFLE      = "shuffle";        // randomize queue order
+        public const string COLOR_REMOVE = "color_remove";   // remove all of one color
 
         private const string PrefsKeyPrefix = "BalloonFlow_Booster_";
 
@@ -34,8 +31,8 @@ namespace BalloonFlow
 
         private struct BoosterDef
         {
-            public int cost;
-            public bool isGemCost; // true = gem, false = coin
+            public int cost;       // all coin-based (v1.0 — no gems)
+            public int unlockLevel; // level at which this booster becomes available
         }
 
         #endregion
@@ -44,12 +41,10 @@ namespace BalloonFlow
 
         private readonly Dictionary<string, BoosterDef> _boosterDefs = new Dictionary<string, BoosterDef>
         {
-            { BF_PRE_01, new BoosterDef { cost = 500,  isGemCost = false } },
-            { BF_PRE_02, new BoosterDef { cost = 800,  isGemCost = false } },
-            { BF_PRE_03, new BoosterDef { cost = 20,   isGemCost = true  } },
-            { BF_IN_01,  new BoosterDef { cost = 600,  isGemCost = false } },
-            { BF_IN_02,  new BoosterDef { cost = 700,  isGemCost = false } },
-            { BF_IN_03,  new BoosterDef { cost = 15,   isGemCost = true  } }
+            { EXTRA_TRAY,   new BoosterDef { cost = 300,  unlockLevel = 10 } },
+            { SELECT_TOOL,  new BoosterDef { cost = 1900, unlockLevel = 12 } },
+            { SHUFFLE,      new BoosterDef { cost = 1500, unlockLevel = 15 } },
+            { COLOR_REMOVE, new BoosterDef { cost = 2900, unlockLevel = 18 } }
         };
 
         private readonly Dictionary<string, int> _inventory = new Dictionary<string, int>();
@@ -129,8 +124,8 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Attempts to purchase one booster. Coin boosters use CurrencyManager,
-        /// gem boosters use GemManager.
+        /// Attempts to purchase one booster using coins.
+        /// All boosters are coin-based in v1.0 (no gems).
         /// </summary>
         public bool PurchaseBooster(string boosterType)
         {
@@ -140,48 +135,37 @@ namespace BalloonFlow
                 return false;
             }
 
+            if (!IsBoosterUnlocked(boosterType))
+            {
+                Debug.LogWarning($"[BoosterManager] Booster {boosterType} not yet unlocked.");
+                return false;
+            }
+
             var def = _boosterDefs[boosterType];
 
-            if (def.isGemCost)
+            if (!CurrencyManager.HasInstance)
             {
-                if (!GemManager.HasInstance)
-                {
-                    Debug.LogWarning("[BoosterManager] GemManager not available.");
-                    return false;
-                }
-
-                if (!GemManager.Instance.SpendGems(def.cost, GemManager.GemSink.PremiumBooster))
-                {
-                    Debug.LogWarning($"[BoosterManager] Not enough gems for {boosterType} (needs {def.cost}).");
-                    return false;
-                }
+                Debug.LogWarning("[BoosterManager] CurrencyManager not available.");
+                return false;
             }
-            else
+
+            CurrencyManager.CoinSink sink = boosterType switch
             {
-                if (!CurrencyManager.HasInstance)
-                {
-                    Debug.LogWarning("[BoosterManager] CurrencyManager not available.");
-                    return false;
-                }
+                EXTRA_TRAY   => CurrencyManager.CoinSink.BoosterExtraTray,
+                SELECT_TOOL  => CurrencyManager.CoinSink.BoosterSelectTool,
+                SHUFFLE      => CurrencyManager.CoinSink.BoosterShuffle,
+                COLOR_REMOVE => CurrencyManager.CoinSink.BoosterColorRemove,
+                _            => CurrencyManager.CoinSink.Other
+            };
 
-                CurrencyManager.CoinSink sink = boosterType switch
-                {
-                    BF_PRE_01 => CurrencyManager.CoinSink.BoosterTrayAdd,
-                    BF_PRE_02 => CurrencyManager.CoinSink.BoosterShuffle,
-                    BF_IN_01  => CurrencyManager.CoinSink.BoosterHand,
-                    BF_IN_02  => CurrencyManager.CoinSink.BoosterColorRemove,
-                    _         => CurrencyManager.CoinSink.Other
-                };
-
-                if (!CurrencyManager.Instance.SpendCoins(def.cost, sink))
-                {
-                    Debug.LogWarning($"[BoosterManager] Not enough coins for {boosterType} (needs {def.cost}).");
-                    return false;
-                }
+            if (!CurrencyManager.Instance.SpendCoins(def.cost, sink))
+            {
+                Debug.LogWarning($"[BoosterManager] Not enough coins for {boosterType} (needs {def.cost}).");
+                return false;
             }
 
             AddBooster(boosterType, 1);
-            Debug.Log($"[BoosterManager] Purchased {boosterType} for {def.cost} {(def.isGemCost ? "gems" : "coins")}.");
+            Debug.Log($"[BoosterManager] Purchased {boosterType} for {def.cost} coins.");
             return true;
         }
 
@@ -194,19 +178,28 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Returns true if the booster costs gems (premium), false if coins.
+        /// Returns true if the booster is unlocked based on player's highest completed level.
+        /// Design: Extra Tray Lv.10, Select Tool Lv.12, Shuffle Lv.15, Color Remove Lv.18.
         /// </summary>
-        public bool IsGemBooster(string boosterType)
+        public bool IsBoosterUnlocked(string boosterType)
         {
-            return _boosterDefs.TryGetValue(boosterType, out var def) && def.isGemCost;
+            if (!_boosterDefs.TryGetValue(boosterType, out var def)) return false;
+
+            int highestLevel = 0;
+            if (LevelManager.HasInstance)
+            {
+                highestLevel = LevelManager.Instance.GetHighestCompletedLevel();
+            }
+
+            return highestLevel >= def.unlockLevel;
         }
 
         /// <summary>
-        /// Returns true if the booster is a pre-play type (used before level starts).
+        /// Returns all booster type IDs.
         /// </summary>
-        public bool IsPrePlayBooster(string boosterType)
+        public IEnumerable<string> GetAllBoosterTypes()
         {
-            return boosterType == BF_PRE_01 || boosterType == BF_PRE_02 || boosterType == BF_PRE_03;
+            return _boosterDefs.Keys;
         }
 
         #endregion
