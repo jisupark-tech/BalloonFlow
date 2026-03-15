@@ -599,7 +599,13 @@ namespace BalloonFlow
             _pendingResultIsWin = false;
             ShowPage(_gamePage);
             if (LevelManager.HasInstance)
-                LevelManager.Instance.LoadLevel(LevelManager.Instance.GetNextLevelId());
+            {
+                // Use persisted highest completed level (not in-memory _currentLevelId)
+                // to avoid regressing to stage 1 after a clear-and-next sequence.
+                int highestCleared = LevelManager.Instance.GetHighestCompletedLevel();
+                int nextLevel = highestCleared + 1;
+                LevelManager.Instance.LoadLevel(nextLevel);
+            }
         }
 
         private void OnRetryClicked()

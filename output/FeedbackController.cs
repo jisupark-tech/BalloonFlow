@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -82,7 +83,7 @@ namespace BalloonFlow
         #region Fields
 
         private Vector3 _cameraOriginalPosition;
-        private Coroutine _shakeCoroutine;
+        private Tweener _shakeTweener;
         private Coroutine _slowMoCoroutine;
         private bool _isShaking;
 
@@ -390,13 +391,20 @@ namespace BalloonFlow
                 return;
             }
 
-            if (_shakeCoroutine != null)
+            if (_shakeTweener != null && _shakeTweener.IsActive())
             {
-                StopCoroutine(_shakeCoroutine);
+                _shakeTweener.Kill();
                 _cameraTransform.localPosition = _cameraOriginalPosition;
             }
 
-            _shakeCoroutine = StartCoroutine(ScreenShakeCoroutine(intensity, duration));
+            _isShaking = true;
+            _shakeTweener = _cameraTransform.DOShakePosition(duration, intensity, 20, 90f, false, true, ShakeRandomnessMode.Harmonic)
+                .SetUpdate(true) // unscaled time
+                .OnComplete(() =>
+                {
+                    _cameraTransform.localPosition = _cameraOriginalPosition;
+                    _isShaking = false;
+                });
         }
 
         private void TriggerSlowMo()
@@ -450,25 +458,7 @@ namespace BalloonFlow
 
         #region Private Methods — Coroutines
 
-        private IEnumerator ScreenShakeCoroutine(float intensity, float duration)
-        {
-            _isShaking = true;
-            float elapsed = 0f;
-
-            while (elapsed < duration)
-            {
-                float x = Random.Range(-1f, 1f) * intensity;
-                float y = Random.Range(-1f, 1f) * intensity;
-                _cameraTransform.localPosition = _cameraOriginalPosition + new Vector3(x, y, 0f);
-
-                elapsed += Time.unscaledDeltaTime;
-                yield return null;
-            }
-
-            _cameraTransform.localPosition = _cameraOriginalPosition;
-            _isShaking = false;
-            _shakeCoroutine = null;
-        }
+        // ScreenShakeCoroutine replaced by DOTween DOShakePosition (see TriggerScreenShake)
 
         private IEnumerator SlowMoCoroutine()
         {

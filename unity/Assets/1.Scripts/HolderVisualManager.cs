@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -425,22 +426,15 @@ namespace BalloonFlow
 
                     if (Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos) > 0.05f)
                     {
-                        StartCoroutine(SmoothMoveCoroutine(colHolders[row].gameObject.transform, targetPos, 3f));
+                        float dist = Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos);
+                        colHolders[row].gameObject.transform.DOMove(targetPos, dist / 3f).SetEase(Ease.OutQuad);
                     }
                     colHolders[row].waitingPosition = targetPos;
                 }
             }
         }
 
-        private IEnumerator SmoothMoveCoroutine(Transform target, Vector3 destination, float speed)
-        {
-            while (target != null && Vector3.Distance(target.position, destination) > 0.05f)
-            {
-                target.position = Vector3.MoveTowards(target.position, destination, speed * Time.deltaTime);
-                yield return null;
-            }
-            if (target != null) target.position = destination;
-        }
+        // SmoothMoveCoroutine replaced by DOTween DOMove (see RepositionWaitingHoldersSmooth)
 
         #endregion
 
@@ -481,19 +475,13 @@ namespace BalloonFlow
             Vector3 targetPos = RailManager.Instance.GetPositionAtNormalized(0f);
             const float moveSpeed = 10f;
 
-            while (visual.gameObject != null)
+            // Use DOTween for smooth movement to rail entry
+            if (visual.gameObject != null)
             {
-                Vector3 currentPos = visual.gameObject.transform.position;
-                float dist = Vector3.Distance(currentPos, targetPos);
-                if (dist < 0.1f) break;
-
-                Vector3 dir = (targetPos - currentPos).normalized;
-
-                // Simple obstacle avoidance: check if any other waiting holder is close in path
-                Vector3 avoidOffset = CalculateAvoidanceOffset(visual, currentPos, dir);
-
-                visual.gameObject.transform.position = currentPos + (dir + avoidOffset).normalized * moveSpeed * Time.deltaTime;
-                yield return null;
+                float dist = Vector3.Distance(visual.gameObject.transform.position, targetPos);
+                float duration = Mathf.Max(dist / moveSpeed, 0.1f);
+                Tween moveTween = visual.gameObject.transform.DOMove(targetPos, duration).SetEase(Ease.InOutQuad);
+                yield return moveTween.WaitForCompletion();
             }
 
             // Arrived at rail entry — snap to entry and start rail traversal
@@ -734,12 +722,10 @@ namespace BalloonFlow
 
         private bool TryFireDart(HolderVisual visual, Vector3 position, Vector3 direction, HashSet<int> firedThisSide = null)
         {
-            // Use holder position relative to board center for scan direction.
-            // When holder is on east rail → scan east (pop easternmost balloons).
-            // When on west rail → scan west, north → north, south → south.
-            Vector3 boardCenter = new Vector3(0f, 0.5f, 2f);
-            Vector3 boardToHolder = position - boardCenter;
-            int targetId = DirectionalTargeting.FindTarget(position, boardToHolder, visual.color, firedThisSide);
+            // Use the rail movement direction directly for targeting.
+            // The holder fires straight in the direction it's facing (from rail direction),
+            // hitting only balloons in the same column/row along that axis.
+            int targetId = DirectionalTargeting.FindTarget(position, direction, visual.color, firedThisSide);
             if (targetId < 0)
             {
                 return false;
@@ -777,10 +763,10 @@ namespace BalloonFlow
                 HolderManager.Instance.ConsumeMagazine(visual.holderId);
             }
 
-            // Scale punch animation on fire
+            // Scale punch animation on fire (DOTween)
             if (visual.gameObject != null)
             {
-                StartCoroutine(ScalePunchCoroutine(visual.gameObject.transform));
+                visual.gameObject.transform.DOPunchScale(Vector3.one * 0.3f, 0.2f, 6, 0.5f);
             }
 
             // Spawn dart projectile from pool
@@ -827,6 +813,13 @@ namespace BalloonFlow
                 sr.material.color = GetColor(color);
             }
 
+            // Orient toward target immediately
+            Vector3 dir = (to - from).normalized;
+            if (dir.sqrMagnitude > 0.001f)
+            {
+                dartObj.transform.rotation = Quaternion.LookRotation(dir);
+            }
+
             DartProjectile projectile = new DartProjectile
             {
                 gameObject = dartObj,
@@ -838,6 +831,9 @@ namespace BalloonFlow
             };
 
             _activeDartProjectiles.Add(projectile);
+
+            // DOTween fast straight-line flight
+            dartObj.transform.DOMove(to, _dartFlightTime).SetEase(Ease.Linear);
         }
 
         private void UpdateDartProjectiles()
@@ -849,17 +845,7 @@ namespace BalloonFlow
 
                 float t = Mathf.Clamp01(proj.elapsed / proj.duration);
 
-                if (proj.gameObject != null)
-                {
-                    proj.gameObject.transform.position = Vector3.Lerp(proj.startPosition, proj.targetPosition, t);
-
-                    // Orient toward target in 3D
-                    Vector3 dir = (proj.targetPosition - proj.startPosition).normalized;
-                    if (dir.sqrMagnitude > 0.001f)
-                    {
-                        proj.gameObject.transform.rotation = Quaternion.LookRotation(dir);
-                    }
-                }
+                // DOTween handles position movement; we only track elapsed for hit timing
 
                 if (t >= 1f)
                 {
@@ -890,32 +876,7 @@ namespace BalloonFlow
             proj.gameObject = null;
         }
 
-        private IEnumerator ScalePunchCoroutine(Transform target)
-        {
-            if (target == null) yield break;
-            Vector3 originalScale = target.localScale;
-            Vector3 punchScale = originalScale * 1.3f;
-
-            // Scale up
-            float t = 0f;
-            while (t < 0.08f)
-            {
-                t += Time.deltaTime;
-                if (target == null) yield break;
-                target.localScale = Vector3.Lerp(originalScale, punchScale, t / 0.08f);
-                yield return null;
-            }
-            // Scale down
-            t = 0f;
-            while (t < 0.12f)
-            {
-                t += Time.deltaTime;
-                if (target == null) yield break;
-                target.localScale = Vector3.Lerp(punchScale, originalScale, t / 0.12f);
-                yield return null;
-            }
-            if (target != null) target.localScale = originalScale;
-        }
+        // ScalePunchCoroutine replaced by DOTween DOPunchScale (see TryFireDart)
 
         #endregion
 
