@@ -22,7 +22,7 @@ namespace BalloonFlow
         private const string HOLDER_POOL_KEY = "Holder";
         private const string DART_POOL_KEY = "Dart";
         private const float DEFAULT_RAIL_SPEED = 7f;
-        private const float DEFAULT_DART_FLIGHT_TIME = 0.12f;
+        private const float DEFAULT_DART_FLIGHT_TIME = 0.06f; // 2x faster dart flight
         private const float FRONT_ROW_Z = -5.0f;    // Front row (closest to board/rail)
         private const float ROW_Z_SPACING = 1.5f;    // Rows go southward (lower Z)
         private const float COLUMN_SPACING = 1.4f;
@@ -590,7 +590,7 @@ namespace BalloonFlow
 
             float distanceTraveled = 0f;
             float lastFireTime = -999f;
-            float fireCooldown = _dartFlightTime + 0.15f;
+            float fireCooldown = _dartFlightTime + 0.04f; // Tight cooldown to avoid missing targets
             const int MAX_LAPS = 50;
             int lapCount = 0;
 
@@ -796,7 +796,7 @@ namespace BalloonFlow
             // Scale punch animation on fire (DOTween)
             if (visual.gameObject != null)
             {
-                visual.gameObject.transform.DOPunchScale(Vector3.one * 0.3f, 0.2f, 6, 0.5f);
+                visual.gameObject.transform.DOPunchScale(Vector3.one * 0.1f, 0.1f, 8, 0.5f);
             }
 
             // Spawn dart projectile from pool
@@ -843,11 +843,12 @@ namespace BalloonFlow
                 sr.material.color = GetColor(color);
             }
 
-            // Orient toward target immediately
-            Vector3 dir = (to - from).normalized;
+            // Orient dart horizontally toward target (flat on XZ plane, no pitch)
+            Vector3 dir = to - from;
+            dir.y = 0f; // Keep dart level/horizontal
             if (dir.sqrMagnitude > 0.001f)
             {
-                dartObj.transform.rotation = Quaternion.LookRotation(dir);
+                dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
             }
 
             DartProjectile projectile = new DartProjectile
