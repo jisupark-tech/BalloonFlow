@@ -207,10 +207,10 @@ namespace BalloonFlow.Editor
                 GUI.backgroundColor = old;
             }
 
-            // Eraser
+            // Empty Cell tool (removes balloon, creates gap in grid)
             Color oldBg = GUI.backgroundColor;
-            GUI.backgroundColor = _paintColor == -1 ? Color.white : Color.gray;
-            if (GUILayout.Button(_paintColor == -1 ? "[Eraser]" : "Eraser", GUILayout.Width(60), GUILayout.Height(28)))
+            GUI.backgroundColor = _paintColor == -1 ? Color.white : new Color(0.2f, 0.2f, 0.2f);
+            if (GUILayout.Button(_paintColor == -1 ? "[Empty]" : "Empty", GUILayout.Width(60), GUILayout.Height(28)))
             {
                 _paintColor = -1;
             }
@@ -259,7 +259,7 @@ namespace BalloonFlow.Editor
             _cellSpacing = EditorGUILayout.FloatField("Cell Spacing", _cellSpacing);
 
             EditorGUILayout.Space(4);
-            EditorGUILayout.LabelField("Click cells to paint balloon color. Eraser removes balloon.");
+            EditorGUILayout.LabelField("Click cells to paint color. Empty (✕) = no balloon (gap in grid).");
 
             // Draw grid (row 0 = south/bottom, displayed at bottom)
             for (int r = _balloonGridRows - 1; r >= 0; r--)
@@ -308,11 +308,11 @@ namespace BalloonFlow.Editor
             int colorIdx = _balloonColors[col, row];
             int gimmickIdx = _balloonGimmicks[col, row];
 
-            Color bgColor = colorIdx >= 0 && colorIdx < PALETTE.Length ? PALETTE[colorIdx] : new Color(0.3f, 0.3f, 0.3f);
+            Color bgColor = colorIdx >= 0 && colorIdx < PALETTE.Length ? PALETTE[colorIdx] : new Color(0.15f, 0.15f, 0.15f);
             Color old = GUI.backgroundColor;
             GUI.backgroundColor = bgColor;
 
-            string label = colorIdx < 0 ? "·" : (gimmickIdx > 0 ? GIMMICK_TYPES[gimmickIdx][0].ToString().ToUpper() : "●");
+            string label = colorIdx < 0 ? "✕" : (gimmickIdx > 0 ? GIMMICK_TYPES[gimmickIdx][0].ToString().ToUpper() : "●");
 
             if (GUILayout.Button(label, GUILayout.Width(CELL_SIZE), GUILayout.Height(CELL_SIZE)))
             {
