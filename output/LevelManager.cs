@@ -322,6 +322,12 @@ namespace BalloonFlow
                 HolderManager.Instance.InitializeHolders(holderSetup);
             }
 
+            // Apply balloon scale
+            if (BalloonController.HasInstance && config.balloonScale > 0f)
+            {
+                BalloonController.Instance.SetBalloonScale(config.balloonScale);
+            }
+
             // Initialize balloons from level config
             if (BalloonController.HasInstance && config.balloons != null)
             {

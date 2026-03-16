@@ -28,8 +28,8 @@ namespace BalloonFlow
         private const float COLUMN_SPACING = 1.4f;
         private const int HOLDERS_PER_ROW = 5;        // 5x5 grid layout
         private const float MIN_NORMALIZED_SPACING = 0.15f;
-        private const int MAGAZINE_FONT_SIZE = 5;
-        private const int DEFAULT_MAX_ON_RAIL = 2;
+        private const int MAGAZINE_FONT_SIZE = 24;
+        private const int DEFAULT_MAX_ON_RAIL = 9;
 
         #endregion
 
@@ -215,6 +215,27 @@ namespace BalloonFlow
         public void SetMaxOnRail(int max)
         {
             _maxOnRail = Mathf.Max(1, max);
+        }
+
+        /// <summary>
+        /// Returns the current number of holders on the rail (including those moving to rail).
+        /// </summary>
+        public int GetOnRailCount()
+        {
+            int count = _onRailHolders.Count;
+            foreach (var kvp in _holderVisuals)
+            {
+                if (kvp.Value.isMovingToRail) count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// Returns the maximum allowed holders on rail.
+        /// </summary>
+        public int GetMaxOnRail()
+        {
+            return _maxOnRail;
         }
 
         /// <summary>

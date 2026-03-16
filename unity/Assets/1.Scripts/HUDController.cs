@@ -5,7 +5,7 @@ namespace BalloonFlow
 {
     /// <summary>
     /// In-game HUD controller. Displays score, star progress, remaining balloons,
-    /// holder info, and level info. Uses legacy UI.Text for SceneBuilder compatibility.
+    /// on-rail holder info, and level info. Uses legacy UI.Text for SceneBuilder compatibility.
     /// </summary>
     /// <remarks>
     /// Layer: Game | Genre: Puzzle | Role: Controller | Phase: 3
@@ -25,7 +25,7 @@ namespace BalloonFlow
         [Header("Balloons")]
         [SerializeField] private Text _remainingText;
 
-        [Header("Holders")]
+        [Header("On-Rail Holders")]
         [SerializeField] private Text _holderCountText;
         [SerializeField] private Text _magazineCountText;
 
@@ -93,7 +93,7 @@ namespace BalloonFlow
 
         public void UpdateHolderInfo(int holderCount, int maxHolders)
         {
-            if (_holderCountText != null) _holderCountText.text = $"Holders: {holderCount}/{maxHolders}";
+            if (_holderCountText != null) _holderCountText.text = $"On Rail: {holderCount}/{maxHolders}";
         }
 
         public void UpdateMagazineDisplay(int holderId, int remaining)
@@ -129,16 +129,19 @@ namespace BalloonFlow
         private void HandleHolderSelected(OnHolderSelected evt)
         {
             UpdateMagazineDisplay(evt.holderId, evt.magazineCount);
+            RefreshOnRailCount();
         }
 
         private void HandleMagazineEmpty(OnMagazineEmpty evt)
         {
             UpdateMagazineDisplay(evt.holderId, 0);
+            RefreshOnRailCount();
         }
 
         private void HandleHolderReturned(OnHolderReturned evt)
         {
             UpdateMagazineDisplay(evt.holderId, evt.remainingMagazine);
+            RefreshOnRailCount();
         }
 
         private void HandleLevelLoaded(OnLevelLoaded evt)
@@ -146,6 +149,15 @@ namespace BalloonFlow
             SetLevelInfo(evt.levelId, evt.packageId);
             UpdateScore(0);
             UpdateStars(0);
+            RefreshOnRailCount();
+        }
+
+        private void RefreshOnRailCount()
+        {
+            if (!HolderVisualManager.HasInstance) return;
+            int onRail = HolderVisualManager.Instance.GetOnRailCount();
+            int max = HolderVisualManager.Instance.GetMaxOnRail();
+            UpdateHolderInfo(onRail, max);
         }
 
         #endregion
