@@ -46,14 +46,17 @@ namespace BalloonFlow
         #region Fields
 
         private int _currentStars;
+        private UIHud _view;
         private Button _settingsButton;
         private Button _goldPlusButton;
 
-        // Settings popup
+        // Popups
+        private PopupSettings _popupSettings;
+        private PopupGoldShop _popupGoldShop;
+
+        // Legacy popup fields (kept for backward compat)
         private CanvasGroup _settingsPopup;
         private Button _settingsCloseButton;
-
-        // Gold shop popup
         private CanvasGroup _goldShopPopup;
         private Button _goldShopCloseButton;
         private Transform _goldShopContentRoot;
@@ -141,7 +144,46 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Wires the settings button. Called by GameBootstrap after building HUD UI.
+        /// Binds the UIHud view. All [SerializeField] references come from the prefab.
+        /// Called by GameBootstrap after loading UIHud prefab.
+        /// </summary>
+        public void BindView(UIHud view)
+        {
+            if (view == null) return;
+            _view = view;
+            _scoreText = view.ScoreText;
+            _remainingText = view.RemainingText;
+            _holderCountText = view.HolderCountText;
+            _levelText = view.LevelText;
+            _goldText = view.GoldText;
+            _moveCountText = view.MoveCountText;
+
+            SetSettingsButton(view.SettingsButton);
+            SetGoldPlusButton(view.GoldPlusButton);
+        }
+
+        /// <summary>
+        /// Wires the settings popup (new PopupSettings type).
+        /// </summary>
+        public void SetSettingsPopup(PopupSettings popup)
+        {
+            _popupSettings = popup;
+            if (_popupSettings != null && _popupSettings.CloseButton != null)
+                _popupSettings.CloseButton.onClick.AddListener(OnSettingsCloseClicked);
+        }
+
+        /// <summary>
+        /// Wires the gold shop popup (new PopupGoldShop type).
+        /// </summary>
+        public void SetGoldShopPopup(PopupGoldShop popup)
+        {
+            _popupGoldShop = popup;
+            if (_popupGoldShop != null && _popupGoldShop.CloseButton != null)
+                _popupGoldShop.CloseButton.onClick.AddListener(OnGoldShopCloseClicked);
+        }
+
+        /// <summary>
+        /// Wires the settings button. Called by BindView or GameBootstrap.
         /// </summary>
         public void SetSettingsButton(Button btn)
         {
@@ -150,7 +192,7 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Wires the gold + button. Called by GameBootstrap after building HUD UI.
+        /// Wires the gold + button. Called by BindView or GameBootstrap.
         /// </summary>
         public void SetGoldPlusButton(Button btn)
         {
@@ -159,7 +201,7 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Wires the settings popup elements.
+        /// Wires the settings popup elements (legacy CanvasGroup method).
         /// </summary>
         public void SetSettingsPopup(CanvasGroup popup, Button closeBtn)
         {
@@ -170,7 +212,7 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Wires the gold shop popup elements.
+        /// Wires the gold shop popup elements (legacy CanvasGroup method).
         /// </summary>
         public void SetGoldShopPopup(CanvasGroup popup, Button closeBtn, Transform contentRoot)
         {
@@ -187,26 +229,42 @@ namespace BalloonFlow
 
         private void OnSettingsClicked()
         {
-            ShowPopup(_settingsPopup);
+            if (_popupSettings != null)
+                _popupSettings.Show();
+            else
+                ShowPopup(_settingsPopup);
             if (GameManager.HasInstance) GameManager.Instance.PauseGame();
         }
 
         private void OnSettingsCloseClicked()
         {
-            HidePopup(_settingsPopup);
+            if (_popupSettings != null)
+                _popupSettings.Hide();
+            else
+                HidePopup(_settingsPopup);
             if (GameManager.HasInstance) GameManager.Instance.ResumeGame();
         }
 
         private void OnGoldPlusClicked()
         {
-            BuildGoldShopItems();
-            ShowPopup(_goldShopPopup);
+            if (_popupGoldShop != null)
+            {
+                _popupGoldShop.Show();
+            }
+            else
+            {
+                BuildGoldShopItems();
+                ShowPopup(_goldShopPopup);
+            }
             if (GameManager.HasInstance) GameManager.Instance.PauseGame();
         }
 
         private void OnGoldShopCloseClicked()
         {
-            HidePopup(_goldShopPopup);
+            if (_popupGoldShop != null)
+                _popupGoldShop.Hide();
+            else
+                HidePopup(_goldShopPopup);
             if (GameManager.HasInstance) GameManager.Instance.ResumeGame();
         }
 
