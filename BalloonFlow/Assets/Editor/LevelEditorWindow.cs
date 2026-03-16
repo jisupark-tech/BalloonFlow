@@ -16,21 +16,45 @@ namespace BalloonFlow.Editor
 
         private static readonly Color[] PALETTE =
         {
-            new Color(0.95f, 0.25f, 0.25f), // 0: Red
-            new Color(0.25f, 0.55f, 0.95f), // 1: Blue
-            new Color(0.25f, 0.85f, 0.35f), // 2: Green
-            new Color(0.95f, 0.85f, 0.15f), // 3: Yellow
-            new Color(0.80f, 0.30f, 0.90f), // 4: Purple
-            new Color(0.95f, 0.55f, 0.15f), // 5: Orange
-            new Color(0.40f, 0.90f, 0.90f), // 6: Cyan
-            new Color(0.95f, 0.50f, 0.70f), // 7: Pink
+            new Color(0.95f, 0.25f, 0.25f), //  0: Red
+            new Color(0.25f, 0.55f, 0.95f), //  1: Blue
+            new Color(0.25f, 0.85f, 0.35f), //  2: Green
+            new Color(0.95f, 0.85f, 0.15f), //  3: Yellow
+            new Color(0.80f, 0.30f, 0.90f), //  4: Purple
+            new Color(0.95f, 0.55f, 0.15f), //  5: Orange
+            new Color(0.40f, 0.90f, 0.90f), //  6: Cyan
+            new Color(0.95f, 0.50f, 0.70f), //  7: Pink
+            new Color(0.75f, 0.15f, 0.15f), //  8: Crimson
+            new Color(0.15f, 0.20f, 0.65f), //  9: Navy
+            new Color(0.55f, 0.95f, 0.25f), // 10: Lime
+            new Color(0.95f, 0.75f, 0.05f), // 11: Gold
+            new Color(0.55f, 0.20f, 0.80f), // 12: Violet
+            new Color(0.95f, 0.65f, 0.00f), // 13: Amber
+            new Color(0.15f, 0.70f, 0.65f), // 14: Teal
+            new Color(0.95f, 0.35f, 0.50f), // 15: Rose
+            new Color(0.95f, 0.45f, 0.35f), // 16: Coral
+            new Color(0.30f, 0.15f, 0.70f), // 17: Indigo
+            new Color(0.40f, 0.95f, 0.65f), // 18: Mint
+            new Color(0.95f, 0.75f, 0.60f), // 19: Peach
+            new Color(0.90f, 0.15f, 0.65f), // 20: Magenta
+            new Color(0.50f, 0.55f, 0.15f), // 21: Olive
+            new Color(0.45f, 0.75f, 0.95f), // 22: Sky
+            new Color(0.95f, 0.55f, 0.45f), // 23: Salmon
+            new Color(0.50f, 0.10f, 0.15f), // 24: Maroon
+            new Color(0.10f, 0.45f, 0.20f), // 25: Forest
+            new Color(0.70f, 0.55f, 0.90f), // 26: Lavender
+            new Color(0.82f, 0.70f, 0.50f), // 27: Tan
         };
 
         private static readonly string[] COLOR_NAMES =
-            { "Red", "Blue", "Green", "Yellow", "Purple", "Orange", "Cyan", "Pink" };
+            { "Red", "Blue", "Green", "Yellow", "Purple", "Orange", "Cyan", "Pink",
+              "Crimson", "Navy", "Lime", "Gold", "Violet", "Amber", "Teal", "Rose",
+              "Coral", "Indigo", "Mint", "Peach", "Magenta", "Olive", "Sky", "Salmon",
+              "Maroon", "Forest", "Lavender", "Tan" };
 
         private static readonly string[] GIMMICK_TYPES =
-            { "(none)", "hidden", "chain", "frozen", "bomb", "spawner" };
+            { "(none)", "Hidden", "Chain", "Pinata", "Spawner_T", "Pin", "Lock_Key",
+              "Surprise", "Wall", "Spawner_O", "Pinata_Box", "Ice", "Frozen_Dart", "Color_Curtain" };
 
         private static readonly string[] RAIL_DIRECTIONS =
             { "Clockwise", "Counter-Clockwise" };
@@ -212,7 +236,7 @@ namespace BalloonFlow.Editor
 
             // --- Level metadata ---
             _levelId = EditorGUILayout.IntField("Level ID", _levelId);
-            _numColors = EditorGUILayout.IntSlider("Num Colors", _numColors, 2, 8);
+            _numColors = EditorGUILayout.IntSlider("Num Colors", _numColors, 2, 11);
             _difficultyPurpose = EditorGUILayout.TextField("Difficulty Purpose", _difficultyPurpose);
 
             EditorGUILayout.Space(8);
@@ -698,8 +722,8 @@ namespace BalloonFlow.Editor
 
             bool used = false;
 
-            // 숫자키 1~8: 색상 선택
-            if (e.keyCode >= KeyCode.Alpha1 && e.keyCode <= KeyCode.Alpha8)
+            // 숫자키 1~9: 색상 선택 (1=color0 ... 9=color8)
+            if (e.keyCode >= KeyCode.Alpha1 && e.keyCode <= KeyCode.Alpha9)
             {
                 int colorIdx = e.keyCode - KeyCode.Alpha1;
                 if (colorIdx < _numColors)

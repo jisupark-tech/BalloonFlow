@@ -18,9 +18,18 @@ namespace BalloonFlow
         private PopupSettings _settings;
         private PopupGoldShop _goldShop;
         private bool _pendingResultIsWin;
+        private bool _isTestMode;
 
         void Start()
         {
+            // Detect test mode from MapMaker
+            #if UNITY_EDITOR
+            _isTestMode = UnityEditor.EditorPrefs.GetBool("BalloonFlow_UseTestLevel", false)
+                          || GameManager.IsTestPlayMode;
+            #else
+            _isTestMode = GameManager.IsTestPlayMode;
+            #endif
+
             // Safety: 직접 씬 로드 테스트용
             if (!GameManager.HasInstance)
             {
@@ -28,8 +37,9 @@ namespace BalloonFlow
                 _go.AddComponent<GameManager>();
             }
 
-            // Lobby 매니저 확보 (Lobby 안 거쳤을 때를 위해)
-            GameManager.Instance.InitLobby();
+            // Lobby 매니저 확보 (Lobby 안 거쳤을 때를 위해) — skip in test mode
+            if (!_isTestMode)
+                GameManager.Instance.InitLobby();
 
             // InGame 매니저 생성 (GameManager 자식)
             GameManager.Instance.InitInGame();
@@ -102,6 +112,12 @@ namespace BalloonFlow
                 if (_result.NextButton != null) _result.NextButton.onClick.AddListener(OnNextClicked);
                 if (_result.RetryButton != null) _result.RetryButton.onClick.AddListener(OnRetryClicked);
                 if (_result.HomeButton != null) _result.HomeButton.onClick.AddListener(OnHomeClicked);
+
+                // Wire gold target for coin fly effect
+                if (_result.GoldTarget == null && _hud != null && _hud.GoldText != null)
+                {
+                    _result.SetGoldTarget(_hud.GoldText.rectTransform);
+                }
             }
 
             // PopupSettings (로드 후 숨김)
@@ -178,6 +194,14 @@ namespace BalloonFlow
             if (_result != null) _result.CloseUI();
             if (_hud != null) _hud.OpenUI();
 
+            if (_isTestMode)
+            {
+                // In test mode, "Next" replays the same level (no progression)
+                if (LevelManager.HasInstance)
+                    LevelManager.Instance.RetryLevel();
+                return;
+            }
+
             if (LevelManager.HasInstance)
             {
                 int _next = LevelManager.Instance.GetHighestCompletedLevel() + 1;
@@ -198,6 +222,14 @@ namespace BalloonFlow
         void OnHomeClicked()
         {
             if (_result != null) _result.CloseUI();
+
+            if (_isTestMode && GameManager.HasInstance)
+            {
+                // Return to MapMaker scene in test mode
+                GameManager.Instance.GoToMapMaker();
+                return;
+            }
+
             if (GameManager.HasInstance) GameManager.Instance.GoToLobby();
         }
 

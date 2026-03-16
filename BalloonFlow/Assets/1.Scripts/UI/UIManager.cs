@@ -21,6 +21,9 @@ namespace BalloonFlow
         [Header("[UI Parent — 씬 컨트롤러가 SetSceneCanvas로 설정]")]
         public Transform UiTr;
 
+        [Header("[Fade — 기본 전환 이미지 (선택)]")]
+        [SerializeField] private Sprite _fadeImage;
+
         // 열린 UI 스택
         private List<UIBase> _openUIList = new List<UIBase>();
 
@@ -28,6 +31,8 @@ namespace BalloonFlow
         private CanvasGroup _fadeOverlay;
         private Canvas _fadeCanvas;
         private Coroutine _fadeCoroutine;
+        private Image _fadeImageDisplay;
+        private Sprite _currentFadeSprite;
 
         #endregion
 
@@ -159,18 +164,52 @@ namespace BalloonFlow
 
         #region Fade
 
+        /// <summary>Fade to opaque (black or custom image). Standard call.</summary>
         public void FadeOut(float _duration)
         {
+            FadeOut(_duration, null);
+        }
+
+        /// <summary>Fade to opaque with optional custom image overlay.</summary>
+        public void FadeOut(float _duration, Sprite _image)
+        {
             EnsureFadeOverlay();
+            ApplyFadeImage(_image);
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeCoroutine(0f, 1f, _duration));
         }
 
+        /// <summary>Fade from opaque to transparent. Standard call.</summary>
         public void FadeIn(float _duration)
         {
+            FadeIn(_duration, null);
+        }
+
+        /// <summary>Fade from opaque to transparent with optional custom image overlay.</summary>
+        public void FadeIn(float _duration, Sprite _image)
+        {
             EnsureFadeOverlay();
+            ApplyFadeImage(_image);
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeCoroutine(1f, 0f, _duration));
+        }
+
+        /// <summary>
+        /// Set the default fade image. Used by Inspector or at runtime.
+        /// Pass null to revert to solid black.
+        /// </summary>
+        public void SetFadeImage(Sprite _sprite)
+        {
+            _fadeImage = _sprite;
+        }
+
+        /// <summary>Revert to solid black fade.</summary>
+        public void ClearFadeImage()
+        {
+            _fadeImage = null;
+            _currentFadeSprite = null;
+            if (_fadeImageDisplay != null)
+                _fadeImageDisplay.enabled = false;
         }
 
         void EnsureFadeOverlay()
@@ -185,6 +224,7 @@ namespace BalloonFlow
             _fadeCanvas.sortingOrder = 999;
             _canvasGO.AddComponent<GraphicRaycaster>();
 
+            // Solid black background overlay
             var _go = new GameObject("FadeOverlay");
             _go.layer = LayerMask.NameToLayer("UI");
             _go.transform.SetParent(_canvasGO.transform, false);
@@ -201,6 +241,51 @@ namespace BalloonFlow
             _fadeOverlay.alpha = 0f;
             _fadeOverlay.interactable = false;
             _fadeOverlay.blocksRaycasts = false;
+
+            // Custom image overlay (on top of black, disabled by default)
+            var _imgGO = new GameObject("FadeImage");
+            _imgGO.layer = LayerMask.NameToLayer("UI");
+            _imgGO.transform.SetParent(_canvasGO.transform, false);
+            var _imgRT = _imgGO.AddComponent<RectTransform>();
+            _imgRT.anchorMin = Vector2.zero;
+            _imgRT.anchorMax = Vector2.one;
+            _imgRT.offsetMin = Vector2.zero;
+            _imgRT.offsetMax = Vector2.zero;
+            _fadeImageDisplay = _imgGO.AddComponent<Image>();
+            _fadeImageDisplay.preserveAspect = true;
+            _fadeImageDisplay.raycastTarget = false;
+            _fadeImageDisplay.enabled = false;
+
+            // Add the image GO under the same CanvasGroup so alpha controls both
+            _imgGO.transform.SetParent(_go.transform, false);
+            _imgRT.anchorMin = Vector2.zero;
+            _imgRT.anchorMax = Vector2.one;
+            _imgRT.offsetMin = Vector2.zero;
+            _imgRT.offsetMax = Vector2.zero;
+        }
+
+        /// <summary>
+        /// Applies a fade image for the current transition.
+        /// If _image is null, uses the default _fadeImage. If both are null, shows solid black.
+        /// </summary>
+        void ApplyFadeImage(Sprite _image)
+        {
+            if (_fadeImageDisplay == null) return;
+
+            Sprite _resolved = _image != null ? _image : _fadeImage;
+
+            if (_resolved != null)
+            {
+                _fadeImageDisplay.sprite = _resolved;
+                _fadeImageDisplay.color = Color.white;
+                _fadeImageDisplay.enabled = true;
+                _currentFadeSprite = _resolved;
+            }
+            else
+            {
+                _fadeImageDisplay.enabled = false;
+                _currentFadeSprite = null;
+            }
         }
 
         IEnumerator FadeCoroutine(float _from, float _to, float _duration)
@@ -221,6 +306,10 @@ namespace BalloonFlow
             _fadeOverlay.alpha = _to;
             _fadeOverlay.blocksRaycasts = _to > 0.01f;
             _fadeOverlay.interactable = false;
+
+            // Disable custom image when fully transparent
+            if (_to < 0.01f && _fadeImageDisplay != null)
+                _fadeImageDisplay.enabled = false;
         }
 
         #endregion

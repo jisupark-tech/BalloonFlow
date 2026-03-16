@@ -5,7 +5,7 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Manages the 5-package × 20-level progression structure.
+    /// Manages the 15-package × 20-level progression structure.
     /// Tracks package unlock status, per-package star totals, and level completion counts.
     /// Progress is persisted via PlayerPrefs. Package 1 is always unlocked; subsequent
     /// packages unlock when the preceding package has at least 15 levels completed.
@@ -20,7 +20,7 @@ namespace BalloonFlow
     {
         #region Constants
 
-        private const int TOTAL_PACKAGES          = 5;
+        private const int TOTAL_PACKAGES          = 15;
         private const int LEVELS_PER_PACKAGE      = 20;
         private const int MAX_STARS_PER_LEVEL      = 3;
         private const int UNLOCK_THRESHOLD_LEVELS  = 15;  // levels completed in previous pkg to unlock next
@@ -59,7 +59,7 @@ namespace BalloonFlow
         #region Public Methods
 
         /// <summary>
-        /// Returns the PackageInfo snapshot for the given package ID (1–5).
+        /// Returns the PackageInfo snapshot for the given package ID (1–15).
         /// Returns null if the ID is out of range.
         /// </summary>
         public PackageInfo GetPackageInfo(int packageId)
@@ -232,7 +232,7 @@ namespace BalloonFlow
         // ── Calculation Helpers ────────────────────────────────────────────────
 
         /// <summary>
-        /// Derives the package ID (1–5) for a given global level ID (1–100).
+        /// Derives the package ID (1–15) for a given global level ID (1–300).
         /// </summary>
         private int ResolvePackageId(int levelId)
         {
@@ -334,7 +334,7 @@ namespace BalloonFlow
     [Serializable]
     public class PackageInfo
     {
-        /// <summary>Package identifier (1–5).</summary>
+        /// <summary>Package identifier (1–15).</summary>
         public int packageId;
 
         /// <summary>Display name, e.g. "Package 1".</summary>

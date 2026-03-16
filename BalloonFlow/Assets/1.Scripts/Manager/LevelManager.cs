@@ -346,6 +346,31 @@ namespace BalloonFlow
                 BalloonController.Instance.SetupBalloons(balloonLayout, config.levelId);
             }
 
+            // Initialize 2D floor tilemap and conveyor belt tiles
+            if (BoardTileManager.HasInstance)
+            {
+                float cellSpacing = GameManager.HasInstance
+                    ? GameManager.Instance.Board.cellSpacing
+                    : 0.55f;
+                float boardCX = GameManager.HasInstance ? GameManager.Instance.Board.boardCenterX : 0f;
+                float boardCZ = GameManager.HasInstance ? GameManager.Instance.Board.boardCenterZ : 2f;
+
+                int tileCols = config.gridCols > 0 ? config.gridCols : 5;
+                int tileRows = config.gridRows > 0 ? config.gridRows : 5;
+
+                BoardTileManager.Instance.InitializeBoard(
+                    tileCols, tileRows,
+                    new Vector2(boardCX, boardCZ),
+                    cellSpacing
+                );
+
+                // Apply conveyor tile positions from level config
+                if (config.conveyorPositions != null && config.conveyorPositions.Length > 0)
+                {
+                    BoardTileManager.Instance.SetConveyorFromConfig(config.conveyorPositions);
+                }
+            }
+
             // Initialize board state tracking with actual balloon count
             if (BoardStateManager.HasInstance)
             {
