@@ -4,27 +4,27 @@ using UnityEngine.UI;
 namespace BalloonFlow
 {
     /// <summary>
-    /// In-game HUD view. Loaded from Resources/UI/UIHud prefab.
-    /// All child references wired via UIPrefabBuilder at editor-time.
-    /// HUDController binds to this view for event-driven updates.
+    /// 인게임 HUD UI. Resources/UI/UIHud 프리팹에서 로드.
+    /// HUDController가 BindView로 참조 연결.
     /// </summary>
-    public class UIHud : MonoBehaviour
+    public class UIHud : UIBase
     {
-        [Header("Row 1")]
+        [Header("[Row 1 — 레벨/골드]")]
         [SerializeField] private Button _settingsButton;
         [SerializeField] private Text _levelText;
         [SerializeField] private Text _goldText;
         [SerializeField] private Button _goldPlusButton;
 
-        [Header("Row 2")]
+        [Header("[Row 2 — 점수/풍선/홀더]")]
         [SerializeField] private Text _scoreText;
         [SerializeField] private Text _remainingText;
         [SerializeField] private Text _holderCountText;
 
-        [Header("Optional")]
+        [Header("[Optional]")]
         [SerializeField] private Text _moveCountText;
 
-        // Accessors for HUDController binding
+        #region Accessors
+
         public Button SettingsButton => _settingsButton;
         public Text LevelText => _levelText;
         public Text GoldText => _goldText;
@@ -34,34 +34,40 @@ namespace BalloonFlow
         public Text HolderCountText => _holderCountText;
         public Text MoveCountText => _moveCountText;
 
-        public void SetScore(int score)
+        #endregion
+
+        #region Set Methods
+
+        public void SetScore(int _score)
         {
-            if (_scoreText != null) _scoreText.text = score.ToString("N0");
+            if (_scoreText != null) _scoreText.text = _score.ToString("N0");
         }
 
-        public void SetRemainingBalloons(int count)
+        public void SetRemainingBalloons(int _count)
         {
-            if (_remainingText != null) _remainingText.text = $"Balloons: {count}";
+            if (_remainingText != null) _remainingText.text = $"Balloons: {_count}";
         }
 
-        public void SetHolderInfo(int onRail, int max)
+        public void SetHolderInfo(int _onRail, int _max)
         {
-            if (_holderCountText != null) _holderCountText.text = $"On Rail: {onRail}/{max}";
+            if (_holderCountText != null) _holderCountText.text = $"On Rail: {_onRail}/{_max}";
         }
 
-        public void SetLevel(int levelId)
+        public void SetLevel(int _levelId)
         {
-            if (_levelText != null) _levelText.text = $"Level {levelId}";
+            if (_levelText != null) _levelText.text = $"Level {_levelId}";
         }
 
-        public void SetGold(int amount)
+        public void SetGold(int _amount)
         {
-            if (_goldText != null) _goldText.text = amount.ToString("N0");
+            if (_goldText != null) _goldText.text = _amount.ToString("N0");
         }
 
-        public void SetMoveCount(int used, int total)
+        public void SetMoveCount(int _used, int _total)
         {
-            if (_moveCountText != null) _moveCountText.text = $"{used}/{total}";
+            if (_moveCountText != null) _moveCountText.text = $"{_used}/{_total}";
         }
+
+        #endregion
     }
 }

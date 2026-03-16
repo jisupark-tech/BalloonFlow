@@ -9,31 +9,28 @@ using UnityEngine.InputSystem.UI;
 namespace BalloonFlow.Editor
 {
     /// <summary>
-    /// Three-scene builder: Title, Lobby, InGame.
-    /// Title: splash/logo → auto-transition to Lobby.
-    /// Lobby: main menu, settings, shop access.
-    /// InGame: 3D board + HUD + all gameplay managers.
-    /// Persistent managers (GameManager, UIManager, etc.) are created at runtime via GameManager.
-    /// Scene-specific managers are placed only in InGame scene.
-    /// Runs once via [InitializeOnLoad]. Force re-run: BalloonFlow > Rebuild Scenes.
+    /// 3씬 빌더: Title, Lobby, InGame.
+    /// 기존 Scenes 폴더의 씬을 열어서 필요한 오브젝트만 추가/수정.
+    /// 새로 만들지 않고, 이미 있는 것은 건드리지 않음.
+    ///
+    /// Title 씬:
+    ///   - GameManager, CameraManager(+MainCamera+UICamera), UIManager
+    ///   - ResourceManager, ObjectPoolManager, Canvas, EventSystem, TitleController
+    ///
+    /// Lobby 씬:
+    ///   - Canvas, EventSystem, LobbyController
+    ///
+    /// InGame 씬:
+    ///   - SceneCanvas, EventSystem, GameBootstrap
+    ///   - Directional Light, BoardPlatform
     /// </summary>
     [InitializeOnLoad]
     public static class SceneBuilder
     {
-        private const string PREFS_KEY = "BalloonFlow_SceneBuilt_v11_3Scene";
+        private const string PREFS_KEY = "BalloonFlow_SceneBuilt_v15";
         private const int REF_WIDTH  = 1080;
         private const int REF_HEIGHT = 1920;
         private const string SCENES_FOLDER = "Assets/Scenes";
-
-        // Colors
-        private static readonly Color BG_TITLE   = new Color(0.08f, 0.08f, 0.16f, 1f);
-        private static readonly Color BG_LOBBY   = new Color(0.06f, 0.10f, 0.18f, 1f);
-        private static readonly Color BG_GAME    = new Color(0.04f, 0.04f, 0.08f, 1f);
-        private static readonly Color BG_OVERLAY = new Color(0f, 0f, 0f, 0.85f);
-        private static readonly Color COL_PLAY   = new Color(0.15f, 0.75f, 0.3f, 1f);
-        private static readonly Color COL_HUD    = new Color(0f, 0f, 0f, 0.5f);
-        private static readonly Color COL_COIN   = new Color(0.85f, 0.75f, 0.1f, 1f);
-        private static readonly Color COL_SETTINGS = new Color(0.4f, 0.4f, 0.5f, 1f);
 
         static SceneBuilder()
         {
@@ -43,328 +40,300 @@ namespace BalloonFlow.Editor
                 if (EditorApplication.isPlayingOrWillChangePlaymode) return;
                 BuildAllScenes();
                 EditorPrefs.SetBool(PREFS_KEY, true);
-                Debug.Log("[SceneBuilder] 3-scene setup complete (v11 — Title/Lobby/InGame).");
+                Debug.Log("[SceneBuilder] v15 완료");
             };
         }
 
         [MenuItem("BalloonFlow/Rebuild Scenes")]
-        private static void RebuildScenes()
+        static void RebuildScenes()
         {
             BuildAllScenes();
             EditorPrefs.SetBool(PREFS_KEY, true);
-            Debug.Log("[SceneBuilder] Scenes rebuilt (3-scene).");
+            Debug.Log("[SceneBuilder] Rebuild 완료");
         }
 
         [MenuItem("BalloonFlow/Reset Scene Builder")]
-        private static void ResetPrefs()
+        static void ResetPrefs()
         {
             EditorPrefs.DeleteKey(PREFS_KEY);
-            Debug.Log("[SceneBuilder] Prefs reset. Scenes will rebuild on next domain reload.");
+            Debug.Log("[SceneBuilder] Reset 완료. 다음 도메인 리로드 시 재빌드.");
         }
 
         // ═══════════════════════════════════════════
-        // MAIN BUILD
+        // BUILD ALL
         // ═══════════════════════════════════════════
 
-        private static void BuildAllScenes()
+        static void BuildAllScenes()
         {
             EnsureFolder(SCENES_FOLDER);
 
-            string titlePath  = SCENES_FOLDER + "/Title.unity";
-            string lobbyPath  = SCENES_FOLDER + "/Lobby.unity";
-            string inGamePath = SCENES_FOLDER + "/InGame.unity";
+            string _titlePath  = SCENES_FOLDER + "/Title.unity";
+            string _lobbyPath  = SCENES_FOLDER + "/Lobby.unity";
+            string _inGamePath = SCENES_FOLDER + "/InGame.unity";
 
-            BuildTitleScene(titlePath);
-            BuildLobbyScene(lobbyPath);
-            BuildInGameScene(inGamePath);
+            SetupTitleScene(_titlePath);
+            SetupLobbyScene(_lobbyPath);
+            SetupInGameScene(_inGamePath);
 
-            // Register all 3 scenes in Build Settings
+            // Build Settings 등록
             EditorBuildSettings.scenes = new[]
             {
-                new EditorBuildSettingsScene(titlePath, true),
-                new EditorBuildSettingsScene(lobbyPath, true),
-                new EditorBuildSettingsScene(inGamePath, true)
+                new EditorBuildSettingsScene(_titlePath, true),
+                new EditorBuildSettingsScene(_lobbyPath, true),
+                new EditorBuildSettingsScene(_inGamePath, true)
             };
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-
-            // Open Title scene
-            EditorSceneManager.OpenScene(titlePath, OpenSceneMode.Single);
+            EditorSceneManager.OpenScene(_titlePath, OpenSceneMode.Single);
         }
 
         // ═══════════════════════════════════════════
-        // TITLE SCENE
+        // TITLE SCENE — 기존 씬 열어서 Core 매니저 확인/추가
         // ═══════════════════════════════════════════
 
-        private static void BuildTitleScene(string path)
+        static void SetupTitleScene(string _path)
         {
-            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var _scene = OpenOrCreateScene(_path);
 
-            // Camera
-            var camGO = new GameObject("Main Camera");
-            var cam = camGO.AddComponent<Camera>();
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = BG_TITLE;
-            cam.orthographic = true;
-            cam.depth = 0;
-            camGO.tag = "MainCamera";
-            camGO.AddComponent<AudioListener>();
+            // ── GameManager ──
+            EnsureComponent<GameManager>("GameManager");
 
-            // Canvas
-            var canvas = CreateCanvas(cam);
+            // ── CameraManager + 카메라 ──
+            var _camMgrGO = EnsureComponent<CameraManager>("CameraManager");
+            var _camMgr = _camMgrGO.GetComponent<CameraManager>();
 
-            // EventSystem
-            CreateEventSystem();
+            // MainCamera (CameraManager 자식)
+            var _mainCamGO = EnsureChild(_camMgrGO, "Main Camera");
+            _mainCamGO.tag = "MainCamera";
+            var _mainCam = EnsureComponentOn<Camera>(_mainCamGO);
+            _mainCam.orthographic = true;
+            _mainCam.clearFlags = CameraClearFlags.SolidColor;
+            _mainCam.backgroundColor = new Color(0.08f, 0.08f, 0.16f);
+            _mainCam.depth = 0;
+            EnsureComponentOn<AudioListener>(_mainCamGO);
 
-            // TitleController
-            var titleCtrlGO = new GameObject("TitleController");
-            titleCtrlGO.AddComponent<TitleController>();
+            // UICamera (CameraManager 자식, 비활성)
+            var _uiCamGO = EnsureChild(_camMgrGO, "UICamera");
+            var _uiCam = EnsureComponentOn<Camera>(_uiCamGO);
+            _uiCam.clearFlags = CameraClearFlags.Depth;
+            _uiCam.orthographic = true;
+            _uiCam.orthographicSize = 10f;
+            _uiCam.depth = 10;
+            _uiCam.cullingMask = 1 << LayerMask.NameToLayer("UI");
+            _uiCamGO.SetActive(false);
 
-            EditorSceneManager.SaveScene(scene, path);
+            // CameraManager에 카메라 참조 와이어링
+            WireField(_camMgr, "MainCamera", _mainCam);
+            WireField(_camMgr, "UICamera", _uiCam);
+
+            // ── UIManager ──
+            EnsureComponent<UIManager>("UIManager");
+
+            // ── ResourceManager ──
+            EnsureComponent<ResourceManager>("ResourceManager");
+
+            // ── ObjectPoolManager ──
+            EnsureComponent<ObjectPoolManager>("ObjectPoolManager");
+
+            // ── Canvas ──
+            EnsureCanvas("Canvas");
+
+            // ── EventSystem ──
+            EnsureEventSystem();
+
+            // ── TitleController ──
+            EnsureComponent<TitleController>("TitleController");
+
+            EditorSceneManager.SaveScene(_scene, _path);
         }
 
         // ═══════════════════════════════════════════
         // LOBBY SCENE
         // ═══════════════════════════════════════════
 
-        private static void BuildLobbyScene(string path)
+        static void SetupLobbyScene(string _path)
         {
-            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var _scene = OpenOrCreateScene(_path);
 
-            // Camera
-            var camGO = new GameObject("Main Camera");
-            var cam = camGO.AddComponent<Camera>();
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = BG_LOBBY;
-            cam.orthographic = true;
-            cam.depth = 0;
-            camGO.tag = "MainCamera";
-            camGO.AddComponent<AudioListener>();
+            EnsureCanvas("Canvas");
+            EnsureEventSystem();
+            EnsureComponent<LobbyController>("LobbyController");
 
-            // Canvas
-            var canvas = CreateCanvas(cam);
-
-            // EventSystem
-            CreateEventSystem();
-
-            // LobbyController
-            var lobbyCtrlGO = new GameObject("LobbyController");
-            lobbyCtrlGO.AddComponent<LobbyController>();
-
-            EditorSceneManager.SaveScene(scene, path);
+            EditorSceneManager.SaveScene(_scene, _path);
         }
 
         // ═══════════════════════════════════════════
         // INGAME SCENE
         // ═══════════════════════════════════════════
 
-        private static void BuildInGameScene(string path)
+        static void SetupInGameScene(string _path)
         {
-            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var _scene = OpenOrCreateScene(_path);
 
-            // ── 3D Camera ──
-            var mainCamGO = CreateMainCamera();
+            // 3D 오브젝트
+            EnsureLighting();
+            EnsureBoardPlatform();
 
-            // ── UI Camera ──
-            var uiCamGO = CreateUICamera();
+            EnsureCanvas("SceneCanvas");
+            EnsureEventSystem();
+            EnsureComponent<GameBootstrap>("GameBootstrap");
 
-            // ── Lighting ──
-            CreateLighting();
-
-            // ── Board Platform ──
-            CreateBoardPlatform();
-
-            // ── EventSystem ──
-            // (Canvas is NOT created here — GameBootstrap creates it at runtime
-            //  to avoid duplicate with UIManager's persistent canvases)
-            CreateEventSystem();
-
-            // ── Scene-Specific Managers ──
-            // (These are SceneSingleton — destroyed on scene unload)
-            var goInput = CreateManagerGO<InputHandler>("Mgr_Input");
-            var goRail = CreateManagerGO<RailManager>("Mgr_Rail");
-            goRail.AddComponent<RailRenderer>();
-            CreateManagerGO<ScoreManager>("Mgr_Score");
-            CreateManagerGO<BoardStateManager>("Mgr_BoardState");
-            CreateManagerGO<HolderManager>("Mgr_Holder");
-            CreateManagerGO<DartManager>("Mgr_Dart");
-            CreateManagerGO<BalloonController>("Mgr_Balloon");
-            CreateManagerGO<PopProcessor>("Mgr_Pop");
-            var goHUD = CreateManagerGO<HUDController>("Mgr_HUD");
-            CreateManagerGO<FeedbackController>("Mgr_Feedback");
-            CreateManagerGO<GimmickManager>("Mgr_Gimmick");
-            CreateManagerGO<BalanceProcessor>("Mgr_Balance");
-            CreateManagerGO<TutorialController>("Mgr_TutorialCtrl");
-            CreateManagerGO<TutorialManager>("Mgr_TutorialMgr");
-            CreateManagerGO<HolderVisualManager>("Mgr_HolderVisual");
-            CreateManagerGO<LevelGenerator>("Mgr_LevelGen");
-
-            // ── GameBootstrap ──
-            var bootstrapGO = new GameObject("GameBootstrap");
-            bootstrapGO.AddComponent<GameBootstrap>();
-
-            // ── Wire InputHandler._gameCamera ──
-            WireField(goInput.GetComponent<InputHandler>(), "_gameCamera", mainCamGO.GetComponent<Camera>());
-
-            EditorSceneManager.SaveScene(scene, path);
+            EditorSceneManager.SaveScene(_scene, _path);
         }
 
         // ═══════════════════════════════════════════
-        // CAMERA & LIGHTING
+        // HELPERS — 씬 열기
         // ═══════════════════════════════════════════
 
-        private static GameObject CreateMainCamera()
+        /// <summary>기존 씬 파일이 있으면 열고, 없으면 새로 생성</summary>
+        static UnityEngine.SceneManagement.Scene OpenOrCreateScene(string _path)
         {
-            var go = new GameObject("Main Camera");
-            var cam = go.AddComponent<Camera>();
-            cam.clearFlags = CameraClearFlags.Skybox;
-            cam.orthographic = false;
-            cam.fieldOfView = 45f;
-            cam.depth = 0;
-            go.tag = "MainCamera";
-            go.transform.position = new Vector3(0f, 12f, -8f);
-            go.transform.eulerAngles = new Vector3(55f, 0f, 0f);
-            return go;
-        }
-
-        private static GameObject CreateUICamera()
-        {
-            var go = new GameObject("UICamera");
-            var cam = go.AddComponent<Camera>();
-            cam.clearFlags = CameraClearFlags.Depth;
-            cam.orthographic = true;
-            cam.orthographicSize = 10f;
-            cam.depth = 10;
-            cam.cullingMask = 1 << LayerMask.NameToLayer("UI");
-
-            TrySetURPOverlay(go);
-            go.AddComponent<AudioListener>();
-            return go;
-        }
-
-        private static void TrySetURPOverlay(GameObject uiCamGO)
-        {
-            var urpCamType = System.Type.GetType(
-                "UnityEngine.Rendering.Universal.UniversalAdditionalCameraData, Unity.RenderPipelines.Universal.Runtime");
-            if (urpCamType == null) return;
-
-            var uiCamData = uiCamGO.GetComponent(urpCamType);
-            if (uiCamData == null) uiCamData = uiCamGO.AddComponent(urpCamType);
-            var renderTypeProp = urpCamType.GetProperty("renderType");
-            if (renderTypeProp != null) renderTypeProp.SetValue(uiCamData, 1);
-
-            var mainCamGO = GameObject.FindWithTag("MainCamera");
-            if (mainCamGO != null)
-            {
-                var mainCamData = mainCamGO.GetComponent(urpCamType);
-                if (mainCamData == null) mainCamData = mainCamGO.AddComponent(urpCamType);
-                var stackProp = urpCamType.GetProperty("cameraStack");
-                if (stackProp != null)
-                {
-                    var stack = stackProp.GetValue(mainCamData) as System.Collections.IList;
-                    var uiCam = uiCamGO.GetComponent<Camera>();
-                    if (stack != null && uiCam != null) stack.Add(uiCam);
-                }
-            }
-        }
-
-        private static void CreateLighting()
-        {
-            var go = new GameObject("Directional Light");
-            var light = go.AddComponent<Light>();
-            light.type = LightType.Directional;
-            light.color = new Color(1.0f, 0.96f, 0.88f);
-            light.intensity = 1.0f;
-            light.shadows = LightShadows.Soft;
-            go.transform.eulerAngles = new Vector3(50f, -30f, 0f);
-        }
-
-        private static void CreateBoardPlatform()
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = "BoardPlatform";
-            go.transform.localScale = new Vector3(12f, 0.2f, 12f);
-            go.transform.position = new Vector3(0f, -0.1f, 2f);
-            var mr = go.GetComponent<MeshRenderer>();
-            var mat = new Material(Shader.Find("Standard"));
-            mat.color = new Color(0.22f, 0.22f, 0.25f);
-            mr.material = mat;
-        }
-
-        // ═══════════════════════════════════════════
-        // CANVAS & UI
-        // ═══════════════════════════════════════════
-
-        private static GameObject CreateCanvas(Camera cam)
-        {
-            var go = new GameObject("Canvas");
-            var c = go.AddComponent<Canvas>();
-
-            if (cam != null)
-            {
-                c.renderMode = RenderMode.ScreenSpaceCamera;
-                c.worldCamera = cam;
-                c.planeDistance = 1f;
-            }
+            if (System.IO.File.Exists(_path))
+                return EditorSceneManager.OpenScene(_path, OpenSceneMode.Single);
             else
-            {
-                c.renderMode = RenderMode.ScreenSpaceOverlay;
-            }
-
-            var scaler = go.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(REF_WIDTH, REF_HEIGHT);
-            scaler.matchWidthOrHeight = 0.5f;
-            go.AddComponent<GraphicRaycaster>();
-            go.layer = LayerMask.NameToLayer("UI");
-            return go;
-        }
-
-        private static void CreateEventSystem()
-        {
-            var go = new GameObject("EventSystem");
-            go.AddComponent<EventSystem>();
-            go.AddComponent<InputSystemUIInputModule>();
+                return EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         }
 
         // ═══════════════════════════════════════════
-        // HELPERS
+        // HELPERS — 오브젝트 확인/추가
         // ═══════════════════════════════════════════
 
-        private static GameObject CreateManagerGO<T>(string name) where T : Component
+        /// <summary>이름으로 루트 오브젝트 찾고, 없으면 새로 생성 + 컴포넌트 부착</summary>
+        static GameObject EnsureComponent<T>(string _name) where T : Component
         {
-            var go = new GameObject(name);
-            go.AddComponent<T>();
-            return go;
+            var _go = GameObject.Find(_name);
+            if (_go == null)
+            {
+                _go = new GameObject(_name);
+            }
+            if (_go.GetComponent<T>() == null)
+            {
+                _go.AddComponent<T>();
+            }
+            return _go;
         }
 
-        private static void WireField(Object target, string fieldName, Object value)
+        /// <summary>GameObject에 컴포넌트가 없으면 추가</summary>
+        static T EnsureComponentOn<T>(GameObject _go) where T : Component
         {
-            if (target == null || value == null) return;
-            var so = new SerializedObject(target);
-            var prop = so.FindProperty(fieldName);
-            if (prop != null)
+            var _comp = _go.GetComponent<T>();
+            if (_comp == null) _comp = _go.AddComponent<T>();
+            return _comp;
+        }
+
+        /// <summary>부모 아래에 이름으로 자식 찾고, 없으면 생성</summary>
+        static GameObject EnsureChild(GameObject _parent, string _childName)
+        {
+            var _tr = _parent.transform.Find(_childName);
+            if (_tr != null) return _tr.gameObject;
+
+            var _child = new GameObject(_childName);
+            _child.transform.SetParent(_parent.transform, false);
+            return _child;
+        }
+
+        /// <summary>Canvas 확인/추가 + CanvasScaler 설정</summary>
+        static GameObject EnsureCanvas(string _name)
+        {
+            var _go = GameObject.Find(_name);
+            if (_go == null)
             {
-                prop.objectReferenceValue = value;
-                so.ApplyModifiedProperties();
+                _go = new GameObject(_name);
+            }
+
+            // Canvas
+            var _canvas = _go.GetComponent<Canvas>();
+            if (_canvas == null) _canvas = _go.AddComponent<Canvas>();
+            _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+            // CanvasScaler
+            var _scaler = _go.GetComponent<CanvasScaler>();
+            if (_scaler == null) _scaler = _go.AddComponent<CanvasScaler>();
+            _scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            _scaler.referenceResolution = new Vector2(REF_WIDTH, REF_HEIGHT);
+            _scaler.matchWidthOrHeight = 0.5f;
+
+            // GraphicRaycaster
+            if (_go.GetComponent<GraphicRaycaster>() == null)
+                _go.AddComponent<GraphicRaycaster>();
+
+            _go.layer = LayerMask.NameToLayer("UI");
+            return _go;
+        }
+
+        /// <summary>EventSystem 확인/추가</summary>
+        static void EnsureEventSystem()
+        {
+            if (Object.FindAnyObjectByType<EventSystem>() != null) return;
+
+            var _go = new GameObject("EventSystem");
+            _go.AddComponent<EventSystem>();
+            _go.AddComponent<InputSystemUIInputModule>();
+        }
+
+        /// <summary>Directional Light 확인/추가</summary>
+        static void EnsureLighting()
+        {
+            var _go = GameObject.Find("Directional Light");
+            if (_go == null)
+            {
+                _go = new GameObject("Directional Light");
+            }
+
+            var _light = _go.GetComponent<Light>();
+            if (_light == null) _light = _go.AddComponent<Light>();
+            _light.type = LightType.Directional;
+            _light.color = new Color(1.0f, 0.96f, 0.88f);
+            _light.intensity = 1.0f;
+            _light.shadows = LightShadows.Soft;
+            _go.transform.eulerAngles = new Vector3(50f, -30f, 0f);
+        }
+
+        /// <summary>BoardPlatform 확인/추가</summary>
+        static void EnsureBoardPlatform()
+        {
+            var _go = GameObject.Find("BoardPlatform");
+            if (_go != null) return; // 이미 있으면 건드리지 않음
+
+            _go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            _go.name = "BoardPlatform";
+            _go.transform.localScale = new Vector3(12f, 0.2f, 12f);
+            _go.transform.position = new Vector3(0f, -0.1f, 2f);
+            var _mr = _go.GetComponent<MeshRenderer>();
+            var _mat = new Material(Shader.Find("Standard"));
+            _mat.color = new Color(0.22f, 0.22f, 0.25f);
+            _mr.material = _mat;
+        }
+
+        // ═══════════════════════════════════════════
+        // HELPERS — 유틸
+        // ═══════════════════════════════════════════
+
+        static void WireField(Object _target, string _fieldName, Object _value)
+        {
+            if (_target == null || _value == null) return;
+            var _so = new SerializedObject(_target);
+            var _prop = _so.FindProperty(_fieldName);
+            if (_prop != null)
+            {
+                _prop.objectReferenceValue = _value;
+                _so.ApplyModifiedProperties();
             }
         }
 
-        private static void EnsureFolder(string path)
+        static void EnsureFolder(string _path)
         {
-            if (!AssetDatabase.IsValidFolder(path))
+            if (!AssetDatabase.IsValidFolder(_path))
             {
-                string[] parts = path.Split('/');
-                string current = parts[0];
-                for (int i = 1; i < parts.Length; i++)
+                string[] _parts = _path.Split('/');
+                string _current = _parts[0];
+                for (int i = 1; i < _parts.Length; i++)
                 {
-                    string next = current + "/" + parts[i];
-                    if (!AssetDatabase.IsValidFolder(next))
-                    {
-                        AssetDatabase.CreateFolder(current, parts[i]);
-                    }
-                    current = next;
+                    string _next = _current + "/" + _parts[i];
+                    if (!AssetDatabase.IsValidFolder(_next))
+                        AssetDatabase.CreateFolder(_current, _parts[i]);
+                    _current = _next;
                 }
             }
         }

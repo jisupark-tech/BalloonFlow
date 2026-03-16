@@ -2,343 +2,205 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
-using UnityEngine.UI;
 
 namespace BalloonFlow
 {
     /// <summary>
-    /// InGame scene controller. Loads UIHud, PopupResult, PopupSettings, PopupGoldShop prefabs.
-    /// Manages gameplay lifecycle: level load, play, result display, retry/next/home.
+    /// InGame 씬 컨트롤러.
+    /// - GameManager.InitInGame() → InGame 매니저 생성 (GameManager 자식)
+    /// - UIManager.OpenUI로 UIHud, PopupResult, PopupSettings, PopupGoldShop 로드
+    /// - 레벨 로드, 결과 팝업, Retry/Next/Home 처리
     /// </summary>
     public class GameBootstrap : MonoBehaviour
     {
-        private const string HUD_PREFAB      = "UI/UIHud";
-        private const string RESULT_PREFAB   = "Popup/PopupResult";
-        private const string SETTINGS_PREFAB = "Popup/PopupSettings";
-        private const string GOLDSHOP_PREFAB = "Popup/PopupGoldShop";
-
         private UIHud _hud;
-        private PopupResult _resultPopup;
-        private PopupSettings _settingsPopup;
-        private PopupGoldShop _goldShopPopup;
-        private CanvasGroup _hudCanvasGroup;
+        private PopupResult _result;
+        private PopupSettings _settings;
+        private PopupGoldShop _goldShop;
         private bool _pendingResultIsWin;
 
-        private void Awake()
+        void Start()
         {
-            EnsureEventSystem();
-            EnsureSceneManagers();
-            LoadUI();
-            Debug.Log("[GameBootstrap] InGame scene initialized.");
-        }
-
-        private void Start()
-        {
-            int pendingLevel = PlayerPrefs.GetInt("BF_PendingLevelId", 0);
-            if (pendingLevel <= 0)
+            // Safety: 직접 씬 로드 테스트용
+            if (!GameManager.HasInstance)
             {
-                if (LevelManager.HasInstance)
-                {
-                    int highest = LevelManager.Instance.GetHighestCompletedLevel();
-                    pendingLevel = highest > 0 ? highest + 1 : 1;
-                }
-                else
-                {
-                    pendingLevel = 1;
-                }
+                var _go = new GameObject("GameManager");
+                _go.AddComponent<GameManager>();
             }
-            PlayerPrefs.DeleteKey("BF_PendingLevelId");
 
-            if (LevelManager.HasInstance)
-                LevelManager.Instance.LoadLevel(pendingLevel);
+            // Lobby 매니저 확보 (Lobby 안 거쳤을 때를 위해)
+            GameManager.Instance.InitLobby();
+
+            // InGame 매니저 생성 (GameManager 자식)
+            GameManager.Instance.InitInGame();
+
+            // 카메라 설정
+            if (CameraManager.HasInstance)
+                CameraManager.Instance.ConfigureInGame();
+
+            // EventSystem 확인
+            if (FindAnyObjectByType<EventSystem>() == null)
+            {
+                var _go = new GameObject("EventSystem");
+                _go.AddComponent<EventSystem>();
+                _go.AddComponent<InputSystemUIInputModule>();
+            }
+
+            // 씬 캔버스 등록
+            var _canvasGO = GameObject.Find("SceneCanvas");
+            if (_canvasGO != null && UIManager.HasInstance)
+                UIManager.Instance.SetSceneCanvas(_canvasGO.transform);
+
+            // UI 로드
+            LoadUI();
+
+            // 레벨 로드
+            LoadPendingLevel();
+
+            Debug.Log("[GameBootstrap] InGame 초기화 완료");
         }
 
-        private void OnEnable()
+        void OnEnable()
         {
             EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompleted);
             EventBus.Subscribe<OnLevelFailed>(HandleLevelFailed);
         }
 
-        private void OnDisable()
+        void OnDisable()
         {
             EventBus.Unsubscribe<OnLevelCompleted>(HandleLevelCompleted);
             EventBus.Unsubscribe<OnLevelFailed>(HandleLevelFailed);
 
-            if (_resultPopup != null)
+            if (_result != null)
             {
-                if (_resultPopup.NextButton != null) _resultPopup.NextButton.onClick.RemoveListener(OnNextClicked);
-                if (_resultPopup.RetryButton != null) _resultPopup.RetryButton.onClick.RemoveListener(OnRetryClicked);
-                if (_resultPopup.HomeButton != null) _resultPopup.HomeButton.onClick.RemoveListener(OnHomeClicked);
+                if (_result.NextButton != null) _result.NextButton.onClick.RemoveListener(OnNextClicked);
+                if (_result.RetryButton != null) _result.RetryButton.onClick.RemoveListener(OnRetryClicked);
+                if (_result.HomeButton != null) _result.HomeButton.onClick.RemoveListener(OnHomeClicked);
             }
         }
 
-        // ═══════════════════════════════════════════
-        // SCENE MANAGERS
-        // ═══════════════════════════════════════════
+        #region UI 로드
 
-        private void EnsureSceneManagers()
+        void LoadUI()
         {
-            if (!GameManager.HasInstance)
-            {
-                var go = new GameObject("GameManager");
-                go.AddComponent<GameManager>();
-            }
-
-            if (!ResourceManager.HasInstance)
-            {
-                var go = new GameObject("Mgr_Resource");
-                go.AddComponent<ResourceManager>();
-            }
-
-            EnsureSingleton<InputHandler>("Mgr_Input");
-
-            var railGO = EnsureSingleton<RailManager>("Mgr_Rail");
-            if (railGO.GetComponent<RailRenderer>() == null)
-                railGO.AddComponent<RailRenderer>();
-
-            EnsureSingleton<ScoreManager>("Mgr_Score");
-            EnsureSingleton<BoardStateManager>("Mgr_BoardState");
-            EnsureSingleton<HolderManager>("Mgr_Holder");
-            EnsureSingleton<DartManager>("Mgr_Dart");
-            EnsureSingleton<BalloonController>("Mgr_Balloon");
-            EnsureSingleton<PopProcessor>("Mgr_Pop");
-            EnsureSingleton<HUDController>("Mgr_HUD");
-            EnsureSingleton<FeedbackController>("Mgr_Feedback");
-            EnsureSingleton<GimmickManager>("Mgr_Gimmick");
-            EnsureSingleton<BalanceProcessor>("Mgr_Balance");
-            EnsureSingleton<TutorialController>("Mgr_TutorialCtrl");
-            EnsureSingleton<TutorialManager>("Mgr_TutorialMgr");
-            EnsureSingleton<HolderVisualManager>("Mgr_HolderVisual");
-            EnsureSingleton<LevelGenerator>("Mgr_LevelGen");
-
-            // Wire InputHandler._gameCamera
-            var inputHandler = FindAnyObjectByType<InputHandler>();
-            if (inputHandler != null)
-            {
-                Camera mainCam = Camera.main;
-                if (mainCam != null)
-                {
-                    var field = typeof(InputHandler).GetField("_gameCamera",
-                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    if (field != null) field.SetValue(inputHandler, mainCam);
-                }
-            }
-        }
-
-        private GameObject EnsureSingleton<T>(string name) where T : Component
-        {
-            T existing = FindAnyObjectByType<T>();
-            if (existing != null) return existing.gameObject;
-            var go = new GameObject(name);
-            go.AddComponent<T>();
-            return go;
-        }
-
-        // ═══════════════════════════════════════════
-        // UI LOADING
-        // ═══════════════════════════════════════════
-
-        private void LoadUI()
-        {
-            Canvas canvas = FindAnyObjectByType<Canvas>();
-            Transform root;
-
-            if (canvas != null)
-            {
-                root = canvas.transform;
-            }
-            else
-            {
-                root = CreateCanvasGO().transform;
-            }
+            if (!UIManager.HasInstance) return;
 
             // UIHud
-            var hudPrefab = Resources.Load<GameObject>(HUD_PREFAB);
-            if (hudPrefab != null)
-            {
-                var go = Instantiate(hudPrefab, root);
-                _hud = go.GetComponent<UIHud>();
-                _hudCanvasGroup = go.GetComponent<CanvasGroup>();
-                ShowCG(_hudCanvasGroup);
-            }
-            else
-            {
-                Debug.LogError($"[GameBootstrap] Prefab not found: {HUD_PREFAB}");
-            }
+            _hud = UIManager.Instance.OpenUI<UIHud>("UI/UIHud");
 
-            // PopupResult
-            var resultPrefab = Resources.Load<GameObject>(RESULT_PREFAB);
-            if (resultPrefab != null)
-            {
-                var go = Instantiate(resultPrefab, root);
-                _resultPopup = go.GetComponent<PopupResult>();
-                _resultPopup.Hide();
-                WireResultButtons();
-            }
-            else
-            {
-                Debug.LogError($"[GameBootstrap] Prefab not found: {RESULT_PREFAB}");
-            }
-
-            // PopupSettings
-            var settingsPrefab = Resources.Load<GameObject>(SETTINGS_PREFAB);
-            if (settingsPrefab != null)
-            {
-                var go = Instantiate(settingsPrefab, root);
-                _settingsPopup = go.GetComponent<PopupSettings>();
-                _settingsPopup.Hide();
-            }
-
-            // PopupGoldShop
-            var goldShopPrefab = Resources.Load<GameObject>(GOLDSHOP_PREFAB);
-            if (goldShopPrefab != null)
-            {
-                var go = Instantiate(goldShopPrefab, root);
-                _goldShopPopup = go.GetComponent<PopupGoldShop>();
-                _goldShopPopup.Hide();
-            }
-
-            // Bind HUDController to UIHud view + popups
+            // HUDController 바인딩
             if (HUDController.HasInstance && _hud != null)
             {
-                var hud = HUDController.Instance;
-                hud.BindView(_hud);
-                hud.SetSettingsPopup(_settingsPopup);
-                hud.SetGoldShopPopup(_goldShopPopup);
+                HUDController.Instance.BindView(_hud);
+            }
+
+            // PopupResult (로드 후 숨김)
+            _result = UIManager.Instance.OpenUI<PopupResult>("Popup/PopupResult");
+            if (_result != null)
+            {
+                _result.CloseUI();
+                if (_result.NextButton != null) _result.NextButton.onClick.AddListener(OnNextClicked);
+                if (_result.RetryButton != null) _result.RetryButton.onClick.AddListener(OnRetryClicked);
+                if (_result.HomeButton != null) _result.HomeButton.onClick.AddListener(OnHomeClicked);
+            }
+
+            // PopupSettings (로드 후 숨김)
+            _settings = UIManager.Instance.OpenUI<PopupSettings>("Popup/PopupSettings");
+            if (_settings != null) _settings.CloseUI();
+
+            // PopupGoldShop (로드 후 숨김)
+            _goldShop = UIManager.Instance.OpenUI<PopupGoldShop>("Popup/PopupGoldShop");
+            if (_goldShop != null) _goldShop.CloseUI();
+
+            // HUDController에 팝업 연결
+            if (HUDController.HasInstance)
+            {
+                HUDController.Instance.SetSettingsPopup(_settings);
+                HUDController.Instance.SetGoldShopPopup(_goldShop);
             }
         }
 
-        private void WireResultButtons()
+        void LoadPendingLevel()
         {
-            if (_resultPopup == null) return;
-            if (_resultPopup.NextButton != null) _resultPopup.NextButton.onClick.AddListener(OnNextClicked);
-            if (_resultPopup.RetryButton != null) _resultPopup.RetryButton.onClick.AddListener(OnRetryClicked);
-            if (_resultPopup.HomeButton != null) _resultPopup.HomeButton.onClick.AddListener(OnHomeClicked);
+            int _levelId = PlayerPrefs.GetInt("BF_PendingLevelId", 0);
+            if (_levelId <= 0)
+            {
+                if (LevelManager.HasInstance)
+                {
+                    int _highest = LevelManager.Instance.GetHighestCompletedLevel();
+                    _levelId = _highest > 0 ? _highest + 1 : 1;
+                }
+                else
+                {
+                    _levelId = 1;
+                }
+            }
+            PlayerPrefs.DeleteKey("BF_PendingLevelId");
+
+            if (LevelManager.HasInstance)
+                LevelManager.Instance.LoadLevel(_levelId);
         }
 
-        // ═══════════════════════════════════════════
-        // GAME FLOW
-        // ═══════════════════════════════════════════
+        #endregion
 
-        private void OnNextClicked()
+        #region 게임 결과 처리
+
+        void HandleLevelCompleted(OnLevelCompleted _evt)
+        {
+            _pendingResultIsWin = true;
+            StartCoroutine(ShowResultDelayed(true, _evt.score, _evt.starCount));
+        }
+
+        void HandleLevelFailed(OnLevelFailed _evt)
+        {
+            if (ContinueHandler.HasInstance && ContinueHandler.Instance.CanContinue()) return;
+            if (_pendingResultIsWin) return;
+            StartCoroutine(ShowResultDelayed(false, 0, 0));
+        }
+
+        IEnumerator ShowResultDelayed(bool _isWin, int _score, int _stars)
+        {
+            yield return new WaitForSeconds(0.8f);
+            if (_result != null)
+            {
+                if (_isWin) _result.ShowWin(_score, _stars);
+                else _result.ShowFail();
+            }
+        }
+
+        #endregion
+
+        #region 버튼 이벤트
+
+        void OnNextClicked()
         {
             _pendingResultIsWin = false;
-            if (_resultPopup != null) _resultPopup.Hide();
-            ShowCG(_hudCanvasGroup);
+            if (_result != null) _result.CloseUI();
+            if (_hud != null) _hud.OpenUI();
 
             if (LevelManager.HasInstance)
             {
-                int nextLevel = LevelManager.Instance.GetHighestCompletedLevel() + 1;
-                LevelManager.Instance.LoadLevel(nextLevel);
+                int _next = LevelManager.Instance.GetHighestCompletedLevel() + 1;
+                LevelManager.Instance.LoadLevel(_next);
             }
         }
 
-        private void OnRetryClicked()
+        void OnRetryClicked()
         {
             _pendingResultIsWin = false;
-            if (_resultPopup != null) _resultPopup.Hide();
-            ShowCG(_hudCanvasGroup);
+            if (_result != null) _result.CloseUI();
+            if (_hud != null) _hud.OpenUI();
 
             if (LevelManager.HasInstance)
                 LevelManager.Instance.RetryLevel();
         }
 
-        private void OnHomeClicked()
+        void OnHomeClicked()
         {
-            if (_resultPopup != null) _resultPopup.Hide();
-            if (GameManager.HasInstance)
-                GameManager.Instance.GoToLobby();
+            if (_result != null) _result.CloseUI();
+            if (GameManager.HasInstance) GameManager.Instance.GoToLobby();
         }
 
-        // ═══════════════════════════════════════════
-        // EVENT HANDLERS
-        // ═══════════════════════════════════════════
-
-        private void HandleLevelCompleted(OnLevelCompleted evt)
-        {
-            Debug.Log($"[GameBootstrap] Level completed: level={evt.levelId}, score={evt.score}, stars={evt.starCount}");
-            _pendingResultIsWin = true;
-            StopCoroutine(nameof(DelayedShowResultCoroutine));
-            StartCoroutine(DelayedShowResultCoroutine(true, evt.score, evt.starCount));
-        }
-
-        private void HandleLevelFailed(OnLevelFailed evt)
-        {
-            if (ContinueHandler.HasInstance && ContinueHandler.Instance.CanContinue())
-                return;
-            if (_pendingResultIsWin) return;
-            StartCoroutine(DelayedShowResultCoroutine(false, 0, 0));
-        }
-
-        private IEnumerator DelayedShowResultCoroutine(bool isWin, int score, int stars)
-        {
-            yield return new WaitForSeconds(0.8f);
-            if (_resultPopup != null)
-            {
-                if (isWin) _resultPopup.ShowWin(score, stars);
-                else _resultPopup.ShowFail();
-            }
-        }
-
-        // ═══════════════════════════════════════════
-        // INFRASTRUCTURE
-        // ═══════════════════════════════════════════
-
-        private void EnsureEventSystem()
-        {
-            if (FindAnyObjectByType<EventSystem>() != null) return;
-            var go = new GameObject("EventSystem");
-            go.AddComponent<EventSystem>();
-            go.AddComponent<InputSystemUIInputModule>();
-        }
-
-        private GameObject CreateCanvasGO()
-        {
-            var go = new GameObject("Canvas");
-            var canvas = go.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceCamera;
-            var scaler = go.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1080, 1920);
-            scaler.matchWidthOrHeight = 0.5f;
-            go.AddComponent<GraphicRaycaster>();
-            go.layer = LayerMask.NameToLayer("UI");
-
-            Camera uiCam = null;
-            Camera[] cameras = FindObjectsByType<Camera>(FindObjectsSortMode.None);
-            foreach (var cam in cameras)
-            {
-                if (cam.gameObject.name == "UICamera") { uiCam = cam; break; }
-            }
-
-            if (uiCam != null)
-            {
-                canvas.worldCamera = uiCam;
-                canvas.planeDistance = 1f;
-            }
-            else
-            {
-                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            }
-
-            return go;
-        }
-
-        private void ShowCG(CanvasGroup cg)
-        {
-            if (cg == null) return;
-            cg.alpha = 1f;
-            cg.interactable = true;
-            cg.blocksRaycasts = true;
-            cg.gameObject.SetActive(true);
-        }
-
-        private void HideCG(CanvasGroup cg)
-        {
-            if (cg == null) return;
-            cg.alpha = 0f;
-            cg.interactable = false;
-            cg.blocksRaycasts = false;
-        }
+        #endregion
     }
 }

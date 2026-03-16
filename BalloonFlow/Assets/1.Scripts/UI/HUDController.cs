@@ -4,62 +4,20 @@ using UnityEngine.UI;
 namespace BalloonFlow
 {
     /// <summary>
-    /// In-game HUD controller. New layout:
-    /// Row 1: [Settings btn] | [Level X] | [Gold display + button]
+    /// 인게임 HUD 컨트롤러. SceneSingleton.
+    /// UIHud 뷰를 바인딩하고 이벤트 기반으로 업데이트.
+    ///
+    /// Row 1: [Settings] | [Level X] | [Gold + 버튼]
     /// Row 2: [Balloons: N] | [Score] | [On Rail: N/M]
-    /// Settings button → opens settings popup, pauses game.
-    /// Gold + button → opens gold shop popup, pauses game.
     /// </summary>
-    /// <remarks>
-    /// Layer: Game | Genre: Puzzle | Role: Controller | Phase: 3
-    /// </remarks>
     public class HUDController : SceneSingleton<HUDController>
     {
-        #region Serialized Fields
-
-        [Header("Score")]
-        [SerializeField] private Text _scoreText;
-
-        [Header("Stars")]
-        [SerializeField] private Image[] _starImages;
-        [SerializeField] private Sprite _starFilledSprite;
-        [SerializeField] private Sprite _starEmptySprite;
-
-        [Header("Balloons")]
-        [SerializeField] private Text _remainingText;
-
-        [Header("On-Rail Holders")]
-        [SerializeField] private Text _holderCountText;
-        [SerializeField] private Text _magazineCountText;
-
-        [Header("Level Info")]
-        [SerializeField] private Text _levelText;
-
-        [Header("Gold Display")]
-        [SerializeField] private Text _goldText;
-
-        [Header("Move Count")]
-        [SerializeField] private Text _moveCountText;
-
-        #endregion
-
         #region Fields
 
-        private int _currentStars;
         private UIHud _view;
-        private Button _settingsButton;
-        private Button _goldPlusButton;
-
-        // Popups
         private PopupSettings _popupSettings;
         private PopupGoldShop _popupGoldShop;
-
-        // Legacy popup fields (kept for backward compat)
-        private CanvasGroup _settingsPopup;
-        private Button _settingsCloseButton;
-        private CanvasGroup _goldShopPopup;
-        private Button _goldShopCloseButton;
-        private Transform _goldShopContentRoot;
+        private int _currentStars;
 
         #endregion
 
@@ -86,355 +44,165 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
 
-            if (_settingsButton != null) _settingsButton.onClick.RemoveListener(OnSettingsClicked);
-            if (_goldPlusButton != null) _goldPlusButton.onClick.RemoveListener(OnGoldPlusClicked);
-            if (_settingsCloseButton != null) _settingsCloseButton.onClick.RemoveListener(OnSettingsCloseClicked);
-            if (_goldShopCloseButton != null) _goldShopCloseButton.onClick.RemoveListener(OnGoldShopCloseClicked);
-        }
-
-        #endregion
-
-        #region Public Methods
-
-        public void UpdateScore(int score)
-        {
-            if (_scoreText != null) _scoreText.text = score.ToString("N0");
-        }
-
-        public void UpdateStars(int count)
-        {
-            _currentStars = Mathf.Clamp(count, 0, 3);
-            if (_starImages == null) return;
-
-            for (int i = 0; i < _starImages.Length; i++)
+            // 버튼 이벤트 해제
+            if (_view != null)
             {
-                if (_starImages[i] == null) continue;
-                _starImages[i].sprite = (i < _currentStars) ? _starFilledSprite : _starEmptySprite;
+                if (_view.SettingsButton != null) _view.SettingsButton.onClick.RemoveListener(OnSettingsClicked);
+                if (_view.GoldPlusButton != null) _view.GoldPlusButton.onClick.RemoveListener(OnGoldPlusClicked);
             }
         }
 
-        public void UpdateRemainingBalloons(int count)
-        {
-            if (_remainingText != null) _remainingText.text = $"Balloons: {count}";
-        }
+        #endregion
 
-        public void UpdateHolderInfo(int holderCount, int maxHolders)
-        {
-            if (_holderCountText != null) _holderCountText.text = $"On Rail: {holderCount}/{maxHolders}";
-        }
-
-        public void UpdateMagazineDisplay(int holderId, int remaining)
-        {
-            if (_magazineCountText != null) _magazineCountText.text = remaining > 0 ? remaining.ToString() : "-";
-        }
-
-        public void ShowMoveCount(int total, int used)
-        {
-            if (_moveCountText != null) _moveCountText.text = $"{used}/{total}";
-        }
-
-        public void SetLevelInfo(int levelId, int packageId)
-        {
-            if (_levelText != null) _levelText.text = $"Level {levelId}";
-        }
-
-        public void UpdateGoldDisplay(int amount)
-        {
-            if (_goldText != null) _goldText.text = amount.ToString("N0");
-        }
+        #region Public — View/Popup 바인딩
 
         /// <summary>
-        /// Binds the UIHud view. All [SerializeField] references come from the prefab.
-        /// Called by GameBootstrap after loading UIHud prefab.
+        /// UIHud 뷰 바인딩. GameBootstrap이 UIHud 로드 후 호출.
         /// </summary>
-        public void BindView(UIHud view)
+        public void BindView(UIHud _hudView)
         {
-            if (view == null) return;
-            _view = view;
-            _scoreText = view.ScoreText;
-            _remainingText = view.RemainingText;
-            _holderCountText = view.HolderCountText;
-            _levelText = view.LevelText;
-            _goldText = view.GoldText;
-            _moveCountText = view.MoveCountText;
+            if (_hudView == null) return;
+            _view = _hudView;
 
-            SetSettingsButton(view.SettingsButton);
-            SetGoldPlusButton(view.GoldPlusButton);
+            // 버튼 이벤트 연결
+            if (_view.SettingsButton != null) _view.SettingsButton.onClick.AddListener(OnSettingsClicked);
+            if (_view.GoldPlusButton != null) _view.GoldPlusButton.onClick.AddListener(OnGoldPlusClicked);
         }
 
-        /// <summary>
-        /// Wires the settings popup (new PopupSettings type).
-        /// </summary>
-        public void SetSettingsPopup(PopupSettings popup)
+        /// <summary>설정 팝업 연결</summary>
+        public void SetSettingsPopup(PopupSettings _popup)
         {
-            _popupSettings = popup;
-            if (_popupSettings != null && _popupSettings.CloseButton != null)
-                _popupSettings.CloseButton.onClick.AddListener(OnSettingsCloseClicked);
+            _popupSettings = _popup;
         }
 
-        /// <summary>
-        /// Wires the gold shop popup (new PopupGoldShop type).
-        /// </summary>
-        public void SetGoldShopPopup(PopupGoldShop popup)
+        /// <summary>골드 상점 팝업 연결</summary>
+        public void SetGoldShopPopup(PopupGoldShop _popup)
         {
-            _popupGoldShop = popup;
-            if (_popupGoldShop != null && _popupGoldShop.CloseButton != null)
-                _popupGoldShop.CloseButton.onClick.AddListener(OnGoldShopCloseClicked);
-        }
-
-        /// <summary>
-        /// Wires the settings button. Called by BindView or GameBootstrap.
-        /// </summary>
-        public void SetSettingsButton(Button btn)
-        {
-            _settingsButton = btn;
-            if (_settingsButton != null) _settingsButton.onClick.AddListener(OnSettingsClicked);
-        }
-
-        /// <summary>
-        /// Wires the gold + button. Called by BindView or GameBootstrap.
-        /// </summary>
-        public void SetGoldPlusButton(Button btn)
-        {
-            _goldPlusButton = btn;
-            if (_goldPlusButton != null) _goldPlusButton.onClick.AddListener(OnGoldPlusClicked);
-        }
-
-        /// <summary>
-        /// Wires the settings popup elements (legacy CanvasGroup method).
-        /// </summary>
-        public void SetSettingsPopup(CanvasGroup popup, Button closeBtn)
-        {
-            _settingsPopup = popup;
-            _settingsCloseButton = closeBtn;
-            if (_settingsCloseButton != null) _settingsCloseButton.onClick.AddListener(OnSettingsCloseClicked);
-            HidePopup(_settingsPopup);
-        }
-
-        /// <summary>
-        /// Wires the gold shop popup elements (legacy CanvasGroup method).
-        /// </summary>
-        public void SetGoldShopPopup(CanvasGroup popup, Button closeBtn, Transform contentRoot)
-        {
-            _goldShopPopup = popup;
-            _goldShopCloseButton = closeBtn;
-            _goldShopContentRoot = contentRoot;
-            if (_goldShopCloseButton != null) _goldShopCloseButton.onClick.AddListener(OnGoldShopCloseClicked);
-            HidePopup(_goldShopPopup);
+            _popupGoldShop = _popup;
         }
 
         #endregion
 
-        #region Button Handlers
+        #region Public — HUD 업데이트
+
+        public void UpdateScore(int _score)
+        {
+            if (_view != null) _view.SetScore(_score);
+        }
+
+        public void UpdateStars(int _count)
+        {
+            _currentStars = Mathf.Clamp(_count, 0, 3);
+        }
+
+        public void UpdateRemainingBalloons(int _count)
+        {
+            if (_view != null) _view.SetRemainingBalloons(_count);
+        }
+
+        public void UpdateHolderInfo(int _holderCount, int _maxHolders)
+        {
+            if (_view != null) _view.SetHolderInfo(_holderCount, _maxHolders);
+        }
+
+        public void UpdateMagazineDisplay(int _holderId, int _remaining) { }
+
+        public void ShowMoveCount(int _total, int _used)
+        {
+            if (_view != null) _view.SetMoveCount(_used, _total);
+        }
+
+        public void SetLevelInfo(int _levelId, int _packageId)
+        {
+            if (_view != null) _view.SetLevel(_levelId);
+        }
+
+        public void UpdateGoldDisplay(int _amount)
+        {
+            if (_view != null) _view.SetGold(_amount);
+        }
+
+        #endregion
+
+        #region 버튼 이벤트
 
         private void OnSettingsClicked()
         {
-            if (_popupSettings != null)
-                _popupSettings.Show();
-            else
-                ShowPopup(_settingsPopup);
+            if (_popupSettings != null) _popupSettings.OpenUI();
             if (GameManager.HasInstance) GameManager.Instance.PauseGame();
         }
 
         private void OnSettingsCloseClicked()
         {
-            if (_popupSettings != null)
-                _popupSettings.Hide();
-            else
-                HidePopup(_settingsPopup);
+            if (_popupSettings != null) _popupSettings.CloseUI();
             if (GameManager.HasInstance) GameManager.Instance.ResumeGame();
         }
 
         private void OnGoldPlusClicked()
         {
-            if (_popupGoldShop != null)
-            {
-                _popupGoldShop.Show();
-            }
-            else
-            {
-                BuildGoldShopItems();
-                ShowPopup(_goldShopPopup);
-            }
+            if (_popupGoldShop != null) _popupGoldShop.OpenUI();
             if (GameManager.HasInstance) GameManager.Instance.PauseGame();
         }
 
         private void OnGoldShopCloseClicked()
         {
-            if (_popupGoldShop != null)
-                _popupGoldShop.Hide();
-            else
-                HidePopup(_goldShopPopup);
+            if (_popupGoldShop != null) _popupGoldShop.CloseUI();
             if (GameManager.HasInstance) GameManager.Instance.ResumeGame();
         }
 
         #endregion
 
-        #region Private Methods
+        #region EventBus 핸들러
 
-        private void ShowPopup(CanvasGroup popup)
+        private void HandleScoreChanged(OnScoreChanged _evt)
         {
-            if (popup == null) return;
-            popup.alpha = 1f;
-            popup.interactable = true;
-            popup.blocksRaycasts = true;
-        }
-
-        private void HidePopup(CanvasGroup popup)
-        {
-            if (popup == null) return;
-            popup.alpha = 0f;
-            popup.interactable = false;
-            popup.blocksRaycasts = false;
-        }
-
-        private void BuildGoldShopItems()
-        {
-            if (_goldShopContentRoot == null) return;
-
-            for (int i = _goldShopContentRoot.childCount - 1; i >= 0; i--)
-                Destroy(_goldShopContentRoot.GetChild(i).gameObject);
-
-            if (!ShopManager.HasInstance) return;
-
-            ShopProduct[] products = ShopManager.Instance.GetProducts();
-            float yOffset = 0f;
-            Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-
-            foreach (ShopProduct product in products)
-            {
-                if (product.currencyType != "coin" && product.currencyType != "iap") continue;
-
-                var itemGO = new GameObject($"Item_{product.productId}");
-                itemGO.layer = LayerMask.NameToLayer("UI");
-                itemGO.transform.SetParent(_goldShopContentRoot, false);
-                var rt = itemGO.AddComponent<RectTransform>();
-                rt.anchorMin = new Vector2(0, 1);
-                rt.anchorMax = new Vector2(1, 1);
-                rt.pivot = new Vector2(0.5f, 1);
-                rt.offsetMin = new Vector2(10, yOffset - 80);
-                rt.offsetMax = new Vector2(-10, yOffset);
-                var img = itemGO.AddComponent<Image>();
-                img.color = new Color(0.12f, 0.14f, 0.24f);
-                img.raycastTarget = false;
-
-                // Product name
-                var nameGO = new GameObject("Name");
-                nameGO.layer = LayerMask.NameToLayer("UI");
-                nameGO.transform.SetParent(itemGO.transform, false);
-                var nameRT = nameGO.AddComponent<RectTransform>();
-                nameRT.anchorMin = new Vector2(0, 0.5f);
-                nameRT.anchorMax = new Vector2(0.6f, 0.5f);
-                nameRT.pivot = new Vector2(0, 0.5f);
-                nameRT.offsetMin = new Vector2(10, -15);
-                nameRT.offsetMax = new Vector2(0, 15);
-                var nameT = nameGO.AddComponent<Text>();
-                nameT.text = product.displayName;
-                nameT.fontSize = 20;
-                nameT.font = font;
-                nameT.color = Color.white;
-                nameT.alignment = TextAnchor.MiddleLeft;
-                nameT.raycastTarget = false;
-
-                // Buy button
-                string buyLabel = product.currencyType == "iap" ? product.priceDisplay : $"{product.coinPrice}";
-                var buyGO = new GameObject("BuyBtn");
-                buyGO.layer = LayerMask.NameToLayer("UI");
-                buyGO.transform.SetParent(itemGO.transform, false);
-                var buyRT = buyGO.AddComponent<RectTransform>();
-                buyRT.anchorMin = new Vector2(1, 0.5f);
-                buyRT.anchorMax = new Vector2(1, 0.5f);
-                buyRT.pivot = new Vector2(1, 0.5f);
-                buyRT.anchoredPosition = new Vector2(-10, 0);
-                buyRT.sizeDelta = new Vector2(110, 45);
-                var buyImg = buyGO.AddComponent<Image>();
-                buyImg.color = new Color(0.2f, 0.65f, 0.9f);
-                var buyBtn = buyGO.AddComponent<Button>();
-
-                var lblGO = new GameObject("Label");
-                lblGO.layer = LayerMask.NameToLayer("UI");
-                lblGO.transform.SetParent(buyGO.transform, false);
-                var lblRT = lblGO.AddComponent<RectTransform>();
-                lblRT.anchorMin = Vector2.zero;
-                lblRT.anchorMax = Vector2.one;
-                lblRT.offsetMin = Vector2.zero;
-                lblRT.offsetMax = Vector2.zero;
-                var lblT = lblGO.AddComponent<Text>();
-                lblT.text = buyLabel;
-                lblT.fontSize = 18;
-                lblT.font = font;
-                lblT.color = Color.white;
-                lblT.alignment = TextAnchor.MiddleCenter;
-                lblT.fontStyle = FontStyle.Bold;
-                lblT.raycastTarget = false;
-
-                string capturedId = product.productId;
-                buyBtn.onClick.AddListener(() =>
-                {
-                    if (ShopManager.HasInstance)
-                    {
-                        ShopManager.Instance.PurchaseProduct(capturedId);
-                        if (CurrencyManager.HasInstance)
-                            UpdateGoldDisplay(CurrencyManager.Instance.Coins);
-                    }
-                });
-
-                yOffset -= 88;
-            }
-        }
-
-        // ── EventBus handlers ──
-
-        private void HandleScoreChanged(OnScoreChanged evt)
-        {
-            UpdateScore(evt.currentScore);
+            UpdateScore(_evt.currentScore);
             if (ScoreManager.HasInstance) UpdateStars(ScoreManager.Instance.GetStarCount());
         }
 
-        private void HandleBoardStateChanged(OnBoardStateChanged evt)
+        private void HandleBoardStateChanged(OnBoardStateChanged _evt)
         {
-            UpdateRemainingBalloons(evt.remainingBalloons);
+            UpdateRemainingBalloons(_evt.remainingBalloons);
         }
 
-        private void HandleHolderSelected(OnHolderSelected evt)
+        private void HandleHolderSelected(OnHolderSelected _evt)
         {
-            UpdateMagazineDisplay(evt.holderId, evt.magazineCount);
+            UpdateMagazineDisplay(_evt.holderId, _evt.magazineCount);
             RefreshOnRailCount();
         }
 
-        private void HandleMagazineEmpty(OnMagazineEmpty evt)
+        private void HandleMagazineEmpty(OnMagazineEmpty _evt)
         {
-            UpdateMagazineDisplay(evt.holderId, 0);
+            UpdateMagazineDisplay(_evt.holderId, 0);
             RefreshOnRailCount();
         }
 
-        private void HandleHolderReturned(OnHolderReturned evt)
+        private void HandleHolderReturned(OnHolderReturned _evt)
         {
-            UpdateMagazineDisplay(evt.holderId, evt.remainingMagazine);
+            UpdateMagazineDisplay(_evt.holderId, _evt.remainingMagazine);
             RefreshOnRailCount();
         }
 
-        private void HandleLevelLoaded(OnLevelLoaded evt)
+        private void HandleLevelLoaded(OnLevelLoaded _evt)
         {
-            SetLevelInfo(evt.levelId, evt.packageId);
+            SetLevelInfo(_evt.levelId, _evt.packageId);
             UpdateScore(0);
             UpdateStars(0);
             RefreshOnRailCount();
             if (CurrencyManager.HasInstance) UpdateGoldDisplay(CurrencyManager.Instance.Coins);
         }
 
-        private void HandleCoinChanged(OnCoinChanged evt)
+        private void HandleCoinChanged(OnCoinChanged _evt)
         {
-            UpdateGoldDisplay(evt.currentCoins);
+            UpdateGoldDisplay(_evt.currentCoins);
         }
 
         private void RefreshOnRailCount()
         {
             if (!HolderVisualManager.HasInstance) return;
-            int onRail = HolderVisualManager.Instance.GetOnRailCount();
-            int max = HolderVisualManager.Instance.GetMaxOnRail();
-            UpdateHolderInfo(onRail, max);
+            int _onRail = HolderVisualManager.Instance.GetOnRailCount();
+            int _max = HolderVisualManager.Instance.GetMaxOnRail();
+            UpdateHolderInfo(_onRail, _max);
         }
 
         #endregion

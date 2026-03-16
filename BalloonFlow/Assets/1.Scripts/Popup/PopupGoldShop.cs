@@ -4,165 +4,162 @@ using UnityEngine.UI;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Gold shop popup view. Loaded from Resources/Popup/PopupGoldShop prefab.
-    /// Shared between Lobby and InGame scenes.
-    /// Handles dynamic shop item creation from ShopManager products.
-    /// All child references wired via UIPrefabBuilder at editor-time.
+    /// 골드 상점 팝업. Resources/Popup/PopupGoldShop 프리팹에서 로드.
+    /// Lobby, InGame 공용.
     /// </summary>
-    public class PopupGoldShop : MonoBehaviour
+    public class PopupGoldShop : UIBase
     {
+        [Header("[버튼]")]
         [SerializeField] private Button _closeButton;
+
+        [Header("[상품 리스트 부모]")]
         [SerializeField] private Transform _contentRoot;
 
-        private CanvasGroup _canvasGroup;
         private Font _font;
 
         public Button CloseButton => _closeButton;
         public Transform ContentRoot => _contentRoot;
 
-        private void Awake()
+        protected override void Awake()
         {
-            _canvasGroup = GetComponent<CanvasGroup>();
+            base.Awake();
             _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (_font == null) _font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             if (_font == null) _font = Font.CreateDynamicFontFromOSFont("Arial", 14);
         }
 
-        public void Show()
+        /// <summary>열기 시 상품 리스트 빌드</summary>
+        public override void OpenUI()
         {
             BuildItems();
-            if (_canvasGroup == null) return;
-            _canvasGroup.alpha = 1f;
-            _canvasGroup.interactable = true;
-            _canvasGroup.blocksRaycasts = true;
-            gameObject.SetActive(true);
+            base.OpenUI();
         }
 
-        public void Hide()
-        {
-            if (_canvasGroup == null) return;
-            _canvasGroup.alpha = 0f;
-            _canvasGroup.interactable = false;
-            _canvasGroup.blocksRaycasts = false;
-        }
+        #region 상품 리스트 빌드
 
         public void BuildItems()
         {
             if (_contentRoot == null) return;
 
-            // Clear existing
+            // 기존 아이템 제거
             for (int i = _contentRoot.childCount - 1; i >= 0; i--)
                 Destroy(_contentRoot.GetChild(i).gameObject);
 
             if (!ShopManager.HasInstance) return;
 
-            ShopProduct[] products = ShopManager.Instance.GetProducts();
-            float yOffset = 0f;
-            const float itemHeight = 90f;
-            const float spacing = 8f;
+            ShopProduct[] _products = ShopManager.Instance.GetProducts();
+            float _yOffset = 0f;
+            const float ITEM_HEIGHT = 90f;
+            const float SPACING = 8f;
 
-            foreach (ShopProduct product in products)
+            foreach (ShopProduct _product in _products)
             {
-                if (product.currencyType != "coin" && product.currencyType != "iap") continue;
+                if (_product.currencyType != "coin" && _product.currencyType != "iap") continue;
 
-                var itemGO = new GameObject($"Item_{product.productId}");
-                itemGO.layer = LayerMask.NameToLayer("UI");
-                itemGO.transform.SetParent(_contentRoot, false);
-                var rt = itemGO.AddComponent<RectTransform>();
-                rt.anchorMin = new Vector2(0, 1);
-                rt.anchorMax = new Vector2(1, 1);
-                rt.pivot = new Vector2(0.5f, 1);
-                rt.offsetMin = new Vector2(20, yOffset - itemHeight);
-                rt.offsetMax = new Vector2(-20, yOffset);
-                var img = itemGO.AddComponent<Image>();
-                img.color = new Color(0.12f, 0.14f, 0.24f);
-                img.raycastTarget = false;
+                var _itemGO = new GameObject($"Item_{_product.productId}");
+                _itemGO.layer = LayerMask.NameToLayer("UI");
+                _itemGO.transform.SetParent(_contentRoot, false);
+                var _rt = _itemGO.AddComponent<RectTransform>();
+                _rt.anchorMin = new Vector2(0, 1);
+                _rt.anchorMax = new Vector2(1, 1);
+                _rt.pivot = new Vector2(0.5f, 1);
+                _rt.offsetMin = new Vector2(20, _yOffset - ITEM_HEIGHT);
+                _rt.offsetMax = new Vector2(-20, _yOffset);
+                var _img = _itemGO.AddComponent<Image>();
+                _img.color = new Color(0.12f, 0.14f, 0.24f);
+                _img.raycastTarget = false;
 
-                // Product name
-                CreateItemText(itemGO.transform, "Name", product.displayName, 22, Color.white,
+                // 상품명
+                CreateItemText(_itemGO.transform, "Name", _product.displayName, 22, Color.white,
                     new Vector2(0, 0.5f), new Vector2(0.6f, 0.5f), new Vector2(0, 0.5f),
                     new Vector2(10, -15), new Vector2(0, 15), TextAnchor.MiddleLeft);
 
-                // Description
-                CreateItemText(itemGO.transform, "Desc", product.description, 14,
+                // 설명
+                CreateItemText(_itemGO.transform, "Desc", _product.description, 14,
                     new Color(0.7f, 0.7f, 0.8f),
                     new Vector2(0, 0.5f), new Vector2(0.6f, 0.5f), new Vector2(0, 0.5f),
                     new Vector2(10, -30), new Vector2(0, -8), TextAnchor.MiddleLeft);
 
-                // Buy button
-                string buyLabel = product.currencyType == "iap" ? product.priceDisplay : $"{product.coinPrice}";
-                var buyBtn = CreateBuyButton(itemGO.transform, buyLabel);
+                // 구매 버튼
+                string _buyLabel = _product.currencyType == "iap" ? _product.priceDisplay : $"{_product.coinPrice}";
+                var _buyBtn = CreateBuyButton(_itemGO.transform, _buyLabel);
 
-                string capturedId = product.productId;
-                buyBtn.onClick.AddListener(() =>
+                string _capturedId = _product.productId;
+                _buyBtn.onClick.AddListener(() =>
                 {
                     if (ShopManager.HasInstance)
                     {
-                        ShopManager.Instance.PurchaseProduct(capturedId);
+                        ShopManager.Instance.PurchaseProduct(_capturedId);
                         if (CurrencyManager.HasInstance)
                             EventBus.Publish(new OnCoinChanged { currentCoins = CurrencyManager.Instance.Coins });
                     }
                 });
 
-                yOffset -= (itemHeight + spacing);
+                _yOffset -= (ITEM_HEIGHT + SPACING);
             }
         }
 
-        private void CreateItemText(Transform parent, string name, string content, int fontSize,
-            Color color, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
-            Vector2 offsetMin, Vector2 offsetMax, TextAnchor alignment)
+        #endregion
+
+        #region Helpers
+
+        private void CreateItemText(Transform _parent, string _name, string _content, int _fontSize,
+            Color _color, Vector2 _anchorMin, Vector2 _anchorMax, Vector2 _pivot,
+            Vector2 _offsetMin, Vector2 _offsetMax, TextAnchor _alignment)
         {
-            var go = new GameObject(name);
-            go.layer = LayerMask.NameToLayer("UI");
-            go.transform.SetParent(parent, false);
-            var rt = go.AddComponent<RectTransform>();
-            rt.anchorMin = anchorMin;
-            rt.anchorMax = anchorMax;
-            rt.pivot = pivot;
-            rt.offsetMin = offsetMin;
-            rt.offsetMax = offsetMax;
-            var t = go.AddComponent<Text>();
-            t.text = content;
-            t.fontSize = fontSize;
-            t.font = _font;
-            t.color = color;
-            t.alignment = alignment;
-            t.raycastTarget = false;
+            var _go = new GameObject(_name);
+            _go.layer = LayerMask.NameToLayer("UI");
+            _go.transform.SetParent(_parent, false);
+            var _rt = _go.AddComponent<RectTransform>();
+            _rt.anchorMin = _anchorMin;
+            _rt.anchorMax = _anchorMax;
+            _rt.pivot = _pivot;
+            _rt.offsetMin = _offsetMin;
+            _rt.offsetMax = _offsetMax;
+            var _t = _go.AddComponent<Text>();
+            _t.text = _content;
+            _t.fontSize = _fontSize;
+            _t.font = _font;
+            _t.color = _color;
+            _t.alignment = _alignment;
+            _t.raycastTarget = false;
         }
 
-        private Button CreateBuyButton(Transform parent, string label)
+        private Button CreateBuyButton(Transform _parent, string _label)
         {
-            var go = new GameObject("BuyBtn");
-            go.layer = LayerMask.NameToLayer("UI");
-            go.transform.SetParent(parent, false);
-            var rt = go.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(1, 0.5f);
-            rt.anchorMax = new Vector2(1, 0.5f);
-            rt.pivot = new Vector2(1, 0.5f);
-            rt.anchoredPosition = new Vector2(-10, 0);
-            rt.sizeDelta = new Vector2(120, 50);
-            var img = go.AddComponent<Image>();
-            img.color = new Color(0.2f, 0.65f, 0.9f);
-            var btn = go.AddComponent<Button>();
+            var _go = new GameObject("BuyBtn");
+            _go.layer = LayerMask.NameToLayer("UI");
+            _go.transform.SetParent(_parent, false);
+            var _rt = _go.AddComponent<RectTransform>();
+            _rt.anchorMin = new Vector2(1, 0.5f);
+            _rt.anchorMax = new Vector2(1, 0.5f);
+            _rt.pivot = new Vector2(1, 0.5f);
+            _rt.anchoredPosition = new Vector2(-10, 0);
+            _rt.sizeDelta = new Vector2(120, 50);
+            var _img = _go.AddComponent<Image>();
+            _img.color = new Color(0.2f, 0.65f, 0.9f);
+            var _btn = _go.AddComponent<Button>();
 
-            var lblGO = new GameObject("Label");
-            lblGO.layer = LayerMask.NameToLayer("UI");
-            lblGO.transform.SetParent(go.transform, false);
-            var lblRT = lblGO.AddComponent<RectTransform>();
-            lblRT.anchorMin = Vector2.zero;
-            lblRT.anchorMax = Vector2.one;
-            lblRT.offsetMin = Vector2.zero;
-            lblRT.offsetMax = Vector2.zero;
-            var t = lblGO.AddComponent<Text>();
-            t.text = label;
-            t.fontSize = 18;
-            t.font = _font;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleCenter;
-            t.fontStyle = FontStyle.Bold;
-            t.raycastTarget = false;
+            var _lblGO = new GameObject("Label");
+            _lblGO.layer = LayerMask.NameToLayer("UI");
+            _lblGO.transform.SetParent(_go.transform, false);
+            var _lblRT = _lblGO.AddComponent<RectTransform>();
+            _lblRT.anchorMin = Vector2.zero;
+            _lblRT.anchorMax = Vector2.one;
+            _lblRT.offsetMin = Vector2.zero;
+            _lblRT.offsetMax = Vector2.zero;
+            var _t = _lblGO.AddComponent<Text>();
+            _t.text = _label;
+            _t.fontSize = 18;
+            _t.font = _font;
+            _t.color = Color.white;
+            _t.alignment = TextAnchor.MiddleCenter;
+            _t.fontStyle = FontStyle.Bold;
+            _t.raycastTarget = false;
 
-            return btn;
+            return _btn;
         }
+
+        #endregion
     }
 }

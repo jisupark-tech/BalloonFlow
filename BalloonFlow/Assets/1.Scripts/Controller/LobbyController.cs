@@ -3,35 +3,49 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Lobby scene controller. Loads UILobby, PopupSettings, PopupGoldShop prefabs.
-    /// Wires button events and manages popup show/hide.
+    /// Lobby 씬 컨트롤러.
+    /// - GameManager.InitLobby() → 경제/상점/레벨 매니저 초기화
+    /// - UIManager.OpenUI로 UILobby, PopupSettings, PopupGoldShop 로드
+    /// - 버튼 이벤트 직접 연결
     /// </summary>
     public class LobbyController : MonoBehaviour
     {
-        private const string LOBBY_PREFAB    = "UI/UILobby";
-        private const string SETTINGS_PREFAB = "Popup/PopupSettings";
-        private const string GOLDSHOP_PREFAB = "Popup/PopupGoldShop";
-
         private UILobby _lobby;
-        private PopupSettings _settingsPopup;
-        private PopupGoldShop _goldShopPopup;
+        private PopupSettings _settings;
+        private PopupGoldShop _goldShop;
 
-        private void Awake()
+        void Start()
         {
+            // Safety: 직접 씬 로드 테스트용
+            if (!GameManager.HasInstance)
+            {
+                var _go = new GameObject("GameManager");
+                _go.AddComponent<GameManager>();
+            }
+
+            // Lobby 매니저 초기화
+            GameManager.Instance.InitLobby();
+
+            // 카메라 설정
+            if (CameraManager.HasInstance)
+                CameraManager.Instance.ConfigureLobby();
+
+            // 씬 캔버스 등록
+            var _canvasGO = GameObject.Find("Canvas");
+            if (_canvasGO != null && UIManager.HasInstance)
+                UIManager.Instance.SetSceneCanvas(_canvasGO.transform);
+
+            // UI 로드
             LoadUI();
-        }
-
-        private void Start()
-        {
             RefreshDisplay();
         }
 
-        private void OnEnable()
+        void OnEnable()
         {
             EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
         }
 
-        private void OnDisable()
+        void OnDisable()
         {
             EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
 
@@ -41,115 +55,103 @@ namespace BalloonFlow
                 if (_lobby.SettingsButton != null) _lobby.SettingsButton.onClick.RemoveListener(OnSettingsClicked);
                 if (_lobby.CoinButton != null) _lobby.CoinButton.onClick.RemoveListener(OnCoinClicked);
             }
-            if (_settingsPopup != null && _settingsPopup.CloseButton != null)
-                _settingsPopup.CloseButton.onClick.RemoveListener(OnSettingsCloseClicked);
-            if (_goldShopPopup != null && _goldShopPopup.CloseButton != null)
-                _goldShopPopup.CloseButton.onClick.RemoveListener(OnGoldShopCloseClicked);
+            if (_settings != null && _settings.CloseButton != null)
+                _settings.CloseButton.onClick.RemoveListener(OnSettingsClose);
+            if (_goldShop != null && _goldShop.CloseButton != null)
+                _goldShop.CloseButton.onClick.RemoveListener(OnGoldShopClose);
         }
 
-        private void LoadUI()
+        #region UI 로드
+
+        void LoadUI()
         {
-            Canvas canvas = FindAnyObjectByType<Canvas>();
-            if (canvas == null) return;
-            Transform root = canvas.transform;
+            if (!UIManager.HasInstance) return;
 
             // UILobby
-            var lobbyPrefab = Resources.Load<GameObject>(LOBBY_PREFAB);
-            if (lobbyPrefab != null)
+            _lobby = UIManager.Instance.OpenUI<UILobby>("UI/UILobby");
+            if (_lobby != null)
             {
-                var go = Instantiate(lobbyPrefab, root);
-                _lobby = go.GetComponent<UILobby>();
-                WireLobbyButtons();
-            }
-            else
-            {
-                Debug.LogError($"[LobbyController] Prefab not found: {LOBBY_PREFAB}");
+                if (_lobby.PlayButton != null) _lobby.PlayButton.onClick.AddListener(OnPlayClicked);
+                if (_lobby.SettingsButton != null) _lobby.SettingsButton.onClick.AddListener(OnSettingsClicked);
+                if (_lobby.CoinButton != null) _lobby.CoinButton.onClick.AddListener(OnCoinClicked);
             }
 
-            // PopupSettings
-            var settingsPrefab = Resources.Load<GameObject>(SETTINGS_PREFAB);
-            if (settingsPrefab != null)
+            // PopupSettings (로드 후 숨김)
+            _settings = UIManager.Instance.OpenUI<PopupSettings>("Popup/PopupSettings");
+            if (_settings != null)
             {
-                var go = Instantiate(settingsPrefab, root);
-                _settingsPopup = go.GetComponent<PopupSettings>();
-                _settingsPopup.Hide();
-                if (_settingsPopup.CloseButton != null)
-                    _settingsPopup.CloseButton.onClick.AddListener(OnSettingsCloseClicked);
+                _settings.CloseUI();
+                if (_settings.CloseButton != null)
+                    _settings.CloseButton.onClick.AddListener(OnSettingsClose);
             }
 
-            // PopupGoldShop
-            var goldShopPrefab = Resources.Load<GameObject>(GOLDSHOP_PREFAB);
-            if (goldShopPrefab != null)
+            // PopupGoldShop (로드 후 숨김)
+            _goldShop = UIManager.Instance.OpenUI<PopupGoldShop>("Popup/PopupGoldShop");
+            if (_goldShop != null)
             {
-                var go = Instantiate(goldShopPrefab, root);
-                _goldShopPopup = go.GetComponent<PopupGoldShop>();
-                _goldShopPopup.Hide();
-                if (_goldShopPopup.CloseButton != null)
-                    _goldShopPopup.CloseButton.onClick.AddListener(OnGoldShopCloseClicked);
+                _goldShop.CloseUI();
+                if (_goldShop.CloseButton != null)
+                    _goldShop.CloseButton.onClick.AddListener(OnGoldShopClose);
             }
         }
 
-        private void WireLobbyButtons()
-        {
-            if (_lobby == null) return;
-            if (_lobby.PlayButton != null) _lobby.PlayButton.onClick.AddListener(OnPlayClicked);
-            if (_lobby.SettingsButton != null) _lobby.SettingsButton.onClick.AddListener(OnSettingsClicked);
-            if (_lobby.CoinButton != null) _lobby.CoinButton.onClick.AddListener(OnCoinClicked);
-        }
-
-        private void RefreshDisplay()
+        void RefreshDisplay()
         {
             if (_lobby == null) return;
 
             if (CurrencyManager.HasInstance)
                 _lobby.SetCoinText(CurrencyManager.Instance.Coins);
 
-            int currentStage = 1;
+            int _stage = 1;
             if (LevelManager.HasInstance)
             {
-                int highest = LevelManager.Instance.GetHighestCompletedLevel();
-                currentStage = highest > 0 ? highest + 1 : 1;
+                int _highest = LevelManager.Instance.GetHighestCompletedLevel();
+                _stage = _highest > 0 ? _highest + 1 : 1;
             }
-            _lobby.SetStageText(currentStage);
+            _lobby.SetStageText(_stage);
         }
 
-        // ── Button Handlers ──
+        #endregion
 
-        private void OnPlayClicked()
+        #region 버튼 이벤트
+
+        void OnPlayClicked()
         {
             if (!GameManager.HasInstance) return;
-            int levelId = 1;
+            int _levelId = 1;
             if (LevelManager.HasInstance)
             {
-                int highest = LevelManager.Instance.GetHighestCompletedLevel();
-                levelId = highest > 0 ? highest + 1 : 1;
+                int _highest = LevelManager.Instance.GetHighestCompletedLevel();
+                _levelId = _highest > 0 ? _highest + 1 : 1;
             }
-            GameManager.Instance.StartLevel(levelId);
+            GameManager.Instance.StartLevel(_levelId);
         }
 
-        private void OnSettingsClicked()
+        void OnSettingsClicked()
         {
-            if (_settingsPopup != null) _settingsPopup.Show();
+            if (_settings != null) _settings.OpenUI();
         }
 
-        private void OnSettingsCloseClicked()
+        void OnSettingsClose()
         {
-            if (_settingsPopup != null) _settingsPopup.Hide();
+            if (_settings != null) _settings.CloseUI();
         }
 
-        private void OnCoinClicked()
+        void OnCoinClicked()
         {
-            if (_goldShopPopup != null) _goldShopPopup.Show();
+            if (_goldShop != null) _goldShop.OpenUI();
         }
 
-        private void OnGoldShopCloseClicked()
+        void OnGoldShopClose()
         {
-            if (_goldShopPopup != null) _goldShopPopup.Hide();
+            if (_goldShop != null) _goldShop.CloseUI();
         }
 
-        private void HandleCoinChanged(OnCoinChanged evt)
+        void HandleCoinChanged(OnCoinChanged _evt)
         {
-            if (_lobby != null) _lobby.SetCoinText(evt.currentCoins);
+            if (_lobby != null) _lobby.SetCoinText(_evt.currentCoins);
         }
+
+        #endregion
     }
 }
