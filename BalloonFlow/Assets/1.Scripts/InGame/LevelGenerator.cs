@@ -128,7 +128,7 @@ namespace BalloonFlow
             int packageId = Mathf.Clamp(((levelId - 1) / LevelsPerPackage) + 1, 1, TotalPackages);
             int positionInPackage = ((levelId - 1) % LevelsPerPackage) + 1;
 
-            string difficultyPurpose = DeterminePurpose(packageId, positionInPackage);
+            DifficultyPurpose difficultyPurpose = DeterminePurpose(packageId, positionInPackage);
             int queueColumns = CalculateQueueColumns(difficultyPurpose, rng);
             float targetClearRate = CalculateTargetClearRate(packageId, difficultyPurpose, rng);
 
@@ -614,22 +614,22 @@ namespace BalloonFlow
         /// Remaining: Normal
         /// PKG 1 exception: Pos 1-3 tutorial, only Pos 19 is hard.
         /// </summary>
-        private string DeterminePurpose(int packageId, int posInPackage)
+        private DifficultyPurpose DeterminePurpose(int packageId, int posInPackage)
         {
             if (packageId == 1)
             {
-                if (posInPackage <= 3) return "tutorial";
-                if (posInPackage == 19) return "hard";
-                if (posInPackage == 20) return "rest";
-                return "normal";
+                if (posInPackage <= 3) return DifficultyPurpose.Tutorial;
+                if (posInPackage == 19) return DifficultyPurpose.Hard;
+                if (posInPackage == 20) return DifficultyPurpose.Rest;
+                return DifficultyPurpose.Normal;
             }
 
-            if (posInPackage == 1 || posInPackage == 11) return "tutorial";
-            if (posInPackage == 4 || posInPackage == 14) return "hard";
-            if (posInPackage == 9) return "super_hard";
-            if (posInPackage == 19) return "super_hard";
-            if (posInPackage == 5 || posInPackage == 10 || posInPackage == 15 || posInPackage == 20) return "rest";
-            return "normal";
+            if (posInPackage == 1 || posInPackage == 11) return DifficultyPurpose.Tutorial;
+            if (posInPackage == 4 || posInPackage == 14) return DifficultyPurpose.Hard;
+            if (posInPackage == 9) return DifficultyPurpose.SuperHard;
+            if (posInPackage == 19) return DifficultyPurpose.SuperHard;
+            if (posInPackage == 5 || posInPackage == 10 || posInPackage == 15 || posInPackage == 20) return DifficultyPurpose.Rest;
+            return DifficultyPurpose.Normal;
         }
 
         #endregion
@@ -640,19 +640,19 @@ namespace BalloonFlow
         /// Calculates holder queue column count (2–5) based on difficulty purpose.
         /// Tutorial: always 2, Normal: 2-4, Hard/Super Hard: 3-5.
         /// </summary>
-        private int CalculateQueueColumns(string purpose, System.Random rng)
+        private int CalculateQueueColumns(DifficultyPurpose purpose, System.Random rng)
         {
             switch (purpose)
             {
-                case "tutorial":
+                case DifficultyPurpose.Tutorial:
                     return 2;
-                case "normal":
-                    return rng.Next(2, 5);   // 2, 3, or 4
-                case "rest":
-                    return rng.Next(2, 4);   // 2 or 3
-                case "hard":
-                case "super_hard":
-                    return rng.Next(3, 6);   // 3, 4, or 5
+                case DifficultyPurpose.Normal:
+                    return rng.Next(2, 5);
+                case DifficultyPurpose.Rest:
+                    return rng.Next(2, 4);
+                case DifficultyPurpose.Hard:
+                case DifficultyPurpose.SuperHard:
+                    return rng.Next(3, 6);
                 default:
                     return 3;
             }
@@ -667,7 +667,7 @@ namespace BalloonFlow
         /// Tutorial: 0.88-0.95, Normal: 0.40-0.80 (decreasing by PKG),
         /// Hard: 0.20-0.60, Super Hard: 0.12-0.45, Rest: 0.60-0.90.
         /// </summary>
-        private float CalculateTargetClearRate(int packageId, string purpose, System.Random rng)
+        private float CalculateTargetClearRate(int packageId, DifficultyPurpose purpose, System.Random rng)
         {
             float pkgProgression = Mathf.Clamp01((packageId - 1f) / 14f); // 0.0 at PKG1, 1.0 at PKG15
 
@@ -676,24 +676,24 @@ namespace BalloonFlow
 
             switch (purpose)
             {
-                case "tutorial":
+                case DifficultyPurpose.Tutorial:
                     minRate = 0.88f;
                     maxRate = 0.95f;
                     break;
-                case "normal":
+                case DifficultyPurpose.Normal:
                     // Decreasing range as packages progress
                     minRate = Mathf.Lerp(0.60f, 0.40f, pkgProgression);
                     maxRate = Mathf.Lerp(0.80f, 0.55f, pkgProgression);
                     break;
-                case "hard":
+                case DifficultyPurpose.Hard:
                     minRate = Mathf.Lerp(0.40f, 0.20f, pkgProgression);
                     maxRate = Mathf.Lerp(0.60f, 0.35f, pkgProgression);
                     break;
-                case "super_hard":
+                case DifficultyPurpose.SuperHard:
                     minRate = Mathf.Lerp(0.30f, 0.12f, pkgProgression);
                     maxRate = Mathf.Lerp(0.45f, 0.20f, pkgProgression);
                     break;
-                case "rest":
+                case DifficultyPurpose.Rest:
                     minRate = 0.60f;
                     maxRate = 0.90f;
                     break;

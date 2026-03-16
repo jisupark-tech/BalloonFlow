@@ -17,7 +17,7 @@ namespace BalloonFlow
         private const float BoardCenterX = 0f;
         private const float BoardCenterZ = 2f;
         private const float RailPadding = 1.5f;
-        private const float MagazineSurplusRatio = 1.25f;
+        private const float MagazineSurplusRatio = 1.0f;
         private const int HolderQueueSlotCount = 5;
 
         #endregion
@@ -32,7 +32,7 @@ namespace BalloonFlow
             public int levelId;
             public int packageId;
             public int positionInPkg;
-            public string purpose;     // tutorial, normal, hard, super_hard, rest, intro
+            public DifficultyPurpose purpose;
             public int numColors;
             public int gridCols;
             public int gridRows;
@@ -47,66 +47,66 @@ namespace BalloonFlow
             {
                 // ═══ PACKAGE 1: LEARN (Levels 1-20) ═══
                 // Pos 1-2: Tutorial (2 colors, very small)
-                new LevelDef { levelId=1,  packageId=1, positionInPkg=1,  purpose="tutorial", numColors=2, gridCols=3, gridRows=3,  holderCount=6,  gimmick="",       gimmickRatio=0f },
-                new LevelDef { levelId=2,  packageId=1, positionInPkg=2,  purpose="tutorial", numColors=2, gridCols=3, gridRows=3,  holderCount=7,  gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=1,  packageId=1, positionInPkg=1,  purpose=DifficultyPurpose.Tutorial, numColors=2, gridCols=3, gridRows=3,  holderCount=6,  gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=2,  packageId=1, positionInPkg=2,  purpose=DifficultyPurpose.Tutorial, numColors=2, gridCols=3, gridRows=3,  holderCount=7,  gimmick="",       gimmickRatio=0f },
                 // Pos 3: Intro 3色 (reduced objects ~20-30%)
-                new LevelDef { levelId=3,  packageId=1, positionInPkg=3,  purpose="intro",    numColors=3, gridCols=4, gridRows=3,  holderCount=8,  gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=3,  packageId=1, positionInPkg=3,  purpose=DifficultyPurpose.Intro,    numColors=3, gridCols=4, gridRows=3,  holderCount=8,  gimmick="",       gimmickRatio=0f },
                 // Pos 4: Hard
-                new LevelDef { levelId=4,  packageId=1, positionInPkg=4,  purpose="hard",     numColors=3, gridCols=5, gridRows=4,  holderCount=12, gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=4,  packageId=1, positionInPkg=4,  purpose=DifficultyPurpose.Hard,     numColors=3, gridCols=5, gridRows=4,  holderCount=12, gimmick="",       gimmickRatio=0f },
                 // Pos 5: Rest
-                new LevelDef { levelId=5,  packageId=1, positionInPkg=5,  purpose="rest",     numColors=2, gridCols=3, gridRows=3,  holderCount=6,  gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=5,  packageId=1, positionInPkg=5,  purpose=DifficultyPurpose.Rest,     numColors=2, gridCols=3, gridRows=3,  holderCount=6,  gimmick="",       gimmickRatio=0f },
                 // Pos 6: Intro 4色
-                new LevelDef { levelId=6,  packageId=1, positionInPkg=6,  purpose="intro",    numColors=4, gridCols=4, gridRows=4,  holderCount=10, gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=6,  packageId=1, positionInPkg=6,  purpose=DifficultyPurpose.Intro,    numColors=4, gridCols=4, gridRows=4,  holderCount=10, gimmick="",       gimmickRatio=0f },
                 // Pos 7-8: Normal
-                new LevelDef { levelId=7,  packageId=1, positionInPkg=7,  purpose="normal",   numColors=4, gridCols=5, gridRows=4,  holderCount=12, gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=7,  packageId=1, positionInPkg=7,  purpose=DifficultyPurpose.Normal,   numColors=4, gridCols=5, gridRows=4,  holderCount=12, gimmick="",       gimmickRatio=0f },
                 // Pos 8: Intro 5色
-                new LevelDef { levelId=8,  packageId=1, positionInPkg=8,  purpose="intro",    numColors=5, gridCols=4, gridRows=4,  holderCount=10, gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=8,  packageId=1, positionInPkg=8,  purpose=DifficultyPurpose.Intro,    numColors=5, gridCols=4, gridRows=4,  holderCount=10, gimmick="",       gimmickRatio=0f },
                 // Pos 9: Hard
-                new LevelDef { levelId=9,  packageId=1, positionInPkg=9,  purpose="hard",     numColors=5, gridCols=5, gridRows=5,  holderCount=14, gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=9,  packageId=1, positionInPkg=9,  purpose=DifficultyPurpose.Hard,     numColors=5, gridCols=5, gridRows=5,  holderCount=14, gimmick="",       gimmickRatio=0f },
                 // Pos 10: Rest
-                new LevelDef { levelId=10, packageId=1, positionInPkg=10, purpose="rest",     numColors=3, gridCols=3, gridRows=3,  holderCount=6,  gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=10, packageId=1, positionInPkg=10, purpose=DifficultyPurpose.Rest,     numColors=3, gridCols=3, gridRows=3,  holderCount=6,  gimmick="",       gimmickRatio=0f },
                 // Pos 11: Tutorial — Hidden gimmick intro (single gimmick only)
-                new LevelDef { levelId=11, packageId=1, positionInPkg=11, purpose="tutorial", numColors=4, gridCols=4, gridRows=4,  holderCount=10, gimmick="hidden", gimmickRatio=0.3f },
+                new LevelDef { levelId=11, packageId=1, positionInPkg=11, purpose=DifficultyPurpose.Tutorial, numColors=4, gridCols=4, gridRows=4,  holderCount=10, gimmick="hidden", gimmickRatio=0.3f },
                 // Pos 12: Normal
-                new LevelDef { levelId=12, packageId=1, positionInPkg=12, purpose="normal",   numColors=4, gridCols=5, gridRows=4,  holderCount=12, gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=12, packageId=1, positionInPkg=12, purpose=DifficultyPurpose.Normal,   numColors=4, gridCols=5, gridRows=4,  holderCount=12, gimmick="",       gimmickRatio=0f },
                 // Pos 13: Normal + Hidden
-                new LevelDef { levelId=13, packageId=1, positionInPkg=13, purpose="normal",   numColors=4, gridCols=5, gridRows=4,  holderCount=12, gimmick="hidden", gimmickRatio=0.25f },
+                new LevelDef { levelId=13, packageId=1, positionInPkg=13, purpose=DifficultyPurpose.Normal,   numColors=4, gridCols=5, gridRows=4,  holderCount=12, gimmick="hidden", gimmickRatio=0.25f },
                 // Pos 14: Normal
-                new LevelDef { levelId=14, packageId=1, positionInPkg=14, purpose="normal",   numColors=5, gridCols=5, gridRows=5,  holderCount=14, gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=14, packageId=1, positionInPkg=14, purpose=DifficultyPurpose.Normal,   numColors=5, gridCols=5, gridRows=5,  holderCount=14, gimmick="",       gimmickRatio=0f },
                 // Pos 15: Rest
-                new LevelDef { levelId=15, packageId=1, positionInPkg=15, purpose="rest",     numColors=3, gridCols=4, gridRows=3,  holderCount=8,  gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=15, packageId=1, positionInPkg=15, purpose=DifficultyPurpose.Rest,     numColors=3, gridCols=4, gridRows=3,  holderCount=8,  gimmick="",       gimmickRatio=0f },
                 // Pos 16: Normal + Hidden
-                new LevelDef { levelId=16, packageId=1, positionInPkg=16, purpose="normal",   numColors=5, gridCols=5, gridRows=5,  holderCount=14, gimmick="hidden", gimmickRatio=0.3f },
+                new LevelDef { levelId=16, packageId=1, positionInPkg=16, purpose=DifficultyPurpose.Normal,   numColors=5, gridCols=5, gridRows=5,  holderCount=14, gimmick="hidden", gimmickRatio=0.3f },
                 // Pos 17: Normal
-                new LevelDef { levelId=17, packageId=1, positionInPkg=17, purpose="normal",   numColors=5, gridCols=6, gridRows=5,  holderCount=16, gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=17, packageId=1, positionInPkg=17, purpose=DifficultyPurpose.Normal,   numColors=5, gridCols=6, gridRows=5,  holderCount=16, gimmick="",       gimmickRatio=0f },
                 // Pos 18: Normal + Hidden
-                new LevelDef { levelId=18, packageId=1, positionInPkg=18, purpose="normal",   numColors=5, gridCols=6, gridRows=5,  holderCount=16, gimmick="hidden", gimmickRatio=0.35f },
+                new LevelDef { levelId=18, packageId=1, positionInPkg=18, purpose=DifficultyPurpose.Normal,   numColors=5, gridCols=6, gridRows=5,  holderCount=16, gimmick="hidden", gimmickRatio=0.35f },
                 // Pos 19: Hard + Hidden (first expected failure)
-                new LevelDef { levelId=19, packageId=1, positionInPkg=19, purpose="hard",     numColors=5, gridCols=6, gridRows=6,  holderCount=18, gimmick="hidden", gimmickRatio=0.4f },
+                new LevelDef { levelId=19, packageId=1, positionInPkg=19, purpose=DifficultyPurpose.Hard,     numColors=5, gridCols=6, gridRows=6,  holderCount=18, gimmick="hidden", gimmickRatio=0.4f },
                 // Pos 20: Rest (PKG1 close → smooth transition)
-                new LevelDef { levelId=20, packageId=1, positionInPkg=20, purpose="rest",     numColors=3, gridCols=4, gridRows=3,  holderCount=8,  gimmick="",       gimmickRatio=0f },
+                new LevelDef { levelId=20, packageId=1, positionInPkg=20, purpose=DifficultyPurpose.Rest,     numColors=3, gridCols=4, gridRows=3,  holderCount=8,  gimmick="",       gimmickRatio=0f },
 
                 // ═══ PACKAGE 2: GROW (Levels 21-30) — first 10 of PKG2 ═══
                 // Pos 1: Tutorial — Spawner_transparent intro
-                new LevelDef { levelId=21, packageId=2, positionInPkg=1,  purpose="tutorial", numColors=4, gridCols=5, gridRows=4,  holderCount=12, gimmick="spawner_transparent", gimmickRatio=0.15f },
+                new LevelDef { levelId=21, packageId=2, positionInPkg=1,  purpose=DifficultyPurpose.Tutorial, numColors=4, gridCols=5, gridRows=4,  holderCount=12, gimmick="spawner_transparent", gimmickRatio=0.15f },
                 // Pos 2: Normal
-                new LevelDef { levelId=22, packageId=2, positionInPkg=2,  purpose="normal",   numColors=5, gridCols=5, gridRows=5,  holderCount=14, gimmick="",                    gimmickRatio=0f },
+                new LevelDef { levelId=22, packageId=2, positionInPkg=2,  purpose=DifficultyPurpose.Normal,   numColors=5, gridCols=5, gridRows=5,  holderCount=14, gimmick="",                    gimmickRatio=0f },
                 // Pos 3: Normal + Spawner
-                new LevelDef { levelId=23, packageId=2, positionInPkg=3,  purpose="normal",   numColors=5, gridCols=6, gridRows=5,  holderCount=16, gimmick="spawner_transparent", gimmickRatio=0.1f },
+                new LevelDef { levelId=23, packageId=2, positionInPkg=3,  purpose=DifficultyPurpose.Normal,   numColors=5, gridCols=6, gridRows=5,  holderCount=16, gimmick="spawner_transparent", gimmickRatio=0.1f },
                 // Pos 4: Hard + Hidden
-                new LevelDef { levelId=24, packageId=2, positionInPkg=4,  purpose="hard",     numColors=5, gridCols=6, gridRows=6,  holderCount=18, gimmick="hidden",              gimmickRatio=0.35f },
+                new LevelDef { levelId=24, packageId=2, positionInPkg=4,  purpose=DifficultyPurpose.Hard,     numColors=5, gridCols=6, gridRows=6,  holderCount=18, gimmick="hidden",              gimmickRatio=0.35f },
                 // Pos 5: Rest
-                new LevelDef { levelId=25, packageId=2, positionInPkg=5,  purpose="rest",     numColors=4, gridCols=4, gridRows=4,  holderCount=10, gimmick="",                    gimmickRatio=0f },
+                new LevelDef { levelId=25, packageId=2, positionInPkg=5,  purpose=DifficultyPurpose.Rest,     numColors=4, gridCols=4, gridRows=4,  holderCount=10, gimmick="",                    gimmickRatio=0f },
                 // Pos 6: Intro 6色
-                new LevelDef { levelId=26, packageId=2, positionInPkg=6,  purpose="intro",    numColors=6, gridCols=5, gridRows=5,  holderCount=14, gimmick="",                    gimmickRatio=0f },
+                new LevelDef { levelId=26, packageId=2, positionInPkg=6,  purpose=DifficultyPurpose.Intro,    numColors=6, gridCols=5, gridRows=5,  holderCount=14, gimmick="",                    gimmickRatio=0f },
                 // Pos 7: Normal + Hidden
-                new LevelDef { levelId=27, packageId=2, positionInPkg=7,  purpose="normal",   numColors=5, gridCols=6, gridRows=5,  holderCount=16, gimmick="hidden",              gimmickRatio=0.3f },
+                new LevelDef { levelId=27, packageId=2, positionInPkg=7,  purpose=DifficultyPurpose.Normal,   numColors=5, gridCols=6, gridRows=5,  holderCount=16, gimmick="hidden",              gimmickRatio=0.3f },
                 // Pos 8: Normal + Spawner
-                new LevelDef { levelId=28, packageId=2, positionInPkg=8,  purpose="normal",   numColors=6, gridCols=6, gridRows=6,  holderCount=18, gimmick="spawner_transparent", gimmickRatio=0.12f },
+                new LevelDef { levelId=28, packageId=2, positionInPkg=8,  purpose=DifficultyPurpose.Normal,   numColors=6, gridCols=6, gridRows=6,  holderCount=18, gimmick="spawner_transparent", gimmickRatio=0.12f },
                 // Pos 9: Normal + Hidden
-                new LevelDef { levelId=29, packageId=2, positionInPkg=9,  purpose="normal",   numColors=5, gridCols=7, gridRows=5,  holderCount=18, gimmick="hidden",              gimmickRatio=0.35f },
+                new LevelDef { levelId=29, packageId=2, positionInPkg=9,  purpose=DifficultyPurpose.Normal,   numColors=5, gridCols=7, gridRows=5,  holderCount=18, gimmick="hidden",              gimmickRatio=0.35f },
                 // Pos 10: Normal
-                new LevelDef { levelId=30, packageId=2, positionInPkg=10, purpose="normal",   numColors=6, gridCols=6, gridRows=6,  holderCount=20, gimmick="hidden",              gimmickRatio=0.3f },
+                new LevelDef { levelId=30, packageId=2, positionInPkg=10, purpose=DifficultyPurpose.Normal,   numColors=6, gridCols=6, gridRows=6,  holderCount=20, gimmick="hidden",              gimmickRatio=0.3f },
             };
         }
 
@@ -319,14 +319,23 @@ namespace BalloonFlow
             {
                 int color = kvp.Key;
                 List<int> indices = kvp.Value;
-                int needed = Mathf.CeilToInt(balloonsPerColor[color] * MagazineSurplusRatio);
-                int perH = Mathf.Max(1, needed / indices.Count);
-                int leftover = needed - (perH * indices.Count);
+                int needed = balloonsPerColor[color]; // exact match, no surplus
 
-                for (int i = 0; i < indices.Count; i++)
+                if (indices.Count == 0) continue;
+
+                int perH = needed / indices.Count;
+                int leftover = needed % indices.Count;
+
+                // Assign evenly, last holder absorbs remainder for exact total
+                int assigned = 0;
+                for (int i = 0; i < indices.Count - 1; i++)
                 {
-                    mags[indices[i]] = perH + (i < leftover ? 1 : 0);
+                    int mag = perH + (i < leftover ? 1 : 0);
+                    mags[indices[i]] = Mathf.Max(1, mag);
+                    assigned += mags[indices[i]];
                 }
+                int lastMag = needed - assigned;
+                mags[indices[indices.Count - 1]] = Mathf.Max(1, lastMag);
             }
 
             HolderSetup[] holders = new HolderSetup[holderColors.Count];
