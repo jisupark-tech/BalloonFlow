@@ -151,7 +151,7 @@ MonoBehaviour:
   Board:
     cellSpacing: 0.55
     balloonScale: 0.5
-    dartFlightTime: 0.036
+    dartFlightTime: 0.1
     dartRailSpeed: 5
     holderRailSpeed: 7
     maxOnRail: 9

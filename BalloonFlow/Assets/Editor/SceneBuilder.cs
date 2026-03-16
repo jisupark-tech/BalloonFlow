@@ -23,11 +23,15 @@ namespace BalloonFlow.Editor
     /// InGame 씬:
     ///   - SceneCanvas, EventSystem, GameBootstrap
     ///   - Directional Light, BoardPlatform
+    ///
+    /// MapMaker 씬:
+    ///   - EditorCamera (탑뷰), Directional Light, BoardPlatform
+    ///   - 레벨 에디터 전용 씬 (런타임 매니저 없음)
     /// </summary>
     [InitializeOnLoad]
     public static class SceneBuilder
     {
-        private const string PREFS_KEY = "BalloonFlow_SceneBuilt_v15";
+        private const string PREFS_KEY = "BalloonFlow_SceneBuilt_v16";
         private const int REF_WIDTH  = 1080;
         private const int REF_HEIGHT = 1920;
         private const string SCENES_FOLDER = "Assets/0.Scenes";
@@ -54,15 +58,17 @@ namespace BalloonFlow.Editor
         {
             EnsureFolder(SCENES_FOLDER);
 
-            string _titlePath  = SCENES_FOLDER + "/Title.unity";
-            string _lobbyPath  = SCENES_FOLDER + "/Lobby.unity";
-            string _inGamePath = SCENES_FOLDER + "/InGame.unity";
+            string _titlePath    = SCENES_FOLDER + "/Title.unity";
+            string _lobbyPath    = SCENES_FOLDER + "/Lobby.unity";
+            string _inGamePath   = SCENES_FOLDER + "/InGame.unity";
+            string _mapMakerPath = SCENES_FOLDER + "/MapMaker.unity";
 
             SetupTitleScene(_titlePath);
             SetupLobbyScene(_lobbyPath);
             SetupInGameScene(_inGamePath);
+            SetupMapMakerScene(_mapMakerPath);
 
-            // Build Settings 등록
+            // Build Settings 등록 (MapMaker는 에디터 전용 — 빌드에 포함하지 않음)
             EditorBuildSettings.scenes = new[]
             {
                 new EditorBuildSettingsScene(_titlePath, true),
@@ -165,6 +171,42 @@ namespace BalloonFlow.Editor
             EnsureCanvas("SceneCanvas");
             EnsureEventSystem();
             EnsureComponent<GameBootstrap>("GameBootstrap");
+
+            EditorSceneManager.SaveScene(_scene, _path);
+        }
+
+        // ═══════════════════════════════════════════
+        // MAPMAKER SCENE — 레벨 에디터 전용
+        // ═══════════════════════════════════════════
+
+        static void SetupMapMakerScene(string _path)
+        {
+            var _scene = OpenOrCreateScene(_path);
+
+            // 3D — 라이팅 + 보드 플랫폼
+            EnsureLighting();
+            EnsureBoardPlatform();
+
+            // EditorCamera — 탑뷰 (MapMakerController가 런타임에 viewport 조정)
+            var _camGO = GameObject.Find("EditorCamera");
+            if (_camGO == null) _camGO = new GameObject("EditorCamera");
+            _camGO.tag = "MainCamera";
+            var _cam = EnsureComponentOn<Camera>(_camGO);
+            _cam.orthographic = true;
+            _cam.orthographicSize = 6f;
+            _cam.clearFlags = CameraClearFlags.SolidColor;
+            _cam.backgroundColor = new Color(0.10f, 0.10f, 0.16f);
+            _cam.nearClipPlane = 0.1f;
+            _cam.farClipPlane = 50f;
+            _camGO.transform.position = new Vector3(0f, 15f, 2f);
+            _camGO.transform.eulerAngles = new Vector3(90f, 0f, 0f);
+            EnsureComponentOn<AudioListener>(_camGO);
+
+            // EventSystem — Canvas UI 인터랙션용
+            EnsureEventSystem();
+
+            // MapMakerController — Play 모드에서 Canvas UI + 페인팅 전담
+            EnsureComponent<MapMakerController>("MapMaker");
 
             EditorSceneManager.SaveScene(_scene, _path);
         }
