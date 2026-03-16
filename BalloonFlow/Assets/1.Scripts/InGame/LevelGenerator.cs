@@ -23,17 +23,17 @@ namespace BalloonFlow
         /// <summary>Maximum grid dimension for latest levels.</summary>
         private const int GridMaxSize = 10;
 
-        /// <summary>World-space distance between adjacent balloon cells.</summary>
-        private const float CellSpacing = 0.9f;
+        /// <summary>World-space distance between adjacent balloon cells. GameManager.Board에서 읽어옴.</summary>
+        private float CellSpacing => GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
 
-        /// <summary>Z offset for the board center (forward axis; leaves room for holders behind).</summary>
-        private const float BoardCenterZ = 2.0f;
+        /// <summary>Z offset for the board center.</summary>
+        private float BoardCenterZ => GameManager.HasInstance ? GameManager.Instance.Board.boardCenterZ : 2.0f;
 
         /// <summary>X offset for the board center.</summary>
-        private const float BoardCenterX = 0.0f;
+        private float BoardCenterX => GameManager.HasInstance ? GameManager.Instance.Board.boardCenterX : 0.0f;
 
         /// <summary>Padding between board edge and rail path.</summary>
-        private const float RailPadding = 1.5f;
+        private float RailPadding => GameManager.HasInstance ? GameManager.Instance.Board.railPadding : 1.5f;
 
         #endregion
 

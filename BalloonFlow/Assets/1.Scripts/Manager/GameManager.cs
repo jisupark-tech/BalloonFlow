@@ -5,6 +5,49 @@ using UnityEngine.SceneManagement;
 namespace BalloonFlow
 {
     /// <summary>
+    /// 보드 관련 수치를 Inspector에서 조절할 수 있는 설정 클래스.
+    /// GameManager.Board를 통해 전체 InGame 시스템에서 참조.
+    /// </summary>
+    [System.Serializable]
+    public class BoardConfig
+    {
+        [Header("[풍선 — Balloon]")]
+        [Tooltip("풍선 간 월드 간격 (작을수록 빈틈 없음)")]
+        public float cellSpacing = 0.55f;
+
+        [Tooltip("풍선 스케일 (0.2~1.0)")]
+        [Range(0.2f, 1.0f)]
+        public float balloonScale = 0.5f;
+
+        [Header("[다트 — Dart]")]
+        [Tooltip("다트 비행 시간 (초). 클수록 느림")]
+        public float dartFlightTime = 0.036f;
+
+        [Tooltip("다트 레일 이동 속도 (DartManager용)")]
+        public float dartRailSpeed = 5f;
+
+        [Header("[레일 — Rail]")]
+        [Tooltip("홀더 레일 이동 속도")]
+        public float holderRailSpeed = 7f;
+
+        [Tooltip("레일 위 최대 홀더 수")]
+        public int maxOnRail = 9;
+
+        [Tooltip("보드 가장자리 ~ 레일 간격")]
+        public float railPadding = 1.5f;
+
+        [Tooltip("레일 높이 (Y축)")]
+        public float railHeight = 0.5f;
+
+        [Header("[보드 — Board]")]
+        [Tooltip("보드 중심 X좌표")]
+        public float boardCenterX = 0f;
+
+        [Tooltip("보드 중심 Z좌표")]
+        public float boardCenterZ = 2f;
+    }
+
+    /// <summary>
     /// 게임 매니저. Title 씬에서 SceneBuilder가 배치, DontDestroyOnLoad.
     ///
     /// Init 흐름:
@@ -20,6 +63,13 @@ namespace BalloonFlow
         public const string SCENE_TITLE  = "Title";
         public const string SCENE_LOBBY  = "Lobby";
         public const string SCENE_INGAME = "InGame";
+
+        #endregion
+
+        #region Board Config
+
+        [Header("[Board Config — Inspector에서 수치 조절]")]
+        public BoardConfig Board = new BoardConfig();
 
         #endregion
 

@@ -70,6 +70,9 @@ namespace BalloonFlow
         // Scale multiplier for balloon visuals (set from LevelConfig)
         private float _balloonScale = DEFAULT_BALLOON_SCALE;
 
+        // Grid spacing for adjacency calculations (read from GameManager.Board)
+        private float _cellSpacing = 0.55f;
+
         private int _nextBalloonId;
         private int _currentLevelId;
 
@@ -88,6 +91,15 @@ namespace BalloonFlow
             _balloonScale = Mathf.Clamp(scale, 0.2f, 1.0f);
         }
 
+        /// <summary>
+        /// Sets the grid cell spacing used for adjacency calculations.
+        /// Must be called before SetupBalloons. GameManager.Board.cellSpacing 기준.
+        /// </summary>
+        public void SetCellSpacing(float spacing)
+        {
+            _cellSpacing = Mathf.Max(0.1f, spacing);
+        }
+
         #endregion
 
         #region Lifecycle
@@ -96,6 +108,13 @@ namespace BalloonFlow
         {
             _nextBalloonId = 1;
             _currentLevelId = -1;
+
+            // GameManager.Board에서 설정값 읽기
+            if (GameManager.HasInstance)
+            {
+                _cellSpacing = GameManager.Instance.Board.cellSpacing;
+                _balloonScale = GameManager.Instance.Board.balloonScale;
+            }
         }
 
         private void OnEnable()
@@ -607,15 +626,15 @@ namespace BalloonFlow
 
         /// <summary>
         /// Converts a world-space Vector3 position to a grid cell key.
-        /// Assumes 1-unit grid spacing; adjust rounding if grid uses different spacing.
+        /// cellSpacing 기준으로 나누어 정수 그리드 좌표로 변환.
         /// </summary>
-        private static Vector3Int ToGridKey(Vector3 worldPos)
+        private Vector3Int ToGridKey(Vector3 worldPos)
         {
-            // Y is height (~0.5), not a grid axis; X and Z define the grid plane
+            // cellSpacing으로 나누어 인접 셀이 정확히 ±1 차이가 되도록 함
             return new Vector3Int(
-                Mathf.RoundToInt(worldPos.x),
+                Mathf.RoundToInt(worldPos.x / _cellSpacing),
                 0,
-                Mathf.RoundToInt(worldPos.z)
+                Mathf.RoundToInt(worldPos.z / _cellSpacing)
             );
         }
 
