@@ -415,24 +415,19 @@ namespace BalloonFlow
         /// <summary>
         /// Returns the buffer multiplier for a given difficulty purpose string.
         /// </summary>
-        private static float GetBufferMultiplier(string difficultyPurpose)
+        private static float GetBufferMultiplier(DifficultyPurpose difficultyPurpose)
         {
-            if (string.IsNullOrEmpty(difficultyPurpose))
+            switch (difficultyPurpose)
             {
-                return BUFFER_DEFAULT;
-            }
-
-            switch (difficultyPurpose.Trim().ToLowerInvariant())
-            {
-                case "tutorial":
+                case DifficultyPurpose.Tutorial:
                     return BUFFER_TUTORIAL;
-                case "normal":
+                case DifficultyPurpose.Normal:
                     return BUFFER_NORMAL;
-                case "hard":
+                case DifficultyPurpose.Hard:
                     return BUFFER_HARD;
-                case "super_hard":
+                case DifficultyPurpose.SuperHard:
                     return BUFFER_SUPER_HARD;
-                case "rest":
+                case DifficultyPurpose.Rest:
                     return BUFFER_REST;
                 default:
                     return BUFFER_DEFAULT;

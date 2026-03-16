@@ -69,7 +69,7 @@ namespace BalloonFlow.Editor
         // --- Level metadata ---
         private int _levelId = 1;
         private int _numColors = 4;
-        private string _difficultyPurpose = "normal";
+        private DifficultyPurpose _difficultyPurpose = DifficultyPurpose.Normal;
 
         // --- Rail config ---
         private int _railDirection = 0;
@@ -237,7 +237,7 @@ namespace BalloonFlow.Editor
             // --- Level metadata ---
             _levelId = EditorGUILayout.IntField("Level ID", _levelId);
             _numColors = EditorGUILayout.IntSlider("Num Colors", _numColors, 2, 11);
-            _difficultyPurpose = EditorGUILayout.TextField("Difficulty Purpose", _difficultyPurpose);
+            _difficultyPurpose = (DifficultyPurpose)EditorGUILayout.EnumPopup("Difficulty Purpose", _difficultyPurpose);
 
             EditorGUILayout.Space(8);
 

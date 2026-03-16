@@ -3,6 +3,19 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
+    /// 레벨 난이도 유형. BeatChart 포지션 규칙에 따라 결정.
+    /// </summary>
+    public enum DifficultyPurpose
+    {
+        Tutorial,
+        Normal,
+        Hard,
+        SuperHard,
+        Rest,
+        Intro
+    }
+
+    /// <summary>
     /// Complete configuration for a single level.
     /// Holds all data required to set up balloons, holders, rail, and scoring.
     /// </summary>
@@ -39,9 +52,8 @@ namespace BalloonFlow
 
         /// <summary>
         /// Describes the pacing role of this level.
-        /// Valid values: tutorial | normal | hard | super_hard | rest
         /// </summary>
-        public string difficultyPurpose;
+        public DifficultyPurpose difficultyPurpose;
 
         /// <summary>Active gimmick type names for this level (e.g. "hidden", "chain").</summary>
         public string[] gimmickTypes;
