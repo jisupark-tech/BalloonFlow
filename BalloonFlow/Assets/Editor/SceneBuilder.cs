@@ -175,11 +175,9 @@ namespace BalloonFlow.Editor
             // ── Board Platform ──
             CreateBoardPlatform();
 
-            // ── Canvas ──
-            var uiCamera = uiCamGO.GetComponent<Camera>();
-            var canvas = CreateCanvas(uiCamera);
-
             // ── EventSystem ──
+            // (Canvas is NOT created here — GameBootstrap creates it at runtime
+            //  to avoid duplicate with UIManager's persistent canvases)
             CreateEventSystem();
 
             // ── Scene-Specific Managers ──
