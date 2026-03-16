@@ -118,7 +118,17 @@ namespace BalloonFlow
         {
             if (_levelDatabase == null)
             {
-                Debug.LogWarning("[LevelDataProvider] LevelDatabase ScriptableObject is not assigned.");
+                // Auto-load from Resources if not wired via Inspector
+                _levelDatabase = Resources.Load<LevelDatabase>("LevelDatabase");
+                if (_levelDatabase != null)
+                {
+                    Debug.Log($"[LevelDataProvider] Auto-loaded LevelDatabase from Resources ({_levelDatabase.levels?.Length ?? 0} levels).");
+                }
+            }
+
+            if (_levelDatabase == null)
+            {
+                Debug.LogWarning("[LevelDataProvider] LevelDatabase not found. Run BalloonFlow > Generate 50 Levels.");
                 return false;
             }
 

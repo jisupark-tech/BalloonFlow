@@ -53,6 +53,7 @@ namespace BalloonFlow
 
         [SerializeField] private float _railSpeed = DEFAULT_RAIL_SPEED;
         [SerializeField] private float _dartFlightTime = DEFAULT_DART_FLIGHT_TIME;
+        [SerializeField] private float _dartFireInterval = 0.06f;
 
         #endregion
 
@@ -122,6 +123,7 @@ namespace BalloonFlow
             {
                 _railSpeed = GameManager.Instance.Board.holderRailSpeed;
                 _dartFlightTime = GameManager.Instance.Board.dartFlightTime;
+                _dartFireInterval = GameManager.Instance.Board.dartFireInterval;
                 _maxOnRail = GameManager.Instance.Board.maxOnRail;
             }
         }
@@ -638,7 +640,7 @@ namespace BalloonFlow
 
             float distanceTraveled = 0f;
             float lastFireTime = -999f;
-            float fireCooldown = _dartFlightTime + 0.02f; // Very tight cooldown
+            float fireCooldown = _dartFireInterval; // Inspector에서 조절 가능 (GameManager.Board.dartFireInterval)
             const int MAX_LAPS = 50;
             int lapCount = 0;
 
