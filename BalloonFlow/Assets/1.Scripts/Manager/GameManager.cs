@@ -48,6 +48,10 @@ namespace BalloonFlow
 
         [Tooltip("보드 중심 Z좌표")]
         public float boardCenterZ = 2f;
+
+        [Header("[타겟팅 — Targeting]")]
+        [Tooltip("true: 최외각만 공격 (기본)\nfalse: 같은 색이면 관통 공격 (방해물/다른색 뒤는 불가)")]
+        public bool outermostOnly = true;
     }
 
     /// <summary>

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using DG.Tweening;
+using TMPro;
 
 namespace BalloonFlow
 {
@@ -28,7 +29,7 @@ namespace BalloonFlow
         private const float COLUMN_SPACING = 1.4f;
         private const int HOLDERS_PER_ROW = 5;        // 5x5 grid layout
         private const float MIN_NORMALIZED_SPACING = 0.15f;
-        private const int MAGAZINE_FONT_SIZE = 24;
+        private const int MAGAZINE_FONT_SIZE = 5;
         private const int DEFAULT_MAX_ON_RAIL = 9;
 
         #endregion
@@ -69,7 +70,7 @@ namespace BalloonFlow
             public int magazineRemaining;
             public GameObject gameObject;
             public Renderer meshRenderer;
-            public TextMesh magazineText;
+            public TMP_Text magazineText;
             public Vector3 waitingPosition;
             public bool isOnRail;
             public bool isMovingToRail;
@@ -102,6 +103,10 @@ namespace BalloonFlow
         private readonly Queue<OnHolderSelected> _deploymentQueue = new Queue<OnHolderSelected>();
         private bool _isDeployingHolder;
         private int _maxOnRail = DEFAULT_MAX_ON_RAIL;
+
+        // Wait point queue: holders wait at staging and enter rail one at a time with spacing
+        private readonly Queue<HolderVisual> _waitPointQueue = new Queue<HolderVisual>();
+        private bool _isProcessingWaitQueue;
 
         #endregion
 
@@ -205,6 +210,25 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// Applies color to all Renderers on a GameObject.
+        /// Sets both _BaseColor (URP Lit) and _Color (Standard) for shader compatibility.
+        /// </summary>
+        private static void ApplyColorToRenderers(GameObject obj, Color color)
+        {
+            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                foreach (Material mat in renderers[i].materials)
+                {
+                    if (mat.HasProperty("_BaseColor"))
+                        mat.SetColor("_BaseColor", color);
+                    if (mat.HasProperty("_Color"))
+                        mat.SetColor("_Color", color);
+                }
+            }
+        }
+
+        /// <summary>
         /// Returns true if the rail is at capacity (no more holders can be deployed).
         /// </summary>
         public bool IsRailFull()
@@ -277,6 +301,8 @@ namespace BalloonFlow
 
             _deploymentQueue.Clear();
             _isDeployingHolder = false;
+            _waitPointQueue.Clear();
+            _isProcessingWaitQueue = false;
 
             foreach (var kvp in _holderVisuals)
             {
@@ -338,7 +364,7 @@ namespace BalloonFlow
                 identifier.SetHolderId(data.holderId);
             }
 
-            // Set mesh color
+            // Set mesh color — URP Lit uses _BaseColor, Standard uses _Color
             Renderer sr = obj.GetComponent<Renderer>();
             if (sr == null)
             {
@@ -346,20 +372,16 @@ namespace BalloonFlow
             }
 
             Color holderColor = GetColor(data.color);
-            if (sr != null)
-            {
-                sr.material.color = holderColor;
-            }
+            ApplyColorToRenderers(obj, holderColor);
 
-            // Set up or find magazine count text
-            TextMesh textMesh = FindOrCreateMagazineText(obj);
+            // Set up or find magazine count text (TMPro)
+            TMP_Text textMesh = FindOrCreateMagazineText(obj);
             if (textMesh != null)
             {
                 textMesh.text = data.magazineCount.ToString();
                 textMesh.color = Color.white;
                 textMesh.fontSize = MAGAZINE_FONT_SIZE;
-                textMesh.anchor = TextAnchor.MiddleCenter;
-                textMesh.alignment = TextAlignment.Center;
+                textMesh.alignment = TextAlignmentOptions.Center;
             }
 
             HolderVisual visual = new HolderVisual
@@ -378,30 +400,28 @@ namespace BalloonFlow
             return visual;
         }
 
-        private TextMesh FindOrCreateMagazineText(GameObject holder)
+        private TMP_Text FindOrCreateMagazineText(GameObject holder)
         {
-            // Look for existing TextMesh child named "MagazineText"
-            TextMesh[] children = holder.GetComponentsInChildren<TextMesh>(true);
-            if (children != null && children.Length > 0)
+            // Priority 1: Look for TMPro text component (TextMeshPro / TextMeshProUGUI)
+            TMP_Text tmpText = holder.GetComponentInChildren<TMP_Text>(true);
+            if (tmpText != null)
             {
-                return children[0];
+                return tmpText;
             }
 
-            // Look for a child transform named "MagazineText"
+            // Priority 2: Look for a child transform named "MagazineText" with TMPro
             Transform textChild = holder.transform.Find("MagazineText");
             if (textChild != null)
             {
-                TextMesh existing = textChild.GetComponent<TextMesh>();
+                TMP_Text existing = textChild.GetComponent<TMP_Text>();
                 if (existing != null)
                 {
                     return existing;
                 }
             }
 
-            // No TextMesh found on prefab; cannot create at runtime per project rules.
-            // The prefab must include a child with TextMesh component.
-            Debug.LogWarning("[HolderVisualManager] Holder prefab has no TextMesh child for magazine count. " +
-                             "Add a child named 'MagazineText' with a TextMesh component to the Holder prefab.");
+            Debug.LogWarning("[HolderVisualManager] Holder prefab has no TMP_Text child for magazine count. " +
+                             "Add a child named 'MagazineText' with a TextMeshPro component to the Holder prefab.");
             return null;
         }
 
@@ -537,46 +557,108 @@ namespace BalloonFlow
         {
             if (!RailManager.HasInstance) yield break;
 
-            Vector3 targetPos = RailManager.Instance.GetPositionAtNormalized(0f);
+            RailManager rail = RailManager.Instance;
+            Vector3 railEntry = rail.GetPositionAtNormalized(0f);
             const float moveSpeed = 10f;
 
-            // Move toward rail entry with per-frame avoidance to prevent overlapping
+            // --- Phase 1: Move to staging position (left-bottom of rail entry) ---
+            Vector3 stagingPos = railEntry + new Vector3(-1.8f, 0f, -1.2f);
+
             while (visual.gameObject != null)
             {
                 Vector3 currentPos = visual.gameObject.transform.position;
-                float dist = Vector3.Distance(currentPos, targetPos);
-                if (dist < 0.1f) break;
+                float dist = Vector3.Distance(currentPos, stagingPos);
+                if (dist < 0.15f) break;
 
-                Vector3 dir = (targetPos - currentPos).normalized;
-                Vector3 avoidOffset = CalculateAvoidanceOffset(visual, currentPos, dir);
-
-                visual.gameObject.transform.position = currentPos + (dir + avoidOffset).normalized * moveSpeed * Time.deltaTime;
+                Vector3 dir = (stagingPos - currentPos).normalized;
+                visual.gameObject.transform.position = currentPos + dir * moveSpeed * Time.deltaTime;
                 yield return null;
             }
 
-            // Arrived at rail entry — snap to entry and start rail traversal
+            // Snap to staging
+            if (visual.gameObject != null)
+                visual.gameObject.transform.position = stagingPos;
+
+            // --- Phase 2: Enqueue at wait point ---
+            // Release deployment lock so next holder can move to staging too
+            _isDeployingHolder = false;
+            TryProcessDeploymentQueue();
+
+            // Add to wait point queue — processed FIFO in ProcessWaitPointQueue
+            _waitPointQueue.Enqueue(visual);
+            if (!_isProcessingWaitQueue)
+            {
+                StartCoroutine(ProcessWaitPointQueue());
+            }
+        }
+
+        /// <summary>
+        /// Processes the wait point queue: sends holders from staging to rail one at a time,
+        /// ensuring MIN_NORMALIZED_SPACING between each rail entry.
+        /// </summary>
+        private IEnumerator ProcessWaitPointQueue()
+        {
+            _isProcessingWaitQueue = true;
+
+            while (_waitPointQueue.Count > 0)
+            {
+                HolderVisual visual = _waitPointQueue.Peek();
+
+                // Skip invalid holders
+                if (visual.gameObject == null || visual.isOnRail || !visual.isMovingToRail)
+                {
+                    _waitPointQueue.Dequeue();
+                    continue;
+                }
+
+                // Wait until rail entry zone is clear (sufficient spacing from nearest holder)
+                float waited = 0f;
+                while (!IsRailEntryFree())
+                {
+                    waited += Time.deltaTime;
+                    if (waited > 10f) break; // Safety timeout
+                    yield return null;
+                }
+
+                // Dequeue and send to rail
+                _waitPointQueue.Dequeue();
+                yield return StartCoroutine(MoveFromStagingToRail(visual));
+            }
+
+            _isProcessingWaitQueue = false;
+        }
+
+        /// <summary>
+        /// Moves a single holder from staging position to rail entry and starts rail traversal.
+        /// </summary>
+        private IEnumerator MoveFromStagingToRail(HolderVisual visual)
+        {
+            if (!RailManager.HasInstance || visual.gameObject == null) yield break;
+
+            RailManager rail = RailManager.Instance;
+            Vector3 railEntry = rail.GetPositionAtNormalized(0f);
+            const float moveSpeed = 10f;
+
+            // Move from staging to rail entry
+            while (visual.gameObject != null)
+            {
+                Vector3 currentPos = visual.gameObject.transform.position;
+                float dist = Vector3.Distance(currentPos, railEntry);
+                if (dist < 0.1f) break;
+
+                Vector3 dir = (railEntry - currentPos).normalized;
+                visual.gameObject.transform.position = currentPos + dir * moveSpeed * Time.deltaTime;
+                yield return null;
+            }
+
+            // Enter rail
             visual.isMovingToRail = false;
             visual.isOnRail = true;
             visual.normalizedT = 0f;
 
-            if (!IsRailEntryFree())
-            {
-                // Wait for entry to clear
-                float waited = 0f;
-                while (waited < 2f && !IsRailEntryFree())
-                {
-                    waited += Time.deltaTime;
-                    yield return null;
-                }
-            }
-
             _onRailHolders.Add(visual);
             _occupiedNormalizedPositions.Add(0f);
             StartCoroutine(RailTraversalCoroutine(visual));
-
-            // Release deployment lock — allow next queued holder to start moving
-            _isDeployingHolder = false;
-            TryProcessDeploymentQueue();
         }
 
         private Vector3 CalculateAvoidanceOffset(HolderVisual self, Vector3 currentPos, Vector3 moveDir)
@@ -882,16 +964,8 @@ namespace BalloonFlow
 
             dartObj.SetActive(true);
 
-            // Tint dart to match holder color
-            Renderer sr = dartObj.GetComponent<Renderer>();
-            if (sr == null)
-            {
-                sr = dartObj.GetComponentInChildren<Renderer>();
-            }
-            if (sr != null)
-            {
-                sr.material.color = GetColor(color);
-            }
+            // Tint dart to match holder color (URP + Standard compatible)
+            ApplyColorToRenderers(dartObj, GetColor(color));
 
             // Orient dart horizontally toward target (flat on XZ plane, no pitch)
             Vector3 dir = to - from;

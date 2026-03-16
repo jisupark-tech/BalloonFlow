@@ -15,9 +15,7 @@ namespace BalloonFlow
         [SerializeField] private Text _goldText;
         [SerializeField] private Button _goldPlusButton;
 
-        [Header("[Row 2 — 점수/풍선/홀더]")]
-        [SerializeField] private Text _scoreText;
-        [SerializeField] private Text _remainingText;
+        [Header("[Row 2 — 홀더]")]
         [SerializeField] private Text _holderCountText;
 
         [Header("[Optional]")]
@@ -29,24 +27,12 @@ namespace BalloonFlow
         public Text LevelText => _levelText;
         public Text GoldText => _goldText;
         public Button GoldPlusButton => _goldPlusButton;
-        public Text ScoreText => _scoreText;
-        public Text RemainingText => _remainingText;
         public Text HolderCountText => _holderCountText;
         public Text MoveCountText => _moveCountText;
 
         #endregion
 
         #region Set Methods
-
-        public void SetScore(int _score)
-        {
-            if (_scoreText != null) _scoreText.text = _score.ToString("N0");
-        }
-
-        public void SetRemainingBalloons(int _count)
-        {
-            if (_remainingText != null) _remainingText.text = $"Balloons: {_count}";
-        }
 
         public void SetHolderInfo(int _onRail, int _max)
         {

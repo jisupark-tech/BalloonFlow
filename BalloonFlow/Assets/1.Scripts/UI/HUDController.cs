@@ -17,7 +17,6 @@ namespace BalloonFlow
         private UIHud _view;
         private PopupSettings _popupSettings;
         private PopupGoldShop _popupGoldShop;
-        private int _currentStars;
 
         #endregion
 
@@ -25,8 +24,6 @@ namespace BalloonFlow
 
         private void OnEnable()
         {
-            EventBus.Subscribe<OnScoreChanged>(HandleScoreChanged);
-            EventBus.Subscribe<OnBoardStateChanged>(HandleBoardStateChanged);
             EventBus.Subscribe<OnHolderSelected>(HandleHolderSelected);
             EventBus.Subscribe<OnMagazineEmpty>(HandleMagazineEmpty);
             EventBus.Subscribe<OnHolderReturned>(HandleHolderReturned);
@@ -36,8 +33,6 @@ namespace BalloonFlow
 
         private void OnDisable()
         {
-            EventBus.Unsubscribe<OnScoreChanged>(HandleScoreChanged);
-            EventBus.Unsubscribe<OnBoardStateChanged>(HandleBoardStateChanged);
             EventBus.Unsubscribe<OnHolderSelected>(HandleHolderSelected);
             EventBus.Unsubscribe<OnMagazineEmpty>(HandleMagazineEmpty);
             EventBus.Unsubscribe<OnHolderReturned>(HandleHolderReturned);
@@ -50,6 +45,11 @@ namespace BalloonFlow
                 if (_view.SettingsButton != null) _view.SettingsButton.onClick.RemoveListener(OnSettingsClicked);
                 if (_view.GoldPlusButton != null) _view.GoldPlusButton.onClick.RemoveListener(OnGoldPlusClicked);
             }
+            if (_popupSettings != null && _popupSettings.CloseButton != null)
+                _popupSettings.CloseButton.onClick.RemoveListener(OnSettingsCloseClicked);
+            if (_popupGoldShop != null && _popupGoldShop.CloseButton != null)
+                _popupGoldShop.CloseButton.onClick.RemoveListener(OnGoldShopCloseClicked);
+
         }
 
         #endregion
@@ -69,36 +69,25 @@ namespace BalloonFlow
             if (_view.GoldPlusButton != null) _view.GoldPlusButton.onClick.AddListener(OnGoldPlusClicked);
         }
 
-        /// <summary>설정 팝업 연결</summary>
+        /// <summary>설정 팝업 연결 + Close 버튼 와이어링</summary>
         public void SetSettingsPopup(PopupSettings _popup)
         {
             _popupSettings = _popup;
+            if (_popupSettings != null && _popupSettings.CloseButton != null)
+                _popupSettings.CloseButton.onClick.AddListener(OnSettingsCloseClicked);
         }
 
-        /// <summary>골드 상점 팝업 연결</summary>
+        /// <summary>골드 상점 팝업 연결 + Close 버튼 와이어링</summary>
         public void SetGoldShopPopup(PopupGoldShop _popup)
         {
             _popupGoldShop = _popup;
+            if (_popupGoldShop != null && _popupGoldShop.CloseButton != null)
+                _popupGoldShop.CloseButton.onClick.AddListener(OnGoldShopCloseClicked);
         }
 
         #endregion
 
         #region Public — HUD 업데이트
-
-        public void UpdateScore(int _score)
-        {
-            if (_view != null) _view.SetScore(_score);
-        }
-
-        public void UpdateStars(int _count)
-        {
-            _currentStars = Mathf.Clamp(_count, 0, 3);
-        }
-
-        public void UpdateRemainingBalloons(int _count)
-        {
-            if (_view != null) _view.SetRemainingBalloons(_count);
-        }
 
         public void UpdateHolderInfo(int _holderCount, int _maxHolders)
         {
@@ -154,17 +143,6 @@ namespace BalloonFlow
 
         #region EventBus 핸들러
 
-        private void HandleScoreChanged(OnScoreChanged _evt)
-        {
-            UpdateScore(_evt.currentScore);
-            if (ScoreManager.HasInstance) UpdateStars(ScoreManager.Instance.GetStarCount());
-        }
-
-        private void HandleBoardStateChanged(OnBoardStateChanged _evt)
-        {
-            UpdateRemainingBalloons(_evt.remainingBalloons);
-        }
-
         private void HandleHolderSelected(OnHolderSelected _evt)
         {
             UpdateMagazineDisplay(_evt.holderId, _evt.magazineCount);
@@ -186,8 +164,6 @@ namespace BalloonFlow
         private void HandleLevelLoaded(OnLevelLoaded _evt)
         {
             SetLevelInfo(_evt.levelId, _evt.packageId);
-            UpdateScore(0);
-            UpdateStars(0);
             RefreshOnRailCount();
             if (CurrencyManager.HasInstance) UpdateGoldDisplay(CurrencyManager.Instance.Coins);
         }

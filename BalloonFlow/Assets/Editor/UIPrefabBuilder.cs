@@ -191,14 +191,6 @@ namespace BalloonFlow.Editor
             hudSubRT.offsetMin = new Vector2(0, -130);
             hudSubRT.offsetMax = new Vector2(0, -80);
 
-            var remainGO = AddText(hudSub.transform, "RemainingText", "Balloons: --", 18,
-                TextAnchor.MiddleLeft, new Color(0.9f, 0.7f, 0.3f), V(20, 0), V(200, 35));
-            AnchorLeft(remainGO);
-            remainGO.GetComponent<RectTransform>().anchoredPosition = new Vector2(20, 0);
-
-            var scoreGO = AddText(hudSub.transform, "ScoreText", "0", 28,
-                TextAnchor.MiddleCenter, Color.white, V(0, 0), V(200, 35));
-
             var holderGO = AddText(hudSub.transform, "HolderText", "On Rail: 0/9", 18,
                 TextAnchor.MiddleRight, new Color(0.3f, 0.9f, 0.7f), V(-20, 0), V(200, 35));
             AnchorRight(holderGO);
@@ -211,8 +203,6 @@ namespace BalloonFlow.Editor
             so.FindProperty("_levelText").objectReferenceValue = levelGO.GetComponent<Text>();
             so.FindProperty("_goldText").objectReferenceValue = goldTextGO.GetComponent<Text>();
             so.FindProperty("_goldPlusButton").objectReferenceValue = plusBtnGO.GetComponent<Button>();
-            so.FindProperty("_scoreText").objectReferenceValue = scoreGO.GetComponent<Text>();
-            so.FindProperty("_remainingText").objectReferenceValue = remainGO.GetComponent<Text>();
             so.FindProperty("_holderCountText").objectReferenceValue = holderGO.GetComponent<Text>();
             so.ApplyModifiedProperties();
 
@@ -235,8 +225,6 @@ namespace BalloonFlow.Editor
 
             var titleGO = AddText(panel.transform, "ResultTitle", "Level Clear!", 48,
                 TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.1f), V(0, 270), V(600, 80));
-            var scoreGO = AddText(panel.transform, "ResultScore", "Score: 0\n★ 0/3", 32,
-                TextAnchor.MiddleCenter, Color.white, V(0, 130), V(500, 120));
 
             var nextGO = AddButton(panel.transform, "NextButton", "NEXT", COL_NEXT, 28,
                 V(0, -30), V(260, 75));
@@ -249,7 +237,6 @@ namespace BalloonFlow.Editor
             var comp = root.AddComponent<PopupResult>();
             var so = new SerializedObject(comp);
             so.FindProperty("_titleText").objectReferenceValue = titleGO.GetComponent<Text>();
-            so.FindProperty("_scoreText").objectReferenceValue = scoreGO.GetComponent<Text>();
             so.FindProperty("_nextButton").objectReferenceValue = nextGO.GetComponent<Button>();
             so.FindProperty("_retryButton").objectReferenceValue = retryGO.GetComponent<Button>();
             so.FindProperty("_homeButton").objectReferenceValue = homeGO.GetComponent<Button>();
