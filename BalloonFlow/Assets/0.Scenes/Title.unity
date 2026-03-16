@@ -151,8 +151,12 @@ MonoBehaviour:
   Board:
     cellSpacing: 0.55
     balloonScale: 0.5
+<<<<<<< HEAD
     dartFlightTime: 0.1
     dartFireInterval: 0.06
+=======
+    dartFlightTime: 0.036
+>>>>>>> 9a348c06bd6598ccd2a996c12b3456b7d8d6526e
     dartRailSpeed: 5
     holderRailSpeed: 7
     maxOnRail: 9
@@ -249,7 +253,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.UIManager
   UiTr: {fileID: 968860529}
+<<<<<<< HEAD
   _fadeImage: {fileID: 0}
+=======
+>>>>>>> 9a348c06bd6598ccd2a996c12b3456b7d8d6526e
 --- !u!4 &399273601
 Transform:
   m_ObjectHideFlags: 0
@@ -820,5 +827,9 @@ SceneRoots:
   - {fileID: 399273601}
   - {fileID: 346714558}
   - {fileID: 1528286051}
+<<<<<<< HEAD
+=======
+  - {fileID: 589563953}
+>>>>>>> 9a348c06bd6598ccd2a996c12b3456b7d8d6526e
   - {fileID: 585999358}
   - {fileID: 589563953}
