@@ -72,6 +72,12 @@ namespace BalloonFlow
         {
             _nextDartId = 0;
             _deployedCount = 0;
+
+            // GameManager.Board에서 설정값 읽기
+            if (GameManager.HasInstance)
+            {
+                _dartSpeed = GameManager.Instance.Board.dartRailSpeed;
+            }
         }
 
         private void OnEnable()

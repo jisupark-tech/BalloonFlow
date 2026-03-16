@@ -44,20 +44,7 @@ namespace BalloonFlow.Editor
             };
         }
 
-        [MenuItem("BalloonFlow/Rebuild Scenes")]
-        static void RebuildScenes()
-        {
-            BuildAllScenes();
-            EditorPrefs.SetBool(PREFS_KEY, true);
-            Debug.Log("[SceneBuilder] Rebuild 완료");
-        }
-
-        [MenuItem("BalloonFlow/Reset Scene Builder")]
-        static void ResetPrefs()
-        {
-            EditorPrefs.DeleteKey(PREFS_KEY);
-            Debug.Log("[SceneBuilder] Reset 완료. 다음 도메인 리로드 시 재빌드.");
-        }
+        // MenuItem 삭제됨 — Level Editor만 BalloonFlow 탭에 표시
 
         // ═══════════════════════════════════════════
         // BUILD ALL

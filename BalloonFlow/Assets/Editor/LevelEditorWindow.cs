@@ -57,7 +57,7 @@ namespace BalloonFlow.Editor
         // --- Balloon grid ---
         private int _balloonGridCols = 5;
         private int _balloonGridRows = 5;
-        private float _cellSpacing = 0.65f;
+        private float _cellSpacing = 0.55f;
         private float _balloonScale = 0.5f;
         private int[,] _balloonColors;    // -1 = empty, 0-7 = color
         private int[,] _balloonGimmicks;  // 0 = none, 1+ = gimmick index

@@ -47,20 +47,7 @@ namespace BalloonFlow.Editor
             };
         }
 
-        [MenuItem("BalloonFlow/Rebuild UI Prefabs")]
-        private static void RebuildUIPrefabs()
-        {
-            BuildAllUIPrefabs();
-            EditorPrefs.SetBool(PREFS_KEY, true);
-            Debug.Log("[UIPrefabBuilder] UI prefabs rebuilt.");
-        }
-
-        [MenuItem("BalloonFlow/Reset UI Prefab Builder")]
-        private static void ResetPrefs()
-        {
-            EditorPrefs.DeleteKey(PREFS_KEY);
-            Debug.Log("[UIPrefabBuilder] Prefs reset.");
-        }
+        // MenuItem 삭제됨 — Level Editor만 BalloonFlow 탭에 표시
 
         private static void BuildAllUIPrefabs()
         {

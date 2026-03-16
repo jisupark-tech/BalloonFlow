@@ -13,7 +13,7 @@ namespace BalloonFlow
     {
         #region Constants
 
-        private const float CellSpacing = 0.9f;
+        private const float CellSpacing = 0.55f;
         private const float BoardCenterX = 0f;
         private const float BoardCenterZ = 2f;
         private const float RailPadding = 1.5f;
@@ -114,7 +114,7 @@ namespace BalloonFlow
 
         #region Menu Item
 
-        [MenuItem("BalloonFlow/Generate Level Database (30 Levels)")]
+        // MenuItem 삭제됨 — Level Editor만 BalloonFlow 탭에 표시
         public static void GenerateLevelDatabase()
         {
             LevelDef[] defs = GetLevelDefinitions();

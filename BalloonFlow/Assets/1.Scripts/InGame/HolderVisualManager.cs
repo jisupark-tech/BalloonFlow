@@ -117,7 +117,13 @@ namespace BalloonFlow
 
         protected override void OnSingletonAwake()
         {
-            // Initialization handled by event subscriptions
+            // GameManager.Board에서 설정값 읽기
+            if (GameManager.HasInstance)
+            {
+                _railSpeed = GameManager.Instance.Board.holderRailSpeed;
+                _dartFlightTime = GameManager.Instance.Board.dartFlightTime;
+                _maxOnRail = GameManager.Instance.Board.maxOnRail;
+            }
         }
 
         private void OnEnable()
