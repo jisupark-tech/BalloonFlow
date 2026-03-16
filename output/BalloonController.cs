@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -20,6 +21,7 @@ namespace BalloonFlow
 
         private const string PoolKey = "Balloon";
         private const int BigObjectRequiredHits = 2;
+        private const float DEFAULT_BALLOON_SCALE = 0.5f;
 
         /// <summary>
         /// Color palette for balloon visualization. Index matches BalloonData.color.
@@ -65,6 +67,9 @@ namespace BalloonFlow
         // Spatial index: position key -> balloonId  (for adjacency lookups)
         private readonly Dictionary<Vector3Int, int> _positionIndex = new Dictionary<Vector3Int, int>();
 
+        // Scale multiplier for balloon visuals (set from LevelConfig)
+        private float _balloonScale = DEFAULT_BALLOON_SCALE;
+
         private int _nextBalloonId;
         private int _currentLevelId;
 
@@ -74,6 +79,14 @@ namespace BalloonFlow
 
         /// <summary>Total number of non-popped balloons currently on the board.</summary>
         public int RemainingCount { get; private set; }
+
+        /// <summary>
+        /// Sets the visual scale for all balloons. Call before InitBoard.
+        /// </summary>
+        public void SetBalloonScale(float scale)
+        {
+            _balloonScale = Mathf.Clamp(scale, 0.2f, 1.0f);
+        }
 
         #endregion
 
@@ -341,6 +354,7 @@ namespace BalloonFlow
             }
 
             obj.transform.position = position;
+            obj.transform.localScale = Vector3.one * _balloonScale;
             obj.SetActive(true);
 
             // Apply balloon color to Renderer
@@ -546,12 +560,19 @@ namespace BalloonFlow
             if (!_balloonObjects.TryGetValue(balloonId, out GameObject obj)) return;
             if (obj == null) return;
 
-            if (ObjectPoolManager.HasInstance)
-            {
-                ObjectPoolManager.Instance.Return(PoolKey, obj);
-            }
-
             _balloonObjects.Remove(balloonId);
+
+            // Animate scale-down before returning to pool
+            obj.transform.DOScale(Vector3.zero, 0.15f)
+                .SetEase(Ease.InBack)
+                .OnComplete(() =>
+                {
+                    if (obj != null && ObjectPoolManager.HasInstance)
+                    {
+                        obj.transform.localScale = Vector3.one * _balloonScale; // Reset scale for reuse
+                        ObjectPoolManager.Instance.Return(PoolKey, obj);
+                    }
+                });
         }
 
         #endregion

@@ -28,6 +28,9 @@ namespace BalloonFlow
         /// <summary>Total balloons placed on the board (6–65).</summary>
         public int balloonCount;
 
+        /// <summary>Scale multiplier for balloon visuals (0.2–1.0, default 0.5).</summary>
+        public float balloonScale = 0.5f;
+
         /// <summary>
         /// Describes the pacing role of this level.
         /// Valid values: tutorial | normal | hard | super_hard | rest

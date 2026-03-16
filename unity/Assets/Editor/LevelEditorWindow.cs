@@ -55,9 +55,10 @@ namespace BalloonFlow.Editor
         private int _maxOnRail = 2;
 
         // --- Balloon grid ---
-        private int _balloonGridCols = 4;
-        private int _balloonGridRows = 4;
-        private float _cellSpacing = 0.9f;
+        private int _balloonGridCols = 5;
+        private int _balloonGridRows = 5;
+        private float _cellSpacing = 0.65f;
+        private float _balloonScale = 0.5f;
         private int[,] _balloonColors;    // -1 = empty, 0-7 = color
         private int[,] _balloonGimmicks;  // 0 = none, 1+ = gimmick index
 
@@ -264,6 +265,7 @@ namespace BalloonFlow.Editor
             }
 
             _cellSpacing = EditorGUILayout.FloatField("Cell Spacing", _cellSpacing);
+            _balloonScale = EditorGUILayout.Slider("Balloon Scale", _balloonScale, 0.2f, 1.0f);
 
             EditorGUILayout.Space(4);
             EditorGUILayout.LabelField("Click cells to paint color. Empty (✕) = no balloon (gap in grid).");
@@ -374,7 +376,7 @@ namespace BalloonFlow.Editor
                 InitGrids();
             }
 
-            _defaultMagazine = EditorGUILayout.IntSlider("Default Magazine", _defaultMagazine, 1, 10);
+            _defaultMagazine = EditorGUILayout.IntSlider("Default Magazine", _defaultMagazine, 1, 20);
 
             EditorGUILayout.Space(4);
             EditorGUILayout.LabelField("Click to set holder color. Eraser = empty slot. Row 1 (top) = front row (clickable).");
@@ -436,7 +438,7 @@ namespace BalloonFlow.Editor
             {
                 if (Event.current.button == 1) // Right-click
                 {
-                    _holderMagazines[col, row] = (_holderMagazines[col, row] % 10) + 1;
+                    _holderMagazines[col, row] = (_holderMagazines[col, row] % 20) + 1;
                 }
                 else // Left-click
                 {
@@ -552,6 +554,7 @@ namespace BalloonFlow.Editor
             config.numColors = _numColors;
             config.difficultyPurpose = _difficultyPurpose;
             config.gimmickTypes = CollectGimmickTypes();
+            config.balloonScale = _balloonScale;
 
             // Build balloons
             var balloons = new List<BalloonLayout>();
