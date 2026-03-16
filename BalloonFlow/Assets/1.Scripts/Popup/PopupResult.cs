@@ -27,7 +27,6 @@ namespace BalloonFlow
 
         [Header("[Result 텍스트]")]
         [SerializeField] private Text _titleText;
-        [SerializeField] private Text _scoreText;
 
         [Header("[버튼]")]
         [SerializeField] private Button _nextButton;
@@ -61,9 +60,6 @@ namespace BalloonFlow
                 _titleText.text = "Level Clear!";
                 _titleText.color = new Color(1f, 0.85f, 0.1f);
             }
-            if (_scoreText != null)
-                _scoreText.text = $"Score: {_score:N0}";
-
             // Hide Retry on clear, show Next
             if (_retryButton != null)
                 _retryButton.gameObject.SetActive(false);
@@ -86,9 +82,6 @@ namespace BalloonFlow
                 _titleText.text = "Game Over";
                 _titleText.color = new Color(1f, 0.3f, 0.3f);
             }
-            if (_scoreText != null)
-                _scoreText.text = "Better luck next time!";
-
             // Show Retry on fail, hide Next
             if (_retryButton != null)
                 _retryButton.gameObject.SetActive(true);

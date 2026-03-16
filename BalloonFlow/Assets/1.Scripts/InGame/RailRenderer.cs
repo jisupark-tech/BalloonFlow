@@ -57,8 +57,9 @@ namespace BalloonFlow
 
         private void Awake()
         {
-            _trackMaterial = new Material(Shader.Find("Standard"));
-            _trackMaterial.color = _railColor;
+            // Visual rendering disabled — conveyor belt visuals are handled by
+            // manually painted tiles in the BoardGrid tilemap.
+            // RailManager (waypoint data) remains active for holder movement.
         }
 
         private void OnEnable()
@@ -151,8 +152,12 @@ namespace BalloonFlow
                             segment.transform.position = midpoint;
                         }
                         segment.name = $"RailSegmentCustom_{i}";
-                        segment.transform.up = (end - start).normalized;
-                        segment.transform.localScale = new Vector3(_trackWidth * 2f, length * 0.5f, _trackWidth * 2f);
+                        // Align prefab forward (Z) along segment direction, keep upright
+                        Vector3 segDir = (end - start).normalized;
+                        if (segDir.sqrMagnitude > 0.001f)
+                            segment.transform.rotation = Quaternion.LookRotation(segDir, Vector3.up);
+                        // Scale: X=width, Y=width, Z=length (stretch along forward axis)
+                        segment.transform.localScale = new Vector3(_trackWidth * 2f, _trackWidth * 2f, length);
                         break;
 
                     default: // VISUAL_CYLINDER
@@ -165,16 +170,21 @@ namespace BalloonFlow
                         break;
                 }
 
-                var meshRenderer = segment.GetComponent<MeshRenderer>();
-                if (meshRenderer != null)
+                // Only override material for primitive segments (not custom prefab which has its own)
+                if (_visualType != VISUAL_CUSTOM3D)
                 {
-                    meshRenderer.material = _trackMaterial;
+                    var meshRenderer = segment.GetComponent<MeshRenderer>();
+                    if (meshRenderer != null)
+                    {
+                        meshRenderer.material = _trackMaterial;
+                    }
                 }
 
-                var col = segment.GetComponent<Collider>();
-                if (col != null)
+                // Disable colliders on rail segments (visual only)
+                var colliders = segment.GetComponentsInChildren<Collider>();
+                for (int c = 0; c < colliders.Length; c++)
                 {
-                    col.enabled = false;
+                    colliders[c].enabled = false;
                 }
 
                 _trackSegments.Add(segment);
@@ -233,14 +243,8 @@ namespace BalloonFlow
 
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
-            // Delay one frame to ensure RailManager has processed its layout data
-            StartCoroutine(RefreshNextFrame());
-        }
-
-        private System.Collections.IEnumerator RefreshNextFrame()
-        {
-            yield return null;
-            RefreshPath();
+            // Visual rendering disabled — BoardGrid's ConveyorTiles tilemap handles rail visuals.
+            // RailManager (waypoint data) remains active for holder movement.
         }
 
         #endregion

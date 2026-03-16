@@ -410,12 +410,20 @@ namespace BalloonFlow
             obj.transform.localScale = Vector3.one * _balloonScale;
             obj.SetActive(true);
 
-            // Apply balloon color to Renderer
-            Renderer rend = obj.GetComponentInChildren<Renderer>();
-            if (rend != null)
+            // Apply balloon color to all Renderers (supports multi-material FBX models)
+            // URP Lit shader uses _BaseColor; Standard uses _Color. Set both for compatibility.
+            int colorIdx = Mathf.Clamp(color, 0, BalloonColors.Length - 1);
+            Color balloonColor = BalloonColors[colorIdx];
+            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
+            for (int i = 0; i < renderers.Length; i++)
             {
-                int colorIdx = Mathf.Clamp(color, 0, BalloonColors.Length - 1);
-                rend.material.color = BalloonColors[colorIdx];
+                foreach (Material mat in renderers[i].materials)
+                {
+                    if (mat.HasProperty("_BaseColor"))
+                        mat.SetColor("_BaseColor", balloonColor);
+                    if (mat.HasProperty("_Color"))
+                        mat.SetColor("_Color", balloonColor);
+                }
             }
 
             // Initialize BalloonIdentifier for dart hit detection
@@ -663,17 +671,20 @@ namespace BalloonFlow
 
             _balloonObjects.Remove(balloonId);
 
-            // Animate scale-down before returning to pool
-            obj.transform.DOScale(Vector3.zero, 0.15f)
-                .SetEase(Ease.InBack)
-                .OnComplete(() =>
+            // Animate: bounce up slightly, then shrink to zero
+            float savedScale = _balloonScale;
+            Sequence seq = DOTween.Sequence();
+            seq.Append(obj.transform.DOMove(obj.transform.position + Vector3.up * 0.4f, 0.12f).SetEase(Ease.OutQuad));
+            seq.Join(obj.transform.DOScale(Vector3.one * savedScale * 1.2f, 0.12f).SetEase(Ease.OutQuad));
+            seq.Append(obj.transform.DOScale(Vector3.zero, 0.15f).SetEase(Ease.InBack));
+            seq.OnComplete(() =>
+            {
+                if (obj != null && ObjectPoolManager.HasInstance)
                 {
-                    if (obj != null && ObjectPoolManager.HasInstance)
-                    {
-                        obj.transform.localScale = Vector3.one * _balloonScale; // Reset scale for reuse
-                        ObjectPoolManager.Instance.Return(PoolKey, obj);
-                    }
-                });
+                    obj.transform.localScale = Vector3.one * savedScale;
+                    ObjectPoolManager.Instance.Return(PoolKey, obj);
+                }
+            });
         }
 
         #endregion

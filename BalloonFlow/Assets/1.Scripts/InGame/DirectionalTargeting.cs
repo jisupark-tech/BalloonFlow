@@ -45,11 +45,11 @@ namespace BalloonFlow
         /// Returns the best target balloon ID for a holder at the given position
         /// moving in the given direction, matching the specified color.
         /// Returns -1 if no valid target is found.
+        ///
+        /// Targeting mode (GameManager.Board.outermostOnly):
+        ///   true  → 최외각만 공격: 가장 가까운 풍선만 타겟 (기본)
+        ///   false → 관통 공격: 같은 색이면 뒤에 있어도 공격 가능 (다른 색/방해물 뒤는 불가)
         /// </summary>
-        /// <param name="holderPosition">Current world position of the holder on the rail.</param>
-        /// <param name="movementDirection">Current movement direction along the rail.</param>
-        /// <param name="color">Color index to match against balloons.</param>
-        /// <returns>BalloonId of the best target, or -1 if none found.</returns>
         public static int FindTarget(Vector3 holderPosition, Vector3 movementDirection, int color, HashSet<int> excludeIds = null)
         {
             if (!BalloonController.HasInstance)
@@ -63,20 +63,21 @@ namespace BalloonFlow
                 return -1;
             }
 
+            // Read targeting mode from GameManager
+            bool outermostOnly = true;
+            if (GameManager.HasInstance)
+            {
+                outermostOnly = GameManager.Instance.Board.outermostOnly;
+            }
+
             ScanDirection scanDir = DetermineScanDirection(movementDirection);
 
-            // Build occupancy set from all non-popped balloons for line-of-sight checks
-            HashSet<Vector2Int> occupancy = BuildOccupancyMap();
+            // Build occupancy set from all non-popped balloons for outermost checks
+            HashSet<Vector2Int> occupancy = outermostOnly ? BuildOccupancyMap() : null;
 
-            // Find the NEAREST balloon along the firing direction that is:
-            // 1. In the same column/row (within perpendicular tolerance)
-            // 2. The first one the dart would hit (closest along firing axis)
-            // 3. Not blocked by a different-color balloon
             int bestId = -1;
             float bestPerpendicularDist = float.MaxValue;
             float bestFiringDist = float.MaxValue;
-
-            Debug.Log($"[DirectionalTargeting] FindTarget: pos={holderPosition}, dir={movementDirection}, scanDir={scanDir}, color={color}, candidates={candidates.Length}");
 
             for (int i = 0; i < candidates.Length; i++)
             {
@@ -106,14 +107,17 @@ namespace BalloonFlow
                     continue; // Balloon is behind the holder
                 }
 
-                // Check the balloon is the nearest outermost from the holder's perspective
-                // (no same-color or different-color balloon closer along the firing axis in same column)
-                if (!IsNearestInColumn(balloon.position, scanDir, occupancy, firingDist))
+                if (outermostOnly)
                 {
-                    continue;
+                    // Outermost mode: only the nearest balloon in the column (no balloon of ANY color in front)
+                    if (!IsNearestInColumn(balloon.position, scanDir, occupancy, firingDist))
+                    {
+                        continue;
+                    }
                 }
 
-                // Line-of-sight check: reject if any different-color balloon blocks the dart path
+                // Line-of-sight: reject if any DIFFERENT-color balloon blocks the path
+                // (same-color balloons don't block — dart passes through in penetrate mode)
                 if (!HasClearLineOfSight(holderPosition, balloon.position, color))
                 {
                     continue;
