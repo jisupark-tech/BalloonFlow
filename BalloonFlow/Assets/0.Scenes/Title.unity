@@ -148,6 +148,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5bb674a233e9f6244b8c5341374cbacc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.GameManager
+  Board:
+    cellSpacing: 0.55
+    balloonScale: 0.5
+    dartFlightTime: 0.036
+    dartRailSpeed: 5
+    holderRailSpeed: 7
+    maxOnRail: 9
+    railPadding: 1.5
+    railHeight: 0.5
+    boardCenterX: 0
+    boardCenterZ: 2
 --- !u!4 &86905297
 Transform:
   m_ObjectHideFlags: 0
@@ -236,7 +247,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 07268dd2c0911f845aafcbdcd42074cd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.UIManager
-  UiTr: {fileID: 0}
+  UiTr: {fileID: 968860529}
 --- !u!4 &399273601
 Transform:
   m_ObjectHideFlags: 0
@@ -249,7 +260,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 968860529}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &585999356
@@ -552,7 +564,7 @@ RectTransform:
   m_LocalScale: {x: 0, y: 0, z: 0}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 399273601}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
@@ -798,6 +810,5 @@ SceneRoots:
   - {fileID: 399273601}
   - {fileID: 346714558}
   - {fileID: 1528286051}
-  - {fileID: 968860529}
   - {fileID: 589563953}
   - {fileID: 585999358}
