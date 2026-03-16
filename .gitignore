@@ -1,13 +1,19 @@
 # Unity generated
-unity/Library/
-unity/Temp/
-unity/Obj/
-unity/Build/
-unity/Builds/
-unity/Logs/
-unity/UserSettings/
-unity/MemoryCaptures/
-unity/Recordings/
+BalloonFlow/Library/
+BalloonFlow/Temp/
+BalloonFlow/Obj/
+BalloonFlow/Build/
+BalloonFlow/Builds/
+BalloonFlow/Logs/
+BalloonFlow/UserSettings/
+BalloonFlow/MemoryCaptures/
+BalloonFlow/Recordings/
+
+# AI Workflow (not in repo — stays local)
+design_workflow/
+docs/
+feedback/
+output/
 
 # IDE
 .vs/
