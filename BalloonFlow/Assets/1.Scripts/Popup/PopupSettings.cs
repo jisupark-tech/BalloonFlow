@@ -4,50 +4,28 @@ using UnityEngine.UI;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Settings popup view. Loaded from Resources/Popup/PopupSettings prefab.
-    /// Shared between Lobby and InGame scenes.
-    /// All child references wired via UIPrefabBuilder at editor-time.
+    /// 설정 팝업. Resources/Popup/PopupSettings 프리팹에서 로드.
+    /// Lobby, InGame 공용.
     /// </summary>
-    public class PopupSettings : MonoBehaviour
+    public class PopupSettings : UIBase
     {
+        [Header("[버튼]")]
         [SerializeField] private Button _closeButton;
+
+        [Header("[설정 라벨]")]
         [SerializeField] private Text _soundLabel;
         [SerializeField] private Text _musicLabel;
 
-        private CanvasGroup _canvasGroup;
-
         public Button CloseButton => _closeButton;
 
-        private void Awake()
+        public void SetSoundLabel(bool _on)
         {
-            _canvasGroup = GetComponent<CanvasGroup>();
+            if (_soundLabel != null) _soundLabel.text = _on ? "Sound: ON" : "Sound: OFF";
         }
 
-        public void Show()
+        public void SetMusicLabel(bool _on)
         {
-            if (_canvasGroup == null) return;
-            _canvasGroup.alpha = 1f;
-            _canvasGroup.interactable = true;
-            _canvasGroup.blocksRaycasts = true;
-            gameObject.SetActive(true);
-        }
-
-        public void Hide()
-        {
-            if (_canvasGroup == null) return;
-            _canvasGroup.alpha = 0f;
-            _canvasGroup.interactable = false;
-            _canvasGroup.blocksRaycasts = false;
-        }
-
-        public void SetSoundLabel(bool on)
-        {
-            if (_soundLabel != null) _soundLabel.text = on ? "Sound: ON" : "Sound: OFF";
-        }
-
-        public void SetMusicLabel(bool on)
-        {
-            if (_musicLabel != null) _musicLabel.text = on ? "Music: ON" : "Music: OFF";
+            if (_musicLabel != null) _musicLabel.text = _on ? "Music: ON" : "Music: OFF";
         }
     }
 }

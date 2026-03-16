@@ -116,6 +116,6 @@ namespace BalloonFlow
         public int visualType;
 
         /// <summary>Maximum holders allowed on the rail simultaneously.</summary>
-        public int maxOnRail = 2;
+        public int maxOnRail = 9;
     }
 }

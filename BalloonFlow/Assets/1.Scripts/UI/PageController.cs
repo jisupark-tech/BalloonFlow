@@ -96,12 +96,6 @@ namespace BalloonFlow
             SetPageActive(pageId, true);
             _currentPage = pageId;
 
-            // Sync UIManager if available
-            if (UIManager.HasInstance)
-            {
-                UIManager.Instance.ShowPage(pageId);
-            }
-
             EventBus.Publish(new OnPageChanged
             {
                 fromPage = fromPage ?? string.Empty,
@@ -126,10 +120,6 @@ namespace BalloonFlow
                 _currentPage = null;
             }
 
-            if (UIManager.HasInstance)
-            {
-                UIManager.Instance.HidePage(pageId);
-            }
         }
 
         /// <summary>
