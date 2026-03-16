@@ -208,9 +208,9 @@ namespace BalloonFlow
         {
             var defaultPools = new[]
             {
-                new { key = "Balloon", path = "Prefabs/Balloon", initialSize = 30 },
-                new { key = "Dart",    path = "Prefabs/Dart",    initialSize = 20 },
-                new { key = "Holder",  path = "Prefabs/Holder",  initialSize = 10 },
+                new { key = "Balloon", path = "Prefabs/Balloon", initialSize = 200 },
+                new { key = "Dart",    path = "Prefabs/Dart",    initialSize = 150 },
+                new { key = "Holder",  path = "Prefabs/Holder",  initialSize = 50 },
             };
 
             foreach (var entry in defaultPools)

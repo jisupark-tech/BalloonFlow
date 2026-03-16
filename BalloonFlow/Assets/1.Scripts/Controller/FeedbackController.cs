@@ -21,8 +21,6 @@ namespace BalloonFlow
 
         private const int COMBO_MEDIUM_THRESHOLD = 3;
         private const int COMBO_HIGH_THRESHOLD = 5;
-        private const float SLOW_MO_DURATION = 0.3f;
-        private const float SLOW_MO_TIME_SCALE = 0.3f;
         private const string POOL_PARTICLE_NORMAL = "ParticleNormal";
         private const string POOL_PARTICLE_COMBO = "ParticleCombo";
         private const string POOL_PARTICLE_RAINBOW = "ParticleRainbow";
@@ -84,7 +82,6 @@ namespace BalloonFlow
 
         private Vector3 _cameraOriginalPosition;
         private Tweener _shakeTweener;
-        private Coroutine _slowMoCoroutine;
         private bool _isShaking;
 
         #endregion
@@ -207,12 +204,11 @@ namespace BalloonFlow
 
             if (comboCount >= COMBO_HIGH_THRESHOLD)
             {
-                // Rainbow particles + slow-mo
+                // Rainbow particles (no slow-mo — causes perceived game slowdown)
                 Vector3 centerPos = GetScreenCenter();
                 SpawnPooledParticle(POOL_PARTICLE_RAINBOW, centerPos);
                 TriggerScreenShake(_shakeIntensityLarge, _shakeDurationMedium);
                 PlayRandomClip(_comboPopClips, pitch);
-                TriggerSlowMo();
             }
             else
             {
@@ -407,18 +403,6 @@ namespace BalloonFlow
                 });
         }
 
-        private void TriggerSlowMo()
-        {
-            if (_slowMoCoroutine != null)
-            {
-                StopCoroutine(_slowMoCoroutine);
-                Time.timeScale = 1f;
-                Time.fixedDeltaTime = 0.02f;
-            }
-
-            _slowMoCoroutine = StartCoroutine(SlowMoCoroutine());
-        }
-
         private void PlayRandomClip(AudioClip[] clips, float pitch)
         {
             if (_sfxSource == null || clips == null || clips.Length == 0)
@@ -457,26 +441,6 @@ namespace BalloonFlow
         #endregion
 
         #region Private Methods — Coroutines
-
-        // ScreenShakeCoroutine replaced by DOTween DOShakePosition (see TriggerScreenShake)
-
-        private IEnumerator SlowMoCoroutine()
-        {
-            Time.timeScale = SLOW_MO_TIME_SCALE;
-            Time.fixedDeltaTime = 0.02f * SLOW_MO_TIME_SCALE;
-
-            // Use unscaled time so slow-mo duration is real-world seconds
-            float elapsed = 0f;
-            while (elapsed < SLOW_MO_DURATION)
-            {
-                elapsed += Time.unscaledDeltaTime;
-                yield return null;
-            }
-
-            Time.timeScale = 1f;
-            Time.fixedDeltaTime = 0.02f;
-            _slowMoCoroutine = null;
-        }
 
         private IEnumerator ReturnParticleAfterPlay(string poolKey, GameObject particle, ParticleSystem ps)
         {

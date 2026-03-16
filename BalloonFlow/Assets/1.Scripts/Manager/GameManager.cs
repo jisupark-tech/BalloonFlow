@@ -21,20 +21,20 @@ namespace BalloonFlow
 
         [Header("[다트 — Dart]")]
         [Tooltip("다트 비행 시간 (초). 클수록 느림")]
-        public float dartFlightTime = 0.036f;
+        public float dartFlightTime = 0.1f;
 
         [Tooltip("다트 발사 인터벌 (초). 보관함이 다트를 연속 발사하는 간격")]
-        public float dartFireInterval = 0.06f;
+        public float dartFireInterval = 0.05f;
 
         [Tooltip("다트 레일 이동 속도 (DartManager용)")]
-        public float dartRailSpeed = 5f;
+        public float dartRailSpeed = 3f;
 
-        [Header("[레일 — Rail]")]
-        [Tooltip("홀더 레일 이동 속도")]
-        public float holderRailSpeed = 7f;
+        [Header("[레일 — Rail (컨베이어벨트)]")]
+        [Tooltip("레일 슬롯 수 (기본 200). 다트가 슬롯을 점유")]
+        public int railSlotCount = 200;
 
-        [Tooltip("레일 위 최대 홀더 수")]
-        public int maxOnRail = 9;
+        [Tooltip("레일 회전 속도 (슬롯/초). 컨베이어벨트 속도")]
+        public float railRotationSpeed = 15f;
 
         [Tooltip("보드 가장자리 ~ 레일 간격")]
         public float railPadding = 1.5f;
@@ -49,9 +49,16 @@ namespace BalloonFlow
         [Tooltip("보드 중심 Z좌표")]
         public float boardCenterZ = 2f;
 
-        [Header("[타겟팅 — Targeting]")]
-        [Tooltip("true: 최외각만 공격 (기본)\nfalse: 같은 색이면 관통 공격 (방해물/다른색 뒤는 불가)")]
-        public bool outermostOnly = true;
+        [Header("[연출 — Visual Effects]")]
+        [Tooltip("보관함 다트 배치 시 펀치 스케일 연출 사용 여부")]
+        public bool useDeployPunchScale = false;
+
+        [Header("[실패 판정 — Fail Detection]")]
+        [Tooltip("실패 유예 시간 (초). 99.5%+ 점유 + 최외곽 매칭 불가 시 이 시간 후 실패")]
+        public float failGraceDelay = 1.5f;
+
+        [Tooltip("실패 임계 점유율 (0~1). 기본 0.995 = 199/200슬롯")]
+        public float failOccupancyThreshold = 0.995f;
     }
 
     /// <summary>

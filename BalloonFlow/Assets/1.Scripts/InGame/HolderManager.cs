@@ -5,7 +5,7 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Data container for a single holder (magazine slot).
+    /// Data container for a single holder (magazine slot) in the queue.
     /// </summary>
     [System.Serializable]
     public class HolderData
@@ -13,41 +13,46 @@ namespace BalloonFlow
         public int holderId;
         public int color;
         public int magazineCount;
-        public bool isDeployed;
-        public bool isOnRail;
+        public int column;            // queue column (0..queueColumns-1)
+        public bool isDeploying;      // currently at rail deploying darts
+        public bool isWaiting;        // waiting behind a deploying holder (same column)
+        public bool isMovingToRail;   // in transit from queue to rail
+        public bool isConsumed;       // magazine=0, removed
     }
 
     /// <summary>
-    /// Manages all holder slots. Player taps a holder to deploy its darts
-    /// onto the circular rail. Holders return after a rail loop if they
-    /// still have remaining magazine. Overflow (>5 waiting) triggers fail.
+    /// Manages all holders in a column-based queue system.
+    /// Rail Overflow mode: holders are queue items that deploy darts onto rail slots.
+    /// Per column: max 1 deploying + 1 waiting. 3rd touch = bounce back (reject).
     /// </summary>
     /// <remarks>
     /// Layer: Domain | Genre: Puzzle | Role: Manager | Phase: 1
-    /// DB Reference: No DB match found — generated from L3 YAML logicFlow (ingame_holder_dart_pop)
+    /// DB Reference: Generated from Rail Overflow spec — column queue system
     /// </remarks>
     public class HolderManager : SceneSingleton<HolderManager>
     {
         #region Constants
 
-        private const int MAX_HOLDER_SLOTS = 5;
+        /// <summary>Maximum queue columns (matches spec: 5).</summary>
+        private const int MAX_QUEUE_COLUMNS = 5;
 
         #endregion
 
         #region Fields
 
         private readonly List<HolderData> _holders = new List<HolderData>();
-        private HolderData _currentHolder;
         private int _nextHolderId;
+        private int _queueColumns = 5;
+
+        // Per-column tracking: which holder is deploying, which is waiting
+        private readonly int[] _deployingHolderId = new int[MAX_QUEUE_COLUMNS];
+        private readonly int[] _waitingHolderId = new int[MAX_QUEUE_COLUMNS];
 
         #endregion
 
         #region Properties
 
-        /// <summary>
-        /// Maximum number of holders allowed in the waiting area before overflow.
-        /// </summary>
-        public int MaxHolderSlots => MAX_HOLDER_SLOTS;
+        public int QueueColumns => _queueColumns;
 
         #endregion
 
@@ -55,19 +60,19 @@ namespace BalloonFlow
 
         protected override void OnSingletonAwake()
         {
-            // Initialization handled by InitializeHolders() called from level loader
+            ResetColumnTracking();
         }
 
         private void OnEnable()
         {
             EventBus.Subscribe<OnHolderTapped>(HandleHolderTapped);
-            EventBus.Subscribe<OnRailLoopComplete>(HandleRailLoopComplete);
+            EventBus.Subscribe<OnHolderDeploymentDone>(HandleDeploymentDone);
         }
 
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnHolderTapped>(HandleHolderTapped);
-            EventBus.Unsubscribe<OnRailLoopComplete>(HandleRailLoopComplete);
+            EventBus.Unsubscribe<OnHolderDeploymentDone>(HandleDeploymentDone);
         }
 
         #endregion
@@ -76,19 +81,53 @@ namespace BalloonFlow
 
         /// <summary>
         /// Initializes holders from level data. Call when a level is loaded.
-        /// Each entry is (color, magazineCount).
+        /// Holders are organized by column. Each entry is (color, magazineCount, column).
         /// </summary>
-        public void InitializeHolders(List<(int color, int magazineCount)> holderSetup)
+        public void InitializeHolders(List<(int color, int magazineCount)> holderSetup, int queueColumns = 5)
         {
             _holders.Clear();
-            _currentHolder = null;
             _nextHolderId = 0;
+            _queueColumns = Mathf.Clamp(queueColumns, 1, MAX_QUEUE_COLUMNS);
+            ResetColumnTracking();
 
             if (holderSetup == null || holderSetup.Count == 0)
             {
                 Debug.LogWarning("[HolderManager] No holder setup data provided.");
                 return;
             }
+
+            // Distribute holders across columns round-robin
+            for (int i = 0; i < holderSetup.Count; i++)
+            {
+                var setup = holderSetup[i];
+                int col = i % _queueColumns;
+
+                var holder = new HolderData
+                {
+                    holderId = _nextHolderId++,
+                    color = setup.color,
+                    magazineCount = setup.magazineCount,
+                    column = col,
+                    isDeploying = false,
+                    isWaiting = false,
+                    isMovingToRail = false,
+                    isConsumed = false
+                };
+                _holders.Add(holder);
+            }
+        }
+
+        /// <summary>
+        /// Initializes holders with explicit column assignments.
+        /// </summary>
+        public void InitializeHoldersWithColumns(List<(int color, int magazineCount, int column)> holderSetup, int queueColumns = 5)
+        {
+            _holders.Clear();
+            _nextHolderId = 0;
+            _queueColumns = Mathf.Clamp(queueColumns, 1, MAX_QUEUE_COLUMNS);
+            ResetColumnTracking();
+
+            if (holderSetup == null || holderSetup.Count == 0) return;
 
             foreach (var setup in holderSetup)
             {
@@ -97,23 +136,18 @@ namespace BalloonFlow
                     holderId = _nextHolderId++,
                     color = setup.color,
                     magazineCount = setup.magazineCount,
-                    isDeployed = false,
-                    isOnRail = false
+                    column = Mathf.Clamp(setup.column, 0, _queueColumns - 1),
+                    isDeploying = false,
+                    isWaiting = false,
+                    isMovingToRail = false,
+                    isConsumed = false
                 };
                 _holders.Add(holder);
-            }
-
-            // Check initial overflow
-            int waitingCount = GetWaitingHolderCount();
-            if (waitingCount > MAX_HOLDER_SLOTS)
-            {
-                Debug.LogWarning($"[HolderManager] Initial holder count {waitingCount} exceeds max {MAX_HOLDER_SLOTS}.");
-                PublishOverflow(waitingCount);
             }
         }
 
         /// <summary>
-        /// Returns all holders (deployed and waiting).
+        /// Returns all holders.
         /// </summary>
         public HolderData[] GetHolders()
         {
@@ -121,40 +155,52 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Attempts to select a holder by ID and deploy it onto the rail.
-        /// Returns false if the holder is not found, already deployed, or empty.
+        /// Attempts to select a holder by ID and deploy it.
+        /// Returns false if:
+        /// - Holder not found / already deployed / consumed
+        /// - Column already has deploying+waiting (3rd touch → bounce)
         /// </summary>
         public bool SelectHolder(int holderId)
         {
-            // Block selection if rail is at capacity
-            if (HolderVisualManager.HasInstance && HolderVisualManager.Instance.IsRailFull())
-            {
-                Debug.Log("[HolderManager] Rail is full. Cannot deploy more holders.");
-                return false;
-            }
-
             HolderData holder = FindHolder(holderId);
-            if (holder == null)
+            if (holder == null || holder.isDeploying || holder.isWaiting || holder.isMovingToRail || holder.isConsumed)
             {
-                Debug.LogWarning($"[HolderManager] Holder {holderId} not found.");
-                return false;
-            }
-
-            if (holder.isDeployed || holder.isOnRail)
-            {
-                Debug.LogWarning($"[HolderManager] Holder {holderId} is already deployed.");
                 return false;
             }
 
             if (holder.magazineCount <= 0)
             {
-                Debug.LogWarning($"[HolderManager] Holder {holderId} has no magazine.");
                 return false;
             }
 
-            holder.isDeployed = true;
-            holder.isOnRail = true;
-            _currentHolder = holder;
+            int col = holder.column;
+
+            // Check column state
+            if (_deployingHolderId[col] >= 0 && _waitingHolderId[col] >= 0)
+            {
+                // Column full (deploying + waiting). 3rd touch = bounce back
+                EventBus.Publish(new OnHolderWarning
+                {
+                    waitingCount = 2,
+                    maxSlots = 2,
+                    isDanger = true
+                });
+                return false;
+            }
+
+            if (_deployingHolderId[col] >= 0)
+            {
+                // Already deploying — this holder becomes the waiting holder
+                holder.isWaiting = true;
+                _waitingHolderId[col] = holder.holderId;
+            }
+            else
+            {
+                // No deployer — this holder starts deploying immediately
+                holder.isDeploying = true;
+                holder.isMovingToRail = true;
+                _deployingHolderId[col] = holder.holderId;
+            }
 
             EventBus.Publish(new OnHolderSelected
             {
@@ -167,28 +213,87 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Reverts a holder's deploy state (called when rail capacity blocked deployment).
+        /// Called when a holder reaches the rail and starts deploying darts.
         /// </summary>
-        public void UndoDeploy(int holderId)
+        public void ConfirmOnRail(int holderId)
         {
             HolderData holder = FindHolder(holderId);
             if (holder != null)
             {
-                holder.isDeployed = false;
-                holder.isOnRail = false;
+                holder.isMovingToRail = false;
+                holder.isDeploying = true;
             }
         }
 
         /// <summary>
-        /// Returns the currently active (deployed) holder, or null if none.
+        /// Consumes one magazine from the specified holder.
+        /// Returns the remaining magazine count.
         /// </summary>
-        public HolderData GetCurrentHolder()
+        public int ConsumeMagazine(int holderId)
         {
-            return _currentHolder;
+            HolderData holder = FindHolder(holderId);
+            if (holder == null || holder.magazineCount <= 0) return 0;
+
+            holder.magazineCount--;
+
+            if (holder.magazineCount <= 0)
+            {
+                EventBus.Publish(new OnMagazineEmpty { holderId = holderId });
+            }
+
+            return holder.magazineCount;
         }
 
         /// <summary>
-        /// Returns total holder count (waiting + deployed).
+        /// Reverts a holder's deploy state (e.g. when deploy was blocked).
+        /// </summary>
+        public void UndoDeploy(int holderId)
+        {
+            HolderData holder = FindHolder(holderId);
+            if (holder == null) return;
+
+            int col = holder.column;
+            holder.isDeploying = false;
+            holder.isWaiting = false;
+            holder.isMovingToRail = false;
+
+            if (_deployingHolderId[col] == holderId) _deployingHolderId[col] = -1;
+            if (_waitingHolderId[col] == holderId) _waitingHolderId[col] = -1;
+        }
+
+        /// <summary>
+        /// Returns holders in a specific column, ordered by queue position.
+        /// </summary>
+        public List<HolderData> GetColumnHolders(int column)
+        {
+            var result = new List<HolderData>();
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                if (_holders[i].column == column && !_holders[i].isConsumed)
+                {
+                    result.Add(_holders[i]);
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Returns true when all holders have zero magazine and none are deploying.
+        /// </summary>
+        public bool AreAllHoldersEmpty()
+        {
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                if (!_holders[i].isConsumed && (_holders[i].magazineCount > 0 || _holders[i].isDeploying))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Returns total holder count (active + consumed).
         /// </summary>
         public int GetHolderCount()
         {
@@ -196,14 +301,14 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Returns the number of holders currently waiting (not deployed).
+        /// Returns the number of holders waiting in the queue (not deploying, not consumed).
         /// </summary>
         public int GetWaitingHolderCount()
         {
             int count = 0;
             for (int i = 0; i < _holders.Count; i++)
             {
-                if (!_holders[i].isDeployed && !_holders[i].isOnRail)
+                if (!_holders[i].isDeploying && !_holders[i].isWaiting && !_holders[i].isMovingToRail && !_holders[i].isConsumed)
                 {
                     count++;
                 }
@@ -230,138 +335,25 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Consumes one magazine from the specified holder.
-        /// Returns the remaining magazine count.
-        /// Publishes OnMagazineEmpty if magazine reaches zero.
+        /// Adds a new holder to a column (used by gimmicks like Spawner).
+        /// Returns the new holder's ID.
         /// </summary>
-        public int ConsumeMagazine(int holderId)
+        public int AddHolder(int color, int magazineCount, int column = -1)
         {
-            HolderData holder = FindHolder(holderId);
-            if (holder == null)
-            {
-                Debug.LogWarning($"[HolderManager] ConsumeMagazine: Holder {holderId} not found.");
-                return 0;
-            }
+            if (column < 0) column = FindShortestColumn();
 
-            if (holder.magazineCount <= 0)
-            {
-                return 0;
-            }
-
-            holder.magazineCount--;
-
-            if (holder.magazineCount <= 0)
-            {
-                EventBus.Publish(new OnMagazineEmpty { holderId = holderId });
-            }
-
-            return holder.magazineCount;
-        }
-
-        /// <summary>
-        /// Returns a holder to the waiting area after a rail loop with remaining magazine.
-        /// Checks overflow condition after return.
-        /// </summary>
-        public void ReturnToHolder(int holderId, int remainingMagazine)
-        {
-            HolderData holder = FindHolder(holderId);
-            if (holder == null)
-            {
-                Debug.LogWarning($"[HolderManager] ReturnToHolder: Holder {holderId} not found.");
-                return;
-            }
-
-            holder.magazineCount = remainingMagazine;
-            holder.isDeployed = false;
-            holder.isOnRail = false;
-
-            if (_currentHolder != null && _currentHolder.holderId == holderId)
-            {
-                _currentHolder = null;
-            }
-
-            EventBus.Publish(new OnHolderReturned
-            {
-                holderId = holderId,
-                remainingMagazine = remainingMagazine
-            });
-
-            // Check warning/overflow after return
-            int waitingCount = GetWaitingHolderCount();
-            CheckAndPublishWarning(waitingCount);
-            if (waitingCount > MAX_HOLDER_SLOTS)
-            {
-                PublishOverflow(waitingCount);
-            }
-        }
-
-        /// <summary>
-        /// Removes a holder from the list (magazine fully consumed on rail).
-        /// </summary>
-        public void RemoveHolder(int holderId)
-        {
-            for (int i = _holders.Count - 1; i >= 0; i--)
-            {
-                if (_holders[i].holderId == holderId)
-                {
-                    if (_currentHolder != null && _currentHolder.holderId == holderId)
-                    {
-                        _currentHolder = null;
-                    }
-                    _holders.RemoveAt(i);
-                    break;
-                }
-            }
-
-            if (AreAllHoldersEmpty())
-            {
-                EventBus.Publish(new OnAllHoldersEmpty());
-            }
-        }
-
-        /// <summary>
-        /// Returns true when all holders have zero magazine and none are on the rail.
-        /// </summary>
-        public bool AreAllHoldersEmpty()
-        {
-            if (_holders.Count == 0)
-            {
-                return true;
-            }
-
-            for (int i = 0; i < _holders.Count; i++)
-            {
-                if (_holders[i].magazineCount > 0 || _holders[i].isOnRail)
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        /// <summary>
-        /// Adds a new holder to the waiting area (used by level spawning / gimmicks).
-        /// Returns the new holder's ID. Checks overflow after adding.
-        /// </summary>
-        public int AddHolder(int color, int magazineCount)
-        {
             var holder = new HolderData
             {
                 holderId = _nextHolderId++,
                 color = color,
                 magazineCount = magazineCount,
-                isDeployed = false,
-                isOnRail = false
+                column = Mathf.Clamp(column, 0, _queueColumns - 1),
+                isDeploying = false,
+                isWaiting = false,
+                isMovingToRail = false,
+                isConsumed = false
             };
             _holders.Add(holder);
-
-            int waitingCount = GetWaitingHolderCount();
-            CheckAndPublishWarning(waitingCount);
-            if (waitingCount > MAX_HOLDER_SLOTS)
-            {
-                PublishOverflow(waitingCount);
-            }
-
             return holder.holderId;
         }
 
@@ -371,8 +363,8 @@ namespace BalloonFlow
         public void ResetAll()
         {
             _holders.Clear();
-            _currentHolder = null;
             _nextHolderId = 0;
+            ResetColumnTracking();
         }
 
         #endregion
@@ -384,50 +376,39 @@ namespace BalloonFlow
             for (int i = 0; i < _holders.Count; i++)
             {
                 if (_holders[i].holderId == holderId)
-                {
                     return _holders[i];
-                }
             }
             return null;
         }
 
-        /// <summary>
-        /// Checks holder count and publishes warning events at 4/5 (warning) and 5/5 (danger).
-        /// Design ref: 피드백디렉션 P0 #2, #3
-        /// </summary>
-        private void CheckAndPublishWarning(int waitingCount)
+        private void ResetColumnTracking()
         {
-            if (waitingCount >= MAX_HOLDER_SLOTS)
+            for (int i = 0; i < MAX_QUEUE_COLUMNS; i++)
             {
-                // 5/5 danger — holder frame all red + screen border alert
-                EventBus.Publish(new OnHolderWarning
-                {
-                    waitingCount = waitingCount,
-                    maxSlots = MAX_HOLDER_SLOTS,
-                    isDanger = true
-                });
-            }
-            else if (waitingCount >= MAX_HOLDER_SLOTS - 1)
-            {
-                // 4/5 warning — holder frame red flicker
-                EventBus.Publish(new OnHolderWarning
-                {
-                    waitingCount = waitingCount,
-                    maxSlots = MAX_HOLDER_SLOTS,
-                    isDanger = false
-                });
+                _deployingHolderId[i] = -1;
+                _waitingHolderId[i] = -1;
             }
         }
 
-        private void PublishOverflow(int holderCount)
+        private int FindShortestColumn()
         {
-            EventBus.Publish(new OnHolderOverflow { holderCount = holderCount });
-
-            EventBus.Publish(new OnBoardFailed
+            int minCount = int.MaxValue;
+            int bestCol = 0;
+            for (int col = 0; col < _queueColumns; col++)
             {
-                levelId = -1,
-                reason = $"Holder overflow: {holderCount} > {MAX_HOLDER_SLOTS}"
-            });
+                int count = 0;
+                for (int i = 0; i < _holders.Count; i++)
+                {
+                    if (_holders[i].column == col && !_holders[i].isConsumed)
+                        count++;
+                }
+                if (count < minCount)
+                {
+                    minCount = count;
+                    bestCol = col;
+                }
+            }
+            return bestCol;
         }
 
         private void HandleHolderTapped(OnHolderTapped evt)
@@ -435,17 +416,46 @@ namespace BalloonFlow
             SelectHolder(evt.holderId);
         }
 
-        private void HandleRailLoopComplete(OnRailLoopComplete evt)
+        private void HandleDeploymentDone(OnHolderDeploymentDone evt)
         {
-            if (evt.remainingMagazine > 0)
+            // Deploying holder finished (magazine=0)
+            HolderData holder = FindHolder(evt.holderId);
+            if (holder != null)
             {
-                // Magazine still has ammo — return to holder waiting area
-                ReturnToHolder(evt.holderId, evt.remainingMagazine);
+                holder.isDeploying = false;
+                holder.isConsumed = true;
             }
-            else
+
+            int col = evt.column;
+            _deployingHolderId[col] = -1;
+
+            // Promote waiting holder to deploying
+            if (_waitingHolderId[col] >= 0)
             {
-                // Magazine fully consumed — remove from holder list
-                RemoveHolder(evt.holderId);
+                int waitId = _waitingHolderId[col];
+                _waitingHolderId[col] = -1;
+
+                HolderData waitHolder = FindHolder(waitId);
+                if (waitHolder != null && !waitHolder.isConsumed)
+                {
+                    waitHolder.isWaiting = false;
+                    waitHolder.isDeploying = true;
+                    waitHolder.isMovingToRail = true;
+                    _deployingHolderId[col] = waitId;
+
+                    EventBus.Publish(new OnHolderSelected
+                    {
+                        holderId = waitHolder.holderId,
+                        color = waitHolder.color,
+                        magazineCount = waitHolder.magazineCount
+                    });
+                }
+            }
+
+            // Check if all holders are consumed
+            if (AreAllHoldersEmpty())
+            {
+                EventBus.Publish(new OnAllHoldersEmpty());
             }
         }
 

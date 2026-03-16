@@ -77,7 +77,7 @@ namespace BalloonFlow.Editor
         private float _railHeight = 0.5f;
         private Vector2 _boardCenter = new Vector2(0f, 2f);
         private int _railVisualType = 0;
-        private int _maxOnRail = 9;
+        private int _railSlotCount = 200;
 
         // --- Balloon grid ---
         private int _balloonGridCols = 5;
@@ -316,7 +316,7 @@ namespace BalloonFlow.Editor
             EditorGUI.indentLevel++;
             _railDirection = EditorGUILayout.Popup("Direction", _railDirection, RAIL_DIRECTIONS);
             _railVisualType = EditorGUILayout.Popup("Visual Type", _railVisualType, RAIL_VISUAL_TYPES);
-            _maxOnRail = EditorGUILayout.IntSlider("Max Holders on Rail", _maxOnRail, 1, 15);
+            _railSlotCount = EditorGUILayout.IntSlider("Rail Slot Count", _railSlotCount, 50, 400);
             _boardCenter = EditorGUILayout.Vector2Field("Board Center (X, Z)", _boardCenter);
             _railPadding = EditorGUILayout.FloatField("Rail Padding", _railPadding);
             _railHeight = EditorGUILayout.FloatField("Rail Height (Y)", _railHeight);
@@ -967,12 +967,12 @@ namespace BalloonFlow.Editor
                 waypoints.Add(new Vector3(right, _railHeight, Mathf.Lerp(top, bottom, 0.67f)));
             }
 
-            int slotCount = _holderGridCols;
-            var holderPositions = new Vector3[slotCount];
-            for (int i = 0; i < slotCount; i++)
+            int deployCount = _holderGridCols;
+            var deployPoints = new Vector3[deployCount];
+            for (int i = 0; i < deployCount; i++)
             {
-                float tVal = (i + 1f) / (slotCount + 1f);
-                holderPositions[i] = new Vector3(
+                float tVal = (i + 1f) / (deployCount + 1f);
+                deployPoints[i] = new Vector3(
                     Mathf.Lerp(left, right, tVal),
                     _railHeight,
                     bottom);
@@ -981,9 +981,9 @@ namespace BalloonFlow.Editor
             return new RailLayout
             {
                 waypoints = waypoints.ToArray(),
-                holderPositions = holderPositions,
+                slotCount = _railSlotCount,
                 visualType = _railVisualType,
-                maxOnRail = _maxOnRail
+                deployPoints = deployPoints
             };
         }
 

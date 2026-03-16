@@ -181,7 +181,13 @@ namespace BalloonFlow
                 SpawnBalloonFromSetup(entry);
             }
 
-            RemainingCount = _balloons.Count;
+            // Wall balloons are indestructible — don't count toward clear condition
+            int wallCount = 0;
+            foreach (BalloonData d in _balloons.Values)
+            {
+                if (d.gimmickType == GimmickWall) wallCount++;
+            }
+            RemainingCount = _balloons.Count - wallCount;
             BuildPositionIndex();
 
             // Apply Hidden gimmick concealment after all balloons are placed

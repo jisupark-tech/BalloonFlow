@@ -134,7 +134,8 @@ namespace BalloonFlow
     }
 
     /// <summary>
-    /// Describes the circular rail layout for a given level.
+    /// Describes the circular rail (conveyor belt) layout for a given level.
+    /// Rail Overflow mode: darts are placed on discrete slots and rotate with the belt.
     /// </summary>
     [System.Serializable]
     public class RailLayout
@@ -142,8 +143,11 @@ namespace BalloonFlow
         /// <summary>Ordered waypoints that define the rail path in world space.</summary>
         public Vector3[] waypoints;
 
-        /// <summary>World-space positions where holders wait on the rail.</summary>
-        public Vector3[] holderPositions;
+        /// <summary>
+        /// Total number of discrete slots on the rail conveyor belt.
+        /// Default 200. Darts occupy slots; occupancy 99.5%+ triggers fail check.
+        /// </summary>
+        public int slotCount = 200;
 
         /// <summary>
         /// Visual style of the conveyor belt.
@@ -151,7 +155,10 @@ namespace BalloonFlow
         /// </summary>
         public int visualType;
 
-        /// <summary>Maximum holders allowed on the rail simultaneously.</summary>
-        public int maxOnRail = 9;
+        /// <summary>
+        /// World-space positions where queue columns align to the rail bottom edge.
+        /// Index = column index (0..queueColumns-1). Holders move up from queue to this point.
+        /// </summary>
+        public Vector3[] deployPoints;
     }
 }
