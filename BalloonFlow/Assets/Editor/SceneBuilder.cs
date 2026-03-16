@@ -30,7 +30,7 @@ namespace BalloonFlow.Editor
         private const string PREFS_KEY = "BalloonFlow_SceneBuilt_v15";
         private const int REF_WIDTH  = 1080;
         private const int REF_HEIGHT = 1920;
-        private const string SCENES_FOLDER = "Assets/Scenes";
+        private const string SCENES_FOLDER = "Assets/0.Scenes";
 
         static SceneBuilder()
         {
