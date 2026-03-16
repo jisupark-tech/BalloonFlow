@@ -23,6 +23,9 @@ namespace BalloonFlow
         [Tooltip("다트 비행 시간 (초). 클수록 느림")]
         public float dartFlightTime = 0.036f;
 
+        [Tooltip("다트 발사 인터벌 (초). 보관함이 다트를 연속 발사하는 간격")]
+        public float dartFireInterval = 0.06f;
+
         [Tooltip("다트 레일 이동 속도 (DartManager용)")]
         public float dartRailSpeed = 5f;
 

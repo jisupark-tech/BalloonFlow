@@ -152,6 +152,7 @@ MonoBehaviour:
     cellSpacing: 0.55
     balloonScale: 0.5
     dartFlightTime: 0.1
+    dartFireInterval: 0.06
     dartRailSpeed: 5
     holderRailSpeed: 7
     maxOnRail: 9
@@ -248,6 +249,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.UIManager
   UiTr: {fileID: 968860529}
+  _fadeImage: {fileID: 0}
 --- !u!4 &399273601
 Transform:
   m_ObjectHideFlags: 0
@@ -602,6 +604,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.CameraManager
   MainCamera: {fileID: 1910842907}
   UICamera: {fileID: 914720488}
+  _inGamePosition: {x: 0, y: 25, z: -12}
+  _inGameRotation: {x: 65, y: 0, z: 0}
+  _inGameFOV: 45
+  _inGameOrthographic: 0
+  _inGameOrthoSize: 10
+  _shakeIntensity: 0.3
+  _shakeDuration: 0.25
+  _shakeDamping: 5
 --- !u!4 &1395393314
 Transform:
   m_ObjectHideFlags: 0
