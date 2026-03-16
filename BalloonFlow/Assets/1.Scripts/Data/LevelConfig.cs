@@ -13,23 +13,29 @@ namespace BalloonFlow
     [System.Serializable]
     public class LevelConfig
     {
-        /// <summary>Unique level identifier (1–100).</summary>
+        /// <summary>Unique level identifier (1–300).</summary>
         public int levelId;
 
-        /// <summary>Package this level belongs to (1–5).</summary>
+        /// <summary>Package this level belongs to (1–15).</summary>
         public int packageId;
 
         /// <summary>Position within the package (1–20).</summary>
         public int positionInPackage;
 
-        /// <summary>Number of distinct balloon/dart colors used (2–8).</summary>
+        /// <summary>Number of distinct balloon/dart colors used (2–11).</summary>
         public int numColors;
 
-        /// <summary>Total balloons placed on the board (6–65).</summary>
+        /// <summary>Total balloons placed on the board (6–200).</summary>
         public int balloonCount;
 
         /// <summary>Scale multiplier for balloon visuals (0.2–1.0, default 0.5).</summary>
         public float balloonScale = 0.5f;
+
+        /// <summary>Queue width — number of columns in the holder queue (2–5, Hard Rule).</summary>
+        public int queueColumns;
+
+        /// <summary>Target clear rate for this level (0.12–0.95).</summary>
+        public float targetClearRate;
 
         /// <summary>
         /// Describes the pacing role of this level.
@@ -48,6 +54,24 @@ namespace BalloonFlow
 
         /// <summary>Rail waypoint and holder-position layout.</summary>
         public RailLayout rail;
+
+        /// <summary>
+        /// Grid positions where conveyor belt tiles are placed (tilemap coordinates).
+        /// Empty or null means no conveyor tiles for this level.
+        /// </summary>
+        public Vector2Int[] conveyorPositions;
+
+        /// <summary>
+        /// Number of balloon grid columns used for tilemap sizing.
+        /// Set by MapMaker or LevelGenerator.
+        /// </summary>
+        public int gridCols;
+
+        /// <summary>
+        /// Number of balloon grid rows used for tilemap sizing.
+        /// Set by MapMaker or LevelGenerator.
+        /// </summary>
+        public int gridRows;
 
         /// <summary>Score required for 1 star (= balloonCount * 100).</summary>
         public int star1Threshold;

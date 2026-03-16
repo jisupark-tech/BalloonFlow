@@ -60,9 +60,10 @@ namespace BalloonFlow
     {
         #region Constants
 
-        public const string SCENE_TITLE  = "Title";
-        public const string SCENE_LOBBY  = "Lobby";
-        public const string SCENE_INGAME = "InGame";
+        public const string SCENE_TITLE    = "Title";
+        public const string SCENE_LOBBY    = "Lobby";
+        public const string SCENE_INGAME   = "InGame";
+        public const string SCENE_MAPMAKER = "MapMaker";
 
         #endregion
 
@@ -79,11 +80,24 @@ namespace BalloonFlow
         private bool _isTransitioning;
         private string _currentScene;
 
+        /// <summary>
+        /// True when playing a level from MapMaker test mode.
+        /// Managers check this to provide unlimited items.
+        /// Reset when leaving InGame to a non-MapMaker scene.
+        /// </summary>
+        public static bool IsTestPlayMode;
+
         // Init 플래그
         private bool _lobbyInitialized;
 
         // InGame 매니저 루트 (GameManager 자식)
         private GameObject _inGameRoot;
+
+        /// <summary>
+        /// Optional sprite shown during fade transitions.
+        /// Set via SetTransitionImage() before LoadScene(). Consumed once per transition.
+        /// </summary>
+        private Sprite _transitionSprite;
 
         #endregion
 
@@ -149,6 +163,7 @@ namespace BalloonFlow
             _inGameRoot = new GameObject("InGameManagers");
             _inGameRoot.transform.SetParent(transform);
 
+            CreateChild<BoardTileManager>("Mgr_BoardTile");
             CreateChild<InputHandler>("Mgr_Input");
             var _railGO = CreateChild<RailManager>("Mgr_Rail");
             _railGO.AddComponent<RailRenderer>();
@@ -209,6 +224,17 @@ namespace BalloonFlow
 
         public void GoToLobby() { LoadScene(SCENE_LOBBY); }
         public void GoToTitle() { LoadScene(SCENE_TITLE); }
+        public void GoToMapMaker() { LoadScene(SCENE_MAPMAKER); }
+
+        /// <summary>
+        /// Set a custom image for the next scene transition fade.
+        /// The sprite is consumed (cleared) after one transition.
+        /// Pass null to use default solid black.
+        /// </summary>
+        public void SetTransitionImage(Sprite _sprite)
+        {
+            _transitionSprite = _sprite;
+        }
 
         IEnumerator LoadSceneCoroutine(string _sceneName)
         {
@@ -225,11 +251,13 @@ namespace BalloonFlow
                 toScene = _sceneName
             });
 
-            // Fade Out
+            // Fade Out (with optional custom image)
+            Sprite _fadeSprite = _transitionSprite;
+            _transitionSprite = null; // consume once
             if (UIManager.HasInstance)
             {
                 UIManager.Instance.CloseUIAll();
-                UIManager.Instance.FadeOut(0.3f);
+                UIManager.Instance.FadeOut(0.3f, _fadeSprite);
                 yield return new WaitForSecondsRealtime(0.35f);
             }
 
@@ -241,8 +269,8 @@ namespace BalloonFlow
             _currentScene = _sceneName;
             _isTransitioning = false;
 
-            // 카메라 설정
-            if (CameraManager.HasInstance)
+            // 카메라 설정 (MapMaker has its own camera setup)
+            if (CameraManager.HasInstance && _sceneName != SCENE_MAPMAKER)
             {
                 switch (_sceneName)
                 {
@@ -252,9 +280,15 @@ namespace BalloonFlow
                 }
             }
 
-            // Fade In
+            // Reset test play mode when leaving InGame to non-MapMaker destinations
+            if (_fromScene == SCENE_INGAME && _sceneName != SCENE_INGAME)
+            {
+                IsTestPlayMode = false;
+            }
+
+            // Fade In (with same custom image if set)
             if (UIManager.HasInstance)
-                UIManager.Instance.FadeIn(0.3f);
+                UIManager.Instance.FadeIn(0.3f, _fadeSprite);
 
             EventBus.Publish(new OnSceneTransitionCompleted { sceneName = _sceneName });
         }

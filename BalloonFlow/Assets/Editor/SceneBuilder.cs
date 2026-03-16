@@ -5,6 +5,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
+using UnityEngine.Tilemaps;
 
 namespace BalloonFlow.Editor
 {
@@ -22,16 +23,16 @@ namespace BalloonFlow.Editor
     ///
     /// InGame 씬:
     ///   - SceneCanvas, EventSystem, GameBootstrap
-    ///   - Directional Light, BoardPlatform
+    ///   - Directional Light, BoardGrid (Grid+Tilemap: FloorTiles, ConveyorTiles)
     ///
     /// MapMaker 씬:
-    ///   - EditorCamera (탑뷰), Directional Light, BoardPlatform
+    ///   - EditorCamera (탑뷰), Directional Light, BoardGrid (Grid+Tilemap)
     ///   - 레벨 에디터 전용 씬 (런타임 매니저 없음)
     /// </summary>
     [InitializeOnLoad]
     public static class SceneBuilder
     {
-        private const string PREFS_KEY = "BalloonFlow_SceneBuilt_v16";
+        private const string PREFS_KEY = "BalloonFlow_SceneBuilt_v17";
         private const int REF_WIDTH  = 1080;
         private const int REF_HEIGHT = 1920;
         private const string SCENES_FOLDER = "Assets/0.Scenes";
@@ -44,7 +45,7 @@ namespace BalloonFlow.Editor
                 if (EditorApplication.isPlayingOrWillChangePlaymode) return;
                 BuildAllScenes();
                 EditorPrefs.SetBool(PREFS_KEY, true);
-                Debug.Log("[SceneBuilder] v15 완료");
+                Debug.Log("[SceneBuilder] v17 완료 (2D Tilemap board)");
             };
         }
 
@@ -166,7 +167,7 @@ namespace BalloonFlow.Editor
 
             // 3D 오브젝트
             EnsureLighting();
-            EnsureBoardPlatform();
+            EnsureBoardTilemap();
 
             EnsureCanvas("SceneCanvas");
             EnsureEventSystem();
@@ -183,9 +184,9 @@ namespace BalloonFlow.Editor
         {
             var _scene = OpenOrCreateScene(_path);
 
-            // 3D — 라이팅 + 보드 플랫폼
+            // 3D — 라이팅 + 2D 타일맵 보드
             EnsureLighting();
-            EnsureBoardPlatform();
+            EnsureBoardTilemap();
 
             // EditorCamera — 탑뷰 (MapMakerController가 런타임에 viewport 조정)
             var _camGO = GameObject.Find("EditorCamera");
@@ -319,20 +320,45 @@ namespace BalloonFlow.Editor
             _go.transform.eulerAngles = new Vector3(50f, -30f, 0f);
         }
 
-        /// <summary>BoardPlatform 확인/추가</summary>
-        static void EnsureBoardPlatform()
+        /// <summary>
+        /// BoardGrid (Grid + Tilemap) 확인/추가.
+        /// Grid를 X축 90도 회전하여 XY 타일맵이 월드 XZ 평면에 매핑되도록 함.
+        /// 자식: FloorTiles (Tilemap + TilemapRenderer, sortingOrder 0)
+        ///       ConveyorTiles (Tilemap + TilemapRenderer, sortingOrder 1)
+        /// BoardTileManager가 런타임에 InitializeBoard()로 타일을 채움.
+        /// </summary>
+        static void EnsureBoardTilemap()
         {
-            var _go = GameObject.Find("BoardPlatform");
-            if (_go != null) return; // 이미 있으면 건드리지 않음
+            // Remove legacy BoardPlatform if present
+            var _oldPlatform = GameObject.Find("BoardPlatform");
+            if (_oldPlatform != null) Object.DestroyImmediate(_oldPlatform);
 
-            _go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            _go.name = "BoardPlatform";
-            _go.transform.localScale = new Vector3(12f, 0.2f, 12f);
-            _go.transform.position = new Vector3(0f, -0.1f, 2f);
-            var _mr = _go.GetComponent<MeshRenderer>();
-            var _mat = new Material(Shader.Find("Standard"));
-            _mat.color = new Color(0.22f, 0.22f, 0.25f);
-            _mr.material = _mat;
+            var _gridGO = GameObject.Find("BoardGrid");
+            if (_gridGO != null) return; // 이미 있으면 건드리지 않음
+
+            // Grid 루트
+            _gridGO = new GameObject("BoardGrid");
+            var _grid = _gridGO.AddComponent<Grid>();
+            _grid.cellSize = new Vector3(0.55f, 0.55f, 0f); // default; BoardTileManager overrides at runtime
+            _grid.cellLayout = GridLayout.CellLayout.Rectangle;
+
+            // Rotate grid so tilemap XY -> world XZ (camera looks down Y)
+            _gridGO.transform.eulerAngles = new Vector3(90f, 0f, 0f);
+            _gridGO.transform.position = new Vector3(0f, -0.05f, 2f);
+
+            // Floor tilemap (sorting order 0)
+            var _floorGO = new GameObject("FloorTiles");
+            _floorGO.transform.SetParent(_gridGO.transform, false);
+            _floorGO.AddComponent<Tilemap>();
+            var _floorRend = _floorGO.AddComponent<TilemapRenderer>();
+            _floorRend.sortingOrder = 0;
+
+            // Conveyor tilemap (sorting order 1, on top of floor)
+            var _conveyorGO = new GameObject("ConveyorTiles");
+            _conveyorGO.transform.SetParent(_gridGO.transform, false);
+            _conveyorGO.AddComponent<Tilemap>();
+            var _conveyorRend = _conveyorGO.AddComponent<TilemapRenderer>();
+            _conveyorRend.sortingOrder = 1;
         }
 
         // ═══════════════════════════════════════════

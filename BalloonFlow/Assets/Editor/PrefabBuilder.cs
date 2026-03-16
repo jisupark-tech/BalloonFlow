@@ -18,14 +18,34 @@ namespace BalloonFlow.Editor
         // Balloon colors for the default material tints
         private static readonly Color[] BalloonColors = new Color[]
         {
-            new Color(0.95f, 0.25f, 0.25f), // Red
-            new Color(0.25f, 0.55f, 0.95f), // Blue
-            new Color(0.25f, 0.85f, 0.35f), // Green
-            new Color(0.95f, 0.85f, 0.15f), // Yellow
-            new Color(0.80f, 0.30f, 0.90f), // Purple
-            new Color(0.95f, 0.55f, 0.15f), // Orange
-            new Color(0.40f, 0.90f, 0.90f), // Cyan
-            new Color(0.95f, 0.50f, 0.70f), // Pink
+            new Color(0.95f, 0.25f, 0.25f), //  0: Red
+            new Color(0.25f, 0.55f, 0.95f), //  1: Blue
+            new Color(0.25f, 0.85f, 0.35f), //  2: Green
+            new Color(0.95f, 0.85f, 0.15f), //  3: Yellow
+            new Color(0.80f, 0.30f, 0.90f), //  4: Purple
+            new Color(0.95f, 0.55f, 0.15f), //  5: Orange
+            new Color(0.40f, 0.90f, 0.90f), //  6: Cyan
+            new Color(0.95f, 0.50f, 0.70f), //  7: Pink
+            new Color(0.75f, 0.15f, 0.15f), //  8: Crimson
+            new Color(0.15f, 0.20f, 0.65f), //  9: Navy
+            new Color(0.55f, 0.95f, 0.25f), // 10: Lime
+            new Color(0.95f, 0.75f, 0.05f), // 11: Gold
+            new Color(0.55f, 0.20f, 0.80f), // 12: Violet
+            new Color(0.95f, 0.65f, 0.00f), // 13: Amber
+            new Color(0.15f, 0.70f, 0.65f), // 14: Teal
+            new Color(0.95f, 0.35f, 0.50f), // 15: Rose
+            new Color(0.95f, 0.45f, 0.35f), // 16: Coral
+            new Color(0.30f, 0.15f, 0.70f), // 17: Indigo
+            new Color(0.40f, 0.95f, 0.65f), // 18: Mint
+            new Color(0.95f, 0.75f, 0.60f), // 19: Peach
+            new Color(0.90f, 0.15f, 0.65f), // 20: Magenta
+            new Color(0.50f, 0.55f, 0.15f), // 21: Olive
+            new Color(0.45f, 0.75f, 0.95f), // 22: Sky
+            new Color(0.95f, 0.55f, 0.45f), // 23: Salmon
+            new Color(0.50f, 0.10f, 0.15f), // 24: Maroon
+            new Color(0.10f, 0.45f, 0.20f), // 25: Forest
+            new Color(0.70f, 0.55f, 0.90f), // 26: Lavender
+            new Color(0.82f, 0.70f, 0.50f), // 27: Tan
         };
 
         static PrefabBuilder()

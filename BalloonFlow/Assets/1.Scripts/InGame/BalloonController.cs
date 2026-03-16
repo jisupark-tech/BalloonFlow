@@ -20,7 +20,7 @@ namespace BalloonFlow
         #region Constants
 
         private const string PoolKey = "Balloon";
-        private const int BigObjectRequiredHits = 2;
+        private const int PinataRequiredHits = 2;
         private const float DEFAULT_BALLOON_SCALE = 0.5f;
 
         /// <summary>
@@ -28,23 +28,51 @@ namespace BalloonFlow
         /// </summary>
         public static readonly Color[] BalloonColors = new Color[]
         {
-            new Color(0.95f, 0.25f, 0.25f), // 0: Red
-            new Color(0.25f, 0.55f, 0.95f), // 1: Blue
-            new Color(0.25f, 0.85f, 0.35f), // 2: Green
-            new Color(0.95f, 0.85f, 0.15f), // 3: Yellow
-            new Color(0.80f, 0.30f, 0.90f), // 4: Purple
-            new Color(0.95f, 0.55f, 0.15f), // 5: Orange
-            new Color(0.40f, 0.90f, 0.90f), // 6: Cyan
-            new Color(0.95f, 0.50f, 0.70f), // 7: Pink
+            new Color(0.95f, 0.25f, 0.25f),  //  0: Red
+            new Color(0.25f, 0.55f, 0.95f),  //  1: Blue
+            new Color(0.25f, 0.85f, 0.35f),  //  2: Green
+            new Color(0.95f, 0.85f, 0.15f),  //  3: Yellow
+            new Color(0.80f, 0.30f, 0.90f),  //  4: Purple
+            new Color(0.95f, 0.55f, 0.15f),  //  5: Orange
+            new Color(0.40f, 0.90f, 0.90f),  //  6: Cyan
+            new Color(0.95f, 0.50f, 0.70f),  //  7: Pink
+            new Color(0.75f, 0.15f, 0.15f),  //  8: Crimson
+            new Color(0.15f, 0.20f, 0.65f),  //  9: Navy
+            new Color(0.55f, 0.95f, 0.25f),  // 10: Lime
+            new Color(0.95f, 0.75f, 0.05f),  // 11: Gold
+            new Color(0.55f, 0.20f, 0.80f),  // 12: Violet
+            new Color(0.95f, 0.65f, 0.00f),  // 13: Amber
+            new Color(0.15f, 0.70f, 0.65f),  // 14: Teal
+            new Color(0.95f, 0.35f, 0.50f),  // 15: Rose
+            new Color(0.95f, 0.45f, 0.35f),  // 16: Coral
+            new Color(0.30f, 0.15f, 0.70f),  // 17: Indigo
+            new Color(0.40f, 0.95f, 0.65f),  // 18: Mint
+            new Color(0.95f, 0.75f, 0.60f),  // 19: Peach
+            new Color(0.90f, 0.15f, 0.65f),  // 20: Magenta
+            new Color(0.50f, 0.55f, 0.15f),  // 21: Olive
+            new Color(0.45f, 0.75f, 0.95f),  // 22: Sky
+            new Color(0.95f, 0.55f, 0.45f),  // 23: Salmon
+            new Color(0.50f, 0.10f, 0.15f),  // 24: Maroon
+            new Color(0.10f, 0.45f, 0.20f),  // 25: Forest
+            new Color(0.70f, 0.55f, 0.90f),  // 26: Lavender
+            new Color(0.82f, 0.70f, 0.50f),  // 27: Tan
         };
 
         // Gimmick type string constants — avoid magic strings throughout
-        public const string GimmickNone      = "none";
-        public const string GimmickHidden    = "Hidden";
-        public const string GimmickSpawnerT  = "Spawner_T";
-        public const string GimmickSpawnerO  = "Spawner_O";
-        public const string GimmickBigObject = "BigObject";
-        public const string GimmickChain     = "Chain";
+        public const string GimmickNone         = "none";
+        public const string GimmickHidden       = "Hidden";        // Lv.11
+        public const string GimmickChain        = "Chain";          // Lv.21
+        public const string GimmickPinata       = "Pinata";         // Lv.31 (was BigObject)
+        public const string GimmickSpawnerT     = "Spawner_T";      // Lv.41
+        public const string GimmickPin          = "Pin";             // Lv.61
+        public const string GimmickLockKey      = "Lock_Key";        // Lv.81
+        public const string GimmickSurprise     = "Surprise";        // Lv.101
+        public const string GimmickWall         = "Wall";            // Lv.121
+        public const string GimmickSpawnerO     = "Spawner_O";       // Lv.141
+        public const string GimmickPinataBox    = "Pinata_Box";      // Lv.161
+        public const string GimmickIce          = "Ice";             // Lv.201
+        public const string GimmickFrozenDart   = "Frozen_Dart";     // Lv.241
+        public const string GimmickColorCurtain = "Color_Curtain";   // Lv.281
 
         #endregion
 
@@ -61,8 +89,8 @@ namespace BalloonFlow
         // Hidden balloons that are currently color-concealed
         private readonly HashSet<int> _hiddenBalloons = new HashSet<int>();
 
-        // BigObject multi-tile occupancy: key = balloonId, value = list of all occupied ids
-        private readonly Dictionary<int, List<int>> _bigObjectGroup = new Dictionary<int, List<int>>();
+        // Pinata multi-tile occupancy: key = balloonId, value = list of all occupied ids
+        private readonly Dictionary<int, List<int>> _pinataGroup = new Dictionary<int, List<int>>();
 
         // Spatial index: position key -> balloonId  (for adjacency lookups)
         private readonly Dictionary<Vector3Int, int> _positionIndex = new Dictionary<Vector3Int, int>();
@@ -233,13 +261,19 @@ namespace BalloonFlow
                 return new PopResult { success = false, reason = "AlreadyPopped" };
             }
 
-            // BigObject requires multiple hits
-            if (data.gimmickType == GimmickBigObject)
+            // Wall blocks all pops — indestructible
+            if (data.gimmickType == GimmickWall)
             {
-                return ProcessBigObjectHit(data);
+                return new PopResult { success = false, reason = "Wall blocks dart", balloonId = data.balloonId, gimmickType = GimmickWall };
             }
 
-            // Standard pop (covers none, Hidden, Chain, Spawner_T, Spawner_O)
+            // Pinata and Pinata Box require multiple hits
+            if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
+            {
+                return ProcessPinataHit(data);
+            }
+
+            // Standard pop (covers none, Hidden, Chain, Spawner_T, Spawner_O, and new gimmick types)
             return ExecutePop(data);
         }
 
@@ -306,7 +340,7 @@ namespace BalloonFlow
             _balloons.Clear();
             _balloonObjects.Clear();
             _hiddenBalloons.Clear();
-            _bigObjectGroup.Clear();
+            _pinataGroup.Clear();
             _positionIndex.Clear();
             RemainingCount = 0;
             _nextBalloonId = 1;
@@ -339,13 +373,13 @@ namespace BalloonFlow
                 _balloonObjects[id] = obj;
             }
 
-            // Register BigObject group membership
-            if (data.gimmickType == GimmickBigObject && entry.groupId >= 0)
+            // Register Pinata group membership
+            if (data.gimmickType == GimmickPinata && entry.groupId >= 0)
             {
-                if (!_bigObjectGroup.TryGetValue(entry.groupId, out List<int> group))
+                if (!_pinataGroup.TryGetValue(entry.groupId, out List<int> group))
                 {
                     group = new List<int>();
-                    _bigObjectGroup[entry.groupId] = group;
+                    _pinataGroup[entry.groupId] = group;
                 }
                 group.Add(id);
             }
@@ -460,26 +494,26 @@ namespace BalloonFlow
             return result;
         }
 
-        private PopResult ProcessBigObjectHit(BalloonData data)
+        private PopResult ProcessPinataHit(BalloonData data)
         {
             data.hitCount++;
             _balloons[data.balloonId] = data;
 
-            if (data.hitCount < BigObjectRequiredHits)
+            if (data.hitCount < PinataRequiredHits)
             {
                 // Partial hit — not yet destroyed
                 EventBus.Publish(new OnGimmickTriggered
                 {
-                    gimmickType = GimmickBigObject,
+                    gimmickType = GimmickPinata,
                     targetId    = data.balloonId
                 });
 
                 return new PopResult
                 {
                     success     = false,
-                    reason      = "BigObjectPartialHit",
+                    reason      = "PinataPartialHit",
                     balloonId   = data.balloonId,
-                    gimmickType = GimmickBigObject
+                    gimmickType = GimmickPinata
                 };
             }
 
@@ -526,8 +560,56 @@ namespace BalloonFlow
                     });
                     break;
 
+                case GimmickPin:
+                    // Pin: 장애물 — 다트 차단, 인접 풍선 팝으로 제거
+                    result.success = true;
+                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickPin, targetId = data.balloonId });
+                    break;
+
+                case GimmickLockKey:
+                    // Lock&Key: Key 풍선 팝 후 대응 Lock 풍선 해제
+                    result.success = true;
+                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickLockKey, targetId = data.balloonId });
+                    break;
+
+                case GimmickSurprise:
+                    // Surprise: 팝 시 랜덤 색상으로 변경 (첫 히트), 두 번째 히트에 실제 팝
+                    result.success = true;
+                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickSurprise, targetId = data.balloonId });
+                    break;
+
+                case GimmickWall:
+                    // Wall: 파괴 불가 장벽 — 다트 차단
+                    result.success = false;
+                    result.reason = "Wall blocks dart";
+                    break;
+
+                case GimmickPinataBox:
+                    // Pinata Box: 다중 히트 컨테이너 — Pinata와 유사, 파괴 시 아이템 드롭
+                    // Reuse multi-hit logic (already handled in PopBalloon for Pinata type)
+                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickPinataBox, targetId = data.balloonId });
+                    break;
+
+                case GimmickIce:
+                    // Ice: 얼음 풍선 — 인접 풍선 팝으로 해동 후 팝 가능
+                    result.success = true;
+                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickIce, targetId = data.balloonId });
+                    break;
+
+                case GimmickFrozenDart:
+                    // Frozen Dart: 큐 기믹 — 컨테이너 첫 N발 동결 (발사 안됨)
+                    result.success = true;
+                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickFrozenDart, targetId = data.balloonId });
+                    break;
+
+                case GimmickColorCurtain:
+                    // Color Curtain: 특정 색상 다트로만 제거 가능한 커튼
+                    result.success = true;
+                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickColorCurtain, targetId = data.balloonId });
+                    break;
+
                 case GimmickNone:
-                case GimmickBigObject:
+                case GimmickPinata:
                 default:
                     break;
             }
@@ -674,11 +756,12 @@ namespace BalloonFlow
 
         /// <summary>
         /// Gimmick type string. One of:
-        /// "none", "Hidden", "Spawner_T", "Spawner_O", "BigObject", "Chain".
+        /// "none", "Hidden", "Chain", "Pinata", "Spawner_T", "Pin", "Lock_Key",
+        /// "Surprise", "Wall", "Spawner_O", "Pinata_Box", "Ice", "Frozen_Dart", "Color_Curtain".
         /// </summary>
         public string gimmickType;
 
-        /// <summary>Hit counter for BigObject gimmick (requires 2 hits).</summary>
+        /// <summary>Hit counter for Pinata gimmick (requires 2 hits).</summary>
         public int hitCount;
     }
 
@@ -693,7 +776,7 @@ namespace BalloonFlow
         public string gimmickType;
 
         /// <summary>
-        /// Group id for BigObject multi-tile balloons.
+        /// Group id for Pinata multi-tile balloons.
         /// -1 means not part of a group.
         /// </summary>
         public int groupId = -1;

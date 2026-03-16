@@ -20,8 +20,8 @@ namespace BalloonFlow
         /// <summary>Minimum grid dimension for earliest levels.</summary>
         private const int GridMinSize = 4;
 
-        /// <summary>Maximum grid dimension for latest levels.</summary>
-        private const int GridMaxSize = 10;
+        /// <summary>Maximum grid dimension for latest levels (Doc: up to 27×32).</summary>
+        private const int GridMaxSize = 27;
 
         /// <summary>World-space distance between adjacent balloon cells. GameManager.Board에서 읽어옴.</summary>
         private float CellSpacing => GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
@@ -43,7 +43,7 @@ namespace BalloonFlow
         private const int MinColors = 2;
 
         /// <summary>Maximum number of distinct colors.</summary>
-        private const int MaxColors = 8;
+        private const int MaxColors = 11;
 
         #endregion
 
@@ -53,7 +53,7 @@ namespace BalloonFlow
         private const int MinHolders = 10;
 
         /// <summary>Maximum number of holders per level.</summary>
-        private const int MaxHolders = 25;
+        private const int MaxHolders = 50;
 
         /// <summary>Z range for holder waiting area (near edge).</summary>
         private const float HolderAreaZStart = -5.0f;
@@ -61,24 +61,35 @@ namespace BalloonFlow
         /// <summary>Z range for holder waiting area (far edge).</summary>
         private const float HolderAreaZEnd = -7.0f;
 
-        /// <summary>Extra magazine ratio above balloon count to ensure solvability.</summary>
-        private const float MagazineSurplusRatio = 1.25f;
+        /// <summary>Exact magazine ratio to balloon count (1.0 = no surplus darts).</summary>
+        private const float MagazineSurplusRatio = 1.0f;
 
         /// <summary>Number of holder queue staging slots along rail bottom edge.</summary>
         private const int HolderQueueSlotCount = 5;
 
         #endregion
 
-        #region Constants — Level Progression Breakpoints
+        #region Constants — Level Progression Breakpoints (5-Phase for 300 Levels)
 
-        /// <summary>Level range for small boards (4x4 to 6x6).</summary>
-        private const int SmallBoardMaxLevel = 10;
+        /// <summary>Phase 1 cap: PKG 1-2, 4×4 to 8×8, 2-5 colors.</summary>
+        private const int Phase1MaxLevel = 40;
 
-        /// <summary>Level range for medium boards (6x6 to 8x8).</summary>
-        private const int MediumBoardMaxLevel = 30;
+        /// <summary>Phase 2 cap: PKG 3-5, 8×8 to 12×12, 4-7 colors.</summary>
+        private const int Phase2MaxLevel = 100;
+
+        /// <summary>Phase 3 cap: PKG 6-9, 12×12 to 18×18, 5-9 colors.</summary>
+        private const int Phase3MaxLevel = 180;
+
+        /// <summary>Phase 4 cap: PKG 10-13, 18×18 to 24×24, 6-10 colors.</summary>
+        private const int Phase4MaxLevel = 260;
+
+        // Phase 5: 261-300, PKG 14-15, 20×20 to 27×27, 7-11 colors
 
         /// <summary>Levels per package.</summary>
         private const int LevelsPerPackage = 20;
+
+        /// <summary>Total packages.</summary>
+        private const int TotalPackages = 15;
 
         #endregion
 
@@ -114,10 +125,12 @@ namespace BalloonFlow
             int star2 = Mathf.CeilToInt(star1 * 1.5f);
             int star3 = Mathf.CeilToInt(star1 * 2.2f);
 
-            int packageId = ((levelId - 1) / LevelsPerPackage) + 1;
+            int packageId = Mathf.Clamp(((levelId - 1) / LevelsPerPackage) + 1, 1, TotalPackages);
             int positionInPackage = ((levelId - 1) % LevelsPerPackage) + 1;
 
-            string difficultyPurpose = DetermineDifficultyPurpose(levelId, positionInPackage);
+            string difficultyPurpose = DeterminePurpose(packageId, positionInPackage);
+            int queueColumns = CalculateQueueColumns(difficultyPurpose, rng);
+            float targetClearRate = CalculateTargetClearRate(packageId, difficultyPurpose, rng);
 
             LevelConfig config = new LevelConfig
             {
@@ -126,6 +139,8 @@ namespace BalloonFlow
                 positionInPackage = positionInPackage,
                 numColors = numColors,
                 balloonCount = balloonCount,
+                queueColumns = queueColumns,
+                targetClearRate = targetClearRate,
                 difficultyPurpose = difficultyPurpose,
                 gimmickTypes = System.Array.Empty<string>(),
                 holders = holders,
@@ -136,9 +151,10 @@ namespace BalloonFlow
                 star3Threshold = star3
             };
 
-            Debug.Log($"[LevelGenerator] Generated level {levelId}: " +
+            Debug.Log($"[LevelGenerator] Generated level {levelId} (PKG{packageId}): " +
                       $"grid={gridSize}x{gridSize}, colors={numColors}, " +
                       $"balloons={balloonCount}, holders={holderCount}, " +
+                      $"queue={queueColumns}, clearRate={targetClearRate:F2}, " +
                       $"purpose={difficultyPurpose}");
 
             return config;
@@ -149,58 +165,60 @@ namespace BalloonFlow
         #region Private Methods — Grid Size
 
         /// <summary>
-        /// Calculates the grid dimension based on level progression.
-        /// Levels 1-10: 4-6, Levels 11-30: 6-8, Levels 31+: 8-10.
+        /// Calculates the grid dimension based on 5-phase level progression.
+        /// Phase 1 (1-40):   4×4 → 8×8
+        /// Phase 2 (41-100): 8×8 → 12×12
+        /// Phase 3 (101-180): 12×12 → 18×18
+        /// Phase 4 (181-260): 18×18 → 24×24
+        /// Phase 5 (261-300): 20×20 → 27×27
         /// </summary>
         private int CalculateGridSize(int levelId, System.Random rng)
         {
             int minSize;
             int maxSize;
+            float t;
 
-            if (levelId <= SmallBoardMaxLevel)
+            if (levelId <= Phase1MaxLevel)
             {
                 minSize = 4;
-                maxSize = 6;
-            }
-            else if (levelId <= MediumBoardMaxLevel)
-            {
-                minSize = 6;
                 maxSize = 8;
+                t = (levelId - 1f) / Mathf.Max(1f, Phase1MaxLevel - 1f);
+            }
+            else if (levelId <= Phase2MaxLevel)
+            {
+                minSize = 8;
+                maxSize = 12;
+                t = (levelId - Phase1MaxLevel - 1f) /
+                    Mathf.Max(1f, Phase2MaxLevel - Phase1MaxLevel - 1f);
+            }
+            else if (levelId <= Phase3MaxLevel)
+            {
+                minSize = 12;
+                maxSize = 18;
+                t = (levelId - Phase2MaxLevel - 1f) /
+                    Mathf.Max(1f, Phase3MaxLevel - Phase2MaxLevel - 1f);
+            }
+            else if (levelId <= Phase4MaxLevel)
+            {
+                minSize = 18;
+                maxSize = 24;
+                t = (levelId - Phase3MaxLevel - 1f) /
+                    Mathf.Max(1f, Phase4MaxLevel - Phase3MaxLevel - 1f);
             }
             else
             {
-                minSize = 8;
-                maxSize = 10;
+                minSize = 20;
+                maxSize = 27;
+                t = (levelId - Phase4MaxLevel - 1f) /
+                    Mathf.Max(1f, 300f - Phase4MaxLevel - 1f);
+                t = Mathf.Clamp01(t);
             }
 
-            // Interpolate within the range based on position within the bracket
-            float t = GetBracketProgress(levelId);
             int baseSize = Mathf.RoundToInt(Mathf.Lerp(minSize, maxSize, t));
 
             // Small random variance (+/- 1) for variety
             int variance = rng.Next(-1, 2);
             return Mathf.Clamp(baseSize + variance, GridMinSize, GridMaxSize);
-        }
-
-        /// <summary>
-        /// Returns 0..1 progress within the current difficulty bracket.
-        /// </summary>
-        private float GetBracketProgress(int levelId)
-        {
-            if (levelId <= SmallBoardMaxLevel)
-            {
-                return (levelId - 1f) / Mathf.Max(1f, SmallBoardMaxLevel - 1f);
-            }
-
-            if (levelId <= MediumBoardMaxLevel)
-            {
-                return (levelId - SmallBoardMaxLevel - 1f) /
-                       Mathf.Max(1f, MediumBoardMaxLevel - SmallBoardMaxLevel - 1f);
-            }
-
-            // Beyond medium: clamp at 1.0 for levels 31+
-            float progress = (levelId - MediumBoardMaxLevel - 1f) / 20f;
-            return Mathf.Clamp01(progress);
         }
 
         #endregion
@@ -209,13 +227,47 @@ namespace BalloonFlow
 
         /// <summary>
         /// Determines the number of distinct colors for a level.
-        /// Early levels use fewer colors for simplicity.
+        /// PKG 1 avg ~3.6 → PKG 15 avg ~7.0.
+        /// Phase 1 (1-40):   2-5 colors
+        /// Phase 2 (41-100): 4-7 colors
+        /// Phase 3 (101-180): 5-9 colors
+        /// Phase 4 (181-260): 6-10 colors
+        /// Phase 5 (261-300): 7-11 colors
         /// </summary>
         private int CalculateColorCount(int levelId, System.Random rng)
         {
-            // Base color count from level progression
-            float normalizedLevel = Mathf.Clamp01((levelId - 1f) / 50f);
-            int baseColors = Mathf.RoundToInt(Mathf.Lerp(MinColors, MaxColors, normalizedLevel));
+            int phaseMin;
+            int phaseMax;
+
+            if (levelId <= Phase1MaxLevel)
+            {
+                phaseMin = 2;
+                phaseMax = 5;
+            }
+            else if (levelId <= Phase2MaxLevel)
+            {
+                phaseMin = 4;
+                phaseMax = 7;
+            }
+            else if (levelId <= Phase3MaxLevel)
+            {
+                phaseMin = 5;
+                phaseMax = 9;
+            }
+            else if (levelId <= Phase4MaxLevel)
+            {
+                phaseMin = 6;
+                phaseMax = 10;
+            }
+            else
+            {
+                phaseMin = 7;
+                phaseMax = 11;
+            }
+
+            // Base color count from level progression within phase
+            float normalizedLevel = Mathf.Clamp01((levelId - 1f) / 299f);
+            int baseColors = Mathf.RoundToInt(Mathf.Lerp(phaseMin, phaseMax, normalizedLevel));
 
             // Small random variance
             int variance = rng.Next(0, 2);
@@ -300,13 +352,13 @@ namespace BalloonFlow
         #region Private Methods — Holders
 
         /// <summary>
-        /// Determines the number of holders for a level.
+        /// Determines the number of holders for a level. Scales across 300 levels.
         /// </summary>
         private int CalculateHolderCount(int levelId, System.Random rng)
         {
-            float normalizedLevel = Mathf.Clamp01((levelId - 1f) / 40f);
+            float normalizedLevel = Mathf.Clamp01((levelId - 1f) / 299f);
             int baseCount = Mathf.RoundToInt(Mathf.Lerp(MinHolders, MaxHolders, normalizedLevel));
-            int variance = rng.Next(0, 2);
+            int variance = rng.Next(0, 3);
             return Mathf.Clamp(baseCount + variance, MinHolders, MaxHolders);
         }
 
@@ -370,9 +422,6 @@ namespace BalloonFlow
                 holderColors[j] = temp;
             }
 
-            // Calculate magazine counts — ensure solvability
-            int totalMagazineTarget = Mathf.CeilToInt(balloonCount * MagazineSurplusRatio);
-
             // Count how many holders per color
             Dictionary<int, List<int>> colorToHolderIndices = new Dictionary<int, List<int>>();
             for (int i = 0; i < holderColors.Count; i++)
@@ -387,18 +436,50 @@ namespace BalloonFlow
 
             int[] magazineCounts = new int[holderColors.Count];
 
-            // Distribute magazine: each color's holders must cover that color's balloons
+            // Distribute magazine: each color's total darts must EXACTLY match that color's balloon count.
+            // MagazineCount rounded to nearest 5, range 5-50 (Doc: containers hold 5-50 darts).
+            // After rounding, the last holder for each color absorbs the difference to guarantee symmetry.
             foreach (var kvp in colorToHolderIndices)
             {
                 int color = kvp.Key;
                 List<int> indices = kvp.Value;
-                int needed = Mathf.CeilToInt(balloonsPerColor[color] * MagazineSurplusRatio);
+                int needed = balloonsPerColor[color]; // exact match, no surplus
                 int perHolder = Mathf.Max(1, needed / indices.Count);
                 int leftover = needed - (perHolder * indices.Count);
 
+                int sumSoFar = 0;
                 for (int i = 0; i < indices.Count; i++)
                 {
-                    magazineCounts[indices[i]] = perHolder + (i < leftover ? 1 : 0);
+                    if (i < indices.Count - 1)
+                    {
+                        int rawMag = perHolder + (i < leftover ? 1 : 0);
+                        // Round to nearest multiple of 5, clamp to [5, 50]
+                        int mag = Mathf.Clamp(((rawMag + 2) / 5) * 5, 5, 50);
+                        magazineCounts[indices[i]] = mag;
+                        sumSoFar += mag;
+                    }
+                    else
+                    {
+                        // Last holder absorbs the remainder to ensure exact total
+                        int remaining = needed - sumSoFar;
+                        int mag = Mathf.Clamp(((remaining + 2) / 5) * 5, 5, 50);
+                        // If rounding causes mismatch, use exact value (allow non-multiple-of-5)
+                        if (sumSoFar + mag != needed)
+                        {
+                            mag = Mathf.Max(1, remaining);
+                        }
+                        magazineCounts[indices[i]] = mag;
+                        sumSoFar += mag;
+                    }
+                }
+
+                // Final validation: if sum still doesn't match (edge case from clamping),
+                // adjust the last holder directly
+                if (sumSoFar != needed && indices.Count > 0)
+                {
+                    int lastIdx = indices[indices.Count - 1];
+                    magazineCounts[lastIdx] += (needed - sumSoFar);
+                    if (magazineCounts[lastIdx] < 1) magazineCounts[lastIdx] = 1;
                 }
             }
 
@@ -420,7 +501,7 @@ namespace BalloonFlow
                 {
                     holderId = i,
                     color = holderColors[i],
-                    magazineCount = Mathf.Max(1, magazineCounts[i]),
+                    magazineCount = magazineCounts[i],
                     position = new Vector2(xPos, zPos)  // x=world X, y=world Z
                 };
             }
@@ -526,45 +607,105 @@ namespace BalloonFlow
         #region Private Methods — Difficulty Purpose
 
         /// <summary>
-        /// Determines the pacing role of a level based on its position within the package.
-        /// Follows a sawtooth pattern: tutorial → normal → hard → rest → super_hard.
+        /// Determines the pacing role of a level based on Doc BeatChart positioning rules.
+        /// Pos 4, 9, 14, 19: Hard or Super Hard
+        /// Pos 5, 10, 15, 20: Rest (recovery after peak)
+        /// Pos 1 or 11: Gimmick introduction (Tutorial)
+        /// Remaining: Normal
+        /// PKG 1 exception: Pos 1-3 tutorial, only Pos 19 is hard.
         /// </summary>
-        private string DetermineDifficultyPurpose(int levelId, int positionInPackage)
+        private string DeterminePurpose(int packageId, int posInPackage)
         {
-            // First 3 levels are always tutorial
-            if (levelId <= 3)
+            if (packageId == 1)
             {
-                return "tutorial";
-            }
-
-            // Sawtooth within package
-            if (positionInPackage <= 2)
-            {
-                return "rest";
-            }
-
-            if (positionInPackage <= 8)
-            {
+                if (posInPackage <= 3) return "tutorial";
+                if (posInPackage == 19) return "hard";
+                if (posInPackage == 20) return "rest";
                 return "normal";
             }
 
-            if (positionInPackage <= 14)
+            if (posInPackage == 1 || posInPackage == 11) return "tutorial";
+            if (posInPackage == 4 || posInPackage == 14) return "hard";
+            if (posInPackage == 9) return "super_hard";
+            if (posInPackage == 19) return "super_hard";
+            if (posInPackage == 5 || posInPackage == 10 || posInPackage == 15 || posInPackage == 20) return "rest";
+            return "normal";
+        }
+
+        #endregion
+
+        #region Private Methods — Queue Columns
+
+        /// <summary>
+        /// Calculates holder queue column count (2–5) based on difficulty purpose.
+        /// Tutorial: always 2, Normal: 2-4, Hard/Super Hard: 3-5.
+        /// </summary>
+        private int CalculateQueueColumns(string purpose, System.Random rng)
+        {
+            switch (purpose)
             {
-                return "hard";
+                case "tutorial":
+                    return 2;
+                case "normal":
+                    return rng.Next(2, 5);   // 2, 3, or 4
+                case "rest":
+                    return rng.Next(2, 4);   // 2 or 3
+                case "hard":
+                case "super_hard":
+                    return rng.Next(3, 6);   // 3, 4, or 5
+                default:
+                    return 3;
+            }
+        }
+
+        #endregion
+
+        #region Private Methods — Target Clear Rate
+
+        /// <summary>
+        /// Calculates target clear rate based on package and difficulty purpose.
+        /// Tutorial: 0.88-0.95, Normal: 0.40-0.80 (decreasing by PKG),
+        /// Hard: 0.20-0.60, Super Hard: 0.12-0.45, Rest: 0.60-0.90.
+        /// </summary>
+        private float CalculateTargetClearRate(int packageId, string purpose, System.Random rng)
+        {
+            float pkgProgression = Mathf.Clamp01((packageId - 1f) / 14f); // 0.0 at PKG1, 1.0 at PKG15
+
+            float minRate;
+            float maxRate;
+
+            switch (purpose)
+            {
+                case "tutorial":
+                    minRate = 0.88f;
+                    maxRate = 0.95f;
+                    break;
+                case "normal":
+                    // Decreasing range as packages progress
+                    minRate = Mathf.Lerp(0.60f, 0.40f, pkgProgression);
+                    maxRate = Mathf.Lerp(0.80f, 0.55f, pkgProgression);
+                    break;
+                case "hard":
+                    minRate = Mathf.Lerp(0.40f, 0.20f, pkgProgression);
+                    maxRate = Mathf.Lerp(0.60f, 0.35f, pkgProgression);
+                    break;
+                case "super_hard":
+                    minRate = Mathf.Lerp(0.30f, 0.12f, pkgProgression);
+                    maxRate = Mathf.Lerp(0.45f, 0.20f, pkgProgression);
+                    break;
+                case "rest":
+                    minRate = 0.60f;
+                    maxRate = 0.90f;
+                    break;
+                default:
+                    minRate = 0.50f;
+                    maxRate = 0.70f;
+                    break;
             }
 
-            if (positionInPackage <= 17)
-            {
-                return "normal";
-            }
-
-            if (positionInPackage <= 19)
-            {
-                return "super_hard";
-            }
-
-            // Position 20 = package boss then rest
-            return "hard";
+            // Random float within [minRate, maxRate]
+            float rate = minRate + (float)rng.NextDouble() * (maxRate - minRate);
+            return Mathf.Round(rate * 100f) / 100f; // Round to 2 decimal places
         }
 
         #endregion

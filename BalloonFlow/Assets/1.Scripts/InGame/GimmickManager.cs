@@ -21,18 +21,34 @@ namespace BalloonFlow
         #region Constants
 
         // Global level IDs at which each gimmick type is first introduced
-        private const int UNLOCK_LEVEL_HIDDEN      = 11;
-        private const int UNLOCK_LEVEL_SPAWNER_T   = 21;
-        private const int UNLOCK_LEVEL_SPAWNER_O   = 31;
-        private const int UNLOCK_LEVEL_BIG_OBJECT  = 41;
-        private const int UNLOCK_LEVEL_CHAIN        = 61;
+        private const int UNLOCK_LEVEL_HIDDEN        = 11;
+        private const int UNLOCK_LEVEL_CHAIN         = 21;
+        private const int UNLOCK_LEVEL_PINATA        = 31;
+        private const int UNLOCK_LEVEL_SPAWNER_T     = 41;
+        private const int UNLOCK_LEVEL_PIN           = 61;
+        private const int UNLOCK_LEVEL_LOCK_KEY      = 81;
+        private const int UNLOCK_LEVEL_SURPRISE      = 101;
+        private const int UNLOCK_LEVEL_WALL          = 121;
+        private const int UNLOCK_LEVEL_SPAWNER_O     = 141;
+        private const int UNLOCK_LEVEL_PINATA_BOX    = 161;
+        private const int UNLOCK_LEVEL_ICE           = 201;
+        private const int UNLOCK_LEVEL_FROZEN_DART   = 241;
+        private const int UNLOCK_LEVEL_COLOR_CURTAIN = 281;
 
         // String identifiers that match LevelConfig.gimmickTypes values
-        public const string GIMMICK_HIDDEN      = "Hidden";
-        public const string GIMMICK_SPAWNER_T   = "Spawner_T";
-        public const string GIMMICK_SPAWNER_O   = "Spawner_O";
-        public const string GIMMICK_BIG_OBJECT  = "BigObject";
-        public const string GIMMICK_CHAIN        = "Chain";
+        public const string GIMMICK_HIDDEN        = "Hidden";
+        public const string GIMMICK_CHAIN         = "Chain";
+        public const string GIMMICK_PINATA        = "Pinata";
+        public const string GIMMICK_SPAWNER_T     = "Spawner_T";
+        public const string GIMMICK_PIN           = "Pin";
+        public const string GIMMICK_LOCK_KEY      = "Lock_Key";
+        public const string GIMMICK_SURPRISE      = "Surprise";
+        public const string GIMMICK_WALL          = "Wall";
+        public const string GIMMICK_SPAWNER_O     = "Spawner_O";
+        public const string GIMMICK_PINATA_BOX    = "Pinata_Box";
+        public const string GIMMICK_ICE           = "Ice";
+        public const string GIMMICK_FROZEN_DART   = "Frozen_Dart";
+        public const string GIMMICK_COLOR_CURTAIN = "Color_Curtain";
 
         #endregion
 
@@ -117,15 +133,31 @@ namespace BalloonFlow
             switch (gimmickType)
             {
                 case GIMMICK_HIDDEN:
-                    return "Balloon is hidden until a dart lands nearby.";
-                case GIMMICK_SPAWNER_T:
-                    return "Balloon spawns additional T-shaped balloons when popped.";
-                case GIMMICK_SPAWNER_O:
-                    return "Balloon spawns additional ring-shaped balloons when popped.";
-                case GIMMICK_BIG_OBJECT:
-                    return "Oversized balloon requiring multiple direct hits to pop.";
+                    return "풍선 색상이 숨겨져 있어 인접 팝으로 공개됩니다.";
                 case GIMMICK_CHAIN:
-                    return "Popping this balloon triggers a chain reaction on connected balloons.";
+                    return "연결된 컨테이너가 순차적으로 배치됩니다.";
+                case GIMMICK_PINATA:
+                    return "여러 번 맞춰야 터지는 단단한 풍선입니다.";
+                case GIMMICK_SPAWNER_T:
+                    return "투명 스포너 — 다음 생성 색상이 보입니다.";
+                case GIMMICK_PIN:
+                    return "다트를 차단하는 장애물. 인접 팝으로 제거.";
+                case GIMMICK_LOCK_KEY:
+                    return "Key 풍선을 먼저 터뜨려야 Lock 풍선 해제.";
+                case GIMMICK_SURPRISE:
+                    return "팝 시 랜덤 색상으로 변경되는 깜짝 풍선.";
+                case GIMMICK_WALL:
+                    return "파괴 불가 벽. 다트를 완전 차단.";
+                case GIMMICK_SPAWNER_O:
+                    return "불투명 스포너 — 다음 생성 색상이 숨겨집니다.";
+                case GIMMICK_PINATA_BOX:
+                    return "다중 히트 박스. 파괴 시 보상 드롭.";
+                case GIMMICK_ICE:
+                    return "얼음 풍선 — 인접 팝으로 해동 후 파괴 가능.";
+                case GIMMICK_FROZEN_DART:
+                    return "동결 다트 — 첫 N발이 발사되지 않음.";
+                case GIMMICK_COLOR_CURTAIN:
+                    return "특정 색상 다트로만 제거 가능한 컬러 커튼.";
                 default:
                     return string.Empty;
             }
@@ -196,11 +228,19 @@ namespace BalloonFlow
         {
             switch (gimmickType)
             {
-                case GIMMICK_HIDDEN:     return UNLOCK_LEVEL_HIDDEN;
-                case GIMMICK_SPAWNER_T:  return UNLOCK_LEVEL_SPAWNER_T;
-                case GIMMICK_SPAWNER_O:  return UNLOCK_LEVEL_SPAWNER_O;
-                case GIMMICK_BIG_OBJECT: return UNLOCK_LEVEL_BIG_OBJECT;
-                case GIMMICK_CHAIN:      return UNLOCK_LEVEL_CHAIN;
+                case GIMMICK_HIDDEN:        return UNLOCK_LEVEL_HIDDEN;
+                case GIMMICK_CHAIN:         return UNLOCK_LEVEL_CHAIN;
+                case GIMMICK_PINATA:        return UNLOCK_LEVEL_PINATA;
+                case GIMMICK_SPAWNER_T:     return UNLOCK_LEVEL_SPAWNER_T;
+                case GIMMICK_PIN:           return UNLOCK_LEVEL_PIN;
+                case GIMMICK_LOCK_KEY:      return UNLOCK_LEVEL_LOCK_KEY;
+                case GIMMICK_SURPRISE:      return UNLOCK_LEVEL_SURPRISE;
+                case GIMMICK_WALL:          return UNLOCK_LEVEL_WALL;
+                case GIMMICK_SPAWNER_O:     return UNLOCK_LEVEL_SPAWNER_O;
+                case GIMMICK_PINATA_BOX:    return UNLOCK_LEVEL_PINATA_BOX;
+                case GIMMICK_ICE:           return UNLOCK_LEVEL_ICE;
+                case GIMMICK_FROZEN_DART:   return UNLOCK_LEVEL_FROZEN_DART;
+                case GIMMICK_COLOR_CURTAIN: return UNLOCK_LEVEL_COLOR_CURTAIN;
                 default:
                     Debug.LogWarning($"[GimmickManager] Unknown gimmick type: '{gimmickType}'.");
                     return int.MaxValue;

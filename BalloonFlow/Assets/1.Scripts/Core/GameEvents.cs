@@ -359,4 +359,11 @@ namespace BalloonFlow
 
     /// <summary>Game was resumed (Time.timeScale = 1).</summary>
     public struct OnGameResumed { }
+
+    // ────────────────────────────────────────
+    // UX Effect Events
+    // ────────────────────────────────────────
+
+    /// <summary>A single coin from the fly effect has landed on the gold target.</summary>
+    public struct OnCoinFlyLanded { }
 }
