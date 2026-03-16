@@ -61,12 +61,6 @@ namespace BalloonFlow
         public bool isDanger; // true = 5/5 (critical), false = 4/5 (warning)
     }
 
-    /// <summary>Holder waiting area exceeded capacity — fail trigger.</summary>
-    public struct OnHolderOverflow
-    {
-        public int holderCount;
-    }
-
     /// <summary>All holders are empty.</summary>
     public struct OnAllHoldersEmpty { }
 
@@ -95,6 +89,7 @@ namespace BalloonFlow
     {
         public int dartId;
         public int balloonId;
+        public int color;
     }
 
     /// <summary>All darts from a holder deployment are complete.</summary>
@@ -108,11 +103,44 @@ namespace BalloonFlow
     // Rail Events
     // ────────────────────────────────────────
 
-    /// <summary>A magazine/holder completed one full rail loop.</summary>
-    public struct OnRailLoopComplete
+    /// <summary>Rail occupancy changed. Occupancy = activeDarts / totalSlots.</summary>
+    public struct OnRailOccupancyChanged
+    {
+        public int activeDarts;
+        public int totalSlots;
+        public float occupancy; // 0.0 ~ 1.0
+    }
+
+    /// <summary>A dart was placed on a rail slot by a deploying holder.</summary>
+    public struct OnDartPlacedOnSlot
+    {
+        public int slotIndex;
+        public int color;
+        public int holderId;
+    }
+
+    /// <summary>A dart on a rail slot auto-fired at a matching balloon.</summary>
+    public struct OnSlotDartFired
+    {
+        public int slotIndex;
+        public int color;
+        public int targetBalloonId;
+        public Vector3 from;
+        public Vector3 to;
+    }
+
+    /// <summary>Rail reached critical occupancy (99.5%+). Fail check in progress.</summary>
+    public struct OnRailCritical
+    {
+        public float occupancy;
+        public bool hasOutermostMatch; // true = recovery possible
+    }
+
+    /// <summary>Holder deployment completed (magazine=0, holder disappears).</summary>
+    public struct OnHolderDeploymentDone
     {
         public int holderId;
-        public int remainingMagazine;
+        public int column;
     }
 
     // ────────────────────────────────────────

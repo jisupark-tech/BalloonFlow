@@ -1,68 +1,79 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
     /// <summary>
-    /// Data container for an active dart on the rail.
-    /// </summary>
-    [System.Serializable]
-    public class DartData
-    {
-        public int dartId;
-        public int holderId;
-        public int color;
-        public GameObject gameObject;
-        public float distanceTraveled;
-        public bool isActive;
-    }
-
-    /// <summary>
-    /// Manages darts that travel the circular rail and fire at matching-color balloons.
-    /// When a holder is selected, darts deploy sequentially onto the rail, move along
-    /// the path, and hit matching balloons 1:1. Magazine=0 mid-loop removes from rail.
-    /// Magazine>0 after full loop returns to holder.
+    /// Manages darts that reside on rail slots and auto-fire at matching balloons.
+    /// Rail Overflow mode: darts are fixed to conveyor belt slots, rotate with the belt,
+    /// and fire straight inward when passing a matching-color outermost balloon.
+    /// Slot is freed immediately on fire (before projectile reaches target).
     /// </summary>
     /// <remarks>
     /// Layer: Domain | Genre: Puzzle | Role: Manager | Phase: 1
-    /// DB Reference: No DB match found — generated from L3 YAML logicFlow (ingame_holder_dart_pop)
+    /// DB Reference: Generated from Rail Overflow spec — slot-based dart system
     /// </remarks>
     public class DartManager : SceneSingleton<DartManager>
     {
         #region Constants
 
         private const string DART_POOL_KEY = "Dart";
-        private const float DEFAULT_DART_SPEED = 5f;
-        private const float DEFAULT_DEPLOY_INTERVAL = 0.15f;
-        private const float HIT_DETECTION_RADIUS = 0.5f;
+        private const float DEFAULT_PROJECTILE_FLIGHT_TIME = 0.1f;
 
         #endregion
 
         #region Serialized Fields
 
-        [SerializeField] private float _dartSpeed = DEFAULT_DART_SPEED;
-        [SerializeField] private float _deployInterval = DEFAULT_DEPLOY_INTERVAL;
-        [SerializeField] private float _hitRadius = HIT_DETECTION_RADIUS;
+        [SerializeField] private float _projectileFlightTime = DEFAULT_PROJECTILE_FLIGHT_TIME;
+
+        #endregion
+
+        #region Nested Types
+
+        /// <summary>
+        /// Visual representation of a dart sitting on a rail slot.
+        /// </summary>
+        private class SlotDartVisual
+        {
+            public int slotIndex;
+            public int color;
+            public GameObject gameObject;
+        }
+
+        /// <summary>
+        /// In-flight projectile after a slot dart fires at a balloon.
+        /// </summary>
+        private class DartProjectile
+        {
+            public GameObject gameObject;
+            public Vector3 targetPosition;
+            public int targetBalloonId;
+            public int color;
+            public float elapsed;
+            public float duration;
+        }
 
         #endregion
 
         #region Fields
 
-        private readonly List<DartData> _activeDarts = new List<DartData>();
-        private int _nextDartId;
-        private int _deployedCount;
-        private bool _isDeploying;
-
-        #endregion
-
-        #region Properties
+        private readonly Dictionary<int, SlotDartVisual> _slotVisuals = new Dictionary<int, SlotDartVisual>();
+        private readonly List<DartProjectile> _activeProjectiles = new List<DartProjectile>();
 
         /// <summary>
-        /// Current dart movement speed along the rail.
+        /// Balloon IDs currently targeted by in-flight projectiles.
+        /// Prevents multiple darts from firing at the same balloon.
+        /// Cleared when projectile hits or balloon is popped externally.
         /// </summary>
-        public float DartSpeed => _dartSpeed;
+        private readonly HashSet<int> _reservedTargets = new HashSet<int>();
+
+        /// <summary>Max darts that can fire in a single frame to prevent visual clutter.</summary>
+        private const int MAX_FIRES_PER_FRAME = 20;
+
+        /// <summary>When true, board is cleared or failed — stop all scanning/firing.</summary>
+        private bool _boardFinished;
 
         #endregion
 
@@ -70,24 +81,35 @@ namespace BalloonFlow
 
         protected override void OnSingletonAwake()
         {
-            _nextDartId = 0;
-            _deployedCount = 0;
-
-            // GameManager.Board에서 설정값 읽기
             if (GameManager.HasInstance)
             {
-                _dartSpeed = GameManager.Instance.Board.dartRailSpeed;
+                _projectileFlightTime = GameManager.Instance.Board.dartFlightTime;
             }
         }
 
         private void OnEnable()
         {
-            // OnHolderSelected is handled by HolderVisualManager (straight-line darts).
-            // DartManager.StartRailLoop() is available for direct calls if needed.
+            EventBus.Subscribe<OnDartPlacedOnSlot>(HandleDartPlaced);
+            EventBus.Subscribe<OnBalloonPopped>(HandleBalloonPopped);
+            EventBus.Subscribe<OnBoardCleared>(HandleBoardCleared);
+            EventBus.Subscribe<OnBoardFailed>(HandleBoardFailed);
         }
 
         private void OnDisable()
         {
+            EventBus.Unsubscribe<OnDartPlacedOnSlot>(HandleDartPlaced);
+            EventBus.Unsubscribe<OnBalloonPopped>(HandleBalloonPopped);
+            EventBus.Unsubscribe<OnBoardCleared>(HandleBoardCleared);
+            EventBus.Unsubscribe<OnBoardFailed>(HandleBoardFailed);
+        }
+
+        private void Update()
+        {
+            if (_boardFinished) return;
+
+            UpdateSlotDartPositions();
+            ScanAndFireDarts();
+            UpdateProjectiles();
         }
 
         #endregion
@@ -95,62 +117,22 @@ namespace BalloonFlow
         #region Public Methods
 
         /// <summary>
-        /// Starts a rail loop deployment for a holder. Darts are deployed
-        /// sequentially onto the rail and begin moving along the path.
-        /// </summary>
-        public void StartRailLoop(int holderId, int color, int magazineCount)
-        {
-            if (magazineCount <= 0)
-            {
-                Debug.LogWarning($"[DartManager] StartRailLoop: magazineCount is 0 for holder {holderId}.");
-                return;
-            }
-
-            if (!RailManager.HasInstance)
-            {
-                Debug.LogError("[DartManager] RailManager not available.");
-                return;
-            }
-
-            StartCoroutine(DeployAndTraverseCoroutine(holderId, color, magazineCount));
-        }
-
-        /// <summary>
-        /// Returns all currently active darts on the rail.
-        /// </summary>
-        public DartData[] GetActiveDarts()
-        {
-            return _activeDarts.ToArray();
-        }
-
-        /// <summary>
-        /// Returns the total number of darts deployed in the current session.
-        /// </summary>
-        public int GetDeployedCount()
-        {
-            return _deployedCount;
-        }
-
-        /// <summary>
-        /// Whether a deployment sequence is currently in progress.
-        /// </summary>
-        public bool IsDeploymentInProgress()
-        {
-            return _isDeploying;
-        }
-
-        /// <summary>
-        /// Clears all active darts and returns them to pool.
+        /// Clears all dart visuals and projectiles.
         /// </summary>
         public void ClearAllDarts()
         {
-            for (int i = _activeDarts.Count - 1; i >= 0; i--)
+            foreach (var kvp in _slotVisuals)
             {
-                ReturnDartToPool(_activeDarts[i]);
+                ReturnDartToPool(kvp.Value.gameObject);
             }
-            _activeDarts.Clear();
-            _deployedCount = 0;
-            _isDeploying = false;
+            _slotVisuals.Clear();
+
+            for (int i = _activeProjectiles.Count - 1; i >= 0; i--)
+            {
+                ReturnDartToPool(_activeProjectiles[i].gameObject);
+            }
+            _activeProjectiles.Clear();
+            _reservedTargets.Clear();
         }
 
         /// <summary>
@@ -158,311 +140,403 @@ namespace BalloonFlow
         /// </summary>
         public void ResetAll()
         {
-            StopAllCoroutines();
             ClearAllDarts();
-            _nextDartId = 0;
-        }
-
-        #endregion
-
-        #region Private Methods — Deployment Coroutine
-
-        private IEnumerator DeployAndTraverseCoroutine(int holderId, int color, int magazineCount)
-        {
-            _isDeploying = true;
-
-            RailManager rail = RailManager.Instance;
-            if (rail == null)
-            {
-                _isDeploying = false;
-                yield break;
-            }
-
-            Vector3[] railPath = rail.GetRailPath();
-            if (railPath == null || railPath.Length < 2)
-            {
-                Debug.LogError("[DartManager] Rail path is invalid or has fewer than 2 waypoints.");
-                _isDeploying = false;
-                yield break;
-            }
-
-            float totalLength = rail.TotalPathLength;
-            if (totalLength <= 0f)
-            {
-                Debug.LogError("[DartManager] Rail total path length is zero.");
-                _isDeploying = false;
-                yield break;
-            }
-
-            // Deploy all darts sequentially onto the rail entry point
-            List<DartData> deployedDarts = new List<DartData>(magazineCount);
-            Vector3 entryPosition = rail.GetPositionAtNormalized(0f);
-
-            for (int i = 0; i < magazineCount; i++)
-            {
-                DartData dart = SpawnDart(holderId, color, entryPosition);
-                if (dart == null)
-                {
-                    continue;
-                }
-
-                deployedDarts.Add(dart);
-                _deployedCount++;
-
-                EventBus.Publish(new OnDartDeployed
-                {
-                    dartId = dart.dartId,
-                    color = color,
-                    position = entryPosition
-                });
-
-                if (i < magazineCount - 1)
-                {
-                    yield return new WaitForSeconds(_deployInterval);
-                }
-            }
-
-            _isDeploying = false;
-
-            if (deployedDarts.Count == 0)
-            {
-                yield break;
-            }
-
-            // Move all deployed darts along the rail
-            yield return MoveAlongRail(deployedDarts, holderId, color, rail);
-
-            // After rail loop completes, determine outcome
-            int remaining = CountActiveDartsForHolder(deployedDarts);
-
-            // Clean up any remaining dart objects (those that didn't hit)
-            for (int i = deployedDarts.Count - 1; i >= 0; i--)
-            {
-                if (deployedDarts[i].isActive)
-                {
-                    ReturnDartToPool(deployedDarts[i]);
-                    _activeDarts.Remove(deployedDarts[i]);
-                }
-            }
-
-            // Publish rail loop complete
-            EventBus.Publish(new OnRailLoopComplete
-            {
-                holderId = holderId,
-                remainingMagazine = remaining
-            });
-
-            EventBus.Publish(new OnDeploymentComplete
-            {
-                color = color,
-                count = deployedDarts.Count - remaining
-            });
+            _boardFinished = false;
         }
 
         /// <summary>
-        /// Moves darts along the rail path. Each dart checks for matching-color
-        /// balloon hits at each position. Darts that hit a balloon are consumed.
+        /// Creates a visual dart on a rail slot (called when holder deploys a dart).
         /// </summary>
-        private IEnumerator MoveAlongRail(List<DartData> darts, int holderId, int color, RailManager rail)
+        public void CreateSlotDartVisual(int slotIndex, int color)
         {
-            float totalLength = rail.TotalPathLength;
-            bool allComplete = false;
-
-            // Spacing between darts on the rail
-            float spacing = Mathf.Min(totalLength * 0.05f, 0.5f);
-
-            // Initialize positions with spacing offsets (negative = behind leader)
-            for (int i = 0; i < darts.Count; i++)
+            if (_slotVisuals.ContainsKey(slotIndex))
             {
-                darts[i].distanceTraveled = -(i * spacing);
+                // Already has visual — replace
+                ReturnDartToPool(_slotVisuals[slotIndex].gameObject);
+                _slotVisuals.Remove(slotIndex);
             }
 
-            while (!allComplete)
-            {
-                allComplete = true;
-                float deltaDistance = _dartSpeed * Time.deltaTime;
+            if (!RailManager.HasInstance) return;
 
-                for (int i = 0; i < darts.Count; i++)
-                {
-                    DartData dart = darts[i];
-                    if (!dart.isActive)
-                    {
-                        continue;
-                    }
-
-                    dart.distanceTraveled += deltaDistance;
-
-                    // Check if this dart has completed the full loop
-                    if (dart.distanceTraveled >= totalLength)
-                    {
-                        // Dart completed loop — still active means it didn't hit a balloon
-                        continue;
-                    }
-
-                    allComplete = false;
-
-                    // Only update position if dart has entered the rail (positive distance)
-                    if (dart.distanceTraveled >= 0f)
-                    {
-                        Vector3 pos = rail.GetPositionAtDistance(dart.distanceTraveled);
-                        if (dart.gameObject != null)
-                        {
-                            dart.gameObject.transform.position = pos;
-
-                            // Orient dart along rail direction
-                            float normalizedT = dart.distanceTraveled / totalLength;
-                            Vector3 dir = rail.GetDirectionAtNormalized(normalizedT);
-                            if (dir.sqrMagnitude > 0.001f)
-                            {
-                                dart.gameObject.transform.forward = dir;
-                            }
-                        }
-
-                        // Try to hit a matching balloon at current position
-                        TryHitBalloon(dart, color, pos);
-                    }
-                }
-
-                // Check if all remaining darts have completed the loop
-                bool anyStillMoving = false;
-                for (int i = 0; i < darts.Count; i++)
-                {
-                    if (darts[i].isActive && darts[i].distanceTraveled < totalLength)
-                    {
-                        anyStillMoving = true;
-                        break;
-                    }
-                }
-
-                if (!anyStillMoving)
-                {
-                    allComplete = true;
-                }
-
-                yield return null;
-            }
-        }
-
-        /// <summary>
-        /// Attempts to hit a matching-color balloon near the dart's position.
-        /// On hit: publishes OnDartHitBalloon, deactivates dart, consumes magazine.
-        /// </summary>
-        private void TryHitBalloon(DartData dart, int color, Vector3 dartPosition)
-        {
-            if (!dart.isActive)
-            {
-                return;
-            }
-
-            // Use 3D Physics overlap to detect balloons within hit radius
-            Collider[] hits = Physics.OverlapSphere(dartPosition, _hitRadius);
-            if (hits == null || hits.Length == 0) return;
-
-            for (int i = 0; i < hits.Length; i++)
-            {
-                BalloonIdentifier balloon = hits[i].GetComponent<BalloonIdentifier>();
-                if (balloon != null && balloon.Color == color && !balloon.IsPopped)
-                {
-                    ExecuteHit(dart, balloon);
-                    return;
-                }
-            }
-        }
-
-        private void ExecuteHit(DartData dart, BalloonIdentifier balloon)
-        {
-            dart.isActive = false;
-
-            EventBus.Publish(new OnDartFired
-            {
-                dartId = dart.dartId,
-                holderId = dart.holderId,
-                color = dart.color
-            });
-
-            EventBus.Publish(new OnDartHitBalloon
-            {
-                dartId = dart.dartId,
-                balloonId = balloon.BalloonId
-            });
-
-            // Consume magazine from the holder
-            if (HolderManager.HasInstance)
-            {
-                HolderManager.Instance.ConsumeMagazine(dart.holderId);
-            }
-
-            // Return dart to pool
-            ReturnDartToPool(dart);
-            _activeDarts.Remove(dart);
-        }
-
-        #endregion
-
-        #region Private Methods — Pool Management
-
-        private DartData SpawnDart(int holderId, int color, Vector3 position)
-        {
+            Vector3 pos = RailManager.Instance.GetSlotWorldPosition(slotIndex);
             GameObject dartObj = null;
 
             if (ObjectPoolManager.HasInstance)
             {
-                dartObj = ObjectPoolManager.Instance.Get(DART_POOL_KEY, position, Quaternion.identity);
+                dartObj = ObjectPoolManager.Instance.Get(DART_POOL_KEY, pos, Quaternion.identity);
+            }
+
+            if (dartObj == null) return;
+
+            dartObj.SetActive(true);
+            ApplyColor(dartObj, color);
+            OrientDart(dartObj, slotIndex);
+
+            _slotVisuals[slotIndex] = new SlotDartVisual
+            {
+                slotIndex = slotIndex,
+                color = color,
+                gameObject = dartObj
+            };
+        }
+
+        /// <summary>
+        /// Returns the number of active dart visuals on slots.
+        /// </summary>
+        public int GetActiveSlotDartCount()
+        {
+            return _slotVisuals.Count;
+        }
+
+        #endregion
+
+        #region Private Methods — Slot Dart Movement
+
+        /// <summary>
+        /// Updates all slot dart positions to follow conveyor belt movement.
+        /// </summary>
+        /// <summary>Reusable list for safe dictionary iteration (avoids allocation every frame).</summary>
+        private readonly List<int> _tempSlotKeys = new List<int>(256);
+        private readonly List<int> _tempRemoveKeys = new List<int>(32);
+
+        private void UpdateSlotDartPositions()
+        {
+            if (!RailManager.HasInstance || _slotVisuals.Count == 0) return;
+
+            RailManager rail = RailManager.Instance;
+
+            // Collect keys without allocation (reuse list)
+            _tempSlotKeys.Clear();
+            _tempSlotKeys.AddRange(_slotVisuals.Keys);
+
+            _tempRemoveKeys.Clear();
+
+            for (int i = 0; i < _tempSlotKeys.Count; i++)
+            {
+                int slotIdx = _tempSlotKeys[i];
+                if (!_slotVisuals.TryGetValue(slotIdx, out SlotDartVisual visual)) continue;
+                if (visual.gameObject == null)
+                {
+                    _tempRemoveKeys.Add(slotIdx);
+                    continue;
+                }
+
+                if (rail.IsSlotEmpty(slotIdx))
+                {
+                    ReturnDartToPool(visual.gameObject);
+                    _tempRemoveKeys.Add(slotIdx);
+                    continue;
+                }
+
+                Vector3 pos = rail.GetSlotWorldPosition(slotIdx);
+                visual.gameObject.transform.position = pos;
+                OrientDart(visual.gameObject, slotIdx);
+            }
+
+            // Deferred removal
+            for (int i = 0; i < _tempRemoveKeys.Count; i++)
+                _slotVisuals.Remove(_tempRemoveKeys[i]);
+        }
+
+        #endregion
+
+        #region Private Methods — Auto-Fire Scan
+
+        /// <summary>
+        /// Scans a batch of occupied slots per frame and fires darts at matching outermost balloons.
+        /// Throttled: SCAN_BATCH_SIZE slots per frame, MAX_FIRES_PER_FRAME launches per frame.
+        /// </summary>
+        private void ScanAndFireDarts()
+        {
+            if (!RailManager.HasInstance || !BalloonController.HasInstance) return;
+
+            RailManager rail = RailManager.Instance;
+            int slotCount = rail.SlotCount;
+            if (slotCount == 0) return;
+
+            int fired = 0;
+
+            // Scan ALL slots every frame (no batching — perf bottleneck was HasClearLineOfSight, now removed)
+            for (int s = 0; s < slotCount && fired < MAX_FIRES_PER_FRAME; s++)
+            {
+                int slotIdx = s;
+
+                RailManager.SlotData slot = rail.GetSlot(slotIdx);
+                if (slot.dartColor < 0) continue; // empty
+
+                Vector3 slotPos = rail.GetSlotWorldPosition(slotIdx);
+                Vector3 fireDir = rail.GetSlotFiringDirection(slotIdx);
+
+                // Use DirectionalTargeting to find matching balloon
+                int targetId = DirectionalTargeting.FindTarget(slotPos, fireDir, slot.dartColor);
+                if (targetId < 0) continue;
+
+                // Skip if another dart is already flying toward this balloon
+                if (_reservedTargets.Contains(targetId)) continue;
+
+                BalloonData targetData = BalloonController.Instance.GetBalloon(targetId);
+                if (targetData == null || targetData.isPopped)
+                {
+                    _reservedTargets.Remove(targetId); // stale reservation cleanup
+                    continue;
+                }
+
+                // Fire! Free slot immediately (spec: slot returns as soon as dart fires)
+                int color = slot.dartColor;
+                int dartId = slot.dartId;
+                rail.ClearSlot(slotIdx);
+
+                // Publish fire event
+                EventBus.Publish(new OnSlotDartFired
+                {
+                    slotIndex = slotIdx,
+                    color = color,
+                    targetBalloonId = targetId,
+                    from = slotPos,
+                    to = targetData.position
+                });
+
+                EventBus.Publish(new OnDartFired
+                {
+                    dartId = dartId,
+                    holderId = -1,
+                    color = color
+                });
+
+                // Reserve target so no other dart targets this balloon
+                _reservedTargets.Add(targetId);
+
+                // Launch projectile visual
+                LaunchProjectile(slotIdx, slotPos, targetData.position, targetId, color);
+                fired++;
+            }
+
+        }
+
+        /// <summary>
+        /// Converts a slot dart into a flying projectile aimed at a balloon.
+        /// </summary>
+        private void LaunchProjectile(int slotIndex, Vector3 from, Vector3 to, int targetBalloonId, int color)
+        {
+            GameObject dartObj = null;
+
+            // Try to reuse the slot visual
+            if (_slotVisuals.TryGetValue(slotIndex, out SlotDartVisual visual))
+            {
+                dartObj = visual.gameObject;
+                _slotVisuals.Remove(slotIndex);
             }
 
             if (dartObj == null)
             {
-                Debug.LogError($"[DartManager] Failed to get dart from pool '{DART_POOL_KEY}'.");
-                return null;
-            }
-
-            DartData dart = new DartData
-            {
-                dartId = _nextDartId++,
-                holderId = holderId,
-                color = color,
-                gameObject = dartObj,
-                distanceTraveled = 0f,
-                isActive = true
-            };
-
-            _activeDarts.Add(dart);
-            return dart;
-        }
-
-        private void ReturnDartToPool(DartData dart)
-        {
-            if (dart.gameObject != null && ObjectPoolManager.HasInstance)
-            {
-                ObjectPoolManager.Instance.Return(DART_POOL_KEY, dart.gameObject);
-            }
-            dart.gameObject = null;
-            dart.isActive = false;
-        }
-
-        private int CountActiveDartsForHolder(List<DartData> darts)
-        {
-            int count = 0;
-            for (int i = 0; i < darts.Count; i++)
-            {
-                if (darts[i].isActive)
+                // No visual to reuse — create new
+                if (ObjectPoolManager.HasInstance)
                 {
-                    count++;
+                    dartObj = ObjectPoolManager.Instance.Get(DART_POOL_KEY, from, Quaternion.identity);
                 }
             }
-            return count;
+
+            if (dartObj == null)
+            {
+                // Pool exhausted — instant hit
+                ExecuteHit(targetBalloonId, color);
+                return;
+            }
+
+            dartObj.SetActive(true);
+            dartObj.transform.position = from;
+
+            // Fire along pure cardinal axis (no diagonal), then snap to balloon position at impact
+            // This prevents the dart from visually passing through adjacent-column balloons
+            Vector3 cardinalTarget = CalculateCardinalTarget(from, to);
+
+            // Orient along cardinal direction
+            Vector3 dir = cardinalTarget - from;
+            dir.y = 0f;
+            if (dir.sqrMagnitude > 0.001f)
+            {
+                dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
+            }
+
+            var proj = new DartProjectile
+            {
+                gameObject = dartObj,
+                targetPosition = to,
+                targetBalloonId = targetBalloonId,
+                color = color,
+                elapsed = 0f,
+                duration = _projectileFlightTime
+            };
+
+            _activeProjectiles.Add(proj);
+
+            // DOTween flight — fly along cardinal axis to balloon depth, then snap
+            dartObj.transform.DOMove(cardinalTarget, _projectileFlightTime).SetEase(Ease.Linear);
+        }
+
+        #endregion
+
+        #region Private Methods — Projectile Update
+
+        private void UpdateProjectiles()
+        {
+            for (int i = _activeProjectiles.Count - 1; i >= 0; i--)
+            {
+                // Guard: ClearAllDarts may have emptied the list via ExecuteHit → OnBoardCleared chain
+                if (i >= _activeProjectiles.Count) continue;
+
+                DartProjectile proj = _activeProjectiles[i];
+                proj.elapsed += Time.deltaTime;
+
+                if (proj.elapsed >= proj.duration)
+                {
+                    _reservedTargets.Remove(proj.targetBalloonId);
+                    ExecuteHit(proj.targetBalloonId, proj.color);
+
+                    // ExecuteHit can trigger OnBoardCleared → ClearAllDarts, which empties the list
+                    if (_boardFinished) return;
+
+                    ReturnDartToPool(proj.gameObject);
+                    _activeProjectiles.RemoveAt(i);
+                }
+            }
+        }
+
+        private void ExecuteHit(int balloonId, int color)
+        {
+            EventBus.Publish(new OnDartHitBalloon
+            {
+                dartId = -1,
+                balloonId = balloonId,
+                color = color
+            });
+
+            if (BalloonController.HasInstance)
+            {
+                BalloonController.Instance.PopBalloon(balloonId);
+            }
         }
 
         #endregion
 
         #region Private Methods — Event Handlers
 
-        // HandleHolderSelected removed — HolderVisualManager handles holder selection
-        // and fires darts straight to balloons (not along rail path).
-        // DartManager.StartRailLoop() remains available for programmatic use.
+        private void HandleDartPlaced(OnDartPlacedOnSlot evt)
+        {
+            if (_boardFinished) return; // Board already cleared — don't create stale visuals
+            CreateSlotDartVisual(evt.slotIndex, evt.color);
+        }
+
+        /// <summary>
+        /// When a balloon is popped externally (chain pop, gimmick, etc.),
+        /// clear its reservation so other darts can target new outermost balloons.
+        /// </summary>
+        private void HandleBalloonPopped(OnBalloonPopped evt)
+        {
+            _reservedTargets.Remove(evt.balloonId);
+        }
+
+        /// <summary>
+        /// Board cleared — stop all dart activity and clear remaining darts from rail.
+        /// Surplus darts exist due to Chain gimmick auto-popping adjacent balloons without darts.
+        /// </summary>
+        private void HandleBoardCleared(OnBoardCleared evt)
+        {
+            _boardFinished = true;
+            ClearAllDarts();
+
+            // Also clear all darts from rail slot data
+            if (RailManager.HasInstance)
+            {
+                RailManager.Instance.ResetAll();
+            }
+
+            // Safety: delayed re-clear catches any darts placed by coroutines
+            // that resumed after OnBoardCleared but before StopAllCoroutines took effect
+            StartCoroutine(DelayedClearCoroutine());
+        }
+
+        private IEnumerator DelayedClearCoroutine()
+        {
+            yield return null; // wait 1 frame
+            ClearAllDarts();
+            if (RailManager.HasInstance)
+            {
+                RailManager.Instance.ResetAll();
+            }
+        }
+
+        private void HandleBoardFailed(OnBoardFailed evt)
+        {
+            _boardFinished = true;
+        }
+
+        #endregion
+
+        #region Private Methods — Targeting Helpers
+
+        /// <summary>
+        /// Calculates the dart's flight destination along a pure cardinal axis.
+        /// Instead of flying diagonally from rail to balloon (crossing other columns),
+        /// the dart flies straight inward along the rail's firing direction to the balloon's depth.
+        /// </summary>
+        private static Vector3 CalculateCardinalTarget(Vector3 from, Vector3 balloonPos)
+        {
+            // Determine dominant axis (which direction is the dart moving more)
+            float dx = Mathf.Abs(balloonPos.x - from.x);
+            float dz = Mathf.Abs(balloonPos.z - from.z);
+
+            if (dx > dz)
+            {
+                // Firing along X axis — keep dart's Z, move to balloon's X
+                return new Vector3(balloonPos.x, from.y, from.z);
+            }
+            else
+            {
+                // Firing along Z axis — keep dart's X, move to balloon's Z
+                return new Vector3(from.x, from.y, balloonPos.z);
+            }
+        }
+
+        #endregion
+
+        #region Private Methods — Pool & Visual
+
+        private void ReturnDartToPool(GameObject obj)
+        {
+            if (obj != null && ObjectPoolManager.HasInstance)
+            {
+                ObjectPoolManager.Instance.Return(DART_POOL_KEY, obj);
+            }
+        }
+
+        private void ApplyColor(GameObject obj, int color)
+        {
+            Color c = HolderVisualManager.GetColor(color);
+            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                foreach (Material mat in renderers[i].materials)
+                {
+                    if (mat.HasProperty("_BaseColor"))
+                        mat.SetColor("_BaseColor", c);
+                    if (mat.HasProperty("_Color"))
+                        mat.SetColor("_Color", c);
+                }
+            }
+        }
+
+        private void OrientDart(GameObject obj, int slotIndex)
+        {
+            if (!RailManager.HasInstance) return;
+
+            Vector3 fireDir = RailManager.Instance.GetSlotFiringDirection(slotIndex);
+            if (fireDir.sqrMagnitude > 0.001f)
+            {
+                obj.transform.rotation = Quaternion.LookRotation(fireDir);
+            }
+        }
 
         #endregion
     }
-
-    // BalloonIdentifier moved to BalloonIdentifier.cs (Unity requires class name == file name for prefab serialization)
 }

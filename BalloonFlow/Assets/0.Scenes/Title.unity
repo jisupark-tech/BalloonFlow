@@ -154,12 +154,15 @@ MonoBehaviour:
     dartFlightTime: 0.06
     dartFireInterval: 0.06
     dartRailSpeed: 5
-    holderRailSpeed: 7
-    maxOnRail: 9
+    railSlotCount: 200
+    railRotationSpeed: 30
     railPadding: 1.5
     railHeight: 0.5
     boardCenterX: 0
     boardCenterZ: 2
+    useDeployPunchScale: 0
+    failGraceDelay: 1.5
+    failOccupancyThreshold: 0.995
 --- !u!4 &86905297
 Transform:
   m_ObjectHideFlags: 0
@@ -703,7 +706,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
-  m_BackGroundColor: {r: 0.08, g: 0.08, b: 0.16, a: 1}
+  m_BackGroundColor: {r: 0.23529412, g: 0.23529412, b: 0.23529412, a: 1}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0

@@ -257,6 +257,13 @@ namespace BalloonFlow
         /// </summary>
         private void SetupLevel(LevelConfig config)
         {
+            // Update cellSpacing based on level grid size (critical for targeting + fail detection)
+            if (GameManager.HasInstance && config.gridCols > 0)
+            {
+                float boardWorldSize = 8f; // must match LevelDatabaseGenerator50.BOARD_WORLD_SIZE
+                GameManager.Instance.Board.cellSpacing = boardWorldSize / config.gridCols;
+            }
+
             // Reset score first so subsystems receive the correct thresholds
             if (ScoreManager.HasInstance)
             {
@@ -276,26 +283,11 @@ namespace BalloonFlow
                 PopProcessor.Instance.ResetAll();
             }
 
-            // Rail setup via RailManager
+            // Rail setup via RailManager (slot-based conveyor belt)
             if (RailManager.HasInstance && config.rail != null)
             {
-                RailManager.Instance.SetRailLayout(config.rail.waypoints);
-
-                // Convert holder positions to HolderSlot array for rail mapping
-                if (config.rail.holderPositions != null)
-                {
-                    var slots = new RailManager.HolderSlot[config.rail.holderPositions.Length];
-                    for (int i = 0; i < config.rail.holderPositions.Length; i++)
-                    {
-                        slots[i] = new RailManager.HolderSlot
-                        {
-                            holderId       = i,
-                            position       = config.rail.holderPositions[i],
-                            entryDirection = Vector3.forward
-                        };
-                    }
-                    RailManager.Instance.SetHolderSlots(slots);
-                }
+                int slotCount = config.rail.slotCount > 0 ? config.rail.slotCount : 200;
+                RailManager.Instance.SetRailLayout(config.rail.waypoints, slotCount);
             }
 
             // Apply rail visual type to RailRenderer
@@ -305,13 +297,7 @@ namespace BalloonFlow
                 railRenderer.VisualType = config.rail.visualType;
             }
 
-            // Apply max-on-rail limit
-            if (HolderVisualManager.HasInstance && config.rail != null && config.rail.maxOnRail > 0)
-            {
-                HolderVisualManager.Instance.SetMaxOnRail(config.rail.maxOnRail);
-            }
-
-            // Initialize holders from level config
+            // Initialize holders from level config (column-based queue)
             if (HolderManager.HasInstance && config.holders != null)
             {
                 var holderSetup = new System.Collections.Generic.List<(int color, int magazineCount)>(config.holders.Length);
@@ -319,7 +305,7 @@ namespace BalloonFlow
                 {
                     holderSetup.Add((config.holders[i].color, config.holders[i].magazineCount));
                 }
-                HolderManager.Instance.InitializeHolders(holderSetup);
+                HolderManager.Instance.InitializeHolders(holderSetup, config.queueColumns);
             }
 
             // Apply balloon scale
@@ -364,10 +350,14 @@ namespace BalloonFlow
                     cellSpacing
                 );
 
-                // Apply conveyor tile positions from level config
+                // Apply conveyor tile positions from level config, or auto-build rectangular belt
                 if (config.conveyorPositions != null && config.conveyorPositions.Length > 0)
                 {
                     BoardTileManager.Instance.SetConveyorFromConfig(config.conveyorPositions);
+                }
+                else
+                {
+                    BoardTileManager.Instance.BuildConveyorBelt();
                 }
             }
 

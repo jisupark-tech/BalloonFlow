@@ -21,19 +21,19 @@ namespace BalloonFlow
         #region Constants
 
         // Global level IDs at which each gimmick type is first introduced
-        private const int UNLOCK_LEVEL_HIDDEN        = 11;
-        private const int UNLOCK_LEVEL_CHAIN         = 21;
-        private const int UNLOCK_LEVEL_PINATA        = 31;
-        private const int UNLOCK_LEVEL_SPAWNER_T     = 41;
-        private const int UNLOCK_LEVEL_PIN           = 61;
-        private const int UNLOCK_LEVEL_LOCK_KEY      = 81;
-        private const int UNLOCK_LEVEL_SURPRISE      = 101;
-        private const int UNLOCK_LEVEL_WALL          = 121;
-        private const int UNLOCK_LEVEL_SPAWNER_O     = 141;
-        private const int UNLOCK_LEVEL_PINATA_BOX    = 161;
-        private const int UNLOCK_LEVEL_ICE           = 201;
-        private const int UNLOCK_LEVEL_FROZEN_DART   = 241;
-        private const int UNLOCK_LEVEL_COLOR_CURTAIN = 281;
+        private const int UNLOCK_LEVEL_HIDDEN        = 2;
+        private const int UNLOCK_LEVEL_CHAIN         = 8;
+        private const int UNLOCK_LEVEL_PINATA        = 15;
+        private const int UNLOCK_LEVEL_PIN           = 25;
+        private const int UNLOCK_LEVEL_WALL          = 35;
+        private const int UNLOCK_LEVEL_SPAWNER_T     = 45;
+        private const int UNLOCK_LEVEL_LOCK_KEY      = 60;
+        private const int UNLOCK_LEVEL_SURPRISE      = 80;
+        private const int UNLOCK_LEVEL_SPAWNER_O     = 100;
+        private const int UNLOCK_LEVEL_PINATA_BOX    = 120;
+        private const int UNLOCK_LEVEL_ICE           = 150;
+        private const int UNLOCK_LEVEL_FROZEN_DART   = 180;
+        private const int UNLOCK_LEVEL_COLOR_CURTAIN = 210;
 
         // String identifiers that match LevelConfig.gimmickTypes values
         public const string GIMMICK_HIDDEN        = "Hidden";

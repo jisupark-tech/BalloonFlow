@@ -67,6 +67,16 @@ namespace BalloonFlow
             // 버튼 이벤트 연결
             if (_view.SettingsButton != null) _view.SettingsButton.onClick.AddListener(OnSettingsClicked);
             if (_view.GoldPlusButton != null) _view.GoldPlusButton.onClick.AddListener(OnGoldPlusClicked);
+
+            // Proactively set level info in case OnLevelLoaded already fired before binding
+            if (LevelManager.HasInstance && LevelManager.Instance.CurrentLevelId > 0)
+            {
+                LevelConfig cfg = LevelManager.Instance.CurrentLevel;
+                int pkgId = cfg != null ? cfg.packageId : 1;
+                SetLevelInfo(LevelManager.Instance.CurrentLevelId, pkgId);
+            }
+            if (CurrencyManager.HasInstance) UpdateGoldDisplay(CurrencyManager.Instance.Coins);
+            RefreshOnRailCount();
         }
 
         /// <summary>설정 팝업 연결 + Close 버튼 와이어링</summary>
@@ -175,9 +185,9 @@ namespace BalloonFlow
 
         private void RefreshOnRailCount()
         {
-            if (!HolderVisualManager.HasInstance) return;
-            int _onRail = HolderVisualManager.Instance.GetOnRailCount();
-            int _max = HolderVisualManager.Instance.GetMaxOnRail();
+            if (!RailManager.HasInstance) return;
+            int _onRail = RailManager.Instance.OccupiedCount;
+            int _max = RailManager.Instance.SlotCount;
             UpdateHolderInfo(_onRail, _max);
         }
 

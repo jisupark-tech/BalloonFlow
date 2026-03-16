@@ -213,42 +213,13 @@ namespace BalloonFlow
         /// </summary>
         private void HandleDartHitBalloon(OnDartHitBalloon evt)
         {
-            // Determine dart color from DartManager's active dart data
-            int dartColor = -1;
-
-            if (DartManager.HasInstance)
+            if (evt.color < 0)
             {
-                DartData[] activeDarts = DartManager.Instance.GetActiveDarts();
-                if (activeDarts != null)
-                {
-                    for (int i = 0; i < activeDarts.Length; i++)
-                    {
-                        if (activeDarts[i].dartId == evt.dartId)
-                        {
-                            dartColor = activeDarts[i].color;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Fallback: try to get color from the current holder
-            if (dartColor < 0 && HolderManager.HasInstance)
-            {
-                HolderData currentHolder = HolderManager.Instance.GetCurrentHolder();
-                if (currentHolder != null)
-                {
-                    dartColor = currentHolder.color;
-                }
-            }
-
-            if (dartColor < 0)
-            {
-                Debug.LogWarning($"[PopProcessor] Could not determine dart color for dartId {evt.dartId}.");
+                Debug.LogWarning($"[PopProcessor] Invalid dart color for dartId {evt.dartId}.");
                 return;
             }
 
-            ProcessPop(evt.balloonId, dartColor);
+            ProcessPop(evt.balloonId, evt.color);
         }
 
         /// <summary>

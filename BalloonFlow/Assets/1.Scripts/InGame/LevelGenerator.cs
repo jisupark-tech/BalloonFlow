@@ -583,12 +583,12 @@ namespace BalloonFlow
             waypoints.Add(new Vector3(left, 0.5f, Mathf.Lerp(top, bottom, 0.33f)));
             waypoints.Add(new Vector3(left, 0.5f, Mathf.Lerp(top, bottom, 0.67f)));
 
-            // Holder queue staging positions: 5 slots evenly spaced along the near (bottom-Z) edge
-            Vector3[] holderPositions = new Vector3[HolderQueueSlotCount];
+            // Deploy points: where each queue column aligns to the bottom rail edge
+            Vector3[] deployPoints = new Vector3[HolderQueueSlotCount];
             for (int i = 0; i < HolderQueueSlotCount; i++)
             {
                 float t = (i + 1f) / (HolderQueueSlotCount + 1f);
-                holderPositions[i] = new Vector3(
+                deployPoints[i] = new Vector3(
                     Mathf.Lerp(left, right, t),
                     0.5f,
                     bottom
@@ -598,7 +598,8 @@ namespace BalloonFlow
             return new RailLayout
             {
                 waypoints = waypoints.ToArray(),
-                holderPositions = holderPositions
+                slotCount = 200,
+                deployPoints = deployPoints
             };
         }
 

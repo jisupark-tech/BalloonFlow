@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using DG.Tweening;
 using TMPro;
@@ -8,29 +7,26 @@ using TMPro;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Manages the visual representation of holders: spawning in the waiting area,
-    /// moving along the rail, firing darts at matching-color outermost balloons,
-    /// and handling collision avoidance between on-rail holders.
+    /// Manages visual representation of holders in Rail Overflow mode.
+    /// Holders sit in a column-based queue, move up to the rail when selected,
+    /// deploy darts onto empty passing slots, then disappear when magazine=0.
+    /// Per column: 1 deploying (at rail) + 1 waiting (just below).
     /// </summary>
     /// <remarks>
     /// Layer: Game | Genre: Puzzle | Role: Manager | Phase: 1
-    /// DB Reference: No DB match found — generated from L3 YAML logicFlow
+    /// DB Reference: Generated from Rail Overflow spec — column queue visual system
     /// </remarks>
     public class HolderVisualManager : SceneSingleton<HolderVisualManager>
     {
         #region Constants
 
         private const string HOLDER_POOL_KEY = "Holder";
-        private const string DART_POOL_KEY = "Dart";
-        private const float DEFAULT_RAIL_SPEED = 7f;
-        private const float DEFAULT_DART_FLIGHT_TIME = 0.03f; // 4x original (very fast)
-        private const float FRONT_ROW_Z = -5.0f;    // Front row (closest to board/rail)
-        private const float ROW_Z_SPACING = 1.5f;    // Rows go southward (lower Z)
+        private const float QUEUE_BASE_Z = -5.0f;    // Front row Z
+        private const float QUEUE_ROW_SPACING = 1.5f;  // Rows go south
         private const float COLUMN_SPACING = 1.4f;
-        private const int HOLDERS_PER_ROW = 5;        // 5x5 grid layout
-        private const float MIN_NORMALIZED_SPACING = 0.15f;
+        private const int MAX_COLUMNS = 5;
         private const int MAGAZINE_FONT_SIZE = 5;
-        private const int DEFAULT_MAX_ON_RAIL = 9;
+        private const float DEPLOY_MOVE_SPEED = 12f;
 
         #endregion
 
@@ -50,44 +46,21 @@ namespace BalloonFlow
 
         #endregion
 
-        #region Serialized Fields
-
-        [SerializeField] private float _railSpeed = DEFAULT_RAIL_SPEED;
-        [SerializeField] private float _dartFlightTime = DEFAULT_DART_FLIGHT_TIME;
-        [SerializeField] private float _dartFireInterval = 0.06f;
-
-        #endregion
-
         #region Nested Types
 
-        /// <summary>
-        /// Tracks the visual state of a single holder.
-        /// </summary>
         private class HolderVisual
         {
             public int holderId;
             public int color;
+            public int column;
             public int magazineRemaining;
             public GameObject gameObject;
             public Renderer meshRenderer;
             public TMP_Text magazineText;
-            public Vector3 waitingPosition;
-            public bool isOnRail;
+            public Vector3 queuePosition;
+            public bool isDeploying;     // at rail, deploying darts
+            public bool isWaiting;       // just below deploying holder
             public bool isMovingToRail;
-            public float normalizedT;
-        }
-
-        /// <summary>
-        /// Tracks an in-flight dart projectile.
-        /// </summary>
-        private class DartProjectile
-        {
-            public GameObject gameObject;
-            public Vector3 startPosition;
-            public Vector3 targetPosition;
-            public int targetBalloonId;
-            public float elapsed;
-            public float duration;
         }
 
         #endregion
@@ -95,27 +68,7 @@ namespace BalloonFlow
         #region Fields
 
         private readonly Dictionary<int, HolderVisual> _holderVisuals = new Dictionary<int, HolderVisual>();
-        private readonly List<HolderVisual> _onRailHolders = new List<HolderVisual>();
-        private readonly List<DartProjectile> _activeDartProjectiles = new List<DartProjectile>();
-        private readonly List<float> _occupiedNormalizedPositions = new List<float>();
-
-        // Deployment queue: prevents overlapping when clicking multiple holders quickly
-        private readonly Queue<OnHolderSelected> _deploymentQueue = new Queue<OnHolderSelected>();
-        private bool _isDeployingHolder;
-        private int _maxOnRail = DEFAULT_MAX_ON_RAIL;
-
-        // Wait point queue: holders wait at staging and enter rail one at a time with spacing
-        private readonly Queue<HolderVisual> _waitPointQueue = new Queue<HolderVisual>();
-        private bool _isProcessingWaitQueue;
-
-        #endregion
-
-        #region Properties
-
-        /// <summary>
-        /// Rail movement speed in units per second.
-        /// </summary>
-        public float RailSpeed => _railSpeed;
+        private int _queueColumns = 5;
 
         #endregion
 
@@ -123,35 +76,26 @@ namespace BalloonFlow
 
         protected override void OnSingletonAwake()
         {
-            // GameManager.Board에서 설정값 읽기
-            if (GameManager.HasInstance)
-            {
-                _railSpeed = GameManager.Instance.Board.holderRailSpeed;
-                _dartFlightTime = GameManager.Instance.Board.dartFlightTime;
-                _dartFireInterval = GameManager.Instance.Board.dartFireInterval;
-                _maxOnRail = GameManager.Instance.Board.maxOnRail;
-            }
         }
+
+        private bool _boardFinished;
 
         private void OnEnable()
         {
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Subscribe<OnHolderSelected>(HandleHolderSelected);
-            EventBus.Subscribe<OnHolderReturned>(HandleHolderReturned);
             EventBus.Subscribe<OnMagazineEmpty>(HandleMagazineEmpty);
+            EventBus.Subscribe<OnBoardCleared>(HandleBoardCleared);
+            EventBus.Subscribe<OnBoardFailed>(HandleBoardFailed);
         }
 
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Unsubscribe<OnHolderSelected>(HandleHolderSelected);
-            EventBus.Unsubscribe<OnHolderReturned>(HandleHolderReturned);
             EventBus.Unsubscribe<OnMagazineEmpty>(HandleMagazineEmpty);
-        }
-
-        private void Update()
-        {
-            UpdateDartProjectiles();
+            EventBus.Unsubscribe<OnBoardCleared>(HandleBoardCleared);
+            EventBus.Unsubscribe<OnBoardFailed>(HandleBoardFailed);
         }
 
         #endregion
@@ -159,41 +103,47 @@ namespace BalloonFlow
         #region Public Methods
 
         /// <summary>
-        /// Spawns visual holder GameObjects in the waiting area based on HolderManager data.
+        /// Spawns visual holder GameObjects in the queue based on HolderManager data.
         /// </summary>
         public void SpawnWaitingHolders()
         {
+            _boardFinished = false;
             ClearAllVisuals();
 
-            if (!HolderManager.HasInstance)
-            {
-                Debug.LogWarning("[HolderVisualManager] HolderManager not available.");
-                return;
-            }
+            if (!HolderManager.HasInstance) return;
 
             HolderData[] holders = HolderManager.Instance.GetHolders();
-            if (holders == null || holders.Length == 0)
-            {
-                return;
-            }
+            if (holders == null || holders.Length == 0) return;
 
-            int waitingIndex = 0;
+            _queueColumns = HolderManager.Instance.QueueColumns;
+
+            // Group by column
+            var columnQueues = new Dictionary<int, List<HolderData>>();
             for (int i = 0; i < holders.Length; i++)
             {
                 HolderData data = holders[i];
-                if (data.isDeployed || data.isOnRail)
-                {
-                    continue;
-                }
+                if (data.isConsumed) continue;
 
-                Vector3 position = CalculateWaitingPosition(waitingIndex);
-                HolderVisual visual = CreateHolderVisual(data, position);
-                if (visual != null)
-                {
-                    _holderVisuals[data.holderId] = visual;
-                }
+                if (!columnQueues.ContainsKey(data.column))
+                    columnQueues[data.column] = new List<HolderData>();
+                columnQueues[data.column].Add(data);
+            }
 
-                waitingIndex++;
+            // Spawn per column, row by row
+            foreach (var kvp in columnQueues)
+            {
+                int col = kvp.Key;
+                var colHolders = kvp.Value;
+
+                for (int row = 0; row < colHolders.Count; row++)
+                {
+                    Vector3 pos = CalculateQueuePosition(col, row);
+                    HolderVisual visual = CreateHolderVisual(colHolders[row], pos, col);
+                    if (visual != null)
+                    {
+                        _holderVisuals[colHolders[row].holderId] = visual;
+                    }
+                }
             }
         }
 
@@ -203,16 +153,181 @@ namespace BalloonFlow
         public static Color GetColor(int colorIndex)
         {
             if (colorIndex >= 0 && colorIndex < COLORS.Length)
-            {
                 return COLORS[colorIndex];
-            }
             return Color.white;
         }
 
         /// <summary>
-        /// Applies color to all Renderers on a GameObject.
-        /// Sets both _BaseColor (URP Lit) and _Color (Standard) for shader compatibility.
+        /// Returns true if the holder is in the front row (row 0) of its column.
+        /// Only front-row holders are clickable.
         /// </summary>
+        public bool IsInFrontRow(int holderId)
+        {
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual))
+                return false;
+            if (visual.isDeploying || visual.isMovingToRail || visual.gameObject == null)
+                return false;
+
+            float holderZ = visual.gameObject.transform.position.z;
+            return holderZ >= QUEUE_BASE_Z - QUEUE_ROW_SPACING * 0.5f;
+        }
+
+        /// <summary>
+        /// Clears all holder visuals and returns objects to pool.
+        /// </summary>
+        public void ClearAllVisuals()
+        {
+            StopAllCoroutines();
+
+            foreach (var kvp in _holderVisuals)
+            {
+                ReturnHolderToPool(kvp.Value);
+            }
+            _holderVisuals.Clear();
+        }
+
+        /// <summary>
+        /// IsRailFull is no longer relevant in Rail Overflow mode.
+        /// Always returns false — dart deployment is gated by slot availability, not holder count.
+        /// </summary>
+        public bool IsRailFull()
+        {
+            return false;
+        }
+
+        public int GetOnRailCount()
+        {
+            int count = 0;
+            foreach (var kvp in _holderVisuals)
+            {
+                if (kvp.Value.isDeploying || kvp.Value.isMovingToRail) count++;
+            }
+            return count;
+        }
+
+        #endregion
+
+        #region Private Methods — Queue Positioning
+
+        private Vector3 CalculateQueuePosition(int column, int row)
+        {
+            float totalWidth = (_queueColumns - 1) * COLUMN_SPACING;
+            float startX = -totalWidth * 0.5f;
+
+            float x = startX + column * COLUMN_SPACING;
+            float z = QUEUE_BASE_Z - row * QUEUE_ROW_SPACING;
+
+            return new Vector3(x, 0.25f, z);
+        }
+
+        /// <summary>
+        /// Returns the deploy point — where a holder attaches to the rail bottom edge
+        /// to start deploying darts onto passing empty slots.
+        /// </summary>
+        private Vector3 GetDeployPoint(int column)
+        {
+            if (!RailManager.HasInstance) return CalculateQueuePosition(column, 0) + Vector3.forward * 2f;
+
+            // Deploy point = bottom rail edge, aligned to column X
+            float totalWidth = (_queueColumns - 1) * COLUMN_SPACING;
+            float startX = -totalWidth * 0.5f;
+            float x = startX + column * COLUMN_SPACING;
+
+            // Get the bottom rail Y from waypoints
+            Vector3[] path = RailManager.Instance.GetRailPath();
+            float railY = 0.5f;
+            float railZ = 0f;
+            if (path != null && path.Length > 0)
+            {
+                // Bottom rail = lowest Z waypoint
+                railY = path[0].y;
+                railZ = float.MaxValue;
+                for (int i = 0; i < path.Length; i++)
+                {
+                    if (path[i].z < railZ)
+                        railZ = path[i].z;
+                }
+            }
+
+            return new Vector3(x, railY, railZ);
+        }
+
+        private void RepositionColumnHolders(int column)
+        {
+            if (!HolderManager.HasInstance) return;
+
+            var colHolders = new List<HolderVisual>();
+            foreach (var kvp in _holderVisuals)
+            {
+                HolderVisual v = kvp.Value;
+                if (v.column == column && !v.isDeploying && !v.isMovingToRail && v.gameObject != null)
+                {
+                    colHolders.Add(v);
+                }
+            }
+
+            // Sort by current Z descending (front first)
+            colHolders.Sort((a, b) => b.gameObject.transform.position.z.CompareTo(a.gameObject.transform.position.z));
+
+            for (int row = 0; row < colHolders.Count; row++)
+            {
+                Vector3 targetPos = CalculateQueuePosition(column, row);
+                if (Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos) > 0.05f)
+                {
+                    float dist = Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos);
+                    colHolders[row].gameObject.transform.DOMove(targetPos, dist / 4f).SetEase(Ease.OutQuad);
+                }
+                colHolders[row].queuePosition = targetPos;
+            }
+        }
+
+        #endregion
+
+        #region Private Methods — Holder Visual Creation
+
+        private HolderVisual CreateHolderVisual(HolderData data, Vector3 position, int column)
+        {
+            if (!ObjectPoolManager.HasInstance) return null;
+
+            GameObject obj = ObjectPoolManager.Instance.Get(HOLDER_POOL_KEY, position, Quaternion.identity);
+            if (obj == null) return null;
+
+            obj.SetActive(true);
+
+            HolderIdentifier identifier = obj.GetComponent<HolderIdentifier>();
+            if (identifier != null)
+            {
+                identifier.SetHolderId(data.holderId);
+            }
+
+            Color holderColor = GetColor(data.color);
+            ApplyColorToRenderers(obj, holderColor);
+
+            TMP_Text textMesh = obj.GetComponentInChildren<TMP_Text>(true);
+            if (textMesh != null)
+            {
+                textMesh.text = data.magazineCount.ToString();
+                textMesh.color = Color.white;
+                textMesh.fontSize = MAGAZINE_FONT_SIZE;
+                textMesh.alignment = TextAlignmentOptions.Center;
+            }
+
+            return new HolderVisual
+            {
+                holderId = data.holderId,
+                color = data.color,
+                column = column,
+                magazineRemaining = data.magazineCount,
+                gameObject = obj,
+                meshRenderer = obj.GetComponent<Renderer>(),
+                magazineText = textMesh,
+                queuePosition = position,
+                isDeploying = false,
+                isWaiting = false,
+                isMovingToRail = false
+            };
+        }
+
         private static void ApplyColorToRenderers(GameObject obj, Color color)
         {
             Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
@@ -228,815 +343,6 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>
-        /// Returns true if the rail is at capacity (no more holders can be deployed).
-        /// </summary>
-        public bool IsRailFull()
-        {
-            int onRailCount = _onRailHolders.Count;
-            foreach (var kvp in _holderVisuals)
-            {
-                if (kvp.Value.isMovingToRail) onRailCount++;
-            }
-            return onRailCount >= _maxOnRail;
-        }
-
-        /// <summary>
-        /// Sets the maximum number of holders allowed on the rail simultaneously.
-        /// </summary>
-        public void SetMaxOnRail(int max)
-        {
-            _maxOnRail = Mathf.Max(1, max);
-        }
-
-        /// <summary>
-        /// Returns the current number of holders on the rail (including those moving to rail).
-        /// </summary>
-        public int GetOnRailCount()
-        {
-            int count = _onRailHolders.Count;
-            foreach (var kvp in _holderVisuals)
-            {
-                if (kvp.Value.isMovingToRail) count++;
-            }
-            return count;
-        }
-
-        /// <summary>
-        /// Returns the maximum allowed holders on rail.
-        /// </summary>
-        public int GetMaxOnRail()
-        {
-            return _maxOnRail;
-        }
-
-        /// <summary>
-        /// Returns true if the holder is in the front row (row 0) of the waiting area.
-        /// Only front-row holders are clickable.
-        /// </summary>
-        public bool IsInFrontRow(int holderId)
-        {
-            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual))
-            {
-                return false;
-            }
-
-            if (visual.isOnRail || visual.isMovingToRail || visual.gameObject == null)
-            {
-                return false;
-            }
-
-            // Front row = highest Z among waiting holders. Check if this holder's Z
-            // is within tolerance of FRONT_ROW_Z (the front row position).
-            float holderZ = visual.gameObject.transform.position.z;
-            return holderZ >= FRONT_ROW_Z - ROW_Z_SPACING * 0.5f;
-        }
-
-        /// <summary>
-        /// Clears all holder visuals and returns objects to pool.
-        /// </summary>
-        public void ClearAllVisuals()
-        {
-            StopAllCoroutines();
-
-            _deploymentQueue.Clear();
-            _isDeployingHolder = false;
-            _waitPointQueue.Clear();
-            _isProcessingWaitQueue = false;
-
-            foreach (var kvp in _holderVisuals)
-            {
-                ReturnHolderToPool(kvp.Value);
-            }
-            _holderVisuals.Clear();
-            _onRailHolders.Clear();
-            _occupiedNormalizedPositions.Clear();
-
-            // Clean up dart projectiles
-            for (int i = _activeDartProjectiles.Count - 1; i >= 0; i--)
-            {
-                ReturnDartProjectileToPool(_activeDartProjectiles[i]);
-            }
-            _activeDartProjectiles.Clear();
-        }
-
-        #endregion
-
-        #region Private Methods -- Waiting Area
-
-        private Vector3 CalculateWaitingPosition(int index)
-        {
-            int row = index / HOLDERS_PER_ROW;
-            int col = index % HOLDERS_PER_ROW;
-
-            // Center the row horizontally
-            float rowWidth = (HOLDERS_PER_ROW - 1) * COLUMN_SPACING;
-            float startX = -rowWidth * 0.5f;
-
-            float x = startX + col * COLUMN_SPACING;
-            // Front row = closest to board (highest Z), subsequent rows go south
-            float z = FRONT_ROW_Z - row * ROW_Z_SPACING;
-
-            return new Vector3(x, 0.25f, z);
-        }
-
-        private HolderVisual CreateHolderVisual(HolderData data, Vector3 position)
-        {
-            if (!ObjectPoolManager.HasInstance)
-            {
-                Debug.LogWarning("[HolderVisualManager] ObjectPoolManager not available.");
-                return null;
-            }
-
-            GameObject obj = ObjectPoolManager.Instance.Get(HOLDER_POOL_KEY, position, Quaternion.identity);
-            if (obj == null)
-            {
-                Debug.LogWarning($"[HolderVisualManager] Failed to get holder from pool '{HOLDER_POOL_KEY}'.");
-                return null;
-            }
-
-            obj.SetActive(true);
-
-            // Set up identifier for tap detection
-            HolderIdentifier identifier = obj.GetComponent<HolderIdentifier>();
-            if (identifier != null)
-            {
-                identifier.SetHolderId(data.holderId);
-            }
-
-            // Set mesh color — URP Lit uses _BaseColor, Standard uses _Color
-            Renderer sr = obj.GetComponent<Renderer>();
-            if (sr == null)
-            {
-                sr = obj.GetComponentInChildren<Renderer>();
-            }
-
-            Color holderColor = GetColor(data.color);
-            ApplyColorToRenderers(obj, holderColor);
-
-            // Set up or find magazine count text (TMPro)
-            TMP_Text textMesh = FindOrCreateMagazineText(obj);
-            if (textMesh != null)
-            {
-                textMesh.text = data.magazineCount.ToString();
-                textMesh.color = Color.white;
-                textMesh.fontSize = MAGAZINE_FONT_SIZE;
-                textMesh.alignment = TextAlignmentOptions.Center;
-            }
-
-            HolderVisual visual = new HolderVisual
-            {
-                holderId = data.holderId,
-                color = data.color,
-                magazineRemaining = data.magazineCount,
-                gameObject = obj,
-                meshRenderer = sr,
-                magazineText = textMesh,
-                waitingPosition = position,
-                isOnRail = false,
-                normalizedT = 0f
-            };
-
-            return visual;
-        }
-
-        private TMP_Text FindOrCreateMagazineText(GameObject holder)
-        {
-            // Priority 1: Look for TMPro text component (TextMeshPro / TextMeshProUGUI)
-            TMP_Text tmpText = holder.GetComponentInChildren<TMP_Text>(true);
-            if (tmpText != null)
-            {
-                return tmpText;
-            }
-
-            // Priority 2: Look for a child transform named "MagazineText" with TMPro
-            Transform textChild = holder.transform.Find("MagazineText");
-            if (textChild != null)
-            {
-                TMP_Text existing = textChild.GetComponent<TMP_Text>();
-                if (existing != null)
-                {
-                    return existing;
-                }
-            }
-
-            Debug.LogWarning("[HolderVisualManager] Holder prefab has no TMP_Text child for magazine count. " +
-                             "Add a child named 'MagazineText' with a TextMeshPro component to the Holder prefab.");
-            return null;
-        }
-
-        private void RepositionWaitingHolders()
-        {
-            RepositionWaitingHoldersSmooth();
-        }
-
-        private void RepositionWaitingHoldersSmooth()
-        {
-            // Column-preserving south→north shift:
-            // 1. Group waiting holders by their current column (nearest X column index)
-            // 2. Within each column, sort by Z descending (northernmost first)
-            // 3. Assign row positions per column from front row backward
-            // Result: holders only move north (Z direction), never horizontally
-
-            List<HolderVisual> waitingList = new List<HolderVisual>();
-            foreach (var kvp in _holderVisuals)
-            {
-                HolderVisual visual = kvp.Value;
-                if (visual.isOnRail || visual.isMovingToRail || visual.gameObject == null)
-                {
-                    continue;
-                }
-                waitingList.Add(visual);
-            }
-
-            if (waitingList.Count == 0) return;
-
-            // Calculate column X positions (same as CalculateWaitingPosition)
-            float rowWidth = (HOLDERS_PER_ROW - 1) * COLUMN_SPACING;
-            float startX = -rowWidth * 0.5f;
-
-            // Group holders by nearest column index
-            Dictionary<int, List<HolderVisual>> columns = new Dictionary<int, List<HolderVisual>>();
-            for (int i = 0; i < waitingList.Count; i++)
-            {
-                float holderX = waitingList[i].gameObject.transform.position.x;
-                // Find nearest column index
-                int nearestCol = 0;
-                float minDist = float.MaxValue;
-                for (int c = 0; c < HOLDERS_PER_ROW; c++)
-                {
-                    float colX = startX + c * COLUMN_SPACING;
-                    float dist = Mathf.Abs(holderX - colX);
-                    if (dist < minDist)
-                    {
-                        minDist = dist;
-                        nearestCol = c;
-                    }
-                }
-
-                if (!columns.ContainsKey(nearestCol))
-                {
-                    columns[nearestCol] = new List<HolderVisual>();
-                }
-                columns[nearestCol].Add(waitingList[i]);
-            }
-
-            // Within each column, sort by Z descending (northernmost first) and assign row positions
-            foreach (var kvp in columns)
-            {
-                int col = kvp.Key;
-                List<HolderVisual> colHolders = kvp.Value;
-
-                // Sort by Z descending — front holders stay front
-                colHolders.Sort((a, b) => b.gameObject.transform.position.z.CompareTo(a.gameObject.transform.position.z));
-
-                float colX = startX + col * COLUMN_SPACING;
-                for (int row = 0; row < colHolders.Count; row++)
-                {
-                    float z = FRONT_ROW_Z - row * ROW_Z_SPACING;
-                    Vector3 targetPos = new Vector3(colX, 0.25f, z);
-
-                    if (Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos) > 0.05f)
-                    {
-                        float dist = Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos);
-                        colHolders[row].gameObject.transform.DOMove(targetPos, dist / 3f).SetEase(Ease.OutQuad);
-                    }
-                    colHolders[row].waitingPosition = targetPos;
-                }
-            }
-        }
-
-        // SmoothMoveCoroutine replaced by DOTween DOMove (see RepositionWaitingHoldersSmooth)
-
-        #endregion
-
-        #region Private Methods -- Rail Movement
-
-        private void MoveHolderToRail(int holderId, int color, int magazineCount)
-        {
-            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual))
-            {
-                Debug.LogWarning($"[HolderVisualManager] No visual found for holder {holderId}.");
-                _isDeployingHolder = false;
-                TryProcessDeploymentQueue();
-                return;
-            }
-
-            if (visual.isOnRail || visual.isMovingToRail)
-            {
-                _isDeployingHolder = false;
-                TryProcessDeploymentQueue();
-                return;
-            }
-
-            // Rail capacity check — block deployment if full
-            if (IsRailFull())
-            {
-                // Undo the deploy state in HolderManager
-                if (HolderManager.HasInstance)
-                {
-                    HolderManager.Instance.UndoDeploy(holderId);
-                }
-                _isDeployingHolder = false;
-                TryProcessDeploymentQueue();
-                return;
-            }
-
-            _isDeployingHolder = true;
-            visual.isMovingToRail = true;
-            visual.magazineRemaining = magazineCount;
-            visual.color = color;
-
-            // Reposition remaining waiting holders to fill the gap
-            RepositionWaitingHoldersSmooth();
-
-            StartCoroutine(MoveToRailEntryCoroutine(visual));
-        }
-
-        private IEnumerator MoveToRailEntryCoroutine(HolderVisual visual)
-        {
-            if (!RailManager.HasInstance) yield break;
-
-            RailManager rail = RailManager.Instance;
-            Vector3 railEntry = rail.GetPositionAtNormalized(0f);
-            const float moveSpeed = 10f;
-
-            // --- Phase 1: Move to staging position (left-bottom of rail entry) ---
-            Vector3 stagingPos = railEntry + new Vector3(-1.8f, 0f, -1.2f);
-
-            while (visual.gameObject != null)
-            {
-                Vector3 currentPos = visual.gameObject.transform.position;
-                float dist = Vector3.Distance(currentPos, stagingPos);
-                if (dist < 0.15f) break;
-
-                Vector3 dir = (stagingPos - currentPos).normalized;
-                visual.gameObject.transform.position = currentPos + dir * moveSpeed * Time.deltaTime;
-                yield return null;
-            }
-
-            // Snap to staging
-            if (visual.gameObject != null)
-                visual.gameObject.transform.position = stagingPos;
-
-            // --- Phase 2: Enqueue at wait point ---
-            // Release deployment lock so next holder can move to staging too
-            _isDeployingHolder = false;
-            TryProcessDeploymentQueue();
-
-            // Add to wait point queue — processed FIFO in ProcessWaitPointQueue
-            _waitPointQueue.Enqueue(visual);
-            if (!_isProcessingWaitQueue)
-            {
-                StartCoroutine(ProcessWaitPointQueue());
-            }
-        }
-
-        /// <summary>
-        /// Processes the wait point queue: sends holders from staging to rail one at a time,
-        /// ensuring MIN_NORMALIZED_SPACING between each rail entry.
-        /// </summary>
-        private IEnumerator ProcessWaitPointQueue()
-        {
-            _isProcessingWaitQueue = true;
-
-            while (_waitPointQueue.Count > 0)
-            {
-                HolderVisual visual = _waitPointQueue.Peek();
-
-                // Skip invalid holders
-                if (visual.gameObject == null || visual.isOnRail || !visual.isMovingToRail)
-                {
-                    _waitPointQueue.Dequeue();
-                    continue;
-                }
-
-                // Wait until rail entry zone is clear (sufficient spacing from nearest holder)
-                float waited = 0f;
-                while (!IsRailEntryFree())
-                {
-                    waited += Time.deltaTime;
-                    if (waited > 10f) break; // Safety timeout
-                    yield return null;
-                }
-
-                // Dequeue and send to rail
-                _waitPointQueue.Dequeue();
-                yield return StartCoroutine(MoveFromStagingToRail(visual));
-            }
-
-            _isProcessingWaitQueue = false;
-        }
-
-        /// <summary>
-        /// Moves a single holder from staging position to rail entry and starts rail traversal.
-        /// </summary>
-        private IEnumerator MoveFromStagingToRail(HolderVisual visual)
-        {
-            if (!RailManager.HasInstance || visual.gameObject == null) yield break;
-
-            RailManager rail = RailManager.Instance;
-            Vector3 railEntry = rail.GetPositionAtNormalized(0f);
-            const float moveSpeed = 10f;
-
-            // Move from staging to rail entry
-            while (visual.gameObject != null)
-            {
-                Vector3 currentPos = visual.gameObject.transform.position;
-                float dist = Vector3.Distance(currentPos, railEntry);
-                if (dist < 0.1f) break;
-
-                Vector3 dir = (railEntry - currentPos).normalized;
-                visual.gameObject.transform.position = currentPos + dir * moveSpeed * Time.deltaTime;
-                yield return null;
-            }
-
-            // Enter rail
-            visual.isMovingToRail = false;
-            visual.isOnRail = true;
-            visual.normalizedT = 0f;
-
-            _onRailHolders.Add(visual);
-            _occupiedNormalizedPositions.Add(0f);
-            StartCoroutine(RailTraversalCoroutine(visual));
-        }
-
-        private Vector3 CalculateAvoidanceOffset(HolderVisual self, Vector3 currentPos, Vector3 moveDir)
-        {
-            Vector3 offset = Vector3.zero;
-            const float avoidRadius = 1.2f;
-
-            foreach (var kvp in _holderVisuals)
-            {
-                HolderVisual other = kvp.Value;
-                if (other == self || other.gameObject == null || other.isOnRail) continue;
-
-                Vector3 otherPos = other.gameObject.transform.position;
-                Vector3 diff = currentPos - otherPos;
-                float dist = diff.magnitude;
-
-                if (dist < avoidRadius && dist > 0.01f)
-                {
-                    // Push away from the obstacle
-                    offset += diff.normalized * (avoidRadius - dist) * 0.5f;
-                }
-            }
-
-            // Keep Y height constant
-            offset.y = 0f;
-            return offset;
-        }
-
-        private bool IsRailEntryFree()
-        {
-            for (int i = 0; i < _occupiedNormalizedPositions.Count; i++)
-            {
-                if (_occupiedNormalizedPositions[i] < MIN_NORMALIZED_SPACING)
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        private IEnumerator RailTraversalCoroutine(HolderVisual visual)
-        {
-            if (!RailManager.HasInstance)
-            {
-                Debug.LogError("[HolderVisualManager] RailManager not available for rail traversal.");
-                yield break;
-            }
-
-            RailManager rail = RailManager.Instance;
-            float totalLength = rail.TotalPathLength;
-
-            if (totalLength <= 0f)
-            {
-                Debug.LogError("[HolderVisualManager] Rail total path length is zero.");
-                yield break;
-            }
-
-            // Multi-lap traversal: loop around the rail until magazine is empty.
-            // Fire only ONE dart per rail side per lap.
-            // Rail sides are detected via movement direction (South/East/North/West).
-
-            float distanceTraveled = 0f;
-            float lastFireTime = -999f;
-            float fireCooldown = _dartFireInterval; // Inspector에서 조절 가능 (GameManager.Board.dartFireInterval)
-            const int MAX_LAPS = 50;
-            int lapCount = 0;
-
-            // Track fired balloon IDs per side per lap to avoid re-targeting
-            // When side changes, the previous side's targets are "spent" for this lap
-            int previousSide = -1;
-            HashSet<int> firedThisSide = new HashSet<int>();
-
-            while (visual.isOnRail && visual.magazineRemaining > 0 && lapCount < MAX_LAPS)
-            {
-                distanceTraveled = 0f;
-                previousSide = -1;
-                lapCount++;
-
-                while (distanceTraveled < totalLength && visual.isOnRail && visual.magazineRemaining > 0)
-                {
-                    float deltaDistance = _railSpeed * Time.deltaTime;
-                    distanceTraveled += deltaDistance;
-
-                    float normalizedT = Mathf.Clamp01(distanceTraveled / totalLength);
-                    visual.normalizedT = normalizedT;
-
-                    UpdateOccupiedPosition(visual);
-
-                    Vector3 position = rail.GetPositionAtNormalized(normalizedT);
-                    Vector3 direction = rail.GetDirectionAtNormalized(normalizedT);
-
-                    if (visual.gameObject != null)
-                    {
-                        visual.gameObject.transform.position = position;
-                    }
-
-                    if (visual.magazineText != null)
-                    {
-                        visual.magazineText.text = visual.magazineRemaining.ToString();
-                    }
-
-                    int currentSide = GetRailSide(direction);
-
-                    // Reset fired set when entering a new side
-                    if (currentSide != previousSide)
-                    {
-                        firedThisSide.Clear();
-                        previousSide = currentSide;
-                    }
-
-                    // Fire at all outermost matching balloons on this side, one at a time (sequential cooldown).
-                    // Each outermost balloon gets fired at once per side pass.
-                    // E.g., south side with (1,1),(2,1),(3,1) all outermost red → fire all 3 sequentially.
-                    // But (1,2) behind (1,1) won't fire until next lap when (1,1) is popped.
-                    if (visual.magazineRemaining > 0 && Time.time - lastFireTime >= fireCooldown)
-                    {
-                        bool fired = TryFireDart(visual, position, direction, firedThisSide);
-                        if (fired)
-                        {
-                            lastFireTime = Time.time;
-                        }
-                    }
-
-                    yield return null;
-                }
-            }
-
-            // Wait for all in-flight darts to land before completing
-            // (prevents fail trigger while last dart is still in flight)
-            yield return StartCoroutine(WaitForDartsToLand());
-
-            // Rail traversal complete (magazine empty or max laps)
-            CompleteRailLoop(visual);
-        }
-
-        /// <summary>
-        /// Determines which side of the rectangular rail the holder is on based on movement direction.
-        /// Returns: 0=South (moving right, +X), 1=East (moving forward, +Z),
-        ///          2=North (moving left, -X), 3=West (moving back, -Z).
-        /// </summary>
-        private int GetRailSide(Vector3 direction)
-        {
-            float absX = Mathf.Abs(direction.x);
-            float absZ = Mathf.Abs(direction.z);
-
-            if (absX >= absZ)
-            {
-                // Horizontal movement
-                return direction.x >= 0f ? 0 : 2; // 0=South (left→right), 2=North (right→left)
-            }
-            else
-            {
-                // Depth movement
-                return direction.z >= 0f ? 1 : 3; // 1=East (bottom→top), 3=West (top→bottom)
-            }
-        }
-
-        private IEnumerator WaitForDartsToLand()
-        {
-            float timeout = 3f;
-            float waited = 0f;
-            while (_activeDartProjectiles.Count > 0 && waited < timeout)
-            {
-                waited += Time.deltaTime;
-                yield return null;
-            }
-        }
-
-        private void UpdateOccupiedPosition(HolderVisual visual)
-        {
-            int index = _onRailHolders.IndexOf(visual);
-            if (index >= 0 && index < _occupiedNormalizedPositions.Count)
-            {
-                _occupiedNormalizedPositions[index] = visual.normalizedT;
-            }
-        }
-
-        private void CompleteRailLoop(HolderVisual visual)
-        {
-            // Remove from on-rail tracking
-            int index = _onRailHolders.IndexOf(visual);
-            if (index >= 0)
-            {
-                _onRailHolders.RemoveAt(index);
-                if (index < _occupiedNormalizedPositions.Count)
-                {
-                    _occupiedNormalizedPositions.RemoveAt(index);
-                }
-            }
-
-            visual.isOnRail = false;
-
-            // Publish rail loop complete -- HolderManager will handle return/remove logic
-            EventBus.Publish(new OnRailLoopComplete
-            {
-                holderId = visual.holderId,
-                remainingMagazine = visual.magazineRemaining
-            });
-
-            // If magazine empty, remove holder visual immediately (holder is consumed)
-            if (visual.magazineRemaining <= 0)
-            {
-                ReturnHolderToPool(visual);
-                _holderVisuals.Remove(visual.holderId);
-                RepositionWaitingHolders();
-            }
-            // If magazine remains, HandleHolderReturned will reposition
-        }
-
-        #endregion
-
-        #region Private Methods -- Dart Firing
-
-        private bool TryFireDart(HolderVisual visual, Vector3 position, Vector3 direction, HashSet<int> firedThisSide = null)
-        {
-            // Determine firing direction: holder fires INWARD toward the board center.
-            // The rail side determines the cardinal direction (south rail → fire north, etc.).
-            // Use GetRailSide to get current side, then convert to inward-facing direction.
-            int side = GetRailSide(direction);
-            Vector3 fireDirection;
-            switch (side)
-            {
-                case 0: fireDirection = Vector3.forward;  break; // South rail → fire north (+Z)
-                case 1: fireDirection = Vector3.left;     break; // East rail  → fire west  (-X)
-                case 2: fireDirection = Vector3.back;     break; // North rail → fire south (-Z)
-                case 3: fireDirection = Vector3.right;    break; // West rail  → fire east  (+X)
-                default: fireDirection = Vector3.forward; break;
-            }
-            int targetId = DirectionalTargeting.FindTarget(position, fireDirection, visual.color, firedThisSide);
-            if (targetId < 0)
-            {
-                return false;
-            }
-
-            // Get target balloon position
-            if (!BalloonController.HasInstance)
-            {
-                return false;
-            }
-
-            BalloonData targetData = BalloonController.Instance.GetBalloon(targetId);
-            if (targetData == null || targetData.isPopped)
-            {
-                return false;
-            }
-
-            // Track this balloon so we don't re-target it on the same side pass
-            if (firedThisSide != null)
-            {
-                firedThisSide.Add(targetId);
-            }
-
-            // Consume magazine
-            visual.magazineRemaining--;
-
-            if (visual.magazineText != null)
-            {
-                visual.magazineText.text = visual.magazineRemaining.ToString();
-            }
-
-            // Also notify HolderManager
-            if (HolderManager.HasInstance)
-            {
-                HolderManager.Instance.ConsumeMagazine(visual.holderId);
-            }
-
-            // Scale punch animation on fire (DOTween)
-            if (visual.gameObject != null)
-            {
-                visual.gameObject.transform.DOPunchScale(Vector3.one * 0.1f, 0.1f, 8, 0.5f);
-            }
-
-            // Spawn dart projectile from pool
-            SpawnDartProjectile(position, targetData.position, targetId, visual.color);
-
-            // Publish dart fired event
-            EventBus.Publish(new OnDartFired
-            {
-                dartId = -1, // Visual-only dart
-                holderId = visual.holderId,
-                color = visual.color
-            });
-
-            return true;
-        }
-
-        private void SpawnDartProjectile(Vector3 from, Vector3 to, int targetBalloonId, int color)
-        {
-            if (!ObjectPoolManager.HasInstance)
-            {
-                // No pool available; execute instant hit
-                ExecuteDartHit(targetBalloonId);
-                return;
-            }
-
-            GameObject dartObj = ObjectPoolManager.Instance.Get(DART_POOL_KEY, from, Quaternion.identity);
-            if (dartObj == null)
-            {
-                // Pool exhausted; execute instant hit
-                ExecuteDartHit(targetBalloonId);
-                return;
-            }
-
-            dartObj.SetActive(true);
-
-            // Tint dart to match holder color (URP + Standard compatible)
-            ApplyColorToRenderers(dartObj, GetColor(color));
-
-            // Orient dart horizontally toward target (flat on XZ plane, no pitch)
-            Vector3 dir = to - from;
-            dir.y = 0f; // Keep dart level/horizontal
-            if (dir.sqrMagnitude > 0.001f)
-            {
-                dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
-            }
-
-            DartProjectile projectile = new DartProjectile
-            {
-                gameObject = dartObj,
-                startPosition = from,
-                targetPosition = to,
-                targetBalloonId = targetBalloonId,
-                elapsed = 0f,
-                duration = _dartFlightTime
-            };
-
-            _activeDartProjectiles.Add(projectile);
-
-            // DOTween fast straight-line flight
-            dartObj.transform.DOMove(to, _dartFlightTime).SetEase(Ease.Linear);
-        }
-
-        private void UpdateDartProjectiles()
-        {
-            for (int i = _activeDartProjectiles.Count - 1; i >= 0; i--)
-            {
-                DartProjectile proj = _activeDartProjectiles[i];
-                proj.elapsed += Time.deltaTime;
-
-                float t = Mathf.Clamp01(proj.elapsed / proj.duration);
-
-                // DOTween handles position movement; we only track elapsed for hit timing
-
-                if (t >= 1f)
-                {
-                    // Dart reached target
-                    ExecuteDartHit(proj.targetBalloonId);
-                    ReturnDartProjectileToPool(proj);
-                    _activeDartProjectiles.RemoveAt(i);
-                }
-            }
-        }
-
-        private void ExecuteDartHit(int balloonId)
-        {
-            if (!BalloonController.HasInstance)
-            {
-                return;
-            }
-
-            BalloonController.Instance.PopBalloon(balloonId);
-        }
-
-        private void ReturnDartProjectileToPool(DartProjectile proj)
-        {
-            if (proj.gameObject != null && ObjectPoolManager.HasInstance)
-            {
-                ObjectPoolManager.Instance.Return(DART_POOL_KEY, proj.gameObject);
-            }
-            proj.gameObject = null;
-        }
-
-        // ScalePunchCoroutine replaced by DOTween DOPunchScale (see TryFireDart)
-
-        #endregion
-
-        #region Private Methods -- Pool Cleanup
-
         private void ReturnHolderToPool(HolderVisual visual)
         {
             if (visual.gameObject != null && ObjectPoolManager.HasInstance)
@@ -1048,11 +354,203 @@ namespace BalloonFlow
 
         #endregion
 
-        #region Private Methods -- Event Handlers
+        #region Private Methods — Deploy Flow
+
+        /// <summary>
+        /// Moves a holder to a waiting position (just behind the deploy point).
+        /// Called when the column already has a deploying holder.
+        /// </summary>
+        private void MoveToWaitingPosition(int holderId)
+        {
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual))
+                return;
+
+            visual.isWaiting = true;
+
+            Vector3 deployPoint = GetDeployPoint(visual.column);
+            // Waiting position = 1.5 units behind the deploy point (toward queue)
+            Vector3 waitPos = deployPoint + Vector3.back * 1.5f;
+
+            if (visual.gameObject != null)
+            {
+                float dist = Vector3.Distance(visual.gameObject.transform.position, waitPos);
+                visual.gameObject.transform.DOMove(waitPos, dist / DEPLOY_MOVE_SPEED).SetEase(Ease.OutQuad);
+            }
+        }
+
+        /// <summary>
+        /// Moves a holder from queue to deploy point, then starts deploying darts onto empty slots.
+        /// </summary>
+        private void StartDeploy(int holderId)
+        {
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual))
+                return;
+
+            if (visual.isDeploying || visual.isMovingToRail) return;
+
+            visual.isMovingToRail = true;
+            RepositionColumnHolders(visual.column);
+            StartCoroutine(DeployCoroutine(visual));
+        }
+
+        private IEnumerator DeployCoroutine(HolderVisual visual)
+        {
+            if (!RailManager.HasInstance || visual.gameObject == null) yield break;
+
+            // Phase 1: Move to deploy point (bottom rail edge, aligned to column)
+            Vector3 deployPoint = GetDeployPoint(visual.column);
+
+            while (visual.gameObject != null)
+            {
+                Vector3 current = visual.gameObject.transform.position;
+                float dist = Vector3.Distance(current, deployPoint);
+                if (dist < 0.15f) break;
+
+                Vector3 dir = (deployPoint - current).normalized;
+                visual.gameObject.transform.position = current + dir * DEPLOY_MOVE_SPEED * Time.deltaTime;
+                yield return null;
+            }
+
+            if (visual.gameObject != null)
+                visual.gameObject.transform.position = deployPoint;
+
+            // Phase 2: At rail — start deploying darts
+            visual.isMovingToRail = false;
+            visual.isDeploying = true;
+
+            if (HolderManager.HasInstance)
+            {
+                HolderManager.Instance.ConfirmOnRail(visual.holderId);
+            }
+
+            RailManager rail = RailManager.Instance;
+
+            // Find the starting slot nearest to deploy point
+            int startSlot = rail.GetNearestSlotIndex(deployPoint);
+
+            // Deploy darts one at a time: wait for empty slot passing nearby
+            while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
+            {
+                // Find next empty slot near deploy point
+                int emptySlot = FindEmptySlotNearPosition(deployPoint);
+
+                if (emptySlot < 0)
+                {
+                    // No empty slot available — wait
+                    yield return null;
+                    continue;
+                }
+
+                // Re-check board state right before placing (guards against race with OnBoardCleared)
+                if (_boardFinished) break;
+
+                // Place dart on slot
+                int dartId = rail.PlaceDart(emptySlot, visual.color, visual.holderId);
+                if (dartId < 0)
+                {
+                    yield return null;
+                    continue;
+                }
+
+                visual.magazineRemaining--;
+
+                // Update magazine text
+                if (visual.magazineText != null)
+                    visual.magazineText.text = visual.magazineRemaining.ToString();
+
+                // Consume from HolderManager
+                if (HolderManager.HasInstance)
+                    HolderManager.Instance.ConsumeMagazine(visual.holderId);
+
+                // Publish dart placed event
+                EventBus.Publish(new OnDartPlacedOnSlot
+                {
+                    slotIndex = emptySlot,
+                    color = visual.color,
+                    holderId = visual.holderId
+                });
+
+                // Punch animation (optional — toggled via GameManager.Board.useDeployPunchScale)
+                bool usePunch = GameManager.HasInstance && GameManager.Instance.Board.useDeployPunchScale;
+                if (usePunch && visual.gameObject != null)
+                {
+                    visual.gameObject.transform.localScale = Vector3.one;
+                    visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.08f, 6, 0.5f);
+                }
+
+                // Next frame — no artificial delay, deploy as fast as empty slots appear
+                yield return null;
+            }
+
+            // Phase 3: Magazine empty — holder disappears
+            CompleteDeployment(visual);
+        }
+
+        /// <summary>
+        /// Finds an empty slot near a deploy position.
+        /// Checks slots within a small window around the nearest slot to deployPos.
+        /// </summary>
+        private int FindEmptySlotNearPosition(Vector3 deployPos)
+        {
+            if (!RailManager.HasInstance) return -1;
+            RailManager rail = RailManager.Instance;
+
+            int nearestSlot = rail.GetNearestSlotIndex(deployPos);
+
+            // Check a window of slots around the nearest
+            int window = 3;
+            for (int offset = 0; offset <= window; offset++)
+            {
+                int idx = (nearestSlot + offset) % rail.SlotCount;
+                if (rail.IsSlotEmpty(idx))
+                {
+                    // Verify it's actually close to deploy position
+                    Vector3 slotPos = rail.GetSlotWorldPosition(idx);
+                    if (Vector3.Distance(slotPos, deployPos) < 2f)
+                        return idx;
+                }
+
+                if (offset > 0)
+                {
+                    idx = (nearestSlot - offset + rail.SlotCount) % rail.SlotCount;
+                    if (rail.IsSlotEmpty(idx))
+                    {
+                        Vector3 slotPos = rail.GetSlotWorldPosition(idx);
+                        if (Vector3.Distance(slotPos, deployPos) < 2f)
+                            return idx;
+                    }
+                }
+            }
+
+            return -1;
+        }
+
+        private void CompleteDeployment(HolderVisual visual)
+        {
+            int col = visual.column;
+            visual.isDeploying = false;
+
+            // Publish deployment done
+            EventBus.Publish(new OnHolderDeploymentDone
+            {
+                holderId = visual.holderId,
+                column = col
+            });
+
+            // Remove visual
+            ReturnHolderToPool(visual);
+            _holderVisuals.Remove(visual.holderId);
+
+            // Reposition remaining holders in this column
+            RepositionColumnHolders(col);
+        }
+
+        #endregion
+
+        #region Private Methods — Event Handlers
 
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
-            // Delay one frame to let HolderManager initialize first
             StartCoroutine(SpawnAfterDelay());
         }
 
@@ -1064,67 +562,47 @@ namespace BalloonFlow
 
         private void HandleHolderSelected(OnHolderSelected evt)
         {
-            _deploymentQueue.Enqueue(evt);
-            TryProcessDeploymentQueue();
-        }
-
-        /// <summary>
-        /// Processes the deployment queue one holder at a time.
-        /// Prevents overlapping when clicking multiple holders quickly.
-        /// </summary>
-        private void TryProcessDeploymentQueue()
-        {
-            if (_isDeployingHolder || _deploymentQueue.Count == 0) return;
-
-            var evt = _deploymentQueue.Dequeue();
-
-            // Verify the holder is still valid (not already on rail)
-            if (_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual))
+            // Check if this holder is in waiting state (another holder deploying in same column)
+            if (HolderManager.HasInstance)
             {
-                if (visual.isOnRail || visual.isMovingToRail)
+                HolderData holderData = null;
+                HolderData[] allHolders = HolderManager.Instance.GetHolders();
+                for (int i = 0; i < allHolders.Length; i++)
                 {
-                    // Skip this one, try next
-                    TryProcessDeploymentQueue();
+                    if (allHolders[i].holderId == evt.holderId)
+                    {
+                        holderData = allHolders[i];
+                        break;
+                    }
+                }
+
+                if (holderData != null && holderData.isWaiting)
+                {
+                    // Move to waiting position (just behind deploy point), do NOT start deploy
+                    MoveToWaitingPosition(evt.holderId);
                     return;
                 }
             }
 
-            MoveHolderToRail(evt.holderId, evt.color, evt.magazineCount);
-        }
-
-        private void HandleHolderReturned(OnHolderReturned evt)
-        {
-            // Holder returned with remaining magazine -- reposition in waiting area
-            if (_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual))
-            {
-                visual.isOnRail = false;
-                visual.isMovingToRail = false;
-                visual.magazineRemaining = evt.remainingMagazine;
-
-                if (visual.magazineText != null)
-                {
-                    visual.magazineText.text = evt.remainingMagazine.ToString();
-                }
-            }
-
-            RepositionWaitingHolders();
+            StartDeploy(evt.holderId);
         }
 
         private void HandleMagazineEmpty(OnMagazineEmpty evt)
         {
-            // When holder is removed by HolderManager, clean up the visual
-            if (_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual))
-            {
-                // Don't remove immediately if still on rail -- CompleteRailLoop handles that.
-                // This event fires when magazine hits zero; the rail loop coroutine will
-                // end naturally and call CompleteRailLoop.
-                if (!visual.isOnRail && !visual.isMovingToRail)
-                {
-                    ReturnHolderToPool(visual);
-                    _holderVisuals.Remove(evt.holderId);
-                    RepositionWaitingHolders();
-                }
-            }
+            // Magazine empty notification — deployment coroutine handles cleanup
+        }
+
+        private void HandleBoardCleared(OnBoardCleared evt)
+        {
+            _boardFinished = true;
+            StopAllCoroutines();
+            ClearAllVisuals();
+        }
+
+        private void HandleBoardFailed(OnBoardFailed evt)
+        {
+            _boardFinished = true;
+            StopAllCoroutines();
         }
 
         #endregion
