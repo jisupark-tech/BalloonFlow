@@ -114,6 +114,12 @@ namespace BalloonFlow
                 // Wall balloons are indestructible — never target them
                 if (balloon.gimmickType == BalloonController.GimmickWall) continue;
 
+                // Pin balloons block darts — only removable by adjacent pop
+                if (balloon.gimmickType == BalloonController.GimmickPin) continue;
+
+                // Ice balloons must be thawed by adjacent pop first — not directly targetable
+                if (balloon.gimmickType == BalloonController.GimmickIce) continue;
+
                 if (excludeIds != null && excludeIds.Contains(balloon.balloonId)) continue;
 
                 // Check perpendicular distance (strict column alignment)

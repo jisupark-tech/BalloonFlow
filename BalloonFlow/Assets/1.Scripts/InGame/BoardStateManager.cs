@@ -334,8 +334,8 @@ namespace BalloonFlow
                 ? GameManager.Instance.Board.cellSpacing
                 : 0.55f;
 
-            var occupancy = new Dictionary<Vector2Int, int>(); // gridPos → color
-            var positionMap = new Dictionary<Vector2Int, bool>();
+            var occupancy = new Dictionary<Vector2Int, int>(); // gridPos → color (targetable only)
+            var positionMap = new Dictionary<Vector2Int, bool>(); // all non-popped (for blocking check)
 
             foreach (var b in allBalloons)
             {
@@ -343,8 +343,17 @@ namespace BalloonFlow
                 Vector2Int cell = new Vector2Int(
                     Mathf.RoundToInt(b.position.x / cellSpacing),
                     Mathf.RoundToInt(b.position.z / cellSpacing));
-                occupancy[cell] = b.color;
+
+                // All non-popped balloons block line-of-sight
                 positionMap[cell] = true;
+
+                // Only dart-targetable balloons count for color matching
+                // Wall, Pin, Ice are not targetable
+                if (b.gimmickType == BalloonController.GimmickWall) continue;
+                if (b.gimmickType == BalloonController.GimmickPin) continue;
+                if (b.gimmickType == BalloonController.GimmickIce) continue;
+
+                occupancy[cell] = b.color;
             }
 
             foreach (var kvp in occupancy)

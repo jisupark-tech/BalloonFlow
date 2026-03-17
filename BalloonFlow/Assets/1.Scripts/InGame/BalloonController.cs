@@ -182,16 +182,17 @@ namespace BalloonFlow
             }
 
             // Wall balloons are indestructible — don't count toward clear condition
-            int wallCount = 0;
+            int excludeCount = 0;
             foreach (BalloonData d in _balloons.Values)
             {
-                if (d.gimmickType == GimmickWall) wallCount++;
+                if (d.gimmickType == GimmickWall) excludeCount++;
             }
-            RemainingCount = _balloons.Count - wallCount;
+            RemainingCount = _balloons.Count - excludeCount;
             BuildPositionIndex();
 
-            // Apply Hidden gimmick concealment after all balloons are placed
+            // Apply gimmick visual states after all balloons are placed
             ApplyInitialHiddenState();
+            ApplyInitialIceState();
 
             Debug.Log($"[BalloonController] Board setup complete. {RemainingCount} balloons placed.");
         }
@@ -271,6 +272,18 @@ namespace BalloonFlow
             if (data.gimmickType == GimmickWall)
             {
                 return new PopResult { success = false, reason = "Wall blocks dart", balloonId = data.balloonId, gimmickType = GimmickWall };
+            }
+
+            // Pin blocks direct dart hits — only removable by adjacent balloon pop
+            if (data.gimmickType == GimmickPin)
+            {
+                return new PopResult { success = false, reason = "Pin blocks dart — remove via adjacent pop", balloonId = data.balloonId, gimmickType = GimmickPin };
+            }
+
+            // Ice blocks direct dart hits — must be thawed by adjacent pop first
+            if (data.gimmickType == GimmickIce)
+            {
+                return new PopResult { success = false, reason = "Ice frozen — thaw via adjacent pop", balloonId = data.balloonId, gimmickType = GimmickIce };
             }
 
             // Pinata and Pinata Box require multiple hits
@@ -377,6 +390,14 @@ namespace BalloonFlow
             if (obj != null)
             {
                 _balloonObjects[id] = obj;
+
+                // Override visuals for special gimmick types
+                if (data.gimmickType == GimmickWall)
+                    ApplyTintToObject(obj, WALL_COLOR);
+                else if (data.gimmickType == GimmickPin)
+                    ApplyTintToObject(obj, PIN_COLOR);
+                else if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
+                    ApplyTintToObject(obj, PINATA_COLOR);
             }
 
             // Register Pinata group membership
@@ -452,19 +473,52 @@ namespace BalloonFlow
             }
         }
 
+        private static readonly Color HIDDEN_COLOR = new Color(0.45f, 0.45f, 0.50f);   // Grey mystery balloon
+        private static readonly Color ICE_COLOR = new Color(0.65f, 0.85f, 0.95f);      // Frozen blue tint
+        private static readonly Color WALL_COLOR = new Color(0.35f, 0.35f, 0.38f);     // Dark grey stone wall
+        private static readonly Color PIN_COLOR = new Color(0.70f, 0.50f, 0.20f);      // Brown wooden pin
+        private static readonly Color PINATA_COLOR = new Color(0.95f, 0.70f, 0.20f);   // Gold pinata
+
         private void ApplyInitialHiddenState()
         {
             foreach (int id in _hiddenBalloons)
             {
                 if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
                 {
-                    // Visual concealment — GimmickManager will handle reveal VFX in Phase 2
-                    // Base behavior: disable renderer to hide color
-                    Renderer rend = obj.GetComponentInChildren<Renderer>();
-                    if (rend != null)
-                    {
-                        rend.enabled = false;
-                    }
+                    // Show as grey balloon (color concealed, but visible on board)
+                    ApplyTintToObject(obj, HIDDEN_COLOR);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Applies the Ice visual tint (frozen blue) to Ice gimmick balloons.
+        /// Called during setup for any balloon with GimmickIce type.
+        /// </summary>
+        private void ApplyInitialIceState()
+        {
+            foreach (BalloonData d in _balloons.Values)
+            {
+                if (d.isPopped || d.gimmickType != GimmickIce) continue;
+                if (_balloonObjects.TryGetValue(d.balloonId, out GameObject obj) && obj != null)
+                {
+                    ApplyTintToObject(obj, ICE_COLOR);
+                }
+            }
+        }
+
+        private static void ApplyTintToObject(GameObject obj, Color color)
+        {
+            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                renderers[i].enabled = true; // Ensure visible
+                foreach (Material mat in renderers[i].materials)
+                {
+                    if (mat.HasProperty("_BaseColor"))
+                        mat.SetColor("_BaseColor", color);
+                    if (mat.HasProperty("_Color"))
+                        mat.SetColor("_Color", color);
                 }
             }
         }
@@ -537,16 +591,16 @@ namespace BalloonFlow
 
         private void ProcessGimmickAfterPop(BalloonData data, PopResult result)
         {
+            // === Gimmick-specific behavior ===
             switch (data.gimmickType)
             {
                 case GimmickHidden:
-                    // Reveal adjacent Hidden balloons
                     RevealAdjacentHiddenBalloons(data.position);
                     break;
 
                 case GimmickSpawnerT:
-                    // Base: signal spawner to produce 1 balloon — GimmickManager handles actual spawn
-                    result.spawnCount = 1;
+                    // Spawn 1 new balloon at a random adjacent empty cell
+                    result.spawnCount = SpawnAtAdjacentEmpty(data.position, 1);
                     EventBus.Publish(new OnGimmickTriggered
                     {
                         gimmickType = GimmickSpawnerT,
@@ -555,8 +609,8 @@ namespace BalloonFlow
                     break;
 
                 case GimmickSpawnerO:
-                    // Base: signal spawner to produce 2 balloons
-                    result.spawnCount = 2;
+                    // Spawn 2 new balloons at random adjacent empty cells
+                    result.spawnCount = SpawnAtAdjacentEmpty(data.position, 2);
                     EventBus.Publish(new OnGimmickTriggered
                     {
                         gimmickType = GimmickSpawnerO,
@@ -565,7 +619,6 @@ namespace BalloonFlow
                     break;
 
                 case GimmickChain:
-                    // Auto-pop adjacent same-color balloons
                     ChainPopAdjacentSameColor(data);
                     EventBus.Publish(new OnGimmickTriggered
                     {
@@ -574,59 +627,39 @@ namespace BalloonFlow
                     });
                     break;
 
-                case GimmickPin:
-                    // Pin: 장애물 — 다트 차단, 인접 풍선 팝으로 제거
-                    result.success = true;
-                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickPin, targetId = data.balloonId });
-                    break;
-
                 case GimmickLockKey:
-                    // Lock&Key: Key 풍선 팝 후 대응 Lock 풍선 해제
-                    result.success = true;
                     EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickLockKey, targetId = data.balloonId });
                     break;
 
                 case GimmickSurprise:
-                    // Surprise: 팝 시 랜덤 색상으로 변경 (첫 히트), 두 번째 히트에 실제 팝
-                    result.success = true;
                     EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickSurprise, targetId = data.balloonId });
                     break;
 
-                case GimmickWall:
-                    // Wall: 파괴 불가 장벽 — 다트 차단
-                    result.success = false;
-                    result.reason = "Wall blocks dart";
-                    break;
-
                 case GimmickPinataBox:
-                    // Pinata Box: 다중 히트 컨테이너 — Pinata와 유사, 파괴 시 아이템 드롭
-                    // Reuse multi-hit logic (already handled in PopBalloon for Pinata type)
                     EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickPinataBox, targetId = data.balloonId });
                     break;
 
-                case GimmickIce:
-                    // Ice: 얼음 풍선 — 인접 풍선 팝으로 해동 후 팝 가능
-                    result.success = true;
-                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickIce, targetId = data.balloonId });
-                    break;
-
                 case GimmickFrozenDart:
-                    // Frozen Dart: 큐 기믹 — 컨테이너 첫 N발 동결 (발사 안됨)
-                    result.success = true;
                     EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickFrozenDart, targetId = data.balloonId });
                     break;
 
                 case GimmickColorCurtain:
-                    // Color Curtain: 특정 색상 다트로만 제거 가능한 커튼
-                    result.success = true;
                     EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickColorCurtain, targetId = data.balloonId });
                     break;
 
                 case GimmickNone:
                 case GimmickPinata:
+                case GimmickWall:
+                case GimmickPin:
+                case GimmickIce:
                 default:
                     break;
             }
+
+            // === Universal post-pop: destroy adjacent Pin & thaw adjacent Ice ===
+            RemoveAdjacentPins(data.position);
+            ThawAdjacentIce(data.position);
+            RevealAdjacentHiddenBalloons(data.position);
         }
 
         private void RevealAdjacentHiddenBalloons(Vector3 position)
@@ -640,11 +673,14 @@ namespace BalloonFlow
 
                 _hiddenBalloons.Remove(id);
 
-                // Re-enable renderer to reveal color
+                // Restore actual balloon color (was showing grey)
                 if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
                 {
-                    Renderer rend = obj.GetComponentInChildren<Renderer>();
-                    if (rend != null) rend.enabled = true;
+                    int colorIdx = Mathf.Clamp(neighbor.color, 0, BalloonColors.Length - 1);
+                    ApplyTintToObject(obj, BalloonColors[colorIdx]);
+
+                    // Reveal punch animation
+                    obj.transform.DOPunchScale(Vector3.one * 0.15f, 0.2f, 8, 0.5f);
                 }
 
                 EventBus.Publish(new OnGimmickTriggered
@@ -668,6 +704,167 @@ namespace BalloonFlow
                 // Recursive chain — ExecutePop will trigger further chains if that balloon is also Chain type
                 ExecutePop(neighbor);
             }
+        }
+
+        /// <summary>
+        /// Destroys all adjacent Pin balloons. Pins cannot be targeted by darts —
+        /// they are only removed when a neighboring balloon is popped.
+        /// </summary>
+        private void RemoveAdjacentPins(Vector3 position)
+        {
+            List<int> adjacentIds = GetAdjacentBalloonIds(position);
+            foreach (int id in adjacentIds)
+            {
+                if (!_balloons.TryGetValue(id, out BalloonData neighbor)) continue;
+                if (neighbor.isPopped) continue;
+                if (neighbor.gimmickType != GimmickPin) continue;
+
+                // Force-pop the Pin (bypasses PopBalloon's Pin guard)
+                ExecutePop(neighbor);
+            }
+        }
+
+        /// <summary>
+        /// Thaws adjacent Ice balloons. Ice balloons are frozen and cannot be targeted.
+        /// When an adjacent balloon pops, Ice converts to a normal balloon (targetable).
+        /// </summary>
+        private void ThawAdjacentIce(Vector3 position)
+        {
+            List<int> adjacentIds = GetAdjacentBalloonIds(position);
+            foreach (int id in adjacentIds)
+            {
+                if (!_balloons.TryGetValue(id, out BalloonData neighbor)) continue;
+                if (neighbor.isPopped) continue;
+                if (neighbor.gimmickType != GimmickIce) continue;
+
+                // Thaw: convert Ice to normal balloon (now targetable by darts)
+                neighbor.gimmickType = GimmickNone;
+                _balloons[id] = neighbor;
+
+                // Visual: restore color (Ice was shown as frozen/blue tint)
+                if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
+                {
+                    int colorIdx = Mathf.Clamp(neighbor.color, 0, BalloonColors.Length - 1);
+                    Color balloonColor = BalloonColors[colorIdx];
+                    Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
+                    for (int r = 0; r < renderers.Length; r++)
+                    {
+                        foreach (Material mat in renderers[r].materials)
+                        {
+                            if (mat.HasProperty("_BaseColor"))
+                                mat.SetColor("_BaseColor", balloonColor);
+                            if (mat.HasProperty("_Color"))
+                                mat.SetColor("_Color", balloonColor);
+                        }
+                    }
+                }
+
+                EventBus.Publish(new OnGimmickTriggered
+                {
+                    gimmickType = GimmickIce,
+                    targetId    = id
+                });
+            }
+        }
+
+        /// <summary>
+        /// Spawns new balloons at random adjacent empty grid cells.
+        /// Used by Spawner_T (1 balloon) and Spawner_O (2 balloons).
+        /// Returns the actual number of balloons spawned.
+        /// </summary>
+        private int SpawnAtAdjacentEmpty(Vector3 position, int count)
+        {
+            List<Vector3> emptyPositions = GetAdjacentEmptyPositions(position);
+            if (emptyPositions.Count == 0) return 0;
+
+            // Shuffle empty positions for randomness
+            for (int i = emptyPositions.Count - 1; i > 0; i--)
+            {
+                int j = Random.Range(0, i + 1);
+                Vector3 tmp = emptyPositions[i];
+                emptyPositions[i] = emptyPositions[j];
+                emptyPositions[j] = tmp;
+            }
+
+            int spawned = 0;
+            int maxColors = Mathf.Min(BalloonColors.Length, 8); // Use first 8 colors
+
+            for (int i = 0; i < count && i < emptyPositions.Count; i++)
+            {
+                int color = Random.Range(0, maxColors);
+                int id = _nextBalloonId++;
+
+                BalloonData newData = new BalloonData
+                {
+                    balloonId   = id,
+                    color       = color,
+                    position    = emptyPositions[i],
+                    isPopped    = false,
+                    gimmickType = GimmickNone,
+                    hitCount    = 0
+                };
+
+                _balloons[id] = newData;
+                RemainingCount++;
+
+                GameObject obj = GetOrCreateBalloonObject(id, emptyPositions[i], color);
+                if (obj != null)
+                {
+                    _balloonObjects[id] = obj;
+
+                    // Spawn animation: scale up from zero
+                    obj.transform.localScale = Vector3.zero;
+                    obj.transform.DOScale(Vector3.one * _balloonScale, 0.25f).SetEase(Ease.OutBack);
+                }
+
+                // Update position index
+                _positionIndex[ToGridKey(emptyPositions[i])] = id;
+
+                EventBus.Publish(new OnBalloonSpawned
+                {
+                    balloonId = id,
+                    color     = color,
+                    position  = emptyPositions[i]
+                });
+
+                spawned++;
+            }
+
+            return spawned;
+        }
+
+        /// <summary>
+        /// Returns world positions of empty adjacent grid cells (4-directional).
+        /// </summary>
+        private List<Vector3> GetAdjacentEmptyPositions(Vector3 position)
+        {
+            List<Vector3> empty = new List<Vector3>();
+            Vector3Int center = ToGridKey(position);
+
+            Vector3Int[] directions =
+            {
+                new Vector3Int( 1, 0,  0),
+                new Vector3Int(-1, 0,  0),
+                new Vector3Int( 0, 0,  1),
+                new Vector3Int( 0, 0, -1)
+            };
+
+            foreach (Vector3Int dir in directions)
+            {
+                Vector3Int neighbor = center + dir;
+                if (!_positionIndex.ContainsKey(neighbor))
+                {
+                    // Convert grid key back to world position
+                    Vector3 worldPos = new Vector3(
+                        neighbor.x * _cellSpacing,
+                        position.y,
+                        neighbor.z * _cellSpacing
+                    );
+                    empty.Add(worldPos);
+                }
+            }
+
+            return empty;
         }
 
         private void ReturnBalloonObject(int balloonId)

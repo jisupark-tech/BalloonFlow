@@ -430,10 +430,49 @@ namespace BalloonFlow
         /// <summary>
         /// When a balloon is popped externally (chain pop, gimmick, etc.),
         /// clear its reservation so other darts can target new outermost balloons.
+        /// Also prune surplus same-color darts when no more targets of that color remain.
         /// </summary>
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
             _reservedTargets.Remove(evt.balloonId);
+
+            // Prune surplus darts: if no balloons of this color remain, remove all rail darts of that color
+            if (BalloonController.HasInstance && RailManager.HasInstance)
+            {
+                int poppedColor = evt.color;
+                BalloonData[] remaining = BalloonController.Instance.GetBalloonsByColor(poppedColor);
+                if (remaining == null || remaining.Length == 0)
+                {
+                    // No more targetable balloons of this color — remove surplus darts from rail
+                    RemoveDartsByColor(poppedColor);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Removes all rail darts and slot visuals of a specific color.
+        /// Called when all targetable balloons of that color are gone (Chain gimmick surplus cleanup).
+        /// </summary>
+        private void RemoveDartsByColor(int color)
+        {
+            if (!RailManager.HasInstance) return;
+            RailManager rail = RailManager.Instance;
+
+            for (int i = 0; i < rail.SlotCount; i++)
+            {
+                RailManager.SlotData slot = rail.GetSlot(i);
+                if (slot.dartColor == color)
+                {
+                    rail.ClearSlot(i);
+
+                    // Remove corresponding visual
+                    if (_slotVisuals.TryGetValue(i, out SlotDartVisual visual))
+                    {
+                        ReturnDartToPool(visual.gameObject);
+                        _slotVisuals.Remove(i);
+                    }
+                }
+            }
         }
 
         /// <summary>
