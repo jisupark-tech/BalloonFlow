@@ -21,19 +21,21 @@ namespace BalloonFlow
         #region Constants
 
         // Global level IDs at which each gimmick type is first introduced
-        private const int UNLOCK_LEVEL_HIDDEN        = 2;
-        private const int UNLOCK_LEVEL_CHAIN         = 8;
-        private const int UNLOCK_LEVEL_PINATA        = 15;
-        private const int UNLOCK_LEVEL_PIN           = 25;
-        private const int UNLOCK_LEVEL_WALL          = 35;
-        private const int UNLOCK_LEVEL_SPAWNER_T     = 45;
-        private const int UNLOCK_LEVEL_LOCK_KEY      = 60;
-        private const int UNLOCK_LEVEL_SURPRISE      = 80;
-        private const int UNLOCK_LEVEL_SPAWNER_O     = 100;
-        private const int UNLOCK_LEVEL_PINATA_BOX    = 120;
-        private const int UNLOCK_LEVEL_ICE           = 150;
-        private const int UNLOCK_LEVEL_FROZEN_DART   = 180;
-        private const int UNLOCK_LEVEL_COLOR_CURTAIN = 210;
+        // 정본: gimmick_spec.yaml — 5종 기믹 도입 레벨
+        private const int UNLOCK_LEVEL_HIDDEN        = 11;   // PKG1 pos11
+        private const int UNLOCK_LEVEL_SPAWNER_T     = 21;   // PKG2 pos1
+        private const int UNLOCK_LEVEL_SPAWNER_O     = 31;   // PKG2 pos11
+        private const int UNLOCK_LEVEL_PINATA        = 41;   // PKG3 pos1 (Big Object)
+        private const int UNLOCK_LEVEL_CHAIN         = 61;   // PKG4 pos1
+        // 미래 확장 기믹 (기획서 미정의 — 높은 레벨에 배치)
+        private const int UNLOCK_LEVEL_PIN           = 81;
+        private const int UNLOCK_LEVEL_LOCK_KEY      = 101;
+        private const int UNLOCK_LEVEL_SURPRISE      = 121;
+        private const int UNLOCK_LEVEL_WALL          = 141;
+        private const int UNLOCK_LEVEL_PINATA_BOX    = 161;
+        private const int UNLOCK_LEVEL_ICE           = 181;
+        private const int UNLOCK_LEVEL_FROZEN_DART   = 201;
+        private const int UNLOCK_LEVEL_COLOR_CURTAIN = 221;
 
         // String identifiers that match LevelConfig.gimmickTypes values
         public const string GIMMICK_HIDDEN        = "Hidden";

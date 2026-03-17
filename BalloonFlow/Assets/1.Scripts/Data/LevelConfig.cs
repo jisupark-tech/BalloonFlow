@@ -160,5 +160,16 @@ namespace BalloonFlow
         /// Index = column index (0..queueColumns-1). Holders move up from queue to this point.
         /// </summary>
         public Vector3[] deployPoints;
+
+        /// <summary>
+        /// When true, darts follow smooth curves at corners instead of sharp 90-degree turns.
+        /// </summary>
+        public bool smoothCorners;
+
+        /// <summary>
+        /// Radius of the rounded corner in world units (0.5 ~ 3.0).
+        /// Only used when smoothCorners is true. Default 1.0.
+        /// </summary>
+        public float cornerRadius = 1f;
     }
 }

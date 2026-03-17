@@ -58,21 +58,22 @@ namespace BalloonFlow
             new Color(0.82f, 0.70f, 0.50f),  // 27: Tan
         };
 
-        // Gimmick type string constants — avoid magic strings throughout
+        // Gimmick type string constants — 정본: gimmick_spec.yaml
         public const string GimmickNone         = "none";
-        public const string GimmickHidden       = "Hidden";        // Lv.11
-        public const string GimmickChain        = "Chain";          // Lv.21
-        public const string GimmickPinata       = "Pinata";         // Lv.31 (was BigObject)
-        public const string GimmickSpawnerT     = "Spawner_T";      // Lv.41
-        public const string GimmickPin          = "Pin";             // Lv.61
-        public const string GimmickLockKey      = "Lock_Key";        // Lv.81
-        public const string GimmickSurprise     = "Surprise";        // Lv.101
-        public const string GimmickWall         = "Wall";            // Lv.121
-        public const string GimmickSpawnerO     = "Spawner_O";       // Lv.141
+        public const string GimmickHidden       = "Hidden";          // Lv.11 (PKG1 pos11)
+        public const string GimmickSpawnerT     = "Spawner_T";       // Lv.21 (PKG2 pos1)
+        public const string GimmickSpawnerO     = "Spawner_O";       // Lv.31 (PKG2 pos11)
+        public const string GimmickPinata       = "Pinata";          // Lv.41 (PKG3 pos1, Big Object)
+        public const string GimmickChain        = "Chain";           // Lv.61 (PKG4 pos1)
+        // 미래 확장 기믹 (기획서 미정의)
+        public const string GimmickPin          = "Pin";             // Lv.81
+        public const string GimmickLockKey      = "Lock_Key";        // Lv.101
+        public const string GimmickSurprise     = "Surprise";        // Lv.121
+        public const string GimmickWall         = "Wall";            // Lv.141
         public const string GimmickPinataBox    = "Pinata_Box";      // Lv.161
-        public const string GimmickIce          = "Ice";             // Lv.201
-        public const string GimmickFrozenDart   = "Frozen_Dart";     // Lv.241
-        public const string GimmickColorCurtain = "Color_Curtain";   // Lv.281
+        public const string GimmickIce          = "Ice";             // Lv.181
+        public const string GimmickFrozenDart   = "Frozen_Dart";     // Lv.201
+        public const string GimmickColorCurtain = "Color_Curtain";   // Lv.221
 
         #endregion
 

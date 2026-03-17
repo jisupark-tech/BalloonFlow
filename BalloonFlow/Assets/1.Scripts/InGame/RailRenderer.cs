@@ -19,8 +19,10 @@ namespace BalloonFlow
         public const int VISUAL_CYLINDER = 0;
         public const int VISUAL_FLAT2D = 1;
         public const int VISUAL_CUSTOM3D = 2;
+        public const int VISUAL_SPRITE_TILE = 3;
 
         private const float DEFAULT_TRACK_WIDTH = 0.3f;
+        private const float DEFAULT_TILE_SIZE = 1.5f;
         private static readonly Color DEFAULT_RAIL_COLOR = new Color(0.4f, 0.4f, 0.45f, 1f);
 
         #endregion
@@ -29,8 +31,9 @@ namespace BalloonFlow
 
         [SerializeField] private float _trackWidth = DEFAULT_TRACK_WIDTH;
         [SerializeField] private Color _railColor = DEFAULT_RAIL_COLOR;
-        [SerializeField] private int _visualType = VISUAL_CYLINDER;
+        [SerializeField] private int _visualType = VISUAL_SPRITE_TILE;
         [SerializeField] private GameObject _customSegmentPrefab; // For VISUAL_CUSTOM3D
+        [SerializeField] private float _tileWorldSize = DEFAULT_TILE_SIZE;
 
         #endregion
 
@@ -38,6 +41,7 @@ namespace BalloonFlow
 
         private readonly List<GameObject> _trackSegments = new List<GameObject>();
         private Material _trackMaterial;
+        private RailTileSet _tileSet;
         private bool _isInitialized;
 
         #endregion
@@ -57,9 +61,13 @@ namespace BalloonFlow
 
         private void Awake()
         {
-            // Visual rendering disabled — conveyor belt visuals are handled by
-            // manually painted tiles in the BoardGrid tilemap.
-            // RailManager (waypoint data) remains active for holder movement.
+            _tileSet = Resources.Load<RailTileSet>("RailTileSet");
+
+            // Create default material for non-sprite visual modes (Cylinder, Flat2D)
+            _trackMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit")
+                ?? Shader.Find("Standard")
+                ?? Shader.Find("Sprites/Default"));
+            _trackMaterial.color = _railColor;
         }
 
         private void OnEnable()
@@ -110,6 +118,15 @@ namespace BalloonFlow
             ClearPath();
 
             bool isLoop = rail.IsClosedLoop;
+
+            // Sprite tile mode — place 2D tile sprites along the path
+            if (_visualType == VISUAL_SPRITE_TILE)
+            {
+                BuildSpriteTilePath(waypoints, isLoop);
+                _isInitialized = true;
+                return;
+            }
+
             int segmentCount = isLoop ? waypoints.Length : waypoints.Length - 1;
 
             for (int i = 0; i < segmentCount; i++)
@@ -209,6 +226,125 @@ namespace BalloonFlow
             _isInitialized = false;
         }
 
+        #endregion
+
+        #region Sprite Tile Path
+
+        /// <summary>
+        /// Builds the rail visual using 2D sprite tiles from RailTileSet.
+        /// Places straight and corner tiles along the waypoint loop.
+        /// </summary>
+        private void BuildSpriteTilePath(Vector3[] waypoints, bool isLoop)
+        {
+            if (_tileSet == null)
+            {
+                Debug.LogWarning("[RailRenderer] RailTileSet not loaded. Run BalloonFlow > Setup Rail Tiles.");
+                return;
+            }
+
+            // Calculate bounding box center for tile type selection
+            Vector3 min = waypoints[0], max = waypoints[0];
+            for (int i = 1; i < waypoints.Length; i++)
+            {
+                min = Vector3.Min(min, waypoints[i]);
+                max = Vector3.Max(max, waypoints[i]);
+            }
+            Vector3 center = (min + max) * 0.5f;
+
+            int count = isLoop ? waypoints.Length : waypoints.Length - 1;
+
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 start = waypoints[i];
+                Vector3 end = waypoints[(i + 1) % waypoints.Length];
+                Vector3 delta = end - start;
+                float segLen = delta.magnitude;
+                if (segLen < 0.01f) continue;
+
+                bool isHorizontal = Mathf.Abs(delta.x) > Mathf.Abs(delta.z);
+
+                // Pick straight tile based on which side of the loop
+                Sprite tile;
+                if (isHorizontal)
+                {
+                    float avgZ = (start.z + end.z) * 0.5f;
+                    tile = avgZ < center.z ? _tileSet.tileBH : _tileSet.tileTH;
+                }
+                else
+                {
+                    // VR sprite has track on right → use on LEFT side (track faces center)
+                    // VL sprite has track on left → use on RIGHT side (track faces center)
+                    float avgX = (start.x + end.x) * 0.5f;
+                    tile = avgX < center.x ? _tileSet.tileVR : _tileSet.tileVL;
+                }
+
+                // Fill segment with tiles
+                int tileCount = Mathf.Max(1, Mathf.RoundToInt(segLen / _tileWorldSize));
+                for (int t = 0; t < tileCount; t++)
+                {
+                    float frac = (t + 0.5f) / tileCount;
+                    Vector3 pos = Vector3.Lerp(start, end, frac);
+                    PlaceSpriteTile(tile, pos);
+                }
+            }
+
+            // Place corner tiles at waypoints where direction changes
+            if (isLoop && waypoints.Length >= 3)
+            {
+                for (int i = 0; i < waypoints.Length; i++)
+                {
+                    int prev = (i - 1 + waypoints.Length) % waypoints.Length;
+                    int next = (i + 1) % waypoints.Length;
+
+                    Vector3 inDir = (waypoints[i] - waypoints[prev]).normalized;
+                    Vector3 outDir = (waypoints[next] - waypoints[i]).normalized;
+
+                    bool inH = Mathf.Abs(inDir.x) > Mathf.Abs(inDir.z);
+                    bool outH = Mathf.Abs(outDir.x) > Mathf.Abs(outDir.z);
+
+                    if (inH == outH) continue; // Same direction = not a corner
+
+                    // Determine corner type from position relative to center
+                    Vector3 pos = waypoints[i];
+                    Sprite cornerTile;
+                    if (pos.x <= center.x && pos.z <= center.z) cornerTile = _tileSet.tileBL;
+                    else if (pos.x > center.x && pos.z <= center.z) cornerTile = _tileSet.tileBR;
+                    else if (pos.x <= center.x && pos.z > center.z) cornerTile = _tileSet.tileTL;
+                    else cornerTile = _tileSet.tileTR;
+
+                    PlaceSpriteTile(cornerTile, pos);
+                }
+            }
+        }
+
+        private void PlaceSpriteTile(Sprite sprite, Vector3 position)
+        {
+            if (sprite == null) return;
+
+            var tileGO = new GameObject($"RailTile_{_trackSegments.Count}");
+            tileGO.transform.SetParent(transform);
+            tileGO.transform.position = position;
+            tileGO.transform.eulerAngles = new Vector3(90f, 0f, 0f); // Lie flat on XZ plane
+
+            var sr = tileGO.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.sortingOrder = -1;
+
+            // Scale sprite to desired tile world size
+            float spriteWidth = sprite.bounds.size.x;
+            if (spriteWidth > 0.001f)
+            {
+                float scale = _tileWorldSize / spriteWidth;
+                tileGO.transform.localScale = new Vector3(scale, scale, scale);
+            }
+
+            _trackSegments.Add(tileGO);
+        }
+
+        #endregion
+
+        #region Visual Controls
+
         /// <summary>
         /// Updates the rail color at runtime.
         /// </summary>
@@ -243,8 +379,7 @@ namespace BalloonFlow
 
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
-            // Visual rendering disabled — BoardGrid's ConveyorTiles tilemap handles rail visuals.
-            // RailManager (waypoint data) remains active for holder movement.
+            RefreshPath();
         }
 
         #endregion

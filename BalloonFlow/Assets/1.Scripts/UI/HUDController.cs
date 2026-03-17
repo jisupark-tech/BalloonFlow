@@ -45,8 +45,13 @@ namespace BalloonFlow
                 if (_view.SettingsButton != null) _view.SettingsButton.onClick.RemoveListener(OnSettingsClicked);
                 if (_view.GoldPlusButton != null) _view.GoldPlusButton.onClick.RemoveListener(OnGoldPlusClicked);
             }
-            if (_popupSettings != null && _popupSettings.CloseButton != null)
-                _popupSettings.CloseButton.onClick.RemoveListener(OnSettingsCloseClicked);
+            if (_popupSettings != null)
+            {
+                if (_popupSettings.CloseButton != null)
+                    _popupSettings.CloseButton.onClick.RemoveListener(OnSettingsCloseClicked);
+                if (_popupSettings.HomeButton != null)
+                    _popupSettings.HomeButton.onClick.RemoveListener(OnSettingsHomeClicked);
+            }
             if (_popupGoldShop != null && _popupGoldShop.CloseButton != null)
                 _popupGoldShop.CloseButton.onClick.RemoveListener(OnGoldShopCloseClicked);
 
@@ -79,12 +84,17 @@ namespace BalloonFlow
             RefreshOnRailCount();
         }
 
-        /// <summary>설정 팝업 연결 + Close 버튼 와이어링</summary>
+        /// <summary>설정 팝업 연결 + Close/Home 버튼 와이어링</summary>
         public void SetSettingsPopup(PopupSettings _popup)
         {
             _popupSettings = _popup;
-            if (_popupSettings != null && _popupSettings.CloseButton != null)
-                _popupSettings.CloseButton.onClick.AddListener(OnSettingsCloseClicked);
+            if (_popupSettings != null)
+            {
+                if (_popupSettings.CloseButton != null)
+                    _popupSettings.CloseButton.onClick.AddListener(OnSettingsCloseClicked);
+                if (_popupSettings.HomeButton != null)
+                    _popupSettings.HomeButton.onClick.AddListener(OnSettingsHomeClicked);
+            }
         }
 
         /// <summary>골드 상점 팝업 연결 + Close 버튼 와이어링</summary>
@@ -135,6 +145,19 @@ namespace BalloonFlow
         {
             if (_popupSettings != null) _popupSettings.CloseUI();
             if (GameManager.HasInstance) GameManager.Instance.ResumeGame();
+        }
+
+        private void OnSettingsHomeClicked()
+        {
+            if (_popupSettings != null) _popupSettings.CloseUI();
+            if (GameManager.HasInstance)
+            {
+                GameManager.Instance.ResumeGame();
+                if (GameManager.IsTestPlayMode)
+                    GameManager.Instance.GoToMapMaker();
+                else
+                    GameManager.Instance.GoToLobby();
+            }
         }
 
         private void OnGoldPlusClicked()

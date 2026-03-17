@@ -287,7 +287,9 @@ namespace BalloonFlow
             if (RailManager.HasInstance && config.rail != null)
             {
                 int slotCount = config.rail.slotCount > 0 ? config.rail.slotCount : 200;
-                RailManager.Instance.SetRailLayout(config.rail.waypoints, slotCount);
+                bool smooth = config.rail.smoothCorners;
+                float radius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 1f;
+                RailManager.Instance.SetRailLayout(config.rail.waypoints, slotCount, true, smooth, radius);
             }
 
             // Apply rail visual type to RailRenderer
