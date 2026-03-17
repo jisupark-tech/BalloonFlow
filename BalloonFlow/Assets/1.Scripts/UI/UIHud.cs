@@ -19,6 +19,9 @@ namespace BalloonFlow
         [Header("[Row 2 — 홀더]")]
         [SerializeField] private Text _holderCountText;
 
+        [Header("[배경/오버레이]")]
+        [SerializeField] private Image _backgroundImage;
+
 
 
         #region Accessors
@@ -28,7 +31,7 @@ namespace BalloonFlow
         public TMP_Text GoldText => _goldText;
         public Button GoldPlusButton => _goldPlusButton;
         public Text HolderCountText => _holderCountText;
-        //public Text MoveCountText => _moveCountText;
+        public Image BackgroundImage => _backgroundImage;
 
         #endregion
 

@@ -21,21 +21,20 @@ namespace BalloonFlow
         #region Constants
 
         // Global level IDs at which each gimmick type is first introduced
-        // 정본: gimmick_spec.yaml — 5종 기믹 도입 레벨
-        private const int UNLOCK_LEVEL_HIDDEN        = 11;   // PKG1 pos11
-        private const int UNLOCK_LEVEL_SPAWNER_T     = 21;   // PKG2 pos1
-        private const int UNLOCK_LEVEL_SPAWNER_O     = 31;   // PKG2 pos11
-        private const int UNLOCK_LEVEL_PINATA        = 41;   // PKG3 pos1 (Big Object)
-        private const int UNLOCK_LEVEL_CHAIN         = 61;   // PKG4 pos1
-        // 미래 확장 기믹 (기획서 미정의 — 높은 레벨에 배치)
-        private const int UNLOCK_LEVEL_PIN           = 81;
-        private const int UNLOCK_LEVEL_LOCK_KEY      = 101;
-        private const int UNLOCK_LEVEL_SURPRISE      = 121;
-        private const int UNLOCK_LEVEL_WALL          = 141;
-        private const int UNLOCK_LEVEL_PINATA_BOX    = 161;
-        private const int UNLOCK_LEVEL_ICE           = 181;
-        private const int UNLOCK_LEVEL_FROZEN_DART   = 201;
-        private const int UNLOCK_LEVEL_COLOR_CURTAIN = 221;
+        // 정본: BalloonFlow_기믹명세 (2026-03-17) — 13종 기믹 도입 레벨
+        private const int UNLOCK_LEVEL_HIDDEN        = 11;   // PKG1 Lv.11
+        private const int UNLOCK_LEVEL_CHAIN         = 21;   // PKG2 Lv.21
+        private const int UNLOCK_LEVEL_PINATA        = 31;   // PKG2 Lv.31
+        private const int UNLOCK_LEVEL_SPAWNER_T     = 41;   // PKG3 Lv.41
+        private const int UNLOCK_LEVEL_PIN           = 61;   // PKG4 Lv.61
+        private const int UNLOCK_LEVEL_LOCK_KEY      = 81;   // PKG5 Lv.81
+        private const int UNLOCK_LEVEL_SURPRISE      = 101;  // PKG6 Lv.101
+        private const int UNLOCK_LEVEL_WALL          = 121;  // PKG7 Lv.121
+        private const int UNLOCK_LEVEL_SPAWNER_O     = 141;  // PKG8 Lv.141
+        private const int UNLOCK_LEVEL_PINATA_BOX    = 161;  // PKG9 Lv.161
+        private const int UNLOCK_LEVEL_ICE           = 201;  // PKG11 Lv.201
+        private const int UNLOCK_LEVEL_FROZEN_DART   = 241;  // PKG13 Lv.241
+        private const int UNLOCK_LEVEL_COLOR_CURTAIN = 281;  // PKG15 Lv.281
 
         // String identifiers that match LevelConfig.gimmickTypes values
         public const string GIMMICK_HIDDEN        = "Hidden";
@@ -135,31 +134,31 @@ namespace BalloonFlow
             switch (gimmickType)
             {
                 case GIMMICK_HIDDEN:
-                    return "풍선 색상이 숨겨져 있어 인접 팝으로 공개됩니다.";
+                    return "보관함 색상이 숨겨져 있어 터치 가능 상태가 될 때 공개됩니다.";
                 case GIMMICK_CHAIN:
-                    return "연결된 컨테이너가 순차적으로 배치됩니다.";
+                    return "2~4개 보관함이 연결되어 순차적으로 배치됩니다.";
                 case GIMMICK_PINATA:
-                    return "여러 번 맞춰야 터지는 단단한 풍선입니다.";
+                    return "1×1~6×6 크기. HP만큼 다트를 맞아야 파괴됩니다.";
                 case GIMMICK_SPAWNER_T:
-                    return "투명 스포너 — 다음 생성 색상이 보입니다.";
+                    return "투명 스포너 — 소진 시 큐에 새 보관함을 생성합니다. 다음 색상이 보입니다.";
                 case GIMMICK_PIN:
-                    return "다트를 차단하는 장애물. 인접 팝으로 제거.";
+                    return "1×N 장애물. 같은 색 다트 직격으로만 1칸씩 점진 제거됩니다.";
                 case GIMMICK_LOCK_KEY:
-                    return "Key 풍선을 먼저 터뜨려야 Lock 풍선 해제.";
+                    return "Key 풍선을 먼저 터뜨려야 Lock 풍선이 해제됩니다.";
                 case GIMMICK_SURPRISE:
-                    return "팝 시 랜덤 색상으로 변경되는 깜짝 풍선.";
+                    return "필드 풍선의 색상이 숨겨져 있어 인접 팝으로 공개됩니다.";
                 case GIMMICK_WALL:
-                    return "파괴 불가 벽. 다트를 완전 차단.";
+                    return "파괴 불가 벽. 다트를 완전 차단합니다.";
                 case GIMMICK_SPAWNER_O:
-                    return "불투명 스포너 — 다음 생성 색상이 숨겨집니다.";
+                    return "불투명 스포너 — 소진 시 큐에 새 보관함을 생성합니다. 다음 색상이 숨겨집니다.";
                 case GIMMICK_PINATA_BOX:
-                    return "다중 히트 박스. 파괴 시 보상 드롭.";
+                    return "다중 셀 피냐타. 각 셀마다 HP를 가지며 파괴 시 보상 드롭.";
                 case GIMMICK_ICE:
-                    return "얼음 풍선 — 인접 팝으로 해동 후 파괴 가능.";
+                    return "얼음 풍선 — 모든 풍선 팝에 의해 간접적으로 HP가 감소합니다.";
                 case GIMMICK_FROZEN_DART:
-                    return "동결 다트 — 첫 N발이 발사되지 않음.";
+                    return "동결 다트 — 레일의 첫 N발이 발사되지 않고 자리를 차지합니다.";
                 case GIMMICK_COLOR_CURTAIN:
-                    return "특정 색상 다트로만 제거 가능한 컬러 커튼.";
+                    return "지정 색상 다트로만 간접 제거 가능한 컬러 커튼.";
                 default:
                     return string.Empty;
             }

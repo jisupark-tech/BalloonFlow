@@ -12,11 +12,27 @@ namespace BalloonFlow
     /// </summary>
     public class HUDController : SceneSingleton<HUDController>
     {
+        #region Constants — Difficulty Tint Colors
+
+        // Design ref: BeatChart_Direction — Hard/SuperHard HUD 색상 차별화
+        private static readonly Color TINT_NORMAL    = Color.white;
+        private static readonly Color TINT_HARD      = new Color(1f, 0.85f, 0.65f);      // warm amber
+        private static readonly Color TINT_SUPERHARD  = new Color(1f, 0.55f, 0.55f);      // red-ish
+
+        // Gauge stage HUD overlay colors
+        private static readonly Color GAUGE_SAFE     = new Color(0f, 0f, 0f, 0f);         // transparent
+        private static readonly Color GAUGE_CAUTION  = new Color(1f, 1f, 0f, 0.05f);      // faint yellow
+        private static readonly Color GAUGE_WARNING  = new Color(1f, 0.3f, 0f, 0.12f);    // orange tint
+        private static readonly Color GAUGE_CRITICAL = new Color(1f, 0f, 0f, 0.2f);       // red tint
+
+        #endregion
+
         #region Fields
 
         private UIHud _view;
         private PopupSettings _popupSettings;
         private PopupGoldShop _popupGoldShop;
+        private Image _gaugeOverlay; // screen-edge warning overlay
 
         #endregion
 
@@ -29,6 +45,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnHolderReturned>(HandleHolderReturned);
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
+            EventBus.Subscribe<OnGaugeStageChanged>(HandleGaugeStage);
         }
 
         private void OnDisable()
@@ -38,6 +55,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnHolderReturned>(HandleHolderReturned);
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
+            EventBus.Unsubscribe<OnGaugeStageChanged>(HandleGaugeStage);
 
             // 버튼 이벤트 해제
             if (_view != null)
@@ -199,11 +217,30 @@ namespace BalloonFlow
             SetLevelInfo(_evt.levelId, _evt.packageId);
             RefreshOnRailCount();
             if (CurrencyManager.HasInstance) UpdateGoldDisplay(CurrencyManager.Instance.Coins);
+
+            // Apply difficulty tint to HUD
+            ApplyDifficultyTint(_evt.levelId);
         }
 
         private void HandleCoinChanged(OnCoinChanged _evt)
         {
             UpdateGoldDisplay(_evt.currentCoins);
+        }
+
+        private void HandleGaugeStage(OnGaugeStageChanged _evt)
+        {
+            // Update HUD overlay color based on gauge stage
+            if (_gaugeOverlay == null) return;
+
+            GaugeStage stage = (GaugeStage)_evt.currentStage;
+            Color overlay = stage switch
+            {
+                GaugeStage.Warning  => GAUGE_WARNING,
+                GaugeStage.Critical => GAUGE_CRITICAL,
+                GaugeStage.Caution  => GAUGE_CAUTION,
+                _                   => GAUGE_SAFE
+            };
+            _gaugeOverlay.color = overlay;
         }
 
         private void RefreshOnRailCount()
@@ -212,6 +249,40 @@ namespace BalloonFlow
             int _onRail = RailManager.Instance.OccupiedCount;
             int _max = RailManager.Instance.SlotCount;
             UpdateHolderInfo(_onRail, _max);
+        }
+
+        /// <summary>
+        /// Applies difficulty-based color tint to HUD elements.
+        /// Design ref: BeatChart_Direction — Hard=amber, SuperHard=red HUD
+        /// </summary>
+        private void ApplyDifficultyTint(int levelId)
+        {
+            if (_view == null) return;
+
+            LevelConfig cfg = null;
+            if (LevelManager.HasInstance) cfg = LevelManager.Instance.CurrentLevel;
+            if (cfg == null) return;
+
+            Color tint = cfg.difficultyPurpose switch
+            {
+                DifficultyPurpose.Hard      => TINT_HARD,
+                DifficultyPurpose.SuperHard  => TINT_SUPERHARD,
+                _                            => TINT_NORMAL
+            };
+
+            // Apply tint to HUD background if available
+            if (_view.BackgroundImage != null)
+                _view.BackgroundImage.color = tint;
+        }
+
+        /// <summary>
+        /// Binds the gauge overlay image for danger tinting.
+        /// Called by GameBootstrap after UI creation.
+        /// </summary>
+        public void SetGaugeOverlay(Image overlay)
+        {
+            _gaugeOverlay = overlay;
+            if (_gaugeOverlay != null) _gaugeOverlay.color = GAUGE_SAFE;
         }
 
         #endregion

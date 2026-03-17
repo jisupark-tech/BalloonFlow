@@ -58,22 +58,21 @@ namespace BalloonFlow
             new Color(0.82f, 0.70f, 0.50f),  // 27: Tan
         };
 
-        // Gimmick type string constants — 정본: gimmick_spec.yaml
+        // Gimmick type string constants — 정본: BalloonFlow_기믹명세 (2026-03-17)
         public const string GimmickNone         = "none";
-        public const string GimmickHidden       = "Hidden";          // Lv.11 (PKG1 pos11)
-        public const string GimmickSpawnerT     = "Spawner_T";       // Lv.21 (PKG2 pos1)
-        public const string GimmickSpawnerO     = "Spawner_O";       // Lv.31 (PKG2 pos11)
-        public const string GimmickPinata       = "Pinata";          // Lv.41 (PKG3 pos1, Big Object)
-        public const string GimmickChain        = "Chain";           // Lv.61 (PKG4 pos1)
-        // 미래 확장 기믹 (기획서 미정의)
-        public const string GimmickPin          = "Pin";             // Lv.81
-        public const string GimmickLockKey      = "Lock_Key";        // Lv.101
-        public const string GimmickSurprise     = "Surprise";        // Lv.121
-        public const string GimmickWall         = "Wall";            // Lv.141
-        public const string GimmickPinataBox    = "Pinata_Box";      // Lv.161
-        public const string GimmickIce          = "Ice";             // Lv.181
-        public const string GimmickFrozenDart   = "Frozen_Dart";     // Lv.201
-        public const string GimmickColorCurtain = "Color_Curtain";   // Lv.221
+        public const string GimmickHidden       = "Hidden";          // Lv.11  보관함 색상 숨김
+        public const string GimmickChain        = "Chain";           // Lv.21  2~4 보관함 연결 순차 배치
+        public const string GimmickPinata       = "Pinata";          // Lv.31  1×1~6×6 HP 오브젝트
+        public const string GimmickSpawnerT     = "Spawner_T";       // Lv.41  투명 스포너 (큐에 보관함 생성)
+        public const string GimmickPin          = "Pin";             // Lv.61  1×N 점진 제거 장애물
+        public const string GimmickLockKey      = "Lock_Key";        // Lv.81  Key→Lock 해제
+        public const string GimmickSurprise     = "Surprise";        // Lv.101 필드 풍선 색상 숨김 (인접 팝 공개)
+        public const string GimmickWall         = "Wall";            // Lv.121 파괴 불가 벽
+        public const string GimmickSpawnerO     = "Spawner_O";       // Lv.141 불투명 스포너
+        public const string GimmickPinataBox    = "Pinata_Box";      // Lv.161 다중 셀 피냐타
+        public const string GimmickIce          = "Ice";             // Lv.201 간접 제거 (모든 팝으로 HP 감소)
+        public const string GimmickFrozenDart   = "Frozen_Dart";     // Lv.241 동결 다트 (레일 점유)
+        public const string GimmickColorCurtain = "Color_Curtain";   // Lv.281 지정 색상 간접 제거
 
         #endregion
 
@@ -273,22 +272,29 @@ namespace BalloonFlow
                 return new PopResult { success = false, reason = "AlreadyPopped" };
             }
 
-            // Wall blocks all pops — indestructible
-            if (data.gimmickType == GimmickWall)
+            // Delegate pre-pop guard check to GimmickProcessor
+            if (GimmickProcessor.HasInstance)
             {
-                return new PopResult { success = false, reason = "Wall blocks dart", balloonId = data.balloonId, gimmickType = GimmickWall };
+                string blockReason = GimmickProcessor.Instance.CheckDartBlocker(data.balloonId, data.gimmickType, -1);
+                if (blockReason != null)
+                {
+                    return new PopResult { success = false, reason = blockReason, balloonId = data.balloonId, gimmickType = data.gimmickType };
+                }
+            }
+            else
+            {
+                // Fallback: Wall/Ice always blocked
+                if (data.gimmickType == GimmickWall)
+                    return new PopResult { success = false, reason = "Wall: indestructible", balloonId = data.balloonId, gimmickType = GimmickWall };
+                if (data.gimmickType == GimmickIce)
+                    return new PopResult { success = false, reason = "Ice: indirect only", balloonId = data.balloonId, gimmickType = GimmickIce };
             }
 
-            // Pin blocks direct dart hits — only removable by adjacent balloon pop
-            if (data.gimmickType == GimmickPin)
+            // Pin: same-color dart progressive removal
+            if (data.gimmickType == GimmickPin && GimmickProcessor.HasInstance)
             {
-                return new PopResult { success = false, reason = "Pin blocks dart — remove via adjacent pop", balloonId = data.balloonId, gimmickType = GimmickPin };
-            }
-
-            // Ice blocks direct dart hits — must be thawed by adjacent pop first
-            if (data.gimmickType == GimmickIce)
-            {
-                return new PopResult { success = false, reason = "Ice frozen — thaw via adjacent pop", balloonId = data.balloonId, gimmickType = GimmickIce };
+                // dartColor is unknown here — caller should use PopBalloonWithDart for Pin
+                return new PopResult { success = false, reason = "Pin: use PopBalloonWithDart", balloonId = data.balloonId, gimmickType = GimmickPin };
             }
 
             // Pinata and Pinata Box require multiple hits
@@ -297,7 +303,7 @@ namespace BalloonFlow
                 return ProcessPinataHit(data);
             }
 
-            // Standard pop (covers none, Hidden, Chain, Spawner_T, Spawner_O, and new gimmick types)
+            // Standard pop
             return ExecutePop(data);
         }
 
@@ -307,6 +313,60 @@ namespace BalloonFlow
         public int GetRemainingBalloonCount()
         {
             return RemainingCount;
+        }
+
+        /// <summary>
+        /// Pops a balloon with dart color context. Required for Pin (same-color progressive)
+        /// and ColorCurtain (specific color required).
+        /// </summary>
+        public PopResult PopBalloonWithDart(int balloonId, int dartColor)
+        {
+            if (!_balloons.TryGetValue(balloonId, out BalloonData data))
+                return new PopResult { success = false, reason = "NotFound" };
+            if (data.isPopped)
+                return new PopResult { success = false, reason = "AlreadyPopped" };
+
+            // GimmickProcessor pre-pop guard with dart color
+            if (GimmickProcessor.HasInstance)
+            {
+                string blockReason = GimmickProcessor.Instance.CheckDartBlocker(data.balloonId, data.gimmickType, dartColor);
+                if (blockReason != null)
+                    return new PopResult { success = false, reason = blockReason, balloonId = data.balloonId, gimmickType = data.gimmickType };
+            }
+
+            // Pin: same-color dart progressive removal
+            if (data.gimmickType == GimmickPin && GimmickProcessor.HasInstance)
+            {
+                bool destroyed = GimmickProcessor.Instance.ProcessPinHit(data.balloonId, dartColor, data.color);
+                if (!destroyed)
+                    return new PopResult { success = false, reason = "Pin: segment removed, not fully destroyed", balloonId = data.balloonId, gimmickType = GimmickPin };
+                return ExecutePop(data);
+            }
+
+            // Pinata/PinataBox
+            if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
+                return ProcessPinataHit(data);
+
+            return ExecutePop(data);
+        }
+
+        /// <summary>
+        /// Force-pops a balloon by ID (used by GimmickProcessor for indirect removal like Ice).
+        /// Bypasses gimmick guards.
+        /// </summary>
+        public void ForcePopBalloon(int balloonId)
+        {
+            if (!_balloons.TryGetValue(balloonId, out BalloonData data)) return;
+            if (data.isPopped) return;
+            ExecutePop(data);
+        }
+
+        /// <summary>
+        /// Public accessor for adjacent balloon IDs (used by GimmickProcessor).
+        /// </summary>
+        public List<int> GetAdjacentBalloonIdsPublic(Vector3 position)
+        {
+            return GetAdjacentBalloonIds(position);
         }
 
         /// <summary>
@@ -596,75 +656,23 @@ namespace BalloonFlow
 
         private void ProcessGimmickAfterPop(BalloonData data, PopResult result)
         {
-            // === Gimmick-specific behavior ===
+            // Post-pop gimmick side effects are now handled by GimmickProcessor
+            // via OnBalloonPopped event subscription (Ice HP reduction, Lock-Key unlock, Surprise reveal).
+            //
+            // Field balloon gimmick types that have post-pop effects:
             switch (data.gimmickType)
             {
-                case GimmickHidden:
-                    RevealAdjacentHiddenBalloons(data.position);
-                    break;
-
-                case GimmickSpawnerT:
-                    // Spawn 1 new balloon at a random adjacent empty cell
-                    result.spawnCount = SpawnAtAdjacentEmpty(data.position, 1);
-                    EventBus.Publish(new OnGimmickTriggered
-                    {
-                        gimmickType = GimmickSpawnerT,
-                        targetId    = data.balloonId
-                    });
-                    break;
-
-                case GimmickSpawnerO:
-                    // Spawn 2 new balloons at random adjacent empty cells
-                    result.spawnCount = SpawnAtAdjacentEmpty(data.position, 2);
-                    EventBus.Publish(new OnGimmickTriggered
-                    {
-                        gimmickType = GimmickSpawnerO,
-                        targetId    = data.balloonId
-                    });
-                    break;
-
-                case GimmickChain:
-                    ChainPopAdjacentSameColor(data);
-                    EventBus.Publish(new OnGimmickTriggered
-                    {
-                        gimmickType = GimmickChain,
-                        targetId    = data.balloonId
-                    });
-                    break;
-
-                case GimmickLockKey:
-                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickLockKey, targetId = data.balloonId });
-                    break;
-
-                case GimmickSurprise:
-                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickSurprise, targetId = data.balloonId });
-                    break;
-
                 case GimmickPinataBox:
                     EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickPinataBox, targetId = data.balloonId });
                     break;
 
-                case GimmickFrozenDart:
-                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickFrozenDart, targetId = data.balloonId });
-                    break;
-
-                case GimmickColorCurtain:
-                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickColorCurtain, targetId = data.balloonId });
-                    break;
-
                 case GimmickNone:
-                case GimmickPinata:
-                case GimmickWall:
-                case GimmickPin:
-                case GimmickIce:
                 default:
                     break;
             }
 
-            // === Universal post-pop: destroy adjacent Pin & thaw adjacent Ice ===
-            RemoveAdjacentPins(data.position);
-            ThawAdjacentIce(data.position);
-            RevealAdjacentHiddenBalloons(data.position);
+            // Note: Surprise/Ice/Lock/Pin/Hidden/Chain/Spawner post-pop effects
+            // are handled by GimmickProcessor.HandleAnyBalloonPopped via EventBus.
         }
 
         private void RevealAdjacentHiddenBalloons(Vector3 position)

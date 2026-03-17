@@ -45,7 +45,6 @@ namespace BalloonFlow
         /// </summary>
         public enum CoinSink
         {
-            BoosterExtraTray,
             BoosterSelectTool,
             BoosterShuffle,
             BoosterColorRemove,

@@ -19,7 +19,7 @@ namespace BalloonFlow
         #region Constants
 
         private const int MaxContinues = 4;  // 1 free + 3 paid
-        private const int ContinueMagazineBonus = 5;
+        private const float ContinueRemoveRatio = 0.10f; // 레일 수용량의 10% 다트 제거
 
         // Escalating coin costs (index 0 = free, then 900 → 1900 → 2900)
         private static readonly int[] ContinueCosts = { 0, 900, 1900, 2900 };
@@ -150,14 +150,24 @@ namespace BalloonFlow
 
         private void ApplyContinueRestore()
         {
-            // Signal HolderManager to add bonus magazines (holderId -1 = all holders)
-            EventBus.Publish(new OnHolderReturned
+            // 1) 레일에서 가장 최근 배치된 다트 N개 제거 (수용량 * 10%, 최소 1개)
+            int dartsToRemove = 1;
+            if (RailManager.HasInstance)
             {
-                holderId = -1,
-                remainingMagazine = ContinueMagazineBonus
+                dartsToRemove = Mathf.Max(1, Mathf.CeilToInt(RailManager.Instance.SlotCount * ContinueRemoveRatio));
+                int removed = RailManager.Instance.RemoveDarts(dartsToRemove);
+                Debug.Log($"[ContinueHandler] Removed {removed} darts from rail (target: {dartsToRemove}).");
+            }
+
+            // 2) 제거된 다트와 매칭되는 필드 풍선 동시 제거
+            //    → PopProcessor가 OnDartsRemovedForContinue 이벤트를 구독하여 처리
+            EventBus.Publish(new OnContinueApplied
+            {
+                dartsRemoved = dartsToRemove,
+                levelId = _currentLevelId
             });
 
-            // Reset board state so gameplay resumes
+            // 3) 보드 상태 리셋하여 게임플레이 재개
             if (BoardStateManager.HasInstance)
             {
                 int remaining = BoardStateManager.Instance.GetRemainingBalloons();
