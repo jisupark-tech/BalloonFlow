@@ -15,6 +15,7 @@ namespace BalloonFlow
     {
         private UIHud _hud;
         private PopupResult _result;
+        private PopupContinue _continuePopup;
         private PopupSettings _settings;
         private PopupGoldShop _goldShop;
         private bool _pendingResultIsWin;
@@ -144,6 +145,14 @@ namespace BalloonFlow
                 if (_result.RetryButton != null) _result.RetryButton.onClick.RemoveListener(OnRetryClicked);
                 if (_result.HomeButton != null) _result.HomeButton.onClick.RemoveListener(OnHomeClicked);
             }
+
+            if (_continuePopup != null)
+            {
+                if (_continuePopup.ContinueButton != null)
+                    _continuePopup.ContinueButton.onClick.RemoveListener(_continuePopup.OnContinueClicked);
+                if (_continuePopup.DeclineButton != null)
+                    _continuePopup.DeclineButton.onClick.RemoveListener(_continuePopup.OnDeclineClicked);
+            }
         }
 
         #region UI 로드
@@ -174,6 +183,25 @@ namespace BalloonFlow
                 if (_result.GoldTarget == null && _hud != null && _hud.GoldText != null)
                 {
                     _result.SetGoldTarget(_hud.GoldText.rectTransform);
+                }
+            }
+
+            // PopupContinue (로드 후 숨김)
+            _continuePopup = UIManager.Instance.OpenUI<PopupContinue>("Popup/PopupContinue");
+            if (_continuePopup != null)
+            {
+                _continuePopup.CloseUI();
+                if (_continuePopup.ContinueButton != null)
+                    _continuePopup.ContinueButton.onClick.AddListener(_continuePopup.OnContinueClicked);
+                if (_continuePopup.DeclineButton != null)
+                    _continuePopup.DeclineButton.onClick.AddListener(_continuePopup.OnDeclineClicked);
+
+                // Register with PopupManager so ShowPopup("popup_continue") works
+                if (PopupManager.HasInstance)
+                {
+                    var cg = _continuePopup.GetComponent<CanvasGroup>();
+                    if (cg != null)
+                        PopupManager.Instance.RegisterPopup("popup_continue", cg);
                 }
             }
 
@@ -226,7 +254,8 @@ namespace BalloonFlow
 
         void HandleLevelFailed(OnLevelFailed _evt)
         {
-            if (ContinueHandler.HasInstance && ContinueHandler.Instance.CanContinue()) return;
+            // OnLevelFailed now only fires after continues are exhausted or declined.
+            // LevelManager defers FailLevel when continues are available.
             if (_pendingResultIsWin) return;
             StartCoroutine(ShowResultDelayed(false, 0, 0));
         }

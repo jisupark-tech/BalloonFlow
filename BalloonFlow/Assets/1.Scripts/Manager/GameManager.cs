@@ -195,6 +195,7 @@ namespace BalloonFlow
             CreateChild<TutorialManager>("Mgr_TutorialMgr");
             CreateChild<HolderVisualManager>("Mgr_HolderVisual");
             CreateChild<LevelGenerator>("Mgr_LevelGen");
+            CreateChild<BoosterExecutor>("Mgr_BoosterExec");
 
             // InputHandler에 MainCamera 연결
             var _input = _inGameRoot.GetComponentInChildren<InputHandler>();

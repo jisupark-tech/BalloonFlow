@@ -96,6 +96,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnBalloonPopped>(HandleBalloonPopped);
             EventBus.Subscribe<OnBoardCleared>(HandleBoardCleared);
             EventBus.Subscribe<OnBoardFailed>(HandleBoardFailed);
+            EventBus.Subscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
         private void OnDisable()
@@ -104,6 +105,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnBalloonPopped>(HandleBalloonPopped);
             EventBus.Unsubscribe<OnBoardCleared>(HandleBoardCleared);
             EventBus.Unsubscribe<OnBoardFailed>(HandleBoardFailed);
+            EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
         private void Update()
@@ -446,23 +448,13 @@ namespace BalloonFlow
         /// <summary>
         /// When a balloon is popped externally (chain pop, gimmick, etc.),
         /// clear its reservation so other darts can target new outermost balloons.
-        /// Also prune surplus same-color darts when no more targets of that color remain.
+        /// NOTE: We do NOT auto-remove surplus darts when no matching balloons remain.
+        /// Unmatched darts stay on rail, raising occupancy toward fail condition.
+        /// This is core to Rail Overflow gameplay.
         /// </summary>
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
             _reservedTargets.Remove(evt.balloonId);
-
-            // Prune surplus darts: if no balloons of this color remain, remove all rail darts of that color
-            if (BalloonController.HasInstance && RailManager.HasInstance)
-            {
-                int poppedColor = evt.color;
-                BalloonData[] remaining = BalloonController.Instance.GetBalloonsByColor(poppedColor);
-                if (remaining == null || remaining.Length == 0)
-                {
-                    // No more targetable balloons of this color — remove surplus darts from rail
-                    RemoveDartsByColor(poppedColor);
-                }
-            }
         }
 
         /// <summary>
@@ -524,6 +516,12 @@ namespace BalloonFlow
         private void HandleBoardFailed(OnBoardFailed evt)
         {
             _boardFinished = true;
+        }
+
+        private void HandleContinueApplied(OnContinueApplied evt)
+        {
+            _boardFinished = false;
+            Debug.Log("[DartManager] Continue applied — dart system resumed.");
         }
 
         #endregion

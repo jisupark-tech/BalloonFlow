@@ -283,22 +283,21 @@ namespace BalloonFlow
                 PopProcessor.Instance.ResetAll();
             }
 
+            // Calculate total darts and rail capacity (needed by both RailManager and HolderManager)
+            int totalDarts = 0;
+            if (config.holders != null)
+            {
+                for (int i = 0; i < config.holders.Length; i++)
+                    totalDarts += config.holders[i].magazineCount;
+            }
+
+            int explicitCapacity = config.railCapacity > 0 ? config.railCapacity
+                : (config.rail != null && config.rail.slotCount > 0) ? config.rail.slotCount : 0;
+            int slotCount = RailManager.CalculateCapacity(totalDarts, explicitCapacity);
+
             // Rail setup via RailManager (slot-based conveyor belt) with variable capacity
             if (RailManager.HasInstance && config.rail != null)
             {
-                // Calculate total darts from all holders
-                int totalDarts = 0;
-                if (config.holders != null)
-                {
-                    for (int i = 0; i < config.holders.Length; i++)
-                        totalDarts += config.holders[i].magazineCount;
-                }
-
-                // Determine capacity: LevelConfig.railCapacity > rail.slotCount > auto-calc
-                int explicitCapacity = config.railCapacity > 0 ? config.railCapacity
-                    : config.rail.slotCount > 0 ? config.rail.slotCount : 0;
-                int slotCount = RailManager.CalculateCapacity(totalDarts, explicitCapacity);
-
                 bool smooth = config.rail.smoothCorners;
                 float radius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 1f;
                 RailManager.Instance.SetRailLayout(config.rail.waypoints, slotCount, true, smooth, radius);
@@ -312,6 +311,7 @@ namespace BalloonFlow
             }
 
             // Initialize holders from level config (column-based queue)
+            // Pass slotCount for per-tier magazine cap enforcement
             if (HolderManager.HasInstance && config.holders != null)
             {
                 var holderSetup = new System.Collections.Generic.List<(int color, int magazineCount)>(config.holders.Length);
@@ -319,7 +319,7 @@ namespace BalloonFlow
                 {
                     holderSetup.Add((config.holders[i].color, config.holders[i].magazineCount));
                 }
-                HolderManager.Instance.InitializeHolders(holderSetup, config.queueColumns);
+                HolderManager.Instance.InitializeHolders(holderSetup, config.queueColumns, slotCount);
             }
 
             // Apply balloon scale
@@ -439,6 +439,14 @@ namespace BalloonFlow
 
         private void HandleBoardFailed(OnBoardFailed evt)
         {
+            // If continues are available, ContinueHandler will show the popup.
+            // Don't mark level as failed yet — wait for continue timeout or decline.
+            if (ContinueHandler.HasInstance && ContinueHandler.Instance.CanContinue())
+            {
+                Debug.Log($"[LevelManager] Board failed but continues available ({ContinueHandler.Instance.ContinueCount}/{4}). Deferring FailLevel.");
+                return;
+            }
+
             FailLevel();
         }
 

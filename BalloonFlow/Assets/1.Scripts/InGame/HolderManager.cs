@@ -36,6 +36,14 @@ namespace BalloonFlow
         /// <summary>Maximum queue columns (matches spec: 5).</summary>
         private const int MAX_QUEUE_COLUMNS = 5;
 
+        /// <summary>Max active holders across all columns. Design ref: "최대 10개 활성".</summary>
+        private const int MAX_ACTIVE_TOTAL = 10;
+
+        // Magazine max per rail capacity tier.
+        // Design ref: 레일초과_코어메카닉_명세 — "50→max15, 100→max30, 150/200→max50"
+        private static readonly int[] MAG_CAP_TIERS      = { 50, 100, 150, 200 };
+        private static readonly int[] MAG_CAP_MAX_VALUES  = { 15,  30,  50,  50 };
+
         #endregion
 
         #region Fields
@@ -43,6 +51,7 @@ namespace BalloonFlow
         private readonly List<HolderData> _holders = new List<HolderData>();
         private int _nextHolderId;
         private int _queueColumns = 5;
+        private int _magazineMax = 50; // current level's magazine cap (set by rail capacity)
 
         // Per-column tracking: which holder is deploying, which is waiting
         private readonly int[] _deployingHolderId = new int[MAX_QUEUE_COLUMNS];
@@ -83,11 +92,12 @@ namespace BalloonFlow
         /// Initializes holders from level data. Call when a level is loaded.
         /// Holders are organized by column. Each entry is (color, magazineCount, column).
         /// </summary>
-        public void InitializeHolders(List<(int color, int magazineCount)> holderSetup, int queueColumns = 5)
+        public void InitializeHolders(List<(int color, int magazineCount)> holderSetup, int queueColumns = 5, int railCapacity = 0)
         {
             _holders.Clear();
             _nextHolderId = 0;
             _queueColumns = Mathf.Clamp(queueColumns, 1, MAX_QUEUE_COLUMNS);
+            _magazineMax = GetMagazineMaxForCapacity(railCapacity);
             ResetColumnTracking();
 
             if (holderSetup == null || holderSetup.Count == 0)
@@ -106,7 +116,7 @@ namespace BalloonFlow
                 {
                     holderId = _nextHolderId++,
                     color = setup.color,
-                    magazineCount = setup.magazineCount,
+                    magazineCount = Mathf.Min(setup.magazineCount, _magazineMax),
                     column = col,
                     isDeploying = false,
                     isWaiting = false,
@@ -120,11 +130,12 @@ namespace BalloonFlow
         /// <summary>
         /// Initializes holders with explicit column assignments.
         /// </summary>
-        public void InitializeHoldersWithColumns(List<(int color, int magazineCount, int column)> holderSetup, int queueColumns = 5)
+        public void InitializeHoldersWithColumns(List<(int color, int magazineCount, int column)> holderSetup, int queueColumns = 5, int railCapacity = 0)
         {
             _holders.Clear();
             _nextHolderId = 0;
             _queueColumns = Mathf.Clamp(queueColumns, 1, MAX_QUEUE_COLUMNS);
+            _magazineMax = GetMagazineMaxForCapacity(railCapacity);
             ResetColumnTracking();
 
             if (holderSetup == null || holderSetup.Count == 0) return;
@@ -135,7 +146,7 @@ namespace BalloonFlow
                 {
                     holderId = _nextHolderId++,
                     color = setup.color,
-                    magazineCount = setup.magazineCount,
+                    magazineCount = Mathf.Min(setup.magazineCount, _magazineMax),
                     column = Mathf.Clamp(setup.column, 0, _queueColumns - 1),
                     isDeploying = false,
                     isWaiting = false,
@@ -170,6 +181,14 @@ namespace BalloonFlow
 
             if (holder.magazineCount <= 0)
             {
+                return false;
+            }
+
+            // Check global active limit: "최대 10개 활성"
+            int activeCount = GetActiveHolderCount();
+            if (activeCount >= MAX_ACTIVE_TOTAL)
+            {
+                Debug.LogWarning($"[HolderManager] Max active holders ({MAX_ACTIVE_TOTAL}) reached.");
                 return false;
             }
 
@@ -346,7 +365,7 @@ namespace BalloonFlow
             {
                 holderId = _nextHolderId++,
                 color = color,
-                magazineCount = magazineCount,
+                magazineCount = Mathf.Min(magazineCount, _magazineMax),
                 column = Mathf.Clamp(column, 0, _queueColumns - 1),
                 isDeploying = false,
                 isWaiting = false,
@@ -409,6 +428,35 @@ namespace BalloonFlow
                 }
             }
             return bestCol;
+        }
+
+        /// <summary>
+        /// Returns the magazine max for a given rail capacity tier.
+        /// Design: 50→15, 100→30, 150→50, 200→50.
+        /// </summary>
+        private static int GetMagazineMaxForCapacity(int railCapacity)
+        {
+            if (railCapacity <= 0) return MAG_CAP_MAX_VALUES[MAG_CAP_MAX_VALUES.Length - 1];
+            for (int i = 0; i < MAG_CAP_TIERS.Length; i++)
+            {
+                if (railCapacity <= MAG_CAP_TIERS[i])
+                    return MAG_CAP_MAX_VALUES[i];
+            }
+            return MAG_CAP_MAX_VALUES[MAG_CAP_MAX_VALUES.Length - 1];
+        }
+
+        /// <summary>
+        /// Returns the number of currently active holders (deploying + waiting + moving to rail).
+        /// </summary>
+        private int GetActiveHolderCount()
+        {
+            int count = 0;
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                if (_holders[i].isDeploying || _holders[i].isWaiting || _holders[i].isMovingToRail)
+                    count++;
+            }
+            return count;
         }
 
         private void HandleHolderTapped(OnHolderTapped evt)

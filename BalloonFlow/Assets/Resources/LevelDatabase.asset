@@ -16,128 +16,717 @@ MonoBehaviour:
   - levelId: 1
     packageId: 1
     positionInPackage: 1
-    numColors: 4
-    balloonCount: 17
-    balloonScale: 0.19459459
+    railCapacity: 200
+    numColors: 6
+    balloonCount: 163
+    balloonScale: 0.20571429
     queueColumns: 0
     targetClearRate: 0
-    difficultyPurpose: 1
+    difficultyPurpose: 0
     gimmickTypes: []
     holders:
     - holderId: 0
       color: 0
-      magazineCount: 5
+      magazineCount: 47
       position: {x: 0, y: 0}
     - holderId: 1
-      color: 0
-      magazineCount: 4
-      position: {x: 0, y: 1}
+      color: 1
+      magazineCount: 49
+      position: {x: 1, y: 0}
     - holderId: 2
-      color: 0
-      magazineCount: 4
-      position: {x: 0, y: 2}
+      color: 2
+      magazineCount: 42
+      position: {x: 2, y: 0}
     - holderId: 3
-      color: 0
-      magazineCount: 4
-      position: {x: 0, y: 3}
+      color: 3
+      magazineCount: 25
+      position: {x: 3, y: 0}
     balloons:
     - balloonId: 0
-      color: 0
-      gridPosition: {x: -1.945946, y: 4.810811}
+      color: 3
+      gridPosition: {x: -2.4, y: 0.6285714}
       gimmickType: 
     - balloonId: 1
-      color: 0
-      gridPosition: {x: -1.7297298, y: 4.810811}
+      color: 3
+      gridPosition: {x: -2.4, y: 2.2285714}
       gimmickType: 
     - balloonId: 2
-      color: 0
-      gridPosition: {x: -0.8648649, y: 3.0810812}
+      color: 2
+      gridPosition: {x: -2.4, y: 2.6857142}
       gimmickType: 
     - balloonId: 3
-      color: 0
-      gridPosition: {x: -0.6486487, y: 2.4324324}
+      color: 2
+      gridPosition: {x: -2.4, y: 2.9142857}
       gimmickType: 
     - balloonId: 4
-      color: 0
-      gridPosition: {x: -0.43243244, y: 3.945946}
+      color: 3
+      gridPosition: {x: -2.1714287, y: 2.6857142}
       gimmickType: 
     - balloonId: 5
-      color: 0
-      gridPosition: {x: -0.21621622, y: 4.810811}
+      color: 2
+      gridPosition: {x: -2.1714287, y: 3.6}
       gimmickType: 
     - balloonId: 6
-      color: 0
-      gridPosition: {x: 0.43243244, y: 1.7837838}
+      color: 2
+      gridPosition: {x: -2.1714287, y: 3.8285713}
       gimmickType: 
     - balloonId: 7
-      color: 0
-      gridPosition: {x: 0.43243244, y: 3.945946}
+      color: 3
+      gridPosition: {x: -1.9428571, y: 0.85714287}
       gimmickType: 
     - balloonId: 8
-      color: 0
-      gridPosition: {x: 0.6486487, y: 3.945946}
+      color: 2
+      gridPosition: {x: -1.9428571, y: 1.7714286}
       gimmickType: 
     - balloonId: 9
-      color: 0
-      gridPosition: {x: 1.0810812, y: 1.7837838}
+      color: 1
+      gridPosition: {x: -1.7142857, y: 1.0857143}
       gimmickType: 
     - balloonId: 10
-      color: 0
-      gridPosition: {x: 1.2972974, y: 4.810811}
+      color: 3
+      gridPosition: {x: -1.7142857, y: 1.3142858}
       gimmickType: 
     - balloonId: 11
-      color: 0
-      gridPosition: {x: 1.5135136, y: 1.7837838}
+      color: 2
+      gridPosition: {x: -1.7142857, y: 1.7714286}
       gimmickType: 
     - balloonId: 12
-      color: 0
-      gridPosition: {x: 1.945946, y: 2.6486487}
+      color: 3
+      gridPosition: {x: -1.4857143, y: 0.85714287}
       gimmickType: 
     - balloonId: 13
-      color: 0
-      gridPosition: {x: 2.1621623, y: 4.810811}
+      color: 1
+      gridPosition: {x: -1.4857143, y: 1.0857143}
       gimmickType: 
     - balloonId: 14
-      color: 0
-      gridPosition: {x: 2.3783784, y: 4.3783784}
+      color: 2
+      gridPosition: {x: -1.4857143, y: 1.3142858}
       gimmickType: 
     - balloonId: 15
-      color: 0
-      gridPosition: {x: 2.3783784, y: 4.5945945}
+      color: 3
+      gridPosition: {x: -1.4857143, y: 2.9142857}
       gimmickType: 
     - balloonId: 16
+      color: 3
+      gridPosition: {x: -1.4857143, y: 3.142857}
+      gimmickType: 
+    - balloonId: 17
+      color: 3
+      gridPosition: {x: -1.4857143, y: 3.6}
+      gimmickType: 
+    - balloonId: 18
+      color: 3
+      gridPosition: {x: -1.4857143, y: 3.8285713}
+      gimmickType: 
+    - balloonId: 19
+      color: 1
+      gridPosition: {x: -1.4857143, y: 4.285714}
+      gimmickType: 
+    - balloonId: 20
+      color: 2
+      gridPosition: {x: -1.2571429, y: 0.39999998}
+      gimmickType: 
+    - balloonId: 21
       color: 0
-      gridPosition: {x: 2.3783784, y: 4.810811}
+      gridPosition: {x: -1.2571429, y: 1.0857143}
+      gimmickType: 
+    - balloonId: 22
+      color: 0
+      gridPosition: {x: -1.2571429, y: 1.3142858}
+      gimmickType: 
+    - balloonId: 23
+      color: 0
+      gridPosition: {x: -1.2571429, y: 1.5428572}
+      gimmickType: 
+    - balloonId: 24
+      color: 0
+      gridPosition: {x: -1.2571429, y: 1.7714286}
+      gimmickType: 
+    - balloonId: 25
+      color: 0
+      gridPosition: {x: -1.2571429, y: 2}
+      gimmickType: 
+    - balloonId: 26
+      color: 2
+      gridPosition: {x: -1.2571429, y: 2.4571428}
+      gimmickType: 
+    - balloonId: 27
+      color: 1
+      gridPosition: {x: -1.2571429, y: 2.9142857}
+      gimmickType: 
+    - balloonId: 28
+      color: 3
+      gridPosition: {x: -1.2571429, y: 3.8285713}
+      gimmickType: 
+    - balloonId: 29
+      color: 0
+      gridPosition: {x: -1.0285715, y: -0.2857143}
+      gimmickType: 
+    - balloonId: 30
+      color: 2
+      gridPosition: {x: -1.0285715, y: 0.39999998}
+      gimmickType: 
+    - balloonId: 31
+      color: 1
+      gridPosition: {x: -1.0285715, y: 0.85714287}
+      gimmickType: 
+    - balloonId: 32
+      color: 1
+      gridPosition: {x: -1.0285715, y: 1.0857143}
+      gimmickType: 
+    - balloonId: 33
+      color: 1
+      gridPosition: {x: -1.0285715, y: 2}
+      gimmickType: 
+    - balloonId: 34
+      color: 2
+      gridPosition: {x: -1.0285715, y: 2.4571428}
+      gimmickType: 
+    - balloonId: 35
+      color: 0
+      gridPosition: {x: -1.0285715, y: 2.6857142}
+      gimmickType: 
+    - balloonId: 36
+      color: 0
+      gridPosition: {x: -0.8, y: -0.05714287}
+      gimmickType: 
+    - balloonId: 37
+      color: 0
+      gridPosition: {x: -0.8, y: 0.17142856}
+      gimmickType: 
+    - balloonId: 38
+      color: 1
+      gridPosition: {x: -0.8, y: 0.6285714}
+      gimmickType: 
+    - balloonId: 39
+      color: 2
+      gridPosition: {x: -0.8, y: 0.85714287}
+      gimmickType: 
+    - balloonId: 40
+      color: 2
+      gridPosition: {x: -0.8, y: 2}
+      gimmickType: 
+    - balloonId: 41
+      color: 1
+      gridPosition: {x: -0.8, y: 2.2285714}
+      gimmickType: 
+    - balloonId: 42
+      color: 1
+      gridPosition: {x: -0.8, y: 2.6857142}
+      gimmickType: 
+    - balloonId: 43
+      color: 0
+      gridPosition: {x: -0.5714286, y: -0.2857143}
+      gimmickType: 
+    - balloonId: 44
+      color: 2
+      gridPosition: {x: -0.5714286, y: 0.17142856}
+      gimmickType: 
+    - balloonId: 45
+      color: 0
+      gridPosition: {x: -0.5714286, y: 0.39999998}
+      gimmickType: 
+    - balloonId: 46
+      color: 1
+      gridPosition: {x: -0.5714286, y: 2}
+      gimmickType: 
+    - balloonId: 47
+      color: 1
+      gridPosition: {x: -0.5714286, y: 2.4571428}
+      gimmickType: 
+    - balloonId: 48
+      color: 1
+      gridPosition: {x: -0.5714286, y: 2.6857142}
+      gimmickType: 
+    - balloonId: 49
+      color: 2
+      gridPosition: {x: -0.5714286, y: 3.3714285}
+      gimmickType: 
+    - balloonId: 50
+      color: 1
+      gridPosition: {x: -0.5714286, y: 3.6}
+      gimmickType: 
+    - balloonId: 51
+      color: 0
+      gridPosition: {x: -0.5714286, y: 4.285714}
+      gimmickType: 
+    - balloonId: 52
+      color: 1
+      gridPosition: {x: -0.34285715, y: 0.6285714}
+      gimmickType: 
+    - balloonId: 53
+      color: 2
+      gridPosition: {x: -0.34285715, y: 0.85714287}
+      gimmickType: 
+    - balloonId: 54
+      color: 1
+      gridPosition: {x: -0.34285715, y: 1.5428572}
+      gimmickType: 
+    - balloonId: 55
+      color: 2
+      gridPosition: {x: -0.34285715, y: 2}
+      gimmickType: 
+    - balloonId: 56
+      color: 1
+      gridPosition: {x: -0.34285715, y: 2.2285714}
+      gimmickType: 
+    - balloonId: 57
+      color: 1
+      gridPosition: {x: -0.34285715, y: 2.6857142}
+      gimmickType: 
+    - balloonId: 58
+      color: 2
+      gridPosition: {x: -0.34285715, y: 2.9142857}
+      gimmickType: 
+    - balloonId: 59
+      color: 2
+      gridPosition: {x: -0.34285715, y: 3.142857}
+      gimmickType: 
+    - balloonId: 60
+      color: 2
+      gridPosition: {x: -0.34285715, y: 3.3714285}
+      gimmickType: 
+    - balloonId: 61
+      color: 3
+      gridPosition: {x: -0.34285715, y: 3.6}
+      gimmickType: 
+    - balloonId: 62
+      color: 1
+      gridPosition: {x: -0.34285715, y: 4.5142856}
+      gimmickType: 
+    - balloonId: 63
+      color: 3
+      gridPosition: {x: -0.114285715, y: -0.05714287}
+      gimmickType: 
+    - balloonId: 64
+      color: 0
+      gridPosition: {x: -0.114285715, y: 0.39999998}
+      gimmickType: 
+    - balloonId: 65
+      color: 0
+      gridPosition: {x: -0.114285715, y: 1.3142858}
+      gimmickType: 
+    - balloonId: 66
+      color: 1
+      gridPosition: {x: -0.114285715, y: 2}
+      gimmickType: 
+    - balloonId: 67
+      color: 0
+      gridPosition: {x: -0.114285715, y: 2.2285714}
+      gimmickType: 
+    - balloonId: 68
+      color: 1
+      gridPosition: {x: -0.114285715, y: 2.6857142}
+      gimmickType: 
+    - balloonId: 69
+      color: 2
+      gridPosition: {x: -0.114285715, y: 3.142857}
+      gimmickType: 
+    - balloonId: 70
+      color: 1
+      gridPosition: {x: -0.114285715, y: 3.6}
+      gimmickType: 
+    - balloonId: 71
+      color: 3
+      gridPosition: {x: -0.114285715, y: 4.0571427}
+      gimmickType: 
+    - balloonId: 72
+      color: 1
+      gridPosition: {x: 0.114285715, y: 0.39999998}
+      gimmickType: 
+    - balloonId: 73
+      color: 1
+      gridPosition: {x: 0.114285715, y: 0.85714287}
+      gimmickType: 
+    - balloonId: 74
+      color: 1
+      gridPosition: {x: 0.114285715, y: 1.0857143}
+      gimmickType: 
+    - balloonId: 75
+      color: 0
+      gridPosition: {x: 0.114285715, y: 1.3142858}
+      gimmickType: 
+    - balloonId: 76
+      color: 0
+      gridPosition: {x: 0.114285715, y: 1.7714286}
+      gimmickType: 
+    - balloonId: 77
+      color: 1
+      gridPosition: {x: 0.114285715, y: 2}
+      gimmickType: 
+    - balloonId: 78
+      color: 2
+      gridPosition: {x: 0.114285715, y: 2.2285714}
+      gimmickType: 
+    - balloonId: 79
+      color: 1
+      gridPosition: {x: 0.114285715, y: 3.3714285}
+      gimmickType: 
+    - balloonId: 80
+      color: 2
+      gridPosition: {x: 0.34285715, y: -0.51428574}
+      gimmickType: 
+    - balloonId: 81
+      color: 0
+      gridPosition: {x: 0.34285715, y: 0.17142856}
+      gimmickType: 
+    - balloonId: 82
+      color: 0
+      gridPosition: {x: 0.34285715, y: 0.6285714}
+      gimmickType: 
+    - balloonId: 83
+      color: 0
+      gridPosition: {x: 0.34285715, y: 0.85714287}
+      gimmickType: 
+    - balloonId: 84
+      color: 1
+      gridPosition: {x: 0.34285715, y: 1.3142858}
+      gimmickType: 
+    - balloonId: 85
+      color: 0
+      gridPosition: {x: 0.34285715, y: 1.5428572}
+      gimmickType: 
+    - balloonId: 86
+      color: 0
+      gridPosition: {x: 0.34285715, y: 2}
+      gimmickType: 
+    - balloonId: 87
+      color: 3
+      gridPosition: {x: 0.34285715, y: 2.4571428}
+      gimmickType: 
+    - balloonId: 88
+      color: 2
+      gridPosition: {x: 0.34285715, y: 3.3714285}
+      gimmickType: 
+    - balloonId: 89
+      color: 1
+      gridPosition: {x: 0.34285715, y: 3.6}
+      gimmickType: 
+    - balloonId: 90
+      color: 2
+      gridPosition: {x: 0.5714286, y: -0.51428574}
+      gimmickType: 
+    - balloonId: 91
+      color: 0
+      gridPosition: {x: 0.5714286, y: -0.05714287}
+      gimmickType: 
+    - balloonId: 92
+      color: 1
+      gridPosition: {x: 0.5714286, y: 0.17142856}
+      gimmickType: 
+    - balloonId: 93
+      color: 1
+      gridPosition: {x: 0.5714286, y: 0.6285714}
+      gimmickType: 
+    - balloonId: 94
+      color: 0
+      gridPosition: {x: 0.5714286, y: 1.3142858}
+      gimmickType: 
+    - balloonId: 95
+      color: 0
+      gridPosition: {x: 0.5714286, y: 1.5428572}
+      gimmickType: 
+    - balloonId: 96
+      color: 0
+      gridPosition: {x: 0.5714286, y: 1.7714286}
+      gimmickType: 
+    - balloonId: 97
+      color: 3
+      gridPosition: {x: 0.5714286, y: 2}
+      gimmickType: 
+    - balloonId: 98
+      color: 0
+      gridPosition: {x: 0.5714286, y: 2.4571428}
+      gimmickType: 
+    - balloonId: 99
+      color: 3
+      gridPosition: {x: 0.5714286, y: 3.142857}
+      gimmickType: 
+    - balloonId: 100
+      color: 2
+      gridPosition: {x: 0.5714286, y: 3.8285713}
+      gimmickType: 
+    - balloonId: 101
+      color: 1
+      gridPosition: {x: 0.5714286, y: 4.0571427}
+      gimmickType: 
+    - balloonId: 102
+      color: 1
+      gridPosition: {x: 0.8, y: 0.39999998}
+      gimmickType: 
+    - balloonId: 103
+      color: 1
+      gridPosition: {x: 0.8, y: 0.85714287}
+      gimmickType: 
+    - balloonId: 104
+      color: 0
+      gridPosition: {x: 0.8, y: 1.3142858}
+      gimmickType: 
+    - balloonId: 105
+      color: 3
+      gridPosition: {x: 0.8, y: 2.2285714}
+      gimmickType: 
+    - balloonId: 106
+      color: 0
+      gridPosition: {x: 0.8, y: 2.4571428}
+      gimmickType: 
+    - balloonId: 107
+      color: 0
+      gridPosition: {x: 0.8, y: 2.6857142}
+      gimmickType: 
+    - balloonId: 108
+      color: 1
+      gridPosition: {x: 0.8, y: 3.142857}
+      gimmickType: 
+    - balloonId: 109
+      color: 2
+      gridPosition: {x: 0.8, y: 4.0571427}
+      gimmickType: 
+    - balloonId: 110
+      color: 2
+      gridPosition: {x: 1.0285715, y: -0.2857143}
+      gimmickType: 
+    - balloonId: 111
+      color: 1
+      gridPosition: {x: 1.0285715, y: 0.85714287}
+      gimmickType: 
+    - balloonId: 112
+      color: 0
+      gridPosition: {x: 1.0285715, y: 1.0857143}
+      gimmickType: 
+    - balloonId: 113
+      color: 3
+      gridPosition: {x: 1.0285715, y: 1.3142858}
+      gimmickType: 
+    - balloonId: 114
+      color: 1
+      gridPosition: {x: 1.0285715, y: 2}
+      gimmickType: 
+    - balloonId: 115
+      color: 1
+      gridPosition: {x: 1.0285715, y: 2.2285714}
+      gimmickType: 
+    - balloonId: 116
+      color: 0
+      gridPosition: {x: 1.0285715, y: 2.6857142}
+      gimmickType: 
+    - balloonId: 117
+      color: 2
+      gridPosition: {x: 1.2571429, y: -0.51428574}
+      gimmickType: 
+    - balloonId: 118
+      color: 3
+      gridPosition: {x: 1.2571429, y: -0.05714287}
+      gimmickType: 
+    - balloonId: 119
+      color: 1
+      gridPosition: {x: 1.2571429, y: 0.39999998}
+      gimmickType: 
+    - balloonId: 120
+      color: 3
+      gridPosition: {x: 1.2571429, y: 0.85714287}
+      gimmickType: 
+    - balloonId: 121
+      color: 1
+      gridPosition: {x: 1.2571429, y: 1.0857143}
+      gimmickType: 
+    - balloonId: 122
+      color: 0
+      gridPosition: {x: 1.2571429, y: 1.5428572}
+      gimmickType: 
+    - balloonId: 123
+      color: 0
+      gridPosition: {x: 1.2571429, y: 2.2285714}
+      gimmickType: 
+    - balloonId: 124
+      color: 0
+      gridPosition: {x: 1.2571429, y: 2.4571428}
+      gimmickType: 
+    - balloonId: 125
+      color: 1
+      gridPosition: {x: 1.2571429, y: 2.6857142}
+      gimmickType: 
+    - balloonId: 126
+      color: 0
+      gridPosition: {x: 1.2571429, y: 2.9142857}
+      gimmickType: 
+    - balloonId: 127
+      color: 1
+      gridPosition: {x: 1.2571429, y: 3.142857}
+      gimmickType: 
+    - balloonId: 128
+      color: 2
+      gridPosition: {x: 1.2571429, y: 3.6}
+      gimmickType: 
+    - balloonId: 129
+      color: 2
+      gridPosition: {x: 1.2571429, y: 3.8285713}
+      gimmickType: 
+    - balloonId: 130
+      color: 1
+      gridPosition: {x: 1.4857143, y: 0.39999998}
+      gimmickType: 
+    - balloonId: 131
+      color: 1
+      gridPosition: {x: 1.4857143, y: 0.6285714}
+      gimmickType: 
+    - balloonId: 132
+      color: 1
+      gridPosition: {x: 1.4857143, y: 0.85714287}
+      gimmickType: 
+    - balloonId: 133
+      color: 0
+      gridPosition: {x: 1.4857143, y: 1.3142858}
+      gimmickType: 
+    - balloonId: 134
+      color: 0
+      gridPosition: {x: 1.4857143, y: 1.5428572}
+      gimmickType: 
+    - balloonId: 135
+      color: 0
+      gridPosition: {x: 1.4857143, y: 1.7714286}
+      gimmickType: 
+    - balloonId: 136
+      color: 0
+      gridPosition: {x: 1.4857143, y: 2.2285714}
+      gimmickType: 
+    - balloonId: 137
+      color: 1
+      gridPosition: {x: 1.4857143, y: 3.142857}
+      gimmickType: 
+    - balloonId: 138
+      color: 1
+      gridPosition: {x: 1.4857143, y: 3.3714285}
+      gimmickType: 
+    - balloonId: 139
+      color: 0
+      gridPosition: {x: 1.7142857, y: 1.0857143}
+      gimmickType: 
+    - balloonId: 140
+      color: 0
+      gridPosition: {x: 1.7142857, y: 1.3142858}
+      gimmickType: 
+    - balloonId: 141
+      color: 0
+      gridPosition: {x: 1.7142857, y: 1.5428572}
+      gimmickType: 
+    - balloonId: 142
+      color: 0
+      gridPosition: {x: 1.7142857, y: 1.7714286}
+      gimmickType: 
+    - balloonId: 143
+      color: 1
+      gridPosition: {x: 1.7142857, y: 3.142857}
+      gimmickType: 
+    - balloonId: 144
+      color: 0
+      gridPosition: {x: 1.7142857, y: 3.6}
+      gimmickType: 
+    - balloonId: 145
+      color: 2
+      gridPosition: {x: 1.7142857, y: 3.8285713}
+      gimmickType: 
+    - balloonId: 146
+      color: 3
+      gridPosition: {x: 1.9428571, y: 0.17142856}
+      gimmickType: 
+    - balloonId: 147
+      color: 0
+      gridPosition: {x: 1.9428571, y: 2.4571428}
+      gimmickType: 
+    - balloonId: 148
+      color: 2
+      gridPosition: {x: 1.9428571, y: 3.3714285}
+      gimmickType: 
+    - balloonId: 149
+      color: 2
+      gridPosition: {x: 1.9428571, y: 3.6}
+      gimmickType: 
+    - balloonId: 150
+      color: 2
+      gridPosition: {x: 2.1714287, y: -0.05714287}
+      gimmickType: 
+    - balloonId: 151
+      color: 2
+      gridPosition: {x: 2.1714287, y: 0.6285714}
+      gimmickType: 
+    - balloonId: 152
+      color: 3
+      gridPosition: {x: 2.1714287, y: 0.85714287}
+      gimmickType: 
+    - balloonId: 153
+      color: 2
+      gridPosition: {x: 2.1714287, y: 1.0857143}
+      gimmickType: 
+    - balloonId: 154
+      color: 2
+      gridPosition: {x: 2.1714287, y: 2}
+      gimmickType: 
+    - balloonId: 155
+      color: 0
+      gridPosition: {x: 2.1714287, y: 2.2285714}
+      gimmickType: 
+    - balloonId: 156
+      color: 1
+      gridPosition: {x: 2.1714287, y: 3.142857}
+      gimmickType: 
+    - balloonId: 157
+      color: 3
+      gridPosition: {x: 2.1714287, y: 4.285714}
+      gimmickType: 
+    - balloonId: 158
+      color: 2
+      gridPosition: {x: 2.4, y: 1.7714286}
+      gimmickType: 
+    - balloonId: 159
+      color: 2
+      gridPosition: {x: 2.4, y: 2.4571428}
+      gimmickType: 
+    - balloonId: 160
+      color: 2
+      gridPosition: {x: 2.4, y: 2.9142857}
+      gimmickType: 
+    - balloonId: 161
+      color: 3
+      gridPosition: {x: 2.4, y: 4.285714}
+      gimmickType: 
+    - balloonId: 162
+      color: 2
+      gridPosition: {x: 2.6285715, y: 1.5428572}
       gimmickType: 
     rail:
       waypoints:
-      - {x: -4.7, y: 0.5, z: -2.7}
-      - {x: -1.5979998, y: 0.5, z: -2.7}
-      - {x: 1.598, y: 0.5, z: -2.7}
-      - {x: 4.7, y: 0.5, z: -2.7}
-      - {x: 4.7, y: 0.5, z: 0.40200004}
-      - {x: 4.7, y: 0.5, z: 3.598}
-      - {x: 4.7, y: 0.5, z: 6.7}
-      - {x: 1.5979998, y: 0.5, z: 6.7}
-      - {x: -1.598, y: 0.5, z: 6.7}
-      - {x: -4.7, y: 0.5, z: 6.7}
-      - {x: -4.7, y: 0.5, z: 3.5979998}
-      - {x: -4.7, y: 0.5, z: 0.40199974}
+      - {x: -5.5, y: 0.5, z: -3.5}
+      - {x: -1.8699999, y: 0.5, z: -3.5}
+      - {x: 1.8700001, y: 0.5, z: -3.5}
+      - {x: 5.5, y: 0.5, z: -3.5}
+      - {x: 5.5, y: 0.5, z: 0.13000014}
+      - {x: 5.5, y: 0.5, z: 3.8700001}
+      - {x: 5.5, y: 0.5, z: 7.5}
+      - {x: 1.8699999, y: 0.5, z: 7.5}
+      - {x: -1.8700001, y: 0.5, z: 7.5}
+      - {x: -5.5, y: 0.5, z: 7.5}
+      - {x: -5.5, y: 0.5, z: 3.87}
+      - {x: -5.5, y: 0.5, z: 0.12999982}
       slotCount: 200
       visualType: 3
       deployPoints:
-      - {x: 0, y: 0.5, z: -3.391892}
+      - {x: -3.162857, y: 0.5, z: -3.3857143}
+      - {x: -1.0542856, y: 0.5, z: -3.3857143}
+      - {x: 1.054286, y: 0.5, z: -3.3857143}
+      - {x: 3.1628573, y: 0.5, z: -3.3857143}
       smoothCorners: 1
       cornerRadius: 1
     conveyorPositions: []
-    gridCols: 37
-    gridRows: 37
-    star1Threshold: 1700
-    star2Threshold: 2550
-    star3Threshold: 3740
+    gridCols: 34
+    gridRows: 35
+    star1Threshold: 16300
+    star2Threshold: 24450
+    star3Threshold: 35860
   - levelId: 2
     packageId: 1
     positionInPackage: 2
+    railCapacity: 0
     numColors: 2
     balloonCount: 36
     balloonScale: 0.85
@@ -348,6 +937,7 @@ MonoBehaviour:
   - levelId: 3
     packageId: 1
     positionInPackage: 3
+    railCapacity: 0
     numColors: 2
     balloonCount: 49
     balloonScale: 0.75555557
@@ -610,6 +1200,7 @@ MonoBehaviour:
   - levelId: 4
     packageId: 1
     positionInPackage: 4
+    railCapacity: 0
     numColors: 2
     balloonCount: 45
     balloonScale: 0.75555557
@@ -860,6 +1451,7 @@ MonoBehaviour:
   - levelId: 5
     packageId: 1
     positionInPackage: 5
+    railCapacity: 0
     numColors: 2
     balloonCount: 54
     balloonScale: 0.68
@@ -1146,6 +1738,7 @@ MonoBehaviour:
   - levelId: 6
     packageId: 1
     positionInPackage: 6
+    railCapacity: 0
     numColors: 3
     balloonCount: 54
     balloonScale: 0.68
@@ -1436,6 +2029,7 @@ MonoBehaviour:
   - levelId: 7
     packageId: 1
     positionInPackage: 7
+    railCapacity: 0
     numColors: 3
     balloonCount: 61
     balloonScale: 0.6181818
@@ -1754,6 +2348,7 @@ MonoBehaviour:
   - levelId: 8
     packageId: 1
     positionInPackage: 8
+    railCapacity: 0
     numColors: 3
     balloonCount: 61
     balloonScale: 0.6181818
@@ -2076,6 +2671,7 @@ MonoBehaviour:
   - levelId: 9
     packageId: 1
     positionInPackage: 9
+    railCapacity: 0
     numColors: 3
     balloonCount: 72
     balloonScale: 0.5666667
@@ -2442,6 +3038,7 @@ MonoBehaviour:
   - levelId: 10
     packageId: 1
     positionInPackage: 10
+    railCapacity: 0
     numColors: 3
     balloonCount: 72
     balloonScale: 0.5666667
@@ -2812,6 +3409,7 @@ MonoBehaviour:
   - levelId: 11
     packageId: 1
     positionInPackage: 11
+    railCapacity: 0
     numColors: 3
     balloonCount: 77
     balloonScale: 0.5666667
@@ -3203,6 +3801,7 @@ MonoBehaviour:
   - levelId: 12
     packageId: 1
     positionInPackage: 12
+    railCapacity: 0
     numColors: 3
     balloonCount: 133
     balloonScale: 0.52307695
@@ -3822,6 +4421,7 @@ MonoBehaviour:
   - levelId: 13
     packageId: 1
     positionInPackage: 13
+    railCapacity: 0
     numColors: 3
     balloonCount: 88
     balloonScale: 0.52307695
@@ -4261,6 +4861,7 @@ MonoBehaviour:
   - levelId: 14
     packageId: 1
     positionInPackage: 14
+    railCapacity: 0
     numColors: 4
     balloonCount: 104
     balloonScale: 0.48571432
@@ -4768,6 +5369,7 @@ MonoBehaviour:
   - levelId: 15
     packageId: 1
     positionInPackage: 15
+    railCapacity: 0
     numColors: 4
     balloonCount: 132
     balloonScale: 0.48571432
@@ -5387,6 +5989,7 @@ MonoBehaviour:
   - levelId: 16
     packageId: 1
     positionInPackage: 16
+    railCapacity: 0
     numColors: 4
     balloonCount: 144
     balloonScale: 0.45333338
@@ -6058,6 +6661,7 @@ MonoBehaviour:
   - levelId: 17
     packageId: 1
     positionInPackage: 17
+    railCapacity: 0
     numColors: 4
     balloonCount: 121
     balloonScale: 0.45333338
@@ -6637,6 +7241,7 @@ MonoBehaviour:
   - levelId: 18
     packageId: 1
     positionInPackage: 18
+    railCapacity: 0
     numColors: 4
     balloonCount: 192
     balloonScale: 0.425
@@ -7504,6 +8109,7 @@ MonoBehaviour:
   - levelId: 19
     packageId: 1
     positionInPackage: 19
+    railCapacity: 0
     numColors: 4
     balloonCount: 156
     balloonScale: 0.425
@@ -8227,6 +8833,7 @@ MonoBehaviour:
   - levelId: 20
     packageId: 1
     positionInPackage: 20
+    railCapacity: 0
     numColors: 4
     balloonCount: 169
     balloonScale: 0.4
@@ -9006,6 +9613,7 @@ MonoBehaviour:
   - levelId: 21
     packageId: 2
     positionInPackage: 1
+    railCapacity: 0
     numColors: 4
     balloonCount: 225
     balloonScale: 0.4
@@ -10010,6 +10618,7 @@ MonoBehaviour:
   - levelId: 22
     packageId: 2
     positionInPackage: 2
+    railCapacity: 0
     numColors: 5
     balloonCount: 168
     balloonScale: 0.4
@@ -10790,6 +11399,7 @@ MonoBehaviour:
   - levelId: 23
     packageId: 2
     positionInPackage: 3
+    railCapacity: 0
     numColors: 5
     balloonCount: 144
     balloonScale: 0.37777779
@@ -11474,6 +12084,7 @@ MonoBehaviour:
   - levelId: 24
     packageId: 2
     positionInPackage: 4
+    railCapacity: 0
     numColors: 5
     balloonCount: 224
     balloonScale: 0.37777779
@@ -12482,6 +13093,7 @@ MonoBehaviour:
   - levelId: 25
     packageId: 2
     positionInPackage: 5
+    railCapacity: 0
     numColors: 5
     balloonCount: 192
     balloonScale: 0.35789475
@@ -13362,6 +13974,7 @@ MonoBehaviour:
   - levelId: 26
     packageId: 2
     positionInPackage: 6
+    railCapacity: 0
     numColors: 5
     balloonCount: 169
     balloonScale: 0.35789475
@@ -14154,6 +14767,7 @@ MonoBehaviour:
   - levelId: 27
     packageId: 2
     positionInPackage: 7
+    railCapacity: 0
     numColors: 5
     balloonCount: 300
     balloonScale: 0.34
@@ -15470,6 +16084,7 @@ MonoBehaviour:
   - levelId: 28
     packageId: 2
     positionInPackage: 8
+    railCapacity: 0
     numColors: 5
     balloonCount: 256
     balloonScale: 0.34
@@ -16614,6 +17229,7 @@ MonoBehaviour:
   - levelId: 29
     packageId: 2
     positionInPackage: 9
+    railCapacity: 0
     numColors: 5
     balloonCount: 225
     balloonScale: 0.32380953
@@ -17634,6 +18250,7 @@ MonoBehaviour:
   - levelId: 30
     packageId: 2
     positionInPackage: 10
+    railCapacity: 0
     numColors: 6
     balloonCount: 341
     balloonScale: 0.32380953
@@ -19122,6 +19739,7 @@ MonoBehaviour:
   - levelId: 31
     packageId: 2
     positionInPackage: 11
+    railCapacity: 0
     numColors: 6
     balloonCount: 309
     balloonScale: 0.32380953
@@ -20483,6 +21101,7 @@ MonoBehaviour:
   - levelId: 32
     packageId: 2
     positionInPackage: 12
+    railCapacity: 0
     numColors: 6
     balloonCount: 256
     balloonScale: 0.3090909
@@ -21636,6 +22255,7 @@ MonoBehaviour:
   - levelId: 33
     packageId: 2
     positionInPackage: 13
+    railCapacity: 0
     numColors: 6
     balloonCount: 340
     balloonScale: 0.3090909
@@ -23125,6 +23745,7 @@ MonoBehaviour:
   - levelId: 34
     packageId: 2
     positionInPackage: 14
+    railCapacity: 0
     numColors: 6
     balloonCount: 377
     balloonScale: 0.29565218
@@ -24766,6 +25387,7 @@ MonoBehaviour:
   - levelId: 35
     packageId: 2
     positionInPackage: 15
+    railCapacity: 0
     numColors: 6
     balloonCount: 289
     balloonScale: 0.29565218
@@ -26055,6 +26677,7 @@ MonoBehaviour:
   - levelId: 36
     packageId: 2
     positionInPackage: 16
+    railCapacity: 0
     numColors: 6
     balloonCount: 432
     balloonScale: 0.28333336
@@ -27920,6 +28543,7 @@ MonoBehaviour:
   - levelId: 37
     packageId: 2
     positionInPackage: 17
+    railCapacity: 0
     numColors: 6
     balloonCount: 408
     balloonScale: 0.28333336
@@ -29689,6 +30313,7 @@ MonoBehaviour:
   - levelId: 38
     packageId: 2
     positionInPackage: 18
+    railCapacity: 0
     numColors: 7
     balloonCount: 289
     balloonScale: 0.272
@@ -30986,6 +31611,7 @@ MonoBehaviour:
   - levelId: 39
     packageId: 2
     positionInPackage: 19
+    railCapacity: 0
     numColors: 7
     balloonCount: 481
     balloonScale: 0.272
@@ -33051,6 +33677,7 @@ MonoBehaviour:
   - levelId: 40
     packageId: 2
     positionInPackage: 20
+    railCapacity: 0
     numColors: 7
     balloonCount: 484
     balloonScale: 0.26153848
@@ -35132,6 +35759,7 @@ MonoBehaviour:
   - levelId: 41
     packageId: 3
     positionInPackage: 1
+    railCapacity: 0
     numColors: 7
     balloonCount: 324
     balloonScale: 0.26153848
@@ -36574,6 +37202,7 @@ MonoBehaviour:
   - levelId: 42
     packageId: 3
     positionInPackage: 2
+    railCapacity: 0
     numColors: 7
     balloonCount: 338
     balloonScale: 0.26153848
@@ -38076,6 +38705,7 @@ MonoBehaviour:
   - levelId: 43
     packageId: 3
     positionInPackage: 3
+    railCapacity: 0
     numColors: 7
     balloonCount: 521
     balloonScale: 0.25185186
@@ -40310,6 +40940,7 @@ MonoBehaviour:
   - levelId: 44
     packageId: 3
     positionInPackage: 4
+    railCapacity: 0
     numColors: 7
     balloonCount: 361
     balloonScale: 0.25185186
@@ -41908,6 +42539,7 @@ MonoBehaviour:
   - levelId: 45
     packageId: 3
     positionInPackage: 5
+    railCapacity: 0
     numColors: 7
     balloonCount: 392
     balloonScale: 0.24285716
@@ -43630,6 +44262,7 @@ MonoBehaviour:
   - levelId: 46
     packageId: 3
     positionInPackage: 6
+    railCapacity: 0
     numColors: 8
     balloonCount: 560
     balloonScale: 0.24285716
@@ -46028,6 +46661,7 @@ MonoBehaviour:
   - levelId: 47
     packageId: 3
     positionInPackage: 7
+    railCapacity: 0
     numColors: 8
     balloonCount: 441
     balloonScale: 0.23448277
@@ -47950,6 +48584,7 @@ MonoBehaviour:
   - levelId: 48
     packageId: 3
     positionInPackage: 8
+    railCapacity: 0
     numColors: 8
     balloonCount: 421
     balloonScale: 0.23448277
@@ -49796,6 +50431,7 @@ MonoBehaviour:
   - levelId: 49
     packageId: 3
     positionInPackage: 9
+    railCapacity: 0
     numColors: 8
     balloonCount: 648
     balloonScale: 0.22666669
@@ -52550,6 +53186,7 @@ MonoBehaviour:
   - levelId: 50
     packageId: 3
     positionInPackage: 10
+    railCapacity: 0
     numColors: 8
     balloonCount: 400
     balloonScale: 0.22666669
