@@ -37,19 +37,20 @@ namespace BalloonFlow
     {
         #region Constants
 
-        // IAP product IDs must match store listings.
-        private const string ProdCoins500    = "coins_500";
-        private const string ProdCoins1200   = "coins_1200";
-        private const string ProdCoins3000   = "coins_3000";
-        private const string ProdCoins8000   = "coins_8000";
-        private const string ProdCoins20000  = "coins_20000";
-        private const string ProdStarterPack = "starter_pack";
-        private const string ProdWeekend     = "weekend_bundle";
+        // IAP product IDs — 레퍼런스 게임 구조 (골드팩 6종 + 번들 3종 + 기타)
+        private const string ProdGold1K      = "gold_1k";
+        private const string ProdGold5K      = "gold_5k";
+        private const string ProdGold10K     = "gold_10k";
+        private const string ProdGold25K     = "gold_25k";
+        private const string ProdGold50K     = "gold_50k";
+        private const string ProdGold100K    = "gold_100k";
+        private const string ProdBundleSmall = "bundle_small";
+        private const string ProdBundleMed   = "bundle_medium";
+        private const string ProdBundleUltra = "bundle_ultra";
         private const string ProdNoAds       = "remove_ads";
         private const string ProdHeartRefill = "heart_refill";
 
         // PlayerPrefs key for one-time purchase flags
-        private const string PrefsStarterOwned = "BalloonFlow_StarterOwned";
         private const string PrefsNoAdsOwned   = "BalloonFlow_NoAdsOwned";
 
         private const string PopupShopId = "popup_shop";
@@ -192,35 +193,33 @@ namespace BalloonFlow
         {
             _products.Clear();
 
-            // ── Coin packs (IAP) ──
-            _products.Add(MakeIAP(ProdCoins500,   "500 Coins",    "Small coin pack",           "$0.99",  "coin_pack"));
-            _products.Add(MakeIAP(ProdCoins1200,  "1200 Coins",   "Medium coin pack",          "$1.99",  "coin_pack"));
-            _products.Add(MakeIAP(ProdCoins3000,  "3000 Coins",   "Large coin pack",           "$4.99",  "coin_pack"));
-            _products.Add(MakeIAP(ProdCoins8000,  "8000 Coins",   "Extra-large coin pack",     "$9.99",  "coin_pack"));
-            _products.Add(MakeIAP(ProdCoins20000, "20000 Coins",  "Mega coin pack",            "$19.99", "coin_pack"));
+            // ── 골드 팩 6종 (IAP, 레퍼런스 게임 구조) ──
+            _products.Add(MakeIAP(ProdGold1K,   "1,000 골드",    "소형 골드 팩",     "KRW 2,751",   "coin_pack"));
+            _products.Add(MakeIAP(ProdGold5K,   "5,000 골드",    "중형 골드 팩",     "KRW 11,007",  "coin_pack"));
+            _products.Add(MakeIAP(ProdGold10K,  "10,000 골드",   "대형 골드 팩",     "KRW 20,638",  "coin_pack"));
+            _products.Add(MakeIAP(ProdGold25K,  "25,000 골드",   "특대 골드 팩",     "KRW 41,277",  "coin_pack"));
+            _products.Add(MakeIAP(ProdGold50K,  "50,000 골드",   "메가 골드 팩",     "KRW 75,675",  "coin_pack"));
+            _products.Add(MakeIAP(ProdGold100K, "100,000 골드",  "울트라 골드 팩",   "KRW 137,591", "coin_pack"));
 
-            // ── Bundles (IAP, one-time purchase gated) ──
-            if (!PlayerPrefs.HasKey(PrefsStarterOwned))
-            {
-                _products.Add(MakeIAP(ProdStarterPack, "Starter Pack", "One-time welcome bundle", "$2.99", "bundle"));
-            }
+            // ── 번들 3종 (IAP, 골드+부스터+무한하트) ──
+            _products.Add(MakeIAP(ProdBundleSmall, "소형 번들",   "골드 5,000 + 부스터 x1 + 무한하트 2시간", "KRW 13,759", "bundle"));
+            _products.Add(MakeIAP(ProdBundleMed,   "중형 번들",   "골드 10,000 + 부스터 x2 + 무한하트 2시간", "KRW 27,518", "bundle"));
+            _products.Add(MakeIAP(ProdBundleUltra, "울트라 번들", "골드 25,000 + 부스터 x5 + 무한하트 6시간", "KRW 59,000", "bundle"));
 
-            _products.Add(MakeIAP(ProdWeekend, "Weekend Bundle", "Limited-time value bundle", "$4.99", "bundle"));
-
-            // ── Ad removal (IAP, non-consumable) ──
+            // ── 광고 제거 (IAP, non-consumable) ──
             if (!PlayerPrefs.HasKey(PrefsNoAdsOwned))
             {
-                _products.Add(MakeIAP(ProdNoAds, "Remove Ads", "Play without ads forever", "$3.99", "ad_removal"));
+                _products.Add(MakeIAP(ProdNoAds, "광고 제거", "영구 광고 제거", "KRW 5,500", "ad_removal"));
             }
 
-            // ── Heart refill (IAP) ──
-            _products.Add(MakeIAP(ProdHeartRefill, "Heart Refill", "Refill all lives instantly", "$0.99", "heart"));
+            // ── 하트 충전 (IAP) ──
+            _products.Add(MakeIAP(ProdHeartRefill, "하트 충전", "하트 즉시 충전", "KRW 1,100", "heart"));
 
-            // ── Boosters (4 types, all coin-based) — design: 아웃게임디렉션 §부스터 ──
-            _products.Add(MakeCoin(BoosterManager.EXTRA_TRAY,   "Extra Tray",    "+1 rail tray slot (overflow insurance)",          300,  "booster"));
-            _products.Add(MakeCoin(BoosterManager.SHUFFLE,      "Shuffle",       "Randomize queue order",                         1500,  "booster"));
-            _products.Add(MakeCoin(BoosterManager.SELECT_TOOL,  "Select Tool",   "Pick any queue container (ignore order)",       1900,  "booster"));
-            _products.Add(MakeCoin(BoosterManager.COLOR_REMOVE, "Color Remove",  "Remove all of one color (field+queue+rail)",    2900,  "booster"));
+            // ── 부스터 4종 (코인 구매) ──
+            _products.Add(MakeCoin(BoosterManager.EXTRA_TRAY,   "Extra Tray",    "+1 레일 슬롯",          300,  "booster"));
+            _products.Add(MakeCoin(BoosterManager.SHUFFLE,      "Shuffle",       "대기열 순서 섞기",       1500, "booster"));
+            _products.Add(MakeCoin(BoosterManager.SELECT_TOOL,  "Select Tool",   "원하는 홀더 선택",       1900, "booster"));
+            _products.Add(MakeCoin(BoosterManager.COLOR_REMOVE, "Color Remove",  "한 색상 전부 제거",      2900, "booster"));
         }
 
         private ShopProduct MakeIAP(string id, string name, string desc, string price, string cat)
@@ -318,27 +317,45 @@ namespace BalloonFlow
 
             switch (productId)
             {
-                case ProdCoins500:   CurrencyManager.Instance.AddCoins(500, CurrencyManager.CoinSource.IAP);   break;
-                case ProdCoins1200:  CurrencyManager.Instance.AddCoins(1200, CurrencyManager.CoinSource.IAP);  break;
-                case ProdCoins3000:  CurrencyManager.Instance.AddCoins(3000, CurrencyManager.CoinSource.IAP);  break;
-                case ProdCoins8000:  CurrencyManager.Instance.AddCoins(8000, CurrencyManager.CoinSource.IAP);  break;
-                case ProdCoins20000: CurrencyManager.Instance.AddCoins(20000, CurrencyManager.CoinSource.IAP); break;
-                case ProdStarterPack:
-                    CurrencyManager.Instance.AddCoins(500, CurrencyManager.CoinSource.IAP);
-                    BoosterManager.Instance?.AddBooster(BoosterManager.SHUFFLE, 1);
-                    PlayerPrefs.SetInt(PrefsStarterOwned, 1);
-                    PlayerPrefs.Save();
-                    break;
-                case ProdWeekend:
-                    CurrencyManager.Instance.AddCoins(1200, CurrencyManager.CoinSource.IAP);
+                // 골드 팩 6종
+                case ProdGold1K:   CurrencyManager.Instance.AddCoins(1000,   CurrencyManager.CoinSource.IAP); break;
+                case ProdGold5K:   CurrencyManager.Instance.AddCoins(5000,   CurrencyManager.CoinSource.IAP); break;
+                case ProdGold10K:  CurrencyManager.Instance.AddCoins(10000,  CurrencyManager.CoinSource.IAP); break;
+                case ProdGold25K:  CurrencyManager.Instance.AddCoins(25000,  CurrencyManager.CoinSource.IAP); break;
+                case ProdGold50K:  CurrencyManager.Instance.AddCoins(50000,  CurrencyManager.CoinSource.IAP); break;
+                case ProdGold100K: CurrencyManager.Instance.AddCoins(100000, CurrencyManager.CoinSource.IAP); break;
+
+                // 번들 3종 (골드 + 부스터 전종 x배수 + 무한하트)
+                case ProdBundleSmall:
+                    CurrencyManager.Instance.AddCoins(5000, CurrencyManager.CoinSource.IAP);
                     BoosterManager.Instance?.AddBooster(BoosterManager.EXTRA_TRAY, 1);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.SHUFFLE, 1);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.SELECT_TOOL, 1);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.COLOR_REMOVE, 1);
+                    if (LifeManager.HasInstance) LifeManager.Instance.ActivateInfiniteHearts(2f * 3600f); // 2시간
                     break;
+                case ProdBundleMed:
+                    CurrencyManager.Instance.AddCoins(10000, CurrencyManager.CoinSource.IAP);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.EXTRA_TRAY, 2);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.SHUFFLE, 2);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.SELECT_TOOL, 2);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.COLOR_REMOVE, 2);
+                    if (LifeManager.HasInstance) LifeManager.Instance.ActivateInfiniteHearts(2f * 3600f); // 2시간
+                    break;
+                case ProdBundleUltra:
+                    CurrencyManager.Instance.AddCoins(25000, CurrencyManager.CoinSource.IAP);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.EXTRA_TRAY, 5);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.SHUFFLE, 5);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.SELECT_TOOL, 5);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.COLOR_REMOVE, 5);
+                    if (LifeManager.HasInstance) LifeManager.Instance.ActivateInfiniteHearts(6f * 3600f); // 6시간
+                    break;
+
                 case ProdNoAds:
                     PlayerPrefs.SetInt(PrefsNoAdsOwned, 1);
                     PlayerPrefs.Save();
                     break;
                 case ProdHeartRefill:
-                    // Life refill routed to CurrencyManager or future LifeManager.
                     EventBus.Publish(new OnLifeChanged { currentLives = 5, maxLives = 5 });
                     break;
             }

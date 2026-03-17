@@ -925,7 +925,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &2783215289313258933
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1234,13 +1234,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.UIHud
   _settingsButton: {fileID: 5973407300119521768}
-  _levelText: {fileID: 0}
-  _goldText: {fileID: 0}
+  _levelText: {fileID: 3719231176809067043}
+  _goldText: {fileID: 2190488200422484713}
   _goldPlusButton: {fileID: 8107426694945993377}
-  _scoreText: {fileID: 4154206684685771174}
-  _remainingText: {fileID: 4210167298875040759}
   _holderCountText: {fileID: 3862870131493302755}
-  _moveCountText: {fileID: 0}
 --- !u!1 &7478134898791050941
 GameObject:
   m_ObjectHideFlags: 0
