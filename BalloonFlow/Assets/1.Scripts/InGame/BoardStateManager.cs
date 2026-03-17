@@ -44,7 +44,8 @@ namespace BalloonFlow
         private int _remainingBalloons;
         private int _currentLevelId;
         private float _failGraceDelay = 1.5f;
-        private float _failOccupancyThreshold = 0.995f;
+        // Design ref: 실패 조건 = "허용량-1개" (capacity - 1, 정수 기준)
+        // 이전: float 0.995f → capacity 50에서 1개 차이 발생. 정수 비교로 변경.
 
         // 6-stage gauge
         private GaugeStage _currentGaugeStage = GaugeStage.Safe;
@@ -78,7 +79,6 @@ namespace BalloonFlow
             if (GameManager.HasInstance)
             {
                 _failGraceDelay = GameManager.Instance.Board.failGraceDelay;
-                _failOccupancyThreshold = GameManager.Instance.Board.failOccupancyThreshold;
             }
         }
 
@@ -89,6 +89,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnBalloonSpawned>(HandleBalloonSpawned);
             EventBus.Subscribe<OnRailOccupancyChanged>(HandleRailOccupancy);
             EventBus.Subscribe<OnAllHoldersEmpty>(HandleAllHoldersEmpty);
+            EventBus.Subscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
         private void OnDisable()
@@ -98,6 +99,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnBalloonSpawned>(HandleBalloonSpawned);
             EventBus.Unsubscribe<OnRailOccupancyChanged>(HandleRailOccupancy);
             EventBus.Unsubscribe<OnAllHoldersEmpty>(HandleAllHoldersEmpty);
+            EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
         private void Update()
@@ -107,8 +109,9 @@ namespace BalloonFlow
             // Grace delay timer for rail overflow fail
             if (_isCritical && !_failConfirmed)
             {
-                // Re-check: has occupancy dropped below critical?
-                if (RailManager.HasInstance && RailManager.Instance.Occupancy < _failOccupancyThreshold)
+                // Re-check: has occupancy dropped below capacity-1?
+                if (RailManager.HasInstance &&
+                    RailManager.Instance.OccupiedCount < RailManager.Instance.SlotCount - 1)
                 {
                     // Recovered!
                     _isCritical = false;
@@ -185,11 +188,12 @@ namespace BalloonFlow
         /// </summary>
         public FailResult CheckFailCondition()
         {
-            // Condition: Rail overflow — 99.5%+ occupancy + no outermost match
+            // Condition: Rail overflow — capacity-1 (정수 비교) + no outermost match
             if (RailManager.HasInstance)
             {
-                float occupancy = RailManager.Instance.Occupancy;
-                if (occupancy >= _failOccupancyThreshold && !HasOutermostMatch())
+                int occupied = RailManager.Instance.OccupiedCount;
+                int capacity = RailManager.Instance.SlotCount;
+                if (occupied >= capacity - 1 && !HasOutermostMatch())
                 {
                     return new FailResult
                     {
@@ -263,8 +267,8 @@ namespace BalloonFlow
         {
             if (_currentState != BoardState.Playing) return;
 
-            // Evaluate 6-stage gauge
-            GaugeStage newStage = EvaluateGaugeStage(evt.occupancy);
+            // Evaluate 6-stage gauge (with integer-based Fail check)
+            GaugeStage newStage = EvaluateGaugeStageWithFail(evt.occupancy, evt.activeDarts, evt.totalSlots);
             if (newStage != _currentGaugeStage)
             {
                 GaugeStage prevStage = _currentGaugeStage;
@@ -278,7 +282,10 @@ namespace BalloonFlow
                 });
             }
 
-            if (evt.occupancy >= _failOccupancyThreshold)
+            // Fail trigger: integer-based "capacity - 1" check (Design ref: 레일초과_코어메카닉_명세)
+            bool atFailThreshold = evt.activeDarts >= evt.totalSlots - 1;
+
+            if (atFailThreshold)
             {
                 // Enter critical check
                 bool hasMatch = HasOutermostMatch();
@@ -309,12 +316,24 @@ namespace BalloonFlow
 
         private GaugeStage EvaluateGaugeStage(float occupancy)
         {
-            if (occupancy >= _failOccupancyThreshold) return GaugeStage.Fail;
+            // Fail stage uses integer check (capacity-1) — see HandleRailOccupancy
+            // Here we only check ratio-based visual stages (Safe~Critical)
             if (occupancy >= THRESHOLD_CRITICAL)      return GaugeStage.Critical;
             if (occupancy >= THRESHOLD_WARNING)        return GaugeStage.Warning;
             if (occupancy >= THRESHOLD_NORMAL_HIGH)    return GaugeStage.NormalHigh;
             if (occupancy >= THRESHOLD_CAUTION)        return GaugeStage.Caution;
             return GaugeStage.Safe;
+        }
+
+        /// <summary>
+        /// Integer-based gauge stage evaluation including Fail.
+        /// Used when activeDarts and totalSlots are available.
+        /// </summary>
+        private GaugeStage EvaluateGaugeStageWithFail(float occupancy, int activeDarts, int totalSlots)
+        {
+            // Design: Fail = capacity-1 (정수 비교)
+            if (totalSlots > 0 && activeDarts >= totalSlots - 1) return GaugeStage.Fail;
+            return EvaluateGaugeStage(occupancy);
         }
 
         private void HandleAllHoldersEmpty(OnAllHoldersEmpty evt)
@@ -473,6 +492,30 @@ namespace BalloonFlow
             Debug.Log($"[BoardStateManager] Board failed! Level={_currentLevelId}, Reason={reasonText}");
         }
 
+        private void HandleContinueApplied(OnContinueApplied evt)
+        {
+            // Resume board after continue — reset fail state so game can detect next fail/clear
+            _currentState = BoardState.Playing;
+            _isCritical = false;
+            _criticalTimer = 0f;
+            _failConfirmed = false;
+
+            // Re-evaluate gauge based on current occupancy
+            if (RailManager.HasInstance)
+            {
+                int occupied = RailManager.Instance.OccupiedCount;
+                int total = RailManager.Instance.SlotCount;
+                float ratio = total > 0 ? (float)occupied / total : 0f;
+                _currentGaugeStage = EvaluateGaugeStage(ratio);
+            }
+            else
+            {
+                _currentGaugeStage = GaugeStage.Safe;
+            }
+
+            Debug.Log($"[BoardStateManager] Continue applied — board resumed. State=Playing, Gauge={_currentGaugeStage}");
+        }
+
         private void PublishBoardStateChanged()
         {
             EventBus.Publish(new OnBoardStateChanged
@@ -499,7 +542,7 @@ namespace BalloonFlow
     {
         None,
         NoMovesLeft,
-        RailOverflow // 레일 점유율 99.5%+ & 최외곽 매칭 불가 & 1.5s grace
+        RailOverflow // 레일 capacity-1개 이상 & 최외곽 매칭 불가 & 1.5s grace
     }
 
     public struct FailResult

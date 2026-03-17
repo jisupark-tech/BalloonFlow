@@ -159,7 +159,14 @@ namespace BalloonFlow
                 Debug.Log($"[ContinueHandler] Removed {removed} darts from rail (target: {dartsToRemove}).");
             }
 
-            // 2) 제거된 다트와 매칭되는 필드 풍선 동시 제거
+            // 2) 대기 중인 보관함은 원래 자리(큐)로 복귀
+            // Design ref: "대기 중인 보관함은 원래 자리(큐)로 복귀"
+            if (HolderManager.HasInstance)
+            {
+                ReturnActiveHoldersToQueue();
+            }
+
+            // 3) 제거된 다트와 매칭되는 필드 풍선 동시 제거
             //    → PopProcessor가 OnDartsRemovedForContinue 이벤트를 구독하여 처리
             EventBus.Publish(new OnContinueApplied
             {
@@ -167,11 +174,42 @@ namespace BalloonFlow
                 levelId = _currentLevelId
             });
 
-            // 3) 보드 상태 리셋하여 게임플레이 재개
+            // 4) 보드 상태 리셋하여 게임플레이 재개
             if (BoardStateManager.HasInstance)
             {
                 int remaining = BoardStateManager.Instance.GetRemainingBalloons();
                 BoardStateManager.Instance.InitializeBoard(_currentLevelId, remaining);
+            }
+        }
+
+        /// <summary>
+        /// Returns all deploying/waiting holders back to queue state.
+        /// Design ref: 이어하기 — "대기 중인 보관함은 원래 자리(큐)로 복귀"
+        /// </summary>
+        private void ReturnActiveHoldersToQueue()
+        {
+            HolderData[] holders = HolderManager.Instance.GetHolders();
+            if (holders == null) return;
+
+            int returned = 0;
+            for (int i = 0; i < holders.Length; i++)
+            {
+                if (holders[i].isConsumed) continue;
+
+                if (holders[i].isDeploying || holders[i].isWaiting || holders[i].isMovingToRail)
+                {
+                    // Cancel visual coroutine BEFORE resetting data (prevents 1-frame stale dart placement)
+                    if (HolderVisualManager.HasInstance)
+                        HolderVisualManager.Instance.CancelDeployAndReturnToQueue(holders[i].holderId);
+
+                    HolderManager.Instance.UndoDeploy(holders[i].holderId);
+                    returned++;
+                }
+            }
+
+            if (returned > 0)
+            {
+                Debug.Log($"[ContinueHandler] Returned {returned} active holders to queue.");
             }
         }
 
@@ -183,10 +221,17 @@ namespace BalloonFlow
 
         private void HandleBoardFailed(OnBoardFailed evt)
         {
-            if (CanContinue() && PopupManager.HasInstance)
-            {
+            if (!CanContinue()) return; // LevelManager handles FailLevel when no continues left
+
+            if (PopupManager.HasInstance)
                 PopupManager.Instance.ShowPopup("popup_continue", priority: 10);
-            }
+
+            // Also update the cost text on PopupContinue
+            var continueUI = Object.FindAnyObjectByType<PopupContinue>();
+            if (continueUI != null)
+                continueUI.Show();
+
+            Debug.Log($"[ContinueHandler] Board failed — showing continue popup. Count={_continueCount}/{MaxContinues}");
         }
 
         #endregion

@@ -306,6 +306,13 @@ namespace BalloonFlow
         public string boosterType;
     }
 
+    /// <summary>A booster effect was applied to the game state.</summary>
+    public struct OnBoosterEffectApplied
+    {
+        public string boosterType;
+        public int affectedCount;
+    }
+
     // ────────────────────────────────────────
     // IAP Events
     // ────────────────────────────────────────

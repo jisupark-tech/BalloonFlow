@@ -131,12 +131,14 @@ namespace BalloonFlow
         {
             EventBus.Subscribe<OnBoardCleared>(HandleBoardCleared);
             EventBus.Subscribe<OnBoardFailed>(HandleBoardFailed);
+            EventBus.Subscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnBoardCleared>(HandleBoardCleared);
             EventBus.Unsubscribe<OnBoardFailed>(HandleBoardFailed);
+            EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
         private void Update()
@@ -605,6 +607,13 @@ namespace BalloonFlow
         private void HandleBoardFailed(OnBoardFailed evt)
         {
             _boardFinished = true;
+        }
+
+        private void HandleContinueApplied(OnContinueApplied evt)
+        {
+            // Resume conveyor after continue — board is back in play
+            _boardFinished = false;
+            Debug.Log($"[RailManager] Continue applied — conveyor resumed. Occupied={_occupiedCount}/{_slotCount}");
         }
 
         #endregion
