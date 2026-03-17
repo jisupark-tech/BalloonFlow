@@ -80,9 +80,30 @@ namespace BalloonFlow
             if (UICamera != null) UICamera.gameObject.SetActive(false);
         }
 
+        /// <summary>
+        /// Re-acquires Camera.main if the current reference was lost (scene transition).
+        /// Call before ConfigureInGame when camera may have changed.
+        /// </summary>
+        public void RefreshMainCamera()
+        {
+            if (MainCamera == null)
+            {
+                MainCamera = Camera.main;
+                if (MainCamera != null)
+                    Debug.Log("[CameraManager] Re-acquired Main Camera after scene transition.");
+            }
+        }
+
+        /// <summary>Stops enforcing camera position (used when entering scenes with own camera setup).</summary>
+        public void ReleaseEnforcement()
+        {
+            _enforcePosition = false;
+        }
+
         /// <summary>InGame: Inspector에서 설정한 위치/FOV/모드 적용, UICamera 활성</summary>
         public void ConfigureInGame()
         {
+            RefreshMainCamera();
             if (MainCamera == null) return;
             MainCamera.orthographic = _inGameOrthographic;
 

@@ -51,12 +51,25 @@ namespace BalloonFlow
 
         #endregion
 
+        #region Constants
+
+        private const int CORNER_SUBDIVISIONS = 8; // arc segments per corner
+        private const float MIN_CORNER_RADIUS = 0.2f;
+        private const float MAX_CORNER_RADIUS = 5f;
+
+        #endregion
+
         #region Fields
 
         private readonly List<Vector3> _waypoints = new List<Vector3>();
+        private readonly List<Vector3> _smoothedPath = new List<Vector3>(); // smoothed version (or copy of waypoints)
         private readonly List<float> _segmentLengths = new List<float>();
         private readonly List<float> _cumulativeLengths = new List<float>();
         private float _totalPathLength;
+
+        // Smooth corners
+        private bool _smoothCorners;
+        private float _cornerRadius = 1f;
 
         // Slot system
         private int _slotCount = 200;
@@ -83,6 +96,12 @@ namespace BalloonFlow
 
         /// <summary>Conveyor belt rotation speed in slots per second.</summary>
         public float RotationSpeed => _rotationSpeed;
+
+        /// <summary>Whether smooth corner interpolation is active.</summary>
+        public bool SmoothCorners => _smoothCorners;
+
+        /// <summary>Corner rounding radius in world units.</summary>
+        public float CornerRadius => _cornerRadius;
 
         #endregion
 
@@ -134,15 +153,23 @@ namespace BalloonFlow
         #region Public Methods — Path
 
         /// <summary>
-        /// Returns the rail path as an array of world positions.
+        /// Returns the rail path as an array of world positions (smoothed if enabled).
         /// </summary>
         public Vector3[] GetRailPath()
         {
-            if (_waypoints.Count == 0)
+            if (_smoothedPath.Count == 0)
             {
                 return System.Array.Empty<Vector3>();
             }
 
+            return _smoothedPath.ToArray();
+        }
+
+        /// <summary>
+        /// Returns the original (non-smoothed) waypoints.
+        /// </summary>
+        public Vector3[] GetRawWaypoints()
+        {
             return _waypoints.ToArray();
         }
 
@@ -151,8 +178,18 @@ namespace BalloonFlow
         /// </summary>
         public void SetRailLayout(Vector3[] positions, int slotCount, bool closedLoop = true)
         {
+            SetRailLayout(positions, slotCount, closedLoop, false, 1f);
+        }
+
+        /// <summary>
+        /// Sets the rail layout with optional smooth corners.
+        /// </summary>
+        public void SetRailLayout(Vector3[] positions, int slotCount, bool closedLoop, bool smoothCorners, float cornerRadius)
+        {
             _waypoints.Clear();
             _isClosedLoop = closedLoop;
+            _smoothCorners = smoothCorners;
+            _cornerRadius = Mathf.Clamp(cornerRadius, MIN_CORNER_RADIUS, MAX_CORNER_RADIUS);
 
             if (positions != null)
             {
@@ -162,18 +199,21 @@ namespace BalloonFlow
                 }
             }
 
+            BuildSmoothedPath();
             RecalculatePathLengths();
             InitializeSlots(slotCount);
         }
 
         /// <summary>
         /// Gets the position on the rail at a specific distance from the start.
+        /// Uses smoothed path when smooth corners are enabled.
         /// </summary>
         public Vector3 GetPositionAtDistance(float distance)
         {
-            if (_waypoints.Count == 0) return Vector3.zero;
-            if (_waypoints.Count == 1) return _waypoints[0];
-            if (_totalPathLength <= 0f) return _waypoints[0];
+            var path = _smoothedPath;
+            if (path.Count == 0) return Vector3.zero;
+            if (path.Count == 1) return path[0];
+            if (_totalPathLength <= 0f) return path[0];
 
             if (_isClosedLoop && _totalPathLength > 0f)
             {
@@ -191,15 +231,15 @@ namespace BalloonFlow
                     float segStart = (i > 0) ? _cumulativeLengths[i - 1] : 0f;
                     float segLength = _segmentLengths[i];
 
-                    if (segLength <= 0f) return _waypoints[i];
+                    if (segLength <= 0f) return path[i];
 
                     float localT = (distance - segStart) / segLength;
-                    int nextIndex = (i + 1) % _waypoints.Count;
-                    return Vector3.Lerp(_waypoints[i], _waypoints[nextIndex], localT);
+                    int nextIndex = (i + 1) % path.Count;
+                    return Vector3.Lerp(path[i], path[nextIndex], localT);
                 }
             }
 
-            return _waypoints[_waypoints.Count - 1];
+            return path[path.Count - 1];
         }
 
         /// <summary>
@@ -207,8 +247,8 @@ namespace BalloonFlow
         /// </summary>
         public Vector3 GetPositionAtNormalized(float t)
         {
-            if (_waypoints.Count == 0) return Vector3.zero;
-            if (_waypoints.Count == 1) return _waypoints[0];
+            if (_smoothedPath.Count == 0) return Vector3.zero;
+            if (_smoothedPath.Count == 1) return _smoothedPath[0];
 
             t = Mathf.Clamp01(t);
             return GetPositionAtDistance(t * _totalPathLength);
@@ -219,7 +259,7 @@ namespace BalloonFlow
         /// </summary>
         public Vector3 GetDirectionAtNormalized(float t)
         {
-            if (_waypoints.Count < 2) return Vector3.forward;
+            if (_smoothedPath.Count < 2) return Vector3.forward;
 
             const float epsilon = 0.001f;
             float tA = Mathf.Clamp01(t - epsilon);
@@ -545,6 +585,7 @@ namespace BalloonFlow
                 }
             }
 
+            BuildSmoothedPath();
             RecalculatePathLengths();
         }
 
@@ -554,14 +595,15 @@ namespace BalloonFlow
             _cumulativeLengths.Clear();
             _totalPathLength = 0f;
 
-            if (_waypoints.Count < 2) return;
+            var path = _smoothedPath;
+            if (path.Count < 2) return;
 
-            int segmentCount = _isClosedLoop ? _waypoints.Count : _waypoints.Count - 1;
+            int segmentCount = _isClosedLoop ? path.Count : path.Count - 1;
 
             for (int i = 0; i < segmentCount; i++)
             {
-                int nextIndex = (i + 1) % _waypoints.Count;
-                float segLen = Vector3.Distance(_waypoints[i], _waypoints[nextIndex]);
+                int nextIndex = (i + 1) % path.Count;
+                float segLen = Vector3.Distance(path[i], path[nextIndex]);
                 _segmentLengths.Add(segLen);
                 _totalPathLength += segLen;
                 _cumulativeLengths.Add(_totalPathLength);
@@ -570,6 +612,78 @@ namespace BalloonFlow
             _slotSpacing = _totalPathLength > 0f && _slotCount > 0
                 ? _totalPathLength / _slotCount
                 : 1f;
+        }
+
+        /// <summary>
+        /// Builds the smoothed path from raw waypoints.
+        /// When _smoothCorners is true, replaces sharp corners with circular arcs.
+        /// When false, copies waypoints directly.
+        /// </summary>
+        private void BuildSmoothedPath()
+        {
+            _smoothedPath.Clear();
+
+            if (_waypoints.Count < 3 || !_smoothCorners)
+            {
+                _smoothedPath.AddRange(_waypoints);
+                return;
+            }
+
+            int wpCount = _waypoints.Count;
+            int loopCount = _isClosedLoop ? wpCount : wpCount;
+
+            for (int i = 0; i < loopCount; i++)
+            {
+                int prev = (i - 1 + wpCount) % wpCount;
+                int next = (i + 1) % wpCount;
+
+                // Skip first/last for open paths
+                if (!_isClosedLoop && (i == 0 || i == wpCount - 1))
+                {
+                    _smoothedPath.Add(_waypoints[i]);
+                    continue;
+                }
+
+                Vector3 dirIn = (_waypoints[i] - _waypoints[prev]).normalized;
+                Vector3 dirOut = (_waypoints[next] - _waypoints[i]).normalized;
+
+                float dot = Vector3.Dot(dirIn, dirOut);
+
+                // If directions are nearly the same (not a corner), keep the waypoint
+                if (dot > 0.95f)
+                {
+                    _smoothedPath.Add(_waypoints[i]);
+                    continue;
+                }
+
+                // It's a corner — calculate tangent points and arc
+                float distToPrev = Vector3.Distance(_waypoints[i], _waypoints[prev]);
+                float distToNext = Vector3.Distance(_waypoints[i], _waypoints[next]);
+                float maxRadius = Mathf.Min(distToPrev * 0.45f, distToNext * 0.45f);
+                float radius = Mathf.Min(_cornerRadius, maxRadius);
+
+                if (radius < 0.01f)
+                {
+                    _smoothedPath.Add(_waypoints[i]);
+                    continue;
+                }
+
+                // Tangent points: pull back from corner along each segment
+                Vector3 tangentIn = _waypoints[i] - dirIn * radius;
+                Vector3 tangentOut = _waypoints[i] + dirOut * radius;
+
+                // Generate arc points using quadratic Bezier (corner as control point)
+                for (int s = 0; s <= CORNER_SUBDIVISIONS; s++)
+                {
+                    float t = (float)s / CORNER_SUBDIVISIONS;
+                    float u = 1f - t;
+                    // Quadratic Bezier: P = (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
+                    Vector3 arcPos = u * u * tangentIn
+                                   + 2f * u * t * _waypoints[i]
+                                   + t * t * tangentOut;
+                    _smoothedPath.Add(arcPos);
+                }
+            }
         }
 
         private void PublishOccupancyChanged()
