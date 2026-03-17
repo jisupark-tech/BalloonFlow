@@ -222,6 +222,10 @@ namespace BalloonFlow
                 BalloonData data = pair.Value;
                 if (data.isPopped) continue;
                 if (_hiddenBalloons.Contains(data.balloonId)) continue;
+                // Non-targetable gimmicks: darts cannot hit these
+                if (data.gimmickType == GimmickWall) continue;
+                if (data.gimmickType == GimmickPin) continue;
+                if (data.gimmickType == GimmickIce) continue;
                 if (data.color == color)
                 {
                     result.Add(data);

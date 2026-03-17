@@ -47,7 +47,18 @@ namespace BalloonFlow.Editor
             };
         }
 
-        // MenuItem 삭제됨 — Level Editor만 BalloonFlow 탭에 표시
+        /// <summary>PopupGoldShop 프리팹만 단독 재빌드 (다른 프리팹 건드리지 않음)</summary>
+        [MenuItem("BalloonFlow/Rebuild GoldShop Prefab Only")]
+        private static void RebuildGoldShopOnly()
+        {
+            EnsureFolder(POPUP_FOLDER);
+            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (_font == null) _font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            BuildPopupGoldShop();
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("[UIPrefabBuilder] PopupGoldShop prefab rebuilt.");
+        }
 
         private static void BuildAllUIPrefabs()
         {
@@ -287,28 +298,75 @@ namespace BalloonFlow.Editor
         {
             var root = CreateUIRoot("PopupGoldShop");
 
-            var overlay = AddImage(root.transform, "Overlay", BG_OVERLAY);
-            Stretch(overlay);
+            // Full-screen dark blue background (레퍼런스 매칭)
+            var bg = AddImage(root.transform, "Background", new Color(0.06f, 0.12f, 0.28f));
+            Stretch(bg);
 
-            var panel = AddImage(root.transform, "GoldShopPanel", COL_SHOP_BG);
-            SetCenter(panel, V(0, 0), V(700, 700));
+            // Close button (X) top-right
+            var closeBtnGO = AddButton(root.transform, "CloseBtn", "X", COL_HOME, 28,
+                V(0, 0), V(60, 60));
+            var closeRT = closeBtnGO.GetComponent<RectTransform>();
+            closeRT.anchorMin = new Vector2(1, 1);
+            closeRT.anchorMax = new Vector2(1, 1);
+            closeRT.pivot = new Vector2(1, 1);
+            closeRT.anchoredPosition = new Vector2(-15, -15);
 
-            AddText(panel.transform, "ShopTitle", "Gold Shop", 36,
-                TextAnchor.MiddleCenter, Color.yellow, V(0, 280), V(400, 60));
+            // ScrollView — fills most of the screen (below top bar, above tab bar)
+            var scrollViewGO = new GameObject("ScrollView");
+            scrollViewGO.layer = LayerMask.NameToLayer("UI");
+            scrollViewGO.transform.SetParent(root.transform, false);
+            var svRT = scrollViewGO.AddComponent<RectTransform>();
+            svRT.anchorMin = new Vector2(0, 0.08f);  // above tab bar
+            svRT.anchorMax = new Vector2(1, 0.94f);   // below close button
+            svRT.offsetMin = Vector2.zero;
+            svRT.offsetMax = Vector2.zero;
+            var svImg = scrollViewGO.AddComponent<Image>();
+            svImg.color = new Color(0, 0, 0, 0);  // transparent
+            svImg.raycastTarget = true;
+            scrollViewGO.AddComponent<Mask>().showMaskGraphic = false;
+            var sr = scrollViewGO.AddComponent<ScrollRect>();
+            sr.horizontal = false;
+            sr.scrollSensitivity = 30;
 
-            // Content area for dynamic shop items
+            // Viewport
+            var viewportGO = new GameObject("Viewport");
+            viewportGO.layer = LayerMask.NameToLayer("UI");
+            viewportGO.transform.SetParent(scrollViewGO.transform, false);
+            var vpRT = viewportGO.AddComponent<RectTransform>();
+            Stretch(vpRT);
+            var vpImg = viewportGO.AddComponent<Image>();
+            vpImg.color = new Color(0, 0, 0, 0);
+            vpImg.raycastTarget = true;
+            viewportGO.AddComponent<Mask>().showMaskGraphic = false;
+            sr.viewport = vpRT;
+
+            // Content (dynamic shop items go here)
             var contentGO = new GameObject("ShopContent");
             contentGO.layer = LayerMask.NameToLayer("UI");
-            contentGO.transform.SetParent(panel.transform, false);
+            contentGO.transform.SetParent(viewportGO.transform, false);
             var contentRT = contentGO.AddComponent<RectTransform>();
-            contentRT.anchorMin = new Vector2(0, 0);
+            contentRT.anchorMin = new Vector2(0, 1);
             contentRT.anchorMax = new Vector2(1, 1);
             contentRT.pivot = new Vector2(0.5f, 1);
-            contentRT.offsetMin = new Vector2(20, 80);
-            contentRT.offsetMax = new Vector2(-20, -80);
+            contentRT.anchoredPosition = Vector2.zero;
+            contentRT.sizeDelta = new Vector2(0, 1200); // tall enough for all items
+            sr.content = contentRT;
 
-            var closeBtnGO = AddButton(panel.transform, "CloseBtn", "CLOSE", COL_HOME, 24,
-                V(0, -280), V(200, 60));
+            // Tab bar at bottom (상점 | 돼지저금통 | 잠금)
+            var tabBar = AddImage(root.transform, "TabBar", new Color(0.08f, 0.10f, 0.22f));
+            var tabRT = tabBar;
+            tabRT.anchorMin = new Vector2(0, 0);
+            tabRT.anchorMax = new Vector2(1, 0.08f);
+            tabRT.offsetMin = Vector2.zero;
+            tabRT.offsetMax = Vector2.zero;
+
+            // Tab buttons (3개)
+            AddText(tabBar.transform, "TabShop", "상점", 18,
+                TextAnchor.MiddleCenter, Color.white, V(-200, 0), V(150, 40));
+            AddText(tabBar.transform, "TabPiggy", "저금통", 18,
+                TextAnchor.MiddleCenter, new Color(0.5f, 0.6f, 0.7f), V(0, 0), V(150, 40));
+            AddText(tabBar.transform, "TabLocked", "잠금", 18,
+                TextAnchor.MiddleCenter, new Color(0.4f, 0.4f, 0.5f), V(200, 0), V(150, 40));
 
             // AddComponent + wire
             var comp = root.AddComponent<PopupGoldShop>();

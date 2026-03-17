@@ -37,9 +37,9 @@ namespace BalloonFlow
                 _go.AddComponent<GameManager>();
             }
 
-            // Lobby 매니저 확보 (Lobby 안 거쳤을 때를 위해) — skip in test mode
-            if (!_isTestMode)
-                GameManager.Instance.InitLobby();
+            // Lobby 매니저 확보 (Lobby 안 거쳤을 때를 위해)
+            // Test mode에서도 LevelManager가 필요하므로 InitLobby 호출
+            GameManager.Instance.InitLobby();
 
             // InGame 매니저 생성 (GameManager 자식)
             GameManager.Instance.InitInGame();
