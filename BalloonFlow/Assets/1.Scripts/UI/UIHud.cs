@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 namespace BalloonFlow
 {
@@ -11,24 +12,23 @@ namespace BalloonFlow
     {
         [Header("[Row 1 — 레벨/골드]")]
         [SerializeField] private Button _settingsButton;
-        [SerializeField] private Text _levelText;
-        [SerializeField] private Text _goldText;
+        [SerializeField] private TMP_Text _levelText;
+        [SerializeField] private TMP_Text _goldText;
         [SerializeField] private Button _goldPlusButton;
 
         [Header("[Row 2 — 홀더]")]
         [SerializeField] private Text _holderCountText;
 
-        [Header("[Optional]")]
-        [SerializeField] private Text _moveCountText;
+
 
         #region Accessors
 
         public Button SettingsButton => _settingsButton;
-        public Text LevelText => _levelText;
-        public Text GoldText => _goldText;
+        public TMP_Text LevelText => _levelText;
+        public TMP_Text GoldText => _goldText;
         public Button GoldPlusButton => _goldPlusButton;
         public Text HolderCountText => _holderCountText;
-        public Text MoveCountText => _moveCountText;
+        //public Text MoveCountText => _moveCountText;
 
         #endregion
 
@@ -51,7 +51,7 @@ namespace BalloonFlow
 
         public void SetMoveCount(int _used, int _total)
         {
-            if (_moveCountText != null) _moveCountText.text = $"{_used}/{_total}";
+            //if (_moveCountText != null) _moveCountText.text = $"{_used}/{_total}";
         }
 
         #endregion

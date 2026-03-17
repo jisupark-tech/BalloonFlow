@@ -30,6 +30,7 @@ namespace BalloonFlow
         private int  _currentLives;
         private long _lastRechargeUtcTicks;   // stored as long ticks for precision
         private float _rechargeTimer;
+        private float _infiniteHeartsEndTime; // realtimeSinceStartup when infinite hearts expire
 
         #endregion
 
@@ -123,6 +124,10 @@ namespace BalloonFlow
         /// </summary>
         public bool UseLive()
         {
+            // Infinite hearts: always succeed without consuming
+            if (IsInfiniteHeartsActive)
+                return true;
+
             if (_currentLives <= 0)
             {
                 Debug.Log("[LifeManager] No lives remaining.");
@@ -198,6 +203,22 @@ namespace BalloonFlow
         {
             AddLife(1);
         }
+
+        /// <summary>
+        /// Activates infinite hearts for the given duration in seconds.
+        /// While active, UseLive() always succeeds without consuming lives.
+        /// </summary>
+        public void ActivateInfiniteHearts(float durationSeconds)
+        {
+            _infiniteHeartsEndTime = Time.realtimeSinceStartup + durationSeconds;
+            _currentLives = MAX_LIVES;
+            SaveToPrefs();
+            PublishLifeChanged();
+            Debug.Log($"[LifeManager] Infinite hearts activated for {durationSeconds / 3600f:F1}h");
+        }
+
+        /// <summary>True while infinite hearts are active.</summary>
+        public bool IsInfiniteHeartsActive => Time.realtimeSinceStartup < _infiniteHeartsEndTime;
 
         /// <summary>
         /// Returns the time remaining until the next life recharges.
