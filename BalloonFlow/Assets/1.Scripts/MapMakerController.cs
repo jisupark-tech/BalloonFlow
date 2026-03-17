@@ -696,6 +696,15 @@ namespace BalloonFlow
             { if (float.TryParse(s, out float v)) _railPadding = v; });
             var r3 = Row(p); Lbl(r3, "Slot Count", w: 90);
             MakeSlider(r3, 50, 400, _railSlotCount, true, v => _railSlotCount = (int)v);
+            // Auto-calc button: calculate capacity from total darts
+            var r3b = Row(p);
+            Btn(r3b, "Auto (from darts)", () =>
+            {
+                int totalDarts = CalcTotalDarts();
+                _railSlotCount = RailManager.CalculateCapacity(totalDarts);
+                SetStatus($"Rail capacity auto: {_railSlotCount} (darts={totalDarts})");
+                RefreshInfo();
+            });
 
             // Smooth corners toggle + radius
             var r4 = Row(p); Lbl(r4, "Smooth Corner", w: 100);
@@ -2032,7 +2041,9 @@ namespace BalloonFlow
                 }
             }
 
-            if (config.rail.slotCount > 0) _railSlotCount = config.rail.slotCount;
+            // Load rail capacity: prefer LevelConfig.railCapacity, fallback to rail.slotCount
+            if (config.railCapacity > 0) _railSlotCount = config.railCapacity;
+            else if (config.rail.slotCount > 0) _railSlotCount = config.rail.slotCount;
             _smoothCorners = config.rail.smoothCorners;
             _cornerRadius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 1f;
             if (config.rail.waypoints != null && config.rail.waypoints.Length > 0)
@@ -2150,6 +2161,7 @@ namespace BalloonFlow
                 visualType = RailRenderer.VISUAL_SPRITE_TILE, deployPoints = dp,
                 smoothCorners = _smoothCorners, cornerRadius = _cornerRadius
             };
+            config.railCapacity = _railSlotCount; // explicit capacity override
 
             config.gridCols = _gridCols; config.gridRows = _gridRows;
 
@@ -2198,6 +2210,11 @@ namespace BalloonFlow
             int n = 0;
             for (int c = 0; c < _holderCols; c++) for (int r = 0; r < _holderRows; r++) if (_holderColors[c, r] >= 0) n += _holderMags[c, r];
             return n;
+        }
+
+        private int CalcTotalDarts()
+        {
+            return CountTotalMags();
         }
 
         #endregion

@@ -57,6 +57,12 @@ namespace BalloonFlow
         private const float MIN_CORNER_RADIUS = 0.2f;
         private const float MAX_CORNER_RADIUS = 5f;
 
+        // 가변 수용량 구간 — 정본: 레일초과_코어메카닉_명세 (2026-03-17)
+        // 총 다트 수 기준으로 레일 수용량 자동 결정
+        private static readonly int[] CAPACITY_TIERS = { 50, 100, 150, 200 };
+        private static readonly int[] CAPACITY_DART_THRESHOLDS = { 30, 60, 100, int.MaxValue };
+        // darts <= 30 → 50, darts <= 60 → 100, darts <= 100 → 150, else → 200
+
         #endregion
 
         #region Fields
@@ -500,21 +506,58 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Removes a batch of darts from the rail (used for Continue/retry).
+        /// Determines the appropriate rail capacity based on total dart count.
+        /// Design: darts≤30→50, ≤60→100, ≤100→150, else→200.
+        /// If explicitCapacity > 0, uses that instead (LevelConfig override).
+        /// </summary>
+        public static int CalculateCapacity(int totalDarts, int explicitCapacity = 0)
+        {
+            if (explicitCapacity > 0) return explicitCapacity;
+
+            for (int i = 0; i < CAPACITY_TIERS.Length; i++)
+            {
+                if (totalDarts <= CAPACITY_DART_THRESHOLDS[i])
+                    return CAPACITY_TIERS[i];
+            }
+            return CAPACITY_TIERS[CAPACITY_TIERS.Length - 1];
+        }
+
+        /// <summary>
+        /// Initializes the rail for a level with auto-capacity calculation.
+        /// Call this instead of InitializeSlots when loading a level.
+        /// </summary>
+        public void InitializeForLevel(int totalDarts, int explicitCapacity = 0)
+        {
+            int capacity = CalculateCapacity(totalDarts, explicitCapacity);
+            InitializeSlots(capacity);
+            Debug.Log($"[RailManager] InitializeForLevel: totalDarts={totalDarts}, capacity={capacity}" +
+                      (explicitCapacity > 0 ? " (explicit)" : " (auto)"));
+        }
+
+        /// <summary>
+        /// Removes a batch of darts from the rail, starting from the most recently placed.
+        /// Design ref: 이어하기 — 가장 최근 배치된 다트부터 제거.
         /// Removes up to count darts, returns actual number removed.
         /// </summary>
         public int RemoveDarts(int count)
         {
-            if (_slots == null) return 0;
+            if (_slots == null || count <= 0) return 0;
+
+            // Build a list of occupied slots sorted by dartId descending (most recent first)
+            var occupied = new List<int>(_occupiedCount);
+            for (int i = 0; i < _slotCount; i++)
+            {
+                if (_slots[i].dartColor >= 0) occupied.Add(i);
+            }
+
+            // Sort by dartId descending — highest dartId = most recently placed
+            occupied.Sort((a, b) => _slots[b].dartId.CompareTo(_slots[a].dartId));
 
             int removed = 0;
-            for (int i = 0; i < _slotCount && removed < count; i++)
+            for (int i = 0; i < occupied.Count && removed < count; i++)
             {
-                if (_slots[i].dartColor >= 0)
-                {
-                    ClearSlot(i);
-                    removed++;
-                }
+                ClearSlot(occupied[i]);
+                removed++;
             }
             return removed;
         }

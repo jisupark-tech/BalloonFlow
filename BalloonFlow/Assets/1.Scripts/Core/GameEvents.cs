@@ -52,6 +52,14 @@ namespace BalloonFlow
         public int remainingMagazine;
     }
 
+    /// <summary>Continue applied — darts removed from rail, matching balloons should pop.
+    /// Design ref: 아웃게임디렉션 (2026-03-17) §이어하기</summary>
+    public struct OnContinueApplied
+    {
+        public int dartsRemoved;
+        public int levelId;
+    }
+
     /// <summary>Holder waiting area is filling up — P0 feedback trigger.
     /// Design: 4/5 = warning (yellow), 5/5 = danger (red).</summary>
     public struct OnHolderWarning
@@ -134,6 +142,22 @@ namespace BalloonFlow
     {
         public float occupancy;
         public bool hasOutermostMatch; // true = recovery possible
+    }
+
+    /// <summary>6-stage gauge changed. Design ref: 레일초과_코어메카닉_명세 (2026-03-17).
+    /// Stages: 0=Safe, 1=Caution, 2=NormalHigh, 3=Warning, 4=Critical, 5=Fail.</summary>
+    public struct OnGaugeStageChanged
+    {
+        public int previousStage;
+        public int currentStage;
+        public float occupancy;
+    }
+
+    /// <summary>Coins earned (level clear reward, daily reward, etc.).</summary>
+    public struct OnCoinEarned
+    {
+        public int amount;
+        public Vector3 sourcePosition; // world pos for fly-to-HUD animation
     }
 
     /// <summary>Holder deployment completed (magazine=0, holder disappears).</summary>

@@ -283,10 +283,22 @@ namespace BalloonFlow
                 PopProcessor.Instance.ResetAll();
             }
 
-            // Rail setup via RailManager (slot-based conveyor belt)
+            // Rail setup via RailManager (slot-based conveyor belt) with variable capacity
             if (RailManager.HasInstance && config.rail != null)
             {
-                int slotCount = config.rail.slotCount > 0 ? config.rail.slotCount : 200;
+                // Calculate total darts from all holders
+                int totalDarts = 0;
+                if (config.holders != null)
+                {
+                    for (int i = 0; i < config.holders.Length; i++)
+                        totalDarts += config.holders[i].magazineCount;
+                }
+
+                // Determine capacity: LevelConfig.railCapacity > rail.slotCount > auto-calc
+                int explicitCapacity = config.railCapacity > 0 ? config.railCapacity
+                    : config.rail.slotCount > 0 ? config.rail.slotCount : 0;
+                int slotCount = RailManager.CalculateCapacity(totalDarts, explicitCapacity);
+
                 bool smooth = config.rail.smoothCorners;
                 float radius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 1f;
                 RailManager.Instance.SetRailLayout(config.rail.waypoints, slotCount, true, smooth, radius);

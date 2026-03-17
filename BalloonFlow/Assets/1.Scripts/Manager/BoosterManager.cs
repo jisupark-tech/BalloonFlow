@@ -4,12 +4,11 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Manages 4 in-play booster types (all coin-based).
-    /// Design ref: 아웃게임디렉션 §부스터
-    ///   Extra Tray (300 coin, Lv.10) — +1 rail tray slot
-    ///   Select Tool (1900 coin, Lv.12) — pick any queue container
-    ///   Shuffle (1500 coin, Lv.15) — randomize queue order
-    ///   Color Remove (2900 coin, Lv.18) — remove all of one color
+    /// Manages 3 in-play booster types (all coin-based).
+    /// Design ref: 아웃게임디렉션 (2026-03-17) §부스터
+    ///   Hand/Select Tool (1900 coin, Lv.9) — 큐에서 원하는 보관함 선택 배치
+    ///   Shuffle (1500 coin, Lv.12) — 큐 보관함 순서 랜덤 셔플
+    ///   Color Remove (2900 coin, Lv.15) — 필드+레일에서 지정 색상 전체 제거
     /// </summary>
     /// <remarks>
     /// Layer: Domain | Genre: Puzzle | Role: Manager | Phase: 3
@@ -18,10 +17,9 @@ namespace BalloonFlow
     {
         #region Constants — Design-aligned booster IDs
 
-        public const string EXTRA_TRAY   = "extra_tray";     // +1 rail tray slot
-        public const string SELECT_TOOL  = "select_tool";    // pick any container
-        public const string SHUFFLE      = "shuffle";        // randomize queue order
-        public const string COLOR_REMOVE = "color_remove";   // remove all of one color
+        public const string SELECT_TOOL  = "select_tool";    // 큐에서 원하는 보관함 선택
+        public const string SHUFFLE      = "shuffle";        // 큐 보관함 순서 랜덤 셔플
+        public const string COLOR_REMOVE = "color_remove";   // 필드+레일 지정 색상 전체 제거
 
         private const string PrefsKeyPrefix = "BalloonFlow_Booster_";
 
@@ -41,10 +39,9 @@ namespace BalloonFlow
 
         private readonly Dictionary<string, BoosterDef> _boosterDefs = new Dictionary<string, BoosterDef>
         {
-            { EXTRA_TRAY,   new BoosterDef { cost = 300,  unlockLevel = 10 } },
-            { SELECT_TOOL,  new BoosterDef { cost = 1900, unlockLevel = 12 } },
-            { SHUFFLE,      new BoosterDef { cost = 1500, unlockLevel = 15 } },
-            { COLOR_REMOVE, new BoosterDef { cost = 2900, unlockLevel = 18 } }
+            { SELECT_TOOL,  new BoosterDef { cost = 1900, unlockLevel = 9 } },
+            { SHUFFLE,      new BoosterDef { cost = 1500, unlockLevel = 12 } },
+            { COLOR_REMOVE, new BoosterDef { cost = 2900, unlockLevel = 15 } }
         };
 
         private readonly Dictionary<string, int> _inventory = new Dictionary<string, int>();
@@ -151,7 +148,6 @@ namespace BalloonFlow
 
             CurrencyManager.CoinSink sink = boosterType switch
             {
-                EXTRA_TRAY   => CurrencyManager.CoinSink.BoosterExtraTray,
                 SELECT_TOOL  => CurrencyManager.CoinSink.BoosterSelectTool,
                 SHUFFLE      => CurrencyManager.CoinSink.BoosterShuffle,
                 COLOR_REMOVE => CurrencyManager.CoinSink.BoosterColorRemove,
@@ -179,7 +175,7 @@ namespace BalloonFlow
 
         /// <summary>
         /// Returns true if the booster is unlocked based on player's highest completed level.
-        /// Design: Extra Tray Lv.10, Select Tool Lv.12, Shuffle Lv.15, Color Remove Lv.18.
+        /// Design: Select Tool Lv.9, Shuffle Lv.12, Color Remove Lv.15.
         /// </summary>
         public bool IsBoosterUnlocked(string boosterType)
         {

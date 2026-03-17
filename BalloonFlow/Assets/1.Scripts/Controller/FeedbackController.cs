@@ -60,6 +60,10 @@ namespace BalloonFlow
         [SerializeField] private AudioClip _starEarnedClip;
         [SerializeField] private AudioClip _holderWarningClip;
         [SerializeField] private AudioClip _holderDangerClip;
+        [SerializeField] private AudioClip _boosterActivateClip;
+        [SerializeField] private AudioClip _coinEarnedClip;
+        [SerializeField] private AudioClip _gaugeWarningClip;
+        [SerializeField] private AudioClip _gaugeCriticalClip;
 
         [Header("Audio Pitch")]
         [SerializeField] private float _basePitch = 1.0f;
@@ -100,6 +104,9 @@ namespace BalloonFlow
             EventBus.Subscribe<OnScoreChanged>(HandleScoreChanged);
             EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompleted);
             EventBus.Subscribe<OnHolderWarning>(HandleHolderWarning);
+            EventBus.Subscribe<OnBoosterUsed>(HandleBoosterUsed);
+            EventBus.Subscribe<OnGaugeStageChanged>(HandleGaugeStageChanged);
+            EventBus.Subscribe<OnCoinEarned>(HandleCoinEarned);
         }
 
         protected override void OnDestroy()
@@ -111,6 +118,9 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnScoreChanged>(HandleScoreChanged);
             EventBus.Unsubscribe<OnLevelCompleted>(HandleLevelCompleted);
             EventBus.Unsubscribe<OnHolderWarning>(HandleHolderWarning);
+            EventBus.Unsubscribe<OnBoosterUsed>(HandleBoosterUsed);
+            EventBus.Unsubscribe<OnGaugeStageChanged>(HandleGaugeStageChanged);
+            EventBus.Unsubscribe<OnCoinEarned>(HandleCoinEarned);
 
             base.OnDestroy();
         }
@@ -289,7 +299,6 @@ namespace BalloonFlow
         {
             if (evt.isDanger)
             {
-                // 5/5 danger — stronger shake + danger clip
                 TriggerScreenShake(_shakeIntensityMedium, _shakeDurationSmall);
                 if (_sfxSource != null && _holderDangerClip != null)
                 {
@@ -299,13 +308,78 @@ namespace BalloonFlow
             }
             else
             {
-                // 4/5 warning — light shake + warning beep
                 TriggerScreenShake(_shakeIntensitySmall, _shakeDurationSmall);
                 if (_sfxSource != null && _holderWarningClip != null)
                 {
                     _sfxSource.pitch = _basePitch * 1.2f;
                     _sfxSource.PlayOneShot(_holderWarningClip);
                 }
+            }
+        }
+
+        /// <summary>
+        /// P0 #2/#3: 6-stage gauge feedback. WARNING = red blink + heartbeat, CRITICAL = full red + vibrate.
+        /// Design ref: 피드백디렉션 (2026-03-17) P0 #2 게이지 90%+, P0 #3 게이지 허용량-1
+        /// </summary>
+        private void HandleGaugeStageChanged(OnGaugeStageChanged evt)
+        {
+            GaugeStage stage = (GaugeStage)evt.currentStage;
+
+            switch (stage)
+            {
+                case GaugeStage.Warning:
+                    // P0 #2: 게이지 빨간색 깜빡임 + 경고 비프음
+                    TriggerScreenShake(_shakeIntensitySmall, _shakeDurationSmall);
+                    if (_sfxSource != null && _gaugeWarningClip != null)
+                    {
+                        _sfxSource.pitch = _basePitch;
+                        _sfxSource.PlayOneShot(_gaugeWarningClip);
+                    }
+                    break;
+
+                case GaugeStage.Critical:
+                    // P0 #3: 화면 테두리 경고 + 진동 + 긴장 사운드
+                    TriggerScreenShake(_shakeIntensityMedium, _shakeDurationMedium);
+                    if (_sfxSource != null && _gaugeCriticalClip != null)
+                    {
+                        _sfxSource.pitch = _basePitch;
+                        _sfxSource.PlayOneShot(_gaugeCriticalClip);
+                    }
+                    break;
+
+                case GaugeStage.Fail:
+                    // Fail is handled by HandleBoardFailed
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// P0 #7: 부스터 사용 시 활성화 이펙트 + 효과음.
+        /// Design ref: 피드백디렉션 P0 #7 부스터 사용 (공통)
+        /// </summary>
+        private void HandleBoosterUsed(OnBoosterUsed evt)
+        {
+            Vector3 pos = GetScreenCenter();
+            SpawnPooledParticle(POOL_PARTICLE_COMBO, pos);
+            TriggerScreenShake(_shakeIntensitySmall, _shakeDurationSmall);
+
+            if (_sfxSource != null && _boosterActivateClip != null)
+            {
+                _sfxSource.pitch = _basePitch;
+                _sfxSource.PlayOneShot(_boosterActivateClip);
+            }
+        }
+
+        /// <summary>
+        /// P0 #8: 코인 획득 시 코인 사운드.
+        /// Design ref: 피드백디렉션 P0 #8 코인 획득
+        /// </summary>
+        private void HandleCoinEarned(OnCoinEarned evt)
+        {
+            if (_sfxSource != null && _coinEarnedClip != null)
+            {
+                _sfxSource.pitch = _basePitch + 0.1f;
+                _sfxSource.PlayOneShot(_coinEarnedClip);
             }
         }
 
