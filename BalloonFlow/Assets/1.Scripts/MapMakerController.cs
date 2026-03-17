@@ -9,10 +9,10 @@ using UnityEditor;
 namespace BalloonFlow
 {
     /// <summary>
-    /// MapMaker 씬 전용 레벨 에디터 컨트롤러.
-    /// Play 모드에서 Canvas UI(1920×1080) + 3D 보드 프리뷰로 레벨 제작.
-    /// 좌측 패널: 설정/팔레트/그리드/레일/홀더/익스포트
-    /// 우측 3D 뷰: 마우스 클릭/드래그로 풍선 배치, 스크롤 줌, 중앙버튼 팬
+    /// MapMaker — 3-Panel Level Editor
+    /// Left: Level list (scroll), click to load/edit
+    /// Center: In-game-style board preview (3D)
+    /// Right: Settings panel + Test Play button (bottom-right)
     /// </summary>
     public class MapMakerController : MonoBehaviour
     {
@@ -60,16 +60,13 @@ namespace BalloonFlow
             { "(none)", "Hidden", "Chain", "Pinata", "Spawner_T", "Pin", "Lock_Key",
               "Surprise", "Wall", "Spawner_O", "Pinata_Box", "Ice", "Frozen_Dart", "Color_Curtain" };
 
-        private const float PANEL_WIDTH = 360f;
+        private const float LEFT_PANEL_WIDTH = 240f;
+        private const float RIGHT_PANEL_WIDTH = 380f;
 
         #endregion
 
         #region Test Play
 
-        /// <summary>
-        /// True while running a test play from MapMaker.
-        /// Reset in Awake() when MapMaker scene is re-entered.
-        /// </summary>
         public static bool IsTestMode { get; private set; }
 
         #endregion
@@ -101,9 +98,8 @@ namespace BalloonFlow
         private float _railHeight = 0.5f;
         private int _railSlotCount = 200;
 
-        // Conveyor belt tile editing
         private bool[,] _conveyorTiles;
-        private bool _conveyorPaintMode;  // false = balloon paint, true = conveyor paint
+        private bool _conveyorPaintMode;
 
         private float CellSpacing => _boardWorldSize / Mathf.Max(_gridCols, _gridRows);
         private float BalloonScale => CellSpacing * 0.9f;
@@ -131,6 +127,14 @@ namespace BalloonFlow
         private Material _conveyorMat;
         private Text _txtConveyorMode;
 
+        // Left panel — level list
+        private Transform _levelListContent;
+        private int _selectedListIndex = -1;
+        private List<Button> _levelListButtons = new List<Button>();
+
+        // Center panel — level info text
+        private Text _txtCenterInfo;
+
         #endregion
 
         #region Lifecycle
@@ -153,6 +157,7 @@ namespace BalloonFlow
             RebuildPreview();
             RebuildConveyorPreview();
             RefreshInfo();
+            RefreshLevelList();
         }
 
         private void Update()
@@ -177,8 +182,9 @@ namespace BalloonFlow
         private void SetupCamera()
         {
             if (_cam == null) return;
-            float panelRatio = PANEL_WIDTH / 1920f;
-            _cam.rect = new Rect(panelRatio, 0, 1f - panelRatio, 1f);
+            float leftRatio = LEFT_PANEL_WIDTH / 1920f;
+            float rightRatio = RIGHT_PANEL_WIDTH / 1920f;
+            _cam.rect = new Rect(leftRatio, 0, 1f - leftRatio - rightRatio, 1f);
             _cam.orthographic = true;
             _cam.orthographicSize = _boardWorldSize * 0.65f;
             _cam.transform.position = new Vector3(_boardCenter.x, 15f, _boardCenter.y);
@@ -250,7 +256,7 @@ namespace BalloonFlow
         #endregion
 
         // ═══════════════════════════════════════════════════════════════
-        //  UI BUILDING
+        //  UI BUILDING — 3-PANEL LAYOUT
         // ═══════════════════════════════════════════════════════════════
 
         #region UI Building — Main
@@ -268,12 +274,113 @@ namespace BalloonFlow
             scaler.matchWidthOrHeight = 0.5f;
             canvasGO.AddComponent<GraphicRaycaster>();
 
-            // Left Panel
-            var panel = MakeRT("LeftPanel", canvasGO.transform);
+            // ── LEFT PANEL: Level List ──
+            BuildLeftPanel(canvasGO.transform);
+
+            // ── CENTER OVERLAY: Info text on 3D viewport ──
+            BuildCenterOverlay(canvasGO.transform);
+
+            // ── RIGHT PANEL: Settings ──
+            BuildRightPanel(canvasGO.transform);
+        }
+
+        private void BuildLeftPanel(Transform canvasRoot)
+        {
+            var panel = MakeRT("LeftPanel", canvasRoot);
             panel.anchorMin = Vector2.zero;
             panel.anchorMax = new Vector2(0, 1);
             panel.pivot = new Vector2(0, 0.5f);
-            panel.sizeDelta = new Vector2(PANEL_WIDTH, 0);
+            panel.sizeDelta = new Vector2(LEFT_PANEL_WIDTH, 0);
+            panel.anchoredPosition = Vector2.zero;
+            var panelImg = panel.gameObject.AddComponent<Image>();
+            panelImg.color = new Color(0.08f, 0.08f, 0.12f, 0.97f);
+
+            // Header
+            var header = MakeRT("Header", panel);
+            header.anchorMin = new Vector2(0, 1);
+            header.anchorMax = Vector2.one;
+            header.pivot = new Vector2(0.5f, 1);
+            header.sizeDelta = new Vector2(0, 36);
+            header.anchoredPosition = Vector2.zero;
+            var headerImg = header.gameObject.AddComponent<Image>();
+            headerImg.color = new Color(0.12f, 0.12f, 0.18f);
+            var headerTxt = MakeText(header, "LEVELS", 15, FontStyle.Bold, TextAnchor.MiddleCenter);
+            SetFillRect(headerTxt.GetComponent<RectTransform>());
+
+            // Scroll view for level list
+            var scrollArea = MakeRT("ScrollArea", panel);
+            scrollArea.anchorMin = Vector2.zero;
+            scrollArea.anchorMax = Vector2.one;
+            scrollArea.sizeDelta = new Vector2(0, -36);
+            scrollArea.anchoredPosition = new Vector2(0, -18);
+
+            var svGO = DefaultControls.CreateScrollView(_uiRes);
+            svGO.transform.SetParent(scrollArea, false);
+            var svRT = svGO.GetComponent<RectTransform>();
+            SetFillRect(svRT);
+            svGO.GetComponent<Image>().color = Color.clear;
+            var sr = svGO.GetComponent<ScrollRect>();
+            sr.horizontal = false;
+            sr.scrollSensitivity = 30;
+            var hBar = svGO.transform.Find("Scrollbar Horizontal");
+            if (hBar) hBar.gameObject.SetActive(false);
+
+            var content = sr.content;
+            var vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(4, 4, 4, 4);
+            vlg.spacing = 2;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
+            var csf = content.gameObject.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            _levelListContent = content;
+        }
+
+        private void BuildCenterOverlay(Transform canvasRoot)
+        {
+            // Semi-transparent info bar at top of center viewport
+            float leftRatio = LEFT_PANEL_WIDTH / 1920f;
+            float rightRatio = RIGHT_PANEL_WIDTH / 1920f;
+
+            var overlay = MakeRT("CenterOverlay", canvasRoot);
+            overlay.anchorMin = new Vector2(leftRatio, 0.92f);
+            overlay.anchorMax = new Vector2(1f - rightRatio, 1f);
+            overlay.sizeDelta = Vector2.zero;
+            overlay.anchoredPosition = Vector2.zero;
+            var overlayImg = overlay.gameObject.AddComponent<Image>();
+            overlayImg.color = new Color(0f, 0f, 0f, 0.55f);
+
+            _txtCenterInfo = MakeText(overlay, "", 13, FontStyle.Normal, TextAnchor.MiddleCenter);
+            var txtRT = _txtCenterInfo.GetComponent<RectTransform>();
+            SetFillRect(txtRT);
+            _txtCenterInfo.color = new Color(0.85f, 0.9f, 1f);
+
+            // Status bar at bottom of center viewport
+            var statusBar = MakeRT("StatusBar", canvasRoot);
+            statusBar.anchorMin = new Vector2(leftRatio, 0f);
+            statusBar.anchorMax = new Vector2(1f - rightRatio, 0.04f);
+            statusBar.sizeDelta = Vector2.zero;
+            statusBar.anchoredPosition = Vector2.zero;
+            var statusImg = statusBar.gameObject.AddComponent<Image>();
+            statusImg.color = new Color(0f, 0f, 0f, 0.55f);
+
+            _txtStatus = MakeText(statusBar, "Ready", 12, FontStyle.Normal, TextAnchor.MiddleLeft);
+            var sRT = _txtStatus.GetComponent<RectTransform>();
+            SetFillRect(sRT);
+            sRT.offsetMin = new Vector2(8, 0);
+            _txtStatus.color = new Color(0.6f, 0.8f, 1f);
+        }
+
+        private void BuildRightPanel(Transform canvasRoot)
+        {
+            var panel = MakeRT("RightPanel", canvasRoot);
+            panel.anchorMin = new Vector2(1, 0);
+            panel.anchorMax = Vector2.one;
+            panel.pivot = new Vector2(1, 0.5f);
+            panel.sizeDelta = new Vector2(RIGHT_PANEL_WIDTH, 0);
             panel.anchoredPosition = Vector2.zero;
             var panelImg = panel.gameObject.AddComponent<Image>();
             panelImg.color = new Color(0.10f, 0.10f, 0.14f, 0.97f);
@@ -323,8 +430,6 @@ namespace BalloonFlow
 
             var gr = Row(p); Lbl(gr, "Gimmick", w: 90);
             MakeSlider(gr, 0, GIMMICK_NAMES.Length - 1, 0, true, v => _paintGimmick = (int)v);
-            _txtStatus = Lbl(p, "Ready", 11);
-            _txtStatus.color = new Color(0.6f, 0.8f, 1f);
             Sep(p);
         }
 
@@ -390,7 +495,6 @@ namespace BalloonFlow
             Btn(r1, _railDir == 0 ? "CW" : "CCW", () =>
             {
                 _railDir = 1 - _railDir;
-                // button text doesn't auto-update, but functional
             });
             var r2 = Row(p); Lbl(r2, "Padding", w: 90);
             MakeInputField(r2, _railPadding.ToString("F1"), s =>
@@ -407,7 +511,6 @@ namespace BalloonFlow
         {
             Lbl(p, "Conveyor Belt Tiles", 14, FontStyle.Bold);
 
-            // Paint mode toggle
             var r1 = Row(p);
             Lbl(r1, "Paint Mode", w: 90);
             _txtConveyorMode = Lbl(r1, "Balloon", w: 80);
@@ -427,7 +530,6 @@ namespace BalloonFlow
                     : "Balloon Paint: click to place/erase");
             });
 
-            // Conveyor actions
             var r2 = Row(p);
             Btn(r2, "Fill Conv.", () =>
             {
@@ -445,9 +547,6 @@ namespace BalloonFlow
                 RebuildConveyorPreview();
                 RefreshInfo();
             });
-
-            int convCount = CountConveyorTiles();
-            Lbl(p, $"  Conveyor tiles: {convCount}", 11);
             Sep(p);
         }
 
@@ -463,7 +562,6 @@ namespace BalloonFlow
             var r3 = Row(p); Lbl(r3, "Default Mag", w: 90);
             MakeSlider(r3, 1, 20, _defaultMag, true, v => _defaultMag = (int)v);
 
-            // Holder grid buttons
             var gridGO = new GameObject("HolderButtons", typeof(RectTransform),
                 typeof(GridLayoutGroup), typeof(LayoutElement));
             gridGO.transform.SetParent(p, false);
@@ -489,8 +587,15 @@ namespace BalloonFlow
             var row = Row(p);
             Btn(row, "Save to DB", SaveToDatabase);
             Btn(row, "Export JSON", ExportJson);
-            var row2 = Row(p);
-            Btn(row2, "Test Play", TestPlay);
+            Btn(row, "Load Level", () => LoadLevelById(_levelId));
+
+            Sep(p);
+
+            // Test Play — prominent button at bottom
+            var testRow = Row(p, 40);
+            var testBtn = Btn(testRow, "TEST PLAY", TestPlay);
+            var testImg = testBtn.GetComponent<Image>();
+            if (testImg) testImg.color = new Color(0.15f, 0.55f, 0.25f);
         }
 
         #endregion
@@ -546,17 +651,14 @@ namespace BalloonFlow
             svRT.sizeDelta = Vector2.zero;
             svRT.anchoredPosition = Vector2.zero;
 
-            // Style scroll view
             svGO.GetComponent<Image>().color = Color.clear;
             var sr = svGO.GetComponent<ScrollRect>();
             sr.horizontal = false;
             sr.scrollSensitivity = 30;
 
-            // Disable horizontal scrollbar
             var hBar = svGO.transform.Find("Scrollbar Horizontal");
             if (hBar) hBar.gameObject.SetActive(false);
 
-            // Style vertical scrollbar
             var vBar = svGO.transform.Find("Scrollbar Vertical");
             if (vBar)
             {
@@ -564,7 +666,6 @@ namespace BalloonFlow
                 if (vBarImg) vBarImg.color = new Color(0.15f, 0.15f, 0.2f);
             }
 
-            // Content — add layout
             var content = sr.content;
             var vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset(8, 8, 6, 6);
@@ -588,6 +689,25 @@ namespace BalloonFlow
             var go = new GameObject(n, typeof(RectTransform));
             go.transform.SetParent(parent, false);
             return go.GetComponent<RectTransform>();
+        }
+
+        private void SetFillRect(RectTransform rt)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.sizeDelta = Vector2.zero;
+            rt.anchoredPosition = Vector2.zero;
+        }
+
+        private Text MakeText(Transform parent, string text, int size,
+            FontStyle style, TextAnchor align)
+        {
+            var go = new GameObject("Txt", typeof(RectTransform), typeof(Text));
+            go.transform.SetParent(parent, false);
+            var t = go.GetComponent<Text>();
+            t.text = text; t.font = _font; t.fontSize = size;
+            t.fontStyle = style; t.color = Color.white; t.alignment = align;
+            return t;
         }
 
         private Text Lbl(Transform parent, string text, int size = 13,
@@ -784,13 +904,11 @@ namespace BalloonFlow
             {
                 for (int r = 0; r < _gridRows; r++)
                 {
-                    // Flat quad on the ground plane (Y ~ -0.04, just above any floor)
                     var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
                     Destroy(quad.GetComponent<Collider>());
                     quad.transform.SetParent(_conveyorPreviewRoot, false);
                     quad.transform.localScale = new Vector3(tileSize, tileSize, 1f);
 
-                    // Quads face +Z by default; rotate to face +Y (top-down visible)
                     float wx = _boardCenter.x + (c - (_gridCols - 1) * 0.5f) * spacing;
                     float wz = _boardCenter.y + (r - (_gridRows - 1) * 0.5f) * spacing;
                     quad.transform.position = new Vector3(wx, -0.04f, wz);
@@ -835,7 +953,6 @@ namespace BalloonFlow
             var mouse = Mouse.current;
             if (mouse == null) return;
 
-            // Conveyor mode uses single clicks, balloon uses drag
             if (_conveyorPaintMode)
             {
                 if (!mouse.leftButton.wasPressedThisFrame) { _conveyorClickConsumed = false; return; }
@@ -863,7 +980,6 @@ namespace BalloonFlow
             {
                 if (_conveyorPaintMode)
                 {
-                    // Toggle conveyor tile
                     _conveyorTiles[col, row] = !_conveyorTiles[col, row];
                     UpdateConveyorPreviewCell(col, row);
                     _conveyorClickConsumed = true;
@@ -888,7 +1004,6 @@ namespace BalloonFlow
 
         private void HandleKeyboard()
         {
-            // InputField 포커스 중이면 무시
             if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)
             {
                 var sel = EventSystem.current.currentSelectedGameObject;
@@ -1007,6 +1122,25 @@ namespace BalloonFlow
                         _holderMags[c, r] = _defaultMag;
         }
 
+        /// <summary>
+        /// Returns gimmick life for balloon dart calculations.
+        /// Matches LevelDatabaseGenerator50.GetGimmickLife().
+        /// </summary>
+        private int GetGimmickLifeForBalance(int gimmickIndex)
+        {
+            if (gimmickIndex <= 0 || gimmickIndex >= GIMMICK_NAMES.Length) return 1;
+            string gimmick = GIMMICK_NAMES[gimmickIndex];
+            switch (gimmick)
+            {
+                case "Pinata":
+                case "Pinata_Box": return 2;
+                case "Wall":
+                case "Pin":
+                case "Ice": return 0;
+                default: return 1;
+            }
+        }
+
         private void RefreshInfo()
         {
             if (_txtColsVal) _txtColsVal.text = _gridCols.ToString();
@@ -1019,68 +1153,93 @@ namespace BalloonFlow
             int hc = CountHolders();
             int tm = CountTotalMags();
 
-            // Per-color validation: count balloons vs darts per color
-            var balloonsPerColor = new Dictionary<int, int>();
-            var dartsPerColor = new Dictionary<int, int>();
+            // Per-color validation accounting for gimmick life
+            var dartsNeededPerColor = new Dictionary<int, int>();
+            var dartsProvidedPerColor = new Dictionary<int, int>();
+
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] >= 0)
                     {
                         int ci = _balloonColors[c, r];
-                        balloonsPerColor[ci] = balloonsPerColor.ContainsKey(ci) ? balloonsPerColor[ci] + 1 : 1;
+                        int life = GetGimmickLifeForBalance(_balloonGimmicks[c, r]);
+                        dartsNeededPerColor[ci] = dartsNeededPerColor.ContainsKey(ci) ? dartsNeededPerColor[ci] + life : life;
                     }
+
             for (int c = 0; c < _holderCols; c++)
                 for (int r = 0; r < _holderRows; r++)
                     if (_holderColors[c, r] >= 0)
                     {
                         int ci = _holderColors[c, r];
-                        dartsPerColor[ci] = dartsPerColor.ContainsKey(ci) ? dartsPerColor[ci] + _holderMags[c, r] : _holderMags[c, r];
+                        dartsProvidedPerColor[ci] = dartsProvidedPerColor.ContainsKey(ci) ? dartsProvidedPerColor[ci] + _holderMags[c, r] : _holderMags[c, r];
                     }
 
+            int totalDartsNeeded = 0;
+            foreach (var v in dartsNeededPerColor.Values) totalDartsNeeded += v;
+
             string warnings = "";
-            foreach (var kvp in balloonsPerColor)
+            foreach (var kvp in dartsNeededPerColor)
             {
-                int darts = dartsPerColor.ContainsKey(kvp.Key) ? dartsPerColor[kvp.Key] : 0;
+                int darts = dartsProvidedPerColor.ContainsKey(kvp.Key) ? dartsProvidedPerColor[kvp.Key] : 0;
                 if (darts != kvp.Value)
                 {
                     string label = kvp.Key < COLOR_LABELS.Length ? COLOR_LABELS[kvp.Key] : kvp.Key.ToString();
-                    warnings += $" [{label}:{kvp.Value}B/{darts}D]";
+                    warnings += $" [{label}:{kvp.Value}need/{darts}have]";
                 }
             }
-            // Also check for dart colors with no balloons
-            foreach (var kvp in dartsPerColor)
+            foreach (var kvp in dartsProvidedPerColor)
             {
-                if (!balloonsPerColor.ContainsKey(kvp.Key))
+                if (!dartsNeededPerColor.ContainsKey(kvp.Key) || dartsNeededPerColor[kvp.Key] == 0)
                 {
                     string label = kvp.Key < COLOR_LABELS.Length ? COLOR_LABELS[kvp.Key] : kvp.Key.ToString();
-                    warnings += $" [{label}:0B/{kvp.Value}D]";
+                    warnings += $" [{label}:0need/{kvp.Value}have]";
                 }
             }
 
-            string status = $"Balloons: {bc}  Holders: {hc}  Darts: {tm}";
-            if (tm < bc) status += "  [NOT ENOUGH DARTS]";
-            if (tm > bc) status += "  [SURPLUS DARTS]";
-            if (!string.IsNullOrEmpty(warnings)) status += "\nMismatch:" + warnings;
+            string status = $"Balloons: {bc}  Holders: {hc}  Darts: {tm} (need: {totalDartsNeeded})";
+            if (tm < totalDartsNeeded) status += "  [NOT ENOUGH]";
+            if (tm > totalDartsNeeded) status += "  [SURPLUS]";
+            if (!string.IsNullOrEmpty(warnings)) status += "\n" + warnings;
 
             if (_txtStatus) _txtStatus.text = status;
+
+            // Center info panel
+            if (_txtCenterInfo)
+            {
+                string gimmickInfo = "";
+                var gimmickCounts = new Dictionary<string, int>();
+                for (int c = 0; c < _gridCols; c++)
+                    for (int r = 0; r < _gridRows; r++)
+                        if (_balloonGimmicks[c, r] > 0 && _balloonGimmicks[c, r] < GIMMICK_NAMES.Length)
+                        {
+                            string gn = GIMMICK_NAMES[_balloonGimmicks[c, r]];
+                            gimmickCounts[gn] = gimmickCounts.ContainsKey(gn) ? gimmickCounts[gn] + 1 : 1;
+                        }
+                foreach (var kvp in gimmickCounts)
+                    gimmickInfo += $"  {kvp.Key}:{kvp.Value}";
+
+                _txtCenterInfo.text = $"Level {_levelId}  |  {_gridCols}x{_gridRows}  |  {_numColors} colors  |  {bc} balloons  |  {_difficulty}" +
+                    (string.IsNullOrEmpty(gimmickInfo) ? "" : $"\nGimmicks:{gimmickInfo}");
+            }
         }
 
         private void SetStatus(string msg) { if (_txtStatus) _txtStatus.text = msg; }
 
         /// <summary>
-        /// Auto-adjusts holder magazines so total darts per color = total balloons per color.
-        /// For each color, distributes the balloon count evenly across holders of that color.
+        /// Auto-adjusts holder magazines so total darts per color = total balloon life per color.
+        /// Accounts for gimmick life (Wall/Pin/Ice = 0, Pinata = 2, others = 1).
         /// </summary>
         private void AutoBalanceHolders()
         {
-            // Count balloons per color
+            // Count darts needed per color (accounting for gimmick life)
             var balloonsPerColor = new Dictionary<int, int>();
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] >= 0)
                     {
                         int ci = _balloonColors[c, r];
-                        balloonsPerColor[ci] = balloonsPerColor.ContainsKey(ci) ? balloonsPerColor[ci] + 1 : 1;
+                        int life = GetGimmickLifeForBalance(_balloonGimmicks[c, r]);
+                        balloonsPerColor[ci] = balloonsPerColor.ContainsKey(ci) ? balloonsPerColor[ci] + life : life;
                     }
 
             // Group holder positions by color
@@ -1119,18 +1278,14 @@ namespace BalloonFlow
                     }
                     else
                     {
-                        // Last holder absorbs remainder for exact match
                         _holderMags[cc, rr] = Mathf.Max(1, needed - sumSoFar);
                     }
                 }
             }
 
-            SetStatus("Auto Balance applied — darts = balloons per color");
+            SetStatus("Auto Balance applied (gimmick life accounted)");
         }
 
-        /// <summary>
-        /// Serializes current level to JSON, stores in EditorPrefs, and loads InGame scene for test play.
-        /// </summary>
         private void TestPlay()
         {
             var config = BuildLevelConfig();
@@ -1145,6 +1300,213 @@ namespace BalloonFlow
 
             SetStatus($"Test Play: Loading level {_levelId}...");
             UnityEngine.SceneManagement.SceneManager.LoadScene("InGame");
+        }
+
+        #endregion
+
+        // ═══════════════════════════════════════════════════════════════
+        //  LEVEL LIST (Left Panel)
+        // ═══════════════════════════════════════════════════════════════
+
+        #region Level List
+
+        private void RefreshLevelList()
+        {
+            if (_levelListContent == null) return;
+            foreach (Transform c in _levelListContent) Destroy(c.gameObject);
+            _levelListButtons.Clear();
+
+            var db = LoadLevelDatabase();
+            if (db == null || db.levels == null || db.levels.Length == 0)
+            {
+                var emptyTxt = MakeText(_levelListContent, "No levels in DB.\nUse 'Save to DB' to add.", 12,
+                    FontStyle.Italic, TextAnchor.MiddleCenter);
+                emptyTxt.color = new Color(0.5f, 0.5f, 0.6f);
+                var le = emptyTxt.gameObject.AddComponent<LayoutElement>();
+                le.preferredHeight = 60;
+                return;
+            }
+
+            for (int i = 0; i < db.levels.Length; i++)
+            {
+                var lvl = db.levels[i];
+                int idx = i;
+                int lid = lvl.levelId;
+
+                var go = DefaultControls.CreateButton(_uiRes);
+                go.transform.SetParent(_levelListContent, false);
+                var le = go.AddComponent<LayoutElement>();
+                le.preferredHeight = 36;
+
+                bool isSelected = (lid == _levelId);
+                var img = go.GetComponent<Image>();
+                img.color = isSelected ? new Color(0.2f, 0.35f, 0.55f) : new Color(0.15f, 0.15f, 0.20f);
+
+                var txt = go.GetComponentInChildren<Text>();
+                txt.font = _font; txt.fontSize = 12; txt.color = Color.white;
+                txt.alignment = TextAnchor.MiddleLeft;
+
+                // Gimmick summary
+                string gimmickStr = "";
+                if (lvl.gimmickTypes != null && lvl.gimmickTypes.Length > 0)
+                    gimmickStr = $" [{string.Join(",", lvl.gimmickTypes)}]";
+
+                txt.text = $"  Lv.{lid}  {lvl.balloonCount}B  {lvl.numColors}C{gimmickStr}";
+
+                var btn = go.GetComponent<Button>();
+                btn.onClick.AddListener(() =>
+                {
+                    LoadLevelFromDB(idx);
+                });
+                _levelListButtons.Add(btn);
+            }
+        }
+
+        private void LoadLevelFromDB(int index)
+        {
+            var db = LoadLevelDatabase();
+            if (db == null || db.levels == null || index < 0 || index >= db.levels.Length) return;
+
+            var config = db.levels[index];
+            ApplyLevelConfig(config);
+            _selectedListIndex = index;
+
+            RefreshLevelList();
+            RebuildPreview();
+            RebuildConveyorPreview();
+            RefreshInfo();
+            SetStatus($"Loaded Level {config.levelId} from DB");
+        }
+
+        private void LoadLevelById(int levelId)
+        {
+            var db = LoadLevelDatabase();
+            if (db == null || db.levels == null)
+            {
+                SetStatus("No LevelDatabase found");
+                return;
+            }
+
+            for (int i = 0; i < db.levels.Length; i++)
+            {
+                if (db.levels[i].levelId == levelId)
+                {
+                    LoadLevelFromDB(i);
+                    return;
+                }
+            }
+            SetStatus($"Level {levelId} not found in DB");
+        }
+
+        private void ApplyLevelConfig(LevelConfig config)
+        {
+            _levelId = config.levelId;
+            _numColors = config.numColors;
+            _difficulty = config.difficultyPurpose;
+
+            // Determine grid size from balloon positions
+            if (config.balloons != null && config.balloons.Length > 0)
+            {
+                _gridCols = Mathf.Max(config.gridCols, 2);
+                _gridRows = Mathf.Max(config.gridRows, 2);
+            }
+
+            // Reconstruct balloon grid
+            float spacing = _boardWorldSize / Mathf.Max(_gridCols, _gridRows);
+            _balloonColors = new int[_gridCols, _gridRows];
+            _balloonGimmicks = new int[_gridCols, _gridRows];
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                {
+                    _balloonColors[c, r] = -1;
+                    _balloonGimmicks[c, r] = 0;
+                }
+
+            if (config.balloons != null)
+            {
+                foreach (var b in config.balloons)
+                {
+                    // Convert world position back to grid coordinates
+                    float relC = (b.gridPosition.x - _boardCenter.x) / spacing + (_gridCols - 1) * 0.5f;
+                    float relR = (b.gridPosition.y - _boardCenter.y) / spacing + (_gridRows - 1) * 0.5f;
+                    int col = Mathf.RoundToInt(relC);
+                    int row = Mathf.RoundToInt(relR);
+
+                    if (col >= 0 && col < _gridCols && row >= 0 && row < _gridRows)
+                    {
+                        _balloonColors[col, row] = b.color;
+                        // Find gimmick index
+                        int gi = 0;
+                        if (!string.IsNullOrEmpty(b.gimmickType))
+                        {
+                            for (int g = 0; g < GIMMICK_NAMES.Length; g++)
+                            {
+                                if (GIMMICK_NAMES[g] == b.gimmickType) { gi = g; break; }
+                            }
+                        }
+                        _balloonGimmicks[col, row] = gi;
+                    }
+                }
+            }
+
+            // Reconstruct holder grid
+            if (config.holders != null && config.holders.Length > 0)
+            {
+                // Determine holder grid dimensions
+                int maxC = 0, maxR = 0;
+                foreach (var h in config.holders)
+                {
+                    maxC = Mathf.Max(maxC, Mathf.RoundToInt(h.position.x) + 1);
+                    maxR = Mathf.Max(maxR, Mathf.RoundToInt(h.position.y) + 1);
+                }
+                _holderCols = Mathf.Max(maxC, 1);
+                _holderRows = Mathf.Max(maxR, 1);
+                _holderColors = new int[_holderCols, _holderRows];
+                _holderMags = new int[_holderCols, _holderRows];
+                for (int c = 0; c < _holderCols; c++)
+                    for (int r = 0; r < _holderRows; r++)
+                    {
+                        _holderColors[c, r] = -1;
+                        _holderMags[c, r] = 0;
+                    }
+
+                foreach (var h in config.holders)
+                {
+                    int hc = Mathf.RoundToInt(h.position.x);
+                    int hr = Mathf.RoundToInt(h.position.y);
+                    if (hc >= 0 && hc < _holderCols && hr >= 0 && hr < _holderRows)
+                    {
+                        _holderColors[hc, hr] = h.color;
+                        _holderMags[hc, hr] = h.magazineCount;
+                    }
+                }
+            }
+
+            // Rail
+            if (config.rail.slotCount > 0)
+                _railSlotCount = config.rail.slotCount;
+
+            // Conveyor positions
+            _conveyorTiles = new bool[_gridCols, _gridRows];
+            if (config.conveyorPositions != null)
+            {
+                foreach (var pos in config.conveyorPositions)
+                {
+                    if (pos.x >= 0 && pos.x < _gridCols && pos.y >= 0 && pos.y < _gridRows)
+                        _conveyorTiles[pos.x, pos.y] = true;
+                }
+            }
+
+            RebuildPalette();
+            RebuildHolderUI();
+        }
+
+        private LevelDatabase LoadLevelDatabase()
+        {
+            if (_targetDB != null) return _targetDB;
+            string path = "Assets/Resources/LevelDatabase.asset";
+            _targetDB = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
+            return _targetDB;
         }
 
         #endregion
@@ -1179,6 +1541,8 @@ namespace BalloonFlow
             EditorUtility.SetDirty(_targetDB);
             AssetDatabase.SaveAssets();
             SetStatus($"Saved Level {config.levelId} — {config.balloonCount} balloons");
+
+            RefreshLevelList();
         }
 
         private void ExportJson()
@@ -1245,11 +1609,9 @@ namespace BalloonFlow
             config.holders = holders.ToArray();
             config.rail = BuildRailLayout(spacing);
 
-            // Grid dimensions for tilemap
             config.gridCols = _gridCols;
             config.gridRows = _gridRows;
 
-            // Conveyor tile positions
             var convPositions = new List<Vector2Int>();
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
@@ -1307,7 +1669,6 @@ namespace BalloonFlow
                 wp.Add(new Vector3(r, h, Mathf.Lerp(t, b, .67f)));
             }
 
-            // Deploy points: where each queue column aligns to the bottom rail edge
             int cols = _holderCols;
             var dp = new Vector3[cols];
             for (int i = 0; i < cols; i++)
@@ -1367,16 +1728,6 @@ namespace BalloonFlow
             for (int c = 0; c < _holderCols; c++)
                 for (int r = 0; r < _holderRows; r++)
                     if (_holderColors[c, r] >= 0) n += _holderMags[c, r];
-            return n;
-        }
-
-        private int CountConveyorTiles()
-        {
-            int n = 0;
-            if (_conveyorTiles == null) return 0;
-            for (int c = 0; c < _conveyorTiles.GetLength(0); c++)
-                for (int r = 0; r < _conveyorTiles.GetLength(1); r++)
-                    if (_conveyorTiles[c, r]) n++;
             return n;
         }
 
