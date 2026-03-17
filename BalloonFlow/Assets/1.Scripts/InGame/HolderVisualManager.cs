@@ -431,6 +431,13 @@ namespace BalloonFlow
             // Deploy darts one at a time: wait for empty slot passing nearby
             while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
             {
+                // Stop deploying if no targetable balloons of this color remain (Chain surplus prevention)
+                if (BalloonController.HasInstance)
+                {
+                    BalloonData[] targets = BalloonController.Instance.GetBalloonsByColor(visual.color);
+                    if (targets == null || targets.Length == 0) break;
+                }
+
                 // Find next empty slot near deploy point
                 int emptySlot = FindEmptySlotNearPosition(deployPoint);
 

@@ -159,6 +159,8 @@ namespace BalloonFlow
     public struct OnBalloonSpawned
     {
         public int balloonId;
+        public int color;
+        public Vector3 position;
     }
 
     /// <summary>A pop sequence completed (single dart hit).</summary>
