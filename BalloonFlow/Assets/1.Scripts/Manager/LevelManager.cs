@@ -260,8 +260,9 @@ namespace BalloonFlow
             // Update cellSpacing based on level grid size (critical for targeting + fail detection)
             if (GameManager.HasInstance && config.gridCols > 0)
             {
-                float boardWorldSize = 8f; // must match LevelDatabaseGenerator50.BOARD_WORLD_SIZE
-                GameManager.Instance.Board.cellSpacing = boardWorldSize / config.gridCols;
+                float boardWorldSize = 8f; // must match MapMakerController._boardWorldSize default
+                int maxDim = Mathf.Max(config.gridCols, config.gridRows > 0 ? config.gridRows : config.gridCols);
+                GameManager.Instance.Board.cellSpacing = boardWorldSize / maxDim;
             }
 
             // Reset score first so subsystems receive the correct thresholds
