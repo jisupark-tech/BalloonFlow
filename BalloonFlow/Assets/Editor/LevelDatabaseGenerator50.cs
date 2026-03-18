@@ -9,7 +9,7 @@ namespace BalloonFlow.Editor
     /// Generates 50 pre-authored levels (Lv1-50) with shaped balloon grids.
     /// Grid: up to 30×30. Shapes: rectangle, triangle, diamond, star, cross, etc.
     /// All levels have exact dart/balloon symmetry — zero surplus.
-    /// Gimmicks start from Lv2: Hidden, Chain, Pinata progressively.
+    /// Gimmicks start from Lv11: Hidden(11), Spawner_T(21), Spawner_O(31), Pinata(41).
     /// Menu: BalloonFlow > Generate 50 Levels
     /// </summary>
     public static class LevelDatabaseGenerator50
@@ -81,7 +81,7 @@ namespace BalloonFlow.Editor
             EditorUtility.DisplayDialog("Level Database Generated",
                 $"50 levels created (up to 30×30 grid)\n" +
                 $"Shapes: Rectangle, Triangle, Diamond, Cross, Star, Circle\n" +
-                $"Gimmicks: from Lv2\n\n{path}", "OK");
+                $"Gimmicks: from Lv11 (design spec)\n\n{path}", "OK");
         }
 
         #endregion
@@ -377,7 +377,7 @@ namespace BalloonFlow.Editor
         private static void AssignGimmicks(int levelId, BalloonLayout[] balloons, System.Random rng,
             out string[] gimmickTypes)
         {
-            if (levelId <= 1 || balloons.Length < 5)
+            if (levelId < 11 || balloons.Length < 5)
             {
                 gimmickTypes = System.Array.Empty<string>();
                 return;
@@ -385,19 +385,18 @@ namespace BalloonFlow.Editor
 
             var activeGimmicks = new List<string>();
 
-            // Progressive gimmick introduction (lowered thresholds for first 50 levels)
-            if (levelId >= 2)  activeGimmicks.Add(GimmickManager.GIMMICK_HIDDEN);
-            if (levelId >= 8)  activeGimmicks.Add(GimmickManager.GIMMICK_CHAIN);
-            if (levelId >= 15) activeGimmicks.Add(GimmickManager.GIMMICK_PINATA);
-            if (levelId >= 25) activeGimmicks.Add(GimmickManager.GIMMICK_PIN);
-            if (levelId >= 35) activeGimmicks.Add(GimmickManager.GIMMICK_WALL);
-            if (levelId >= 45) activeGimmicks.Add(GimmickManager.GIMMICK_SPAWNER_T);
+            // Progressive gimmick introduction — 정본: gimmick_spec.yaml 도입 레벨 기준
+            if (levelId >= 11) activeGimmicks.Add(GimmickManager.GIMMICK_HIDDEN);      // PKG1 pos11
+            if (levelId >= 21) activeGimmicks.Add(GimmickManager.GIMMICK_SPAWNER_T);   // PKG2 pos1
+            if (levelId >= 31) activeGimmicks.Add(GimmickManager.GIMMICK_SPAWNER_O);   // PKG2 pos11
+            if (levelId >= 41) activeGimmicks.Add(GimmickManager.GIMMICK_PINATA);      // PKG3 pos1 (Big Object)
+            // Chain은 Lv61이지만 Generator는 50레벨까지만 생성하므로 미포함
 
             gimmickTypes = activeGimmicks.ToArray();
 
             // Assign gimmicks to random balloons
-            // Percentage of balloons with gimmicks: 5% (lv2) → 20% (lv50)
-            float gimmickRate = Mathf.Lerp(0.05f, 0.20f, (levelId - 2f) / 48f);
+            // Percentage of balloons with gimmicks: 5% (lv11) → 20% (lv50)
+            float gimmickRate = Mathf.Lerp(0.05f, 0.20f, (levelId - 11f) / 39f);
             int gimmickCount = Mathf.Max(1, Mathf.RoundToInt(balloons.Length * gimmickRate));
 
             // Create shuffled indices
@@ -560,7 +559,7 @@ namespace BalloonFlow.Editor
             {
                 waypoints = wp.ToArray(),
                 slotCount = 200,
-                visualType = 0,
+                visualType = RailRenderer.VISUAL_SPRITE_TILE,
                 deployPoints = dp
             };
         }

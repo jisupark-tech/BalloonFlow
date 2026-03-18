@@ -28,6 +28,9 @@ namespace BalloonFlow
 
         [SerializeField] private float _projectileFlightTime = DEFAULT_PROJECTILE_FLIGHT_TIME;
 
+        [Tooltip("다트 포물선 곡사 높이. 0=직선, >0=곡사. Design ref: 피드백디렉션 §다트궤적")]
+        [SerializeField] private float _arcHeight = 1.5f;
+
         #endregion
 
         #region Nested Types
@@ -93,6 +96,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnBalloonPopped>(HandleBalloonPopped);
             EventBus.Subscribe<OnBoardCleared>(HandleBoardCleared);
             EventBus.Subscribe<OnBoardFailed>(HandleBoardFailed);
+            EventBus.Subscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
         private void OnDisable()
@@ -101,6 +105,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnBalloonPopped>(HandleBalloonPopped);
             EventBus.Unsubscribe<OnBoardCleared>(HandleBoardCleared);
             EventBus.Unsubscribe<OnBoardFailed>(HandleBoardFailed);
+            EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
         private void Update()
@@ -370,8 +375,21 @@ namespace BalloonFlow
 
             _activeProjectiles.Add(proj);
 
-            // DOTween flight — fly along cardinal axis to balloon depth, then snap
-            dartObj.transform.DOMove(cardinalTarget, _projectileFlightTime).SetEase(Ease.Linear);
+            // Flight: parabolic arc (곡사) or linear depending on _arcHeight
+            if (_arcHeight > 0.01f)
+            {
+                // 3-point arc: start → apex (midpoint + Y offset) → target
+                Vector3 midPoint = (from + cardinalTarget) * 0.5f;
+                midPoint.y += _arcHeight;
+                Vector3[] path = { from, midPoint, cardinalTarget };
+                dartObj.transform.DOPath(path, _projectileFlightTime, PathType.CatmullRom)
+                    .SetEase(Ease.Linear)
+                    .SetLookAt(0.01f); // face movement direction
+            }
+            else
+            {
+                dartObj.transform.DOMove(cardinalTarget, _projectileFlightTime).SetEase(Ease.Linear);
+            }
         }
 
         #endregion
@@ -430,23 +448,13 @@ namespace BalloonFlow
         /// <summary>
         /// When a balloon is popped externally (chain pop, gimmick, etc.),
         /// clear its reservation so other darts can target new outermost balloons.
-        /// Also prune surplus same-color darts when no more targets of that color remain.
+        /// NOTE: We do NOT auto-remove surplus darts when no matching balloons remain.
+        /// Unmatched darts stay on rail, raising occupancy toward fail condition.
+        /// This is core to Rail Overflow gameplay.
         /// </summary>
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
             _reservedTargets.Remove(evt.balloonId);
-
-            // Prune surplus darts: if no balloons of this color remain, remove all rail darts of that color
-            if (BalloonController.HasInstance && RailManager.HasInstance)
-            {
-                int poppedColor = evt.color;
-                BalloonData[] remaining = BalloonController.Instance.GetBalloonsByColor(poppedColor);
-                if (remaining == null || remaining.Length == 0)
-                {
-                    // No more targetable balloons of this color — remove surplus darts from rail
-                    RemoveDartsByColor(poppedColor);
-                }
-            }
         }
 
         /// <summary>
@@ -508,6 +516,12 @@ namespace BalloonFlow
         private void HandleBoardFailed(OnBoardFailed evt)
         {
             _boardFinished = true;
+        }
+
+        private void HandleContinueApplied(OnContinueApplied evt)
+        {
+            _boardFinished = false;
+            Debug.Log("[DartManager] Continue applied — dart system resumed.");
         }
 
         #endregion

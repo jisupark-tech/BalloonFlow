@@ -215,11 +215,10 @@ namespace BalloonFlow
             // ── 하트 충전 (IAP) ──
             _products.Add(MakeIAP(ProdHeartRefill, "하트 충전", "하트 즉시 충전", "KRW 1,100", "heart"));
 
-            // ── 부스터 4종 (코인 구매) ──
-            _products.Add(MakeCoin(BoosterManager.EXTRA_TRAY,   "Extra Tray",    "+1 레일 슬롯",          300,  "booster"));
-            _products.Add(MakeCoin(BoosterManager.SHUFFLE,      "Shuffle",       "대기열 순서 섞기",       1500, "booster"));
-            _products.Add(MakeCoin(BoosterManager.SELECT_TOOL,  "Select Tool",   "원하는 홀더 선택",       1900, "booster"));
-            _products.Add(MakeCoin(BoosterManager.COLOR_REMOVE, "Color Remove",  "한 색상 전부 제거",      2900, "booster"));
+            // ── 부스터 3종 (코인 구매) ──
+            _products.Add(MakeCoin(BoosterManager.SELECT_TOOL,  "Hand",          "큐에서 원하는 보관함 선택", 1900, "booster"));
+            _products.Add(MakeCoin(BoosterManager.SHUFFLE,      "Shuffle",       "큐 보관함 순서 셔플",      1500, "booster"));
+            _products.Add(MakeCoin(BoosterManager.COLOR_REMOVE, "Color Remove",  "지정 색상 전부 제거",      2900, "booster"));
         }
 
         private ShopProduct MakeIAP(string id, string name, string desc, string price, string cat)
@@ -328,25 +327,22 @@ namespace BalloonFlow
                 // 번들 3종 (골드 + 부스터 전종 x배수 + 무한하트)
                 case ProdBundleSmall:
                     CurrencyManager.Instance.AddCoins(5000, CurrencyManager.CoinSource.IAP);
-                    BoosterManager.Instance?.AddBooster(BoosterManager.EXTRA_TRAY, 1);
-                    BoosterManager.Instance?.AddBooster(BoosterManager.SHUFFLE, 1);
                     BoosterManager.Instance?.AddBooster(BoosterManager.SELECT_TOOL, 1);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.SHUFFLE, 1);
                     BoosterManager.Instance?.AddBooster(BoosterManager.COLOR_REMOVE, 1);
                     if (LifeManager.HasInstance) LifeManager.Instance.ActivateInfiniteHearts(2f * 3600f); // 2시간
                     break;
                 case ProdBundleMed:
                     CurrencyManager.Instance.AddCoins(10000, CurrencyManager.CoinSource.IAP);
-                    BoosterManager.Instance?.AddBooster(BoosterManager.EXTRA_TRAY, 2);
-                    BoosterManager.Instance?.AddBooster(BoosterManager.SHUFFLE, 2);
                     BoosterManager.Instance?.AddBooster(BoosterManager.SELECT_TOOL, 2);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.SHUFFLE, 2);
                     BoosterManager.Instance?.AddBooster(BoosterManager.COLOR_REMOVE, 2);
                     if (LifeManager.HasInstance) LifeManager.Instance.ActivateInfiniteHearts(2f * 3600f); // 2시간
                     break;
                 case ProdBundleUltra:
                     CurrencyManager.Instance.AddCoins(25000, CurrencyManager.CoinSource.IAP);
-                    BoosterManager.Instance?.AddBooster(BoosterManager.EXTRA_TRAY, 5);
-                    BoosterManager.Instance?.AddBooster(BoosterManager.SHUFFLE, 5);
                     BoosterManager.Instance?.AddBooster(BoosterManager.SELECT_TOOL, 5);
+                    BoosterManager.Instance?.AddBooster(BoosterManager.SHUFFLE, 5);
                     BoosterManager.Instance?.AddBooster(BoosterManager.COLOR_REMOVE, 5);
                     if (LifeManager.HasInstance) LifeManager.Instance.ActivateInfiniteHearts(6f * 3600f); // 6시간
                     break;

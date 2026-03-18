@@ -111,6 +111,8 @@ namespace BalloonFlow
         private float _railPadding = 1.5f;
         private float _railHeight = 0.5f;
         private int _railSlotCount = 200;
+        private bool _smoothCorners;
+        private float _cornerRadius = 1f;
 
         private bool[,] _conveyorTiles;
         private bool _conveyorPaintMode;
@@ -154,6 +156,7 @@ namespace BalloonFlow
         private GameObject[,] _conveyorPreviewObjs;
         private Material _conveyorMat;
         private Text _txtConveyorMode;
+        private RailTileSet _railTileSet;
 
         // Waypoint preview
         private Transform _waypointPreviewRoot;
@@ -182,6 +185,7 @@ namespace BalloonFlow
             if (_font == null) _font = Font.CreateDynamicFontFromOSFont("Arial", 14);
 
             _uiRes = new DefaultControls.Resources();
+            _railTileSet = Resources.Load<RailTileSet>("RailTileSet");
             CreateMaterials();
             InitGrid();
             InitDefaultWaypoints();
@@ -692,6 +696,37 @@ namespace BalloonFlow
             { if (float.TryParse(s, out float v)) _railPadding = v; });
             var r3 = Row(p); Lbl(r3, "Slot Count", w: 90);
             MakeSlider(r3, 50, 400, _railSlotCount, true, v => _railSlotCount = (int)v);
+            // Auto-calc button: calculate capacity from total darts
+            var r3b = Row(p);
+            Btn(r3b, "Auto (from darts)", () =>
+            {
+                int totalDarts = CalcTotalDarts();
+                _railSlotCount = RailManager.CalculateCapacity(totalDarts);
+                SetStatus($"Rail capacity auto: {_railSlotCount} (darts={totalDarts})");
+                RefreshInfo();
+            });
+
+            // Smooth corners toggle + radius
+            var r4 = Row(p); Lbl(r4, "Smooth Corner", w: 100);
+            var smoothLabel = Lbl(r4, _smoothCorners ? "ON" : "OFF", w: 40);
+            smoothLabel.color = _smoothCorners ? new Color(0.5f, 0.95f, 0.5f) : new Color(0.7f, 0.7f, 0.7f);
+            Btn(r4, "Toggle", () =>
+            {
+                _smoothCorners = !_smoothCorners;
+                smoothLabel.text = _smoothCorners ? "ON" : "OFF";
+                smoothLabel.color = _smoothCorners ? new Color(0.5f, 0.95f, 0.5f) : new Color(0.7f, 0.7f, 0.7f);
+                RebuildWaypointPreview();
+                SetStatus(_smoothCorners ? "Smooth corners ON" : "Smooth corners OFF");
+            });
+
+            var r5 = Row(p); Lbl(r5, "Corner Radius", w: 100);
+            var radiusLabel = Lbl(r5, _cornerRadius.ToString("F1"), w: 40);
+            MakeSlider(r5, 0.2f, 3f, _cornerRadius, false, v =>
+            {
+                _cornerRadius = v;
+                radiusLabel.text = _cornerRadius.ToString("F1");
+                if (_smoothCorners) RebuildWaypointPreview();
+            });
             Sep(p);
         }
 
@@ -707,11 +742,12 @@ namespace BalloonFlow
 
             // Tile type selector
             var r4 = Row(p); Lbl(r4, "Tile Type", w: 90);
+            var tileLabel = Lbl(r4, TILE_NAMES[0], w: 50);
             MakeSlider(r4, 0, TILE_NAMES.Length - 1, 0, true, v => {
                 _selectedTileType = (int)v;
+                tileLabel.text = TILE_NAMES[_selectedTileType];
                 SetStatus($"Tile: rail_corner_{TILE_NAMES[_selectedTileType]}");
             });
-            var tileLabel = Lbl(r4, TILE_NAMES[0], w: 36);
 
             var r2 = Row(p);
             Btn(r2, "Fill Conv.", () => {
@@ -780,32 +816,39 @@ namespace BalloonFlow
         private void RebuildHolderUI()
         {
             if (_holderGridContainer == null) return;
-            foreach (Transform c in _holderGridContainer) Destroy(c.gameObject);
+
+            // Unparent first so GridLayoutGroup stops counting old children immediately
+            var toDestroy = new List<GameObject>();
+            foreach (Transform c in _holderGridContainer) toDestroy.Add(c.gameObject);
+            foreach (var go in toDestroy) { go.transform.SetParent(null); Destroy(go); }
 
             var glg = _holderGridContainer.GetComponent<GridLayoutGroup>();
             glg.constraintCount = _holderCols;
             float cellW = Mathf.Min(300f / Mathf.Max(_holderCols, 1), 36f);
             glg.cellSize = new Vector2(cellW, cellW);
-            _holderGridContainer.GetComponent<LayoutElement>().preferredHeight =
-                cellW * _holderRows + (_holderRows - 1) * 2 + 4;
+            var le = _holderGridContainer.GetComponent<LayoutElement>();
+            le.preferredHeight = cellW * _holderRows + (_holderRows - 1) * glg.spacing.y + 4;
 
             for (int r = 0; r < _holderRows; r++)
                 for (int c = 0; c < _holderCols; c++)
                 {
                     int cc = c, rr = r;
                     int ci = _holderColors[c, r];
-                    var go = DefaultControls.CreateButton(_uiRes);
-                    go.transform.SetParent(_holderGridContainer, false);
-                    go.GetComponent<Image>().color = ci >= 0 ? PALETTE[ci] : new Color(0.22f, 0.22f, 0.26f);
-                    var t = go.GetComponentInChildren<Text>();
+                    var btn = DefaultControls.CreateButton(_uiRes);
+                    btn.transform.SetParent(_holderGridContainer, false);
+                    btn.GetComponent<Image>().color = ci >= 0 ? PALETTE[ci] : new Color(0.22f, 0.22f, 0.26f);
+                    var t = btn.GetComponentInChildren<Text>();
                     t.text = ci >= 0 ? _holderMags[c, r].ToString() : ".";
                     t.font = _font; t.fontSize = 11; t.color = Color.white;
-                    go.GetComponent<Button>().onClick.AddListener(() => {
+                    btn.GetComponent<Button>().onClick.AddListener(() => {
                         _holderColors[cc, rr] = _paintColor;
                         _holderMags[cc, rr] = _paintColor >= 0 ? _defaultMag : 0;
                         RebuildHolderUI(); RefreshInfo();
                     });
                 }
+
+            // Force layout recalculation so container expands immediately
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_holderGridContainer.GetComponent<RectTransform>());
         }
 
         #endregion
@@ -1104,27 +1147,136 @@ namespace BalloonFlow
             _conveyorPreviewRoot = new GameObject("ConveyorPreview").transform;
             _conveyorPreviewObjs = new GameObject[_gridCols, _gridRows];
 
-            float spacing = CellSpacing;
-            float tileSize = spacing * 0.95f;
+            // Tile sprites along waypoint path (the actual conveyor belt line)
+            if (_railTileSet != null && _railTileSet.tileBH != null && _customWaypoints.Count >= 2)
+            {
+                BuildWaypointTiles();
+            }
 
+            // Also keep grid-based fallback quads for conveyor paint mode visualization
+            float spacing = CellSpacing;
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                 {
-                    var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                    Destroy(quad.GetComponent<Collider>());
-                    quad.transform.SetParent(_conveyorPreviewRoot, false);
-                    quad.transform.localScale = new Vector3(tileSize, tileSize, 1f);
+                    bool active = _conveyorTiles != null && c < _conveyorTiles.GetLength(0)
+                        && r < _conveyorTiles.GetLength(1) && _conveyorTiles[c, r];
 
                     float wx = _boardCenter.x + (c - (_gridCols - 1) * 0.5f) * spacing;
                     float wz = _boardCenter.y + (r - (_gridRows - 1) * 0.5f) * spacing;
-                    quad.transform.position = new Vector3(wx, -0.04f, wz);
-                    quad.transform.eulerAngles = new Vector3(90f, 0f, 0f);
 
+                    var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                    Destroy(quad.GetComponent<Collider>());
+                    quad.transform.SetParent(_conveyorPreviewRoot, false);
+                    quad.transform.localScale = new Vector3(spacing * 0.95f, spacing * 0.95f, 1f);
+                    quad.transform.position = new Vector3(wx, -0.05f, wz);
+                    quad.transform.eulerAngles = new Vector3(90f, 0f, 0f);
                     if (_conveyorMat) quad.GetComponent<MeshRenderer>().sharedMaterial = _conveyorMat;
-                    quad.SetActive(_conveyorTiles != null && c < _conveyorTiles.GetLength(0)
-                        && r < _conveyorTiles.GetLength(1) && _conveyorTiles[c, r]);
+                    // Only show grid quads if NO tile sprites (fallback), or in conveyor paint mode
+                    quad.SetActive(active && (_railTileSet == null || _railTileSet.tileBH == null));
                     _conveyorPreviewObjs[c, r] = quad;
                 }
+        }
+
+        /// <summary>
+        /// Places tile sprites along the waypoint path (conveyor belt line).
+        /// Tiles are placed under each straight segment and at each corner.
+        /// </summary>
+        private void BuildWaypointTiles()
+        {
+            var wp = _customWaypoints;
+            if (wp.Count < 2 || _railTileSet == null) return;
+
+            // Bounding box center for tile type selection
+            Vector3 min = wp[0], max = wp[0];
+            for (int i = 1; i < wp.Count; i++)
+            {
+                min = Vector3.Min(min, wp[i]);
+                max = Vector3.Max(max, wp[i]);
+            }
+            Vector3 center = (min + max) * 0.5f;
+
+            // Desired tile world size — match the spacing between waypoints visually
+            float tileSize = CellSpacing * 1.2f;
+            if (tileSize < 0.5f) tileSize = 0.5f;
+
+            // Place straight tiles along each segment
+            for (int i = 0; i < wp.Count; i++)
+            {
+                int next = (i + 1) % wp.Count;
+                Vector3 start = wp[i];
+                Vector3 end = wp[next];
+                Vector3 delta = end - start;
+                float segLen = delta.magnitude;
+                if (segLen < 0.01f) continue;
+
+                bool isHorizontal = Mathf.Abs(delta.x) > Mathf.Abs(delta.z);
+
+                Sprite tile;
+                if (isHorizontal)
+                {
+                    float avgZ = (start.z + end.z) * 0.5f;
+                    tile = avgZ < center.z ? _railTileSet.tileBH : _railTileSet.tileTH;
+                }
+                else
+                {
+                    // VR on left side, VL on right side (track faces inward)
+                    float avgX = (start.x + end.x) * 0.5f;
+                    tile = avgX < center.x ? _railTileSet.tileVR : _railTileSet.tileVL;
+                }
+
+                int count = Mathf.Max(1, Mathf.RoundToInt(segLen / tileSize));
+                for (int t = 0; t < count; t++)
+                {
+                    float frac = (t + 0.5f) / count;
+                    Vector3 pos = Vector3.Lerp(start, end, frac);
+                    PlaceConveyorSpriteTile(tile, pos, tileSize);
+                }
+            }
+
+            // Place corner tiles at waypoints where direction changes
+            for (int i = 0; i < wp.Count; i++)
+            {
+                int prev = (i - 1 + wp.Count) % wp.Count;
+                int next = (i + 1) % wp.Count;
+
+                Vector3 inDir = (wp[i] - wp[prev]).normalized;
+                Vector3 outDir = (wp[next] - wp[i]).normalized;
+
+                bool inH = Mathf.Abs(inDir.x) > Mathf.Abs(inDir.z);
+                bool outH = Mathf.Abs(outDir.x) > Mathf.Abs(outDir.z);
+
+                if (inH == outH) continue; // Same direction = not a corner
+
+                Vector3 pos = wp[i];
+                Sprite cornerTile;
+                if (pos.x <= center.x && pos.z <= center.z) cornerTile = _railTileSet.tileBL;
+                else if (pos.x > center.x && pos.z <= center.z) cornerTile = _railTileSet.tileBR;
+                else if (pos.x <= center.x && pos.z > center.z) cornerTile = _railTileSet.tileTL;
+                else cornerTile = _railTileSet.tileTR;
+
+                PlaceConveyorSpriteTile(cornerTile, pos, tileSize);
+            }
+        }
+
+        private void PlaceConveyorSpriteTile(Sprite sprite, Vector3 position, float tileSize)
+        {
+            if (sprite == null) return;
+
+            var tileGO = new GameObject($"ConvTile_{_conveyorPreviewRoot.childCount}");
+            tileGO.transform.SetParent(_conveyorPreviewRoot, false);
+            tileGO.transform.position = new Vector3(position.x, -0.02f, position.z);
+            tileGO.transform.eulerAngles = new Vector3(90f, 0f, 0f);
+
+            var sr = tileGO.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.sortingOrder = -1;
+
+            float spriteWidth = sprite.bounds.size.x;
+            if (spriteWidth > 0.001f)
+            {
+                float scale = tileSize / spriteWidth;
+                tileGO.transform.localScale = new Vector3(scale, scale, scale);
+            }
         }
 
         private void AutoConveyorRing()
@@ -1176,15 +1328,35 @@ namespace BalloonFlow
             // Draw line connecting waypoints
             if (_customWaypoints.Count >= 2)
             {
+                // Original waypoint line (thin, dashed appearance via lower alpha when smooth)
                 var lineGO = new GameObject("WPLine");
                 lineGO.transform.SetParent(_waypointPreviewRoot, false);
                 _waypointLineRenderer = lineGO.AddComponent<LineRenderer>();
                 _waypointLineRenderer.material = _waypointLineMat;
-                _waypointLineRenderer.startWidth = 0.08f; _waypointLineRenderer.endWidth = 0.08f;
+                float lineWidth = _smoothCorners ? 0.04f : 0.08f;
+                _waypointLineRenderer.startWidth = lineWidth; _waypointLineRenderer.endWidth = lineWidth;
                 _waypointLineRenderer.loop = true;
                 _waypointLineRenderer.positionCount = _customWaypoints.Count;
                 for (int i = 0; i < _customWaypoints.Count; i++)
                     _waypointLineRenderer.SetPosition(i, _customWaypoints[i] + Vector3.up * 0.15f);
+
+                // Smoothed path preview (thicker, different color)
+                if (_smoothCorners && _customWaypoints.Count >= 3)
+                {
+                    var smoothPoints = BuildSmoothedPreviewPath();
+                    if (smoothPoints.Count >= 2)
+                    {
+                        var smoothLineGO = new GameObject("SmoothLine");
+                        smoothLineGO.transform.SetParent(_waypointPreviewRoot, false);
+                        var smoothLR = smoothLineGO.AddComponent<LineRenderer>();
+                        smoothLR.material = MakeLitMaterial(FindLitShader(), new Color(0.2f, 0.8f, 1f));
+                        smoothLR.startWidth = 0.1f; smoothLR.endWidth = 0.1f;
+                        smoothLR.loop = true;
+                        smoothLR.positionCount = smoothPoints.Count;
+                        for (int i = 0; i < smoothPoints.Count; i++)
+                            smoothLR.SetPosition(i, smoothPoints[i] + Vector3.up * 0.15f);
+                    }
+                }
 
                 // Direction arrows: small cones at midpoints between waypoints
                 var arrowMat = MakeLitMaterial(FindLitShader(), new Color(1f, 0.5f, 0f)); // orange
@@ -1217,6 +1389,51 @@ namespace BalloonFlow
                     head.GetComponent<MeshRenderer>().material = arrowMat;
                 }
             }
+        }
+
+        /// <summary>
+        /// Builds a smoothed path preview using the same quadratic Bezier algorithm as RailManager.
+        /// </summary>
+        private List<Vector3> BuildSmoothedPreviewPath()
+        {
+            var result = new List<Vector3>();
+            int wpCount = _customWaypoints.Count;
+            if (wpCount < 3) { result.AddRange(_customWaypoints); return result; }
+
+            const int SUBS = 8;
+
+            for (int i = 0; i < wpCount; i++)
+            {
+                int prev = (i - 1 + wpCount) % wpCount;
+                int next = (i + 1) % wpCount;
+
+                Vector3 dirIn = (_customWaypoints[i] - _customWaypoints[prev]).normalized;
+                Vector3 dirOut = (_customWaypoints[next] - _customWaypoints[i]).normalized;
+                float dot = Vector3.Dot(dirIn, dirOut);
+
+                if (dot > 0.95f)
+                {
+                    result.Add(_customWaypoints[i]);
+                    continue;
+                }
+
+                float distPrev = Vector3.Distance(_customWaypoints[i], _customWaypoints[prev]);
+                float distNext = Vector3.Distance(_customWaypoints[i], _customWaypoints[next]);
+                float maxR = Mathf.Min(distPrev * 0.45f, distNext * 0.45f);
+                float r = Mathf.Min(_cornerRadius, maxR);
+                if (r < 0.01f) { result.Add(_customWaypoints[i]); continue; }
+
+                Vector3 tIn = _customWaypoints[i] - dirIn * r;
+                Vector3 tOut = _customWaypoints[i] + dirOut * r;
+
+                for (int s = 0; s <= SUBS; s++)
+                {
+                    float t = (float)s / SUBS;
+                    float u = 1f - t;
+                    result.Add(u * u * tIn + 2f * u * t * _customWaypoints[i] + t * t * tOut);
+                }
+            }
+            return result;
         }
 
         #endregion
@@ -1824,7 +2041,11 @@ namespace BalloonFlow
                 }
             }
 
-            if (config.rail.slotCount > 0) _railSlotCount = config.rail.slotCount;
+            // Load rail capacity: prefer LevelConfig.railCapacity, fallback to rail.slotCount
+            if (config.railCapacity > 0) _railSlotCount = config.railCapacity;
+            else if (config.rail.slotCount > 0) _railSlotCount = config.rail.slotCount;
+            _smoothCorners = config.rail.smoothCorners;
+            _cornerRadius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 1f;
             if (config.rail.waypoints != null && config.rail.waypoints.Length > 0)
             {
                 _customWaypoints = new List<Vector3>(config.rail.waypoints);
@@ -1935,7 +2156,12 @@ namespace BalloonFlow
             { float tv = (i + 1f) / (cols + 1f); dp[i] = new Vector3(Mathf.Lerp(l, rr, tv), _railHeight, bz); }
 
             config.rail = new RailLayout
-            { waypoints = wp.ToArray(), slotCount = _railSlotCount, visualType = 0, deployPoints = dp };
+            {
+                waypoints = wp.ToArray(), slotCount = _railSlotCount,
+                visualType = RailRenderer.VISUAL_SPRITE_TILE, deployPoints = dp,
+                smoothCorners = _smoothCorners, cornerRadius = _cornerRadius
+            };
+            config.railCapacity = _railSlotCount; // explicit capacity override
 
             config.gridCols = _gridCols; config.gridRows = _gridRows;
 
@@ -1984,6 +2210,11 @@ namespace BalloonFlow
             int n = 0;
             for (int c = 0; c < _holderCols; c++) for (int r = 0; r < _holderRows; r++) if (_holderColors[c, r] >= 0) n += _holderMags[c, r];
             return n;
+        }
+
+        private int CalcTotalDarts()
+        {
+            return CountTotalMags();
         }
 
         #endregion

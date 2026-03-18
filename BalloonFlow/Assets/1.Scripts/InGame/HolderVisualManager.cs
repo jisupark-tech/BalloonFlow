@@ -68,6 +68,7 @@ namespace BalloonFlow
         #region Fields
 
         private readonly Dictionary<int, HolderVisual> _holderVisuals = new Dictionary<int, HolderVisual>();
+        private readonly HashSet<int> _cancelledHolders = new HashSet<int>();
         private int _queueColumns = 5;
 
         #endregion
@@ -87,6 +88,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnMagazineEmpty>(HandleMagazineEmpty);
             EventBus.Subscribe<OnBoardCleared>(HandleBoardCleared);
             EventBus.Subscribe<OnBoardFailed>(HandleBoardFailed);
+            EventBus.Subscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
         private void OnDisable()
@@ -96,6 +98,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnMagazineEmpty>(HandleMagazineEmpty);
             EventBus.Unsubscribe<OnBoardCleared>(HandleBoardCleared);
             EventBus.Unsubscribe<OnBoardFailed>(HandleBoardFailed);
+            EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
         #endregion
@@ -178,12 +181,79 @@ namespace BalloonFlow
         public void ClearAllVisuals()
         {
             StopAllCoroutines();
+            _cancelledHolders.Clear();
 
             foreach (var kvp in _holderVisuals)
             {
                 ReturnHolderToPool(kvp.Value);
             }
             _holderVisuals.Clear();
+        }
+
+        /// <summary>
+        /// Cancels an active deploy coroutine for the given holder and returns it to queue position.
+        /// Called by ContinueHandler when reverting active holders.
+        /// </summary>
+        public void CancelDeployAndReturnToQueue(int holderId)
+        {
+            _cancelledHolders.Add(holderId);
+
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual)) return;
+
+            visual.isDeploying = false;
+            visual.isWaiting = false;
+            visual.isMovingToRail = false;
+
+            // Kill any active DOTween on this object
+            if (visual.gameObject != null)
+            {
+                visual.gameObject.transform.DOKill();
+            }
+
+            // Move back to queue
+            RepositionColumnHolders(visual.column);
+        }
+
+        /// <summary>
+        /// Removes a holder visual immediately (e.g. Color Remove booster consumed it).
+        /// </summary>
+        public void RemoveHolderVisual(int holderId)
+        {
+            _cancelledHolders.Add(holderId);
+
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual)) return;
+
+            if (visual.gameObject != null)
+                visual.gameObject.transform.DOKill();
+
+            ReturnHolderToPool(visual);
+            _holderVisuals.Remove(holderId);
+        }
+
+        /// <summary>
+        /// Refreshes all visual positions from HolderData columns.
+        /// Called after Shuffle booster changes column assignments.
+        /// </summary>
+        public void RefreshAllPositions()
+        {
+            if (!HolderManager.HasInstance) return;
+            HolderData[] holders = HolderManager.Instance.GetHolders();
+            if (holders == null) return;
+
+            // Sync visual column from data column
+            for (int i = 0; i < holders.Length; i++)
+            {
+                if (_holderVisuals.TryGetValue(holders[i].holderId, out HolderVisual visual))
+                {
+                    visual.column = holders[i].column;
+                }
+            }
+
+            // Reposition all columns
+            for (int col = 0; col < _queueColumns; col++)
+            {
+                RepositionColumnHolders(col);
+            }
         }
 
         /// <summary>
@@ -402,6 +472,11 @@ namespace BalloonFlow
 
             while (visual.gameObject != null)
             {
+                if (_cancelledHolders.Contains(visual.holderId))
+                {
+                    _cancelledHolders.Remove(visual.holderId);
+                    yield break;
+                }
                 Vector3 current = visual.gameObject.transform.position;
                 float dist = Vector3.Distance(current, deployPoint);
                 if (dist < 0.15f) break;
@@ -429,13 +504,16 @@ namespace BalloonFlow
             int startSlot = rail.GetNearestSlotIndex(deployPoint);
 
             // Deploy darts one at a time: wait for empty slot passing nearby
+            // NOTE: Darts are ALWAYS placed on rail regardless of matching balloons.
+            // Unmatched darts accumulate on rail -> occupancy rises -> fail condition.
+            // DartManager handles auto-fire when a match passes; we never skip placement.
             while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
             {
-                // Stop deploying if no targetable balloons of this color remain (Chain surplus prevention)
-                if (BalloonController.HasInstance)
+                // Check if this holder was cancelled (continue, color remove, etc.)
+                if (_cancelledHolders.Contains(visual.holderId))
                 {
-                    BalloonData[] targets = BalloonController.Instance.GetBalloonsByColor(visual.color);
-                    if (targets == null || targets.Length == 0) break;
+                    _cancelledHolders.Remove(visual.holderId);
+                    yield break;
                 }
 
                 // Find next empty slot near deploy point
@@ -610,6 +688,12 @@ namespace BalloonFlow
         {
             _boardFinished = true;
             StopAllCoroutines();
+        }
+
+        private void HandleContinueApplied(OnContinueApplied evt)
+        {
+            _boardFinished = false;
+            Debug.Log("[HolderVisualManager] Continue applied — holder deployment resumed.");
         }
 
         #endregion
