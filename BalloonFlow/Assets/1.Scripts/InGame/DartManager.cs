@@ -248,8 +248,9 @@ namespace BalloonFlow
         #region Private Methods — Auto-Fire Scan
 
         /// <summary>
-        /// Scans a batch of occupied slots per frame and fires darts at matching outermost balloons.
-        /// Throttled: SCAN_BATCH_SIZE slots per frame, MAX_FIRES_PER_FRAME launches per frame.
+        /// Scans occupied slots per frame and fires darts at matching outermost balloons.
+        /// Throttled to MAX_FIRES_PER_FRAME launches per frame.
+        /// Outermost filtering is handled by DirectionalTargeting.FindTarget (per-column check).
         /// </summary>
         private void ScanAndFireDarts()
         {
@@ -261,7 +262,6 @@ namespace BalloonFlow
 
             int fired = 0;
 
-            // Scan ALL slots every frame (no batching — perf bottleneck was HasClearLineOfSight, now removed)
             for (int s = 0; s < slotCount && fired < MAX_FIRES_PER_FRAME; s++)
             {
                 int slotIdx = s;
