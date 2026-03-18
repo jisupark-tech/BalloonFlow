@@ -43,7 +43,7 @@ namespace BalloonFlow.Editor
 
         #region Public
 
-        [MenuItem("BalloonFlow/Generate 50 Levels")]
+        [MenuItem("BalloonFlow/DON'T USE/Generate 50 Levels")]
         public static void Generate()
         {
             var configs = new LevelConfig[50];

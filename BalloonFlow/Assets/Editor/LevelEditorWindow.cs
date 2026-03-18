@@ -120,7 +120,7 @@ namespace BalloonFlow.Editor
 
         private const string MAPMAKER_SCENE_PATH = "Assets/0.Scenes/MapMaker.unity";
 
-        [MenuItem("BalloonFlow/Level Editor")]
+        [MenuItem("BalloonFlow/DON'T USE/Level Editor")]
         public static void Open()
         {
             // MapMaker 씬이 아니면 자동 전환
