@@ -182,17 +182,20 @@ namespace BalloonFlow
             if (positions == null || positions.Length == 0) return;
 
             // Build a grid from position array for neighbor analysis
-            int maxX = 0, maxY = 0;
+            // Positions may have negative coords (extended path grid), so offset to 0-based
+            int minX = 0, minY = 0, maxX = 0, maxY = 0;
             for (int i = 0; i < positions.Length; i++)
             {
+                if (positions[i].x < minX) minX = positions[i].x;
+                if (positions[i].y < minY) minY = positions[i].y;
                 if (positions[i].x > maxX) maxX = positions[i].x;
                 if (positions[i].y > maxY) maxY = positions[i].y;
             }
-            int gw = maxX + 2;
-            int gh = maxY + 2;
+            int gw = maxX - minX + 2;
+            int gh = maxY - minY + 2;
             bool[,] grid = new bool[gw, gh];
             for (int i = 0; i < positions.Length; i++)
-                grid[positions[i].x, positions[i].y] = true;
+                grid[positions[i].x - minX, positions[i].y - minY] = true;
 
             if (_hasDirectionalTiles)
             {
@@ -201,14 +204,15 @@ namespace BalloonFlow
                 {
                     for (int i = 0; i < positions.Length; i++)
                     {
-                        int x = positions[i].x, y = positions[i].y;
-                        Sprite sprite = tileSet.GetTileForCell(grid, x, y, gw, gh);
+                        int gx = positions[i].x - minX, gy = positions[i].y - minY;
+                        Sprite sprite = tileSet.GetTileForCell(grid, gx, gy, gw, gh);
                         if (sprite != null)
                         {
                             var tile = ScriptableObject.CreateInstance<Tile>();
                             tile.sprite = sprite;
                             tile.color = Color.white;
-                            _conveyorTilemap.SetTile(new Vector3Int(x, y, 0), tile);
+                            // Tilemap uses original coords (supports negative)
+                            _conveyorTilemap.SetTile(new Vector3Int(positions[i].x, positions[i].y, 0), tile);
                         }
                     }
                     return;
