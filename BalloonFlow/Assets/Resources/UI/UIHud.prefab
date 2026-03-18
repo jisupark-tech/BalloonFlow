@@ -378,7 +378,7 @@ GameObject:
   - component: {fileID: 588307360071862416}
   - component: {fileID: 7374363041574706326}
   m_Layer: 5
-  m_Name: bgColor
+  m_Name: BgColor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -666,7 +666,7 @@ GameObject:
   - component: {fileID: 4472728017926750219}
   - component: {fileID: 2297869023600934319}
   m_Layer: 5
-  m_Name: buttonContainer
+  m_Name: ButtonContainer
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1778,7 +1778,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2990486498068129568}
   m_Layer: 5
-  m_Name: bottomPanel
+  m_Name: BottomPanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
