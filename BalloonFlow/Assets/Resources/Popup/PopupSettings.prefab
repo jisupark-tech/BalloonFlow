@@ -2076,7 +2076,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 975106cc1a3f3254798144947e079dcb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupSettings
-  _closeButton: {fileID: 0}
+  _closeButton: {fileID: 7744121911613988278}
   _homeButton: {fileID: 0}
   _soundLabel: {fileID: 0}
   _musicLabel: {fileID: 4759230982547877677}
