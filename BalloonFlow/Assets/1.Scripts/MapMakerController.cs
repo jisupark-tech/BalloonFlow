@@ -72,7 +72,7 @@ namespace BalloonFlow
         private static readonly Color GIMMICK_PINATA_COLOR = new Color(0.95f, 0.70f, 0.20f);
 
         private static readonly string[] TILE_NAMES =
-            { "bh", "bl", "br", "th", "tl", "tr", "vl", "vr" };
+            { "bl", "br", "h", "tl", "tr", "v" };
 
         private const float LEFT_PANEL_WIDTH = 240f;
         private const float RIGHT_PANEL_WIDTH = 400f;
@@ -114,15 +114,13 @@ namespace BalloonFlow
         private bool _smoothCorners;
         private float _cornerRadius = 1f;
 
-        private bool[,] _conveyorTiles;
+        // Grid-based conveyor path (extended grid: +1 padding on each side)
+        private bool[,] _pathGrid; // [gridCols+2, gridRows+2]
+        private const int PATH_PAD = 1;
         private bool _conveyorPaintMode;
-        private int _selectedTileType; // 0-7 index into TILE_NAMES
 
-        // Waypoint editing
+        // Auto-generated waypoints from path grid
         private List<Vector3> _customWaypoints = new List<Vector3>();
-        private bool _waypointEditMode;
-        private int _selectedWaypointIndex = -1;
-        private bool _draggingWaypoint;
 
         private float CellSpacing => _boardWorldSize / Mathf.Max(_gridCols, _gridRows);
         private float BalloonScale => CellSpacing * 0.9f;
@@ -151,17 +149,14 @@ namespace BalloonFlow
         // Grid lines
         private Transform _gridLineRoot;
 
-        // Conveyor preview
+        // Conveyor path preview
         private Transform _conveyorPreviewRoot;
-        private GameObject[,] _conveyorPreviewObjs;
         private Material _conveyorMat;
         private Text _txtConveyorMode;
         private RailTileSet _railTileSet;
 
-        // Waypoint preview
+        // Waypoint line preview (auto-generated from path grid)
         private Transform _waypointPreviewRoot;
-        private List<GameObject> _waypointSpheres = new List<GameObject>();
-        private LineRenderer _waypointLineRenderer;
 
         // Left panel — level list
         private Transform _levelListContent;
@@ -340,14 +335,14 @@ namespace BalloonFlow
             _balloonGimmicks = ResizeGrid(_balloonGimmicks, _gridCols, _gridRows, 0);
             _holderColors = ResizeGrid(_holderColors, _holderCols, _holderRows, -1);
             _holderMags = ResizeGrid(_holderMags, _holderCols, _holderRows, _defaultMag);
-            _conveyorTiles = ResizeBoolGrid(_conveyorTiles, _gridCols, _gridRows);
+            _pathGrid = ResizeBoolGrid(_pathGrid, _gridCols + PATH_PAD * 2, _gridRows + PATH_PAD * 2);
         }
 
         private void InitDefaultWaypoints()
         {
             if (_customWaypoints.Count > 0) return;
-            // Build default rectangular waypoints
-            _customWaypoints = BuildRectangularWaypoints();
+            // Default: auto-ring the outer border of the extended path grid
+            AutoConveyorRing();
         }
 
         private List<Vector3> BuildRectangularWaypoints()
@@ -559,7 +554,6 @@ namespace BalloonFlow
             BuildHolderSection(content);
             BuildRailSection(content);
             BuildConveyorSection(content);
-            BuildWaypointSection(content);
             BuildExportSection(content);
         }
 
@@ -687,7 +681,9 @@ namespace BalloonFlow
             var dirBtn = Btn(r1, _railDir == 0 ? "CW (clockwise)" : "CCW (counter-CW)", () =>
             {
                 _railDir = 1 - _railDir;
-                _customWaypoints = BuildRectangularWaypoints();
+                GenerateWaypointsFromPathGrid();
+                if (_customWaypoints.Count < 3)
+                    _customWaypoints = BuildRectangularWaypoints();
                 RebuildPreview(); RebuildConveyorPreview(); RebuildWaypointPreview();
                 RefreshInfo();
             });
@@ -732,7 +728,7 @@ namespace BalloonFlow
 
         private void BuildConveyorSection(Transform p)
         {
-            Lbl(p, "Conveyor Tiles", 14, FontStyle.Bold);
+            Lbl(p, "Conveyor Path", 14, FontStyle.Bold);
 
             var r1 = Row(p);
             Lbl(r1, "Paint Mode", w: 90);
@@ -740,56 +736,19 @@ namespace BalloonFlow
             _txtConveyorMode.color = new Color(0.5f, 0.9f, 0.5f);
             Btn(r1, "Toggle (Tab)", () => ToggleConveyorMode());
 
-            // Tile type selector
-            var r4 = Row(p); Lbl(r4, "Tile Type", w: 90);
-            var tileLabel = Lbl(r4, TILE_NAMES[0], w: 50);
-            MakeSlider(r4, 0, TILE_NAMES.Length - 1, 0, true, v => {
-                _selectedTileType = (int)v;
-                tileLabel.text = TILE_NAMES[_selectedTileType];
-                SetStatus($"Tile: rail_corner_{TILE_NAMES[_selectedTileType]}");
-            });
-
             var r2 = Row(p);
-            Btn(r2, "Fill Conv.", () => {
-                for (int c = 0; c < _gridCols; c++)
-                    for (int r = 0; r < _gridRows; r++)
-                        _conveyorTiles[c, r] = true;
-                RebuildConveyorPreview(); RefreshInfo();
-            });
-            Btn(r2, "Clear Conv.", () => {
-                for (int c = 0; c < _gridCols; c++)
-                    for (int r = 0; r < _gridRows; r++)
-                        _conveyorTiles[c, r] = false;
-                RebuildConveyorPreview(); RefreshInfo();
-            });
             Btn(r2, "Auto Ring", () => { AutoConveyorRing(); RebuildConveyorPreview(); RefreshInfo(); });
-            Sep(p);
-        }
-
-        private void BuildWaypointSection(Transform p)
-        {
-            Lbl(p, "Conveyor Path (Waypoints)", 14, FontStyle.Bold);
-
-            var r1 = Row(p);
-            Btn(r1, "Edit Mode", () => {
-                _waypointEditMode = !_waypointEditMode;
-                SetStatus(_waypointEditMode ? "Waypoint Edit: Click to add, drag to move, RightClick to remove" : "Waypoint Edit OFF");
-                RebuildWaypointPreview();
-            });
-            Btn(r1, "Reset Rect", () => {
-                _customWaypoints = BuildRectangularWaypoints();
-                RebuildWaypointPreview(); RefreshInfo();
-                SetStatus("Waypoints reset to rectangle");
-            });
-
-            var r2 = Row(p);
-            Btn(r2, "Clear All WP", () => {
+            Btn(r2, "Clear Path", () => {
+                int pw = _pathGrid.GetLength(0), ph = _pathGrid.GetLength(1);
+                for (int c = 0; c < pw; c++)
+                    for (int r = 0; r < ph; r++)
+                        _pathGrid[c, r] = false;
                 _customWaypoints.Clear();
-                RebuildWaypointPreview(); RefreshInfo();
+                RebuildConveyorPreview(); RebuildWaypointPreview(); RefreshInfo();
             });
-            var wpCount = Lbl(r2, $"WP: {_customWaypoints.Count}", w: 60);
 
-            Lbl(p, "  Edit Mode: LClick=Add, Drag=Move, RClick=Remove", 10);
+            Lbl(p, "  Tab=Toggle Mode. Click grid cells to draw path.", 10);
+            Lbl(p, "  Path inside board removes balloons on that cell.", 10);
             Sep(p);
         }
 
@@ -1145,119 +1104,107 @@ namespace BalloonFlow
         {
             if (_conveyorPreviewRoot) Destroy(_conveyorPreviewRoot.gameObject);
             _conveyorPreviewRoot = new GameObject("ConveyorPreview").transform;
-            _conveyorPreviewObjs = new GameObject[_gridCols, _gridRows];
 
-            // Tile sprites along waypoint path (the actual conveyor belt line)
-            if (_railTileSet != null && _railTileSet.tileBH != null && _customWaypoints.Count >= 2)
-            {
-                BuildWaypointTiles();
-            }
+            if (_pathGrid == null) return;
 
-            // Also keep grid-based fallback quads for conveyor paint mode visualization
+            int pw = _pathGrid.GetLength(0);
+            int ph = _pathGrid.GetLength(1);
             float spacing = CellSpacing;
-            for (int c = 0; c < _gridCols; c++)
-                for (int r = 0; r < _gridRows; r++)
+
+            for (int gx = 0; gx < pw; gx++)
+            {
+                for (int gy = 0; gy < ph; gy++)
                 {
-                    bool active = _conveyorTiles != null && c < _conveyorTiles.GetLength(0)
-                        && r < _conveyorTiles.GetLength(1) && _conveyorTiles[c, r];
+                    // World position: convert extended grid coord to world space
+                    Vector3 wpos = PathGridToWorld(gx, gy);
 
-                    float wx = _boardCenter.x + (c - (_gridCols - 1) * 0.5f) * spacing;
-                    float wz = _boardCenter.y + (r - (_gridRows - 1) * 0.5f) * spacing;
+                    if (_conveyorPaintMode)
+                    {
+                        // Show faint grid outline for all extended cells (paint guide)
+                        var outline = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                        Destroy(outline.GetComponent<Collider>());
+                        outline.transform.SetParent(_conveyorPreviewRoot, false);
+                        outline.transform.localScale = new Vector3(spacing * 0.98f, spacing * 0.98f, 1f);
+                        outline.transform.position = new Vector3(wpos.x, -0.08f, wpos.z);
+                        outline.transform.eulerAngles = new Vector3(90f, 0f, 0f);
+                        var mat = MakeLitMaterial(FindLitShader(),
+                            _pathGrid[gx, gy] ? new Color(0.3f, 0.3f, 0.6f, 0.5f) : new Color(0.15f, 0.15f, 0.2f, 0.3f));
+                        outline.GetComponent<MeshRenderer>().material = mat;
+                    }
 
-                    var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                    Destroy(quad.GetComponent<Collider>());
-                    quad.transform.SetParent(_conveyorPreviewRoot, false);
-                    quad.transform.localScale = new Vector3(spacing * 0.95f, spacing * 0.95f, 1f);
-                    quad.transform.position = new Vector3(wx, -0.05f, wz);
-                    quad.transform.eulerAngles = new Vector3(90f, 0f, 0f);
-                    if (_conveyorMat) quad.GetComponent<MeshRenderer>().sharedMaterial = _conveyorMat;
-                    // Only show grid quads if NO tile sprites (fallback), or in conveyor paint mode
-                    quad.SetActive(active && (_railTileSet == null || _railTileSet.tileBH == null));
-                    _conveyorPreviewObjs[c, r] = quad;
+                    if (!_pathGrid[gx, gy]) continue;
+
+                    // Place tile sprite based on neighbor auto-tiling
+                    Sprite tile = GetPathTileSprite(gx, gy);
+                    if (tile != null)
+                    {
+                        PlaceConveyorSpriteTile(tile, wpos, spacing);
+                    }
+                    else
+                    {
+                        // Fallback: colored quad if no tile sprite available
+                        var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                        Destroy(quad.GetComponent<Collider>());
+                        quad.transform.SetParent(_conveyorPreviewRoot, false);
+                        quad.transform.localScale = new Vector3(spacing * 0.95f, spacing * 0.95f, 1f);
+                        quad.transform.position = new Vector3(wpos.x, -0.05f, wpos.z);
+                        quad.transform.eulerAngles = new Vector3(90f, 0f, 0f);
+                        if (_conveyorMat) quad.GetComponent<MeshRenderer>().sharedMaterial = _conveyorMat;
+                    }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Converts extended path grid coordinates to world position.
+        /// Grid (PATH_PAD, PATH_PAD) = balloon grid (0,0).
+        /// </summary>
+        private Vector3 PathGridToWorld(int gx, int gy)
+        {
+            float spacing = CellSpacing;
+            int bx = gx - PATH_PAD; // balloon grid x (-1 = outer left)
+            int by = gy - PATH_PAD; // balloon grid y (-1 = outer bottom)
+            float wx = _boardCenter.x + (bx - (_gridCols - 1) * 0.5f) * spacing;
+            float wz = _boardCenter.y + (by - (_gridRows - 1) * 0.5f) * spacing;
+            return new Vector3(wx, _railHeight, wz);
+        }
+
+        /// <summary>
+        /// Gets the auto-tile sprite for a path grid cell based on its neighbors.
+        /// </summary>
+        private Sprite GetPathTileSprite(int gx, int gy)
+        {
+            if (_railTileSet == null) return null;
+
+            int pw = _pathGrid.GetLength(0), ph = _pathGrid.GetLength(1);
+            bool hasUp    = (gy + 1 < ph) && _pathGrid[gx, gy + 1];
+            bool hasDown  = (gy - 1 >= 0) && _pathGrid[gx, gy - 1];
+            bool hasLeft  = (gx - 1 >= 0) && _pathGrid[gx - 1, gy];
+            bool hasRight = (gx + 1 < pw) && _pathGrid[gx + 1, gy];
+
+            // Corners: exactly 2 neighbors at right angle
+            if (hasRight && hasUp    && !hasLeft && !hasDown) return _railTileSet.tileBL;
+            if (hasLeft  && hasUp    && !hasRight && !hasDown) return _railTileSet.tileBR;
+            if (hasRight && hasDown  && !hasLeft && !hasUp)   return _railTileSet.tileTL;
+            if (hasLeft  && hasDown  && !hasRight && !hasUp)  return _railTileSet.tileTR;
+
+            // Straight segments
+            if (hasLeft && hasRight) return _railTileSet.GetH();
+            if (hasUp   && hasDown)  return _railTileSet.GetV();
+
+            // Single-neighbor fallback
+            if (hasLeft || hasRight) return _railTileSet.GetH();
+            if (hasUp   || hasDown)  return _railTileSet.GetV();
+
+            return _railTileSet.GetH(); // isolated cell default
         }
 
         /// <summary>
         /// Places tile sprites along the waypoint path (conveyor belt line).
-        /// Tiles are placed under each straight segment and at each corner.
+        /// Uses 6 center-aligned tiles: h, v, bl, br, tl, tr.
+        /// Direction-based corner detection (not position-based) so it works with any path shape.
+        /// Tiles are sized exactly to tileSize with no overlap.
         /// </summary>
-        private void BuildWaypointTiles()
-        {
-            var wp = _customWaypoints;
-            if (wp.Count < 2 || _railTileSet == null) return;
-
-            // Bounding box center for tile type selection
-            Vector3 min = wp[0], max = wp[0];
-            for (int i = 1; i < wp.Count; i++)
-            {
-                min = Vector3.Min(min, wp[i]);
-                max = Vector3.Max(max, wp[i]);
-            }
-            Vector3 center = (min + max) * 0.5f;
-
-            // Desired tile world size — match the spacing between waypoints visually
-            float tileSize = CellSpacing * 1.2f;
-            if (tileSize < 0.5f) tileSize = 0.5f;
-
-            // Place straight tiles along each segment
-            for (int i = 0; i < wp.Count; i++)
-            {
-                int next = (i + 1) % wp.Count;
-                Vector3 start = wp[i];
-                Vector3 end = wp[next];
-                Vector3 delta = end - start;
-                float segLen = delta.magnitude;
-                if (segLen < 0.01f) continue;
-
-                bool isHorizontal = Mathf.Abs(delta.x) > Mathf.Abs(delta.z);
-
-                Sprite tile;
-                if (isHorizontal)
-                {
-                    float avgZ = (start.z + end.z) * 0.5f;
-                    tile = avgZ < center.z ? _railTileSet.tileBH : _railTileSet.tileTH;
-                }
-                else
-                {
-                    // VR on left side, VL on right side (track faces inward)
-                    float avgX = (start.x + end.x) * 0.5f;
-                    tile = avgX < center.x ? _railTileSet.tileVR : _railTileSet.tileVL;
-                }
-
-                int count = Mathf.Max(1, Mathf.RoundToInt(segLen / tileSize));
-                for (int t = 0; t < count; t++)
-                {
-                    float frac = (t + 0.5f) / count;
-                    Vector3 pos = Vector3.Lerp(start, end, frac);
-                    PlaceConveyorSpriteTile(tile, pos, tileSize);
-                }
-            }
-
-            // Place corner tiles at waypoints where direction changes
-            for (int i = 0; i < wp.Count; i++)
-            {
-                int prev = (i - 1 + wp.Count) % wp.Count;
-                int next = (i + 1) % wp.Count;
-
-                Vector3 inDir = (wp[i] - wp[prev]).normalized;
-                Vector3 outDir = (wp[next] - wp[i]).normalized;
-
-                bool inH = Mathf.Abs(inDir.x) > Mathf.Abs(inDir.z);
-                bool outH = Mathf.Abs(outDir.x) > Mathf.Abs(outDir.z);
-
-                if (inH == outH) continue; // Same direction = not a corner
-
-                Vector3 pos = wp[i];
-                Sprite cornerTile;
-                if (pos.x <= center.x && pos.z <= center.z) cornerTile = _railTileSet.tileBL;
-                else if (pos.x > center.x && pos.z <= center.z) cornerTile = _railTileSet.tileBR;
-                else if (pos.x <= center.x && pos.z > center.z) cornerTile = _railTileSet.tileTL;
-                else cornerTile = _railTileSet.tileTR;
-
-                PlaceConveyorSpriteTile(cornerTile, pos, tileSize);
-            }
-        }
-
         private void PlaceConveyorSpriteTile(Sprite sprite, Vector3 position, float tileSize)
         {
             if (sprite == null) return;
@@ -1272,20 +1219,151 @@ namespace BalloonFlow
             sr.sortingOrder = -1;
 
             float spriteWidth = sprite.bounds.size.x;
-            if (spriteWidth > 0.001f)
+            float spriteHeight = sprite.bounds.size.y;
+            if (spriteWidth > 0.001f && spriteHeight > 0.001f)
             {
-                float scale = tileSize / spriteWidth;
-                tileGO.transform.localScale = new Vector3(scale, scale, scale);
+                float scaleX = tileSize / spriteWidth;
+                float scaleY = tileSize / spriteHeight;
+                tileGO.transform.localScale = new Vector3(scaleX, scaleY, 1f);
             }
         }
 
+        /// <summary>
+        /// Auto-generate a rectangular ring path in the outer border of the extended grid.
+        /// </summary>
         private void AutoConveyorRing()
         {
-            // Auto-generate conveyor tiles as a 1-tile-thick rectangular ring around the grid
-            _conveyorTiles = new bool[_gridCols, _gridRows];
-            for (int c = 0; c < _gridCols; c++)
-                for (int r = 0; r < _gridRows; r++)
-                    _conveyorTiles[c, r] = (c == 0 || c == _gridCols - 1 || r == 0 || r == _gridRows - 1);
+            int pw = _gridCols + PATH_PAD * 2;
+            int ph = _gridRows + PATH_PAD * 2;
+            _pathGrid = new bool[pw, ph];
+
+            // Ring on the outermost row/col of the extended grid (index 0 and max)
+            for (int c = 0; c < pw; c++)
+            {
+                _pathGrid[c, 0] = true;
+                _pathGrid[c, ph - 1] = true;
+            }
+            for (int r = 1; r < ph - 1; r++)
+            {
+                _pathGrid[0, r] = true;
+                _pathGrid[pw - 1, r] = true;
+            }
+
+            GenerateWaypointsFromPathGrid();
+        }
+
+        /// <summary>
+        /// Traces the path grid to generate an ordered list of waypoints.
+        /// Finds connected loop, extracts corner positions as waypoints.
+        /// </summary>
+        private void GenerateWaypointsFromPathGrid()
+        {
+            _customWaypoints.Clear();
+
+            if (_pathGrid == null) return;
+            int pw = _pathGrid.GetLength(0);
+            int ph = _pathGrid.GetLength(1);
+
+            // Find all path cells
+            var pathCells = new List<Vector2Int>();
+            for (int x = 0; x < pw; x++)
+                for (int y = 0; y < ph; y++)
+                    if (_pathGrid[x, y]) pathCells.Add(new Vector2Int(x, y));
+
+            if (pathCells.Count < 3) return;
+
+            // Trace ordered loop via neighbor-following
+            var ordered = TracePathLoop(pathCells);
+            if (ordered.Count < 3) return;
+
+            // Extract corner waypoints (where direction changes)
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                int prev = (i - 1 + ordered.Count) % ordered.Count;
+                int next = (i + 1) % ordered.Count;
+
+                Vector2Int dp = ordered[i] - ordered[prev];
+                Vector2Int dn = ordered[next] - ordered[i];
+
+                // Corner = direction changes
+                if (dp.x != dn.x || dp.y != dn.y)
+                {
+                    Vector3 wpos = PathGridToWorld(ordered[i].x, ordered[i].y);
+                    _customWaypoints.Add(wpos);
+                }
+            }
+
+            // If no corners detected (e.g., straight line), use all cells
+            if (_customWaypoints.Count < 2)
+            {
+                _customWaypoints.Clear();
+                for (int i = 0; i < ordered.Count; i++)
+                {
+                    Vector3 wpos = PathGridToWorld(ordered[i].x, ordered[i].y);
+                    _customWaypoints.Add(wpos);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Traces path grid cells into an ordered loop by following neighbors.
+        /// Each cell should have exactly 2 neighbors for a valid loop.
+        /// </summary>
+        private List<Vector2Int> TracePathLoop(List<Vector2Int> cells)
+        {
+            if (cells.Count == 0) return new List<Vector2Int>();
+
+            int pw = _pathGrid.GetLength(0);
+            int ph = _pathGrid.GetLength(1);
+
+            // Build lookup set
+            var cellSet = new HashSet<Vector2Int>(cells);
+            var ordered = new List<Vector2Int>();
+            var visited = new HashSet<Vector2Int>();
+
+            // Start from first cell
+            Vector2Int current = cells[0];
+            Vector2Int previous = new Vector2Int(-999, -999);
+
+            for (int safety = 0; safety < cells.Count + 1; safety++)
+            {
+                if (visited.Contains(current)) break;
+                ordered.Add(current);
+                visited.Add(current);
+
+                // Find unvisited neighbor (4-directional)
+                Vector2Int[] dirs = { Vector2Int.right, Vector2Int.up, Vector2Int.left, Vector2Int.down };
+                Vector2Int next = new Vector2Int(-1, -1);
+                bool found = false;
+
+                foreach (var d in dirs)
+                {
+                    Vector2Int n = current + d;
+                    if (n.x >= 0 && n.x < pw && n.y >= 0 && n.y < ph
+                        && cellSet.Contains(n) && !visited.Contains(n))
+                    {
+                        next = n;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    // Check if we can close the loop back to start
+                    foreach (var d in dirs)
+                    {
+                        Vector2Int n = current + d;
+                        if (n == cells[0] && ordered.Count >= 3) break;
+                    }
+                    break;
+                }
+
+                previous = current;
+                current = next;
+            }
+
+            return ordered;
         }
 
         #endregion
@@ -1296,22 +1374,18 @@ namespace BalloonFlow
         {
             if (_waypointPreviewRoot) Destroy(_waypointPreviewRoot.gameObject);
             _waypointPreviewRoot = new GameObject("WaypointPreview").transform;
-            _waypointSpheres.Clear();
 
             if (_customWaypoints.Count == 0) return;
 
-            // Draw spheres at each waypoint
+            // Draw small spheres at each waypoint
             for (int i = 0; i < _customWaypoints.Count; i++)
             {
                 var s = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                Destroy(s.GetComponent<Collider>());
                 s.transform.SetParent(_waypointPreviewRoot, false);
                 s.transform.position = _customWaypoints[i] + Vector3.up * 0.3f;
-                s.transform.localScale = Vector3.one * 0.25f;
-                s.GetComponent<MeshRenderer>().material = (i == _selectedWaypointIndex)
-                    ? MakeLitMaterial(FindLitShader(), Color.yellow)
-                    : _waypointMat;
-                // Keep collider for raycast picking
-                _waypointSpheres.Add(s);
+                s.transform.localScale = Vector3.one * 0.2f;
+                s.GetComponent<MeshRenderer>().material = _waypointMat;
 
                 // Number label
                 var labelGO = new GameObject("WPLabel");
@@ -1328,17 +1402,16 @@ namespace BalloonFlow
             // Draw line connecting waypoints
             if (_customWaypoints.Count >= 2)
             {
-                // Original waypoint line (thin, dashed appearance via lower alpha when smooth)
                 var lineGO = new GameObject("WPLine");
                 lineGO.transform.SetParent(_waypointPreviewRoot, false);
-                _waypointLineRenderer = lineGO.AddComponent<LineRenderer>();
-                _waypointLineRenderer.material = _waypointLineMat;
+                var lr = lineGO.AddComponent<LineRenderer>();
+                lr.material = _waypointLineMat;
                 float lineWidth = _smoothCorners ? 0.04f : 0.08f;
-                _waypointLineRenderer.startWidth = lineWidth; _waypointLineRenderer.endWidth = lineWidth;
-                _waypointLineRenderer.loop = true;
-                _waypointLineRenderer.positionCount = _customWaypoints.Count;
+                lr.startWidth = lineWidth; lr.endWidth = lineWidth;
+                lr.loop = true;
+                lr.positionCount = _customWaypoints.Count;
                 for (int i = 0; i < _customWaypoints.Count; i++)
-                    _waypointLineRenderer.SetPosition(i, _customWaypoints[i] + Vector3.up * 0.15f);
+                    lr.SetPosition(i, _customWaypoints[i] + Vector3.up * 0.15f);
 
                 // Smoothed path preview (thicker, different color)
                 if (_smoothCorners && _customWaypoints.Count >= 3)
@@ -1358,8 +1431,8 @@ namespace BalloonFlow
                     }
                 }
 
-                // Direction arrows: small cones at midpoints between waypoints
-                var arrowMat = MakeLitMaterial(FindLitShader(), new Color(1f, 0.5f, 0f)); // orange
+                // Direction arrows
+                var arrowMat = MakeLitMaterial(FindLitShader(), new Color(1f, 0.5f, 0f));
                 for (int i = 0; i < _customWaypoints.Count; i++)
                 {
                     int next = (i + 1) % _customWaypoints.Count;
@@ -1368,7 +1441,6 @@ namespace BalloonFlow
                     Vector3 mid = (from + to) * 0.5f + Vector3.up * 0.15f;
                     Vector3 dir = (to - from).normalized;
 
-                    // Arrow = small elongated cube pointing in direction
                     var arrow = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     Destroy(arrow.GetComponent<Collider>());
                     arrow.transform.SetParent(_waypointPreviewRoot, false);
@@ -1378,7 +1450,6 @@ namespace BalloonFlow
                         arrow.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
                     arrow.GetComponent<MeshRenderer>().material = arrowMat;
 
-                    // Arrow head (wider triangle effect using another cube angled)
                     var head = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     Destroy(head.GetComponent<Collider>());
                     head.transform.SetParent(_waypointPreviewRoot, false);
@@ -1454,13 +1525,6 @@ namespace BalloonFlow
             var mouse = Mouse.current;
             if (mouse == null) return;
 
-            // Waypoint edit mode takes priority
-            if (_waypointEditMode)
-            {
-                HandleWaypointInput(mouse);
-                return;
-            }
-
             if (_conveyorPaintMode)
             {
                 if (!mouse.leftButton.wasPressedThisFrame) { _conveyorClickConsumed = false; return; }
@@ -1475,19 +1539,45 @@ namespace BalloonFlow
             if (!RaycastToGround(mouse, out hit)) return;
 
             float spacing = CellSpacing;
-            int col = Mathf.RoundToInt((hit.x - _boardCenter.x) / spacing + (_gridCols - 1) * 0.5f);
-            int row = Mathf.RoundToInt((hit.z - _boardCenter.y) / spacing + (_gridRows - 1) * 0.5f);
 
-            if (col >= 0 && col < _gridCols && row >= 0 && row < _gridRows)
+            if (_conveyorPaintMode)
             {
-                if (_conveyorPaintMode)
+                // Convert world hit to extended path grid coordinates
+                // Path grid (PATH_PAD, PATH_PAD) = balloon grid (0,0)
+                int bx = Mathf.RoundToInt((hit.x - _boardCenter.x) / spacing + (_gridCols - 1) * 0.5f);
+                int by = Mathf.RoundToInt((hit.z - _boardCenter.y) / spacing + (_gridRows - 1) * 0.5f);
+                int gx = bx + PATH_PAD;
+                int gy = by + PATH_PAD;
+
+                int pw = _pathGrid.GetLength(0);
+                int ph = _pathGrid.GetLength(1);
+
+                if (gx >= 0 && gx < pw && gy >= 0 && gy < ph)
                 {
-                    _conveyorTiles[col, row] = !_conveyorTiles[col, row];
+                    _pathGrid[gx, gy] = !_pathGrid[gx, gy];
+
+                    // If toggling ON inside balloon grid, remove the balloon at that cell
+                    if (_pathGrid[gx, gy] && bx >= 0 && bx < _gridCols && by >= 0 && by < _gridRows)
+                    {
+                        _balloonColors[bx, by] = -1;
+                        _balloonGimmicks[bx, by] = 0;
+                        RebuildPreview();
+                    }
+
+                    GenerateWaypointsFromPathGrid();
                     RebuildConveyorPreview();
+                    RebuildWaypointPreview();
                     _conveyorClickConsumed = true;
                     RefreshInfo();
                 }
-                else
+            }
+            else
+            {
+                // Balloon paint mode
+                int col = Mathf.RoundToInt((hit.x - _boardCenter.x) / spacing + (_gridCols - 1) * 0.5f);
+                int row = Mathf.RoundToInt((hit.z - _boardCenter.y) / spacing + (_gridRows - 1) * 0.5f);
+
+                if (col >= 0 && col < _gridCols && row >= 0 && row < _gridRows)
                 {
                     if (_balloonColors[col, row] != _paintColor || _balloonGimmicks[col, row] != (_paintColor >= 0 ? _paintGimmick : 0))
                     {
@@ -1498,114 +1588,6 @@ namespace BalloonFlow
                     }
                 }
             }
-        }
-
-        private void HandleWaypointInput(Mouse mouse)
-        {
-            // Dragging existing waypoint
-            if (_draggingWaypoint && _selectedWaypointIndex >= 0)
-            {
-                if (mouse.leftButton.isPressed)
-                {
-                    Vector3 hit;
-                    if (RaycastToGround(mouse, out hit))
-                    {
-                        _customWaypoints[_selectedWaypointIndex] = new Vector3(hit.x, _railHeight, hit.z);
-                        RebuildWaypointPreview();
-                    }
-                }
-                else
-                {
-                    _draggingWaypoint = false;
-                    _selectedWaypointIndex = -1;
-                    RebuildWaypointPreview();
-                    RefreshInfo();
-                }
-                return;
-            }
-
-            // Right click to remove
-            if (mouse.rightButton.wasPressedThisFrame)
-            {
-                int nearest = FindNearestWaypoint(mouse);
-                if (nearest >= 0)
-                {
-                    _customWaypoints.RemoveAt(nearest);
-                    RebuildWaypointPreview(); RefreshInfo();
-                    SetStatus($"Removed waypoint {nearest}. Total: {_customWaypoints.Count}");
-                }
-                return;
-            }
-
-            // Left click
-            if (mouse.leftButton.wasPressedThisFrame)
-            {
-                // Check if clicking near existing waypoint → start drag
-                int nearest = FindNearestWaypoint(mouse);
-                if (nearest >= 0)
-                {
-                    _selectedWaypointIndex = nearest;
-                    _draggingWaypoint = true;
-                    RebuildWaypointPreview();
-                    return;
-                }
-
-                // Otherwise add new waypoint
-                Vector3 hit;
-                if (RaycastToGround(mouse, out hit))
-                {
-                    // Insert at nearest segment
-                    Vector3 wp = new Vector3(hit.x, _railHeight, hit.z);
-                    int insertIdx = FindBestInsertIndex(wp);
-                    _customWaypoints.Insert(insertIdx, wp);
-                    RebuildWaypointPreview(); RefreshInfo();
-                    SetStatus($"Added waypoint at index {insertIdx}. Total: {_customWaypoints.Count}");
-                }
-            }
-        }
-
-        private int FindNearestWaypoint(Mouse mouse)
-        {
-            Vector3 hit;
-            if (!RaycastToGround(mouse, out hit)) return -1;
-
-            float bestDist = 0.5f; // Threshold
-            int bestIdx = -1;
-            for (int i = 0; i < _customWaypoints.Count; i++)
-            {
-                float d = Vector2.Distance(
-                    new Vector2(hit.x, hit.z),
-                    new Vector2(_customWaypoints[i].x, _customWaypoints[i].z));
-                if (d < bestDist) { bestDist = d; bestIdx = i; }
-            }
-            return bestIdx;
-        }
-
-        private int FindBestInsertIndex(Vector3 point)
-        {
-            if (_customWaypoints.Count < 2) return _customWaypoints.Count;
-
-            float bestDist = float.MaxValue;
-            int bestIdx = _customWaypoints.Count;
-
-            for (int i = 0; i < _customWaypoints.Count; i++)
-            {
-                int next = (i + 1) % _customWaypoints.Count;
-                Vector3 a = _customWaypoints[i];
-                Vector3 b = _customWaypoints[next];
-                float d = DistanceToSegment(point, a, b);
-                if (d < bestDist) { bestDist = d; bestIdx = next; }
-            }
-            return bestIdx;
-        }
-
-        private float DistanceToSegment(Vector3 p, Vector3 a, Vector3 b)
-        {
-            Vector2 ap = new Vector2(p.x - a.x, p.z - a.z);
-            Vector2 ab = new Vector2(b.x - a.x, b.z - a.z);
-            float t = Mathf.Clamp01(Vector2.Dot(ap, ab) / Vector2.Dot(ab, ab));
-            Vector2 closest = new Vector2(a.x, a.z) + ab * t;
-            return Vector2.Distance(new Vector2(p.x, p.z), closest);
         }
 
         private bool RaycastToGround(Mouse mouse, out Vector3 hit)
@@ -1638,20 +1620,6 @@ namespace BalloonFlow
             if (kb[Key.Digit0].wasPressedThisFrame) SetPaintColor(-1);
             if (kb[Key.Backquote].wasPressedThisFrame) SetPaintColor(-1);
             if (kb[Key.Tab].wasPressedThisFrame) ToggleConveyorMode();
-            if (kb[Key.W].wasPressedThisFrame)
-            {
-                _waypointEditMode = !_waypointEditMode;
-                SetStatus(_waypointEditMode ? "Waypoint Edit ON (W)" : "Waypoint Edit OFF (W)");
-                RebuildWaypointPreview();
-            }
-            if (kb[Key.Escape].wasPressedThisFrame && _waypointEditMode)
-            {
-                _waypointEditMode = false;
-                _draggingWaypoint = false;
-                _selectedWaypointIndex = -1;
-                RebuildWaypointPreview();
-                SetStatus("Waypoint Edit OFF");
-            }
         }
 
         private void ToggleConveyorMode()
@@ -2051,11 +2019,20 @@ namespace BalloonFlow
                 _customWaypoints = new List<Vector3>(config.rail.waypoints);
             }
 
-            _conveyorTiles = new bool[_gridCols, _gridRows];
+            // Load conveyor path into extended path grid
+            int pw = _gridCols + PATH_PAD * 2;
+            int ph = _gridRows + PATH_PAD * 2;
+            _pathGrid = new bool[pw, ph];
             if (config.conveyorPositions != null)
                 foreach (var pos in config.conveyorPositions)
-                    if (pos.x >= 0 && pos.x < _gridCols && pos.y >= 0 && pos.y < _gridRows)
-                        _conveyorTiles[pos.x, pos.y] = true;
+                {
+                    // conveyorPositions stored as balloon-grid coords → shift to extended grid
+                    int gx = pos.x + PATH_PAD;
+                    int gy = pos.y + PATH_PAD;
+                    if (gx >= 0 && gx < pw && gy >= 0 && gy < ph)
+                        _pathGrid[gx, gy] = true;
+                }
+            GenerateWaypointsFromPathGrid();
 
             RebuildPalette();
         }
@@ -2143,6 +2120,7 @@ namespace BalloonFlow
                     { holderId = hid++, color = _holderColors[c, r], magazineCount = _holderMags[c, r], position = new Vector2(c, r) });
                 }
             config.holders = holders.ToArray();
+            config.queueColumns = Mathf.Clamp(_holderCols, 2, 5);
 
             // Use custom waypoints
             var wp = _customWaypoints.Count >= 3 ? _customWaypoints : BuildRectangularWaypoints();
@@ -2165,11 +2143,17 @@ namespace BalloonFlow
 
             config.gridCols = _gridCols; config.gridRows = _gridRows;
 
+            // Export path grid as conveyor positions (in balloon-grid coords)
             var convPos = new List<Vector2Int>();
-            for (int c = 0; c < _gridCols; c++)
-                for (int r2 = 0; r2 < _gridRows; r2++)
-                    if (_conveyorTiles != null && c < _conveyorTiles.GetLength(0) && r2 < _conveyorTiles.GetLength(1) && _conveyorTiles[c, r2])
-                        convPos.Add(new Vector2Int(c, r2));
+            if (_pathGrid != null)
+            {
+                int pgw = _pathGrid.GetLength(0);
+                int pgh = _pathGrid.GetLength(1);
+                for (int gx = 0; gx < pgw; gx++)
+                    for (int gy = 0; gy < pgh; gy++)
+                        if (_pathGrid[gx, gy])
+                            convPos.Add(new Vector2Int(gx - PATH_PAD, gy - PATH_PAD));
+            }
             config.conveyorPositions = convPos.ToArray();
 
             config.star1Threshold = config.balloonCount * 100;

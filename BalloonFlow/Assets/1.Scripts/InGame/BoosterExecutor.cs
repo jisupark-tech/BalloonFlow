@@ -94,6 +94,10 @@ namespace BalloonFlow
                     _awaitingColorSelection = true;
                     Debug.Log("[BoosterExecutor] Color Remove activated. Waiting for color selection.");
                     break;
+
+                case BoosterManager.HAND:
+                    ExecuteHand();
+                    break;
             }
         }
 
@@ -178,7 +182,7 @@ namespace BalloonFlow
             // 1) Field — pop all balloons of this color
             if (BalloonController.HasInstance)
             {
-                BalloonData[] balloons = BalloonController.Instance.GetBalloonsByColor(color);
+                BalloonData[] balloons = BalloonController.Instance.GetAllBalloonsByColor(color);
                 if (balloons != null)
                 {
                     for (int i = 0; i < balloons.Length; i++)
@@ -233,12 +237,47 @@ namespace BalloonFlow
                 }
             }
 
+            // Re-distribute remaining holders across columns and refresh visuals
+            if (HolderManager.HasInstance)
+                HolderManager.Instance.CompactColumns();
+            if (HolderVisualManager.HasInstance)
+                HolderVisualManager.Instance.RefreshAllPositions();
+
             Debug.Log($"[BoosterExecutor] Color Remove: removed {totalRemoved} objects of color {color}.");
 
             EventBus.Publish(new OnBoosterEffectApplied
             {
                 boosterType = BoosterManager.COLOR_REMOVE,
                 affectedCount = totalRemoved
+            });
+        }
+
+        /// <summary>
+        /// Hand: reveals a random Hidden balloon so it can be matched.
+        /// Design ref: 아웃게임디렉션 §Hand — Hidden 보관함 즉시 활성화
+        /// </summary>
+        private void ExecuteHand()
+        {
+            if (!BalloonController.HasInstance)
+            {
+                Debug.LogWarning("[BoosterExecutor] Hand: BalloonController not available.");
+                return;
+            }
+
+            int hiddenId = BalloonController.Instance.GetRandomHiddenBalloonId();
+            if (hiddenId < 0)
+            {
+                Debug.LogWarning("[BoosterExecutor] Hand: no hidden balloons to reveal.");
+                return;
+            }
+
+            bool revealed = BalloonController.Instance.RevealHiddenBalloon(hiddenId);
+            Debug.Log($"[BoosterExecutor] Hand: revealed hidden balloon {hiddenId} (success={revealed}).");
+
+            EventBus.Publish(new OnBoosterEffectApplied
+            {
+                boosterType = BoosterManager.HAND,
+                affectedCount = revealed ? 1 : 0
             });
         }
 

@@ -156,7 +156,7 @@ namespace BalloonFlow
                 case GIMMICK_ICE:
                     return "얼음 풍선 — 모든 풍선 팝에 의해 간접적으로 HP가 감소합니다.";
                 case GIMMICK_FROZEN_DART:
-                    return "동결 다트 — 레일의 첫 N발이 발사되지 않고 자리를 차지합니다.";
+                    return "동결 풍선 — 2히트 필요 (1히트=해동, 2히트=팝). 인접 팝으로도 해동 가능.";
                 case GIMMICK_COLOR_CURTAIN:
                     return "지정 색상 다트로만 간접 제거 가능한 컬러 커튼.";
                 default:

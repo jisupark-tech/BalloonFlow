@@ -248,7 +248,7 @@ namespace BalloonFlow
 
         /// <summary>
         /// Bonus type identifier.
-        /// Values: "none", "booster_tray_add", "booster_shuffle", "heart_refill", "booster_mixed"
+        /// Values: "none", "select_tool", "shuffle", "heart_refill", "booster_mixed"
         /// </summary>
         public string bonusType;
 

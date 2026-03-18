@@ -20,6 +20,7 @@ namespace BalloonFlow
         public const string SELECT_TOOL  = "select_tool";    // 큐에서 원하는 보관함 선택
         public const string SHUFFLE      = "shuffle";        // 큐 보관함 순서 랜덤 셔플
         public const string COLOR_REMOVE = "color_remove";   // 필드+레일 지정 색상 전체 제거
+        public const string HAND         = "hand";           // Hidden 풍선 즉시 공개
 
         private const string PrefsKeyPrefix = "BalloonFlow_Booster_";
 
@@ -41,7 +42,8 @@ namespace BalloonFlow
         {
             { SELECT_TOOL,  new BoosterDef { cost = 1900, unlockLevel = 9 } },
             { SHUFFLE,      new BoosterDef { cost = 1500, unlockLevel = 12 } },
-            { COLOR_REMOVE, new BoosterDef { cost = 2900, unlockLevel = 15 } }
+            { COLOR_REMOVE, new BoosterDef { cost = 2900, unlockLevel = 15 } },
+            { HAND,         new BoosterDef { cost = 1900, unlockLevel = 9 } }
         };
 
         private readonly Dictionary<string, int> _inventory = new Dictionary<string, int>();
@@ -151,6 +153,7 @@ namespace BalloonFlow
                 SELECT_TOOL  => CurrencyManager.CoinSink.BoosterSelectTool,
                 SHUFFLE      => CurrencyManager.CoinSink.BoosterShuffle,
                 COLOR_REMOVE => CurrencyManager.CoinSink.BoosterColorRemove,
+                HAND         => CurrencyManager.CoinSink.BoosterHand,
                 _            => CurrencyManager.CoinSink.Other
             };
 

@@ -60,6 +60,32 @@ namespace BalloonFlow.Editor
             Debug.Log("[UIPrefabBuilder] PopupGoldShop prefab rebuilt.");
         }
 
+        /// <summary>PopupContinue 프리팹 생성 (이어하기 팝업)</summary>
+        [MenuItem("BalloonFlow/Build PopupContinue Prefab")]
+        private static void BuildPopupContinueMenu()
+        {
+            EnsureFolder(POPUP_FOLDER);
+            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (_font == null) _font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            BuildPopupContinue();
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("[UIPrefabBuilder] PopupContinue prefab built.");
+        }
+
+        /// <summary>부스터 테스트 패널 프리팹 생성</summary>
+        [MenuItem("BalloonFlow/Build BoosterTestPanel Prefab")]
+        private static void BuildBoosterTestPanelMenu()
+        {
+            EnsureFolder(UI_FOLDER);
+            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (_font == null) _font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            BuildBoosterTestPanel();
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("[UIPrefabBuilder] BoosterTestPanel prefab built.");
+        }
+
         private static void BuildAllUIPrefabs()
         {
             EnsureFolder(UI_FOLDER);
@@ -73,6 +99,8 @@ namespace BalloonFlow.Editor
             BuildPopupResult();
             BuildPopupSettings();
             BuildPopupGoldShop();
+            BuildPopupContinue();
+            BuildBoosterTestPanel();
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -376,6 +404,127 @@ namespace BalloonFlow.Editor
             so.ApplyModifiedProperties();
 
             SaveAndCleanup(root, POPUP_FOLDER + "/PopupGoldShop.prefab");
+        }
+
+        // ═══════════════════════════════════════════
+        // Popup/PopupContinue (이어하기)
+        // ═══════════════════════════════════════════
+
+        private static void BuildPopupContinue()
+        {
+            var root = CreateUIRoot("PopupContinue");
+
+            var overlay = AddImage(root.transform, "Overlay", BG_OVERLAY);
+            Stretch(overlay);
+
+            var panel = AddImage(root.transform, "ContinuePanel", COL_PANEL);
+            SetCenter(panel, V(0, 0), V(700, 600));
+
+            AddText(panel.transform, "ContinueTitle", "Continue?", 42,
+                TextAnchor.MiddleCenter, Color.white, V(0, 220), V(500, 70));
+
+            AddText(panel.transform, "CostLabel", "Cost:", 24,
+                TextAnchor.MiddleCenter, new Color(0.7f, 0.7f, 0.8f), V(0, 100), V(300, 40));
+
+            var costTextGO = AddText(panel.transform, "CostText", "FREE", 36,
+                TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.1f), V(0, 50), V(300, 55));
+
+            var continueBtnGO = AddButton(panel.transform, "ContinueButton", "CONTINUE", COL_PLAY, 28,
+                V(0, -60), V(320, 80));
+
+            var declineBtnGO = AddButton(panel.transform, "DeclineButton", "GIVE UP", COL_HOME, 24,
+                V(0, -170), V(240, 60));
+
+            // AddComponent + wire
+            var comp = root.AddComponent<PopupContinue>();
+            var so = new SerializedObject(comp);
+            so.FindProperty("_continueButton").objectReferenceValue = continueBtnGO.GetComponent<Button>();
+            so.FindProperty("_declineButton").objectReferenceValue = declineBtnGO.GetComponent<Button>();
+            so.FindProperty("_costText").objectReferenceValue = costTextGO.GetComponent<Text>();
+            so.ApplyModifiedProperties();
+
+            SaveAndCleanup(root, POPUP_FOLDER + "/PopupContinue.prefab");
+        }
+
+        // ═══════════════════════════════════════════
+        // UI/BoosterTestPanel (테스트용)
+        // ═══════════════════════════════════════════
+
+        private static void BuildBoosterTestPanel()
+        {
+            var root = CreateUIRoot("BoosterTestPanel");
+
+            // Bottom-left anchored panel
+            var panelRT = root.GetComponent<RectTransform>();
+            panelRT.anchorMin = new Vector2(0, 0);
+            panelRT.anchorMax = new Vector2(0, 0);
+            panelRT.pivot = new Vector2(0, 0);
+            panelRT.anchoredPosition = new Vector2(10, 200);
+            panelRT.sizeDelta = new Vector2(455, 416);
+
+            var panelBG = AddImage(root.transform, "PanelBG", new Color(0, 0, 0, 0.6f));
+            Stretch(panelBG);
+
+            // Label
+            AddText(root.transform, "Title", "[Booster Test]", 21,
+                TextAnchor.MiddleCenter, Color.yellow, V(0, 182), V(390, 39));
+
+            // 4 booster buttons with count text
+            var stBtnGO = AddButton(root.transform, "SelectToolBtn", "SelectTool", new Color(0.2f, 0.5f, 0.9f), 21,
+                V(0, 127), V(390, 49));
+            var stCountGO = AddText(root.transform, "STCount", "0", 18,
+                TextAnchor.MiddleRight, Color.white, V(169, 127), V(52, 39));
+
+            var shBtnGO = AddButton(root.transform, "ShuffleBtn", "Shuffle", new Color(0.8f, 0.5f, 0.1f), 21,
+                V(0, 73), V(390, 49));
+            var shCountGO = AddText(root.transform, "SHCount", "0", 18,
+                TextAnchor.MiddleRight, Color.white, V(169, 73), V(52, 39));
+
+            var crBtnGO = AddButton(root.transform, "ColorRemoveBtn", "ColorRemove", new Color(0.8f, 0.2f, 0.3f), 21,
+                V(0, 18), V(390, 49));
+            var crCountGO = AddText(root.transform, "CRCount", "0", 18,
+                TextAnchor.MiddleRight, Color.white, V(169, 18), V(52, 39));
+
+            var handBtnGO = AddButton(root.transform, "HandBtn", "Hand", new Color(0.7f, 0.3f, 0.7f), 21,
+                V(0, -36), V(390, 49));
+            var handCountGO = AddText(root.transform, "HACount", "0", 18,
+                TextAnchor.MiddleRight, Color.white, V(169, -36), V(52, 39));
+
+            // Color selection panel (initially hidden)
+            var colorPanelGO = new GameObject("ColorPanel");
+            colorPanelGO.layer = LayerMask.NameToLayer("UI");
+            colorPanelGO.transform.SetParent(root.transform, false);
+            var cpRT = colorPanelGO.AddComponent<RectTransform>();
+            SetCenter(cpRT, V(0, -98), V(390, 59));
+
+            var c0 = AddButton(colorPanelGO.transform, "Color0Btn", "C0", new Color(0.9f, 0.2f, 0.2f), 18,
+                V(-150, 0), V(85, 49));
+            var c1 = AddButton(colorPanelGO.transform, "Color1Btn", "C1", new Color(0.2f, 0.7f, 0.2f), 18,
+                V(-52, 0), V(85, 49));
+            var c2 = AddButton(colorPanelGO.transform, "Color2Btn", "C2", new Color(0.2f, 0.4f, 0.9f), 18,
+                V(46, 0), V(85, 49));
+            var c3 = AddButton(colorPanelGO.transform, "Color3Btn", "C3", new Color(0.9f, 0.8f, 0.1f), 18,
+                V(143, 0), V(85, 49));
+
+            // AddComponent + wire
+            var comp = root.AddComponent<BoosterTestPanel>();
+            var so = new SerializedObject(comp);
+            so.FindProperty("_selectToolButton").objectReferenceValue = stBtnGO.GetComponent<Button>();
+            so.FindProperty("_shuffleButton").objectReferenceValue = shBtnGO.GetComponent<Button>();
+            so.FindProperty("_colorRemoveButton").objectReferenceValue = crBtnGO.GetComponent<Button>();
+            so.FindProperty("_handButton").objectReferenceValue = handBtnGO.GetComponent<Button>();
+            so.FindProperty("_colorPanel").objectReferenceValue = colorPanelGO;
+            so.FindProperty("_color0Button").objectReferenceValue = c0.GetComponent<Button>();
+            so.FindProperty("_color1Button").objectReferenceValue = c1.GetComponent<Button>();
+            so.FindProperty("_color2Button").objectReferenceValue = c2.GetComponent<Button>();
+            so.FindProperty("_color3Button").objectReferenceValue = c3.GetComponent<Button>();
+            so.FindProperty("_selectToolCountText").objectReferenceValue = stCountGO.GetComponent<Text>();
+            so.FindProperty("_shuffleCountText").objectReferenceValue = shCountGO.GetComponent<Text>();
+            so.FindProperty("_colorRemoveCountText").objectReferenceValue = crCountGO.GetComponent<Text>();
+            so.FindProperty("_handCountText").objectReferenceValue = handCountGO.GetComponent<Text>();
+            so.ApplyModifiedProperties();
+
+            SaveAndCleanup(root, UI_FOLDER + "/BoosterTestPanel.prefab");
         }
 
         // ═══════════════════════════════════════════

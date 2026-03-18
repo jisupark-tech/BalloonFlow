@@ -48,6 +48,7 @@ namespace BalloonFlow
             BoosterSelectTool,
             BoosterShuffle,
             BoosterColorRemove,
+            BoosterHand,
             HeartRefill,
             Continue,
             Other
