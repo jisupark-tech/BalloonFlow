@@ -377,6 +377,42 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// Re-distributes surviving (non-consumed) holders across columns evenly.
+        /// Called after Color Remove deletes holders, leaving gaps in some columns.
+        /// </summary>
+        public void CompactColumns()
+        {
+            // Collect all non-consumed holders
+            var active = new System.Collections.Generic.List<HolderData>();
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                if (!_holders[i].isConsumed)
+                    active.Add(_holders[i]);
+            }
+
+            if (active.Count == 0) return;
+
+            // Re-distribute round-robin across columns
+            for (int i = 0; i < active.Count; i++)
+            {
+                active[i].column = i % _queueColumns;
+            }
+
+            // Reset column deploy/wait tracking and re-assign from current state
+            ResetColumnTracking();
+            for (int i = 0; i < active.Count; i++)
+            {
+                int col = active[i].column;
+                if (active[i].isDeploying && _deployingHolderId[col] < 0)
+                    _deployingHolderId[col] = active[i].holderId;
+                else if (active[i].isWaiting && _waitingHolderId[col] < 0)
+                    _waitingHolderId[col] = active[i].holderId;
+            }
+
+            Debug.Log($"[HolderManager] CompactColumns: {active.Count} holders redistributed across {_queueColumns} columns.");
+        }
+
+        /// <summary>
         /// Resets all holder state for a new level.
         /// </summary>
         public void ResetAll()

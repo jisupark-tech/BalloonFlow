@@ -78,6 +78,22 @@ namespace BalloonFlow
                 _go.AddComponent<GameManager>();
             }
 
+            // ObjectPoolManager (required for balloon & dart spawning)
+            if (!ObjectPoolManager.HasInstance)
+            {
+                var _go = new GameObject("ObjectPoolManager");
+                _go.AddComponent<ObjectPoolManager>();
+                Debug.Log("[GameBootstrap] Created ObjectPoolManager (was missing — test mode or direct scene load)");
+            }
+
+            // ResourceManager
+            if (!ResourceManager.HasInstance)
+            {
+                var _go = new GameObject("ResourceManager");
+                _go.AddComponent<ResourceManager>();
+                Debug.Log("[GameBootstrap] Created ResourceManager (was missing — test mode or direct scene load)");
+            }
+
             // UIManager (required for all UI: HUD, popups, fade transitions)
             if (!UIManager.HasInstance)
             {
@@ -87,17 +103,36 @@ namespace BalloonFlow
             }
 
             // CameraManager (wraps Main Camera for scene-specific config + shake)
-            // Create on separate GO so DontDestroyOnLoad doesn't persist the scene camera
             if (!CameraManager.HasInstance)
             {
                 var _go = new GameObject("Mgr_Camera");
                 var _cmgr = _go.AddComponent<CameraManager>();
                 Camera _mainCam = Camera.main;
-                if (_mainCam != null)
+                if (_mainCam == null)
                 {
-                    _cmgr.MainCamera = _mainCam;
+                    // No camera in scene (e.g. MapMaker → InGame direct) — create one
+                    var _camGO = new GameObject("Main Camera");
+                    _camGO.tag = "MainCamera";
+                    _mainCam = _camGO.AddComponent<Camera>();
+                    _camGO.AddComponent<AudioListener>();
+                    Debug.Log("[GameBootstrap] Created Main Camera (no camera in InGame scene)");
                 }
+                _cmgr.MainCamera = _mainCam;
                 Debug.Log("[GameBootstrap] Created CameraManager (was missing — test mode or direct scene load)");
+            }
+            else
+            {
+                // CameraManager exists but camera reference may be lost after scene transition
+                CameraManager.Instance.RefreshMainCamera();
+                if (CameraManager.Instance.MainCamera == null)
+                {
+                    var _camGO = new GameObject("Main Camera");
+                    _camGO.tag = "MainCamera";
+                    var _cam = _camGO.AddComponent<Camera>();
+                    _camGO.AddComponent<AudioListener>();
+                    CameraManager.Instance.MainCamera = _cam;
+                    Debug.Log("[GameBootstrap] Re-created Main Camera (reference lost after scene transition)");
+                }
             }
         }
 
@@ -213,11 +248,19 @@ namespace BalloonFlow
             _goldShop = UIManager.Instance.OpenUI<PopupGoldShop>("Popup/PopupGoldShop");
             if (_goldShop != null) _goldShop.CloseUI();
 
+            // PopupQuit (로드 후 숨김)
+            var _quitPopup = UIManager.Instance.OpenUI<PopupQuit>("Popup/PopupQuit");
+            if (_quitPopup != null) _quitPopup.CloseUI();
+
+            // BoosterTestPanel (테스트용 — 하단 좌측에 부스터 버튼 표시)
+            UIManager.Instance.OpenUI<BoosterTestPanel>("UI/BoosterTestPanel");
+
             // HUDController에 팝업 연결
             if (HUDController.HasInstance)
             {
                 HUDController.Instance.SetSettingsPopup(_settings);
                 HUDController.Instance.SetGoldShopPopup(_goldShop);
+                HUDController.Instance.SetQuitPopup(_quitPopup);
             }
         }
 

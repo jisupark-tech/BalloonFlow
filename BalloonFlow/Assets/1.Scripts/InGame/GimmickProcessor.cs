@@ -8,8 +8,8 @@ namespace BalloonFlow
     /// Design ref: BalloonFlow_기믹명세 (2026-03-17) — 13종 기믹
     ///
     /// Gimmick domains:
-    ///   FIELD gimmicks  (on balloons): Piñata, Pin, Lock_Key, Surprise, Wall, Piñata_Box, Ice, Color_Curtain
-    ///   QUEUE gimmicks  (on holders):  Hidden, Chain, Spawner_T, Spawner_O, Frozen_Dart
+    ///   FIELD gimmicks  (on balloons): Piñata, Pin, Lock_Key, Surprise, Wall, Piñata_Box, Ice, Color_Curtain, Frozen_Dart
+    ///   QUEUE gimmicks  (on holders):  Hidden, Chain, Spawner_T, Spawner_O
     /// </summary>
     /// <remarks>
     /// Layer: Domain | Genre: Puzzle | Role: Processor | Phase: 1
@@ -308,6 +308,12 @@ namespace BalloonFlow
                         RevealSurprise(adjId);
                     }
                 }
+
+                // === Hidden: reveal adjacent Hidden balloons ===
+                foreach (int adjId in adjacentIds)
+                {
+                    BalloonController.Instance.RevealHiddenBalloon(adjId);
+                }
             }
         }
 
@@ -356,33 +362,6 @@ namespace BalloonFlow
                 targetId = holderId
             });
             Debug.Log($"[GimmickProcessor] {spawnerType} holder {holderId} consumed — new holder spawned in queue.");
-        }
-
-        /// <summary>
-        /// Processes Frozen Dart effect during level init.
-        /// The first N darts on the rail cannot fire — they occupy slots until thawed.
-        /// </summary>
-        public void ApplyFrozenDarts(int frozenCount)
-        {
-            if (!RailManager.HasInstance) return;
-
-            for (int i = 0; i < frozenCount; i++)
-            {
-                int slot = RailManager.Instance.FindNextEmptySlot(i);
-                if (slot >= 0)
-                {
-                    // Place a "frozen" dart (color = -2 to distinguish from empty -1)
-                    // Frozen darts cannot fire, but occupy slots
-                    RailManager.Instance.PlaceDart(slot, -2, -1);
-                }
-            }
-
-            EventBus.Publish(new OnGimmickTriggered
-            {
-                gimmickType = BalloonController.GimmickFrozenDart,
-                targetId = frozenCount
-            });
-            Debug.Log($"[GimmickProcessor] Applied {frozenCount} frozen darts to rail.");
         }
 
         #endregion
