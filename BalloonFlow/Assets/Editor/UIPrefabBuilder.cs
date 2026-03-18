@@ -48,7 +48,7 @@ namespace BalloonFlow.Editor
         }
 
         /// <summary>PopupGoldShop 프리팹만 단독 재빌드 (다른 프리팹 건드리지 않음)</summary>
-        [MenuItem("BalloonFlow/Rebuild GoldShop Prefab Only")]
+        [MenuItem("BalloonFlow/DON'T USE/Rebuild GoldShop Prefab Only")]
         private static void RebuildGoldShopOnly()
         {
             EnsureFolder(POPUP_FOLDER);
@@ -61,7 +61,7 @@ namespace BalloonFlow.Editor
         }
 
         /// <summary>PopupContinue 프리팹 생성 (이어하기 팝업)</summary>
-        [MenuItem("BalloonFlow/Build PopupContinue Prefab")]
+        [MenuItem("BalloonFlow/DON'T USE/Build PopupContinue Prefab")]
         private static void BuildPopupContinueMenu()
         {
             EnsureFolder(POPUP_FOLDER);
@@ -74,7 +74,7 @@ namespace BalloonFlow.Editor
         }
 
         /// <summary>부스터 테스트 패널 프리팹 생성</summary>
-        [MenuItem("BalloonFlow/Build BoosterTestPanel Prefab")]
+        [MenuItem("BalloonFlow/DON'T USE/Build BoosterTestPanel Prefab")]
         private static void BuildBoosterTestPanelMenu()
         {
             EnsureFolder(UI_FOLDER);

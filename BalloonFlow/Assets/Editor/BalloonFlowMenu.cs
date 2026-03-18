@@ -61,11 +61,11 @@ namespace BalloonFlow.Editor
             EditorUtility.DisplayDialog("완료", "유저 데이터가 초기화되었습니다.", "OK");
         }
 
-        [MenuItem("BalloonFlow/Generate 50 Levels (50x50)", false, 100)]
-        private static void GenerateFiftyLevels()
-        {
-            LevelDatabaseGenerator50.Generate();
-        }
+        // [MenuItem("BalloonFlow/Generate 50 Levels (50x50)", false, 100)]
+        // private static void GenerateFiftyLevels()
+        // {
+        //     LevelDatabaseGenerator50.Generate();
+        // }
     }
 }
 #endif

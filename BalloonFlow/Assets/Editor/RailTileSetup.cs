@@ -17,7 +17,7 @@ namespace BalloonFlow.Editor
         private const string ASSET_PATH  = "Assets/Resources/RailTileSet.asset";
         private const string TILES_DIR   = "Assets/Resources/Tiles/";
 
-        [MenuItem("BalloonFlow/Setup Rail Tiles")]
+        [MenuItem("BalloonFlow/DON'T USE/Setup Rail Tiles")]
         public static void Setup()
         {
             var tileSet = AssetDatabase.LoadAssetAtPath<RailTileSet>(ASSET_PATH);
