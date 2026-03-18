@@ -125,6 +125,12 @@ namespace BalloonFlow
         private float CellSpacing => _boardWorldSize / Mathf.Max(_gridCols, _gridRows);
         private float BalloonScale => CellSpacing * 0.9f;
 
+        /// <summary>
+        /// Conveyor tile render size. Minimum 1/15 of board so belt stays
+        /// visually thick on large grids (20×20 etc).
+        /// </summary>
+        private float ConveyorTileSize => Mathf.Max(CellSpacing, _boardWorldSize / 15f);
+
         #endregion
 
         #region Runtime Refs
@@ -207,6 +213,9 @@ namespace BalloonFlow
             if (_colorMats != null)
                 foreach (var m in _colorMats)
                     if (m) Destroy(m);
+            foreach (var kvp in _gimmickMatCache)
+                if (kvp.Value) Destroy(kvp.Value);
+            _gimmickMatCache.Clear();
             if (_conveyorMat) Destroy(_conveyorMat);
             if (_gridLineMat) Destroy(_gridLineMat);
             if (_waypointMat) Destroy(_waypointMat);
@@ -993,12 +1002,26 @@ namespace BalloonFlow
 
         #region Board Preview
 
+        /// <summary>Shared sphere mesh for all preview objects (created once).</summary>
+        private Mesh _sharedSphereMesh;
+
+        /// <summary>Cached gimmick-specific materials (created on demand, reused).</summary>
+        private readonly Dictionary<Color, Material> _gimmickMatCache = new Dictionary<Color, Material>();
+
         private void RebuildPreview()
         {
             if (_previewRoot) Destroy(_previewRoot.gameObject);
             _previewRoot = new GameObject("BalloonPreview").transform;
             _previewObjs = new GameObject[_gridCols, _gridRows];
             _previewLabels = new TextMesh[_gridCols, _gridRows];
+
+            // Create shared mesh once
+            if (_sharedSphereMesh == null)
+            {
+                var tmpSphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                _sharedSphereMesh = tmpSphere.GetComponent<MeshFilter>().sharedMesh;
+                Destroy(tmpSphere);
+            }
 
             float spacing = CellSpacing;
             float scale = BalloonScale;
@@ -1010,28 +1033,29 @@ namespace BalloonFlow
                     float wx = _boardCenter.x + (c - (_gridCols - 1) * 0.5f) * spacing;
                     float wz = _boardCenter.y + (r - (_gridRows - 1) * 0.5f) * spacing;
 
-                    var sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                    Destroy(sphere.GetComponent<Collider>());
-                    sphere.transform.SetParent(_previewRoot, false);
-                    sphere.transform.localScale = Vector3.one * scale;
-                    sphere.transform.position = new Vector3(wx, 0.5f, wz);
+                    // Reuse shared mesh + cached material instead of CreatePrimitive per cell
+                    var go = new GameObject($"B_{c}_{r}");
+                    go.transform.SetParent(_previewRoot, false);
+                    go.transform.localScale = Vector3.one * scale;
+                    go.transform.position = new Vector3(wx, 0.5f, wz);
+                    go.AddComponent<MeshFilter>().sharedMesh = _sharedSphereMesh;
+                    var mr = go.AddComponent<MeshRenderer>();
 
                     int ci = _balloonColors[c, r];
                     int gi = _balloonGimmicks[c, r];
 
                     if (ci >= 0)
                     {
-                        Color balloonColor = GetPreviewColor(ci, gi);
-                        sphere.GetComponent<MeshRenderer>().material = MakeLitMaterial(FindLitShader(), balloonColor);
-                        sphere.SetActive(true);
+                        mr.sharedMaterial = GetCachedMaterial(ci, gi);
+                        go.SetActive(true);
                     }
                     else
                     {
-                        sphere.SetActive(false);
+                        go.SetActive(false);
                     }
-                    _previewObjs[c, r] = sphere;
+                    _previewObjs[c, r] = go;
 
-                    // Gimmick label (floating text above balloon)
+                    // Gimmick label
                     if (ci >= 0 && gi > 0 && gi < GIMMICK_MARKS.Length && !string.IsNullOrEmpty(GIMMICK_MARKS[gi]))
                     {
                         var labelGO = new GameObject("GLabel");
@@ -1051,6 +1075,24 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>Returns a cached material for the given color/gimmick combination. No allocation per cell.</summary>
+        private Material GetCachedMaterial(int colorIndex, int gimmickIndex)
+        {
+            Color c = GetPreviewColor(colorIndex, gimmickIndex);
+
+            // Normal palette color — use pre-created _colorMats
+            if (gimmickIndex <= 0 && colorIndex >= 0 && colorIndex < _colorMats.Length)
+                return _colorMats[colorIndex];
+
+            // Gimmick color — cache on demand
+            if (!_gimmickMatCache.TryGetValue(c, out Material mat))
+            {
+                mat = MakeLitMaterial(FindLitShader(), c);
+                _gimmickMatCache[c] = mat;
+            }
+            return mat;
+        }
+
         private Color GetPreviewColor(int colorIndex, int gimmickIndex)
         {
             if (gimmickIndex > 0 && gimmickIndex < GIMMICK_NAMES.Length)
@@ -1062,7 +1104,6 @@ namespace BalloonFlow
                 if (gn == "Hidden") return GIMMICK_HIDDEN_COLOR;
                 if (gn == "Pinata" || gn == "Pinata_Box") return GIMMICK_PINATA_COLOR;
             }
-            // Normal balloon: use actual palette color
             if (colorIndex >= 0 && colorIndex < PALETTE.Length)
                 return PALETTE[colorIndex];
             return Color.grey;
@@ -1071,8 +1112,51 @@ namespace BalloonFlow
         private void UpdatePreviewCell(int c, int r)
         {
             if (_previewObjs == null || c >= _previewObjs.GetLength(0) || r >= _previewObjs.GetLength(1)) return;
-            // Full rebuild is simpler for gimmick label sync
-            RebuildPreview();
+
+            var go = _previewObjs[c, r];
+            if (go == null) return;
+
+            int ci = _balloonColors[c, r];
+            int gi = _balloonGimmicks[c, r];
+
+            if (ci >= 0)
+            {
+                go.GetComponent<MeshRenderer>().sharedMaterial = GetCachedMaterial(ci, gi);
+                go.SetActive(true);
+            }
+            else
+            {
+                go.SetActive(false);
+            }
+
+            // Update gimmick label
+            float spacing = CellSpacing;
+            float wx = _boardCenter.x + (c - (_gridCols - 1) * 0.5f) * spacing;
+            float wz = _boardCenter.y + (r - (_gridRows - 1) * 0.5f) * spacing;
+
+            // Remove old label
+            if (_previewLabels[c, r] != null)
+            {
+                Destroy(_previewLabels[c, r].gameObject);
+                _previewLabels[c, r] = null;
+            }
+
+            // Add new label if needed
+            if (ci >= 0 && gi > 0 && gi < GIMMICK_MARKS.Length && !string.IsNullOrEmpty(GIMMICK_MARKS[gi]))
+            {
+                var labelGO = new GameObject("GLabel");
+                labelGO.transform.SetParent(_previewRoot, false);
+                labelGO.transform.position = new Vector3(wx, 1.2f, wz);
+                labelGO.transform.eulerAngles = new Vector3(90f, 0f, 0f);
+                var tm = labelGO.AddComponent<TextMesh>();
+                tm.text = GIMMICK_MARKS[gi];
+                tm.fontSize = 32;
+                tm.characterSize = BalloonScale * 0.35f;
+                tm.alignment = TextAlignment.Center;
+                tm.anchor = TextAnchor.MiddleCenter;
+                tm.color = Color.white;
+                _previewLabels[c, r] = tm;
+            }
         }
 
         #endregion
@@ -1137,6 +1221,7 @@ namespace BalloonFlow
             int pw = _pathGrid.GetLength(0);
             int ph = _pathGrid.GetLength(1);
             float spacing = CellSpacing;
+            float tileSize = ConveyorTileSize; // minimum-clamped for visual thickness
 
             for (int gx = 0; gx < pw; gx++)
             {
@@ -1162,10 +1247,11 @@ namespace BalloonFlow
                     if (!_pathGrid[gx, gy]) continue;
 
                     // Place tile sprite based on neighbor auto-tiling
+                    // tileSize ensures minimum visual thickness on large grids
                     Sprite tile = GetPathTileSprite(gx, gy);
                     if (tile != null)
                     {
-                        PlaceConveyorSpriteTile(tile, wpos, spacing);
+                        PlaceConveyorSpriteTile(tile, wpos, tileSize);
                     }
                     else
                     {
@@ -1173,7 +1259,7 @@ namespace BalloonFlow
                         var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
                         Destroy(quad.GetComponent<Collider>());
                         quad.transform.SetParent(_conveyorPreviewRoot, false);
-                        quad.transform.localScale = new Vector3(spacing * 0.95f, spacing * 0.95f, 1f);
+                        quad.transform.localScale = new Vector3(tileSize * 0.95f, tileSize * 0.95f, 1f);
                         quad.transform.position = new Vector3(wpos.x, -0.05f, wpos.z);
                         quad.transform.eulerAngles = new Vector3(90f, 0f, 0f);
                         if (_conveyorMat) quad.GetComponent<MeshRenderer>().sharedMaterial = _conveyorMat;
@@ -1588,7 +1674,7 @@ namespace BalloonFlow
                     {
                         _balloonColors[bx, by] = -1;
                         _balloonGimmicks[bx, by] = 0;
-                        RebuildPreview();
+                        UpdatePreviewCell(bx, by);
                     }
 
                     GenerateWaypointsFromPathGrid();
@@ -1610,7 +1696,7 @@ namespace BalloonFlow
                     {
                         _balloonColors[col, row] = _paintColor;
                         _balloonGimmicks[col, row] = _paintColor >= 0 ? _paintGimmick : 0;
-                        RebuildPreview();
+                        UpdatePreviewCell(col, row);
                         RefreshInfo();
                     }
                 }

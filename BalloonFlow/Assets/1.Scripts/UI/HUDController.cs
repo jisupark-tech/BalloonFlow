@@ -107,6 +107,7 @@ namespace BalloonFlow
             }
             if (CurrencyManager.HasInstance) UpdateGoldDisplay(CurrencyManager.Instance.Coins);
             RefreshOnRailCount();
+
         }
 
         /// <summary>설정 팝업 연결 + Close/Home 버튼 와이어링</summary>
@@ -337,5 +338,6 @@ namespace BalloonFlow
         }
 
         #endregion
+
     }
 }

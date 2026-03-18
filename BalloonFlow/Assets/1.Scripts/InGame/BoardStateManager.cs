@@ -397,6 +397,7 @@ namespace BalloonFlow
         /// <summary>
         /// Returns the set of balloon colors exposed on the outermost edges
         /// (directly targetable from any rail side).
+        /// Uses per-column nearest-to-rail check (IsOutermostInDirection) for all 4 directions.
         /// </summary>
         private HashSet<int> GetOutermostBalloonColors()
         {
@@ -406,17 +407,12 @@ namespace BalloonFlow
             BalloonData[] allBalloons = BalloonController.Instance.GetAllBalloons();
             if (allBalloons == null) return colors;
 
-            // For each balloon, check if it's outermost from any direction
-            // A balloon is outermost if no other balloon is between it and the rail edge
-            // in at least one cardinal direction.
-            // Use a simplified grid approach.
-
             float cellSpacing = GameManager.HasInstance
                 ? GameManager.Instance.Board.cellSpacing
                 : 0.55f;
 
             var occupancy = new Dictionary<Vector2Int, int>(); // gridPos → color (targetable only)
-            var positionMap = new Dictionary<Vector2Int, bool>(); // all non-popped (for blocking check)
+            var positionMap = new HashSet<Vector2Int>(); // all non-popped cells (for blocking check)
 
             foreach (var b in allBalloons)
             {
@@ -426,7 +422,7 @@ namespace BalloonFlow
                     Mathf.RoundToInt(b.position.z / cellSpacing));
 
                 // All non-popped balloons block line-of-sight
-                positionMap[cell] = true;
+                positionMap.Add(cell);
 
                 // Only dart-targetable balloons count for color matching
                 // Wall, Pin, Ice are not targetable
@@ -437,32 +433,31 @@ namespace BalloonFlow
                 occupancy[cell] = b.color;
             }
 
+            // Per-column mode: outermost from any rail direction
             foreach (var kvp in occupancy)
             {
                 Vector2Int cell = kvp.Key;
-                int color = kvp.Value;
 
-                // Check 4 directions: is this balloon the first in any direction from the edge?
                 if (IsOutermostInDirection(cell, Vector2Int.up, positionMap) ||
                     IsOutermostInDirection(cell, Vector2Int.down, positionMap) ||
                     IsOutermostInDirection(cell, Vector2Int.left, positionMap) ||
                     IsOutermostInDirection(cell, Vector2Int.right, positionMap))
                 {
-                    colors.Add(color);
+                    colors.Add(kvp.Value);
                 }
             }
 
             return colors;
         }
 
-        private bool IsOutermostInDirection(Vector2Int cell, Vector2Int direction, Dictionary<Vector2Int, bool> occupied)
+        private bool IsOutermostInDirection(Vector2Int cell, Vector2Int direction, HashSet<Vector2Int> occupied)
         {
             // Scan from cell toward the edge (direction toward rail). If no other balloon
             // is between cell and the edge in that direction, cell is outermost.
             Vector2Int check = cell + direction;
             for (int i = 0; i < 30; i++) // max scan
             {
-                if (occupied.ContainsKey(check))
+                if (occupied.Contains(check))
                     return false; // another balloon blocks
                 check += direction;
             }

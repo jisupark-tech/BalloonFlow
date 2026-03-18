@@ -130,7 +130,7 @@ namespace BalloonFlow
                 float firingDist = GetFiringAxisDistance(dartPosition, balloon.position, scanDir);
                 if (firingDist < 0f) continue;
 
-                // Outermost check: no balloon of ANY color closer to the rail in the same grid column/row
+                // No penetration: must be nearest in column
                 if (!IsNearestInColumn(balloon.position, scanDir, occupancy)) continue;
 
                 // Closest target wins
