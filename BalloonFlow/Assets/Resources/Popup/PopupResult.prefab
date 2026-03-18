@@ -5121,6 +5121,7 @@ GameObject:
   - component: {fileID: 6053116654097480130}
   - component: {fileID: 3733497194064788380}
   - component: {fileID: 1520248631517158491}
+  - component: {fileID: 3536788962449617759}
   m_Layer: 5
   m_Name: ResultPanel
   m_TagString: Untagged
@@ -5194,6 +5195,20 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &3536788962449617759
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1256971415117823289}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c11ff85ae863d4ba3613c882ee1f72, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
+  dim: {fileID: 9018109011430426596}
+  popupWindow: {fileID: 6053116654097480130}
 --- !u!1 &1617214298294143505
 GameObject:
   m_ObjectHideFlags: 0
@@ -5485,6 +5500,7 @@ GameObject:
   - component: {fileID: 1607839726595972064}
   - component: {fileID: 881820356201252799}
   - component: {fileID: 603438829087493658}
+  - component: {fileID: 9018109011430426596}
   m_Layer: 5
   m_Name: Overlay
   m_TagString: Untagged
@@ -5549,6 +5565,18 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!225 &9018109011430426596
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1954307638721191599}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &2115377586889732590
 GameObject:
   m_ObjectHideFlags: 0
@@ -5584,7 +5612,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -52, y: -3}
+  m_AnchoredPosition: {x: -20, y: -9}
   m_SizeDelta: {x: 148, y: 153}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &1858604545694968298
