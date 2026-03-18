@@ -15,6 +15,7 @@ namespace BalloonFlow
     {
         private UIHud _hud;
         private PopupResult _result;
+        private PopupContinue _continuePopup;
         private PopupSettings _settings;
         private PopupGoldShop _goldShop;
         private bool _pendingResultIsWin;
@@ -30,12 +31,8 @@ namespace BalloonFlow
             _isTestMode = GameManager.IsTestPlayMode;
             #endif
 
-            // Safety: 직접 씬 로드 테스트용
-            if (!GameManager.HasInstance)
-            {
-                var _go = new GameObject("GameManager");
-                _go.AddComponent<GameManager>();
-            }
+            // Ensure core singletons exist (may be missing if MapMaker → InGame directly)
+            EnsureCoreSingletons();
 
             // Lobby 매니저 확보 (Lobby 안 거쳤을 때를 위해)
             // Test mode에서도 LevelManager가 필요하므로 InitLobby 호출
@@ -57,9 +54,7 @@ namespace BalloonFlow
             }
 
             // 씬 캔버스 등록
-            var _canvasGO = GameObject.Find("SceneCanvas");
-            if (_canvasGO != null && UIManager.HasInstance)
-                UIManager.Instance.SetSceneCanvas(_canvasGO.transform);
+            EnsureSceneCanvas();
 
             // UI 로드
             LoadUI();
@@ -67,7 +62,70 @@ namespace BalloonFlow
             // 레벨 로드
             LoadPendingLevel();
 
-            Debug.Log("[GameBootstrap] InGame 초기화 완료");
+            Debug.Log($"[GameBootstrap] InGame 초기화 완료 (testMode={_isTestMode})");
+        }
+
+        /// <summary>
+        /// Ensures GameManager, UIManager, CameraManager exist.
+        /// Required when entering InGame directly from MapMaker without passing through Title/Lobby.
+        /// </summary>
+        void EnsureCoreSingletons()
+        {
+            // GameManager
+            if (!GameManager.HasInstance)
+            {
+                var _go = new GameObject("GameManager");
+                _go.AddComponent<GameManager>();
+            }
+
+            // UIManager (required for all UI: HUD, popups, fade transitions)
+            if (!UIManager.HasInstance)
+            {
+                var _go = new GameObject("Mgr_UI");
+                _go.AddComponent<UIManager>();
+                Debug.Log("[GameBootstrap] Created UIManager (was missing — test mode or direct scene load)");
+            }
+
+            // CameraManager (wraps Main Camera for scene-specific config + shake)
+            // Create on separate GO so DontDestroyOnLoad doesn't persist the scene camera
+            if (!CameraManager.HasInstance)
+            {
+                var _go = new GameObject("Mgr_Camera");
+                var _cmgr = _go.AddComponent<CameraManager>();
+                Camera _mainCam = Camera.main;
+                if (_mainCam != null)
+                {
+                    _cmgr.MainCamera = _mainCam;
+                }
+                Debug.Log("[GameBootstrap] Created CameraManager (was missing — test mode or direct scene load)");
+            }
+        }
+
+        /// <summary>
+        /// Finds or creates a SceneCanvas and registers it with UIManager.
+        /// </summary>
+        void EnsureSceneCanvas()
+        {
+            if (!UIManager.HasInstance) return;
+
+            var _canvasGO = GameObject.Find("SceneCanvas");
+
+            // Create canvas if not found in scene
+            if (_canvasGO == null)
+            {
+                _canvasGO = new GameObject("SceneCanvas");
+                var _canvas = _canvasGO.AddComponent<Canvas>();
+                _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                _canvas.sortingOrder = 0;
+                var _scaler = _canvasGO.AddComponent<UnityEngine.UI.CanvasScaler>();
+                _scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                _scaler.referenceResolution = new Vector2(1080f, 1920f);
+                _scaler.matchWidthOrHeight = 0.5f;
+                _canvasGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+                Debug.Log("[GameBootstrap] Created SceneCanvas (was missing)");
+            }
+
+            UIManager.Instance.SetSceneCanvas(_canvasGO.transform);
         }
 
         void OnEnable()
@@ -86,6 +144,14 @@ namespace BalloonFlow
                 if (_result.NextButton != null) _result.NextButton.onClick.RemoveListener(OnNextClicked);
                 if (_result.RetryButton != null) _result.RetryButton.onClick.RemoveListener(OnRetryClicked);
                 if (_result.HomeButton != null) _result.HomeButton.onClick.RemoveListener(OnHomeClicked);
+            }
+
+            if (_continuePopup != null)
+            {
+                if (_continuePopup.ContinueButton != null)
+                    _continuePopup.ContinueButton.onClick.RemoveListener(_continuePopup.OnContinueClicked);
+                if (_continuePopup.DeclineButton != null)
+                    _continuePopup.DeclineButton.onClick.RemoveListener(_continuePopup.OnDeclineClicked);
             }
         }
 
@@ -117,6 +183,25 @@ namespace BalloonFlow
                 if (_result.GoldTarget == null && _hud != null && _hud.GoldText != null)
                 {
                     _result.SetGoldTarget(_hud.GoldText.rectTransform);
+                }
+            }
+
+            // PopupContinue (로드 후 숨김)
+            _continuePopup = UIManager.Instance.OpenUI<PopupContinue>("Popup/PopupContinue");
+            if (_continuePopup != null)
+            {
+                _continuePopup.CloseUI();
+                if (_continuePopup.ContinueButton != null)
+                    _continuePopup.ContinueButton.onClick.AddListener(_continuePopup.OnContinueClicked);
+                if (_continuePopup.DeclineButton != null)
+                    _continuePopup.DeclineButton.onClick.AddListener(_continuePopup.OnDeclineClicked);
+
+                // Register with PopupManager so ShowPopup("popup_continue") works
+                if (PopupManager.HasInstance)
+                {
+                    var cg = _continuePopup.GetComponent<CanvasGroup>();
+                    if (cg != null)
+                        PopupManager.Instance.RegisterPopup("popup_continue", cg);
                 }
             }
 
@@ -169,7 +254,8 @@ namespace BalloonFlow
 
         void HandleLevelFailed(OnLevelFailed _evt)
         {
-            if (ContinueHandler.HasInstance && ContinueHandler.Instance.CanContinue()) return;
+            // OnLevelFailed now only fires after continues are exhausted or declined.
+            // LevelManager defers FailLevel when continues are available.
             if (_pendingResultIsWin) return;
             StartCoroutine(ShowResultDelayed(false, 0, 0));
         }

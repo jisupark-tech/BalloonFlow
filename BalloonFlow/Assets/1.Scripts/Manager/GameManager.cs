@@ -195,6 +195,7 @@ namespace BalloonFlow
             CreateChild<TutorialManager>("Mgr_TutorialMgr");
             CreateChild<HolderVisualManager>("Mgr_HolderVisual");
             CreateChild<LevelGenerator>("Mgr_LevelGen");
+            CreateChild<BoosterExecutor>("Mgr_BoosterExec");
 
             // InputHandler에 MainCamera 연결
             var _input = _inGameRoot.GetComponentInChildren<InputHandler>();
@@ -284,13 +285,20 @@ namespace BalloonFlow
             _isTransitioning = false;
 
             // 카메라 설정 (MapMaker has its own camera setup)
-            if (CameraManager.HasInstance && _sceneName != SCENE_MAPMAKER)
+            if (CameraManager.HasInstance)
             {
-                switch (_sceneName)
+                if (_sceneName == SCENE_MAPMAKER)
                 {
-                    case SCENE_TITLE:  CameraManager.Instance.ConfigureTitle();  break;
-                    case SCENE_LOBBY:  CameraManager.Instance.ConfigureLobby();  break;
-                    case SCENE_INGAME: CameraManager.Instance.ConfigureInGame(); break;
+                    CameraManager.Instance.ReleaseEnforcement();
+                }
+                else
+                {
+                    switch (_sceneName)
+                    {
+                        case SCENE_TITLE:  CameraManager.Instance.ConfigureTitle();  break;
+                        case SCENE_LOBBY:  CameraManager.Instance.ConfigureLobby();  break;
+                        case SCENE_INGAME: CameraManager.Instance.ConfigureInGame(); break;
+                    }
                 }
             }
 

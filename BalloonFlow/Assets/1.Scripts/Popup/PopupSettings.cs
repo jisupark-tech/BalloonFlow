@@ -11,12 +11,14 @@ namespace BalloonFlow
     {
         [Header("[버튼]")]
         [SerializeField] private Button _closeButton;
+        [SerializeField] private Button _homeButton;
 
         [Header("[설정 라벨]")]
         [SerializeField] private Text _soundLabel;
         [SerializeField] private Text _musicLabel;
 
         public Button CloseButton => _closeButton;
+        public Button HomeButton => _homeButton;
 
         public void SetSoundLabel(bool _on)
         {

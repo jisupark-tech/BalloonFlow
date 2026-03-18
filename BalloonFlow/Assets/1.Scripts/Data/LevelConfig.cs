@@ -29,11 +29,18 @@ namespace BalloonFlow
         /// <summary>Unique level identifier (1–300).</summary>
         public int levelId;
 
-        /// <summary>Package this level belongs to (1–15).</summary>
+        /// <summary>Package this level belongs to (1–15, 20 levels each).</summary>
         public int packageId;
 
         /// <summary>Position within the package (1–20).</summary>
         public int positionInPackage;
+
+        /// <summary>
+        /// Explicit rail capacity override.
+        /// 0 = auto-calculate from total dart count (default).
+        /// Design: darts≤30→50, ≤60→100, ≤100→150, else→200.
+        /// </summary>
+        public int railCapacity;
 
         /// <summary>Number of distinct balloon/dart colors used (2–11).</summary>
         public int numColors;
@@ -145,9 +152,10 @@ namespace BalloonFlow
 
         /// <summary>
         /// Total number of discrete slots on the rail conveyor belt.
-        /// Default 200. Darts occupy slots; occupancy 99.5%+ triggers fail check.
+        /// 0 = use LevelConfig.railCapacity or auto-calculate from total darts.
+        /// Design: 50/100/150/200 variable capacity based on total dart count.
         /// </summary>
-        public int slotCount = 200;
+        public int slotCount;
 
         /// <summary>
         /// Visual style of the conveyor belt.
@@ -160,5 +168,16 @@ namespace BalloonFlow
         /// Index = column index (0..queueColumns-1). Holders move up from queue to this point.
         /// </summary>
         public Vector3[] deployPoints;
+
+        /// <summary>
+        /// When true, darts follow smooth curves at corners instead of sharp 90-degree turns.
+        /// </summary>
+        public bool smoothCorners;
+
+        /// <summary>
+        /// Radius of the rounded corner in world units (0.5 ~ 3.0).
+        /// Only used when smoothCorners is true. Default 1.0.
+        /// </summary>
+        public float cornerRadius = 1f;
     }
 }
