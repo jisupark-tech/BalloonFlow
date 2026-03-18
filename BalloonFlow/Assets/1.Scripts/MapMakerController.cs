@@ -141,7 +141,6 @@ namespace BalloonFlow
         private DefaultControls.Resources _uiRes;
 
         private Text _txtStatus, _txtSpacing, _txtScale;
-        private Text _txtColsVal, _txtRowsVal, _txtBoardVal;
         private Text[] _palTexts;
         private Transform _holderGridContainer;
         private LevelDatabase _targetDB;
@@ -567,7 +566,7 @@ namespace BalloonFlow
             var r1 = Row(p); Lbl(r1, "Level ID", w: 90);
             MakeInputField(r1, _levelId.ToString(), s => { if (int.TryParse(s, out int v)) _levelId = v; });
             var r2 = Row(p); Lbl(r2, "Colors", w: 90);
-            MakeSlider(r2, 2, 11, _numColors, true, v => { _numColors = (int)v; RebuildPalette(); });
+            MakeIntField(r2, _numColors, 2, 28, v => { _numColors = v; RebuildPalette(); });
             var r3 = Row(p); Lbl(r3, "Difficulty", w: 90);
             MakeDifficultyDropdown(r3);
             Sep(p);
@@ -584,8 +583,17 @@ namespace BalloonFlow
             RebuildPalette();
 
             var gr = Row(p); Lbl(gr, "Gimmick", w: 90);
-            MakeSlider(gr, 0, GIMMICK_NAMES.Length - 1, 0, true, v => {
-                _paintGimmick = (int)v;
+            var gimmickDD = DefaultControls.CreateDropdown(_uiRes);
+            gimmickDD.transform.SetParent(gr, false);
+            var gddLE = gimmickDD.AddComponent<LayoutElement>(); gddLE.flexibleWidth = 1; gddLE.preferredHeight = 24;
+            gimmickDD.GetComponent<Image>().color = new Color(0.16f, 0.16f, 0.20f);
+            var gdd = gimmickDD.GetComponent<Dropdown>();
+            gdd.ClearOptions();
+            gdd.AddOptions(new List<string>(GIMMICK_NAMES));
+            gdd.value = 0;
+            gdd.captionText.font = _font; gdd.captionText.fontSize = 12; gdd.captionText.color = Color.white;
+            gdd.onValueChanged.AddListener(v => {
+                _paintGimmick = v;
                 SetStatus($"Gimmick: {GIMMICK_NAMES[_paintGimmick]}");
             });
             Sep(p);
@@ -614,18 +622,15 @@ namespace BalloonFlow
         {
             Lbl(p, "Balloon Grid", 14, FontStyle.Bold);
             var r1 = Row(p); Lbl(r1, "Columns", w: 90);
-            MakeSlider(r1, 2, 100, _gridCols, true, v => { _gridCols = (int)v; OnBalloonGridChanged(); });
-            _txtColsVal = Lbl(r1, _gridCols.ToString(), w: 36);
+            MakeIntField(r1, _gridCols, 2, 100, v => { _gridCols = v; OnBalloonGridChanged(); });
             var r2 = Row(p); Lbl(r2, "Rows", w: 90);
-            MakeSlider(r2, 2, 100, _gridRows, true, v => { _gridRows = (int)v; OnBalloonGridChanged(); });
-            _txtRowsVal = Lbl(r2, _gridRows.ToString(), w: 36);
+            MakeIntField(r2, _gridRows, 2, 100, v => { _gridRows = v; OnBalloonGridChanged(); });
             var r3 = Row(p); Lbl(r3, "Board Size", w: 90);
-            MakeSlider(r3, 4, 20, _boardWorldSize, false, v => {
+            MakeFloatField(r3, _boardWorldSize, 4f, 20f, v => {
                 _boardWorldSize = v;
                 if (_cam) _cam.orthographicSize = v * 0.65f;
                 OnBalloonGridChanged();
             });
-            _txtBoardVal = Lbl(r3, _boardWorldSize.ToString("F1"), w: 36);
 
             _txtSpacing = Lbl(p, $"  Spacing: {CellSpacing:F3}", 11);
             _txtSpacing.color = new Color(0.6f, 0.6f, 0.7f);
@@ -647,13 +652,13 @@ namespace BalloonFlow
         {
             Lbl(p, "Holder Grid", 14, FontStyle.Bold);
             var r1 = Row(p); Lbl(r1, "Columns", w: 90);
-            MakeSlider(r1, 1, 8, _holderCols, true, v =>
-            { _holderCols = (int)v; InitGrid(); RebuildHolderUI(); RefreshInfo(); });
+            MakeIntField(r1, _holderCols, 1, 20, v =>
+            { _holderCols = v; InitGrid(); RebuildHolderUI(); RefreshInfo(); });
             var r2 = Row(p); Lbl(r2, "Rows", w: 90);
-            MakeSlider(r2, 1, 8, _holderRows, true, v =>
-            { _holderRows = (int)v; InitGrid(); RebuildHolderUI(); RefreshInfo(); });
+            MakeIntField(r2, _holderRows, 1, 20, v =>
+            { _holderRows = v; InitGrid(); RebuildHolderUI(); RefreshInfo(); });
             var r3 = Row(p); Lbl(r3, "Default Mag", w: 90);
-            MakeSlider(r3, 1, 20, _defaultMag, true, v => _defaultMag = (int)v);
+            MakeIntField(r3, _defaultMag, 1, 99, v => _defaultMag = v);
 
             var gridGO = new GameObject("HolderButtons", typeof(RectTransform),
                 typeof(GridLayoutGroup), typeof(LayoutElement));
@@ -691,7 +696,7 @@ namespace BalloonFlow
             MakeInputField(r2, _railPadding.ToString("F1"), s =>
             { if (float.TryParse(s, out float v)) _railPadding = v; });
             var r3 = Row(p); Lbl(r3, "Slot Count", w: 90);
-            MakeSlider(r3, 50, 400, _railSlotCount, true, v => _railSlotCount = (int)v);
+            MakeIntField(r3, _railSlotCount, 10, 9999, v => _railSlotCount = v);
             // Auto-calc button: calculate capacity from total darts
             var r3b = Row(p);
             Btn(r3b, "Auto (from darts)", () =>
@@ -716,11 +721,9 @@ namespace BalloonFlow
             });
 
             var r5 = Row(p); Lbl(r5, "Corner Radius", w: 100);
-            var radiusLabel = Lbl(r5, _cornerRadius.ToString("F1"), w: 40);
-            MakeSlider(r5, 0.2f, 3f, _cornerRadius, false, v =>
+            MakeFloatField(r5, _cornerRadius, 0.1f, 10f, v =>
             {
                 _cornerRadius = v;
-                radiusLabel.text = _cornerRadius.ToString("F1");
                 if (_smoothCorners) RebuildWaypointPreview();
             });
             Sep(p);
@@ -917,6 +920,30 @@ namespace BalloonFlow
             inp.text = text; inp.textComponent.font = _font; inp.textComponent.fontSize = 13; inp.textComponent.color = Color.white;
             var ph = inp.placeholder as Text; if (ph) { ph.font = _font; ph.fontSize = 13; }
             if (cb != null) inp.onEndEdit.AddListener(v => cb(v));
+            return inp;
+        }
+
+        /// <summary>Integer input field with min/max clamping.</summary>
+        private InputField MakeIntField(Transform p, int value, int min, int max, System.Action<int> cb)
+        {
+            var inp = MakeInputField(p, value.ToString(), s =>
+            {
+                if (int.TryParse(s, out int v))
+                    cb?.Invoke(Mathf.Clamp(v, min, max));
+            });
+            inp.contentType = InputField.ContentType.IntegerNumber;
+            return inp;
+        }
+
+        /// <summary>Float input field with min/max clamping.</summary>
+        private InputField MakeFloatField(Transform p, float value, float min, float max, System.Action<float> cb)
+        {
+            var inp = MakeInputField(p, value.ToString("F1"), s =>
+            {
+                if (float.TryParse(s, out float v))
+                    cb?.Invoke(Mathf.Clamp(v, min, max));
+            });
+            inp.contentType = InputField.ContentType.DecimalNumber;
             return inp;
         }
 
@@ -1718,9 +1745,6 @@ namespace BalloonFlow
 
         private void RefreshInfo()
         {
-            if (_txtColsVal) _txtColsVal.text = _gridCols.ToString();
-            if (_txtRowsVal) _txtRowsVal.text = _gridRows.ToString();
-            if (_txtBoardVal) _txtBoardVal.text = _boardWorldSize.ToString("F1");
             if (_txtSpacing) _txtSpacing.text = $"  Spacing: {CellSpacing:F3}";
             if (_txtScale) _txtScale.text = $"  Scale: {BalloonScale:F3}";
 

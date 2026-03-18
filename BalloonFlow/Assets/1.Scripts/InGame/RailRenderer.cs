@@ -119,9 +119,22 @@ namespace BalloonFlow
 
             bool isLoop = rail.IsClosedLoop;
 
-            // Sprite tile mode — place 2D tile sprites along the path
+            // Sprite tile mode — use grid-based placement when conveyorPositions exist
             if (_visualType == VISUAL_SPRITE_TILE)
             {
+                // Try grid-based tile placement from LevelConfig.conveyorPositions
+                if (LevelManager.HasInstance && LevelManager.Instance.CurrentLevel != null)
+                {
+                    var config = LevelManager.Instance.CurrentLevel;
+                    if (config.conveyorPositions != null && config.conveyorPositions.Length > 0)
+                    {
+                        BuildGridBasedTilePath(config);
+                        _isInitialized = true;
+                        return;
+                    }
+                }
+
+                // Fallback: waypoint-interpolated tile placement
                 BuildSpriteTilePath(waypoints, isLoop);
                 _isInitialized = true;
                 return;
@@ -229,6 +242,107 @@ namespace BalloonFlow
         #endregion
 
         #region Sprite Tile Path
+
+        /// <summary>
+        /// Builds tile visuals from LevelConfig.conveyorPositions using grid-aligned placement.
+        /// Each position maps to a world coordinate via the same formula as MapMaker.
+        /// Neighbor-based auto-tiling picks the correct sprite (h, v, bl, br, tl, tr).
+        /// </summary>
+        private void BuildGridBasedTilePath(LevelConfig config)
+        {
+            if (_tileSet == null) return;
+
+            var positions = config.conveyorPositions;
+            int gridCols = config.gridCols > 0 ? config.gridCols : 5;
+            int gridRows = config.gridRows > 0 ? config.gridRows : 5;
+
+            float boardCX = 0f, boardCY = 2f;
+            float cellSpacing = 1.6f;
+            if (GameManager.HasInstance)
+            {
+                boardCX = GameManager.Instance.Board.boardCenterX;
+                boardCY = GameManager.Instance.Board.boardCenterZ;
+                cellSpacing = GameManager.Instance.Board.cellSpacing;
+            }
+
+            // Build lookup grid (offset to handle negative coords)
+            int minX = 0, minY = 0, maxX = 0, maxY = 0;
+            for (int i = 0; i < positions.Length; i++)
+            {
+                if (positions[i].x < minX) minX = positions[i].x;
+                if (positions[i].y < minY) minY = positions[i].y;
+                if (positions[i].x > maxX) maxX = positions[i].x;
+                if (positions[i].y > maxY) maxY = positions[i].y;
+            }
+            int gw = maxX - minX + 1;
+            int gh = maxY - minY + 1;
+            bool[,] grid = new bool[gw, gh];
+            for (int i = 0; i < positions.Length; i++)
+                grid[positions[i].x - minX, positions[i].y - minY] = true;
+
+            // Place tiles at grid-aligned world positions
+            for (int i = 0; i < positions.Length; i++)
+            {
+                int bx = positions[i].x; // balloon-grid-relative coord
+                int by = positions[i].y;
+
+                // World position (same formula as MapMaker.PathGridToWorld)
+                float wx = boardCX + (bx - (gridCols - 1) * 0.5f) * cellSpacing;
+                float wz = boardCY + (by - (gridRows - 1) * 0.5f) * cellSpacing;
+                Vector3 wpos = new Vector3(wx, 0f, wz);
+
+                // Auto-tile: check 4 neighbors in the offset grid
+                int gx = bx - minX, gy = by - minY;
+                bool hasUp    = (gy + 1 < gh) && grid[gx, gy + 1];
+                bool hasDown  = (gy - 1 >= 0) && grid[gx, gy - 1];
+                bool hasLeft  = (gx - 1 >= 0) && grid[gx - 1, gy];
+                bool hasRight = (gx + 1 < gw) && grid[gx + 1, gy];
+
+                Sprite tile;
+                // Corners
+                if      (hasRight && hasUp   && !hasLeft && !hasDown) tile = _tileSet.tileBL;
+                else if (hasLeft  && hasUp   && !hasRight && !hasDown) tile = _tileSet.tileBR;
+                else if (hasRight && hasDown && !hasLeft && !hasUp)   tile = _tileSet.tileTL;
+                else if (hasLeft  && hasDown && !hasRight && !hasUp)  tile = _tileSet.tileTR;
+                // Straights
+                else if (hasLeft && hasRight) tile = _tileSet.GetH();
+                else if (hasUp   && hasDown)  tile = _tileSet.GetV();
+                // Single-neighbor fallback
+                else if (hasLeft || hasRight) tile = _tileSet.GetH();
+                else if (hasUp   || hasDown)  tile = _tileSet.GetV();
+                else tile = _tileSet.GetH();
+
+                PlaceSpriteTileAtSize(tile, wpos, cellSpacing);
+            }
+        }
+
+        /// <summary>
+        /// Places a sprite tile at exact world position with specified tile size.
+        /// </summary>
+        private void PlaceSpriteTileAtSize(Sprite sprite, Vector3 position, float tileSize)
+        {
+            if (sprite == null) return;
+
+            var tileGO = new GameObject($"RailTile_{_trackSegments.Count}");
+            tileGO.transform.SetParent(transform);
+            tileGO.transform.position = new Vector3(position.x, -0.02f, position.z);
+            tileGO.transform.eulerAngles = new Vector3(90f, 0f, 0f);
+
+            var sr = tileGO.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.sortingOrder = -1;
+
+            float spriteW = sprite.bounds.size.x;
+            float spriteH = sprite.bounds.size.y;
+            if (spriteW > 0.001f && spriteH > 0.001f)
+            {
+                float scaleX = tileSize / spriteW;
+                float scaleY = tileSize / spriteH;
+                tileGO.transform.localScale = new Vector3(scaleX, scaleY, 1f);
+            }
+
+            _trackSegments.Add(tileGO);
+        }
 
         /// <summary>
         /// Builds the rail visual using 2D sprite tiles from RailTileSet.
