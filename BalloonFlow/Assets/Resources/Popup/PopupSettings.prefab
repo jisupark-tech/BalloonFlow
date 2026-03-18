@@ -49,7 +49,7 @@ GameObject:
   - component: {fileID: 6016824813122747287}
   - component: {fileID: 1378899233178207473}
   m_Layer: 5
-  m_Name: MusicLabel
+  m_Name: TxtMusic
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -384,7 +384,7 @@ GameObject:
   - component: {fileID: 865465737664691907}
   - component: {fileID: 125269254873498446}
   m_Layer: 5
-  m_Name: SettingsTitleOutline
+  m_Name: TxtTitleOutline
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -716,7 +716,7 @@ GameObject:
   m_Component:
   - component: {fileID: 613214655777525576}
   m_Layer: 5
-  m_Name: title
+  m_Name: Title
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1065,7 +1065,7 @@ GameObject:
   - component: {fileID: 8231204988062016686}
   - component: {fileID: 7744121911613988278}
   m_Layer: 5
-  m_Name: CloseBtn
+  m_Name: CloseButton
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1360,7 +1360,7 @@ GameObject:
   - component: {fileID: 7542030815416226436}
   - component: {fileID: 5808634431024052318}
   m_Layer: 5
-  m_Name: LabelOutline
+  m_Name: TxtQuitOutline
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1573,7 +1573,7 @@ GameObject:
   - component: {fileID: 5678844657018329708}
   - component: {fileID: 8655991218279978866}
   m_Layer: 5
-  m_Name: Image
+  m_Name: LeftTopSidePanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1649,7 +1649,7 @@ GameObject:
   - component: {fileID: 3584314909602497620}
   - component: {fileID: 364965193795787772}
   m_Layer: 5
-  m_Name: LabelOutline
+  m_Name: TxtResumeOutline
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1787,7 +1787,7 @@ GameObject:
   - component: {fileID: 5272834771609561219}
   - component: {fileID: 2157108707011712506}
   m_Layer: 5
-  m_Name: SoundLabel
+  m_Name: TxtSound
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2113,7 +2113,7 @@ GameObject:
   - component: {fileID: 8426534533947309926}
   - component: {fileID: 1796642824323493134}
   m_Layer: 5
-  m_Name: Label
+  m_Name: TxtResume
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2251,7 +2251,7 @@ GameObject:
   - component: {fileID: 1712232979842747035}
   - component: {fileID: 3998154638390200201}
   m_Layer: 5
-  m_Name: Image (1)
+  m_Name: RightTopSidePanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2326,7 +2326,7 @@ GameObject:
   - component: {fileID: 4248991842406181845}
   - component: {fileID: 827506911186462942}
   m_Layer: 5
-  m_Name: Label
+  m_Name: TxtQuit
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2465,7 +2465,7 @@ GameObject:
   - component: {fileID: 3231814270373684779}
   - component: {fileID: 8833407995880516106}
   m_Layer: 5
-  m_Name: ResumeBtn
+  m_Name: ResumeButton
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2675,7 +2675,7 @@ GameObject:
   - component: {fileID: 5430594614114264612}
   - component: {fileID: 5300243194485387707}
   m_Layer: 5
-  m_Name: SettingsTitle
+  m_Name: TxtTitle
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2886,7 +2886,7 @@ GameObject:
   - component: {fileID: 3450537394177342105}
   - component: {fileID: 3240044568694646199}
   m_Layer: 5
-  m_Name: SoundLabel
+  m_Name: TxtSound
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
