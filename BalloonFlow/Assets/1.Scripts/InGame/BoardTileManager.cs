@@ -6,13 +6,13 @@ namespace BalloonFlow
     /// <summary>
     /// Manages 2D floor tiles and conveyor belt tilemap.
     /// Floor tiles are visual only (dark background beneath balloons).
-    /// Conveyor tiles define the belt path (brighter/different color).
-    /// Uses XY tilemap rotated 90 degrees on X to map onto the XZ world plane
-    /// (camera is orthographic top-down, Y=15, looking along -Y).
+    /// Conveyor tiles define the belt path using 6 tile types:
+    ///   4 corners (bl, br, tl, tr) + 2 straight (h, v).
+    /// Tiles are center-aligned, placed seamlessly with no overlap.
+    /// Uses XY tilemap rotated 90 degrees on X to map onto the XZ world plane.
     /// </summary>
     /// <remarks>
     /// Layer: Domain | Genre: Puzzle | Role: Manager | Phase: 1
-    /// DB Reference: No DB match -- generated from task spec (2D floor + tilemap conveyor)
     /// </remarks>
     public class BoardTileManager : SceneSingleton<BoardTileManager>
     {
@@ -27,15 +27,13 @@ namespace BalloonFlow
         private TileBase _floorTile;
         private TileBase _conveyorTile; // fallback single tile
 
-        // 8 directional rail tiles
-        private TileBase _tileBH; // bottom horizontal
-        private TileBase _tileBL; // bottom-left corner
-        private TileBase _tileBR; // bottom-right corner
-        private TileBase _tileTH; // top horizontal
-        private TileBase _tileTL; // top-left corner
-        private TileBase _tileTR; // top-right corner
-        private TileBase _tileVL; // vertical left
-        private TileBase _tileVR; // vertical right
+        // 6 directional rail tiles (center-aligned)
+        private TileBase _tileH;   // horizontal straight
+        private TileBase _tileV;   // vertical straight
+        private TileBase _tileBL;  // bottom-left corner
+        private TileBase _tileBR;  // bottom-right corner
+        private TileBase _tileTL;  // top-left corner
+        private TileBase _tileTR;  // top-right corner
         private bool _hasDirectionalTiles;
 
         private int _cols;
@@ -57,8 +55,6 @@ namespace BalloonFlow
 
         protected override void OnSingletonAwake()
         {
-            // Auto-discover scene Grid/Tilemap if not wired via SerializeField
-            // (BoardTileManager is created dynamically by GameManager.CreateChild)
             if (_grid == null)
             {
                 var gridGO = GameObject.Find("BoardGrid");
@@ -101,42 +97,30 @@ namespace BalloonFlow
         /// Initializes the board tilemap: loads tile assets, sets grid cell size, fills floor.
         /// Called by LevelManager.SetupLevel() after level config is loaded.
         /// </summary>
-        /// <param name="cols">Number of grid columns.</param>
-        /// <param name="rows">Number of grid rows.</param>
-        /// <param name="boardCenter">World-space center of the board (X, Z).</param>
-        /// <param name="cellSpacing">Distance between cells in world units.</param>
         public void InitializeBoard(int cols, int rows, Vector2 boardCenter, float cellSpacing)
         {
             _cols = cols;
             _rows = rows;
 
-            // Load tile assets from Resources (user can place real tiles later)
             _floorTile = Resources.Load<TileBase>("Tiles/FloorTile");
             _conveyorTile = Resources.Load<TileBase>("Tiles/ConveyorTile");
 
-            // Fallback: create simple colored tiles if no art assets exist
             if (_floorTile == null)
                 _floorTile = CreateSimpleTile(new Color(0.18f, 0.18f, 0.22f));
             if (_conveyorTile == null)
                 _conveyorTile = CreateSimpleTile(new Color(0.35f, 0.35f, 0.45f));
 
-            // Load 8 directional rail tiles
             LoadDirectionalRailTiles();
 
-            // Configure grid cell size to match balloon spacing
             if (_grid != null)
             {
                 _grid.cellSize = new Vector3(cellSpacing, cellSpacing, 0f);
 
-                // Position the grid so tiles align with the board center on XZ plane.
-                // The Grid is rotated 90 degrees on X (tilemap XY -> world XZ).
-                // Tilemap origin (0,0) maps to grid world position.
-                // We offset so the center of the tile grid aligns with boardCenter.
                 float halfCols = (cols - 1) * 0.5f * cellSpacing;
                 float halfRows = (rows - 1) * 0.5f * cellSpacing;
                 _grid.transform.position = new Vector3(
                     boardCenter.x - halfCols - cellSpacing * 0.5f,
-                    -0.05f, // Slightly below Y=0 so it sits under balloons
+                    -0.05f,
                     boardCenter.y - halfRows - cellSpacing * 0.5f
                 );
             }
@@ -144,26 +128,100 @@ namespace BalloonFlow
             FillFloor(cols, rows);
         }
 
-        /// <summary>
-        /// Fills the floor tilemap with floor tiles covering the full grid area.
-        /// </summary>
         public void FillFloor(int cols, int rows)
         {
             if (_floorTilemap == null || _floorTile == null) return;
             _floorTilemap.ClearAllTiles();
 
             for (int x = 0; x < cols; x++)
+                for (int y = 0; y < rows; y++)
+                    _floorTilemap.SetTile(new Vector3Int(x, y, 0), _floorTile);
+        }
+
+        /// <summary>
+        /// Sets conveyor tiles from a conveyor path grid using directional auto-tiling.
+        /// Each cell analyzes its neighbors to pick the correct tile (corner vs straight).
+        /// Tiles are center-aligned and sized to cell spacing — no overlap.
+        /// </summary>
+        public void SetConveyorFromGrid(bool[,] grid, int cols, int rows)
+        {
+            if (_conveyorTilemap == null) return;
+            _conveyorTilemap.ClearAllTiles();
+
+            if (grid == null || !_hasDirectionalTiles) return;
+
+            var tileSet = Resources.Load<RailTileSet>("RailTileSet");
+            if (tileSet == null) return;
+
+            for (int x = 0; x < cols; x++)
             {
                 for (int y = 0; y < rows; y++)
                 {
-                    _floorTilemap.SetTile(new Vector3Int(x, y, 0), _floorTile);
+                    if (!grid[x, y]) continue;
+                    Sprite sprite = tileSet.GetTileForCell(grid, x, y, cols, rows);
+                    if (sprite != null)
+                    {
+                        var tile = ScriptableObject.CreateInstance<Tile>();
+                        tile.sprite = sprite;
+                        tile.color = Color.white;
+                        _conveyorTilemap.SetTile(new Vector3Int(x, y, 0), tile);
+                    }
                 }
             }
         }
 
         /// <summary>
-        /// Sets conveyor tiles at the specified tilemap positions.
-        /// Uses directional rail tiles when available, falls back to single tile.
+        /// Sets conveyor positions from Vector2Int array (from LevelConfig).
+        /// Uses directional auto-tiling when available.
+        /// </summary>
+        public void SetConveyorFromConfig(Vector2Int[] positions)
+        {
+            if (_conveyorTilemap == null) return;
+            _conveyorTilemap.ClearAllTiles();
+
+            if (positions == null || positions.Length == 0) return;
+
+            // Build a grid from position array for neighbor analysis
+            int maxX = 0, maxY = 0;
+            for (int i = 0; i < positions.Length; i++)
+            {
+                if (positions[i].x > maxX) maxX = positions[i].x;
+                if (positions[i].y > maxY) maxY = positions[i].y;
+            }
+            int gw = maxX + 2;
+            int gh = maxY + 2;
+            bool[,] grid = new bool[gw, gh];
+            for (int i = 0; i < positions.Length; i++)
+                grid[positions[i].x, positions[i].y] = true;
+
+            if (_hasDirectionalTiles)
+            {
+                var tileSet = Resources.Load<RailTileSet>("RailTileSet");
+                if (tileSet != null)
+                {
+                    for (int i = 0; i < positions.Length; i++)
+                    {
+                        int x = positions[i].x, y = positions[i].y;
+                        Sprite sprite = tileSet.GetTileForCell(grid, x, y, gw, gh);
+                        if (sprite != null)
+                        {
+                            var tile = ScriptableObject.CreateInstance<Tile>();
+                            tile.sprite = sprite;
+                            tile.color = Color.white;
+                            _conveyorTilemap.SetTile(new Vector3Int(x, y, 0), tile);
+                        }
+                    }
+                    return;
+                }
+            }
+
+            // Fallback: single tile
+            for (int i = 0; i < positions.Length; i++)
+                _conveyorTilemap.SetTile(new Vector3Int(positions[i].x, positions[i].y, 0), _conveyorTile);
+        }
+
+        /// <summary>
+        /// Sets conveyor tiles at the specified tilemap positions (legacy single-tile mode).
         /// </summary>
         public void SetConveyorPath(Vector3Int[] positions)
         {
@@ -172,35 +230,11 @@ namespace BalloonFlow
 
             if (positions == null) return;
             foreach (var pos in positions)
-            {
                 _conveyorTilemap.SetTile(pos, _conveyorTile);
-            }
         }
 
         /// <summary>
-        /// Sets conveyor positions from Vector2Int array (from LevelConfig).
-        /// Converts to Vector3Int for the tilemap.
-        /// </summary>
-        public void SetConveyorFromConfig(Vector2Int[] positions)
-        {
-            if (positions == null || positions.Length == 0)
-            {
-                if (_conveyorTilemap != null)
-                    _conveyorTilemap.ClearAllTiles();
-                return;
-            }
-
-            var tilePositions = new Vector3Int[positions.Length];
-            for (int i = 0; i < positions.Length; i++)
-            {
-                tilePositions[i] = new Vector3Int(positions[i].x, positions[i].y, 0);
-            }
-            SetConveyorPath(tilePositions);
-        }
-
-        /// <summary>
-        /// Builds the rectangular conveyor belt around the balloon grid using directional tiles.
-        /// Call after InitializeBoard. Uses the 8 rail corner/edge tiles for proper visuals.
+        /// Builds a rectangular conveyor belt around the balloon grid using 6 directional tiles.
         /// </summary>
         public void BuildConveyorBelt()
         {
@@ -209,14 +243,10 @@ namespace BalloonFlow
 
             if (!_hasDirectionalTiles)
             {
-                // Fallback: use single conveyor tile for a simple rectangular loop
                 BuildConveyorBeltFallback();
                 return;
             }
 
-            // Rectangular belt around the balloon grid: 1 tile outside each edge
-            // Grid occupies cells (0,0) to (cols-1, rows-1)
-            // Conveyor ring: x from -1 to cols, y from -1 to rows
             int minX = -1;
             int maxX = _cols;
             int minY = -1;
@@ -224,83 +254,54 @@ namespace BalloonFlow
 
             // Bottom-left corner
             _conveyorTilemap.SetTile(new Vector3Int(minX, minY, 0), _tileBL);
-
             // Bottom edge (horizontal)
             for (int x = minX + 1; x < maxX; x++)
-                _conveyorTilemap.SetTile(new Vector3Int(x, minY, 0), _tileBH);
-
+                _conveyorTilemap.SetTile(new Vector3Int(x, minY, 0), _tileH);
             // Bottom-right corner
             _conveyorTilemap.SetTile(new Vector3Int(maxX, minY, 0), _tileBR);
-
             // Right edge (vertical)
             for (int y = minY + 1; y < maxY; y++)
-                _conveyorTilemap.SetTile(new Vector3Int(maxX, y, 0), _tileVR);
-
+                _conveyorTilemap.SetTile(new Vector3Int(maxX, y, 0), _tileV);
             // Top-right corner
             _conveyorTilemap.SetTile(new Vector3Int(maxX, maxY, 0), _tileTR);
-
             // Top edge (horizontal)
             for (int x = maxX - 1; x > minX; x--)
-                _conveyorTilemap.SetTile(new Vector3Int(x, maxY, 0), _tileTH);
-
+                _conveyorTilemap.SetTile(new Vector3Int(x, maxY, 0), _tileH);
             // Top-left corner
             _conveyorTilemap.SetTile(new Vector3Int(minX, maxY, 0), _tileTL);
-
             // Left edge (vertical)
             for (int y = maxY - 1; y > minY; y--)
-                _conveyorTilemap.SetTile(new Vector3Int(minX, y, 0), _tileVL);
+                _conveyorTilemap.SetTile(new Vector3Int(minX, y, 0), _tileV);
         }
 
-        /// <summary>
-        /// Fallback conveyor belt using single tile.
-        /// </summary>
         private void BuildConveyorBeltFallback()
         {
             if (_conveyorTilemap == null || _conveyorTile == null) return;
 
-            int minX = -1;
-            int maxX = _cols;
-            int minY = -1;
-            int maxY = _rows;
+            int minX = -1, maxX = _cols, minY = -1, maxY = _rows;
 
-            // Bottom row
             for (int x = minX; x <= maxX; x++)
                 _conveyorTilemap.SetTile(new Vector3Int(x, minY, 0), _conveyorTile);
-
-            // Top row
             for (int x = minX; x <= maxX; x++)
                 _conveyorTilemap.SetTile(new Vector3Int(x, maxY, 0), _conveyorTile);
-
-            // Left column (excluding corners)
             for (int y = minY + 1; y < maxY; y++)
                 _conveyorTilemap.SetTile(new Vector3Int(minX, y, 0), _conveyorTile);
-
-            // Right column (excluding corners)
             for (int y = minY + 1; y < maxY; y++)
                 _conveyorTilemap.SetTile(new Vector3Int(maxX, y, 0), _conveyorTile);
         }
 
-        /// <summary>
-        /// Toggles a single conveyor tile at the given grid position.
-        /// </summary>
         public void SetConveyorTileAt(Vector3Int pos, bool active)
         {
             if (_conveyorTilemap == null) return;
             _conveyorTilemap.SetTile(pos, active ? _conveyorTile : null);
         }
 
-        /// <summary>
-        /// Returns true if a conveyor tile exists at the given position.
-        /// </summary>
         public bool HasConveyorAt(Vector3Int pos)
         {
             if (_conveyorTilemap == null) return false;
             return _conveyorTilemap.GetTile(pos) != null;
         }
 
-        /// <summary>
-        /// Clears all tiles (floor + conveyor). Call before re-initializing.
-        /// </summary>
         public void ClearAll()
         {
             if (_floorTilemap != null) _floorTilemap.ClearAllTiles();
@@ -312,38 +313,63 @@ namespace BalloonFlow
         #region Private Methods
 
         /// <summary>
-        /// Loads the 8 directional rail tiles from Resources/Tiles/.
-        /// Falls back to single conveyor tile if any are missing.
+        /// Loads the 6 directional rail tiles from Resources/Tiles/.
+        /// New naming: h, v, bl, br, tl, tr (center-aligned).
+        /// Falls back to legacy 8-tile naming if new tiles not found.
         /// </summary>
         private void LoadDirectionalRailTiles()
         {
-            _tileBH = Resources.Load<TileBase>("Tiles/rail_corner_bh");
-            _tileBL = Resources.Load<TileBase>("Tiles/rail_corner_bl");
-            _tileBR = Resources.Load<TileBase>("Tiles/rail_corner_br");
-            _tileTH = Resources.Load<TileBase>("Tiles/rail_corner_th");
-            _tileTL = Resources.Load<TileBase>("Tiles/rail_corner_tl");
-            _tileTR = Resources.Load<TileBase>("Tiles/rail_corner_tr");
-            _tileVL = Resources.Load<TileBase>("Tiles/rail_corner_vl");
-            _tileVR = Resources.Load<TileBase>("Tiles/rail_corner_vr");
+            // Try new 6-tile naming first
+            var tileH_res  = Resources.Load<TileBase>("Tiles/rail_corner_h");
+            var tileV_res  = Resources.Load<TileBase>("Tiles/rail_corner_v");
+            var tileBL_res = Resources.Load<TileBase>("Tiles/rail_corner_bl");
+            var tileBR_res = Resources.Load<TileBase>("Tiles/rail_corner_br");
+            var tileTL_res = Resources.Load<TileBase>("Tiles/rail_corner_tl");
+            var tileTR_res = Resources.Load<TileBase>("Tiles/rail_corner_tr");
 
-            _hasDirectionalTiles = _tileBH != null && _tileBL != null && _tileBR != null
-                                && _tileTH != null && _tileTL != null && _tileTR != null
-                                && _tileVL != null && _tileVR != null;
+            if (tileH_res != null && tileV_res != null
+                && tileBL_res != null && tileBR_res != null
+                && tileTL_res != null && tileTR_res != null)
+            {
+                _tileH  = tileH_res;
+                _tileV  = tileV_res;
+                _tileBL = tileBL_res;
+                _tileBR = tileBR_res;
+                _tileTL = tileTL_res;
+                _tileTR = tileTR_res;
+                _hasDirectionalTiles = true;
+                return;
+            }
 
-            if (!_hasDirectionalTiles)
-                Debug.Log("[BoardTileManager] Directional rail tiles not found in Resources/Tiles/. Using fallback conveyor tile.");
+            // Fallback to legacy 8-tile naming
+            var bh = Resources.Load<TileBase>("Tiles/rail_corner_bh");
+            var vl = Resources.Load<TileBase>("Tiles/rail_corner_vl");
+            var bl = Resources.Load<TileBase>("Tiles/rail_corner_bl");
+            var br = Resources.Load<TileBase>("Tiles/rail_corner_br");
+            var tl = Resources.Load<TileBase>("Tiles/rail_corner_tl");
+            var tr = Resources.Load<TileBase>("Tiles/rail_corner_tr");
+
+            if (bh != null && vl != null && bl != null && br != null && tl != null && tr != null)
+            {
+                _tileH  = bh;  // use bh as horizontal
+                _tileV  = vl;  // use vl as vertical
+                _tileBL = bl;
+                _tileBR = br;
+                _tileTL = tl;
+                _tileTR = tr;
+                _hasDirectionalTiles = true;
+                return;
+            }
+
+            _hasDirectionalTiles = false;
+            Debug.Log("[BoardTileManager] Directional rail tiles not found in Resources/Tiles/. Using fallback.");
         }
 
-        /// <summary>
-        /// Creates a simple Tile with a white 4x4 texture tinted by the given color.
-        /// Placeholder until user provides real tile art.
-        /// </summary>
         private TileBase CreateSimpleTile(Color color)
         {
             var tile = ScriptableObject.CreateInstance<Tile>();
             tile.color = color;
 
-            // Create a 4x4 white texture as sprite base
             var tex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             tex.filterMode = FilterMode.Point;
             var pixels = new Color[16];

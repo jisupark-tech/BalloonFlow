@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 6363491409498136376}
   - component: {fileID: 2768357235856963315}
   m_Layer: 5
-  m_Name: Image
+  m_Name: LeftTopSidePanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -180,6 +180,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1808534200474095212}
   - component: {fileID: 5371659554554410376}
+  - component: {fileID: -5312988246108041574}
   m_Layer: 5
   m_Name: PopupQuit
   m_TagString: Untagged
@@ -220,6 +221,20 @@ CanvasGroup:
   m_Interactable: 1
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
+--- !u!114 &-5312988246108041574
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1631849603134721387}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 58d3e8e163c909d4395934dff84ac8e3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupQuit
+  _homeButton: {fileID: 2525510344598965173}
+  _nextButton: {fileID: 6040654328154167430}
 --- !u!1 &1954307638721191599
 GameObject:
   m_ObjectHideFlags: 0
@@ -440,7 +455,7 @@ GameObject:
   - component: {fileID: 1663637898698217144}
   - component: {fileID: 327681396931677165}
   m_Layer: 5
-  m_Name: Text (TMP)
+  m_Name: TxtTItle
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1112,7 +1127,7 @@ GameObject:
   - component: {fileID: 3712986999819910096}
   - component: {fileID: 2599902114666044275}
   m_Layer: 5
-  m_Name: Image (1)
+  m_Name: RightTopSidePanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

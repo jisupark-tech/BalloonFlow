@@ -242,19 +242,14 @@ namespace BalloonFlow
                 return;
             }
 
-            // Calculate bounding box center for tile type selection
-            Vector3 min = waypoints[0], max = waypoints[0];
-            for (int i = 1; i < waypoints.Length; i++)
-            {
-                min = Vector3.Min(min, waypoints[i]);
-                max = Vector3.Max(max, waypoints[i]);
-            }
-            Vector3 center = (min + max) * 0.5f;
-
             int count = isLoop ? waypoints.Length : waypoints.Length - 1;
 
             for (int i = 0; i < count; i++)
             {
+                int prev = (i - 1 + waypoints.Length) % waypoints.Length;
+                int next = (i + 1) % waypoints.Length;
+                int nextNext = (i + 2) % waypoints.Length;
+
                 Vector3 start = waypoints[i];
                 Vector3 end = waypoints[(i + 1) % waypoints.Length];
                 Vector3 delta = end - start;
@@ -262,27 +257,34 @@ namespace BalloonFlow
                 if (segLen < 0.01f) continue;
 
                 bool isHorizontal = Mathf.Abs(delta.x) > Mathf.Abs(delta.z);
+                Sprite tile = isHorizontal ? _tileSet.GetH() : _tileSet.GetV();
 
-                // Pick straight tile based on which side of the loop
-                Sprite tile;
-                if (isHorizontal)
+                // Check if start/end are corners to avoid tile overlap
+                bool startIsCorner = false;
+                bool endIsCorner = false;
+                if (isLoop && waypoints.Length >= 3)
                 {
-                    float avgZ = (start.z + end.z) * 0.5f;
-                    tile = avgZ < center.z ? _tileSet.tileBH : _tileSet.tileTH;
-                }
-                else
-                {
-                    // VR sprite has track on right → use on LEFT side (track faces center)
-                    // VL sprite has track on left → use on RIGHT side (track faces center)
-                    float avgX = (start.x + end.x) * 0.5f;
-                    tile = avgX < center.x ? _tileSet.tileVR : _tileSet.tileVL;
+                    Vector3 inAtStart = (waypoints[i] - waypoints[prev]).normalized;
+                    Vector3 outAtStart = delta.normalized;
+                    startIsCorner = Mathf.Abs(inAtStart.x) > Mathf.Abs(inAtStart.z)
+                                 != Mathf.Abs(outAtStart.x) > Mathf.Abs(outAtStart.z);
+
+                    Vector3 inAtEnd = delta.normalized;
+                    Vector3 outAtEnd = (waypoints[nextNext] - waypoints[(i + 1) % waypoints.Length]).normalized;
+                    endIsCorner = Mathf.Abs(inAtEnd.x) > Mathf.Abs(inAtEnd.z)
+                               != Mathf.Abs(outAtEnd.x) > Mathf.Abs(outAtEnd.z);
                 }
 
-                // Fill segment with tiles
                 int tileCount = Mathf.Max(1, Mathf.RoundToInt(segLen / _tileWorldSize));
-                for (int t = 0; t < tileCount; t++)
+                int straightCount = tileCount;
+                if (startIsCorner) straightCount--;
+                if (endIsCorner) straightCount--;
+                if (straightCount <= 0) continue;
+
+                for (int t = 0; t < straightCount; t++)
                 {
-                    float frac = (t + 0.5f) / tileCount;
+                    float offset = startIsCorner ? 1f : 0.5f;
+                    float frac = (t + offset) / tileCount;
                     Vector3 pos = Vector3.Lerp(start, end, frac);
                     PlaceSpriteTile(tile, pos);
                 }
@@ -302,17 +304,11 @@ namespace BalloonFlow
                     bool inH = Mathf.Abs(inDir.x) > Mathf.Abs(inDir.z);
                     bool outH = Mathf.Abs(outDir.x) > Mathf.Abs(outDir.z);
 
-                    if (inH == outH) continue; // Same direction = not a corner
+                    if (inH == outH) continue;
 
-                    // Determine corner type from position relative to center
-                    Vector3 pos = waypoints[i];
-                    Sprite cornerTile;
-                    if (pos.x <= center.x && pos.z <= center.z) cornerTile = _tileSet.tileBL;
-                    else if (pos.x > center.x && pos.z <= center.z) cornerTile = _tileSet.tileBR;
-                    else if (pos.x <= center.x && pos.z > center.z) cornerTile = _tileSet.tileTL;
-                    else cornerTile = _tileSet.tileTR;
-
-                    PlaceSpriteTile(cornerTile, pos);
+                    // Direction-based corner selection (works for any path shape)
+                    Sprite cornerTile = _tileSet.GetTileForDirections(inDir, outDir);
+                    PlaceSpriteTile(cornerTile, waypoints[i]);
                 }
             }
         }
@@ -330,12 +326,14 @@ namespace BalloonFlow
             sr.sprite = sprite;
             sr.sortingOrder = -1;
 
-            // Scale sprite to desired tile world size
-            float spriteWidth = sprite.bounds.size.x;
-            if (spriteWidth > 0.001f)
+            // Scale sprite to exactly fill tile size (center-aligned, no overlap)
+            float spriteW = sprite.bounds.size.x;
+            float spriteH = sprite.bounds.size.y;
+            if (spriteW > 0.001f && spriteH > 0.001f)
             {
-                float scale = _tileWorldSize / spriteWidth;
-                tileGO.transform.localScale = new Vector3(scale, scale, scale);
+                float scaleX = _tileWorldSize / spriteW;
+                float scaleY = _tileWorldSize / spriteH;
+                tileGO.transform.localScale = new Vector3(scaleX, scaleY, 1f);
             }
 
             _trackSegments.Add(tileGO);

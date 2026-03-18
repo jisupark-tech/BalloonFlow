@@ -363,8 +363,8 @@ def step5_gimmick_overlay(params: dict) -> dict:
     selected = available[-num_types:] if num_types > 0 else []
 
     # Separate field vs queue gimmicks
-    field_gimmick_types = {"pinata", "pin", "surprise", "wall", "pinata_box", "ice", "color_curtain", "lock_key"}
-    queue_gimmick_types = {"hidden", "chain", "spawner_t", "spawner_o", "frozen_dart"}
+    field_gimmick_types = {"pinata", "pin", "surprise", "wall", "pinata_box", "ice", "color_curtain", "lock_key", "frozen_dart"}
+    queue_gimmick_types = {"hidden", "chain", "spawner_t", "spawner_o"}
 
     field_gimmicks = []
     queue_gimmicks = []
