@@ -32,6 +32,7 @@ namespace BalloonFlow
         private UIHud _view;
         private PopupSettings _popupSettings;
         private PopupGoldShop _popupGoldShop;
+        private PopupQuit _popupQuit;
         private Image _gaugeOverlay; // screen-edge warning overlay
 
         #endregion
@@ -72,7 +73,13 @@ namespace BalloonFlow
             }
             if (_popupGoldShop != null && _popupGoldShop.CloseButton != null)
                 _popupGoldShop.CloseButton.onClick.RemoveListener(OnGoldShopCloseClicked);
-
+            if (_popupQuit != null)
+            {
+                if (_popupQuit.HomeButton != null)
+                    _popupQuit.HomeButton.onClick.RemoveListener(OnQuitHomeClicked);
+                if (_popupQuit.NextButton != null)
+                    _popupQuit.NextButton.onClick.RemoveListener(OnQuitNextClicked);
+            }
         }
 
         #endregion
@@ -123,6 +130,19 @@ namespace BalloonFlow
                 _popupGoldShop.CloseButton.onClick.AddListener(OnGoldShopCloseClicked);
         }
 
+        /// <summary>나가기 확인 팝업 연결 + Home/Next 버튼 와이어링</summary>
+        public void SetQuitPopup(PopupQuit _popup)
+        {
+            _popupQuit = _popup;
+            if (_popupQuit != null)
+            {
+                if (_popupQuit.HomeButton != null)
+                    _popupQuit.HomeButton.onClick.AddListener(OnQuitHomeClicked);
+                if (_popupQuit.NextButton != null)
+                    _popupQuit.NextButton.onClick.AddListener(OnQuitNextClicked);
+            }
+        }
+
         #endregion
 
         #region Public — HUD 업데이트
@@ -168,13 +188,23 @@ namespace BalloonFlow
         private void OnSettingsHomeClicked()
         {
             if (_popupSettings != null) _popupSettings.CloseUI();
-            if (GameManager.HasInstance)
+
+            // 나가기 확인 팝업이 있으면 표시, 없으면 바로 나가기
+            if (_popupQuit != null)
             {
-                GameManager.Instance.ResumeGame();
-                if (GameManager.IsTestPlayMode)
-                    GameManager.Instance.GoToMapMaker();
-                else
-                    GameManager.Instance.GoToLobby();
+                _popupQuit.OpenUI();
+            }
+            else
+            {
+                // Fallback: 팝업 없으면 기존 동작
+                if (GameManager.HasInstance)
+                {
+                    GameManager.Instance.ResumeGame();
+                    if (GameManager.IsTestPlayMode)
+                        GameManager.Instance.GoToMapMaker();
+                    else
+                        GameManager.Instance.GoToLobby();
+                }
             }
         }
 
@@ -187,6 +217,27 @@ namespace BalloonFlow
         private void OnGoldShopCloseClicked()
         {
             if (_popupGoldShop != null) _popupGoldShop.CloseUI();
+            if (GameManager.HasInstance) GameManager.Instance.ResumeGame();
+        }
+
+        /// <summary>나가기 확인 → Home 버튼: Lobby 또는 MapMaker로 이동</summary>
+        private void OnQuitHomeClicked()
+        {
+            if (_popupQuit != null) _popupQuit.CloseUI();
+            if (GameManager.HasInstance)
+            {
+                GameManager.Instance.ResumeGame();
+                if (GameManager.IsTestPlayMode)
+                    GameManager.Instance.GoToMapMaker();
+                else
+                    GameManager.Instance.GoToLobby();
+            }
+        }
+
+        /// <summary>나가기 확인 → Next 버튼: 팝업 닫고 게임 계속</summary>
+        private void OnQuitNextClicked()
+        {
+            if (_popupQuit != null) _popupQuit.CloseUI();
             if (GameManager.HasInstance) GameManager.Instance.ResumeGame();
         }
 

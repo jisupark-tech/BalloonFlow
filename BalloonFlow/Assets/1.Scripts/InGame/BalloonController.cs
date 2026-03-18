@@ -71,7 +71,7 @@ namespace BalloonFlow
         public const string GimmickSpawnerO     = "Spawner_O";       // Lv.141 불투명 스포너
         public const string GimmickPinataBox    = "Pinata_Box";      // Lv.161 다중 셀 피냐타
         public const string GimmickIce          = "Ice";             // Lv.201 간접 제거 (모든 팝으로 HP 감소)
-        public const string GimmickFrozenDart   = "Frozen_Dart";     // Lv.241 동결 다트 (레일 점유)
+        public const string GimmickFrozenDart   = "Frozen_Dart";     // Lv.241 동결 풍선 (2히트 필요: 1히트=해동, 2히트=팝)
         public const string GimmickColorCurtain = "Color_Curtain";   // Lv.281 지정 색상 간접 제거
 
         #endregion
@@ -193,6 +193,7 @@ namespace BalloonFlow
             // Apply gimmick visual states after all balloons are placed
             ApplyInitialHiddenState();
             ApplyInitialIceState();
+            ApplyInitialFrozenDartState();
 
             Debug.Log($"[BalloonController] Board setup complete. {RemainingCount} balloons placed.");
         }
@@ -226,6 +227,26 @@ namespace BalloonFlow
                 if (data.gimmickType == GimmickWall) continue;
                 if (data.gimmickType == GimmickPin) continue;
                 if (data.gimmickType == GimmickIce) continue;
+                if (data.color == color)
+                {
+                    result.Add(data);
+                }
+            }
+            return result.ToArray();
+        }
+
+        /// <summary>
+        /// Returns all non-popped balloons matching the specified color, INCLUDING gimmick
+        /// balloons (Wall, Pin, Ice, Hidden, etc.). Used by the Color Remove booster so that
+        /// every balloon of the chosen color is cleared regardless of gimmick state.
+        /// </summary>
+        public BalloonData[] GetAllBalloonsByColor(int color)
+        {
+            List<BalloonData> result = new List<BalloonData>();
+            foreach (KeyValuePair<int, BalloonData> pair in _balloons)
+            {
+                BalloonData data = pair.Value;
+                if (data.isPopped) continue;
                 if (data.color == color)
                 {
                     result.Add(data);
@@ -297,6 +318,12 @@ namespace BalloonFlow
                 return new PopResult { success = false, reason = "Pin: use PopBalloonWithDart", balloonId = data.balloonId, gimmickType = GimmickPin };
             }
 
+            // Frozen Dart: 2-hit field gimmick (1st hit = thaw, 2nd hit = pop)
+            if (data.gimmickType == GimmickFrozenDart)
+            {
+                return ProcessFrozenDartHit(data);
+            }
+
             // Pinata and Pinata Box require multiple hits
             if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
             {
@@ -343,6 +370,10 @@ namespace BalloonFlow
                 return ExecutePop(data);
             }
 
+            // Frozen Dart: 2-hit field gimmick
+            if (data.gimmickType == GimmickFrozenDart)
+                return ProcessFrozenDartHit(data);
+
             // Pinata/PinataBox
             if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
                 return ProcessPinataHit(data);
@@ -359,6 +390,53 @@ namespace BalloonFlow
             if (!_balloons.TryGetValue(balloonId, out BalloonData data)) return;
             if (data.isPopped) return;
             ExecutePop(data);
+        }
+
+        /// <summary>
+        /// Reveals a specific hidden balloon by removing its concealed state.
+        /// Used by Hand booster. Returns true if a balloon was revealed.
+        /// </summary>
+        public bool RevealHiddenBalloon(int balloonId)
+        {
+            if (!_hiddenBalloons.Contains(balloonId)) return false;
+            if (!_balloons.TryGetValue(balloonId, out BalloonData data)) return false;
+            if (data.isPopped) return false;
+
+            _hiddenBalloons.Remove(balloonId);
+
+            if (_balloonObjects.TryGetValue(balloonId, out GameObject obj) && obj != null)
+            {
+                int colorIdx = Mathf.Clamp(data.color, 0, BalloonColors.Length - 1);
+                ApplyTintToObject(obj, BalloonColors[colorIdx]);
+                obj.transform.DOPunchScale(Vector3.one * 0.15f, 0.2f, 8, 0.5f);
+            }
+
+            EventBus.Publish(new OnGimmickTriggered
+            {
+                gimmickType = GimmickHidden,
+                targetId    = balloonId
+            });
+
+            return true;
+        }
+
+        /// <summary>
+        /// Returns one random hidden balloon ID, or -1 if none.
+        /// Used by Hand booster to pick a target.
+        /// </summary>
+        public int GetRandomHiddenBalloonId()
+        {
+            if (_hiddenBalloons.Count == 0) return -1;
+
+            // Pick a random one from the set
+            int idx = Random.Range(0, _hiddenBalloons.Count);
+            int i = 0;
+            foreach (int id in _hiddenBalloons)
+            {
+                if (i == idx) return id;
+                i++;
+            }
+            return -1;
         }
 
         /// <summary>
@@ -540,6 +618,7 @@ namespace BalloonFlow
 
         private static readonly Color HIDDEN_COLOR = new Color(0.45f, 0.45f, 0.50f);   // Grey mystery balloon
         private static readonly Color ICE_COLOR = new Color(0.65f, 0.85f, 0.95f);      // Frozen blue tint
+        private static readonly Color FROZEN_DART_COLOR = new Color(0.50f, 0.70f, 0.90f); // Darker frozen tint (distinct from Ice)
         private static readonly Color WALL_COLOR = new Color(0.35f, 0.35f, 0.38f);     // Dark grey stone wall
         private static readonly Color PIN_COLOR = new Color(0.70f, 0.50f, 0.20f);      // Brown wooden pin
         private static readonly Color PINATA_COLOR = new Color(0.95f, 0.70f, 0.20f);   // Gold pinata
@@ -568,6 +647,22 @@ namespace BalloonFlow
                 if (_balloonObjects.TryGetValue(d.balloonId, out GameObject obj) && obj != null)
                 {
                     ApplyTintToObject(obj, ICE_COLOR);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Applies Frozen Dart visual tint. Darker blue than Ice to distinguish.
+        /// Called during setup for balloons with GimmickFrozenDart type.
+        /// </summary>
+        private void ApplyInitialFrozenDartState()
+        {
+            foreach (BalloonData d in _balloons.Values)
+            {
+                if (d.isPopped || d.gimmickType != GimmickFrozenDart) continue;
+                if (_balloonObjects.TryGetValue(d.balloonId, out GameObject obj) && obj != null)
+                {
+                    ApplyTintToObject(obj, FROZEN_DART_COLOR);
                 }
             }
         }
@@ -654,14 +749,71 @@ namespace BalloonFlow
             return ExecutePop(data);
         }
 
+        /// <summary>
+        /// Frozen Dart: 2-hit field gimmick.
+        /// 1st hit (hitCount 0→1): thaw — removes frozen layer, converts to normal balloon.
+        /// 2nd hit: standard pop.
+        /// Adjacent pops also thaw (like Ice, but requires direct hit to pop afterward).
+        /// </summary>
+        private PopResult ProcessFrozenDartHit(BalloonData data)
+        {
+            data.hitCount++;
+            _balloons[data.balloonId] = data;
+
+            if (data.hitCount < 2)
+            {
+                // Thaw: convert to normal balloon (still alive, now poppable in 1 hit)
+                data.gimmickType = GimmickNone;
+                _balloons[data.balloonId] = data;
+
+                // Visual: restore original color from frozen tint
+                if (_balloonObjects.TryGetValue(data.balloonId, out GameObject obj) && obj != null)
+                {
+                    int colorIdx = Mathf.Clamp(data.color, 0, BalloonColors.Length - 1);
+                    Color balloonColor = BalloonColors[colorIdx];
+                    Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
+                    for (int r = 0; r < renderers.Length; r++)
+                    {
+                        foreach (Material mat in renderers[r].materials)
+                        {
+                            if (mat.HasProperty("_BaseColor"))
+                                mat.SetColor("_BaseColor", balloonColor);
+                            if (mat.HasProperty("_Color"))
+                                mat.SetColor("_Color", balloonColor);
+                        }
+                    }
+                }
+
+                EventBus.Publish(new OnGimmickTriggered
+                {
+                    gimmickType = GimmickFrozenDart,
+                    targetId    = data.balloonId
+                });
+
+                return new PopResult
+                {
+                    success     = false,
+                    reason      = "FrozenDartThawed",
+                    balloonId   = data.balloonId,
+                    gimmickType = GimmickFrozenDart
+                };
+            }
+
+            // 2nd hit — fully thawed, execute pop
+            return ExecutePop(data);
+        }
+
         private void ProcessGimmickAfterPop(BalloonData data, PopResult result)
         {
-            // Post-pop gimmick side effects are now handled by GimmickProcessor
-            // via OnBalloonPopped event subscription (Ice HP reduction, Lock-Key unlock, Surprise reveal).
-            //
-            // Field balloon gimmick types that have post-pop effects:
+            // Post-pop gimmick side effects:
+            // - Ice HP, Lock-Key, Surprise, Hidden → GimmickProcessor.HandleAnyBalloonPopped (EventBus)
+            // - Chain, Pin, PinataBox → here (requires BalloonController internal access)
             switch (data.gimmickType)
             {
+                case GimmickChain:
+                    ChainPopAdjacentSameColor(data);
+                    break;
+
                 case GimmickPinataBox:
                     EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickPinataBox, targetId = data.balloonId });
                     break;
@@ -671,8 +823,11 @@ namespace BalloonFlow
                     break;
             }
 
-            // Note: Surprise/Ice/Lock/Pin/Hidden/Chain/Spawner post-pop effects
-            // are handled by GimmickProcessor.HandleAnyBalloonPopped via EventBus.
+            // All pops remove adjacent Pins (Pins can't be targeted directly)
+            RemoveAdjacentPins(data.position);
+
+            // All pops thaw adjacent Frozen Dart balloons (like Ice adjacency)
+            ThawAdjacentFrozenDarts(data.position);
         }
 
         private void RevealAdjacentHiddenBalloons(Vector3 position)
@@ -775,6 +930,50 @@ namespace BalloonFlow
                 EventBus.Publish(new OnGimmickTriggered
                 {
                     gimmickType = GimmickIce,
+                    targetId    = id
+                });
+            }
+        }
+
+        /// <summary>
+        /// Thaws adjacent Frozen Dart balloons. Unlike Ice (which becomes targetable),
+        /// Frozen Dart thaw converts it to a normal balloon that can be popped in 1 hit.
+        /// </summary>
+        private void ThawAdjacentFrozenDarts(Vector3 position)
+        {
+            List<int> adjacentIds = GetAdjacentBalloonIds(position);
+            foreach (int id in adjacentIds)
+            {
+                if (!_balloons.TryGetValue(id, out BalloonData neighbor)) continue;
+                if (neighbor.isPopped) continue;
+                if (neighbor.gimmickType != GimmickFrozenDart) continue;
+
+                // Thaw: convert to normal balloon (now poppable in 1 hit)
+                neighbor.gimmickType = GimmickNone;
+                neighbor.hitCount = 1; // Mark as already thawed so next hit pops
+                _balloons[id] = neighbor;
+
+                // Visual: restore original color
+                if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
+                {
+                    int colorIdx = Mathf.Clamp(neighbor.color, 0, BalloonColors.Length - 1);
+                    Color balloonColor = BalloonColors[colorIdx];
+                    Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
+                    for (int r = 0; r < renderers.Length; r++)
+                    {
+                        foreach (Material mat in renderers[r].materials)
+                        {
+                            if (mat.HasProperty("_BaseColor"))
+                                mat.SetColor("_BaseColor", balloonColor);
+                            if (mat.HasProperty("_Color"))
+                                mat.SetColor("_Color", balloonColor);
+                        }
+                    }
+                }
+
+                EventBus.Publish(new OnGimmickTriggered
+                {
+                    gimmickType = GimmickFrozenDart,
                     targetId    = id
                 });
             }
