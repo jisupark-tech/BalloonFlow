@@ -148,11 +148,7 @@ GameObject:
   - component: {fileID: 6363491409498136376}
   - component: {fileID: 2768357235856963315}
   m_Layer: 5
-<<<<<<< HEAD
   m_Name: TitleFrame
-=======
-  m_Name: LeftTopSidePanel
->>>>>>> main
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5713,11 +5709,7 @@ GameObject:
   - component: {fileID: 1663637898698217144}
   - component: {fileID: 327681396931677165}
   m_Layer: 5
-<<<<<<< HEAD
   m_Name: TextOutline
-=======
-  m_Name: TxtTitle
->>>>>>> main
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -7386,11 +7378,7 @@ GameObject:
   - component: {fileID: 3712986999819910096}
   - component: {fileID: 2599902114666044275}
   m_Layer: 5
-<<<<<<< HEAD
   m_Name: TitleFrame (1)
-=======
-  m_Name: RightTopSidePanel
->>>>>>> main
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
