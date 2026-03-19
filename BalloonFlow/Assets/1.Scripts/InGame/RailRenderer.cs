@@ -68,6 +68,7 @@ namespace BalloonFlow
                 ?? Shader.Find("Standard")
                 ?? Shader.Find("Sprites/Default"));
             _trackMaterial.color = _railColor;
+            _trackMaterial.enableInstancing = true;
         }
 
         private void OnEnable()

@@ -314,9 +314,10 @@ namespace BalloonFlow
         private static Material MakeLitMaterial(Shader shader, Color color)
         {
             var mat = new Material(shader);
-            mat.color = color; // sets _Color
+            mat.color = color;
             if (mat.HasProperty("_BaseColor"))
-                mat.SetColor("_BaseColor", color); // URP uses _BaseColor
+                mat.SetColor("_BaseColor", color);
+            mat.enableInstancing = true; // GPU Instancing
             return mat;
         }
 

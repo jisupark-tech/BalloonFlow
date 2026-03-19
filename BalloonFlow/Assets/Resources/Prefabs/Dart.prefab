@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 5529427059750744329}
   - component: {fileID: 3597135895808763500}
   - component: {fileID: 4695868677111225083}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: bodyOutline
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -100,7 +100,7 @@ GameObject:
   - component: {fileID: 987789412582313349}
   - component: {fileID: 4041639640396794676}
   - component: {fileID: 4995013278503878959}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Dart
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -203,7 +203,7 @@ GameObject:
   - component: {fileID: 4628803217274501990}
   - component: {fileID: 4429181356453867435}
   - component: {fileID: 3687676089358455573}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: needlleOutline
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -329,9 +329,21 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -4819223349682164798, guid: 2e85cb0319ddace479d2b9f5b9e9a5da, type: 3}
+      propertyPath: m_Layer
+      value: 7
+      objectReference: {fileID: 0}
+    - target: {fileID: -2680626368646135558, guid: 2e85cb0319ddace479d2b9f5b9e9a5da, type: 3}
+      propertyPath: m_Layer
+      value: 7
+      objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: 2e85cb0319ddace479d2b9f5b9e9a5da, type: 3}
       propertyPath: m_Name
       value: dart
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 2e85cb0319ddace479d2b9f5b9e9a5da, type: 3}
+      propertyPath: m_Layer
+      value: 7
       objectReference: {fileID: 0}
     - target: {fileID: 2546413419846655661, guid: 2e85cb0319ddace479d2b9f5b9e9a5da, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'

@@ -61,6 +61,8 @@ namespace BalloonFlow
             MainCamera.orthographic = true;
             MainCamera.clearFlags = CameraClearFlags.SolidColor;
             MainCamera.backgroundColor = new Color(0.08f, 0.08f, 0.16f);
+            MainCamera.nearClipPlane = 0.3f;
+            MainCamera.farClipPlane = 50f;
             MainCamera.depth = 0;
             SetCameraTransform(new Vector3(0f, 0f, -10f), Vector3.zero);
 
@@ -74,6 +76,8 @@ namespace BalloonFlow
             MainCamera.orthographic = true;
             MainCamera.clearFlags = CameraClearFlags.SolidColor;
             MainCamera.backgroundColor = new Color(0.06f, 0.10f, 0.18f);
+            MainCamera.nearClipPlane = 0.3f;
+            MainCamera.farClipPlane = 50f;
             MainCamera.depth = 0;
             SetCameraTransform(new Vector3(0f, 0f, -10f), Vector3.zero);
 
@@ -118,7 +122,17 @@ namespace BalloonFlow
 
             MainCamera.clearFlags = CameraClearFlags.SolidColor;
             MainCamera.backgroundColor = new Color(0.255f, 0.235f, 0.392f); // #413C64
+            MainCamera.nearClipPlane = 0.3f;
+            MainCamera.farClipPlane = 80f; // 기본 1000 → 80 (퍼즐 게임 범위 충분)
             MainCamera.depth = 0;
+
+            // 레이어별 컬링 거리 — 먼 오브젝트 일찍 컬링
+            float[] layerCullDist = new float[32];
+            for (int i = 0; i < 32; i++) layerCullDist[i] = 80f; // 기본
+            layerCullDist[0] = 60f; // Default 레이어 (풍선/다트/홀더) — 60m 넘으면 컬링
+            MainCamera.layerCullDistances = layerCullDist;
+            MainCamera.layerCullSpherical = true; // 구형 컬링 (사각형보다 정확)
+
             SetCameraTransform(_inGamePosition, _inGameRotation);
 
             if (UICamera != null)
