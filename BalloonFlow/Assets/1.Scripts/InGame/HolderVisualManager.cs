@@ -375,13 +375,21 @@ namespace BalloonFlow
                 identifier.SetHolderId(data.holderId);
             }
 
-            Color holderColor = GetColor(data.color);
+            // Hidden 보관함: 회색 + "?" 표시 / Frozen: 하늘색 톤
+            Color holderColor;
+            if (data.isHidden)
+                holderColor = new Color(0.5f, 0.5f, 0.5f); // 회색 (색상 숨김)
+            else if (data.isFrozen)
+                holderColor = new Color(0.6f, 0.85f, 1f);  // 하늘색 (동결)
+            else
+                holderColor = GetColor(data.color);
+
             ApplyColorToRenderers(obj, holderColor);
 
             TMP_Text textMesh = obj.GetComponentInChildren<TMP_Text>(true);
             if (textMesh != null)
             {
-                textMesh.text = data.magazineCount.ToString();
+                textMesh.text = data.isHidden ? "?" : data.magazineCount.ToString();
                 textMesh.color = Color.white;
                 textMesh.fontSize = MAGAZINE_FONT_SIZE;
                 textMesh.alignment = TextAlignmentOptions.Center;
@@ -454,9 +462,8 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Enqueues a holder for deployment and processes the queue.
-        /// Only one holder deploys at a time (sequential, across all columns).
-        /// Design ref: "동시에 클릭되더라도 먼저 클릭된 보관함 먼저, 나머지 대기. 순차적으로"
+        /// 클릭된 보관함을 즉시 deploy point로 이동 시작 + 배치 큐에 등록.
+        /// 이동은 동시에 가능, 배치만 순차.
         /// </summary>
         private void StartDeploy(int holderId)
         {
@@ -465,53 +472,41 @@ namespace BalloonFlow
 
             if (visual.isDeploying || visual.isMovingToRail) return;
 
+            // 배치 순서 큐에 등록
             _deployQueue.Enqueue(holderId);
-            TryProcessNextDeploy();
+
+            // 즉시 이동 시작 (대기 없이)
+            visual.isMovingToRail = true;
+            RepositionColumnHolders(visual.column);
+            StartCoroutine(DeployCoroutine(visual));
         }
 
         /// <summary>
-        /// Attempts to process the next holder in the deploy queue.
-        /// Skips if another deployment is already in progress.
+        /// 배치 큐에서 다음 대기 중인 holder를 활성화.
+        /// 이미 deploy point에 도착해서 대기 중인 holder가 있으면 깨움.
         /// </summary>
         private void TryProcessNextDeploy()
         {
-            if (_isProcessingDeploy) return;
-            if (_deployQueue.Count == 0) return;
-
-            int nextId = _deployQueue.Dequeue();
-
-            if (!_holderVisuals.TryGetValue(nextId, out HolderVisual visual))
-            {
-                // Holder was removed (cancelled, color remove, etc.) — skip and try next
-                TryProcessNextDeploy();
-                return;
-            }
-
-            visual.isMovingToRail = true;
-            _isProcessingDeploy = true;
-            RepositionColumnHolders(visual.column);
-            StartCoroutine(DeployCoroutine(visual));
+            // _isProcessingDeploy를 false로 세팅한 뒤 호출됨
+            // 대기 중인 코루틴이 알아서 _isProcessingDeploy 체크 후 진행
         }
 
         private IEnumerator DeployCoroutine(HolderVisual visual)
         {
             if (!RailManager.HasInstance || visual.gameObject == null)
             {
-                _isProcessingDeploy = false;
-                TryProcessNextDeploy();
                 yield break;
             }
 
             // ── Phase 1: Move holder to deploy point ──
             Vector3 deployPoint = GetDeployPoint(visual.column);
 
+            // ── Phase 1: 즉시 deploy point로 이동 (다른 보관함과 동시 가능) ──
             while (visual.gameObject != null)
             {
                 if (_cancelledHolders.Contains(visual.holderId))
                 {
                     _cancelledHolders.Remove(visual.holderId);
-                    _isProcessingDeploy = false;
-                    TryProcessNextDeploy();
                     yield break;
                 }
 
@@ -527,8 +522,31 @@ namespace BalloonFlow
             if (visual.gameObject != null)
                 visual.gameObject.transform.position = deployPoint;
 
-            // ── Phase 2: At rail — start deploying darts one at a time ──
             visual.isMovingToRail = false;
+
+            // ── Phase 1.5: 배치 순서 대기 — 내 차례가 올 때까지 deploy point에서 대기 ──
+            // _deployQueue의 맨 앞이 나일 때 + _isProcessingDeploy가 false일 때 진행
+            while (true)
+            {
+                if (_boardFinished) yield break;
+                if (_cancelledHolders.Contains(visual.holderId))
+                {
+                    _cancelledHolders.Remove(visual.holderId);
+                    yield break;
+                }
+
+                // 내 차례인지 확인: 큐 맨 앞이 나이고 + 다른 배치 진행 중이 아닐 때
+                if (!_isProcessingDeploy && _deployQueue.Count > 0 && _deployQueue.Peek() == visual.holderId)
+                {
+                    _deployQueue.Dequeue(); // 큐에서 빼기
+                    _isProcessingDeploy = true;
+                    break; // Phase 2로 진행
+                }
+
+                yield return null;
+            }
+
+            // ── Phase 2: 배치 시작 (순차 — 내 차례) ──
             visual.isDeploying = true;
 
             if (HolderManager.HasInstance)

@@ -18,6 +18,16 @@ namespace BalloonFlow
         public bool isWaiting;        // waiting behind a deploying holder (same column)
         public bool isMovingToRail;   // in transit from queue to rail
         public bool isConsumed;       // magazine=0, removed
+
+        // ── 큐 기믹 상태 ──
+        /// <summary>큐 기믹 타입. 빈 문자열 = 없음.</summary>
+        public string queueGimmick = "";
+        /// <summary>Hidden: 색상이 숨겨진 상태 (큐 앞줄 도달 시 공개).</summary>
+        public bool isHidden;
+        /// <summary>Frozen: 얼어있어 터치 불가 (인접 보관함 사용 시 해동).</summary>
+        public bool isFrozen;
+        /// <summary>Chain 그룹 ID. -1 = Chain 아님. 같은 ID끼리 연결 발동.</summary>
+        public int chainGroupId = -1;
     }
 
     /// <summary>
@@ -158,6 +168,84 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// Initializes holders from LevelConfig.HolderSetup with queue gimmick support.
+        /// </summary>
+        public void InitializeHoldersFromConfig(HolderSetup[] holderSetups, int queueColumns = 5, int railCapacity = 0)
+        {
+            _holders.Clear();
+            _nextHolderId = 0;
+            _queueColumns = Mathf.Clamp(queueColumns, 1, MAX_QUEUE_COLUMNS);
+            _magazineMax = GetMagazineMaxForCapacity(railCapacity);
+            ResetColumnTracking();
+
+            if (holderSetups == null || holderSetups.Length == 0) return;
+
+            for (int i = 0; i < holderSetups.Length; i++)
+            {
+                var setup = holderSetups[i];
+                int col = i % _queueColumns;
+
+                string gimmick = setup.queueGimmick ?? "";
+                bool hidden = gimmick == GimmickManager.GIMMICK_HIDDEN;
+                bool frozen = gimmick == GimmickManager.GIMMICK_FROZEN_DART;
+
+                var holder = new HolderData
+                {
+                    holderId = _nextHolderId++,
+                    color = setup.color,
+                    magazineCount = Mathf.Min(setup.magazineCount, _magazineMax),
+                    column = col,
+                    isDeploying = false,
+                    isWaiting = false,
+                    isMovingToRail = false,
+                    isConsumed = false,
+                    queueGimmick = gimmick,
+                    isHidden = hidden,
+                    isFrozen = frozen,
+                    chainGroupId = setup.chainGroupId
+                };
+                _holders.Add(holder);
+            }
+        }
+
+        /// <summary>
+        /// Hidden 보관함의 색상 공개. 큐 앞줄 도달 시 호출.
+        /// </summary>
+        public void RevealHiddenHolder(int holderId)
+        {
+            HolderData holder = FindHolder(holderId);
+            if (holder == null || !holder.isHidden) return;
+            holder.isHidden = false;
+            Debug.Log($"[HolderManager] Hidden holder {holderId} revealed — color {holder.color}");
+        }
+
+        /// <summary>
+        /// Frozen 보관함 해동. 인접 보관함(같은 열) 사용 시 호출.
+        /// </summary>
+        public void ThawFrozenHolder(int holderId)
+        {
+            HolderData holder = FindHolder(holderId);
+            if (holder == null || !holder.isFrozen) return;
+            holder.isFrozen = false;
+            Debug.Log($"[HolderManager] Frozen holder {holderId} thawed");
+        }
+
+        /// <summary>
+        /// Chain 그룹에 속한 모든 보관함 ID 반환.
+        /// </summary>
+        public List<int> GetChainGroup(int chainGroupId)
+        {
+            var result = new List<int>();
+            if (chainGroupId < 0) return result;
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                if (_holders[i].chainGroupId == chainGroupId && !_holders[i].isConsumed)
+                    result.Add(_holders[i].holderId);
+            }
+            return result;
+        }
+
+        /// <summary>
         /// Returns all holders.
         /// </summary>
         public HolderData[] GetHolders()
@@ -181,6 +269,20 @@ namespace BalloonFlow
 
             if (holder.magazineCount <= 0)
             {
+                return false;
+            }
+
+            // 큐 기믹 체크: Hidden 상태면 터치 불가 (앞줄 도달 시 자동 공개)
+            if (holder.isHidden)
+            {
+                Debug.Log($"[HolderManager] Holder {holderId} is Hidden — cannot select.");
+                return false;
+            }
+
+            // 큐 기믹 체크: Frozen 상태면 터치 불가 (인접 보관함 사용 시 해동)
+            if (holder.isFrozen)
+            {
+                Debug.Log($"[HolderManager] Holder {holderId} is Frozen — cannot select.");
                 return false;
             }
 
