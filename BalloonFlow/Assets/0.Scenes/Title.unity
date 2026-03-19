@@ -161,7 +161,6 @@ MonoBehaviour:
     boardCenterX: 0
     boardCenterZ: 2
     useDeployPunchScale: 0
-    outermostOnlyMode: 1
     failGraceDelay: 1.5
     failOccupancyThreshold: 0.995
 --- !u!4 &86905297
