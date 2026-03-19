@@ -147,6 +147,7 @@ namespace BalloonFlow
         private DefaultControls.Resources _uiRes;
 
         private Text _txtStatus, _txtSpacing, _txtScale;
+        private Text _queueGenScoreLabel;
         private Text[] _palTexts;
         private Transform _holderGridContainer;
         private LevelDatabase _targetDB;
@@ -684,7 +685,14 @@ namespace BalloonFlow
             Btn(row, "Random", () => { RandomHolders(); RebuildHolderUI(); RefreshInfo(); });
             var row2 = Row(p);
             Btn(row2, "Set Mag", () => { SetAllMags(); RebuildHolderUI(); RefreshInfo(); });
-            Btn(row2, "Auto Balance", () => { AutoBalanceHolders(); RebuildHolderUI(); RefreshInfo(); });
+            Sep(p);
+
+            // ── 큐 생성기 섹션 ──
+            Lbl(p, "Queue Generator", 14, FontStyle.Bold);
+            _queueGenScoreLabel = Lbl(p, "Score: -", 12);
+            var rowGen = Row(p);
+            Btn(rowGen, "Generate Queue", () => { GenerateQueue(); RebuildHolderUI(); RefreshInfo(); });
+            Btn(rowGen, "Auto Balance", () => { AutoBalanceHolders(); RebuildHolderUI(); RefreshInfo(); });
             Sep(p);
         }
 
@@ -1974,6 +1982,392 @@ namespace BalloonFlow
             }
             SetStatus("Auto Balance (gimmick life accounted)");
         }
+
+        // ════════════════════════════════════════════════════════════════
+        //  큐 생성기 (Queue Generator) — BalloonFlow_큐생성기_명세 기반
+        // ════════════════════════════════════════════════════════════════
+
+        #region Queue Generator
+
+        // 난이도별 탄창 풀 (70% 주력 / 30% 나머지)
+        private static readonly int[][] PRIMARY_POOL = {
+            new[] { 10, 20 },         // Easy (Tutorial, Rest)
+            new[] { 20, 30 },         // Normal
+            new[] { 20, 30, 40 },     // Hard
+            new[] { 20, 30, 40, 50 }  // SuperHard
+        };
+        private static readonly int[][] SECONDARY_POOL = {
+            new[] { 5, 30, 40, 50 },  // Easy
+            new[] { 5, 10, 40, 50 },  // Normal
+            new[] { 5, 10, 50 },      // Hard
+            new[] { 5, 10 }           // SuperHard
+        };
+        // 순서 배치 파라미터: 앞 50%에 depth 0 비율 (min~max)
+        private static readonly float[][] DEPTH0_FRONT_RATIO = {
+            new[] { 0.70f, 0.90f }, // Easy
+            new[] { 0.40f, 0.65f }, // Normal
+            new[] { 0.25f, 0.45f }, // Hard
+            new[] { 0.10f, 0.30f }  // SuperHard
+        };
+        private static readonly int[] SAME_COLOR_MAX = { 1, 2, 3, 4 };
+
+        private void GenerateQueue()
+        {
+            // ── 1. 필드 분석 ──
+            var colorDarts = new Dictionary<int, int>();
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                    if (_balloonColors[c, r] >= 0)
+                    {
+                        int ci = _balloonColors[c, r];
+                        int life = GetGimmickLife(_balloonGimmicks[c, r]);
+                        colorDarts[ci] = (colorDarts.ContainsKey(ci) ? colorDarts[ci] : 0) + life;
+                    }
+
+            if (colorDarts.Count == 0)
+            {
+                SetStatus("Generate Queue: No balloons on field.");
+                return;
+            }
+
+            // 5배수 올림
+            var colorDartsRounded = new Dictionary<int, int>();
+            int totalDarts = 0;
+            foreach (var kvp in colorDarts)
+            {
+                int rounded = ((kvp.Value + 4) / 5) * 5;
+                if (rounded < 5) rounded = 5;
+                colorDartsRounded[kvp.Key] = rounded;
+                totalDarts += rounded;
+            }
+
+            int railCapacity = RailManager.CalculateCapacity(totalDarts);
+            int dartCapMax = GetDartCapacityMax(railCapacity);
+
+            // color_depth 계산 (4면 스캔)
+            var colorDepth = CalcColorDepth(colorDartsRounded);
+
+            // ── 2. 난이도 인덱스 ──
+            int diffIdx = GetDifficultyIndex(_difficulty);
+
+            // ── 3. STEP A: 보관함 분해 ──
+            var allMagazines = new List<(int color, int mag)>();
+            foreach (var kvp in colorDartsRounded)
+            {
+                var mags = DecomposeMagazines(kvp.Value, diffIdx, dartCapMax);
+                foreach (int m in mags)
+                    allMagazines.Add((kvp.Key, m));
+            }
+
+            // ── 4. STEP B: 그리드 배치 (depth 기반 순서) ──
+            allMagazines = LayoutByDepth(allMagazines, colorDepth, diffIdx);
+
+            // ── 5. 홀더 그리드에 반영 ──
+            int queueCols = _holderCols;
+            int neededRows = Mathf.CeilToInt((float)allMagazines.Count / queueCols);
+            if (neededRows != _holderRows)
+            {
+                _holderRows = Mathf.Max(1, neededRows);
+                InitGrid();
+            }
+
+            // Clear holder grid
+            for (int c = 0; c < _holderCols; c++)
+                for (int r = 0; r < _holderRows; r++)
+                {
+                    _holderColors[c, r] = -1;
+                    _holderMags[c, r] = _defaultMag;
+                }
+
+            // Fill from allMagazines (row by row, left to right)
+            for (int i = 0; i < allMagazines.Count; i++)
+            {
+                int col = i % queueCols;
+                int row = i / queueCols;
+                if (col < _holderCols && row < _holderRows)
+                {
+                    _holderColors[col, row] = allMagazines[i].color;
+                    _holderMags[col, row] = allMagazines[i].mag;
+                }
+            }
+
+            // ── 6. 난이도 점수 계산 ──
+            float score = CalcDifficultyScore(allMagazines, colorDepth, railCapacity);
+            string grade = score < 20f ? "Easy" : score < 50f ? "Normal" : score < 80f ? "Hard" : "SuperHard";
+
+            if (_queueGenScoreLabel != null)
+                _queueGenScoreLabel.text = $"Score: {score:F0}%  [{grade}]  |  {allMagazines.Count} holders  |  {totalDarts} darts";
+
+            // ── 7. 무결성 검증 ──
+            int sumCheck = 0;
+            foreach (var m in allMagazines) sumCheck += m.mag;
+            bool valid = sumCheck == totalDarts;
+            SetStatus(valid
+                ? $"Generate Queue OK — {grade} ({score:F0}%)"
+                : $"Generate Queue WARN: dart sum {sumCheck} != {totalDarts}");
+        }
+
+        private List<int> DecomposeMagazines(int colorDarts, int diffIdx, int dartCapMax)
+        {
+            var primary = FilterPool(PRIMARY_POOL[diffIdx], dartCapMax);
+            var secondary = FilterPool(SECONDARY_POOL[diffIdx], dartCapMax);
+            if (primary.Length == 0) primary = secondary;
+            if (secondary.Length == 0) secondary = primary;
+            if (primary.Length == 0) return new List<int> { colorDarts }; // fallback
+
+            var result = new List<int>();
+            int remaining = colorDarts;
+
+            int safety = 0;
+            while (remaining > 0 && safety++ < 200)
+            {
+                int[] pool = Random.value < 0.7f ? primary : secondary;
+                var candidates = FilterPool(pool, Mathf.Min(remaining, dartCapMax));
+                if (candidates.Length == 0)
+                    candidates = FilterPool(Concat(primary, secondary), Mathf.Min(remaining, dartCapMax));
+                if (candidates.Length == 0)
+                {
+                    result.Add(remaining); // 남은 전부
+                    remaining = 0;
+                    break;
+                }
+
+                int mag = candidates[Random.Range(0, candidates.Length)];
+                if (remaining - mag >= 0 && (remaining - mag == 0 || remaining - mag >= 5))
+                {
+                    result.Add(mag);
+                    remaining -= mag;
+                }
+            }
+
+            return result;
+        }
+
+        private List<(int color, int mag)> LayoutByDepth(
+            List<(int color, int mag)> magazines,
+            Dictionary<int, int> colorDepth,
+            int diffIdx)
+        {
+            // depth별 그룹핑
+            var depth0 = new List<(int, int)>();
+            var depth12 = new List<(int, int)>();
+
+            foreach (var m in magazines)
+            {
+                int depth = colorDepth.ContainsKey(m.color) ? colorDepth[m.color] : 0;
+                if (depth == 0) depth0.Add(m);
+                else depth12.Add(m);
+            }
+
+            // 각 그룹 내 셔플
+            Shuffle(depth0);
+            Shuffle(depth12);
+
+            // 앞 50%에 depth 0 비율
+            float[] ratioRange = DEPTH0_FRONT_RATIO[diffIdx];
+            float targetRatio = Random.Range(ratioRange[0], ratioRange[1]);
+            int halfCount = magazines.Count / 2;
+            int frontDepth0Count = Mathf.RoundToInt(halfCount * targetRatio);
+            frontDepth0Count = Mathf.Min(frontDepth0Count, depth0.Count);
+
+            var sorted = new List<(int, int)>();
+            // 앞쪽: depth 0 일부 + depth 1~2 일부
+            sorted.AddRange(depth0.GetRange(0, frontDepth0Count));
+            int frontDepth12 = Mathf.Min(halfCount - frontDepth0Count, depth12.Count);
+            if (frontDepth12 > 0) sorted.AddRange(depth12.GetRange(0, frontDepth12));
+
+            // 뒤쪽: 나머지
+            if (frontDepth0Count < depth0.Count)
+                sorted.AddRange(depth0.GetRange(frontDepth0Count, depth0.Count - frontDepth0Count));
+            if (frontDepth12 < depth12.Count)
+                sorted.AddRange(depth12.GetRange(frontDepth12, depth12.Count - frontDepth12));
+
+            // 같은 색 연속 max 제한
+            int maxConsec = SAME_COLOR_MAX[diffIdx];
+            EnforceColorConsecutiveLimit(sorted, maxConsec);
+
+            return sorted;
+        }
+
+        private void EnforceColorConsecutiveLimit(List<(int color, int mag)> list, int maxConsec)
+        {
+            for (int i = maxConsec; i < list.Count; i++)
+            {
+                bool allSame = true;
+                for (int j = 1; j <= maxConsec; j++)
+                {
+                    if (list[i].color != list[i - j].color) { allSame = false; break; }
+                }
+                if (!allSame) continue;
+
+                // 뒤에서 다른 색 찾아서 swap
+                for (int k = i + 1; k < list.Count; k++)
+                {
+                    if (list[k].color != list[i].color)
+                    {
+                        var temp = list[i];
+                        list[i] = list[k];
+                        list[k] = temp;
+                        break;
+                    }
+                }
+            }
+        }
+
+        private Dictionary<int, int> CalcColorDepth(Dictionary<int, int> colorDarts)
+        {
+            var depth = new Dictionary<int, int>();
+            var exposureCount = new Dictionary<int, int>();
+            int totalEdges = 0;
+
+            // 4면 스캔: 상/하/좌/우에서 첫 풍선 색상
+            // 상단 (row=0, 각 col)
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                    if (_balloonColors[c, r] >= 0)
+                    {
+                        int ci = _balloonColors[c, r];
+                        exposureCount[ci] = (exposureCount.ContainsKey(ci) ? exposureCount[ci] : 0) + 1;
+                        totalEdges++;
+                        break;
+                    }
+            // 하단 (row=max, 각 col)
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = _gridRows - 1; r >= 0; r--)
+                    if (_balloonColors[c, r] >= 0)
+                    {
+                        int ci = _balloonColors[c, r];
+                        exposureCount[ci] = (exposureCount.ContainsKey(ci) ? exposureCount[ci] : 0) + 1;
+                        totalEdges++;
+                        break;
+                    }
+            // 좌측 (col=0, 각 row)
+            for (int r = 0; r < _gridRows; r++)
+                for (int c = 0; c < _gridCols; c++)
+                    if (_balloonColors[c, r] >= 0)
+                    {
+                        int ci = _balloonColors[c, r];
+                        exposureCount[ci] = (exposureCount.ContainsKey(ci) ? exposureCount[ci] : 0) + 1;
+                        totalEdges++;
+                        break;
+                    }
+            // 우측 (col=max, 각 row)
+            for (int r = 0; r < _gridRows; r++)
+                for (int c = _gridCols - 1; c >= 0; c--)
+                    if (_balloonColors[c, r] >= 0)
+                    {
+                        int ci = _balloonColors[c, r];
+                        exposureCount[ci] = (exposureCount.ContainsKey(ci) ? exposureCount[ci] : 0) + 1;
+                        totalEdges++;
+                        break;
+                    }
+
+            // depth 판정
+            foreach (var kvp in colorDarts)
+            {
+                int ci = kvp.Key;
+                float ratio = totalEdges > 0 && exposureCount.ContainsKey(ci)
+                    ? (float)exposureCount[ci] / totalEdges
+                    : 0f;
+
+                if (ratio > 0.5f) depth[ci] = 0;
+                else if (ratio > 0.2f) depth[ci] = 1;
+                else depth[ci] = 2;
+            }
+
+            return depth;
+        }
+
+        private float CalcDifficultyScore(
+            List<(int color, int mag)> magazines,
+            Dictionary<int, int> colorDepth,
+            int railCapacity)
+        {
+            if (railCapacity <= 0) return 0f;
+
+            // max_possible = (depth1 + depth2 다트 합) / rail_capacity
+            int innerDarts = 0;
+            foreach (var m in magazines)
+            {
+                int d = colorDepth.ContainsKey(m.color) ? colorDepth[m.color] : 0;
+                if (d > 0) innerDarts += m.mag;
+            }
+            float maxPossible = (float)innerDarts / railCapacity;
+            if (maxPossible <= 0f) return 0f; // 전부 외곽 → Easy
+
+            // absolute = depth>0인 보관함의 mag 합 (순서 기반, 간략화)
+            var consumed = new Dictionary<int, float>();
+            float absolute = 0f;
+            foreach (var m in magazines)
+            {
+                int d = colorDepth.ContainsKey(m.color) ? colorDepth[m.color] : 0;
+                if (d == 0)
+                {
+                    // depth 0: 즉시 발사 가능 → 0
+                }
+                else
+                {
+                    absolute += (float)m.mag / railCapacity;
+                }
+            }
+
+            float relative = Mathf.Clamp01(absolute / maxPossible) * 100f;
+            return relative;
+        }
+
+        // ── 유틸리티 ──
+
+        private static int GetDifficultyIndex(DifficultyPurpose d)
+        {
+            switch (d)
+            {
+                case DifficultyPurpose.Tutorial:
+                case DifficultyPurpose.Rest:
+                    return 0; // Easy
+                case DifficultyPurpose.Normal:
+                case DifficultyPurpose.Intro:
+                    return 1;
+                case DifficultyPurpose.Hard:
+                    return 2;
+                case DifficultyPurpose.SuperHard:
+                    return 3;
+                default: return 1;
+            }
+        }
+
+        private static int GetDartCapacityMax(int railCapacity)
+        {
+            if (railCapacity <= 50) return 30;
+            if (railCapacity <= 100) return 40;
+            return 50;
+        }
+
+        private static int[] FilterPool(int[] pool, int max)
+        {
+            var result = new List<int>();
+            for (int i = 0; i < pool.Length; i++)
+                if (pool[i] <= max) result.Add(pool[i]);
+            return result.ToArray();
+        }
+
+        private static int[] Concat(int[] a, int[] b)
+        {
+            var result = new int[a.Length + b.Length];
+            a.CopyTo(result, 0);
+            b.CopyTo(result, a.Length);
+            return result;
+        }
+
+        private static void Shuffle<T>(List<T> list)
+        {
+            for (int i = list.Count - 1; i > 0; i--)
+            {
+                int j = Random.Range(0, i + 1);
+                T tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+            }
+        }
+
+        #endregion
 
         private void TestPlay()
         {
