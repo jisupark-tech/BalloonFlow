@@ -11,6 +11,21 @@ namespace BalloonFlow
     /// </summary>
     public class PopupFail02 : UIBase
     {
+        [Header("[난이도별 프레임]")]
+        [SerializeField] private Image _resultPanel;
+        [SerializeField] private Image _leftTopSidePanel;
+        [SerializeField] private Image _rightTopSidePanel;
+
+        [Header("[난이도 스프라이트 — ResultPanel]")]
+        [SerializeField] private Sprite _framePopupNormal;
+        [SerializeField] private Sprite _framePopupHard;
+        [SerializeField] private Sprite _framePopupSuperHard;
+
+        [Header("[난이도 스프라이트 — SidePanel]")]
+        [SerializeField] private Sprite _frameResultNormal;
+        [SerializeField] private Sprite _frameResultHard;
+        [SerializeField] private Sprite _frameResultSuperHard;
+
         [Header("[버튼]")]
         [SerializeField] private Button _retryButton;
         [SerializeField] private Button _homeButton;
@@ -22,7 +37,32 @@ namespace BalloonFlow
             if (_retryButton != null) _retryButton.onClick.AddListener(OnRetryClicked);
             if (_homeButton != null) _homeButton.onClick.AddListener(OnHomeClicked);
         }
+        public void Show(DifficultyPurpose difficulty)
+        {
+            ApplyDifficultyFrames(difficulty);
+            OpenUI();
+        }
+        private void ApplyDifficultyFrames(DifficultyPurpose difficulty)
+        {
+            Sprite popupFrame = _framePopupNormal;
+            Sprite sideFrame = _frameResultNormal;
 
+            switch (difficulty)
+            {
+                case DifficultyPurpose.Hard:
+                    popupFrame = _framePopupHard;
+                    sideFrame = _frameResultHard;
+                    break;
+                case DifficultyPurpose.SuperHard:
+                    popupFrame = _framePopupSuperHard;
+                    sideFrame = _frameResultSuperHard;
+                    break;
+            }
+
+            if (_resultPanel != null && popupFrame != null) _resultPanel.sprite = popupFrame;
+            if (_leftTopSidePanel != null && sideFrame != null) _leftTopSidePanel.sprite = sideFrame;
+            if (_rightTopSidePanel != null && sideFrame != null) _rightTopSidePanel.sprite = sideFrame;
+        }
         private void OnDestroy()
         {
             if (_retryButton != null) _retryButton.onClick.RemoveAllListeners();

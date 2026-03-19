@@ -54,7 +54,6 @@ namespace BalloonFlow
             bool success = ContinueHandler.Instance.Continue();
             if (success)
             {
-                CloseUI();
                 if (PopupManager.HasInstance)
                     PopupManager.Instance.ClosePopup("popup_continue");
                 Debug.Log("[PopupContinue] Continue 성공 — 게임 재개");
@@ -67,14 +66,9 @@ namespace BalloonFlow
 
         public void OnDeclineClicked()
         {
-            CloseUI();
-
-            if (PopupManager.HasInstance)
-                PopupManager.Instance.ClosePopup("popup_continue");
-
-            // PopupFail02 표시 (최종 실패 팝업)
             if (PopupManager.HasInstance)
             {
+                PopupManager.Instance.ClosePopup("popup_continue");
                 PopupManager.Instance.ShowPopup("popup_fail02", 50);
             }
 

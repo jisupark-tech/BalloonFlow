@@ -354,7 +354,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 58d3e8e163c909d4395934dff84ac8e3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupQuit
-  _useAnimation: 1
+  _useAnimation: 0
   _animationType: 1
   _animDuration: 0.35
   _animEase: 27

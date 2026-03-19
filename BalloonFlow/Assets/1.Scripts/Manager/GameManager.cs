@@ -101,6 +101,12 @@ namespace BalloonFlow
         /// </summary>
         public static bool IsTestPlayMode;
 
+        /// <summary>
+        /// TEST ITEM 모드. true면 아이템(부스터) 무제한 사용 가능.
+        /// Inspector 또는 런타임 디버그 UI에서 토글.
+        /// </summary>
+        public static bool IsTestItemMode;
+
         // Init 플래그
         private bool _lobbyInitialized;
 
@@ -196,6 +202,7 @@ namespace BalloonFlow
             CreateChild<HolderVisualManager>("Mgr_HolderVisual");
             CreateChild<LevelGenerator>("Mgr_LevelGen");
             CreateChild<BoosterExecutor>("Mgr_BoosterExec");
+            CreateChild<PopupManager>("Mgr_Popup");
 
             // InputHandler에 MainCamera 연결
             var _input = _inGameRoot.GetComponentInChildren<InputHandler>();
@@ -256,25 +263,25 @@ namespace BalloonFlow
             _isTransitioning = true;
             string _fromScene = _currentScene;
 
-            // InGame 퇴장 시 매니저 정리
-            if (_fromScene == SCENE_INGAME)
-                CleanupInGame();
-
             EventBus.Publish(new OnSceneTransitionStarted
             {
                 fromScene = _fromScene ?? string.Empty,
                 toScene = _sceneName
             });
 
-            // Fade Out (with optional custom image)
+            // Fade Out 먼저 (화면 가린 후 정리)
             Sprite _fadeSprite = _transitionSprite;
-            _transitionSprite = null; // consume once
+            _transitionSprite = null;
             if (UIManager.HasInstance)
             {
+                UIManager.Instance.FadeOut(0.5f, _fadeSprite);
+                yield return new WaitForSecondsRealtime(0.55f);
                 UIManager.Instance.CloseUIAll();
-                UIManager.Instance.FadeOut(0.3f, _fadeSprite);
-                yield return new WaitForSecondsRealtime(0.35f);
             }
+
+            // 페이드 완료 후 InGame 매니저 정리
+            if (_fromScene == SCENE_INGAME)
+                CleanupInGame();
 
             // 씬 로드
             AsyncOperation _op = SceneManager.LoadSceneAsync(_sceneName);
@@ -308,9 +315,9 @@ namespace BalloonFlow
                 IsTestPlayMode = false;
             }
 
-            // Fade In (with same custom image if set)
+            // Fade In
             if (UIManager.HasInstance)
-                UIManager.Instance.FadeIn(0.3f, _fadeSprite);
+                UIManager.Instance.FadeIn(0.5f, _fadeSprite);
 
             EventBus.Publish(new OnSceneTransitionCompleted { sceneName = _sceneName });
         }
@@ -334,6 +341,157 @@ namespace BalloonFlow
             Time.timeScale = 1f;
             EventBus.Publish(new OnGameResumed());
         }
+
+        #endregion
+
+        #region Debug UI (InGame Only)
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        private GUIStyle _debugBtnStyle;
+
+        private void OnGUI()
+        {
+            if (_currentScene != SCENE_INGAME && _currentScene != SCENE_MAPMAKER) return;
+
+            // 스타일 초기화 (한번만)
+            if (_debugBtnStyle == null)
+            {
+                _debugBtnStyle = new GUIStyle(GUI.skin.button);
+                _debugBtnStyle.fontSize = 18;
+                _debugBtnStyle.fontStyle = FontStyle.Bold;
+            }
+
+            float w = 220f;
+            float h = 50f;
+            float gap = 6f;
+            float x = Screen.width - w - 15f;
+            float y = 15f;
+
+            int currentLevel = PlayerPrefs.GetInt("BF_PendingLevelId", 1);
+
+            // ── TEST ITEM 토글 ──
+            string itemLabel = IsTestItemMode ? "TEST ITEM: ON" : "TEST ITEM: OFF";
+            GUI.backgroundColor = IsTestItemMode ? Color.green : Color.gray;
+            if (GUI.Button(new Rect(x, y, w, h), itemLabel, _debugBtnStyle))
+            {
+                IsTestItemMode = !IsTestItemMode;
+                Debug.Log($"[GameManager] TEST ITEM = {IsTestItemMode}");
+            }
+            y += h + gap;
+
+            // ── 강제 실패 ──
+            GUI.backgroundColor = new Color(1f, 0.3f, 0.3f);
+            if (GUI.Button(new Rect(x, y, w, h), "FORCE FAIL", _debugBtnStyle))
+            {
+                ForceShowPopup("popup_fail01", "PopupFail01", "Popup/PopupFail01");
+            }
+            y += h + gap;
+
+            // ── 강제 클리어 ──
+            GUI.backgroundColor = new Color(0.3f, 1f, 0.3f);
+            if (GUI.Button(new Rect(x, y, w, h), "FORCE CLEAR", _debugBtnStyle))
+            {
+                if (BoardStateManager.HasInstance)
+                {
+                    // 모든 풍선 제거 → 클리어 판정
+                    if (BalloonController.HasInstance)
+                    {
+                        var all = BalloonController.Instance.GetAllBalloons();
+                        if (all != null)
+                        {
+                            foreach (var b in all)
+                            {
+                                if (!b.isPopped)
+                                    BalloonController.Instance.PopBalloon(b.balloonId);
+                            }
+                        }
+                    }
+                }
+                Debug.Log("[GameManager] FORCE CLEAR triggered");
+            }
+            y += h + gap;
+
+            // ── 이전 스테이지 ──
+            GUI.backgroundColor = new Color(0.5f, 0.7f, 1f);
+            if (GUI.Button(new Rect(x, y, w / 2 - gap / 2, h), $"◀ Lv.{currentLevel - 1}", _debugBtnStyle))
+            {
+                int prevLevel = Mathf.Max(1, currentLevel - 1);
+                CleanupBeforeLevelSwitch();
+                PlayerPrefs.SetInt("BF_PendingLevelId", prevLevel);
+                LoadScene(SCENE_INGAME);
+                Debug.Log($"[GameManager] → Level {prevLevel}");
+            }
+
+            // ── 다음 스테이지 ──
+            if (GUI.Button(new Rect(x + w / 2 + gap / 2, y, w / 2 - gap / 2, h), $"Lv.{currentLevel + 1} ▶", _debugBtnStyle))
+            {
+                int nextLevel = currentLevel + 1;
+                CleanupBeforeLevelSwitch();
+                PlayerPrefs.SetInt("BF_PendingLevelId", nextLevel);
+                LoadScene(SCENE_INGAME);
+                Debug.Log($"[GameManager] → Level {nextLevel}");
+            }
+            y += h + gap;
+
+            // ── 현재 레벨 표시 ──
+            GUI.backgroundColor = new Color(0.2f, 0.2f, 0.2f);
+            GUI.Button(new Rect(x, y, w, h * 0.6f), $"Current: Level {currentLevel}", _debugBtnStyle);
+
+            GUI.backgroundColor = Color.white;
+        }
+
+        /// <summary>레벨 전환 전 정리. 게임 오브젝트 + 팝업 + 상태 초기화.</summary>
+        private void CleanupBeforeLevelSwitch()
+        {
+            // 풍선 풀 반환 (Destroy 전에 정리해야 풀 오브젝트 유실 방지)
+            if (BalloonController.HasInstance)
+                BalloonController.Instance.ClearAllBalloons();
+
+            // 다트 풀 반환
+            if (DartManager.HasInstance)
+                DartManager.Instance.ClearAllDarts();
+
+            // 보관함 비주얼 풀 반환
+            if (HolderVisualManager.HasInstance)
+                HolderVisualManager.Instance.ClearAllVisuals();
+
+            // 레일 슬롯 초기화
+            if (RailManager.HasInstance)
+                RailManager.Instance.ResetAll();
+
+            // 팝업 전부 닫기
+            if (PopupManager.HasInstance)
+                PopupManager.Instance.CloseAllPopups();
+
+            // 이어하기 횟수 리셋
+            if (ContinueHandler.HasInstance)
+                ContinueHandler.Instance.ResetContinueCount();
+        }
+
+        /// <summary>PopupManager에 등록된 팝업 표시. 미등록 시 자동 로드+등록.</summary>
+        private void ForceShowPopup(string popupId, string logName, string resourcePath)
+        {
+            if (PopupManager.HasInstance)
+            {
+                if (PopupManager.Instance.HasPopup(popupId))
+                {
+                    PopupManager.Instance.ShowPopup(popupId, 50);
+                }
+                else if (UIManager.HasInstance)
+                {
+                    var go = UIManager.Instance.LoadPrefab(resourcePath, UIManager.Instance.UiTr);
+                    if (go != null)
+                    {
+                        var cg = go.GetComponent<CanvasGroup>();
+                        if (cg == null) cg = go.AddComponent<CanvasGroup>();
+                        PopupManager.Instance.RegisterPopup(popupId, cg);
+                        PopupManager.Instance.ShowPopup(popupId, 50);
+                    }
+                }
+            }
+            Debug.Log($"[GameManager] {logName} 표시");
+        }
+#endif
 
         #endregion
 

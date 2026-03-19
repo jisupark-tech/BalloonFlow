@@ -5393,7 +5393,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4cc4fb8bf2239ea49bff37baf86bcc81, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupResult
-  _useAnimation: 1
+  _useAnimation: 0
   _animationType: 1
   _animDuration: 0.35
   _animEase: 27

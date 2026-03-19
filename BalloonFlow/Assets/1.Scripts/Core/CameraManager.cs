@@ -116,7 +116,8 @@ namespace BalloonFlow
                 MainCamera.fieldOfView = _inGameFOV;
             }
 
-            MainCamera.clearFlags = CameraClearFlags.Skybox;
+            MainCamera.clearFlags = CameraClearFlags.SolidColor;
+            MainCamera.backgroundColor = new Color(0.255f, 0.235f, 0.392f); // #413C64
             MainCamera.depth = 0;
             SetCameraTransform(_inGamePosition, _inGameRotation);
 

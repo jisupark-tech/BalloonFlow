@@ -85,7 +85,7 @@ namespace BalloonFlow
 
         public void RefreshBoosterCounts()
         {
-            if (_isMapMakerMode)
+            if (_isMapMakerMode || GameManager.IsTestItemMode)
             {
                 SetCountText(_itemCountShuffle, "\u221E"); // ∞
                 SetCountText(_itemCountRemove, "\u221E");
@@ -163,9 +163,9 @@ namespace BalloonFlow
         {
             if (!BoosterManager.HasInstance) return false;
 
-            if (_isMapMakerMode)
+            // MapMaker 또는 TEST ITEM 모드: 무한 사용
+            if (_isMapMakerMode || GameManager.IsTestItemMode)
             {
-                // MapMaker: 무한 사용 — 부족하면 자동 추가
                 if (BoosterManager.Instance.GetBoosterCount(boosterType) <= 0)
                     BoosterManager.Instance.AddBooster(boosterType, 1);
                 return true;

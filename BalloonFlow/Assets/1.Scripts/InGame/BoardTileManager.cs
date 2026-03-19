@@ -106,7 +106,7 @@ namespace BalloonFlow
             _conveyorTile = Resources.Load<TileBase>("Tiles/ConveyorTile");
 
             if (_floorTile == null)
-                _floorTile = CreateSimpleTile(new Color(0.18f, 0.18f, 0.22f));
+                _floorTile = CreateSimpleTile(new Color(0.255f, 0.235f, 0.392f)); // #413C64
             if (_conveyorTile == null)
                 _conveyorTile = CreateSimpleTile(new Color(0.35f, 0.35f, 0.45f));
 

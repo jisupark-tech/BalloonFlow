@@ -221,17 +221,15 @@ namespace BalloonFlow
 
         private void HandleBoardFailed(OnBoardFailed evt)
         {
-            if (!CanContinue()) return; // LevelManager handles FailLevel when no continues left
+            // 실패 흐름: PopupFail01 → PopupContinue → PopupFail02
+            // ContinueHandler는 팝업을 직접 띄우지 않음.
+            // PopupFail01이 먼저 표시되고, Decline 시 PopupContinue를 띄움.
+            if (!CanContinue()) return;
 
             if (PopupManager.HasInstance)
-                PopupManager.Instance.ShowPopup("popup_continue", priority: 10);
+                PopupManager.Instance.ShowPopup("popup_fail01", priority: 50);
 
-            // Also update the cost text on PopupContinue
-            var continueUI = Object.FindAnyObjectByType<PopupContinue>();
-            if (continueUI != null)
-                continueUI.Show();
-
-            Debug.Log($"[ContinueHandler] Board failed — showing continue popup. Count={_continueCount}/{MaxContinues}");
+            Debug.Log($"[ContinueHandler] Board failed — showing PopupFail01. ContinueCount={_continueCount}/{MaxContinues}");
         }
 
         #endregion

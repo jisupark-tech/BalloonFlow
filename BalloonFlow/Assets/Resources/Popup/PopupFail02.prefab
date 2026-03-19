@@ -5340,7 +5340,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1808534200474095212}
   - component: {fileID: 5371659554554410376}
-  - component: {fileID: 4893091315975123614}
+  - component: {fileID: 1136676025346393369}
   m_Layer: 5
   m_Name: PopupFail02
   m_TagString: Untagged
@@ -5381,7 +5381,7 @@ CanvasGroup:
   m_Interactable: 1
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
---- !u!114 &4893091315975123614
+--- !u!114 &1136676025346393369
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -5390,14 +5390,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 1631849603134721387}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4cc4fb8bf2239ea49bff37baf86bcc81, type: 3}
+  m_Script: {fileID: 11500000, guid: 249f450a02c106d4a9f7097433e470f1, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupResult
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupFail02
   _useAnimation: 0
   _animationType: 1
   _animDuration: 0.35
   _animEase: 27
-  _dim: {fileID: 5371659554554410376}
+  _dim: {fileID: 9018109011430426596}
   _popupWindow: {fileID: 6053116654097480130}
   _resultPanel: {fileID: 1520248631517158491}
   _leftTopSidePanel: {fileID: 2768357235856963315}
@@ -5408,11 +5408,8 @@ MonoBehaviour:
   _frameResultNormal: {fileID: 21300000, guid: 8b7a6d882762a384d9c69ada398291b6, type: 3}
   _frameResultHard: {fileID: 21300000, guid: 44efab1b342972a46abc7841991a7bfe, type: 3}
   _frameResultSuperHard: {fileID: 21300000, guid: 8a2ac73a334541146b4c5be69e5380e1, type: 3}
-  _titleText: {fileID: 6234912365236753742}
-  _nextButton: {fileID: 6040654328154167430}
+  _retryButton: {fileID: 6040654328154167430}
   _homeButton: {fileID: 2525510344598965173}
-  _starImages: []
-  _goldTarget: {fileID: 0}
 --- !u!1 &1792226952027943704
 GameObject:
   m_ObjectHideFlags: 0
