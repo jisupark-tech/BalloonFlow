@@ -116,6 +116,7 @@ namespace BalloonFlow
         public void SpawnWaitingHolders()
         {
             _boardFinished = false;
+            _railBottomCached = false; // 새 레벨에서 레일 바닥 재계산
             ClearAllVisuals();
 
             if (!HolderManager.HasInstance) return;
@@ -299,39 +300,48 @@ namespace BalloonFlow
         /// Returns the deploy point — where a holder attaches to the rail bottom edge
         /// to start deploying darts onto passing empty slots.
         /// </summary>
+        /// <summary>캐시된 레일 바닥 Y/Z (레벨당 1회 계산)</summary>
+        private float _cachedRailY = 0.5f;
+        private float _cachedRailZ = 0f;
+        private bool _railBottomCached;
+
         private Vector3 GetDeployPoint(int column)
         {
             if (!RailManager.HasInstance) return CalculateQueuePosition(column, 0) + Vector3.forward * 2f;
 
-            // Deploy point = bottom rail edge, aligned to column X
             float totalWidth = (_queueColumns - 1) * COLUMN_SPACING;
             float startX = -totalWidth * 0.5f;
             float x = startX + column * COLUMN_SPACING;
 
-            // Get the bottom rail Y from waypoints
-            Vector3[] path = RailManager.Instance.GetRailPath();
-            float railY = 0.5f;
-            float railZ = 0f;
-            if (path != null && path.Length > 0)
+            // 레일 바닥 Y/Z는 레벨 중 변하지 않으므로 1회만 계산
+            if (!_railBottomCached)
             {
-                // Bottom rail = lowest Z waypoint
-                railY = path[0].y;
-                railZ = float.MaxValue;
-                for (int i = 0; i < path.Length; i++)
+                Vector3[] path = RailManager.Instance.GetRailPath();
+                if (path != null && path.Length > 0)
                 {
-                    if (path[i].z < railZ)
-                        railZ = path[i].z;
+                    _cachedRailY = path[0].y;
+                    _cachedRailZ = float.MaxValue;
+                    for (int i = 0; i < path.Length; i++)
+                    {
+                        if (path[i].z < _cachedRailZ)
+                            _cachedRailZ = path[i].z;
+                    }
                 }
+                _railBottomCached = true;
             }
 
-            return new Vector3(x, railY, railZ);
+            return new Vector3(x, _cachedRailY, _cachedRailZ);
         }
+
+        /// <summary>재사용 리스트 (GC 방지)</summary>
+        private readonly List<HolderVisual> _tempColumnHolders = new List<HolderVisual>();
 
         private void RepositionColumnHolders(int column)
         {
             if (!HolderManager.HasInstance) return;
 
-            var colHolders = new List<HolderVisual>();
+            var colHolders = _tempColumnHolders;
+            colHolders.Clear();
             foreach (var kvp in _holderVisuals)
             {
                 HolderVisual v = kvp.Value;
@@ -411,9 +421,18 @@ namespace BalloonFlow
             };
         }
 
+        /// <summary>Renderer 캐시 — GetComponentsInChildren 반복 호출 방지</summary>
+        private static readonly Dictionary<int, Renderer[]> _holderRendererCache = new Dictionary<int, Renderer[]>();
+
         private static void ApplyColorToRenderers(GameObject obj, Color color)
         {
-            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
+            int id = obj.GetInstanceID();
+            if (!_holderRendererCache.TryGetValue(id, out Renderer[] renderers))
+            {
+                renderers = obj.GetComponentsInChildren<Renderer>();
+                _holderRendererCache[id] = renderers;
+            }
+
             for (int i = 0; i < renderers.Length; i++)
             {
                 foreach (Material mat in renderers[i].materials)
@@ -428,9 +447,11 @@ namespace BalloonFlow
 
         private void ReturnHolderToPool(HolderVisual visual)
         {
-            if (visual.gameObject != null && ObjectPoolManager.HasInstance)
+            if (visual.gameObject != null)
             {
-                ObjectPoolManager.Instance.Return(HOLDER_POOL_KEY, visual.gameObject);
+                _holderRendererCache.Remove(visual.gameObject.GetInstanceID());
+                if (ObjectPoolManager.HasInstance)
+                    ObjectPoolManager.Instance.Return(HOLDER_POOL_KEY, visual.gameObject);
             }
             visual.gameObject = null;
         }

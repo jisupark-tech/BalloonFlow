@@ -399,55 +399,57 @@ namespace BalloonFlow
         /// (directly targetable from any rail side).
         /// Uses per-column nearest-to-rail check (IsOutermostInDirection) for all 4 directions.
         /// </summary>
+        // 재사용 컬렉션 (GC 방지)
+        private readonly HashSet<int> _reusableOutermostColors = new HashSet<int>();
+        private readonly Dictionary<Vector2Int, int> _reusableOccupancy = new Dictionary<Vector2Int, int>();
+        private readonly HashSet<Vector2Int> _reusablePositionMap = new HashSet<Vector2Int>();
+        private float _cachedCellSpacing = 0.55f;
+
         private HashSet<int> GetOutermostBalloonColors()
         {
-            var colors = new HashSet<int>();
-            if (!BalloonController.HasInstance) return colors;
+            _reusableOutermostColors.Clear();
+            if (!BalloonController.HasInstance) return _reusableOutermostColors;
 
             BalloonData[] allBalloons = BalloonController.Instance.GetAllBalloons();
-            if (allBalloons == null) return colors;
+            if (allBalloons == null) return _reusableOutermostColors;
 
-            float cellSpacing = GameManager.HasInstance
-                ? GameManager.Instance.Board.cellSpacing
-                : 0.55f;
+            if (GameManager.HasInstance)
+                _cachedCellSpacing = GameManager.Instance.Board.cellSpacing;
 
-            var occupancy = new Dictionary<Vector2Int, int>(); // gridPos → color (targetable only)
-            var positionMap = new HashSet<Vector2Int>(); // all non-popped cells (for blocking check)
+            _reusableOccupancy.Clear();
+            _reusablePositionMap.Clear();
 
+            float cs = _cachedCellSpacing;
             foreach (var b in allBalloons)
             {
                 if (b.isPopped) continue;
                 Vector2Int cell = new Vector2Int(
-                    Mathf.RoundToInt(b.position.x / cellSpacing),
-                    Mathf.RoundToInt(b.position.z / cellSpacing));
+                    Mathf.RoundToInt(b.position.x / cs),
+                    Mathf.RoundToInt(b.position.z / cs));
 
-                // All non-popped balloons block line-of-sight
-                positionMap.Add(cell);
+                _reusablePositionMap.Add(cell);
 
-                // Only dart-targetable balloons count for color matching
-                // Wall, Pin, Ice are not targetable
                 if (b.gimmickType == BalloonController.GimmickWall) continue;
                 if (b.gimmickType == BalloonController.GimmickPin) continue;
                 if (b.gimmickType == BalloonController.GimmickIce) continue;
 
-                occupancy[cell] = b.color;
+                _reusableOccupancy[cell] = b.color;
             }
 
-            // Per-column mode: outermost from any rail direction
-            foreach (var kvp in occupancy)
+            foreach (var kvp in _reusableOccupancy)
             {
                 Vector2Int cell = kvp.Key;
 
-                if (IsOutermostInDirection(cell, Vector2Int.up, positionMap) ||
-                    IsOutermostInDirection(cell, Vector2Int.down, positionMap) ||
-                    IsOutermostInDirection(cell, Vector2Int.left, positionMap) ||
-                    IsOutermostInDirection(cell, Vector2Int.right, positionMap))
+                if (IsOutermostInDirection(cell, Vector2Int.up, _reusablePositionMap) ||
+                    IsOutermostInDirection(cell, Vector2Int.down, _reusablePositionMap) ||
+                    IsOutermostInDirection(cell, Vector2Int.left, _reusablePositionMap) ||
+                    IsOutermostInDirection(cell, Vector2Int.right, _reusablePositionMap))
                 {
-                    colors.Add(kvp.Value);
+                    _reusableOutermostColors.Add(kvp.Value);
                 }
             }
 
-            return colors;
+            return _reusableOutermostColors;
         }
 
         private bool IsOutermostInDirection(Vector2Int cell, Vector2Int direction, HashSet<Vector2Int> occupied)

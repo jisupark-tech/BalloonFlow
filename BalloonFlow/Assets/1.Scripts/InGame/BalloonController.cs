@@ -240,33 +240,39 @@ namespace BalloonFlow
         /// balloons (Wall, Pin, Ice, Hidden, etc.). Used by the Color Remove booster so that
         /// every balloon of the chosen color is cleared regardless of gimmick state.
         /// </summary>
+        /// <summary>재사용 리스트 — GetAllBalloonsByColor GC 방지</summary>
+        private readonly List<BalloonData> _reusableColorList = new List<BalloonData>(256);
+
         public BalloonData[] GetAllBalloonsByColor(int color)
         {
-            List<BalloonData> result = new List<BalloonData>();
+            _reusableColorList.Clear();
             foreach (KeyValuePair<int, BalloonData> pair in _balloons)
             {
                 BalloonData data = pair.Value;
                 if (data.isPopped) continue;
                 if (data.color == color)
-                {
-                    result.Add(data);
-                }
+                    _reusableColorList.Add(data);
             }
-            return result.ToArray();
+            return _reusableColorList.ToArray();
         }
+
+        /// <summary>재사용 배열 — GetAllBalloons GC 방지</summary>
+        private BalloonData[] _reusableAllBalloons;
 
         /// <summary>
         /// Returns all balloon data entries (including popped), for board state inspection.
         /// </summary>
         public BalloonData[] GetAllBalloons()
         {
-            BalloonData[] all = new BalloonData[_balloons.Count];
+            if (_reusableAllBalloons == null || _reusableAllBalloons.Length != _balloons.Count)
+                _reusableAllBalloons = new BalloonData[_balloons.Count];
+
             int i = 0;
             foreach (BalloonData d in _balloons.Values)
             {
-                all[i++] = d;
+                _reusableAllBalloons[i++] = d;
             }
-            return all;
+            return _reusableAllBalloons;
         }
 
         /// <summary>

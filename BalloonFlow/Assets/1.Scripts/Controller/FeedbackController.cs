@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using DG.Tweening;
 
@@ -527,9 +528,28 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>WaitForSeconds 캐시 — 동일 delay 값 재사용으로 GC 방지</summary>
+        private static readonly Dictionary<float, WaitForSeconds> _waitCache = new Dictionary<float, WaitForSeconds>();
+        private const int WAIT_CACHE_MAX = 32;
+
+        private static WaitForSeconds GetWait(float seconds)
+        {
+            // float 정밀도 문제 방지: 소수점 2자리로 반올림
+            seconds = Mathf.Round(seconds * 100f) / 100f;
+
+            if (!_waitCache.TryGetValue(seconds, out WaitForSeconds w))
+            {
+                if (_waitCache.Count >= WAIT_CACHE_MAX)
+                    _waitCache.Clear(); // 과도한 성장 방지
+                w = new WaitForSeconds(seconds);
+                _waitCache[seconds] = w;
+            }
+            return w;
+        }
+
         private IEnumerator ReturnAfterDelay(string poolKey, GameObject obj, float delay)
         {
-            yield return new WaitForSeconds(delay);
+            yield return GetWait(delay);
 
             if (obj != null && ObjectPoolManager.HasInstance)
             {
@@ -541,7 +561,7 @@ namespace BalloonFlow
         {
             if (delay > 0f)
             {
-                yield return new WaitForSeconds(delay);
+                yield return GetWait(delay);
             }
 
             SpawnPooledParticle(POOL_PARTICLE_STAR, position);

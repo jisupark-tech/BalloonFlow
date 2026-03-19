@@ -82,8 +82,8 @@ namespace BalloonFlow
                 return -1;
             }
 
-            // Update cell spacing once per frame
-            if (GameManager.HasInstance)
+            // Update cell spacing once per frame (프레임 캐시)
+            if (_cachedOccupancyFrame != Time.frameCount && GameManager.HasInstance)
             {
                 _gridCellSize = GameManager.Instance.Board.cellSpacing;
             }
@@ -176,8 +176,11 @@ namespace BalloonFlow
             int currentFrame = Time.frameCount;
             if (_cachedColorFrame != currentFrame)
             {
-                // New frame — rebuild all color lists
-                _cachedColorBalloons.Clear();
+                // 재사용: 기존 리스트 Clear. 사용되지 않는 색상 키 축적 방지.
+                if (_cachedColorBalloons.Count > 16)
+                    _cachedColorBalloons.Clear(); // 키 과다 축적 시 리셋
+                else
+                    foreach (var kvp in _cachedColorBalloons) kvp.Value.Clear();
                 _cachedColorFrame = currentFrame;
 
                 if (BalloonController.HasInstance)
@@ -192,7 +195,7 @@ namespace BalloonFlow
                             int c = all[i].color;
                             if (!_cachedColorBalloons.TryGetValue(c, out List<BalloonData> list))
                             {
-                                list = new List<BalloonData>();
+                                list = new List<BalloonData>(64);
                                 _cachedColorBalloons[c] = list;
                             }
                             list.Add(all[i]);
@@ -217,7 +220,11 @@ namespace BalloonFlow
                 return _cachedOccupancy;
             }
 
-            var occupancy = new HashSet<Vector2Int>();
+            // 재사용: new 대신 Clear
+            if (_cachedOccupancy == null)
+                _cachedOccupancy = new HashSet<Vector2Int>();
+            else
+                _cachedOccupancy.Clear();
 
             if (BalloonController.HasInstance)
             {
@@ -228,16 +235,14 @@ namespace BalloonFlow
                     {
                         if (!allBalloons[i].isPopped)
                         {
-                            Vector2Int cell = WorldToGrid(allBalloons[i].position);
-                            occupancy.Add(cell);
+                            _cachedOccupancy.Add(WorldToGrid(allBalloons[i].position));
                         }
                     }
                 }
             }
 
-            _cachedOccupancy = occupancy;
             _cachedOccupancyFrame = currentFrame;
-            return occupancy;
+            return _cachedOccupancy;
         }
 
         #endregion
