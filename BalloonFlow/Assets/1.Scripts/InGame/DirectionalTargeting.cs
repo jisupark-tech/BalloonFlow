@@ -130,8 +130,9 @@ namespace BalloonFlow
                 float firingDist = GetFiringAxisDistance(dartPosition, balloon.position, scanDir);
                 if (firingDist < 0f) continue;
 
-                // No penetration: must be nearest in column
-                if (!IsNearestInColumn(balloon.position, scanDir, occupancy)) continue;
+                // No penetration: check if any balloon (any color) blocks the path
+                // between the dart and this target
+                if (IsPathBlocked(dartPosition, balloon.position, scanDir, occupancy)) continue;
 
                 // Closest target wins
                 if (firingDist < bestFiringDist)
@@ -260,51 +261,52 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Checks if a balloon is the outermost (nearest to rail) in its grid column/row.
-        /// Returns true if no other non-popped balloon occupies a grid cell between
-        /// the rail edge and this balloon along the firing axis.
+        /// Checks if any balloon (any color) occupies a grid cell between
+        /// the dart position and the target balloon along the firing axis.
+        /// Returns true if the path is BLOCKED (dart cannot reach target).
         /// </summary>
-        private static bool IsNearestInColumn(Vector3 balloonPosition, ScanDirection direction, HashSet<Vector2Int> occupancy)
+        private static bool IsPathBlocked(Vector3 dartPos, Vector3 targetPos, ScanDirection direction, HashSet<Vector2Int> occupancy)
         {
-            Vector2Int cell = WorldToGrid(balloonPosition);
+            Vector2Int dartCell = WorldToGrid(dartPos);
+            Vector2Int targetCell = WorldToGrid(targetPos);
 
-            // Scan from this cell toward the rail edge. If any cell is occupied, this balloon is blocked.
+            // Scan from dart cell toward target cell. If any occupied cell exists between them, path is blocked.
             switch (direction)
             {
-                case ScanDirection.Up: // Firing north (+Z), rail is south, nearest = lowest Z
-                    for (int y = cell.y - 1; y >= cell.y - 30; y--)
+                case ScanDirection.Up: // Firing north (+Z)
+                    for (int y = dartCell.y + 1; y < targetCell.y; y++)
                     {
-                        if (occupancy.Contains(new Vector2Int(cell.x, y)))
-                            return false;
+                        if (occupancy.Contains(new Vector2Int(targetCell.x, y)))
+                            return true;
                     }
-                    return true;
+                    return false;
 
-                case ScanDirection.Down: // Firing south (-Z), rail is north, nearest = highest Z
-                    for (int y = cell.y + 1; y <= cell.y + 30; y++)
+                case ScanDirection.Down: // Firing south (-Z)
+                    for (int y = dartCell.y - 1; y > targetCell.y; y--)
                     {
-                        if (occupancy.Contains(new Vector2Int(cell.x, y)))
-                            return false;
+                        if (occupancy.Contains(new Vector2Int(targetCell.x, y)))
+                            return true;
                     }
-                    return true;
+                    return false;
 
-                case ScanDirection.Right: // Firing east (+X), rail is west, nearest = lowest X
-                    for (int x = cell.x - 1; x >= cell.x - 30; x--)
+                case ScanDirection.Right: // Firing east (+X)
+                    for (int x = dartCell.x + 1; x < targetCell.x; x++)
                     {
-                        if (occupancy.Contains(new Vector2Int(x, cell.y)))
-                            return false;
+                        if (occupancy.Contains(new Vector2Int(x, targetCell.y)))
+                            return true;
                     }
-                    return true;
+                    return false;
 
-                case ScanDirection.Left: // Firing west (-X), rail is east, nearest = highest X
-                    for (int x = cell.x + 1; x <= cell.x + 30; x++)
+                case ScanDirection.Left: // Firing west (-X)
+                    for (int x = dartCell.x - 1; x > targetCell.x; x--)
                     {
-                        if (occupancy.Contains(new Vector2Int(x, cell.y)))
-                            return false;
+                        if (occupancy.Contains(new Vector2Int(x, targetCell.y)))
+                            return true;
                     }
-                    return true;
+                    return false;
 
                 default:
-                    return false;
+                    return true;
             }
         }
 
