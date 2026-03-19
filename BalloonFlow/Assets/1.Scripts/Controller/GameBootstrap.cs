@@ -161,6 +161,15 @@ namespace BalloonFlow
             }
 
             UIManager.Instance.SetSceneCanvas(_canvasGO.transform);
+
+            // EventSystem이 없으면 UI 클릭 불가 — 생성
+            if (UnityEngine.EventSystems.EventSystem.current == null)
+            {
+                var esGO = new GameObject("EventSystem");
+                esGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
+                esGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+                Debug.Log("[GameBootstrap] Created EventSystem (was missing)");
+            }
         }
 
         void OnEnable()
@@ -252,8 +261,7 @@ namespace BalloonFlow
             var _quitPopup = UIManager.Instance.OpenUI<PopupQuit>("Popup/PopupQuit");
             if (_quitPopup != null) _quitPopup.CloseUI();
 
-            // BoosterTestPanel (테스트용 — 하단 좌측에 부스터 버튼 표시)
-            UIManager.Instance.OpenUI<BoosterTestPanel>("UI/BoosterTestPanel");
+            // BoosterTestPanel 삭제됨 — 부스터 기능은 UIHud의 ItemBtn으로 이전
 
             // HUDController에 팝업 연결
             if (HUDController.HasInstance)
