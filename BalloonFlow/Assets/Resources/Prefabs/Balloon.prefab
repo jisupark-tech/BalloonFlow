@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 5672489093163787386}
   - component: {fileID: 6872660358152279957}
   - component: {fileID: 5113461803887897403}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: balloonOutline
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -100,7 +100,7 @@ GameObject:
   - component: {fileID: 3428667507723789500}
   - component: {fileID: 7112659452224844551}
   - component: {fileID: 5650027658570603723}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Balloon
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -245,9 +245,17 @@ PrefabInstance:
       propertyPath: m_LocalRotation.x
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -2255248007331424131, guid: f61191468219b904cb021655320c7d50, type: 3}
+      propertyPath: m_Layer
+      value: 6
+      objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: f61191468219b904cb021655320c7d50, type: 3}
       propertyPath: m_Name
       value: balloon
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: f61191468219b904cb021655320c7d50, type: 3}
+      propertyPath: m_Layer
+      value: 6
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: f61191468219b904cb021655320c7d50, type: 3}
       propertyPath: m_IsActive
