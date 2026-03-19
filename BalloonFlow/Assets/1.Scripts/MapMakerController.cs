@@ -1011,7 +1011,7 @@ namespace BalloonFlow
         #region Board Preview
 
         /// <summary>Shared sphere mesh for all preview objects (created once).</summary>
-        private Mesh _sharedSphereMesh;
+        private Mesh _sharedQuadMesh;
 
         /// <summary>Cached gimmick-specific materials (created on demand, reused).</summary>
         private readonly Dictionary<Color, Material> _gimmickMatCache = new Dictionary<Color, Material>();
@@ -1023,12 +1023,12 @@ namespace BalloonFlow
             _previewObjs = new GameObject[_gridCols, _gridRows];
             _previewLabels = new TextMesh[_gridCols, _gridRows];
 
-            // Create shared mesh once
-            if (_sharedSphereMesh == null)
+            // Quad 메시 (Sphere 720 tri → Quad 2 tri, ~99.7% GPU 절감)
+            if (_sharedQuadMesh == null)
             {
-                var tmpSphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                _sharedSphereMesh = tmpSphere.GetComponent<MeshFilter>().sharedMesh;
-                Destroy(tmpSphere);
+                var tmpQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                _sharedQuadMesh = tmpQuad.GetComponent<MeshFilter>().sharedMesh;
+                Object.Destroy(tmpQuad);
             }
 
             float spacing = CellSpacing;
@@ -1046,7 +1046,8 @@ namespace BalloonFlow
                     go.transform.SetParent(_previewRoot, false);
                     go.transform.localScale = Vector3.one * scale;
                     go.transform.position = new Vector3(wx, 0.5f, wz);
-                    go.AddComponent<MeshFilter>().sharedMesh = _sharedSphereMesh;
+                    go.transform.rotation = Quaternion.Euler(90f, 0f, 0f); // Quad를 위에서 보이게
+                    go.AddComponent<MeshFilter>().sharedMesh = _sharedQuadMesh;
                     var mr = go.AddComponent<MeshRenderer>();
 
                     int ci = _balloonColors[c, r];
