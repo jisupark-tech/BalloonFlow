@@ -87,6 +87,17 @@ namespace BalloonFlow
         private int _nextDartId;
         private bool _boardFinished;
 
+        // Off-belt frozen dart system: darts removed from slots and held at fixed world positions
+        public struct FrozenDartInfo
+        {
+            public int dartId;
+            public int color;
+            public int holderId;
+            public Vector3 worldPosition;
+            public int originalSlotIndex; // freeze 시점의 슬롯 인덱스 (체인 전파용)
+        }
+        private readonly List<FrozenDartInfo> _frozenDartInfos = new List<FrozenDartInfo>();
+
         #endregion
 
         #region Properties
@@ -102,6 +113,12 @@ namespace BalloonFlow
 
         /// <summary>Conveyor belt rotation speed in slots per second.</summary>
         public float RotationSpeed => _rotationSpeed;
+
+        /// <summary>Distance between adjacent slots on the path.</summary>
+        public float SlotSpacing => _slotSpacing;
+
+        /// <summary>Current belt rotation offset in distance units.</summary>
+        public float RotationOffset => _rotationOffset;
 
         /// <summary>Whether smooth corner interpolation is active.</summary>
         public bool SmoothCorners => _smoothCorners;
@@ -144,7 +161,7 @@ namespace BalloonFlow
         private void Update()
         {
             if (_slots == null || _slotCount == 0) return;
-            if (_boardFinished) return; // Stop belt rotation after board clear/fail
+            if (_boardFinished) return;
 
             // Advance conveyor belt (counter-clockwise = positive direction along path)
             _rotationOffset += _rotationSpeed * _slotSpacing * Time.deltaTime;
@@ -154,6 +171,9 @@ namespace BalloonFlow
             {
                 _rotationOffset %= _totalPathLength;
             }
+
+            // Chain freeze: moving darts that reach frozen darts also freeze
+            PropagateFreezeChain();
         }
 
         #endregion
@@ -489,6 +509,147 @@ namespace BalloonFlow
             return result;
         }
 
+        #endregion
+
+        #region Public Methods — Cluster / Gap Detection
+
+        /// <summary>
+        /// 지정 슬롯부터 벨트 진행 방향(+)으로 연속된 빈 슬롯 수를 반환.
+        /// 0 = 해당 슬롯이 occupied (틈 아님).
+        /// 군집 사이의 틈 크기를 측정할 때 사용.
+        /// </summary>
+        public int GetGapLengthForward(int slotIndex)
+        {
+            if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return 0;
+            if (_slots[slotIndex].dartColor >= 0) return 0;
+
+            int length = 0;
+            for (int i = 0; i < _slotCount; i++)
+            {
+                int idx = (slotIndex + i) % _slotCount;
+                if (_slots[idx].dartColor >= 0) break;
+                length++;
+            }
+            return length;
+        }
+
+        /// <summary>
+        /// 지정 슬롯부터 벨트 역방향(-)으로 연속된 빈 슬롯 수를 반환.
+        /// deploy point 뒤쪽 틈 크기 측정에 사용.
+        /// </summary>
+        public int GetGapLengthBackward(int slotIndex)
+        {
+            if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return 0;
+            if (_slots[slotIndex].dartColor >= 0) return 0;
+
+            int length = 0;
+            for (int i = 0; i < _slotCount; i++)
+            {
+                int idx = (slotIndex - i + _slotCount) % _slotCount;
+                if (_slots[idx].dartColor >= 0) break;
+                length++;
+            }
+            return length;
+        }
+
+        /// <summary>
+        /// deploy point 기준, 뒤쪽(벨트 역방향)에서 가장 가까운 군집까지의 틈 크기.
+        /// 군집이 바로 인접하면 0, 빈칸 3개 있으면 3.
+        /// 틈이 있어야 배치 가능한 로직에 사용.
+        /// </summary>
+        public int GetGapBehindDeployPoint(int deploySlot)
+        {
+            if (_slots == null) return 0;
+
+            // deploy slot 자체가 비어있는지 확인
+            // deploy slot부터 뒤로 스캔하여 첫 occupied 슬롯까지의 거리
+            int gap = 0;
+            for (int i = 0; i < _slotCount; i++)
+            {
+                int idx = (deploySlot - i + _slotCount) % _slotCount;
+                if (_slots[idx].dartColor >= 0) break;
+                gap++;
+            }
+            return gap;
+        }
+
+        /// <summary>
+        /// 빈 슬롯에 다트를 배치하면 기존 군집이 분리되는지 체크.
+        /// 즉시 이웃(slot ±1)만 확인 — 양쪽 모두 같은 색이면 군집 내부 구멍.
+        /// true = 배치 가능, false = 군집 분리 위험 → 배치 금지.
+        /// </summary>
+        public bool CanPlaceWithoutSplittingCluster(int slotIndex)
+        {
+            if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return false;
+            if (_slots[slotIndex].dartColor >= 0) return false; // occupied
+
+            int prev = (slotIndex - 1 + _slotCount) % _slotCount;
+            int next = (slotIndex + 1) % _slotCount;
+
+            int colorPrev = _slots[prev].dartColor; // -1 if empty
+            int colorNext = _slots[next].dartColor; // -1 if empty
+
+            // 양쪽 즉시 이웃이 같은 색 → 군집 내부 구멍 → 배치 금지
+            if (colorPrev >= 0 && colorNext >= 0 && colorPrev == colorNext)
+                return false;
+
+            return true;
+        }
+
+        /// <summary>
+        /// 벨트 위의 군집 정보를 반환. 각 군집 = (시작 슬롯, 길이, 색상).
+        /// 같은 색이 연속되면 하나의 군집. 색이 바뀌면 새 군집.
+        /// </summary>
+        public List<(int startSlot, int length, int color)> GetClusters()
+        {
+            var clusters = new List<(int, int, int)>();
+            if (_slots == null || _slotCount == 0) return clusters;
+
+            int i = 0;
+            // 첫 번째 occupied 슬롯 찾기
+            while (i < _slotCount && _slots[i].dartColor < 0) i++;
+            if (i >= _slotCount) return clusters;
+
+            int start = i;
+            int color = _slots[i].dartColor;
+            int len = 1;
+            i++;
+
+            while (i < _slotCount)
+            {
+                if (_slots[i].dartColor == color && color >= 0)
+                {
+                    len++;
+                }
+                else
+                {
+                    if (color >= 0)
+                        clusters.Add((start, len, color));
+                    if (_slots[i].dartColor >= 0)
+                    {
+                        start = i;
+                        color = _slots[i].dartColor;
+                        len = 1;
+                    }
+                    else
+                    {
+                        color = -1;
+                        len = 0;
+                    }
+                }
+                i++;
+            }
+
+            if (color >= 0)
+                clusters.Add((start, len, color));
+
+            return clusters;
+        }
+
+        #endregion
+
+        #region Public Methods — Dart Colors
+
         /// <summary>
         /// Returns the set of dart colors currently on the rail.
         /// </summary>
@@ -565,6 +726,129 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// Removes a dart from the belt and stores it as frozen at its current world position.
+        /// The dart is completely off the slot system until unfrozen.
+        /// Design ref: "뒤에 오는걸 그자리에 멈추고, 배치가 끝나면 다시 움직이라고"
+        /// </summary>
+        /// <returns>True if frozen successfully.</returns>
+        public bool FreezeDart(int slotIndex)
+        {
+            if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return false;
+            if (_slots[slotIndex].dartColor < 0) return false;
+
+            // Don't freeze darts from the currently deploying holder
+            if (_activeDeployHolderId >= 0 && _slots[slotIndex].holderId == _activeDeployHolderId)
+                return false;
+
+            // Check not already frozen
+            int dartId = _slots[slotIndex].dartId;
+            for (int i = 0; i < _frozenDartInfos.Count; i++)
+            {
+                if (_frozenDartInfos[i].dartId == dartId) return false;
+            }
+
+            Vector3 worldPos = GetSlotWorldPosition(slotIndex);
+
+            _frozenDartInfos.Add(new FrozenDartInfo
+            {
+                dartId = dartId,
+                color = _slots[slotIndex].dartColor,
+                holderId = _slots[slotIndex].holderId,
+                worldPosition = worldPos,
+                originalSlotIndex = slotIndex
+            });
+
+            // Remove from belt
+            ClearSlot(slotIndex);
+
+            // Notify DartManager to pin visual at frozen position
+            EventBus.Publish(new OnDartFrozen
+            {
+                dartId = dartId,
+                slotIndex = slotIndex
+            });
+
+            return true;
+        }
+
+        /// <summary>
+        /// Reinserts all frozen darts back into the nearest available belt slots
+        /// and resumes normal movement. Called when holder deployment finishes.
+        /// </summary>
+        public void UnfreezeAndReinsertAll()
+        {
+            // First clear frozen visuals
+            EventBus.Publish(new OnDartsFrozenCleared());
+
+            // Then reinsert each dart and create new slot visuals
+            for (int i = 0; i < _frozenDartInfos.Count; i++)
+            {
+                var info = _frozenDartInfos[i];
+                int nearestSlot = GetNearestSlotIndex(info.worldPosition);
+                int emptySlot = FindNextEmptySlot(nearestSlot);
+
+                if (emptySlot >= 0)
+                {
+                    _slots[emptySlot].dartColor = info.color;
+                    _slots[emptySlot].holderId = info.holderId;
+                    _slots[emptySlot].dartId = info.dartId;
+                    _occupiedCount++;
+
+                    // Create visual for reinserted dart
+                    EventBus.Publish(new OnDartPlacedOnSlot
+                    {
+                        slotIndex = emptySlot,
+                        color = info.color,
+                        holderId = info.holderId
+                    });
+                }
+            }
+
+            _frozenDartInfos.Clear();
+            PublishOccupancyChanged();
+        }
+
+        /// <summary>
+        /// Returns which slot index is currently at a given fixed path distance.
+        /// Deterministic: computed from belt offset, no 3D distance search.
+        /// </summary>
+        public int GetSlotAtPathDistance(float pathDistance)
+        {
+            if (_slotSpacing <= 0f || _slotCount == 0) return 0;
+            float rawIndex = (pathDistance - _rotationOffset) / _slotSpacing;
+            int slot = Mathf.RoundToInt(rawIndex) % _slotCount;
+            return (slot % _slotCount + _slotCount) % _slotCount;
+        }
+
+        /// <summary>
+        /// Calculates the path distance for a slot at the current belt offset.
+        /// Use once at deployment start, then pass to GetSlotAtPathDistance each frame.
+        /// </summary>
+        public float GetPathDistanceForSlot(int slotIndex)
+        {
+            return slotIndex * _slotSpacing + _rotationOffset;
+        }
+
+        /// <summary>
+        /// 현재 배치 중인 deploy point 슬롯. 체인 전파가 이 슬롯과 앞쪽을 건드리지 않게 함.
+        /// -1 = 배치 중 아님.
+        /// </summary>
+        private int _activeDeploySlot = -1;
+
+        /// <summary>현재 배치 중인 holder ID. 이 holder의 다트는 freeze 대상에서 제외.</summary>
+        private int _activeDeployHolderId = -1;
+
+        public void SetActiveDeploySlot(int slot) { _activeDeploySlot = slot; }
+        public void ClearActiveDeploySlot() { _activeDeploySlot = -1; _activeDeployHolderId = -1; }
+        public void SetActiveDeployHolderId(int holderId) { _activeDeployHolderId = holderId; }
+
+        /// <summary>Whether any darts are currently frozen off-belt.</summary>
+        public bool HasFrozenDarts => _frozenDartInfos.Count > 0;
+
+        /// <summary>Returns the list of currently frozen darts (read-only).</summary>
+        public List<FrozenDartInfo> GetFrozenDarts() => _frozenDartInfos;
+
+        /// <summary>
         /// Resets all slots and conveyor state for a new level.
         /// </summary>
         public void ResetAll()
@@ -582,6 +866,9 @@ namespace BalloonFlow
             _rotationOffset = 0f;
             _nextDartId = 0;
             _boardFinished = false;
+            _frozenDartInfos.Clear();
+            _activeDeploySlot = -1;
+            _activeDeployHolderId = -1;
         }
 
         #endregion
@@ -734,6 +1021,51 @@ namespace BalloonFlow
                                    + 2f * u * t * _waypoints[i]
                                    + t * t * tangentOut;
                     _smoothedPath.Add(arcPos);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Chain freeze propagation: if a moving dart's world position becomes
+        /// directly adjacent (within ~1 slot spacing) to any frozen dart, freeze it too.
+        /// Frozen darts are off-belt, so we compare world positions.
+        /// Design ref: "대기하지않은 다트들이 대기하는 다트에 바로 인접하게 되면 대기하게 세팅"
+        /// </summary>
+        private void PropagateFreezeChain()
+        {
+            if (_frozenDartInfos.Count == 0) return;
+
+            float adjacencyThreshold = _slotSpacing * 1.3f;
+
+            bool changed = true;
+            while (changed)
+            {
+                changed = false;
+                for (int s = 0; s < _slotCount; s++)
+                {
+                    if (_slots[s].dartColor < 0) continue;
+
+                    // deploy point와 그 앞쪽(+1)은 절대 freeze하지 않음
+                    if (_activeDeploySlot >= 0)
+                    {
+                        if (s == _activeDeploySlot) continue;
+                        if (s == (_activeDeploySlot + 1) % _slotCount) continue;
+                    }
+
+                    Vector3 dartPos = GetSlotWorldPosition(s);
+
+                    for (int f = 0; f < _frozenDartInfos.Count; f++)
+                    {
+                        float dist = Vector3.Distance(dartPos, _frozenDartInfos[f].worldPosition);
+                        if (dist < adjacencyThreshold)
+                        {
+                            if (FreezeDart(s)) // 실제로 freeze 성공했을 때만
+                            {
+                                changed = true;
+                            }
+                            break;
+                        }
+                    }
                 }
             }
         }

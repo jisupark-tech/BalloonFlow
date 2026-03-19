@@ -5121,7 +5121,6 @@ GameObject:
   - component: {fileID: 6053116654097480130}
   - component: {fileID: 3733497194064788380}
   - component: {fileID: 1520248631517158491}
-  - component: {fileID: 3536788962449617759}
   m_Layer: 5
   m_Name: ResultPanel
   m_TagString: Untagged
@@ -5195,20 +5194,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &3536788962449617759
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1256971415117823289}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f3c11ff85ae863d4ba3613c882ee1f72, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: '::'
-  dim: {fileID: 9018109011430426596}
-  popupWindow: {fileID: 6053116654097480130}
 --- !u!1 &1617214298294143505
 GameObject:
   m_ObjectHideFlags: 0
@@ -5408,9 +5393,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4cc4fb8bf2239ea49bff37baf86bcc81, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupResult
+  _useAnimation: 0
+  _animationType: 1
+  _animDuration: 0.35
+  _animEase: 27
+  _dim: {fileID: 5371659554554410376}
+  _popupWindow: {fileID: 6053116654097480130}
+  _resultPanel: {fileID: 1520248631517158491}
+  _leftTopSidePanel: {fileID: 2768357235856963315}
+  _rightTopSidePanel: {fileID: 2599902114666044275}
+  _framePopupNormal: {fileID: 21300000, guid: 8218e91f0ec78854197dbaab177f8078, type: 3}
+  _framePopupHard: {fileID: 21300000, guid: 479a3d54cf4037240af6efeb21c49eb7, type: 3}
+  _framePopupSuperHard: {fileID: 21300000, guid: 339bfcfea1476a240964926f4de4735c, type: 3}
+  _frameResultNormal: {fileID: 21300000, guid: 8b7a6d882762a384d9c69ada398291b6, type: 3}
+  _frameResultHard: {fileID: 21300000, guid: 44efab1b342972a46abc7841991a7bfe, type: 3}
+  _frameResultSuperHard: {fileID: 21300000, guid: 8a2ac73a334541146b4c5be69e5380e1, type: 3}
   _titleText: {fileID: 6234912365236753742}
   _nextButton: {fileID: 6040654328154167430}
-  _retryButton: {fileID: 208645134566231287}
   _homeButton: {fileID: 2525510344598965173}
   _starImages: []
   _goldTarget: {fileID: 0}

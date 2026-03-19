@@ -427,4 +427,19 @@ namespace BalloonFlow
 
     /// <summary>A single coin from the fly effect has landed on the gold target.</summary>
     public struct OnCoinFlyLanded { }
+
+    // ────────────────────────────────────────
+    // Deploy Freeze Events
+    // ────────────────────────────────────────
+
+    /// <summary>A dart was frozen in place during holder deployment.
+    /// Visual stays at frozen world position while belt continues.</summary>
+    public struct OnDartFrozen
+    {
+        public int dartId;
+        public int slotIndex;
+    }
+
+    /// <summary>All frozen darts resumed normal belt movement after deployment ends.</summary>
+    public struct OnDartsFrozenCleared { }
 }

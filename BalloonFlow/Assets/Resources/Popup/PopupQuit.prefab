@@ -223,7 +223,6 @@ GameObject:
   - component: {fileID: 6053116654097480130}
   - component: {fileID: 3733497194064788380}
   - component: {fileID: 1520248631517158491}
-  - component: {fileID: 3536788962449617759}
   m_Layer: 5
   m_Name: QuitPanel
   m_TagString: Untagged
@@ -292,20 +291,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &3536788962449617759
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1256971415117823289}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f3c11ff85ae863d4ba3613c882ee1f72, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: '::'
-  dim: {fileID: 9018109011430426596}
-  popupWindow: {fileID: 6053116654097480130}
 --- !u!1 &1631849603134721387
 GameObject:
   m_ObjectHideFlags: 0
@@ -369,6 +354,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 58d3e8e163c909d4395934dff84ac8e3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupQuit
+  _useAnimation: 1
+  _animationType: 1
+  _animDuration: 0.35
+  _animEase: 27
+  _dim: {fileID: 5371659554554410376}
+  _popupWindow: {fileID: 6053116654097480130}
   _homeButton: {fileID: 2525510344598965173}
   _nextButton: {fileID: 6040654328154167430}
 --- !u!1 &1954307638721191599

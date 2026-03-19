@@ -2995,6 +2995,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 518da4e09b3715548ae31d6cb5008159, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.UILobby
+  _useAnimation: 0
+  _animationType: 1
+  _animDuration: 0.35
+  _animEase: 27
+  _dim: {fileID: 5963229542980643047}
+  _popupWindow: {fileID: 6863820864472708994}
   _playButton: {fileID: 1004161832626243381}
   _coinButton: {fileID: 7982330750056798911}
   _settingsButton: {fileID: 6386947207428374221}

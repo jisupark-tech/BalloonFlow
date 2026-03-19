@@ -65,6 +65,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9439414384030044594699049ac987b4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.UITitle
+  _useAnimation: 0
+  _animationType: 1
+  _animDuration: 0.35
+  _animEase: 27
+  _dim: {fileID: 6494794082036417418}
+  _popupWindow: {fileID: 1763781314803702851}
   _logoText: {fileID: 2911917079017237912}
   _subtitleText: {fileID: 1127256135572670454}
   _tapToStartText: {fileID: 6321273667545542942}

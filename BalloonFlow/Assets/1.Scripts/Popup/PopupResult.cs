@@ -1,13 +1,15 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 namespace BalloonFlow
 {
     /// <summary>
-    /// 결과 팝업. Resources/Popup/PopupResult 프리팹에서 로드.
-    /// Clear: 별 표시 + Next/Home (Retry 숨김) + 코인 비행 연출
-    /// Fail: Retry/Home (Next 숨김) + 별 회색 처리
+    /// 클리어 결과 팝업.
+    /// 난이도별 프레임 변경 (Normal/Hard/SuperHard).
+    /// NextButton: 다음 레벨 (하트 있으면 진입, 없으면 로비).
+    /// HomeButton: 로비씬 이동.
     /// </summary>
     public class PopupResult : UIBase
     {
@@ -19,18 +21,31 @@ namespace BalloonFlow
         private const int MAX_COIN_COUNT = 20;
         private const int SCORE_PER_COIN_STEP = 500;
 
-        // Star colors
-        private static readonly Color STAR_EARNED_COLOR = new Color(1f, 0.85f, 0.1f);  // Gold
-        private static readonly Color STAR_UNEARNED_COLOR = new Color(0.4f, 0.4f, 0.4f, 0.5f);  // Grey
+        private static readonly Color STAR_EARNED_COLOR = new Color(1f, 0.85f, 0.1f);
+        private static readonly Color STAR_UNEARNED_COLOR = new Color(0.4f, 0.4f, 0.4f, 0.5f);
 
         #endregion
+
+        [Header("[난이도별 프레임]")]
+        [SerializeField] private Image _resultPanel;
+        [SerializeField] private Image _leftTopSidePanel;
+        [SerializeField] private Image _rightTopSidePanel;
+
+        [Header("[난이도 스프라이트 — ResultPanel]")]
+        [SerializeField] private Sprite _framePopupNormal;
+        [SerializeField] private Sprite _framePopupHard;
+        [SerializeField] private Sprite _framePopupSuperHard;
+
+        [Header("[난이도 스프라이트 — SidePanel]")]
+        [SerializeField] private Sprite _frameResultNormal;
+        [SerializeField] private Sprite _frameResultHard;
+        [SerializeField] private Sprite _frameResultSuperHard;
 
         [Header("[Result 텍스트]")]
         [SerializeField] private Text _titleText;
 
         [Header("[버튼]")]
         [SerializeField] private Button _nextButton;
-        [SerializeField] private Button _retryButton;
         [SerializeField] private Button _homeButton;
 
         [Header("[별 표시 — 3개 Image, 왼쪽부터 순서대로]")]
@@ -40,59 +55,113 @@ namespace BalloonFlow
         [SerializeField] private RectTransform _goldTarget;
 
         public Button NextButton => _nextButton;
-        public Button RetryButton => _retryButton;
+        public Button RetryButton => null; // PopupFail02로 이동됨. GameBootstrap 호환용.
         public Button HomeButton => _homeButton;
         public RectTransform GoldTarget => _goldTarget;
 
-        /// <summary>
-        /// Sets the gold target RectTransform for coin fly effect.
-        /// Called by GameBootstrap to wire the HUD gold display.
-        /// </summary>
+        /// <summary>GameBootstrap 호환: 실패 시 PopupFail01을 대신 표시.</summary>
+        public void ShowFail()
+        {
+            // 실패 흐름은 PopupFail01 → PopupContinue → PopupFail02로 변경됨.
+            // GameBootstrap에서 이 메서드를 호출하면 PopupFail01을 띄움.
+            if (PopupManager.HasInstance)
+            {
+                PopupManager.Instance.ShowPopup("popup_fail01", 50);
+            }
+        }
+
+        private void Start()
+        {
+            if (_nextButton != null) _nextButton.onClick.AddListener(OnNextClicked);
+            if (_homeButton != null) _homeButton.onClick.AddListener(OnHomeClicked);
+        }
+
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            if (_nextButton != null) _nextButton.onClick.RemoveAllListeners();
+            if (_homeButton != null) _homeButton.onClick.RemoveAllListeners();
+        }
+
         public void SetGoldTarget(RectTransform target)
         {
             _goldTarget = target;
         }
 
-        public void ShowWin(int _score, int _stars)
+        public void ShowWin(int _score, int _stars, DifficultyPurpose difficulty = DifficultyPurpose.Normal)
         {
+            ApplyDifficultyFrames(difficulty);
+
             if (_titleText != null)
             {
                 _titleText.text = "Level Clear!";
                 _titleText.color = new Color(1f, 0.85f, 0.1f);
             }
-            // Hide Retry on clear, show Next
-            if (_retryButton != null)
-                _retryButton.gameObject.SetActive(false);
-            if (_nextButton != null)
-                _nextButton.gameObject.SetActive(true);
 
-            // Show stars
             UpdateStarDisplay(_stars);
-
             OpenUI();
 
-            // Trigger coin fly effect after a brief delay
             StartCoroutine(TriggerCoinFlyDelayed(_score));
         }
 
-        public void ShowFail()
+        #region Button Handlers
+
+        private void OnNextClicked()
         {
-            if (_titleText != null)
+            CloseUI();
+
+            // 하트 확인
+            if (LifeManager.HasInstance && LifeManager.Instance.CurrentLives <= 0)
             {
-                _titleText.text = "Game Over";
-                _titleText.color = new Color(1f, 0.3f, 0.3f);
+                UnityEngine.SceneManagement.SceneManager.LoadScene("Lobby");
+                return;
             }
-            // Show Retry on fail, hide Next
-            if (_retryButton != null)
-                _retryButton.gameObject.SetActive(true);
-            if (_nextButton != null)
-                _nextButton.gameObject.SetActive(false);
 
-            // Grey out all stars
-            UpdateStarDisplay(0);
-
-            OpenUI();
+            // 다음 레벨 진입
+            if (LevelManager.HasInstance)
+            {
+                int nextId = LevelManager.Instance.GetNextLevelId();
+                LevelManager.Instance.LoadLevel(nextId);
+            }
         }
+
+        private void OnHomeClicked()
+        {
+            CloseUI();
+
+            if (PopupManager.HasInstance)
+                PopupManager.Instance.CloseAllPopups();
+
+            UnityEngine.SceneManagement.SceneManager.LoadScene("Lobby");
+        }
+
+        #endregion
+
+        #region Difficulty Frames
+
+        private void ApplyDifficultyFrames(DifficultyPurpose difficulty)
+        {
+            Sprite popupFrame = _framePopupNormal;
+            Sprite sideFrame = _frameResultNormal;
+
+            switch (difficulty)
+            {
+                case DifficultyPurpose.Hard:
+                    popupFrame = _framePopupHard;
+                    sideFrame = _frameResultHard;
+                    break;
+                case DifficultyPurpose.SuperHard:
+                    popupFrame = _framePopupSuperHard;
+                    sideFrame = _frameResultSuperHard;
+                    break;
+            }
+
+            if (_resultPanel != null && popupFrame != null) _resultPanel.sprite = popupFrame;
+            if (_leftTopSidePanel != null && sideFrame != null) _leftTopSidePanel.sprite = sideFrame;
+            if (_rightTopSidePanel != null && sideFrame != null) _rightTopSidePanel.sprite = sideFrame;
+        }
+
+        #endregion
 
         #region Star Display
 
@@ -105,18 +174,15 @@ namespace BalloonFlow
             for (int i = 0; i < _starImages.Length; i++)
             {
                 if (_starImages[i] == null) continue;
-
                 _starImages[i].gameObject.SetActive(true);
 
                 if (i < clampedStars)
                 {
-                    // Earned star — gold
                     _starImages[i].color = STAR_EARNED_COLOR;
                     _starImages[i].transform.localScale = Vector3.one;
                 }
                 else
                 {
-                    // Unearned star — grey
                     _starImages[i].color = STAR_UNEARNED_COLOR;
                     _starImages[i].transform.localScale = Vector3.one * 0.85f;
                 }
@@ -133,53 +199,30 @@ namespace BalloonFlow
 
             RectTransform target = _goldTarget;
 
-            // Fallback: try to find gold text from HUD
-            if (target == null && HUDController.HasInstance)
-            {
-                var hud = HUDController.Instance.GetComponent<UIHud>();
-                if (hud == null)
-                {
-                    // Try to find UIHud in scene
-                    hud = FindAnyObjectByType<UIHud>();
-                }
-                if (hud != null && hud.GoldText != null)
-                {
-                    target = hud.GoldText.rectTransform;
-                }
-            }
-
             if (target == null)
             {
-                Debug.LogWarning("[PopupResult] Gold target not found, skipping coin fly effect.");
-                yield break;
+                var hud = FindAnyObjectByType<UIHud>();
+                if (hud != null && hud.GoldText != null)
+                    target = hud.GoldText.rectTransform;
             }
 
-            // Find a parent canvas for the effect
+            if (target == null) yield break;
+
             Canvas canvas = GetComponentInParent<Canvas>();
-            if (canvas == null)
-            {
-                canvas = FindAnyObjectByType<Canvas>();
-            }
+            if (canvas == null) canvas = FindAnyObjectByType<Canvas>();
             if (canvas == null) yield break;
 
-            // Determine coin count based on score
             int coinCount = Mathf.Clamp(
                 MIN_COIN_COUNT + (score / SCORE_PER_COIN_STEP),
-                MIN_COIN_COUNT,
-                MAX_COIN_COUNT);
+                MIN_COIN_COUNT, MAX_COIN_COUNT);
 
-            // Source: screen center
             Vector2 screenCenter = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
 
             var effect = CoinFlyEffect.Create(canvas);
             if (effect != null)
             {
                 effect.Play(screenCenter, target, coinCount,
-                    onEachLand: () =>
-                    {
-                        // Increment gold display per coin landing
-                        EventBus.Publish(new OnCoinFlyLanded());
-                    });
+                    onEachLand: () => EventBus.Publish(new OnCoinFlyLanded()));
             }
         }
 

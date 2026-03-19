@@ -2260,7 +2260,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d87ebd27cd6f76848a8897a0374934ea, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupContinue
-  _continueButton: {fileID: 0}
+  _useAnimation: 0
+  _animationType: 1
+  _animDuration: 0.35
+  _animEase: 27
+  _dim: {fileID: 7867954912908968060}
+  _popupWindow: {fileID: 2154296287609273698}
+  _continueButton: {fileID: 4247953977444279499}
   _declineButton: {fileID: 900038919082209533}
   _costText: {fileID: 2884284065406127613}
 --- !u!1 &9003318873129549188
