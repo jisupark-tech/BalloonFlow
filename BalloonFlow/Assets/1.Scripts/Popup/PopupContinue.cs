@@ -4,9 +4,10 @@ using UnityEngine.UI;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Continue popup — wires Continue/Decline buttons to ContinueHandler.
-    /// Design ref: 아웃게임디렉션 §이어하기
-    ///   1st continue: FREE → 2nd: 900 → 3rd: 1900 → 4th: 2900 (max)
+    /// Continue popup — 실패 흐름의 두 번째 단계.
+    /// ContinueButton: 골드 차감 + 색상 제거 + 게임 재개.
+    /// DeclineButton: PopupFail02로 이동.
+    /// Flow: PopupFail01 → PopupContinue → PopupFail02
     /// </summary>
     public class PopupContinue : UIBase
     {
@@ -20,44 +21,50 @@ namespace BalloonFlow
         public Button ContinueButton => _continueButton;
         public Button DeclineButton => _declineButton;
 
-        /// <summary>
-        /// Shows the continue popup with current cost info.
-        /// </summary>
+        private void Start()
+        {
+            if (_continueButton != null) _continueButton.onClick.AddListener(OnContinueClicked);
+            if (_declineButton != null) _declineButton.onClick.AddListener(OnDeclineClicked);
+        }
+
+        private void OnDestroy()
+        {
+            if (_continueButton != null) _continueButton.onClick.RemoveAllListeners();
+            if (_declineButton != null) _declineButton.onClick.RemoveAllListeners();
+        }
+
         public void Show()
         {
             UpdateCostDisplay();
             OpenUI();
         }
 
-        /// <summary>
-        /// Called when player presses the Continue button.
-        /// </summary>
         public void OnContinueClicked()
         {
             if (!ContinueHandler.HasInstance) return;
 
+            int cost = ContinueHandler.Instance.GetContinueCost();
+
+            if (CurrencyManager.HasInstance && CurrencyManager.Instance.Coins < cost && cost > 0)
+            {
+                Debug.Log("[PopupContinue] 골드 부족");
+                return;
+            }
+
             bool success = ContinueHandler.Instance.Continue();
             if (success)
             {
-                Debug.Log("[PopupContinue] Continue accepted.");
                 CloseUI();
-
-                // Close the PopupManager's popup_continue entry too
                 if (PopupManager.HasInstance)
                     PopupManager.Instance.ClosePopup("popup_continue");
+                Debug.Log("[PopupContinue] Continue 성공 — 게임 재개");
             }
             else
             {
-                Debug.LogWarning("[PopupContinue] Continue failed (not enough coins or max reached).");
-                // If failed due to coins, could show gold shop — for now just close
                 OnDeclineClicked();
             }
         }
 
-        /// <summary>
-        /// Called when player presses the Decline button.
-        /// Triggers the actual level fail flow.
-        /// </summary>
         public void OnDeclineClicked()
         {
             CloseUI();
@@ -65,28 +72,20 @@ namespace BalloonFlow
             if (PopupManager.HasInstance)
                 PopupManager.Instance.ClosePopup("popup_continue");
 
-            // Now actually fail the level since player declined continue
-            if (LevelManager.HasInstance)
+            // PopupFail02 표시 (최종 실패 팝업)
+            if (PopupManager.HasInstance)
             {
-                LevelManager.Instance.FailLevel();
+                PopupManager.Instance.ShowPopup("popup_fail02", 50);
             }
 
-            Debug.Log("[PopupContinue] Continue declined — triggering level fail.");
+            Debug.Log("[PopupContinue] Decline → PopupFail02 표시");
         }
 
         private void UpdateCostDisplay()
         {
             if (_costText == null || !ContinueHandler.HasInstance) return;
-
             int cost = ContinueHandler.Instance.GetContinueCost();
-            if (cost <= 0)
-            {
-                _costText.text = "FREE";
-            }
-            else
-            {
-                _costText.text = $"{cost}";
-            }
+            _costText.text = cost <= 0 ? "FREE" : cost.ToString("N0");
         }
     }
 }

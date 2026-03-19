@@ -10,41 +10,72 @@ namespace BalloonFlow
     /// </summary>
     public class UIHud : UIBase
     {
-        [Header("[Row 1 — 레벨/골드]")]
+        [Header("[Top — 레벨/골드]")]
+        [SerializeField] private TMP_Text _txtLevelOutline;
+        [SerializeField] private TMP_Text _txtLevel;
         [SerializeField] private Button _settingsButton;
-        [SerializeField] private TMP_Text _levelText;
         [SerializeField] private TMP_Text _goldText;
         [SerializeField] private Button _goldPlusButton;
 
-        [Header("[Row 2 — 홀더]")]
-        [SerializeField] private Text _holderCountText;
+        [Header("[Bottom Panel — 부스터 아이템]")]
+        [SerializeField] private Button _itemBtnShuffle;
+        [SerializeField] private Button _itemBtnRemove;
+        [SerializeField] private Button _itemBtnHand;
+        [SerializeField] private TMP_Text _itemCountShuffle;
+        [SerializeField] private TMP_Text _itemCountRemove;
+        [SerializeField] private TMP_Text _itemCountHand;
+
+        [Header("[색상 선택 패널 — Color Remove용]")]
+        [SerializeField] private GameObject _colorPanel;
+        [SerializeField] private Button _color0Button;
+        [SerializeField] private Button _color1Button;
+        [SerializeField] private Button _color2Button;
+        [SerializeField] private Button _color3Button;
 
         [Header("[배경/오버레이]")]
         [SerializeField] private Image _backgroundImage;
 
-
+        private bool _isMapMakerMode;
 
         #region Accessors
 
         public Button SettingsButton => _settingsButton;
-        public TMP_Text LevelText => _levelText;
+        public TMP_Text LevelText => _txtLevel;
+        public TMP_Text LevelOutlineText => _txtLevelOutline;
         public TMP_Text GoldText => _goldText;
         public Button GoldPlusButton => _goldPlusButton;
-        public Text HolderCountText => _holderCountText;
         public Image BackgroundImage => _backgroundImage;
+        public Button ItemBtnShuffle => _itemBtnShuffle;
+        public Button ItemBtnRemove => _itemBtnRemove;
+        public Button ItemBtnHand => _itemBtnHand;
 
         #endregion
 
-        #region Set Methods
-
-        public void SetHolderInfo(int _onRail, int _max)
+        private void Start()
         {
-            if (_holderCountText != null) _holderCountText.text = $"On Rail: {_onRail}/{_max}";
+            WireButtons();
+            if (_colorPanel != null) _colorPanel.SetActive(false);
+            RefreshBoosterCounts();
+        }
+
+        private void OnDestroy()
+        {
+            UnwireButtons();
+        }
+
+        #region Public Methods
+
+        /// <summary>MapMaker에서 진입 시 아이템 무한대 표기.</summary>
+        public void SetMapMakerMode(bool isMapMaker)
+        {
+            _isMapMakerMode = isMapMaker;
+            RefreshBoosterCounts();
         }
 
         public void SetLevel(int _levelId)
         {
-            if (_levelText != null) _levelText.text = $"Level {_levelId}";
+            if (_txtLevel != null) _txtLevel.text = $"{_levelId}";
+            if (_txtLevelOutline != null) _txtLevelOutline.text = $"{_levelId}";
         }
 
         public void SetGold(int _amount)
@@ -52,9 +83,111 @@ namespace BalloonFlow
             if (_goldText != null) _goldText.text = _amount.ToString("N0");
         }
 
-        public void SetMoveCount(int _used, int _total)
+        public void RefreshBoosterCounts()
         {
-            //if (_moveCountText != null) _moveCountText.text = $"{_used}/{_total}";
+            if (_isMapMakerMode)
+            {
+                SetCountText(_itemCountShuffle, "\u221E"); // ∞
+                SetCountText(_itemCountRemove, "\u221E");
+                SetCountText(_itemCountHand, "\u221E");
+                return;
+            }
+
+            if (!BoosterManager.HasInstance) return;
+            SetCountText(_itemCountShuffle, BoosterManager.Instance.GetBoosterCount(BoosterManager.SHUFFLE).ToString());
+            SetCountText(_itemCountRemove, BoosterManager.Instance.GetBoosterCount(BoosterManager.COLOR_REMOVE).ToString());
+            SetCountText(_itemCountHand, BoosterManager.Instance.GetBoosterCount(BoosterManager.HAND).ToString());
+        }
+
+        #endregion
+
+        #region Button Wiring
+
+        private void WireButtons()
+        {
+            if (_itemBtnShuffle != null) _itemBtnShuffle.onClick.AddListener(OnShuffleClicked);
+            if (_itemBtnRemove != null) _itemBtnRemove.onClick.AddListener(OnColorRemoveClicked);
+            if (_itemBtnHand != null) _itemBtnHand.onClick.AddListener(OnHandClicked);
+            if (_color0Button != null) _color0Button.onClick.AddListener(() => OnColorPicked(0));
+            if (_color1Button != null) _color1Button.onClick.AddListener(() => OnColorPicked(1));
+            if (_color2Button != null) _color2Button.onClick.AddListener(() => OnColorPicked(2));
+            if (_color3Button != null) _color3Button.onClick.AddListener(() => OnColorPicked(3));
+        }
+
+        private void UnwireButtons()
+        {
+            if (_itemBtnShuffle != null) _itemBtnShuffle.onClick.RemoveAllListeners();
+            if (_itemBtnRemove != null) _itemBtnRemove.onClick.RemoveAllListeners();
+            if (_itemBtnHand != null) _itemBtnHand.onClick.RemoveAllListeners();
+            if (_color0Button != null) _color0Button.onClick.RemoveAllListeners();
+            if (_color1Button != null) _color1Button.onClick.RemoveAllListeners();
+            if (_color2Button != null) _color2Button.onClick.RemoveAllListeners();
+            if (_color3Button != null) _color3Button.onClick.RemoveAllListeners();
+        }
+
+        #endregion
+
+        #region Booster Handlers
+
+        private void OnShuffleClicked()
+        {
+            if (!CanUseBooster(BoosterManager.SHUFFLE)) return;
+            BoosterManager.Instance.UseBooster(BoosterManager.SHUFFLE);
+            RefreshBoosterCounts();
+        }
+
+        private void OnColorRemoveClicked()
+        {
+            if (!CanUseBooster(BoosterManager.COLOR_REMOVE)) return;
+            BoosterManager.Instance.UseBooster(BoosterManager.COLOR_REMOVE);
+            RefreshBoosterCounts();
+            if (_colorPanel != null) _colorPanel.SetActive(true);
+        }
+
+        private void OnHandClicked()
+        {
+            if (!CanUseBooster(BoosterManager.HAND)) return;
+            BoosterManager.Instance.UseBooster(BoosterManager.HAND);
+            RefreshBoosterCounts();
+            Debug.Log("[UIHud] Hand 사용 — 보관함을 탭하세요.");
+        }
+
+        private void OnColorPicked(int color)
+        {
+            if (BoosterExecutor.HasInstance)
+                BoosterExecutor.Instance.OnColorSelected(color);
+            if (_colorPanel != null) _colorPanel.SetActive(false);
+        }
+
+        private bool CanUseBooster(string boosterType)
+        {
+            if (!BoosterManager.HasInstance) return false;
+
+            if (_isMapMakerMode)
+            {
+                // MapMaker: 무한 사용 — 부족하면 자동 추가
+                if (BoosterManager.Instance.GetBoosterCount(boosterType) <= 0)
+                    BoosterManager.Instance.AddBooster(boosterType, 1);
+                return true;
+            }
+
+            return BoosterManager.Instance.GetBoosterCount(boosterType) > 0;
+        }
+
+        #endregion
+
+        #region Legacy Compat (HUDController 호환)
+
+        public void SetHolderInfo(int _onRail, int _max) { }
+        public void SetMoveCount(int _used, int _total) { }
+
+        #endregion
+
+        #region Utility
+
+        private static void SetCountText(TMP_Text text, string value)
+        {
+            if (text != null) text.text = value;
         }
 
         #endregion

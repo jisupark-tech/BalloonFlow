@@ -90,9 +90,14 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>Frozen dart visuals: pinned at world position, don't move with belt.</summary>
+        private readonly Dictionary<int, GameObject> _frozenVisuals = new Dictionary<int, GameObject>();
+
         private void OnEnable()
         {
             EventBus.Subscribe<OnDartPlacedOnSlot>(HandleDartPlaced);
+            EventBus.Subscribe<OnDartFrozen>(HandleDartFrozen);
+            EventBus.Subscribe<OnDartsFrozenCleared>(HandleDartsFrozenCleared);
             EventBus.Subscribe<OnBalloonPopped>(HandleBalloonPopped);
             EventBus.Subscribe<OnBoardCleared>(HandleBoardCleared);
             EventBus.Subscribe<OnBoardFailed>(HandleBoardFailed);
@@ -102,6 +107,8 @@ namespace BalloonFlow
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnDartPlacedOnSlot>(HandleDartPlaced);
+            EventBus.Unsubscribe<OnDartFrozen>(HandleDartFrozen);
+            EventBus.Unsubscribe<OnDartsFrozenCleared>(HandleDartsFrozenCleared);
             EventBus.Unsubscribe<OnBalloonPopped>(HandleBalloonPopped);
             EventBus.Unsubscribe<OnBoardCleared>(HandleBoardCleared);
             EventBus.Unsubscribe<OnBoardFailed>(HandleBoardFailed);
@@ -138,6 +145,12 @@ namespace BalloonFlow
             }
             _activeProjectiles.Clear();
             _reservedTargets.Clear();
+
+            foreach (var kvp in _frozenVisuals)
+            {
+                ReturnDartToPool(kvp.Value);
+            }
+            _frozenVisuals.Clear();
         }
 
         /// <summary>
@@ -441,9 +454,40 @@ namespace BalloonFlow
 
         private void HandleDartPlaced(OnDartPlacedOnSlot evt)
         {
-            if (_boardFinished) return; // Board already cleared — don't create stale visuals
+            if (_boardFinished) return;
             CreateSlotDartVisual(evt.slotIndex, evt.color);
         }
+
+        /// <summary>
+        /// A dart was frozen (removed from belt). Convert its slot visual to a pinned frozen visual.
+        /// The visual stays at the dart's world position and does NOT move with the belt.
+        /// </summary>
+        private void HandleDartFrozen(OnDartFrozen evt)
+        {
+            if (_boardFinished) return;
+
+            // Transfer visual from slot tracking to frozen tracking
+            if (_slotVisuals.TryGetValue(evt.slotIndex, out SlotDartVisual slotVisual))
+            {
+                _frozenVisuals[evt.dartId] = slotVisual.gameObject;
+                _slotVisuals.Remove(evt.slotIndex);
+                // Visual stays at its current position — don't update it
+            }
+        }
+
+        /// <summary>
+        /// All frozen darts were reinserted back onto the belt.
+        /// Remove all frozen visuals — new slot visuals will be created by OnDartPlacedOnSlot.
+        /// </summary>
+        private void HandleDartsFrozenCleared(OnDartsFrozenCleared evt)
+        {
+            foreach (var kvp in _frozenVisuals)
+            {
+                ReturnDartToPool(kvp.Value);
+            }
+            _frozenVisuals.Clear();
+        }
+
 
         /// <summary>
         /// When a balloon is popped externally (chain pop, gimmick, etc.),

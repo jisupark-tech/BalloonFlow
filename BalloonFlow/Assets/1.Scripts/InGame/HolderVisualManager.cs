@@ -71,6 +71,11 @@ namespace BalloonFlow
         private readonly HashSet<int> _cancelledHolders = new HashSet<int>();
         private int _queueColumns = 5;
 
+        /// <summary>Global sequential deploy queue. Only one holder deploys at a time.</summary>
+        private readonly Queue<int> _deployQueue = new Queue<int>();
+        private bool _isProcessingDeploy;
+
+
         #endregion
 
         #region Lifecycle
@@ -449,7 +454,9 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Moves a holder from queue to deploy point, then starts deploying darts onto empty slots.
+        /// Enqueues a holder for deployment and processes the queue.
+        /// Only one holder deploys at a time (sequential, across all columns).
+        /// Design ref: "동시에 클릭되더라도 먼저 클릭된 보관함 먼저, 나머지 대기. 순차적으로"
         /// </summary>
         private void StartDeploy(int holderId)
         {
@@ -458,16 +465,44 @@ namespace BalloonFlow
 
             if (visual.isDeploying || visual.isMovingToRail) return;
 
+            _deployQueue.Enqueue(holderId);
+            TryProcessNextDeploy();
+        }
+
+        /// <summary>
+        /// Attempts to process the next holder in the deploy queue.
+        /// Skips if another deployment is already in progress.
+        /// </summary>
+        private void TryProcessNextDeploy()
+        {
+            if (_isProcessingDeploy) return;
+            if (_deployQueue.Count == 0) return;
+
+            int nextId = _deployQueue.Dequeue();
+
+            if (!_holderVisuals.TryGetValue(nextId, out HolderVisual visual))
+            {
+                // Holder was removed (cancelled, color remove, etc.) — skip and try next
+                TryProcessNextDeploy();
+                return;
+            }
+
             visual.isMovingToRail = true;
+            _isProcessingDeploy = true;
             RepositionColumnHolders(visual.column);
             StartCoroutine(DeployCoroutine(visual));
         }
 
         private IEnumerator DeployCoroutine(HolderVisual visual)
         {
-            if (!RailManager.HasInstance || visual.gameObject == null) yield break;
+            if (!RailManager.HasInstance || visual.gameObject == null)
+            {
+                _isProcessingDeploy = false;
+                TryProcessNextDeploy();
+                yield break;
+            }
 
-            // Phase 1: Move to deploy point (bottom rail edge, aligned to column)
+            // ── Phase 1: Move holder to deploy point ──
             Vector3 deployPoint = GetDeployPoint(visual.column);
 
             while (visual.gameObject != null)
@@ -475,8 +510,11 @@ namespace BalloonFlow
                 if (_cancelledHolders.Contains(visual.holderId))
                 {
                     _cancelledHolders.Remove(visual.holderId);
+                    _isProcessingDeploy = false;
+                    TryProcessNextDeploy();
                     yield break;
                 }
+
                 Vector3 current = visual.gameObject.transform.position;
                 float dist = Vector3.Distance(current, deployPoint);
                 if (dist < 0.15f) break;
@@ -489,125 +527,127 @@ namespace BalloonFlow
             if (visual.gameObject != null)
                 visual.gameObject.transform.position = deployPoint;
 
-            // Phase 2: At rail — start deploying darts
+            // ── Phase 2: At rail — start deploying darts one at a time ──
             visual.isMovingToRail = false;
             visual.isDeploying = true;
 
             if (HolderManager.HasInstance)
-            {
                 HolderManager.Instance.ConfirmOnRail(visual.holderId);
-            }
 
             RailManager rail = RailManager.Instance;
 
-            // Find the starting slot nearest to deploy point
-            int startSlot = rail.GetNearestSlotIndex(deployPoint);
+            // Calculate fixed path distance for deploy point (one-time).
+            int initialSlot = rail.GetNearestSlotIndex(deployPoint);
+            float deployPathDist = rail.GetPathDistanceForSlot(initialSlot);
 
-            // Deploy darts one at a time: wait for empty slot passing nearby
-            // NOTE: Darts are ALWAYS placed on rail regardless of matching balloons.
-            // Unmatched darts accumulate on rail -> occupancy rises -> fail condition.
-            // DartManager handles auto-fire when a match passes; we never skip placement.
+            // 배치가 시작되었는지 (첫 다트 배치 후 true → 그때부터 freeze 활성화)
+            bool deployStarted = false;
+
             while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
             {
-                // Check if this holder was cancelled (continue, color remove, etc.)
+                // ── CHECK 1: 취소 여부 ──
                 if (_cancelledHolders.Contains(visual.holderId))
                 {
                     _cancelledHolders.Remove(visual.holderId);
+                    if (deployStarted)
+                    {
+                        rail.ClearActiveDeploySlot();
+                        rail.UnfreezeAndReinsertAll();
+                    }
+                    _isProcessingDeploy = false;
+                    TryProcessNextDeploy();
                     yield break;
                 }
 
-                // Find next empty slot near deploy point
-                int emptySlot = FindEmptySlotNearPosition(deployPoint);
+                // 순차 처리는 _deployQueue + _isProcessingDeploy로 보장됨.
+                // 이 코루틴이 실행 중이면 이 holder가 현재 활성 deployer.
 
-                if (emptySlot < 0)
+                // ── CHECK 2: deploy point 슬롯 확인 ──
+                int currentDeploySlot = rail.GetSlotAtPathDistance(deployPathDist);
+
+                // 배치 시작 전: dartColor == -1 인지만 확인. 빈 슬롯이 올 때까지 순수 대기
+                // 배치 시작 후: freeze로 뒤에서 오는 다트 대기시킴
+                if (deployStarted)
                 {
-                    // No empty slot available — wait
-                    yield return null;
-                    continue;
+                    rail.SetActiveDeploySlot(currentDeploySlot);
+                    rail.SetActiveDeployHolderId(visual.holderId);
+                    FreezeApproachingDarts(currentDeploySlot, visual.holderId);
                 }
 
-                // Re-check board state right before placing (guards against race with OnBoardCleared)
-                if (_boardFinished) break;
-
-                // Place dart on slot
-                int dartId = rail.PlaceDart(emptySlot, visual.color, visual.holderId);
-                if (dartId < 0)
+                // dartColor == -1 (빈 슬롯) + 군집 내부 구멍 아님 → 배치
+                if (rail.IsSlotEmpty(currentDeploySlot) &&
+                    rail.CanPlaceWithoutSplittingCluster(currentDeploySlot))
                 {
-                    yield return null;
-                    continue;
+                    int dartId = rail.PlaceDart(currentDeploySlot, visual.color, visual.holderId);
+                    if (dartId >= 0)
+                    {
+                        visual.magazineRemaining--;
+
+                        // 첫 배치 성공 → 이후부터 freeze 활성화
+                        if (!deployStarted)
+                        {
+                            deployStarted = true;
+                            rail.SetActiveDeploySlot(currentDeploySlot);
+                            rail.SetActiveDeployHolderId(visual.holderId);
+                        }
+
+                        if (visual.magazineText != null)
+                            visual.magazineText.text = visual.magazineRemaining.ToString();
+
+                        if (HolderManager.HasInstance)
+                            HolderManager.Instance.ConsumeMagazine(visual.holderId);
+
+                        EventBus.Publish(new OnDartPlacedOnSlot
+                        {
+                            slotIndex = currentDeploySlot,
+                            color = visual.color,
+                            holderId = visual.holderId
+                        });
+
+                        bool usePunch = GameManager.HasInstance && GameManager.Instance.Board.useDeployPunchScale;
+                        if (usePunch && visual.gameObject != null)
+                        {
+                            visual.gameObject.transform.localScale = Vector3.one;
+                            visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.08f, 6, 0.5f);
+                        }
+                    }
                 }
 
-                visual.magazineRemaining--;
-
-                // Update magazine text
-                if (visual.magazineText != null)
-                    visual.magazineText.text = visual.magazineRemaining.ToString();
-
-                // Consume from HolderManager
-                if (HolderManager.HasInstance)
-                    HolderManager.Instance.ConsumeMagazine(visual.holderId);
-
-                // Publish dart placed event
-                EventBus.Publish(new OnDartPlacedOnSlot
-                {
-                    slotIndex = emptySlot,
-                    color = visual.color,
-                    holderId = visual.holderId
-                });
-
-                // Punch animation (optional — toggled via GameManager.Board.useDeployPunchScale)
-                bool usePunch = GameManager.HasInstance && GameManager.Instance.Board.useDeployPunchScale;
-                if (usePunch && visual.gameObject != null)
-                {
-                    visual.gameObject.transform.localScale = Vector3.one;
-                    visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.08f, 6, 0.5f);
-                }
-
-                // Next frame — no artificial delay, deploy as fast as empty slots appear
                 yield return null;
             }
 
-            // Phase 3: Magazine empty — holder disappears
+            // ── Phase 3: Deployment done — freeze 해제 ──
+            if (deployStarted)
+            {
+                rail.ClearActiveDeploySlot();
+                rail.UnfreezeAndReinsertAll();
+            }
+
+            // ── Phase 4: Cleanup ──
             CompleteDeployment(visual);
+
+            _isProcessingDeploy = false;
+            TryProcessNextDeploy();
         }
 
         /// <summary>
-        /// Finds an empty slot near a deploy position.
-        /// Checks slots within a small window around the nearest slot to deployPos.
+        /// deploy point 바로 뒤(deploySlot - 1) 한 칸만 체크.
+        /// 다트가 있으면 freeze. 빈 슬롯이면 아무것도 안 함 (벨트가 가져올 때까지 대기).
+        /// 체인 전파(PropagateFreezeChain)가 뒤쪽으로 자동 확장.
         /// </summary>
-        private int FindEmptySlotNearPosition(Vector3 deployPos)
+        private void FreezeApproachingDarts(int deploySlot, int deployingHolderId)
         {
-            if (!RailManager.HasInstance) return -1;
+            if (!RailManager.HasInstance) return;
             RailManager rail = RailManager.Instance;
 
-            int nearestSlot = rail.GetNearestSlotIndex(deployPos);
+            int checkSlot = (deploySlot - 1 + rail.SlotCount) % rail.SlotCount;
 
-            // Check a window of slots around the nearest
-            int window = 3;
-            for (int offset = 0; offset <= window; offset++)
-            {
-                int idx = (nearestSlot + offset) % rail.SlotCount;
-                if (rail.IsSlotEmpty(idx))
-                {
-                    // Verify it's actually close to deploy position
-                    Vector3 slotPos = rail.GetSlotWorldPosition(idx);
-                    if (Vector3.Distance(slotPos, deployPos) < 2f)
-                        return idx;
-                }
+            if (rail.IsSlotEmpty(checkSlot)) return;
 
-                if (offset > 0)
-                {
-                    idx = (nearestSlot - offset + rail.SlotCount) % rail.SlotCount;
-                    if (rail.IsSlotEmpty(idx))
-                    {
-                        Vector3 slotPos = rail.GetSlotWorldPosition(idx);
-                        if (Vector3.Distance(slotPos, deployPos) < 2f)
-                            return idx;
-                    }
-                }
-            }
+            RailManager.SlotData slotData = rail.GetSlot(checkSlot);
+            if (slotData.holderId == deployingHolderId) return;
 
-            return -1;
+            rail.FreezeDart(checkSlot);
         }
 
         private void CompleteDeployment(HolderVisual visual)
@@ -680,6 +720,8 @@ namespace BalloonFlow
         private void HandleBoardCleared(OnBoardCleared evt)
         {
             _boardFinished = true;
+            _isProcessingDeploy = false;
+            _deployQueue.Clear();
             StopAllCoroutines();
             ClearAllVisuals();
         }
@@ -687,12 +729,16 @@ namespace BalloonFlow
         private void HandleBoardFailed(OnBoardFailed evt)
         {
             _boardFinished = true;
+            _isProcessingDeploy = false;
+            _deployQueue.Clear();
             StopAllCoroutines();
         }
 
         private void HandleContinueApplied(OnContinueApplied evt)
         {
             _boardFinished = false;
+            _isProcessingDeploy = false;
+            _deployQueue.Clear();
             Debug.Log("[HolderVisualManager] Continue applied — holder deployment resumed.");
         }
 
