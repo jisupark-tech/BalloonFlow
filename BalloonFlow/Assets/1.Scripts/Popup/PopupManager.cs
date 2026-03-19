@@ -231,6 +231,8 @@ namespace BalloonFlow
         {
             if (_popupMap.TryGetValue(popupId, out CanvasGroup group))
             {
+                // UIBase.CloseUI()가 SetActive(false)하므로 여기서 복원
+                group.gameObject.SetActive(true);
                 SetCanvasGroupVisible(group, true);
                 SetOverlayVisible(true);
                 _activePopupId = popupId;
@@ -242,6 +244,7 @@ namespace BalloonFlow
             if (_popupMap.TryGetValue(popupId, out CanvasGroup group))
             {
                 SetCanvasGroupVisible(group, false);
+                group.gameObject.SetActive(false);
             }
         }
 

@@ -230,23 +230,45 @@ namespace BalloonFlow
                 }
             }
 
-            // PopupContinue (로드 후 숨김)
+            // PopupContinue (실패 흐름 두 번째)
             _continuePopup = UIManager.Instance.OpenUI<PopupContinue>("Popup/PopupContinue");
             if (_continuePopup != null)
             {
+                // CanvasGroup 보장
+                var cgCont = _continuePopup.GetComponent<CanvasGroup>();
+                if (cgCont == null) cgCont = _continuePopup.gameObject.AddComponent<CanvasGroup>();
                 _continuePopup.CloseUI();
+
                 if (_continuePopup.ContinueButton != null)
                     _continuePopup.ContinueButton.onClick.AddListener(_continuePopup.OnContinueClicked);
                 if (_continuePopup.DeclineButton != null)
                     _continuePopup.DeclineButton.onClick.AddListener(_continuePopup.OnDeclineClicked);
 
-                // Register with PopupManager so ShowPopup("popup_continue") works
                 if (PopupManager.HasInstance)
-                {
-                    var cg = _continuePopup.GetComponent<CanvasGroup>();
-                    if (cg != null)
-                        PopupManager.Instance.RegisterPopup("popup_continue", cg);
-                }
+                    PopupManager.Instance.RegisterPopup("popup_continue", cgCont);
+            }
+
+            // PopupFail01 (실패 흐름 첫 번째: Continue/Decline + 난이도프레임)
+            var _fail01 = UIManager.Instance.OpenUI<PopupFail01>("Popup/PopupFail01");
+            if (_fail01 != null)
+            {
+                // CanvasGroup 보장 (CloseUI가 사용하므로 먼저 추가)
+                var cg01 = _fail01.GetComponent<CanvasGroup>();
+                if (cg01 == null) cg01 = _fail01.gameObject.AddComponent<CanvasGroup>();
+                _fail01.CloseUI();
+                if (PopupManager.HasInstance)
+                    PopupManager.Instance.RegisterPopup("popup_fail01", cg01);
+            }
+
+            // PopupFail02 (실패 흐름 마지막: Retry/Home)
+            var _fail02 = UIManager.Instance.OpenUI<PopupFail02>("Popup/PopupFail02");
+            if (_fail02 != null)
+            {
+                var cg02 = _fail02.GetComponent<CanvasGroup>();
+                if (cg02 == null) cg02 = _fail02.gameObject.AddComponent<CanvasGroup>();
+                _fail02.CloseUI();
+                if (PopupManager.HasInstance)
+                    PopupManager.Instance.RegisterPopup("popup_fail02", cg02);
             }
 
             // PopupSettings (로드 후 숨김)

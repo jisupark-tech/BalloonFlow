@@ -13,20 +13,20 @@ namespace BalloonFlow
     /// </summary>
     public class PopupFail01 : UIBase
     {
-        [Header("[난이도별 프레임]")]
-        [SerializeField] private Image _resultPanel;
-        [SerializeField] private Image _leftTopSidePanel;
-        [SerializeField] private Image _rightTopSidePanel;
+        // [Header("[난이도별 프레임]")]
+        // [SerializeField] private Image _resultPanel;
+        // [SerializeField] private Image _leftTopSidePanel;
+        // [SerializeField] private Image _rightTopSidePanel;
 
-        [Header("[난이도 스프라이트 — ResultPanel]")]
-        [SerializeField] private Sprite _framePopupNormal;
-        [SerializeField] private Sprite _framePopupHard;
-        [SerializeField] private Sprite _framePopupSuperHard;
+        // [Header("[난이도 스프라이트 — ResultPanel]")]
+        // [SerializeField] private Sprite _framePopupNormal;
+        // [SerializeField] private Sprite _framePopupHard;
+        // [SerializeField] private Sprite _framePopupSuperHard;
 
-        [Header("[난이도 스프라이트 — SidePanel]")]
-        [SerializeField] private Sprite _frameResultNormal;
-        [SerializeField] private Sprite _frameResultHard;
-        [SerializeField] private Sprite _frameResultSuperHard;
+        // [Header("[난이도 스프라이트 — SidePanel]")]
+        // [SerializeField] private Sprite _frameResultNormal;
+        // [SerializeField] private Sprite _frameResultHard;
+        // [SerializeField] private Sprite _frameResultSuperHard;
 
         [Header("[버튼]")]
         [SerializeField] private Button _continueButton;
@@ -52,7 +52,7 @@ namespace BalloonFlow
 
         public void Show(DifficultyPurpose difficulty)
         {
-            ApplyDifficultyFrames(difficulty);
+            //ApplyDifficultyFrames(difficulty);
             UpdateCostDisplay();
             OpenUI();
         }
@@ -74,18 +74,18 @@ namespace BalloonFlow
             bool success = ContinueHandler.Instance.Continue();
             if (success)
             {
-                CloseUI();
+                if (PopupManager.HasInstance)
+                    PopupManager.Instance.ClosePopup("popup_fail01");
                 Debug.Log("[PopupFail01] Continue 성공 — 게임 재개");
             }
         }
 
         private void OnDeclineClicked()
         {
-            CloseUI();
-
-            // PopupContinue 표시
+            // PopupManager에서 현재 팝업 닫기 → 다음 팝업 표시 가능
             if (PopupManager.HasInstance)
             {
+                PopupManager.Instance.ClosePopup("popup_fail01");
                 PopupManager.Instance.ShowPopup("popup_continue", 50);
             }
         }
@@ -105,26 +105,26 @@ namespace BalloonFlow
             _costText.text = cost <= 0 ? "FREE" : cost.ToString("N0");
         }
 
-        private void ApplyDifficultyFrames(DifficultyPurpose difficulty)
-        {
-            Sprite popupFrame = _framePopupNormal;
-            Sprite sideFrame = _frameResultNormal;
+        // private void ApplyDifficultyFrames(DifficultyPurpose difficulty)
+        // {
+        //     Sprite popupFrame = _framePopupNormal;
+        //     Sprite sideFrame = _frameResultNormal;
 
-            switch (difficulty)
-            {
-                case DifficultyPurpose.Hard:
-                    popupFrame = _framePopupHard;
-                    sideFrame = _frameResultHard;
-                    break;
-                case DifficultyPurpose.SuperHard:
-                    popupFrame = _framePopupSuperHard;
-                    sideFrame = _frameResultSuperHard;
-                    break;
-            }
+        //     switch (difficulty)
+        //     {
+        //         case DifficultyPurpose.Hard:
+        //             popupFrame = _framePopupHard;
+        //             sideFrame = _frameResultHard;
+        //             break;
+        //         case DifficultyPurpose.SuperHard:
+        //             popupFrame = _framePopupSuperHard;
+        //             sideFrame = _frameResultSuperHard;
+        //             break;
+        //     }
 
-            if (_resultPanel != null && popupFrame != null) _resultPanel.sprite = popupFrame;
-            if (_leftTopSidePanel != null && sideFrame != null) _leftTopSidePanel.sprite = sideFrame;
-            if (_rightTopSidePanel != null && sideFrame != null) _rightTopSidePanel.sprite = sideFrame;
-        }
+        //     if (_resultPanel != null && popupFrame != null) _resultPanel.sprite = popupFrame;
+        //     if (_leftTopSidePanel != null && sideFrame != null) _leftTopSidePanel.sprite = sideFrame;
+        //     if (_rightTopSidePanel != null && sideFrame != null) _rightTopSidePanel.sprite = sideFrame;
+        // }
     }
 }
