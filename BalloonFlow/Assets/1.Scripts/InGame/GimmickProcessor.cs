@@ -8,8 +8,8 @@ namespace BalloonFlow
     /// Design ref: BalloonFlow_기믹명세 (2026-03-17) — 13종 기믹
     ///
     /// Gimmick domains:
-    ///   FIELD gimmicks  (on balloons): Piñata, Pin, Lock_Key, Surprise, Wall, Piñata_Box, Ice, Color_Curtain, Frozen_Dart
-    ///   QUEUE gimmicks  (on holders):  Hidden, Chain, Spawner_T, Spawner_O
+    ///   FIELD gimmicks  (on balloons): Piñata, Pin, Lock_Key, Surprise(Lv.101), Wall, Piñata_Box, Ice, Color_Curtain
+    ///   QUEUE gimmicks  (on holders):  Hidden(Lv.11), Chain(Lv.21), Spawner_T(Lv.41), Spawner_O(Lv.141), Frozen_Dart(Lv.241)
     /// </summary>
     /// <remarks>
     /// Layer: Domain | Genre: Puzzle | Role: Processor | Phase: 1

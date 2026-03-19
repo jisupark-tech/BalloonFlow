@@ -119,6 +119,12 @@ namespace BalloonFlow
 
         /// <summary>2D grid position of the holder on the board.</summary>
         public Vector2 position;
+
+        /// <summary>큐 기믹 타입 (빈 문자열 = 없음). "Hidden", "Chain", "Spawner_T", "Spawner_O", "Frozen_Dart"</summary>
+        public string queueGimmick = "";
+
+        /// <summary>Chain 그룹 ID (-1 = Chain 아님). 같은 groupId의 보관함들이 연결됨.</summary>
+        public int chainGroupId = -1;
     }
 
     /// <summary>

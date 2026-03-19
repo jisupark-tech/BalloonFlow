@@ -413,7 +413,7 @@ namespace BalloonFlow
 
             EventBus.Publish(new OnGimmickTriggered
             {
-                gimmickType = GimmickHidden,
+                gimmickType = GimmickSurprise, // 필드 풍선 색상 공개 = Surprise 기믹
                 targetId    = balloonId
             });
 
@@ -421,7 +421,7 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Returns one random hidden balloon ID, or -1 if none.
+        /// Returns one random hidden (Surprise) balloon ID, or -1 if none.
         /// Used by Hand booster to pick a target.
         /// </summary>
         public int GetRandomHiddenBalloonId()
@@ -554,8 +554,9 @@ namespace BalloonFlow
                 group.Add(id);
             }
 
-            // Hidden balloons start concealed
-            if (data.gimmickType == GimmickHidden)
+            // Surprise balloons start concealed (Lv.101+, 필드 기믹)
+            // Hidden(Lv.11)은 큐 기믹 → HolderManager에서 처리
+            if (data.gimmickType == GimmickSurprise)
             {
                 _hiddenBalloons.Add(id);
             }
@@ -853,7 +854,7 @@ namespace BalloonFlow
 
                 EventBus.Publish(new OnGimmickTriggered
                 {
-                    gimmickType = GimmickHidden,
+                    gimmickType = GimmickSurprise, // 인접 팝으로 필드 Surprise 공개
                     targetId    = id
                 });
             }

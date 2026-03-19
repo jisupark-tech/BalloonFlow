@@ -2102,6 +2102,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 4472728017926750219}
     m_Modifications:
+    - target: {fileID: 2725414008860286888, guid: 64f30577bccc3bb46ab2170d8926d18c, type: 3}
+      propertyPath: m_TargetGraphic
+      value: 
+      objectReference: {fileID: 8930664747613191065}
     - target: {fileID: 4014540690138425756, guid: 64f30577bccc3bb46ab2170d8926d18c, type: 3}
       propertyPath: m_Name
       value: itemBtn (2)
@@ -2230,3 +2234,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+--- !u!114 &8930664747613191065 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 215695579687813913, guid: 64f30577bccc3bb46ab2170d8926d18c, type: 3}
+  m_PrefabInstance: {fileID: 8723003784935798912}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
