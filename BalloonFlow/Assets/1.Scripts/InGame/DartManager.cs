@@ -248,7 +248,11 @@ namespace BalloonFlow
 
                 Vector3 pos = rail.GetSlotWorldPosition(slotIdx);
                 visual.gameObject.transform.position = pos;
-                OrientDart(visual.gameObject, slotIdx);
+
+                // OrientDart 인라인 — GetSlotFiringDirection 중복 호출 방지
+                Vector3 fireDir = rail.GetSlotFiringDirection(slotIdx);
+                if (fireDir.sqrMagnitude > 0.001f)
+                    visual.gameObject.transform.rotation = Quaternion.LookRotation(fireDir);
             }
 
             // Deferred removal
@@ -601,16 +605,27 @@ namespace BalloonFlow
 
         private void ReturnDartToPool(GameObject obj)
         {
-            if (obj != null && ObjectPoolManager.HasInstance)
+            if (obj != null)
             {
-                ObjectPoolManager.Instance.Return(DART_POOL_KEY, obj);
+                _rendererCache.Remove(obj.GetInstanceID());
+                if (ObjectPoolManager.HasInstance)
+                    ObjectPoolManager.Instance.Return(DART_POOL_KEY, obj);
             }
         }
+
+        /// <summary>Renderer 캐시 — GetComponentsInChildren 반복 호출 방지</summary>
+        private static readonly Dictionary<int, Renderer[]> _rendererCache = new Dictionary<int, Renderer[]>();
 
         private void ApplyColor(GameObject obj, int color)
         {
             Color c = HolderVisualManager.GetColor(color);
-            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
+            int id = obj.GetInstanceID();
+            if (!_rendererCache.TryGetValue(id, out Renderer[] renderers))
+            {
+                renderers = obj.GetComponentsInChildren<Renderer>();
+                _rendererCache[id] = renderers;
+            }
+
             for (int i = 0; i < renderers.Length; i++)
             {
                 foreach (Material mat in renderers[i].materials)

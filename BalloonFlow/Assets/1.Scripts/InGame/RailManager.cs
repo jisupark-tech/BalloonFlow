@@ -492,21 +492,21 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Returns all occupied slot indices.
+        /// Returns all occupied slot indices. 재사용 리스트로 GC 방지.
         /// </summary>
+        private readonly List<int> _reusableOccupiedSlots = new List<int>(200);
+
         public List<int> GetOccupiedSlots()
         {
-            var result = new List<int>(_occupiedCount);
-            if (_slots == null) return result;
+            _reusableOccupiedSlots.Clear();
+            if (_slots == null) return _reusableOccupiedSlots;
 
             for (int i = 0; i < _slotCount; i++)
             {
                 if (_slots[i].dartColor >= 0)
-                {
-                    result.Add(i);
-                }
+                    _reusableOccupiedSlots.Add(i);
             }
-            return result;
+            return _reusableOccupiedSlots;
         }
 
         #endregion
