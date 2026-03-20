@@ -9887,7 +9887,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 3428667507723789500}
-  - component: {fileID: 7112659452224844551}
   - component: {fileID: 5650027658570603723}
   m_Layer: 6
   m_Name: Balloon
@@ -9912,54 +9911,6 @@ Transform:
   - {fileID: 9104769578481752292}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!23 &7112659452224844551
-MeshRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3797848094198122636}
-  m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 2
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 2100000, guid: d16b1ad807e18344197902fc8482f2ed, type: 2}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 1
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 3
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_AdditionalVertexStreams: {fileID: 0}
 --- !u!114 &5650027658570603723
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9974,6 +9925,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.BalloonIdentifier
   _balloonId: 0
   _color: 0
+  _animator: {fileID: 1606809899372433985}
 --- !u!1 &7089958179667606825
 GameObject:
   m_ObjectHideFlags: 0
@@ -10131,7 +10083,7 @@ PrefabInstance:
     - target: {fileID: -7511558181221131132, guid: f61191468219b904cb021655320c7d50, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 917326f6bd954eb48a86da9992b305f4, type: 2}
+      objectReference: {fileID: 2100000, guid: 66b7b620b8048be45b37648985705e8f, type: 2}
     - target: {fileID: -4061171639509818329, guid: f61191468219b904cb021655320c7d50, type: 3}
       propertyPath: m_LocalRotation.w
       value: 1

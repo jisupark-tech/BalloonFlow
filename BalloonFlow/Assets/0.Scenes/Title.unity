@@ -151,13 +151,15 @@ MonoBehaviour:
   Board:
     cellSpacing: 0.55
     balloonScale: 0.5
-    dartFlightTime: 0.06
-    dartFireInterval: 0.06
-    dartRailSpeed: 5
-    railSlotCount: 200
-    railRotationSpeed: 30
-    railPadding: 1.5
-    railHeight: 0.5
+    dartFlightTime: 0.2
+    dartFireInterval: 0.05
+    dartRailSpeed: 20
+    dartSpawnInterval: 0.05
+    conveyorArrowSpeed: 1.5
+    railSlotCount: 52
+    railRotationSpeed: 20
+    railPadding: 3.5
+    railHeight: 2
     boardCenterX: 0
     boardCenterZ: 2
     useDeployPunchScale: 0
@@ -655,8 +657,8 @@ MonoBehaviour:
   _inGamePosition: {x: 0, y: 30, z: -15}
   _inGameRotation: {x: 65, y: 0, z: 0}
   _inGameFOV: 45
-  _inGameOrthographic: 0
-  _inGameOrthoSize: 10
+  _inGameOrthographic: 1
+  _inGameOrthoSize: 15
   _shakeIntensity: 0.3
   _shakeDuration: 0.25
   _shakeDamping: 5

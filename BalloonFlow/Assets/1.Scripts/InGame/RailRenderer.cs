@@ -120,25 +120,12 @@ namespace BalloonFlow
 
             bool isLoop = rail.IsClosedLoop;
 
-            // Sprite tile mode — use grid-based placement when conveyorPositions exist
+            // Sprite tile mode — BoardTileManager.ConveyorSprites가 처리하므로 여기서 생성하지 않음
+            // 다중 생성 방지: RailRenderer는 타일 비주얼을 생성하지 않고 경로 데이터만 제공
             if (_visualType == VISUAL_SPRITE_TILE)
             {
-                // Try grid-based tile placement from LevelConfig.conveyorPositions
-                if (LevelManager.HasInstance && LevelManager.Instance.CurrentLevel != null)
-                {
-                    var config = LevelManager.Instance.CurrentLevel;
-                    if (config.conveyorPositions != null && config.conveyorPositions.Length > 0)
-                    {
-                        BuildGridBasedTilePath(config);
-                        _isInitialized = true;
-                        return;
-                    }
-                }
-
-                // Fallback: waypoint-interpolated tile placement
-                BuildSpriteTilePath(waypoints, isLoop);
                 _isInitialized = true;
-                return;
+                return; // ConveyorSprites가 이미 BoardTileManager.BuildConveyorBelt()에서 생성됨
             }
 
             int segmentCount = isLoop ? waypoints.Length : waypoints.Length - 1;

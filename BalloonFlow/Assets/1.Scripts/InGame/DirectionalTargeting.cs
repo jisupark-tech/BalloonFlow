@@ -272,38 +272,38 @@ namespace BalloonFlow
         /// </summary>
         private static bool IsPathBlocked(Vector3 dartPos, Vector3 targetPos, ScanDirection direction, HashSet<Vector2Int> occupancy)
         {
-            Vector2Int dartCell = WorldToGrid(dartPos);
             Vector2Int targetCell = WorldToGrid(targetPos);
 
-            // Scan from dart cell toward target cell. If any occupied cell exists between them, path is blocked.
+            // 타겟 셀에서 레일 방향(바깥)으로 스캔. 타겟 앞에 다른 풍선이 있으면 차단.
+            // (다트 위치는 레일 위라 그리드 밖 → 타겟 기준으로 스캔)
             switch (direction)
             {
-                case ScanDirection.Up: // Firing north (+Z)
-                    for (int y = dartCell.y + 1; y < targetCell.y; y++)
+                case ScanDirection.Up: // 레일이 아래, 위로 발사 → 타겟 아래에 뭐가 있으면 차단
+                    for (int y = targetCell.y - 1; y >= targetCell.y - 30; y--)
                     {
                         if (occupancy.Contains(new Vector2Int(targetCell.x, y)))
                             return true;
                     }
                     return false;
 
-                case ScanDirection.Down: // Firing south (-Z)
-                    for (int y = dartCell.y - 1; y > targetCell.y; y--)
+                case ScanDirection.Down: // 레일이 위, 아래로 발사 → 타겟 위에 뭐가 있으면 차단
+                    for (int y = targetCell.y + 1; y <= targetCell.y + 30; y++)
                     {
                         if (occupancy.Contains(new Vector2Int(targetCell.x, y)))
                             return true;
                     }
                     return false;
 
-                case ScanDirection.Right: // Firing east (+X)
-                    for (int x = dartCell.x + 1; x < targetCell.x; x++)
+                case ScanDirection.Right: // 레일이 왼쪽, 오른쪽으로 발사 → 타겟 왼쪽에 뭐가 있으면 차단
+                    for (int x = targetCell.x - 1; x >= targetCell.x - 30; x--)
                     {
                         if (occupancy.Contains(new Vector2Int(x, targetCell.y)))
                             return true;
                     }
                     return false;
 
-                case ScanDirection.Left: // Firing west (-X)
-                    for (int x = dartCell.x - 1; x > targetCell.x; x--)
+                case ScanDirection.Left: // 레일이 오른쪽, 왼쪽으로 발사 → 타겟 오른쪽에 뭐가 있으면 차단
+                    for (int x = targetCell.x + 1; x <= targetCell.x + 30; x++)
                     {
                         if (occupancy.Contains(new Vector2Int(x, targetCell.y)))
                             return true;
