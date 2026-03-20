@@ -10312,6 +10312,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.HolderIdentifier
   _holderId: 0
+  _animator: {fileID: 0}
 --- !u!1 &8548622878600573810
 GameObject:
   m_ObjectHideFlags: 0
@@ -15406,7 +15407,7 @@ PrefabInstance:
     - target: {fileID: -7511558181221131132, guid: 375b6165ca1d1e04b9a73dad74cb7f93, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 917326f6bd954eb48a86da9992b305f4, type: 2}
+      objectReference: {fileID: 2100000, guid: 66b7b620b8048be45b37648985705e8f, type: 2}
     - target: {fileID: -2001496963424984923, guid: 375b6165ca1d1e04b9a73dad74cb7f93, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
@@ -15430,7 +15431,7 @@ PrefabInstance:
     - target: {fileID: 8032750206264916975, guid: 375b6165ca1d1e04b9a73dad74cb7f93, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 917326f6bd954eb48a86da9992b305f4, type: 2}
+      objectReference: {fileID: 2100000, guid: 66b7b620b8048be45b37648985705e8f, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
