@@ -293,7 +293,7 @@ namespace BalloonFlow
             float x = startX + column * COLUMN_SPACING;
             float z = QUEUE_BASE_Z - row * QUEUE_ROW_SPACING;
 
-            return new Vector3(x, 0.25f, z);
+            return new Vector3(x, 0.1f, z);
         }
 
         /// <summary>
@@ -301,7 +301,7 @@ namespace BalloonFlow
         /// to start deploying darts onto passing empty slots.
         /// </summary>
         /// <summary>캐시된 레일 바닥 Y/Z (레벨당 1회 계산)</summary>
-        private float _cachedRailY = 0.5f;
+        private float _cachedRailY = 0.1f;
         private float _cachedRailZ = 0f;
         private bool _railBottomCached;
 
@@ -423,25 +423,16 @@ namespace BalloonFlow
 
         /// <summary>Renderer 캐시 — GetComponentsInChildren 반복 호출 방지</summary>
         private static readonly Dictionary<int, Renderer[]> _holderRendererCache = new Dictionary<int, Renderer[]>();
-
         private static void ApplyColorToRenderers(GameObject obj, Color color)
         {
-            int id = obj.GetInstanceID();
-            if (!_holderRendererCache.TryGetValue(id, out Renderer[] renderers))
-            {
-                renderers = obj.GetComponentsInChildren<Renderer>();
-                _holderRendererCache[id] = renderers;
-            }
-
+            Material shared = BalloonController.GetOrCreateSharedMaterial(color);
+            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
             for (int i = 0; i < renderers.Length; i++)
             {
-                foreach (Material mat in renderers[i].materials)
-                {
-                    if (mat.HasProperty("_BaseColor"))
-                        mat.SetColor("_BaseColor", color);
-                    if (mat.HasProperty("_Color"))
-                        mat.SetColor("_Color", color);
-                }
+                if (renderers[i].GetComponent<TMPro.TMP_Text>() != null) continue;
+                string name = renderers[i].gameObject.name;
+                if (name == "Shadow" || name.Contains("Particle")) continue;
+                renderers[i].sharedMaterial = shared;
             }
         }
 
@@ -478,7 +469,15 @@ namespace BalloonFlow
             if (visual.gameObject != null)
             {
                 float dist = Vector3.Distance(visual.gameObject.transform.position, waitPos);
-                visual.gameObject.transform.DOMove(waitPos, dist / DEPLOY_MOVE_SPEED).SetEase(Ease.OutQuad);
+                visual.gameObject.transform.DOMove(waitPos, dist / DEPLOY_MOVE_SPEED).SetEase(Ease.OutQuad)
+                    .OnComplete(() =>
+                    {
+                        if (visual.gameObject != null)
+                        {
+                            visual.gameObject.transform.localScale = Vector3.one;
+                            visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
+                        }
+                    });
             }
         }
 
@@ -541,13 +540,19 @@ namespace BalloonFlow
             }
 
             if (visual.gameObject != null)
+            {
                 visual.gameObject.transform.position = deployPoint;
+                // deploy point 도착 펀치 (1회)
+                visual.gameObject.transform.localScale = Vector3.one;
+                visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
+            }
 
             visual.isMovingToRail = false;
 
             // ── Phase 1.5: 배치 순서 대기 — 내 차례가 올 때까지 deploy point에서 대기 ──
-            // _deployQueue의 맨 앞이 나일 때 + _isProcessingDeploy가 false일 때 진행
-            while (true)
+            int waitFrames = 0;
+            const int MAX_WAIT_FRAMES = 3600; // 60초 타임아웃 (60fps)
+            while (waitFrames < MAX_WAIT_FRAMES)
             {
                 if (_boardFinished) yield break;
                 if (_cancelledHolders.Contains(visual.holderId))
@@ -556,30 +561,39 @@ namespace BalloonFlow
                     yield break;
                 }
 
-                // 내 차례인지 확인: 큐 맨 앞이 나이고 + 다른 배치 진행 중이 아닐 때
                 if (!_isProcessingDeploy && _deployQueue.Count > 0 && _deployQueue.Peek() == visual.holderId)
                 {
-                    _deployQueue.Dequeue(); // 큐에서 빼기
+                    _deployQueue.Dequeue();
                     _isProcessingDeploy = true;
-                    break; // Phase 2로 진행
+                    break;
                 }
 
+                waitFrames++;
                 yield return null;
+            }
+
+            if (waitFrames >= MAX_WAIT_FRAMES)
+            {
+                Debug.LogWarning($"[HolderVisualManager] Holder {visual.holderId} timed out waiting for deploy turn.");
+                yield break;
             }
 
             // ── Phase 2: 배치 시작 (순차 — 내 차례) ──
             visual.isDeploying = true;
+
+            // Deploy 애니메이션 시작
+            if (visual.gameObject != null)
+            {
+                var identifier = visual.gameObject.GetComponent<HolderIdentifier>();
+                if (identifier != null) identifier.StartDeploy();
+            }
 
             if (HolderManager.HasInstance)
                 HolderManager.Instance.ConfirmOnRail(visual.holderId);
 
             RailManager rail = RailManager.Instance;
 
-            // Calculate fixed path distance for deploy point (one-time).
-            int initialSlot = rail.GetNearestSlotIndex(deployPoint);
-            float deployPathDist = rail.GetPathDistanceForSlot(initialSlot);
-
-            // 배치가 시작되었는지 (첫 다트 배치 후 true → 그때부터 freeze 활성화)
+            // deploy point에서 매 프레임 nearest 슬롯 체크, 빈 슬롯이면 배치
             bool deployStarted = false;
 
             while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
@@ -598,36 +612,34 @@ namespace BalloonFlow
                     yield break;
                 }
 
-                // 순차 처리는 _deployQueue + _isProcessingDeploy로 보장됨.
-                // 이 코루틴이 실행 중이면 이 holder가 현재 활성 deployer.
+                // ── CHECK 2: deploy point의 nearest 슬롯이 비어있으면 배치 ──
+                int deploySlot = rail.GetNearestSlotIndex(deployPoint);
 
-                // ── CHECK 2: deploy point 슬롯 확인 ──
-                int currentDeploySlot = rail.GetSlotAtPathDistance(deployPathDist);
-
-                // 배치 시작 전: dartColor == -1 인지만 확인. 빈 슬롯이 올 때까지 순수 대기
-                // 배치 시작 후: freeze로 뒤에서 오는 다트 대기시킴
-                if (deployStarted)
+                if (rail.IsSlotEmpty(deploySlot))
                 {
-                    rail.SetActiveDeploySlot(currentDeploySlot);
-                    rail.SetActiveDeployHolderId(visual.holderId);
-                    FreezeApproachingDarts(currentDeploySlot, visual.holderId);
-                }
+                    if (deployStarted)
+                    {
+                        rail.SetActiveDeploySlot(deploySlot);
+                        rail.SetActiveDeployHolderId(visual.holderId);
+                        FreezeApproachingDarts(deploySlot, visual.holderId);
+                    }
 
-                // dartColor == -1 (빈 슬롯) + 군집 내부 구멍 아님 → 배치
-                if (rail.IsSlotEmpty(currentDeploySlot) &&
-                    rail.CanPlaceWithoutSplittingCluster(currentDeploySlot))
-                {
-                    int dartId = rail.PlaceDart(currentDeploySlot, visual.color, visual.holderId);
+                    int dartId = rail.PlaceDart(deploySlot, visual.color, visual.holderId);
                     if (dartId >= 0)
                     {
                         visual.magazineRemaining--;
 
-                        // 첫 배치 성공 → 이후부터 freeze 활성화
                         if (!deployStarted)
                         {
                             deployStarted = true;
-                            rail.SetActiveDeploySlot(currentDeploySlot);
+                            rail.SetActiveDeploySlot(deploySlot);
                             rail.SetActiveDeployHolderId(visual.holderId);
+
+                            if (visual.gameObject != null)
+                            {
+                                visual.gameObject.transform.localScale = Vector3.one;
+                                visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
+                            }
                         }
 
                         if (visual.magazineText != null)
@@ -638,17 +650,10 @@ namespace BalloonFlow
 
                         EventBus.Publish(new OnDartPlacedOnSlot
                         {
-                            slotIndex = currentDeploySlot,
+                            slotIndex = deploySlot,
                             color = visual.color,
                             holderId = visual.holderId
                         });
-
-                        bool usePunch = GameManager.HasInstance && GameManager.Instance.Board.useDeployPunchScale;
-                        if (usePunch && visual.gameObject != null)
-                        {
-                            visual.gameObject.transform.localScale = Vector3.one;
-                            visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.08f, 6, 0.5f);
-                        }
                     }
                 }
 
@@ -693,6 +698,13 @@ namespace BalloonFlow
         {
             int col = visual.column;
             visual.isDeploying = false;
+
+            // End Deploy 애니메이션
+            if (visual.gameObject != null)
+            {
+                var identifier = visual.gameObject.GetComponent<HolderIdentifier>();
+                if (identifier != null) identifier.EndDeploy();
+            }
 
             // Publish deployment done
             EventBus.Publish(new OnHolderDeploymentDone

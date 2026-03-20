@@ -21,7 +21,7 @@ namespace BalloonFlow
 
         [Header("[다트 — Dart]")]
         [Tooltip("다트 비행 시간 (초). 클수록 느림")]
-        public float dartFlightTime = 0.1f;
+        public float dartFlightTime = 0.15f;
 
         [Tooltip("다트 발사 인터벌 (초). 보관함이 다트를 연속 발사하는 간격")]
         public float dartFireInterval = 0.05f;
@@ -29,18 +29,25 @@ namespace BalloonFlow
         [Tooltip("다트 레일 이동 속도 (DartManager용)")]
         public float dartRailSpeed = 3f;
 
+        [Tooltip("보관함에서 다트 소환 간격 (초). 벨트 속도와 동기화 필요")]
+        public float dartSpawnInterval = 0.05f;
+
+        [Tooltip("컨베이어 화살표 이동 속도")]
+        public float conveyorArrowSpeed = 1.5f;
+
+
         [Header("[레일 — Rail (컨베이어벨트)]")]
         [Tooltip("레일 슬롯 수 (기본 200). 다트가 슬롯을 점유")]
         public int railSlotCount = 200;
 
         [Tooltip("레일 회전 속도 (슬롯/초). 컨베이어벨트 속도")]
-        public float railRotationSpeed = 15f;
+        public float railRotationSpeed = 10f;
 
         [Tooltip("보드 가장자리 ~ 레일 간격")]
         public float railPadding = 1.5f;
 
         [Tooltip("레일 높이 (Y축)")]
-        public float railHeight = 0.5f;
+        public float railHeight = 0.1f;
 
         [Header("[보드 — Board]")]
         [Tooltip("보드 중심 X좌표")]

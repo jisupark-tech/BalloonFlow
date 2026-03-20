@@ -412,10 +412,10 @@ namespace BalloonFlow
 
         private void SpawnPooledParticle(string poolKey, Vector3 position)
         {
-            if (!ObjectPoolManager.HasInstance)
-            {
-                return;
-            }
+            if (!ObjectPoolManager.HasInstance) return;
+
+            // 풀이 등록 안 됐으면 (프리팹 없음) 스킵 — 크래시 방지
+            if (!ObjectPoolManager.Instance.HasPool(poolKey)) return;
 
             GameObject particle = ObjectPoolManager.Instance.Get(poolKey);
             if (particle == null)

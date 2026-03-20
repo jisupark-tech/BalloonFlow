@@ -115,12 +115,24 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
+        /// <summary>공격 스캔 주기 타이머 (dartFireInterval 기반)</summary>
+        private float _scanTimer;
+
         private void Update()
         {
             if (_boardFinished) return;
 
             UpdateSlotDartPositions();
-            ScanAndFireDarts();
+
+            // 공격 스캔: dartFireInterval 간격으로만 실행 (매 프레임 X)
+            _scanTimer += Time.deltaTime;
+            float interval = GameManager.HasInstance ? GameManager.Instance.Board.dartFireInterval : 0.05f;
+            if (_scanTimer >= interval)
+            {
+                _scanTimer -= interval;
+                ScanAndFireDarts();
+            }
+
             UpdateProjectiles();
         }
 
@@ -246,10 +258,12 @@ namespace BalloonFlow
                     continue;
                 }
 
+                // null 재확인 (다른 시스템이 mid-frame에 오브젝트 파괴할 수 있음)
+                if (visual.gameObject == null) { _tempRemoveKeys.Add(slotIdx); continue; }
+
                 Vector3 pos = rail.GetSlotWorldPosition(slotIdx);
                 visual.gameObject.transform.position = pos;
 
-                // OrientDart 인라인 — GetSlotFiringDirection 중복 호출 방지
                 Vector3 fireDir = rail.GetSlotFiringDirection(slotIdx);
                 if (fireDir.sqrMagnitude > 0.001f)
                     visual.gameObject.transform.rotation = Quaternion.LookRotation(fireDir);
@@ -264,10 +278,13 @@ namespace BalloonFlow
 
         #region Private Methods — Auto-Fire Scan
 
+        /// <summary>같은 보관함에서 선행 다트(낮은 dartId)가 아직 남아있으면 후행 다트 공격 차단.</summary>
+        private readonly Dictionary<int, int> _holderFrontDartId = new Dictionary<int, int>();
+        private readonly HashSet<int> _blockedHolders = new HashSet<int>();
+
         /// <summary>
         /// Scans occupied slots per frame and fires darts at matching outermost balloons.
-        /// Throttled to MAX_FIRES_PER_FRAME launches per frame.
-        /// Outermost filtering is handled by DirectionalTargeting.FindTarget (per-column check).
+        /// 같은 보관함 다트는 선행 인덱스(낮은 dartId)부터 순차 공격.
         /// </summary>
         private void ScanAndFireDarts()
         {
@@ -277,6 +294,22 @@ namespace BalloonFlow
             int slotCount = rail.SlotCount;
             if (slotCount == 0) return;
 
+            // Step 1: 보관함별 가장 선행(낮은 dartId) 다트 찾기
+            _holderFrontDartId.Clear();
+            _blockedHolders.Clear();
+
+            for (int s = 0; s < slotCount; s++)
+            {
+                RailManager.SlotData sd = rail.GetSlot(s);
+                if (sd.dartColor < 0) continue;
+                if (!_holderFrontDartId.ContainsKey(sd.holderId) ||
+                    sd.dartId < _holderFrontDartId[sd.holderId])
+                {
+                    _holderFrontDartId[sd.holderId] = sd.dartId;
+                }
+            }
+
+            // Step 2: 스캔 + 순차 공격
             int fired = 0;
 
             for (int s = 0; s < slotCount && fired < MAX_FIRES_PER_FRAME; s++)
@@ -284,14 +317,28 @@ namespace BalloonFlow
                 int slotIdx = s;
 
                 RailManager.SlotData slot = rail.GetSlot(slotIdx);
-                if (slot.dartColor < 0) continue; // empty
+                if (slot.dartColor < 0) continue;
+
+                // 같은 보관함의 선행 다트가 막혔으면 후행도 차단
+                if (_blockedHolders.Contains(slot.holderId)) continue;
+
+                // 선행 다트(가장 낮은 dartId)만 공격 가능
+                if (_holderFrontDartId.ContainsKey(slot.holderId) &&
+                    slot.dartId != _holderFrontDartId[slot.holderId])
+                {
+                    continue;
+                }
 
                 Vector3 slotPos = rail.GetSlotWorldPosition(slotIdx);
                 Vector3 fireDir = rail.GetSlotFiringDirection(slotIdx);
 
-                // Use DirectionalTargeting to find matching balloon
                 int targetId = DirectionalTargeting.FindTarget(slotPos, fireDir, slot.dartColor);
-                if (targetId < 0) continue;
+                if (targetId < 0)
+                {
+                    // 선행 다트가 공격 못 함 → 같은 보관함 전체 차단
+                    _blockedHolders.Add(slot.holderId);
+                    continue;
+                }
 
                 // Skip if another dart is already flying toward this balloon
                 if (_reservedTargets.Contains(targetId)) continue;
@@ -426,13 +473,15 @@ namespace BalloonFlow
                 if (proj.elapsed >= proj.duration)
                 {
                     _reservedTargets.Remove(proj.targetBalloonId);
+                    GameObject projObj = proj.gameObject; // 참조 미리 저장
                     ExecuteHit(proj.targetBalloonId, proj.color);
 
-                    // ExecuteHit can trigger OnBoardCleared → ClearAllDarts, which empties the list
-                    if (_boardFinished) return;
+                    // ExecuteHit → OnBoardCleared → ClearAllDarts로 리스트가 비워질 수 있음
+                    if (_boardFinished || _activeProjectiles.Count == 0) return;
 
-                    ReturnDartToPool(proj.gameObject);
-                    _activeProjectiles.RemoveAt(i);
+                    ReturnDartToPool(projObj);
+                    if (i < _activeProjectiles.Count)
+                        _activeProjectiles.RemoveAt(i);
                 }
             }
         }
@@ -605,36 +654,23 @@ namespace BalloonFlow
 
         private void ReturnDartToPool(GameObject obj)
         {
-            if (obj != null)
+            if (obj != null && ObjectPoolManager.HasInstance)
             {
-                _rendererCache.Remove(obj.GetInstanceID());
-                if (ObjectPoolManager.HasInstance)
-                    ObjectPoolManager.Instance.Return(DART_POOL_KEY, obj);
+                ObjectPoolManager.Instance.Return(DART_POOL_KEY, obj);
             }
         }
-
-        /// <summary>Renderer 캐시 — GetComponentsInChildren 반복 호출 방지</summary>
-        private static readonly Dictionary<int, Renderer[]> _rendererCache = new Dictionary<int, Renderer[]>();
 
         private void ApplyColor(GameObject obj, int color)
         {
             Color c = HolderVisualManager.GetColor(color);
-            int id = obj.GetInstanceID();
-            if (!_rendererCache.TryGetValue(id, out Renderer[] renderers))
-            {
-                renderers = obj.GetComponentsInChildren<Renderer>();
-                _rendererCache[id] = renderers;
-            }
-
+            Material shared = BalloonController.GetOrCreateSharedMaterial(c);
+            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
             for (int i = 0; i < renderers.Length; i++)
             {
-                foreach (Material mat in renderers[i].materials)
-                {
-                    if (mat.HasProperty("_BaseColor"))
-                        mat.SetColor("_BaseColor", c);
-                    if (mat.HasProperty("_Color"))
-                        mat.SetColor("_Color", c);
-                }
+                if (renderers[i].GetComponent<TMPro.TMP_Text>() != null) continue;
+                string name = renderers[i].gameObject.name;
+                if (name == "Shadow" || name.Contains("Particle")) continue;
+                renderers[i].sharedMaterial = shared;
             }
         }
 

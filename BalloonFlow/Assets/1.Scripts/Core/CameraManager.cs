@@ -19,7 +19,7 @@ namespace BalloonFlow
         [SerializeField] private Vector3 _inGameRotation = new Vector3(65f, 0f, 0f);
         [SerializeField] private float _inGameFOV = 45f;
         [SerializeField] private bool _inGameOrthographic = false;
-        [SerializeField] private float _inGameOrthoSize = 10f;
+        [SerializeField] private float _inGameOrthoSize = 10f; // Inspector 기본값
 
         [Header("[Camera Shake]")]
         [Tooltip("기본 흔들림 강도 (유닛)")]
@@ -109,16 +109,8 @@ namespace BalloonFlow
         {
             RefreshMainCamera();
             if (MainCamera == null) return;
-            MainCamera.orthographic = _inGameOrthographic;
-
-            if (_inGameOrthographic)
-            {
-                MainCamera.orthographicSize = _inGameOrthoSize;
-            }
-            else
-            {
-                MainCamera.fieldOfView = _inGameFOV;
-            }
+            MainCamera.orthographic = true; // InGame은 항상 Orthographic
+            MainCamera.orthographicSize = 15f;
 
             MainCamera.clearFlags = CameraClearFlags.SolidColor;
             MainCamera.backgroundColor = new Color(0.255f, 0.235f, 0.392f); // #413C64

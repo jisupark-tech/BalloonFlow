@@ -119,6 +119,19 @@ namespace BalloonFlow
         private const int PATH_PAD = 1;
         private bool _conveyorPaintMode;
 
+        // Edit Tools state
+        private int _cropWidth = 5;
+        private int _cropHeight = 5;
+        private int _shiftAmount = 1;
+        private int _insertRowAt;
+        private int _insertColAt;
+        private int _deleteRowAt;
+        private int _deleteColAt;
+        private int _swapFromColor;
+        private int _swapToColor = 1;
+        private bool _floodFillMode;
+        private Text _txtFillMode;
+
         // Auto-generated waypoints from path grid
         private List<Vector3> _customWaypoints = new List<Vector3>();
 
@@ -126,10 +139,10 @@ namespace BalloonFlow
         private float BalloonScale => CellSpacing * 0.9f;
 
         /// <summary>
-        /// Conveyor tile render size. Minimum 1/15 of board so belt stays
-        /// visually thick on large grids (20×20 etc).
+        /// Conveyor tile render size based on fixed rail width proportion.
+        /// Uses fieldWidth * 0.17 for consistent belt thickness across all levels.
         /// </summary>
-        private float ConveyorTileSize => Mathf.Max(CellSpacing, _boardWorldSize / 15f);
+        private float ConveyorTileSize => _gridCols * CellSpacing * 0.30f;
 
         #endregion
 
@@ -148,6 +161,11 @@ namespace BalloonFlow
 
         private Text _txtStatus, _txtSpacing, _txtScale;
         private Text _queueGenScoreLabel;
+
+        // Level Info UI 참조 (로드 시 갱신용)
+        private InputField _levelIdInput;
+        private InputField _numColorsInput;
+        private Dropdown _difficultyDropdown;
         private Text[] _palTexts;
         private Transform _holderGridContainer;
         private LevelDatabase _targetDB;
@@ -211,6 +229,13 @@ namespace BalloonFlow
 
         private void OnDestroy()
         {
+            // 프리뷰 오브젝트 일괄 파괴 (개별 파괴보다 빠름)
+            if (_previewRoot) DestroyImmediate(_previewRoot.gameObject);
+            if (_gridLineRoot) DestroyImmediate(_gridLineRoot.gameObject);
+            if (_conveyorPreviewRoot) DestroyImmediate(_conveyorPreviewRoot.gameObject);
+            if (_waypointPreviewRoot) DestroyImmediate(_waypointPreviewRoot.gameObject);
+
+            // 머티리얼 정리
             if (_colorMats != null)
                 foreach (var m in _colorMats)
                     if (m) Destroy(m);
@@ -358,12 +383,17 @@ namespace BalloonFlow
         private List<Vector3> BuildRectangularWaypoints()
         {
             float spacing = CellSpacing;
-            float halfX = (_gridCols - 1) * spacing * 0.5f;
-            float halfZ = (_gridRows - 1) * spacing * 0.5f;
-            float l = _boardCenter.x - halfX - _railPadding;
-            float r = _boardCenter.x + halfX + _railPadding;
-            float b = _boardCenter.y - halfZ - _railPadding;
-            float t = _boardCenter.y + halfZ + _railPadding;
+            float fieldWidth = _gridCols * spacing;
+            float halfFieldX = fieldWidth * 0.5f;
+            float halfFieldZ = _gridRows * spacing * 0.5f;
+            // Fixed proportions: rail offset from field edge = gap + half rail width
+            float railOffsetH = fieldWidth * 0.07f + fieldWidth * 0.30f * 0.5f;
+            float railOffsetVTop = fieldWidth * 0.09f + fieldWidth * 0.30f * 0.5f;
+            float railOffsetVBottom = fieldWidth * 0.12f + fieldWidth * 0.30f * 0.5f;
+            float l = _boardCenter.x - halfFieldX - railOffsetH;
+            float r = _boardCenter.x + halfFieldX + railOffsetH;
+            float b = _boardCenter.y - halfFieldZ - railOffsetVBottom;
+            float t = _boardCenter.y + halfFieldZ + railOffsetVTop;
             float h = _railHeight;
 
             var wp = new List<Vector3>();
@@ -561,6 +591,7 @@ namespace BalloonFlow
             BuildPaletteSection(content);
             BuildGridSection(content);
             BuildActionSection(content);
+            BuildEditToolsSection(content);
             BuildHolderSection(content);
             BuildRailSection(content);
             BuildConveyorSection(content);
@@ -575,9 +606,9 @@ namespace BalloonFlow
         {
             Lbl(p, "Level Info", 14, FontStyle.Bold);
             var r1 = Row(p); Lbl(r1, "Level ID", w: 90);
-            MakeInputField(r1, _levelId.ToString(), s => { if (int.TryParse(s, out int v)) _levelId = v; });
+            _levelIdInput = MakeInputField(r1, _levelId.ToString(), s => { if (int.TryParse(s, out int v)) _levelId = v; });
             var r2 = Row(p); Lbl(r2, "Colors", w: 90);
-            MakeIntField(r2, _numColors, 2, 28, v => { _numColors = v; RebuildPalette(); });
+            _numColorsInput = MakeIntField(r2, _numColors, 2, 28, v => { _numColors = v; RebuildPalette(); });
             var r3 = Row(p); Lbl(r3, "Difficulty", w: 90);
             MakeDifficultyDropdown(r3);
             Sep(p);
@@ -977,6 +1008,7 @@ namespace BalloonFlow
             dd.value = (int)_difficulty;
             dd.captionText.font = _font; dd.captionText.fontSize = 13; dd.captionText.color = Color.white;
             dd.onValueChanged.AddListener(v => _difficulty = (DifficultyPurpose)v);
+            _difficultyDropdown = dd;
         }
 
         private Button Btn(Transform p, string text, System.Action cb)
@@ -1221,28 +1253,64 @@ namespace BalloonFlow
 
         #region Conveyor Preview
 
+        /// <summary>
+        /// 컨베이어벨트 프리뷰: 코너 4개 + 직선 4개 = 총 8개 타일.
+        /// 코너: 고정 크기. 직선: 스케일 늘려서 코너에 연결.
+        /// </summary>
         private void RebuildConveyorPreview()
         {
             if (_conveyorPreviewRoot) Destroy(_conveyorPreviewRoot.gameObject);
             _conveyorPreviewRoot = new GameObject("ConveyorPreview").transform;
 
-            if (_pathGrid == null) return;
-
-            int pw = _pathGrid.GetLength(0);
-            int ph = _pathGrid.GetLength(1);
             float spacing = CellSpacing;
-            float tileSize = ConveyorTileSize; // minimum-clamped for visual thickness
+            float fieldWidth = _gridCols * spacing;
+            float halfFieldX = fieldWidth * 0.5f;
+            float halfFieldZ = _gridRows * spacing * 0.5f;
+            float railWidth = ConveyorTileSize;
+            float offsetH = fieldWidth * 0.07f + railWidth * 0.5f;
+            float offsetVTop = fieldWidth * 0.09f + railWidth * 0.5f;
+            float offsetVBottom = fieldWidth * 0.12f + railWidth * 0.5f;
 
-            for (int gx = 0; gx < pw; gx++)
+            float left   = _boardCenter.x - halfFieldX - offsetH;
+            float right  = _boardCenter.x + halfFieldX + offsetH;
+            float bottom = _boardCenter.y - halfFieldZ - offsetVBottom;
+            float top    = _boardCenter.y + halfFieldZ + offsetVTop;
+
+            float cornerSize = railWidth;
+            float hLength = right - left - cornerSize;
+            float vLength = top - bottom - cornerSize;
+            float hCenter = (left + right) * 0.5f;
+            float vCenter = (bottom + top) * 0.5f;
+
+            // 4 코너 (고정 크기) — 아래왼쪽:bl, 아래오른쪽:br, 위오른쪽:tr, 위왼쪽:tl
+            Sprite spBL = _railTileSet != null ? _railTileSet.tileBL : null;
+            Sprite spBR = _railTileSet != null ? _railTileSet.tileBR : null;
+            Sprite spTL = _railTileSet != null ? _railTileSet.tileTL : null;
+            Sprite spTR = _railTileSet != null ? _railTileSet.tileTR : null;
+
+            PlaceConveyorSpriteTile(spBL, new Vector3(left, _railHeight, bottom), cornerSize);
+            PlaceConveyorSpriteTile(spBR, new Vector3(right, _railHeight, bottom), cornerSize);
+            PlaceConveyorSpriteTile(spTL, new Vector3(left, _railHeight, top), cornerSize);
+            PlaceConveyorSpriteTile(spTR, new Vector3(right, _railHeight, top), cornerSize);
+
+            // 4 직선
+            Sprite hSprite = _railTileSet != null ? _railTileSet.GetH() : null;
+            Sprite vSprite = _railTileSet != null ? _railTileSet.GetV() : null;
+
+            PlaceConveyorSpriteTileStretched(hSprite, new Vector3(hCenter, _railHeight, bottom), hLength, cornerSize); // 하단
+            PlaceConveyorSpriteTileStretched(hSprite, new Vector3(hCenter, _railHeight, top), hLength, cornerSize);    // 상단
+            PlaceConveyorSpriteTileStretched(vSprite, new Vector3(left, _railHeight, vCenter), cornerSize, vLength);   // 좌측
+            PlaceConveyorSpriteTileStretched(vSprite, new Vector3(right, _railHeight, vCenter), cornerSize, vLength);  // 우측
+
+            // Paint 모드일 때 가이드 그리드 표시
+            if (_conveyorPaintMode && _pathGrid != null)
             {
-                for (int gy = 0; gy < ph; gy++)
-                {
-                    // World position: convert extended grid coord to world space
-                    Vector3 wpos = PathGridToWorld(gx, gy);
-
-                    if (_conveyorPaintMode)
+                int pw = _pathGrid.GetLength(0);
+                int ph = _pathGrid.GetLength(1);
+                for (int gx = 0; gx < pw; gx++)
+                    for (int gy = 0; gy < ph; gy++)
                     {
-                        // Show faint grid outline for all extended cells (paint guide)
+                        Vector3 wpos = PathGridToWorld(gx, gy);
                         var outline = GameObject.CreatePrimitive(PrimitiveType.Quad);
                         Destroy(outline.GetComponent<Collider>());
                         outline.transform.SetParent(_conveyorPreviewRoot, false);
@@ -1253,29 +1321,36 @@ namespace BalloonFlow
                             _pathGrid[gx, gy] ? new Color(0.3f, 0.3f, 0.6f, 0.5f) : new Color(0.15f, 0.15f, 0.2f, 0.3f));
                         outline.GetComponent<MeshRenderer>().material = mat;
                     }
-
-                    if (!_pathGrid[gx, gy]) continue;
-
-                    // Place tile sprite based on neighbor auto-tiling
-                    // tileSize ensures minimum visual thickness on large grids
-                    Sprite tile = GetPathTileSprite(gx, gy);
-                    if (tile != null)
-                    {
-                        PlaceConveyorSpriteTile(tile, wpos, tileSize);
-                    }
-                    else
-                    {
-                        // Fallback: colored quad if no tile sprite available
-                        var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                        Destroy(quad.GetComponent<Collider>());
-                        quad.transform.SetParent(_conveyorPreviewRoot, false);
-                        quad.transform.localScale = new Vector3(tileSize * 0.95f, tileSize * 0.95f, 1f);
-                        quad.transform.position = new Vector3(wpos.x, -0.05f, wpos.z);
-                        quad.transform.eulerAngles = new Vector3(90f, 0f, 0f);
-                        if (_conveyorMat) quad.GetComponent<MeshRenderer>().sharedMaterial = _conveyorMat;
-                    }
-                }
             }
+        }
+
+        private Sprite GetPathTileSprite_Corner(bool isLeft, bool isBottom)
+        {
+            if (_railTileSet == null) return null;
+            if (isLeft && isBottom) return _railTileSet.tileBL;
+            if (!isLeft && isBottom) return _railTileSet.tileBR;
+            if (isLeft && !isBottom) return _railTileSet.tileTL;
+            return _railTileSet.tileTR;
+        }
+
+        private void PlaceConveyorSpriteTileStretched(Sprite sprite, Vector3 position, float worldW, float worldH)
+        {
+            if (sprite == null) return;
+
+            var go = new GameObject("ConvStretched");
+            go.transform.SetParent(_conveyorPreviewRoot, false);
+            go.transform.position = new Vector3(position.x, -0.02f, position.z);
+            go.transform.eulerAngles = new Vector3(90f, 0f, 0f);
+
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.sortingOrder = -1;
+
+            float sw = sprite.bounds.size.x;
+            float sh = sprite.bounds.size.y;
+            float scaleX = sw > 0.001f ? worldW / sw : 1f;
+            float scaleY = sh > 0.001f ? worldH / sh : 1f;
+            go.transform.localScale = new Vector3(scaleX, scaleY, 1f);
         }
 
         /// <summary>
@@ -1285,10 +1360,35 @@ namespace BalloonFlow
         private Vector3 PathGridToWorld(int gx, int gy)
         {
             float spacing = CellSpacing;
+            float fieldWidth = _gridCols * spacing;
+            float halfFieldX = fieldWidth * 0.5f;
+            float halfFieldZ = _gridRows * spacing * 0.5f;
+            // Fixed proportion offsets for rail center position
+            float railOffsetH = fieldWidth * 0.07f + fieldWidth * 0.30f * 0.5f;
+            float railOffsetVTop = fieldWidth * 0.09f + fieldWidth * 0.30f * 0.5f;
+            float railOffsetVBottom = fieldWidth * 0.12f + fieldWidth * 0.30f * 0.5f;
+
             int bx = gx - PATH_PAD; // balloon grid x (-1 = outer left)
             int by = gy - PATH_PAD; // balloon grid y (-1 = outer bottom)
-            float wx = _boardCenter.x + (bx - (_gridCols - 1) * 0.5f) * spacing;
-            float wz = _boardCenter.y + (by - (_gridRows - 1) * 0.5f) * spacing;
+
+            // For cells inside the balloon grid range, use cellSpacing
+            // For cells outside (the rail ring), use fixed proportion offsets
+            float wx, wz;
+
+            if (bx < 0)
+                wx = _boardCenter.x - halfFieldX - railOffsetH;
+            else if (bx >= _gridCols)
+                wx = _boardCenter.x + halfFieldX + railOffsetH;
+            else
+                wx = _boardCenter.x + (bx - (_gridCols - 1) * 0.5f) * spacing;
+
+            if (by < 0)
+                wz = _boardCenter.y - halfFieldZ - railOffsetVBottom;
+            else if (by >= _gridRows)
+                wz = _boardCenter.y + halfFieldZ + railOffsetVTop;
+            else
+                wz = _boardCenter.y + (by - (_gridRows - 1) * 0.5f) * spacing;
+
             return new Vector3(wx, _railHeight, wz);
         }
 
@@ -1702,12 +1802,20 @@ namespace BalloonFlow
 
                 if (col >= 0 && col < _gridCols && row >= 0 && row < _gridRows)
                 {
-                    if (_balloonColors[col, row] != _paintColor || _balloonGimmicks[col, row] != (_paintColor >= 0 ? _paintGimmick : 0))
+                    if (_floodFillMode && mouse.leftButton.wasPressedThisFrame)
                     {
-                        _balloonColors[col, row] = _paintColor;
-                        _balloonGimmicks[col, row] = _paintColor >= 0 ? _paintGimmick : 0;
-                        UpdatePreviewCell(col, row);
-                        RefreshInfo();
+                        FloodFill(col, row, _paintColor);
+                        OnBalloonGridChanged();
+                    }
+                    else if (!_floodFillMode)
+                    {
+                        if (_balloonColors[col, row] != _paintColor || _balloonGimmicks[col, row] != (_paintColor >= 0 ? _paintGimmick : 0))
+                        {
+                            _balloonColors[col, row] = _paintColor;
+                            _balloonGimmicks[col, row] = _paintColor >= 0 ? _paintGimmick : 0;
+                            UpdatePreviewCell(col, row);
+                            RefreshInfo();
+                        }
                     }
                 }
             }
@@ -2541,6 +2649,11 @@ namespace BalloonFlow
             GenerateWaypointsFromPathGrid();
 
             RebuildPalette();
+
+            // UI 위젯 텍스트 갱신 (변수는 바뀌었지만 InputField/Dropdown은 자동 갱신 안 됨)
+            if (_levelIdInput != null) _levelIdInput.text = _levelId.ToString();
+            if (_numColorsInput != null) _numColorsInput.text = _numColors.ToString();
+            if (_difficultyDropdown != null) _difficultyDropdown.value = (int)_difficulty;
         }
 
         private LevelDatabase LoadLevelDatabase()
@@ -2631,10 +2744,13 @@ namespace BalloonFlow
             // Use custom waypoints
             var wp = _customWaypoints.Count >= 3 ? _customWaypoints : BuildRectangularWaypoints();
             int cols = _holderCols;
-            float halfX = (_gridCols - 1) * spacing * 0.5f;
-            float l = _boardCenter.x - halfX - _railPadding;
-            float rr = _boardCenter.x + halfX + _railPadding;
-            float bz = _boardCenter.y - (_gridRows - 1) * spacing * 0.5f - _railPadding;
+            float fieldWidth = _gridCols * spacing;
+            float halfFieldX = fieldWidth * 0.5f;
+            float railOffsetH = fieldWidth * 0.07f + fieldWidth * 0.30f * 0.5f;
+            float railOffsetVBottom = fieldWidth * 0.12f + fieldWidth * 0.30f * 0.5f;
+            float l = _boardCenter.x - halfFieldX - railOffsetH;
+            float rr = _boardCenter.x + halfFieldX + railOffsetH;
+            float bz = _boardCenter.y - _gridRows * spacing * 0.5f - railOffsetVBottom;
             var dp = new Vector3[cols];
             for (int i = 0; i < cols; i++)
             { float tv = (i + 1f) / (cols + 1f); dp[i] = new Vector3(Mathf.Lerp(l, rr, tv), _railHeight, bz); }
@@ -2675,6 +2791,342 @@ namespace BalloonFlow
                 for (int r = 0; r < _gridRows; r++)
                 { int g = _balloonGimmicks[c, r]; if (g > 0 && g < GIMMICK_NAMES.Length) set.Add(GIMMICK_NAMES[g]); }
             var arr = new string[set.Count]; set.CopyTo(arr); return arr;
+        }
+
+        #endregion
+
+        // ═══════════════════════════════════════════════════════════════
+        //  EDIT TOOLS (8 Features)
+        // ═══════════════════════════════════════════════════════════════
+
+        #region Edit Tools
+
+        private void BuildEditToolsSection(Transform p)
+        {
+            Lbl(p, "Edit Tools", 14, FontStyle.Bold);
+            Sep(p);
+
+            // ── Grid Size Display (Feature 2) ──
+            Lbl(p, $"Grid: {_gridCols}\u00D7{_gridRows}", 12);
+
+            // ── Crop Tool (Feature 3) ──
+            Lbl(p, "Crop", 12, FontStyle.Bold);
+            var cropRow1 = Row(p);
+            Lbl(cropRow1, "W:", w: 24);
+            MakeIntField(cropRow1, _cropWidth, 1, 100, v => _cropWidth = v);
+            Lbl(cropRow1, "H:", w: 24);
+            MakeIntField(cropRow1, _cropHeight, 1, 100, v => _cropHeight = v);
+            Btn(cropRow1, "Crop", () => CropGrid(_cropWidth, _cropHeight));
+
+            // ── Shift/Move Tool (Feature 4) ──
+            Lbl(p, "Shift", 12, FontStyle.Bold);
+            var shiftRow1 = Row(p);
+            Lbl(shiftRow1, "Amount:", w: 55);
+            MakeIntField(shiftRow1, _shiftAmount, 1, 100, v => _shiftAmount = v);
+            var shiftRow2 = Row(p);
+            Btn(shiftRow2, "\u25B2", () => ShiftGrid(0, _shiftAmount));
+            Btn(shiftRow2, "\u25BC", () => ShiftGrid(0, -_shiftAmount));
+            Btn(shiftRow2, "\u25C0", () => ShiftGrid(-_shiftAmount, 0));
+            Btn(shiftRow2, "\u25B6", () => ShiftGrid(_shiftAmount, 0));
+
+            // ── Insert Row/Column (Feature 5) ──
+            Lbl(p, "Insert Row/Col", 12, FontStyle.Bold);
+            var insRowR = Row(p);
+            Lbl(insRowR, "Row At:", w: 55);
+            MakeIntField(insRowR, _insertRowAt, 0, 100, v => _insertRowAt = v);
+            Btn(insRowR, "Above", () => InsertRow(_insertRowAt, true));
+            Btn(insRowR, "Below", () => InsertRow(_insertRowAt, false));
+
+            var insColR = Row(p);
+            Lbl(insColR, "Col At:", w: 55);
+            MakeIntField(insColR, _insertColAt, 0, 100, v => _insertColAt = v);
+            Btn(insColR, "Left", () => InsertCol(_insertColAt, true));
+            Btn(insColR, "Right", () => InsertCol(_insertColAt, false));
+
+            // ── Delete Row/Column (Feature 6) ──
+            Lbl(p, "Delete Row/Col", 12, FontStyle.Bold);
+            var delRowR = Row(p);
+            Lbl(delRowR, "Row:", w: 40);
+            MakeIntField(delRowR, _deleteRowAt, 0, 100, v => _deleteRowAt = v);
+            Btn(delRowR, "Del Row", () => DeleteRow(_deleteRowAt));
+
+            var delColR = Row(p);
+            Lbl(delColR, "Col:", w: 40);
+            MakeIntField(delColR, _deleteColAt, 0, 100, v => _deleteColAt = v);
+            Btn(delColR, "Del Col", () => DeleteCol(_deleteColAt));
+
+            // ── Color Swap (Feature 8) ──
+            Lbl(p, "Swap Color", 12, FontStyle.Bold);
+            var swapRow = Row(p);
+            Lbl(swapRow, "From:", w: 40);
+            MakeIntField(swapRow, _swapFromColor, 0, 27, v => _swapFromColor = v);
+            Lbl(swapRow, "To:", w: 28);
+            MakeIntField(swapRow, _swapToColor, 0, 27, v => _swapToColor = v);
+            Btn(swapRow, "Swap", () => SwapColors(_swapFromColor, _swapToColor));
+
+            // ── Flood Fill (Feature 7) ──
+            var fillRow = Row(p);
+            _txtFillMode = Lbl(fillRow, "Fill Mode: OFF", w: 120);
+            _txtFillMode.color = new Color(0.7f, 0.7f, 0.7f);
+            Btn(fillRow, "Toggle Fill", () =>
+            {
+                _floodFillMode = !_floodFillMode;
+                if (_txtFillMode != null)
+                {
+                    _txtFillMode.text = _floodFillMode ? "Fill Mode: ON" : "Fill Mode: OFF";
+                    _txtFillMode.color = _floodFillMode ? new Color(0.5f, 0.95f, 0.5f) : new Color(0.7f, 0.7f, 0.7f);
+                }
+                SetStatus(_floodFillMode ? "Flood Fill ON — click a cell to fill" : "Flood Fill OFF");
+            });
+
+            // ── Save This Level (Feature 1) ──
+            var saveRow = Row(p);
+            Btn(saveRow, "Save This Level", () => SaveLevelToDatabase(_levelId));
+
+            Sep(p);
+        }
+
+        // ── Feature 1: Save individual level ──
+
+        private void SaveLevelToDatabase(int levelId)
+        {
+            if (_targetDB == null)
+            {
+                string path = "Assets/Resources/LevelDatabase.asset";
+                _targetDB = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
+                if (_targetDB == null)
+                { _targetDB = ScriptableObject.CreateInstance<LevelDatabase>(); AssetDatabase.CreateAsset(_targetDB, path); }
+            }
+            var config = BuildLevelConfig();
+            config.levelId = levelId;
+            var levels = _targetDB.levels != null ? new List<LevelConfig>(_targetDB.levels) : new List<LevelConfig>();
+            int idx = levels.FindIndex(l => l.levelId == levelId);
+            if (idx >= 0) levels[idx] = config; else levels.Add(config);
+            levels.Sort((a, b) => a.levelId.CompareTo(b.levelId));
+            _targetDB.levels = levels.ToArray();
+            EditorUtility.SetDirty(_targetDB);
+            AssetDatabase.SaveAssets();
+            SetStatus($"Saved Level {levelId} to DB");
+            RefreshLevelList();
+        }
+
+        // ── Feature 3: Crop Tool ──
+
+        private void CropGrid(int newCols, int newRows)
+        {
+            newCols = Mathf.Clamp(newCols, 1, 100);
+            newRows = Mathf.Clamp(newRows, 1, 100);
+
+            var newColors = new int[newCols, newRows];
+            var newGimmicks = new int[newCols, newRows];
+            for (int c = 0; c < newCols; c++)
+                for (int r = 0; r < newRows; r++)
+                {
+                    newColors[c, r] = (c < _gridCols && r < _gridRows) ? _balloonColors[c, r] : -1;
+                    newGimmicks[c, r] = (c < _gridCols && r < _gridRows) ? _balloonGimmicks[c, r] : 0;
+                }
+
+            _gridCols = newCols;
+            _gridRows = newRows;
+            _balloonColors = newColors;
+            _balloonGimmicks = newGimmicks;
+            OnBalloonGridChanged();
+            SetStatus($"Cropped to {newCols}\u00D7{newRows}");
+        }
+
+        // ── Feature 4: Shift/Move Tool ──
+
+        private void ShiftGrid(int dx, int dy)
+        {
+            var newColors = new int[_gridCols, _gridRows];
+            var newGimmicks = new int[_gridCols, _gridRows];
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                { newColors[c, r] = -1; newGimmicks[c, r] = 0; }
+
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                {
+                    int nc = c + dx;
+                    int nr = r + dy;
+                    if (nc >= 0 && nc < _gridCols && nr >= 0 && nr < _gridRows)
+                    {
+                        newColors[nc, nr] = _balloonColors[c, r];
+                        newGimmicks[nc, nr] = _balloonGimmicks[c, r];
+                    }
+                }
+
+            _balloonColors = newColors;
+            _balloonGimmicks = newGimmicks;
+            OnBalloonGridChanged();
+            SetStatus($"Shifted ({dx}, {dy})");
+        }
+
+        // ── Feature 5: Insert Row/Column ──
+
+        private void InsertRow(int at, bool above)
+        {
+            int insertAt = above ? at : at + 1;
+            insertAt = Mathf.Clamp(insertAt, 0, _gridRows);
+            int newRows = _gridRows + 1;
+
+            var newColors = new int[_gridCols, newRows];
+            var newGimmicks = new int[_gridCols, newRows];
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < newRows; r++)
+                { newColors[c, r] = -1; newGimmicks[c, r] = 0; }
+
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                {
+                    int dr = r < insertAt ? r : r + 1;
+                    newColors[c, dr] = _balloonColors[c, r];
+                    newGimmicks[c, dr] = _balloonGimmicks[c, r];
+                }
+
+            _gridRows = newRows;
+            _balloonColors = newColors;
+            _balloonGimmicks = newGimmicks;
+            OnBalloonGridChanged();
+            SetStatus($"Inserted row {(above ? "above" : "below")} {at}");
+        }
+
+        private void InsertCol(int at, bool left)
+        {
+            int insertAt = left ? at : at + 1;
+            insertAt = Mathf.Clamp(insertAt, 0, _gridCols);
+            int newCols = _gridCols + 1;
+
+            var newColors = new int[newCols, _gridRows];
+            var newGimmicks = new int[newCols, _gridRows];
+            for (int c = 0; c < newCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                { newColors[c, r] = -1; newGimmicks[c, r] = 0; }
+
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                {
+                    int dc = c < insertAt ? c : c + 1;
+                    newColors[dc, r] = _balloonColors[c, r];
+                    newGimmicks[dc, r] = _balloonGimmicks[c, r];
+                }
+
+            _gridCols = newCols;
+            _balloonColors = newColors;
+            _balloonGimmicks = newGimmicks;
+            OnBalloonGridChanged();
+            SetStatus($"Inserted col {(left ? "left of" : "right of")} {at}");
+        }
+
+        // ── Feature 6: Delete Row/Column ──
+
+        private void DeleteRow(int at)
+        {
+            if (_gridRows <= 1) { SetStatus("Cannot delete: only 1 row left"); return; }
+            if (at < 0 || at >= _gridRows) { SetStatus($"Row {at} out of range (0-{_gridRows - 1})"); return; }
+            int newRows = _gridRows - 1;
+
+            var newColors = new int[_gridCols, newRows];
+            var newGimmicks = new int[_gridCols, newRows];
+
+            for (int c = 0; c < _gridCols; c++)
+            {
+                int dr = 0;
+                for (int r = 0; r < _gridRows; r++)
+                {
+                    if (r == at) continue;
+                    newColors[c, dr] = _balloonColors[c, r];
+                    newGimmicks[c, dr] = _balloonGimmicks[c, r];
+                    dr++;
+                }
+            }
+
+            _gridRows = newRows;
+            _balloonColors = newColors;
+            _balloonGimmicks = newGimmicks;
+            OnBalloonGridChanged();
+            SetStatus($"Deleted row {at}");
+        }
+
+        private void DeleteCol(int at)
+        {
+            if (_gridCols <= 1) { SetStatus("Cannot delete: only 1 col left"); return; }
+            if (at < 0 || at >= _gridCols) { SetStatus($"Col {at} out of range (0-{_gridCols - 1})"); return; }
+            int newCols = _gridCols - 1;
+
+            var newColors = new int[newCols, _gridRows];
+            var newGimmicks = new int[newCols, _gridRows];
+
+            for (int r = 0; r < _gridRows; r++)
+            {
+                int dc = 0;
+                for (int c = 0; c < _gridCols; c++)
+                {
+                    if (c == at) continue;
+                    newColors[dc, r] = _balloonColors[c, r];
+                    newGimmicks[dc, r] = _balloonGimmicks[c, r];
+                    dc++;
+                }
+            }
+
+            _gridCols = newCols;
+            _balloonColors = newColors;
+            _balloonGimmicks = newGimmicks;
+            OnBalloonGridChanged();
+            SetStatus($"Deleted col {at}");
+        }
+
+        // ── Feature 7: Flood Fill ──
+
+        private void FloodFill(int startCol, int startRow, int newColor)
+        {
+            int targetColor = _balloonColors[startCol, startRow];
+            if (targetColor == newColor) return;
+
+            var queue = new Queue<Vector2Int>();
+            var visited = new HashSet<Vector2Int>();
+            queue.Enqueue(new Vector2Int(startCol, startRow));
+            visited.Add(new Vector2Int(startCol, startRow));
+
+            while (queue.Count > 0)
+            {
+                var cell = queue.Dequeue();
+                int c = cell.x, r = cell.y;
+                _balloonColors[c, r] = newColor;
+                _balloonGimmicks[c, r] = newColor >= 0 ? _paintGimmick : 0;
+
+                Vector2Int[] dirs = { new Vector2Int(1, 0), new Vector2Int(-1, 0),
+                                      new Vector2Int(0, 1), new Vector2Int(0, -1) };
+                foreach (var d in dirs)
+                {
+                    int nc = c + d.x, nr = r + d.y;
+                    var np = new Vector2Int(nc, nr);
+                    if (nc >= 0 && nc < _gridCols && nr >= 0 && nr < _gridRows
+                        && !visited.Contains(np) && _balloonColors[nc, nr] == targetColor)
+                    {
+                        visited.Add(np);
+                        queue.Enqueue(np);
+                    }
+                }
+            }
+            SetStatus($"Flood filled {visited.Count} cells");
+        }
+
+        // ── Feature 8: Color Swap ──
+
+        private void SwapColors(int fromColor, int toColor)
+        {
+            if (fromColor == toColor) { SetStatus("From and To colors are the same"); return; }
+            int count = 0;
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                    if (_balloonColors[c, r] == fromColor)
+                    {
+                        _balloonColors[c, r] = toColor;
+                        count++;
+                    }
+            OnBalloonGridChanged();
+            SetStatus($"Swapped color {fromColor} -> {toColor} ({count} cells)");
         }
 
         #endregion
