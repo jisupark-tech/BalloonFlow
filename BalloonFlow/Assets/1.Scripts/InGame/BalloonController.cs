@@ -587,9 +587,6 @@ namespace BalloonFlow
             obj.transform.localScale = Vector3.one * _balloonScale;
             obj.SetActive(true);
 
-            // Collider 없으면 자동 추가 (Raycast 클릭 감지용)
-            if (obj.GetComponent<Collider>() == null)
-                obj.AddComponent<SphereCollider>();
 
             // per-object 색상 변주 (같은 색이라도 톤이 약간씩 다름)
             int colorIdx = Mathf.Clamp(color, 0, BalloonColors.Length - 1);
@@ -748,6 +745,30 @@ namespace BalloonFlow
                 if (data.color == color)
                     SetOutline(kvp.Value, active, outlineColor);
             }
+        }
+
+        /// <summary>
+        /// 화면 클릭 위치에서 가장 가까운 풍선 ID 반환. Collider 없이 동작.
+        /// 월드 좌표 XZ 거리 기반. threshold 이내만 반환, 없으면 -1.
+        /// </summary>
+        public int FindNearestBalloonAtWorldPos(Vector3 worldPos, float threshold = 1f)
+        {
+            int bestId = -1;
+            float bestDist = threshold * threshold; // sqr 비교
+
+            foreach (var kvp in _balloons)
+            {
+                if (kvp.Value.isPopped) continue;
+                float dx = kvp.Value.position.x - worldPos.x;
+                float dz = kvp.Value.position.z - worldPos.z;
+                float sqrDist = dx * dx + dz * dz;
+                if (sqrDist < bestDist)
+                {
+                    bestDist = sqrDist;
+                    bestId = kvp.Key;
+                }
+            }
+            return bestId;
         }
 
         /// <summary>Clear all outlines on all balloons.</summary>
