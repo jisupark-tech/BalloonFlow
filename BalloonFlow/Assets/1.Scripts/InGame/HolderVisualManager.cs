@@ -283,6 +283,12 @@ namespace BalloonFlow
 
         #endregion
 
+        /// <summary>Returns the center position of the queue area (for camera targeting).</summary>
+        public Vector3 CalculateQueueCenterPosition()
+        {
+            return new Vector3(0f, 0.1f, QUEUE_BASE_Z);
+        }
+
         #region Private Methods — Queue Positioning
 
         private Vector3 CalculateQueuePosition(int column, int row)

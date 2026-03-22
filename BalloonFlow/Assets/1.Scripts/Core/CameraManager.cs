@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -40,6 +41,9 @@ namespace BalloonFlow
         private Coroutine _shakeCoroutine;
         private Vector3 _shakeOffset;
         private bool _isShaking;
+
+        // Smooth camera move (MoveToTarget / MoveBack)
+        private Vector3 _savedPosition;
 
         #endregion
 
@@ -243,6 +247,34 @@ namespace BalloonFlow
             _shakeOffset = Vector3.zero;
             _isShaking = false;
             _shakeCoroutine = null;
+        }
+
+        #endregion
+
+        #region Smooth Camera Move
+
+        /// <summary>Smoothly move camera to a target position over duration seconds. Saves current position for MoveBack.</summary>
+        public void MoveToTarget(Vector3 targetPosition, float duration = 0.5f)
+        {
+            if (MainCamera == null) return;
+
+            _savedPosition = _expectedPosition;
+            _enforcePosition = false;
+
+            MainCamera.transform.DOMove(targetPosition, duration).SetEase(Ease.OutQuad);
+        }
+
+        /// <summary>Smoothly move camera back to the saved position.</summary>
+        public void MoveBack(float duration = 0.5f)
+        {
+            if (MainCamera == null) return;
+
+            MainCamera.transform.DOMove(_savedPosition, duration).SetEase(Ease.OutQuad)
+                .OnComplete(() =>
+                {
+                    _expectedPosition = _savedPosition;
+                    _enforcePosition = true;
+                });
         }
 
         #endregion

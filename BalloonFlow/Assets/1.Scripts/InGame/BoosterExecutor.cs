@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -20,6 +21,7 @@ namespace BalloonFlow
 
         private bool _awaitingColorSelection;
         private bool _awaitingHolderSelection;
+        private bool _awaitingBalloonClick;
 
         #endregion
 
@@ -59,6 +61,10 @@ namespace BalloonFlow
             _awaitingHolderSelection = false;
 
             ExecuteSelectTool(holderId);
+
+            // Move camera back after holder selection
+            if (CameraManager.HasInstance)
+                CameraManager.Instance.MoveBack();
         }
 
         /// <summary>
@@ -71,6 +77,30 @@ namespace BalloonFlow
         /// </summary>
         public bool IsAwaitingHolderSelection => _awaitingHolderSelection;
 
+        /// <summary>
+        /// Whether the executor is waiting for player balloon click (Color Remove).
+        /// </summary>
+        public bool IsAwaitingBalloonClick => _awaitingBalloonClick;
+
+        /// <summary>Called when player clicks a balloon during Color Remove mode.</summary>
+        public void OnBalloonClicked(int balloonId)
+        {
+            if (!_awaitingBalloonClick) return;
+            _awaitingBalloonClick = false;
+
+            // Get clicked balloon's color
+            if (!BalloonController.HasInstance) return;
+            var data = BalloonController.Instance.GetBalloon(balloonId);
+            if (data == null) return;
+            int selectedColor = data.color;
+
+            // Highlight selected color with white outline, others stay black
+            BalloonController.Instance.SetOutlineByColor(selectedColor, true, Color.white);
+
+            // Execute color remove after brief delay (so player sees the highlight)
+            StartCoroutine(DelayedColorRemove(selectedColor));
+        }
+
         #endregion
 
         #region Private Methods — Event Handler
@@ -82,6 +112,14 @@ namespace BalloonFlow
                 case BoosterManager.SELECT_TOOL:
                     // Enter holder selection mode — UI highlights available holders
                     _awaitingHolderSelection = true;
+
+                    // Move camera to queue area
+                    if (CameraManager.HasInstance && HolderVisualManager.HasInstance)
+                    {
+                        Vector3 queuePosition = HolderVisualManager.Instance.CalculateQueueCenterPosition();
+                        CameraManager.Instance.MoveToTarget(queuePosition);
+                    }
+
                     Debug.Log("[BoosterExecutor] Select Tool activated. Waiting for holder selection.");
                     break;
 
@@ -92,6 +130,23 @@ namespace BalloonFlow
                 case BoosterManager.COLOR_REMOVE:
                     // Enter color selection mode — UI shows available colors
                     _awaitingColorSelection = true;
+                    _awaitingBalloonClick = true;
+
+                    // Move camera to field center
+                    if (CameraManager.HasInstance && GameManager.HasInstance)
+                    {
+                        Vector3 fieldPosition = new Vector3(
+                            GameManager.Instance.Board.boardCenterX,
+                            0f,
+                            GameManager.Instance.Board.boardCenterZ
+                        );
+                        CameraManager.Instance.MoveToTarget(fieldPosition);
+                    }
+
+                    // Turn ON black outline on ALL balloons
+                    if (BalloonController.HasInstance)
+                        BalloonController.Instance.SetAllOutlines(true, Color.black);
+
                     Debug.Log("[BoosterExecutor] Color Remove activated. Waiting for color selection.");
                     break;
 
@@ -104,6 +159,23 @@ namespace BalloonFlow
         #endregion
 
         #region Private Methods — Execution
+
+        private IEnumerator DelayedColorRemove(int color)
+        {
+            yield return new WaitForSeconds(0.3f);
+
+            // Clear all outlines
+            if (BalloonController.HasInstance)
+                BalloonController.Instance.ClearAllOutlines();
+
+            // Execute removal
+            _awaitingColorSelection = false;
+            ExecuteColorRemove(color);
+
+            // Camera back
+            if (CameraManager.HasInstance)
+                CameraManager.Instance.MoveBack();
+        }
 
         /// <summary>
         /// Select Tool: force-deploy the chosen holder regardless of queue order.
