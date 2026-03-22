@@ -587,6 +587,10 @@ namespace BalloonFlow
             obj.transform.localScale = Vector3.one * _balloonScale;
             obj.SetActive(true);
 
+            // Collider 없으면 자동 추가 (Raycast 클릭 감지용)
+            if (obj.GetComponent<Collider>() == null)
+                obj.AddComponent<SphereCollider>();
+
             // per-object 색상 변주 (같은 색이라도 톤이 약간씩 다름)
             int colorIdx = Mathf.Clamp(color, 0, BalloonColors.Length - 1);
             Color variedColor = GetVariedColor(colorIdx);
@@ -720,6 +724,40 @@ namespace BalloonFlow
             mpb.SetFloat("_OutlineEnabled", active ? 1f : 0f);
             mpb.SetColor("_OutlineColor", outlineColor);
             r.SetPropertyBlock(mpb);
+        }
+
+        /// <summary>Set outline on ALL non-popped balloons.</summary>
+        public void SetAllOutlines(bool active, Color outlineColor)
+        {
+            foreach (var kvp in _balloonObjects)
+            {
+                if (kvp.Value == null) continue;
+                if (_balloons.TryGetValue(kvp.Key, out BalloonData data) && data.isPopped) continue;
+                SetOutline(kvp.Value, active, outlineColor);
+            }
+        }
+
+        /// <summary>Set outline only on balloons of a specific color.</summary>
+        public void SetOutlineByColor(int color, bool active, Color outlineColor)
+        {
+            foreach (var kvp in _balloonObjects)
+            {
+                if (kvp.Value == null) continue;
+                if (!_balloons.TryGetValue(kvp.Key, out BalloonData data)) continue;
+                if (data.isPopped) continue;
+                if (data.color == color)
+                    SetOutline(kvp.Value, active, outlineColor);
+            }
+        }
+
+        /// <summary>Clear all outlines on all balloons.</summary>
+        public void ClearAllOutlines()
+        {
+            foreach (var kvp in _balloonObjects)
+            {
+                if (kvp.Value == null) continue;
+                SetOutline(kvp.Value, false, Color.black);
+            }
         }
 
         /// <summary>프리팹 고유 컴포넌트(Shadow, Particle 등) 건드리지 않고 색상만 적용.

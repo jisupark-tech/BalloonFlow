@@ -115,6 +115,20 @@ namespace BalloonFlow
 
             Ray ray = _gameCamera.ScreenPointToRay(screenPosition);
 
+            // Color Remove 모드: 풍선 클릭 감지
+            if (BoosterExecutor.HasInstance && BoosterExecutor.Instance.IsAwaitingBalloonClick)
+            {
+                if (Physics.Raycast(ray, out RaycastHit balloonHit, Mathf.Infinity))
+                {
+                    BalloonIdentifier balloon = balloonHit.collider.GetComponent<BalloonIdentifier>();
+                    if (balloon != null && !balloon.IsPopped)
+                    {
+                        BoosterExecutor.Instance.OnBalloonClicked(balloon.BalloonId);
+                        return; // Don't process holder tap
+                    }
+                }
+            }
+
             if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, _holderLayerMask))
             {
                 HolderIdentifier holder = hit.collider.GetComponent<HolderIdentifier>();
