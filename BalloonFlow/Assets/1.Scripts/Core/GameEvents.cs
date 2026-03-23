@@ -365,6 +365,12 @@ namespace BalloonFlow
         public int color;
     }
 
+    /// <summary>A frozen holder was thawed (unfrozen).</summary>
+    public struct OnHolderThawed
+    {
+        public int holderId;
+    }
+
     /// <summary>A dart was fired at a specific target balloon with trajectory info.</summary>
     public struct OnDartFiredAtTarget
     {

@@ -228,6 +228,7 @@ namespace BalloonFlow
             if (holder == null || !holder.isFrozen) return;
             holder.isFrozen = false;
             Debug.Log($"[HolderManager] Frozen holder {holderId} thawed");
+            EventBus.Publish(new OnHolderThawed { holderId = holderId });
         }
 
         /// <summary>

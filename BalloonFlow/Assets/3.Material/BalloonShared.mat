@@ -24,7 +24,8 @@ Material:
   m_Shader: {fileID: 4800000, guid: b3685fb0b0d93db40a434a3f0879d21a, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
+  m_ValidKeywords:
+  - _EMISSION
   m_InvalidKeywords:
   - _OUTLINEENABLED_ON
   - _RECEIVE_SHADOWS_OFF
@@ -104,6 +105,7 @@ Material:
     - _AlphaToMask: 0
     - _Blend: 0
     - _BlendModePreserveSpecular: 1
+    - _BlurAmount: 0
     - _BumpScale: 1
     - _ClearCoatMask: 0
     - _ClearCoatSmoothness: 0
@@ -118,15 +120,15 @@ Material:
     - _Glossiness: 0
     - _GlossinessSource: 0
     - _GlossyReflections: 0
-    - _Metallic: 1
+    - _Metallic: 0.5
     - _OcclusionStrength: 1
     - _OutlineEnabled: 1
-    - _OutlineWidth: 0.002
+    - _OutlineWidth: 0.00055
     - _Parallax: 0.005
     - _QueueOffset: 0
     - _ReceiveShadows: 0
     - _Shininess: 0
-    - _Smoothness: 0.5
+    - _Smoothness: 0.518
     - _SmoothnessSource: 0
     - _SmoothnessTextureChannel: 0
     - _SpecSource: 0
@@ -134,6 +136,8 @@ Material:
     - _SrcBlend: 1
     - _SrcBlendAlpha: 1
     - _Surface: 0
+    - _UseEmission: 1
+    - _UseNormalMap: 0
     - _VariationHue: 0.03
     - _VariationSat: 0.08
     - _VariationVal: 0.08
@@ -142,6 +146,7 @@ Material:
     - _ZWrite: 1
     m_Colors:
     - _BaseColor: {r: 0.8621036, g: 0.90588236, b: 0.14117646, a: 1}
+    - _BlurColor: {r: 1, g: 1, b: 1, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
     - _OutlineColor: {r: 0, g: 0, b: 0, a: 1}

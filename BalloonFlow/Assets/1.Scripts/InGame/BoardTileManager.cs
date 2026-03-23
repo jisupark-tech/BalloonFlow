@@ -44,7 +44,7 @@ namespace BalloonFlow
         private int _rows;
 
         // Fixed conveyor proportions (all relative to fieldWidth)
-        private const float PROP_RAIL_WIDTH       = 0.30f;
+        private const float PROP_RAIL_WIDTH       = 0.39f; // 0.30 × 1.3 (30% 두껍게)
         private const float PROP_RAIL_GAP_H       = 0.07f;
         private const float PROP_TOTAL_WIDTH       = 1.48f;
         private const float PROP_TOTAL_HEIGHT      = 1.72f;
@@ -66,6 +66,7 @@ namespace BalloonFlow
 
         // RailTileSet for auto-tiling sprites
         private RailTileSet _spriteRailTileSet;
+        private Sprite _cachedArrowSprite;
 
         // Arrow: 슬롯 기반 회전 (다트처럼 벨트와 함께 이동)
         private const int ARROW_COUNT = 20;
@@ -242,7 +243,7 @@ namespace BalloonFlow
 
             if (grid == null || !_hasDirectionalTiles) return;
 
-            var tileSet = Resources.Load<RailTileSet>("RailTileSet");
+            var tileSet = _spriteRailTileSet ?? Resources.Load<RailTileSet>("RailTileSet");
             if (tileSet == null) return;
 
             for (int x = 0; x < cols; x++)
@@ -293,7 +294,7 @@ namespace BalloonFlow
 
             if (_hasDirectionalTiles)
             {
-                var tileSet = Resources.Load<RailTileSet>("RailTileSet");
+                var tileSet = _spriteRailTileSet ?? Resources.Load<RailTileSet>("RailTileSet");
                 if (tileSet != null)
                 {
                     for (int i = 0; i < positions.Length; i++)
@@ -593,9 +594,10 @@ namespace BalloonFlow
             // 균등 간격으로 슬롯 배정
             int spacing = Mathf.Max(1, rail.SlotCount / ARROW_COUNT);
 
-            // Arrow 스프라이트 로드 (Assets/2.Sprite/UI 등에 arrow 이미지)
-            // 없으면 프로시저럴 생성
-            Sprite arrowSprite = Resources.Load<Sprite>("Sprites/arrow");
+            // Arrow 스프라이트 캐시
+            if (_cachedArrowSprite == null)
+                _cachedArrowSprite = Resources.Load<Sprite>("Sprites/arrow");
+            Sprite arrowSprite = _cachedArrowSprite;
 
             for (int i = 0; i < ARROW_COUNT; i++)
             {

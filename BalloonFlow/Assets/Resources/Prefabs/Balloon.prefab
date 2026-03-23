@@ -9926,6 +9926,9 @@ MonoBehaviour:
   _balloonId: 0
   _color: 0
   _animator: {fileID: 1606809899372433985}
+  _colorRenderers:
+  - {fileID: 415636442154169283}
+  _baseMaterial: {fileID: 2100000, guid: 66b7b620b8048be45b37648985705e8f, type: 2}
 --- !u!1 &7089958179667606825
 GameObject:
   m_ObjectHideFlags: 0
@@ -10118,6 +10121,11 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: f61191468219b904cb021655320c7d50, type: 3}
+--- !u!23 &415636442154169283 stripped
+MeshRenderer:
+  m_CorrespondingSourceObject: {fileID: -7511558181221131132, guid: f61191468219b904cb021655320c7d50, type: 3}
+  m_PrefabInstance: {fileID: 1298504014722035527}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &1553618695913310380 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: f61191468219b904cb021655320c7d50, type: 3}

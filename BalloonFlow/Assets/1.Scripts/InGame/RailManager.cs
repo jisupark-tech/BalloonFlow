@@ -252,19 +252,26 @@ namespace BalloonFlow
                 distance = Mathf.Clamp(distance, 0f, _totalPathLength);
             }
 
-            for (int i = 0; i < _segmentLengths.Count; i++)
+            // 이진 탐색으로 세그먼트 찾기 (O(log n))
+            int lo = 0, hi = _cumulativeLengths.Count - 1;
+            while (lo < hi)
             {
-                if (distance <= _cumulativeLengths[i])
-                {
-                    float segStart = (i > 0) ? _cumulativeLengths[i - 1] : 0f;
-                    float segLength = _segmentLengths[i];
+                int mid = (lo + hi) >> 1;
+                if (_cumulativeLengths[mid] < distance)
+                    lo = mid + 1;
+                else
+                    hi = mid;
+            }
 
-                    if (segLength <= 0f) return path[i];
-
-                    float localT = (distance - segStart) / segLength;
-                    int nextIndex = (i + 1) % path.Count;
-                    return Vector3.Lerp(path[i], path[nextIndex], localT);
-                }
+            int i = lo;
+            if (i < _segmentLengths.Count)
+            {
+                float segStart = (i > 0) ? _cumulativeLengths[i - 1] : 0f;
+                float segLength = _segmentLengths[i];
+                if (segLength <= 0f) return path[i];
+                float localT = (distance - segStart) / segLength;
+                int nextIndex = (i + 1) % path.Count;
+                return Vector3.Lerp(path[i], path[nextIndex], localT);
             }
 
             return path[path.Count - 1];
@@ -420,6 +427,9 @@ namespace BalloonFlow
             if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return -1;
             if (_slots[slotIndex].dartColor >= 0) return -1; // occupied
 
+            // frozen 다트가 복귀할 공간 확보 — 예약분 초과 시 배치 거부
+            if (_occupiedCount + _frozenDartInfos.Count >= _slotCount) return -1;
+
             int dartId = _nextDartId++;
             _slots[slotIndex].dartColor = color;
             _slots[slotIndex].holderId = holderId;
@@ -451,9 +461,14 @@ namespace BalloonFlow
         /// Finds the next empty slot starting from startIndex, scanning forward (belt direction).
         /// Returns -1 if no empty slot found (full rail).
         /// </summary>
-        public int FindNextEmptySlot(int startIndex)
+        /// <param name="ignoreFrozenReserve">true면 frozen 예약분 무시 (UnfreezeAndReinsertAll 전용)</param>
+        public int FindNextEmptySlot(int startIndex, bool ignoreFrozenReserve = false)
         {
             if (_slots == null || _occupiedCount >= _slotCount) return -1;
+
+            // 배치 시: frozen 다트가 복귀할 공간 확보
+            if (!ignoreFrozenReserve && _occupiedCount + _frozenDartInfos.Count >= _slotCount)
+                return -1;
 
             for (int i = 0; i < _slotCount; i++)
             {
@@ -781,11 +796,30 @@ namespace BalloonFlow
             EventBus.Publish(new OnDartsFrozenCleared());
 
             // Then reinsert each dart and create new slot visuals
+            if (_slots == null) { _frozenDartInfos.Clear(); return; }
+            int lostCount = 0;
             for (int i = 0; i < _frozenDartInfos.Count; i++)
             {
                 var info = _frozenDartInfos[i];
                 int nearestSlot = GetNearestSlotIndex(info.worldPosition);
-                int emptySlot = FindNextEmptySlot(nearestSlot);
+                int emptySlot = FindNextEmptySlot(nearestSlot, ignoreFrozenReserve: true);
+
+                // 빈 슬롯이 없으면 원래 슬롯에 강제 복귀 시도
+                if (emptySlot < 0)
+                {
+                    emptySlot = info.originalSlotIndex;
+                    if (emptySlot >= 0 && emptySlot < _slotCount && _slots[emptySlot].dartColor >= 0)
+                    {
+                        // 원래 슬롯도 점유됨 — 전체 순회로 빈 칸 재탐색
+                        for (int j = 0; j < _slotCount; j++)
+                        {
+                            if (_slots[j].dartColor < 0) { emptySlot = j; break; }
+                        }
+                        // 정말 없으면 -1
+                        if (emptySlot >= 0 && emptySlot < _slotCount && _slots[emptySlot].dartColor >= 0)
+                            emptySlot = -1;
+                    }
+                }
 
                 if (emptySlot >= 0)
                 {
@@ -802,7 +836,14 @@ namespace BalloonFlow
                         holderId = info.holderId
                     });
                 }
+                else
+                {
+                    lostCount++;
+                }
             }
+
+            if (lostCount > 0)
+                Debug.LogWarning($"[RailManager] UnfreezeAndReinsertAll: {lostCount} darts lost — rail full ({_occupiedCount}/{_slotCount})");
 
             _frozenDartInfos.Clear();
             PublishOccupancyChanged();

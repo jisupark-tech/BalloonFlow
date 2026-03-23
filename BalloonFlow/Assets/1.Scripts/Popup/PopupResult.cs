@@ -110,6 +110,16 @@ namespace BalloonFlow
         {
             CloseUI();
 
+            // MapMaker에서 테스트 플레이 → MapMaker 씬으로 복귀
+            if (GameManager.IsTestPlayMode)
+            {
+                if (PopupManager.HasInstance)
+                    PopupManager.Instance.CloseAllPopups();
+
+                UnityEngine.SceneManagement.SceneManager.LoadScene(GameManager.SCENE_MAPMAKER);
+                return;
+            }
+
             // 하트 확인
             if (LifeManager.HasInstance && LifeManager.Instance.CurrentLives <= 0)
             {
