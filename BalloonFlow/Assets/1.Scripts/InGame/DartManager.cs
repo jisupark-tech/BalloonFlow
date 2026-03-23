@@ -124,9 +124,12 @@ namespace BalloonFlow
 
             UpdateSlotDartPositions();
 
-            // 공격 스캔: dartFireInterval 간격으로만 실행 (매 프레임 X)
+            // 공격 스캔: 벨트 속도 적응형 간격 (1슬롯 이동당 최소 2회 스캔)
             _scanTimer += Time.deltaTime;
-            float interval = GameManager.HasInstance ? GameManager.Instance.Board.dartFireInterval : 0.05f;
+            float baseInterval = GameManager.HasInstance ? GameManager.Instance.Board.dartFireInterval : 0.05f;
+            float railSpeed = RailManager.HasInstance ? RailManager.Instance.RotationSpeed : 10f;
+            float speedInterval = railSpeed > 0f ? 0.5f / railSpeed : baseInterval;
+            float interval = Mathf.Min(baseInterval, speedInterval);
             if (_scanTimer >= interval)
             {
                 _scanTimer -= interval;
@@ -145,22 +148,32 @@ namespace BalloonFlow
         /// </summary>
         public void ClearAllDarts()
         {
+            // Dictionary 순회 전 키를 복사 (순회 중 변경 방지)
+            _tempRemoveKeys.Clear();
             foreach (var kvp in _slotVisuals)
+                _tempRemoveKeys.Add(kvp.Key);
+            for (int i = 0; i < _tempRemoveKeys.Count; i++)
             {
-                ReturnDartToPool(kvp.Value.gameObject);
+                if (_slotVisuals.TryGetValue(_tempRemoveKeys[i], out var visual))
+                    ReturnDartToPool(visual.gameObject);
             }
             _slotVisuals.Clear();
 
             for (int i = _activeProjectiles.Count - 1; i >= 0; i--)
             {
-                ReturnDartToPool(_activeProjectiles[i].gameObject);
+                if (i < _activeProjectiles.Count)
+                    ReturnDartToPool(_activeProjectiles[i].gameObject);
             }
             _activeProjectiles.Clear();
             _reservedTargets.Clear();
 
+            _tempRemoveKeys.Clear();
             foreach (var kvp in _frozenVisuals)
+                _tempRemoveKeys.Add(kvp.Key);
+            for (int i = 0; i < _tempRemoveKeys.Count; i++)
             {
-                ReturnDartToPool(kvp.Value);
+                if (_frozenVisuals.TryGetValue(_tempRemoveKeys[i], out var obj))
+                    ReturnDartToPool(obj);
             }
             _frozenVisuals.Clear();
         }
@@ -177,7 +190,7 @@ namespace BalloonFlow
         /// <summary>
         /// Creates a visual dart on a rail slot (called when holder deploys a dart).
         /// </summary>
-        public void CreateSlotDartVisual(int slotIndex, int color)
+        public void CreateSlotDartVisual(int slotIndex, int color, int holderId = -1)
         {
             if (_slotVisuals.ContainsKey(slotIndex))
             {
@@ -302,8 +315,8 @@ namespace BalloonFlow
             {
                 RailManager.SlotData sd = rail.GetSlot(s);
                 if (sd.dartColor < 0) continue;
-                if (!_holderFrontDartId.ContainsKey(sd.holderId) ||
-                    sd.dartId < _holderFrontDartId[sd.holderId])
+                if (!_holderFrontDartId.TryGetValue(sd.holderId, out int existingId) ||
+                    sd.dartId < existingId)
                 {
                     _holderFrontDartId[sd.holderId] = sd.dartId;
                 }
@@ -323,8 +336,8 @@ namespace BalloonFlow
                 if (_blockedHolders.Contains(slot.holderId)) continue;
 
                 // 선행 다트(가장 낮은 dartId)만 공격 가능
-                if (_holderFrontDartId.ContainsKey(slot.holderId) &&
-                    slot.dartId != _holderFrontDartId[slot.holderId])
+                if (_holderFrontDartId.TryGetValue(slot.holderId, out int frontId) &&
+                    slot.dartId != frontId)
                 {
                     continue;
                 }
@@ -343,6 +356,7 @@ namespace BalloonFlow
                 // Skip if another dart is already flying toward this balloon
                 if (_reservedTargets.Contains(targetId)) continue;
 
+                if (!BalloonController.HasInstance) return;
                 BalloonData targetData = BalloonController.Instance.GetBalloon(targetId);
                 if (targetData == null || targetData.isPopped)
                 {
@@ -508,7 +522,7 @@ namespace BalloonFlow
         private void HandleDartPlaced(OnDartPlacedOnSlot evt)
         {
             if (_boardFinished) return;
-            CreateSlotDartVisual(evt.slotIndex, evt.color);
+            CreateSlotDartVisual(evt.slotIndex, evt.color, evt.holderId);
         }
 
         /// <summary>
@@ -663,7 +677,18 @@ namespace BalloonFlow
         private void ApplyColor(GameObject obj, int color)
         {
             Color c = HolderVisualManager.GetColor(color);
+
+            // DartIdentifier에 기반 Material + Renderer가 할당되어 있으면 복제 방식
+            DartIdentifier dartId = obj.GetComponent<DartIdentifier>();
+            if (dartId != null && dartId.HasColorRenderers)
+            {
+                dartId.ApplyColor(c);
+                return;
+            }
+
+            // fallback: 전체 Renderer (TMP/Shadow/Particle 제외)
             Material shared = BalloonController.GetOrCreateSharedMaterial(c);
+            if (shared == null) return;
             Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
             for (int i = 0; i < renderers.Length; i++)
             {

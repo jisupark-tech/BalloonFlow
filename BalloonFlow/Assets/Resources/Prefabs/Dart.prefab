@@ -9,6 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 987789412582313349}
+  - component: {fileID: -8696889725474668029}
   m_Layer: 7
   m_Name: Dart
   m_TagString: Untagged
@@ -32,6 +33,21 @@ Transform:
   - {fileID: 379216093814826620}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &-8696889725474668029
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2573062081152905902}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f28a8c41e66880c4aba05f910eb9c416, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.DartIdentifier
+  _colorRenderers:
+  - {fileID: 8614802010601634603}
+  _baseMaterial: {fileID: 2100000, guid: 66b7b620b8048be45b37648985705e8f, type: 2}
 --- !u!1001 &200839518185374103
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -84,6 +100,10 @@ PrefabInstance:
       propertyPath: m_Layer
       value: 7
       objectReference: {fileID: 0}
+    - target: {fileID: -4819223349682164798, guid: 2e85cb0319ddace479d2b9f5b9e9a5da, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: -2680626368646135558, guid: 2e85cb0319ddace479d2b9f5b9e9a5da, type: 3}
       propertyPath: m_Layer
       value: 7
@@ -112,5 +132,10 @@ PrefabInstance:
 --- !u!4 &379216093814826620 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 2e85cb0319ddace479d2b9f5b9e9a5da, type: 3}
+  m_PrefabInstance: {fileID: 200839518185374103}
+  m_PrefabAsset: {fileID: 0}
+--- !u!23 &8614802010601634603 stripped
+MeshRenderer:
+  m_CorrespondingSourceObject: {fileID: 8449996119470504636, guid: 2e85cb0319ddace479d2b9f5b9e9a5da, type: 3}
   m_PrefabInstance: {fileID: 200839518185374103}
   m_PrefabAsset: {fileID: 0}

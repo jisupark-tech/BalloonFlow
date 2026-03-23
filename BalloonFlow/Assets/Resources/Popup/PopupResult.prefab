@@ -5409,7 +5409,7 @@ MonoBehaviour:
   _frameResultHard: {fileID: 21300000, guid: 44efab1b342972a46abc7841991a7bfe, type: 3}
   _frameResultSuperHard: {fileID: 21300000, guid: 8a2ac73a334541146b4c5be69e5380e1, type: 3}
   _titleText: {fileID: 0}
-  _nextButton: {fileID: 0}
+  _nextButton: {fileID: 6805634177068436573}
   _homeButton: {fileID: 2525510344598965173}
   _starImages: []
   _goldTarget: {fileID: 0}

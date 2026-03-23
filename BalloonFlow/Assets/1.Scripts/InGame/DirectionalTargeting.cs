@@ -95,8 +95,8 @@ namespace BalloonFlow
                 return -1;
             }
 
-            // Tight tolerance: half cell spacing — dart must be nearly aligned with balloon column
-            float perpendicularTolerance = _gridCellSize * 0.5f;
+            // 수직 정렬 허용치: cellSpacing의 75% — 벨트 고속 시에도 타겟 놓치지 않도록
+            float perpendicularTolerance = _gridCellSize * 0.75f;
 
             ScanDirection scanDir = DetermineScanDirection(firingDirection);
 
@@ -270,43 +270,63 @@ namespace BalloonFlow
         /// the dart position and the target balloon along the firing axis.
         /// Returns true if the path is BLOCKED (dart cannot reach target).
         /// </summary>
+        /// <summary>재사용 Vector2Int (GC 방지)</summary>
+        private static Vector2Int _reusableScanCell;
+
+        /// <summary>캐시된 maxScan (프레임당 1회 계산)</summary>
+        private static int _cachedMaxScan;
+        private static int _cachedMaxScanFrame = -1;
+
         private static bool IsPathBlocked(Vector3 dartPos, Vector3 targetPos, ScanDirection direction, HashSet<Vector2Int> occupancy)
         {
             Vector2Int targetCell = WorldToGrid(targetPos);
 
-            // 타겟 셀에서 레일 방향(바깥)으로 스캔. 타겟 앞에 다른 풍선이 있으면 차단.
-            // (다트 위치는 레일 위라 그리드 밖 → 타겟 기준으로 스캔)
+            // 그리드 크기 기반 스캔 범위 — 프레임당 1회 캐시
+            if (_cachedMaxScanFrame != Time.frameCount)
+            {
+                _cachedMaxScan = 50;
+                if (BoardTileManager.HasInstance)
+                    _cachedMaxScan = Mathf.Max(BoardTileManager.Instance.Cols, BoardTileManager.Instance.Rows);
+                _cachedMaxScanFrame = Time.frameCount;
+            }
+
+            int maxScan = _cachedMaxScan;
+
             switch (direction)
             {
-                case ScanDirection.Up: // 레일이 아래, 위로 발사 → 타겟 아래에 뭐가 있으면 차단
-                    for (int y = targetCell.y - 1; y >= targetCell.y - 30; y--)
+                case ScanDirection.Up:
+                    _reusableScanCell.x = targetCell.x;
+                    for (int y = targetCell.y - 1; y >= targetCell.y - maxScan; y--)
                     {
-                        if (occupancy.Contains(new Vector2Int(targetCell.x, y)))
-                            return true;
+                        _reusableScanCell.y = y;
+                        if (occupancy.Contains(_reusableScanCell)) return true;
                     }
                     return false;
 
-                case ScanDirection.Down: // 레일이 위, 아래로 발사 → 타겟 위에 뭐가 있으면 차단
-                    for (int y = targetCell.y + 1; y <= targetCell.y + 30; y++)
+                case ScanDirection.Down:
+                    _reusableScanCell.x = targetCell.x;
+                    for (int y = targetCell.y + 1; y <= targetCell.y + maxScan; y++)
                     {
-                        if (occupancy.Contains(new Vector2Int(targetCell.x, y)))
-                            return true;
+                        _reusableScanCell.y = y;
+                        if (occupancy.Contains(_reusableScanCell)) return true;
                     }
                     return false;
 
-                case ScanDirection.Right: // 레일이 왼쪽, 오른쪽으로 발사 → 타겟 왼쪽에 뭐가 있으면 차단
-                    for (int x = targetCell.x - 1; x >= targetCell.x - 30; x--)
+                case ScanDirection.Right:
+                    _reusableScanCell.y = targetCell.y;
+                    for (int x = targetCell.x - 1; x >= targetCell.x - maxScan; x--)
                     {
-                        if (occupancy.Contains(new Vector2Int(x, targetCell.y)))
-                            return true;
+                        _reusableScanCell.x = x;
+                        if (occupancy.Contains(_reusableScanCell)) return true;
                     }
                     return false;
 
-                case ScanDirection.Left: // 레일이 오른쪽, 왼쪽으로 발사 → 타겟 오른쪽에 뭐가 있으면 차단
-                    for (int x = targetCell.x + 1; x <= targetCell.x + 30; x++)
+                case ScanDirection.Left:
+                    _reusableScanCell.y = targetCell.y;
+                    for (int x = targetCell.x + 1; x <= targetCell.x + maxScan; x++)
                     {
-                        if (occupancy.Contains(new Vector2Int(x, targetCell.y)))
-                            return true;
+                        _reusableScanCell.x = x;
+                        if (occupancy.Contains(_reusableScanCell)) return true;
                     }
                     return false;
 

@@ -677,12 +677,12 @@ namespace BalloonFlow
             int variant = Random.Range(0, VARIATION_COUNT);
             switch (variant)
             {
-                case 1: // 진한 톤 (채도+, 명도-)
+                case 1: // 진한 톤 (미세 변주)
                     Color.RGBToHSV(baseColor, out float h1, out float s1, out float v1);
-                    return Color.HSVToRGB(h1, Mathf.Min(s1 + 0.1f, 1f), Mathf.Max(v1 - 0.08f, 0.2f));
-                case 2: // 연한 톤 (채도-, 명도+)
+                    return Color.HSVToRGB(h1, Mathf.Min(s1 + 0.03f, 1f), Mathf.Max(v1 - 0.03f, 0.2f));
+                case 2: // 연한 톤 (미세 변주)
                     Color.RGBToHSV(baseColor, out float h2, out float s2, out float v2);
-                    return Color.HSVToRGB(h2, Mathf.Max(s2 - 0.12f, 0.1f), Mathf.Min(v2 + 0.1f, 1f));
+                    return Color.HSVToRGB(h2, Mathf.Max(s2 - 0.04f, 0.1f), Mathf.Min(v2 + 0.03f, 1f));
                 default: // 기본 톤
                     return baseColor;
             }
@@ -701,6 +701,12 @@ namespace BalloonFlow
                 _cachedLitShader = Shader.Find("Custom/ItemShared")
                     ?? Shader.Find("Universal Render Pipeline/Lit")
                     ?? Shader.Find("Standard");
+
+            if (_cachedLitShader == null)
+            {
+                Debug.LogError("[BalloonController] No shader found for balloon material!");
+                return null;
+            }
 
             mat = new Material(_cachedLitShader);
             mat.SetColor("_BaseColor", color);
@@ -785,9 +791,18 @@ namespace BalloonFlow
         /// tag "BalloonMesh"가 있는 Renderer만 변경. 없으면 루트 Renderer만.</summary>
         private static void ApplyTintToObject(GameObject obj, Color color)
         {
-            Material shared = GetOrCreateSharedMaterial(color);
+            // BalloonIdentifier에 Renderer + 기반 Material이 할당되어 있으면 복제 방식
+            BalloonIdentifier bi = obj.GetComponent<BalloonIdentifier>();
+            if (bi != null && bi.HasColorRenderers)
+            {
+                bi.ApplyColor(color);
+                return;
+            }
 
-            // 루트 오브젝트의 Renderer만 적용 (자식의 Shadow/Particle/TMP 보호)
+            // fallback: 기존 방식
+            Material shared = GetOrCreateSharedMaterial(color);
+            if (shared == null) return;
+
             Renderer r = obj.GetComponent<Renderer>();
             if (r != null)
             {
@@ -796,7 +811,6 @@ namespace BalloonFlow
                 return;
             }
 
-            // 루트에 Renderer 없으면 첫 번째 자식 MeshRenderer 찾기 (FBX 구조 대응)
             MeshRenderer mr = obj.GetComponentInChildren<MeshRenderer>();
             if (mr != null)
             {
@@ -943,9 +957,10 @@ namespace BalloonFlow
 
         private void RevealAdjacentHiddenBalloons(Vector3 position)
         {
-            List<int> adjacentIds = GetAdjacentBalloonIds(position);
-            foreach (int id in adjacentIds)
+            int count = CopyAdjacentIds(GetAdjacentBalloonIds(position));
+            for (int i = 0; i < count; i++)
             {
+                int id = _adjCopyBuffer[i];
                 if (!_hiddenBalloons.Contains(id)) continue;
                 if (!_balloons.TryGetValue(id, out BalloonData neighbor)) continue;
                 if (neighbor.isPopped) continue;
@@ -972,14 +987,21 @@ namespace BalloonFlow
 
         /// <summary>BFS 큐 기반 체인 팝 (재귀 대신 → StackOverflow 방지)</summary>
         private readonly Queue<int> _chainPopQueue = new Queue<int>();
+        private readonly HashSet<int> _chainPopVisited = new HashSet<int>();
 
         private void ChainPopAdjacentSameColor(BalloonData source)
         {
             _chainPopQueue.Clear();
+            _chainPopVisited.Clear();
+            _chainPopVisited.Add(source.balloonId);
 
             // 시작 풍선의 인접 같은 색 추가
-            foreach (int id in GetAdjacentBalloonIds(source.position))
-                _chainPopQueue.Enqueue(id);
+            List<int> startAdj = GetAdjacentBalloonIds(source.position);
+            for (int i = 0; i < startAdj.Count; i++)
+            {
+                if (_chainPopVisited.Add(startAdj[i]))
+                    _chainPopQueue.Enqueue(startAdj[i]);
+            }
 
             int safety = 0;
             const int MAX_CHAIN = 500;
@@ -994,10 +1016,13 @@ namespace BalloonFlow
 
                 ExecutePop(neighbor);
 
-                // 팝된 풍선의 인접 같은 색도 큐에 추가
-                foreach (int adjId in GetAdjacentBalloonIds(neighbor.position))
-                    if (!_chainPopQueue.Contains(adjId))
-                        _chainPopQueue.Enqueue(adjId);
+                // 팝된 풍선의 인접도 큐에 추가 (HashSet으로 O(1) 중복 체크)
+                List<int> adj = GetAdjacentBalloonIds(neighbor.position);
+                for (int i = 0; i < adj.Count; i++)
+                {
+                    if (_chainPopVisited.Add(adj[i]))
+                        _chainPopQueue.Enqueue(adj[i]);
+                }
             }
         }
 
@@ -1007,14 +1032,14 @@ namespace BalloonFlow
         /// </summary>
         private void RemoveAdjacentPins(Vector3 position)
         {
-            List<int> adjacentIds = GetAdjacentBalloonIds(position);
-            foreach (int id in adjacentIds)
+            int count = CopyAdjacentIds(GetAdjacentBalloonIds(position));
+            for (int i = 0; i < count; i++)
             {
+                int id = _adjCopyBuffer[i];
                 if (!_balloons.TryGetValue(id, out BalloonData neighbor)) continue;
                 if (neighbor.isPopped) continue;
                 if (neighbor.gimmickType != GimmickPin) continue;
 
-                // Force-pop the Pin (bypasses PopBalloon's Pin guard)
                 ExecutePop(neighbor);
             }
         }
@@ -1025,9 +1050,10 @@ namespace BalloonFlow
         /// </summary>
         private void ThawAdjacentIce(Vector3 position)
         {
-            List<int> adjacentIds = GetAdjacentBalloonIds(position);
-            foreach (int id in adjacentIds)
+            int count = CopyAdjacentIds(GetAdjacentBalloonIds(position));
+            for (int i = 0; i < count; i++)
             {
+                int id = _adjCopyBuffer[i];
                 if (!_balloons.TryGetValue(id, out BalloonData neighbor)) continue;
                 if (neighbor.isPopped) continue;
                 if (neighbor.gimmickType != GimmickIce) continue;
@@ -1057,9 +1083,10 @@ namespace BalloonFlow
         /// </summary>
         private void ThawAdjacentFrozenDarts(Vector3 position)
         {
-            List<int> adjacentIds = GetAdjacentBalloonIds(position);
-            foreach (int id in adjacentIds)
+            int count = CopyAdjacentIds(GetAdjacentBalloonIds(position));
+            for (int i = 0; i < count; i++)
             {
+                int id = _adjCopyBuffer[i];
                 if (!_balloons.TryGetValue(id, out BalloonData neighbor)) continue;
                 if (neighbor.isPopped) continue;
                 if (neighbor.gimmickType != GimmickFrozenDart) continue;
@@ -1211,30 +1238,41 @@ namespace BalloonFlow
 
         #region Private Methods — Spatial Helpers
 
+        /// <summary>재사용 리스트 + 방향 배열 (GC 방지)</summary>
+        private readonly List<int> _reusableAdjacentIds = new List<int>(4);
+        /// <summary>순회 중 재진입 방지용 로컬 복사 버퍼 (최대 4방향)</summary>
+        private readonly int[] _adjCopyBuffer = new int[4];
+
+        /// <summary>_reusableAdjacentIds를 로컬 버퍼로 복사. 순회 중 재진입 안전.</summary>
+        private int CopyAdjacentIds(List<int> src)
+        {
+            int count = Mathf.Min(src.Count, _adjCopyBuffer.Length);
+            for (int i = 0; i < count; i++) _adjCopyBuffer[i] = src[i];
+            return count;
+        }
+        private static readonly Vector3Int[] _adjacentDirs =
+        {
+            new Vector3Int( 1, 0,  0),
+            new Vector3Int(-1, 0,  0),
+            new Vector3Int( 0, 0,  1),
+            new Vector3Int( 0, 0, -1)
+        };
+
         private List<int> GetAdjacentBalloonIds(Vector3 position)
         {
-            List<int> neighbors = new List<int>();
+            _reusableAdjacentIds.Clear();
             Vector3Int center = ToGridKey(position);
 
-            // 4-directional adjacency (grid-based layout, XZ plane)
-            Vector3Int[] directions =
+            for (int i = 0; i < _adjacentDirs.Length; i++)
             {
-                new Vector3Int( 1, 0,  0),
-                new Vector3Int(-1, 0,  0),
-                new Vector3Int( 0, 0,  1),
-                new Vector3Int( 0, 0, -1)
-            };
-
-            foreach (Vector3Int dir in directions)
-            {
-                Vector3Int neighbor = center + dir;
+                Vector3Int neighbor = center + _adjacentDirs[i];
                 if (_positionIndex.TryGetValue(neighbor, out int neighborId))
                 {
-                    neighbors.Add(neighborId);
+                    _reusableAdjacentIds.Add(neighborId);
                 }
             }
 
-            return neighbors;
+            return _reusableAdjacentIds;
         }
 
         /// <summary>
