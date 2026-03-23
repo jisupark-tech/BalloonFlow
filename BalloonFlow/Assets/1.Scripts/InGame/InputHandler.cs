@@ -115,6 +115,25 @@ namespace BalloonFlow
 
             Ray ray = _gameCamera.ScreenPointToRay(screenPosition);
 
+            // Color Remove 모드: 풍선 클릭 감지 (Collider-free)
+            if (BoosterExecutor.HasInstance && BoosterExecutor.Instance.IsAwaitingBalloonClick)
+            {
+                if (BalloonController.HasInstance)
+                {
+                    // Orthographic 카메라: screenPos → worldPos (Y=0 평면)
+                    Vector3 worldPos = _gameCamera.ScreenToWorldPoint(
+                        new Vector3(screenPosition.x, screenPosition.y, _gameCamera.nearClipPlane));
+                    worldPos.y = 0.1f; // 풍선 Y 높이
+
+                    int balloonId = BalloonController.Instance.FindNearestBalloonAtWorldPos(worldPos);
+                    if (balloonId >= 0)
+                    {
+                        BoosterExecutor.Instance.OnBalloonClicked(balloonId);
+                        return; // Don't process holder tap
+                    }
+                }
+            }
+
             if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, _holderLayerMask))
             {
                 HolderIdentifier holder = hit.collider.GetComponent<HolderIdentifier>();

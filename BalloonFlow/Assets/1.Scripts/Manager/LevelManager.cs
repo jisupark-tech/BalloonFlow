@@ -296,12 +296,65 @@ namespace BalloonFlow
                 : (config.rail != null && config.rail.slotCount > 0) ? config.rail.slotCount : 0;
             int slotCount = RailManager.CalculateCapacity(totalDarts, explicitCapacity);
 
-            // Rail setup via RailManager (slot-based conveyor belt) with variable capacity
+            // Initialize 2D floor tilemap and conveyor belt tiles BEFORE rail setup
+            // so that BoardTileManager's fixed rail proportions are available for waypoint generation.
+            float cellSpacing = GameManager.HasInstance
+                ? GameManager.Instance.Board.cellSpacing
+                : 0.55f;
+            float boardCX = GameManager.HasInstance ? GameManager.Instance.Board.boardCenterX : 0f;
+            float boardCZ = GameManager.HasInstance ? GameManager.Instance.Board.boardCenterZ : 2f;
+
+            int tileCols = config.gridCols > 0 ? config.gridCols : 5;
+            int tileRows = config.gridRows > 0 ? config.gridRows : 5;
+
+            if (BoardTileManager.HasInstance)
+            {
+                BoardTileManager.Instance.InitializeBoard(
+                    tileCols, tileRows,
+                    new Vector2(boardCX, boardCZ),
+                    cellSpacing
+                );
+
+                // 8타일 고정 컨베이어벨트 (코너4 + 직선4 + Arrow 애니메이션)
+                BoardTileManager.Instance.BuildConveyorBelt();
+            }
+
+            // Rail setup via RailManager (slot-based conveyor belt) with variable capacity.
+            // If config has no explicit waypoints but BoardTileManager proportions are available,
+            // generate waypoints from the fixed proportions.
             if (RailManager.HasInstance && config.rail != null)
             {
+                Vector3[] waypoints = null;
+
+                // 항상 BoardTileManager 고정 비율로 웨이포인트 생성 (저장된 값 무시 → 타일과 일치 보장)
+                if (BoardTileManager.HasInstance)
+                {
+                    var btm = BoardTileManager.Instance;
+                    float fieldWidth = btm.FieldWidth;
+                    float halfFieldX = fieldWidth * 0.5f;
+                    float halfFieldZ = tileRows * cellSpacing * 0.5f;
+                    float offsetH = btm.RailCenterOffsetH;
+                    float offsetVTop = btm.RailCenterOffsetVTop;
+                    float offsetVBottom = btm.RailCenterOffsetVBottom;
+                    float h = 0.1f;
+
+                    float l = boardCX - halfFieldX - offsetH;
+                    float r = boardCX + halfFieldX + offsetH;
+                    float b = boardCZ - halfFieldZ - offsetVBottom;
+                    float t = boardCZ + halfFieldZ + offsetVTop;
+
+                    waypoints = new Vector3[]
+                    {
+                        new Vector3(l, h, b),
+                        new Vector3(r, h, b),
+                        new Vector3(r, h, t),
+                        new Vector3(l, h, t)
+                    };
+                }
+
                 bool smooth = config.rail.smoothCorners;
                 float radius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 1f;
-                RailManager.Instance.SetRailLayout(config.rail.waypoints, slotCount, true, smooth, radius);
+                RailManager.Instance.SetRailLayout(waypoints, slotCount, true, smooth, radius);
             }
 
             // Apply rail visual type to RailRenderer
@@ -339,41 +392,12 @@ namespace BalloonFlow
                     balloonLayout.Add(new BalloonSetupData
                     {
                         color       = bl.color,
-                        position    = new Vector3(bl.gridPosition.x, 0.5f, bl.gridPosition.y),  // XZ plane: gridPosition.y = world Z
+                        position    = new Vector3(bl.gridPosition.x, 0.1f, bl.gridPosition.y),  // XZ plane: gridPosition.y = world Z
                         gimmickType = bl.gimmickType,
                         groupId     = -1
                     });
                 }
                 BalloonController.Instance.SetupBalloons(balloonLayout, config.levelId);
-            }
-
-            // Initialize 2D floor tilemap and conveyor belt tiles
-            if (BoardTileManager.HasInstance)
-            {
-                float cellSpacing = GameManager.HasInstance
-                    ? GameManager.Instance.Board.cellSpacing
-                    : 0.55f;
-                float boardCX = GameManager.HasInstance ? GameManager.Instance.Board.boardCenterX : 0f;
-                float boardCZ = GameManager.HasInstance ? GameManager.Instance.Board.boardCenterZ : 2f;
-
-                int tileCols = config.gridCols > 0 ? config.gridCols : 5;
-                int tileRows = config.gridRows > 0 ? config.gridRows : 5;
-
-                BoardTileManager.Instance.InitializeBoard(
-                    tileCols, tileRows,
-                    new Vector2(boardCX, boardCZ),
-                    cellSpacing
-                );
-
-                // Apply conveyor tile positions from level config, or auto-build rectangular belt
-                if (config.conveyorPositions != null && config.conveyorPositions.Length > 0)
-                {
-                    BoardTileManager.Instance.SetConveyorFromConfig(config.conveyorPositions);
-                }
-                else
-                {
-                    BoardTileManager.Instance.BuildConveyorBelt();
-                }
             }
 
             // Initialize board state tracking with actual balloon count

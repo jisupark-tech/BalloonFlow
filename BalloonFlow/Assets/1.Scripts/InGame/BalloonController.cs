@@ -587,21 +587,11 @@ namespace BalloonFlow
             obj.transform.localScale = Vector3.one * _balloonScale;
             obj.SetActive(true);
 
-            // Apply balloon color to all Renderers (supports multi-material FBX models)
-            // URP Lit shader uses _BaseColor; Standard uses _Color. Set both for compatibility.
+
+            // per-object 색상 변주 (같은 색이라도 톤이 약간씩 다름)
             int colorIdx = Mathf.Clamp(color, 0, BalloonColors.Length - 1);
-            Color balloonColor = BalloonColors[colorIdx];
-            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
-            for (int i = 0; i < renderers.Length; i++)
-            {
-                foreach (Material mat in renderers[i].materials)
-                {
-                    if (mat.HasProperty("_BaseColor"))
-                        mat.SetColor("_BaseColor", balloonColor);
-                    if (mat.HasProperty("_Color"))
-                        mat.SetColor("_Color", balloonColor);
-                }
-            }
+            Color variedColor = GetVariedColor(colorIdx);
+            ApplyTintToObject(obj, variedColor);
 
             // Initialize BalloonIdentifier for dart hit detection
             BalloonIdentifier identifier = obj.GetComponent<BalloonIdentifier>();
@@ -674,19 +664,144 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>
+        /// 색상 변주: 기본색에서 3가지 톤 (기본, 진한, 연한) 중 랜덤 선택.
+        /// 머티리얼은 색상별 캐시되므로 동일 톤끼리 배칭 가능.
+        /// </summary>
+        private const int VARIATION_COUNT = 3; // 기본, 진한, 연한
+
+        public static Color GetVariedColor(int colorIndex)
+        {
+            Color baseColor = BalloonColors[Mathf.Clamp(colorIndex, 0, BalloonColors.Length - 1)];
+
+            int variant = Random.Range(0, VARIATION_COUNT);
+            switch (variant)
+            {
+                case 1: // 진한 톤 (채도+, 명도-)
+                    Color.RGBToHSV(baseColor, out float h1, out float s1, out float v1);
+                    return Color.HSVToRGB(h1, Mathf.Min(s1 + 0.1f, 1f), Mathf.Max(v1 - 0.08f, 0.2f));
+                case 2: // 연한 톤 (채도-, 명도+)
+                    Color.RGBToHSV(baseColor, out float h2, out float s2, out float v2);
+                    return Color.HSVToRGB(h2, Mathf.Max(s2 - 0.12f, 0.1f), Mathf.Min(v2 + 0.1f, 1f));
+                default: // 기본 톤
+                    return baseColor;
+            }
+        }
+
+        /// <summary>색상별 공유 Material 캐시. sharedMaterial 할당 → SRP Batcher 배칭 유지.</summary>
+        private static readonly Dictionary<Color, Material> _sharedColorMats = new Dictionary<Color, Material>();
+        private static Shader _cachedLitShader;
+
+        public static Material GetOrCreateSharedMaterial(Color color)
+        {
+            if (_sharedColorMats.TryGetValue(color, out Material mat))
+                return mat;
+
+            if (_cachedLitShader == null)
+                _cachedLitShader = Shader.Find("Custom/ItemShared")
+                    ?? Shader.Find("Universal Render Pipeline/Lit")
+                    ?? Shader.Find("Standard");
+
+            mat = new Material(_cachedLitShader);
+            mat.SetColor("_BaseColor", color);
+            mat.enableInstancing = true;
+            _sharedColorMats[color] = mat;
+            return mat;
+        }
+
+        /// <summary>아웃라인 ON/OFF 설정 (검은색=활성, 흰색=비활성)</summary>
+        public static void SetOutline(GameObject obj, bool active, Color outlineColor)
+        {
+            Renderer r = obj.GetComponent<Renderer>();
+            if (r == null) return;
+
+            // MaterialPropertyBlock으로 per-object 아웃라인 제어 (SRP Batcher는 Unlit이라 영향 없음)
+            var mpb = new MaterialPropertyBlock();
+            r.GetPropertyBlock(mpb);
+            mpb.SetFloat("_OutlineEnabled", active ? 1f : 0f);
+            mpb.SetColor("_OutlineColor", outlineColor);
+            r.SetPropertyBlock(mpb);
+        }
+
+        /// <summary>Set outline on ALL non-popped balloons.</summary>
+        public void SetAllOutlines(bool active, Color outlineColor)
+        {
+            foreach (var kvp in _balloonObjects)
+            {
+                if (kvp.Value == null) continue;
+                if (_balloons.TryGetValue(kvp.Key, out BalloonData data) && data.isPopped) continue;
+                SetOutline(kvp.Value, active, outlineColor);
+            }
+        }
+
+        /// <summary>Set outline only on balloons of a specific color.</summary>
+        public void SetOutlineByColor(int color, bool active, Color outlineColor)
+        {
+            foreach (var kvp in _balloonObjects)
+            {
+                if (kvp.Value == null) continue;
+                if (!_balloons.TryGetValue(kvp.Key, out BalloonData data)) continue;
+                if (data.isPopped) continue;
+                if (data.color == color)
+                    SetOutline(kvp.Value, active, outlineColor);
+            }
+        }
+
+        /// <summary>
+        /// 화면 클릭 위치에서 가장 가까운 풍선 ID 반환. Collider 없이 동작.
+        /// 월드 좌표 XZ 거리 기반. threshold 이내만 반환, 없으면 -1.
+        /// </summary>
+        public int FindNearestBalloonAtWorldPos(Vector3 worldPos, float threshold = 1f)
+        {
+            int bestId = -1;
+            float bestDist = threshold * threshold; // sqr 비교
+
+            foreach (var kvp in _balloons)
+            {
+                if (kvp.Value.isPopped) continue;
+                float dx = kvp.Value.position.x - worldPos.x;
+                float dz = kvp.Value.position.z - worldPos.z;
+                float sqrDist = dx * dx + dz * dz;
+                if (sqrDist < bestDist)
+                {
+                    bestDist = sqrDist;
+                    bestId = kvp.Key;
+                }
+            }
+            return bestId;
+        }
+
+        /// <summary>Clear all outlines on all balloons.</summary>
+        public void ClearAllOutlines()
+        {
+            foreach (var kvp in _balloonObjects)
+            {
+                if (kvp.Value == null) continue;
+                SetOutline(kvp.Value, false, Color.black);
+            }
+        }
+
+        /// <summary>프리팹 고유 컴포넌트(Shadow, Particle 등) 건드리지 않고 색상만 적용.
+        /// tag "BalloonMesh"가 있는 Renderer만 변경. 없으면 루트 Renderer만.</summary>
         private static void ApplyTintToObject(GameObject obj, Color color)
         {
-            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
-            for (int i = 0; i < renderers.Length; i++)
+            Material shared = GetOrCreateSharedMaterial(color);
+
+            // 루트 오브젝트의 Renderer만 적용 (자식의 Shadow/Particle/TMP 보호)
+            Renderer r = obj.GetComponent<Renderer>();
+            if (r != null)
             {
-                renderers[i].enabled = true; // Ensure visible
-                foreach (Material mat in renderers[i].materials)
-                {
-                    if (mat.HasProperty("_BaseColor"))
-                        mat.SetColor("_BaseColor", color);
-                    if (mat.HasProperty("_Color"))
-                        mat.SetColor("_Color", color);
-                }
+                r.enabled = true;
+                r.sharedMaterial = shared;
+                return;
+            }
+
+            // 루트에 Renderer 없으면 첫 번째 자식 MeshRenderer 찾기 (FBX 구조 대응)
+            MeshRenderer mr = obj.GetComponentInChildren<MeshRenderer>();
+            if (mr != null)
+            {
+                mr.enabled = true;
+                mr.sharedMaterial = shared;
             }
         }
 
@@ -777,18 +892,7 @@ namespace BalloonFlow
                 if (_balloonObjects.TryGetValue(data.balloonId, out GameObject obj) && obj != null)
                 {
                     int colorIdx = Mathf.Clamp(data.color, 0, BalloonColors.Length - 1);
-                    Color balloonColor = BalloonColors[colorIdx];
-                    Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
-                    for (int r = 0; r < renderers.Length; r++)
-                    {
-                        foreach (Material mat in renderers[r].materials)
-                        {
-                            if (mat.HasProperty("_BaseColor"))
-                                mat.SetColor("_BaseColor", balloonColor);
-                            if (mat.HasProperty("_Color"))
-                                mat.SetColor("_Color", balloonColor);
-                        }
-                    }
+                    ApplyTintToObject(obj, BalloonColors[colorIdx]);
                 }
 
                 EventBus.Publish(new OnGimmickTriggered
@@ -866,18 +970,34 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>BFS 큐 기반 체인 팝 (재귀 대신 → StackOverflow 방지)</summary>
+        private readonly Queue<int> _chainPopQueue = new Queue<int>();
+
         private void ChainPopAdjacentSameColor(BalloonData source)
         {
-            List<int> adjacentIds = GetAdjacentBalloonIds(source.position);
-            foreach (int id in adjacentIds)
+            _chainPopQueue.Clear();
+
+            // 시작 풍선의 인접 같은 색 추가
+            foreach (int id in GetAdjacentBalloonIds(source.position))
+                _chainPopQueue.Enqueue(id);
+
+            int safety = 0;
+            const int MAX_CHAIN = 500;
+
+            while (_chainPopQueue.Count > 0 && safety++ < MAX_CHAIN)
             {
+                int id = _chainPopQueue.Dequeue();
                 if (!_balloons.TryGetValue(id, out BalloonData neighbor)) continue;
                 if (neighbor.isPopped) continue;
                 if (neighbor.color != source.color) continue;
-                if (_hiddenBalloons.Contains(id)) continue; // Hidden not yet revealed
+                if (_hiddenBalloons.Contains(id)) continue;
 
-                // Recursive chain — ExecutePop will trigger further chains if that balloon is also Chain type
                 ExecutePop(neighbor);
+
+                // 팝된 풍선의 인접 같은 색도 큐에 추가
+                foreach (int adjId in GetAdjacentBalloonIds(neighbor.position))
+                    if (!_chainPopQueue.Contains(adjId))
+                        _chainPopQueue.Enqueue(adjId);
             }
         }
 
@@ -920,18 +1040,7 @@ namespace BalloonFlow
                 if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
                 {
                     int colorIdx = Mathf.Clamp(neighbor.color, 0, BalloonColors.Length - 1);
-                    Color balloonColor = BalloonColors[colorIdx];
-                    Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
-                    for (int r = 0; r < renderers.Length; r++)
-                    {
-                        foreach (Material mat in renderers[r].materials)
-                        {
-                            if (mat.HasProperty("_BaseColor"))
-                                mat.SetColor("_BaseColor", balloonColor);
-                            if (mat.HasProperty("_Color"))
-                                mat.SetColor("_Color", balloonColor);
-                        }
-                    }
+                    ApplyTintToObject(obj, BalloonColors[colorIdx]);
                 }
 
                 EventBus.Publish(new OnGimmickTriggered
@@ -964,18 +1073,7 @@ namespace BalloonFlow
                 if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
                 {
                     int colorIdx = Mathf.Clamp(neighbor.color, 0, BalloonColors.Length - 1);
-                    Color balloonColor = BalloonColors[colorIdx];
-                    Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
-                    for (int r = 0; r < renderers.Length; r++)
-                    {
-                        foreach (Material mat in renderers[r].materials)
-                        {
-                            if (mat.HasProperty("_BaseColor"))
-                                mat.SetColor("_BaseColor", balloonColor);
-                            if (mat.HasProperty("_Color"))
-                                mat.SetColor("_Color", balloonColor);
-                        }
-                    }
+                    ApplyTintToObject(obj, BalloonColors[colorIdx]);
                 }
 
                 EventBus.Publish(new OnGimmickTriggered

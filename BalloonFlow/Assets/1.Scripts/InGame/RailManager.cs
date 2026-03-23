@@ -816,7 +816,8 @@ namespace BalloonFlow
         {
             if (_slotSpacing <= 0f || _slotCount == 0) return 0;
             float rawIndex = (pathDistance - _rotationOffset) / _slotSpacing;
-            int slot = Mathf.RoundToInt(rawIndex) % _slotCount;
+            // FloorToInt: 슬롯 전환이 균일 (RoundToInt는 경계에서 같은 값 반복)
+            int slot = Mathf.FloorToInt(rawIndex) % _slotCount;
             return (slot % _slotCount + _slotCount) % _slotCount;
         }
 
@@ -1038,7 +1039,8 @@ namespace BalloonFlow
             float adjacencyThreshold = _slotSpacing * 1.3f;
 
             bool changed = true;
-            while (changed)
+            int maxIterations = _slotCount + 1; // 최대 슬롯 수만큼만 반복 (안전장치)
+            while (changed && maxIterations-- > 0)
             {
                 changed = false;
                 for (int s = 0; s < _slotCount; s++)
