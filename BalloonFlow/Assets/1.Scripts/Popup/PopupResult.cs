@@ -116,14 +116,18 @@ namespace BalloonFlow
                 if (PopupManager.HasInstance)
                     PopupManager.Instance.CloseAllPopups();
 
-                UnityEngine.SceneManagement.SceneManager.LoadScene(GameManager.SCENE_MAPMAKER);
+                if (GameManager.HasInstance)
+                    GameManager.Instance.LoadScene(GameManager.SCENE_MAPMAKER);
                 return;
             }
 
             // 하트 확인
             if (LifeManager.HasInstance && LifeManager.Instance.CurrentLives <= 0)
             {
-                UnityEngine.SceneManagement.SceneManager.LoadScene("Lobby");
+                if (GameManager.HasInstance)
+                    GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY);
+                else
+                    UnityEngine.SceneManagement.SceneManager.LoadScene("Lobby");
                 return;
             }
 
@@ -142,7 +146,10 @@ namespace BalloonFlow
             if (PopupManager.HasInstance)
                 PopupManager.Instance.CloseAllPopups();
 
-            UnityEngine.SceneManagement.SceneManager.LoadScene("Lobby");
+            if (GameManager.HasInstance)
+                GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY);
+            else
+                UnityEngine.SceneManagement.SceneManager.LoadScene("Lobby");
         }
 
         #endregion

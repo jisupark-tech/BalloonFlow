@@ -101,8 +101,11 @@ namespace BalloonFlow
             if (PopupManager.HasInstance)
                 PopupManager.Instance.CloseAllPopups();
 
-            // 로비씬 이동
-            UnityEngine.SceneManagement.SceneManager.LoadScene("Lobby");
+            // 로비씬 이동 (GameManager 경유 → CleanupInGame 실행)
+            if (GameManager.HasInstance)
+                GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY);
+            else
+                UnityEngine.SceneManagement.SceneManager.LoadScene("Lobby");
         }
     }
 }
