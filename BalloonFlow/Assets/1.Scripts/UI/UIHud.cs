@@ -141,7 +141,8 @@ namespace BalloonFlow
             if (!CanUseBooster(BoosterManager.COLOR_REMOVE)) return;
             BoosterManager.Instance.UseBooster(BoosterManager.COLOR_REMOVE);
             RefreshBoosterCounts();
-            if (_colorPanel != null) _colorPanel.SetActive(true);
+            // 색상 패널 제거 — 카메라가 필드로 이동 → 풍선 직접 클릭으로 색상 선택
+            // BoosterExecutor.HandleBoosterUsed에서 카메라 이동 + 아웃라인 처리
         }
 
         private void OnHandClicked()
