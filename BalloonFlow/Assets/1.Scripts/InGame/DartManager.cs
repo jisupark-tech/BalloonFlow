@@ -73,7 +73,7 @@ namespace BalloonFlow
         private readonly HashSet<int> _reservedTargets = new HashSet<int>();
 
         /// <summary>Max darts that can fire in a single frame to prevent visual clutter.</summary>
-        private const int MAX_FIRES_PER_FRAME = 20;
+        private const int MAX_FIRES_PER_FRAME = 40;
 
         /// <summary>When true, board is cleared or failed — stop all scanning/firing.</summary>
         private bool _boardFinished;
