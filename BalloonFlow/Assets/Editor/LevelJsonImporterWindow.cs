@@ -130,6 +130,7 @@ namespace BalloonFlow.Editor
 
         private void DrawToolbar()
         {
+            // ── Row 1: Import 도구 ──
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
 
             if (GUILayout.Button("파일 추가...", EditorStyles.toolbarButton, GUILayout.Width(90)))
@@ -157,6 +158,31 @@ namespace BalloonFlow.Editor
                 ApplyToDatabase();
             GUI.enabled = true;
 
+            EditorGUILayout.EndHorizontal();
+
+            // ── Row 2: DB 관리 도구 ──
+            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+
+            if (GUILayout.Button("DB Export", EditorStyles.toolbarButton, GUILayout.Width(80)))
+                LevelDatabaseTools.ExportAll();
+
+            if (GUILayout.Button("DB Import", EditorStyles.toolbarButton, GUILayout.Width(80)))
+                LevelDatabaseTools.ImportAll();
+
+            GUILayout.Space(5);
+
+            if (GUILayout.Button("백업", EditorStyles.toolbarButton, GUILayout.Width(50)))
+                LevelDatabaseTools.ManualBackup();
+
+            if (GUILayout.Button("롤백", EditorStyles.toolbarButton, GUILayout.Width(50)))
+                LevelDatabaseTools.DoRollback();
+
+            GUILayout.Space(5);
+
+            if (GUILayout.Button("레벨 Swap", EditorStyles.toolbarButton, GUILayout.Width(80)))
+                LevelDatabaseTools.SwapLevels();
+
+            GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
         }
 
@@ -909,6 +935,12 @@ namespace BalloonFlow.Editor
                 db.levels = Array.Empty<LevelConfig>();
                 AssetDatabase.CreateAsset(db, dbPath);
             }
+
+            // 덮어쓰기가 있으면 자동 백업
+            bool hasOverwrite = _overwriteConflicts &&
+                _entries.Any(e => e.selected && e.conflict && e.config != null && e.error == null);
+            if (hasOverwrite)
+                LevelDatabaseTools.CreateBackup(db, "before_overwrite");
 
             Undo.RecordObject(db, "Import Level Data From JSON");
 

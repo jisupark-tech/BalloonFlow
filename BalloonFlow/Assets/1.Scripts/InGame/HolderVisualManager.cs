@@ -25,12 +25,17 @@ namespace BalloonFlow
         private const int MAGAZINE_FONT_SIZE = 5;
         private const float DEPLOY_MOVE_SPEED = 12f;
 
-        // 이미지 비율 기준 (풍선 필드 가로 = 1.0 기준)
-        private const float RATIO_HOLDER_SPACING = 0.12f;    // 보관함 좌우 간격 (여유 추가: 9% → 12%)
-        private const float RATIO_HOLDER_SIZE    = 0.173f;   // 보관함 크기
-        private const float RATIO_RAIL_TO_DEPLOY = 0.35f;    // 컨베이어 ~ 도착위치
-        private const float RATIO_RAIL_TO_QUEUE  = 0.65f;    // 컨베이어 ~ 보관함 1열
-        private const float RATIO_ROW_SPACING    = 0.26f;    // 보관함 행 간격 (앞뒤 마진 추가: 21% → 26%)
+        // 보관함 배치 수치 — 절대 최소값 보장 (프리팹 스케일 1.04 기준)
+        private const float MIN_COL_SPACING      = 1.8f;     // 보관함 좌우 최소 간격
+        private const float MIN_ROW_SPACING       = 1.8f;     // 보관함 앞뒤 최소 간격
+        private const float MIN_DEPLOY_GAP        = 2.0f;     // 컨베이어 ~ 도착위치 최소 거리
+        private const float MIN_RAIL_TO_QUEUE     = 3.5f;     // 컨베이어 ~ 보관함 1열 최소 거리
+
+        // 비율 기준 (큰 필드에서 비례 확장)
+        private const float RATIO_COL_SPACING     = 0.293f;   // 필드 폭 × (보관함+간격)
+        private const float RATIO_ROW_SPACING     = 0.26f;    // 필드 폭 × 행 간격
+        private const float RATIO_DEPLOY_GAP      = 0.35f;    // 필드 폭 × 도착 거리
+        private const float RATIO_RAIL_TO_QUEUE   = 0.65f;    // 필드 폭 × 보관함 거리
 
         #endregion
 
@@ -321,37 +326,34 @@ namespace BalloonFlow
         #region Private Methods — Queue Positioning
 
         /// <summary>
-        /// 필드 폭 비율 기반으로 보관함 배치 계산.
-        /// 보관함 간격, 행 간격, 컨베이어~보관함 거리 전부 필드 폭에 비례.
+        /// 필드 폭 비율 기반 + 최소값 보장으로 보관함 배치 계산.
+        /// 작은 필드에서도 보관함끼리 겹치지 않음.
         /// </summary>
-        private float _rowSpacing = 1.5f;
-        private float _deployGap;  // 컨베이어 ~ 도착 위치
+        private float _rowSpacing = 1.8f;
+        private float _deployGap = 2.0f;
 
         private void ComputeDynamicLayout()
         {
             CacheRailBottom();
 
-            float fw = 8f; // fallback
+            float fw = 8f;
             if (BoardTileManager.HasInstance)
                 fw = BoardTileManager.Instance.FieldWidth;
 
-            // 보관함 열 간격 = 보관함 크기 + 보관함 간 간격
-            _columnSpacing = fw * (RATIO_HOLDER_SIZE + RATIO_HOLDER_SPACING);
+            // 비율 vs 최소값 중 큰 값 사용
+            _columnSpacing = Mathf.Max(fw * RATIO_COL_SPACING, MIN_COL_SPACING);
+            _rowSpacing = Mathf.Max(fw * RATIO_ROW_SPACING, MIN_ROW_SPACING);
+            _deployGap = Mathf.Max(fw * RATIO_DEPLOY_GAP, MIN_DEPLOY_GAP);
+            float railToQueue = Mathf.Max(fw * RATIO_RAIL_TO_QUEUE, MIN_RAIL_TO_QUEUE);
 
-            // 전체 보관함 폭이 필드 폭을 초과하면 축소
+            // 전체 보관함 폭이 필드 폭을 초과하면 축소 (단, MIN 이하로는 안 줄임)
             if (_queueColumns > 1)
             {
                 float neededWidth = (_queueColumns - 1) * _columnSpacing;
-                if (neededWidth > fw)
-                    _columnSpacing = fw / (_queueColumns - 1);
+                if (neededWidth > fw * 1.2f) // 필드 120%까지 허용
+                    _columnSpacing = Mathf.Max(fw * 1.2f / (_queueColumns - 1), MIN_COL_SPACING);
             }
 
-            // 행 간격, 도착 갭
-            _rowSpacing = fw * RATIO_ROW_SPACING;
-            _deployGap = fw * RATIO_RAIL_TO_DEPLOY;
-
-            // 보관함 1열 Z = 컨베이어 바닥 - (컨베이어~보관함 거리)
-            float railToQueue = fw * RATIO_RAIL_TO_QUEUE;
             _queueBaseZ = _cachedRailZ - railToQueue;
         }
 

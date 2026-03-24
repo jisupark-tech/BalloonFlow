@@ -356,18 +356,16 @@ namespace BalloonFlow
                 if (BoardTileManager.HasInstance)
                 {
                     var btm = BoardTileManager.Instance;
-                    float fieldWidth = btm.FieldWidth;
-                    float halfFieldX = fieldWidth * 0.5f;
-                    float halfFieldZ = tileRows * cellSpacing * 0.5f;
-                    float offsetH = btm.RailCenterOffsetH;
-                    float offsetVTop = btm.RailCenterOffsetVTop;
-                    float offsetVBottom = btm.RailCenterOffsetVBottom;
                     float h = 0.1f;
 
-                    float l = boardCX - halfFieldX - offsetH;
-                    float r = boardCX + halfFieldX + offsetH;
-                    float b = boardCZ - halfFieldZ - offsetVBottom;
-                    float t = boardCZ + halfFieldZ + offsetVTop;
+                    // 타일 배치와 동일한 좌표 사용 (외곽 = 타일 중심)
+                    float halfCW = btm.TotalAreaWidth * 0.5f;
+                    float halfCH = btm.TotalAreaHeight * 0.5f;
+
+                    float l = boardCX - halfCW;
+                    float r = boardCX + halfCW;
+                    float b = boardCZ - halfCH;
+                    float t = boardCZ + halfCH;
 
                     int sides = btm.RailSideCount;
 
@@ -470,6 +468,12 @@ namespace BalloonFlow
             if (GimmickManager.HasInstance)
             {
                 GimmickManager.Instance.InitializeGimmicks(config);
+            }
+
+            // 카메라 orthoSize 고정 (해상도/비율 픽스)
+            if (CameraManager.HasInstance && CameraManager.Instance.MainCamera != null)
+            {
+                CameraManager.Instance.MainCamera.orthographicSize = 15f;
             }
 
             // Publish level-loaded for any remaining listeners (HUDController, etc.)

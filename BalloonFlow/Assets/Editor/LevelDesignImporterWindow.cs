@@ -93,7 +93,8 @@ namespace BalloonFlow.Editor
 
         #region Menu
 
-        [MenuItem("BalloonFlow/Import Level Design", false, 50)]
+        // 메뉴 비활성화 — Import Level Data From JSON으로 통합
+        // [MenuItem("BalloonFlow/Import Level Design", false, 50)]
         public static void ShowWindow()
         {
             var win = GetWindow<LevelDesignImporterWindow>("Level Importer");

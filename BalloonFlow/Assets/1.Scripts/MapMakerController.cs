@@ -140,9 +140,9 @@ namespace BalloonFlow
 
         /// <summary>
         /// Conveyor tile render size based on fixed rail width proportion.
-        /// Uses fieldWidth * 0.17 for consistent belt thickness across all levels.
+        /// InGame BoardTileManager.RAIL_THICKNESS와 동일한 절대값.
         /// </summary>
-        private float ConveyorTileSize => _gridCols * CellSpacing * 0.556f;
+        private float ConveyorTileSize => 2.0f;
 
         #endregion
 
