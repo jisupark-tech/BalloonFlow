@@ -315,18 +315,20 @@ namespace BalloonFlow
                     cellSpacing
                 );
 
-                // 8타일 고정 컨베이어벨트 (코너4 + 직선4 + Arrow 애니메이션)
+                // RailSideCount를 먼저 설정 → BuildConveyorBelt에서 면 수 반영
+                int railSides = RailManager.GetRailSideCount(slotCount);
+                BoardTileManager.Instance.RailSideCount = railSides;
+
+                // 면 수에 맞는 컨베이어벨트 타일 빌드
                 BoardTileManager.Instance.BuildConveyorBelt();
             }
 
             // Rail setup via RailManager (slot-based conveyor belt) with variable capacity.
-            // If config has no explicit waypoints but BoardTileManager proportions are available,
-            // generate waypoints from the fixed proportions.
             if (RailManager.HasInstance && config.rail != null)
             {
                 Vector3[] waypoints = null;
 
-                // 항상 BoardTileManager 고정 비율로 웨이포인트 생성 (저장된 값 무시 → 타일과 일치 보장)
+                // 허용량에 따라 1~4면 웨이포인트 생성
                 if (BoardTileManager.HasInstance)
                 {
                     var btm = BoardTileManager.Instance;
@@ -343,18 +345,52 @@ namespace BalloonFlow
                     float b = boardCZ - halfFieldZ - offsetVBottom;
                     float t = boardCZ + halfFieldZ + offsetVTop;
 
-                    waypoints = new Vector3[]
+                    int sides = btm.RailSideCount;
+
+                    switch (sides)
                     {
-                        new Vector3(l, h, b),
-                        new Vector3(r, h, b),
-                        new Vector3(r, h, t),
-                        new Vector3(l, h, t)
-                    };
+                        case 1: // 하단만 (→)
+                            waypoints = new Vector3[]
+                            {
+                                new Vector3(l, h, b),
+                                new Vector3(r, h, b)
+                            };
+                            break;
+                        case 2: // 하단(→) + 우측(↑)
+                            waypoints = new Vector3[]
+                            {
+                                new Vector3(l, h, b),
+                                new Vector3(r, h, b),
+                                new Vector3(r, h, t)
+                            };
+                            break;
+                        case 3: // 하단(→) + 우측(↑) + 상단(←)
+                            waypoints = new Vector3[]
+                            {
+                                new Vector3(l, h, b),
+                                new Vector3(r, h, b),
+                                new Vector3(r, h, t),
+                                new Vector3(l, h, t)
+                            };
+                            break;
+                        default: // 4면 전체 (사각형 순환)
+                            waypoints = new Vector3[]
+                            {
+                                new Vector3(l, h, b),
+                                new Vector3(r, h, b),
+                                new Vector3(r, h, t),
+                                new Vector3(l, h, t)
+                            };
+                            break;
+                    }
                 }
 
                 bool smooth = config.rail.smoothCorners;
                 float radius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 1f;
-                RailManager.Instance.SetRailLayout(waypoints, slotCount, true, smooth, radius);
+                // 4면만 closedLoop (물리적 순환). 1~3면은 개방 경로 + 슬롯 래핑으로 순간이동
+                int sideCount = RailManager.GetRailSideCount(slotCount);
+                bool isLoop = (sideCount >= 4);
+                RailManager.Instance.SetRailLayout(waypoints, slotCount, isLoop, smooth, radius);
             }
 
             // Apply rail visual type to RailRenderer

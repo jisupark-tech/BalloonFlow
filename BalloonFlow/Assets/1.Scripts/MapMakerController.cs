@@ -1282,25 +1282,61 @@ namespace BalloonFlow
             float hCenter = (left + right) * 0.5f;
             float vCenter = (bottom + top) * 0.5f;
 
-            // 4 코너 (고정 크기) — 아래왼쪽:bl, 아래오른쪽:br, 위오른쪽:tr, 위왼쪽:tl
             Sprite spBL = _railTileSet != null ? _railTileSet.tileBL : null;
             Sprite spBR = _railTileSet != null ? _railTileSet.tileBR : null;
             Sprite spTL = _railTileSet != null ? _railTileSet.tileTL : null;
             Sprite spTR = _railTileSet != null ? _railTileSet.tileTR : null;
-
-            PlaceConveyorSpriteTile(spBL, new Vector3(left, _railHeight, bottom), cornerSize);
-            PlaceConveyorSpriteTile(spBR, new Vector3(right, _railHeight, bottom), cornerSize);
-            PlaceConveyorSpriteTile(spTL, new Vector3(left, _railHeight, top), cornerSize);
-            PlaceConveyorSpriteTile(spTR, new Vector3(right, _railHeight, top), cornerSize);
-
-            // 4 직선
             Sprite hSprite = _railTileSet != null ? _railTileSet.GetH() : null;
             Sprite vSprite = _railTileSet != null ? _railTileSet.GetV() : null;
 
-            PlaceConveyorSpriteTileStretched(hSprite, new Vector3(hCenter, _railHeight, bottom), hLength, cornerSize); // 하단
-            PlaceConveyorSpriteTileStretched(hSprite, new Vector3(hCenter, _railHeight, top), hLength, cornerSize);    // 상단
-            PlaceConveyorSpriteTileStretched(vSprite, new Vector3(left, _railHeight, vCenter), cornerSize, vLength);   // 좌측
-            PlaceConveyorSpriteTileStretched(vSprite, new Vector3(right, _railHeight, vCenter), cornerSize, vLength);  // 우측
+            // 허용량별 면 수 계산
+            int totalDarts = 0;
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                    if (_balloonColors[c, r] >= 0) totalDarts++;
+            int capacity = _railSlotCount > 0 ? _railSlotCount : RailManager.CalculateCapacity(totalDarts);
+            int sides = RailManager.GetRailSideCount(capacity);
+
+            // 하단 (항상)
+            PlaceConveyorSpriteTileStretched(hSprite, new Vector3(hCenter, _railHeight, bottom), hLength, cornerSize);
+
+            // 우측 (2면+)
+            if (sides >= 2)
+            {
+                PlaceConveyorSpriteTile(spBR, new Vector3(right, _railHeight, bottom), cornerSize);
+                PlaceConveyorSpriteTileStretched(vSprite, new Vector3(right, _railHeight, vCenter), cornerSize, vLength);
+            }
+
+            // 상단 (3면+)
+            if (sides >= 3)
+            {
+                PlaceConveyorSpriteTile(spTR, new Vector3(right, _railHeight, top), cornerSize);
+                PlaceConveyorSpriteTileStretched(hSprite, new Vector3(hCenter, _railHeight, top), hLength, cornerSize);
+            }
+
+            // 좌측 (4면)
+            if (sides >= 4)
+            {
+                PlaceConveyorSpriteTile(spBL, new Vector3(left, _railHeight, bottom), cornerSize);
+                PlaceConveyorSpriteTile(spTL, new Vector3(left, _railHeight, top), cornerSize);
+                PlaceConveyorSpriteTileStretched(vSprite, new Vector3(left, _railHeight, vCenter), cornerSize, vLength);
+            }
+
+            // 끝점 코너 캡
+            if (sides == 1)
+            {
+                PlaceConveyorSpriteTile(spBL, new Vector3(left, _railHeight, bottom), cornerSize);
+                PlaceConveyorSpriteTile(spBR, new Vector3(right, _railHeight, bottom), cornerSize);
+            }
+            else if (sides == 2)
+            {
+                PlaceConveyorSpriteTile(spBL, new Vector3(left, _railHeight, bottom), cornerSize);
+            }
+            else if (sides == 3)
+            {
+                PlaceConveyorSpriteTile(spBL, new Vector3(left, _railHeight, bottom), cornerSize);
+                PlaceConveyorSpriteTile(spTL, new Vector3(left, _railHeight, top), cornerSize);
+            }
 
             // Paint 모드일 때 가이드 그리드 표시
             if (_conveyorPaintMode && _pathGrid != null)
