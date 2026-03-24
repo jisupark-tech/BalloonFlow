@@ -226,11 +226,22 @@ namespace BalloonFlow
         /// <summary>InGame 매니저 전부 파괴. InGame 씬 퇴장 시 호출.</summary>
         public void CleanupInGame()
         {
+            // 풀 오브젝트 정리 (DontDestroyOnLoad라 씬 전환에서 안 사라짐)
+            if (BalloonController.HasInstance)
+                BalloonController.Instance.ClearAllBalloons();
+            if (DartManager.HasInstance)
+                DartManager.Instance.ClearAllDarts();
+            if (HolderVisualManager.HasInstance)
+                HolderVisualManager.Instance.ClearAllVisuals();
+            if (RailManager.HasInstance)
+                RailManager.Instance.ResetAll();
+            if (PopupManager.HasInstance)
+                PopupManager.Instance.CloseAllPopups();
+
             if (_inGameRoot != null)
             {
                 Destroy(_inGameRoot);
                 _inGameRoot = null;
-                Debug.Log("[GameManager] CleanupInGame 완료");
             }
         }
 

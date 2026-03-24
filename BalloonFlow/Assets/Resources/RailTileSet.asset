@@ -18,6 +18,10 @@ MonoBehaviour:
   tileBR: {fileID: 21300000, guid: 44e6d1fb02bef0f4dac50f2c2a3569c3, type: 3}
   tileTL: {fileID: 21300000, guid: 06a9ecf1922c4124197f879512a0969b, type: 3}
   tileTR: {fileID: 21300000, guid: d0d5ec8042c6b28478b2bcbfb168a43b, type: 3}
+  capB: {fileID: 21300000, guid: d084bf19160de6d40a43e2240fc0c506, type: 3}
+  capT: {fileID: 21300000, guid: 8d1b2276415d1fe47898a87cdd998c9a, type: 3}
+  capL: {fileID: 21300000, guid: 38e11c41f97bb204cb5e70f5823347d0, type: 3}
+  capR: {fileID: 21300000, guid: 3a12540a8d3372742921fca60f9ea36d, type: 3}
   tileBH: {fileID: 21300000, guid: 2e6e7cf86097e1948854923ad8171f1d, type: 3}
   tileTH: {fileID: 21300000, guid: 2e6e7cf86097e1948854923ad8171f1d, type: 3}
   tileVL: {fileID: 21300000, guid: 985d703f21e14914d96594ab3b210cda, type: 3}
