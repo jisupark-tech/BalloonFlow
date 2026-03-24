@@ -68,6 +68,9 @@ namespace BalloonFlow
         private RailTileSet _spriteRailTileSet;
         private Sprite _cachedArrowSprite;
 
+        /// <summary>허용량별 레일 면 수 (1~4). LevelManager에서 설정.</summary>
+        public int RailSideCount { get; set; } = 4;
+
         // Arrow: 슬롯 기반 회전 (다트처럼 벨트와 함께 이동)
         private const int ARROW_COUNT = 20;
         private GameObject[] _arrowObjects;
@@ -374,18 +377,56 @@ namespace BalloonFlow
             Sprite spTL = _spriteRailTileSet != null ? _spriteRailTileSet.tileTL : null;
             Sprite spTR = _spriteRailTileSet != null ? _spriteRailTileSet.tileTR : null;
 
-            PlaceConveyorSprite(spBL, left, bottom, cornerSize);
-            PlaceConveyorSprite(spBR, right, bottom, cornerSize);
-            PlaceConveyorSprite(spTL, left, top, cornerSize);
-            PlaceConveyorSprite(spTR, right, top, cornerSize);
-
             Sprite hSprite = GetTileSprite(true, false, true, false);
             Sprite vSprite = GetTileSprite(false, true, false, true);
 
-            PlaceConveyorSpriteStretched(hSprite, hCenter, bottom, hLength, cornerSize);
-            PlaceConveyorSpriteStretched(hSprite, hCenter, top, hLength, cornerSize);
-            PlaceConveyorSpriteStretched(vSprite, left, vCenter, cornerSize, vLength);
-            PlaceConveyorSpriteStretched(vSprite, right, vCenter, cornerSize, vLength);
+            int sides = RailSideCount;
+
+            // 하단 (항상 존재)
+            if (sides >= 1)
+            {
+                PlaceConveyorSpriteStretched(hSprite, hCenter, bottom, hLength, cornerSize);
+            }
+
+            // 우측 (2면 이상)
+            if (sides >= 2)
+            {
+                PlaceConveyorSprite(spBR, right, bottom, cornerSize);
+                PlaceConveyorSpriteStretched(vSprite, right, vCenter, cornerSize, vLength);
+            }
+
+            // 상단 (3면 이상)
+            if (sides >= 3)
+            {
+                PlaceConveyorSprite(spTR, right, top, cornerSize);
+                PlaceConveyorSpriteStretched(hSprite, hCenter, top, hLength, cornerSize);
+            }
+
+            // 좌측 (4면 — 전체 순환)
+            if (sides >= 4)
+            {
+                PlaceConveyorSprite(spBL, left, bottom, cornerSize);
+                PlaceConveyorSprite(spTL, left, top, cornerSize);
+                PlaceConveyorSpriteStretched(vSprite, left, vCenter, cornerSize, vLength);
+            }
+
+            // 1면만: 시작/끝에 코너 캡 표시
+            if (sides == 1)
+            {
+                PlaceConveyorSprite(spBL, left, bottom, cornerSize);
+                PlaceConveyorSprite(spBR, right, bottom, cornerSize);
+            }
+            // 2면: BL 코너 + TR 끝점
+            else if (sides == 2)
+            {
+                PlaceConveyorSprite(spBL, left, bottom, cornerSize);
+            }
+            // 3면: BL + TL 끝점
+            else if (sides == 3)
+            {
+                PlaceConveyorSprite(spBL, left, bottom, cornerSize);
+                PlaceConveyorSprite(spTL, left, top, cornerSize);
+            }
 
             // Arrow: 슬롯 기반 (다트처럼 벨트와 함께 회전)
             SpawnArrows();
