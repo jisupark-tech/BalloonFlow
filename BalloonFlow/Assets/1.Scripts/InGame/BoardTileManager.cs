@@ -44,10 +44,10 @@ namespace BalloonFlow
         private int _rows;
 
         // Fixed conveyor proportions (all relative to fieldWidth)
-        private const float PROP_RAIL_WIDTH       = 0.39f; // 0.30 × 1.3 (30% 두껍게)
-        private const float PROP_RAIL_GAP_H       = 0.07f;
-        private const float PROP_TOTAL_WIDTH       = 1.48f;
-        private const float PROP_TOTAL_HEIGHT      = 1.72f;
+        private const float PROP_RAIL_WIDTH       = 0.556f;
+        private const float PROP_RAIL_GAP_H       = 0.01f;  // 레일이 안쪽으로 겹치도록 갭 축소
+        private const float PROP_TOTAL_WIDTH       = 1.48f;  // 원래 값 유지 → 바깥으로 안 나감
+        private const float PROP_TOTAL_HEIGHT      = 1.72f;  // 원래 값 유지
         private const float PROP_RAIL_GAP_V_TOP    = 0.09f;
         private const float PROP_RAIL_GAP_V_BOTTOM = 0.12f;
 
