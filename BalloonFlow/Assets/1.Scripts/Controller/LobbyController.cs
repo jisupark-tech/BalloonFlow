@@ -23,6 +23,12 @@ namespace BalloonFlow
                 _go.AddComponent<GameManager>();
             }
 
+            // 테스트 플래그 초기화 (MapMaker에서 남은 것 정리)
+            #if UNITY_EDITOR
+            UnityEditor.EditorPrefs.SetBool("BalloonFlow_UseTestLevel", false);
+            #endif
+            GameManager.IsTestPlayMode = false;
+
             // Lobby 매니저 초기화
             GameManager.Instance.InitLobby();
 

@@ -43,14 +43,13 @@ namespace BalloonFlow
         private int _cols;
         private int _rows;
 
-        // Fixed conveyor proportions (all relative to fieldWidth)
-        private const float PROP_RAIL_WIDTH       = 0.556f;
-        private const float PROP_RAIL_GAP_H       = 0.01f;  // 레일이 안쪽으로 겹치도록 갭 축소
-        private const float PROP_TOTAL_WIDTH       = 1.48f;  // 원래 값 유지 → 바깥으로 안 나감
-        private const float PROP_TOTAL_HEIGHT      = 1.72f;  // 원래 값 유지
-        private const float PROP_RAIL_GAP_V_TOP    = 0.09f;
-        private const float PROP_RAIL_GAP_V_BOTTOM = 0.12f;
-
+        // 컨베이어 외곽 절대 크기 (월드 유닛, 카메라 orthoSize=15, aspect=0.46 기준)
+        // 화면 가로 = 30 × 0.46 = 13.8 유닛
+        private const float CONVEYOR_WIDTH     = 12f;   // 화면 양쪽 끝에 거의 닿음
+        private const float CONVEYOR_HEIGHT    = 18.0f;   // 세로 (HUD/보관함 뺀 영역)
+        private const float RAIL_THICKNESS     = 5f;    // 레일 두께 (두껍게)
+        private const float RAIL_GAP           = 0.2f;    // 레일~풍선 필드 사이 마진
+        
         // Cached rail layout values (computed in InitializeBoard)
         private float _fieldWidth;
         private float _railWidth;
@@ -95,7 +94,7 @@ namespace BalloonFlow
         /// <summary>Horizontal gap between rail inner edge and balloon field edge.</summary>
         public float RailGapH => _railGapH;
 
-        /// <summary>Total conveyor area width in world units.</summary>
+        /// <summary>컨베이어 전체 너비 (절대값).</summary>
         public float TotalAreaWidth => _totalAreaWidth;
 
         /// <summary>Total conveyor area height in world units.</summary>
@@ -186,14 +185,14 @@ namespace BalloonFlow
             _rows = rows;
             _cellSpacing = cellSpacing;
 
-            // 고정 비율
+            // 컨베이어 외곽 고정 → 필드가 안에 맞춤
             _fieldWidth       = cols * cellSpacing;
-            _railWidth        = _fieldWidth * PROP_RAIL_WIDTH; // 30%
-            _railGapH         = _fieldWidth * PROP_RAIL_GAP_H;
-            _totalAreaWidth   = _fieldWidth * PROP_TOTAL_WIDTH;
-            _totalAreaHeight  = _fieldWidth * PROP_TOTAL_HEIGHT;
-            _railGapVTop      = _fieldWidth * PROP_RAIL_GAP_V_TOP;
-            _railGapVBottom   = _fieldWidth * PROP_RAIL_GAP_V_BOTTOM;
+            _railWidth        = RAIL_THICKNESS;
+            _railGapH         = RAIL_GAP;
+            _totalAreaWidth   = CONVEYOR_WIDTH;
+            _totalAreaHeight  = CONVEYOR_HEIGHT;
+            _railGapVTop      = RAIL_GAP;
+            _railGapVBottom   = RAIL_GAP;
 
             _floorTile = Resources.Load<TileBase>("Tiles/FloorTile");
             _conveyorTile = Resources.Load<TileBase>("Tiles/ConveyorTile");
@@ -355,16 +354,14 @@ namespace BalloonFlow
             float boardCX = GameManager.HasInstance ? GameManager.Instance.Board.boardCenterX : 0f;
             float boardCZ = GameManager.HasInstance ? GameManager.Instance.Board.boardCenterZ : 2f;
 
-            float halfFieldX = _fieldWidth * 0.5f;
-            float halfFieldZ = _rows * _cellSpacing * 0.5f;
-            float offsetH = _railGapH + _railWidth * 0.5f;
-            float offsetVTop = _railGapVTop + _railWidth * 0.5f;
-            float offsetVBottom = _railGapVBottom + _railWidth * 0.5f;
+            // 가로: 컨베이어 외곽 절대값
+            float halfConveyorW = CONVEYOR_WIDTH * 0.5f;
+            float halfConveyorH = CONVEYOR_HEIGHT * 0.5f;
 
-            float left   = boardCX - halfFieldX - offsetH;
-            float right  = boardCX + halfFieldX + offsetH;
-            float bottom = boardCZ - halfFieldZ - offsetVBottom;
-            float top    = boardCZ + halfFieldZ + offsetVTop;
+            float left   = boardCX - halfConveyorW;
+            float right  = boardCX + halfConveyorW;
+            float bottom = boardCZ - halfConveyorH;
+            float top    = boardCZ + halfConveyorH;
 
             float cornerSize = _railWidth;
             float hLength = right - left - cornerSize;
