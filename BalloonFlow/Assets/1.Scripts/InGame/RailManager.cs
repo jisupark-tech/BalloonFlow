@@ -61,6 +61,18 @@ namespace BalloonFlow
         // 총 다트 수 기준으로 레일 수용량 자동 결정
         private static readonly int[] CAPACITY_TIERS = { 50, 100, 150, 200 };
         private static readonly int[] CAPACITY_DART_THRESHOLDS = { 30, 60, 100, int.MaxValue };
+
+        /// <summary>
+        /// 허용량에 따른 레일 면 수 반환.
+        /// 50→1면(하단), 100→2면(하단+우측), 150→3면(하단+우측+상단), 200→4면(전체)
+        /// </summary>
+        public static int GetRailSideCount(int capacity)
+        {
+            if (capacity <= 50) return 1;
+            if (capacity <= 100) return 2;
+            if (capacity <= 150) return 3;
+            return 4;
+        }
         // darts <= 30 → 50, darts <= 60 → 100, darts <= 100 → 150, else → 200
 
         #endregion
@@ -163,6 +175,9 @@ namespace BalloonFlow
             if (_slots == null || _slotCount == 0) return;
             if (_boardFinished) return;
 
+            // 레일 가득 참 → 벨트 정지 (시각적 인지 + 이어하기 정렬 유지)
+            if (_occupiedCount >= _slotCount) return;
+
             // Advance conveyor belt (counter-clockwise = positive direction along path)
             _rotationOffset += _rotationSpeed * _slotSpacing * Time.deltaTime;
 
@@ -243,13 +258,12 @@ namespace BalloonFlow
             if (path.Count == 1) return path[0];
             if (_totalPathLength <= 0f) return path[0];
 
-            if (_isClosedLoop && _totalPathLength > 0f)
+            // closedLoop: 물리적 순환 (4면 사각형)
+            // 비closedLoop: 끝 도달 시 시작점으로 순간이동 (1~3면)
+            // 어느 쪽이든 distance를 래핑하여 순환
+            if (_totalPathLength > 0f)
             {
                 distance = ((distance % _totalPathLength) + _totalPathLength) % _totalPathLength;
-            }
-            else
-            {
-                distance = Mathf.Clamp(distance, 0f, _totalPathLength);
             }
 
             // 이진 탐색으로 세그먼트 찾기 (O(log n))
