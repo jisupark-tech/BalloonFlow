@@ -215,6 +215,20 @@ namespace BalloonFlow
             ApplyColor(dartObj, color);
             OrientDart(dartObj, slotIndex);
 
+            // 슬롯 간격보다 다트가 크면 스케일 축소 (겹침 방지)
+            float spacing = RailManager.Instance.SlotSpacing;
+            if (spacing > 0.01f)
+            {
+                float maxScale = spacing * 0.9f; // 슬롯 간격의 90%
+                Vector3 s = dartObj.transform.localScale;
+                float currentSize = Mathf.Max(s.x, s.z);
+                if (currentSize > maxScale)
+                {
+                    float ratio = maxScale / currentSize;
+                    dartObj.transform.localScale = new Vector3(s.x * ratio, s.y * ratio, s.z * ratio);
+                }
+            }
+
             _slotVisuals[slotIndex] = new SlotDartVisual
             {
                 slotIndex = slotIndex,
