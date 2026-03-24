@@ -21,11 +21,16 @@ namespace BalloonFlow
         #region Constants
 
         private const string HOLDER_POOL_KEY = "Holder";
-        private const float QUEUE_ROW_SPACING = 1.5f;  // Rows go south
         private const int MAX_COLUMNS = 5;
         private const int MAGAZINE_FONT_SIZE = 5;
         private const float DEPLOY_MOVE_SPEED = 12f;
-        private const float HOLDER_RAIL_GAP = 3.0f;    // 레일 바닥과 보관함 앞줄 사이 간격
+
+        // 이미지 비율 기준 (풍선 필드 가로 = 1.0 기준)
+        private const float RATIO_HOLDER_SPACING = 0.12f;    // 보관함 좌우 간격 (여유 추가: 9% → 12%)
+        private const float RATIO_HOLDER_SIZE    = 0.173f;   // 보관함 크기
+        private const float RATIO_RAIL_TO_DEPLOY = 0.35f;    // 컨베이어 ~ 도착위치
+        private const float RATIO_RAIL_TO_QUEUE  = 0.65f;    // 컨베이어 ~ 보관함 1열
+        private const float RATIO_ROW_SPACING    = 0.26f;    // 보관함 행 간격 (앞뒤 마진 추가: 21% → 26%)
 
         #endregion
 
@@ -194,7 +199,7 @@ namespace BalloonFlow
                 return false;
 
             float holderZ = visual.gameObject.transform.position.z;
-            return holderZ >= _queueBaseZ - QUEUE_ROW_SPACING * 0.5f;
+            return holderZ >= _queueBaseZ - _rowSpacing * 0.5f;
         }
 
         /// <summary>보관함의 GameObject 반환 (다트 Pop 연출용).</summary>
@@ -316,28 +321,38 @@ namespace BalloonFlow
         #region Private Methods — Queue Positioning
 
         /// <summary>
-        /// 보관함 열 간격과 시작 Z를 동적 계산.
-        /// 기본 간격(DEFAULT_COL_SPACING) 유지, 필드 폭 초과 시 축소.
+        /// 필드 폭 비율 기반으로 보관함 배치 계산.
+        /// 보관함 간격, 행 간격, 컨베이어~보관함 거리 전부 필드 폭에 비례.
         /// </summary>
-        private const float DEFAULT_COL_SPACING = 1.4f;
+        private float _rowSpacing = 1.5f;
+        private float _deployGap;  // 컨베이어 ~ 도착 위치
 
         private void ComputeDynamicLayout()
         {
-            // 기본 간격 유지
-            _columnSpacing = DEFAULT_COL_SPACING;
+            CacheRailBottom();
 
-            // 풍선 필드 폭보다 넓어지면 축소
-            if (BoardTileManager.HasInstance && _queueColumns > 1)
+            float fw = 8f; // fallback
+            if (BoardTileManager.HasInstance)
+                fw = BoardTileManager.Instance.FieldWidth;
+
+            // 보관함 열 간격 = 보관함 크기 + 보관함 간 간격
+            _columnSpacing = fw * (RATIO_HOLDER_SIZE + RATIO_HOLDER_SPACING);
+
+            // 전체 보관함 폭이 필드 폭을 초과하면 축소
+            if (_queueColumns > 1)
             {
-                float fieldWidth = BoardTileManager.Instance.FieldWidth;
-                float neededWidth = (_queueColumns - 1) * DEFAULT_COL_SPACING;
-                if (neededWidth > fieldWidth)
-                    _columnSpacing = fieldWidth / (_queueColumns - 1);
+                float neededWidth = (_queueColumns - 1) * _columnSpacing;
+                if (neededWidth > fw)
+                    _columnSpacing = fw / (_queueColumns - 1);
             }
 
-            // 레일 바닥 캐시 후 → 보관함 앞줄 Z = 레일 바닥 - 갭
-            CacheRailBottom();
-            _queueBaseZ = _cachedRailZ - HOLDER_RAIL_GAP;
+            // 행 간격, 도착 갭
+            _rowSpacing = fw * RATIO_ROW_SPACING;
+            _deployGap = fw * RATIO_RAIL_TO_DEPLOY;
+
+            // 보관함 1열 Z = 컨베이어 바닥 - (컨베이어~보관함 거리)
+            float railToQueue = fw * RATIO_RAIL_TO_QUEUE;
+            _queueBaseZ = _cachedRailZ - railToQueue;
         }
 
         private Vector3 CalculateQueuePosition(int column, int row)
@@ -346,7 +361,7 @@ namespace BalloonFlow
             float startX = -totalWidth * 0.5f;
 
             float x = startX + column * _columnSpacing;
-            float z = _queueBaseZ - row * QUEUE_ROW_SPACING;
+            float z = _queueBaseZ - row * _rowSpacing;
 
             return new Vector3(x, 0.1f, z);
         }
@@ -370,9 +385,9 @@ namespace BalloonFlow
 
             CacheRailBottom();
 
-            // 레일 바닥과 보관함 앞줄의 중간 지점
-            float midZ = (_cachedRailZ + _queueBaseZ) * 0.5f;
-            return new Vector3(x, _cachedRailY, midZ);
+            // 도착 위치 = 컨베이어 바닥 - deployGap (비율 기반)
+            float deployZ = _cachedRailZ - _deployGap;
+            return new Vector3(x, _cachedRailY, deployZ);
         }
 
         /// <summary>레일 바닥 Z 좌표를 반복하여 캐시.</summary>

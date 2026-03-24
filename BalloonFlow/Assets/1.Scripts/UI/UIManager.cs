@@ -57,6 +57,16 @@ namespace BalloonFlow
         /// </summary>
         public T OpenUI<T>(string _path) where T : UIBase
         {
+            // 이미 생성된 인스턴스가 있으면 재사용
+            for (int i = 0; i < _openUIList.Count; i++)
+            {
+                if (_openUIList[i] is T existing && _openUIList[i] != null)
+                {
+                    existing.OpenUI();
+                    return existing;
+                }
+            }
+
             var _prefab = Resources.Load<GameObject>(_path);
             if (_prefab == null)
             {
