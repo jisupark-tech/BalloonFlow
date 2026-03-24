@@ -1510,6 +1510,7 @@ GameObject:
   - component: {fileID: 917807245506380928}
   - component: {fileID: 9144447496599210860}
   - component: {fileID: 1689608880572473401}
+  - component: {fileID: 8857634930331988591}
   m_Layer: 5
   m_Name: Overlay
   m_TagString: Untagged
@@ -1574,6 +1575,18 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!225 &8857634930331988591
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5679329409876678852}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &5988460431789949918
 GameObject:
   m_ObjectHideFlags: 0
@@ -2295,7 +2308,7 @@ MonoBehaviour:
   _animationType: 1
   _animDuration: 0.35
   _animEase: 27
-  _dim: {fileID: 7867954912908968060}
+  _dim: {fileID: 8857634930331988591}
   _popupWindow: {fileID: 2154296287609273698}
   _continueButton: {fileID: 2937251200782416604}
   _declineButton: {fileID: 900038919082209533}

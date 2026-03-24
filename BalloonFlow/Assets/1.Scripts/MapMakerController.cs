@@ -210,6 +210,7 @@ namespace BalloonFlow
             InitDefaultWaypoints();
 
             _cam = Camera.main;
+            if (_cam == null) { Debug.LogError("[MapMaker] Camera.main not found!"); return; }
             SetupCamera();
             BuildUI();
             RebuildPreview();
@@ -847,7 +848,7 @@ namespace BalloonFlow
                     int ci = _holderColors[c, r];
                     var btn = DefaultControls.CreateButton(_uiRes);
                     btn.transform.SetParent(_holderGridContainer, false);
-                    btn.GetComponent<Image>().color = ci >= 0 ? PALETTE[ci] : new Color(0.22f, 0.22f, 0.26f);
+                    btn.GetComponent<Image>().color = (ci >= 0 && ci < PALETTE.Length) ? PALETTE[ci] : new Color(0.22f, 0.22f, 0.26f);
                     var t = btn.GetComponentInChildren<Text>();
                     t.text = ci >= 0 ? _holderMags[c, r].ToString() : ".";
                     t.font = _font; t.fontSize = 11; t.color = Color.white;

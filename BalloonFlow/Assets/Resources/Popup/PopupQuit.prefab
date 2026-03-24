@@ -358,7 +358,7 @@ MonoBehaviour:
   _animationType: 1
   _animDuration: 0.35
   _animEase: 27
-  _dim: {fileID: 5371659554554410376}
+  _dim: {fileID: 9018109011430426596}
   _popupWindow: {fileID: 6053116654097480130}
   _homeButton: {fileID: 2525510344598965173}
   _nextButton: {fileID: 2016737612399801484}
