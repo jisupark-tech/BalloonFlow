@@ -79,3 +79,7 @@ BalloonFlow/Assets/Resources/Texture/IceFlake.png
 BalloonFlow/Assets/Resources/Texture/IceFlake.png.meta
 BalloonFlow/Assets/Resources/Texture/smog.png
 BalloonFlow/Assets/Resources/Texture/smog.png.meta
+
+# LevelDatabase — 각자 로컬 관리 (충돌 방지)
+BalloonFlow/Assets/Resources/LevelDatabase.asset
+BalloonFlow/Assets/Resources/LevelDatabase.asset.meta
