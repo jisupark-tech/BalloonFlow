@@ -22,6 +22,12 @@ namespace BalloonFlow
         public Sprite tileTL;  // top-left corner
         public Sprite tileTR;  // top-right corner
 
+        [Header("Cap Tiles (개방 경로 끝점)")]
+        public Sprite capB;    // 위→아래 끝점 (하단 마침)
+        public Sprite capT;    // 아래→위 끝점 (상단 마침)
+        public Sprite capL;    // 오른쪽→왼쪽 끝점 (좌측 마침)
+        public Sprite capR;    // 왼쪽→오른쪽 끝점 (우측 마침)
+
         // Legacy references — kept for backward compatibility with old RailTileSet assets
         [HideInInspector] public Sprite tileBH;
         [HideInInspector] public Sprite tileTH;

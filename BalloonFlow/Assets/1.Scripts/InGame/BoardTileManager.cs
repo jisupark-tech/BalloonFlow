@@ -372,60 +372,59 @@ namespace BalloonFlow
             float hCenter = (left + right) * 0.5f;
             float vCenter = (bottom + top) * 0.5f;
 
-            Sprite spBL = _spriteRailTileSet != null ? _spriteRailTileSet.tileBL : null;
-            Sprite spBR = _spriteRailTileSet != null ? _spriteRailTileSet.tileBR : null;
-            Sprite spTL = _spriteRailTileSet != null ? _spriteRailTileSet.tileTL : null;
-            Sprite spTR = _spriteRailTileSet != null ? _spriteRailTileSet.tileTR : null;
+            var ts = _spriteRailTileSet;
+            Sprite spBL = ts != null ? ts.tileBL : null;
+            Sprite spBR = ts != null ? ts.tileBR : null;
+            Sprite spTL = ts != null ? ts.tileTL : null;
+            Sprite spTR = ts != null ? ts.tileTR : null;
+            Sprite capB = ts != null ? ts.capB : null;
+            Sprite capT = ts != null ? ts.capT : null;
+            Sprite capL = ts != null ? ts.capL : null;
+            Sprite capR = ts != null ? ts.capR : null;
 
             Sprite hSprite = GetTileSprite(true, false, true, false);
             Sprite vSprite = GetTileSprite(false, true, false, true);
 
             int sides = RailSideCount;
 
-            // 하단 (항상 존재)
-            if (sides >= 1)
-            {
-                PlaceConveyorSpriteStretched(hSprite, hCenter, bottom, hLength, cornerSize);
-            }
-
-            // 우측 (2면 이상)
-            if (sides >= 2)
-            {
-                PlaceConveyorSprite(spBR, right, bottom, cornerSize);
-                PlaceConveyorSpriteStretched(vSprite, right, vCenter, cornerSize, vLength);
-            }
-
-            // 상단 (3면 이상)
-            if (sides >= 3)
-            {
-                PlaceConveyorSprite(spTR, right, top, cornerSize);
-                PlaceConveyorSpriteStretched(hSprite, hCenter, top, hLength, cornerSize);
-            }
-
-            // 좌측 (4면 — 전체 순환)
+            // ── 4면: 전체 순환 사각형 ──
             if (sides >= 4)
             {
                 PlaceConveyorSprite(spBL, left, bottom, cornerSize);
-                PlaceConveyorSprite(spTL, left, top, cornerSize);
-                PlaceConveyorSpriteStretched(vSprite, left, vCenter, cornerSize, vLength);
-            }
-
-            // 1면만: 시작/끝에 코너 캡 표시
-            if (sides == 1)
-            {
-                PlaceConveyorSprite(spBL, left, bottom, cornerSize);
                 PlaceConveyorSprite(spBR, right, bottom, cornerSize);
+                PlaceConveyorSprite(spTR, right, top, cornerSize);
+                PlaceConveyorSprite(spTL, left, top, cornerSize);
+                PlaceConveyorSpriteStretched(hSprite, hCenter, bottom, hLength, cornerSize);
+                PlaceConveyorSpriteStretched(hSprite, hCenter, top, hLength, cornerSize);
+                PlaceConveyorSpriteStretched(vSprite, left, vCenter, cornerSize, vLength);
+                PlaceConveyorSpriteStretched(vSprite, right, vCenter, cornerSize, vLength);
             }
-            // 2면: BL 코너 + TR 끝점
-            else if (sides == 2)
-            {
-                PlaceConveyorSprite(spBL, left, bottom, cornerSize);
-            }
-            // 3면: BL + TL 끝점
+            // ── 3면: 하단(→) + 우측(↑) + 상단(←) ──
             else if (sides == 3)
             {
-                PlaceConveyorSprite(spBL, left, bottom, cornerSize);
-                PlaceConveyorSprite(spTL, left, top, cornerSize);
+                PlaceConveyorSprite(capL, left, bottom, cornerSize);      // 시작점
+                PlaceConveyorSpriteStretched(hSprite, hCenter, bottom, hLength, cornerSize);
+                PlaceConveyorSprite(spBR, right, bottom, cornerSize);
+                PlaceConveyorSpriteStretched(vSprite, right, vCenter, cornerSize, vLength);
+                PlaceConveyorSprite(spTR, right, top, cornerSize);
+                PlaceConveyorSpriteStretched(hSprite, hCenter, top, hLength, cornerSize);
+                PlaceConveyorSprite(capL, left, top, cornerSize);         // 끝점
+            }
+            // ── 2면: 하단(→) + 우측(↑) ──
+            else if (sides == 2)
+            {
+                PlaceConveyorSprite(capL, left, bottom, cornerSize);      // 시작점
+                PlaceConveyorSpriteStretched(hSprite, hCenter, bottom, hLength, cornerSize);
+                PlaceConveyorSprite(spBR, right, bottom, cornerSize);
+                PlaceConveyorSpriteStretched(vSprite, right, vCenter, cornerSize, vLength);
+                PlaceConveyorSprite(capT, right, top, cornerSize);        // 끝점
+            }
+            // ── 1면: 하단(→)만 ──
+            else
+            {
+                PlaceConveyorSprite(capL, left, bottom, cornerSize);      // 시작점
+                PlaceConveyorSpriteStretched(hSprite, hCenter, bottom, hLength, cornerSize);
+                PlaceConveyorSprite(capR, right, bottom, cornerSize);     // 끝점
             }
 
             // Arrow: 슬롯 기반 (다트처럼 벨트와 함께 회전)
