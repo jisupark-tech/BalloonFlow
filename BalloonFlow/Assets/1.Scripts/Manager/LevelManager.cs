@@ -120,6 +120,9 @@ namespace BalloonFlow
                 return;
             }
 
+            // 이전 레벨 오브젝트 정리 (같은 씬 내 레벨 전환 시)
+            CleanupPreviousLevel();
+
             _currentLevelId     = levelId;
             _currentLevelConfig = config;
             _levelActive        = true;
@@ -250,6 +253,27 @@ namespace BalloonFlow
         #endregion
 
         #region Private Methods
+
+        /// <summary>
+        /// 이전 레벨의 오브젝트를 정리. 같은 씬 내 레벨 전환 시 호출.
+        /// </summary>
+        private void CleanupPreviousLevel()
+        {
+            if (BalloonController.HasInstance)
+                BalloonController.Instance.ClearAllBalloons();
+
+            if (DartManager.HasInstance)
+                DartManager.Instance.ClearAllDarts();
+
+            if (HolderVisualManager.HasInstance)
+                HolderVisualManager.Instance.ClearAllVisuals();
+
+            if (RailManager.HasInstance)
+                RailManager.Instance.ResetAll();
+
+            if (PopupManager.HasInstance)
+                PopupManager.Instance.CloseAllPopups();
+        }
 
         /// <summary>
         /// Coordinates subsystem setup for the given level config.
