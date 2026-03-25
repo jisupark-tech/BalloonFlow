@@ -283,6 +283,13 @@ namespace BalloonFlow
             ClearMPBFromAll();
         }
 
+        /// <summary>Chain 연결 표시 — 검은색 아웃라인만 적용 (블러 없음).</summary>
+        public void SetChainHighlight(bool active)
+        {
+            if (_sharedMPB == null) _sharedMPB = new MaterialPropertyBlock();
+            ApplyMPBToAll(0f, Color.white, active ? 1f : 0f, Color.black);
+        }
+
         private void ApplyMPBToAll(float blur, Color blurCol, float outlineOn, Color outlineCol)
         {
             // _colorRenderers

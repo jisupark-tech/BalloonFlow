@@ -43,6 +43,7 @@ namespace BalloonFlow
             public int slotIndex;
             public int color;
             public GameObject gameObject;
+            public Vector3 baseScale;  // Cave 스케일 복원용
         }
 
         /// <summary>
@@ -233,7 +234,8 @@ namespace BalloonFlow
             {
                 slotIndex = slotIndex,
                 color = color,
-                gameObject = dartObj
+                gameObject = dartObj,
+                baseScale = dartObj.transform.localScale
             };
         }
 
@@ -256,11 +258,17 @@ namespace BalloonFlow
         private readonly List<int> _tempSlotKeys = new List<int>(256);
         private readonly List<int> _tempRemoveKeys = new List<int>(32);
 
+        /// <summary>Cave 스케일 구간: FADE_START(스케일1) ~ FADE_END(스케일0) 사이에서 축소.</summary>
+        private const float CAVE_FADE_START = 0.0315f;  // 이 지점부터 축소 시작
+        private const float CAVE_FADE_END   = 0.03f;  // 이 지점에서 스케일 0
+
         private void UpdateSlotDartPositions()
         {
             if (!RailManager.HasInstance || _slotVisuals.Count == 0) return;
 
             RailManager rail = RailManager.Instance;
+            bool isOpen = !rail.IsClosedLoop;
+            float pathLen = rail.TotalPathLength;
 
             // Collect keys without allocation (reuse list)
             _tempSlotKeys.Clear();
@@ -294,6 +302,30 @@ namespace BalloonFlow
                 Vector3 fireDir = rail.GetSlotFiringDirection(slotIdx);
                 if (fireDir.sqrMagnitude > 0.001f)
                     visual.gameObject.transform.rotation = Quaternion.LookRotation(fireDir);
+
+                // Cave 스케일: 비순환 레일의 끝점/시작점 근처에서 축소
+                if (isOpen && pathLen > 0f)
+                {
+                    float dist = slotIdx * rail.SlotSpacing + rail.RotationOffset;
+                    float t = ((dist % pathLen) + pathLen) % pathLen / pathLen; // 0~1 정규화
+
+                    float scale = 1f;
+                    float fadeRange = CAVE_FADE_START - CAVE_FADE_END;
+                    if (t < CAVE_FADE_START)
+                    {
+                        // 시작점에서 나옴: FADE_END(0) → FADE_START(1)
+                        scale = t <= CAVE_FADE_END ? 0f : (t - CAVE_FADE_END) / fadeRange;
+                    }
+                    else if (t > 1f - CAVE_FADE_START)
+                    {
+                        // 끝점으로 들어감: (1-FADE_START)(1) → (1-FADE_END)(0)
+                        float distFromEnd = 1f - t;
+                        scale = distFromEnd <= CAVE_FADE_END ? 0f : (distFromEnd - CAVE_FADE_END) / fadeRange;
+                    }
+
+                    scale = Mathf.Clamp01(scale);
+                    visual.gameObject.transform.localScale = visual.baseScale * scale;
+                }
             }
 
             // Deferred removal
@@ -516,8 +548,13 @@ namespace BalloonFlow
 
         private void ExecuteHit(int balloonId, int color)
         {
-            // PopProcessor subscribes to this event and calls BalloonController.PopBalloon.
-            // Do NOT call PopBalloon here — it would double-hit Piñata HP.
+            // 다트로 풍선 팝 (기믹 처리 포함)
+            if (BalloonController.HasInstance)
+            {
+                BalloonController.Instance.PopBalloonWithDart(balloonId, color);
+            }
+
+            // PopProcessor가 점수/콤보 처리 (PopBalloon 중복 호출은 isPopped 체크로 방지)
             EventBus.Publish(new OnDartHitBalloon
             {
                 dartId = -1,

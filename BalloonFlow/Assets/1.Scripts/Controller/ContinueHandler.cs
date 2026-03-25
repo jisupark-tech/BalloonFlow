@@ -19,7 +19,7 @@ namespace BalloonFlow
         #region Constants
 
         private const int MaxContinues = 4;  // 1 free + 3 paid
-        private const float ContinueRemoveRatio = 0.10f; // 레일 수용량의 10% 다트 제거
+        // 이어하기 제거량은 RailManager.GetContinueRemoveCount()로 결정 (허용량 기반)
 
         // Escalating coin costs (index 0 = free, then 900 → 1900 → 2900)
         private static readonly int[] ContinueCosts = { 0, 900, 1900, 2900 };
@@ -150,13 +150,14 @@ namespace BalloonFlow
 
         private void ApplyContinueRestore()
         {
-            // 1) 레일에서 가장 최근 배치된 다트 N개 제거 (수용량 * 10%, 최소 1개)
-            int dartsToRemove = 1;
+            // 1) 레일에서 가장 많은 색상 다트 N개 제거 (허용량 기반: 50→5, 100→10, 150→15, 200→20)
+            int dartsToRemove = 5;
+            int removedColor = -1;
             if (RailManager.HasInstance)
             {
-                dartsToRemove = Mathf.Max(1, Mathf.CeilToInt(RailManager.Instance.SlotCount * ContinueRemoveRatio));
-                int removed = RailManager.Instance.RemoveDarts(dartsToRemove);
-                Debug.Log($"[ContinueHandler] Removed {removed} darts from rail (target: {dartsToRemove}).");
+                dartsToRemove = RailManager.GetContinueRemoveCount(RailManager.Instance.SlotCount);
+                int removed = RailManager.Instance.RemoveDartsByMostCommonColor(dartsToRemove, out removedColor);
+                Debug.Log($"[ContinueHandler] Removed {removed} darts (color={removedColor}) from rail (target: {dartsToRemove}).");
             }
 
             // 2) 대기 중인 보관함은 원래 자리(큐)로 복귀
@@ -171,6 +172,7 @@ namespace BalloonFlow
             EventBus.Publish(new OnContinueApplied
             {
                 dartsRemoved = dartsToRemove,
+                removedColor = removedColor,
                 levelId = _currentLevelId
             });
 

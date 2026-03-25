@@ -378,6 +378,10 @@ namespace BalloonFlow
             Sprite capT = ts != null ? ts.capT : null;
             Sprite capL = ts != null ? ts.capL : null;
             Sprite capR = ts != null ? ts.capR : null;
+            Sprite caveB = ts != null ? ts.caveB : null;
+            Sprite caveT = ts != null ? ts.caveT : null;
+            Sprite caveL = ts != null ? ts.caveL : null;
+            Sprite caveR = ts != null ? ts.caveR : null;
 
             Sprite hSprite = GetTileSprite(true, false, true, false);
             Sprite vSprite = GetTileSprite(false, true, false, true);
@@ -426,6 +430,26 @@ namespace BalloonFlow
 
             // Arrow: 슬롯 기반 (다트처럼 벨트와 함께 회전)
             SpawnArrows();
+
+            // ── Cave: 개방 끝점 위에 터널 오버레이 (Arrow보다 위) ──
+            if (sides < 4)
+            {
+                if (sides == 3)
+                {
+                    PlaceCaveOverlay(caveL, left, bottom, cornerSize);    // 시작점
+                    PlaceCaveOverlay(caveL, left, top, cornerSize);       // 끝점
+                }
+                else if (sides == 2)
+                {
+                    PlaceCaveOverlay(caveL, left, bottom, cornerSize);    // 시작점
+                    PlaceCaveOverlay(caveT, right, top, cornerSize);      // 끝점
+                }
+                else // 1면
+                {
+                    PlaceCaveOverlay(caveL, left, bottom, cornerSize);    // 시작점
+                    PlaceCaveOverlay(caveR, right, bottom, cornerSize);   // 끝점
+                }
+            }
         }
 
         private void PlaceConveyorSpriteStretched(Sprite sprite, float wx, float wz, float worldW, float worldH)
@@ -447,6 +471,28 @@ namespace BalloonFlow
             float scaleX = sw > 0.001f ? worldW / sw : 1f;
             float scaleY = sh > 0.001f ? worldH / sh : 1f;
             go.transform.localScale = new Vector3(scaleX, scaleY, 1f);
+        }
+
+        /// <summary>
+        /// Cave 터널 오버레이 — 캡 위치에 Arrow보다 높은 sortingOrder로 배치.
+        /// </summary>
+        private void PlaceCaveOverlay(Sprite sprite, float wx, float wz, float tileSize)
+        {
+            if (sprite == null || _conveyorSpriteRoot == null) return;
+
+            var go = new GameObject("CaveTile");
+            go.transform.SetParent(_conveyorSpriteRoot, false);
+            go.transform.position = new Vector3(wx, -0.01f, wz);
+            go.transform.eulerAngles = new Vector3(90f, 0f, 0f);
+
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.sortingOrder = 1; // Arrow(0)보다 위
+
+            float sw = sprite.bounds.size.x;
+            float sh = sprite.bounds.size.y;
+            if (sw > 0.001f && sh > 0.001f)
+                go.transform.localScale = new Vector3(tileSize / sw, tileSize / sh, 1f);
         }
 
         private void PlaceConveyorSprite(Sprite sprite, float wx, float wz, float tileSize)

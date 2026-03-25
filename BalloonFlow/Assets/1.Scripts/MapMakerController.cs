@@ -118,6 +118,7 @@ namespace BalloonFlow
         private int[,] _holderMags;
         private int[,] _holderGimmicks;  // 보관함 기믹 인덱스 (HOLDER_GIMMICK_NAMES 기준)
         private int[,] _holderChainGroups; // Chain 그룹 ID (-1 = 없음)
+        private int[,] _holderFrozenHP;    // Frozen Dart 해동 체력 (기본 3)
         private int[,] _balloonGimmickHP;  // Piñata HP (기본 2)
         private int[,] _balloonPinataW;   // Piñata 가로 크기 (앵커 셀에만 저장)
         private int[,] _balloonPinataH;   // Piñata 세로 크기
@@ -126,6 +127,7 @@ namespace BalloonFlow
         private int _paintPinataH = 1;     // 브러시용 Piñata 세로
         private int _paintChainGroup = 0;  // 브러시용 Chain 그룹 ID
         private int _nextChainGroupId = 1; // 자동 증가 Chain 그룹 ID
+        private int _paintFrozenHP = 3;    // 브러시용 Frozen Dart 해동 체력
 
         private int _railDir;
         private float _railPadding = 1.5f;
@@ -191,7 +193,7 @@ namespace BalloonFlow
         private TextMesh[,] _previewLabels;  // Gimmick marks on each balloon
         private DefaultControls.Resources _uiRes;
 
-        private Text _txtStatus, _txtSpacing, _txtScale;
+        private Text _txtStatus, _txtSpacing, _txtScale, _railCapacityLabel;
         private Text _queueGenScoreLabel;
 
         // Level Info UI 참조 (로드 시 갱신용)
@@ -331,10 +333,10 @@ namespace BalloonFlow
                 _cam.transform.position += new Vector3(-delta.x * s, 0, -delta.y * s);
             }
 
-            // Keyboard shortcuts for zoom
             var kb = Keyboard.current;
             if (kb != null)
             {
+                // Keyboard shortcuts for zoom
                 if (kb[Key.NumpadPlus].isPressed || kb[Key.Equals].isPressed)
                     _cam.orthographicSize = Mathf.Max(0.5f, _cam.orthographicSize - Time.deltaTime * 3f);
                 if (kb[Key.NumpadMinus].isPressed || kb[Key.Minus].isPressed)
@@ -405,6 +407,7 @@ namespace BalloonFlow
             _holderMags = ResizeGrid(_holderMags, _holderCols, _holderRows, _defaultMag);
             _holderGimmicks = ResizeGrid(_holderGimmicks, _holderCols, _holderRows, 0);
             _holderChainGroups = ResizeGrid(_holderChainGroups, _holderCols, _holderRows, -1);
+            _holderFrozenHP = ResizeGrid(_holderFrozenHP, _holderCols, _holderRows, 3);
             _balloonGimmickHP = ResizeGrid(_balloonGimmickHP, _gridCols, _gridRows, 2);
             _balloonPinataW = ResizeGrid(_balloonPinataW, _gridCols, _gridRows, 1);
             _balloonPinataH = ResizeGrid(_balloonPinataH, _gridCols, _gridRows, 1);
@@ -792,6 +795,13 @@ namespace BalloonFlow
                 SetStatus($"New Chain Group: {_paintChainGroup}");
             });
 
+            // Frozen Dart 해동 체력 설정
+            var frozenRow = Row(p); Lbl(frozenRow, "Frozen HP", w: 110);
+            MakeIntField(frozenRow, _paintFrozenHP, 1, 99, v => {
+                _paintFrozenHP = v;
+                SetStatus($"Frozen Dart HP: {v}");
+            });
+
             var row = Row(p);
             Btn(row, "Fill", () => { FillHolders(_paintColor); RebuildHolderUI(); RefreshInfo(); });
             Btn(row, "Clear", () => { FillHolders(-1); RebuildHolderUI(); RefreshInfo(); });
@@ -825,17 +835,11 @@ namespace BalloonFlow
             var r2 = Row(p); Lbl(r2, "Padding", w: 90);
             MakeInputField(r2, _railPadding.ToString("F1"), s =>
             { if (float.TryParse(s, out float v)) _railPadding = v; });
-            var r3 = Row(p); Lbl(r3, "Slot Count", w: 90);
-            MakeIntField(r3, _railSlotCount, 10, 9999, v => _railSlotCount = v);
-            // Auto-calc button: calculate capacity from total darts
-            var r3b = Row(p);
-            Btn(r3b, "Auto (from darts)", () =>
-            {
-                int totalDarts = CalcTotalDarts();
-                _railSlotCount = RailManager.CalculateCapacity(totalDarts);
-                SetStatus($"Rail capacity auto: {_railSlotCount} (darts={totalDarts})");
-                RefreshInfo();
-            });
+            // 허용량은 총 다트 수에서 자동 결정 (읽기 전용)
+            var r3 = Row(p); Lbl(r3, "Capacity", w: 90);
+            int autoCapacity = RailManager.CalculateCapacity(CalcTotalDarts());
+            _railSlotCount = autoCapacity;
+            _railCapacityLabel = Lbl(r3, $"{autoCapacity}  ({RailManager.GetRailSideCount(autoCapacity)}면, 제거:{RailManager.GetContinueRemoveCount(autoCapacity)})", w: 200);
 
             // Smooth corners toggle + radius
             var r4 = Row(p); Lbl(r4, "Smooth Corner", w: 100);
@@ -943,6 +947,7 @@ namespace BalloonFlow
                         _holderMags[cc, rr] = _paintColor >= 0 ? _defaultMag : 0;
                         _holderGimmicks[cc, rr] = _paintColor >= 0 ? _paintHolderGimmick : 0;
                         _holderChainGroups[cc, rr] = _paintColor >= 0 ? _paintChainGroup : -1;
+                        _holderFrozenHP[cc, rr] = _paintFrozenHP;
                         RebuildHolderUI(); RefreshInfo();
                     });
                 }
@@ -1380,6 +1385,10 @@ namespace BalloonFlow
             Sprite capT = ts != null ? ts.capT : null;
             Sprite capL = ts != null ? ts.capL : null;
             Sprite capR = ts != null ? ts.capR : null;
+            Sprite caveB = ts != null ? ts.caveB : null;
+            Sprite caveT = ts != null ? ts.caveT : null;
+            Sprite caveL = ts != null ? ts.caveL : null;
+            Sprite caveR = ts != null ? ts.caveR : null;
             Sprite hSprite = ts != null ? ts.GetH() : null;
             Sprite vSprite = ts != null ? ts.GetV() : null;
 
@@ -1434,6 +1443,26 @@ namespace BalloonFlow
                 PlaceConveyorSpriteTile(capL, new Vector3(left, rh, bottom), cornerSize);
                 PlaceConveyorSpriteTileStretched(hSprite, new Vector3(hCenter, rh, bottom), hLength, cornerSize);
                 PlaceConveyorSpriteTile(capR, new Vector3(right, rh, bottom), cornerSize);
+            }
+
+            // Cave: 개방 끝점 위에 터널 오버레이
+            if (sides < 4)
+            {
+                if (sides == 3)
+                {
+                    PlaceCaveOverlayTile(caveL, new Vector3(left, rh, bottom), cornerSize);
+                    PlaceCaveOverlayTile(caveL, new Vector3(left, rh, top), cornerSize);
+                }
+                else if (sides == 2)
+                {
+                    PlaceCaveOverlayTile(caveL, new Vector3(left, rh, bottom), cornerSize);
+                    PlaceCaveOverlayTile(caveT, new Vector3(right, rh, top), cornerSize);
+                }
+                else
+                {
+                    PlaceCaveOverlayTile(caveL, new Vector3(left, rh, bottom), cornerSize);
+                    PlaceCaveOverlayTile(caveR, new Vector3(right, rh, bottom), cornerSize);
+                }
             }
 
             // Paint 모드일 때 가이드 그리드 표시
@@ -1583,6 +1612,25 @@ namespace BalloonFlow
                 float scaleY = tileSize / spriteHeight;
                 tileGO.transform.localScale = new Vector3(scaleX, scaleY, 1f);
             }
+        }
+
+        private void PlaceCaveOverlayTile(Sprite sprite, Vector3 position, float tileSize)
+        {
+            if (sprite == null) return;
+
+            var go = new GameObject($"CaveTile_{_conveyorPreviewRoot.childCount}");
+            go.transform.SetParent(_conveyorPreviewRoot, false);
+            go.transform.position = new Vector3(position.x, -0.01f, position.z);
+            go.transform.eulerAngles = new Vector3(90f, 0f, 0f);
+
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.sortingOrder = 1; // Arrow(0)보다 위
+
+            float sw = sprite.bounds.size.x;
+            float sh = sprite.bounds.size.y;
+            if (sw > 0.001f && sh > 0.001f)
+                go.transform.localScale = new Vector3(tileSize / sw, tileSize / sh, 1f);
         }
 
         /// <summary>
@@ -1892,6 +1940,7 @@ namespace BalloonFlow
                 if (!mouse.leftButton.isPressed) return;
             }
 
+
             Vector3 hit;
             if (!RaycastToGround(mouse, out hit)) return;
 
@@ -2118,6 +2167,12 @@ namespace BalloonFlow
         {
             if (_txtSpacing) _txtSpacing.text = $"  Spacing: {CellSpacing:F3}";
             if (_txtScale) _txtScale.text = $"  Scale: {BalloonScale:F3}";
+
+            // 허용량 자동 갱신
+            int autoCap = RailManager.CalculateCapacity(CalcTotalDarts());
+            _railSlotCount = autoCap;
+            if (_railCapacityLabel != null)
+                _railCapacityLabel.text = $"{autoCap}  ({RailManager.GetRailSideCount(autoCap)}면, 제거:{RailManager.GetContinueRemoveCount(autoCap)})";
 
             // === Build per-color stats ===
             var balloonCountPerColor = new Dictionary<int, int>();
@@ -2661,6 +2716,9 @@ namespace BalloonFlow
 
         private void TestPlay()
         {
+            // 테스트 플레이 전 자동 저장 (돌아올 때 데이터 유실 방지)
+            SaveToDatabase();
+
             var config = BuildLevelConfig();
             if (config.balloons == null || config.balloons.Length == 0)
             {
@@ -2763,7 +2821,7 @@ namespace BalloonFlow
             _gridCols = Mathf.Max(config.gridCols, 2);
             _gridRows = Mathf.Max(config.gridRows, 2);
 
-            float spacing = _boardWorldSize / Mathf.Max(_gridCols, _gridRows);
+            float spacing = CellSpacing;
             _balloonColors = new int[_gridCols, _gridRows];
             _balloonGimmicks = new int[_gridCols, _gridRows];
             for (int c = 0; c < _gridCols; c++)
@@ -2794,8 +2852,9 @@ namespace BalloonFlow
                 _holderColors = new int[_holderCols, _holderRows];
                 _holderMags = new int[_holderCols, _holderRows];
                 _holderGimmicks = new int[_holderCols, _holderRows];
+                _holderFrozenHP = new int[_holderCols, _holderRows];
                 for (int c = 0; c < _holderCols; c++)
-                    for (int r = 0; r < _holderRows; r++) { _holderColors[c, r] = -1; _holderMags[c, r] = 0; _holderGimmicks[c, r] = 0; }
+                    for (int r = 0; r < _holderRows; r++) { _holderColors[c, r] = -1; _holderMags[c, r] = 0; _holderGimmicks[c, r] = 0; _holderFrozenHP[c, r] = 3; }
                 foreach (var h in config.holders)
                 {
                     int hc = Mathf.RoundToInt(h.position.x), hr = Mathf.RoundToInt(h.position.y);
@@ -2806,6 +2865,7 @@ namespace BalloonFlow
                         // 보관함 기믹 복원
                         int hgi = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, h.queueGimmick ?? "");
                         _holderGimmicks[hc, hr] = hgi > 0 ? hgi : 0;
+                        _holderFrozenHP[hc, hr] = h.frozenHP > 0 ? h.frozenHP : 3;
                     }
                 }
             }
@@ -2867,6 +2927,10 @@ namespace BalloonFlow
                 if (_targetDB == null)
                 { _targetDB = ScriptableObject.CreateInstance<LevelDatabase>(); AssetDatabase.CreateAsset(_targetDB, path); }
             }
+
+            // 자동 백업: Save 전에 기존 DB를 JSON 파일로 백업
+            BackupDatabase();
+
             var config = BuildLevelConfig();
             var levels = _targetDB.levels != null ? new List<LevelConfig>(_targetDB.levels) : new List<LevelConfig>();
             int idx = levels.FindIndex(l => l.levelId == config.levelId);
@@ -2875,8 +2939,40 @@ namespace BalloonFlow
             _targetDB.levels = levels.ToArray();
             EditorUtility.SetDirty(_targetDB);
             AssetDatabase.SaveAssets();
-            SetStatus($"Saved Level {config.levelId}");
+            SetStatus($"Saved Level {config.levelId} (backup created)");
             RefreshLevelList();
+        }
+
+        private void BackupDatabase()
+        {
+            if (_targetDB == null || _targetDB.levels == null) return;
+            string dir = "Assets/LevelBackups";
+            if (!System.IO.Directory.Exists(dir))
+                System.IO.Directory.CreateDirectory(dir);
+
+            string timestamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            string backupPath = $"{dir}/LevelDB_backup_{timestamp}.json";
+
+            // 전체 DB를 JSON으로 직렬화
+            var wrapper = new LevelDatabaseWrapper { levels = _targetDB.levels };
+            string json = JsonUtility.ToJson(wrapper, true);
+            System.IO.File.WriteAllText(backupPath, json);
+            Debug.Log($"[MapMaker] Backup saved: {backupPath}");
+
+            // 오래된 백업 정리 (최대 10개 유지)
+            var files = new List<string>(System.IO.Directory.GetFiles(dir, "LevelDB_backup_*.json"));
+            files.Sort();
+            while (files.Count > 10)
+            {
+                System.IO.File.Delete(files[0]);
+                files.RemoveAt(0);
+            }
+        }
+
+        [System.Serializable]
+        private class LevelDatabaseWrapper
+        {
+            public LevelConfig[] levels;
         }
 
         private void ExportJson()
@@ -2937,7 +3033,8 @@ namespace BalloonFlow
                     holders.Add(new HolderSetup
                     { holderId = hid++, color = _holderColors[c, r], magazineCount = _holderMags[c, r],
                       position = new Vector2(c, r), queueGimmick = hgName,
-                      chainGroupId = chainGrp > 0 ? chainGrp : -1 });
+                      chainGroupId = chainGrp > 0 ? chainGrp : -1,
+                      frozenHP = _holderFrozenHP[c, r] });
                 }
             config.holders = holders.ToArray();
             config.queueColumns = Mathf.Clamp(_holderCols, 2, 5);

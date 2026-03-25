@@ -125,6 +125,9 @@ namespace BalloonFlow
 
         /// <summary>Chain 그룹 ID (-1 = Chain 아님). 같은 groupId의 보관함들이 연결됨.</summary>
         public int chainGroupId = -1;
+
+        /// <summary>Frozen Dart 해동에 필요한 배치 완료 횟수 (0 = 기본값 3).</summary>
+        public int frozenHP;
     }
 
     /// <summary>
