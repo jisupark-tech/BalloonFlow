@@ -516,17 +516,14 @@ namespace BalloonFlow
 
         private void ExecuteHit(int balloonId, int color)
         {
+            // PopProcessor subscribes to this event and calls BalloonController.PopBalloon.
+            // Do NOT call PopBalloon here — it would double-hit Piñata HP.
             EventBus.Publish(new OnDartHitBalloon
             {
                 dartId = -1,
                 balloonId = balloonId,
                 color = color
             });
-
-            if (BalloonController.HasInstance)
-            {
-                BalloonController.Instance.PopBalloon(balloonId);
-            }
         }
 
         #endregion

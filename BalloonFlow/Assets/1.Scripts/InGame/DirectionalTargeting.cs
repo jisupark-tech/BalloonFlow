@@ -114,11 +114,13 @@ namespace BalloonFlow
                 // Wall balloons are indestructible — never target them
                 if (balloon.gimmickType == BalloonController.GimmickWall) continue;
 
-                // Pin balloons block darts — only removable by adjacent pop
-                if (balloon.gimmickType == BalloonController.GimmickPin) continue;
+                // Pin — 같은 색 다트로 직접 타격 가능 (타겟팅에서 제외하지 않음)
 
                 // Ice balloons must be thawed by adjacent pop first — not directly targetable
                 if (balloon.gimmickType == BalloonController.GimmickIce) continue;
+
+                // Color Curtain — 간접 제거만 가능 (해당 색 풍선 팝 시 카운터 감소)
+                if (balloon.gimmickType == BalloonController.GimmickColorCurtain) continue;
 
                 if (excludeIds != null && excludeIds.Contains(balloon.balloonId)) continue;
 

@@ -211,6 +211,7 @@ namespace BalloonFlow
                 new { key = "Balloon", path = "Prefabs/Balloon", initialSize = 50 },
                 new { key = "Dart",    path = "Prefabs/Dart",    initialSize = 30 },
                 new { key = "Holder",  path = "Prefabs/Holder",  initialSize = 20 },
+                new { key = "Pinata",  path = "Prefabs/Pinata",  initialSize = 10 },
             };
 
             foreach (var entry in defaultPools)

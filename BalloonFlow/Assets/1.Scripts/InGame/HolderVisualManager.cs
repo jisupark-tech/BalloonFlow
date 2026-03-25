@@ -110,6 +110,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnBoardFailed>(HandleBoardFailed);
             EventBus.Subscribe<OnContinueApplied>(HandleContinueApplied);
             EventBus.Subscribe<OnHolderThawed>(HandleHolderThawed);
+            EventBus.Subscribe<OnHolderRevealed>(HandleHolderRevealed);
         }
 
         private void OnDisable()
@@ -121,6 +122,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnBoardFailed>(HandleBoardFailed);
             EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
             EventBus.Unsubscribe<OnHolderThawed>(HandleHolderThawed);
+            EventBus.Unsubscribe<OnHolderRevealed>(HandleHolderRevealed);
         }
 
         #endregion
@@ -443,12 +445,19 @@ namespace BalloonFlow
                 Vector3 targetPos = CalculateQueuePosition(column, row);
                 if (Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos) > 0.05f)
                 {
-                    // 기존 이동 트윈 킬 후 새 이동
                     colHolders[row].gameObject.transform.DOKill(false);
                     float dist = Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos);
                     colHolders[row].gameObject.transform.DOMove(targetPos, dist / 4f).SetEase(Ease.OutQuad);
                 }
                 colHolders[row].queuePosition = targetPos;
+
+                // 앞줄(row 0) 도달 시 Hidden 보관함 자동 공개
+                if (row == 0 && HolderManager.HasInstance)
+                {
+                    var data = HolderManager.Instance.FindHolderPublic(colHolders[row].holderId);
+                    if (data != null && data.isHidden)
+                        HolderManager.Instance.RevealHiddenHolder(colHolders[row].holderId);
+                }
             }
         }
 
@@ -468,25 +477,29 @@ namespace BalloonFlow
             HolderIdentifier ident = obj.GetComponent<HolderIdentifier>();
             if (ident != null)
             {
-                ident.SetHolderId(data.holderId); // Init() 포함 → Dart/Box 자동 수집
+                ident.SetHolderId(data.holderId);
                 ident.ShowDarts(data.magazineCount);
                 ident.SetFrozen(data.isFrozen);
+                if (data.isHidden) ident.SetHidden(true);
             }
 
-            // Hidden 보관함: 회색 + "?" 표시 / Frozen: 하늘색 톤
+            // Hidden: Hidden Material 적용됨 (색상 건너뜀) / Frozen: 하늘색 톤 / 일반: 원래 색
             Color holderColor;
             if (data.isHidden)
-                holderColor = new Color(0.5f, 0.5f, 0.5f);
+                holderColor = Color.clear; // Hidden Material이 적용되었으므로 색상 스킵
             else if (data.isFrozen)
                 holderColor = new Color(0.6f, 0.85f, 1f);
             else
                 holderColor = GetColor(data.color);
 
-            // HolderIdentifier에 색상 대상이 할당되어 있으면 그것만 적용, 아니면 fallback
-            if (ident != null && ident.HasColorRenderers)
-                ident.ApplyColor(holderColor);
-            else
-                ApplyColorToRenderers(obj, holderColor);
+            // Hidden이면 SetHidden에서 Material 적용 완료 → 색상 스킵
+            if (!data.isHidden)
+            {
+                if (ident != null && ident.HasColorRenderers)
+                    ident.ApplyColor(holderColor);
+                else
+                    ApplyColorToRenderers(obj, holderColor);
+            }
 
             TMP_Text textMesh = obj.GetComponentInChildren<TMP_Text>(true);
             if (textMesh != null)
@@ -929,16 +942,30 @@ namespace BalloonFlow
         {
             if (!_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual)) return;
 
-            // BoxFrozen → Box 전환
             if (visual.identifier != null)
                 visual.identifier.SetFrozen(false);
 
-            // 색상 복원 (Frozen 하늘색 → 원래 색)
             Color originalColor = GetColor(visual.color);
             if (visual.identifier != null && visual.identifier.HasColorRenderers)
                 visual.identifier.ApplyColor(originalColor);
             else if (visual.gameObject != null)
                 ApplyColorToRenderers(visual.gameObject, originalColor);
+        }
+
+        private void HandleHolderRevealed(OnHolderRevealed evt)
+        {
+            if (!_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual)) return;
+
+            // Hidden Material → 원래 색상 복원
+            Color originalColor = GetColor(visual.color);
+            if (visual.identifier != null && visual.identifier.HasColorRenderers)
+                visual.identifier.ApplyColor(originalColor);
+            else if (visual.gameObject != null)
+                ApplyColorToRenderers(visual.gameObject, originalColor);
+
+            // 텍스트도 "?" → 실제 탄창 수로 변경
+            if (visual.magazineText != null)
+                visual.magazineText.text = visual.magazineRemaining.ToString();
         }
 
         private void HandleContinueApplied(OnContinueApplied evt)

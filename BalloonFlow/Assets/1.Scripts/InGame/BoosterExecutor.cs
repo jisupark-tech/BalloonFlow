@@ -330,26 +330,44 @@ namespace BalloonFlow
         /// </summary>
         private void ExecuteHand()
         {
-            if (!BalloonController.HasInstance)
+            int affected = 0;
+
+            // 1) Hidden 보관함 공개 시도
+            if (HolderManager.HasInstance)
             {
-                Debug.LogWarning("[BoosterExecutor] Hand: BalloonController not available.");
-                return;
+                HolderData[] holders = HolderManager.Instance.GetHolders();
+                if (holders != null)
+                {
+                    for (int i = 0; i < holders.Length; i++)
+                    {
+                        if (holders[i].isHidden && !holders[i].isConsumed)
+                        {
+                            HolderManager.Instance.RevealHiddenHolder(holders[i].holderId);
+                            affected++;
+                            break; // 한 번에 하나만
+                        }
+                    }
+                }
             }
 
-            int hiddenId = BalloonController.Instance.GetRandomHiddenBalloonId();
-            if (hiddenId < 0)
+            // 2) Hidden 보관함이 없으면 Surprise 풍선 공개
+            if (affected == 0 && BalloonController.HasInstance)
             {
-                Debug.LogWarning("[BoosterExecutor] Hand: no hidden balloons to reveal.");
-                return;
+                int hiddenId = BalloonController.Instance.GetRandomHiddenBalloonId();
+                if (hiddenId >= 0)
+                {
+                    BalloonController.Instance.RevealHiddenBalloon(hiddenId);
+                    affected++;
+                }
             }
 
-            bool revealed = BalloonController.Instance.RevealHiddenBalloon(hiddenId);
-            Debug.Log($"[BoosterExecutor] Hand: revealed hidden balloon {hiddenId} (success={revealed}).");
+            if (affected == 0)
+                Debug.LogWarning("[BoosterExecutor] Hand: no hidden holders or balloons to reveal.");
 
             EventBus.Publish(new OnBoosterEffectApplied
             {
                 boosterType = BoosterManager.HAND,
-                affectedCount = revealed ? 1 : 0
+                affectedCount = affected
             });
         }
 

@@ -28,8 +28,16 @@ namespace BalloonFlow
         [Header("[Box Visuals — Inspector에서 할당]")]
         [Tooltip("일반 상태 박스")]
         [SerializeField] private GameObject _box;
-        [Tooltip("Frozen 상태 박스")]
+        [Tooltip("Frozen(Ice) 상태 박스")]
         [SerializeField] private GameObject _boxFrozen;
+        [Tooltip("Frozen 해동 이펙트 (ParticleFrozenExplosion)")]
+        [SerializeField] private GameObject _frozenExplosionEffect;
+
+        [Header("[Hidden 기믹 — Inspector에서 할당]")]
+        [Tooltip("Hidden Body용 Material (색상 숨김)")]
+        [SerializeField] private Material _hiddenBodyMaterial;
+        [Tooltip("Hidden Lid용 Material (색상 숨김)")]
+        [SerializeField] private Material _hiddenLidMaterial;
 
         [Header("[색상 적용 대상 Renderer — Inspector에서 할당]")]
         [Tooltip("Box Body, Handle, Dart Body 등 색상만 적용할 Renderer")]
@@ -72,11 +80,17 @@ namespace BalloonFlow
             if (_animator == null)
                 _animator = GetComponentInChildren<Animator>();
 
-            // Box/BoxFrozen 미할당 시 자동 탐색
+            // Box/BoxFrozen 미할당 시 자동 탐색 (자식 깊이 탐색)
             if (_box == null)
-                _box = transform.Find("Box")?.gameObject;
+            {
+                var t = transform.Find("Box") ?? FindDeep(transform, "Box");
+                if (t != null) _box = t.gameObject;
+            }
             if (_boxFrozen == null)
-                _boxFrozen = transform.Find("BoxFrozen")?.gameObject;
+            {
+                var t = transform.Find("BoxFrozen") ?? FindDeep(transform, "BoxFrozen");
+                if (t != null) _boxFrozen = t.gameObject;
+            }
 
             // Dart Slots 미할당 시 자동 수집 (fallback)
             if (_dartSlots == null || _dartSlots.Length == 0)
@@ -406,24 +420,59 @@ namespace BalloonFlow
 
         #endregion
 
+        #region Hidden Visual
+
+        /// <summary>Hidden 상태 적용 — body/lid를 Hidden Material로 교체.</summary>
+        public void SetHidden(bool hidden)
+        {
+            if (hidden)
+            {
+                // Hidden Material 적용 (색상 숨김)
+                if (_hiddenBodyMaterial != null && _colorRenderers != null)
+                {
+                    for (int i = 0; i < _colorRenderers.Length; i++)
+                    {
+                        if (_colorRenderers[i] != null)
+                            _colorRenderers[i].sharedMaterial = _hiddenBodyMaterial;
+                    }
+                }
+                if (_hiddenLidMaterial != null && _customMatRenderers != null)
+                {
+                    for (int i = 0; i < _customMatRenderers.Length; i++)
+                    {
+                        if (_customMatRenderers[i] != null)
+                            _customMatRenderers[i].sharedMaterial = _hiddenLidMaterial;
+                    }
+                }
+            }
+            // hidden=false일 때는 ApplyColor가 호출되어 원래 색상 복원
+        }
+
+        #endregion
+
         #region Box / Frozen Visual
 
         /// <summary>
         /// Frozen 상태 설정. true면 BoxFrozen 활성 + Box 비활성.
         /// </summary>
+        /// <summary>Frozen 상태 설정. frozen=true → BoxFrozen 활성, Box 비활성.</summary>
         public void SetFrozen(bool frozen)
         {
+            if (frozen && _boxFrozen == null)
+                Debug.LogWarning($"[HolderIdentifier] Holder {_holderId}: _boxFrozen 미할당! Inspector에서 BoxFrozen 오브젝트를 드래그하세요.");
+
             if (_box != null) _box.SetActive(!frozen);
             if (_boxFrozen != null) _boxFrozen.SetActive(frozen);
+            if (!frozen && _frozenExplosionEffect != null)
+                _frozenExplosionEffect.SetActive(true);
         }
 
-        /// <summary>
-        /// 풀 반환 시 Box 상태 초기화 (일반 상태로).
-        /// </summary>
+        /// <summary>풀 반환 시 Box 상태 초기화 (일반 상태로).</summary>
         public void ResetBox()
         {
             if (_box != null) _box.SetActive(true);
             if (_boxFrozen != null) _boxFrozen.SetActive(false);
+            if (_frozenExplosionEffect != null) _frozenExplosionEffect.SetActive(false);
         }
 
         #endregion
@@ -455,6 +504,21 @@ namespace BalloonFlow
                 _animator.SetBool(_animDeploy, false);
                 _animator.ResetTrigger(_animEnd);
             }
+        }
+
+        #endregion
+
+        #region Utility
+
+        private static Transform FindDeep(Transform parent, string name)
+        {
+            foreach (Transform child in parent)
+            {
+                if (child.name == name) return child;
+                var found = FindDeep(child, name);
+                if (found != null) return found;
+            }
+            return null;
         }
 
         #endregion

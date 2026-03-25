@@ -774,7 +774,7 @@ Camera:
     y: 0
     width: 1
     height: 1
-  near clip plane: 0.3
+  near clip plane: -5
   far clip plane: 1000
   field of view: 60
   orthographic: 1
@@ -833,7 +833,8 @@ MonoBehaviour:
   m_RequiresDepthTextureOption: 2
   m_RequiresOpaqueTextureOption: 2
   m_CameraType: 0
-  m_Cameras: []
+  m_Cameras:
+  - {fileID: 914720488}
   m_RendererIndex: -1
   m_VolumeLayerMask:
     serializedVersion: 2

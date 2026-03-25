@@ -144,6 +144,13 @@ namespace BalloonFlow
 
         /// <summary>Optional gimmick type applied to this balloon (empty string = none).</summary>
         public string gimmickType;
+
+        /// <summary>Piñata 가로 크기 (1=기본, 2~6=멀티셀).</summary>
+        public int sizeW = 1;
+        /// <summary>Piñata 세로 크기.</summary>
+        public int sizeH = 1;
+        /// <summary>Piñata HP (기본 2).</summary>
+        public int hp = 0;
     }
 
     /// <summary>

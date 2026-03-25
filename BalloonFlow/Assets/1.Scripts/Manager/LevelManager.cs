@@ -281,11 +281,19 @@ namespace BalloonFlow
         /// </summary>
         private void SetupLevel(LevelConfig config)
         {
-            // Update cellSpacing based on level grid size (critical for targeting + fail detection)
+            // 풍선 필드 사이즈 자동 계산
+            // boardWorldSize를 컨베이어 내부 최대 영역에서 역산
             if (GameManager.HasInstance && config.gridCols > 0)
             {
-                float boardWorldSize = 8f; // must match MapMakerController._boardWorldSize default
-                int maxDim = Mathf.Max(config.gridCols, config.gridRows > 0 ? config.gridRows : config.gridCols);
+                float innerW = BoardTileManager.CONVEYOR_WIDTH - BoardTileManager.RAIL_THICKNESS - BoardTileManager.RAIL_GAP * 2f;
+                float innerH = BoardTileManager.CONVEYOR_HEIGHT - BoardTileManager.RAIL_THICKNESS - BoardTileManager.RAIL_GAP * 2f;
+                int cols = config.gridCols;
+                int rows = config.gridRows > 0 ? config.gridRows : cols;
+                int maxDim = Mathf.Max(cols, rows);
+                // maxDim 기준으로 boardWorldSize 역산 (가로/세로 중 제한되는 쪽)
+                float bwsFromW = innerW / cols * maxDim;
+                float bwsFromH = innerH / rows * maxDim;
+                float boardWorldSize = Mathf.Min(bwsFromW, bwsFromH);
                 GameManager.Instance.Board.cellSpacing = boardWorldSize / maxDim;
             }
 
@@ -426,12 +434,7 @@ namespace BalloonFlow
             // Pass slotCount for per-tier magazine cap enforcement
             if (HolderManager.HasInstance && config.holders != null)
             {
-                var holderSetup = new System.Collections.Generic.List<(int color, int magazineCount)>(config.holders.Length);
-                for (int i = 0; i < config.holders.Length; i++)
-                {
-                    holderSetup.Add((config.holders[i].color, config.holders[i].magazineCount));
-                }
-                HolderManager.Instance.InitializeHolders(holderSetup, config.queueColumns, slotCount);
+                HolderManager.Instance.InitializeHoldersFromConfig(config.holders, config.queueColumns, slotCount);
             }
 
             // Apply balloon scale
@@ -450,9 +453,12 @@ namespace BalloonFlow
                     balloonLayout.Add(new BalloonSetupData
                     {
                         color       = bl.color,
-                        position    = new Vector3(bl.gridPosition.x, 0.1f, bl.gridPosition.y),  // XZ plane: gridPosition.y = world Z
+                        position    = new Vector3(bl.gridPosition.x, 0.1f, bl.gridPosition.y),
                         gimmickType = bl.gimmickType,
-                        groupId     = -1
+                        groupId     = -1,
+                        sizeW       = bl.sizeW > 0 ? bl.sizeW : 1,
+                        sizeH       = bl.sizeH > 0 ? bl.sizeH : 1,
+                        hp          = bl.hp
                     });
                 }
                 BalloonController.Instance.SetupBalloons(balloonLayout, config.levelId);
