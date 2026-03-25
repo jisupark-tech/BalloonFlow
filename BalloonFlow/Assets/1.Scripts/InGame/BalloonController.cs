@@ -1218,6 +1218,11 @@ namespace BalloonFlow
 
             _balloonObjects.Remove(balloonId);
 
+            // 팝 이펙트 활성화
+            var identifier = obj.GetComponent<BalloonIdentifier>();
+            if (identifier != null)
+                identifier.MarkPopped();
+
             // Animate: bounce up slightly, then shrink to zero
             float savedScale = _balloonScale;
             Sequence seq = DOTween.Sequence();
