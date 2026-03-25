@@ -335,21 +335,73 @@ namespace BalloonFlow
             // Chain: 연결된 보관함도 순차 배치 등록
             if (holder.chainGroupId >= 0)
             {
+                // 레일 여유 용량 체크 — Chain 전체 다트 수 vs 빈 슬롯
+                int chainTotalDarts = holder.magazineCount;
                 List<int> chainMembers = GetChainGroup(holder.chainGroupId);
-                foreach (int memberId in chainMembers)
+                foreach (int mid in chainMembers)
                 {
-                    if (memberId == holder.holderId) continue; // 이미 처리됨
-                    HolderData member = FindHolder(memberId);
-                    if (member == null || member.isDeploying || member.isWaiting ||
-                        member.isMovingToRail || member.isConsumed) continue;
+                    if (mid == holder.holderId) continue;
+                    HolderData m = FindHolder(mid);
+                    if (m != null && !m.isDeploying && !m.isWaiting && !m.isMovingToRail && !m.isConsumed)
+                        chainTotalDarts += m.magazineCount;
+                }
 
-                    member.isMovingToRail = true;
-                    EventBus.Publish(new OnHolderSelected
+                int emptySlots = 0;
+                if (RailManager.HasInstance)
+                    emptySlots = RailManager.Instance.SlotCount - RailManager.Instance.OccupiedCount;
+
+                if (chainTotalDarts > emptySlots)
+                {
+                    Debug.LogWarning($"[HolderManager] Chain group {holder.chainGroupId}: need {chainTotalDarts} slots but only {emptySlots} empty — chain blocked.");
+                    EventBus.Publish(new OnHolderWarning
                     {
-                        holderId = member.holderId,
-                        color = member.color,
-                        magazineCount = member.magazineCount
+                        waitingCount = chainTotalDarts,
+                        maxSlots = emptySlots,
+                        isDanger = true
                     });
+                    // 리더만 배치, 체인 멤버는 등록 안 함
+                }
+                else
+                {
+                    foreach (int memberId in chainMembers)
+                    {
+                        if (memberId == holder.holderId) continue; // 이미 처리됨
+                        HolderData member = FindHolder(memberId);
+                        if (member == null || member.isDeploying || member.isWaiting ||
+                            member.isMovingToRail || member.isConsumed) continue;
+
+                        int memberCol = member.column;
+
+                        // 같은 열 상태 체크 — deploying/waiting 슬롯 관리
+                        if (_deployingHolderId[memberCol] >= 0 && _waitingHolderId[memberCol] >= 0)
+                        {
+                            // 열이 꽉 참 (deploying + waiting) — 이 멤버는 큐에서 대기
+                            Debug.Log($"[HolderManager] Chain member {memberId} column {memberCol} full — stays in queue.");
+                            continue;
+                        }
+
+                        if (_deployingHolderId[memberCol] >= 0)
+                        {
+                            // 열에 이미 배치 중인 보관함 있음 → waiting으로 등록
+                            member.isWaiting = true;
+                            member.isMovingToRail = true;
+                            _waitingHolderId[memberCol] = member.holderId;
+                        }
+                        else
+                        {
+                            // 열이 비어있음 → 즉시 배치
+                            member.isDeploying = true;
+                            member.isMovingToRail = true;
+                            _deployingHolderId[memberCol] = member.holderId;
+                        }
+
+                        EventBus.Publish(new OnHolderSelected
+                        {
+                            holderId = member.holderId,
+                            color = member.color,
+                            magazineCount = member.magazineCount
+                        });
+                    }
                 }
             }
 
