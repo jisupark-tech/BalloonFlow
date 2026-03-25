@@ -132,8 +132,7 @@ namespace BalloonFlow
                 float firingDist = GetFiringAxisDistance(dartPosition, balloon.position, scanDir);
                 if (firingDist < 0f) continue;
 
-                // No penetration: check if any balloon (any color) blocks the path
-                // between the dart and this target
+                // outermost 규칙 — 앞에 풍선(아무 색)이 있으면 타겟 불가
                 if (IsPathBlocked(dartPosition, balloon.position, scanDir, occupancy)) continue;
 
                 // Closest target wins

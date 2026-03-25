@@ -57,6 +57,7 @@ namespace BalloonFlow
     public struct OnContinueApplied
     {
         public int dartsRemoved;
+        public int removedColor; // 제거된 다트 색상 (같은 색 풍선도 제거)
         public int levelId;
     }
 
@@ -369,6 +370,13 @@ namespace BalloonFlow
     public struct OnHolderThawed
     {
         public int holderId;
+    }
+
+    /// <summary>Frozen holder HP changed (deployment count decreased).</summary>
+    public struct OnFrozenHPChanged
+    {
+        public int holderId;
+        public int remainingHP;
     }
 
     /// <summary>A hidden holder was revealed.</summary>

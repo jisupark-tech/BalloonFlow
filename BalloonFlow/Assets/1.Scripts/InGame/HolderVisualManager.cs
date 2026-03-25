@@ -27,13 +27,13 @@ namespace BalloonFlow
 
         // 보관함 배치 수치 — 절대 최소값 보장 (프리팹 스케일 1.04 기준)
         private const float MIN_COL_SPACING      = 1.8f;     // 보관함 좌우 최소 간격
-        private const float MIN_ROW_SPACING       = 1.8f;     // 보관함 앞뒤 최소 간격
+        private const float MIN_ROW_SPACING       = 2.16f;    // 보관함 앞뒤 최소 간격 (+20%)
         private const float MIN_DEPLOY_GAP        = 2.0f;     // 컨베이어 ~ 도착위치 최소 거리
         private const float MIN_RAIL_TO_QUEUE     = 3.5f;     // 컨베이어 ~ 보관함 1열 최소 거리
 
         // 비율 기준 (큰 필드에서 비례 확장)
         private const float RATIO_COL_SPACING     = 0.293f;   // 필드 폭 × (보관함+간격)
-        private const float RATIO_ROW_SPACING     = 0.26f;    // 필드 폭 × 행 간격
+        private const float RATIO_ROW_SPACING     = 0.312f;   // 필드 폭 × 행 간격 (+20%)
         private const float RATIO_DEPLOY_GAP      = 0.35f;    // 필드 폭 × 도착 거리
         private const float RATIO_RAIL_TO_QUEUE   = 0.65f;    // 필드 폭 × 보관함 거리
 
@@ -86,9 +86,9 @@ namespace BalloonFlow
         /// <summary>동적 계산: 레일 바닥 - 갭</summary>
         private float _queueBaseZ = -5.0f;
 
-        /// <summary>Global sequential deploy queue. Only one holder deploys at a time.</summary>
-        private readonly Queue<int> _deployQueue = new Queue<int>();
-        private bool _isProcessingDeploy;
+        /// <summary>열별 독립 배치 큐. 빈 공간 있으면 동시 배치, 없으면 대기.</summary>
+        private Queue<int>[] _colQueues;
+        private bool[] _colBusy;
 
 
         #endregion
@@ -97,6 +97,16 @@ namespace BalloonFlow
 
         protected override void OnSingletonAwake()
         {
+            InitColArrays(5);
+        }
+
+        private void InitColArrays(int cols)
+        {
+            if (_colQueues != null && _colQueues.Length >= cols) return;
+            _colQueues = new Queue<int>[cols];
+            _colBusy = new bool[cols];
+            for (int i = 0; i < cols; i++)
+                _colQueues[i] = new Queue<int>();
         }
 
         private bool _boardFinished;
@@ -111,6 +121,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnContinueApplied>(HandleContinueApplied);
             EventBus.Subscribe<OnHolderThawed>(HandleHolderThawed);
             EventBus.Subscribe<OnHolderRevealed>(HandleHolderRevealed);
+            EventBus.Subscribe<OnFrozenHPChanged>(HandleFrozenHPChanged);
         }
 
         private void OnDisable()
@@ -123,6 +134,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
             EventBus.Unsubscribe<OnHolderThawed>(HandleHolderThawed);
             EventBus.Unsubscribe<OnHolderRevealed>(HandleHolderRevealed);
+            EventBus.Unsubscribe<OnFrozenHPChanged>(HandleFrozenHPChanged);
         }
 
         #endregion
@@ -144,6 +156,7 @@ namespace BalloonFlow
             if (holders == null || holders.Length == 0) return;
 
             _queueColumns = HolderManager.Instance.QueueColumns;
+            InitColArrays(_queueColumns);
 
             // 보관함 가로폭 = 풍선 필드 가로폭에 맞춤
             ComputeDynamicLayout();
@@ -504,7 +517,15 @@ namespace BalloonFlow
             TMP_Text textMesh = obj.GetComponentInChildren<TMP_Text>(true);
             if (textMesh != null)
             {
-                textMesh.text = data.isHidden ? "?" : data.magazineCount.ToString();
+                // Frozen: frozenHP 표시 / Hidden: "?" / 일반: 탄창 수
+                string displayText;
+                if (data.isHidden)
+                    displayText = "?";
+                else if (data.isFrozen)
+                    displayText = data.frozenHP.ToString();
+                else
+                    displayText = data.magazineCount.ToString();
+                textMesh.text = displayText;
                 textMesh.color = Color.white;
                 textMesh.fontSize = MAGAZINE_FONT_SIZE;
                 textMesh.alignment = TextAlignmentOptions.Center;
@@ -610,8 +631,7 @@ namespace BalloonFlow
 
             if (visual.isDeploying || visual.isMovingToRail) return;
 
-            // 배치 순서 큐에 등록
-            _deployQueue.Enqueue(holderId);
+            _colQueues[visual.column].Enqueue(holderId);
 
             // 선택됨 → 블러 해제 + 원래 색상 표시
             if (visual.identifier != null)
@@ -626,16 +646,6 @@ namespace BalloonFlow
 
             RepositionColumnHolders(visual.column);
             StartCoroutine(DeployCoroutine(visual));
-        }
-
-        /// <summary>
-        /// 배치 큐에서 다음 대기 중인 holder를 활성화.
-        /// 이미 deploy point에 도착해서 대기 중인 holder가 있으면 깨움.
-        /// </summary>
-        private void TryProcessNextDeploy()
-        {
-            // _isProcessingDeploy를 false로 세팅한 뒤 호출됨
-            // 대기 중인 코루틴이 알아서 _isProcessingDeploy 체크 후 진행
         }
 
         private IEnumerator DeployCoroutine(HolderVisual visual)
@@ -691,10 +701,11 @@ namespace BalloonFlow
                     yield break;
                 }
 
-                if (!_isProcessingDeploy && _deployQueue.Count > 0 && _deployQueue.Peek() == visual.holderId)
+                int c = visual.column;
+                if (!_colBusy[c] && _colQueues[c].Count > 0 && _colQueues[c].Peek() == visual.holderId)
                 {
-                    _deployQueue.Dequeue();
-                    _isProcessingDeploy = true;
+                    _colQueues[c].Dequeue();
+                    _colBusy[c] = true;
                     break;
                 }
 
@@ -720,8 +731,7 @@ namespace BalloonFlow
 
             if (!RailManager.HasInstance)
             {
-                _isProcessingDeploy = false;
-                TryProcessNextDeploy();
+                _colBusy[visual.column] = false;
                 yield break;
             }
             RailManager rail = RailManager.Instance;
@@ -740,13 +750,7 @@ namespace BalloonFlow
                 if (_cancelledHolders.Contains(visual.holderId))
                 {
                     _cancelledHolders.Remove(visual.holderId);
-                    if (deployStarted)
-                    {
-                        rail.ClearActiveDeploySlot();
-                        rail.UnfreezeAndReinsertAll();
-                    }
-                    _isProcessingDeploy = false;
-                    TryProcessNextDeploy();
+                    _colBusy[visual.column] = false;
                     yield break;
                 }
 
@@ -755,12 +759,8 @@ namespace BalloonFlow
 
                 if (rail.IsSlotEmpty(deploySlot))
                 {
-                    if (deployStarted)
-                    {
-                        rail.SetActiveDeploySlot(deploySlot);
-                        rail.SetActiveDeployHolderId(visual.holderId);
-                        FreezeApproachingDarts(deploySlot, visual.holderId);
-                    }
+                    // deploy slot 기록 (PropagateFreezeChain에서 참조)
+                    // 동시 배치 시에는 freeze 없이 빈 슬롯 대기로 처리
 
                     int dartId = rail.PlaceDart(deploySlot, visual.color, visual.holderId);
                     if (dartId >= 0)
@@ -770,9 +770,6 @@ namespace BalloonFlow
                         if (!deployStarted)
                         {
                             deployStarted = true;
-                            rail.SetActiveDeploySlot(deploySlot);
-                            rail.SetActiveDeployHolderId(visual.holderId);
-
                             if (visual.gameObject != null)
                             {
                                 visual.gameObject.transform.localScale = Vector3.one;
@@ -802,17 +799,10 @@ namespace BalloonFlow
             }
 
             // ── Phase 3: Deployment done — freeze 해제 ──
-            if (deployStarted)
-            {
-                rail.ClearActiveDeploySlot();
-                rail.UnfreezeAndReinsertAll();
-            }
-
-            // ── Phase 4: Cleanup ──
+            // ── Phase 3/4: Cleanup ──
             CompleteDeployment(visual);
 
-            _isProcessingDeploy = false;
-            TryProcessNextDeploy();
+            _colBusy[visual.column] = false;
         }
 
         /// <summary>
@@ -905,6 +895,20 @@ namespace BalloonFlow
                     }
                 }
 
+                // Chain 연결 보관함에 검은 아웃라인 표시
+                if (holderData != null && holderData.chainGroupId >= 0)
+                {
+                    var chainMembers = HolderManager.Instance.GetChainGroup(holderData.chainGroupId);
+                    foreach (int memberId in chainMembers)
+                    {
+                        if (_holderVisuals.TryGetValue(memberId, out HolderVisual memberVisual)
+                            && memberVisual.identifier != null)
+                        {
+                            memberVisual.identifier.SetChainHighlight(true);
+                        }
+                    }
+                }
+
                 if (holderData != null && holderData.isWaiting)
                 {
                     // Move to waiting position (just behind deploy point), do NOT start deploy
@@ -924,8 +928,7 @@ namespace BalloonFlow
         private void HandleBoardCleared(OnBoardCleared evt)
         {
             _boardFinished = true;
-            _isProcessingDeploy = false;
-            _deployQueue.Clear();
+            if (_colQueues != null) for (int i = 0; i < _colQueues.Length; i++) { _colQueues[i].Clear(); _colBusy[i] = false; }
             StopAllCoroutines();
             ClearAllVisuals();
         }
@@ -933,8 +936,7 @@ namespace BalloonFlow
         private void HandleBoardFailed(OnBoardFailed evt)
         {
             _boardFinished = true;
-            _isProcessingDeploy = false;
-            _deployQueue.Clear();
+            if (_colQueues != null) for (int i = 0; i < _colQueues.Length; i++) { _colQueues[i].Clear(); _colBusy[i] = false; }
             StopAllCoroutines();
         }
 
@@ -945,11 +947,22 @@ namespace BalloonFlow
             if (visual.identifier != null)
                 visual.identifier.SetFrozen(false);
 
+            // 해동 시 텍스트를 탄창 수로 복원
+            if (visual.magazineText != null)
+                visual.magazineText.text = visual.magazineRemaining.ToString();
+
             Color originalColor = GetColor(visual.color);
             if (visual.identifier != null && visual.identifier.HasColorRenderers)
                 visual.identifier.ApplyColor(originalColor);
             else if (visual.gameObject != null)
                 ApplyColorToRenderers(visual.gameObject, originalColor);
+        }
+
+        private void HandleFrozenHPChanged(OnFrozenHPChanged evt)
+        {
+            if (!_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual)) return;
+            if (visual.magazineText != null)
+                visual.magazineText.text = evt.remainingHP.ToString();
         }
 
         private void HandleHolderRevealed(OnHolderRevealed evt)
@@ -971,8 +984,7 @@ namespace BalloonFlow
         private void HandleContinueApplied(OnContinueApplied evt)
         {
             _boardFinished = false;
-            _isProcessingDeploy = false;
-            _deployQueue.Clear();
+            if (_colQueues != null) for (int i = 0; i < _colQueues.Length; i++) { _colQueues[i].Clear(); _colBusy[i] = false; }
             Debug.Log("[HolderVisualManager] Continue applied — holder deployment resumed.");
         }
 

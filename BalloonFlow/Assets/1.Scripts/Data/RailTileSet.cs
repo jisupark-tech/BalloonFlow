@@ -28,6 +28,12 @@ namespace BalloonFlow
         public Sprite capL;    // 오른쪽→왼쪽 끝점 (좌측 마침)
         public Sprite capR;    // 왼쪽→오른쪽 끝점 (우측 마침)
 
+        [Header("Cave Tiles (터널 — 개방 끝점 위에 덮음)")]
+        public Sprite caveB;   // rail_cave_b
+        public Sprite caveT;   // rail_cave_t
+        public Sprite caveL;   // rail_cave_l
+        public Sprite caveR;   // rail_cave_r
+
         // Legacy references — kept for backward compatibility with old RailTileSet assets
         [HideInInspector] public Sprite tileBH;
         [HideInInspector] public Sprite tileTH;

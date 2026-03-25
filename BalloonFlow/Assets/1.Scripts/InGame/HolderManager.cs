@@ -24,8 +24,10 @@ namespace BalloonFlow
         public string queueGimmick = "";
         /// <summary>Hidden: 색상이 숨겨진 상태 (큐 앞줄 도달 시 공개).</summary>
         public bool isHidden;
-        /// <summary>Frozen: 얼어있어 터치 불가 (인접 보관함 사용 시 해동).</summary>
+        /// <summary>Frozen: 얼어있어 터치 불가 (글로벌 배치 완료 카운트로 해동).</summary>
         public bool isFrozen;
+        /// <summary>Frozen 해동에 필요한 보관함 배치 완료 횟수.</summary>
+        public int frozenHP;
         /// <summary>Chain 그룹 ID. -1 = Chain 아님. 같은 ID끼리 연결 발동.</summary>
         public int chainGroupId = -1;
     }
@@ -50,9 +52,9 @@ namespace BalloonFlow
         private const int MAX_ACTIVE_TOTAL = 10;
 
         // Magazine max per rail capacity tier.
-        // Design ref: 레일초과_코어메카닉_명세 — "50→max15, 100→max30, 150/200→max50"
+        // 허용량 기준: 50→max50, 100→max80, 150→max100, 200→max100
         private static readonly int[] MAG_CAP_TIERS      = { 50, 100, 150, 200 };
-        private static readonly int[] MAG_CAP_MAX_VALUES  = { 15,  30,  50,  50 };
+        private static readonly int[] MAG_CAP_MAX_VALUES  = { 50,  80, 100, 100 };
 
         #endregion
 
@@ -189,6 +191,7 @@ namespace BalloonFlow
                 bool hidden = gimmick == GimmickManager.GIMMICK_HIDDEN;
                 bool frozen = gimmick == GimmickManager.GIMMICK_FROZEN_DART;
 
+                int fHP = frozen ? (setup.frozenHP > 0 ? setup.frozenHP : 3) : 0;
                 var holder = new HolderData
                 {
                     holderId = _nextHolderId++,
@@ -202,6 +205,7 @@ namespace BalloonFlow
                     queueGimmick = gimmick,
                     isHidden = hidden,
                     isFrozen = frozen,
+                    frozenHP = fHP,
                     chainGroupId = setup.chainGroupId
                 };
                 _holders.Add(holder);
@@ -700,16 +704,27 @@ namespace BalloonFlow
                 }
             }
 
-            // 같은 열의 Frozen 보관함 해동
-            int col = evt.column;
+            // Frozen Dart: 글로벌 배치 완료 카운트 기반 해동
             for (int i = 0; i < _holders.Count; i++)
             {
-                if (_holders[i].column == col && _holders[i].isFrozen && !_holders[i].isConsumed)
+                if (!_holders[i].isFrozen || _holders[i].isConsumed) continue;
+                _holders[i].frozenHP--;
+                if (_holders[i].frozenHP <= 0)
                 {
                     ThawFrozenHolder(_holders[i].holderId);
-                    break; // 한 번에 하나만 해동
+                }
+                else
+                {
+                    // HP 텍스트 갱신 이벤트
+                    EventBus.Publish(new OnFrozenHPChanged
+                    {
+                        holderId = _holders[i].holderId,
+                        remainingHP = _holders[i].frozenHP
+                    });
                 }
             }
+
+            int col = evt.column;
             _deployingHolderId[col] = -1;
 
             // Promote waiting holder to deploying

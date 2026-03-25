@@ -22,6 +22,10 @@ MonoBehaviour:
   capT: {fileID: 21300000, guid: 8d1b2276415d1fe47898a87cdd998c9a, type: 3}
   capL: {fileID: 21300000, guid: 38e11c41f97bb204cb5e70f5823347d0, type: 3}
   capR: {fileID: 21300000, guid: 3a12540a8d3372742921fca60f9ea36d, type: 3}
+  caveB: {fileID: 21300000, guid: d50d95ee29203f0498dd29cf46897dfa, type: 3}
+  caveT: {fileID: 21300000, guid: 1e3f9e22c3f92a54d816e3617f497909, type: 3}
+  caveL: {fileID: 21300000, guid: 4254d6f6c629dc949a114b3d97a9ffaf, type: 3}
+  caveR: {fileID: 21300000, guid: 3286df7db6dc8da4c80e4c5ff6d6cac6, type: 3}
   tileBH: {fileID: 21300000, guid: 2e6e7cf86097e1948854923ad8171f1d, type: 3}
   tileTH: {fileID: 21300000, guid: 2e6e7cf86097e1948854923ad8171f1d, type: 3}
   tileVL: {fileID: 21300000, guid: 985d703f21e14914d96594ab3b210cda, type: 3}

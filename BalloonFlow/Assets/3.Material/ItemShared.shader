@@ -154,8 +154,8 @@ Shader "Custom/ItemShared"
                 finalColor += _EmissionColor.rgb;
             #endif
 
-                // Blur overlay: _BlurAmount=0 원래 색, =1 완전히 BlurColor로 덮음
-                finalColor = lerp(finalColor, _BlurColor.rgb, _BlurAmount);
+                // Blur overlay: 비활성 (흰색 아웃라인만 사용)
+                // finalColor = lerp(finalColor, _BlurColor.rgb, _BlurAmount);
 
                 return half4(finalColor, baseColor.a);
             }

@@ -213,13 +213,34 @@ namespace BalloonFlow
         /// </summary>
         private void HandleDartHitBalloon(OnDartHitBalloon evt)
         {
-            if (evt.color < 0)
-            {
-                Debug.LogWarning($"[PopProcessor] Invalid dart color for dartId {evt.dartId}.");
-                return;
-            }
+            if (evt.color < 0) return;
 
-            ProcessPop(evt.balloonId, evt.color);
+            // DartManager가 이미 PopBalloonWithDart를 호출하여 풍선 팝/기믹 처리 완료.
+            // 여기서는 점수/콤보만 처리 (PopBalloon 중복 호출 방지).
+            if (!BalloonController.HasInstance) return;
+            BalloonData data = BalloonController.Instance.GetBalloon(evt.balloonId);
+            if (data == null) return;
+
+            // 풍선이 팝되었으면 콤보/점수 처리
+            if (data.isPopped)
+            {
+                _comboCount++;
+                _popCount++;
+
+                int comboBonus = (_comboCount - 1) * COMBO_BONUS_PER_HIT;
+                if (comboBonus > 0 && ScoreManager.HasInstance)
+                    ScoreManager.Instance.AddScore(comboBonus);
+
+                EventBus.Publish(new OnComboIncremented { comboCount = _comboCount });
+                EventBus.Publish(new OnPopComplete
+                {
+                    balloonId = evt.balloonId,
+                    color = evt.color,
+                    position = data.position,
+                    popIndex = _comboCount
+                });
+            }
+            // Piñata partial hit 등 — 팝 안 됐으면 콤보 리셋하지 않음 (무시)
         }
 
         /// <summary>

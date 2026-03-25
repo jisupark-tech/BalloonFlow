@@ -340,6 +340,50 @@ namespace BalloonFlow
         {
             if (_currentState != BoardState.Playing) return;
 
+            // 남은 풍선 색상별 로그
+            if (BalloonController.HasInstance)
+            {
+                var remaining = new Dictionary<int, int>();
+                BalloonData[] all = BalloonController.Instance.GetAllBalloons();
+                if (all != null)
+                {
+                    for (int i = 0; i < all.Length; i++)
+                    {
+                        if (all[i].isPopped) continue;
+                        int c = all[i].color;
+                        if (remaining.ContainsKey(c)) remaining[c]++;
+                        else remaining[c] = 1;
+                    }
+                }
+                int totalRemain = 0;
+                foreach (var kvp in remaining) totalRemain += kvp.Value;
+
+                // 벨트 위 다트 색상별 로그
+                var railDarts = new Dictionary<int, int>();
+                if (RailManager.HasInstance)
+                {
+                    var rail = RailManager.Instance;
+                    var occupied = rail.GetOccupiedSlots();
+                    for (int i = 0; i < occupied.Count; i++)
+                    {
+                        int c = rail.GetSlot(occupied[i]).dartColor;
+                        if (c < 0) continue;
+                        if (railDarts.ContainsKey(c)) railDarts[c]++;
+                        else railDarts[c] = 1;
+                    }
+                }
+
+                var sb = new System.Text.StringBuilder();
+                sb.Append($"[BoardState] AllHoldersEmpty — 남은 풍선 {totalRemain}개: ");
+                foreach (var kvp in remaining)
+                    sb.Append($"color{kvp.Key}={kvp.Value} ");
+                sb.Append("| 벨트 다트: ");
+                foreach (var kvp in railDarts)
+                    sb.Append($"color{kvp.Key}={kvp.Value} ");
+                if (railDarts.Count == 0) sb.Append("없음");
+                Debug.Log(sb.ToString());
+            }
+
             // All holders consumed. If rail also empty and balloons remain → fail
             if (RailManager.HasInstance && RailManager.Instance.OccupiedCount == 0 && _remainingBalloons > 0)
             {

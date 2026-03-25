@@ -57,10 +57,24 @@ namespace BalloonFlow
         private const float MIN_CORNER_RADIUS = 0.2f;
         private const float MAX_CORNER_RADIUS = 5f;
 
-        // 가변 수용량 구간 — 정본: 레일초과_코어메카닉_명세 (2026-03-17)
-        // 총 다트 수 기준으로 레일 수용량 자동 결정
+        // 가변 수용량 구간 — 총 다트 수 기준으로 레일 수용량 자동 결정
+        // ≤300→50, ≤500→100, ≤700→150, 701+→200
         private static readonly int[] CAPACITY_TIERS = { 50, 100, 150, 200 };
-        private static readonly int[] CAPACITY_DART_THRESHOLDS = { 30, 60, 100, int.MaxValue };
+        private static readonly int[] CAPACITY_DART_THRESHOLDS = { 300, 500, 700, int.MaxValue };
+
+        // 이어하기 제거량 — 허용량 기준 (가장 많은 색상 다트 기준)
+        private static readonly int[] CONTINUE_REMOVE_COUNTS = { 5, 10, 15, 20 };
+
+        /// <summary>허용량에 따른 이어하기 다트 제거량 반환.</summary>
+        public static int GetContinueRemoveCount(int capacity)
+        {
+            for (int i = 0; i < CAPACITY_TIERS.Length; i++)
+            {
+                if (capacity <= CAPACITY_TIERS[i])
+                    return CONTINUE_REMOVE_COUNTS[i];
+            }
+            return CONTINUE_REMOVE_COUNTS[CONTINUE_REMOVE_COUNTS.Length - 1];
+        }
 
         /// <summary>
         /// 허용량에 따른 레일 면 수 반환.
@@ -106,7 +120,7 @@ namespace BalloonFlow
             public int color;
             public int holderId;
             public Vector3 worldPosition;
-            public int originalSlotIndex; // freeze 시점의 슬롯 인덱스 (체인 전파용)
+            public int originalSlotIndex;
         }
         private readonly List<FrozenDartInfo> _frozenDartInfos = new List<FrozenDartInfo>();
 
@@ -175,10 +189,7 @@ namespace BalloonFlow
             if (_slots == null || _slotCount == 0) return;
             if (_boardFinished) return;
 
-            // 레일 가득 참 → 벨트 정지 (시각적 인지 + 이어하기 정렬 유지)
-            if (_occupiedCount >= _slotCount) return;
-
-            // Advance conveyor belt (counter-clockwise = positive direction along path)
+            // 벨트는 항상 회전 (가득 차도 회전 — 다트가 타겟을 찾아 발사할 수 있게)
             _rotationOffset += _rotationSpeed * _slotSpacing * Time.deltaTime;
 
             // Wrap around
@@ -189,6 +200,7 @@ namespace BalloonFlow
 
             // Chain freeze: moving darts that reach frozen darts also freeze
             PropagateFreezeChain();
+
         }
 
         #endregion
@@ -755,6 +767,51 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// 이어하기: 가장 많은 색상의 다트를 count개 제거.
+        /// 제거된 색상을 out으로 반환 (풍선도 같은 색상으로 제거해야 함).
+        /// </summary>
+        public int RemoveDartsByMostCommonColor(int count, out int removedColor)
+        {
+            removedColor = -1;
+            if (_slots == null || count <= 0) return 0;
+
+            // 색상별 카운트
+            var colorCounts = new Dictionary<int, int>();
+            for (int i = 0; i < _slotCount; i++)
+            {
+                int c = _slots[i].dartColor;
+                if (c < 0) continue;
+                if (colorCounts.ContainsKey(c)) colorCounts[c]++;
+                else colorCounts[c] = 1;
+            }
+
+            if (colorCounts.Count == 0) return 0;
+
+            // 가장 많은 색상 찾기
+            int maxCount = 0;
+            foreach (var kvp in colorCounts)
+            {
+                if (kvp.Value > maxCount) { maxCount = kvp.Value; removedColor = kvp.Key; }
+            }
+
+            // 해당 색상 다트만 제거 (최근 배치 순)
+            var targets = new List<int>();
+            for (int i = 0; i < _slotCount; i++)
+            {
+                if (_slots[i].dartColor == removedColor) targets.Add(i);
+            }
+            targets.Sort((a, b) => _slots[b].dartId.CompareTo(_slots[a].dartId));
+
+            int removed = 0;
+            for (int i = 0; i < targets.Count && removed < count; i++)
+            {
+                ClearSlot(targets[i]);
+                removed++;
+            }
+            return removed;
+        }
+
+        /// <summary>
         /// Removes a dart from the belt and stores it as frozen at its current world position.
         /// The dart is completely off the slot system until unfrozen.
         /// Design ref: "뒤에 오는걸 그자리에 멈추고, 배치가 끝나면 다시 움직이라고"
@@ -890,8 +947,6 @@ namespace BalloonFlow
         /// -1 = 배치 중 아님.
         /// </summary>
         private int _activeDeploySlot = -1;
-
-        /// <summary>현재 배치 중인 holder ID. 이 holder의 다트는 freeze 대상에서 제외.</summary>
         private int _activeDeployHolderId = -1;
 
         public void SetActiveDeploySlot(int slot) { _activeDeploySlot = slot; }
