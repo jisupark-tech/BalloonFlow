@@ -216,6 +216,7 @@ namespace BalloonFlow
             HolderData holder = FindHolder(holderId);
             if (holder == null || !holder.isHidden) return;
             holder.isHidden = false;
+            EventBus.Publish(new OnHolderRevealed { holderId = holderId });
             Debug.Log($"[HolderManager] Hidden holder {holderId} revealed — color {holder.color}");
         }
 
@@ -330,6 +331,27 @@ namespace BalloonFlow
                 color = holder.color,
                 magazineCount = holder.magazineCount
             });
+
+            // Chain: 연결된 보관함도 순차 배치 등록
+            if (holder.chainGroupId >= 0)
+            {
+                List<int> chainMembers = GetChainGroup(holder.chainGroupId);
+                foreach (int memberId in chainMembers)
+                {
+                    if (memberId == holder.holderId) continue; // 이미 처리됨
+                    HolderData member = FindHolder(memberId);
+                    if (member == null || member.isDeploying || member.isWaiting ||
+                        member.isMovingToRail || member.isConsumed) continue;
+
+                    member.isMovingToRail = true;
+                    EventBus.Publish(new OnHolderSelected
+                    {
+                        holderId = member.holderId,
+                        color = member.color,
+                        magazineCount = member.magazineCount
+                    });
+                }
+            }
 
             return true;
         }
@@ -529,6 +551,8 @@ namespace BalloonFlow
 
         #region Private Methods
 
+        public HolderData FindHolderPublic(int holderId) => FindHolder(holderId);
+
         private HolderData FindHolder(int holderId)
         {
             for (int i = 0; i < _holders.Count; i++)
@@ -611,9 +635,29 @@ namespace BalloonFlow
             {
                 holder.isDeploying = false;
                 holder.isConsumed = true;
+
+                // Spawner: 보관함 소모 시 새 보관함 큐에 추가
+                if (holder.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T ||
+                    holder.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O)
+                {
+                    // 랜덤 색상으로 새 보관함 생성 (같은 열)
+                    int newColor = UnityEngine.Random.Range(0, 4); // 기본 4색
+                    int newMag = 20; // 기본 탄창
+                    int newId = AddHolder(newColor, newMag, holder.column);
+                    Debug.Log($"[HolderManager] Spawner triggered — new holder {newId} (color={newColor}) added to column {holder.column}");
+                }
             }
 
+            // 같은 열의 Frozen 보관함 해동
             int col = evt.column;
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                if (_holders[i].column == col && _holders[i].isFrozen && !_holders[i].isConsumed)
+                {
+                    ThawFrozenHolder(_holders[i].holderId);
+                    break; // 한 번에 하나만 해동
+                }
+            }
             _deployingHolderId[col] = -1;
 
             // Promote waiting holder to deploying

@@ -20,6 +20,7 @@ namespace BalloonFlow
         #region Constants
 
         private const string PoolKey = "Balloon";
+        private const string PinataPoolKey = "Pinata";
         private const int PinataRequiredHits = 2;
         private const float DEFAULT_BALLOON_SCALE = 0.5f;
 
@@ -194,6 +195,7 @@ namespace BalloonFlow
             ApplyInitialHiddenState();
             ApplyInitialIceState();
             ApplyInitialFrozenDartState();
+            ApplyInitialColorCurtainState();
 
             Debug.Log($"[BalloonController] Board setup complete. {RemainingCount} balloons placed.");
         }
@@ -225,8 +227,9 @@ namespace BalloonFlow
                 if (_hiddenBalloons.Contains(data.balloonId)) continue;
                 // Non-targetable gimmicks: darts cannot hit these
                 if (data.gimmickType == GimmickWall) continue;
-                if (data.gimmickType == GimmickPin) continue;
+                // Pin은 같은 색 다트로 직접 타격 가능 — 타겟 목록에 포함
                 if (data.gimmickType == GimmickIce) continue;
+                if (data.gimmickType == GimmickColorCurtain) continue;
                 if (data.color == color)
                 {
                     result.Add(data);
@@ -315,6 +318,8 @@ namespace BalloonFlow
                     return new PopResult { success = false, reason = "Wall: indestructible", balloonId = data.balloonId, gimmickType = GimmickWall };
                 if (data.gimmickType == GimmickIce)
                     return new PopResult { success = false, reason = "Ice: indirect only", balloonId = data.balloonId, gimmickType = GimmickIce };
+                if (data.gimmickType == GimmickColorCurtain)
+                    return new PopResult { success = false, reason = "ColorCurtain: indirect only", balloonId = data.balloonId, gimmickType = GimmickColorCurtain };
             }
 
             // Pin: same-color dart progressive removal
@@ -501,7 +506,10 @@ namespace BalloonFlow
             {
                 if (pair.Value != null && ObjectPoolManager.HasInstance)
                 {
-                    ObjectPoolManager.Instance.Return(PoolKey, pair.Value);
+                    // Pinata 프리팹은 Pinata 풀로 반환
+                    bool isPinata = _balloons.TryGetValue(pair.Key, out BalloonData bd)
+                        && (bd.gimmickType == GimmickPinata || bd.gimmickType == GimmickPinataBox);
+                    ObjectPoolManager.Instance.Return(isPinata ? PinataPoolKey : PoolKey, pair.Value);
                 }
             }
 
@@ -522,6 +530,7 @@ namespace BalloonFlow
         {
             int id = _nextBalloonId++;
 
+            int resolvedHP = entry.hp > 0 ? entry.hp : PinataRequiredHits;
             BalloonData data = new BalloonData
             {
                 balloonId   = id,
@@ -529,7 +538,10 @@ namespace BalloonFlow
                 position    = entry.position,
                 isPopped    = false,
                 gimmickType = string.IsNullOrEmpty(entry.gimmickType) ? GimmickNone : entry.gimmickType,
-                hitCount    = 0
+                hitCount    = 0,
+                maxHP       = resolvedHP,
+                sizeW       = entry.sizeW > 0 ? entry.sizeW : 1,
+                sizeH       = entry.sizeH > 0 ? entry.sizeH : 1
             };
 
             _balloons[id] = data;
@@ -546,7 +558,42 @@ namespace BalloonFlow
                 else if (data.gimmickType == GimmickPin)
                     ApplyTintToObject(obj, PIN_COLOR);
                 else if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
-                    ApplyTintToObject(obj, PINATA_COLOR);
+                {
+                    // Pinata 프리팹 — GimmickIdentifier 사용
+                    var gi = obj.GetComponent<GimmickIdentifier>();
+                    if (gi != null)
+                    {
+                        gi.Initialize();
+                        int hp = data.maxHP - data.hitCount;
+                        gi.UpdateHP(Mathf.Max(1, hp));
+                        int ci = Mathf.Clamp(data.color, 0, BalloonColors.Length - 1);
+                        if (gi.HasColorRenderers)
+                            gi.ApplyColor(BalloonColors[ci]);
+                    }
+
+                    // 멀티셀 Piñata: 차지하는 그리드 영역 중심에 배치 + 스케일
+                    {
+                        float cs = _cellSpacing > 0 ? _cellSpacing : 0.3f;
+                        float scaleBase = _balloonScale;
+
+                        if (data.sizeW > 1 || data.sizeH > 1)
+                        {
+                            // 차지하는 영역의 월드 크기에 맞춰 스케일
+                            obj.transform.localScale = new Vector3(
+                                scaleBase * data.sizeW,
+                                scaleBase,
+                                scaleBase * data.sizeH);
+                        }
+
+                        // 앵커(좌하 셀 중심)에서 전체 영역 중심으로 이동
+                        Vector3 centerOffset = new Vector3(
+                            (data.sizeW - 1) * cs * 0.5f,
+                            0f,
+                            (data.sizeH - 1) * cs * 0.5f);
+                        obj.transform.position = data.position + centerOffset;
+                        Debug.Log($"[Pinata] anchor={data.position} cs={cs} size={data.sizeW}x{data.sizeH} offset={centerOffset} final={obj.transform.position}");
+                    }
+                }
             }
 
             // Register Pinata group membership
@@ -576,10 +623,14 @@ namespace BalloonFlow
                 return null;
             }
 
-            GameObject obj = ObjectPoolManager.Instance.Get(PoolKey);
+            // Pinata/PinataBox는 별도 풀 사용
+            bool isPinata = _balloons.TryGetValue(balloonId, out BalloonData bData)
+                && (bData.gimmickType == GimmickPinata || bData.gimmickType == GimmickPinataBox);
+            string poolKey = isPinata ? PinataPoolKey : PoolKey;
+            GameObject obj = ObjectPoolManager.Instance.Get(poolKey);
             if (obj == null)
             {
-                Debug.LogWarning($"[BalloonController] Pool returned null for key '{PoolKey}'. Pool may not be pre-configured.");
+                Debug.LogWarning($"[BalloonController] Pool returned null for key '{poolKey}'.");
                 return null;
             }
 
@@ -618,6 +669,7 @@ namespace BalloonFlow
         private static readonly Color FROZEN_DART_COLOR = new Color(0.50f, 0.70f, 0.90f); // Darker frozen tint (distinct from Ice)
         private static readonly Color WALL_COLOR = new Color(0.35f, 0.35f, 0.38f);     // Dark grey stone wall
         private static readonly Color PIN_COLOR = new Color(0.70f, 0.50f, 0.20f);      // Brown wooden pin
+        private static readonly Color CURTAIN_COLOR = new Color(0.85f, 0.55f, 0.85f);  // Purple curtain tint
         private static readonly Color PINATA_COLOR = new Color(0.95f, 0.70f, 0.20f);   // Gold pinata
 
         private void ApplyInitialHiddenState()
@@ -660,6 +712,18 @@ namespace BalloonFlow
                 if (_balloonObjects.TryGetValue(d.balloonId, out GameObject obj) && obj != null)
                 {
                     ApplyTintToObject(obj, FROZEN_DART_COLOR);
+                }
+            }
+        }
+
+        private void ApplyInitialColorCurtainState()
+        {
+            foreach (BalloonData d in _balloons.Values)
+            {
+                if (d.isPopped || d.gimmickType != GimmickColorCurtain) continue;
+                if (_balloonObjects.TryGetValue(d.balloonId, out GameObject obj) && obj != null)
+                {
+                    ApplyTintToObject(obj, CURTAIN_COLOR);
                 }
             }
         }
@@ -863,7 +927,21 @@ namespace BalloonFlow
             data.hitCount++;
             _balloons[data.balloonId] = data;
 
-            if (data.hitCount < PinataRequiredHits)
+            // HP 텍스트 + 피격/파괴 이펙트
+            int requiredHits = data.maxHP > 0 ? data.maxHP : PinataRequiredHits;
+            if (_balloonObjects.TryGetValue(data.balloonId, out GameObject hitObj) && hitObj != null)
+            {
+                int remainHP = Mathf.Max(0, requiredHits - data.hitCount);
+                var gi = hitObj.GetComponent<GimmickIdentifier>();
+                if (gi != null)
+                {
+                    gi.UpdateHP(remainHP);
+                    gi.PlayHitEffect();
+                    if (remainHP <= 0) gi.PlayEndEffect();
+                }
+            }
+
+            if (data.hitCount < requiredHits)
             {
                 // Partial hit — not yet destroyed
                 EventBus.Publish(new OnGimmickTriggered
@@ -948,8 +1026,8 @@ namespace BalloonFlow
                     break;
             }
 
-            // All pops remove adjacent Pins (Pins can't be targeted directly)
-            RemoveAdjacentPins(data.position);
+            // Pin은 인접 팝으로 제거 안 됨 — 같은 색 다트 직접 타격으로만 제거
+            // RemoveAdjacentPins(data.position);  // 문서 기준 비활성
 
             // All pops thaw adjacent Frozen Dart balloons (like Ice adjacency)
             ThawAdjacentFrozenDarts(data.position);
@@ -1229,12 +1307,17 @@ namespace BalloonFlow
             seq.Append(obj.transform.DOMove(obj.transform.position + Vector3.up * 0.4f, 0.12f).SetEase(Ease.OutQuad));
             seq.Join(obj.transform.DOScale(Vector3.one * savedScale * 1.2f, 0.12f).SetEase(Ease.OutQuad));
             seq.Append(obj.transform.DOScale(Vector3.zero, 0.15f).SetEase(Ease.InBack));
+            // Pinata 프리팹인지 판별하여 올바른 풀에 반환
+            bool returnToPinata = _balloons.TryGetValue(balloonId, out BalloonData retData)
+                && (retData.gimmickType == GimmickPinata || retData.gimmickType == GimmickPinataBox);
+            string returnKey = returnToPinata ? PinataPoolKey : PoolKey;
+
             seq.OnComplete(() =>
             {
                 if (obj != null && ObjectPoolManager.HasInstance)
                 {
                     obj.transform.localScale = Vector3.one * savedScale;
-                    ObjectPoolManager.Instance.Return(PoolKey, obj);
+                    ObjectPoolManager.Instance.Return(returnKey, obj);
                 }
             });
         }
@@ -1335,8 +1418,15 @@ namespace BalloonFlow
         /// </summary>
         public string gimmickType;
 
-        /// <summary>Hit counter for Pinata gimmick (requires 2 hits).</summary>
+        /// <summary>Hit counter for Pinata gimmick.</summary>
         public int hitCount;
+        /// <summary>Piñata 최대 HP (설정값).</summary>
+        public int maxHP = 2;
+
+        /// <summary>Piñata 가로 크기 (1=기본).</summary>
+        public int sizeW = 1;
+        /// <summary>Piñata 세로 크기.</summary>
+        public int sizeH = 1;
     }
 
     /// <summary>
@@ -1354,6 +1444,9 @@ namespace BalloonFlow
         /// -1 means not part of a group.
         /// </summary>
         public int groupId = -1;
+        public int sizeW = 1;
+        public int sizeH = 1;
+        public int hp = 0;
     }
 
     /// <summary>

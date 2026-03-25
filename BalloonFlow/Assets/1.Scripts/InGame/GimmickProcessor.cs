@@ -44,8 +44,10 @@ namespace BalloonFlow
         // Surprise tracking: balloonIds with hidden color (field balloon)
         private readonly HashSet<int> _surpriseBalloons = new HashSet<int>();
 
-        // Color Curtain tracking: balloonId → required color
+        // Color Curtain tracking: balloonId → required color, balloonId → counter
         private readonly Dictionary<int, int> _curtainColors = new Dictionary<int, int>();
+        private readonly Dictionary<int, int> _curtainCounters = new Dictionary<int, int>();
+        private const int DEFAULT_CURTAIN_COUNTER = 3;
 
         #endregion
 
@@ -78,6 +80,7 @@ namespace BalloonFlow
             _pinSegments.Clear();
             _surpriseBalloons.Clear();
             _curtainColors.Clear();
+            _curtainCounters.Clear();
         }
 
         /// <summary>
@@ -102,6 +105,7 @@ namespace BalloonFlow
 
                 case BalloonController.GimmickColorCurtain:
                     _curtainColors[balloonId] = color;
+                    _curtainCounters[balloonId] = hp > 0 ? hp : DEFAULT_CURTAIN_COUNTER;
                     break;
 
                 case BalloonController.GimmickLockKey:
@@ -277,6 +281,36 @@ namespace BalloonFlow
                 {
                     BalloonController.Instance.ForcePopBalloon(id);
                 }
+            }
+
+            // === Color Curtain: 해당 색 풍선 팝 시 카운터 -1 ===
+            var curtainToRemove = new List<int>();
+            foreach (var kvp in _curtainCounters)
+            {
+                // 팝된 풍선의 색상이 커튼의 요구 색상과 일치해야 카운터 감소
+                if (_curtainColors.TryGetValue(kvp.Key, out int requiredColor) && evt.color == requiredColor)
+                {
+                    int newCounter = kvp.Value - 1;
+                    _curtainCounters[kvp.Key] = newCounter;
+
+                    if (newCounter <= 0)
+                    {
+                        curtainToRemove.Add(kvp.Key);
+                        EventBus.Publish(new OnGimmickTriggered
+                        {
+                            gimmickType = BalloonController.GimmickColorCurtain,
+                            targetId = kvp.Key
+                        });
+                    }
+                }
+            }
+
+            foreach (int id in curtainToRemove)
+            {
+                _curtainCounters.Remove(id);
+                _curtainColors.Remove(id);
+                if (BalloonController.HasInstance)
+                    BalloonController.Instance.ForcePopBalloon(id);
             }
 
             // === Lock-Key: popping any balloon with this color unlocks Locks ===

@@ -84,6 +84,8 @@ namespace BalloonFlow
                 _popEffect.SetActive(true);
         }
 
+        // Piñata 관련 기능은 GimmickIdentifier로 이전됨
+
         #region Color
 
         /// <summary>기반 Material 복제 캐시 (색상별)</summary>

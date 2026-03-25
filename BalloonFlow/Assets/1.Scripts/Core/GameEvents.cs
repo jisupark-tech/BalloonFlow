@@ -371,6 +371,12 @@ namespace BalloonFlow
         public int holderId;
     }
 
+    /// <summary>A hidden holder was revealed.</summary>
+    public struct OnHolderRevealed
+    {
+        public int holderId;
+    }
+
     /// <summary>A dart was fired at a specific target balloon with trajectory info.</summary>
     public struct OnDartFiredAtTarget
     {
