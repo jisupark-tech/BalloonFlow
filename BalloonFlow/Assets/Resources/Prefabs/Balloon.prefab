@@ -17,7 +17,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1213864293001348586
 Transform:
   m_ObjectHideFlags: 0
@@ -9926,6 +9926,7 @@ MonoBehaviour:
   _balloonId: 0
   _color: 0
   _animator: {fileID: 1606809899372433985}
+  _popEffect: {fileID: 2422562311097542492}
   _colorRenderers:
   - {fileID: 5129179390010211110}
   _baseMaterial: {fileID: 2100000, guid: 66b7b620b8048be45b37648985705e8f, type: 2}

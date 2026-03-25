@@ -22,6 +22,10 @@ namespace BalloonFlow
         private Animator _animator;
         private static readonly int _animPop = Animator.StringToHash("Pop");
 
+        [Header("[팝 이펙트 — Inspector에서 할당]")]
+        [Tooltip("풍선 터질 때 활성화할 이펙트 (Particle System 등)")]
+        [SerializeField] private GameObject _popEffect;
+
         [Header("[색상 적용 대상 — Inspector에서 할당]")]
         [Tooltip("색상 적용할 Renderer만 드래그")]
         [SerializeField] private Renderer[] _colorRenderers;
@@ -61,6 +65,10 @@ namespace BalloonFlow
 
             if (_animator != null)
                 _animator.SetBool(_animPop, false);
+
+            // 이펙트 비활성화 (풀 재사용 대비)
+            if (_popEffect != null)
+                _popEffect.SetActive(false);
         }
 
         /// <summary>Marks this balloon as popped + 팡 애니메이션 트리거.</summary>
@@ -70,6 +78,10 @@ namespace BalloonFlow
 
             if (_animator != null)
                 _animator.SetBool(_animPop, true);
+
+            // 팝 이펙트 활성화
+            if (_popEffect != null)
+                _popEffect.SetActive(true);
         }
 
         #region Color
