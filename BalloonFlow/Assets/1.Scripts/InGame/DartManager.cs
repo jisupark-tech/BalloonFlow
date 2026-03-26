@@ -859,32 +859,6 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Removes all rail darts and slot visuals of a specific color.
-        /// Called when all targetable balloons of that color are gone (Chain gimmick surplus cleanup).
-        /// </summary>
-        private void RemoveDartsByColor(int color)
-        {
-            if (!RailManager.HasInstance) return;
-            RailManager rail = RailManager.Instance;
-
-            for (int i = 0; i < rail.SlotCount; i++)
-            {
-                RailManager.SlotData slot = rail.GetSlot(i);
-                if (slot.dartColor == color)
-                {
-                    rail.ClearSlot(i);
-
-                    // Remove corresponding visual
-                    if (_slotVisuals.TryGetValue(i, out SlotDartVisual visual))
-                    {
-                        ReturnDartToPool(visual.gameObject);
-                        _slotVisuals.Remove(i);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
         /// Board cleared — stop all dart activity and clear remaining darts from rail.
         /// Surplus darts exist due to Chain gimmick auto-popping adjacent balloons without darts.
         /// </summary>
@@ -922,7 +896,6 @@ namespace BalloonFlow
         private void HandleContinueApplied(OnContinueApplied evt)
         {
             _boardFinished = false;
-            Debug.Log("[DartManager] Continue applied — dart system resumed.");
         }
 
         #endregion

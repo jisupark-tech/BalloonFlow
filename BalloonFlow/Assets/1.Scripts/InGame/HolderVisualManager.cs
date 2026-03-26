@@ -182,9 +182,6 @@ namespace BalloonFlow
             // 보관함 가로폭 = 풍선 필드 가로폭에 맞춤
             ComputeDynamicLayout();
 
-            Debug.Log($"[HolderVisualManager] SpawnWaitingHolders: holders={holders.Length}, queueCols={_queueColumns}, " +
-                $"colSpacing={_columnSpacing:F2}, baseZ={_queueBaseZ:F2}, railZ={_cachedRailZ:F2}");
-
             // Group by column
             var columnQueues = new Dictionary<int, List<HolderData>>();
             for (int i = 0; i < holders.Length; i++)
@@ -215,7 +212,6 @@ namespace BalloonFlow
                     }
                 }
             }
-            Debug.Log($"[HolderVisualManager] Spawned {spawnedCount}/{holders.Length} holder visuals");
         }
 
         /// <summary>
@@ -573,8 +569,6 @@ namespace BalloonFlow
             };
         }
 
-        /// <summary>Renderer 캐시 — GetComponentsInChildren 반복 호출 방지</summary>
-        private static readonly Dictionary<int, Renderer[]> _holderRendererCache = new Dictionary<int, Renderer[]>();
         private static void ApplyColorToRenderers(GameObject obj, Color color)
         {
             Material shared = BalloonController.GetOrCreateSharedMaterial(color);
@@ -600,7 +594,6 @@ namespace BalloonFlow
                     visual.identifier.SetSelected(); // MPB 초기화
                 }
 
-                _holderRendererCache.Remove(visual.gameObject.GetInstanceID());
                 if (ObjectPoolManager.HasInstance)
                     ObjectPoolManager.Instance.Return(HOLDER_POOL_KEY, visual.gameObject);
             }
@@ -1007,7 +1000,6 @@ namespace BalloonFlow
         {
             _boardFinished = false;
             if (_colQueues != null) for (int i = 0; i < _colQueues.Length; i++) { _colQueues[i].Clear(); _colBusy[i] = false; }
-            Debug.Log("[HolderVisualManager] Continue applied — holder deployment resumed.");
         }
 
         #endregion

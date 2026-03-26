@@ -273,10 +273,28 @@ namespace BalloonFlow
             float myProg = dart.progress;
             float closest = float.MaxValue;
 
+            // 다른 다트 체크
             for (int i = 0; i < _darts.Count; i++)
             {
                 if (_darts[i].dartId == dart.dartId) continue;
                 float dist = _darts[i].progress - myProg;
+                if (_totalPathLength > 0f)
+                    dist = ((dist % _totalPathLength) + _totalPathLength) % _totalPathLength;
+                if (dist > 0f && dist < closest)
+                    closest = dist;
+            }
+
+            // 다른 holder의 deploy point 바로 뒤에서 정지
+            // deploy point 자체가 아닌, deploy point - slotSpacing * 0.5 지점을 장애물로 설정
+            // → 다트가 deploy point를 넘지 않되, deploy point 바로 앞에서 멈춤
+            foreach (var dp in _deployPoints)
+            {
+                if (dp.Key == dart.holderId) continue;
+                // deploy point 바로 뒤 (진행 방향 기준)
+                float blockAt = dp.Value - _slotSpacing * 0.5f;
+                if (_totalPathLength > 0f)
+                    blockAt = ((blockAt % _totalPathLength) + _totalPathLength) % _totalPathLength;
+                float dist = blockAt - myProg;
                 if (_totalPathLength > 0f)
                     dist = ((dist % _totalPathLength) + _totalPathLength) % _totalPathLength;
                 if (dist > 0f && dist < closest)
@@ -656,13 +674,17 @@ namespace BalloonFlow
             return bestProg;
         }
 
-        /// <summary>해당 progress에 slotSpacing 이내에 다트가 없는지 체크 (모든 다트).</summary>
+        /// <summary>해당 progress에 배치 가능한지 체크.
+        /// 자기 holder 다트만 간격 체크. 다른 holder의 멈춘 다트는 무시
+        /// (deploy point에서 정지 중이므로 배치에 방해하지 않음).</summary>
         public bool IsProgressClear(float progress, int holderId)
         {
             if (_darts.Count >= _slotCount) return false;
             float minGap = _slotSpacing * 0.9f;
             for (int i = 0; i < _darts.Count; i++)
             {
+                // 다른 holder의 다트는 무시 (deploy point에서 정지 중일 수 있음)
+                if (_darts[i].holderId != holderId) continue;
                 float diff = Mathf.Abs(_darts[i].progress - progress);
                 if (_totalPathLength > 0f)
                     diff = Mathf.Min(diff, _totalPathLength - diff);
@@ -952,8 +974,6 @@ namespace BalloonFlow
         {
             int capacity = CalculateCapacity(totalDarts, explicitCapacity);
             InitializeSlots(capacity);
-            Debug.Log($"[RailManager] InitializeForLevel: totalDarts={totalDarts}, capacity={capacity}" +
-                      (explicitCapacity > 0 ? " (explicit)" : " (auto)"));
         }
 
         /// <summary>
@@ -1208,6 +1228,8 @@ namespace BalloonFlow
         private void HandleBoardCleared(OnBoardCleared evt)
         {
             _boardFinished = true;
+            _deployPoints.Clear();
+            _darts.Clear();
             // Force-clear all slots immediately
             if (_slots != null)
             {
@@ -1224,13 +1246,14 @@ namespace BalloonFlow
         private void HandleBoardFailed(OnBoardFailed evt)
         {
             _boardFinished = true;
+            _deployPoints.Clear();
+            _darts.Clear();
         }
 
         private void HandleContinueApplied(OnContinueApplied evt)
         {
             // Resume conveyor after continue — board is back in play
             _boardFinished = false;
-            Debug.Log($"[RailManager] Continue applied — conveyor resumed. Occupied={_occupiedCount}/{_slotCount}");
         }
 
         #endregion
@@ -1393,45 +1416,6 @@ namespace BalloonFlow
                             {
                                 changed = true;
                             }
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Per-dart freeze chain: if a non-frozen dart is close to a frozen dart, freeze it too.
-        /// </summary>
-        private void PerDartFreezeChain()
-        {
-            if (_darts.Count < 2) return;
-            float threshold = _slotSpacing * 1.2f;
-
-            // Check all pairs - if a non-frozen dart is close behind a frozen dart, freeze it
-            bool changed = true;
-            int iterations = 0;
-            while (changed && iterations < 10)
-            {
-                changed = false;
-                iterations++;
-                for (int i = 0; i < _darts.Count; i++)
-                {
-                    if (_darts[i].isFrozen) continue;
-
-                    Vector3 myPos = GetPositionAtDistance(_darts[i].progress);
-
-                    for (int j = 0; j < _darts.Count; j++)
-                    {
-                        if (i == j || !_darts[j].isFrozen) continue;
-
-                        Vector3 frozenPos = GetPositionAtDistance(_darts[j].progress);
-                        float dist = Vector3.Distance(myPos, frozenPos);
-
-                        if (dist < threshold)
-                        {
-                            _darts[i].isFrozen = true;
-                            changed = true;
                             break;
                         }
                     }

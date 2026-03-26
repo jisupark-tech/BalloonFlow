@@ -58,21 +58,6 @@ namespace BalloonFlow
             new Color(253/255f, 180/255f,  88/255f),  // 25: Amber
             new Color(137/255f,  10/255f,   8/255f),  // 26: Crimson
             new Color(111/255f, 175/255f, 177/255f),  // 27: Sage
-            new Color(0.95f, 0.65f, 0.00f),  // 13: Amber
-            new Color(0.15f, 0.70f, 0.65f),  // 14: Teal
-            new Color(0.95f, 0.35f, 0.50f),  // 15: Rose
-            new Color(0.95f, 0.45f, 0.35f),  // 16: Coral
-            new Color(0.30f, 0.15f, 0.70f),  // 17: Indigo
-            new Color(0.40f, 0.95f, 0.65f),  // 18: Mint
-            new Color(0.95f, 0.75f, 0.60f),  // 19: Peach
-            new Color(0.90f, 0.15f, 0.65f),  // 20: Magenta
-            new Color(0.50f, 0.55f, 0.15f),  // 21: Olive
-            new Color(0.45f, 0.75f, 0.95f),  // 22: Sky
-            new Color(0.95f, 0.55f, 0.45f),  // 23: Salmon
-            new Color(0.50f, 0.10f, 0.15f),  // 24: Maroon
-            new Color(0.10f, 0.45f, 0.20f),  // 25: Forest
-            new Color(0.70f, 0.55f, 0.90f),  // 26: Lavender
-            new Color(0.82f, 0.70f, 0.50f),  // 27: Tan
         };
 
         // Gimmick type string constants — 정본: BalloonFlow_기믹명세 (2026-03-17)
@@ -212,8 +197,6 @@ namespace BalloonFlow
             ApplyInitialIceState();
             ApplyInitialFrozenDartState();
             ApplyInitialColorCurtainState();
-
-            Debug.Log($"[BalloonController] Board setup complete. {RemainingCount} balloons placed.");
         }
 
         /// <summary>
@@ -607,7 +590,6 @@ namespace BalloonFlow
                             0f,
                             (data.sizeH - 1) * cs * 0.5f);
                         obj.transform.position = data.position + centerOffset;
-                        Debug.Log($"[Pinata] anchor={data.position} cs={cs} size={data.sizeW}x{data.sizeH} offset={centerOffset} final={obj.transform.position}");
                     }
                 }
             }
