@@ -99,8 +99,10 @@ namespace BalloonFlow
 
         private int _levelId = 1;
         private int _numColors = 4;
+        private HashSet<int> _selectedColors = new HashSet<int> { 0, 1, 2, 3 };
         private DifficultyPurpose _difficulty = DifficultyPurpose.Normal;
         private int _paintColor = 0;
+        private int _activeTab = 0;
         private int _paintGimmick = 0;       // FIELD_GIMMICK_NAMES 인덱스
         private int _paintHolderGimmick = 0; // HOLDER_GIMMICK_NAMES 인덱스
 
@@ -134,8 +136,8 @@ namespace BalloonFlow
         private float _railPadding = 1.5f;
         private float _railHeight = 0.5f;
         private int _railSlotCount = 200;
-        private bool _smoothCorners;
-        private float _cornerRadius = 1f;
+        private bool _smoothCorners = true;
+        private float _cornerRadius = 3f;
 
         // Grid-based conveyor path (extended grid: +1 padding on each side)
         private bool[,] _pathGrid; // [gridCols+2, gridRows+2]
@@ -152,8 +154,20 @@ namespace BalloonFlow
         private int _deleteColAt;
         private int _swapFromColor;
         private int _swapToColor = 1;
+        private Dropdown _swapFromDropdown;
+        private Dropdown _swapToDropdown;
         private bool _floodFillMode;
         private Text _txtFillMode;
+
+        // Gimmick-specific UI rows (Balloon/Field brush)
+        private RectTransform _fieldGimmickHPRow;
+        private RectTransform _fieldGimmickSizeRow;
+        private RectTransform _fieldGimmickChainRow;
+        private RectTransform _fieldGimmickFrozenRow;
+
+        // Gimmick-specific UI rows (Holder brush)
+        private RectTransform _holderGimmickChainRow;
+        private RectTransform _holderGimmickFrozenRow;
 
         // Auto-generated waypoints from path grid
         private List<Vector3> _customWaypoints = new List<Vector3>();
@@ -199,7 +213,7 @@ namespace BalloonFlow
 
         // Level Info UI 참조 (로드 시 갱신용)
         private InputField _levelIdInput;
-        private InputField _numColorsInput;
+        // _numColorsInput removed — replaced by color toggle grid
         private Dropdown _difficultyDropdown;
         private Text[] _palTexts;
         private Transform _holderGridContainer;
@@ -622,6 +636,10 @@ namespace BalloonFlow
             _txtStatus.color = new Color(0.6f, 0.8f, 1f);
         }
 
+        private Transform[] _tabContents;
+        private Button[] _tabButtons;
+        private static readonly string[] TAB_NAMES = { "Balloon", "Holder", "Image", "Export" };
+
         private void BuildRightPanel(Transform canvasRoot)
         {
             var panel = MakeRT("RightPanel", canvasRoot);
@@ -637,30 +655,181 @@ namespace BalloonFlow
             Lbl(content, "MAP MAKER", 18, FontStyle.Bold);
             Sep(content);
             BuildLevelSection(content);
-            BuildPaletteSection(content);
-            BuildGridSection(content);
-            BuildActionSection(content);
-            BuildEditToolsSection(content);
-            BuildHolderSection(content);
-            BuildRailSection(content);
-            BuildConveyorSection(content);
-            BuildExportSection(content);
+
+            // Tab bar
+            var tabRow = Row(content, 30);
+            _tabButtons = new Button[TAB_NAMES.Length];
+            for (int i = 0; i < TAB_NAMES.Length; i++)
+            {
+                int tabIdx = i;
+                var b = Btn(tabRow, TAB_NAMES[i], () => SetActiveTab(tabIdx));
+                _tabButtons[i] = b;
+            }
+            Sep(content);
+
+            // Tab contents
+            _tabContents = new Transform[TAB_NAMES.Length];
+
+            // Tab 0: Balloon
+            var tab0 = MakeRT("Tab_Balloon", content);
+            tab0.gameObject.AddComponent<VerticalLayoutGroup>().spacing = 2;
+            tab0.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            _tabContents[0] = tab0;
+            BuildPaletteSection(tab0);
+            BuildGridSection(tab0);
+            BuildActionSection(tab0);
+            BuildEditToolsSection(tab0);
+
+            // Tab 1: Holder
+            var tab1 = MakeRT("Tab_Holder", content);
+            tab1.gameObject.AddComponent<VerticalLayoutGroup>().spacing = 2;
+            tab1.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            _tabContents[1] = tab1;
+            BuildHolderSection(tab1);
+
+            // Tab 2: Image
+            var tab2 = MakeRT("Tab_Image", content);
+            tab2.gameObject.AddComponent<VerticalLayoutGroup>().spacing = 2;
+            tab2.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            _tabContents[2] = tab2;
+            BuildImageImportSection(tab2);
+
+            // Tab 3: Export
+            var tab3 = MakeRT("Tab_Export", content);
+            tab3.gameObject.AddComponent<VerticalLayoutGroup>().spacing = 2;
+            tab3.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            _tabContents[3] = tab3;
+            BuildExportSection(tab3);
+
+            SetActiveTab(0);
+        }
+
+        private void SetActiveTab(int tabIndex)
+        {
+            _activeTab = tabIndex;
+            for (int i = 0; i < _tabContents.Length; i++)
+            {
+                if (_tabContents[i] != null)
+                    _tabContents[i].gameObject.SetActive(i == _activeTab);
+            }
+            // Highlight active tab button
+            for (int i = 0; i < _tabButtons.Length; i++)
+            {
+                if (_tabButtons[i] != null)
+                {
+                    var img = _tabButtons[i].gameObject.GetComponent<Image>();
+                    if (img != null)
+                        img.color = (i == _activeTab)
+                            ? new Color(0.25f, 0.45f, 0.70f)
+                            : new Color(0.18f, 0.18f, 0.22f);
+                }
+            }
         }
 
         #endregion
 
         #region UI Building — Sections
 
+        private Transform _colorToggleContainer;
+
         private void BuildLevelSection(Transform p)
         {
             Lbl(p, "Level Info", 14, FontStyle.Bold);
             var r1 = Row(p); Lbl(r1, "Level ID", w: 90);
             _levelIdInput = MakeInputField(r1, _levelId.ToString(), s => { if (int.TryParse(s, out int v)) _levelId = v; });
-            var r2 = Row(p); Lbl(r2, "Colors", w: 90);
-            _numColorsInput = MakeIntField(r2, _numColors, 2, 28, v => { _numColors = v; RebuildPalette(); });
             var r3 = Row(p); Lbl(r3, "Difficulty", w: 90);
             MakeDifficultyDropdown(r3);
+
+            // Color Palette Toggle Grid — replaces numColors IntField
+            Lbl(p, "Color Palette (click to toggle)", 11);
+            _colorToggleContainer = MakeRT("ColorToggleGrid", p);
+            var glg = _colorToggleContainer.gameObject.AddComponent<GridLayoutGroup>();
+            glg.cellSize = new Vector2(34, 34);
+            glg.spacing = new Vector2(3, 3);
+            glg.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            glg.constraintCount = 10;
+            var le = _colorToggleContainer.gameObject.AddComponent<LayoutElement>();
+            le.preferredHeight = 120;
+            RebuildColorToggleGrid();
+
             Sep(p);
+        }
+
+        private void RebuildColorToggleGrid()
+        {
+            if (_colorToggleContainer == null) return;
+            foreach (Transform c in _colorToggleContainer) Destroy(c.gameObject);
+
+            for (int i = 0; i < PALETTE.Length; i++)
+            {
+                int idx = i;
+                bool selected = _selectedColors.Contains(idx);
+
+                // Outer container (acts as border frame)
+                var outerGO = new GameObject($"ColorSlot_{idx}", typeof(RectTransform), typeof(Image));
+                outerGO.transform.SetParent(_colorToggleContainer, false);
+                var outerImg = outerGO.GetComponent<Image>();
+                outerImg.color = selected ? Color.white : new Color(0.12f, 0.12f, 0.15f);
+
+                // Inner color button
+                var btn = DefaultControls.CreateButton(_uiRes);
+                btn.transform.SetParent(outerGO.transform, false);
+                var btnRT = btn.GetComponent<RectTransform>();
+                btnRT.anchorMin = Vector2.zero; btnRT.anchorMax = Vector2.one;
+                float border = selected ? 3f : 0f;
+                btnRT.offsetMin = new Vector2(border, border);
+                btnRT.offsetMax = new Vector2(-border, -border);
+
+                Color btnColor = PALETTE[idx];
+                btnColor.a = 1f;
+                btn.GetComponent<Image>().color = btnColor;
+                var t = btn.GetComponentInChildren<Text>();
+                t.text = $"{idx}";
+                t.font = _font; t.fontSize = 9; t.color = Color.white;
+                t.fontStyle = selected ? FontStyle.Bold : FontStyle.Normal;
+                btn.GetComponent<Button>().onClick.AddListener(() => ToggleColorSelection(idx));
+            }
+        }
+
+        private void ToggleColorSelection(int colorIndex)
+        {
+            if (_selectedColors.Contains(colorIndex))
+            {
+                if (_selectedColors.Count <= 2) { SetStatus("Minimum 2 colors required"); return; }
+                _selectedColors.Remove(colorIndex);
+            }
+            else
+            {
+                _selectedColors.Add(colorIndex);
+            }
+            _numColors = _selectedColors.Count;
+
+            // Remove balloons of deselected colors
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                    if (_balloonColors[c, r] >= 0 && !_selectedColors.Contains(_balloonColors[c, r]))
+                    {
+                        _balloonColors[c, r] = -1;
+                        _balloonGimmicks[c, r] = 0;
+                    }
+
+            // Remove holders that use deselected colors
+            for (int c = 0; c < _holderCols; c++)
+                for (int r = 0; r < _holderRows; r++)
+                    if (_holderColors[c, r] >= 0 && !_selectedColors.Contains(_holderColors[c, r]))
+                    {
+                        _holderColors[c, r] = -1;
+                        _holderMags[c, r] = 0;
+                        _holderGimmicks[c, r] = 0;
+                    }
+
+            RebuildColorToggleGrid();
+            RebuildPalette();
+            AutoRoundBalloonCounts();
+            OnBalloonGridChanged();
+            RebuildHolderUI();
+            RefreshInfo();
+            SetStatus($"Colors: {_numColors} selected");
         }
 
         private Transform _paletteContainer;
@@ -688,15 +857,19 @@ namespace BalloonFlow
                 string name = FIELD_GIMMICK_NAMES[v];
                 _paintGimmick = System.Array.IndexOf(GIMMICK_NAMES, name);
                 if (_paintGimmick < 0) _paintGimmick = 0;
+                UpdateFieldGimmickUI(name);
                 SetStatus($"Field Gimmick: {name}");
             });
 
-            // Piñata 설정
+            // Piñata HP (shown for Pinata/Pinata_Box)
             var hpRow = Row(p); Lbl(hpRow, "Piñata HP", w: 110);
             MakeIntField(hpRow, _paintPinataHP, 1, 50, v => {
                 _paintPinataHP = v;
                 SetStatus($"Piñata HP: {v}");
             });
+            _fieldGimmickHPRow = hpRow.GetComponent<RectTransform>();
+
+            // Piñata Size (shown for Pinata/Pinata_Box)
             var sizeRow = Row(p); Lbl(sizeRow, "Piñata Size", w: 110);
             MakeIntField(sizeRow, _paintPinataW, 1, 6, v => {
                 _paintPinataW = v;
@@ -707,8 +880,28 @@ namespace BalloonFlow
                 _paintPinataH = v;
                 SetStatus($"Piñata Size: {_paintPinataW}x{_paintPinataH}");
             });
+            _fieldGimmickSizeRow = sizeRow.GetComponent<RectTransform>();
+
+            // Initially hide all gimmick-specific rows (none selected)
+            _fieldGimmickHPRow.gameObject.SetActive(false);
+            _fieldGimmickSizeRow.gameObject.SetActive(false);
 
             Sep(p);
+        }
+
+        private void UpdateFieldGimmickUI(string gimmickName)
+        {
+            bool isPinata = gimmickName == "Pinata" || gimmickName == "Pinata_Box";
+            if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(isPinata);
+            if (_fieldGimmickSizeRow != null) _fieldGimmickSizeRow.gameObject.SetActive(isPinata);
+        }
+
+        private void UpdateHolderGimmickUI(string gimmickName)
+        {
+            bool isChain = gimmickName == "Chain";
+            bool isFrozen = gimmickName == "Frozen_Dart";
+            if (_holderGimmickChainRow != null) _holderGimmickChainRow.gameObject.SetActive(isChain);
+            if (_holderGimmickFrozenRow != null) _holderGimmickFrozenRow.gameObject.SetActive(isFrozen);
         }
 
         private void RebuildPalette()
@@ -716,28 +909,29 @@ namespace BalloonFlow
             if (_paletteContainer == null) return;
             foreach (Transform c in _paletteContainer) Destroy(c.gameObject);
 
-            _palTexts = new Text[_numColors + 1];
-            for (int i = 0; i < _numColors; i++)
+            // Build sorted list of selected color indices
+            var sortedColors = new List<int>(_selectedColors);
+            sortedColors.Sort();
+
+            _palTexts = new Text[sortedColors.Count + 1];
+            for (int i = 0; i < sortedColors.Count; i++)
             {
-                int idx = i;
-                var btn = MakeColorBtn(_paletteContainer, PALETTE[i], (i + 1).ToString(),
+                int idx = sortedColors[i];
+                var btn = MakeColorBtn(_paletteContainer, PALETTE[idx], COLOR_LABELS[idx],
                     () => SetPaintColor(idx));
                 _palTexts[i] = btn.GetComponentInChildren<Text>();
             }
             var eraseBtn = MakeColorBtn(_paletteContainer, new Color(0.25f, 0.25f, 0.3f), "X",
                 () => SetPaintColor(-1));
-            _palTexts[_numColors] = eraseBtn.GetComponentInChildren<Text>();
+            _palTexts[sortedColors.Count] = eraseBtn.GetComponentInChildren<Text>();
             UpdatePaletteHighlight();
+            RebuildSwapDropdowns();
         }
 
         private void BuildGridSection(Transform p)
         {
+            // Columns/Rows removed from UI — grid size is set by image import or level load
             Lbl(p, "Balloon Grid", 14, FontStyle.Bold);
-            var r1 = Row(p); Lbl(r1, "Columns", w: 90);
-            MakeIntField(r1, _gridCols, 2, 100, v => { _gridCols = v; OnBalloonGridChanged(); });
-            var r2 = Row(p); Lbl(r2, "Rows", w: 90);
-            MakeIntField(r2, _gridRows, 2, 100, v => { _gridRows = v; OnBalloonGridChanged(); });
-            // Board Size는 컨베이어 내부 영역에서 자동 계산 (UI 불필요)
 
             _txtSpacing = Lbl(p, $"  Spacing: {CellSpacing:F3}", 11);
             _txtSpacing.color = new Color(0.6f, 0.6f, 0.7f);
@@ -749,11 +943,11 @@ namespace BalloonFlow
         private void BuildActionSection(Transform p)
         {
             var row = Row(p);
-            Btn(row, "Fill All", () => { FillBalloons(_paintColor); OnBalloonGridChanged(); });
+            Btn(row, "Fill All", () => { FillBalloons(_paintColor); AutoRoundBalloonCounts(); OnBalloonGridChanged(); });
             Btn(row, "Clear All", () => { FillBalloons(-1); OnBalloonGridChanged(); });
-            Btn(row, "Random", () => { RandomBalloons(); OnBalloonGridChanged(); });
+            Btn(row, "Random", () => { RandomBalloons(); AutoRoundBalloonCounts(); OnBalloonGridChanged(); });
             var row2 = Row(p);
-            Btn(row2, "Erase Color", () => { EraseColor(_paintColor); OnBalloonGridChanged(); });
+            Btn(row2, "Erase Color", () => { EraseColor(_paintColor); AutoRoundBalloonCounts(); OnBalloonGridChanged(); });
             Btn(row2, "Erase Neighbor", () => { _eraseNeighborMode = true; SetStatus("Click a cell to erase same-color neighbors"); });
             Btn(row2, "Fill Neighbor", () => { _fillNeighborMode = true; SetStatus("Click an empty cell to fill same-empty neighbors"); });
             Sep(p);
@@ -796,6 +990,7 @@ namespace BalloonFlow
             hgdd.captionText.font = _font; hgdd.captionText.fontSize = 12; hgdd.captionText.color = Color.white;
             hgdd.onValueChanged.AddListener(v => {
                 _paintHolderGimmick = v;
+                UpdateHolderGimmickUI(HOLDER_GIMMICK_NAMES[v]);
                 SetStatus($"Holder Gimmick: {HOLDER_GIMMICK_NAMES[v]}");
             });
 
@@ -809,6 +1004,7 @@ namespace BalloonFlow
                 _paintChainGroup = _nextChainGroupId++;
                 SetStatus($"New Chain Group: {_paintChainGroup}");
             });
+            _holderGimmickChainRow = chainRow.GetComponent<RectTransform>();
 
             // Frozen Dart 해동 체력 설정
             var frozenRow = Row(p); Lbl(frozenRow, "Frozen HP", w: 110);
@@ -816,6 +1012,11 @@ namespace BalloonFlow
                 _paintFrozenHP = v;
                 SetStatus($"Frozen Dart HP: {v}");
             });
+            _holderGimmickFrozenRow = frozenRow.GetComponent<RectTransform>();
+
+            // Initially hide holder gimmick-specific rows
+            _holderGimmickChainRow.gameObject.SetActive(false);
+            _holderGimmickFrozenRow.gameObject.SetActive(false);
 
             var row = Row(p);
             Btn(row, "Fill", () => { FillHolders(_paintColor); RebuildHolderUI(); RefreshInfo(); });
@@ -902,6 +1103,447 @@ namespace BalloonFlow
             Lbl(p, "  Tab=Toggle Mode. Click grid cells to draw path.", 10);
             Lbl(p, "  Path inside board removes balloons on that cell.", 10);
             Sep(p);
+        }
+
+        // ── Image Import ──
+        private Texture2D _importedImage;
+        private int _importGridCols = 20;
+        private int _importGridRows = 20;
+        private int _importRoundTo = 10;
+        private int[,] _importPreview; // color index grid from image
+
+        private void BuildImageImportSection(Transform p)
+        {
+            Lbl(p, "Image Import", 14, FontStyle.Bold);
+
+            var r1 = Row(p);
+            Btn(r1, "Load Image", () =>
+            {
+                string path = EditorUtility.OpenFilePanel("Select Image", "", "png,jpg,jpeg,bmp");
+                if (string.IsNullOrEmpty(path)) return;
+                byte[] data = System.IO.File.ReadAllBytes(path);
+                _importedImage = new Texture2D(2, 2);
+                _importedImage.LoadImage(data);
+                SetStatus($"Image loaded: {_importedImage.width}x{_importedImage.height}");
+                UpdateImagePreview();
+            });
+            Btn(r1, "Apply", () =>
+            {
+                if (_importPreview == null) { SetStatus("Load an image first"); return; }
+                ApplyImageToGrid();
+            });
+
+            var r2 = Row(p); Lbl(r2, "Grid W", w: 50);
+            MakeIntField(r2, _importGridCols, 4, 100, v => { _importGridCols = v; UpdateImagePreview(); });
+            Lbl(r2, "H", w: 20);
+            MakeIntField(r2, _importGridRows, 4, 100, v => { _importGridRows = v; UpdateImagePreview(); });
+
+            var r3 = Row(p); Lbl(r3, "Round To", w: 70);
+            MakeIntField(r3, _importRoundTo, 0, 50, v => _importRoundTo = v);
+
+            Sep(p);
+        }
+
+        private void UpdateImagePreview()
+        {
+            if (_importedImage == null) return;
+
+            int gw = _importGridCols, gh = _importGridRows;
+            var selColorList = new List<int>(_selectedColors);
+            _importPreview = new int[gw, gh];
+
+            // 이미지를 그리드 크기로 샘플링 → 선택된 팔레트 색상만 매핑
+            for (int c = 0; c < gw; c++)
+            {
+                for (int r = 0; r < gh; r++)
+                {
+                    float u = (c + 0.5f) / gw;
+                    float v = (r + 0.5f) / gh;
+                    Color pixel = _importedImage.GetPixelBilinear(u, v);
+
+                    if (pixel.a < 0.5f) { _importPreview[c, r] = -1; continue; }
+
+                    // 선택된 색상 범위 내에서만 매칭
+                    int bestIdx = selColorList.Count > 0 ? selColorList[0] : 0;
+                    float bestDist = float.MaxValue;
+                    for (int si = 0; si < selColorList.Count; si++)
+                    {
+                        int pi = selColorList[si];
+                        float dr = pixel.r - PALETTE[pi].r;
+                        float dg = pixel.g - PALETTE[pi].g;
+                        float db = pixel.b - PALETTE[pi].b;
+                        float dist = dr * dr + dg * dg + db * db;
+                        if (dist < bestDist) { bestDist = dist; bestIdx = pi; }
+                    }
+                    _importPreview[c, r] = bestIdx;
+                }
+            }
+
+            // 색상별 카운트를 10의 배수로 조정
+            if (_importRoundTo > 0)
+                RoundColorCounts(_importPreview, gw, gh, _importRoundTo);
+
+            // 프리뷰를 현재 그리드에 반영
+            _gridCols = gw;
+            _gridRows = gh;
+            InitGrid();
+            for (int c = 0; c < gw; c++)
+                for (int r = 0; r < gh; r++)
+                    _balloonColors[c, r] = _importPreview[c, r];
+
+            _levelLoaded = true;
+            OnBalloonGridChanged();
+
+            // 색상별 카운트 로그
+            var counts = new Dictionary<int, int>();
+            int totalBalloons = 0;
+            for (int c = 0; c < gw; c++)
+                for (int r = 0; r < gh; r++)
+                    if (_importPreview[c, r] >= 0)
+                    {
+                        int ci = _importPreview[c, r];
+                        counts[ci] = counts.ContainsKey(ci) ? counts[ci] + 1 : 1;
+                        totalBalloons++;
+                    }
+            var sb = new System.Text.StringBuilder($"Preview: {gw}x{gh} {_numColors}C {totalBalloons}B — ");
+            foreach (var kvp in counts) sb.Append($"c{kvp.Key}={kvp.Value} ");
+            SetStatus(sb.ToString());
+        }
+
+        private void RoundColorCounts(int[,] grid, int cols, int rows, int multiple)
+        {
+            // Pass 1: Merge colors with too few balloons into nearest palette color
+            MergeTinyColors(grid, cols, rows, multiple);
+
+            // Pass 2: Boundary-first rounding
+            for (int pass = 0; pass < 3; pass++) // up to 3 passes to converge
+            {
+                // Collect positions per color
+                var colorPositions = new Dictionary<int, List<Vector2Int>>();
+                for (int c = 0; c < cols; c++)
+                    for (int r = 0; r < rows; r++)
+                    {
+                        int ci = grid[c, r];
+                        if (ci < 0) continue;
+                        if (!colorPositions.ContainsKey(ci))
+                            colorPositions[ci] = new List<Vector2Int>();
+                        colorPositions[ci].Add(new Vector2Int(c, r));
+                    }
+
+                // Compute targets
+                var targets = new Dictionary<int, int>();
+                foreach (var kvp in colorPositions)
+                {
+                    int count = kvp.Value.Count;
+                    int rounded = Mathf.RoundToInt((float)count / multiple) * multiple;
+                    if (rounded < multiple) rounded = multiple;
+                    targets[kvp.Key] = rounded;
+                }
+
+                bool anyChanged = false;
+
+                // Reduce excess colors via boundary pixels
+                foreach (var kvp in colorPositions)
+                {
+                    int ci = kvp.Key;
+                    int excess = kvp.Value.Count - targets[ci];
+                    if (excess <= 0) continue;
+
+                    // Boundary cells (neighbor has different color)
+                    var boundary = new List<Vector2Int>();
+                    foreach (var pos in kvp.Value)
+                    {
+                        int x = pos.x, y = pos.y;
+                        bool edge = false;
+                        if (x > 0 && grid[x - 1, y] != ci) edge = true;
+                        if (x < cols - 1 && grid[x + 1, y] != ci) edge = true;
+                        if (y > 0 && grid[x, y - 1] != ci) edge = true;
+                        if (y < rows - 1 && grid[x, y + 1] != ci) edge = true;
+                        if (edge) boundary.Add(pos);
+                    }
+
+                    int removed = 0;
+                    foreach (var pos in boundary)
+                    {
+                        if (removed >= excess) break;
+                        int bestNeighbor = -1;
+                        int bestNeed = int.MinValue;
+                        Vector2Int[] dirs = { Vector2Int.right, Vector2Int.left, Vector2Int.up, Vector2Int.down };
+                        foreach (var d in dirs)
+                        {
+                            int nx = pos.x + d.x, ny = pos.y + d.y;
+                            if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+                            int nc = grid[nx, ny];
+                            if (nc < 0 || nc == ci) continue;
+                            int need = targets.ContainsKey(nc) ? targets[nc] - (colorPositions.ContainsKey(nc) ? colorPositions[nc].Count : 0) : 0;
+                            if (need > bestNeed) { bestNeed = need; bestNeighbor = nc; }
+                        }
+                        if (bestNeighbor >= 0)
+                        {
+                            grid[pos.x, pos.y] = bestNeighbor;
+                            if (!colorPositions.ContainsKey(bestNeighbor))
+                                colorPositions[bestNeighbor] = new List<Vector2Int>();
+                            colorPositions[bestNeighbor].Add(pos);
+                            removed++;
+                            anyChanged = true;
+                        }
+                    }
+
+                    // Second pass: corner cells (least visually impactful)
+                    if (removed < excess)
+                    {
+                        var corners = new List<Vector2Int>();
+                        foreach (var pos in kvp.Value)
+                        {
+                            if (grid[pos.x, pos.y] != ci) continue; // already reassigned
+                            int x = pos.x, y = pos.y;
+                            int sameNeighbors = 0;
+                            if (x > 0 && grid[x - 1, y] == ci) sameNeighbors++;
+                            if (x < cols - 1 && grid[x + 1, y] == ci) sameNeighbors++;
+                            if (y > 0 && grid[x, y - 1] == ci) sameNeighbors++;
+                            if (y < rows - 1 && grid[x, y + 1] == ci) sameNeighbors++;
+                            if (sameNeighbors <= 2) corners.Add(pos);
+                        }
+                        foreach (var pos in corners)
+                        {
+                            if (removed >= excess) break;
+                            int bestNeighbor = -1;
+                            int bestNeed = int.MinValue;
+                            Vector2Int[] dirs = { Vector2Int.right, Vector2Int.left, Vector2Int.up, Vector2Int.down };
+                            foreach (var d in dirs)
+                            {
+                                int nx = pos.x + d.x, ny = pos.y + d.y;
+                                if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+                                int nc = grid[nx, ny];
+                                if (nc < 0 || nc == ci) continue;
+                                int need = targets.ContainsKey(nc) ? targets[nc] - (colorPositions.ContainsKey(nc) ? colorPositions[nc].Count : 0) : 0;
+                                if (need > bestNeed) { bestNeed = need; bestNeighbor = nc; }
+                            }
+                            if (bestNeighbor >= 0)
+                            {
+                                grid[pos.x, pos.y] = bestNeighbor;
+                                if (!colorPositions.ContainsKey(bestNeighbor))
+                                    colorPositions[bestNeighbor] = new List<Vector2Int>();
+                                colorPositions[bestNeighbor].Add(pos);
+                                removed++;
+                                anyChanged = true;
+                            }
+                        }
+                    }
+                }
+
+                if (!anyChanged) break;
+            }
+
+            // Final verification: ensure all counts are exact multiples
+            VerifyAndForceRound(grid, cols, rows, multiple);
+        }
+
+        /// <summary>Merge colors with fewer than 'multiple' balloons into nearest palette color by hue.</summary>
+        private void MergeTinyColors(int[,] grid, int cols, int rows, int multiple)
+        {
+            var counts = new Dictionary<int, int>();
+            for (int c = 0; c < cols; c++)
+                for (int r = 0; r < rows; r++)
+                {
+                    int ci = grid[c, r];
+                    if (ci < 0) continue;
+                    counts[ci] = counts.ContainsKey(ci) ? counts[ci] + 1 : 1;
+                }
+
+            foreach (var kvp in new Dictionary<int, int>(counts))
+            {
+                if (kvp.Value >= multiple) continue;
+                int tinyColor = kvp.Key;
+                // Find nearest color by hue similarity
+                float tinyH, tinyS, tinyV;
+                Color.RGBToHSV(PALETTE[tinyColor], out tinyH, out tinyS, out tinyV);
+
+                int bestColor = -1;
+                float bestDist = float.MaxValue;
+                foreach (var other in counts)
+                {
+                    if (other.Key == tinyColor) continue;
+                    if (other.Value <= 0) continue;
+                    float oH, oS, oV;
+                    Color.RGBToHSV(PALETTE[other.Key], out oH, out oS, out oV);
+                    float dh = Mathf.Min(Mathf.Abs(tinyH - oH), 1f - Mathf.Abs(tinyH - oH));
+                    float ds = Mathf.Abs(tinyS - oS);
+                    float dv = Mathf.Abs(tinyV - oV);
+                    float dist = dh * 2f + ds + dv;
+                    if (dist < bestDist) { bestDist = dist; bestColor = other.Key; }
+                }
+
+                if (bestColor >= 0)
+                {
+                    for (int c = 0; c < cols; c++)
+                        for (int r = 0; r < rows; r++)
+                            if (grid[c, r] == tinyColor)
+                                grid[c, r] = bestColor;
+                    counts[bestColor] = counts.ContainsKey(bestColor) ? counts[bestColor] + kvp.Value : kvp.Value;
+                    counts[tinyColor] = 0;
+                }
+            }
+        }
+
+        /// <summary>Force remaining non-multiples by converting boundary pixels to empty (-1).</summary>
+        private void VerifyAndForceRound(int[,] grid, int cols, int rows, int multiple)
+        {
+            var counts = new Dictionary<int, int>();
+            for (int c = 0; c < cols; c++)
+                for (int r = 0; r < rows; r++)
+                {
+                    int ci = grid[c, r];
+                    if (ci < 0) continue;
+                    counts[ci] = counts.ContainsKey(ci) ? counts[ci] + 1 : 1;
+                }
+
+            foreach (var kvp in counts)
+            {
+                int ci = kvp.Key;
+                int remainder = kvp.Value % multiple;
+                if (remainder == 0) continue;
+
+                // Decide whether to round down or up
+                int removeCount = remainder; // round down
+                int addCount = multiple - remainder; // round up
+                // Use whichever is smaller change
+                if (addCount < removeCount)
+                {
+                    // Round up by converting nearest empty cells to this color
+                    int added = 0;
+                    for (int c = 0; c < cols && added < addCount; c++)
+                        for (int r = 0; r < rows && added < addCount; r++)
+                        {
+                            if (grid[c, r] != -1) continue;
+                            // Check if adjacent to this color
+                            bool adj = false;
+                            if (c > 0 && grid[c - 1, r] == ci) adj = true;
+                            if (c < cols - 1 && grid[c + 1, r] == ci) adj = true;
+                            if (r > 0 && grid[c, r - 1] == ci) adj = true;
+                            if (r < rows - 1 && grid[c, r + 1] == ci) adj = true;
+                            if (adj) { grid[c, r] = ci; added++; }
+                        }
+                    // If still not enough, fill any empty
+                    for (int c = 0; c < cols && added < addCount; c++)
+                        for (int r = 0; r < rows && added < addCount; r++)
+                            if (grid[c, r] == -1) { grid[c, r] = ci; added++; }
+                }
+                else
+                {
+                    // Round down by removing boundary pixels
+                    int removed = 0;
+                    for (int c = 0; c < cols && removed < removeCount; c++)
+                        for (int r = 0; r < rows && removed < removeCount; r++)
+                        {
+                            if (grid[c, r] != ci) continue;
+                            bool edge = false;
+                            if (c == 0 || grid[c - 1, r] != ci) edge = true;
+                            if (c == cols - 1 || grid[c + 1, r] != ci) edge = true;
+                            if (r == 0 || grid[c, r - 1] != ci) edge = true;
+                            if (r == rows - 1 || grid[c, r + 1] != ci) edge = true;
+                            if (edge) { grid[c, r] = -1; removed++; }
+                        }
+                    // Force remove if boundary wasn't enough
+                    for (int c = 0; c < cols && removed < removeCount; c++)
+                        for (int r = 0; r < rows && removed < removeCount; r++)
+                            if (grid[c, r] == ci) { grid[c, r] = -1; removed++; }
+                }
+            }
+        }
+
+        private void ApplyImageToGrid()
+        {
+            if (_importPreview == null) return;
+            int gw = _importPreview.GetLength(0);
+            int gh = _importPreview.GetLength(1);
+
+            // 1) 그리드 크기 갱신
+            _gridCols = gw;
+            _gridRows = gh;
+            InitGrid();
+
+            for (int c = 0; c < gw; c++)
+                for (int r = 0; r < gh; r++)
+                {
+                    _balloonColors[c, r] = _importPreview[c, r];
+                    _balloonGimmicks[c, r] = 0;
+                }
+
+            // 2) 색상별 풍선 수 집계
+            var colorCounts = new Dictionary<int, int>();
+            for (int c = 0; c < gw; c++)
+                for (int r = 0; r < gh; r++)
+                    if (_importPreview[c, r] >= 0)
+                    {
+                        int ci = _importPreview[c, r];
+                        colorCounts[ci] = colorCounts.ContainsKey(ci) ? colorCounts[ci] + 1 : 1;
+                    }
+
+            _numColors = colorCounts.Count;
+            _selectedColors.Clear();
+            foreach (var key in colorCounts.Keys) _selectedColors.Add(key);
+            RebuildColorToggleGrid();
+            RebuildPalette();
+
+            // 3) 보관함 자동 생성 — 색상별 풍선 수 = 다트 수
+            int totalDarts = 0;
+            foreach (var v in colorCounts.Values) totalDarts += v;
+            int railCap = RailManager.CalculateCapacity(totalDarts);
+            _railSlotCount = railCap;
+
+            // 보관함 열 수 = 기존 _holderCols 유지 (2~5)
+            int qCols = Mathf.Clamp(_holderCols, 2, 5);
+            var holders = new List<(int color, int mag)>();
+            foreach (var kvp in colorCounts)
+            {
+                int remaining = kvp.Value;
+                while (remaining > 0)
+                {
+                    int mag = Mathf.Min(remaining, 50); // 최대 50발
+                    // 10의 배수로 맞춤 (마지막 홀더 제외)
+                    if (remaining > 50 && mag % 10 != 0)
+                        mag = (mag / 10) * 10;
+                    if (mag <= 0) mag = remaining;
+                    holders.Add((kvp.Key, mag));
+                    remaining -= mag;
+                }
+            }
+
+            // 보관함 행 수 계산
+            _holderCols = qCols;
+            _holderRows = Mathf.Max(1, (holders.Count + qCols - 1) / qCols);
+            _holderColors = new int[_holderCols, _holderRows];
+            _holderMags = new int[_holderCols, _holderRows];
+            _holderGimmicks = new int[_holderCols, _holderRows];
+            _holderChainGroups = new int[_holderCols, _holderRows];
+            _holderFrozenHP = new int[_holderCols, _holderRows];
+            for (int c2 = 0; c2 < _holderCols; c2++)
+                for (int r2 = 0; r2 < _holderRows; r2++)
+                {
+                    _holderColors[c2, r2] = -1;
+                    _holderChainGroups[c2, r2] = -1;
+                    _holderFrozenHP[c2, r2] = 3;
+                }
+
+            for (int i = 0; i < holders.Count; i++)
+            {
+                int hc = i % _holderCols;
+                int hr = i / _holderCols;
+                if (hr >= _holderRows) break;
+                _holderColors[hc, hr] = holders[i].color;
+                _holderMags[hc, hr] = holders[i].mag;
+            }
+
+            // 4) 전체 UI 갱신
+            _levelLoaded = true;
+            OnBalloonGridChanged();
+            RebuildHolderUI();
+            RefreshInfo();
+
+            int totalB = 0;
+            foreach (var v in colorCounts.Values) totalB += v;
+            SetStatus($"Applied: {gw}x{gh}, {_numColors}C, {totalB}B, {holders.Count} holders, rail={railCap}");
         }
 
         private void BuildExportSection(Transform p)
@@ -1183,8 +1825,7 @@ namespace BalloonFlow
                     float wx = _boardCenter.x + (c - (_gridCols - 1) * 0.5f) * spacing;
                     float wz = _boardCenter.y + (r - (_gridRows - 1) * 0.5f) * spacing;
 
-                    // Reuse shared mesh + cached material instead of CreatePrimitive per cell
-                    var go = new GameObject($"B_{c}_{r}");
+                    var go = new GameObject("B");
                     go.transform.SetParent(_previewRoot, false);
                     go.transform.localScale = Vector3.one * scale;
                     go.transform.position = new Vector3(wx, 0.5f, wz);
@@ -2004,17 +2645,20 @@ namespace BalloonFlow
                     {
                         EraseNeighborSameColor(col, row);
                         _eraseNeighborMode = false;
+                        AutoRoundBalloonCounts();
                         OnBalloonGridChanged();
                     }
                     else if (_fillNeighborMode && mouse.leftButton.wasPressedThisFrame)
                     {
                         FillNeighborEmpty(col, row, _paintColor);
                         _fillNeighborMode = false;
+                        AutoRoundBalloonCounts();
                         OnBalloonGridChanged();
                     }
                     else if (_floodFillMode && mouse.leftButton.wasPressedThisFrame)
                     {
                         FloodFill(col, row, _paintColor);
+                        AutoRoundBalloonCounts();
                         OnBalloonGridChanged();
                     }
                     else if (!_floodFillMode && !_eraseNeighborMode && !_fillNeighborMode)
@@ -2084,8 +2728,10 @@ namespace BalloonFlow
 
             Key[] numKeys = { Key.Digit1, Key.Digit2, Key.Digit3, Key.Digit4, Key.Digit5,
                               Key.Digit6, Key.Digit7, Key.Digit8, Key.Digit9 };
-            for (int i = 0; i < Mathf.Min(9, _numColors); i++)
-                if (kb[numKeys[i]].wasPressedThisFrame) SetPaintColor(i);
+            var _sortedSelColors = new List<int>(_selectedColors);
+            _sortedSelColors.Sort();
+            for (int i = 0; i < Mathf.Min(9, _sortedSelColors.Count); i++)
+                if (kb[numKeys[i]].wasPressedThisFrame) SetPaintColor(_sortedSelColors[i]);
             if (kb[Key.Digit0].wasPressedThisFrame) SetPaintColor(-1);
             if (kb[Key.Backquote].wasPressedThisFrame) SetPaintColor(-1);
             if (kb[Key.Tab].wasPressedThisFrame) ToggleConveyorMode();
@@ -2123,22 +2769,98 @@ namespace BalloonFlow
         private void UpdatePaletteHighlight()
         {
             if (_palTexts == null) return;
+            var sortedColors = new List<int>(_selectedColors);
+            sortedColors.Sort();
             for (int i = 0; i < _palTexts.Length; i++)
             {
                 if (_palTexts[i] == null) continue;
-                bool sel = (i < _numColors && i == _paintColor) || (i == _numColors && _paintColor == -1);
-                string num = i < _numColors ? (i + 1).ToString() : "X";
-                _palTexts[i].text = sel ? $"[{num}]" : num;
+                bool isEraser = (i == sortedColors.Count);
+                bool sel = isEraser ? (_paintColor == -1) : (i < sortedColors.Count && sortedColors[i] == _paintColor);
+                string label = isEraser ? "X" : COLOR_LABELS[sortedColors[i]];
+                _palTexts[i].text = sel ? $"[{label}]" : label;
             }
+        }
+
+        private void AutoRoundBalloonCounts()
+        {
+            if (_importRoundTo <= 0) return;
+            // Count colors
+            var counts = new Dictionary<int, int>();
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                    if (_balloonColors[c, r] >= 0)
+                    {
+                        int ci = _balloonColors[c, r];
+                        counts[ci] = counts.ContainsKey(ci) ? counts[ci] + 1 : 1;
+                    }
+
+            // Check if any color is not a multiple
+            bool needsRound = false;
+            foreach (var v in counts.Values)
+                if (v % _importRoundTo != 0) { needsRound = true; break; }
+
+            if (needsRound)
+                RoundColorCounts(_balloonColors, _gridCols, _gridRows, _importRoundTo);
         }
 
         private void OnBalloonGridChanged()
         {
             InitGrid();
-            RebuildPreview();
-            RebuildGridLines();
-            RebuildConveyorPreview();
+            // 그리드 크기가 변경됐으면 전체 리빌드, 아니면 색상만 업데이트
+            if (_previewObjs == null || _previewObjs.GetLength(0) != _gridCols || _previewObjs.GetLength(1) != _gridRows)
+            {
+                RebuildPreview();
+                RebuildGridLines();
+                RebuildConveyorPreview();
+            }
+            else
+            {
+                UpdatePreviewColors();
+            }
             RefreshInfo();
+        }
+
+        /// <summary>프리뷰 오브젝트의 색상/표시만 갱신 (Destroy/Create 없이).</summary>
+        private void UpdatePreviewColors()
+        {
+            if (_previewObjs == null) return;
+            for (int c = 0; c < _gridCols; c++)
+            {
+                for (int r = 0; r < _gridRows; r++)
+                {
+                    if (c >= _previewObjs.GetLength(0) || r >= _previewObjs.GetLength(1)) continue;
+                    var go = _previewObjs[c, r];
+                    if (go == null) continue;
+
+                    int ci = _balloonColors[c, r];
+                    int gi = _balloonGimmicks[c, r];
+                    var mr = go.GetComponent<MeshRenderer>();
+                    if (mr == null) continue;
+
+                    if (ci >= 0)
+                    {
+                        go.SetActive(true);
+                        mr.sharedMaterial = GetCachedMaterial(ci, gi);
+                    }
+                    else
+                    {
+                        go.SetActive(false);
+                    }
+
+                    // 라벨 갱신
+                    if (_previewLabels != null && c < _previewLabels.GetLength(0) && r < _previewLabels.GetLength(1))
+                    {
+                        var label = _previewLabels[c, r];
+                        if (label != null)
+                        {
+                            if (ci >= 0 && gi > 0 && gi < GIMMICK_NAMES.Length)
+                                label.text = GIMMICK_NAMES[gi].Substring(0, System.Math.Min(2, GIMMICK_NAMES[gi].Length));
+                            else
+                                label.text = "";
+                        }
+                    }
+                }
+            }
         }
 
         private void FillBalloons(int color)
@@ -2150,9 +2872,10 @@ namespace BalloonFlow
 
         private void RandomBalloons()
         {
+            var colorList = new List<int>(_selectedColors);
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
-                { _balloonColors[c, r] = Random.Range(0, _numColors); _balloonGimmicks[c, r] = 0; }
+                { _balloonColors[c, r] = colorList[Random.Range(0, colorList.Count)]; _balloonGimmicks[c, r] = 0; }
         }
 
         private void FillHolders(int color)
@@ -2164,9 +2887,10 @@ namespace BalloonFlow
 
         private void RandomHolders()
         {
+            var colorList = new List<int>(_selectedColors);
             for (int c = 0; c < _holderCols; c++)
                 for (int r = 0; r < _holderRows; r++)
-                { _holderColors[c, r] = Random.Range(0, _numColors); _holderMags[c, r] = _defaultMag; }
+                { _holderColors[c, r] = colorList[Random.Range(0, colorList.Count)]; _holderMags[c, r] = _defaultMag; }
         }
 
         private void SetAllMags()
@@ -2348,6 +3072,15 @@ namespace BalloonFlow
                     { _holderMags[cc, rr] = Mathf.Max(1, kvp.Value - sum); }
                 }
             }
+            // After auto balance, round magazines to 10 multiples
+            for (int c = 0; c < _holderCols; c++)
+                for (int r = 0; r < _holderRows; r++)
+                    if (_holderColors[c, r] >= 0 && _holderMags[c, r] > 0)
+                    {
+                        int rounded = Mathf.Max(10, Mathf.RoundToInt(_holderMags[c, r] / 10f) * 10);
+                        _holderMags[c, r] = rounded;
+                    }
+
             SetStatus("Auto Balance (gimmick life accounted)");
         }
 
@@ -2970,7 +3703,19 @@ namespace BalloonFlow
 
             // UI 위젯 텍스트 갱신 (변수는 바뀌었지만 InputField/Dropdown은 자동 갱신 안 됨)
             if (_levelIdInput != null) _levelIdInput.text = _levelId.ToString();
-            if (_numColorsInput != null) _numColorsInput.text = _numColors.ToString();
+            // Rebuild _selectedColors from actual balloon/holder data
+            _selectedColors.Clear();
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                    if (_balloonColors[c, r] >= 0) _selectedColors.Add(_balloonColors[c, r]);
+            for (int c = 0; c < _holderCols; c++)
+                for (int r = 0; r < _holderRows; r++)
+                    if (_holderColors[c, r] >= 0) _selectedColors.Add(_holderColors[c, r]);
+            // Ensure at least _numColors colors are selected (fill from 0 if needed)
+            for (int i = 0; _selectedColors.Count < _numColors && i < PALETTE.Length; i++)
+                _selectedColors.Add(i);
+            _numColors = _selectedColors.Count;
+            RebuildColorToggleGrid();
             if (_difficultyDropdown != null) _difficultyDropdown.value = (int)_difficulty;
         }
 
@@ -3183,14 +3928,7 @@ namespace BalloonFlow
             // ── Grid Size Display (Feature 2) ──
             Lbl(p, $"Grid: {_gridCols}\u00D7{_gridRows}", 12);
 
-            // ── Crop Tool (Feature 3) ──
-            Lbl(p, "Crop", 12, FontStyle.Bold);
-            var cropRow1 = Row(p);
-            Lbl(cropRow1, "W:", w: 24);
-            MakeIntField(cropRow1, _cropWidth, 1, 100, v => _cropWidth = v);
-            Lbl(cropRow1, "H:", w: 24);
-            MakeIntField(cropRow1, _cropHeight, 1, 100, v => _cropHeight = v);
-            Btn(cropRow1, "Crop", () => CropGrid(_cropWidth, _cropHeight));
+            // Crop Tool UI removed — CropGrid method retained for internal use
 
             // ── Shift/Move Tool (Feature 4) ──
             Lbl(p, "Shift", 12, FontStyle.Bold);
@@ -3231,12 +3969,35 @@ namespace BalloonFlow
 
             // ── Color Swap (Feature 8) ──
             Lbl(p, "Swap Color", 12, FontStyle.Bold);
-            var swapRow = Row(p);
-            Lbl(swapRow, "From:", w: 40);
-            MakeIntField(swapRow, _swapFromColor, 0, 27, v => _swapFromColor = v);
-            Lbl(swapRow, "To:", w: 28);
-            MakeIntField(swapRow, _swapToColor, 0, 27, v => _swapToColor = v);
-            Btn(swapRow, "Swap", () => SwapColors(_swapFromColor, _swapToColor));
+            var swapRow1 = Row(p);
+            Lbl(swapRow1, "From:", w: 40);
+            var swapFromDD = DefaultControls.CreateDropdown(_uiRes);
+            swapFromDD.transform.SetParent(swapRow1, false);
+            var sfLE = swapFromDD.AddComponent<LayoutElement>(); sfLE.flexibleWidth = 1; sfLE.preferredHeight = 24;
+            swapFromDD.GetComponent<Image>().color = new Color(0.16f, 0.16f, 0.20f);
+            _swapFromDropdown = swapFromDD.GetComponent<Dropdown>();
+            _swapFromDropdown.captionText.font = _font; _swapFromDropdown.captionText.fontSize = 12; _swapFromDropdown.captionText.color = Color.white;
+            _swapFromDropdown.onValueChanged.AddListener(v => {
+                var sorted = new List<int>(_selectedColors); sorted.Sort();
+                if (v >= 0 && v < sorted.Count) _swapFromColor = sorted[v];
+            });
+
+            var swapRow2 = Row(p);
+            Lbl(swapRow2, "To:", w: 40);
+            var swapToDD = DefaultControls.CreateDropdown(_uiRes);
+            swapToDD.transform.SetParent(swapRow2, false);
+            var stLE = swapToDD.AddComponent<LayoutElement>(); stLE.flexibleWidth = 1; stLE.preferredHeight = 24;
+            swapToDD.GetComponent<Image>().color = new Color(0.16f, 0.16f, 0.20f);
+            _swapToDropdown = swapToDD.GetComponent<Dropdown>();
+            _swapToDropdown.captionText.font = _font; _swapToDropdown.captionText.fontSize = 12; _swapToDropdown.captionText.color = Color.white;
+            _swapToDropdown.onValueChanged.AddListener(v => {
+                var sorted = new List<int>(_selectedColors); sorted.Sort();
+                if (v >= 0 && v < sorted.Count) _swapToColor = sorted[v];
+            });
+
+            RebuildSwapDropdowns();
+            var swapRow3 = Row(p);
+            Btn(swapRow3, "Swap", () => SwapColors(_swapFromColor, _swapToColor));
 
             // ── Flood Fill (Feature 7) ──
             var fillRow = Row(p);
@@ -3304,6 +4065,7 @@ namespace BalloonFlow
             _gridRows = newRows;
             _balloonColors = newColors;
             _balloonGimmicks = newGimmicks;
+            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             SetStatus($"Cropped to {newCols}\u00D7{newRows}");
         }
@@ -3332,6 +4094,7 @@ namespace BalloonFlow
 
             _balloonColors = newColors;
             _balloonGimmicks = newGimmicks;
+            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             SetStatus($"Shifted ({dx}, {dy})");
         }
@@ -3361,6 +4124,7 @@ namespace BalloonFlow
             _gridRows = newRows;
             _balloonColors = newColors;
             _balloonGimmicks = newGimmicks;
+            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             SetStatus($"Inserted row {(above ? "above" : "below")} {at}");
         }
@@ -3388,6 +4152,7 @@ namespace BalloonFlow
             _gridCols = newCols;
             _balloonColors = newColors;
             _balloonGimmicks = newGimmicks;
+            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             SetStatus($"Inserted col {(left ? "left of" : "right of")} {at}");
         }
@@ -3418,6 +4183,7 @@ namespace BalloonFlow
             _gridRows = newRows;
             _balloonColors = newColors;
             _balloonGimmicks = newGimmicks;
+            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             SetStatus($"Deleted row {at}");
         }
@@ -3446,6 +4212,7 @@ namespace BalloonFlow
             _gridCols = newCols;
             _balloonColors = newColors;
             _balloonGimmicks = newGimmicks;
+            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             SetStatus($"Deleted col {at}");
         }
@@ -3574,6 +4341,32 @@ namespace BalloonFlow
 
         // ── Feature 8: Color Swap ──
 
+        private void RebuildSwapDropdowns()
+        {
+            var sorted = new List<int>(_selectedColors);
+            sorted.Sort();
+            var options = new List<string>();
+            foreach (int ci in sorted)
+                options.Add($"{ci}: {COLOR_LABELS[ci]}");
+
+            if (_swapFromDropdown != null)
+            {
+                _swapFromDropdown.ClearOptions();
+                _swapFromDropdown.AddOptions(options);
+                int fromIdx = sorted.IndexOf(_swapFromColor);
+                _swapFromDropdown.value = fromIdx >= 0 ? fromIdx : 0;
+                if (sorted.Count > 0) _swapFromColor = sorted[_swapFromDropdown.value];
+            }
+            if (_swapToDropdown != null)
+            {
+                _swapToDropdown.ClearOptions();
+                _swapToDropdown.AddOptions(options);
+                int toIdx = sorted.IndexOf(_swapToColor);
+                _swapToDropdown.value = toIdx >= 0 ? toIdx : (sorted.Count > 1 ? 1 : 0);
+                if (sorted.Count > 0) _swapToColor = sorted[_swapToDropdown.value];
+            }
+        }
+
         private void SwapColors(int fromColor, int toColor)
         {
             if (fromColor == toColor) { SetStatus("From and To colors are the same"); return; }
@@ -3594,6 +4387,7 @@ namespace BalloonFlow
                         _holderColors[c, r] = toColor;
                         holderCount++;
                     }
+            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             RebuildHolderUI();
             RefreshInfo();
