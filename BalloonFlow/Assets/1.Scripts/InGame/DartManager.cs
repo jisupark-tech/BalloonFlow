@@ -64,6 +64,7 @@ namespace BalloonFlow
         #region Fields
 
         private readonly Dictionary<int, SlotDartVisual> _slotVisuals = new Dictionary<int, SlotDartVisual>();
+        private readonly Dictionary<int, SlotDartVisual> _dartVisuals = new Dictionary<int, SlotDartVisual>();
         private readonly List<DartProjectile> _activeProjectiles = new List<DartProjectile>();
 
         /// <summary>
@@ -97,6 +98,7 @@ namespace BalloonFlow
         private void OnEnable()
         {
             EventBus.Subscribe<OnDartPlacedOnSlot>(HandleDartPlaced);
+            EventBus.Subscribe<OnDartPlaced>(HandleDartPlacedPerDart);
             EventBus.Subscribe<OnDartFrozen>(HandleDartFrozen);
             EventBus.Subscribe<OnDartsFrozenCleared>(HandleDartsFrozenCleared);
             EventBus.Subscribe<OnBalloonPopped>(HandleBalloonPopped);
@@ -108,6 +110,7 @@ namespace BalloonFlow
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnDartPlacedOnSlot>(HandleDartPlaced);
+            EventBus.Unsubscribe<OnDartPlaced>(HandleDartPlacedPerDart);
             EventBus.Unsubscribe<OnDartFrozen>(HandleDartFrozen);
             EventBus.Unsubscribe<OnDartsFrozenCleared>(HandleDartsFrozenCleared);
             EventBus.Unsubscribe<OnBalloonPopped>(HandleBalloonPopped);
@@ -124,6 +127,7 @@ namespace BalloonFlow
             if (_boardFinished) return;
 
             UpdateSlotDartPositions();
+            UpdatePerDartPositions();
 
             // 공격 스캔: 벨트 속도 적응형 간격 (1슬롯 이동당 최소 2회 스캔)
             _scanTimer += Time.deltaTime;
@@ -135,6 +139,7 @@ namespace BalloonFlow
             {
                 _scanTimer -= interval;
                 ScanAndFireDarts();
+                ScanAndFirePerDart();
             }
 
             UpdateProjectiles();
@@ -159,6 +164,10 @@ namespace BalloonFlow
                     ReturnDartToPool(visual.gameObject);
             }
             _slotVisuals.Clear();
+
+            foreach (var kvp in _dartVisuals)
+                ReturnDartToPool(kvp.Value.gameObject);
+            _dartVisuals.Clear();
 
             for (int i = _activeProjectiles.Count - 1; i >= 0; i--)
             {
@@ -247,6 +256,53 @@ namespace BalloonFlow
             return _slotVisuals.Count;
         }
 
+        /// <summary>
+        /// Creates a visual dart by dart ID (per-dart system).
+        /// </summary>
+        public void CreateDartVisualById(int dartId, int color, int holderId)
+        {
+            if (_dartVisuals.ContainsKey(dartId))
+            {
+                ReturnDartToPool(_dartVisuals[dartId].gameObject);
+                _dartVisuals.Remove(dartId);
+            }
+
+            if (!RailManager.HasInstance) return;
+
+            Vector3 pos = RailManager.Instance.GetDartWorldPosition(dartId);
+            GameObject dartObj = null;
+
+            if (ObjectPoolManager.HasInstance)
+                dartObj = ObjectPoolManager.Instance.Get(DART_POOL_KEY, pos, Quaternion.identity);
+
+            if (dartObj == null) return;
+
+            dartObj.SetActive(true);
+            ApplyColor(dartObj, color);
+
+            // 슬롯 간격 기반 스케일 축소 (겹침 방지)
+            float spacing = RailManager.Instance.SlotSpacing;
+            if (spacing > 0.01f)
+            {
+                float maxScale = spacing * 0.9f;
+                Vector3 s = dartObj.transform.localScale;
+                float currentSize = Mathf.Max(s.x, s.z);
+                if (currentSize > maxScale)
+                {
+                    float ratio = maxScale / currentSize;
+                    dartObj.transform.localScale = new Vector3(s.x * ratio, s.y * ratio, s.z * ratio);
+                }
+            }
+
+            _dartVisuals[dartId] = new SlotDartVisual
+            {
+                slotIndex = dartId,
+                color = color,
+                gameObject = dartObj,
+                baseScale = dartObj.transform.localScale
+            };
+        }
+
         #endregion
 
         #region Private Methods — Slot Dart Movement
@@ -331,6 +387,70 @@ namespace BalloonFlow
             // Deferred removal
             for (int i = 0; i < _tempRemoveKeys.Count; i++)
                 _slotVisuals.Remove(_tempRemoveKeys[i]);
+        }
+
+        #endregion
+
+        #region Private Methods — Per-Dart Movement
+
+        private void UpdatePerDartPositions()
+        {
+            if (!RailManager.HasInstance || _dartVisuals.Count == 0) return;
+
+            RailManager rail = RailManager.Instance;
+            bool isOpen = !rail.IsClosedLoop;
+            float pathLen = rail.TotalPathLength;
+
+            _tempRemoveKeys.Clear();
+
+            foreach (var kvp in _dartVisuals)
+            {
+                int dartId = kvp.Key;
+                var visual = kvp.Value;
+                if (visual.gameObject == null) { _tempRemoveKeys.Add(dartId); continue; }
+
+                var dart = rail.FindDart(dartId);
+                if (dart == null)
+                {
+                    // Dart removed from belt
+                    ReturnDartToPool(visual.gameObject);
+                    _tempRemoveKeys.Add(dartId);
+                    continue;
+                }
+
+                Vector3 pos = rail.GetPositionAtDistance(dart.progress);
+                visual.gameObject.transform.position = pos;
+
+                // Orient along path
+                Vector3 fireDir = rail.GetDartFiringDirection(dartId);
+                if (fireDir.sqrMagnitude > 0.001f)
+                    visual.gameObject.transform.rotation = Quaternion.LookRotation(fireDir);
+
+                // Cave scale for open rails
+                if (isOpen && pathLen > 0f)
+                {
+                    float t = dart.progress / pathLen;
+                    float scale = 1f;
+                    float fadeStart = CAVE_FADE_START;
+                    float fadeEnd = CAVE_FADE_END;
+                    float fadeRange = fadeStart - fadeEnd;
+                    if (fadeRange > 0f)
+                    {
+                        if (t < fadeStart)
+                            scale = t <= fadeEnd ? 0f : (t - fadeEnd) / fadeRange;
+                        else if (t > 1f - fadeStart)
+                        {
+                            float distFromEnd = 1f - t;
+                            scale = distFromEnd <= fadeEnd ? 0f : (distFromEnd - fadeEnd) / fadeRange;
+                        }
+                    }
+                    scale = Mathf.Clamp01(scale);
+                    visual.gameObject.transform.localScale = visual.baseScale * scale;
+                }
+            }
+
+            for (int i = 0; i < _tempRemoveKeys.Count; i++)
+                _dartVisuals.Remove(_tempRemoveKeys[i]);
         }
 
         #endregion
@@ -516,6 +636,122 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>
+        /// Per-dart scanning: fires darts from the per-dart system at matching balloons.
+        /// </summary>
+        private void ScanAndFirePerDart()
+        {
+            if (!RailManager.HasInstance || !BalloonController.HasInstance) return;
+
+            RailManager rail = RailManager.Instance;
+            var darts = rail.GetAllDarts();
+            if (darts.Count == 0) return;
+
+            int fired = 0;
+
+            for (int i = 0; i < darts.Count && fired < MAX_FIRES_PER_FRAME; i++)
+            {
+                var dart = darts[i];
+                if (dart.dartColor < 0) continue;
+
+                // Skip if another dart from same holder with lower ID exists (sequential firing)
+                bool blocked = false;
+                for (int j = 0; j < darts.Count; j++)
+                {
+                    if (i == j) continue;
+                    if (darts[j].holderId == dart.holderId && darts[j].dartId < dart.dartId && darts[j].dartColor >= 0)
+                    {
+                        blocked = true;
+                        break;
+                    }
+                }
+                if (blocked) continue;
+
+                Vector3 dartPos = rail.GetPositionAtDistance(dart.progress);
+                Vector3 fireDir = rail.GetDartFiringDirection(dart.dartId);
+
+                int targetId = DirectionalTargeting.FindTarget(dartPos, fireDir, dart.dartColor);
+                if (targetId < 0) continue;
+
+                if (_reservedTargets.Contains(targetId)) continue;
+
+                BalloonData targetData = BalloonController.Instance.GetBalloon(targetId);
+                if (targetData == null || targetData.isPopped) continue;
+
+                // Fire!
+                int color = dart.dartColor;
+                int dartId = dart.dartId;
+                rail.RemoveDartById(dartId);
+
+                _reservedTargets.Add(targetId);
+
+                // Transfer visual from belt to projectile
+                GameObject dartObj = null;
+                if (_dartVisuals.TryGetValue(dartId, out var visual))
+                {
+                    dartObj = visual.gameObject;
+                    _dartVisuals.Remove(dartId);
+                }
+
+                if (dartObj == null && ObjectPoolManager.HasInstance)
+                    dartObj = ObjectPoolManager.Instance.Get(DART_POOL_KEY, dartPos, Quaternion.identity);
+
+                if (dartObj != null)
+                {
+                    // 배치 시 축소된 baseScale 유지 (cave scale은 리셋)
+                    if (visual != null)
+                        dartObj.transform.localScale = visual.baseScale;
+                    else
+                    {
+                        float sp = RailManager.Instance.SlotSpacing;
+                        float maxS = sp * 0.9f;
+                        Vector3 s = dartObj.transform.localScale;
+                        float cur = Mathf.Max(s.x, s.z);
+                        if (cur > maxS && maxS > 0.01f)
+                        {
+                            float r = maxS / cur;
+                            dartObj.transform.localScale = new Vector3(s.x * r, s.y * r, s.z * r);
+                        }
+                    }
+
+                    EventBus.Publish(new OnDartFired { dartId = dartId, holderId = -1, color = color });
+
+                    Vector3 cardinalTarget = CalculateCardinalTarget(dartPos, targetData.position);
+                    Vector3 dir = cardinalTarget - dartPos;
+                    dir.y = 0f;
+                    if (dir.sqrMagnitude > 0.001f)
+                        dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
+
+                    var proj = new DartProjectile
+                    {
+                        gameObject = dartObj,
+                        targetPosition = targetData.position,
+                        targetBalloonId = targetId,
+                        color = color,
+                        elapsed = 0f,
+                        duration = _projectileFlightTime
+                    };
+                    _activeProjectiles.Add(proj);
+
+                    if (_arcHeight > 0.01f)
+                    {
+                        Vector3 midPoint = (dartPos + cardinalTarget) * 0.5f;
+                        midPoint.y += _arcHeight;
+                        Vector3[] path = { dartPos, midPoint, cardinalTarget };
+                        dartObj.transform.DOPath(path, _projectileFlightTime, PathType.CatmullRom)
+                            .SetEase(Ease.Linear).SetLookAt(0.01f);
+                    }
+                    else
+                    {
+                        dartObj.transform.DOMove(cardinalTarget, _projectileFlightTime).SetEase(Ease.Linear);
+                    }
+                }
+
+                fired++;
+                i--; // re-check same index since we removed from list
+            }
+        }
+
         #endregion
 
         #region Private Methods — Projectile Update
@@ -571,6 +807,12 @@ namespace BalloonFlow
         {
             if (_boardFinished) return;
             CreateSlotDartVisual(evt.slotIndex, evt.color, evt.holderId);
+        }
+
+        private void HandleDartPlacedPerDart(OnDartPlaced evt)
+        {
+            if (_boardFinished) return;
+            CreateDartVisualById(evt.dartId, evt.color, evt.holderId);
         }
 
         /// <summary>
