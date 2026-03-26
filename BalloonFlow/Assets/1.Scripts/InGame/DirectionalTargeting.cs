@@ -278,62 +278,40 @@ namespace BalloonFlow
         private static int _cachedMaxScan;
         private static int _cachedMaxScanFrame = -1;
 
+        /// <summary>
+        /// 다트와 타겟 사이에 다른 풍선(아무 색)이 있는지 월드 좌표 기반으로 체크.
+        /// 그리드 반올림 없이 직접 거리 비교 — 관통 불가.
+        /// </summary>
         private static bool IsPathBlocked(Vector3 dartPos, Vector3 targetPos, ScanDirection direction, HashSet<Vector2Int> occupancy)
         {
-            Vector2Int targetCell = WorldToGrid(targetPos);
+            if (!BalloonController.HasInstance) return false;
 
-            // 그리드 크기 기반 스캔 범위 — 프레임당 1회 캐시
-            if (_cachedMaxScanFrame != Time.frameCount)
+            float perpTolerance = _gridCellSize * 0.75f;
+            float targetFiringDist = GetFiringAxisDistance(dartPos, targetPos, direction);
+            if (targetFiringDist <= 0f) return false;
+
+            BalloonData[] all = BalloonController.Instance.GetAllBalloons();
+            if (all == null) return false;
+
+            for (int i = 0; i < all.Length; i++)
             {
-                _cachedMaxScan = 50;
-                if (BoardTileManager.HasInstance)
-                    _cachedMaxScan = Mathf.Max(BoardTileManager.Instance.Cols, BoardTileManager.Instance.Rows);
-                _cachedMaxScanFrame = Time.frameCount;
+                if (all[i].isPopped) continue;
+
+                // 타겟 자신은 제외
+                Vector3 bPos = all[i].position;
+                if (Vector3.Distance(bPos, targetPos) < 0.01f) continue;
+
+                // 수직 거리 체크 (같은 열/행인지)
+                float perpDist = GetPerpendicularDistance(dartPos, bPos, direction);
+                if (perpDist > perpTolerance) continue;
+
+                // 발사축 거리 체크 (다트와 타겟 사이에 있는지)
+                float firingDist = GetFiringAxisDistance(dartPos, bPos, direction);
+                if (firingDist > 0f && firingDist < targetFiringDist)
+                    return true; // 다트와 타겟 사이에 풍선 있음 → 차단
             }
 
-            int maxScan = _cachedMaxScan;
-
-            switch (direction)
-            {
-                case ScanDirection.Up:
-                    _reusableScanCell.x = targetCell.x;
-                    for (int y = targetCell.y - 1; y >= targetCell.y - maxScan; y--)
-                    {
-                        _reusableScanCell.y = y;
-                        if (occupancy.Contains(_reusableScanCell)) return true;
-                    }
-                    return false;
-
-                case ScanDirection.Down:
-                    _reusableScanCell.x = targetCell.x;
-                    for (int y = targetCell.y + 1; y <= targetCell.y + maxScan; y++)
-                    {
-                        _reusableScanCell.y = y;
-                        if (occupancy.Contains(_reusableScanCell)) return true;
-                    }
-                    return false;
-
-                case ScanDirection.Right:
-                    _reusableScanCell.y = targetCell.y;
-                    for (int x = targetCell.x - 1; x >= targetCell.x - maxScan; x--)
-                    {
-                        _reusableScanCell.x = x;
-                        if (occupancy.Contains(_reusableScanCell)) return true;
-                    }
-                    return false;
-
-                case ScanDirection.Left:
-                    _reusableScanCell.y = targetCell.y;
-                    for (int x = targetCell.x + 1; x <= targetCell.x + maxScan; x++)
-                    {
-                        _reusableScanCell.x = x;
-                        if (occupancy.Contains(_reusableScanCell)) return true;
-                    }
-                    return false;
-
-                default:
-                    return true;
-            }
+            return false;
         }
 
         /// <summary>
