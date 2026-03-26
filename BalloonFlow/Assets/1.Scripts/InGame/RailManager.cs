@@ -32,6 +32,18 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// Per-dart individual movement data. Each dart tracks its own progress along the path.
+        /// </summary>
+        public class DartOnRail
+        {
+            public int dartId;
+            public int dartColor;
+            public int holderId;
+            public float progress;    // distance along path [0, totalPathLength)
+            public bool isFrozen;
+        }
+
+        /// <summary>
         /// Cardinal direction a dart fires from its rail side.
         /// </summary>
         public enum RailSide
@@ -112,6 +124,9 @@ namespace BalloonFlow
         private int _occupiedCount;
         private int _nextDartId;
         private bool _boardFinished;
+
+        // Per-dart individual movement system
+        private readonly List<DartOnRail> _darts = new List<DartOnRail>();
 
         // Off-belt frozen dart system: darts removed from slots and held at fixed world positions
         public struct FrozenDartInfo
@@ -201,6 +216,74 @@ namespace BalloonFlow
             // Chain freeze: moving darts that reach frozen darts also freeze
             PropagateFreezeChain();
 
+            // Per-dart 자동차 모델: 앞이 막히면 slotSpacing 거리 두고 정지
+            float dartDelta = _rotationSpeed * _slotSpacing * Time.deltaTime;
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                float maxAdvance = dartDelta;
+
+                // 앞에 있는 가장 가까운 장애물 (다른 다트 or deploy point) 찾기
+                float blockDist = FindDistanceToBlockAhead(_darts[i]);
+                if (blockDist >= 0f)
+                {
+                    // 장애물 앞 slotSpacing 거리에서 정지
+                    float stopDist = blockDist - _slotSpacing;
+                    if (stopDist < 0f) stopDist = 0f;
+                    maxAdvance = Mathf.Min(maxAdvance, stopDist);
+                }
+
+                if (maxAdvance > 0.001f)
+                {
+                    _darts[i].progress += maxAdvance;
+                    if (_totalPathLength > 0f)
+                        _darts[i].progress = ((_darts[i].progress % _totalPathLength) + _totalPathLength) % _totalPathLength;
+                }
+            }
+        }
+
+        /// <summary>활성 deploy point. holderId → progress on path.</summary>
+        private readonly Dictionary<int, float> _deployPoints = new Dictionary<int, float>();
+
+        /// <summary>deploy point 등록. holder가 배치할 때 매 프레임 호출.</summary>
+        public void RegisterDeployPoint(int holderId, float progress)
+        {
+            _deployPoints[holderId] = progress;
+        }
+
+        /// <summary>deploy point 해제. 다트는 다음 프레임부터 자연스럽게 이동 재개.</summary>
+        public void UnregisterDeployPoint(int holderId)
+        {
+            _deployPoints.Remove(holderId);
+            // deploy point 제거되면 다트가 자연스럽게 앞으로 이동 (장애물 없으므로)
+        }
+
+        /// <summary>
+        /// 다트 앞에 있는 가장 가까운 장애물까지의 경로상 거리.
+        /// 장애물 = 다른 다트 or 다른 holder의 deploy point.
+        /// -1 = 앞에 장애물 없음.
+        /// </summary>
+        /// <summary>
+        /// 앞에 있는 가장 가까운 다트까지의 경로상 거리.
+        /// 다트끼리만 장애물 (deploy point는 장애물 아님).
+        /// holder가 배치한 다트 자체가 뒤에서 오는 다트의 장애물 역할.
+        /// -1 = 앞에 장애물 없음.
+        /// </summary>
+        private float FindDistanceToBlockAhead(DartOnRail dart)
+        {
+            float myProg = dart.progress;
+            float closest = float.MaxValue;
+
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                if (_darts[i].dartId == dart.dartId) continue;
+                float dist = _darts[i].progress - myProg;
+                if (_totalPathLength > 0f)
+                    dist = ((dist % _totalPathLength) + _totalPathLength) % _totalPathLength;
+                if (dist > 0f && dist < closest)
+                    closest = dist;
+            }
+
+            return closest < float.MaxValue ? closest : -1f;
         }
 
         #endregion
@@ -348,6 +431,7 @@ namespace BalloonFlow
             _occupiedCount = 0;
             _nextDartId = 0;
             _boardFinished = false;
+            _darts.Clear();
 
             for (int i = 0; i < _slotCount; i++)
             {
@@ -548,6 +632,140 @@ namespace BalloonFlow
                     _reusableOccupiedSlots.Add(i);
             }
             return _reusableOccupiedSlots;
+        }
+
+        #endregion
+
+        #region Public Methods — Per-Dart System
+
+        /// <summary>Returns all darts on the belt (per-dart system).</summary>
+        public IReadOnlyList<DartOnRail> GetAllDarts() => _darts;
+
+        /// <summary>월드 좌표를 경로상 progress로 변환 (가장 가까운 지점).</summary>
+        public float GetProgressAtWorldPos(Vector3 worldPos)
+        {
+            float bestDist = float.MaxValue;
+            float bestProg = 0f;
+            int samples = Mathf.Max(100, _slotCount * 2);
+            for (int i = 0; i < samples; i++)
+            {
+                float prog = (i / (float)samples) * _totalPathLength;
+                float d = Vector3.Distance(worldPos, GetPositionAtDistance(prog));
+                if (d < bestDist) { bestDist = d; bestProg = prog; }
+            }
+            return bestProg;
+        }
+
+        /// <summary>해당 progress에 slotSpacing 이내에 다트가 없는지 체크 (모든 다트).</summary>
+        public bool IsProgressClear(float progress, int holderId)
+        {
+            if (_darts.Count >= _slotCount) return false;
+            float minGap = _slotSpacing * 0.9f;
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                float diff = Mathf.Abs(_darts[i].progress - progress);
+                if (_totalPathLength > 0f)
+                    diff = Mathf.Min(diff, _totalPathLength - diff);
+                if (diff < minGap) return false;
+            }
+            return true;
+        }
+
+        /// <summary>Place a dart at a specific progress on the path.</summary>
+        public int PlaceDartAtProgress(float progress, int color, int holderId)
+        {
+            if (_darts.Count >= _slotCount) return -1; // capacity check
+            int id = _nextDartId++;
+            _darts.Add(new DartOnRail { dartId = id, dartColor = color, holderId = holderId, progress = progress, isFrozen = false });
+            _occupiedCount = _darts.Count;
+            PublishOccupancyChanged();
+            return id;
+        }
+
+        /// <summary>Remove a dart by ID.</summary>
+        public bool RemoveDartById(int dartId)
+        {
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                if (_darts[i].dartId == dartId)
+                {
+                    _darts.RemoveAt(i);
+                    _occupiedCount = _darts.Count;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Find a dart by ID.</summary>
+        public DartOnRail FindDart(int dartId)
+        {
+            for (int i = 0; i < _darts.Count; i++)
+                if (_darts[i].dartId == dartId) return _darts[i];
+            return null;
+        }
+
+        /// <summary>Get world position for a dart.</summary>
+        public Vector3 GetDartWorldPosition(int dartId)
+        {
+            var dart = FindDart(dartId);
+            return dart != null ? GetPositionAtDistance(dart.progress) : Vector3.zero;
+        }
+
+        /// <summary>Get firing direction for a dart based on its progress along the path.</summary>
+        public Vector3 GetDartFiringDirection(int dartId)
+        {
+            var dart = FindDart(dartId);
+            if (dart == null) return Vector3.forward;
+            float t = _totalPathLength > 0f ? dart.progress / _totalPathLength : 0f;
+            t = ((t % 1f) + 1f) % 1f;
+            Vector3 moveDir = GetDirectionAtNormalized(t);
+            // Reuse same cardinal logic as GetSlotFiringDirection
+            return GetFiringDirectionFromMoveDir(moveDir);
+        }
+
+        /// <summary>Check if there's space to place a dart near a world position.</summary>
+        public float FindInsertionProgress(Vector3 worldPos)
+        {
+            // Convert world pos to nearest path progress
+            float bestDist = float.MaxValue;
+            float bestProgress = 0f;
+            int segments = Mathf.Max(50, _slotCount);
+            for (int i = 0; i < segments; i++)
+            {
+                float prog = (i / (float)segments) * _totalPathLength;
+                Vector3 pos = GetPositionAtDistance(prog);
+                float d = Vector3.Distance(worldPos, pos);
+                if (d < bestDist) { bestDist = d; bestProgress = prog; }
+            }
+
+            // Check if there's enough gap from existing darts (frozen 다트는 무시 — 곧 이동할 것)
+            float minGap = _slotSpacing * 0.8f;
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                if (_darts[i].isFrozen) continue; // frozen 다트는 간격 체크 제외
+                float diff = Mathf.Abs(_darts[i].progress - bestProgress);
+                if (_totalPathLength > 0f)
+                    diff = Mathf.Min(diff, _totalPathLength - diff); // wrap-around
+                if (diff < minGap) return -1f; // too close
+            }
+
+            if (_darts.Count >= _slotCount) return -1f; // full
+            return bestProgress;
+        }
+
+        /// <summary>Freeze a dart by ID.</summary>
+        public void FreezeDartById(int dartId)
+        {
+            var dart = FindDart(dartId);
+            if (dart != null) dart.isFrozen = true;
+        }
+
+        /// <summary>Unfreeze all darts.</summary>
+        public void UnfreezeAllDarts()
+        {
+            for (int i = 0; i < _darts.Count; i++)
+                _darts[i].isFrozen = false;
         }
 
         #endregion
@@ -822,7 +1040,6 @@ namespace BalloonFlow
             if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return false;
             if (_slots[slotIndex].dartColor < 0) return false;
 
-            // Don't freeze darts from the currently deploying holder
             if (_activeDeployHolderId >= 0 && _slots[slotIndex].holderId == _activeDeployHolderId)
                 return false;
 
@@ -977,6 +1194,8 @@ namespace BalloonFlow
             _rotationOffset = 0f;
             _nextDartId = 0;
             _boardFinished = false;
+            _darts.Clear();
+            _deployPoints.Clear();
             _frozenDartInfos.Clear();
             _activeDeploySlot = -1;
             _activeDeployHolderId = -1;
@@ -1157,7 +1376,6 @@ namespace BalloonFlow
                 {
                     if (_slots[s].dartColor < 0) continue;
 
-                    // deploy point와 그 앞쪽(+1)은 절대 freeze하지 않음
                     if (_activeDeploySlot >= 0)
                     {
                         if (s == _activeDeploySlot) continue;
@@ -1179,6 +1397,68 @@ namespace BalloonFlow
                         }
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Per-dart freeze chain: if a non-frozen dart is close to a frozen dart, freeze it too.
+        /// </summary>
+        private void PerDartFreezeChain()
+        {
+            if (_darts.Count < 2) return;
+            float threshold = _slotSpacing * 1.2f;
+
+            // Check all pairs - if a non-frozen dart is close behind a frozen dart, freeze it
+            bool changed = true;
+            int iterations = 0;
+            while (changed && iterations < 10)
+            {
+                changed = false;
+                iterations++;
+                for (int i = 0; i < _darts.Count; i++)
+                {
+                    if (_darts[i].isFrozen) continue;
+
+                    Vector3 myPos = GetPositionAtDistance(_darts[i].progress);
+
+                    for (int j = 0; j < _darts.Count; j++)
+                    {
+                        if (i == j || !_darts[j].isFrozen) continue;
+
+                        Vector3 frozenPos = GetPositionAtDistance(_darts[j].progress);
+                        float dist = Vector3.Distance(myPos, frozenPos);
+
+                        if (dist < threshold)
+                        {
+                            _darts[i].isFrozen = true;
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Derives the inward firing direction from a movement direction along the belt.
+        /// Uses the same cardinal logic as GetSlotFiringDirection.
+        /// </summary>
+        private Vector3 GetFiringDirectionFromMoveDir(Vector3 moveDir)
+        {
+            float absX = Mathf.Abs(moveDir.x);
+            float absZ = Mathf.Abs(moveDir.z);
+
+            if (absX >= absZ)
+            {
+                // Moving +X = along bottom edge → fire north
+                // Moving -X = along top edge → fire south
+                return moveDir.x >= 0f ? Vector3.forward : Vector3.back;
+            }
+            else
+            {
+                // Moving +Z = right wall → fire left (west)
+                // Moving -Z = left wall → fire right (east)
+                return moveDir.z >= 0f ? Vector3.left : Vector3.right;
             }
         }
 

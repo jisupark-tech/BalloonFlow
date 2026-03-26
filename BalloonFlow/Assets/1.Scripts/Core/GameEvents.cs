@@ -128,6 +128,15 @@ namespace BalloonFlow
         public int holderId;
     }
 
+    /// <summary>A dart was placed on the belt (per-dart system).</summary>
+    public struct OnDartPlaced
+    {
+        public int dartId;
+        public int color;
+        public int holderId;
+        public float progress;
+    }
+
     /// <summary>A dart on a rail slot auto-fired at a matching balloon.</summary>
     public struct OnSlotDartFired
     {
