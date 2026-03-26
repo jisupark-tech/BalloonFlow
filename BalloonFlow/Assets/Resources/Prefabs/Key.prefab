@@ -154,7 +154,43 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -5568371526223589888, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -2577548232221058511, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -2577548232221058511, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -2577548232221058511, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -2577548232221058511, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -2577548232221058511, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -2577548232221058511, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.9659258
+      objectReference: {fileID: 0}
+    - target: {fileID: -2577548232221058511, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0.2588191
+      objectReference: {fileID: 0}
+    - target: {fileID: -2577548232221058511, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 30
+      objectReference: {fileID: 0}
+    - target: {fileID: -2577548232221058511, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 180
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
       propertyPath: m_Name
@@ -168,13 +204,41 @@ PrefabInstance:
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
       objectReference: {fileID: 2100000, guid: f02ffafa36825b64a9a9018f40b21e71, type: 2}
+    - target: {fileID: 2858861989129603195, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: f02ffafa36825b64a9a9018f40b21e71, type: 2}
     - target: {fileID: 3735102090226358198, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
       propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4573940403621388067, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
       propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6894072334796977429, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalRotation.w
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6894072334796977429, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6894072334796977429, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.9659258
+      objectReference: {fileID: 0}
+    - target: {fileID: 6894072334796977429, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0.2588191
+      objectReference: {fileID: 0}
+    - target: {fileID: 6894072334796977429, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 30
+      objectReference: {fileID: 0}
+    - target: {fileID: 6894072334796977429, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 180
       objectReference: {fileID: 0}
     - target: {fileID: 7202271454713460447, guid: db818d7228dd13046acfafc80fd9d119, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
