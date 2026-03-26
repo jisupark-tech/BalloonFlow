@@ -27,7 +27,7 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3610442545722993168}
   m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: 0, z: 0.39}
+  m_LocalPosition: {x: 0, y: 0, z: 0.124}
   m_LocalScale: {x: 1.3, y: 1.3000001, z: 1.3000001}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -35,7 +35,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 2.96}
+  m_AnchoredPosition: {x: 0, y: 2.769}
   m_SizeDelta: {x: 1, y: 1}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!23 &2205791928068613115
@@ -284,8 +284,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 0.85, y: 0.85, z: 0.85}
+  m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 1874418435740067082}
   m_Father: {fileID: 1489698874566250769}
@@ -356,7 +356,7 @@ PrefabInstance:
       objectReference: {fileID: 2100000, guid: 3df9ded33a6960e42b3f5e3db67313ed, type: 2}
     - target: {fileID: -5588175124101018413, guid: 4ccc789b93a84e1448b8b140c104d194, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -1987444991543732646, guid: 4ccc789b93a84e1448b8b140c104d194, type: 3}
       propertyPath: m_IsActive
@@ -397,7 +397,15 @@ PrefabInstance:
     - target: {fileID: 7727408531806841143, guid: 4ccc789b93a84e1448b8b140c104d194, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 02206c3485b09df4780420da2de44f68, type: 2}
+      objectReference: {fileID: 2100000, guid: 607a10a7dadb6304cb3db4c629afd79c, type: 2}
+    - target: {fileID: 8695242307547303323, guid: 4ccc789b93a84e1448b8b140c104d194, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1.17
+      objectReference: {fileID: 0}
+    - target: {fileID: 8695242307547303323, guid: 4ccc789b93a84e1448b8b140c104d194, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.83
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
