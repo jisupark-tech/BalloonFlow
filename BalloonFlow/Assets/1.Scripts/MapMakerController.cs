@@ -2813,6 +2813,37 @@ namespace BalloonFlow
             SetStatus($"Level {levelId} not found");
         }
 
+        /// <summary>풍선 좌표에서 실제 spacing 감지. 같은 행/열의 인접 풍선 간 최소 거리.</summary>
+        private float DetectSpacingFromBalloons(BalloonLayout[] balloons, int cols, int rows)
+        {
+            if (balloons == null || balloons.Length < 2) return -1f;
+
+            // X 좌표들 수집 후 정렬, 인접 차이의 최소값 = spacing
+            var xs = new List<float>();
+            var zs = new List<float>();
+            for (int i = 0; i < balloons.Length; i++)
+            {
+                xs.Add(balloons[i].gridPosition.x);
+                zs.Add(balloons[i].gridPosition.y);
+            }
+            xs.Sort();
+            zs.Sort();
+
+            float minGap = float.MaxValue;
+            for (int i = 1; i < xs.Count; i++)
+            {
+                float gap = xs[i] - xs[i - 1];
+                if (gap > 0.01f && gap < minGap) minGap = gap;
+            }
+            for (int i = 1; i < zs.Count; i++)
+            {
+                float gap = zs[i] - zs[i - 1];
+                if (gap > 0.01f && gap < minGap) minGap = gap;
+            }
+
+            return minGap < float.MaxValue ? minGap : -1f;
+        }
+
         private void ApplyLevelConfig(LevelConfig config)
         {
             _levelId = config.levelId;
@@ -2821,7 +2852,9 @@ namespace BalloonFlow
             _gridCols = Mathf.Max(config.gridCols, 2);
             _gridRows = Mathf.Max(config.gridRows, 2);
 
-            float spacing = CellSpacing;
+            // spacing 자동 감지: 실제 풍선 좌표에서 최소 간격 계산
+            float spacing = DetectSpacingFromBalloons(config.balloons, _gridCols, _gridRows);
+            if (spacing <= 0f) spacing = CellSpacing; // 풍선 없으면 현재 공식 사용
             _balloonColors = new int[_gridCols, _gridRows];
             _balloonGimmicks = new int[_gridCols, _gridRows];
             for (int c = 0; c < _gridCols; c++)
