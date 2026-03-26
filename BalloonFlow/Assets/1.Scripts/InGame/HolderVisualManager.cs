@@ -43,14 +43,20 @@ namespace BalloonFlow
 
         private static readonly Color[] COLORS =
         {
-            new Color(0.95f, 0.25f, 0.25f), // 0: Red
-            new Color(0.25f, 0.55f, 0.95f), // 1: Blue
-            new Color(0.25f, 0.85f, 0.35f), // 2: Green
-            new Color(0.95f, 0.85f, 0.15f), // 3: Yellow
-            new Color(0.80f, 0.30f, 0.90f), // 4: Purple
-            new Color(0.95f, 0.55f, 0.15f), // 5: Orange
-            new Color(0.40f, 0.90f, 0.90f), // 6: Cyan
-            new Color(0.95f, 0.50f, 0.70f), // 7: Pink
+            new Color(0.95f, 0.25f, 0.25f), //  0: Red
+            new Color(0.25f, 0.55f, 0.95f), //  1: Blue
+            new Color(0.25f, 0.85f, 0.35f), //  2: Green
+            new Color(0.95f, 0.85f, 0.15f), //  3: Yellow
+            new Color(0.80f, 0.30f, 0.90f), //  4: Purple
+            new Color(0.95f, 0.55f, 0.15f), //  5: Orange
+            new Color(0.40f, 0.90f, 0.90f), //  6: Cyan
+            new Color(0.95f, 0.50f, 0.70f), //  7: Pink
+            new Color(0.75f, 0.15f, 0.15f), //  8: Crimson
+            new Color(0.15f, 0.20f, 0.65f), //  9: Navy
+            new Color(0.55f, 0.95f, 0.25f), // 10: Lime
+            new Color(0.95f, 0.75f, 0.05f), // 11: Gold
+            new Color(0.55f, 0.20f, 0.80f), // 12: Violet
+            new Color(0.95f, 0.65f, 0.00f), // 13: Amber
         };
 
         #endregion
