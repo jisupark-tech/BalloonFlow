@@ -3577,16 +3577,27 @@ namespace BalloonFlow
         private void SwapColors(int fromColor, int toColor)
         {
             if (fromColor == toColor) { SetStatus("From and To colors are the same"); return; }
-            int count = 0;
+            int balloonCount = 0;
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] == fromColor)
                     {
                         _balloonColors[c, r] = toColor;
-                        count++;
+                        balloonCount++;
+                    }
+            // 보관함(큐) 색상도 같이 swap
+            int holderCount = 0;
+            for (int c = 0; c < _holderCols; c++)
+                for (int r = 0; r < _holderRows; r++)
+                    if (_holderColors[c, r] == fromColor)
+                    {
+                        _holderColors[c, r] = toColor;
+                        holderCount++;
                     }
             OnBalloonGridChanged();
-            SetStatus($"Swapped color {fromColor} -> {toColor} ({count} cells)");
+            RebuildHolderUI();
+            RefreshInfo();
+            SetStatus($"Swapped color {fromColor} -> {toColor} (balloons:{balloonCount}, holders:{holderCount})");
         }
 
         #endregion
