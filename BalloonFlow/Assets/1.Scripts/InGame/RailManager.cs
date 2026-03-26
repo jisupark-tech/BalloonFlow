@@ -65,7 +65,7 @@ namespace BalloonFlow
 
         #region Constants
 
-        private const int CORNER_SUBDIVISIONS = 8; // arc segments per corner
+        private const int CORNER_SUBDIVISIONS = 16; // arc segments per corner (부드러운 곡선)
         private const float MIN_CORNER_RADIUS = 0.2f;
         private const float MAX_CORNER_RADIUS = 5f;
 
@@ -1364,15 +1364,28 @@ namespace BalloonFlow
                 Vector3 tangentIn = _waypoints[i] - dirIn * radius;
                 Vector3 tangentOut = _waypoints[i] + dirOut * radius;
 
-                // Generate arc points using quadratic Bezier (corner as control point)
+                // 원호 중심 = 코너에서 안쪽 방향
+                Vector3 cross = Vector3.Cross(dirIn, dirOut);
+                Vector3 bisector = ((-dirIn) + dirOut).normalized;
+                // cross.y로 회전 방향 판별 → 안쪽으로 향하도록 보정
+                if (cross.y > 0f) bisector = -bisector;
+
+                float halfAngle = Mathf.Acos(Mathf.Clamp(dot, -1f, 1f)) * 0.5f;
+                float sinHalf = Mathf.Sin(halfAngle);
+                float centerDist = sinHalf > 0.01f ? radius / sinHalf : radius;
+                Vector3 arcCenter = _waypoints[i] + bisector * centerDist;
+
+                // 원호 보간 (Slerp)
+                Vector3 startDir = (tangentIn - arcCenter).normalized;
+                Vector3 endDir = (tangentOut - arcCenter).normalized;
+                float arcRadius = Vector3.Distance(tangentIn, arcCenter);
+
                 for (int s = 0; s <= CORNER_SUBDIVISIONS; s++)
                 {
                     float t = (float)s / CORNER_SUBDIVISIONS;
-                    float u = 1f - t;
-                    // Quadratic Bezier: P = (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
-                    Vector3 arcPos = u * u * tangentIn
-                                   + 2f * u * t * _waypoints[i]
-                                   + t * t * tangentOut;
+                    Vector3 dir = Vector3.Slerp(startDir, endDir, t);
+                    Vector3 arcPos = arcCenter + dir * arcRadius;
+                    arcPos.y = Mathf.Lerp(tangentIn.y, tangentOut.y, t);
                     _smoothedPath.Add(arcPos);
                 }
             }
