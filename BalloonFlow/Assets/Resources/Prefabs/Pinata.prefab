@@ -5181,7 +5181,7 @@ ParticleSystem:
     startSize:
       serializedVersion: 2
       minMaxState: 3
-      scalar: 0.5
+      scalar: 0.1
       minScalar: 0.2
       maxCurve:
         serializedVersion: 2
@@ -9734,7 +9734,7 @@ ParticleSystemRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: c12b8999bb3e1fd498009cd906f7b524, type: 2}
+  - {fileID: 2100000, guid: ee205af7ee82e274eb4918217f00c5ee, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -10075,7 +10075,7 @@ ParticleSystem:
     startSize:
       serializedVersion: 2
       minMaxState: 3
-      scalar: 0.5
+      scalar: 0.1
       minScalar: 0.2
       maxCurve:
         serializedVersion: 2
@@ -14628,7 +14628,7 @@ ParticleSystemRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: c12b8999bb3e1fd498009cd906f7b524, type: 2}
+  - {fileID: 2100000, guid: ee205af7ee82e274eb4918217f00c5ee, type: 2}
   - {fileID: 2100000, guid: c8712d6fad50ac245b782ca8e80142ce, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
@@ -19953,7 +19953,7 @@ PrefabInstance:
     - target: {fileID: -7511558181221131132, guid: d8c68f31ec49f5d46b69db994f66a826, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 66b7b620b8048be45b37648985705e8f, type: 2}
+      objectReference: {fileID: 2100000, guid: 8c20b772413c41a4e95ce69c7e2bab52, type: 2}
     - target: {fileID: 919132149155446097, guid: d8c68f31ec49f5d46b69db994f66a826, type: 3}
       propertyPath: m_Name
       value: Pinata
