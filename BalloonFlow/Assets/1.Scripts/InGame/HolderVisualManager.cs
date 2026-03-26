@@ -41,22 +41,37 @@ namespace BalloonFlow
 
         #region Color Palette
 
+        /// <summary>PixelArtConverter 28색 팔레트와 동기화.</summary>
         private static readonly Color[] COLORS =
         {
-            new Color(0.95f, 0.25f, 0.25f), //  0: Red
-            new Color(0.25f, 0.55f, 0.95f), //  1: Blue
-            new Color(0.25f, 0.85f, 0.35f), //  2: Green
-            new Color(0.95f, 0.85f, 0.15f), //  3: Yellow
-            new Color(0.80f, 0.30f, 0.90f), //  4: Purple
-            new Color(0.95f, 0.55f, 0.15f), //  5: Orange
-            new Color(0.40f, 0.90f, 0.90f), //  6: Cyan
-            new Color(0.95f, 0.50f, 0.70f), //  7: Pink
-            new Color(0.75f, 0.15f, 0.15f), //  8: Crimson
-            new Color(0.15f, 0.20f, 0.65f), //  9: Navy
-            new Color(0.55f, 0.95f, 0.25f), // 10: Lime
-            new Color(0.95f, 0.75f, 0.05f), // 11: Gold
-            new Color(0.55f, 0.20f, 0.80f), // 12: Violet
-            new Color(0.95f, 0.65f, 0.00f), // 13: Amber
+            new Color(252/255f, 106/255f, 175/255f),  //  0: HotPink
+            new Color( 80/255f, 232/255f, 246/255f),  //  1: Cyan
+            new Color(137/255f,  80/255f, 248/255f),  //  2: Purple
+            new Color(254/255f, 213/255f,  85/255f),  //  3: Yellow
+            new Color(115/255f, 254/255f, 102/255f),  //  4: Green
+            new Color(253/255f, 161/255f,  76/255f),  //  5: Orange
+            new Color(255/255f, 255/255f, 255/255f),  //  6: White
+            new Color( 65/255f,  65/255f,  65/255f),  //  7: DarkGray
+            new Color(110/255f, 168/255f, 250/255f),  //  8: SkyBlue
+            new Color( 57/255f, 174/255f,  46/255f),  //  9: Forest
+            new Color(252/255f,  94/255f,  94/255f),  // 10: Red
+            new Color( 50/255f, 107/255f, 248/255f),  // 11: Blue
+            new Color( 58/255f, 165/255f, 139/255f),  // 12: Teal
+            new Color(231/255f, 167/255f, 250/255f),  // 13: Lavender
+            new Color(183/255f, 199/255f, 251/255f),  // 14: Periwinkle
+            new Color(106/255f,  74/255f,  48/255f),  // 15: Brown
+            new Color(254/255f, 227/255f, 169/255f),  // 16: Cream
+            new Color(253/255f, 183/255f, 193/255f),  // 17: Pink
+            new Color(158/255f,  61/255f,  94/255f),  // 18: Wine
+            new Color(167/255f, 221/255f, 148/255f),  // 19: Mint
+            new Color( 89/255f,  46/255f, 126/255f),  // 20: Indigo
+            new Color(220/255f, 120/255f, 129/255f),  // 21: Rose
+            new Color(217/255f, 217/255f, 231/255f),  // 22: Silver
+            new Color(111/255f, 114/255f, 127/255f),  // 23: Gray
+            new Color(252/255f,  56/255f, 165/255f),  // 24: Magenta
+            new Color(253/255f, 180/255f,  88/255f),  // 25: Amber
+            new Color(137/255f,  10/255f,   8/255f),  // 26: Crimson
+            new Color(111/255f, 175/255f, 177/255f),  // 27: Sage
         };
 
         #endregion
