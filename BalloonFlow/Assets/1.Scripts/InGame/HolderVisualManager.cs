@@ -744,25 +744,25 @@ namespace BalloonFlow
 
             bool deployStarted = false;
 
+            // deploy point progress를 한 번만 계산 (고정 위치)
+            float fixedDeployProgress = rail.GetProgressAtWorldPos(railAttachPoint);
+            rail.RegisterDeployPoint(visual.holderId, fixedDeployProgress);
+
             while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
             {
-                // ── CHECK 1: 취소 여부 ──
+                // 취소 체크
                 if (_cancelledHolders.Contains(visual.holderId))
                 {
                     _cancelledHolders.Remove(visual.holderId);
+                    rail.UnregisterDeployPoint(visual.holderId);
                     _colBusy[visual.column] = false;
                     yield break;
                 }
 
-                // ── CHECK 2: 레일 바닥의 nearest 슬롯이 비어있으면 배치 ──
-                int deploySlot = rail.GetNearestSlotIndex(railAttachPoint);
-
-                if (rail.IsSlotEmpty(deploySlot))
+                // deploy point에 빈 공간이 있는지 체크 (slotSpacing 이내에 다트 없음)
+                if (rail.IsProgressClear(fixedDeployProgress, visual.holderId))
                 {
-                    // deploy slot 기록 (PropagateFreezeChain에서 참조)
-                    // 동시 배치 시에는 freeze 없이 빈 슬롯 대기로 처리
-
-                    int dartId = rail.PlaceDart(deploySlot, visual.color, visual.holderId);
+                    int dartId = rail.PlaceDartAtProgress(fixedDeployProgress, visual.color, visual.holderId);
                     if (dartId >= 0)
                     {
                         visual.magazineRemaining--;
@@ -777,8 +777,7 @@ namespace BalloonFlow
                             }
                         }
 
-                        // Dart 자식 하나를 보관함에서 분리 → 슬롯으로 날림
-                        LaunchDartChild(visual, rail.GetSlotWorldPosition(deploySlot));
+                        LaunchDartChild(visual, rail.GetPositionAtDistance(fixedDeployProgress));
 
                         if (visual.magazineText != null)
                             visual.magazineText.SetText("{0}", visual.magazineRemaining);
@@ -786,11 +785,12 @@ namespace BalloonFlow
                         if (HolderManager.HasInstance)
                             HolderManager.Instance.ConsumeMagazine(visual.holderId);
 
-                        EventBus.Publish(new OnDartPlacedOnSlot
+                        EventBus.Publish(new OnDartPlaced
                         {
-                            slotIndex = deploySlot,
+                            dartId = dartId,
                             color = visual.color,
-                            holderId = visual.holderId
+                            holderId = visual.holderId,
+                            progress = fixedDeployProgress
                         });
                     }
                 }
@@ -798,10 +798,11 @@ namespace BalloonFlow
                 yield return null;
             }
 
-            // ── Phase 3: Deployment done — freeze 해제 ──
-            // ── Phase 3/4: Cleanup ──
-            CompleteDeployment(visual);
+            // ── Phase 3: deploy point 해제 → frozen 다트 unfreeze ──
+            rail.UnregisterDeployPoint(visual.holderId);
 
+            // ── Phase 4: Cleanup ──
+            CompleteDeployment(visual);
             _colBusy[visual.column] = false;
         }
 
