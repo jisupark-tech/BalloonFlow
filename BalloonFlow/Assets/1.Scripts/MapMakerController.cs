@@ -19,43 +19,44 @@ namespace BalloonFlow
     {
         #region Constants
 
+        /// <summary>PixelArtConverter 28색 팔레트와 동기화.</summary>
         private static readonly Color[] PALETTE =
         {
-            new Color(0.95f, 0.25f, 0.25f), //  0: Red
-            new Color(0.25f, 0.55f, 0.95f), //  1: Blue
-            new Color(0.25f, 0.85f, 0.35f), //  2: Green
-            new Color(0.95f, 0.85f, 0.15f), //  3: Yellow
-            new Color(0.80f, 0.30f, 0.90f), //  4: Purple
-            new Color(0.95f, 0.55f, 0.15f), //  5: Orange
-            new Color(0.40f, 0.90f, 0.90f), //  6: Cyan
-            new Color(0.95f, 0.50f, 0.70f), //  7: Pink
-            new Color(0.75f, 0.15f, 0.15f), //  8: Crimson
-            new Color(0.15f, 0.20f, 0.65f), //  9: Navy
-            new Color(0.55f, 0.95f, 0.25f), // 10: Lime
-            new Color(0.95f, 0.75f, 0.05f), // 11: Gold
-            new Color(0.55f, 0.20f, 0.80f), // 12: Violet
-            new Color(0.95f, 0.65f, 0.00f), // 13: Amber
-            new Color(0.15f, 0.70f, 0.65f), // 14: Teal
-            new Color(0.95f, 0.35f, 0.50f), // 15: Rose
-            new Color(0.95f, 0.45f, 0.35f), // 16: Coral
-            new Color(0.30f, 0.15f, 0.70f), // 17: Indigo
-            new Color(0.40f, 0.95f, 0.65f), // 18: Mint
-            new Color(0.95f, 0.75f, 0.60f), // 19: Peach
-            new Color(0.90f, 0.15f, 0.65f), // 20: Magenta
-            new Color(0.50f, 0.55f, 0.15f), // 21: Olive
-            new Color(0.45f, 0.75f, 0.95f), // 22: Sky
-            new Color(0.95f, 0.55f, 0.45f), // 23: Salmon
-            new Color(0.50f, 0.10f, 0.15f), // 24: Maroon
-            new Color(0.10f, 0.45f, 0.20f), // 25: Forest
-            new Color(0.70f, 0.55f, 0.90f), // 26: Lavender
-            new Color(0.82f, 0.70f, 0.50f), // 27: Tan
+            new Color(252/255f, 106/255f, 175/255f),  //  0: HotPink
+            new Color( 80/255f, 232/255f, 246/255f),  //  1: Cyan
+            new Color(137/255f,  80/255f, 248/255f),  //  2: Purple
+            new Color(254/255f, 213/255f,  85/255f),  //  3: Yellow
+            new Color(115/255f, 254/255f, 102/255f),  //  4: Green
+            new Color(253/255f, 161/255f,  76/255f),  //  5: Orange
+            new Color(255/255f, 255/255f, 255/255f),  //  6: White
+            new Color( 65/255f,  65/255f,  65/255f),  //  7: DarkGray
+            new Color(110/255f, 168/255f, 250/255f),  //  8: SkyBlue
+            new Color( 57/255f, 174/255f,  46/255f),  //  9: Forest
+            new Color(252/255f,  94/255f,  94/255f),  // 10: Red
+            new Color( 50/255f, 107/255f, 248/255f),  // 11: Blue
+            new Color( 58/255f, 165/255f, 139/255f),  // 12: Teal
+            new Color(231/255f, 167/255f, 250/255f),  // 13: Lavender
+            new Color(183/255f, 199/255f, 251/255f),  // 14: Periwinkle
+            new Color(106/255f,  74/255f,  48/255f),  // 15: Brown
+            new Color(254/255f, 227/255f, 169/255f),  // 16: Cream
+            new Color(253/255f, 183/255f, 193/255f),  // 17: Pink
+            new Color(158/255f,  61/255f,  94/255f),  // 18: Wine
+            new Color(167/255f, 221/255f, 148/255f),  // 19: Mint
+            new Color( 89/255f,  46/255f, 126/255f),  // 20: Indigo
+            new Color(220/255f, 120/255f, 129/255f),  // 21: Rose
+            new Color(217/255f, 217/255f, 231/255f),  // 22: Silver
+            new Color(111/255f, 114/255f, 127/255f),  // 23: Gray
+            new Color(252/255f,  56/255f, 165/255f),  // 24: Magenta
+            new Color(253/255f, 180/255f,  88/255f),  // 25: Amber
+            new Color(137/255f,  10/255f,   8/255f),  // 26: Crimson
+            new Color(111/255f, 175/255f, 177/255f),  // 27: Sage
         };
 
         private static readonly string[] COLOR_LABELS =
-            { "R", "B", "G", "Y", "P", "O", "C", "K",
-              "Cr", "Nv", "Lm", "Gd", "Vi", "Am", "Tl", "Rs",
-              "Co", "In", "Mt", "Pc", "Mg", "Ol", "Sk", "Sl",
-              "Mr", "Fr", "Lv", "Tn" };
+            { "HP", "Cy", "Pu", "Yl", "Gr", "Or", "Wh", "DG",
+              "SB", "Fo", "Rd", "Bl", "Tl", "Lv", "Pw", "Br",
+              "Cr", "Pk", "Wi", "Mt", "In", "Rs", "Si", "Gy",
+              "Mg", "Am", "Cm", "Sa" };
 
         // 전체 기믹 (기존 호환 유지)
         private static readonly string[] GIMMICK_NAMES =
@@ -253,6 +254,13 @@ namespace BalloonFlow
             RebuildWaypointPreview();
             RefreshInfo();
             RefreshLevelList();
+
+            // 테스트 플레이 복귀 시 마지막 편집 레벨, 처음이면 레벨 1 로드
+            int lastEditedLevel = EditorPrefs.GetInt("BalloonFlow_LastEditedLevel", 1);
+            if (lastEditedLevel > 0)
+            {
+                LoadLevelById(lastEditedLevel);
+            }
         }
 
         private void Update()
@@ -744,8 +752,15 @@ namespace BalloonFlow
             Btn(row, "Fill All", () => { FillBalloons(_paintColor); OnBalloonGridChanged(); });
             Btn(row, "Clear All", () => { FillBalloons(-1); OnBalloonGridChanged(); });
             Btn(row, "Random", () => { RandomBalloons(); OnBalloonGridChanged(); });
+            var row2 = Row(p);
+            Btn(row2, "Erase Color", () => { EraseColor(_paintColor); OnBalloonGridChanged(); });
+            Btn(row2, "Erase Neighbor", () => { _eraseNeighborMode = true; SetStatus("Click a cell to erase same-color neighbors"); });
+            Btn(row2, "Fill Neighbor", () => { _fillNeighborMode = true; SetStatus("Click an empty cell to fill same-empty neighbors"); });
             Sep(p);
         }
+
+        private bool _eraseNeighborMode;
+        private bool _fillNeighborMode;
 
         private void BuildHolderSection(Transform p)
         {
@@ -1985,12 +2000,24 @@ namespace BalloonFlow
 
                 if (col >= 0 && col < _gridCols && row >= 0 && row < _gridRows)
                 {
-                    if (_floodFillMode && mouse.leftButton.wasPressedThisFrame)
+                    if (_eraseNeighborMode && mouse.leftButton.wasPressedThisFrame)
+                    {
+                        EraseNeighborSameColor(col, row);
+                        _eraseNeighborMode = false;
+                        OnBalloonGridChanged();
+                    }
+                    else if (_fillNeighborMode && mouse.leftButton.wasPressedThisFrame)
+                    {
+                        FillNeighborEmpty(col, row, _paintColor);
+                        _fillNeighborMode = false;
+                        OnBalloonGridChanged();
+                    }
+                    else if (_floodFillMode && mouse.leftButton.wasPressedThisFrame)
                     {
                         FloodFill(col, row, _paintColor);
                         OnBalloonGridChanged();
                     }
-                    else if (!_floodFillMode)
+                    else if (!_floodFillMode && !_eraseNeighborMode && !_fillNeighborMode)
                     {
                         bool isPinataGimmick = _paintGimmick > 0 && _paintGimmick < GIMMICK_NAMES.Length
                             && (GIMMICK_NAMES[_paintGimmick] == "Pinata" || GIMMICK_NAMES[_paintGimmick] == "Pinata_Box");
@@ -2714,10 +2741,16 @@ namespace BalloonFlow
 
         #endregion
 
+        private bool _levelLoaded; // 레벨이 로드/편집된 상태인지
+
         private void TestPlay()
         {
-            // 테스트 플레이 전 자동 저장 (돌아올 때 데이터 유실 방지)
-            SaveToDatabase();
+            // 레벨이 로드되지 않은 상태에서 TestPlay 방지
+            if (!_levelLoaded)
+            {
+                SetStatus("ERROR: Load a level first before test play.");
+                return;
+            }
 
             var config = BuildLevelConfig();
             if (config.balloons == null || config.balloons.Length == 0)
@@ -2731,9 +2764,13 @@ namespace BalloonFlow
                 return;
             }
 
+            // 테스트 플레이 전 자동 저장 (돌아올 때 데이터 유실 방지)
+            SaveToDatabase();
+
             string json = JsonUtility.ToJson(config, false);
             EditorPrefs.SetString("BalloonFlow_TestLevel", json);
             EditorPrefs.SetBool("BalloonFlow_UseTestLevel", true);
+            EditorPrefs.SetInt("BalloonFlow_LastEditedLevel", _levelId);
             PlayerPrefs.SetInt("BF_PendingLevelId", _levelId);
             IsTestMode = true;
             GameManager.IsTestPlayMode = true;
@@ -2846,6 +2883,7 @@ namespace BalloonFlow
 
         private void ApplyLevelConfig(LevelConfig config)
         {
+            _levelLoaded = true;
             _levelId = config.levelId;
             _numColors = config.numColors;
             _difficulty = config.difficultyPurpose;
@@ -2953,6 +2991,11 @@ namespace BalloonFlow
 
         private void SaveToDatabase()
         {
+            if (!_levelLoaded)
+            {
+                SetStatus("ERROR: No level loaded. Load or create a level first.");
+                return;
+            }
             if (_targetDB == null)
             {
                 string path = "Assets/Resources/LevelDatabase.asset";
@@ -3409,6 +3452,92 @@ namespace BalloonFlow
 
         // ── Feature 7: Flood Fill ──
 
+        /// <summary>특정 색상의 풍선을 전부 제거.</summary>
+        private void EraseColor(int color)
+        {
+            if (color < 0) { SetStatus("Select a color first"); return; }
+            int count = 0;
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                    if (_balloonColors[c, r] == color)
+                    {
+                        _balloonColors[c, r] = -1;
+                        _balloonGimmicks[c, r] = 0;
+                        count++;
+                    }
+            SetStatus($"Erased {count} cells of color {color}");
+        }
+
+        /// <summary>클릭한 셀과 이웃한 같은 색상 셀들을 전부 제거 (BFS).</summary>
+        private void EraseNeighborSameColor(int startCol, int startRow)
+        {
+            int targetColor = _balloonColors[startCol, startRow];
+            if (targetColor < 0) { SetStatus("Click a colored cell"); return; }
+
+            var queue = new Queue<Vector2Int>();
+            var visited = new HashSet<Vector2Int>();
+            queue.Enqueue(new Vector2Int(startCol, startRow));
+            visited.Add(new Vector2Int(startCol, startRow));
+
+            while (queue.Count > 0)
+            {
+                var cell = queue.Dequeue();
+                int c = cell.x, r = cell.y;
+                _balloonColors[c, r] = -1;
+                _balloonGimmicks[c, r] = 0;
+
+                Vector2Int[] dirs = { new Vector2Int(1, 0), new Vector2Int(-1, 0),
+                                      new Vector2Int(0, 1), new Vector2Int(0, -1) };
+                foreach (var d in dirs)
+                {
+                    int nc = c + d.x, nr = r + d.y;
+                    var np = new Vector2Int(nc, nr);
+                    if (nc >= 0 && nc < _gridCols && nr >= 0 && nr < _gridRows
+                        && !visited.Contains(np) && _balloonColors[nc, nr] == targetColor)
+                    {
+                        visited.Add(np);
+                        queue.Enqueue(np);
+                    }
+                }
+            }
+            SetStatus($"Erased {visited.Count} neighbor cells (color {targetColor})");
+        }
+
+        /// <summary>클릭한 빈 셀과 이웃한 빈 셀들을 현재 브러시 색상으로 채움 (BFS).</summary>
+        private void FillNeighborEmpty(int startCol, int startRow, int fillColor)
+        {
+            if (_balloonColors[startCol, startRow] >= 0) { SetStatus("Click an empty cell"); return; }
+            if (fillColor < 0) { SetStatus("Select a color first"); return; }
+
+            var queue = new Queue<Vector2Int>();
+            var visited = new HashSet<Vector2Int>();
+            queue.Enqueue(new Vector2Int(startCol, startRow));
+            visited.Add(new Vector2Int(startCol, startRow));
+
+            while (queue.Count > 0)
+            {
+                var cell = queue.Dequeue();
+                int c = cell.x, r = cell.y;
+                _balloonColors[c, r] = fillColor;
+                _balloonGimmicks[c, r] = _paintGimmick;
+
+                Vector2Int[] dirs = { new Vector2Int(1, 0), new Vector2Int(-1, 0),
+                                      new Vector2Int(0, 1), new Vector2Int(0, -1) };
+                foreach (var d in dirs)
+                {
+                    int nc = c + d.x, nr = r + d.y;
+                    var np = new Vector2Int(nc, nr);
+                    if (nc >= 0 && nc < _gridCols && nr >= 0 && nr < _gridRows
+                        && !visited.Contains(np) && _balloonColors[nc, nr] < 0)
+                    {
+                        visited.Add(np);
+                        queue.Enqueue(np);
+                    }
+                }
+            }
+            SetStatus($"Filled {visited.Count} empty neighbor cells (color {fillColor})");
+        }
+
         private void FloodFill(int startCol, int startRow, int newColor)
         {
             int targetColor = _balloonColors[startCol, startRow];
@@ -3448,16 +3577,27 @@ namespace BalloonFlow
         private void SwapColors(int fromColor, int toColor)
         {
             if (fromColor == toColor) { SetStatus("From and To colors are the same"); return; }
-            int count = 0;
+            int balloonCount = 0;
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] == fromColor)
                     {
                         _balloonColors[c, r] = toColor;
-                        count++;
+                        balloonCount++;
+                    }
+            // 보관함(큐) 색상도 같이 swap
+            int holderCount = 0;
+            for (int c = 0; c < _holderCols; c++)
+                for (int r = 0; r < _holderRows; r++)
+                    if (_holderColors[c, r] == fromColor)
+                    {
+                        _holderColors[c, r] = toColor;
+                        holderCount++;
                     }
             OnBalloonGridChanged();
-            SetStatus($"Swapped color {fromColor} -> {toColor} ({count} cells)");
+            RebuildHolderUI();
+            RefreshInfo();
+            SetStatus($"Swapped color {fromColor} -> {toColor} (balloons:{balloonCount}, holders:{holderCount})");
         }
 
         #endregion
