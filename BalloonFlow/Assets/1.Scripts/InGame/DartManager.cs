@@ -229,7 +229,7 @@ namespace BalloonFlow
             float spacing = RailManager.Instance.SlotSpacing;
             if (spacing > 0.01f)
             {
-                float maxScale = spacing * 0.9f; // 슬롯 간격의 90%
+                float maxScale = spacing * 1.3f; // 슬롯 간격의 90%
                 Vector3 s = dartObj.transform.localScale;
                 float currentSize = Mathf.Max(s.x, s.z);
                 if (currentSize > maxScale)
@@ -284,7 +284,7 @@ namespace BalloonFlow
             float spacing = RailManager.Instance.SlotSpacing;
             if (spacing > 0.01f)
             {
-                float maxScale = spacing * 0.9f;
+                float maxScale = spacing * 1.3f;
                 Vector3 s = dartObj.transform.localScale;
                 float currentSize = Mathf.Max(s.x, s.z);
                 if (currentSize > maxScale)

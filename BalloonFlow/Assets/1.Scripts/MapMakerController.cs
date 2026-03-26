@@ -1110,6 +1110,7 @@ namespace BalloonFlow
         private int _importGridCols = 20;
         private int _importGridRows = 20;
         private int _importRoundTo = 10;
+        private float _importBgThreshold = 0.15f; // 이 밝기 이하는 배경으로 인식 (0~1)
         private int[,] _importPreview; // color index grid from image
 
         private void BuildImageImportSection(Transform p)
@@ -1141,6 +1142,16 @@ namespace BalloonFlow
             var r3 = Row(p); Lbl(r3, "Round To", w: 70);
             MakeIntField(r3, _importRoundTo, 0, 50, v => _importRoundTo = v);
 
+            var r4 = Row(p); Lbl(r4, "BG Cut", w: 70);
+            MakeInputField(r4, _importBgThreshold.ToString("F2"), s =>
+            {
+                if (float.TryParse(s, out float v))
+                {
+                    _importBgThreshold = Mathf.Clamp01(v);
+                    UpdateImagePreview();
+                }
+            });
+
             Sep(p);
         }
 
@@ -1150,32 +1161,90 @@ namespace BalloonFlow
 
             int gw = _importGridCols, gh = _importGridRows;
             var selColorList = new List<int>(_selectedColors);
+            if (selColorList.Count == 0) return;
             _importPreview = new int[gw, gh];
 
-            // 이미지를 그리드 크기로 샘플링 → 선택된 팔레트 색상만 매핑
+            // PixelArtConverter 방식: 원본 해상도에서 팔레트 매칭 → 그리드 셀별 최빈값(MODE)
+            int srcW = _importedImage.width;
+            int srcH = _importedImage.height;
+
+            // 1단계: 원본 해상도의 모든 픽셀을 팔레트 인덱스로 변환 (full-res quantize)
+            // 팔레트 색상을 미리 배열로 변환 (성능)
+            float[] palR = new float[selColorList.Count];
+            float[] palG = new float[selColorList.Count];
+            float[] palB = new float[selColorList.Count];
+            for (int si = 0; si < selColorList.Count; si++)
+            {
+                int pi = selColorList[si];
+                palR[si] = PALETTE[pi].r; palG[si] = PALETTE[pi].g; palB[si] = PALETTE[pi].b;
+            }
+
+            // 2단계: 그리드 셀별로 원본 픽셀 블록의 최빈 팔레트 색상 선택
+            var colorVotes = new Dictionary<int, int>(); // paletteIndex → count
+
             for (int c = 0; c < gw; c++)
             {
                 for (int r = 0; r < gh; r++)
                 {
-                    float u = (c + 0.5f) / gw;
-                    float v = (r + 0.5f) / gh;
-                    Color pixel = _importedImage.GetPixelBilinear(u, v);
+                    int x0 = (int)((float)c / gw * srcW);
+                    int x1 = Mathf.Max(x0 + 1, (int)((float)(c + 1) / gw * srcW));
+                    int y0 = (int)((float)r / gh * srcH);
+                    int y1 = Mathf.Max(y0 + 1, (int)((float)(r + 1) / gh * srcH));
 
-                    if (pixel.a < 0.5f) { _importPreview[c, r] = -1; continue; }
+                    colorVotes.Clear();
+                    int bgCount = 0;
+                    int totalPixels = 0;
 
-                    // 선택된 색상 범위 내에서만 매칭
-                    int bestIdx = selColorList.Count > 0 ? selColorList[0] : 0;
-                    float bestDist = float.MaxValue;
-                    for (int si = 0; si < selColorList.Count; si++)
+                    for (int py = y0; py < y1 && py < srcH; py++)
                     {
-                        int pi = selColorList[si];
-                        float dr = pixel.r - PALETTE[pi].r;
-                        float dg = pixel.g - PALETTE[pi].g;
-                        float db = pixel.b - PALETTE[pi].b;
-                        float dist = dr * dr + dg * dg + db * db;
-                        if (dist < bestDist) { bestDist = dist; bestIdx = pi; }
+                        for (int px = x0; px < x1 && px < srcW; px++)
+                        {
+                            Color p = _importedImage.GetPixel(px, py);
+                            totalPixels++;
+
+                            // 투명 또는 어두운 배경
+                            float brightness = p.r * 0.299f + p.g * 0.587f + p.b * 0.114f;
+                            if (p.a < 0.5f || brightness < _importBgThreshold)
+                            {
+                                bgCount++;
+                                continue;
+                            }
+
+                            // 이 픽셀의 가장 가까운 팔레트 색상 (원본 해상도에서 매칭)
+                            int bestSi = 0;
+                            float bestDist = float.MaxValue;
+                            for (int si = 0; si < selColorList.Count; si++)
+                            {
+                                float dr = p.r - palR[si];
+                                float dg = p.g - palG[si];
+                                float db = p.b - palB[si];
+                                // Redmean 가중 거리 (인간 시각 최적화)
+                                float rmean = (p.r + palR[si]) * 0.5f;
+                                float dist = (2f + rmean) * dr * dr + 4f * dg * dg + (3f - rmean) * db * db;
+                                if (dist < bestDist) { bestDist = dist; bestSi = si; }
+                            }
+
+                            int palIdx = selColorList[bestSi];
+                            if (colorVotes.ContainsKey(palIdx)) colorVotes[palIdx]++;
+                            else colorVotes[palIdx] = 1;
+                        }
                     }
-                    _importPreview[c, r] = bestIdx;
+
+                    // 배경이 과반수면 빈 셀
+                    if (bgCount > totalPixels / 2 || colorVotes.Count == 0)
+                    {
+                        _importPreview[c, r] = -1;
+                        continue;
+                    }
+
+                    // 최빈 색상 (MODE) 선택
+                    int modeColor = selColorList[0];
+                    int modeCount = 0;
+                    foreach (var kvp in colorVotes)
+                    {
+                        if (kvp.Value > modeCount) { modeCount = kvp.Value; modeColor = kvp.Key; }
+                    }
+                    _importPreview[c, r] = modeColor;
                 }
             }
 
@@ -2821,6 +2890,30 @@ namespace BalloonFlow
         }
 
         /// <summary>프리뷰 오브젝트의 색상/표시만 갱신 (Destroy/Create 없이).</summary>
+        /// <summary>인간 시각 기반 색상 거리. 색상(Hue) 차이에 가중치를 줘서 밝기만 비슷한 다른 색을 구별.</summary>
+        private static float PerceptualColorDist(float r1, float g1, float b1, float r2, float g2, float b2)
+        {
+            // 가중 RGB (인간 눈의 감도: G > R > B)
+            float dr = r1 - r2, dg = g1 - g2, db = b1 - b2;
+            float rgbDist = 2f * dr * dr + 4f * dg * dg + 3f * db * db;
+
+            // HSV 색상(Hue) 거리 — 밝기가 비슷해도 색이 다르면 큰 거리
+            float h1, s1, v1, h2, s2, v2;
+            Color.RGBToHSV(new Color(r1, g1, b1), out h1, out s1, out v1);
+            Color.RGBToHSV(new Color(r2, g2, b2), out h2, out s2, out v2);
+
+            float dh = Mathf.Abs(h1 - h2);
+            if (dh > 0.5f) dh = 1f - dh; // Hue wrap-around
+            float ds = Mathf.Abs(s1 - s2);
+
+            // 채도가 낮으면 Hue 차이 무시 (회색 계열은 Hue가 불안정)
+            float satWeight = Mathf.Min(s1, s2);
+            float hueDist = dh * dh * satWeight * 8f; // Hue에 높은 가중치
+            float satDist = ds * ds * 2f;
+
+            return rgbDist + hueDist + satDist;
+        }
+
         private void UpdatePreviewColors()
         {
             if (_previewObjs == null) return;
