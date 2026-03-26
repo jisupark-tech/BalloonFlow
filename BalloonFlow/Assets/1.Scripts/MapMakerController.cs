@@ -253,6 +253,13 @@ namespace BalloonFlow
             RebuildWaypointPreview();
             RefreshInfo();
             RefreshLevelList();
+
+            // 테스트 플레이 복귀 시 마지막 편집 레벨, 처음이면 레벨 1 로드
+            int lastEditedLevel = EditorPrefs.GetInt("BalloonFlow_LastEditedLevel", 1);
+            if (lastEditedLevel > 0)
+            {
+                LoadLevelById(lastEditedLevel);
+            }
         }
 
         private void Update()
@@ -744,8 +751,15 @@ namespace BalloonFlow
             Btn(row, "Fill All", () => { FillBalloons(_paintColor); OnBalloonGridChanged(); });
             Btn(row, "Clear All", () => { FillBalloons(-1); OnBalloonGridChanged(); });
             Btn(row, "Random", () => { RandomBalloons(); OnBalloonGridChanged(); });
+            var row2 = Row(p);
+            Btn(row2, "Erase Color", () => { EraseColor(_paintColor); OnBalloonGridChanged(); });
+            Btn(row2, "Erase Neighbor", () => { _eraseNeighborMode = true; SetStatus("Click a cell to erase same-color neighbors"); });
+            Btn(row2, "Fill Neighbor", () => { _fillNeighborMode = true; SetStatus("Click an empty cell to fill same-empty neighbors"); });
             Sep(p);
         }
+
+        private bool _eraseNeighborMode;
+        private bool _fillNeighborMode;
 
         private void BuildHolderSection(Transform p)
         {
@@ -1985,12 +1999,24 @@ namespace BalloonFlow
 
                 if (col >= 0 && col < _gridCols && row >= 0 && row < _gridRows)
                 {
-                    if (_floodFillMode && mouse.leftButton.wasPressedThisFrame)
+                    if (_eraseNeighborMode && mouse.leftButton.wasPressedThisFrame)
+                    {
+                        EraseNeighborSameColor(col, row);
+                        _eraseNeighborMode = false;
+                        OnBalloonGridChanged();
+                    }
+                    else if (_fillNeighborMode && mouse.leftButton.wasPressedThisFrame)
+                    {
+                        FillNeighborEmpty(col, row, _paintColor);
+                        _fillNeighborMode = false;
+                        OnBalloonGridChanged();
+                    }
+                    else if (_floodFillMode && mouse.leftButton.wasPressedThisFrame)
                     {
                         FloodFill(col, row, _paintColor);
                         OnBalloonGridChanged();
                     }
-                    else if (!_floodFillMode)
+                    else if (!_floodFillMode && !_eraseNeighborMode && !_fillNeighborMode)
                     {
                         bool isPinataGimmick = _paintGimmick > 0 && _paintGimmick < GIMMICK_NAMES.Length
                             && (GIMMICK_NAMES[_paintGimmick] == "Pinata" || GIMMICK_NAMES[_paintGimmick] == "Pinata_Box");
@@ -2714,10 +2740,16 @@ namespace BalloonFlow
 
         #endregion
 
+        private bool _levelLoaded; // 레벨이 로드/편집된 상태인지
+
         private void TestPlay()
         {
-            // 테스트 플레이 전 자동 저장 (돌아올 때 데이터 유실 방지)
-            SaveToDatabase();
+            // 레벨이 로드되지 않은 상태에서 TestPlay 방지
+            if (!_levelLoaded)
+            {
+                SetStatus("ERROR: Load a level first before test play.");
+                return;
+            }
 
             var config = BuildLevelConfig();
             if (config.balloons == null || config.balloons.Length == 0)
@@ -2731,9 +2763,13 @@ namespace BalloonFlow
                 return;
             }
 
+            // 테스트 플레이 전 자동 저장 (돌아올 때 데이터 유실 방지)
+            SaveToDatabase();
+
             string json = JsonUtility.ToJson(config, false);
             EditorPrefs.SetString("BalloonFlow_TestLevel", json);
             EditorPrefs.SetBool("BalloonFlow_UseTestLevel", true);
+            EditorPrefs.SetInt("BalloonFlow_LastEditedLevel", _levelId);
             PlayerPrefs.SetInt("BF_PendingLevelId", _levelId);
             IsTestMode = true;
             GameManager.IsTestPlayMode = true;
@@ -2846,6 +2882,7 @@ namespace BalloonFlow
 
         private void ApplyLevelConfig(LevelConfig config)
         {
+            _levelLoaded = true;
             _levelId = config.levelId;
             _numColors = config.numColors;
             _difficulty = config.difficultyPurpose;
@@ -2953,6 +2990,11 @@ namespace BalloonFlow
 
         private void SaveToDatabase()
         {
+            if (!_levelLoaded)
+            {
+                SetStatus("ERROR: No level loaded. Load or create a level first.");
+                return;
+            }
             if (_targetDB == null)
             {
                 string path = "Assets/Resources/LevelDatabase.asset";
@@ -3408,6 +3450,92 @@ namespace BalloonFlow
         }
 
         // ── Feature 7: Flood Fill ──
+
+        /// <summary>특정 색상의 풍선을 전부 제거.</summary>
+        private void EraseColor(int color)
+        {
+            if (color < 0) { SetStatus("Select a color first"); return; }
+            int count = 0;
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                    if (_balloonColors[c, r] == color)
+                    {
+                        _balloonColors[c, r] = -1;
+                        _balloonGimmicks[c, r] = 0;
+                        count++;
+                    }
+            SetStatus($"Erased {count} cells of color {color}");
+        }
+
+        /// <summary>클릭한 셀과 이웃한 같은 색상 셀들을 전부 제거 (BFS).</summary>
+        private void EraseNeighborSameColor(int startCol, int startRow)
+        {
+            int targetColor = _balloonColors[startCol, startRow];
+            if (targetColor < 0) { SetStatus("Click a colored cell"); return; }
+
+            var queue = new Queue<Vector2Int>();
+            var visited = new HashSet<Vector2Int>();
+            queue.Enqueue(new Vector2Int(startCol, startRow));
+            visited.Add(new Vector2Int(startCol, startRow));
+
+            while (queue.Count > 0)
+            {
+                var cell = queue.Dequeue();
+                int c = cell.x, r = cell.y;
+                _balloonColors[c, r] = -1;
+                _balloonGimmicks[c, r] = 0;
+
+                Vector2Int[] dirs = { new Vector2Int(1, 0), new Vector2Int(-1, 0),
+                                      new Vector2Int(0, 1), new Vector2Int(0, -1) };
+                foreach (var d in dirs)
+                {
+                    int nc = c + d.x, nr = r + d.y;
+                    var np = new Vector2Int(nc, nr);
+                    if (nc >= 0 && nc < _gridCols && nr >= 0 && nr < _gridRows
+                        && !visited.Contains(np) && _balloonColors[nc, nr] == targetColor)
+                    {
+                        visited.Add(np);
+                        queue.Enqueue(np);
+                    }
+                }
+            }
+            SetStatus($"Erased {visited.Count} neighbor cells (color {targetColor})");
+        }
+
+        /// <summary>클릭한 빈 셀과 이웃한 빈 셀들을 현재 브러시 색상으로 채움 (BFS).</summary>
+        private void FillNeighborEmpty(int startCol, int startRow, int fillColor)
+        {
+            if (_balloonColors[startCol, startRow] >= 0) { SetStatus("Click an empty cell"); return; }
+            if (fillColor < 0) { SetStatus("Select a color first"); return; }
+
+            var queue = new Queue<Vector2Int>();
+            var visited = new HashSet<Vector2Int>();
+            queue.Enqueue(new Vector2Int(startCol, startRow));
+            visited.Add(new Vector2Int(startCol, startRow));
+
+            while (queue.Count > 0)
+            {
+                var cell = queue.Dequeue();
+                int c = cell.x, r = cell.y;
+                _balloonColors[c, r] = fillColor;
+                _balloonGimmicks[c, r] = _paintGimmick;
+
+                Vector2Int[] dirs = { new Vector2Int(1, 0), new Vector2Int(-1, 0),
+                                      new Vector2Int(0, 1), new Vector2Int(0, -1) };
+                foreach (var d in dirs)
+                {
+                    int nc = c + d.x, nr = r + d.y;
+                    var np = new Vector2Int(nc, nr);
+                    if (nc >= 0 && nc < _gridCols && nr >= 0 && nr < _gridRows
+                        && !visited.Contains(np) && _balloonColors[nc, nr] < 0)
+                    {
+                        visited.Add(np);
+                        queue.Enqueue(np);
+                    }
+                }
+            }
+            SetStatus($"Filled {visited.Count} empty neighbor cells (color {fillColor})");
+        }
 
         private void FloodFill(int startCol, int startRow, int newColor)
         {
