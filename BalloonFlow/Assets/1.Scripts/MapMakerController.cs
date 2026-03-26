@@ -1123,9 +1123,38 @@ namespace BalloonFlow
                 string path = EditorUtility.OpenFilePanel("Select Image", "", "png,jpg,jpeg,bmp");
                 if (string.IsNullOrEmpty(path)) return;
                 byte[] data = System.IO.File.ReadAllBytes(path);
-                _importedImage = new Texture2D(2, 2);
-                _importedImage.LoadImage(data);
-                SetStatus($"Image loaded: {_importedImage.width}x{_importedImage.height}");
+                var raw = new Texture2D(2, 2);
+                raw.LoadImage(data);
+
+                // 해상도가 낮으면 600x600 이상으로 업스케일 (NearestNeighbor)
+                const int MIN_RES = 600;
+                if (raw.width < MIN_RES || raw.height < MIN_RES)
+                {
+                    float scale = Mathf.Max((float)MIN_RES / raw.width, (float)MIN_RES / raw.height);
+                    int newW = Mathf.CeilToInt(raw.width * scale);
+                    int newH = Mathf.CeilToInt(raw.height * scale);
+
+                    var rt = RenderTexture.GetTemporary(newW, newH, 0, RenderTextureFormat.ARGB32);
+                    rt.filterMode = FilterMode.Point; // NearestNeighbor
+                    Graphics.Blit(raw, rt);
+
+                    var upscaled = new Texture2D(newW, newH, TextureFormat.RGBA32, false);
+                    upscaled.filterMode = FilterMode.Point;
+                    RenderTexture.active = rt;
+                    upscaled.ReadPixels(new Rect(0, 0, newW, newH), 0, 0);
+                    upscaled.Apply();
+                    RenderTexture.active = null;
+                    RenderTexture.ReleaseTemporary(rt);
+                    Object.Destroy(raw);
+
+                    _importedImage = upscaled;
+                    SetStatus($"Image loaded: {raw.width}x{raw.height} → upscaled to {newW}x{newH}");
+                }
+                else
+                {
+                    _importedImage = raw;
+                    SetStatus($"Image loaded: {raw.width}x{raw.height}");
+                }
                 UpdateImagePreview();
             });
             Btn(r1, "Apply", () =>
