@@ -14926,7 +14926,7 @@ MonoBehaviour:
   _endEffect: {fileID: 4105914513643246178}
   _colorRenderers:
   - {fileID: 4494722634914351928}
-  _baseMaterial: {fileID: 2100000, guid: 66b7b620b8048be45b37648985705e8f, type: 2}
+  _baseMaterial: {fileID: 2100000, guid: 8c20b772413c41a4e95ce69c7e2bab52, type: 2}
 --- !u!1 &3808388320624441943
 GameObject:
   m_ObjectHideFlags: 0
