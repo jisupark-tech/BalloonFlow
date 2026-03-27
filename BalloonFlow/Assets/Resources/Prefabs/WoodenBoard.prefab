@@ -14886,7 +14886,7 @@ GameObject:
   - component: {fileID: 3428667507723789500}
   - component: {fileID: 3191423504861134942}
   m_Layer: 6
-  m_Name: Pinata
+  m_Name: WoodenBoard
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
