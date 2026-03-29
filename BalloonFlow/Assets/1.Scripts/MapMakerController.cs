@@ -1685,11 +1685,68 @@ namespace BalloonFlow
             Btn(row, "Load Level", () => LoadLevelById(_levelId));
             Sep(p);
 
+            // ── Tutorial Steps ──
+            Lbl(p, "Tutorial Steps", 14, FontStyle.Bold);
+            var tutRow = Row(p);
+            Btn(tutRow, "+ Add Step", () =>
+            {
+                _tutorialSteps.Add(new TutorialStepData
+                {
+                    instruction = "설명을 입력하세요",
+                    highlightTarget = "holder_0",
+                    requireAction = "tap_holder",
+                    cutoutWidth = 200, cutoutHeight = 200
+                });
+                RebuildTutorialStepUI(p);
+            });
+            Btn(tutRow, "Clear All", () =>
+            {
+                _tutorialSteps.Clear();
+                RebuildTutorialStepUI(p);
+                SetStatus("Tutorial steps cleared");
+            });
+
+            _tutorialStepContainer = new GameObject("TutorialStepContainer", typeof(RectTransform), typeof(VerticalLayoutGroup)).transform;
+            _tutorialStepContainer.SetParent(p, false);
+            _tutorialStepContainer.GetComponent<VerticalLayoutGroup>().spacing = 2;
+
+            RebuildTutorialStepUI(p);
+            Sep(p);
+
             // Test Play
             var testRow = Row(p, 44);
             var testBtn = Btn(testRow, "TEST PLAY", TestPlay);
             if (testBtn.GetComponent<Image>())
                 testBtn.GetComponent<Image>().color = new Color(0.15f, 0.55f, 0.25f);
+        }
+
+        private List<TutorialStepData> _tutorialSteps = new List<TutorialStepData>();
+        private Transform _tutorialStepContainer;
+
+        private static readonly string[] TUTORIAL_TARGETS = {
+            "holder_0", "holder_1", "holder_2", "holder_3", "holder_4",
+            "board", "holder_queue",
+            "gimmick_hidden", "gimmick_chain", "gimmick_pinata", "gimmick_spawner"
+        };
+        private static readonly string[] TUTORIAL_ACTIONS = { "none", "tap_holder", "wait_pop", "tap_anywhere" };
+
+        private void RebuildTutorialStepUI(Transform parent)
+        {
+            if (_tutorialStepContainer == null) return;
+            foreach (Transform c in _tutorialStepContainer) Destroy(c.gameObject);
+
+            for (int i = 0; i < _tutorialSteps.Count; i++)
+            {
+                int idx = i;
+                var step = _tutorialSteps[i];
+                var stepRow = Row(_tutorialStepContainer);
+                Lbl(stepRow, $"#{i}", w: 25);
+                MakeInputField(stepRow, step.instruction, s => _tutorialSteps[idx].instruction = s);
+                Btn(stepRow, "X", () => { _tutorialSteps.RemoveAt(idx); RebuildTutorialStepUI(parent); });
+            }
+
+            if (_tutorialSteps.Count > 0)
+                SetStatus($"Tutorial: {_tutorialSteps.Count} steps");
         }
 
         #endregion
@@ -3850,6 +3907,11 @@ namespace BalloonFlow
                 }
             GenerateWaypointsFromPathGrid();
 
+            // 튜토리얼 스텝 로드
+            _tutorialSteps.Clear();
+            if (config.tutorialSteps != null)
+                _tutorialSteps.AddRange(config.tutorialSteps);
+
             RebuildPalette();
 
             // UI 위젯 텍스트 갱신 (변수는 바뀌었지만 InputField/Dropdown은 자동 갱신 안 됨)
@@ -4051,6 +4113,11 @@ namespace BalloonFlow
             config.star1Threshold = config.balloonCount * 100;
             config.star2Threshold = Mathf.CeilToInt(config.star1Threshold * 1.5f);
             config.star3Threshold = Mathf.CeilToInt(config.star1Threshold * 2.2f);
+
+            // 튜토리얼 스텝 저장
+            if (_tutorialSteps.Count > 0)
+                config.tutorialSteps = _tutorialSteps.ToArray();
+
             return config;
         }
 
