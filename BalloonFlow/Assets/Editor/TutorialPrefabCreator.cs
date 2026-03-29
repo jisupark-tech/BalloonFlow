@@ -13,7 +13,7 @@ namespace BalloonFlow.Editor
     /// </summary>
     public static class TutorialPrefabCreator
     {
-        private const string PREFAB_PATH = "Assets/Resources/Popup/Tutorial.prefab";
+        private const string PREFAB_PATH = "Assets/Resources/Popup/PopupTutorial.prefab";
         private static readonly Color DIM_COLOR = new Color(0f, 0f, 0f, 0.75f);
 
         [MenuItem("BalloonFlow/Don't Use/Create Tutorial Prefab", false, 70)]
@@ -33,16 +33,13 @@ namespace BalloonFlow.Editor
             if (!AssetDatabase.IsValidFolder("Assets/Resources/Popup"))
                 AssetDatabase.CreateFolder("Assets/Resources", "Popup");
 
-            // Root Canvas
-            var root = new GameObject("Tutorial");
-            var canvas = root.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 200;
-            var scaler = root.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1080, 1920);
-            scaler.matchWidthOrHeight = 0.5f;
-            root.AddComponent<GraphicRaycaster>();
+            // Root (Canvas 없음 — 씬의 기존 Canvas 하위에 배치됨)
+            var root = new GameObject("PopupTutorial");
+            var rootRT = root.AddComponent<RectTransform>();
+            SetFillRect(rootRT);
+            root.AddComponent<CanvasGroup>();
+            // PopupTutorial 스크립트는 프리팹 저장 후 수동 할당 필요
+            // (Prefab에 스크립트 참조 + SerializeField 연결)
 
             // ── Dim Panels (4개) ──
             CreateDimPanel("DimTop", root.transform);
@@ -128,6 +125,21 @@ namespace BalloonFlow.Editor
             skipTmp.alignment = TextAlignmentOptions.Center;
             var skipTextRT = skipTextGO.GetComponent<RectTransform>();
             SetFillRect(skipTextRT);
+
+            // PopupTutorial 컴포넌트 추가 + SerializeField 연결
+            var popup = root.AddComponent<PopupTutorial>();
+            // SerializeField는 private이므로 SerializedObject로 할당
+            var so = new SerializedObject(popup);
+            so.FindProperty("_dimTop").objectReferenceValue = root.transform.Find("DimTop");
+            so.FindProperty("_dimBottom").objectReferenceValue = root.transform.Find("DimBottom");
+            so.FindProperty("_dimLeft").objectReferenceValue = root.transform.Find("DimLeft");
+            so.FindProperty("_dimRight").objectReferenceValue = root.transform.Find("DimRight");
+            so.FindProperty("_cutoutFrame").objectReferenceValue = root.transform.Find("CutoutFrame");
+            so.FindProperty("_arrowIndicator").objectReferenceValue = root.transform.Find("ArrowIndicator");
+            so.FindProperty("_instructionText").objectReferenceValue = tmp;
+            so.FindProperty("_skipButton").objectReferenceValue = skipGO.GetComponent<Button>();
+            so.FindProperty("_tapAnywhereButton").objectReferenceValue = root.transform.Find("TapAnywhereOverlay").GetComponent<Button>();
+            so.ApplyModifiedPropertiesWithoutUndo();
 
             // 프리팹으로 저장
             PrefabUtility.SaveAsPrefabAsset(root, PREFAB_PATH);

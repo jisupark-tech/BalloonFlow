@@ -41,7 +41,14 @@ namespace BalloonFlow
         private Canvas _canvas;
         private RectTransform _canvasRect;
 
-        // Dim panels (4 panels forming a frame around the cutout hole)
+        // Spotlight dim (단일 패널 + 스포트라이트 셰이더)
+        private Image _spotlightImage;
+        private Material _spotlightMat;
+        private static readonly int _propCenter = Shader.PropertyToID("_Center");
+        private static readonly int _propRadius = Shader.PropertyToID("_Radius");
+        private static readonly int _propSoftness = Shader.PropertyToID("_Softness");
+
+        // Legacy 4-panel references (PopupTutorial 프리팹 호환)
         private RectTransform _dimTop;
         private RectTransform _dimBottom;
         private RectTransform _dimLeft;
@@ -50,8 +57,6 @@ namespace BalloonFlow
         private Image _dimBottomImage;
         private Image _dimLeftImage;
         private Image _dimRightImage;
-
-        // Cutout frame (outline around the hole)
         private RectTransform _cutoutFrame;
         private Image _cutoutFrameImage;
 
@@ -85,85 +90,93 @@ namespace BalloonFlow
             HideAllVisuals();
         }
 
-        /// <summary>Resources/Popup/Tutorial 프리팹 로드. 없으면 코드로 생성.</summary>
+        /// <summary>Resources/Popup/PopupTutorial 프리팹 로드. 없으면 코드로 생성.</summary>
         private void LoadOrCreateTutorialUI()
         {
-            var prefab = Resources.Load<GameObject>("Popup/Tutorial");
-            if (prefab != null)
+            // 씬의 기존 Canvas 찾기
+            Canvas sceneCanvas = FindSceneCanvas();
+
+            var prefab = Resources.Load<GameObject>("Popup/PopupTutorial");
+            if (prefab != null && sceneCanvas != null)
             {
-                var go = Instantiate(prefab, transform);
-                go.name = "TutorialCanvas";
-                BindFromPrefab(go);
+                var go = Instantiate(prefab, sceneCanvas.transform);
+                go.name = "PopupTutorial";
+                BindFromPopup(go);
             }
             else
             {
-                Debug.LogWarning("[TutorialManager] Resources/Popup/Tutorial prefab not found. Use BalloonFlow > Create Tutorial Prefab to generate it.");
+                if (prefab == null)
+                    Debug.LogWarning("[TutorialManager] Resources/Popup/PopupTutorial prefab not found.");
                 CreateTutorialUI();
             }
         }
 
-        /// <summary>프리팹에서 UI 요소 바인딩 (이름 기반).</summary>
-        private void BindFromPrefab(GameObject root)
+        /// <summary>씬에서 기존 Canvas 찾기.</summary>
+        private Canvas FindSceneCanvas()
+        {
+            // UIManager의 Canvas 우선
+            if (UIManager.HasInstance)
+            {
+                var canvas = UIManager.Instance.GetComponentInChildren<Canvas>();
+                if (canvas != null) return canvas;
+            }
+            // SceneCanvas 찾기
+            var all = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+            foreach (var c in all)
+                if (c.renderMode == RenderMode.ScreenSpaceOverlay) return c;
+            return null;
+        }
+
+        /// <summary>PopupTutorial 컴포넌트에서 SerializeField 바인딩.</summary>
+        private void BindFromPopup(GameObject root)
         {
             _tutorialCanvas = root;
-            _canvas = root.GetComponent<Canvas>();
             _canvasRect = root.GetComponent<RectTransform>();
 
-            _dimTop = FindChild<RectTransform>(root, "DimTop");
-            _dimBottom = FindChild<RectTransform>(root, "DimBottom");
-            _dimLeft = FindChild<RectTransform>(root, "DimLeft");
-            _dimRight = FindChild<RectTransform>(root, "DimRight");
-            _dimTopImage = _dimTop?.GetComponent<Image>();
-            _dimBottomImage = _dimBottom?.GetComponent<Image>();
-            _dimLeftImage = _dimLeft?.GetComponent<Image>();
-            _dimRightImage = _dimRight?.GetComponent<Image>();
+            // 부모 Canvas 참조
+            _canvas = root.GetComponentInParent<Canvas>();
 
-            _cutoutFrame = FindChild<RectTransform>(root, "CutoutFrame");
-            _cutoutFrameImage = _cutoutFrame?.GetComponent<Image>();
-
-            _arrowIndicator = FindChild<RectTransform>(root, "ArrowIndicator");
-            _arrowImage = _arrowIndicator?.GetComponent<Image>();
-
-            var instrGO = FindChildGO(root, "InstructionPanel");
-            _instructionPanel = instrGO;
-            _instructionPanelRect = instrGO?.GetComponent<RectTransform>();
-            _instructionText = FindChild<TextMeshProUGUI>(root, "InstructionText");
-            var skipGO = FindChildGO(root, "SkipButton");
-            _skipButton = skipGO?.GetComponent<Button>();
-            if (_skipButton != null)
+            var popup = root.GetComponent<PopupTutorial>();
+            if (popup != null)
             {
-                _skipButton.onClick.AddListener(() =>
-                {
-                    if (TutorialController.HasInstance) TutorialController.Instance.SkipTutorial();
-                });
-            }
+                _dimTop = popup.DimTop;
+                _dimBottom = popup.DimBottom;
+                _dimLeft = popup.DimLeft;
+                _dimRight = popup.DimRight;
+                _dimTopImage = _dimTop?.GetComponent<Image>();
+                _dimBottomImage = _dimBottom?.GetComponent<Image>();
+                _dimLeftImage = _dimLeft?.GetComponent<Image>();
+                _dimRightImage = _dimRight?.GetComponent<Image>();
 
-            var tapGO = FindChildGO(root, "TapAnywhereOverlay");
-            _tapAnywhereGO = tapGO;
-            _tapAnywhereButton = tapGO?.GetComponent<Button>();
-            if (_tapAnywhereButton != null)
+                _cutoutFrame = popup.CutoutFrame;
+                _cutoutFrameImage = _cutoutFrame?.GetComponent<Image>();
+
+                _arrowIndicator = popup.ArrowIndicator;
+                _arrowImage = _arrowIndicator?.GetComponent<Image>();
+
+                _instructionText = popup.InstructionText;
+                _instructionPanel = _instructionText?.transform.parent?.gameObject;
+                _instructionPanelRect = _instructionPanel?.GetComponent<RectTransform>();
+
+                _skipButton = popup.SkipButton;
+                if (_skipButton != null)
+                    _skipButton.onClick.AddListener(() =>
+                    {
+                        if (TutorialController.HasInstance) TutorialController.Instance.SkipTutorial();
+                    });
+
+                _tapAnywhereButton = popup.TapAnywhereButton;
+                _tapAnywhereGO = _tapAnywhereButton?.gameObject;
+                if (_tapAnywhereButton != null)
+                    _tapAnywhereButton.onClick.AddListener(() =>
+                    {
+                        if (TutorialController.HasInstance) TutorialController.Instance.AdvanceStep();
+                    });
+            }
+            else
             {
-                _tapAnywhereButton.onClick.AddListener(() =>
-                {
-                    if (TutorialController.HasInstance) TutorialController.Instance.AdvanceStep();
-                });
+                Debug.LogWarning("[TutorialManager] PopupTutorial component not found on prefab.");
             }
-        }
-
-        private static T FindChild<T>(GameObject root, string name) where T : Component
-        {
-            var all = root.GetComponentsInChildren<T>(true);
-            foreach (var c in all)
-                if (c.gameObject.name == name) return c;
-            return null;
-        }
-
-        private static GameObject FindChildGO(GameObject root, string name)
-        {
-            var all = root.GetComponentsInChildren<Transform>(true);
-            foreach (var t in all)
-                if (t.gameObject.name == name) return t.gameObject;
-            return null;
         }
 
         private void OnEnable()
@@ -276,6 +289,7 @@ namespace BalloonFlow
         public void HideCutout()
         {
             _isCutoutVisible = false;
+            if (_spotlightImage != null) _spotlightImage.gameObject.SetActive(false);
             SetDimPanelsActive(false);
 
             if (_cutoutFrame != null)
@@ -405,7 +419,28 @@ namespace BalloonFlow
             _canvasRect = canvasGO.GetComponent<RectTransform>();
             _tutorialCanvas = canvasGO;
 
-            // Create 4 dim panels
+            // 스포트라이트 패널 (단일 + 셰이더)
+            var spotShader = Shader.Find("UI/TutorialSpotlight");
+            if (spotShader != null)
+            {
+                var spotGO = new GameObject("SpotlightDim");
+                spotGO.transform.SetParent(canvasGO.transform, false);
+                _spotlightImage = spotGO.AddComponent<Image>();
+                _spotlightMat = new Material(spotShader);
+                _spotlightImage.material = _spotlightMat;
+                _spotlightImage.color = Color.white;
+                _spotlightImage.raycastTarget = true;
+                var spotRT = spotGO.GetComponent<RectTransform>();
+                spotRT.anchorMin = Vector2.zero;
+                spotRT.anchorMax = Vector2.one;
+                spotRT.offsetMin = Vector2.zero;
+                spotRT.offsetMax = Vector2.zero;
+                // 기본: 구멍 없이 전체 어둡게
+                _spotlightMat.SetVector(_propCenter, new Vector4(0.5f, 0.5f, 0, 0));
+                _spotlightMat.SetVector(_propRadius, new Vector4(0, 0, 0, 0));
+            }
+
+            // Fallback: 4 dim panels (스포트라이트 셰이더 없을 때)
             _dimTop = CreateDimPanel("DimTop", canvasGO.transform, out _dimTopImage);
             _dimBottom = CreateDimPanel("DimBottom", canvasGO.transform, out _dimBottomImage);
             _dimLeft = CreateDimPanel("DimLeft", canvasGO.transform, out _dimLeftImage);
@@ -697,41 +732,43 @@ namespace BalloonFlow
         private void ApplyCutout(Vector2 center, Vector2 size)
         {
             _isCutoutVisible = true;
-            SetDimPanelsActive(true);
 
-            Vector2 canvasSize = _canvasRect.sizeDelta;
-            float canvasW = canvasSize.x;
-            float canvasH = canvasSize.y;
+            // 스포트라이트 셰이더 방식 (부드러운 원형 투명 영역)
+            if (_spotlightMat != null && _spotlightImage != null)
+            {
+                _spotlightImage.gameObject.SetActive(true);
+                SetDimPanelsActive(false); // 4패널 사용 안 함
 
-            // Cutout rect bounds
-            float cutLeft = center.x - size.x * 0.5f;
-            float cutRight = center.x + size.x * 0.5f;
-            float cutBottom = center.y - size.y * 0.5f;
-            float cutTop = center.y + size.y * 0.5f;
+                Vector2 canvasSize = _canvasRect.sizeDelta;
+                // UV 좌표로 변환 (0~1)
+                Vector2 uvCenter = new Vector2(center.x / canvasSize.x, center.y / canvasSize.y);
+                Vector2 uvRadius = new Vector2(
+                    (size.x * 0.5f + CUTOUT_PADDING) / canvasSize.x,
+                    (size.y * 0.5f + CUTOUT_PADDING) / canvasSize.y);
 
-            // Clamp to canvas
-            cutLeft = Mathf.Max(0f, cutLeft);
-            cutRight = Mathf.Min(canvasW, cutRight);
-            cutBottom = Mathf.Max(0f, cutBottom);
-            cutTop = Mathf.Min(canvasH, cutTop);
+                _spotlightMat.SetVector(_propCenter, new Vector4(uvCenter.x, uvCenter.y, 0, 0));
+                _spotlightMat.SetVector(_propRadius, new Vector4(uvRadius.x, uvRadius.y, 0, 0));
+                _spotlightMat.SetFloat(_propSoftness, 0.15f);
+            }
+            else
+            {
+                // Fallback: 4패널 컷아웃
+                SetDimPanelsActive(true);
 
-            // DimTop: full width, from cutTop to canvasH
-            _dimTop.anchoredPosition = new Vector2(0f, cutTop);
-            _dimTop.sizeDelta = new Vector2(canvasW, canvasH - cutTop);
+                Vector2 canvasSize = _canvasRect.sizeDelta;
+                float canvasW = canvasSize.x;
+                float canvasH = canvasSize.y;
+                float cutLeft = Mathf.Max(0f, center.x - size.x * 0.5f);
+                float cutRight = Mathf.Min(canvasW, center.x + size.x * 0.5f);
+                float cutBottom = Mathf.Max(0f, center.y - size.y * 0.5f);
+                float cutTop = Mathf.Min(canvasH, center.y + size.y * 0.5f);
 
-            // DimBottom: full width, from 0 to cutBottom
-            _dimBottom.anchoredPosition = new Vector2(0f, 0f);
-            _dimBottom.sizeDelta = new Vector2(canvasW, cutBottom);
+                if (_dimTop != null) { _dimTop.anchoredPosition = new Vector2(0f, cutTop); _dimTop.sizeDelta = new Vector2(canvasW, canvasH - cutTop); }
+                if (_dimBottom != null) { _dimBottom.anchoredPosition = Vector2.zero; _dimBottom.sizeDelta = new Vector2(canvasW, cutBottom); }
+                if (_dimLeft != null) { _dimLeft.anchoredPosition = new Vector2(0f, cutBottom); _dimLeft.sizeDelta = new Vector2(cutLeft, cutTop - cutBottom); }
+                if (_dimRight != null) { _dimRight.anchoredPosition = new Vector2(cutRight, cutBottom); _dimRight.sizeDelta = new Vector2(canvasW - cutRight, cutTop - cutBottom); }
+            }
 
-            // DimLeft: between cutBottom and cutTop on Y, from 0 to cutLeft on X
-            _dimLeft.anchoredPosition = new Vector2(0f, cutBottom);
-            _dimLeft.sizeDelta = new Vector2(cutLeft, cutTop - cutBottom);
-
-            // DimRight: between cutBottom and cutTop on Y, from cutRight to canvasW on X
-            _dimRight.anchoredPosition = new Vector2(cutRight, cutBottom);
-            _dimRight.sizeDelta = new Vector2(canvasW - cutRight, cutTop - cutBottom);
-
-            // Position the cutout frame around the hole
             if (_cutoutFrame != null)
             {
                 _cutoutFrame.gameObject.SetActive(true);
