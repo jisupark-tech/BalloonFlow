@@ -769,7 +769,7 @@ namespace BalloonFlow
 
                 // 경로상 위치 + 방향
                 Vector3 pos = rail.GetPositionAtDistance(_arrowProgresses[i]);
-                pos.y = 0.05f;
+                pos.y = -0.01f; // 타일(-0.02) 위, cave(-0.01)와 같은 레벨
                 _arrowObjects[i].transform.position = pos;
 
                 float t = _arrowProgresses[i] / pathLen;

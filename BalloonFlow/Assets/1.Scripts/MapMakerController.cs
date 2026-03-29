@@ -137,7 +137,7 @@ namespace BalloonFlow
         private float _railHeight = 0.5f;
         private int _railSlotCount = 200;
         private bool _smoothCorners = true;
-        private float _cornerRadius = 3f;
+        private float _cornerRadius = 2.5f; // RAIL_THICKNESS/2 = 타일 코너 중심선
 
         // Grid-based conveyor path (extended grid: +1 padding on each side)
         private bool[,] _pathGrid; // [gridCols+2, gridRows+2]
