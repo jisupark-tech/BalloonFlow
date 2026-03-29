@@ -351,6 +351,10 @@ namespace BalloonFlow
             ClearConveyorSprites();
             _conveyorSpriteRoot = new GameObject("ConveyorSprites").transform;
 
+            // RailTileSet 로드 보장
+            if (_spriteRailTileSet == null)
+                _spriteRailTileSet = Resources.Load<RailTileSet>("RailTileSet");
+
             float boardCX = GameManager.HasInstance ? GameManager.Instance.Board.boardCenterX : 0f;
             float boardCZ = GameManager.HasInstance ? GameManager.Instance.Board.boardCenterZ : 2f;
 
@@ -428,8 +432,8 @@ namespace BalloonFlow
                 PlaceConveyorSprite(capR, right, bottom, cornerSize);     // 끝점
             }
 
-            // Arrow: 슬롯 기반 (다트처럼 벨트와 함께 회전)
-            SpawnArrows();
+            // Arrow는 RailManager 초기화 후에 별도 호출 (SpawnArrows)
+            // BuildConveyorBelt 시점에는 RailManager.TotalPathLength가 아직 0
 
             // ── Cave: 개방 끝점 위에 터널 오버레이 (Arrow보다 위) ──
             if (sides < 4)
@@ -666,7 +670,7 @@ namespace BalloonFlow
         /// <summary>Arrow별 경로상 progress (슬롯 인덱스 대신).</summary>
         private float[] _arrowProgresses;
 
-        private void SpawnArrows()
+        public void SpawnArrows()
         {
             ClearArrows();
 
