@@ -71,7 +71,7 @@ namespace BalloonFlow
         public int RailSideCount { get; set; } = 4;
 
         // Arrow: 슬롯 기반 회전 (다트처럼 벨트와 함께 이동)
-        private const int ARROW_COUNT = 20;
+        private const float ARROW_SPACING = 1.5f; // Arrow 간 월드 거리
         private GameObject[] _arrowObjects;
         private int[] _arrowSlotIndices; // 각 Arrow가 점유한 슬롯 인덱스
 
@@ -663,29 +663,36 @@ namespace BalloonFlow
         /// Arrow를 벨트 슬롯에 균등 배치 (ARROW_COUNT개).
         /// 다트처럼 벨트와 함께 회전. 슬롯이 다트로 차면 숨기고, 비면 보이기.
         /// </summary>
+        /// <summary>Arrow별 경로상 progress (슬롯 인덱스 대신).</summary>
+        private float[] _arrowProgresses;
+
         private void SpawnArrows()
         {
             ClearArrows();
 
             if (!RailManager.HasInstance) return;
             RailManager rail = RailManager.Instance;
-            if (rail.SlotCount == 0) return;
+            if (rail.SlotCount == 0 || rail.TotalPathLength <= 0f) return;
 
-            _arrowObjects = new GameObject[ARROW_COUNT];
-            _arrowSlotIndices = new int[ARROW_COUNT];
+            float pathLen = rail.TotalPathLength;
+            int arrowCount = Mathf.Max(4, Mathf.FloorToInt(pathLen / ARROW_SPACING));
 
-            // 균등 간격으로 슬롯 배정
-            int spacing = Mathf.Max(1, rail.SlotCount / ARROW_COUNT);
+            _arrowObjects = new GameObject[arrowCount];
+            _arrowSlotIndices = new int[arrowCount];
+            _arrowProgresses = new float[arrowCount];
+
+            int spacing = Mathf.Max(1, rail.SlotCount / arrowCount);
 
             // Arrow 스프라이트 캐시
             if (_cachedArrowSprite == null)
                 _cachedArrowSprite = Resources.Load<Sprite>("Sprites/arrow");
             Sprite arrowSprite = _cachedArrowSprite;
 
-            for (int i = 0; i < ARROW_COUNT; i++)
+            for (int i = 0; i < arrowCount; i++)
             {
                 int slotIdx = (i * spacing) % rail.SlotCount;
                 _arrowSlotIndices[i] = slotIdx;
+                _arrowProgresses[i] = (float)i / arrowCount * pathLen;
 
                 var go = new GameObject($"Arrow_{i}");
                 if (_conveyorSpriteRoot != null)
@@ -721,36 +728,51 @@ namespace BalloonFlow
             UpdateArrowPositions();
         }
 
-        /// <summary>매 프레임: Arrow를 슬롯 위치로 이동 + 방향 설정 + 다트 있으면 숨기기.</summary>
+        /// <summary>매 프레임: Arrow를 경로 progress 기반으로 이동 + 방향 설정.</summary>
         private void UpdateArrowPositions()
         {
             if (_arrowObjects == null || !RailManager.HasInstance) return;
 
             RailManager rail = RailManager.Instance;
+            float pathLen = rail.TotalPathLength;
+            if (pathLen <= 0f) return;
+
+            // Arrow도 벨트 속도로 이동
+            float delta = rail.RotationSpeed * rail.SlotSpacing * Time.deltaTime;
 
             for (int i = 0; i < _arrowObjects.Length; i++)
             {
                 if (_arrowObjects[i] == null) continue;
+                if (_arrowProgresses == null || i >= _arrowProgresses.Length) continue;
 
-                int slotIdx = _arrowSlotIndices[i];
+                // progress 전진
+                _arrowProgresses[i] += delta;
+                if (_arrowProgresses[i] >= pathLen)
+                    _arrowProgresses[i] -= pathLen;
 
-                // 다트가 있는 슬롯이면 숨기기
-                bool occupied = !rail.IsSlotEmpty(slotIdx);
-                _arrowObjects[i].SetActive(!occupied);
+                // 근처에 다트가 있으면 숨기기
+                bool nearDart = false;
+                var darts = rail.GetAllDarts();
+                float threshold = rail.SlotSpacing * 1.5f;
+                for (int d = 0; d < darts.Count; d++)
+                {
+                    float diff = Mathf.Abs(darts[d].progress - _arrowProgresses[i]);
+                    if (pathLen > 0f) diff = Mathf.Min(diff, pathLen - diff);
+                    if (diff < threshold) { nearDart = true; break; }
+                }
+                _arrowObjects[i].SetActive(!nearDart);
+                if (nearDart) continue;
 
-                if (occupied) continue;
-
-                // 슬롯 위치 + 방향
-                Vector3 pos = rail.GetSlotWorldPosition(slotIdx);
-                pos.y = 0.05f; // 컨베이어 타일 위
+                // 경로상 위치 + 방향
+                Vector3 pos = rail.GetPositionAtDistance(_arrowProgresses[i]);
+                pos.y = 0.05f;
                 _arrowObjects[i].transform.position = pos;
 
-                // 벨트 이동 방향으로 회전 (90도 눕힘 + 진행 방향)
-                Vector3 dir = rail.GetSlotDirection(slotIdx);
+                float t = _arrowProgresses[i] / pathLen;
+                t = ((t % 1f) + 1f) % 1f;
+                Vector3 dir = rail.GetDirectionAtNormalized(t);
                 if (dir.sqrMagnitude > 0.001f)
                 {
-                    // XZ 평면에서 진행 방향 → Sprite를 90도 눕히고 진행 방향으로 회전
-                    // 스프라이트 기본이 아래(↓)를 향하므로 +90도 보정하여 오른쪽(→) 기준
                     float angle = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
                     _arrowObjects[i].transform.rotation = Quaternion.Euler(90f, angle - 90f, 0f);
                 }
