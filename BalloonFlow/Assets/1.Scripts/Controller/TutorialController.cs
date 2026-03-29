@@ -70,6 +70,7 @@ namespace BalloonFlow
         private const string PREFS_PREFIX = "BF_Tutorial_Complete_";
         private const string ACTION_TAP_HOLDER = "tap_holder";
         private const string ACTION_WAIT_POP = "wait_pop";
+        private const string ACTION_TAP_ANYWHERE = "tap_anywhere";
         private const string ACTION_NONE = "none";
 
         #endregion
@@ -601,6 +602,14 @@ namespace BalloonFlow
             // so the player can actually perform the required action.
             if (step.requireAction == ACTION_TAP_HOLDER || step.requireAction == ACTION_NONE)
             {
+                if (InputHandler.HasInstance)
+                {
+                    InputHandler.Instance.EnableInput();
+                }
+            }
+            else if (step.requireAction == ACTION_TAP_ANYWHERE)
+            {
+                // tap_anywhere: enable input but also let TutorialManager handle the tap overlay
                 if (InputHandler.HasInstance)
                 {
                     InputHandler.Instance.EnableInput();
