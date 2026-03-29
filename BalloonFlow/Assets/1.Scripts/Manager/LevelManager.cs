@@ -421,6 +421,10 @@ namespace BalloonFlow
                 int sideCount = RailManager.GetRailSideCount(slotCount);
                 bool isLoop = (sideCount >= 4);
                 RailManager.Instance.SetRailLayout(waypoints, slotCount, isLoop, smooth, radius);
+
+                // RailManager 초기화 완료 → Arrow 생성
+                if (BoardTileManager.HasInstance)
+                    BoardTileManager.Instance.SpawnArrows();
             }
 
             // Apply rail visual type to RailRenderer
