@@ -775,10 +775,16 @@ namespace BalloonFlow
         private void DeselectUnusedColors()
         {
             var usedColors = new HashSet<int>();
+            // 풍선 색상
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] >= 0)
                         usedColors.Add(_balloonColors[c, r]);
+            // 보관함 색상
+            for (int c = 0; c < _holderCols; c++)
+                for (int r = 0; r < _holderRows; r++)
+                    if (_holderColors[c, r] >= 0)
+                        usedColors.Add(_holderColors[c, r]);
 
             _selectedColors.Clear();
             foreach (int ci in usedColors)
@@ -4013,6 +4019,18 @@ namespace BalloonFlow
             {
                 _customWaypoints = new List<Vector3>(config.rail.waypoints);
             }
+
+            // 팔레트 색상 동기화 — 레벨에 실제 사용된 색상만 선택
+            _selectedColors.Clear();
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                    if (_balloonColors[c, r] >= 0)
+                        _selectedColors.Add(_balloonColors[c, r]);
+            if (config.holders != null)
+                foreach (var h in config.holders)
+                    if (h.color >= 0) _selectedColors.Add(h.color);
+            if (_selectedColors.Count < 2) { _selectedColors.Add(0); _selectedColors.Add(1); }
+            _numColors = _selectedColors.Count;
 
             // Load conveyor path into extended path grid
             int pw = _gridCols + PATH_PAD * 2;

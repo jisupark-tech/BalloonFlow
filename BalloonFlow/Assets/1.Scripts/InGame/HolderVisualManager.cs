@@ -101,6 +101,9 @@ namespace BalloonFlow
 
         private readonly Dictionary<int, HolderVisual> _holderVisuals = new Dictionary<int, HolderVisual>();
         private readonly HashSet<int> _cancelledHolders = new HashSet<int>();
+
+        /// <summary>Chain 연결선: "id1_id2" → LineRenderer GameObject</summary>
+        private readonly Dictionary<string, GameObject> _chainLines = new Dictionary<string, GameObject>();
         private int _queueColumns = 5;
 
         /// <summary>동적 계산: 풍선 필드 너비에 맞춘 열 간격</summary>
@@ -133,6 +136,12 @@ namespace BalloonFlow
         }
 
         private bool _boardFinished;
+
+        private void LateUpdate()
+        {
+            if (_chainLines.Count > 0)
+                UpdateChainLines();
+        }
 
         private void OnEnable()
         {
@@ -240,6 +249,9 @@ namespace BalloonFlow
                 for (int col = 0; col < _queueColumns; col++)
                     RepositionColumnHolders(col);
             }
+
+            // Chain 연결선 생성
+            RebuildChainLines();
         }
 
         /// <summary>
@@ -288,6 +300,7 @@ namespace BalloonFlow
                 ReturnHolderToPool(kvp.Value);
             }
             _holderVisuals.Clear();
+            ClearChainLines();
         }
 
         /// <summary>
@@ -1027,6 +1040,108 @@ namespace BalloonFlow
 
             // Reposition remaining holders in this column
             RepositionColumnHolders(col);
+        }
+
+        #endregion
+
+        #region Private Methods — Chain Lines
+
+        /// <summary>Chain 그룹 연결선 전체 재생성.</summary>
+        private void RebuildChainLines()
+        {
+            ClearChainLines();
+            if (!HolderManager.HasInstance) return;
+
+            var processed = new HashSet<string>();
+            foreach (var kvp in _holderVisuals)
+            {
+                var hData = HolderManager.Instance.FindHolderPublic(kvp.Value.holderId);
+                if (hData == null || hData.chainGroupId < 0 || hData.isConsumed) continue;
+
+                var members = HolderManager.Instance.GetChainGroup(hData.chainGroupId);
+                for (int i = 0; i < members.Count; i++)
+                {
+                    for (int j = i + 1; j < members.Count; j++)
+                    {
+                        int idA = members[i], idB = members[j];
+                        string key = idA < idB ? $"{idA}_{idB}" : $"{idB}_{idA}";
+                        if (processed.Contains(key)) continue;
+                        processed.Add(key);
+
+                        if (!_holderVisuals.TryGetValue(idA, out HolderVisual vA) || vA.gameObject == null) continue;
+                        if (!_holderVisuals.TryGetValue(idB, out HolderVisual vB) || vB.gameObject == null) continue;
+
+                        CreateChainLine(key, vA, vB);
+                    }
+                }
+            }
+        }
+
+        private void CreateChainLine(string key, HolderVisual a, HolderVisual b)
+        {
+            var go = new GameObject($"ChainLine_{key}");
+            var lr = go.AddComponent<LineRenderer>();
+            lr.positionCount = 2;
+            lr.startWidth = 0.15f;
+            lr.endWidth = 0.15f;
+            lr.useWorldSpace = true;
+            lr.sortingOrder = 5;
+
+            // 그라디언트: A 색상 → B 색상 (반반)
+            Color colorA = GetColor(a.color);
+            Color colorB = GetColor(b.color);
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new GradientColorKey[] { new GradientColorKey(colorA, 0f), new GradientColorKey(colorB, 1f) },
+                new GradientAlphaKey[] { new GradientAlphaKey(0.8f, 0f), new GradientAlphaKey(0.8f, 1f) }
+            );
+            lr.colorGradient = gradient;
+
+            // Unlit Material
+            lr.material = new Material(Shader.Find("Sprites/Default"));
+
+            _chainLines[key] = go;
+        }
+
+        /// <summary>매 프레임 Chain 연결선 위치 갱신.</summary>
+        private void UpdateChainLines()
+        {
+            var removeKeys = new List<string>();
+            foreach (var kvp in _chainLines)
+            {
+                string[] ids = kvp.Key.Split('_');
+                if (ids.Length != 2) continue;
+                int idA = int.Parse(ids[0]), idB = int.Parse(ids[1]);
+
+                bool validA = _holderVisuals.TryGetValue(idA, out HolderVisual vA) && vA.gameObject != null;
+                bool validB = _holderVisuals.TryGetValue(idB, out HolderVisual vB) && vB.gameObject != null;
+
+                if (!validA || !validB)
+                {
+                    // 한쪽이 사라짐 → 연결선 제거
+                    if (kvp.Value != null) Destroy(kvp.Value);
+                    removeKeys.Add(kvp.Key);
+                    continue;
+                }
+
+                var lr = kvp.Value.GetComponent<LineRenderer>();
+                if (lr != null)
+                {
+                    lr.SetPosition(0, vA.gameObject.transform.position + Vector3.up * 0.3f);
+                    lr.SetPosition(1, vB.gameObject.transform.position + Vector3.up * 0.3f);
+                }
+            }
+            foreach (var k in removeKeys)
+                _chainLines.Remove(k);
+        }
+
+        private void ClearChainLines()
+        {
+            foreach (var kvp in _chainLines)
+            {
+                if (kvp.Value != null) Destroy(kvp.Value);
+            }
+            _chainLines.Clear();
         }
 
         #endregion
