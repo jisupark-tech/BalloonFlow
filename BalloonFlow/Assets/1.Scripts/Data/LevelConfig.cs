@@ -100,6 +100,30 @@ namespace BalloonFlow
 
         /// <summary>Score required for 3 stars (= ceil(star1 * 2.2)).</summary>
         public int star3Threshold;
+
+        /// <summary>튜토리얼 스텝 배열. null이면 튜토리얼 없음.</summary>
+        public TutorialStepData[] tutorialSteps;
+    }
+
+    /// <summary>
+    /// 레벨에 포함된 튜토리얼 스텝 데이터.
+    /// LevelConfig.tutorialSteps에 저장됨.
+    /// </summary>
+    [System.Serializable]
+    public class TutorialStepData
+    {
+        /// <summary>설명 텍스트 (TMPro로 표시).</summary>
+        public string instruction;
+
+        /// <summary>하이라이트 대상. "holder_0", "board", "gimmick_hidden" 등.</summary>
+        public string highlightTarget;
+
+        /// <summary>진행 조건. "none", "tap_holder", "wait_pop", "tap_anywhere".</summary>
+        public string requireAction;
+
+        /// <summary>컷아웃/스포트라이트 크기 (화면 비율, 기본 200x200).</summary>
+        public float cutoutWidth = 200f;
+        public float cutoutHeight = 200f;
     }
 
     /// <summary>
