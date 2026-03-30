@@ -205,7 +205,9 @@ namespace BalloonFlow
             if (_boardFinished) return;
 
             // 벨트는 항상 회전 (가득 차도 회전 — 다트가 타겟을 찾아 발사할 수 있게)
-            _rotationOffset += _rotationSpeed * _slotSpacing * Time.deltaTime;
+            // 다트가 허용량의 50% 미만이면 2배속
+            float beltSpeedMult = (_darts.Count < _slotCount * 0.5f) ? 2f : 1f;
+            _rotationOffset += _rotationSpeed * _slotSpacing * Time.deltaTime * beltSpeedMult;
 
             // Wrap around
             if (_totalPathLength > 0f)
@@ -217,7 +219,9 @@ namespace BalloonFlow
             PropagateFreezeChain();
 
             // Per-dart 자동차 모델: 앞이 막히면 slotSpacing 거리 두고 정지
-            float dartDelta = _rotationSpeed * _slotSpacing * Time.deltaTime;
+            // 다트가 허용량의 50% 미만이면 2배속
+            float speedMult = (_darts.Count < _slotCount * 0.5f) ? 2f : 1f;
+            float dartDelta = _rotationSpeed * _slotSpacing * Time.deltaTime * speedMult;
             for (int i = 0; i < _darts.Count; i++)
             {
                 float maxAdvance = dartDelta;
@@ -243,18 +247,27 @@ namespace BalloonFlow
 
         /// <summary>활성 deploy point. holderId → progress on path.</summary>
         private readonly Dictionary<int, float> _deployPoints = new Dictionary<int, float>();
+        /// <summary>배치 시작된 deploy point (첫 다트 투입 후 → 장애물 활성화).</summary>
+        private readonly HashSet<int> _activeDeployPoints = new HashSet<int>();
 
-        /// <summary>deploy point 등록. holder가 배치할 때 매 프레임 호출.</summary>
+        /// <summary>deploy point 등록 (대기 상태 — 아직 장애물 아님).</summary>
         public void RegisterDeployPoint(int holderId, float progress)
         {
             _deployPoints[holderId] = progress;
+            // 아직 _activeDeployPoints에 추가하지 않음 → 빈틈 기다림
+        }
+
+        /// <summary>deploy point 활성화 (첫 다트 배치 후 → 장애물로 전환).</summary>
+        public void ActivateDeployPoint(int holderId)
+        {
+            _activeDeployPoints.Add(holderId);
         }
 
         /// <summary>deploy point 해제. 다트는 다음 프레임부터 자연스럽게 이동 재개.</summary>
         public void UnregisterDeployPoint(int holderId)
         {
             _deployPoints.Remove(holderId);
-            // deploy point 제거되면 다트가 자연스럽게 앞으로 이동 (장애물 없으므로)
+            _activeDeployPoints.Remove(holderId);
         }
 
         /// <summary>
@@ -263,9 +276,9 @@ namespace BalloonFlow
         /// -1 = 앞에 장애물 없음.
         /// </summary>
         /// <summary>
-        /// 앞에 있는 가장 가까운 다트까지의 경로상 거리.
-        /// 다트끼리만 장애물 (deploy point는 장애물 아님).
-        /// holder가 배치한 다트 자체가 뒤에서 오는 다트의 장애물 역할.
+        /// 앞에 있는 가장 가까운 장애물까지의 경로상 거리.
+        /// 장애물 = 다른 다트 + 활성화된 deploy point (첫 다트 배치 후).
+        /// 대기 중인 deploy point는 차단하지 않음 → 빈틈 기다림.
         /// -1 = 앞에 장애물 없음.
         /// </summary>
         private float FindDistanceToBlockAhead(DartOnRail dart)
@@ -284,13 +297,11 @@ namespace BalloonFlow
                     closest = dist;
             }
 
-            // 다른 holder의 deploy point 바로 뒤에서 정지
-            // deploy point 자체가 아닌, deploy point - slotSpacing * 0.5 지점을 장애물로 설정
-            // → 다트가 deploy point를 넘지 않되, deploy point 바로 앞에서 멈춤
+            // 활성화된 deploy point만 장애물 (첫 다트 배치 후 → 연속 배치 보호)
             foreach (var dp in _deployPoints)
             {
                 if (dp.Key == dart.holderId) continue;
-                // deploy point 바로 뒤 (진행 방향 기준)
+                if (!_activeDeployPoints.Contains(dp.Key)) continue; // 대기 중이면 무시
                 float blockAt = dp.Value - _slotSpacing * 0.5f;
                 if (_totalPathLength > 0f)
                     blockAt = ((blockAt % _totalPathLength) + _totalPathLength) % _totalPathLength;
@@ -675,16 +686,13 @@ namespace BalloonFlow
         }
 
         /// <summary>해당 progress에 배치 가능한지 체크.
-        /// 자기 holder 다트만 간격 체크. 다른 holder의 멈춘 다트는 무시
-        /// (deploy point에서 정지 중이므로 배치에 방해하지 않음).</summary>
+        /// 모든 다트와의 간격 확인 — 빈틈이 있을 때만 배치 가능.</summary>
         public bool IsProgressClear(float progress, int holderId)
         {
             if (_darts.Count >= _slotCount) return false;
             float minGap = _slotSpacing * 0.9f;
             for (int i = 0; i < _darts.Count; i++)
             {
-                // 다른 holder의 다트는 무시 (deploy point에서 정지 중일 수 있음)
-                if (_darts[i].holderId != holderId) continue;
                 float diff = Mathf.Abs(_darts[i].progress - progress);
                 if (_totalPathLength > 0f)
                     diff = Mathf.Min(diff, _totalPathLength - diff);
@@ -1216,6 +1224,7 @@ namespace BalloonFlow
             _boardFinished = false;
             _darts.Clear();
             _deployPoints.Clear();
+            _activeDeployPoints.Clear();
             _frozenDartInfos.Clear();
             _activeDeploySlot = -1;
             _activeDeployHolderId = -1;
@@ -1229,6 +1238,7 @@ namespace BalloonFlow
         {
             _boardFinished = true;
             _deployPoints.Clear();
+            _activeDeployPoints.Clear();
             _darts.Clear();
             // Force-clear all slots immediately
             if (_slots != null)
@@ -1247,6 +1257,7 @@ namespace BalloonFlow
         {
             _boardFinished = true;
             _deployPoints.Clear();
+            _activeDeployPoints.Clear();
             _darts.Clear();
         }
 

@@ -21,19 +21,20 @@ namespace BalloonFlow
         #region Constants
 
         private const string HOLDER_POOL_KEY = "Holder";
+        private const string SPAWNER_POOL_KEY = "Spawner";
         private const int MAX_COLUMNS = 5;
         private const int MAGAZINE_FONT_SIZE = 5;
         private const float DEPLOY_MOVE_SPEED = 12f;
 
         // 보관함 배치 수치 — 절대 최소값 보장 (프리팹 스케일 1.04 기준)
-        private const float MIN_COL_SPACING      = 1.8f;     // 보관함 좌우 최소 간격
-        private const float MIN_ROW_SPACING       = 2.16f;    // 보관함 앞뒤 최소 간격 (+20%)
+        private const float MIN_COL_SPACING      = 2.16f;    // 보관함 좌우 최소 간격 (+20%)
+        private const float MIN_ROW_SPACING       = 2.59f;    // 보관함 앞뒤 최소 간격 (+20%)
         private const float MIN_DEPLOY_GAP        = 2.0f;     // 컨베이어 ~ 도착위치 최소 거리
         private const float MIN_RAIL_TO_QUEUE     = 3.5f;     // 컨베이어 ~ 보관함 1열 최소 거리
 
         // 비율 기준 (큰 필드에서 비례 확장)
-        private const float RATIO_COL_SPACING     = 0.293f;   // 필드 폭 × (보관함+간격)
-        private const float RATIO_ROW_SPACING     = 0.312f;   // 필드 폭 × 행 간격 (+20%)
+        private const float RATIO_COL_SPACING     = 0.352f;   // 필드 폭 × (보관함+간격) (+20%)
+        private const float RATIO_ROW_SPACING     = 0.374f;   // 필드 폭 × 행 간격 (+20%)
         private const float RATIO_DEPLOY_GAP      = 0.35f;    // 필드 폭 × 도착 거리
         private const float RATIO_RAIL_TO_QUEUE   = 0.65f;    // 필드 폭 × 보관함 거리
 
@@ -107,9 +108,10 @@ namespace BalloonFlow
         /// <summary>동적 계산: 레일 바닥 - 갭</summary>
         private float _queueBaseZ = -5.0f;
 
-        /// <summary>열별 독립 배치 큐. 빈 공간 있으면 동시 배치, 없으면 대기.</summary>
+        /// <summary>열별 독립 배치 큐. 열 단위로 순차, 열 간 동시 배치 가능.</summary>
         private Queue<int>[] _colQueues;
         private bool[] _colBusy;
+
 
 
         #endregion
@@ -143,6 +145,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnHolderThawed>(HandleHolderThawed);
             EventBus.Subscribe<OnHolderRevealed>(HandleHolderRevealed);
             EventBus.Subscribe<OnFrozenHPChanged>(HandleFrozenHPChanged);
+            EventBus.Subscribe<OnHolderUnlocked>(HandleHolderUnlocked);
         }
 
         private void OnDisable()
@@ -156,6 +159,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnHolderThawed>(HandleHolderThawed);
             EventBus.Unsubscribe<OnHolderRevealed>(HandleHolderRevealed);
             EventBus.Unsubscribe<OnFrozenHPChanged>(HandleFrozenHPChanged);
+            EventBus.Unsubscribe<OnHolderUnlocked>(HandleHolderUnlocked);
         }
 
         #endregion
@@ -182,35 +186,59 @@ namespace BalloonFlow
             // 보관함 가로폭 = 풍선 필드 가로폭에 맞춤
             ComputeDynamicLayout();
 
-            // Group by column
+            // Group by column — Spawner는 열 맨 뒤에 배치 (관통 방지)
             var columnQueues = new Dictionary<int, List<HolderData>>();
+            var columnSpawners = new Dictionary<int, List<HolderData>>();
             for (int i = 0; i < holders.Length; i++)
             {
                 HolderData data = holders[i];
                 if (data.isConsumed) continue;
 
-                if (!columnQueues.ContainsKey(data.column))
-                    columnQueues[data.column] = new List<HolderData>();
-                columnQueues[data.column].Add(data);
+                bool isSpawner = data.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                              || data.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O;
+
+                var target = isSpawner ? columnSpawners : columnQueues;
+                if (!target.ContainsKey(data.column))
+                    target[data.column] = new List<HolderData>();
+                target[data.column].Add(data);
             }
 
-            // Spawn per column, row by row
+            // Spawn per column: regular holders first, then spawners
             int spawnedCount = 0;
-            foreach (var kvp in columnQueues)
-            {
-                int col = kvp.Key;
-                var colHolders = kvp.Value;
+            var allColumns = new HashSet<int>(columnQueues.Keys);
+            foreach (var col in columnSpawners.Keys) allColumns.Add(col);
 
-                for (int row = 0; row < colHolders.Count; row++)
+            foreach (int col in allColumns)
+            {
+                // 일반 보관함 + Spawner를 합쳐서 원래 row 순서대로 배치
+                var allInCol = new List<HolderData>();
+                if (columnQueues.TryGetValue(col, out var regularHolders))
+                    allInCol.AddRange(regularHolders);
+                if (columnSpawners.TryGetValue(col, out var spawners))
+                    allInCol.AddRange(spawners);
+
+                // holderId 순 (MapMaker 저장 순서 = row 순서 보존)
+                allInCol.Sort((a, b) => a.holderId.CompareTo(b.holderId));
+
+                for (int row = 0; row < allInCol.Count; row++)
                 {
                     Vector3 pos = CalculateQueuePosition(col, row);
-                    HolderVisual visual = CreateHolderVisual(colHolders[row], pos, col);
+                    HolderVisual visual = CreateHolderVisual(allInCol[row], pos, col);
                     if (visual != null)
                     {
-                        _holderVisuals[colHolders[row].holderId] = visual;
+                        _holderVisuals[allInCol[row].holderId] = visual;
                         spawnedCount++;
                     }
                 }
+            }
+
+            // Spawner 소환: 앞 보관함 + 대기 보관함 (풍선 생성 후이므로 색상 참조 가능)
+            if (HolderManager.HasInstance)
+            {
+                HolderManager.Instance.ProcessSpawners(); // 앞 보관함
+                HolderManager.Instance.ProcessSpawners(); // Spawner 안 대기 보관함
+                for (int col = 0; col < _queueColumns; col++)
+                    RepositionColumnHolders(col);
             }
         }
 
@@ -451,37 +479,108 @@ namespace BalloonFlow
         {
             if (!HolderManager.HasInstance) return;
 
+            // Spawner에 의해 새로 추가된 보관함 — Spawner 위치에서 생성, 정상 스케일
+            // Spawner 위치 찾기
+            Vector3 spawnerPos = CalculateQueuePosition(column, 1); // fallback
+            foreach (var kvp2 in _holderVisuals)
+            {
+                if (kvp2.Value.column == column && kvp2.Value.gameObject != null)
+                {
+                    var spData = HolderManager.Instance.FindHolderPublic(kvp2.Value.holderId);
+                    if (spData != null && (spData.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                                        || spData.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O))
+                    {
+                        spawnerPos = kvp2.Value.gameObject.transform.position;
+                        break;
+                    }
+                }
+            }
+
+            // 비주얼 없는 일반 보관함 생성 (Spawner에서 소환된 보관함)
+            HolderData[] allHolders = HolderManager.Instance.GetHolders();
+            for (int i = 0; i < allHolders.Length; i++)
+            {
+                var hd = allHolders[i];
+                if (hd.column != column || hd.isConsumed) continue;
+                if (_holderVisuals.ContainsKey(hd.holderId)) continue;
+                // Spawner 자체는 SpawnWaitingHolders에서 생성됨
+                if (hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                 || hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O) continue;
+
+                // Spawner 위치에서 생성 → 아래 리포지셔닝으로 앞 칸 이동
+                Vector3 startPos = spawnerPos;
+                HolderVisual newVisual = CreateHolderVisual(hd, startPos, column, false);
+                if (newVisual != null)
+                    _holderVisuals[hd.holderId] = newVisual;
+            }
+
+
+            // Spawner는 고정 위치 — 일반 보관함만 리포지셔닝
             var colHolders = _tempColumnHolders;
             colHolders.Clear();
+            int spawnerCount = 0;
             foreach (var kvp in _holderVisuals)
             {
                 HolderVisual v = kvp.Value;
                 if (v.column == column && !v.isDeploying && !v.isMovingToRail && v.gameObject != null)
                 {
+                    var hData = HolderManager.Instance.FindHolderPublic(v.holderId);
+                    if (hData != null && (hData.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                                       || hData.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O))
+                    {
+                        spawnerCount++;
+                        continue;
+                    }
+
                     colHolders.Add(v);
                 }
             }
 
-            // Sort by current Z descending (front first)
+            // Sort regular holders by current Z descending (front first)
             colHolders.Sort((a, b) =>
             {
                 if (a.gameObject == null || b.gameObject == null) return 0;
                 return b.gameObject.transform.position.z.CompareTo(a.gameObject.transform.position.z);
             });
 
+            // 일반 보관함 배치
             for (int row = 0; row < colHolders.Count; row++)
             {
                 if (colHolders[row].gameObject == null) continue;
-                Vector3 targetPos = CalculateQueuePosition(column, row);
+
+                Vector3 targetPos;
+                if (row == 0)
+                {
+                    // 앞줄: 정상 위치
+                    targetPos = CalculateQueuePosition(column, 0);
+                }
+                else if (spawnerCount > 0)
+                {
+                    // Spawner보다 살짝 앞에 배치
+                    targetPos = spawnerPos + new Vector3(0f, 0f, 0.3f);
+                }
+                else
+                {
+                    targetPos = CalculateQueuePosition(column, row);
+                }
+
+                bool insideSpawner = row > 0 && spawnerCount > 0;
+
+                colHolders[row].gameObject.transform.DOKill(false);
+                colHolders[row].gameObject.transform.localScale = Vector3.one;
+
+                // Spawner 안 대기: TEXT 숨김 / 앞줄: TEXT 보이기
+                if (colHolders[row].magazineText != null)
+                    colHolders[row].magazineText.gameObject.SetActive(!insideSpawner);
+
                 if (Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos) > 0.05f)
                 {
-                    colHolders[row].gameObject.transform.DOKill(false);
                     float dist = Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos);
                     colHolders[row].gameObject.transform.DOMove(targetPos, dist / 4f).SetEase(Ease.OutQuad);
                 }
+
                 colHolders[row].queuePosition = targetPos;
 
-                // 앞줄(row 0) 도달 시 Hidden 보관함 자동 공개
                 if (row == 0 && HolderManager.HasInstance)
                 {
                     var data = HolderManager.Instance.FindHolderPublic(colHolders[row].holderId);
@@ -493,16 +592,33 @@ namespace BalloonFlow
 
         #endregion
 
+
         #region Private Methods — Holder Visual Creation
 
-        private HolderVisual CreateHolderVisual(HolderData data, Vector3 position, int column)
+        private HolderVisual CreateHolderVisual(HolderData data, Vector3 position, int column, bool spawnAnimation = false)
         {
             if (!ObjectPoolManager.HasInstance) return null;
 
-            GameObject obj = ObjectPoolManager.Instance.Get(HOLDER_POOL_KEY, position, Quaternion.identity);
+            // Spawner 기믹이면 Spawner 프리팹 사용
+            bool isSpawner = data.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                          || data.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O;
+            bool isLockObj = data.isLockObject;
+            string poolKey = isLockObj ? "Lock" : (isSpawner ? SPAWNER_POOL_KEY : HOLDER_POOL_KEY);
+            GameObject obj = ObjectPoolManager.Instance.Get(poolKey, position, Quaternion.identity);
             if (obj == null) return null;
 
             obj.SetActive(true);
+            obj.transform.localScale = Vector3.one; // 풀 재사용 시 스케일 초기화
+
+            if (isSpawner)
+            {
+                obj.transform.localScale = Vector3.one * 0.7f;
+            }
+            else if (isLockObj)
+            {
+                // Lock: 보관함과 같은 크기
+                obj.transform.localScale = Vector3.one;
+            }
 
             HolderIdentifier ident = obj.GetComponent<HolderIdentifier>();
             if (ident != null)
@@ -512,6 +628,12 @@ namespace BalloonFlow
                 ident.SetFrozen(data.isFrozen);
                 if (data.isHidden) ident.SetHidden(true);
             }
+
+            // Spawner visual
+            if (data.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T && ident != null)
+                ident.SetSpawnerTransparent(true);
+            else if (data.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O && ident != null)
+                ident.SetSpawnerTransparent(false); // opaque = default, but mark for identification
 
             // Hidden: Hidden Material 적용됨 (색상 건너뜀) / Frozen: 하늘색 톤 / 일반: 원래 색
             Color holderColor;
@@ -527,19 +649,22 @@ namespace BalloonFlow
             {
                 if (ident != null && ident.HasColorRenderers)
                     ident.ApplyColor(holderColor);
-                else
+                else if (!isSpawner && !isLockObj)
                     ApplyColorToRenderers(obj, holderColor);
+                // Spawner/Lock: 색상 적용 안 함 (프리팹 원본 유지)
             }
 
             TMP_Text textMesh = obj.GetComponentInChildren<TMP_Text>(true);
             if (textMesh != null)
             {
-                // Frozen: frozenHP 표시 / Hidden: "?" / 일반: 탄창 수
+                // Frozen: frozenHP / Hidden: "?" / Spawner: 소환횟수 / 일반: 탄창 수
                 string displayText;
                 if (data.isHidden)
                     displayText = "?";
                 else if (data.isFrozen)
                     displayText = data.frozenHP.ToString();
+                else if (data.spawnerHP > 0)
+                    displayText = data.spawnerHP.ToString();
                 else
                     displayText = data.magazineCount.ToString();
                 textMesh.text = displayText;
@@ -595,7 +720,11 @@ namespace BalloonFlow
                 }
 
                 if (ObjectPoolManager.HasInstance)
-                    ObjectPoolManager.Instance.Return(HOLDER_POOL_KEY, visual.gameObject);
+                {
+                    // Spawner 프리팹이면 Spawner 풀로 반환
+                    bool isSpawnerVisual = visual.gameObject.name.Contains("Spawner");
+                    ObjectPoolManager.Instance.Return(isSpawnerVisual ? SPAWNER_POOL_KEY : HOLDER_POOL_KEY, visual.gameObject);
+                }
             }
             visual.gameObject = null;
         }
@@ -703,7 +832,7 @@ namespace BalloonFlow
 
             visual.isMovingToRail = false;
 
-            // ── Phase 1.5: 배치 순서 대기 — 내 차례가 올 때까지 deploy point에서 대기 ──
+            // ── Phase 1.5: 전역 순차 배치 — 다른 보관함 배치 완료까지 대기 ──
             int waitFrames = 0;
             const int MAX_WAIT_FRAMES = 3600; // 60초 타임아웃 (60fps)
             while (waitFrames < MAX_WAIT_FRAMES)
@@ -716,6 +845,7 @@ namespace BalloonFlow
                 }
 
                 int c = visual.column;
+                // 열 내 순서 확인
                 if (!_colBusy[c] && _colQueues[c].Count > 0 && _colQueues[c].Peek() == visual.holderId)
                 {
                     _colQueues[c].Dequeue();
@@ -733,7 +863,7 @@ namespace BalloonFlow
                 yield break;
             }
 
-            // ── Phase 2: 배치 시작 (순차 — 내 차례) ──
+            // ── Phase 2: 배치 시작 (전역 순차 — 내 차례) ──
             visual.isDeploying = true;
 
             // Deploy 애니메이션 시작
@@ -746,6 +876,7 @@ namespace BalloonFlow
             if (!RailManager.HasInstance)
             {
                 _colBusy[visual.column] = false;
+
                 yield break;
             }
             RailManager rail = RailManager.Instance;
@@ -770,6 +901,7 @@ namespace BalloonFlow
                     _cancelledHolders.Remove(visual.holderId);
                     rail.UnregisterDeployPoint(visual.holderId);
                     _colBusy[visual.column] = false;
+    
                     yield break;
                 }
 
@@ -784,6 +916,8 @@ namespace BalloonFlow
                         if (!deployStarted)
                         {
                             deployStarted = true;
+                            // 첫 다트 배치 → deploy point 활성화 (장애물로 전환)
+                            rail.ActivateDeployPoint(visual.holderId);
                             if (visual.gameObject != null)
                             {
                                 visual.gameObject.transform.localScale = Vector3.one;
@@ -817,7 +951,6 @@ namespace BalloonFlow
 
             // ── Phase 4: Cleanup ──
             CompleteDeployment(visual);
-            _colBusy[visual.column] = false;
         }
 
         /// <summary>
@@ -859,6 +992,8 @@ namespace BalloonFlow
         {
             int col = visual.column;
             visual.isDeploying = false;
+
+            _colBusy[col] = false;
 
             // End Deploy 애니메이션
             if (visual.identifier != null)
@@ -978,6 +1113,25 @@ namespace BalloonFlow
             if (!_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual)) return;
             if (visual.magazineText != null)
                 visual.magazineText.text = evt.remainingHP.ToString();
+
+        }
+
+        private void HandleHolderUnlocked(OnHolderUnlocked evt)
+        {
+            if (!_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual)) return;
+            if (visual.gameObject == null) return;
+
+            int col = visual.column;
+
+            // Lock removal animation
+            visual.gameObject.transform.DOScale(Vector3.zero, 0.3f).SetEase(DG.Tweening.Ease.InBack)
+                .OnComplete(() =>
+                {
+                    ReturnHolderToPool(visual);
+                    _holderVisuals.Remove(evt.holderId);
+                    // Reposition holders in this column (fill the gap)
+                    RepositionColumnHolders(col);
+                });
         }
 
         private void HandleHolderRevealed(OnHolderRevealed evt)
@@ -1000,6 +1154,33 @@ namespace BalloonFlow
         {
             _boardFinished = false;
             if (_colQueues != null) for (int i = 0; i < _colQueues.Length; i++) { _colQueues[i].Clear(); _colBusy[i] = false; }
+
+            // StopAllCoroutines로 죽은 코루틴 상태 초기화
+            // 배포 중/이동 중이던 보관함 → 큐로 복귀
+            foreach (var kvp in _holderVisuals)
+            {
+                HolderVisual visual = kvp.Value;
+
+                // deploy point 해제 (미해제 상태일 수 있음)
+                if (visual.isDeploying && RailManager.HasInstance)
+                    RailManager.Instance.UnregisterDeployPoint(visual.holderId);
+
+                // 상태 리셋
+                visual.isDeploying = false;
+                visual.isMovingToRail = false;
+                visual.isWaiting = false;
+
+                // DOTween 킬 + 큐 위치로 복귀
+                if (visual.gameObject != null)
+                {
+                    visual.gameObject.transform.DOKill();
+                    visual.gameObject.transform.localScale = Vector3.one;
+                }
+            }
+
+            // 모든 열 리포지셔닝 (큐 위치 복원)
+            for (int col = 0; col < _queueColumns; col++)
+                RepositionColumnHolders(col);
         }
 
         #endregion

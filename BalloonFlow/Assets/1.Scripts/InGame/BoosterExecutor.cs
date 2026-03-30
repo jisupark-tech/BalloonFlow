@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -232,6 +233,12 @@ namespace BalloonFlow
 
             Debug.Log($"[BoosterExecutor] Shuffle: randomized {shuffleable.Count} holder positions.");
 
+            // Shuffle 연출: 카메라 쉐이크
+            if (CameraManager.HasInstance && CameraManager.Instance.MainCamera != null)
+            {
+                CameraManager.Instance.MainCamera.transform.DOShakePosition(0.2f, 0.1f, 8, 90f, false, true);
+            }
+
             // Sync visual positions to new column assignments
             if (HolderVisualManager.HasInstance)
                 HolderVisualManager.Instance.RefreshAllPositions();
@@ -314,6 +321,12 @@ namespace BalloonFlow
                 HolderManager.Instance.CompactColumns();
             if (HolderVisualManager.HasInstance)
                 HolderVisualManager.Instance.RefreshAllPositions();
+
+            // Color Remove 연출: 카메라 쉐이크
+            if (CameraManager.HasInstance && CameraManager.Instance.MainCamera != null)
+            {
+                CameraManager.Instance.MainCamera.transform.DOShakePosition(0.3f, 0.15f, 10, 90f, false, true);
+            }
 
             Debug.Log($"[BoosterExecutor] Color Remove: removed {totalRemoved} objects of color {color}.");
 

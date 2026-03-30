@@ -31,10 +31,6 @@ namespace BalloonFlow
 
         #region Fields
 
-        // Lock-Key tracking: keyColor → list of locked balloonIds
-        private readonly Dictionary<int, List<int>> _lockTargets = new Dictionary<int, List<int>>();
-        private readonly HashSet<int> _unlockedBalloons = new HashSet<int>();
-
         // Ice HP tracking: balloonId → remaining HP
         private readonly Dictionary<int, int> _iceHP = new Dictionary<int, int>();
 
@@ -74,8 +70,6 @@ namespace BalloonFlow
 
         public void ResetAll()
         {
-            _lockTargets.Clear();
-            _unlockedBalloons.Clear();
             _iceHP.Clear();
             _pinSegments.Clear();
             _surpriseBalloons.Clear();
@@ -108,12 +102,6 @@ namespace BalloonFlow
                     _curtainCounters[balloonId] = hp > 0 ? hp : DEFAULT_CURTAIN_COUNTER;
                     break;
 
-                case BalloonController.GimmickLockKey:
-                    // 'color' here is the key color that unlocks this lock
-                    if (!_lockTargets.ContainsKey(color))
-                        _lockTargets[color] = new List<int>();
-                    _lockTargets[color].Add(balloonId);
-                    break;
             }
         }
 
@@ -143,12 +131,6 @@ namespace BalloonFlow
                         // Check if dart color matches — handled by ProcessPinHit
                         return null; // Allow the hit, ProcessPinHit will handle logic
                     }
-                    return null;
-
-                case BalloonController.GimmickLockKey:
-                    // Lock is blocked until its key color has been popped
-                    if (!_unlockedBalloons.Contains(balloonId))
-                        return "Lock: key not yet destroyed";
                     return null;
 
                 case BalloonController.GimmickColorCurtain:
@@ -311,24 +293,6 @@ namespace BalloonFlow
                 _curtainColors.Remove(id);
                 if (BalloonController.HasInstance)
                     BalloonController.Instance.ForcePopBalloon(id);
-            }
-
-            // === Lock-Key: popping any balloon with this color unlocks Locks ===
-            if (_lockTargets.TryGetValue(evt.color, out List<int> lockedIds))
-            {
-                foreach (int lockedId in lockedIds)
-                {
-                    _unlockedBalloons.Add(lockedId);
-
-                    EventBus.Publish(new OnGimmickTriggered
-                    {
-                        gimmickType = BalloonController.GimmickLockKey,
-                        targetId = lockedId
-                    });
-
-                    Debug.Log($"[GimmickProcessor] Lock {lockedId} unlocked by color {evt.color}.");
-                }
-                _lockTargets.Remove(evt.color);
             }
 
             // === Surprise: reveal adjacent Surprise balloons ===

@@ -19,7 +19,10 @@ namespace BalloonFlow
             Ice,
             ColorCurtain,
             Surprise,
-            LockKey
+            LockKey,
+            Barricade,
+            SpawnerT,
+            SpawnerO
         }
 
         [Header("[기믹 타입 선택]")]
@@ -128,6 +131,9 @@ namespace BalloonFlow
                 case GimmickType.ColorCurtain: return BalloonController.GimmickColorCurtain;
                 case GimmickType.Surprise:     return BalloonController.GimmickSurprise;
                 case GimmickType.LockKey:      return "Lock_Key";
+                case GimmickType.Barricade:    return BalloonController.GimmickBarricade;
+                case GimmickType.SpawnerT:     return BalloonController.GimmickSpawnerT;
+                case GimmickType.SpawnerO:     return BalloonController.GimmickSpawnerO;
                 default:                       return "";
             }
         }

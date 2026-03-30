@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using DG.Tweening;
@@ -75,6 +76,7 @@ namespace BalloonFlow
         public const string GimmickIce          = "Ice";             // Lv.201 간접 제거 (모든 팝으로 HP 감소)
         public const string GimmickFrozenDart   = "Frozen_Dart";     // Lv.241 동결 풍선 (2히트 필요: 1히트=해동, 2히트=팝)
         public const string GimmickColorCurtain = "Color_Curtain";   // Lv.281 지정 색상 간접 제거
+        public const string GimmickBarricade    = "Barricade";       // destructible wall (HP-based)
 
         #endregion
 
@@ -96,6 +98,9 @@ namespace BalloonFlow
 
         // Spatial index: position key -> balloonId  (for adjacency lookups)
         private readonly Dictionary<Vector3Int, int> _positionIndex = new Dictionary<Vector3Int, int>();
+
+        // Key tracking: balloonId -> lockPairId (for path-based Key release)
+        private readonly Dictionary<int, int> _activeKeyPairIds = new Dictionary<int, int>();
 
         // Scale multiplier for balloon visuals (set from LevelConfig)
         private float _balloonScale = DEFAULT_BALLOON_SCALE;
@@ -150,11 +155,13 @@ namespace BalloonFlow
         private void OnEnable()
         {
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
+            EventBus.Subscribe<OnBalloonPopped>(CheckKeysOnPop);
         }
 
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
+            EventBus.Unsubscribe<OnBalloonPopped>(CheckKeysOnPop);
         }
 
         #endregion
@@ -229,6 +236,7 @@ namespace BalloonFlow
                 // Pin은 같은 색 다트로 직접 타격 가능 — 타겟 목록에 포함
                 if (data.gimmickType == GimmickIce) continue;
                 if (data.gimmickType == GimmickColorCurtain) continue;
+                if (data.gimmickType == GimmickLockKey) continue;
                 if (data.color == color)
                 {
                     result.Add(data);
@@ -252,6 +260,7 @@ namespace BalloonFlow
             {
                 BalloonData data = pair.Value;
                 if (data.isPopped) continue;
+                if (data.gimmickType == GimmickLockKey) continue;
                 if (data.color == color)
                     _reusableColorList.Add(data);
             }
@@ -334,6 +343,12 @@ namespace BalloonFlow
                 return ProcessFrozenDartHit(data);
             }
 
+            // Barricade: destructible wall with HP
+            if (data.gimmickType == GimmickBarricade)
+            {
+                return ProcessBarricadeHit(data);
+            }
+
             // Pinata and Pinata Box require multiple hits
             if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
             {
@@ -384,6 +399,10 @@ namespace BalloonFlow
             if (data.gimmickType == GimmickFrozenDart)
                 return ProcessFrozenDartHit(data);
 
+            // Barricade: destructible wall with HP
+            if (data.gimmickType == GimmickBarricade)
+                return ProcessBarricadeHit(data);
+
             // Pinata/PinataBox
             if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
                 return ProcessPinataHit(data);
@@ -399,6 +418,7 @@ namespace BalloonFlow
         {
             if (!_balloons.TryGetValue(balloonId, out BalloonData data)) return;
             if (data.isPopped) return;
+            if (data.gimmickType == GimmickLockKey) return;
             ExecutePop(data);
         }
 
@@ -469,6 +489,7 @@ namespace BalloonFlow
             {
                 BalloonData data = pair.Value;
                 if (data.isPopped) continue;
+                if (data.gimmickType == GimmickLockKey) continue;
                 if (data.color == color)
                 {
                     result.Add(data);
@@ -517,6 +538,7 @@ namespace BalloonFlow
             _hiddenBalloons.Clear();
             _pinataGroup.Clear();
             _positionIndex.Clear();
+            _activeKeyPairIds.Clear();
             RemainingCount = 0;
             _nextBalloonId = 1;
         }
@@ -540,56 +562,78 @@ namespace BalloonFlow
                 hitCount    = 0,
                 maxHP       = resolvedHP,
                 sizeW       = entry.sizeW > 0 ? entry.sizeW : 1,
-                sizeH       = entry.sizeH > 0 ? entry.sizeH : 1
+                sizeH       = entry.sizeH > 0 ? entry.sizeH : 1,
+                lockPairId  = entry.lockPairId
             };
 
             _balloons[id] = data;
 
-            // Get visual object from pool (with color visualization)
-            GameObject obj = GetOrCreateBalloonObject(id, entry.position, entry.color);
-            if (obj != null)
+            // Lock_Key: 풍선 대신 Key 프리팹을 셀에 독립 배치 (풀링)
+            if (data.gimmickType == GimmickLockKey)
             {
-                _balloonObjects[id] = obj;
-
-                // Override visuals for special gimmick types
-                if (data.gimmickType == GimmickWall)
-                    ApplyTintToObject(obj, WALL_COLOR);
-                else if (data.gimmickType == GimmickPin)
-                    ApplyTintToObject(obj, PIN_COLOR);
-                else if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
+                if (ObjectPoolManager.HasInstance)
                 {
-                    // Pinata 프리팹 — GimmickIdentifier 사용
-                    var gi = obj.GetComponent<GimmickIdentifier>();
-                    if (gi != null)
+                    GameObject keyObj = ObjectPoolManager.Instance.Get("Key", entry.position, Quaternion.Euler(90f, 0f, 0f));
+                    if (keyObj != null)
                     {
-                        gi.Initialize();
-                        int hp = data.maxHP - data.hitCount;
-                        gi.UpdateHP(Mathf.Max(1, hp));
-                        int ci = Mathf.Clamp(data.color, 0, BalloonColors.Length - 1);
-                        if (gi.HasColorRenderers)
-                            gi.ApplyColor(BalloonColors[ci]);
+                        keyObj.SetActive(true);
+                        keyObj.transform.localScale = Vector3.one * _balloonScale;
+                        _balloonObjects[id] = keyObj;
                     }
+                }
+                _activeKeyPairIds[id] = data.lockPairId;
+                Debug.Log($"[Key SETUP] Key {id} registered: pairId={data.lockPairId}, gimmick={data.gimmickType}");
+            }
+            else
+            {
+                // 일반 풍선/기믹 — 풀에서 오브젝트 생성
+                GameObject obj = GetOrCreateBalloonObject(id, entry.position, entry.color);
+                if (obj != null)
+                {
+                    _balloonObjects[id] = obj;
 
-                    // 멀티셀 Piñata: 차지하는 그리드 영역 중심에 배치 + 스케일
+                    // Override visuals for special gimmick types
+                    if (data.gimmickType == GimmickWall)
+                        ApplyTintToObject(obj, WALL_COLOR);
+                    else if (data.gimmickType == GimmickPin)
+                        ApplyTintToObject(obj, PIN_COLOR);
+                    else if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
                     {
-                        float cs = _cellSpacing > 0 ? _cellSpacing : 0.3f;
-                        float scaleBase = _balloonScale;
-
-                        if (data.sizeW > 1 || data.sizeH > 1)
+                        var gi = obj.GetComponent<GimmickIdentifier>();
+                        if (gi != null)
                         {
-                            // 차지하는 영역의 월드 크기에 맞춰 스케일
-                            obj.transform.localScale = new Vector3(
-                                scaleBase * data.sizeW,
-                                scaleBase,
-                                scaleBase * data.sizeH);
+                            gi.Initialize();
+                            int hp = data.maxHP - data.hitCount;
+                            gi.UpdateHP(Mathf.Max(1, hp));
+                            int ci = Mathf.Clamp(data.color, 0, BalloonColors.Length - 1);
+                            if (gi.HasColorRenderers)
+                                gi.ApplyColor(BalloonColors[ci]);
                         }
 
-                        // 앵커(좌하 셀 중심)에서 전체 영역 중심으로 이동
-                        Vector3 centerOffset = new Vector3(
-                            (data.sizeW - 1) * cs * 0.5f,
-                            0f,
-                            (data.sizeH - 1) * cs * 0.5f);
-                        obj.transform.position = data.position + centerOffset;
+                        // Piñata 위치/스케일 — 프리팹 세팅 기준, 추가 보정 없음
+                        {
+                            float cs = _cellSpacing > 0 ? _cellSpacing : 0.3f;
+                            float scaleBase = _balloonScale;
+
+                            if (data.sizeW > 1 || data.sizeH > 1)
+                            {
+                                obj.transform.localScale = new Vector3(
+                                    scaleBase * data.sizeW,
+                                    scaleBase,
+                                    scaleBase * data.sizeH);
+                            }
+
+                            // 앵커(좌하단)에서 멀티셀 중심으로 이동
+                            Vector3 centerOffset = new Vector3(
+                                (data.sizeW - 1) * cs * 0.5f,
+                                0f,
+                                (data.sizeH - 1) * cs * 0.5f);
+                            // Y는 프리팹 기준 (0으로 — 프리팹에서 이미 높이 설정됨)
+                            obj.transform.position = new Vector3(
+                                data.position.x + centerOffset.x,
+                                0f,
+                                data.position.z + centerOffset.z);
+                        }
                     }
                 }
             }
@@ -962,6 +1006,44 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// Barricade: destructible wall with HP.
+        /// Each hit reduces HP by 1. Destroyed when HP reaches 0.
+        /// While alive, blocks dart path (occupancy map). Default HP = 2.
+        /// </summary>
+        private PopResult ProcessBarricadeHit(BalloonData data)
+        {
+            data.hitCount++;
+            _balloons[data.balloonId] = data;
+
+            int requiredHits = data.maxHP > 0 ? data.maxHP : 2;
+
+            if (_balloonObjects.TryGetValue(data.balloonId, out GameObject hitObj) && hitObj != null)
+            {
+                var gi = hitObj.GetComponent<GimmickIdentifier>();
+                if (gi != null)
+                {
+                    int remainHP = Mathf.Max(0, requiredHits - data.hitCount);
+                    gi.UpdateHP(remainHP);
+                    gi.PlayHitEffect();
+                    if (remainHP <= 0) gi.PlayEndEffect();
+                }
+            }
+
+            if (data.hitCount < requiredHits)
+            {
+                return new PopResult
+                {
+                    success     = false,
+                    reason      = "BarricadePartialHit",
+                    balloonId   = data.balloonId,
+                    gimmickType = GimmickBarricade
+                };
+            }
+
+            return ExecutePop(data);
+        }
+
+        /// <summary>
         /// Frozen Dart: 2-hit field gimmick.
         /// 1st hit (hitCount 0→1): thaw — removes frozen layer, converts to normal balloon.
         /// 2nd hit: standard pop.
@@ -1017,6 +1099,10 @@ namespace BalloonFlow
 
                 case GimmickPinataBox:
                     EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickPinataBox, targetId = data.balloonId });
+                    break;
+
+                case GimmickLockKey:
+                    // OnKeyReleased는 ReturnBalloonObject에서 발행 (KeyVisual 분리 후)
                     break;
 
                 case GimmickNone:
@@ -1320,6 +1406,187 @@ namespace BalloonFlow
             });
         }
 
+        /// <summary>Key 프리팹이 포물선으로 Lock 보관함까지 비행 → 도착 시 잠금 해제.</summary>
+        private IEnumerator FlyKeyToLock(Vector3 startPos, int pairId)
+        {
+            // Lock 보관함 찾기
+            Vector3 targetPos = startPos + Vector3.up * 2f; // fallback
+            if (HolderManager.HasInstance && HolderVisualManager.HasInstance)
+            {
+                HolderData[] holders = HolderManager.Instance.GetHolders();
+                for (int i = 0; i < holders.Length; i++)
+                {
+                    if (holders[i].lockPairId == pairId && holders[i].isLocked)
+                    {
+                        GameObject targetObj = HolderVisualManager.Instance.GetHolderGameObject(holders[i].holderId);
+                        if (targetObj != null)
+                            targetPos = targetObj.transform.position + Vector3.up * 1.1f;
+                        break;
+                    }
+                }
+            }
+
+            // Key 오브젝트 풀에서 가져오기
+            if (!ObjectPoolManager.HasInstance)
+            {
+                if (HolderManager.HasInstance) HolderManager.Instance.UnlockHolder(pairId);
+                yield break;
+            }
+
+            Vector3 spawnPos = startPos + Vector3.up * 0.3f;
+            GameObject keyObj = ObjectPoolManager.Instance.Get("Key", spawnPos, Quaternion.Euler(90f, 0f, 0f));
+            if (keyObj == null)
+            {
+                if (HolderManager.HasInstance) HolderManager.Instance.UnlockHolder(pairId);
+                yield break;
+            }
+            keyObj.SetActive(true);
+
+            // Phase 1: 위로 튕김 (0.15초)
+            Vector3 bounceTop = spawnPos + Vector3.up * 1.2f;
+            float t = 0f;
+            while (t < 0.15f)
+            {
+                t += Time.deltaTime;
+                float p = t / 0.15f;
+                keyObj.transform.position = Vector3.Lerp(spawnPos, bounceTop, Mathf.Sin(p * Mathf.PI * 0.5f));
+                yield return null;
+            }
+
+            // Phase 2: 포물선 비행 (0.5초)
+            t = 0f;
+            while (t < 0.5f)
+            {
+                t += Time.deltaTime;
+                float p = Mathf.Clamp01(t / 0.5f);
+                Vector3 linear = Vector3.Lerp(bounceTop, targetPos, p);
+                float arc = 2f * 4f * p * (1f - p);
+                keyObj.transform.position = linear + Vector3.up * arc;
+                keyObj.transform.Rotate(Vector3.forward, 540f * Time.deltaTime);
+                yield return null;
+            }
+
+            keyObj.transform.position = targetPos;
+            keyObj.SetActive(false);
+            if (ObjectPoolManager.HasInstance)
+                ObjectPoolManager.Instance.Return("Key", keyObj);
+
+            // 잠금 해제
+            if (HolderManager.HasInstance)
+                HolderManager.Instance.UnlockHolder(pairId);
+        }
+
+        #endregion
+
+        #region Private Methods — Key Path Checking
+
+        private void CheckKeysOnPop(OnBalloonPopped evt)
+        {
+            if (_activeKeyPairIds.Count == 0) return;
+            var keysToRelease = new List<int>();
+            foreach (var kvp in _activeKeyPairIds)
+            {
+                if (!_balloons.TryGetValue(kvp.Key, out BalloonData kd)) continue;
+                if (kd.isPopped) continue;
+                Vector3Int keyGrid = ToGridKey(kd.position);
+                bool canReach = CanKeyReachBelt(keyGrid);
+                Debug.Log($"[Key A*] Key {kvp.Key} at grid({keyGrid.x},{keyGrid.z}): canReachBelt={canReach}");
+                if (canReach)
+                    keysToRelease.Add(kvp.Key);
+            }
+            foreach (int keyId in keysToRelease)
+            {
+                Debug.Log($"[Key A*] Releasing Key {keyId}, pairId={_activeKeyPairIds[keyId]}");
+                ReleaseKey(keyId);
+            }
+        }
+
+        private bool CanKeyReachBelt(Vector3Int startGrid)
+        {
+            // BFS from Key grid position to any edge of the balloon field
+            // A cell is walkable if no non-popped balloon exists there
+            var visited = new HashSet<Vector3Int>();
+            var queue = new Queue<Vector3Int>();
+            visited.Add(startGrid);
+            queue.Enqueue(startGrid);
+
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+                // Check if current is at edge of grid (can escape to belt)
+                if (!_positionIndex.ContainsKey(current) || current.Equals(startGrid))
+                {
+                    // Check if this position is at the boundary or outside the populated area
+                    bool atEdge = false;
+                    Vector3Int[] dirs = { new Vector3Int(1,0,0), new Vector3Int(-1,0,0), new Vector3Int(0,0,1), new Vector3Int(0,0,-1) };
+                    foreach (var d in dirs)
+                    {
+                        Vector3Int neighbor = current + d;
+                        if (!_positionIndex.ContainsKey(neighbor) && !visited.Contains(neighbor))
+                        {
+                            // Neighbor is empty and not in grid = belt edge reached
+                            // A position with no balloon registered means it's open
+                            atEdge = true;
+                        }
+                    }
+                    if (atEdge && !current.Equals(startGrid)) return true;
+                }
+
+                // Expand to neighbors
+                Vector3Int[] directions = { new Vector3Int(1,0,0), new Vector3Int(-1,0,0), new Vector3Int(0,0,1), new Vector3Int(0,0,-1) };
+                foreach (var dir in directions)
+                {
+                    Vector3Int next = current + dir;
+                    if (visited.Contains(next)) continue;
+                    visited.Add(next);
+
+                    // Check if this cell is passable (no non-popped balloon, or it's a popped balloon)
+                    if (_positionIndex.TryGetValue(next, out int balloonId))
+                    {
+                        if (_balloons.TryGetValue(balloonId, out BalloonData bd) && !bd.isPopped)
+                            continue; // Blocked by non-popped balloon
+                    }
+                    queue.Enqueue(next);
+                }
+            }
+            return false;
+        }
+
+        private void ReleaseKey(int keyId)
+        {
+            if (!_balloons.TryGetValue(keyId, out BalloonData keyData)) return;
+            if (!_activeKeyPairIds.TryGetValue(keyId, out int pairId)) return;
+
+            _activeKeyPairIds.Remove(keyId);
+
+            // Mark as popped so it's removed from position tracking
+            keyData.isPopped = true;
+            _balloons[keyId] = keyData;
+            RemainingCount = Mathf.Max(0, RemainingCount - 1);
+            _positionIndex.Remove(ToGridKey(keyData.position));
+
+            // Return Key visual to pool
+            if (_balloonObjects.TryGetValue(keyId, out GameObject keyObj) && keyObj != null)
+            {
+                Vector3 keyPos = keyObj.transform.position;
+                _balloonObjects.Remove(keyId);
+                keyObj.SetActive(false);
+                if (ObjectPoolManager.HasInstance)
+                    ObjectPoolManager.Instance.Return("Key", keyObj);
+
+                // Start flight animation
+                if (pairId >= 0)
+                    StartCoroutine(FlyKeyToLock(keyPos, pairId));
+            }
+
+            EventBus.Publish(new OnBalloonPopped
+            {
+                balloonId = keyId,
+                color = keyData.color,
+                position = keyData.position
+            });
+        }
+
         #endregion
 
         #region Private Methods — Spatial Helpers
@@ -1425,6 +1692,7 @@ namespace BalloonFlow
         public int sizeW = 1;
         /// <summary>Piñata 세로 크기.</summary>
         public int sizeH = 1;
+        public int lockPairId = -1;
     }
 
     /// <summary>
@@ -1445,6 +1713,7 @@ namespace BalloonFlow
         public int sizeW = 1;
         public int sizeH = 1;
         public int hp = 0;
+        public int lockPairId = -1;
     }
 
     /// <summary>
