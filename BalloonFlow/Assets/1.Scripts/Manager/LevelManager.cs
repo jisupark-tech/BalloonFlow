@@ -462,7 +462,8 @@ namespace BalloonFlow
                         groupId     = -1,
                         sizeW       = bl.sizeW > 0 ? bl.sizeW : 1,
                         sizeH       = bl.sizeH > 0 ? bl.sizeH : 1,
-                        hp          = bl.hp
+                        hp          = bl.hp,
+                        lockPairId  = bl.lockPairId
                     });
                 }
                 BalloonController.Instance.SetupBalloons(balloonLayout, config.levelId);

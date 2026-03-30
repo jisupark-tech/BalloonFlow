@@ -152,6 +152,18 @@ namespace BalloonFlow
 
         /// <summary>Frozen Dart 해동에 필요한 배치 완료 횟수 (0 = 기본값 3).</summary>
         public int frozenHP;
+
+        /// <summary>Spawner 소환 횟수 (HP). 0 = Spawner 아님.</summary>
+        public int spawnerHP;
+
+        /// <summary>Spawner가 소환할 보관함 색상 목록 (순서대로). null이면 랜덤.</summary>
+        public int[] spawnerColors;
+
+        /// <summary>Spawner가 소환할 보관함의 탄창 수 (기본 20).</summary>
+        public int spawnerMag = 20;
+
+        /// <summary>Lock_Key pair ID. -1 = 없음. 같은 pairId의 Key 풍선이 터지면 잠금 해제.</summary>
+        public int lockPairId = -1;
     }
 
     /// <summary>
@@ -178,6 +190,9 @@ namespace BalloonFlow
         public int sizeH = 1;
         /// <summary>Piñata HP (기본 2).</summary>
         public int hp = 0;
+
+        /// <summary>Lock_Key pair ID. -1 = 없음. Key 풍선: 터지면 같은 pairId의 Lock 보관함 해제.</summary>
+        public int lockPairId = -1;
     }
 
     /// <summary>

@@ -285,6 +285,20 @@ namespace BalloonFlow
         public int targetId;
     }
 
+    /// <summary>Key 풍선이 터져서 열쇠 해방 → Lock 보관함으로 비행.</summary>
+    public struct OnKeyReleased
+    {
+        public int pairId;
+        public UnityEngine.Vector3 keyPosition;
+    }
+
+    /// <summary>Lock 보관함 해제 완료 → 클릭 가능.</summary>
+    public struct OnHolderUnlocked
+    {
+        public int holderId;
+        public int pairId;
+    }
+
     // ────────────────────────────────────────
     // Economy Events
     // ────────────────────────────────────────

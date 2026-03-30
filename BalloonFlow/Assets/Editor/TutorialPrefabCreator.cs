@@ -16,7 +16,7 @@ namespace BalloonFlow.Editor
         private const string PREFAB_PATH = "Assets/Resources/Popup/PopupTutorial.prefab";
         private static readonly Color DIM_COLOR = new Color(0f, 0f, 0f, 0.75f);
 
-        [MenuItem("BalloonFlow/Don't Use/Create Tutorial Prefab", false, 70)]
+        [MenuItem("BalloonFlow/DON'T USE/Create Tutorial Prefab", false, 70)]
         public static void CreatePrefab()
         {
             // 이미 존재하면 확인

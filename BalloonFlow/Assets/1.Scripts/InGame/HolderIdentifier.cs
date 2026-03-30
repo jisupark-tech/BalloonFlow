@@ -515,6 +515,23 @@ namespace BalloonFlow
 
         #endregion
 
+        #region Spawner Visual
+
+        /// <summary>Spawner_T: 반투명으로 다음 색상 미리보기.</summary>
+        public void SetSpawnerTransparent(bool transparent)
+        {
+            if (_colorRenderers == null) return;
+            for (int i = 0; i < _colorRenderers.Length; i++)
+            {
+                if (_colorRenderers[i] == null) continue;
+                Color c = _colorRenderers[i].material.color;
+                c.a = transparent ? 0.4f : 1f;
+                _colorRenderers[i].material.color = c;
+            }
+        }
+
+        #endregion
+
         #region Utility
 
         private static Transform FindDeep(Transform parent, string name)

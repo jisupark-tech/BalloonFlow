@@ -35,6 +35,7 @@ namespace BalloonFlow
         private const int UNLOCK_LEVEL_ICE           = 201;  // PKG11 Lv.201
         private const int UNLOCK_LEVEL_FROZEN_DART   = 241;  // PKG13 Lv.241
         private const int UNLOCK_LEVEL_COLOR_CURTAIN = 281;  // PKG15 Lv.281
+        private const int UNLOCK_LEVEL_BARRICADE     = 91;   // Lv.91 destructible wall
 
         // String identifiers that match LevelConfig.gimmickTypes values
         public const string GIMMICK_HIDDEN        = "Hidden";
@@ -50,6 +51,7 @@ namespace BalloonFlow
         public const string GIMMICK_ICE           = "Ice";
         public const string GIMMICK_FROZEN_DART   = "Frozen_Dart";
         public const string GIMMICK_COLOR_CURTAIN = "Color_Curtain";
+        public const string GIMMICK_BARRICADE    = "Barricade";
 
         #endregion
 
@@ -87,6 +89,10 @@ namespace BalloonFlow
             {
                 return false;
             }
+
+            // MapMaker TestPlay 모드: 모든 기믹 해금
+            if (GameManager.IsTestPlayMode)
+                return true;
 
             int unlockLevel = GetUnlockLevel(gimmickType);
             return levelId >= unlockLevel;
@@ -159,6 +165,8 @@ namespace BalloonFlow
                     return "동결 풍선 — 2히트 필요 (1히트=해동, 2히트=팝). 인접 팝으로도 해동 가능.";
                 case GIMMICK_COLOR_CURTAIN:
                     return "지정 색상 다트로만 간접 제거 가능한 컬러 커튼.";
+                case GIMMICK_BARRICADE:
+                    return "파괴 가능한 벽. HP만큼 다트를 맞아야 파괴됩니다.";
                 default:
                     return string.Empty;
             }
@@ -242,6 +250,7 @@ namespace BalloonFlow
                 case GIMMICK_ICE:           return UNLOCK_LEVEL_ICE;
                 case GIMMICK_FROZEN_DART:   return UNLOCK_LEVEL_FROZEN_DART;
                 case GIMMICK_COLOR_CURTAIN: return UNLOCK_LEVEL_COLOR_CURTAIN;
+                case GIMMICK_BARRICADE:    return UNLOCK_LEVEL_BARRICADE;
                 default:
                     Debug.LogWarning($"[GimmickManager] Unknown gimmick type: '{gimmickType}'.");
                     return int.MaxValue;

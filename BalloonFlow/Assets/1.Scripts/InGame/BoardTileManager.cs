@@ -46,7 +46,7 @@ namespace BalloonFlow
         // 컨베이어 외곽 절대 크기 (월드 유닛, 카메라 orthoSize=15, aspect=0.46 기준)
         // 화면 가로 = 30 × 0.46 = 13.8 유닛
         public const float CONVEYOR_WIDTH     = 12f;
-        public const float CONVEYOR_HEIGHT    = 18.0f;
+        public const float CONVEYOR_HEIGHT    = 15.4f;
         public const float RAIL_THICKNESS     = 5f;
         public const float RAIL_GAP           = 0.2f;
         

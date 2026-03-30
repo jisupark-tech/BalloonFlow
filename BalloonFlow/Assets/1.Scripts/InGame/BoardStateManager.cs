@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -490,11 +491,58 @@ namespace BalloonFlow
 
         private void HandleContinueApplied(OnContinueApplied evt)
         {
-            // Resume board after continue — reset fail state so game can detect next fail/clear
-            _currentState = BoardState.Playing;
+            // 풍선 제거 연출 → 완료 후 게임 재개
             _isCritical = false;
             _criticalTimer = 0f;
             _failConfirmed = false;
+
+            if (evt.removedColor >= 0 && evt.dartsRemoved > 0)
+            {
+                // 풍선 제거 연출이 끝난 후 게임 시작
+                StartCoroutine(ContinuePopThenResume(evt.removedColor, evt.dartsRemoved));
+            }
+            else
+            {
+                // 제거할 풍선 없으면 즉시 재개
+                ResumeAfterContinue();
+            }
+        }
+
+        private IEnumerator ContinuePopThenResume(int color, int count)
+        {
+            // 1프레임 대기 (팝업 닫히고 게임 화면 전환 완료)
+            yield return null;
+
+            // 풍선 제거 연출
+            if (BalloonController.HasInstance)
+            {
+                var balloons = BalloonController.Instance.GetAllBalloonsByColor(color);
+                if (balloons != null)
+                {
+                    int removed = 0;
+                    for (int i = 0; i < balloons.Length && removed < count; i++)
+                    {
+                        if (!balloons[i].isPopped)
+                        {
+                            BalloonController.Instance.ForcePopBalloon(balloons[i].balloonId);
+                            removed++;
+                        }
+                    }
+                    if (removed > 0)
+                        Debug.Log($"[BoardStateManager] Continue: removed {removed} balloons of color {color}.");
+                }
+            }
+
+            // 연출 완료 대기 (ReturnBalloonObject 애니메이션: 0.12 + 0.15 = 0.27초)
+            yield return new WaitForSeconds(0.35f);
+
+            // 게임 재개
+            ResumeAfterContinue();
+        }
+
+        private void ResumeAfterContinue()
+        {
+            _currentState = BoardState.Playing;
 
             // Re-evaluate gauge based on current occupancy
             if (RailManager.HasInstance)
@@ -509,7 +557,7 @@ namespace BalloonFlow
                 _currentGaugeStage = GaugeStage.Safe;
             }
 
-            Debug.Log($"[BoardStateManager] Continue applied — board resumed. State=Playing, Gauge={_currentGaugeStage}");
+            Debug.Log($"[BoardStateManager] Continue — balloons removed, board resumed. Gauge={_currentGaugeStage}");
         }
 
         private void PublishBoardStateChanged()
