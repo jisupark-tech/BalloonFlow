@@ -393,6 +393,29 @@ namespace BalloonFlow
 
         #region Private Methods — Per-Dart Movement
 
+        /// <summary>벨트 4개 코너 타일 영역 안에 있는지 판별.</summary>
+        private bool IsInCornerZone(Vector3 pos)
+        {
+            float boardCX = GameManager.HasInstance ? GameManager.Instance.Board.boardCenterX : 0f;
+            float boardCZ = GameManager.HasInstance ? GameManager.Instance.Board.boardCenterZ : 2f;
+            float halfW = BoardTileManager.CONVEYOR_WIDTH * 0.5f;
+            float halfH = BoardTileManager.CONVEYOR_HEIGHT * 0.5f;
+            float cs = BoardTileManager.RAIL_THICKNESS; // 코너 타일 크기
+
+            float left = boardCX - halfW;
+            float right = boardCX + halfW - cs;
+            float bottom = boardCZ - halfH;
+            float top = boardCZ + halfH - cs;
+
+            // 4개 코너 박스 체크
+            bool inBL = pos.x >= left && pos.x <= left + cs && pos.z >= bottom && pos.z <= bottom + cs;
+            bool inBR = pos.x >= right && pos.x <= right + cs && pos.z >= bottom && pos.z <= bottom + cs;
+            bool inTL = pos.x >= left && pos.x <= left + cs && pos.z >= top && pos.z <= top + cs;
+            bool inTR = pos.x >= right && pos.x <= right + cs && pos.z >= top && pos.z <= top + cs;
+
+            return inBL || inBR || inTL || inTR;
+        }
+
         private void UpdatePerDartPositions()
         {
             if (!RailManager.HasInstance || _dartVisuals.Count == 0) return;
@@ -421,10 +444,17 @@ namespace BalloonFlow
                 Vector3 pos = rail.GetPositionAtDistance(dart.progress);
                 visual.gameObject.transform.position = pos;
 
-                // Orient along path
-                Vector3 fireDir = rail.GetDartFiringDirection(dartId);
-                if (fireDir.sqrMagnitude > 0.001f)
-                    visual.gameObject.transform.rotation = Quaternion.LookRotation(fireDir);
+                // Orient — 접선의 안쪽 직각 방향 = 공격 방향 (직선/곡선 모두 자연스럽게)
+                float normT = pathLen > 0f ? dart.progress / pathLen : 0f;
+                normT = ((normT % 1f) + 1f) % 1f;
+                Vector3 tangent = rail.GetDirectionAtNormalized(normT);
+                if (tangent.sqrMagnitude > 0.001f)
+                {
+                    // 접선의 안쪽 직각 = Cross(tangent, up) → 풍선 필드 방향
+                    Vector3 inward = Vector3.Cross(tangent, Vector3.up).normalized;
+                    if (inward.sqrMagnitude > 0.001f)
+                        visual.gameObject.transform.rotation = Quaternion.LookRotation(inward);
+                }
 
                 // Cave scale for open rails
                 if (isOpen && pathLen > 0f)

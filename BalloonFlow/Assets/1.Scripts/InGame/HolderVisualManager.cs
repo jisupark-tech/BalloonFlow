@@ -798,8 +798,14 @@ namespace BalloonFlow
                 yield break;
             }
 
-            // ── Phase 1: Move holder to deploy point ──
+            // ── Phase 1: Move holder to deploy point (또는 대기 위치) ──
             Vector3 deployPoint = GetDeployPoint(visual.column);
+
+            // 같은 열에 이미 배치 중인 보관함이 있으면 바로 뒤에 대기
+            bool hasDeploying = _colBusy[visual.column];
+            Vector3 targetPoint = hasDeploying
+                ? deployPoint + Vector3.back * _rowSpacing
+                : deployPoint;
 
             // 기존 DOTween 전부 킬 (RepositionColumnHolders의 DOMove 등)
             if (visual.gameObject != null)
@@ -814,17 +820,17 @@ namespace BalloonFlow
                 }
 
                 Vector3 current = visual.gameObject.transform.position;
-                float dist = Vector3.Distance(current, deployPoint);
+                float dist = Vector3.Distance(current, targetPoint);
                 if (dist < 0.15f) break;
 
-                Vector3 dir = (deployPoint - current).normalized;
+                Vector3 dir = (targetPoint - current).normalized;
                 visual.gameObject.transform.position = current + dir * DEPLOY_MOVE_SPEED * Time.deltaTime;
                 yield return null;
             }
 
             if (visual.gameObject != null)
             {
-                visual.gameObject.transform.position = deployPoint;
+                visual.gameObject.transform.position = targetPoint;
                 // deploy point 도착 펀치 (1회)
                 visual.gameObject.transform.localScale = Vector3.one;
                 visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
@@ -863,7 +869,16 @@ namespace BalloonFlow
                 yield break;
             }
 
-            // ── Phase 2: 배치 시작 (전역 순차 — 내 차례) ──
+            // 대기 위치에서 실제 deploy point로 이동 (대기했던 경우)
+            if (visual.gameObject != null && Vector3.Distance(visual.gameObject.transform.position, deployPoint) > 0.1f)
+            {
+                visual.gameObject.transform.DOKill();
+                float moveDist = Vector3.Distance(visual.gameObject.transform.position, deployPoint);
+                visual.gameObject.transform.DOMove(deployPoint, moveDist / DEPLOY_MOVE_SPEED).SetEase(Ease.OutQuad);
+                yield return new WaitForSeconds(moveDist / DEPLOY_MOVE_SPEED);
+            }
+
+            // ── Phase 2: 배치 시작 (열 순차 — 내 차례) ──
             visual.isDeploying = true;
 
             // Deploy 애니메이션 시작
@@ -1155,30 +1170,32 @@ namespace BalloonFlow
             _boardFinished = false;
             if (_colQueues != null) for (int i = 0; i < _colQueues.Length; i++) { _colQueues[i].Clear(); _colBusy[i] = false; }
 
-            // StopAllCoroutines로 죽은 코루틴 상태 초기화
-            // 배포 중/이동 중이던 보관함 → 큐로 복귀
+            // 비주얼 + 데이터 상태 동시 리셋
             foreach (var kvp in _holderVisuals)
             {
                 HolderVisual visual = kvp.Value;
 
-                // deploy point 해제 (미해제 상태일 수 있음)
+                // deploy point 해제
                 if (visual.isDeploying && RailManager.HasInstance)
                     RailManager.Instance.UnregisterDeployPoint(visual.holderId);
 
-                // 상태 리셋
+                // 비주얼 상태 리셋
                 visual.isDeploying = false;
                 visual.isMovingToRail = false;
                 visual.isWaiting = false;
 
-                // DOTween 킬 + 큐 위치로 복귀
                 if (visual.gameObject != null)
                 {
                     visual.gameObject.transform.DOKill();
                     visual.gameObject.transform.localScale = Vector3.one;
                 }
+
+                // HolderManager 데이터도 강제 리셋
+                if (HolderManager.HasInstance)
+                    HolderManager.Instance.UndoDeploy(visual.holderId);
             }
 
-            // 모든 열 리포지셔닝 (큐 위치 복원)
+            // 모든 열 리포지셔닝 (큐 위치 복원 — 즉시 이동)
             for (int col = 0; col < _queueColumns; col++)
                 RepositionColumnHolders(col);
         }
