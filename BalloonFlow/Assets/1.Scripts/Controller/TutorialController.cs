@@ -70,6 +70,7 @@ namespace BalloonFlow
         private const string PREFS_PREFIX = "BF_Tutorial_Complete_";
         private const string ACTION_TAP_HOLDER = "tap_holder";
         private const string ACTION_WAIT_POP = "wait_pop";
+        private const string ACTION_TAP_ANYWHERE = "tap_anywhere";
         private const string ACTION_NONE = "none";
 
         #endregion
@@ -585,6 +586,52 @@ namespace BalloonFlow
             return null;
         }
 
+        /// <summary>
+        /// LevelDatabase에서 해당 레벨의 tutorialSteps를 읽어 TutorialConfig를 생성.
+        /// tutorialSteps가 없으면 null 반환 → 하드코딩 fallback 사용.
+        /// </summary>
+        private TutorialConfig TryBuildFromLevelData(int levelId)
+        {
+            var db = Resources.Load<LevelDatabase>("LevelDatabase");
+            if (db == null || db.levels == null) return null;
+
+            LevelConfig levelConfig = null;
+            for (int i = 0; i < db.levels.Length; i++)
+            {
+                if (db.levels[i].levelId == levelId)
+                {
+                    levelConfig = db.levels[i];
+                    break;
+                }
+            }
+
+            if (levelConfig == null || levelConfig.tutorialSteps == null || levelConfig.tutorialSteps.Length == 0)
+                return null;
+
+            // TutorialStepData[] → TutorialStep[] 변환
+            var steps = new TutorialStep[levelConfig.tutorialSteps.Length];
+            for (int i = 0; i < steps.Length; i++)
+            {
+                var src = levelConfig.tutorialSteps[i];
+                steps[i] = new TutorialStep
+                {
+                    stepIndex = i,
+                    instruction = src.instruction ?? "",
+                    highlightTarget = src.highlightTarget ?? "",
+                    requireAction = string.IsNullOrEmpty(src.requireAction) ? ACTION_NONE : src.requireAction,
+                    isComplete = false
+                };
+            }
+
+            return new TutorialConfig
+            {
+                tutorialId = levelId, // levelId를 tutorialId로 사용
+                levelId = levelId,
+                tutorialName = $"Level {levelId} Tutorial (from data)",
+                steps = steps
+            };
+        }
+
         #endregion
 
         #region Private Methods — Flow Control
@@ -601,6 +648,14 @@ namespace BalloonFlow
             // so the player can actually perform the required action.
             if (step.requireAction == ACTION_TAP_HOLDER || step.requireAction == ACTION_NONE)
             {
+                if (InputHandler.HasInstance)
+                {
+                    InputHandler.Instance.EnableInput();
+                }
+            }
+            else if (step.requireAction == ACTION_TAP_ANYWHERE)
+            {
+                // tap_anywhere: enable input but also let TutorialManager handle the tap overlay
                 if (InputHandler.HasInstance)
                 {
                     InputHandler.Instance.EnableInput();
@@ -662,7 +717,18 @@ namespace BalloonFlow
 
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
-            // Check if this level has a tutorial and it hasn't been completed yet
+            // 1) LevelConfig에 tutorialSteps가 있으면 우선 사용
+            TutorialConfig configFromData = TryBuildFromLevelData(evt.levelId);
+            if (configFromData != null)
+            {
+                if (IsTutorialComplete(configFromData.tutorialId)) return;
+                // 기존 코드 방식과 동일하게 등록 후 시작
+                _configByLevel[configFromData.levelId] = configFromData;
+                StartTutorial(configFromData.tutorialId);
+                return;
+            }
+
+            // 2) Fallback: 코드에 하드코딩된 튜토리얼
             if (!_configByLevel.TryGetValue(evt.levelId, out TutorialConfig config))
             {
                 return;

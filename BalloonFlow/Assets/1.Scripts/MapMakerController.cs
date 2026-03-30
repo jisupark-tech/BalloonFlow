@@ -137,7 +137,7 @@ namespace BalloonFlow
         private float _railHeight = 0.5f;
         private int _railSlotCount = 200;
         private bool _smoothCorners = true;
-        private float _cornerRadius = 3f;
+        private float _cornerRadius = 2.5f; // RAIL_THICKNESS/2 = 타일 코너 중심선
 
         // Grid-based conveyor path (extended grid: +1 padding on each side)
         private bool[,] _pathGrid; // [gridCols+2, gridRows+2]
@@ -752,7 +752,34 @@ namespace BalloonFlow
             le.preferredHeight = 120;
             RebuildColorToggleGrid();
 
+            var deselectRow = Row(p);
+            Btn(deselectRow, "Deselect Unused", () => { DeselectUnusedColors(); });
+
             Sep(p);
+        }
+
+        private void DeselectUnusedColors()
+        {
+            var usedColors = new HashSet<int>();
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                    if (_balloonColors[c, r] >= 0)
+                        usedColors.Add(_balloonColors[c, r]);
+
+            _selectedColors.Clear();
+            foreach (int ci in usedColors)
+                _selectedColors.Add(ci);
+            if (_selectedColors.Count < 2)
+            {
+                _selectedColors.Add(0);
+                _selectedColors.Add(1);
+            }
+            _numColors = _selectedColors.Count;
+            RebuildColorToggleGrid();
+            RebuildPalette();
+            RebuildHolderUI();
+            RefreshInfo();
+            SetStatus($"Deselected unused colors — {_numColors} remain");
         }
 
         private void RebuildColorToggleGrid()
@@ -804,24 +831,27 @@ namespace BalloonFlow
             }
             _numColors = _selectedColors.Count;
 
-            // Remove balloons of deselected colors
-            for (int c = 0; c < _gridCols; c++)
-                for (int r = 0; r < _gridRows; r++)
-                    if (_balloonColors[c, r] >= 0 && !_selectedColors.Contains(_balloonColors[c, r]))
-                    {
-                        _balloonColors[c, r] = -1;
-                        _balloonGimmicks[c, r] = 0;
-                    }
+            // Remove balloons only of the just-toggled color (not all non-selected colors)
+            if (!_selectedColors.Contains(colorIndex))
+            {
+                for (int c = 0; c < _gridCols; c++)
+                    for (int r = 0; r < _gridRows; r++)
+                        if (_balloonColors[c, r] == colorIndex)
+                        {
+                            _balloonColors[c, r] = -1;
+                            _balloonGimmicks[c, r] = 0;
+                        }
 
-            // Remove holders that use deselected colors
-            for (int c = 0; c < _holderCols; c++)
-                for (int r = 0; r < _holderRows; r++)
-                    if (_holderColors[c, r] >= 0 && !_selectedColors.Contains(_holderColors[c, r]))
-                    {
-                        _holderColors[c, r] = -1;
-                        _holderMags[c, r] = 0;
-                        _holderGimmicks[c, r] = 0;
-                    }
+                // Remove holders only of the just-toggled color
+                for (int c = 0; c < _holderCols; c++)
+                    for (int r = 0; r < _holderRows; r++)
+                        if (_holderColors[c, r] == colorIndex)
+                        {
+                            _holderColors[c, r] = -1;
+                            _holderMags[c, r] = 0;
+                            _holderGimmicks[c, r] = 0;
+                        }
+            }
 
             RebuildColorToggleGrid();
             RebuildPalette();
@@ -943,11 +973,11 @@ namespace BalloonFlow
         private void BuildActionSection(Transform p)
         {
             var row = Row(p);
-            Btn(row, "Fill All", () => { FillBalloons(_paintColor); AutoRoundBalloonCounts(); OnBalloonGridChanged(); });
+            Btn(row, "Fill All", () => { FillBalloons(_paintColor); OnBalloonGridChanged(); });
             Btn(row, "Clear All", () => { FillBalloons(-1); OnBalloonGridChanged(); });
-            Btn(row, "Random", () => { RandomBalloons(); AutoRoundBalloonCounts(); OnBalloonGridChanged(); });
+            Btn(row, "Random", () => { RandomBalloons(); OnBalloonGridChanged(); });
             var row2 = Row(p);
-            Btn(row2, "Erase Color", () => { EraseColor(_paintColor); AutoRoundBalloonCounts(); OnBalloonGridChanged(); });
+            Btn(row2, "Erase Color", () => { EraseColor(_paintColor); OnBalloonGridChanged(); });
             Btn(row2, "Erase Neighbor", () => { _eraseNeighborMode = true; SetStatus("Click a cell to erase same-color neighbors"); });
             Btn(row2, "Fill Neighbor", () => { _fillNeighborMode = true; SetStatus("Click an empty cell to fill same-empty neighbors"); });
             Sep(p);
@@ -1616,12 +1646,14 @@ namespace BalloonFlow
             _holderGimmicks = new int[_holderCols, _holderRows];
             _holderChainGroups = new int[_holderCols, _holderRows];
             _holderFrozenHP = new int[_holderCols, _holderRows];
+            // Clear all holder gimmicks (hidden, spawner, chain, frozen from previous level)
             for (int c2 = 0; c2 < _holderCols; c2++)
                 for (int r2 = 0; r2 < _holderRows; r2++)
                 {
                     _holderColors[c2, r2] = -1;
-                    _holderChainGroups[c2, r2] = -1;
-                    _holderFrozenHP[c2, r2] = 3;
+                    _holderGimmicks[c2, r2] = 0;      // no gimmick
+                    _holderChainGroups[c2, r2] = -1;   // no chain
+                    _holderFrozenHP[c2, r2] = 3;       // default frozen HP
                 }
 
             for (int i = 0; i < holders.Count; i++)
@@ -1653,11 +1685,68 @@ namespace BalloonFlow
             Btn(row, "Load Level", () => LoadLevelById(_levelId));
             Sep(p);
 
+            // ── Tutorial Steps ──
+            Lbl(p, "Tutorial Steps", 14, FontStyle.Bold);
+            var tutRow = Row(p);
+            Btn(tutRow, "+ Add Step", () =>
+            {
+                _tutorialSteps.Add(new TutorialStepData
+                {
+                    instruction = "설명을 입력하세요",
+                    highlightTarget = "holder_0",
+                    requireAction = "tap_holder",
+                    cutoutWidth = 200, cutoutHeight = 200
+                });
+                RebuildTutorialStepUI(p);
+            });
+            Btn(tutRow, "Clear All", () =>
+            {
+                _tutorialSteps.Clear();
+                RebuildTutorialStepUI(p);
+                SetStatus("Tutorial steps cleared");
+            });
+
+            _tutorialStepContainer = new GameObject("TutorialStepContainer", typeof(RectTransform), typeof(VerticalLayoutGroup)).transform;
+            _tutorialStepContainer.SetParent(p, false);
+            _tutorialStepContainer.GetComponent<VerticalLayoutGroup>().spacing = 2;
+
+            RebuildTutorialStepUI(p);
+            Sep(p);
+
             // Test Play
             var testRow = Row(p, 44);
             var testBtn = Btn(testRow, "TEST PLAY", TestPlay);
             if (testBtn.GetComponent<Image>())
                 testBtn.GetComponent<Image>().color = new Color(0.15f, 0.55f, 0.25f);
+        }
+
+        private List<TutorialStepData> _tutorialSteps = new List<TutorialStepData>();
+        private Transform _tutorialStepContainer;
+
+        private static readonly string[] TUTORIAL_TARGETS = {
+            "holder_0", "holder_1", "holder_2", "holder_3", "holder_4",
+            "board", "holder_queue",
+            "gimmick_hidden", "gimmick_chain", "gimmick_pinata", "gimmick_spawner"
+        };
+        private static readonly string[] TUTORIAL_ACTIONS = { "none", "tap_holder", "wait_pop", "tap_anywhere" };
+
+        private void RebuildTutorialStepUI(Transform parent)
+        {
+            if (_tutorialStepContainer == null) return;
+            foreach (Transform c in _tutorialStepContainer) Destroy(c.gameObject);
+
+            for (int i = 0; i < _tutorialSteps.Count; i++)
+            {
+                int idx = i;
+                var step = _tutorialSteps[i];
+                var stepRow = Row(_tutorialStepContainer);
+                Lbl(stepRow, $"#{i}", w: 25);
+                MakeInputField(stepRow, step.instruction, s => _tutorialSteps[idx].instruction = s);
+                Btn(stepRow, "X", () => { _tutorialSteps.RemoveAt(idx); RebuildTutorialStepUI(parent); });
+            }
+
+            if (_tutorialSteps.Count > 0)
+                SetStatus($"Tutorial: {_tutorialSteps.Count} steps");
         }
 
         #endregion
@@ -2743,20 +2832,17 @@ namespace BalloonFlow
                     {
                         EraseNeighborSameColor(col, row);
                         _eraseNeighborMode = false;
-                        AutoRoundBalloonCounts();
                         OnBalloonGridChanged();
                     }
                     else if (_fillNeighborMode && mouse.leftButton.wasPressedThisFrame)
                     {
                         FillNeighborEmpty(col, row, _paintColor);
                         _fillNeighborMode = false;
-                        AutoRoundBalloonCounts();
                         OnBalloonGridChanged();
                     }
                     else if (_floodFillMode && mouse.leftButton.wasPressedThisFrame)
                     {
                         FloodFill(col, row, _paintColor);
-                        AutoRoundBalloonCounts();
                         OnBalloonGridChanged();
                     }
                     else if (!_floodFillMode && !_eraseNeighborMode && !_fillNeighborMode)
@@ -3220,10 +3306,10 @@ namespace BalloonFlow
             new[] { 20, 30, 40, 50 }  // SuperHard
         };
         private static readonly int[][] SECONDARY_POOL = {
-            new[] { 5, 30, 40, 50 },  // Easy
-            new[] { 5, 10, 40, 50 },  // Normal
-            new[] { 5, 10, 50 },      // Hard
-            new[] { 5, 10 }           // SuperHard
+            new[] { 10, 30, 40, 50 }, // Easy
+            new[] { 10, 40, 50 },     // Normal
+            new[] { 10, 50 },         // Hard
+            new[] { 10 }              // SuperHard
         };
         // 순서 배치 파라미터: 앞 50%에 depth 0 비율 (min~max)
         private static readonly float[][] DEPTH0_FRONT_RATIO = {
@@ -3257,13 +3343,13 @@ namespace BalloonFlow
                 return;
             }
 
-            // 5배수 올림
+            // 10배수 올림
             var colorDartsRounded = new Dictionary<int, int>();
             int totalDarts = 0;
             foreach (var kvp in colorDarts)
             {
-                int rounded = ((kvp.Value + 4) / 5) * 5;
-                if (rounded < 5) rounded = 5;
+                int rounded = ((kvp.Value + 9) / 10) * 10;
+                if (rounded < 10) rounded = 10;
                 colorDartsRounded[kvp.Key] = rounded;
                 totalDarts += rounded;
             }
@@ -3821,6 +3907,11 @@ namespace BalloonFlow
                 }
             GenerateWaypointsFromPathGrid();
 
+            // 튜토리얼 스텝 로드
+            _tutorialSteps.Clear();
+            if (config.tutorialSteps != null)
+                _tutorialSteps.AddRange(config.tutorialSteps);
+
             RebuildPalette();
 
             // UI 위젯 텍스트 갱신 (변수는 바뀌었지만 InputField/Dropdown은 자동 갱신 안 됨)
@@ -4022,6 +4113,11 @@ namespace BalloonFlow
             config.star1Threshold = config.balloonCount * 100;
             config.star2Threshold = Mathf.CeilToInt(config.star1Threshold * 1.5f);
             config.star3Threshold = Mathf.CeilToInt(config.star1Threshold * 2.2f);
+
+            // 튜토리얼 스텝 저장
+            if (_tutorialSteps.Count > 0)
+                config.tutorialSteps = _tutorialSteps.ToArray();
+
             return config;
         }
 
@@ -4187,7 +4283,6 @@ namespace BalloonFlow
             _gridRows = newRows;
             _balloonColors = newColors;
             _balloonGimmicks = newGimmicks;
-            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             SetStatus($"Cropped to {newCols}\u00D7{newRows}");
         }
@@ -4216,7 +4311,6 @@ namespace BalloonFlow
 
             _balloonColors = newColors;
             _balloonGimmicks = newGimmicks;
-            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             SetStatus($"Shifted ({dx}, {dy})");
         }
@@ -4246,7 +4340,6 @@ namespace BalloonFlow
             _gridRows = newRows;
             _balloonColors = newColors;
             _balloonGimmicks = newGimmicks;
-            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             SetStatus($"Inserted row {(above ? "above" : "below")} {at}");
         }
@@ -4274,7 +4367,6 @@ namespace BalloonFlow
             _gridCols = newCols;
             _balloonColors = newColors;
             _balloonGimmicks = newGimmicks;
-            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             SetStatus($"Inserted col {(left ? "left of" : "right of")} {at}");
         }
@@ -4289,6 +4381,9 @@ namespace BalloonFlow
 
             var newColors = new int[_gridCols, newRows];
             var newGimmicks = new int[_gridCols, newRows];
+            var newHP = new int[_gridCols, newRows];
+            var newPW = new int[_gridCols, newRows];
+            var newPH = new int[_gridCols, newRows];
 
             for (int c = 0; c < _gridCols; c++)
             {
@@ -4298,6 +4393,12 @@ namespace BalloonFlow
                     if (r == at) continue;
                     newColors[c, dr] = _balloonColors[c, r];
                     newGimmicks[c, dr] = _balloonGimmicks[c, r];
+                    if (_balloonGimmickHP != null && c < _balloonGimmickHP.GetLength(0) && r < _balloonGimmickHP.GetLength(1))
+                        newHP[c, dr] = _balloonGimmickHP[c, r];
+                    if (_balloonPinataW != null && c < _balloonPinataW.GetLength(0) && r < _balloonPinataW.GetLength(1))
+                        newPW[c, dr] = _balloonPinataW[c, r];
+                    if (_balloonPinataH != null && c < _balloonPinataH.GetLength(0) && r < _balloonPinataH.GetLength(1))
+                        newPH[c, dr] = _balloonPinataH[c, r];
                     dr++;
                 }
             }
@@ -4305,7 +4406,9 @@ namespace BalloonFlow
             _gridRows = newRows;
             _balloonColors = newColors;
             _balloonGimmicks = newGimmicks;
-            AutoRoundBalloonCounts();
+            _balloonGimmickHP = newHP;
+            _balloonPinataW = newPW;
+            _balloonPinataH = newPH;
             OnBalloonGridChanged();
             SetStatus($"Deleted row {at}");
         }
@@ -4318,6 +4421,9 @@ namespace BalloonFlow
 
             var newColors = new int[newCols, _gridRows];
             var newGimmicks = new int[newCols, _gridRows];
+            var newHP = new int[newCols, _gridRows];
+            var newPW = new int[newCols, _gridRows];
+            var newPH = new int[newCols, _gridRows];
 
             for (int r = 0; r < _gridRows; r++)
             {
@@ -4327,6 +4433,12 @@ namespace BalloonFlow
                     if (c == at) continue;
                     newColors[dc, r] = _balloonColors[c, r];
                     newGimmicks[dc, r] = _balloonGimmicks[c, r];
+                    if (_balloonGimmickHP != null && c < _balloonGimmickHP.GetLength(0) && r < _balloonGimmickHP.GetLength(1))
+                        newHP[dc, r] = _balloonGimmickHP[c, r];
+                    if (_balloonPinataW != null && c < _balloonPinataW.GetLength(0) && r < _balloonPinataW.GetLength(1))
+                        newPW[dc, r] = _balloonPinataW[c, r];
+                    if (_balloonPinataH != null && c < _balloonPinataH.GetLength(0) && r < _balloonPinataH.GetLength(1))
+                        newPH[dc, r] = _balloonPinataH[c, r];
                     dc++;
                 }
             }
@@ -4334,7 +4446,9 @@ namespace BalloonFlow
             _gridCols = newCols;
             _balloonColors = newColors;
             _balloonGimmicks = newGimmicks;
-            AutoRoundBalloonCounts();
+            _balloonGimmickHP = newHP;
+            _balloonPinataW = newPW;
+            _balloonPinataH = newPH;
             OnBalloonGridChanged();
             SetStatus($"Deleted col {at}");
         }
@@ -4509,7 +4623,6 @@ namespace BalloonFlow
                         _holderColors[c, r] = toColor;
                         holderCount++;
                     }
-            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             RebuildHolderUI();
             RefreshInfo();
