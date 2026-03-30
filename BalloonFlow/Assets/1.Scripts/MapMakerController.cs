@@ -147,7 +147,7 @@ namespace BalloonFlow
         private float _railHeight = 0.5f;
         private int _railSlotCount = 200;
         private bool _smoothCorners = true;
-        private float _cornerRadius = 2.5f; // RAIL_THICKNESS/2 = 타일 코너 중심선
+        private float _cornerRadius = 2.5f; // 벨트 코너 타일 곡선에 맞춤
 
         // Grid-based conveyor path (extended grid: +1 padding on each side)
         private bool[,] _pathGrid; // [gridCols+2, gridRows+2]
@@ -462,18 +462,14 @@ namespace BalloonFlow
 
         private List<Vector3> BuildRectangularWaypoints()
         {
-            float spacing = CellSpacing;
-            float fieldWidth = _gridCols * spacing;
-            float halfFieldX = fieldWidth * 0.5f;
-            float halfFieldZ = _gridRows * spacing * 0.5f;
-            // Fixed proportions: rail offset from field edge = gap + half rail width
-            float railOffsetH = fieldWidth * 0.07f + fieldWidth * 0.30f * 0.5f;
-            float railOffsetVTop = fieldWidth * 0.09f + fieldWidth * 0.30f * 0.5f;
-            float railOffsetVBottom = fieldWidth * 0.12f + fieldWidth * 0.30f * 0.5f;
-            float l = _boardCenter.x - halfFieldX - railOffsetH;
-            float r = _boardCenter.x + halfFieldX + railOffsetH;
-            float b = _boardCenter.y - halfFieldZ - railOffsetVBottom;
-            float t = _boardCenter.y + halfFieldZ + railOffsetVTop;
+            // 벨트 타일과 동일한 기준 — 코너 중심을 지나도록 halfCorner 안쪽
+            float halfW = BoardTileManager.CONVEYOR_WIDTH * 0.5f;
+            float halfH = BoardTileManager.CONVEYOR_HEIGHT * 0.5f;
+            float halfCorner = BoardTileManager.RAIL_THICKNESS * 0.5f;
+            float l = _boardCenter.x - halfW + halfCorner;
+            float r = _boardCenter.x + halfW - halfCorner;
+            float b = _boardCenter.y - halfH + halfCorner;
+            float t = _boardCenter.y + halfH - halfCorner;
             float h = _railHeight;
 
             var wp = new List<Vector3>();
@@ -716,6 +712,7 @@ namespace BalloonFlow
             tab3.gameObject.AddComponent<VerticalLayoutGroup>().spacing = 2;
             tab3.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             _tabContents[3] = tab3;
+            BuildRailSection(tab3);
             BuildExportSection(tab3);
 
             SetActiveTab(0);
@@ -4011,7 +4008,7 @@ namespace BalloonFlow
             if (config.railCapacity > 0) _railSlotCount = config.railCapacity;
             else if (config.rail.slotCount > 0) _railSlotCount = config.rail.slotCount;
             _smoothCorners = config.rail.smoothCorners;
-            _cornerRadius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 1f;
+            _cornerRadius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 2.5f;
             if (config.rail.waypoints != null && config.rail.waypoints.Length > 0)
             {
                 _customWaypoints = new List<Vector3>(config.rail.waypoints);
@@ -4217,11 +4214,13 @@ namespace BalloonFlow
             int cols = _holderCols;
             float fieldWidth = _gridCols * spacing;
             float halfFieldX = fieldWidth * 0.5f;
-            float railOffsetH = fieldWidth * 0.07f + fieldWidth * 0.30f * 0.5f;
-            float railOffsetVBottom = fieldWidth * 0.12f + fieldWidth * 0.30f * 0.5f;
-            float l = _boardCenter.x - halfFieldX - railOffsetH;
-            float rr = _boardCenter.x + halfFieldX + railOffsetH;
-            float bz = _boardCenter.y - _gridRows * spacing * 0.5f - railOffsetVBottom;
+            // deploy point — 벨트 하단 레일 중심선
+            float dpHalfW = BoardTileManager.CONVEYOR_WIDTH * 0.5f;
+            float dpHalfH = BoardTileManager.CONVEYOR_HEIGHT * 0.5f;
+            float dpHalfCorner = BoardTileManager.RAIL_THICKNESS * 0.5f;
+            float l = _boardCenter.x - dpHalfW + dpHalfCorner;
+            float rr = _boardCenter.x + dpHalfW - dpHalfCorner;
+            float bz = _boardCenter.y - dpHalfH + dpHalfCorner;
             var dp = new Vector3[cols];
             for (int i = 0; i < cols; i++)
             { float tv = (i + 1f) / (cols + 1f); dp[i] = new Vector3(Mathf.Lerp(l, rr, tv), _railHeight, bz); }

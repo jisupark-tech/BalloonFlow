@@ -416,7 +416,7 @@ namespace BalloonFlow
                 }
 
                 bool smooth = config.rail.smoothCorners;
-                float radius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 1f;
+                float radius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 2.5f;
                 // 4면만 closedLoop (물리적 순환). 1~3면은 개방 경로 + 슬롯 래핑으로 순간이동
                 int sideCount = RailManager.GetRailSideCount(slotCount);
                 bool isLoop = (sideCount >= 4);
