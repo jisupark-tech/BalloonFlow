@@ -81,6 +81,9 @@ MonoBehaviour:
   _colorRenderers:
   - {fileID: 5877080579532304007}
   _baseMaterial: {fileID: 2100000, guid: 66b7b620b8048be45b37648985705e8f, type: 2}
+  _outlineOnlyRenderers:
+  - {fileID: 352567799030404655}
+  _needleBaseMaterial: {fileID: 2100000, guid: 31a438f5f70f7314c813d633b7f51dcb, type: 2}
 --- !u!1001 &5065986664962994691
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -146,6 +149,11 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 96117ca146b02da46a92dc30baf2cece, type: 3}
+--- !u!23 &352567799030404655 stripped
+MeshRenderer:
+  m_CorrespondingSourceObject: {fileID: 4803813084240995372, guid: 96117ca146b02da46a92dc30baf2cece, type: 3}
+  m_PrefabInstance: {fileID: 5065986664962994691}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &4739116643941176808 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 96117ca146b02da46a92dc30baf2cece, type: 3}
