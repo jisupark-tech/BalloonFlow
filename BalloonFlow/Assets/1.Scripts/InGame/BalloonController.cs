@@ -688,7 +688,11 @@ namespace BalloonFlow
                 adjustedPos.z = cz + (position.z - cz) * hm;
             }
             obj.transform.position = adjustedPos;
-            obj.transform.localScale = Vector3.one * _balloonScale;
+            // 풍선 스케일도 영역 배율에 맞춰 확대
+            float scaleMult = GameManager.HasInstance
+                ? Mathf.Max(GameManager.Instance.Board.balloonFieldWidthMult, GameManager.Instance.Board.balloonFieldHeightMult)
+                : 1f;
+            obj.transform.localScale = Vector3.one * _balloonScale * scaleMult;
             obj.SetActive(true);
 
 
