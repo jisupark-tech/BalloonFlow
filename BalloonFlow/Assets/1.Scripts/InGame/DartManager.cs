@@ -278,6 +278,7 @@ namespace BalloonFlow
             if (dartObj == null) return;
 
             dartObj.SetActive(true);
+            dartObj.transform.localScale = Vector3.one; // 풀 재사용 시 스케일 리셋
             ApplyColor(dartObj, color);
 
             // 슬롯 간격 기반 스케일 축소 (겹침 방지)
@@ -285,12 +286,11 @@ namespace BalloonFlow
             if (spacing > 0.01f)
             {
                 float maxScale = spacing * 1.3f;
-                Vector3 s = dartObj.transform.localScale;
-                float currentSize = Mathf.Max(s.x, s.z);
+                float currentSize = Mathf.Max(1f, 1f); // 리셋 후 기본 1.0 기준
                 if (currentSize > maxScale)
                 {
                     float ratio = maxScale / currentSize;
-                    dartObj.transform.localScale = new Vector3(s.x * ratio, s.y * ratio, s.z * ratio);
+                    dartObj.transform.localScale = Vector3.one * ratio;
                 }
             }
 
@@ -443,6 +443,10 @@ namespace BalloonFlow
 
                 Vector3 pos = rail.GetPositionAtDistance(dart.progress);
                 visual.gameObject.transform.position = pos;
+
+                // 다트 스케일 동적 적용
+                float ds = GameManager.HasInstance ? GameManager.Instance.Board.dartScale : 1f;
+                visual.gameObject.transform.localScale = Vector3.one * ds;
 
                 // Orient — 접선의 안쪽 직각 방향 = 공격 방향 (직선/곡선 모두 자연스럽게)
                 float normT = pathLen > 0f ? dart.progress / pathLen : 0f;

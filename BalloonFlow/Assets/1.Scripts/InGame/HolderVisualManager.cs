@@ -657,7 +657,11 @@ namespace BalloonFlow
                 ident.SetHolderId(data.holderId);
                 ident.ShowDarts(data.magazineCount);
                 ident.SetFrozen(data.isFrozen);
-                if (data.isHidden) ident.SetHidden(true);
+                if (data.isHidden)
+                {
+                    ident.SetHidden(true);
+                    ident.SetHiddenAnim(true);
+                }
                 // Chain 기믹이면 Loop 활성화 (chainGroupId > 0)
                 bool isChain = data.chainGroupId > 0;
                 ident.SetChainLoop(isChain);
@@ -745,12 +749,14 @@ namespace BalloonFlow
         {
             if (visual.gameObject != null)
             {
-                // Dart + Box + 블러 원복 (풀 재사용 대비)
+                // Dart + Box + 블러 + 애니메이터 원복 (풀 재사용 대비)
                 if (visual.identifier != null)
                 {
                     visual.identifier.ResetDarts();
                     visual.identifier.ResetBox();
                     visual.identifier.SetSelected(); // MPB 초기화
+                    visual.identifier.ResetAnimator(); // 뚜껑 닫기
+                    visual.identifier.SetChainLoop(false); // Chain Loop 비활성화
                 }
 
                 if (ObjectPoolManager.HasInstance)
@@ -810,9 +816,12 @@ namespace BalloonFlow
 
             _colQueues[visual.column].Enqueue(holderId);
 
-            // 선택됨 → 블러 해제 + 원래 색상 표시
+            // 선택됨 → 블러 해제 + 원래 색상 표시 + 뚜껑 열기
             if (visual.identifier != null)
+            {
                 visual.identifier.SetSelected();
+                visual.identifier.StartDeploy(); // 터치 시 바로 뚜껑 열림
+            }
 
             // 즉시 이동 시작 (대기 없이)
             visual.isMovingToRail = true;
@@ -914,10 +923,7 @@ namespace BalloonFlow
 
             // ── Phase 2: 배치 시작 (열 순차 — 내 차례) ──
             visual.isDeploying = true;
-
-            // Deploy 애니메이션 시작
-            if (visual.identifier != null)
-                visual.identifier.StartDeploy();
+            // 뚜껑은 이미 터치 시 열림 (StartDeploy에서 호출됨)
 
             if (HolderManager.HasInstance)
                 HolderManager.Instance.ConfirmOnRail(visual.holderId);
@@ -1319,6 +1325,10 @@ namespace BalloonFlow
         private void HandleHolderRevealed(OnHolderRevealed evt)
         {
             if (!_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual)) return;
+
+            // Hidden 해금 애니메이션
+            if (visual.identifier != null)
+                visual.identifier.TriggerHiddenEnd();
 
             // Hidden Material → 원래 색상 복원
             Color originalColor = GetColor(visual.color);

@@ -21,6 +21,8 @@ namespace BalloonFlow
         private Animator _animator;
         private static readonly int _animDeploy = Animator.StringToHash("Deploy");
         private static readonly int _animEnd = Animator.StringToHash("end");
+        private static readonly int _animHidden = Animator.StringToHash("Hidden");
+        private static readonly int _animHiddenEnd = Animator.StringToHash("HiddenEnd");
 
         [Header("[Dart Visuals — Inspector에서 할당]")]
         [SerializeField] private Transform[] _dartSlots;
@@ -504,14 +506,31 @@ namespace BalloonFlow
 
         #region Animator
 
-        /// <summary>배포 시작 — Deploy=true 애니메이션.</summary>
+        /// <summary>Hidden 상태 세팅 — Hidden=true.</summary>
+        public void SetHiddenAnim(bool hidden)
+        {
+            if (_animator != null)
+                _animator.SetBool(_animHidden, hidden);
+        }
+
+        /// <summary>Hidden 해금 — HiddenEnd 트리거.</summary>
+        public void TriggerHiddenEnd()
+        {
+            if (_animator != null)
+            {
+                _animator.SetBool(_animHidden, false);
+                _animator.SetTrigger(_animHiddenEnd);
+            }
+        }
+
+        /// <summary>배포 시작 — Deploy=true.</summary>
         public void StartDeploy()
         {
             if (_animator != null)
                 _animator.SetBool(_animDeploy, true);
         }
 
-        /// <summary>배포 완료 — end 트리거 + Deploy=false.</summary>
+        /// <summary>배포 완료 — Deploy=false + end 트리거.</summary>
         public void EndDeploy()
         {
             if (_animator != null)
@@ -521,13 +540,15 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>재사용 시 애니메이터 리셋.</summary>
+        /// <summary>재사용 시 애니메이터 전체 리셋.</summary>
         public void ResetAnimator()
         {
             if (_animator != null)
             {
                 _animator.SetBool(_animDeploy, false);
+                _animator.SetBool(_animHidden, false);
                 _animator.ResetTrigger(_animEnd);
+                _animator.ResetTrigger(_animHiddenEnd);
             }
         }
 

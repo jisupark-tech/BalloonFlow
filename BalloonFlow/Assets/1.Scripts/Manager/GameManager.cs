@@ -36,6 +36,15 @@ namespace BalloonFlow
         public float conveyorArrowSpeed = 4f;
 
 
+        [Header("[다트 비주얼 — Dart Visual (인게임 동적 조정)]")]
+        [Tooltip("다트 스케일 (1.0 = 기본)")]
+        [Range(0.1f, 3f)]
+        public float dartScale = 1f;
+
+        [Tooltip("다트 간격 배율 (1.0 = 기본). 크면 다트 사이 간격 넓어짐")]
+        [Range(0.2f, 3f)]
+        public float dartSpacingMultiplier = 1f;
+
         [Header("[레일 — Rail (컨베이어벨트)]")]
         [Tooltip("레일 슬롯 수 (기본 200). 다트가 슬롯을 점유")]
         public int railSlotCount = 200;
