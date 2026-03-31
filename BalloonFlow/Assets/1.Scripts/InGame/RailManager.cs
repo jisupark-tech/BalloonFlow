@@ -158,6 +158,9 @@ namespace BalloonFlow
         /// <summary>Distance between adjacent slots on the path.</summary>
         public float SlotSpacing => _slotSpacing;
 
+        /// <summary>동적 배율이 적용된 다트 간 최소 간격.</summary>
+        public float EffectiveDartGap => _slotSpacing * (GameManager.HasInstance ? GameManager.Instance.Board.dartSpacingMultiplier : 1f);
+
         /// <summary>Current belt rotation offset in distance units.</summary>
         public float RotationOffset => _rotationOffset;
 
@@ -228,8 +231,8 @@ namespace BalloonFlow
                 float blockDist = FindDistanceToBlockAhead(_darts[i]);
                 if (blockDist >= 0f)
                 {
-                    // 장애물 앞 slotSpacing 거리에서 정지
-                    float stopDist = blockDist - _slotSpacing;
+                    // 장애물 앞 EffectiveDartGap 거리에서 정지
+                    float stopDist = blockDist - EffectiveDartGap;
                     if (stopDist < 0f) stopDist = 0f;
                     maxAdvance = Mathf.Min(maxAdvance, stopDist);
                 }
@@ -264,8 +267,8 @@ namespace BalloonFlow
 
             float baseMult = totalRemaining < _slotCount ? 2f : 1f;
 
-            // 배치 중이면 ×0.5 (1개든 여러 개든 동일)
-            if (_activeDeployPoints.Count > 0 || _deployPoints.Count > 0)
+            // 실제 다트 배치 중(첫 다트 투입 후)일 때만 ×0.5
+            if (_activeDeployPoints.Count > 0)
                 baseMult *= 0.5f;
 
             return baseMult;
@@ -328,7 +331,7 @@ namespace BalloonFlow
             {
                 if (dp.Key == dart.holderId) continue;
                 if (!_activeDeployPoints.Contains(dp.Key)) continue; // 대기 중이면 무시
-                float blockAt = dp.Value - _slotSpacing * 0.5f;
+                float blockAt = dp.Value - EffectiveDartGap * 0.5f;
                 if (_totalPathLength > 0f)
                     blockAt = ((blockAt % _totalPathLength) + _totalPathLength) % _totalPathLength;
                 float dist = blockAt - myProg;
@@ -716,7 +719,7 @@ namespace BalloonFlow
         public bool IsProgressClear(float progress, int holderId)
         {
             if (_darts.Count >= _slotCount) return false;
-            float minGap = _slotSpacing * 0.9f;
+            float minGap = EffectiveDartGap * 0.9f;
             for (int i = 0; i < _darts.Count; i++)
             {
                 float diff = Mathf.Abs(_darts[i].progress - progress);

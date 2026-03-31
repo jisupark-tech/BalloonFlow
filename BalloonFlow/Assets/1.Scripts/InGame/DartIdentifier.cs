@@ -16,11 +16,23 @@ namespace BalloonFlow
         [Tooltip("기반 Material (BalloonShared). 복제하여 색상만 변경")]
         [SerializeField] private Material _baseMaterial;
 
+        [Header("[아웃라인 전용 Renderer — 색상 변경 없이 아웃라인만 적용]")]
+        [Tooltip("Niddle 등 은색 유지하면서 아웃라인만 적용할 Renderer")]
+        [SerializeField] private Renderer[] _outlineOnlyRenderers;
+
+        [Tooltip("Niddle 기반 Material (은색). 복제하여 아웃라인 활성화")]
+        [SerializeField] private Material _needleBaseMaterial;
+
         /// <summary>색상 적용 대상이 할당되었는지.</summary>
         public bool HasColorRenderers => _colorRenderers != null && _colorRenderers.Length > 0;
 
         /// <summary>기반 Material 복제 캐시 (색상별)</summary>
         private static readonly Dictionary<int, Material> _dartMatCache = new Dictionary<int, Material>();
+
+        private static Material _needleOutlineMat;
+        private static readonly int _propOutlineEnabled = Shader.PropertyToID("_OutlineEnabled");
+        private static readonly int _propOutlineColor = Shader.PropertyToID("_OutlineColor");
+        private MaterialPropertyBlock _mpb;
 
         /// <summary>기반 Material을 복제 + 색상 변경하여 적용. Outline/Metallic 유지.</summary>
         public void ApplyColor(Color color)
@@ -50,6 +62,36 @@ namespace BalloonFlow
             {
                 if (_colorRenderers[i] != null)
                     _colorRenderers[i].sharedMaterial = mat;
+            }
+
+            // Niddle: 은색 유지 + 아웃라인 활성화 (MPB)
+            if (_outlineOnlyRenderers != null)
+            {
+                // Niddle 기반 Material 적용 (처음 1회)
+                if (_needleBaseMaterial != null)
+                {
+                    if (_needleOutlineMat == null)
+                    {
+                        _needleOutlineMat = new Material(_needleBaseMaterial);
+                        _needleOutlineMat.enableInstancing = true;
+                    }
+                    for (int i = 0; i < _outlineOnlyRenderers.Length; i++)
+                    {
+                        if (_outlineOnlyRenderers[i] != null)
+                            _outlineOnlyRenderers[i].sharedMaterial = _needleOutlineMat;
+                    }
+                }
+
+                // 아웃라인 MPB 적용
+                if (_mpb == null) _mpb = new MaterialPropertyBlock();
+                for (int i = 0; i < _outlineOnlyRenderers.Length; i++)
+                {
+                    if (_outlineOnlyRenderers[i] == null) continue;
+                    _outlineOnlyRenderers[i].GetPropertyBlock(_mpb);
+                    _mpb.SetFloat(_propOutlineEnabled, 1f);
+                    _mpb.SetColor(_propOutlineColor, color); // 다트 색상으로 아웃라인
+                    _outlineOnlyRenderers[i].SetPropertyBlock(_mpb);
+                }
             }
         }
     }
