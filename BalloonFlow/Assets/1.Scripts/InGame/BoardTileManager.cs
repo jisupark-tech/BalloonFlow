@@ -709,7 +709,7 @@ namespace BalloonFlow
                     sr.sprite = arrowSprite;
                     sr.sortingOrder = 0;
                     sr.color = new Color(1f, 1f, 1f, 0.6f);
-                    float arrowSize = _railWidth * 0.5f;
+                    float arrowSize = _railWidth * 0.25f; // 기존 0.5 → 0.25 (반으로 축소)
                     float sw = arrowSprite.bounds.size.x;
                     float sh = arrowSprite.bounds.size.y;
                     if (sw > 0.001f && sh > 0.001f)

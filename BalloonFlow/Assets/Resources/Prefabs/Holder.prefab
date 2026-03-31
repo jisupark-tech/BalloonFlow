@@ -15199,6 +15199,7 @@ MonoBehaviour:
   _customMatRenderers:
   - {fileID: 8765892366923195327}
   _customBaseMaterial: {fileID: 2100000, guid: 5d9b5ea01f3595542a02eca47f0dbf99, type: 2}
+  _chainLoop: {fileID: 5921923613595994400}
 --- !u!1 &5025323339511714503
 GameObject:
   m_ObjectHideFlags: 0
@@ -25675,7 +25676,7 @@ PrefabInstance:
       objectReference: {fileID: 2100000, guid: 646e1f7007050af4b98b4b89592cc5d5, type: 2}
     - target: {fileID: -3640541235966205065, guid: 3ea04062c97ea494b96af6c8026c199d, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 368274576635160658, guid: 3ea04062c97ea494b96af6c8026c199d, type: 3}
       propertyPath: m_CastShadows
@@ -25751,6 +25752,11 @@ Transform:
 --- !u!23 &1893916376361648645 stripped
 MeshRenderer:
   m_CorrespondingSourceObject: {fileID: 368274576635160658, guid: 3ea04062c97ea494b96af6c8026c199d, type: 3}
+  m_PrefabInstance: {fileID: 2257663708231739991}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &5921923613595994400 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: -3640541235966205065, guid: 3ea04062c97ea494b96af6c8026c199d, type: 3}
   m_PrefabInstance: {fileID: 2257663708231739991}
   m_PrefabAsset: {fileID: 0}
 --- !u!23 &8083639099106005432 stripped

@@ -204,10 +204,9 @@ namespace BalloonFlow
             if (_slots == null || _slotCount == 0) return;
             if (_boardFinished) return;
 
-            // 벨트는 항상 회전 (가득 차도 회전 — 다트가 타겟을 찾아 발사할 수 있게)
-            // 다트가 허용량의 50% 미만이면 2배속
-            float beltSpeedMult = (_darts.Count < _slotCount * 0.5f) ? 2f : 1f;
-            _rotationOffset += _rotationSpeed * _slotSpacing * Time.deltaTime * beltSpeedMult;
+            // 회전 속도: 남은 다트 수 기반 + 배치 중 감속
+            float baseSpeedMult = GetSpeedMultiplier();
+            _rotationOffset += _rotationSpeed * _slotSpacing * Time.deltaTime * baseSpeedMult;
 
             // Wrap around
             if (_totalPathLength > 0f)
@@ -219,8 +218,7 @@ namespace BalloonFlow
             PropagateFreezeChain();
 
             // Per-dart 자동차 모델: 앞이 막히면 slotSpacing 거리 두고 정지
-            // 다트가 허용량의 50% 미만이면 2배속
-            float speedMult = (_darts.Count < _slotCount * 0.5f) ? 2f : 1f;
+            float speedMult = baseSpeedMult;
             float dartDelta = _rotationSpeed * _slotSpacing * Time.deltaTime * speedMult;
             for (int i = 0; i < _darts.Count; i++)
             {
@@ -243,6 +241,34 @@ namespace BalloonFlow
                         _darts[i].progress = ((_darts[i].progress % _totalPathLength) + _totalPathLength) % _totalPathLength;
                 }
             }
+        }
+
+        /// <summary>
+        /// 남은 다트 수 기반 회전 속도 배율.
+        /// 남은 다트 >= capacity: 1배 / 미만: 2배
+        /// 배치 중(deploy point 활성화): ×0.5 (중복 감속 없음)
+        /// </summary>
+        private float GetSpeedMultiplier()
+        {
+            // 남은 다트 수 = 레일 위 + 보관함 전체
+            int totalRemaining = _darts.Count;
+            if (HolderManager.HasInstance)
+            {
+                var holders = HolderManager.Instance.GetHolders();
+                for (int i = 0; i < holders.Length; i++)
+                {
+                    if (!holders[i].isConsumed)
+                        totalRemaining += holders[i].magazineCount;
+                }
+            }
+
+            float baseMult = totalRemaining < _slotCount ? 2f : 1f;
+
+            // 배치 중이면 ×0.5 (1개든 여러 개든 동일)
+            if (_activeDeployPoints.Count > 0 || _deployPoints.Count > 0)
+                baseMult *= 0.5f;
+
+            return baseMult;
         }
 
         /// <summary>활성 deploy point. holderId → progress on path.</summary>
