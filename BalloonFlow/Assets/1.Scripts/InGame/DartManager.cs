@@ -442,20 +442,25 @@ namespace BalloonFlow
                 }
 
                 Vector3 pos = rail.GetPositionAtDistance(dart.progress);
+
+                // 다트 경로 오프셋 — 벨트 중심 방향으로 이동
+                float normT = pathLen > 0f ? dart.progress / pathLen : 0f;
+                normT = ((normT % 1f) + 1f) % 1f;
+                Vector3 tangent = rail.GetDirectionAtNormalized(normT);
+                Vector3 inward = Vector3.Cross(tangent, Vector3.up).normalized;
+
+                float pathOffset = GameManager.HasInstance ? GameManager.Instance.Board.dartPathOffset : 0f;
+                pos += inward * pathOffset;
+
                 visual.gameObject.transform.position = pos;
 
                 // 다트 스케일 동적 적용
                 float ds = GameManager.HasInstance ? GameManager.Instance.Board.dartScale : 1f;
                 visual.gameObject.transform.localScale = Vector3.one * ds;
 
-                // Orient — 접선의 안쪽 직각 방향 = 공격 방향 (직선/곡선 모두 자연스럽게)
-                float normT = pathLen > 0f ? dart.progress / pathLen : 0f;
-                normT = ((normT % 1f) + 1f) % 1f;
-                Vector3 tangent = rail.GetDirectionAtNormalized(normT);
+                // Orient — 접선의 안쪽 직각 방향 = 공격 방향
                 if (tangent.sqrMagnitude > 0.001f)
                 {
-                    // 접선의 안쪽 직각 = Cross(tangent, up) → 풍선 필드 방향
-                    Vector3 inward = Vector3.Cross(tangent, Vector3.up).normalized;
                     if (inward.sqrMagnitude > 0.001f)
                         visual.gameObject.transform.rotation = Quaternion.LookRotation(inward);
                 }
