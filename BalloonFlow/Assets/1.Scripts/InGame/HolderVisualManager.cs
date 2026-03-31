@@ -23,7 +23,7 @@ namespace BalloonFlow
         private const string HOLDER_POOL_KEY = "Holder";
         private const string SPAWNER_POOL_KEY = "Spawner";
         private const int MAX_COLUMNS = 5;
-        private const int MAGAZINE_FONT_SIZE = 5;
+        private const int MAGAZINE_FONT_SIZE = 6;
         private const float DEPLOY_MOVE_SPEED = 12f;
 
         // 보관함 배치 수치 — 절대 최소값 보장 (프리팹 스케일 1.04 기준)
@@ -584,7 +584,25 @@ namespace BalloonFlow
 
                 // Spawner 안 대기: TEXT 숨김 / 앞줄: TEXT 보이기
                 if (colHolders[row].magazineText != null)
+                {
                     colHolders[row].magazineText.gameObject.SetActive(!insideSpawner);
+                    // 비활성화(row 1+): 텍스트 투명도 50%
+                    if (!insideSpawner && colHolders[row].magazineText != null)
+                    {
+                        colHolders[row].magazineText.color = row == 0
+                            ? Color.white
+                            : new Color(1f, 1f, 1f, 0.75f);
+                    }
+                }
+
+                // 보관함 상태별 아웃라인
+                if (colHolders[row].identifier != null)
+                {
+                    if (row == 0)
+                        colHolders[row].identifier.SetActiveFrontRow(); // 검은 아웃라인
+                    else
+                        colHolders[row].identifier.SetInactiveRow(); // 아웃라인 없음
+                }
 
                 if (Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos) > 0.05f)
                 {
@@ -640,6 +658,9 @@ namespace BalloonFlow
                 ident.ShowDarts(data.magazineCount);
                 ident.SetFrozen(data.isFrozen);
                 if (data.isHidden) ident.SetHidden(true);
+                // Chain 기믹이면 Loop 활성화 (chainGroupId > 0)
+                bool isChain = data.chainGroupId > 0;
+                ident.SetChainLoop(isChain);
             }
 
             // Spawner visual
@@ -1079,26 +1100,35 @@ namespace BalloonFlow
 
         private void CreateChainLine(string key, HolderVisual a, HolderVisual b)
         {
-            var go = new GameObject($"ChainLine_{key}");
-            var lr = go.AddComponent<LineRenderer>();
-            lr.positionCount = 2;
-            lr.startWidth = 0.15f;
-            lr.endWidth = 0.15f;
-            lr.useWorldSpace = true;
-            lr.sortingOrder = 5;
-
-            // 그라디언트: A 색상 → B 색상 (반반)
             Color colorA = GetColor(a.color);
             Color colorB = GetColor(b.color);
-            var gradient = new Gradient();
-            gradient.SetKeys(
-                new GradientColorKey[] { new GradientColorKey(colorA, 0f), new GradientColorKey(colorB, 1f) },
-                new GradientAlphaKey[] { new GradientAlphaKey(0.8f, 0f), new GradientAlphaKey(0.8f, 1f) }
-            );
-            lr.colorGradient = gradient;
+            var mat = new Material(Shader.Find("Sprites/Default"));
 
-            // Unlit Material
-            lr.material = new Material(Shader.Find("Sprites/Default"));
+            var go = new GameObject($"ChainLine_{key}");
+
+            // A색 절반
+            var lrA = go.AddComponent<LineRenderer>();
+            lrA.positionCount = 2;
+            lrA.startWidth = 0.15f;
+            lrA.endWidth = 0.15f;
+            lrA.useWorldSpace = true;
+            lrA.sortingOrder = 5;
+            lrA.startColor = colorA;
+            lrA.endColor = colorA;
+            lrA.material = mat;
+
+            // B색 절반 — 별도 자식 오브젝트
+            var goB = new GameObject($"ChainLineB_{key}");
+            goB.transform.SetParent(go.transform, false);
+            var lrB = goB.AddComponent<LineRenderer>();
+            lrB.positionCount = 2;
+            lrB.startWidth = 0.15f;
+            lrB.endWidth = 0.15f;
+            lrB.useWorldSpace = true;
+            lrB.sortingOrder = 5;
+            lrB.startColor = colorB;
+            lrB.endColor = colorB;
+            lrB.material = mat;
 
             _chainLines[key] = go;
         }
@@ -1124,11 +1154,33 @@ namespace BalloonFlow
                     continue;
                 }
 
-                var lr = kvp.Value.GetComponent<LineRenderer>();
-                if (lr != null)
+                // Chain 연결 위치: Y 높이 + 상대 방향으로 좌우 오프셋
+                Vector3 baseA = vA.gameObject.transform.position;
+                Vector3 baseB = vB.gameObject.transform.position;
+                Vector3 dirAtoB = (baseB - baseA).normalized;
+                Vector3 sideOffset = new Vector3(dirAtoB.x, 0f, dirAtoB.z).normalized * 0.4f;
+
+                Vector3 posA = baseA + Vector3.up * 0.8f + sideOffset;  // A → B 방향 쪽
+                Vector3 posB = baseB + Vector3.up * 0.8f - sideOffset;  // B → A 방향 쪽
+                Vector3 mid = (posA + posB) * 0.5f;
+
+                var lrA = kvp.Value.GetComponent<LineRenderer>();
+                if (lrA != null)
                 {
-                    lr.SetPosition(0, vA.gameObject.transform.position + Vector3.up * 0.3f);
-                    lr.SetPosition(1, vB.gameObject.transform.position + Vector3.up * 0.3f);
+                    lrA.SetPosition(0, posA);
+                    lrA.SetPosition(1, mid);
+                }
+
+                var lrB = kvp.Value.GetComponentInChildren<LineRenderer>();
+                // GetComponentInChildren은 자기 자신도 반환하므로 자식만 찾기
+                if (kvp.Value.transform.childCount > 0)
+                {
+                    var childLr = kvp.Value.transform.GetChild(0).GetComponent<LineRenderer>();
+                    if (childLr != null)
+                    {
+                        childLr.SetPosition(0, mid);
+                        childLr.SetPosition(1, posB);
+                    }
                 }
             }
             foreach (var k in removeKeys)

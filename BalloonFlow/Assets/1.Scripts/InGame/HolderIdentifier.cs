@@ -51,6 +51,10 @@ namespace BalloonFlow
         [Tooltip("기반 Material (BoxLidShared 등). 이것을 복제하여 색상만 변경")]
         [SerializeField] private Material _customBaseMaterial;
 
+        [Header("[Chain 기믹 — Loop 오브젝트]")]
+        [Tooltip("Chain 연결 시 활성화할 Loop 오브젝트")]
+        [SerializeField] private GameObject _chainLoop;
+
         /// <summary>다음에 날릴 Dart 슬롯 인덱스</summary>
         private int _nextDartIndex;
 
@@ -273,6 +277,20 @@ namespace BalloonFlow
             Color outlineCol = Color.white;
 
             ApplyMPBToAll(blur, blurCol, outlineOn, outlineCol);
+        }
+
+        /// <summary>활성화 상태 (row 0): 검은색 아웃라인, 블러 없음.</summary>
+        public void SetActiveFrontRow()
+        {
+            if (_sharedMPB == null) _sharedMPB = new MaterialPropertyBlock();
+            ApplyMPBToAll(0f, Color.white, 1f, Color.black);
+        }
+
+        /// <summary>비활성화 상태 (row 1+): 아웃라인 없음, 블러 없음.</summary>
+        public void SetInactiveRow()
+        {
+            if (_sharedMPB == null) _sharedMPB = new MaterialPropertyBlock();
+            ApplyMPBToAll(0f, Color.white, 0f, Color.white);
         }
 
         /// <summary>선택됨 — 블러 해제 + 아웃라인 원복 (기반 Material 설정 따름).</summary>
@@ -528,6 +546,17 @@ namespace BalloonFlow
                 c.a = transparent ? 0.4f : 1f;
                 _colorRenderers[i].material.color = c;
             }
+        }
+
+        #endregion
+
+        #region Chain Visual
+
+        /// <summary>Chain Loop 오브젝트 활성화/비활성화.</summary>
+        public void SetChainLoop(bool active)
+        {
+            if (_chainLoop != null)
+                _chainLoop.SetActive(active);
         }
 
         #endregion

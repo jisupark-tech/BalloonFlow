@@ -3985,12 +3985,13 @@ namespace BalloonFlow
                 _holderColors = new int[_holderCols, _holderRows];
                 _holderMags = new int[_holderCols, _holderRows];
                 _holderGimmicks = new int[_holderCols, _holderRows];
+                _holderChainGroups = new int[_holderCols, _holderRows];
                 _holderFrozenHP = new int[_holderCols, _holderRows];
                 _holderSpawnerHP = new int[_holderCols, _holderRows];
                 _holderSpawnerMag = new int[_holderCols, _holderRows];
                 _holderLockPairIds = new int[_holderCols, _holderRows];
                 for (int c = 0; c < _holderCols; c++)
-                    for (int r = 0; r < _holderRows; r++) { _holderColors[c, r] = -1; _holderMags[c, r] = 0; _holderGimmicks[c, r] = 0; _holderFrozenHP[c, r] = 3; _holderSpawnerHP[c, r] = 0; _holderSpawnerMag[c, r] = 20; _holderLockPairIds[c, r] = -1; }
+                    for (int r = 0; r < _holderRows; r++) { _holderColors[c, r] = -1; _holderMags[c, r] = 0; _holderGimmicks[c, r] = 0; _holderChainGroups[c, r] = -1; _holderFrozenHP[c, r] = 3; _holderSpawnerHP[c, r] = 0; _holderSpawnerMag[c, r] = 20; _holderLockPairIds[c, r] = -1; }
                 foreach (var h in config.holders)
                 {
                     int hc = Mathf.RoundToInt(h.position.x), hr = Mathf.RoundToInt(h.position.y);
@@ -4001,6 +4002,7 @@ namespace BalloonFlow
                         // 보관함 기믹 복원
                         int hgi = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, h.queueGimmick ?? "");
                         _holderGimmicks[hc, hr] = hgi > 0 ? hgi : 0;
+                        _holderChainGroups[hc, hr] = h.chainGroupId;
                         _holderFrozenHP[hc, hr] = h.frozenHP > 0 ? h.frozenHP : 3;
                         _holderSpawnerHP[hc, hr] = h.spawnerHP;
                         _holderSpawnerMag[hc, hr] = h.spawnerMag > 0 ? h.spawnerMag : 20;
