@@ -19,6 +19,15 @@ namespace BalloonFlow
         [Range(0.2f, 1.0f)]
         public float balloonScale = 0.5f;
 
+        [Header("[풍선 타일 영역 — 동적 조정]")]
+        [Tooltip("풍선 타일 영역 가로 배율 (1.0 = 기본)")]
+        [Range(0.5f, 2f)]
+        public float balloonFieldWidthMult = 1f;
+
+        [Tooltip("풍선 타일 영역 세로 배율 (1.0 = 기본)")]
+        [Range(0.5f, 2f)]
+        public float balloonFieldHeightMult = 1f;
+
         [Header("[다트 — Dart]")]
         [Tooltip("다트 비행 시간 (초). 클수록 느림")]
         public float dartFlightTime = 0.1f;

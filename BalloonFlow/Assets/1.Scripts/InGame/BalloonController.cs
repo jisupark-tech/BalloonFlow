@@ -676,7 +676,18 @@ namespace BalloonFlow
                 return null;
             }
 
-            obj.transform.position = position;
+            // 풍선 타일 영역 배율 적용 (보드 중심 기준)
+            Vector3 adjustedPos = position;
+            if (GameManager.HasInstance)
+            {
+                float cx = GameManager.Instance.Board.boardCenterX;
+                float cz = GameManager.Instance.Board.boardCenterZ;
+                float wm = GameManager.Instance.Board.balloonFieldWidthMult;
+                float hm = GameManager.Instance.Board.balloonFieldHeightMult;
+                adjustedPos.x = cx + (position.x - cx) * wm;
+                adjustedPos.z = cz + (position.z - cz) * hm;
+            }
+            obj.transform.position = adjustedPos;
             obj.transform.localScale = Vector3.one * _balloonScale;
             obj.SetActive(true);
 
