@@ -45,6 +45,10 @@ namespace BalloonFlow
         [Range(0.2f, 3f)]
         public float dartSpacingMultiplier = 1f;
 
+        [Tooltip("다트 경로 오프셋 — 벨트 중심에서 안쪽(+)/바깥쪽(-) 이동")]
+        [Range(-2f, 2f)]
+        public float dartPathOffset = 0f;
+
         [Header("[레일 — Rail (컨베이어벨트)]")]
         [Tooltip("레일 슬롯 수 (기본 200). 다트가 슬롯을 점유")]
         public int railSlotCount = 200;
