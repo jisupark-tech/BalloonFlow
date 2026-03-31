@@ -164,6 +164,43 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnBalloonPopped>(CheckKeysOnPop);
         }
 
+#if UNITY_EDITOR
+        /// <summary>에디터 전용: GameManager 배율 변경 시 풍선 위치/스케일 실시간 갱신.</summary>
+        private float _prevWidthMult = 1f, _prevHeightMult = 1f;
+        private void Update()
+        {
+            if (!GameManager.HasInstance) return;
+            float wm = GameManager.Instance.Board.balloonFieldWidthMult;
+            float hm = GameManager.Instance.Board.balloonFieldHeightMult;
+            if (Mathf.Approximately(wm, _prevWidthMult) && Mathf.Approximately(hm, _prevHeightMult)) return;
+            _prevWidthMult = wm;
+            _prevHeightMult = hm;
+            RefreshAllBalloonTransforms();
+        }
+
+        private void RefreshAllBalloonTransforms()
+        {
+            float cx = GameManager.Instance.Board.boardCenterX;
+            float cz = GameManager.Instance.Board.boardCenterZ;
+            float wm = GameManager.Instance.Board.balloonFieldWidthMult;
+            float hm = GameManager.Instance.Board.balloonFieldHeightMult;
+            float scaleMult = Mathf.Max(wm, hm);
+
+            foreach (var kvp in _balloons)
+            {
+                if (kvp.Value.isPopped) continue;
+                if (!_balloonObjects.TryGetValue(kvp.Key, out GameObject obj) || obj == null) continue;
+
+                Vector3 origPos = kvp.Value.position;
+                obj.transform.position = new Vector3(
+                    cx + (origPos.x - cx) * wm,
+                    origPos.y,
+                    cz + (origPos.z - cz) * hm);
+                obj.transform.localScale = Vector3.one * _balloonScale * scaleMult;
+            }
+        }
+#endif
+
         #endregion
 
         #region Public Methods
