@@ -124,16 +124,21 @@ namespace BalloonFlow
 
                 if (excludeIds != null && excludeIds.Contains(balloon.balloonId)) continue;
 
+                // 실제 월드 위치 사용 (배율/오프셋 적용 후)
+                Vector3 balloonWorldPos = BalloonController.HasInstance
+                    ? BalloonController.Instance.GetBalloonWorldPosition(balloon.balloonId)
+                    : balloon.position;
+
                 // Check perpendicular distance (strict column alignment)
-                float perpDist = GetPerpendicularDistance(dartPosition, balloon.position, scanDir);
+                float perpDist = GetPerpendicularDistance(dartPosition, balloonWorldPos, scanDir);
                 if (perpDist > perpendicularTolerance) continue;
 
                 // Check that balloon is in front of the dart (in firing direction)
-                float firingDist = GetFiringAxisDistance(dartPosition, balloon.position, scanDir);
+                float firingDist = GetFiringAxisDistance(dartPosition, balloonWorldPos, scanDir);
                 if (firingDist < 0f) continue;
 
                 // outermost 규칙 — 앞에 풍선(아무 색)이 있으면 타겟 불가
-                if (IsPathBlocked(dartPosition, balloon.position, scanDir, occupancy)) continue;
+                if (IsPathBlocked(dartPosition, balloonWorldPos, scanDir, occupancy)) continue;
 
                 // Closest target wins
                 if (firingDist < bestFiringDist)
@@ -297,8 +302,8 @@ namespace BalloonFlow
             {
                 if (all[i].isPopped) continue;
 
-                // 타겟 자신은 제외
-                Vector3 bPos = all[i].position;
+                // 실제 월드 위치 사용
+                Vector3 bPos = BalloonController.Instance.GetBalloonWorldPosition(all[i].balloonId);
                 if (Vector3.Distance(bPos, targetPos) < 0.01f) continue;
 
                 // 수직 거리 체크 (같은 열/행인지)

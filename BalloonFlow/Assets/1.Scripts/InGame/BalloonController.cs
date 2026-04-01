@@ -166,15 +166,17 @@ namespace BalloonFlow
 
 #if UNITY_EDITOR
         /// <summary>에디터 전용: GameManager 배율 변경 시 풍선 위치/스케일 실시간 갱신.</summary>
-        private float _prevWidthMult = 1f, _prevHeightMult = 1f;
+        private float _prevWidthMult = 1f, _prevHeightMult = 1f, _prevZOffset = 0f;
         private void Update()
         {
             if (!GameManager.HasInstance) return;
             float wm = GameManager.Instance.Board.balloonFieldWidthMult;
             float hm = GameManager.Instance.Board.balloonFieldHeightMult;
-            if (Mathf.Approximately(wm, _prevWidthMult) && Mathf.Approximately(hm, _prevHeightMult)) return;
+            float zo = GameManager.Instance.Board.balloonGridZOffset;
+            if (Mathf.Approximately(wm, _prevWidthMult) && Mathf.Approximately(hm, _prevHeightMult) && Mathf.Approximately(zo, _prevZOffset)) return;
             _prevWidthMult = wm;
             _prevHeightMult = hm;
+            _prevZOffset = zo;
             RefreshAllBalloonTransforms();
         }
 
@@ -184,6 +186,7 @@ namespace BalloonFlow
             float cz = GameManager.Instance.Board.boardCenterZ;
             float wm = GameManager.Instance.Board.balloonFieldWidthMult;
             float hm = GameManager.Instance.Board.balloonFieldHeightMult;
+            float zo = GameManager.Instance.Board.balloonGridZOffset;
             float scaleMult = Mathf.Max(wm, hm);
 
             foreach (var kvp in _balloons)
@@ -195,7 +198,7 @@ namespace BalloonFlow
                 obj.transform.position = new Vector3(
                     cx + (origPos.x - cx) * wm,
                     origPos.y,
-                    cz + (origPos.z - cz) * hm);
+                    cz + (origPos.z - cz) * hm + zo);
                 obj.transform.localScale = Vector3.one * _balloonScale * scaleMult;
             }
         }
@@ -254,6 +257,16 @@ namespace BalloonFlow
                 return data;
             }
             return null;
+        }
+
+        /// <summary>풍선의 실제 월드 위치 (배율/오프셋 적용 후). 오브젝트 없으면 데이터 위치 반환.</summary>
+        public Vector3 GetBalloonWorldPosition(int balloonId)
+        {
+            if (_balloonObjects.TryGetValue(balloonId, out GameObject obj) && obj != null)
+                return obj.transform.position;
+            if (_balloons.TryGetValue(balloonId, out BalloonData data))
+                return data.position;
+            return Vector3.zero;
         }
 
         /// <summary>
@@ -721,8 +734,9 @@ namespace BalloonFlow
                 float cz = GameManager.Instance.Board.boardCenterZ;
                 float wm = GameManager.Instance.Board.balloonFieldWidthMult;
                 float hm = GameManager.Instance.Board.balloonFieldHeightMult;
+                float zOffset = GameManager.Instance.Board.balloonGridZOffset;
                 adjustedPos.x = cx + (position.x - cx) * wm;
-                adjustedPos.z = cz + (position.z - cz) * hm;
+                adjustedPos.z = cz + (position.z - cz) * hm + zOffset;
             }
             obj.transform.position = adjustedPos;
             // 풍선 스케일도 영역 배율에 맞춰 확대
