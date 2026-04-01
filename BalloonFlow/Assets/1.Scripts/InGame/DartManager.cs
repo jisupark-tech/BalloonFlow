@@ -29,7 +29,7 @@ namespace BalloonFlow
         [SerializeField] private float _projectileFlightTime = DEFAULT_PROJECTILE_FLIGHT_TIME;
 
         [Tooltip("다트 포물선 곡사 높이. 0=직선, >0=곡사. Design ref: 피드백디렉션 §다트궤적")]
-        [SerializeField] private float _arcHeight = 1.5f;
+        [SerializeField] private float _arcHeight = 0f; // 0 = 직사, >0 = 곡사
 
         #endregion
 
@@ -75,7 +75,7 @@ namespace BalloonFlow
         private readonly HashSet<int> _reservedTargets = new HashSet<int>();
 
         /// <summary>Max darts that can fire in a single frame to prevent visual clutter.</summary>
-        private const int MAX_FIRES_PER_FRAME = 40;
+        private const int MAX_FIRES_PER_FRAME = 1; // 한 프레임에 1발만 (단발 연속)
 
         /// <summary>When true, board is cleared or failed — stop all scanning/firing.</summary>
         private bool _boardFinished;
@@ -634,17 +634,11 @@ namespace BalloonFlow
             dartObj.SetActive(true);
             dartObj.transform.position = from;
 
-            // Fire along pure cardinal axis (no diagonal), then snap to balloon position at impact
-            // This prevents the dart from visually passing through adjacent-column balloons
-            Vector3 cardinalTarget = CalculateCardinalTarget(from, to);
-
-            // Orient along cardinal direction
-            Vector3 dir = cardinalTarget - from;
+            // 직사: 풍선 위치로 직접 발사
+            Vector3 dir = to - from;
             dir.y = 0f;
             if (dir.sqrMagnitude > 0.001f)
-            {
                 dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
-            }
 
             var proj = new DartProjectile
             {
@@ -661,17 +655,16 @@ namespace BalloonFlow
             // Flight: parabolic arc (곡사) or linear depending on _arcHeight
             if (_arcHeight > 0.01f)
             {
-                // 3-point arc: start → apex (midpoint + Y offset) → target
-                Vector3 midPoint = (from + cardinalTarget) * 0.5f;
+                Vector3 midPoint = (from + to) * 0.5f;
                 midPoint.y += _arcHeight;
-                Vector3[] path = { from, midPoint, cardinalTarget };
+                Vector3[] path = { from, midPoint, to };
                 dartObj.transform.DOPath(path, _projectileFlightTime, PathType.CatmullRom)
                     .SetEase(Ease.Linear)
                     .SetLookAt(0.01f); // face movement direction
             }
             else
             {
-                dartObj.transform.DOMove(cardinalTarget, _projectileFlightTime).SetEase(Ease.Linear);
+                dartObj.transform.DOMove(to, _projectileFlightTime).SetEase(Ease.Linear);
             }
         }
 
@@ -755,8 +748,9 @@ namespace BalloonFlow
 
                     EventBus.Publish(new OnDartFired { dartId = dartId, holderId = -1, color = color });
 
-                    Vector3 cardinalTarget = CalculateCardinalTarget(dartPos, targetData.position);
-                    Vector3 dir = cardinalTarget - dartPos;
+                    // 직사: 풍선 위치로 직접 발사
+                    Vector3 targetPos = targetData.position;
+                    Vector3 dir = targetPos - dartPos;
                     dir.y = 0f;
                     if (dir.sqrMagnitude > 0.001f)
                         dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
@@ -764,7 +758,7 @@ namespace BalloonFlow
                     var proj = new DartProjectile
                     {
                         gameObject = dartObj,
-                        targetPosition = targetData.position,
+                        targetPosition = targetPos,
                         targetBalloonId = targetId,
                         color = color,
                         elapsed = 0f,
@@ -772,17 +766,7 @@ namespace BalloonFlow
                     };
                     _activeProjectiles.Add(proj);
 
-                    if (_arcHeight > 0.01f)
-                    {
-                        Vector3 midPoint = (dartPos + cardinalTarget) * 0.5f;
-                        midPoint.y += _arcHeight;
-                        Vector3[] path = { dartPos, midPoint, cardinalTarget };
-                        dartObj.transform.DOPath(path, _projectileFlightTime, PathType.CatmullRom)
-                            .SetEase(Ease.Linear).SetLookAt(0.01f);
-                    }
-                    else
-                    {
-                        dartObj.transform.DOMove(cardinalTarget, _projectileFlightTime).SetEase(Ease.Linear);
+                    dartObj.transform.DOMove(targetPos, _projectileFlightTime).SetEase(Ease.Linear);
                     }
                 }
 
