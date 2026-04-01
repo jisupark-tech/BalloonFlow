@@ -22,11 +22,11 @@ namespace BalloonFlow
         [Header("[풍선 타일 영역 — 동적 조정]")]
         [Tooltip("풍선 타일 영역 가로 배율 (1.0 = 기본)")]
         [Range(0.5f, 2f)]
-        public float balloonFieldWidthMult = 1f;
+        public float balloonFieldWidthMult = 1.39f;
 
         [Tooltip("풍선 타일 영역 세로 배율 (1.0 = 기본)")]
         [Range(0.5f, 2f)]
-        public float balloonFieldHeightMult = 1f;
+        public float balloonFieldHeightMult = 1.44f;
 
         [Header("[다트 — Dart]")]
         [Tooltip("다트 비행 시간 (초). 클수록 느림")]
@@ -48,15 +48,15 @@ namespace BalloonFlow
         [Header("[다트 비주얼 — Dart Visual (인게임 동적 조정)]")]
         [Tooltip("다트 스케일 (1.0 = 기본)")]
         [Range(0.1f, 3f)]
-        public float dartScale = 1f;
+        public float dartScale = 0.275f;
 
         [Tooltip("다트 간격 배율 (1.0 = 기본). 크면 다트 사이 간격 넓어짐")]
         [Range(0.2f, 3f)]
-        public float dartSpacingMultiplier = 1f;
+        public float dartSpacingMultiplier = 1.25f;
 
         [Tooltip("다트 경로 오프셋 — 벨트 중심에서 안쪽(+)/바깥쪽(-) 이동")]
         [Range(-2f, 2f)]
-        public float dartPathOffset = 0f;
+        public float dartPathOffset = -0.15f;
 
         [Header("[레일 — Rail (컨베이어벨트)]")]
         [Tooltip("레일 슬롯 수 (기본 200). 다트가 슬롯을 점유")]
@@ -77,6 +77,10 @@ namespace BalloonFlow
 
         [Tooltip("보드 중심 Z좌표")]
         public float boardCenterZ = 2f;
+
+        [Tooltip("풍선 그리드 Z 오프셋 — row 갯수에 따른 위치 보정")]
+        [Range(-5f, 5f)]
+        public float balloonGridZOffset = 0f;
 
         [Header("[연출 — Visual Effects]")]
         [Tooltip("보관함 다트 배치 시 펀치 스케일 연출 사용 여부")]

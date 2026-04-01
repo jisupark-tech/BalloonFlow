@@ -581,7 +581,7 @@ namespace BalloonFlow
                     color = color,
                     targetBalloonId = targetId,
                     from = slotPos,
-                    to = targetData.position
+                    to = BalloonController.Instance.GetBalloonWorldPosition(targetId)
                 });
 
                 EventBus.Publish(new OnDartFired
@@ -594,8 +594,8 @@ namespace BalloonFlow
                 // Reserve target so no other dart targets this balloon
                 _reservedTargets.Add(targetId);
 
-                // Launch projectile visual
-                LaunchProjectile(slotIdx, slotPos, targetData.position, targetId, color);
+                // Launch projectile visual (실제 월드 위치)
+                LaunchProjectile(slotIdx, slotPos, BalloonController.Instance.GetBalloonWorldPosition(targetId), targetId, color);
                 fired++;
             }
 
@@ -748,8 +748,8 @@ namespace BalloonFlow
 
                     EventBus.Publish(new OnDartFired { dartId = dartId, holderId = -1, color = color });
 
-                    // 직사: 풍선 위치로 직접 발사
-                    Vector3 targetPos = targetData.position;
+                    // 직사: 풍선 실제 월드 위치로 직접 발사
+                    Vector3 targetPos = BalloonController.Instance.GetBalloonWorldPosition(targetId);
                     Vector3 dir = targetPos - dartPos;
                     dir.y = 0f;
                     if (dir.sqrMagnitude > 0.001f)
@@ -767,7 +767,6 @@ namespace BalloonFlow
                     _activeProjectiles.Add(proj);
 
                     dartObj.transform.DOMove(targetPos, _projectileFlightTime).SetEase(Ease.Linear);
-                    }
                 }
 
                 fired++;
