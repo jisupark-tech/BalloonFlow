@@ -152,6 +152,35 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>벨트 영역 초과 방지 — 그리드 전체 범위에서 안전한 배율 계산.</summary>
+        private void GetSafeBalloonFieldMult(out float wm, out float hm)
+        {
+            wm = GameManager.Instance.Board.balloonFieldWidthMult;
+            hm = GameManager.Instance.Board.balloonFieldHeightMult;
+
+            float cx = GameManager.Instance.Board.boardCenterX;
+            float cz = GameManager.Instance.Board.boardCenterZ;
+            float innerW = (BoardTileManager.CONVEYOR_WIDTH - BoardTileManager.RAIL_THICKNESS - BoardTileManager.RAIL_GAP * 2f) * 0.5f;
+            float innerH = (BoardTileManager.CONVEYOR_HEIGHT - BoardTileManager.RAIL_THICKNESS - BoardTileManager.RAIL_GAP * 2f) * 0.5f;
+
+            // 전체 풍선 중 보드 중심에서 가장 먼 X/Z 거리
+            float maxDx = 0f, maxDz = 0f;
+            foreach (var kvp in _balloons)
+            {
+                if (kvp.Value.isPopped) continue;
+                float dx = Mathf.Abs(kvp.Value.position.x - cx);
+                float dz = Mathf.Abs(kvp.Value.position.z - cz);
+                if (dx > maxDx) maxDx = dx;
+                if (dz > maxDz) maxDz = dz;
+            }
+
+            // 배율 적용 후 초과하면 배율 축소
+            if (maxDx * wm > innerW && maxDx > 0.001f)
+                wm = innerW / maxDx;
+            if (maxDz * hm > innerH && maxDz > 0.001f)
+                hm = innerH / maxDz;
+        }
+
         private void OnEnable()
         {
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
@@ -184,9 +213,9 @@ namespace BalloonFlow
         {
             float cx = GameManager.Instance.Board.boardCenterX;
             float cz = GameManager.Instance.Board.boardCenterZ;
-            float wm = GameManager.Instance.Board.balloonFieldWidthMult;
-            float hm = GameManager.Instance.Board.balloonFieldHeightMult;
             float zo = GameManager.Instance.Board.balloonGridZOffset;
+            float wm, hm;
+            GetSafeBalloonFieldMult(out wm, out hm);
             float scaleMult = Mathf.Max(wm, hm);
 
             foreach (var kvp in _balloons)
@@ -726,23 +755,25 @@ namespace BalloonFlow
                 return null;
             }
 
-            // 풍선 타일 영역 배율 적용 (보드 중심 기준)
+            // 풍선 타일 영역 배율 적용 (보드 중심 기준, 벨트 초과 시 자동 축소)
             Vector3 adjustedPos = position;
             if (GameManager.HasInstance)
             {
                 float cx = GameManager.Instance.Board.boardCenterX;
                 float cz = GameManager.Instance.Board.boardCenterZ;
-                float wm = GameManager.Instance.Board.balloonFieldWidthMult;
-                float hm = GameManager.Instance.Board.balloonFieldHeightMult;
                 float zOffset = GameManager.Instance.Board.balloonGridZOffset;
+                float wm, hm;
+                GetSafeBalloonFieldMult(out wm, out hm);
+
                 adjustedPos.x = cx + (position.x - cx) * wm;
                 adjustedPos.z = cz + (position.z - cz) * hm + zOffset;
             }
             obj.transform.position = adjustedPos;
-            // 풍선 스케일도 영역 배율에 맞춰 확대
-            float scaleMult = GameManager.HasInstance
-                ? Mathf.Max(GameManager.Instance.Board.balloonFieldWidthMult, GameManager.Instance.Board.balloonFieldHeightMult)
-                : 1f;
+            // 풍선 스케일도 안전 배율에 맞춰 확대
+            float safeWm, safeHm;
+            if (GameManager.HasInstance) GetSafeBalloonFieldMult(out safeWm, out safeHm);
+            else { safeWm = 1f; safeHm = 1f; }
+            float scaleMult = Mathf.Max(safeWm, safeHm);
             obj.transform.localScale = Vector3.one * _balloonScale * scaleMult;
             obj.SetActive(true);
 
