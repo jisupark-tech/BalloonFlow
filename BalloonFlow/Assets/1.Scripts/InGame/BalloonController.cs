@@ -152,9 +152,14 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>벨트 영역 초과 방지 — 그리드 전체 범위에서 안전한 배율 계산.</summary>
+        /// <summary>벨트 영역 초과 방지 — 초과하는 레벨만 배율 축소, 나머지는 원래 배율.</summary>
+        private float _cachedSafeWm = -1f, _cachedSafeHm = -1f;
+        private int _cachedSafeFrame = -1;
         private void GetSafeBalloonFieldMult(out float wm, out float hm)
         {
+            // 프레임당 1회만 계산
+            if (_cachedSafeFrame == Time.frameCount) { wm = _cachedSafeWm; hm = _cachedSafeHm; return; }
+
             wm = GameManager.Instance.Board.balloonFieldWidthMult;
             hm = GameManager.Instance.Board.balloonFieldHeightMult;
 
@@ -163,7 +168,7 @@ namespace BalloonFlow
             float innerW = (BoardTileManager.CONVEYOR_WIDTH - BoardTileManager.RAIL_THICKNESS - BoardTileManager.RAIL_GAP * 2f) * 0.5f;
             float innerH = (BoardTileManager.CONVEYOR_HEIGHT - BoardTileManager.RAIL_THICKNESS - BoardTileManager.RAIL_GAP * 2f) * 0.5f;
 
-            // 전체 풍선 중 보드 중심에서 가장 먼 X/Z 거리
+            // 원래 배율로 넘는지 체크
             float maxDx = 0f, maxDz = 0f;
             foreach (var kvp in _balloons)
             {
@@ -174,11 +179,22 @@ namespace BalloonFlow
                 if (dz > maxDz) maxDz = dz;
             }
 
-            // 배율 적용 후 초과하면 배율 축소
-            if (maxDx * wm > innerW && maxDx > 0.001f)
+            // 원래 배율(1.0)로 넘는지 먼저 체크
+            bool baseOverW = maxDx > innerW;
+            bool baseOverH = maxDz > innerH;
+
+            // 안 넘으면: 설정 배율 적용. 넘으면: 딱 맞게 축소
+            if (!baseOverW && maxDx * wm <= innerW)
+            { /* 배율 적용해도 안 넘음 → 설정 배율 유지 */ }
+            else if (maxDx > 0.001f)
                 wm = innerW / maxDx;
-            if (maxDz * hm > innerH && maxDz > 0.001f)
+
+            if (!baseOverH && maxDz * hm <= innerH)
+            { /* 배율 적용해도 안 넘음 → 설정 배율 유지 */ }
+            else if (maxDz > 0.001f)
                 hm = innerH / maxDz;
+
+            _cachedSafeWm = wm; _cachedSafeHm = hm; _cachedSafeFrame = Time.frameCount;
         }
 
         private void OnEnable()
