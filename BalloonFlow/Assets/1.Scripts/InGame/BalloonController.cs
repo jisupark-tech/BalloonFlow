@@ -152,49 +152,40 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>벨트 영역 초과 방지 — 초과하는 레벨만 배율 축소, 나머지는 원래 배율.</summary>
-        private float _cachedSafeWm = -1f, _cachedSafeHm = -1f;
-        private int _cachedSafeFrame = -1;
-        private void GetSafeBalloonFieldMult(out float wm, out float hm)
+
+        /// <summary>레벨별 안전 배율. 넘지 않으면 설정값 그대로, 넘으면 축소.</summary>
+        private float _levelSafeWm = 1f, _levelSafeHm = 1f;
+        private bool _levelSafeCalculated = false;
+
+        /// <summary>SetupBalloons 완료 후 호출 — 레벨별 안전 배율 1회 계산.</summary>
+        private void CalculateLevelSafeMult()
         {
-            // 프레임당 1회만 계산
-            if (_cachedSafeFrame == Time.frameCount) { wm = _cachedSafeWm; hm = _cachedSafeHm; return; }
+            _levelSafeCalculated = false;
+            if (!GameManager.HasInstance) { _levelSafeWm = 1f; _levelSafeHm = 1f; return; }
 
-            wm = GameManager.Instance.Board.balloonFieldWidthMult;
-            hm = GameManager.Instance.Board.balloonFieldHeightMult;
-
+            float wm = GameManager.Instance.Board.balloonFieldWidthMult;
+            float hm = GameManager.Instance.Board.balloonFieldHeightMult;
             float cx = GameManager.Instance.Board.boardCenterX;
             float cz = GameManager.Instance.Board.boardCenterZ;
             float innerW = (BoardTileManager.CONVEYOR_WIDTH - BoardTileManager.RAIL_THICKNESS - BoardTileManager.RAIL_GAP * 2f) * 0.5f;
             float innerH = (BoardTileManager.CONVEYOR_HEIGHT - BoardTileManager.RAIL_THICKNESS - BoardTileManager.RAIL_GAP * 2f) * 0.5f;
 
-            // 원래 배율로 넘는지 체크
             float maxDx = 0f, maxDz = 0f;
             foreach (var kvp in _balloons)
             {
-                if (kvp.Value.isPopped) continue;
                 float dx = Mathf.Abs(kvp.Value.position.x - cx);
                 float dz = Mathf.Abs(kvp.Value.position.z - cz);
                 if (dx > maxDx) maxDx = dx;
                 if (dz > maxDz) maxDz = dz;
             }
 
-            // 원래 배율(1.0)로 넘는지 먼저 체크
-            bool baseOverW = maxDx > innerW;
-            bool baseOverH = maxDz > innerH;
-
-            // 안 넘으면: 설정 배율 적용. 넘으면: 딱 맞게 축소
-            if (!baseOverW && maxDx * wm <= innerW)
-            { /* 배율 적용해도 안 넘음 → 설정 배율 유지 */ }
-            else if (maxDx > 0.001f)
-                wm = innerW / maxDx;
-
-            if (!baseOverH && maxDz * hm <= innerH)
-            { /* 배율 적용해도 안 넘음 → 설정 배율 유지 */ }
-            else if (maxDz > 0.001f)
+            // 세로(Z)가 벨트를 넘을 때만 보정
+            if (maxDz * hm > innerH && maxDz > 0.001f)
                 hm = innerH / maxDz;
 
-            _cachedSafeWm = wm; _cachedSafeHm = hm; _cachedSafeFrame = Time.frameCount;
+            _levelSafeWm = wm;
+            _levelSafeHm = hm;
+            _levelSafeCalculated = true;
         }
 
         private void OnEnable()
@@ -227,11 +218,12 @@ namespace BalloonFlow
 
         private void RefreshAllBalloonTransforms()
         {
+            CalculateLevelSafeMult();
             float cx = GameManager.Instance.Board.boardCenterX;
             float cz = GameManager.Instance.Board.boardCenterZ;
+            float wm = _levelSafeWm;
+            float hm = _levelSafeHm;
             float zo = GameManager.Instance.Board.balloonGridZOffset;
-            float wm, hm;
-            GetSafeBalloonFieldMult(out wm, out hm);
             float scaleMult = Mathf.Max(wm, hm);
 
             foreach (var kvp in _balloons)
@@ -289,6 +281,9 @@ namespace BalloonFlow
             ApplyInitialIceState();
             ApplyInitialFrozenDartState();
             ApplyInitialColorCurtainState();
+
+            // 레벨별 안전 배율 계산 (벨트 초과 레벨만 축소)
+            CalculateLevelSafeMult();
         }
 
         /// <summary>
@@ -771,25 +766,22 @@ namespace BalloonFlow
                 return null;
             }
 
-            // 풍선 타일 영역 배율 적용 (보드 중심 기준, 벨트 초과 시 자동 축소)
+            // 풍선 타일 영역 배율 적용 (레벨별 안전 배율 사용)
             Vector3 adjustedPos = position;
             if (GameManager.HasInstance)
             {
                 float cx = GameManager.Instance.Board.boardCenterX;
                 float cz = GameManager.Instance.Board.boardCenterZ;
+                float wm = _levelSafeCalculated ? _levelSafeWm : GameManager.Instance.Board.balloonFieldWidthMult;
+                float hm = _levelSafeCalculated ? _levelSafeHm : GameManager.Instance.Board.balloonFieldHeightMult;
                 float zOffset = GameManager.Instance.Board.balloonGridZOffset;
-                float wm, hm;
-                GetSafeBalloonFieldMult(out wm, out hm);
-
                 adjustedPos.x = cx + (position.x - cx) * wm;
                 adjustedPos.z = cz + (position.z - cz) * hm + zOffset;
             }
             obj.transform.position = adjustedPos;
-            // 풍선 스케일도 안전 배율에 맞춰 확대
-            float safeWm, safeHm;
-            if (GameManager.HasInstance) GetSafeBalloonFieldMult(out safeWm, out safeHm);
-            else { safeWm = 1f; safeHm = 1f; }
-            float scaleMult = Mathf.Max(safeWm, safeHm);
+            float scaleMult = _levelSafeCalculated
+                ? Mathf.Max(_levelSafeWm, _levelSafeHm)
+                : (GameManager.HasInstance ? Mathf.Max(GameManager.Instance.Board.balloonFieldWidthMult, GameManager.Instance.Board.balloonFieldHeightMult) : 1f);
             obj.transform.localScale = Vector3.one * _balloonScale * scaleMult;
             obj.SetActive(true);
 
