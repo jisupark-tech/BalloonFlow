@@ -91,6 +91,14 @@ namespace BalloonFlow.Editor
         private bool    _overwriteConflicts = true;
         private float   _previewZoom = 1f;
 
+        private static readonly string[] DB_NAMES = { "Origin", "AI Extractor", "Transform Extractor" };
+        private static readonly string[] DB_ASSET_PATHS = {
+            "Assets/Resources/LevelDatabase.asset",
+            "Assets/Resources/LevelDatabase_AI.asset",
+            "Assets/Resources/LevelDatabase_Transform.asset"
+        };
+        private int _targetDBIndex = 0;
+
         #endregion
 
         #region Menu
@@ -153,8 +161,11 @@ namespace BalloonFlow.Editor
 
             GUILayout.Space(10);
 
+            GUILayout.Label("저장 대상:", EditorStyles.miniLabel, GUILayout.Width(55));
+            _targetDBIndex = EditorGUILayout.Popup(_targetDBIndex, DB_NAMES, EditorStyles.toolbarPopup, GUILayout.Width(120));
+
             GUI.enabled = _entries.Any(e => e.selected && e.config != null);
-            if (GUILayout.Button("LevelDatabase에 추가", EditorStyles.toolbarButton, GUILayout.Width(140)))
+            if (GUILayout.Button($"{DB_NAMES[_targetDBIndex]}에 추가", EditorStyles.toolbarButton, GUILayout.Width(140)))
                 ApplyToDatabase();
             GUI.enabled = true;
 
@@ -445,7 +456,7 @@ namespace BalloonFlow.Editor
             if (entry.config == null) return;
 
             var db = AssetDatabase.LoadAssetAtPath<LevelDatabase>(
-                "Assets/Resources/LevelDatabase.asset");
+                DB_ASSET_PATHS[_targetDBIndex]);
             if (db?.levels == null) return;
 
             entry.conflict = db.levels.Any(lv => lv.levelId == entry.config.levelId);
@@ -923,7 +934,7 @@ namespace BalloonFlow.Editor
 
         private void ApplyToDatabase()
         {
-            string dbPath = "Assets/Resources/LevelDatabase.asset";
+            string dbPath = DB_ASSET_PATHS[_targetDBIndex];
 
             if (!AssetDatabase.IsValidFolder("Assets/Resources"))
                 AssetDatabase.CreateFolder("Assets", "Resources");

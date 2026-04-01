@@ -230,7 +230,18 @@ namespace BalloonFlow
         private Dropdown _difficultyDropdown;
         private Text[] _palTexts;
         private Transform _holderGridContainer;
-        private LevelDatabase _targetDB;
+        private LevelDatabase _targetDB;           // Origin
+        private LevelDatabase _targetDB_AI;         // AI Extractor
+        private LevelDatabase _targetDB_Transform;  // Transform Extractor
+
+        private static readonly string[] DB_TAB_NAMES = { "Ori", "AI", "Transform" };
+        private static readonly string[] DB_PATHS = {
+            "Assets/Resources/LevelDatabase.asset",
+            "Assets/Resources/LevelDatabase_AI.asset",
+            "Assets/Resources/LevelDatabase_Transform.asset"
+        };
+        private int _activeDBTab = 0;
+        private Text[] _dbTabLabels;
 
         // Grid lines
         private Transform _gridLineRoot;
@@ -572,12 +583,35 @@ namespace BalloonFlow
             var headerTxt = MakeText(header, "LEVELS", 15, FontStyle.Bold, TextAnchor.MiddleCenter);
             SetFillRect(headerTxt.GetComponent<RectTransform>());
 
-            // Scroll area
+            // DB 탭 (헤더 바로 아래)
+            var dbTabBar = MakeRT("DBTabBar", panel);
+            dbTabBar.anchorMin = new Vector2(0, 1);
+            dbTabBar.anchorMax = Vector2.one;
+            dbTabBar.pivot = new Vector2(0.5f, 1);
+            dbTabBar.sizeDelta = new Vector2(0, 28);
+            dbTabBar.anchoredPosition = new Vector2(0, -36);
+            var dbTabHlg = dbTabBar.gameObject.AddComponent<HorizontalLayoutGroup>();
+            dbTabHlg.spacing = 2;
+            dbTabHlg.childForceExpandWidth = true;
+            dbTabHlg.childForceExpandHeight = true;
+
+            _dbTabLabels = new Text[DB_TAB_NAMES.Length];
+            for (int t = 0; t < DB_TAB_NAMES.Length; t++)
+            {
+                int tabIdx = t;
+                var btn = Btn(dbTabBar, DB_TAB_NAMES[t], () => SetActiveDBTab(tabIdx));
+                _dbTabLabels[t] = btn.GetComponentInChildren<Text>();
+                if (_dbTabLabels[t] != null) _dbTabLabels[t].fontSize = 10;
+            }
+            UpdateDBTabColors();
+
+            // Scroll area (헤더 + DB탭 아래)
+            float topOffset = 36 + 28; // header + dbTab
             var scrollArea = MakeRT("ScrollArea", panel);
             scrollArea.anchorMin = Vector2.zero;
             scrollArea.anchorMax = Vector2.one;
-            scrollArea.sizeDelta = new Vector2(0, -36);
-            scrollArea.anchoredPosition = new Vector2(0, -18);
+            scrollArea.sizeDelta = new Vector2(0, -topOffset);
+            scrollArea.anchoredPosition = new Vector2(0, -topOffset * 0.5f);
 
             var svGO = DefaultControls.CreateScrollView(_uiRes);
             svGO.transform.SetParent(scrollArea, false);
@@ -597,6 +631,29 @@ namespace BalloonFlow
             content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             _levelListContent = content;
+        }
+
+        private void SetActiveDBTab(int tabIdx)
+        {
+            _activeDBTab = tabIdx;
+            _targetDB = null; // 캐시 초기화 → LoadLevelDatabase에서 새 DB 로드
+            _targetDB_AI = null;
+            _targetDB_Transform = null;
+            UpdateDBTabColors();
+            RefreshLevelList();
+            SetStatus($"DB: {DB_TAB_NAMES[tabIdx]}");
+        }
+
+        private void UpdateDBTabColors()
+        {
+            if (_dbTabLabels == null) return;
+            for (int i = 0; i < _dbTabLabels.Length; i++)
+            {
+                if (_dbTabLabels[i] == null) continue;
+                var img = _dbTabLabels[i].transform.parent.GetComponent<Image>();
+                if (img != null)
+                    img.color = i == _activeDBTab ? new Color(0.2f, 0.45f, 0.7f) : new Color(0.15f, 0.15f, 0.2f);
+            }
         }
 
         private void BuildCenterOverlay(Transform canvasRoot)
@@ -1743,7 +1800,7 @@ namespace BalloonFlow
         {
             Lbl(p, "Export / Import", 14, FontStyle.Bold);
             var row = Row(p);
-            Btn(row, "Save to DB", SaveToDatabase);
+            Btn(row, "Save to DB", SaveToActiveDB);
             Btn(row, "Export JSON", ExportJson);
             Btn(row, "Load Level", () => LoadLevelById(_levelId));
             Sep(p);
@@ -4076,9 +4133,34 @@ namespace BalloonFlow
 
         private LevelDatabase LoadLevelDatabase()
         {
-            if (_targetDB != null) return _targetDB;
-            _targetDB = AssetDatabase.LoadAssetAtPath<LevelDatabase>("Assets/Resources/LevelDatabase.asset");
-            return _targetDB;
+            string path = DB_PATHS[_activeDBTab];
+            switch (_activeDBTab)
+            {
+                case 1:
+                    if (_targetDB_AI != null) return _targetDB_AI;
+                    _targetDB_AI = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
+                    return _targetDB_AI;
+                case 2:
+                    if (_targetDB_Transform != null) return _targetDB_Transform;
+                    _targetDB_Transform = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
+                    return _targetDB_Transform;
+                default:
+                    if (_targetDB != null) return _targetDB;
+                    _targetDB = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
+                    return _targetDB;
+            }
+        }
+
+        /// <summary>활성 DB 탭에 저장.</summary>
+        private void SaveToActiveDB()
+        {
+            string path = DB_PATHS[_activeDBTab];
+            switch (_activeDBTab)
+            {
+                case 1:  SaveToDB(path, ref _targetDB_AI); break;
+                case 2:  SaveToDB(path, ref _targetDB_Transform); break;
+                default: SaveToDB(path, ref _targetDB); break;
+            }
         }
 
         #endregion
@@ -4089,33 +4171,45 @@ namespace BalloonFlow
 
         #region Export
 
+        /// <summary>기존 호출 호환용.</summary>
         private void SaveToDatabase()
+        {
+            SaveToDB("Assets/Resources/LevelDatabase.asset", ref _targetDB);
+        }
+
+        /// <summary>지정된 경로의 LevelDatabase에 저장.</summary>
+        private void SaveToDB(string assetPath, ref LevelDatabase db)
         {
             if (!_levelLoaded)
             {
                 SetStatus("ERROR: No level loaded. Load or create a level first.");
                 return;
             }
-            if (_targetDB == null)
+            if (db == null)
             {
-                string path = "Assets/Resources/LevelDatabase.asset";
-                _targetDB = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
-                if (_targetDB == null)
-                { _targetDB = ScriptableObject.CreateInstance<LevelDatabase>(); AssetDatabase.CreateAsset(_targetDB, path); }
+                db = AssetDatabase.LoadAssetAtPath<LevelDatabase>(assetPath);
+                if (db == null)
+                {
+                    db = ScriptableObject.CreateInstance<LevelDatabase>();
+                    AssetDatabase.CreateAsset(db, assetPath);
+                }
             }
 
-            // 자동 백업: Save 전에 기존 DB를 JSON 파일로 백업
-            BackupDatabase();
+            // 자동 백업 (Origin DB만)
+            if (assetPath.Contains("LevelDatabase.asset") && !assetPath.Contains("_"))
+                BackupDatabase();
 
             var config = BuildLevelConfig();
-            var levels = _targetDB.levels != null ? new List<LevelConfig>(_targetDB.levels) : new List<LevelConfig>();
+            var levels = db.levels != null ? new List<LevelConfig>(db.levels) : new List<LevelConfig>();
             int idx = levels.FindIndex(l => l.levelId == config.levelId);
             if (idx >= 0) levels[idx] = config; else levels.Add(config);
             levels.Sort((a, b) => a.levelId.CompareTo(b.levelId));
-            _targetDB.levels = levels.ToArray();
-            EditorUtility.SetDirty(_targetDB);
+            db.levels = levels.ToArray();
+            EditorUtility.SetDirty(db);
             AssetDatabase.SaveAssets();
-            SetStatus($"Saved Level {config.levelId} (backup created)");
+
+            string dbName = System.IO.Path.GetFileNameWithoutExtension(assetPath);
+            SetStatus($"Saved Level {config.levelId} to {dbName}");
             RefreshLevelList();
         }
 

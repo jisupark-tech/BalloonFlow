@@ -12,82 +12,83 @@ namespace BalloonFlow
     public class BoardConfig
     {
         [Header("[풍선 — Balloon]")]
-        [Tooltip("풍선 간 월드 간격 (작을수록 빈틈 없음)")]
+        [Tooltip("풍선 간 월드 간격. 작을수록 빈틈 없음. (default: 0.55)")]
         public float cellSpacing = 0.55f;
 
-        [Tooltip("풍선 스케일 (0.2~1.0)")]
+        [Tooltip("풍선 스케일. (default: 0.5, range: 0.2~1.0)")]
         [Range(0.2f, 1.0f)]
         public float balloonScale = 0.5f;
 
         [Header("[풍선 타일 영역 — 동적 조정]")]
-        [Tooltip("풍선 타일 영역 가로 배율 (1.0 = 기본)")]
+        [Tooltip("풍선 타일 영역 가로 배율. 1.0=기본, 인게임 동적 반영. (default: 1.39)")]
         [Range(0.5f, 2f)]
         public float balloonFieldWidthMult = 1.39f;
 
-        [Tooltip("풍선 타일 영역 세로 배율 (1.0 = 기본)")]
+        [Tooltip("풍선 타일 영역 세로 배율. 1.0=기본, 인게임 동적 반영. (default: 1.44)")]
         [Range(0.5f, 2f)]
         public float balloonFieldHeightMult = 1.44f;
 
         [Header("[다트 — Dart]")]
-        [Tooltip("다트 비행 시간 (초). 클수록 느림")]
+        [Tooltip("다트 비행 시간(초). 발사→풍선 도달까지 걸리는 시간. 클수록 느림. 동적 반영. (default: 0.1)")]
         public float dartFlightTime = 0.1f;
 
-        [Tooltip("다트 발사 인터벌 (초). 보관함이 다트를 연속 발사하는 간격")]
-        public float dartFireInterval = 0.02f;
-
-        [Tooltip("다트 레일 이동 속도 (DartManager용)")]
+        [Tooltip("다트 레일 이동 속도. 현재 미사용 (railRotationSpeed가 벨트 속도 담당). (default: 8)")]
         public float dartRailSpeed = 8f;
 
-        [Tooltip("보관함에서 다트 소환 간격 (초). 벨트 속도와 동기화 필요")]
-        public float dartSpawnInterval = 0.02f;
+        [Tooltip("공격 스캔 배율. railSpeed에 비례하여 스캔 빈도 결정. 높을수록 공격 빠름. 동적 반영. (default: 1.0)")]
+        [Range(0.5f, 10f)]
+        public float attackSpeedMultiplier = 1f;
 
-        [Tooltip("컨베이어 화살표 이동 속도")]
-        public float conveyorArrowSpeed = 4f;
+        [Tooltip("프레임당 최대 발사 수. 1=단발 연속, 높으면 직선상 같은 색 풍선 연속 공격 가능. 동적 반영. (default: 1)")]
+        [Range(1, 10)]
+        public int maxFiresPerFrame = 1;
 
+        [HideInInspector] public float dartSpawnInterval = 0.02f;
+        [HideInInspector] public float conveyorArrowSpeed = 4f;
 
         [Header("[다트 비주얼 — Dart Visual (인게임 동적 조정)]")]
-        [Tooltip("다트 스케일 (1.0 = 기본)")]
+        [Tooltip("다트 오브젝트 스케일. 동적 반영. (default: 0.275)")]
         [Range(0.1f, 3f)]
         public float dartScale = 0.275f;
 
-        [Tooltip("다트 간격 배율 (1.0 = 기본). 크면 다트 사이 간격 넓어짐")]
+        [Tooltip("다트 간격 배율. 크면 다트 사이 간격 넓어짐. 동적 반영. (default: 1.25)")]
         [Range(0.2f, 3f)]
         public float dartSpacingMultiplier = 1.25f;
 
-        [Tooltip("다트 경로 오프셋 — 벨트 중심에서 안쪽(+)/바깥쪽(-) 이동")]
+        [Tooltip("다트 경로 오프셋. 벨트 중심에서 안쪽(+)/바깥쪽(-) 이동. 동적 반영. (default: -0.15)")]
         [Range(-2f, 2f)]
         public float dartPathOffset = -0.15f;
 
         [Header("[레일 — Rail (컨베이어벨트)]")]
-        [Tooltip("레일 슬롯 수 (기본 200). 다트가 슬롯을 점유")]
+        [Tooltip("레일 슬롯 수. 다트가 점유하는 칸 수. 레벨 데이터에서 자동 계산됨. (default: 200)")]
         public int railSlotCount = 200;
 
-        [Tooltip("레일 회전 속도 (슬롯/초). 컨베이어벨트 속도")]
+        [Tooltip("레일 회전 속도(슬롯/초). 벨트+다트+화살표 이동 속도 통일 기준. (default: 37)")]
         public float railRotationSpeed = 37f;
 
-        [Tooltip("보드 가장자리 ~ 레일 간격")]
+        [Tooltip("보드 가장자리 ~ 레일 간격. (default: 1.5)")]
         public float railPadding = 1.5f;
 
-        [Tooltip("레일 높이 (Y축)")]
+        [Tooltip("레일 높이(Y축). (default: 0.1)")]
         public float railHeight = 0.1f;
 
         [Header("[보드 — Board]")]
-        [Tooltip("보드 중심 X좌표")]
+        [Tooltip("보드 중심 X좌표. (default: 0)")]
         public float boardCenterX = 0f;
 
-        [Tooltip("보드 중심 Z좌표")]
+        [Tooltip("보드 중심 Z좌표. (default: 2)")]
         public float boardCenterZ = 2f;
 
-        [Tooltip("풍선 그리드 Z 오프셋 — row 갯수에 따른 위치 보정")]
+        [Tooltip("풍선 그리드 Z 오프셋. row 갯수에 따른 위치 보정. 동적 반영. (default: 0)")]
         [Range(-5f, 5f)]
         public float balloonGridZOffset = 0f;
 
         [Header("[연출 — Visual Effects]")]
-        [Tooltip("보관함 다트 배치 시 펀치 스케일 연출 사용 여부")]
+        [Tooltip("보관함 다트 배치 시 펀치 스케일 연출 사용 여부. (default: false)")]
         public bool useDeployPunchScale = false;
 
         [Header("[실패 판정 — Fail Detection]")]
-        [Tooltip("실패 유예 시간 (초). 99.5%+ 점유 + 최외곽 매칭 불가 시 이 시간 후 실패")]
+        [Tooltip("실패 유예 시간(초). 99.5%+ 점유 + 최외곽 매칭 불가 시 이 시간 후 실패. (default: 1.5)")]
         public float failGraceDelay = 1.5f;
 
         [Tooltip("실패 임계 점유율 (0~1). 기본 0.995 = 199/200슬롯")]

@@ -31,6 +31,9 @@ namespace BalloonFlow
         [Tooltip("다트 포물선 곡사 높이. 0=직선, >0=곡사. Design ref: 피드백디렉션 §다트궤적")]
         [SerializeField] private float _arcHeight = 0f; // 0 = 직사, >0 = 곡사
 
+        /// <summary>동적 비행 시간 (GameManager에서 실시간 참조).</summary>
+        private float FlightTime => GameManager.HasInstance ? GameManager.Instance.Board.dartFlightTime : _projectileFlightTime;
+
         #endregion
 
         #region Nested Types
@@ -74,8 +77,7 @@ namespace BalloonFlow
         /// </summary>
         private readonly HashSet<int> _reservedTargets = new HashSet<int>();
 
-        /// <summary>Max darts that can fire in a single frame to prevent visual clutter.</summary>
-        private const int MAX_FIRES_PER_FRAME = 1; // 한 프레임에 1발만 (단발 연속)
+        private int MAX_FIRES_PER_FRAME => GameManager.HasInstance ? GameManager.Instance.Board.maxFiresPerFrame : 1;
 
         /// <summary>When true, board is cleared or failed — stop all scanning/firing.</summary>
         private bool _boardFinished;
@@ -129,12 +131,12 @@ namespace BalloonFlow
             UpdateSlotDartPositions();
             UpdatePerDartPositions();
 
-            // 공격 스캔: 벨트 속도 적응형 간격 (1슬롯 이동당 최소 2회 스캔)
+            // 공격 스캔: 벨트 속도 × 공격 배율
             _scanTimer += Time.deltaTime;
-            float baseInterval = GameManager.HasInstance ? GameManager.Instance.Board.dartFireInterval : 0.05f;
             float railSpeed = RailManager.HasInstance ? RailManager.Instance.RotationSpeed : 10f;
-            float speedInterval = railSpeed > 0f ? 0.5f / railSpeed : baseInterval;
-            float interval = Mathf.Min(baseInterval, speedInterval);
+            float atkMult = GameManager.HasInstance ? GameManager.Instance.Board.attackSpeedMultiplier : 1f;
+            float interval = railSpeed > 0f ? 0.5f / (railSpeed * atkMult) : 0.05f;
+            interval = Mathf.Clamp(interval, 0.005f, 0.1f);
             if (_scanTimer >= interval)
             {
                 _scanTimer -= interval;
@@ -647,7 +649,7 @@ namespace BalloonFlow
                 targetBalloonId = targetBalloonId,
                 color = color,
                 elapsed = 0f,
-                duration = _projectileFlightTime
+                duration = FlightTime
             };
 
             _activeProjectiles.Add(proj);
@@ -658,13 +660,13 @@ namespace BalloonFlow
                 Vector3 midPoint = (from + to) * 0.5f;
                 midPoint.y += _arcHeight;
                 Vector3[] path = { from, midPoint, to };
-                dartObj.transform.DOPath(path, _projectileFlightTime, PathType.CatmullRom)
+                dartObj.transform.DOPath(path, FlightTime, PathType.CatmullRom)
                     .SetEase(Ease.Linear)
                     .SetLookAt(0.01f); // face movement direction
             }
             else
             {
-                dartObj.transform.DOMove(to, _projectileFlightTime).SetEase(Ease.Linear);
+                dartObj.transform.DOMove(to, FlightTime).SetEase(Ease.Linear);
             }
         }
 
@@ -762,11 +764,11 @@ namespace BalloonFlow
                         targetBalloonId = targetId,
                         color = color,
                         elapsed = 0f,
-                        duration = _projectileFlightTime
+                        duration = FlightTime
                     };
                     _activeProjectiles.Add(proj);
 
-                    dartObj.transform.DOMove(targetPos, _projectileFlightTime).SetEase(Ease.Linear);
+                    dartObj.transform.DOMove(targetPos, FlightTime).SetEase(Ease.Linear);
                 }
 
                 fired++;
