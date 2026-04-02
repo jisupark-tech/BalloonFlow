@@ -76,10 +76,13 @@ namespace BalloonFlow
         [Tooltip("보드 중심 X좌표. (default: 0)")]
         public float boardCenterX = 0f;
 
-        [Tooltip("보드 중심 Z좌표. (default: 2)")]
-        public float boardCenterZ = 2f;
+        [Tooltip("보드 중심 Z좌표. (default: 2.4)")]
+        public float boardCenterZ = 2.4f;
 
-        [Tooltip("풍선 그리드 Z 오프셋. row 갯수에 따른 위치 보정. 동적 반영. (default: 0)")]
+        [Tooltip("풍선 중심 Z좌표. 벨트(boardCenterZ)와 독립. 동적 반영. (default: 2)")]
+        public float balloonCenterZ = 2f;
+
+        [Tooltip("풍선 그리드 Z 오프셋. 추가 미세 보정. 동적 반영. (default: 0)")]
         [Range(-5f, 5f)]
         public float balloonGridZOffset = 0f;
 

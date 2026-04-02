@@ -166,9 +166,9 @@ namespace BalloonFlow
             float wm = GameManager.Instance.Board.balloonFieldWidthMult;
             float hm = GameManager.Instance.Board.balloonFieldHeightMult;
             float cx = GameManager.Instance.Board.boardCenterX;
-            float cz = GameManager.Instance.Board.boardCenterZ;
-            float innerW = (BoardTileManager.CONVEYOR_WIDTH - BoardTileManager.RAIL_THICKNESS - BoardTileManager.RAIL_GAP * 2f) * 0.5f;
-            float innerH = (BoardTileManager.CONVEYOR_HEIGHT - BoardTileManager.RAIL_THICKNESS - BoardTileManager.RAIL_GAP * 2f) * 0.5f;
+            float cz = GameManager.Instance.Board.balloonCenterZ;
+            // 벨트 타일 안쪽 경계 (타일 중심에서 반 크기 빼기)
+            float innerH = BoardTileManager.CONVEYOR_HEIGHT * 0.5f - BoardTileManager.RAIL_THICKNESS * 0.5f;
 
             float maxDx = 0f, maxDz = 0f;
             foreach (var kvp in _balloons)
@@ -179,9 +179,13 @@ namespace BalloonFlow
                 if (dz > maxDz) maxDz = dz;
             }
 
-            // 세로(Z)가 벨트를 넘을 때만 보정
+            // 세로(Z)가 벨트를 넘을 때 → 가로세로 동일 비율로 축소
             if (maxDz * hm > innerH && maxDz > 0.001f)
-                hm = innerH / maxDz;
+            {
+                float ratio = innerH / (maxDz * hm); // 축소 비율
+                wm *= ratio;
+                hm *= ratio;
+            }
 
             _levelSafeWm = wm;
             _levelSafeHm = hm;
@@ -220,7 +224,7 @@ namespace BalloonFlow
         {
             CalculateLevelSafeMult();
             float cx = GameManager.Instance.Board.boardCenterX;
-            float cz = GameManager.Instance.Board.boardCenterZ;
+            float cz = GameManager.Instance.Board.balloonCenterZ;
             float wm = _levelSafeWm;
             float hm = _levelSafeHm;
             float zo = GameManager.Instance.Board.balloonGridZOffset;
@@ -771,7 +775,7 @@ namespace BalloonFlow
             if (GameManager.HasInstance)
             {
                 float cx = GameManager.Instance.Board.boardCenterX;
-                float cz = GameManager.Instance.Board.boardCenterZ;
+                float cz = GameManager.Instance.Board.balloonCenterZ;
                 float wm = _levelSafeCalculated ? _levelSafeWm : GameManager.Instance.Board.balloonFieldWidthMult;
                 float hm = _levelSafeCalculated ? _levelSafeHm : GameManager.Instance.Board.balloonFieldHeightMult;
                 float zOffset = GameManager.Instance.Board.balloonGridZOffset;
