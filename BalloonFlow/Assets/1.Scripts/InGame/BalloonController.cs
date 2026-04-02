@@ -155,36 +155,54 @@ namespace BalloonFlow
 
         /// <summary>레벨별 안전 배율. 넘지 않으면 설정값 그대로, 넘으면 축소.</summary>
         private float _levelSafeWm = 1f, _levelSafeHm = 1f;
+        /// <summary>위/아래 침범 차이 보정용 Z 이동량.</summary>
+        private float _levelSafeZShift = 0f;
         private bool _levelSafeCalculated = false;
 
         /// <summary>SetupBalloons 완료 후 호출 — 레벨별 안전 배율 1회 계산.</summary>
         private void CalculateLevelSafeMult()
         {
             _levelSafeCalculated = false;
+            _levelSafeZShift = 0f;
             if (!GameManager.HasInstance) { _levelSafeWm = 1f; _levelSafeHm = 1f; return; }
 
             float wm = GameManager.Instance.Board.balloonFieldWidthMult;
             float hm = GameManager.Instance.Board.balloonFieldHeightMult;
-            float cx = GameManager.Instance.Board.boardCenterX;
             float cz = GameManager.Instance.Board.balloonCenterZ;
-            // 벨트 타일 안쪽 경계 (타일 중심에서 반 크기 빼기)
-            float innerH = BoardTileManager.CONVEYOR_HEIGHT * 0.5f - BoardTileManager.RAIL_THICKNESS * 0.5f;
+            float beltCZ = GameManager.Instance.Board.boardCenterZ;
 
-            float maxDx = 0f, maxDz = 0f;
+            // 벨트 내부 경계 (절대 좌표)
+            float halfConveyor = BoardTileManager.CONVEYOR_HEIGHT * 0.5f;
+            float halfRail = BoardTileManager.RAIL_THICKNESS * 0.5f;
+            float beltTop = beltCZ + halfConveyor - halfRail;
+            float beltBottom = beltCZ - halfConveyor + halfRail;
+            float beltInnerSpan = beltTop - beltBottom;
+            float beltInnerCenter = (beltTop + beltBottom) * 0.5f;
+
+            // 풍선 최소/최대 Z (배율 적용 후)
+            float minZ = float.MaxValue, maxZ = float.MinValue;
             foreach (var kvp in _balloons)
             {
-                float dx = Mathf.Abs(kvp.Value.position.x - cx);
-                float dz = Mathf.Abs(kvp.Value.position.z - cz);
-                if (dx > maxDx) maxDx = dx;
-                if (dz > maxDz) maxDz = dz;
+                float z = cz + (kvp.Value.position.z - cz) * hm;
+                if (z < minZ) minZ = z;
+                if (z > maxZ) maxZ = z;
             }
 
-            // 세로(Z)가 벨트를 넘을 때 → 가로세로 동일 비율로 축소
-            if (maxDz * hm > innerH && maxDz > 0.001f)
+            if (minZ >= maxZ) { _levelSafeWm = wm; _levelSafeHm = hm; _levelSafeCalculated = true; return; }
+
+            float gridSpan = maxZ - minZ;
+            float gridCenter = (maxZ + minZ) * 0.5f;
+
+            if (gridSpan > beltInnerSpan)
             {
-                float ratio = innerH / (maxDz * hm); // 축소 비율
+                // 벨트 초과 → 가로세로 동일 비율 축소
+                float ratio = beltInnerSpan / gridSpan;
                 wm *= ratio;
                 hm *= ratio;
+                gridCenter = cz; // 축소 후 중심은 balloonCenterZ
+
+                // 축소 후 벨트 내부 정중앙에 배치 → 위아래 마진 동일
+                _levelSafeZShift = beltInnerCenter - gridCenter;
             }
 
             _levelSafeWm = wm;
@@ -239,7 +257,7 @@ namespace BalloonFlow
                 obj.transform.position = new Vector3(
                     cx + (origPos.x - cx) * wm,
                     origPos.y,
-                    cz + (origPos.z - cz) * hm + zo);
+                    cz + (origPos.z - cz) * hm + zo + _levelSafeZShift);
                 obj.transform.localScale = Vector3.one * _balloonScale * scaleMult;
             }
         }
@@ -780,7 +798,7 @@ namespace BalloonFlow
                 float hm = _levelSafeCalculated ? _levelSafeHm : GameManager.Instance.Board.balloonFieldHeightMult;
                 float zOffset = GameManager.Instance.Board.balloonGridZOffset;
                 adjustedPos.x = cx + (position.x - cx) * wm;
-                adjustedPos.z = cz + (position.z - cz) * hm + zOffset;
+                adjustedPos.z = cz + (position.z - cz) * hm + zOffset + _levelSafeZShift;
             }
             obj.transform.position = adjustedPos;
             float scaleMult = _levelSafeCalculated
