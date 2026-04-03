@@ -353,19 +353,50 @@ namespace BalloonFlow
             HolderData[] holders = HolderManager.Instance.GetHolders();
             if (holders == null) return;
 
-            // Sync visual column from data column
+            // Sync visual column from data column + 포물선 이동
+            var columnRows = new Dictionary<int, int>();
             for (int i = 0; i < holders.Length; i++)
             {
-                if (_holderVisuals.TryGetValue(holders[i].holderId, out HolderVisual visual))
-                {
-                    visual.column = holders[i].column;
-                }
-            }
+                if (!_holderVisuals.TryGetValue(holders[i].holderId, out HolderVisual visual)) continue;
+                if (visual.isDeploying || visual.isMovingToRail || visual.gameObject == null) continue;
 
-            // Reposition all columns
-            for (int col = 0; col < _queueColumns; col++)
-            {
-                RepositionColumnHolders(col);
+                visual.column = holders[i].column;
+
+                // 새 위치 계산
+                if (!columnRows.ContainsKey(visual.column)) columnRows[visual.column] = 0;
+                int row = columnRows[visual.column]++;
+                Vector3 targetPos = CalculateQueuePosition(visual.column, row);
+
+                // 포물선 비행 (랜덤 높이 + 랜덤 좌우 곡선)
+                visual.gameObject.transform.DOKill();
+                Vector3 startPos = visual.gameObject.transform.position;
+                float arcHeight = Random.Range(1.5f, 3f);
+                float sideOffset = Random.Range(-1.5f, 1.5f);
+                Vector3 mid = (startPos + targetPos) * 0.5f;
+                mid.y += arcHeight;
+                mid.x += sideOffset;
+
+                Vector3[] path = { startPos, mid, targetPos };
+                float duration = Random.Range(0.4f, 0.7f);
+                visual.gameObject.transform.DOPath(path, duration, PathType.CatmullRom)
+                    .SetEase(Ease.OutQuad);
+
+                visual.queuePosition = targetPos;
+
+                // Apply front-row shader: row 0 = active outline, row 1+ = inactive + text alpha 25%
+                if (visual.identifier != null)
+                {
+                    if (row == 0)
+                        visual.identifier.SetActiveFrontRow();
+                    else
+                        visual.identifier.SetInactiveRow();
+                }
+                if (visual.magazineText != null)
+                {
+                    visual.magazineText.color = row == 0
+                        ? Color.white
+                        : new Color(1f, 1f, 1f, 0.25f);
+                }
             }
         }
 

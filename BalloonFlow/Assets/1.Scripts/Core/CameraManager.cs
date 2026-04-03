@@ -66,7 +66,7 @@ namespace BalloonFlow
             MainCamera.clearFlags = CameraClearFlags.SolidColor;
             MainCamera.backgroundColor = new Color(0.08f, 0.08f, 0.16f);
             MainCamera.nearClipPlane = 0.3f;
-            MainCamera.farClipPlane = 50f;
+            MainCamera.farClipPlane = 15f;
             MainCamera.depth = 0;
             SetCameraTransform(new Vector3(0f, 0f, -10f), Vector3.zero);
 
@@ -118,8 +118,8 @@ namespace BalloonFlow
 
             MainCamera.clearFlags = CameraClearFlags.SolidColor;
             MainCamera.backgroundColor = new Color(0.255f, 0.235f, 0.392f); // #413C64
-            MainCamera.nearClipPlane = 0.3f;
-            MainCamera.farClipPlane = 80f; // 기본 1000 → 80 (퍼즐 게임 범위 충분)
+            MainCamera.nearClipPlane = -10f;
+            MainCamera.farClipPlane = 80f;
             MainCamera.depth = 0;
 
             // 레이어별 컬링 거리 — 먼 오브젝트 일찍 컬링
