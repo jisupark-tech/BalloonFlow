@@ -5295,7 +5295,7 @@ MonoBehaviour:
   _frameResultHard: {fileID: 21300000, guid: 44efab1b342972a46abc7841991a7bfe, type: 3}
   _frameResultSuperHard: {fileID: 21300000, guid: 8a2ac73a334541146b4c5be69e5380e1, type: 3}
   _titleText: {fileID: 0}
-  _nextButton: {fileID: 5070980916116285694}
+  _nextButton: {fileID: 0}
   _homeButton: {fileID: 4260876080512773910}
   _starImages: []
   _goldTarget: {fileID: 0}
@@ -6196,6 +6196,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1808534200474095212}
     m_Modifications:
+    - target: {fileID: 808024209144717098, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 3376396783073976494, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
       propertyPath: m_Pivot.x
       value: 0.5
@@ -6276,6 +6280,16 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 4244878855323792664, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+      propertyPath: m_text
+      value: 'Title
+
+'
+      objectReference: {fileID: 0}
+    - target: {fileID: 4244878855323792664, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+      propertyPath: m_fontSize
+      value: 100
+      objectReference: {fileID: 0}
     - target: {fileID: 7758026146669962325, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
       propertyPath: m_Name
       value: PopupCommonFrame
@@ -6335,17 +6349,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
---- !u!114 &5070980916116285694 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 2641883739385386289, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
-  m_PrefabInstance: {fileID: 7130998135762402767}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
 --- !u!224 &5489109465291709793 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 3376396783073976494, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
