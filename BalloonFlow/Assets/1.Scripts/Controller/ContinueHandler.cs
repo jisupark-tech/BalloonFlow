@@ -150,14 +150,14 @@ namespace BalloonFlow
 
         private void ApplyContinueRestore()
         {
-            // 1) 레일에서 가장 많은 색상 다트 N개 제거 (허용량 기반: 50→5, 100→10, 150→15, 200→20)
-            int dartsToRemove = 5;
+            // 1) 레일에서 최근 배치 다트부터 허용량의 10% 제거 + 매칭 풍선 동시 제거
+            int dartsToRemove = 4;
             int removedColor = -1;
             if (RailManager.HasInstance)
             {
                 dartsToRemove = RailManager.GetContinueRemoveCount(RailManager.Instance.SlotCount);
-                int removed = RailManager.Instance.RemoveDartsByMostCommonColor(dartsToRemove, out removedColor);
-                Debug.Log($"[ContinueHandler] Removed {removed} darts (color={removedColor}) from rail (target: {dartsToRemove}).");
+                int removed = RailManager.Instance.RemoveRecentDarts(dartsToRemove, out removedColor);
+                Debug.Log($"[ContinueHandler] Removed {removed} recent darts (color={removedColor}) from rail.");
             }
 
             // 2) 대기 중인 보관함은 원래 자리(큐)로 복귀

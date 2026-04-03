@@ -24,6 +24,12 @@ namespace BalloonFlow
         private bool _awaitingHolderSelection;
         private bool _awaitingBalloonClick;
 
+        /// <summary>Tracks which booster type is pending user interaction (for deferred consumption).</summary>
+        private string _pendingBoosterType;
+
+        /// <summary>부스터 취소 버튼 (런타임 생성).</summary>
+        private GameObject _cancelButtonGO;
+
         #endregion
 
         #region Lifecycle
@@ -61,11 +67,14 @@ namespace BalloonFlow
             if (!_awaitingHolderSelection) return;
             _awaitingHolderSelection = false;
 
+            ConfirmPendingBooster();
+            HideCancelButton();
             ExecuteSelectTool(holderId);
 
-            // Move camera back after holder selection
             if (CameraManager.HasInstance)
                 CameraManager.Instance.MoveBack();
+
+            ResumeRail();
         }
 
         /// <summary>
@@ -89,6 +98,8 @@ namespace BalloonFlow
             if (!_awaitingBalloonClick) return;
             _awaitingBalloonClick = false;
 
+            ConfirmPendingBooster();
+
             // Get clicked balloon's color
             if (!BalloonController.HasInstance) return;
             var data = BalloonController.Instance.GetBalloon(balloonId);
@@ -108,13 +119,17 @@ namespace BalloonFlow
 
         private void HandleBoosterUsed(OnBoosterUsed evt)
         {
+            // Pause rail rotation while booster is active
+            if (RailManager.HasInstance)
+                RailManager.Instance.IsPausedByBooster = true;
+
             switch (evt.boosterType)
             {
                 case BoosterManager.SELECT_TOOL:
-                    // Enter holder selection mode — UI highlights available holders
+                    _pendingBoosterType = BoosterManager.SELECT_TOOL;
                     _awaitingHolderSelection = true;
+                    ShowCancelButton();
 
-                    // Move camera to queue area
                     if (CameraManager.HasInstance && HolderVisualManager.HasInstance)
                     {
                         Vector3 queuePosition = HolderVisualManager.Instance.CalculateQueueCenterPosition();
@@ -126,10 +141,12 @@ namespace BalloonFlow
 
                 case BoosterManager.SHUFFLE:
                     ExecuteShuffle();
+                    ResumeRail();
                     break;
 
                 case BoosterManager.COLOR_REMOVE:
-                    // Enter color selection mode — UI shows available colors
+                    _pendingBoosterType = BoosterManager.COLOR_REMOVE;
+                    ShowCancelButton();
                     _awaitingColorSelection = true;
                     _awaitingBalloonClick = true;
 
@@ -152,10 +169,117 @@ namespace BalloonFlow
                     break;
 
                 case BoosterManager.HAND:
-                    ExecuteHand();
+                    _pendingBoosterType = BoosterManager.HAND;
+                    _awaitingHolderSelection = true;
+                    ShowCancelButton();
+
+                    // Move camera to queue area
+                    if (CameraManager.HasInstance && HolderVisualManager.HasInstance)
+                    {
+                        Vector3 queuePosition = HolderVisualManager.Instance.CalculateQueueCenterPosition();
+                        CameraManager.Instance.MoveToTarget(queuePosition);
+                    }
+
+                    Debug.Log("[BoosterExecutor] Hand activated. Waiting for holder selection.");
                     break;
             }
         }
+
+        /// <summary>Resume rail rotation after booster completes.</summary>
+        private void ResumeRail()
+        {
+            if (RailManager.HasInstance)
+                RailManager.Instance.IsPausedByBooster = false;
+        }
+
+        /// <summary>Confirm deferred booster consumption after user completes interaction.</summary>
+        private void ConfirmPendingBooster()
+        {
+            if (!string.IsNullOrEmpty(_pendingBoosterType))
+            {
+                // Inventory was already decremented in UseBooster — nothing extra needed
+                _pendingBoosterType = null;
+            }
+        }
+
+        /// <summary>
+        /// Cancel a pending interactive booster — refunds inventory and resumes rail.
+        /// </summary>
+        public void CancelPendingBooster()
+        {
+            if (string.IsNullOrEmpty(_pendingBoosterType)) return;
+
+            // Refund inventory
+            if (BoosterManager.HasInstance)
+                BoosterManager.Instance.AddBooster(_pendingBoosterType, 1);
+
+            Debug.Log($"[BoosterExecutor] Cancelled {_pendingBoosterType} — inventory refunded.");
+
+            // Reset awaiting flags
+            _awaitingHolderSelection = false;
+            _awaitingColorSelection = false;
+            _awaitingBalloonClick = false;
+
+            // Clear outlines if Color Remove was active
+            if (BalloonController.HasInstance)
+                BalloonController.Instance.ClearAllOutlines();
+
+            // Move camera back
+            if (CameraManager.HasInstance)
+                CameraManager.Instance.MoveBack();
+
+            _pendingBoosterType = null;
+            HideCancelButton();
+            ResumeRail();
+        }
+
+        /// <summary>부스터 취소 [X] 버튼 표시.</summary>
+        private void ShowCancelButton()
+        {
+            if (_cancelButtonGO != null) { _cancelButtonGO.SetActive(true); return; }
+
+            // Canvas 찾기
+            var canvas = FindAnyObjectByType<Canvas>();
+            if (canvas == null) return;
+
+            _cancelButtonGO = new GameObject("BoosterCancelBtn");
+            _cancelButtonGO.transform.SetParent(canvas.transform, false);
+
+            var rt = _cancelButtonGO.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(1f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(1f, 1f);
+            rt.anchoredPosition = new Vector2(-20f, -20f);
+            rt.sizeDelta = new Vector2(80f, 80f);
+
+            var img = _cancelButtonGO.AddComponent<UnityEngine.UI.Image>();
+            img.color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
+
+            var btn = _cancelButtonGO.AddComponent<UnityEngine.UI.Button>();
+            btn.onClick.AddListener(CancelPendingBooster);
+
+            // X 텍스트
+            var txtGO = new GameObject("X");
+            txtGO.transform.SetParent(_cancelButtonGO.transform, false);
+            var txtRT = txtGO.AddComponent<RectTransform>();
+            txtRT.anchorMin = Vector2.zero; txtRT.anchorMax = Vector2.one;
+            txtRT.offsetMin = Vector2.zero; txtRT.offsetMax = Vector2.zero;
+            var txt = txtGO.AddComponent<TMPro.TextMeshProUGUI>();
+            txt.text = "X";
+            txt.fontSize = 40;
+            txt.alignment = TMPro.TextAlignmentOptions.Center;
+            txt.color = Color.white;
+        }
+
+        /// <summary>부스터 취소 버튼 숨기기.</summary>
+        private void HideCancelButton()
+        {
+            if (_cancelButtonGO != null)
+                _cancelButtonGO.SetActive(false);
+        }
+
+        /// <summary>Whether an interactive booster is pending (can be cancelled).</summary>
+        public bool HasPendingBooster => !string.IsNullOrEmpty(_pendingBoosterType);
 
         #endregion
 
@@ -171,11 +295,15 @@ namespace BalloonFlow
 
             // Execute removal
             _awaitingColorSelection = false;
+            HideCancelButton();
+            ConfirmPendingBooster();
             ExecuteColorRemove(color);
 
             // Camera back
             if (CameraManager.HasInstance)
                 CameraManager.Instance.MoveBack();
+
+            ResumeRail();
         }
 
         /// <summary>
@@ -185,7 +313,8 @@ namespace BalloonFlow
         {
             if (!HolderManager.HasInstance) return;
 
-            bool result = HolderManager.Instance.SelectHolder(holderId);
+            // Hand/SelectTool: 줄 순서 무시 — ForceSelectHolder 사용
+            bool result = HolderManager.Instance.ForceSelectHolder(holderId);
             if (result)
             {
                 Debug.Log($"[BoosterExecutor] Select Tool: deployed holder {holderId}.");
@@ -198,6 +327,7 @@ namespace BalloonFlow
 
         /// <summary>
         /// Shuffle: randomize the order of waiting holders in the queue.
+        /// Chain groups are treated as single units — members stay together with relative column order preserved.
         /// </summary>
         private void ExecuteShuffle()
         {
@@ -220,18 +350,74 @@ namespace BalloonFlow
 
             if (shuffleable.Count <= 1) return;
 
-            // Fisher-Yates shuffle of column assignments
-            int queueCols = HolderManager.Instance.QueueColumns;
-            for (int i = shuffleable.Count - 1; i > 0; i--)
+            // Group by chainGroupId. Holders with chainGroupId < 0 are standalone (each is its own unit).
+            var chainGroups = new Dictionary<int, List<HolderData>>();
+            int soloKey = -1; // unique negative keys for standalone holders
+            for (int i = 0; i < shuffleable.Count; i++)
             {
-                int j = Random.Range(0, i + 1);
-                // Swap columns
-                int tmpCol = shuffleable[i].column;
-                shuffleable[i].column = shuffleable[j].column;
-                shuffleable[j].column = tmpCol;
+                int gid = shuffleable[i].chainGroupId;
+                if (gid < 0)
+                {
+                    // Standalone — assign unique group key
+                    chainGroups[soloKey] = new List<HolderData> { shuffleable[i] };
+                    soloKey--;
+                }
+                else
+                {
+                    if (!chainGroups.ContainsKey(gid))
+                        chainGroups[gid] = new List<HolderData>();
+                    chainGroups[gid].Add(shuffleable[i]);
+                }
             }
 
-            Debug.Log($"[BoosterExecutor] Shuffle: randomized {shuffleable.Count} holder positions.");
+            // Sort members within each chain group by column (preserve relative ordering)
+            foreach (var kvp in chainGroups)
+            {
+                if (kvp.Value.Count > 1)
+                    kvp.Value.Sort((a, b) => a.column.CompareTo(b.column));
+            }
+
+            // Build list of shuffle units (each unit = list of holders)
+            var units = new List<List<HolderData>>();
+            foreach (var kvp in chainGroups)
+                units.Add(kvp.Value);
+
+            if (units.Count <= 1) return;
+
+            // Collect original column slots for each unit (in order)
+            var unitColumns = new List<List<int>>();
+            for (int i = 0; i < units.Count; i++)
+            {
+                var cols = new List<int>();
+                for (int j = 0; j < units[i].Count; j++)
+                    cols.Add(units[i][j].column);
+                unitColumns.Add(cols);
+            }
+
+            // Fisher-Yates shuffle of units
+            for (int i = units.Count - 1; i > 0; i--)
+            {
+                int j = Random.Range(0, i + 1);
+                // Swap column assignments between unit i and unit j
+                var tmpCols = unitColumns[i];
+                unitColumns[i] = unitColumns[j];
+                unitColumns[j] = tmpCols;
+            }
+
+            // Apply new column assignments
+            for (int i = 0; i < units.Count; i++)
+            {
+                var cols = unitColumns[i];
+                var members = units[i];
+                for (int m = 0; m < members.Count; m++)
+                {
+                    // If group has more members than available column slots, wrap
+                    int colIdx = m < cols.Count ? m : m % cols.Count;
+                    members[m].column = cols[colIdx];
+                }
+            }
+
+            Debug.Log($"[BoosterExecutor] Shuffle: randomized {units.Count} units ({shuffleable.Count} holders).");
 
             // Shuffle 연출: 카메라 쉐이크
             if (CameraManager.HasInstance && CameraManager.Instance.MainCamera != null)
@@ -337,52 +523,10 @@ namespace BalloonFlow
             });
         }
 
-        /// <summary>
-        /// Hand: reveals a random Hidden balloon so it can be matched.
-        /// Design ref: 아웃게임디렉션 §Hand — Hidden 보관함 즉시 활성화
-        /// </summary>
-        private void ExecuteHand()
-        {
-            int affected = 0;
-
-            // 1) Hidden 보관함 공개 시도
-            if (HolderManager.HasInstance)
-            {
-                HolderData[] holders = HolderManager.Instance.GetHolders();
-                if (holders != null)
-                {
-                    for (int i = 0; i < holders.Length; i++)
-                    {
-                        if (holders[i].isHidden && !holders[i].isConsumed)
-                        {
-                            HolderManager.Instance.RevealHiddenHolder(holders[i].holderId);
-                            affected++;
-                            break; // 한 번에 하나만
-                        }
-                    }
-                }
-            }
-
-            // 2) Hidden 보관함이 없으면 Surprise 풍선 공개
-            if (affected == 0 && BalloonController.HasInstance)
-            {
-                int hiddenId = BalloonController.Instance.GetRandomHiddenBalloonId();
-                if (hiddenId >= 0)
-                {
-                    BalloonController.Instance.RevealHiddenBalloon(hiddenId);
-                    affected++;
-                }
-            }
-
-            if (affected == 0)
-                Debug.LogWarning("[BoosterExecutor] Hand: no hidden holders or balloons to reveal.");
-
-            EventBus.Publish(new OnBoosterEffectApplied
-            {
-                boosterType = BoosterManager.HAND,
-                affectedCount = affected
-            });
-        }
+        // Hand booster now uses SELECT_TOOL behavior (holder selection mode).
+        // The HAND case in HandleBoosterUsed sets _awaitingHolderSelection = true
+        // and moves camera to queue, identical to SELECT_TOOL.
+        // OnHolderSelected handles the actual deployment for both boosters.
 
         #endregion
     }
