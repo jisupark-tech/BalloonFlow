@@ -70,12 +70,12 @@ namespace BalloonFlow
         private const float MAX_CORNER_RADIUS = 5f;
 
         // 가변 수용량 구간 — 총 다트 수 기준으로 레일 수용량 자동 결정
-        // ≤300→50, ≤500→100, ≤700→150, 701+→200
-        private static readonly int[] CAPACITY_TIERS = { 50, 100, 150, 200 };
+        // ≤300→40, ≤500→80, ≤700→120, 701+→160
+        private static readonly int[] CAPACITY_TIERS = { 40, 80, 120, 160 };
         private static readonly int[] CAPACITY_DART_THRESHOLDS = { 300, 500, 700, int.MaxValue };
 
-        // 이어하기 제거량 — 허용량 기준 (가장 많은 색상 다트 기준)
-        private static readonly int[] CONTINUE_REMOVE_COUNTS = { 5, 10, 15, 20 };
+        // 이어하기 제거량 — 허용량의 10% (명세: 4/8/12/16)
+        private static readonly int[] CONTINUE_REMOVE_COUNTS = { 4, 8, 12, 16 };
 
         /// <summary>허용량에 따른 이어하기 다트 제거량 반환.</summary>
         public static int GetContinueRemoveCount(int capacity)
@@ -124,6 +124,11 @@ namespace BalloonFlow
         private int _occupiedCount;
         private int _nextDartId;
         private bool _boardFinished;
+
+        /// <summary>
+        /// When true, rail rotation is paused (e.g. during booster execution).
+        /// </summary>
+        public bool IsPausedByBooster { get; set; }
 
         // Per-dart individual movement system
         private readonly List<DartOnRail> _darts = new List<DartOnRail>();
@@ -206,6 +211,7 @@ namespace BalloonFlow
         {
             if (_slots == null || _slotCount == 0) return;
             if (_boardFinished) return;
+            if (IsPausedByBooster) return;
 
             // 회전 속도: 남은 다트 수 기반 + 배치 중 감속
             float baseSpeedMult = GetSpeedMultiplier();
@@ -1083,6 +1089,42 @@ namespace BalloonFlow
                 ClearSlot(targets[i]);
                 removed++;
             }
+            return removed;
+        }
+
+        /// <summary>이어하기: 최근 배치 다트부터 count개 제거. 제거된 색상 목록 반환.</summary>
+        public int RemoveRecentDarts(int count, out int removedColor)
+        {
+            removedColor = -1;
+            if (count <= 0) return 0;
+
+            // per-dart 시스템: dartId 내림차순 = 최근 배치 순
+            var sorted = new List<DartOnRail>(_darts);
+            sorted.Sort((a, b) => b.dartId.CompareTo(a.dartId));
+
+            int removed = 0;
+            for (int i = 0; i < sorted.Count && removed < count; i++)
+            {
+                if (removed == 0) removedColor = sorted[i].dartColor;
+                RemoveDartById(sorted[i].dartId);
+                removed++;
+            }
+
+            // 슬롯 시스템도 처리
+            if (_slots != null)
+            {
+                var slotTargets = new List<int>();
+                for (int i = 0; i < _slotCount; i++)
+                    if (_slots[i].dartColor >= 0) slotTargets.Add(i);
+                slotTargets.Sort((a, b) => _slots[b].dartId.CompareTo(_slots[a].dartId));
+                for (int i = 0; i < slotTargets.Count && removed < count; i++)
+                {
+                    if (removed == 0 && removedColor < 0) removedColor = _slots[slotTargets[i]].dartColor;
+                    ClearSlot(slotTargets[i]);
+                    removed++;
+                }
+            }
+
             return removed;
         }
 
