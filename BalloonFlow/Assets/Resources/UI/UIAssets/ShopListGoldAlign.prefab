@@ -187,6 +187,22 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 8736437862415988692}
     m_Modifications:
+    - target: {fileID: 1877739127138757845, guid: 6dc0b5c917327cd48bdc208b09d53f0c, type: 3}
+      propertyPath: m_fontSize
+      value: 70
+      objectReference: {fileID: 0}
+    - target: {fileID: 1877739127138757845, guid: 6dc0b5c917327cd48bdc208b09d53f0c, type: 3}
+      propertyPath: m_fontSizeMax
+      value: 70
+      objectReference: {fileID: 0}
+    - target: {fileID: 1877739127138757845, guid: 6dc0b5c917327cd48bdc208b09d53f0c, type: 3}
+      propertyPath: m_fontSizeMin
+      value: 60
+      objectReference: {fileID: 0}
+    - target: {fileID: 1877739127138757845, guid: 6dc0b5c917327cd48bdc208b09d53f0c, type: 3}
+      propertyPath: m_enableAutoSizing
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 3026978619746198640, guid: 6dc0b5c917327cd48bdc208b09d53f0c, type: 3}
       propertyPath: m_Name
       value: ShopListGold (1)
@@ -270,6 +286,22 @@ PrefabInstance:
     - target: {fileID: 3817649258396521679, guid: 6dc0b5c917327cd48bdc208b09d53f0c, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3922767430934254891, guid: 6dc0b5c917327cd48bdc208b09d53f0c, type: 3}
+      propertyPath: m_fontSize
+      value: 70
+      objectReference: {fileID: 0}
+    - target: {fileID: 3922767430934254891, guid: 6dc0b5c917327cd48bdc208b09d53f0c, type: 3}
+      propertyPath: m_fontSizeMax
+      value: 70
+      objectReference: {fileID: 0}
+    - target: {fileID: 3922767430934254891, guid: 6dc0b5c917327cd48bdc208b09d53f0c, type: 3}
+      propertyPath: m_fontSizeMin
+      value: 60
+      objectReference: {fileID: 0}
+    - target: {fileID: 3922767430934254891, guid: 6dc0b5c917327cd48bdc208b09d53f0c, type: 3}
+      propertyPath: m_enableAutoSizing
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
