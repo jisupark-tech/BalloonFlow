@@ -675,8 +675,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eb8e4cf67de65844a9f1366029284ba4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupShopListItem
-  _imgProducts: {fileID: 0}
-  _txtTitle: {fileID: 0}
+  _imgProducts: {fileID: 4122419248917417442}
+  _txtTitle: {fileID: 1877739127138757845}
   _timeOffRoot: {fileID: 5852802107258570726}
   _txtTimeOff: {fileID: 2982956180958160063}
   _offPercentRoot: {fileID: 8969446597295807079}
