@@ -139,11 +139,18 @@ namespace BalloonFlow
                 HolderIdentifier holder = hit.collider.GetComponent<HolderIdentifier>();
                 if (holder != null)
                 {
-                    // Only front-row holders are clickable
-                    if (HolderVisualManager.HasInstance
-                        && !HolderVisualManager.Instance.IsInFrontRow(holder.HolderId))
+                    // 부스터(Hand/SelectTool) 대기 중이면 모든 보관함 클릭 가능
+                    bool boosterAwaiting = BoosterExecutor.HasInstance
+                        && BoosterExecutor.Instance.IsAwaitingHolderSelection;
+
+                    if (!boosterAwaiting)
                     {
-                        return;
+                        // 일반 상태: 앞줄만 클릭 가능
+                        if (HolderVisualManager.HasInstance
+                            && !HolderVisualManager.Instance.IsInFrontRow(holder.HolderId))
+                        {
+                            return;
+                        }
                     }
 
                     EventBus.Publish(new OnHolderTapped { holderId = holder.HolderId });

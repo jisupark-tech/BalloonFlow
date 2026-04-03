@@ -163,8 +163,8 @@ namespace BalloonFlow
                 return false;
             }
 
-            AddBooster(boosterType, 1);
-            Debug.Log($"[BoosterManager] Purchased {boosterType} for {def.cost} coins.");
+            AddBooster(boosterType, 3); // 명세: 구매 시 3개 충전
+            Debug.Log($"[BoosterManager] Purchased {boosterType} x3 for {def.cost} coins.");
             return true;
         }
 

@@ -32,10 +32,11 @@ namespace BalloonFlow
         #region Constants — Gauge Thresholds
 
         // Occupancy ratio thresholds for each gauge stage
+        // 명세: SAFE 0~50%, CAUTION 50~80%, NORMAL_HIGH 80~90%, WARNING 90%~허용량-2, CRITICAL 허용량-1+
         private const float THRESHOLD_CAUTION     = 0.50f;
-        private const float THRESHOLD_NORMAL_HIGH = 0.70f;
-        private const float THRESHOLD_WARNING     = 0.85f;
-        private const float THRESHOLD_CRITICAL    = 0.95f;
+        private const float THRESHOLD_NORMAL_HIGH = 0.80f;
+        private const float THRESHOLD_WARNING     = 0.90f;
+        private const float THRESHOLD_CRITICAL    = 0.95f; // 실제 CRITICAL은 허용량-1 정수 비교
 
         #endregion
 

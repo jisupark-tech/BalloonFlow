@@ -62,8 +62,9 @@ namespace BalloonFlow
 
         // Magazine max per rail capacity tier.
         // 허용량 기준: 50→max50, 100→max80, 150→max100, 200→max100
-        private static readonly int[] MAG_CAP_TIERS      = { 50, 100, 150, 200 };
-        private static readonly int[] MAG_CAP_MAX_VALUES  = { 50,  80, 100, 100 };
+        // 명세: 40→max30, 80→max40, 120→max50, 160→max50
+        private static readonly int[] MAG_CAP_TIERS      = { 40, 80, 120, 160 };
+        private static readonly int[] MAG_CAP_MAX_VALUES  = { 30, 40,  50,  50 };
 
         #endregion
 
@@ -276,6 +277,59 @@ namespace BalloonFlow
         public HolderData[] GetHolders()
         {
             return _holders.ToArray();
+        }
+
+        /// <summary>
+        /// Hand 부스터용 — 줄 순서/Hidden/Frozen 무시하고 강제 배치.
+        /// Spawner/Lock/consumed만 차단.
+        /// </summary>
+        public bool ForceSelectHolder(int holderId)
+        {
+            HolderData holder = FindHolder(holderId);
+            if (holder == null || holder.isDeploying || holder.isWaiting || holder.isMovingToRail || holder.isConsumed)
+                return false;
+            if (holder.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T ||
+                holder.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O)
+                return false;
+            if (holder.isLockObject) return false;
+            if (holder.magazineCount <= 0) return false;
+
+            // Frozen → 자동 해동
+            if (holder.isFrozen)
+            {
+                holder.isFrozen = false;
+                EventBus.Publish(new OnHolderThawed { holderId = holderId });
+            }
+
+            int col = holder.column;
+            holder.isDeploying = true;
+            _deployingHolderId[col] = holder.holderId;
+
+            EventBus.Publish(new OnHolderSelected
+            {
+                holderId = holder.holderId,
+                color = holder.color,
+                magazineCount = holder.magazineCount
+            });
+
+            // Chain 연결 보관함도 함께 배치
+            if (holder.chainGroupId >= 0)
+            {
+                List<int> chainMembers = GetChainGroup(holder.chainGroupId);
+                foreach (int mid in chainMembers)
+                {
+                    if (mid == holder.holderId) continue;
+                    HolderData m = FindHolder(mid);
+                    if (m != null && !m.isDeploying && !m.isWaiting && !m.isMovingToRail && !m.isConsumed)
+                    {
+                        if (m.isFrozen) { m.isFrozen = false; EventBus.Publish(new OnHolderThawed { holderId = mid }); }
+                        m.isDeploying = true;
+                        EventBus.Publish(new OnHolderSelected { holderId = mid, color = m.color, magazineCount = m.magazineCount });
+                    }
+                }
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -840,6 +894,12 @@ namespace BalloonFlow
 
         private void HandleHolderTapped(OnHolderTapped evt)
         {
+            // 부스터(Hand/SelectTool) 대기 중이면 BoosterExecutor로 넘김
+            if (BoosterExecutor.HasInstance && BoosterExecutor.Instance.IsAwaitingHolderSelection)
+            {
+                BoosterExecutor.Instance.OnHolderSelected(evt.holderId);
+                return;
+            }
             SelectHolder(evt.holderId);
         }
 
