@@ -304,7 +304,8 @@ namespace BalloonFlow
 
         private void HandleLevelFailed(OnLevelFailed evt)
         {
-            UseLive();
+            // 하트 소모는 최종 실패 확정 시(PopupFail02)에서만 처리
+            // 여기서 소모하면 이어하기 선택 시 이중 소모 BUG
         }
 
         #endregion
