@@ -1,47 +1,41 @@
+using System;
 using UnityEngine;
 
 namespace BalloonFlow
 {
     /// <summary>
-    /// Lobby 씬 컨트롤러.
-    /// - GameManager.InitLobby() → 경제/상점/레벨 매니저 초기화
-    /// - UIManager.OpenUI로 UILobby, PopupSettings, PopupGoldShop 로드
-    /// - 버튼 이벤트 직접 연결
+    /// Lobby scene controller.
+    /// - GameManager.InitLobby() initializes economy/shop/level managers
+    /// - Opens UILobby with page-swipe navigation (Shop/Home/Setting)
+    /// - BtnGoldPlus / BtnLifePlus → Shop 페이지로 이동 (PopupGoldShop 미사용)
+    /// - Updates Gold, Life, Level display via EventBus
     /// </summary>
     public class LobbyController : MonoBehaviour
     {
         private UILobby _lobby;
-        private PopupSettings _settings;
-        private PopupGoldShop _goldShop;
 
         void Start()
         {
-            // Safety: 직접 씬 로드 테스트용
             if (!GameManager.HasInstance)
             {
-                var _go = new GameObject("GameManager");
-                _go.AddComponent<GameManager>();
+                var go = new GameObject("GameManager");
+                go.AddComponent<GameManager>();
             }
 
-            // 테스트 플래그 초기화 (MapMaker에서 남은 것 정리)
             #if UNITY_EDITOR
             UnityEditor.EditorPrefs.SetBool("BalloonFlow_UseTestLevel", false);
             #endif
             GameManager.IsTestPlayMode = false;
 
-            // Lobby 매니저 초기화
             GameManager.Instance.InitLobby();
 
-            // 카메라 설정
             if (CameraManager.HasInstance)
                 CameraManager.Instance.ConfigureLobby();
 
-            // 씬 캔버스 등록
-            var _canvasGO = GameObject.Find("Canvas");
-            if (_canvasGO != null && UIManager.HasInstance)
-                UIManager.Instance.SetSceneCanvas(_canvasGO.transform);
+            var canvasGO = GameObject.Find("Canvas");
+            if (canvasGO != null && UIManager.HasInstance)
+                UIManager.Instance.SetSceneCanvas(canvasGO.transform);
 
-            // UI 로드
             LoadUI();
             RefreshDisplay();
         }
@@ -49,55 +43,39 @@ namespace BalloonFlow
         void OnEnable()
         {
             EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
+            EventBus.Subscribe<OnLifeChanged>(HandleLifeChanged);
         }
 
         void OnDisable()
         {
             EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
+            EventBus.Unsubscribe<OnLifeChanged>(HandleLifeChanged);
 
             if (_lobby != null)
             {
-                if (_lobby.PlayButton != null) _lobby.PlayButton.onClick.RemoveListener(OnPlayClicked);
-                if (_lobby.SettingsButton != null) _lobby.SettingsButton.onClick.RemoveListener(OnSettingsClicked);
-                if (_lobby.CoinButton != null) _lobby.CoinButton.onClick.RemoveListener(OnCoinClicked);
+                if (_lobby.BtnPlay != null) _lobby.BtnPlay.onClick.RemoveListener(OnPlayClicked);
+                if (_lobby.BtnGoldPlus != null) _lobby.BtnGoldPlus.onClick.RemoveListener(OnGoToShop);
+                if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.RemoveListener(OnGoToShop);
             }
-            if (_settings != null && _settings.CloseButton != null)
-                _settings.CloseButton.onClick.RemoveListener(OnSettingsClose);
-            if (_goldShop != null && _goldShop.CloseButton != null)
-                _goldShop.CloseButton.onClick.RemoveListener(OnGoldShopClose);
         }
 
-        #region UI 로드
+        void Update()
+        {
+            UpdateLifeTimer();
+        }
+
+        #region UI Load
 
         void LoadUI()
         {
             if (!UIManager.HasInstance) return;
 
-            // UILobby
             _lobby = UIManager.Instance.OpenUI<UILobby>("UI/UILobby");
             if (_lobby != null)
             {
-                if (_lobby.PlayButton != null) _lobby.PlayButton.onClick.AddListener(OnPlayClicked);
-                if (_lobby.SettingsButton != null) _lobby.SettingsButton.onClick.AddListener(OnSettingsClicked);
-                if (_lobby.CoinButton != null) _lobby.CoinButton.onClick.AddListener(OnCoinClicked);
-            }
-
-            // PopupSettings (로드 후 숨김)
-            _settings = UIManager.Instance.OpenUI<PopupSettings>("Popup/PopupSettings");
-            if (_settings != null)
-            {
-                _settings.CloseUI();
-                if (_settings.CloseButton != null)
-                    _settings.CloseButton.onClick.AddListener(OnSettingsClose);
-            }
-
-            // PopupGoldShop (로드 후 숨김)
-            _goldShop = UIManager.Instance.OpenUI<PopupGoldShop>("Popup/PopupGoldShop");
-            if (_goldShop != null)
-            {
-                _goldShop.CloseUI();
-                if (_goldShop.CloseButton != null)
-                    _goldShop.CloseButton.onClick.AddListener(OnGoldShopClose);
+                if (_lobby.BtnPlay != null) _lobby.BtnPlay.onClick.AddListener(OnPlayClicked);
+                if (_lobby.BtnGoldPlus != null) _lobby.BtnGoldPlus.onClick.AddListener(OnGoToShop);
+                if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.AddListener(OnGoToShop);
             }
         }
 
@@ -106,56 +84,78 @@ namespace BalloonFlow
             if (_lobby == null) return;
 
             if (CurrencyManager.HasInstance)
-                _lobby.SetCoinText(CurrencyManager.Instance.Coins);
+                _lobby.SetGoldText(CurrencyManager.Instance.Coins);
 
-            int _stage = 1;
+            if (LifeManager.HasInstance)
+                _lobby.SetLifeText(LifeManager.Instance.CurrentLives, LifeManager.Instance.MaxLives);
+
+            int highest = 0;
             if (LevelManager.HasInstance)
+                highest = LevelManager.Instance.GetHighestCompletedLevel();
+
+            int currentLevel = highest > 0 ? highest + 1 : 1;
+            _lobby.SetupLevelBoxes(currentLevel, highest);
+        }
+
+        void UpdateLifeTimer()
+        {
+            if (_lobby == null || !LifeManager.HasInstance) return;
+
+            if (LifeManager.Instance.IsFullLives())
             {
-                int _highest = LevelManager.Instance.GetHighestCompletedLevel();
-                _stage = _highest > 0 ? _highest + 1 : 1;
+                _lobby.SetLifeTimerText(null);
+                return;
             }
-            _lobby.SetStageText(_stage);
+
+            TimeSpan remaining = LifeManager.Instance.GetTimeToNextLife();
+            if (remaining.TotalSeconds > 0)
+                _lobby.SetLifeTimerText($"{remaining.Minutes:D2}:{remaining.Seconds:D2}");
+            else
+                _lobby.SetLifeTimerText(null);
         }
 
         #endregion
 
-        #region 버튼 이벤트
+        #region Button Events
 
         void OnPlayClicked()
         {
             if (!GameManager.HasInstance) return;
-            int _levelId = 1;
+
+            if (LifeManager.HasInstance && !LifeManager.Instance.HasLife())
+            {
+                // 라이프 없으면 Shop 페이지로 이동
+                if (_lobby != null) _lobby.GoToPage(0);
+                return;
+            }
+
+            int levelId = 1;
             if (LevelManager.HasInstance)
             {
-                int _highest = LevelManager.Instance.GetHighestCompletedLevel();
-                _levelId = _highest > 0 ? _highest + 1 : 1;
+                int highest = LevelManager.Instance.GetHighestCompletedLevel();
+                levelId = highest > 0 ? highest + 1 : 1;
             }
-            GameManager.Instance.StartLevel(_levelId);
+            GameManager.Instance.StartLevel(levelId);
         }
 
-        void OnSettingsClicked()
+        /// <summary>BtnGoldPlus / BtnLifePlus → Shop 페이지로 스와이프 이동</summary>
+        void OnGoToShop()
         {
-            if (_settings != null) _settings.OpenUI();
+            if (_lobby != null) _lobby.GoToPage(0);
         }
 
-        void OnSettingsClose()
+        #endregion
+
+        #region EventBus Handlers
+
+        void HandleCoinChanged(OnCoinChanged evt)
         {
-            if (_settings != null) _settings.CloseUI();
+            if (_lobby != null) _lobby.SetGoldText(evt.currentCoins);
         }
 
-        void OnCoinClicked()
+        void HandleLifeChanged(OnLifeChanged evt)
         {
-            if (_goldShop != null) _goldShop.OpenUI();
-        }
-
-        void OnGoldShopClose()
-        {
-            if (_goldShop != null) _goldShop.CloseUI();
-        }
-
-        void HandleCoinChanged(OnCoinChanged _evt)
-        {
-            if (_lobby != null) _lobby.SetCoinText(_evt.currentCoins);
+            if (_lobby != null) _lobby.SetLifeText(evt.currentLives, evt.maxLives);
         }
 
         #endregion

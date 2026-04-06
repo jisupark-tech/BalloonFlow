@@ -9,6 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 126540755428092555}
+  - component: {fileID: -9173619878625300183}
   m_Layer: 5
   m_Name: LobbyRailBox
   m_TagString: Untagged
@@ -38,6 +39,25 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 300, y: 300}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &-9173619878625300183
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 24749370407827341}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aeb40e65e2386e64fb65d1d8fcf2d9c2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.LobbyRailBox
+  _imgBox: {fileID: 1047571178905831168}
+  _imgBoxEffect: {fileID: 1193745680810526645}
+  _rotateLight: {fileID: 7743365063719902898}
+  _blurOverlay: {fileID: 4234044573939086462}
+  _txtLevel: {fileID: 6976302680847245406}
+  _txtLevelOutline: {fileID: 117449764562003064}
+  _blurMaterial: {fileID: 0}
 --- !u!1 &808237656216990905
 GameObject:
   m_ObjectHideFlags: 0
