@@ -32,9 +32,23 @@ namespace BalloonFlow
             if (CameraManager.HasInstance)
                 CameraManager.Instance.ConfigureLobby();
 
-            var canvasGO = GameObject.Find("Canvas");
-            if (canvasGO != null && UIManager.HasInstance)
-                UIManager.Instance.SetSceneCanvas(canvasGO.transform);
+            if (UIManager.HasInstance)
+            {
+                var uiCanvas = GameObject.Find("UICanvas");
+                if (uiCanvas == null) uiCanvas = GameObject.Find("Canvas");
+                if (uiCanvas == null)
+                {
+                    uiCanvas = CreateCanvas("UICanvas", 0);
+                }
+
+                var popupCanvas = GameObject.Find("PopupCanvas");
+                if (popupCanvas == null)
+                {
+                    popupCanvas = CreateCanvas("PopupCanvas", 10);
+                }
+
+                UIManager.Instance.SetSceneCanvas(uiCanvas.transform, popupCanvas.transform);
+            }
 
             LoadUI();
             RefreshDisplay();
@@ -156,6 +170,24 @@ namespace BalloonFlow
         void HandleLifeChanged(OnLifeChanged evt)
         {
             if (_lobby != null) _lobby.SetLifeText(evt.currentLives, evt.maxLives);
+        }
+
+        #endregion
+
+        #region Helpers
+
+        static GameObject CreateCanvas(string name, int sortingOrder)
+        {
+            var go = new GameObject(name);
+            var canvas = go.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = sortingOrder;
+            var scaler = go.AddComponent<UnityEngine.UI.CanvasScaler>();
+            scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new UnityEngine.Vector2(1242f, 2688f);
+            scaler.matchWidthOrHeight = 0.5f;
+            go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+            return go;
         }
 
         #endregion

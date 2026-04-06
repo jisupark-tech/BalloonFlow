@@ -154,13 +154,28 @@ namespace BalloonFlow
                 _canvas.sortingOrder = 0;
                 var _scaler = _canvasGO.AddComponent<UnityEngine.UI.CanvasScaler>();
                 _scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                _scaler.referenceResolution = new Vector2(1080f, 1920f);
+                _scaler.referenceResolution = new Vector2(1242f, 2688f);
                 _scaler.matchWidthOrHeight = 0.5f;
                 _canvasGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
                 Debug.Log("[GameBootstrap] Created SceneCanvas (was missing)");
             }
 
-            UIManager.Instance.SetSceneCanvas(_canvasGO.transform);
+            // PopupCanvas: UI 위에 렌더링되는 팝업 전용
+            var _popupCanvasGO = GameObject.Find("PopupCanvas");
+            if (_popupCanvasGO == null)
+            {
+                _popupCanvasGO = new GameObject("PopupCanvas");
+                var _popupCanvas = _popupCanvasGO.AddComponent<Canvas>();
+                _popupCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                _popupCanvas.sortingOrder = 10;
+                var _popupScaler = _popupCanvasGO.AddComponent<UnityEngine.UI.CanvasScaler>();
+                _popupScaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                _popupScaler.referenceResolution = new Vector2(1242f, 2688f);
+                _popupScaler.matchWidthOrHeight = 0.5f;
+                _popupCanvasGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+            }
+
+            UIManager.Instance.SetSceneCanvas(_canvasGO.transform, _popupCanvasGO.transform);
 
             // EventSystem이 없으면 UI 클릭 불가 — 생성
             if (UnityEngine.EventSystems.EventSystem.current == null)

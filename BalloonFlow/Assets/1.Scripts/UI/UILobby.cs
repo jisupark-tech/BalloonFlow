@@ -145,8 +145,8 @@ namespace BalloonFlow
         {
             // Determine page width from our own RectTransform
             var selfRT = GetComponent<RectTransform>();
-            _pageWidth = selfRT != null ? selfRT.rect.width : 1080f;
-            if (_pageWidth <= 0f) _pageWidth = 1080f;
+            _pageWidth = selfRT != null ? selfRT.rect.width : 1242f;
+            if (_pageWidth <= 0f) _pageWidth = 1242f;
 
             // Create container
             var containerGO = new GameObject("PageContainer");
