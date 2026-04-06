@@ -7,19 +7,20 @@ namespace BalloonFlow
 {
     /// <summary>
     /// 중앙 UI 매니저. 모든 UI 로딩/열기/닫기를 관리.
-    /// - OpenUI<T>(path) : Resources에서 프리팹 로드 → UiTr에 생성
-    /// - CloseUI<T>()    : 열린 UI 닫기
-    /// - LoadPrefab()    : 범용 프리팹 로드
-    /// - FadeIn/FadeOut  : 씬 전환 페이드
-    ///
+    /// Canvas를 두 개로 분리:
+    ///   - UiTr (UICanvas): 일반 UI (UILobby, UIHud 등)
+    ///   - PopupTr (PopupCanvas): 팝업 (PopupSettings, PopupGoldShop 등) — UI 위에 렌더링
     /// 씬 컨트롤러가 SetSceneCanvas()로 현재 씬 캔버스를 등록.
     /// </summary>
     public class UIManager : Singleton<UIManager>
     {
         #region Fields
 
-        [Header("[UI Parent — 씬 컨트롤러가 SetSceneCanvas로 설정]")]
+        [Header("[UI Canvas — 일반 UI 부모]")]
         public Transform UiTr;
+
+        [Header("[Popup Canvas — 팝업 부모 (UI 위에 렌더링)]")]
+        public Transform PopupTr;
 
         [Header("[Fade — 기본 전환 이미지 (선택)]")]
         [SerializeField] private Sprite _fadeImage;
@@ -40,11 +41,13 @@ namespace BalloonFlow
 
         /// <summary>
         /// 각 씬 컨트롤러가 Awake/Start에서 호출.
-        /// 해당 씬의 Canvas Transform을 UI 부모로 설정.
+        /// UICanvas와 PopupCanvas를 동시에 설정.
+        /// PopupCanvas가 없으면 UICanvas를 공유.
         /// </summary>
-        public void SetSceneCanvas(Transform _canvasTr)
+        public void SetSceneCanvas(Transform _uiCanvasTr, Transform _popupCanvasTr = null)
         {
-            UiTr = _canvasTr;
+            UiTr = _uiCanvasTr;
+            PopupTr = _popupCanvasTr != null ? _popupCanvasTr : _uiCanvasTr;
         }
 
         #endregion
@@ -52,8 +55,8 @@ namespace BalloonFlow
         #region OpenUI / CloseUI
 
         /// <summary>
-        /// Resources에서 프리팹 로드 → UiTr 아래 생성 → T 컴포넌트 리턴.
-        /// path 예시: "UI/UITitle", "Popup/PopupSettings"
+        /// Resources에서 프리팹 로드 → 부모 Canvas에 생성 → T 컴포넌트 리턴.
+        /// path가 "Popup/"으로 시작하면 PopupTr에, 아니면 UiTr에 생성.
         /// </summary>
         public T OpenUI<T>(string _path) where T : UIBase
         {
@@ -74,7 +77,9 @@ namespace BalloonFlow
                 return null;
             }
 
-            var _go = Instantiate(_prefab, UiTr);
+            // Popup/ 경로면 PopupCanvas, 아니면 UICanvas
+            Transform parent = _path.StartsWith("Popup/") ? PopupTr : UiTr;
+            var _go = Instantiate(_prefab, parent);
             var _ui = _go.GetComponent<T>();
 
             if (_ui != null)
