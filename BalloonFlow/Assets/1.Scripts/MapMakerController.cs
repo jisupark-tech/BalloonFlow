@@ -237,8 +237,8 @@ namespace BalloonFlow
         private static readonly string[] DB_TAB_NAMES = { "Ori", "AI", "Transform" };
         private static readonly string[] DB_PATHS = {
             "Assets/Resources/LevelDatabase.asset",
-            "Assets/Resources/LevelDatabase_AI.asset",
-            "Assets/Resources/LevelDatabase_Transform.asset"
+            "Assets/EditorData/LevelDatabase_AI.asset",
+            "Assets/EditorData/LevelDatabase_Transform.asset"
         };
         private int _activeDBTab = 0;
         private Text[] _dbTabLabels;
@@ -263,6 +263,18 @@ namespace BalloonFlow
         // Center panel — info overlay
         private Text _txtCenterInfo;
         private Text _txtBalanceInfo;
+
+        // Perf: deferred refresh
+        private bool _infoDirty;
+        private List<int> _sortedSelectedColors = new List<int>();
+        private bool _sortedColorsDirty = true;
+
+        // Perf: shared primitive meshes (avoid CreatePrimitive per call)
+        private Mesh _sharedSphereMesh;
+        private Mesh _sharedCubeMesh;
+
+        // Perf: holder button pool
+        private GameObject[,] _holderButtonPool;
 
         #endregion
 
@@ -306,6 +318,7 @@ namespace BalloonFlow
             HandlePaintInput();
             HandleKeyboard();
             HandleCameraControl();
+            if (_infoDirty) { _infoDirty = false; RefreshInfo(); }
         }
 
         private void OnDestroy()
@@ -843,7 +856,7 @@ namespace BalloonFlow
                     if (_holderColors[c, r] >= 0)
                         usedColors.Add(_holderColors[c, r]);
 
-            _selectedColors.Clear();
+            _selectedColors.Clear(); _sortedColorsDirty = true;
             foreach (int ci in usedColors)
                 _selectedColors.Add(ci);
             if (_selectedColors.Count < 2)
@@ -855,7 +868,7 @@ namespace BalloonFlow
             RebuildColorToggleGrid();
             RebuildPalette();
             RebuildHolderUI();
-            RefreshInfo();
+            _infoDirty = true;
             SetStatus($"Deselected unused colors — {_numColors} remain");
         }
 
@@ -906,6 +919,7 @@ namespace BalloonFlow
             {
                 _selectedColors.Add(colorIndex);
             }
+            _sortedColorsDirty = true;
             _numColors = _selectedColors.Count;
 
             // Remove balloons only of the just-toggled color (not all non-selected colors)
@@ -935,7 +949,7 @@ namespace BalloonFlow
             AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             RebuildHolderUI();
-            RefreshInfo();
+            _infoDirty = true;
             SetStatus($"Colors: {_numColors} selected");
         }
 
@@ -1086,10 +1100,10 @@ namespace BalloonFlow
             Lbl(p, "Holder Grid", 14, FontStyle.Bold);
             var r1 = Row(p); Lbl(r1, "Columns", w: 90);
             _holderColsInput = MakeIntField(r1, _holderCols, 1, 20, v =>
-            { _holderCols = v; InitGrid(); RebuildHolderUI(); RefreshInfo(); });
+            { _holderCols = v; InitGrid(); RebuildHolderUI(); _infoDirty = true; });
             var r2 = Row(p); Lbl(r2, "Rows", w: 90);
             _holderRowsInput = MakeIntField(r2, _holderRows, 1, 20, v =>
-            { _holderRows = v; InitGrid(); RebuildHolderUI(); RefreshInfo(); });
+            { _holderRows = v; InitGrid(); RebuildHolderUI(); _infoDirty = true; });
             var r3 = Row(p); Lbl(r3, "Default Mag", w: 90);
             MakeIntField(r3, _defaultMag, 1, 99, v => _defaultMag = v);
 
@@ -1165,19 +1179,19 @@ namespace BalloonFlow
             _holderGimmickLockRow.gameObject.SetActive(false);
 
             var row = Row(p);
-            Btn(row, "Fill", () => { FillHolders(_paintColor); RebuildHolderUI(); RefreshInfo(); });
-            Btn(row, "Clear", () => { FillHolders(-1); RebuildHolderUI(); RefreshInfo(); });
-            Btn(row, "Random", () => { RandomHolders(); RebuildHolderUI(); RefreshInfo(); });
+            Btn(row, "Fill", () => { FillHolders(_paintColor); RebuildHolderUI(); _infoDirty = true; });
+            Btn(row, "Clear", () => { FillHolders(-1); RebuildHolderUI(); _infoDirty = true; });
+            Btn(row, "Random", () => { RandomHolders(); RebuildHolderUI(); _infoDirty = true; });
             var row2 = Row(p);
-            Btn(row2, "Set Mag", () => { SetAllMags(); RebuildHolderUI(); RefreshInfo(); });
+            Btn(row2, "Set Mag", () => { SetAllMags(); RebuildHolderUI(); _infoDirty = true; });
             Sep(p);
 
             // ── 큐 생성기 섹션 ──
             Lbl(p, "Queue Generator", 14, FontStyle.Bold);
             _queueGenScoreLabel = Lbl(p, "Score: -", 12);
             var rowGen = Row(p);
-            Btn(rowGen, "Generate Queue", () => { GenerateQueue(); RebuildHolderUI(); RefreshInfo(); });
-            Btn(rowGen, "Auto Balance", () => { AutoBalanceHolders(); RebuildHolderUI(); RefreshInfo(); });
+            Btn(rowGen, "Generate Queue", () => { GenerateQueue(); RebuildHolderUI(); _infoDirty = true; });
+            Btn(rowGen, "Auto Balance", () => { AutoBalanceHolders(); RebuildHolderUI(); _infoDirty = true; });
             Sep(p);
         }
 
@@ -1192,7 +1206,7 @@ namespace BalloonFlow
                 if (_customWaypoints.Count < 3)
                     _customWaypoints = BuildRectangularWaypoints();
                 RebuildPreview(); RebuildConveyorPreview(); RebuildWaypointPreview();
-                RefreshInfo();
+                _infoDirty = true;
             });
             var r2 = Row(p); Lbl(r2, "Padding", w: 90);
             MakeInputField(r2, _railPadding.ToString("F1"), s =>
@@ -1236,14 +1250,14 @@ namespace BalloonFlow
             Btn(r1, "Toggle (Tab)", () => ToggleConveyorMode());
 
             var r2 = Row(p);
-            Btn(r2, "Auto Ring", () => { AutoConveyorRing(); RebuildConveyorPreview(); RefreshInfo(); });
+            Btn(r2, "Auto Ring", () => { AutoConveyorRing(); RebuildConveyorPreview(); _infoDirty = true; });
             Btn(r2, "Clear Path", () => {
                 int pw = _pathGrid.GetLength(0), ph = _pathGrid.GetLength(1);
                 for (int c = 0; c < pw; c++)
                     for (int r = 0; r < ph; r++)
                         _pathGrid[c, r] = false;
                 _customWaypoints.Clear();
-                RebuildConveyorPreview(); RebuildWaypointPreview(); RefreshInfo();
+                RebuildConveyorPreview(); RebuildWaypointPreview(); _infoDirty = true;
             });
 
             Lbl(p, "  Tab=Toggle Mode. Click grid cells to draw path.", 10);
@@ -1388,12 +1402,12 @@ namespace BalloonFlow
             }
 
             // 팔레트 갱신
-            _selectedColors.Clear();
+            _selectedColors.Clear(); _sortedColorsDirty = true;
             foreach (int ci in colorHits) _selectedColors.Add(ci);
             _numColors = _selectedColors.Count;
             RebuildColorToggleGrid();
             RebuildPalette();
-            RefreshInfo();
+            _infoDirty = true;
             SetStatus($"Auto-detect: {colorHits.Count} palette colors matched from image");
         }
 
@@ -1792,7 +1806,7 @@ namespace BalloonFlow
                     }
 
             _numColors = colorCounts.Count;
-            _selectedColors.Clear();
+            _selectedColors.Clear(); _sortedColorsDirty = true;
             foreach (var key in colorCounts.Keys) _selectedColors.Add(key);
             RebuildColorToggleGrid();
             RebuildPalette();
@@ -1856,7 +1870,7 @@ namespace BalloonFlow
             _levelLoaded = true;
             OnBalloonGridChanged();
             RebuildHolderUI();
-            RefreshInfo();
+            _infoDirty = true;
 
             int totalB = 0;
             foreach (var v in colorCounts.Values) totalB += v;
@@ -1944,57 +1958,77 @@ namespace BalloonFlow
         {
             if (_holderGridContainer == null) return;
 
-            // Unparent first so GridLayoutGroup stops counting old children immediately
-            var toDestroy = new List<GameObject>();
-            foreach (Transform c in _holderGridContainer) toDestroy.Add(c.gameObject);
-            foreach (var go in toDestroy) { go.transform.SetParent(null); Destroy(go); }
+            bool needsRebuild = _holderButtonPool == null
+                || _holderButtonPool.GetLength(0) != _holderCols
+                || _holderButtonPool.GetLength(1) != _holderRows;
 
-            var glg = _holderGridContainer.GetComponent<GridLayoutGroup>();
-            glg.constraintCount = _holderCols;
-            float cellW = Mathf.Min(300f / Mathf.Max(_holderCols, 1), 36f);
-            glg.cellSize = new Vector2(cellW, cellW);
-            var le = _holderGridContainer.GetComponent<LayoutElement>();
-            le.preferredHeight = cellW * _holderRows + (_holderRows - 1) * glg.spacing.y + 4;
+            if (needsRebuild)
+            {
+                // Grid 크기 변경 시에만 전체 재생성
+                var toDestroy = new List<GameObject>();
+                foreach (Transform c in _holderGridContainer) toDestroy.Add(c.gameObject);
+                foreach (var go in toDestroy) { go.transform.SetParent(null); Destroy(go); }
 
+                var glg = _holderGridContainer.GetComponent<GridLayoutGroup>();
+                glg.constraintCount = _holderCols;
+                float cellW = Mathf.Min(300f / Mathf.Max(_holderCols, 1), 36f);
+                glg.cellSize = new Vector2(cellW, cellW);
+                var le = _holderGridContainer.GetComponent<LayoutElement>();
+                le.preferredHeight = cellW * _holderRows + (_holderRows - 1) * glg.spacing.y + 4;
+
+                _holderButtonPool = new GameObject[_holderCols, _holderRows];
+
+                for (int r = 0; r < _holderRows; r++)
+                    for (int c = 0; c < _holderCols; c++)
+                    {
+                        int cc = c, rr = r;
+                        var btn = DefaultControls.CreateButton(_uiRes);
+                        btn.transform.SetParent(_holderGridContainer, false);
+                        var t = btn.GetComponentInChildren<Text>();
+                        t.font = _font; t.fontSize = 8; t.color = Color.white;
+                        btn.GetComponent<Button>().onClick.AddListener(() => {
+                            _holderColors[cc, rr] = _paintColor;
+                            _holderMags[cc, rr] = _paintColor >= 0 ? _defaultMag : 0;
+                            _holderGimmicks[cc, rr] = _paintColor >= 0 ? _paintHolderGimmick : 0;
+                            _holderChainGroups[cc, rr] = _paintColor >= 0 ? _paintChainGroup : -1;
+                            _holderFrozenHP[cc, rr] = _paintFrozenHP;
+                            bool isSpawnerGimmick = _paintHolderGimmick > 0 && _paintHolderGimmick < HOLDER_GIMMICK_NAMES.Length
+                                && (HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Spawner_T"
+                                 || HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Spawner_O");
+                            _holderSpawnerHP[cc, rr] = isSpawnerGimmick ? _paintSpawnerHP : 0;
+                            _holderSpawnerMag[cc, rr] = isSpawnerGimmick ? _paintSpawnerMag : 20;
+                            bool isLockKeyHolder = _paintHolderGimmick > 0 && _paintHolderGimmick < HOLDER_GIMMICK_NAMES.Length
+                                && HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Lock_Key";
+                            _holderLockPairIds[cc, rr] = isLockKeyHolder ? _paintLockPairId : -1;
+                            UpdateHolderButton(cc, rr);
+                            _infoDirty = true;
+                        });
+                        _holderButtonPool[c, r] = btn;
+                    }
+
+                LayoutRebuilder.ForceRebuildLayoutImmediate(_holderGridContainer.GetComponent<RectTransform>());
+            }
+
+            // 모든 버튼 외형만 갱신 (Destroy/Create 없음)
             for (int r = 0; r < _holderRows; r++)
                 for (int c = 0; c < _holderCols; c++)
-                {
-                    int cc = c, rr = r;
-                    int ci = _holderColors[c, r];
-                    int gi = _holderGimmicks[c, r];
-                    var btn = DefaultControls.CreateButton(_uiRes);
-                    btn.transform.SetParent(_holderGridContainer, false);
-                    btn.GetComponent<Image>().color = (ci >= 0 && ci < PALETTE.Length) ? PALETTE[ci] : new Color(0.22f, 0.22f, 0.26f);
-                    var t = btn.GetComponentInChildren<Text>();
-                    // 기믹 + Chain 그룹 표시
-                    string gimmickMark = (gi > 0 && gi < HOLDER_GIMMICK_NAMES.Length) ? HOLDER_GIMMICK_NAMES[gi].Substring(0, System.Math.Min(2, HOLDER_GIMMICK_NAMES[gi].Length)) : "";
-                    int chainGrp = _holderChainGroups[c, r];
-                    string chainMark = chainGrp > 0 ? $"C{chainGrp}" : "";
-                    string mark = gimmickMark + (chainMark.Length > 0 ? " " + chainMark : "");
-                    t.text = ci >= 0 ? $"{_holderMags[c, r]}{(mark.Length > 0 ? "\n" + mark : "")}" : ".";
-                    t.font = _font; t.fontSize = 8; t.color = Color.white;
-                    btn.GetComponent<Button>().onClick.AddListener(() => {
-                        _holderColors[cc, rr] = _paintColor;
-                        _holderMags[cc, rr] = _paintColor >= 0 ? _defaultMag : 0;
-                        _holderGimmicks[cc, rr] = _paintColor >= 0 ? _paintHolderGimmick : 0;
-                        _holderChainGroups[cc, rr] = _paintColor >= 0 ? _paintChainGroup : -1;
-                        _holderFrozenHP[cc, rr] = _paintFrozenHP;
-                        // Spawner 기믹일 때만 spawnerHP/Mag 저장, 아니면 0
-                        bool isSpawnerGimmick = _paintHolderGimmick > 0 && _paintHolderGimmick < HOLDER_GIMMICK_NAMES.Length
-                            && (HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Spawner_T"
-                             || HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Spawner_O");
-                        _holderSpawnerHP[cc, rr] = isSpawnerGimmick ? _paintSpawnerHP : 0;
-                        _holderSpawnerMag[cc, rr] = isSpawnerGimmick ? _paintSpawnerMag : 20;
-                        // Lock_Key pairId
-                        bool isLockKeyHolder = _paintHolderGimmick > 0 && _paintHolderGimmick < HOLDER_GIMMICK_NAMES.Length
-                            && HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Lock_Key";
-                        _holderLockPairIds[cc, rr] = isLockKeyHolder ? _paintLockPairId : -1;
-                        RebuildHolderUI(); RefreshInfo();
-                    });
-                }
+                    UpdateHolderButton(c, r);
+        }
 
-            // Force layout recalculation so container expands immediately
-            LayoutRebuilder.ForceRebuildLayoutImmediate(_holderGridContainer.GetComponent<RectTransform>());
+        private void UpdateHolderButton(int c, int r)
+        {
+            if (_holderButtonPool == null || c >= _holderButtonPool.GetLength(0) || r >= _holderButtonPool.GetLength(1)) return;
+            var btn = _holderButtonPool[c, r];
+            if (btn == null) return;
+            int ci = _holderColors[c, r];
+            int gi = _holderGimmicks[c, r];
+            btn.GetComponent<Image>().color = (ci >= 0 && ci < PALETTE.Length) ? PALETTE[ci] : new Color(0.22f, 0.22f, 0.26f);
+            var t = btn.GetComponentInChildren<Text>();
+            string gimmickMark = (gi > 0 && gi < HOLDER_GIMMICK_NAMES.Length) ? HOLDER_GIMMICK_NAMES[gi].Substring(0, System.Math.Min(2, HOLDER_GIMMICK_NAMES[gi].Length)) : "";
+            int chainGrp = _holderChainGroups[c, r];
+            string chainMark = chainGrp > 0 ? $"C{chainGrp}" : "";
+            string mark = gimmickMark + (chainMark.Length > 0 ? " " + chainMark : "");
+            t.text = ci >= 0 ? $"{_holderMags[c, r]}{(mark.Length > 0 ? "\n" + mark : "")}" : ".";
         }
 
         #endregion
@@ -2310,28 +2344,31 @@ namespace BalloonFlow
             float wx = _boardCenter.x + (c - (_gridCols - 1) * 0.5f) * spacing;
             float wz = _boardCenter.y + (r - (_gridRows - 1) * 0.5f) * spacing;
 
-            // Remove old label
-            if (_previewLabels[c, r] != null)
+            // Reuse existing label or create once; toggle visibility
+            bool needLabel = ci >= 0 && gi > 0 && gi < GIMMICK_MARKS.Length && !string.IsNullOrEmpty(GIMMICK_MARKS[gi]);
+            if (needLabel)
             {
-                Destroy(_previewLabels[c, r].gameObject);
-                _previewLabels[c, r] = null;
-            }
-
-            // Add new label if needed
-            if (ci >= 0 && gi > 0 && gi < GIMMICK_MARKS.Length && !string.IsNullOrEmpty(GIMMICK_MARKS[gi]))
-            {
-                var labelGO = new GameObject("GLabel");
-                labelGO.transform.SetParent(_previewRoot, false);
-                labelGO.transform.position = new Vector3(wx, 1.2f, wz);
-                labelGO.transform.eulerAngles = new Vector3(90f, 0f, 0f);
-                var tm = labelGO.AddComponent<TextMesh>();
-                tm.text = GIMMICK_MARKS[gi];
-                tm.fontSize = 32;
+                var tm = _previewLabels[c, r];
+                if (tm == null)
+                {
+                    var labelGO = new GameObject("GLabel");
+                    labelGO.transform.SetParent(_previewRoot, false);
+                    labelGO.transform.eulerAngles = new Vector3(90f, 0f, 0f);
+                    tm = labelGO.AddComponent<TextMesh>();
+                    tm.fontSize = 32;
+                    tm.alignment = TextAlignment.Center;
+                    tm.anchor = TextAnchor.MiddleCenter;
+                    tm.color = Color.white;
+                    _previewLabels[c, r] = tm;
+                }
+                tm.transform.position = new Vector3(wx, 1.2f, wz);
                 tm.characterSize = BalloonScale * 0.35f;
-                tm.alignment = TextAlignment.Center;
-                tm.anchor = TextAnchor.MiddleCenter;
-                tm.color = Color.white;
-                _previewLabels[c, r] = tm;
+                tm.text = GIMMICK_MARKS[gi];
+                tm.gameObject.SetActive(true);
+            }
+            else if (_previewLabels[c, r] != null)
+            {
+                _previewLabels[c, r].gameObject.SetActive(false);
             }
         }
 
@@ -2508,21 +2545,20 @@ namespace BalloonFlow
             // Paint 모드일 때 가이드 그리드 표시
             if (_conveyorPaintMode && _pathGrid != null)
             {
+                EnsureSharedMeshes();
+                // 두 가지 상태(ON/OFF)에 대해 머티리얼 캐시
+                var matOn = MakeLitMaterial(FindLitShader(), new Color(0.3f, 0.3f, 0.6f, 0.5f));
+                var matOff = MakeLitMaterial(FindLitShader(), new Color(0.15f, 0.15f, 0.2f, 0.3f));
                 int pw = _pathGrid.GetLength(0);
                 int ph = _pathGrid.GetLength(1);
                 for (int gx = 0; gx < pw; gx++)
                     for (int gy = 0; gy < ph; gy++)
                     {
                         Vector3 wpos = PathGridToWorld(gx, gy);
-                        var outline = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                        Destroy(outline.GetComponent<Collider>());
-                        outline.transform.SetParent(_conveyorPreviewRoot, false);
+                        var outline = MakeMeshObj("PG", _sharedQuadMesh, _pathGrid[gx, gy] ? matOn : matOff, _conveyorPreviewRoot);
                         outline.transform.localScale = new Vector3(spacing * 0.98f, spacing * 0.98f, 1f);
                         outline.transform.position = new Vector3(wpos.x, -0.08f, wpos.z);
                         outline.transform.eulerAngles = new Vector3(90f, 0f, 0f);
-                        var mat = MakeLitMaterial(FindLitShader(),
-                            _pathGrid[gx, gy] ? new Color(0.3f, 0.3f, 0.6f, 0.5f) : new Color(0.15f, 0.15f, 0.2f, 0.3f));
-                        outline.GetComponent<MeshRenderer>().material = mat;
                     }
             }
         }
@@ -2815,6 +2851,31 @@ namespace BalloonFlow
 
         #region Waypoint Preview
 
+        private void EnsureSharedMeshes()
+        {
+            if (_sharedSphereMesh == null)
+            {
+                var tmp = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                _sharedSphereMesh = tmp.GetComponent<MeshFilter>().sharedMesh;
+                Object.Destroy(tmp);
+            }
+            if (_sharedCubeMesh == null)
+            {
+                var tmp = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                _sharedCubeMesh = tmp.GetComponent<MeshFilter>().sharedMesh;
+                Object.Destroy(tmp);
+            }
+        }
+
+        private GameObject MakeMeshObj(string name, Mesh mesh, Material mat, Transform parent)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = mat;
+            return go;
+        }
+
         private void RebuildWaypointPreview()
         {
             if (_waypointPreviewRoot) Destroy(_waypointPreviewRoot.gameObject);
@@ -2822,15 +2883,14 @@ namespace BalloonFlow
 
             if (_customWaypoints.Count == 0) return;
 
+            EnsureSharedMeshes();
+
             // Draw small spheres at each waypoint
             for (int i = 0; i < _customWaypoints.Count; i++)
             {
-                var s = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                Destroy(s.GetComponent<Collider>());
-                s.transform.SetParent(_waypointPreviewRoot, false);
+                var s = MakeMeshObj("WP", _sharedSphereMesh, _waypointMat, _waypointPreviewRoot);
                 s.transform.position = _customWaypoints[i] + Vector3.up * 0.3f;
                 s.transform.localScale = Vector3.one * 0.2f;
-                s.GetComponent<MeshRenderer>().material = _waypointMat;
 
                 // Number label
                 var labelGO = new GameObject("WPLabel");
@@ -2886,23 +2946,17 @@ namespace BalloonFlow
                     Vector3 mid = (from + to) * 0.5f + Vector3.up * 0.15f;
                     Vector3 dir = (to - from).normalized;
 
-                    var arrow = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    Destroy(arrow.GetComponent<Collider>());
-                    arrow.transform.SetParent(_waypointPreviewRoot, false);
+                    var arrow = MakeMeshObj("Arrow", _sharedCubeMesh, arrowMat, _waypointPreviewRoot);
                     arrow.transform.position = mid;
                     arrow.transform.localScale = new Vector3(0.06f, 0.06f, 0.25f);
                     if (dir.sqrMagnitude > 0.001f)
                         arrow.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
-                    arrow.GetComponent<MeshRenderer>().material = arrowMat;
 
-                    var head = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    Destroy(head.GetComponent<Collider>());
-                    head.transform.SetParent(_waypointPreviewRoot, false);
+                    var head = MakeMeshObj("Head", _sharedCubeMesh, arrowMat, _waypointPreviewRoot);
                     head.transform.position = mid + dir * 0.15f;
                     head.transform.localScale = new Vector3(0.18f, 0.06f, 0.12f);
                     if (dir.sqrMagnitude > 0.001f)
                         head.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
-                    head.GetComponent<MeshRenderer>().material = arrowMat;
                 }
             }
         }
@@ -3014,7 +3068,7 @@ namespace BalloonFlow
                     RebuildConveyorPreview();
                     RebuildWaypointPreview();
                     _conveyorClickConsumed = true;
-                    RefreshInfo();
+                    _infoDirty = true;
                 }
             }
             else
@@ -3067,7 +3121,7 @@ namespace BalloonFlow
                             _balloonPinataW[col, row] = pw;
                             _balloonPinataH[col, row] = ph;
                             UpdatePreviewCell(col, row);
-                            RefreshInfo();
+                            _infoDirty = true;
                         }
                         else
                         {
@@ -3082,7 +3136,7 @@ namespace BalloonFlow
                                 && FIELD_GIMMICK_NAMES[gimmickToSet] == "Lock_Key";
                             _balloonLockPairIds[col, row] = isLockKeyGimmick ? _paintLockPairId : -1;
                             UpdatePreviewCell(col, row);
-                            RefreshInfo();
+                            _infoDirty = true;
                         }
                     }
                 }
@@ -3114,10 +3168,15 @@ namespace BalloonFlow
 
             Key[] numKeys = { Key.Digit1, Key.Digit2, Key.Digit3, Key.Digit4, Key.Digit5,
                               Key.Digit6, Key.Digit7, Key.Digit8, Key.Digit9 };
-            var _sortedSelColors = new List<int>(_selectedColors);
-            _sortedSelColors.Sort();
-            for (int i = 0; i < Mathf.Min(9, _sortedSelColors.Count); i++)
-                if (kb[numKeys[i]].wasPressedThisFrame) SetPaintColor(_sortedSelColors[i]);
+            if (_sortedColorsDirty)
+            {
+                _sortedSelectedColors.Clear();
+                _sortedSelectedColors.AddRange(_selectedColors);
+                _sortedSelectedColors.Sort();
+                _sortedColorsDirty = false;
+            }
+            for (int i = 0; i < Mathf.Min(9, _sortedSelectedColors.Count); i++)
+                if (kb[numKeys[i]].wasPressedThisFrame) SetPaintColor(_sortedSelectedColors[i]);
             if (kb[Key.Digit0].wasPressedThisFrame) SetPaintColor(-1);
             if (kb[Key.Backquote].wasPressedThisFrame) SetPaintColor(-1);
             if (kb[Key.Tab].wasPressedThisFrame) ToggleConveyorMode();
@@ -3204,7 +3263,7 @@ namespace BalloonFlow
             {
                 UpdatePreviewColors();
             }
-            RefreshInfo();
+            _infoDirty = true;
         }
 
         /// <summary>프리뷰 오브젝트의 색상/표시만 갱신 (Destroy/Create 없이).</summary>
@@ -3357,13 +3416,13 @@ namespace BalloonFlow
 
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
-                        balloonCountPerColor[ci] = (balloonCountPerColor.ContainsKey(ci) ? balloonCountPerColor[ci] : 0) + 1;
-                        dartsNeededPerColor[ci] = (dartsNeededPerColor.ContainsKey(ci) ? dartsNeededPerColor[ci] : 0) + life;
+                        balloonCountPerColor.TryGetValue(ci, out int bcOld); balloonCountPerColor[ci] = bcOld + 1;
+                        dartsNeededPerColor.TryGetValue(ci, out int dnOld); dartsNeededPerColor[ci] = dnOld + life;
 
                         if (gi > 0 && gi < FIELD_GIMMICK_NAMES.Length)
                         {
                             string gn = FIELD_GIMMICK_NAMES[gi];
-                            gimmickCounts[gn] = (gimmickCounts.ContainsKey(gn) ? gimmickCounts[gn] : 0) + 1;
+                            gimmickCounts.TryGetValue(gn, out int gcOld); gimmickCounts[gn] = gcOld + 1;
                         }
                     }
 
@@ -3375,7 +3434,7 @@ namespace BalloonFlow
                     if (_holderColors[c, r] >= 0)
                     {
                         int ci = _holderColors[c, r];
-                        dartsProvidedPerColor[ci] = (dartsProvidedPerColor.ContainsKey(ci) ? dartsProvidedPerColor[ci] : 0) + _holderMags[c, r];
+                        dartsProvidedPerColor.TryGetValue(ci, out int dpOld); dartsProvidedPerColor[ci] = dpOld + _holderMags[c, r];
                         totalDartsProvided += _holderMags[c, r];
                         totalHolders++;
                     }
@@ -3388,54 +3447,58 @@ namespace BalloonFlow
             // === Center Top: Map + Holder info ===
             if (_txtCenterInfo)
             {
-                string line1 = $"Level {_levelId}  |  {_gridCols}x{_gridRows}  |  {_numColors}C  |  {_difficulty}";
-                string line2 = $"Balloons: {totalBalloons}  |  Holders: {totalHolders}  |  Darts: {totalDartsProvided} (need {totalDartsNeeded})";
+                var sb = new System.Text.StringBuilder(256);
+                sb.Append($"Level {_levelId}  |  {_gridCols}x{_gridRows}  |  {_numColors}C  |  {_difficulty}");
+                sb.Append($"\nBalloons: {totalBalloons}  |  Holders: {totalHolders}  |  Darts: {totalDartsProvided} (need {totalDartsNeeded})");
 
-                string gimmickStr = "";
-                foreach (var kvp in gimmickCounts)
-                    gimmickStr += $"  {kvp.Key}:{kvp.Value}";
-                if (!string.IsNullOrEmpty(gimmickStr))
-                    line2 += "\nGimmicks:" + gimmickStr;
+                if (gimmickCounts.Count > 0)
+                {
+                    sb.Append("\nGimmicks:");
+                    foreach (var kvp in gimmickCounts)
+                        sb.Append($"  {kvp.Key}:{kvp.Value}");
+                }
 
-                // Holder summary
-                string holderStr = "\nHolders: ";
+                sb.Append("\nHolders: ");
                 foreach (var kvp in dartsProvidedPerColor)
                 {
                     string label = kvp.Key < COLOR_LABELS.Length ? COLOR_LABELS[kvp.Key] : kvp.Key.ToString();
-                    holderStr += $"[{label}:{kvp.Value}]  ";
+                    sb.Append($"[{label}:{kvp.Value}]  ");
                 }
 
-                _txtCenterInfo.text = line1 + "\n" + line2 + holderStr;
+                _txtCenterInfo.text = sb.ToString();
             }
 
             // === Center Bottom: Per-color balance validation ===
             if (_txtBalanceInfo)
             {
-                string bal = "BALANCE CHECK (per color):\n";
+                var sb = new System.Text.StringBuilder(256);
                 bool hasIssue = false;
 
-                // Collect all colors
                 var allColors = new HashSet<int>();
                 foreach (var k in dartsNeededPerColor.Keys) allColors.Add(k);
                 foreach (var k in dartsProvidedPerColor.Keys) allColors.Add(k);
 
-                foreach (int ci in allColors)
+                if (allColors.Count > 0)
                 {
-                    string label = ci < COLOR_LABELS.Length ? COLOR_LABELS[ci] : ci.ToString();
-                    int bCount = balloonCountPerColor.ContainsKey(ci) ? balloonCountPerColor[ci] : 0;
-                    int need = dartsNeededPerColor.ContainsKey(ci) ? dartsNeededPerColor[ci] : 0;
-                    int have = dartsProvidedPerColor.ContainsKey(ci) ? dartsProvidedPerColor[ci] : 0;
-                    string status = (have == need) ? "OK" : (have > need ? $"+{have - need}" : $"-{need - have} !!!");
-                    if (have != need) hasIssue = true;
-                    bal += $"  {label}: {bCount}B (need {need}D) / have {have}D  [{status}]\n";
+                    sb.Append("BALANCE CHECK (per color):\n");
+                    foreach (int ci in allColors)
+                    {
+                        string label = ci < COLOR_LABELS.Length ? COLOR_LABELS[ci] : ci.ToString();
+                        balloonCountPerColor.TryGetValue(ci, out int bCount);
+                        dartsNeededPerColor.TryGetValue(ci, out int need);
+                        dartsProvidedPerColor.TryGetValue(ci, out int have);
+                        string status = (have == need) ? "OK" : (have > need ? $"+{have - need}" : $"-{need - have} !!!");
+                        if (have != need) hasIssue = true;
+                        sb.Append($"  {label}: {bCount}B (need {need}D) / have {have}D  [{status}]\n");
+                    }
+                    if (!hasIssue) sb.Append("  All colors balanced!");
+                }
+                else
+                {
+                    sb.Append("No balloons placed.");
                 }
 
-                if (!hasIssue && allColors.Count > 0)
-                    bal += "  All colors balanced!";
-                else if (allColors.Count == 0)
-                    bal = "No balloons placed.";
-
-                _txtBalanceInfo.text = bal;
+                _txtBalanceInfo.text = sb.ToString();
                 _txtBalanceInfo.color = hasIssue ? new Color(1f, 0.7f, 0.4f) : new Color(0.6f, 0.9f, 0.6f);
             }
 
@@ -4147,7 +4210,7 @@ namespace BalloonFlow
             }
 
             // 팔레트 색상 동기화 — 레벨에 실제 사용된 색상만 선택
-            _selectedColors.Clear();
+            _selectedColors.Clear(); _sortedColorsDirty = true;
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] >= 0)
@@ -4183,7 +4246,7 @@ namespace BalloonFlow
             // UI 위젯 텍스트 갱신 (변수는 바뀌었지만 InputField/Dropdown은 자동 갱신 안 됨)
             if (_levelIdInput != null) _levelIdInput.text = _levelId.ToString();
             // Rebuild _selectedColors from actual balloon/holder data
-            _selectedColors.Clear();
+            _selectedColors.Clear(); _sortedColorsDirty = true;
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] >= 0) _selectedColors.Add(_balloonColors[c, r]);
@@ -4949,7 +5012,7 @@ namespace BalloonFlow
                     }
             OnBalloonGridChanged();
             RebuildHolderUI();
-            RefreshInfo();
+            _infoDirty = true;
             SetStatus($"Swapped color {fromColor} -> {toColor} (balloons:{balloonCount}, holders:{holderCount})");
         }
 

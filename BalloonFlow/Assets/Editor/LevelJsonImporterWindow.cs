@@ -94,8 +94,8 @@ namespace BalloonFlow.Editor
         private static readonly string[] DB_NAMES = { "Origin", "AI Extractor", "Transform Extractor" };
         private static readonly string[] DB_ASSET_PATHS = {
             "Assets/Resources/LevelDatabase.asset",
-            "Assets/Resources/LevelDatabase_AI.asset",
-            "Assets/Resources/LevelDatabase_Transform.asset"
+            "Assets/EditorData/LevelDatabase_AI.asset",
+            "Assets/EditorData/LevelDatabase_Transform.asset"
         };
         private int _targetDBIndex = 0;
 
@@ -476,6 +476,13 @@ namespace BalloonFlow.Editor
 
             // 1) FieldMap 파싱 → 정확한 풍선 배치
             int[,] fieldMap = ParseFieldMap(json.designer_note, gridCols, gridRows);
+
+            // FieldMap이 비어있으면 pixel_art_source 이미지에서 자동 생성
+            if (IsFieldMapEmpty(fieldMap, gridCols, gridRows) && !string.IsNullOrEmpty(json.pixel_art_source))
+            {
+                fieldMap = BuildFieldMapFromImage(json.pixel_art_source, gridCols, gridRows, json.num_colors, json.color_distribution);
+            }
+
             var balloons = BuildBalloonsFromFieldMap(fieldMap, gridCols, gridRows, cellSpacing);
 
             // 2) 색상 분포 파싱
@@ -578,6 +585,128 @@ namespace BalloonFlow.Editor
             }
 
             return field;
+        }
+
+        /// <summary>FieldMap이 전부 0인지 확인</summary>
+        private bool IsFieldMapEmpty(int[,] field, int cols, int rows)
+        {
+            for (int y = 0; y < rows; y++)
+                for (int x = 0; x < cols; x++)
+                    if (field[x, y] != 0) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// pixel_art_source 이미지에서 FieldMap 자동 생성.
+        /// JSON과 같은 폴더 또는 Assets/ 하위에서 이미지를 찾아 픽셀→색상ID 매핑.
+        /// </summary>
+        private int[,] BuildFieldMapFromImage(string imageFileName, int cols, int rows,
+            int numColors, string colorDistribution)
+        {
+            var field = new int[cols, rows];
+
+            // 이미지 파일 찾기: JSON과 같은 폴더 또는 Assets/
+            string imagePath = null;
+            foreach (var entry in _entries)
+            {
+                if (entry.filePath == null) continue;
+                string dir = Path.GetDirectoryName(entry.filePath);
+                string candidate = Path.Combine(dir, imageFileName);
+                if (File.Exists(candidate)) { imagePath = candidate; break; }
+            }
+            if (imagePath == null)
+            {
+                // Assets 폴더에서도 검색
+                var guids = AssetDatabase.FindAssets(Path.GetFileNameWithoutExtension(imageFileName));
+                foreach (var guid in guids)
+                {
+                    string p = AssetDatabase.GUIDToAssetPath(guid);
+                    if (p.EndsWith(".png") || p.EndsWith(".jpg")) { imagePath = p; break; }
+                }
+            }
+            if (imagePath == null)
+            {
+                Debug.LogWarning($"[PixelForge] 이미지 없음: {imageFileName} — 빈 FieldMap 사용");
+                return field;
+            }
+
+            // 이미지 로드
+            byte[] bytes = File.ReadAllBytes(imagePath);
+            var tex = new Texture2D(2, 2);
+            if (!tex.LoadImage(bytes))
+            {
+                Debug.LogWarning($"[PixelForge] 이미지 로드 실패: {imagePath}");
+                return field;
+            }
+
+            Debug.Log($"[PixelForge] 이미지→FieldMap: {imagePath} ({tex.width}x{tex.height}) → {cols}x{rows}");
+
+            // 허용 색상 결정
+            var allowedColors = ParseColorDistribution(colorDistribution);
+            if (allowedColors.Count == 0)
+                for (int i = 1; i <= Mathf.Max(numColors, 1); i++) allowedColors[i] = 1;
+
+            // 28색 게임 팔레트
+            var palette = new Dictionary<int, Color>
+            {
+                {1, new Color(252/255f, 106/255f, 175/255f)}, {2, new Color(80/255f, 232/255f, 246/255f)},
+                {3, new Color(137/255f, 80/255f, 248/255f)},  {4, new Color(254/255f, 213/255f, 85/255f)},
+                {5, new Color(115/255f, 254/255f, 102/255f)}, {6, new Color(253/255f, 161/255f, 76/255f)},
+                {7, new Color(1f, 1f, 1f)},                   {8, new Color(65/255f, 65/255f, 65/255f)},
+                {9, new Color(110/255f, 168/255f, 250/255f)},  {10, new Color(57/255f, 174/255f, 46/255f)},
+                {11, new Color(252/255f, 94/255f, 94/255f)},   {12, new Color(50/255f, 107/255f, 248/255f)},
+                {13, new Color(58/255f, 165/255f, 139/255f)},  {14, new Color(231/255f, 167/255f, 250/255f)},
+                {15, new Color(183/255f, 199/255f, 251/255f)}, {16, new Color(106/255f, 74/255f, 48/255f)},
+                {17, new Color(254/255f, 227/255f, 169/255f)}, {18, new Color(253/255f, 183/255f, 193/255f)},
+                {19, new Color(158/255f, 61/255f, 94/255f)},   {20, new Color(167/255f, 221/255f, 148/255f)},
+                {21, new Color(89/255f, 46/255f, 126/255f)},   {22, new Color(220/255f, 120/255f, 129/255f)},
+                {23, new Color(217/255f, 217/255f, 231/255f)}, {24, new Color(111/255f, 114/255f, 127/255f)},
+                {25, new Color(252/255f, 56/255f, 165/255f)},  {26, new Color(253/255f, 180/255f, 88/255f)},
+                {27, new Color(137/255f, 10/255f, 8/255f)},    {28, new Color(111/255f, 175/255f, 177/255f)},
+            };
+
+            // 허용 색상만 필터
+            var allowed = palette.Where(kv => allowedColors.ContainsKey(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
+            if (allowed.Count == 0) allowed = palette;
+
+            // 배경색 추정 (코너 4곳 평균)
+            Color bg = (tex.GetPixel(0, 0) + tex.GetPixel(tex.width - 1, 0) +
+                        tex.GetPixel(0, tex.height - 1) + tex.GetPixel(tex.width - 1, tex.height - 1)) / 4f;
+
+            // 각 셀의 색상 매핑
+            for (int y = 0; y < rows; y++)
+            {
+                for (int x = 0; x < cols; x++)
+                {
+                    // 이미지에서 해당 셀 영역의 중심 픽셀
+                    int px = Mathf.FloorToInt((x + 0.5f) * tex.width / cols);
+                    int py = Mathf.FloorToInt((1f - (y + 0.5f) / rows) * tex.height); // Y 반전
+                    px = Mathf.Clamp(px, 0, tex.width - 1);
+                    py = Mathf.Clamp(py, 0, tex.height - 1);
+                    Color pixel = tex.GetPixel(px, py);
+
+                    // 배경과 유사하면 빈 셀
+                    if (ColorDistance(pixel, bg) < 0.15f) { field[x, y] = 0; continue; }
+
+                    // 가장 가까운 허용 색상 찾기
+                    int bestId = 0;
+                    float bestDist = float.MaxValue;
+                    foreach (var kv in allowed)
+                    {
+                        float d = ColorDistance(pixel, kv.Value);
+                        if (d < bestDist) { bestDist = d; bestId = kv.Key; }
+                    }
+                    field[x, y] = bestId;
+                }
+            }
+
+            Object.DestroyImmediate(tex);
+            return field;
+        }
+
+        private float ColorDistance(Color a, Color b)
+        {
+            return (a.r - b.r) * (a.r - b.r) + (a.g - b.g) * (a.g - b.g) + (a.b - b.b) * (a.b - b.b);
         }
 
         /// <summary>

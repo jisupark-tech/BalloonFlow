@@ -30,6 +30,9 @@ output/
 Thumbs.db
 .DS_Store
 
+# Level backups (local only, too large for repo)
+BalloonFlow/Assets/LevelBackups/
+
 # Crashlytics
 crashlytics-build.properties
 BalloonFlow/Assets/2.Sprite/UI/circle.png
