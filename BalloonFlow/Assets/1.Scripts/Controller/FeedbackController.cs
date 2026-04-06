@@ -74,6 +74,10 @@ namespace BalloonFlow
         [Header("Camera Reference")]
         [SerializeField] private Transform _cameraTransform;
 
+        [Header("Haptic (진동)")]
+        [Tooltip("햅틱 활성화 여부")]
+        [SerializeField] private bool _hapticEnabled = true;
+
         [Header("Pool Sizes")]
         [SerializeField] private int _normalParticlePoolSize = 20;
         [SerializeField] private int _comboParticlePoolSize = 10;
@@ -263,6 +267,7 @@ namespace BalloonFlow
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
             PlayPopFeedback(evt.position, evt.color, false);
+            HapticLight(); // P0: 풍선 터짐 Light 진동
         }
 
         private void HandleComboIncremented(OnComboIncremented evt)
@@ -571,6 +576,50 @@ namespace BalloonFlow
                 _sfxSource.pitch = _basePitch;
                 _sfxSource.PlayOneShot(_starEarnedClip);
             }
+        }
+
+        #endregion
+
+        #region Haptic
+
+        /// <summary>Light 진동 (10ms) — 풍선 터짐, 다트 배치, UI 터치.</summary>
+        public void HapticLight()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!_hapticEnabled) return;
+            try
+            {
+                using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                {
+                    var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                    var vibrator = activity.Call<AndroidJavaObject>("getSystemService", "vibrator");
+                    if (vibrator != null) vibrator.Call("vibrate", 10L);
+                }
+            }
+            catch (System.Exception) { }
+#elif UNITY_IOS && !UNITY_EDITOR
+            if (_hapticEnabled) Handheld.Vibrate();
+#endif
+        }
+
+        /// <summary>Heavy 진동 (40ms) — 보관함 비활성 터치, 경고.</summary>
+        public void HapticHeavy()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!_hapticEnabled) return;
+            try
+            {
+                using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                {
+                    var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                    var vibrator = activity.Call<AndroidJavaObject>("getSystemService", "vibrator");
+                    if (vibrator != null) vibrator.Call("vibrate", 40L);
+                }
+            }
+            catch (System.Exception) { }
+#elif UNITY_IOS && !UNITY_EDITOR
+            if (_hapticEnabled) Handheld.Vibrate();
+#endif
         }
 
         #endregion
