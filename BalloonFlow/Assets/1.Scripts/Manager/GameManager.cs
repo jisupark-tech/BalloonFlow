@@ -198,6 +198,9 @@ namespace BalloonFlow
             EnsurePersistent<OfferManager>("Mgr_Offer");
             EnsurePersistent<IAPManager>("Mgr_IAP");
 
+            // Settings
+            EnsurePersistent<SettingsManager>("Mgr_Settings");
+
             // Level & Content
             var _levelGO = EnsurePersistent<LevelManager>("Mgr_Level");
             if (_levelGO.GetComponent<LevelDataProvider>() == null)
@@ -267,6 +270,10 @@ namespace BalloonFlow
                 RailManager.Instance.ResetAll();
             if (PopupManager.HasInstance)
                 PopupManager.Instance.CloseAllPopups();
+
+            // 오브젝트 풀 전체 반환 — 비활성 풀 오브젝트가 다음 InGame에서 오염되지 않도록
+            if (ObjectPoolManager.HasInstance)
+                ObjectPoolManager.Instance.ReturnAllPools();
 
             if (_inGameRoot != null)
             {

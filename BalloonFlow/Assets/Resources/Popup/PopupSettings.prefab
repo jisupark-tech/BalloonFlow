@@ -1902,8 +1902,7 @@ MonoBehaviour:
   _animEase: 27
   _dim: {fileID: 6312736190280804709}
   _popupWindow: {fileID: 2576630869768810318}
-  _closeButton: {fileID: 6110997521914289465}
-  _homeButton: {fileID: 1709459604542128943}
+  _frame: {fileID: 3257377643137989241}
   _soundLabel: {fileID: 0}
   _musicLabel: {fileID: 0}
 --- !u!1 &6876009829752822843
@@ -2077,7 +2076,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 0.85}
+  m_Color: {r: 0, g: 0, b: 0, a: 0.9490196}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -2139,11 +2138,11 @@ RectTransform:
   - {fileID: 1965846102413014896}
   m_Father: {fileID: 2576630869768810318}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0}
+  m_AnchorMin: {x: 0.5, y: 1}
   m_AnchorMax: {x: 0.5, y: 1}
-  m_AnchoredPosition: {x: 0, y: 130}
-  m_SizeDelta: {x: 904, y: -700}
-  m_Pivot: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: -220}
+  m_SizeDelta: {x: 904, y: 450}
+  m_Pivot: {x: 0.5, y: 1}
 --- !u!222 &667309183228181329
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -2344,6 +2343,10 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 2318739553156642201, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+      propertyPath: _txtBtnSingleOutline
+      value: 
+      objectReference: {fileID: 7265479479207452709}
     - target: {fileID: 2613309072712728109, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
       propertyPath: m_AnchorMax.y
       value: 0
@@ -2544,30 +2547,30 @@ PrefabInstance:
       addedObject: {fileID: 6617048252157600791}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
---- !u!114 &1709459604542128943 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 1918655039847025871, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
-  m_PrefabInstance: {fileID: 943881133727502304}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
 --- !u!224 &2576630869768810318 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 3376396783073976494, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
   m_PrefabInstance: {fileID: 943881133727502304}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &6110997521914289465 stripped
+--- !u!114 &3257377643137989241 stripped
 MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 6473864255396057817, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+  m_CorrespondingSourceObject: {fileID: 2318739553156642201, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
   m_PrefabInstance: {fileID: 943881133727502304}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Script: {fileID: 11500000, guid: 87f7cca05f38fbb40a0db2bcdf32f1c3, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupCommonFrame
+--- !u!114 &7265479479207452709 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 7623888233264951237, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+  m_PrefabInstance: {fileID: 943881133727502304}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI

@@ -12,11 +12,13 @@ namespace BalloonFlow
     /// </summary>
     public class PopupGoldShop : UIBase
     {
+        [Header("[Common Frame]")]
+        [SerializeField] private PopupCommonFrame _frame;
+
         [Header("[Top Panel]")]
         [SerializeField] private TMP_Text _txtGold;
-        [SerializeField] private Button _btnClose;
 
-        public Button CloseButton => _btnClose;
+        public Button CloseButton => _frame != null ? _frame.BtnExit : null;
 
         [Header("[Main Panel — ScrollView]")]
         [SerializeField] private ScrollRect _scrollView;
@@ -42,8 +44,8 @@ namespace BalloonFlow
         {
             base.Awake();
 
-            if (_btnClose != null)
-                _btnClose.onClick.AddListener(() => CloseUI());
+            if (_frame != null && _frame.BtnExit != null)
+                _frame.BtnExit.onClick.AddListener(() => CloseUI());
 
             if (_btnMoreProducts != null)
                 _btnMoreProducts.onClick.AddListener(LoadMoreProducts);
@@ -51,6 +53,12 @@ namespace BalloonFlow
 
         public override void OpenUI()
         {
+            if (_frame != null)
+            {
+                _frame.SetTitle("Shop");
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.None);
+                _frame.ShowExitButton(true);
+            }
             base.OpenUI();
             RefreshGold();
             ResetAndLoadProducts();

@@ -24,10 +24,16 @@ namespace BalloonFlow
                 CameraManager.Instance.ConfigureTitle();
 
             // 씬 캔버스를 UIManager에 등록
-            var _canvasGO = GameObject.Find("Canvas");
-            if (_canvasGO != null && UIManager.HasInstance)
+            if (UIManager.HasInstance)
             {
-                UIManager.Instance.SetSceneCanvas(_canvasGO.transform);
+                var _uiCanvas = GameObject.Find("UICanvas");
+                if (_uiCanvas == null) _uiCanvas = GameObject.Find("Canvas");
+                if (_uiCanvas == null) _uiCanvas = CreateCanvas("UICanvas", 0);
+
+                var _popupCanvas = GameObject.Find("PopupCanvas");
+                if (_popupCanvas == null) _popupCanvas = CreateCanvas("PopupCanvas", 10);
+
+                UIManager.Instance.SetSceneCanvas(_uiCanvas.transform, _popupCanvas.transform);
                 UIManager.Instance.OpenUI<UITitle>("UI/UITitle");
             }
         }
@@ -46,6 +52,20 @@ namespace BalloonFlow
                 if (GameManager.HasInstance)
                     GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY);
             }
+        }
+
+        static GameObject CreateCanvas(string name, int sortingOrder)
+        {
+            var go = new GameObject(name);
+            var canvas = go.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = sortingOrder;
+            var scaler = go.AddComponent<UnityEngine.UI.CanvasScaler>();
+            scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1242f, 2688f);
+            scaler.matchWidthOrHeight = 0.5f;
+            go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+            return go;
         }
     }
 }

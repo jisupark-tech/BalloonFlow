@@ -233,6 +233,17 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// Returns the difficulty of a specific level from the database.
+        /// Returns Normal if level data is not available.
+        /// </summary>
+        public DifficultyPurpose GetLevelDifficulty(int levelId)
+        {
+            if (_levelDataProvider == null) return DifficultyPurpose.Normal;
+            var config = _levelDataProvider.GetLevelData(levelId);
+            return config != null ? config.difficultyPurpose : DifficultyPurpose.Normal;
+        }
+
+        /// <summary>
         /// Returns the best (highest) star count ever achieved on a level, from PlayerPrefs.
         /// Returns 0 if the level has never been completed.
         /// </summary>
@@ -431,7 +442,10 @@ namespace BalloonFlow
             var railRenderer = FindAnyObjectByType<RailRenderer>();
             if (railRenderer != null && config.rail != null)
             {
-                railRenderer.VisualType = config.rail.visualType;
+                // visualType 0(Cylinder)은 레거시 기본값 — SpriteTile(3)로 강제
+                int vt = config.rail.visualType;
+                if (vt == 0) vt = RailRenderer.VISUAL_SPRITE_TILE;
+                railRenderer.VisualType = vt;
             }
 
             // Initialize holders from level config (column-based queue)
