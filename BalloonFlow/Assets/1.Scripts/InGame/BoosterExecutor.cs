@@ -168,20 +168,7 @@ namespace BalloonFlow
                     Debug.Log("[BoosterExecutor] Color Remove activated. Waiting for color selection.");
                     break;
 
-                case BoosterManager.HAND:
-                    _pendingBoosterType = BoosterManager.HAND;
-                    _awaitingHolderSelection = true;
-                    ShowCancelButton();
-
-                    // Move camera to queue area
-                    if (CameraManager.HasInstance && HolderVisualManager.HasInstance)
-                    {
-                        Vector3 queuePosition = HolderVisualManager.Instance.CalculateQueueCenterPosition();
-                        CameraManager.Instance.MoveToTarget(queuePosition);
-                    }
-
-                    Debug.Log("[BoosterExecutor] Hand activated. Waiting for holder selection.");
-                    break;
+                // HAND = SELECT_TOOL (명세 통합) → 위 SELECT_TOOL case에서 처리
             }
         }
 
