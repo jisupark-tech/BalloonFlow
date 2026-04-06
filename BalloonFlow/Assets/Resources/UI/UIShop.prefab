@@ -511,7 +511,7 @@ MonoBehaviour:
   m_HandleRect: {fileID: 832374431743664045}
   m_Direction: 2
   m_Value: 0
-  m_Size: 0.88851726
+  m_Size: 0.95684814
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -1687,7 +1687,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 105.84073}
+  m_AnchoredPosition: {x: 0, y: 0.42036244}
   m_SizeDelta: {x: 0, y: 300}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &7669768595882168475
@@ -1923,6 +1923,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: ShopListGoldAlign
       objectReference: {fileID: 0}
+    - target: {fileID: 628220367067160006, guid: 0ee928ab9d53cbf46a3f217645cb80cb, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 3997517465772649653, guid: 0ee928ab9d53cbf46a3f217645cb80cb, type: 3}
       propertyPath: m_AnchorMax.y
       value: 0
@@ -1997,7 +2001,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8736437862415988692, guid: 0ee928ab9d53cbf46a3f217645cb80cb, type: 3}
       propertyPath: m_SizeDelta.x
-      value: 0
+      value: 1172
       objectReference: {fileID: 0}
     - target: {fileID: 8736437862415988692, guid: 0ee928ab9d53cbf46a3f217645cb80cb, type: 3}
       propertyPath: m_SizeDelta.y
