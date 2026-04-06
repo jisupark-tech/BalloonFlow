@@ -253,7 +253,11 @@ namespace BalloonFlow
                     bool isCompleted = (levelId <= highestCompleted);
                     bool isLocked = (levelId > highestCompleted + 1);
 
-                    box.Setup(levelId, isActive, isCompleted, isLocked);
+                    DifficultyPurpose diff = DifficultyPurpose.Normal;
+                    if (LevelManager.HasInstance)
+                        diff = LevelManager.Instance.GetLevelDifficulty(levelId);
+
+                    box.Setup(levelId, isActive, isCompleted, isLocked, diff);
                 }
                 _railBoxes[i] = box;
 

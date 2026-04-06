@@ -355,8 +355,7 @@ MonoBehaviour:
   _animEase: 27
   _dim: {fileID: 6312736190280804709}
   _popupWindow: {fileID: 2576630869768810318}
-  _closeButton: {fileID: 6110997521914289465}
-  _homeButton: {fileID: 0}
+  _frame: {fileID: 3257377643137989241}
   _soundLabel: {fileID: 0}
   _musicLabel: {fileID: 0}
 --- !u!1 &7876007414537713315
@@ -675,14 +674,14 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 3376396783073976494, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
   m_PrefabInstance: {fileID: 943881133727502304}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &6110997521914289465 stripped
+--- !u!114 &3257377643137989241 stripped
 MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 6473864255396057817, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+  m_CorrespondingSourceObject: {fileID: 2318739553156642201, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
   m_PrefabInstance: {fileID: 943881133727502304}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Script: {fileID: 11500000, guid: 87f7cca05f38fbb40a0db2bcdf32f1c3, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupCommonFrame

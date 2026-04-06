@@ -481,8 +481,7 @@ MonoBehaviour:
   _animEase: 27
   _dim: {fileID: 6312736190280804709}
   _popupWindow: {fileID: 6984908553855046056}
-  _closeButton: {fileID: 0}
-  _homeButton: {fileID: 0}
+  _frame: {fileID: 342548267286190168}
   _soundLabel: {fileID: 0}
   _musicLabel: {fileID: 0}
 --- !u!1 &6852369448966386706
@@ -1341,6 +1340,17 @@ PrefabInstance:
       addedObject: {fileID: 4323857593869934572}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+--- !u!114 &342548267286190168 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 2318739553156642201, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+  m_PrefabInstance: {fileID: 2660827498732350913}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87f7cca05f38fbb40a0db2bcdf32f1c3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupCommonFrame
 --- !u!224 &735905877314047343 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 3376396783073976494, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}

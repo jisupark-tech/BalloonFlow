@@ -1932,19 +1932,30 @@ MonoBehaviour:
   m_GameObject: {fileID: 6745744179658336456}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 975106cc1a3f3254798144947e079dcb, type: 3}
+  m_Script: {fileID: 11500000, guid: 12286a2f227b4aa49c99b3da03a100ad, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupSettings
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupMoreLive
   _useAnimation: 0
   _animationType: 1
   _animDuration: 0.35
   _animEase: 27
   _dim: {fileID: 6312736190280804709}
   _popupWindow: {fileID: 2576630869768810318}
-  _closeButton: {fileID: 6110997521914289465}
-  _homeButton: {fileID: 0}
-  _soundLabel: {fileID: 0}
-  _musicLabel: {fileID: 0}
+  _frame: {fileID: 3257377643137989241}
+  _txtLife: {fileID: 7373849485959722136}
+  _txtLifeOutline: {fileID: 6424643472608892360}
+  _imgLife: {fileID: 8317041856750354867}
+  _txtTimer: {fileID: 5635784729895553372}
+  _imgClock: {fileID: 6403065321352718197}
+  _imgClockHand: {fileID: 2040573014625560599}
+  _txtDescription: {fileID: 971331068688350962}
+  _txtGold: {fileID: 7490428548799973239}
+  _txtGoldOutline: {fileID: 2497141415855153223}
+  _imgCoin: {fileID: 8200089123001384782}
+  _txtFree: {fileID: 7555000501763753025}
+  _txtFreeOutline: {fileID: 4142407829754829055}
+  _imgAd: {fileID: 5356946586320784814}
+  _imgInnerFrame: {fileID: 7123559407983626967}
 --- !u!1 &6987276572832219584
 GameObject:
   m_ObjectHideFlags: 0
@@ -2838,22 +2849,33 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 3376396783073976494, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
   m_PrefabInstance: {fileID: 943881133727502304}
   m_PrefabAsset: {fileID: 0}
---- !u!224 &3988378106508841445 stripped
-RectTransform:
-  m_CorrespondingSourceObject: {fileID: 4197572703288483333, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
-  m_PrefabInstance: {fileID: 943881133727502304}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &6110997521914289465 stripped
+--- !u!114 &3257377643137989241 stripped
 MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 6473864255396057817, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+  m_CorrespondingSourceObject: {fileID: 2318739553156642201, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
   m_PrefabInstance: {fileID: 943881133727502304}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Script: {fileID: 11500000, guid: 87f7cca05f38fbb40a0db2bcdf32f1c3, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupCommonFrame
+--- !u!224 &3988378106508841445 stripped
+RectTransform:
+  m_CorrespondingSourceObject: {fileID: 4197572703288483333, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+  m_PrefabInstance: {fileID: 943881133727502304}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &7123559407983626967 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8053176560183985463, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+  m_PrefabInstance: {fileID: 943881133727502304}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
 --- !u!224 &8543623460749417138 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 8901464334231459154, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}

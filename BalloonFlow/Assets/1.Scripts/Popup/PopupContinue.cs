@@ -5,36 +5,50 @@ namespace BalloonFlow
 {
     /// <summary>
     /// Continue popup — 실패 흐름의 두 번째 단계.
-    /// ContinueButton: 골드 차감 + 색상 제거 + 게임 재개.
-    /// DeclineButton: PopupFail02로 이동.
+    /// PopupCommonFrame: Horizontal 레이아웃 (Green=Continue, Red=Give Up).
     /// Flow: PopupFail01 → PopupContinue → PopupFail02
     /// </summary>
     public class PopupContinue : UIBase
     {
-        [Header("[버튼]")]
-        [SerializeField] private Button _continueButton;
-        [SerializeField] private Button _declineButton;
+        [Header("[Common Frame]")]
+        [SerializeField] private PopupCommonFrame _frame;
 
         [Header("[코스트 텍스트]")]
         [SerializeField] private Text _costText;
 
-        public Button ContinueButton => _continueButton;
-        public Button DeclineButton => _declineButton;
+        public Button ContinueButton => _frame != null ? _frame.BtnHorizGreen : null;
+        public Button DeclineButton => _frame != null ? _frame.BtnHorizRed : null;
 
         private void Start()
         {
-            if (_continueButton != null) _continueButton.onClick.AddListener(OnContinueClicked);
-            if (_declineButton != null) _declineButton.onClick.AddListener(OnDeclineClicked);
+            if (_frame != null)
+            {
+                if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.AddListener(OnContinueClicked);
+                if (_frame.BtnHorizRed != null) _frame.BtnHorizRed.onClick.AddListener(OnDeclineClicked);
+                if (_frame.BtnExit != null) _frame.BtnExit.onClick.AddListener(OnDeclineClicked);
+            }
         }
 
         private void OnDestroy()
         {
-            if (_continueButton != null) _continueButton.onClick.RemoveAllListeners();
-            if (_declineButton != null) _declineButton.onClick.RemoveAllListeners();
+            if (_frame != null)
+            {
+                if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.RemoveAllListeners();
+                if (_frame.BtnHorizRed != null) _frame.BtnHorizRed.onClick.RemoveAllListeners();
+                if (_frame.BtnExit != null) _frame.BtnExit.onClick.RemoveAllListeners();
+            }
         }
 
         public void Show()
         {
+            if (_frame != null)
+            {
+                _frame.SetTitle("Continue?");
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
+                _frame.SetHorizGreenText("Continue");
+                _frame.SetHorizRedText("Give Up");
+                _frame.ShowExitButton(true);
+            }
             UpdateCostDisplay();
             OpenUI();
         }
@@ -44,7 +58,6 @@ namespace BalloonFlow
             if (!ContinueHandler.HasInstance) return;
 
             int cost = ContinueHandler.Instance.GetContinueCost();
-
             if (CurrencyManager.HasInstance && CurrencyManager.Instance.Coins < cost && cost > 0)
             {
                 Debug.Log("[PopupContinue] 골드 부족");
@@ -54,9 +67,7 @@ namespace BalloonFlow
             bool success = ContinueHandler.Instance.Continue();
             if (success)
             {
-                if (PopupManager.HasInstance)
-                    PopupManager.Instance.ClosePopup("popup_continue");
-                Debug.Log("[PopupContinue] Continue 성공 — 게임 재개");
+                if (PopupManager.HasInstance) PopupManager.Instance.ClosePopup("popup_continue");
             }
             else
             {
@@ -71,8 +82,6 @@ namespace BalloonFlow
                 PopupManager.Instance.ClosePopup("popup_continue");
                 PopupManager.Instance.ShowPopup("popup_fail02", 50);
             }
-
-            Debug.Log("[PopupContinue] Decline → PopupFail02 표시");
         }
 
         private void UpdateCostDisplay()

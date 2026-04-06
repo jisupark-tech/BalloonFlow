@@ -138,8 +138,9 @@ namespace BalloonFlow
 
             if (LifeManager.HasInstance && !LifeManager.Instance.HasLife())
             {
-                // 라이프 없으면 Shop 페이지로 이동
-                if (_lobby != null) _lobby.GoToPage(0);
+                // 라이프 부족 → PopupMoreLive 표시
+                if (UIManager.HasInstance)
+                    UIManager.Instance.OpenUI<PopupMoreLive>("Popup/PopupMoreLive");
                 return;
             }
 

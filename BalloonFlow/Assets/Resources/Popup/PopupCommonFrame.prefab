@@ -3025,6 +3025,7 @@ GameObject:
   - component: {fileID: 3376396783073976494}
   - component: {fileID: 5263485927329129200}
   - component: {fileID: 8053176560183985463}
+  - component: {fileID: 2318739553156642201}
   m_Layer: 5
   m_Name: PopupCommonFrame
   m_TagString: Untagged
@@ -3094,6 +3095,57 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &2318739553156642201
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7758026146669962325}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87f7cca05f38fbb40a0db2bcdf32f1c3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupCommonFrame
+  _frameImage: {fileID: 8053176560183985463}
+  _leftTopSidePanel: {fileID: 6678993585657655199}
+  _rightTopSidePanel: {fileID: 6831703659846992415}
+  _txtTitle: {fileID: 4244878855323792664}
+  _txtTitleOutline: {fileID: 9103898021502096001}
+  _btnExit: {fileID: 6473864255396057817}
+  _btnSingleRoot: {fileID: 808024209144717098}
+  _btnSingle: {fileID: 7732753931540586264}
+  _btnSingleFrame: {fileID: 5385303518306048366}
+  _txtBtnSingle: {fileID: 7892786266567462720}
+  _txtBtnSingleOutline: {fileID: 0}
+  _btnHorizontalRoot: {fileID: 6575846011874418962}
+  _btnHorizGreen: {fileID: 1918655039847025871}
+  _btnHorizGreenFrame: {fileID: 4319629223005367303}
+  _txtHorizGreen: {fileID: 3320720024954225738}
+  _txtHorizGreenOutline: {fileID: 9170425644537096924}
+  _btnHorizRed: {fileID: 6229036895930064926}
+  _btnHorizRedFrame: {fileID: 4638866792463638490}
+  _txtHorizRed: {fileID: 7940479620705999160}
+  _txtHorizRedOutline: {fileID: 2970707907876736984}
+  _btnVerticalRoot: {fileID: 7270842578942557459}
+  _btnVertGreen: {fileID: 5785173388139244149}
+  _btnVertGreenFrame: {fileID: 4890731362531231019}
+  _txtVertGreen: {fileID: 188443869457795678}
+  _txtVertGreenOutline: {fileID: 5391949516316670461}
+  _btnVertRed: {fileID: 7325710687404522282}
+  _btnVertRedFrame: {fileID: 5215920312322416347}
+  _txtVertRed: {fileID: 8775388428163304882}
+  _txtVertRedOutline: {fileID: 8545323943631751415}
+  _btnVertBlue: {fileID: 1964330006985133658}
+  _btnVertBlueFrame: {fileID: 7583458539658249580}
+  _txtVertBlue: {fileID: 6520574327195494935}
+  _txtVertBlueOutline: {fileID: 3170827023751741375}
+  _sprFrameNormal: {fileID: 21300000, guid: 8218e91f0ec78854197dbaab177f8078, type: 3}
+  _sprFrameHard: {fileID: 21300000, guid: 479a3d54cf4037240af6efeb21c49eb7, type: 3}
+  _sprFrameSuperHard: {fileID: 21300000, guid: 339bfcfea1476a240964926f4de4735c, type: 3}
+  _sprSideNormal: {fileID: 21300000, guid: 8b7a6d882762a384d9c69ada398291b6, type: 3}
+  _sprSideHard: {fileID: 21300000, guid: 44efab1b342972a46abc7841991a7bfe, type: 3}
+  _sprSideSuperHard: {fileID: 21300000, guid: 8a2ac73a334541146b4c5be69e5380e1, type: 3}
 --- !u!1 &8038297779133709078
 GameObject:
   m_ObjectHideFlags: 0

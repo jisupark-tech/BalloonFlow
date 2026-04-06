@@ -268,6 +268,10 @@ namespace BalloonFlow
             if (PopupManager.HasInstance)
                 PopupManager.Instance.CloseAllPopups();
 
+            // 오브젝트 풀 전체 반환 — 비활성 풀 오브젝트가 다음 InGame에서 오염되지 않도록
+            if (ObjectPoolManager.HasInstance)
+                ObjectPoolManager.Instance.ReturnAllPools();
+
             if (_inGameRoot != null)
             {
                 Destroy(_inGameRoot);

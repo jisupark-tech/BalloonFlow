@@ -311,6 +311,10 @@ namespace BalloonFlow
 
         void LoadPendingLevel()
         {
+            // 이전 InGame 잔여 풀 오브젝트 정리 (Lobby → InGame 경로에서 오염 방지)
+            if (ObjectPoolManager.HasInstance)
+                ObjectPoolManager.Instance.ReturnAllPools();
+
             int _levelId = PlayerPrefs.GetInt("BF_PendingLevelId", 0);
             if (_levelId <= 0)
             {

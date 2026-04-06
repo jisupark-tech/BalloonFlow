@@ -54,10 +54,9 @@ MonoBehaviour:
   _imgBox: {fileID: 1047571178905831168}
   _imgBoxEffect: {fileID: 1193745680810526645}
   _rotateLight: {fileID: 7743365063719902898}
-  _blurOverlay: {fileID: 4234044573939086462}
+  _imgBoxDim: {fileID: 4234044573939086462}
   _txtLevel: {fileID: 6976302680847245406}
   _txtLevelOutline: {fileID: 117449764562003064}
-  _blurMaterial: {fileID: 0}
 --- !u!1 &808237656216990905
 GameObject:
   m_ObjectHideFlags: 0

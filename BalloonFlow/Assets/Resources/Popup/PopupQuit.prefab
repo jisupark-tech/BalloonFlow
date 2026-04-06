@@ -69,8 +69,7 @@ MonoBehaviour:
   _animEase: 27
   _dim: {fileID: 9018109011430426596}
   _popupWindow: {fileID: 2099128651844331429}
-  _homeButton: {fileID: 7650786334194849234}
-  _nextButton: {fileID: 0}
+  _frame: {fileID: 1429635361967927954}
 --- !u!1 &1954307638721191599
 GameObject:
   m_ObjectHideFlags: 0
@@ -647,19 +646,19 @@ PrefabInstance:
       addedObject: {fileID: 5166886870800633889}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
---- !u!224 &2099128651844331429 stripped
-RectTransform:
-  m_CorrespondingSourceObject: {fileID: 3376396783073976494, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
-  m_PrefabInstance: {fileID: 3745522227909740299}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &7650786334194849234 stripped
+--- !u!114 &1429635361967927954 stripped
 MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 6473864255396057817, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+  m_CorrespondingSourceObject: {fileID: 2318739553156642201, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
   m_PrefabInstance: {fileID: 3745522227909740299}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Script: {fileID: 11500000, guid: 87f7cca05f38fbb40a0db2bcdf32f1c3, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupCommonFrame
+--- !u!224 &2099128651844331429 stripped
+RectTransform:
+  m_CorrespondingSourceObject: {fileID: 3376396783073976494, guid: 3ee86b8fda7ba23439a099e287fe7480, type: 3}
+  m_PrefabInstance: {fileID: 3745522227909740299}
+  m_PrefabAsset: {fileID: 0}

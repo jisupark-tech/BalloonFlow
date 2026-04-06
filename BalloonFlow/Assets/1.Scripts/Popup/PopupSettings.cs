@@ -4,30 +4,42 @@ using UnityEngine.UI;
 namespace BalloonFlow
 {
     /// <summary>
-    /// 설정 팝업. Resources/Popup/PopupSettings 프리팹에서 로드.
+    /// 설정 팝업. PopupCommonFrame 사용.
+    /// Single 버튼 레이아웃 (Close).
     /// Lobby, InGame 공용.
     /// </summary>
     public class PopupSettings : UIBase
     {
-        [Header("[버튼]")]
-        [SerializeField] private Button _closeButton;
-        [SerializeField] private Button _homeButton;
+        [Header("[Common Frame]")]
+        [SerializeField] private PopupCommonFrame _frame;
 
         [Header("[설정 라벨]")]
         [SerializeField] private Text _soundLabel;
         [SerializeField] private Text _musicLabel;
 
-        public Button CloseButton => _closeButton;
-        public Button HomeButton => _homeButton;
+        public Button CloseButton => _frame != null ? _frame.BtnExit : null;
+        public Button HomeButton => _frame != null ? _frame.BtnSingle : null;
 
-        public void SetSoundLabel(bool _on)
+        public override void OpenUI()
         {
-            if (_soundLabel != null) _soundLabel.text = _on ? "Sound: ON" : "Sound: OFF";
+            if (_frame != null)
+            {
+                _frame.SetTitle("Settings");
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
+                _frame.SetSingleButtonText("Home");
+                _frame.ShowExitButton(true);
+            }
+            base.OpenUI();
         }
 
-        public void SetMusicLabel(bool _on)
+        public void SetSoundLabel(bool on)
         {
-            if (_musicLabel != null) _musicLabel.text = _on ? "Music: ON" : "Music: OFF";
+            if (_soundLabel != null) _soundLabel.text = on ? "Sound: ON" : "Sound: OFF";
+        }
+
+        public void SetMusicLabel(bool on)
+        {
+            if (_musicLabel != null) _musicLabel.text = on ? "Music: ON" : "Music: OFF";
         }
     }
 }
