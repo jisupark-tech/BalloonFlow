@@ -582,6 +582,12 @@ namespace BalloonFlow
 
         #region Haptic
 
+        /// <summary>외부에서 햅틱 ON/OFF 설정.</summary>
+        public void SetHapticEnabled(bool enabled)
+        {
+            _hapticEnabled = enabled;
+        }
+
         /// <summary>Light 진동 (10ms) — 풍선 터짐, 다트 배치, UI 터치.</summary>
         public void HapticLight()
         {

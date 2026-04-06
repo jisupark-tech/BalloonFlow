@@ -472,9 +472,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 6745744179658336456}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 975106cc1a3f3254798144947e079dcb, type: 3}
+  m_Script: {fileID: 11500000, guid: 527af112f663416982669ac098320dea, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupSettings
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupBuyItem
   _useAnimation: 0
   _animationType: 1
   _animDuration: 0.35
@@ -482,8 +482,14 @@ MonoBehaviour:
   _dim: {fileID: 6312736190280804709}
   _popupWindow: {fileID: 6984908553855046056}
   _frame: {fileID: 342548267286190168}
-  _soundLabel: {fileID: 0}
-  _musicLabel: {fileID: 0}
+  _imgItem: {fileID: 1668448947226324524}
+  _txtItemAmount: {fileID: 8225716690887407716}
+  _txtItemAmountOutline: {fileID: 4126293367212853923}
+  _txtDescription: {fileID: 4802360835804599545}
+  _imgInnerFrame: {fileID: 3081160622165780161}
+  _txtGold: {fileID: 6287200623247545062}
+  _txtGoldOutline: {fileID: 0}
+  _imgCoin: {fileID: 3817930777228283802}
 --- !u!1 &6852369448966386706
 GameObject:
   m_ObjectHideFlags: 0
@@ -1479,3 +1485,25 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 211679720283588645, guid: 882c3b8f6aa0fc641b5828544dd6605d, type: 3}
   m_PrefabInstance: {fileID: 3709746249481749580}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &3817930777228283802 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 542588506791971798, guid: 882c3b8f6aa0fc641b5828544dd6605d, type: 3}
+  m_PrefabInstance: {fileID: 3709746249481749580}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+--- !u!114 &6287200623247545062 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 7222424877284349610, guid: 882c3b8f6aa0fc641b5828544dd6605d, type: 3}
+  m_PrefabInstance: {fileID: 3709746249481749580}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI

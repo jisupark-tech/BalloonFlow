@@ -198,6 +198,9 @@ namespace BalloonFlow
             EnsurePersistent<OfferManager>("Mgr_Offer");
             EnsurePersistent<IAPManager>("Mgr_IAP");
 
+            // Settings
+            EnsurePersistent<SettingsManager>("Mgr_Settings");
+
             // Level & Content
             var _levelGO = EnsurePersistent<LevelManager>("Mgr_Level");
             if (_levelGO.GetComponent<LevelDataProvider>() == null)

@@ -346,9 +346,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 6745744179658336456}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 975106cc1a3f3254798144947e079dcb, type: 3}
+  m_Script: {fileID: 11500000, guid: 1d7edc24cf834c8b90c1fb272b8c5ff6, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupSettings
+  m_EditorClassIdentifier: Assembly-CSharp::BalloonFlow.PopupError
   _useAnimation: 0
   _animationType: 1
   _animDuration: 0.35
@@ -356,8 +356,9 @@ MonoBehaviour:
   _dim: {fileID: 6312736190280804709}
   _popupWindow: {fileID: 2576630869768810318}
   _frame: {fileID: 3257377643137989241}
-  _soundLabel: {fileID: 0}
-  _musicLabel: {fileID: 0}
+  _txtDescription: {fileID: 971331068688350962}
+  _imgIcon: {fileID: 8317041856750354867}
+  _imgInnerFrame: {fileID: 1434571724485561650}
 --- !u!1 &7876007414537713315
 GameObject:
   m_ObjectHideFlags: 0

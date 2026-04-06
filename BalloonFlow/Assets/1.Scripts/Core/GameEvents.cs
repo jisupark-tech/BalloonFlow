@@ -485,4 +485,17 @@ namespace BalloonFlow
 
     /// <summary>All frozen darts resumed normal belt movement after deployment ends.</summary>
     public struct OnDartsFrozenCleared { }
+
+    // ────────────────────────────────────────
+    // Settings Events
+    // ────────────────────────────────────────
+
+    /// <summary>User settings changed (Sound/Music/Haptic/Notification).</summary>
+    public struct OnSettingsChanged
+    {
+        public bool soundOn;
+        public bool musicOn;
+        public bool hapticOn;
+        public bool notificationOn;
+    }
 }
