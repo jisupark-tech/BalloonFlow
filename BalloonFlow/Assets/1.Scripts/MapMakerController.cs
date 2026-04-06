@@ -1255,6 +1255,8 @@ namespace BalloonFlow
         private Texture2D _importedImage;
         private int _importGridCols = 20;
         private int _importGridRows = 20;
+        private InputField _importGridColsInput;
+        private InputField _importGridRowsInput;
         private int _importRoundTo = 10;
         private float _importBgThreshold = 0.15f; // 이 밝기 이하는 배경으로 인식 (0~1)
         private int[,] _importPreview; // color index grid from image
@@ -1295,12 +1297,28 @@ namespace BalloonFlow
 
                     _importedImage = upscaled;
                     SetStatus($"Image loaded: {raw.width}x{raw.height} → upscaled to {newW}x{newH}");
+                    AutoDetectPaletteFromImage(_importedImage);
                 }
                 else
                 {
                     _importedImage = raw;
                     SetStatus($"Image loaded: {raw.width}x{raw.height}");
                 }
+                // 이미지 색상 자동 감지 → 팔레트 자동 선택
+                AutoDetectPaletteFromImage(_importedImage);
+
+                // 파일명에서 그리드 크기 파싱 (예: level_101_31x36.png → 31x36)
+                string fileName = System.IO.Path.GetFileNameWithoutExtension(path);
+                var match = System.Text.RegularExpressions.Regex.Match(fileName, @"(\d+)x(\d+)");
+                if (match.Success)
+                {
+                    _importGridCols = int.Parse(match.Groups[1].Value);
+                    _importGridRows = int.Parse(match.Groups[2].Value);
+                    if (_importGridColsInput != null) _importGridColsInput.text = _importGridCols.ToString();
+                    if (_importGridRowsInput != null) _importGridRowsInput.text = _importGridRows.ToString();
+                }
+                // 파일명에 NxM 없으면 기존 수동 세팅 유지
+
                 UpdateImagePreview();
             });
             Btn(r1, "Apply", () =>
@@ -1310,9 +1328,9 @@ namespace BalloonFlow
             });
 
             var r2 = Row(p); Lbl(r2, "Grid W", w: 50);
-            MakeIntField(r2, _importGridCols, 4, 100, v => { _importGridCols = v; UpdateImagePreview(); });
+            _importGridColsInput = MakeIntField(r2, _importGridCols, 4, 100, v => { _importGridCols = v; UpdateImagePreview(); });
             Lbl(r2, "H", w: 20);
-            MakeIntField(r2, _importGridRows, 4, 100, v => { _importGridRows = v; UpdateImagePreview(); });
+            _importGridRowsInput = MakeIntField(r2, _importGridRows, 4, 100, v => { _importGridRows = v; UpdateImagePreview(); });
 
             var r3 = Row(p); Lbl(r3, "Round To", w: 70);
             MakeIntField(r3, _importRoundTo, 0, 50, v => _importRoundTo = v);
@@ -1328,6 +1346,55 @@ namespace BalloonFlow
             });
 
             Sep(p);
+        }
+
+        /// <summary>이미지 픽셀을 분석하여 사용된 팔레트 색상을 자동 감지 → _selectedColors 갱신.</summary>
+        private void AutoDetectPaletteFromImage(Texture2D img)
+        {
+            if (img == null) return;
+
+            // 전체 28색 팔레트에서 매칭
+            var colorHits = new HashSet<int>();
+            int sampleStep = Mathf.Max(1, img.width * img.height / 10000); // 최대 10000 샘플
+            var pixels = img.GetPixels();
+
+            for (int i = 0; i < pixels.Length; i += sampleStep)
+            {
+                Color p = pixels[i];
+
+                // 투명/어두운 배경 스킵
+                float brightness = p.r * 0.299f + p.g * 0.587f + p.b * 0.114f;
+                if (p.a < 0.5f || brightness < _importBgThreshold) continue;
+
+                // 28색 팔레트 중 가장 가까운 색상
+                int bestIdx = 0;
+                float bestDist = float.MaxValue;
+                for (int pi = 0; pi < PALETTE.Length; pi++)
+                {
+                    float dr = p.r - PALETTE[pi].r;
+                    float dg = p.g - PALETTE[pi].g;
+                    float db = p.b - PALETTE[pi].b;
+                    float rmean = (p.r + PALETTE[pi].r) * 0.5f;
+                    float dist = (2f + rmean) * dr * dr + 4f * dg * dg + (3f - rmean) * db * db;
+                    if (dist < bestDist) { bestDist = dist; bestIdx = pi; }
+                }
+                colorHits.Add(bestIdx);
+            }
+
+            if (colorHits.Count < 2)
+            {
+                SetStatus($"Auto-detect: {colorHits.Count} colors found (minimum 2 needed)");
+                return;
+            }
+
+            // 팔레트 갱신
+            _selectedColors.Clear();
+            foreach (int ci in colorHits) _selectedColors.Add(ci);
+            _numColors = _selectedColors.Count;
+            RebuildColorToggleGrid();
+            RebuildPalette();
+            RefreshInfo();
+            SetStatus($"Auto-detect: {colorHits.Count} palette colors matched from image");
         }
 
         private void UpdateImagePreview()
