@@ -626,8 +626,8 @@ namespace BalloonFlow.Editor
             }
             if (imagePath == null)
             {
-                Debug.LogWarning($"[PixelForge] 이미지 없음: {imageFileName} — 빈 FieldMap 사용");
-                return field;
+                Debug.LogWarning($"[PixelForge] 이미지 없음: {imageFileName} — 색상 분포 기반 랜덤 배치");
+                return BuildRandomFieldMap(cols, rows, numColors, colorDistribution);
             }
 
             // 이미지 로드
@@ -700,13 +700,34 @@ namespace BalloonFlow.Editor
                 }
             }
 
-            Object.DestroyImmediate(tex);
+            UnityEngine.Object.DestroyImmediate(tex);
             return field;
         }
 
         private float ColorDistance(Color a, Color b)
         {
             return (a.r - b.r) * (a.r - b.r) + (a.g - b.g) * (a.g - b.g) + (a.b - b.b) * (a.b - b.b);
+        }
+
+        /// <summary>이미지 없을 때 색상 분포 기반 랜덤 FieldMap 생성</summary>
+        private int[,] BuildRandomFieldMap(int cols, int rows, int numColors, string colorDistribution)
+        {
+            var field = new int[cols, rows];
+            var colorIds = new List<int>();
+            var dist = ParseColorDistribution(colorDistribution);
+
+            if (dist.Count > 0)
+                colorIds.AddRange(dist.Keys);
+            else
+                for (int i = 1; i <= Mathf.Max(numColors, 2); i++) colorIds.Add(i);
+
+            var rng = new System.Random(42);
+            for (int y = 0; y < rows; y++)
+                for (int x = 0; x < cols; x++)
+                    field[x, y] = colorIds[rng.Next(colorIds.Count)];
+
+            Debug.Log($"[PixelForge] 랜덤 FieldMap 생성: {cols}x{rows}, {colorIds.Count}색");
+            return field;
         }
 
         /// <summary>
