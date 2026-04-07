@@ -215,7 +215,8 @@ namespace BalloonFlow
 
         public void SetLifeText(int current, int max)
         {
-            string formatted = $"{current}/{max}";
+            // 남은 하트 개수만 표시 (최대치 표기 제거)
+            string formatted = current.ToString();
             if (_txtLife != null) _txtLife.text = formatted;
             if (_txtLifeOutline != null) _txtLifeOutline.text = formatted;
         }

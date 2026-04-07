@@ -281,18 +281,20 @@ namespace BalloonFlow
             ApplyMPBToAll(blur, blurCol, outlineOn, outlineCol);
         }
 
-        /// <summary>활성화 상태 (row 0): 검은색 아웃라인, 블러 없음.</summary>
+        /// <summary>활성화 상태 (row 0): 검은색 아웃라인, 블러 없음, idle 애니메이션 재생.</summary>
         public void SetActiveFrontRow()
         {
             if (_sharedMPB == null) _sharedMPB = new MaterialPropertyBlock();
             ApplyMPBToAll(0f, Color.white, 1f, Color.black);
+            if (_animator != null) _animator.enabled = true;
         }
 
-        /// <summary>비활성화 상태 (row 1+): 아웃라인 없음, 블러 없음.</summary>
+        /// <summary>비활성화 상태 (row 1+): 아웃라인 없음, 블러 없음, idle 애니메이션 정지.</summary>
         public void SetInactiveRow()
         {
             if (_sharedMPB == null) _sharedMPB = new MaterialPropertyBlock();
             ApplyMPBToAll(0f, Color.white, 0f, Color.white);
+            if (_animator != null) _animator.enabled = false;
         }
 
         /// <summary>선택됨 — 블러 해제 + 아웃라인 원복 (기반 Material 설정 따름).</summary>
@@ -540,11 +542,12 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>재사용 시 애니메이터 전체 리셋.</summary>
+        /// <summary>재사용 시 애니메이터 전체 리셋 (풀 반환 시 enabled 복원).</summary>
         public void ResetAnimator()
         {
             if (_animator != null)
             {
+                _animator.enabled = true;
                 _animator.SetBool(_animDeploy, false);
                 _animator.SetBool(_animHidden, false);
                 _animator.ResetTrigger(_animEnd);

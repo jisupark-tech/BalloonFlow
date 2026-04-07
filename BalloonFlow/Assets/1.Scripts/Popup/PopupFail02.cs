@@ -15,8 +15,10 @@ namespace BalloonFlow
 
         private const int RETRY_BONUS_GOLD = 20;
 
-        private void Start()
+        protected override void Awake()
         {
+            base.Awake();
+            // 버튼 연결은 Awake에서 (Start는 GameBootstrap CloseUI로 인해 첫 활성화 전까지 실행 안 됨)
             if (_frame != null)
             {
                 if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.AddListener(OnRetryClicked);
@@ -25,8 +27,9 @@ namespace BalloonFlow
             }
         }
 
-        private void OnDestroy()
+        protected override void OnDestroy()
         {
+            base.OnDestroy();
             if (_frame != null)
             {
                 if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.RemoveAllListeners();

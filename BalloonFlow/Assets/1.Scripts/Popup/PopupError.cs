@@ -19,8 +19,10 @@ namespace BalloonFlow
         [SerializeField] private Image _imgIcon;
         [SerializeField] private Image _imgInnerFrame;
 
-        private void Start()
+        protected override void Awake()
         {
+            base.Awake();
+            // 버튼 연결은 Awake에서 (CloseUI 후에도 listener 유지)
             if (_frame != null)
             {
                 if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.AddListener(() => CloseUI());
@@ -28,8 +30,9 @@ namespace BalloonFlow
             }
         }
 
-        private void OnDestroy()
+        protected override void OnDestroy()
         {
+            base.OnDestroy();
             if (_frame != null)
             {
                 if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.RemoveAllListeners();

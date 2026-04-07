@@ -45,8 +45,10 @@ namespace BalloonFlow
                 PopupManager.Instance.ShowPopup("popup_fail01", 50);
         }
 
-        private void Start()
+        protected override void Awake()
         {
+            base.Awake();
+            // 버튼 연결은 Awake에서 (CloseUI 후에도 listener 유지)
             if (_frame != null)
             {
                 if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.AddListener(OnNextClicked);
