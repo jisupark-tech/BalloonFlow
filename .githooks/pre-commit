@@ -1,0 +1,22 @@
+#!/bin/bash
+# Block level data commits from unauthorized users
+
+LEVEL_FILES=$(git diff --cached --name-only | grep -E "LevelDatabase|LevelBackups")
+
+if [ -n "$LEVEL_FILES" ]; then
+    AUTHOR_EMAIL=$(git config user.email)
+    if [ "$AUTHOR_EMAIL" != "woohyun.lim@aimed.xyz" ]; then
+        echo ""
+        echo "============================================"
+        echo "  BLOCKED: Level Data 커밋 권한이 없습니다."
+        echo "  허용된 사용자: woohyun (woohyun.lim@aimed.xyz)"
+        echo ""
+        echo "  변경 감지된 파일:"
+        echo "$LEVEL_FILES" | sed 's/^/    /'
+        echo "============================================"
+        echo ""
+        exit 1
+    fi
+fi
+
+exit 0
