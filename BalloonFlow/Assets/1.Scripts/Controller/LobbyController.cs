@@ -70,6 +70,7 @@ namespace BalloonFlow
                 if (_lobby.BtnPlay != null) _lobby.BtnPlay.onClick.RemoveListener(OnPlayClicked);
                 if (_lobby.BtnGoldPlus != null) _lobby.BtnGoldPlus.onClick.RemoveListener(OnGoToShop);
                 if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.RemoveListener(OnGoToShop);
+                if (_lobby.BtnLifeBar != null) _lobby.BtnLifeBar.onClick.RemoveListener(OnLifeBarClicked);
             }
         }
 
@@ -90,6 +91,7 @@ namespace BalloonFlow
                 if (_lobby.BtnPlay != null) _lobby.BtnPlay.onClick.AddListener(OnPlayClicked);
                 if (_lobby.BtnGoldPlus != null) _lobby.BtnGoldPlus.onClick.AddListener(OnGoToShop);
                 if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.AddListener(OnGoToShop);
+                if (_lobby.BtnLifeBar != null) _lobby.BtnLifeBar.onClick.AddListener(OnLifeBarClicked);
             }
         }
 
@@ -115,13 +117,34 @@ namespace BalloonFlow
         {
             if (_lobby == null || !LifeManager.HasInstance) return;
 
-            if (LifeManager.Instance.IsFullLives())
+            var lm = LifeManager.Instance;
+
+            // 무한 하트 상태
+            if (lm.IsInfiniteHeartsActive)
             {
-                _lobby.SetLifeTimerText(null);
+                _lobby.SetLifeText(lm.MaxLives, lm.MaxLives);
+                float secs = lm.GetRemainingInfiniteSeconds();
+                TimeSpan ts = TimeSpan.FromSeconds(secs);
+                string timerStr = ts.TotalHours >= 1
+                    ? $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+                    : $"{ts.Minutes:D2}:{ts.Seconds:D2}";
+                _lobby.SetLifeTimerText(timerStr);
+                _lobby.SetLifePlusButtonVisible(false);
                 return;
             }
 
-            TimeSpan remaining = LifeManager.Instance.GetTimeToNextLife();
+            // FULL 상태
+            if (lm.IsFullLives())
+            {
+                _lobby.SetLifeText(lm.MaxLives, lm.MaxLives);
+                _lobby.SetLifeTimerText("FULL");
+                _lobby.SetLifePlusButtonVisible(false);
+                return;
+            }
+
+            // 충전 중
+            _lobby.SetLifePlusButtonVisible(true);
+            TimeSpan remaining = lm.GetTimeToNextLife();
             if (remaining.TotalSeconds > 0)
                 _lobby.SetLifeTimerText($"{remaining.Minutes:D2}:{remaining.Seconds:D2}");
             else
@@ -159,6 +182,29 @@ namespace BalloonFlow
             if (_lobby != null) _lobby.GoToPage(0);
         }
 
+        /// <summary>하트 바 터치 시 상태별 분기.</summary>
+        void OnLifeBarClicked()
+        {
+            if (!LifeManager.HasInstance || !UIManager.HasInstance) return;
+
+            if (LifeManager.Instance.IsInfiniteHeartsActive)
+            {
+                var popup = UIManager.Instance.OpenUI<PopupDescription>("Popup/PopupDescription");
+                if (popup != null) popup.Show("Hearts", "Your lives are unlimited!");
+                return;
+            }
+
+            if (LifeManager.Instance.IsFullLives())
+            {
+                var popup = UIManager.Instance.OpenUI<PopupDescription>("Popup/PopupDescription");
+                if (popup != null) popup.Show("Hearts", "Your lives are full!");
+                return;
+            }
+
+            // 하트 미만 → more lives 팝업
+            UIManager.Instance.OpenUI<PopupMoreLive>("Popup/PopupMoreLive");
+        }
+
         #endregion
 
         #region EventBus Handlers
@@ -170,7 +216,14 @@ namespace BalloonFlow
 
         void HandleLifeChanged(OnLifeChanged evt)
         {
-            if (_lobby != null) _lobby.SetLifeText(evt.currentLives, evt.maxLives);
+            if (_lobby == null) return;
+
+            _lobby.SetLifeText(evt.currentLives, evt.maxLives);
+
+            // (+) 버튼: Full 또는 무한 하트 시 숨김
+            bool hidePlus = evt.currentLives >= evt.maxLives
+                || (LifeManager.HasInstance && LifeManager.Instance.IsInfiniteHeartsActive);
+            _lobby.SetLifePlusButtonVisible(!hidePlus);
         }
 
         #endregion

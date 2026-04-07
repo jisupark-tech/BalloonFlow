@@ -45,6 +45,7 @@ namespace BalloonFlow
         [SerializeField] private Image _imgLifeTimer;
         [SerializeField] private TMP_Text _txtLifeTimer;
         [SerializeField] private TMP_Text _txtLifeTimerOutline;
+        [SerializeField] private Button _btnLifeBar;
 
         [Header("[Pages — 프리팹 내 기존 오브젝트 (Shop/Lobby/Setting)]")]
         [SerializeField] private RectTransform _pageShop;
@@ -102,6 +103,7 @@ namespace BalloonFlow
         public Button BtnPlay => _btnPlay;
         public Button BtnGoldPlus => _btnGoldPlus;
         public Button BtnLifePlus => _btnLifePlus;
+        public Button BtnLifeBar => _btnLifeBar;
         public Button BtnShop => _btnShop;
         public Button BtnHome => _btnHome;
         public Button BtnSetting => _btnSetting;
@@ -224,6 +226,11 @@ namespace BalloonFlow
             if (_txtLifeTimer != null) _txtLifeTimer.text = hasTimer ? timeText : "";
             if (_txtLifeTimerOutline != null) _txtLifeTimerOutline.text = hasTimer ? timeText : "";
             if (_imgLifeTimer != null) _imgLifeTimer.gameObject.SetActive(hasTimer);
+        }
+
+        public void SetLifePlusButtonVisible(bool visible)
+        {
+            if (_btnLifePlus != null) _btnLifePlus.gameObject.SetActive(visible);
         }
 
         #endregion

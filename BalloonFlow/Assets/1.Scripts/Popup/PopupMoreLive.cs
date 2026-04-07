@@ -114,6 +114,12 @@ namespace BalloonFlow
         {
             if (!LifeManager.HasInstance) return;
 
+            if (LifeManager.Instance.IsInfiniteHeartsActive)
+            {
+                if (_txtTimer != null) _txtTimer.text = "UNLIMITED";
+                return;
+            }
+
             if (LifeManager.Instance.IsFullLives())
             {
                 if (_txtTimer != null) _txtTimer.text = "FULL";

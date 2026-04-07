@@ -63,6 +63,8 @@ namespace BalloonFlow
 
         private void OnEnable()
         {
+            if (_txtTitle != null) _txtTitle.text = "Settings";
+            if (_txtTitleOutline != null) _txtTitleOutline.text = "Settings";
             RefreshAll();
             EventBus.Subscribe<OnSettingsChanged>(HandleSettingsChanged);
         }
@@ -111,6 +113,21 @@ namespace BalloonFlow
 
         private void RefreshAll()
         {
+            // ON/OFF 텍스트 대소문자 통일 (prefab 기본값 "On"/"OFF" → "ON"/"OFF")
+            EnsureToggleLabel(_soundOn, "ON");
+            EnsureToggleLabel(_soundOff, "OFF");
+            EnsureToggleLabel(_musicOn, "ON");
+            EnsureToggleLabel(_musicOff, "OFF");
+            EnsureToggleLabel(_hapticOn, "ON");
+            EnsureToggleLabel(_hapticOff, "OFF");
+            EnsureToggleLabel(_notificationOn, "ON");
+            EnsureToggleLabel(_notificationOff, "OFF");
+
+            if (_txtNotificationOn != null) _txtNotificationOn.text = "ON";
+            if (_txtNotificationOnOutline != null) _txtNotificationOnOutline.text = "ON";
+            if (_txtNotificationOff != null) _txtNotificationOff.text = "OFF";
+            if (_txtNotificationOffOutline != null) _txtNotificationOffOutline.text = "OFF";
+
             if (!SettingsManager.HasInstance) return;
 
             var sm = SettingsManager.Instance;
@@ -118,6 +135,13 @@ namespace BalloonFlow
             UpdateToggle(_musicOn, _musicOff, sm.MusicOn);
             UpdateToggle(_hapticOn, _hapticOff, sm.HapticOn);
             UpdateToggle(_notificationOn, _notificationOff, sm.NotificationOn);
+        }
+
+        private static void EnsureToggleLabel(GameObject obj, string label)
+        {
+            if (obj == null) return;
+            var txt = obj.GetComponentInChildren<TMP_Text>(true);
+            if (txt != null) txt.text = label;
         }
 
         private void UpdateToggle(GameObject onObj, GameObject offObj, bool isOn)

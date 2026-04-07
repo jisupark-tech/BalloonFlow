@@ -220,6 +220,13 @@ namespace BalloonFlow
         /// <summary>True while infinite hearts are active.</summary>
         public bool IsInfiniteHeartsActive => Time.realtimeSinceStartup < _infiniteHeartsEndTime;
 
+        /// <summary>Remaining duration of infinite hearts in seconds. 0 if inactive.</summary>
+        public float GetRemainingInfiniteSeconds()
+        {
+            if (!IsInfiniteHeartsActive) return 0f;
+            return _infiniteHeartsEndTime - Time.realtimeSinceStartup;
+        }
+
         /// <summary>
         /// Returns the time remaining until the next life recharges.
         /// Returns TimeSpan.Zero if lives are already at maximum.
