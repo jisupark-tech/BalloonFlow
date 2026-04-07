@@ -1,0 +1,27 @@
+#
+# Sprite sheet data for Unity.
+#
+# To import these sprites into your Unity project, download "TexturePackerImporter":
+# https://www.codeandweb.com/texturepacker/unity
+#
+# $TexturePacker:SmartUpdate:1b3f3ae81e1e53019ff3f82303aadec7:b0eb9720d9ddaa9668d3ad684be8c51e:6b885918e3014164c8181e8073e80d4f$
+#
+:format=40300
+:texture=PurpleBox.png
+:size=3072x1024
+:pivotpoints=enabled
+:borders=disabled
+:alphahandling=ClearTransparentPixels
+
+purpleBoxOpen0001;0;512;512;512; 0.5;0.5; 0;0;0;0
+purpleBoxOpen0002;512;512;512;512; 0.5;0.5; 0;0;0;0
+purpleBoxOpen0003;1024;512;512;512; 0.5;0.5; 0;0;0;0
+purpleBoxOpen0004;1536;512;512;512; 0.5;0.5; 0;0;0;0
+purpleBoxOpen0005;2048;512;512;512; 0.5;0.5; 0;0;0;0
+purpleBoxOpen0006;2560;512;512;512; 0.5;0.5; 0;0;0;0
+purpleBoxOpen0007;0;0;512;512; 0.5;0.5; 0;0;0;0
+purpleBoxOpen0008;512;0;512;512; 0.5;0.5; 0;0;0;0
+purpleBoxOpen0009;1024;0;512;512; 0.5;0.5; 0;0;0;0
+purpleBoxOpen0010;1536;0;512;512; 0.5;0.5; 0;0;0;0
+purpleBoxOpen0011;2048;0;512;512; 0.5;0.5; 0;0;0;0
+purpleBoxOpen0012;2560;0;512;512; 0.5;0.5; 0;0;0;0
