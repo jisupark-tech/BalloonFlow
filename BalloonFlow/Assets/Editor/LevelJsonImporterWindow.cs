@@ -330,7 +330,8 @@ namespace BalloonFlow.Editor
                 foreach (var b in config.balloons)
                 {
                     int gx = Mathf.RoundToInt((b.gridPosition.x - BOARD_CENTER_X + halfGrid) / cs);
-                    int gy = Mathf.RoundToInt((b.gridPosition.y - BOARD_CENTER_Z + halfGrid) / cs);
+                    // Y축 반전 역매핑: max Z(상단) → y=0
+                    int gy = (rows - 1) - Mathf.RoundToInt((b.gridPosition.y - BOARD_CENTER_Z + halfGrid) / cs);
                     balloonMap[new Vector2Int(gx, gy)] = b;
                 }
             }
@@ -342,7 +343,7 @@ namespace BalloonFlow.Editor
                 {
                     var rect = new Rect(
                         offsetX + x * cellSize,
-                        offsetY + (rows - 1 - y) * cellSize,
+                        offsetY + y * cellSize,
                         cellSize - 1, cellSize - 1);
 
                     if (balloonMap.TryGetValue(new Vector2Int(x, y), out var balloon))
@@ -752,7 +753,8 @@ namespace BalloonFlow.Editor
                     if (colorId <= 0) continue; // 빈 셀
 
                     float wx = BOARD_CENTER_X + x * cs - halfGridX;
-                    float wz = BOARD_CENTER_Z + y * cs - halfGridY;
+                    // Y축 반전: FieldMap 텍스트 첫 줄(y=0) → 게임 화면 상단(max Z)
+                    float wz = BOARD_CENTER_Z + (rows - 1 - y) * cs - halfGridY;
 
                     balloons.Add(new BalloonLayout
                     {
