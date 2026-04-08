@@ -175,13 +175,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: purpleBox_0
+      name: PurpleBox_0
       rect:
         serializedVersion: 2
-        x: 7
-        y: 606
-        width: 246
-        height: 418
+        x: 0
+        y: 512
+        width: 512
+        height: 512
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -190,20 +190,20 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 939e3022895018e41ac342b81fa7dd20
-      internalID: 574473833
+      spriteID: 0725320774e2f5649ae945e87feee369
+      internalID: -461896755
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: purpleBox_1
+      name: PurpleBox_1
       rect:
         serializedVersion: 2
-        x: 258
-        y: 594
-        width: 228
-        height: 426
+        x: 512
+        y: 512
+        width: 512
+        height: 512
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -212,20 +212,20 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: dbcc721cc6a5ca54f97d0815394f85b2
-      internalID: 849112197
+      spriteID: d7f7f50e78b6c8048adf99f105b53fe8
+      internalID: -1896106810
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: purpleBox_2
+      name: PurpleBox_2
       rect:
         serializedVersion: 2
-        x: 495
-        y: 654
-        width: 188
-        height: 366
+        x: 1024
+        y: 512
+        width: 512
+        height: 512
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -234,20 +234,20 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: ac00e0ada20155144907676c519077c1
-      internalID: -490804679
+      spriteID: de494312ae75c54488794a8d75f1ec3c
+      internalID: -1424271852
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: purpleBox_3
+      name: PurpleBox_3
       rect:
         serializedVersion: 2
-        x: 699
-        y: 744
-        width: 232
-        height: 280
+        x: 1536
+        y: 512
+        width: 512
+        height: 512
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -256,20 +256,20 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: bf4886bccc864c542a88830bd9bc79d6
-      internalID: -1060706836
+      spriteID: 05780daccbdf34647a2386853a03bd1f
+      internalID: -1117151364
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: purpleBox_4
+      name: PurpleBox_4
       rect:
         serializedVersion: 2
-        x: 6
-        y: 294
-        width: 168
-        height: 306
+        x: 2048
+        y: 512
+        width: 512
+        height: 512
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -278,20 +278,20 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 06196d1967f346e4ba73f41f47130a58
-      internalID: -336292283
+      spriteID: 8981506432bc6db4fab3b16c143baad2
+      internalID: -1197987727
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: purpleBox_5
+      name: PurpleBox_5
       rect:
         serializedVersion: 2
-        x: 180
-        y: 306
-        width: 162
-        height: 282
+        x: 2560
+        y: 512
+        width: 512
+        height: 512
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -300,64 +300,20 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: e4bc466c0e98a794195b1567d85a2ea1
-      internalID: 1972437838
+      spriteID: 9650b56fe42952140a6216192c4c276f
+      internalID: -1746608463
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: purpleBox_6
+      name: PurpleBox_6
       rect:
         serializedVersion: 2
-        x: 330
-        y: 104
-        width: 198
-        height: 478
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: 6b515900798b6394388a9bdb620f8ef1
-      internalID: -984430152
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: purpleBox_7
-      rect:
-        serializedVersion: 2
-        x: 513
-        y: 456
-        width: 176
-        height: 192
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: fd1e28ea2c8d79544aab31d1a90fbb8b
-      internalID: -263936833
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: purpleBox_8
-      rect:
-        serializedVersion: 2
-        x: 6
+        x: 0
         y: 0
-        width: 156
-        height: 282
+        width: 512
+        height: 512
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -366,20 +322,20 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 8d50d8b0459c03b48a444d08be2c6dae
-      internalID: 909511151
+      spriteID: 6e96f7f59a7339b4d9cc73b934e732da
+      internalID: 475690701
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: purpleBox_9
+      name: PurpleBox_7
       rect:
         serializedVersion: 2
-        x: 168
-        y: 18
-        width: 156
-        height: 282
+        x: 512
+        y: 0
+        width: 512
+        height: 512
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -388,20 +344,20 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 7ea669a5863ef2a4581865c454aeb2de
-      internalID: -548877873
+      spriteID: 22120b17b50c0ac44be0ac179a6b4983
+      internalID: -1438133332
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: purpleBox_10
+      name: PurpleBox_8
       rect:
         serializedVersion: 2
-        x: 516
-        y: 264
-        width: 168
-        height: 186
+        x: 1024
+        y: 0
+        width: 512
+        height: 512
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -410,8 +366,74 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: f5291286c4a24a147a46e66a05839c9d
-      internalID: 130003572
+      spriteID: d882bd6a6674ee2408a590f30adc9f14
+      internalID: -2098319737
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PurpleBox_9
+      rect:
+        serializedVersion: 2
+        x: 1536
+        y: 0
+        width: 512
+        height: 512
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: fe6f6c9855f863e46ad05b2b4adaf63a
+      internalID: 1375963740
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PurpleBox_10
+      rect:
+        serializedVersion: 2
+        x: 2048
+        y: 0
+        width: 512
+        height: 512
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: e73f3dd91b5f6464eadff787f2b371cb
+      internalID: -1945574994
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PurpleBox_11
+      rect:
+        serializedVersion: 2
+        x: 2560
+        y: 0
+        width: 512
+        height: 512
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 8961cd548677e844ba387af93a176bc3
+      internalID: -1288209444
       vertices: []
       indices: 
       edges: []
@@ -420,7 +442,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: a9f101899473c9649b5056ecce020bcc
+    spriteID: 0d0bbe0e9cc7a3f439022de213ef4691
     internalID: 0
     vertices: []
     indices: 
@@ -430,21 +452,20 @@ TextureImporter:
     spriteCustomMetadata:
       entries:
       - key: SpriteEditor.SliceSettings
-        value: '{"sliceOnImport":true,"gridCellCount":{"x":1.0,"y":1.0},"gridSpriteSize":{"x":64.0,"y":64.0},"gridSpriteOffset":{"x":0.0,"y":0.0},"gridSpritePadding":{"x":0.0,"y":0.0},"pivot":{"x":0.5,"y":0.5},"pivotPixels":{"x":0.0,"y":0.0},"autoSlicingMethod":0,"spriteAlignment":0,"pivotUnitMode":0,"slicingType":0,"keepEmptyRects":false,"isAlternate":false}'
-      - key: SpriteEditor.SliceOnImport
-        value: True
+        value: '{"sliceOnImport":false,"gridCellCount":{"x":6.0,"y":2.0},"gridSpriteSize":{"x":512.0,"y":512.0},"gridSpriteOffset":{"x":0.0,"y":0.0},"gridSpritePadding":{"x":0.0,"y":0.0},"pivot":{"x":0.5,"y":0.5},"pivotPixels":{"x":0.0,"y":0.0},"autoSlicingMethod":0,"spriteAlignment":0,"pivotUnitMode":1,"slicingType":2,"keepEmptyRects":false,"isAlternate":false}'
     nameFileIdTable:
-      purpleBox_0: 574473833
-      purpleBox_1: 849112197
-      purpleBox_10: 130003572
-      purpleBox_2: -490804679
-      purpleBox_3: -1060706836
-      purpleBox_4: -336292283
-      purpleBox_5: 1972437838
-      purpleBox_6: -984430152
-      purpleBox_7: -263936833
-      purpleBox_8: 909511151
-      purpleBox_9: -548877873
+      PurpleBox_0: -461896755
+      PurpleBox_1: -1896106810
+      PurpleBox_10: -1945574994
+      PurpleBox_11: -1288209444
+      PurpleBox_2: -1424271852
+      PurpleBox_3: -1117151364
+      PurpleBox_4: -1197987727
+      PurpleBox_5: -1746608463
+      PurpleBox_6: 475690701
+      PurpleBox_7: -1438133332
+      PurpleBox_8: -2098319737
+      PurpleBox_9: 1375963740
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

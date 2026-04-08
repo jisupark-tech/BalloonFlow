@@ -163,7 +163,7 @@ MonoBehaviour:
     dartSpacingMultiplier: 1.25
     dartPathOffset: -0.15
     railSlotCount: 52
-    railRotationSpeed: 20
+    railRotationSpeed: 37
     railPadding: 3.5
     railHeight: 2
     boardCenterX: 0

@@ -19,8 +19,10 @@ namespace BalloonFlow
         public Button ContinueButton => _frame != null ? _frame.BtnHorizGreen : null;
         public Button DeclineButton => _frame != null ? _frame.BtnHorizRed : null;
 
-        private void Start()
+        protected override void Awake()
         {
+            base.Awake();
+            // 버튼 연결은 Awake에서 (Start는 GameBootstrap CloseUI로 인해 첫 활성화 전까지 실행 안 됨)
             if (_frame != null)
             {
                 if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.AddListener(OnContinueClicked);
@@ -29,8 +31,9 @@ namespace BalloonFlow
             }
         }
 
-        private void OnDestroy()
+        protected override void OnDestroy()
         {
+            base.OnDestroy();
             if (_frame != null)
             {
                 if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.RemoveAllListeners();

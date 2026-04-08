@@ -3576,7 +3576,7 @@ namespace BalloonFlow
             new[] { 20, 30, 40, 50 }  // SuperHard
         };
         private static readonly int[][] SECONDARY_POOL = {
-            new[] { 10, 30, 40, 50 }, // Easy
+            new[] { 30, 40, 50 },     // Easy (spec: 10 제거 — 주력 {10,20}과 중복 방지)
             new[] { 10, 40, 50 },     // Normal
             new[] { 10, 50 },         // Hard
             new[] { 10 }              // SuperHard
@@ -3588,7 +3588,10 @@ namespace BalloonFlow
             new[] { 0.25f, 0.45f }, // Hard
             new[] { 0.10f, 0.30f }  // SuperHard
         };
-        private static readonly int[] SAME_COLOR_MAX = { 1, 2, 3, 4 };
+        // 행(가로) 연속 max
+        private static readonly int[] SAME_COLOR_MAX_ROW = { 1, 2, 3, 4 };
+        // 열(세로) 연속 max (명세 v1 §4-3 신규 추가)
+        private static readonly int[] SAME_COLOR_MAX_COL = { 1, 2, 2, 3 };
 
         private void GenerateQueue()
         {
@@ -3627,8 +3630,9 @@ namespace BalloonFlow
             int railCapacity = RailManager.CalculateCapacity(totalDarts);
             int dartCapMax = GetDartCapacityMax(railCapacity);
 
-            // color_depth 계산 (4면 스캔)
+            // color_depth + color_dependency 계산 (4면 스캔)
             var colorDepth = CalcColorDepth(colorDartsRounded);
+            var colorDependency = CalcColorDependency(colorDartsRounded);
 
             // ── 2. 난이도 인덱스 ──
             int diffIdx = GetDifficultyIndex(_difficulty);
@@ -3654,6 +3658,11 @@ namespace BalloonFlow
                 InitGrid();
             }
 
+            // 2D 그리드 연속 제한 (행/열) — 배치 전 swap으로 해소
+            int maxRowConsec = SAME_COLOR_MAX_ROW[diffIdx];
+            int maxColConsec = SAME_COLOR_MAX_COL[diffIdx];
+            EnforceGridConsecutiveLimit(allMagazines, queueCols, maxRowConsec, maxColConsec);
+
             // Clear holder grid
             for (int c = 0; c < _holderCols; c++)
                 for (int r = 0; r < _holderRows; r++)
@@ -3675,8 +3684,9 @@ namespace BalloonFlow
             }
 
             // ── 6. 난이도 점수 계산 ──
-            float score = CalcDifficultyScore(allMagazines, colorDepth, railCapacity);
-            string grade = score < 20f ? "Easy" : score < 50f ? "Normal" : score < 80f ? "Hard" : "SuperHard";
+            float score = CalcDifficultyScore(allMagazines, colorDepth, colorDependency, colorDartsRounded, railCapacity);
+            // 새 밴드 (명세 v1, 2026-04-06 업데이트): <35 / 70 / 90
+            string grade = score < 35f ? "Easy" : score < 70f ? "Normal" : score < 90f ? "Hard" : "SuperHard";
 
             if (_queueGenScoreLabel != null)
                 _queueGenScoreLabel.text = $"Score: {score:F0}%  [{grade}]  |  {allMagazines.Count} holders  |  {totalDarts} darts";
@@ -3716,7 +3726,8 @@ namespace BalloonFlow
                 }
 
                 int mag = candidates[Random.Range(0, candidates.Length)];
-                if (remaining - mag >= 0 && (remaining - mag == 0 || remaining - mag >= 5))
+                // 모든 탄창이 10의 배수이므로 remaining - mag는 0 또는 10 이상이어야 유효
+                if (remaining - mag >= 0 && (remaining - mag == 0 || remaining - mag >= 10))
                 {
                     result.Add(mag);
                     remaining -= mag;
@@ -3765,36 +3776,162 @@ namespace BalloonFlow
             if (frontDepth12 < depth12.Count)
                 sorted.AddRange(depth12.GetRange(frontDepth12, depth12.Count - frontDepth12));
 
-            // 같은 색 연속 max 제한
-            int maxConsec = SAME_COLOR_MAX[diffIdx];
-            EnforceColorConsecutiveLimit(sorted, maxConsec);
+            // 1D 연속 제한은 deprecated — GenerateQueue에서 2D 그리드 배치 후
+            // EnforceGridConsecutiveLimit로 행/열 동시 체크
 
             return sorted;
         }
 
-        private void EnforceColorConsecutiveLimit(List<(int color, int mag)> list, int maxConsec)
+        /// <summary>
+        /// 2D 그리드 연속 제한 (명세 v1 §4-2 #4).
+        /// row-major (i % cols, i / cols)로 배치된 리스트에서
+        /// 행(가로)과 열(세로) 연속을 동시에 체크하고 swap으로 해소.
+        /// swap 대상이 없으면 현재 배치 유지 (Soft Rule).
+        /// </summary>
+        private void EnforceGridConsecutiveLimit(
+            List<(int color, int mag)> list, int cols, int maxRow, int maxCol)
         {
-            for (int i = maxConsec; i < list.Count; i++)
-            {
-                bool allSame = true;
-                for (int j = 1; j <= maxConsec; j++)
-                {
-                    if (list[i].color != list[i - j].color) { allSame = false; break; }
-                }
-                if (!allSame) continue;
+            if (list.Count == 0 || cols <= 0) return;
+            int rows = (list.Count + cols - 1) / cols;
 
-                // 뒤에서 다른 색 찾아서 swap
-                for (int k = i + 1; k < list.Count; k++)
+            for (int pass = 0; pass < 2; pass++)
+            {
+                for (int i = 0; i < list.Count; i++)
                 {
-                    if (list[k].color != list[i].color)
+                    int c = i % cols;
+                    int r = i / cols;
+
+                    if (ViolatesConsecutive(list, cols, rows, r, c, maxRow, maxCol))
                     {
-                        var temp = list[i];
-                        list[i] = list[k];
-                        list[k] = temp;
-                        break;
+                        // 뒤쪽에서 swap 후 양쪽 다 만족하는 후보 찾기
+                        for (int k = i + 1; k < list.Count; k++)
+                        {
+                            if (list[k].color == list[i].color) continue;
+
+                            // swap 시뮬레이션: 두 위치 모두 제약을 만족하는지 체크
+                            var a = list[i]; var b = list[k];
+                            list[i] = b; list[k] = a;
+
+                            int kc = k % cols, kr = k / cols;
+                            bool okI = !ViolatesConsecutive(list, cols, rows, r, c, maxRow, maxCol);
+                            bool okK = !ViolatesConsecutive(list, cols, rows, kr, kc, maxRow, maxCol);
+
+                            if (okI && okK) break; // swap 유지
+                            // 복원
+                            list[i] = a; list[k] = b;
+                        }
                     }
                 }
             }
+        }
+
+        /// <summary>(r,c) 위치에 배치된 보관함이 행/열 연속 max를 위반하는지.</summary>
+        private bool ViolatesConsecutive(
+            List<(int color, int mag)> list, int cols, int rows,
+            int r, int c, int maxRow, int maxCol)
+        {
+            int idx = r * cols + c;
+            if (idx >= list.Count) return false;
+            int color = list[idx].color;
+
+            // 행(가로) 좌측 연속 카운트
+            int rowRun = 1;
+            for (int cc = c - 1; cc >= 0; cc--)
+            {
+                int id = r * cols + cc;
+                if (id >= list.Count) break;
+                if (list[id].color != color) break;
+                rowRun++;
+            }
+            if (rowRun > maxRow) return true;
+
+            // 열(세로) 위쪽 연속 카운트
+            int colRun = 1;
+            for (int rr = r - 1; rr >= 0; rr--)
+            {
+                int id = rr * cols + c;
+                if (id >= list.Count) break;
+                if (list[id].color != color) break;
+                colRun++;
+            }
+            if (colRun > maxCol) return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// 4면 스캔으로 color_dependency 계산 (명세 v1 §1).
+        /// 각 방향(상/하/좌/우) 스캔 시, 같은 라인에서 먼저 만난 색 A가 나중에 만난 색 B를 가림.
+        /// → dependency[B].add(A)
+        /// </summary>
+        private Dictionary<int, HashSet<int>> CalcColorDependency(Dictionary<int, int> colorDarts)
+        {
+            var dep = new Dictionary<int, HashSet<int>>();
+            foreach (var kvp in colorDarts)
+                dep[kvp.Key] = new HashSet<int>();
+
+            // 각 스캔 라인에서 순서대로 만난 unique 색상 시퀀스 수집 후
+            // 앞선 색이 뒤에 있는 색을 가림
+            void ProcessLine(List<int> seq)
+            {
+                for (int i = 0; i < seq.Count; i++)
+                {
+                    int b = seq[i];
+                    if (!dep.ContainsKey(b)) continue;
+                    for (int j = 0; j < i; j++)
+                    {
+                        int a = seq[j];
+                        if (a != b) dep[b].Add(a);
+                    }
+                }
+            }
+
+            // 상단 (각 열, row 0→max)
+            for (int c = 0; c < _gridCols; c++)
+            {
+                var seq = new List<int>();
+                for (int r = 0; r < _gridRows; r++)
+                {
+                    int ci = _balloonColors[c, r];
+                    if (ci >= 0 && !seq.Contains(ci)) seq.Add(ci);
+                }
+                ProcessLine(seq);
+            }
+            // 하단 (각 열, row max→0)
+            for (int c = 0; c < _gridCols; c++)
+            {
+                var seq = new List<int>();
+                for (int r = _gridRows - 1; r >= 0; r--)
+                {
+                    int ci = _balloonColors[c, r];
+                    if (ci >= 0 && !seq.Contains(ci)) seq.Add(ci);
+                }
+                ProcessLine(seq);
+            }
+            // 좌측 (각 행, col 0→max)
+            for (int r = 0; r < _gridRows; r++)
+            {
+                var seq = new List<int>();
+                for (int c = 0; c < _gridCols; c++)
+                {
+                    int ci = _balloonColors[c, r];
+                    if (ci >= 0 && !seq.Contains(ci)) seq.Add(ci);
+                }
+                ProcessLine(seq);
+            }
+            // 우측 (각 행, col max→0)
+            for (int r = 0; r < _gridRows; r++)
+            {
+                var seq = new List<int>();
+                for (int c = _gridCols - 1; c >= 0; c--)
+                {
+                    int ci = _balloonColors[c, r];
+                    if (ci >= 0 && !seq.Contains(ci)) seq.Add(ci);
+                }
+                ProcessLine(seq);
+            }
+
+            return dep;
         }
 
         private Dictionary<int, int> CalcColorDepth(Dictionary<int, int> colorDarts)
@@ -3861,14 +3998,26 @@ namespace BalloonFlow
             return depth;
         }
 
+        /// <summary>
+        /// 난이도 점수 (명세 v1 §7). 순서 기반 fireable 로직.
+        /// absolute = Σ fireable(i) × mag(i) / rail_capacity
+        /// fireable(i):
+        ///   0 = depth 0 (즉시 발사 가능)
+        ///   0 = 가림 색상 전부가 이전 보관함들에서 50%+ 이미 소모됨
+        ///   1 = 가림 색상 중 하나라도 아직 안 벗겨짐 (다트 레일에 잔류)
+        /// max_possible = (depth > 0 다트 합) / rail_capacity
+        /// relative = absolute / max_possible × 100%
+        /// </summary>
         private float CalcDifficultyScore(
             List<(int color, int mag)> magazines,
             Dictionary<int, int> colorDepth,
+            Dictionary<int, HashSet<int>> colorDependency,
+            Dictionary<int, int> colorDartsTotal,
             int railCapacity)
         {
             if (railCapacity <= 0) return 0f;
 
-            // max_possible = (depth1 + depth2 다트 합) / rail_capacity
+            // max_possible = 안쪽 색 다트 합 (최악 = 전부 쌓임)
             int innerDarts = 0;
             foreach (var m in magazines)
             {
@@ -3878,20 +4027,53 @@ namespace BalloonFlow
             float maxPossible = (float)innerDarts / railCapacity;
             if (maxPossible <= 0f) return 0f; // 전부 외곽 → Easy
 
-            // absolute = depth>0인 보관함의 mag 합 (순서 기반, 간략화)
-            var consumed = new Dictionary<int, float>();
+            // 순서대로 보관함 처리: 각 색 누적 소모량 추적
+            var consumed = new Dictionary<int, int>(); // color → 누적 소모 다트 수
             float absolute = 0f;
+
             foreach (var m in magazines)
             {
-                int d = colorDepth.ContainsKey(m.color) ? colorDepth[m.color] : 0;
-                if (d == 0)
+                int color = m.color;
+                int depth = colorDepth.ContainsKey(color) ? colorDepth[color] : 0;
+
+                bool fireable0 = false;
+                if (depth == 0)
                 {
-                    // depth 0: 즉시 발사 가능 → 0
+                    fireable0 = true; // 최외곽 → 즉시 발사
                 }
-                else
+                else if (colorDependency.ContainsKey(color))
+                {
+                    // 가림 색상이 전부 50%+ 소모됐는지
+                    var blockers = colorDependency[color];
+                    if (blockers.Count == 0)
+                    {
+                        fireable0 = true; // 가림 없음
+                    }
+                    else
+                    {
+                        bool allUnblocked = true;
+                        foreach (int blocker in blockers)
+                        {
+                            int total = colorDartsTotal.ContainsKey(blocker) ? colorDartsTotal[blocker] : 0;
+                            int used = consumed.ContainsKey(blocker) ? consumed[blocker] : 0;
+                            if (total <= 0 || (float)used / total < 0.5f)
+                            {
+                                allUnblocked = false;
+                                break;
+                            }
+                        }
+                        fireable0 = allUnblocked;
+                    }
+                }
+
+                if (!fireable0)
                 {
                     absolute += (float)m.mag / railCapacity;
                 }
+
+                // 소모 누적 (발사 가능 여부와 관계없이 보관함은 소비됨)
+                if (consumed.ContainsKey(color)) consumed[color] += m.mag;
+                else consumed[color] = m.mag;
             }
 
             float relative = Mathf.Clamp01(absolute / maxPossible) * 100f;
