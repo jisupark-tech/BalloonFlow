@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: afac4168384f8aa4e8170c8ff6219624
+guid: e9860c8c45264da4a9e66cbfbabb3f4f
 TextureImporter:
   internalIDToNameTable: []
   externalObjects: {}
@@ -175,7 +175,7 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: PurpleBox_0
+      name: RedBox_0
       rect:
         serializedVersion: 2
         x: 0
@@ -190,14 +190,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 964093412be6cfa4a80b403ef56a0dfe
-      internalID: -1214594910
+      spriteID: 7a3ed6d2aa43a574ca6b120dbfe52ee3
+      internalID: -1494469370
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: PurpleBox_1
+      name: RedBox_1
       rect:
         serializedVersion: 2
         x: 512
@@ -212,14 +212,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 12130a66dd6d4b0468c4c869365ed01b
-      internalID: -1084730019
+      spriteID: 07d6f40e22900f04c9048608bcf0ce6d
+      internalID: 1190281653
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: PurpleBox_2
+      name: RedBox_2
       rect:
         serializedVersion: 2
         x: 1024
@@ -234,14 +234,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: a53efadf92d55314dacb58bce5fdfd36
-      internalID: -1221400460
+      spriteID: 88b11977e764d7b49b84066f1d75932c
+      internalID: -1979290454
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: PurpleBox_3
+      name: RedBox_3
       rect:
         serializedVersion: 2
         x: 1536
@@ -256,14 +256,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: d37f89ea619750a4a9e4ceb5e36d7a5b
-      internalID: 1967408955
+      spriteID: a513e11622850c142b7c64e93c54fc03
+      internalID: 322987161
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: PurpleBox_4
+      name: RedBox_4
       rect:
         serializedVersion: 2
         x: 2048
@@ -278,14 +278,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 985ade1f51b141144a5cdf97a277502b
-      internalID: 21281630
+      spriteID: a763ed53e48639b4fa6f03951475be96
+      internalID: -577177018
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: PurpleBox_5
+      name: RedBox_5
       rect:
         serializedVersion: 2
         x: 2560
@@ -300,14 +300,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 2042b3b350ef8b8499c657c85b690bd3
-      internalID: -1556709961
+      spriteID: ddbe83d175788a34bb0ec6a70e54225c
+      internalID: -66191703
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: PurpleBox_6
+      name: RedBox_6
       rect:
         serializedVersion: 2
         x: 0
@@ -322,14 +322,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: bed7a7e09b1f4794aa0303f2dc520a79
-      internalID: 847586089
+      spriteID: e0a8a76f2bdc90148b6735e82f3d1cc6
+      internalID: -972636946
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: PurpleBox_7
+      name: RedBox_7
       rect:
         serializedVersion: 2
         x: 512
@@ -344,14 +344,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 4b6f83e45e18b864b9626ac957d49c88
-      internalID: -137687637
+      spriteID: 49e89bf320f0b6c4781cc8d60318db15
+      internalID: -607528443
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: PurpleBox_8
+      name: RedBox_8
       rect:
         serializedVersion: 2
         x: 1024
@@ -366,14 +366,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: a3f21e513f39a7e46859c3e795921202
-      internalID: 918677334
+      spriteID: 2b34d8716c173ea439d84cd9c4dd851f
+      internalID: 1752106319
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: PurpleBox_9
+      name: RedBox_9
       rect:
         serializedVersion: 2
         x: 1536
@@ -388,14 +388,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 00dbe60053803dc4cb61efb2fed8bb6a
-      internalID: 1487942214
+      spriteID: aa70fbf4027c22b45857638d94cece35
+      internalID: -988844198
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: PurpleBox_10
+      name: RedBox_10
       rect:
         serializedVersion: 2
         x: 2048
@@ -410,14 +410,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 115dbecde3dc66a4c98a27ee9f0525ac
-      internalID: 1029233702
+      spriteID: b79b469f21c011a4a8e94efb159de30e
+      internalID: -403557834
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: PurpleBox_11
+      name: RedBox_11
       rect:
         serializedVersion: 2
         x: 2560
@@ -432,8 +432,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: c1f97c3a35a440746bb7c2ef6bb83baf
-      internalID: 865216119
+      spriteID: f50f046989ed8b04e8228aa0cc13d016
+      internalID: -1491472383
       vertices: []
       indices: 
       edges: []
@@ -442,7 +442,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: e18413cff6cacaf4f84f5e2a0281e2e1
+    spriteID: 3ef39c076d54090449d9a0f34918883b
     internalID: 0
     vertices: []
     indices: 
@@ -454,18 +454,18 @@ TextureImporter:
       - key: SpriteEditor.SliceSettings
         value: '{"sliceOnImport":false,"gridCellCount":{"x":6.0,"y":2.0},"gridSpriteSize":{"x":512.0,"y":512.0},"gridSpriteOffset":{"x":0.0,"y":0.0},"gridSpritePadding":{"x":0.0,"y":0.0},"pivot":{"x":0.5,"y":0.5},"pivotPixels":{"x":0.0,"y":0.0},"autoSlicingMethod":0,"spriteAlignment":0,"pivotUnitMode":0,"slicingType":2,"keepEmptyRects":false,"isAlternate":false}'
     nameFileIdTable:
-      PurpleBox_0: -1214594910
-      PurpleBox_1: -1084730019
-      PurpleBox_10: 1029233702
-      PurpleBox_11: 865216119
-      PurpleBox_2: -1221400460
-      PurpleBox_3: 1967408955
-      PurpleBox_4: 21281630
-      PurpleBox_5: -1556709961
-      PurpleBox_6: 847586089
-      PurpleBox_7: -137687637
-      PurpleBox_8: 918677334
-      PurpleBox_9: 1487942214
+      RedBox_0: -1494469370
+      RedBox_1: 1190281653
+      RedBox_10: -403557834
+      RedBox_11: -1491472383
+      RedBox_2: -1979290454
+      RedBox_3: 322987161
+      RedBox_4: -577177018
+      RedBox_5: -66191703
+      RedBox_6: -972636946
+      RedBox_7: -607528443
+      RedBox_8: 1752106319
+      RedBox_9: -988844198
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

@@ -1,0 +1,27 @@
+#
+# Sprite sheet data for Unity.
+#
+# To import these sprites into your Unity project, download "TexturePackerImporter":
+# https://www.codeandweb.com/texturepacker/unity
+#
+# $TexturePacker:SmartUpdate:42cca2c87ea65f215fcf498276cfc8da:a9a2604e21093748d8655709f21da6bd:615b7f3e978817c53bb0822f53f0e4cd$
+#
+:format=40300
+:texture=BlueBox.png
+:size=3072x1024
+:pivotpoints=enabled
+:borders=disabled
+:alphahandling=ClearTransparentPixels
+
+BlueBoxOpen0001;0;512;512;512; 0.5;0.5; 0;0;0;0
+BlueBoxOpen0002;512;512;512;512; 0.5;0.5; 0;0;0;0
+BlueBoxOpen0003;1024;512;512;512; 0.5;0.5; 0;0;0;0
+BlueBoxOpen0004;1536;512;512;512; 0.5;0.5; 0;0;0;0
+BlueBoxOpen0005;2048;512;512;512; 0.5;0.5; 0;0;0;0
+BlueBoxOpen0006;2560;512;512;512; 0.5;0.5; 0;0;0;0
+BlueBoxOpen0007;0;0;512;512; 0.5;0.5; 0;0;0;0
+BlueBoxOpen0008;512;0;512;512; 0.5;0.5; 0;0;0;0
+BlueBoxOpen0009;1024;0;512;512; 0.5;0.5; 0;0;0;0
+BlueBoxOpen0010;1536;0;512;512; 0.5;0.5; 0;0;0;0
+BlueBoxOpen0011;2048;0;512;512; 0.5;0.5; 0;0;0;0
+BlueBoxOpen0012;2560;0;512;512; 0.5;0.5; 0;0;0;0

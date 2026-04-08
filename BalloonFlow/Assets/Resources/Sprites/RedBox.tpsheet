@@ -1,0 +1,27 @@
+#
+# Sprite sheet data for Unity.
+#
+# To import these sprites into your Unity project, download "TexturePackerImporter":
+# https://www.codeandweb.com/texturepacker/unity
+#
+# $TexturePacker:SmartUpdate:9a487cec720da03edb00c240d568b4bb:7f96c185796716d45dd71018eaacd466:c984631ae4d0d8115ec17397159af54e$
+#
+:format=40300
+:texture=RedBox.png
+:size=3072x1024
+:pivotpoints=enabled
+:borders=disabled
+:alphahandling=ClearTransparentPixels
+
+RedBoxOpen0001;0;512;512;512; 0.5;0.5; 0;0;0;0
+RedBoxOpen0002;512;512;512;512; 0.5;0.5; 0;0;0;0
+RedBoxOpen0003;1024;512;512;512; 0.5;0.5; 0;0;0;0
+RedBoxOpen0004;1536;512;512;512; 0.5;0.5; 0;0;0;0
+RedBoxOpen0005;2048;512;512;512; 0.5;0.5; 0;0;0;0
+RedBoxOpen0006;2560;512;512;512; 0.5;0.5; 0;0;0;0
+RedBoxOpen0007;0;0;512;512; 0.5;0.5; 0;0;0;0
+RedBoxOpen0008;512;0;512;512; 0.5;0.5; 0;0;0;0
+RedBoxOpen0009;1024;0;512;512; 0.5;0.5; 0;0;0;0
+RedBoxOpen0010;1536;0;512;512; 0.5;0.5; 0;0;0;0
+RedBoxOpen0011;2048;0;512;512; 0.5;0.5; 0;0;0;0
+RedBoxOpen0012;2560;0;512;512; 0.5;0.5; 0;0;0;0
