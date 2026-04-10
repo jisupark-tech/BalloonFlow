@@ -79,6 +79,14 @@ namespace BalloonFlow
 
         [Header("[Home Page — Play Button]")]
         [SerializeField] private Button _btnPlay;
+        [SerializeField] private Image _imgPlayButton;
+        [SerializeField] private TMP_Text _txtPlay;
+        [SerializeField] private TMP_Text _txtPlayOutline;
+        [SerializeField] private TMP_Text _txtPlayLevel;
+        [SerializeField] private TMP_Text _txtPlayLevelOutline;
+        [SerializeField] private Sprite _sprBtnGreen;
+        [SerializeField] private Sprite _sprBtnPurple;
+        [SerializeField] private Sprite _sprBtnRed;
 
         #endregion
 
@@ -232,6 +240,47 @@ namespace BalloonFlow
         public void SetLifePlusButtonVisible(bool visible)
         {
             if (_btnLifePlus != null) _btnLifePlus.gameObject.SetActive(visible);
+        }
+
+        #endregion
+
+        #region Public Methods — Play Button
+
+        public void UpdatePlayButton(int levelId, DifficultyPurpose difficulty)
+        {
+            string levelStr = "Level " + levelId;
+            if (_txtPlay != null) _txtPlay.text = levelStr;
+            if (_txtPlayOutline != null) _txtPlayOutline.text = levelStr;
+
+            switch (difficulty)
+            {
+                case DifficultyPurpose.Hard:
+                    if (_imgPlayButton != null && _sprBtnPurple != null) _imgPlayButton.sprite = _sprBtnPurple;
+                    if (_txtPlayLevel != null) { _txtPlayLevel.gameObject.SetActive(true); _txtPlayLevel.text = "Hard Level"; }
+                    if (_txtPlayLevelOutline != null) { _txtPlayLevelOutline.gameObject.SetActive(true); _txtPlayLevelOutline.text = "Hard Level"; }
+                    break;
+
+                case DifficultyPurpose.SuperHard:
+                    if (_imgPlayButton != null && _sprBtnRed != null) _imgPlayButton.sprite = _sprBtnRed;
+                    if (_txtPlayLevel != null) { _txtPlayLevel.gameObject.SetActive(true); _txtPlayLevel.text = "Super Hard"; }
+                    if (_txtPlayLevelOutline != null) { _txtPlayLevelOutline.gameObject.SetActive(true); _txtPlayLevelOutline.text = "Super Hard"; }
+                    break;
+
+                default: // Normal, Tutorial, Rest, Intro
+                    if (_imgPlayButton != null && _sprBtnGreen != null) _imgPlayButton.sprite = _sprBtnGreen;
+                    if (_txtPlayLevel != null) _txtPlayLevel.gameObject.SetActive(false);
+                    if (_txtPlayLevelOutline != null) _txtPlayLevelOutline.gameObject.SetActive(false);
+                    break;
+            }
+        }
+
+        public void PlayButtonPressAnim()
+        {
+            if (_btnPlay == null) return;
+            var rt = _btnPlay.transform;
+            rt.DOKill();
+            rt.DOScale(0.95f, 0.08f).SetEase(Ease.InQuad)
+              .OnComplete(() => rt.DOScale(1f, 0.08f).SetEase(Ease.OutQuad));
         }
 
         #endregion

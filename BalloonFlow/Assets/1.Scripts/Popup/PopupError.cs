@@ -8,6 +8,7 @@ namespace BalloonFlow
     /// 에러/경고 팝업.
     /// PopupCommonFrame: Single 버튼 (OK).
     /// 아이콘 + 설명 텍스트 표시.
+    /// 결제 실패: iconCancel, 인터넷 연결X: iconWifi.
     /// </summary>
     public class PopupError : UIBase
     {
@@ -19,10 +20,13 @@ namespace BalloonFlow
         [SerializeField] private Image _imgIcon;
         [SerializeField] private Image _imgInnerFrame;
 
+        [Header("[Preset Icons — Inspector에서 할당]")]
+        [SerializeField] private Sprite _sprIconCancel;
+        [SerializeField] private Sprite _sprIconWifi;
+
         protected override void Awake()
         {
             base.Awake();
-            // 버튼 연결은 Awake에서 (CloseUI 후에도 listener 유지)
             if (_frame != null)
             {
                 if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.AddListener(() => CloseUI());
@@ -66,6 +70,18 @@ namespace BalloonFlow
             }
 
             OpenUI();
+        }
+
+        /// <summary>결제 실패 팝업 (iconCancel).</summary>
+        public void ShowPaymentFailed(string description = "Payment failed. Please try again.")
+        {
+            Show("Error", description, _sprIconCancel);
+        }
+
+        /// <summary>인터넷 연결 없음 팝업 (iconWifi).</summary>
+        public void ShowNoInternet(string description = "No internet connection. Please check your network.")
+        {
+            Show("Connection Error", description, _sprIconWifi);
         }
     }
 }
