@@ -134,27 +134,35 @@ namespace BalloonFlow
                 }
             }
 
-            if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, _holderLayerMask))
+            // RaycastAll: 앞줄이 뒷줄을 가려도 모든 hit 처리
+            RaycastHit[] hits = Physics.RaycastAll(ray, Mathf.Infinity, _holderLayerMask);
+            if (hits.Length == 0) return;
+
+            // 카메라에서 가장 가까운 hit부터 정렬
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+            for (int i = 0; i < hits.Length; i++)
             {
-                HolderIdentifier holder = hit.collider.GetComponent<HolderIdentifier>();
-                if (holder != null)
+                HolderIdentifier holder = hits[i].collider.GetComponent<HolderIdentifier>();
+                if (holder == null) continue;
+
+                bool boosterAwaiting = BoosterExecutor.HasInstance
+                    && BoosterExecutor.Instance.IsAwaitingHolderSelection;
+
+                if (!boosterAwaiting)
                 {
-                    // 부스터(Hand/SelectTool) 대기 중이면 모든 보관함 클릭 가능
-                    bool boosterAwaiting = BoosterExecutor.HasInstance
-                        && BoosterExecutor.Instance.IsAwaitingHolderSelection;
-
-                    if (!boosterAwaiting)
+                    if (HolderVisualManager.HasInstance
+                        && !HolderVisualManager.Instance.IsInFrontRow(holder.HolderId))
                     {
-                        // 일반 상태: 앞줄만 클릭 가능
-                        if (HolderVisualManager.HasInstance
-                            && !HolderVisualManager.Instance.IsInFrontRow(holder.HolderId))
-                        {
-                            return;
-                        }
+                        // 앞줄 아닌 보관함: Click 애니메이션만
+                        EventBus.Publish(new OnHolderClickAnim { holderId = holder.HolderId });
+                        return;
                     }
-
-                    EventBus.Publish(new OnHolderTapped { holderId = holder.HolderId });
                 }
+
+                // 앞줄 보관함 또는 부스터 모드: 정상 탭 처리
+                EventBus.Publish(new OnHolderTapped { holderId = holder.HolderId });
+                return;
             }
         }
 

@@ -222,6 +222,9 @@ namespace BalloonFlow
             // Settings
             EnsurePersistent<SettingsManager>("Mgr_Settings");
 
+            // Audio
+            EnsurePersistent<AudioManager>("Mgr_Audio");
+
             // Level & Content
             var _levelGO = EnsurePersistent<LevelManager>("Mgr_Level");
             if (_levelGO.GetComponent<LevelDataProvider>() == null)
@@ -316,10 +319,7 @@ namespace BalloonFlow
 
         public void StartLevel(int _levelId)
         {
-            // 하트 소모 (무한하트/테스트 모드 제외)
-            if (!IsTestPlayMode && LifeManager.HasInstance)
-                LifeManager.Instance.UseLive();
-
+            // 하트 소모: 실패 확정 시에만 (클리어/취소 시 소모 없음) — PopupFail02에서 처리
             PlayerPrefs.SetInt("BF_PendingLevelId", _levelId);
             LoadScene(SCENE_INGAME);
         }

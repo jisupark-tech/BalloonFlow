@@ -129,9 +129,10 @@ namespace BalloonFlow
             BuildPageContainer();
             CacheNavTextBaseY();
 
-            if (_btnShop != null) _btnShop.onClick.AddListener(() => GoToPage(0));
-            if (_btnHome != null) _btnHome.onClick.AddListener(() => GoToPage(1));
-            if (_btnSetting != null) _btnSetting.onClick.AddListener(() => GoToPage(2));
+            if (_btnShop != null) _btnShop.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(0); });
+            if (_btnHome != null) _btnHome.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(1); });
+            if (_btnSetting != null) _btnSetting.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(2); });
+            if (_btnPlay != null) _btnPlay.onClick.AddListener(PlayTouchSFX);
 
             // Start on Home(Lobby) page
             SetPageImmediate(1);
@@ -505,6 +506,11 @@ namespace BalloonFlow
         }
 
         #endregion
+
+        private static void PlayTouchSFX()
+        {
+            if (AudioManager.HasInstance) AudioManager.Instance.PlayPopupTouch();
+        }
 
         #region Legacy Compatibility
 

@@ -50,6 +50,20 @@ namespace BalloonFlow
         [SerializeField] private Button _color2Button;
         [SerializeField] private Button _color3Button;
 
+        [Header("[아이템 패널 — 난이도별 리소스]")]
+        [SerializeField] private Image _imgItemPanelBg;
+        [SerializeField] private Sprite _sprItemPanelNormal;
+        [SerializeField] private Sprite _sprItemPanelHard;
+        [SerializeField] private Sprite _sprItemPanelSuperHard;
+
+        [Header("[아이템 버튼 — 난이도별 리소스]")]
+        [SerializeField] private Image _imgBtnShuffle;
+        [SerializeField] private Image _imgBtnRemove;
+        [SerializeField] private Image _imgBtnHand;
+        [SerializeField] private Sprite _sprItemBtnNormal;
+        [SerializeField] private Sprite _sprItemBtnHard;
+        [SerializeField] private Sprite _sprItemBtnSuperHard;
+
         [Header("[배경/오버레이]")]
         [SerializeField] private Image _backgroundImage;
 
@@ -93,11 +107,39 @@ namespace BalloonFlow
             RefreshLockState();
         }
 
-        /// <summary>현재 난이도 설정 (Lock 색상에 사용).</summary>
+        /// <summary>현재 난이도 설정 (Lock 색상 + 아이템 패널 리소스).</summary>
         public void SetDifficulty(DifficultyPurpose difficulty)
         {
             _currentDifficulty = difficulty;
             RefreshLockState();
+            ApplyItemPanelDifficulty(difficulty);
+        }
+
+        private void ApplyItemPanelDifficulty(DifficultyPurpose difficulty)
+        {
+            // 패널 배경
+            Sprite panelSpr = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _sprItemPanelHard,
+                DifficultyPurpose.SuperHard  => _sprItemPanelSuperHard,
+                _                            => _sprItemPanelNormal
+            };
+            if (_imgItemPanelBg != null && panelSpr != null)
+                _imgItemPanelBg.sprite = panelSpr;
+
+            // 버튼 리소스
+            Sprite btnSpr = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _sprItemBtnHard,
+                DifficultyPurpose.SuperHard  => _sprItemBtnSuperHard,
+                _                            => _sprItemBtnNormal
+            };
+            if (btnSpr != null)
+            {
+                if (_imgBtnShuffle != null) _imgBtnShuffle.sprite = btnSpr;
+                if (_imgBtnRemove != null) _imgBtnRemove.sprite = btnSpr;
+                if (_imgBtnHand != null) _imgBtnHand.sprite = btnSpr;
+            }
         }
 
         public void SetLevel(int _levelId)
