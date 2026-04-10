@@ -16,6 +16,27 @@ namespace BalloonFlow
     /// </summary>
     public class PopupCommonFrame : MonoBehaviour
     {
+        private void Awake()
+        {
+            // 모든 버튼에 클릭 사운드 자동 연결
+            WireButtonSound(_btnExit);
+            WireButtonSound(_btnSingle);
+            WireButtonSound(_btnHorizGreen);
+            WireButtonSound(_btnHorizRed);
+            WireButtonSound(_btnVertGreen);
+            WireButtonSound(_btnVertRed);
+            WireButtonSound(_btnVertBlue);
+        }
+
+        private static void WireButtonSound(Button btn)
+        {
+            if (btn == null) return;
+            btn.onClick.AddListener(() =>
+            {
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayPopupTouch();
+            });
+        }
+
         #region Serialized Fields — Frame
 
         [Header("[Frame Background]")]

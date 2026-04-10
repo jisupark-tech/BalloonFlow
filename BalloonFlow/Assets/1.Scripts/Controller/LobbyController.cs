@@ -30,6 +30,9 @@ namespace BalloonFlow
 
             GameManager.Instance.InitLobby();
 
+            if (AudioManager.HasInstance)
+                AudioManager.Instance.PlayLobbyBGM();
+
             if (CameraManager.HasInstance)
                 CameraManager.Instance.ConfigureLobby();
 

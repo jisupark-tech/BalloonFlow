@@ -57,11 +57,11 @@ namespace BalloonFlow
         private float _criticalTimer;
         private bool _failConfirmed;
 
-        // Stall detection (교착 상태) — 높은 점유율에서 변화 없으면 실패
+        // Stall detection (교착 상태) — 높은 점유율에서 풍선이 안 터지면 실패
         private float _stallTimer;
-        private int _lastOccupiedCount;
-        private const float STALL_FAIL_DELAY = 5f; // 5초 동안 변화 없으면 실패
-        private const float STALL_MIN_OCCUPANCY = 0.8f; // 80% 이상에서만 감지
+        private int _lastBalloonCount;
+        private const float STALL_FAIL_DELAY = 4f; // 4초 동안 풍선 안 터지면 실패
+        private const float STALL_MIN_OCCUPANCY = 0.7f; // 70% 이상에서만 감지
 
         #endregion
 
@@ -146,13 +146,12 @@ namespace BalloonFlow
                 }
             }
 
-            // 교착 감지: 높은 점유율에서 레일 변화 없으면 실패
+            // 교착 감지: 높은 점유율에서 풍선이 안 터지면 실패
             if (RailManager.HasInstance && _remainingBalloons > 0)
             {
                 float occ = RailManager.Instance.Occupancy;
-                int currentCount = RailManager.Instance.OccupiedCount;
 
-                if (occ >= STALL_MIN_OCCUPANCY && currentCount == _lastOccupiedCount)
+                if (occ >= STALL_MIN_OCCUPANCY && _remainingBalloons == _lastBalloonCount)
                 {
                     _stallTimer += Time.deltaTime;
                     if (_stallTimer >= STALL_FAIL_DELAY)
@@ -164,7 +163,7 @@ namespace BalloonFlow
                 else
                 {
                     _stallTimer = 0f;
-                    _lastOccupiedCount = currentCount;
+                    _lastBalloonCount = _remainingBalloons;
                 }
             }
         }

@@ -62,6 +62,13 @@ namespace BalloonFlow
             // 레벨 로드
             LoadPendingLevel();
 
+            // 레벨 로드 후 난이도별 배경색 적용
+            if (CameraManager.HasInstance)
+                CameraManager.Instance.ConfigureInGame();
+
+            if (AudioManager.HasInstance)
+                AudioManager.Instance.PlayInGameBGM();
+
             Debug.Log($"[GameBootstrap] InGame 초기화 완료 (testMode={_isTestMode})");
         }
 

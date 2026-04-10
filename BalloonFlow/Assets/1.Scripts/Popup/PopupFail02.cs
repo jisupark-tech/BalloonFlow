@@ -49,20 +49,23 @@ namespace BalloonFlow
                 _frame.SetHorizRedText("Home");
                 _frame.ShowExitButton(true);
             }
+
+            // 실패 확정 시 하트 1개 소모 (클리어/취소 시 소모 없음)
+            if (LifeManager.HasInstance)
+                LifeManager.Instance.UseLive();
+
             OpenUI();
         }
 
         private void OnRetryClicked()
         {
-            if (LifeManager.HasInstance)
+            // 하트 체크 (이미 Show에서 소모됨)
+            if (LifeManager.HasInstance && LifeManager.Instance.CurrentLives <= 0)
             {
-                if (LifeManager.Instance.CurrentLives <= 0)
-                {
-                    Debug.Log("[PopupFail02] 하트 부족 — 로비로 이동");
-                    OnHomeClicked();
-                    return;
-                }
-                LifeManager.Instance.UseLive();
+                Debug.Log("[PopupFail02] 하트 부족 — More Lives 팝업");
+                if (UIManager.HasInstance)
+                    UIManager.Instance.OpenUI<PopupMoreLive>("Popup/PopupMoreLive");
+                return;
             }
 
             CloseUI();
