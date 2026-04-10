@@ -70,6 +70,9 @@ namespace BalloonFlow
         public bool isDanger; // true = 5/5 (critical), false = 4/5 (warning)
     }
 
+    /// <summary>배포 불가 보관함 클릭 — Click 애니메이션만 재생용.</summary>
+    public struct OnHolderClickAnim { public int holderId; }
+
     /// <summary>All holders are empty.</summary>
     public struct OnAllHoldersEmpty { }
 

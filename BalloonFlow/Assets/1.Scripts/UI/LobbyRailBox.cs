@@ -51,6 +51,9 @@ namespace BalloonFlow
 
         #endregion
 
+        private static readonly int _animIdle = Animator.StringToHash("BoxIdle");
+        private static readonly int _animOpen = Animator.StringToHash("BoxOpen");
+
         #region Fields
 
         private int _levelId;
@@ -115,6 +118,11 @@ namespace BalloonFlow
             if (_imgBoxDim != null) _imgBoxDim.gameObject.SetActive(false);
 
             if (_imgBox != null) _imgBox.rectTransform.localScale = Vector3.one * 1.5f;
+
+            // 현재 레벨 박스: DefaultToIdle 애니메이션
+            if (_animator != null)
+                _animator.SetTrigger(_animIdle);
+
             PlayOpenAnimation();
         }
 
@@ -175,6 +183,22 @@ namespace BalloonFlow
             var controller = Resources.Load<RuntimeAnimatorController>(controllerName);
             if (controller != null)
                 _animator.runtimeAnimatorController = controller;
+        }
+
+        /// <summary>게임 시작 시 호출 — 박스 열림 연출, 0.5초 후 콜백.</summary>
+        public void PlayStartGameAnimation(System.Action onComplete = null)
+        {
+            if (_animator != null)
+                _animator.SetTrigger(_animOpen);
+
+            if (onComplete != null)
+                StartCoroutine(DelayedCallback(0.5f, onComplete));
+        }
+
+        private System.Collections.IEnumerator DelayedCallback(float delay, System.Action callback)
+        {
+            yield return new WaitForSeconds(delay);
+            callback?.Invoke();
         }
 
         private void PlayOpenAnimation()

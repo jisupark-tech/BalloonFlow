@@ -317,8 +317,45 @@ namespace BalloonFlow
         private readonly List<int> _tempRemoveKeys = new List<int>(32);
 
         /// <summary>Cave 스케일 구간: FADE_START(스케일1) ~ FADE_END(스케일0) 사이에서 축소.</summary>
-        private const float CAVE_FADE_START = 0.0315f;  // 이 지점부터 축소 시작
-        private const float CAVE_FADE_END   = 0.03f;  // 이 지점에서 스케일 0
+        /// 면수별 기본값 (동일하게 시작, Inspector에서 개별 조정 가능)
+        private const float DEFAULT_CAVE_FADE_START = 0.0315f;
+        private const float DEFAULT_CAVE_FADE_END   = 0.03f;
+
+        /// <summary>현재 면수에 맞는 CaveFadeStart 동적 반환 (Inspector에서 실시간 조정 가능).</summary>
+        private float CaveFadeStart
+        {
+            get
+            {
+                if (!GameManager.HasInstance) return DEFAULT_CAVE_FADE_START;
+                int sides = BoardTileManager.HasInstance ? BoardTileManager.Instance.RailSideCount : 4;
+                var b = GameManager.Instance.Board;
+                return sides switch
+                {
+                    1 => b.caveFadeStart1Side,
+                    2 => b.caveFadeStart2Side,
+                    3 => b.caveFadeStart3Side,
+                    _ => b.caveFadeStart4Side,
+                };
+            }
+        }
+
+        /// <summary>현재 면수에 맞는 CaveFadeEnd 동적 반환.</summary>
+        private float CaveFadeEnd
+        {
+            get
+            {
+                if (!GameManager.HasInstance) return DEFAULT_CAVE_FADE_END;
+                int sides = BoardTileManager.HasInstance ? BoardTileManager.Instance.RailSideCount : 4;
+                var b = GameManager.Instance.Board;
+                return sides switch
+                {
+                    1 => b.caveFadeEnd1Side,
+                    2 => b.caveFadeEnd2Side,
+                    3 => b.caveFadeEnd3Side,
+                    _ => b.caveFadeEnd4Side,
+                };
+            }
+        }
 
         private void UpdateSlotDartPositions()
         {
@@ -368,17 +405,18 @@ namespace BalloonFlow
                     float t = ((dist % pathLen) + pathLen) % pathLen / pathLen; // 0~1 정규화
 
                     float scale = 1f;
-                    float fadeRange = CAVE_FADE_START - CAVE_FADE_END;
-                    if (t < CAVE_FADE_START)
+                    float fs = CaveFadeStart, fe = CaveFadeEnd;
+                    float fadeRange = fs - fe;
+                    if (t < fs)
                     {
                         // 시작점에서 나옴: FADE_END(0) → FADE_START(1)
-                        scale = t <= CAVE_FADE_END ? 0f : (t - CAVE_FADE_END) / fadeRange;
+                        scale = t <= fe ? 0f : (t - fe) / fadeRange;
                     }
-                    else if (t > 1f - CAVE_FADE_START)
+                    else if (t > 1f - fs)
                     {
                         // 끝점으로 들어감: (1-FADE_START)(1) → (1-FADE_END)(0)
                         float distFromEnd = 1f - t;
-                        scale = distFromEnd <= CAVE_FADE_END ? 0f : (distFromEnd - CAVE_FADE_END) / fadeRange;
+                        scale = distFromEnd <= fe ? 0f : (distFromEnd - fe) / fadeRange;
                     }
 
                     scale = Mathf.Clamp01(scale);
@@ -472,8 +510,8 @@ namespace BalloonFlow
                 {
                     float t = dart.progress / pathLen;
                     float scale = 1f;
-                    float fadeStart = CAVE_FADE_START;
-                    float fadeEnd = CAVE_FADE_END;
+                    float fadeStart = CaveFadeStart;
+                    float fadeEnd = CaveFadeEnd;
                     float fadeRange = fadeStart - fadeEnd;
                     if (fadeRange > 0f)
                     {

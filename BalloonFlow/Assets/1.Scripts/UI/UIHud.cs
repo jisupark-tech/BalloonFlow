@@ -38,6 +38,11 @@ namespace BalloonFlow
         [SerializeField] private Image _iconLockRemove;
         [SerializeField] private Image _iconLockHand;
 
+        [Header("[Icon Items — 미해금 시 비활성화]")]
+        [SerializeField] private GameObject _iconItemShuffle;
+        [SerializeField] private GameObject _iconItemRemove;
+        [SerializeField] private GameObject _iconItemHand;
+
         [Header("[색상 선택 패널 — Color Remove용]")]
         [SerializeField] private GameObject _colorPanel;
         [SerializeField] private Button _color0Button;
@@ -130,6 +135,9 @@ namespace BalloonFlow
                 SetLockIcon(_iconLockHand, false, _currentDifficulty);
                 SetLockIcon(_iconLockShuffle, false, _currentDifficulty);
                 SetLockIcon(_iconLockRemove, false, _currentDifficulty);
+                SetIconItemVisible(_iconItemHand, true);
+                SetIconItemVisible(_iconItemShuffle, true);
+                SetIconItemVisible(_iconItemRemove, true);
                 return;
             }
 
@@ -142,6 +150,11 @@ namespace BalloonFlow
             SetLockIcon(_iconLockHand, handLocked, _currentDifficulty);
             SetLockIcon(_iconLockShuffle, shuffleLocked, _currentDifficulty);
             SetLockIcon(_iconLockRemove, removeLocked, _currentDifficulty);
+
+            // 미해금 시 IconItem 비활성화
+            SetIconItemVisible(_iconItemHand, !handLocked);
+            SetIconItemVisible(_iconItemShuffle, !shuffleLocked);
+            SetIconItemVisible(_iconItemRemove, !removeLocked);
         }
 
         #endregion
@@ -305,6 +318,11 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard  => LOCK_SUPERHARD,
                 _                            => LOCK_NORMAL
             };
+        }
+
+        private static void SetIconItemVisible(GameObject iconItem, bool visible)
+        {
+            if (iconItem != null) iconItem.SetActive(visible);
         }
 
         #endregion

@@ -57,6 +57,12 @@ namespace BalloonFlow
         private float _criticalTimer;
         private bool _failConfirmed;
 
+        // Stall detection (교착 상태) — 높은 점유율에서 변화 없으면 실패
+        private float _stallTimer;
+        private int _lastOccupiedCount;
+        private const float STALL_FAIL_DELAY = 5f; // 5초 동안 변화 없으면 실패
+        private const float STALL_MIN_OCCUPANCY = 0.8f; // 80% 이상에서만 감지
+
         #endregion
 
         #region Properties
@@ -136,6 +142,29 @@ namespace BalloonFlow
                 {
                     _failConfirmed = true;
                     TriggerFail(FailReason.RailOverflow);
+                    return;
+                }
+            }
+
+            // 교착 감지: 높은 점유율에서 레일 변화 없으면 실패
+            if (RailManager.HasInstance && _remainingBalloons > 0)
+            {
+                float occ = RailManager.Instance.Occupancy;
+                int currentCount = RailManager.Instance.OccupiedCount;
+
+                if (occ >= STALL_MIN_OCCUPANCY && currentCount == _lastOccupiedCount)
+                {
+                    _stallTimer += Time.deltaTime;
+                    if (_stallTimer >= STALL_FAIL_DELAY)
+                    {
+                        TriggerFail(FailReason.RailOverflow);
+                        return;
+                    }
+                }
+                else
+                {
+                    _stallTimer = 0f;
+                    _lastOccupiedCount = currentCount;
                 }
             }
         }
@@ -281,6 +310,13 @@ namespace BalloonFlow
                     currentStage = (int)newStage,
                     occupancy = evt.occupancy
                 });
+            }
+
+            // 레일 완전히 찬 경우 → 즉시 실패 (grace 없이)
+            if (evt.activeDarts >= evt.totalSlots)
+            {
+                TriggerFail(FailReason.RailOverflow);
+                return;
             }
 
             // Fail trigger: integer-based "capacity - 1" check (Design ref: 레일초과_코어메카닉_명세)

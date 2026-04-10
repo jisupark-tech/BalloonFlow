@@ -155,6 +155,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnHolderRevealed>(HandleHolderRevealed);
             EventBus.Subscribe<OnFrozenHPChanged>(HandleFrozenHPChanged);
             EventBus.Subscribe<OnHolderUnlocked>(HandleHolderUnlocked);
+            EventBus.Subscribe<OnHolderClickAnim>(HandleHolderClickAnim);
         }
 
         private void OnDisable()
@@ -169,6 +170,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnHolderRevealed>(HandleHolderRevealed);
             EventBus.Unsubscribe<OnFrozenHPChanged>(HandleFrozenHPChanged);
             EventBus.Unsubscribe<OnHolderUnlocked>(HandleHolderUnlocked);
+            EventBus.Unsubscribe<OnHolderClickAnim>(HandleHolderClickAnim);
         }
 
         #endregion
@@ -854,6 +856,18 @@ namespace BalloonFlow
                 visual.identifier.StartDeploy(); // 터치 시 바로 뚜껑 열림
             }
 
+            // 같은 컬럼의 대기 박스들에 Click 애니메이션 트리거
+            foreach (var kvp in _holderVisuals)
+            {
+                var other = kvp.Value;
+                if (other.column == visual.column && other.holderId != holderId
+                    && !other.isDeploying && !other.isMovingToRail
+                    && other.identifier != null)
+                {
+                    other.identifier.TriggerClick();
+                }
+            }
+
             // 즉시 이동 시작 (대기 없이)
             visual.isMovingToRail = true;
 
@@ -1371,6 +1385,15 @@ namespace BalloonFlow
             // 텍스트도 "?" → 실제 탄창 수로 변경
             if (visual.magazineText != null)
                 visual.magazineText.text = visual.magazineRemaining.ToString();
+        }
+
+        private void HandleHolderClickAnim(OnHolderClickAnim evt)
+        {
+            if (_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual))
+            {
+                if (visual.identifier != null)
+                    visual.identifier.TriggerClick();
+            }
         }
 
         private void HandleContinueApplied(OnContinueApplied evt)

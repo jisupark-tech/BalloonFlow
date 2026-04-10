@@ -602,7 +602,11 @@ namespace BalloonFlow
             if (_slots[slotIndex].dartColor >= 0) return -1; // occupied
 
             // frozen 다트가 복귀할 공간 확보 — 예약분 초과 시 배치 거부
-            if (_occupiedCount + _frozenDartInfos.Count >= _slotCount) return -1;
+            if (_occupiedCount + _frozenDartInfos.Count >= _slotCount)
+            {
+                PublishOccupancyChanged(); // 실패 조건 감지용
+                return -1;
+            }
 
             int dartId = _nextDartId++;
             _slots[slotIndex].dartColor = color;
@@ -638,11 +642,18 @@ namespace BalloonFlow
         /// <param name="ignoreFrozenReserve">true면 frozen 예약분 무시 (UnfreezeAndReinsertAll 전용)</param>
         public int FindNextEmptySlot(int startIndex, bool ignoreFrozenReserve = false)
         {
-            if (_slots == null || _occupiedCount >= _slotCount) return -1;
+            if (_slots == null || _occupiedCount >= _slotCount)
+            {
+                PublishOccupancyChanged();
+                return -1;
+            }
 
             // 배치 시: frozen 다트가 복귀할 공간 확보
             if (!ignoreFrozenReserve && _occupiedCount + _frozenDartInfos.Count >= _slotCount)
+            {
+                PublishOccupancyChanged();
                 return -1;
+            }
 
             for (int i = 0; i < _slotCount; i++)
             {
@@ -1543,11 +1554,14 @@ namespace BalloonFlow
 
         private void PublishOccupancyChanged()
         {
+            // frozen 다트도 실질적 점유로 포함
+            int effectiveCount = _occupiedCount + _frozenDartInfos.Count;
+            float effectiveOccupancy = _slotCount > 0 ? (float)effectiveCount / _slotCount : 0f;
             EventBus.Publish(new OnRailOccupancyChanged
             {
-                activeDarts = _occupiedCount,
+                activeDarts = effectiveCount,
                 totalSlots = _slotCount,
-                occupancy = Occupancy
+                occupancy = effectiveOccupancy
             });
         }
 

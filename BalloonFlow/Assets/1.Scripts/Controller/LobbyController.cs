@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace BalloonFlow
 {
@@ -77,6 +78,19 @@ namespace BalloonFlow
         void Update()
         {
             UpdateLifeTimer();
+
+            // 백버튼(Escape) → 종료 확인 팝업
+            if (Keyboard.current != null && Keyboard.current[Key.Escape].wasPressedThisFrame)
+                ShowQuitConfirm();
+        }
+
+        void ShowQuitConfirm()
+        {
+            if (!UIManager.HasInstance) return;
+            var popup = UIManager.Instance.OpenUI<PopupDescription>("Popup/PopupDescription");
+            if (popup != null)
+                popup.Show("Quit", "Are you sure you want to quit?", "Quit",
+                    () => Application.Quit());
         }
 
         #region UI Load
@@ -124,7 +138,7 @@ namespace BalloonFlow
 
             var lm = LifeManager.Instance;
 
-            // 무한 하트 상태
+            // 무한 하트 상태: ImageInfinite 노출, (+) 숨김, 남은 시간 표시
             if (lm.IsInfiniteHeartsActive)
             {
                 _lobby.SetLifeText(lm.MaxLives, lm.MaxLives);
@@ -135,10 +149,13 @@ namespace BalloonFlow
                     : $"{ts.Minutes:D2}:{ts.Seconds:D2}";
                 _lobby.SetLifeTimerText(timerStr);
                 _lobby.SetLifePlusButtonVisible(false);
+                _lobby.SetInfiniteImageVisible(true);
                 return;
             }
 
-            // FULL 상태
+            _lobby.SetInfiniteImageVisible(false);
+
+            // FULL 상태: FULL 텍스트, (+) 숨김
             if (lm.IsFullLives())
             {
                 _lobby.SetLifeText(lm.MaxLives, lm.MaxLives);
@@ -147,7 +164,7 @@ namespace BalloonFlow
                 return;
             }
 
-            // 충전 중
+            // 충전 중: (+) 보임, 시간 표시
             _lobby.SetLifePlusButtonVisible(true);
             TimeSpan remaining = lm.GetTimeToNextLife();
             if (remaining.TotalSeconds > 0)
@@ -180,7 +197,20 @@ namespace BalloonFlow
                 int highest = LevelManager.Instance.GetHighestCompletedLevel();
                 levelId = highest > 0 ? highest + 1 : 1;
             }
-            GameManager.Instance.StartLevel(levelId);
+            // 현재 레벨 RailBox 열림 연출 후 씬 이동
+            var activeBox = _lobby.GetActiveRailBox();
+            if (activeBox != null)
+            {
+                int capturedLevelId = levelId;
+                activeBox.PlayStartGameAnimation(() =>
+                {
+                    GameManager.Instance.StartLevel(capturedLevelId);
+                });
+            }
+            else
+            {
+                GameManager.Instance.StartLevel(levelId);
+            }
         }
 
         /// <summary>BtnGoldPlus / BtnLifePlus → Shop 페이지로 스와이프 이동</summary>
@@ -194,21 +224,21 @@ namespace BalloonFlow
         {
             if (!LifeManager.HasInstance || !UIManager.HasInstance) return;
 
+            // 무한 하트 → PopupMoreLive
             if (LifeManager.Instance.IsInfiniteHeartsActive)
             {
-                var popup = UIManager.Instance.OpenUI<PopupDescription>("Popup/PopupDescription");
-                if (popup != null) popup.Show("Hearts", "Your lives are unlimited!");
+                UIManager.Instance.OpenUI<PopupMoreLive>("Popup/PopupMoreLive");
                 return;
             }
 
+            // FULL → TxtToast 토스트
             if (LifeManager.Instance.IsFullLives())
             {
-                var popup = UIManager.Instance.OpenUI<PopupDescription>("Popup/PopupDescription");
-                if (popup != null) popup.Show("Hearts", "Your lives are full!");
+                ShowToast("Your lives are full!");
                 return;
             }
 
-            // 하트 미만 → more lives 팝업
+            // 하트 미만 → PopupMoreLive
             UIManager.Instance.OpenUI<PopupMoreLive>("Popup/PopupMoreLive");
         }
 
@@ -231,6 +261,27 @@ namespace BalloonFlow
             bool hidePlus = evt.currentLives >= evt.maxLives
                 || (LifeManager.HasInstance && LifeManager.Instance.IsInfiniteHeartsActive);
             _lobby.SetLifePlusButtonVisible(!hidePlus);
+        }
+
+        #endregion
+
+        #region Toast
+
+        void ShowToast(string message)
+        {
+            if (!UIManager.HasInstance) return;
+            Transform parent = UIManager.Instance.PopupTr ?? UIManager.Instance.UiTr;
+            if (parent == null) return;
+
+            var prefab = Resources.Load<GameObject>("Popup/TxtToast");
+            if (prefab == null) return;
+
+            var go = Instantiate(prefab, parent);
+            var txt = go.GetComponentInChildren<TMPro.TMP_Text>();
+            if (txt != null) txt.text = message;
+
+            // 2초 후 자동 소멸
+            Destroy(go, 2f);
         }
 
         #endregion
