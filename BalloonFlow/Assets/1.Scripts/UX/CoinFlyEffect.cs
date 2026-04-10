@@ -46,6 +46,8 @@ namespace BalloonFlow
 
             var go = new GameObject("CoinFlyEffect");
             go.transform.SetParent(canvas.transform, false);
+            // Canvas 내 최상위로 올려서 팝업 위에 보이도록
+            go.transform.SetAsLastSibling();
             return go.AddComponent<CoinFlyEffect>();
         }
 
@@ -109,26 +111,34 @@ namespace BalloonFlow
                 }));
 
                 // Staggered delay for "pouring" feel
-                yield return new WaitForSeconds(
+                yield return new WaitForSecondsRealtime(
                     UnityEngine.Random.Range(MIN_SPAWN_DELAY, MAX_SPAWN_DELAY));
             }
         }
 
+        private static GameObject _fxGoldPrefab;
+
         private GameObject CreateCoinObject()
         {
-            var coinGO = new GameObject("Coin", typeof(RectTransform), typeof(Image));
-            coinGO.transform.SetParent(transform, false);
+            if (_fxGoldPrefab == null)
+                _fxGoldPrefab = Resources.Load<GameObject>("UI/UIAssets/FXGold");
 
-            var rt = coinGO.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(COIN_SIZE, COIN_SIZE);
-
-            var img = coinGO.GetComponent<Image>();
-            // Gold coin color with a slight warm tint
-            img.color = new Color(1f, 0.85f, 0.1f);
-            img.raycastTarget = false;
-
-            // Make it circular by creating a simple round sprite at runtime
-            img.sprite = CreateCircleSprite();
+            GameObject coinGO;
+            if (_fxGoldPrefab != null)
+            {
+                coinGO = Instantiate(_fxGoldPrefab, transform);
+            }
+            else
+            {
+                coinGO = new GameObject("Coin", typeof(RectTransform), typeof(Image));
+                coinGO.transform.SetParent(transform, false);
+                var rt = coinGO.GetComponent<RectTransform>();
+                rt.sizeDelta = new Vector2(COIN_SIZE, COIN_SIZE);
+                var img = coinGO.GetComponent<Image>();
+                img.color = new Color(1f, 0.85f, 0.1f);
+                img.raycastTarget = false;
+                img.sprite = CreateCircleSprite();
+            }
 
             return coinGO;
         }
@@ -145,7 +155,7 @@ namespace BalloonFlow
 
             while (elapsed < duration)
             {
-                elapsed += Time.deltaTime;
+                elapsed += Time.unscaledDeltaTime;
                 float t = Mathf.Clamp01(elapsed / duration);
 
                 // Ease-out quadratic

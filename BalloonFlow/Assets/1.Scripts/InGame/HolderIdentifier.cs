@@ -23,6 +23,7 @@ namespace BalloonFlow
         private static readonly int _animEnd = Animator.StringToHash("end");
         private static readonly int _animHidden = Animator.StringToHash("Hidden");
         private static readonly int _animHiddenEnd = Animator.StringToHash("HiddenEnd");
+        private static readonly int _animClick = Animator.StringToHash("Click");
 
         [Header("[Dart Visuals — Inspector에서 할당]")]
         [SerializeField] private Transform[] _dartSlots;
@@ -525,6 +526,13 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>클릭 시 대기 박스 애니메이션 — Click 트리거.</summary>
+        public void TriggerClick()
+        {
+            if (_animator != null)
+                _animator.SetTrigger(_animClick);
+        }
+
         /// <summary>배포 시작 — Deploy=true.</summary>
         public void StartDeploy()
         {
@@ -552,6 +560,7 @@ namespace BalloonFlow
                 _animator.SetBool(_animHidden, false);
                 _animator.ResetTrigger(_animEnd);
                 _animator.ResetTrigger(_animHiddenEnd);
+                _animator.ResetTrigger(_animClick);
             }
         }
 

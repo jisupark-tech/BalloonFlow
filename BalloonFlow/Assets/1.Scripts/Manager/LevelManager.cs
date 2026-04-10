@@ -364,6 +364,8 @@ namespace BalloonFlow
 
                 // 면 수에 맞는 컨베이어벨트 타일 빌드
                 BoardTileManager.Instance.BuildConveyorBelt();
+                BoardTileManager.Instance.BuildDangerOverlay();
+
             }
 
             // Rail setup via RailManager (slot-based conveyor belt) with variable capacity.

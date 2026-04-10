@@ -46,6 +46,7 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtLifeTimer;
         [SerializeField] private TMP_Text _txtLifeTimerOutline;
         [SerializeField] private Button _btnLifeBar;
+        [SerializeField] private GameObject _imgInfinite;
 
         [Header("[Pages — 프리팹 내 기존 오브젝트 (Shop/Lobby/Setting)]")]
         [SerializeField] private RectTransform _pageShop;
@@ -242,6 +243,11 @@ namespace BalloonFlow
             if (_btnLifePlus != null) _btnLifePlus.gameObject.SetActive(visible);
         }
 
+        public void SetInfiniteImageVisible(bool visible)
+        {
+            if (_imgInfinite != null) _imgInfinite.SetActive(visible);
+        }
+
         #endregion
 
         #region Public Methods — Play Button
@@ -323,6 +329,15 @@ namespace BalloonFlow
                 // SetAsFirstSibling makes each new one push above previous
                 go.transform.SetAsFirstSibling();
             }
+        }
+
+        /// <summary>현재 레벨(active) RailBox 반환.</summary>
+        public LobbyRailBox GetActiveRailBox()
+        {
+            if (_railBoxes == null) return null;
+            for (int i = 0; i < _railBoxes.Length; i++)
+                if (_railBoxes[i] != null && _railBoxes[i].IsActive) return _railBoxes[i];
+            return null;
         }
 
         public void ClearLevelBoxes()

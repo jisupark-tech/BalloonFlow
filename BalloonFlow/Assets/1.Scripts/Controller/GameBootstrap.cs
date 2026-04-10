@@ -357,7 +357,13 @@ namespace BalloonFlow
             yield return new WaitForSeconds(0.8f);
             if (_result != null)
             {
-                if (_isWin) _result.ShowWin(_score, _stars);
+                if (_isWin)
+                {
+                    DifficultyPurpose diff = DifficultyPurpose.Normal;
+                    if (LevelManager.HasInstance)
+                        diff = LevelManager.Instance.GetLevelDifficulty(LevelManager.Instance.CurrentLevelId);
+                    _result.ShowWin(_score, diff);
+                }
                 else _result.ShowFail();
             }
         }

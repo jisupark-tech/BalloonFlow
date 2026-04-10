@@ -281,18 +281,27 @@ namespace BalloonFlow
 
         private void HandleGaugeStage(OnGaugeStageChanged _evt)
         {
-            // Update HUD overlay color based on gauge stage
-            if (_gaugeOverlay == null) return;
-
             GaugeStage stage = (GaugeStage)_evt.currentStage;
-            Color overlay = stage switch
+
+            // Update HUD overlay color based on gauge stage
+            if (_gaugeOverlay != null)
             {
-                GaugeStage.Warning  => GAUGE_WARNING,
-                GaugeStage.Critical => GAUGE_CRITICAL,
-                GaugeStage.Caution  => GAUGE_CAUTION,
-                _                   => GAUGE_SAFE
-            };
-            _gaugeOverlay.color = overlay;
+                Color overlay = stage switch
+                {
+                    GaugeStage.Warning  => GAUGE_WARNING,
+                    GaugeStage.Critical => GAUGE_CRITICAL,
+                    GaugeStage.Caution  => GAUGE_CAUTION,
+                    _                   => GAUGE_SAFE
+                };
+                _gaugeOverlay.color = overlay;
+            }
+
+            // Danger 알람 타일: Warning 이상에서 표시
+            if (BoardTileManager.HasInstance)
+            {
+                bool showDanger = stage >= GaugeStage.Warning;
+                BoardTileManager.Instance.SetDangerVisible(showDanger);
+            }
         }
 
         private void RefreshOnRailCount()

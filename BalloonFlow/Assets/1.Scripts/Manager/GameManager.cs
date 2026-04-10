@@ -59,6 +59,27 @@ namespace BalloonFlow
         [Range(-2f, 2f)]
         public float dartPathOffset = -0.15f;
 
+        [Header("[Cave 스케일 — 면수별 (FadeStart/FadeEnd, 전체 경로 대비 비율)]")]
+        [Tooltip("1면(일자) Cave Fade Start. 클수록 안쪽에서 스케일 변화. (default: 0.0315)")]
+        public float caveFadeStart1Side = 0.0315f;
+        [Tooltip("1면(일자) Cave Fade End. (default: 0.03)")]
+        public float caveFadeEnd1Side = 0.03f;
+
+        [Tooltip("2면(ㄴ자) Cave Fade Start. (default: 0.0315)")]
+        public float caveFadeStart2Side = 0.0315f;
+        [Tooltip("2면(ㄴ자) Cave Fade End. (default: 0.03)")]
+        public float caveFadeEnd2Side = 0.03f;
+
+        [Tooltip("3면(ㄷ자) Cave Fade Start. (default: 0.0315)")]
+        public float caveFadeStart3Side = 0.0315f;
+        [Tooltip("3면(ㄷ자) Cave Fade End. (default: 0.03)")]
+        public float caveFadeEnd3Side = 0.03f;
+
+        [Tooltip("4면(ㅁ자) Cave Fade Start. (default: 0.0315)")]
+        public float caveFadeStart4Side = 0.0315f;
+        [Tooltip("4면(ㅁ자) Cave Fade End. (default: 0.03)")]
+        public float caveFadeEnd4Side = 0.03f;
+
         [Header("[레일 — Rail (컨베이어벨트)]")]
         [Tooltip("레일 슬롯 수. 다트가 점유하는 칸 수. 레벨 데이터에서 자동 계산됨. (default: 200)")]
         public int railSlotCount = 200;
@@ -295,6 +316,10 @@ namespace BalloonFlow
 
         public void StartLevel(int _levelId)
         {
+            // 하트 소모 (무한하트/테스트 모드 제외)
+            if (!IsTestPlayMode && LifeManager.HasInstance)
+                LifeManager.Instance.UseLive();
+
             PlayerPrefs.SetInt("BF_PendingLevelId", _levelId);
             LoadScene(SCENE_INGAME);
         }

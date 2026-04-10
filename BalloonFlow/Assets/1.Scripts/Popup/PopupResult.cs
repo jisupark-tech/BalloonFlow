@@ -14,22 +14,20 @@ namespace BalloonFlow
     {
         #region Constants
 
-        private const int MAX_STARS = 3;
         private const float COIN_DELAY_AFTER_POPUP = 0.6f;
         private const int MIN_COIN_COUNT = 8;
         private const int MAX_COIN_COUNT = 20;
         private const int SCORE_PER_COIN_STEP = 500;
-
-        private static readonly Color STAR_EARNED_COLOR = new Color(1f, 0.85f, 0.1f);
-        private static readonly Color STAR_UNEARNED_COLOR = new Color(0.4f, 0.4f, 0.4f, 0.5f);
 
         #endregion
 
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
 
-        [Header("[별 표시 — 3개 Image]")]
-        [SerializeField] private Image[] _starImages;
+        [Header("[Hard Level Option — Hard/SuperHard 전용]")]
+        [SerializeField] private GameObject _hardLevelOption;
+        [SerializeField] private TMP_Text _txtHardLevel;
+        [SerializeField] private TMP_Text _txtHardLevelOutline;
 
         [Header("[코인 연출 — Gold HUD 위치]")]
         [SerializeField] private RectTransform _goldTarget;
@@ -70,7 +68,7 @@ namespace BalloonFlow
 
         public void SetGoldTarget(RectTransform target) { _goldTarget = target; }
 
-        public void ShowWin(int score, int stars, DifficultyPurpose difficulty = DifficultyPurpose.Normal)
+        public void ShowWin(int score, DifficultyPurpose difficulty = DifficultyPurpose.Normal)
         {
             if (_frame != null)
             {
@@ -82,7 +80,7 @@ namespace BalloonFlow
                 _frame.ShowExitButton(false);
             }
 
-            UpdateStarDisplay(stars);
+            UpdateHardLevelOption(difficulty);
             OpenUI();
             StartCoroutine(TriggerCoinFlyDelayed(score));
         }
@@ -109,6 +107,18 @@ namespace BalloonFlow
             if (LevelManager.HasInstance)
             {
                 int nextId = LevelManager.Instance.GetNextLevelId();
+                int currentId = LevelManager.Instance.CurrentLevelId;
+
+                // 마지막 레벨 클리어 → 다음 레벨이 없으면 축하 팝업
+                if (nextId <= currentId && UIManager.HasInstance)
+                {
+                    var popup = UIManager.Instance.OpenUI<PopupDescription>("Popup/PopupDescription");
+                    if (popup != null)
+                        popup.Show("Congratulations!", "You've cleared all levels!", "OK",
+                            () => { if (GameManager.HasInstance) GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY); });
+                    return;
+                }
+
                 LevelManager.Instance.LoadLevel(nextId);
             }
         }
@@ -122,18 +132,18 @@ namespace BalloonFlow
 
         #endregion
 
-        #region Star Display
+        #region Hard Level Option
 
-        private void UpdateStarDisplay(int earnedCount)
+        private void UpdateHardLevelOption(DifficultyPurpose difficulty)
         {
-            if (_starImages == null) return;
-            int clamped = Mathf.Clamp(earnedCount, 0, MAX_STARS);
-            for (int i = 0; i < _starImages.Length; i++)
+            bool show = difficulty == DifficultyPurpose.Hard || difficulty == DifficultyPurpose.SuperHard;
+            if (_hardLevelOption != null) _hardLevelOption.SetActive(show);
+
+            if (show)
             {
-                if (_starImages[i] == null) continue;
-                _starImages[i].gameObject.SetActive(true);
-                _starImages[i].color = i < clamped ? STAR_EARNED_COLOR : STAR_UNEARNED_COLOR;
-                _starImages[i].transform.localScale = i < clamped ? Vector3.one : Vector3.one * 0.85f;
+                string label = difficulty == DifficultyPurpose.SuperHard ? "SuperHard" : "Hard";
+                if (_txtHardLevel != null) _txtHardLevel.text = label;
+                if (_txtHardLevelOutline != null) _txtHardLevelOutline.text = label;
             }
         }
 
@@ -143,7 +153,7 @@ namespace BalloonFlow
 
         private IEnumerator TriggerCoinFlyDelayed(int score)
         {
-            yield return new WaitForSeconds(COIN_DELAY_AFTER_POPUP);
+            yield return new WaitForSecondsRealtime(COIN_DELAY_AFTER_POPUP);
 
             RectTransform target = _goldTarget;
             if (target == null)
@@ -153,14 +163,17 @@ namespace BalloonFlow
             }
             if (target == null) yield break;
 
-            Canvas canvas = GetComponentInParent<Canvas>();
-            if (canvas == null) canvas = FindAnyObjectByType<Canvas>();
-            if (canvas == null) yield break;
+            // 골드 이펙트 전용 Canvas (팝업 위에 렌더링)
+            var fxCanvasGO = new GameObject("FXGoldCanvas");
+            var fxCanvas = fxCanvasGO.AddComponent<Canvas>();
+            fxCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            fxCanvas.sortingOrder = 100;
+            fxCanvasGO.AddComponent<UnityEngine.UI.CanvasScaler>();
 
             int coinCount = Mathf.Clamp(MIN_COIN_COUNT + (score / SCORE_PER_COIN_STEP), MIN_COIN_COUNT, MAX_COIN_COUNT);
             Vector2 screenCenter = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
 
-            var effect = CoinFlyEffect.Create(canvas);
+            var effect = CoinFlyEffect.Create(fxCanvas);
             if (effect != null)
                 effect.Play(screenCenter, target, coinCount, onEachLand: () => EventBus.Publish(new OnCoinFlyLanded()));
         }

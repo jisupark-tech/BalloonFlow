@@ -117,7 +117,16 @@ namespace BalloonFlow
             MainCamera.orthographicSize = 15f;
 
             MainCamera.clearFlags = CameraClearFlags.SolidColor;
-            MainCamera.backgroundColor = new Color(0.255f, 0.235f, 0.392f); // #413C64
+            // 난이도별 배경색
+            DifficultyPurpose diff = DifficultyPurpose.Normal;
+            if (LevelManager.HasInstance)
+                diff = LevelManager.Instance.GetLevelDifficulty(LevelManager.Instance.CurrentLevelId);
+            MainCamera.backgroundColor = diff switch
+            {
+                DifficultyPurpose.Hard      => new Color(0x3B / 255f, 0x34 / 255f, 0x4B / 255f), // #3B344B
+                DifficultyPurpose.SuperHard  => new Color(0x48 / 255f, 0x34 / 255f, 0x38 / 255f), // #483438
+                _                            => new Color(0x38 / 255f, 0x3D / 255f, 0x4D / 255f), // #383D4D
+            };
             MainCamera.nearClipPlane = -10f;
             MainCamera.farClipPlane = 80f;
             MainCamera.depth = 0;

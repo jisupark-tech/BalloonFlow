@@ -34,6 +34,18 @@ namespace BalloonFlow
         public Sprite caveL;   // rail_cave_l
         public Sprite caveR;   // rail_cave_r
 
+        [Header("Danger Tiles (위급 알람 — 기존 타일 위에 겹침)")]
+        public Sprite dangerH;     // rail_corner_h_danger
+        public Sprite dangerV;     // rail_corner_v_danger
+        public Sprite dangerBL;    // rail_corner_bl_danger
+        public Sprite dangerBR;    // rail_corner_br_danger
+        public Sprite dangerTL;    // rail_corner_tl_danger
+        public Sprite dangerTR;    // rail_corner_tr_danger
+        public Sprite dangerCapB;  // rail_cap_b_danger
+        public Sprite dangerCapT;  // rail_cap_t_danger
+        public Sprite dangerCapL;  // rail_cap_l_danger
+        public Sprite dangerCapR;  // rail_cap_r_danger
+
         // Legacy references — kept for backward compatibility with old RailTileSet assets
         [HideInInspector] public Sprite tileBH;
         [HideInInspector] public Sprite tileTH;

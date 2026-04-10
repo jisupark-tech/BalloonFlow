@@ -75,6 +75,15 @@ namespace BalloonFlow
         private GameObject[] _arrowObjects;
         private int[] _arrowSlotIndices; // 각 Arrow가 점유한 슬롯 인덱스
 
+        // Danger overlay (위급 알람)
+        private Transform _dangerOverlayRoot;
+        private SpriteRenderer[] _dangerRenderers;
+        private bool _dangerVisible;
+        private float _dangerBlinkTimer;
+        private const float DANGER_BLINK_SPEED = 3f; // 깜빡임 속도
+        private const float DANGER_ALPHA_MIN = 0.15f;
+        private const float DANGER_ALPHA_MAX = 0.8f;
+
         #endregion
 
         #region Properties
@@ -161,6 +170,7 @@ namespace BalloonFlow
         private void Update()
         {
             UpdateArrowPositions();
+            UpdateDangerBlink();
         }
 
         private void OnDestroy()
@@ -440,21 +450,123 @@ namespace BalloonFlow
             {
                 if (sides == 3)
                 {
-                    PlaceCaveOverlay(caveL, left, bottom, cornerSize);    // 시작점
-                    PlaceCaveOverlay(caveL, left, top, cornerSize);       // 끝점
+                    PlaceCaveOverlay(caveL, left, bottom, cornerSize, cornerSize);
+                    PlaceCaveOverlay(caveL, left, top, cornerSize, cornerSize);
                 }
                 else if (sides == 2)
                 {
-                    PlaceCaveOverlay(caveL, left, bottom, cornerSize);    // 시작점
-                    PlaceCaveOverlay(caveT, right, top, cornerSize);      // 끝점
+                    PlaceCaveOverlay(caveL, left, bottom, cornerSize, cornerSize);
+                    PlaceCaveOverlay(caveT, right, top, cornerSize, cornerSize);
                 }
-                else // 1면
+                else // 1면 (직선): 터널 높이를 레일 두께에 맞춤
                 {
-                    PlaceCaveOverlay(caveL, left, bottom, cornerSize);    // 시작점
-                    PlaceCaveOverlay(caveR, right, bottom, cornerSize);   // 끝점
+                    PlaceCaveOverlay(caveL, left, bottom, cornerSize, cornerSize);
+                    PlaceCaveOverlay(caveR, right, bottom, cornerSize, cornerSize);
                 }
             }
         }
+
+        #region Danger Overlay
+
+        /// <summary>BuildConveyorBelt 이후 호출. 기존 컨베이어 타일을 복제하여 danger 오버레이 생성.</summary>
+        public void BuildDangerOverlay()
+        {
+            if (_dangerOverlayRoot != null) Destroy(_dangerOverlayRoot.gameObject);
+            _dangerOverlayRoot = new GameObject("DangerOverlay").transform;
+            if (_conveyorSpriteRoot != null)
+                _dangerOverlayRoot.SetParent(_conveyorSpriteRoot.parent, false);
+
+            // 기존 컨베이어 타일 SpriteRenderer를 복제하여 danger 오버레이 생성
+            if (_conveyorSpriteRoot == null) return;
+
+            var renderers = new System.Collections.Generic.List<SpriteRenderer>();
+            var ts = _spriteRailTileSet;
+
+            for (int i = 0; i < _conveyorSpriteRoot.childCount; i++)
+            {
+                var child = _conveyorSpriteRoot.GetChild(i);
+                var srcSR = child.GetComponent<SpriteRenderer>();
+                if (srcSR == null || srcSR.sprite == null) continue;
+                // Cave 타일은 제외 (danger 오버레이 불필요)
+                if (child.name == "CaveTile") continue;
+
+                // RailTileSet에 대응하는 danger 스프라이트가 있으면 사용
+                Sprite dangerSprite = GetDangerSpriteFor(ts, srcSR.sprite);
+
+                var go = new GameObject("DangerTile");
+                go.transform.SetParent(_dangerOverlayRoot, false);
+                go.transform.position = child.position + new Vector3(0f, 0.005f, 0f);
+                go.transform.rotation = child.rotation;
+                go.transform.localScale = child.localScale;
+
+                var sr = go.AddComponent<SpriteRenderer>();
+                sr.sortingOrder = 0; // 기본 타일(-1)보다 위
+
+                if (dangerSprite != null)
+                {
+                    // danger 전용 스프라이트 사용
+                    sr.sprite = dangerSprite;
+                    sr.color = Color.white;
+                }
+                else
+                {
+                    // fallback: 기존 스프라이트 + 빨간 틴트
+                    sr.sprite = srcSR.sprite;
+                    sr.color = new Color(1f, 0.2f, 0.2f, 0.6f);
+                }
+
+                renderers.Add(sr);
+            }
+
+            _dangerRenderers = renderers.ToArray();
+            SetDangerVisible(false);
+        }
+
+        /// <summary>기존 타일 스프라이트에 대응하는 danger 스프라이트 반환. 없으면 null.</summary>
+        private static Sprite GetDangerSpriteFor(RailTileSet ts, Sprite src)
+        {
+            if (ts == null || src == null) return null;
+
+            if (src == ts.tileBL)  return ts.dangerBL;
+            if (src == ts.tileBR)  return ts.dangerBR;
+            if (src == ts.tileTL)  return ts.dangerTL;
+            if (src == ts.tileTR)  return ts.dangerTR;
+            if (src == ts.tileH || src == ts.tileBH || src == ts.tileTH)  return ts.dangerH;
+            if (src == ts.tileV || src == ts.tileVL || src == ts.tileVR)  return ts.dangerV;
+            if (src == ts.capB)    return ts.dangerCapB;
+            if (src == ts.capT)    return ts.dangerCapT;
+            if (src == ts.capL)    return ts.dangerCapL;
+            if (src == ts.capR)    return ts.dangerCapR;
+
+            return null;
+        }
+
+        /// <summary>위급 알람 표시/숨김.</summary>
+        public void SetDangerVisible(bool visible)
+        {
+            _dangerVisible = visible;
+            if (_dangerOverlayRoot != null)
+                _dangerOverlayRoot.gameObject.SetActive(visible);
+        }
+
+        /// <summary>매 프레임 호출 — 깜빡임 알파 애니메이션.</summary>
+        public void UpdateDangerBlink()
+        {
+            if (!_dangerVisible || _dangerRenderers == null) return;
+
+            _dangerBlinkTimer += Time.deltaTime * DANGER_BLINK_SPEED;
+            float alpha = Mathf.Lerp(DANGER_ALPHA_MIN, DANGER_ALPHA_MAX,
+                (Mathf.Sin(_dangerBlinkTimer) + 1f) * 0.5f);
+
+            for (int i = 0; i < _dangerRenderers.Length; i++)
+            {
+                if (_dangerRenderers[i] == null) continue;
+                var c = _dangerRenderers[i].color;
+                _dangerRenderers[i].color = new Color(c.r, c.g, c.b, alpha);
+            }
+        }
+
+        #endregion
 
         private void PlaceConveyorSpriteStretched(Sprite sprite, float wx, float wz, float worldW, float worldH)
         {
@@ -480,7 +592,7 @@ namespace BalloonFlow
         /// <summary>
         /// Cave 터널 오버레이 — 캡 위치에 Arrow보다 높은 sortingOrder로 배치.
         /// </summary>
-        private void PlaceCaveOverlay(Sprite sprite, float wx, float wz, float tileSize)
+        private void PlaceCaveOverlay(Sprite sprite, float wx, float wz, float worldW, float worldH)
         {
             if (sprite == null || _conveyorSpriteRoot == null) return;
 
@@ -496,7 +608,7 @@ namespace BalloonFlow
             float sw = sprite.bounds.size.x;
             float sh = sprite.bounds.size.y;
             if (sw > 0.001f && sh > 0.001f)
-                go.transform.localScale = new Vector3(tileSize / sw, tileSize / sh, 1f);
+                go.transform.localScale = new Vector3(worldW / sw, worldH / sh, 1f);
         }
 
         private void PlaceConveyorSprite(Sprite sprite, float wx, float wz, float tileSize)

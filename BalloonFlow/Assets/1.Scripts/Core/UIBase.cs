@@ -155,6 +155,7 @@ namespace BalloonFlow
                     break;
             }
 
+            _currentSequence.SetUpdate(true); // timeScale=0에서도 동작
             _currentSequence.OnComplete(() =>
             {
                 if (_canvasGroup != null)

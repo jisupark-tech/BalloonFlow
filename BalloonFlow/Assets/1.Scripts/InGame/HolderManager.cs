@@ -900,7 +900,14 @@ namespace BalloonFlow
                 BoosterExecutor.Instance.OnHolderSelected(evt.holderId);
                 return;
             }
-            SelectHolder(evt.holderId);
+
+            bool selected = SelectHolder(evt.holderId);
+
+            // 배포 불가해도 Click 애니메이션만 재생 (3열 이후 등)
+            if (!selected)
+            {
+                EventBus.Publish(new OnHolderClickAnim { holderId = evt.holderId });
+            }
         }
 
         private void HandleDeploymentDone(OnHolderDeploymentDone evt)
