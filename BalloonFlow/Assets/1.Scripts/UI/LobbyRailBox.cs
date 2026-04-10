@@ -46,6 +46,9 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtLevel;
         [SerializeField] private TMP_Text _txtLevelOutline;
 
+        [Header("[Animator]")]
+        [SerializeField] private Animator _animator;
+
         #endregion
 
         #region Fields
@@ -78,9 +81,15 @@ namespace BalloonFlow
             if (_txtLevelOutline != null) _txtLevelOutline.text = levelStr;
 
             if (isActive)
+            {
+                ApplyAnimator(difficulty);
                 SetActiveState();
+            }
             else
+            {
+                if (_animator != null) _animator.enabled = false;
                 SetInactiveState(isLocked, difficulty);
+            }
         }
 
         #endregion
@@ -105,12 +114,15 @@ namespace BalloonFlow
             // ImgBoxDim OFF
             if (_imgBoxDim != null) _imgBoxDim.gameObject.SetActive(false);
 
-            transform.localScale = Vector3.one * 1.2f;
+            if (_imgBox != null) _imgBox.rectTransform.localScale = Vector3.one * 1.5f;
             PlayOpenAnimation();
         }
 
         private void SetInactiveState(bool isLocked, DifficultyPurpose difficulty)
         {
+            // ImageBox scale
+            if (_imgBox != null) _imgBox.rectTransform.localScale = Vector3.one * 1.5f;
+
             // ImgBoxDim ON with difficulty color
             if (_imgBoxDim != null)
             {
@@ -149,12 +161,28 @@ namespace BalloonFlow
             transform.localScale = isLocked ? Vector3.one * LOCKED_SCALE : Vector3.one;
         }
 
+        private void ApplyAnimator(DifficultyPurpose difficulty)
+        {
+            if (_animator == null) return;
+
+            string controllerName = difficulty switch
+            {
+                DifficultyPurpose.SuperHard => "Animator/LobbyRailBoxRed",
+                DifficultyPurpose.Hard      => "Animator/LobbyRailBoxPurple",
+                _                           => "Animator/LobbyRailBoxBlue"
+            };
+
+            var controller = Resources.Load<RuntimeAnimatorController>(controllerName);
+            if (controller != null)
+                _animator.runtimeAnimatorController = controller;
+        }
+
         private void PlayOpenAnimation()
         {
             if (_imgBox == null) return;
             var rt = _imgBox.rectTransform;
-            rt.localScale = Vector3.one * 0.8f;
-            rt.DOScale(1f, 0.4f).SetEase(Ease.OutBack);
+            rt.localScale = Vector3.one * 1.2f;
+            rt.DOScale(1.5f, 0.4f).SetEase(Ease.OutBack);
         }
 
         #endregion

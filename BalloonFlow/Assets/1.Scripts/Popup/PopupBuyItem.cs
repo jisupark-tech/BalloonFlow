@@ -5,9 +5,9 @@ using TMPro;
 namespace BalloonFlow
 {
     /// <summary>
-    /// 아이템 구매 확인 팝업.
-    /// PopupCommonFrame: Horizontal (Green=Buy, Red=Cancel).
-    /// 아이템 이미지, 수량, 가격(골드) ���시.
+    /// 아이템 구매/해금 확인 팝업.
+    /// 구매 모드: Horizontal (Green=Buy, Red=Cancel) — TxtBtnBuyOutline.
+    /// 해금 모드: Single 버튼 — TxtSingleOutline.
     /// </summary>
     public class PopupBuyItem : UIBase
     {
@@ -26,17 +26,28 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtGoldOutline;
         [SerializeField] private Image _imgCoin;
 
+        [Header("[Buy Outline — 구매 모드]")]
+        [SerializeField] private GameObject _txtBtnBuyOutline;
+
+        [Header("[Single Outline — 해금 모드]")]
+        [SerializeField] private GameObject _txtSingleOutline;
+
+        [Header("[Item Sprites — Inspector에서 할당]")]
+        [SerializeField] private Sprite _sprHand;
+        [SerializeField] private Sprite _sprShuffle;
+        [SerializeField] private Sprite _sprZap;
+
         private System.Action _onConfirm;
         private System.Action _onCancel;
 
         protected override void Awake()
         {
             base.Awake();
-            // 버튼 연결은 Awake에서 (CloseUI 후에도 listener 유지)
             if (_frame != null)
             {
                 if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.AddListener(OnBuyClicked);
                 if (_frame.BtnHorizRed != null) _frame.BtnHorizRed.onClick.AddListener(OnCancelClicked);
+                if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.AddListener(OnBuyClicked);
                 if (_frame.BtnExit != null) _frame.BtnExit.onClick.AddListener(OnCancelClicked);
             }
         }
@@ -48,13 +59,14 @@ namespace BalloonFlow
             {
                 if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.RemoveAllListeners();
                 if (_frame.BtnHorizRed != null) _frame.BtnHorizRed.onClick.RemoveAllListeners();
+                if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.RemoveAllListeners();
                 if (_frame.BtnExit != null) _frame.BtnExit.onClick.RemoveAllListeners();
             }
         }
 
-        /// <summary>아이템 구매 팝업 표시.</summary>
-        public void Show(string title, Sprite itemSprite, string amount, int goldCost,
-                         System.Action onConfirm = null, System.Action onCancel = null)
+        /// <summary>아이템 구매 팝업 표시 (Horizontal — Buy/Cancel).</summary>
+        public void ShowBuy(string title, Sprite itemSprite, string amount, int goldCost,
+                            System.Action onConfirm = null, System.Action onCancel = null)
         {
             _onConfirm = onConfirm;
             _onCancel = onCancel;
@@ -68,6 +80,56 @@ namespace BalloonFlow
                 _frame.ShowExitButton(true);
             }
 
+            if (_txtBtnBuyOutline != null) _txtBtnBuyOutline.SetActive(true);
+            if (_txtSingleOutline != null) _txtSingleOutline.SetActive(false);
+
+            SetItemDisplay(itemSprite, amount, goldCost);
+            OpenUI();
+        }
+
+        /// <summary>아이템 해금 팝업 표시 (Single 버튼).</summary>
+        public void ShowUnlock(string title, Sprite itemSprite, int unlockLevel,
+                               System.Action onConfirm = null, System.Action onCancel = null)
+        {
+            _onConfirm = onConfirm;
+            _onCancel = onCancel;
+
+            if (_frame != null)
+            {
+                _frame.SetTitle(title);
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
+                _frame.SetSingleButtonText($"Unlock at Lv.{unlockLevel}");
+                _frame.ShowExitButton(true);
+            }
+
+            if (_txtBtnBuyOutline != null) _txtBtnBuyOutline.SetActive(false);
+            if (_txtSingleOutline != null) _txtSingleOutline.SetActive(true);
+
+            if (_imgItem != null && itemSprite != null) _imgItem.sprite = itemSprite;
+            OpenUI();
+        }
+
+        /// <summary>boosterType에 맞는 아이콘 스프라이트 반환.</summary>
+        public Sprite GetBoosterSprite(string boosterType)
+        {
+            return boosterType switch
+            {
+                BoosterManager.SELECT_TOOL  => _sprHand,
+                BoosterManager.SHUFFLE      => _sprShuffle,
+                BoosterManager.COLOR_REMOVE => _sprZap,
+                _                           => null
+            };
+        }
+
+        /// <summary>기존 Show 호환 (구매 모드로 동작).</summary>
+        public void Show(string title, Sprite itemSprite, string amount, int goldCost,
+                         System.Action onConfirm = null, System.Action onCancel = null)
+        {
+            ShowBuy(title, itemSprite, amount, goldCost, onConfirm, onCancel);
+        }
+
+        private void SetItemDisplay(Sprite itemSprite, string amount, int goldCost)
+        {
             if (_imgItem != null && itemSprite != null) _imgItem.sprite = itemSprite;
             if (_txtItemAmount != null) _txtItemAmount.text = amount;
             if (_txtItemAmountOutline != null) _txtItemAmountOutline.text = amount;
@@ -75,8 +137,6 @@ namespace BalloonFlow
             string costStr = goldCost.ToString("N0");
             if (_txtGold != null) _txtGold.text = costStr;
             if (_txtGoldOutline != null) _txtGoldOutline.text = costStr;
-
-            OpenUI();
         }
 
         private void OnBuyClicked()

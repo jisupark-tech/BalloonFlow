@@ -1512,6 +1512,11 @@ namespace BalloonFlow
             if (identifier != null)
                 identifier.MarkPopped();
 
+            // 파티클을 풍선에서 분리 → 풍선 스케일 변경이 파티클에 영향 안 주도록
+            Transform detachedEffect = null;
+            if (identifier != null)
+                detachedEffect = identifier.DetachPopEffect();
+
             // Animate: bounce up slightly, then shrink to zero
             float savedScale = _balloonScale;
             Sequence seq = DOTween.Sequence();
@@ -1527,6 +1532,10 @@ namespace BalloonFlow
             {
                 if (obj != null && ObjectPoolManager.HasInstance)
                 {
+                    // 파티클을 다시 풍선 자식으로 복귀
+                    if (identifier != null)
+                        identifier.ReattachPopEffect(detachedEffect);
+
                     obj.transform.localScale = Vector3.one * savedScale;
                     ObjectPoolManager.Instance.Return(returnKey, obj);
                 }

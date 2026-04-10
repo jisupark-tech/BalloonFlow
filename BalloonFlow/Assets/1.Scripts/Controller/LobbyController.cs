@@ -111,6 +111,11 @@ namespace BalloonFlow
 
             int currentLevel = highest > 0 ? highest + 1 : 1;
             _lobby.SetupLevelBoxes(currentLevel, highest);
+
+            DifficultyPurpose diff = DifficultyPurpose.Normal;
+            if (LevelManager.HasInstance)
+                diff = LevelManager.Instance.GetLevelDifficulty(currentLevel);
+            _lobby.UpdatePlayButton(currentLevel, diff);
         }
 
         void UpdateLifeTimer()
@@ -157,6 +162,8 @@ namespace BalloonFlow
 
         void OnPlayClicked()
         {
+            if (_lobby != null) _lobby.PlayButtonPressAnim();
+
             if (!GameManager.HasInstance) return;
 
             if (LifeManager.HasInstance && !LifeManager.Instance.HasLife())

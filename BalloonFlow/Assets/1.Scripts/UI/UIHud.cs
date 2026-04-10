@@ -10,6 +10,14 @@ namespace BalloonFlow
     /// </summary>
     public class UIHud : UIBase
     {
+        #region Constants — Lock Colors
+
+        private static readonly Color LOCK_NORMAL    = new Color(0x9E / 255f, 0xD1 / 255f, 0xFF / 255f); // #9ED1FF
+        private static readonly Color LOCK_HARD      = new Color(0xCF / 255f, 0x9E / 255f, 0xFF / 255f); // #CF9EFF
+        private static readonly Color LOCK_SUPERHARD  = new Color(0xFA / 255f, 0x9F / 255f, 0x7D / 255f); // #FA9F7D
+
+        #endregion
+
         [Header("[Top — 레벨/골드]")]
         [SerializeField] private TMP_Text _txtLevelOutline;
         [SerializeField] private TMP_Text _txtLevel;
@@ -25,6 +33,11 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _itemCountRemove;
         [SerializeField] private TMP_Text _itemCountHand;
 
+        [Header("[Lock Icons — 미해금 시 표시]")]
+        [SerializeField] private Image _iconLockShuffle;
+        [SerializeField] private Image _iconLockRemove;
+        [SerializeField] private Image _iconLockHand;
+
         [Header("[색상 선택 패널 — Color Remove용]")]
         [SerializeField] private GameObject _colorPanel;
         [SerializeField] private Button _color0Button;
@@ -36,6 +49,7 @@ namespace BalloonFlow
         [SerializeField] private Image _backgroundImage;
 
         private bool _isMapMakerMode;
+        private DifficultyPurpose _currentDifficulty = DifficultyPurpose.Normal;
 
         #region Accessors
 
@@ -56,6 +70,7 @@ namespace BalloonFlow
             WireButtons();
             if (_colorPanel != null) _colorPanel.SetActive(false);
             RefreshBoosterCounts();
+            RefreshLockState();
         }
 
         private void OnDestroy()
@@ -70,6 +85,14 @@ namespace BalloonFlow
         {
             _isMapMakerMode = isMapMaker;
             RefreshBoosterCounts();
+            RefreshLockState();
+        }
+
+        /// <summary>현재 난이도 설정 (Lock 색상에 사용).</summary>
+        public void SetDifficulty(DifficultyPurpose difficulty)
+        {
+            _currentDifficulty = difficulty;
+            RefreshLockState();
         }
 
         public void SetLevel(int _levelId)
@@ -97,6 +120,28 @@ namespace BalloonFlow
             SetCountText(_itemCountShuffle, BoosterManager.Instance.GetBoosterCount(BoosterManager.SHUFFLE).ToString());
             SetCountText(_itemCountRemove, BoosterManager.Instance.GetBoosterCount(BoosterManager.COLOR_REMOVE).ToString());
             SetCountText(_itemCountHand, BoosterManager.Instance.GetBoosterCount(BoosterManager.HAND).ToString());
+        }
+
+        /// <summary>Lock 아이콘 갱신. 미해금 → Lock 표시 + 난이도 색상.</summary>
+        public void RefreshLockState()
+        {
+            if (_isMapMakerMode || GameManager.IsTestItemMode)
+            {
+                SetLockIcon(_iconLockHand, false, _currentDifficulty);
+                SetLockIcon(_iconLockShuffle, false, _currentDifficulty);
+                SetLockIcon(_iconLockRemove, false, _currentDifficulty);
+                return;
+            }
+
+            if (!BoosterManager.HasInstance) return;
+
+            bool handLocked = !BoosterManager.Instance.IsBoosterUnlocked(BoosterManager.HAND);
+            bool shuffleLocked = !BoosterManager.Instance.IsBoosterUnlocked(BoosterManager.SHUFFLE);
+            bool removeLocked = !BoosterManager.Instance.IsBoosterUnlocked(BoosterManager.COLOR_REMOVE);
+
+            SetLockIcon(_iconLockHand, handLocked, _currentDifficulty);
+            SetLockIcon(_iconLockShuffle, shuffleLocked, _currentDifficulty);
+            SetLockIcon(_iconLockRemove, removeLocked, _currentDifficulty);
         }
 
         #endregion
@@ -131,26 +176,110 @@ namespace BalloonFlow
 
         private void OnShuffleClicked()
         {
-            if (!CanUseBooster(BoosterManager.SHUFFLE)) return;
-            BoosterManager.Instance.UseBooster(BoosterManager.SHUFFLE);
-            RefreshBoosterCounts();
+            HandleBoosterButton(BoosterManager.SHUFFLE);
         }
 
         private void OnColorRemoveClicked()
         {
-            if (!CanUseBooster(BoosterManager.COLOR_REMOVE)) return;
-            BoosterManager.Instance.UseBooster(BoosterManager.COLOR_REMOVE);
-            RefreshBoosterCounts();
-            // 색상 패널 제거 — 카메라가 필드로 이동 → 풍선 직접 클릭으로 색상 선택
-            // BoosterExecutor.HandleBoosterUsed에서 카메라 이동 + 아웃라인 처리
+            HandleBoosterButton(BoosterManager.COLOR_REMOVE);
         }
 
         private void OnHandClicked()
         {
-            if (!CanUseBooster(BoosterManager.HAND)) return;
-            BoosterManager.Instance.UseBooster(BoosterManager.HAND);
-            RefreshBoosterCounts();
-            Debug.Log("[UIHud] Hand 사용 — 보관함을 탭하세요.");
+            HandleBoosterButton(BoosterManager.HAND);
+        }
+
+        /// <summary>
+        /// 부스터 버튼 공통 처리.
+        /// 미해금 → 해금 팝업, 재고 없음 → 구매 팝업, 재고 있음 → 사용 확인 팝업.
+        /// </summary>
+        private void HandleBoosterButton(string boosterType)
+        {
+            if (!BoosterManager.HasInstance) return;
+
+            // MapMaker / TestItem: 직접 사용 (팝업 없이)
+            if (_isMapMakerMode || GameManager.IsTestItemMode)
+            {
+                if (BoosterManager.Instance.GetBoosterCount(boosterType) <= 0)
+                    BoosterManager.Instance.AddBooster(boosterType, 1);
+                BoosterManager.Instance.UseBooster(boosterType);
+                RefreshBoosterCounts();
+                return;
+            }
+
+            // 미해금 → 해금 팝업
+            if (!BoosterManager.Instance.IsBoosterUnlocked(boosterType))
+            {
+                ShowUnlockPopup(boosterType);
+                return;
+            }
+
+            // 재고 없음 → 구매 팝업
+            if (BoosterManager.Instance.GetBoosterCount(boosterType) <= 0)
+            {
+                ShowBuyPopup(boosterType);
+                return;
+            }
+
+            // 재고 있음 → 사용 확인 팝업
+            ShowUseItemPopup(boosterType);
+        }
+
+        private void ShowUseItemPopup(string boosterType)
+        {
+            if (!UIManager.HasInstance) return;
+            var popup = UIManager.Instance.OpenUI<PopupUseItem>("Popup/UseItem");
+            if (popup == null) return;
+
+            string desc = GetBoosterDescription(boosterType);
+            popup.Show(boosterType, desc,
+                onConfirm: () =>
+                {
+                    BoosterManager.Instance.UseBooster(boosterType);
+                    RefreshBoosterCounts();
+                });
+        }
+
+        private void ShowBuyPopup(string boosterType)
+        {
+            if (!UIManager.HasInstance) return;
+            var popup = UIManager.Instance.OpenUI<PopupBuyItem>("Popup/PopupBuyItem");
+            if (popup == null) return;
+
+            int price = BoosterManager.Instance.GetBoosterPrice(boosterType);
+            Sprite spr = popup.GetBoosterSprite(boosterType);
+            popup.ShowBuy("Buy Item", spr, "x3", price,
+                onConfirm: () =>
+                {
+                    if (BoosterManager.Instance.PurchaseBooster(boosterType))
+                    {
+                        RefreshBoosterCounts();
+                    }
+                    else
+                    {
+                        // 결제 실패
+                        var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+                        if (err != null) err.ShowPaymentFailed("Not enough coins.");
+                    }
+                });
+        }
+
+        private void ShowUnlockPopup(string boosterType)
+        {
+            if (!UIManager.HasInstance) return;
+            var popup = UIManager.Instance.OpenUI<PopupBuyItem>("Popup/PopupBuyItem");
+            if (popup == null) return;
+
+            int unlockLevel = boosterType switch
+            {
+                BoosterManager.SELECT_TOOL  => 9,
+                BoosterManager.SHUFFLE      => 12,
+                BoosterManager.COLOR_REMOVE => 15,
+                _                           => 1
+            };
+
+            Sprite spr = popup.GetBoosterSprite(boosterType);
+            popup.ShowUnlock("Locked", spr, unlockLevel);
         }
 
         private void OnColorPicked(int color)
@@ -160,19 +289,22 @@ namespace BalloonFlow
             if (_colorPanel != null) _colorPanel.SetActive(false);
         }
 
-        private bool CanUseBooster(string boosterType)
+        #endregion
+
+        #region Lock Icon
+
+        private static void SetLockIcon(Image lockIcon, bool locked, DifficultyPurpose difficulty)
         {
-            if (!BoosterManager.HasInstance) return false;
+            if (lockIcon == null) return;
+            lockIcon.gameObject.SetActive(locked);
+            if (!locked) return;
 
-            // MapMaker 또는 TEST ITEM 모드: 무한 사용
-            if (_isMapMakerMode || GameManager.IsTestItemMode)
+            lockIcon.color = difficulty switch
             {
-                if (BoosterManager.Instance.GetBoosterCount(boosterType) <= 0)
-                    BoosterManager.Instance.AddBooster(boosterType, 1);
-                return true;
-            }
-
-            return BoosterManager.Instance.GetBoosterCount(boosterType) > 0;
+                DifficultyPurpose.Hard      => LOCK_HARD,
+                DifficultyPurpose.SuperHard  => LOCK_SUPERHARD,
+                _                            => LOCK_NORMAL
+            };
         }
 
         #endregion
@@ -189,6 +321,17 @@ namespace BalloonFlow
         private static void SetCountText(TMP_Text text, string value)
         {
             if (text != null) text.text = value;
+        }
+
+        private static string GetBoosterDescription(string boosterType)
+        {
+            return boosterType switch
+            {
+                BoosterManager.SELECT_TOOL  => "Select a holder from the queue to deploy.",
+                BoosterManager.SHUFFLE      => "Shuffle the holder queue order.",
+                BoosterManager.COLOR_REMOVE => "Remove all balloons of a selected color.",
+                _                           => ""
+            };
         }
 
         #endregion

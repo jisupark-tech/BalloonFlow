@@ -96,6 +96,25 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>팝 이펙트를 풍선에서 분리. 풍선 스케일 변경이 파티클에 영향 안 주도록.</summary>
+        public Transform DetachPopEffect()
+        {
+            if (_popEffect == null) return null;
+            var t = _popEffect.transform;
+            t.SetParent(null, true);
+            return t;
+        }
+
+        /// <summary>분리했던 팝 이펙트를 다시 풍선 자식으로 복귀 + 비활성화.</summary>
+        public void ReattachPopEffect(Transform detached)
+        {
+            if (detached == null || _popEffect == null) return;
+            detached.SetParent(transform, false);
+            detached.localPosition = Vector3.zero;
+            detached.localScale = Vector3.one;
+            _popEffect.SetActive(false);
+        }
+
         // Piñata 관련 기능은 GimmickIdentifier로 이전됨
 
         #region Color

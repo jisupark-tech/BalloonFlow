@@ -325,6 +325,9 @@ namespace BalloonFlow
             // Apply tint to HUD background if available
             if (_view.BackgroundImage != null)
                 _view.BackgroundImage.color = tint;
+
+            // Lock 색상 반영
+            _view.SetDifficulty(cfg.difficultyPurpose);
         }
 
         /// <summary>
