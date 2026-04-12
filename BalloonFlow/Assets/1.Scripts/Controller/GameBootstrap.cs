@@ -361,7 +361,7 @@ namespace BalloonFlow
 
         IEnumerator ShowResultDelayed(bool _isWin, int _score, int _stars)
         {
-            yield return new WaitForSeconds(0.8f);
+            yield return new WaitForSecondsRealtime(0.8f);
             if (_result != null)
             {
                 if (_isWin)

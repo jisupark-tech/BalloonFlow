@@ -604,7 +604,6 @@ namespace BalloonFlow
             // frozen 다트가 복귀할 공간 확보 — 예약분 초과 시 배치 거부
             if (_occupiedCount + _frozenDartInfos.Count >= _slotCount)
             {
-                PublishOccupancyChanged(); // 실패 조건 감지용
                 return -1;
             }
 
@@ -643,17 +642,11 @@ namespace BalloonFlow
         public int FindNextEmptySlot(int startIndex, bool ignoreFrozenReserve = false)
         {
             if (_slots == null || _occupiedCount >= _slotCount)
-            {
-                PublishOccupancyChanged();
                 return -1;
-            }
 
             // 배치 시: frozen 다트가 복귀할 공간 확보
             if (!ignoreFrozenReserve && _occupiedCount + _frozenDartInfos.Count >= _slotCount)
-            {
-                PublishOccupancyChanged();
                 return -1;
-            }
 
             for (int i = 0; i < _slotCount; i++)
             {

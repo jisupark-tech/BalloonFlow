@@ -1,44 +1,40 @@
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 
 namespace BalloonFlow
 {
-    /// <summary>
-    /// 실패 시 첫 번째 팝업.
-    /// PopupCommonFrame: Horizontal 레이아웃 (Green=Continue, Red=Decline).
-    /// ContinueButton: 골드 차감 + 이어하기.
-    /// DeclineButton: PopupContinue로 이동.
-    /// Flow: PopupFail01 → PopupContinue → PopupFail02
-    /// </summary>
     public class PopupFail01 : UIBase
     {
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
 
+        [Header("[Buttons — 직접 할당]")]
+        [SerializeField] private Button _btnContinue;
+        [SerializeField] private Button _btnDecline;
+        [SerializeField] private Button _btnExit;
+
         [Header("[코스트 텍스트]")]
         [SerializeField] private TMP_Text _costText;
+
+        private Button ContinueBtn => _btnContinue != null ? _btnContinue : (_frame != null ? _frame.BtnHorizGreen : null);
+        private Button DeclineBtn => _btnDecline != null ? _btnDecline : (_frame != null ? _frame.BtnHorizRed : null);
+        private Button ExitBtn => _btnExit != null ? _btnExit : (_frame != null ? _frame.BtnExit : null);
 
         protected override void Awake()
         {
             base.Awake();
-            // 버튼 연결은 Awake에서 (Start는 GameBootstrap CloseUI로 인해 첫 활성화 전까지 실행 안 됨)
-            if (_frame != null)
-            {
-                if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.AddListener(OnContinueClicked);
-                if (_frame.BtnHorizRed != null) _frame.BtnHorizRed.onClick.AddListener(OnDeclineClicked);
-                if (_frame.BtnExit != null) _frame.BtnExit.onClick.AddListener(OnDeclineClicked);
-            }
+            if (ContinueBtn != null) ContinueBtn.onClick.AddListener(OnContinueClicked);
+            if (DeclineBtn != null) DeclineBtn.onClick.AddListener(OnDeclineClicked);
+            if (ExitBtn != null) ExitBtn.onClick.AddListener(OnDeclineClicked);
         }
 
         protected override void OnDestroy()
         {
             base.OnDestroy();
-            if (_frame != null)
-            {
-                if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.RemoveAllListeners();
-                if (_frame.BtnHorizRed != null) _frame.BtnHorizRed.onClick.RemoveAllListeners();
-                if (_frame.BtnExit != null) _frame.BtnExit.onClick.RemoveAllListeners();
-            }
+            if (ContinueBtn != null) ContinueBtn.onClick.RemoveAllListeners();
+            if (DeclineBtn != null) DeclineBtn.onClick.RemoveAllListeners();
+            if (ExitBtn != null) ExitBtn.onClick.RemoveAllListeners();
         }
 
         public void Show(DifficultyPurpose difficulty)

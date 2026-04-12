@@ -1,243 +1,154 @@
 using System;
 using System.Collections;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BalloonFlow
 {
     /// <summary>
-    /// Reusable coin fly effect. Spawns coin images that fly from a source position
-    /// to a target UI element with parabolic arcs and staggered timing for a "pouring" feel.
+    /// FXGold를 PopupCanvas 자식의 ScreenSpaceCamera Canvas에서 비행.
+    /// 연출 끝나면 ObjectPoolManager로 반환.
     /// </summary>
-    /// <remarks>
-    /// Layer: Game | Genre: Puzzle | Role: UX | Phase: 1
-    /// </remarks>
-    public class CoinFlyEffect : MonoBehaviour
+    public static class CoinFlyEffect
     {
-        #region Constants
+        private const string POOL_KEY = "FXGold";
+        private static bool _poolRegistered;
+        private static Transform _fxLayer;
 
-        private const float MIN_SPAWN_DELAY = 0.03f;
-        private const float MAX_SPAWN_DELAY = 0.08f;
-        private const float MIN_FLIGHT_DURATION = 0.5f;
-        private const float MAX_FLIGHT_DURATION = 0.8f;
-        private const float MIN_ARC_HEIGHT = 100f;
-        private const float MAX_ARC_HEIGHT = 250f;
-        private const float START_OFFSET_RANGE = 40f;
-        private const float CONTROL_POINT_X_RANGE = 80f;
-        private const float COIN_SIZE = 32f;
-        private const float SCALE_DOWN_THRESHOLD = 0.7f;
-        private const float SCALE_DOWN_MIN = 0.3f;
-
-        #endregion
-
-        #region Public — Create & Play
-
-        /// <summary>
-        /// Creates a CoinFlyEffect instance under the given canvas.
-        /// The instance self-destructs after all coins land.
-        /// </summary>
-        public static CoinFlyEffect Create(Canvas canvas)
-        {
-            if (canvas == null)
-            {
-                Debug.LogWarning("[CoinFlyEffect] Canvas is null, cannot create effect.");
-                return null;
-            }
-
-            var go = new GameObject("CoinFlyEffect");
-            go.transform.SetParent(canvas.transform, false);
-            // Canvas 내 최상위로 올려서 팝업 위에 보이도록
-            go.transform.SetAsLastSibling();
-            return go.AddComponent<CoinFlyEffect>();
-        }
-
-        /// <summary>
-        /// Plays the coin fly effect.
-        /// </summary>
-        /// <param name="screenFrom">Start position in screen space.</param>
-        /// <param name="target">Target RectTransform (e.g., Gold counter).</param>
-        /// <param name="coinCount">Number of coins to spawn.</param>
-        /// <param name="onEachLand">Callback fired each time a coin lands (for incrementing display).</param>
-        /// <param name="onAllComplete">Callback fired when all coins have landed.</param>
-        public void Play(Vector2 screenFrom, RectTransform target, int coinCount,
+        public static void Play(Vector2 screenFrom, Vector2 screenTo, int count,
             Action onEachLand = null, Action onAllComplete = null)
         {
-            if (target == null || coinCount <= 0)
-            {
-                onAllComplete?.Invoke();
-                Destroy(gameObject, 0.1f);
-                return;
-            }
+            if (count <= 0) { onAllComplete?.Invoke(); return; }
+            if (!UIManager.HasInstance || UIManager.Instance.PopupTr == null) return;
 
-            StartCoroutine(SpawnCoinsCoroutine(screenFrom, target, coinCount, onEachLand, onAllComplete));
+            EnsurePool();
+            EnsureFXLayer();
+            if (_fxLayer == null) return;
+
+            CoroutineRunner.Get().StartCoroutine(
+                RunFly(screenFrom, screenTo, count, onEachLand, onAllComplete));
         }
 
-        #endregion
+        private static void EnsurePool()
+        {
+            if (_poolRegistered || !ObjectPoolManager.HasInstance) return;
+            var prefab = Resources.Load<GameObject>("Prefabs/FxGold");
+            if (prefab == null) return;
+            ObjectPoolManager.Instance.CreatePool(POOL_KEY, prefab, 8);
+            _poolRegistered = true;
+        }
 
-        #region Private — Spawn & Fly
+        private static void EnsureFXLayer()
+        {
+            if (_fxLayer != null) return;
 
-        private IEnumerator SpawnCoinsCoroutine(Vector2 from, RectTransform target, int count,
+            var go = new GameObject("FXGoldLayer");
+            go.transform.SetParent(UIManager.Instance.transform, false);
+
+            var canvas = go.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = CameraManager.HasInstance ? CameraManager.Instance.UICamera : Camera.main;
+            canvas.sortingOrder = 100;
+            canvas.planeDistance = 100f;
+
+            // CanvasScaler 추가 (스케일 정상화)
+            var scaler = go.AddComponent<UnityEngine.UI.CanvasScaler>();
+            scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1242f, 2688f);
+            scaler.matchWidthOrHeight = 0.5f;
+
+            var cg = go.AddComponent<CanvasGroup>();
+            cg.blocksRaycasts = false;
+            cg.interactable = false;
+
+            _fxLayer = go.transform;
+        }
+
+        private static IEnumerator RunFly(Vector2 fromScreen, Vector2 toScreen, int count,
             Action onEachLand, Action onAllComplete)
         {
+            Canvas canvas = _fxLayer.GetComponent<Canvas>();
+            RectTransform canvasRT = canvas != null ? canvas.GetComponent<RectTransform>() : null;
+            Camera cam = canvas != null ? canvas.worldCamera : null;
+
+            Vector2 from = ScreenToLocal(canvasRT, cam, fromScreen);
+            Vector2 to = ScreenToLocal(canvasRT, cam, toScreen);
+            float cH = canvasRT != null ? canvasRT.rect.height : Screen.height;
+            float cW = canvasRT != null ? canvasRT.rect.width : Screen.width;
+
+            float minDur = 0.4f, maxDur = 0.7f, minDelay = 0.03f, maxDelay = 0.08f;
+            if (GameManager.HasInstance)
+            {
+                var b = GameManager.Instance.Board;
+                minDur = b.coinFlyDurationMin;
+                maxDur = b.coinFlyDurationMax;
+                minDelay = b.coinSpawnDelayMin;
+                maxDelay = b.coinSpawnDelayMax;
+            }
+
             int landed = 0;
 
             for (int i = 0; i < count; i++)
             {
-                Vector2 startOffset = new Vector2(
-                    UnityEngine.Random.Range(-START_OFFSET_RANGE, START_OFFSET_RANGE),
-                    UnityEngine.Random.Range(-START_OFFSET_RANGE, START_OFFSET_RANGE));
-                Vector2 startPos = from + startOffset;
+                Vector2 start = from + new Vector2(
+                    UnityEngine.Random.Range(-40f, 40f),
+                    UnityEngine.Random.Range(-40f, 40f));
 
-                // Create coin image
-                var coinGO = CreateCoinObject();
-                var rt = coinGO.GetComponent<RectTransform>();
-                rt.position = startPos;
+                Vector2 mid = (start + to) * 0.5f;
+                mid.y += UnityEngine.Random.Range(cH * 0.1f, cH * 0.25f);
+                mid.x += UnityEngine.Random.Range(-cW * 0.1f, cW * 0.1f);
 
-                // Random flight parameters
-                float duration = UnityEngine.Random.Range(MIN_FLIGHT_DURATION, MAX_FLIGHT_DURATION);
-                float arcHeight = UnityEngine.Random.Range(MIN_ARC_HEIGHT, MAX_ARC_HEIGHT);
+                GameObject coin = ObjectPoolManager.Instance.Get(POOL_KEY);
+                coin.transform.SetParent(_fxLayer, false);
+                var rt = coin.GetComponent<RectTransform>();
+                if (rt == null) rt = coin.AddComponent<RectTransform>();
+                rt.anchoredPosition = start;
+                rt.localScale = Vector3.one;
 
-                StartCoroutine(FlyCoinCoroutine(rt, startPos, target, duration, arcHeight, () =>
+                float dur = UnityEngine.Random.Range(minDur, maxDur);
+
+                CoroutineRunner.Get().StartCoroutine(Fly(coin, rt, start, mid, to, dur, () =>
                 {
                     landed++;
                     onEachLand?.Invoke();
-                    Destroy(coinGO);
-
-                    if (landed >= count)
-                    {
-                        onAllComplete?.Invoke();
-                        Destroy(gameObject, 0.1f);
-                    }
+                    if (landed >= count) onAllComplete?.Invoke();
                 }));
 
-                // Staggered delay for "pouring" feel
                 yield return new WaitForSecondsRealtime(
-                    UnityEngine.Random.Range(MIN_SPAWN_DELAY, MAX_SPAWN_DELAY));
+                    UnityEngine.Random.Range(minDelay, maxDelay));
             }
         }
 
-        private static GameObject _fxGoldPrefab;
-
-        private GameObject CreateCoinObject()
-        {
-            if (_fxGoldPrefab == null)
-                _fxGoldPrefab = Resources.Load<GameObject>("UI/UIAssets/FXGold");
-
-            GameObject coinGO;
-            if (_fxGoldPrefab != null)
-            {
-                coinGO = Instantiate(_fxGoldPrefab, transform);
-            }
-            else
-            {
-                coinGO = new GameObject("Coin", typeof(RectTransform), typeof(Image));
-                coinGO.transform.SetParent(transform, false);
-                var rt = coinGO.GetComponent<RectTransform>();
-                rt.sizeDelta = new Vector2(COIN_SIZE, COIN_SIZE);
-                var img = coinGO.GetComponent<Image>();
-                img.color = new Color(1f, 0.85f, 0.1f);
-                img.raycastTarget = false;
-                img.sprite = CreateCircleSprite();
-            }
-
-            return coinGO;
-        }
-
-        private IEnumerator FlyCoinCoroutine(RectTransform coin, Vector2 from,
-            RectTransform target, float duration, float arcHeight, Action onLand)
+        private static IEnumerator Fly(GameObject coin, RectTransform rt,
+            Vector2 a, Vector2 b, Vector2 c, float duration, Action onDone)
         {
             float elapsed = 0f;
-            Vector2 to = target.position;
-
-            // Control point for quadratic bezier (above midpoint with horizontal randomness)
-            Vector2 mid = (from + to) * 0.5f + Vector2.up * arcHeight;
-            mid.x += UnityEngine.Random.Range(-CONTROL_POINT_X_RANGE, CONTROL_POINT_X_RANGE);
-
             while (elapsed < duration)
             {
                 elapsed += Time.unscaledDeltaTime;
                 float t = Mathf.Clamp01(elapsed / duration);
-
-                // Ease-out quadratic
-                float eased = 1f - (1f - t) * (1f - t);
-
-                // Quadratic bezier position
-                coin.position = QuadBezier(from, mid, to, eased);
-
-                // Scale down + fade near the end
-                if (t > SCALE_DOWN_THRESHOLD)
-                {
-                    float scaleFactor = Mathf.Lerp(1f, SCALE_DOWN_MIN,
-                        (t - SCALE_DOWN_THRESHOLD) / (1f - SCALE_DOWN_THRESHOLD));
-                    coin.localScale = Vector3.one * scaleFactor;
-                }
-
+                float e = 1f - (1f - t) * (1f - t);
+                float u = 1f - e;
+                rt.anchoredPosition = u * u * a + 2f * u * e * b + e * e * c;
+                if (t > 0.7f)
+                    rt.localScale = Vector3.one * Mathf.Lerp(1f, 0.3f, (t - 0.7f) / 0.3f);
                 yield return null;
             }
 
-            onLand?.Invoke();
+            rt.localScale = Vector3.one;
+            coin.transform.SetParent(null);
+            if (ObjectPoolManager.HasInstance)
+                ObjectPoolManager.Instance.Return(POOL_KEY, coin);
+            else
+                coin.SetActive(false);
+            onDone?.Invoke();
         }
 
-        private static Vector2 QuadBezier(Vector2 a, Vector2 b, Vector2 c, float t)
+        private static Vector2 ScreenToLocal(RectTransform canvasRT, Camera cam, Vector2 screen)
         {
-            float u = 1f - t;
-            return u * u * a + 2f * u * t * b + t * t * c;
+            if (canvasRT != null &&
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRT, screen, cam, out Vector2 local))
+                return local;
+            return screen;
         }
-
-        #endregion
-
-        #region Helpers
-
-        /// <summary>
-        /// Creates a simple filled circle sprite at runtime (32x32 white circle).
-        /// Cached statically so it is only generated once.
-        /// </summary>
-        private static Sprite _cachedCircleSprite;
-
-        private static Sprite CreateCircleSprite()
-        {
-            if (_cachedCircleSprite != null) return _cachedCircleSprite;
-
-            const int size = 32;
-            const float radius = size * 0.5f;
-            const float radiusSq = radius * radius;
-
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            var pixels = new Color[size * size];
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    float dx = x - radius + 0.5f;
-                    float dy = y - radius + 0.5f;
-                    float distSq = dx * dx + dy * dy;
-
-                    if (distSq <= radiusSq)
-                    {
-                        // Slight edge anti-aliasing
-                        float edgeDist = radius - Mathf.Sqrt(distSq);
-                        float alpha = Mathf.Clamp01(edgeDist * 2f);
-                        pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
-                    }
-                    else
-                    {
-                        pixels[y * size + x] = Color.clear;
-                    }
-                }
-            }
-
-            tex.SetPixels(pixels);
-            tex.Apply();
-
-            _cachedCircleSprite = Sprite.Create(tex,
-                new Rect(0, 0, size, size),
-                new Vector2(0.5f, 0.5f),
-                100f);
-
-            return _cachedCircleSprite;
-        }
-
-        #endregion
     }
 }

@@ -60,7 +60,7 @@ namespace BalloonFlow
         // Stall detection (교착 상태) — 높은 점유율에서 풍선이 안 터지면 실패
         private float _stallTimer;
         private int _lastBalloonCount;
-        private const float STALL_FAIL_DELAY = 4f; // 4초 동안 풍선 안 터지면 실패
+        private const float STALL_FAIL_DELAY = 1.5f; // 1.5초 동안 풍선 안 터지면 실패
         private const float STALL_MIN_OCCUPANCY = 0.7f; // 70% 이상에서만 감지
 
         #endregion
@@ -311,6 +311,10 @@ namespace BalloonFlow
                 });
             }
 
+            // Danger 알람: stall 감지와 동일한 임계치에서 표시
+            if (BoardTileManager.HasInstance)
+                BoardTileManager.Instance.SetDangerVisible(evt.occupancy >= STALL_MIN_OCCUPANCY);
+
             // 레일 완전히 찬 경우 → 즉시 실패 (grace 없이)
             if (evt.activeDarts >= evt.totalSlots)
             {
@@ -367,8 +371,9 @@ namespace BalloonFlow
         /// </summary>
         private GaugeStage EvaluateGaugeStageWithFail(float occupancy, int activeDarts, int totalSlots)
         {
-            // Design: Fail = capacity-1 (정수 비교)
-            if (totalSlots > 0 && activeDarts >= totalSlots - 1) return GaugeStage.Fail;
+            // Fail 여부와 관계없이 occupancy 기반 gauge stage 반환
+            // (Danger 알람 등 Warning/Critical 연출이 Fail 전에도 보여야 함)
+            // Fail 판정은 HandleRailOccupancy에서 별도 처리
             return EvaluateGaugeStage(occupancy);
         }
 

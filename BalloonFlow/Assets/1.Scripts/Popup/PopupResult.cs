@@ -14,15 +14,19 @@ namespace BalloonFlow
     {
         #region Constants
 
-        private const float COIN_DELAY_AFTER_POPUP = 0f;
-        private const int MIN_COIN_COUNT = 8;
-        private const int MAX_COIN_COUNT = 20;
+        private const int MIN_COIN_COUNT = 5;
+        private const int MAX_COIN_COUNT = 8;
         private const int SCORE_PER_COIN_STEP = 500;
 
         #endregion
 
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
+
+        [Header("[Buttons — 직접 할당]")]
+        [SerializeField] private Button _btnNext;
+        [SerializeField] private Button _btnHome;
+        [SerializeField] private Button _btnExit;
 
         [Header("[Hard Level Option — Hard/SuperHard 전용]")]
         [SerializeField] private GameObject _hardLevelOption;
@@ -32,9 +36,9 @@ namespace BalloonFlow
         [Header("[코인 연출 — Gold HUD 위치]")]
         [SerializeField] private RectTransform _goldTarget;
 
-        public Button NextButton => _frame != null ? _frame.BtnHorizGreen : null;
+        public Button NextButton => _btnNext != null ? _btnNext : (_frame != null ? _frame.BtnHorizGreen : null);
         public Button RetryButton => null;
-        public Button HomeButton => _frame != null ? _frame.BtnHorizRed : null;
+        public Button HomeButton => _btnHome != null ? _btnHome : (_frame != null ? _frame.BtnHorizRed : null);
         public RectTransform GoldTarget => _goldTarget;
 
         public void ShowFail()
@@ -83,9 +87,14 @@ namespace BalloonFlow
             UpdateHardLevelOption(difficulty);
             OpenUI();
 
-            // 코루틴을 별도 오브젝트에서 실행 (PopupResult가 닫혀도 연출 지속)
-            var runner = new GameObject("CoinFlyRunner").AddComponent<CoroutineRunner>();
-            runner.Run(TriggerCoinFlyDelayed(score));
+            // 애니메이션 상태와 무관하게 즉시 클릭 가능
+            if (_canvasGroup != null)
+            {
+                _canvasGroup.interactable = true;
+                _canvasGroup.blocksRaycasts = true;
+            }
+
+            TriggerCoinFly(score);
         }
 
         #region Button Handlers
@@ -154,49 +163,53 @@ namespace BalloonFlow
 
         #region Coin Fly
 
-        private IEnumerator TriggerCoinFlyDelayed(int score)
+        private void TriggerCoinFly(int score)
         {
-            yield return new WaitForSecondsRealtime(COIN_DELAY_AFTER_POPUP);
-
             RectTransform target = _goldTarget;
             if (target == null)
             {
                 var hud = FindAnyObjectByType<UIHud>();
                 if (hud != null && hud.GoldText != null) target = hud.GoldText.rectTransform;
             }
-            if (target == null) yield break;
-
-            // PopupCanvas 찾아서 그 위에 생성 (같은 CanvasScaler 환경)
-            Canvas popupCanvas = null;
-            var popupCanvasGO = GameObject.Find("PopupCanvas");
-            if (popupCanvasGO != null) popupCanvas = popupCanvasGO.GetComponent<Canvas>();
-            if (popupCanvas == null) popupCanvas = GetComponentInParent<Canvas>();
-            if (popupCanvas == null) popupCanvas = FindAnyObjectByType<Canvas>();
-            if (popupCanvas == null) yield break;
+            if (target == null) { Debug.LogWarning("[CoinFly] target null"); return; }
 
             int coinCount = Mathf.Clamp(MIN_COIN_COUNT + (score / SCORE_PER_COIN_STEP), MIN_COIN_COUNT, MAX_COIN_COUNT);
             Vector2 screenCenter = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+            // target의 screen 좌표 (어떤 Canvas에 있든 동작)
+            Canvas targetCanvas = target.GetComponentInParent<Canvas>();
+            Camera targetCam = (targetCanvas != null && targetCanvas.renderMode == RenderMode.ScreenSpaceCamera)
+                ? targetCanvas.worldCamera : null;
+            Vector2 screenTarget = RectTransformUtility.WorldToScreenPoint(targetCam, target.position);
 
-            var effect = CoinFlyEffect.Create(popupCanvas);
-            if (effect != null)
-                effect.Play(screenCenter, target, coinCount, onEachLand: () => EventBus.Publish(new OnCoinFlyLanded()));
+            CoinFlyEffect.Play(screenCenter, screenTarget, coinCount,
+                onEachLand: () => EventBus.Publish(new OnCoinFlyLanded()));
         }
 
         #endregion
     }
 
-    /// <summary>독립 코루틴 실행용 헬퍼. 완료 후 자동 파괴.</summary>
+    /// <summary>독립 코루틴 실행용 헬퍼. 완료 후 풀로 반환.</summary>
     internal class CoroutineRunner : MonoBehaviour
     {
-        public void Run(System.Collections.IEnumerator routine)
+        private static CoroutineRunner _instance;
+
+        public static CoroutineRunner Get()
         {
-            StartCoroutine(RunAndDestroy(routine));
+            if (_instance != null && _instance.gameObject != null)
+            {
+                _instance.gameObject.SetActive(true);
+                return _instance;
+            }
+
+            var go = new GameObject("CoroutineRunner");
+            DontDestroyOnLoad(go);
+            _instance = go.AddComponent<CoroutineRunner>();
+            return _instance;
         }
 
-        private System.Collections.IEnumerator RunAndDestroy(System.Collections.IEnumerator routine)
+        public void Run(System.Collections.IEnumerator routine)
         {
-            yield return routine;
-            Destroy(gameObject, 1f);
+            StartCoroutine(routine);
         }
     }
 }

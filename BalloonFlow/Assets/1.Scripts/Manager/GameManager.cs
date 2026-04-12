@@ -80,6 +80,16 @@ namespace BalloonFlow
         [Tooltip("4면(ㅁ자) Cave Fade End. (default: 0.03)")]
         public float caveFadeEnd4Side = 0.03f;
 
+        [Header("[골드 연출 — Coin Fly]")]
+        [Tooltip("코인 비행 최소 시간(초). (default: 0.4)")]
+        public float coinFlyDurationMin = 0.4f;
+        [Tooltip("코인 비행 최대 시간(초). (default: 0.7)")]
+        public float coinFlyDurationMax = 0.7f;
+        [Tooltip("코인 생성 간격 최소(초). (default: 0.03)")]
+        public float coinSpawnDelayMin = 0.03f;
+        [Tooltip("코인 생성 간격 최대(초). (default: 0.08)")]
+        public float coinSpawnDelayMax = 0.08f;
+
         [Header("[레일 — Rail (컨베이어벨트)]")]
         [Tooltip("레일 슬롯 수. 다트가 점유하는 칸 수. 레벨 데이터에서 자동 계산됨. (default: 200)")]
         public int railSlotCount = 200;
@@ -194,6 +204,17 @@ namespace BalloonFlow
             _isPaused = false;
             _isTransitioning = false;
             _currentScene = SceneManager.GetActiveScene().name;
+
+            // 프레임 타겟 설정 (저사양 디바이스 안정성)
+            Application.targetFrameRate = 60;
+            QualitySettings.vSyncCount = 0;
+
+            // 세로 고정 (상하 반전 방지)
+            Screen.orientation = ScreenOrientation.Portrait;
+            Screen.autorotateToPortrait = true;
+            Screen.autorotateToPortraitUpsideDown = false;
+            Screen.autorotateToLandscapeLeft = false;
+            Screen.autorotateToLandscapeRight = false;
         }
 
         #endregion

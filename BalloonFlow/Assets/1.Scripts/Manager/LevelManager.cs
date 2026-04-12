@@ -122,6 +122,8 @@ namespace BalloonFlow
 
             // 이전 레벨 오브젝트 정리 (같은 씬 내 레벨 전환 시)
             CleanupPreviousLevel();
+            Resources.UnloadUnusedAssets();
+            System.GC.Collect();
 
             _currentLevelId     = levelId;
             _currentLevelConfig = config;

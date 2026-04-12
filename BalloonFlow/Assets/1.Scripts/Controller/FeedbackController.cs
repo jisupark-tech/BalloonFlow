@@ -593,16 +593,7 @@ namespace BalloonFlow
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (!_hapticEnabled) return;
-            try
-            {
-                using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
-                {
-                    var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-                    var vibrator = activity.Call<AndroidJavaObject>("getSystemService", "vibrator");
-                    if (vibrator != null) vibrator.Call("vibrate", 10L);
-                }
-            }
-            catch (System.Exception) { }
+            AndroidVibrate(10L);
 #elif UNITY_IOS && !UNITY_EDITOR
             if (_hapticEnabled) Handheld.Vibrate();
 #endif
@@ -613,20 +604,36 @@ namespace BalloonFlow
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (!_hapticEnabled) return;
+            AndroidVibrate(40L);
+#elif UNITY_IOS && !UNITY_EDITOR
+            if (_hapticEnabled) Handheld.Vibrate();
+#endif
+        }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        /// <summary>Android API 26+ 대응 진동. VibrationEffect 사용.</summary>
+        private static void AndroidVibrate(long milliseconds)
+        {
             try
             {
                 using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
                 {
                     var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
                     var vibrator = activity.Call<AndroidJavaObject>("getSystemService", "vibrator");
-                    if (vibrator != null) vibrator.Call("vibrate", 40L);
+                    if (vibrator == null) return;
+
+                    // API 26+ (Oreo): VibrationEffect 사용
+                    using (var vibEffect = new AndroidJavaClass("android.os.VibrationEffect"))
+                    {
+                        var effect = vibEffect.CallStatic<AndroidJavaObject>(
+                            "createOneShot", milliseconds, -1); // -1 = DEFAULT_AMPLITUDE
+                        vibrator.Call("vibrate", effect);
+                    }
                 }
             }
             catch (System.Exception) { }
-#elif UNITY_IOS && !UNITY_EDITOR
-            if (_hapticEnabled) Handheld.Vibrate();
-#endif
         }
+#endif
 
         #endregion
     }

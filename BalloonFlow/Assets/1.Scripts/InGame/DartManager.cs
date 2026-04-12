@@ -321,40 +321,25 @@ namespace BalloonFlow
         private const float DEFAULT_CAVE_FADE_START = 0.0315f;
         private const float DEFAULT_CAVE_FADE_END   = 0.03f;
 
-        /// <summary>현재 면수에 맞는 CaveFadeStart 동적 반환 (Inspector에서 실시간 조정 가능).</summary>
-        private float CaveFadeStart
-        {
-            get
-            {
-                if (!GameManager.HasInstance) return DEFAULT_CAVE_FADE_START;
-                int sides = BoardTileManager.HasInstance ? BoardTileManager.Instance.RailSideCount : 4;
-                var b = GameManager.Instance.Board;
-                return sides switch
-                {
-                    1 => b.caveFadeStart1Side,
-                    2 => b.caveFadeStart2Side,
-                    3 => b.caveFadeStart3Side,
-                    _ => b.caveFadeStart4Side,
-                };
-            }
-        }
+        // 프레임당 1회 캐시 (다트 수백 개에서 매번 프로퍼티 접근 방지)
+        private float _cachedFadeStart = DEFAULT_CAVE_FADE_START;
+        private float _cachedFadeEnd = DEFAULT_CAVE_FADE_END;
+        private int _fadeCacheFrame = -1;
 
-        /// <summary>현재 면수에 맞는 CaveFadeEnd 동적 반환.</summary>
-        private float CaveFadeEnd
+        private float CaveFadeStart { get { RefreshFadeCache(); return _cachedFadeStart; } }
+        private float CaveFadeEnd { get { RefreshFadeCache(); return _cachedFadeEnd; } }
+
+        private void RefreshFadeCache()
         {
-            get
-            {
-                if (!GameManager.HasInstance) return DEFAULT_CAVE_FADE_END;
-                int sides = BoardTileManager.HasInstance ? BoardTileManager.Instance.RailSideCount : 4;
-                var b = GameManager.Instance.Board;
-                return sides switch
-                {
-                    1 => b.caveFadeEnd1Side,
-                    2 => b.caveFadeEnd2Side,
-                    3 => b.caveFadeEnd3Side,
-                    _ => b.caveFadeEnd4Side,
-                };
-            }
+            int frame = Time.frameCount;
+            if (frame == _fadeCacheFrame) return;
+            _fadeCacheFrame = frame;
+
+            if (!GameManager.HasInstance) { _cachedFadeStart = DEFAULT_CAVE_FADE_START; _cachedFadeEnd = DEFAULT_CAVE_FADE_END; return; }
+            int sides = BoardTileManager.HasInstance ? BoardTileManager.Instance.RailSideCount : 4;
+            var b = GameManager.Instance.Board;
+            _cachedFadeStart = sides switch { 1 => b.caveFadeStart1Side, 2 => b.caveFadeStart2Side, 3 => b.caveFadeStart3Side, _ => b.caveFadeStart4Side };
+            _cachedFadeEnd = sides switch { 1 => b.caveFadeEnd1Side, 2 => b.caveFadeEnd2Side, 3 => b.caveFadeEnd3Side, _ => b.caveFadeEnd4Side };
         }
 
         private void UpdateSlotDartPositions()

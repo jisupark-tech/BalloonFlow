@@ -176,14 +176,13 @@ namespace BalloonFlow
 
         private void OnSettingsClicked()
         {
+            // PauseGame 제거 — timeScale=0이 UI 입력을 막을 수 있음
             if (_popupSettings != null) _popupSettings.OpenUI();
-            if (GameManager.HasInstance) GameManager.Instance.PauseGame();
         }
 
         private void OnSettingsCloseClicked()
         {
             if (_popupSettings != null) _popupSettings.CloseUI();
-            if (GameManager.HasInstance) GameManager.Instance.ResumeGame();
         }
 
         private void OnSettingsHomeClicked()

@@ -687,6 +687,7 @@ namespace BalloonFlow
             HolderIdentifier ident = obj.GetComponent<HolderIdentifier>();
             if (ident != null)
             {
+                ident.ResetAnimator(); // 뚜껑 닫힌 상태로 초기화
                 ident.SetHolderId(data.holderId);
                 ident.ShowDarts(data.magazineCount);
                 ident.SetFrozen(data.isFrozen);

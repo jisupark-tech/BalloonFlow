@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.InputSystem;
 using DG.Tweening;
 using TMPro;
 
@@ -105,6 +106,12 @@ namespace BalloonFlow
         private float _iconBaseYShop, _iconBaseYHome, _iconBaseYSetting;
         private bool _baseYCached;
 
+        // Swipe drag
+        private bool _isDragging;
+        private float _dragStartScreenX;
+        private float _dragStartPageX;
+        private const float SWIPE_THRESHOLD_RATIO = 0.2f; // 화면 폭의 20%
+
         #endregion
 
         #region Properties
@@ -142,6 +149,11 @@ namespace BalloonFlow
         {
             base.OnDestroy();
             _pageTween?.Kill();
+        }
+
+        private void Update()
+        {
+            HandleSwipeDrag();
         }
 
         #endregion
@@ -371,6 +383,7 @@ namespace BalloonFlow
         public void GoToPage(int pageIndex)
         {
             pageIndex = Mathf.Clamp(pageIndex, 0, 2);
+            _isDragging = false; // 탭 버튼 클릭 시 드래그 상태 리셋
             if (pageIndex == _currentPageIndex) return;
 
             _currentPageIndex = pageIndex;
@@ -388,6 +401,66 @@ namespace BalloonFlow
             }
             UpdateNavStateImmediate(pageIndex);
         }
+
+        #region Swipe Drag
+
+        private void HandleSwipeDrag()
+        {
+            if (_pageContainer == null) return;
+
+            bool touching = false;
+            float screenX = 0f;
+
+            // 터치 입력
+            if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.isPressed)
+            {
+                touching = true;
+                screenX = Touchscreen.current.primaryTouch.position.ReadValue().x;
+            }
+            // 마우스 입력
+            else if (Mouse.current != null && Mouse.current.leftButton.isPressed)
+            {
+                touching = true;
+                screenX = Mouse.current.position.ReadValue().x;
+            }
+
+            if (touching && !_isDragging)
+            {
+                // 드래그 시작
+                _isDragging = true;
+                _dragStartScreenX = screenX;
+                _dragStartPageX = _pageContainer.anchoredPosition.x;
+                _pageTween?.Kill();
+            }
+            else if (touching && _isDragging)
+            {
+                // 드래그 중 — 페이지 따라오기
+                float deltaScreen = screenX - _dragStartScreenX;
+                float scale = _pageWidth / (Screen.width > 0 ? Screen.width : 1242f);
+                float newX = _dragStartPageX + deltaScreen * scale;
+                newX = Mathf.Clamp(newX, -2f * _pageWidth, 0f);
+                _pageContainer.anchoredPosition = new Vector2(newX, _pageContainer.anchoredPosition.y);
+            }
+            else if (!touching && _isDragging)
+            {
+                // 드래그 끝 — 스냅
+                _isDragging = false;
+                float dragDelta = screenX - _dragStartScreenX;
+                float threshold = Screen.width * SWIPE_THRESHOLD_RATIO;
+
+                int targetPage = _currentPageIndex;
+                if (dragDelta > threshold && _currentPageIndex > 0)
+                    targetPage = _currentPageIndex - 1;
+                else if (dragDelta < -threshold && _currentPageIndex < 2)
+                    targetPage = _currentPageIndex + 1;
+
+                _currentPageIndex = targetPage;
+                AnimateToPage(targetPage);
+                UpdateNavState(targetPage);
+            }
+        }
+
+        #endregion
 
         private void AnimateToPage(int pageIndex)
         {

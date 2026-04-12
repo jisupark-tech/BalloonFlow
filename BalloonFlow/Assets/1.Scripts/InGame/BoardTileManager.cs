@@ -487,8 +487,8 @@ namespace BalloonFlow
                 var child = _conveyorSpriteRoot.GetChild(i);
                 var srcSR = child.GetComponent<SpriteRenderer>();
                 if (srcSR == null || srcSR.sprite == null) continue;
-                // Cave 타일은 제외 (danger 오버레이 불필요)
-                if (child.name == "CaveTile") continue;
+                // Cave, Arrow 타일은 제외
+                if (child.name == "CaveTile" || child.name.StartsWith("Arrow")) continue;
 
                 // RailTileSet에 대응하는 danger 스프라이트가 있으면 사용
                 Sprite dangerSprite = GetDangerSpriteFor(ts, srcSR.sprite);

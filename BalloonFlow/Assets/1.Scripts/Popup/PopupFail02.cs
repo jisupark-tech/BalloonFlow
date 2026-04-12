@@ -1,41 +1,56 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace BalloonFlow
 {
-    /// <summary>
-    /// 실패 시 마지막 팝업 (PopupContinue에서 거절 후).
-    /// PopupCommonFrame: Horizontal 레이아웃 (Green=Retry, Red=Home).
-    /// RetryButton: 하트 차감 + 해당 레벨 재시작.
-    /// HomeButton: 로비씬 이동.
-    /// </summary>
     public class PopupFail02 : UIBase
     {
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
 
+        [Header("[Buttons — 직접 할당]")]
+        [SerializeField] private Button _btnRetry;
+        [SerializeField] private Button _btnHome;
+        [SerializeField] private Button _btnExit;
+
         private const int RETRY_BONUS_GOLD = 20;
+
+        private Button RetryBtn => _btnRetry != null ? _btnRetry : (_frame != null ? _frame.BtnHorizGreen : null);
+        private Button HomeBtn => _btnHome != null ? _btnHome : (_frame != null ? _frame.BtnHorizRed : null);
+        private Button ExitBtn => _btnExit != null ? _btnExit : (_frame != null ? _frame.BtnExit : null);
 
         protected override void Awake()
         {
             base.Awake();
-            // 버튼 연결은 Awake에서 (Start는 GameBootstrap CloseUI로 인해 첫 활성화 전까지 실행 안 됨)
-            if (_frame != null)
-            {
-                if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.AddListener(OnRetryClicked);
-                if (_frame.BtnHorizRed != null) _frame.BtnHorizRed.onClick.AddListener(OnHomeClicked);
-                if (_frame.BtnExit != null) _frame.BtnExit.onClick.AddListener(OnHomeClicked);
-            }
+            if (RetryBtn != null) RetryBtn.onClick.AddListener(OnRetryClicked);
+            if (HomeBtn != null) HomeBtn.onClick.AddListener(OnHomeClicked);
+            if (ExitBtn != null) ExitBtn.onClick.AddListener(OnHomeClicked);
         }
 
         protected override void OnDestroy()
         {
             base.OnDestroy();
-            if (_frame != null)
+            if (RetryBtn != null) RetryBtn.onClick.RemoveAllListeners();
+            if (HomeBtn != null) HomeBtn.onClick.RemoveAllListeners();
+            if (ExitBtn != null) ExitBtn.onClick.RemoveAllListeners();
+        }
+
+        private bool _lifeConsumed;
+
+        private void OnEnable()
+        {
+            // PopupManager가 SetActive(true) 할 때 호출됨
+            // 실패 확정 시 하트 1개 소모
+            if (!_lifeConsumed && LifeManager.HasInstance)
             {
-                if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.RemoveAllListeners();
-                if (_frame.BtnHorizRed != null) _frame.BtnHorizRed.onClick.RemoveAllListeners();
-                if (_frame.BtnExit != null) _frame.BtnExit.onClick.RemoveAllListeners();
+                LifeManager.Instance.UseLive();
+                _lifeConsumed = true;
             }
+        }
+
+        private void OnDisable()
+        {
+            _lifeConsumed = false; // 다음 실패 시 다시 소모 가능
         }
 
         public void Show(DifficultyPurpose difficulty)
@@ -49,17 +64,11 @@ namespace BalloonFlow
                 _frame.SetHorizRedText("Home");
                 _frame.ShowExitButton(true);
             }
-
-            // 실패 확정 시 하트 1개 소모 (클리어/취소 시 소모 없음)
-            if (LifeManager.HasInstance)
-                LifeManager.Instance.UseLive();
-
             OpenUI();
         }
 
         private void OnRetryClicked()
         {
-            // 하트 체크 (이미 Show에서 소모됨)
             if (LifeManager.HasInstance && LifeManager.Instance.CurrentLives <= 0)
             {
                 Debug.Log("[PopupFail02] 하트 부족 — More Lives 팝업");

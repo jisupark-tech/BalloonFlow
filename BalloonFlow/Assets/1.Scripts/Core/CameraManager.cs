@@ -136,7 +136,6 @@ namespace BalloonFlow
             for (int i = 0; i < 32; i++) layerCullDist[i] = 80f; // 기본
             layerCullDist[0] = 60f; // Default 레이어 (풍선/다트/홀더) — 60m 넘으면 컬링
             MainCamera.layerCullDistances = layerCullDist;
-            MainCamera.layerCullSpherical = true; // 구형 컬링 (사각형보다 정확)
 
             SetCameraTransform(_inGamePosition, _inGameRotation);
 
