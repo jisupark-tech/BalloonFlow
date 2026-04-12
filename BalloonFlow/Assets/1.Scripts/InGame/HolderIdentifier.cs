@@ -556,11 +556,8 @@ namespace BalloonFlow
             if (_animator != null)
             {
                 _animator.enabled = true;
-                _animator.SetBool(_animDeploy, false);
-                _animator.SetBool(_animHidden, false);
-                _animator.ResetTrigger(_animEnd);
-                _animator.ResetTrigger(_animHiddenEnd);
-                _animator.ResetTrigger(_animClick);
+                _animator.Rebind(); // 모든 상태/파라미터 초기화 → Entry 상태로 복귀
+                _animator.Update(0f);
             }
         }
 

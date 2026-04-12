@@ -110,6 +110,7 @@ namespace BalloonFlow
         private bool _isDragging;
         private float _dragStartScreenX;
         private float _dragStartPageX;
+        private float _dragLastScreenX; // 마지막 터치 위치 저장
         private const float SWIPE_THRESHOLD_RATIO = 0.2f; // 화면 폭의 20%
 
         #endregion
@@ -410,31 +411,38 @@ namespace BalloonFlow
 
             bool touching = false;
             float screenX = 0f;
+            float screenY = 0f;
 
-            // 터치 입력
             if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.isPressed)
             {
                 touching = true;
-                screenX = Touchscreen.current.primaryTouch.position.ReadValue().x;
+                var pos = Touchscreen.current.primaryTouch.position.ReadValue();
+                screenX = pos.x;
+                screenY = pos.y;
             }
-            // 마우스 입력
             else if (Mouse.current != null && Mouse.current.leftButton.isPressed)
             {
                 touching = true;
-                screenX = Mouse.current.position.ReadValue().x;
+                var pos = Mouse.current.position.ReadValue();
+                screenX = pos.x;
+                screenY = pos.y;
             }
 
             if (touching && !_isDragging)
             {
-                // 드래그 시작
                 _isDragging = true;
                 _dragStartScreenX = screenX;
+                _dragLastScreenX = screenX;
                 _dragStartPageX = _pageContainer.anchoredPosition.x;
                 _pageTween?.Kill();
             }
             else if (touching && _isDragging)
             {
-                // 드래그 중 — 페이지 따라오기
+                _dragLastScreenX = screenX; // 매 프레임 마지막 위치 갱신
+
+                float deltaX = Mathf.Abs(screenX - _dragStartScreenX);
+                if (deltaX < 15f) return; // 탭과 구분
+
                 float deltaScreen = screenX - _dragStartScreenX;
                 float scale = _pageWidth / (Screen.width > 0 ? Screen.width : 1242f);
                 float newX = _dragStartPageX + deltaScreen * scale;
@@ -443,10 +451,15 @@ namespace BalloonFlow
             }
             else if (!touching && _isDragging)
             {
-                // 드래그 끝 — 스냅
                 _isDragging = false;
-                float dragDelta = screenX - _dragStartScreenX;
+                float dragDelta = _dragLastScreenX - _dragStartScreenX; // 마지막 위치 사용
                 float threshold = Screen.width * SWIPE_THRESHOLD_RATIO;
+
+                if (Mathf.Abs(dragDelta) < 15f)
+                {
+                    AnimateToPage(_currentPageIndex);
+                    return;
+                }
 
                 int targetPage = _currentPageIndex;
                 if (dragDelta > threshold && _currentPageIndex > 0)
