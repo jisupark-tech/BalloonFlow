@@ -17,9 +17,19 @@ namespace BalloonFlow
         [Header("[코스트 텍스트]")]
         [SerializeField] private TMP_Text _costText;
 
+        [Header("[골드 표시]")]
+        [SerializeField] private TMP_Text _txtGold;
+        [SerializeField] private TMP_Text _txtGoldOutline;
+
         private Button ContinueBtn => _btnContinue != null ? _btnContinue : (_frame != null ? _frame.BtnHorizGreen : null);
         private Button DeclineBtn => _btnDecline != null ? _btnDecline : (_frame != null ? _frame.BtnHorizRed : null);
         private Button ExitBtn => _btnExit != null ? _btnExit : (_frame != null ? _frame.BtnExit : null);
+
+        private void OnEnable()
+        {
+            UpdateCostDisplay();
+            UpdateGoldDisplay();
+        }
 
         protected override void Awake()
         {
@@ -49,7 +59,16 @@ namespace BalloonFlow
                 _frame.ShowExitButton(true);
             }
             UpdateCostDisplay();
+            UpdateGoldDisplay();
             OpenUI();
+        }
+
+        private void UpdateGoldDisplay()
+        {
+            if (!CurrencyManager.HasInstance) return;
+            string gold = CurrencyManager.Instance.Coins.ToString("N0");
+            if (_txtGold != null) _txtGold.text = gold;
+            if (_txtGoldOutline != null) _txtGoldOutline.text = gold;
         }
 
         private void OnContinueClicked()

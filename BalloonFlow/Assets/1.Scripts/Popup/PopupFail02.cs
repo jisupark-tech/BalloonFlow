@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 namespace BalloonFlow
 {
@@ -12,6 +13,10 @@ namespace BalloonFlow
         [SerializeField] private Button _btnRetry;
         [SerializeField] private Button _btnHome;
         [SerializeField] private Button _btnExit;
+
+        [Header("[골드 표시]")]
+        [SerializeField] private TMP_Text _txtGold;
+        [SerializeField] private TMP_Text _txtGoldOutline;
 
         private const int RETRY_BONUS_GOLD = 20;
 
@@ -64,7 +69,16 @@ namespace BalloonFlow
                 _frame.SetHorizRedText("Home");
                 _frame.ShowExitButton(true);
             }
+            UpdateGoldDisplay();
             OpenUI();
+        }
+
+        private void UpdateGoldDisplay()
+        {
+            if (!CurrencyManager.HasInstance) return;
+            string gold = CurrencyManager.Instance.Coins.ToString("N0");
+            if (_txtGold != null) _txtGold.text = gold;
+            if (_txtGoldOutline != null) _txtGoldOutline.text = gold;
         }
 
         private void OnRetryClicked()

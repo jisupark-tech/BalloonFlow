@@ -49,6 +49,10 @@ namespace BalloonFlow
         [SerializeField] private Button _btnLifeBar;
         [SerializeField] private GameObject _imgInfinite;
 
+        [Header("[Shop — 골드 표시]")]
+        [SerializeField] private TMP_Text _txtShopGold;
+        [SerializeField] private TMP_Text _txtShopGoldOutline;
+
         [Header("[Pages — 프리팹 내 기존 오브젝트 (Shop/Lobby/Setting)]")]
         [SerializeField] private RectTransform _pageShop;
         [SerializeField] private RectTransform _pageLobby;
@@ -234,6 +238,9 @@ namespace BalloonFlow
             string formatted = coins.ToString("N0");
             if (_txtGold != null) _txtGold.text = formatted;
             if (_txtGoldOutline != null) _txtGoldOutline.text = formatted;
+            // Shop 패널 골드도 연동
+            if (_txtShopGold != null) _txtShopGold.text = formatted;
+            if (_txtShopGoldOutline != null) _txtShopGoldOutline.text = formatted;
         }
 
         public void SetLifeText(int current, int max)

@@ -89,6 +89,8 @@ namespace BalloonFlow
         public float coinSpawnDelayMin = 0.03f;
         [Tooltip("코인 생성 간격 최대(초). (default: 0.08)")]
         public float coinSpawnDelayMax = 0.08f;
+        [Tooltip("코인 이펙트 스케일. (default: 15)")]
+        public float coinFlyScale = 15f;
 
         [Header("[레일 — Rail (컨베이어벨트)]")]
         [Tooltip("레일 슬롯 수. 다트가 점유하는 칸 수. 레벨 데이터에서 자동 계산됨. (default: 200)")]

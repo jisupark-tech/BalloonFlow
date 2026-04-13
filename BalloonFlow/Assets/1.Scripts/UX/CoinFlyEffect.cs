@@ -5,14 +5,14 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// FXGold를 PopupCanvas 자식의 ScreenSpaceCamera Canvas에서 비행.
+    /// FxGold를 PopupCanvas에 직접 넣고 시작점→끝점 랜덤 포물선 비행.
+    /// UIParticleRenderer가 ParticleSystem을 Canvas UI로 렌더링.
     /// 연출 끝나면 ObjectPoolManager로 반환.
     /// </summary>
     public static class CoinFlyEffect
     {
         private const string POOL_KEY = "FXGold";
         private static bool _poolRegistered;
-        private static Transform _fxLayer;
 
         public static void Play(Vector2 screenFrom, Vector2 screenTo, int count,
             Action onEachLand = null, Action onAllComplete = null)
@@ -21,9 +21,6 @@ namespace BalloonFlow
             if (!UIManager.HasInstance || UIManager.Instance.PopupTr == null) return;
 
             EnsurePool();
-            EnsureFXLayer();
-            if (_fxLayer == null) return;
-
             CoroutineRunner.Get().StartCoroutine(
                 RunFly(screenFrom, screenTo, count, onEachLand, onAllComplete));
         }
@@ -31,44 +28,31 @@ namespace BalloonFlow
         private static void EnsurePool()
         {
             if (_poolRegistered || !ObjectPoolManager.HasInstance) return;
-            var prefab = Resources.Load<GameObject>("Prefabs/FxGold");
+            var prefab = Resources.Load<GameObject>("UI/UIAssets/FXGold");
             if (prefab == null) return;
+
+            // 프리팹에 UIParticleRenderer 추가 (없으면)
+            if (prefab.GetComponent<UIParticleRenderer>() == null)
+                prefab.AddComponent<UIParticleRenderer>();
+            // 자식에도
+            foreach (Transform child in prefab.transform)
+            {
+                if (child.GetComponent<ParticleSystem>() != null && child.GetComponent<UIParticleRenderer>() == null)
+                    child.gameObject.AddComponent<UIParticleRenderer>();
+            }
+
             ObjectPoolManager.Instance.CreatePool(POOL_KEY, prefab, 8);
             _poolRegistered = true;
-        }
-
-        private static void EnsureFXLayer()
-        {
-            if (_fxLayer != null) return;
-
-            var go = new GameObject("FXGoldLayer");
-            go.transform.SetParent(UIManager.Instance.transform, false);
-
-            var canvas = go.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceCamera;
-            canvas.worldCamera = CameraManager.HasInstance ? CameraManager.Instance.UICamera : Camera.main;
-            canvas.sortingOrder = 100;
-            canvas.planeDistance = 100f;
-
-            // CanvasScaler 추가 (스케일 정상화)
-            var scaler = go.AddComponent<UnityEngine.UI.CanvasScaler>();
-            scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1242f, 2688f);
-            scaler.matchWidthOrHeight = 0.5f;
-
-            var cg = go.AddComponent<CanvasGroup>();
-            cg.blocksRaycasts = false;
-            cg.interactable = false;
-
-            _fxLayer = go.transform;
         }
 
         private static IEnumerator RunFly(Vector2 fromScreen, Vector2 toScreen, int count,
             Action onEachLand, Action onAllComplete)
         {
-            Canvas canvas = _fxLayer.GetComponent<Canvas>();
+            Transform parent = UIManager.Instance.PopupTr;
+            Canvas canvas = parent.GetComponentInParent<Canvas>();
+            Camera cam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
+                ? canvas.worldCamera : null;
             RectTransform canvasRT = canvas != null ? canvas.GetComponent<RectTransform>() : null;
-            Camera cam = canvas != null ? canvas.worldCamera : null;
 
             Vector2 from = ScreenToLocal(canvasRT, cam, fromScreen);
             Vector2 to = ScreenToLocal(canvasRT, cam, toScreen);
@@ -98,11 +82,23 @@ namespace BalloonFlow
                 mid.x += UnityEngine.Random.Range(-cW * 0.1f, cW * 0.1f);
 
                 GameObject coin = ObjectPoolManager.Instance.Get(POOL_KEY);
-                coin.transform.SetParent(_fxLayer, false);
+                coin.transform.SetParent(parent, false);
+                coin.transform.SetAsLastSibling();
                 var rt = coin.GetComponent<RectTransform>();
                 if (rt == null) rt = coin.AddComponent<RectTransform>();
                 rt.anchoredPosition = start;
-                rt.localScale = Vector3.one;
+                float coinScale = GameManager.HasInstance ? GameManager.Instance.Board.coinFlyScale : 3f;
+                rt.localScale = Vector3.one * coinScale;
+
+                // ParticleSystem 재시작 + startSpeed 제거 (이동은 코드로 제어)
+                var particles = coin.GetComponentsInChildren<ParticleSystem>(true);
+                foreach (var ps in particles)
+                {
+                    var main = ps.main;
+                    main.startSpeed = 0f;
+                    ps.Clear();
+                    ps.Play();
+                }
 
                 float dur = UnityEngine.Random.Range(minDur, maxDur);
 
@@ -130,7 +126,10 @@ namespace BalloonFlow
                 float u = 1f - e;
                 rt.anchoredPosition = u * u * a + 2f * u * e * b + e * e * c;
                 if (t > 0.7f)
-                    rt.localScale = Vector3.one * Mathf.Lerp(1f, 0.3f, (t - 0.7f) / 0.3f);
+                {
+                    float cs = GameManager.HasInstance ? GameManager.Instance.Board.coinFlyScale : 3f;
+                    rt.localScale = Vector3.one * cs * Mathf.Lerp(1f, 0.3f, (t - 0.7f) / 0.3f);
+                }
                 yield return null;
             }
 
