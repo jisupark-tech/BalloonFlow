@@ -335,26 +335,25 @@ namespace BalloonFlow
         /// Returns all non-popped balloons matching the specified color.
         /// Hidden balloons whose color is concealed are excluded until revealed.
         /// </summary>
+        // 재사용 리스트 (GC 할당 방지)
+        private readonly List<BalloonData> _reusableColorResult = new List<BalloonData>(64);
+
         public BalloonData[] GetBalloonsByColor(int color)
         {
-            List<BalloonData> result = new List<BalloonData>();
+            _reusableColorResult.Clear();
             foreach (KeyValuePair<int, BalloonData> pair in _balloons)
             {
                 BalloonData data = pair.Value;
                 if (data.isPopped) continue;
                 if (_hiddenBalloons.Contains(data.balloonId)) continue;
-                // Non-targetable gimmicks: darts cannot hit these
                 if (data.gimmickType == GimmickWall) continue;
-                // Pin은 같은 색 다트로 직접 타격 가능 — 타겟 목록에 포함
                 if (data.gimmickType == GimmickIce) continue;
                 if (data.gimmickType == GimmickColorCurtain) continue;
                 if (data.gimmickType == GimmickLockKey) continue;
                 if (data.color == color)
-                {
-                    result.Add(data);
-                }
+                    _reusableColorResult.Add(data);
             }
-            return result.ToArray();
+            return _reusableColorResult.ToArray();
         }
 
         /// <summary>
@@ -1507,39 +1506,61 @@ namespace BalloonFlow
 
             _balloonObjects.Remove(balloonId);
 
-            // 팝 이펙트 활성화
             var identifier = obj.GetComponent<BalloonIdentifier>();
-            if (identifier != null)
-                identifier.MarkPopped();
 
-            // 파티클을 풍선에서 분리 → 풍선 스케일 변경이 파티클에 영향 안 주도록
-            Transform detachedEffect = null;
-            if (identifier != null)
-                detachedEffect = identifier.DetachPopEffect();
-
-            // Animate: bounce up slightly, then shrink to zero
             float savedScale = _balloonScale;
-            Sequence seq = DOTween.Sequence();
-            seq.Append(obj.transform.DOMove(obj.transform.position + Vector3.up * 0.4f, 0.12f).SetEase(Ease.OutQuad));
-            seq.Join(obj.transform.DOScale(Vector3.one * savedScale * 1.2f, 0.12f).SetEase(Ease.OutQuad));
-            seq.Append(obj.transform.DOScale(Vector3.zero, 0.15f).SetEase(Ease.InBack));
-            // Pinata 프리팹인지 판별하여 올바른 풀에 반환
             bool returnToPinata = _balloons.TryGetValue(balloonId, out BalloonData retData)
                 && (retData.gimmickType == GimmickPinata || retData.gimmickType == GimmickPinataBox);
             string returnKey = returnToPinata ? PinataPoolKey : PoolKey;
 
+            // 1) 파티클 분리 → 월드 루트에서 독립 재생
+            Transform detachedEffect = null;
+            if (identifier != null)
+                detachedEffect = identifier.DetachPopEffect();
+
+            // 2) 파티클 활성화 (분리 후 호출해야 풍선과 무관하게 재생)
+            if (identifier != null)
+                identifier.MarkPopped();
+
+            // 3) 파티클 duration 강제 설정
+            if (detachedEffect != null)
+            {
+                var ps = detachedEffect.GetComponent<ParticleSystem>();
+                if (ps != null)
+                {
+                    var main = ps.main;
+                    main.startLifetime = 1.5f;
+                    main.loop = false;
+                    ps.Clear();
+                    ps.Play();
+                }
+            }
+
+            // 4) 풍선 스케일 커짐 → 숨기고 즉시 풀 반환
+            Sequence seq = DOTween.Sequence();
+            seq.Append(obj.transform.DOScale(Vector3.one * savedScale * 1.5f, 0.3f).SetEase(Ease.OutQuad));
             seq.OnComplete(() =>
             {
                 if (obj != null && ObjectPoolManager.HasInstance)
                 {
-                    // 파티클을 다시 풍선 자식으로 복귀
-                    if (identifier != null)
-                        identifier.ReattachPopEffect(detachedEffect);
-
                     obj.transform.localScale = Vector3.one * savedScale;
                     ObjectPoolManager.Instance.Return(returnKey, obj);
                 }
             });
+
+            // 5) 파티클은 독립적으로 1.5초 후 자동 정리
+            if (detachedEffect != null)
+                StartCoroutine(ReturnParticleDelayed(detachedEffect, identifier, 1.5f));
+        }
+
+        /// <summary>분리된 파티클을 일정 시간 후 풍선에 복귀 + 비활성화.</summary>
+        private IEnumerator ReturnParticleDelayed(Transform effect, BalloonIdentifier identifier, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (identifier != null)
+                identifier.ReattachPopEffect(effect);
+            else if (effect != null)
+                effect.gameObject.SetActive(false);
         }
 
         /// <summary>Key 프리팹이 포물선으로 Lock 보관함까지 비행 → 도착 시 잠금 해제.</summary>
@@ -1626,13 +1647,17 @@ namespace BalloonFlow
                 if (kd.isPopped) continue;
                 Vector3Int keyGrid = ToGridKey(kd.position);
                 bool canReach = CanKeyReachBelt(keyGrid);
-                Debug.Log($"[Key A*] Key {kvp.Key} at grid({keyGrid.x},{keyGrid.z}): canReachBelt={canReach}");
+#if UNITY_EDITOR
+                Debug.Log($"[Key A*]" + "stripped");
+#endif
                 if (canReach)
                     keysToRelease.Add(kvp.Key);
             }
             foreach (int keyId in keysToRelease)
             {
-                Debug.Log($"[Key A*] Releasing Key {keyId}, pairId={_activeKeyPairIds[keyId]}");
+#if UNITY_EDITOR
+                Debug.Log($"[Key A*]" + "stripped");
+#endif
                 ReleaseKey(keyId);
             }
         }

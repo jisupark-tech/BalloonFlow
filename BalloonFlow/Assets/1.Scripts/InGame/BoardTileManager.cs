@@ -856,20 +856,20 @@ namespace BalloonFlow
             // Arrow도 벨트 속도로 이동
             float delta = rail.RotationSpeed * rail.SlotSpacing * Time.deltaTime;
 
+            // 다트 리스트 1회 캐시 (매 arrow마다 호출 방지)
+            var darts = rail.GetAllDarts();
+            float threshold = rail.SlotSpacing * 1.5f;
+
             for (int i = 0; i < _arrowObjects.Length; i++)
             {
                 if (_arrowObjects[i] == null) continue;
                 if (_arrowProgresses == null || i >= _arrowProgresses.Length) continue;
 
-                // progress 전진
                 _arrowProgresses[i] += delta;
                 if (_arrowProgresses[i] >= pathLen)
                     _arrowProgresses[i] -= pathLen;
 
-                // 근처에 다트가 있으면 숨기기
                 bool nearDart = false;
-                var darts = rail.GetAllDarts();
-                float threshold = rail.SlotSpacing * 1.5f;
                 for (int d = 0; d < darts.Count; d++)
                 {
                     float diff = Mathf.Abs(darts[d].progress - _arrowProgresses[i]);

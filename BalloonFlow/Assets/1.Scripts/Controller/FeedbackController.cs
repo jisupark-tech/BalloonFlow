@@ -460,12 +460,16 @@ namespace BalloonFlow
             }
         }
 
+        private float _lastShakeTime;
+        private const float SHAKE_COOLDOWN = 0.1f;
+
         private void TriggerScreenShake(float intensity, float duration)
         {
-            if (_cameraTransform == null)
-            {
-                return;
-            }
+            if (_cameraTransform == null) return;
+
+            // 쿨다운: 연속 pop 시 셰이크 Tween 스팸 방지
+            if (Time.unscaledTime - _lastShakeTime < SHAKE_COOLDOWN) return;
+            _lastShakeTime = Time.unscaledTime;
 
             if (_shakeTweener != null && _shakeTweener.IsActive())
             {
@@ -474,8 +478,8 @@ namespace BalloonFlow
             }
 
             _isShaking = true;
-            _shakeTweener = _cameraTransform.DOShakePosition(duration, intensity, 20, 90f, false, true, ShakeRandomnessMode.Harmonic)
-                .SetUpdate(true) // unscaled time
+            _shakeTweener = _cameraTransform.DOShakePosition(duration, intensity, 10, 90f, false, true, ShakeRandomnessMode.Harmonic)
+                .SetUpdate(true)
                 .OnComplete(() =>
                 {
                     _cameraTransform.localPosition = _cameraOriginalPosition;

@@ -1186,57 +1186,60 @@ namespace BalloonFlow
         }
 
         /// <summary>매 프레임 Chain 연결선 위치 갱신.</summary>
+        // 캐시: String.Split/GetComponent 매 프레임 호출 방지
+        private struct ChainLineCache
+        {
+            public int idA, idB;
+            public LineRenderer lrA, lrChild;
+        }
+        private readonly Dictionary<string, ChainLineCache> _chainCache = new Dictionary<string, ChainLineCache>();
+        private readonly List<string> _chainRemoveKeys = new List<string>();
+
         private void UpdateChainLines()
         {
-            var removeKeys = new List<string>();
+            _chainRemoveKeys.Clear();
             foreach (var kvp in _chainLines)
             {
-                string[] ids = kvp.Key.Split('_');
-                if (ids.Length != 2) continue;
-                int idA = int.Parse(ids[0]), idB = int.Parse(ids[1]);
+                if (!_chainCache.TryGetValue(kvp.Key, out ChainLineCache cache))
+                {
+                    // 첫 호출 시 1번만 파싱 + GetComponent
+                    var ids = kvp.Key.Split('_');
+                    if (ids.Length != 2) continue;
+                    cache.idA = int.Parse(ids[0]);
+                    cache.idB = int.Parse(ids[1]);
+                    cache.lrA = kvp.Value != null ? kvp.Value.GetComponent<LineRenderer>() : null;
+                    cache.lrChild = (kvp.Value != null && kvp.Value.transform.childCount > 0)
+                        ? kvp.Value.transform.GetChild(0).GetComponent<LineRenderer>() : null;
+                    _chainCache[kvp.Key] = cache;
+                }
 
-                bool validA = _holderVisuals.TryGetValue(idA, out HolderVisual vA) && vA.gameObject != null;
-                bool validB = _holderVisuals.TryGetValue(idB, out HolderVisual vB) && vB.gameObject != null;
+                bool validA = _holderVisuals.TryGetValue(cache.idA, out HolderVisual vA) && vA.gameObject != null;
+                bool validB = _holderVisuals.TryGetValue(cache.idB, out HolderVisual vB) && vB.gameObject != null;
 
                 if (!validA || !validB)
                 {
-                    // 한쪽이 사라짐 → 연결선 제거
                     if (kvp.Value != null) Destroy(kvp.Value);
-                    removeKeys.Add(kvp.Key);
+                    _chainRemoveKeys.Add(kvp.Key);
                     continue;
                 }
 
-                // Chain 연결 위치: Y 높이 + 상대 방향으로 좌우 오프셋
                 Vector3 baseA = vA.gameObject.transform.position;
                 Vector3 baseB = vB.gameObject.transform.position;
                 Vector3 dirAtoB = (baseB - baseA).normalized;
                 Vector3 sideOffset = new Vector3(dirAtoB.x, 0f, dirAtoB.z).normalized * 0.4f;
 
-                Vector3 posA = baseA + Vector3.up * 0.8f + sideOffset;  // A → B 방향 쪽
-                Vector3 posB = baseB + Vector3.up * 0.8f - sideOffset;  // B → A 방향 쪽
+                Vector3 posA = baseA + Vector3.up * 0.8f + sideOffset;
+                Vector3 posB = baseB + Vector3.up * 0.8f - sideOffset;
                 Vector3 mid = (posA + posB) * 0.5f;
 
-                var lrA = kvp.Value.GetComponent<LineRenderer>();
-                if (lrA != null)
-                {
-                    lrA.SetPosition(0, posA);
-                    lrA.SetPosition(1, mid);
-                }
-
-                var lrB = kvp.Value.GetComponentInChildren<LineRenderer>();
-                // GetComponentInChildren은 자기 자신도 반환하므로 자식만 찾기
-                if (kvp.Value.transform.childCount > 0)
-                {
-                    var childLr = kvp.Value.transform.GetChild(0).GetComponent<LineRenderer>();
-                    if (childLr != null)
-                    {
-                        childLr.SetPosition(0, mid);
-                        childLr.SetPosition(1, posB);
-                    }
-                }
+                if (cache.lrA != null) { cache.lrA.SetPosition(0, posA); cache.lrA.SetPosition(1, mid); }
+                if (cache.lrChild != null) { cache.lrChild.SetPosition(0, mid); cache.lrChild.SetPosition(1, posB); }
             }
-            foreach (var k in removeKeys)
-                _chainLines.Remove(k);
+            for (int i = 0; i < _chainRemoveKeys.Count; i++)
+            {
+                _chainCache.Remove(_chainRemoveKeys[i]);
+                _chainLines.Remove(_chainRemoveKeys[i]);
+            }
         }
 
         private void ClearChainLines()
