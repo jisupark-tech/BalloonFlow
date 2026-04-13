@@ -69,6 +69,7 @@ namespace BalloonFlow
 
             ConfirmPendingBooster();
             HideCancelButton();
+            CloseUseItemPopup();
             ExecuteSelectTool(holderId);
 
             if (CameraManager.HasInstance)
@@ -110,7 +111,19 @@ namespace BalloonFlow
             BalloonController.Instance.SetOutlineByColor(selectedColor, true, Color.white);
 
             // Execute color remove after brief delay (so player sees the highlight)
+            HideCancelButton();
+            CloseUseItemPopup();
             StartCoroutine(DelayedColorRemove(selectedColor));
+        }
+
+        /// <summary>UseItem 팝업 닫기.</summary>
+        private void CloseUseItemPopup()
+        {
+            if (UIManager.HasInstance)
+            {
+                var popup = UIManager.Instance.GetOpenUI<PopupUseItem>();
+                if (popup != null) popup.CloseUI();
+            }
         }
 
         #endregion
@@ -217,6 +230,7 @@ namespace BalloonFlow
 
             _pendingBoosterType = null;
             HideCancelButton();
+            CloseUseItemPopup();
             ResumeRail();
         }
 

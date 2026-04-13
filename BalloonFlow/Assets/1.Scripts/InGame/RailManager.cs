@@ -316,31 +316,54 @@ namespace BalloonFlow
         /// 대기 중인 deploy point는 차단하지 않음 → 빈틈 기다림.
         /// -1 = 앞에 장애물 없음.
         /// </summary>
-        private float FindDistanceToBlockAhead(DartOnRail dart)
+        // 정렬된 progress 캐시 (매 프레임 1회 빌드, 모든 다트가 공유)
+        private readonly List<float> _sortedProgress = new List<float>(256);
+        private int _sortedProgressFrame = -1;
+
+        private void RebuildSortedProgress()
         {
-            float myProg = dart.progress;
-            float closest = float.MaxValue;
+            int frame = Time.frameCount;
+            if (frame == _sortedProgressFrame) return;
+            _sortedProgressFrame = frame;
 
-            // 다른 다트 체크
+            _sortedProgress.Clear();
             for (int i = 0; i < _darts.Count; i++)
-            {
-                if (_darts[i].dartId == dart.dartId) continue;
-                float dist = _darts[i].progress - myProg;
-                if (_totalPathLength > 0f)
-                    dist = ((dist % _totalPathLength) + _totalPathLength) % _totalPathLength;
-                if (dist > 0f && dist < closest)
-                    closest = dist;
-            }
+                _sortedProgress.Add(_darts[i].progress);
 
-            // 활성화된 deploy point만 장애물 (첫 다트 배치 후 → 연속 배치 보호)
+            // deploy points 추가
             foreach (var dp in _deployPoints)
             {
-                if (dp.Key == dart.holderId) continue;
-                if (!_activeDeployPoints.Contains(dp.Key)) continue; // 대기 중이면 무시
+                if (!_activeDeployPoints.Contains(dp.Key)) continue;
                 float blockAt = dp.Value - EffectiveDartGap * 0.5f;
                 if (_totalPathLength > 0f)
                     blockAt = ((blockAt % _totalPathLength) + _totalPathLength) % _totalPathLength;
-                float dist = blockAt - myProg;
+                _sortedProgress.Add(blockAt);
+            }
+
+            _sortedProgress.Sort();
+        }
+
+        private float FindDistanceToBlockAhead(DartOnRail dart)
+        {
+            RebuildSortedProgress();
+
+            float myProg = dart.progress;
+            float closest = float.MaxValue;
+
+            // 이진 검색으로 바로 앞 장애물 찾기
+            int idx = _sortedProgress.BinarySearch(myProg);
+            if (idx < 0) idx = ~idx; // insertion point
+
+            // 바로 다음 위치 확인
+            for (int check = 0; check < 2; check++)
+            {
+                int ci = (idx + check) % _sortedProgress.Count;
+                if (ci < 0 || ci >= _sortedProgress.Count) continue;
+
+                float prog = _sortedProgress[ci];
+                if (Mathf.Approximately(prog, myProg)) continue; // 자기 자신 스킵
+
+                float dist = prog - myProg;
                 if (_totalPathLength > 0f)
                     dist = ((dist % _totalPathLength) + _totalPathLength) % _totalPathLength;
                 if (dist > 0f && dist < closest)

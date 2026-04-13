@@ -276,7 +276,15 @@ namespace BalloonFlow
                 return;
             }
 
-            // 재고 있음 → 사용 확인 팝업
+            // Shuffle은 즉시 실행 (팝업 없이)
+            if (boosterType == BoosterManager.SHUFFLE)
+            {
+                BoosterManager.Instance.UseBooster(boosterType);
+                RefreshBoosterCounts();
+                return;
+            }
+
+            // Hand/Remove → UseItem 팝업 (Dim + Cutout)
             ShowUseItemPopup(boosterType);
         }
 
@@ -284,6 +292,7 @@ namespace BalloonFlow
         {
             if (!UIManager.HasInstance) return;
             var popup = UIManager.Instance.OpenUI<PopupUseItem>("Popup/UseItem");
+            Debug.Log($"[UIHud] ShowUseItemPopup: popup={popup != null}, booster={boosterType}");
             if (popup == null) return;
 
             string desc = GetBoosterDescription(boosterType);

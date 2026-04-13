@@ -53,7 +53,7 @@ namespace BalloonFlow
 
             // 파티클 메시 베이크
             _psr.enabled = true;
-            _psr.BakeMesh(_bakedMesh, Camera.main, true);
+            _psr.BakeMesh(_bakedMesh, useTransform: true);
             _psr.enabled = false;
 
             if (_bakedMesh.vertexCount == 0) return;
@@ -67,15 +67,11 @@ namespace BalloonFlow
             bool hasColors = colors != null && colors.Length == verts.Length;
             bool hasUVs = uvs != null && uvs.Length == verts.Length;
 
-            // 월드→로컬 변환
-            var worldToLocal = rectTransform.worldToLocalMatrix;
-            var particleToWorld = transform.localToWorldMatrix;
-
             for (int i = 0; i < verts.Length; i++)
             {
-                // 파티클 로컬 → 월드 → UI 로컬
-                Vector3 worldPos = particleToWorld.MultiplyPoint3x4(verts[i]);
-                Vector3 localPos = worldToLocal.MultiplyPoint3x4(worldPos);
+                // BakeMesh는 카메라 기준 빌보드 → XY만 사용, Z=0 (UI 평면)
+                Vector3 v = verts[i];
+                Vector3 localPos = new Vector3(v.x, v.y, 0f);
 
                 Color32 c = hasColors ? colors[i] : new Color32(255, 255, 255, 255);
                 Vector2 uv = hasUVs ? uvs[i] : Vector2.zero;

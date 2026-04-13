@@ -207,6 +207,11 @@ namespace BalloonFlow
             _isTransitioning = false;
             _currentScene = SceneManager.GetActiveScene().name;
 
+            // 모바일 빌드: Debug.Log 비활성화 (프레임 드랍 주범)
+#if !UNITY_EDITOR
+            Debug.unityLogger.logEnabled = false;
+#endif
+
             // 프레임 타겟 설정 (저사양 디바이스 안정성)
             Application.targetFrameRate = 60;
             QualitySettings.vSyncCount = 0;
@@ -539,6 +544,17 @@ namespace BalloonFlow
             // ── 현재 레벨 표시 ──
             GUI.backgroundColor = new Color(0.2f, 0.2f, 0.2f);
             GUI.Button(new Rect(x, y, w, h * 0.6f), $"Current: Level {currentLevel}", _debugBtnStyle);
+            y += h * 0.6f + gap;
+
+            // ── RESET USER DATA ──
+            GUI.backgroundColor = new Color(1f, 0.5f, 0f);
+            if (GUI.Button(new Rect(x, y, w, h), "RESET USER DATA", _debugBtnStyle))
+            {
+                PlayerPrefs.DeleteAll();
+                PlayerPrefs.Save();
+                // 다음 실행 시 모든 매니저가 초기값으로 로드 (골드, 하트, 레벨, 부스터 전부)
+                LoadScene(SCENE_LOBBY);
+            }
 
             GUI.backgroundColor = Color.white;
         }

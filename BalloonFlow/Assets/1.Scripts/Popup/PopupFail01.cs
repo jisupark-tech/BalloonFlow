@@ -16,6 +16,7 @@ namespace BalloonFlow
 
         [Header("[코스트 텍스트]")]
         [SerializeField] private TMP_Text _costText;
+        [SerializeField] private TMP_Text _costTextOutline;
 
         [Header("[골드 표시]")]
         [SerializeField] private TMP_Text _txtGold;
@@ -100,9 +101,11 @@ namespace BalloonFlow
 
         private void UpdateCostDisplay()
         {
-            if (_costText == null || !ContinueHandler.HasInstance) return;
+            if (!ContinueHandler.HasInstance) return;
             int cost = ContinueHandler.Instance.GetContinueCost();
-            _costText.text = cost <= 0 ? "FREE" : cost.ToString("N0");
+            string costStr = cost <= 0 ? "FREE" : cost.ToString("N0");
+            if (_costText != null) _costText.text = costStr;
+            if (_costTextOutline != null) _costTextOutline.text = costStr;
         }
     }
 }
