@@ -222,8 +222,8 @@ TextureImporter:
       name: Circle03_2
       rect:
         serializedVersion: 2
-        x: 0
-        y: 0
+        x: 256
+        y: 128
         width: 128
         height: 128
       alignment: 0
@@ -244,7 +244,7 @@ TextureImporter:
       name: Circle03_3
       rect:
         serializedVersion: 2
-        x: 128
+        x: 0
         y: 0
         width: 128
         height: 128
@@ -258,6 +258,50 @@ TextureImporter:
       bones: []
       spriteID: a0a27cb7649257341adb7a5130c62087
       internalID: -2109933102
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Circle03_4
+      rect:
+        serializedVersion: 2
+        x: 128
+        y: 0
+        width: 128
+        height: 128
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 0ffb29c1caf968f499e0fb1fd6e09f7b
+      internalID: 316235292
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Circle03_5
+      rect:
+        serializedVersion: 2
+        x: 256
+        y: 0
+        width: 128
+        height: 128
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: b1b89512ba930a44cabc9d7fa2541537
+      internalID: 329988994
       vertices: []
       indices: 
       edges: []
@@ -282,6 +326,8 @@ TextureImporter:
       Circle03_1: -549298431
       Circle03_2: -93323299
       Circle03_3: -2109933102
+      Circle03_4: 316235292
+      Circle03_5: 329988994
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
