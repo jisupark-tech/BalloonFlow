@@ -911,10 +911,13 @@ namespace BalloonFlow
             {
                 case 1: // 진한 톤 (미세 변주)
                     Color.RGBToHSV(baseColor, out float h1, out float s1, out float v1);
-                    return Color.HSVToRGB(h1, Mathf.Min(s1 + 0.03f, 1f), Mathf.Max(v1 - 0.03f, 0.2f));
+                    // 그레이스케일(s≈0)은 saturation 변주 생략 (h=0 + s>0 = 빨강 끼어들음)
+                    float newS1 = s1 < 0.01f ? 0f : Mathf.Min(s1 + 0.03f, 1f);
+                    return Color.HSVToRGB(h1, newS1, Mathf.Max(v1 - 0.03f, 0.2f));
                 case 2: // 연한 톤 (미세 변주)
                     Color.RGBToHSV(baseColor, out float h2, out float s2, out float v2);
-                    return Color.HSVToRGB(h2, Mathf.Max(s2 - 0.04f, 0.1f), Mathf.Min(v2 + 0.03f, 1f));
+                    float newS2 = s2 < 0.01f ? 0f : Mathf.Max(s2 - 0.04f, 0.1f);
+                    return Color.HSVToRGB(h2, newS2, Mathf.Min(v2 + 0.03f, 1f));
                 default: // 기본 톤
                     return baseColor;
             }

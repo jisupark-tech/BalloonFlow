@@ -81,7 +81,7 @@ namespace BalloonFlow
             if (_animator != null)
                 _animator.SetBool(_animPop, true);
 
-            // 팝 이펙트 활성화 + 풍선 색상 적용 (밝은/어두운 변주)
+            // 팝 이펙트 활성화 + 풍선 원본 색상 적용 (변주 없이 단일 색)
             if (_popEffect != null)
             {
                 _popEffect.SetActive(true);
@@ -91,9 +91,7 @@ namespace BalloonFlow
                     int ci = Mathf.Clamp(_color, 0, BalloonController.BalloonColors.Length - 1);
                     Color baseColor = BalloonController.BalloonColors[ci];
                     var main = ps.main;
-                    UnityEngine.Color bright = UnityEngine.Color.Lerp(baseColor, UnityEngine.Color.white, 0.3f);
-                    UnityEngine.Color dark = UnityEngine.Color.Lerp(baseColor, UnityEngine.Color.black, 0.15f);
-                    main.startColor = new ParticleSystem.MinMaxGradient(dark, bright);
+                    main.startColor = baseColor;
                 }
             }
         }
