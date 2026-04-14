@@ -1513,45 +1513,43 @@ namespace BalloonFlow
                 && (retData.gimmickType == GimmickPinata || retData.gimmickType == GimmickPinataBox);
             string returnKey = returnToPinata ? PinataPoolKey : PoolKey;
 
-            // 1) 파티클 분리 → 월드 루트에서 독립 재생
+            // 1) 파티클 미리 분리 (스케일업이 파티클 transform에 영향 안 주도록)
             Transform detachedEffect = null;
             if (identifier != null)
                 detachedEffect = identifier.DetachPopEffect();
 
-            // 2) 파티클 활성화 (분리 후 호출해야 풍선과 무관하게 재생)
-            if (identifier != null)
-                identifier.MarkPopped();
-
-            // 3) 파티클 재생 (lifetime/duration은 프리팹 설정 사용)
-            float popDuration = 1.5f;
-            if (detachedEffect != null)
-            {
-                var ps = detachedEffect.GetComponent<ParticleSystem>();
-                if (ps != null)
-                {
-                    var main = ps.main;
-                    main.loop = false;
-                    ps.Clear();
-                    ps.Play();
-                    popDuration = main.duration + main.startLifetime.constantMax;
-                }
-            }
-
-            // 4) 풍선 스케일 커짐 → 숨기고 즉시 풀 반환
+            // 2) 풍선 스케일업 → 완료 후 파티클 재생 + 풍선 풀 반환
+            float scaleUpDuration = GameManager.Instance.Board.popScaleDuration;
+            float scaleUpMult = GameManager.Instance.Board.popScaleMultiplier;
             Sequence seq = DOTween.Sequence();
-            seq.Append(obj.transform.DOScale(Vector3.one * savedScale * 1.5f, 0.3f).SetEase(Ease.OutQuad));
-            seq.OnComplete(() =>
+            seq.Append(obj.transform.DOScale(Vector3.one * savedScale * scaleUpMult, scaleUpDuration).SetEase(Ease.OutQuad));
+            seq.AppendCallback(() =>
             {
+                // 스케일업 완료 시점에 팝 트리거 (애니메이터 Pop + 파티클 활성화 + 색상)
+                if (identifier != null)
+                    identifier.MarkPopped();
+
+                float popDuration = 1.5f;
+                if (detachedEffect != null)
+                {
+                    var ps = detachedEffect.GetComponent<ParticleSystem>();
+                    if (ps != null)
+                    {
+                        var main = ps.main;
+                        main.loop = false;
+                        ps.Clear();
+                        ps.Play();
+                        popDuration = main.duration + main.startLifetime.constantMax;
+                    }
+                    StartCoroutine(ReturnParticleDelayed(detachedEffect, identifier, popDuration));
+                }
+
                 if (obj != null && ObjectPoolManager.HasInstance)
                 {
                     obj.transform.localScale = Vector3.one * savedScale;
                     ObjectPoolManager.Instance.Return(returnKey, obj);
                 }
             });
-
-            // 5) 파티클은 자체 duration + lifetime 만큼 후 자동 정리
-            if (detachedEffect != null)
-                StartCoroutine(ReturnParticleDelayed(detachedEffect, identifier, popDuration));
         }
 
         /// <summary>분리된 파티클을 일정 시간 후 풍선에 복귀 + 비활성화.</summary>
