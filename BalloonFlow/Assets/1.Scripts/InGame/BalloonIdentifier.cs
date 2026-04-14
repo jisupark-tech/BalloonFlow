@@ -27,8 +27,10 @@ namespace BalloonFlow
         [SerializeField] private GameObject _popEffect;
 
         [Header("[색상 적용 대상 — Inspector에서 할당]")]
-        [Tooltip("색상 적용할 Renderer만 드래그")]
+        [Tooltip("색상 적용할 Mesh Renderer만 드래그 (ParticleSystem은 아래 _colorParticles에)")]
         [SerializeField] private Renderer[] _colorRenderers;
+        [Tooltip("색상 적용할 ParticleSystem (main.startColor로 적용, material은 건드리지 않음)")]
+        [SerializeField] private ParticleSystem[] _colorParticles;
         [Tooltip("기반 Material (BalloonShared). 복제하여 색상만 변경")]
         [SerializeField] private Material _baseMaterial;
 
@@ -155,6 +157,16 @@ namespace BalloonFlow
                 {
                     _colorRenderers[i].enabled = true;
                     _colorRenderers[i].sharedMaterial = mat;
+                }
+            }
+
+            if (_colorParticles != null)
+            {
+                for (int i = 0; i < _colorParticles.Length; i++)
+                {
+                    if (_colorParticles[i] == null) continue;
+                    var main = _colorParticles[i].main;
+                    main.startColor = color;
                 }
             }
         }

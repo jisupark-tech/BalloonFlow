@@ -1522,17 +1522,18 @@ namespace BalloonFlow
             if (identifier != null)
                 identifier.MarkPopped();
 
-            // 3) 파티클 duration 강제 설정
+            // 3) 파티클 재생 (lifetime/duration은 프리팹 설정 사용)
+            float popDuration = 1.5f;
             if (detachedEffect != null)
             {
                 var ps = detachedEffect.GetComponent<ParticleSystem>();
                 if (ps != null)
                 {
                     var main = ps.main;
-                    main.startLifetime = 1.5f;
                     main.loop = false;
                     ps.Clear();
                     ps.Play();
+                    popDuration = main.duration + main.startLifetime.constantMax;
                 }
             }
 
@@ -1548,9 +1549,9 @@ namespace BalloonFlow
                 }
             });
 
-            // 5) 파티클은 독립적으로 1.5초 후 자동 정리
+            // 5) 파티클은 자체 duration + lifetime 만큼 후 자동 정리
             if (detachedEffect != null)
-                StartCoroutine(ReturnParticleDelayed(detachedEffect, identifier, 1.5f));
+                StartCoroutine(ReturnParticleDelayed(detachedEffect, identifier, popDuration));
         }
 
         /// <summary>분리된 파티클을 일정 시간 후 풍선에 복귀 + 비활성화.</summary>
