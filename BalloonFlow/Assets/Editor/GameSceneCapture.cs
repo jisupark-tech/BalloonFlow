@@ -2,7 +2,9 @@
 using System;
 using System.IO;
 using UnityEditor;
+using UnityEditor.ShortcutManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace BalloonFlow.Editor
 {
@@ -10,37 +12,40 @@ namespace BalloonFlow.Editor
     {
         private const string CaptureDirName = "BalloonFlow_Shot";
 
-        [MenuItem("BalloonFlow/Capture Game Scene #F12", false, 210)]
+        [MenuItem("BalloonFlow/Capture Game Scene", false, 210)]
+        [Shortcut("BalloonFlow/Capture Game Scene", KeyCode.F12, ShortcutModifiers.Shift)]
         public static void CaptureGameScene()
         {
             string dir = ResolveCaptureDirectory();
             Directory.CreateDirectory(dir);
 
-            string fileName = $"BalloonFlow_{DateTime.Now:yyyyMMdd_HHmmss}.png";
+            string sceneName = SceneManager.GetActiveScene().name;
+            if (string.IsNullOrEmpty(sceneName)) sceneName = "Scene";
+            string fileName = $"BalloonFlow_{sceneName}_{DateTime.Now:yyyyMMdd_HHmmss}.png";
             string fullPath = Path.Combine(dir, fileName);
 
-            EditorApplication.ExecuteMenuItem("Window/General/Game");
+            FocusGameView();
 
-            Texture2D tex = null;
-            try
+            ScreenCapture.CaptureScreenshot(fullPath);
+            Debug.Log($"[BalloonFlow] Capture scheduled: {fullPath}");
+
+            double deadline = EditorApplication.timeSinceStartup + 3.0;
+            EditorApplication.CallbackFunction check = null;
+            check = () =>
             {
-                tex = ScreenCapture.CaptureScreenshotAsTexture();
-                if (tex == null || tex.width <= 1)
+                if (File.Exists(fullPath))
                 {
-                    ScreenCapture.CaptureScreenshot(fullPath);
-                    Debug.Log($"[BalloonFlow] Capture scheduled (next frame): {fullPath}");
-                }
-                else
-                {
-                    File.WriteAllBytes(fullPath, tex.EncodeToPNG());
-                    Debug.Log($"[BalloonFlow] Captured: {fullPath} ({tex.width}x{tex.height})");
+                    EditorApplication.update -= check;
+                    Debug.Log($"[BalloonFlow] Captured: {fullPath}");
                     EditorUtility.RevealInFinder(fullPath);
                 }
-            }
-            finally
-            {
-                if (tex != null) UnityEngine.Object.DestroyImmediate(tex);
-            }
+                else if (EditorApplication.timeSinceStartup > deadline)
+                {
+                    EditorApplication.update -= check;
+                    Debug.LogWarning($"[BalloonFlow] Capture timeout. Ensure Play mode is running. Target: {fullPath}");
+                }
+            };
+            EditorApplication.update += check;
         }
 
         [MenuItem("BalloonFlow/Open Capture Folder", false, 211)]
@@ -51,10 +56,21 @@ namespace BalloonFlow.Editor
             EditorUtility.RevealInFinder(dir + Path.DirectorySeparatorChar);
         }
 
+        private static void FocusGameView()
+        {
+            var gameViewType = Type.GetType("UnityEditor.PlayModeView,UnityEditor")
+                               ?? Type.GetType("UnityEditor.GameView,UnityEditor");
+            if (gameViewType != null)
+            {
+                var window = EditorWindow.GetWindow(gameViewType, false, null, false);
+                if (window != null) window.Focus();
+            }
+        }
+
         private static string ResolveCaptureDirectory()
         {
             string projectRoot = Path.GetDirectoryName(Application.dataPath);
-            string parent = Path.GetDirectoryName(projectRoot);
+            string parent = projectRoot != null ? Path.GetDirectoryName(projectRoot) : null;
             string grandparent = parent != null ? Path.GetDirectoryName(parent) : null;
 
             foreach (var candidate in new[] { grandparent, parent, projectRoot })
