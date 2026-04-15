@@ -67,6 +67,13 @@ namespace BalloonFlow
         [Range(-2f, 2f)]
         public float dartPathOffset = -0.15f;
 
+        [Tooltip("비행 중 다트 스케일을 풍선 크기로 보간. 끄면 발사 시 스케일 유지. 동적 반영. (default: ON)")]
+        public bool dartScaleLerpToBalloon = true;
+
+        [Tooltip("비행 보간 강도. 0=원본 스케일 유지, 1=풍선 스케일에 정확히 맞춤. 동적 반영. (default: 1)")]
+        [Range(0f, 1f)]
+        public float dartScaleLerpStrength = 1f;
+
         [Header("[Cave 스케일 — 면수별 (FadeStart/FadeEnd, 전체 경로 대비 비율)]")]
         [Tooltip("1면(일자) Cave Fade Start. 클수록 안쪽에서 스케일 변화. (default: 0.0315)")]
         public float caveFadeStart1Side = 0.0315f;

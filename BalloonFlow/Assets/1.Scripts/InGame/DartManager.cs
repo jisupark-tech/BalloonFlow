@@ -60,6 +60,8 @@ namespace BalloonFlow
             public int color;
             public float elapsed;
             public float duration;
+            public Vector3 startScale;
+            public Vector3 targetScale;
         }
 
         #endregion
@@ -672,7 +674,11 @@ namespace BalloonFlow
                 targetBalloonId = targetBalloonId,
                 color = color,
                 elapsed = 0f,
-                duration = FlightTime
+                duration = FlightTime,
+                startScale = dartObj.transform.localScale,
+                targetScale = BalloonController.HasInstance
+                    ? BalloonController.Instance.GetBalloonWorldScale(targetBalloonId)
+                    : dartObj.transform.localScale
             };
 
             _activeProjectiles.Add(proj);
@@ -787,7 +793,9 @@ namespace BalloonFlow
                         targetBalloonId = targetId,
                         color = color,
                         elapsed = 0f,
-                        duration = FlightTime
+                        duration = FlightTime,
+                        startScale = dartObj.transform.localScale,
+                        targetScale = BalloonController.Instance.GetBalloonWorldScale(targetId)
                     };
                     _activeProjectiles.Add(proj);
 
@@ -812,6 +820,15 @@ namespace BalloonFlow
 
                 DartProjectile proj = _activeProjectiles[i];
                 proj.elapsed += Time.deltaTime;
+
+                if (proj.gameObject != null && proj.duration > 0f
+                    && GameManager.HasInstance && GameManager.Instance.Board.dartScaleLerpToBalloon)
+                {
+                    float t = Mathf.Clamp01(proj.elapsed / proj.duration);
+                    Vector3 desired = Vector3.Lerp(proj.startScale, proj.targetScale, t);
+                    float strength = Mathf.Clamp01(GameManager.Instance.Board.dartScaleLerpStrength);
+                    proj.gameObject.transform.localScale = Vector3.Lerp(proj.startScale, desired, strength);
+                }
 
                 if (proj.elapsed >= proj.duration)
                 {
@@ -980,6 +997,7 @@ namespace BalloonFlow
         {
             if (obj != null && ObjectPoolManager.HasInstance)
             {
+                obj.transform.localScale = Vector3.one;
                 ObjectPoolManager.Instance.Return(DART_POOL_KEY, obj);
             }
         }

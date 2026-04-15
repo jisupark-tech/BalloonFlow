@@ -4812,23 +4812,33 @@ namespace BalloonFlow
 
         private void SaveLevelToDatabase(int levelId)
         {
-            if (_targetDB == null)
+            string path = DB_PATHS[_activeDBTab];
+            LevelDatabase db = _activeDBTab == 1 ? _targetDB_AI
+                              : _activeDBTab == 2 ? _targetDB_Transform
+                              : _targetDB;
+            if (db == null)
             {
-                string path = "Assets/Resources/LevelDatabase.asset";
-                _targetDB = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
-                if (_targetDB == null)
-                { _targetDB = ScriptableObject.CreateInstance<LevelDatabase>(); AssetDatabase.CreateAsset(_targetDB, path); }
+                db = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
+                if (db == null)
+                { db = ScriptableObject.CreateInstance<LevelDatabase>(); AssetDatabase.CreateAsset(db, path); }
+                switch (_activeDBTab)
+                {
+                    case 1: _targetDB_AI = db; break;
+                    case 2: _targetDB_Transform = db; break;
+                    default: _targetDB = db; break;
+                }
             }
             var config = BuildLevelConfig();
             config.levelId = levelId;
-            var levels = _targetDB.levels != null ? new List<LevelConfig>(_targetDB.levels) : new List<LevelConfig>();
+            var levels = db.levels != null ? new List<LevelConfig>(db.levels) : new List<LevelConfig>();
             int idx = levels.FindIndex(l => l.levelId == levelId);
             if (idx >= 0) levels[idx] = config; else levels.Add(config);
             levels.Sort((a, b) => a.levelId.CompareTo(b.levelId));
-            _targetDB.levels = levels.ToArray();
-            EditorUtility.SetDirty(_targetDB);
+            db.levels = levels.ToArray();
+            EditorUtility.SetDirty(db);
             AssetDatabase.SaveAssets();
-            SetStatus($"Saved Level {levelId} to DB");
+            string dbName = System.IO.Path.GetFileNameWithoutExtension(path);
+            SetStatus($"Saved Level {levelId} to {dbName}");
             RefreshLevelList();
         }
 

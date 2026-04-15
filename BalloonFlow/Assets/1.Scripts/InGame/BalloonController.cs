@@ -331,6 +331,17 @@ namespace BalloonFlow
             return Vector3.zero;
         }
 
+        /// <summary>풍선 오브젝트의 현재 localScale. 오브젝트 없으면 추정 스케일 반환.</summary>
+        public Vector3 GetBalloonWorldScale(int balloonId)
+        {
+            if (_balloonObjects.TryGetValue(balloonId, out GameObject obj) && obj != null)
+                return obj.transform.localScale;
+            float scaleMult = _levelSafeCalculated
+                ? Mathf.Max(_levelSafeWm, _levelSafeHm)
+                : (GameManager.HasInstance ? Mathf.Max(GameManager.Instance.Board.balloonFieldWidthMult, GameManager.Instance.Board.balloonFieldHeightMult) : 1f);
+            return Vector3.one * _balloonScale * scaleMult;
+        }
+
         /// <summary>
         /// Returns all non-popped balloons matching the specified color.
         /// Hidden balloons whose color is concealed are excluded until revealed.
