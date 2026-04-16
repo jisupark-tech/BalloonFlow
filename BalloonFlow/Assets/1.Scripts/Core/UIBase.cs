@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 using DG.Tweening;
 
 namespace BalloonFlow
@@ -39,6 +40,16 @@ namespace BalloonFlow
         protected virtual void Awake()
         {
             _canvasGroup = GetComponent<CanvasGroup>();
+            InjectButtonScaleEffects();
+        }
+
+        private void InjectButtonScaleEffects()
+        {
+            foreach (var btn in GetComponentsInChildren<Button>(true))
+            {
+                if (btn.GetComponent<ButtonScaleEffect>() == null)
+                    btn.gameObject.AddComponent<ButtonScaleEffect>();
+            }
         }
 
         /// <summary>초기화. 필요한 데이터 전달 시 사용.</summary>

@@ -23,6 +23,7 @@ namespace BalloonFlow
         [Header("[Preset Icons — Inspector에서 할당]")]
         [SerializeField] private Sprite _sprIconCancel;
         [SerializeField] private Sprite _sprIconWifi;
+        [SerializeField] private Sprite _sprIconCheck;
 
         protected override void Awake()
         {
@@ -82,6 +83,22 @@ namespace BalloonFlow
         public void ShowNoInternet(string description = "No internet connection. Please check your network.")
         {
             Show("Connection Error", description, _sprIconWifi);
+        }
+
+        /// <summary>결제 성공 팝업 (iconCheck). OK 누르면 onConfirm 콜백.</summary>
+        public void ShowPurchaseSuccess(string description = "Purchase successful!", System.Action onConfirm = null)
+        {
+            Show("Success", description, _sprIconCheck);
+
+            if (_frame != null && _frame.BtnSingle != null && onConfirm != null)
+            {
+                _frame.BtnSingle.onClick.RemoveAllListeners();
+                _frame.BtnSingle.onClick.AddListener(() =>
+                {
+                    onConfirm();
+                    CloseUI();
+                });
+            }
         }
     }
 }

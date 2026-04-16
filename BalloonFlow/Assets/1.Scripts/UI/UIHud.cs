@@ -325,6 +325,18 @@ namespace BalloonFlow
                     if (BoosterManager.Instance.PurchaseBooster(boosterType))
                     {
                         RefreshBoosterCounts();
+
+                        // 결제 성공 → 성공 팝업 → 로비씬 이동 (아이템 획득 연출)
+                        if (UIManager.HasInstance)
+                        {
+                            var success = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+                            if (success != null)
+                                success.ShowPurchaseSuccess("Purchase successful!", () =>
+                                {
+                                    if (GameManager.HasInstance)
+                                        GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY);
+                                });
+                        }
                     }
                     else
                     {

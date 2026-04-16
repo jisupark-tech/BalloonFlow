@@ -412,6 +412,10 @@ namespace BalloonFlow
 
         #region Swipe Drag
 
+        private float _dragStartScreenY;
+        private bool _dragDirectionLocked;
+        private bool _dragIsHorizontal;
+
         private void HandleSwipeDrag()
         {
             if (_pageContainer == null) return;
@@ -439,16 +443,28 @@ namespace BalloonFlow
             {
                 _isDragging = true;
                 _dragStartScreenX = screenX;
+                _dragStartScreenY = screenY;
                 _dragLastScreenX = screenX;
                 _dragStartPageX = _pageContainer.anchoredPosition.x;
+                _dragDirectionLocked = false;
+                _dragIsHorizontal = false;
                 _pageTween?.Kill();
             }
             else if (touching && _isDragging)
             {
-                _dragLastScreenX = screenX; // 매 프레임 마지막 위치 갱신
+                _dragLastScreenX = screenX;
 
                 float deltaX = Mathf.Abs(screenX - _dragStartScreenX);
-                if (deltaX < 15f) return; // 탭과 구분
+                float deltaY = Mathf.Abs(screenY - _dragStartScreenY);
+
+                // 방향 판정: 첫 15px 이동 시 가로/세로 결정
+                if (!_dragDirectionLocked && (deltaX > 15f || deltaY > 15f))
+                {
+                    _dragDirectionLocked = true;
+                    _dragIsHorizontal = deltaX > deltaY;
+                }
+
+                if (!_dragDirectionLocked || !_dragIsHorizontal) return;
 
                 float deltaScreen = screenX - _dragStartScreenX;
                 float scale = _pageWidth / (Screen.width > 0 ? Screen.width : 1242f);
@@ -459,7 +475,15 @@ namespace BalloonFlow
             else if (!touching && _isDragging)
             {
                 _isDragging = false;
-                float dragDelta = _dragLastScreenX - _dragStartScreenX; // 마지막 위치 사용
+
+                if (!_dragIsHorizontal)
+                {
+                    // 세로 드래그였으면 페이지 이동 없이 복귀
+                    AnimateToPage(_currentPageIndex);
+                    return;
+                }
+
+                float dragDelta = _dragLastScreenX - _dragStartScreenX;
                 float threshold = Screen.width * SWIPE_THRESHOLD_RATIO;
 
                 if (Mathf.Abs(dragDelta) < 15f)
