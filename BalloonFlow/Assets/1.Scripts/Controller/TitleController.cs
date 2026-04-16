@@ -33,7 +33,10 @@ namespace BalloonFlow
                 var _popupCanvas = GameObject.Find("PopupCanvas");
                 if (_popupCanvas == null) _popupCanvas = CreateCanvas("PopupCanvas", 10);
 
-                UIManager.Instance.SetSceneCanvas(_uiCanvas.transform, _popupCanvas.transform);
+                var _effectCanvas = GameObject.Find("EffectCanvas");
+                if (_effectCanvas == null) _effectCanvas = CreateCanvas("EffectCanvas", 15);
+
+                UIManager.Instance.SetSceneCanvas(_uiCanvas.transform, _popupCanvas.transform, _effectCanvas.transform);
                 UIManager.Instance.OpenUI<UITitle>("UI/UITitle");
             }
         }

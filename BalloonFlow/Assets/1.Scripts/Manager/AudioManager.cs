@@ -209,12 +209,10 @@ namespace BalloonFlow
 
         private void HandleHolderTapped(OnHolderTapped evt)
         {
-            PlaySFX(_sfxNormalTouch);
         }
 
         private void HandleHolderClickAnim(OnHolderClickAnim evt)
         {
-            PlaySFX(_sfxNormalTouch);
         }
 
         private void HandleCoinFlyLanded(OnCoinFlyLanded evt)

@@ -262,10 +262,17 @@ namespace BalloonFlow
                 return;
             }
 
-            // 미해금 → 해금 팝업
+            // 미해금 → 토스트
             if (!BoosterManager.Instance.IsBoosterUnlocked(boosterType))
             {
-                ShowUnlockPopup(boosterType);
+                int unlockLevel = boosterType switch
+                {
+                    BoosterManager.SELECT_TOOL  => 9,
+                    BoosterManager.SHUFFLE      => 12,
+                    BoosterManager.COLOR_REMOVE => 15,
+                    _                           => 1
+                };
+                ShowToast($"Unlocks at Level {unlockLevel}");
                 return;
             }
 
@@ -382,6 +389,19 @@ namespace BalloonFlow
 
         public void SetHolderInfo(int _onRail, int _max) { }
         public void SetMoveCount(int _used, int _total) { }
+
+        #endregion
+
+        #region Toast
+
+        private void ShowToast(string message)
+        {
+            if (!UIManager.HasInstance) return;
+            Transform parent = UIManager.Instance.PopupTr ?? UIManager.Instance.UiTr;
+            if (parent == null) return;
+
+            TxtToast.Spawn(parent, message, new Vector2(0f, -1022f));
+        }
 
         #endregion
 

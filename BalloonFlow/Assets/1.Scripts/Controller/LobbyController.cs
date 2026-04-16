@@ -51,7 +51,10 @@ namespace BalloonFlow
                     popupCanvas = CreateCanvas("PopupCanvas", 10);
                 }
 
-                UIManager.Instance.SetSceneCanvas(uiCanvas.transform, popupCanvas.transform);
+                var effectCanvas = GameObject.Find("EffectCanvas");
+                if (effectCanvas == null) effectCanvas = CreateCanvas("EffectCanvas", 15);
+
+                UIManager.Instance.SetSceneCanvas(uiCanvas.transform, popupCanvas.transform, effectCanvas.transform);
             }
 
             LoadUI();
@@ -276,15 +279,7 @@ namespace BalloonFlow
             Transform parent = UIManager.Instance.PopupTr ?? UIManager.Instance.UiTr;
             if (parent == null) return;
 
-            var prefab = Resources.Load<GameObject>("Popup/TxtToast");
-            if (prefab == null) return;
-
-            var go = Instantiate(prefab, parent);
-            var txt = go.GetComponentInChildren<TMPro.TMP_Text>();
-            if (txt != null) txt.text = message;
-
-            // 2초 후 자동 소멸
-            Destroy(go, 2f);
+            TxtToast.Spawn(parent, message, Vector2.zero);
         }
 
         #endregion

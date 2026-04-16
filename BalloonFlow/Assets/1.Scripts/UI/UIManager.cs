@@ -22,6 +22,9 @@ namespace BalloonFlow
         [Header("[Popup Canvas — 팝업 부모 (UI 위에 렌더링)]")]
         public Transform PopupTr;
 
+        [Header("[Effect Canvas — 팝업 위에 렌더링되는 이펙트 전용]")]
+        public Transform EffectTr;
+
         [Header("[Fade — 기본 전환 이미지 (선택)]")]
         [SerializeField] private Sprite _fadeImage;
 
@@ -44,10 +47,11 @@ namespace BalloonFlow
         /// UICanvas와 PopupCanvas를 동시에 설정.
         /// PopupCanvas가 없으면 UICanvas를 공유.
         /// </summary>
-        public void SetSceneCanvas(Transform _uiCanvasTr, Transform _popupCanvasTr = null)
+        public void SetSceneCanvas(Transform _uiCanvasTr, Transform _popupCanvasTr = null, Transform _effectCanvasTr = null)
         {
             UiTr = _uiCanvasTr;
             PopupTr = _popupCanvasTr != null ? _popupCanvasTr : _uiCanvasTr;
+            EffectTr = _effectCanvasTr != null ? _effectCanvasTr : PopupTr;
         }
 
         #endregion

@@ -182,7 +182,21 @@ namespace BalloonFlow
                 _popupCanvasGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
             }
 
-            UIManager.Instance.SetSceneCanvas(_canvasGO.transform, _popupCanvasGO.transform);
+            // EffectCanvas: 팝업 위에 렌더링되는 파티클 이펙트 전용
+            var _effectCanvasGO = GameObject.Find("EffectCanvas");
+            if (_effectCanvasGO == null)
+            {
+                _effectCanvasGO = new GameObject("EffectCanvas");
+                var _effectCanvas = _effectCanvasGO.AddComponent<Canvas>();
+                _effectCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                _effectCanvas.sortingOrder = 15;
+                var _effectScaler = _effectCanvasGO.AddComponent<UnityEngine.UI.CanvasScaler>();
+                _effectScaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                _effectScaler.referenceResolution = new Vector2(1242f, 2688f);
+                _effectScaler.matchWidthOrHeight = 0.5f;
+            }
+
+            UIManager.Instance.SetSceneCanvas(_canvasGO.transform, _popupCanvasGO.transform, _effectCanvasGO.transform);
 
             // EventSystem이 없으면 UI 클릭 불가 — 생성
             if (UnityEngine.EventSystems.EventSystem.current == null)
