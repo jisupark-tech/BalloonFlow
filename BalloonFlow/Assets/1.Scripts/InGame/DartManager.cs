@@ -539,22 +539,27 @@ namespace BalloonFlow
             int slotCount = rail.SlotCount;
             if (slotCount == 0) return;
 
+            bool freeFireMode = GameManager.HasInstance && GameManager.Instance.Board.dartFreeFireMode;
+
             // Step 1: 보관함별 가장 선행(낮은 dartId) 다트 찾기
             _holderFrontDartId.Clear();
             _blockedHolders.Clear();
 
-            for (int s = 0; s < slotCount; s++)
+            if (!freeFireMode)
             {
-                RailManager.SlotData sd = rail.GetSlot(s);
-                if (sd.dartColor < 0) continue;
-                if (!_holderFrontDartId.TryGetValue(sd.holderId, out int existingId) ||
-                    sd.dartId < existingId)
+                for (int s = 0; s < slotCount; s++)
                 {
-                    _holderFrontDartId[sd.holderId] = sd.dartId;
+                    RailManager.SlotData sd = rail.GetSlot(s);
+                    if (sd.dartColor < 0) continue;
+                    if (!_holderFrontDartId.TryGetValue(sd.holderId, out int existingId) ||
+                        sd.dartId < existingId)
+                    {
+                        _holderFrontDartId[sd.holderId] = sd.dartId;
+                    }
                 }
             }
 
-            // Step 2: 스캔 + 순차 공격
+            // Step 2: 스캔 + 공격
             int fired = 0;
 
             for (int s = 0; s < slotCount && fired < MAX_FIRES_PER_FRAME; s++)
@@ -564,14 +569,17 @@ namespace BalloonFlow
                 RailManager.SlotData slot = rail.GetSlot(slotIdx);
                 if (slot.dartColor < 0) continue;
 
-                // 같은 보관함의 선행 다트가 막혔으면 후행도 차단
-                if (_blockedHolders.Contains(slot.holderId)) continue;
-
-                // 선행 다트(가장 낮은 dartId)만 공격 가능
-                if (_holderFrontDartId.TryGetValue(slot.holderId, out int frontId) &&
-                    slot.dartId != frontId)
+                if (!freeFireMode)
                 {
-                    continue;
+                    // 같은 보관함의 선행 다트가 막혔으면 후행도 차단
+                    if (_blockedHolders.Contains(slot.holderId)) continue;
+
+                    // 선행 다트(가장 낮은 dartId)만 공격 가능
+                    if (_holderFrontDartId.TryGetValue(slot.holderId, out int frontId) &&
+                        slot.dartId != frontId)
+                    {
+                        continue;
+                    }
                 }
 
                 Vector3 slotPos = rail.GetSlotWorldPosition(slotIdx);
@@ -580,8 +588,8 @@ namespace BalloonFlow
                 int targetId = DirectionalTargeting.FindTarget(slotPos, fireDir, slot.dartColor);
                 if (targetId < 0)
                 {
-                    // 선행 다트가 공격 못 함 → 같은 보관함 전체 차단
-                    _blockedHolders.Add(slot.holderId);
+                    if (!freeFireMode)
+                        _blockedHolders.Add(slot.holderId);
                     continue;
                 }
 
@@ -718,17 +726,21 @@ namespace BalloonFlow
                 if (dart.dartColor < 0) continue;
 
                 // Skip if another dart from same holder with lower ID exists (sequential firing)
-                bool blocked = false;
-                for (int j = 0; j < darts.Count; j++)
+                bool freeMode = GameManager.HasInstance && GameManager.Instance.Board.dartFreeFireMode;
+                if (!freeMode)
                 {
-                    if (i == j) continue;
-                    if (darts[j].holderId == dart.holderId && darts[j].dartId < dart.dartId && darts[j].dartColor >= 0)
+                    bool blocked = false;
+                    for (int j = 0; j < darts.Count; j++)
                     {
-                        blocked = true;
-                        break;
+                        if (i == j) continue;
+                        if (darts[j].holderId == dart.holderId && darts[j].dartId < dart.dartId && darts[j].dartColor >= 0)
+                        {
+                            blocked = true;
+                            break;
+                        }
                     }
+                    if (blocked) continue;
                 }
-                if (blocked) continue;
 
                 Vector3 dartPos = rail.GetPositionAtDistance(dart.progress);
                 Vector3 fireDir = rail.GetDartFiringDirection(dart.dartId);

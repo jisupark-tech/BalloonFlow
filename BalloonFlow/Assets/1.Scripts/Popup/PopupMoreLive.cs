@@ -94,8 +94,7 @@ namespace BalloonFlow
             if (!LifeManager.HasInstance) return;
 
             int current = LifeManager.Instance.CurrentLives;
-            int max = LifeManager.Instance.MaxLives;
-            string lifeStr = $"{current}/{max}";
+            string lifeStr = $"{current}";
 
             if (_txtLife != null) _txtLife.text = lifeStr;
             if (_txtLifeOutline != null) _txtLifeOutline.text = lifeStr;

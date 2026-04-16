@@ -14,8 +14,8 @@ namespace BalloonFlow
     {
         #region Constants
 
-        private const int MIN_COIN_COUNT = 5;
-        private const int MAX_COIN_COUNT = 8;
+        private const int MIN_COIN_COUNT = 20;
+        private const int MAX_COIN_COUNT = 25;
         private const int SCORE_PER_COIN_STEP = 500;
 
         #endregion
@@ -28,10 +28,22 @@ namespace BalloonFlow
         [SerializeField] private Button _btnHome;
         [SerializeField] private Button _btnExit;
 
+        [Header("[난이도별 비주얼]")]
+        [SerializeField] private Image _imageLight;
+        [SerializeField] private Image _imageStage;
+        [SerializeField] private Sprite _sprStageNormal;
+        [SerializeField] private Sprite _sprStageHard;
+        [SerializeField] private Sprite _sprStageSuperHard;
+
         [Header("[Hard Level Option — Hard/SuperHard 전용]")]
         [SerializeField] private GameObject _hardLevelOption;
+        [SerializeField] private Image _iconSkull;
+        [SerializeField] private Sprite _sprSkullHard;
+        [SerializeField] private Sprite _sprSkullSuperHard;
         [SerializeField] private TMP_Text _txtHardLevel;
         [SerializeField] private TMP_Text _txtHardLevelOutline;
+        [SerializeField] private Material _matHardLevelOutlineHard;
+        [SerializeField] private Material _matHardLevelOutlineSuperHard;
 
         [Header("[코인 연출 — Gold HUD 위치]")]
         [SerializeField] private RectTransform _goldTarget;
@@ -146,8 +158,37 @@ namespace BalloonFlow
 
         #region Hard Level Option
 
+        // 난이도별 ImageLight 색상
+        private static readonly Color LIGHT_NORMAL    = new Color(0x00 / 255f, 0x9B / 255f, 0xFF / 255f); // #009BFF
+        private static readonly Color LIGHT_HARD      = new Color(0xAF / 255f, 0x20 / 255f, 0xE5 / 255f); // #AF20E5
+        private static readonly Color LIGHT_SUPERHARD  = new Color(0xFF / 255f, 0x59 / 255f, 0x00 / 255f); // #FF5900
+
         private void UpdateHardLevelOption(DifficultyPurpose difficulty)
         {
+            // ImageLight 색상
+            if (_imageLight != null)
+            {
+                _imageLight.color = difficulty switch
+                {
+                    DifficultyPurpose.Hard      => LIGHT_HARD,
+                    DifficultyPurpose.SuperHard  => LIGHT_SUPERHARD,
+                    _                            => LIGHT_NORMAL
+                };
+            }
+
+            // ImageStage 스프라이트
+            if (_imageStage != null)
+            {
+                Sprite stageSpr = difficulty switch
+                {
+                    DifficultyPurpose.Hard      => _sprStageHard ?? _sprStageNormal,
+                    DifficultyPurpose.SuperHard  => _sprStageSuperHard ?? _sprStageNormal,
+                    _                            => _sprStageNormal
+                };
+                if (stageSpr != null) _imageStage.sprite = stageSpr;
+            }
+
+            // HardLevelOption 표시
             bool show = difficulty == DifficultyPurpose.Hard || difficulty == DifficultyPurpose.SuperHard;
             if (_hardLevelOption != null) _hardLevelOption.SetActive(show);
 
@@ -156,6 +197,22 @@ namespace BalloonFlow
                 string label = difficulty == DifficultyPurpose.SuperHard ? "SuperHard" : "Hard";
                 if (_txtHardLevel != null) _txtHardLevel.text = label;
                 if (_txtHardLevelOutline != null) _txtHardLevelOutline.text = label;
+
+                // IconSkull 스프라이트
+                if (_iconSkull != null)
+                {
+                    Sprite skullSpr = difficulty == DifficultyPurpose.SuperHard ? _sprSkullSuperHard : _sprSkullHard;
+                    if (skullSpr != null) _iconSkull.sprite = skullSpr;
+                }
+
+                // TxtHardLevelOutline 머티리얼
+                if (_txtHardLevelOutline != null)
+                {
+                    Material mat = difficulty == DifficultyPurpose.SuperHard
+                        ? _matHardLevelOutlineSuperHard
+                        : _matHardLevelOutlineHard;
+                    if (mat != null) _txtHardLevelOutline.fontMaterial = mat;
+                }
             }
         }
 

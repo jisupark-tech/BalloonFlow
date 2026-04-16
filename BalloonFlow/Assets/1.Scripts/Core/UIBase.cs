@@ -40,24 +40,18 @@ namespace BalloonFlow
         protected virtual void Awake()
         {
             _canvasGroup = GetComponent<CanvasGroup>();
-            InjectButtonScaleEffects();
-        }
-
-        private void InjectButtonScaleEffects()
-        {
-            foreach (var btn in GetComponentsInChildren<Button>(true))
-            {
-                if (btn.GetComponent<ButtonScaleEffect>() == null)
-                    btn.gameObject.AddComponent<ButtonScaleEffect>();
-            }
         }
 
         /// <summary>초기화. 필요한 데이터 전달 시 사용.</summary>
         public virtual void Init(object[] _data) { }
 
-        /// <summary>UI 열기 (활성화 + CanvasGroup ON + 애니메이션)</summary>
+        /// <summary>UI 열기 (활성화 + CanvasGroup ON + 애니메이션). 이미 열려있으면 중복 실행 안 함.</summary>
         public virtual void OpenUI()
         {
+            // 이미 활성 + 보이는 상태면 중복 실행 방지
+            if (gameObject.activeSelf && _canvasGroup != null && _canvasGroup.alpha > 0.99f && _canvasGroup.interactable)
+                return;
+
             gameObject.SetActive(true);
 
             if (_useAnimation && _animationType != AnimationType.None)
@@ -75,7 +69,7 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>UI 닫기 (비활성화 + CanvasGroup OFF)</summary>
+        /// <summary>UI 닫기 (CanvasGroup으로 숨김. SetActive 토글 없이 Canvas 리빌드 최소화)</summary>
         public virtual void CloseUI()
         {
             KillAnimation();
@@ -86,7 +80,10 @@ namespace BalloonFlow
                 _canvasGroup.interactable = false;
                 _canvasGroup.blocksRaycasts = false;
             }
-            gameObject.SetActive(false);
+            else
+            {
+                gameObject.SetActive(false);
+            }
         }
 
         /// <summary>UI 보이기 (OpenUI와 동일)</summary>

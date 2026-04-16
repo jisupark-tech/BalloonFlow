@@ -326,16 +326,12 @@ namespace BalloonFlow
                     {
                         RefreshBoosterCounts();
 
-                        // 결제 성공 → 성공 팝업 → 로비씬 이동 (아이템 획득 연출)
+                        // 인게임 결제 성공 → 가벼운 토스트로 알림
                         if (UIManager.HasInstance)
                         {
-                            var success = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
-                            if (success != null)
-                                success.ShowPurchaseSuccess("Purchase successful!", () =>
-                                {
-                                    if (GameManager.HasInstance)
-                                        GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY);
-                                });
+                            Transform parent = UIManager.Instance.PopupTr ?? UIManager.Instance.UiTr;
+                            if (parent != null)
+                                TxtToast.Spawn(parent, "Purchase successful!", new Vector2(0f, -1022f));
                         }
                     }
                     else

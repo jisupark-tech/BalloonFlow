@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -51,6 +52,9 @@ namespace BalloonFlow
         [Range(1, 10)]
         public int maxFiresPerFrame = 1;
 
+        [Tooltip("순차 발사 제한 해제. ON=모든 다트 동시 공격 가능, OFF=선행 다트 우선 (기본). 동적 반영.")]
+        public bool dartFreeFireMode = false;
+
         [HideInInspector] public float dartSpawnInterval = 0.02f;
         [HideInInspector] public float conveyorArrowSpeed = 4f;
 
@@ -96,14 +100,14 @@ namespace BalloonFlow
         public float caveFadeEnd4Side = 0.03f;
 
         [Header("[골드 연출 — Coin Fly]")]
-        [Tooltip("코인 비행 최소 시간(초). (default: 0.4)")]
-        public float coinFlyDurationMin = 0.4f;
-        [Tooltip("코인 비행 최대 시간(초). (default: 0.7)")]
-        public float coinFlyDurationMax = 0.7f;
-        [Tooltip("코인 생성 간격 최소(초). (default: 0.03)")]
-        public float coinSpawnDelayMin = 0.03f;
-        [Tooltip("코인 생성 간격 최대(초). (default: 0.08)")]
-        public float coinSpawnDelayMax = 0.08f;
+        [Tooltip("코인 비행 최소 시간(초). (default: 0.3)")]
+        public float coinFlyDurationMin = 0.3f;
+        [Tooltip("코인 비행 최대 시간(초). (default: 0.55)")]
+        public float coinFlyDurationMax = 0.55f;
+        [Tooltip("코인 생성 간격 최소(초). (default: 0.005)")]
+        public float coinSpawnDelayMin = 0.005f;
+        [Tooltip("코인 생성 간격 최대(초). (default: 0.02)")]
+        public float coinSpawnDelayMax = 0.02f;
         [Tooltip("코인 이펙트 스케일. (default: 15)")]
         public float coinFlyScale = 15f;
 
@@ -514,19 +518,19 @@ namespace BalloonFlow
             GUI.backgroundColor = new Color(0.3f, 1f, 0.3f);
             if (GUI.Button(new Rect(x, y, w, h), "FORCE CLEAR", _debugBtnStyle))
             {
-                if (BoardStateManager.HasInstance)
+                if (BalloonController.HasInstance)
                 {
-                    // 모든 풍선 제거 → 클리어 판정
-                    if (BalloonController.HasInstance)
+                    // 이전 팝 시퀀스/코루틴 정리 (반복 시 DOTween 누적 부하 방지)
+                    BalloonController.Instance.StopAllCoroutines();
+                    DOTween.KillAll(false);
+
+                    var all = BalloonController.Instance.GetAllBalloons();
+                    if (all != null)
                     {
-                        var all = BalloonController.Instance.GetAllBalloons();
-                        if (all != null)
+                        foreach (var b in all)
                         {
-                            foreach (var b in all)
-                            {
-                                if (!b.isPopped)
-                                    BalloonController.Instance.PopBalloon(b.balloonId);
-                            }
+                            if (!b.isPopped)
+                                BalloonController.Instance.PopBalloon(b.balloonId);
                         }
                     }
                 }

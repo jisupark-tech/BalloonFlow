@@ -19,9 +19,19 @@ namespace BalloonFlow
         [SerializeField] private Image _imgItem;
         [SerializeField] private TMP_Text _txtItemDescription;
         [SerializeField] private TMP_Text _txtItemDescriptionOutline;
+        [SerializeField] private RectTransform _rtItemDescription;
+
+        [Header("[아이템별 Description 위치 — anchoredPosition]")]
+        [SerializeField] private Vector2 _descPosHand = Vector2.zero;
+        [SerializeField] private Vector2 _descPosShuffle = Vector2.zero;
+        [SerializeField] private Vector2 _descPosZap = Vector2.zero;
 
         [Header("[Cutout 기준 — 프리팹에서 할당]")]
         [SerializeField] private RectTransform _cutoutMask;
+
+        [Header("[Cutout Materials — 빌드에서 Shader.Find 실패 방지]")]
+        [SerializeField] private Material _matCutoutMask;
+        [SerializeField] private Material _matCutoutDim;
 
         [Header("[Buttons]")]
         [SerializeField] private Button _btnBottomExit;
@@ -59,26 +69,46 @@ namespace BalloonFlow
                 _frame.BtnExit.onClick.RemoveAllListeners();
         }
 
+        private Sprite _whiteSprite;
+
+        private Sprite GetWhiteSprite()
+        {
+            if (_whiteSprite == null)
+            {
+                var tex = new Texture2D(4, 4);
+                var pixels = new Color[16];
+                for (int i = 0; i < 16; i++) pixels[i] = Color.white;
+                tex.SetPixels(pixels);
+                tex.Apply();
+                _whiteSprite = Sprite.Create(tex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
+            }
+            return _whiteSprite;
+        }
+
         private void SetupShaders()
         {
-            // CutoutMask에 스텐실 기록 셰이더 적용
+            // CutoutMask: 스텐실 기록용 (화면에 안 그림, 스텐실만 씀)
             if (_cutoutMask != null)
             {
                 _cutoutImage = _cutoutMask.GetComponent<Image>();
                 if (_cutoutImage == null) _cutoutImage = _cutoutMask.gameObject.AddComponent<Image>();
 
-                var cutoutShader = Shader.Find("UI/CutoutMask");
-                if (cutoutShader != null)
-                    _cutoutImage.material = new Material(cutoutShader);
+                // Material 직접 할당 (new Material 복사 금지 — 스텐실 설정 유실 방지)
+                if (_matCutoutMask != null)
+                    _cutoutImage.material = _matCutoutMask;
 
+                // 메시가 비어있으면 스텐실이 안 씌어짐 → 흰색 스프라이트 보장
+                if (_cutoutImage.sprite == null)
+                    _cutoutImage.sprite = GetWhiteSprite();
+                _cutoutImage.type = Image.Type.Simple;
                 _cutoutImage.color = Color.white;
                 _cutoutImage.raycastTarget = false;
             }
 
-            // DimOverlay 생성 — 전체화면, 스텐실 제외 영역만 Dim
+            // DimOverlay: 스텐실 읽어서 CutoutMask 영역 제외하고 Dim
             var dimGO = new GameObject("DimOverlay", typeof(RectTransform), typeof(Image));
             dimGO.transform.SetParent(transform, false);
-            // CutoutMask 바로 뒤에 배치 (스텐실 기록 후 읽기)
+            // CutoutMask 바로 뒤 (스텐실 기록 후 읽기)
             if (_cutoutMask != null)
                 dimGO.transform.SetSiblingIndex(_cutoutMask.GetSiblingIndex() + 1);
             else
@@ -91,14 +121,12 @@ namespace BalloonFlow
             dimRT.offsetMax = Vector2.zero;
 
             _dimImage = dimGO.GetComponent<Image>();
+            _dimImage.sprite = GetWhiteSprite();
+            _dimImage.type = Image.Type.Simple;
             _dimImage.raycastTarget = false;
 
-            var dimShader = Shader.Find("UI/CutoutDim");
-            if (dimShader != null)
-            {
-                _dimImage.material = new Material(dimShader);
-                _dimImage.material.SetColor("_Color", new Color(0f, 0f, 0f, 0.7f));
-            }
+            if (_matCutoutDim != null)
+                _dimImage.material = _matCutoutDim;
             _dimImage.color = new Color(0f, 0f, 0f, 0.7f);
 
             dimGO.SetActive(false);
@@ -126,6 +154,18 @@ namespace BalloonFlow
 
             if (_txtItemDescription != null) _txtItemDescription.text = description;
             if (_txtItemDescriptionOutline != null) _txtItemDescriptionOutline.text = description;
+
+            // 아이템별 Description 위치 적용
+            if (_rtItemDescription != null)
+            {
+                _rtItemDescription.anchoredPosition = boosterType switch
+                {
+                    BoosterManager.SELECT_TOOL  => _descPosHand,
+                    BoosterManager.SHUFFLE      => _descPosShuffle,
+                    BoosterManager.COLOR_REMOVE => _descPosZap,
+                    _                           => _rtItemDescription.anchoredPosition
+                };
+            }
 
             // Cutout 위치 설정
             SetupCutout(boosterType);

@@ -41,7 +41,7 @@ namespace BalloonFlow
                     child.gameObject.AddComponent<UIParticleRenderer>();
             }
 
-            ObjectPoolManager.Instance.CreatePool(POOL_KEY, prefab, 8);
+            ObjectPoolManager.Instance.CreatePool(POOL_KEY, prefab, 28);
             _poolRegistered = true;
         }
 
@@ -59,7 +59,7 @@ namespace BalloonFlow
             float cH = canvasRT != null ? canvasRT.rect.height : Screen.height;
             float cW = canvasRT != null ? canvasRT.rect.width : Screen.width;
 
-            float minDur = 0.4f, maxDur = 0.7f, minDelay = 0.03f, maxDelay = 0.08f;
+            float minDur = 0.5f, maxDur = 0.9f, minDelay = 0.01f, maxDelay = 0.04f;
             if (GameManager.HasInstance)
             {
                 var b = GameManager.Instance.Board;
@@ -70,27 +70,30 @@ namespace BalloonFlow
             }
 
             int landed = 0;
+            float scatterRadius = Mathf.Min(cW, cH) * 0.25f;
 
             for (int i = 0; i < count; i++)
             {
-                Vector2 start = from + new Vector2(
-                    UnityEngine.Random.Range(-40f, 40f),
-                    UnityEngine.Random.Range(-40f, 40f));
+                // 와르르 폭발: 360° 랜덤 방향으로 흩뿌림
+                float angle = UnityEngine.Random.Range(0f, 360f) * Mathf.Deg2Rad;
+                float radius = UnityEngine.Random.Range(scatterRadius * 0.4f, scatterRadius);
+                Vector2 scatterDir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                Vector2 scatterPos = from + scatterDir * radius;
 
-                Vector2 mid = (start + to) * 0.5f;
-                mid.y += UnityEngine.Random.Range(cH * 0.1f, cH * 0.25f);
-                mid.x += UnityEngine.Random.Range(-cW * 0.1f, cW * 0.1f);
+                // 포물선 꼭짓점: scatter 방향 바깥쪽 + 위로 솟구침
+                Vector2 mid = (scatterPos + to) * 0.5f;
+                mid += scatterDir * UnityEngine.Random.Range(cW * 0.05f, cW * 0.15f);
+                mid.y += UnityEngine.Random.Range(cH * 0.08f, cH * 0.25f);
 
                 GameObject coin = ObjectPoolManager.Instance.Get(POOL_KEY);
                 coin.transform.SetParent(parent, false);
                 coin.transform.SetAsLastSibling();
                 var rt = coin.GetComponent<RectTransform>();
                 if (rt == null) rt = coin.AddComponent<RectTransform>();
-                rt.anchoredPosition = start;
+                rt.anchoredPosition = from;
                 float coinScale = GameManager.HasInstance ? GameManager.Instance.Board.coinFlyScale : 3f;
                 rt.localScale = Vector3.one * coinScale;
 
-                // ParticleSystem 재시작 + startSpeed 제거 (이동은 코드로 제어)
                 var particles = coin.GetComponentsInChildren<ParticleSystem>(true);
                 foreach (var ps in particles)
                 {
@@ -102,34 +105,56 @@ namespace BalloonFlow
 
                 float dur = UnityEngine.Random.Range(minDur, maxDur);
 
-                CoroutineRunner.Get().StartCoroutine(Fly(coin, rt, start, mid, to, dur, () =>
-                {
-                    landed++;
-                    onEachLand?.Invoke();
-                    if (landed >= count) onAllComplete?.Invoke();
-                }));
+                CoroutineRunner.Get().StartCoroutine(
+                    Fly(coin, rt, from, scatterPos, mid, to, dur, coinScale, () =>
+                    {
+                        landed++;
+                        onEachLand?.Invoke();
+                        if (landed >= count) onAllComplete?.Invoke();
+                    }));
 
                 yield return new WaitForSecondsRealtime(
                     UnityEngine.Random.Range(minDelay, maxDelay));
             }
         }
 
+        /// <summary>
+        /// 2단계 비행: 폭발(scatter) → 포물선 수렴(converge).
+        /// Phase 1 (0~0.25): from → scatterPos (빠르게 퍼짐)
+        /// Phase 2 (0.25~1.0): scatterPos → mid → to (베지어 포물선으로 목표 수렴)
+        /// </summary>
         private static IEnumerator Fly(GameObject coin, RectTransform rt,
-            Vector2 a, Vector2 b, Vector2 c, float duration, Action onDone)
+            Vector2 origin, Vector2 scatter, Vector2 mid, Vector2 target,
+            float duration, float baseScale, Action onDone)
         {
             float elapsed = 0f;
+            float scatterPhase = 0.2f;
+
             while (elapsed < duration)
             {
                 elapsed += Time.unscaledDeltaTime;
                 float t = Mathf.Clamp01(elapsed / duration);
-                float e = 1f - (1f - t) * (1f - t);
-                float u = 1f - e;
-                rt.anchoredPosition = u * u * a + 2f * u * e * b + e * e * c;
-                if (t > 0.7f)
+
+                if (t < scatterPhase)
                 {
-                    float cs = GameManager.HasInstance ? GameManager.Instance.Board.coinFlyScale : 3f;
-                    rt.localScale = Vector3.one * cs * Mathf.Lerp(1f, 0.3f, (t - 0.7f) / 0.3f);
+                    // Phase 1: 중앙에서 폭발 (EaseOut으로 빠르게 퍼짐)
+                    float st = t / scatterPhase;
+                    float ease = 1f - (1f - st) * (1f - st);
+                    rt.anchoredPosition = Vector2.Lerp(origin, scatter, ease);
                 }
+                else
+                {
+                    // Phase 2: 포물선으로 목표 수렴 (Quadratic Bezier)
+                    float ct = (t - scatterPhase) / (1f - scatterPhase);
+                    float ease = ct * ct; // EaseIn — 처음 느리다 끝에 빨라짐 (도착감)
+                    float u = 1f - ease;
+                    rt.anchoredPosition = u * u * scatter + 2f * u * ease * mid + ease * ease * target;
+                }
+
+                // 도착 직전 스케일 축소 (골드 HUD에 흡수되는 느낌)
+                if (t > 0.75f)
+                    rt.localScale = Vector3.one * baseScale * Mathf.Lerp(1f, 0.3f, (t - 0.75f) / 0.25f);
+
                 yield return null;
             }
 

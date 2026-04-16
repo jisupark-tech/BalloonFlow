@@ -267,7 +267,7 @@ namespace BalloonFlow
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
             PlayPopFeedback(evt.position, evt.color, false);
-            HapticLight(); // P0: 풍선 터짐 Light 진동
+            HapticLight();
         }
 
         private void HandleComboIncremented(OnComboIncremented evt)
