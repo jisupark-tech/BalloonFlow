@@ -11,6 +11,7 @@ namespace BalloonFlow
         [Header("[Audio Sources]")]
         [SerializeField] private AudioSource _bgmSource;
         [SerializeField] private AudioSource _sfxSource;
+        private AudioSource _popSource;
 
         [Header("[BGM]")]
         [SerializeField] private AudioClip _bgmLobby;
@@ -32,6 +33,22 @@ namespace BalloonFlow
         [SerializeField] private AudioClip _sfxItemShuffle;
         [SerializeField] private AudioClip _sfxItemZap;
 
+        [Header("[Pop Combo Pitch]")]
+        [Tooltip("연속 팝 SFX 피치 상승 사용 여부.")]
+        [SerializeField] private bool _popPitchComboEnabled = true;
+        [Tooltip("팝 SFX 기본 피치.")]
+        [Range(0.5f, 2f)]
+        [SerializeField] private float _popPitchBase = 1f;
+        [Tooltip("연속 팝마다 더해지는 피치 증가량.")]
+        [Range(0f, 0.3f)]
+        [SerializeField] private float _popPitchStep = 0.06f;
+        [Tooltip("최대 피치(상한).")]
+        [Range(1f, 3f)]
+        [SerializeField] private float _popPitchMax = 1.8f;
+        [Tooltip("이 시간(초) 동안 다음 팝이 없으면 콤보/피치 초기화.")]
+        [Range(0.1f, 2f)]
+        [SerializeField] private float _popComboResetSec = 0.6f;
+
         private bool _sfxEnabled = true;
         private bool _bgmEnabled = true;
 
@@ -48,6 +65,9 @@ namespace BalloonFlow
                 _sfxSource = gameObject.AddComponent<AudioSource>();
                 _sfxSource.playOnAwake = false;
             }
+
+            _popSource = gameObject.AddComponent<AudioSource>();
+            _popSource.playOnAwake = false;
 
             AutoLoadClips();
 
@@ -135,13 +155,29 @@ namespace BalloonFlow
         #region Event Handlers
 
         private float _lastPopTime;
+        private int _popComboCount;
         private const float POP_SFX_COOLDOWN = 0.05f; // 50ms 쿨다운
 
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
-            if (Time.unscaledTime - _lastPopTime < POP_SFX_COOLDOWN) return;
-            _lastPopTime = Time.unscaledTime;
-            PlaySFX(_sfxBalloonPop);
+            float now = Time.unscaledTime;
+            if (now - _lastPopTime < POP_SFX_COOLDOWN) return;
+
+            if (_popPitchComboEnabled && now - _lastPopTime > _popComboResetSec)
+                _popComboCount = 0;
+
+            float pitch = _popPitchComboEnabled
+                ? Mathf.Min(_popPitchBase + _popPitchStep * _popComboCount, _popPitchMax)
+                : 1f;
+
+            _lastPopTime = now;
+            _popComboCount++;
+
+            if (_popSource != null && _sfxBalloonPop != null && _sfxEnabled)
+            {
+                _popSource.pitch = pitch;
+                _popSource.PlayOneShot(_sfxBalloonPop);
+            }
         }
 
         private void HandleBoardCleared(OnBoardCleared evt)

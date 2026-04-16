@@ -492,7 +492,7 @@ namespace BalloonFlow
                         visual.gameObject.transform.rotation = Quaternion.LookRotation(inward);
                 }
 
-                // Cave scale for open rails
+                // Cave scale for open rails (dartScale 적용 유지)
                 if (isOpen && pathLen > 0f)
                 {
                     float t = dart.progress / pathLen;
@@ -511,7 +511,7 @@ namespace BalloonFlow
                         }
                     }
                     scale = Mathf.Clamp01(scale);
-                    visual.gameObject.transform.localScale = visual.baseScale * scale;
+                    visual.gameObject.transform.localScale = Vector3.one * ds * scale;
                 }
             }
 
@@ -761,21 +761,9 @@ namespace BalloonFlow
 
                 if (dartObj != null)
                 {
-                    // 배치 시 축소된 baseScale 유지 (cave scale은 리셋)
-                    if (visual != null)
-                        dartObj.transform.localScale = visual.baseScale;
-                    else
-                    {
-                        float sp = RailManager.Instance.SlotSpacing;
-                        float maxS = sp * 0.9f;
-                        Vector3 s = dartObj.transform.localScale;
-                        float cur = Mathf.Max(s.x, s.z);
-                        if (cur > maxS && maxS > 0.01f)
-                        {
-                            float r = maxS / cur;
-                            dartObj.transform.localScale = new Vector3(s.x * r, s.y * r, s.z * r);
-                        }
-                    }
+                    // 레일에서 보이던 사이즈(dartScale) 그대로 발사 — cave fade는 무시하고 정상 크기로 복원
+                    float ds = GameManager.HasInstance ? GameManager.Instance.Board.dartScale : 1f;
+                    dartObj.transform.localScale = Vector3.one * ds;
 
                     EventBus.Publish(new OnDartFired { dartId = dartId, holderId = -1, color = color });
 
@@ -997,7 +985,6 @@ namespace BalloonFlow
         {
             if (obj != null && ObjectPoolManager.HasInstance)
             {
-                obj.transform.localScale = Vector3.one;
                 ObjectPoolManager.Instance.Return(DART_POOL_KEY, obj);
             }
         }
