@@ -137,8 +137,24 @@ namespace BalloonFlow
             _scanTimer += Time.deltaTime;
             float railSpeed = RailManager.HasInstance ? RailManager.Instance.RotationSpeed : 10f;
             float atkMult = GameManager.HasInstance ? GameManager.Instance.Board.attackSpeedMultiplier : 1f;
-            float interval = railSpeed > 0f ? 0.5f / (railSpeed * atkMult) : 0.05f;
-            interval = Mathf.Clamp(interval, 0.005f, 0.1f);
+            bool balloonSynced = GameManager.HasInstance && GameManager.Instance.Board.dartBalloonSyncedFireMode;
+            float interval;
+            if (balloonSynced && RailManager.HasInstance)
+            {
+                // 다트가 풍선 하나 거리(cellSpacing)를 이동하는 시간 = 인터벌.
+                // 점유율 가속(후반 ×2)은 반영, 배치 감속(×0.5)은 제외.
+                float worldRailSpeed = RailManager.Instance.RotationSpeed * RailManager.Instance.SlotSpacing;
+                float occMult = RailManager.Instance.GetOccupancySpeedMultiplier();
+                float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
+                float speed = worldRailSpeed * occMult * Mathf.Max(atkMult, 0.0001f);
+                interval = speed > 0f ? cellSpacing / speed : 0.05f;
+                interval = Mathf.Clamp(interval, 0.005f, 0.5f);
+            }
+            else
+            {
+                interval = railSpeed > 0f ? 0.5f / (railSpeed * atkMult) : 0.05f;
+                interval = Mathf.Clamp(interval, 0.005f, 0.1f);
+            }
             if (_scanTimer >= interval)
             {
                 _scanTimer -= interval;

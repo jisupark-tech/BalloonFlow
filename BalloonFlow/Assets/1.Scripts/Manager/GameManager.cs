@@ -55,6 +55,9 @@ namespace BalloonFlow
         [Tooltip("순차 발사 제한 해제. ON=모든 다트 동시 공격 가능, OFF=선행 다트 우선 (기본). 동적 반영.")]
         public bool dartFreeFireMode = false;
 
+        [Tooltip("풍선 간격 동기 발사. ON=다트가 풍선 하나 거리를 이동하는 시간을 발사 인터벌로 사용 (외곽 스윕 연출). OFF=기존 스캔 주기. 동적 반영.")]
+        public bool dartBalloonSyncedFireMode = false;
+
         [HideInInspector] public float dartSpawnInterval = 0.02f;
         [HideInInspector] public float conveyorArrowSpeed = 4f;
 

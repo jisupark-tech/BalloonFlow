@@ -253,11 +253,11 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// 남은 다트 수 기반 회전 속도 배율.
-        /// 남은 다트 >= capacity: 1배 / 미만: 2배
-        /// 배치 중(deploy point 활성화): ×0.5 (중복 감속 없음)
+        /// 점유율 기반 속도 배율 (배치 감속 제외).
+        /// 남은 다트 >= capacity: 1배 / 미만: 2배.
+        /// 공격 속도 동기화(dartBalloonSyncedFireMode)에도 사용.
         /// </summary>
-        private float GetSpeedMultiplier()
+        public float GetOccupancySpeedMultiplier()
         {
             // 남은 다트 수 = 레일 위 + 보관함 전체
             int totalRemaining = _darts.Count;
@@ -271,10 +271,22 @@ namespace BalloonFlow
                 }
             }
 
-            float baseMult = totalRemaining < _slotCount ? 2f : 1f;
+            return totalRemaining < _slotCount ? 2f : 1f;
+        }
+
+        /// <summary>
+        /// 남은 다트 수 기반 회전 속도 배율.
+        /// 남은 다트 >= capacity: 1배 / 미만: 2배
+        /// 배치 중(deploy point 활성화): ×0.5 (중복 감속 없음)
+        /// </summary>
+        private float GetSpeedMultiplier()
+        {
+            float baseMult = GetOccupancySpeedMultiplier();
 
             // 실제 다트 배치 중(첫 다트 투입 후)일 때만 ×0.5
-            if (_activeDeployPoints.Count > 0)
+            // synced 모드에선 배치 감속 자체를 비활성화
+            bool balloonSynced = GameManager.HasInstance && GameManager.Instance.Board.dartBalloonSyncedFireMode;
+            if (!balloonSynced && _activeDeployPoints.Count > 0)
                 baseMult *= 0.5f;
 
             return baseMult;
