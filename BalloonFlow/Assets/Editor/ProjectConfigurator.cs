@@ -51,7 +51,7 @@ namespace BalloonFlow.Editor
             // Portrait only
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
             PlayerSettings.allowedAutorotateToPortrait = true;
-            PlayerSettings.allowedAutorotateToPortraitUpsideDown = true;
+            PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
             PlayerSettings.allowedAutorotateToLandscapeLeft = false;
             PlayerSettings.allowedAutorotateToLandscapeRight = false;
 
