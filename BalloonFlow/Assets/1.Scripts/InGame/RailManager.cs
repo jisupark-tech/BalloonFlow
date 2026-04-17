@@ -342,14 +342,18 @@ namespace BalloonFlow
             for (int i = 0; i < _darts.Count; i++)
                 _sortedProgress.Add(_darts[i].progress);
 
-            // deploy points 추가
-            foreach (var dp in _deployPoints)
+            // deploy points 추가 (synced 모드에선 배치 중 블로킹 비활성화)
+            bool balloonSynced = GameManager.HasInstance && GameManager.Instance.Board.dartBalloonSyncedFireMode;
+            if (!balloonSynced)
             {
-                if (!_activeDeployPoints.Contains(dp.Key)) continue;
-                float blockAt = dp.Value - EffectiveDartGap * 0.5f;
-                if (_totalPathLength > 0f)
-                    blockAt = ((blockAt % _totalPathLength) + _totalPathLength) % _totalPathLength;
-                _sortedProgress.Add(blockAt);
+                foreach (var dp in _deployPoints)
+                {
+                    if (!_activeDeployPoints.Contains(dp.Key)) continue;
+                    float blockAt = dp.Value - EffectiveDartGap * 0.5f;
+                    if (_totalPathLength > 0f)
+                        blockAt = ((blockAt % _totalPathLength) + _totalPathLength) % _totalPathLength;
+                    _sortedProgress.Add(blockAt);
+                }
             }
 
             _sortedProgress.Sort();
