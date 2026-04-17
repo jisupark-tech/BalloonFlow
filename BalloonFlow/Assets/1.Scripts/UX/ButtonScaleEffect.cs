@@ -10,9 +10,9 @@ namespace BalloonFlow
     /// </summary>
     public class ButtonScaleEffect : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     {
-        [SerializeField] private float _pressScale = 0.9f;
-        [SerializeField] private float _pressDuration = 0.08f;
-        [SerializeField] private float _releaseDuration = 0.12f;
+        [SerializeField] private float _pressScale = 0.95f;
+        [SerializeField] private float _pressDuration = 0.03f;
+        [SerializeField] private float _releaseDuration = 1f;
 
         private Vector3 _originalScale;
         private Tweener _tween;
