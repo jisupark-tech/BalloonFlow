@@ -70,6 +70,8 @@ namespace BalloonFlow
                     _popupSettings.CloseButton.onClick.RemoveListener(OnSettingsCloseClicked);
                 if (_popupSettings.HomeButton != null)
                     _popupSettings.HomeButton.onClick.RemoveListener(OnSettingsHomeClicked);
+                if (_popupSettings.ContinueButton != null)
+                    _popupSettings.ContinueButton.onClick.RemoveListener(OnSettingsCloseClicked);
             }
             if (_popupGoldShop != null && _popupGoldShop.CloseButton != null)
                 _popupGoldShop.CloseButton.onClick.RemoveListener(OnGoldShopCloseClicked);
@@ -120,6 +122,8 @@ namespace BalloonFlow
                     _popupSettings.CloseButton.onClick.AddListener(OnSettingsCloseClicked);
                 if (_popupSettings.HomeButton != null)
                     _popupSettings.HomeButton.onClick.AddListener(OnSettingsHomeClicked);
+                if (_popupSettings.ContinueButton != null)
+                    _popupSettings.ContinueButton.onClick.AddListener(OnSettingsCloseClicked);
             }
         }
 

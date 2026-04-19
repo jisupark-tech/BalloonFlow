@@ -6,6 +6,7 @@ namespace BalloonFlow
     /// <summary>
     /// 설정 팝업. Sound/Music/Haptic 토글.
     /// PopupCommonFrame 사용. Lobby, InGame 공용.
+    /// Notification 토글은 UILobby Setting Panel에만 존재 (여기엔 없음).
     /// </summary>
     public class PopupSettings : UIBase
     {
@@ -28,7 +29,8 @@ namespace BalloonFlow
         [SerializeField] private GameObject _hapticOff;
 
         public Button CloseButton => _frame != null ? _frame.BtnExit : null;
-        public Button HomeButton => _frame != null ? _frame.BtnSingle : null;
+        public Button HomeButton => _frame != null ? _frame.BtnHorizRed : null;
+        public Button ContinueButton => _frame != null ? _frame.BtnHorizGreen : null;
 
         protected override void Awake()
         {
@@ -55,8 +57,9 @@ namespace BalloonFlow
             if (_frame != null)
             {
                 _frame.SetTitle("Settings");
-                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
-                _frame.SetSingleButtonText("Home");
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
+                _frame.SetHorizGreenText("Continue");
+                _frame.SetHorizRedText("Home");
                 _frame.ShowExitButton(true);
             }
 

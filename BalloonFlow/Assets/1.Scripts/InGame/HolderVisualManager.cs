@@ -325,6 +325,16 @@ namespace BalloonFlow
                 visual.gameObject.transform.DOKill();
             }
 
+            // magazine이 이미 0이면 큐 복귀가 아니라 바로 제거 (이어하기 경합 시 잔존 방지).
+            if (visual.magazineRemaining <= 0)
+            {
+                int col = visual.column;
+                ReturnHolderToPool(visual);
+                _holderVisuals.Remove(holderId);
+                RepositionColumnHolders(col);
+                return;
+            }
+
             // Move back to queue
             RepositionColumnHolders(visual.column);
         }
@@ -994,6 +1004,12 @@ namespace BalloonFlow
             float fixedDeployProgress = rail.GetProgressAtWorldPos(railAttachPoint);
             rail.RegisterDeployPoint(visual.holderId, fixedDeployProgress);
 
+            // 정확한 간격(physicalGap)을 보장하기 위해 배치 progress는 "앞 다트 위치 - physicalGap".
+            // 속도/배속과 관계없이 다트끼리의 간격이 항상 physicalGap로 동일하게 유지됨.
+            // 게이트로 페이싱하여 너무 빠르게 스폰되지 않도록 함.
+            int lastPlacedDartId = -1;
+            float totalPathLen = rail.TotalPathLength;
+
             while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
             {
                 // 취소 체크
@@ -1002,47 +1018,73 @@ namespace BalloonFlow
                     _cancelledHolders.Remove(visual.holderId);
                     rail.UnregisterDeployPoint(visual.holderId);
                     _colBusy[visual.column] = false;
-    
+
                     yield break;
                 }
 
-                // deploy point에 빈 공간이 있는지 체크 (slotSpacing 이내에 다트 없음)
-                if (rail.IsProgressClear(fixedDeployProgress, visual.holderId))
+                // 한 프레임에 필요한 만큼 연속 배치 (belt가 빠를 때 따라잡기) —
+                // gate가 닫힐 때까지 반복. 각 배치는 (lastDart - physicalGap)에 놓여 physicalGap 간격 유지.
+                // 부하 최소화를 위해 프레임당 최대 3개로 제한.
+                int maxPlacementsThisFrame = 3;
+                while (visual.magazineRemaining > 0 && maxPlacementsThisFrame-- > 0)
                 {
-                    int dartId = rail.PlaceDartAtProgress(fixedDeployProgress, visual.color, visual.holderId);
-                    if (dartId >= 0)
+                    bool gateOpen = true;
+                    float placementProgress = fixedDeployProgress; // 첫 다트는 dp
+                    if (lastPlacedDartId >= 0)
                     {
-                        visual.magazineRemaining--;
-
-                        if (!deployStarted)
+                        var lastDart = rail.FindDart(lastPlacedDartId);
+                        if (lastDart != null)
                         {
-                            deployStarted = true;
-                            // 첫 다트 배치 → deploy point 활성화 (장애물로 전환)
-                            rail.ActivateDeployPoint(visual.holderId);
-                            if (visual.gameObject != null)
-                            {
-                                visual.gameObject.transform.localScale = Vector3.one;
-                                visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
-                            }
+                            float distFromDp = lastDart.progress - fixedDeployProgress;
+                            if (totalPathLen > 0f)
+                                distFromDp = ((distFromDp % totalPathLen) + totalPathLen) % totalPathLen;
+                            gateOpen = distFromDp >= rail.DartPhysicalGap;
+                            placementProgress = lastDart.progress - rail.DartPhysicalGap;
+                            if (totalPathLen > 0f)
+                                placementProgress = ((placementProgress % totalPathLen) + totalPathLen) % totalPathLen;
                         }
-
-                        LaunchDartChild(visual, rail.GetPositionAtDistance(fixedDeployProgress));
-
-                        if (visual.magazineText != null)
-                            visual.magazineText.SetText("{0}", visual.magazineRemaining);
-
-                        if (HolderManager.HasInstance)
-                            HolderManager.Instance.ConsumeMagazine(visual.holderId);
-
-                        EventBus.Publish(new OnDartPlaced
-                        {
-                            dartId = dartId,
-                            color = visual.color,
-                            holderId = visual.holderId,
-                            progress = fixedDeployProgress
-                        });
                     }
+
+                    if (!gateOpen || !rail.IsProgressClear(placementProgress, visual.holderId))
+                        break;
+
+                    int dartId = rail.PlaceDartAtProgress(placementProgress, visual.color, visual.holderId);
+                    if (dartId < 0) break;
+
+                    visual.magazineRemaining--;
+                    lastPlacedDartId = dartId;
+
+                    if (!deployStarted)
+                    {
+                        deployStarted = true;
+                        rail.ActivateDeployPoint(visual.holderId);
+                        if (visual.gameObject != null)
+                        {
+                            visual.gameObject.transform.localScale = Vector3.one;
+                            visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
+                        }
+                    }
+
+                    LaunchDartChild(visual, rail.GetPositionAtDistance(placementProgress));
+
+                    if (visual.magazineText != null)
+                        visual.magazineText.SetText("{0}", visual.magazineRemaining);
+
+                    if (HolderManager.HasInstance)
+                        HolderManager.Instance.ConsumeMagazine(visual.holderId);
+
+                    EventBus.Publish(new OnDartPlaced
+                    {
+                        dartId = dartId,
+                        color = visual.color,
+                        holderId = visual.holderId,
+                        progress = placementProgress
+                    });
                 }
+
+                // magazine이 0이 됐으면 즉시 outer loop 종료 (Continue 경합으로 visual이
+                // CancelDeployAndReturnToQueue로 빠져 CompleteDeployment가 안 불리는 레이스 방지).
+                if (visual.magazineRemaining <= 0) break;
 
                 yield return null;
             }

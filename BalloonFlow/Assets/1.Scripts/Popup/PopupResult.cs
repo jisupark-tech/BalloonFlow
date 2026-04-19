@@ -45,6 +45,11 @@ namespace BalloonFlow
         [SerializeField] private Material _matHardLevelOutlineHard;
         [SerializeField] private Material _matHardLevelOutlineSuperHard;
 
+        [Header("[난이도별 곱하기 라벨 — 표시용(내부 수치와 무관)]")]
+        [SerializeField] private GameObject _multiplierLabel;
+        [SerializeField] private TMP_Text _txtMultiplier;
+        [SerializeField] private TMP_Text _txtMultiplierOutline;
+
         [Header("[코인 연출 — Gold HUD 위치]")]
         [SerializeField] private RectTransform _goldTarget;
 
@@ -188,9 +193,35 @@ namespace BalloonFlow
                 if (stageSpr != null) _imageStage.sprite = stageSpr;
             }
 
-            // HardLevelOption 표시
+            // HardLevelOption 표시: Normal=숨김, Hard/SuperHard=노출
             bool show = difficulty == DifficultyPurpose.Hard || difficulty == DifficultyPurpose.SuperHard;
             if (_hardLevelOption != null) _hardLevelOption.SetActive(show);
+
+            // 방어적 처리: _hardLevelOption 루트가 프리팹에 미할당이거나 부분 영역만 가리키는 경우를 대비,
+            // 하위 구성 요소(IconSkull, TxtHardLevel, Outline)도 개별적으로 가시 상태를 제어.
+            if (_iconSkull != null) _iconSkull.gameObject.SetActive(show);
+            if (_txtHardLevel != null) _txtHardLevel.gameObject.SetActive(show);
+            if (_txtHardLevelOutline != null) _txtHardLevelOutline.gameObject.SetActive(show);
+
+            // 곱하기 라벨: Normal 없음 / Hard x3 / SuperHard x5
+            string multiplier = difficulty switch
+            {
+                DifficultyPurpose.SuperHard => "x5",
+                DifficultyPurpose.Hard      => "x3",
+                _                            => ""
+            };
+            bool showMultiplier = !string.IsNullOrEmpty(multiplier);
+            if (_multiplierLabel != null) _multiplierLabel.SetActive(showMultiplier);
+            if (_txtMultiplier != null)
+            {
+                _txtMultiplier.gameObject.SetActive(showMultiplier);
+                _txtMultiplier.text = multiplier;
+            }
+            if (_txtMultiplierOutline != null)
+            {
+                _txtMultiplierOutline.gameObject.SetActive(showMultiplier);
+                _txtMultiplierOutline.text = multiplier;
+            }
 
             if (show)
             {
@@ -262,6 +293,12 @@ namespace BalloonFlow
             DontDestroyOnLoad(go);
             _instance = go.AddComponent<CoroutineRunner>();
             return _instance;
+        }
+
+        /// <summary>이미 생성된 인스턴스가 있으면 반환, 없으면 null. StopAll 등 생성 없이 참조만 할 때 사용.</summary>
+        public static CoroutineRunner GetIfExists()
+        {
+            return _instance != null && _instance.gameObject != null ? _instance : null;
         }
 
         public void Run(System.Collections.IEnumerator routine)

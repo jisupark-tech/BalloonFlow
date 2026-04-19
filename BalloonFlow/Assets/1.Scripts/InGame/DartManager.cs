@@ -259,13 +259,20 @@ namespace BalloonFlow
                 }
             }
 
+            Vector3 slotTargetScale = dartObj.transform.localScale;
+
             _slotVisuals[slotIndex] = new SlotDartVisual
             {
                 slotIndex = slotIndex,
                 color = color,
                 gameObject = dartObj,
-                baseScale = dartObj.transform.localScale
+                baseScale = slotTargetScale
             };
+
+            // 배치 연출: pop-in 스케일 애니 (매 배치마다 가시적 피드백)
+            dartObj.transform.DOKill();
+            dartObj.transform.localScale = Vector3.zero;
+            dartObj.transform.DOScale(slotTargetScale, 0.22f).SetEase(Ease.OutBack);
         }
 
         /// <summary>
@@ -314,13 +321,20 @@ namespace BalloonFlow
                 }
             }
 
+            Vector3 targetScale = dartObj.transform.localScale;
+
             _dartVisuals[dartId] = new SlotDartVisual
             {
                 slotIndex = dartId,
                 color = color,
                 gameObject = dartObj,
-                baseScale = dartObj.transform.localScale
+                baseScale = targetScale
             };
+
+            // 배치 연출: 0 → targetScale 로 OutBack pop-in (매 배치마다 가시적 피드백).
+            dartObj.transform.DOKill();
+            dartObj.transform.localScale = Vector3.zero;
+            dartObj.transform.DOScale(targetScale, 0.22f).SetEase(Ease.OutBack);
         }
 
         #endregion

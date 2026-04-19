@@ -253,6 +253,16 @@ namespace BalloonFlow
             _sfxSource.PlayOneShot(clip);
         }
 
+        /// <summary>
+        /// 모든 SFX 즉시 중단 (PlayOneShot으로 재생 중인 클립 포함).
+        /// 씬 전환 시 보상 사운드 등이 다음 씬으로 넘어가 이어지는 현상 방지.
+        /// </summary>
+        public void StopAllSfx()
+        {
+            if (_sfxSource != null) _sfxSource.Stop();
+            if (_popSource != null) _popSource.Stop();
+        }
+
         #endregion
     }
 }

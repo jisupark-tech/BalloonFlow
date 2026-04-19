@@ -84,6 +84,9 @@ namespace BalloonFlow
 
         [SerializeField] private GameObject _balloonPrefab;
 
+        [Tooltip("Hidden 기믹 풍선 전용 머테리얼 (BalloonHidden.mat). Inspector 할당 또는 Resources/BalloonHidden 에서 자동 로드.")]
+        [SerializeField] private Material _balloonHiddenMaterial;
+
         // Primary data store keyed by balloonId
         private readonly Dictionary<int, BalloonData> _balloons = new Dictionary<int, BalloonData>();
 
@@ -853,14 +856,33 @@ namespace BalloonFlow
 
         private void ApplyInitialHiddenState()
         {
+            // 머테리얼 우선순위: (1) BalloonIdentifier 프리팹 할당 → (2) BalloonController 할당/Resources
+            Material fallbackMat = GetHiddenMaterialFallback();
+
             foreach (int id in _hiddenBalloons)
             {
-                if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
+                if (!_balloonObjects.TryGetValue(id, out GameObject obj) || obj == null) continue;
+
+                BalloonIdentifier bi = obj.GetComponent<BalloonIdentifier>();
+                if (bi != null && bi.HasColorRenderers && (bi.HasHiddenMaterial || fallbackMat != null))
                 {
-                    // Show as grey balloon (color concealed, but visible on board)
+                    // 프리팹 자체 할당된 머테리얼 우선, 없으면 fallback 전달
+                    bi.ApplyHiddenMaterial(bi.HasHiddenMaterial ? null : fallbackMat);
+                }
+                else
+                {
+                    // 최종 폴백: 기존 grey tint
                     ApplyTintToObject(obj, HIDDEN_COLOR);
                 }
             }
+        }
+
+        private Material GetHiddenMaterialFallback()
+        {
+            if (_balloonHiddenMaterial != null) return _balloonHiddenMaterial;
+            // Resources 폴백 로드 (Assets/Resources/BalloonHidden.mat 에 복사 시 자동 사용)
+            _balloonHiddenMaterial = Resources.Load<Material>("BalloonHidden");
+            return _balloonHiddenMaterial;
         }
 
         /// <summary>

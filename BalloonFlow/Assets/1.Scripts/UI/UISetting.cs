@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -46,6 +47,15 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtNotificationOnOutline;
         [SerializeField] private TMP_Text _txtNotificationOff;
         [SerializeField] private TMP_Text _txtNotificationOffOutline;
+
+        [Header("[Notification — 사양: ToggleBtn 이동 + Frame 스프라이트 교체]")]
+        [SerializeField] private RectTransform _notificationToggleBtn;
+        [SerializeField] private Image _frameNotification;
+        [SerializeField] private Sprite _sprNotificationOn;
+        [SerializeField] private Sprite _sprNotificationOff;
+        private const float NOTIFICATION_TOGGLE_X_ON  = 96f;
+        private const float NOTIFICATION_TOGGLE_X_OFF = -96f;
+        private const float NOTIFICATION_TOGGLE_DUR   = 0.15f;
 
         #endregion
 
@@ -135,6 +145,34 @@ namespace BalloonFlow
             UpdateToggle(_musicOn, _musicOff, sm.MusicOn);
             UpdateToggle(_hapticOn, _hapticOff, sm.HapticOn);
             UpdateToggle(_notificationOn, _notificationOff, sm.NotificationOn);
+            ApplyNotificationSpec(sm.NotificationOn, animate: false);
+        }
+
+        /// <summary>
+        /// Notification 사양 적용.
+        /// On: ToggleBtn x=+96, OnOutline 노출, Frame=notificationOn 스프라이트.
+        /// Off: ToggleBtn x=-96, OffOutline 노출, Frame=notificationOff 스프라이트.
+        /// </summary>
+        private void ApplyNotificationSpec(bool isOn, bool animate)
+        {
+            if (_notificationToggleBtn != null)
+            {
+                float targetX = isOn ? NOTIFICATION_TOGGLE_X_ON : NOTIFICATION_TOGGLE_X_OFF;
+                _notificationToggleBtn.DOKill();
+                if (animate)
+                    _notificationToggleBtn.DOAnchorPosX(targetX, NOTIFICATION_TOGGLE_DUR).SetEase(Ease.OutCubic);
+                else
+                    _notificationToggleBtn.anchoredPosition = new Vector2(targetX, _notificationToggleBtn.anchoredPosition.y);
+            }
+
+            if (_txtNotificationOnOutline != null) _txtNotificationOnOutline.gameObject.SetActive(isOn);
+            if (_txtNotificationOffOutline != null) _txtNotificationOffOutline.gameObject.SetActive(!isOn);
+
+            if (_frameNotification != null)
+            {
+                Sprite target = isOn ? _sprNotificationOn : _sprNotificationOff;
+                if (target != null) _frameNotification.sprite = target;
+            }
         }
 
         private static void EnsureToggleLabel(GameObject obj, string label)
@@ -156,6 +194,7 @@ namespace BalloonFlow
             UpdateToggle(_musicOn, _musicOff, evt.musicOn);
             UpdateToggle(_hapticOn, _hapticOff, evt.hapticOn);
             UpdateToggle(_notificationOn, _notificationOff, evt.notificationOn);
+            ApplyNotificationSpec(evt.notificationOn, animate: true);
         }
 
         #endregion

@@ -94,6 +94,11 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprBtnPurple;
         [SerializeField] private Sprite _sprBtnRed;
 
+        [Header("[Home Page — Play Button Badge (x3/x5)]")]
+        [SerializeField] private Image _imgPlayBadge;
+        [SerializeField] private Sprite _sprBadgeX3;
+        [SerializeField] private Sprite _sprBadgeX5;
+
         #endregion
 
         #region Fields
@@ -146,8 +151,106 @@ namespace BalloonFlow
             if (_btnSetting != null) _btnSetting.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(2); });
             if (_btnPlay != null) _btnPlay.onClick.AddListener(PlayTouchSFX);
 
+            AutoConfigureShopScroll();
+
             // Start on Home(Lobby) page
             SetPageImmediate(1);
+        }
+
+        /// <summary>
+        /// Shop 페이지 하위 ScrollRect를 런타임에 강제로 올바른 설정으로 맞춤.
+        /// 프리팹 Inspector 세팅 누락을 코드에서 보정.
+        /// </summary>
+        private void AutoConfigureShopScroll()
+        {
+            if (_pageShop == null) return;
+
+            var scrolls = _pageShop.GetComponentsInChildren<ScrollRect>(true);
+            for (int i = 0; i < scrolls.Length; i++)
+            {
+                ConfigureScrollRect(scrolls[i]);
+            }
+        }
+
+        private const float DEFAULT_ITEM_PREFERRED_HEIGHT = 200f;
+        private const float DEFAULT_LAYOUT_SPACING = 20f;
+
+        private static void ConfigureScrollRect(ScrollRect sr)
+        {
+            if (sr == null) return;
+
+            // 1. ScrollRect 자체
+            sr.vertical = true;
+            sr.horizontal = false;
+            sr.movementType = ScrollRect.MovementType.Clamped;
+            sr.inertia = false;
+            sr.scrollSensitivity = 20f;
+
+            // 2. Viewport
+            RectTransform viewport = sr.viewport;
+            if (viewport == null)
+            {
+                viewport = sr.GetComponent<RectTransform>();
+                sr.viewport = viewport;
+            }
+            if (viewport != null)
+            {
+                var vpImage = viewport.GetComponent<Image>();
+                if (vpImage == null)
+                {
+                    vpImage = viewport.gameObject.AddComponent<Image>();
+                    vpImage.color = new Color(1f, 1f, 1f, 0f); // 투명
+                }
+                vpImage.raycastTarget = true;
+
+                if (viewport.GetComponent<Mask>() == null &&
+                    viewport.GetComponent<RectMask2D>() == null)
+                {
+                    viewport.gameObject.AddComponent<RectMask2D>();
+                }
+            }
+
+            // 3. Content
+            RectTransform content = sr.content;
+            if (content == null) return;
+
+            // Anchor/Pivot: Top-Stretch, 상단 기준
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = new Vector2(1f, 1f);
+            content.pivot = new Vector2(0.5f, 1f);
+
+            // VerticalLayoutGroup
+            var vlg = content.GetComponent<VerticalLayoutGroup>();
+            if (vlg == null) vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
+            vlg.childControlHeight = true;
+            vlg.childControlWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.childForceExpandWidth = true;
+            vlg.childAlignment = TextAnchor.UpperCenter;
+            if (vlg.spacing < 1f) vlg.spacing = DEFAULT_LAYOUT_SPACING;
+
+            // ContentSizeFitter
+            var csf = content.GetComponent<ContentSizeFitter>();
+            if (csf == null) csf = content.gameObject.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+            // 4. 하위 아이템: LayoutElement 자동 부착 (preferred height 제공)
+            for (int i = 0; i < content.childCount; i++)
+            {
+                var child = content.GetChild(i) as RectTransform;
+                if (child == null) continue;
+                if (child.GetComponent<LayoutElement>() != null) continue;
+
+                var le = child.gameObject.AddComponent<LayoutElement>();
+                // 기존 아이템 높이가 있으면 존중, 없으면 기본값
+                float h = child.rect.height;
+                le.preferredHeight = h > 1f ? h : DEFAULT_ITEM_PREFERRED_HEIGHT;
+            }
+
+            // 레이아웃 재계산
+            LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+            sr.verticalNormalizedPosition = 1f;
         }
 
         private new void OnDestroy()
@@ -159,6 +262,16 @@ namespace BalloonFlow
         private void Update()
         {
             HandleSwipeDrag();
+        }
+
+        /// <summary>
+        /// Canvas/screen 사이즈가 바뀔 때(해상도·회전 등) 페이지 레이아웃 재계산.
+        /// Awake 시점에 rect가 0이어서 1242f fallback으로 잡히는 케이스도 커버.
+        /// </summary>
+        private void OnRectTransformDimensionsChange()
+        {
+            if (_pageContainer == null) return;
+            RefreshPageLayout();
         }
 
         #endregion
@@ -173,9 +286,7 @@ namespace BalloonFlow
         private void BuildPageContainer()
         {
             // Determine page width from our own RectTransform
-            var selfRT = GetComponent<RectTransform>();
-            _pageWidth = selfRT != null ? selfRT.rect.width : 1242f;
-            if (_pageWidth <= 0f) _pageWidth = 1242f;
+            _pageWidth = ResolvePageWidth();
 
             // Create container
             var containerGO = new GameObject("PageContainer");
@@ -209,13 +320,48 @@ namespace BalloonFlow
             ReparentPage(_pageSetting, 2);
         }
 
+        /// <summary>selfRT.rect.width를 실측. 아직 레이아웃이 안 잡혔으면 Screen.width로 fallback.</summary>
+        private float ResolvePageWidth()
+        {
+            var selfRT = GetComponent<RectTransform>();
+            float w = selfRT != null ? selfRT.rect.width : 0f;
+            if (w <= 0f)
+            {
+                // Canvas 레이아웃 전: 현재 화면의 가로 픽셀을 사용 (CanvasScaler가 자동 스케일)
+                w = Screen.width > 0 ? Screen.width : 1242f;
+            }
+            return w;
+        }
+
+        /// <summary>
+        /// 해상도 변경 시 PageContainer와 하위 페이지들의 크기·위치를 재적용.
+        /// 현재 보이는 페이지 오프셋도 함께 갱신.
+        /// </summary>
+        private void RefreshPageLayout()
+        {
+            float newWidth = ResolvePageWidth();
+            if (newWidth <= 0f) return;
+            if (Mathf.Approximately(newWidth, _pageWidth)) return;
+
+            _pageWidth = newWidth;
+            _pageContainer.sizeDelta = new Vector2(_pageWidth * 3f, 0f);
+
+            ReparentPage(_pageShop, 0);
+            ReparentPage(_pageLobby, 1);
+            ReparentPage(_pageSetting, 2);
+
+            // 진행 중인 스와이프 트윈을 죽이고 현재 페이지 위치로 스냅
+            _pageTween?.Kill();
+            _pageContainer.anchoredPosition = new Vector2(-_currentPageIndex * _pageWidth, _pageContainer.anchoredPosition.y);
+        }
+
         private void ReparentPage(RectTransform page, int index)
         {
             if (page == null) return;
 
             page.SetParent(_pageContainer, false);
 
-            // Each page fills one _pageWidth slot
+            // Each page fills one _pageWidth slot (기존 원본 구조 유지)
             page.anchorMin = Vector2.zero;
             page.anchorMax = Vector2.zero;
             page.pivot = new Vector2(0f, 0f);
@@ -298,6 +444,34 @@ namespace BalloonFlow
                     if (_txtPlayLevel != null) _txtPlayLevel.gameObject.SetActive(false);
                     if (_txtPlayLevelOutline != null) _txtPlayLevelOutline.gameObject.SetActive(false);
                     break;
+            }
+
+            ApplyPlayBadge(difficulty);
+        }
+
+        /// <summary>
+        /// Play 버튼 Badge: Normal=숨김 / Hard=badgex3 / SuperHard=badgex5.
+        /// 표시용(내부 보상 배율 수치와 별개).
+        /// </summary>
+        private void ApplyPlayBadge(DifficultyPurpose difficulty)
+        {
+            if (_imgPlayBadge == null) return;
+
+            Sprite badge = difficulty switch
+            {
+                DifficultyPurpose.SuperHard => _sprBadgeX5,
+                DifficultyPurpose.Hard      => _sprBadgeX3,
+                _                            => null
+            };
+
+            if (badge != null)
+            {
+                _imgPlayBadge.sprite = badge;
+                _imgPlayBadge.gameObject.SetActive(true);
+            }
+            else
+            {
+                _imgPlayBadge.gameObject.SetActive(false);
             }
         }
 
