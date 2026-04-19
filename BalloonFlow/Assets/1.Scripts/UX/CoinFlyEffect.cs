@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BalloonFlow
@@ -11,8 +12,17 @@ namespace BalloonFlow
     /// </summary>
     public static class CoinFlyEffect
     {
-        private const string POOL_KEY = "FXGold";
+        // 신규 FXGoldRotate 우선 사용, 없으면 기존 FXGold로 폴백 (아트팀 교체 타이밍 대비).
+        private const string PREFERRED_PREFAB = "UI/UIAssets/FXGoldRotate";
+        private const string FALLBACK_PREFAB  = "UI/UIAssets/FXGold";
+        private const string POOL_KEY_ROTATE  = "FXGoldRotate";
+        private const string POOL_KEY_LEGACY  = "FXGold";
+
+        private static string POOL_KEY = POOL_KEY_LEGACY; // EnsurePool에서 실제 로드된 프리팹에 따라 결정
         private static bool _poolRegistered;
+
+        /// <summary>진행 중인 연출이 사용 중인 코인 인스턴스 집합. StopAll에서 한번에 반환.</summary>
+        private static readonly HashSet<GameObject> _activeCoins = new HashSet<GameObject>();
 
         public static void Play(Vector2 screenFrom, Vector2 screenTo, int count,
             Action onEachLand = null, Action onAllComplete = null)
@@ -25,10 +35,51 @@ namespace BalloonFlow
                 RunFly(screenFrom, screenTo, count, onEachLand, onAllComplete));
         }
 
+        /// <summary>
+        /// 진행 중인 모든 코인 연출 중단 + 활성 코인을 풀로 반환.
+        /// 씬 전환 시 호출하여 잔여 연출/사운드 이어짐을 방지.
+        /// </summary>
+        public static void StopAll()
+        {
+            // CoroutineRunner에 걸린 모든 RunFly/Fly 코루틴 중단
+            var runner = CoroutineRunner.GetIfExists();
+            if (runner != null) runner.StopAllCoroutines();
+
+            // 활성 코인 오브젝트를 풀로 반환
+            if (ObjectPoolManager.HasInstance)
+            {
+                foreach (var coin in _activeCoins)
+                {
+                    if (coin == null) continue;
+                    coin.transform.SetParent(null);
+                    ObjectPoolManager.Instance.Return(POOL_KEY, coin);
+                }
+            }
+            else
+            {
+                foreach (var coin in _activeCoins)
+                    if (coin != null) coin.SetActive(false);
+            }
+            _activeCoins.Clear();
+        }
+
         private static void EnsurePool()
         {
             if (_poolRegistered || !ObjectPoolManager.HasInstance) return;
-            var prefab = Resources.Load<GameObject>("UI/UIAssets/FXGold");
+
+            // FXGoldRotate 우선, 없으면 FXGold 폴백
+            GameObject prefab = Resources.Load<GameObject>(PREFERRED_PREFAB);
+            if (prefab != null)
+            {
+                POOL_KEY = POOL_KEY_ROTATE;
+            }
+            else
+            {
+                prefab = Resources.Load<GameObject>(FALLBACK_PREFAB);
+                POOL_KEY = POOL_KEY_LEGACY;
+                if (prefab != null)
+                    Debug.LogWarning("[CoinFlyEffect] FXGoldRotate.prefab not found — falling back to FXGold.prefab.");
+            }
             if (prefab == null) return;
 
             // 프리팹에 UIParticleRenderer 추가 (없으면)
@@ -72,6 +123,11 @@ namespace BalloonFlow
             int landed = 0;
             float scatterRadius = Mathf.Min(cW, cH) * 0.25f;
 
+            // 스폰: "연속적으로 날아가는" 느낌을 위해 모든 코인을 단일 프레임에 발사.
+            // 자연스러운 도착 간격은 코인별 랜덤 flight duration으로 처리됨.
+            // (minDelay/maxDelay는 하위 호환 보존용이지만 여기선 사용하지 않음)
+            _ = minDelay; _ = maxDelay;
+
             for (int i = 0; i < count; i++)
             {
                 // 와르르 폭발: 360° 랜덤 방향으로 흩뿌림
@@ -88,6 +144,7 @@ namespace BalloonFlow
                 GameObject coin = ObjectPoolManager.Instance.Get(POOL_KEY);
                 coin.transform.SetParent(parent, false);
                 coin.transform.SetAsLastSibling();
+                _activeCoins.Add(coin);
                 var rt = coin.GetComponent<RectTransform>();
                 if (rt == null) rt = coin.AddComponent<RectTransform>();
                 rt.anchoredPosition = from;
@@ -112,10 +169,8 @@ namespace BalloonFlow
                         onEachLand?.Invoke();
                         if (landed >= count) onAllComplete?.Invoke();
                     }));
-
-                yield return new WaitForSecondsRealtime(
-                    UnityEngine.Random.Range(minDelay, maxDelay));
             }
+            yield break;
         }
 
         /// <summary>
@@ -128,7 +183,8 @@ namespace BalloonFlow
             float duration, float baseScale, Action onDone)
         {
             float elapsed = 0f;
-            float scatterPhase = 0.2f;
+            // 스캐터 단계를 짧게 유지해 코인이 빠르게 타겟으로 수렴 (연속 비행 느낌).
+            float scatterPhase = 0.08f;
 
             while (elapsed < duration)
             {
@@ -160,6 +216,7 @@ namespace BalloonFlow
 
             rt.localScale = Vector3.one;
             coin.transform.SetParent(null);
+            _activeCoins.Remove(coin);
             if (ObjectPoolManager.HasInstance)
                 ObjectPoolManager.Instance.Return(POOL_KEY, coin);
             else

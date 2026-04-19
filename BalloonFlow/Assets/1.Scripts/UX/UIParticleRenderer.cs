@@ -13,6 +13,11 @@ namespace BalloonFlow
     [RequireComponent(typeof(CanvasRenderer))]
     public class UIParticleRenderer : MaskableGraphic
     {
+        [Tooltip("ParticleSystem 월드 단위 → Canvas 픽셀 단위 보정 배율. " +
+                 "ScreenSpaceOverlay에서 Start Size가 0.1처럼 작으면 먼지처럼 보임. " +
+                 "기본 100배로 확대 (1 world = 100 pixel 가정).")]
+        [SerializeField] private float _meshScale = 100f;
+
         private ParticleSystem _ps;
         private ParticleSystemRenderer _psr;
         private Mesh _bakedMesh;
@@ -23,6 +28,10 @@ namespace BalloonFlow
             _ps = GetComponent<ParticleSystem>();
             _psr = GetComponent<ParticleSystemRenderer>();
             _bakedMesh = new Mesh();
+
+            // MaskableGraphic은 기본 raycastTarget=true → 밑에 깔린 버튼 클릭을 차단.
+            // 파티클 비주얼은 입력을 받을 이유가 없으므로 항상 false.
+            raycastTarget = false;
 
             // 기본 ParticleSystemRenderer 비활성화 (UI로 대체)
             if (_psr != null) _psr.enabled = false;
@@ -40,7 +49,10 @@ namespace BalloonFlow
 
         private void LateUpdate()
         {
-            if (_ps == null || !_ps.isPlaying) return;
+            if (_ps == null) return;
+            // Loop가 켜진 파티클이면 isPlaying이 계속 true. 일회성 파티클은 끝나면 false.
+            // 둘 다 지원 — 파티클이 있을 수도 있으니 isPlaying과 particleCount 둘 다 체크.
+            if (!_ps.isPlaying && _ps.particleCount == 0) return;
             SetVerticesDirty();
         }
 
@@ -51,10 +63,8 @@ namespace BalloonFlow
             if (_ps == null || _psr == null) return;
             if (_ps.particleCount == 0) return;
 
-            // 파티클 메시 베이크
-            _psr.enabled = true;
+            // 월드 공간 베이크 — 카메라 빌보드 + Simulation Space(World/Local) 모두 대응.
             _psr.BakeMesh(_bakedMesh, useTransform: true);
-            _psr.enabled = false;
 
             if (_bakedMesh.vertexCount == 0) return;
 
@@ -63,20 +73,24 @@ namespace BalloonFlow
             var uvs = _bakedMesh.uv;
             var indices = _bakedMesh.GetIndices(0);
 
-            // 색상 배열이 비어있으면 흰색으로
             bool hasColors = colors != null && colors.Length == verts.Length;
             bool hasUVs = uvs != null && uvs.Length == verts.Length;
 
+            // 월드 좌표 → Graphic의 RectTransform 로컬 좌표로 변환.
+            // _meshScale: 파티클 Start Size가 작을 때 UI 픽셀 크기로 맞추기 위한 배율.
+            RectTransform rt = rectTransform;
+            float scale = _meshScale;
+
             for (int i = 0; i < verts.Length; i++)
             {
-                // BakeMesh는 카메라 기준 빌보드 → XY만 사용, Z=0 (UI 평면)
-                Vector3 v = verts[i];
-                Vector3 localPos = new Vector3(v.x, v.y, 0f);
+                Vector3 worldV = verts[i];
+                Vector3 localV = rt.InverseTransformPoint(worldV);
+                Vector3 finalPos = new Vector3(localV.x * scale, localV.y * scale, 0f);
 
                 Color32 c = hasColors ? colors[i] : new Color32(255, 255, 255, 255);
                 Vector2 uv = hasUVs ? uvs[i] : Vector2.zero;
 
-                vh.AddVert(localPos, c, uv);
+                vh.AddVert(finalPos, c, uv);
             }
 
             for (int i = 0; i < indices.Length; i += 3)

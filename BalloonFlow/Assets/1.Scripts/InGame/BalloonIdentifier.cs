@@ -34,6 +34,12 @@ namespace BalloonFlow
         [Tooltip("기반 Material (BalloonShared). 복제하여 색상만 변경")]
         [SerializeField] private Material _baseMaterial;
 
+        [Tooltip("Hidden 기믹 상태 전용 머테리얼 (BalloonHidden.mat). 프리팹에 드래그 할당.")]
+        [SerializeField] private Material _hiddenMaterial;
+
+        /// <summary>Hidden 머테리얼 존재 여부.</summary>
+        public bool HasHiddenMaterial => _hiddenMaterial != null;
+
         /// <summary>Unique balloon ID.</summary>
         public int BalloonId => _balloonId;
 
@@ -166,6 +172,22 @@ namespace BalloonFlow
                     var main = _colorParticles[i].main;
                     main.startColor = color;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Hidden 기믹 상태 전용 머테리얼 적용.
+        /// 우선순위: 인자로 전달된 머테리얼 > 프리팹에 할당된 _hiddenMaterial > null(무시).
+        /// </summary>
+        public void ApplyHiddenMaterial(Material hiddenMat = null)
+        {
+            Material mat = hiddenMat != null ? hiddenMat : _hiddenMaterial;
+            if (mat == null || _colorRenderers == null) return;
+            for (int i = 0; i < _colorRenderers.Length; i++)
+            {
+                if (_colorRenderers[i] == null) continue;
+                _colorRenderers[i].enabled = true;
+                _colorRenderers[i].sharedMaterial = mat;
             }
         }
 

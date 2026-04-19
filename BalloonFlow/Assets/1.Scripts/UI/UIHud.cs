@@ -25,6 +25,11 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _goldText;
         [SerializeField] private Button _goldPlusButton;
 
+        [Header("[Top — x2 속도 토글 (우상단)]")]
+        [SerializeField] private Button _speedToggleButton;
+        [SerializeField] private GameObject _speedToggleOnVisual;
+        [SerializeField] private GameObject _speedToggleOffVisual;
+
         [Header("[Bottom Panel — 부스터 아이템]")]
         [SerializeField] private Button _itemBtnShuffle;
         [SerializeField] private Button _itemBtnRemove;
@@ -212,6 +217,8 @@ namespace BalloonFlow
             if (_color1Button != null) _color1Button.onClick.AddListener(() => OnColorPicked(1));
             if (_color2Button != null) _color2Button.onClick.AddListener(() => OnColorPicked(2));
             if (_color3Button != null) _color3Button.onClick.AddListener(() => OnColorPicked(3));
+            if (_speedToggleButton != null) _speedToggleButton.onClick.AddListener(OnSpeedToggleClicked);
+            RefreshSpeedToggleVisual();
         }
 
         private void UnwireButtons()
@@ -223,6 +230,21 @@ namespace BalloonFlow
             if (_color1Button != null) _color1Button.onClick.RemoveAllListeners();
             if (_color2Button != null) _color2Button.onClick.RemoveAllListeners();
             if (_color3Button != null) _color3Button.onClick.RemoveAllListeners();
+            if (_speedToggleButton != null) _speedToggleButton.onClick.RemoveAllListeners();
+        }
+
+        private void OnSpeedToggleClicked()
+        {
+            if (GameSpeedController.HasInstance)
+                GameSpeedController.Instance.ToggleSpeedBoost();
+            RefreshSpeedToggleVisual();
+        }
+
+        private void RefreshSpeedToggleVisual()
+        {
+            bool on = GameSpeedController.HasInstance && GameSpeedController.Instance.ToggleOn;
+            if (_speedToggleOnVisual != null) _speedToggleOnVisual.SetActive(on);
+            if (_speedToggleOffVisual != null) _speedToggleOffVisual.SetActive(!on);
         }
 
         #endregion

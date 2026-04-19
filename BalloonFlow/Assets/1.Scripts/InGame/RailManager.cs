@@ -157,14 +157,32 @@ namespace BalloonFlow
         /// <summary>Occupancy ratio 0.0 ~ 1.0.</summary>
         public float Occupancy => _slotCount > 0 ? (float)_occupiedCount / _slotCount : 0f;
 
-        /// <summary>Conveyor belt rotation speed in slots per second.</summary>
-        public float RotationSpeed => _rotationSpeed;
+        /// <summary>
+        /// 유저 속도 조절 배율 (홀드 가속 + x2 토글).
+        /// GameSpeedController가 매 프레임 설정. 기본 1.0.
+        /// </summary>
+        public float UserSpeedMultiplier { get; set; } = 1f;
+
+        /// <summary>
+        /// Conveyor belt rotation speed in slots per second.
+        /// UserSpeedMultiplier가 이미 반영된 값 — DartManager 등 하위 소비자도 자동으로 가속 적용.
+        /// </summary>
+        public float RotationSpeed => _rotationSpeed * UserSpeedMultiplier;
+
+        /// <summary>유저 가속 미반영 원본 레벨 속도.</summary>
+        public float BaseRotationSpeed => _rotationSpeed;
 
         /// <summary>Distance between adjacent slots on the path.</summary>
         public float SlotSpacing => _slotSpacing;
 
-        /// <summary>동적 배율이 적용된 다트 간 최소 간격.</summary>
+        /// <summary>동적 배율이 적용된 다트 간 최소 간격 (슬롯 기반, 배치 로직용).</summary>
         public float EffectiveDartGap => _slotSpacing * (GameManager.HasInstance ? GameManager.Instance.Board.dartSpacingMultiplier : 1f);
+
+        /// <summary>
+        /// 다트가 서로 막혀 정지할 때의 물리적 최소 간격 = 다트 비주얼 크기.
+        /// Deploy point 대기/주행 중 간격이 벌어지지 않고 밀집 정렬되도록 함.
+        /// </summary>
+        public float DartPhysicalGap => GameManager.HasInstance ? GameManager.Instance.Board.dartScale : 0.275f;
 
         /// <summary>Current belt rotation offset in distance units.</summary>
         public float RotationOffset => _rotationOffset;
@@ -213,44 +231,116 @@ namespace BalloonFlow
             if (_boardFinished) return;
             if (IsPausedByBooster) return;
 
-            // 회전 속도: 남은 다트 수 기반 + 배치 중 감속
+            // 회전 속도: 남은 다트 수 기반 + 배치 중 감속 + 유저 가속(홀드/x2토글)
             float baseSpeedMult = GetSpeedMultiplier();
-            _rotationOffset += _rotationSpeed * _slotSpacing * Time.deltaTime * baseSpeedMult;
+            float beltDelta = _rotationSpeed * UserSpeedMultiplier * _slotSpacing * Time.deltaTime * baseSpeedMult;
+            _rotationOffset += beltDelta;
 
-            // Wrap around
-            if (_totalPathLength > 0f)
-            {
-                _rotationOffset %= _totalPathLength;
-            }
+            float pathLen = _totalPathLength;
+            bool hasWrap = pathLen > 0f;
+            if (hasWrap && _rotationOffset >= pathLen) _rotationOffset -= pathLen;
 
             // Chain freeze: moving darts that reach frozen darts also freeze
             PropagateFreezeChain();
 
-            // Per-dart 자동차 모델: 앞이 막히면 slotSpacing 거리 두고 정지
-            float speedMult = baseSpeedMult;
-            float dartDelta = _rotationSpeed * _slotSpacing * Time.deltaTime * speedMult;
-            for (int i = 0; i < _darts.Count; i++)
-            {
-                float maxAdvance = dartDelta;
+            int dartCount = _darts.Count;
+            if (dartCount == 0) return;
 
-                // 앞에 있는 가장 가까운 장애물 (다른 다트 or deploy point) 찾기
-                float blockDist = FindDistanceToBlockAhead(_darts[i]);
-                if (blockDist >= 0f)
+            float physicalGap = DartPhysicalGap;
+            float dartDelta = beltDelta;
+
+            // progress 내림차순 정렬
+            _sortedDartIndices.Clear();
+            for (int i = 0; i < dartCount; i++) _sortedDartIndices.Add(i);
+            if (_dartProgressDescending == null)
+                _dartProgressDescending = (a, b) => _darts[b].progress.CompareTo(_darts[a].progress);
+            _sortedDartIndices.Sort(_dartProgressDescending);
+
+            // 공통 케이스(wrap 없음)에서는 sort-descending이 곧 front-to-back.
+            // wrap 가능성: 최고-최저 progress 차이가 pathLen/2 초과면 wrap 구간을 걸치고 있음.
+            int headPosInSorted = 0;
+            if (hasWrap && dartCount > 1)
+            {
+                float highest = _darts[_sortedDartIndices[0]].progress;
+                float lowest = _darts[_sortedDartIndices[dartCount - 1]].progress;
+                if ((highest - lowest) > pathLen * 0.5f)
                 {
-                    // 장애물 앞 EffectiveDartGap 거리에서 정지
-                    float stopDist = blockDist - EffectiveDartGap;
+                    // wrap 구간 걸침 → 정확한 head 탐지 필요 (O(n²))
+                    float maxGapAhead = -1f;
+                    for (int p = 0; p < dartCount; p++)
+                    {
+                        int idx = _sortedDartIndices[p];
+                        float myProg = _darts[idx].progress;
+                        float minAhead = float.MaxValue;
+                        for (int j = 0; j < dartCount; j++)
+                        {
+                            if (j == idx) continue;
+                            float d = _darts[j].progress - myProg;
+                            if (d < 0f) d += pathLen;
+                            if (d > 0.001f && d < minAhead) minAhead = d;
+                        }
+                        if (minAhead > maxGapAhead)
+                        {
+                            maxGapAhead = minAhead;
+                            headPosInSorted = p;
+                        }
+                    }
+                }
+            }
+
+            // 선두부터 cyclic하게 처리
+            bool hasDeployPoints = _activeDeployPoints.Count > 0;
+            float deployOffset = physicalGap * 0.5f;
+
+            for (int offset = 0; offset < dartCount; offset++)
+            {
+                int p = headPosInSorted + offset;
+                if (p >= dartCount) p -= dartCount;
+                int idx = _sortedDartIndices[p];
+                DartOnRail dart = _darts[idx];
+                float myProg = dart.progress;
+
+                // 인라인 블록 쿼리 — 함수 호출 오버헤드 제거 + 실시간 최신 progress 사용
+                float closest = float.MaxValue;
+                for (int i = 0; i < dartCount; i++)
+                {
+                    if (i == idx) continue;
+                    float d = _darts[i].progress - myProg;
+                    if (hasWrap && d < 0f) d += pathLen;
+                    if (d > 0.001f && d < closest) closest = d;
+                }
+
+                if (hasDeployPoints)
+                {
+                    foreach (var kvp in _deployPoints)
+                    {
+                        if (!_activeDeployPoints.Contains(kvp.Key)) continue;
+                        float d = (kvp.Value - deployOffset) - myProg;
+                        if (hasWrap && d < 0f) d += pathLen;
+                        if (d > 0.001f && d < closest) closest = d;
+                    }
+                }
+
+                float maxAdvance = dartDelta;
+                if (closest < float.MaxValue)
+                {
+                    float stopDist = closest - physicalGap;
                     if (stopDist < 0f) stopDist = 0f;
-                    maxAdvance = Mathf.Min(maxAdvance, stopDist);
+                    if (stopDist < maxAdvance) maxAdvance = stopDist;
                 }
 
                 if (maxAdvance > 0.001f)
                 {
-                    _darts[i].progress += maxAdvance;
-                    if (_totalPathLength > 0f)
-                        _darts[i].progress = ((_darts[i].progress % _totalPathLength) + _totalPathLength) % _totalPathLength;
+                    float newProg = myProg + maxAdvance;
+                    if (hasWrap && newProg >= pathLen) newProg -= pathLen;
+                    dart.progress = newProg;
                 }
             }
         }
+
+        // Sort helpers for front-to-back dart iteration
+        private readonly List<int> _sortedDartIndices = new List<int>(256);
+        private System.Comparison<int> _dartProgressDescending;
 
         /// <summary>
         /// 점유율 기반 속도 배율 (배치 감속 제외).
@@ -322,69 +412,6 @@ namespace BalloonFlow
         /// 장애물 = 다른 다트 or 다른 holder의 deploy point.
         /// -1 = 앞에 장애물 없음.
         /// </summary>
-        /// <summary>
-        /// 앞에 있는 가장 가까운 장애물까지의 경로상 거리.
-        /// 장애물 = 다른 다트 + 활성화된 deploy point (첫 다트 배치 후).
-        /// 대기 중인 deploy point는 차단하지 않음 → 빈틈 기다림.
-        /// -1 = 앞에 장애물 없음.
-        /// </summary>
-        // 정렬된 progress 캐시 (매 프레임 1회 빌드, 모든 다트가 공유)
-        private readonly List<float> _sortedProgress = new List<float>(256);
-        private int _sortedProgressFrame = -1;
-
-        private void RebuildSortedProgress()
-        {
-            int frame = Time.frameCount;
-            if (frame == _sortedProgressFrame) return;
-            _sortedProgressFrame = frame;
-
-            _sortedProgress.Clear();
-            for (int i = 0; i < _darts.Count; i++)
-                _sortedProgress.Add(_darts[i].progress);
-
-            // deploy points 추가
-            foreach (var dp in _deployPoints)
-            {
-                if (!_activeDeployPoints.Contains(dp.Key)) continue;
-                float blockAt = dp.Value - EffectiveDartGap * 0.5f;
-                if (_totalPathLength > 0f)
-                    blockAt = ((blockAt % _totalPathLength) + _totalPathLength) % _totalPathLength;
-                _sortedProgress.Add(blockAt);
-            }
-
-            _sortedProgress.Sort();
-        }
-
-        private float FindDistanceToBlockAhead(DartOnRail dart)
-        {
-            RebuildSortedProgress();
-
-            float myProg = dart.progress;
-            float closest = float.MaxValue;
-
-            // 이진 검색으로 바로 앞 장애물 찾기
-            int idx = _sortedProgress.BinarySearch(myProg);
-            if (idx < 0) idx = ~idx; // insertion point
-
-            // 바로 다음 위치 확인
-            for (int check = 0; check < 2; check++)
-            {
-                int ci = (idx + check) % _sortedProgress.Count;
-                if (ci < 0 || ci >= _sortedProgress.Count) continue;
-
-                float prog = _sortedProgress[ci];
-                if (Mathf.Approximately(prog, myProg)) continue; // 자기 자신 스킵
-
-                float dist = prog - myProg;
-                if (_totalPathLength > 0f)
-                    dist = ((dist % _totalPathLength) + _totalPathLength) % _totalPathLength;
-                if (dist > 0f && dist < closest)
-                    closest = dist;
-            }
-
-            return closest < float.MaxValue ? closest : -1f;
-        }
-
         #endregion
 
         #region Public Methods — Path
@@ -760,11 +787,13 @@ namespace BalloonFlow
         }
 
         /// <summary>해당 progress에 배치 가능한지 체크.
-        /// 모든 다트와의 간격 확인 — 빈틈이 있을 때만 배치 가능.</summary>
+        /// 모든 다트와의 간격 확인 — 빈틈이 있을 때만 배치 가능.
+        /// 밀집 배치를 위해 물리 간격(DartPhysicalGap) 기준으로 체크 → 다트 단위로 빠르게 연쇄 배치됨.
+        /// </summary>
         public bool IsProgressClear(float progress, int holderId)
         {
             if (_darts.Count >= _slotCount) return false;
-            float minGap = EffectiveDartGap * 0.9f;
+            float minGap = DartPhysicalGap * 0.9f;
             for (int i = 0; i < _darts.Count; i++)
             {
                 float diff = Mathf.Abs(_darts[i].progress - progress);

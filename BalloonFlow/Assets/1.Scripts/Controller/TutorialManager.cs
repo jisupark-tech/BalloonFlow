@@ -96,17 +96,18 @@ namespace BalloonFlow
             // 씬의 기존 Canvas 찾기
             Canvas sceneCanvas = FindSceneCanvas();
 
-            var prefab = Resources.Load<GameObject>("Popup/PopupTutorial");
+            // 실제 프리팹 경로: Resources/Popup/Tutorial.prefab
+            var prefab = Resources.Load<GameObject>("Popup/Tutorial");
             if (prefab != null && sceneCanvas != null)
             {
                 var go = Instantiate(prefab, sceneCanvas.transform);
-                go.name = "PopupTutorial";
+                go.name = "Tutorial";
                 BindFromPopup(go);
             }
             else
             {
                 if (prefab == null)
-                    Debug.LogWarning("[TutorialManager] Resources/Popup/PopupTutorial prefab not found.");
+                    Debug.LogWarning("[TutorialManager] Resources/Popup/Tutorial prefab not found.");
                 CreateTutorialUI();
             }
         }
@@ -155,8 +156,12 @@ namespace BalloonFlow
                 _arrowImage = _arrowIndicator?.GetComponent<Image>();
 
                 _instructionText = popup.InstructionText;
-                _instructionPanel = _instructionText?.transform.parent?.gameObject;
-                _instructionPanelRect = _instructionPanel?.GetComponent<RectTransform>();
+                // Prefab에서 InstructionPanel이 명시 지정되어 있으면 우선 사용 (디자이너가 위치 이동 가능).
+                // 없으면 기존처럼 InstructionText의 parent로 폴백.
+                _instructionPanelRect = popup.InstructionPanel;
+                if (_instructionPanelRect == null && _instructionText != null)
+                    _instructionPanelRect = _instructionText.transform.parent as RectTransform;
+                _instructionPanel = _instructionPanelRect != null ? _instructionPanelRect.gameObject : null;
 
                 _skipButton = popup.SkipButton;
                 if (_skipButton != null)

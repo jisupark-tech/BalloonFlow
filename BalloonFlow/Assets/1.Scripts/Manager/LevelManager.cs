@@ -329,6 +329,15 @@ namespace BalloonFlow
                 PopProcessor.Instance.ResetAll();
             }
 
+            // Reset gimmick state (Ice HP, Pin segments, Surprise, Color Curtain counters).
+            // Without this, stale balloonId-keyed entries from previous levels can collide
+            // with new-level balloonIds and trigger unintended ForcePopBalloon on balloons
+            // that share IDs with orphaned Ice/Curtain entries.
+            if (GimmickProcessor.HasInstance)
+            {
+                GimmickProcessor.Instance.ResetAll();
+            }
+
             // Calculate total darts and rail capacity (needed by both RailManager and HolderManager)
             int totalDarts = 0;
             if (config.holders != null)

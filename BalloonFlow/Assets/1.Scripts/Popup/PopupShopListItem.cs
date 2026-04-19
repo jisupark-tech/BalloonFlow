@@ -26,6 +26,23 @@ namespace BalloonFlow
         [SerializeField] private Button _btnBuy;
         [SerializeField] private TMP_Text _txtBtnBuy;
 
+        [Header("[타입별 프레임 — 상단/하단]")]
+        [SerializeField] private Image _imgTop;
+        [SerializeField] private Image _imgBottom;
+        [SerializeField] private Image _imgBtnBuyFrame;
+        [SerializeField] private GameObject _imgSale;
+        [SerializeField] private GameObject _particleLight;
+
+        [Header("[Special Offer 스프라이트]")]
+        [SerializeField] private Sprite _sprFrameSpecial;
+        [SerializeField] private Sprite _sprFrameRed;
+        [SerializeField] private Sprite _sprBtnFrameRed;
+
+        [Header("[Normal Bundle 스프라이트]")]
+        [SerializeField] private Sprite _sprFrameNormal;
+        [SerializeField] private Sprite _sprFramePurple;
+        [SerializeField] private Sprite _sprBtnFramePurple;
+
         private ShopProductData _data;
         private System.Action<ShopProductData> _onBuy;
         private float _remainingTime;
@@ -74,6 +91,27 @@ namespace BalloonFlow
             {
                 _btnBuy.onClick.RemoveAllListeners();
                 _btnBuy.onClick.AddListener(() => _onBuy?.Invoke(_data));
+            }
+
+            // 타입별 프레임/이미지 스왑: hasDiscount=true → Special Offer (Red) / false → Normal Bundle (Purple)
+            ApplyProductTypeVisual(data.hasDiscount);
+        }
+
+        private void ApplyProductTypeVisual(bool isSpecial)
+        {
+            if (isSpecial)
+            {
+                if (_imgTop != null && _sprFrameSpecial != null) _imgTop.sprite = _sprFrameSpecial;
+                if (_imgBottom != null && _sprFrameRed != null) _imgBottom.sprite = _sprFrameRed;
+                if (_imgBtnBuyFrame != null && _sprBtnFrameRed != null) _imgBtnBuyFrame.sprite = _sprBtnFrameRed;
+                if (_imgSale != null) _imgSale.SetActive(true);
+            }
+            else
+            {
+                if (_imgTop != null && _sprFrameNormal != null) _imgTop.sprite = _sprFrameNormal;
+                if (_imgBottom != null && _sprFramePurple != null) _imgBottom.sprite = _sprFramePurple;
+                if (_imgBtnBuyFrame != null && _sprBtnFramePurple != null) _imgBtnBuyFrame.sprite = _sprBtnFramePurple;
+                if (_imgSale != null) _imgSale.SetActive(false);
             }
         }
 

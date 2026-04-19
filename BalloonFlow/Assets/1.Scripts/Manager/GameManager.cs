@@ -310,6 +310,7 @@ namespace BalloonFlow
             CreateChild<HUDController>("Mgr_HUD");
             CreateChild<FeedbackController>("Mgr_Feedback");
             CreateChild<GimmickManager>("Mgr_Gimmick");
+            CreateChild<GameSpeedController>("Mgr_GameSpeed");
             CreateChild<BalanceProcessor>("Mgr_Balance");
             CreateChild<TutorialController>("Mgr_TutorialCtrl");
             CreateChild<TutorialManager>("Mgr_TutorialMgr");
@@ -392,6 +393,10 @@ namespace BalloonFlow
         {
             _isTransitioning = true;
             string _fromScene = _currentScene;
+
+            // 보상 이펙트/SFX가 다음 씬으로 이어져 재생되는 문제 방지.
+            CoinFlyEffect.StopAll();
+            if (AudioManager.HasInstance) AudioManager.Instance.StopAllSfx();
 
             EventBus.Publish(new OnSceneTransitionStarted
             {
