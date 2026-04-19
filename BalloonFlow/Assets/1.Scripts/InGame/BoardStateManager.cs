@@ -32,11 +32,11 @@ namespace BalloonFlow
         #region Constants — Gauge Thresholds
 
         // Occupancy ratio thresholds for each gauge stage
-        // 명세: SAFE 0~50%, CAUTION 50~80%, NORMAL_HIGH 80~90%, WARNING 90%~허용량-2, CRITICAL 허용량-1+
+        // 명세 (v2): 경고 알림은 80% 이상부터, 실패는 100%(레일 완전 가득 참)일 때만.
         private const float THRESHOLD_CAUTION     = 0.50f;
         private const float THRESHOLD_NORMAL_HIGH = 0.80f;
         private const float THRESHOLD_WARNING     = 0.90f;
-        private const float THRESHOLD_CRITICAL    = 0.95f; // 실제 CRITICAL은 허용량-1 정수 비교
+        private const float THRESHOLD_CRITICAL    = 0.95f;
 
         #endregion
 
@@ -46,8 +46,7 @@ namespace BalloonFlow
         private int _remainingBalloons;
         private int _currentLevelId;
         private float _failGraceDelay = 1.5f;
-        // Design ref: 실패 조건 = "허용량-1개" (capacity - 1, 정수 기준)
-        // 이전: float 0.995f → capacity 50에서 1개 차이 발생. 정수 비교로 변경.
+        // Design ref: 실패 조건 = "레일이 꽉 찬 상태" (activeDarts >= capacity, 정수 기준)
 
         // 6-stage gauge
         private GaugeStage _currentGaugeStage = GaugeStage.Safe;
@@ -61,7 +60,7 @@ namespace BalloonFlow
         private float _stallTimer;
         private int _lastBalloonCount;
         private const float STALL_FAIL_DELAY = 1.5f; // 1.5초 동안 풍선 안 터지면 실패
-        private const float STALL_MIN_OCCUPANCY = 0.7f; // 70% 이상에서만 감지
+        private const float STALL_MIN_OCCUPANCY = 0.8f; // 80% 이상에서만 경고/교착 감지
 
         #endregion
 
@@ -117,9 +116,9 @@ namespace BalloonFlow
             // Grace delay timer for rail overflow fail
             if (_isCritical && !_failConfirmed)
             {
-                // Re-check: has occupancy dropped below capacity-1?
+                // Re-check: 레일이 꽉 찬 상태에서 벗어났는지 (100% 미만)
                 if (RailManager.HasInstance &&
-                    RailManager.Instance.OccupiedCount < RailManager.Instance.SlotCount - 1)
+                    RailManager.Instance.OccupiedCount < RailManager.Instance.SlotCount)
                 {
                     // Recovered!
                     _isCritical = false;
@@ -222,7 +221,8 @@ namespace BalloonFlow
             {
                 int occupied = RailManager.Instance.OccupiedCount;
                 int capacity = RailManager.Instance.SlotCount;
-                if (occupied >= capacity - 1 && !HasOutermostMatch())
+                // 실패 조건: 레일이 꽉 찬(100%) 상태 + 매칭 가능한 풍선 없음
+                if (occupied >= capacity && !HasOutermostMatch())
                 {
                     return new FailResult
                     {
@@ -315,15 +315,9 @@ namespace BalloonFlow
             if (BoardTileManager.HasInstance)
                 BoardTileManager.Instance.SetDangerVisible(evt.occupancy >= STALL_MIN_OCCUPANCY);
 
-            // 레일 완전히 찬 경우 → 즉시 실패 (grace 없이)
-            if (evt.activeDarts >= evt.totalSlots)
-            {
-                TriggerFail(FailReason.RailOverflow);
-                return;
-            }
-
-            // Fail trigger: integer-based "capacity - 1" check (Design ref: 레일초과_코어메카닉_명세)
-            bool atFailThreshold = evt.activeDarts >= evt.totalSlots - 1;
+            // 실패 조건: 레일이 완전히 찬 상태 (100%).
+            // 매칭 가능한 풍선이 없으면 grace delay 후 실패, 있으면 매칭 기다림.
+            bool atFailThreshold = evt.activeDarts >= evt.totalSlots;
 
             if (atFailThreshold)
             {
