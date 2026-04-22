@@ -151,6 +151,9 @@ namespace BalloonFlow
 
         [Tooltip("실패 임계 점유율 (0~1). 기본 0.995 = 199/200슬롯")]
         public float failOccupancyThreshold = 0.995f;
+
+        [Tooltip("실패 판정 비활성화. ON=레일 초과/교착 등 어떤 조건에서도 게임오버 트리거 안 됨. 경고 UI(게이지)는 그대로 표시. 동적 반영.")]
+        public bool disableFail = false;
     }
 
     /// <summary>

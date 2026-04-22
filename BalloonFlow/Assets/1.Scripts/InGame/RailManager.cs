@@ -70,8 +70,9 @@ namespace BalloonFlow
         private const float MAX_CORNER_RADIUS = 5f;
 
         // 가변 수용량 구간 — 총 다트 수 기준으로 레일 수용량 자동 결정
-        // ≤300→40, ≤500→80, ≤700→120, 701+→160
-        private static readonly int[] CAPACITY_TIERS = { 40, 80, 120, 160 };
+        // ≤300→50, ≤500→100, ≤700→150, 701+→200
+        // 다트 간 간격 제거로 실제 패킹 밀도 증가 → 허용량 상향 (기존 40/80/120/160)
+        private static readonly int[] CAPACITY_TIERS = { 50, 100, 150, 200 };
         private static readonly int[] CAPACITY_DART_THRESHOLDS = { 300, 500, 700, int.MaxValue };
 
         // 이어하기 제거량 — 허용량의 10% (명세: 4/8/12/16)
