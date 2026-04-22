@@ -512,6 +512,16 @@ namespace BalloonFlow
         {
             if (_currentState != BoardState.Playing) return;
 
+            // GameManager.Board.disableFail: 동적 토글로 모든 실패 트리거 차단 (경고 UI는 유지)
+            if (GameManager.HasInstance && GameManager.Instance.Board.disableFail)
+            {
+                _isCritical = false;
+                _criticalTimer = 0f;
+                _failConfirmed = false;
+                _stallTimer = 0f;
+                return;
+            }
+
             _currentState = BoardState.Failed;
 
             string reasonText;
