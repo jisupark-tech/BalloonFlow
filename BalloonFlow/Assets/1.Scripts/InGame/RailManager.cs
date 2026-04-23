@@ -183,7 +183,7 @@ namespace BalloonFlow
         /// 다트가 서로 막혀 정지할 때의 물리적 최소 간격 = 다트 비주얼 크기.
         /// Deploy point 대기/주행 중 간격이 벌어지지 않고 밀집 정렬되도록 함.
         /// </summary>
-        public float DartPhysicalGap => GameManager.HasInstance ? GameManager.Instance.Board.dartScale : 0.275f;
+        public float DartPhysicalGap => GameManager.HasInstance ? GameManager.Instance.Board.dartScale * GameManager.Instance.Board.dartSpacingMultiplier : 0.275f;
 
         /// <summary>Current belt rotation offset in distance units.</summary>
         public float RotationOffset => _rotationOffset;
