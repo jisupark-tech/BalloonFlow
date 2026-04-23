@@ -66,9 +66,9 @@ namespace BalloonFlow
         [Range(0.1f, 3f)]
         public float dartScale = 0.275f;
 
-        [Tooltip("다트 간격 배율. 크면 다트 사이 간격 넓어짐. 동적 반영. (default: 1)")]
-        [Range(0.2f, 3f)]
-        public float dartSpacingMultiplier = 1f;
+        [Tooltip("다트 간격 배율. 크면 다트 사이 간격 넓어짐. 동적 반영. (default: 4)")]
+        [Range(0.2f, 5f)]
+        public float dartSpacingMultiplier = 4f;
 
         [Tooltip("다트 경로 오프셋. 벨트 중심에서 안쪽(+)/바깥쪽(-) 이동. 동적 반영. (default: -0.15)")]
         [Range(-2f, 2f)]
