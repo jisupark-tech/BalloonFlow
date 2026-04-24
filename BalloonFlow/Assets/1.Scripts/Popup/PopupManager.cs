@@ -233,6 +233,9 @@ namespace BalloonFlow
             {
                 // UIBase.CloseUI()가 SetActive(false)하므로 여기서 복원
                 group.gameObject.SetActive(true);
+                // UIBase.Awake가 이미 바인딩을 처리하지만, UIBase를 상속하지 않는
+                // 팝업 프리팹이나 RegisterPopup으로 등록된 런타임 오브젝트까지 안전망으로 커버.
+                UIParticleBinder.Bind(group.gameObject);
                 SetCanvasGroupVisible(group, true);
                 SetOverlayVisible(true);
                 _activePopupId = popupId;
