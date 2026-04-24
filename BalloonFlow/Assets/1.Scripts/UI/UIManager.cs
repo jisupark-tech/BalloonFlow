@@ -243,7 +243,7 @@ namespace BalloonFlow
             _fadeCanvas.sortingOrder = 999;
             _canvasGO.AddComponent<GraphicRaycaster>();
 
-            // Solid black background overlay
+            // Solid #1B58A5 background overlay (letterbox area during scene transition)
             var _go = new GameObject("FadeOverlay");
             _go.layer = LayerMask.NameToLayer("UI");
             _go.transform.SetParent(_canvasGO.transform, false);
@@ -253,7 +253,7 @@ namespace BalloonFlow
             _rt.offsetMin = Vector2.zero;
             _rt.offsetMax = Vector2.zero;
             var _img = _go.AddComponent<Image>();
-            _img.color = Color.black;
+            _img.color = new Color(0x1B / 255f, 0x58 / 255f, 0xA5 / 255f);
             _img.raycastTarget = true;
 
             _fadeOverlay = _go.AddComponent<CanvasGroup>();
