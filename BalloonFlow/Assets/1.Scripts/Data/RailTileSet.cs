@@ -14,6 +14,8 @@ namespace BalloonFlow
     {
         [Header("Straight Tiles (center-aligned)")]
         public Sprite tileH;   // horizontal straight
+        public Sprite tileHTop;     // horizontal straight — top row of conveyor (rail_corner_h_t)
+        public Sprite tileHBottom;  // horizontal straight — bottom row of conveyor (rail_corner_h_b)
         public Sprite tileV;   // vertical straight
 
         [Header("Corner Tiles (center-aligned)")]
@@ -120,5 +122,33 @@ namespace BalloonFlow
 
         /// <summary>Returns vertical straight tile (new tileV, fallback to legacy tileVL).</summary>
         public Sprite GetV() => tileV != null ? tileV : tileVL;
+
+        // Resources 폴백 캐시 — 매번 Load를 타지 않도록 저장.
+        private static Sprite _cachedHTop;
+        private static Sprite _cachedHBottom;
+
+        /// <summary>컨베이어 상단 수평 타일. 직렬화 필드가 비어 있으면 Resources/Tiles/rail_corner_h_t 폴백.</summary>
+        public Sprite GetHTop()
+        {
+            if (tileHTop != null) return tileHTop;
+            if (_cachedHTop == null)
+            {
+                var tile = Resources.Load<UnityEngine.Tilemaps.Tile>("Tiles/rail_corner_h_t");
+                if (tile != null) _cachedHTop = tile.sprite;
+            }
+            return _cachedHTop != null ? _cachedHTop : GetH();
+        }
+
+        /// <summary>컨베이어 하단 수평 타일. 직렬화 필드가 비어 있으면 Resources/Tiles/rail_corner_h_b 폴백.</summary>
+        public Sprite GetHBottom()
+        {
+            if (tileHBottom != null) return tileHBottom;
+            if (_cachedHBottom == null)
+            {
+                var tile = Resources.Load<UnityEngine.Tilemaps.Tile>("Tiles/rail_corner_h_b");
+                if (tile != null) _cachedHBottom = tile.sprite;
+            }
+            return _cachedHBottom != null ? _cachedHBottom : GetH();
+        }
     }
 }
