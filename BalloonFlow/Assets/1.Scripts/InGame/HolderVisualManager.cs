@@ -1028,9 +1028,18 @@ namespace BalloonFlow
                 int maxPlacementsThisFrame = 3;
                 while (visual.magazineRemaining > 0 && maxPlacementsThisFrame-- > 0)
                 {
+                    // capacity-1 boundary: 마지막 빈 슬롯 채우기. lastDart 기준 progress는
+                    // 점유된 위치를 가리킬 수 있으므로 deploy point 부근 빈 자리 스캔.
+                    bool lastSlotMode = rail.EffectiveOccupiedCount >= rail.SlotCount - 1;
+
                     bool gateOpen = true;
-                    float placementProgress = fixedDeployProgress; // 첫 다트는 dp
-                    if (lastPlacedDartId >= 0)
+                    float placementProgress;
+                    if (lastSlotMode)
+                    {
+                        placementProgress = rail.FindClearProgressNear(fixedDeployProgress, visual.holderId);
+                        if (placementProgress < 0f) break; // 빈 자리 못 찾음 (= 사실상 200/200) → yield 후 재시도
+                    }
+                    else if (lastPlacedDartId >= 0)
                     {
                         var lastDart = rail.FindDart(lastPlacedDartId);
                         if (lastDart != null)
@@ -1043,10 +1052,19 @@ namespace BalloonFlow
                             if (totalPathLen > 0f)
                                 placementProgress = ((placementProgress % totalPathLen) + totalPathLen) % totalPathLen;
                         }
+                        else placementProgress = fixedDeployProgress;
+                    }
+                    else
+                    {
+                        placementProgress = fixedDeployProgress;
                     }
 
-                    if (!gateOpen || !rail.IsProgressClear(placementProgress, visual.holderId))
-                        break;
+                    // lastSlotMode에선 FindClearProgressNear가 IsProgressClear를 이미 보장.
+                    if (!lastSlotMode)
+                    {
+                        if (!gateOpen || !rail.IsProgressClear(placementProgress, visual.holderId))
+                            break;
+                    }
 
                     int dartId = rail.PlaceDartAtProgress(placementProgress, visual.color, visual.holderId);
                     if (dartId < 0) break;

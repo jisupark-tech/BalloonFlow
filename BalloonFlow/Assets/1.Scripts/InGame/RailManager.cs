@@ -155,6 +155,9 @@ namespace BalloonFlow
         public int SlotCount => _slotCount;
         public int OccupiedCount => _occupiedCount;
 
+        /// <summary>Active + frozen 다트 합계. event publish 및 capacity-1 boundary 검출용.</summary>
+        public int EffectiveOccupiedCount => _occupiedCount + _frozenDartInfos.Count;
+
         /// <summary>Occupancy ratio 0.0 ~ 1.0.</summary>
         public float Occupancy => _slotCount > 0 ? (float)_occupiedCount / _slotCount : 0f;
 
@@ -795,11 +798,17 @@ namespace BalloonFlow
         /// <summary>해당 progress에 배치 가능한지 체크.
         /// 모든 다트와의 간격 확인 — 빈틈이 있을 때만 배치 가능.
         /// 밀집 배치를 위해 물리 간격(DartPhysicalGap) 기준으로 체크 → 다트 단위로 빠르게 연쇄 배치됨.
+        /// 마지막 슬롯(capacity-1) 도달 시: deploy point obstacle 영향으로 다트가 0.5*gap 까지
+        /// 가까이 settle 가능 → minGap을 0.4로 완화해야 200/200 도달 → railFull → belt 회전.
         /// </summary>
         public bool IsProgressClear(float progress, int holderId)
         {
             if (_darts.Count >= _slotCount) return false;
-            float minGap = DartPhysicalGap * 0.9f;
+
+            int effectiveOccupied = _darts.Count + _frozenDartInfos.Count;
+            bool lastSlotCase = effectiveOccupied >= _slotCount - 1;
+            float minGap = DartPhysicalGap * (lastSlotCase ? 0.4f : 0.9f);
+
             for (int i = 0; i < _darts.Count; i++)
             {
                 float diff = Mathf.Abs(_darts[i].progress - progress);
@@ -808,6 +817,30 @@ namespace BalloonFlow
                 if (diff < minGap) return false;
             }
             return true;
+        }
+
+        /// <summary>capacity-1 boundary case: deploy point 근처에서 IsProgressClear 통과하는
+        /// 가장 가까운 progress를 탐색. 다트 packing으로 deploy point 위치가 점유돼 있어도
+        /// 인접 빈 자리에 배치할 수 있게 함. 반환 -1 = 못 찾음.
+        /// </summary>
+        public float FindClearProgressNear(float targetProgress, int holderId)
+        {
+            if (_darts.Count >= _slotCount) return -1f;
+            if (IsProgressClear(targetProgress, holderId)) return targetProgress;
+
+            float pathLen = _totalPathLength;
+            if (pathLen <= 0f) return -1f;
+
+            float step = DartPhysicalGap * 0.5f;
+            int maxIterations = Mathf.CeilToInt(pathLen / step / 2f) + 1;
+            for (int i = 1; i <= maxIterations; i++)
+            {
+                float forward = ((targetProgress + i * step) % pathLen + pathLen) % pathLen;
+                if (IsProgressClear(forward, holderId)) return forward;
+                float backward = ((targetProgress - i * step) % pathLen + pathLen) % pathLen;
+                if (IsProgressClear(backward, holderId)) return backward;
+            }
+            return -1f;
         }
 
         /// <summary>Place a dart at a specific progress on the path.</summary>
