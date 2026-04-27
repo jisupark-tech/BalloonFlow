@@ -89,7 +89,7 @@ namespace BalloonFlow
                     if (_outlineOnlyRenderers[i] == null) continue;
                     _outlineOnlyRenderers[i].GetPropertyBlock(_mpb);
                     _mpb.SetFloat(_propOutlineEnabled, 1f);
-                    _mpb.SetColor(_propOutlineColor, color); // 다트 색상으로 아웃라인
+                    _mpb.SetColor(_propOutlineColor, Color.black); // Niddle 아웃라인은 모든 다트에서 검정 고정
                     _outlineOnlyRenderers[i].SetPropertyBlock(_mpb);
                 }
             }
