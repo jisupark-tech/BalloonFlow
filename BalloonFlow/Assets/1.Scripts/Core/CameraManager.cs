@@ -117,7 +117,7 @@ namespace BalloonFlow
             MainCamera.orthographicSize = 15f;
 
             MainCamera.clearFlags = CameraClearFlags.SolidColor;
-            MainCamera.backgroundColor = new Color(0x66 / 255f, 0x68 / 255f, 0x76 / 255f); // #666876
+            MainCamera.backgroundColor = new Color(0x46 / 255f, 0x4A / 255f, 0x5B / 255f); // #464a5b
             MainCamera.nearClipPlane = -10f;
             MainCamera.farClipPlane = 80f;
             MainCamera.depth = 0;
