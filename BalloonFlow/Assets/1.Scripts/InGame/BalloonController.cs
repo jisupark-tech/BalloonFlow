@@ -774,9 +774,9 @@ namespace BalloonFlow
                 group.Add(id);
             }
 
-            // Surprise balloons start concealed (Lv.101+, 필드 기믹)
-            // Hidden(Lv.11)은 큐 기믹 → HolderManager에서 처리
-            if (data.gimmickType == GimmickSurprise)
+            // Surprise(Lv.101) + Hidden(필드 풍선 기믹) 모두 색상 은닉 → BalloonHidden.mat 적용
+            // Hidden을 큐 기믹으로 쓰는 보관함은 별개로 HolderManager에서 처리
+            if (data.gimmickType == GimmickSurprise || data.gimmickType == GimmickHidden)
             {
                 _hiddenBalloons.Add(id);
             }
