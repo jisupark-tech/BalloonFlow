@@ -247,6 +247,9 @@ namespace BalloonFlow
             Screen.autorotateToPortraitUpsideDown = false;
             Screen.autorotateToLandscapeLeft = false;
             Screen.autorotateToLandscapeRight = false;
+
+            // Firebase는 Title부터 살아있어야 Analytics가 첫 화면 이벤트도 잡음
+            EnsurePersistent<FirebaseManager>("Mgr_Firebase");
         }
 
         #endregion

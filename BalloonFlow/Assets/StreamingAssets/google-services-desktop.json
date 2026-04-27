@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "823908428822",
+    "project_id": "balloonloop-d855d",
+    "storage_bucket": "balloonloop-d855d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:823908428822:android:c9a777098b826a8bd29937",
+        "android_client_info": {
+          "package_name": "xyz.aimed.balloonloop"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCpBSxrrG-0LC2D1Xz9HExeeaaG0WPckhY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
