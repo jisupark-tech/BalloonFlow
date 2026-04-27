@@ -45,9 +45,9 @@ namespace BalloonFlow
         private BoardState _currentState;
         private int _remainingBalloons;
         private int _currentLevelId;
-        private float _failGraceDelay = 1.5f;
-        // Design ref: 실패 조건 = "레일 허용량-1 (한 칸은 deploy point용 예약)"
-        // activeDarts >= capacity - 1 + 매칭 가능 풍선 없음 → grace delay 후 실패
+        private float _failGraceDelay = 2f;
+        // Design ref: 실패 조건 = "레일 가득 (deploy point 포함)"
+        // activeDarts >= capacity + 매칭 가능 풍선 없음 → grace delay 후 실패
 
         // 6-stage gauge
         private GaugeStage _currentGaugeStage = GaugeStage.Safe;
@@ -57,11 +57,9 @@ namespace BalloonFlow
         private float _criticalTimer;
         private bool _failConfirmed;
 
-        // Stall detection (교착 상태) — 높은 점유율에서 풍선이 안 터지면 실패
-        private float _stallTimer;
-        private int _lastBalloonCount;
-        private const float STALL_FAIL_DELAY = 1.5f; // 1.5초 동안 풍선 안 터지면 실패
-        private const float STALL_MIN_OCCUPANCY = 0.8f; // 80% 이상에서만 경고/교착 감지
+        // Danger 시각 경고 임계 (점유율 80%+에서 보드 위험 표시)
+        // 단일 실패 경로는 '레일 가득 + 공격 불가 2초 grace' — stall 검출은 제거됨
+        private const float STALL_MIN_OCCUPANCY = 0.8f;
 
         #endregion
 
@@ -117,9 +115,9 @@ namespace BalloonFlow
             // Grace delay timer for rail overflow fail
             if (_isCritical && !_failConfirmed)
             {
-                // Re-check: has occupancy dropped below capacity-1?
+                // Re-check: has rail dropped below full?
                 if (RailManager.HasInstance &&
-                    RailManager.Instance.OccupiedCount < RailManager.Instance.SlotCount - 1)
+                    RailManager.Instance.OccupiedCount < RailManager.Instance.SlotCount)
                 {
                     // Recovered!
                     _isCritical = false;
@@ -143,27 +141,6 @@ namespace BalloonFlow
                     _failConfirmed = true;
                     TriggerFail(FailReason.RailOverflow);
                     return;
-                }
-            }
-
-            // 교착 감지: 높은 점유율에서 풍선이 안 터지면 실패
-            if (RailManager.HasInstance && _remainingBalloons > 0)
-            {
-                float occ = RailManager.Instance.Occupancy;
-
-                if (occ >= STALL_MIN_OCCUPANCY && _remainingBalloons == _lastBalloonCount)
-                {
-                    _stallTimer += Time.deltaTime;
-                    if (_stallTimer >= STALL_FAIL_DELAY)
-                    {
-                        TriggerFail(FailReason.RailOverflow);
-                        return;
-                    }
-                }
-                else
-                {
-                    _stallTimer = 0f;
-                    _lastBalloonCount = _remainingBalloons;
                 }
             }
         }
@@ -222,8 +199,8 @@ namespace BalloonFlow
             {
                 int occupied = RailManager.Instance.OccupiedCount;
                 int capacity = RailManager.Instance.SlotCount;
-                // 실패 조건: 허용량-1 (한 칸은 deploy point 예약) + 매칭 가능 풍선 없음
-                if (occupied >= capacity - 1 && !HasOutermostMatch())
+                // 실패 조건: 레일 가득 (deploy point 포함) + 매칭 가능 풍선 없음
+                if (occupied >= capacity && !HasOutermostMatch())
                 {
                     return new FailResult
                     {
@@ -316,15 +293,8 @@ namespace BalloonFlow
             if (BoardTileManager.HasInstance)
                 BoardTileManager.Instance.SetDangerVisible(evt.occupancy >= STALL_MIN_OCCUPANCY);
 
-            // 레일 완전히 찬 경우 → 즉시 실패 (grace 없이)
-            if (evt.activeDarts >= evt.totalSlots)
-            {
-                TriggerFail(FailReason.RailOverflow);
-                return;
-            }
-
-            // Fail trigger: integer-based "capacity - 1" check (한 칸은 deploy point 예약)
-            bool atFailThreshold = evt.activeDarts >= evt.totalSlots - 1;
+            // Fail trigger: integer-based "레일 가득" check (deploy point 포함, 즉시 실패 없이 grace 경로)
+            bool atFailThreshold = evt.activeDarts >= evt.totalSlots;
 
             if (atFailThreshold)
             {
@@ -518,7 +488,6 @@ namespace BalloonFlow
                 _isCritical = false;
                 _criticalTimer = 0f;
                 _failConfirmed = false;
-                _stallTimer = 0f;
                 return;
             }
 

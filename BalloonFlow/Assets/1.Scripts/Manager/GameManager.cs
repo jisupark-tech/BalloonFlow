@@ -147,7 +147,7 @@ namespace BalloonFlow
 
         [Header("[실패 판정 — Fail Detection]")]
         [Tooltip("실패 유예 시간(초). 99.5%+ 점유 + 최외곽 매칭 불가 시 이 시간 후 실패. (default: 1.5)")]
-        public float failGraceDelay = 1.5f;
+        public float failGraceDelay = 2f;
 
         [Tooltip("실패 임계 점유율 (0~1). 기본 0.995 = 199/200슬롯")]
         public float failOccupancyThreshold = 0.995f;
