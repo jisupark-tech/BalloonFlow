@@ -48,16 +48,10 @@ namespace BalloonFlow
 
                 FirebaseAnalytics.SetAnalyticsCollectionEnabled(true);
 
-                // 익명 로그인 — UID 발급되어야 Firestore 보안 규칙(request.auth != null) 통과
-                if (Auth.CurrentUser == null)
-                {
-                    var _result = await Auth.SignInAnonymouslyAsync();
-                    Debug.Log($"[Firebase] Anonymous sign-in: {_result.User.UserId}");
-                }
-                else
-                {
+                // Auth 자동 로그인은 안 함 — 외부 인증 키 사용 예정.
+                // 로그인 필요할 때 FirebaseManager.Instance.Auth로 직접 호출.
+                if (Auth.CurrentUser != null)
                     Debug.Log($"[Firebase] Restored session: {Auth.CurrentUser.UserId}");
-                }
 
                 IsReady = true;
                 OnReady?.Invoke();
