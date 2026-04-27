@@ -14,14 +14,14 @@ namespace BalloonFlow
         Caution,     // 50~69%
         NormalHigh,  // 70~84%
         Warning,     // 85~94%
-        Critical,    // 95% ~ capacity-2
-        Fail         // capacity-1 + no outermost match + 1.5s grace
+        Critical,    // 95% ~ capacity-1
+        Fail         // capacity (rail full, deploy point 포함) + no outermost match + 2s grace
     }
 
     /// <summary>
     /// Tracks overall board state and owns clear/fail condition evaluation.
     /// Rail Overflow mode: 6-stage gauge (SAFE→CAUTION→NORMAL_HIGH→WARNING→CRITICAL→FAIL).
-    /// Fail = capacity-1 slot occupied + no outermost balloon match + 1.5s grace delay expires.
+    /// Fail = rail full (capacity, deploy point 포함) + no outermost balloon match + 2s grace delay expires.
     /// </summary>
     /// <remarks>
     /// Layer: Domain | Genre: Puzzle | Role: Manager | Phase: 1
@@ -36,7 +36,7 @@ namespace BalloonFlow
         private const float THRESHOLD_CAUTION     = 0.50f;
         private const float THRESHOLD_NORMAL_HIGH = 0.80f;
         private const float THRESHOLD_WARNING     = 0.90f;
-        private const float THRESHOLD_CRITICAL    = 0.95f; // 실제 CRITICAL은 허용량-1 정수 비교
+        private const float THRESHOLD_CRITICAL    = 0.95f; // 실제 fail은 레일 가득(capacity, deploy point 포함) 정수 비교
 
         #endregion
 
@@ -194,7 +194,7 @@ namespace BalloonFlow
         /// </summary>
         public FailResult CheckFailCondition()
         {
-            // Condition: Rail overflow — capacity-1 (정수 비교) + no outermost match
+            // Condition: Rail overflow — 레일 가득 (capacity, deploy point 포함, 정수 비교) + no outermost match
             if (RailManager.HasInstance)
             {
                 int occupied = RailManager.Instance.OccupiedCount;
@@ -607,7 +607,7 @@ namespace BalloonFlow
     {
         None,
         NoMovesLeft,
-        RailOverflow // 레일 capacity-1개 이상 & 최외곽 매칭 불가 & 1.5s grace
+        RailOverflow // 레일 가득 (capacity, deploy point 포함) & 최외곽 매칭 불가 & 2s grace
     }
 
     public struct FailResult

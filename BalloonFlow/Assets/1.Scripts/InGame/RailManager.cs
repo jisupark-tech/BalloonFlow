@@ -290,7 +290,10 @@ namespace BalloonFlow
             }
 
             // 선두부터 cyclic하게 처리
-            bool hasDeployPoints = _activeDeployPoints.Count > 0;
+            // 레일이 가득 차면 deploy point는 obstacle 역할을 하지 않음 — 다트들이 belt를 자유롭게 순환하여 외곽 풍선 매치/공격 가능.
+            // 매치 발사로 슬롯 해제 → !railFull 복귀 → deploy point 다시 obstacle → 새 다트 배치 재개.
+            bool railFull = (_occupiedCount + _frozenDartInfos.Count) >= _slotCount;
+            bool hasDeployPoints = _activeDeployPoints.Count > 0 && !railFull;
             float deployOffset = physicalGap * 0.5f;
 
             for (int offset = 0; offset < dartCount; offset++)
@@ -376,8 +379,10 @@ namespace BalloonFlow
 
             // 실제 다트 배치 중(첫 다트 투입 후)일 때만 ×0.5
             // synced 모드에선 배치 감속 자체를 비활성화
+            // 레일이 가득 차면 belt가 정상 속도로 순환해야 외곽 풍선 공격이 가능 → 감속 해제
             bool balloonSynced = GameManager.HasInstance && GameManager.Instance.Board.dartBalloonSyncedFireMode;
-            if (!balloonSynced && _activeDeployPoints.Count > 0)
+            bool railFull = (_occupiedCount + _frozenDartInfos.Count) >= _slotCount;
+            if (!balloonSynced && _activeDeployPoints.Count > 0 && !railFull)
                 baseMult *= 0.5f;
 
             return baseMult;
