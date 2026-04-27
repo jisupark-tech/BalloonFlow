@@ -16,7 +16,8 @@ namespace BalloonFlow
         public Sprite tileH;   // horizontal straight
         public Sprite tileHTop;     // horizontal straight — top row of conveyor (rail_corner_h_t)
         public Sprite tileHBottom;  // horizontal straight — bottom row of conveyor (rail_corner_h_b)
-        public Sprite tileV;   // vertical straight
+        public Sprite tileVL;       // vertical straight — left column of conveyor
+        public Sprite tileVR;       // vertical straight — right column of conveyor
 
         [Header("Corner Tiles (center-aligned)")]
         public Sprite tileBL;  // bottom-left corner
@@ -51,8 +52,7 @@ namespace BalloonFlow
         // Legacy references — kept for backward compatibility with old RailTileSet assets
         [HideInInspector] public Sprite tileBH;
         [HideInInspector] public Sprite tileTH;
-        [HideInInspector] public Sprite tileVL;
-        [HideInInspector] public Sprite tileVR;
+        [HideInInspector] public Sprite tileV;   // legacy: single vertical sprite, fallback when VL/VR not set
 
         /// <summary>
         /// Returns the correct tile sprite for a conveyor path segment.
@@ -65,6 +65,8 @@ namespace BalloonFlow
             bool hasLeft  = (col - 1 >= 0)   && grid[col - 1, row];
             bool hasRight = (col + 1 < cols)  && grid[col + 1, row];
 
+            int midCol = (cols - 1) / 2;
+
             // Corners: exactly 2 neighbors at a right angle
             if (hasRight && hasUp    && !hasLeft && !hasDown) return tileBL;
             if (hasLeft  && hasUp    && !hasRight && !hasDown) return tileBR;
@@ -73,11 +75,11 @@ namespace BalloonFlow
 
             // Straight segments
             if (hasLeft && hasRight) return GetH();
-            if (hasUp   && hasDown)  return GetV();
+            if (hasUp   && hasDown)  return col <= midCol ? GetVL() : GetVR();
 
             // Single-neighbor fallback
             if (hasLeft || hasRight) return GetH();
-            if (hasUp   || hasDown)  return GetV();
+            if (hasUp   || hasDown)  return col <= midCol ? GetVL() : GetVR();
 
             return GetH(); // default
         }
@@ -120,8 +122,14 @@ namespace BalloonFlow
         /// <summary>Returns horizontal straight tile (new tileH, fallback to legacy tileBH).</summary>
         public Sprite GetH() => tileH != null ? tileH : tileBH;
 
-        /// <summary>Returns vertical straight tile (new tileV, fallback to legacy tileVL).</summary>
-        public Sprite GetV() => tileV != null ? tileV : tileVL;
+        /// <summary>Left vertical column tile. Falls back to legacy tileV, then tileVR.</summary>
+        public Sprite GetVL() => tileVL != null ? tileVL : (tileV != null ? tileV : tileVR);
+
+        /// <summary>Right vertical column tile. Falls back to legacy tileV, then tileVL.</summary>
+        public Sprite GetVR() => tileVR != null ? tileVR : (tileV != null ? tileV : tileVL);
+
+        /// <summary>Backward-compat vertical accessor — delegates to GetVL().</summary>
+        public Sprite GetV() => GetVL();
 
         // Resources 폴백 캐시 — 매번 Load를 타지 않도록 저장.
         private static Sprite _cachedHTop;

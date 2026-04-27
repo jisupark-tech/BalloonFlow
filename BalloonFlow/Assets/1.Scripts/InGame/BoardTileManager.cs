@@ -398,7 +398,9 @@ namespace BalloonFlow
             Sprite caveR = ts != null ? ts.caveR : null;
 
             Sprite hSprite = GetTileSprite(true, false, true, false);
-            Sprite vSprite = GetTileSprite(false, true, false, true);
+            // 좌/우 세로 레일을 별도 스프라이트로 분리 (rail_corner_vl / rail_corner_vr).
+            Sprite vlSprite = ts != null ? ts.GetVL() : null;
+            Sprite vrSprite = ts != null ? ts.GetVR() : null;
             // 컨베이어 하단/상단 수평 타일은 서로 다른 스프라이트 사용 (rail_corner_h_b / rail_corner_h_t).
             Sprite hBottomSprite = _spriteRailTileSet != null ? _spriteRailTileSet.GetHBottom() : hSprite;
             Sprite hTopSprite    = _spriteRailTileSet != null ? _spriteRailTileSet.GetHTop()    : hSprite;
@@ -414,8 +416,8 @@ namespace BalloonFlow
                 PlaceConveyorSprite(spTL, left, top, cornerSize);
                 PlaceConveyorSpriteStretched(hBottomSprite, hCenter, bottom, hLength, cornerSize);
                 PlaceConveyorSpriteStretched(hTopSprite,    hCenter, top,    hLength, cornerSize);
-                PlaceConveyorSpriteStretched(vSprite, left, vCenter, cornerSize, vLength);
-                PlaceConveyorSpriteStretched(vSprite, right, vCenter, cornerSize, vLength);
+                PlaceConveyorSpriteStretched(vlSprite, left,  vCenter, cornerSize, vLength);
+                PlaceConveyorSpriteStretched(vrSprite, right, vCenter, cornerSize, vLength);
             }
             // ── 3면: 하단(→) + 우측(↑) + 상단(←) ──
             else if (sides == 3)
@@ -423,7 +425,7 @@ namespace BalloonFlow
                 PlaceConveyorSprite(capL, left, bottom, cornerSize);      // 시작점
                 PlaceConveyorSpriteStretched(hBottomSprite, hCenter, bottom, hLength, cornerSize);
                 PlaceConveyorSprite(spBR, right, bottom, cornerSize);
-                PlaceConveyorSpriteStretched(vSprite, right, vCenter, cornerSize, vLength);
+                PlaceConveyorSpriteStretched(vrSprite, right, vCenter, cornerSize, vLength);
                 PlaceConveyorSprite(spTR, right, top, cornerSize);
                 PlaceConveyorSpriteStretched(hTopSprite, hCenter, top, hLength, cornerSize);
                 PlaceConveyorSprite(capL, left, top, cornerSize);         // 끝점
@@ -434,7 +436,7 @@ namespace BalloonFlow
                 PlaceConveyorSprite(capL, left, bottom, cornerSize);      // 시작점
                 PlaceConveyorSpriteStretched(hBottomSprite, hCenter, bottom, hLength, cornerSize);
                 PlaceConveyorSprite(spBR, right, bottom, cornerSize);
-                PlaceConveyorSpriteStretched(vSprite, right, vCenter, cornerSize, vLength);
+                PlaceConveyorSpriteStretched(vrSprite, right, vCenter, cornerSize, vLength);
                 PlaceConveyorSprite(capT, right, top, cornerSize);        // 끝점
             }
             // ── 1면: 하단(→)만 ──

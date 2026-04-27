@@ -286,6 +286,8 @@ namespace BalloonFlow
                 bool hasLeft  = (gx - 1 >= 0) && grid[gx - 1, gy];
                 bool hasRight = (gx + 1 < gw) && grid[gx + 1, gy];
 
+                int midCol = (gw - 1) / 2;
+
                 Sprite tile;
                 // Corners
                 if      (hasRight && hasUp   && !hasLeft && !hasDown) tile = _tileSet.tileBL;
@@ -294,10 +296,10 @@ namespace BalloonFlow
                 else if (hasLeft  && hasDown && !hasRight && !hasUp)  tile = _tileSet.tileTR;
                 // Straights
                 else if (hasLeft && hasRight) tile = _tileSet.GetH();
-                else if (hasUp   && hasDown)  tile = _tileSet.GetV();
+                else if (hasUp   && hasDown)  tile = gx <= midCol ? _tileSet.GetVL() : _tileSet.GetVR();
                 // Single-neighbor fallback
                 else if (hasLeft || hasRight) tile = _tileSet.GetH();
-                else if (hasUp   || hasDown)  tile = _tileSet.GetV();
+                else if (hasUp   || hasDown)  tile = gx <= midCol ? _tileSet.GetVL() : _tileSet.GetVR();
                 else tile = _tileSet.GetH();
 
                 PlaceSpriteTileAtSize(tile, wpos, cellSpacing);
@@ -346,6 +348,11 @@ namespace BalloonFlow
 
             int count = isLoop ? waypoints.Length : waypoints.Length - 1;
 
+            // 컨베이어 중심 X — waypoint 평균값으로 좌/우 세로 레일 판정.
+            float centerX = 0f;
+            for (int wi = 0; wi < waypoints.Length; wi++) centerX += waypoints[wi].x;
+            centerX /= Mathf.Max(1, waypoints.Length);
+
             for (int i = 0; i < count; i++)
             {
                 int prev = (i - 1 + waypoints.Length) % waypoints.Length;
@@ -359,7 +366,9 @@ namespace BalloonFlow
                 if (segLen < 0.01f) continue;
 
                 bool isHorizontal = Mathf.Abs(delta.x) > Mathf.Abs(delta.z);
-                Sprite tile = isHorizontal ? _tileSet.GetH() : _tileSet.GetV();
+                Sprite tile = isHorizontal
+                    ? _tileSet.GetH()
+                    : (start.x < centerX ? _tileSet.GetVL() : _tileSet.GetVR());
 
                 // Check if start/end are corners to avoid tile overlap
                 bool startIsCorner = false;

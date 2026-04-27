@@ -2466,8 +2466,9 @@ namespace BalloonFlow
             Sprite caveT = ts != null ? ts.caveT : null;
             Sprite caveL = ts != null ? ts.caveL : null;
             Sprite caveR = ts != null ? ts.caveR : null;
-            Sprite hSprite = ts != null ? ts.GetH() : null;
-            Sprite vSprite = ts != null ? ts.GetV() : null;
+            Sprite hSprite  = ts != null ? ts.GetH()  : null;
+            Sprite vlSprite = ts != null ? ts.GetVL() : null;
+            Sprite vrSprite = ts != null ? ts.GetVR() : null;
 
             // 허용량별 면 수 계산 (Piñata 비앵커 셀 제외)
             int totalDarts = 0;
@@ -2492,27 +2493,27 @@ namespace BalloonFlow
                 PlaceConveyorSpriteTile(spBR, new Vector3(right, rh, bottom), cornerSize);
                 PlaceConveyorSpriteTile(spTR, new Vector3(right, rh, top), cornerSize);
                 PlaceConveyorSpriteTile(spTL, new Vector3(left, rh, top), cornerSize);
-                PlaceConveyorSpriteTileStretched(hSprite, new Vector3(hCenter, rh, bottom), hLength, cornerSize);
-                PlaceConveyorSpriteTileStretched(hSprite, new Vector3(hCenter, rh, top), hLength, cornerSize);
-                PlaceConveyorSpriteTileStretched(vSprite, new Vector3(left, rh, vCenter), cornerSize, vLength);
-                PlaceConveyorSpriteTileStretched(vSprite, new Vector3(right, rh, vCenter), cornerSize, vLength);
+                PlaceConveyorSpriteTileStretched(hSprite,  new Vector3(hCenter, rh, bottom), hLength, cornerSize);
+                PlaceConveyorSpriteTileStretched(hSprite,  new Vector3(hCenter, rh, top),    hLength, cornerSize);
+                PlaceConveyorSpriteTileStretched(vlSprite, new Vector3(left,  rh, vCenter), cornerSize, vLength);
+                PlaceConveyorSpriteTileStretched(vrSprite, new Vector3(right, rh, vCenter), cornerSize, vLength);
             }
             else if (sides == 3)
             {
                 PlaceConveyorSpriteTile(capL, new Vector3(left, rh, bottom), cornerSize);
-                PlaceConveyorSpriteTileStretched(hSprite, new Vector3(hCenter, rh, bottom), hLength, cornerSize);
+                PlaceConveyorSpriteTileStretched(hSprite,  new Vector3(hCenter, rh, bottom), hLength, cornerSize);
                 PlaceConveyorSpriteTile(spBR, new Vector3(right, rh, bottom), cornerSize);
-                PlaceConveyorSpriteTileStretched(vSprite, new Vector3(right, rh, vCenter), cornerSize, vLength);
+                PlaceConveyorSpriteTileStretched(vrSprite, new Vector3(right, rh, vCenter), cornerSize, vLength);
                 PlaceConveyorSpriteTile(spTR, new Vector3(right, rh, top), cornerSize);
-                PlaceConveyorSpriteTileStretched(hSprite, new Vector3(hCenter, rh, top), hLength, cornerSize);
+                PlaceConveyorSpriteTileStretched(hSprite,  new Vector3(hCenter, rh, top), hLength, cornerSize);
                 PlaceConveyorSpriteTile(capL, new Vector3(left, rh, top), cornerSize);
             }
             else if (sides == 2)
             {
                 PlaceConveyorSpriteTile(capL, new Vector3(left, rh, bottom), cornerSize);
-                PlaceConveyorSpriteTileStretched(hSprite, new Vector3(hCenter, rh, bottom), hLength, cornerSize);
+                PlaceConveyorSpriteTileStretched(hSprite,  new Vector3(hCenter, rh, bottom), hLength, cornerSize);
                 PlaceConveyorSpriteTile(spBR, new Vector3(right, rh, bottom), cornerSize);
-                PlaceConveyorSpriteTileStretched(vSprite, new Vector3(right, rh, vCenter), cornerSize, vLength);
+                PlaceConveyorSpriteTileStretched(vrSprite, new Vector3(right, rh, vCenter), cornerSize, vLength);
                 PlaceConveyorSpriteTile(capT, new Vector3(right, rh, top), cornerSize);
             }
             else
@@ -2644,6 +2645,8 @@ namespace BalloonFlow
             bool hasLeft  = (gx - 1 >= 0) && _pathGrid[gx - 1, gy];
             bool hasRight = (gx + 1 < pw) && _pathGrid[gx + 1, gy];
 
+            int midCol = (pw - 1) / 2;
+
             // Corners: exactly 2 neighbors at right angle
             if (hasRight && hasUp    && !hasLeft && !hasDown) return _railTileSet.tileBL;
             if (hasLeft  && hasUp    && !hasRight && !hasDown) return _railTileSet.tileBR;
@@ -2652,11 +2655,11 @@ namespace BalloonFlow
 
             // Straight segments
             if (hasLeft && hasRight) return _railTileSet.GetH();
-            if (hasUp   && hasDown)  return _railTileSet.GetV();
+            if (hasUp   && hasDown)  return gx <= midCol ? _railTileSet.GetVL() : _railTileSet.GetVR();
 
             // Single-neighbor fallback
             if (hasLeft || hasRight) return _railTileSet.GetH();
-            if (hasUp   || hasDown)  return _railTileSet.GetV();
+            if (hasUp   || hasDown)  return gx <= midCol ? _railTileSet.GetVL() : _railTileSet.GetVR();
 
             return _railTileSet.GetH(); // isolated cell default
         }
