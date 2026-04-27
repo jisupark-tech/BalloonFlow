@@ -1,10 +1,12 @@
 #!/bin/bash
-# Block level data commits from unauthorized users
+# Block sensitive file commits from unauthorized users
 
-LEVEL_FILES=$(git diff --cached --name-only | grep -E "LevelDatabase|LevelBackups")
+AUTHOR_EMAIL=$(git config user.email)
+STAGED=$(git diff --cached --name-only)
 
+# ─── 1) Level Data — woohyun 전용 ───
+LEVEL_FILES=$(echo "$STAGED" | grep -E "LevelDatabase|LevelBackups")
 if [ -n "$LEVEL_FILES" ]; then
-    AUTHOR_EMAIL=$(git config user.email)
     if [ "$AUTHOR_EMAIL" != "woohyun.lim@aimed.xyz" ]; then
         echo ""
         echo "============================================"
@@ -13,6 +15,45 @@ if [ -n "$LEVEL_FILES" ]; then
         echo ""
         echo "  변경 감지된 파일:"
         echo "$LEVEL_FILES" | sed 's/^/    /'
+        echo "============================================"
+        echo ""
+        exit 1
+    fi
+fi
+
+# ─── 2) .gitignore — jisu 전용 ───
+GITIGNORE_FILES=$(echo "$STAGED" | grep -E "^\.gitignore$")
+if [ -n "$GITIGNORE_FILES" ]; then
+    if [ "$AUTHOR_EMAIL" != "jisu.park@gameberry.co.kr" ]; then
+        echo ""
+        echo "============================================"
+        echo "  BLOCKED: .gitignore 수정 권한이 없습니다."
+        echo "  허용된 사용자: jisu (jisu.park@gameberry.co.kr)"
+        echo ""
+        echo "  변경 감지된 파일:"
+        echo "$GITIGNORE_FILES" | sed 's/^/    /'
+        echo "============================================"
+        echo ""
+        exit 1
+    fi
+fi
+
+# ─── 3) SDK 파일 — jisu 전용 ───
+# Firebase, EDM4U, AppLovin MAX, AdMob, AppsFlyer, Facebook 등 외부 SDK 통합 영역
+SDK_FILES=$(echo "$STAGED" | grep -E "^BalloonFlow/(Assets/(Firebase|ExternalDependencyManager|GeneratedLocalRepo|Plugins|MaxSdk|AppLovin|GoogleMobileAds|AppsFlyer|Facebook|google-services|StreamingAssets/google-services)|ProjectSettings/(AndroidResolverDependencies|GvhProjectSettings))")
+if [ -n "$SDK_FILES" ]; then
+    if [ "$AUTHOR_EMAIL" != "jisu.park@gameberry.co.kr" ]; then
+        echo ""
+        echo "============================================"
+        echo "  BLOCKED: SDK 파일 커밋 권한이 없습니다."
+        echo "  허용된 사용자: jisu (jisu.park@gameberry.co.kr)"
+        echo ""
+        echo "  변경 감지된 파일 (앞 20개):"
+        echo "$SDK_FILES" | head -20 | sed 's/^/    /'
+        TOTAL=$(echo "$SDK_FILES" | wc -l)
+        if [ "$TOTAL" -gt 20 ]; then
+            echo "    ... (총 $TOTAL 개)"
+        fi
         echo "============================================"
         echo ""
         exit 1
