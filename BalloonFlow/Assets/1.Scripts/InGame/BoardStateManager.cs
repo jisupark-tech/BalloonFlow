@@ -46,8 +46,9 @@ namespace BalloonFlow
         private int _remainingBalloons;
         private int _currentLevelId;
         private float _failGraceDelay = 2f;
-        // Design ref: 실패 조건 = "레일 가득 (deploy point 포함)"
-        // activeDarts >= capacity + 매칭 가능 풍선 없음 → grace delay 후 실패
+        // Design ref: 실패 조건 = "레일 가득 (capacity, deploy point 포함) + N초간 풍선 pop 없음"
+        // capacity 도달 시 belt 풀스피드 회전 (RailManager railFull 처리) → 다트가 외곽 풍선 공격.
+        // pop 발생 시 timer 리셋, pop 없이 N초 경과 시 fail.
 
         // 6-stage gauge
         private GaugeStage _currentGaugeStage = GaugeStage.Safe;
@@ -113,22 +114,13 @@ namespace BalloonFlow
             if (_currentState != BoardState.Playing) return;
 
             // Grace delay timer for rail overflow fail
+            // capacity 도달 후 N초간 풍선 pop이 없으면 fail. pop 시 HandleBalloonPopped에서 리셋.
             if (_isCritical && !_failConfirmed)
             {
-                // Re-check: has rail dropped below full?
+                // Recovery: rail이 가득에서 떨어짐 (한 발이라도 발사돼서 슬롯 비움)
                 if (RailManager.HasInstance &&
                     RailManager.Instance.OccupiedCount < RailManager.Instance.SlotCount)
                 {
-                    // Recovered!
-                    _isCritical = false;
-                    _criticalTimer = 0f;
-                    return;
-                }
-
-                // Re-check: has outermost match appeared?
-                if (HasOutermostMatch())
-                {
-                    // Recovery possible — matching will happen naturally
                     _isCritical = false;
                     _criticalTimer = 0f;
                     return;
@@ -194,12 +186,12 @@ namespace BalloonFlow
         /// </summary>
         public FailResult CheckFailCondition()
         {
-            // Condition: Rail overflow — 레일 가득 (capacity, deploy point 포함, 정수 비교) + no outermost match
+            // Snapshot 평가: capacity 도달 + 매칭 가능 풍선 없음이면 잠재적 실패 상태.
+            // 실제 실패 트리거는 Update 루프의 N초 grace timer (pop 발생 시 리셋).
             if (RailManager.HasInstance)
             {
                 int occupied = RailManager.Instance.OccupiedCount;
                 int capacity = RailManager.Instance.SlotCount;
-                // 실패 조건: 레일 가득 (deploy point 포함) + 매칭 가능 풍선 없음
                 if (occupied >= capacity && !HasOutermostMatch())
                 {
                     return new FailResult
@@ -255,10 +247,10 @@ namespace BalloonFlow
                 EvaluateClearCondition();
             }
 
-            // Recovery: balloon popped may open outermost match or free rail slots
-            if (_isCritical && HasOutermostMatch())
+            // Pop = 공격 성공 = 진행 중. critical 상태 유지 + timer만 리셋.
+            // (rail이 여전히 가득이면 belt 회전 계속, pop이 또 일어나면 timer 또 리셋되는 식)
+            if (_isCritical)
             {
-                _isCritical = false;
                 _criticalTimer = 0f;
             }
         }
@@ -293,30 +285,26 @@ namespace BalloonFlow
             if (BoardTileManager.HasInstance)
                 BoardTileManager.Instance.SetDangerVisible(evt.occupancy >= STALL_MIN_OCCUPANCY);
 
-            // Fail trigger: integer-based "레일 가득" check (deploy point 포함, 즉시 실패 없이 grace 경로)
+            // Fail trigger: capacity 도달 (deploy point 포함 가득) — belt 풀스피드 회전.
+            // pop 발생 시 timer 리셋, pop 없이 N초 경과 시 fail. HasOutermostMatch와 무관.
             bool atFailThreshold = evt.activeDarts >= evt.totalSlots;
 
             if (atFailThreshold)
             {
-                // Enter critical check
-                bool hasMatch = HasOutermostMatch();
-
                 EventBus.Publish(new OnRailCritical
                 {
                     occupancy = evt.occupancy,
-                    hasOutermostMatch = hasMatch
+                    hasOutermostMatch = HasOutermostMatch()
                 });
 
-                if (!hasMatch && !_isCritical)
+                if (!_isCritical)
                 {
-                    // Start grace delay
                     _isCritical = true;
                     _criticalTimer = 0f;
                 }
             }
             else
             {
-                // Below threshold — cancel any critical state
                 if (_isCritical)
                 {
                     _isCritical = false;
