@@ -35,12 +35,6 @@ BalloonFlow/Assets/LevelBackups/
 
 # Crashlytics
 crashlytics-build.properties
-
-# Firebase iOS/tvOS plugins — AOS-only build, 81MB+ each. Re-import unitypackage if iOS 활성화 시
-BalloonFlow/Assets/Plugins/iOS/
-BalloonFlow/Assets/Plugins/iOS.meta
-BalloonFlow/Assets/Plugins/tvOS/
-BalloonFlow/Assets/Plugins/tvOS.meta
 BalloonFlow/Assets/2.Sprite/UI/circle.png
 BalloonFlow/Assets/2.Sprite/UI/circle.png.meta
 BalloonFlow/Assets/3.Material/Arrow.shader
@@ -88,3 +82,5 @@ BalloonFlow/Assets/Resources/Texture/IceFlake.png
 BalloonFlow/Assets/Resources/Texture/IceFlake.png.meta
 BalloonFlow/Assets/Resources/Texture/smog.png
 BalloonFlow/Assets/Resources/Texture/smog.png.meta
+BalloonFlow/Assets/1.Scripts/UX/UIParticleBinder.cs.meta
+BalloonFlow/BalloonFlow_Shot/BalloonFlow_InGame_20260427_143308.png
