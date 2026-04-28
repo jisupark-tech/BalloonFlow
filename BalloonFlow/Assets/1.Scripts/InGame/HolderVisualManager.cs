@@ -1083,11 +1083,15 @@ namespace BalloonFlow
 
             while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
             {
-                // stale (NEW가 take-over). NEW가 이미 _colBusy를 자기 것으로 점유했을 수 있으므로
-                // _colBusy를 OLD가 풀면 안 됨. UnregisterDeployPoint도 NEW가 다시 등록했을 수 있어 skip.
-                // (NEW는 같은 holderId이므로 큐/_colBusy/deployPoint 모두 자연 재사용)
+                // stale (NEW take-over). 이 시점엔 OLD가 이미 Phase 1.5에서 _colBusy=true 를 set 했고
+                // visual.isDeploying=true 도 set 했으므로, 둘 다 release해야 함 — 안 그러면 NEW의
+                // Phase 1.5가 (!_colBusy) 가드에 걸려 60초 timeout, 또는 isDeploying=true 가
+                // 다음 user 클릭의 StartDeploy 진입을 차단. NEW는 자기 차례에 다시 set 함.
                 if (visual.deployGeneration != gen)
                 {
+                    rail.UnregisterDeployPoint(visual.holderId);
+                    _colBusy[visual.column] = false;
+                    visual.isDeploying = false;
                     yield break;
                 }
                 // 취소 체크
