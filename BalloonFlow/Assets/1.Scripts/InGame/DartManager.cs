@@ -34,6 +34,19 @@ namespace BalloonFlow
         /// <summary>동적 비행 시간 (GameManager에서 실시간 참조).</summary>
         private float FlightTime => GameManager.HasInstance ? GameManager.Instance.Board.dartFlightTime : _projectileFlightTime;
 
+        /// <summary>유저 가속 반영된 비행 시간.
+        /// x2 토글 시 투사체도 2x 빠르게 풍선에 도달 → 공격 플로우 일관성.</summary>
+        private float EffectiveFlightTime
+        {
+            get
+            {
+                float t = FlightTime;
+                float mult = RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f;
+                if (mult > 0.001f) t /= mult;
+                return t;
+            }
+        }
+
         #endregion
 
         #region Nested Types
@@ -705,6 +718,7 @@ namespace BalloonFlow
             if (dir.sqrMagnitude > 0.001f)
                 dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
 
+            float ft = EffectiveFlightTime;
             var proj = new DartProjectile
             {
                 gameObject = dartObj,
@@ -712,7 +726,7 @@ namespace BalloonFlow
                 targetBalloonId = targetBalloonId,
                 color = color,
                 elapsed = 0f,
-                duration = FlightTime,
+                duration = ft,
                 startScale = dartObj.transform.localScale,
                 targetScale = BalloonController.HasInstance
                     ? BalloonController.Instance.GetBalloonWorldScale(targetBalloonId)
@@ -727,13 +741,13 @@ namespace BalloonFlow
                 Vector3 midPoint = (from + to) * 0.5f;
                 midPoint.y += _arcHeight;
                 Vector3[] path = { from, midPoint, to };
-                dartObj.transform.DOPath(path, FlightTime, PathType.CatmullRom)
+                dartObj.transform.DOPath(path, ft, PathType.CatmullRom)
                     .SetEase(Ease.Linear)
                     .SetLookAt(0.01f); // face movement direction
             }
             else
             {
-                dartObj.transform.DOMove(to, FlightTime).SetEase(Ease.Linear);
+                dartObj.transform.DOMove(to, ft).SetEase(Ease.Linear);
             }
         }
 
@@ -816,6 +830,7 @@ namespace BalloonFlow
                     if (dir.sqrMagnitude > 0.001f)
                         dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
 
+                    float ft = EffectiveFlightTime;
                     var proj = new DartProjectile
                     {
                         gameObject = dartObj,
@@ -823,13 +838,13 @@ namespace BalloonFlow
                         targetBalloonId = targetId,
                         color = color,
                         elapsed = 0f,
-                        duration = FlightTime,
+                        duration = ft,
                         startScale = dartObj.transform.localScale,
                         targetScale = BalloonController.Instance.GetBalloonWorldScale(targetId)
                     };
                     _activeProjectiles.Add(proj);
 
-                    dartObj.transform.DOMove(targetPos, FlightTime).SetEase(Ease.Linear);
+                    dartObj.transform.DOMove(targetPos, ft).SetEase(Ease.Linear);
                 }
 
                 fired++;

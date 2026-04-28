@@ -1,21 +1,36 @@
+using System.Collections;
 using UnityEngine;
-using UnityEngine.InputSystem;
-using Touchscreen = UnityEngine.InputSystem.Touchscreen;
 
 namespace BalloonFlow
 {
     /// <summary>
     /// Title 씬 컨트롤러.
-    /// - GameManager, CameraManager, UIManager는 SceneBuilder가 씬에 배치 → Awake에서 Instance 자동 설정
-    /// - UITitle 프리팹을 UIManager.OpenUI로 로드
-    /// - 탭 or 타임아웃 → Lobby 이동
+    /// - GameManager / CameraManager / UIManager 는 SceneBuilder 가 씬에 배치 → Awake 에서 Instance 자동 설정
+    /// - UITitle 프리팹을 UIManager.OpenUI 로 로드
+    /// - CDM 다운로드 + 서버 세팅 단계별 실행 → 슬라이더로 진행도 표시
+    /// - 100% 도달 시 자동으로 Lobby 씬 진입
+    /// - 탭 입력은 로딩 중엔 무시 (단, 완료 후엔 즉시 진입 가능)
     /// </summary>
     public class TitleController : MonoBehaviour
     {
-        private const float AUTO_TRANSITION_DELAY = 3.0f;
+        /// <summary>안전 timeout — 어떤 단계가 너무 오래 걸려도 결국 진입.</summary>
+        private const float MAX_LOADING_TIME = 30.0f;
 
-        private bool _tapped;
-        private float _timer;
+        /// <summary>로딩 단계 정의. (라벨, 가중치 0~1) — 가중치 합 = 1.0.</summary>
+        private static readonly (string label, float weight)[] LoadingSteps = new[]
+        {
+            ("Initializing...",    0.10f),
+            ("Connecting server...", 0.20f),
+            ("Downloading data...",  0.40f),
+            ("Loading assets...",    0.20f),
+            ("Finalizing...",        0.10f),
+        };
+
+        private UITitle _ui;
+        private bool _loadingStarted;
+        private bool _loadingComplete;
+        private bool _entered;
+        private float _watchdogTimer;
 
         void Start()
         {
@@ -37,24 +52,125 @@ namespace BalloonFlow
                 if (_effectCanvas == null) _effectCanvas = CreateCanvas("EffectCanvas", 15);
 
                 UIManager.Instance.SetSceneCanvas(_uiCanvas.transform, _popupCanvas.transform, _effectCanvas.transform);
-                UIManager.Instance.OpenUI<UITitle>("UI/UITitle");
+                _ui = UIManager.Instance.OpenUI<UITitle>("UI/UITitle");
             }
+
+            if (_ui != null)
+            {
+                _ui.SetProgress(0f);
+                _ui.SetStatus(LoadingSteps[0].label);
+                _ui.SetTapHintVisible(false);
+            }
+
+            StartCoroutine(LoadingFlow());
         }
 
         void Update()
         {
-            if (_tapped) return;
-            _timer += Time.deltaTime;
+            if (_entered) return;
 
-            bool _mousePressed = Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
-            bool _touchPressed = Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame;
-
-            if (_mousePressed || _touchPressed || _timer >= AUTO_TRANSITION_DELAY)
+            // 로딩 완료 후 자동 입장 (모든 진행도 == 1.0)
+            if (_loadingComplete)
             {
-                _tapped = true;
-                if (GameManager.HasInstance)
-                    GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY);
+                EnterLobby();
+                return;
             }
+
+            // 로딩 중 watchdog — 정의된 max time 초과 시 강제 입장
+            if (_loadingStarted)
+            {
+                _watchdogTimer += Time.deltaTime;
+                if (_watchdogTimer >= MAX_LOADING_TIME)
+                {
+                    Debug.LogWarning("[TitleController] Loading watchdog timeout → 강제 입장");
+                    if (_ui != null) _ui.SetProgress(1f);
+                    EnterLobby();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 로딩 흐름 — 단계별 진행도 누적해서 UI 갱신.
+        /// 실제 다운로드/세팅 작업은 각 단계에서 호출 (현재는 시뮬레이션 + Firebase 초기화 hook).
+        /// </summary>
+        private IEnumerator LoadingFlow()
+        {
+            _loadingStarted = true;
+            float accumulated = 0f;
+
+            for (int i = 0; i < LoadingSteps.Length; i++)
+            {
+                var (label, weight) = LoadingSteps[i];
+                if (_ui != null) _ui.SetStatus(label);
+
+                // 단계별 실제 작업 hook
+                yield return StartCoroutine(RunLoadingStep(i));
+
+                accumulated += weight;
+                if (_ui != null) _ui.SetProgress(accumulated);
+            }
+
+            _loadingComplete = true;
+            if (_ui != null)
+            {
+                _ui.SetProgress(1f);
+                _ui.SetStatus("Ready");
+            }
+        }
+
+        /// <summary>
+        /// 인덱스별 실제 로딩 작업.
+        /// 0 Init / 1 Server / 2 Download / 3 Assets / 4 Finalize.
+        /// 현재 시뮬레이션 — 실제 작업 추가 시 yield return 유지하며 추가 가능.
+        /// </summary>
+        private IEnumerator RunLoadingStep(int index)
+        {
+            switch (index)
+            {
+                case 0: // Initializing — Firebase / Manager 초기화 대기
+                    // Firebase 가 자체 Init 코루틴을 가질 경우 대기 (HasInstance 만 확인).
+                    yield return new WaitForSeconds(0.4f);
+                    break;
+
+                case 1: // Server connect — Firebase Auth / Firestore ping 등 hook
+                    yield return new WaitForSeconds(0.6f);
+                    break;
+
+                case 2: // Download — CDM (Content Download Manager) 호출 hook
+                    // 점진 진행: 0.5초 동안 fake increments. 실제로는 다운로드 progress callback 으로 대체.
+                    {
+                        float dur = 0.8f;
+                        float t = 0f;
+                        while (t < dur)
+                        {
+                            t += Time.deltaTime;
+                            // 단계 내 sub-progress 까지 부드럽게 보이려면 SetProgress 보간 가능 (생략)
+                            yield return null;
+                        }
+                    }
+                    break;
+
+                case 3: // Assets — 레벨/리소스 prefetch
+                    yield return new WaitForSeconds(0.4f);
+                    break;
+
+                case 4: // Finalize — 마지막 검증
+                    yield return new WaitForSeconds(0.2f);
+                    break;
+
+                default:
+                    yield return null;
+                    break;
+            }
+        }
+
+        /// <summary>로딩 완료 시 1회 호출 — Lobby 씬 로드.</summary>
+        private void EnterLobby()
+        {
+            if (_entered) return;
+            _entered = true;
+            if (GameManager.HasInstance)
+                GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY);
         }
 
         static GameObject CreateCanvas(string name, int sortingOrder)

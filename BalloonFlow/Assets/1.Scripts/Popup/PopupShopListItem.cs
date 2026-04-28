@@ -13,18 +13,22 @@ namespace BalloonFlow
         [Header("[상품 정보]")]
         [SerializeField] private Image _imgProducts;
         [SerializeField] private TMP_Text _txtTitle;
+        [SerializeField] private TMP_Text _txtTitleOutline;
 
         [Header("[시간 한정 할인]")]
         [SerializeField] private GameObject _timeOffRoot;
         [SerializeField] private TMP_Text _txtTimeOff;
+        [SerializeField] private TMP_Text _txtTimeOffOutline;
 
         [Header("[할인율]")]
         [SerializeField] private GameObject _offPercentRoot;
         [SerializeField] private TMP_Text _txtOffPer;
+        [SerializeField] private TMP_Text _txtOffPerOutline;
 
         [Header("[구매 버튼]")]
         [SerializeField] private Button _btnBuy;
         [SerializeField] private TMP_Text _txtBtnBuy;
+        [SerializeField] private TMP_Text _txtBtnBuyOutline;
 
         [Header("[타입별 프레임 — 상단/하단]")]
         [SerializeField] private Image _imgTop;
@@ -59,12 +63,10 @@ namespace BalloonFlow
                 _imgProducts.sprite = data.productImage;
 
             // 타이틀
-            if (_txtTitle != null)
-                _txtTitle.text = data.title;
+            SetTextWithOutline(_txtTitle, _txtTitleOutline, data.title);
 
             // 가격
-            if (_txtBtnBuy != null)
-                _txtBtnBuy.text = data.price;
+            SetTextWithOutline(_txtBtnBuy, _txtBtnBuyOutline, data.price);
 
             // 시간 한정
             if (_timeOffRoot != null)
@@ -82,8 +84,8 @@ namespace BalloonFlow
             if (_offPercentRoot != null)
             {
                 _offPercentRoot.SetActive(data.hasDiscount && data.discountPercent > 0);
-                if (_txtOffPer != null && data.hasDiscount)
-                    _txtOffPer.text = $"{data.discountPercent}%";
+                if (data.hasDiscount)
+                    SetTextWithOutline(_txtOffPer, _txtOffPerOutline, $"{data.discountPercent}%");
             }
 
             // 구매 버튼
@@ -133,14 +135,22 @@ namespace BalloonFlow
 
         private void UpdateTimerText()
         {
-            if (_txtTimeOff == null) return;
+            if (_txtTimeOff == null && _txtTimeOffOutline == null) return;
 
             int total = Mathf.CeilToInt(_remainingTime);
             int h = total / 3600;
             int m = (total % 3600) / 60;
             int s = total % 60;
 
-            _txtTimeOff.text = h > 0 ? $"{h:D2}:{m:D2}:{s:D2}" : $"{m:D2}:{s:D2}";
+            string txt = h > 0 ? $"{h:D2}:{m:D2}:{s:D2}" : $"{m:D2}:{s:D2}";
+            SetTextWithOutline(_txtTimeOff, _txtTimeOffOutline, txt);
+        }
+
+        /// <summary>본문 + outline TMP_Text 둘 다 동일 문자열로 갱신.</summary>
+        private static void SetTextWithOutline(TMP_Text main, TMP_Text outline, string value)
+        {
+            if (main != null) main.text = value;
+            if (outline != null) outline.text = value;
         }
     }
 }

@@ -208,13 +208,17 @@ namespace BalloonFlow
         {
             var defaultPools = new[]
             {
-                new { key = "Balloon", path = "Prefabs/Balloon", initialSize = 50 },
-                new { key = "Dart",    path = "Prefabs/Dart",    initialSize = 30 },
-                new { key = "Holder",  path = "Prefabs/Holder",  initialSize = 20 },
-                new { key = "Pinata",  path = "Prefabs/Pinata",  initialSize = 10 },
-                new { key = "Spawner", path = "Prefabs/Spawner", initialSize = 5 },
-                new { key = "Key",     path = "Prefabs/Key",     initialSize = 5 },
-                new { key = "Lock",    path = "Prefabs/Lock",    initialSize = 5 },
+                new { key = "Balloon",     path = "Prefabs/Balloon",     initialSize = 50 },
+                new { key = "Dart",        path = "Prefabs/Dart",        initialSize = 30 },
+                new { key = "Holder",      path = "Prefabs/Holder",      initialSize = 20 },
+                new { key = "Spawner",     path = "Prefabs/Spawner",     initialSize = 5 },
+                new { key = "Key",         path = "Prefabs/Key",         initialSize = 5 },
+                new { key = "Lock",        path = "Prefabs/Lock",        initialSize = 5 },
+                // Gimmick visual variants (Lv.91+ unlock content)
+                new { key = "Baricade",    path = "Prefabs/Baricade",    initialSize = 5 },  // Barricade gimmick (destructible wall)
+                new { key = "IronBox",     path = "Prefabs/IronBox",     initialSize = 5 },  // Pinata_Box gimmick (Lv.161)
+                new { key = "WoodenBoard", path = "Prefabs/WoodenBoard", initialSize = 8 },  // Pin gimmick (Lv.61, 1×N progressive)
+                new { key = "FrozenLayer", path = "Prefabs/FrozenLayer", initialSize = 10 }, // Ice/Frozen_Dart overlay
             };
 
             foreach (var entry in defaultPools)

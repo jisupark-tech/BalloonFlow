@@ -48,6 +48,14 @@ namespace BalloonFlow
         [SerializeField] private Image _iconLockRemove;
         [SerializeField] private Image _iconLockHand;
 
+        [Header("[Lock 레벨 텍스트 — Lv.X 표시 (각 본문 + outline 짝)]")]
+        [SerializeField] private TMP_Text _txtLockShuffle;
+        [SerializeField] private TMP_Text _txtLockShuffleOutline;
+        [SerializeField] private TMP_Text _txtLockRemove;
+        [SerializeField] private TMP_Text _txtLockRemoveOutline;
+        [SerializeField] private TMP_Text _txtLockHand;
+        [SerializeField] private TMP_Text _txtLockHandOutline;
+
         [Header("[Icon Items — 미해금 시 비활성화]")]
         [SerializeField] private GameObject _iconItemShuffle;
         [SerializeField] private GameObject _iconItemRemove;
@@ -193,7 +201,7 @@ namespace BalloonFlow
             SetCountText(_itemCountHand, BoosterManager.Instance.GetBoosterCount(BoosterManager.HAND).ToString());
         }
 
-        /// <summary>Lock 아이콘 갱신. 미해금 → Lock 표시 + 난이도 색상.</summary>
+        /// <summary>Lock 아이콘 + Lv.X 텍스트 갱신. 미해금 → Lock 표시 + 난이도 색상 + 해금 레벨.</summary>
         public void RefreshLockState()
         {
             if (_isMapMakerMode || GameManager.IsTestItemMode)
@@ -204,6 +212,10 @@ namespace BalloonFlow
                 SetIconItemVisible(_iconItemHand, true);
                 SetIconItemVisible(_iconItemShuffle, true);
                 SetIconItemVisible(_iconItemRemove, true);
+                // 해금 상태에선 Lv.X 텍스트 모두 숨김
+                SetLockText(_txtLockHand, _txtLockHandOutline, false, 0);
+                SetLockText(_txtLockShuffle, _txtLockShuffleOutline, false, 0);
+                SetLockText(_txtLockRemove, _txtLockRemoveOutline, false, 0);
                 return;
             }
 
@@ -216,6 +228,15 @@ namespace BalloonFlow
             SetLockIcon(_iconLockHand, handLocked, _currentDifficulty);
             SetLockIcon(_iconLockShuffle, shuffleLocked, _currentDifficulty);
             SetLockIcon(_iconLockRemove, removeLocked, _currentDifficulty);
+
+            // Lv.X 표시 — 잠긴 booster 만 텍스트 활성, 해금되면 숨김
+            int handUnlock    = GetUnlockLevel(BoosterManager.HAND);
+            int shuffleUnlock = GetUnlockLevel(BoosterManager.SHUFFLE);
+            int removeUnlock  = GetUnlockLevel(BoosterManager.COLOR_REMOVE);
+
+            SetLockText(_txtLockHand,    _txtLockHandOutline,    handLocked,    handUnlock);
+            SetLockText(_txtLockShuffle, _txtLockShuffleOutline, shuffleLocked, shuffleUnlock);
+            SetLockText(_txtLockRemove,  _txtLockRemoveOutline,  removeLocked,  removeUnlock);
 
             // 미해금 시 IconItem 비활성화
             SetIconItemVisible(_iconItemHand, !handLocked);
@@ -430,6 +451,32 @@ namespace BalloonFlow
         private static void SetIconItemVisible(GameObject iconItem, bool visible)
         {
             if (iconItem != null) iconItem.SetActive(visible);
+        }
+
+        private static void SetLockText(TMP_Text main, TMP_Text outline, bool locked, int level)
+        {
+            string txt = locked ? $"Lv.{level}" : string.Empty;
+            if (main != null)
+            {
+                main.gameObject.SetActive(locked);
+                main.text = txt;
+            }
+            if (outline != null)
+            {
+                outline.gameObject.SetActive(locked);
+                outline.text = txt;
+            }
+        }
+
+        private static int GetUnlockLevel(string boosterType)
+        {
+            return boosterType switch
+            {
+                BoosterManager.SELECT_TOOL  => 9,
+                BoosterManager.SHUFFLE      => 12,
+                BoosterManager.COLOR_REMOVE => 15,
+                _                           => 1
+            };
         }
 
         #endregion

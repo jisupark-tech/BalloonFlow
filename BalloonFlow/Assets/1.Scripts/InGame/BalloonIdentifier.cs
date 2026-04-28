@@ -191,6 +191,21 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>
+        /// 풍선 비주얼 (color renderers) 의 보이기/숨기기 토글.
+        /// FrozenLayer 오버레이가 부착된 동안 풍선 본체를 숨기고, 해동 시 다시 보이게 함.
+        /// 자식 오버레이는 별도 GameObject 라 영향받지 않음.
+        /// </summary>
+        public void SetVisible(bool visible)
+        {
+            if (_colorRenderers == null) return;
+            for (int i = 0; i < _colorRenderers.Length; i++)
+            {
+                if (_colorRenderers[i] != null)
+                    _colorRenderers[i].enabled = visible;
+            }
+        }
+
         #endregion
     }
 }

@@ -37,9 +37,12 @@ namespace BalloonFlow
         [SerializeField] private Button _btnBottomExit;
         [SerializeField] private Button _btnExit;
 
-        [Header("[Item Sprites]")]
+        [Header("[Item Sprites — Inspector에서 할당]")]
+        [Tooltip("iconHand.png 드래그")]
         [SerializeField] private Sprite _sprHand;
+        [Tooltip("iconSuffle.png 드래그 (파일명 그대로 — typo 유지)")]
         [SerializeField] private Sprite _sprShuffle;
+        [Tooltip("iconZap.png 드래그")]
         [SerializeField] private Sprite _sprZap;
 
         private System.Action _onConfirm;
@@ -57,7 +60,26 @@ namespace BalloonFlow
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.AddListener(OnCancelClicked);
 
+            // BottomExit 화면 하단 고정 — Inspector 세팅 누락 대비 anchor 강제 보정
+            EnsureBottomExitAnchor();
+
             SetupShaders();
+        }
+
+        /// <summary>
+        /// BottomExit 버튼이 항상 화면 하단에 고정되도록 RectTransform anchor/pivot 보정.
+        /// (ItemDescription 위치는 가변, BottomExit 만 고정.)
+        /// </summary>
+        private void EnsureBottomExitAnchor()
+        {
+            if (_btnBottomExit == null) return;
+            var rt = _btnBottomExit.transform as RectTransform;
+            if (rt == null) return;
+
+            // Bottom-stretch (가로 stretch, 세로 하단 고정)
+            rt.anchorMin = new Vector2(0.5f, 0f);
+            rt.anchorMax = new Vector2(0.5f, 0f);
+            rt.pivot     = new Vector2(0.5f, 0f);
         }
 
         protected override void OnDestroy()
@@ -240,13 +262,29 @@ namespace BalloonFlow
 
         public Sprite GetBoosterSprite(string boosterType)
         {
-            return boosterType switch
+            Sprite spr = boosterType switch
             {
-                BoosterManager.SELECT_TOOL => _sprHand,
-                BoosterManager.SHUFFLE     => _sprShuffle,
+                BoosterManager.SELECT_TOOL  => _sprHand,
+                BoosterManager.SHUFFLE      => _sprShuffle,
                 BoosterManager.COLOR_REMOVE => _sprZap,
-                _                          => null
+                _                           => null
             };
+
+            if (spr == null && !string.IsNullOrEmpty(boosterType))
+            {
+                string filename = boosterType switch
+                {
+                    BoosterManager.SELECT_TOOL  => "iconHand.png",
+                    BoosterManager.SHUFFLE      => "iconSuffle.png",
+                    BoosterManager.COLOR_REMOVE => "iconZap.png",
+                    _                           => "(unknown)"
+                };
+                Debug.LogWarning($"[PopupUseItem] '{boosterType}' Sprite 미할당. " +
+                                 $"Inspector 에서 {filename} 드래그 필요. " +
+                                 "(Assets/2.Sprite/UI/ 위치)");
+            }
+
+            return spr;
         }
     }
 }

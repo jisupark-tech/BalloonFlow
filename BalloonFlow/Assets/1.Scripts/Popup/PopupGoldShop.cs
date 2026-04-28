@@ -152,5 +152,21 @@ namespace BalloonFlow
         [Header("[시간 한정]")]
         public bool hasTimeLimit;
         public float timeLimitSeconds;
+
+        [Header("[List Item Prefab 카테고리]")]
+        [Tooltip("Gold = ShopListGold, General = ShopListItem (특가/번들), Ad = ShopListAd")]
+        public ShopItemCategory category = ShopItemCategory.General;
+    }
+
+    /// <summary>UI 의 List Item Prefab 선택용 카테고리.
+    /// Resources/UI/UIAssets/Shop*.prefab 와 매핑.</summary>
+    public enum ShopItemCategory
+    {
+        /// <summary>Gold/Coin pack — ShopListGold.prefab</summary>
+        Gold = 0,
+        /// <summary>일반/특가/번들/부스터 — ShopListItem.prefab</summary>
+        General = 1,
+        /// <summary>광고 보상 — ShopListAd.prefab</summary>
+        Ad = 2
     }
 }

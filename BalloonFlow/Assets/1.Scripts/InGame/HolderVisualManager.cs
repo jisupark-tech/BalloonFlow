@@ -26,6 +26,11 @@ namespace BalloonFlow
         private const int MAGAZINE_FONT_SIZE = 6;
         private const float DEPLOY_MOVE_SPEED = 12f;
 
+        /// <summary>유저 가속(홀드/x2 토글) 반영된 보관함 이동 속도.
+        /// 벨트와 동일 배율로 스케일 → 2x 토글 시 보관함도 2x 빠르게 배치점 도달.</summary>
+        private float EffectiveDeployMoveSpeed
+            => DEPLOY_MOVE_SPEED * (RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f);
+
         // 보관함 배치 수치 — 절대 최소값 보장 (프리팹 스케일 1.04 기준)
         private const float MIN_COL_SPACING      = 2.16f;    // 보관함 좌우 최소 간격 (+20%)
         private const float MIN_ROW_SPACING       = 2.59f;    // 보관함 앞뒤 최소 간격 (+20%)
@@ -835,7 +840,7 @@ namespace BalloonFlow
             if (visual.gameObject != null)
             {
                 float dist = Vector3.Distance(visual.gameObject.transform.position, waitPos);
-                visual.gameObject.transform.DOMove(waitPos, dist / DEPLOY_MOVE_SPEED).SetEase(Ease.OutQuad)
+                visual.gameObject.transform.DOMove(waitPos, dist / EffectiveDeployMoveSpeed).SetEase(Ease.OutQuad)
                     .OnComplete(() =>
                     {
                         if (visual.gameObject != null)
@@ -923,7 +928,7 @@ namespace BalloonFlow
                 if (dist < 0.15f) break;
 
                 Vector3 dir = (targetPoint - current).normalized;
-                visual.gameObject.transform.position = current + dir * DEPLOY_MOVE_SPEED * Time.deltaTime;
+                visual.gameObject.transform.position = current + dir * EffectiveDeployMoveSpeed * Time.deltaTime;
                 yield return null;
             }
 
@@ -973,8 +978,9 @@ namespace BalloonFlow
             {
                 visual.gameObject.transform.DOKill();
                 float moveDist = Vector3.Distance(visual.gameObject.transform.position, deployPoint);
-                visual.gameObject.transform.DOMove(deployPoint, moveDist / DEPLOY_MOVE_SPEED).SetEase(Ease.OutQuad);
-                yield return new WaitForSeconds(moveDist / DEPLOY_MOVE_SPEED);
+                float moveDur = moveDist / EffectiveDeployMoveSpeed;
+                visual.gameObject.transform.DOMove(deployPoint, moveDur).SetEase(Ease.OutQuad);
+                yield return new WaitForSeconds(moveDur);
             }
 
             // ── Phase 2: 배치 시작 (열 순차 — 내 차례) ──
@@ -1125,6 +1131,10 @@ namespace BalloonFlow
                 visual.gameObject != null ? visual.gameObject.transform.position : slotWorldPos,
                 slotWorldPos);
             float duration = Mathf.Clamp(dist * 0.15f, 0.25f, 0.5f);
+
+            // 유저 가속 반영 — 2x 토글 시 다트 발사 비주얼도 2x 빠르게
+            float speedMult = RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f;
+            if (speedMult > 0.001f) duration /= speedMult;
 
             visual.identifier.LaunchNextDart(slotWorldPos, duration);
         }

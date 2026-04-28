@@ -21,7 +21,11 @@ namespace BalloonFlow
         #region Constants
 
         private const string PoolKey = "Balloon";
-        private const string PinataPoolKey = "Pinata";
+        // Gimmick prefab pool keys — must match Resources/Prefabs/<key>.prefab exactly.
+        private const string BarricadePoolKey  = "Baricade";     // Barricade gimmick visual
+        private const string IronBoxPoolKey    = "IronBox";      // Pinata_Box gimmick visual (Lv.161)
+        private const string WoodenBoardPoolKey = "WoodenBoard"; // Pin gimmick visual (Lv.61)
+        private const string FrozenLayerPoolKey = "FrozenLayer"; // Ice / Frozen_Dart overlay child
         private const int PinataRequiredHits = 2;
         private const float DEFAULT_BALLOON_SCALE = 0.5f;
 
@@ -120,6 +124,9 @@ namespace BalloonFlow
 
         /// <summary>Total number of non-popped balloons currently on the board.</summary>
         public int RemainingCount { get; private set; }
+
+        /// <summary>누적 팝된 풍선 수 (Spawner로 추가된 풍선 포함). 진행률 슬라이더용.</summary>
+        public int PoppedCount { get; private set; }
 
         /// <summary>
         /// Sets the visual scale for all balloons. Call before InitBoard.
@@ -299,6 +306,7 @@ namespace BalloonFlow
                 if (d.gimmickType == GimmickWall) excludeCount++;
             }
             RemainingCount = _balloons.Count - excludeCount;
+            PoppedCount = 0;
             BuildPositionIndex();
 
             // Apply gimmick visual states after all balloons are placed
@@ -651,12 +659,19 @@ namespace BalloonFlow
             {
                 if (pair.Value != null && ObjectPoolManager.HasInstance)
                 {
-                    // Pinata 프리팹은 Pinata 풀로 반환
-                    bool isPinata = _balloons.TryGetValue(pair.Key, out BalloonData bd)
-                        && (bd.gimmickType == GimmickPinata || bd.gimmickType == GimmickPinataBox);
-                    ObjectPoolManager.Instance.Return(isPinata ? PinataPoolKey : PoolKey, pair.Value);
+                    // 기믹별 전용 풀로 반환 (없으면 기본 Balloon 풀)
+                    string returnKey = PoolKey;
+                    if (_balloons.TryGetValue(pair.Key, out BalloonData bd))
+                    {
+                        returnKey = ResolveGimmickPoolKey(bd.gimmickType);
+                        if (bd.gimmickType == GimmickLockKey) returnKey = "Key";
+                    }
+                    ObjectPoolManager.Instance.Return(returnKey, pair.Value);
                 }
             }
+
+            // FrozenLayer 오버레이 자식들도 모두 풀로 반환
+            ReturnAllFrozenOverlays();
 
             _balloons.Clear();
             _balloonObjects.Clear();
@@ -665,6 +680,7 @@ namespace BalloonFlow
             _positionIndex.Clear();
             _activeKeyPairIds.Clear();
             RemainingCount = 0;
+            PoppedCount = 0;
             _nextBalloonId = 1;
         }
 
@@ -719,11 +735,71 @@ namespace BalloonFlow
 
                     // Override visuals for special gimmick types
                     if (data.gimmickType == GimmickWall)
+                    {
+                        // WoodenBoard 프리팹 사용 — GimmickIdentifier 있으면 색상 적용 (Wall은 HP 미사용)
                         ApplyTintToObject(obj, WALL_COLOR);
+                        var gi = obj.GetComponent<GimmickIdentifier>();
+                        if (gi != null)
+                        {
+                            gi.Initialize();
+                            if (gi.HasColorRenderers)
+                                gi.ApplyColor(WALL_COLOR);
+                        }
+                    }
                     else if (data.gimmickType == GimmickPin)
+                    {
+                        // WoodenBoard 프리팹 사용 — Pin은 같은 색 다트로 점진 제거
                         ApplyTintToObject(obj, PIN_COLOR);
+                        var gi = obj.GetComponent<GimmickIdentifier>();
+                        if (gi != null)
+                        {
+                            gi.Initialize();
+                            int ci = Mathf.Clamp(data.color, 0, BalloonColors.Length - 1);
+                            if (gi.HasColorRenderers)
+                                gi.ApplyColor(BalloonColors[ci]);
+                        }
+                    }
+                    else if (data.gimmickType == GimmickBarricade)
+                    {
+                        // Baricade 프리팹 사용 — HP 기반 파괴 가능 벽.
+                        // 명세: Pinata 처럼 sizeW/sizeH 만큼 길이 stretch (여러 개 뭉친 게 아닌 한 덩어리).
+                        var gi = obj.GetComponent<GimmickIdentifier>();
+                        if (gi != null)
+                        {
+                            gi.Initialize();
+                            int hp = data.maxHP - data.hitCount;
+                            gi.UpdateHP(Mathf.Max(1, hp));
+                            if (gi.HasColorRenderers)
+                                gi.ApplyColor(WALL_COLOR);
+                        }
+
+                        // 멀티셀 stretching — Pinata 와 동일 방식
+                        {
+                            float cs = _cellSpacing > 0 ? _cellSpacing : 0.3f;
+                            float scaleBase = _balloonScale;
+
+                            if (data.sizeW > 1 || data.sizeH > 1)
+                            {
+                                obj.transform.localScale = new Vector3(
+                                    scaleBase * data.sizeW,
+                                    scaleBase,
+                                    scaleBase * data.sizeH);
+                            }
+
+                            // 앵커(좌하단)에서 멀티셀 중심으로 이동
+                            Vector3 centerOffset = new Vector3(
+                                (data.sizeW - 1) * cs * 0.5f,
+                                0f,
+                                (data.sizeH - 1) * cs * 0.5f);
+                            obj.transform.position = new Vector3(
+                                data.position.x + centerOffset.x,
+                                0f,
+                                data.position.z + centerOffset.z);
+                        }
+                    }
                     else if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
                     {
+                        // PinataBox는 IronBox 프리팹, 일반 Pinata는 Balloon 풀 폴백
                         var gi = obj.GetComponent<GimmickIdentifier>();
                         if (gi != null)
                         {
@@ -790,10 +866,12 @@ namespace BalloonFlow
                 return null;
             }
 
-            // Pinata/PinataBox는 별도 풀 사용
-            bool isPinata = _balloons.TryGetValue(balloonId, out BalloonData bData)
-                && (bData.gimmickType == GimmickPinata || bData.gimmickType == GimmickPinataBox);
-            string poolKey = isPinata ? PinataPoolKey : PoolKey;
+            // 기믹별 전용 풀 라우팅 — 기믹 비주얼 프리팹이 있는 경우 해당 풀 사용
+            string poolKey = PoolKey;
+            if (_balloons.TryGetValue(balloonId, out BalloonData bData))
+            {
+                poolKey = ResolveGimmickPoolKey(bData.gimmickType);
+            }
             GameObject obj = ObjectPoolManager.Instance.Get(poolKey);
             if (obj == null)
             {
@@ -888,6 +966,7 @@ namespace BalloonFlow
         /// <summary>
         /// Applies the Ice visual tint (frozen blue) to Ice gimmick balloons.
         /// Called during setup for any balloon with GimmickIce type.
+        /// Also overlays FrozenLayer prefab as a child for visual ice shell.
         /// </summary>
         private void ApplyInitialIceState()
         {
@@ -897,6 +976,7 @@ namespace BalloonFlow
                 if (_balloonObjects.TryGetValue(d.balloonId, out GameObject obj) && obj != null)
                 {
                     ApplyTintToObject(obj, ICE_COLOR);
+                    AttachFrozenOverlay(d.balloonId, obj);
                 }
             }
         }
@@ -904,6 +984,7 @@ namespace BalloonFlow
         /// <summary>
         /// Applies Frozen Dart visual tint. Darker blue than Ice to distinguish.
         /// Called during setup for balloons with GimmickFrozenDart type.
+        /// Also overlays FrozenLayer prefab as a child for visual frost shell.
         /// </summary>
         private void ApplyInitialFrozenDartState()
         {
@@ -913,6 +994,7 @@ namespace BalloonFlow
                 if (_balloonObjects.TryGetValue(d.balloonId, out GameObject obj) && obj != null)
                 {
                     ApplyTintToObject(obj, FROZEN_DART_COLOR);
+                    AttachFrozenOverlay(d.balloonId, obj);
                 }
             }
         }
@@ -1087,6 +1169,110 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>
+        /// 기믹 타입에 따라 사용할 풀 키를 반환. 전용 비주얼 프리팹이 없는 기믹은
+        /// 기본 Balloon 풀로 폴백. (Lock_Key는 별도 처리이므로 여기서 다루지 않음)
+        /// </summary>
+        private static string ResolveGimmickPoolKey(string gimmickType)
+        {
+            if (string.IsNullOrEmpty(gimmickType)) return PoolKey;
+            switch (gimmickType)
+            {
+                case GimmickBarricade: return BarricadePoolKey;
+                case GimmickPinataBox: return IronBoxPoolKey;
+                case GimmickPin:       return WoodenBoardPoolKey;
+                case GimmickWall:      return WoodenBoardPoolKey;
+                default:               return PoolKey;
+            }
+        }
+
+        // FrozenLayer 오버레이 추적: balloonId → 자식으로 부착된 FrozenLayer GameObject
+        private readonly Dictionary<int, GameObject> _frozenOverlays = new Dictionary<int, GameObject>();
+
+        /// <summary>풍선보다 커 보이게 하는 오버레이 스케일 배율 (얼음 쉘이 풍선을 감싼 모습).
+        /// 명세: "FrozenLayer 가 풍선보다 커보여야함."</summary>
+        private const float FROZEN_OVERLAY_SCALE = 1.3f;
+
+        /// <summary>
+        /// FrozenLayer 프리팹을 풍선의 자식으로 부착 (얼음 쉘 비주얼).
+        /// Ice (Lv.201) / Frozen_Dart (Lv.241) 기믹용. 풍선 자체는 교체하지 않고 오버레이만 추가.
+        /// 부착 시 풍선 본체 비주얼 숨김 → 얼음만 보임. 해동 시 ReturnFrozenOverlay 로 제거 →
+        /// 원본 풍선 노출.
+        /// </summary>
+        private void AttachFrozenOverlay(int balloonId, GameObject parentBalloon)
+        {
+            if (parentBalloon == null) return;
+            if (!ObjectPoolManager.HasInstance) return;
+            if (_frozenOverlays.ContainsKey(balloonId)) return; // 중복 부착 방지
+            if (!ObjectPoolManager.Instance.HasPool(FrozenLayerPoolKey)) return;
+
+            GameObject overlay = ObjectPoolManager.Instance.Get(FrozenLayerPoolKey);
+            if (overlay == null) return;
+
+            overlay.transform.SetParent(parentBalloon.transform, false);
+            overlay.transform.localPosition = Vector3.zero;
+            overlay.transform.localRotation = Quaternion.identity;
+            // 풍선보다 크게 — 얼음이 풍선을 감싼 시각.
+            overlay.transform.localScale = Vector3.one * FROZEN_OVERLAY_SCALE;
+            overlay.SetActive(true);
+
+            // 풍선 본체 숨김 (얼음만 보이게).
+            var bi = parentBalloon.GetComponent<BalloonIdentifier>();
+            if (bi != null) bi.SetVisible(false);
+
+            _frozenOverlays[balloonId] = overlay;
+        }
+
+        /// <summary>
+        /// 특정 풍선의 FrozenLayer 오버레이를 풀로 반환 (해동/팝/클리어 시 호출).
+        /// 풍선 본체 비주얼 다시 보이게 복원.
+        /// </summary>
+        private void ReturnFrozenOverlay(int balloonId)
+        {
+            if (!_frozenOverlays.TryGetValue(balloonId, out GameObject overlay)) return;
+            _frozenOverlays.Remove(balloonId);
+
+            // 풍선 본체 다시 보이게 (얼음 깨짐 → 원래 풍선 노출).
+            if (_balloonObjects.TryGetValue(balloonId, out GameObject balloonObj) && balloonObj != null)
+            {
+                var bi = balloonObj.GetComponent<BalloonIdentifier>();
+                if (bi != null) bi.SetVisible(true);
+            }
+
+            if (overlay == null) return;
+            overlay.transform.SetParent(null, false);
+            if (ObjectPoolManager.HasInstance)
+                ObjectPoolManager.Instance.Return(FrozenLayerPoolKey, overlay);
+            else
+                overlay.SetActive(false);
+        }
+
+        /// <summary>모든 FrozenLayer 오버레이를 풀로 반환 (보드 클리어 시).
+        /// 풍선 본체 visibility 도 복원 — 다음 풀 재사용 안전성 확보.</summary>
+        private void ReturnAllFrozenOverlays()
+        {
+            foreach (var kvp in _frozenOverlays)
+            {
+                int balloonId = kvp.Key;
+                GameObject overlay = kvp.Value;
+
+                // 풍선 본체 visibility 복원
+                if (_balloonObjects.TryGetValue(balloonId, out GameObject balloonObj) && balloonObj != null)
+                {
+                    var bi = balloonObj.GetComponent<BalloonIdentifier>();
+                    if (bi != null) bi.SetVisible(true);
+                }
+
+                if (overlay == null) continue;
+                overlay.transform.SetParent(null, false);
+                if (ObjectPoolManager.HasInstance)
+                    ObjectPoolManager.Instance.Return(FrozenLayerPoolKey, overlay);
+                else
+                    overlay.SetActive(false);
+            }
+            _frozenOverlays.Clear();
+        }
+
         #endregion
 
         #region Private Methods — Pop Logic
@@ -1097,6 +1283,7 @@ namespace BalloonFlow
             data.isPopped = true;
             _balloons[data.balloonId] = data;
             RemainingCount = Mathf.Max(0, RemainingCount - 1);
+            PoppedCount++;
 
             // Return visual to pool
             ReturnBalloonObject(data.balloonId);
@@ -1221,6 +1408,9 @@ namespace BalloonFlow
                 // Thaw: convert to normal balloon (still alive, now poppable in 1 hit)
                 data.gimmickType = GimmickNone;
                 _balloons[data.balloonId] = data;
+
+                // 얼음 쉘 오버레이 제거 (해동)
+                ReturnFrozenOverlay(data.balloonId);
 
                 // Visual: restore original color from frozen tint
                 if (_balloonObjects.TryGetValue(data.balloonId, out GameObject obj) && obj != null)
@@ -1386,6 +1576,9 @@ namespace BalloonFlow
                 neighbor.gimmickType = GimmickNone;
                 _balloons[id] = neighbor;
 
+                // 얼음 쉘 오버레이 제거
+                ReturnFrozenOverlay(id);
+
                 // Visual: restore color (Ice was shown as frozen/blue tint)
                 if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
                 {
@@ -1419,6 +1612,9 @@ namespace BalloonFlow
                 neighbor.gimmickType = GimmickNone;
                 neighbor.hitCount = 1; // Mark as already thawed so next hit pops
                 _balloons[id] = neighbor;
+
+                // 얼음 쉘 오버레이 제거
+                ReturnFrozenOverlay(id);
 
                 // Visual: restore original color
                 if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
@@ -1545,9 +1741,14 @@ namespace BalloonFlow
             var identifier = obj.GetComponent<BalloonIdentifier>();
 
             float savedScale = _balloonScale;
-            bool returnToPinata = _balloons.TryGetValue(balloonId, out BalloonData retData)
-                && (retData.gimmickType == GimmickPinata || retData.gimmickType == GimmickPinataBox);
-            string returnKey = returnToPinata ? PinataPoolKey : PoolKey;
+            string returnKey = PoolKey;
+            if (_balloons.TryGetValue(balloonId, out BalloonData retData))
+            {
+                returnKey = ResolveGimmickPoolKey(retData.gimmickType);
+            }
+
+            // FrozenLayer 오버레이가 붙어있다면 먼저 풀로 반환
+            ReturnFrozenOverlay(balloonId);
 
             // 1) 파티클 미리 분리 (스케일업이 파티클 transform에 영향 안 주도록)
             Transform detachedEffect = null;
@@ -1759,6 +1960,7 @@ namespace BalloonFlow
             keyData.isPopped = true;
             _balloons[keyId] = keyData;
             RemainingCount = Mathf.Max(0, RemainingCount - 1);
+            PoppedCount++;
             _positionIndex.Remove(ToGridKey(keyData.position));
 
             // Return Key visual to pool

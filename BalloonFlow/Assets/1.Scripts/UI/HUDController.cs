@@ -51,6 +51,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
             EventBus.Subscribe<OnGaugeStageChanged>(HandleGaugeStage);
             EventBus.Subscribe<OnHolderDeploymentDone>(HandleHolderDeploymentDone);
+            EventBus.Subscribe<OnBalloonPopped>(HandleBalloonPopped);
         }
 
         private void OnDisable()
@@ -62,6 +63,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
             EventBus.Unsubscribe<OnGaugeStageChanged>(HandleGaugeStage);
             EventBus.Unsubscribe<OnHolderDeploymentDone>(HandleHolderDeploymentDone);
+            EventBus.Unsubscribe<OnBalloonPopped>(HandleBalloonPopped);
 
             // 버튼 이벤트 해제
             if (_view != null)
@@ -287,39 +289,33 @@ namespace BalloonFlow
 
         private void HandleHolderDeploymentDone(OnHolderDeploymentDone _evt)
         {
-            // 보관함 하나의 magazine 이 0이 됨 → 진행도 갱신.
+            // 보관함 배치 종료 시 진행도 동기화 (보드 상태 변동 시점).
+            RefreshProgress();
+        }
+
+        private void HandleBalloonPopped(OnBalloonPopped _evt)
+        {
+            // 풍선이 터질 때마다 진행도 갱신.
             RefreshProgress();
         }
 
         /// <summary>
-        /// 진행도 = 탄창 소진(magazine=0 또는 isConsumed=true)된 보관함 수 / 전체 보관함 수.
-        /// EX. 5레벨 20개 보관함 중 3개 소진 = 3/20 = 15%.
+        /// 진행도 = 공격한 풍선 수(누적 PoppedCount) / 전체 풍선 수(PoppedCount + RemainingCount).
+        /// Spawner로 추가된 풍선도 분모에 합산 → 모두 터트려야 100%.
         /// </summary>
         private void RefreshProgress()
         {
             if (_view == null) return;
-            if (!HolderManager.HasInstance)
+            if (!BalloonController.HasInstance)
             {
                 _view.SetProgress(0, 0);
                 return;
             }
 
-            HolderData[] holders = HolderManager.Instance.GetHolders();
-            if (holders == null || holders.Length == 0)
-            {
-                _view.SetProgress(0, 0);
-                return;
-            }
-
-            int consumed = 0;
-            for (int i = 0; i < holders.Length; i++)
-            {
-                if (holders[i] == null) continue;
-                // isConsumed = 라이프사이클 종료 (regular: magazine=0 / spawner: spawnerHP=0).
-                // magazineCount 직접 검사는 spawner(magazine=0 시작) false-positive 발생 → 사용 안 함.
-                if (holders[i].isConsumed) consumed++;
-            }
-            _view.SetProgress(consumed, holders.Length);
+            int popped = BalloonController.Instance.PoppedCount;
+            int remaining = BalloonController.Instance.RemainingCount;
+            int total = popped + remaining;
+            _view.SetProgress(popped, total);
         }
 
         private void HandleCoinChanged(OnCoinChanged _evt)
