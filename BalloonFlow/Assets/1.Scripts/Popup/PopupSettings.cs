@@ -39,7 +39,17 @@ namespace BalloonFlow
             if (_btnMusic != null) _btnMusic.onClick.AddListener(OnMusicClicked);
             if (_btnHaptic != null) _btnHaptic.onClick.AddListener(OnHapticClicked);
 
+            // ExitButton 직접 바인딩 — HUDController.SetSettingsPopup가 호출 안 돼도 닫힘 동작 보장.
+            // (HUDController는 추가 listener를 더 등록하지만, 중복 등록은 onClick.Invoke가 모두 호출해 안전.)
+            if (_frame != null && _frame.BtnExit != null)
+                _frame.BtnExit.onClick.AddListener(OnExitClickedSelf);
+
             EventBus.Subscribe<OnSettingsChanged>(HandleSettingsChanged);
+        }
+
+        private void OnExitClickedSelf()
+        {
+            CloseUI();
         }
 
         protected override void OnDestroy()
@@ -48,6 +58,8 @@ namespace BalloonFlow
             if (_btnSound != null) _btnSound.onClick.RemoveAllListeners();
             if (_btnMusic != null) _btnMusic.onClick.RemoveAllListeners();
             if (_btnHaptic != null) _btnHaptic.onClick.RemoveAllListeners();
+            if (_frame != null && _frame.BtnExit != null)
+                _frame.BtnExit.onClick.RemoveListener(OnExitClickedSelf);
 
             EventBus.Unsubscribe<OnSettingsChanged>(HandleSettingsChanged);
         }
@@ -65,6 +77,19 @@ namespace BalloonFlow
 
             RefreshToggles();
             base.OpenUI();
+
+            // 애니메이션 사용 시 base.OpenUI 가 interactable=false 로 시작 → ExitButton 클릭 안 됨.
+            // 즉시 클릭 가능하도록 강제.
+            if (_canvasGroup != null)
+            {
+                _canvasGroup.interactable = true;
+                _canvasGroup.blocksRaycasts = true;
+            }
+            if (_frame != null && _frame.BtnExit != null)
+            {
+                _frame.BtnExit.interactable = true;
+                _frame.BtnExit.gameObject.SetActive(true);
+            }
         }
 
         private void OnSoundClicked()

@@ -146,18 +146,16 @@ namespace BalloonFlow
             UpdateSlotDartPositions();
             UpdatePerDartPositions();
 
-            // 공격 스캔: 벨트 속도 × 공격 배율
+            // 공격 스캔: 셀 한 칸(cellSpacing) 당 정확히 1회 — 다트가 셀 한 칸 이동하는 시간을 인터벌로.
+            // 셀 사이즈 / 벨트 속도 / 후반 배속 모두 반영해서 누락 없이 매 셀 마다 1회 공격 기회.
             _scanTimer += Time.deltaTime;
-            float railSpeed = RailManager.HasInstance ? RailManager.Instance.RotationSpeed : 10f;
             float atkMult = GameManager.HasInstance ? GameManager.Instance.Board.attackSpeedMultiplier : 1f;
-            bool balloonSynced = GameManager.HasInstance && GameManager.Instance.Board.dartBalloonSyncedFireMode;
             float interval;
-            if (balloonSynced && RailManager.HasInstance)
+            if (RailManager.HasInstance)
             {
-                // 다트가 풍선 하나 거리(cellSpacing)를 이동하는 시간 = 인터벌.
-                // 점유율 가속(후반 ×2)은 반영, 배치 감속(×0.5)은 제외.
+                // 다트 월드 속도 = RotationSpeed(slots/sec, UserSpeedMultiplier 포함) × SlotSpacing(units/slot)
                 float worldRailSpeed = RailManager.Instance.RotationSpeed * RailManager.Instance.SlotSpacing;
-                float occMult = RailManager.Instance.GetOccupancySpeedMultiplier();
+                float occMult = RailManager.Instance.GetOccupancySpeedMultiplier(); // 후반 ×2
                 float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
                 float speed = worldRailSpeed * occMult * Mathf.Max(atkMult, 0.0001f);
                 interval = speed > 0f ? cellSpacing / speed : 0.05f;
@@ -165,8 +163,7 @@ namespace BalloonFlow
             }
             else
             {
-                interval = railSpeed > 0f ? 0.5f / (railSpeed * atkMult) : 0.05f;
-                interval = Mathf.Clamp(interval, 0.005f, 0.1f);
+                interval = 0.05f;
             }
             if (_scanTimer >= interval)
             {

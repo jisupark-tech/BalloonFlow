@@ -136,7 +136,10 @@ namespace BalloonFlow
             }
 
             obj.SetActive(false);
-            obj.transform.SetParent(_poolParent);
+            // worldPositionStays=false: localScale/Position/Rotation 보존.
+            // (worldPositionStays=true 가 기본이지만 UI 풀의 경우 Canvas 스케일 차이로
+            //  매 cycle 마다 localScale이 누적 축소되는 버그 발생 — 토스트 클릭마다 작아지는 현상.)
+            obj.transform.SetParent(_poolParent, false);
             _available.Enqueue(obj);
         }
 

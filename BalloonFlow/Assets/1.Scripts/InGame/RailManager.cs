@@ -266,9 +266,9 @@ namespace BalloonFlow
             float physicalGap = DartPhysicalGap;
             float dartDelta = beltDelta;
 
-            // Doc spec line 57-58: 레일이 가득 차면 belt가 절대 멈추지 않음.
-            // PhysicalCapacity - 1 도달 시 uniform advance. physGap > slotSpacing 인 visual mismatch
-            // 케이스에서도 deploy point만 비어있는 "physical full" 상태 검출됨.
+            // 가득 시 uniform advance — 모든 다트가 belt와 함께 동일 속도 회전.
+            // (deploy point 장애물 제거됐으므로 일반적인 packing 으로도 회전 가능하지만,
+            //  빡빡하게 가득찬 상태에서는 packing이 잠길 수 있어 안전망으로 유지.)
             bool railFullUniform = (_occupiedCount + _frozenDartInfos.Count) >= PhysicalCapacity - 1;
             if (railFullUniform)
             {
@@ -321,12 +321,10 @@ namespace BalloonFlow
                 }
             }
 
-            // Deploy point obstacle (doc cluster 시나리오): 다트가 deploy point 앞에 pile-up.
-            // deployOffset = 0.5*physGap → frontmost는 deployProgress - 1.5*physGap 에 settle,
-            // 다음 holder가 chain이 약간 drift 한 상태에서도 deployProgress 에 첫 다트를 배치
-            // 가능하도록 buffer 확보.
+            // Deploy point 장애물 — 다트가 deploy point 직전에 settle. 한 칸 안 잡아먹도록 offset=0.
+            // (이전: deployOffset = 0.5*physGap → 1.5*physGap 낭비. 지금: 0 → physGap 만 낭비 = 정확히 1 슬롯.)
+            // 다트 간격 일정 유지(packing 안정화) + deploy point 기능(freeze 등) 모두 유지.
             bool hasDeployPoints = _activeDeployPoints.Count > 0;
-            float deployOffset = physicalGap * 0.5f;
 
             for (int offset = 0; offset < dartCount; offset++)
             {
@@ -350,7 +348,7 @@ namespace BalloonFlow
                     foreach (var kvp in _deployPoints)
                     {
                         if (!_activeDeployPoints.Contains(kvp.Key)) continue;
-                        float d = (kvp.Value - deployOffset) - myProg;
+                        float d = kvp.Value - myProg; // offset=0: 장애물 = deployProgress 그 자체
                         if (hasWrap && d < 0f) d += pathLen;
                         if (d > 0.001f && d < closest) closest = d;
                     }
@@ -412,10 +410,8 @@ namespace BalloonFlow
             // synced 모드에선 배치 감속 자체를 비활성화
             // PhysicalCapacity - 1 도달 시 belt 정상 속도로 회전 (배포 슬로우 해제).
             // 사용자 spec: "delay 없이 컨베이어벨트 돌아감".
-            bool balloonSynced = GameManager.HasInstance && GameManager.Instance.Board.dartBalloonSyncedFireMode;
-            bool railFull = (_occupiedCount + _frozenDartInfos.Count) >= PhysicalCapacity - 1;
-            if (!balloonSynced && _activeDeployPoints.Count > 0 && !railFull)
-                baseMult *= 0.5f;
+            // Deploy point 장애물 제거 후 배포 중 감속 의미 없음 (벨트는 항상 정상 속도 회전).
+            // baseMult = 점유율 기반 (후반 ×2) 만 유지.
 
             return baseMult;
         }

@@ -98,6 +98,9 @@ namespace BalloonFlow
             public bool isWaiting;       // just below deploying holder
             public bool isMovingToRail;
             public HolderIdentifier identifier;
+            /// <summary>StartDeploy 마다 증가. DeployCoroutine 캡처 후 mismatch 시 stale로 간주, yield break.
+            /// Continue/Cancel 시 visual을 무효화하지 않고도 OLD 코루틴을 안전하게 종료.</summary>
+            public int deployGeneration;
         }
 
         #endregion
@@ -121,6 +124,16 @@ namespace BalloonFlow
                 int id = q.Dequeue();
                 if (id != holderId) q.Enqueue(id);
             }
+        }
+
+        /// <summary>특정 holderId가 컬럼 큐에 있는지 확인 (StartDeploy 중복 enqueue 방지).</summary>
+        private bool ColumnQueueContains(int column, int holderId)
+        {
+            if (_colQueues == null || column < 0 || column >= _colQueues.Length) return false;
+            var q = _colQueues[column];
+            if (q == null || q.Count == 0) return false;
+            foreach (int id in q) if (id == holderId) return true;
+            return false;
         }
 
         /// <summary>Chain 연결선: "id1_id2" → LineRenderer GameObject</summary>
@@ -335,6 +348,9 @@ namespace BalloonFlow
             _cancelledHolders.Add(holderId);
 
             if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual)) return;
+
+            // generation 증가 → 활성 OLD 코루틴 stale 처리 (cancel 플래그와 중복 안전장치)
+            visual.deployGeneration++;
 
             visual.isDeploying = false;
             visual.isWaiting = false;
@@ -879,7 +895,15 @@ namespace BalloonFlow
 
             if (visual.isDeploying || visual.isMovingToRail) return;
 
-            _colQueues[visual.column].Enqueue(holderId);
+            // NEW 코루틴은 이전 cancel 플래그 영향 받지 않도록 사전 정리.
+            // (Continue 직후 같은 holder를 다시 클릭한 경우, 이전 사이클의 cancel 플래그가
+            // 잔존해 NEW 코루틴이 즉시 yield break 되는 race 방지.)
+            _cancelledHolders.Remove(holderId);
+
+            // 큐에 이미 같은 holderId가 있으면 OLD 코루틴의 잔재 — 중복 enqueue 안 함.
+            // (NEW가 OLD의 큐 자리를 그대로 이어받음. OLD는 generation mismatch로 곧 종료.)
+            if (!ColumnQueueContains(visual.column, holderId))
+                _colQueues[visual.column].Enqueue(holderId);
 
             // 선택됨 → 블러 해제 + 원래 색상 표시 + 뚜껑 열기
             if (visual.identifier != null)
@@ -903,20 +927,27 @@ namespace BalloonFlow
             // 즉시 이동 시작 (대기 없이)
             visual.isMovingToRail = true;
 
+            // generation 증가 → 이전 사이클의 OLD 코루틴은 mismatch로 자동 stale 처리
+            visual.deployGeneration++;
+            int gen = visual.deployGeneration;
+
             // 기존 DOTween 킬 — RepositionColumnHolders의 DOMove와 충돌 방지
             if (visual.gameObject != null)
                 visual.gameObject.transform.DOKill();
 
             RepositionColumnHolders(visual.column);
-            StartCoroutine(DeployCoroutine(visual));
+            StartCoroutine(DeployCoroutine(visual, gen));
         }
 
-        private IEnumerator DeployCoroutine(HolderVisual visual)
+        private IEnumerator DeployCoroutine(HolderVisual visual, int gen)
         {
             if (!RailManager.HasInstance || visual.gameObject == null)
             {
                 yield break;
             }
+
+            // 헬퍼: stale 코루틴이면 큐에서 자기 ID 제거 후 yield break.
+            // (이 코루틴은 lambda 캡처 안전성 위해 inline 으로 사용)
 
             // ── Phase 1: Move holder to deploy point (또는 대기 위치) ──
             Vector3 deployPoint = GetDeployPoint(visual.column);
@@ -933,6 +964,11 @@ namespace BalloonFlow
 
             while (visual.gameObject != null)
             {
+                // stale (NEW가 generation 증가시켜 take-over) → 큐는 NEW가 재사용 중, 건드리지 않음
+                if (visual.deployGeneration != gen)
+                {
+                    yield break;
+                }
                 if (_cancelledHolders.Contains(visual.holderId))
                 {
                     _cancelledHolders.Remove(visual.holderId);
@@ -965,6 +1001,11 @@ namespace BalloonFlow
             const int MAX_WAIT_FRAMES = 3600; // 60초 타임아웃 (60fps)
             while (waitFrames < MAX_WAIT_FRAMES)
             {
+                // stale (NEW take-over) → 큐는 NEW 소유, 건드리지 않음
+                if (visual.deployGeneration != gen)
+                {
+                    yield break;
+                }
                 if (_boardFinished)
                 {
                     RemoveFromColumnQueue(visual.column, visual.holderId);
@@ -1034,14 +1075,21 @@ namespace BalloonFlow
             float fixedDeployProgress = rail.GetProgressAtWorldPos(railAttachPoint);
             rail.RegisterDeployPoint(visual.holderId, fixedDeployProgress);
 
-            // 정확한 간격(physicalGap)을 보장하기 위해 배치 progress는 "앞 다트 위치 - physicalGap".
-            // 속도/배속과 관계없이 다트끼리의 간격이 항상 physicalGap로 동일하게 유지됨.
-            // 게이트로 페이싱하여 너무 빠르게 스폰되지 않도록 함.
-            int lastPlacedDartId = -1;
+            // 배치 페이싱: belt 누적 이동 거리(distSinceLastPlacement)가 physicalGap에 도달할 때마다 1회 배치.
+            // overshoot은 carry-over + placementProgress 보정으로 흡수 → 다트 간격이 항상 정확히 physicalGap.
+            // (이전: IsProgressClear 의 minGap=0.9*physGap 폴링이라 frame 타이밍에 따라 spacing 변동.)
             float totalPathLen = rail.TotalPathLength;
+            float distSinceLastPlacement = rail.DartPhysicalGap; // 첫 다트 즉시 배치
 
             while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
             {
+                // stale (NEW가 take-over). NEW가 이미 _colBusy를 자기 것으로 점유했을 수 있으므로
+                // _colBusy를 OLD가 풀면 안 됨. UnregisterDeployPoint도 NEW가 다시 등록했을 수 있어 skip.
+                // (NEW는 같은 holderId이므로 큐/_colBusy/deployPoint 모두 자연 재사용)
+                if (visual.deployGeneration != gen)
+                {
+                    yield break;
+                }
                 // 취소 체크
                 if (_cancelledHolders.Contains(visual.holderId))
                 {
@@ -1052,55 +1100,36 @@ namespace BalloonFlow
                     yield break;
                 }
 
-                // 한 프레임에 필요한 만큼 연속 배치 (belt가 빠를 때 따라잡기) —
-                // gate가 닫힐 때까지 반복. 각 배치는 (lastDart - physicalGap)에 놓여 physicalGap 간격 유지.
-                // 부하 최소화를 위해 프레임당 최대 3개로 제한.
+                float physGap = rail.DartPhysicalGap;
+                float beltSpeed = rail.RotationSpeed * rail.SlotSpacing * rail.GetOccupancySpeedMultiplier();
+                distSinceLastPlacement += beltSpeed * Time.deltaTime;
+
+                // physGap 누적 시마다 배치. overshoot은 carry-over + placement 위치 보정.
+                // 부하/race 방지를 위해 프레임당 최대 3개로 제한.
                 int maxPlacementsThisFrame = 3;
-                while (visual.magazineRemaining > 0 && maxPlacementsThisFrame-- > 0)
+                while (visual.magazineRemaining > 0 && maxPlacementsThisFrame-- > 0
+                       && distSinceLastPlacement >= physGap)
                 {
-                    // capacity-1 boundary: 마지막 빈 슬롯 채우기. lastDart 기준 progress는
-                    // 점유된 위치를 가리킬 수 있으므로 deploy point 부근 빈 자리 스캔.
-                    bool lastSlotMode = rail.EffectiveOccupiedCount >= rail.SlotCount - 1;
+                    float overshoot = distSinceLastPlacement - physGap;
 
-                    bool gateOpen = true;
-                    float placementProgress;
-                    if (lastSlotMode)
-                    {
-                        placementProgress = rail.FindClearProgressNear(fixedDeployProgress, visual.holderId);
-                        if (placementProgress < 0f) break; // 빈 자리 못 찾음 (= 사실상 200/200) → yield 후 재시도
-                    }
-                    else if (lastPlacedDartId >= 0)
-                    {
-                        var lastDart = rail.FindDart(lastPlacedDartId);
-                        if (lastDart != null)
-                        {
-                            float distFromDp = lastDart.progress - fixedDeployProgress;
-                            if (totalPathLen > 0f)
-                                distFromDp = ((distFromDp % totalPathLen) + totalPathLen) % totalPathLen;
-                            gateOpen = distFromDp >= rail.DartPhysicalGap;
-                            placementProgress = lastDart.progress - rail.DartPhysicalGap;
-                            if (totalPathLen > 0f)
-                                placementProgress = ((placementProgress % totalPathLen) + totalPathLen) % totalPathLen;
-                        }
-                        else placementProgress = fixedDeployProgress;
-                    }
-                    else
-                    {
-                        placementProgress = fixedDeployProgress;
-                    }
+                    // overshoot 보정: 이상적 배치 시점은 overshoot/beltSpeed 초 전. 그 사이 belt가 overshoot 만큼 이동했으므로
+                    // 그 다트는 지금 deployProgress + overshoot 에 있어야 직전 다트와 spacing이 정확히 physicalGap.
+                    float placementProgress = fixedDeployProgress + overshoot;
+                    if (totalPathLen > 0f && placementProgress >= totalPathLen) placementProgress -= totalPathLen;
 
-                    // lastSlotMode에선 FindClearProgressNear가 IsProgressClear를 이미 보장.
-                    if (!lastSlotMode)
+                    // Race 방어: 다른 holder가 이 progress를 점유했을 수 있어 fallback gate 유지.
+                    if (!rail.IsProgressClear(placementProgress, visual.holderId))
                     {
-                        if (!gateOpen || !rail.IsProgressClear(placementProgress, visual.holderId))
-                            break;
+                        // race 지속 시 accumulator 무한 증가 방지 — 다음 프레임에서 즉시 재시도.
+                        if (distSinceLastPlacement > physGap) distSinceLastPlacement = physGap;
+                        break;
                     }
 
                     int dartId = rail.PlaceDartAtProgress(placementProgress, visual.color, visual.holderId);
                     if (dartId < 0) break;
 
+                    distSinceLastPlacement = overshoot;
                     visual.magazineRemaining--;
-                    lastPlacedDartId = dartId;
 
                     if (!deployStarted)
                     {
@@ -1497,6 +1526,12 @@ namespace BalloonFlow
         private void HandleContinueApplied(OnContinueApplied evt)
         {
             _boardFinished = false;
+
+            // 모든 활성 DeployCoroutine 무효화 — generation 증가 시 OLD 코루틴이 mismatch 감지하고 정리 후 자동 종료.
+            // (cancel 플래그 방식은 NEW 클릭과 race 발생 → generation token이 안전.)
+            foreach (var kvp in _holderVisuals)
+                kvp.Value.deployGeneration++;
+
             if (_colQueues != null) for (int i = 0; i < _colQueues.Length; i++) { _colQueues[i].Clear(); _colBusy[i] = false; }
 
             // 비주얼 + 데이터 상태 동시 리셋

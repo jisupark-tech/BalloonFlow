@@ -110,6 +110,9 @@ namespace BalloonFlow
             }
 
             go.transform.SetParent(parent, false);
+            // Pool 반환 시 SetParent worldPositionStays=true가 localScale을 변경시켜
+            // 매 spawn 사이클마다 누적 축소 → 명시적으로 1로 리셋.
+            go.transform.localScale = Vector3.one;
             go.SetActive(true);
 
             var rt = go.GetComponent<RectTransform>();
