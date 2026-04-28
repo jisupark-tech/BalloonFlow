@@ -120,10 +120,10 @@ namespace BalloonFlow
                 return;
             }
 
-            // 이전 레벨 오브젝트 정리 (같은 씬 내 레벨 전환 시)
+            // 이전 레벨 오브젝트 정리 (같은 씬 내 레벨 전환 시).
+            // Resources.UnloadUnusedAssets / GC.Collect는 메인 스레드 stall (100ms+) 유발 →
+            // ObjectPool 사용 + Addressable로 이미 reference 관리되므로 명시 호출 불필요. 제거.
             CleanupPreviousLevel();
-            Resources.UnloadUnusedAssets();
-            System.GC.Collect();
 
             _currentLevelId     = levelId;
             _currentLevelConfig = config;

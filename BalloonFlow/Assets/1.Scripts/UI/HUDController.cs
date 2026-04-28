@@ -35,6 +35,9 @@ namespace BalloonFlow
         private PopupQuit _popupQuit;
         private Image _gaugeOverlay; // screen-edge warning overlay
 
+        // 진행률 (LvPanel 슬라이더): 탄창 소진(magazine=0)된 보관함 수 / 전체 보관함 수
+        // 분모는 OnLevelLoaded 시점의 _holders.Count (Spawner 자체는 1로 카운트, spawn될 보관함은 미반영).
+
         #endregion
 
         #region Lifecycle
@@ -47,6 +50,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
             EventBus.Subscribe<OnGaugeStageChanged>(HandleGaugeStage);
+            EventBus.Subscribe<OnHolderDeploymentDone>(HandleHolderDeploymentDone);
         }
 
         private void OnDisable()
@@ -57,6 +61,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
             EventBus.Unsubscribe<OnGaugeStageChanged>(HandleGaugeStage);
+            EventBus.Unsubscribe<OnHolderDeploymentDone>(HandleHolderDeploymentDone);
 
             // 버튼 이벤트 해제
             if (_view != null)
@@ -275,6 +280,46 @@ namespace BalloonFlow
 
             // Apply difficulty tint to HUD
             ApplyDifficultyTint(_evt.levelId);
+
+            // 진행률 초기화 — 0% 표시.
+            RefreshProgress();
+        }
+
+        private void HandleHolderDeploymentDone(OnHolderDeploymentDone _evt)
+        {
+            // 보관함 하나의 magazine 이 0이 됨 → 진행도 갱신.
+            RefreshProgress();
+        }
+
+        /// <summary>
+        /// 진행도 = 탄창 소진(magazine=0 또는 isConsumed=true)된 보관함 수 / 전체 보관함 수.
+        /// EX. 5레벨 20개 보관함 중 3개 소진 = 3/20 = 15%.
+        /// </summary>
+        private void RefreshProgress()
+        {
+            if (_view == null) return;
+            if (!HolderManager.HasInstance)
+            {
+                _view.SetProgress(0, 0);
+                return;
+            }
+
+            HolderData[] holders = HolderManager.Instance.GetHolders();
+            if (holders == null || holders.Length == 0)
+            {
+                _view.SetProgress(0, 0);
+                return;
+            }
+
+            int consumed = 0;
+            for (int i = 0; i < holders.Length; i++)
+            {
+                if (holders[i] == null) continue;
+                // isConsumed = 라이프사이클 종료 (regular: magazine=0 / spawner: spawnerHP=0).
+                // magazineCount 직접 검사는 spawner(magazine=0 시작) false-positive 발생 → 사용 안 함.
+                if (holders[i].isConsumed) consumed++;
+            }
+            _view.SetProgress(consumed, holders.Length);
         }
 
         private void HandleCoinChanged(OnCoinChanged _evt)

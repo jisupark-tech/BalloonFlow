@@ -595,49 +595,30 @@ namespace BalloonFlow
         /// <summary>Light 진동 (10ms) — 풍선 터짐, 다트 배치, UI 터치.</summary>
         public void HapticLight()
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
             if (!_hapticEnabled) return;
-            AndroidVibrate(10L);
-#elif UNITY_IOS && !UNITY_EDITOR
-            if (_hapticEnabled) Handheld.Vibrate();
-#endif
+            VibrationManager.Light();
+        }
+
+        /// <summary>Medium 진동 (25ms) — 콤보, 가벼운 강조.</summary>
+        public void HapticMedium()
+        {
+            if (!_hapticEnabled) return;
+            VibrationManager.Medium();
         }
 
         /// <summary>Heavy 진동 (40ms) — 보관함 비활성 터치, 경고.</summary>
         public void HapticHeavy()
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
             if (!_hapticEnabled) return;
-            AndroidVibrate(40L);
-#elif UNITY_IOS && !UNITY_EDITOR
-            if (_hapticEnabled) Handheld.Vibrate();
-#endif
+            VibrationManager.Heavy();
         }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
-        /// <summary>Android API 26+ 대응 진동. VibrationEffect 사용.</summary>
-        private static void AndroidVibrate(long milliseconds)
+        /// <summary>임의 길이 진동 (ms).</summary>
+        public void HapticVibrate(long milliseconds)
         {
-            try
-            {
-                using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
-                {
-                    var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-                    var vibrator = activity.Call<AndroidJavaObject>("getSystemService", "vibrator");
-                    if (vibrator == null) return;
-
-                    // API 26+ (Oreo): VibrationEffect 사용
-                    using (var vibEffect = new AndroidJavaClass("android.os.VibrationEffect"))
-                    {
-                        var effect = vibEffect.CallStatic<AndroidJavaObject>(
-                            "createOneShot", milliseconds, -1); // -1 = DEFAULT_AMPLITUDE
-                        vibrator.Call("vibrate", effect);
-                    }
-                }
-            }
-            catch (System.Exception) { }
+            if (!_hapticEnabled) return;
+            VibrationManager.Vibrate(milliseconds);
         }
-#endif
 
         #endregion
     }

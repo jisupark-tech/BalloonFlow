@@ -807,18 +807,40 @@ namespace BalloonFlow
 
         private bool IsBlockedByLock(HolderData holder)
         {
-            // Check if any non-consumed Lock exists in the same column, positioned before this holder
+            // 컬럼 내 큐 위치(=_holders 리스트에서 같은 column 의 non-consumed 만 모은 순서)
+            // 로 비교. holderId 비교는 Spawner 가 새 holder 추가 시 ID 가 끝에 매겨져 실제
+            // 컬럼 위치와 어긋날 수 있음 → 누수 방지.
+            int holderColPos = GetColumnQueuePosition(holder);
+            if (holderColPos < 0) return false;
+
             for (int i = 0; i < _holders.Count; i++)
             {
                 if (_holders[i].isConsumed) continue;
                 if (_holders[i].column != holder.column) continue;
                 if (!_holders[i].isLockObject) continue;
-                // Lock exists in this column and is not consumed = blocks everything behind it
-                // Check if the Lock is positioned BEFORE this holder (lower holderId = earlier in queue)
-                if (_holders[i].holderId < holder.holderId)
+                int lockColPos = GetColumnQueuePosition(_holders[i]);
+                // Lock이 같은 컬럼에서 holder 보다 앞쪽에 있으면 차단
+                if (lockColPos >= 0 && lockColPos < holderColPos)
                     return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// Returns 0-based position of holder in its column queue (excluding consumed).
+        /// _holders 리스트 순서 (= 추가 순서) 가 컬럼 큐 순서와 일치한다고 가정.
+        /// </summary>
+        private int GetColumnQueuePosition(HolderData h)
+        {
+            int pos = 0;
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                if (_holders[i].column != h.column) continue;
+                if (_holders[i].isConsumed) continue;
+                if (_holders[i] == h) return pos;
+                pos++;
+            }
+            return -1;
         }
 
         public HolderData FindHolderPublic(int holderId) => FindHolder(holderId);

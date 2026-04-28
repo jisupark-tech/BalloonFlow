@@ -45,10 +45,9 @@ namespace BalloonFlow
         private BoardState _currentState;
         private int _remainingBalloons;
         private int _currentLevelId;
-        private float _failGraceDelay = 2f;
-        // Design ref: 실패 조건 = "레일 가득 (capacity, deploy point 포함) + N초간 풍선 pop 없음"
-        // capacity 도달 시 belt 풀스피드 회전 (RailManager railFull 처리) → 다트가 외곽 풍선 공격.
-        // pop 발생 시 timer 리셋, pop 없이 N초 경과 시 fail.
+        private float _failGraceDelay = 1.5f;
+        // Design ref (doc line 56, 322-329): 실패 조건 = "레일 다트 수 ≥ 허용량-1 + 외곽 매칭 불가 + 1.5초 grace"
+        // 매칭 가능하면 critical 진입 안 함. 매칭 가능해지거나 슬롯 비면 critical 즉시 해제.
 
         // 6-stage gauge
         private GaugeStage _currentGaugeStage = GaugeStage.Safe;
@@ -109,32 +108,131 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
+        private float _periodicLogTimer;
+        private const float PERIODIC_LOG_INTERVAL = 1.0f;
+
         private void Update()
         {
             if (_currentState != BoardState.Playing) return;
+            if (_failConfirmed) return;
 
-            // Grace delay timer for rail overflow fail
-            // capacity 도달 후 N초간 풍선 pop이 없으면 fail. pop 시 HandleBalloonPopped에서 리셋.
-            if (_isCritical && !_failConfirmed)
+            // 실패 조건 (사용자 정의):
+            //  ① rail 가득 (EFC >= PhysicalCapacity - 1, gap-search 운용 상 rail이
+            //     PC-1 ↔ PC 를 오가는 점 고려)
+            //  ② 외곽 풍선 중 rail dart 로 공격 가능한 게 없음 (HasOutermostMatch = false)
+            //  ③ 풍선 잔존 (clear 아님)
+            // 셋 다 충족 → 1.5초 grace 후 fail 트리거. 도중 매칭 가능해지면 즉시 회복.
+            int efc = RailManager.HasInstance ? RailManager.Instance.EffectiveOccupiedCount : 0;
+            int physCap = RailManager.HasInstance ? RailManager.Instance.PhysicalCapacity : 0;
+            bool railFull = RailManager.HasInstance && efc >= physCap - 1;
+            bool hasMatch = HasOutermostMatchCached;
+            bool stuck = railFull && _remainingBalloons > 0 && !hasMatch;
+
+            // 진단용 주기적 로그 — rail이 많이 차 있는데 stuck 미충족 시 어떤 조건이
+            // 막고 있는지 출력 (false negative 케이스 분석용).
+            if (_debugLogFail)
             {
-                // Recovery: rail이 가득에서 떨어짐 (한 발이라도 발사돼서 슬롯 비움)
-                if (RailManager.HasInstance &&
-                    RailManager.Instance.OccupiedCount < RailManager.Instance.SlotCount)
+                _periodicLogTimer += Time.deltaTime;
+                if (_periodicLogTimer >= PERIODIC_LOG_INTERVAL)
                 {
-                    _isCritical = false;
-                    _criticalTimer = 0f;
-                    return;
-                }
-
-                _criticalTimer += Time.deltaTime;
-
-                if (_criticalTimer >= _failGraceDelay)
-                {
-                    _failConfirmed = true;
-                    TriggerFail(FailReason.RailOverflow);
-                    return;
+                    _periodicLogTimer = 0f;
+                    bool nearFull = physCap > 0 && efc >= physCap - 1;
+                    if (nearFull)
+                    {
+                        Debug.Log($"[Fail-DEBUG/Periodic] efc={efc}/{physCap} railFull={railFull} balloons={_remainingBalloons} hasMatch={hasMatch} stuck={stuck} isCritical={_isCritical} timer={_criticalTimer:F2}");
+                        if (!stuck && nearFull)
+                        {
+                            DumpAttackState("[Fail-DEBUG/Periodic] stuck=false 상세");
+                        }
+                    }
                 }
             }
+
+            if (!_isCritical)
+            {
+                if (stuck)
+                {
+                    _isCritical = true;
+                    _criticalTimer = 0f;
+                    if (_debugLogFail) DumpAttackState("[Fail-DEBUG] Critical 진입");
+                }
+                return;
+            }
+
+            // Recovery: 매칭 가능해짐 (다트 발사로 외곽 변경 / 풍선 pop / rail 비어짐)
+            if (!stuck)
+            {
+                if (_debugLogFail) DumpAttackState("[Fail-DEBUG] Critical 회복");
+                _isCritical = false;
+                _criticalTimer = 0f;
+                return;
+            }
+
+            _criticalTimer += Time.deltaTime;
+            if (_criticalTimer >= _failGraceDelay)
+            {
+                if (_debugLogFail) DumpAttackState("[Fail-DEBUG] Fail 트리거");
+                _failConfirmed = true;
+                TriggerFail(FailReason.RailOverflow);
+            }
+        }
+
+        /// <summary>디버그 로그 활성 토글 — Inspector 에서 ON 가능. 기본 OFF (성능 영향 회피).</summary>
+        [SerializeField] private bool _debugLogFail = false;
+
+        /// <summary>
+        /// 현재 공격 가능성 상태를 콘솔에 덤프. 외부 디버그 버튼/단축키에서도 호출 가능.
+        /// 출력: rail 다트 색상, 외곽 풍선 색상, 매칭 색상, holder 색상, 물리 점유율.
+        /// </summary>
+        public void DumpAttackState(string tag = "[Fail-DEBUG]")
+        {
+            string railStr = "n/a", outerStr = "n/a", matchStr = "n/a", holderStr = "n/a", occStr = "n/a";
+
+            if (RailManager.HasInstance)
+            {
+                var railColors = RailManager.Instance.GetRailDartColors();
+                railStr = railColors.Count == 0 ? "(empty)" : string.Join(",", railColors);
+                int efc = RailManager.Instance.EffectiveOccupiedCount;
+                int pc = RailManager.Instance.PhysicalCapacity;
+                occStr = $"{efc}/{pc} (PC-1 임계 {(efc >= pc - 1 ? "도달" : "미달")})";
+            }
+
+            if (BalloonController.HasInstance)
+            {
+                var outer = GetOutermostBalloonColors();
+                outerStr = outer.Count == 0 ? "(empty — 외곽 풍선 없음/walls only)" : string.Join(",", outer);
+
+                if (RailManager.HasInstance)
+                {
+                    // color-set 교집합 — 실제 매칭 로직과 동일
+                    var matched = new HashSet<int>();
+                    var railColors = RailManager.Instance.GetRailDartColors();
+                    foreach (int c in railColors)
+                        if (outer.Contains(c)) matched.Add(c);
+                    matchStr = matched.Count == 0
+                        ? "(매칭 없음 — 공격 불가)"
+                        : string.Join(",", matched);
+                }
+            }
+
+            if (HolderManager.HasInstance)
+            {
+                var holders = HolderManager.Instance.GetHolders();
+                var alive = new List<string>();
+                for (int i = 0; i < holders.Length; i++)
+                {
+                    var h = holders[i];
+                    if (h == null || h.isConsumed) continue;
+                    alive.Add($"c{h.color}x{h.magazineCount}{(h.isLocked ? "[L]" : "")}{(h.isFrozen ? "[F]" : "")}{(h.isHidden ? "[H]" : "")}{(h.spawnerHP > 0 ? $"[Sp{h.spawnerHP}]" : "")}");
+                }
+                holderStr = alive.Count == 0 ? "(empty)" : string.Join(" ", alive);
+            }
+
+            Debug.Log($"{tag} state={_currentState} balloons={_remainingBalloons} occ={occStr}\n" +
+                      $"  rail colors=[{railStr}]\n" +
+                      $"  outermost colors=[{outerStr}]\n" +
+                      $"  → matched=[{matchStr}]\n" +
+                      $"  holders=[{holderStr}]");
         }
 
         #endregion
@@ -186,13 +284,14 @@ namespace BalloonFlow
         /// </summary>
         public FailResult CheckFailCondition()
         {
-            // Snapshot 평가: capacity 도달 + 매칭 가능 풍선 없음이면 잠재적 실패 상태.
-            // 실제 실패 트리거는 Update 루프의 N초 grace timer (pop 발생 시 리셋).
+            // Snapshot 평가 (doc spec line 56): capacity-1 도달 + 매칭 가능 풍선 없음.
+            // 실제 실패 트리거는 Update 루프의 1.5s grace timer.
+            // PhysicalCapacity 기준 (SlotCount > PhysicalCapacity 케이스 대응).
             if (RailManager.HasInstance)
             {
-                int occupied = RailManager.Instance.OccupiedCount;
-                int capacity = RailManager.Instance.SlotCount;
-                if (occupied >= capacity && !HasOutermostMatch())
+                int occupied = RailManager.Instance.EffectiveOccupiedCount;
+                int capacity = RailManager.Instance.PhysicalCapacity;
+                if (occupied >= capacity - 1 && !HasOutermostMatch())
                 {
                     return new FailResult
                     {
@@ -247,12 +346,8 @@ namespace BalloonFlow
                 EvaluateClearCondition();
             }
 
-            // Pop = 공격 성공 = 진행 중. critical 상태 유지 + timer만 리셋.
-            // (rail이 여전히 가득이면 belt 회전 계속, pop이 또 일어나면 timer 또 리셋되는 식)
-            if (_isCritical)
-            {
-                _criticalTimer = 0f;
-            }
+            // Recovery: pop으로 외곽 풍선 노출 변경 → HasOutermostMatch 재검사
+            // (Update 루프의 HasOutermostMatch 체크가 다음 frame에서 critical 해제 처리)
         }
 
         private void HandleBalloonSpawned(OnBalloonSpawned evt)
@@ -285,31 +380,18 @@ namespace BalloonFlow
             if (BoardTileManager.HasInstance)
                 BoardTileManager.Instance.SetDangerVisible(evt.occupancy >= STALL_MIN_OCCUPANCY);
 
-            // Fail trigger: capacity 도달 (deploy point 포함 가득) — belt 풀스피드 회전.
-            // pop 발생 시 timer 리셋, pop 없이 N초 경과 시 fail. HasOutermostMatch와 무관.
-            bool atFailThreshold = evt.activeDarts >= evt.totalSlots;
+            // OnRailCritical 시각 알람용 이벤트 (rail 가득 + 매칭 불가 시).
+            // _isCritical / 타이머는 Update 가 일괄 관리 (rail 가득 여부 무관하게 매칭 불가 검출).
+            int physCap = RailManager.HasInstance ? RailManager.Instance.PhysicalCapacity : evt.totalSlots;
+            bool atFailThreshold = evt.activeDarts >= physCap - 1;
 
             if (atFailThreshold)
             {
                 EventBus.Publish(new OnRailCritical
                 {
                     occupancy = evt.occupancy,
-                    hasOutermostMatch = HasOutermostMatch()
+                    hasOutermostMatch = HasOutermostMatchCached
                 });
-
-                if (!_isCritical)
-                {
-                    _isCritical = true;
-                    _criticalTimer = 0f;
-                }
-            }
-            else
-            {
-                if (_isCritical)
-                {
-                    _isCritical = false;
-                    _criticalTimer = 0f;
-                }
             }
         }
 
@@ -370,21 +452,41 @@ namespace BalloonFlow
             Debug.Log($"[BoardStateManager] Board cleared! Level={_currentLevelId}, Score={score}, Stars={starCount}");
         }
 
+        // 프레임 캐싱: HasOutermostMatch는 비용이 있어 매 프레임 다중 호출 회피.
+        private int _matchCacheFrame = -1;
+        private bool _cachedMatchResult;
+
         /// <summary>
-        /// Checks if any dart color on the rail can match an outermost balloon.
-        /// "Outermost" = directly visible from a rail side (no other balloon blocking).
+        /// 레일 위 다트 색상이 외곽 풍선 색상과 교집합 있는지 (현재 프레임 캐싱).
+        /// RailManager.Update가 belt 회전 결정에 사용 → 매 프레임 호출됨.
+        /// </summary>
+        public bool HasOutermostMatchCached
+        {
+            get
+            {
+                if (_matchCacheFrame != Time.frameCount)
+                {
+                    _cachedMatchResult = HasOutermostMatch();
+                    _matchCacheFrame = Time.frameCount;
+                }
+                return _cachedMatchResult;
+            }
+        }
+
+        /// <summary>
+        /// 공격 가능 여부 검사 — rail dart 색상 ∩ outermost ≠ ∅.
+        /// 사용자 spec: "최외각에 공격가능한 풍선이 없으면 게임 종료" →
+        /// rail dart 가 즉시 발사 가능한 매칭만 검사. holder magazine 색상은 user가 누르기
+        /// 전엔 발사 못 하므로 매칭 검사에 포함하지 않음.
         /// </summary>
         private bool HasOutermostMatch()
         {
             if (!RailManager.HasInstance || !BalloonController.HasInstance) return false;
 
-            HashSet<int> railColors = RailManager.Instance.GetRailDartColors();
-            if (railColors.Count == 0) return false;
-
             HashSet<int> outermostColors = GetOutermostBalloonColors();
             if (outermostColors.Count == 0) return false;
 
-            // Check intersection
+            HashSet<int> railColors = RailManager.Instance.GetRailDartColors();
             foreach (int color in railColors)
             {
                 if (outermostColors.Contains(color))
@@ -423,19 +525,29 @@ namespace BalloonFlow
             foreach (var b in allBalloons)
             {
                 if (b.isPopped) continue;
+                // FindTarget과 동일하게 GetBalloonWorldPosition 사용 — LevelSafeMult 적용된 실제 위치.
+                // b.position 은 raw 데이터 좌표라 큰 레벨에서 cell mapping 결과가 FindTarget과 달라짐.
+                Vector3 worldPos = BalloonController.Instance.GetBalloonWorldPosition(b.balloonId);
                 Vector2Int cell = new Vector2Int(
-                    Mathf.RoundToInt(b.position.x / cs),
-                    Mathf.RoundToInt(b.position.z / cs));
+                    Mathf.RoundToInt(worldPos.x / cs),
+                    Mathf.RoundToInt(worldPos.z / cs));
 
                 _reusablePositionMap.Add(cell);
 
+                // 직접 타격 불가 타입 제외 (DirectionalTargeting.FindTarget과 정합):
+                //   Wall: 파괴 불가 / Ice: 인접 pop으로 간접 해동 / ColorCurtain: 간접 제거만
+                // Pin은 doc line 222 + FindTarget(line 117): 같은 색 다트로 직접 타격 가능 → 포함.
                 if (b.gimmickType == BalloonController.GimmickWall) continue;
-                if (b.gimmickType == BalloonController.GimmickPin) continue;
                 if (b.gimmickType == BalloonController.GimmickIce) continue;
+                if (b.gimmickType == BalloonController.GimmickColorCurtain) continue;
 
                 _reusableOccupancy[cell] = b.color;
             }
 
+            // 4방향 무조건 검사 (baseline 50c9574 복원).
+            // RailSideCount 기반 방향 제한은 BoardTileManager 초기화 타이밍 / RailSideCount
+            // 미설정 케이스에서 outermost 빈 set 반환 → false fail 발생. spec 의 "외곽 매칭 가능"
+            // 정의는 어느 방향이든 도달 가능한 풍선 → 4방향 모두 검사가 안전.
             foreach (var kvp in _reusableOccupancy)
             {
                 Vector2Int cell = kvp.Key;
@@ -456,8 +568,10 @@ namespace BalloonFlow
         {
             // Scan from cell toward the edge (direction toward rail). If no other balloon
             // is between cell and the edge in that direction, cell is outermost.
+            // 50셀 = 약 28 world units (cellSpacing 0.55 기준). 일반 레벨 풍선 그리드 너비
+            // 충분히 커버. 200셀은 매 프레임 비용 높아 제거 (큰 레벨 lag 원인).
             Vector2Int check = cell + direction;
-            for (int i = 0; i < 30; i++) // max scan
+            for (int i = 0; i < 50; i++)
             {
                 if (occupied.Contains(check))
                     return false; // another balloon blocks

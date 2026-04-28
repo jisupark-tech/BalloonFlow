@@ -28,8 +28,9 @@ namespace BalloonFlow
         [SerializeField] private TilemapRenderer _floorRenderer;
         [SerializeField] private TilemapRenderer _conveyorRenderer;
 
-        private TileBase _floorTile;
-        private TileBase _conveyorTile; // fallback single tile
+        // Static cache — 씬 전환 시 Resources.Load 재호출 회피 (transition lag 감소)
+        private static TileBase _floorTile;
+        private static TileBase _conveyorTile; // fallback single tile
 
         // 6 directional rail tiles (center-aligned)
         private TileBase _tileH;   // horizontal straight
@@ -63,9 +64,10 @@ namespace BalloonFlow
         // SpriteRenderer 기반 컨베이어 타일 (MapMaker와 동일 방식)
         private Transform _conveyorSpriteRoot;
 
-        // RailTileSet for auto-tiling sprites
-        private RailTileSet _spriteRailTileSet;
-        private Sprite _cachedArrowSprite;
+        // RailTileSet for auto-tiling sprites — static cache (씬 전환 시 Resources.Load 재호출 회피).
+        // BoardTileManager가 SceneSingleton이라 매 InGame 진입마다 새로 생성되지만, 에셋 자체는 변하지 않으므로 static으로 한 번만 로드.
+        private static RailTileSet _spriteRailTileSet;
+        private static Sprite _cachedArrowSprite;
 
         /// <summary>허용량별 레일 면 수 (1~4). LevelManager에서 설정.</summary>
         public int RailSideCount { get; set; } = 4;
@@ -204,8 +206,11 @@ namespace BalloonFlow
             _railGapVTop      = RAIL_GAP;
             _railGapVBottom   = RAIL_GAP;
 
-            _floorTile = Resources.Load<TileBase>("Tiles/FloorTile");
-            _conveyorTile = Resources.Load<TileBase>("Tiles/ConveyorTile");
+            // Static 캐시 hit이면 Resources.Load 스킵 (씬 전환 시 매번 로드 안 함).
+            if (_floorTile == null)
+                _floorTile = Resources.Load<TileBase>("Tiles/FloorTile");
+            if (_conveyorTile == null)
+                _conveyorTile = Resources.Load<TileBase>("Tiles/ConveyorTile");
 
             if (_floorTile == null)
                 _floorTile = CreateSimpleTile(new Color(0.255f, 0.235f, 0.392f)); // #413C64

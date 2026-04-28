@@ -25,6 +25,11 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _goldText;
         [SerializeField] private Button _goldPlusButton;
 
+        [Header("[LvPanel — 진행률 슬라이더 (popped/total)]")]
+        [SerializeField] private Slider _lvPanelSlider;
+        [SerializeField] private TMP_Text _txtPercentage;
+        [SerializeField] private TMP_Text _txtPercentageOutline;
+
         [Header("[Top — x2 속도 토글 (우상단)]")]
         [SerializeField] private Button _speedToggleButton;
         [SerializeField] private GameObject _speedToggleOnVisual;
@@ -156,6 +161,20 @@ namespace BalloonFlow
         public void SetGold(int _amount)
         {
             if (_goldText != null) _goldText.text = _amount.ToString("N0");
+        }
+
+        /// <summary>
+        /// 진행률 표시: 공격한 풍선 / 전체 풍선 비율을 슬라이더와 텍스트("XX%")로 갱신.
+        /// </summary>
+        public void SetProgress(int popped, int total)
+        {
+            float ratio = total > 0 ? Mathf.Clamp01((float)popped / total) : 0f;
+            if (_lvPanelSlider != null) _lvPanelSlider.value = ratio;
+
+            int percent = Mathf.RoundToInt(ratio * 100f);
+            string txt = $"{percent}%";
+            if (_txtPercentage != null) _txtPercentage.text = txt;
+            if (_txtPercentageOutline != null) _txtPercentageOutline.text = txt;
         }
 
         public void RefreshBoosterCounts()

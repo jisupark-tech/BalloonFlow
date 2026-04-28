@@ -158,6 +158,22 @@ namespace BalloonFlow
         /// <summary>Active + frozen 다트 합계. event publish 및 capacity-1 boundary 검출용.</summary>
         public int EffectiveOccupiedCount => _occupiedCount + _frozenDartInfos.Count;
 
+        /// <summary>물리적 packing 최대 다트 수 = min(_slotCount, floor(pathLen / physGap)).
+        /// physGap > slotSpacing 인 visual mismatch 케이스에서 _slotCount 그대로 채울 수 없음.
+        /// railFull / 배포 슬로우 해제 등 "가득" 임계 검출에 사용.
+        /// </summary>
+        public int PhysicalCapacity
+        {
+            get
+            {
+                if (_totalPathLength <= 0f) return _slotCount;
+                float gap = DartPhysicalGap;
+                if (gap <= 0f) return _slotCount;
+                int phys = Mathf.FloorToInt(_totalPathLength / gap);
+                return Mathf.Min(_slotCount, Mathf.Max(1, phys));
+            }
+        }
+
         /// <summary>Occupancy ratio 0.0 ~ 1.0.</summary>
         public float Occupancy => _slotCount > 0 ? (float)_occupiedCount / _slotCount : 0f;
 
@@ -178,9 +194,6 @@ namespace BalloonFlow
 
         /// <summary>Distance between adjacent slots on the path.</summary>
         public float SlotSpacing => _slotSpacing;
-
-        /// <summary>동적 배율이 적용된 다트 간 최소 간격 (슬롯 기반, 배치 로직용).</summary>
-        public float EffectiveDartGap => _slotSpacing * (GameManager.HasInstance ? GameManager.Instance.Board.dartSpacingMultiplier : 1f);
 
         /// <summary>
         /// 다트가 서로 막혀 정지할 때의 물리적 최소 간격 = 다트 비주얼 크기.
@@ -253,6 +266,24 @@ namespace BalloonFlow
             float physicalGap = DartPhysicalGap;
             float dartDelta = beltDelta;
 
+            // Doc spec line 57-58: 레일이 가득 차면 belt가 절대 멈추지 않음.
+            // PhysicalCapacity - 1 도달 시 uniform advance. physGap > slotSpacing 인 visual mismatch
+            // 케이스에서도 deploy point만 비어있는 "physical full" 상태 검출됨.
+            bool railFullUniform = (_occupiedCount + _frozenDartInfos.Count) >= PhysicalCapacity - 1;
+            if (railFullUniform)
+            {
+                for (int i = 0; i < dartCount; i++)
+                {
+                    DartOnRail dart = _darts[i];
+                    float newProg = dart.progress + beltDelta;
+                    if (hasWrap && newProg >= pathLen) newProg -= pathLen;
+                    dart.progress = newProg;
+                }
+                return;
+            }
+
+            // ─── 일반 상태: packing/cluster physics (deploy point freeze 시각 유지) ───
+
             // progress 내림차순 정렬
             _sortedDartIndices.Clear();
             for (int i = 0; i < dartCount; i++) _sortedDartIndices.Add(i);
@@ -260,8 +291,7 @@ namespace BalloonFlow
                 _dartProgressDescending = (a, b) => _darts[b].progress.CompareTo(_darts[a].progress);
             _sortedDartIndices.Sort(_dartProgressDescending);
 
-            // 공통 케이스(wrap 없음)에서는 sort-descending이 곧 front-to-back.
-            // wrap 가능성: 최고-최저 progress 차이가 pathLen/2 초과면 wrap 구간을 걸치고 있음.
+            // wrap 구간 걸침 감지
             int headPosInSorted = 0;
             if (hasWrap && dartCount > 1)
             {
@@ -269,7 +299,6 @@ namespace BalloonFlow
                 float lowest = _darts[_sortedDartIndices[dartCount - 1]].progress;
                 if ((highest - lowest) > pathLen * 0.5f)
                 {
-                    // wrap 구간 걸침 → 정확한 head 탐지 필요 (O(n²))
                     float maxGapAhead = -1f;
                     for (int p = 0; p < dartCount; p++)
                     {
@@ -292,11 +321,11 @@ namespace BalloonFlow
                 }
             }
 
-            // 선두부터 cyclic하게 처리
-            // 레일이 가득 차면 deploy point는 obstacle 역할을 하지 않음 — 다트들이 belt를 자유롭게 순환하여 외곽 풍선 매치/공격 가능.
-            // 매치 발사로 슬롯 해제 → !railFull 복귀 → deploy point 다시 obstacle → 새 다트 배치 재개.
-            bool railFull = (_occupiedCount + _frozenDartInfos.Count) >= _slotCount;
-            bool hasDeployPoints = _activeDeployPoints.Count > 0 && !railFull;
+            // Deploy point obstacle (doc cluster 시나리오): 다트가 deploy point 앞에 pile-up.
+            // deployOffset = 0.5*physGap → frontmost는 deployProgress - 1.5*physGap 에 settle,
+            // 다음 holder가 chain이 약간 drift 한 상태에서도 deployProgress 에 첫 다트를 배치
+            // 가능하도록 buffer 확보.
+            bool hasDeployPoints = _activeDeployPoints.Count > 0;
             float deployOffset = physicalGap * 0.5f;
 
             for (int offset = 0; offset < dartCount; offset++)
@@ -307,7 +336,6 @@ namespace BalloonFlow
                 DartOnRail dart = _darts[idx];
                 float myProg = dart.progress;
 
-                // 인라인 블록 쿼리 — 함수 호출 오버헤드 제거 + 실시간 최신 progress 사용
                 float closest = float.MaxValue;
                 for (int i = 0; i < dartCount; i++)
                 {
@@ -345,7 +373,7 @@ namespace BalloonFlow
             }
         }
 
-        // Sort helpers for front-to-back dart iteration
+        // Sort helpers for front-to-back dart iteration (packing physics 시 선두부터 처리)
         private readonly List<int> _sortedDartIndices = new List<int>(256);
         private System.Comparison<int> _dartProgressDescending;
 
@@ -382,9 +410,10 @@ namespace BalloonFlow
 
             // 실제 다트 배치 중(첫 다트 투입 후)일 때만 ×0.5
             // synced 모드에선 배치 감속 자체를 비활성화
-            // 레일이 가득 차면 belt가 정상 속도로 순환해야 외곽 풍선 공격이 가능 → 감속 해제
+            // PhysicalCapacity - 1 도달 시 belt 정상 속도로 회전 (배포 슬로우 해제).
+            // 사용자 spec: "delay 없이 컨베이어벨트 돌아감".
             bool balloonSynced = GameManager.HasInstance && GameManager.Instance.Board.dartBalloonSyncedFireMode;
-            bool railFull = (_occupiedCount + _frozenDartInfos.Count) >= _slotCount;
+            bool railFull = (_occupiedCount + _frozenDartInfos.Count) >= PhysicalCapacity - 1;
             if (!balloonSynced && _activeDeployPoints.Count > 0 && !railFull)
                 baseMult *= 0.5f;
 
@@ -804,11 +833,7 @@ namespace BalloonFlow
         public bool IsProgressClear(float progress, int holderId)
         {
             if (_darts.Count >= _slotCount) return false;
-
-            int effectiveOccupied = _darts.Count + _frozenDartInfos.Count;
-            bool lastSlotCase = effectiveOccupied >= _slotCount - 1;
-            float minGap = DartPhysicalGap * (lastSlotCase ? 0.4f : 0.9f);
-
+            float minGap = DartPhysicalGap * 0.9f;
             for (int i = 0; i < _darts.Count; i++)
             {
                 float diff = Mathf.Abs(_darts[i].progress - progress);
@@ -819,9 +844,78 @@ namespace BalloonFlow
             return true;
         }
 
-        /// <summary>capacity-1 boundary case: deploy point 근처에서 IsProgressClear 통과하는
-        /// 가장 가까운 progress를 탐색. 다트 packing으로 deploy point 위치가 점유돼 있어도
-        /// 인접 빈 자리에 배치할 수 있게 함. 반환 -1 = 못 찾음.
+        private readonly List<float> _gapSortBuffer = new List<float>(256);
+
+        /// <summary>
+        /// targetProgress 근처의 빈틈을 찾아 그 중심 progress 반환.
+        /// 빈틈 중심이 targetProgress 로부터 maxOffset 이내, 폭이 minGapWidth 이상이면 true.
+        /// 여러 후보 중 targetProgress 에 가장 가까운 중심을 반환.
+        /// uniform 모드에서 fire로 생긴 2*physGap gap이 deploy point에 맞물렸을 때만
+        /// 배치하기 위한 헬퍼. half-integer offset(packing 결과)이 있어도 ±physGap 범위로
+        /// 검출 가능.
+        /// </summary>
+        public bool TryFindGapNearProgress(float targetProgress, float maxOffset, float minGapWidth, out float gapCenter)
+        {
+            gapCenter = -1f;
+            int n = _darts.Count;
+            float pathLen = _totalPathLength;
+            if (pathLen <= 0f) return false;
+
+            if (n == 0)
+            {
+                gapCenter = targetProgress;
+                return true;
+            }
+
+            _gapSortBuffer.Clear();
+            for (int i = 0; i < n; i++) _gapSortBuffer.Add(_darts[i].progress);
+            _gapSortBuffer.Sort();
+
+            float bestOffset = float.MaxValue;
+            float bestCenter = -1f;
+            for (int i = 0; i < n; i++)
+            {
+                float curr = _gapSortBuffer[i];
+                float next = (i + 1 < n) ? _gapSortBuffer[i + 1] : _gapSortBuffer[0] + pathLen;
+                float gap = next - curr;
+                if (gap < minGapWidth) continue;
+
+                float center = (curr + next) * 0.5f;
+                if (center >= pathLen) center -= pathLen;
+
+                float diff = Mathf.Abs(center - targetProgress);
+                if (diff > pathLen * 0.5f) diff = pathLen - diff;
+
+                if (diff <= maxOffset && diff < bestOffset)
+                {
+                    bestOffset = diff;
+                    bestCenter = center;
+                }
+            }
+
+            if (bestCenter >= 0f)
+            {
+                gapCenter = bestCenter;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>Place a dart at a specific progress on the path.</summary>
+        public int PlaceDartAtProgress(float progress, int color, int holderId)
+        {
+            if (_darts.Count >= _slotCount) return -1; // capacity check
+            int id = _nextDartId++;
+            _darts.Add(new DartOnRail { dartId = id, dartColor = color, holderId = holderId, progress = progress, isFrozen = false });
+            _occupiedCount = _darts.Count;
+            PublishOccupancyChanged();
+            return id;
+        }
+
+        /// <summary>
+        /// targetProgress 근처의 빈 progress 를 forward/backward 양방향 스캔으로 탐색.
+        /// 0.5*physGap step 으로 점진적 확장. IsProgressClear 만족하는 첫 progress 반환,
+        /// 못 찾으면 -1. cb78e1b "capacity-1 deploy point 배치 락 해소" 의 핵심 헬퍼.
         /// </summary>
         public float FindClearProgressNear(float targetProgress, int holderId)
         {
@@ -841,17 +935,6 @@ namespace BalloonFlow
                 if (IsProgressClear(backward, holderId)) return backward;
             }
             return -1f;
-        }
-
-        /// <summary>Place a dart at a specific progress on the path.</summary>
-        public int PlaceDartAtProgress(float progress, int color, int holderId)
-        {
-            if (_darts.Count >= _slotCount) return -1; // capacity check
-            int id = _nextDartId++;
-            _darts.Add(new DartOnRail { dartId = id, dartColor = color, holderId = holderId, progress = progress, isFrozen = false });
-            _occupiedCount = _darts.Count;
-            PublishOccupancyChanged();
-            return id;
         }
 
         /// <summary>Remove a dart by ID.</summary>
@@ -1082,19 +1165,18 @@ namespace BalloonFlow
         #region Public Methods — Dart Colors
 
         /// <summary>
-        /// Returns the set of dart colors currently on the rail.
+        /// Returns the set of dart colors currently on the rail (progress-based system).
+        /// HasOutermostMatch fail 판정에 사용 — 색상 교집합 체크 (doc spec line 322-329).
+        /// 이전 _slots[] 기반 구현은 PlaceDartAtProgress가 _slots를 채우지 않아 항상 empty
+        /// 반환하던 버그. _darts 리스트로 전환.
         /// </summary>
         public HashSet<int> GetRailDartColors()
         {
             var colors = new HashSet<int>();
-            if (_slots == null) return colors;
-
-            for (int i = 0; i < _slotCount; i++)
+            for (int i = 0; i < _darts.Count; i++)
             {
-                if (_slots[i].dartColor >= 0)
-                {
-                    colors.Add(_slots[i].dartColor);
-                }
+                int c = _darts[i].dartColor;
+                if (c >= 0) colors.Add(c);
             }
             return colors;
         }
@@ -1197,6 +1279,66 @@ namespace BalloonFlow
                 removed++;
             }
             return removed;
+        }
+
+        /// <summary>이어하기: 레일 위 다트 색상 중 가장 많은 색을 반환. 다트 없으면 -1.</summary>
+        public int FindMostNumerousDartColor()
+        {
+            if (_darts.Count == 0) return -1;
+            // 작은 수의 색상만 있으므로 Dictionary 대신 List 스캔으로 충분 (alloc 회피)
+            int bestColor = -1, bestCount = 0;
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                int c = _darts[i].dartColor;
+                if (c < 0) continue;
+                int cnt = 0;
+                for (int j = 0; j < _darts.Count; j++)
+                    if (_darts[j].dartColor == c) cnt++;
+                if (cnt > bestCount)
+                {
+                    bestCount = cnt;
+                    bestColor = c;
+                }
+            }
+            return bestColor;
+        }
+
+        /// <summary>이어하기: 지정한 색상의 다트를 모두 제거. 제거된 개수 반환.</summary>
+        public int RemoveDartsByColor(int color)
+        {
+            return RemoveDartsByColor(color, int.MaxValue);
+        }
+
+        /// <summary>이어하기: 지정한 색상의 다트를 최대 maxCount 개까지 제거.
+        /// 최근 배치 다트(_darts 끝쪽)부터 우선 제거. 제거된 개수 반환.</summary>
+        public int RemoveDartsByColor(int color, int maxCount)
+        {
+            if (color < 0 || maxCount <= 0) return 0;
+            int removed = 0;
+            for (int i = _darts.Count - 1; i >= 0 && removed < maxCount; i--)
+            {
+                if (_darts[i].dartColor == color)
+                {
+                    _darts.RemoveAt(i);
+                    removed++;
+                }
+            }
+            if (removed > 0)
+            {
+                _occupiedCount = _darts.Count;
+                PublishOccupancyChanged();
+            }
+            return removed;
+        }
+
+        /// <summary>지정한 색상의 다트가 rail에 몇 개 있는지 반환.</summary>
+        public int CountDartsByColor(int color)
+        {
+            if (color < 0) return 0;
+            int count = 0;
+            for (int i = 0; i < _darts.Count; i++)
+                if (_darts[i].dartColor == color) count++;
+            return count;
         }
 
         /// <summary>이어하기: 최근 배치 다트부터 count개 제거. 제거된 색상 목록 반환.</summary>

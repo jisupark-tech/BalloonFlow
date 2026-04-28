@@ -150,28 +150,38 @@ namespace BalloonFlow
 
         private void ApplyContinueRestore()
         {
-            // 1) 레일에서 최근 배치 다트부터 허용량의 10% 제거 + 매칭 풍선 동시 제거
-            int dartsToRemove = 4;
+            // 1) 레일 위 다트 중 가장 많은 색을 찾아 그 색 다트 중 10%만 제거.
+            //    동일 색의 풍선도 제거된 다트 수와 동일하게 제거 (BoardStateManager.HandleContinueApplied 처리).
+            //    최소 1개는 제거 (다트가 1~9개라도 부분적 도움 보장).
+            int dartsRemoved = 0;
             int removedColor = -1;
             if (RailManager.HasInstance)
             {
-                dartsToRemove = RailManager.GetContinueRemoveCount(RailManager.Instance.SlotCount);
-                int removed = RailManager.Instance.RemoveRecentDarts(dartsToRemove, out removedColor);
-                Debug.Log($"[ContinueHandler] Removed {removed} recent darts (color={removedColor}) from rail.");
+                removedColor = RailManager.Instance.FindMostNumerousDartColor();
+                if (removedColor >= 0)
+                {
+                    int totalCount = RailManager.Instance.CountDartsByColor(removedColor);
+                    int targetRemove = Mathf.Max(1, Mathf.CeilToInt(totalCount * 0.1f));
+                    dartsRemoved = RailManager.Instance.RemoveDartsByColor(removedColor, targetRemove);
+                    Debug.Log($"[ContinueHandler] Removed {dartsRemoved}/{totalCount} darts of color {removedColor} (10% of most numerous).");
+                }
+                else
+                {
+                    Debug.Log("[ContinueHandler] No darts on rail — skipping rail clear.");
+                }
             }
 
-            // 2) 대기 중인 보관함은 원래 자리(큐)로 복귀
-            // Design ref: "대기 중인 보관함은 원래 자리(큐)로 복귀"
+            // 2) 배포중인 holder는 그대로 유지 (계속 배포).
+            //    대기 중/이동 중인 holder만 큐로 복귀.
             if (HolderManager.HasInstance)
             {
-                ReturnActiveHoldersToQueue();
+                ReturnWaitingHoldersToQueue();
             }
 
-            // 3) 제거된 다트와 매칭되는 필드 풍선 동시 제거
-            //    → PopProcessor가 OnDartsRemovedForContinue 이벤트를 구독하여 처리
+            // 3) 제거된 다트와 동일 색 풍선 제거 (BoardStateManager.HandleContinueApplied가 처리)
             EventBus.Publish(new OnContinueApplied
             {
-                dartsRemoved = dartsToRemove,
+                dartsRemoved = dartsRemoved,
                 removedColor = removedColor,
                 levelId = _currentLevelId
             });
@@ -185,10 +195,10 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Returns all deploying/waiting holders back to queue state.
-        /// Design ref: 이어하기 — "대기 중인 보관함은 원래 자리(큐)로 복귀"
+        /// 대기 중/이동 중인 holder만 큐로 복귀. 배포 중인 holder는 그대로 유지하여 남은 magazine 계속 배치.
+        /// 사용자 spec: "배포중인 다트는 이어서 배포해야하는데"
         /// </summary>
-        private void ReturnActiveHoldersToQueue()
+        private void ReturnWaitingHoldersToQueue()
         {
             HolderData[] holders = HolderManager.Instance.GetHolders();
             if (holders == null) return;
@@ -197,8 +207,10 @@ namespace BalloonFlow
             for (int i = 0; i < holders.Length; i++)
             {
                 if (holders[i].isConsumed) continue;
+                // 배포 중인 holder는 그대로 유지 — 남은 mag 계속 배치
+                if (holders[i].isDeploying) continue;
 
-                if (holders[i].isDeploying || holders[i].isWaiting || holders[i].isMovingToRail)
+                if (holders[i].isWaiting || holders[i].isMovingToRail)
                 {
                     // Cancel visual coroutine BEFORE resetting data (prevents 1-frame stale dart placement)
                     if (HolderVisualManager.HasInstance)
@@ -211,7 +223,7 @@ namespace BalloonFlow
 
             if (returned > 0)
             {
-                Debug.Log($"[ContinueHandler] Returned {returned} active holders to queue.");
+                Debug.Log($"[ContinueHandler] Returned {returned} waiting/moving holders to queue (active deploying holders preserved).");
             }
         }
 
