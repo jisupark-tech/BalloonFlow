@@ -86,6 +86,12 @@ namespace BalloonFlow
         private const float DANGER_ALPHA_MIN = 0.15f;
         private const float DANGER_ALPHA_MAX = 0.8f;
 
+        // 스테이지 전환 최적화: 동일 dimensions 재빌드 스킵용 캐시 키
+        private int _lastBuildSides = -1;
+        private float _lastBuildCellSpacing = -1f;
+        private int _lastBuildCols = -1;
+        private int _lastBuildRows = -1;
+
         #endregion
 
         #region Properties
@@ -363,7 +369,28 @@ namespace BalloonFlow
         /// </summary>
         public void BuildConveyorBelt()
         {
+            // 동일 dimensions 재빌드 스킵 (스테이지 전환 시 stutter 감소)
+            if (_conveyorSpriteRoot != null
+                && _lastBuildSides == RailSideCount
+                && Mathf.Approximately(_lastBuildCellSpacing, _cellSpacing)
+                && _lastBuildCols == _cols
+                && _lastBuildRows == _rows)
+            {
+                return;
+            }
+            _lastBuildSides = RailSideCount;
+            _lastBuildCellSpacing = _cellSpacing;
+            _lastBuildCols = _cols;
+            _lastBuildRows = _rows;
+
             ClearConveyorSprites();
+            // 컨베이어가 새로 빌드되면 danger overlay도 무효화 (자식 참조 stale 방지)
+            if (_dangerOverlayRoot != null)
+            {
+                Destroy(_dangerOverlayRoot.gameObject);
+                _dangerOverlayRoot = null;
+                _dangerRenderers = null;
+            }
             _conveyorSpriteRoot = new GameObject("ConveyorSprites").transform;
 
             // RailTileSet 로드 보장
@@ -481,6 +508,10 @@ namespace BalloonFlow
         /// <summary>BuildConveyorBelt 이후 호출. 기존 컨베이어 타일을 복제하여 danger 오버레이 생성.</summary>
         public void BuildDangerOverlay()
         {
+            // 컨베이어가 재빌드 안 됐고 danger overlay 이미 있으면 스킵 (스테이지 전환 최적화)
+            if (_dangerOverlayRoot != null && _dangerRenderers != null && _dangerRenderers.Length > 0)
+                return;
+
             if (_dangerOverlayRoot != null) Destroy(_dangerOverlayRoot.gameObject);
             _dangerOverlayRoot = new GameObject("DangerOverlay").transform;
             if (_conveyorSpriteRoot != null)

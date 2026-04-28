@@ -18,11 +18,13 @@ namespace BalloonFlow
 #if UNITY_ANDROID && !UNITY_EDITOR
         private const int SDK_INT_S = 31; // Android 12
         private const int DEFAULT_AMPLITUDE = -1;
+        private const int MAX_AMPLITUDE     = 255; // VibrationEffect 1~255 (255 = 최대)
 
         private static AndroidJavaObject _vibrator;
         private static AndroidJavaClass _vibrationEffectClass;
         private static bool _initialized;
         private static bool _initFailed;
+        private static bool _hasAmplitudeControl;
 
         private static void InitIfNeeded()
         {
@@ -58,6 +60,13 @@ namespace BalloonFlow
                 _vibrationEffectClass = new AndroidJavaClass("android.os.VibrationEffect");
                 _initialized = _vibrator != null && _vibrationEffectClass != null;
                 if (!_initialized) _initFailed = true;
+
+                // amplitude control 지원 여부 (지원 안 되면 항상 max 강도로 발진)
+                if (_initialized)
+                {
+                    try { _hasAmplitudeControl = _vibrator.Call<bool>("hasAmplitudeControl"); }
+                    catch { _hasAmplitudeControl = false; }
+                }
             }
             catch (System.Exception e)
             {
@@ -68,11 +77,12 @@ namespace BalloonFlow
 #endif
 
         /// <summary>
-        /// 한 번 진동. milliseconds 만큼 DEFAULT_AMPLITUDE 로 발진.
+        /// 한 번 진동. milliseconds 만큼 발진. amplitude 1~255 (기본 255 = 최대).
         /// SettingsManager.HapticOn 토글이 OFF 면 무시.
         /// </summary>
         /// <param name="milliseconds">진동 지속 시간 (ms). 양수.</param>
-        public static void Vibrate(long milliseconds)
+        /// <param name="amplitude">진동 강도 1~255. 255 = 최대 (디바이스 지원 시).</param>
+        public static void Vibrate(long milliseconds, int amplitude = 255)
         {
             if (milliseconds <= 0) return;
             if (SettingsManager.HasInstance && !SettingsManager.Instance.HapticOn) return;
@@ -83,8 +93,11 @@ namespace BalloonFlow
 
             try
             {
+                int amp = _hasAmplitudeControl
+                    ? Mathf.Clamp(amplitude, 1, MAX_AMPLITUDE)
+                    : DEFAULT_AMPLITUDE;
                 using (var effect = _vibrationEffectClass.CallStatic<AndroidJavaObject>(
-                    "createOneShot", milliseconds, DEFAULT_AMPLITUDE))
+                    "createOneShot", milliseconds, amp))
                 {
                     _vibrator.Call("vibrate", effect);
                 }
@@ -101,13 +114,13 @@ namespace BalloonFlow
 #endif
         }
 
-        /// <summary>편의: light tap (10ms).</summary>
-        public static void Light() => Vibrate(10L);
+        /// <summary>편의: light tap (40ms, amp 200) — 체감 가능하도록 강화.</summary>
+        public static void Light() => Vibrate(40L, 200);
 
-        /// <summary>편의: medium tap (25ms).</summary>
-        public static void Medium() => Vibrate(25L);
+        /// <summary>편의: medium tap (90ms, amp 230).</summary>
+        public static void Medium() => Vibrate(90L, 230);
 
-        /// <summary>편의: heavy tap (40ms).</summary>
-        public static void Heavy() => Vibrate(40L);
+        /// <summary>편의: heavy tap (180ms, amp 255).</summary>
+        public static void Heavy() => Vibrate(180L, 255);
     }
 }

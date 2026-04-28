@@ -108,6 +108,19 @@ namespace BalloonFlow
             csf.verticalFit   = ContentSizeFitter.FitMode.PreferredSize;
             csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 
+            // ScrollRect 스크롤감 보정 — inertia + elastic + 적절한 sensitivity
+            var sr = _contentRoot.GetComponentInParent<ScrollRect>();
+            if (sr != null)
+            {
+                sr.horizontal = false;
+                sr.vertical = true;
+                sr.movementType = ScrollRect.MovementType.Elastic;
+                sr.elasticity = 0.1f;          // 끝에서 부드럽게 튕김
+                sr.inertia = true;             // 손가락 떼고도 관성 스크롤
+                sr.decelerationRate = 0.135f;  // Unity 기본값 (관성 감속)
+                if (sr.scrollSensitivity < 30f) sr.scrollSensitivity = 60f;
+            }
+
             // BtnMoreProducts 진단 + LayoutElement 보장
             if (_btnMoreProducts == null)
             {

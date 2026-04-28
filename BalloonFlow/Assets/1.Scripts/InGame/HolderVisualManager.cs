@@ -107,6 +107,22 @@ namespace BalloonFlow
         private readonly Dictionary<int, HolderVisual> _holderVisuals = new Dictionary<int, HolderVisual>();
         private readonly HashSet<int> _cancelledHolders = new HashSet<int>();
 
+        /// <summary>특정 holderId를 컬럼 큐에서 제거 (취소/이탈 시 후속 보관함이 헤드에 진입 가능하도록).
+        /// Queue<T>는 임의 제거를 직접 지원 안 해서 재빌드.</summary>
+        private void RemoveFromColumnQueue(int column, int holderId)
+        {
+            if (_colQueues == null || column < 0 || column >= _colQueues.Length) return;
+            var q = _colQueues[column];
+            if (q == null || q.Count == 0) return;
+
+            int n = q.Count;
+            for (int i = 0; i < n; i++)
+            {
+                int id = q.Dequeue();
+                if (id != holderId) q.Enqueue(id);
+            }
+        }
+
         /// <summary>Chain 연결선: "id1_id2" → LineRenderer GameObject</summary>
         private readonly Dictionary<string, GameObject> _chainLines = new Dictionary<string, GameObject>();
         private int _queueColumns = 5;
@@ -920,6 +936,7 @@ namespace BalloonFlow
                 if (_cancelledHolders.Contains(visual.holderId))
                 {
                     _cancelledHolders.Remove(visual.holderId);
+                    RemoveFromColumnQueue(visual.column, visual.holderId);
                     yield break;
                 }
 
@@ -927,8 +944,9 @@ namespace BalloonFlow
                 float dist = Vector3.Distance(current, targetPoint);
                 if (dist < 0.15f) break;
 
-                Vector3 dir = (targetPoint - current).normalized;
-                visual.gameObject.transform.position = current + dir * EffectiveDeployMoveSpeed * Time.deltaTime;
+                // MoveTowards로 step을 dist에 클램프 — 2x 속도/저프레임에서 오버슈트 방지
+                float step = EffectiveDeployMoveSpeed * Time.deltaTime;
+                visual.gameObject.transform.position = Vector3.MoveTowards(current, targetPoint, step);
                 yield return null;
             }
 
@@ -947,10 +965,15 @@ namespace BalloonFlow
             const int MAX_WAIT_FRAMES = 3600; // 60초 타임아웃 (60fps)
             while (waitFrames < MAX_WAIT_FRAMES)
             {
-                if (_boardFinished) yield break;
+                if (_boardFinished)
+                {
+                    RemoveFromColumnQueue(visual.column, visual.holderId);
+                    yield break;
+                }
                 if (_cancelledHolders.Contains(visual.holderId))
                 {
                     _cancelledHolders.Remove(visual.holderId);
+                    RemoveFromColumnQueue(visual.column, visual.holderId);
                     yield break;
                 }
 
@@ -970,6 +993,7 @@ namespace BalloonFlow
             if (waitFrames >= MAX_WAIT_FRAMES)
             {
                 Debug.LogWarning($"[HolderVisualManager] Holder {visual.holderId} timed out waiting for deploy turn.");
+                RemoveFromColumnQueue(visual.column, visual.holderId);
                 yield break;
             }
 

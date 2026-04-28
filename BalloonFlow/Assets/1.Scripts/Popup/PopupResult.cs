@@ -67,18 +67,27 @@ namespace BalloonFlow
         protected override void Awake()
         {
             base.Awake();
-            // 버튼 연결은 Awake에서 (CloseUI 후에도 listener 유지)
-            if (_frame != null)
-            {
-                if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.AddListener(OnNextClicked);
-                if (_frame.BtnHorizRed != null) _frame.BtnHorizRed.onClick.AddListener(OnHomeClicked);
-                if (_frame.BtnExit != null) _frame.BtnExit.onClick.AddListener(OnHomeClicked);
-            }
+            // 직접 할당 버튼 우선, 없으면 frame 버튼 fallback (CloseUI 후에도 listener 유지)
+            if (_btnNext != null) _btnNext.onClick.AddListener(OnNextClicked);
+            else if (_frame != null && _frame.BtnHorizGreen != null)
+                _frame.BtnHorizGreen.onClick.AddListener(OnNextClicked);
+
+            if (_btnHome != null) _btnHome.onClick.AddListener(OnHomeClicked);
+            else if (_frame != null && _frame.BtnHorizRed != null)
+                _frame.BtnHorizRed.onClick.AddListener(OnHomeClicked);
+
+            // ExitButton: 직접 할당 + frame 둘 다 와이어 (둘 중 보이는 쪽이 동작)
+            if (_btnExit != null) _btnExit.onClick.AddListener(OnHomeClicked);
+            if (_frame != null && _frame.BtnExit != null)
+                _frame.BtnExit.onClick.AddListener(OnHomeClicked);
         }
 
         protected override void OnDestroy()
         {
             base.OnDestroy();
+            if (_btnNext != null) _btnNext.onClick.RemoveAllListeners();
+            if (_btnHome != null) _btnHome.onClick.RemoveAllListeners();
+            if (_btnExit != null) _btnExit.onClick.RemoveAllListeners();
             if (_frame != null)
             {
                 if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.RemoveAllListeners();
@@ -98,7 +107,15 @@ namespace BalloonFlow
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
                 _frame.SetHorizGreenText("Next");
                 _frame.SetHorizRedText("Home");
-                _frame.ShowExitButton(false);
+                // ExitButton은 직접 할당된 게 있으면 그걸 보이도록, 없으면 frame 것 표시
+                _frame.ShowExitButton(_btnExit == null);
+            }
+
+            // 직접 할당된 ExitButton 강제 활성화 (다른 ShowXxx 호출에서 꺼졌을 가능성 대비)
+            if (_btnExit != null)
+            {
+                _btnExit.gameObject.SetActive(true);
+                _btnExit.interactable = true;
             }
 
             UpdateHardLevelOption(difficulty);
