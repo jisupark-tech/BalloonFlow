@@ -8,7 +8,7 @@ namespace BalloonFlow
     ///   1st continue: FREE
     ///   2nd: 900 coins
     ///   3rd: 1900 coins
-    ///   4th: 2900 coins (max)
+    ///   4th+: 2900 coins (cap — 횟수 제한 자체는 없음)
     /// Restart resets cost back to free.
     /// </summary>
     /// <remarks>
@@ -18,10 +18,9 @@ namespace BalloonFlow
     {
         #region Constants
 
-        private const int MaxContinues = 4;  // 1 free + 3 paid
         // 이어하기 제거량은 RailManager.GetContinueRemoveCount()로 결정 (허용량 기반)
 
-        // Escalating coin costs (index 0 = free, then 900 → 1900 → 2900)
+        // Escalating coin costs (index 0 = free, then 900 → 1900 → 2900). idx 가 배열 길이를 넘으면 마지막(2900)으로 캡.
         private static readonly int[] ContinueCosts = { 0, 900, 1900, 2900 };
 
         #endregion
@@ -64,11 +63,12 @@ namespace BalloonFlow
         #region Public Methods
 
         /// <summary>
-        /// Returns true if the player is eligible to continue (under max limit).
+        /// 이어하기 횟수 제한 없음 — 항상 true.
+        /// 보드 종료 직후 OnBoardFailed 이벤트 1회만 PopupFail01 을 띄우는 가드는 호출 흐름에서 처리.
         /// </summary>
         public bool CanContinue()
         {
-            return _continueCount < MaxContinues;
+            return true;
         }
 
         /// <summary>
@@ -80,14 +80,23 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Returns the coin cost of the next continue.
-        /// Returns 0 for the first (free) continue.
+        /// Returns the coin cost of the next continue (현재 _continueCount 기준).
         /// </summary>
         public int GetContinueCost()
         {
-            if (_continueCount >= ContinueCosts.Length)
+            return GetContinueCost(_continueCount);
+        }
+
+        /// <summary>
+        /// Returns the coin cost for a specific continue index.
+        /// idx >= ContinueCosts.Length 이면 마지막 값(2900)으로 캡.
+        /// </summary>
+        public int GetContinueCost(int idx)
+        {
+            if (idx < 0) idx = 0;
+            if (idx >= ContinueCosts.Length)
                 return ContinueCosts[ContinueCosts.Length - 1];
-            return ContinueCosts[_continueCount];
+            return ContinueCosts[idx];
         }
 
         /// <summary>
@@ -96,12 +105,6 @@ namespace BalloonFlow
         /// </summary>
         public bool Continue()
         {
-            if (!CanContinue())
-            {
-                Debug.LogWarning("[ContinueHandler] Max continues reached.");
-                return false;
-            }
-
             int cost = GetContinueCost();
 
             if (cost > 0)
@@ -150,25 +153,17 @@ namespace BalloonFlow
 
         private void ApplyContinueRestore()
         {
-            // 1) 레일 위 다트 중 가장 많은 색을 찾아 그 색 다트 중 10%만 제거.
-            //    동일 색의 풍선도 제거된 다트 수와 동일하게 제거 (BoardStateManager.HandleContinueApplied 처리).
-            //    최소 1개는 제거 (다트가 1~9개라도 부분적 도움 보장).
+            // 1) 최근 배치 다트 N개 + 같은 색 풍선 1:1 제거. 제거량은 레일 허용량 기준(4/8/12/16).
             int dartsRemoved = 0;
-            int removedColor = -1;
+            int balloonsRemoved = 0;
             if (RailManager.HasInstance)
             {
-                removedColor = RailManager.Instance.FindMostNumerousDartColor();
-                if (removedColor >= 0)
-                {
-                    int totalCount = RailManager.Instance.CountDartsByColor(removedColor);
-                    int targetRemove = Mathf.Max(1, Mathf.CeilToInt(totalCount * 0.1f));
-                    dartsRemoved = RailManager.Instance.RemoveDartsByColor(removedColor, targetRemove);
-                    Debug.Log($"[ContinueHandler] Removed {dartsRemoved}/{totalCount} darts of color {removedColor} (10% of most numerous).");
-                }
-                else
-                {
-                    Debug.Log("[ContinueHandler] No darts on rail — skipping rail clear.");
-                }
+                int capacity = RailManager.Instance.SlotCount;
+                int targetRemove = RailManager.GetContinueRemoveCount(capacity);
+                var res = RailManager.Instance.RemoveRecentDartsAndMatchingBalloons(targetRemove);
+                dartsRemoved = res.removedDarts;
+                balloonsRemoved = res.removedBalloons;
+                Debug.Log($"[ContinueHandler] Continue removed {dartsRemoved} recent darts ({res.distinctColors} colors) + {balloonsRemoved} matching balloons (target={targetRemove}, capacity={capacity}).");
             }
 
             // 2) 배포중인 holder는 그대로 유지 (계속 배포).
@@ -178,11 +173,12 @@ namespace BalloonFlow
                 ReturnWaitingHoldersToQueue();
             }
 
-            // 3) 제거된 다트와 동일 색 풍선 제거 (BoardStateManager.HandleContinueApplied가 처리)
+            // 3) 풍선 제거는 새 API에서 직접 처리됨. 이벤트는 보드 상태 재개용.
+            //    removedColor = -1 → BoardStateManager 가 추가 풍선 pop 을 시도하지 않음.
             EventBus.Publish(new OnContinueApplied
             {
                 dartsRemoved = dartsRemoved,
-                removedColor = removedColor,
+                removedColor = -1,
                 levelId = _currentLevelId
             });
 
@@ -238,12 +234,11 @@ namespace BalloonFlow
             // 실패 흐름: PopupFail01 → PopupContinue → PopupFail02
             // ContinueHandler는 팝업을 직접 띄우지 않음.
             // PopupFail01이 먼저 표시되고, Decline 시 PopupContinue를 띄움.
-            if (!CanContinue()) return;
-
+            // 횟수 제한 제거 — 매 보드 실패마다 표시.
             if (PopupManager.HasInstance)
                 PopupManager.Instance.ShowPopup("popup_fail01", priority: 50);
 
-            Debug.Log($"[ContinueHandler] Board failed — showing PopupFail01. ContinueCount={_continueCount}/{MaxContinues}");
+            Debug.Log($"[ContinueHandler] Board failed — showing PopupFail01. ContinueCount={_continueCount}");
         }
 
         #endregion

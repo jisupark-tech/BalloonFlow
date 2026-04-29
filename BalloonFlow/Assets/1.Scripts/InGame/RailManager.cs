@@ -41,6 +41,9 @@ namespace BalloonFlow
             public int holderId;
             public float progress;    // distance along path [0, totalPathLength)
             public bool isFrozen;
+            // 배치 순서 식별용 단조 증가 ID. 이어하기 시 "최근 배치 다트" 선정에 사용.
+            // dartId는 발사로 RemoveDartById 후 새 배치에서 재할당될 수 있으므로 별도 시퀀스 유지.
+            public long placedSeq;
         }
 
         /// <summary>
@@ -124,6 +127,7 @@ namespace BalloonFlow
         private float _slotSpacing;    // distance between slots on the path
         private int _occupiedCount;
         private int _nextDartId;
+        private long _nextPlacedSeq; // monotonically increasing dart placement order (이어하기 정렬용)
         private bool _boardFinished;
 
         /// <summary>
@@ -598,6 +602,7 @@ namespace BalloonFlow
             _rotationOffset = 0f;
             _occupiedCount = 0;
             _nextDartId = 0;
+            _nextPlacedSeq = 0;
             _boardFinished = false;
             _darts.Clear();
             _dartById.Clear();
@@ -911,7 +916,15 @@ namespace BalloonFlow
         {
             if (_darts.Count >= _slotCount) return -1; // capacity check
             int id = _nextDartId++;
-            var dart = new DartOnRail { dartId = id, dartColor = color, holderId = holderId, progress = progress, isFrozen = false };
+            var dart = new DartOnRail
+            {
+                dartId = id,
+                dartColor = color,
+                holderId = holderId,
+                progress = progress,
+                isFrozen = false,
+                placedSeq = _nextPlacedSeq++
+            };
             _darts.Add(dart);
             _dartById[id] = dart; // FindDart 캐시 동기화
             _occupiedCount = _darts.Count;
@@ -1351,6 +1364,112 @@ namespace BalloonFlow
             return count;
         }
 
+        #region Public Methods — Continue (이어하기 정본 API)
+
+        /// <summary>
+        /// 이어하기 결과 정보. 제거된 다트 수 / 매칭 풍선 수 / 사용된 색상 종류 수.
+        /// </summary>
+        public struct ContinueRemoveResult
+        {
+            public int removedDarts;
+            public int removedBalloons;
+            public int distinctColors;
+        }
+
+        // GC alloc 0 — 매 호출 재사용 버퍼.
+        private readonly List<DartOnRail> _continueRecentBuffer = new List<DartOnRail>(64);
+        private readonly List<int> _continueRemoveColors = new List<int>(16);
+        private readonly List<int> _continueRemoveCounts = new List<int>(16);
+        private static System.Comparison<DartOnRail> _placedSeqDescending;
+
+        /// <summary>
+        /// 이어하기 정본 API: 최근 배치된 다트 N개를 제거하고, 같은 색의 풍선을 1:1로 제거.
+        /// (1) placedSeq 내림차순 상위 count개 다트 선정
+        /// (2) 색별 카운트 후 다트 제거
+        /// (3) 같은 색 풍선을 같은 개수만큼 ForcePopBalloon (다트 < 풍선이면 가능한 만큼만)
+        /// </summary>
+        public ContinueRemoveResult RemoveRecentDartsAndMatchingBalloons(int count)
+        {
+            ContinueRemoveResult result = default;
+            if (count <= 0 || _darts.Count == 0) return result;
+
+            // (1) 활성 다트를 placedSeq 내림차순으로 정렬 — 재사용 버퍼.
+            _continueRecentBuffer.Clear();
+            for (int i = 0; i < _darts.Count; i++) _continueRecentBuffer.Add(_darts[i]);
+            if (_placedSeqDescending == null)
+                _placedSeqDescending = (a, b) => b.placedSeq.CompareTo(a.placedSeq);
+            _continueRecentBuffer.Sort(_placedSeqDescending);
+
+            int take = Mathf.Min(count, _continueRecentBuffer.Count);
+
+            // (2) 상위 take개의 색 분포 누적 — 재사용 List 2-parallel (Dictionary alloc 회피).
+            _continueRemoveColors.Clear();
+            _continueRemoveCounts.Clear();
+            for (int i = 0; i < take; i++)
+            {
+                int c = _continueRecentBuffer[i].dartColor;
+                if (c < 0) continue;
+
+                bool found = false;
+                int n = _continueRemoveColors.Count;
+                for (int k = 0; k < n; k++)
+                {
+                    if (_continueRemoveColors[k] == c)
+                    {
+                        _continueRemoveCounts[k]++;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                {
+                    _continueRemoveColors.Add(c);
+                    _continueRemoveCounts.Add(1);
+                }
+            }
+
+            // (3) 다트 제거. 시각은 다음 frame UpdatePerDartPositions 에서 자동 정리.
+            for (int i = 0; i < take; i++)
+            {
+                if (RemoveDartById(_continueRecentBuffer[i].dartId))
+                    result.removedDarts++;
+            }
+
+            // (4) 같은 색 풍선을 1:1로 제거.
+            if (BalloonController.HasInstance)
+            {
+                int colorN = _continueRemoveColors.Count;
+                for (int k = 0; k < colorN; k++)
+                {
+                    int color = _continueRemoveColors[k];
+                    int targetPops = _continueRemoveCounts[k];
+
+                    BalloonData[] balloons = BalloonController.Instance.GetAllBalloonsByColor(color);
+                    if (balloons == null) continue;
+
+                    int popped = 0;
+                    for (int b = 0; b < balloons.Length && popped < targetPops; b++)
+                    {
+                        BalloonData bd = balloons[b];
+                        if (bd == null || bd.isPopped) continue;
+                        BalloonController.Instance.ForcePopBalloon(bd.balloonId);
+                        popped++;
+                    }
+                    result.removedBalloons += popped;
+                }
+            }
+
+            result.distinctColors = _continueRemoveColors.Count;
+
+            // 버퍼 안의 strong reference 정리 (다음 호출 전까지 GC 차단 방지).
+            _continueRecentBuffer.Clear();
+
+            if (result.removedDarts > 0) PublishOccupancyChanged();
+            return result;
+        }
+
+        #endregion
+
         /// <summary>이어하기: 최근 배치 다트부터 count개 제거. 제거된 색상 목록 반환.</summary>
         public int RemoveRecentDarts(int count, out int removedColor)
         {
@@ -1551,6 +1670,7 @@ namespace BalloonFlow
             _occupiedCount = 0;
             _rotationOffset = 0f;
             _nextDartId = 0;
+            _nextPlacedSeq = 0;
             _boardFinished = false;
             _darts.Clear();
             _dartById.Clear();
