@@ -81,6 +81,17 @@ namespace BalloonFlow
         [Range(0f, 1f)]
         public float dartScaleLerpStrength = 1f;
 
+        [Tooltip("발사 순간 다트가 풍선 사이즈로 펀치 스케일업. 동적 반영. (default: ON)")]
+        public bool dartLaunchScalePunch = true;
+
+        [Tooltip("펀치 스케일업 시간(초). (default: 0.10)")]
+        [Range(0.02f, 0.4f)]
+        public float dartLaunchScalePunchDuration = 0.10f;
+
+        [Tooltip("펀치 오버슈트 배율(1=정확히 풍선사이즈, 1.15=15% 더 크게 튀어 올랐다 안착). (default: 1.0)")]
+        [Range(1.0f, 1.5f)]
+        public float dartLaunchScaleOvershoot = 1.0f;
+
         [Header("[Cave 스케일 — 면수별 (FadeStart/FadeEnd, 전체 경로 대비 비율)]")]
         [Tooltip("1면(일자) Cave Fade Start. 클수록 안쪽에서 스케일 변화. (default: 0.0315)")]
         public float caveFadeStart1Side = 0.0315f;

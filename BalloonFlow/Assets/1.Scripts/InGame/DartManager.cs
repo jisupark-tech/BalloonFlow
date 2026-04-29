@@ -714,6 +714,15 @@ namespace BalloonFlow
                 dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
 
             float ft = EffectiveFlightTime;
+
+            // 발사 순간 다트를 풍선 사이즈로 펀치 스케일업 → 비행 중에도 풍선사이즈 유지.
+            Vector3 balloonScale = BalloonController.HasInstance
+                ? BalloonController.Instance.GetBalloonWorldScale(targetBalloonId)
+                : dartObj.transform.localScale;
+            bool punchOn = GameManager.HasInstance && GameManager.Instance.Board.dartLaunchScalePunch;
+            float overshoot = GameManager.HasInstance ? GameManager.Instance.Board.dartLaunchScaleOvershoot : 1f;
+            Vector3 launchStartScale = punchOn ? balloonScale * overshoot : dartObj.transform.localScale;
+
             var proj = new DartProjectile
             {
                 gameObject = dartObj,
@@ -722,13 +731,17 @@ namespace BalloonFlow
                 color = color,
                 elapsed = 0f,
                 duration = ft,
-                startScale = dartObj.transform.localScale,
-                targetScale = BalloonController.HasInstance
-                    ? BalloonController.Instance.GetBalloonWorldScale(targetBalloonId)
-                    : dartObj.transform.localScale
+                startScale = launchStartScale,
+                targetScale = balloonScale
             };
 
             _activeProjectiles.Add(proj);
+
+            if (punchOn)
+            {
+                float punchDur = GameManager.Instance.Board.dartLaunchScalePunchDuration;
+                dartObj.transform.DOScale(balloonScale * overshoot, punchDur).SetEase(Ease.OutBack);
+            }
 
             // Flight: parabolic arc (곡사) or linear depending on _arcHeight
             if (_arcHeight > 0.01f)
@@ -846,6 +859,13 @@ namespace BalloonFlow
                         dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
 
                     float ft = EffectiveFlightTime;
+
+                    // 발사 순간 다트를 풍선 사이즈로 펀치 스케일업 → 비행 중에도 풍선사이즈 유지.
+                    Vector3 balloonScale = BalloonController.Instance.GetBalloonWorldScale(targetId);
+                    bool punchOn = GameManager.HasInstance && GameManager.Instance.Board.dartLaunchScalePunch;
+                    float overshoot = GameManager.HasInstance ? GameManager.Instance.Board.dartLaunchScaleOvershoot : 1f;
+                    Vector3 launchStartScale = punchOn ? balloonScale * overshoot : dartObj.transform.localScale;
+
                     var proj = new DartProjectile
                     {
                         gameObject = dartObj,
@@ -854,10 +874,16 @@ namespace BalloonFlow
                         color = color,
                         elapsed = 0f,
                         duration = ft,
-                        startScale = dartObj.transform.localScale,
-                        targetScale = BalloonController.Instance.GetBalloonWorldScale(targetId)
+                        startScale = launchStartScale,
+                        targetScale = balloonScale
                     };
                     _activeProjectiles.Add(proj);
+
+                    if (punchOn)
+                    {
+                        float punchDur = GameManager.Instance.Board.dartLaunchScalePunchDuration;
+                        dartObj.transform.DOScale(balloonScale * overshoot, punchDur).SetEase(Ease.OutBack);
+                    }
 
                     dartObj.transform.DOMove(targetPos, ft).SetEase(Ease.Linear);
                 }
