@@ -547,7 +547,7 @@ namespace BalloonFlow
                 {
                     // danger 전용 스프라이트 사용
                     sr.sprite = dangerSprite;
-                    sr.color = Color.white;
+                    sr.color = new Color(1f, 1f, 1f, 1f);
                 }
                 else
                 {
@@ -572,7 +572,7 @@ namespace BalloonFlow
             if (src == ts.tileBR)  return ts.dangerBR;
             if (src == ts.tileTL)  return ts.dangerTL;
             if (src == ts.tileTR)  return ts.dangerTR;
-            if (src == ts.tileH || src == ts.tileBH || src == ts.tileTH)  return ts.dangerH;
+            if (src == ts.tileH || src == ts.tileBH || src == ts.tileTH || src == ts.tileHTop || src == ts.tileHBottom)  return ts.dangerH;
             if (src == ts.tileV || src == ts.tileVL || src == ts.tileVR)  return ts.dangerV;
             if (src == ts.capB)    return ts.dangerCapB;
             if (src == ts.capT)    return ts.dangerCapT;
