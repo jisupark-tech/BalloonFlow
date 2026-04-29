@@ -54,9 +54,20 @@ namespace BalloonFlow
         protected override void Awake()
         {
             base.Awake();
+            LoadStageSpritesFromResources();
             if (RetryBtn != null) RetryBtn.onClick.AddListener(OnRetryClicked);
             if (HomeBtn != null) HomeBtn.onClick.AddListener(OnHomeClicked);
             if (ExitBtn != null) ExitBtn.onClick.AddListener(OnHomeClicked);
+        }
+
+        private void LoadStageSpritesFromResources()
+        {
+            var n = Resources.Load<Sprite>("Sprites/UI/resultStageNormal");
+            var h = Resources.Load<Sprite>("Sprites/UI/resultStageHard");
+            var s = Resources.Load<Sprite>("Sprites/UI/resultStageSuperHard");
+            if (n != null) _sprStageNormal   = n;
+            if (h != null) _sprStageHard     = h;
+            if (s != null) _sprStageSuperHard = s;
         }
 
         protected override void OnDestroy()
