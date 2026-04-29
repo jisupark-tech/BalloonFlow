@@ -34,6 +34,12 @@ namespace BalloonFlow
         [SerializeField] private Button _speedToggleButton;
         [SerializeField] private GameObject _speedToggleOnVisual;
         [SerializeField] private GameObject _speedToggleOffVisual;
+        [SerializeField] private Image _imgSpeedColor;
+        [SerializeField] private Sprite _sprSpeedNormal;
+        [SerializeField] private Sprite _sprSpeedHard;
+        [SerializeField] private Sprite _sprSpeedSuperHard;
+        [SerializeField] private TMP_Text _txtSpeed;
+        [SerializeField] private TMP_Text _txtSpeedOutline;
 
         [Header("[Bottom Panel — 부스터 아이템]")]
         [SerializeField] private Button _itemBtnShuffle;
@@ -174,6 +180,16 @@ namespace BalloonFlow
             };
             if (_imgSettingColor != null && settingSpr != null)
                 _imgSettingColor.sprite = settingSpr;
+
+            // Speed 토글 버튼 리소스
+            Sprite speedSpr = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _sprSpeedHard,
+                DifficultyPurpose.SuperHard => _sprSpeedSuperHard,
+                _                           => _sprSpeedNormal
+            };
+            if (_imgSpeedColor != null && speedSpr != null)
+                _imgSpeedColor.sprite = speedSpr;
         }
 
         public void SetLevel(int _levelId)
@@ -301,6 +317,10 @@ namespace BalloonFlow
             bool on = GameSpeedController.HasInstance && GameSpeedController.Instance.ToggleOn;
             if (_speedToggleOnVisual != null) _speedToggleOnVisual.SetActive(on);
             if (_speedToggleOffVisual != null) _speedToggleOffVisual.SetActive(!on);
+
+            string speedTxt = on ? "X2" : "X1";
+            if (_txtSpeed != null) _txtSpeed.text = speedTxt;
+            if (_txtSpeedOutline != null) _txtSpeedOutline.text = speedTxt;
         }
 
         #endregion
