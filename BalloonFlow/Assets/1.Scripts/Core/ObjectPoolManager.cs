@@ -219,6 +219,7 @@ namespace BalloonFlow
                 new { key = "IronBox",     path = "Prefabs/IronBox",     initialSize = 5 },  // Pinata_Box gimmick (Lv.161)
                 new { key = "WoodenBoard", path = "Prefabs/WoodenBoard", initialSize = 8 },  // Pin gimmick (Lv.61, 1×N progressive)
                 new { key = "FrozenLayer", path = "Prefabs/FrozenLayer", initialSize = 10 }, // Ice/Frozen_Dart overlay
+                new { key = "CircleParticle", path = "Prefabs/CircleParticle", initialSize = 30 }, // 풍선 pop 이펙트
             };
 
             foreach (var entry in defaultPools)

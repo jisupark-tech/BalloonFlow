@@ -1742,44 +1742,32 @@ namespace BalloonFlow
 
             float savedScale = _balloonScale;
             string returnKey = PoolKey;
+            int popColorIdx = 0;
             if (_balloons.TryGetValue(balloonId, out BalloonData retData))
             {
                 returnKey = ResolveGimmickPoolKey(retData.gimmickType);
+                popColorIdx = retData.color;
             }
 
             // FrozenLayer 오버레이가 붙어있다면 먼저 풀로 반환
             ReturnFrozenOverlay(balloonId);
 
-            // 1) 파티클 미리 분리 (스케일업이 파티클 transform에 영향 안 주도록)
-            Transform detachedEffect = null;
-            if (identifier != null)
-                detachedEffect = identifier.DetachPopEffect();
-
-            // 2) 풍선 스케일업 → 완료 후 파티클 재생 + 풍선 풀 반환
+            // 풍선 스케일업 → 완료 후 PopEffectPool 재생 + 풍선 풀 반환.
+            // 이전: BalloonIdentifier에 _popEffect 자식 부착 → detach/reattach + 풍선마다 별도 인스턴스 → 부하.
+            // 이후: 단일 CircleParticle 풀에서 가져와 색상 적용 + play, 끝나면 풀 반환.
             float scaleUpDuration = GameManager.Instance.Board.popScaleDuration;
             float scaleUpMult = GameManager.Instance.Board.popScaleMultiplier;
+            Vector3 popPos = obj.transform.position;
             Sequence seq = DOTween.Sequence();
             seq.Append(obj.transform.DOScale(Vector3.one * savedScale * scaleUpMult, scaleUpDuration).SetEase(Ease.OutQuad));
             seq.AppendCallback(() =>
             {
-                // 스케일업 완료 시점에 팝 트리거 (애니메이터 Pop + 파티클 활성화 + 색상)
+                // 스케일업 완료 시점에 애니메이터 Pop 트리거 (파티클은 PopEffectPool 가 처리)
                 if (identifier != null)
                     identifier.MarkPopped();
 
-                float popDuration = 1.5f;
-                if (detachedEffect != null)
-                {
-                    var ps = detachedEffect.GetComponent<ParticleSystem>();
-                    if (ps != null)
-                    {
-                        var main = ps.main;
-                        main.loop = false;
-                        ps.Clear();
-                        ps.Play();
-                        popDuration = main.duration + main.startLifetime.constantMax;
-                    }
-                    StartCoroutine(ReturnParticleDelayed(detachedEffect, identifier, popDuration));
-                }
+                int ci = Mathf.Clamp(popColorIdx, 0, BalloonColors.Length - 1);
+                PopEffectPool.Play(popPos, BalloonColors[ci], this);
 
                 if (obj != null && ObjectPoolManager.HasInstance)
                 {
@@ -1787,16 +1775,6 @@ namespace BalloonFlow
                     ObjectPoolManager.Instance.Return(returnKey, obj);
                 }
             });
-        }
-
-        /// <summary>분리된 파티클을 일정 시간 후 풍선에 복귀 + 비활성화.</summary>
-        private IEnumerator ReturnParticleDelayed(Transform effect, BalloonIdentifier identifier, float delay)
-        {
-            yield return new WaitForSeconds(delay);
-            if (identifier != null)
-                identifier.ReattachPopEffect(effect);
-            else if (effect != null)
-                effect.gameObject.SetActive(false);
         }
 
         /// <summary>Key 프리팹이 포물선으로 Lock 보관함까지 비행 → 도착 시 잠금 해제.</summary>

@@ -95,8 +95,9 @@ namespace BalloonFlow
                 return -1;
             }
 
-            // 수직 정렬 허용치: cellSpacing의 75% — 벨트 고속 시에도 타겟 놓치지 않도록
-            float perpendicularTolerance = _gridCellSize * 0.75f;
+            // 수직 정렬 허용치: cellSpacing의 100% — cluster span 짧을 때도 row 전체 커버.
+            // 이전 0.75: cluster 가 좁으면 row 끝 풍선 못 잡아 "하나씩 걸러" 패턴 발생.
+            float perpendicularTolerance = _gridCellSize * 1.0f;
 
             ScanDirection scanDir = DetermineScanDirection(firingDirection);
 
@@ -137,15 +138,16 @@ namespace BalloonFlow
                 float firingDist = GetFiringAxisDistance(dartPosition, balloonWorldPos, scanDir);
                 if (firingDist < 0f) continue;
 
+                // 더 가까운 후보가 이미 있으면 IsPathBlocked 호출조차 skip — closest target 선정에 영향 없는 후보는 검사 불필요.
+                // (이전: IsPathBlocked 를 firingDist 비교 전에 호출 → K*M ops, 후보 절반 이상이 더 멀어도 매번 검사.)
+                if (firingDist >= bestFiringDist) continue;
+
                 // outermost 규칙 — 앞에 풍선(아무 색)이 있으면 타겟 불가
                 if (IsPathBlocked(dartPosition, balloonWorldPos, scanDir, occupancy)) continue;
 
-                // Closest target wins
-                if (firingDist < bestFiringDist)
-                {
-                    bestFiringDist = firingDist;
-                    bestId = balloon.balloonId;
-                }
+                // 통과한 가장 가까운 후보로 갱신
+                bestFiringDist = firingDist;
+                bestId = balloon.balloonId;
             }
 
             return bestId;
@@ -291,7 +293,8 @@ namespace BalloonFlow
         {
             if (!BalloonController.HasInstance) return false;
 
-            float perpTolerance = _gridCellSize * 0.75f;
+            // FindTarget 의 perpTolerance 와 동기화 (1.0). 다른 값이면 FindTarget이 candidate로 본 풍선의 차단 판정 누락.
+            float perpTolerance = _gridCellSize * 1.0f;
             float targetFiringDist = GetFiringAxisDistance(dartPos, targetPos, direction);
             if (targetFiringDist <= 0f) return false;
 

@@ -239,6 +239,10 @@ namespace BalloonFlow
                 SetCanvasGroupVisible(group, true);
                 SetOverlayVisible(true);
                 _activePopupId = popupId;
+
+                // OnEnable 라이프사이클이 reopen 흐름에서 누락되는 케이스 방어 — 명시 호출
+                var frame = group.GetComponentInChildren<PopupCommonFrame>(true);
+                if (frame != null) frame.PlayPopAnimation();
             }
         }
 

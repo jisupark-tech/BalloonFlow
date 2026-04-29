@@ -11,10 +11,15 @@ namespace BalloonFlow
     {
         #region Constants
 
-        private const string KEY_SOUND        = "BF_Setting_Sound";
-        private const string KEY_MUSIC        = "BF_Setting_Music";
-        private const string KEY_HAPTIC       = "BF_Setting_Haptic";
-        private const string KEY_NOTIFICATION = "BF_Setting_Notification";
+        private const string KEY_SOUND             = "BF_Setting_Sound";
+        private const string KEY_MUSIC             = "BF_Setting_Music";
+        private const string KEY_HAPTIC            = "BF_Setting_Haptic";
+        private const string KEY_NOTIFICATION      = "BF_Setting_Notification";
+        private const string KEY_HAPTIC_INTENSITY  = "BF_Setting_HapticIntensity";
+        private const string KEY_HAPTIC_DURATION   = "BF_Setting_HapticDuration";
+
+        private const float DEFAULT_HAPTIC_INTENSITY = 1f;
+        private const float DEFAULT_HAPTIC_DURATION  = 1f;
 
         #endregion
 
@@ -24,6 +29,8 @@ namespace BalloonFlow
         private bool _musicOn;
         private bool _hapticOn;
         private bool _notificationOn;
+        private float _hapticIntensity = DEFAULT_HAPTIC_INTENSITY;
+        private float _hapticDuration  = DEFAULT_HAPTIC_DURATION;
 
         #endregion
 
@@ -33,6 +40,12 @@ namespace BalloonFlow
         public bool MusicOn => _musicOn;
         public bool HapticOn => _hapticOn;
         public bool NotificationOn => _notificationOn;
+
+        /// <summary>진동 강도 multiplier (0~1). VibrationManager.Vibrate amplitude에 곱해짐.</summary>
+        public float HapticIntensity => _hapticIntensity;
+
+        /// <summary>진동 지속시간 multiplier (0~1). VibrationManager.Vibrate ms에 곱해짐.</summary>
+        public float HapticDuration => _hapticDuration;
 
         #endregion
 
@@ -84,6 +97,28 @@ namespace BalloonFlow
         public void ToggleHaptic()  => SetHaptic(!_hapticOn);
         public void ToggleNotification() => SetNotification(!_notificationOn);
 
+        /// <summary>진동 강도 multiplier 설정 (0~1).</summary>
+        public void SetHapticIntensity(float v)
+        {
+            float clamped = Mathf.Clamp01(v);
+            if (Mathf.Approximately(clamped, _hapticIntensity)) return;
+            _hapticIntensity = clamped;
+            PlayerPrefs.SetFloat(KEY_HAPTIC_INTENSITY, _hapticIntensity);
+            PlayerPrefs.Save();
+            PublishChanged();
+        }
+
+        /// <summary>진동 지속시간 multiplier 설정 (0~1).</summary>
+        public void SetHapticDuration(float v)
+        {
+            float clamped = Mathf.Clamp01(v);
+            if (Mathf.Approximately(clamped, _hapticDuration)) return;
+            _hapticDuration = clamped;
+            PlayerPrefs.SetFloat(KEY_HAPTIC_DURATION, _hapticDuration);
+            PlayerPrefs.Save();
+            PublishChanged();
+        }
+
         #endregion
 
         #region Private Methods
@@ -94,6 +129,8 @@ namespace BalloonFlow
             _musicOn        = PlayerPrefs.GetInt(KEY_MUSIC, 1) == 1;
             _hapticOn       = PlayerPrefs.GetInt(KEY_HAPTIC, 1) == 1;
             _notificationOn = PlayerPrefs.GetInt(KEY_NOTIFICATION, 1) == 1;
+            _hapticIntensity = Mathf.Clamp01(PlayerPrefs.GetFloat(KEY_HAPTIC_INTENSITY, DEFAULT_HAPTIC_INTENSITY));
+            _hapticDuration  = Mathf.Clamp01(PlayerPrefs.GetFloat(KEY_HAPTIC_DURATION,  DEFAULT_HAPTIC_DURATION));
         }
 
         private void Save(string key, bool value)
@@ -139,7 +176,9 @@ namespace BalloonFlow
                 soundOn = _soundOn,
                 musicOn = _musicOn,
                 hapticOn = _hapticOn,
-                notificationOn = _notificationOn
+                notificationOn = _notificationOn,
+                hapticIntensity = _hapticIntensity,
+                hapticDuration  = _hapticDuration
             });
         }
 

@@ -38,6 +38,9 @@ namespace BalloonFlow
         private Image _fadeImageDisplay;
         private Sprite _currentFadeSprite;
 
+        /// <summary>현재 fade 진행 중 또는 overlay가 가시 상태인지. 중복 fade 호출 방지용.</summary>
+        public bool IsFading => _fadeCoroutine != null || (_fadeOverlay != null && _fadeOverlay.alpha > 0.01f);
+
         #endregion
 
         #region SetSceneCanvas
@@ -61,19 +64,38 @@ namespace BalloonFlow
         /// <summary>
         /// Resources에서 프리팹 로드 → 부모 Canvas에 생성 → T 컴포넌트 리턴.
         /// path가 "Popup/"으로 시작하면 PopupTr에, 아니면 UiTr에 생성.
+        /// 중복 생성 방지: (1) _openUIList stale cleanup → (2) 리스트 재사용 → (3) Scene FindAny → (4) Instantiate.
         /// </summary>
         public T OpenUI<T>(string _path) where T : UIBase
         {
-            // 이미 생성된 인스턴스가 있으면 재사용
+            // (1) 씬 전환 등으로 destroyed 된 항목을 리스트에서 정리 (Unity fake-null)
+            for (int i = _openUIList.Count - 1; i >= 0; i--)
+            {
+                if (_openUIList[i] == null) _openUIList.RemoveAt(i);
+            }
+
+            // (2) 살아있는 인스턴스가 리스트에 이미 있으면 재사용
             for (int i = 0; i < _openUIList.Count; i++)
             {
-                if (_openUIList[i] is T existing && _openUIList[i] != null)
+                if (_openUIList[i] is T existing && existing != null)
                 {
                     existing.OpenUI();
                     return existing;
                 }
             }
 
+            // (3) 리스트엔 없지만 씬 hierarchy 에 prefab 이 미리 배치돼 있거나,
+            //     다른 경로로 instantiate 된 경우 그것을 채택 (중복 instantiate 방지).
+            //     비활성 상태도 포함하기 위해 FindObjectsInactive.Include 사용.
+            var existingInScene = FindAnyObjectByType<T>(FindObjectsInactive.Include);
+            if (existingInScene != null)
+            {
+                _openUIList.Add(existingInScene);
+                existingInScene.OpenUI();
+                return existingInScene;
+            }
+
+            // (4) Resources 에서 prefab 로드 후 instantiate
             var _prefab = Resources.Load<GameObject>(_path);
             if (_prefab == null)
             {
@@ -81,7 +103,6 @@ namespace BalloonFlow
                 return null;
             }
 
-            // Popup/ 경로면 PopupCanvas, 아니면 UICanvas
             Transform parent = _path.StartsWith("Popup/") ? PopupTr : UiTr;
             var _go = Instantiate(_prefab, parent);
             var _ui = _go.GetComponent<T>();

@@ -118,6 +118,28 @@ namespace BalloonFlow
                 _btnExit.interactable = true;
             }
 
+            // Next/Home 버튼 강제 활성화 (interactable 미설정/prefab 기본값 false 방어)
+            if (_btnNext != null)
+            {
+                _btnNext.gameObject.SetActive(true);
+                _btnNext.interactable = true;
+            }
+            else if (_frame != null && _frame.BtnHorizGreen != null)
+            {
+                _frame.BtnHorizGreen.gameObject.SetActive(true);
+                _frame.BtnHorizGreen.interactable = true;
+            }
+            if (_btnHome != null)
+            {
+                _btnHome.gameObject.SetActive(true);
+                _btnHome.interactable = true;
+            }
+            else if (_frame != null && _frame.BtnHorizRed != null)
+            {
+                _frame.BtnHorizRed.gameObject.SetActive(true);
+                _frame.BtnHorizRed.interactable = true;
+            }
+
             UpdateHardLevelOption(difficulty);
             OpenUI();
 

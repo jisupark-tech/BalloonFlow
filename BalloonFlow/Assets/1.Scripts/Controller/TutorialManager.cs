@@ -80,6 +80,11 @@ namespace BalloonFlow
         private bool _isDimActive;
         private bool _isCutoutVisible;
 
+        // Tutorial prefab root canvas/canvasgroup/raycaster — 튜토리얼 active 시에만 raycast 인터셉트.
+        private Canvas _prefabRootCanvas;
+        private CanvasGroup _prefabRootCanvasGroup;
+        private UnityEngine.UI.GraphicRaycaster _prefabRootRaycaster;
+
         #endregion
 
         #region Lifecycle
@@ -90,26 +95,27 @@ namespace BalloonFlow
             HideAllVisuals();
         }
 
-        /// <summary>Resources/Popup/PopupTutorial 프리팹 로드. 없으면 코드로 생성.</summary>
+        /// <summary>UIManager.OpenUI 통해 PopupCanvas(sortingOrder=10)에 instantiate.
+        /// 직접 Resources.Load + Instantiate 시 SceneCanvas(sortingOrder=0)에 parent돼 다른 popup에 가려지는 문제 해결.</summary>
         private void LoadOrCreateTutorialUI()
         {
-            // 씬의 기존 Canvas 찾기
-            Canvas sceneCanvas = FindSceneCanvas();
+            if (UIManager.HasInstance)
+            {
+                var popup = UIManager.Instance.OpenUI<PopupTutorial>("Popup/Tutorial");
+                if (popup != null)
+                {
+                    Debug.Log("[TutorialDbg] LoadOrCreateTutorialUI via UIManager.OpenUI OK");
+                    BindFromPopup(popup.gameObject);
+                    // 직후 닫기 — TutorialController.StartTutorial 호출 시 다시 활성화됨.
+                    // (HideAllVisuals가 dim/cutout/instruction 개별 비활성화 처리)
+                    return;
+                }
+                Debug.LogWarning("[TutorialManager] UIManager.OpenUI returned null for Popup/Tutorial.");
+            }
 
-            // 실제 프리팹 경로: Resources/Popup/Tutorial.prefab
-            var prefab = Resources.Load<GameObject>("Popup/Tutorial");
-            if (prefab != null && sceneCanvas != null)
-            {
-                var go = Instantiate(prefab, sceneCanvas.transform);
-                go.name = "Tutorial";
-                BindFromPopup(go);
-            }
-            else
-            {
-                if (prefab == null)
-                    Debug.LogWarning("[TutorialManager] Resources/Popup/Tutorial prefab not found.");
-                CreateTutorialUI();
-            }
+            // Fallback: 코드로 직접 생성
+            Debug.Log("[TutorialDbg] LoadOrCreateTutorialUI fallback to CreateTutorialUI");
+            CreateTutorialUI();
         }
 
         /// <summary>씬에서 기존 Canvas 찾기.</summary>
@@ -136,6 +142,16 @@ namespace BalloonFlow
 
             // 부모 Canvas 참조
             _canvas = root.GetComponentInParent<Canvas>();
+
+            // 프리팹의 Canvas/Raycaster 참조만 보관. raycast 인터셉트는 튜토리얼이 실제 active 일 때만.
+            // (평소엔 비활성 → Tutorial canvas 가 HUD 아이템 클릭 가로채는 부작용 방지.)
+            _prefabRootCanvas = root.GetComponent<Canvas>();
+            _prefabRootCanvasGroup = root.GetComponent<CanvasGroup>();
+            _prefabRootRaycaster = root.GetComponent<UnityEngine.UI.GraphicRaycaster>();
+            SetTutorialCanvasInteractive(false);
+            Debug.Log($"[TutorialDbg] BindFromPopup done. parentCanvas={(_canvas != null ? _canvas.name : "NULL")} " +
+                      $"sortingOrder={(_canvas != null ? _canvas.sortingOrder : -1)} " +
+                      $"rectSize={(_canvasRect != null ? _canvasRect.sizeDelta.ToString() : "NULL")}");
 
             var popup = root.GetComponent<PopupTutorial>();
             if (popup != null)
@@ -196,6 +212,14 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnTutorialStepChanged>(HandleTutorialStepChanged);
             EventBus.Unsubscribe<OnTutorialCompleted>(HandleTutorialCompleted);
             EventBus.Unsubscribe<OnTutorialStarted>(HandleTutorialStarted);
+        }
+
+        protected override void OnDestroy()
+        {
+            // BindFromPopup / 재바인딩 시 lambda 누적 leak 방지.
+            if (_skipButton != null) _skipButton.onClick.RemoveAllListeners();
+            if (_tapAnywhereButton != null) _tapAnywhereButton.onClick.RemoveAllListeners();
+            base.OnDestroy();
         }
 
         #endregion
@@ -649,11 +673,16 @@ namespace BalloonFlow
 
         private void HandleTutorialStarted(OnTutorialStarted evt)
         {
+            Debug.Log($"[TutorialDbg] HandleTutorialStarted tutorialId={evt.tutorialId} " +
+                      $"canvasActive={(_tutorialCanvas != null ? _tutorialCanvas.activeInHierarchy : false)} " +
+                      $"instructionPanel={_instructionPanel != null} instructionText={_instructionText != null}");
+            SetTutorialCanvasInteractive(true);
             SetDimOverlay(true);
         }
 
         private void HandleTutorialStepChanged(OnTutorialStepChanged evt)
         {
+            Debug.Log($"[TutorialDbg] HandleTutorialStepChanged step={evt.stepIndex} instr='{evt.instruction}'");
             string highlightTarget = string.Empty;
             string requireAction = string.Empty;
 
@@ -724,6 +753,29 @@ namespace BalloonFlow
         private void HandleTutorialCompleted(OnTutorialCompleted evt)
         {
             HideAllVisuals();
+            SetTutorialCanvasInteractive(false);
+        }
+
+        /// <summary>Tutorial canvas의 sortingOrder + raycast 인터셉트 토글. 튜토리얼 active 일 때만 ON.
+        /// OFF 시: 다른 UI(HUD 아이템 등) 클릭이 Tutorial canvas에 가로채이지 않음.</summary>
+        private void SetTutorialCanvasInteractive(bool active)
+        {
+            if (_prefabRootCanvas != null)
+            {
+                _prefabRootCanvas.overrideSorting = active;
+                if (active) _prefabRootCanvas.sortingOrder = CANVAS_SORT_ORDER;
+            }
+            if (_prefabRootCanvasGroup != null)
+            {
+                _prefabRootCanvasGroup.blocksRaycasts = active;
+                _prefabRootCanvasGroup.interactable = active;
+                _prefabRootCanvasGroup.alpha = active ? 1f : 0f;
+            }
+            if (_prefabRootRaycaster != null)
+            {
+                // GraphicRaycaster.enabled 토글 — 비활성 시 Tutorial canvas 자체로 raycast 안 들어감.
+                _prefabRootRaycaster.enabled = active;
+            }
         }
 
         #endregion

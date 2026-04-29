@@ -37,6 +37,18 @@ namespace BalloonFlow
         [SerializeField] private GameObject _hapticOff;
         [SerializeField] private TMP_Text _txtHaptic;
 
+        [Header("[Haptic Intensity — 진동 강도 슬라이더 (0~1)]")]
+        [SerializeField] private Slider _sliderHapticIntensity;
+        [Tooltip("선택. 슬라이더 옆에 % 또는 수치 표시할 텍스트")]
+        [SerializeField] private TMP_Text _txtHapticIntensityValue;
+        [Tooltip("선택. 강도 슬라이더 행을 통째로 숨기고 싶을 때 (Haptic OFF 시)")]
+        [SerializeField] private GameObject _hapticIntensityRow;
+
+        [Header("[Haptic Duration — 진동 지속시간 슬라이더 (0~1)]")]
+        [SerializeField] private Slider _sliderHapticDuration;
+        [SerializeField] private TMP_Text _txtHapticDurationValue;
+        [SerializeField] private GameObject _hapticDurationRow;
+
         [Header("[Notification]")]
         [SerializeField] private Button _btnNotification;
         [SerializeField] private GameObject _notificationOn;
@@ -69,6 +81,19 @@ namespace BalloonFlow
             if (_btnMusic != null) _btnMusic.onClick.AddListener(OnMusicClicked);
             if (_btnHaptic != null) _btnHaptic.onClick.AddListener(OnHapticClicked);
             if (_btnNotification != null) _btnNotification.onClick.AddListener(OnNotificationClicked);
+
+            if (_sliderHapticIntensity != null)
+            {
+                _sliderHapticIntensity.minValue = 0f;
+                _sliderHapticIntensity.maxValue = 1f;
+                _sliderHapticIntensity.onValueChanged.AddListener(OnHapticIntensityChanged);
+            }
+            if (_sliderHapticDuration != null)
+            {
+                _sliderHapticDuration.minValue = 0f;
+                _sliderHapticDuration.maxValue = 1f;
+                _sliderHapticDuration.onValueChanged.AddListener(OnHapticDurationChanged);
+            }
         }
 
         private void OnEnable()
@@ -91,6 +116,9 @@ namespace BalloonFlow
             if (_btnMusic != null) _btnMusic.onClick.RemoveListener(OnMusicClicked);
             if (_btnHaptic != null) _btnHaptic.onClick.RemoveListener(OnHapticClicked);
             if (_btnNotification != null) _btnNotification.onClick.RemoveListener(OnNotificationClicked);
+
+            if (_sliderHapticIntensity != null) _sliderHapticIntensity.onValueChanged.RemoveListener(OnHapticIntensityChanged);
+            if (_sliderHapticDuration  != null) _sliderHapticDuration.onValueChanged.RemoveListener(OnHapticDurationChanged);
         }
 
         #endregion
@@ -115,6 +143,18 @@ namespace BalloonFlow
         private void OnNotificationClicked()
         {
             if (SettingsManager.HasInstance) SettingsManager.Instance.ToggleNotification();
+        }
+
+        private void OnHapticIntensityChanged(float v)
+        {
+            if (SettingsManager.HasInstance) SettingsManager.Instance.SetHapticIntensity(v);
+            UpdateHapticIntensityLabel(v);
+        }
+
+        private void OnHapticDurationChanged(float v)
+        {
+            if (SettingsManager.HasInstance) SettingsManager.Instance.SetHapticDuration(v);
+            UpdateHapticDurationLabel(v);
         }
 
         #endregion
@@ -146,6 +186,8 @@ namespace BalloonFlow
             UpdateToggle(_hapticOn, _hapticOff, sm.HapticOn);
             UpdateToggle(_notificationOn, _notificationOff, sm.NotificationOn);
             ApplyNotificationSpec(sm.NotificationOn, animate: false);
+
+            ApplyHapticSliders(sm.HapticIntensity, sm.HapticDuration, sm.HapticOn);
         }
 
         /// <summary>
@@ -195,6 +237,42 @@ namespace BalloonFlow
             UpdateToggle(_hapticOn, _hapticOff, evt.hapticOn);
             UpdateToggle(_notificationOn, _notificationOff, evt.notificationOn);
             ApplyNotificationSpec(evt.notificationOn, animate: true);
+
+            ApplyHapticSliders(evt.hapticIntensity, evt.hapticDuration, evt.hapticOn);
+        }
+
+        /// <summary>슬라이더 위치 + 라벨 + Haptic OFF 시 행 숨김 동기화.</summary>
+        private void ApplyHapticSliders(float intensity, float duration, bool hapticOn)
+        {
+            // SetValueWithoutNotify 로 onValueChanged 재발화 방지 (무한 루프 차단)
+            if (_sliderHapticIntensity != null)
+            {
+                _sliderHapticIntensity.SetValueWithoutNotify(intensity);
+                _sliderHapticIntensity.interactable = hapticOn;
+            }
+            if (_sliderHapticDuration != null)
+            {
+                _sliderHapticDuration.SetValueWithoutNotify(duration);
+                _sliderHapticDuration.interactable = hapticOn;
+            }
+            UpdateHapticIntensityLabel(intensity);
+            UpdateHapticDurationLabel(duration);
+
+            // 행 자체 노출/숨김 (선택) — Haptic OFF면 슬라이더 행을 숨겨 UI 깔끔하게
+            if (_hapticIntensityRow != null) _hapticIntensityRow.SetActive(hapticOn);
+            if (_hapticDurationRow  != null) _hapticDurationRow.SetActive(hapticOn);
+        }
+
+        private void UpdateHapticIntensityLabel(float v)
+        {
+            if (_txtHapticIntensityValue != null)
+                _txtHapticIntensityValue.text = Mathf.RoundToInt(v * 100f) + "%";
+        }
+
+        private void UpdateHapticDurationLabel(float v)
+        {
+            if (_txtHapticDurationValue != null)
+                _txtHapticDurationValue.text = Mathf.RoundToInt(v * 100f) + "%";
         }
 
         #endregion

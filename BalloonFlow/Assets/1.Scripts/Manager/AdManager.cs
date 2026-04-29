@@ -1,51 +1,53 @@
-#if GOOGLE_MOBILE_ADS
-using GoogleMobileAds.Api;
-#endif
-
 using System;
-using System.Collections;
 using UnityEngine;
 
 namespace BalloonFlow
 {
     /// <summary>
-    /// Manages rewarded and interstitial ad delivery.
-    /// Uses Google AdMob when GOOGLE_MOBILE_ADS is defined; otherwise simulates ad flow.
+    /// AppLovin MAX 기반 광고 매니저. Rewarded / Interstitial 노출 + Admob/FAN mediation.
+    /// 이전 Admob-direct 구현을 MAX로 교체. 시그니처(ShowRewardedAd/ShowInterstitialAd 등)는
+    /// 외부 호출자 영향 없도록 보존.
     /// </summary>
     /// <remarks>
     /// Layer: Domain | Genre: Puzzle | Role: Manager | Phase: 3
-    /// domain_owner: BM (placed in Domain layer for dependency proximity to OutGame)
-    /// DB Reference: No DB match for puzzle ad manager — generated from L3 YAML logicFlow
+    /// 광고 Unit ID는 SdkConfig (SdkConfig.local.cs, .gitignore) 에서 주입.
     /// </remarks>
     public class AdManager : Singleton<AdManager>
     {
         #region Constants
 
-        private const int AdProtectionLevelThreshold = 20;
-        private const int InterstitialFailInterval    = 3;
-        private const float SimulatedAdDurationSeconds = 1f;
+        private const int    AD_PROTECTION_LEVEL_THRESHOLD = 20;
+        private const int    INTERSTITIAL_FAIL_INTERVAL    = 3;
+        private const int    MAX_RETRY_EXPONENT            = 6; // 2^6 = 64s
+        private const string LOG_TAG                       = "[AdManager]";
 
         #endregion
 
-        #region Serialized Fields
+        #region Public Events (MAX-native)
 
-        [SerializeField] private string _rewardedAdUnitId    = "ca-app-pub-3940256099942544/5224354917"; // test ID
-        [SerializeField] private string _interstitialAdUnitId = "ca-app-pub-3940256099942544/1033173712"; // test ID
+        public event Action                    OnRewardedAdLoaded;
+        public event Action<string>            OnRewardedAdFailedToLoad;
+        public event Action                    OnRewardedAdDisplayed;
+        public event Action                    OnRewardedAdHidden;
+        public event Action<MaxSdkBase.Reward> OnRewardedAdRewarded;
+        public event Action<string>            OnRewardedAdFailedToShow;
+
+        public event Action                    OnInterstitialAdLoaded;
+        public event Action<string>            OnInterstitialAdFailedToLoad;
+        public event Action                    OnInterstitialAdDisplayed;
+        public event Action                    OnInterstitialAdHidden;
 
         #endregion
 
         #region Fields
 
-        private int  _failCount;
-        private int  _currentLevel;
-        private bool _isRewardedAdReady;
-        private bool _isInterstitialAdReady;
-        private bool _isShowingAd;
-
-#if GOOGLE_MOBILE_ADS
-        private RewardedAd      _rewardedAd;
-        private InterstitialAd  _interstitialAd;
-#endif
+        private bool   _isInitialized;
+        private int    _rewardedRetryAttempt;
+        private int    _interstitialRetryAttempt;
+        private int    _failCount;
+        private int    _currentLevel = 1;
+        private bool   _isShowingAd;
+        private Action _pendingRewardCallback;
 
         #endregion
 
@@ -53,19 +55,17 @@ namespace BalloonFlow
 
         protected override void OnSingletonAwake()
         {
-            _failCount             = 0;
-            _currentLevel          = 1;
-            _isRewardedAdReady     = false;
-            _isInterstitialAdReady = false;
-            _isShowingAd           = false;
+            string sdkKey = SdkConfig.AppLovinSdkKey;
+            if (string.IsNullOrEmpty(sdkKey))
+            {
+                Debug.LogWarning($"{LOG_TAG} AppLovin SDK Key is empty. Skipping init. (SdkConfig.local.cs 누락 가능성)");
+                return;
+            }
 
-#if GOOGLE_MOBILE_ADS
-            MobileAds.Initialize(_ => LoadRewardedAd());
-#else
-            // Simulation: treat ads as always ready after init.
-            _isRewardedAdReady     = true;
-            _isInterstitialAdReady = true;
-#endif
+            MaxSdkCallbacks.OnSdkInitializedEvent += OnSdkInitialized;
+            MaxSdk.SetSdkKey(sdkKey);
+            MaxSdk.InitializeSdk();
+            Debug.Log($"{LOG_TAG} AppLovin MAX initializing...");
         }
 
         private void OnEnable()
@@ -82,200 +82,210 @@ namespace BalloonFlow
 
         #endregion
 
-        #region Public Methods
+        #region SDK Init
 
-        /// <summary>
-        /// Shows a rewarded ad. On success, invokes <paramref name="rewardCallback"/>.
-        /// Does nothing if ad protection is active (below Level 20) or no ad is ready.
-        /// </summary>
-        /// <param name="rewardCallback">Invoked once reward is earned.</param>
-        public void ShowRewardedAd(Action rewardCallback)
+        private void OnSdkInitialized(MaxSdkBase.SdkConfiguration cfg)
         {
-            if (GetAdProtectionLevel() < AdProtectionLevelThreshold)
-            {
-                Debug.Log("[AdManager] Ad protection active — skipping rewarded ad.");
-                return;
-            }
+            _isInitialized = true;
+            Debug.Log($"{LOG_TAG} MAX SDK initialized. consentDialogState={cfg.ConsentDialogState}");
 
-            if (!IsRewardedAdReady())
-            {
-                Debug.LogWarning("[AdManager] Rewarded ad not ready.");
-                return;
-            }
+            // Rewarded
+            MaxSdkCallbacks.Rewarded.OnAdLoadedEvent          += OnRewardedLoadedCb;
+            MaxSdkCallbacks.Rewarded.OnAdLoadFailedEvent      += OnRewardedLoadFailedCb;
+            MaxSdkCallbacks.Rewarded.OnAdDisplayedEvent       += OnRewardedDisplayedCb;
+            MaxSdkCallbacks.Rewarded.OnAdHiddenEvent          += OnRewardedHiddenCb;
+            MaxSdkCallbacks.Rewarded.OnAdReceivedRewardEvent  += OnRewardedReceivedRewardCb;
+            MaxSdkCallbacks.Rewarded.OnAdDisplayFailedEvent   += OnRewardedDisplayFailedCb;
 
-            if (_isShowingAd) return;
+            // Interstitial
+            MaxSdkCallbacks.Interstitial.OnAdLoadedEvent        += OnInterstitialLoadedCb;
+            MaxSdkCallbacks.Interstitial.OnAdLoadFailedEvent    += OnInterstitialLoadFailedCb;
+            MaxSdkCallbacks.Interstitial.OnAdDisplayedEvent     += OnInterstitialDisplayedCb;
+            MaxSdkCallbacks.Interstitial.OnAdHiddenEvent        += OnInterstitialHiddenCb;
+            MaxSdkCallbacks.Interstitial.OnAdDisplayFailedEvent += OnInterstitialDisplayFailedCb;
 
-#if GOOGLE_MOBILE_ADS
-            if (_rewardedAd == null) return;
-            _isShowingAd = true;
-
-            _rewardedAd.Show(reward =>
-            {
-                _isRewardedAdReady = false;
-                _isShowingAd       = false;
-                rewardCallback?.Invoke();
-                LoadRewardedAd();
-            });
-#else
-            StartCoroutine(SimulateRewardedAd(rewardCallback));
-#endif
-        }
-
-        /// <summary>
-        /// Shows an interstitial ad. Enforces: not during gameplay, every 3rd fail, Level &gt;= 20.
-        /// </summary>
-        public void ShowInterstitialAd()
-        {
-            if (GetAdProtectionLevel() < AdProtectionLevelThreshold) return;
-            if (!IsInterstitialAdReady()) return;
-            if (_isShowingAd) return;
-
-            // Interstitial only after gameplay, not mid-session
-            if (BoardStateManager.HasInstance &&
-                BoardStateManager.Instance.GetBoardState() == BoardState.Playing)
-            {
-                Debug.LogWarning("[AdManager] Cannot show interstitial during gameplay.");
-                return;
-            }
-
-#if GOOGLE_MOBILE_ADS
-            if (_interstitialAd == null) return;
-            _isShowingAd = true;
-
-            _interstitialAd.Show();
-            _isInterstitialAdReady = false;
-            _isShowingAd           = false;
-            _interstitialAd.Destroy();
+            LoadRewardedAd();
             LoadInterstitialAd();
-#else
-            Debug.Log("[AdManager][Sim] Interstitial ad shown.");
-            _isInterstitialAdReady = false;
-            StartCoroutine(RearmInterstitialAfterDelay());
-#endif
-        }
-
-        /// <summary>Returns true if a rewarded ad is loaded and ready to show.</summary>
-        public bool IsRewardedAdReady()
-        {
-#if GOOGLE_MOBILE_ADS
-            return _rewardedAd != null && _rewardedAd.CanShowAd();
-#else
-            return _isRewardedAdReady;
-#endif
-        }
-
-        /// <summary>Returns true if an interstitial ad is loaded and ready to show.</summary>
-        public bool IsInterstitialAdReady()
-        {
-#if GOOGLE_MOBILE_ADS
-            return _interstitialAd != null && _interstitialAd.CanShowAd();
-#else
-            return _isInterstitialAdReady;
-#endif
-        }
-
-        /// <summary>
-        /// Returns the current level used for ad-protection evaluation.
-        /// Ad protection: no ads below Level 20.
-        /// </summary>
-        public int GetAdProtectionLevel()
-        {
-            return _currentLevel;
         }
 
         #endregion
 
-        #region Private Methods — Ad Loading
+        #region Public API — Compatibility (Action-based, 기존 시그니처 유지)
 
-#if GOOGLE_MOBILE_ADS
+        /// <summary>
+        /// Rewarded 광고 표시. 보상 시점에 callback 실행.
+        /// Lv20 미만은 기본적으로 ad protection 적용. outgame UI(Lives 충전 등)에서는 ignoreAdProtection=true.
+        /// </summary>
+        public void ShowRewardedAd(Action rewardCallback, bool ignoreAdProtection = false)
+        {
+            if (!ignoreAdProtection && GetAdProtectionLevel() < AD_PROTECTION_LEVEL_THRESHOLD)
+            {
+                Debug.Log($"{LOG_TAG} Ad protection active — skipping rewarded ad.");
+                return;
+            }
+            if (!IsRewardedAdReady())
+            {
+                Debug.LogWarning($"{LOG_TAG} Rewarded not ready.");
+                return;
+            }
+            if (_isShowingAd) return;
+
+            _pendingRewardCallback = rewardCallback;
+            _isShowingAd = true;
+            MaxSdk.ShowRewardedAd(SdkConfig.AppLovinRewardedAdUnitId);
+        }
+
+        /// <summary>Interstitial 광고 표시. 게임 중에는 무시. Lv20 미만 ad protection.</summary>
+        public void ShowInterstitialAd()
+        {
+            if (GetAdProtectionLevel() < AD_PROTECTION_LEVEL_THRESHOLD) return;
+            if (!IsInterstitialAdReady()) return;
+            if (_isShowingAd) return;
+
+            if (BoardStateManager.HasInstance &&
+                BoardStateManager.Instance.GetBoardState() == BoardState.Playing)
+            {
+                Debug.LogWarning($"{LOG_TAG} Cannot show interstitial during gameplay.");
+                return;
+            }
+
+            _isShowingAd = true;
+            MaxSdk.ShowInterstitial(SdkConfig.AppLovinInterstitialAdUnitId);
+        }
+
+        public bool IsRewardedAdReady() =>
+            _isInitialized
+            && !string.IsNullOrEmpty(SdkConfig.AppLovinRewardedAdUnitId)
+            && MaxSdk.IsRewardedAdReady(SdkConfig.AppLovinRewardedAdUnitId);
+
+        public bool IsInterstitialAdReady() =>
+            _isInitialized
+            && !string.IsNullOrEmpty(SdkConfig.AppLovinInterstitialAdUnitId)
+            && MaxSdk.IsInterstitialReady(SdkConfig.AppLovinInterstitialAdUnitId);
+
+        public int GetAdProtectionLevel() => _currentLevel;
+
+        #endregion
+
+        #region Ad Loading
+
         private void LoadRewardedAd()
         {
-            _rewardedAd?.Destroy();
-            _rewardedAd = null;
-            _isRewardedAdReady = false;
-
-            var adRequest = new AdRequest();
-            RewardedAd.Load(_rewardedAdUnitId, adRequest, (ad, error) =>
+            if (!_isInitialized) return;
+            if (string.IsNullOrEmpty(SdkConfig.AppLovinRewardedAdUnitId))
             {
-                if (error != null)
-                {
-                    Debug.LogWarning($"[AdManager] Rewarded load failed: {error.GetMessage()}");
-                    return;
-                }
-                _rewardedAd        = ad;
-                _isRewardedAdReady = true;
-                Debug.Log("[AdManager] Rewarded ad loaded.");
-            });
+                Debug.LogWarning($"{LOG_TAG} Rewarded Ad Unit ID is empty.");
+                return;
+            }
+            MaxSdk.LoadRewardedAd(SdkConfig.AppLovinRewardedAdUnitId);
         }
 
         private void LoadInterstitialAd()
         {
-            _interstitialAd?.Destroy();
-            _interstitialAd        = null;
-            _isInterstitialAdReady = false;
-
-            var adRequest = new AdRequest();
-            InterstitialAd.Load(_interstitialAdUnitId, adRequest, (ad, error) =>
+            if (!_isInitialized) return;
+            if (string.IsNullOrEmpty(SdkConfig.AppLovinInterstitialAdUnitId))
             {
-                if (error != null)
-                {
-                    Debug.LogWarning($"[AdManager] Interstitial load failed: {error.GetMessage()}");
-                    return;
-                }
-                _interstitialAd        = ad;
-                _isInterstitialAdReady = true;
-                Debug.Log("[AdManager] Interstitial ad loaded.");
-            });
+                // Interstitial Ad Unit 미설정 — Rewarded만 사용 가능
+                return;
+            }
+            MaxSdk.LoadInterstitial(SdkConfig.AppLovinInterstitialAdUnitId);
         }
-#endif
 
         #endregion
 
-        #region Private Methods — Simulation
+        #region Rewarded Callbacks
 
-#if !GOOGLE_MOBILE_ADS
-        private IEnumerator SimulateRewardedAd(Action rewardCallback)
+        private void OnRewardedLoadedCb(string adUnitId, MaxSdkBase.AdInfo info)
         {
-            _isShowingAd       = true;
-            _isRewardedAdReady = false;
-            Debug.Log("[AdManager][Sim] Rewarded ad started.");
-            yield return new WaitForSeconds(SimulatedAdDurationSeconds);
+            _rewardedRetryAttempt = 0;
+            OnRewardedAdLoaded?.Invoke();
+        }
+
+        private void OnRewardedLoadFailedCb(string adUnitId, MaxSdkBase.ErrorInfo error)
+        {
+            _rewardedRetryAttempt++;
+            float retryDelay = (float)Math.Pow(2, Math.Min(MAX_RETRY_EXPONENT, _rewardedRetryAttempt));
+            Invoke(nameof(LoadRewardedAd), retryDelay);
+            OnRewardedAdFailedToLoad?.Invoke(error.Message);
+        }
+
+        private void OnRewardedDisplayedCb(string adUnitId, MaxSdkBase.AdInfo info)
+            => OnRewardedAdDisplayed?.Invoke();
+
+        private void OnRewardedHiddenCb(string adUnitId, MaxSdkBase.AdInfo info)
+        {
             _isShowingAd = false;
-            Debug.Log("[AdManager][Sim] Rewarded ad complete — reward granted.");
-            rewardCallback?.Invoke();
-            // Re-arm for next use.
-            _isRewardedAdReady = true;
+            _pendingRewardCallback = null;
+            OnRewardedAdHidden?.Invoke();
+            LoadRewardedAd();
         }
 
-        private IEnumerator RearmInterstitialAfterDelay()
+        private void OnRewardedReceivedRewardCb(string adUnitId, MaxSdkBase.Reward reward, MaxSdkBase.AdInfo info)
         {
-            yield return new WaitForSeconds(SimulatedAdDurationSeconds);
-            _isInterstitialAdReady = true;
+            _pendingRewardCallback?.Invoke();
+            _pendingRewardCallback = null;
+            OnRewardedAdRewarded?.Invoke(reward);
         }
-#endif
+
+        private void OnRewardedDisplayFailedCb(string adUnitId, MaxSdkBase.ErrorInfo error, MaxSdkBase.AdInfo info)
+        {
+            _isShowingAd = false;
+            _pendingRewardCallback = null;
+            OnRewardedAdFailedToShow?.Invoke(error.Message);
+            LoadRewardedAd();
+        }
 
         #endregion
 
-        #region Private Methods — Event Handlers
+        #region Interstitial Callbacks
+
+        private void OnInterstitialLoadedCb(string adUnitId, MaxSdkBase.AdInfo info)
+        {
+            _interstitialRetryAttempt = 0;
+            OnInterstitialAdLoaded?.Invoke();
+        }
+
+        private void OnInterstitialLoadFailedCb(string adUnitId, MaxSdkBase.ErrorInfo error)
+        {
+            _interstitialRetryAttempt++;
+            float retryDelay = (float)Math.Pow(2, Math.Min(MAX_RETRY_EXPONENT, _interstitialRetryAttempt));
+            Invoke(nameof(LoadInterstitialAd), retryDelay);
+            OnInterstitialAdFailedToLoad?.Invoke(error.Message);
+        }
+
+        private void OnInterstitialDisplayedCb(string adUnitId, MaxSdkBase.AdInfo info)
+            => OnInterstitialAdDisplayed?.Invoke();
+
+        private void OnInterstitialHiddenCb(string adUnitId, MaxSdkBase.AdInfo info)
+        {
+            _isShowingAd = false;
+            OnInterstitialAdHidden?.Invoke();
+            LoadInterstitialAd();
+        }
+
+        private void OnInterstitialDisplayFailedCb(string adUnitId, MaxSdkBase.ErrorInfo error, MaxSdkBase.AdInfo info)
+        {
+            _isShowingAd = false;
+            LoadInterstitialAd();
+        }
+
+        #endregion
+
+        #region Event Handlers
 
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
             _currentLevel = evt.levelId;
             _failCount    = 0;
 
-#if GOOGLE_MOBILE_ADS
-            // Pre-load ads for the new level.
-            if (_rewardedAd == null) LoadRewardedAd();
-            if (_interstitialAd == null) LoadInterstitialAd();
-#endif
+            if (!IsRewardedAdReady())     LoadRewardedAd();
+            if (!IsInterstitialAdReady()) LoadInterstitialAd();
         }
 
         private void HandleLevelFailed(OnLevelFailed evt)
         {
             _failCount++;
-
-            // Show interstitial every 3rd fail (but not during level — board is failed state).
-            if (_failCount % InterstitialFailInterval == 0)
+            if (_failCount % INTERSTITIAL_FAIL_INTERVAL == 0)
             {
                 ShowInterstitialAd();
             }

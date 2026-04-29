@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 namespace BalloonFlow
@@ -20,6 +21,7 @@ namespace BalloonFlow
         private const string PREFS_KEY_STARS_PREFIX      = "BF_Stars_";
         private const int    FIRST_LEVEL_ID              = 1;
         private const int    LEVELS_PER_PACKAGE          = 20;
+        private const float  LOADING_FADE_DURATION       = 0.25f;
 
         #endregion
 
@@ -32,6 +34,7 @@ namespace BalloonFlow
         private int         _currentLevelId;
         private bool        _levelActive;
         private int         _retryCount;
+        private bool        _isLoading;
 
         #endregion
 
@@ -52,6 +55,9 @@ namespace BalloonFlow
         /// True while a level is active (loaded and not yet completed or failed).
         /// </summary>
         public bool IsLevelActive => _levelActive;
+
+        /// <summary>True while LoadLevelCoroutine is in progress (cleanup + setup). GameManager가 fade-in 시점 동기화에 사용.</summary>
+        public bool IsLoading => _isLoading;
 
         #endregion
 
@@ -81,9 +87,59 @@ namespace BalloonFlow
 
         /// <summary>
         /// Loads a level by ID, sets up all subsystems, and publishes OnLevelLoaded.
+        /// Internally runs as coroutine: fade out → cleanup → setup (yielded across frames) → fade in.
         /// Does nothing if the level ID is invalid or LevelDataProvider is unassigned.
         /// </summary>
         public void LoadLevel(int levelId)
+        {
+            StartCoroutine(LoadLevelCoroutine(levelId));
+        }
+
+        private IEnumerator LoadLevelCoroutine(int levelId)
+        {
+            _isLoading = true;
+
+            // ── Fade out (loading screen 역할) ──
+            // GameManager.LoadScene 직후 호출되는 케이스(씬 전환 → InGame)에선 이미 fade overlay가 활성이라
+            // 여기서 또 FadeOut 하면 두 번 페이드되어 보임 → IsFading 시 skip.
+            bool ownsFade = false;
+            if (UIManager.HasInstance && !UIManager.Instance.IsFading)
+            {
+                UIManager.Instance.FadeOut(LOADING_FADE_DURATION);
+                yield return new WaitForSecondsRealtime(LOADING_FADE_DURATION);
+                ownsFade = true;
+            }
+
+            // ── Config 로드 ──
+            LevelConfig config = LoadConfig(levelId);
+            if (config == null)
+            {
+                Debug.LogWarning($"[LevelManager] Cannot load level {levelId}: no config found.");
+                if (ownsFade && UIManager.HasInstance) UIManager.Instance.FadeIn(LOADING_FADE_DURATION);
+                _isLoading = false;
+                yield break;
+            }
+
+            // ── Cleanup ──
+            CleanupPreviousLevel();
+            yield return null; // GPU 한 프레임 양보
+
+            _currentLevelId     = levelId;
+            _currentLevelConfig = config;
+            _levelActive        = true;
+            _retryCount         = 0;
+
+            // ── Setup (yields 분산) ──
+            yield return SetupLevelCoroutine(config);
+
+            // ── Fade in ── (자체 fade일 때만. GameManager 가 fade 관리 중이면 GM이 IsLoading 감지 후 fade-in)
+            if (ownsFade && UIManager.HasInstance)
+                UIManager.Instance.FadeIn(LOADING_FADE_DURATION);
+
+            _isLoading = false;
+        }
+
+        private LevelConfig LoadConfig(int levelId)
         {
             LevelConfig config = null;
 
@@ -101,36 +157,16 @@ namespace BalloonFlow
             }
             #endif
 
-            // Try LevelDataProvider first (pre-authored levels)
             if (config == null && ValidateProvider())
-            {
                 config = _levelDataProvider.GetLevelData(levelId);
-            }
 
-            // Fallback to LevelGenerator for procedurally generated levels
             if (config == null && LevelGenerator.HasInstance)
             {
                 Debug.Log($"[LevelManager] No pre-authored config for level {levelId}. Falling back to LevelGenerator.");
                 config = LevelGenerator.Instance.GenerateLevel(levelId);
             }
 
-            if (config == null)
-            {
-                Debug.LogWarning($"[LevelManager] Cannot load level {levelId}: no config found from provider or generator.");
-                return;
-            }
-
-            // 이전 레벨 오브젝트 정리 (같은 씬 내 레벨 전환 시).
-            // Resources.UnloadUnusedAssets / GC.Collect는 메인 스레드 stall (100ms+) 유발 →
-            // ObjectPool 사용 + Addressable로 이미 reference 관리되므로 명시 호출 불필요. 제거.
-            CleanupPreviousLevel();
-
-            _currentLevelId     = levelId;
-            _currentLevelConfig = config;
-            _levelActive        = true;
-            _retryCount         = 0;
-
-            SetupLevel(config);
+            return config;
         }
 
         /// <summary>
@@ -289,6 +325,16 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// 코루틴 버전 — 무거운 셋업 단계 사이에 yield return null 삽입해 한 프레임 부하 분산.
+        /// FadeOut → 이 함수 → FadeIn 순서로 호출됨.
+        /// </summary>
+        private IEnumerator SetupLevelCoroutine(LevelConfig config)
+        {
+            SetupLevel(config);
+            yield return null;
+        }
+
+        /// <summary>
         /// Coordinates subsystem setup for the given level config.
         /// Publishes setup events for balloons, holders, and rail, then resets the score.
         /// </summary>
@@ -440,7 +486,8 @@ namespace BalloonFlow
                 }
 
                 bool smooth = config.rail.smoothCorners;
-                float radius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 2.5f;
+                // 레벨 데이터의 cornerRadius는 의도적으로 무시 — 모든 레벨 1.5f 고정
+                float radius = 1.5f;
                 // 4면만 closedLoop (물리적 순환). 1~3면은 개방 경로 + 슬롯 래핑으로 순간이동
                 int sideCount = RailManager.GetRailSideCount(slotCount);
                 bool isLoop = (sideCount >= 4);

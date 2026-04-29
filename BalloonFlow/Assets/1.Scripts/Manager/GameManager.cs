@@ -48,7 +48,7 @@ namespace BalloonFlow
         [Range(0.5f, 10f)]
         public float attackSpeedMultiplier = 1f;
 
-        [Tooltip("프레임당 최대 발사 수. 1=단발 연속, 높으면 직선상 같은 색 풍선 연속 공격 가능. 동적 반영. (default: 1)")]
+        [Tooltip("(legacy) 슬롯 기반 스캔 한도 — per-dart 시스템에선 무시됨. (default: 1)")]
         [Range(1, 10)]
         public int maxFiresPerFrame = 1;
 
@@ -456,7 +456,23 @@ namespace BalloonFlow
                 IsTestPlayMode = false;
             }
 
-            // Fade In
+            // InGame 진입 시 LevelManager 셋업 완료까지 대기 (씬 보이기 전 모든 셋업 끝남).
+            // GameBootstrap.Start 가 LoadPendingLevel → LevelManager.LoadLevel 코루틴 시작.
+            if (_sceneName == SCENE_INGAME)
+            {
+                // 1) LevelManager 가 LoadLevel 시작할 때까지 대기 (최대 1초 timeout — 셋업 안 도는 케이스 방어).
+                float waitStart = Time.realtimeSinceStartup;
+                while (Time.realtimeSinceStartup - waitStart < 1.0f)
+                {
+                    if (LevelManager.HasInstance && LevelManager.Instance.IsLoading) break;
+                    yield return null;
+                }
+                // 2) 셋업 완료까지 대기.
+                while (LevelManager.HasInstance && LevelManager.Instance.IsLoading)
+                    yield return null;
+            }
+
+            // Fade In — 셋업 완전 종료 후
             if (UIManager.HasInstance)
                 UIManager.Instance.FadeIn(0.5f, _fadeSprite);
 

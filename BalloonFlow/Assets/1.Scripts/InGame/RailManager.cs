@@ -134,6 +134,9 @@ namespace BalloonFlow
         // Per-dart individual movement system
         private readonly List<DartOnRail> _darts = new List<DartOnRail>();
 
+        // FindDart O(N) → O(1) 캐시. Place/Remove 시 동기화.
+        private readonly Dictionary<int, DartOnRail> _dartById = new Dictionary<int, DartOnRail>();
+
         // Off-belt frozen dart system: darts removed from slots and held at fixed world positions
         public struct FrozenDartInfo
         {
@@ -291,7 +294,8 @@ namespace BalloonFlow
                 _dartProgressDescending = (a, b) => _darts[b].progress.CompareTo(_darts[a].progress);
             _sortedDartIndices.Sort(_dartProgressDescending);
 
-            // wrap 구간 걸침 감지
+            // wrap 구간 걸침 감지. sorted 인접 인덱스의 progress 차이가 max gap → 그 dart 의 sorted position 이 head.
+            // O(N²) → O(N).
             int headPosInSorted = 0;
             if (hasWrap && dartCount > 1)
             {
@@ -299,22 +303,19 @@ namespace BalloonFlow
                 float lowest = _darts[_sortedDartIndices[dartCount - 1]].progress;
                 if ((highest - lowest) > pathLen * 0.5f)
                 {
-                    float maxGapAhead = -1f;
+                    float maxGap = -1f;
+                    // sorted 인접 다트 간격 비교 (descending 이므로 prev.progress - current.progress).
+                    // 가장 큰 gap 의 다트가 chain head (그 뒤로 가장 큰 빈 구간).
                     for (int p = 0; p < dartCount; p++)
                     {
-                        int idx = _sortedDartIndices[p];
-                        float myProg = _darts[idx].progress;
-                        float minAhead = float.MaxValue;
-                        for (int j = 0; j < dartCount; j++)
+                        int prevPos = p == 0 ? dartCount - 1 : p - 1;
+                        float curProg = _darts[_sortedDartIndices[p]].progress;
+                        float prevProg = _darts[_sortedDartIndices[prevPos]].progress;
+                        float gap = prevProg - curProg;
+                        if (gap < 0f) gap += pathLen; // wrap edge
+                        if (gap > maxGap)
                         {
-                            if (j == idx) continue;
-                            float d = _darts[j].progress - myProg;
-                            if (d < 0f) d += pathLen;
-                            if (d > 0.001f && d < minAhead) minAhead = d;
-                        }
-                        if (minAhead > maxGapAhead)
-                        {
-                            maxGapAhead = minAhead;
+                            maxGap = gap;
                             headPosInSorted = p;
                         }
                     }
@@ -334,13 +335,20 @@ namespace BalloonFlow
                 DartOnRail dart = _darts[idx];
                 float myProg = dart.progress;
 
+                // closest-ahead = sorted 에서 즉시 직전 인덱스 (정렬 descending 이므로 progress 더 높은 다트).
+                // O(N²) → O(1) 최적화. wrap 시 i=0 → sorted[N-1] 의 progress + pathLen.
                 float closest = float.MaxValue;
-                for (int i = 0; i < dartCount; i++)
+                if (dartCount > 1)
                 {
-                    if (i == idx) continue;
-                    float d = _darts[i].progress - myProg;
-                    if (hasWrap && d < 0f) d += pathLen;
-                    if (d > 0.001f && d < closest) closest = d;
+                    int aheadSortedPos = p - 1;
+                    if (aheadSortedPos < 0) aheadSortedPos = dartCount - 1;
+                    int aheadIdx = _sortedDartIndices[aheadSortedPos];
+                    if (aheadIdx != idx)
+                    {
+                        float d = _darts[aheadIdx].progress - myProg;
+                        if (hasWrap && d < 0f) d += pathLen;
+                        if (d > 0.001f) closest = d;
+                    }
                 }
 
                 if (hasDeployPoints)
@@ -592,6 +600,7 @@ namespace BalloonFlow
             _nextDartId = 0;
             _boardFinished = false;
             _darts.Clear();
+            _dartById.Clear();
 
             for (int i = 0; i < _slotCount; i++)
             {
@@ -902,7 +911,9 @@ namespace BalloonFlow
         {
             if (_darts.Count >= _slotCount) return -1; // capacity check
             int id = _nextDartId++;
-            _darts.Add(new DartOnRail { dartId = id, dartColor = color, holderId = holderId, progress = progress, isFrozen = false });
+            var dart = new DartOnRail { dartId = id, dartColor = color, holderId = holderId, progress = progress, isFrozen = false };
+            _darts.Add(dart);
+            _dartById[id] = dart; // FindDart 캐시 동기화
             _occupiedCount = _darts.Count;
             PublishOccupancyChanged();
             return id;
@@ -933,9 +944,10 @@ namespace BalloonFlow
             return -1f;
         }
 
-        /// <summary>Remove a dart by ID.</summary>
+        /// <summary>Remove a dart by ID. O(1) dict lookup + O(N) list remove.</summary>
         public bool RemoveDartById(int dartId)
         {
+            if (!_dartById.Remove(dartId)) return false;
             for (int i = 0; i < _darts.Count; i++)
             {
                 if (_darts[i].dartId == dartId)
@@ -948,12 +960,10 @@ namespace BalloonFlow
             return false;
         }
 
-        /// <summary>Find a dart by ID.</summary>
+        /// <summary>Find a dart by ID. O(1) — dict 조회.</summary>
         public DartOnRail FindDart(int dartId)
         {
-            for (int i = 0; i < _darts.Count; i++)
-                if (_darts[i].dartId == dartId) return _darts[i];
-            return null;
+            return _dartById.TryGetValue(dartId, out DartOnRail d) ? d : null;
         }
 
         /// <summary>Get world position for a dart.</summary>
@@ -1166,15 +1176,18 @@ namespace BalloonFlow
         /// 이전 _slots[] 기반 구현은 PlaceDartAtProgress가 _slots를 채우지 않아 항상 empty
         /// 반환하던 버그. _darts 리스트로 전환.
         /// </summary>
+        // 재사용 HashSet (매 프레임 호출되므로 GC 방지).
+        private readonly HashSet<int> _reusableRailColors = new HashSet<int>();
+
         public HashSet<int> GetRailDartColors()
         {
-            var colors = new HashSet<int>();
+            _reusableRailColors.Clear();
             for (int i = 0; i < _darts.Count; i++)
             {
                 int c = _darts[i].dartColor;
-                if (c >= 0) colors.Add(c);
+                if (c >= 0) _reusableRailColors.Add(c);
             }
-            return colors;
+            return _reusableRailColors;
         }
 
         /// <summary>
@@ -1315,6 +1328,7 @@ namespace BalloonFlow
             {
                 if (_darts[i].dartColor == color)
                 {
+                    _dartById.Remove(_darts[i].dartId); // FindDart 캐시 동기화
                     _darts.RemoveAt(i);
                     removed++;
                 }
@@ -1539,6 +1553,7 @@ namespace BalloonFlow
             _nextDartId = 0;
             _boardFinished = false;
             _darts.Clear();
+            _dartById.Clear();
             _deployPoints.Clear();
             _activeDeployPoints.Clear();
             _frozenDartInfos.Clear();
@@ -1556,6 +1571,7 @@ namespace BalloonFlow
             _deployPoints.Clear();
             _activeDeployPoints.Clear();
             _darts.Clear();
+            _dartById.Clear();
             // Force-clear all slots immediately
             if (_slots != null)
             {
@@ -1575,6 +1591,7 @@ namespace BalloonFlow
             _deployPoints.Clear();
             _activeDeployPoints.Clear();
             _darts.Clear();
+            _dartById.Clear();
         }
 
         private void HandleContinueApplied(OnContinueApplied evt)

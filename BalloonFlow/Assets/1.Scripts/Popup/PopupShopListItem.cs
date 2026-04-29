@@ -1,3 +1,4 @@
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -46,6 +47,26 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprFrameNormal;
         [SerializeField] private Sprite _sprFramePurple;
         [SerializeField] private Sprite _sprBtnFramePurple;
+
+        [Header("[보상 표시 — 동적 생성]")]
+        [Tooltip("ShopItem.prefab. 미할당 시 Resources/UI/UIAssets/ShopItem 자동 로드")]
+        [SerializeField] private GameObject _shopItemPrefab;
+        [Tooltip("ItemArea (코인/무한하트/광고제거). 미할당 시 transform.Find('ItemArea') 자동 검색")]
+        [SerializeField] private RectTransform _itemArea;
+        [Tooltip("BoostArea (부스터 3종). 미할당 시 transform.Find('BoostArea') 자동 검색")]
+        [SerializeField] private RectTransform _boostArea;
+
+        [Header("[가격 (왼쪽 골드 영역) — TextPrice / TextPriceOutline]")]
+        [SerializeField] private TMP_Text _txtPrice;
+        [SerializeField] private TMP_Text _txtPriceOutline;
+
+        [Header("[보상 아이콘 — 비할당 시 미표시]")]
+        [SerializeField] private Sprite _iconCoin;
+        [SerializeField] private Sprite _iconInfiniteHearts;
+        [SerializeField] private Sprite _iconRemoveAds;
+        [SerializeField] private Sprite _iconSelectTool;
+        [SerializeField] private Sprite _iconShuffle;
+        [SerializeField] private Sprite _iconColorRemove;
 
         private ShopProductData _data;
         private System.Action<ShopProductData> _onBuy;
@@ -97,7 +118,119 @@ namespace BalloonFlow
 
             // 타입별 프레임/이미지 스왑: hasDiscount=true → Special Offer (Red) / false → Normal Bundle (Purple)
             ApplyProductTypeVisual(data.hasDiscount);
+
+            // 왼쪽 가격 표시 (TextPrice / TextPriceOutline) — 버튼 가격과 동일 텍스트로 일단 동기화
+            SetTextWithOutline(_txtPrice, _txtPriceOutline, data.price);
+
+            // 동적 보상 표시 (ItemArea / BoostArea)
+            SetupRewards(data.rewards);
         }
+
+        #region Reward area dynamic build
+
+        /// <summary>
+        /// rewards 항목을 ItemArea / BoostArea 에 동적 생성.
+        /// 분담:
+        ///   ItemArea  — coins, infiniteHeartsSeconds, removeAds
+        ///   BoostArea — select_tool, shuffle, color_remove
+        /// </summary>
+        private void SetupRewards(ShopRewards rewards)
+        {
+            EnsureRewardAreas();
+
+            ClearArea(_itemArea);
+            ClearArea(_boostArea);
+
+            if (rewards == null) return;
+
+            var prefab = GetShopItemPrefab();
+            if (prefab == null)
+            {
+                Debug.LogWarning("[PopupShopListItem] ShopItem prefab 미발견. Resources/UI/UIAssets/ShopItem 확인");
+                return;
+            }
+
+            // ── ItemArea ──
+            if (rewards.coins > 0)
+                SpawnRewardItem(prefab, _itemArea, _iconCoin, FormatCoins(rewards.coins));
+
+            if (rewards.infiniteHeartsSeconds > 0)
+                SpawnRewardItem(prefab, _itemArea, _iconInfiniteHearts, FormatHours(rewards.infiniteHeartsSeconds));
+
+            if (rewards.removeAds)
+                SpawnRewardItem(prefab, _itemArea, _iconRemoveAds, ""); // 카운트 비움 — 아이콘만
+
+            // ── BoostArea ──
+            if (rewards.boosters != null)
+            {
+                if (rewards.boosters.select_tool > 0)
+                    SpawnRewardItem(prefab, _boostArea, _iconSelectTool, $"x{rewards.boosters.select_tool}");
+                if (rewards.boosters.shuffle > 0)
+                    SpawnRewardItem(prefab, _boostArea, _iconShuffle, $"x{rewards.boosters.shuffle}");
+                if (rewards.boosters.color_remove > 0)
+                    SpawnRewardItem(prefab, _boostArea, _iconColorRemove, $"x{rewards.boosters.color_remove}");
+            }
+        }
+
+        private void SpawnRewardItem(GameObject prefab, RectTransform area, Sprite icon, string countText)
+        {
+            if (area == null) return;
+
+            var go = Instantiate(prefab, area);
+            go.SetActive(true);
+
+            // ShopItemView 자동 attach (prefab 에 미리 붙어있지 않으면)
+            var view = go.GetComponent<ShopItemView>();
+            if (view == null) view = go.AddComponent<ShopItemView>();
+            view.Setup(icon, countText);
+        }
+
+        private static void ClearArea(RectTransform area)
+        {
+            if (area == null) return;
+            for (int i = area.childCount - 1; i >= 0; i--)
+            {
+                var child = area.GetChild(i);
+                if (child != null) Destroy(child.gameObject);
+            }
+        }
+
+        /// <summary>ShopItem prefab 미할당 시 Resources fallback.</summary>
+        private GameObject GetShopItemPrefab()
+        {
+            if (_shopItemPrefab != null) return _shopItemPrefab;
+            _shopItemPrefab = Resources.Load<GameObject>("UI/UIAssets/ShopItem");
+            return _shopItemPrefab;
+        }
+
+        /// <summary>_itemArea / _boostArea 미할당 시 자식 GameObject 이름 기반 자동 검색.</summary>
+        private void EnsureRewardAreas()
+        {
+            if (_itemArea == null)
+                _itemArea = FindChildByName("ItemArea");
+            if (_boostArea == null)
+                _boostArea = FindChildByName("BoostArea");
+        }
+
+        private RectTransform FindChildByName(string name)
+        {
+            var rt = GetComponentsInChildren<RectTransform>(true)
+                .FirstOrDefault(t => t.name == name && t != transform);
+            return rt;
+        }
+
+        private static string FormatCoins(int coins) => coins.ToString("N0");
+
+        private static string FormatHours(int seconds)
+        {
+            if (seconds <= 0) return "";
+            float hours = seconds / 3600f;
+            if (hours >= 1f) return $"{Mathf.RoundToInt(hours)}h";
+            int minutes = Mathf.RoundToInt(seconds / 60f);
+            return $"{minutes}m";
+        }
+
+        #endregion
 
         private void ApplyProductTypeVisual(bool isSpecial)
         {

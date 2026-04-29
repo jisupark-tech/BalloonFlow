@@ -68,6 +68,11 @@ namespace BalloonFlow
                     _canvasGroup.blocksRaycasts = true;
                 }
             }
+
+            // CloseUI는 alpha만 0으로 토글하고 SetActive(false)는 안 하므로
+            // OnEnable 라이프사이클이 reopen 시 호출되지 않음 → PopupCommonFrame 등장 연출을 명시 호출.
+            var popFrame = GetComponentInChildren<PopupCommonFrame>(true);
+            if (popFrame != null) popFrame.PlayPopAnimation();
         }
 
         /// <summary>UI 닫기 (CanvasGroup으로 숨김. SetActive 토글 없이 Canvas 리빌드 최소화)</summary>

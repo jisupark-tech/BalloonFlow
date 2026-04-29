@@ -500,5 +500,7 @@ namespace BalloonFlow
         public bool musicOn;
         public bool hapticOn;
         public bool notificationOn;
+        public float hapticIntensity; // 0~1 multiplier (slider)
+        public float hapticDuration;  // 0~1 multiplier (slider)
     }
 }

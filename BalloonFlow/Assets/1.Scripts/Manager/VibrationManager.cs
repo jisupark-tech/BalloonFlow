@@ -87,6 +87,15 @@ namespace BalloonFlow
             if (milliseconds <= 0) return;
             if (SettingsManager.HasInstance && !SettingsManager.Instance.HapticOn) return;
 
+            // Slider multiplier 적용 (UISetting의 강도/지속시간 슬라이더 반영)
+            if (SettingsManager.HasInstance)
+            {
+                var sm = SettingsManager.Instance;
+                milliseconds = (long)(milliseconds * sm.HapticDuration);
+                amplitude    = Mathf.RoundToInt(amplitude * sm.HapticIntensity);
+                if (milliseconds <= 0 || amplitude <= 0) return;
+            }
+
 #if UNITY_ANDROID && !UNITY_EDITOR
             InitIfNeeded();
             if (!_initialized || _vibrator == null || _vibrationEffectClass == null) return;

@@ -36,6 +36,23 @@ BalloonFlow/Assets/LevelBackups/
 # Crashlytics
 crashlytics-build.properties
 
+# ─── Secrets / SDK Keys (DO NOT COMMIT) ────────────────────────────────────
+# Local SDK key overrides (partial class — actual values per-machine)
+BalloonFlow/Assets/1.Scripts/Core/SdkConfig.local.cs
+BalloonFlow/Assets/1.Scripts/Core/SdkConfig.local.cs.meta
+
+# Firebase config (per-machine, sensitive — request from owner)
+BalloonFlow/Assets/google-services.json
+BalloonFlow/Assets/google-services.json.meta
+BalloonFlow/Assets/GoogleService-Info.plist
+BalloonFlow/Assets/GoogleService-Info.plist.meta
+
+# Keystore (signing — never commit)
+*.keystore
+*.jks
+keystore.properties
+# ───────────────────────────────────────────────────────────────────────────
+
 # Firebase iOS/tvOS plugins — AOS-only build, 81MB+ each. Re-import unitypackage if iOS 활성화 시
 BalloonFlow/Assets/Plugins/iOS/
 BalloonFlow/Assets/Plugins/iOS.meta

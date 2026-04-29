@@ -156,6 +156,10 @@ namespace BalloonFlow
         [Header("[List Item Prefab 카테고리]")]
         [Tooltip("Gold = ShopListGold, General = ShopListItem (특가/번들), Ad = ShopListAd")]
         public ShopItemCategory category = ShopItemCategory.General;
+
+        /// <summary>Firestore ShopProductDoc.rewards 매핑. Inspector 임시 데이터에선 null.</summary>
+        [HideInInspector]
+        public ShopRewards rewards;
     }
 
     /// <summary>UI 의 List Item Prefab 선택용 카테고리.

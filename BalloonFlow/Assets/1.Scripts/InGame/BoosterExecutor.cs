@@ -241,7 +241,12 @@ namespace BalloonFlow
 
             // Canvas 찾기
             var canvas = FindAnyObjectByType<Canvas>();
-            if (canvas == null) return;
+            if (canvas == null)
+            {
+                Debug.LogError("[BoosterExecutor] No Canvas found — cancel button can't be created. Cancelling pending booster (inventory refunded).");
+                CancelPendingBooster();
+                return;
+            }
 
             _cancelButtonGO = new GameObject("BoosterCancelBtn");
             _cancelButtonGO.transform.SetParent(canvas.transform, false);

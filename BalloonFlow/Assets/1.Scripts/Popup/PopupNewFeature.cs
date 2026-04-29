@@ -20,6 +20,10 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtDescription;
         [SerializeField] private TMP_Text _txtDescriptionOutline;
 
+        [Header("[Buttons]")]
+        [Tooltip("프리팹의 OK 버튼 직접 링크")]
+        [SerializeField] private Button _btnOk;
+
         [Header("[Feature Images — Inspector에서 할당]")]
         [Tooltip("newFeatureLoop.png 드래그")]
         [SerializeField] private Sprite _sprLoop;
@@ -43,6 +47,7 @@ namespace BalloonFlow
         protected override void Awake()
         {
             base.Awake();
+            if (_btnOk != null) _btnOk.onClick.AddListener(CloseUI);
             if (_frame != null)
             {
                 if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.AddListener(() => CloseUI());
@@ -53,6 +58,7 @@ namespace BalloonFlow
         protected override void OnDestroy()
         {
             base.OnDestroy();
+            if (_btnOk != null) _btnOk.onClick.RemoveAllListeners();
             if (_frame != null)
             {
                 if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.RemoveAllListeners();

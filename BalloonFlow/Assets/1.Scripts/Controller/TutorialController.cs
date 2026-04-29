@@ -717,27 +717,28 @@ namespace BalloonFlow
 
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
+            Debug.Log($"[TutorialDbg] HandleLevelLoaded levelId={evt.levelId}");
+
             // 1) LevelConfig에 tutorialSteps가 있으면 우선 사용
             TutorialConfig configFromData = TryBuildFromLevelData(evt.levelId);
             if (configFromData != null)
             {
-                if (IsTutorialComplete(configFromData.tutorialId)) return;
-                // 기존 코드 방식과 동일하게 등록 후 시작
+                bool complete1 = IsTutorialComplete(configFromData.tutorialId);
+                Debug.Log($"[TutorialDbg] LevelData config found: tutorialId={configFromData.tutorialId} complete={complete1}");
+                if (complete1) return;
                 _configByLevel[configFromData.levelId] = configFromData;
                 StartTutorial(configFromData.tutorialId);
                 return;
             }
 
             // 2) Fallback: 코드에 하드코딩된 튜토리얼
-            if (!_configByLevel.TryGetValue(evt.levelId, out TutorialConfig config))
-            {
-                return;
-            }
+            bool hasConfig = _configByLevel.TryGetValue(evt.levelId, out TutorialConfig config);
+            Debug.Log($"[TutorialDbg] Hardcoded config for level {evt.levelId}: {(hasConfig ? $"tutorialId={config.tutorialId}" : "NONE")}");
+            if (!hasConfig) return;
 
-            if (IsTutorialComplete(config.tutorialId))
-            {
-                return;
-            }
+            bool complete2 = IsTutorialComplete(config.tutorialId);
+            Debug.Log($"[TutorialDbg] tutorialId={config.tutorialId} alreadyComplete={complete2}");
+            if (complete2) return;
 
             StartTutorial(config.tutorialId);
         }

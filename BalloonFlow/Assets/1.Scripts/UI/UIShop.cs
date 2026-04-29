@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -71,11 +72,82 @@ namespace BalloonFlow
             // 미리 처리하지만, prefab 직접 띄우는 케이스 대비 fallback)
             EnsureContentLayout();
 
-            // Inspector 가 비어있으면 임시 데이터로 채움
-            if (_products == null || _products.Length == 0)
-                _products = BuildDefaultTempProducts();
+            // Firestore 카탈로그 우선. 매니저 미준비/실패 시 임시 데이터 fallback.
+            SubscribeToCatalog();
+        }
 
+        private void OnDestroy()
+        {
+            if (ShopCatalogService.HasInstance)
+                ShopCatalogService.Instance.OnCatalogLoaded -= OnCatalogReady;
+        }
+
+        /// <summary>ShopCatalogService 구독. 이미 로드 상태면 즉시 적용. 매니저 부재 시 fallback.</summary>
+        private void SubscribeToCatalog()
+        {
+            if (ShopCatalogService.HasInstance)
+            {
+                ShopCatalogService.Instance.OnCatalogLoaded += OnCatalogReady;
+                if (ShopCatalogService.Instance.IsLoaded)
+                {
+                    OnCatalogReady();
+                }
+                else
+                {
+                    // 로딩 대기 중. 일시적으로 임시 데이터 표시 (사용자 빈 화면 방지)
+                    if (_products == null || _products.Length == 0)
+                        _products = BuildDefaultTempProducts();
+                    ResetAndLoadProducts();
+                }
+            }
+            else
+            {
+                // 매니저 없음 (Editor 스탠드얼론 테스트 등) — 임시 데이터
+                if (_products == null || _products.Length == 0)
+                    _products = BuildDefaultTempProducts();
+                ResetAndLoadProducts();
+            }
+        }
+
+        /// <summary>Firestore 카탈로그 로드 완료 시 실행. UserData 기준 필터 + 변환 + 재구성.</summary>
+        private void OnCatalogReady()
+        {
+            var user = (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+                ? UserDataService.Instance.CurrentUser
+                : null;
+
+            var visible = ShopCatalogService.Instance.GetVisibleForUser(user);
+            _products = visible.Select(ConvertDocToData).ToArray();
+            Debug.Log($"[UIShop] Catalog loaded — {_products.Length} products visible.");
             ResetAndLoadProducts();
+        }
+
+        /// <summary>ShopProductDoc(서버 모델) → ShopProductData(UI 모델) 변환.</summary>
+        private static ShopProductData ConvertDocToData(ShopProductDoc doc)
+        {
+            return new ShopProductData
+            {
+                productId        = doc.productId,
+                title            = string.IsNullOrEmpty(doc.title_loc_key) ? doc.productId : doc.title_loc_key,
+                price            = $"${doc.priceUsd:F2}",
+                hasDiscount      = doc.discountPercent > 0,
+                discountPercent  = doc.discountPercent,
+                hasTimeLimit     = doc.hasTimeLimit,
+                timeLimitSeconds = doc.timeLimitSeconds,
+                category         = MapCategory(doc.category),
+                rewards          = doc.rewards   // 동적 보상 표시용
+            };
+        }
+
+        private static ShopItemCategory MapCategory(string cat)
+        {
+            if (string.IsNullOrEmpty(cat)) return ShopItemCategory.General;
+            switch (cat.ToLowerInvariant())
+            {
+                case "gold":      return ShopItemCategory.Gold;
+                case "ad_reward": return ShopItemCategory.Ad;
+                default:          return ShopItemCategory.General; // bundle / special_offer / remove_ads
+            }
         }
 
         /// <summary>
@@ -235,10 +307,20 @@ namespace BalloonFlow
             UpdateMoreButton();
         }
 
+        /// <summary>
+        /// BtnMoreProducts 는 항상 활성 + 항상 _contentRoot 의 마지막 sibling (= 스크롤 최하단) 보장.
+        /// 이전엔 모든 상품 로드 완료 시 SetActive(false) 했지만, 디자인 요청으로 노출 유지.
+        /// </summary>
         private void UpdateMoreButton()
         {
-            if (_btnMoreProducts != null)
-                _btnMoreProducts.gameObject.SetActive(_products != null && _displayedCount < _products.Length);
+            if (_btnMoreProducts == null) return;
+
+            if (!_btnMoreProducts.gameObject.activeSelf)
+                _btnMoreProducts.gameObject.SetActive(true);
+
+            // 항상 스크롤 최하단으로
+            if (_btnMoreProducts.transform.parent == _contentRoot)
+                _btnMoreProducts.transform.SetAsLastSibling();
         }
 
         /// <summary>상품 구매 콜백 → ShopManager 라우팅.</summary>

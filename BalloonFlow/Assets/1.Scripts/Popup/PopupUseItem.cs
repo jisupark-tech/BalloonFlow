@@ -256,8 +256,23 @@ namespace BalloonFlow
             _onCancel?.Invoke();
             _activeBoosterType = null;
 
-            if (_dimImage != null) _dimImage.gameObject.SetActive(false);
+            HideOverlay();
             CloseUI();
+        }
+
+        /// <summary>Cutout/Dim overlay 비활성화. Cancel 및 자동 close (BoosterExecutor.CloseUseItemPopup) 모두에서 호출.</summary>
+        private void HideOverlay()
+        {
+            if (_cutoutImage != null) _cutoutImage.gameObject.SetActive(false);
+            if (_dimImage != null) _dimImage.gameObject.SetActive(false);
+        }
+
+        public override void CloseUI()
+        {
+            // UIBase.CloseUI()는 alpha=0 만 처리 → OnDisable이 fire 안 됨.
+            // BoosterExecutor 자동 close 경로에서도 overlay 잔존 방지.
+            HideOverlay();
+            base.CloseUI();
         }
 
         public Sprite GetBoosterSprite(string boosterType)

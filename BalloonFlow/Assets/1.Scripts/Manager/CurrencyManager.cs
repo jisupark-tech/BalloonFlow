@@ -136,6 +136,10 @@ namespace BalloonFlow
             SaveCoins();
             RecordTransaction(amount, true, source.ToString());
 
+            // Firestore 동기화 (atomic increment). UserDataService 미준비 시 무시 (offline).
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+                UserDataService.Instance.AdjustCoins(amount, $"src:{source}");
+
             EventBus.Publish(new OnCoinChanged
             {
                 currentCoins = _currentCoins,
@@ -167,6 +171,10 @@ namespace BalloonFlow
             _currentCoins -= amount;
             SaveCoins();
             RecordTransaction(amount, false, sink.ToString());
+
+            // Firestore 동기화 (atomic decrement)
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+                UserDataService.Instance.AdjustCoins(-amount, $"sink:{sink}");
 
             EventBus.Publish(new OnCoinChanged
             {

@@ -156,6 +156,20 @@ namespace BalloonFlow
         /// <param name="productId">Product identifier from the catalogue.</param>
         public bool PurchaseProduct(string productId)
         {
+            // 1차: Firestore 카탈로그 (ShopCatalogService) — bundle_pop_pack 등 새 productId 들
+            if (ShopCatalogService.HasInstance)
+            {
+                var doc = ShopCatalogService.Instance.Get(productId);
+                if (doc != null)
+                {
+                    // TODO Task #17: Unity IAP IStoreListener.InitiatePurchase + Cloud Function validatePurchase 라우팅.
+                    // 지금은 결제 흐름 미구현 — productId 매칭 확인용 LogInfo.
+                    Debug.Log($"[ShopManager] Firestore product matched: {productId} ({doc.category}, ${doc.priceUsd}). IAP 통합 대기 중.");
+                    return true;
+                }
+            }
+
+            // 2차: 옛 자체 카탈로그 (코인 부스터 등 BuildCatalogue 항목)
             ShopProduct product = FindProduct(productId);
             if (product == null)
             {

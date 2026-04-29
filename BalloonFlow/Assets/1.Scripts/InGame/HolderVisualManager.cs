@@ -1109,6 +1109,7 @@ namespace BalloonFlow
                 distSinceLastPlacement += beltSpeed * Time.deltaTime;
 
                 // physGap 누적 시마다 배치. overshoot은 carry-over + placement 위치 보정.
+                // overshoot 보정으로 chain이 cluster들 끝 근처라도 lock 안 걸림 (위치가 살짝 이동하며 빈자리 활용).
                 // 부하/race 방지를 위해 프레임당 최대 3개로 제한.
                 int maxPlacementsThisFrame = 3;
                 while (visual.magazineRemaining > 0 && maxPlacementsThisFrame-- > 0

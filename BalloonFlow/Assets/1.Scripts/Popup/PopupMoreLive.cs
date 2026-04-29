@@ -157,7 +157,22 @@ namespace BalloonFlow
         {
             if (!LifeManager.HasInstance) return;
 
-            // TODO: 광고 시청 후 콜백에서 호출
+            // 광고 미준비 또는 AdManager 부재 시 즉시 보상 (Editor / SDK init 실패 fallback)
+            if (!AdManager.HasInstance || !AdManager.Instance.IsRewardedAdReady())
+            {
+                Debug.LogWarning("[PopupMoreLive] Rewarded ad not ready — granting reward as fallback.");
+                GrantAdReward();
+                return;
+            }
+
+            // 광고 시청 → 보상 콜백에서 하트 +1. Lives 충전은 outgame이라 ad protection 우회.
+            AdManager.Instance.ShowRewardedAd(GrantAdReward, ignoreAdProtection: true);
+        }
+
+        private void GrantAdReward()
+        {
+            if (!LifeManager.HasInstance) return;
+
             LifeManager.Instance.GrantAdRewardLife();
             RefreshDisplay();
 

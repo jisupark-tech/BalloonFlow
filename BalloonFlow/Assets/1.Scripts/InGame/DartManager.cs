@@ -146,16 +146,15 @@ namespace BalloonFlow
             UpdateSlotDartPositions();
             UpdatePerDartPositions();
 
-            // 공격 스캔: 셀 한 칸(cellSpacing) 당 정확히 1회 — 다트가 셀 한 칸 이동하는 시간을 인터벌로.
-            // 셀 사이즈 / 벨트 속도 / 후반 배속 모두 반영해서 누락 없이 매 셀 마다 1회 공격 기회.
+            // 셀 한 칸당 1회 스캔 (cellSpacing/dartSpeed 인터벌). MAX 제약은 제거 — 한 틱당 모든 ready 다트 발사.
+            // (매 프레임 호출하면 N*M FindTarget 으로 부하 심함. timer로 ~60% 감소, 발사 정확도는 동일.)
             _scanTimer += Time.deltaTime;
-            float atkMult = GameManager.HasInstance ? GameManager.Instance.Board.attackSpeedMultiplier : 1f;
             float interval;
             if (RailManager.HasInstance)
             {
-                // 다트 월드 속도 = RotationSpeed(slots/sec, UserSpeedMultiplier 포함) × SlotSpacing(units/slot)
                 float worldRailSpeed = RailManager.Instance.RotationSpeed * RailManager.Instance.SlotSpacing;
-                float occMult = RailManager.Instance.GetOccupancySpeedMultiplier(); // 후반 ×2
+                float occMult = RailManager.Instance.GetOccupancySpeedMultiplier();
+                float atkMult = GameManager.HasInstance ? GameManager.Instance.Board.attackSpeedMultiplier : 1f;
                 float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
                 float speed = worldRailSpeed * occMult * Mathf.Max(atkMult, 0.0001f);
                 interval = speed > 0f ? cellSpacing / speed : 0.05f;
@@ -168,7 +167,6 @@ namespace BalloonFlow
             if (_scanTimer >= interval)
             {
                 _scanTimer -= interval;
-                ScanAndFireDarts();
                 ScanAndFirePerDart();
             }
 
@@ -749,8 +747,13 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Per-dart scanning: fires darts from the per-dart system at matching balloons.
+        /// 다트별 매-프레임 동기 스캔. 매 다트가 풍선의 perpendicular zone에 진입하는 순간 발사.
+        /// MAX_FIRES_PER_FRAME 제약 제거 — 다트별 독립 발사 (한 다트는 한 번만 발사 후 _darts에서 제거).
+        /// _reservedTargets 가 같은 풍선에 대한 중복 발사 방지.
+        /// 시퀀셜 firing 체크: holder별 최저 dartId 미리 1회 계산 (O(N²) → O(N)).
         /// </summary>
+        private readonly Dictionary<int, int> _holderMinDartIdCache = new Dictionary<int, int>();
+
         private void ScanAndFirePerDart()
         {
             if (!RailManager.HasInstance || !BalloonController.HasInstance) return;
@@ -759,37 +762,37 @@ namespace BalloonFlow
             var darts = rail.GetAllDarts();
             if (darts.Count == 0) return;
 
-            int fired = 0;
+            bool freeMode = GameManager.HasInstance && GameManager.Instance.Board.dartFreeFireMode;
 
-            for (int i = 0; i < darts.Count && fired < MAX_FIRES_PER_FRAME; i++)
+            // O(N) 사전 계산: holder별 최저 dartId. 이후 sequential 체크는 O(1) 조회.
+            if (!freeMode)
+            {
+                _holderMinDartIdCache.Clear();
+                for (int j = 0; j < darts.Count; j++)
+                {
+                    var d = darts[j];
+                    if (d.dartColor < 0) continue;
+                    if (!_holderMinDartIdCache.TryGetValue(d.holderId, out int existing) || d.dartId < existing)
+                        _holderMinDartIdCache[d.holderId] = d.dartId;
+                }
+            }
+
+            for (int i = 0; i < darts.Count; i++)
             {
                 var dart = darts[i];
                 if (dart.dartColor < 0) continue;
 
-                // Skip if another dart from same holder with lower ID exists (sequential firing)
-                bool freeMode = GameManager.HasInstance && GameManager.Instance.Board.dartFreeFireMode;
-                if (!freeMode)
-                {
-                    bool blocked = false;
-                    for (int j = 0; j < darts.Count; j++)
-                    {
-                        if (i == j) continue;
-                        if (darts[j].holderId == dart.holderId && darts[j].dartId < dart.dartId && darts[j].dartColor >= 0)
-                        {
-                            blocked = true;
-                            break;
-                        }
-                    }
-                    if (blocked) continue;
-                }
+                // Sequential firing: 같은 holder의 lowest dartId만 발사 가능.
+                if (!freeMode && _holderMinDartIdCache.TryGetValue(dart.holderId, out int minId) && dart.dartId != minId)
+                    continue;
 
                 Vector3 dartPos = rail.GetPositionAtDistance(dart.progress);
                 Vector3 fireDir = rail.GetDartFiringDirection(dart.dartId);
 
-                int targetId = DirectionalTargeting.FindTarget(dartPos, fireDir, dart.dartColor);
+                // 이미 reserve 된 풍선은 후보에서 제외 → 다음 closest 풍선을 발사 대상으로 받음.
+                // (이전: 한 풍선 reserve 되면 같은 tick 다른 다트들이 그 풍선만 보고 skip → 다른 풍선 못 잡음.)
+                int targetId = DirectionalTargeting.FindTarget(dartPos, fireDir, dart.dartColor, _reservedTargets);
                 if (targetId < 0) continue;
-
-                if (_reservedTargets.Contains(targetId)) continue;
 
                 BalloonData targetData = BalloonController.Instance.GetBalloon(targetId);
                 if (targetData == null || targetData.isPopped) continue;
@@ -797,7 +800,22 @@ namespace BalloonFlow
                 // Fire!
                 int color = dart.dartColor;
                 int dartId = dart.dartId;
+                int holderId = dart.holderId;
                 rail.RemoveDartById(dartId);
+
+                // 캐시 업데이트: 이 holder의 새 최저 dartId 재계산. 안 그러면 cache stale로 같은 holder의
+                // 다른 다트가 이번 scan tick에 발사 못 함 → 풍선 절반만 공격되는 현상.
+                if (!freeMode)
+                {
+                    int newMin = int.MaxValue;
+                    for (int j = 0; j < darts.Count; j++)
+                    {
+                        if (darts[j].holderId == holderId && darts[j].dartColor >= 0 && darts[j].dartId < newMin)
+                            newMin = darts[j].dartId;
+                    }
+                    if (newMin == int.MaxValue) _holderMinDartIdCache.Remove(holderId);
+                    else _holderMinDartIdCache[holderId] = newMin;
+                }
 
                 _reservedTargets.Add(targetId);
 
@@ -844,7 +862,6 @@ namespace BalloonFlow
                     dartObj.transform.DOMove(targetPos, ft).SetEase(Ease.Linear);
                 }
 
-                fired++;
                 i--; // re-check same index since we removed from list
             }
         }

@@ -144,6 +144,7 @@ namespace BalloonFlow
             }
 
             SaveToPrefs();
+            SyncToFirestore("UseLive");
             PublishLifeChanged();
             return true;
         }
@@ -160,6 +161,7 @@ namespace BalloonFlow
 
             _currentLives = Mathf.Min(_currentLives + count, MAX_LIVES);
             SaveToPrefs();
+            SyncToFirestore($"AddLife({count})");
             PublishLifeChanged();
         }
 
@@ -171,6 +173,7 @@ namespace BalloonFlow
             _currentLives = MAX_LIVES;
             _rechargeTimer = 0f;
             SaveToPrefs();
+            SyncToFirestore("RefillLives");
             PublishLifeChanged();
         }
 
@@ -213,6 +216,16 @@ namespace BalloonFlow
             _infiniteHeartsEndTime = Time.realtimeSinceStartup + durationSeconds;
             _currentLives = MAX_LIVES;
             SaveToPrefs();
+            SyncToFirestore($"InfiniteHearts({durationSeconds}s)");
+
+            // Firestore infiniteHeartsUntil — 절대 시각(UTC)으로 저장 (cross-device 동기화)
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+            {
+                var until = Firebase.Firestore.Timestamp.FromDateTime(
+                    DateTime.UtcNow.AddSeconds(durationSeconds));
+                UserDataService.Instance.SetInfiniteHeartsUntil(until);
+            }
+
             PublishLifeChanged();
             Debug.Log($"[LifeManager] Infinite hearts activated for {durationSeconds / 3600f:F1}h");
         }
@@ -263,6 +276,32 @@ namespace BalloonFlow
             PlayerPrefs.SetInt(PREFS_CURRENT_LIVES, _currentLives);
             PlayerPrefs.SetString(PREFS_LAST_RECHARGE_UTC, _lastRechargeUtcTicks.ToString());
             PlayerPrefs.Save();
+        }
+
+        /// <summary>
+        /// Firestore 동기화. UserDataService 미준비 시 무시 (offline cache로 PlayerPrefs).
+        /// lives 와 nextLifeAt 둘 다 절대값으로 set (atomic increment 아님 — race condition 회피).
+        /// </summary>
+        private void SyncToFirestore(string reason)
+        {
+            if (!UserDataService.HasInstance || !UserDataService.Instance.IsReady) return;
+            var svc = UserDataService.Instance;
+
+            // lives는 직접 set
+            svc.UpdateField("lives", _currentLives);
+
+            // nextLifeAt = lastRecharge + 30분 (FULL이면 default(Timestamp) = unset)
+            if (_currentLives < MAX_LIVES)
+            {
+                var lastRecharge = new DateTime(_lastRechargeUtcTicks, DateTimeKind.Utc);
+                var nextLifeAt   = Firebase.Firestore.Timestamp.FromDateTime(
+                    lastRecharge.AddSeconds(RECHARGE_SECONDS));
+                svc.SetNextLifeAt(nextLifeAt);
+            }
+            else
+            {
+                svc.SetNextLifeAt(default);
+            }
         }
 
         private void ProcessOfflineRecharge()
