@@ -82,6 +82,12 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprItemBtnHard;
         [SerializeField] private Sprite _sprItemBtnSuperHard;
 
+        [Header("[Settings 버튼 — 난이도별 리소스]")]
+        [SerializeField] private Image _imgSettingColor;
+        [SerializeField] private Sprite _sprSettingNormal;
+        [SerializeField] private Sprite _sprSettingHard;
+        [SerializeField] private Sprite _sprSettingSuperHard;
+
         [Header("[배경/오버레이]")]
         [SerializeField] private Image _backgroundImage;
 
@@ -158,6 +164,16 @@ namespace BalloonFlow
                 if (_imgBtnRemove != null) _imgBtnRemove.sprite = btnSpr;
                 if (_imgBtnHand != null) _imgBtnHand.sprite = btnSpr;
             }
+
+            // Settings 버튼 리소스
+            Sprite settingSpr = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _sprSettingHard,
+                DifficultyPurpose.SuperHard  => _sprSettingSuperHard,
+                _                            => _sprSettingNormal
+            };
+            if (_imgSettingColor != null && settingSpr != null)
+                _imgSettingColor.sprite = settingSpr;
         }
 
         public void SetLevel(int _levelId)
