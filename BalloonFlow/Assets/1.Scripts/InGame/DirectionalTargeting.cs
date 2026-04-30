@@ -243,7 +243,9 @@ namespace BalloonFlow
                     {
                         if (!allBalloons[i].isPopped)
                         {
-                            _cachedOccupancy.Add(WorldToGrid(allBalloons[i].position));
+                            // GetBalloonWorldPosition 사용 — LevelSafeMult 적용된 위치로 BoardStateManager.outermost 와 일관.
+                            Vector3 wp = BalloonController.Instance.GetBalloonWorldPosition(allBalloons[i].balloonId);
+                            _cachedOccupancy.Add(WorldToGrid(wp));
                         }
                     }
                 }
@@ -286,39 +288,61 @@ namespace BalloonFlow
         private static int _cachedMaxScanFrame = -1;
 
         /// <summary>
-        /// 다트와 타겟 사이에 다른 풍선(아무 색)이 있는지 월드 좌표 기반으로 체크.
-        /// 그리드 반올림 없이 직접 거리 비교 — 관통 불가.
+        /// 다트와 타겟 사이에 다른 풍선(아무 색)이 있는지 grid occupancy 기반 step 검사.
+        /// 이전: 모든 풍선 순회 O(n) + GetBalloonWorldPosition Dictionary lookup. dart 슬롯 × candidate × n
+        /// 으로 풍선 수 비례 폭증.
+        /// 변경: 이미 빌드된 occupancy(HashSet) 의 cell step 검사 — O(steps), max ~보드 너비.
+        /// step 마다 axis cell + perp ±1 cell 검사 — FindTarget 의 perpTolerance 1.0 과 동기 (관통 방지).
+        /// target cell 자체는 차단 검사에서 제외 (자기 자신).
         /// </summary>
         private static bool IsPathBlocked(Vector3 dartPos, Vector3 targetPos, ScanDirection direction, HashSet<Vector2Int> occupancy)
         {
-            if (!BalloonController.HasInstance) return false;
+            if (occupancy == null) return false;
 
-            // FindTarget 의 perpTolerance 와 동기화 (1.0). 다른 값이면 FindTarget이 candidate로 본 풍선의 차단 판정 누락.
-            float perpTolerance = _gridCellSize * 1.0f;
-            float targetFiringDist = GetFiringAxisDistance(dartPos, targetPos, direction);
-            if (targetFiringDist <= 0f) return false;
+            Vector2Int dartCell   = WorldToGrid(dartPos);
+            Vector2Int targetCell = WorldToGrid(targetPos);
 
-            BalloonData[] all = BalloonController.Instance.GetAllBalloons();
-            if (all == null) return false;
-
-            for (int i = 0; i < all.Length; i++)
+            Vector2Int delta;
+            int targetFiringSteps;
+            bool isHorizontal;
+            switch (direction)
             {
-                if (all[i].isPopped) continue;
-
-                // 실제 월드 위치 사용
-                Vector3 bPos = BalloonController.Instance.GetBalloonWorldPosition(all[i].balloonId);
-                if (Vector3.Distance(bPos, targetPos) < 0.01f) continue;
-
-                // 수직 거리 체크 (같은 열/행인지)
-                float perpDist = GetPerpendicularDistance(dartPos, bPos, direction);
-                if (perpDist > perpTolerance) continue;
-
-                // 발사축 거리 체크 (다트와 타겟 사이에 있는지)
-                float firingDist = GetFiringAxisDistance(dartPos, bPos, direction);
-                if (firingDist > 0f && firingDist < targetFiringDist)
-                    return true; // 다트와 타겟 사이에 풍선 있음 → 차단
+                case ScanDirection.Right: delta = new Vector2Int(1, 0);  targetFiringSteps = targetCell.x - dartCell.x;  isHorizontal = true;  break;
+                case ScanDirection.Left:  delta = new Vector2Int(-1, 0); targetFiringSteps = dartCell.x - targetCell.x;  isHorizontal = true;  break;
+                case ScanDirection.Up:    delta = new Vector2Int(0, 1);  targetFiringSteps = targetCell.y - dartCell.y;  isHorizontal = false; break;
+                case ScanDirection.Down:  delta = new Vector2Int(0, -1); targetFiringSteps = dartCell.y - targetCell.y;  isHorizontal = false; break;
+                default: return false;
             }
 
+            // 인접 또는 뒤쪽 — 차단 검사 불가 (FindTarget 에서 firingDist > 0 보장 후 호출되지만 grid round 결과 0 가능)
+            if (targetFiringSteps <= 1) return false;
+
+            // dart cell 다음부터 target cell 직전 axis cell 까지 step. 각 step 에서 axis + perp ±1 cell 검사.
+            // perp ±1 은 FindTarget 의 perpTolerance(_gridCellSize × 1.0) 와 동기 — 약간 어긋난 row/column 의 차단 풍선도 잡음.
+            Vector2Int check = dartCell + delta;
+            for (int s = 1; s < targetFiringSteps; s++)
+            {
+                // axis cell
+                if (check != targetCell && occupancy.Contains(check)) return true;
+
+                // perp ±1 cell (target 본인은 차단으로 간주 안 함)
+                if (isHorizontal)
+                {
+                    Vector2Int up   = new Vector2Int(check.x, check.y + 1);
+                    Vector2Int down = new Vector2Int(check.x, check.y - 1);
+                    if (up   != targetCell && occupancy.Contains(up))   return true;
+                    if (down != targetCell && occupancy.Contains(down)) return true;
+                }
+                else
+                {
+                    Vector2Int right = new Vector2Int(check.x + 1, check.y);
+                    Vector2Int left  = new Vector2Int(check.x - 1, check.y);
+                    if (right != targetCell && occupancy.Contains(right)) return true;
+                    if (left  != targetCell && occupancy.Contains(left))  return true;
+                }
+
+                check += delta;
+            }
             return false;
         }
 
