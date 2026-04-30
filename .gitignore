@@ -107,3 +107,7 @@ BalloonFlow/Assets/Resources/Texture/smog.png
 BalloonFlow/Assets/Resources/Texture/smog.png.meta
 BalloonFlow/Assets/1.Scripts/UX/UIParticleBinder.cs.meta
 BalloonFlow/BalloonFlow_Shot/BalloonFlow_InGame_20260427_143308.png
+
+# Firebase Admin seed — service account 키 + Node modules (package-lock.json 은 커밋 OK)
+firebase/seed/service-account.json
+firebase/seed/node_modules/

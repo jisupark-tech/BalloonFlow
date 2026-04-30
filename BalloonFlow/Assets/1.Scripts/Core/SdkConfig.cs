@@ -15,9 +15,11 @@ namespace BalloonFlow
         public static string FacebookClientToken         { get; private set; } = "";
         public static string AppLovinSdkKey              { get; private set; } = "";
         public static string AppLovinRewardedAdUnitId    { get; private set; } = "";
+        public static string AppLovinIOSRewardedAdUnitId { get; private set; } = "";
         public static string AppLovinBannerAdUnitId      { get; private set; } = "";
         public static string AppLovinInterstitialAdUnitId { get; private set; } = "";
         public static string AdmobAndroidAppId           { get; private set; } = "";
+        public static string AdmobIOSAppId               { get; private set; } = "";
         public static string AppsFlyerDevKey             { get; private set; } = "";
         public static string AppsFlyerAppId              { get; private set; } = "";
 
