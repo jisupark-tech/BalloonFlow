@@ -694,6 +694,13 @@ namespace BalloonFlow
                 {
                     _dragDirectionLocked = true;
                     _dragIsHorizontal = deltaX > deltaY;
+
+                    // 가로 페이지 swipe로 결정된 순간, Shop 내부 세로 ScrollRect를 잠가
+                    // 드래그 중 세로 스크롤이 동시에 일어나는 충돌을 방지.
+                    if (_dragIsHorizontal)
+                    {
+                        SetShopInnerScrollEnabled(false);
+                    }
                 }
 
                 if (!_dragDirectionLocked || !_dragIsHorizontal) return;
@@ -707,6 +714,9 @@ namespace BalloonFlow
             else if (!touching && _isDragging)
             {
                 _isDragging = false;
+
+                // 드래그 종료 — 가로 잠금 동안 비활성화했던 Shop 내부 ScrollRect를 항상 복구.
+                SetShopInnerScrollEnabled(true);
 
                 if (!_dragIsHorizontal)
                 {
@@ -733,6 +743,34 @@ namespace BalloonFlow
                 _currentPageIndex = targetPage;
                 AnimateToPage(targetPage);
                 UpdateNavState(targetPage);
+            }
+        }
+
+        /// <summary>
+        /// _pageShop 하위의 모든 ScrollRect를 일괄 enable/disable.
+        /// 가로 페이지 swipe가 lock되는 순간 세로 스크롤이 동시에 일어나지 않도록
+        /// false로 잠갔다가 드래그 종료 시 true로 복구한다.
+        /// </summary>
+        private void SetShopInnerScrollEnabled(bool enabled)
+        {
+            if (_pageShop == null) return;
+
+            var scrolls = _pageShop.GetComponentsInChildren<ScrollRect>(true);
+            for (int i = 0; i < scrolls.Length; i++)
+            {
+                var sr = scrolls[i];
+                if (sr == null) continue;
+
+                if (!enabled)
+                {
+                    // 진행 중이던 관성/드래그를 즉시 멈춰 잔여 이동을 방지.
+                    sr.StopMovement();
+                    sr.enabled = false;
+                }
+                else
+                {
+                    sr.enabled = true;
+                }
             }
         }
 
