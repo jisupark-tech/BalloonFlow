@@ -61,7 +61,7 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtPrice;
         [SerializeField] private TMP_Text _txtPriceOutline;
 
-        [Header("[보상 아이콘 — 비할당 시 미표시]")]
+        [Header("[보상 아이콘 — Inspector fallback. Awake 시 Addressable atlas 에서 override]")]
         [SerializeField] private Sprite _iconCoin;
         [SerializeField] private Sprite _iconInfiniteHearts;
         [SerializeField] private Sprite _iconRemoveAds;
@@ -70,6 +70,20 @@ namespace BalloonFlow
         [SerializeField] private Sprite _iconShuffle;
         [FormerlySerializedAs("_iconColorRemove")]
         [SerializeField] private Sprite _iconZap;
+
+        private void Awake()
+        {
+            if (ResourceManager.HasInstance)
+            {
+                var rm = ResourceManager.Instance;
+                _iconCoin           = rm.UISpriteOr("iconGold",          _iconCoin);
+                _iconInfiniteHearts = rm.UISpriteOr("iconHearInfinite",  _iconInfiniteHearts);
+                _iconRemoveAds      = rm.UISpriteOr("iconAd",            _iconRemoveAds);
+                _iconHand           = rm.UISpriteOr("iconHand",          _iconHand);
+                _iconShuffle        = rm.UISpriteOr("iconSuffle",        _iconShuffle);
+                _iconZap            = rm.UISpriteOr("iconZap",           _iconZap);
+            }
+        }
 
         private ShopProductData _data;
         private System.Action<ShopProductData> _onBuy;

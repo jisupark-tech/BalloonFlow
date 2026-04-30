@@ -60,6 +60,15 @@ namespace BalloonFlow
             EnsureBottomExitAnchor();
 
             SetupShaders();
+
+            // 'iconSuffle' 은 atlas 측 의도된 typo
+            if (ResourceManager.HasInstance)
+            {
+                var rm = ResourceManager.Instance;
+                _sprHand    = rm.UISpriteOr("iconHand",    _sprHand);
+                _sprShuffle = rm.UISpriteOr("iconSuffle",  _sprShuffle);
+                _sprZap     = rm.UISpriteOr("iconZap",     _sprZap);
+            }
         }
 
         /// <summary>

@@ -47,6 +47,15 @@ namespace BalloonFlow
                 _originalScale = transform.localScale;
                 _originalScaleCaptured = true;
             }
+
+            // Frame sprite override (난이도별). Side panel 은 atlas sprite 명 미확정.
+            if (ResourceManager.HasInstance)
+            {
+                var rm = ResourceManager.Instance;
+                _sprFrameNormal    = rm.UISpriteOr("framePopupNormal",    _sprFrameNormal);
+                _sprFrameHard      = rm.UISpriteOr("framePopupHard",      _sprFrameHard);
+                _sprFrameSuperHard = rm.UISpriteOr("framePopupSuperHard", _sprFrameSuperHard);
+            }
         }
 
         private void OnEnable()

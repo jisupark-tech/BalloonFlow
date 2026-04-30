@@ -120,6 +120,23 @@ namespace BalloonFlow
             if (_colorPanel != null) _colorPanel.SetActive(false);
             RefreshBoosterCounts();
             RefreshLockState();
+
+            // ItemBtn 변형은 atlas 명 미확정 → Inspector 값 그대로
+            if (ResourceManager.HasInstance)
+            {
+                var rm = ResourceManager.Instance;
+                _sprSpeedNormal    = rm.UISpriteOr("ingameBtnFastNormal",    _sprSpeedNormal);
+                _sprSpeedHard      = rm.UISpriteOr("ingameBtnFastHard",      _sprSpeedHard);
+                _sprSpeedSuperHard = rm.UISpriteOr("ingameBtnFastSuperHard", _sprSpeedSuperHard);
+
+                _sprItemPanelNormal    = rm.UISpriteOr("frameItemNormal",    _sprItemPanelNormal);
+                _sprItemPanelHard      = rm.UISpriteOr("frameItemHard",      _sprItemPanelHard);
+                _sprItemPanelSuperHard = rm.UISpriteOr("frameItemSuperHard", _sprItemPanelSuperHard);
+
+                _sprSettingNormal    = rm.UISpriteOr("btnSettingNormal",    _sprSettingNormal);
+                _sprSettingHard      = rm.UISpriteOr("btnSettingHard",      _sprSettingHard);
+                _sprSettingSuperHard = rm.UISpriteOr("btnSettingSuperHard", _sprSettingSuperHard);
+            }
         }
 
         private void OnDestroy()

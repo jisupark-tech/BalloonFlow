@@ -131,6 +131,49 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// CDM 다운로드 단계 — Addressables 의 ADDR_LABEL_CDM 라벨로 묶인 원격 콘텐츠 fetch.
+        /// 진행도는 LoadingFlow 의 step weight 안에서 sub-progress 로 표시.
+        /// 라벨에 등록된 콘텐츠 없거나 모두 cache 됐으면 즉시 통과.
+        /// </summary>
+        private IEnumerator DownloadCdmStep()
+        {
+            // 다운로드 사이즈 확인 — 0 이면 cache hit, skip
+            var sizeTask = AddressableSystem.GetDownloadSizeAsync(Const.ADDR_LABEL_CDM);
+            while (!sizeTask.IsCompleted) yield return null;
+
+            long size = sizeTask.Result;
+            if (size <= 0)
+            {
+                yield return new WaitForSeconds(0.2f); // UX: 다운로드 0 이어도 UI 가 너무 빨리 넘어가지 않게
+                yield break;
+            }
+
+            if (_ui != null) _ui.SetStatus($"Downloading data... ({FormatBytes(size)})");
+
+            float lastReportedProgress = 0f;
+            var dlTask = AddressableSystem.DownloadDependenciesAsync(Const.ADDR_LABEL_CDM,
+                onProgress: p => lastReportedProgress = p);
+
+            while (!dlTask.IsCompleted)
+            {
+                // 슬라이더 sub-progress 는 LoadingFlow 가 step weight 단위로 갱신 — 여기선 대기만.
+                // 더 부드럽게 표시하려면 _ui.SetSubProgress(lastReportedProgress) 같은 API 추가 가능.
+                yield return null;
+            }
+
+            if (!dlTask.Result)
+                Debug.LogWarning("[TitleController] CDM 다운로드 실패 — 로컬 콘텐츠만 사용");
+        }
+
+        private static string FormatBytes(long bytes)
+        {
+            if (bytes < 1024) return $"{bytes} B";
+            if (bytes < 1024 * 1024) return $"{bytes / 1024} KB";
+            if (bytes < 1024L * 1024 * 1024) return $"{bytes / (1024 * 1024)} MB";
+            return $"{bytes / (1024L * 1024 * 1024)} GB";
+        }
+
+        /// <summary>
         /// 인터넷 연결 확인 — 끊겨있으면 PopupError(Wifi) 띄우고 status text 를 "Connecting to internet..." 로.
         /// 사용자가 OK 누르면 popup 닫히고 재확인 → 여전히 끊겨있으면 다시 popup. 연결되면 진행.
         /// </summary>
@@ -175,27 +218,33 @@ namespace BalloonFlow
         {
             switch (index)
             {
-                case 0: // Initializing — Firebase / Manager 초기화 대기
-                    // Firebase 가 자체 Init 코루틴을 가질 경우 대기 (HasInstance 만 확인).
-                    yield return new WaitForSeconds(0.4f);
+                case 0: // Initializing — Addressables init + UI atlas 사전 로드 + Firebase / Manager 초기화
+                    {
+                        var initTask = AddressableSystem.InitializeAsync();
+                        while (!initTask.IsCompleted) yield return null;
+                        if (!initTask.Result)
+                            Debug.LogWarning("[TitleController] Addressables init 실패 — 로컬 빌드만 사용 가능할 수 있음");
+
+                        // UI atlas + popup/UI/InGame prefab 일괄 사전 로드 — 이후 sync API 사용 가능
+                        if (ResourceManager.HasInstance)
+                        {
+                            var rm = ResourceManager.Instance;
+                            var atlasTask = rm.PreloadUIAtlasAsync();
+                            while (!atlasTask.IsCompleted) yield return null;
+
+                            var prefabsTask = rm.PreloadAddressablePrefabsAsync();
+                            while (!prefabsTask.IsCompleted) yield return null;
+                        }
+                    }
+                    yield return new WaitForSeconds(0.2f);
                     break;
 
                 case 1: // Server connect — Firebase Auth / Firestore ping 등 hook
                     yield return new WaitForSeconds(0.6f);
                     break;
 
-                case 2: // Download — CDM (Content Download Manager) 호출 hook
-                    // 점진 진행: 0.5초 동안 fake increments. 실제로는 다운로드 progress callback 으로 대체.
-                    {
-                        float dur = 0.8f;
-                        float t = 0f;
-                        while (t < dur)
-                        {
-                            t += Time.deltaTime;
-                            // 단계 내 sub-progress 까지 부드럽게 보이려면 SetProgress 보간 가능 (생략)
-                            yield return null;
-                        }
-                    }
+                case 2: // Download — Addressables CDM (Remote_CDM 그룹의 모든 의존성 fetch)
+                    yield return DownloadCdmStep();
                     break;
 
                 case 3: // Assets — 레벨/리소스 prefetch

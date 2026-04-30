@@ -113,11 +113,16 @@ namespace BalloonFlow
                 return existingInScene;
             }
 
-            // (4) Resources 에서 prefab 로드 후 instantiate
-            var _prefab = Resources.Load<GameObject>(_path);
+            // (4) Addressables 우선 시도 — Resources 외 마이그레이션 된 prefab 들 (popup_*, ui_* 키).
+            //     Addressables 가 sync API 가 없어 동기 path 호환 위해 ResourceManager 의 사전 로드 캐시 사용.
+            //     Cache miss 시 Resources.Load 폴백 (UITitle, PopupError 가 그 경로로 동작).
+            var _prefab = ResourceManager.HasInstance
+                ? ResourceManager.Instance.GetCachedAddressablePrefab(_path)
+                : null;
+            if (_prefab == null) _prefab = Resources.Load<GameObject>(_path);
             if (_prefab == null)
             {
-                Debug.LogError($"[UIManager] Prefab not found: {_path}");
+                Debug.LogError($"[UIManager] Prefab not found (Addressables/Resources): {_path}");
                 return null;
             }
 

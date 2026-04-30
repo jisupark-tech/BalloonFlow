@@ -20,7 +20,7 @@ namespace BalloonFlow
         [SerializeField] private Image _imgIcon;
         [SerializeField] private Image _imgInnerFrame;
 
-        [Header("[Preset Icons — Inspector에서 할당]")]
+        [Header("[Preset Icons — Inspector fallback. Awake 시 Addressable atlas 에서 override]")]
         [SerializeField] private Sprite _sprIconCancel;
         [SerializeField] private Sprite _sprIconWifi;
         [SerializeField] private Sprite _sprIconCheck;
@@ -32,6 +32,15 @@ namespace BalloonFlow
             {
                 if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.AddListener(() => CloseUI());
                 if (_frame.BtnExit != null) _frame.BtnExit.onClick.AddListener(() => CloseUI());
+            }
+
+            // UI atlas 가 ResourceManager 에 사전 로드되어 있으면 sprite 교체. 미준비면 Inspector 값 그대로.
+            if (ResourceManager.HasInstance)
+            {
+                var rm = ResourceManager.Instance;
+                _sprIconCancel = rm.UISpriteOr("iconCancel", _sprIconCancel);
+                _sprIconWifi   = rm.UISpriteOr("iconWifi",   _sprIconWifi);
+                _sprIconCheck  = rm.UISpriteOr("iconCheck",  _sprIconCheck);
             }
         }
 

@@ -53,6 +53,21 @@ namespace BalloonFlow
                 if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.AddListener(() => CloseUI());
                 if (_frame.BtnExit != null) _frame.BtnExit.onClick.AddListener(() => CloseUI());
             }
+
+            // 기믹 sprite override
+            if (ResourceManager.HasInstance)
+            {
+                var rm = ResourceManager.Instance;
+                _sprLoop        = rm.UISpriteOr("newFeatureLoop",          _sprLoop);
+                _sprPinata      = rm.UISpriteOr("newFeaturePinata",        _sprPinata);
+                _sprHidden      = rm.UISpriteOr("newFeatureHiddenBalloon", _sprHidden);
+                _sprIronBox     = rm.UISpriteOr("newFeatureIronBox",       _sprIronBox);
+                _sprSpawner     = rm.UISpriteOr("newFeatureSpawner",       _sprSpawner);
+                _sprKeyLock     = rm.UISpriteOr("newFeatureKeyLock",       _sprKeyLock);
+                _sprFrozenLayer = rm.UISpriteOr("newFeatureFrozenLayer",   _sprFrozenLayer);
+                _sprBaricade    = rm.UISpriteOr("newFeatureBaricade",      _sprBaricade);
+                _sprFrozenBox   = rm.UISpriteOr("newFeatureFrozenBox",     _sprFrozenBox);
+            }
         }
 
         protected override void OnDestroy()

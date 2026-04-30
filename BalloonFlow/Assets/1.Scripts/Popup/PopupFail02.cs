@@ -55,6 +55,15 @@ namespace BalloonFlow
         {
             base.Awake();
             LoadStageSpritesFromResources();
+
+            // Skull (Hard/SuperHard) 는 atlas 에 있음. Stage sprites 는 Resources/ 에만 있어 별도 로드 유지.
+            if (ResourceManager.HasInstance)
+            {
+                var rm = ResourceManager.Instance;
+                _sprSkullHard      = rm.UISpriteOr("iconSkullHard",      _sprSkullHard);
+                _sprSkullSuperHard = rm.UISpriteOr("iconSkullSuperHard", _sprSkullSuperHard);
+            }
+
             if (RetryBtn != null) RetryBtn.onClick.AddListener(OnRetryClicked);
             if (HomeBtn != null) HomeBtn.onClick.AddListener(OnHomeClicked);
             if (ExitBtn != null) ExitBtn.onClick.AddListener(OnHomeClicked);
@@ -62,6 +71,7 @@ namespace BalloonFlow
 
         private void LoadStageSpritesFromResources()
         {
+            // Stage sprite 들은 Resources/Sprites/UI/ 에 있고 atlas 와 별개.
             var n = Resources.Load<Sprite>("Sprites/UI/resultStageNormal");
             var h = Resources.Load<Sprite>("Sprites/UI/resultStageHard");
             var s = Resources.Load<Sprite>("Sprites/UI/resultStageSuperHard");

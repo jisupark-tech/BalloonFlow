@@ -32,7 +32,7 @@ namespace BalloonFlow
         [Header("[Single Outline — 해금 모드]")]
         [SerializeField] private GameObject _txtSingleOutline;
 
-        [Header("[Item Sprites — Inspector에서 할당]")]
+        [Header("[Item Sprites — Inspector fallback. Awake 시 Addressable atlas 에서 override]")]
         [SerializeField] private Sprite _sprHand;
         [SerializeField] private Sprite _sprShuffle;
         [SerializeField] private Sprite _sprZap;
@@ -49,6 +49,15 @@ namespace BalloonFlow
                 if (_frame.BtnHorizRed != null) _frame.BtnHorizRed.onClick.AddListener(OnCancelClicked);
                 if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.AddListener(OnBuyClicked);
                 if (_frame.BtnExit != null) _frame.BtnExit.onClick.AddListener(OnCancelClicked);
+            }
+
+            // 'iconSuffle' 은 atlas 측 의도된 typo. ResourceManager 에 atlas 사전 로드되어 있으면 sprite 교체.
+            if (ResourceManager.HasInstance)
+            {
+                var rm = ResourceManager.Instance;
+                _sprHand    = rm.UISpriteOr("iconHand",    _sprHand);
+                _sprShuffle = rm.UISpriteOr("iconSuffle",  _sprShuffle);
+                _sprZap     = rm.UISpriteOr("iconZap",     _sprZap);
             }
         }
 
