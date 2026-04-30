@@ -1,0 +1,13 @@
+{
+  "name": "balloonflow-firestore-seed",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Admin SDK uploader for /products catalog",
+  "scripts": {
+    "seed": "node seed.js",
+    "dry-run": "node seed.js --dry-run"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}

@@ -17,10 +17,13 @@ namespace BalloonFlow
     {
         #region Constants — Design-aligned booster IDs
 
-        public const string SELECT_TOOL  = "select_tool";    // 손(Hand): 큐에서 원하는 보관함 선택
-        public const string SHUFFLE      = "shuffle";        // 큐 보관함 순서 랜덤 셔플
-        public const string COLOR_REMOVE = "color_remove";   // 필드+레일 지정 색상 전체 제거
-        public const string HAND         = SELECT_TOOL;      // HAND = SELECT_TOOL (명세 통합)
+        // ID 는 IAP 문서 (balloonflow_IAP.xlsx) 표기 통일: Hand/Shuffle/Zap
+        public const string HAND         = "hand";    // 큐에서 원하는 보관함 선택
+        public const string SHUFFLE      = "shuffle"; // 큐 보관함 순서 랜덤 셔플
+        public const string ZAP          = "zap";     // 필드+레일 지정 색상 전체 제거
+        // Legacy 별칭 — 외부 참조 깨지지 않게 유지. 새 코드는 HAND/ZAP 사용.
+        public const string SELECT_TOOL  = HAND;
+        public const string COLOR_REMOVE = ZAP;
 
         private const string PrefsKeyPrefix = "BalloonFlow_Booster_";
 
@@ -40,9 +43,9 @@ namespace BalloonFlow
 
         private readonly Dictionary<string, BoosterDef> _boosterDefs = new Dictionary<string, BoosterDef>
         {
-            { SELECT_TOOL,  new BoosterDef { cost = 1900, unlockLevel = 9 } },  // 손(Hand)
-            { SHUFFLE,      new BoosterDef { cost = 1500, unlockLevel = 12 } },
-            { COLOR_REMOVE, new BoosterDef { cost = 2900, unlockLevel = 15 } },
+            { HAND,    new BoosterDef { cost = 1900, unlockLevel = 9 } },
+            { SHUFFLE, new BoosterDef { cost = 1500, unlockLevel = 12 } },
+            { ZAP,     new BoosterDef { cost = 2900, unlockLevel = 15 } },
         };
 
         private readonly Dictionary<string, int> _inventory = new Dictionary<string, int>();

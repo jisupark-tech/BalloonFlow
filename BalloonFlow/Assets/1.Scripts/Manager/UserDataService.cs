@@ -149,17 +149,17 @@ namespace BalloonFlow
             if (!_isReady || delta == 0) return;
             int current = boosterId switch
             {
-                "select_tool" => _user.boosters.select_tool,
-                "shuffle"     => _user.boosters.shuffle,
-                "color_remove" => _user.boosters.color_remove,
+                "hand"    => _user.boosters.hand,
+                "shuffle" => _user.boosters.shuffle,
+                "zap"     => _user.boosters.zap,
                 _ => 0
             };
             int next = Mathf.Max(0, current + delta);
             switch (boosterId)
             {
-                case "select_tool":  _user.boosters.select_tool  = next; break;
-                case "shuffle":      _user.boosters.shuffle      = next; break;
-                case "color_remove": _user.boosters.color_remove = next; break;
+                case "hand":    _user.boosters.hand    = next; break;
+                case "shuffle": _user.boosters.shuffle = next; break;
+                case "zap":     _user.boosters.zap     = next; break;
                 default:
                     Debug.LogWarning($"{LOG_TAG} Unknown booster id: {boosterId}");
                     return;

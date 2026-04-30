@@ -94,10 +94,10 @@ namespace BalloonFlow
     [FirestoreData]
     public class BoosterInventory
     {
-        // productId 와 일치 — 스크립트 상수와 정합
-        [FirestoreProperty] public int select_tool { get; set; } = 0;
+        // 문서 (balloonflow_IAP.xlsx) 표기와 통일: Hand / Shuffle / Zap
+        [FirestoreProperty] public int hand { get; set; } = 0;
         [FirestoreProperty] public int shuffle { get; set; } = 0;
-        [FirestoreProperty] public int color_remove { get; set; } = 0;
+        [FirestoreProperty] public int zap { get; set; } = 0;
     }
 
     [FirestoreData]

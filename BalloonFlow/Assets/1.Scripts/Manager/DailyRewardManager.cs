@@ -25,8 +25,9 @@ namespace BalloonFlow
 
         // Bonus type string constants
         public const string BONUS_NONE           = "none";
-        public const string BONUS_BOOSTER_SELECT  = BoosterManager.SELECT_TOOL;
+        public const string BONUS_BOOSTER_HAND   = BoosterManager.HAND;
         public const string BONUS_BOOSTER_SHUFFLE = BoosterManager.SHUFFLE;
+        public const string BONUS_BOOSTER_ZAP    = BoosterManager.ZAP;
         public const string BONUS_HEART_REFILL   = "heart_refill";
         public const string BONUS_MIXED          = "booster_mixed";
 
@@ -41,7 +42,7 @@ namespace BalloonFlow
         {
             new DailyReward { day = 1, coins = 100,  bonusType = BONUS_NONE,           bonusCount = 0 },
             new DailyReward { day = 2, coins = 150,  bonusType = BONUS_NONE,           bonusCount = 0 },
-            new DailyReward { day = 3, coins = 200,  bonusType = BONUS_BOOSTER_SELECT,   bonusCount = 1 },
+            new DailyReward { day = 3, coins = 200,  bonusType = BONUS_BOOSTER_HAND,    bonusCount = 1 },
             new DailyReward { day = 4, coins = 300,  bonusType = BONUS_NONE,           bonusCount = 0 },
             new DailyReward { day = 5, coins = 500,  bonusType = BONUS_HEART_REFILL,   bonusCount = 1 },
             new DailyReward { day = 6, coins = 400,  bonusType = BONUS_BOOSTER_SHUFFLE,bonusCount = 1 },
@@ -165,8 +166,9 @@ namespace BalloonFlow
                     GrantHeartRefill(reward.bonusCount);
                     break;
 
-                case BONUS_BOOSTER_SELECT:
+                case BONUS_BOOSTER_HAND:
                 case BONUS_BOOSTER_SHUFFLE:
+                case BONUS_BOOSTER_ZAP:
                 case BONUS_MIXED:
                     GrantBoosters(reward.bonusType, reward.bonusCount);
                     break;
@@ -248,7 +250,7 @@ namespace BalloonFlow
 
         /// <summary>
         /// Bonus type identifier.
-        /// Values: "none", "select_tool", "shuffle", "heart_refill", "booster_mixed"
+        /// Values: "none", "hand", "shuffle", "zap", "heart_refill", "booster_mixed"
         /// </summary>
         public string bonusType;
 

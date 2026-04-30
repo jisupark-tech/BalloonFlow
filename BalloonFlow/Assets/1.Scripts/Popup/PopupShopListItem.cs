@@ -1,5 +1,6 @@
 using System.Linq;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 using TMPro;
 
@@ -64,9 +65,11 @@ namespace BalloonFlow
         [SerializeField] private Sprite _iconCoin;
         [SerializeField] private Sprite _iconInfiniteHearts;
         [SerializeField] private Sprite _iconRemoveAds;
-        [SerializeField] private Sprite _iconSelectTool;
+        [FormerlySerializedAs("_iconSelectTool")]
+        [SerializeField] private Sprite _iconHand;
         [SerializeField] private Sprite _iconShuffle;
-        [SerializeField] private Sprite _iconColorRemove;
+        [FormerlySerializedAs("_iconColorRemove")]
+        [SerializeField] private Sprite _iconZap;
 
         private ShopProductData _data;
         private System.Action<ShopProductData> _onBuy;
@@ -132,7 +135,7 @@ namespace BalloonFlow
         /// rewards 항목을 ItemArea / BoostArea 에 동적 생성.
         /// 분담:
         ///   ItemArea  — coins, infiniteHeartsSeconds, removeAds
-        ///   BoostArea — select_tool, shuffle, color_remove
+        ///   BoostArea — hand, shuffle, zap
         /// </summary>
         private void SetupRewards(ShopRewards rewards)
         {
@@ -163,12 +166,12 @@ namespace BalloonFlow
             // ── BoostArea ──
             if (rewards.boosters != null)
             {
-                if (rewards.boosters.select_tool > 0)
-                    SpawnRewardItem(prefab, _boostArea, _iconSelectTool, $"x{rewards.boosters.select_tool}");
+                if (rewards.boosters.hand > 0)
+                    SpawnRewardItem(prefab, _boostArea, _iconHand, $"x{rewards.boosters.hand}");
                 if (rewards.boosters.shuffle > 0)
                     SpawnRewardItem(prefab, _boostArea, _iconShuffle, $"x{rewards.boosters.shuffle}");
-                if (rewards.boosters.color_remove > 0)
-                    SpawnRewardItem(prefab, _boostArea, _iconColorRemove, $"x{rewards.boosters.color_remove}");
+                if (rewards.boosters.zap > 0)
+                    SpawnRewardItem(prefab, _boostArea, _iconZap, $"x{rewards.boosters.zap}");
             }
         }
 

@@ -333,8 +333,8 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Inspector 가 비어있을 때 사용할 임시 상품 데이터.
-        /// ShopManager.BuildCatalogue 와 productId 정합 — 실제 구매 라우팅 가능.
+        /// Inspector 가 비어있을 때 사용할 임시 상품 데이터 (Editor 스탠드얼론 + Firestore 미연결 fallback).
+        /// 실제 product ID 는 Firestore /products (full Store SKU) — ShopCatalogService 통해 fetch.
         /// </summary>
         private static ShopProductData[] BuildDefaultTempProducts()
         {
@@ -384,12 +384,12 @@ namespace BalloonFlow
                 new ShopProductData { productId = "heart_refill",  title = "하트 충전",   price = "₩1,100",
                                        category = ShopItemCategory.General },
 
-                // ── 부스터 (코인 구매) — productId는 BoosterManager 상수와 정확 일치 — General prefab ──
-                new ShopProductData { productId = "select_tool",   title = "Hand 부스터",         price = "1,900 coins",
+                // ── 부스터 (코인 구매) — productId 는 BoosterManager 상수와 정확 일치 — General prefab ──
+                new ShopProductData { productId = "hand",    title = "Hand 부스터",    price = "1,900 coins",
                                        category = ShopItemCategory.General },
-                new ShopProductData { productId = "shuffle",       title = "Shuffle 부스터",      price = "1,500 coins",
+                new ShopProductData { productId = "shuffle", title = "Shuffle 부스터", price = "1,500 coins",
                                        category = ShopItemCategory.General },
-                new ShopProductData { productId = "color_remove",  title = "Color Remove 부스터", price = "2,900 coins",
+                new ShopProductData { productId = "zap",     title = "Zap 부스터",     price = "2,900 coins",
                                        category = ShopItemCategory.General },
             };
         }

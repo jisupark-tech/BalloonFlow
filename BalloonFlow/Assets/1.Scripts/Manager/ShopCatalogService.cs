@@ -15,9 +15,7 @@ namespace BalloonFlow
     public class ShopCatalogService : Singleton<ShopCatalogService>
     {
         private const string LOG_TAG = "[ShopCatalogService]";
-        // ⚠️ 비표준 — Firestore 콘솔에 "productId" 로 만들어졌고 임시로 매칭. 표준은 "products" (복수).
-        // TODO: 컬렉션을 "products" 로 마이그레이션 후 이 상수도 변경 (Task 참조).
-        private const string COLLECTION = "productId";
+        private const string COLLECTION = "products";
 
         private readonly List<ShopProductDoc> _all = new List<ShopProductDoc>();
         private bool _isLoaded;

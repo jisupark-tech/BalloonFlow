@@ -9,129 +9,134 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Manages in-app purchases using Unity IAP SDK with conditional compilation.
-    /// Provides simulation mode when UNITY_IAP is not defined.
-    /// Products: coin packs, bundles, ad removal, heart refill.
+    /// Unity IAP wrapper. 상품 목록과 보상은 Firestore /products (ShopCatalogService) 가 진실 소스.
+    /// ShopCatalogService 로드 완료 후 자동 init. UNITY_IAP 미정의 시 simulation 모드.
     /// </summary>
-    /// <remarks>
-    /// Layer: Game | Genre: Puzzle | Role: Manager | Phase: 3
-    /// DB Reference: No DB match found — generated from L3 YAML logicFlow (BM monetization)
-    /// Requires: CurrencyManager (for coin grants after purchase)
-    /// </remarks>
     public class IAPManager : Singleton<IAPManager>
 #if UNITY_IAP
         , IDetailedStoreListener
 #endif
     {
-        #region Constants
+        private const string LOG_TAG = "[IAPManager]";
 
-        // Coin Pack product IDs
-        public const string PRODUCT_COIN_500 = "coin_500";
-        public const string PRODUCT_COIN_1200 = "coin_1200";
-        public const string PRODUCT_COIN_3000 = "coin_3000";
-        public const string PRODUCT_COIN_8000 = "coin_8000";
-        public const string PRODUCT_COIN_20000 = "coin_20000";
-
-        // Bundle product IDs
-        public const string PRODUCT_STARTER_PACK = "starter_pack";
-        public const string PRODUCT_WEEKEND_BUNDLE = "weekend_bundle";
-
-        // Utility product IDs
-        public const string PRODUCT_AD_REMOVE = "ad_remove";
-        public const string PRODUCT_HEART_REFILL = "heart_refill_iap";
-
-        private const string PREFS_KEY_AD_REMOVED = "BalloonFlow_AdRemoved";
-        private const string PREFS_KEY_STARTER_PURCHASED = "BalloonFlow_StarterPurchased";
-
-        #endregion
-
-        #region Types
-
-        /// <summary>
-        /// Maps product IDs to their coin grant amounts.
-        /// </summary>
-        private struct ProductCoinGrant
-        {
-            public string productId;
-            public int coinAmount;
-        }
-
-        #endregion
-
-        #region Fields
+        // 카테고리: 문서/seed 와 일치 (coin / bundle / noads / offer)
+        public const string CAT_NOADS = "noads";
 
         private bool _isInitialized;
+        private bool _initStarted;
         private readonly Dictionary<string, string> _cachedPrices = new Dictionary<string, string>();
 
-        private static readonly ProductCoinGrant[] CoinGrants = new ProductCoinGrant[]
-        {
-            new ProductCoinGrant { productId = PRODUCT_COIN_500, coinAmount = 500 },
-            new ProductCoinGrant { productId = PRODUCT_COIN_1200, coinAmount = 1200 },
-            new ProductCoinGrant { productId = PRODUCT_COIN_3000, coinAmount = 3000 },
-            new ProductCoinGrant { productId = PRODUCT_COIN_8000, coinAmount = 8000 },
-            new ProductCoinGrant { productId = PRODUCT_COIN_20000, coinAmount = 20000 },
-            new ProductCoinGrant { productId = PRODUCT_STARTER_PACK, coinAmount = 3000 },
-            new ProductCoinGrant { productId = PRODUCT_WEEKEND_BUNDLE, coinAmount = 5000 },
-            new ProductCoinGrant { productId = PRODUCT_HEART_REFILL, coinAmount = 0 },
-            new ProductCoinGrant { productId = PRODUCT_AD_REMOVE, coinAmount = 0 },
-        };
-
 #if UNITY_IAP
-        private IStoreController _storeController;
-        private IExtensionProvider _extensionProvider;
+        private IStoreController    _storeController;
+        private IExtensionProvider  _extensionProvider;
 #endif
 
-        #endregion
-
-        #region Properties
-
-        /// <summary>
-        /// Whether ads have been removed via IAP.
-        /// </summary>
-        public bool AdsRemoved => PlayerPrefs.GetInt(PREFS_KEY_AD_REMOVED, 0) == 1;
-
-        /// <summary>
-        /// Whether the one-time starter pack has been purchased.
-        /// </summary>
-        public bool StarterPackPurchased => PlayerPrefs.GetInt(PREFS_KEY_STARTER_PURCHASED, 0) == 1;
-
-        #endregion
-
-        #region Lifecycle
+        /// <summary>광고 영구 제거 여부. Firestore UserData.removedAds 가 진실 소스. 미준비 시 PlayerPrefs fallback.</summary>
+        public bool AdsRemoved
+        {
+            get
+            {
+                if (UserDataService.HasInstance && UserDataService.Instance.IsReady
+                    && UserDataService.Instance.CurrentUser != null)
+                    return UserDataService.Instance.CurrentUser.removedAds;
+                return PlayerPrefs.GetInt("BalloonFlow_AdRemoved", 0) == 1;
+            }
+        }
 
         protected override void OnSingletonAwake()
         {
-            InitializeStore();
+            TryStartInit();
         }
 
-        #endregion
-
-        #region Public Methods
-
-        /// <summary>
-        /// Whether the IAP system has been initialized and is ready.
-        /// </summary>
-        public bool IsInitialized()
+        private void TryStartInit()
         {
-            return _isInitialized;
+            if (_initStarted || _isInitialized) return;
+
+            if (!ShopCatalogService.HasInstance)
+            {
+                // 부트 순서상 거의 발생하지 않음 — SdkBootstrap 이 둘 다 같이 attach
+                Debug.LogWarning($"{LOG_TAG} ShopCatalogService 미준비 — 다음 프레임 재시도");
+                return;
+            }
+
+            if (ShopCatalogService.Instance.IsLoaded)
+            {
+                StartInit(ShopCatalogService.Instance.All);
+                return;
+            }
+
+            ShopCatalogService.Instance.OnCatalogLoaded += HandleCatalogLoaded;
         }
 
-        /// <summary>
-        /// Initiates a purchase for the given product ID.
-        /// </summary>
-        /// <param name="productId">The product ID to purchase.</param>
+        private void HandleCatalogLoaded()
+        {
+            if (ShopCatalogService.HasInstance)
+                ShopCatalogService.Instance.OnCatalogLoaded -= HandleCatalogLoaded;
+            StartInit(ShopCatalogService.Instance.All);
+        }
+
+        private void StartInit(IReadOnlyList<ShopProductDoc> catalog)
+        {
+            if (_initStarted || _isInitialized) return;
+            _initStarted = true;
+
+#if UNITY_IAP
+            var builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance());
+            int registered = 0;
+            foreach (var p in catalog)
+            {
+                if (string.IsNullOrEmpty(p.productId)) continue;
+                builder.AddProduct(p.productId, ResolveProductType(p));
+                registered++;
+            }
+            UnityPurchasing.Initialize(this, builder);
+            Debug.Log($"{LOG_TAG} Unity IAP init started — {registered} products registered.");
+#else
+            // Simulation: catalog 가격 그대로 캐시. 결제 시 보상 즉시 지급
+            _cachedPrices.Clear();
+            foreach (var p in catalog)
+            {
+                if (!string.IsNullOrEmpty(p.productId))
+                    _cachedPrices[p.productId] = $"${p.priceUsd:F2}";
+            }
+            _isInitialized = true;
+            Debug.Log($"{LOG_TAG} Sim 모드 init — {catalog.Count} products cached.");
+#endif
+        }
+
+#if UNITY_IAP
+        private static ProductType ResolveProductType(ShopProductDoc p)
+        {
+            // 영구 광고 제거 / 1회 한정 상품 → NonConsumable. 나머지 → Consumable
+            if (p.category == CAT_NOADS) return ProductType.NonConsumable;
+            if (p.maxPurchases == 1)     return ProductType.NonConsumable;
+            return ProductType.Consumable;
+        }
+#endif
+
+        public bool IsInitialized() => _isInitialized;
+
+        /// <summary>구매 시도. ShopCatalogService 의 상품 ID 사용 (full Store SKU).</summary>
         public void PurchaseProduct(string productId)
         {
             if (string.IsNullOrEmpty(productId))
             {
-                Debug.LogWarning("[IAPManager] PurchaseProduct called with null/empty productId.");
+                Debug.LogWarning($"{LOG_TAG} PurchaseProduct null/empty");
+                return;
+            }
+
+            // 1회 한정 차단 (UserData.purchasedOnce)
+            if (IsLimitedAndAlreadyPurchased(productId))
+            {
+                Debug.LogWarning($"{LOG_TAG} {productId} 는 1회 한정 — 이미 구매됨");
+                PublishPurchaseResult(productId, false);
                 return;
             }
 
 #if UNITY_IAP
             if (!_isInitialized)
             {
-                Debug.LogWarning("[IAPManager] Store not initialized. Cannot purchase.");
+                Debug.LogWarning($"{LOG_TAG} 미초기화 상태 — 구매 불가");
                 PublishPurchaseResult(productId, false);
                 return;
             }
@@ -143,26 +148,22 @@ namespace BalloonFlow
             }
             else
             {
-                Debug.LogWarning($"[IAPManager] Product '{productId}' not found or not available.");
+                Debug.LogWarning($"{LOG_TAG} {productId} 미등록/구매불가");
                 PublishPurchaseResult(productId, false);
             }
 #else
-            // Simulation mode: auto-succeed purchase
-            Debug.Log($"[IAPManager Sim] Simulating purchase: {productId}");
+            Debug.Log($"{LOG_TAG} Sim — {productId} 구매");
             ProcessPurchaseReward(productId);
             PublishPurchaseResult(productId, true);
 #endif
         }
 
-        /// <summary>
-        /// Restores previously purchased non-consumable products (iOS).
-        /// </summary>
         public void RestorePurchases()
         {
 #if UNITY_IAP
             if (!_isInitialized)
             {
-                Debug.LogWarning("[IAPManager] Store not initialized. Cannot restore.");
+                Debug.LogWarning($"{LOG_TAG} 미초기화 — restore 불가");
                 return;
             }
 
@@ -172,245 +173,145 @@ namespace BalloonFlow
                 var apple = _extensionProvider.GetExtension<IAppleExtensions>();
                 apple.RestoreTransactions((result, error) =>
                 {
-                    if (result)
-                    {
-                        Debug.Log("[IAPManager] Restore purchases succeeded.");
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"[IAPManager] Restore purchases failed: {error}");
-                    }
+                    if (result) Debug.Log($"{LOG_TAG} Restore 성공");
+                    else        Debug.LogWarning($"{LOG_TAG} Restore 실패: {error}");
                 });
             }
             else
             {
-                Debug.Log("[IAPManager] Restore not needed on this platform (auto-restore).");
+                Debug.Log($"{LOG_TAG} Restore 불필요 (Google Play 자동)");
             }
 #else
-            // Simulation mode: restore ad removal if previously "purchased"
-            Debug.Log("[IAPManager Sim] Simulating restore purchases.");
-            if (AdsRemoved)
-            {
-                EventBus.Publish(new OnPurchaseRestored { productId = PRODUCT_AD_REMOVE });
-            }
+            Debug.Log($"{LOG_TAG} Sim restore");
 #endif
         }
 
-        /// <summary>
-        /// Returns the localized price string for a product.
-        /// Returns "$?.??" if product not found or store not initialized.
-        /// </summary>
-        /// <param name="productId">The product ID.</param>
-        /// <returns>Localized price string.</returns>
         public string GetProductPrice(string productId)
         {
-            if (string.IsNullOrEmpty(productId))
-            {
-                return "$?.??";
-            }
+            if (string.IsNullOrEmpty(productId)) return "$?.??";
 
 #if UNITY_IAP
             if (!_isInitialized || _storeController == null)
-            {
-                return _cachedPrices.TryGetValue(productId, out string cached) ? cached : "$?.??";
-            }
+                return _cachedPrices.TryGetValue(productId, out var cached) ? cached : "$?.??";
 
             Product product = _storeController.products.WithID(productId);
             if (product != null && product.availableToPurchase)
-            {
                 return product.metadata.localizedPriceString;
-            }
 
-            return "$?.??";
+            return _cachedPrices.TryGetValue(productId, out var fallback) ? fallback : "$?.??";
 #else
-            // Simulation mode: return hardcoded prices
-            return GetSimulatedPrice(productId);
+            return _cachedPrices.TryGetValue(productId, out var p) ? p : "$?.??";
 #endif
         }
 
-        #endregion
-
-        #region Private Methods — Initialization
-
-        private void InitializeStore()
+        private bool IsLimitedAndAlreadyPurchased(string productId)
         {
-#if UNITY_IAP
-            if (_isInitialized)
-            {
-                return;
-            }
+            var doc = ShopCatalogService.HasInstance ? ShopCatalogService.Instance.Get(productId) : null;
+            if (doc == null || doc.maxPurchases != 1) return false;
 
-            var builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance());
-
-            // Coin packs (consumable)
-            builder.AddProduct(PRODUCT_COIN_500, ProductType.Consumable);
-            builder.AddProduct(PRODUCT_COIN_1200, ProductType.Consumable);
-            builder.AddProduct(PRODUCT_COIN_3000, ProductType.Consumable);
-            builder.AddProduct(PRODUCT_COIN_8000, ProductType.Consumable);
-            builder.AddProduct(PRODUCT_COIN_20000, ProductType.Consumable);
-
-            // Bundles
-            builder.AddProduct(PRODUCT_STARTER_PACK, ProductType.NonConsumable);
-            builder.AddProduct(PRODUCT_WEEKEND_BUNDLE, ProductType.Consumable);
-
-            // Utility
-            builder.AddProduct(PRODUCT_AD_REMOVE, ProductType.NonConsumable);
-            builder.AddProduct(PRODUCT_HEART_REFILL, ProductType.Consumable);
-
-            UnityPurchasing.Initialize(this, builder);
-#else
-            // Simulation mode: mark as initialized immediately
-            _isInitialized = true;
-            CacheSimulatedPrices();
-            Debug.Log("[IAPManager Sim] Initialized in simulation mode.");
-#endif
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady
+                && UserDataService.Instance.CurrentUser != null
+                && UserDataService.Instance.CurrentUser.purchasedOnce.TryGetValue(productId, out var purchased))
+                return purchased;
+            return false;
         }
 
-        #endregion
-
 #if UNITY_IAP
-        #region IDetailedStoreListener Implementation
-
         public void OnInitialized(IStoreController controller, IExtensionProvider extensions)
         {
             _storeController = controller;
             _extensionProvider = extensions;
             _isInitialized = true;
 
-            // Cache prices for offline access
             foreach (Product product in controller.products.all)
             {
                 if (product.availableToPurchase)
-                {
                     _cachedPrices[product.definition.id] = product.metadata.localizedPriceString;
-                }
             }
-
-            Debug.Log("[IAPManager] Store initialized successfully.");
+            Debug.Log($"{LOG_TAG} Store 초기화 완료 — {_cachedPrices.Count} products");
         }
 
         public void OnInitializeFailed(InitializationFailureReason error)
-        {
-            Debug.LogError($"[IAPManager] Store initialization failed: {error}");
-        }
+            => Debug.LogError($"{LOG_TAG} Store init 실패: {error}");
 
         public void OnInitializeFailed(InitializationFailureReason error, string message)
-        {
-            Debug.LogError($"[IAPManager] Store initialization failed: {error} — {message}");
-        }
+            => Debug.LogError($"{LOG_TAG} Store init 실패: {error} — {message}");
 
         public PurchaseProcessingResult ProcessPurchase(PurchaseEventArgs args)
         {
             string productId = args.purchasedProduct.definition.id;
-            Debug.Log($"[IAPManager] Purchase succeeded: {productId}");
+            Debug.Log($"{LOG_TAG} 구매 성공: {productId}");
 
             ProcessPurchaseReward(productId);
             PublishPurchaseResult(productId, true);
 
+            // TODO: Phase 3 — Cloud Functions validatePurchase 호출 후 보상 지급으로 라우팅 변경 예정
             return PurchaseProcessingResult.Complete;
         }
 
         public void OnPurchaseFailed(Product product, PurchaseFailureReason failureReason)
         {
-            Debug.LogWarning($"[IAPManager] Purchase failed: {product.definition.id} — {failureReason}");
+            Debug.LogWarning($"{LOG_TAG} 구매 실패: {product.definition.id} — {failureReason}");
             PublishPurchaseResult(product.definition.id, false);
         }
 
         public void OnPurchaseFailed(Product product, PurchaseFailureDescription failureDescription)
         {
-            Debug.LogWarning($"[IAPManager] Purchase failed: {product.definition.id} — {failureDescription.message}");
+            Debug.LogWarning($"{LOG_TAG} 구매 실패: {product.definition.id} — {failureDescription.message}");
             PublishPurchaseResult(product.definition.id, false);
         }
-
-        #endregion
 #endif
 
-        #region Private Methods — Reward Processing
-
+        /// <summary>ShopCatalogService 의 보상 정의를 읽어 매니저에 위임. 클라 단독 처리 (Phase 3 전).</summary>
         private void ProcessPurchaseReward(string productId)
         {
-            // Grant coins
-            int coinAmount = GetCoinGrantForProduct(productId);
-            if (coinAmount > 0 && CurrencyManager.HasInstance)
+            var doc = ShopCatalogService.HasInstance ? ShopCatalogService.Instance.Get(productId) : null;
+            if (doc == null)
             {
-                CurrencyManager.Instance.AddCoins(coinAmount, CurrencyManager.CoinSource.IAP);
+                Debug.LogWarning($"{LOG_TAG} {productId} 카탈로그 lookup 실패 — 보상 지급 안 함");
+                return;
             }
 
-            // Handle non-consumable flags
-            if (productId == PRODUCT_AD_REMOVE)
+            var r = doc.rewards;
+            if (r != null)
             {
-                PlayerPrefs.SetInt(PREFS_KEY_AD_REMOVED, 1);
-                PlayerPrefs.Save();
-                Debug.Log("[IAPManager] Ads removed.");
-            }
-            else if (productId == PRODUCT_STARTER_PACK)
-            {
-                PlayerPrefs.SetInt(PREFS_KEY_STARTER_PURCHASED, 1);
-                PlayerPrefs.Save();
-                // Starter pack also grants 5 hearts + 3 boosters via events
-                EventBus.Publish(new OnPurchaseRestored { productId = PRODUCT_STARTER_PACK });
-            }
-            else if (productId == PRODUCT_HEART_REFILL)
-            {
-                // Heart refill grants 5 hearts — handled by LifeManager listening to OnPurchaseCompleted
-            }
-        }
+                if (r.coins > 0 && CurrencyManager.HasInstance)
+                    CurrencyManager.Instance.AddCoins(r.coins, CurrencyManager.CoinSource.IAP);
 
-        private int GetCoinGrantForProduct(string productId)
-        {
-            if (string.IsNullOrEmpty(productId))
-            {
-                return 0;
-            }
-
-            for (int i = 0; i < CoinGrants.Length; i++)
-            {
-                if (CoinGrants[i].productId == productId)
+                if (r.boosters != null && BoosterManager.HasInstance)
                 {
-                    return CoinGrants[i].coinAmount;
+                    if (r.boosters.hand    > 0) BoosterManager.Instance.AddBooster(BoosterManager.HAND,    r.boosters.hand);
+                    if (r.boosters.shuffle > 0) BoosterManager.Instance.AddBooster(BoosterManager.SHUFFLE, r.boosters.shuffle);
+                    if (r.boosters.zap     > 0) BoosterManager.Instance.AddBooster(BoosterManager.ZAP,     r.boosters.zap);
+                }
+
+                if (r.infiniteHeartsSeconds > 0 && LifeManager.HasInstance)
+                    LifeManager.Instance.ActivateInfiniteHearts(r.infiniteHeartsSeconds);
+
+                if (r.removeAds)
+                {
+                    PlayerPrefs.SetInt("BalloonFlow_AdRemoved", 1);
+                    PlayerPrefs.Save();
+                    if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+                        UserDataService.Instance.SetRemovedAds(true);
                 }
             }
 
-            return 0;
-        }
-
-        private void PublishPurchaseResult(string productId, bool success)
-        {
-            EventBus.Publish(new OnPurchaseCompleted
+            // 1회 한정 마킹 (UserData.purchasedOnce)
+            if (doc.maxPurchases == 1
+                && UserDataService.HasInstance && UserDataService.Instance.IsReady)
             {
-                productId = productId,
-                success = success
-            });
-        }
-
-        #endregion
-
-        #region Private Methods — Simulation
-
-#if !UNITY_IAP
-        private void CacheSimulatedPrices()
-        {
-            _cachedPrices[PRODUCT_COIN_500] = "$0.99";
-            _cachedPrices[PRODUCT_COIN_1200] = "$1.99";
-            _cachedPrices[PRODUCT_COIN_3000] = "$4.99";
-            _cachedPrices[PRODUCT_COIN_8000] = "$9.99";
-            _cachedPrices[PRODUCT_COIN_20000] = "$19.99";
-            _cachedPrices[PRODUCT_STARTER_PACK] = "$2.99";
-            _cachedPrices[PRODUCT_WEEKEND_BUNDLE] = "$4.99";
-            _cachedPrices[PRODUCT_AD_REMOVE] = "$3.99";
-            _cachedPrices[PRODUCT_HEART_REFILL] = "$0.99";
-        }
-
-        private string GetSimulatedPrice(string productId)
-        {
-            if (_cachedPrices.TryGetValue(productId, out string price))
-            {
-                return price;
+                UserDataService.Instance.SetPurchasedOnce(productId, true);
             }
-            return "$?.??";
-        }
-#endif
 
-        #endregion
+            // NPU 해제
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+                UserDataService.Instance.MarkPaying();
+        }
+
+        private static void PublishPurchaseResult(string productId, bool success)
+        {
+            EventBus.Publish(new OnPurchaseCompleted { productId = productId, success = success });
+        }
     }
 }
