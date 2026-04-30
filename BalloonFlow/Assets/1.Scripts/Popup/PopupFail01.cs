@@ -22,6 +22,9 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtGold;
         [SerializeField] private TMP_Text _txtGoldOutline;
 
+        [Header("[ImgFail Animation]")]
+        [SerializeField] private UnityEngine.Animation _imgFailAnimation;
+
         private Button ContinueBtn => _btnContinue != null ? _btnContinue : (_frame != null ? _frame.BtnHorizGreen : null);
         private Button DeclineBtn => _btnDecline != null ? _btnDecline : (_frame != null ? _frame.BtnHorizRed : null);
         private Button ExitBtn => _btnExit != null ? _btnExit : (_frame != null ? _frame.BtnExit : null);
@@ -30,6 +33,21 @@ namespace BalloonFlow
         {
             UpdateCostDisplay();
             UpdateGoldDisplay();
+            PlayImgFailAnimation();
+        }
+
+        private void PlayImgFailAnimation()
+        {
+            if (_imgFailAnimation == null)
+            {
+                Transform imgFail = transform.Find("ImgFail");
+                if (imgFail != null) _imgFailAnimation = imgFail.GetComponent<UnityEngine.Animation>();
+            }
+            if (_imgFailAnimation == null) return;
+
+            _imgFailAnimation.Stop();
+            _imgFailAnimation.Rewind();
+            _imgFailAnimation.Play();
         }
 
         protected override void Awake()
