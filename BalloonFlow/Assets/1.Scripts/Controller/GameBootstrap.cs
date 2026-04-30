@@ -56,6 +56,10 @@ namespace BalloonFlow
             // 씬 캔버스 등록
             EnsureSceneCanvas();
 
+            // 직전 씬(Lobby/Title) 의 UI/Popup 제거 — InGame 전용만 새로 로드
+            if (UIManager.HasInstance) UIManager.Instance.DestroyAllUI();
+            if (PopupManager.HasInstance) PopupManager.Instance.UnregisterAll();
+
             // UI 로드
             LoadUI();
 
@@ -144,15 +148,22 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Finds or creates a SceneCanvas and registers it with UIManager.
+        /// UIManager 가 이미 캔버스를 가지고 있으면 (Title/Lobby 에서 등록된 후 DontDestroyOnLoad 으로 유지) 재사용.
+        /// 그 외 경우(Editor 직접 InGame Play 등) 에만 새로 생성.
         /// </summary>
         void EnsureSceneCanvas()
         {
             if (!UIManager.HasInstance) return;
 
-            var _canvasGO = GameObject.Find("SceneCanvas");
+            // 이미 살아있는 캔버스가 있으면 그대로 사용 — InGame 진입 때 추가 캔버스 생성 안 함
+            if (UIManager.Instance.HasLiveSceneCanvas)
+            {
+                EnsureEventSystem();
+                return;
+            }
 
-            // Create canvas if not found in scene
+            // Fallback: Editor 에서 InGame 직접 Play 한 경우 등 — 기존 동작 유지
+            var _canvasGO = GameObject.Find("SceneCanvas");
             if (_canvasGO == null)
             {
                 _canvasGO = new GameObject("SceneCanvas");
@@ -164,10 +175,9 @@ namespace BalloonFlow
                 _scaler.referenceResolution = new Vector2(1242f, 2688f);
                 _scaler.matchWidthOrHeight = 0.5f;
                 _canvasGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-                Debug.Log("[GameBootstrap] Created SceneCanvas (was missing)");
+                Debug.Log("[GameBootstrap] Created SceneCanvas (fallback — UIManager 미보유)");
             }
 
-            // PopupCanvas: UI 위에 렌더링되는 팝업 전용
             var _popupCanvasGO = GameObject.Find("PopupCanvas");
             if (_popupCanvasGO == null)
             {
@@ -182,7 +192,6 @@ namespace BalloonFlow
                 _popupCanvasGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
             }
 
-            // EffectCanvas: 팝업 위에 렌더링되는 파티클 이펙트 전용
             var _effectCanvasGO = GameObject.Find("EffectCanvas");
             if (_effectCanvasGO == null)
             {
@@ -197,15 +206,16 @@ namespace BalloonFlow
             }
 
             UIManager.Instance.SetSceneCanvas(_canvasGO.transform, _popupCanvasGO.transform, _effectCanvasGO.transform);
+            EnsureEventSystem();
+        }
 
-            // EventSystem이 없으면 UI 클릭 불가 — 생성
-            if (UnityEngine.EventSystems.EventSystem.current == null)
-            {
-                var esGO = new GameObject("EventSystem");
-                esGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
-                esGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
-                Debug.Log("[GameBootstrap] Created EventSystem (was missing)");
-            }
+        static void EnsureEventSystem()
+        {
+            if (UnityEngine.EventSystems.EventSystem.current != null) return;
+            var esGO = new GameObject("EventSystem");
+            esGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
+            esGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+            Debug.Log("[GameBootstrap] Created EventSystem (was missing)");
         }
 
         void OnEnable()

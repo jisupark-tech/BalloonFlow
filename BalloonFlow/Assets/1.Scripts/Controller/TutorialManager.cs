@@ -59,6 +59,8 @@ namespace BalloonFlow
         private Image _dimRightImage;
         private RectTransform _cutoutFrame;
         private Image _cutoutFrameImage;
+        /// <summary>CutoutFrame 자식의 dim overlay (frame 영역 "밖"에만 그려짐).</summary>
+        private Image _cutoutDimImage;
 
         // Arrow indicator
         private RectTransform _arrowIndicator;
@@ -167,6 +169,10 @@ namespace BalloonFlow
 
                 _cutoutFrame = popup.CutoutFrame;
                 _cutoutFrameImage = _cutoutFrame?.GetComponent<Image>();
+
+                // CutoutFrame 에 CutoutMaskUI + Mask 부착 → 자식 DimOverlay 가 frame 영역 "밖"에만 그려져 펀칭 효과.
+                // 기존 4-panel(DimTop/Bottom/Left/Right) 접근은 이 단일 mask 로 대체.
+                SetupCutoutMaskOnFrame();
 
                 _arrowIndicator = popup.ArrowIndicator;
                 _arrowImage = _arrowIndicator?.GetComponent<Image>();
@@ -528,6 +534,74 @@ namespace BalloonFlow
             _tapAnywhereGO.SetActive(false);
         }
 
+        /// <summary>
+        /// CutoutFrame 에 CutoutMaskUI + Mask 부착 후 자식 DimOverlay 추가 — frame 영역 "밖" 만 dim 처리.
+        /// 기존 4-panel(DimTop/Bottom/Left/Right) 은 비활성화. ShowCutoutForHolder 가 _cutoutFrame 사이즈/위치 변경하면
+        /// 자식 dim 도 함께 따라가므로 간단.
+        /// </summary>
+        private void SetupCutoutMaskOnFrame()
+        {
+            if (_cutoutFrame == null) return;
+
+            // 기존 Image 가 일반 Image 면 CutoutMaskUI 로 교체
+            var existingImage = _cutoutFrame.GetComponent<Image>();
+            CutoutMaskUI cutout = _cutoutFrame.GetComponent<CutoutMaskUI>();
+            if (cutout == null)
+            {
+                if (existingImage != null && !(existingImage is CutoutMaskUI))
+                    DestroyImmediate(existingImage);
+                cutout = _cutoutFrame.gameObject.AddComponent<CutoutMaskUI>();
+            }
+            _cutoutFrameImage = cutout;
+            // 메시 보장용 흰색 sprite (스텐실 wrtie 가능)
+            if (cutout.sprite == null)
+            {
+                var tex = new Texture2D(4, 4);
+                var px = new Color[16]; for (int i = 0; i < 16; i++) px[i] = Color.white;
+                tex.SetPixels(px); tex.Apply();
+                cutout.sprite = Sprite.Create(tex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
+            }
+            cutout.type = Image.Type.Simple;
+            cutout.color = new Color(1f, 1f, 1f, 0f); // 본체는 안 보임 — frame 표시는 Outline 컴포넌트가 담당
+            cutout.raycastTarget = false;
+
+            // Mask 컴포넌트 — showMaskGraphic=true 로 base graphic 렌더 허용 (Outline 컴포넌트의 frame 표시).
+            // CutoutMaskUI 의 color.alpha=0 이라 본체는 안 보이고 Outline 만 보임.
+            var mask = _cutoutFrame.GetComponent<Mask>();
+            if (mask == null) mask = _cutoutFrame.gameObject.AddComponent<Mask>();
+            mask.showMaskGraphic = true;
+
+            // 자식 DimOverlay — 부모 frame 영역 "밖" 만 그려짐 (CutoutMaskUI 가 stencil-invert 수행)
+            Transform existingDim = _cutoutFrame.Find("DimOverlay");
+            GameObject dimGO;
+            if (existingDim != null)
+            {
+                dimGO = existingDim.gameObject;
+                _cutoutDimImage = dimGO.GetComponent<Image>();
+                if (_cutoutDimImage == null) _cutoutDimImage = dimGO.AddComponent<Image>();
+            }
+            else
+            {
+                dimGO = new GameObject("DimOverlay", typeof(RectTransform), typeof(Image));
+                dimGO.transform.SetParent(_cutoutFrame, false);
+                _cutoutDimImage = dimGO.GetComponent<Image>();
+            }
+            var dimRT = dimGO.GetComponent<RectTransform>();
+            dimRT.anchorMin = new Vector2(0.5f, 0.5f);
+            dimRT.anchorMax = new Vector2(0.5f, 0.5f);
+            dimRT.pivot     = new Vector2(0.5f, 0.5f);
+            dimRT.anchoredPosition = Vector2.zero;
+            dimRT.sizeDelta = new Vector2(10000f, 10000f);
+            _cutoutDimImage.color = new Color(0f, 0f, 0f, 0f); // 알파는 SetDimColor 로 페이드
+            _cutoutDimImage.raycastTarget = true; // dim 영역 클릭 차단 — 튜토리얼이 frame 외부 입력 가로챔
+
+            // 기존 4-panel dim 은 비활성화 — 단일 mask 로 대체
+            if (_dimTop != null) _dimTop.gameObject.SetActive(false);
+            if (_dimBottom != null) _dimBottom.gameObject.SetActive(false);
+            if (_dimLeft != null) _dimLeft.gameObject.SetActive(false);
+            if (_dimRight != null) _dimRight.gameObject.SetActive(false);
+        }
+
         private RectTransform CreateCutoutFrame(Transform parent)
         {
             var go = new GameObject("CutoutFrame");
@@ -790,6 +864,15 @@ namespace BalloonFlow
         {
             _isCutoutVisible = true;
 
+            // 1순위: CutoutFrame + CutoutMaskUI (자식 dim 이 frame 영역 밖만 그림 — 표준 hole-in-UI 패턴).
+            //         frame 위치/크기 변경만으로 hole 위치 변경 됨 — ApplyCutout 종료 후 호출자에서 처리.
+            if (_cutoutDimImage != null && _cutoutFrame != null)
+            {
+                if (_spotlightImage != null) _spotlightImage.gameObject.SetActive(false);
+                SetDimPanelsActive(false);
+                return;
+            }
+
             // 스포트라이트 셰이더 방식 (부드러운 원형 투명 영역)
             if (_spotlightMat != null && _spotlightImage != null)
             {
@@ -895,6 +978,8 @@ namespace BalloonFlow
         private void SetDimColor(float alpha)
         {
             Color c = new Color(0f, 0f, 0f, alpha);
+            // CutoutMaskUI 자식 dim 이 새 표준 — 기존 4-panel 은 호환성 위해 유지
+            if (_cutoutDimImage != null) _cutoutDimImage.color = c;
             if (_dimTopImage != null) _dimTopImage.color = c;
             if (_dimBottomImage != null) _dimBottomImage.color = c;
             if (_dimLeftImage != null) _dimLeftImage.color = c;

@@ -58,34 +58,19 @@ namespace BalloonFlow
 
         #region Configure Per Scene
 
-        /// <summary>Title: 2D, 어두운 배경</summary>
+        /// <summary>Title: Inspector 의 카메라 설정 그대로 사용. UICamera 활성 유지.</summary>
         public void ConfigureTitle()
         {
-            if (MainCamera == null) return;
-            MainCamera.orthographic = true;
-            MainCamera.clearFlags = CameraClearFlags.SolidColor;
-            MainCamera.backgroundColor = new Color(0.08f, 0.08f, 0.16f);
-            MainCamera.nearClipPlane = 0.3f;
-            MainCamera.farClipPlane = 15f;
-            MainCamera.depth = 0;
-            SetCameraTransform(new Vector3(0f, 0f, -10f), Vector3.zero);
-
-            if (UICamera != null) UICamera.gameObject.SetActive(false);
+            ReleaseEnforcement();
+            if (UICamera != null) UICamera.gameObject.SetActive(true);
         }
 
-        /// <summary>Lobby: 2D, 네이비 배경</summary>
+        /// <summary>Lobby: Inspector 의 카메라 설정 그대로 사용. UICamera 만 활성화.</summary>
         public void ConfigureLobby()
         {
-            if (MainCamera == null) return;
-            MainCamera.orthographic = true;
-            MainCamera.clearFlags = CameraClearFlags.SolidColor;
-            MainCamera.backgroundColor = new Color(0.06f, 0.10f, 0.18f);
-            MainCamera.nearClipPlane = 0.3f;
-            MainCamera.farClipPlane = 50f;
-            MainCamera.depth = 0;
-            SetCameraTransform(new Vector3(0f, 0f, -10f), Vector3.zero);
-
-            if (UICamera != null) UICamera.gameObject.SetActive(false);
+            // Inspector 에서 설정한 MainCamera/UICamera 값 (clearFlags/배경/depth/Stack/URP Overlay 등) override 안 함
+            ReleaseEnforcement();
+            if (UICamera != null) UICamera.gameObject.SetActive(true);
         }
 
         /// <summary>

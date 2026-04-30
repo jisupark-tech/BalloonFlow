@@ -50,6 +50,7 @@ namespace BalloonFlow
         {
             LoadFromPrefs();
             ProcessOfflineRecharge();
+            TrySubscribeUserData();
         }
 
         private void OnEnable()
@@ -60,6 +61,40 @@ namespace BalloonFlow
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnLevelFailed>(HandleLevelFailed);
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.OnUserDataReady -= ApplyInfiniteHeartsFromUserData;
+        }
+
+        /// <summary>
+        /// UserDataService 가 ready 되면 Firestore.infiniteHeartsUntil 을 잔여시간에 반영.
+        /// 이미 ready 면 즉시 적용. cross-device 동기화용.
+        /// </summary>
+        private void TrySubscribeUserData()
+        {
+            if (!UserDataService.HasInstance) return;
+
+            UserDataService.Instance.OnUserDataReady += ApplyInfiniteHeartsFromUserData;
+            if (UserDataService.Instance.IsReady)
+                ApplyInfiniteHeartsFromUserData();
+        }
+
+        private void ApplyInfiniteHeartsFromUserData()
+        {
+            if (!UserDataService.HasInstance || !UserDataService.Instance.IsReady) return;
+            var user = UserDataService.Instance.CurrentUser;
+            if (user == null) return;
+
+            // Firestore Unity SDK 13.10.0 의 Timestamp 는 Seconds 프로퍼티 미공개 — ToDateTime() 으로 비교.
+            // sentinel(default) = epoch(1970), 만료 = 과거 시각. 둘 다 remaining <= 0 으로 처리.
+            var until = user.infiniteHeartsUntil.ToDateTime();
+            double remaining = (until - DateTime.UtcNow).TotalSeconds;
+            if (remaining <= 0) return;
+
+            _infiniteHeartsEndTime = Time.realtimeSinceStartup + (float)remaining;
+            _currentLives = MAX_LIVES;
+            SaveToPrefs();
+            PublishLifeChanged();
+            Debug.Log($"[LifeManager] Firestore infiniteHeartsUntil 적용 — 잔여 {remaining / 3600:F1}h");
         }
 
         /// <summary>

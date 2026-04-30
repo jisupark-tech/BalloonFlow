@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -717,28 +718,37 @@ namespace BalloonFlow
 
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
-            Debug.Log($"[TutorialDbg] HandleLevelLoaded levelId={evt.levelId}");
+            // 로딩/fade 끝난 뒤 시작 — 튜토리얼이 로딩 화면 위로 떠 보이는 것 방지
+            StartCoroutine(StartTutorialAfterLoad(evt.levelId));
+        }
+
+        private IEnumerator StartTutorialAfterLoad(int levelId)
+        {
+            while (LevelManager.HasInstance && LevelManager.Instance.IsLoading) yield return null;
+            while (UIManager.HasInstance && UIManager.Instance.IsFading) yield return null;
+
+            Debug.Log($"[TutorialDbg] HandleLevelLoaded levelId={levelId}");
 
             // 1) LevelConfig에 tutorialSteps가 있으면 우선 사용
-            TutorialConfig configFromData = TryBuildFromLevelData(evt.levelId);
+            TutorialConfig configFromData = TryBuildFromLevelData(levelId);
             if (configFromData != null)
             {
                 bool complete1 = IsTutorialComplete(configFromData.tutorialId);
                 Debug.Log($"[TutorialDbg] LevelData config found: tutorialId={configFromData.tutorialId} complete={complete1}");
-                if (complete1) return;
+                if (complete1) yield break;
                 _configByLevel[configFromData.levelId] = configFromData;
                 StartTutorial(configFromData.tutorialId);
-                return;
+                yield break;
             }
 
             // 2) Fallback: 코드에 하드코딩된 튜토리얼
-            bool hasConfig = _configByLevel.TryGetValue(evt.levelId, out TutorialConfig config);
-            Debug.Log($"[TutorialDbg] Hardcoded config for level {evt.levelId}: {(hasConfig ? $"tutorialId={config.tutorialId}" : "NONE")}");
-            if (!hasConfig) return;
+            bool hasConfig = _configByLevel.TryGetValue(levelId, out TutorialConfig config);
+            Debug.Log($"[TutorialDbg] Hardcoded config for level {levelId}: {(hasConfig ? $"tutorialId={config.tutorialId}" : "NONE")}");
+            if (!hasConfig) yield break;
 
             bool complete2 = IsTutorialComplete(config.tutorialId);
             Debug.Log($"[TutorialDbg] tutorialId={config.tutorialId} alreadyComplete={complete2}");
-            if (complete2) return;
+            if (complete2) yield break;
 
             StartTutorial(config.tutorialId);
         }

@@ -6,19 +6,15 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// FxGold를 PopupCanvas에 직접 넣고 시작점→끝점 랜덤 포물선 비행.
-    /// UIParticleRenderer가 ParticleSystem을 Canvas UI로 렌더링.
+    /// FxGold를 EffectCanvas에 직접 넣고 시작점→끝점 랜덤 포물선 비행.
+    /// EffectCanvas (sortingOrder=15) 가 PopupCanvas (10) 위에 렌더되어 popup 으로 가려지지 않음.
     /// 연출 끝나면 ObjectPoolManager로 반환.
     /// </summary>
     public static class CoinFlyEffect
     {
-        // 신규 FXGoldRotate 우선 사용, 없으면 기존 FXGold로 폴백 (아트팀 교체 타이밍 대비).
-        private const string PREFERRED_PREFAB = "UI/UIAssets/FXGoldRotate";
-        private const string FALLBACK_PREFAB  = "UI/UIAssets/FXGold";
-        private const string POOL_KEY_ROTATE  = "FXGoldRotate";
-        private const string POOL_KEY_LEGACY  = "FXGold";
+        private const string PREFAB_PATH = "UI/UIAssets/FXGold";
+        private const string POOL_KEY    = "FXGold";
 
-        private static string POOL_KEY = POOL_KEY_LEGACY; // EnsurePool에서 실제 로드된 프리팹에 따라 결정
         private static bool _poolRegistered;
 
         /// <summary>진행 중인 연출이 사용 중인 코인 인스턴스 집합. StopAll에서 한번에 반환.</summary>
@@ -28,11 +24,21 @@ namespace BalloonFlow
             Action onEachLand = null, Action onAllComplete = null)
         {
             if (count <= 0) { onAllComplete?.Invoke(); return; }
-            if (!UIManager.HasInstance || UIManager.Instance.PopupTr == null) return;
+            if (!UIManager.HasInstance || GetParentTransform() == null) return;
 
             EnsurePool();
             CoroutineRunner.Get().StartCoroutine(
                 RunFly(screenFrom, screenTo, count, onEachLand, onAllComplete));
+        }
+
+        /// <summary>EffectCanvas 우선, 없으면 PopupCanvas, 그것도 없으면 UICanvas 로 fallback.</summary>
+        private static Transform GetParentTransform()
+        {
+            if (!UIManager.HasInstance) return null;
+            var ui = UIManager.Instance;
+            return ui.EffectTr != null ? ui.EffectTr
+                 : ui.PopupTr  != null ? ui.PopupTr
+                 : ui.UiTr;
         }
 
         /// <summary>
@@ -45,13 +51,13 @@ namespace BalloonFlow
             var runner = CoroutineRunner.GetIfExists();
             if (runner != null) runner.StopAllCoroutines();
 
-            // 활성 코인 오브젝트를 풀로 반환
+            // 활성 코인 오브젝트를 풀로 반환 — Pool.Return 이 SetParent(_poolParent, false) 처리하므로 직접 detach 안 함
+            // (worldPositionStays=true 기본값으로 detach 시 캔버스 스케일이 localScale 로 흡수되어 누적 증가 버그)
             if (ObjectPoolManager.HasInstance)
             {
                 foreach (var coin in _activeCoins)
                 {
                     if (coin == null) continue;
-                    coin.transform.SetParent(null);
                     ObjectPoolManager.Instance.Return(POOL_KEY, coin);
                 }
             }
@@ -67,31 +73,14 @@ namespace BalloonFlow
         {
             if (_poolRegistered || !ObjectPoolManager.HasInstance) return;
 
-            // FXGoldRotate 우선, 없으면 FXGold 폴백
-            GameObject prefab = Resources.Load<GameObject>(PREFERRED_PREFAB);
-            if (prefab != null)
+            GameObject prefab = Resources.Load<GameObject>(PREFAB_PATH);
+            if (prefab == null)
             {
-                POOL_KEY = POOL_KEY_ROTATE;
-            }
-            else
-            {
-                prefab = Resources.Load<GameObject>(FALLBACK_PREFAB);
-                POOL_KEY = POOL_KEY_LEGACY;
-                if (prefab != null)
-                    Debug.LogWarning("[CoinFlyEffect] FXGoldRotate.prefab not found — falling back to FXGold.prefab.");
-            }
-            if (prefab == null) return;
-
-            // 프리팹에 UIParticleRenderer 추가 (없으면)
-            if (prefab.GetComponent<UIParticleRenderer>() == null)
-                prefab.AddComponent<UIParticleRenderer>();
-            // 자식에도
-            foreach (Transform child in prefab.transform)
-            {
-                if (child.GetComponent<ParticleSystem>() != null && child.GetComponent<UIParticleRenderer>() == null)
-                    child.gameObject.AddComponent<UIParticleRenderer>();
+                Debug.LogError($"[CoinFlyEffect] {PREFAB_PATH}.prefab not found in Resources.");
+                return;
             }
 
+            // 프리팹에 붙어있는 ParticleSystem 만 사용. UIParticleRenderer 자동 부착 제거.
             ObjectPoolManager.Instance.CreatePool(POOL_KEY, prefab, 28);
             _poolRegistered = true;
         }
@@ -99,7 +88,8 @@ namespace BalloonFlow
         private static IEnumerator RunFly(Vector2 fromScreen, Vector2 toScreen, int count,
             Action onEachLand, Action onAllComplete)
         {
-            Transform parent = UIManager.Instance.PopupTr;
+            Transform parent = GetParentTransform();
+            if (parent == null) yield break;
             Canvas canvas = parent.GetComponentInParent<Canvas>();
             Camera cam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
                 ? canvas.worldCamera : null;
@@ -148,8 +138,8 @@ namespace BalloonFlow
                 var rt = coin.GetComponent<RectTransform>();
                 if (rt == null) rt = coin.AddComponent<RectTransform>();
                 rt.anchoredPosition = from;
-                float coinScale = GameManager.HasInstance ? GameManager.Instance.Board.coinFlyScale : 3f;
-                rt.localScale = Vector3.one * coinScale;
+                // 프리팹의 localScale 그대로 사용 — 자식 Light 컴포넌트가 root 스케일 변동에 영향 안 받도록.
+                // (코인 사이즈는 FXGold.prefab 에서 직접 조절)
 
                 var particles = coin.GetComponentsInChildren<ParticleSystem>(true);
                 foreach (var ps in particles)
@@ -163,7 +153,7 @@ namespace BalloonFlow
                 float dur = UnityEngine.Random.Range(minDur, maxDur);
 
                 CoroutineRunner.Get().StartCoroutine(
-                    Fly(coin, rt, from, scatterPos, mid, to, dur, coinScale, () =>
+                    Fly(coin, rt, from, scatterPos, mid, to, dur, () =>
                     {
                         landed++;
                         onEachLand?.Invoke();
@@ -177,10 +167,11 @@ namespace BalloonFlow
         /// 2단계 비행: 폭발(scatter) → 포물선 수렴(converge).
         /// Phase 1 (0~0.25): from → scatterPos (빠르게 퍼짐)
         /// Phase 2 (0.25~1.0): scatterPos → mid → to (베지어 포물선으로 목표 수렴)
+        /// 스케일 변경은 Light 등 자식 컴포넌트에 영향 가니 안 함 — 위치만 애니메이트.
         /// </summary>
         private static IEnumerator Fly(GameObject coin, RectTransform rt,
             Vector2 origin, Vector2 scatter, Vector2 mid, Vector2 target,
-            float duration, float baseScale, Action onDone)
+            float duration, Action onDone)
         {
             float elapsed = 0f;
             // 스캐터 단계를 짧게 유지해 코인이 빠르게 타겟으로 수렴 (연속 비행 느낌).
@@ -207,15 +198,11 @@ namespace BalloonFlow
                     rt.anchoredPosition = u * u * scatter + 2f * u * ease * mid + ease * ease * target;
                 }
 
-                // 도착 직전 스케일 축소 (골드 HUD에 흡수되는 느낌)
-                if (t > 0.75f)
-                    rt.localScale = Vector3.one * baseScale * Mathf.Lerp(1f, 0.3f, (t - 0.75f) / 0.25f);
-
                 yield return null;
             }
 
-            rt.localScale = Vector3.one;
-            coin.transform.SetParent(null);
+            // Pool.Return 이 SetParent(_poolParent, worldPositionStays=false) 로 localScale 보존하며 분리.
+            // 직접 SetParent(null) 호출하면 worldPositionStays=true(기본값) 라 캔버스 스케일이 localScale 로 흡수됨.
             _activeCoins.Remove(coin);
             if (ObjectPoolManager.HasInstance)
                 ObjectPoolManager.Instance.Return(POOL_KEY, coin);

@@ -49,12 +49,30 @@ namespace BalloonFlow
         /// 각 씬 컨트롤러가 Awake/Start에서 호출.
         /// UICanvas와 PopupCanvas를 동시에 설정.
         /// PopupCanvas가 없으면 UICanvas를 공유.
+        /// 등록된 캔버스의 root 를 DontDestroyOnLoad 처리해 씬 전환 후에도 유지 — 다음 씬은 동일 캔버스 재사용.
         /// </summary>
         public void SetSceneCanvas(Transform _uiCanvasTr, Transform _popupCanvasTr = null, Transform _effectCanvasTr = null)
         {
             UiTr = _uiCanvasTr;
             PopupTr = _popupCanvasTr != null ? _popupCanvasTr : _uiCanvasTr;
             EffectTr = _effectCanvasTr != null ? _effectCanvasTr : PopupTr;
+
+            PersistRoot(UiTr);
+            if (PopupTr != UiTr) PersistRoot(PopupTr);
+            if (EffectTr != PopupTr && EffectTr != UiTr) PersistRoot(EffectTr);
+        }
+
+        /// <summary>현재 등록된 UI/Popup/Effect 캔버스가 모두 살아있는지 (씬 전환 후 fake-null 아닌지).</summary>
+        public bool HasLiveSceneCanvas
+            => UiTr != null && PopupTr != null && EffectTr != null;
+
+        private static void PersistRoot(Transform t)
+        {
+            if (t == null) return;
+            var root = t.root.gameObject;
+            // 이미 DontDestroyOnLoad 인 GameObject 는 무시 (root.scene.buildIndex == -1)
+            if (root.scene.buildIndex < 0) return;
+            DontDestroyOnLoad(root);
         }
 
         #endregion
@@ -144,7 +162,7 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// 열린 UI 전부 닫기.
+        /// 열린 UI 전부 닫기 (alpha=0 으로 숨김. GameObject 는 유지).
         /// </summary>
         public void CloseUIAll()
         {
@@ -152,6 +170,20 @@ namespace BalloonFlow
             {
                 if (_openUIList[i] != null)
                     _openUIList[i].CloseUI();
+            }
+            _openUIList.Clear();
+        }
+
+        /// <summary>
+        /// 열린 UI 전부 GameObject 단위로 파괴 + 리스트 초기화. 씬 전환 시 직전 씬의 UI 제거용.
+        /// 캔버스(UiTr/PopupTr/EffectTr)는 DontDestroyOnLoad 로 살아있으므로 보존됨.
+        /// </summary>
+        public void DestroyAllUI()
+        {
+            for (int i = _openUIList.Count - 1; i >= 0; i--)
+            {
+                var ui = _openUIList[i];
+                if (ui != null) Destroy(ui.gameObject);
             }
             _openUIList.Clear();
         }
@@ -330,7 +362,11 @@ namespace BalloonFlow
 
         IEnumerator FadeCoroutine(float _from, float _to, float _duration)
         {
-            if (_fadeOverlay == null) yield break;
+            if (_fadeOverlay == null)
+            {
+                _fadeCoroutine = null;
+                yield break;
+            }
 
             _fadeOverlay.alpha = _from;
             _fadeOverlay.blocksRaycasts = true;
@@ -350,6 +386,10 @@ namespace BalloonFlow
             // Disable custom image when fully transparent
             if (_to < 0.01f && _fadeImageDisplay != null)
                 _fadeImageDisplay.enabled = false;
+
+            // 코루틴 완료 표시 — IsFading 이 영구 true 로 남아 LevelManager 의 next-stage FadeOut 이 skip 되는 버그 방지.
+            // (FadeOut 으로 alpha=1 도달했더라도 코루틴 자체는 끝났으므로 null 처리. IsFading 의 alpha 체크가 overlay 가시성을 별도로 다룸.)
+            _fadeCoroutine = null;
         }
 
         #endregion

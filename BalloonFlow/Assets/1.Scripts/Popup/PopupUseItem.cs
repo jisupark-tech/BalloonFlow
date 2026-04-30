@@ -6,8 +6,8 @@ namespace BalloonFlow
 {
     /// <summary>
     /// 아이템 사용 중 팝업.
-    /// 스텐실 셰이더로 Dim + Cutout (역마스크).
-    /// CutoutMask(UI/CutoutMask 셰이더) = 스텐실 기록, DimOverlay(UI/CutoutDim 셰이더) = 스텐실 제외하고 Dim.
+    /// "Hole in UI" 패턴 — _cutoutMask 에 CutoutMaskUI + Mask 부착, 그 자식 DimOverlay 가
+    /// CutoutMask 영역 바깥에만 그려져 구멍 효과. 셰이더 없이 표준 Unity UI 만 사용.
     /// Hand: Queue 영역, Remove: Board 영역.
     /// </summary>
     public class PopupUseItem : UIBase
@@ -26,12 +26,8 @@ namespace BalloonFlow
         [SerializeField] private Vector2 _descPosShuffle = Vector2.zero;
         [SerializeField] private Vector2 _descPosZap = Vector2.zero;
 
-        [Header("[Cutout 기준 — 프리팹에서 할당]")]
+        [Header("[Cutout 기준 — 프리팹에서 할당. 자동으로 CutoutMaskUI + Mask + 자식 DimOverlay 추가]")]
         [SerializeField] private RectTransform _cutoutMask;
-
-        [Header("[Cutout Materials — 빌드에서 Shader.Find 실패 방지]")]
-        [SerializeField] private Material _matCutoutMask;
-        [SerializeField] private Material _matCutoutDim;
 
         [Header("[Buttons]")]
         [SerializeField] private Button _btnBottomExit;
@@ -109,49 +105,64 @@ namespace BalloonFlow
 
         private void SetupShaders()
         {
-            // CutoutMask: 스텐실 기록용 (화면에 안 그림, 스텐실만 씀)
-            if (_cutoutMask != null)
+            if (_cutoutMask == null) return;
+
+            // CutoutMaskUI 컴포넌트 보장 — 기존 Image 가 있으면 교체.
+            // CutoutMaskUI 는 Image 를 상속하므로 GetComponent<Image>() 로도 잡힘.
+            var existingImage = _cutoutMask.GetComponent<Image>();
+            CutoutMaskUI cutout = _cutoutMask.GetComponent<CutoutMaskUI>();
+            if (cutout == null)
             {
-                _cutoutImage = _cutoutMask.GetComponent<Image>();
-                if (_cutoutImage == null) _cutoutImage = _cutoutMask.gameObject.AddComponent<Image>();
+                if (existingImage != null && !(existingImage is CutoutMaskUI))
+                    DestroyImmediate(existingImage);
+                cutout = _cutoutMask.gameObject.AddComponent<CutoutMaskUI>();
+            }
+            _cutoutImage = cutout;
+            if (cutout.sprite == null) cutout.sprite = GetWhiteSprite();
+            cutout.type = Image.Type.Simple;
+            // alpha=0 으로 본체는 보이지 않게 — geometry 만 stencil 기록용. dim child 가 mask 영역 밖만 그려져 hole 효과
+            cutout.color = new Color(1f, 1f, 1f, 0f);
+            cutout.raycastTarget = false;
 
-                // Material 직접 할당 (new Material 복사 금지 — 스텐실 설정 유실 방지)
-                if (_matCutoutMask != null)
-                    _cutoutImage.material = _matCutoutMask;
+            // Mask 컴포넌트 보장. CutoutMaskUI 가 stencil-invert 처리 → 자식 dim 이 mask 영역 "밖" 만 그림.
+            // showMaskGraphic 은 true 여야 stencil 이 정상 기록됨 (false 면 ColorMask 0 으로 stencil 도 불안정).
+            // CutoutMaskUI 의 color 는 white 지만 mask 영역은 dim child 에 의해 가려지지 않으므로 결과적으로 투명한 hole 처럼 보임.
+            var mask = _cutoutMask.GetComponent<Mask>();
+            if (mask == null) mask = _cutoutMask.gameObject.AddComponent<Mask>();
+            mask.showMaskGraphic = true;
 
-                // 메시가 비어있으면 스텐실이 안 씌어짐 → 흰색 스프라이트 보장
-                if (_cutoutImage.sprite == null)
-                    _cutoutImage.sprite = GetWhiteSprite();
-                _cutoutImage.type = Image.Type.Simple;
-                _cutoutImage.color = Color.white;
-                _cutoutImage.raycastTarget = false;
+            // DimOverlay: CutoutMask 의 자식 — 부모 Mask 영역 "바깥" 에만 그려져 dim 효과
+            Transform existingDim = _cutoutMask.Find("DimOverlay");
+            GameObject dimGO;
+            if (existingDim != null)
+            {
+                dimGO = existingDim.gameObject;
+                _dimImage = dimGO.GetComponent<Image>();
+                if (_dimImage == null) _dimImage = dimGO.AddComponent<Image>();
+            }
+            else
+            {
+                dimGO = new GameObject("DimOverlay", typeof(RectTransform), typeof(Image));
+                dimGO.transform.SetParent(_cutoutMask, false);
+                _dimImage = dimGO.GetComponent<Image>();
             }
 
-            // DimOverlay: 스텐실 읽어서 CutoutMask 영역 제외하고 Dim
-            var dimGO = new GameObject("DimOverlay", typeof(RectTransform), typeof(Image));
-            dimGO.transform.SetParent(transform, false);
-            // CutoutMask 바로 뒤 (스텐실 기록 후 읽기)
-            if (_cutoutMask != null)
-                dimGO.transform.SetSiblingIndex(_cutoutMask.GetSiblingIndex() + 1);
-            else
-                dimGO.transform.SetAsFirstSibling();
-
+            // 부모(_cutoutMask)가 작아도 자식이 화면 전체를 덮도록 절대 크기로 설정.
+            // CutoutMaskUI 의 stencil-invert 로 cutoutMask 영역 "밖"에만 렌더 → 구멍 + 전체 dim.
             var dimRT = dimGO.GetComponent<RectTransform>();
-            dimRT.anchorMin = Vector2.zero;
-            dimRT.anchorMax = Vector2.one;
-            dimRT.offsetMin = Vector2.zero;
-            dimRT.offsetMax = Vector2.zero;
+            dimRT.anchorMin = new Vector2(0.5f, 0.5f);
+            dimRT.anchorMax = new Vector2(0.5f, 0.5f);
+            dimRT.pivot     = new Vector2(0.5f, 0.5f);
+            dimRT.anchoredPosition = Vector2.zero;
+            dimRT.sizeDelta = new Vector2(10000f, 10000f);
 
-            _dimImage = dimGO.GetComponent<Image>();
             _dimImage.sprite = GetWhiteSprite();
             _dimImage.type = Image.Type.Simple;
-            _dimImage.raycastTarget = false;
-
-            if (_matCutoutDim != null)
-                _dimImage.material = _matCutoutDim;
+            _dimImage.raycastTarget = true;  // dim 영역에서 클릭 차단
             _dimImage.color = new Color(0f, 0f, 0f, 0.7f);
 
             dimGO.SetActive(false);
+            _cutoutImage.gameObject.SetActive(false);
         }
 
         public void Show(string boosterType, string description,

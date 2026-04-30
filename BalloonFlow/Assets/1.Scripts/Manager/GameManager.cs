@@ -122,8 +122,8 @@ namespace BalloonFlow
         public float coinSpawnDelayMin = 0.005f;
         [Tooltip("코인 생성 간격 최대(초). (default: 0.02)")]
         public float coinSpawnDelayMax = 0.02f;
-        [Tooltip("코인 이펙트 스케일. (default: 15)")]
-        public float coinFlyScale = 15f;
+        [Tooltip("코인 이펙트 스케일. (default: 1)")]
+        public float coinFlyScale = 1f;
 
         [Header("[레일 — Rail (컨베이어벨트)]")]
         [Tooltip("레일 슬롯 수. 다트가 점유하는 칸 수. 레벨 데이터에서 자동 계산됨. (default: 200)")]
@@ -406,10 +406,14 @@ namespace BalloonFlow
             _transitionSprite = _sprite;
         }
 
+        /// <summary>InGame 진입 시 강제 최소 로딩 시간 (초). fade-out + setup + warmup 합산이 이 값 미만이면 대기.</summary>
+        private const float MIN_INGAME_LOAD_DURATION = 2.5f;
+
         IEnumerator LoadSceneCoroutine(string _sceneName)
         {
             _isTransitioning = true;
             string _fromScene = _currentScene;
+            float _coStart = Time.realtimeSinceStartup;
 
             // 보상 이펙트/SFX가 다음 씬으로 이어져 재생되는 문제 방지.
             CoinFlyEffect.StopAll();
@@ -481,6 +485,16 @@ namespace BalloonFlow
                 // 2) 셋업 완료까지 대기.
                 while (LevelManager.HasInstance && LevelManager.Instance.IsLoading)
                     yield return null;
+
+                // 3) Warmup — fade overlay 가 아직 opaque 인 상태에서 몇 프레임 렌더하여
+                //    first-frame shader 컴파일 / material 바인드 / 풍선 메시 인스턴싱 등 첫 프레임 비용을
+                //    로딩 화면 뒤에서 흡수. 풍선 수가 많을 때 시작 직후 프레임 드랍 방지.
+                for (int i = 0; i < 3; i++) yield return new WaitForEndOfFrame();
+
+                // 4) 강제 최소 로딩 시간 보장 — 셋업이 빠르게 끝나도 사용자에게 일정 시간 로딩 화면 노출.
+                float elapsed = Time.realtimeSinceStartup - _coStart;
+                if (elapsed < MIN_INGAME_LOAD_DURATION)
+                    yield return new WaitForSecondsRealtime(MIN_INGAME_LOAD_DURATION - elapsed);
             }
 
             // Fade In — 셋업 완전 종료 후

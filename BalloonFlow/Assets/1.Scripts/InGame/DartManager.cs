@@ -715,13 +715,11 @@ namespace BalloonFlow
 
             float ft = EffectiveFlightTime;
 
-            // 발사 순간 다트를 풍선 사이즈로 펀치 스케일업 → 비행 중에도 풍선사이즈 유지.
+            // 시작 = 레일 위 다트 현재 사이즈, 목표 = 풍선 사이즈 → UpdateProjectiles 에서 비행 중 lerp.
             Vector3 balloonScale = BalloonController.HasInstance
                 ? BalloonController.Instance.GetBalloonWorldScale(targetBalloonId)
                 : dartObj.transform.localScale;
-            bool punchOn = GameManager.HasInstance && GameManager.Instance.Board.dartLaunchScalePunch;
-            float overshoot = GameManager.HasInstance ? GameManager.Instance.Board.dartLaunchScaleOvershoot : 1f;
-            Vector3 launchStartScale = punchOn ? balloonScale * overshoot : dartObj.transform.localScale;
+            Vector3 launchStartScale = dartObj.transform.localScale;
 
             var proj = new DartProjectile
             {
@@ -736,12 +734,6 @@ namespace BalloonFlow
             };
 
             _activeProjectiles.Add(proj);
-
-            if (punchOn)
-            {
-                float punchDur = GameManager.Instance.Board.dartLaunchScalePunchDuration;
-                dartObj.transform.DOScale(balloonScale * overshoot, punchDur).SetEase(Ease.OutBack);
-            }
 
             // Flight: parabolic arc (곡사) or linear depending on _arcHeight
             if (_arcHeight > 0.01f)
@@ -860,11 +852,9 @@ namespace BalloonFlow
 
                     float ft = EffectiveFlightTime;
 
-                    // 발사 순간 다트를 풍선 사이즈로 펀치 스케일업 → 비행 중에도 풍선사이즈 유지.
+                    // 시작 = 레일 위 다트 현재 사이즈, 목표 = 풍선 사이즈 → UpdateProjectiles 에서 비행 중 lerp.
                     Vector3 balloonScale = BalloonController.Instance.GetBalloonWorldScale(targetId);
-                    bool punchOn = GameManager.HasInstance && GameManager.Instance.Board.dartLaunchScalePunch;
-                    float overshoot = GameManager.HasInstance ? GameManager.Instance.Board.dartLaunchScaleOvershoot : 1f;
-                    Vector3 launchStartScale = punchOn ? balloonScale * overshoot : dartObj.transform.localScale;
+                    Vector3 launchStartScale = dartObj.transform.localScale;
 
                     var proj = new DartProjectile
                     {
@@ -878,12 +868,6 @@ namespace BalloonFlow
                         targetScale = balloonScale
                     };
                     _activeProjectiles.Add(proj);
-
-                    if (punchOn)
-                    {
-                        float punchDur = GameManager.Instance.Board.dartLaunchScalePunchDuration;
-                        dartObj.transform.DOScale(balloonScale * overshoot, punchDur).SetEase(Ease.OutBack);
-                    }
 
                     dartObj.transform.DOMove(targetPos, ft).SetEase(Ease.Linear);
                 }
@@ -906,13 +890,11 @@ namespace BalloonFlow
                 DartProjectile proj = _activeProjectiles[i];
                 proj.elapsed += Time.deltaTime;
 
-                if (proj.gameObject != null && proj.duration > 0f
-                    && GameManager.HasInstance && GameManager.Instance.Board.dartScaleLerpToBalloon)
+                if (proj.gameObject != null && proj.duration > 0f)
                 {
+                    // 비행 중 사이즈 lerp — 레일 다트 사이즈(start) → 풍선 사이즈(target). Inspector flag 무시 (항상 적용).
                     float t = Mathf.Clamp01(proj.elapsed / proj.duration);
-                    Vector3 desired = Vector3.Lerp(proj.startScale, proj.targetScale, t);
-                    float strength = Mathf.Clamp01(GameManager.Instance.Board.dartScaleLerpStrength);
-                    proj.gameObject.transform.localScale = Vector3.Lerp(proj.startScale, desired, strength);
+                    proj.gameObject.transform.localScale = Vector3.Lerp(proj.startScale, proj.targetScale, t);
                 }
 
                 if (proj.elapsed >= proj.duration)

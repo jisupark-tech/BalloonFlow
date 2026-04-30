@@ -95,9 +95,16 @@ namespace BalloonFlow
             StartCoroutine(LoadLevelCoroutine(levelId));
         }
 
+        /// <summary>
+        /// next-stage / retry 전환에서 강제 최소 로딩 시간 (초). fadeOut + setup + warmup 합산이 미만이면 hold.
+        /// GameManager.MIN_INGAME_LOAD_DURATION 과 동일 의미.
+        /// </summary>
+        private const float MIN_LEVEL_LOAD_DURATION = 2.5f;
+
         private IEnumerator LoadLevelCoroutine(int levelId)
         {
             _isLoading = true;
+            float coStart = Time.realtimeSinceStartup;
 
             // ── Fade out (loading screen 역할) ──
             // GameManager.LoadScene 직후 호출되는 케이스(씬 전환 → InGame)에선 이미 fade overlay가 활성이라
@@ -131,6 +138,19 @@ namespace BalloonFlow
 
             // ── Setup (yields 분산) ──
             yield return SetupLevelCoroutine(config);
+
+            // ── Warmup ── fade overlay 가 opaque 인 상태에서 몇 프레임 렌더 → first-frame shader / material 비용 흡수
+            if (ownsFade)
+                for (int i = 0; i < 3; i++) yield return new WaitForEndOfFrame();
+
+            // ── 최소 로딩 시간 보장 ── 셋업이 빨라도 사용자에게 일정 시간 로딩 화면 노출.
+            // GameManager 가 fade 를 관리 중이면 (외부 LoadScene 경로) 거기서 별도 보장 → skip.
+            if (ownsFade)
+            {
+                float elapsed = Time.realtimeSinceStartup - coStart;
+                if (elapsed < MIN_LEVEL_LOAD_DURATION)
+                    yield return new WaitForSecondsRealtime(MIN_LEVEL_LOAD_DURATION - elapsed);
+            }
 
             // ── Fade in ── (자체 fade일 때만. GameManager 가 fade 관리 중이면 GM이 IsLoading 감지 후 fade-in)
             if (ownsFade && UIManager.HasInstance)

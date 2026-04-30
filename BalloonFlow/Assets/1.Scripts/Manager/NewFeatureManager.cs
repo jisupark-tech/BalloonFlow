@@ -78,6 +78,10 @@ namespace BalloonFlow
         {
             _isShowingPopup = true;
 
+            // 로딩 + fade-in 끝날 때까지 대기 — popup 이 로딩 화면 위로 보이는 것을 방지.
+            while (LevelManager.HasInstance && LevelManager.Instance.IsLoading) yield return null;
+            while (UIManager.HasInstance && UIManager.Instance.IsFading) yield return null;
+
             while (_pendingFeatures.Count > 0)
             {
                 string featureKey = _pendingFeatures.Dequeue();

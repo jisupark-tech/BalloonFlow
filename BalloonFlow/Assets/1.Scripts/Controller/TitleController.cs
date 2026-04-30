@@ -31,12 +31,18 @@ namespace BalloonFlow
         private bool _loadingComplete;
         private bool _entered;
         private float _watchdogTimer;
+        /// <summary>네트워크 대기 중일 때 watchdog 일시 정지 (오프라인이면 30s timeout 으로 Lobby 강제 진입 막기).</summary>
+        private bool _isWaitingForNetwork;
 
         void Start()
         {
             // 카메라 설정
             if (CameraManager.HasInstance)
                 CameraManager.Instance.ConfigureTitle();
+
+            // 직전 씬의 UI/Popup 정리 (Title 진입 시 캐시된 잔여 UI 제거)
+            if (UIManager.HasInstance) UIManager.Instance.DestroyAllUI();
+            if (PopupManager.HasInstance) PopupManager.Instance.UnregisterAll();
 
             // 씬 캔버스를 UIManager에 등록
             if (UIManager.HasInstance)
@@ -76,8 +82,8 @@ namespace BalloonFlow
                 return;
             }
 
-            // 로딩 중 watchdog — 정의된 max time 초과 시 강제 입장
-            if (_loadingStarted)
+            // 로딩 중 watchdog — 정의된 max time 초과 시 강제 입장. 네트워크 대기 중에는 일시 정지.
+            if (_loadingStarted && !_isWaitingForNetwork)
             {
                 _watchdogTimer += Time.deltaTime;
                 if (_watchdogTimer >= MAX_LOADING_TIME)
@@ -101,6 +107,12 @@ namespace BalloonFlow
             for (int i = 0; i < LoadingSteps.Length; i++)
             {
                 var (label, weight) = LoadingSteps[i];
+
+                // 네트워크 필요한 단계 (1: server connect, 2: download) 진입 전 연결 확인.
+                // 끊겨있으면 여기서 PopupError 띄우고 연결될 때까지 hold.
+                if (i == 1 || i == 2)
+                    yield return EnsureInternet();
+
                 if (_ui != null) _ui.SetStatus(label);
 
                 // 단계별 실제 작업 hook
@@ -116,6 +128,42 @@ namespace BalloonFlow
                 _ui.SetProgress(1f);
                 _ui.SetStatus("Ready");
             }
+        }
+
+        /// <summary>
+        /// 인터넷 연결 확인 — 끊겨있으면 PopupError(Wifi) 띄우고 status text 를 "Connecting to internet..." 로.
+        /// 사용자가 OK 누르면 popup 닫히고 재확인 → 여전히 끊겨있으면 다시 popup. 연결되면 진행.
+        /// </summary>
+        private IEnumerator EnsureInternet()
+        {
+            while (Application.internetReachability == NetworkReachability.NotReachable)
+            {
+                _isWaitingForNetwork = true;
+                if (_ui != null) _ui.SetStatus("Connecting to internet...");
+
+                PopupError popup = null;
+                if (UIManager.HasInstance)
+                {
+                    popup = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+                    if (popup != null) popup.ShowNoInternet();
+                }
+
+                // 사용자가 OK 또는 X 로 popup 을 닫을 때까지 대기 — UIBase.CloseUI 가 SetActive(false) 처리.
+                if (popup != null)
+                {
+                    while (popup != null && popup.gameObject.activeSelf)
+                        yield return null;
+                }
+                else
+                {
+                    // popup 로드 실패 시 폴백 — 1초 간격 재시도
+                    yield return new WaitForSeconds(1f);
+                }
+
+                // 짧은 대기 후 재확인 (상태 갱신 시간 확보)
+                yield return new WaitForSeconds(0.5f);
+            }
+            _isWaitingForNetwork = false;
         }
 
         /// <summary>

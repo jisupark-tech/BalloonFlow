@@ -194,6 +194,19 @@ namespace BalloonFlow
             return !string.IsNullOrEmpty(popupId) && _popupMap.ContainsKey(popupId);
         }
 
+        /// <summary>
+        /// 등록된 popup 매핑 + 큐 + 활성 popup 상태 모두 초기화. 씬 전환 시 호출.
+        /// 다음 씬의 컨트롤러가 RegisterPopup 으로 자기 popup 들을 재등록한다.
+        /// </summary>
+        public void UnregisterAll()
+        {
+            _popupMap.Clear();
+            _queue.Clear();
+            _activePopupId = null;
+            if (_overlayBackground != null)
+                SetCanvasGroupVisible(_overlayBackground, false);
+        }
+
         #endregion
 
         #region Private Methods

@@ -57,6 +57,11 @@ namespace BalloonFlow
         private float _criticalTimer;
         private bool _failConfirmed;
 
+        /// <summary>이어하기 직후 fail 평가 일시 정지 기간 (초). player 가 행동할 시간 확보.</summary>
+        private const float POST_CONTINUE_GRACE_DURATION = 3f;
+        /// <summary>이어하기 grace 종료 시각 (Time.unscaledTime 기준). 0 이면 비활성.</summary>
+        private float _postContinueGraceUntil;
+
         // Danger 시각 경고 임계 (점유율 80%+에서 보드 위험 표시)
         // 단일 실패 경로는 '레일 가득 + 공격 불가 2초 grace' — stall 검출은 제거됨
         private const float STALL_MIN_OCCUPANCY = 0.8f;
@@ -115,6 +120,15 @@ namespace BalloonFlow
         {
             if (_currentState != BoardState.Playing) return;
             if (_failConfirmed) return;
+
+            // 이어하기 직후 grace 기간 — fail 평가 일시 정지. 이어하기 후 rail 이 여전히 stuck 일 수 있는데
+            // 즉시 fail 재트리거 방지. critical 도 강제로 풀어 시각 알람도 잠시 OFF.
+            if (_postContinueGraceUntil > 0f && Time.unscaledTime < _postContinueGraceUntil)
+            {
+                _isCritical = false;
+                _criticalTimer = 0f;
+                return;
+            }
 
             // 실패 조건 (사용자 정의):
             //  ① rail 가득 (EFC >= PhysicalCapacity - 1, gap-search 운용 상 rail이
@@ -618,6 +632,9 @@ namespace BalloonFlow
             _isCritical = false;
             _criticalTimer = 0f;
             _failConfirmed = false;
+
+            // 이어하기 후 grace 시작 — rail 이 여전히 stuck 이어도 일정 시간 fail 평가 멈춤
+            _postContinueGraceUntil = Time.unscaledTime + POST_CONTINUE_GRACE_DURATION;
 
             if (evt.removedColor >= 0 && evt.dartsRemoved > 0)
             {

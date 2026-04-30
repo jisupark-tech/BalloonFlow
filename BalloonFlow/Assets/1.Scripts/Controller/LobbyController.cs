@@ -36,20 +36,19 @@ namespace BalloonFlow
             if (CameraManager.HasInstance)
                 CameraManager.Instance.ConfigureLobby();
 
-            if (UIManager.HasInstance)
+            // Title 의 UI/Popup 제거 (Lobby 진입 시 직전 씬 UI 잔여 정리)
+            if (UIManager.HasInstance) UIManager.Instance.DestroyAllUI();
+            if (PopupManager.HasInstance) PopupManager.Instance.UnregisterAll();
+
+            if (UIManager.HasInstance && !UIManager.Instance.HasLiveSceneCanvas)
             {
+                // UIManager 가 캔버스를 갖고있지 않을 때만 (Editor 직접 Lobby Play 등) 새로 생성
                 var uiCanvas = GameObject.Find("UICanvas");
                 if (uiCanvas == null) uiCanvas = GameObject.Find("Canvas");
-                if (uiCanvas == null)
-                {
-                    uiCanvas = CreateCanvas("UICanvas", 0);
-                }
+                if (uiCanvas == null) uiCanvas = CreateCanvas("UICanvas", 0);
 
                 var popupCanvas = GameObject.Find("PopupCanvas");
-                if (popupCanvas == null)
-                {
-                    popupCanvas = CreateCanvas("PopupCanvas", 10);
-                }
+                if (popupCanvas == null) popupCanvas = CreateCanvas("PopupCanvas", 10);
 
                 var effectCanvas = GameObject.Find("EffectCanvas");
                 if (effectCanvas == null) effectCanvas = CreateCanvas("EffectCanvas", 15);
