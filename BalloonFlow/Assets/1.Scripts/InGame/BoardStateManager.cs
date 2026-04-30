@@ -390,9 +390,10 @@ namespace BalloonFlow
                 });
             }
 
-            // Danger 알람: stall 감지와 동일한 임계치에서 표시
-            if (BoardTileManager.HasInstance)
-                BoardTileManager.Instance.SetDangerVisible(evt.occupancy >= STALL_MIN_OCCUPANCY);
+            // Danger 알람: stall 감지와 동일한 임계치에서 ON.
+            // 80% 미만 진입 시 즉시 OFF 안 함 — BoardTileManager.UpdateDangerBlink가 사이클 종료 시점에 자체 종료.
+            if (BoardTileManager.HasInstance && evt.occupancy >= STALL_MIN_OCCUPANCY)
+                BoardTileManager.Instance.SetDangerVisible(true);
 
             // OnRailCritical 시각 알람용 이벤트 (rail 가득 + 매칭 불가 시).
             // _isCritical / 타이머는 Update 가 일괄 관리 (rail 가득 여부 무관하게 매칭 불가 검출).
