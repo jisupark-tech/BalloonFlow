@@ -34,13 +34,13 @@ namespace BalloonFlow
         // 보관함 배치 수치 — 절대 최소값 보장 (프리팹 스케일 1.04 기준)
         private const float MIN_COL_SPACING      = 2.16f;    // 보관함 좌우 최소 간격 (+20%)
         private const float MIN_ROW_SPACING       = 2.59f;    // 보관함 앞뒤 최소 간격 (+20%)
-        private const float MIN_DEPLOY_GAP        = 2.0f;     // 컨베이어 ~ 도착위치 최소 거리
+        private const float MIN_DEPLOY_GAP        = 0.8f;     // 컨베이어 ~ 도착위치 최소 거리
         private const float MIN_RAIL_TO_QUEUE     = 3.5f;     // 컨베이어 ~ 보관함 1열 최소 거리
 
         // 비율 기준 (큰 필드에서 비례 확장)
         private const float RATIO_COL_SPACING     = 0.352f;   // 필드 폭 × (보관함+간격) (+20%)
         private const float RATIO_ROW_SPACING     = 0.374f;   // 필드 폭 × 행 간격 (+20%)
-        private const float RATIO_DEPLOY_GAP      = 0.35f;    // 필드 폭 × 도착 거리
+        private const float RATIO_DEPLOY_GAP      = 0.15f;    // 필드 폭 × 도착 거리
         private const float RATIO_RAIL_TO_QUEUE   = 0.65f;    // 필드 폭 × 보관함 거리
 
         #endregion
@@ -483,7 +483,7 @@ namespace BalloonFlow
         /// 작은 필드에서도 보관함끼리 겹치지 않음.
         /// </summary>
         private float _rowSpacing = 1.8f;
-        private float _deployGap = 2.0f;
+        private float _deployGap = 0.8f;
 
         private void ComputeDynamicLayout()
         {
