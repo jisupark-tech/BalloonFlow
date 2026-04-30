@@ -112,6 +112,10 @@ namespace BalloonFlow
         private RectTransform _pageContainer;
         private float _pageWidth;
 
+        // Gold text display tween — 카운트업/다운 연출용 캐시값
+        private int _displayedCoins;
+        private Tweener _goldTween;
+
         // Nav text base Y positions (cached before animation)
         private float _baseYShop, _baseYHome, _baseYSetting;
         // Nav icon base Y positions
@@ -261,6 +265,7 @@ namespace BalloonFlow
         {
             base.OnDestroy();
             _pageTween?.Kill();
+            _goldTween?.Kill();
         }
 
         private void Update()
@@ -383,9 +388,58 @@ namespace BalloonFlow
 
         #region Public Methods — Display
 
+        /// <summary>
+        /// 골드 텍스트 즉시 스냅 (초기/비연출 케이스). 진행 중인 카운트 트윈은 종료.
+        /// </summary>
         public void SetGoldText(int coins)
         {
-            string formatted = coins.ToString("N0");
+            _goldTween?.Kill();
+            _displayedCoins = coins;
+            ApplyGoldText(coins);
+        }
+
+        /// <summary>
+        /// 현재 표시값 → target 까지 카운트 트윈으로 연출. timeScale 영향 회피(SetUpdate(true)).
+        /// </summary>
+        public void SetGoldTextAnimated(int targetCoins, float duration = 0.45f)
+        {
+            _goldTween?.Kill();
+
+            int from = _displayedCoins;
+            if (from == targetCoins)
+            {
+                ApplyGoldText(targetCoins);
+                return;
+            }
+
+            _goldTween = DOTween.To(
+                    () => _displayedCoins,
+                    v => { _displayedCoins = v; ApplyGoldText(v); },
+                    targetCoins,
+                    duration)
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(true)
+                .OnComplete(() =>
+                {
+                    _displayedCoins = targetCoins;
+                    ApplyGoldText(targetCoins);
+                });
+        }
+
+        /// <summary>
+        /// 표시값에 delta 만큼 즉시 더하기 — CoinFlyEffect 코인 한 알 도착 시 +1 카운트업용.
+        /// </summary>
+        public void AddDisplayedGold(int delta)
+        {
+            _goldTween?.Kill();
+            _displayedCoins += delta;
+            ApplyGoldText(_displayedCoins);
+        }
+
+        /// <summary>4개 골드 텍스트(메인+Outline, Shop+Outline) 동기화. N0 포맷.</summary>
+        private void ApplyGoldText(int value)
+        {
+            string formatted = value.ToString("N0");
             if (_txtGold != null) _txtGold.text = formatted;
             if (_txtGoldOutline != null) _txtGoldOutline.text = formatted;
             // Shop 패널 골드도 연동
