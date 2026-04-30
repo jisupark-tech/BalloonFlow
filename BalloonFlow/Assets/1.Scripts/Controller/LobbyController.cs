@@ -13,7 +13,11 @@ namespace BalloonFlow
     /// </summary>
     public class LobbyController : MonoBehaviour
     {
+        private const float COIN_FLY_FLAG_RESET_DELAY = 0.3f;
+
         private UILobby _lobby;
+        private bool _isCoinFlyInFlight;
+        private Coroutine _coinFlyResetCoroutine;
 
         void Start()
         {
@@ -64,12 +68,14 @@ namespace BalloonFlow
         {
             EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
             EventBus.Subscribe<OnLifeChanged>(HandleLifeChanged);
+            EventBus.Subscribe<OnCoinFlyLanded>(HandleCoinFlyLanded);
         }
 
         void OnDisable()
         {
             EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
             EventBus.Unsubscribe<OnLifeChanged>(HandleLifeChanged);
+            EventBus.Unsubscribe<OnCoinFlyLanded>(HandleCoinFlyLanded);
 
             if (_lobby != null)
             {
@@ -261,7 +267,46 @@ namespace BalloonFlow
 
         void HandleCoinChanged(OnCoinChanged evt)
         {
-            if (_lobby != null) _lobby.SetGoldText(evt.currentCoins);
+            if (_lobby == null) return;
+
+            // delta == 0 이면 단순 스냅
+            if (evt.delta == 0)
+            {
+                _lobby.SetGoldText(evt.currentCoins);
+                return;
+            }
+
+            // 코인 fly 시퀀스 진행 중이면 OnCoinFlyLanded 가 점진적으로 +1 갱신함 — 이 이벤트는 무시.
+            // 시퀀스 종료 후 ResetCoinFlyFlag 가 최종 값으로 동기화함.
+            if (evt.delta > 0 && _isCoinFlyInFlight) return;
+
+            _lobby.SetGoldTextAnimated(evt.currentCoins);
+        }
+
+        /// <summary>
+        /// PopupResult 의 코인 fly 연출에서 코인 한 알 도착 시 호출.
+        /// 표시값을 +1 카운트업하고, 마지막 도착 후 0.3s 뒤 플래그 해제 + 최종 동기화.
+        /// </summary>
+        void HandleCoinFlyLanded(OnCoinFlyLanded evt)
+        {
+            if (_lobby == null) return;
+
+            _isCoinFlyInFlight = true;
+            _lobby.AddDisplayedGold(1);
+
+            if (_coinFlyResetCoroutine != null) StopCoroutine(_coinFlyResetCoroutine);
+            _coinFlyResetCoroutine = StartCoroutine(ResetCoinFlyFlag());
+        }
+
+        System.Collections.IEnumerator ResetCoinFlyFlag()
+        {
+            yield return new WaitForSecondsRealtime(COIN_FLY_FLAG_RESET_DELAY);
+            _isCoinFlyInFlight = false;
+            _coinFlyResetCoroutine = null;
+
+            // 시퀀스 종료 후 최종 정합성 보정 — CurrencyManager 의 실제 값과 동기화
+            if (_lobby != null && CurrencyManager.HasInstance)
+                _lobby.SetGoldText(CurrencyManager.Instance.Coins);
         }
 
         void HandleLifeChanged(OnLifeChanged evt)
