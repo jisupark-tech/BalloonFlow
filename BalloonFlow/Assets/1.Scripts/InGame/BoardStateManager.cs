@@ -339,10 +339,12 @@ namespace BalloonFlow
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
             _currentLevelId = evt.levelId;
+            _outermostDirty = true;
         }
 
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
+            _outermostDirty = true;
             if (BalloonController.HasInstance)
             {
                 _remainingBalloons = BalloonController.Instance.GetRemainingCount();
@@ -366,6 +368,7 @@ namespace BalloonFlow
 
         private void HandleBalloonSpawned(OnBalloonSpawned evt)
         {
+            _outermostDirty = true;
             if (_currentState != BoardState.Playing) return;
             _remainingBalloons++;
             PublishBoardStateChanged();
@@ -522,8 +525,25 @@ namespace BalloonFlow
         private readonly HashSet<Vector2Int> _reusablePositionMap = new HashSet<Vector2Int>();
         private float _cachedCellSpacing = 0.55f;
 
+        /// <summary>
+        /// 외곽 색상 dirty 플래그 — 풍선 spawn/pop/level load 시 true 마킹.
+        /// false 면 _reusableOutermostColors 의 직전 결과 그대로 반환 → 매 프레임 O(n×200) 재계산 회피.
+        /// 풍선 N×N 격자 perf 최적화 (BoardStateManager.HasOutermostMatchCached 핫스팟 제거).
+        /// </summary>
+        private bool _outermostDirty = true;
+
+        /// <summary>
+        /// 외곽 색상 cache 무효화. 풍선 visibility 변경 (Hidden reveal / Ice melt / ColorCurtain off 등)
+        /// 외부에서 발생 시 호출. EventBus 으로 잡지 못하는 변경에 대한 방어 hook.
+        /// </summary>
+        public void InvalidateOutermostCache() => _outermostDirty = true;
+
         private HashSet<int> GetOutermostBalloonColors()
         {
+            // dirty 아니면 직전 계산 결과 그대로 반환 (매 프레임 비용 0)
+            if (!_outermostDirty) return _reusableOutermostColors;
+            _outermostDirty = false;
+
             _reusableOutermostColors.Clear();
             if (!BalloonController.HasInstance) return _reusableOutermostColors;
 
