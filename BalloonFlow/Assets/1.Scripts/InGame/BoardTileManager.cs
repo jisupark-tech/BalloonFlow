@@ -895,7 +895,7 @@ namespace BalloonFlow
             if (pathLen <= 0f) return;
 
             // Arrow도 벨트 속도로 이동
-            float delta = rail.RotationSpeed * rail.SlotSpacing * Time.deltaTime;
+            float delta = rail.RotationSpeed * rail.SlotSpacing * Time.deltaTime * 0.1f;
 
             // 다트 리스트 1회 캐시 (매 arrow마다 호출 방지)
             var darts = rail.GetAllDarts();
