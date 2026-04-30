@@ -129,8 +129,8 @@ namespace BalloonFlow
         [Tooltip("레일 슬롯 수. 다트가 점유하는 칸 수. 레벨 데이터에서 자동 계산됨. (default: 200)")]
         public int railSlotCount = 200;
 
-        [Tooltip("레일 회전 속도(슬롯/초). 벨트+다트+화살표 이동 속도 통일 기준. (default: 37)")]
-        public float railRotationSpeed = 37f;
+        [Tooltip("레일 회전 속도(슬롯/초). 벨트+다트+화살표 이동 속도 통일 기준. (default: 30)")]
+        public float railRotationSpeed = 30f;
 
         [Tooltip("보드 가장자리 ~ 레일 간격. (default: 1.5)")]
         public float railPadding = 1.5f;
