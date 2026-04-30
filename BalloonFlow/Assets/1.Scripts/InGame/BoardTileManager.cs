@@ -73,7 +73,7 @@ namespace BalloonFlow
         public int RailSideCount { get; set; } = 4;
 
         // Arrow: 슬롯 기반 회전 (다트처럼 벨트와 함께 이동)
-        private const float ARROW_SPACING = 4.5f; // Arrow 간 월드 거리 (이전 1.5 → 1/3 개수)
+        private const float ARROW_SPACING = 2.0f; // Arrow 간 월드 거리
         private GameObject[] _arrowObjects;
         private int[] _arrowSlotIndices; // 각 Arrow가 점유한 슬롯 인덱스
 
