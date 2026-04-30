@@ -85,6 +85,10 @@ namespace BalloonFlow
         private const float DANGER_BLINK_SPEED = 3f; // 깜빡임 속도
         private const float DANGER_ALPHA_MIN = 0.15f;
         private const float DANGER_ALPHA_MAX = 0.8f;
+        // 점유율이 이 값 이하로 떨어진 사이클 종료 시점에만 danger 오버레이 OFF
+        private const float DANGER_OFF_THRESHOLD = 0.8f;
+        // 한 점멸 사이클 = 사인파 한 주기
+        private const float DANGER_CYCLE_LENGTH = 2f * Mathf.PI;
 
         // 스테이지 전환 최적화: 동일 dimensions 재빌드 스킵용 캐시 키
         private int _lastBuildSides = -1;
@@ -596,6 +600,19 @@ namespace BalloonFlow
             if (!_dangerVisible || _dangerRenderers == null) return;
 
             _dangerBlinkTimer += Time.deltaTime * DANGER_BLINK_SPEED;
+
+            // 사이클 종료 시점에서만 OFF 판정 — 깜빡임 도중 갑자기 사라지지 않도록.
+            if (_dangerBlinkTimer >= DANGER_CYCLE_LENGTH)
+            {
+                _dangerBlinkTimer -= DANGER_CYCLE_LENGTH;
+                if (RailManager.HasInstance && RailManager.Instance.Occupancy <= DANGER_OFF_THRESHOLD)
+                {
+                    SetDangerVisible(false);
+                    _dangerBlinkTimer = 0f;
+                    return;
+                }
+            }
+
             float alpha = Mathf.Lerp(DANGER_ALPHA_MIN, DANGER_ALPHA_MAX,
                 (Mathf.Sin(_dangerBlinkTimer) + 1f) * 0.5f);
 
