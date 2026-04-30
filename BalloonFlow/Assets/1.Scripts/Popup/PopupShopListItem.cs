@@ -76,12 +76,12 @@ namespace BalloonFlow
             if (ResourceManager.HasInstance)
             {
                 var rm = ResourceManager.Instance;
-                _iconCoin           = rm.UISpriteOr("iconGold",          _iconCoin);
-                _iconInfiniteHearts = rm.UISpriteOr("iconHearInfinite",  _iconInfiniteHearts);
-                _iconRemoveAds      = rm.UISpriteOr("iconAd",            _iconRemoveAds);
-                _iconHand           = rm.UISpriteOr("iconHand",          _iconHand);
-                _iconShuffle        = rm.UISpriteOr("iconSuffle",        _iconShuffle);
-                _iconZap            = rm.UISpriteOr("iconZap",           _iconZap);
+                _iconCoin           = rm.UISpriteOr(Const.SPR_ICONGOLD,           _iconCoin);
+                _iconInfiniteHearts = rm.UISpriteOr(Const.SPR_ICONHEARINFINITE,   _iconInfiniteHearts);
+                _iconRemoveAds      = rm.UISpriteOr(Const.SPR_ICONAD,             _iconRemoveAds);
+                _iconHand           = rm.UISpriteOr(Const.SPR_ICONHAND,           _iconHand);
+                _iconShuffle        = rm.UISpriteOr(Const.SPR_ICONSUFFLE,         _iconShuffle);
+                _iconZap            = rm.UISpriteOr(Const.SPR_ICONZAP,            _iconZap);
             }
         }
 
@@ -96,9 +96,13 @@ namespace BalloonFlow
             _data = data;
             _onBuy = onBuy;
 
-            // 상품 이미지
-            if (_imgProducts != null && data.productImage != null)
-                _imgProducts.sprite = data.productImage;
+            // 상품 이미지: Firestore imageKey → atlas sprite (sync, atlas 가 Title 에서 사전 로드됨).
+            // 키 미지정/atlas 미준비 시 Inspector 의 productImage 또는 prefab 기본값 유지.
+            if (_imgProducts != null)
+            {
+                Sprite resolved = ResolveProductSprite(data);
+                if (resolved != null) _imgProducts.sprite = resolved;
+            }
 
             // 타이틀
             SetTextWithOutline(_txtTitle, _txtTitleOutline, data.title);
@@ -141,6 +145,42 @@ namespace BalloonFlow
 
             // 동적 보상 표시 (ItemArea / BoostArea)
             SetupRewards(data.rewards);
+        }
+
+        /// <summary>
+        /// 상품 카드 상단 큰 이미지 sprite 결정 우선순위:
+        ///   1) data.imageKey (Firestore 명시) → atlas
+        ///   2) data.category 별 기본 sprite (코인=iconGold, 광고제거=iconAd, 그 외=iconGold)
+        ///   3) Inspector 의 data.productImage (임시 데이터용)
+        /// atlas 미로드 시에는 모두 null 가능 — 호출자 측에서 prefab 기본값 유지.
+        /// </summary>
+        private Sprite ResolveProductSprite(ShopProductData data)
+        {
+            if (data == null) return null;
+            var rm = ResourceManager.HasInstance ? ResourceManager.Instance : null;
+
+            // 1) imageKey 명시
+            if (rm != null && !string.IsNullOrEmpty(data.imageKey))
+            {
+                var s = rm.GetUISprite(data.imageKey);
+                if (s != null) return s;
+            }
+
+            // 2) 카테고리 fallback
+            if (rm != null)
+            {
+                string fallbackKey = data.category switch
+                {
+                    ShopItemCategory.Gold => Const.SPR_ICONGOLD,
+                    ShopItemCategory.Ad   => Const.SPR_ICONAD,
+                    _                     => Const.SPR_ICONGOLD,
+                };
+                var s = rm.GetUISprite(fallbackKey);
+                if (s != null) return s;
+            }
+
+            // 3) Inspector 임시 데이터
+            return data.productImage;
         }
 
         #region Reward area dynamic build

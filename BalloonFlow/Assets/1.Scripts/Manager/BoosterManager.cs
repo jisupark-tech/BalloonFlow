@@ -57,6 +57,55 @@ namespace BalloonFlow
         protected override void OnSingletonAwake()
         {
             LoadInventory();
+            TrySubscribeUserData();
+        }
+
+        /// <summary>UserDataService ready 시 Firestore boosters 와 PlayerPrefs 비교 후 reconcile.</summary>
+        private void TrySubscribeUserData()
+        {
+            if (!UserDataService.HasInstance) return;
+            UserDataService.Instance.OnUserDataReady += ReconcileFromFirestore;
+            if (UserDataService.Instance.IsReady) ReconcileFromFirestore();
+        }
+
+        protected override void OnDestroy()
+        {
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.OnUserDataReady -= ReconcileFromFirestore;
+            base.OnDestroy();
+        }
+
+        /// <summary>
+        /// 새 디바이스 / 앱 재설치 시 Firestore.boosters 가 PlayerPrefs 보다 클 수 있음.
+        /// 보수적으로 max 채택 — 사용자가 어느 한쪽이라도 가지고 있던 부스터를 잃지 않도록.
+        /// 보낼 delta = max - PlayerPrefs (양수만 atomic increment 로 다시 push).
+        /// </summary>
+        private void ReconcileFromFirestore()
+        {
+            if (!UserDataService.HasInstance || !UserDataService.Instance.IsReady) return;
+            var user = UserDataService.Instance.CurrentUser;
+            if (user == null || user.boosters == null) return;
+
+            ReconcileOne(HAND,    user.boosters.hand);
+            ReconcileOne(SHUFFLE, user.boosters.shuffle);
+            ReconcileOne(ZAP,     user.boosters.zap);
+        }
+
+        private void ReconcileOne(string id, int firestoreCount)
+        {
+            int local = GetBoosterCount(id);
+            if (firestoreCount > local)
+            {
+                // Firestore 가 더 많음 — local 을 끌어올림 (PlayerPrefs 만 갱신, 이미 서버에 있는 값이라 push 불필요)
+                _inventory[id] = firestoreCount;
+                SaveInventory(id);
+            }
+            else if (local > firestoreCount)
+            {
+                // local 이 더 많음 — Firestore 에 차이만큼 push
+                int delta = local - firestoreCount;
+                UserDataService.Instance.AdjustBooster(id, delta, "Reconcile(local>fs)");
+            }
         }
 
         #endregion
@@ -90,6 +139,7 @@ namespace BalloonFlow
 
             _inventory[boosterType]--;
             SaveInventory(boosterType);
+            SyncBoosterToFirestore(boosterType, -1, "UseBooster");
 
             EventBus.Publish(new OnBoosterUsed { boosterType = boosterType });
             Debug.Log($"[BoosterManager] Used {boosterType}. Remaining: {_inventory[boosterType]}");
@@ -121,6 +171,7 @@ namespace BalloonFlow
             if (!_inventory.ContainsKey(boosterType)) _inventory[boosterType] = 0;
             _inventory[boosterType] += count;
             SaveInventory(boosterType);
+            SyncBoosterToFirestore(boosterType, count, "AddBooster");
             Debug.Log($"[BoosterManager] Added {count}x {boosterType}. Total: {_inventory[boosterType]}");
         }
 
@@ -209,6 +260,14 @@ namespace BalloonFlow
         private bool IsValidType(string boosterType)
         {
             return !string.IsNullOrEmpty(boosterType) && _boosterDefs.ContainsKey(boosterType);
+        }
+
+        /// <summary>Firestore atomic increment 동기화. UserDataService 미준비 시 무시 (offline cache → 추후 reconcile).</summary>
+        private static void SyncBoosterToFirestore(string boosterType, int delta, string reason)
+        {
+            if (delta == 0) return;
+            if (!UserDataService.HasInstance || !UserDataService.Instance.IsReady) return;
+            UserDataService.Instance.AdjustBooster(boosterType, delta, reason);
         }
 
         private void LoadInventory()

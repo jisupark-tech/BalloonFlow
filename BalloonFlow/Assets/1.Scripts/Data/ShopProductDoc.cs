@@ -5,7 +5,7 @@ namespace BalloonFlow
     /// <summary>
     /// Firestore /products/{productId} 문서 모델. 콘솔에서 가격/구성 라이브 조정용.
     /// 클라이언트의 ShopProductData 와는 별도 — 서버 fetch 후 변환.
-    /// 카테고리: gold | bundle | special_offer | remove_ads | ad_reward
+    /// 카테고리(1.0): coin | bundle | noads | offer  (xlsx 시트 기준)
     /// </summary>
     [FirestoreData]
     public class ShopProductDoc
@@ -13,13 +13,17 @@ namespace BalloonFlow
         [FirestoreProperty] public string productId { get; set; } = "";
         [FirestoreProperty] public string title_loc_key { get; set; } = "";
         [FirestoreProperty] public string description_loc_key { get; set; } = "";
-        [FirestoreProperty] public string category { get; set; } = ""; // gold|bundle|special_offer|remove_ads|ad_reward
+        [FirestoreProperty] public string category { get; set; } = ""; // coin|bundle|noads|offer
 
         // ── Pricing ──────────────────────────────────────────────
         [FirestoreProperty] public double priceUsd { get; set; } = 0d;
         [FirestoreProperty] public string currency { get; set; } = "USD";
         [FirestoreProperty] public string playStoreSku { get; set; } = "";
         [FirestoreProperty] public string appStoreSku { get; set; } = "";
+
+        // ── Visuals (Addressable atlas sprite name) ──────────────
+        /// <summary>UI atlas (Const.ADDR_ATLAS_UI) 안의 sprite 이름. 빈 문자열이면 카테고리별 fallback.</summary>
+        [FirestoreProperty] public string imageKey { get; set; } = "";
 
         // ── Rewards ──────────────────────────────────────────────
         [FirestoreProperty] public ShopRewards rewards { get; set; } = new ShopRewards();

@@ -142,6 +142,7 @@ namespace BalloonFlow
         public string productId;
         public string title;
         public string price;
+        /// <summary>Inspector 임시 데이터용 직접 sprite 참조. Firestore 카탈로그 경로에선 사용 안 함 (imageKey 우선).</summary>
         public Sprite productImage;
 
         [Header("[할인]")]
@@ -156,6 +157,10 @@ namespace BalloonFlow
         [Header("[List Item Prefab 카테고리]")]
         [Tooltip("Gold = ShopListGold, General = ShopListItem (특가/번들), Ad = ShopListAd")]
         public ShopItemCategory category = ShopItemCategory.General;
+
+        /// <summary>UI atlas (Const.ADDR_ATLAS_UI) 안의 sprite 이름. Firestore ShopProductDoc.imageKey 매핑.</summary>
+        [HideInInspector]
+        public string imageKey;
 
         /// <summary>Firestore ShopProductDoc.rewards 매핑. Inspector 임시 데이터에선 null.</summary>
         [HideInInspector]

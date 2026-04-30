@@ -436,6 +436,51 @@ namespace BalloonFlow
             ApplyGoldText(_displayedCoins);
         }
 
+        /// <summary>
+        /// GoldPanel (TopBar 골드 텍스트) 의 화면 좌표. CoinFlyEffect 의 도착 지점으로 사용.
+        /// _txtGold 미할당 시 화면 우상단 추정값 fallback.
+        /// </summary>
+        public Vector2 GetGoldPanelScreenPos()
+        {
+            if (_txtGold == null) return new Vector2(Screen.width * 0.85f, Screen.height * 0.92f);
+            var rt = _txtGold.rectTransform;
+            var canvas = rt.GetComponentInParent<Canvas>();
+            Camera cam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
+                ? canvas.worldCamera : null;
+            return RectTransformUtility.WorldToScreenPoint(cam, rt.position);
+        }
+
+        private Vector3 _goldPanelOriginalScale;
+        private bool _goldPanelOriginalCaptured;
+
+        /// <summary>
+        /// GoldPanel 펄스 연출 — DOPunchScale 로 커지고-작아지고 반복.
+        /// FxGold 코인 도착 시 호출. 매 호출 시 원본 scale 로 복원 후 새 punch 시작 (중첩 호출 시 누적 변형 방지).
+        /// </summary>
+        public void PulseGoldPanel(float strength = 0.25f, float duration = 0.5f, int vibrato = 6)
+        {
+            Transform target = (_txtGold != null && _txtGold.transform.parent != null)
+                ? _txtGold.transform.parent
+                : (_txtGold != null ? _txtGold.transform : null);
+            if (target == null) return;
+
+            // 원본 scale 캡처 (1회만, prefab 기본값 보존)
+            if (!_goldPanelOriginalCaptured)
+            {
+                _goldPanelOriginalScale = target.localScale;
+                _goldPanelOriginalCaptured = true;
+            }
+
+            // 진행 중 트윈 즉시 종료 + 원본 scale 강제 복원 → 새 punch 가 깨끗한 상태에서 시작
+            target.DOKill();
+            target.localScale = _goldPanelOriginalScale;
+
+            target.DOPunchScale(Vector3.one * strength, duration, vibrato, elasticity: 0.5f)
+                  .SetUpdate(true)
+                  .OnComplete(() => target.localScale = _goldPanelOriginalScale)
+                  .OnKill(()     => target.localScale = _goldPanelOriginalScale);
+        }
+
         /// <summary>4개 골드 텍스트(메인+Outline, Shop+Outline) 동기화. N0 포맷.</summary>
         private void ApplyGoldText(int value)
         {

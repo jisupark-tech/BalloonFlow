@@ -120,11 +120,12 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Adds coins from a specified source. Publishes OnCoinChanged.
+        /// Adds coins from a specified source. Publishes OnCoinChanged unless suppressed.
         /// </summary>
         /// <param name="amount">Positive amount to add.</param>
         /// <param name="source">Source category for tracking.</param>
-        public void AddCoins(int amount, CoinSource source)
+        /// <param name="suppressEvent">true 면 OnCoinChanged 발행 안 함 — IAP 보상 연출에서 UILobby 즉시 갱신 방지용. 연출 끝 후 PublishCoinSync() 호출 책임.</param>
+        public void AddCoins(int amount, CoinSource source, bool suppressEvent = false)
         {
             if (amount <= 0)
             {
@@ -140,10 +141,26 @@ namespace BalloonFlow
             if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
                 UserDataService.Instance.AdjustCoins(amount, $"src:{source}");
 
+            if (!suppressEvent)
+            {
+                EventBus.Publish(new OnCoinChanged
+                {
+                    currentCoins = _currentCoins,
+                    delta = amount
+                });
+            }
+        }
+
+        /// <summary>
+        /// 현재 잔액으로 OnCoinChanged 발행 — suppressEvent=true 로 더한 코인을 UI 와 sync 시킬 때 호출.
+        /// 연출 (FxGold fly + GoldPanel 펄스) 종료 시점에 호출.
+        /// </summary>
+        public void PublishCoinSync()
+        {
             EventBus.Publish(new OnCoinChanged
             {
                 currentCoins = _currentCoins,
-                delta = amount
+                delta = 0
             });
         }
 

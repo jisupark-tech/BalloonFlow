@@ -54,6 +54,12 @@ namespace BalloonFlow
 
             if (_animator == null)
                 _animator = GetComponentInChildren<Animator>();
+
+            // 풍선 N×N 격자에서 Animator update 가 풍선 수 비례로 main thread 부하 큼.
+            // 카메라에 안 보이는 풍선의 Animator 는 update 안 함 — Renderer.bounds 기준 Cull.
+            // CullCompletely: 보이지 않을 때 controller graph evaluation + bone transform 모두 skip.
+            if (_animator != null)
+                _animator.cullingMode = AnimatorCullingMode.CullCompletely;
         }
 
         /// <summary>Sets balloon properties (used by BalloonController during spawn).</summary>

@@ -135,18 +135,23 @@ namespace BalloonFlow
                 hasTimeLimit     = doc.hasTimeLimit,
                 timeLimitSeconds = doc.timeLimitSeconds,
                 category         = MapCategory(doc.category),
+                imageKey         = doc.imageKey,
                 rewards          = doc.rewards   // 동적 보상 표시용
             };
         }
 
+        /// <summary>Firestore /products 의 카테고리 문자열 → UI prefab 분기 enum.
+        /// 실제 시드 카테고리: coin / bundle / noads / offer (1.0 기준).</summary>
         private static ShopItemCategory MapCategory(string cat)
         {
             if (string.IsNullOrEmpty(cat)) return ShopItemCategory.General;
             switch (cat.ToLowerInvariant())
             {
-                case "gold":      return ShopItemCategory.Gold;
-                case "ad_reward": return ShopItemCategory.Ad;
-                default:          return ShopItemCategory.General; // bundle / special_offer / remove_ads
+                case "coin":   return ShopItemCategory.Gold;    // ShopListGold prefab
+                case "noads":  return ShopItemCategory.Ad;      // ShopListAd prefab
+                case "bundle":
+                case "offer":
+                default:       return ShopItemCategory.General; // ShopListItem prefab
             }
         }
 
@@ -323,75 +328,47 @@ namespace BalloonFlow
                 _btnMoreProducts.transform.SetAsLastSibling();
         }
 
-        /// <summary>상품 구매 콜백 → ShopManager 라우팅.</summary>
+        /// <summary>상품 구매 콜백 → 확인 popup → 확인 시 ShopManager 라우팅.</summary>
         private void OnProductBuy(ShopProductData product)
         {
-            Debug.Log($"[UIShop] Buy: {product.productId}, {product.title}, {product.price}");
+            Debug.Log($"[UIShop] Buy clicked: {product.productId}, {product.title}, {product.price}");
 
+            if (!UIManager.HasInstance)
+            {
+                ProceedPurchase(product);
+                return;
+            }
+
+            var popup = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+            if (popup == null)
+            {
+                ProceedPurchase(product);
+                return;
+            }
+
+            string desc = $"Buy {product.title} for {product.price}?";
+            popup.ShowConfirm(
+                title:       "Confirm Purchase",
+                description: desc,
+                onYes:       () => ProceedPurchase(product),
+                onNo:        null);
+        }
+
+        /// <summary>실제 구매 라우팅 — 확인 popup 의 Yes 콜백.</summary>
+        private static void ProceedPurchase(ShopProductData product)
+        {
             if (ShopManager.HasInstance)
                 ShopManager.Instance.PurchaseProduct(product.productId);
         }
 
         /// <summary>
-        /// Inspector 가 비어있을 때 사용할 임시 상품 데이터 (Editor 스탠드얼론 + Firestore 미연결 fallback).
-        /// 실제 product ID 는 Firestore /products (full Store SKU) — ShopCatalogService 통해 fetch.
+        /// Firestore /products fetch 가 미준비/실패한 짧은 시점에 빈 배열 반환.
+        /// 실제 카탈로그는 ShopCatalogService 가 fetch 완료 시 OnCatalogReady 에서 채움.
+        /// (이전 placeholder 들은 옛 ID 라 구매 시 IAPManager lookup 실패하므로 제거)
         /// </summary>
         private static ShopProductData[] BuildDefaultTempProducts()
         {
-            return new[]
-            {
-                // ── 골드 팩 6종 (IAP) — Gold prefab ──
-                new ShopProductData { productId = "gold_1k",   title = "1,000 골드",   price = "₩2,751",
-                                       category = ShopItemCategory.Gold },
-                new ShopProductData { productId = "gold_5k",   title = "5,000 골드",   price = "₩11,007",
-                                       hasDiscount = true, discountPercent = 10,
-                                       category = ShopItemCategory.Gold },
-                new ShopProductData { productId = "gold_10k",  title = "10,000 골드",  price = "₩20,638",
-                                       hasDiscount = true, discountPercent = 15,
-                                       category = ShopItemCategory.Gold },
-                new ShopProductData { productId = "gold_25k",  title = "25,000 골드",  price = "₩41,277",
-                                       hasDiscount = true, discountPercent = 20,
-                                       category = ShopItemCategory.Gold },
-                new ShopProductData { productId = "gold_50k",  title = "50,000 골드",  price = "₩75,675",
-                                       hasDiscount = true, discountPercent = 25,
-                                       category = ShopItemCategory.Gold },
-                new ShopProductData { productId = "gold_100k", title = "100,000 골드", price = "₩137,591",
-                                       hasDiscount = true, discountPercent = 30,
-                                       category = ShopItemCategory.Gold },
-
-                // ── 번들 3종 — 시간 한정 — General prefab (특가/번들) ──
-                new ShopProductData { productId = "bundle_small",  title = "소형 번들",   price = "₩13,759",
-                                       hasDiscount = true, discountPercent = 40,
-                                       hasTimeLimit = true, timeLimitSeconds = 86400f,
-                                       category = ShopItemCategory.General },
-                new ShopProductData { productId = "bundle_medium", title = "중형 번들",   price = "₩27,518",
-                                       hasDiscount = true, discountPercent = 50,
-                                       hasTimeLimit = true, timeLimitSeconds = 86400f,
-                                       category = ShopItemCategory.General },
-                new ShopProductData { productId = "bundle_ultra",  title = "울트라 번들", price = "₩59,000",
-                                       hasDiscount = true, discountPercent = 60,
-                                       hasTimeLimit = true, timeLimitSeconds = 86400f,
-                                       category = ShopItemCategory.General },
-
-                // ── 광고 보상 — Ad prefab ──
-                new ShopProductData { productId = "ad_gold_100",   title = "광고 보상 — 100 골드",  price = "WATCH AD",
-                                       category = ShopItemCategory.Ad,
-                                       hasTimeLimit = true, timeLimitSeconds = 3600f /* 1시간 쿨타임 */ },
-
-                // ── 광고 제거 + 하트 — General prefab ──
-                new ShopProductData { productId = "remove_ads",    title = "광고 제거",   price = "₩5,500",
-                                       category = ShopItemCategory.General },
-                new ShopProductData { productId = "heart_refill",  title = "하트 충전",   price = "₩1,100",
-                                       category = ShopItemCategory.General },
-
-                // ── 부스터 (코인 구매) — productId 는 BoosterManager 상수와 정확 일치 — General prefab ──
-                new ShopProductData { productId = "hand",    title = "Hand 부스터",    price = "1,900 coins",
-                                       category = ShopItemCategory.General },
-                new ShopProductData { productId = "shuffle", title = "Shuffle 부스터", price = "1,500 coins",
-                                       category = ShopItemCategory.General },
-                new ShopProductData { productId = "zap",     title = "Zap 부스터",     price = "2,900 coins",
-                                       category = ShopItemCategory.General },
-            };
+            return System.Array.Empty<ShopProductData>();
         }
     }
 }

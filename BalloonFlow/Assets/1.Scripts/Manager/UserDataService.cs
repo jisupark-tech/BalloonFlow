@@ -50,31 +50,60 @@ namespace BalloonFlow
                 _auth = FirebaseAuth.DefaultInstance;
                 _db   = FirebaseEnvironment.GetFirestore();
 
-                // Anonymous sign-in. 기존 세션은 token 강제 refresh — Editor 에서 stale token 으로 Firestore permission_denied 회피
-                if (_auth.CurrentUser == null)
-                {
-                    var authResult = await _auth.SignInAnonymouslyAsync();
-                    Debug.Log($"{LOG_TAG} Signed in anonymously. uid={authResult.User.UserId}");
-                }
-                else
-                {
-                    Debug.Log($"{LOG_TAG} Existing auth session. uid={_auth.CurrentUser.UserId}");
-                    try
-                    {
-                        await _auth.CurrentUser.TokenAsync(true); // forceRefresh
-                        Debug.Log($"{LOG_TAG} Auth token refreshed.");
-                    }
-                    catch (Exception tokenEx)
-                    {
-                        Debug.LogWarning($"{LOG_TAG} Token refresh failed: {tokenEx.Message}");
-                    }
-                }
+                await EnsureSignedInAsync(forceFresh: false);
 
-                await LoadOrCreateUserAsync(_auth.CurrentUser.UserId);
+                // 1차 시도. permission_denied 면 backend 에 user 가 없는(stale) 상태로 보고 sign-out + new sign-in 후 재시도 1회.
+                try
+                {
+                    await LoadOrCreateUserAsync(_auth.CurrentUser.UserId);
+                }
+                catch (FirestoreException fe) when (fe.ErrorCode == FirestoreError.PermissionDenied)
+                {
+                    Debug.LogWarning($"{LOG_TAG} permission_denied — stale auth 의심. SignOut 후 재로그인 시도.");
+                    await EnsureSignedInAsync(forceFresh: true);
+                    // 새 token backend propagation 짧은 대기 (race condition 방지)
+                    await Task.Delay(500);
+                    // 한 번 더 forceRefresh — 새 user 의 ID token 보장
+                    try { await _auth.CurrentUser.TokenAsync(true); } catch { /* best-effort */ }
+                    await LoadOrCreateUserAsync(_auth.CurrentUser.UserId);
+                }
             }
             catch (Exception e)
             {
                 Debug.LogError($"{LOG_TAG} Init failed: {e}");
+            }
+        }
+
+        /// <summary>
+        /// Anonymous Auth 보장. forceFresh=true 면 SignOut 후 새로 sign-in (stale token / 삭제된 user 회복용).
+        /// </summary>
+        private async Task EnsureSignedInAsync(bool forceFresh)
+        {
+            if (forceFresh && _auth.CurrentUser != null)
+            {
+                Debug.Log($"{LOG_TAG} SignOut existing user uid={_auth.CurrentUser.UserId}");
+                _auth.SignOut();
+            }
+
+            if (_auth.CurrentUser == null)
+            {
+                var authResult = await _auth.SignInAnonymouslyAsync();
+                Debug.Log($"{LOG_TAG} Signed in anonymously. uid={authResult.User.UserId}");
+                return;
+            }
+
+            Debug.Log($"{LOG_TAG} Existing auth session. uid={_auth.CurrentUser.UserId}");
+            try
+            {
+                await _auth.CurrentUser.TokenAsync(true); // forceRefresh
+                Debug.Log($"{LOG_TAG} Auth token refreshed.");
+            }
+            catch (Exception tokenEx)
+            {
+                Debug.LogWarning($"{LOG_TAG} Token refresh failed: {tokenEx.Message} — SignOut 후 재로그인.");
+                _auth.SignOut();
+                var authResult = await _auth.SignInAnonymouslyAsync();
+                Debug.Log($"{LOG_TAG} Re-signed in anonymously. uid={authResult.User.UserId}");
             }
         }
 

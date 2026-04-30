@@ -35,6 +35,7 @@ namespace BalloonFlow
             go.AddComponent<AttributionManager>();
             go.AddComponent<AdManager>();
             go.AddComponent<AnalyticsManager>();
+            go.AddComponent<PurchaseRewardEffect>();
 
             Debug.Log("[SdkBootstrap] Boot object created. Managers attached.");
         }

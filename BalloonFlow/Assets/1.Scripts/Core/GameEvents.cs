@@ -357,6 +357,17 @@ namespace BalloonFlow
         public string productId;
     }
 
+    /// <summary>
+    /// 결제 성공 후 보상이 메모리에 지급됐고 UI 연출만 남은 시점에 발행.
+    /// PurchaseRewardEffect (또는 동등) 가 구독해 success popup → 확인 → FxGold fly → GoldPanel 펄스 진행.
+    /// </summary>
+    public struct OnPurchaseRewardGranted
+    {
+        public string productId;
+        public ShopRewards rewards;     // null 가능 (광고제거만 등)
+        public int coinsAdded;          // 즉시 더해진 코인 (suppressEvent=true 라 UI 미반영 상태)
+    }
+
     // ────────────────────────────────────────
     // UI Events
     // ────────────────────────────────────────

@@ -262,7 +262,11 @@ namespace BalloonFlow
         }
 #endif
 
-        /// <summary>ShopCatalogService 의 보상 정의를 읽어 매니저에 위임. 클라 단독 처리 (Phase 3 전).</summary>
+        /// <summary>
+        /// ShopCatalogService 의 보상 정의를 읽어 매니저에 위임. 클라 단독 처리 (Phase 3 전).
+        /// 코인은 CurrencyManager.AddCoins(suppressEvent=true) 로 silent 지급 — UILobby 즉시 갱신 차단.
+        /// 후속 OnPurchaseRewardGranted 이벤트로 PurchaseRewardEffect 가 success popup + FxGold 연출 처리.
+        /// </summary>
         private void ProcessPurchaseReward(string productId)
         {
             var doc = ShopCatalogService.HasInstance ? ShopCatalogService.Instance.Get(productId) : null;
@@ -273,10 +277,15 @@ namespace BalloonFlow
             }
 
             var r = doc.rewards;
+            int coinsAdded = 0;
             if (r != null)
             {
                 if (r.coins > 0 && CurrencyManager.HasInstance)
-                    CurrencyManager.Instance.AddCoins(r.coins, CurrencyManager.CoinSource.IAP);
+                {
+                    // suppressEvent=true → UILobby 즉시 갱신 차단. 연출 끝에 PublishCoinSync 호출.
+                    CurrencyManager.Instance.AddCoins(r.coins, CurrencyManager.CoinSource.IAP, suppressEvent: true);
+                    coinsAdded = r.coins;
+                }
 
                 if (r.boosters != null && BoosterManager.HasInstance)
                 {
@@ -307,6 +316,14 @@ namespace BalloonFlow
             // NPU 해제
             if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
                 UserDataService.Instance.MarkPaying();
+
+            // 보상 연출 트리거
+            EventBus.Publish(new OnPurchaseRewardGranted
+            {
+                productId   = productId,
+                rewards     = r,
+                coinsAdded  = coinsAdded
+            });
         }
 
         private static void PublishPurchaseResult(string productId, bool success)

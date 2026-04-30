@@ -87,6 +87,10 @@ namespace BalloonFlow
             if (_animator == null)
                 _animator = GetComponentInChildren<Animator>();
 
+            // 화면 밖 holder 의 Animator update 차단 — 풍선과 동일 사유.
+            if (_animator != null)
+                _animator.cullingMode = AnimatorCullingMode.CullCompletely;
+
             // Box/BoxFrozen 미할당 시 자동 탐색 (자식 깊이 탐색)
             if (_box == null)
             {

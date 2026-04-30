@@ -94,20 +94,95 @@ namespace BalloonFlow
             Show("Connection Error", description, _sprIconWifi);
         }
 
-        /// <summary>결제 성공 팝업 (iconCheck). OK 누르면 onConfirm 콜백.</summary>
+        /// <summary>결제 성공 팝업 (iconCheck). OK (또는 X) 누르면 onConfirm 콜백.
+        /// CloseUI 먼저 → 콜백 호출 (콜백 안에서 새 popup 띄울 때 race 회피).</summary>
         public void ShowPurchaseSuccess(string description = "Purchase successful!", System.Action onConfirm = null)
         {
             Show("Success", description, _sprIconCheck);
 
-            if (_frame != null && _frame.BtnSingle != null && onConfirm != null)
+            // Success popup 은 OK 만 — X 닫기 누르면 보상 연출이 skip 되어 사용자가 혼란.
+            if (_frame != null) _frame.ShowExitButton(false);
+
+            if (_frame != null && _frame.BtnSingle != null)
             {
                 _frame.BtnSingle.onClick.RemoveAllListeners();
                 _frame.BtnSingle.onClick.AddListener(() =>
                 {
-                    onConfirm();
                     CloseUI();
+                    onConfirm?.Invoke();
                 });
             }
+        }
+
+        /// <summary>
+        /// 구매 확인 팝업 (iconCheck + 2버튼 Yes/No).
+        /// Yes (Horizontal Green): onYes 호출 후 닫힘. No (Horizontal Red) 또는 X: onNo 후 닫힘.
+        /// 같은 prefab(PopupError) 재사용 — 별도 prefab 불필요.
+        /// </summary>
+        public void ShowConfirm(
+            string title,
+            string description,
+            System.Action onYes,
+            System.Action onNo = null,
+            string yesText = "Buy",
+            string noText  = "Cancel")
+        {
+            if (_frame != null)
+            {
+                _frame.SetTitle(title);
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
+                _frame.SetHorizGreenText(yesText);
+                _frame.SetHorizRedText(noText);
+                _frame.ShowExitButton(true);
+            }
+
+            if (_txtDescription != null) _txtDescription.text = description;
+            if (_imgIcon != null)
+            {
+                if (_sprIconCheck != null)
+                {
+                    _imgIcon.sprite = _sprIconCheck;
+                    _imgIcon.gameObject.SetActive(true);
+                }
+                else
+                {
+                    _imgIcon.gameObject.SetActive(false);
+                }
+            }
+
+            if (_frame != null)
+            {
+                // CloseUI 를 먼저 호출 — 콜백(예: Buy → IAPManager → 새 PopupError 띄움) 이 같은 인스턴스를 재용도하는 race 회피.
+                if (_frame.BtnHorizGreen != null)
+                {
+                    _frame.BtnHorizGreen.onClick.RemoveAllListeners();
+                    _frame.BtnHorizGreen.onClick.AddListener(() =>
+                    {
+                        CloseUI();
+                        onYes?.Invoke();
+                    });
+                }
+                if (_frame.BtnHorizRed != null)
+                {
+                    _frame.BtnHorizRed.onClick.RemoveAllListeners();
+                    _frame.BtnHorizRed.onClick.AddListener(() =>
+                    {
+                        CloseUI();
+                        onNo?.Invoke();
+                    });
+                }
+                if (_frame.BtnExit != null)
+                {
+                    _frame.BtnExit.onClick.RemoveAllListeners();
+                    _frame.BtnExit.onClick.AddListener(() =>
+                    {
+                        CloseUI();
+                        onNo?.Invoke();
+                    });
+                }
+            }
+
+            OpenUI();
         }
     }
 }
