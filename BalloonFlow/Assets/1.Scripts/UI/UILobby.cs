@@ -99,6 +99,9 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprBadgeX3;
         [SerializeField] private Sprite _sprBadgeX5;
 
+        [Header("[RightArea — Lobby Page]")]
+        [SerializeField] private Button _btnNoAds;
+
         #endregion
 
         #region Fields
@@ -133,6 +136,7 @@ namespace BalloonFlow
         public Button BtnShop => _btnShop;
         public Button BtnHome => _btnHome;
         public Button BtnSetting => _btnSetting;
+        public Button BtnNoAds => _btnNoAds;
         public int CurrentPageIndex => _currentPageIndex;
 
         #endregion

@@ -77,6 +77,7 @@ namespace BalloonFlow
                 if (_lobby.BtnGoldPlus != null) _lobby.BtnGoldPlus.onClick.RemoveListener(OnGoToShop);
                 if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.RemoveListener(OnGoToShop);
                 if (_lobby.BtnLifeBar != null) _lobby.BtnLifeBar.onClick.RemoveListener(OnLifeBarClicked);
+                if (_lobby.BtnNoAds != null) _lobby.BtnNoAds.onClick.RemoveListener(OnNoAdsClicked);
             }
         }
 
@@ -111,6 +112,7 @@ namespace BalloonFlow
                 if (_lobby.BtnGoldPlus != null) _lobby.BtnGoldPlus.onClick.AddListener(OnGoToShop);
                 if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.AddListener(OnGoToShop);
                 if (_lobby.BtnLifeBar != null) _lobby.BtnLifeBar.onClick.AddListener(OnLifeBarClicked);
+                if (_lobby.BtnNoAds != null) _lobby.BtnNoAds.onClick.AddListener(OnNoAdsClicked);
             }
         }
 
@@ -222,6 +224,12 @@ namespace BalloonFlow
         void OnGoToShop()
         {
             if (_lobby != null) _lobby.GoToPage(0);
+        }
+
+        void OnNoAdsClicked()
+        {
+            if (UIManager.HasInstance)
+                UIManager.Instance.OpenUI<PopupNoAds>("Popup/PopupNoAds");
         }
 
         /// <summary>하트 바 터치 시 상태별 분기.</summary>
