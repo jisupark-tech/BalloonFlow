@@ -181,16 +181,8 @@ namespace BalloonFlow
 
             if (_popSource == null || !_sfxEnabled || _sfxBalloonPop == null) return;
 
-            // 콤보 상승 중엔 직전 클립을 유지해 피치 변화만 들리게, 최대 피치 도달 후엔 직전과 다른 클립을 강제해 진짜 번갈아 들리게 한다
-            bool atMax = _popPitchComboEnabled && pitch >= _popPitchMax;
-            if (_lastPopClip == null || !_popPitchComboEnabled)
-            {
-                _lastPopClip = (_sfxBalloonPop2 != null && Random.value < 0.5f) ? _sfxBalloonPop2 : _sfxBalloonPop;
-            }
-            else if (atMax)
-            {
-                _lastPopClip = (_sfxBalloonPop2 != null && _lastPopClip == _sfxBalloonPop) ? _sfxBalloonPop2 : _sfxBalloonPop;
-            }
+            // 매 팝마다 50% 확률로 두 클립 중 하나를 선택해 단조로움을 줄인다 (피치 콤보와 독립적으로 항상 랜덤)
+            _lastPopClip = (_sfxBalloonPop2 != null && Random.value < 0.5f) ? _sfxBalloonPop2 : _sfxBalloonPop;
 
             _popSource.pitch = pitch;
             _popSource.PlayOneShot(_lastPopClip);
