@@ -75,6 +75,12 @@ namespace BalloonFlow
             public float duration;
             public Vector3 startScale;
             public Vector3 targetScale;
+
+            // Launch punch (발사 직후 짧은 스케일 펀치): startScale → punchPeakScale → startScale, 이후 lerp.
+            public float launchPunchT;       // 펀치 피크 시각(초). 0이면 punch 비활성.
+            public Vector3 punchPeakScale;
+            public float punchDuration;
+            public float lerpStrength;       // Punch 종료 후 비행 보간 강도(0~1) — 풍선 사이즈 도달 제한용.
         }
 
         #endregion
@@ -715,7 +721,7 @@ namespace BalloonFlow
 
             float ft = EffectiveFlightTime;
 
-            // 시작 = 레일 위 다트 현재 사이즈, 목표 = 풍선 사이즈 → UpdateProjectiles 에서 비행 중 lerp.
+            // startScale = 레일 위 다트 현재 사이즈(절대 풍선 사이즈로 바꾸지 말 것 — 사용자 피드백 핵심).
             Vector3 balloonScale = BalloonController.HasInstance
                 ? BalloonController.Instance.GetBalloonWorldScale(targetBalloonId)
                 : dartObj.transform.localScale;
@@ -728,10 +734,9 @@ namespace BalloonFlow
                 targetBalloonId = targetBalloonId,
                 color = color,
                 elapsed = 0f,
-                duration = ft,
-                startScale = launchStartScale,
-                targetScale = balloonScale
+                duration = ft
             };
+            ConfigureLaunchScale(proj, launchStartScale, balloonScale);
 
             _activeProjectiles.Add(proj);
 
@@ -852,7 +857,7 @@ namespace BalloonFlow
 
                     float ft = EffectiveFlightTime;
 
-                    // 시작 = 레일 위 다트 현재 사이즈, 목표 = 풍선 사이즈 → UpdateProjectiles 에서 비행 중 lerp.
+                    // startScale = 레일 위 다트 현재 사이즈(절대 풍선 사이즈로 바꾸지 말 것 — 사용자 피드백 핵심).
                     Vector3 balloonScale = BalloonController.Instance.GetBalloonWorldScale(targetId);
                     Vector3 launchStartScale = dartObj.transform.localScale;
 
@@ -863,10 +868,9 @@ namespace BalloonFlow
                         targetBalloonId = targetId,
                         color = color,
                         elapsed = 0f,
-                        duration = ft,
-                        startScale = launchStartScale,
-                        targetScale = balloonScale
+                        duration = ft
                     };
+                    ConfigureLaunchScale(proj, launchStartScale, balloonScale);
                     _activeProjectiles.Add(proj);
 
                     dartObj.transform.DOMove(targetPos, ft).SetEase(Ease.Linear);
@@ -892,9 +896,31 @@ namespace BalloonFlow
 
                 if (proj.gameObject != null && proj.duration > 0f)
                 {
-                    // 비행 중 사이즈 lerp — 레일 다트 사이즈(start) → 풍선 사이즈(target). Inspector flag 무시 (항상 적용).
-                    float t = Mathf.Clamp01(proj.elapsed / proj.duration);
-                    proj.gameObject.transform.localScale = Vector3.Lerp(proj.startScale, proj.targetScale, t);
+                    Vector3 scale;
+                    if (proj.punchDuration > 0f && proj.elapsed < proj.punchDuration)
+                    {
+                        // 발사 직후 짧은 punch: startScale → peak (EaseOut) → startScale (EaseIn).
+                        if (proj.elapsed < proj.launchPunchT)
+                        {
+                            float pt = proj.launchPunchT > 0f ? proj.elapsed / proj.launchPunchT : 1f;
+                            float eased = 1f - (1f - pt) * (1f - pt); // EaseOutQuad
+                            scale = Vector3.Lerp(proj.startScale, proj.punchPeakScale, eased);
+                        }
+                        else
+                        {
+                            float remain = proj.punchDuration - proj.launchPunchT;
+                            float pt = remain > 0f ? (proj.elapsed - proj.launchPunchT) / remain : 1f;
+                            float eased = pt * pt; // EaseInQuad
+                            scale = Vector3.Lerp(proj.punchPeakScale, proj.startScale, eased);
+                        }
+                    }
+                    else
+                    {
+                        // Punch 종료 후 lerpStrength로 풍선 사이즈에 도달하지 않게 제한 — 사용자 피드백 반영.
+                        float t = Mathf.Clamp01(proj.elapsed / proj.duration);
+                        scale = Vector3.Lerp(proj.startScale, proj.targetScale, Mathf.Clamp01(t * proj.lerpStrength));
+                    }
+                    proj.gameObject.transform.localScale = scale;
                 }
 
                 if (proj.elapsed >= proj.duration)
@@ -910,6 +936,34 @@ namespace BalloonFlow
                     if (i < _activeProjectiles.Count)
                         _activeProjectiles.RemoveAt(i);
                 }
+            }
+        }
+
+        // GameManager.Board의 punch/lerp-strength 4 필드를 proj에 복사해 두 발사 함수의 중복을 제거.
+        private void ConfigureLaunchScale(DartProjectile proj, Vector3 dartScaleVec, Vector3 balloonScale)
+        {
+            proj.startScale = dartScaleVec;
+            proj.targetScale = balloonScale;
+
+            bool hasBoard = GameManager.HasInstance;
+            bool punchOn = hasBoard && GameManager.Instance.Board.dartLaunchScalePunch;
+            float punchDur = hasBoard ? GameManager.Instance.Board.dartLaunchScalePunchDuration : 0f;
+            float overshoot = hasBoard ? GameManager.Instance.Board.dartLaunchScaleOvershoot : 1f;
+            float lerpStr = hasBoard ? Mathf.Clamp01(GameManager.Instance.Board.dartScaleLerpStrength) : 1f;
+
+            proj.lerpStrength = lerpStr;
+
+            if (punchOn && punchDur > 0.001f && overshoot > 1.0001f)
+            {
+                proj.punchDuration = punchDur;
+                proj.launchPunchT = punchDur * 0.5f;
+                proj.punchPeakScale = dartScaleVec * overshoot;
+            }
+            else
+            {
+                proj.punchDuration = 0f;
+                proj.launchPunchT = 0f;
+                proj.punchPeakScale = dartScaleVec;
             }
         }
 
