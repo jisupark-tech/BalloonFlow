@@ -15,6 +15,10 @@ namespace BalloonFlow
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
 
+        [Header("[Exit Button — 직접 와이어링 (선택)]")]
+        [Tooltip("prefab 안의 나가기 버튼을 Inspector에서 직접 연결. 미연결 시 _frame.BtnExit 와 이름 기반 자동 탐색으로 fallback.")]
+        [SerializeField] private Button _btnExitDirect;
+
         [Header("[Top Panel]")]
         [SerializeField] private TMP_Text _txtGold;
 
@@ -46,19 +50,33 @@ namespace BalloonFlow
         {
             base.Awake();
 
-            if (_frame != null && _frame.BtnExit != null)
-                _frame.BtnExit.onClick.AddListener(() => CloseUI());
+            var bound = new HashSet<Button>();
+            BindExitClick(_frame != null ? _frame.BtnExit : null, bound);
+            BindExitClick(_btnExitDirect, bound);
+
+            string[] exitNameCandidates = { "ExitButton", "ExitButton(1)", "BtnExit", "BtnClose", "CloseButton", "Btn_Exit", "Btn_Close" };
+            for (int i = 0; i < exitNameCandidates.Length; i++)
+            {
+                Transform found = FindChildRecursive(transform, exitNameCandidates[i]);
+                if (found == null) continue;
+                BindExitClick(found.GetComponent<Button>(), bound);
+            }
 
             if (_btnMoreProducts != null)
                 _btnMoreProducts.onClick.AddListener(LoadMoreProducts);
+        }
 
-            // prefab에 'ExitButton(1)' 이라는 추가 닫기 버튼이 있을 수 있어 방어적으로 바인딩
-            Transform extraExit = FindChildRecursive(transform, "ExitButton(1)");
-            if (extraExit != null)
-            {
-                Button extraBtn = extraExit.GetComponent<Button>();
-                if (extraBtn != null) extraBtn.onClick.AddListener(() => CloseUI());
-            }
+        private void BindExitClick(Button btn, HashSet<Button> bound)
+        {
+            if (btn == null) return;
+            if (!bound.Add(btn)) return;
+            btn.onClick.RemoveListener(OnExitClicked);
+            btn.onClick.AddListener(OnExitClicked);
+        }
+
+        private void OnExitClicked()
+        {
+            CloseUI();
         }
 
         private static Transform FindChildRecursive(Transform parent, string childName)
