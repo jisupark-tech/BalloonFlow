@@ -55,6 +55,10 @@ namespace BalloonFlow
                 _sprFrameNormal    = rm.UISpriteOr("framePopupNormal",    _sprFrameNormal);
                 _sprFrameHard      = rm.UISpriteOr("framePopupHard",      _sprFrameHard);
                 _sprFrameSuperHard = rm.UISpriteOr("framePopupSuperHard", _sprFrameSuperHard);
+
+                _sprSideNormal     = rm.UISpriteOr(Const.SPR_FRAMERESULTNORMAL,    _sprSideNormal);
+                _sprSideHard       = rm.UISpriteOr(Const.SPR_FRAMERESULTHARD,      _sprSideHard);
+                _sprSideSuperHard  = rm.UISpriteOr(Const.SPR_FRAMERESULTSUPERHARD, _sprSideSuperHard);
             }
         }
 
