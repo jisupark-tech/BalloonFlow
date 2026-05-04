@@ -50,6 +50,11 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtMultiplier;
         [SerializeField] private TMP_Text _txtMultiplierOutline;
 
+        [Header("[HardOptionColor — Hard/SuperHard 전용]")]
+        [SerializeField] private Image _imageHardOptionColor;
+        [SerializeField] private Sprite _sprHardOptionHard;
+        [SerializeField] private Sprite _sprHardOptionSuperHard;
+
         [Header("[코인 연출 — Gold HUD 위치]")]
         [SerializeField] private RectTransform _goldTarget;
 
@@ -67,6 +72,14 @@ namespace BalloonFlow
         protected override void Awake()
         {
             base.Awake();
+
+            if (ResourceManager.HasInstance)
+            {
+                var rm = ResourceManager.Instance;
+                _sprHardOptionHard      = rm.UISpriteOr(Const.SPR_FRAMEHARD,      _sprHardOptionHard);
+                _sprHardOptionSuperHard = rm.UISpriteOr(Const.SPR_FRAMESUPERHARD, _sprHardOptionSuperHard);
+            }
+
             // 직접 할당 버튼 우선, 없으면 frame 버튼 fallback (CloseUI 후에도 listener 유지)
             if (_btnNext != null) _btnNext.onClick.AddListener(OnNextClicked);
             else if (_frame != null && _frame.BtnHorizGreen != null)
@@ -230,6 +243,23 @@ namespace BalloonFlow
                     _                            => _sprStageNormal
                 };
                 if (stageSpr != null) _imageStage.sprite = stageSpr;
+            }
+
+            // HardOptionColor: Normal 숨김 / Hard·SuperHard 노출 + 스프라이트 교체
+            if (_imageHardOptionColor != null)
+            {
+                if (difficulty == DifficultyPurpose.Normal)
+                {
+                    _imageHardOptionColor.gameObject.SetActive(false);
+                }
+                else
+                {
+                    _imageHardOptionColor.gameObject.SetActive(true);
+                    Sprite hardOptSpr = difficulty == DifficultyPurpose.SuperHard
+                        ? _sprHardOptionSuperHard
+                        : _sprHardOptionHard;
+                    if (hardOptSpr != null) _imageHardOptionColor.sprite = hardOptSpr;
+                }
             }
 
             // HardLevelOption 표시: Normal=숨김, Hard/SuperHard=노출
