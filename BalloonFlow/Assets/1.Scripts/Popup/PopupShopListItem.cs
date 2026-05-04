@@ -10,6 +10,7 @@ namespace BalloonFlow
     /// 상점 상품 리스트 아이템.
     /// Inspector에서 UI 링크 연결.
     /// </summary>
+    // BtnBuyGreen prefab sprite는 디자인타임 미리보기용 — 런타임에는 hasDiscount 분기로 _imgBtnBuyFrame.sprite 가 swap 됨.
     public class PopupShopListItem : MonoBehaviour
     {
         [Header("[상품 정보]")]
