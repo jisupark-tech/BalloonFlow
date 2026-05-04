@@ -322,8 +322,8 @@ namespace BalloonFlow
 
         public void SetLevel(int _levelId)
         {
-            if (_txtLevel != null) _txtLevel.text = $"{_levelId}";
-            if (_txtLevelOutline != null) _txtLevelOutline.text = $"{_levelId}";
+            if (_txtLevel != null) _txtLevel.text = $"Level {_levelId}";
+            if (_txtLevelOutline != null) _txtLevelOutline.text = $"Level {_levelId}";
         }
 
         public void SetGold(int _amount)
