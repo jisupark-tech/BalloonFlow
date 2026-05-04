@@ -134,6 +134,11 @@ namespace BalloonFlow
         [SerializeField] private Material _matNumberOutlineHard;
         [SerializeField] private Material _matNumberOutlineSuperHard;
 
+        [Header("[TxtPercentageOutline — 난이도별 Material Preset]")]
+        [SerializeField] private Material _matPercentageOutlineNormal;
+        [SerializeField] private Material _matPercentageOutlineHard;
+        [SerializeField] private Material _matPercentageOutlineSuperHard;
+
         private bool _isMapMakerMode;
         private DifficultyPurpose _currentDifficulty = DifficultyPurpose.Normal;
 
@@ -304,6 +309,15 @@ namespace BalloonFlow
                 _                           => _matNumberOutlineNormal
             };
             if (numberOutlineMat != null && _txtNumberOutline != null) _txtNumberOutline.fontMaterial = numberOutlineMat;
+
+            // Percentage 텍스트 아웃라인 머티리얼
+            Material percentageOutlineMat = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _matPercentageOutlineHard,
+                DifficultyPurpose.SuperHard => _matPercentageOutlineSuperHard,
+                _                           => _matPercentageOutlineNormal
+            };
+            if (percentageOutlineMat != null && _txtPercentageOutline != null) _txtPercentageOutline.fontMaterial = percentageOutlineMat;
         }
 
         public void SetLevel(int _levelId)
