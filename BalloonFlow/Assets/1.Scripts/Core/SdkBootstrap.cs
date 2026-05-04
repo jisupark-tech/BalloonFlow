@@ -22,6 +22,11 @@ namespace BalloonFlow
             var existing = GameObject.Find(BOOT_OBJECT_NAME);
             if (existing != null) return;
 
+            // 모바일 60FPS 타겟 + VSync off (Optimized Frame Pacing 이 frame timing 제어)
+            Application.targetFrameRate = 60;
+            QualitySettings.vSyncCount  = 0;
+            Screen.sleepTimeout         = SleepTimeout.NeverSleep;
+
             var go = new GameObject(BOOT_OBJECT_NAME);
             Object.DontDestroyOnLoad(go);
 
