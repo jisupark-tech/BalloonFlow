@@ -40,6 +40,17 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtMultiplier;
         [SerializeField] private TMP_Text _txtMultiplierOutline;
 
+        [Header("[Fail 이미지 — 난이도별]")]
+        [SerializeField] private Image _imageFail;
+        [SerializeField] private Sprite _sprFailNormal;
+        [SerializeField] private Sprite _sprFailHard;
+        [SerializeField] private Sprite _sprFailSuperHard;
+
+        [Header("[HardOptionColor — Hard/SuperHard 전용]")]
+        [SerializeField] private Image _imageHardOptionColor;
+        [SerializeField] private Sprite _sprHardOptionHard;
+        [SerializeField] private Sprite _sprHardOptionSuperHard;
+
         private const int RETRY_BONUS_GOLD = 20;
 
         // 난이도별 ImageLight 색상 (PopupResult와 동일)
@@ -62,6 +73,12 @@ namespace BalloonFlow
                 var rm = ResourceManager.Instance;
                 _sprSkullHard      = rm.UISpriteOr("iconSkullHard",      _sprSkullHard);
                 _sprSkullSuperHard = rm.UISpriteOr("iconSkullSuperHard", _sprSkullSuperHard);
+
+                _sprFailNormal          = rm.UISpriteOr(Const.SPR_POPUPINNERNORMAL,    _sprFailNormal);
+                _sprFailHard            = rm.UISpriteOr(Const.SPR_POPUPINNERHARD,      _sprFailHard);
+                _sprFailSuperHard       = rm.UISpriteOr(Const.SPR_POPUPINNERSUPURHARD, _sprFailSuperHard);
+                _sprHardOptionHard      = rm.UISpriteOr(Const.SPR_FRAMEHARD,           _sprHardOptionHard);
+                _sprHardOptionSuperHard = rm.UISpriteOr(Const.SPR_FRAMESUPERHARD,      _sprHardOptionSuperHard);
             }
 
             if (RetryBtn != null) RetryBtn.onClick.AddListener(OnRetryClicked);
@@ -155,6 +172,35 @@ namespace BalloonFlow
                     _                            => _sprStageNormal
                 };
                 if (stageSpr != null) _imageStage.sprite = stageSpr;
+            }
+
+            // ImageFail (Fail Inner) 스프라이트
+            if (_imageFail != null)
+            {
+                Sprite failSpr = difficulty switch
+                {
+                    DifficultyPurpose.Hard      => _sprFailHard ?? _sprFailNormal,
+                    DifficultyPurpose.SuperHard  => _sprFailSuperHard ?? _sprFailNormal,
+                    _                            => _sprFailNormal
+                };
+                if (failSpr != null) _imageFail.sprite = failSpr;
+            }
+
+            // HardOptionColor: Normal 숨김 / Hard·SuperHard 노출 + 스프라이트 교체
+            if (_imageHardOptionColor != null)
+            {
+                if (difficulty == DifficultyPurpose.Normal)
+                {
+                    _imageHardOptionColor.gameObject.SetActive(false);
+                }
+                else
+                {
+                    _imageHardOptionColor.gameObject.SetActive(true);
+                    Sprite hardOptSpr = difficulty == DifficultyPurpose.SuperHard
+                        ? _sprHardOptionSuperHard
+                        : _sprHardOptionHard;
+                    if (hardOptSpr != null) _imageHardOptionColor.sprite = hardOptSpr;
+                }
             }
 
             // HardLevelOption 표시: Normal=숨김, Hard/SuperHard=노출
