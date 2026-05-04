@@ -25,8 +25,8 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _goldText;
         [SerializeField] private Button _goldPlusButton;
 
-        [Header("[LvPanel — 진행률 슬라이더 (popped/total)]")]
-        [SerializeField] private Slider _lvPanelSlider;
+        [Header("[LvPanel — 진행률 게이지 Image (popped/total, fillAmount)]")]
+        [SerializeField] private Image _fillGaugeImage;
         [SerializeField] private TMP_Text _txtPercentage;
         [SerializeField] private TMP_Text _txtPercentageOutline;
 
@@ -337,7 +337,7 @@ namespace BalloonFlow
         public void SetProgress(int popped, int total)
         {
             float ratio = total > 0 ? Mathf.Clamp01((float)popped / total) : 0f;
-            if (_lvPanelSlider != null) _lvPanelSlider.value = ratio;
+            if (_fillGaugeImage != null) { _fillGaugeImage.type = Image.Type.Filled; _fillGaugeImage.fillAmount = ratio; }
 
             int percent = Mathf.RoundToInt(ratio * 100f);
             string txt = $"{percent}%";
