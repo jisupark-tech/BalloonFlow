@@ -181,14 +181,15 @@ namespace BalloonFlow
 
             if (_popSource == null || !_sfxEnabled || _sfxBalloonPop == null) return;
 
-            // 콤보 상승 중엔 직전 클립을 유지해 피치 변화만 들리게, 최대 피치 도달 후엔 다시 50% 랜덤으로 섞이게 한다
-            bool needFreshClip = _lastPopClip == null
-                || !_popPitchComboEnabled
-                || pitch >= _popPitchMax;
-
-            if (needFreshClip)
+            // 콤보 상승 중엔 직전 클립을 유지해 피치 변화만 들리게, 최대 피치 도달 후엔 직전과 다른 클립을 강제해 진짜 번갈아 들리게 한다
+            bool atMax = _popPitchComboEnabled && pitch >= _popPitchMax;
+            if (_lastPopClip == null || !_popPitchComboEnabled)
             {
                 _lastPopClip = (_sfxBalloonPop2 != null && Random.value < 0.5f) ? _sfxBalloonPop2 : _sfxBalloonPop;
+            }
+            else if (atMax)
+            {
+                _lastPopClip = (_sfxBalloonPop2 != null && _lastPopClip == _sfxBalloonPop) ? _sfxBalloonPop2 : _sfxBalloonPop;
             }
 
             _popSource.pitch = pitch;
