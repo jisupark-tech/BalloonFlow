@@ -13,6 +13,7 @@ namespace BalloonFlow
         [SerializeField] private Button _btnContinue;
         [SerializeField] private Button _btnDecline;
         [SerializeField] private Button _btnExit;
+        [SerializeField] private Button _btnGoldPlus;
 
         [Header("[코스트 텍스트]")]
         [SerializeField] private TMP_Text _costText;
@@ -56,6 +57,13 @@ namespace BalloonFlow
             if (ContinueBtn != null) ContinueBtn.onClick.AddListener(OnContinueClicked);
             if (DeclineBtn != null) DeclineBtn.onClick.AddListener(OnDeclineClicked);
             if (ExitBtn != null) ExitBtn.onClick.AddListener(OnDeclineClicked);
+
+            if (_btnGoldPlus == null)
+            {
+                Transform found = FindChildRecursive(transform, "GoldPlusBtn");
+                if (found != null) _btnGoldPlus = found.GetComponent<Button>();
+            }
+            if (_btnGoldPlus != null) _btnGoldPlus.onClick.AddListener(OnGoldPlusClicked);
         }
 
         protected override void OnDestroy()
@@ -64,6 +72,19 @@ namespace BalloonFlow
             if (ContinueBtn != null) ContinueBtn.onClick.RemoveAllListeners();
             if (DeclineBtn != null) DeclineBtn.onClick.RemoveAllListeners();
             if (ExitBtn != null) ExitBtn.onClick.RemoveAllListeners();
+            if (_btnGoldPlus != null) _btnGoldPlus.onClick.RemoveAllListeners();
+        }
+
+        private static Transform FindChildRecursive(Transform parent, string childName)
+        {
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform child = parent.GetChild(i);
+                if (child.name == childName) return child;
+                Transform deep = FindChildRecursive(child, childName);
+                if (deep != null) return deep;
+            }
+            return null;
         }
 
         public void Show(DifficultyPurpose difficulty)
@@ -114,6 +135,21 @@ namespace BalloonFlow
             {
                 PopupManager.Instance.ClosePopup("popup_fail01");
                 PopupManager.Instance.ShowPopup("popup_continue", 50);
+            }
+        }
+
+        private void OnGoldPlusClicked()
+        {
+            if (PopupManager.HasInstance)
+                PopupManager.Instance.ClosePopup("popup_fail01");
+
+            if (HUDController.HasInstance && HUDController.Instance.GoldShopPopup != null)
+            {
+                HUDController.Instance.GoldShopPopup.OpenWithCloseCallback(() =>
+                {
+                    if (PopupManager.HasInstance)
+                        PopupManager.Instance.ShowPopup("popup_fail01", 50);
+                });
             }
         }
 

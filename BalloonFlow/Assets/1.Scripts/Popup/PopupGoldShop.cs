@@ -40,6 +40,8 @@ namespace BalloonFlow
         /// <summary>생성된 아이템 리스트 (무한 스크롤 풀링용).</summary>
         private readonly List<PopupShopListItem> _spawnedItems = new List<PopupShopListItem>();
 
+        private System.Action _onCloseCallback;
+
         protected override void Awake()
         {
             base.Awake();
@@ -49,6 +51,43 @@ namespace BalloonFlow
 
             if (_btnMoreProducts != null)
                 _btnMoreProducts.onClick.AddListener(LoadMoreProducts);
+
+            // prefab에 'ExitButton(1)' 이라는 추가 닫기 버튼이 있을 수 있어 방어적으로 바인딩
+            Transform extraExit = FindChildRecursive(transform, "ExitButton(1)");
+            if (extraExit != null)
+            {
+                Button extraBtn = extraExit.GetComponent<Button>();
+                if (extraBtn != null) extraBtn.onClick.AddListener(() => CloseUI());
+            }
+        }
+
+        private static Transform FindChildRecursive(Transform parent, string childName)
+        {
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform child = parent.GetChild(i);
+                if (child.name == childName) return child;
+                Transform deep = FindChildRecursive(child, childName);
+                if (deep != null) return deep;
+            }
+            return null;
+        }
+
+        public void OpenWithCloseCallback(System.Action onClose)
+        {
+            _onCloseCallback = onClose;
+            OpenUI();
+        }
+
+        public override void CloseUI()
+        {
+            base.CloseUI();
+            if (_onCloseCallback != null)
+            {
+                System.Action cb = _onCloseCallback;
+                _onCloseCallback = null;
+                cb.Invoke();
+            }
         }
 
         public override void OpenUI()

@@ -134,6 +134,8 @@ namespace BalloonFlow
             }
         }
 
+        public PopupGoldShop GoldShopPopup => _popupGoldShop;
+
         /// <summary>골드 상점 팝업 연결 + Close 버튼 와이어링</summary>
         public void SetGoldShopPopup(PopupGoldShop _popup)
         {
