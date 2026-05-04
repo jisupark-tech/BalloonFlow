@@ -181,8 +181,17 @@ namespace BalloonFlow
 
             if (_popSource == null || !_sfxEnabled || _sfxBalloonPop == null) return;
 
-            // 매 팝마다 50% 확률로 두 클립 중 하나를 선택해 단조로움을 줄인다 (피치 콤보와 독립적으로 항상 랜덤)
-            _lastPopClip = (_sfxBalloonPop2 != null && Random.value < 0.5f) ? _sfxBalloonPop2 : _sfxBalloonPop;
+            // 콤보 시작 시 한 번 50% 랜덤으로 클립을 정하고, 피치 상승 중엔 그 클립을 고정 재생.
+            // 최고 피치(_popPitchMax) 도달 이후에만 매 팝마다 두 클립 사이에서 50% 랜덤 재추첨해 단조로움을 줄인다.
+            bool atMaxPitch = _popPitchComboEnabled && pitch >= _popPitchMax;
+            if (_lastPopClip == null)
+            {
+                _lastPopClip = (_sfxBalloonPop2 != null && Random.value < 0.5f) ? _sfxBalloonPop2 : _sfxBalloonPop;
+            }
+            else if (atMaxPitch)
+            {
+                _lastPopClip = (_sfxBalloonPop2 != null && Random.value < 0.5f) ? _sfxBalloonPop2 : _sfxBalloonPop;
+            }
 
             _popSource.pitch = pitch;
             _popSource.PlayOneShot(_lastPopClip);
