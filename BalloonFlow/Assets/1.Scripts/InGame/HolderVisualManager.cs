@@ -444,7 +444,7 @@ namespace BalloonFlow
                 {
                     visual.magazineText.color = row == 0
                         ? Color.white
-                        : new Color(1f, 1f, 1f, 0.25f);
+                        : new Color(1f, 1f, 1f, 0.5f);
                 }
             }
         }
@@ -671,7 +671,7 @@ namespace BalloonFlow
                     {
                         colHolders[row].magazineText.color = row == 0
                             ? Color.white
-                            : new Color(1f, 1f, 1f, 0.25f);
+                            : new Color(1f, 1f, 1f, 0.5f);
                     }
                 }
 
