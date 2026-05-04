@@ -24,6 +24,7 @@ namespace BalloonFlow
 
         [Header("[SFX — InGame]")]
         [SerializeField] private AudioClip _sfxBalloonPop;
+        [SerializeField] private AudioClip _sfxBalloonPop2;
         [SerializeField] private AudioClip _sfxClear;
         [SerializeField] private AudioClip _sfxFail;
         [SerializeField] private AudioClip _sfxHolderDeploy;
@@ -85,6 +86,7 @@ namespace BalloonFlow
             if (_sfxPopupTouch == null)   _sfxPopupTouch   = Resources.Load<AudioClip>("Sound/Effect/Common_Popup_Touch");
             if (_sfxCoinGain == null)     _sfxCoinGain     = Resources.Load<AudioClip>("Sound/Effect/Common_Coin_Gain");
             if (_sfxBalloonPop == null)   _sfxBalloonPop   = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal");
+            if (_sfxBalloonPop2 == null)  _sfxBalloonPop2  = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal_2");
             if (_sfxClear == null)        _sfxClear        = Resources.Load<AudioClip>("Sound/Effect/Stage_Clear");
             if (_sfxFail == null)         _sfxFail         = Resources.Load<AudioClip>("Sound/Effect/Stage_Fail");
             if (_sfxHolderDeploy == null) _sfxHolderDeploy = Resources.Load<AudioClip>("Sound/Effect/Stage_Object_Drop");
@@ -173,10 +175,14 @@ namespace BalloonFlow
             _lastPopTime = now;
             _popComboCount++;
 
-            if (_popSource != null && _sfxBalloonPop != null && _sfxEnabled)
+            if (_popSource != null && _sfxEnabled)
             {
-                _popSource.pitch = pitch;
-                _popSource.PlayOneShot(_sfxBalloonPop);
+                AudioClip popClip = (_sfxBalloonPop2 != null && Random.value < 0.5f) ? _sfxBalloonPop2 : _sfxBalloonPop;
+                if (popClip != null)
+                {
+                    _popSource.pitch = pitch;
+                    _popSource.PlayOneShot(popClip);
+                }
             }
         }
 
