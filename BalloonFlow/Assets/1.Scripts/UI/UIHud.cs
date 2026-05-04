@@ -101,6 +101,25 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprBgColorHard;
         [SerializeField] private Sprite _sprBgColorSuperHard;
 
+        [Header("[LvFrame — 난이도별 리소스]")]
+        [SerializeField] private Image _imgLvFrame;
+        [SerializeField] private Sprite _sprLvFrameNormal;
+        [SerializeField] private Sprite _sprLvFrameHard;
+        [SerializeField] private Sprite _sprLvFrameSuperHard;
+
+        [Header("[Lv 아이콘 — 난이도별 리소스]")]
+        [SerializeField] private Image _imgLvIcon;
+        [SerializeField] private Sprite _sprLvIconNormal;
+        [SerializeField] private Sprite _sprLvIconHard;
+        [SerializeField] private Sprite _sprLvIconSuperHard;
+
+        [Header("[Lv/Number 텍스트 아웃라인 — 난이도별 Material Preset]")]
+        [SerializeField] private TMP_Text _txtLVOutline;
+        [SerializeField] private TMP_Text _txtNumberOutline;
+        [SerializeField] private Material _matLvOutlineNormal;
+        [SerializeField] private Material _matLvOutlineHard;
+        [SerializeField] private Material _matLvOutlineSuperHard;
+
         private bool _isMapMakerMode;
         private DifficultyPurpose _currentDifficulty = DifficultyPurpose.Normal;
 
@@ -144,6 +163,14 @@ namespace BalloonFlow
                 _sprBgColorNormal    = rm.UISpriteOr(Const.SPR_FRAMEBOTTOMNORMAL,    _sprBgColorNormal);
                 _sprBgColorHard      = rm.UISpriteOr(Const.SPR_FRAMEBOTTOMHARD,      _sprBgColorHard);
                 _sprBgColorSuperHard = rm.UISpriteOr(Const.SPR_FRAMEBOTTOMSUPERHARD, _sprBgColorSuperHard);
+
+                _sprLvFrameNormal    = rm.UISpriteOr(Const.SPR_INGAMEGAUGEBARNORMAL,    _sprLvFrameNormal);
+                _sprLvFrameHard      = rm.UISpriteOr(Const.SPR_INGAMEGAUGEBARHARD,      _sprLvFrameHard);
+                _sprLvFrameSuperHard = rm.UISpriteOr(Const.SPR_INGAMEGAUGEBARSUPERHARD, _sprLvFrameSuperHard);
+
+                _sprLvIconNormal     = rm.UISpriteOr(Const.SPR_INGAMELVNORMAL,    _sprLvIconNormal);
+                _sprLvIconHard       = rm.UISpriteOr(Const.SPR_INGAMELVHARD,      _sprLvIconHard);
+                _sprLvIconSuperHard  = rm.UISpriteOr(Const.SPR_INGAMELVSUPERHARD, _sprLvIconSuperHard);
             }
         }
 
@@ -225,6 +252,39 @@ namespace BalloonFlow
             };
             if (_imgBgColor != null && bgSpr != null)
                 _imgBgColor.sprite = bgSpr;
+
+            // LvFrame 리소스
+            Sprite lvFrameSpr = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _sprLvFrameHard,
+                DifficultyPurpose.SuperHard => _sprLvFrameSuperHard,
+                _                           => _sprLvFrameNormal
+            };
+            if (_imgLvFrame != null && lvFrameSpr != null)
+                _imgLvFrame.sprite = lvFrameSpr;
+
+            // Lv 아이콘 리소스
+            Sprite lvIconSpr = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _sprLvIconHard,
+                DifficultyPurpose.SuperHard => _sprLvIconSuperHard,
+                _                           => _sprLvIconNormal
+            };
+            if (_imgLvIcon != null && lvIconSpr != null)
+                _imgLvIcon.sprite = lvIconSpr;
+
+            // Lv/Number 텍스트 아웃라인 머티리얼
+            Material lvOutlineMat = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _matLvOutlineHard,
+                DifficultyPurpose.SuperHard => _matLvOutlineSuperHard,
+                _                           => _matLvOutlineNormal
+            };
+            if (lvOutlineMat != null)
+            {
+                if (_txtLVOutline != null) _txtLVOutline.fontMaterial = lvOutlineMat;
+                if (_txtNumberOutline != null) _txtNumberOutline.fontMaterial = lvOutlineMat;
+            }
         }
 
         public void SetLevel(int _levelId)
