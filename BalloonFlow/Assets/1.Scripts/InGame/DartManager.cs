@@ -147,6 +147,9 @@ namespace BalloonFlow
 
         private void Update()
         {
+            var __sw = InGamePerfLogger.StartSection();
+            try
+            {
             if (_boardFinished) return;
 
             UpdateSlotDartPositions();
@@ -177,6 +180,8 @@ namespace BalloonFlow
             }
 
             UpdateProjectiles();
+            }
+            finally { InGamePerfLogger.EndSection(__sw, "DartManager.Update"); }
         }
 
         #endregion

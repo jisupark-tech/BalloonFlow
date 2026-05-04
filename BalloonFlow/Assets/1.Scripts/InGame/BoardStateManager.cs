@@ -118,6 +118,9 @@ namespace BalloonFlow
 
         private void Update()
         {
+            var __sw = InGamePerfLogger.StartSection();
+            try
+            {
             if (_currentState != BoardState.Playing) return;
             if (_failConfirmed) return;
 
@@ -189,6 +192,8 @@ namespace BalloonFlow
                 _failConfirmed = true;
                 TriggerFail(FailReason.RailOverflow);
             }
+            }
+            finally { InGamePerfLogger.EndSection(__sw, "BoardStateManager.Update"); }
         }
 
         /// <summary>디버그 로그 활성 토글 — Inspector 에서 ON 가능. 기본 OFF (성능 영향 회피).</summary>

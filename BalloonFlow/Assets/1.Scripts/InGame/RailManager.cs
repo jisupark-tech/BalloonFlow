@@ -251,6 +251,13 @@ namespace BalloonFlow
 
         private void Update()
         {
+            var __sw = InGamePerfLogger.StartSection();
+            UpdateInternal();
+            InGamePerfLogger.EndSection(__sw, "RailManager.Update");
+        }
+
+        private void UpdateInternal()
+        {
             if (_slots == null || _slotCount == 0) return;
             if (_boardFinished) return;
             if (IsPausedByBooster) return;

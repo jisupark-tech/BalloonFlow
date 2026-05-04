@@ -181,8 +181,10 @@ namespace BalloonFlow
 
         private void Update()
         {
+            var __sw = InGamePerfLogger.StartSection();
             UpdateArrowPositions();
             UpdateDangerBlink();
+            InGamePerfLogger.EndSection(__sw, "BoardTileManager.Update");
         }
 
         private void OnDestroy()

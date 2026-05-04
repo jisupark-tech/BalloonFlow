@@ -39,18 +39,21 @@ namespace BalloonFlow
         {
             try
             {
-                // Firebase deps 점검 (FirebaseManager 가 별도로 처리할 수도 있지만 안전망)
-                var depStatus = await FirebaseApp.CheckAndFixDependenciesAsync();
-                if (depStatus != DependencyStatus.Available)
+                // FirebaseManager 의 dep check 완료까지 대기. 이 매니저가 단독으로 CheckAndFixDependencies 호출.
+                // 동시 호출 시 "Don't call other Firebase functions while CheckDependencies is running" InvalidOperationException.
+                if (!await WaitForFirebaseReady())
                 {
-                    Debug.LogError($"{LOG_TAG} Firebase dependencies unavailable: {depStatus}");
+                    Debug.LogError($"{LOG_TAG} FirebaseManager not ready (timeout)");
                     return;
                 }
 
                 _auth = FirebaseAuth.DefaultInstance;
-                _db   = FirebaseEnvironment.GetFirestore();
 
+                // Sign-in 을 Firestore 첫 init 전에 — Unity Firebase SDK 13.10.0 의 Firestore lazy init 시점에 Auth state 캡처.
+                // 이전 순서 (Firestore 먼저 → sign-in) 에서 token sync quirk 로 permission_denied 발생.
                 await EnsureSignedInAsync(forceFresh: false);
+
+                _db = FirebaseEnvironment.GetFirestore();
 
                 // 1차 시도. permission_denied 면 backend 에 user 가 없는(stale) 상태로 보고 sign-out + new sign-in 후 재시도 1회.
                 try
@@ -61,11 +64,22 @@ namespace BalloonFlow
                 {
                     Debug.LogWarning($"{LOG_TAG} permission_denied — stale auth 의심. SignOut 후 재로그인 시도.");
                     await EnsureSignedInAsync(forceFresh: true);
-                    // 새 token backend propagation 짧은 대기 (race condition 방지)
                     await Task.Delay(500);
-                    // 한 번 더 forceRefresh — 새 user 의 ID token 보장
                     try { await _auth.CurrentUser.TokenAsync(true); } catch { /* best-effort */ }
-                    await LoadOrCreateUserAsync(_auth.CurrentUser.UserId);
+                    try
+                    {
+                        await LoadOrCreateUserAsync(_auth.CurrentUser.UserId);
+                    }
+                    catch (FirestoreException retryFe) when (retryFe.ErrorCode == FirestoreError.PermissionDenied)
+                    {
+                        // 2번째 시도도 fail — Unity Firebase SDK Editor token sync quirk 가능성 높음.
+                        // 디바이스 빌드에선 정상 동작이라 게임은 진행 (UserDataService.IsReady 가 false 로 유지되어 다른 매니저들이 가드).
+#if UNITY_EDITOR
+                        Debug.LogWarning($"{LOG_TAG} Editor SDK token sync quirk — Firestore 동기화 skip. 게임은 PlayerPrefs offline 모드로 진행. (디바이스 빌드는 정상)");
+#else
+                        Debug.LogError($"{LOG_TAG} permission_denied retry 실패: {retryFe.Message}");
+#endif
+                    }
                 }
             }
             catch (Exception e)
@@ -256,6 +270,35 @@ namespace BalloonFlow
         }
 
         #endregion
+
+        /// <summary>
+        /// FirebaseManager.IsReady 까지 대기. FirebaseManager 가 단독으로 CheckAndFixDependenciesAsync 호출.
+        /// 다른 매니저가 Firebase API 호출하기 전에 반드시 호출.
+        /// </summary>
+        private static async Task<bool> WaitForFirebaseReady(int timeoutMs = 15000)
+        {
+            // FirebaseManager 인스턴스 attach 대기 (5s)
+            for (int i = 0; i < 50 && !FirebaseManager.HasInstance; i++)
+                await Task.Delay(100);
+            if (!FirebaseManager.HasInstance) return false;
+
+            // IsReady 이벤트 또는 polling
+            var fm = FirebaseManager.Instance;
+            if (fm.IsReady) return true;
+
+            var tcs = new TaskCompletionSource<bool>();
+            Action onReady = null;
+            onReady = () =>
+            {
+                if (FirebaseManager.HasInstance)
+                    FirebaseManager.Instance.OnReady -= onReady;
+                tcs.TrySetResult(true);
+            };
+            fm.OnReady += onReady;
+
+            var winner = await Task.WhenAny(tcs.Task, Task.Delay(timeoutMs));
+            return winner == tcs.Task && fm.IsReady;
+        }
 
         private static void FireAndForget(Task t, string label)
         {

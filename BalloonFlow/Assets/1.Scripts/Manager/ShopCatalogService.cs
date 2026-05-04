@@ -31,6 +31,16 @@ namespace BalloonFlow
 
         public async Task FetchAsync()
         {
+            // FirebaseManager 의 dep check 완료까지 대기.
+            // 직접 호출 시 "Don't call Firebase functions before CheckDependencies has finished" InvalidOperationException.
+            for (int i = 0; i < 150 && !(FirebaseManager.HasInstance && FirebaseManager.Instance.IsReady); i++)
+                await Task.Delay(100);
+            if (!FirebaseManager.HasInstance || !FirebaseManager.Instance.IsReady)
+            {
+                Debug.LogError($"{LOG_TAG} FirebaseManager not ready (timeout) — fetch skipped");
+                return;
+            }
+
             const int MAX_RETRIES = 3;
             Exception lastEx = null;
 

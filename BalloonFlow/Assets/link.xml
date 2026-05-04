@@ -1,0 +1,21 @@
+<linker>
+  <!-- Firebase SDK assemblies — IL2CPP managed stripping 시 reflection 기반 코드 잘림 방지 -->
+  <assembly fullname="Firebase.App" preserve="all"/>
+  <assembly fullname="Firebase.Auth" preserve="all"/>
+  <assembly fullname="Firebase.Firestore" preserve="all"/>
+  <assembly fullname="Firebase.Analytics" preserve="all"/>
+  <assembly fullname="Firebase.Platform" preserve="all"/>
+  <assembly fullname="Firebase.TaskExtension" preserve="all"/>
+  <assembly fullname="Firebase.Storage" preserve="all"/>
+
+  <!-- BalloonFlow 의 RuntimeInitializeOnLoadMethod (SdkBootstrap), EventBus reflection 등 -->
+  <assembly fullname="Assembly-CSharp" preserve="all"/>
+
+  <!-- Unity IAP — IL2CPP stripping 회피 (재구매 / restore flow 보호) -->
+  <assembly fullname="UnityEngine.Purchasing" preserve="all"/>
+
+  <!-- AppsFlyer / MAX / Facebook SDK 의 callback 매니저 보호 -->
+  <assembly fullname="AppsFlyerSDK" preserve="all"/>
+  <assembly fullname="MAX" preserve="all"/>
+  <assembly fullname="Facebook.Unity" preserve="all"/>
+</linker>

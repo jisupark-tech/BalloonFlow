@@ -31,19 +31,25 @@ namespace BalloonFlow
 
         private void InitFirebase()
         {
-            FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
+            // FirebaseManager 가 단독으로 CheckAndFixDependenciesAsync 호출. 여기선 IsReady 만 wait.
+            // 직접 호출 시 InvalidOperationException ("Don't call other Firebase functions while CheckDependencies is running")
+            _ = WaitFirebaseReadyThenInit();
+        }
+
+        private async System.Threading.Tasks.Task WaitFirebaseReadyThenInit()
+        {
+            for (int i = 0; i < 150 && !(FirebaseManager.HasInstance && FirebaseManager.Instance.IsReady); i++)
+                await System.Threading.Tasks.Task.Delay(100);
+
+            if (!FirebaseManager.HasInstance || !FirebaseManager.Instance.IsReady)
             {
-                if (task.Result == DependencyStatus.Available)
-                {
-                    _firebaseReady = true;
-                    FirebaseAnalytics.SetAnalyticsCollectionEnabled(true);
-                    Debug.Log($"{LOG_TAG} Firebase Analytics ready.");
-                }
-                else
-                {
-                    Debug.LogError($"{LOG_TAG} Firebase init failed: {task.Result}");
-                }
-            });
+                Debug.LogError($"{LOG_TAG} FirebaseManager not ready (timeout)");
+                return;
+            }
+
+            _firebaseReady = true;
+            FirebaseAnalytics.SetAnalyticsCollectionEnabled(true);
+            Debug.Log($"{LOG_TAG} Firebase Analytics ready.");
         }
 
         private void InitFacebook()

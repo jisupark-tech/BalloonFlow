@@ -716,10 +716,21 @@ namespace BalloonFlow
 
         #region Private Methods — Event Handlers
 
+        // OnLevelLoaded 가 짧은 시간 내 여러 번 발화될 수 있어 (scene 전환 / loadingFlow / continue 등)
+        // 코루틴 동시 다수 실행 시 StartTutorial 여러 번 호출 → "tutorial already active" 반복 → Stop/Start 사이클로 CPU 낭비.
+        // 진행 중 코루틴 1개만 보장.
+        private Coroutine _startTutorialCoroutine;
+
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
+            // 진행 중 코루틴 cancel — race 방지
+            if (_startTutorialCoroutine != null)
+            {
+                StopCoroutine(_startTutorialCoroutine);
+                _startTutorialCoroutine = null;
+            }
             // 로딩/fade 끝난 뒤 시작 — 튜토리얼이 로딩 화면 위로 떠 보이는 것 방지
-            StartCoroutine(StartTutorialAfterLoad(evt.levelId));
+            _startTutorialCoroutine = StartCoroutine(StartTutorialAfterLoad(evt.levelId));
         }
 
         private IEnumerator StartTutorialAfterLoad(int levelId)

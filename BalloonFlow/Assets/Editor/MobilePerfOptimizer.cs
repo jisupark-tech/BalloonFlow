@@ -28,12 +28,14 @@ namespace BalloonFlow.EditorTools
     public static class MobilePerfOptimizer
     {
         private const string URP_ASSET_PATH = "Assets/Settings/Mobile_RPAsset.asset";
+        private const string RENDERER_PATH  = "Assets/Settings/Mobile_Renderer.asset";
 
         [MenuItem("BalloonFlow/Optimize URP for Low-end Mobile (S8/A23)")]
         public static void Optimize()
         {
             int n = 0;
             n += OptimizeUrpAsset();
+            n += OptimizeRenderer();
             n += OptimizePlayerSettings();
             n += OptimizeQualitySettings();
 
@@ -50,6 +52,36 @@ namespace BalloonFlow.EditorTools
         // URP Asset
         // ─────────────────────────────────────────────────────────────
 
+        // ─────────────────────────────────────────────────────────────
+        // Mobile_Renderer (UniversalRendererData) — Post-processing off
+        // ─────────────────────────────────────────────────────────────
+
+        private static int OptimizeRenderer()
+        {
+            var renderer = AssetDatabase.LoadMainAssetAtPath(RENDERER_PATH);
+            if (renderer == null)
+            {
+                Debug.LogWarning($"[MobilePerfOptimizer] Renderer asset not found: {RENDERER_PATH}");
+                return 0;
+            }
+
+            int n = 0;
+            var so = new SerializedObject(renderer);
+
+            // Post-processing 비활성 — postProcessData = null 로 setting (사용자 결정: Bloom 등 안 씀)
+            var postProcessProp = so.FindProperty("postProcessData");
+            if (postProcessProp != null && postProcessProp.objectReferenceValue != null)
+            {
+                postProcessProp.objectReferenceValue = null;
+                Debug.Log("[MobilePerfOptimizer] ✓ Renderer: postProcessData = null (Post-processing off — GPU bound 절감)");
+                n++;
+            }
+
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(renderer);
+            return n;
+        }
+
         private static int OptimizeUrpAsset()
         {
             var asset = AssetDatabase.LoadMainAssetAtPath(URP_ASSET_PATH);
@@ -63,7 +95,7 @@ namespace BalloonFlow.EditorTools
             var so = new SerializedObject(asset);
 
             n += SetBool (so, "m_SupportsHDR",                       false,  "HDR off");
-            n += SetFloat(so, "m_RenderScale",                       0.85f,  "Render Scale 0.85");
+            n += SetFloat(so, "m_RenderScale",                       0.7f,   "Render Scale 0.7 (GPU 97% bound — fillrate 추가 30% 절감)");
             n += SetInt  (so, "m_AdditionalLightsRenderingMode",     0,      "Additional Lights Disabled");
             n += SetBool (so, "m_EnableLODCrossFade",                false,  "LOD CrossFade off");
             n += SetBool (so, "m_ReflectionProbeBlending",           false,  "Reflection Probe Blending off");
@@ -179,6 +211,23 @@ namespace BalloonFlow.EditorTools
             {
                 PlayerSettings.stripUnusedMeshComponents = true;
                 Debug.Log("[MobilePerfOptimizer] ✓ Player: Optimize Mesh Data on");
+                n++;
+            }
+
+            // Managed Stripping Level — High 면 Firebase reflection 기반 코드가 잘려 디바이스에서 init fail.
+            // Minimal = Engine code 만 strip, managed code 보존. link.xml 와 함께 안전.
+            if (PlayerSettings.GetManagedStrippingLevel(ngt) != ManagedStrippingLevel.Minimal)
+            {
+                PlayerSettings.SetManagedStrippingLevel(ngt, ManagedStrippingLevel.Minimal);
+                Debug.Log("[MobilePerfOptimizer] ✓ Player: Managed Stripping Level = Minimal (Firebase reflection 보호)");
+                n++;
+            }
+
+            // Min SDK Version 24 (Android 7.0 Nougat = Galaxy S8 base) — 1.0 minimum spec 명시
+            if (PlayerSettings.Android.minSdkVersion != AndroidSdkVersions.AndroidApiLevel24)
+            {
+                PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel24;
+                Debug.Log("[MobilePerfOptimizer] ✓ Player: Min SDK = Android 7.0 (API 24, Galaxy S8 base)");
                 n++;
             }
 

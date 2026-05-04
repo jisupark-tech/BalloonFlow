@@ -529,10 +529,16 @@ namespace BalloonFlow
         #region Debug UI (InGame Only)
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+        [Header("[Debug UI]")]
+        [Tooltip("InGame 우상단 디버그 패널 (TEST ITEM / FORCE FAIL / Lv.N / RESET 등). " +
+                 "OnGUI 는 매 프레임 IMGUI 레이아웃 비용 큼 — 모바일 큰 부하. perf 측정 시 OFF.")]
+        [SerializeField] private bool _showDebugGui = false;
+
         private GUIStyle _debugBtnStyle;
 
         private void OnGUI()
         {
+            if (!_showDebugGui) return;
             if (_currentScene != SCENE_INGAME && _currentScene != SCENE_MAPMAKER) return;
 
             // 스타일 초기화 (한번만)
