@@ -264,10 +264,15 @@ namespace BalloonFlow
         public const string SPR_INGAMEGAUGEBARGREEN                      = "ingameGaugebarGreen";
         public const string SPR_INGAMEGAUGEBARHARD                       = "ingameGaugebarHard";
         public const string SPR_INGAMEGAUGEBARLV                         = "ingamegaugebarLV";
+        public const string SPR_INGAMEGAUGEBARNORMAL                     = "ingameGaugebarNormal";
+        public const string SPR_INGAMEGAUGEBARSUPERHARD                  = "ingameGaugebarSuperHard";
         public const string SPR_INGAMEITEMHAND                           = "ingameItemHand";
         public const string SPR_INGAMEITEMSUFFLE                         = "ingameItemSuffle";
         public const string SPR_INGAMEITEMZAP                            = "ingameItemZap";
         public const string SPR_INGAMELOCK                               = "ingameLock";
+        public const string SPR_INGAMELVHARD                             = "ingameLVHard";
+        public const string SPR_INGAMELVNORMAL                           = "ingamelvNormal";
+        public const string SPR_INGAMELVSUPERHARD                        = "ingameLVSuperhard";
         public const string SPR_INGAMESETTINGFRAME                       = "ingameSettingFrame";
         public const string SPR_IRONBOXSHADOW                            = "ironBoxShadow";
         public const string SPR_ITEMCOUNTFRAME                           = "itemCountFrame";
