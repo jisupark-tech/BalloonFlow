@@ -517,7 +517,8 @@ namespace BalloonFlow
                     continue;
                 }
 
-                Vector3 pos = rail.GetPositionAtDistance(dart.progress);
+                // 사용자 요구: slot 기반 위치 — 다트 사이 간격 일관성 보장 (progress 가변 영향 제거)
+                Vector3 pos = rail.GetDartCurrentPosition(dart);
 
                 // 다트 경로 오프셋 — 벨트 중심 방향으로 이동
                 float normT = pathLen > 0f ? dart.progress / pathLen : 0f;
@@ -801,7 +802,8 @@ namespace BalloonFlow
                 if (!freeMode && _holderMinDartIdCache.TryGetValue(dart.holderId, out int minId) && dart.dartId != minId)
                     continue;
 
-                Vector3 dartPos = rail.GetPositionAtDistance(dart.progress);
+                // 사용자 요구: slot 기반 위치
+                Vector3 dartPos = rail.GetDartCurrentPosition(dart);
                 Vector3 fireDir = rail.GetDartFiringDirection(dart.dartId);
 
                 // 이미 reserve 된 풍선은 후보에서 제외 → 다음 closest 풍선을 발사 대상으로 받음.

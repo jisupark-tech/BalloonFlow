@@ -270,6 +270,7 @@ namespace BalloonFlow
         private static readonly int _propBlurColor = Shader.PropertyToID("_BlurColor");
         private static readonly int _propOutlineEnabled = Shader.PropertyToID("_OutlineEnabled");
         private static readonly int _propOutlineColor = Shader.PropertyToID("_OutlineColor");
+        private static readonly int _propMainColor = Shader.PropertyToID("_Color");
         private static MaterialPropertyBlock _sharedMPB;
 
         /// <summary>

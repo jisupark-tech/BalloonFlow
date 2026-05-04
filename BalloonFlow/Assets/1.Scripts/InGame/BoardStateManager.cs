@@ -528,6 +528,9 @@ namespace BalloonFlow
         private readonly HashSet<int> _reusableOutermostColors = new HashSet<int>();
         private readonly Dictionary<Vector2Int, int> _reusableOccupancy = new Dictionary<Vector2Int, int>();
         private readonly HashSet<Vector2Int> _reusablePositionMap = new HashSet<Vector2Int>();
+        private readonly Dictionary<Vector2Int, int> _reusableCellToBalloonId = new Dictionary<Vector2Int, int>(512);
+        // 외곽 풍선 ID set — DirectionalTargeting candidates pre-filter 용. dirty 갱신 때 같이 채움.
+        private readonly HashSet<int> _reusableOutermostBalloonIds = new HashSet<int>();
         private float _cachedCellSpacing = 0.55f;
 
         /// <summary>
@@ -560,13 +563,16 @@ namespace BalloonFlow
 
             _reusableOccupancy.Clear();
             _reusablePositionMap.Clear();
+            _reusableCellToBalloonId.Clear();
+            _reusableOutermostBalloonIds.Clear();
 
             float cs = _cachedCellSpacing;
-            foreach (var b in allBalloons)
+            // foreach → for index — IL2CPP 명시적 inline + array indexer 직접 사용
+            for (int i = 0; i < allBalloons.Length; i++)
             {
+                var b = allBalloons[i];
                 if (b.isPopped) continue;
                 // FindTarget과 동일하게 GetBalloonWorldPosition 사용 — LevelSafeMult 적용된 실제 위치.
-                // b.position 은 raw 데이터 좌표라 큰 레벨에서 cell mapping 결과가 FindTarget과 달라짐.
                 Vector3 worldPos = BalloonController.Instance.GetBalloonWorldPosition(b.balloonId);
                 Vector2Int cell = new Vector2Int(
                     Mathf.RoundToInt(worldPos.x / cs),
@@ -582,26 +588,42 @@ namespace BalloonFlow
                 if (b.gimmickType == BalloonController.GimmickColorCurtain) continue;
 
                 _reusableOccupancy[cell] = b.color;
+                _reusableCellToBalloonId[cell] = b.balloonId;
             }
 
-            // 4방향 무조건 검사 (baseline 50c9574 복원).
-            // RailSideCount 기반 방향 제한은 BoardTileManager 초기화 타이밍 / RailSideCount
-            // 미설정 케이스에서 outermost 빈 set 반환 → false fail 발생. spec 의 "외곽 매칭 가능"
-            // 정의는 어느 방향이든 도달 가능한 풍선 → 4방향 모두 검사가 안전.
-            foreach (var kvp in _reusableOccupancy)
+            // 4방향 무조건 검사. 외곽 cell 의 색깔 + balloonId 모두 캐싱 — DirectionalTargeting candidates pre-filter 용.
+            // foreach → GetEnumerator 직접 사용으로 명시적 분기 + IL2CPP inline 보장.
+            var occEn = _reusableOccupancy.GetEnumerator();
+            try
             {
-                Vector2Int cell = kvp.Key;
-
-                if (IsOutermostInDirection(cell, Vector2Int.up, _reusablePositionMap) ||
-                    IsOutermostInDirection(cell, Vector2Int.down, _reusablePositionMap) ||
-                    IsOutermostInDirection(cell, Vector2Int.left, _reusablePositionMap) ||
-                    IsOutermostInDirection(cell, Vector2Int.right, _reusablePositionMap))
+                while (occEn.MoveNext())
                 {
-                    _reusableOutermostColors.Add(kvp.Value);
+                    Vector2Int cell = occEn.Current.Key;
+
+                    if (IsOutermostInDirection(cell, Vector2Int.up, _reusablePositionMap) ||
+                        IsOutermostInDirection(cell, Vector2Int.down, _reusablePositionMap) ||
+                        IsOutermostInDirection(cell, Vector2Int.left, _reusablePositionMap) ||
+                        IsOutermostInDirection(cell, Vector2Int.right, _reusablePositionMap))
+                    {
+                        _reusableOutermostColors.Add(occEn.Current.Value);
+                        if (_reusableCellToBalloonId.TryGetValue(cell, out int bid))
+                            _reusableOutermostBalloonIds.Add(bid);
+                    }
                 }
             }
+            finally { occEn.Dispose(); }
 
             return _reusableOutermostColors;
+        }
+
+        /// <summary>풍선이 외곽인지 (4방향 중 하나라도 rail 까지 비어있는지). dirty 자동 갱신.
+        /// DirectionalTargeting.FindTarget candidates pre-filter 용 — 외곽 아닌 풍선은 어차피 hit 불가능.
+        /// dirty=false 면 캐시 즉시 반환 (HashSet.Contains O(1)).</summary>
+        public bool IsOutermost(int balloonId)
+        {
+            // dirty 면 GetOutermostBalloonColors 호출이 _reusableOutermostBalloonIds 도 함께 갱신.
+            GetOutermostBalloonColors();
+            return _reusableOutermostBalloonIds.Contains(balloonId);
         }
 
         private bool IsOutermostInDirection(Vector2Int cell, Vector2Int direction, HashSet<Vector2Int> occupied)

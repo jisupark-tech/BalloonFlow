@@ -74,15 +74,15 @@ namespace BalloonFlow
         [Range(-2f, 2f)]
         public float dartPathOffset = -0.15f;
 
-        [Tooltip("비행 중 다트 스케일을 풍선 크기로 보간. 끄면 발사 시 스케일 유지. 동적 반영. (default: ON)")]
+        [Tooltip("비행 중 다트 스케일을 풍선 크기로 보간. ON=비행 중 다트가 풍선 사이즈로 점진 변환. 동적 반영. (default: ON)")]
         public bool dartScaleLerpToBalloon = true;
 
-        [Tooltip("비행 보간 강도. 0=원본 스케일 유지, 1=풍선 스케일에 정확히 맞춤. 동적 반영. (default: 0.3)")]
+        [Tooltip("비행 보간 강도. 0=원본 스케일 유지, 1=풍선 스케일에 정확히 맞춤. 동적 반영. (default: 1.0 — 풍선 사이즈 정확히 맞춤)")]
         [Range(0f, 1f)]
-        public float dartScaleLerpStrength = 0.3f;
+        public float dartScaleLerpStrength = 1f;
 
-        [Tooltip("발사 순간 다트가 풍선 사이즈로 펀치 스케일업. 동적 반영. (default: ON)")]
-        public bool dartLaunchScalePunch = true;
+        [Tooltip("발사 순간 다트가 풍선 사이즈로 펀치 스케일업 (overshoot). 동적 반영. (default: OFF — 발사 시 1.25배 커지는 효과 제거)")]
+        public bool dartLaunchScalePunch = false;
 
         [Tooltip("펀치 스케일업 시간(초). (default: 0.10)")]
         [Range(0.02f, 0.4f)]
@@ -191,6 +191,41 @@ namespace BalloonFlow
 
         [Header("[Board Config — Inspector에서 수치 조절]")]
         public BoardConfig Board = new BoardConfig();
+
+        #endregion
+
+        #region Render Pipeline 분리 — Quality Level 기반 switch
+
+        // Project Settings > Quality 에 등록된 Quality Level 이름.
+        // 각 Level 의 "Render Pipeline Asset" 슬롯에 해당 RPAsset 을 할당해두면 빌드에 자동 포함됨.
+        // GameManager 가 RPAsset 을 직접 reference 안 함 → Editor 전용 RPAsset 이 빌드에 끌려가는 누수 방지.
+        [Header("[Quality Level Name — Project Settings > Quality 와 동일하게]")]
+        [Tooltip("로비/타이틀/상점용 Quality Level 이름. Project Settings > Quality 에서 동일 이름으로 등록 + Mobile_RPAsset 할당.")]
+        [SerializeField] private string _lobbyQualityName = "Mobile";
+        [Tooltip("인게임 전용 Quality Level 이름. Project Settings > Quality 에서 등록 + InGame_RPAsset 할당.")]
+        [SerializeField] private string _ingameQualityName = "InGame";
+
+        /// <summary>씬에 맞는 Quality Level 로 switch — RPAsset 자동 변경.
+        /// Quality Level 등록 전이면 not found warning + 변경 안 함 (안전 fallback).</summary>
+        private void ApplyRPAssetForScene(string sceneName)
+        {
+            string target = sceneName == SCENE_INGAME ? _ingameQualityName : _lobbyQualityName;
+            if (string.IsNullOrEmpty(target)) return;
+
+            var names = QualitySettings.names;
+            for (int i = 0; i < names.Length; i++)
+            {
+                if (names[i] == target)
+                {
+                    if (QualitySettings.GetQualityLevel() == i) return;
+                    QualitySettings.SetQualityLevel(i, applyExpensiveChanges: true);
+                    Debug.Log($"[GameManager] Quality switched → {target} (idx={i}, scene={sceneName})");
+                    return;
+                }
+            }
+            // Quality Level 미등록 — 빌드에 RPAsset 없음. 기존 default 유지.
+            Debug.LogWarning($"[GameManager] Quality level '{target}' not found in Project Settings > Quality. RPAsset switch skipped.");
+        }
 
         #endregion
 
@@ -372,6 +407,23 @@ namespace BalloonFlow
                 Destroy(_inGameRoot);
                 _inGameRoot = null;
             }
+            // 메모리 회수(Resources.UnloadUnusedAssets) 는 transition 끝난 후 별도 코루틴에서 호출 —
+            // 디바이스에선 동기 stall 위험. 여기선 호출 안 함.
+        }
+
+        /// <summary>
+        /// 비동기 자원 회수. fade-in 후 background 로 진행.
+        /// 모바일에서 동기 호출 시 main thread 0.5~수 초 block.
+        /// </summary>
+        IEnumerator UnloadUnusedAssetsAsync()
+        {
+            // 다음 frame 시작 후 진행 — transition 끝난 후 idle 상태에서 GC 수행.
+            yield return null;
+            Debug.Log("[GameManager] Resources.UnloadUnusedAssets 시작 (background)");
+            float t0 = Time.realtimeSinceStartup;
+            var op = Resources.UnloadUnusedAssets();
+            while (!op.isDone) yield return null;
+            Debug.Log($"[GameManager] Resources.UnloadUnusedAssets 완료 ({(Time.realtimeSinceStartup - t0)*1000f:F0}ms)");
         }
 
         #endregion
@@ -414,6 +466,7 @@ namespace BalloonFlow
             _isTransitioning = true;
             string _fromScene = _currentScene;
             float _coStart = Time.realtimeSinceStartup;
+            Debug.Log($"[GameManager] Transition START {_fromScene} → {_sceneName}");
 
             // 보상 이펙트/SFX가 다음 씬으로 이어져 재생되는 문제 방지.
             CoinFlyEffect.StopAll();
@@ -436,16 +489,29 @@ namespace BalloonFlow
             }
 
             // 페이드 완료 후 InGame 매니저 정리
+            float _cleanupT0 = Time.realtimeSinceStartup;
             if (_fromScene == SCENE_INGAME)
                 CleanupInGame();
+            Debug.Log($"[GameManager] CleanupInGame {(Time.realtimeSinceStartup - _cleanupT0)*1000f:F0}ms");
 
             // 씬 로드
+            float _loadT0 = Time.realtimeSinceStartup;
             AsyncOperation _op = SceneManager.LoadSceneAsync(_sceneName);
             if (_op != null)
                 while (!_op.isDone) yield return null;
+            Debug.Log($"[GameManager] LoadSceneAsync {(Time.realtimeSinceStartup - _loadT0)*1000f:F0}ms");
 
             _currentScene = _sceneName;
             _isTransitioning = false;
+
+            // RPAsset 씬별 switch — InGame 은 더 minimal RPAsset, 그 외는 default.
+            // Inspector 미할당이면 변경 안 함 (안전).
+            ApplyRPAssetForScene(_sceneName);
+
+            // 인게임에서 빠져나온 경우 — fade-in 후 비동기로 자원 회수.
+            // 동기 호출 시 디바이스에서 main thread 0.5~수 초 block.
+            if (_fromScene == SCENE_INGAME)
+                StartCoroutine(UnloadUnusedAssetsAsync());
 
             // 카메라 설정 (MapMaker has its own camera setup)
             if (CameraManager.HasInstance)

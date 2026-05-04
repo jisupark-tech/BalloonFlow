@@ -41,6 +41,9 @@ namespace BalloonFlow
         private static HashSet<Vector2Int> _cachedOccupancy;
         private static int _cachedOccupancyFrame = -1;
 
+        /// <summary>BuildOccupancyMap reusable position list — GC alloc 방지.</summary>
+        private static List<Vector3> _reusableActivePositions;
+
         /// <summary>
         /// Per-frame cached same-color balloon lists to avoid repeated array allocation.
         /// Key = color index, Value = list of BalloonData.
@@ -107,48 +110,64 @@ namespace BalloonFlow
             int bestId = -1;
             float bestFiringDist = float.MaxValue;
 
-            for (int i = 0; i < candidates.Count; i++)
+            // candidates 순회 — foreach 대신 GetEnumerator 직접 사용 (IL2CPP inline 보장 + 명시적 분기).
+            // List<T>.Enumerator 는 struct 라 GC alloc 0. try/finally 로 Dispose 보장.
+            // candidates 첫 줄에 IsOutermost check — 외곽 아닌 풍선 (= 어차피 hit 불가) 은 즉시 skip.
+            //   N×N 격자 내부 풍선 (외곽 아님) 이 candidates 의 90%+ → Vector3 distance / IsPathBlocked 계산 90% 절감.
+            bool hasBoardState = BoardStateManager.HasInstance;
+            BoardStateManager bsm = hasBoardState ? BoardStateManager.Instance : null;
+
+            var en = candidates.GetEnumerator();
+            try
             {
-                BalloonData balloon = candidates[i];
-                if (balloon.isPopped) continue;
+                while (en.MoveNext())
+                {
+                    BalloonData balloon = en.Current;
+                    if (balloon.isPopped) continue;
 
-                // Wall balloons are indestructible — never target them
-                if (balloon.gimmickType == BalloonController.GimmickWall) continue;
+                    // Wall balloons are indestructible — never target them
+                    if (balloon.gimmickType == BalloonController.GimmickWall) continue;
 
-                // Pin — 같은 색 다트로 직접 타격 가능 (타겟팅에서 제외하지 않음)
+                    // Pin — 같은 색 다트로 직접 타격 가능 (타겟팅에서 제외하지 않음)
 
-                // Ice balloons must be thawed by adjacent pop first — not directly targetable
-                if (balloon.gimmickType == BalloonController.GimmickIce) continue;
+                    // Ice balloons must be thawed by adjacent pop first — not directly targetable
+                    if (balloon.gimmickType == BalloonController.GimmickIce) continue;
 
-                // Color Curtain — 간접 제거만 가능 (해당 색 풍선 팝 시 카운터 감소)
-                if (balloon.gimmickType == BalloonController.GimmickColorCurtain) continue;
+                    // Color Curtain — 간접 제거만 가능 (해당 색 풍선 팝 시 카운터 감소)
+                    if (balloon.gimmickType == BalloonController.GimmickColorCurtain) continue;
 
-                if (excludeIds != null && excludeIds.Contains(balloon.balloonId)) continue;
+                    if (excludeIds != null && excludeIds.Contains(balloon.balloonId)) continue;
 
-                // 실제 월드 위치 사용 (배율/오프셋 적용 후)
-                Vector3 balloonWorldPos = BalloonController.HasInstance
-                    ? BalloonController.Instance.GetBalloonWorldPosition(balloon.balloonId)
-                    : balloon.position;
+                    // 외곽 풍선만 candidates — N×N 내부 풍선은 어차피 IsPathBlocked 로 막힐 것 → 미리 skip.
+                    // BoardStateManager 가 dirty flag 로 외곽 set 캐싱 → HashSet.Contains O(1).
+                    if (hasBoardState && !bsm.IsOutermost(balloon.balloonId)) continue;
 
-                // Check perpendicular distance (strict column alignment)
-                float perpDist = GetPerpendicularDistance(dartPosition, balloonWorldPos, scanDir);
-                if (perpDist > perpendicularTolerance) continue;
+                    // 실제 월드 위치 사용 (배율/오프셋 적용 후) — Cached 버전:
+                    // candidates loop 은 perp tolerance cellSpacing 100% 라 1 frame stale 영향 없음.
+                    Vector3 balloonWorldPos = BalloonController.HasInstance
+                        ? BalloonController.Instance.GetBalloonWorldPositionCached(balloon.balloonId)
+                        : balloon.position;
 
-                // Check that balloon is in front of the dart (in firing direction)
-                float firingDist = GetFiringAxisDistance(dartPosition, balloonWorldPos, scanDir);
-                if (firingDist < 0f) continue;
+                    // Check perpendicular distance (strict column alignment)
+                    float perpDist = GetPerpendicularDistance(dartPosition, balloonWorldPos, scanDir);
+                    if (perpDist > perpendicularTolerance) continue;
 
-                // 더 가까운 후보가 이미 있으면 IsPathBlocked 호출조차 skip — closest target 선정에 영향 없는 후보는 검사 불필요.
-                // (이전: IsPathBlocked 를 firingDist 비교 전에 호출 → K*M ops, 후보 절반 이상이 더 멀어도 매번 검사.)
-                if (firingDist >= bestFiringDist) continue;
+                    // Check that balloon is in front of the dart (in firing direction)
+                    float firingDist = GetFiringAxisDistance(dartPosition, balloonWorldPos, scanDir);
+                    if (firingDist < 0f) continue;
 
-                // outermost 규칙 — 앞에 풍선(아무 색)이 있으면 타겟 불가
-                if (IsPathBlocked(dartPosition, balloonWorldPos, scanDir, occupancy)) continue;
+                    // 더 가까운 후보가 이미 있으면 IsPathBlocked 호출조차 skip.
+                    if (firingDist >= bestFiringDist) continue;
 
-                // 통과한 가장 가까운 후보로 갱신
-                bestFiringDist = firingDist;
-                bestId = balloon.balloonId;
+                    // outermost 규칙 — 앞에 풍선(아무 색)이 있으면 타겟 불가
+                    if (IsPathBlocked(dartPosition, balloonWorldPos, scanDir, occupancy)) continue;
+
+                    // 통과한 가장 가까운 후보로 갱신
+                    bestFiringDist = firingDist;
+                    bestId = balloon.balloonId;
+                }
             }
+            finally { en.Dispose(); }
 
             return bestId;
         }
@@ -228,26 +247,23 @@ namespace BalloonFlow
                 return _cachedOccupancy;
             }
 
-            // 재사용: new 대신 Clear
+            // 재사용: new 대신 Clear. 초기 capacity 1024 — 풍선 수 < 1024 면 bucket resize 없음 (GC alloc 0).
             if (_cachedOccupancy == null)
-                _cachedOccupancy = new HashSet<Vector2Int>();
+                _cachedOccupancy = new HashSet<Vector2Int>(1024);
             else
                 _cachedOccupancy.Clear();
 
             if (BalloonController.HasInstance)
             {
-                BalloonData[] allBalloons = BalloonController.Instance.GetAllBalloons();
-                if (allBalloons != null)
+                // GetActivePositions: _balloonObjects (active 만) 직접 순회 → popped 자동 제외 + BalloonData lookup 비용 0.
+                // 이전: GetAllBalloons() (popped 포함) × isPopped check × GetBalloonWorldPosition (dict lookup + transform marshalling).
+                if (_reusableActivePositions == null)
+                    _reusableActivePositions = new List<Vector3>(256);
+                BalloonController.Instance.GetActivePositions(_reusableActivePositions);
+
+                for (int i = 0; i < _reusableActivePositions.Count; i++)
                 {
-                    for (int i = 0; i < allBalloons.Length; i++)
-                    {
-                        if (!allBalloons[i].isPopped)
-                        {
-                            // GetBalloonWorldPosition 사용 — LevelSafeMult 적용된 위치로 BoardStateManager.outermost 와 일관.
-                            Vector3 wp = BalloonController.Instance.GetBalloonWorldPosition(allBalloons[i].balloonId);
-                            _cachedOccupancy.Add(WorldToGrid(wp));
-                        }
-                    }
+                    _cachedOccupancy.Add(WorldToGrid(_reusableActivePositions[i]));
                 }
             }
 

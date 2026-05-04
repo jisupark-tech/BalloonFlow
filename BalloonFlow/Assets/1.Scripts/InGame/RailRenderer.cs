@@ -188,13 +188,14 @@ namespace BalloonFlow
                         break;
                 }
 
-                // Only override material for primitive segments (not custom prefab which has its own)
+                // Only override material for primitive segments (not custom prefab which has its own).
+                // sharedMaterial 사용: 매 segment 마다 instance material 생성 방지 (기존 .material 은 instance 자동 생성).
                 if (_visualType != VISUAL_CUSTOM3D)
                 {
                     var meshRenderer = segment.GetComponent<MeshRenderer>();
                     if (meshRenderer != null)
                     {
-                        meshRenderer.material = _trackMaterial;
+                        meshRenderer.sharedMaterial = _trackMaterial;
                     }
                 }
 

@@ -277,14 +277,30 @@ namespace BalloonFlow
             var _renderType = _urpType.GetProperty("renderType");
             if (_renderType != null) _renderType.SetValue(_uiData, 1);
 
-            // MainCamera → Stack에 UICamera 추가
+            // MainCamera → Stack 에 UICamera 추가. 중복 add 방지 — 매 씬 전환마다 호출되므로 누적되면
+            // 같은 UICamera 가 stack 에 N 번 들어가 N 번 렌더링됨 (Profiler UICamera 47% 부하 핵심 원인).
             var _mainData = MainCamera.gameObject.GetComponent(_urpType);
             if (_mainData == null) _mainData = MainCamera.gameObject.AddComponent(_urpType);
             var _stackProp = _urpType.GetProperty("cameraStack");
             if (_stackProp != null)
             {
                 var _stack = _stackProp.GetValue(_mainData) as System.Collections.IList;
-                if (_stack != null) _stack.Add(UICamera);
+                if (_stack != null)
+                {
+                    // 1) 기존 stack 안의 null / destroyed reference 정리
+                    for (int i = _stack.Count - 1; i >= 0; i--)
+                    {
+                        var item = _stack[i] as Object;
+                        if (item == null) _stack.RemoveAt(i);
+                    }
+                    // 2) UICamera 가 이미 stack 안에 있으면 skip (중복 방지)
+                    bool already = false;
+                    for (int i = 0; i < _stack.Count; i++)
+                    {
+                        if (ReferenceEquals(_stack[i], UICamera)) { already = true; break; }
+                    }
+                    if (!already) _stack.Add(UICamera);
+                }
             }
         }
 

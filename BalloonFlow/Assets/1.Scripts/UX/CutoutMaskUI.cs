@@ -15,14 +15,35 @@ namespace BalloonFlow
     /// </summary>
     public class CutoutMaskUI : Image
     {
+        // Material cache — 매 frame new Material() 호출되던 문제 fix.
+        // base.materialForRendering 이 동일하면 cache 재사용. shader 변경 시 새로 생성.
+        private Material _cachedMat;
+        private Material _cachedBaseMat;
+
         public override Material materialForRendering
         {
             get
             {
-                var m = new Material(base.materialForRendering);
-                m.SetInt("_StencilComp", (int)CompareFunction.NotEqual);
-                return m;
+                Material baseMat = base.materialForRendering;
+                if (_cachedMat == null || _cachedBaseMat != baseMat)
+                {
+                    if (_cachedMat != null) DestroyImmediate(_cachedMat);
+                    _cachedMat = new Material(baseMat);
+                    _cachedMat.SetInt("_StencilComp", (int)CompareFunction.NotEqual);
+                    _cachedBaseMat = baseMat;
+                }
+                return _cachedMat;
             }
+        }
+
+        protected override void OnDestroy()
+        {
+            if (_cachedMat != null)
+            {
+                DestroyImmediate(_cachedMat);
+                _cachedMat = null;
+            }
+            base.OnDestroy();
         }
     }
 }

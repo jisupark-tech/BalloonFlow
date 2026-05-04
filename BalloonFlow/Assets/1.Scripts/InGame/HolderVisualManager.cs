@@ -1278,11 +1278,16 @@ namespace BalloonFlow
             }
         }
 
+        // 모든 ChainLine 이 공유하는 단일 Material. LineRenderer.startColor/endColor 가
+        // per-line 색상을 처리하므로 material 자체는 1개만 있으면 충분 — instance 누수 방지.
+        private static Material _sharedChainLineMat;
+
         private void CreateChainLine(string key, HolderVisual a, HolderVisual b)
         {
             Color colorA = GetColor(a.color);
             Color colorB = GetColor(b.color);
-            var mat = new Material(Shader.Find("Sprites/Default"));
+            if (_sharedChainLineMat == null)
+                _sharedChainLineMat = new Material(Shader.Find("Sprites/Default"));
 
             var go = new GameObject($"ChainLine_{key}");
 
@@ -1295,7 +1300,7 @@ namespace BalloonFlow
             lrA.sortingOrder = 5;
             lrA.startColor = colorA;
             lrA.endColor = colorA;
-            lrA.material = mat;
+            lrA.sharedMaterial = _sharedChainLineMat;
 
             // B색 절반 — 별도 자식 오브젝트
             var goB = new GameObject($"ChainLineB_{key}");
@@ -1308,7 +1313,7 @@ namespace BalloonFlow
             lrB.sortingOrder = 5;
             lrB.startColor = colorB;
             lrB.endColor = colorB;
-            lrB.material = mat;
+            lrB.sharedMaterial = _sharedChainLineMat;
 
             _chainLines[key] = go;
         }

@@ -77,9 +77,10 @@ namespace BalloonFlow
 
         private void OnDisable()
         {
-            // 씬 전환 시 가속 잔재 리셋
+            // 씬 전환 시 가속 잔재 모두 리셋 — 사용자 요구: 로비로 나오면 x2 토글도 원복.
             _holdActive = false;
             _touchStartTime = -1f;
+            _toggleOn = false;
             if (RailManager.HasInstance)
                 RailManager.Instance.UserSpeedMultiplier = 1f;
         }

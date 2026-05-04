@@ -141,8 +141,13 @@ namespace BalloonFlow
             // 타입별 프레임/이미지 스왑: hasDiscount=true → Special Offer (Red) / false → Normal Bundle (Purple)
             ApplyProductTypeVisual(data.hasDiscount);
 
-            // 왼쪽 가격 표시 (TextPrice / TextPriceOutline) — 버튼 가격과 동일 텍스트로 일단 동기화
-            SetTextWithOutline(_txtPrice, _txtPriceOutline, data.price);
+            // 왼쪽 골드 표시 (TextPrice / TextPriceOutline) — 사용자 요구: 받을 골드 양 (rewards.coins).
+            // 구매 가격은 우측 BtnBuy 의 _txtBtnBuy 가 표시. 여기서는 reward.coins 만.
+            // coins 0 인 상품 (광고제거 등) 은 빈 텍스트 — TextPrice 자체 GameObject 는 그대로 노출 (디자인 결정 시 SetActive 조정).
+            string coinsText = (data.rewards != null && data.rewards.coins > 0)
+                ? FormatCoins(data.rewards.coins)
+                : string.Empty;
+            SetTextWithOutline(_txtPrice, _txtPriceOutline, coinsText);
 
             // 동적 보상 표시 (ItemArea / BoostArea)
             SetupRewards(data.rewards);
@@ -209,8 +214,10 @@ namespace BalloonFlow
             }
 
             // ── ItemArea ──
-            if (rewards.coins > 0)
-                SpawnRewardItem(prefab, _itemArea, _iconCoin, FormatCoins(rewards.coins));
+            // 사용자 요구: RightArea 의 coin reward 표시 제거 — LeftArea 의 _txtPrice (TextPrice/Outline)
+            // 가 이미 골드 표시. 두 곳에 골드 아이콘 보이면 시각적 중복.
+            // if (rewards.coins > 0)
+            //     SpawnRewardItem(prefab, _itemArea, _iconCoin, FormatCoins(rewards.coins));
 
             if (rewards.infiniteHeartsSeconds > 0)
                 SpawnRewardItem(prefab, _itemArea, _iconInfiniteHearts, FormatHours(rewards.infiniteHeartsSeconds));

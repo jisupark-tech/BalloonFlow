@@ -39,11 +39,16 @@ namespace BalloonFlow
             public int dartId;
             public int dartColor;
             public int holderId;
-            public float progress;    // distance along path [0, totalPathLength)
+            public float progress;    // distance along path [0, totalPathLength). LEGACY — slotIndex 우선 사용.
             public bool isFrozen;
             // 배치 순서 식별용 단조 증가 ID. 이어하기 시 "최근 배치 다트" 선정에 사용.
             // dartId는 발사로 RemoveDartById 후 새 배치에서 재할당될 수 있으므로 별도 시퀀스 유지.
             public long placedSeq;
+
+            // 사용자 요구: slot index 기반 통일 — 배치/이동/Freeze 시 간격 일관성 보장.
+            // -1 = 미할당. 다트 점유 slot 의 array index. _slots[slotIndex].dartId == this.dartId 와 동기화.
+            // 위치 계산: rail.GetPositionAtSlot(slotIndex) 사용 (progress 거리 비례 대체).
+            public int slotIndex = -1;
         }
 
         /// <summary>
@@ -135,8 +140,9 @@ namespace BalloonFlow
         /// </summary>
         public bool IsPausedByBooster { get; set; }
 
-        // Per-dart individual movement system
-        private readonly List<DartOnRail> _darts = new List<DartOnRail>();
+        // Per-dart individual movement system. capacity 256 미리 할당 → resize 비용 0.
+        // RailManager 전반에 _slotCount 까지 다트가 갈 수 있으므로 보수적으로 256 (slot 일반 200, 여유).
+        private readonly List<DartOnRail> _darts = new List<DartOnRail>(256);
 
         // FindDart O(N) → O(1) 캐시. Place/Remove 시 동기화.
         private readonly Dictionary<int, DartOnRail> _dartById = new Dictionary<int, DartOnRail>();
@@ -271,7 +277,9 @@ namespace BalloonFlow
             bool hasWrap = pathLen > 0f;
             if (hasWrap && _rotationOffset >= pathLen) _rotationOffset -= pathLen;
 
-            // Chain freeze: moving darts that reach frozen darts also freeze
+            // Chain freeze: deploy point 접한 다트 + 뒤에 연결된 다트 전부 cluster freeze.
+            // 빈 공간 매꿈 자동화는 보류 — UnfreezeAndReinsertAll 매 frame 호출 시 부하 + 의도와 다른 동작.
+            // 빈 공간 매꿈 trigger 는 dart 발사 시점 또는 deploy event 에서 명시적 호출하는 방식이 안전.
             PropagateFreezeChain();
 
             int dartCount = _darts.Count;
@@ -280,9 +288,11 @@ namespace BalloonFlow
             float physicalGap = DartPhysicalGap;
             float dartDelta = beltDelta;
 
+            // ─── 사용자 보고로 LEGACY 복원 — packing physics + deploy point obstacle 살림 ───
+            // 균등 이동만 하면 (1) 뭉침 (2) 배포 느낌 X (3) freeze 안 됨 (4) 곡선 부자연 4 문제 발생.
+            // packing physics 가 cluster / deploy point freeze / 곡선 자연스러움의 핵심.
+            // dart.slotIndex 는 PlaceDartAtProgress 에서 동기화 (간격 추적용 메타데이터로만 사용).
             // 가득 시 uniform advance — 모든 다트가 belt와 함께 동일 속도 회전.
-            // (deploy point 장애물 제거됐으므로 일반적인 packing 으로도 회전 가능하지만,
-            //  빡빡하게 가득찬 상태에서는 packing이 잠길 수 있어 안전망으로 유지.)
             bool railFullUniform = (_occupiedCount + _frozenDartInfos.Count) >= PhysicalCapacity - 1;
             if (railFullUniform)
             {
@@ -296,17 +306,13 @@ namespace BalloonFlow
                 return;
             }
 
-            // ─── 일반 상태: packing/cluster physics (deploy point freeze 시각 유지) ───
-
-            // progress 내림차순 정렬
+            // 일반 상태: packing/cluster physics (deploy point freeze 시각 유지)
             _sortedDartIndices.Clear();
             for (int i = 0; i < dartCount; i++) _sortedDartIndices.Add(i);
             if (_dartProgressDescending == null)
                 _dartProgressDescending = (a, b) => _darts[b].progress.CompareTo(_darts[a].progress);
             _sortedDartIndices.Sort(_dartProgressDescending);
 
-            // wrap 구간 걸침 감지. sorted 인접 인덱스의 progress 차이가 max gap → 그 dart 의 sorted position 이 head.
-            // O(N²) → O(N).
             int headPosInSorted = 0;
             if (hasWrap && dartCount > 1)
             {
@@ -315,15 +321,13 @@ namespace BalloonFlow
                 if ((highest - lowest) > pathLen * 0.5f)
                 {
                     float maxGap = -1f;
-                    // sorted 인접 다트 간격 비교 (descending 이므로 prev.progress - current.progress).
-                    // 가장 큰 gap 의 다트가 chain head (그 뒤로 가장 큰 빈 구간).
                     for (int p = 0; p < dartCount; p++)
                     {
                         int prevPos = p == 0 ? dartCount - 1 : p - 1;
                         float curProg = _darts[_sortedDartIndices[p]].progress;
                         float prevProg = _darts[_sortedDartIndices[prevPos]].progress;
                         float gap = prevProg - curProg;
-                        if (gap < 0f) gap += pathLen; // wrap edge
+                        if (gap < 0f) gap += pathLen;
                         if (gap > maxGap)
                         {
                             maxGap = gap;
@@ -333,11 +337,7 @@ namespace BalloonFlow
                 }
             }
 
-            // Deploy point 장애물 — 다트가 deploy point 직전에 settle. 한 칸 안 잡아먹도록 offset=0.
-            // (이전: deployOffset = 0.5*physGap → 1.5*physGap 낭비. 지금: 0 → physGap 만 낭비 = 정확히 1 슬롯.)
-            // 다트 간격 일정 유지(packing 안정화) + deploy point 기능(freeze 등) 모두 유지.
             bool hasDeployPoints = _activeDeployPoints.Count > 0;
-
             for (int offset = 0; offset < dartCount; offset++)
             {
                 int p = headPosInSorted + offset;
@@ -346,8 +346,6 @@ namespace BalloonFlow
                 DartOnRail dart = _darts[idx];
                 float myProg = dart.progress;
 
-                // closest-ahead = sorted 에서 즉시 직전 인덱스 (정렬 descending 이므로 progress 더 높은 다트).
-                // O(N²) → O(1) 최적화. wrap 시 i=0 → sorted[N-1] 의 progress + pathLen.
                 float closest = float.MaxValue;
                 if (dartCount > 1)
                 {
@@ -367,7 +365,7 @@ namespace BalloonFlow
                     foreach (var kvp in _deployPoints)
                     {
                         if (!_activeDeployPoints.Contains(kvp.Key)) continue;
-                        float d = kvp.Value - myProg; // offset=0: 장애물 = deployProgress 그 자체
+                        float d = kvp.Value - myProg;
                         if (hasWrap && d < 0f) d += pathLen;
                         if (d > 0.001f && d < closest) closest = d;
                     }
@@ -525,6 +523,24 @@ namespace BalloonFlow
         /// Gets the position on the rail at a specific distance from the start.
         /// Uses smoothed path when smooth corners are enabled.
         /// </summary>
+        // ─── 사용자 요구: slot index 기반 위치 통일 ───
+        /// <summary>Slot index 의 현재 world position. _rotationOffset 자동 적용.
+        /// 모든 다트 위치 계산은 이걸로 통일 — 다트 사이 간격이 항상 slotSpacing 의 정수배 보장.</summary>
+        public Vector3 GetPositionAtSlot(int slotIndex)
+        {
+            if (_slotCount <= 0 || _slotSpacing <= 0.0001f) return Vector3.zero;
+            slotIndex = ((slotIndex % _slotCount) + _slotCount) % _slotCount;
+            float distance = slotIndex * _slotSpacing + _rotationOffset;
+            return GetPositionAtDistance(distance);
+        }
+
+        /// <summary>다트의 현재 world position. progress 기반 (LEGACY) — 곡선/packing 자연.
+        /// slotIndex 는 메타데이터 (간격 추적용)만 사용. 시각은 packing physics 결과 progress 따름.</summary>
+        public Vector3 GetDartCurrentPosition(DartOnRail dart)
+        {
+            return dart != null ? GetPositionAtDistance(dart.progress) : Vector3.zero;
+        }
+
         public Vector3 GetPositionAtDistance(float distance)
         {
             var path = _smoothedPath;
@@ -922,6 +938,16 @@ namespace BalloonFlow
         public int PlaceDartAtProgress(float progress, int color, int holderId)
         {
             if (_darts.Count >= _slotCount) return -1; // capacity check
+
+            // slotIndex 메타데이터 동기화 — progress 그대로 유지 (packing physics 자연 동작 위해 snap 안 함).
+            // slotIndex 는 추적/디버그/빈 slot 인덱스 식별용. 시각 위치 계산은 progress 기반 GetPositionAtDistance.
+            int slotIndex = -1;
+            if (_slotSpacing > 0.0001f && _slotCount > 0)
+            {
+                slotIndex = Mathf.RoundToInt(progress / _slotSpacing);
+                slotIndex = ((slotIndex % _slotCount) + _slotCount) % _slotCount;
+            }
+
             int id = _nextDartId++;
             var dart = new DartOnRail
             {
@@ -930,7 +956,8 @@ namespace BalloonFlow
                 holderId = holderId,
                 progress = progress,
                 isFrozen = false,
-                placedSeq = _nextPlacedSeq++
+                placedSeq = _nextPlacedSeq++,
+                slotIndex = slotIndex
             };
             _darts.Add(dart);
             _dartById[id] = dart; // FindDart 캐시 동기화
@@ -964,7 +991,9 @@ namespace BalloonFlow
             return -1f;
         }
 
-        /// <summary>Remove a dart by ID. O(1) dict lookup + O(N) list remove.</summary>
+        /// <summary>Remove a dart by ID. O(1) dict lookup + O(N) list remove.
+        /// 사용자 의도 B: 다트 발사 시점에 cluster unfreeze → 빈 공간 advance → 다음 frame PropagateFreezeChain 이 다시 cluster 형성.
+        /// 매 frame UpdateInternal 호출 대신 발사 시점만 호출 — 부하 0 + cluster 흐름 자연.</summary>
         public bool RemoveDartById(int dartId)
         {
             if (!_dartById.Remove(dartId)) return false;
@@ -974,6 +1003,10 @@ namespace BalloonFlow
                 {
                     _darts.RemoveAt(i);
                     _occupiedCount = _darts.Count;
+
+                    // 빈 공간 생겼으니 frozen cluster 풀어 packing physics 가 advance.
+                    if (_frozenDartInfos.Count > 0)
+                        UnfreezeAndReinsertAll();
                     return true;
                 }
             }
@@ -986,11 +1019,11 @@ namespace BalloonFlow
             return _dartById.TryGetValue(dartId, out DartOnRail d) ? d : null;
         }
 
-        /// <summary>Get world position for a dart.</summary>
+        /// <summary>Get world position for a dart. slot index 우선 — 사용자 요구로 다트 위치 통일.</summary>
         public Vector3 GetDartWorldPosition(int dartId)
         {
             var dart = FindDart(dartId);
-            return dart != null ? GetPositionAtDistance(dart.progress) : Vector3.zero;
+            return dart != null ? GetDartCurrentPosition(dart) : Vector3.zero;
         }
 
         /// <summary>Get firing direction for a dart based on its progress along the path.</summary>

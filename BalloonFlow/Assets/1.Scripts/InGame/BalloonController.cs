@@ -332,7 +332,32 @@ namespace BalloonFlow
             return null;
         }
 
-        /// <summary>풍선의 실제 월드 위치 (배율/오프셋 적용 후). 오브젝트 없으면 데이터 위치 반환.</summary>
+        /// <summary>Frame 단위 position cache — transform.position 호출 N×M → 1×N 으로 절감.</summary>
+        private readonly Dictionary<int, Vector3> _frameCachedPositions = new Dictionary<int, Vector3>(512);
+        private int _frameCachedPositionsFrame = -1;
+
+        /// <summary>매 frame 첫 호출 시 모든 active 풍선 위치를 한 번에 cache. 같은 frame 내 lookup 은 dict TryGetValue.
+        /// foreach 대신 Dictionary.Enumerator 직접 사용 — IL2CPP 에서 inline 보장 + 명시적 Dispose.</summary>
+        private void RefreshFramePositionCacheIfNeeded()
+        {
+            int currentFrame = Time.frameCount;
+            if (_frameCachedPositionsFrame == currentFrame) return;
+            _frameCachedPositionsFrame = currentFrame;
+            _frameCachedPositions.Clear();
+            var en = _balloonObjects.GetEnumerator();
+            try
+            {
+                while (en.MoveNext())
+                {
+                    var obj = en.Current.Value;
+                    if (obj != null) _frameCachedPositions[en.Current.Key] = obj.transform.position;
+                }
+            }
+            finally { en.Dispose(); }
+        }
+
+        /// <summary>풍선의 실제 월드 위치 (배율/오프셋 적용 후). 오브젝트 없으면 데이터 위치 반환.
+        /// 정확한 위치 — 매 호출 transform.position 직접. 다트 발사 등 정밀 위치 필요한 곳 사용.</summary>
         public Vector3 GetBalloonWorldPosition(int balloonId)
         {
             if (_balloonObjects.TryGetValue(balloonId, out GameObject obj) && obj != null)
@@ -340,6 +365,31 @@ namespace BalloonFlow
             if (_balloons.TryGetValue(balloonId, out BalloonData data))
                 return data.position;
             return Vector3.zero;
+        }
+
+        /// <summary>풍선 월드 위치 — frame 단위 cache. 같은 frame 안에서 N번 호출돼도 transform.position 은 frame 당 1회만.
+        /// 1 frame stale 허용되는 hot path 전용 (FindTarget candidates loop 등 — perp tolerance 가 cellSpacing 100% 라 stale 영향 없음).
+        /// 정확한 위치 필요하면 GetBalloonWorldPosition() 사용.</summary>
+        public Vector3 GetBalloonWorldPositionCached(int balloonId)
+        {
+            RefreshFramePositionCacheIfNeeded();
+            if (_frameCachedPositions.TryGetValue(balloonId, out Vector3 cached))
+                return cached;
+            // Cache 미스 — fallback to direct.
+            return GetBalloonWorldPosition(balloonId);
+        }
+
+        /// <summary>
+        /// Active(non-popped) 풍선의 world position 을 caller-provided list 에 채워줌.
+        /// Frame cache 활용 — 같은 frame 안에서 BuildOccupancyMap 등 다른 호출이 있었으면 0 transform 호출.
+        /// </summary>
+        public void GetActivePositions(List<Vector3> output)
+        {
+            if (output == null) return;
+            output.Clear();
+            RefreshFramePositionCacheIfNeeded();
+            foreach (var kvp in _frameCachedPositions)
+                output.Add(kvp.Value);
         }
 
         /// <summary>풍선 오브젝트의 현재 localScale. 오브젝트 없으면 추정 스케일 반환.</summary>

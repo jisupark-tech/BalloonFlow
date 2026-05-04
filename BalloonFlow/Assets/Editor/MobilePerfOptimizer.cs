@@ -30,7 +30,7 @@ namespace BalloonFlow.EditorTools
         private const string URP_ASSET_PATH = "Assets/Settings/Mobile_RPAsset.asset";
         private const string RENDERER_PATH  = "Assets/Settings/Mobile_Renderer.asset";
 
-        [MenuItem("BalloonFlow/Optimize URP for Low-end Mobile (S8/A23)")]
+        [MenuItem("BalloonFlow/DON'T USE/Optimize URP for Low-end Mobile (S8/A23)")]
         public static void Optimize()
         {
             int n = 0;
@@ -101,6 +101,34 @@ namespace BalloonFlow.EditorTools
             n += SetBool (so, "m_ReflectionProbeBlending",           false,  "Reflection Probe Blending off");
             n += SetBool (so, "m_ReflectionProbeBoxProjection",      false,  "Reflection Probe Box Projection off");
             n += SetInt  (so, "m_AdditionalLightsCookieResolution",  256,    "Cookie Atlas Resolution 256");
+
+            // ── 추가 부하 옵션 OFF (Profiler 분석 결과 RenderCameraStack/UICamera 47% 부하 잡기) ──
+            n += SetBool (so, "m_SupportsCameraDepthTexture",        false,  "Depth Texture off (모바일 비싼 prepass)");
+            n += SetBool (so, "m_SupportsCameraOpaqueTexture",       false,  "Opaque Texture off (UI overlay 에선 거의 안 씀)");
+            n += SetBool (so, "m_UseSRPBatcher",                     true,   "SRP Batcher on (drawcall 절감)");
+            n += SetBool (so, "m_UseFastSRGBLinearConversion",       true,   "Fast SRGB Linear (Color Space Gamma 면 무관)");
+            n += SetBool (so, "m_SupportsTerrainHoles",              false,  "Terrain Holes off (terrain 미사용)");
+            n += SetInt  (so, "m_StoreActionsOptimization",          1,      "Store Actions Optimization Auto (모바일 tile-based GPU 핵심)");
+            n += SetInt  (so, "m_ColorGradingMode",                  0,      "Color Grading Mode = LowDynamicRange (HDR 모드 비싼)");
+            n += SetInt  (so, "m_ColorGradingLutSize",               16,     "Color Grading LUT 16 (default 32 → 16, 절반)");
+            n += SetInt  (so, "m_HDRColorBufferPrecision",           0,      "HDR Color Buffer R11G11B10 (32bit float 비싼)");
+            n += SetInt  (so, "m_VolumeFrameworkUpdateMode",         1,      "Volume Update = ViaScripting (자동 매 frame update 끔)");
+
+            // URP 17 (Unity 6) RenderGraph — 일부 케이스에서 legacy 보다 무거움
+            // 모바일에선 RenderGraph 가 default 지만 보수적으로 유지 (호환성). Profiler 결과 28% 차지하지만
+            // legacy 로 강제 변경은 위험 (deprecated 경로). 주석으로 남김.
+
+            // Depth Priming — 모바일에선 보통 비싼 (extra prepass)
+            n += SetIntFallback(so, new[] {
+                    "m_DepthPrimingMode",
+                    "depthPrimingMode"
+                }, 0, "Depth Priming Disabled (모바일 prepass 비싼)");
+
+            // Main Light Shadows — Disable Shadows 메뉴 + 여기서도 명시적 OFF
+            n += SetBool (so, "m_MainLightShadowsSupported",         false,  "Main Light Shadows off");
+            n += SetBool (so, "m_AdditionalLightsShadowsSupported",  false,  "Additional Lights Shadows off");
+            n += SetBool (so, "m_SoftShadowsSupported",              false,  "Soft Shadows off");
+            n += SetFloat(so, "m_ShadowDistance",                    0f,     "Shadow Distance 0");
 
             // URP 17 (Unity 6) 에서 이름 다를 가능성 — 후보 fallback
             n += SetBoolFallback(so, new[] {
@@ -350,6 +378,23 @@ namespace BalloonFlow.EditorTools
                 {
                     if (p.boolValue == value) return 0;
                     p.boolValue = value;
+                    Debug.Log($"[MobilePerfOptimizer] ✓ {label} (matched: {candidates[i]})");
+                    return 1;
+                }
+            }
+            Debug.Log($"[MobilePerfOptimizer] skip '{label}' — 후보 이름 모두 미발견 ({string.Join(", ", candidates)})");
+            return 0;
+        }
+
+        private static int SetIntFallback(SerializedObject so, string[] candidates, int value, string label)
+        {
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                var p = so.FindProperty(candidates[i]);
+                if (p != null && (p.propertyType == SerializedPropertyType.Integer || p.propertyType == SerializedPropertyType.Enum))
+                {
+                    if (p.intValue == value) return 0;
+                    p.intValue = value;
                     Debug.Log($"[MobilePerfOptimizer] ✓ {label} (matched: {candidates[i]})");
                     return 1;
                 }

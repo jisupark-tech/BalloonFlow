@@ -22,7 +22,7 @@ namespace BalloonFlow.EditorTools
     {
         private const string ATLAS_PATH = "Assets/4.Atlas/UI.spriteatlas";
 
-        [MenuItem("BalloonFlow/Fix UI Atlas for Mobile")]
+        [MenuItem("BalloonFlow/DON'T USE/Fix UI Atlas for Mobile")]
         public static void Fix()
         {
             var atlas = AssetDatabase.LoadAssetAtPath<SpriteAtlas>(ATLAS_PATH);
