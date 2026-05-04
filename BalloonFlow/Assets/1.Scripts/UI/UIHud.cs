@@ -48,6 +48,15 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _itemCountShuffle;
         [SerializeField] private TMP_Text _itemCountRemove;
         [SerializeField] private TMP_Text _itemCountHand;
+        [SerializeField] private TMP_Text _itemCountOutlineShuffle;
+        [SerializeField] private TMP_Text _itemCountOutlineRemove;
+        [SerializeField] private TMP_Text _itemCountOutlineHand;
+        [SerializeField] private GameObject _countBadgeShuffle;
+        [SerializeField] private GameObject _countBadgeRemove;
+        [SerializeField] private GameObject _countBadgeHand;
+        [SerializeField] private GameObject _imgPlusShuffle;
+        [SerializeField] private GameObject _imgPlusRemove;
+        [SerializeField] private GameObject _imgPlusHand;
 
         [Header("[Lock Icons — 미해금 시 표시]")]
         [SerializeField] private Image _iconLockShuffle;
@@ -329,13 +338,38 @@ namespace BalloonFlow
                 SetCountText(_itemCountShuffle, "\u221E"); // ∞
                 SetCountText(_itemCountRemove, "\u221E");
                 SetCountText(_itemCountHand, "\u221E");
+                SetCountText(_itemCountOutlineShuffle, "\u221E");
+                SetCountText(_itemCountOutlineRemove, "\u221E");
+                SetCountText(_itemCountOutlineHand, "\u221E");
+                ApplyCountBadgeContent(_imgPlusShuffle, _itemCountShuffle, _itemCountOutlineShuffle, true);
+                ApplyCountBadgeContent(_imgPlusRemove,  _itemCountRemove,  _itemCountOutlineRemove,  true);
+                ApplyCountBadgeContent(_imgPlusHand,    _itemCountHand,    _itemCountOutlineHand,    true);
                 return;
             }
 
             if (!BoosterManager.HasInstance) return;
-            SetCountText(_itemCountShuffle, BoosterManager.Instance.GetBoosterCount(BoosterManager.SHUFFLE).ToString());
-            SetCountText(_itemCountRemove, BoosterManager.Instance.GetBoosterCount(BoosterManager.COLOR_REMOVE).ToString());
-            SetCountText(_itemCountHand, BoosterManager.Instance.GetBoosterCount(BoosterManager.HAND).ToString());
+            int shuffleCount = BoosterManager.Instance.GetBoosterCount(BoosterManager.SHUFFLE);
+            int removeCount  = BoosterManager.Instance.GetBoosterCount(BoosterManager.COLOR_REMOVE);
+            int handCount    = BoosterManager.Instance.GetBoosterCount(BoosterManager.HAND);
+
+            SetCountText(_itemCountShuffle, shuffleCount.ToString());
+            SetCountText(_itemCountRemove,  removeCount.ToString());
+            SetCountText(_itemCountHand,    handCount.ToString());
+            SetCountText(_itemCountOutlineShuffle, shuffleCount.ToString());
+            SetCountText(_itemCountOutlineRemove,  removeCount.ToString());
+            SetCountText(_itemCountOutlineHand,    handCount.ToString());
+
+            ApplyCountBadgeContent(_imgPlusShuffle, _itemCountShuffle, _itemCountOutlineShuffle, shuffleCount >= 1);
+            ApplyCountBadgeContent(_imgPlusRemove,  _itemCountRemove,  _itemCountOutlineRemove,  removeCount  >= 1);
+            ApplyCountBadgeContent(_imgPlusHand,    _itemCountHand,    _itemCountOutlineHand,    handCount    >= 1);
+        }
+
+        /// <summary>수량/+ 토글: hasItem=true(수량 1+ 또는 무한) → text 노출 + plus 숨김. false(0) → plus 노출 + text 숨김.</summary>
+        private static void ApplyCountBadgeContent(GameObject imgPlus, TMP_Text txt, TMP_Text txtOutline, bool hasItem)
+        {
+            if (imgPlus != null) imgPlus.SetActive(!hasItem);
+            if (txt != null) txt.gameObject.SetActive(hasItem);
+            if (txtOutline != null) txtOutline.gameObject.SetActive(hasItem);
         }
 
         /// <summary>Lock 아이콘 + Lv.X 텍스트 갱신. 미해금 → Lock 표시 + 난이도 색상 + 해금 레벨.</summary>
@@ -353,6 +387,10 @@ namespace BalloonFlow
                 SetLockText(_txtLockHand, _txtLockHandOutline, false, 0);
                 SetLockText(_txtLockShuffle, _txtLockShuffleOutline, false, 0);
                 SetLockText(_txtLockRemove, _txtLockRemoveOutline, false, 0);
+                // Unlocked → CountBadge 노출 (∞ 표기를 위해)
+                SetCountBadgeVisible(_countBadgeShuffle, true);
+                SetCountBadgeVisible(_countBadgeRemove,  true);
+                SetCountBadgeVisible(_countBadgeHand,    true);
                 return;
             }
 
@@ -379,6 +417,16 @@ namespace BalloonFlow
             SetIconItemVisible(_iconItemHand, !handLocked);
             SetIconItemVisible(_iconItemShuffle, !shuffleLocked);
             SetIconItemVisible(_iconItemRemove, !removeLocked);
+
+            // Lock 시 CountBadge 비활성 → IconLock / Lv.X 표시 영역과 충돌 방지
+            SetCountBadgeVisible(_countBadgeShuffle, !shuffleLocked);
+            SetCountBadgeVisible(_countBadgeRemove,  !removeLocked);
+            SetCountBadgeVisible(_countBadgeHand,    !handLocked);
+        }
+
+        private static void SetCountBadgeVisible(GameObject badge, bool visible)
+        {
+            if (badge != null) badge.SetActive(visible);
         }
 
         #endregion
