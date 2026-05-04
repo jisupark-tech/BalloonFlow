@@ -113,12 +113,17 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprLvIconHard;
         [SerializeField] private Sprite _sprLvIconSuperHard;
 
-        [Header("[Lv/Number 텍스트 아웃라인 — 난이도별 Material Preset]")]
+        [Header("[TxtLVOutline — 난이도별 Material Preset]")]
         [SerializeField] private TMP_Text _txtLVOutline;
-        [SerializeField] private TMP_Text _txtNumberOutline;
         [SerializeField] private Material _matLvOutlineNormal;
         [SerializeField] private Material _matLvOutlineHard;
         [SerializeField] private Material _matLvOutlineSuperHard;
+
+        [Header("[TxtNumberOutline — 난이도별 Material Preset]")]
+        [SerializeField] private TMP_Text _txtNumberOutline;
+        [SerializeField] private Material _matNumberOutlineNormal;
+        [SerializeField] private Material _matNumberOutlineHard;
+        [SerializeField] private Material _matNumberOutlineSuperHard;
 
         private bool _isMapMakerMode;
         private DifficultyPurpose _currentDifficulty = DifficultyPurpose.Normal;
@@ -273,18 +278,23 @@ namespace BalloonFlow
             if (_imgLvIcon != null && lvIconSpr != null)
                 _imgLvIcon.sprite = lvIconSpr;
 
-            // Lv/Number 텍스트 아웃라인 머티리얼
+            // Lv 텍스트 아웃라인 머티리얼
             Material lvOutlineMat = difficulty switch
             {
                 DifficultyPurpose.Hard      => _matLvOutlineHard,
                 DifficultyPurpose.SuperHard => _matLvOutlineSuperHard,
                 _                           => _matLvOutlineNormal
             };
-            if (lvOutlineMat != null)
+            if (lvOutlineMat != null && _txtLVOutline != null) _txtLVOutline.fontMaterial = lvOutlineMat;
+
+            // Number 텍스트 아웃라인 머티리얼
+            Material numberOutlineMat = difficulty switch
             {
-                if (_txtLVOutline != null) _txtLVOutline.fontMaterial = lvOutlineMat;
-                if (_txtNumberOutline != null) _txtNumberOutline.fontMaterial = lvOutlineMat;
-            }
+                DifficultyPurpose.Hard      => _matNumberOutlineHard,
+                DifficultyPurpose.SuperHard => _matNumberOutlineSuperHard,
+                _                           => _matNumberOutlineNormal
+            };
+            if (numberOutlineMat != null && _txtNumberOutline != null) _txtNumberOutline.fontMaterial = numberOutlineMat;
         }
 
         public void SetLevel(int _levelId)
