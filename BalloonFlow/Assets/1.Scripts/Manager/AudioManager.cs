@@ -158,6 +158,7 @@ namespace BalloonFlow
 
         private float _lastPopTime;
         private int _popComboCount;
+        private AudioClip _lastPopClip;
         private const float POP_SFX_COOLDOWN = 0.05f; // 50ms 쿨다운
 
         private void HandleBalloonPopped(OnBalloonPopped evt)
@@ -166,7 +167,10 @@ namespace BalloonFlow
             if (now - _lastPopTime < POP_SFX_COOLDOWN) return;
 
             if (_popPitchComboEnabled && now - _lastPopTime > _popComboResetSec)
+            {
                 _popComboCount = 0;
+                _lastPopClip = null;
+            }
 
             float pitch = _popPitchComboEnabled
                 ? Mathf.Min(_popPitchBase + _popPitchStep * _popComboCount, _popPitchMax)
@@ -175,15 +179,20 @@ namespace BalloonFlow
             _lastPopTime = now;
             _popComboCount++;
 
-            if (_popSource != null && _sfxEnabled)
+            if (_popSource == null || !_sfxEnabled || _sfxBalloonPop == null) return;
+
+            // 콤보 상승 중엔 직전 클립을 유지해 피치 변화만 들리게, 최대 피치 도달 후엔 다시 50% 랜덤으로 섞이게 한다
+            bool needFreshClip = _lastPopClip == null
+                || !_popPitchComboEnabled
+                || pitch >= _popPitchMax;
+
+            if (needFreshClip)
             {
-                AudioClip popClip = (_sfxBalloonPop2 != null && Random.value < 0.5f) ? _sfxBalloonPop2 : _sfxBalloonPop;
-                if (popClip != null)
-                {
-                    _popSource.pitch = pitch;
-                    _popSource.PlayOneShot(popClip);
-                }
+                _lastPopClip = (_sfxBalloonPop2 != null && Random.value < 0.5f) ? _sfxBalloonPop2 : _sfxBalloonPop;
             }
+
+            _popSource.pitch = pitch;
+            _popSource.PlayOneShot(_lastPopClip);
         }
 
         private void HandleBoardCleared(OnBoardCleared evt)
