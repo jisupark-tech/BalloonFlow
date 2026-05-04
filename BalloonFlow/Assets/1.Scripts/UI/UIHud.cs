@@ -96,6 +96,10 @@ namespace BalloonFlow
 
         [Header("[배경/오버레이]")]
         [SerializeField] private Image _backgroundImage;
+        [SerializeField] private Image _imgBgColor;
+        [SerializeField] private Sprite _sprBgColorNormal;
+        [SerializeField] private Sprite _sprBgColorHard;
+        [SerializeField] private Sprite _sprBgColorSuperHard;
 
         private bool _isMapMakerMode;
         private DifficultyPurpose _currentDifficulty = DifficultyPurpose.Normal;
@@ -136,6 +140,10 @@ namespace BalloonFlow
                 _sprSettingNormal    = rm.UISpriteOr("btnSettingNormal",    _sprSettingNormal);
                 _sprSettingHard      = rm.UISpriteOr("btnSettingHard",      _sprSettingHard);
                 _sprSettingSuperHard = rm.UISpriteOr("btnSettingSuperHard", _sprSettingSuperHard);
+
+                _sprBgColorNormal    = rm.UISpriteOr(Const.SPR_FRAMEBOTTOMNORMAL,    _sprBgColorNormal);
+                _sprBgColorHard      = rm.UISpriteOr(Const.SPR_FRAMEBOTTOMHARD,      _sprBgColorHard);
+                _sprBgColorSuperHard = rm.UISpriteOr(Const.SPR_FRAMEBOTTOMSUPERHARD, _sprBgColorSuperHard);
             }
         }
 
@@ -207,6 +215,16 @@ namespace BalloonFlow
             };
             if (_imgSpeedColor != null && speedSpr != null)
                 _imgSpeedColor.sprite = speedSpr;
+
+            // 배경 색상 (frameBottom)
+            Sprite bgSpr = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _sprBgColorHard,
+                DifficultyPurpose.SuperHard => _sprBgColorSuperHard,
+                _                           => _sprBgColorNormal
+            };
+            if (_imgBgColor != null && bgSpr != null)
+                _imgBgColor.sprite = bgSpr;
         }
 
         public void SetLevel(int _levelId)
