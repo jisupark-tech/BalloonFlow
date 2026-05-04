@@ -94,6 +94,16 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprBtnPurple;
         [SerializeField] private Sprite _sprBtnRed;
 
+        [Header("[TxtPlayOutline — 난이도별 Material Preset]")]
+        [SerializeField] private Material _matPlayOutlineNormal;
+        [SerializeField] private Material _matPlayOutlineHard;
+        [SerializeField] private Material _matPlayOutlineSuperHard;
+
+        [Header("[TxtPlayLevelOutline — 난이도별 Material Preset]")]
+        [SerializeField] private Material _matPlayLevelOutlineNormal;
+        [SerializeField] private Material _matPlayLevelOutlineHard;
+        [SerializeField] private Material _matPlayLevelOutlineSuperHard;
+
         [Header("[Home Page — Play Button Badge (x3/x5)]")]
         [SerializeField] private Image _imgPlayBadge;
         [SerializeField] private Sprite _sprBadgeX3;
@@ -548,6 +558,24 @@ namespace BalloonFlow
                     if (_txtPlayLevelOutline != null) _txtPlayLevelOutline.gameObject.SetActive(false);
                     break;
             }
+
+            // Play 텍스트 아웃라인 머티리얼
+            Material playOutlineMat = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _matPlayOutlineHard,
+                DifficultyPurpose.SuperHard => _matPlayOutlineSuperHard,
+                _                           => _matPlayOutlineNormal
+            };
+            if (playOutlineMat != null && _txtPlayOutline != null) _txtPlayOutline.fontMaterial = playOutlineMat;
+
+            // PlayLevel 텍스트 아웃라인 머티리얼
+            Material playLevelOutlineMat = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _matPlayLevelOutlineHard,
+                DifficultyPurpose.SuperHard => _matPlayLevelOutlineSuperHard,
+                _                           => _matPlayLevelOutlineNormal
+            };
+            if (playLevelOutlineMat != null && _txtPlayLevelOutline != null) _txtPlayLevelOutline.fontMaterial = playLevelOutlineMat;
 
             ApplyPlayBadge(difficulty);
         }
