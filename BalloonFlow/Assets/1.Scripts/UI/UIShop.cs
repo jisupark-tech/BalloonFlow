@@ -23,7 +23,7 @@ namespace BalloonFlow
         [SerializeField] private Button _btnMoreProducts;
 
         [Header("[List Item Prefab — 카테고리별]")]
-        [Tooltip("Resources/UI/UIAssets/ShopListGold.prefab")]
+        [Tooltip("Resources/UI/UIAssets/ShopListGoldAlign.prefab (2개 ShopListGold 가로 정렬 컨테이너)")]
         [SerializeField] private GameObject _prefabGold;
         [Tooltip("Resources/UI/UIAssets/ShopListItem.prefab (일반/특가/번들/부스터)")]
         [SerializeField] private GameObject _prefabGeneral;
@@ -62,7 +62,7 @@ namespace BalloonFlow
             if (_autoLoadFromResources)
             {
                 if (_prefabGold == null)
-                    _prefabGold = Resources.Load<GameObject>("UI/UIAssets/ShopListGold");
+                    _prefabGold = Resources.Load<GameObject>("UI/UIAssets/ShopListGoldAlign");
                 if (_prefabGeneral == null)
                     _prefabGeneral = Resources.Load<GameObject>("UI/UIAssets/ShopListItem");
                 if (_prefabAd == null)
