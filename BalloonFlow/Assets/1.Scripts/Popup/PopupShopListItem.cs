@@ -12,7 +12,7 @@ namespace BalloonFlow
     /// Inspector에서 UI 링크 연결.
     /// </summary>
     // BtnBuyGreen 본체/프레임 sprite는 런타임에 ApplyProductTypeVisual()에서 isSpecial 분기에 따라 _imgBtnBuy(_sprBtnGreen/_sprBtnGreenSpecial)·_imgBtnBuyFrame(_sprBtnFramePurple/_sprBtnFrameRed)으로 swap 됨.
-    // ImageGoldIcon은 productId == "xyz.aimed.balloonloop.offer.starter" 시 Const.SPR_GOLD01("gold01")로 override 됨.
+    // ImageGoldIcon은 productId == "xyz.aimed.balloonloop.offer.starter" 시 Const.SPR_GOLD01("gold01")로 override 되며, bundle.tier1~tier5는 각각 Const.SPR_GOLD03~SPR_GOLD07("gold03"~"gold07")로 override 됨.
     public class PopupShopListItem : MonoBehaviour
     {
         // tier1~5 bundle은 데이터의 discountPercent 유무와 무관하게 Normal Bundle 스타일로 고정
@@ -25,8 +25,20 @@ namespace BalloonFlow
             "xyz.aimed.balloonloop.bundle.tier5",
         };
 
-        // ImageGoldIcon은 이 productId일 때만 Const.SPR_GOLD01("gold01") atlas로 강제 — 그 외는 data.goldIconKey 우선.
+        // ImageGoldIcon override 우선순위: (a) 이 productId(starter offer) → SPR_GOLD01,
+        // (b) _normalBundleGoldIconKeys 매핑(tier1~5) → SPR_GOLD03~SPR_GOLD07, (c) data.goldIconKey, (d) SPR_ICONGOLD fallback.
         private const string GoldIconStarterOfferProductId = "xyz.aimed.balloonloop.offer.starter";
+
+        // tier1~5 bundle은 ImageGoldIcon을 tier별 gold03~gold07 atlas key로 강제 — data.goldIconKey 우선순위보다 위.
+        // _normalBundleProductIds(프레임/할인 분기용)와 의도적으로 별개 컬렉션 — 두 override 메커니즘이 독립 변경될 여지 보존.
+        private static readonly Dictionary<string, string> _normalBundleGoldIconKeys = new Dictionary<string, string>
+        {
+            { "xyz.aimed.balloonloop.bundle.tier1", Const.SPR_GOLD03 },
+            { "xyz.aimed.balloonloop.bundle.tier2", Const.SPR_GOLD04 },
+            { "xyz.aimed.balloonloop.bundle.tier3", Const.SPR_GOLD05 },
+            { "xyz.aimed.balloonloop.bundle.tier4", Const.SPR_GOLD06 },
+            { "xyz.aimed.balloonloop.bundle.tier5", Const.SPR_GOLD07 },
+        };
 
         private static bool IsNormalBundleProduct(string productId)
         {
@@ -211,10 +223,14 @@ namespace BalloonFlow
             if (_imageGoldIcon == null) return;
             if (!ResourceManager.HasInstance) return;
             var rm = ResourceManager.Instance;
-            // offer.starter 상품은 goldIconKey 와 무관하게 gold01 강제 — 그 외는 기존 우선순위 유지.
+            // 우선순위: (a) starter offer → SPR_GOLD01, (b) tier1~5 → SPR_GOLD03~07,
+            //           (c) data.goldIconKey, (d) SPR_ICONGOLD fallback.
+            string productId = data?.productId;
             string key;
-            if (!string.IsNullOrEmpty(data?.productId) && data.productId == GoldIconStarterOfferProductId)
+            if (!string.IsNullOrEmpty(productId) && productId == GoldIconStarterOfferProductId)
                 key = Const.SPR_GOLD01;
+            else if (!string.IsNullOrEmpty(productId) && _normalBundleGoldIconKeys.TryGetValue(productId, out var tierKey))
+                key = tierKey;
             else
                 key = string.IsNullOrEmpty(data?.goldIconKey) ? Const.SPR_ICONGOLD : data.goldIconKey;
             var sprite = rm.UISpriteOr(key, _imageGoldIcon.sprite);
