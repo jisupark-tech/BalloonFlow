@@ -46,6 +46,7 @@ namespace BalloonFlow
         [SerializeField] private float _itemHeightOverride = 0f;
 
         private int _displayedCount;
+        private bool _userExpandedMore;
         private readonly List<PopupShopListItem> _spawnedItems = new List<PopupShopListItem>();
 
         protected override void Awake()
@@ -55,7 +56,7 @@ namespace BalloonFlow
             if (_txtTitleOutline != null) _txtTitleOutline.text = "Shop";
 
             if (_btnMoreProducts != null)
-                _btnMoreProducts.onClick.AddListener(LoadMoreProducts);
+                _btnMoreProducts.onClick.AddListener(OnMoreProductsClicked);
 
             // Resources 폴백 — Inspector 미할당 시 prefab 자동 로드
             if (_autoLoadFromResources)
@@ -253,6 +254,15 @@ namespace BalloonFlow
             UpdateMoreButton();
         }
 
+        /// <summary>사용자가 BtnMoreProducts를 직접 클릭했을 때만 호출 — 추가 로드 후 버튼 영구 숨김.</summary>
+        private void OnMoreProductsClicked()
+        {
+            _userExpandedMore = true;
+            LoadMoreProducts();
+            if (_btnMoreProducts != null && _btnMoreProducts.gameObject.activeSelf)
+                _btnMoreProducts.gameObject.SetActive(false);
+        }
+
         /// <summary>다음 페이지 상품 추가. 카테고리별 prefab 자동 선택.
         /// 각 아이템에 LayoutElement 자동 부착 (preferredHeight) → VerticalLayoutGroup 정상 배치.
         /// 끝에 LayoutRebuilder 호출 → ScrollRect Content 크기 갱신.</summary>
@@ -313,17 +323,20 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// BtnMoreProducts 는 항상 활성 + 항상 _contentRoot 의 마지막 sibling (= 스크롤 최하단) 보장.
-        /// 이전엔 모든 상품 로드 완료 시 SetActive(false) 했지만, 디자인 요청으로 노출 유지.
+        /// BtnMoreProducts 노출 정책 — 클릭 후에는 영구히 숨김.
+        /// 첫 로드 시에만 _contentRoot 의 마지막 sibling (= 스크롤 최하단) 으로 노출.
         /// </summary>
         private void UpdateMoreButton()
         {
             if (_btnMoreProducts == null) return;
-
+            if (_userExpandedMore)
+            {
+                if (_btnMoreProducts.gameObject.activeSelf)
+                    _btnMoreProducts.gameObject.SetActive(false);
+                return;
+            }
             if (!_btnMoreProducts.gameObject.activeSelf)
                 _btnMoreProducts.gameObject.SetActive(true);
-
-            // 항상 스크롤 최하단으로
             if (_btnMoreProducts.transform.parent == _contentRoot)
                 _btnMoreProducts.transform.SetAsLastSibling();
         }
