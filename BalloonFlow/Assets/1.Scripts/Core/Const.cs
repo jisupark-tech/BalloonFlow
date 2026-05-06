@@ -222,6 +222,7 @@ namespace BalloonFlow
         public const string SPR_GOLD05                                   = "gold05";
         public const string SPR_GOLD06                                   = "gold06";
         public const string SPR_GOLD07                                   = "gold07";
+        public const string SPR_GOLD08                                   = "gold08";
         public const string SPR_GRADATION                                = "gradation";
         public const string SPR_ICONAD                                   = "iconAd";
         public const string SPR_ICONADBTN                                = "iconAdBtn";
