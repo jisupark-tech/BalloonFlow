@@ -6,7 +6,7 @@ namespace BalloonFlow
 {
     /// <summary>
     /// 아이템 구매/해금 확인 팝업.
-    /// 구매 모드: Horizontal (Green=Buy, Red=Cancel) — TxtBtnBuyOutline.
+    /// 구매 모드: Single 버튼 (Buy) — TxtSingleOutline.
     /// 해금 모드: Single 버튼 — TxtSingleOutline.
     /// </summary>
     public class PopupBuyItem : UIBase
@@ -73,7 +73,7 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>아이템 구매 팝업 표시 (Horizontal — Buy/Cancel).</summary>
+        /// <summary>아이템 구매 팝업 표시 (Single 버튼 — Buy).</summary>
         public void ShowBuy(string title, Sprite itemSprite, string amount, int goldCost,
                             System.Action onConfirm = null, System.Action onCancel = null)
         {
@@ -83,14 +83,13 @@ namespace BalloonFlow
             if (_frame != null)
             {
                 _frame.SetTitle(title);
-                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
-                _frame.SetHorizGreenText("Buy");
-                _frame.SetHorizRedText("Cancel");
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
+                _frame.SetSingleButtonText("Buy");
                 _frame.ShowExitButton(true);
             }
 
-            if (_txtBtnBuyOutline != null) _txtBtnBuyOutline.SetActive(true);
-            if (_txtSingleOutline != null) _txtSingleOutline.SetActive(false);
+            if (_txtBtnBuyOutline != null) _txtBtnBuyOutline.SetActive(false);
+            if (_txtSingleOutline != null) _txtSingleOutline.SetActive(true);
 
             SetItemDisplay(itemSprite, amount, goldCost);
             OpenUI();
