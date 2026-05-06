@@ -215,6 +215,8 @@ namespace BalloonFlow
             vlg.childForceExpandWidth  = true;
             vlg.childAlignment = TextAnchor.UpperCenter;
             if (vlg.spacing < 1f) vlg.spacing = 20f;
+            // 스크롤 끝에 마지막 카드가 붙지 않도록 breathing space — UIShop scroll 답답함 fix
+            if (vlg.padding.bottom < 500) vlg.padding.bottom = 500;
 
             // ContentSizeFitter
             var csf = _contentRoot.GetComponent<ContentSizeFitter>();
