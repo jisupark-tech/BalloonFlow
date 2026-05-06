@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -13,6 +14,21 @@ namespace BalloonFlow
     // BtnBuyGreen prefab sprite는 디자인타임 미리보기용 — 런타임에는 hasDiscount 분기로 _imgBtnBuyFrame.sprite 가 swap 됨.
     public class PopupShopListItem : MonoBehaviour
     {
+        // tier1~5 bundle은 데이터의 discountPercent 유무와 무관하게 Normal Bundle 스타일로 고정
+        private static readonly HashSet<string> _normalBundleProductIds = new HashSet<string>
+        {
+            "xyz.aimed.balloonloop.bundle.tier1",
+            "xyz.aimed.balloonloop.bundle.tier2",
+            "xyz.aimed.balloonloop.bundle.tier3",
+            "xyz.aimed.balloonloop.bundle.tier4",
+            "xyz.aimed.balloonloop.bundle.tier5",
+        };
+
+        private static bool IsNormalBundleProduct(string productId)
+        {
+            return !string.IsNullOrEmpty(productId) && _normalBundleProductIds.Contains(productId);
+        }
+
         [Header("[상품 정보]")]
         [SerializeField] private Image _imgProducts;
         [SerializeField] private TMP_Text _txtTitle;
@@ -100,6 +116,8 @@ namespace BalloonFlow
             _data = data;
             _onBuy = onBuy;
 
+            bool forceNormalBundle = IsNormalBundleProduct(data?.productId);
+
             // 상품 이미지: Firestore imageKey → atlas sprite (sync, atlas 가 Title 에서 사전 로드됨).
             // 키 미지정/atlas 미준비 시 Inspector 의 productImage 또는 prefab 기본값 유지.
             if (_imgProducts != null)
@@ -117,8 +135,13 @@ namespace BalloonFlow
             // 시간 한정
             if (_timeOffRoot != null)
             {
-                _timeOffRoot.SetActive(data.hasTimeLimit);
-                if (data.hasTimeLimit)
+                bool showTimeOff = !forceNormalBundle && data.hasTimeLimit;
+                _timeOffRoot.SetActive(showTimeOff);
+                if (forceNormalBundle)
+                {
+                    _timerActive = false;
+                }
+                else if (data.hasTimeLimit)
                 {
                     _remainingTime = data.timeLimitSeconds;
                     _timerActive = true;
@@ -129,8 +152,8 @@ namespace BalloonFlow
             // 할인율
             if (_offPercentRoot != null)
             {
-                _offPercentRoot.SetActive(data.hasDiscount && data.discountPercent > 0);
-                if (data.hasDiscount)
+                _offPercentRoot.SetActive(!forceNormalBundle && data.hasDiscount && data.discountPercent > 0);
+                if (!forceNormalBundle && data.hasDiscount)
                     SetTextWithOutline(_txtOffPer, _txtOffPerOutline, $"{data.discountPercent}%");
             }
 
@@ -142,7 +165,7 @@ namespace BalloonFlow
             }
 
             // 타입별 프레임/이미지 스왑: hasDiscount=true → Special Offer (Red) / false → Normal Bundle (Purple)
-            ApplyProductTypeVisual(data.hasDiscount);
+            ApplyProductTypeVisual(!forceNormalBundle && data.hasDiscount);
 
             // 왼쪽 골드 표시 (TextPrice / TextPriceOutline) — 사용자 요구: 받을 골드 양 (rewards.coins).
             // 구매 가격은 우측 BtnBuy 의 _txtBtnBuy 가 표시. 여기서는 reward.coins 만.
