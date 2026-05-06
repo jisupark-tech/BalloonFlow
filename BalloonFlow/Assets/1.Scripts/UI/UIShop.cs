@@ -23,8 +23,10 @@ namespace BalloonFlow
         [SerializeField] private Button _btnMoreProducts;
 
         [Header("[List Item Prefab — 카테고리별]")]
-        [Tooltip("Resources/UI/UIAssets/ShopListGoldAlign.prefab (2개 ShopListGold 가로 정렬 컨테이너)")]
+        [Tooltip("Resources/UI/UIAssets/ShopListGold")]
         [SerializeField] private GameObject _prefabGold;
+        [Tooltip("Resources/UI/UIAssets/ShopListGoldAlign.prefab (코인 상품들을 가로 정렬해 담는 컨테이너)")]
+        [SerializeField] private GameObject _prefabGoldAlign;
         [Tooltip("Resources/UI/UIAssets/ShopListItem.prefab (일반/특가/번들/부스터)")]
         [SerializeField] private GameObject _prefabGeneral;
         [Tooltip("Resources/UI/UIAssets/ShopListAd.prefab")]
@@ -62,7 +64,9 @@ namespace BalloonFlow
             if (_autoLoadFromResources)
             {
                 if (_prefabGold == null)
-                    _prefabGold = Resources.Load<GameObject>("UI/UIAssets/ShopListGoldAlign");
+                    _prefabGold = Resources.Load<GameObject>("UI/UIAssets/ShopListGold");
+                if (_prefabGoldAlign == null)
+                    _prefabGoldAlign = Resources.Load<GameObject>("UI/UIAssets/ShopListGoldAlign");
                 if (_prefabGeneral == null)
                     _prefabGeneral = Resources.Load<GameObject>("UI/UIAssets/ShopListItem");
                 if (_prefabAd == null)
@@ -276,11 +280,63 @@ namespace BalloonFlow
         {
             if (_products == null || _contentRoot == null) return;
 
+            GameObject goldContainer = null;
+
             int loadCount = Mathf.Min(ITEMS_PER_PAGE, _products.Length - _displayedCount);
             for (int i = 0; i < loadCount; i++)
             {
                 int idx = _displayedCount + i;
                 var data = _products[idx];
+
+                if (data.category == ShopItemCategory.Gold && _prefabGoldAlign != null && _prefabGold != null)
+                {
+                    // Gold 그룹 컨테이너 1개를 만들고 코인 상품들을 그 자식으로 spawn.
+                    if (goldContainer == null)
+                    {
+                        goldContainer = Instantiate(_prefabGoldAlign, _contentRoot);
+                        goldContainer.SetActive(true);
+
+                        if (_btnMoreProducts != null && _btnMoreProducts.transform.parent == _contentRoot)
+                            goldContainer.transform.SetSiblingIndex(_btnMoreProducts.transform.GetSiblingIndex());
+
+                        var containerRT = goldContainer.transform as RectTransform;
+                        var containerLE = goldContainer.GetComponent<LayoutElement>();
+                        if (containerLE == null) containerLE = goldContainer.AddComponent<LayoutElement>();
+                        if (containerLE.preferredHeight <= 0f)
+                        {
+                            if (_itemHeightOverride > 0f)
+                                containerLE.preferredHeight = _itemHeightOverride;
+                            else if (containerRT != null && containerRT.rect.height > 1f)
+                                containerLE.preferredHeight = containerRT.rect.height;
+                            else
+                                containerLE.preferredHeight = DEFAULT_ITEM_HEIGHT;
+                        }
+
+                        // prefab 에 미리 박혀있는 placeholder 자식(ShopListGold(1)/(2)) 제거 —
+                        // 데이터 없는 빈 카드 노출 방지.
+                        for (int c = goldContainer.transform.childCount - 1; c >= 0; c--)
+                            Destroy(goldContainer.transform.GetChild(c).gameObject);
+                    }
+
+                    var goldGo = Instantiate(_prefabGold, goldContainer.transform);
+                    goldGo.SetActive(true);
+
+                    var goldItem = goldGo.GetComponent<PopupShopListItem>();
+                    if (goldItem != null)
+                    {
+                        goldItem.Setup(data, OnProductBuy);
+                        _spawnedItems.Add(goldItem);
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[UIShop] {_prefabGold.name} 에 PopupShopListItem 컴포넌트 없음 — Setup 호출 불가. " +
+                                         "Inspector에서 카드 자체 컴포넌트로 attach 필요.");
+                    }
+                    continue;
+                }
+
+                // 비-Gold 카테고리: 기존 직접-spawn 경로 유지.
+                goldContainer = null;
 
                 GameObject prefab = GetPrefabForCategory(data.category);
                 if (prefab == null) continue; // prefab 미할당 → skip
