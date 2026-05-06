@@ -282,6 +282,23 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>유저가 다른 페이지에서 Shop 탭으로 재진입할 때 호출 — 더보기 상태/리스트/스크롤 위치를 초기 상태로 되돌린다.</summary>
+        public void ResetView()
+        {
+            _userExpandedMore = false;
+            ResetAndLoadProducts();
+
+            if (_contentRoot != null)
+            {
+                var sr = _contentRoot.GetComponentInParent<ScrollRect>();
+                if (sr != null)
+                {
+                    sr.StopMovement();
+                    sr.verticalNormalizedPosition = 1f;
+                }
+            }
+        }
+
         /// <summary>상품 리스트 초기화 + 첫 페이지 로드.</summary>
         private void ResetAndLoadProducts()
         {

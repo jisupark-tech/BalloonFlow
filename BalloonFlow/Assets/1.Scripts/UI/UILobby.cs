@@ -121,6 +121,7 @@ namespace BalloonFlow
         private LobbyRailBox[] _railBoxes;
         private RectTransform _pageContainer;
         private float _pageWidth;
+        private UIShop _uiShop;
 
         // Gold text display tween — 카운트업/다운 연출용 캐시값
         private int _displayedCoins;
@@ -162,6 +163,7 @@ namespace BalloonFlow
             base.Awake();
 
             BuildPageContainer();
+            _uiShop = _pageShop != null ? _pageShop.GetComponent<UIShop>() : null;
             CacheNavTextBaseY();
 
             if (_btnShop != null) _btnShop.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(0); });
@@ -702,6 +704,7 @@ namespace BalloonFlow
             _currentPageIndex = pageIndex;
             AnimateToPage(pageIndex);
             UpdateNavState(pageIndex);
+            if (pageIndex == 0 && _uiShop != null) _uiShop.ResetView();
         }
 
         private void SetPageImmediate(int pageIndex)
@@ -813,9 +816,11 @@ namespace BalloonFlow
                 else if (dragDelta < -threshold && _currentPageIndex < 2)
                     targetPage = _currentPageIndex + 1;
 
+                int prev = _currentPageIndex;
                 _currentPageIndex = targetPage;
                 AnimateToPage(targetPage);
                 UpdateNavState(targetPage);
+                if (targetPage == 0 && prev != 0 && _uiShop != null) _uiShop.ResetView();
             }
         }
 
