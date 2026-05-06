@@ -21,6 +21,8 @@ namespace BalloonFlow
         [Header("[Content — ScrollView]")]
         [SerializeField] private RectTransform _contentRoot;
         [SerializeField] private Button _btnMoreProducts;
+        [Tooltip("BtnMoreProducts 부모 컨테이너 GameObject — 클릭 후 전체 숨김 대상. 미할당 시 _btnMoreProducts.transform.parent.gameObject 폴백.")]
+        [SerializeField] private GameObject _btnMoreProductsRoot;
 
         [Header("[List Item Prefab — 카테고리별]")]
         [Tooltip("Resources/UI/UIAssets/ShopListGold")]
@@ -39,6 +41,18 @@ namespace BalloonFlow
         [SerializeField] private ShopProductData[] _products;
 
         public RectTransform ContentRoot => _contentRoot;
+
+        // 부모 컨테이너 전체 비활성/활성 — 미할당 시 Button의 부모로 자동 폴백.
+        private GameObject MoreButtonRoot
+        {
+            get
+            {
+                if (_btnMoreProductsRoot != null) return _btnMoreProductsRoot;
+                if (_btnMoreProducts != null && _btnMoreProducts.transform.parent != null)
+                    return _btnMoreProducts.transform.parent.gameObject;
+                return _btnMoreProducts != null ? _btnMoreProducts.gameObject : null;
+            }
+        }
 
         private const int ITEMS_PER_PAGE = 6;
         private const float DEFAULT_ITEM_HEIGHT = 200f;
@@ -269,8 +283,9 @@ namespace BalloonFlow
         {
             _userExpandedMore = true;
             LoadMoreProducts();
-            if (_btnMoreProducts != null && _btnMoreProducts.gameObject.activeSelf)
-                _btnMoreProducts.gameObject.SetActive(false);
+            // 부모 컨테이너 전체 비활성 — Button GameObject 단독이 아닌 root 기준.
+            if (MoreButtonRoot != null && MoreButtonRoot.activeSelf)
+                MoreButtonRoot.SetActive(false);
         }
 
         /// <summary>다음 페이지 상품 추가. 카테고리별 prefab 자동 선택.
@@ -296,8 +311,9 @@ namespace BalloonFlow
                         goldContainer = Instantiate(_prefabGoldAlign, _contentRoot);
                         goldContainer.SetActive(true);
 
-                        if (_btnMoreProducts != null && _btnMoreProducts.transform.parent == _contentRoot)
-                            goldContainer.transform.SetSiblingIndex(_btnMoreProducts.transform.GetSiblingIndex());
+                        // 부모 컨테이너 root 기준으로 sibling 정렬 — Blue 자식이 _contentRoot 직속이 아니므로 root 사용.
+                        if (MoreButtonRoot != null && MoreButtonRoot.transform.parent == _contentRoot)
+                            goldContainer.transform.SetSiblingIndex(MoreButtonRoot.transform.GetSiblingIndex());
 
                         var containerRT = goldContainer.transform as RectTransform;
                         var containerLE = goldContainer.GetComponent<LayoutElement>();
@@ -344,9 +360,9 @@ namespace BalloonFlow
                 var go = Instantiate(prefab, _contentRoot);
                 go.SetActive(true);
 
-                // BtnMoreProducts 가 있으면 그 직전에 배치 (스크롤 끝에 더보기 유지)
-                if (_btnMoreProducts != null && _btnMoreProducts.transform.parent == _contentRoot)
-                    go.transform.SetSiblingIndex(_btnMoreProducts.transform.GetSiblingIndex());
+                // 부모 컨테이너 root 기준으로 그 직전에 배치 (스크롤 끝에 더보기 유지)
+                if (MoreButtonRoot != null && MoreButtonRoot.transform.parent == _contentRoot)
+                    go.transform.SetSiblingIndex(MoreButtonRoot.transform.GetSiblingIndex());
 
                 // VerticalLayoutGroup 이 size 줄 수 있도록 LayoutElement 보장
                 var rt = go.transform as RectTransform;
@@ -377,10 +393,9 @@ namespace BalloonFlow
 
             _displayedCount += loadCount;
 
-            // 동적 spawn 후에도 BtnMore 가 항상 마지막 sibling 이 되도록 한 번 더 보정.
-            // (정적 placeholder 가 ShopContent 안에 남아있는 경우 대비)
-            if (_btnMoreProducts != null && _btnMoreProducts.transform.parent == _contentRoot)
-                _btnMoreProducts.transform.SetAsLastSibling();
+            // 동적 spawn 후에도 부모 컨테이너 root 가 항상 마지막 sibling 이 되도록 한 번 더 보정.
+            if (MoreButtonRoot != null && MoreButtonRoot.transform.parent == _contentRoot)
+                MoreButtonRoot.transform.SetAsLastSibling();
 
             // VerticalLayoutGroup + ContentSizeFitter 강제 재계산 → ScrollRect 활성
             if (_contentRoot != null)
@@ -397,19 +412,22 @@ namespace BalloonFlow
         private void UpdateMoreButton()
         {
             if (_btnMoreProducts == null) return;
+            var root = MoreButtonRoot;
             if (_userExpandedMore)
             {
-                if (_btnMoreProducts.gameObject.activeSelf)
-                    _btnMoreProducts.gameObject.SetActive(false);
+                // 부모 컨테이너 전체 비활성.
+                if (root != null && root.activeSelf)
+                    root.SetActive(false);
                 // 비활성화돼도 마지막 sibling 위치 유지 — 다음 reload 안정.
-                if (_btnMoreProducts.transform.parent == _contentRoot)
-                    _btnMoreProducts.transform.SetAsLastSibling();
+                if (root != null && root.transform.parent == _contentRoot)
+                    root.transform.SetAsLastSibling();
                 return;
             }
-            if (!_btnMoreProducts.gameObject.activeSelf)
-                _btnMoreProducts.gameObject.SetActive(true);
-            if (_btnMoreProducts.transform.parent == _contentRoot)
-                _btnMoreProducts.transform.SetAsLastSibling();
+            // 부모 컨테이너 전체 활성.
+            if (root != null && !root.activeSelf)
+                root.SetActive(true);
+            if (root != null && root.transform.parent == _contentRoot)
+                root.transform.SetAsLastSibling();
         }
 
         /// <summary>상품 구매 콜백 → 확인 popup → 확인 시 ShopManager 라우팅.</summary>
