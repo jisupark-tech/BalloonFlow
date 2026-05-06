@@ -11,7 +11,7 @@ namespace BalloonFlow
     /// 상점 상품 리스트 아이템.
     /// Inspector에서 UI 링크 연결.
     /// </summary>
-    // BtnBuyGreen prefab sprite는 디자인타임 미리보기용 — 런타임에는 hasDiscount 분기로 _imgBtnBuyFrame.sprite 가 swap 됨.
+    // BtnBuyGreen 본체/프레임 sprite는 런타임에 ApplyProductTypeVisual()에서 _imgBtnBuy(_sprBtnGreen)·_imgBtnBuyFrame(_sprBtnFramePurple) 으로 swap 됨.
     public class PopupShopListItem : MonoBehaviour
     {
         // tier1~5 bundle은 데이터의 discountPercent 유무와 무관하게 Normal Bundle 스타일로 고정
@@ -53,6 +53,8 @@ namespace BalloonFlow
         [SerializeField] private Image _imgTop;
         [SerializeField] private Image _imgBottom;
         [SerializeField] private Image _imgBtnBuyFrame;
+        [Tooltip("BtnBuyGreen 자식 노드의 Image — 버튼 본체 그린 BG")]
+        [SerializeField] private Image _imgBtnBuy;
         [SerializeField] private GameObject _imgSale;
         [SerializeField] private GameObject _particleLight;
 
@@ -65,6 +67,8 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprFrameNormal;
         [SerializeField] private Sprite _sprFramePurple;
         [SerializeField] private Sprite _sprBtnFramePurple;
+        [Tooltip("Assets/2.Sprite/UI/shopBtnGreen.png — Normal Bundle용 그린 버튼 BG")]
+        [SerializeField] private Sprite _sprBtnGreen;
 
         [Header("[보상 표시 — 동적 생성]")]
         [Tooltip("ShopItem.prefab. 미할당 시 Resources/UI/UIAssets/ShopItem 자동 로드")]
@@ -373,6 +377,7 @@ namespace BalloonFlow
                 if (_imgTop != null && _sprFrameNormal != null) _imgTop.sprite = _sprFrameNormal;
                 if (_imgBottom != null && _sprFramePurple != null) _imgBottom.sprite = _sprFramePurple;
                 if (_imgBtnBuyFrame != null && _sprBtnFramePurple != null) _imgBtnBuyFrame.sprite = _sprBtnFramePurple;
+                if (_imgBtnBuy != null && _sprBtnGreen != null) _imgBtnBuy.sprite = _sprBtnGreen;
                 if (_imgSale != null) _imgSale.SetActive(false);
             }
         }
