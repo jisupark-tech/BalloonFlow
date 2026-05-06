@@ -72,7 +72,7 @@ namespace BalloonFlow
         [FormerlySerializedAs("_iconColorRemove")]
         [SerializeField] private Sprite _iconZap;
 
-        [Tooltip("Assets/2.Sprite/UI/noAdsBig 할당 — BoostArea 선두 고정 노출용")]
+        [Tooltip("Assets/2.Sprite/UI/noAdsBig 할당 — ItemArea 선두 고정 노출용")]
         [SerializeField] private Sprite _iconNoAdsBig;
 
         private void Awake()
@@ -215,9 +215,9 @@ namespace BalloonFlow
                 return;
             }
 
-            // BoostArea 선두 고정 노출 (rewards 무관, 기존 ShopItem보다 앞)
+            // ItemArea 선두 고정 노출 (rewards 무관, 기존 ShopItem보다 앞)
             if (_iconNoAdsBig != null)
-                SpawnIconOnlyItem(prefab, _boostArea, _iconNoAdsBig);
+                SpawnIconOnlyItem(prefab, _itemArea, _iconNoAdsBig);
             else
                 Debug.LogWarning("[PopupShopListItem] _iconNoAdsBig 미할당 — Inspector에서 noAdsBig 스프라이트 와이어 필요");
 
