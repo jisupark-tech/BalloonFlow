@@ -43,6 +43,12 @@ namespace BalloonFlow
         private const string CoinProductId100000 = "xyz.aimed.balloonloop.coin.100000";
 
         // ImageGoldIcon override 우선순위 표는 ApplyGoldIcon() docstring 참조.
+        // 사용자 스펙 (Product ID → Asset 경로) — 변경 시 user feedback 재확인 필수:
+        //   bundle.tier1 → Assets/2.Sprite/UI/gold03.png  (스펙 미명시, 패턴 추정)
+        //   bundle.tier2 → Assets/2.Sprite/UI/gold04.png
+        //   bundle.tier3 → Assets/2.Sprite/UI/gold05.png
+        //   bundle.tier4 → Assets/2.Sprite/UI/gold06.png
+        //   bundle.tier5 → Assets/2.Sprite/UI/gold07.png
         // _normalBundleProductIds(프레임/할인 분기용)와 의도적으로 별개 컬렉션 -- 두 override 메커니즘이 독립 변경될 여지 보존.
         private static readonly Dictionary<string, string> _normalBundleGoldIconKeys = new Dictionary<string, string>
         {
