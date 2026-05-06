@@ -72,6 +72,9 @@ namespace BalloonFlow
         [FormerlySerializedAs("_iconColorRemove")]
         [SerializeField] private Sprite _iconZap;
 
+        [Tooltip("Assets/2.Sprite/UI/noAdsBig 할당 — BoostArea 선두 고정 노출용")]
+        [SerializeField] private Sprite _iconNoAdsBig;
+
         private void Awake()
         {
             if (ResourceManager.HasInstance)
@@ -200,11 +203,10 @@ namespace BalloonFlow
         private void SetupRewards(ShopRewards rewards)
         {
             EnsureRewardAreas();
+            ApplyAreaPositions();
 
             ClearArea(_itemArea);
             ClearArea(_boostArea);
-
-            if (rewards == null) return;
 
             var prefab = GetShopItemPrefab();
             if (prefab == null)
@@ -212,6 +214,14 @@ namespace BalloonFlow
                 Debug.LogWarning("[PopupShopListItem] ShopItem prefab 미발견. Resources/UI/UIAssets/ShopItem 확인");
                 return;
             }
+
+            // BoostArea 선두 고정 노출 (rewards 무관, 기존 ShopItem보다 앞)
+            if (_iconNoAdsBig != null)
+                SpawnIconOnlyItem(prefab, _boostArea, _iconNoAdsBig);
+            else
+                Debug.LogWarning("[PopupShopListItem] _iconNoAdsBig 미할당 — Inspector에서 noAdsBig 스프라이트 와이어 필요");
+
+            if (rewards == null) return;
 
             // ── ItemArea ──
             // 사용자 요구: RightArea 의 coin reward 표시 제거 — LeftArea 의 _txtPrice (TextPrice/Outline)
@@ -235,6 +245,35 @@ namespace BalloonFlow
                 if (rewards.boosters.zap > 0)
                     SpawnRewardItem(prefab, _boostArea, _iconZap, $"x{rewards.boosters.zap}");
             }
+        }
+
+        // 프리팹이 binary 직렬화라 Inspector 좌표가 외부에서 바뀔 수 있음 → 매번 강제 보장
+        private void ApplyAreaPositions()
+        {
+            if (_itemArea != null)
+            {
+                var p = _itemArea.anchoredPosition;
+                p.y = 70f;
+                _itemArea.anchoredPosition = p;
+            }
+            if (_boostArea != null)
+            {
+                var p = _boostArea.anchoredPosition;
+                p.y = -70f;
+                _boostArea.anchoredPosition = p;
+            }
+        }
+
+        private void SpawnIconOnlyItem(GameObject prefab, RectTransform area, Sprite icon)
+        {
+            if (area == null) return;
+
+            var go = Instantiate(prefab, area);
+            go.SetActive(true);
+
+            var view = go.GetComponent<ShopItemView>();
+            if (view == null) view = go.AddComponent<ShopItemView>();
+            view.SetupIconOnly(icon);
         }
 
         private void SpawnRewardItem(GameObject prefab, RectTransform area, Sprite icon, string countText)
