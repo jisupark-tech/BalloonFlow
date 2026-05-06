@@ -21,6 +21,11 @@ namespace BalloonFlow
     // OffPercent UI는 coin 카테고리(_coinGoldIconKeys.ContainsKey(productId))에서는 항상 비활성 -- coin 상품군 할인율 표시 정책상 숨김.
     public class PopupShopListItem : MonoBehaviour
     {
+        // BoostArea 인스턴스 ImageItem 축소 비율 -- ItemArea 쪽은 적용 금지 (사용자 요구: BoostArea 한정).
+        // prefab 자체 m_LocalScale을 건드리면 ItemArea 쪽도 같이 줄어들기 때문에 인스턴스 단위로만 조정.
+        private const float BoostIconScaleX = 0.8f;
+        private const float BoostIconScaleY = 0.8f;
+
         // tier1~5 bundle은 데이터의 discountPercent 유무와 무관하게 Normal Bundle 스타일로 고정
         private static readonly HashSet<string> _normalBundleProductIds = new HashSet<string>
         {
@@ -382,14 +387,24 @@ namespace BalloonFlow
                 SpawnRewardItem(prefab, _itemArea, _iconRemoveAds, ""); // 카운트 비움 — 아이콘만
 
             // ── BoostArea ──
+            // BoostArea의 ImageItem만 축소 (사용자 요구). prefab 공유로 인해 ItemArea 쪽엔 적용 금지.
             if (rewards.boosters != null)
             {
                 if (rewards.boosters.hand > 0)
-                    SpawnRewardItem(prefab, _boostArea, _iconHand, $"x{rewards.boosters.hand}");
+                {
+                    var view = SpawnRewardItem(prefab, _boostArea, _iconHand, $"x{rewards.boosters.hand}");
+                    view?.ApplyIconScale(BoostIconScaleX, BoostIconScaleY);
+                }
                 if (rewards.boosters.shuffle > 0)
-                    SpawnRewardItem(prefab, _boostArea, _iconShuffle, $"x{rewards.boosters.shuffle}");
+                {
+                    var view = SpawnRewardItem(prefab, _boostArea, _iconShuffle, $"x{rewards.boosters.shuffle}");
+                    view?.ApplyIconScale(BoostIconScaleX, BoostIconScaleY);
+                }
                 if (rewards.boosters.zap > 0)
-                    SpawnRewardItem(prefab, _boostArea, _iconZap, $"x{rewards.boosters.zap}");
+                {
+                    var view = SpawnRewardItem(prefab, _boostArea, _iconZap, $"x{rewards.boosters.zap}");
+                    view?.ApplyIconScale(BoostIconScaleX, BoostIconScaleY);
+                }
             }
         }
 
@@ -422,9 +437,9 @@ namespace BalloonFlow
             view.SetupIconOnly(icon);
         }
 
-        private void SpawnRewardItem(GameObject prefab, RectTransform area, Sprite icon, string countText)
+        private ShopItemView SpawnRewardItem(GameObject prefab, RectTransform area, Sprite icon, string countText)
         {
-            if (area == null) return;
+            if (area == null) return null;
 
             var go = Instantiate(prefab, area);
             go.SetActive(true);
@@ -433,6 +448,7 @@ namespace BalloonFlow
             var view = go.GetComponent<ShopItemView>();
             if (view == null) view = go.AddComponent<ShopItemView>();
             view.Setup(icon, countText);
+            return view;
         }
 
         private static void ClearArea(RectTransform area)

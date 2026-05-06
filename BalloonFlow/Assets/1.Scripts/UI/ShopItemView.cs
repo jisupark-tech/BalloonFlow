@@ -61,6 +61,15 @@ namespace BalloonFlow
             if (_txtCountOutline != null)  _txtCountOutline.gameObject.SetActive(false);
         }
 
+        /// <summary>아이콘 Image의 localScale을 (x, y, 기존 Z 보존)으로 적용. EnsureBound 후 _icon이 있을 때만 동작.</summary>
+        public void ApplyIconScale(float x, float y)
+        {
+            EnsureBound();
+            if (_icon == null) return;
+            var s = _icon.transform.localScale;
+            _icon.transform.localScale = new Vector3(x, y, s.z);
+        }
+
         private void EnsureBound()
         {
             if (_bound) return;
