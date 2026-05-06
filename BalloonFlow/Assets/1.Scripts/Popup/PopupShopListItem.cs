@@ -12,12 +12,7 @@ namespace BalloonFlow
     /// Inspector에서 UI 링크 연결.
     /// </summary>
     // BtnBuyGreen 본체/프레임 sprite는 런타임에 ApplyProductTypeVisual()에서 isSpecial 분기에 따라 _imgBtnBuy(_sprBtnGreen/_sprBtnGreenSpecial)·_imgBtnBuyFrame(_sprBtnFramePurple/_sprBtnFrameRed)으로 swap 됨.
-    // ImageGoldIcon override 우선순위 (ApplyGoldIcon 메서드 / _normalBundleGoldIconKeys / _coinGoldIconKeys 선언부와 동일 문구로 동기화):
-    //   1) starter offer override -> Const.SPR_GOLD01("gold01")
-    //   2) bundle tier1~5 override -> Const.SPR_GOLD03~SPR_GOLD07("gold03"~"gold07")
-    //   3) coin productId override (1000/5000/10000/25000/50000/100000) -> gold01/03/04/05/06/08
-    //   4) data.goldIconKey
-    //   5) Const.SPR_ICONGOLD fallback
+    // ImageGoldIcon override 우선순위 표는 ApplyGoldIcon() docstring 참조.
     // OffPercent UI는 coin 카테고리(_coinGoldIconKeys.ContainsKey(productId))에서는 항상 비활성 -- coin 상품군 할인율 표시 정책상 숨김.
     public class PopupShopListItem : MonoBehaviour
     {
@@ -36,12 +31,7 @@ namespace BalloonFlow
             "xyz.aimed.balloonloop.bundle.tier5",
         };
 
-        // ImageGoldIcon override 우선순위 (클래스 헤더 / ApplyGoldIcon 메서드와 동일 문구로 동기화):
-        //   1) starter offer override -> Const.SPR_GOLD01("gold01")
-        //   2) bundle tier1~5 override -> Const.SPR_GOLD03~SPR_GOLD07
-        //   3) coin productId override (_coinGoldIconKeys, 1000/5000/10000/25000/50000/100000) -> gold01/03/04/05/06/08
-        //   4) data.goldIconKey
-        //   5) Const.SPR_ICONGOLD fallback
+        // ImageGoldIcon override 우선순위 표는 ApplyGoldIcon() docstring 참조.
         private const string GoldIconStarterOfferProductId = "xyz.aimed.balloonloop.offer.starter";
 
         // Coin 카테고리 productId -- 매직 스트링 인라인 금지, _coinGoldIconKeys / OffPercent 분기에서 deterministic 키로 사용.
@@ -52,12 +42,7 @@ namespace BalloonFlow
         private const string CoinProductId50000  = "xyz.aimed.balloonloop.coin.50000";
         private const string CoinProductId100000 = "xyz.aimed.balloonloop.coin.100000";
 
-        // ImageGoldIcon override 우선순위 (클래스 헤더 / ApplyGoldIcon 메서드와 동일 문구로 동기화):
-        //   1) starter offer override -> Const.SPR_GOLD01
-        //   2) bundle tier1~5 override -> Const.SPR_GOLD03~SPR_GOLD07 (이 컬렉션)
-        //   3) coin productId override -> _coinGoldIconKeys (gold01/03/04/05/06/08)
-        //   4) data.goldIconKey
-        //   5) Const.SPR_ICONGOLD fallback
+        // ImageGoldIcon override 우선순위 표는 ApplyGoldIcon() docstring 참조.
         // _normalBundleProductIds(프레임/할인 분기용)와 의도적으로 별개 컬렉션 -- 두 override 메커니즘이 독립 변경될 여지 보존.
         private static readonly Dictionary<string, string> _normalBundleGoldIconKeys = new Dictionary<string, string>
         {
