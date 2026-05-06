@@ -946,11 +946,11 @@ namespace BalloonFlow
             }
         }
 
-        // GameManager.Board의 punch/lerp-strength 4 필드를 proj에 복사해 두 발사 함수의 중복을 제거.
+        // 발사 punch와 비행 lerp 모두 startScale(=레일 사이즈)을 절대 초과하지 않도록 cap — 사용자 피드백: 다트가 레일 위보다 커보이면 안 됨
         private void ConfigureLaunchScale(DartProjectile proj, Vector3 dartScaleVec, Vector3 balloonScale)
         {
             proj.startScale = dartScaleVec;
-            proj.targetScale = balloonScale;
+            proj.targetScale = dartScaleVec;
 
             bool hasBoard = GameManager.HasInstance;
             bool punchOn = hasBoard && GameManager.Instance.Board.dartLaunchScalePunch;
@@ -964,7 +964,7 @@ namespace BalloonFlow
             {
                 proj.punchDuration = punchDur;
                 proj.launchPunchT = punchDur * 0.5f;
-                proj.punchPeakScale = dartScaleVec * overshoot;
+                proj.punchPeakScale = dartScaleVec * Mathf.Min(overshoot, 1f);
             }
             else
             {
