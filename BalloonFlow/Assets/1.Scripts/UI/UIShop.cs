@@ -159,7 +159,8 @@ namespace BalloonFlow
         /// <summary>
         /// _contentRoot 의 VerticalLayoutGroup + ContentSizeFitter 가 설정돼있는지 확인.
         /// 없으면 자동 추가 — 동적 아이템이 뭉치는 문제 방지.
-        /// BtnMoreProducts 도 _contentRoot 자식이면 LayoutElement 보장 (안 보임 방지).
+        /// BtnMoreProducts 도 _contentRoot 자식이면 LayoutElement 보장 + Awake 단계부터
+        /// last sibling 강제. 이후 모든 분기(catalog 로드/dynamic spawn/재로드)에서도 유지.
         /// </summary>
         private void EnsureContentLayout()
         {
@@ -226,6 +227,11 @@ namespace BalloonFlow
                 float h = btnRT.rect.height;
                 le.preferredHeight = h > 1f ? h : 120f; // 더보기 버튼 기본 높이
             }
+
+            // Awake 단계부터 last sibling 강제 — 정적 placeholder 가 ShopContent 안에 있어도
+            // BtnMore 가 항상 스크롤 최하단에 위치. (parent != _contentRoot 면 designer 의도일
+            // 수 있으므로 reparent 는 하지 않고 위 LogWarning 에서 종료.)
+            _btnMoreProducts.transform.SetAsLastSibling();
         }
 
         private GameObject GetPrefabForCategory(ShopItemCategory cat)
@@ -315,6 +321,11 @@ namespace BalloonFlow
 
             _displayedCount += loadCount;
 
+            // 동적 spawn 후에도 BtnMore 가 항상 마지막 sibling 이 되도록 한 번 더 보정.
+            // (정적 placeholder 가 ShopContent 안에 남아있는 경우 대비)
+            if (_btnMoreProducts != null && _btnMoreProducts.transform.parent == _contentRoot)
+                _btnMoreProducts.transform.SetAsLastSibling();
+
             // VerticalLayoutGroup + ContentSizeFitter 강제 재계산 → ScrollRect 활성
             if (_contentRoot != null)
                 LayoutRebuilder.ForceRebuildLayoutImmediate(_contentRoot);
@@ -324,7 +335,8 @@ namespace BalloonFlow
 
         /// <summary>
         /// BtnMoreProducts 노출 정책 — 클릭 후에는 영구히 숨김.
-        /// 첫 로드 시에만 _contentRoot 의 마지막 sibling (= 스크롤 최하단) 으로 노출.
+        /// Awake 단계부터 last sibling 강제, 이후 모든 분기(활성/비활성)에서도 유지하여
+        /// 다음 ResetAndLoadProducts 시 sibling 위치가 안정되도록 보장.
         /// </summary>
         private void UpdateMoreButton()
         {
@@ -333,6 +345,9 @@ namespace BalloonFlow
             {
                 if (_btnMoreProducts.gameObject.activeSelf)
                     _btnMoreProducts.gameObject.SetActive(false);
+                // 비활성화돼도 마지막 sibling 위치 유지 — 다음 reload 안정.
+                if (_btnMoreProducts.transform.parent == _contentRoot)
+                    _btnMoreProducts.transform.SetAsLastSibling();
                 return;
             }
             if (!_btnMoreProducts.gameObject.activeSelf)
