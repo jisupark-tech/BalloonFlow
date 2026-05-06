@@ -11,7 +11,7 @@ namespace BalloonFlow
     /// 상점 상품 리스트 아이템.
     /// Inspector에서 UI 링크 연결.
     /// </summary>
-    // BtnBuyGreen 본체/프레임 sprite는 런타임에 ApplyProductTypeVisual()에서 _imgBtnBuy(_sprBtnGreen)·_imgBtnBuyFrame(_sprBtnFramePurple) 으로 swap 됨.
+    // BtnBuyGreen 본체/프레임 sprite는 런타임에 ApplyProductTypeVisual()에서 isSpecial 분기에 따라 _imgBtnBuy(_sprBtnGreen/_sprBtnGreenSpecial)·_imgBtnBuyFrame(_sprBtnFramePurple/_sprBtnFrameRed)으로 swap 됨.
     public class PopupShopListItem : MonoBehaviour
     {
         // tier1~5 bundle은 데이터의 discountPercent 유무와 무관하게 Normal Bundle 스타일로 고정
@@ -62,6 +62,8 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprFrameSpecial;
         [SerializeField] private Sprite _sprFrameRed;
         [SerializeField] private Sprite _sprBtnFrameRed;
+        [Tooltip("Special Offer 버튼 본체 BG sprite — Normal Bundle의 _sprBtnGreen와 분리 관리")]
+        [SerializeField] private Sprite _sprBtnGreenSpecial;
 
         [Header("[Normal Bundle 스프라이트]")]
         [SerializeField] private Sprite _sprFrameNormal;
@@ -397,6 +399,7 @@ namespace BalloonFlow
                 if (_imgTop != null && _sprFrameSpecial != null) _imgTop.sprite = _sprFrameSpecial;
                 if (_imgBottom != null && _sprFrameRed != null) _imgBottom.sprite = _sprFrameRed;
                 if (_imgBtnBuyFrame != null && _sprBtnFrameRed != null) _imgBtnBuyFrame.sprite = _sprBtnFrameRed;
+                if (_imgBtnBuy != null && _sprBtnGreenSpecial != null) _imgBtnBuy.sprite = _sprBtnGreenSpecial;
                 if (_imgSale != null) _imgSale.SetActive(true);
             }
             else
