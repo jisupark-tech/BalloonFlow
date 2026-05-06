@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -62,6 +63,9 @@ namespace BalloonFlow
         private Button HomeBtn => _btnHome != null ? _btnHome : (_frame != null ? _frame.BtnHorizRed : null);
         private Button ExitBtn => _btnExit != null ? _btnExit : (_frame != null ? _frame.BtnExit : null);
 
+        private int _displayedCoins;
+        private Tweener _goldTween;
+
         protected override void Awake()
         {
             base.Awake();
@@ -103,6 +107,7 @@ namespace BalloonFlow
             if (RetryBtn != null) RetryBtn.onClick.RemoveAllListeners();
             if (HomeBtn != null) HomeBtn.onClick.RemoveAllListeners();
             if (ExitBtn != null) ExitBtn.onClick.RemoveAllListeners();
+            _goldTween?.Kill();
         }
 
         private bool _lifeConsumed;
@@ -126,11 +131,56 @@ namespace BalloonFlow
             if (_frame != null) _frame.ApplyDifficulty(diff);
             UpdateHardLevelOption(diff);
             UpdateGoldDisplay();
+
+            EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
         }
 
         private void OnDisable()
         {
             _lifeConsumed = false; // 다음 실패 시 다시 소모 가능
+            EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
+            _goldTween?.Kill();
+        }
+
+        private void HandleCoinChanged(OnCoinChanged evt)
+        {
+            if (evt.delta == 0)
+            {
+                _goldTween?.Kill();
+                _displayedCoins = evt.currentCoins;
+                ApplyTopBarGold(evt.currentCoins);
+                return;
+            }
+            AnimateTopBarGold(evt.currentCoins);
+        }
+
+        private void AnimateTopBarGold(int target)
+        {
+            _goldTween?.Kill();
+            if (_displayedCoins == target)
+            {
+                ApplyTopBarGold(target);
+                return;
+            }
+            _goldTween = DOTween.To(
+                    () => _displayedCoins,
+                    v => { _displayedCoins = v; ApplyTopBarGold(v); },
+                    target,
+                    0.45f)
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(true)
+                .OnComplete(() =>
+                {
+                    _displayedCoins = target;
+                    ApplyTopBarGold(target);
+                });
+        }
+
+        private void ApplyTopBarGold(int value)
+        {
+            string str = value.ToString("N0");
+            if (_txtGold != null) _txtGold.text = str;
+            if (_txtGoldOutline != null) _txtGoldOutline.text = str;
         }
 
         public void Show(DifficultyPurpose difficulty)
@@ -260,9 +310,9 @@ namespace BalloonFlow
         private void UpdateGoldDisplay()
         {
             if (!CurrencyManager.HasInstance) return;
-            string gold = CurrencyManager.Instance.Coins.ToString("N0");
-            if (_txtGold != null) _txtGold.text = gold;
-            if (_txtGoldOutline != null) _txtGoldOutline.text = gold;
+            _goldTween?.Kill();
+            _displayedCoins = CurrencyManager.Instance.Coins;
+            ApplyTopBarGold(_displayedCoins);
         }
 
         private void OnRetryClicked()

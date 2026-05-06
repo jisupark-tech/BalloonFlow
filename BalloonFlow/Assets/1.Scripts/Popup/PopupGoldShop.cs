@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -45,6 +46,9 @@ namespace BalloonFlow
         private readonly List<PopupShopListItem> _spawnedItems = new List<PopupShopListItem>();
 
         private System.Action _onCloseCallback;
+
+        private int _displayedCoins;
+        private Tweener _goldTween;
 
         protected override void Awake()
         {
@@ -121,11 +125,74 @@ namespace BalloonFlow
             ResetAndLoadProducts();
         }
 
-        /// <summary>보유 골드 갱신.</summary>
+        private void OnEnable()
+        {
+            EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
+            if (CurrencyManager.HasInstance)
+            {
+                _displayedCoins = CurrencyManager.Instance.Coins;
+                ApplyTopBarGold(_displayedCoins);
+            }
+        }
+
+        private void OnDisable()
+        {
+            EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
+            _goldTween?.Kill();
+        }
+
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            _goldTween?.Kill();
+        }
+
+        private void HandleCoinChanged(OnCoinChanged evt)
+        {
+            if (evt.delta == 0)
+            {
+                _goldTween?.Kill();
+                _displayedCoins = evt.currentCoins;
+                ApplyTopBarGold(evt.currentCoins);
+                return;
+            }
+            AnimateTopBarGold(evt.currentCoins);
+        }
+
+        private void AnimateTopBarGold(int target)
+        {
+            _goldTween?.Kill();
+            if (_displayedCoins == target)
+            {
+                ApplyTopBarGold(target);
+                return;
+            }
+            _goldTween = DOTween.To(
+                    () => _displayedCoins,
+                    v => { _displayedCoins = v; ApplyTopBarGold(v); },
+                    target,
+                    0.45f)
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(true)
+                .OnComplete(() =>
+                {
+                    _displayedCoins = target;
+                    ApplyTopBarGold(target);
+                });
+        }
+
+        private void ApplyTopBarGold(int value)
+        {
+            if (_txtGold != null) _txtGold.text = value.ToString("N0");
+        }
+
+        /// <summary>보유 골드 갱신 — 즉시 스냅(트윈 종료) + 캐시 동기화.</summary>
         private void RefreshGold()
         {
-            if (_txtGold != null && CurrencyManager.HasInstance)
-                _txtGold.text = CurrencyManager.Instance.Coins.ToString("N0");
+            if (!CurrencyManager.HasInstance) return;
+            _goldTween?.Kill();
+            _displayedCoins = CurrencyManager.Instance.Coins;
+            ApplyTopBarGold(_displayedCoins);
         }
 
         /// <summary>상품 리스트 초기화 + 첫 페이지 로드.</summary>
