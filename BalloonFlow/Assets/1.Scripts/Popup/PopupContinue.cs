@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -28,10 +29,61 @@ namespace BalloonFlow
         public Button ContinueButton => ContinueBtn;
         public Button DeclineButton => DeclineBtn;
 
+        private int _displayedCoins;
+        private Tweener _goldTween;
+
         private void OnEnable()
         {
             UpdateCostDisplay();
             UpdateGoldDisplay();
+            EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
+        }
+
+        private void OnDisable()
+        {
+            EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
+            _goldTween?.Kill();
+        }
+
+        private void HandleCoinChanged(OnCoinChanged evt)
+        {
+            if (evt.delta == 0)
+            {
+                _goldTween?.Kill();
+                _displayedCoins = evt.currentCoins;
+                ApplyTopBarGold(evt.currentCoins);
+                return;
+            }
+            AnimateTopBarGold(evt.currentCoins);
+        }
+
+        private void AnimateTopBarGold(int target)
+        {
+            _goldTween?.Kill();
+            if (_displayedCoins == target)
+            {
+                ApplyTopBarGold(target);
+                return;
+            }
+            _goldTween = DOTween.To(
+                    () => _displayedCoins,
+                    v => { _displayedCoins = v; ApplyTopBarGold(v); },
+                    target,
+                    0.45f)
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(true)
+                .OnComplete(() =>
+                {
+                    _displayedCoins = target;
+                    ApplyTopBarGold(target);
+                });
+        }
+
+        private void ApplyTopBarGold(int value)
+        {
+            string str = value.ToString("N0");
+            if (_txtGold != null) _txtGold.text = str;
+            if (_txtGoldOutline != null) _txtGoldOutline.text = str;
         }
 
         protected override void Awake()
@@ -48,6 +100,7 @@ namespace BalloonFlow
             if (ContinueBtn != null) ContinueBtn.onClick.RemoveAllListeners();
             if (DeclineBtn != null) DeclineBtn.onClick.RemoveAllListeners();
             if (ExitBtn != null) ExitBtn.onClick.RemoveAllListeners();
+            _goldTween?.Kill();
         }
 
         public void Show()
@@ -106,9 +159,9 @@ namespace BalloonFlow
         private void UpdateGoldDisplay()
         {
             if (!CurrencyManager.HasInstance) return;
-            string gold = CurrencyManager.Instance.Coins.ToString("N0");
-            if (_txtGold != null) _txtGold.text = gold;
-            if (_txtGoldOutline != null) _txtGoldOutline.text = gold;
+            _goldTween?.Kill();
+            _displayedCoins = CurrencyManager.Instance.Coins;
+            ApplyTopBarGold(_displayedCoins);
         }
     }
 }

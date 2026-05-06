@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -43,6 +44,14 @@ namespace BalloonFlow
         [Header("[Inner Frame]")]
         [SerializeField] private Image _imgInnerFrame;
 
+        [Header("[TopBar — GoldPanel]")]
+        [Tooltip("TopBarArea>GoldPanel>TxtGold — 잔액 표시(코스트 텍스트 _txtGold 와 별개). prefab 에서 Inspector 와이어링 필요.")]
+        [SerializeField] private TMP_Text _txtTopBarGold;
+        [SerializeField] private TMP_Text _txtTopBarGoldOutline;
+
+        private int _displayedCoins;
+        private Tweener _goldTween;
+
         protected override void Awake()
         {
             base.Awake();
@@ -64,6 +73,64 @@ namespace BalloonFlow
                 if (_frame.BtnVertBlue != null) _frame.BtnVertBlue.onClick.RemoveAllListeners();
                 if (_frame.BtnExit != null) _frame.BtnExit.onClick.RemoveAllListeners();
             }
+            _goldTween?.Kill();
+        }
+
+        private void OnEnable()
+        {
+            EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
+            if (CurrencyManager.HasInstance)
+            {
+                _displayedCoins = CurrencyManager.Instance.Coins;
+                ApplyTopBarGold(_displayedCoins);
+            }
+        }
+
+        private void OnDisable()
+        {
+            EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
+            _goldTween?.Kill();
+        }
+
+        private void HandleCoinChanged(OnCoinChanged evt)
+        {
+            if (evt.delta == 0)
+            {
+                _goldTween?.Kill();
+                _displayedCoins = evt.currentCoins;
+                ApplyTopBarGold(evt.currentCoins);
+                return;
+            }
+            AnimateTopBarGold(evt.currentCoins);
+        }
+
+        private void AnimateTopBarGold(int target)
+        {
+            _goldTween?.Kill();
+            if (_displayedCoins == target)
+            {
+                ApplyTopBarGold(target);
+                return;
+            }
+            _goldTween = DOTween.To(
+                    () => _displayedCoins,
+                    v => { _displayedCoins = v; ApplyTopBarGold(v); },
+                    target,
+                    0.45f)
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(true)
+                .OnComplete(() =>
+                {
+                    _displayedCoins = target;
+                    ApplyTopBarGold(target);
+                });
+        }
+
+        private void ApplyTopBarGold(int value)
+        {
+            string str = value.ToString("N0");
+            if (_txtTopBarGold != null) _txtTopBarGold.text = str;
+            if (_txtTopBarGoldOutline != null) _txtTopBarGoldOutline.text = str;
         }
 
         public override void OpenUI()
