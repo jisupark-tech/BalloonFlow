@@ -53,7 +53,7 @@ namespace BalloonFlow
             { "xyz.aimed.balloonloop.bundle.tier5", Const.SPR_GOLD07 },
         };
 
-        // Coin 카테고리 ImageGoldIcon override -- 1000/5000/10000/25000/50000/100000 -> gold01/03/04/05/06/08 atlas key.
+        // Coin 카테고리 ImageGoldIcon override -- 1000/5000/10000/25000/50000/100000 -> gold01/03/04/05/06/08 sprite key (gold01~07 atlas 패킹, gold08 Resources/UI/Sprites/gold08.png 폴백).
         // ContainsKey 검사로 OffPercent 강제 비활성화 카테고리 식별에도 재사용 (deterministic, prefix 매칭보다 안전).
         private static readonly Dictionary<string, string> _coinGoldIconKeys = new Dictionary<string, string>
         {
