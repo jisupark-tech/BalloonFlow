@@ -144,16 +144,32 @@ namespace BalloonFlow
         /// <summary>ShopProductDoc(서버 모델) → ShopProductData(UI 모델) 변환.</summary>
         private static ShopProductData ConvertDocToData(ShopProductDoc doc)
         {
+            var category = MapCategory(doc.category);
+            string title;
+            if (!string.IsNullOrEmpty(doc.title_loc_key))
+            {
+                title = doc.title_loc_key;
+            }
+            else if (category == ShopItemCategory.Gold && doc.rewards != null && doc.rewards.coins > 0)
+            {
+                // coin 카테고리는 title_loc_key 비어있을 때 productId 대신 코인 수량 표시 — ShopListGold prefab의 TextPrice가 _txtTitle 슬롯에 wire 되어 있어 발생한 productId 노출 회귀 fix.
+                title = doc.rewards.coins.ToString("N0");
+            }
+            else
+            {
+                title = doc.productId;
+            }
+
             return new ShopProductData
             {
                 productId        = doc.productId,
-                title            = string.IsNullOrEmpty(doc.title_loc_key) ? doc.productId : doc.title_loc_key,
+                title            = title,
                 price            = $"${doc.priceUsd:F2}",
                 hasDiscount      = doc.discountPercent > 0,
                 discountPercent  = doc.discountPercent,
                 hasTimeLimit     = doc.hasTimeLimit,
                 timeLimitSeconds = doc.timeLimitSeconds,
-                category         = MapCategory(doc.category),
+                category         = category,
                 imageKey         = doc.imageKey,
                 rewards          = doc.rewards   // 동적 보상 표시용
             };
