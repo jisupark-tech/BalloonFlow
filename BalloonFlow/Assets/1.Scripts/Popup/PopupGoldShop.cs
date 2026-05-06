@@ -286,6 +286,10 @@ namespace BalloonFlow
         [HideInInspector]
         public string imageKey;
 
+        /// <summary>좌측 가격 영역 골드 아이콘 atlas key. Firestore ShopProductDoc.goldIconKey 매핑. 빈 값이면 Const.SPR_ICONGOLD 기본.</summary>
+        [HideInInspector]
+        public string goldIconKey;
+
         /// <summary>Firestore ShopProductDoc.rewards 매핑. Inspector 임시 데이터에선 null.</summary>
         [HideInInspector]
         public ShopRewards rewards;

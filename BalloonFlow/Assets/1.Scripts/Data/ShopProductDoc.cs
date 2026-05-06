@@ -24,6 +24,8 @@ namespace BalloonFlow
         // ── Visuals (Addressable atlas sprite name) ──────────────
         /// <summary>UI atlas (Const.ADDR_ATLAS_UI) 안의 sprite 이름. 빈 문자열이면 카테고리별 fallback.</summary>
         [FirestoreProperty] public string imageKey { get; set; } = "";
+        /// <summary>좌측 가격 영역 골드 아이콘 atlas key. 빈 문자열이면 Const.SPR_ICONGOLD 기본.</summary>
+        [FirestoreProperty] public string goldIconKey { get; set; } = "";
 
         // ── Rewards ──────────────────────────────────────────────
         [FirestoreProperty] public ShopRewards rewards { get; set; } = new ShopRewards();
