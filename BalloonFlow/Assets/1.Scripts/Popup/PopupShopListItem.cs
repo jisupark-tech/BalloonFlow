@@ -217,6 +217,7 @@ namespace BalloonFlow
         /// 좌측 가격 영역 ImageGoldIcon sprite 결정.
         /// data.goldIconKey 비어있으면 Const.SPR_ICONGOLD 기본. atlas miss 시 기존 sprite 유지
         /// (ResolveProductSprite 의 fallback 패턴과 동일).
+        /// tier1~5 분기는 atlas miss 시 경고 로그 — 패킹 누락 추적용.
         /// </summary>
         private void ApplyGoldIcon(ShopProductData data)
         {
@@ -226,11 +227,22 @@ namespace BalloonFlow
             // 우선순위: (a) starter offer → SPR_GOLD01, (b) tier1~5 → SPR_GOLD03~07,
             //           (c) data.goldIconKey, (d) SPR_ICONGOLD fallback.
             string productId = data?.productId;
+            if (!string.IsNullOrEmpty(productId) && _normalBundleGoldIconKeys.TryGetValue(productId, out var tierKey))
+            {
+                var tierSprite = rm.GetUISprite(tierKey);
+                if (tierSprite == null)
+                {
+                    Debug.LogWarning($"[PopupShopListItem] tier bundle '{productId}' gold icon key '{tierKey}' atlas miss — UI.spriteatlas 의 packables 에 Assets/2.Sprite/UI/{tierKey}.png 가 포함됐는지 확인");
+                }
+                else
+                {
+                    _imageGoldIcon.sprite = tierSprite;
+                }
+                return;
+            }
             string key;
             if (!string.IsNullOrEmpty(productId) && productId == GoldIconStarterOfferProductId)
                 key = Const.SPR_GOLD01;
-            else if (!string.IsNullOrEmpty(productId) && _normalBundleGoldIconKeys.TryGetValue(productId, out var tierKey))
-                key = tierKey;
             else
                 key = string.IsNullOrEmpty(data?.goldIconKey) ? Const.SPR_ICONGOLD : data.goldIconKey;
             var sprite = rm.UISpriteOr(key, _imageGoldIcon.sprite);
