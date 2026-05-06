@@ -286,7 +286,15 @@ namespace BalloonFlow
         public void ResetView()
         {
             _userExpandedMore = false;
+
+            // 누적된 스크롤 오프셋 wipe — 탭 재진입 시 상단 공백 fix
+            if (_contentRoot != null)
+                _contentRoot.anchoredPosition = Vector2.zero;
+
             ResetAndLoadProducts();
+
+            // ScrollRect 내부 viewport/content 캐시 flush — 새 content size 기반 normalizedPosition 보장
+            Canvas.ForceUpdateCanvases();
 
             if (_contentRoot != null)
             {
@@ -296,6 +304,9 @@ namespace BalloonFlow
                     sr.StopMovement();
                     sr.verticalNormalizedPosition = 1f;
                 }
+
+                // belt-and-suspenders — 어떤 ScrollRect 캐시 상태에서도 첫 진입과 동일한 상단 위치 보장
+                _contentRoot.anchoredPosition = Vector2.zero;
             }
         }
 
