@@ -39,6 +39,28 @@ namespace BalloonFlow
             if (_txtCountOutline != null)  _txtCountOutline.text  = countText ?? "";
         }
 
+        /// <summary>아이콘만 노출. 카운트 텍스트 GameObject 비활성 (예: noAdsBig 고정 표시).</summary>
+        public void SetupIconOnly(Sprite icon)
+        {
+            EnsureBound();
+
+            if (_icon != null)
+            {
+                if (icon != null)
+                {
+                    _icon.sprite  = icon;
+                    _icon.enabled = true;
+                }
+                else
+                {
+                    _icon.enabled = false;
+                }
+            }
+
+            if (_txtCount != null)         _txtCount.gameObject.SetActive(false);
+            if (_txtCountOutline != null)  _txtCountOutline.gameObject.SetActive(false);
+        }
+
         private void EnsureBound()
         {
             if (_bound) return;
