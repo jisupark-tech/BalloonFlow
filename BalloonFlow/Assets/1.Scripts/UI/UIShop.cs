@@ -299,7 +299,8 @@ namespace BalloonFlow
         private void OnMoreProductsClicked()
         {
             _userExpandedMore = true;
-            LoadMoreProducts();
+            // More 버튼 1회 클릭 시 남은 전체 로드 (6번째 coin 이상 잔존 상품 누락 fix)
+            LoadMoreProducts(_products != null ? _products.Length - _displayedCount : -1);
             // 부모 컨테이너 전체 비활성 — Button GameObject 단독이 아닌 root 기준.
             if (MoreButtonRoot != null && MoreButtonRoot.activeSelf)
                 MoreButtonRoot.SetActive(false);
@@ -308,13 +309,14 @@ namespace BalloonFlow
         /// <summary>다음 페이지 상품 추가. 카테고리별 prefab 자동 선택.
         /// 각 아이템에 LayoutElement 자동 부착 (preferredHeight) → VerticalLayoutGroup 정상 배치.
         /// 끝에 LayoutRebuilder 호출 → ScrollRect Content 크기 갱신.</summary>
-        private void LoadMoreProducts()
+        private void LoadMoreProducts(int loadOverride = -1)
         {
             if (_products == null || _contentRoot == null) return;
 
             GameObject goldContainer = null;
 
-            int loadCount = Mathf.Min(ITEMS_PER_PAGE, _products.Length - _displayedCount);
+            int remaining = _products.Length - _displayedCount;
+            int loadCount = (loadOverride > 0) ? Mathf.Min(loadOverride, remaining) : Mathf.Min(ITEMS_PER_PAGE, remaining);
             for (int i = 0; i < loadCount; i++)
             {
                 int idx = _displayedCount + i;
