@@ -317,6 +317,7 @@
     "description_loc_key": "shop.offer.starter.desc",
     "category": "offer",
     "imageKey": "",
+    "goldIconKey": "gold01",
     "priceUsd": 1.99,
     "currency": "USD",
     "playStoreSku": "xyz.aimed.balloonloop.offer.starter",
