@@ -281,6 +281,8 @@ namespace BalloonFlow
             if (!string.IsNullOrEmpty(productId) && _coinGoldIconKeys.TryGetValue(productId, out var coinKey))
             {
                 var coinSprite = rm.GetUISprite(coinKey);
+                // atlas 미포함 sprite (예: gold08) Resources fallback — Resources/UI/Sprites/{key}.png 사본 필요
+                if (coinSprite == null) coinSprite = Resources.Load<Sprite>("UI/Sprites/" + coinKey);
                 if (coinSprite != null) _imageGoldIcon.sprite = coinSprite;
                 else Debug.LogWarning($"[PopupShopListItem] coin '{productId}' gold icon key '{coinKey}' atlas miss -- UI.spriteatlas 의 packables 에 Assets/2.Sprite/UI/{coinKey}.png 가 포함됐는지 확인");
                 return;
