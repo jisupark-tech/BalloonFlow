@@ -171,6 +171,7 @@ namespace BalloonFlow
                 timeLimitSeconds = doc.timeLimitSeconds,
                 category         = category,
                 imageKey         = doc.imageKey,
+                goldIconKey      = doc.goldIconKey ?? string.Empty,
                 rewards          = doc.rewards   // 동적 보상 표시용
             };
         }

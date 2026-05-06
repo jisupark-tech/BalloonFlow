@@ -95,6 +95,9 @@ namespace BalloonFlow
         [Tooltip("Assets/2.Sprite/UI/noAdsBig 할당 — ItemArea 선두 고정 노출용")]
         [SerializeField] private Sprite _iconNoAdsBig;
 
+        // 좌측 TextPrice 옆 골드 아이콘 (ImageGoldIcon). Awake 1회 캐시.
+        private Image _imageGoldIcon;
+
         private void Awake()
         {
             if (ResourceManager.HasInstance)
@@ -107,6 +110,12 @@ namespace BalloonFlow
                 _iconShuffle        = rm.UISpriteOr(Const.SPR_ICONSUFFLE,         _iconShuffle);
                 _iconZap            = rm.UISpriteOr(Const.SPR_ICONZAP,            _iconZap);
             }
+
+            // ImageGoldIcon — 직계 자식 우선, 없으면 deep 탐색 fallback (prefab 구조에 따라 위치 다름)
+            var direct = transform.Find("ImageGoldIcon");
+            _imageGoldIcon = direct != null ? direct.GetComponent<Image>() : null;
+            if (_imageGoldIcon == null)
+                _imageGoldIcon = GetComponentsInChildren<Image>(true).FirstOrDefault(i => i.name == "ImageGoldIcon");
         }
 
         private ShopProductData _data;
@@ -179,8 +188,26 @@ namespace BalloonFlow
                 : string.Empty;
             SetTextWithOutline(_txtPrice, _txtPriceOutline, coinsText);
 
+            // 좌측 ImageGoldIcon — Firestore goldIconKey 명시 시 atlas 교체, 미지정 시 Const.SPR_ICONGOLD 기본.
+            ApplyGoldIcon(data);
+
             // 동적 보상 표시 (ItemArea / BoostArea)
             SetupRewards(data.rewards);
+        }
+
+        /// <summary>
+        /// 좌측 가격 영역 ImageGoldIcon sprite 결정.
+        /// data.goldIconKey 비어있으면 Const.SPR_ICONGOLD 기본. atlas miss 시 기존 sprite 유지
+        /// (ResolveProductSprite 의 fallback 패턴과 동일).
+        /// </summary>
+        private void ApplyGoldIcon(ShopProductData data)
+        {
+            if (_imageGoldIcon == null) return;
+            if (!ResourceManager.HasInstance) return;
+            var rm = ResourceManager.Instance;
+            var key = string.IsNullOrEmpty(data?.goldIconKey) ? Const.SPR_ICONGOLD : data.goldIconKey;
+            var sprite = rm.UISpriteOr(key, _imageGoldIcon.sprite);
+            if (sprite != null) _imageGoldIcon.sprite = sprite;
         }
 
         /// <summary>
