@@ -6,7 +6,7 @@ namespace BalloonFlow
 {
     /// <summary>
     /// 아이템 구매/해금 확인 팝업.
-    /// 구매 모드: Single 버튼 (Buy) — TxtSingleOutline.
+    /// 구매 모드: Single 버튼 (Buy) — TxtBtnBuyOutline.
     /// 해금 모드: Single 버튼 — TxtSingleOutline.
     /// </summary>
     public class PopupBuyItem : UIBase
@@ -88,8 +88,8 @@ namespace BalloonFlow
                 _frame.ShowExitButton(true);
             }
 
-            if (_txtBtnBuyOutline != null) _txtBtnBuyOutline.SetActive(false);
-            if (_txtSingleOutline != null) _txtSingleOutline.SetActive(true);
+            if (_txtBtnBuyOutline != null) _txtBtnBuyOutline.SetActive(true);
+            if (_txtSingleOutline != null) _txtSingleOutline.SetActive(false);
 
             SetItemDisplay(itemSprite, amount, goldCost);
             OpenUI();
