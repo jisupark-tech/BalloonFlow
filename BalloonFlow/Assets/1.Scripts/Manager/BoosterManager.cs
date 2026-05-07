@@ -187,6 +187,14 @@ namespace BalloonFlow
                 return false;
             }
 
+            // MapMaker 테스트 플레이 / 디버그 테스트 아이템 모드: 레벨 잠금 + 코인 비용 모두 우회. 무제한 사용.
+            if (GameManager.IsTestPlayMode || GameManager.IsTestItemMode)
+            {
+                AddBooster(boosterType, 3);
+                Debug.Log($"[BoosterManager] (Test mode) Granted {boosterType} x3 — bypassed lock + cost.");
+                return true;
+            }
+
             if (!IsBoosterUnlocked(boosterType))
             {
                 Debug.LogWarning($"[BoosterManager] Booster {boosterType} not yet unlocked.");

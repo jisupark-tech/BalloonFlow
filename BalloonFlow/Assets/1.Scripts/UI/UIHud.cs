@@ -347,7 +347,7 @@ namespace BalloonFlow
 
         public void RefreshBoosterCounts()
         {
-            if (_isMapMakerMode || GameManager.IsTestItemMode)
+            if (_isMapMakerMode || GameManager.IsTestItemMode || GameManager.IsTestPlayMode)
             {
                 SetCountText(_itemCountShuffle, "\u221E"); // ∞
                 SetCountText(_itemCountRemove, "\u221E");
@@ -389,7 +389,7 @@ namespace BalloonFlow
         /// <summary>Lock 아이콘 + Lv.X 텍스트 갱신. 미해금 → Lock 표시 + 난이도 색상 + 해금 레벨.</summary>
         public void RefreshLockState()
         {
-            if (_isMapMakerMode || GameManager.IsTestItemMode)
+            if (_isMapMakerMode || GameManager.IsTestItemMode || GameManager.IsTestPlayMode)
             {
                 SetLockIcon(_iconLockHand, false, _currentDifficulty);
                 SetLockIcon(_iconLockShuffle, false, _currentDifficulty);
@@ -518,7 +518,7 @@ namespace BalloonFlow
             if (!BoosterManager.HasInstance) return;
 
             // MapMaker / TestItem: 직접 사용 (팝업 없이)
-            if (_isMapMakerMode || GameManager.IsTestItemMode)
+            if (_isMapMakerMode || GameManager.IsTestItemMode || GameManager.IsTestPlayMode)
             {
                 if (BoosterManager.Instance.GetBoosterCount(boosterType) <= 0)
                     BoosterManager.Instance.AddBooster(boosterType, 1);
