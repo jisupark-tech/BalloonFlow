@@ -19,12 +19,12 @@ namespace BalloonFlow
         private static readonly Color COLOR_TEXT_ACTIVE = Color.white;
         private const float LOCKED_SCALE = 0.85f;
 
-        // ImgBoxDim 색상 (alpha 0.7 통일)
+        // ImgBoxDim 색상 (alpha 0.7 통일) — Normal=#272D3A / Hard=#925D5D / SuperHard=#2F2223
         private static readonly Color DIM_BLUE   = new Color(0x27 / 255f, 0x2D / 255f, 0x3A / 255f, 0.7f); // Normal
         private static readonly Color DIM_PURPLE = new Color(0x92 / 255f, 0x5D / 255f, 0x5D / 255f, 0.7f); // Hard
         private static readonly Color DIM_RED    = new Color(0x2F / 255f, 0x22 / 255f, 0x23 / 255f, 0.7f); // SuperHard
 
-        // TextLevel 색상 (alpha 100%)
+        // TextLevel 색상 (alpha 100%) — Normal=#779AC4 / Hard=#9677C4 / SuperHard=#C47777
         private static readonly Color TXT_BLUE   = new Color(0x77 / 255f, 0x9A / 255f, 0xC4 / 255f, 1f); // Normal
         private static readonly Color TXT_PURPLE = new Color(0x96 / 255f, 0x77 / 255f, 0xC4 / 255f, 1f); // Hard
         private static readonly Color TXT_RED    = new Color(0xC4 / 255f, 0x77 / 255f, 0x77 / 255f, 1f); // SuperHard
