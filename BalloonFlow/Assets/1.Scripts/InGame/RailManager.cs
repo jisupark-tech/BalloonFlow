@@ -76,6 +76,11 @@ namespace BalloonFlow
         private const int CORNER_SUBDIVISIONS = 16; // arc segments per corner (부드러운 곡선)
         private const float MIN_CORNER_RADIUS = 0.2f;
         private const float MAX_CORNER_RADIUS = 5f;
+        private const float DEPLOY_POINT_CLEARANCE_GAP = 1f;
+        private const float PACKING_ASSIST_GAP_START = 1.75f;
+        private const float PACKING_ASSIST_GAP_STOP = 1.1f;
+        private const float PACKING_ASSIST_SPEED_SCALE = 0.4f;
+        private const float PACKING_ASSIST_CATCH_UP_MULTIPLIER = 0.75f;
 
         // 가변 수용량 구간 — 총 다트 수 기준으로 레일 수용량 자동 결정
         // ≤300→50, ≤500→100, ≤700→150, 701+→200
@@ -127,6 +132,10 @@ namespace BalloonFlow
         // Slot system
         private int _slotCount = 200;
         private SlotData[] _slots;
+        // V2 아키텍처: 110% buffer 제거. 100% slot capacity 만 사용. deadlock 은 leftmost-only suspend 로 해결.
+        private int _deadlockBufferSize; // 항상 0 — 코드 호환 위해 필드 유지
+        // -1 = 데드락 모드 아님. 양수 = 해당 holder 가 buffer slot 사용 + 다른 holder pause.
+        private int _deadlockHolderId = -1;
         private float _rotationOffset; // current conveyor belt offset in distance units
         private float _rotationSpeed;  // slots per second
         private float _slotSpacing;    // distance between slots on the path
@@ -134,6 +143,7 @@ namespace BalloonFlow
         private int _nextDartId;
         private long _nextPlacedSeq; // monotonically increasing dart placement order (이어하기 정렬용)
         private bool _boardFinished;
+        private bool _packingAssistActive;
 
         /// <summary>
         /// When true, rail rotation is paused (e.g. during booster execution).
@@ -146,6 +156,8 @@ namespace BalloonFlow
 
         // FindDart O(N) → O(1) 캐시. Place/Remove 시 동기화.
         private readonly Dictionary<int, DartOnRail> _dartById = new Dictionary<int, DartOnRail>();
+        private readonly Dictionary<int, DartOnRail> _clusterHeadByHolder = new Dictionary<int, DartOnRail>();
+        private bool _slotOccupancyDirty;
 
         // Off-belt frozen dart system: darts removed from slots and held at fixed world positions
         public struct FrozenDartInfo
@@ -158,6 +170,16 @@ namespace BalloonFlow
         }
         private readonly List<FrozenDartInfo> _frozenDartInfos = new List<FrozenDartInfo>();
 
+        private struct ProgressReservation
+        {
+            public float startProgress;
+            public int dartCount;
+            public long order;
+        }
+
+        private readonly Dictionary<int, ProgressReservation> _holderReservations = new Dictionary<int, ProgressReservation>();
+        private long _nextReservationOrder;
+
         #endregion
 
         #region Properties
@@ -167,6 +189,12 @@ namespace BalloonFlow
         public bool IsClosedLoop => _isClosedLoop;
         public int SlotCount => _slotCount;
         public int OccupiedCount => _occupiedCount;
+
+        /// <summary>현재 데드락 모드의 leftmost holder ID. -1 = 정상 모드.</summary>
+        public int DeadlockHolderId => _deadlockHolderId;
+
+        /// <summary>데드락 buffer slot 수 (= 10% of slotCount).</summary>
+        public int DeadlockBufferSize => _deadlockBufferSize;
 
         /// <summary>Active + frozen 다트 합계. event publish 및 capacity-1 boundary 검출용.</summary>
         public int EffectiveOccupiedCount => _occupiedCount + _frozenDartInfos.Count;
@@ -212,7 +240,15 @@ namespace BalloonFlow
         /// 다트가 서로 막혀 정지할 때의 물리적 최소 간격 = 다트 비주얼 크기.
         /// Deploy point 대기/주행 중 간격이 벌어지지 않고 밀집 정렬되도록 함.
         /// </summary>
-        public float DartPhysicalGap => GameManager.HasInstance ? GameManager.Instance.Board.dartScale * GameManager.Instance.Board.dartSpacingMultiplier : 0.275f;
+        public float DartPhysicalGap
+        {
+            get
+            {
+                if (_slotSpacing > 0.0001f) return _slotSpacing;
+                if (_totalPathLength > 0.0001f && _slotCount > 0) return _totalPathLength / _slotCount;
+                return GameManager.HasInstance ? GameManager.Instance.Board.dartScale * GameManager.Instance.Board.dartSpacingMultiplier : 0.275f;
+            }
+        }
 
         /// <summary>Current belt rotation offset in distance units.</summary>
         public float RotationOffset => _rotationOffset;
@@ -269,50 +305,38 @@ namespace BalloonFlow
             if (IsPausedByBooster) return;
 
             // 회전 속도: 남은 다트 수 기반 + 배치 중 감속 + 유저 가속(홀드/x2토글)
+            UpdatePackingAssistState();
             float baseSpeedMult = GetSpeedMultiplier();
-            float beltDelta = _rotationSpeed * UserSpeedMultiplier * _slotSpacing * Time.deltaTime * baseSpeedMult;
+            float beltDelta = _rotationSpeed * UserSpeedMultiplier * _slotSpacing * Time.deltaTime * baseSpeedMult * GetPackingAssistSpeedScale();
             _rotationOffset += beltDelta;
 
             float pathLen = _totalPathLength;
             bool hasWrap = pathLen > 0f;
             if (hasWrap && _rotationOffset >= pathLen) _rotationOffset -= pathLen;
 
-            // Chain freeze: deploy point 접한 다트 + 뒤에 연결된 다트 전부 cluster freeze.
-            // 빈 공간 매꿈 자동화는 보류 — UnfreezeAndReinsertAll 매 frame 호출 시 부하 + 의도와 다른 동작.
-            // 빈 공간 매꿈 trigger 는 dart 발사 시점 또는 deploy event 에서 명시적 호출하는 방식이 안전.
-            PropagateFreezeChain();
-
             int dartCount = _darts.Count;
             if (dartCount == 0) return;
 
-            float physicalGap = DartPhysicalGap;
-            float dartDelta = beltDelta;
+            // Packing physics — frozen dart 가 멈춰있을 때 trailing cluster 가 catch-up.
+            // (2) 색상 무관 cluster 끼리 만나면 앞 cluster 뒤로 붙음 (slotSpacing 간격 유지).
+            // (3) consecutive deploy 시 cluster 내부 spacing uniform (packing 이 trailing dart catch-up).
+            // Fire 시 gap 자동 close 안 함 — fire 로 head 가 사라지면 trailing 은 이전 위치 유지하다 belt 회전으로 도달.
+            //     ※ 단 cluster 내부 packing 이 작동해서 trailing 은 head 위치까지 catch-up 가능.
+            //       사용자 요구: fire empty 가 deploy point 도달해야 placement.
+            //       이는 IsSlotEmpty / GetSlotAtPathDistance 로 보장 (slot 점유 체크).
+            // V2 freeze rule: cluster head 가 다른 holder 의 active deploy point 에 도달 시 cluster 전체 freeze.
+            // ([A....B] => [AAAAAB] : B 배포 중 → A 의 head 가 B deploy point 근처 → A cluster 전체 정지)
+            V2UpdateFreezeOnDeployBlock();
 
-            // ─── 사용자 보고로 LEGACY 복원 — packing physics + deploy point obstacle 살림 ───
-            // 균등 이동만 하면 (1) 뭉침 (2) 배포 느낌 X (3) freeze 안 됨 (4) 곡선 부자연 4 문제 발생.
-            // packing physics 가 cluster / deploy point freeze / 곡선 자연스러움의 핵심.
-            // dart.slotIndex 는 PlaceDartAtProgress 에서 동기화 (간격 추적용 메타데이터로만 사용).
-            // 가득 시 uniform advance — 모든 다트가 belt와 함께 동일 속도 회전.
-            bool railFullUniform = (_occupiedCount + _frozenDartInfos.Count) >= PhysicalCapacity - 1;
-            if (railFullUniform)
-            {
-                for (int i = 0; i < dartCount; i++)
-                {
-                    DartOnRail dart = _darts[i];
-                    float newProg = dart.progress + beltDelta;
-                    if (hasWrap && newProg >= pathLen) newProg -= pathLen;
-                    dart.progress = newProg;
-                }
-                return;
-            }
-
-            // 일반 상태: packing/cluster physics (deploy point freeze 시각 유지)
+            float physGap = DartPhysicalGap;
             _sortedDartIndices.Clear();
             for (int i = 0; i < dartCount; i++) _sortedDartIndices.Add(i);
             if (_dartProgressDescending == null)
                 _dartProgressDescending = (a, b) => _darts[b].progress.CompareTo(_darts[a].progress);
             _sortedDartIndices.Sort(_dartProgressDescending);
 
+            // Wrap 감지 — full rail 또는 cluster 가 path 0/pathLen 경계 wrap 시 sort[0] 이 진짜 head 가 아님.
+            // 가장 큰 gap 뒤가 진짜 head. iteration 시작점으로 사용 → head 가 free advance.
             int headPosInSorted = 0;
             if (hasWrap && dartCount > 1)
             {
@@ -337,55 +361,53 @@ namespace BalloonFlow
                 }
             }
 
-            bool hasDeployPoints = _activeDeployPoints.Count > 0;
             for (int offset = 0; offset < dartCount; offset++)
             {
                 int p = headPosInSorted + offset;
                 if (p >= dartCount) p -= dartCount;
                 int idx = _sortedDartIndices[p];
                 DartOnRail dart = _darts[idx];
-                float myProg = dart.progress;
+                if (dart.isFrozen) continue;
 
+                // Ahead dart 까지 거리 + 같은 cluster 여부.
                 float closest = float.MaxValue;
+                bool sameCluster = false;
                 if (dartCount > 1)
                 {
-                    int aheadSortedPos = p - 1;
-                    if (aheadSortedPos < 0) aheadSortedPos = dartCount - 1;
-                    int aheadIdx = _sortedDartIndices[aheadSortedPos];
+                    int aheadPos = p - 1;
+                    if (aheadPos < 0) aheadPos = dartCount - 1;
+                    int aheadIdx = _sortedDartIndices[aheadPos];
                     if (aheadIdx != idx)
                     {
-                        float d = _darts[aheadIdx].progress - myProg;
+                        float d = _darts[aheadIdx].progress - dart.progress;
                         if (hasWrap && d < 0f) d += pathLen;
-                        if (d > 0.001f) closest = d;
+                        if (d > 0.001f)
+                        {
+                            closest = d;
+                            sameCluster = (_darts[aheadIdx].holderId == dart.holderId);
+                        }
                     }
                 }
 
-                if (hasDeployPoints)
-                {
-                    foreach (var kvp in _deployPoints)
-                    {
-                        if (!_activeDeployPoints.Contains(kvp.Key)) continue;
-                        float d = kvp.Value - myProg;
-                        if (hasWrap && d < 0f) d += pathLen;
-                        if (d > 0.001f && d < closest) closest = d;
-                    }
-                }
-
-                float maxAdvance = dartDelta;
+                float maxAdvance = beltDelta;
                 if (closest < float.MaxValue)
                 {
-                    float stopDist = closest - physicalGap;
+                    float stopDist = closest - physGap;
                     if (stopDist < 0f) stopDist = 0f;
+                    // 단순화 — 모든 dart 가 belt 속도 normal advance, ahead 와 physGap 미만 충돌 시만 한도.
+                    // catch-up 제거 (corner 의 boundary case 에서 maxAdvance=0 trap 방지).
                     if (stopDist < maxAdvance) maxAdvance = stopDist;
                 }
 
                 if (maxAdvance > 0.001f)
                 {
-                    float newProg = myProg + maxAdvance;
+                    float newProg = dart.progress + maxAdvance;
                     if (hasWrap && newProg >= pathLen) newProg -= pathLen;
                     dart.progress = newProg;
                 }
             }
+
+            MarkSlotOccupancyDirty();
         }
 
         // Sort helpers for front-to-back dart iteration (packing physics 시 선두부터 처리)
@@ -394,24 +416,12 @@ namespace BalloonFlow
 
         /// <summary>
         /// 점유율 기반 속도 배율 (배치 감속 제외).
-        /// 남은 다트 >= capacity: 1배 / 미만: 2배.
-        /// 공격 속도 동기화(dartBalloonSyncedFireMode)에도 사용.
+        /// 사용자 요구 (2026-05-08): belt 속도 일정 유지 — 1 slot rotation 당 1 deploy 동기화.
+        /// 이전: 다트 < capacity 시 2x 가속 → deploy 가 못 따라가서 cluster spacing 벌어짐.
         /// </summary>
         public float GetOccupancySpeedMultiplier()
         {
-            // 남은 다트 수 = 레일 위 + 보관함 전체
-            int totalRemaining = _darts.Count;
-            if (HolderManager.HasInstance)
-            {
-                var holders = HolderManager.Instance.GetHolders();
-                for (int i = 0; i < holders.Length; i++)
-                {
-                    if (!holders[i].isConsumed)
-                        totalRemaining += holders[i].magazineCount;
-                }
-            }
-
-            return totalRemaining < _slotCount ? 2f : 1f;
+            return 1f;
         }
 
         /// <summary>
@@ -433,7 +443,68 @@ namespace BalloonFlow
             return baseMult;
         }
 
+        public float GetBeltDistancePerSecond()
+        {
+            return _rotationSpeed * UserSpeedMultiplier * _slotSpacing * GetSpeedMultiplier() * GetPackingAssistSpeedScale();
+        }
+
         /// <summary>활성 deploy point. holderId → progress on path.</summary>
+        private float GetPackingAssistSpeedScale()
+        {
+            // 사용자 요구 (2026-05-08): belt 속도 일정 유지 — packing assist 의 0.4x 감속 제거.
+            // 이전: nearly full 시 0.4x 감속 → 단일 cluster (= sparse) 와 다중 cluster (= dense) 속도 mismatch.
+            return 1f;
+        }
+
+        private void UpdatePackingAssistState()
+        {
+            if (_slotCount <= 0 || _totalPathLength <= 0f || _darts.Count < 2 || _activeDeployPoints.Count == 0)
+            {
+                _packingAssistActive = false;
+                return;
+            }
+
+            bool nearlyFull = (_occupiedCount + _frozenDartInfos.Count) >= PhysicalCapacity - 2;
+            if (!nearlyFull)
+            {
+                _packingAssistActive = false;
+                return;
+            }
+
+            float largestGap = CalculateLargestProgressGap();
+            float gapMultiplier = _packingAssistActive ? PACKING_ASSIST_GAP_STOP : PACKING_ASSIST_GAP_START;
+            _packingAssistActive = largestGap > DartPhysicalGap * gapMultiplier;
+        }
+
+        private float CalculateLargestProgressGap()
+        {
+            if (_totalPathLength <= 0f || _darts.Count < 2) return 0f;
+
+            _gapSortBuffer.Clear();
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                DartOnRail dart = _darts[i];
+                if (dart == null || dart.isFrozen) continue;
+                _gapSortBuffer.Add(dart.progress);
+            }
+
+            if (_gapSortBuffer.Count < 2) return 0f;
+
+            _gapSortBuffer.Sort();
+            float largestGap = 0f;
+            for (int i = 0; i < _gapSortBuffer.Count; i++)
+            {
+                float current = _gapSortBuffer[i];
+                float next = i + 1 < _gapSortBuffer.Count
+                    ? _gapSortBuffer[i + 1]
+                    : _gapSortBuffer[0] + _totalPathLength;
+                float gap = next - current;
+                if (gap > largestGap) largestGap = gap;
+            }
+
+            return largestGap;
+        }
+
         private readonly Dictionary<int, float> _deployPoints = new Dictionary<int, float>();
         /// <summary>배치 시작된 deploy point (첫 다트 투입 후 → 장애물 활성화).</summary>
         private readonly HashSet<int> _activeDeployPoints = new HashSet<int>();
@@ -441,6 +512,7 @@ namespace BalloonFlow
         /// <summary>deploy point 등록 (대기 상태 — 아직 장애물 아님).</summary>
         public void RegisterDeployPoint(int holderId, float progress)
         {
+            NormalizeProgress(ref progress);
             _deployPoints[holderId] = progress;
             // 아직 _activeDeployPoints에 추가하지 않음 → 빈틈 기다림
         }
@@ -451,11 +523,136 @@ namespace BalloonFlow
             _activeDeployPoints.Add(holderId);
         }
 
+        public void DeactivateDeployPoint(int holderId)
+        {
+            _activeDeployPoints.Remove(holderId);
+        }
+
         /// <summary>deploy point 해제. 다트는 다음 프레임부터 자연스럽게 이동 재개.</summary>
         public void UnregisterDeployPoint(int holderId)
         {
             _deployPoints.Remove(holderId);
             _activeDeployPoints.Remove(holderId);
+
+            if (_deployPoints.Count == 0)
+            {
+                UnfreezeAllDarts();
+                if (_frozenDartInfos.Count > 0)
+                    UnfreezeAndReinsertAll();
+            }
+        }
+
+        /// <summary>데드락 trigger 조건 — rail 점유량이 100% 도달 (V2 아키텍처: buffer 없음).</summary>
+        public bool IsRailNearFull()
+        {
+            return (_occupiedCount + _frozenDartInfos.Count) >= _slotCount;
+        }
+
+        /// <summary>현재 active deploy point 개수.</summary>
+        public int GetActiveDeployPointCount() => _activeDeployPoints.Count;
+
+        /// <summary>RailDebugVisualizer 용 — 등록된 deploy point 들의 holderId / progress / active 여부 반환.</summary>
+        public bool TryGetDeployPointsDebug(out System.Collections.Generic.List<int> holderIds,
+                                             out System.Collections.Generic.List<float> progresses,
+                                             out System.Collections.Generic.List<bool> actives)
+        {
+            holderIds = new System.Collections.Generic.List<int>(_deployPoints.Count);
+            progresses = new System.Collections.Generic.List<float>(_deployPoints.Count);
+            actives = new System.Collections.Generic.List<bool>(_deployPoints.Count);
+            foreach (var kvp in _deployPoints)
+            {
+                holderIds.Add(kvp.Key);
+                progresses.Add(kvp.Value);
+                actives.Add(_activeDeployPoints.Contains(kvp.Key));
+            }
+            return holderIds.Count > 0;
+        }
+
+        /// <summary>데드락 모드 진입 — leftmost holder 만 buffer slot 사용 가능, 다른 holder pause.
+        /// 호출자: PlaceDart 가 capacity 초과로 실패한 시점에서 _activeDeployPoints 의 leftmost 선택해 호출.
+        /// 이미 진입 상태면 no-op.
+        ///
+        /// 옵션 A: leftmost 외 다른 deploy point 를 _activeDeployPoints 에서 제거 → packing physics 의
+        /// obstacle 아니게 됨 → 다른 cluster 들 belt 회전 따라 자유롭게 흐름 → fire 매치 기회 발생 →
+        /// slot 해소. paused holder 들은 ExitDeadlockMode 후 placement 재개 시 자동으로 re-activate.</summary>
+        public bool EnterDeadlockMode(int leftmostHolderId)
+        {
+            if (_deadlockHolderId >= 0) return false; // 이미 진입
+            if (leftmostHolderId < 0) return false;
+            _deadlockHolderId = leftmostHolderId;
+
+            // leftmost 외 active deploy point 모두 obstacle 해제 — cluster 자연 흐름.
+            // 사본 iterate (Remove 중 collection 변경 방지).
+            _deadlockSuspendedDeployPoints.Clear();
+            foreach (int hid in _activeDeployPoints)
+            {
+                if (hid != leftmostHolderId) _deadlockSuspendedDeployPoints.Add(hid);
+            }
+            for (int i = 0; i < _deadlockSuspendedDeployPoints.Count; i++)
+            {
+                _activeDeployPoints.Remove(_deadlockSuspendedDeployPoints[i]);
+            }
+
+            // CompressDartsForDeadlock 제거 — 순간 progress 재할당이 시각 teleport ([AAAAABBBB.......CCC] → [.......AAAAABBBBCCC]) 발생.
+            // 110% buffer 로 leftmost 가 추가 placement 가능 + packing physics 의 0.9x 가 frame 별로 자연 압축 → 점진적으로 deploy point 빈 공간 생성.
+
+            Debug.Log($"[Deadlock] ENTER — leftmost holder {leftmostHolderId}. " +
+                      $"Suspended deploy points: [{string.Join(", ", _deadlockSuspendedDeployPoints)}]. " +
+                      $"Occupancy: {_occupiedCount}/{_slotCount} (+frozen {_frozenDartInfos.Count})");
+
+            EventBus.Publish(new OnDeadlockEntered { holderId = leftmostHolderId });
+            return true;
+        }
+
+        /// <summary>EnterDeadlockMode 시 1회 호출 — non-frozen dart 들을 head 기준 0.9*physGap 간격으로 재분배.
+        /// 결과: cluster 압축 → tail (deploy point 측) forward 이동 → deploy point 빈 공간 발생.
+        /// 압축 비율 0.9 → N=200 cluster 시 19.9*physGap (= 20 slot 분량) 공간 saved.</summary>
+        private void CompressDartsForDeadlock()
+        {
+            if (_darts.Count == 0) return;
+            if (_totalPathLength <= 0f) return;
+
+            float compressedGap = DartPhysicalGap * 0.9f;
+
+            // non-frozen dart 만 재분배
+            var indices = new List<int>(_darts.Count);
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                if (!_darts[i].isFrozen) indices.Add(i);
+            }
+            if (indices.Count <= 1) return;
+
+            // progress descending sort (head first)
+            indices.Sort((a, b) => _darts[b].progress.CompareTo(_darts[a].progress));
+
+            // head 는 그대로. 나머지는 head.progress - i*compressedGap.
+            float anchorProgress = _darts[indices[0]].progress;
+            for (int i = 1; i < indices.Count; i++)
+            {
+                var dart = _darts[indices[i]];
+                float newProgress = anchorProgress - i * compressedGap;
+                // wrap negative
+                while (newProgress < 0f) newProgress += _totalPathLength;
+                while (newProgress >= _totalPathLength) newProgress -= _totalPathLength;
+                dart.progress = newProgress;
+            }
+
+            MarkSlotOccupancyDirty();
+        }
+
+        // EnterDeadlockMode 에서 obstacle 해제된 holder ID 들. ExitDeadlockMode 에서 정보로만 보유 (자동 re-activate 는 holder 자신이 다음 placement 성공 시 호출).
+        private readonly List<int> _deadlockSuspendedDeployPoints = new List<int>();
+
+        /// <summary>데드락 모드 해제 — 트리거 holder 의 magazine 종료 시 호출.
+        /// 다른 holder 들 deploy 재개.</summary>
+        public void ExitDeadlockMode()
+        {
+            if (_deadlockHolderId < 0) return;
+            int prevHolder = _deadlockHolderId;
+            _deadlockHolderId = -1;
+            Debug.Log($"[Deadlock] EXIT — trigger holder {prevHolder} done. " +
+                      $"Occupancy: {_occupiedCount}/{_slotCount}");
+            EventBus.Publish(new OnDeadlockExited { holderId = prevHolder });
         }
 
         /// <summary>
@@ -538,7 +735,8 @@ namespace BalloonFlow
         /// slotIndex 는 메타데이터 (간격 추적용)만 사용. 시각은 packing physics 결과 progress 따름.</summary>
         public Vector3 GetDartCurrentPosition(DartOnRail dart)
         {
-            return dart != null ? GetPositionAtDistance(dart.progress) : Vector3.zero;
+            if (dart == null) return Vector3.zero;
+            return GetPositionAtDistance(dart.progress);
         }
 
         public Vector3 GetPositionAtDistance(float distance)
@@ -621,7 +819,10 @@ namespace BalloonFlow
         public void InitializeSlots(int slotCount)
         {
             _slotCount = Mathf.Max(1, slotCount);
+            // 데드락 buffer = 10% of slotCount (최소 1). _slots 배열은 normal + buffer 크기.
+            _deadlockBufferSize = 0; // V2 아키텍처: buffer 없음
             _slots = new SlotData[_slotCount];
+            _deadlockHolderId = -1;
             _rotationOffset = 0f;
             _occupiedCount = 0;
             _nextDartId = 0;
@@ -629,6 +830,7 @@ namespace BalloonFlow
             _boardFinished = false;
             _darts.Clear();
             _dartById.Clear();
+            _clusterHeadByHolder.Clear();
 
             for (int i = 0; i < _slotCount; i++)
             {
@@ -711,6 +913,7 @@ namespace BalloonFlow
         /// </summary>
         public SlotData GetSlot(int slotIndex)
         {
+            EnsureSlotOccupancySynced();
             if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount)
                 return new SlotData { dartColor = -1, holderId = -1, dartId = -1 };
             return _slots[slotIndex];
@@ -721,21 +924,30 @@ namespace BalloonFlow
         /// </summary>
         public bool IsSlotEmpty(int slotIndex)
         {
+            EnsureSlotOccupancySynced();
             if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return false;
             return _slots[slotIndex].dartColor < 0;
         }
 
         /// <summary>
         /// Places a dart on an empty slot. Returns the assigned dart ID, or -1 if slot is occupied.
+        /// 데드락 모드 시 leftmost holder 는 buffer slot (slotIndex >= _slotCount) 도 사용 가능.
         /// </summary>
         public int PlaceDart(int slotIndex, int color, int holderId)
         {
+            EnsureSlotOccupancySynced();
             if (_boardFinished) return -1; // Reject after board clear/fail
-            if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return -1;
+            if (_slots == null || slotIndex < 0) return -1;
+
+            // V2 아키텍처: deadlock 도 100% capacity. buffer 분기 제거.
+            int slotIndexLimit = _slotCount;
+            int capacityLimit  = _slotCount;
+
+            if (slotIndex >= slotIndexLimit) return -1;
             if (_slots[slotIndex].dartColor >= 0) return -1; // occupied
 
             // frozen 다트가 복귀할 공간 확보 — 예약분 초과 시 배치 거부
-            if (_occupiedCount + _frozenDartInfos.Count >= _slotCount)
+            if (_occupiedCount + _frozenDartInfos.Count >= capacityLimit)
             {
                 return -1;
             }
@@ -744,6 +956,19 @@ namespace BalloonFlow
             _slots[slotIndex].dartColor = color;
             _slots[slotIndex].holderId = holderId;
             _slots[slotIndex].dartId = dartId;
+            var dart = new DartOnRail
+            {
+                dartId = dartId,
+                dartColor = color,
+                holderId = holderId,
+                progress = GetPathDistanceForSlot(slotIndex),
+                isFrozen = false,
+                placedSeq = _nextPlacedSeq++,
+                slotIndex = slotIndex
+            };
+            _darts.Add(dart);
+            _dartById[dartId] = dart;
+            UpdateClusterHeadCache(dart);
             _occupiedCount++;
 
             PublishOccupancyChanged();
@@ -755,13 +980,30 @@ namespace BalloonFlow
         /// </summary>
         public bool ClearSlot(int slotIndex)
         {
+            EnsureSlotOccupancySynced();
             if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return false;
             if (_slots[slotIndex].dartColor < 0) return false; // already empty
+
+            int dartId = _slots[slotIndex].dartId;
+            if (dartId >= 0)
+            {
+                _dartById.TryGetValue(dartId, out DartOnRail removedDart);
+                _dartById.Remove(dartId);
+                for (int i = _darts.Count - 1; i >= 0; i--)
+                {
+                    if (_darts[i].dartId == dartId)
+                    {
+                        _darts.RemoveAt(i);
+                        break;
+                    }
+                }
+                RemoveFromClusterHeadCache(removedDart);
+            }
 
             _slots[slotIndex].dartColor = -1;
             _slots[slotIndex].holderId = -1;
             _slots[slotIndex].dartId = -1;
-            _occupiedCount = Mathf.Max(0, _occupiedCount - 1);
+            _occupiedCount = _darts.Count;
 
             PublishOccupancyChanged();
             return true;
@@ -824,6 +1066,7 @@ namespace BalloonFlow
 
         public List<int> GetOccupiedSlots()
         {
+            EnsureSlotOccupancySynced();
             _reusableOccupiedSlots.Clear();
             if (_slots == null) return _reusableOccupiedSlots;
 
@@ -865,19 +1108,69 @@ namespace BalloonFlow
         /// </summary>
         public bool IsProgressClear(float progress, int holderId)
         {
-            if (_darts.Count >= _slotCount) return false;
-            float minGap = DartPhysicalGap * 0.9f;
-            for (int i = 0; i < _darts.Count; i++)
+            // V2 아키텍처: 모든 holder 동일 — slot-index O(1) check. buffer / deadlock 분기 없음.
+            // DartPhysicalGap == _slotSpacing (line 248) 이므로 slot 점유 = 자동 minGap 보장.
+            if (!HasRoomForAdditionalDart(DartPhysicalGap)) return false;
+
+            EnsureSlotOccupancySynced();
+            int targetSlot = GetSlotAtPathDistance(progress);
+            if (targetSlot < 0 || targetSlot >= _slotCount) return false;
+            return _slots[targetSlot].dartId < 0;
+        }
+
+        private float ForwardDistance(float fromProgress, float toProgress)
+        {
+            float d = toProgress - fromProgress;
+            if (_totalPathLength > 0f && d < 0f) d += _totalPathLength;
+            return d;
+        }
+
+        private float GetDeployBlockProgress(float deployProgress)
+        {
+            float blockProgress = deployProgress - (DartPhysicalGap * DEPLOY_POINT_CLEARANCE_GAP);
+            NormalizeProgress(ref blockProgress);
+            return blockProgress;
+        }
+
+        private void NormalizeProgress(ref float progress)
+        {
+            if (_totalPathLength <= 0f) return;
+            progress = ((progress % _totalPathLength) + _totalPathLength) % _totalPathLength;
+        }
+
+        private bool IsReservationClearForHolder(float progress, int holderId)
+        {
+            float minGap = DartPhysicalGap;
+            long myOrder = _holderReservations.TryGetValue(holderId, out ProgressReservation ownReservation)
+                ? ownReservation.order
+                : long.MaxValue;
+
+            var reservationEn = _holderReservations.GetEnumerator();
+            try
             {
-                float diff = Mathf.Abs(_darts[i].progress - progress);
-                if (_totalPathLength > 0f)
-                    diff = Mathf.Min(diff, _totalPathLength - diff);
-                if (diff < minGap) return false;
+                while (reservationEn.MoveNext())
+                {
+                    if (reservationEn.Current.Key == holderId) continue;
+
+                    ProgressReservation reservation = reservationEn.Current.Value;
+                    if (reservation.order > myOrder) continue;
+
+                    int reserveCount = Mathf.Max(1, reservation.dartCount);
+                    float reserveLength = minGap * reserveCount;
+                    float distFromStart = ForwardDistance(reservation.startProgress, progress);
+                    if (distFromStart <= reserveLength + minGap)
+                        return false;
+                }
             }
+            finally { reservationEn.Dispose(); }
+
             return true;
         }
 
         private readonly List<float> _gapSortBuffer = new List<float>(256);
+        private readonly List<int> _pushInsertIndices = new List<int>(256);
+        private readonly List<float> _pushInsertDistances = new List<float>(256);
+        private readonly List<float> _pushInsertTargets = new List<float>(256);
 
         /// <summary>
         /// targetProgress 근처의 빈틈을 찾아 그 중심 progress 반환.
@@ -934,19 +1227,264 @@ namespace BalloonFlow
             return false;
         }
 
+        public bool TryFindInsertionProgressNear(float targetProgress, float maxOffset, int holderId, out float insertionProgress)
+        {
+            insertionProgress = -1f;
+            float pathLen = _totalPathLength;
+            if (pathLen <= 0f) return false;
+
+            NormalizeProgress(ref targetProgress);
+            if (IsProgressClear(targetProgress, holderId))
+            {
+                insertionProgress = targetProgress;
+                return true;
+            }
+
+            int n = _darts.Count;
+            if (n == 0)
+            {
+                insertionProgress = targetProgress;
+                return IsReservationClearForHolder(targetProgress, holderId);
+            }
+
+            float minGap = DartPhysicalGap;
+            _gapSortBuffer.Clear();
+            for (int i = 0; i < n; i++) _gapSortBuffer.Add(_darts[i].progress);
+            _gapSortBuffer.Sort();
+
+            float bestOffset = float.MaxValue;
+            float bestProgress = -1f;
+
+            for (int i = 0; i < n; i++)
+            {
+                float curr = _gapSortBuffer[i];
+                float next = (i + 1 < n) ? _gapSortBuffer[i + 1] : _gapSortBuffer[0] + pathLen;
+                float start = curr + minGap;
+                float end = next - minGap;
+                if (end < start) continue;
+
+                float target = targetProgress;
+                if (target < start - pathLen * 0.5f) target += pathLen;
+                if (target > end + pathLen * 0.5f) target -= pathLen;
+
+                float candidate = Mathf.Clamp(target, start, end);
+                float normalized = candidate;
+                NormalizeProgress(ref normalized);
+
+                if (!IsReservationClearForHolder(normalized, holderId)) continue;
+                if (!IsProgressClear(normalized, holderId)) continue;
+
+                float offset = Mathf.Abs(candidate - target);
+                if (offset > pathLen * 0.5f) offset = pathLen - offset;
+                if (offset <= maxOffset && offset < bestOffset)
+                {
+                    bestOffset = offset;
+                    bestProgress = normalized;
+                }
+            }
+
+            if (bestProgress >= 0f)
+            {
+                insertionProgress = bestProgress;
+                return true;
+            }
+
+            return false;
+        }
+
+        public void ReserveProgressForHolder(int holderId, float startProgress, int dartCount)
+        {
+            if (holderId < 0 || dartCount <= 0) return;
+
+            if (_totalPathLength > 0f)
+                startProgress = ((startProgress % _totalPathLength) + _totalPathLength) % _totalPathLength;
+
+            long order = _holderReservations.TryGetValue(holderId, out ProgressReservation existing)
+                ? existing.order
+                : _nextReservationOrder++;
+
+            _holderReservations[holderId] = new ProgressReservation
+            {
+                startProgress = startProgress,
+                dartCount = dartCount,
+                order = order
+            };
+        }
+
+        public void ReleaseHolderReservation(int holderId)
+        {
+            _holderReservations.Remove(holderId);
+        }
+
+        public bool TryEnterDeployPlacement(int holderId)
+        {
+            return true;
+        }
+
+        public void ExitDeployPlacement(int holderId)
+        {
+        }
+
+        public int TryPlaceDartWithPush(float progress, int color, int holderId, bool allowPush)
+        {
+            if (!IsProgressClear(progress, holderId)) return -1;
+            return PlaceDartAtProgress(progress, color, holderId);
+        }
+
+        private bool HasRoomForAdditionalDart(float minGap)
+        {
+            int effectiveCount = _darts.Count + _frozenDartInfos.Count;
+            if (effectiveCount >= PhysicalCapacity) return false;
+            if (_totalPathLength <= 0f) return false;
+            if (minGap <= 0f) return effectiveCount < _slotCount;
+
+            // New insertion needs one full physical gap somewhere on the closed loop.
+            return ((effectiveCount + 1) * minGap) <= _totalPathLength + 0.0001f;
+        }
+
+        private void ShiftSlotsForward(int fromSlot, int emptySlot)
+        {
+            if (_slots == null || _slotCount <= 0) return;
+
+            int current = emptySlot;
+            while (current != fromSlot)
+            {
+                int prev = (current - 1 + _slotCount) % _slotCount;
+                _slots[current] = _slots[prev];
+                UpdateDartSlotIndex(_slots[current].dartId, current);
+                current = prev;
+            }
+
+            _slots[fromSlot].dartColor = -1;
+            _slots[fromSlot].holderId = -1;
+            _slots[fromSlot].dartId = -1;
+        }
+
+        private void UpdateDartSlotIndex(int dartId, int slotIndex)
+        {
+            if (dartId < 0) return;
+            if (_dartById.TryGetValue(dartId, out DartOnRail dart))
+            {
+                dart.slotIndex = slotIndex;
+                dart.progress = GetPathDistanceForSlot(slotIndex);
+            }
+        }
+
+        private void SyncSlotOccupancyFromDarts()
+        {
+            if (_slots == null || _slotCount <= 0) return;
+
+            for (int i = 0; i < _slotCount; i++)
+            {
+                _slots[i].dartColor = -1;
+                _slots[i].holderId = -1;
+                _slots[i].dartId = -1;
+            }
+
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                DartOnRail dart = _darts[i];
+                if (dart == null) continue;
+
+                int slotIndex = GetSlotAtPathDistance(dart.progress);
+                if (_slots[slotIndex].dartColor >= 0)
+                    slotIndex = FindNearestEmptySlot(slotIndex);
+
+                if (slotIndex < 0) continue;
+
+                dart.slotIndex = slotIndex;
+                _slots[slotIndex].dartColor = dart.dartColor;
+                _slots[slotIndex].holderId = dart.holderId;
+                _slots[slotIndex].dartId = dart.dartId;
+            }
+
+            _occupiedCount = _darts.Count;
+            _slotOccupancyDirty = false;
+        }
+
+        private void MarkSlotOccupancyDirty()
+        {
+            _slotOccupancyDirty = true;
+        }
+
+        private void EnsureSlotOccupancySynced()
+        {
+            if (_slotOccupancyDirty)
+                SyncSlotOccupancyFromDarts();
+        }
+
+        private void UpdateClusterHeadCache(DartOnRail dart)
+        {
+            if (dart == null) return;
+            if (!_clusterHeadByHolder.TryGetValue(dart.holderId, out DartOnRail current)
+                || current == null
+                || dart.placedSeq < current.placedSeq)
+            {
+                _clusterHeadByHolder[dart.holderId] = dart;
+            }
+        }
+
+        private void RebuildClusterHeadCache(int holderId)
+        {
+            DartOnRail head = null;
+            long minSeq = long.MaxValue;
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                DartOnRail dart = _darts[i];
+                if (dart == null || dart.holderId != holderId) continue;
+                if (dart.placedSeq < minSeq)
+                {
+                    minSeq = dart.placedSeq;
+                    head = dart;
+                }
+            }
+
+            if (head != null)
+                _clusterHeadByHolder[holderId] = head;
+            else
+                _clusterHeadByHolder.Remove(holderId);
+        }
+
+        private void RemoveFromClusterHeadCache(DartOnRail dart)
+        {
+            if (dart == null) return;
+            if (_clusterHeadByHolder.TryGetValue(dart.holderId, out DartOnRail head)
+                && head != null
+                && head.dartId == dart.dartId)
+            {
+                RebuildClusterHeadCache(dart.holderId);
+            }
+        }
+
+        private int FindNearestEmptySlot(int centerSlot)
+        {
+            if (_slots == null || _slotCount <= 0) return -1;
+            centerSlot = ((centerSlot % _slotCount) + _slotCount) % _slotCount;
+
+            for (int step = 0; step < _slotCount; step++)
+            {
+                int forward = (centerSlot + step) % _slotCount;
+                if (_slots[forward].dartColor < 0) return forward;
+
+                if (step == 0) continue;
+                int backward = (centerSlot - step + _slotCount) % _slotCount;
+                if (_slots[backward].dartColor < 0) return backward;
+            }
+
+            return -1;
+        }
+
         /// <summary>Place a dart at a specific progress on the path.</summary>
         public int PlaceDartAtProgress(float progress, int color, int holderId)
         {
-            if (_darts.Count >= _slotCount) return -1; // capacity check
+            NormalizeProgress(ref progress);
+            if (!IsProgressClear(progress, holderId)) return -1;
 
             // slotIndex 메타데이터 동기화 — progress 그대로 유지 (packing physics 자연 동작 위해 snap 안 함).
             // slotIndex 는 추적/디버그/빈 slot 인덱스 식별용. 시각 위치 계산은 progress 기반 GetPositionAtDistance.
             int slotIndex = -1;
             if (_slotSpacing > 0.0001f && _slotCount > 0)
-            {
-                slotIndex = Mathf.RoundToInt(progress / _slotSpacing);
-                slotIndex = ((slotIndex % _slotCount) + _slotCount) % _slotCount;
-            }
+                slotIndex = GetSlotAtPathDistance(progress);
 
             int id = _nextDartId++;
             var dart = new DartOnRail
@@ -961,7 +1499,9 @@ namespace BalloonFlow
             };
             _darts.Add(dart);
             _dartById[id] = dart; // FindDart 캐시 동기화
+            UpdateClusterHeadCache(dart);
             _occupiedCount = _darts.Count;
+            SyncSlotOccupancyFromDarts();
             PublishOccupancyChanged();
             return id;
         }
@@ -996,12 +1536,24 @@ namespace BalloonFlow
         /// 매 frame UpdateInternal 호출 대신 발사 시점만 호출 — 부하 0 + cluster 흐름 자연.</summary>
         public bool RemoveDartById(int dartId)
         {
-            if (!_dartById.Remove(dartId)) return false;
+            if (!_dartById.TryGetValue(dartId, out DartOnRail dart)) return false;
+
+            if (dart.slotIndex >= 0 && dart.slotIndex < _slotCount
+                && _slots != null && _slots[dart.slotIndex].dartId == dartId)
+            {
+                bool cleared = ClearSlot(dart.slotIndex);
+                if (_frozenDartInfos.Count > 0)
+                    UnfreezeAndReinsertAll();
+                return cleared;
+            }
+
+            _dartById.Remove(dartId);
             for (int i = 0; i < _darts.Count; i++)
             {
                 if (_darts[i].dartId == dartId)
                 {
                     _darts.RemoveAt(i);
+                    RemoveFromClusterHeadCache(dart);
                     _occupiedCount = _darts.Count;
 
                     // 빈 공간 생겼으니 frozen cluster 풀어 packing physics 가 advance.
@@ -1082,6 +1634,65 @@ namespace BalloonFlow
                 _darts[i].isFrozen = false;
         }
 
+        // Phase 2 v1 — sequential turn-based deploy 지원 API.
+
+        /// <summary>특정 holder dart 들 모두 isFrozen=true. cluster 정지 효과 (UpdateInternal 에서 progress update skip).</summary>
+        public void FreezeClusterByHolder(int holderId)
+        {
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                var d = _darts[i];
+                if (d.holderId == holderId) d.isFrozen = true;
+            }
+        }
+
+        /// <summary>특정 holder dart 들 모두 isFrozen=false. cluster belt 회전 재개.</summary>
+        public void UnfreezeClusterByHolder(int holderId)
+        {
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                var d = _darts[i];
+                if (d.holderId == holderId) d.isFrozen = false;
+            }
+        }
+
+        /// <summary>자기 holder dart 중 placedSeq 가장 작은 dart (가장 먼저 spawn = belt 진행 방향 head).
+        /// 없으면 null.</summary>
+        public DartOnRail GetClusterHeadDart(int holderId)
+        {
+            if (_clusterHeadByHolder.TryGetValue(holderId, out DartOnRail head)
+                && head != null
+                && _dartById.ContainsKey(head.dartId))
+            {
+                return head;
+            }
+
+            RebuildClusterHeadCache(holderId);
+            return _clusterHeadByHolder.TryGetValue(holderId, out head) ? head : null;
+        }
+
+        /// <summary>progress 가 다른 holder 의 활성 deploy point 와 인접 (within physGap) 한지 check.
+        /// 인접하면 그 holder Id 반환, 아니면 -1. 사용자 의도: A cluster head 가 B deploy point 도달 trigger.</summary>
+        public int GetOtherActiveDeployPointHolderNear(float progress, int callingHolderId)
+        {
+            if (_deployPoints.Count == 0 || _activeDeployPoints.Count == 0) return -1;
+            float physGap = DartPhysicalGap;
+            var en = _deployPoints.GetEnumerator();
+            try
+            {
+                while (en.MoveNext())
+                {
+                    if (en.Current.Key == callingHolderId) continue;
+                    if (!_activeDeployPoints.Contains(en.Current.Key)) continue;
+                    float deployProg = GetDeployBlockProgress(en.Current.Value);
+                    float distanceAhead = ForwardDistance(progress, deployProg);
+                    if (distanceAhead > 0.001f && distanceAhead <= physGap) return en.Current.Key;
+                }
+            }
+            finally { en.Dispose(); }
+            return -1;
+        }
+
         #endregion
 
         #region Public Methods — Cluster / Gap Detection
@@ -1093,6 +1704,7 @@ namespace BalloonFlow
         /// </summary>
         public int GetGapLengthForward(int slotIndex)
         {
+            EnsureSlotOccupancySynced();
             if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return 0;
             if (_slots[slotIndex].dartColor >= 0) return 0;
 
@@ -1112,6 +1724,7 @@ namespace BalloonFlow
         /// </summary>
         public int GetGapLengthBackward(int slotIndex)
         {
+            EnsureSlotOccupancySynced();
             if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return 0;
             if (_slots[slotIndex].dartColor >= 0) return 0;
 
@@ -1153,6 +1766,7 @@ namespace BalloonFlow
         /// </summary>
         public bool CanPlaceWithoutSplittingCluster(int slotIndex)
         {
+            EnsureSlotOccupancySynced();
             if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return false;
             if (_slots[slotIndex].dartColor >= 0) return false; // occupied
 
@@ -1554,6 +2168,7 @@ namespace BalloonFlow
         /// <returns>True if frozen successfully.</returns>
         public bool FreezeDart(int slotIndex)
         {
+            EnsureSlotOccupancySynced();
             if (_slots == null || slotIndex < 0 || slotIndex >= _slotCount) return false;
             if (_slots[slotIndex].dartColor < 0) return false;
 
@@ -1631,6 +2246,19 @@ namespace BalloonFlow
                     _slots[emptySlot].dartColor = info.color;
                     _slots[emptySlot].holderId = info.holderId;
                     _slots[emptySlot].dartId = info.dartId;
+                    var dart = new DartOnRail
+                    {
+                        dartId = info.dartId,
+                        dartColor = info.color,
+                        holderId = info.holderId,
+                        progress = GetPathDistanceForSlot(emptySlot),
+                        isFrozen = false,
+                        placedSeq = _nextPlacedSeq++,
+                        slotIndex = emptySlot
+                    };
+                    _darts.Add(dart);
+                    _dartById[info.dartId] = dart;
+                    UpdateClusterHeadCache(dart);
                     _occupiedCount++;
 
                     // Create visual for reinserted dart
@@ -1670,10 +2298,18 @@ namespace BalloonFlow
         /// <summary>
         /// Calculates the path distance for a slot at the current belt offset.
         /// Use once at deployment start, then pass to GetSlotAtPathDistance each frame.
+        /// 데드락 buffer slot (slotIndex >= _slotCount) 인 경우 정상 belt 범위 (0~totalPathLen) 안으로 wrap.
+        /// 버퍼 dart 의 visual 위치는 normal slot 위치와 겹쳐 packing physics 가 자연 분리.
         /// </summary>
         public float GetPathDistanceForSlot(int slotIndex)
         {
-            return slotIndex * _slotSpacing + _rotationOffset;
+            float distance = slotIndex * _slotSpacing + _rotationOffset;
+            if (_totalPathLength > 0f)
+            {
+                // 강제 wrap (옵션 a) — buffer slot 이 belt 범위 안으로 들어옴.
+                distance = ((distance % _totalPathLength) + _totalPathLength) % _totalPathLength;
+            }
+            return distance;
         }
 
         /// <summary>
@@ -1711,11 +2347,14 @@ namespace BalloonFlow
             _rotationOffset = 0f;
             _nextDartId = 0;
             _nextPlacedSeq = 0;
+            _nextReservationOrder = 0;
             _boardFinished = false;
             _darts.Clear();
             _dartById.Clear();
+            _clusterHeadByHolder.Clear();
             _deployPoints.Clear();
             _activeDeployPoints.Clear();
+            _holderReservations.Clear();
             _frozenDartInfos.Clear();
             _activeDeploySlot = -1;
             _activeDeployHolderId = -1;
@@ -1730,8 +2369,11 @@ namespace BalloonFlow
             _boardFinished = true;
             _deployPoints.Clear();
             _activeDeployPoints.Clear();
+            _holderReservations.Clear();
+            _nextReservationOrder = 0;
             _darts.Clear();
             _dartById.Clear();
+            _clusterHeadByHolder.Clear();
             // Force-clear all slots immediately
             if (_slots != null)
             {
@@ -1750,8 +2392,11 @@ namespace BalloonFlow
             _boardFinished = true;
             _deployPoints.Clear();
             _activeDeployPoints.Clear();
+            _holderReservations.Clear();
+            _nextReservationOrder = 0;
             _darts.Clear();
             _dartById.Clear();
+            _clusterHeadByHolder.Clear();
         }
 
         private void HandleContinueApplied(OnContinueApplied evt)
@@ -1938,6 +2583,99 @@ namespace BalloonFlow
                     }
                 }
             }
+        }
+
+
+        // V2 아키텍처 freeze 추적 — 회전 중 deploy block 도달한 holder 의 cluster 전체 freeze.
+        // 매 frame 재평가, 조건 해제 시 자동 unfreeze.
+        private readonly System.Collections.Generic.HashSet<int> _v2FrozenHolders = new System.Collections.Generic.HashSet<int>();
+        private readonly System.Collections.Generic.HashSet<int> _v2ShouldFreezeBuffer = new System.Collections.Generic.HashSet<int>();
+
+        private void V2UpdateFreezeOnDeployBlock()
+        {
+            _v2ShouldFreezeBuffer.Clear();
+
+            if (_deployPoints.Count > 0 && _activeDeployPoints.Count > 0 && _darts.Count > 0)
+            {
+                var en = _deployPoints.GetEnumerator();
+                try
+                {
+                    while (en.MoveNext())
+                    {
+                        int deployHolderId = en.Current.Key;
+                        if (!_activeDeployPoints.Contains(deployHolderId)) continue;
+                        float blockProgress = GetDeployBlockProgress(en.Current.Value);
+
+                        // Deploy holder 의 색상 — 같은 색 cluster 는 freeze 안 함 (시각 merge).
+                        int deployColor = -1;
+                        if (HolderManager.HasInstance)
+                        {
+                            var hd = HolderManager.Instance.FindHolderPublic(deployHolderId);
+                            if (hd != null) deployColor = hd.color;
+                        }
+
+                        for (int i = 0; i < _darts.Count; i++)
+                        {
+                            DartOnRail dart = _darts[i];
+                            if (dart.holderId == deployHolderId) continue;
+                            // 같은 색 cluster 는 freeze X (deploy 가 같은 색이면 merge)
+                            if (deployColor >= 0 && dart.dartColor == deployColor) continue;
+                            float distToBlock = ForwardDistance(dart.progress, blockProgress);
+                            if (distToBlock <= DartPhysicalGap)
+                            {
+                                _v2ShouldFreezeBuffer.Add(dart.holderId);
+                            }
+                        }
+                    }
+                }
+                finally { en.Dispose(); }
+            }
+
+            // Apply freeze state — V2 가 관리하는 holder 들만 set/clear.
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                DartOnRail dart = _darts[i];
+                bool shouldFreeze = _v2ShouldFreezeBuffer.Contains(dart.holderId);
+                bool wasV2Frozen = _v2FrozenHolders.Contains(dart.holderId);
+
+                if (shouldFreeze) dart.isFrozen = true;
+                else if (wasV2Frozen) dart.isFrozen = false;
+            }
+
+            // Update tracker
+            _v2FrozenHolders.Clear();
+            var bufEn = _v2ShouldFreezeBuffer.GetEnumerator();
+            try { while (bufEn.MoveNext()) _v2FrozenHolders.Add(bufEn.Current); }
+            finally { bufEn.Dispose(); }
+        }
+
+        private void FreezeDartsAtDeployPointBlocks()
+        {
+            if (_deployPoints.Count == 0 || _activeDeployPoints.Count == 0 || _darts.Count == 0) return;
+
+            var deployPointEn = _deployPoints.GetEnumerator();
+            try
+            {
+                while (deployPointEn.MoveNext())
+                {
+                    int holderId = deployPointEn.Current.Key;
+                    if (!_activeDeployPoints.Contains(holderId)) continue;
+
+                    float deployProgress = deployPointEn.Current.Value;
+                    float blockProgress = GetDeployBlockProgress(deployProgress);
+
+                    for (int i = 0; i < _darts.Count; i++)
+                    {
+                        DartOnRail dart = _darts[i];
+                        if (dart == null || dart.isFrozen || dart.holderId == holderId) continue;
+
+                        float distToBlock = ForwardDistance(dart.progress, blockProgress);
+                        if (distToBlock <= DartPhysicalGap)
+                            dart.isFrozen = true;
+                    }
+                }
+            }
+            finally { deployPointEn.Dispose(); }
         }
 
         /// <summary>

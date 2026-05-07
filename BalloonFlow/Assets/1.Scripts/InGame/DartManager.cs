@@ -98,6 +98,9 @@ namespace BalloonFlow
         /// </summary>
         private readonly HashSet<int> _reservedTargets = new HashSet<int>();
 
+        // scan tick 안 이미 발사한 holder ID set. 같은 holder 의 다음 head (cache 자동 갱신 후) 가 같은 tick 발사하는 shotgun 차단.
+        private readonly HashSet<int> _firedHoldersThisTick = new HashSet<int>();
+
         private int MAX_FIRES_PER_FRAME => GameManager.HasInstance ? GameManager.Instance.Board.maxFiresPerFrame : 1;
 
         /// <summary>When true, board is cleared or failed — stop all scanning/firing.</summary>
@@ -233,6 +236,7 @@ namespace BalloonFlow
         public void ResetAll()
         {
             ClearAllDarts();
+            DirectionalTargeting.ResetCache();
             _boardFinished = false;
         }
 
@@ -375,6 +379,8 @@ namespace BalloonFlow
         // 프레임당 1회 캐시 (다트 수백 개에서 매번 프로퍼티 접근 방지)
         private float _cachedFadeStart = DEFAULT_CAVE_FADE_START;
         private float _cachedFadeEnd = DEFAULT_CAVE_FADE_END;
+        private float _cachedDartScale = 1f;
+        private float _cachedDartPathOffset = 0f;
         private int _fadeCacheFrame = -1;
 
         private float CaveFadeStart { get { RefreshFadeCache(); return _cachedFadeStart; } }
@@ -386,11 +392,20 @@ namespace BalloonFlow
             if (frame == _fadeCacheFrame) return;
             _fadeCacheFrame = frame;
 
-            if (!GameManager.HasInstance) { _cachedFadeStart = DEFAULT_CAVE_FADE_START; _cachedFadeEnd = DEFAULT_CAVE_FADE_END; return; }
+            if (!GameManager.HasInstance)
+            {
+                _cachedFadeStart = DEFAULT_CAVE_FADE_START;
+                _cachedFadeEnd = DEFAULT_CAVE_FADE_END;
+                _cachedDartScale = 1f;
+                _cachedDartPathOffset = 0f;
+                return;
+            }
             int sides = BoardTileManager.HasInstance ? BoardTileManager.Instance.RailSideCount : 4;
             var b = GameManager.Instance.Board;
             _cachedFadeStart = sides switch { 1 => b.caveFadeStart1Side, 2 => b.caveFadeStart2Side, 3 => b.caveFadeStart3Side, _ => b.caveFadeStart4Side };
             _cachedFadeEnd = sides switch { 1 => b.caveFadeEnd1Side, 2 => b.caveFadeEnd2Side, 3 => b.caveFadeEnd3Side, _ => b.caveFadeEnd4Side };
+            _cachedDartScale = b.dartScale;
+            _cachedDartPathOffset = b.dartPathOffset;
         }
 
         private void UpdateSlotDartPositions()
@@ -499,6 +514,12 @@ namespace BalloonFlow
             RailManager rail = RailManager.Instance;
             bool isOpen = !rail.IsClosedLoop;
             float pathLen = rail.TotalPathLength;
+            RefreshFadeCache();
+            float pathOffset = _cachedDartPathOffset;
+            float dartScale = _cachedDartScale;
+            Vector3 normalScale = Vector3.one * dartScale;
+            float fadeStart = _cachedFadeStart;
+            float fadeEnd = _cachedFadeEnd;
 
             _tempRemoveKeys.Clear();
 
@@ -526,15 +547,11 @@ namespace BalloonFlow
                 Vector3 tangent = rail.GetDirectionAtNormalized(normT);
                 Vector3 inward = Vector3.Cross(tangent, Vector3.up).normalized;
 
-                float pathOffset = GameManager.HasInstance ? GameManager.Instance.Board.dartPathOffset : 0f;
                 pos += inward * pathOffset;
 
                 visual.gameObject.transform.position = pos;
 
                 // 다트 스케일 동적 적용
-                float ds = GameManager.HasInstance ? GameManager.Instance.Board.dartScale : 1f;
-                visual.gameObject.transform.localScale = Vector3.one * ds;
-
                 // Orient — 접선의 안쪽 직각 방향 = 공격 방향
                 if (tangent.sqrMagnitude > 0.001f)
                 {
@@ -547,8 +564,6 @@ namespace BalloonFlow
                 {
                     float t = dart.progress / pathLen;
                     float scale = 1f;
-                    float fadeStart = CaveFadeStart;
-                    float fadeEnd = CaveFadeEnd;
                     float fadeRange = fadeStart - fadeEnd;
                     if (fadeRange > 0f)
                     {
@@ -561,7 +576,11 @@ namespace BalloonFlow
                         }
                     }
                     scale = Mathf.Clamp01(scale);
-                    visual.gameObject.transform.localScale = Vector3.one * ds * scale;
+                    visual.gameObject.transform.localScale = normalScale * scale;
+                }
+                else if (visual.gameObject.transform.localScale != normalScale)
+                {
+                    visual.gameObject.transform.localScale = normalScale;
                 }
             }
 
@@ -763,13 +782,11 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// 다트별 매-프레임 동기 스캔. 매 다트가 풍선의 perpendicular zone에 진입하는 순간 발사.
-        /// MAX_FIRES_PER_FRAME 제약 제거 — 다트별 독립 발사 (한 다트는 한 번만 발사 후 _darts에서 제거).
-        /// _reservedTargets 가 같은 풍선에 대한 중복 발사 방지.
-        /// 시퀀셜 firing 체크: holder별 최저 dartId 미리 1회 계산 (O(N²) → O(N)).
+        /// 다트별 동기 스캔 — scan tick (= belt cellSpacing 이동) 마다 호출.
+        /// 사용자 요구: cluster head / sequential lowest-dartId 제한 제거.
+        /// 한 scan tick 안 모든 eligible dart 발사 — 풍선 1개 = 다트 1발 (_reservedTargets 로 보장).
+        /// 외곽 풍선 균등 hit (선형 + 비선형 outline 모두 대응).
         /// </summary>
-        private readonly Dictionary<int, int> _holderMinDartIdCache = new Dictionary<int, int>();
-
         private void ScanAndFirePerDart()
         {
             if (!RailManager.HasInstance || !BalloonController.HasInstance) return;
@@ -780,34 +797,35 @@ namespace BalloonFlow
 
             bool freeMode = GameManager.HasInstance && GameManager.Instance.Board.dartFreeFireMode;
 
-            // O(N) 사전 계산: holder별 최저 dartId. 이후 sequential 체크는 O(1) 조회.
-            if (!freeMode)
-            {
-                _holderMinDartIdCache.Clear();
-                for (int j = 0; j < darts.Count; j++)
-                {
-                    var d = darts[j];
-                    if (d.dartColor < 0) continue;
-                    if (!_holderMinDartIdCache.TryGetValue(d.holderId, out int existing) || d.dartId < existing)
-                        _holderMinDartIdCache[d.holderId] = d.dartId;
-                }
-            }
+            // 사용자 요구: scan tick 안 holder 별 1발 제한. 매 tick 시작 시 fired-set 초기화.
+            _firedHoldersThisTick.Clear();
+            // 추가 safety: 전역 1발/scan tick — "헤더에서 동시에 하나씩 더" 발사 (다른 holder 또는 cache 갱신된 head)
+            // 차단. belt cellSpacing 이동마다 정확히 1 dart 만 발사.
+            int firesThisTick = 0;
+            const int MAX_FIRES_PER_TICK = 1;
 
+            // head 가 먼저 발사되어야 함. RailManager._clusterHeadByHolder 의 holder 별
+            // lowest placedSeq dart 만 발사 후보. event-maintained — wrap-around 버그 없음, sort 부담 0.
+            // belt 회전 따라 head 위치 자동 변경 → outline 자동 분산 hit (한 column 만 hammering 안 됨).
             for (int i = 0; i < darts.Count; i++)
             {
                 var dart = darts[i];
                 if (dart.dartColor < 0) continue;
 
-                // Sequential firing: 같은 holder의 lowest dartId만 발사 가능.
-                if (!freeMode && _holderMinDartIdCache.TryGetValue(dart.holderId, out int minId) && dart.dartId != minId)
-                    continue;
+                // Head 검사 + scan tick 당 1발 제한 — freeMode 면 모두 발사 (디버그용).
+                if (!freeMode)
+                {
+                    if (firesThisTick >= MAX_FIRES_PER_TICK) break; // 전역 1발/tick 도달
+                    // 이 holder 가 이미 이 tick 에 발사 → skip (cache 갱신된 새 head 도 차단).
+                    if (_firedHoldersThisTick.Contains(dart.holderId)) continue;
+                    var head = rail.GetClusterHeadDart(dart.holderId);
+                    if (head == null || head.dartId != dart.dartId) continue; // 이 dart 는 head 아님
+                }
 
-                // 사용자 요구: slot 기반 위치
                 Vector3 dartPos = rail.GetDartCurrentPosition(dart);
                 Vector3 fireDir = rail.GetDartFiringDirection(dart.dartId);
 
                 // 이미 reserve 된 풍선은 후보에서 제외 → 다음 closest 풍선을 발사 대상으로 받음.
-                // (이전: 한 풍선 reserve 되면 같은 tick 다른 다트들이 그 풍선만 보고 skip → 다른 풍선 못 잡음.)
                 int targetId = DirectionalTargeting.FindTarget(dartPos, fireDir, dart.dartColor, _reservedTargets);
                 if (targetId < 0) continue;
 
@@ -819,21 +837,11 @@ namespace BalloonFlow
                 int dartId = dart.dartId;
                 int holderId = dart.holderId;
                 rail.RemoveDartById(dartId);
+                // RemoveDartById 가 RemoveFromClusterHeadCache 호출 → _clusterHeadByHolder 자동 갱신.
+                // 새 head 가 같은 tick 에 발사되지 않도록 _firedHoldersThisTick 으로 차단.
 
-                // 캐시 업데이트: 이 holder의 새 최저 dartId 재계산. 안 그러면 cache stale로 같은 holder의
-                // 다른 다트가 이번 scan tick에 발사 못 함 → 풍선 절반만 공격되는 현상.
-                if (!freeMode)
-                {
-                    int newMin = int.MaxValue;
-                    for (int j = 0; j < darts.Count; j++)
-                    {
-                        if (darts[j].holderId == holderId && darts[j].dartColor >= 0 && darts[j].dartId < newMin)
-                            newMin = darts[j].dartId;
-                    }
-                    if (newMin == int.MaxValue) _holderMinDartIdCache.Remove(holderId);
-                    else _holderMinDartIdCache[holderId] = newMin;
-                }
-
+                _firedHoldersThisTick.Add(holderId);
+                firesThisTick++;
                 _reservedTargets.Add(targetId);
 
                 // Transfer visual from belt to projectile
