@@ -27,6 +27,10 @@ namespace BalloonFlow
         private const float ICON_Y_OFFSET = 25f; // 활성 +25, 비활성 -25
         private const float ICON_SCALE_DURATION = 0.2f;
 
+        // Rail 슬라이드 인 연출 파라미터 (Top: +120 → 0, Bottom: -120 → 0)
+        private const float RAIL_ENTER_OFFSET = 120f;
+        private const float RAIL_ENTER_DURATION = 0.45f;
+
         #endregion
 
         #region Serialized Fields
@@ -112,6 +116,10 @@ namespace BalloonFlow
         [Header("[RightArea — Lobby Page]")]
         [SerializeField] private Button _btnNoAds;
 
+        [Header("[Rail Enter Animation]")]
+        [SerializeField] private RectTransform _railTop;
+        [SerializeField] private RectTransform _railBottom;
+
         #endregion
 
         #region Fields
@@ -126,6 +134,10 @@ namespace BalloonFlow
         // Gold text display tween — 카운트업/다운 연출용 캐시값
         private int _displayedCoins;
         private Tweener _goldTween;
+
+        // Rail 슬라이드 인 트윈 캐시 (중복 호출 시 Kill 후 재시작)
+        private Tweener _railTopTween;
+        private Tweener _railBottomTween;
 
         // Nav text base Y positions (cached before animation)
         private float _baseYShop, _baseYHome, _baseYSetting;
@@ -165,6 +177,7 @@ namespace BalloonFlow
             BuildPageContainer();
             _uiShop = _pageShop != null ? _pageShop.GetComponent<UIShop>() : null;
             CacheNavTextBaseY();
+            ResolveRailRefs();
 
             if (_btnShop != null) _btnShop.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(0); });
             if (_btnHome != null) _btnHome.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(1); });
@@ -175,6 +188,58 @@ namespace BalloonFlow
 
             // Start on Home(Lobby) page
             SetPageImmediate(1);
+
+            // 최초 진입 시 Rail 슬라이드 인 연출 1회 재생
+            PlayRailEnterAnimation();
+        }
+
+        /// <summary>
+        /// Inspector 미할당 fallback — TopBarArea/BottomNav 하위에서 'Rail' 자식 RectTransform 을 탐색.
+        /// 못 찾으면 조용히 null 유지 (애니메이션 스킵).
+        /// </summary>
+        private void ResolveRailRefs()
+        {
+            if (_railTop == null && _topBarArea != null)
+            {
+                var topRail = _topBarArea.Find("Rail");
+                if (topRail != null) _railTop = topRail as RectTransform;
+            }
+
+            if (_railBottom == null)
+            {
+                Transform bottomRail = transform.Find("BottomNavIArea/Rail");
+                if (bottomRail == null) bottomRail = transform.Find("BottomNav/Rail");
+                if (bottomRail == null) bottomRail = transform.Find("BottomNavArea/Rail");
+                if (bottomRail != null) _railBottom = bottomRail as RectTransform;
+            }
+        }
+
+        /// <summary>
+        /// Top/Bottom Rail 을 화면 바깥(±RAIL_ENTER_OFFSET)에서 원위치(0)로 OutCubic 곡선 슬라이드.
+        /// 진입/탭 복귀 시 호출. 시작값은 anchoredPosition 직접 할당으로 적용 (페이지 트윈 패턴과 일관).
+        /// </summary>
+        public void PlayRailEnterAnimation()
+        {
+            _railTopTween?.Kill();
+            _railBottomTween?.Kill();
+
+            if (_railTop != null)
+            {
+                var p = _railTop.anchoredPosition;
+                _railTop.anchoredPosition = new Vector2(p.x, RAIL_ENTER_OFFSET);
+                _railTopTween = _railTop.DOAnchorPosY(0f, RAIL_ENTER_DURATION)
+                    .SetEase(Ease.OutCubic)
+                    .SetUpdate(true);
+            }
+
+            if (_railBottom != null)
+            {
+                var p = _railBottom.anchoredPosition;
+                _railBottom.anchoredPosition = new Vector2(p.x, -RAIL_ENTER_OFFSET);
+                _railBottomTween = _railBottom.DOAnchorPosY(0f, RAIL_ENTER_DURATION)
+                    .SetEase(Ease.OutCubic)
+                    .SetUpdate(true);
+            }
         }
 
         /// <summary>
@@ -278,6 +343,8 @@ namespace BalloonFlow
             base.OnDestroy();
             _pageTween?.Kill();
             _goldTween?.Kill();
+            _railTopTween?.Kill();
+            _railBottomTween?.Kill();
         }
 
         private void Update()
@@ -702,6 +769,7 @@ namespace BalloonFlow
             if (pageIndex == _currentPageIndex) return;
 
             _currentPageIndex = pageIndex;
+            if (pageIndex == 1) PlayRailEnterAnimation();
             AnimateToPage(pageIndex);
             UpdateNavState(pageIndex);
             if (pageIndex == 0 && _uiShop != null) _uiShop.ResetView();
@@ -821,6 +889,7 @@ namespace BalloonFlow
                 AnimateToPage(targetPage);
                 UpdateNavState(targetPage);
                 if (targetPage == 0 && prev != 0 && _uiShop != null) _uiShop.ResetView();
+                if (targetPage == 1 && prev != 1) PlayRailEnterAnimation();
             }
         }
 
