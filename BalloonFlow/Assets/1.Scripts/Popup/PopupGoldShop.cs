@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -10,6 +9,7 @@ namespace BalloonFlow
     /// 골드 상점 팝업.
     /// Inspector에서 UI 링크 연결. 상품 리스트는 PopupShopListItem 프리팹으로 동적 생성.
     /// BtnMoreProducts: 스크롤에 아이템 추가.
+    /// TopBar 코인 표시는 AnimatedCoinLabel 가 TopBarArea/GoldPanel/TxtGold 에 자동 부착되어 처리.
     /// </summary>
     public class PopupGoldShop : UIBase
     {
@@ -20,7 +20,8 @@ namespace BalloonFlow
         [Tooltip("prefab 안의 나가기 버튼을 Inspector에서 직접 연결. 미연결 시 _frame.BtnExit 와 이름 기반 자동 탐색으로 fallback.")]
         [SerializeField] private Button _btnExitDirect;
 
-        [Header("[Top Panel]")]
+        [Header("[Top Panel — Fallback 즉시 스냅 전용]")]
+        [Tooltip("prefab 와이어링이 TopBar 노드를 가리키면 AnimatedCoinLabel 이 우선 갱신. 미와이어링 fallback 으로 OpenUI 시 1회 즉시 스냅.")]
         [SerializeField] private TMP_Text _txtGold;
 
         public Button CloseButton => _frame != null ? _frame.BtnExit : null;
@@ -47,9 +48,6 @@ namespace BalloonFlow
 
         private System.Action _onCloseCallback;
 
-        private int _displayedCoins;
-        private Tweener _goldTween;
-
         protected override void Awake()
         {
             base.Awake();
@@ -68,6 +66,8 @@ namespace BalloonFlow
 
             if (_btnMoreProducts != null)
                 _btnMoreProducts.onClick.AddListener(LoadMoreProducts);
+
+            EnsureTopBarBinding();
         }
 
         private void BindExitClick(Button btn, HashSet<Button> bound)
@@ -81,6 +81,15 @@ namespace BalloonFlow
         private void OnExitClicked()
         {
             CloseUI();
+        }
+
+        private void EnsureTopBarBinding()
+        {
+            Transform topBar = FindChildRecursive(transform, "TopBarArea");
+            Transform gold = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
+            Transform txt = gold != null ? FindChildRecursive(gold, "TxtGold") : null;
+            if (txt != null && txt.GetComponent<AnimatedCoinLabel>() == null)
+                txt.gameObject.AddComponent<AnimatedCoinLabel>();
         }
 
         private static Transform FindChildRecursive(Transform parent, string childName)
@@ -125,74 +134,13 @@ namespace BalloonFlow
             ResetAndLoadProducts();
         }
 
-        private void OnEnable()
-        {
-            EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
-            if (CurrencyManager.HasInstance)
-            {
-                _displayedCoins = CurrencyManager.Instance.Coins;
-                ApplyTopBarGold(_displayedCoins);
-            }
-        }
-
-        private void OnDisable()
-        {
-            EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
-            _goldTween?.Kill();
-        }
-
-        protected override void OnDestroy()
-        {
-            base.OnDestroy();
-            _goldTween?.Kill();
-        }
-
-        private void HandleCoinChanged(OnCoinChanged evt)
-        {
-            if (evt.delta == 0)
-            {
-                _goldTween?.Kill();
-                _displayedCoins = evt.currentCoins;
-                ApplyTopBarGold(evt.currentCoins);
-                return;
-            }
-            AnimateTopBarGold(evt.currentCoins);
-        }
-
-        private void AnimateTopBarGold(int target)
-        {
-            _goldTween?.Kill();
-            if (_displayedCoins == target)
-            {
-                ApplyTopBarGold(target);
-                return;
-            }
-            _goldTween = DOTween.To(
-                    () => _displayedCoins,
-                    v => { _displayedCoins = v; ApplyTopBarGold(v); },
-                    target,
-                    0.45f)
-                .SetEase(Ease.OutCubic)
-                .SetUpdate(true)
-                .OnComplete(() =>
-                {
-                    _displayedCoins = target;
-                    ApplyTopBarGold(target);
-                });
-        }
-
-        private void ApplyTopBarGold(int value)
-        {
-            if (_txtGold != null) _txtGold.text = value.ToString("N0");
-        }
-
-        /// <summary>보유 골드 갱신 — 즉시 스냅(트윈 종료) + 캐시 동기화.</summary>
+        /// <summary>보유 골드 즉시 스냅 — prefab 의 _txtGold 와이어링이 TopBar 가 아닌 다른 노드를
+        /// 가리킬 때 fallback. TopBar 잔액은 AnimatedCoinLabel 이 EventBus 로 자동 갱신.</summary>
         private void RefreshGold()
         {
             if (!CurrencyManager.HasInstance) return;
-            _goldTween?.Kill();
-            _displayedCoins = CurrencyManager.Instance.Coins;
-            ApplyTopBarGold(_displayedCoins);
+            if (_txtGold != null)
+                _txtGold.text = CurrencyManager.Instance.Coins.ToString("N0");
         }
 
         /// <summary>상품 리스트 초기화 + 첫 페이지 로드.</summary>

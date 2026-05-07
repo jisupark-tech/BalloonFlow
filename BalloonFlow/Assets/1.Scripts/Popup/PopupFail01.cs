@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -20,7 +19,7 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _costText;
         [SerializeField] private TMP_Text _costTextOutline;
 
-        [Header("[골드 표시]")]
+        [Header("[골드 표시 — 보수적 보존(미사용). TopBar 잔액은 AnimatedCoinLabel 가 갱신.]")]
         [SerializeField] private TMP_Text _txtGold;
         [SerializeField] private TMP_Text _txtGoldOutline;
 
@@ -31,62 +30,10 @@ namespace BalloonFlow
         private Button DeclineBtn => _btnDecline != null ? _btnDecline : (_frame != null ? _frame.BtnHorizRed : null);
         private Button ExitBtn => _btnExit != null ? _btnExit : (_frame != null ? _frame.BtnExit : null);
 
-        private int _displayedCoins;
-        private Tweener _goldTween;
-
         private void OnEnable()
         {
             UpdateCostDisplay();
-            UpdateGoldDisplay();
             PlayImgFailAnimation();
-            EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
-        }
-
-        private void OnDisable()
-        {
-            EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
-            _goldTween?.Kill();
-        }
-
-        private void HandleCoinChanged(OnCoinChanged evt)
-        {
-            if (evt.delta == 0)
-            {
-                _goldTween?.Kill();
-                _displayedCoins = evt.currentCoins;
-                ApplyTopBarGold(evt.currentCoins);
-                return;
-            }
-            AnimateTopBarGold(evt.currentCoins);
-        }
-
-        private void AnimateTopBarGold(int target)
-        {
-            _goldTween?.Kill();
-            if (_displayedCoins == target)
-            {
-                ApplyTopBarGold(target);
-                return;
-            }
-            _goldTween = DOTween.To(
-                    () => _displayedCoins,
-                    v => { _displayedCoins = v; ApplyTopBarGold(v); },
-                    target,
-                    0.45f)
-                .SetEase(Ease.OutCubic)
-                .SetUpdate(true)
-                .OnComplete(() =>
-                {
-                    _displayedCoins = target;
-                    ApplyTopBarGold(target);
-                });
-        }
-
-        private void ApplyTopBarGold(int value)
-        {
-            string str = value.ToString("N0");
-            if (_txtGold != null) _txtGold.text = str;
-            if (_txtGoldOutline != null) _txtGoldOutline.text = str;
         }
 
         private void PlayImgFailAnimation()
@@ -116,6 +63,8 @@ namespace BalloonFlow
                 if (found != null) _btnGoldPlus = found.GetComponent<Button>();
             }
             if (_btnGoldPlus != null) _btnGoldPlus.onClick.AddListener(OnGoldPlusClicked);
+
+            EnsureTopBarBinding();
         }
 
         protected override void OnDestroy()
@@ -125,7 +74,15 @@ namespace BalloonFlow
             if (DeclineBtn != null) DeclineBtn.onClick.RemoveAllListeners();
             if (ExitBtn != null) ExitBtn.onClick.RemoveAllListeners();
             if (_btnGoldPlus != null) _btnGoldPlus.onClick.RemoveAllListeners();
-            _goldTween?.Kill();
+        }
+
+        private void EnsureTopBarBinding()
+        {
+            Transform topBar = FindChildRecursive(transform, "TopBarArea");
+            Transform gold = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
+            Transform txt = gold != null ? FindChildRecursive(gold, "TxtGold") : null;
+            if (txt != null && txt.GetComponent<AnimatedCoinLabel>() == null)
+                txt.gameObject.AddComponent<AnimatedCoinLabel>();
         }
 
         private static Transform FindChildRecursive(Transform parent, string childName)
@@ -152,16 +109,7 @@ namespace BalloonFlow
                 _frame.ShowExitButton(true);
             }
             UpdateCostDisplay();
-            UpdateGoldDisplay();
             OpenUI();
-        }
-
-        private void UpdateGoldDisplay()
-        {
-            if (!CurrencyManager.HasInstance) return;
-            _goldTween?.Kill();
-            _displayedCoins = CurrencyManager.Instance.Coins;
-            ApplyTopBarGold(_displayedCoins);
         }
 
         private void OnContinueClicked()

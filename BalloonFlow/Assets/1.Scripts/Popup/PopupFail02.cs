@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -15,7 +14,7 @@ namespace BalloonFlow
         [SerializeField] private Button _btnHome;
         [SerializeField] private Button _btnExit;
 
-        [Header("[골드 표시]")]
+        [Header("[골드 표시 — 보수적 보존(미사용). TopBar 잔액은 AnimatedCoinLabel 가 갱신.]")]
         [SerializeField] private TMP_Text _txtGold;
         [SerializeField] private TMP_Text _txtGoldOutline;
 
@@ -63,9 +62,6 @@ namespace BalloonFlow
         private Button HomeBtn => _btnHome != null ? _btnHome : (_frame != null ? _frame.BtnHorizRed : null);
         private Button ExitBtn => _btnExit != null ? _btnExit : (_frame != null ? _frame.BtnExit : null);
 
-        private int _displayedCoins;
-        private Tweener _goldTween;
-
         protected override void Awake()
         {
             base.Awake();
@@ -88,6 +84,29 @@ namespace BalloonFlow
             if (RetryBtn != null) RetryBtn.onClick.AddListener(OnRetryClicked);
             if (HomeBtn != null) HomeBtn.onClick.AddListener(OnHomeClicked);
             if (ExitBtn != null) ExitBtn.onClick.AddListener(OnHomeClicked);
+
+            EnsureTopBarBinding();
+        }
+
+        private void EnsureTopBarBinding()
+        {
+            Transform topBar = FindChildRecursive(transform, "TopBarArea");
+            Transform gold = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
+            Transform txt = gold != null ? FindChildRecursive(gold, "TxtGold") : null;
+            if (txt != null && txt.GetComponent<AnimatedCoinLabel>() == null)
+                txt.gameObject.AddComponent<AnimatedCoinLabel>();
+        }
+
+        private static Transform FindChildRecursive(Transform parent, string childName)
+        {
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform child = parent.GetChild(i);
+                if (child.name == childName) return child;
+                Transform deep = FindChildRecursive(child, childName);
+                if (deep != null) return deep;
+            }
+            return null;
         }
 
         private void LoadStageSpritesFromResources()
@@ -107,7 +126,6 @@ namespace BalloonFlow
             if (RetryBtn != null) RetryBtn.onClick.RemoveAllListeners();
             if (HomeBtn != null) HomeBtn.onClick.RemoveAllListeners();
             if (ExitBtn != null) ExitBtn.onClick.RemoveAllListeners();
-            _goldTween?.Kill();
         }
 
         private bool _lifeConsumed;
@@ -130,57 +148,11 @@ namespace BalloonFlow
 
             if (_frame != null) _frame.ApplyDifficulty(diff);
             UpdateHardLevelOption(diff);
-            UpdateGoldDisplay();
-
-            EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
         }
 
         private void OnDisable()
         {
             _lifeConsumed = false; // 다음 실패 시 다시 소모 가능
-            EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
-            _goldTween?.Kill();
-        }
-
-        private void HandleCoinChanged(OnCoinChanged evt)
-        {
-            if (evt.delta == 0)
-            {
-                _goldTween?.Kill();
-                _displayedCoins = evt.currentCoins;
-                ApplyTopBarGold(evt.currentCoins);
-                return;
-            }
-            AnimateTopBarGold(evt.currentCoins);
-        }
-
-        private void AnimateTopBarGold(int target)
-        {
-            _goldTween?.Kill();
-            if (_displayedCoins == target)
-            {
-                ApplyTopBarGold(target);
-                return;
-            }
-            _goldTween = DOTween.To(
-                    () => _displayedCoins,
-                    v => { _displayedCoins = v; ApplyTopBarGold(v); },
-                    target,
-                    0.45f)
-                .SetEase(Ease.OutCubic)
-                .SetUpdate(true)
-                .OnComplete(() =>
-                {
-                    _displayedCoins = target;
-                    ApplyTopBarGold(target);
-                });
-        }
-
-        private void ApplyTopBarGold(int value)
-        {
-            string str = value.ToString("N0");
-            if (_txtGold != null) _txtGold.text = str;
-            if (_txtGoldOutline != null) _txtGoldOutline.text = str;
         }
 
         public void Show(DifficultyPurpose difficulty)
@@ -195,7 +167,6 @@ namespace BalloonFlow
                 _frame.ShowExitButton(true);
             }
             UpdateHardLevelOption(difficulty);
-            UpdateGoldDisplay();
             OpenUI();
         }
 
@@ -305,14 +276,6 @@ namespace BalloonFlow
                     if (mat != null) _txtHardLevelOutline.fontMaterial = mat;
                 }
             }
-        }
-
-        private void UpdateGoldDisplay()
-        {
-            if (!CurrencyManager.HasInstance) return;
-            _goldTween?.Kill();
-            _displayedCoins = CurrencyManager.Instance.Coins;
-            ApplyTopBarGold(_displayedCoins);
         }
 
         private void OnRetryClicked()

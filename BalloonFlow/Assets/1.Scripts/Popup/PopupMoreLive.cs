@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -12,6 +11,7 @@ namespace BalloonFlow
     /// - GreenBtn: 900 골드 차감 후 Life 풀 충전 (골드 부족 시 무동작)
     /// - BlueBtn: 광고 시청 보상 — Ad 미연동 상태이므로 fallback +1 Life 즉시 지급
     /// - 닫기 (Exit)
+    /// TopBar 코인 표시는 AnimatedCoinLabel 가 TopBarArea/GoldPanel/TxtGold 에 자동 부착되어 처리.
     /// </summary>
     public class PopupMoreLive : UIBase
     {
@@ -44,14 +44,6 @@ namespace BalloonFlow
         [Header("[Inner Frame]")]
         [SerializeField] private Image _imgInnerFrame;
 
-        [Header("[TopBar — GoldPanel]")]
-        [Tooltip("TopBarArea>GoldPanel>TxtGold — 잔액 표시(코스트 텍스트 _txtGold 와 별개). prefab 에서 Inspector 와이어링 필요.")]
-        [SerializeField] private TMP_Text _txtTopBarGold;
-        [SerializeField] private TMP_Text _txtTopBarGoldOutline;
-
-        private int _displayedCoins;
-        private Tweener _goldTween;
-
         protected override void Awake()
         {
             base.Awake();
@@ -62,6 +54,8 @@ namespace BalloonFlow
                 if (_frame.BtnVertBlue != null) _frame.BtnVertBlue.onClick.AddListener(OnAdRewardClicked);
                 if (_frame.BtnExit != null) _frame.BtnExit.onClick.AddListener(() => CloseUI());
             }
+
+            EnsureTopBarBinding();
         }
 
         protected override void OnDestroy()
@@ -73,64 +67,27 @@ namespace BalloonFlow
                 if (_frame.BtnVertBlue != null) _frame.BtnVertBlue.onClick.RemoveAllListeners();
                 if (_frame.BtnExit != null) _frame.BtnExit.onClick.RemoveAllListeners();
             }
-            _goldTween?.Kill();
         }
 
-        private void OnEnable()
+        private void EnsureTopBarBinding()
         {
-            EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
-            if (CurrencyManager.HasInstance)
+            Transform topBar = FindChildRecursive(transform, "TopBarArea");
+            Transform gold = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
+            Transform txt = gold != null ? FindChildRecursive(gold, "TxtGold") : null;
+            if (txt != null && txt.GetComponent<AnimatedCoinLabel>() == null)
+                txt.gameObject.AddComponent<AnimatedCoinLabel>();
+        }
+
+        private static Transform FindChildRecursive(Transform parent, string childName)
+        {
+            for (int i = 0; i < parent.childCount; i++)
             {
-                _displayedCoins = CurrencyManager.Instance.Coins;
-                ApplyTopBarGold(_displayedCoins);
+                Transform child = parent.GetChild(i);
+                if (child.name == childName) return child;
+                Transform deep = FindChildRecursive(child, childName);
+                if (deep != null) return deep;
             }
-        }
-
-        private void OnDisable()
-        {
-            EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
-            _goldTween?.Kill();
-        }
-
-        private void HandleCoinChanged(OnCoinChanged evt)
-        {
-            if (evt.delta == 0)
-            {
-                _goldTween?.Kill();
-                _displayedCoins = evt.currentCoins;
-                ApplyTopBarGold(evt.currentCoins);
-                return;
-            }
-            AnimateTopBarGold(evt.currentCoins);
-        }
-
-        private void AnimateTopBarGold(int target)
-        {
-            _goldTween?.Kill();
-            if (_displayedCoins == target)
-            {
-                ApplyTopBarGold(target);
-                return;
-            }
-            _goldTween = DOTween.To(
-                    () => _displayedCoins,
-                    v => { _displayedCoins = v; ApplyTopBarGold(v); },
-                    target,
-                    0.45f)
-                .SetEase(Ease.OutCubic)
-                .SetUpdate(true)
-                .OnComplete(() =>
-                {
-                    _displayedCoins = target;
-                    ApplyTopBarGold(target);
-                });
-        }
-
-        private void ApplyTopBarGold(int value)
-        {
-            string str = value.ToString("N0");
-            if (_txtTopBarGold != null) _txtTopBarGold.text = str;
-            if (_txtTopBarGoldOutline != null) _txtTopBarGoldOutline.text = str;
+            return null;
         }
 
         public override void OpenUI()
@@ -166,7 +123,7 @@ namespace BalloonFlow
             if (_txtLife != null) _txtLife.text = lifeStr;
             if (_txtLifeOutline != null) _txtLifeOutline.text = lifeStr;
 
-            // Coin cost
+            // Coin cost — popup 내부 cost 라벨 전용 (TopBar 잔액과 분리)
             int cost = 900; // LifeManager.COIN_REFILL_COST
             string costStr = cost.ToString("N0");
             if (_txtGold != null) _txtGold.text = costStr;
