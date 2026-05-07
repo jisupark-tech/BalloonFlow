@@ -32,6 +32,9 @@ namespace BalloonFlow
         // TextLevelOutline: alpha 0.45 (색상 변경 없이)
         private const float OUTLINE_INACTIVE_ALPHA = 0.45f;
 
+        // Hard 난이도 전용 dim sprite (Normal/SuperHard는 prefab 원본 유지)
+        private const string PURPLE_BOX_SPRITE_PATH = "Sprites/purpleBox";
+
         #endregion
 
         #region Serialized Fields
@@ -59,6 +62,9 @@ namespace BalloonFlow
         private int _levelId;
         private bool _isActive;
 
+        private static Sprite s_purpleBoxSprite;
+        private Sprite _originalDimSprite;
+
         #endregion
 
         #region Properties
@@ -69,6 +75,11 @@ namespace BalloonFlow
         #endregion
 
         #region Public Methods
+
+        private void Awake()
+        {
+            if (_imgBoxDim != null) _originalDimSprite = _imgBoxDim.sprite;
+        }
 
         /// <summary>
         /// Setup with difficulty for inactive color.
@@ -135,6 +146,13 @@ namespace BalloonFlow
             if (_imgBoxDim != null)
             {
                 _imgBoxDim.gameObject.SetActive(true);
+
+                // Hard 난이도일 때만 purpleBox sprite로 교체, 그 외엔 prefab 원본 유지
+                Sprite targetSprite = difficulty == DifficultyPurpose.Hard
+                    ? GetPurpleBoxSprite()
+                    : _originalDimSprite;
+                if (targetSprite != null) _imgBoxDim.sprite = targetSprite;
+
                 _imgBoxDim.color = difficulty switch
                 {
                     DifficultyPurpose.SuperHard => DIM_RED,
@@ -167,6 +185,13 @@ namespace BalloonFlow
             if (_imgBoxEffect != null) _imgBoxEffect.gameObject.SetActive(false);
 
             transform.localScale = isLocked ? Vector3.one * LOCKED_SCALE : Vector3.one;
+        }
+
+        private static Sprite GetPurpleBoxSprite()
+        {
+            if (s_purpleBoxSprite == null)
+                s_purpleBoxSprite = Resources.Load<Sprite>(PURPLE_BOX_SPRITE_PATH);
+            return s_purpleBoxSprite;
         }
 
         private void ApplyAnimator(DifficultyPurpose difficulty)
