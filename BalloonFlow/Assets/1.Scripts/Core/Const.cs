@@ -34,6 +34,7 @@ namespace BalloonFlow
         public const string POPUP_SETTINGS        = "Popup/PopupSettings";
         public const string POPUP_GOLD_SHOP       = "Popup/PopupGoldShop";
         public const string POPUP_QUIT            = "Popup/PopupQuit";
+        public const string POPUP_PROFILE         = "Popup/PopupProfile";
         public const string POPUP_DESCRIPTION     = "Popup/PopupDescription";
         public const string POPUP_ITEM_DESC       = "Popup/PopupItemDescription";
         public const string POPUP_BUY_ITEM        = "Popup/PopupBuyItem";

@@ -84,6 +84,7 @@ namespace BalloonFlow
                 if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.RemoveListener(OnGoToShop);
                 if (_lobby.BtnLifeBar != null) _lobby.BtnLifeBar.onClick.RemoveListener(OnLifeBarClicked);
                 if (_lobby.BtnNoAds != null) _lobby.BtnNoAds.onClick.RemoveListener(OnNoAdsClicked);
+                if (_lobby.BtnProfilePanel != null) _lobby.BtnProfilePanel.onClick.RemoveListener(OnProfileClicked);
             }
         }
 
@@ -119,6 +120,7 @@ namespace BalloonFlow
                 if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.AddListener(OnGoToShop);
                 if (_lobby.BtnLifeBar != null) _lobby.BtnLifeBar.onClick.AddListener(OnLifeBarClicked);
                 if (_lobby.BtnNoAds != null) _lobby.BtnNoAds.onClick.AddListener(OnNoAdsClicked);
+                if (_lobby.BtnProfilePanel != null) _lobby.BtnProfilePanel.onClick.AddListener(OnProfileClicked);
             }
         }
 
@@ -236,6 +238,12 @@ namespace BalloonFlow
         {
             if (UIManager.HasInstance)
                 UIManager.Instance.OpenUI<PopupNoAds>("Popup/PopupNoAds");
+        }
+
+        void OnProfileClicked()
+        {
+            if (UIManager.HasInstance)
+                UIManager.Instance.OpenUI<PopupProfile>(Const.POPUP_PROFILE);
         }
 
         /// <summary>하트 바 터치 시 상태별 분기.</summary>
