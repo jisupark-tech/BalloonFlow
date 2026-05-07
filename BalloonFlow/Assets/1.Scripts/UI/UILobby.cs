@@ -115,6 +115,7 @@ namespace BalloonFlow
 
         [Header("[RightArea — Lobby Page]")]
         [SerializeField] private Button _btnNoAds;
+        [SerializeField] private Button _btnProfilePanel;
 
         [Header("[Rail Enter Animation]")]
         [SerializeField] private RectTransform _railTop;
@@ -164,6 +165,7 @@ namespace BalloonFlow
         public Button BtnHome => _btnHome;
         public Button BtnSetting => _btnSetting;
         public Button BtnNoAds => _btnNoAds;
+        public Button BtnProfilePanel => _btnProfilePanel;
         public int CurrentPageIndex => _currentPageIndex;
 
         #endregion
