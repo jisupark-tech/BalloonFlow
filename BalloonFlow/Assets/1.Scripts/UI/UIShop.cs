@@ -210,9 +210,9 @@ namespace BalloonFlow
             var vlg = _contentRoot.GetComponent<VerticalLayoutGroup>();
             if (vlg == null) vlg = _contentRoot.gameObject.AddComponent<VerticalLayoutGroup>();
             vlg.childControlHeight = true;
-            vlg.childControlWidth  = true;
+            vlg.childControlWidth  = false;
             vlg.childForceExpandHeight = false;
-            vlg.childForceExpandWidth  = true;
+            vlg.childForceExpandWidth  = false;
             vlg.childAlignment = TextAnchor.UpperCenter;
             if (vlg.spacing < 1f) vlg.spacing = 20f;
             // 스크롤 끝에 마지막 카드가 붙지 않도록 breathing space — UIShop scroll 답답함 fix
