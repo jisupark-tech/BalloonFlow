@@ -101,6 +101,16 @@ namespace BalloonFlow
             /// <summary>StartDeploy 마다 증가. DeployCoroutine 캡처 후 mismatch 시 stale로 간주, yield break.
             /// Continue/Cancel 시 visual을 무효화하지 않고도 OLD 코루틴을 안전하게 종료.</summary>
             public int deployGeneration;
+
+            /// <summary>사용자 요구: 자기 holder 의 마지막 spawn dart ID. 다음 spawn 시 그 dart 의 현재 progress - physGap 위치에 spawn → cluster 자연 형성 + Deploy 연속성.</summary>
+            public int lastSpawnedDartId;
+
+            /// <summary>Phase 2 v1 — 자기 cluster head 가 다른 holder 의 활성 deploy point 도달 시 true.
+            /// DeployCoroutine 이 자기 cluster freeze 후 spawn pause. blockingHolder 가 없어지면 unfreeze + spawn 재개.</summary>
+            public bool isClusterFrozen;
+
+            /// <summary>Deadlock 으로 pause 중일 때 1회 로그 후 true. 매 frame 로그 spam 방지.</summary>
+            public bool deadlockPauseLogged;
         }
 
         #endregion
@@ -134,6 +144,46 @@ namespace BalloonFlow
             if (q == null || q.Count == 0) return false;
             foreach (int id in q) if (id == holderId) return true;
             return false;
+        }
+
+        private void ResetDeployQueues()
+        {
+            if (_colQueues != null)
+            {
+                for (int i = 0; i < _colQueues.Length; i++)
+                {
+                    _colQueues[i].Clear();
+                    _colBusy[i] = false;
+                }
+            }
+        }
+
+        private void AbortDeploy(HolderVisual visual, bool undoHolderState)
+        {
+            if (visual == null) return;
+
+            if (undoHolderState)
+            {
+                RemoveFromColumnQueue(visual.column, visual.holderId);
+            }
+
+            if (_colBusy != null && visual.column >= 0 && visual.column < _colBusy.Length)
+                _colBusy[visual.column] = false;
+
+            if (RailManager.HasInstance)
+            {
+                RailManager.Instance.UnregisterDeployPoint(visual.holderId);
+                RailManager.Instance.ReleaseHolderReservation(visual.holderId);
+                RailManager.Instance.ExitDeployPlacement(visual.holderId);
+            }
+
+            visual.isDeploying = false;
+            visual.isMovingToRail = false;
+            visual.isWaiting = false;
+            visual.isClusterFrozen = false;
+
+            if (undoHolderState && HolderManager.HasInstance)
+                HolderManager.Instance.UndoDeploy(visual.holderId);
         }
 
         /// <summary>Chain 연결선: "id1_id2" → LineRenderer GameObject</summary>
@@ -355,6 +405,7 @@ namespace BalloonFlow
             visual.isDeploying = false;
             visual.isWaiting = false;
             visual.isMovingToRail = false;
+            visual.isClusterFrozen = false;
 
             // Kill any active DOTween on this object
             if (visual.gameObject != null)
@@ -813,6 +864,7 @@ namespace BalloonFlow
                 isDeploying = false,
                 isWaiting = false,
                 isMovingToRail = false,
+                isClusterFrozen = false,
                 identifier = ident
             };
         }
@@ -972,12 +1024,13 @@ namespace BalloonFlow
                 // stale (NEW가 generation 증가시켜 take-over) → 큐는 NEW가 재사용 중, 건드리지 않음
                 if (visual.deployGeneration != gen)
                 {
+                    AbortDeploy(visual, false);
                     yield break;
                 }
                 if (_cancelledHolders.Contains(visual.holderId))
                 {
                     _cancelledHolders.Remove(visual.holderId);
-                    RemoveFromColumnQueue(visual.column, visual.holderId);
+                    AbortDeploy(visual, true);
                     yield break;
                 }
 
@@ -1003,23 +1056,25 @@ namespace BalloonFlow
 
             // ── Phase 1.5: 전역 순차 배치 — 다른 보관함 배치 완료까지 대기 ──
             int waitFrames = 0;
-            const int MAX_WAIT_FRAMES = 3600; // 60초 타임아웃 (60fps)
-            while (waitFrames < MAX_WAIT_FRAMES)
+            float waitStart = Time.unscaledTime;
+            const float MAX_WAIT_SECONDS = 60f;
+            while (Time.unscaledTime - waitStart < MAX_WAIT_SECONDS)
             {
                 // stale (NEW take-over) → 큐는 NEW 소유, 건드리지 않음
                 if (visual.deployGeneration != gen)
                 {
+                    AbortDeploy(visual, false);
                     yield break;
                 }
                 if (_boardFinished)
                 {
-                    RemoveFromColumnQueue(visual.column, visual.holderId);
+                    AbortDeploy(visual, false);
                     yield break;
                 }
                 if (_cancelledHolders.Contains(visual.holderId))
                 {
                     _cancelledHolders.Remove(visual.holderId);
-                    RemoveFromColumnQueue(visual.column, visual.holderId);
+                    AbortDeploy(visual, true);
                     yield break;
                 }
 
@@ -1036,10 +1091,10 @@ namespace BalloonFlow
                 yield return null;
             }
 
-            if (waitFrames >= MAX_WAIT_FRAMES)
+            if (Time.unscaledTime - waitStart >= MAX_WAIT_SECONDS)
             {
                 Debug.LogWarning($"[HolderVisualManager] Holder {visual.holderId} timed out waiting for deploy turn.");
-                RemoveFromColumnQueue(visual.column, visual.holderId);
+                AbortDeploy(visual, true);
                 yield break;
             }
 
@@ -1062,7 +1117,7 @@ namespace BalloonFlow
 
             if (!RailManager.HasInstance)
             {
-                _colBusy[visual.column] = false;
+                AbortDeploy(visual, false);
 
                 yield break;
             }
@@ -1083,8 +1138,9 @@ namespace BalloonFlow
             // 배치 페이싱: belt 누적 이동 거리(distSinceLastPlacement)가 physicalGap에 도달할 때마다 1회 배치.
             // overshoot은 carry-over + placementProgress 보정으로 흡수 → 다트 간격이 항상 정확히 physicalGap.
             // (이전: IsProgressClear 의 minGap=0.9*physGap 폴링이라 frame 타이밍에 따라 spacing 변동.)
-            float totalPathLen = rail.TotalPathLength;
             float distSinceLastPlacement = rail.DartPhysicalGap; // 첫 다트 즉시 배치
+
+            float totalPathLen = rail.TotalPathLength;
 
             while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
             {
@@ -1094,7 +1150,10 @@ namespace BalloonFlow
                 // 다음 user 클릭의 StartDeploy 진입을 차단. NEW는 자기 차례에 다시 set 함.
                 if (visual.deployGeneration != gen)
                 {
+                    AbortDeploy(visual, false);
                     rail.UnregisterDeployPoint(visual.holderId);
+                    rail.ReleaseHolderReservation(visual.holderId); // 사용자 요구: Slot Reservation 해제
+                    rail.ExitDeployPlacement(visual.holderId);
                     _colBusy[visual.column] = false;
                     visual.isDeploying = false;
                     yield break;
@@ -1103,42 +1162,104 @@ namespace BalloonFlow
                 if (_cancelledHolders.Contains(visual.holderId))
                 {
                     _cancelledHolders.Remove(visual.holderId);
+                    AbortDeploy(visual, true);
                     rail.UnregisterDeployPoint(visual.holderId);
+                    rail.ReleaseHolderReservation(visual.holderId); // 사용자 요구: Slot Reservation 해제
+                    rail.ExitDeployPlacement(visual.holderId);
                     _colBusy[visual.column] = false;
 
                     yield break;
                 }
 
+                // 매 iteration 마다 deadlock 감지 — cluster freeze / placement 실패 분기 모두 catch.
+                // (이전: IsProgressClear false 시점에서만 호출 → blockedByDeployPoint 분기 빠지면 stuck)
+                TryEnterDeadlockIfNeeded(rail);
+
+                // 데드락 mode 시 leftmost holder 만 placement 진행. 다른 holder pause.
+                if (rail.DeadlockHolderId >= 0 && rail.DeadlockHolderId != visual.holderId)
+                {
+                    if (!visual.deadlockPauseLogged)
+                    {
+                        Debug.Log($"[Deadlock] Holder {visual.holderId} (col {visual.column}) PAUSED — leftmost = {rail.DeadlockHolderId}");
+                        visual.deadlockPauseLogged = true;
+                    }
+                    yield return null;
+                    continue;
+                }
+                else if (visual.deadlockPauseLogged && rail.DeadlockHolderId < 0)
+                {
+                    Debug.Log($"[Deadlock] Holder {visual.holderId} RESUMED — deadlock cleared");
+                    visual.deadlockPauseLogged = false;
+                }
+
                 float physGap = rail.DartPhysicalGap;
-                float beltSpeed = rail.RotationSpeed * rail.SlotSpacing * rail.GetOccupancySpeedMultiplier();
+                RailManager.DartOnRail clusterHead = rail.GetClusterHeadDart(visual.holderId);
+                bool blockedByDeployPoint = clusterHead != null
+                    && rail.GetOtherActiveDeployPointHolderNear(clusterHead.progress, visual.holderId) >= 0;
+                if (blockedByDeployPoint)
+                {
+                    rail.FreezeClusterByHolder(visual.holderId);
+                    visual.isClusterFrozen = true;
+                    if (distSinceLastPlacement > physGap) distSinceLastPlacement = physGap;
+                    yield return null;
+                    continue;
+                }
+
+                if (visual.isClusterFrozen)
+                {
+                    rail.UnfreezeClusterByHolder(visual.holderId);
+                    visual.isClusterFrozen = false;
+                }
+
+                float beltSpeed = rail.GetBeltDistancePerSecond();
                 distSinceLastPlacement += beltSpeed * Time.deltaTime;
 
-                // physGap 누적 시마다 배치. overshoot은 carry-over + placement 위치 보정.
-                // overshoot 보정으로 chain이 cluster들 끝 근처라도 lock 안 걸림 (위치가 살짝 이동하며 빈자리 활용).
+                if (!rail.TryEnterDeployPlacement(visual.holderId))
+                {
+                    if (distSinceLastPlacement > physGap) distSinceLastPlacement = physGap;
+                    yield return null;
+                    continue;
+                }
+
+                // 사용자 요구 (2026-05-07): slot index 기반 wait — fire 가 비운 slot 의 world 위치가
+                // deploy point world 위치에 도달했을 때만 placement.
+                // = 매 frame, deploy point 의 현재 slot index 조회 (belt 회전 따라 변함) → IsSlotEmpty 검사.
+                // packing physics 로 인한 다른 gap 은 무시 — fire 가 비운 그 slot 이 도착해야 함.
                 // 부하/race 방지를 위해 프레임당 최대 3개로 제한.
                 int maxPlacementsThisFrame = 3;
                 while (visual.magazineRemaining > 0 && maxPlacementsThisFrame-- > 0
                        && distSinceLastPlacement >= physGap)
                 {
-                    float overshoot = distSinceLastPlacement - physGap;
+                    // 현재 belt 회전 기준 deploy point 의 slot index
+                    int deploySlotIndex = rail.GetSlotAtPathDistance(fixedDeployProgress);
 
-                    // overshoot 보정: 이상적 배치 시점은 overshoot/beltSpeed 초 전. 그 사이 belt가 overshoot 만큼 이동했으므로
-                    // 그 다트는 지금 deployProgress + overshoot 에 있어야 직전 다트와 spacing이 정확히 physicalGap.
-                    float placementProgress = fixedDeployProgress + overshoot;
-                    if (totalPathLen > 0f && placementProgress >= totalPathLen) placementProgress -= totalPathLen;
-
-                    // Race 방어: 다른 holder가 이 progress를 점유했을 수 있어 fallback gate 유지.
-                    if (!rail.IsProgressClear(placementProgress, visual.holderId))
+                    // slot 비어있나? (= 그 slot 의 world 위치가 deploy point 와 일치 + dart 없음)
+                    if (!rail.IsSlotEmpty(deploySlotIndex))
                     {
-                        // race 지속 시 accumulator 무한 증가 방지 — 다음 프레임에서 즉시 재시도.
+                        // fire-gap 이 아직 deploy point 도달 안 함 — wait. deadlock 가능성 trigger 검사.
+                        TryEnterDeadlockIfNeeded(rail);
                         if (distSinceLastPlacement > physGap) distSinceLastPlacement = physGap;
                         break;
                     }
 
-                    int dartId = rail.PlaceDartAtProgress(placementProgress, visual.color, visual.holderId);
-                    if (dartId < 0) break;
+                    // slot-based placement — slot 위치에 dart 배치 (PlaceDart 가 slot 의 world 위치를 progress 로 변환).
+                    int dartId = rail.PlaceDart(deploySlotIndex, visual.color, visual.holderId);
+                    if (dartId < 0)
+                    {
+                        // capacity 한도 도달 또는 race → deadlock 가능
+                        TryEnterDeadlockIfNeeded(rail);
+                        break;
+                    }
 
-                    distSinceLastPlacement = overshoot;
+                    // 진단 로그
+                    Debug.Log($"[DEPLOY] holder={visual.holderId} (col {visual.column}) placed dart at slot={deploySlotIndex} (fixedDeployProgress={fixedDeployProgress:F2}). Rail={rail.OccupiedCount}/{rail.SlotCount}. DeadlockHolder={rail.DeadlockHolderId}");
+
+                    if (deployStarted)
+                        rail.ActivateDeployPoint(visual.holderId);
+
+                    // overshoot 보존 — physGap 만큼만 차감해서 다음 placement 의 timing drift 방지.
+                    // (이전: = 0 reset 했는데, frame jitter 로 ε 손실 → consecutive placements 가 1+ slot 떨어짐 → gap)
+                    distSinceLastPlacement -= physGap;
                     visual.magazineRemaining--;
 
                     if (!deployStarted)
@@ -1154,7 +1275,13 @@ namespace BalloonFlow
                         }
                     }
 
-                    LaunchDartChild(visual, rail.GetPositionAtDistance(placementProgress));
+                    // slot index 기반 placement 후 dart 의 progress = slot 의 path distance.
+                    float dartProgress = rail.GetPathDistanceForSlot(deploySlotIndex);
+
+                    Vector3 placedWorldPos = rail.GetDartWorldPosition(dartId);
+                    if (placedWorldPos == Vector3.zero)
+                        placedWorldPos = rail.GetPositionAtDistance(dartProgress);
+                    LaunchDartChild(visual, placedWorldPos);
 
                     if (visual.magazineText != null)
                         visual.magazineText.SetText("{0}", visual.magazineRemaining);
@@ -1167,7 +1294,7 @@ namespace BalloonFlow
                         dartId = dartId,
                         color = visual.color,
                         holderId = visual.holderId,
-                        progress = placementProgress
+                        progress = dartProgress
                     });
                 }
 
@@ -1180,9 +1307,67 @@ namespace BalloonFlow
 
             // ── Phase 3: deploy point 해제 → frozen 다트 unfreeze ──
             rail.UnregisterDeployPoint(visual.holderId);
+            // 사용자 요구: Slot Reservation 해제 — magazine 다 spawn 후 다른 holder 가 이 영역 사용 가능.
+            rail.ReleaseHolderReservation(visual.holderId);
+            rail.ExitDeployPlacement(visual.holderId);
 
             // ── Phase 4: Cleanup ──
             CompleteDeployment(visual);
+        }
+
+        // 데드락 진단 로그 throttle — 동일 메시지 2초당 1회
+        private float _lastDeadlockDiagLogTime;
+        private const float DEADLOCK_DIAG_LOG_INTERVAL = 2.0f;
+
+        /// <summary>
+        /// 데드락 감지 — rail full + 다중 active deploy point 인 경우 leftmost holder 선택해 EnterDeadlockMode.
+        /// 매 placement 실패 시 호출. 이미 deadlock 진입 상태면 no-op.
+        /// </summary>
+        private void TryEnterDeadlockIfNeeded(RailManager rail)
+        {
+            if (rail.DeadlockHolderId >= 0) return; // 이미 진입
+
+            bool nearFull = rail.IsRailNearFull();
+            int activeCount = rail.GetActiveDeployPointCount();
+
+            if (Time.unscaledTime - _lastDeadlockDiagLogTime > DEADLOCK_DIAG_LOG_INTERVAL)
+            {
+                _lastDeadlockDiagLogTime = Time.unscaledTime;
+                int isDeployingCount = 0;
+                foreach (var kvp in _holderVisuals)
+                {
+                    if (kvp.Value.isDeploying) isDeployingCount++;
+                }
+                Debug.Log($"[Deadlock][Diag] check: rail={rail.OccupiedCount}/{rail.SlotCount} (nearFull={nearFull}), " +
+                          $"activeDeploys={activeCount}, isDeployingHolders={isDeployingCount}, " +
+                          $"deadlockHolder={rail.DeadlockHolderId}");
+            }
+
+            if (!nearFull) return;
+            // 단일 holder 도 rail full 상태에서 ABABAB / cluster 정렬 깨짐 발생 → 자기 자신이 deadlock holder 되어 buffer 사용.
+            if (activeCount < 1) return;
+
+            int leftmostHolderId = -1;
+            int leftmostCol = int.MaxValue;
+            foreach (var kvp in _holderVisuals)
+            {
+                var v = kvp.Value;
+                if (!v.isDeploying) continue;
+                if (v.column < leftmostCol)
+                {
+                    leftmostCol = v.column;
+                    leftmostHolderId = v.holderId;
+                }
+            }
+            if (leftmostHolderId < 0)
+            {
+                Debug.LogWarning($"[Deadlock] Detect FAIL — no isDeploying holder found despite {activeCount} active deploy points.");
+                return;
+            }
+
+            Debug.Log($"[Deadlock] Detected. Leftmost = holder {leftmostHolderId} (col {leftmostCol}). " +
+                      $"Rail {rail.OccupiedCount}/{rail.SlotCount}, active deploys = {activeCount}.");
+            rail.EnterDeadlockMode(leftmostHolderId);
         }
 
         /// <summary>
@@ -1228,8 +1413,16 @@ namespace BalloonFlow
         {
             int col = visual.column;
             visual.isDeploying = false;
+            visual.isClusterFrozen = false;
 
             _colBusy[col] = false;
+
+            // 데드락 trigger holder 가 deploy 종료 → ExitDeadlockMode (다른 holder 들 재개).
+            if (RailManager.HasInstance
+                && RailManager.Instance.DeadlockHolderId == visual.holderId)
+            {
+                RailManager.Instance.ExitDeadlockMode();
+            }
 
             // End Deploy 애니메이션
             if (visual.identifier != null)
@@ -1455,7 +1648,7 @@ namespace BalloonFlow
         private void HandleBoardCleared(OnBoardCleared evt)
         {
             _boardFinished = true;
-            if (_colQueues != null) for (int i = 0; i < _colQueues.Length; i++) { _colQueues[i].Clear(); _colBusy[i] = false; }
+            ResetDeployQueues();
             StopAllCoroutines();
             ClearAllVisuals();
         }
@@ -1463,7 +1656,7 @@ namespace BalloonFlow
         private void HandleBoardFailed(OnBoardFailed evt)
         {
             _boardFinished = true;
-            if (_colQueues != null) for (int i = 0; i < _colQueues.Length; i++) { _colQueues[i].Clear(); _colBusy[i] = false; }
+            ResetDeployQueues();
             StopAllCoroutines();
         }
 
@@ -1549,7 +1742,7 @@ namespace BalloonFlow
             foreach (var kvp in _holderVisuals)
                 kvp.Value.deployGeneration++;
 
-            if (_colQueues != null) for (int i = 0; i < _colQueues.Length; i++) { _colQueues[i].Clear(); _colBusy[i] = false; }
+            ResetDeployQueues();
 
             // 비주얼 + 데이터 상태 동시 리셋
             foreach (var kvp in _holderVisuals)
@@ -1558,12 +1751,17 @@ namespace BalloonFlow
 
                 // deploy point 해제
                 if (visual.isDeploying && RailManager.HasInstance)
+                {
                     RailManager.Instance.UnregisterDeployPoint(visual.holderId);
+                    RailManager.Instance.ReleaseHolderReservation(visual.holderId);
+                    RailManager.Instance.ExitDeployPlacement(visual.holderId);
+                }
 
                 // 비주얼 상태 리셋
                 visual.isDeploying = false;
                 visual.isMovingToRail = false;
                 visual.isWaiting = false;
+                visual.isClusterFrozen = false;
 
                 if (visual.gameObject != null)
                 {

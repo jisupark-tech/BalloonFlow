@@ -66,6 +66,15 @@ namespace BalloonFlow
             // 레벨 로드
             LoadPendingLevel();
 
+#if UNITY_EDITOR
+            // Editor 디버그 — 레일 slot index + deploy point 시각화 자동 추가
+            if (FindAnyObjectByType<RailDebugVisualizer>() == null)
+            {
+                var dbgGO = new GameObject("RailDebugVisualizer");
+                dbgGO.AddComponent<RailDebugVisualizer>();
+            }
+#endif
+
             // 레벨 로드 후 난이도별 배경색 적용
             if (CameraManager.HasInstance)
                 CameraManager.Instance.ConfigureInGame();
@@ -339,6 +348,7 @@ namespace BalloonFlow
                 HUDController.Instance.SetQuitPopup(_quitPopup);
             }
         }
+
 
         void LoadPendingLevel()
         {
