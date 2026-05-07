@@ -28,11 +28,12 @@ namespace BalloonFlow
         private const float ICON_SCALE_DURATION = 0.2f;
 
         // Rail 슬라이드 인 연출 파라미터.
-        // TopBar 의 Rail 은 anchor 가 화면 상단(anchorMax.y=1) 기준이라 +Y 는 화면 위쪽 바깥 → +120 에서 0 으로 내려옴.
-        // BottomNav 의 Rail 은 anchor 가 화면 하단(anchorMin.y=0) 기준이라 -Y 는 화면 아래쪽 바깥 → -120 에서 0 으로 올라옴.
-        // 부호 의도를 코드 자체로 표현하기 위해 두 상수를 분리. (값을 바꾸려면 각각 조정)
+        // Top/Bottom Rail 모두 화면 위쪽 +120 에서 시작해 OutCubic 으로 제자리(0) 로 내려오는
+        // 일관된 톱-다운 슬라이드인 연출. (사용자 피드백: 두 Rail 이 반대 방향으로 들어오는 것보다
+        // 동일 방향으로 내려오는 쪽이 시각적 일체감이 좋음)
+        // 부호 의도를 코드 자체로 표현하기 위해 두 상수를 분리해 둠. (값을 바꾸려면 각각 조정)
         private const float RAIL_TOP_ENTER_OFFSET_Y    = +120f;
-        private const float RAIL_BOTTOM_ENTER_OFFSET_Y = -120f;
+        private const float RAIL_BOTTOM_ENTER_OFFSET_Y = +120f;
         private const float RAIL_ENTER_DURATION = 0.45f;
 
         #endregion
@@ -221,9 +222,9 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Top/Bottom Rail 을 화면 바깥(Top:+120 / Bottom:-120) 에서 원위치(0) 로 OutCubic 곡선 슬라이드.
+        /// Top/Bottom Rail 을 화면 위쪽 바깥(+120) 에서 원위치(0) 로 OutCubic 곡선 슬라이드.
         /// 진입/탭 복귀 시 호출. 시작값은 anchoredPosition 직접 할당으로 적용 (페이지 트윈 패턴과 일관).
-        /// 방향: Top 은 위→아래로 들어옴, Bottom 은 아래→위로 들어옴.
+        /// 방향: Top/Bottom 둘 다 위→아래로 동일 방향 슬라이드.
         /// </summary>
         public void PlayRailEnterAnimation()
         {
