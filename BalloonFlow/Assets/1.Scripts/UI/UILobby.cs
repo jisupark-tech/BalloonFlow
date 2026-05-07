@@ -27,8 +27,12 @@ namespace BalloonFlow
         private const float ICON_Y_OFFSET = 25f; // 활성 +25, 비활성 -25
         private const float ICON_SCALE_DURATION = 0.2f;
 
-        // Rail 슬라이드 인 연출 파라미터 (Top: +120 → 0, Bottom: -120 → 0)
-        private const float RAIL_ENTER_OFFSET = 120f;
+        // Rail 슬라이드 인 연출 파라미터.
+        // TopBar 의 Rail 은 anchor 가 화면 상단(anchorMax.y=1) 기준이라 +Y 는 화면 위쪽 바깥 → +120 에서 0 으로 내려옴.
+        // BottomNav 의 Rail 은 anchor 가 화면 하단(anchorMin.y=0) 기준이라 -Y 는 화면 아래쪽 바깥 → -120 에서 0 으로 올라옴.
+        // 부호 의도를 코드 자체로 표현하기 위해 두 상수를 분리. (값을 바꾸려면 각각 조정)
+        private const float RAIL_TOP_ENTER_OFFSET_Y    = +120f;
+        private const float RAIL_BOTTOM_ENTER_OFFSET_Y = -120f;
         private const float RAIL_ENTER_DURATION = 0.45f;
 
         #endregion
@@ -217,8 +221,9 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Top/Bottom Rail 을 화면 바깥(±RAIL_ENTER_OFFSET)에서 원위치(0)로 OutCubic 곡선 슬라이드.
+        /// Top/Bottom Rail 을 화면 바깥(Top:+120 / Bottom:-120) 에서 원위치(0) 로 OutCubic 곡선 슬라이드.
         /// 진입/탭 복귀 시 호출. 시작값은 anchoredPosition 직접 할당으로 적용 (페이지 트윈 패턴과 일관).
+        /// 방향: Top 은 위→아래로 들어옴, Bottom 은 아래→위로 들어옴.
         /// </summary>
         public void PlayRailEnterAnimation()
         {
@@ -228,7 +233,7 @@ namespace BalloonFlow
             if (_railTop != null)
             {
                 var p = _railTop.anchoredPosition;
-                _railTop.anchoredPosition = new Vector2(p.x, RAIL_ENTER_OFFSET);
+                _railTop.anchoredPosition = new Vector2(p.x, RAIL_TOP_ENTER_OFFSET_Y);
                 _railTopTween = _railTop.DOAnchorPosY(0f, RAIL_ENTER_DURATION)
                     .SetEase(Ease.OutCubic)
                     .SetUpdate(true);
@@ -237,7 +242,7 @@ namespace BalloonFlow
             if (_railBottom != null)
             {
                 var p = _railBottom.anchoredPosition;
-                _railBottom.anchoredPosition = new Vector2(p.x, -RAIL_ENTER_OFFSET);
+                _railBottom.anchoredPosition = new Vector2(p.x, RAIL_BOTTOM_ENTER_OFFSET_Y);
                 _railBottomTween = _railBottom.DOAnchorPosY(0f, RAIL_ENTER_DURATION)
                     .SetEase(Ease.OutCubic)
                     .SetUpdate(true);
