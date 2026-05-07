@@ -111,3 +111,9 @@ BalloonFlow/BalloonFlow_Shot/BalloonFlow_InGame_20260427_143308.png
 # Firebase Admin seed — service account 키 + Node modules (package-lock.json 은 커밋 OK)
 firebase/seed/service-account.json
 firebase/seed/node_modules/
+
+# ProjectHub MCP runtime + secrets (do not commit)
+projecthub-mcp/server/.env
+projecthub-mcp/server/mcp.log
+projecthub-mcp/server/mcp.err
+projecthub-mcp/server/run_mcp.cmd
