@@ -23,7 +23,7 @@ namespace BalloonFlow.Editor
     ///
     /// InGame 씬:
     ///   - SceneCanvas, EventSystem, GameBootstrap
-    ///   - Directional Light, BoardGrid (Grid+Tilemap: FloorTiles, ConveyorTiles)
+    ///   - Directional Light
     ///
     /// MapMaker 씬:
     ///   - EditorCamera (탑뷰), Directional Light, BoardGrid (Grid+Tilemap)
@@ -165,9 +165,13 @@ namespace BalloonFlow.Editor
         {
             var _scene = OpenOrCreateScene(_path);
 
+            // 마이그레이션 안전망: 레거시 BoardGrid가 남아 있으면 제거.
+            // InGame 컨베이어는 SpriteRenderer 기반(BoardTileManager.BuildConveyorBelt).
+            var _legacyGrid = GameObject.Find("BoardGrid");
+            if (_legacyGrid != null) Object.DestroyImmediate(_legacyGrid);
+
             // 3D 오브젝트
             EnsureLighting();
-            EnsureBoardTilemap();
 
             EnsureCanvas("SceneCanvas");
             EnsureEventSystem();

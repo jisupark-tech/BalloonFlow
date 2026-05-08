@@ -145,6 +145,8 @@ namespace BalloonFlow
 
         protected override void OnSingletonAwake()
         {
+            // InGame: BoardGrid 미사용 — 컨베이어는 SpriteRenderer 기반(BuildConveyorBelt).
+            // MapMaker: Inspector wire 또는 씬 내 BoardGrid 검색.
             if (_grid == null)
             {
                 var gridGO = GameObject.Find("BoardGrid");
@@ -152,31 +154,27 @@ namespace BalloonFlow
                     _grid = gridGO.GetComponent<Grid>();
             }
 
-            if (_grid != null)
-            {
-                if (_floorTilemap == null)
-                {
-                    var floorTr = _grid.transform.Find("FloorTiles");
-                    if (floorTr != null)
-                    {
-                        _floorTilemap = floorTr.GetComponent<Tilemap>();
-                        _floorRenderer = floorTr.GetComponent<TilemapRenderer>();
-                    }
-                }
+            if (_grid == null) return;
 
-                if (_conveyorTilemap == null)
+            if (_floorTilemap == null)
+            {
+                var floorTr = _grid.transform.Find("FloorTiles");
+                if (floorTr != null)
                 {
-                    var convTr = _grid.transform.Find("ConveyorTiles");
-                    if (convTr != null)
-                    {
-                        _conveyorTilemap = convTr.GetComponent<Tilemap>();
-                        _conveyorRenderer = convTr.GetComponent<TilemapRenderer>();
-                    }
+                    _floorTilemap = floorTr.GetComponent<Tilemap>();
+                    _floorRenderer = floorTr.GetComponent<TilemapRenderer>();
                 }
             }
 
-            if (_grid == null)
-                Debug.LogWarning("[BoardTileManager] BoardGrid not found in scene. Tilemap features disabled.");
+            if (_conveyorTilemap == null)
+            {
+                var convTr = _grid.transform.Find("ConveyorTiles");
+                if (convTr != null)
+                {
+                    _conveyorTilemap = convTr.GetComponent<Tilemap>();
+                    _conveyorRenderer = convTr.GetComponent<TilemapRenderer>();
+                }
+            }
         }
 
         private void Update()
