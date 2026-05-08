@@ -550,14 +550,36 @@ namespace BalloonFlow
                 _animator.SetBool(_animDeploy, true);
         }
 
-        /// <summary>첫 다트가 레일에 배치되는 시점에 true → BoxOpenDefault↔BoxOpenIdle 전환. 풀 반환/취소 시 false. 파라미터 + 명시 Play 이중 트리거 — controller transition 설정이 깨져도 강건하게 전환 (BoxOpen/Click 등 다른 상태 진행 중에는 끊지 않음).</summary>
+        /// <summary>첫 다트가 레일에 배치되는 시점에 true → BoxOpenIdle로 강제 전환. 풀 반환/취소 시 false → BoxOpenDefault. BoxOpen.ani(뚜껑 원샷) 진행 중이면 완료될 때까지 코루틴으로 대기 후 Play — 컨트롤러 transition이 깨져도 강건.</summary>
         public void SetDartsOnRail(bool onRail)
         {
             if (_animator == null) return;
             _animator.SetBool(_animOpenHold, onRail);
-            var info = _animator.GetCurrentAnimatorStateInfo(0);
-            if (info.shortNameHash == _animStateBoxOpenDefault || info.shortNameHash == _animStateBoxOpenIdle)
-                _animator.Play(onRail ? _animStateBoxOpenIdle : _animStateBoxOpenDefault, 0);
+            if (_onRailRoutine != null) StopCoroutine(_onRailRoutine);
+            if (isActiveAndEnabled)
+                _onRailRoutine = StartCoroutine(ApplyOnRailState(onRail));
+        }
+
+        private Coroutine _onRailRoutine;
+
+        private System.Collections.IEnumerator ApplyOnRailState(bool onRail)
+        {
+            int target = onRail ? _animStateBoxOpenIdle : _animStateBoxOpenDefault;
+            float timeout = 2f;
+            while (timeout > 0f && _animator != null)
+            {
+                var info = _animator.GetCurrentAnimatorStateInfo(0);
+                if (info.shortNameHash == _animStateBoxOpenDefault || info.shortNameHash == _animStateBoxOpenIdle)
+                {
+                    if (info.shortNameHash != target)
+                        _animator.Play(target, 0);
+                    _onRailRoutine = null;
+                    yield break;
+                }
+                timeout -= Time.deltaTime;
+                yield return null;
+            }
+            _onRailRoutine = null;
         }
 
         /// <summary>배포 완료 — Deploy=false + end 트리거.</summary>
