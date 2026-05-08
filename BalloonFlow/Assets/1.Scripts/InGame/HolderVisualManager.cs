@@ -32,8 +32,8 @@ namespace BalloonFlow
             => DEPLOY_MOVE_SPEED * (RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f);
 
         // 보관함 배치 수치 — 절대 최소값 보장 (프리팹 스케일 1.04 기준)
-        private const float MIN_COL_SPACING      = 4f;    // 보관함 좌우 최소 간격
-        private const float MIN_ROW_SPACING       = 4f;    // 보관함 앞뒤 최소 간격
+        private const float MIN_COL_SPACING      = 3f;    // 보관함 좌우 최소 간격
+        private const float MIN_ROW_SPACING       = 2.6f;    // 보관함 앞뒤 최소 간격
         private const float MIN_DEPLOY_GAP        = 1.6f;     // 컨베이어 ~ 도착위치 최소 거리
         private const float MIN_RAIL_TO_QUEUE     = 3.5f;     // 컨베이어 ~ 보관함 1열 최소 거리
 
