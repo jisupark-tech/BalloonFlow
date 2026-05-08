@@ -25,6 +25,8 @@ namespace BalloonFlow
         private static readonly int _animHiddenEnd = Animator.StringToHash("HiddenEnd");
         private static readonly int _animClick = Animator.StringToHash("Click");
         private static readonly int _animOpenHold = Animator.StringToHash("openHold");
+        private static readonly int _animStateBoxOpenDefault = Animator.StringToHash("BoxOpenDefault");
+        private static readonly int _animStateBoxOpenIdle = Animator.StringToHash("BoxOpenIdle");
 
         [Header("[Dart Visuals — Inspector에서 할당]")]
         [SerializeField] private Transform[] _dartSlots;
@@ -548,11 +550,14 @@ namespace BalloonFlow
                 _animator.SetBool(_animDeploy, true);
         }
 
-        /// <summary>첫 다트가 레일에 배치되는 시점에 true → BoxOpenDefault에서 BoxOpenIdle로 전환. 풀 반환/취소 시 false.</summary>
+        /// <summary>첫 다트가 레일에 배치되는 시점에 true → BoxOpenDefault↔BoxOpenIdle 전환. 풀 반환/취소 시 false. 파라미터 + 명시 Play 이중 트리거 — controller transition 설정이 깨져도 강건하게 전환 (BoxOpen/Click 등 다른 상태 진행 중에는 끊지 않음).</summary>
         public void SetDartsOnRail(bool onRail)
         {
-            if (_animator != null)
-                _animator.SetBool(_animOpenHold, onRail);
+            if (_animator == null) return;
+            _animator.SetBool(_animOpenHold, onRail);
+            var info = _animator.GetCurrentAnimatorStateInfo(0);
+            if (info.shortNameHash == _animStateBoxOpenDefault || info.shortNameHash == _animStateBoxOpenIdle)
+                _animator.Play(onRail ? _animStateBoxOpenIdle : _animStateBoxOpenDefault, 0);
         }
 
         /// <summary>배포 완료 — Deploy=false + end 트리거.</summary>
