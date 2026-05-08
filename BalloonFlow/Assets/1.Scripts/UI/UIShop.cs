@@ -72,6 +72,11 @@ namespace BalloonFlow
         private readonly List<PopupShopListItem> _spawnedItems = new List<PopupShopListItem>();
         private int _lastLoadFrame = -1;
 
+        // ScrollRect 캐시 — onValueChanged 리스너 등록/해제 + viewport overlap 컬링 기준점.
+        private ScrollRect _scrollRect;
+        private RectTransform _viewport;
+        private bool _scrollListenerRegistered;
+
         protected override void Awake()
         {
             base.Awake();
@@ -106,6 +111,12 @@ namespace BalloonFlow
         {
             if (ShopCatalogService.HasInstance)
                 ShopCatalogService.Instance.OnCatalogLoaded -= OnCatalogReady;
+
+            if (_scrollRect != null && _scrollListenerRegistered)
+            {
+                _scrollRect.onValueChanged.RemoveListener(OnScrollValueChanged);
+                _scrollListenerRegistered = false;
+            }
         }
 
         /// <summary>ShopCatalogService 구독. 이미 로드 상태면 즉시 적용. 매니저 부재 시 fallback.</summary>
@@ -242,6 +253,15 @@ namespace BalloonFlow
                 sr.inertia = true;             // 손가락 떼고도 관성 스크롤
                 sr.decelerationRate = 0.135f;  // Unity 기본값 (관성 감속)
                 if (sr.scrollSensitivity < 30f) sr.scrollSensitivity = 60f;
+
+                // viewport overlap 컬링 기준점 캐시 + onValueChanged 1회 등록.
+                _scrollRect = sr;
+                _viewport = sr.viewport != null ? sr.viewport : sr.transform as RectTransform;
+                if (!_scrollListenerRegistered)
+                {
+                    sr.onValueChanged.AddListener(OnScrollValueChanged);
+                    _scrollListenerRegistered = true;
+                }
             }
 
             // BtnMoreProducts 진단 + LayoutElement 보장
@@ -302,6 +322,9 @@ namespace BalloonFlow
 
             // ScrollRect 내부 viewport/content 캐시 flush — 새 content size 기반 normalizedPosition 보장
             Canvas.ForceUpdateCanvases();
+
+            // 캔버스 갱신 직후 viewport rect 기준으로 카드 particle 컬링 1회 재평가.
+            RefreshAllParticleLights();
 
             if (_contentRoot != null)
             {
@@ -466,7 +489,27 @@ namespace BalloonFlow
             if (_contentRoot != null)
                 LayoutRebuilder.ForceRebuildLayoutImmediate(_contentRoot);
 
+            // 레이아웃 확정 후 카드 rect 가 정확해진 시점에 1회 컬링 갱신.
+            RefreshAllParticleLights();
+
             UpdateMoreButton();
+        }
+
+        /// <summary>ScrollRect.onValueChanged 콜백 — 스크롤마다 viewport 안/밖 카드 particle 컬링 갱신.</summary>
+        private void OnScrollValueChanged(Vector2 _)
+        {
+            RefreshAllParticleLights();
+        }
+
+        /// <summary>spawn 직후 또는 스크롤 시 viewport 기준으로 각 카드의 _particleLight 활성 여부 결정.</summary>
+        private void RefreshAllParticleLights()
+        {
+            for (int i = 0; i < _spawnedItems.Count; i++)
+            {
+                var item = _spawnedItems[i];
+                if (item == null) continue;
+                item.RefreshParticleLightVisibility(_viewport);
+            }
         }
 
         // ShopContent 행 단위 순차 등장 — Gold 그룹은 컨테이너 1개를 1행으로 묶어 한 번만 stagger.

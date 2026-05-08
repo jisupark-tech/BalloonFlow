@@ -546,5 +546,50 @@ namespace BalloonFlow
             if (main != null) main.text = value;
             if (outline != null) outline.text = value;
         }
+
+        // RectTransform.GetWorldCorners 결과 재사용용 — 매 프레임 호출 시 GC alloc 방지.
+        private static readonly Vector3[] _vpCorners = new Vector3[4];
+        private static readonly Vector3[] _pCorners  = new Vector3[4];
+
+        /// <summary>
+        /// _particleLight GameObject를 viewport 영역에 들어왔는지 여부에 따라 SetActive로 컬링.
+        /// 이유: ScrollRect의 RectMask2D는 graphic만 클리핑하고 ParticleSystem CPU는 계속 돌므로
+        /// 화면 밖 카드의 particle을 명시적으로 OFF 시켜야 한다.
+        /// gold/ad 카드처럼 _particleLight 미할당이면 즉시 return — NRE 방지.
+        /// </summary>
+        public void RefreshParticleLightVisibility(RectTransform viewport)
+        {
+            if (_particleLight == null) return;
+
+            if (viewport == null)
+            {
+                if (!_particleLight.activeSelf) _particleLight.SetActive(true);
+                return;
+            }
+
+            var particleRT = _particleLight.transform as RectTransform;
+            if (particleRT == null)
+            {
+                if (!_particleLight.activeSelf) _particleLight.SetActive(true);
+                return;
+            }
+
+            viewport.GetWorldCorners(_vpCorners);
+            particleRT.GetWorldCorners(_pCorners);
+
+            // GetWorldCorners 순서: [0]BL, [1]TL, [2]TR, [3]BR.
+            Rect vpRect = new Rect(
+                _vpCorners[0].x, _vpCorners[0].y,
+                _vpCorners[2].x - _vpCorners[0].x,
+                _vpCorners[2].y - _vpCorners[0].y);
+            Rect pRect = new Rect(
+                _pCorners[0].x, _pCorners[0].y,
+                _pCorners[2].x - _pCorners[0].x,
+                _pCorners[2].y - _pCorners[0].y);
+
+            bool overlaps = vpRect.Overlaps(pRect);
+            if (_particleLight.activeSelf != overlaps)
+                _particleLight.SetActive(overlaps);
+        }
     }
 }
