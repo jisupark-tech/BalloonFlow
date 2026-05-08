@@ -23,7 +23,7 @@ namespace BalloonFlow
         private const string HOLDER_POOL_KEY = "Holder";
         private const string SPAWNER_POOL_KEY = "Spawner";
         private const int MAX_COLUMNS = 5;
-        private const int MAGAZINE_FONT_SIZE = 6;
+        private const int MAGAZINE_FONT_SIZE = 8;
         private const float DEPLOY_MOVE_SPEED = 12f;
 
         /// <summary>유저 가속(홀드/x2 토글) 반영된 보관함 이동 속도.
@@ -32,15 +32,15 @@ namespace BalloonFlow
             => DEPLOY_MOVE_SPEED * (RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f);
 
         // 보관함 배치 수치 — 절대 최소값 보장 (프리팹 스케일 1.04 기준)
-        private const float MIN_COL_SPACING      = 2.7f;    // 보관함 좌우 최소 간격
-        private const float MIN_ROW_SPACING       = 2.6f;    // 보관함 앞뒤 최소 간격
-        private const float MIN_DEPLOY_GAP        = 1.6f;     // 컨베이어 ~ 도착위치 최소 거리
-        private const float MIN_RAIL_TO_QUEUE     = 3.5f;     // 컨베이어 ~ 보관함 1열 최소 거리
+        private const float MIN_COL_SPACING      = 2.5f;    // 보관함 좌우 최소 간격
+        private const float MIN_ROW_SPACING       = 2.5f;    // 보관함 앞뒤 최소 간격
+        private const float MIN_DEPLOY_GAP        = 2f;     // 컨베이어 ~ 도착위치 최소 거리
+        private const float MIN_RAIL_TO_QUEUE     = 5f;     // 컨베이어 ~ 보관함 1열 최소 거리
 
         // 비율 기준 (큰 필드에서 비례 확장)
         private const float RATIO_COL_SPACING     = 0.352f;   // 필드 폭 × (보관함+간격) (+20%)
         private const float RATIO_ROW_SPACING     = 0.374f;   // 필드 폭 × 행 간격 (+20%)
-        private const float RATIO_DEPLOY_GAP      = 0.15f;    // 필드 폭 × 도착 거리
+        private const float RATIO_DEPLOY_GAP      = 0.2f;    // 필드 폭 × 도착 거리
         private const float RATIO_RAIL_TO_QUEUE   = 0.65f;    // 필드 폭 × 보관함 거리
 
         #endregion
