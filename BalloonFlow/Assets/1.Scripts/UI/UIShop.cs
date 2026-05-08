@@ -3,6 +3,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -60,6 +61,11 @@ namespace BalloonFlow
         [Header("[Layout]")]
         [Tooltip("동적 아이템에 적용할 preferredHeight (LayoutElement). 프리팹 자체 size 사용 시 0.")]
         [SerializeField] private float _itemHeightOverride = 0f;
+
+        [Header("[Appear Animation]")]
+        [SerializeField] private float _itemAppearScaleDuration = 0.25f;
+        [SerializeField] private float _itemAppearStagger = 0.06f;
+        [SerializeField] private Ease _itemAppearEase = Ease.OutBack;
 
         private int _displayedCount;
         private bool _userExpandedMore;
@@ -344,6 +350,7 @@ namespace BalloonFlow
             if (_products == null || _contentRoot == null) return;
 
             GameObject goldContainer = null;
+            int appearOrder = 0;
 
             int remaining = _products.Length - _displayedCount;
             int loadCount = (loadOverride > 0) ? Mathf.Min(loadOverride, remaining) : Mathf.Min(ITEMS_PER_PAGE, remaining);
@@ -381,6 +388,8 @@ namespace BalloonFlow
                         // 데이터 없는 빈 카드 노출 방지.
                         for (int c = goldContainer.transform.childCount - 1; c >= 0; c--)
                             Destroy(goldContainer.transform.GetChild(c).gameObject);
+
+                        PlayAppearAnimation(goldContainer.transform, appearOrder++);
                     }
 
                     var goldGo = Instantiate(_prefabGold, goldContainer.transform);
@@ -408,6 +417,8 @@ namespace BalloonFlow
 
                 var go = Instantiate(prefab, _contentRoot);
                 go.SetActive(true);
+
+                PlayAppearAnimation(go.transform, appearOrder++);
 
                 // 부모 컨테이너 root 기준으로 그 직전에 배치 (스크롤 끝에 더보기 유지)
                 if (MoreButtonRoot != null && MoreButtonRoot.transform.parent == _contentRoot)
@@ -451,6 +462,17 @@ namespace BalloonFlow
                 LayoutRebuilder.ForceRebuildLayoutImmediate(_contentRoot);
 
             UpdateMoreButton();
+        }
+
+        // ShopContent 행 단위 순차 등장 — Gold 그룹은 컨테이너 1개를 1행으로 묶어 한 번만 stagger.
+        private void PlayAppearAnimation(Transform target, int orderIndex)
+        {
+            if (target == null) return;
+            target.localScale = Vector3.zero;
+            target.DOScale(Vector3.one, _itemAppearScaleDuration)
+                  .SetEase(_itemAppearEase)
+                  .SetDelay(orderIndex * _itemAppearStagger)
+                  .SetLink(target.gameObject);
         }
 
         /// <summary>
