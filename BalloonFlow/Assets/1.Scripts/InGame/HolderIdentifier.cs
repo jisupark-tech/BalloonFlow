@@ -24,6 +24,7 @@ namespace BalloonFlow
         private static readonly int _animHidden = Animator.StringToHash("Hidden");
         private static readonly int _animHiddenEnd = Animator.StringToHash("HiddenEnd");
         private static readonly int _animClick = Animator.StringToHash("Click");
+        private static readonly int _animOpenHold = Animator.StringToHash("openHold");
 
         [Header("[Dart Visuals — Inspector에서 할당]")]
         [SerializeField] private Transform[] _dartSlots;
@@ -545,6 +546,13 @@ namespace BalloonFlow
         {
             if (_animator != null)
                 _animator.SetBool(_animDeploy, true);
+        }
+
+        /// <summary>첫 다트가 레일에 배치되는 시점에 true → BoxOpenDefault에서 BoxOpenIdle로 전환. 풀 반환/취소 시 false.</summary>
+        public void SetDartsOnRail(bool onRail)
+        {
+            if (_animator != null)
+                _animator.SetBool(_animOpenHold, onRail);
         }
 
         /// <summary>배포 완료 — Deploy=false + end 트리거.</summary>

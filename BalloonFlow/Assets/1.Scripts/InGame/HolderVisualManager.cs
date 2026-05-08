@@ -372,6 +372,10 @@ namespace BalloonFlow
                 return;
             }
 
+            // 큐 복귀 — 박스가 BoxOpenIdle 상태면 다음 클릭 시 BoxOpenDefault 부터 다시 시작되도록 openHold 해제.
+            if (visual.identifier != null)
+                visual.identifier.SetDartsOnRail(false);
+
             // Move back to queue
             RepositionColumnHolders(visual.column);
         }
@@ -836,6 +840,7 @@ namespace BalloonFlow
                     visual.identifier.ResetDarts();
                     visual.identifier.ResetBox();
                     visual.identifier.SetSelected(); // MPB 초기화
+                    visual.identifier.SetDartsOnRail(false); // openHold 리셋
                     visual.identifier.ResetAnimator(); // 뚜껑 닫기
                     visual.identifier.SetChainLoop(false); // Chain Loop 비활성화
                 }
@@ -1140,6 +1145,8 @@ namespace BalloonFlow
                     {
                         deployStarted = true;
                         rail.ActivateDeployPoint(visual.holderId);
+                        if (visual.identifier != null)
+                            visual.identifier.SetDartsOnRail(true);
                         if (visual.gameObject != null)
                         {
                             visual.gameObject.transform.localScale = Vector3.one;
