@@ -158,6 +158,10 @@ namespace BalloonFlow
         private float _dragLastScreenX; // 마지막 터치 위치 저장
         private const float SWIPE_THRESHOLD_RATIO = 0.2f; // 화면 폭의 20%
 
+        // 직전 OnPageArrived 도착 페이지. 같은 Shop 탭 내 vertical drag/short tap 으로 재도착 시
+        // ResetView 가 다시 불려 스크롤이 상단으로 점프하던 버그를 막기 위한 가드용 캐시.
+        private int _lastArrivedPageIndex = -1;
+
         #endregion
 
         #region Properties
@@ -947,14 +951,20 @@ namespace BalloonFlow
         /// <summary>
         /// Page slide tween 완료 시 호출. Shop 탭 도착 시 layout 재계산 — 다른 탭 다녀온 후 상단 영역
         /// 넓어지는 이슈 fix (사용자 보고).
+        /// 같은 Shop 탭에서 vertical drag/short tap 으로 재도착할 때 스크롤이 상단으로 점프하던 버그를
+        /// 막기 위해, 다른 탭→Shop 진입(fresh arrival)인 경우에만 ResetView 호출.
         /// </summary>
         private void OnPageArrived(int pageIndex)
         {
-            if (pageIndex == 0 && _pageShop != null)
+            bool isFreshShopArrival = pageIndex == 0 && _lastArrivedPageIndex != 0;
+
+            if (isFreshShopArrival && _pageShop != null)
             {
                 var shop = _pageShop.GetComponent<UIShop>();
                 if (shop != null) shop.ResetView();
             }
+
+            _lastArrivedPageIndex = pageIndex;
         }
 
         #endregion
