@@ -91,11 +91,20 @@ namespace BalloonFlow
         [Tooltip("Hidden 기믹 풍선 전용 머테리얼 (BalloonHidden.mat). Inspector 할당 또는 Resources/BalloonHidden 에서 자동 로드.")]
         [SerializeField] private Material _balloonHiddenMaterial;
 
+        [Header("[Perf — 외곽 풍선만 Outline 활성]")]
+        [Tooltip("외곽 풍선만 Outline pass 활성 (_OutlineEnabled MaterialPropertyBlock). " +
+                 "사용자 보고: 매 pop 시 호출이 spike 원인 + BoardStateManager 외곽 갱신 trigger 비용 큼. " +
+                 "default OFF — 모든 풍선 outline (material default). 외곽만 outline 원하면 ON.")]
+        [SerializeField] private bool _outlineOnOuterOnly = false;
+
         // Primary data store keyed by balloonId
         private readonly Dictionary<int, BalloonData> _balloons = new Dictionary<int, BalloonData>();
 
         // Visual GameObject handles keyed by balloonId
         private readonly Dictionary<int, GameObject> _balloonObjects = new Dictionary<int, GameObject>();
+
+        // Renderer cache per balloonId — _outermostCulling 시 매 호출 GetComponentsInChildren 비용 회피
+        private readonly Dictionary<int, Renderer[]> _balloonRenderers = new Dictionary<int, Renderer[]>();
 
         // Hidden balloons that are currently color-concealed
         private readonly HashSet<int> _hiddenBalloons = new HashSet<int>();
@@ -336,13 +345,19 @@ namespace BalloonFlow
         private readonly Dictionary<int, Vector3> _frameCachedPositions = new Dictionary<int, Vector3>(512);
         private int _frameCachedPositionsFrame = -1;
 
-        /// <summary>매 frame 첫 호출 시 모든 active 풍선 위치를 한 번에 cache. 같은 frame 내 lookup 은 dict TryGetValue.
-        /// foreach 대신 Dictionary.Enumerator 직접 사용 — IL2CPP 에서 inline 보장 + 명시적 Dispose.</summary>
+        /// <summary>풍선 위치 cache. 풍선 정적 가정 (spawn 후 안 움직임) — 0.1s 마다 갱신.
+        /// 이전: 매 frame 1620 iterate × transform.position 호출 = 20%+ 부하 (Profiler 측정).
+        /// 변경: 0.1s throttle — 평균 부하 14배 절감. 풍선 정적이라 0.1s stale OK.</summary>
+        private float _lastCacheRefreshTime;
+        private const float CACHE_REFRESH_INTERVAL = 0.1f;
+
         private void RefreshFramePositionCacheIfNeeded()
         {
-            int currentFrame = Time.frameCount;
-            if (_frameCachedPositionsFrame == currentFrame) return;
-            _frameCachedPositionsFrame = currentFrame;
+            float now = Time.unscaledTime;
+            // 첫 호출 또는 0.1s 경과 시만 rebuild — 풍선이 정적이라 stale 영향 미미.
+            if (_frameCachedPositions.Count > 0 && now - _lastCacheRefreshTime < CACHE_REFRESH_INTERVAL) return;
+            _lastCacheRefreshTime = now;
+
             _frameCachedPositions.Clear();
             var en = _balloonObjects.GetEnumerator();
             try
@@ -433,6 +448,93 @@ namespace BalloonFlow
         /// balloons (Wall, Pin, Ice, Hidden, etc.). Used by the Color Remove booster so that
         /// every balloon of the chosen color is cleared regardless of gimmick state.
         /// </summary>
+        /// <summary>외곽 풍선만 Outline pass 활성. 매 pop 시 호출되니까 throttle + 외곽 diff 적용.
+        /// 첫 호출: 모든 풍선 0 + 외곽 set 1. 이후: 이전 외곽 vs 새 외곽 diff 만 update.</summary>
+        private static readonly int _propBalloonOutlineEnabled = Shader.PropertyToID("_OutlineEnabled");
+        private static MaterialPropertyBlock _balloonMpb;
+        private readonly HashSet<int> _prevOutermostSet = new HashSet<int>();
+        private readonly List<int> _outerDiffBuffer = new List<int>(64);
+        private float _lastOutermostRefreshTime;
+
+        public void RefreshOutermostRendererState()
+        {
+            if (!_outlineOnOuterOnly) return;
+            if (!BoardStateManager.HasInstance) return;
+
+            // 사용자 보고: 매 pop 시 1620 iterate spike → throttle.
+            // 0.1s 안 중복 호출은 skip — 마지막 pop 후 한 번만 정리.
+            float now = Time.unscaledTime;
+            if (now - _lastOutermostRefreshTime < 0.1f) return;
+            _lastOutermostRefreshTime = now;
+
+            var bsm = BoardStateManager.Instance;
+            if (_balloonMpb == null) _balloonMpb = new MaterialPropertyBlock();
+
+            // 새 외곽 set 확보 — IsOutermost 호출 1번이 dirty 면 갱신, 이후 cache hit.
+            // dummy 호출로 BoardStateManager 캐시 갱신.
+            bsm.IsOutermost(0);
+
+            // 이전 외곽 → 새 외곽 diff 만 update.
+            // 새 외곽 set: 모든 active 풍선 중 IsOutermost true 인 것 collect.
+            _outerDiffBuffer.Clear();
+            var en = _balloonObjects.GetEnumerator();
+            try
+            {
+                while (en.MoveNext())
+                {
+                    int id = en.Current.Key;
+                    if (bsm.IsOutermost(id)) _outerDiffBuffer.Add(id);
+                }
+            }
+            finally { en.Dispose(); }
+
+            // 1) 이전 외곽 → 비외곽 (newly inner): _OutlineEnabled = 0
+            var enPrev = _prevOutermostSet.GetEnumerator();
+            try
+            {
+                while (enPrev.MoveNext())
+                {
+                    int id = enPrev.Current;
+                    bool stillOuter = false;
+                    for (int i = 0; i < _outerDiffBuffer.Count; i++)
+                    {
+                        if (_outerDiffBuffer[i] == id) { stillOuter = true; break; }
+                    }
+                    if (!stillOuter) ApplyOutlineToBalloon(id, false);
+                }
+            }
+            finally { enPrev.Dispose(); }
+
+            // 2) 새 외곽: _OutlineEnabled = 1
+            for (int i = 0; i < _outerDiffBuffer.Count; i++)
+            {
+                ApplyOutlineToBalloon(_outerDiffBuffer[i], true);
+            }
+
+            // _prevOutermostSet ← 새 외곽 set 으로 교체
+            _prevOutermostSet.Clear();
+            for (int i = 0; i < _outerDiffBuffer.Count; i++) _prevOutermostSet.Add(_outerDiffBuffer[i]);
+        }
+
+        private void ApplyOutlineToBalloon(int balloonId, bool enableOutline)
+        {
+            if (!_balloonObjects.TryGetValue(balloonId, out GameObject obj) || obj == null) return;
+            if (!_balloonRenderers.TryGetValue(balloonId, out Renderer[] cachedRenderers))
+            {
+                cachedRenderers = obj.GetComponentsInChildren<Renderer>(includeInactive: true);
+                _balloonRenderers[balloonId] = cachedRenderers;
+            }
+            float v = enableOutline ? 1f : 0f;
+            for (int r = 0; r < cachedRenderers.Length; r++)
+            {
+                var rend = cachedRenderers[r];
+                if (rend == null) continue;
+                rend.GetPropertyBlock(_balloonMpb);
+                _balloonMpb.SetFloat(_propBalloonOutlineEnabled, v);
+                rend.SetPropertyBlock(_balloonMpb);
+            }
+        }
+
         /// <summary>재사용 리스트 — GetAllBalloonsByColor GC 방지</summary>
         private readonly List<BalloonData> _reusableColorList = new List<BalloonData>(256);
 
@@ -1360,6 +1462,10 @@ namespace BalloonFlow
             };
 
             ProcessGimmickAfterPop(data, result);
+
+            // 외곽 변경 가능 — 외곽 풍선만 렌더링 toggle 시 Renderer state 갱신
+            RefreshOutermostRendererState();
+
             return result;
         }
 
@@ -2075,6 +2181,10 @@ namespace BalloonFlow
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
             _currentLevelId = evt.levelId;
+
+            // 모든 풍선 spawn 끝난 후 외곽 풍선만 렌더링 1회 적용 (toggle ON 시).
+            // BoardStateManager 의 outermost cache 가 첫 호출에 build 되므로 자동.
+            RefreshOutermostRendererState();
         }
 
         #endregion

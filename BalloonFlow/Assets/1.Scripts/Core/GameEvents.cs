@@ -180,6 +180,18 @@ namespace BalloonFlow
         public int column;
     }
 
+    /// <summary>데드락 모드 진입 — leftmost holder 만 over-capacity 사용. 다른 holder pause.</summary>
+    public struct OnDeadlockEntered
+    {
+        public int holderId;
+    }
+
+    /// <summary>데드락 모드 해제 — 트리거 holder magazine 종료. 다른 holder 재개.</summary>
+    public struct OnDeadlockExited
+    {
+        public int holderId;
+    }
+
     // ────────────────────────────────────────
     // Balloon / Pop Events
     // ────────────────────────────────────────

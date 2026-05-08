@@ -940,7 +940,21 @@ namespace BalloonFlow
             float targetX = -pageIndex * _pageWidth;
             _pageTween = _pageContainer.DOAnchorPosX(targetX, PAGE_SWIPE_DURATION)
                 .SetEase(Ease.OutCubic)
-                .SetUpdate(true);
+                .SetUpdate(true)
+                .OnComplete(() => OnPageArrived(pageIndex));
+        }
+
+        /// <summary>
+        /// Page slide tween 완료 시 호출. Shop 탭 도착 시 layout 재계산 — 다른 탭 다녀온 후 상단 영역
+        /// 넓어지는 이슈 fix (사용자 보고).
+        /// </summary>
+        private void OnPageArrived(int pageIndex)
+        {
+            if (pageIndex == 0 && _pageShop != null)
+            {
+                var shop = _pageShop.GetComponent<UIShop>();
+                if (shop != null) shop.ResetView();
+            }
         }
 
         #endregion

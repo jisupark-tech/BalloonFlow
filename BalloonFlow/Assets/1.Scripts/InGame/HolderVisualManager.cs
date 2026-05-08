@@ -1140,6 +1140,11 @@ namespace BalloonFlow
             // (이전: IsProgressClear 의 minGap=0.9*physGap 폴링이라 frame 타이밍에 따라 spacing 변동.)
             float distSinceLastPlacement = rail.DartPhysicalGap; // 첫 다트 즉시 배치
 
+            // 한 frame 안 catch-up 한도 — belt 가 1.5~3 slot/frame 회전 시 누적된 distSinceLastPlacement
+            // 를 한 frame 안에 N placements 로 처리. clamp 도 이 한도 이하로 자르지 않음.
+            // 1*physGap 으로 clamp 하면 정상 catch-up (belt frame 당 1+ slot 회전) 도 손실 → cluster 안 빈 slot 누적.
+            const int MAX_PLACEMENTS_PER_FRAME = 3;
+
             float totalPathLen = rail.TotalPathLength;
 
             while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
@@ -1200,7 +1205,9 @@ namespace BalloonFlow
                 {
                     rail.FreezeClusterByHolder(visual.holderId);
                     visual.isClusterFrozen = true;
-                    if (distSinceLastPlacement > physGap) distSinceLastPlacement = physGap;
+                    // clamp 한도를 MAX_PLACEMENTS_PER_FRAME * physGap 로 완화 — 정상 catch-up (1.5~3 slot/frame) 보존.
+                    float __clampMax_a = MAX_PLACEMENTS_PER_FRAME * physGap;
+                    if (distSinceLastPlacement > __clampMax_a) distSinceLastPlacement = __clampMax_a;
                     yield return null;
                     continue;
                 }
@@ -1216,7 +1223,8 @@ namespace BalloonFlow
 
                 if (!rail.TryEnterDeployPlacement(visual.holderId))
                 {
-                    if (distSinceLastPlacement > physGap) distSinceLastPlacement = physGap;
+                    float __clampMax_b = MAX_PLACEMENTS_PER_FRAME * physGap;
+                    if (distSinceLastPlacement > __clampMax_b) distSinceLastPlacement = __clampMax_b;
                     yield return null;
                     continue;
                 }
@@ -1226,6 +1234,15 @@ namespace BalloonFlow
                 // = 매 frame, deploy point 의 현재 slot index 조회 (belt 회전 따라 변함) → IsSlotEmpty 검사.
                 // packing physics 로 인한 다른 gap 은 무시 — fire 가 비운 그 slot 이 도착해야 함.
                 // 부하/race 방지를 위해 프레임당 최대 3개로 제한.
+
+                // ── LEGACY (2026-05-08 이전 버전, 롤백용) ──────────────────────────────────
+                // 이슈: belt 가 frame 당 2+ slot 회전 시 (UserSpeedMultiplier 가속 + low fps)
+                //   inner loop 가 같은 deploySlotIndex 만 반복 시도 → 첫 PlaceDart 만 성공,
+                //   두 번째 PlaceDart 는 같은 slot 점유로 거부 → break.
+                //   그 frame 안에 deploy 가 통과한 다른 slot 들은 영원히 빈 채로 → AAAAA.AAAAAA
+                //   → rail full 인데 빈 slot 존재 → deadlock.
+                // 신규 버전은 currentDeploySlot + placementsThisFrame 으로 catch-up.
+                /*
                 int maxPlacementsThisFrame = 3;
                 while (visual.magazineRemaining > 0 && maxPlacementsThisFrame-- > 0
                        && distSinceLastPlacement >= physGap)
@@ -1295,6 +1312,138 @@ namespace BalloonFlow
                         color = visual.color,
                         holderId = visual.holderId,
                         progress = dartProgress
+                    });
+                }
+                */
+
+                // ── 신규-A (2026-05-08, slot-index catch-up — 회귀로 비활성) ───────────────
+                // belt 1.5 slot/frame 회전 시 dart 가 deploy point 에서 0.5 slot 어긋남 → drift → 1 slot 갭.
+                // progress-based (이전 버전, G:\BalanceProcessor) 로 복귀.
+                /*
+                int currentDeploySlot = rail.GetSlotAtPathDistance(fixedDeployProgress);
+                int slotCount = rail.SlotCount;
+                int placementsThisFrame_A = 0;
+                while (visual.magazineRemaining > 0
+                       && placementsThisFrame_A < MAX_PLACEMENTS_PER_FRAME
+                       && distSinceLastPlacement >= physGap)
+                {
+                    int targetSlot = (currentDeploySlot + placementsThisFrame_A + slotCount) % slotCount;
+                    if (!rail.IsSlotEmpty(targetSlot))
+                    {
+                        TryEnterDeadlockIfNeeded(rail);
+                        float __clampMax_c = MAX_PLACEMENTS_PER_FRAME * physGap;
+                        if (distSinceLastPlacement > __clampMax_c) distSinceLastPlacement = __clampMax_c;
+                        break;
+                    }
+                    int dartId = rail.PlaceDart(targetSlot, visual.color, visual.holderId);
+                    if (dartId < 0) { TryEnterDeadlockIfNeeded(rail); break; }
+                    Debug.Log($"[DEPLOY] holder={visual.holderId} placed at slot={targetSlot}");
+                    if (deployStarted) rail.ActivateDeployPoint(visual.holderId);
+                    placementsThisFrame_A++;
+                    distSinceLastPlacement -= physGap;
+                    visual.magazineRemaining--;
+                    if (!deployStarted) {
+                        deployStarted = true;
+                        rail.ActivateDeployPoint(visual.holderId);
+                        if (visual.identifier != null) visual.identifier.SetDartsOnRail(true);
+                        if (visual.gameObject != null) {
+                            visual.gameObject.transform.localScale = Vector3.one;
+                            visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
+                        }
+                    }
+                    float dartProgress = rail.GetPathDistanceForSlot(targetSlot);
+                    Vector3 placedWorldPos = rail.GetDartWorldPosition(dartId);
+                    if (placedWorldPos == Vector3.zero) placedWorldPos = rail.GetPositionAtDistance(dartProgress);
+                    LaunchDartChild(visual, placedWorldPos);
+                    if (visual.magazineText != null) visual.magazineText.SetText("{0}", visual.magazineRemaining);
+                    if (HolderManager.HasInstance) HolderManager.Instance.ConsumeMagazine(visual.holderId);
+                    EventBus.Publish(new OnDartPlaced { dartId = dartId, color = visual.color, holderId = visual.holderId, progress = dartProgress });
+                }
+                */
+
+                // ── 신규-B (2026-05-08, progress-based + overshoot carry, G:\BalanceProcessor 참조) ──
+                // overshoot = 누적된 잉여 (한 physGap 초과분).
+                // placementProgress = fixedDeployProgress + overshoot — belt 가 overshoot 만큼 더 회전한 시점의 deploy 위치.
+                // distSinceLastPlacement = overshoot 으로 잉여만 carry → spacing drift 누적 손실 0.
+                // catch-up: 한 frame 안 N=floor(distSinceLastPlacement / physGap) placements 자연 처리.
+                int placementsThisFrame = 0;
+                while (visual.magazineRemaining > 0
+                       && placementsThisFrame < MAX_PLACEMENTS_PER_FRAME
+                       && distSinceLastPlacement >= physGap)
+                {
+                    float overshoot = distSinceLastPlacement - physGap;
+                    float placementProgress = fixedDeployProgress + overshoot;
+                    if (totalPathLen > 0f && placementProgress >= totalPathLen) placementProgress -= totalPathLen;
+
+                    bool useDeadlockFallback = false;
+                    if (!rail.IsProgressClear(placementProgress, visual.holderId))
+                    {
+                        TryEnterDeadlockIfNeeded(rail);
+
+                        // DeadlockMode 의 leftmost 만 fallback — 빈 progress 직접 탐색 후 placement.
+                        // 의도 7 ("deploy point 닿아 정렬될 때만 채움") 일시 양보. 이유: placementProgress 와
+                        // 빈 progress 위치가 belt 진행 따라 같은 속도로 이동 → 첫 시점에 align 안 되면 영원히
+                        // align 안 됨 (timing mismatch deadlock). DeadlockMode 풀기 위해 fallback 필요.
+                        // 비-deadlock 상태에선 fallback 안 함 (의도 7 유지).
+                        if (rail.DeadlockHolderId == visual.holderId)
+                        {
+                            float fallbackProgress = rail.FindClearProgressNear(placementProgress, visual.holderId);
+                            if (fallbackProgress >= 0f)
+                            {
+                                placementProgress = fallbackProgress;
+                                useDeadlockFallback = true;
+                            }
+                        }
+
+                        if (!useDeadlockFallback)
+                        {
+                            float __clampMax_c = MAX_PLACEMENTS_PER_FRAME * physGap;
+                            if (distSinceLastPlacement > __clampMax_c) distSinceLastPlacement = __clampMax_c;
+                            break;
+                        }
+                    }
+
+                    int dartId = rail.PlaceDartAtProgress(placementProgress, visual.color, visual.holderId);
+                    if (dartId < 0)
+                    {
+                        TryEnterDeadlockIfNeeded(rail);
+                        break;
+                    }
+
+                    if (deployStarted)
+                        rail.ActivateDeployPoint(visual.holderId);
+
+                    distSinceLastPlacement = overshoot;  // 잉여만 carry — physGap 만큼 차감 (spacing 손실 X)
+                    placementsThisFrame++;
+                    visual.magazineRemaining--;
+
+                    if (!deployStarted)
+                    {
+                        deployStarted = true;
+                        rail.ActivateDeployPoint(visual.holderId);
+                        if (visual.identifier != null)
+                            visual.identifier.SetDartsOnRail(true);
+                        if (visual.gameObject != null)
+                        {
+                            visual.gameObject.transform.localScale = Vector3.one;
+                            visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
+                        }
+                    }
+
+                    LaunchDartChild(visual, rail.GetPositionAtDistance(placementProgress));
+
+                    if (visual.magazineText != null)
+                        visual.magazineText.SetText("{0}", visual.magazineRemaining);
+
+                    if (HolderManager.HasInstance)
+                        HolderManager.Instance.ConsumeMagazine(visual.holderId);
+
+                    EventBus.Publish(new OnDartPlaced
+                    {
+                        dartId = dartId,
+                        color = visual.color,
+                        holderId = visual.holderId,
+                        progress = placementProgress
                     });
                 }
 

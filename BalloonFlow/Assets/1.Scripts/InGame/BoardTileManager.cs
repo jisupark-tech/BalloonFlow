@@ -177,10 +177,20 @@ namespace BalloonFlow
             }
         }
 
+        // Arrow update throttle — 매 frame O(arrow × dart) 비용 큼. 0.05s 마다 호출 = 부하 1/3 절감.
+        // 시각: arrow 가 약간 jerky 하지만 60fps 화면에서 거의 못 알아챔.
+        private float _arrowUpdateTimer;
+        private const float ARROW_UPDATE_INTERVAL = 0.05f;
+
         private void Update()
         {
             var __sw = InGamePerfLogger.StartSection();
-            UpdateArrowPositions();
+            _arrowUpdateTimer += Time.deltaTime;
+            if (_arrowUpdateTimer >= ARROW_UPDATE_INTERVAL)
+            {
+                _arrowUpdateTimer = 0f;
+                UpdateArrowPositions();
+            }
             UpdateDangerBlink();
             InGamePerfLogger.EndSection(__sw, "BoardTileManager.Update");
         }

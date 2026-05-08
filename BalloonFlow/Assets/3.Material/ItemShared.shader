@@ -38,6 +38,9 @@ Shader "Custom/ItemShared"
             Name "MainColor"
             Tags { "LightMode" = "UniversalForward" }
 
+            Cull Back   // 명시: backface culling — 카메라 반대면 픽셀 skip (default 와 동일, 명확성 위한 명시)
+            ZWrite On
+
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -138,16 +141,18 @@ Shader "Custom/ItemShared"
                 // Ambient
                 half3 ambient = baseColor.rgb * 0.3;
 
-                // Specular (Blinn-Phong)
-                float3 viewDir = normalize(GetWorldSpaceViewDir(IN.positionWS));
-                float3 halfDir = normalize(mainLight.direction + viewDir);
-                half NdotH = saturate(dot(normalWS, halfDir));
-                half specPower = exp2(10.0 * _Smoothness + 1.0);
-                half3 specular = mainLight.color * pow(NdotH, specPower) * _Smoothness;
+                // 사용자 요구로 Specular 제거 — 모바일 pow + exp2 가 fragment shader 의 가장 큰 부하.
+                // Smoothness 0.15 default 에선 시각 거의 동일.
+                // [LEGACY: Blinn-Phong Specular]
+                // float3 viewDir = normalize(GetWorldSpaceViewDir(IN.positionWS));
+                // float3 halfDir = normalize(mainLight.direction + viewDir);
+                // half NdotH = saturate(dot(normalWS, halfDir));
+                // half specPower = exp2(10.0 * _Smoothness + 1.0);
+                // half3 specular = mainLight.color * pow(NdotH, specPower) * _Smoothness;
 
-                // Metallic blend
-                half3 finalColor = lerp(diffuse + ambient, baseColor.rgb * specular + ambient * 0.5, _Metallic);
-                finalColor += specular * (1.0 - _Metallic) * 0.3;
+                // Metallic blend — specular 없는 단순 형태. _Metallic 0 이면 diffuse + ambient.
+                half3 finalColor = lerp(diffuse + ambient, baseColor.rgb + ambient * 0.5, _Metallic);
+                // [LEGACY] finalColor += specular * (1.0 - _Metallic) * 0.3;
 
                 // Emission
             #ifdef _EMISSION
@@ -231,6 +236,7 @@ Shader "Custom/ItemShared"
             Name "DepthOnly"
             Tags { "LightMode" = "DepthOnly" }
 
+            Cull Back   // 명시: backface culling
             ZWrite On
             ColorMask 0
 

@@ -63,9 +63,13 @@ namespace ProjectHub.Mcp
 
         static McpBridge()
         {
-            // 도메인 리로드 시 기존 인스턴스 정리
+            // 도메인 리로드 시 기존 인스턴스 정리.
+            // Editor 종료 + 도메인 리로드 둘 다 hook — quitting 만 등록하면 script 재컴파일 시
+            // 이전 listener 가 포트(7901) 를 점유한 채 새 ctor 가 bind 시도 → 소켓 충돌.
             EditorApplication.quitting -= Stop;
             EditorApplication.quitting += Stop;
+            AssemblyReloadEvents.beforeAssemblyReload -= Stop;
+            AssemblyReloadEvents.beforeAssemblyReload += Stop;
             EditorApplication.update -= PumpMainThread;
             EditorApplication.update += PumpMainThread;
 
@@ -79,6 +83,8 @@ namespace ProjectHub.Mcp
             CompilationPipeline.assemblyCompilationFinished -= OnAssemblyCompiled;
             CompilationPipeline.assemblyCompilationFinished += OnAssemblyCompiled;
 
+            // Ensure any previous instance is stopped before starting new one
+            Stop();
             try { Start(); }
             catch (Exception e) { Debug.LogError($"[McpBridge] start failed: {e.Message}"); }
         }
@@ -126,16 +132,31 @@ namespace ProjectHub.Mcp
 
         private static void Start()
         {
+            // Check if already running
             if (_listener != null && _listener.IsListening) return;
+            if (_listenerThread != null && _listenerThread.IsAlive) return;
 
-            _listener = new HttpListener();
-            _listener.Prefixes.Add(ListenerUrl);
-            _listener.Start();
+            try
+            {
+                _listener = new HttpListener();
+                _listener.Prefixes.Add(ListenerUrl);
+                _listener.Start();
 
-            _listenerThread = new Thread(ListenLoop) { IsBackground = true, Name = "McpBridge-Listener" };
-            _listenerThread.Start();
+                _listenerThread = new Thread(ListenLoop) { IsBackground = true, Name = "McpBridge-Listener" };
+                _listenerThread.Start();
 
-            Debug.Log($"[McpBridge] listening on {ListenerUrl}");
+                Debug.Log($"[McpBridge] listening on {ListenerUrl}");
+            }
+            catch (Exception e)
+            {
+                // If binding fails, clean up
+                if (_listener != null)
+                {
+                    try { _listener.Close(); } catch {}
+                    _listener = null;
+                }
+                throw; // Re-throw to be caught by caller
+            }
         }
 
         private static void Stop()
@@ -143,6 +164,11 @@ namespace ProjectHub.Mcp
             try
             {
                 _cts.Cancel();
+                if (_listenerThread != null && _listenerThread.IsAlive)
+                {
+                    _listenerThread.Join(1000); // Wait up to 1 second for thread to finish
+                    _listenerThread = null;
+                }
                 if (_listener != null)
                 {
                     if (_listener.IsListening) _listener.Stop();

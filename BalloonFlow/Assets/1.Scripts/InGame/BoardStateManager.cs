@@ -116,6 +116,11 @@ namespace BalloonFlow
         private float _periodicLogTimer;
         private const float PERIODIC_LOG_INTERVAL = 1.0f;
 
+        // Stuck 평가 throttle — HasOutermostMatchCached 가 dirty 시 1620 풍선 iterate × 4방향 × 50 cells = 324K ops.
+        // 매 frame 호출 spike. 0.1s 마다 1번이면 fail 감지 0.1s 지연 — 게임 디자인 영향 미미.
+        private float _stuckEvalTimer;
+        private const float STUCK_EVAL_INTERVAL = 0.1f;
+
         private void Update()
         {
             var __sw = InGamePerfLogger.StartSection();
@@ -123,6 +128,11 @@ namespace BalloonFlow
             {
             if (_currentState != BoardState.Playing) return;
             if (_failConfirmed) return;
+
+            // Throttle — fail evaluation 매 frame 안 함.
+            _stuckEvalTimer += Time.deltaTime;
+            if (_stuckEvalTimer < STUCK_EVAL_INTERVAL) return;
+            _stuckEvalTimer = 0f;
 
             // 이어하기 직후 grace 기간 — fail 평가 일시 정지. 이어하기 후 rail 이 여전히 stuck 일 수 있는데
             // 즉시 fail 재트리거 방지. critical 도 강제로 풀어 시각 알람도 잠시 OFF.
@@ -531,6 +541,12 @@ namespace BalloonFlow
         private readonly Dictionary<Vector2Int, int> _reusableCellToBalloonId = new Dictionary<Vector2Int, int>(512);
         // 외곽 풍선 ID set — DirectionalTargeting candidates pre-filter 용. dirty 갱신 때 같이 채움.
         private readonly HashSet<int> _reusableOutermostBalloonIds = new HashSet<int>();
+        // 사용자 요구: Sweep + boundary check 알고리즘 — row/col 별 min/max cell 계산 (O(N) sweep).
+        // 이전 ray cast 50 cells 한계 / 200 cells 부하 모두 해결. 부하 100배 절감 + 큰 보드 정확.
+        private readonly Dictionary<int, int> _reusableRowMinX = new Dictionary<int, int>(64);
+        private readonly Dictionary<int, int> _reusableRowMaxX = new Dictionary<int, int>(64);
+        private readonly Dictionary<int, int> _reusableColMinY = new Dictionary<int, int>(64);
+        private readonly Dictionary<int, int> _reusableColMaxY = new Dictionary<int, int>(64);
         private float _cachedCellSpacing = 0.55f;
 
         /// <summary>
@@ -591,19 +607,40 @@ namespace BalloonFlow
                 _reusableCellToBalloonId[cell] = b.balloonId;
             }
 
-            // 4방향 무조건 검사. 외곽 cell 의 색깔 + balloonId 모두 캐싱 — DirectionalTargeting candidates pre-filter 용.
-            // foreach → GetEnumerator 직접 사용으로 명시적 분기 + IL2CPP inline 보장.
+            // 사용자 요구: Sweep + boundary check — ray cast 50 cells 한계 + 200 cells 부하 둘 다 해결.
+            // O(N) sweep 으로 row/col 별 min/max 계산 → per-cell O(1) boundary check.
+            _reusableRowMinX.Clear();
+            _reusableRowMaxX.Clear();
+            _reusableColMinY.Clear();
+            _reusableColMaxY.Clear();
+            var posEn = _reusablePositionMap.GetEnumerator();
+            try
+            {
+                while (posEn.MoveNext())
+                {
+                    Vector2Int c = posEn.Current;
+                    if (!_reusableRowMinX.TryGetValue(c.y, out int rxMin) || c.x < rxMin) _reusableRowMinX[c.y] = c.x;
+                    if (!_reusableRowMaxX.TryGetValue(c.y, out int rxMax) || c.x > rxMax) _reusableRowMaxX[c.y] = c.x;
+                    if (!_reusableColMinY.TryGetValue(c.x, out int cyMin) || c.y < cyMin) _reusableColMinY[c.x] = c.y;
+                    if (!_reusableColMaxY.TryGetValue(c.x, out int cyMax) || c.y > cyMax) _reusableColMaxY[c.x] = c.y;
+                }
+            }
+            finally { posEn.Dispose(); }
+
+            // 외곽 cell 식별 — boundary 4가지 중 하나라도 만족하면 외곽.
             var occEn = _reusableOccupancy.GetEnumerator();
             try
             {
                 while (occEn.MoveNext())
                 {
                     Vector2Int cell = occEn.Current.Key;
+                    bool isOuter =
+                        (_reusableRowMinX.TryGetValue(cell.y, out int rxMin) && cell.x == rxMin)
+                        || (_reusableRowMaxX.TryGetValue(cell.y, out int rxMax) && cell.x == rxMax)
+                        || (_reusableColMinY.TryGetValue(cell.x, out int cyMin) && cell.y == cyMin)
+                        || (_reusableColMaxY.TryGetValue(cell.x, out int cyMax) && cell.y == cyMax);
 
-                    if (IsOutermostInDirection(cell, Vector2Int.up, _reusablePositionMap) ||
-                        IsOutermostInDirection(cell, Vector2Int.down, _reusablePositionMap) ||
-                        IsOutermostInDirection(cell, Vector2Int.left, _reusablePositionMap) ||
-                        IsOutermostInDirection(cell, Vector2Int.right, _reusablePositionMap))
+                    if (isOuter)
                     {
                         _reusableOutermostColors.Add(occEn.Current.Value);
                         if (_reusableCellToBalloonId.TryGetValue(cell, out int bid))
@@ -628,10 +665,8 @@ namespace BalloonFlow
 
         private bool IsOutermostInDirection(Vector2Int cell, Vector2Int direction, HashSet<Vector2Int> occupied)
         {
-            // Scan from cell toward the edge (direction toward rail). If no other balloon
-            // is between cell and the edge in that direction, cell is outermost.
-            // 50셀 = 약 28 world units (cellSpacing 0.55 기준). 일반 레벨 풍선 그리드 너비
-            // 충분히 커버. 200셀은 매 프레임 비용 높아 제거 (큰 레벨 lag 원인).
+            // Scan from cell toward the edge. 200 → 50 원복 (프레임 드랍 회피).
+            // 큰 보드 외곽 인식 누락 issue 는 별도 알고리즘 (sweep 기반 boundary) 으로 fix 권장.
             Vector2Int check = cell + direction;
             for (int i = 0; i < 50; i++)
             {

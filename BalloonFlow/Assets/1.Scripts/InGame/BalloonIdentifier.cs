@@ -5,8 +5,8 @@ namespace BalloonFlow
 {
     /// <summary>
     /// Attach to balloon GameObjects to identify them during dart hit detection.
-    /// Animator 연동: Pop(bool) 파라미터로 팡 연출.
     /// 색상 적용: Inspector에서 지정한 Renderer + 기반 Material로 복제 방식 적용.
+    /// 사용자 요구로 풍선 Animator 제거 — 1620 Animator update 부하 제거. pop 시각은 PopEffectPool 파티클이 처리.
     /// </summary>
     /// <remarks>
     /// MUST be in its own file (BalloonIdentifier.cs) for Unity prefab serialization.
@@ -18,9 +18,9 @@ namespace BalloonFlow
         [SerializeField] private int _color;
 
         private bool _isPopped;
-        [SerializeField]
-        private Animator _animator;
-        private static readonly int _animPop = Animator.StringToHash("Pop");
+        // 사용자 요구: Animator 자체 제거 (풍선 prefab Animator 컴포넌트 삭제 + 코드 주석).
+        // [SerializeField] private Animator _animator;
+        // private static readonly int _animPop = Animator.StringToHash("Pop");
 
         [Header("[색상 적용 대상 — Inspector에서 할당]")]
         [Tooltip("색상 적용할 Mesh Renderer만 드래그")]
@@ -46,20 +46,14 @@ namespace BalloonFlow
         /// <summary>색상 적용 대상이 할당되었는지.</summary>
         public bool HasColorRenderers => _colorRenderers != null && _colorRenderers.Length > 0;
 
-        /// <summary>Animator 초기화. 외부에서 명시적으로 호출.</summary>
+        /// <summary>외부 호출 entry — 사용자 요구로 Animator 제거. 현재 비어있음.</summary>
         public void Init()
         {
-            if (_animator == null)
-                _animator = GetComponent<Animator>();
-
-            if (_animator == null)
-                _animator = GetComponentInChildren<Animator>();
-
-            // 풍선 N×N 격자에서 Animator update 가 풍선 수 비례로 main thread 부하 큼.
-            // 카메라에 안 보이는 풍선의 Animator 는 update 안 함 — Renderer.bounds 기준 Cull.
-            // CullCompletely: 보이지 않을 때 controller graph evaluation + bone transform 모두 skip.
-            if (_animator != null)
-                _animator.cullingMode = AnimatorCullingMode.CullCompletely;
+            // Animator 검색 + CullCompletely 설정 코드 제거됨.
+            // [LEGACY 주석]
+            // if (_animator == null) _animator = GetComponent<Animator>();
+            // if (_animator == null) _animator = GetComponentInChildren<Animator>();
+            // if (_animator != null) _animator.cullingMode = AnimatorCullingMode.CullCompletely;
         }
 
         /// <summary>Sets balloon properties (used by BalloonController during spawn).</summary>
@@ -68,21 +62,15 @@ namespace BalloonFlow
             _balloonId = balloonId;
             _color = color;
             _isPopped = false;
-
             Init();
-
-            if (_animator != null)
-                _animator.SetBool(_animPop, false);
+            // [LEGACY] if (_animator != null) _animator.SetBool(_animPop, false);
         }
 
-        /// <summary>Marks this balloon as popped + 팡 애니메이션 트리거.
-        /// 파티클 이펙트는 외부 PopEffectPool 이 처리.</summary>
+        /// <summary>Marks this balloon as popped. 파티클 이펙트는 외부 PopEffectPool 이 처리 — Animator 트리거 제거됨.</summary>
         public void MarkPopped()
         {
             _isPopped = true;
-
-            if (_animator != null)
-                _animator.SetBool(_animPop, true);
+            // [LEGACY] if (_animator != null) _animator.SetBool(_animPop, true);
         }
 
         // Piñata 관련 기능은 GimmickIdentifier로 이전됨
