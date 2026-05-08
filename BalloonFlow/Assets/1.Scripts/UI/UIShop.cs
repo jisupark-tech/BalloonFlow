@@ -63,7 +63,7 @@ namespace BalloonFlow
         [SerializeField] private float _itemHeightOverride = 0f;
 
         [Header("[Appear Animation]")]
-        [SerializeField] private float _itemAppearScaleDuration = 1.5f;
+        [SerializeField] private float _itemAppearScaleDuration = 4f;
         [SerializeField] private float _itemAppearStagger = 0.06f;
         [SerializeField] private Ease _itemAppearEase = Ease.OutBack;
 
