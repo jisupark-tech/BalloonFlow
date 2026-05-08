@@ -77,6 +77,10 @@ namespace BalloonFlow
         [SerializeField] private GameObject _imgOnClickHome;
         [SerializeField] private GameObject _imgOnClickSetting;
 
+        [Header("[BottomNav — ImageLine (Home 활성 시 숨김)]")]
+        [SerializeField] private GameObject _imgLineShop;
+        [SerializeField] private GameObject _imgLineSetting;
+
         [Header("[BottomNav — Icon Images]")]
         [SerializeField] private Image _iconShop;
         [SerializeField] private Image _iconHome;
@@ -990,6 +994,10 @@ namespace BalloonFlow
             if (_imgOnClickHome != null) _imgOnClickHome.SetActive(activeIndex == 1);
             if (_imgOnClickSetting != null) _imgOnClickSetting.SetActive(activeIndex == 2);
 
+            bool homeActive = activeIndex == 1;
+            if (_imgLineShop != null) _imgLineShop.SetActive(!homeActive);
+            if (_imgLineSetting != null) _imgLineSetting.SetActive(!homeActive);
+
             // Icon scale + Y position
             SetNavIcon(_iconShop, activeIndex == 0, true, _iconBaseYShop);
             SetNavIcon(_iconHome, activeIndex == 1, true, _iconBaseYHome);
@@ -1006,6 +1014,10 @@ namespace BalloonFlow
             if (_imgOnClickShop != null) _imgOnClickShop.SetActive(activeIndex == 0);
             if (_imgOnClickHome != null) _imgOnClickHome.SetActive(activeIndex == 1);
             if (_imgOnClickSetting != null) _imgOnClickSetting.SetActive(activeIndex == 2);
+
+            bool homeActive = activeIndex == 1;
+            if (_imgLineShop != null) _imgLineShop.SetActive(!homeActive);
+            if (_imgLineSetting != null) _imgLineSetting.SetActive(!homeActive);
 
             SetNavIcon(_iconShop, activeIndex == 0, false, _iconBaseYShop);
             SetNavIcon(_iconHome, activeIndex == 1, false, _iconBaseYHome);
