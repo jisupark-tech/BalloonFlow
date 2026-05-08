@@ -217,7 +217,7 @@ namespace BalloonFlow
             {
                 _offPercentRoot.SetActive(!isCoinProduct && !forceNormalBundle && data.hasDiscount && data.discountPercent > 0);
                 if (!isCoinProduct && !forceNormalBundle && data.hasDiscount)
-                    SetTextWithOutline(_txtOffPer, _txtOffPerOutline, $"{data.discountPercent}%");
+                    SetTextWithOutline(_txtOffPer, _txtOffPerOutline, $"{data.discountPercent}% OFF!");
             }
 
             // 구매 버튼
