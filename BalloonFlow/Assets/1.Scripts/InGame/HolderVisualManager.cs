@@ -1134,6 +1134,12 @@ namespace BalloonFlow
             // deploy point progress를 한 번만 계산 (고정 위치)
             float fixedDeployProgress = rail.GetProgressAtWorldPos(railAttachPoint);
             rail.RegisterDeployPoint(visual.holderId, fixedDeployProgress);
+            int fixedDeploySlot = rail.GetSlotAtPathDistance(fixedDeployProgress);
+            string fixedDeployClearState = rail.GetProgressClearFailReason(fixedDeployProgress, visual.holderId);
+            Debug.Log($"[DeployStart] holder={visual.holderId}(col{visual.column}) gen={gen} mag={visual.magazineRemaining} " +
+                      $"fixedProg={fixedDeployProgress:F2} fixedSlot={fixedDeploySlot} clearNow={rail.IsProgressClear(fixedDeployProgress, visual.holderId)} " +
+                      $"state={fixedDeployClearState} waitFrames={waitFrames} waitSec={(Time.unscaledTime - waitStart):F2} " +
+                      $"Rail={rail.OccupiedCount}/{rail.SlotCount} active={rail.GetActiveDeployPointCount()} dlh={rail.DeadlockHolderId}");
 
             // 배치 페이싱: belt 누적 이동 거리(distSinceLastPlacement)가 physicalGap에 도달할 때마다 1회 배치.
             // overshoot은 carry-over + placementProgress 보정으로 흡수 → 다트 간격이 항상 정확히 physicalGap.
@@ -1198,6 +1204,11 @@ namespace BalloonFlow
                 }
 
                 float physGap = rail.DartPhysicalGap;
+                // ── 2026-05-08: client-side cluster freeze 분기 폐기 ── 롤백 가능.
+                // V2UpdateFreezeOnDeployBlock 폐기 + packing physics deploy block obstacle 추가에 따라
+                // cluster head 가 다른 deploy block 직전 packing 자연 정지. self.placement 는 cluster head
+                // 와 위치 다르므로 IsProgressClear 통과 → 정상 진행. yield/wait 분기 불필요.
+                /*
                 RailManager.DartOnRail clusterHead = rail.GetClusterHeadDart(visual.holderId);
                 bool blockedByDeployPoint = clusterHead != null
                     && rail.GetOtherActiveDeployPointHolderNear(clusterHead.progress, visual.holderId) >= 0;
@@ -1217,6 +1228,7 @@ namespace BalloonFlow
                     rail.UnfreezeClusterByHolder(visual.holderId);
                     visual.isClusterFrozen = false;
                 }
+                */
 
                 float beltSpeed = rail.GetBeltDistancePerSecond();
                 distSinceLastPlacement += beltSpeed * Time.deltaTime;
@@ -1372,12 +1384,40 @@ namespace BalloonFlow
                        && distSinceLastPlacement >= physGap)
                 {
                     float overshoot = distSinceLastPlacement - physGap;
-                    float placementProgress = fixedDeployProgress + overshoot;
+                    bool lockPlacementToDeployPoint = rail.DeadlockHolderId == visual.holderId;
+                    // 이전: deployStarted ? overshoot : 0f.
+                    // 문제: deadlock/full 이후 멀리서 fire가 나 capacity만 비면, 실제 fire gap이 deploy point에
+                    // 도달하기 전에도 fixedDeployProgress+overshoot 위치에 즉시 배포되어 AABBAABB가 생김.
+                    // deadlock holder는 fixed deploy point에 gap이 직접 지나올 때만 배포한다.
+                    float appliedOvershoot = (deployStarted && !lockPlacementToDeployPoint) ? overshoot : 0f;
+                    float placementProgress = fixedDeployProgress + appliedOvershoot;
                     if (totalPathLen > 0f && placementProgress >= totalPathLen) placementProgress -= totalPathLen;
 
                     bool useDeadlockFallback = false;
                     if (!rail.IsProgressClear(placementProgress, visual.holderId))
                     {
+                        float originalBlockedProgress = placementProgress;
+                        int originalBlockedSlot = rail.GetSlotAtPathDistance(originalBlockedProgress);
+                        // [Stuck] 진단 로그 — IsProgressClear=false 원인 식별 (자기 cluster.tail vs 외부 dart vs capacity)
+                        _lastStuckLogTime.TryGetValue(visual.holderId, out float __lastStuckT);
+                        if (Time.unscaledTime - __lastStuckT > STUCK_LOG_INTERVAL)
+                        {
+                            _lastStuckLogTime[visual.holderId] = Time.unscaledTime;
+                            int __slotIdx = rail.GetSlotAtPathDistance(placementProgress);
+                            var __slot = rail.GetSlot(__slotIdx);
+                            var __clusterHead = rail.GetClusterHeadDart(visual.holderId);
+                            string __headInfo = __clusterHead != null
+                                ? $"head.dartId={__clusterHead.dartId} head.progress={__clusterHead.progress:F2} head.frozen={__clusterHead.isFrozen}"
+                                : "head=null";
+                            string __clearFailReason = rail.GetProgressClearFailReason(placementProgress, visual.holderId);
+                            Debug.Log($"[Stuck] holder={visual.holderId}(col{visual.column}) magRem={visual.magazineRemaining} " +
+                                      $"placementProg={placementProgress:F2} overshoot={overshoot:F3} dist={distSinceLastPlacement:F3} " +
+                                      $"appliedOvershoot={appliedOvershoot:F3} fixedProg={fixedDeployProgress:F2} deployStarted={deployStarted} lockFixed={lockPlacementToDeployPoint} " +
+                                      $"→ slot{__slotIdx}: occupiedBy=holder{__slot.holderId} dartId={__slot.dartId} color={__slot.dartColor}. " +
+                                      $"{__headInfo}. reason={__clearFailReason}. " +
+                                      $"Rail={rail.OccupiedCount}/{rail.SlotCount} active={rail.GetActiveDeployPointCount()} dlh={rail.DeadlockHolderId}");
+                        }
+
                         TryEnterDeadlockIfNeeded(rail);
 
                         // DeadlockMode 의 leftmost 만 fallback — 빈 progress 직접 탐색 후 placement.
@@ -1385,11 +1425,24 @@ namespace BalloonFlow
                         // 빈 progress 위치가 belt 진행 따라 같은 속도로 이동 → 첫 시점에 align 안 되면 영원히
                         // align 안 됨 (timing mismatch deadlock). DeadlockMode 풀기 위해 fallback 필요.
                         // 비-deadlock 상태에선 fallback 안 함 (의도 7 유지).
-                        if (rail.DeadlockHolderId == visual.holderId)
+                        bool canUseLastSlotFallback =
+                            ENABLE_DEADLOCK_FALLBACK
+                            && rail.DeadlockHolderId == visual.holderId
+                            && rail.OccupiedCount >= rail.PhysicalCapacity - DEADLOCK_FALLBACK_REMAINING_SLOTS
+                            && rail.OccupiedCount < rail.PhysicalCapacity;
+
+                        if (canUseLastSlotFallback)
                         {
                             float fallbackProgress = rail.FindClearProgressNear(placementProgress, visual.holderId);
                             if (fallbackProgress >= 0f)
                             {
+                                int fallbackSlot = rail.GetSlotAtPathDistance(fallbackProgress);
+                                string fallbackState = rail.GetProgressClearFailReason(fallbackProgress, visual.holderId);
+                                Debug.Log($"[DeadlockFallback] holder={visual.holderId}(col{visual.column}) " +
+                                          $"fromProg={originalBlockedProgress:F2} fromSlot={originalBlockedSlot} " +
+                                          $"toProg={fallbackProgress:F2} toSlot={fallbackSlot} " +
+                                          $"overshoot={overshoot:F3} dist={distSinceLastPlacement:F3} " +
+                                          $"toState={fallbackState} Rail={rail.OccupiedCount}/{rail.SlotCount} active={rail.GetActiveDeployPointCount()} dlh={rail.DeadlockHolderId}");
                                 placementProgress = fallbackProgress;
                                 useDeadlockFallback = true;
                             }
@@ -1403,6 +1456,26 @@ namespace BalloonFlow
                         }
                     }
 
+                    if (!rail.IsDeployProgressPhysicallyClear(placementProgress, visual.color, visual.holderId, out string placementGapInfo))
+                    {
+                        _lastGapBlockLogTime.TryGetValue(visual.holderId, out float __lastGapBlockT);
+                        if (Time.unscaledTime - __lastGapBlockT > STUCK_LOG_INTERVAL)
+                        {
+                            _lastGapBlockLogTime[visual.holderId] = Time.unscaledTime;
+                            Debug.Log($"[DeployGapBlocked] holder={visual.holderId}(col{visual.column}) magRem={visual.magazineRemaining} " +
+                                      $"placementProg={placementProgress:F2} overshoot={overshoot:F3} dist={distSinceLastPlacement:F3} " +
+                                      $"appliedOvershoot={appliedOvershoot:F3} fixedProg={fixedDeployProgress:F2} deployStarted={deployStarted} lockFixed={lockPlacementToDeployPoint} " +
+                                      $"reason={placementGapInfo}. " +
+                                      $"advance={rail.GetAdvanceModeDebugInfo()} " +
+                                      $"Rail={rail.OccupiedCount}/{rail.SlotCount} active={rail.GetActiveDeployPointCount()} dlh={rail.DeadlockHolderId}");
+                        }
+
+                        TryEnterDeadlockIfNeeded(rail);
+                        float __clampMax_gap = MAX_PLACEMENTS_PER_FRAME * physGap;
+                        if (distSinceLastPlacement > __clampMax_gap) distSinceLastPlacement = __clampMax_gap;
+                        break;
+                    }
+
                     int dartId = rail.PlaceDartAtProgress(placementProgress, visual.color, visual.holderId);
                     if (dartId < 0)
                     {
@@ -1410,10 +1483,28 @@ namespace BalloonFlow
                         break;
                     }
 
+                    bool wasFirstPlacement = !deployStarted;
+                    if (LOG_DEPLOY_GAP_DIAG || wasFirstPlacement || useDeadlockFallback)
+                    {
+                        int placedSlot = rail.GetSlotAtPathDistance(placementProgress);
+                        Debug.Log($"[DeployPlace] holder={visual.holderId}(col{visual.column}) dartId={dartId} " +
+                                  $"progress={placementProgress:F2} slot={placedSlot} fallback={useDeadlockFallback} first={wasFirstPlacement} " +
+                                  $"overshoot={overshoot:F3} appliedOvershoot={appliedOvershoot:F3} lockFixed={lockPlacementToDeployPoint} magBefore={visual.magazineRemaining} " +
+                                  $"{placementGapInfo} " +
+                                  $"Rail={rail.OccupiedCount}/{rail.SlotCount} active={rail.GetActiveDeployPointCount()} dlh={rail.DeadlockHolderId}");
+
+                        if (placementGapInfo.Contains("splitRisk=between"))
+                        {
+                            Debug.Log($"[DeploySplitRisk] holder={visual.holderId}(col{visual.column}) dartId={dartId} " +
+                                      $"progress={placementProgress:F2} slot={placedSlot} magBefore={visual.magazineRemaining} " +
+                                      $"lockFixed={lockPlacementToDeployPoint} {placementGapInfo} advance={rail.GetAdvanceModeDebugInfo()}");
+                        }
+                    }
+
                     if (deployStarted)
                         rail.ActivateDeployPoint(visual.holderId);
 
-                    distSinceLastPlacement = overshoot;  // 잉여만 carry — physGap 만큼 차감 (spacing 손실 X)
+                    distSinceLastPlacement = wasFirstPlacement ? 0f : overshoot;  // 첫 배치 전 누적 overshoot는 Deploy Point 정렬을 위해 버림
                     placementsThisFrame++;
                     visual.magazineRemaining--;
 
@@ -1468,6 +1559,14 @@ namespace BalloonFlow
         private float _lastDeadlockDiagLogTime;
         private const float DEADLOCK_DIAG_LOG_INTERVAL = 2.0f;
 
+        // [Stuck] 진단 로그 throttle — holder 별 1초당 1회. IsProgressClear=false 시 점유 정보 log.
+        private readonly Dictionary<int, float> _lastStuckLogTime = new Dictionary<int, float>();
+        private readonly Dictionary<int, float> _lastGapBlockLogTime = new Dictionary<int, float>();
+        private const float STUCK_LOG_INTERVAL = 1.0f;
+        private const bool ENABLE_DEADLOCK_FALLBACK = false; // 기존 FindClearProgressNear 직접 배포 fallback은 비활성화.
+        private const int DEADLOCK_FALLBACK_REMAINING_SLOTS = 1; // 199/200 같은 마지막 1칸 deadlock 보정 전용.
+        private const bool LOG_DEPLOY_GAP_DIAG = true; // 성공 배포가 실제 어떤 앞/뒤 dart 사이에 들어가는지 임시 진단.
+
         /// <summary>
         /// 데드락 감지 — rail full + 다중 active deploy point 인 경우 leftmost holder 선택해 EnterDeadlockMode.
         /// 매 placement 실패 시 호출. 이미 deadlock 진입 상태면 no-op.
@@ -1476,18 +1575,27 @@ namespace BalloonFlow
         {
             if (rail.DeadlockHolderId >= 0) return; // 이미 진입
 
-            bool nearFull = rail.IsRailNearFull();
             int activeCount = rail.GetActiveDeployPointCount();
+            int isDeployingCount = 0;
+            foreach (var kvp in _holderVisuals)
+            {
+                if (kvp.Value.isDeploying) isDeployingCount++;
+            }
+
+            // 이전: rail.IsRailNearFull() == capacity - 1 고정 기준.
+            // 198/200에서도 active/deploying holder들이 deploy point를 막으면 gap이 순환하지 못해 stuck.
+            int deployPressure = Mathf.Max(1, Mathf.Max(activeCount, isDeployingCount));
+            // 이전: min 2칸. active=1/isDeploying=1에서도 197/200에서 자기 cluster tail에 막히는 케이스 발생.
+            // deadlock advance 허용치와 맞춰 최소 3칸부터 nearFull로 취급한다.
+            int emptyAllowance = Mathf.Clamp(deployPressure + 1, 3, 5);
+            int nearFullThreshold = Mathf.Max(0, rail.PhysicalCapacity - emptyAllowance);
+            bool nearFull = rail.OccupiedCount >= nearFullThreshold;
 
             if (Time.unscaledTime - _lastDeadlockDiagLogTime > DEADLOCK_DIAG_LOG_INTERVAL)
             {
                 _lastDeadlockDiagLogTime = Time.unscaledTime;
-                int isDeployingCount = 0;
-                foreach (var kvp in _holderVisuals)
-                {
-                    if (kvp.Value.isDeploying) isDeployingCount++;
-                }
                 Debug.Log($"[Deadlock][Diag] check: rail={rail.OccupiedCount}/{rail.SlotCount} (nearFull={nearFull}), " +
+                          $"threshold={nearFullThreshold} emptyAllowance={emptyAllowance}, " +
                           $"activeDeploys={activeCount}, isDeployingHolders={isDeployingCount}, " +
                           $"deadlockHolder={rail.DeadlockHolderId}");
             }

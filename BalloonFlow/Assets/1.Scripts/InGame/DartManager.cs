@@ -836,7 +836,17 @@ namespace BalloonFlow
                 int color = dart.dartColor;
                 int dartId = dart.dartId;
                 int holderId = dart.holderId;
-                rail.RemoveDartById(dartId);
+                var fireHead = rail.GetClusterHeadDart(holderId);
+                int fireSlot = rail.GetSlotAtPathDistance(dart.progress);
+                var fireSlotData = rail.GetSlot(fireSlot);
+                Debug.Log($"[DartFire] holder={holderId} dartId={dartId} color={color} " +
+                          $"progress={dart.progress:F2} slot={fireSlot} slotState=holder{fireSlotData.holderId}/dart{fireSlotData.dartId}/color{fireSlotData.dartColor} " +
+                          $"head={(fireHead != null ? fireHead.dartId.ToString() : "null")} target={targetId} " +
+                          $"gapAfterRemove={rail.GetPlacementGapDebugInfo(dart.progress, color, holderId, dartId)} " +
+                          $"advance={rail.GetAdvanceModeDebugInfo()}");
+                bool removedFromRail = rail.RemoveDartById(dartId);
+                Debug.Log($"[DartFireAfterRemove] holder={holderId} dartId={dartId} removed={removedFromRail} " +
+                          $"advance={rail.GetAdvanceModeDebugInfo()}");
                 // RemoveDartById 가 RemoveFromClusterHeadCache 호출 → _clusterHeadByHolder 자동 갱신.
                 // 새 head 가 같은 tick 에 발사되지 않도록 _firedHoldersThisTick 으로 차단.
 

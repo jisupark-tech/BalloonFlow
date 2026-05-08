@@ -38,13 +38,6 @@ namespace BalloonFlow
             // Test mode에서도 LevelManager가 필요하므로 InitLobby 호출
             GameManager.Instance.InitLobby();
 
-            // InGame 매니저 생성 (GameManager 자식)
-            GameManager.Instance.InitInGame();
-
-            // 카메라 설정
-            if (CameraManager.HasInstance)
-                CameraManager.Instance.ConfigureInGame();
-
             // EventSystem 확인
             if (FindAnyObjectByType<EventSystem>() == null)
             {
@@ -59,6 +52,13 @@ namespace BalloonFlow
             // 직전 씬(Lobby/Title) 의 UI/Popup 제거 — InGame 전용만 새로 로드
             if (UIManager.HasInstance) UIManager.Instance.DestroyAllUI();
             if (PopupManager.HasInstance) PopupManager.Instance.UnregisterAll();
+
+            // TutorialManager opens/binds Popup/Tutorial during Awake, so create it after stale UI cleanup.
+            GameManager.Instance.InitInGame();
+
+            // 카메라 설정
+            if (CameraManager.HasInstance)
+                CameraManager.Instance.ConfigureInGame();
 
             // UI 로드
             LoadUI();

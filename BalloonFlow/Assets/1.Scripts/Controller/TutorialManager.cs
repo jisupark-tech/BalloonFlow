@@ -8,8 +8,8 @@ namespace BalloonFlow
     /// <summary>
     /// First Time User Experience (FTUE) visual manager.
     /// Listens to OnTutorialStepChanged and drives all tutorial UI elements:
-    /// 4-panel cutout dim overlay, highlight frame, directional arrow, and instruction panel.
-    /// Auto-creates all UI in code — no prefab dependencies.
+    /// single cutout dim overlay (CutoutMaskUI), highlight frame, directional arrow, and instruction panel.
+    /// Prefab-based (Resources/Popup/Tutorial). Code fallback creates minimal UI when prefab missing.
     /// Contains no game logic — purely cosmetic guidance layer.
     /// </summary>
     /// <remarks>
@@ -28,7 +28,6 @@ namespace BalloonFlow
         private const float CUTOUT_PADDING = 20f;
         private const float FRAME_THICKNESS = 4f;
         private const int CANVAS_SORT_ORDER = 200;
-        private static readonly Color DIM_COLOR = new Color(0f, 0f, 0f, DIM_ALPHA);
         private static readonly Color FRAME_COLOR = new Color(1f, 1f, 1f, 0.9f);
         private static readonly Color INSTRUCTION_BG_COLOR = new Color(0.1f, 0.1f, 0.15f, 0.92f);
 
@@ -41,25 +40,12 @@ namespace BalloonFlow
         private Canvas _canvas;
         private RectTransform _canvasRect;
 
-        // Spotlight dim (단일 패널 + 스포트라이트 셰이더)
-        private Image _spotlightImage;
-        private Material _spotlightMat;
-        private static readonly int _propCenter = Shader.PropertyToID("_Center");
-        private static readonly int _propRadius = Shader.PropertyToID("_Radius");
-        private static readonly int _propSoftness = Shader.PropertyToID("_Softness");
-
-        // Legacy 4-panel references (PopupTutorial 프리팹 호환)
-        private RectTransform _dimTop;
-        private RectTransform _dimBottom;
-        private RectTransform _dimLeft;
-        private RectTransform _dimRight;
-        private Image _dimTopImage;
-        private Image _dimBottomImage;
-        private Image _dimLeftImage;
-        private Image _dimRightImage;
+        // Cutout mask (UseItem 패턴): _cutoutMask = hole 정의 RectTransform.
+        // CutoutMaskUI + Mask + 자식 DimOverlay 자동 셋업 → mask 영역 "밖"만 dim 렌더 (hole-in-UI).
+        private RectTransform _cutoutMask;
         private RectTransform _cutoutFrame;
         private Image _cutoutFrameImage;
-        /// <summary>CutoutFrame 자식의 dim overlay (frame 영역 "밖"에만 그려짐).</summary>
+        /// <summary>풀스크린 dim Image — CutoutMaskUI 가 자식 영역(=CutoutFrame) "밖"에만 그려지도록 펀칭.</summary>
         private Image _cutoutDimImage;
 
         // Arrow indicator
@@ -158,21 +144,12 @@ namespace BalloonFlow
             var popup = root.GetComponent<PopupTutorial>();
             if (popup != null)
             {
-                _dimTop = popup.DimTop;
-                _dimBottom = popup.DimBottom;
-                _dimLeft = popup.DimLeft;
-                _dimRight = popup.DimRight;
-                _dimTopImage = _dimTop?.GetComponent<Image>();
-                _dimBottomImage = _dimBottom?.GetComponent<Image>();
-                _dimLeftImage = _dimLeft?.GetComponent<Image>();
-                _dimRightImage = _dimRight?.GetComponent<Image>();
-
+                _cutoutMask = popup.CutoutMask;
                 _cutoutFrame = popup.CutoutFrame;
                 _cutoutFrameImage = _cutoutFrame?.GetComponent<Image>();
 
-                // CutoutFrame 에 CutoutMaskUI + Mask 부착 → 자식 DimOverlay 가 frame 영역 "밖"에만 그려져 펀칭 효과.
-                // 기존 4-panel(DimTop/Bottom/Left/Right) 접근은 이 단일 mask 로 대체.
-                SetupCutoutMaskOnFrame();
+                // _cutoutMask 에 CutoutMaskUI + Mask 부착 → 자식 DimOverlay 자동 생성 (hole "밖"만 dim 렌더, UseItem 패턴).
+                SetupCutoutMask();
 
                 _arrowIndicator = popup.ArrowIndicator;
                 _arrowImage = _arrowIndicator?.GetComponent<Image>();
@@ -319,13 +296,14 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Hides the cutout and all dim panels.
+        /// Hides the cutout and dim overlay.
         /// </summary>
         public void HideCutout()
         {
             _isCutoutVisible = false;
-            if (_spotlightImage != null) _spotlightImage.gameObject.SetActive(false);
-            SetDimPanelsActive(false);
+
+            if (_cutoutMask != null)
+                _cutoutMask.gameObject.SetActive(false);
 
             if (_cutoutFrame != null)
                 _cutoutFrame.gameObject.SetActive(false);
@@ -454,61 +432,32 @@ namespace BalloonFlow
             _canvasRect = canvasGO.GetComponent<RectTransform>();
             _tutorialCanvas = canvasGO;
 
-            // 스포트라이트 패널 (단일 + 셰이더)
-            var spotShader = Shader.Find("UI/TutorialSpotlight");
-            if (spotShader != null)
-            {
-                var spotGO = new GameObject("SpotlightDim");
-                spotGO.transform.SetParent(canvasGO.transform, false);
-                _spotlightImage = spotGO.AddComponent<Image>();
-                _spotlightMat = new Material(spotShader);
-                _spotlightImage.material = _spotlightMat;
-                _spotlightImage.color = Color.white;
-                _spotlightImage.raycastTarget = true;
-                var spotRT = spotGO.GetComponent<RectTransform>();
-                spotRT.anchorMin = Vector2.zero;
-                spotRT.anchorMax = Vector2.one;
-                spotRT.offsetMin = Vector2.zero;
-                spotRT.offsetMax = Vector2.zero;
-                // 기본: 구멍 없이 전체 어둡게
-                _spotlightMat.SetVector(_propCenter, new Vector4(0.5f, 0.5f, 0, 0));
-                _spotlightMat.SetVector(_propRadius, new Vector4(0, 0, 0, 0));
-            }
+            // 단일 _cutoutMask (hole 정의 RectTransform). SetupCutoutMask 이 CutoutMaskUI/Mask + 자식 DimOverlay 추가.
+            _cutoutMask = CreateCutoutMaskRect("CutoutMask", canvasGO.transform);
 
-            // Fallback: 4 dim panels (스포트라이트 셰이더 없을 때)
-            _dimTop = CreateDimPanel("DimTop", canvasGO.transform, out _dimTopImage);
-            _dimBottom = CreateDimPanel("DimBottom", canvasGO.transform, out _dimBottomImage);
-            _dimLeft = CreateDimPanel("DimLeft", canvasGO.transform, out _dimLeftImage);
-            _dimRight = CreateDimPanel("DimRight", canvasGO.transform, out _dimRightImage);
-
-            // Create tap-anywhere overlay (sits between dim panels and instruction)
-            CreateTapAnywhereOverlay(canvasGO.transform);
-
-            // Create cutout frame (outline)
+            // CutoutFrame (frame Outline 시각화). _cutoutMask 의 형제로 둠 — mask 영향 안 받게.
             _cutoutFrame = CreateCutoutFrame(canvasGO.transform);
 
-            // Create arrow indicator
-            _arrowIndicator = CreateArrowIndicator(canvasGO.transform);
+            // _cutoutMask 에 mask + 자식 DimOverlay 셋업
+            SetupCutoutMask();
 
-            // Create instruction panel at bottom
+            // Tap-anywhere, arrow, instruction
+            CreateTapAnywhereOverlay(canvasGO.transform);
+            _arrowIndicator = CreateArrowIndicator(canvasGO.transform);
             _instructionPanel = CreateInstructionPanel(canvasGO.transform);
         }
 
-        private RectTransform CreateDimPanel(string name, Transform parent, out Image image)
+        private RectTransform CreateCutoutMaskRect(string name, Transform parent)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
 
             var rect = go.AddComponent<RectTransform>();
-            // Default: stretch to fill (will be repositioned by ApplyCutout)
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.zero;
-            rect.pivot = new Vector2(0f, 0f);
-
-            image = go.AddComponent<Image>();
-            image.color = DIM_COLOR;
-            image.raycastTarget = true;
-
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot     = new Vector2(0.5f, 0.5f);
+            // hole 영역은 ApplyCutout 에서 갱신
+            rect.sizeDelta = Vector2.zero;
             return rect;
         }
 
@@ -535,25 +484,24 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// CutoutFrame 에 CutoutMaskUI + Mask 부착 후 자식 DimOverlay 추가 — frame 영역 "밖" 만 dim 처리.
-        /// 기존 4-panel(DimTop/Bottom/Left/Right) 은 비활성화. ShowCutoutForHolder 가 _cutoutFrame 사이즈/위치 변경하면
-        /// 자식 dim 도 함께 따라가므로 간단.
+        /// UseItem 패턴 (PopupUseItem.SetupShaders 와 동일):
+        /// _cutoutMask (RectTransform) 에 CutoutMaskUI + Mask 부착 → _cutoutMask 영역 = hole. 자식 DimOverlay 자동 생성 → hole "밖"만 dim 렌더.
+        /// _cutoutFrame 이 _cutoutMask 자식이면 mask 영향으로 frame 가시성 깨지므로 형제로 reparent.
         /// </summary>
-        private void SetupCutoutMaskOnFrame()
+        private void SetupCutoutMask()
         {
-            if (_cutoutFrame == null) return;
+            if (_cutoutMask == null) return;
 
-            // 기존 Image 가 일반 Image 면 CutoutMaskUI 로 교체
-            var existingImage = _cutoutFrame.GetComponent<Image>();
-            CutoutMaskUI cutout = _cutoutFrame.GetComponent<CutoutMaskUI>();
+            // CutoutMaskUI 보장 — 기존 Image 가 있으면 교체.
+            var existingImage = _cutoutMask.GetComponent<Image>();
+            CutoutMaskUI cutout = _cutoutMask.GetComponent<CutoutMaskUI>();
             if (cutout == null)
             {
                 if (existingImage != null && !(existingImage is CutoutMaskUI))
                     DestroyImmediate(existingImage);
-                cutout = _cutoutFrame.gameObject.AddComponent<CutoutMaskUI>();
+                cutout = _cutoutMask.gameObject.AddComponent<CutoutMaskUI>();
             }
-            _cutoutFrameImage = cutout;
-            // 메시 보장용 흰색 sprite (스텐실 wrtie 가능)
+            // 메시 보장용 흰색 sprite (stencil write 가능)
             if (cutout.sprite == null)
             {
                 var tex = new Texture2D(4, 4);
@@ -562,17 +510,24 @@ namespace BalloonFlow
                 cutout.sprite = Sprite.Create(tex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
             }
             cutout.type = Image.Type.Simple;
-            cutout.color = new Color(1f, 1f, 1f, 0f); // 본체는 안 보임 — frame 표시는 Outline 컴포넌트가 담당
+            cutout.color = new Color(1f, 1f, 1f, 0f); // 본체는 안 보임 — geometry/stencil 만
             cutout.raycastTarget = false;
 
-            // Mask 컴포넌트 — showMaskGraphic=true 로 base graphic 렌더 허용 (Outline 컴포넌트의 frame 표시).
-            // CutoutMaskUI 의 color.alpha=0 이라 본체는 안 보이고 Outline 만 보임.
-            var mask = _cutoutFrame.GetComponent<Mask>();
-            if (mask == null) mask = _cutoutFrame.gameObject.AddComponent<Mask>();
+            // Mask — showMaskGraphic=true 여야 stencil 정상 기록.
+            var mask = _cutoutMask.GetComponent<Mask>();
+            if (mask == null) mask = _cutoutMask.gameObject.AddComponent<Mask>();
             mask.showMaskGraphic = true;
 
-            // 자식 DimOverlay — 부모 frame 영역 "밖" 만 그려짐 (CutoutMaskUI 가 stencil-invert 수행)
-            Transform existingDim = _cutoutFrame.Find("DimOverlay");
+            // _cutoutFrame 이 _cutoutMask 자식이면 mask 영향으로 frame 안 보임 → 한 단계 위로 reparent.
+            if (_cutoutFrame != null && _cutoutFrame.parent == _cutoutMask)
+            {
+                Transform grand = _cutoutMask.parent != null ? _cutoutMask.parent
+                    : (_tutorialCanvas != null ? _tutorialCanvas.transform : null);
+                if (grand != null) _cutoutFrame.SetParent(grand, false);
+            }
+
+            // 자식 DimOverlay — 부모 _cutoutMask 의 mask 영역 "밖" 만 그려짐.
+            Transform existingDim = _cutoutMask.Find("DimOverlay");
             GameObject dimGO;
             if (existingDim != null)
             {
@@ -583,9 +538,10 @@ namespace BalloonFlow
             else
             {
                 dimGO = new GameObject("DimOverlay", typeof(RectTransform), typeof(Image));
-                dimGO.transform.SetParent(_cutoutFrame, false);
+                dimGO.transform.SetParent(_cutoutMask, false);
                 _cutoutDimImage = dimGO.GetComponent<Image>();
             }
+            // 부모 _cutoutMask 이 작아도 자식이 화면 전체를 덮도록 절대 크기.
             var dimRT = dimGO.GetComponent<RectTransform>();
             dimRT.anchorMin = new Vector2(0.5f, 0.5f);
             dimRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -593,13 +549,7 @@ namespace BalloonFlow
             dimRT.anchoredPosition = Vector2.zero;
             dimRT.sizeDelta = new Vector2(10000f, 10000f);
             _cutoutDimImage.color = new Color(0f, 0f, 0f, 0f); // 알파는 SetDimColor 로 페이드
-            _cutoutDimImage.raycastTarget = true; // dim 영역 클릭 차단 — 튜토리얼이 frame 외부 입력 가로챔
-
-            // 기존 4-panel dim 은 비활성화 — 단일 mask 로 대체
-            if (_dimTop != null) _dimTop.gameObject.SetActive(false);
-            if (_dimBottom != null) _dimBottom.gameObject.SetActive(false);
-            if (_dimLeft != null) _dimLeft.gameObject.SetActive(false);
-            if (_dimRight != null) _dimRight.gameObject.SetActive(false);
+            _cutoutDimImage.raycastTarget = true; // dim 영역 클릭 차단
         }
 
         private RectTransform CreateCutoutFrame(Transform parent)
@@ -745,8 +695,19 @@ namespace BalloonFlow
 
         #region Private Methods — Event Handlers
 
+        private void EnsureTutorialUI()
+        {
+            if (_tutorialCanvas != null && _instructionText != null)
+                return;
+
+            Debug.Log("[TutorialDbg] Tutorial UI reference missing. Rebinding Popup/Tutorial.");
+            LoadOrCreateTutorialUI();
+            HideAllVisuals();
+        }
+
         private void HandleTutorialStarted(OnTutorialStarted evt)
         {
+            EnsureTutorialUI();
             Debug.Log($"[TutorialDbg] HandleTutorialStarted tutorialId={evt.tutorialId} " +
                       $"canvasActive={(_tutorialCanvas != null ? _tutorialCanvas.activeInHierarchy : false)} " +
                       $"instructionPanel={_instructionPanel != null} instructionText={_instructionText != null}");
@@ -756,6 +717,7 @@ namespace BalloonFlow
 
         private void HandleTutorialStepChanged(OnTutorialStepChanged evt)
         {
+            EnsureTutorialUI();
             Debug.Log($"[TutorialDbg] HandleTutorialStepChanged step={evt.stepIndex} instr='{evt.instruction}'");
             string highlightTarget = string.Empty;
             string requireAction = string.Empty;
@@ -857,56 +819,19 @@ namespace BalloonFlow
         #region Private Methods — Cutout Positioning
 
         /// <summary>
-        /// Positions the 4 dim panels around the cutout hole defined by center and size in canvas space.
-        /// Canvas space: (0,0) at bottom-left, (canvasWidth, canvasHeight) at top-right.
+        /// _cutoutMask 의 RectTransform 을 hole 위치/크기로 갱신 (UseItem 패턴). center/size 는 canvas space.
+        /// CutoutMaskUI 가 _cutoutMask 영역을 stencil-invert → 자식 DimOverlay 가 hole "밖"만 dim 렌더.
+        /// _cutoutFrame 도 동일 위치/크기로 따라가서 hole 가장자리 frame 표시.
         /// </summary>
         private void ApplyCutout(Vector2 center, Vector2 size)
         {
             _isCutoutVisible = true;
 
-            // 1순위: CutoutFrame + CutoutMaskUI (자식 dim 이 frame 영역 밖만 그림 — 표준 hole-in-UI 패턴).
-            //         frame 위치/크기 변경만으로 hole 위치 변경 됨 — ApplyCutout 종료 후 호출자에서 처리.
-            if (_cutoutDimImage != null && _cutoutFrame != null)
+            if (_cutoutMask != null)
             {
-                if (_spotlightImage != null) _spotlightImage.gameObject.SetActive(false);
-                SetDimPanelsActive(false);
-                return;
-            }
-
-            // 스포트라이트 셰이더 방식 (부드러운 원형 투명 영역)
-            if (_spotlightMat != null && _spotlightImage != null)
-            {
-                _spotlightImage.gameObject.SetActive(true);
-                SetDimPanelsActive(false); // 4패널 사용 안 함
-
-                Vector2 canvasSize = _canvasRect.sizeDelta;
-                // UV 좌표로 변환 (0~1)
-                Vector2 uvCenter = new Vector2(center.x / canvasSize.x, center.y / canvasSize.y);
-                Vector2 uvRadius = new Vector2(
-                    (size.x * 0.5f + CUTOUT_PADDING) / canvasSize.x,
-                    (size.y * 0.5f + CUTOUT_PADDING) / canvasSize.y);
-
-                _spotlightMat.SetVector(_propCenter, new Vector4(uvCenter.x, uvCenter.y, 0, 0));
-                _spotlightMat.SetVector(_propRadius, new Vector4(uvRadius.x, uvRadius.y, 0, 0));
-                _spotlightMat.SetFloat(_propSoftness, 0.15f);
-            }
-            else
-            {
-                // Fallback: 4패널 컷아웃
-                SetDimPanelsActive(true);
-
-                Vector2 canvasSize = _canvasRect.sizeDelta;
-                float canvasW = canvasSize.x;
-                float canvasH = canvasSize.y;
-                float cutLeft = Mathf.Max(0f, center.x - size.x * 0.5f);
-                float cutRight = Mathf.Min(canvasW, center.x + size.x * 0.5f);
-                float cutBottom = Mathf.Max(0f, center.y - size.y * 0.5f);
-                float cutTop = Mathf.Min(canvasH, center.y + size.y * 0.5f);
-
-                if (_dimTop != null) { _dimTop.anchoredPosition = new Vector2(0f, cutTop); _dimTop.sizeDelta = new Vector2(canvasW, canvasH - cutTop); }
-                if (_dimBottom != null) { _dimBottom.anchoredPosition = Vector2.zero; _dimBottom.sizeDelta = new Vector2(canvasW, cutBottom); }
-                if (_dimLeft != null) { _dimLeft.anchoredPosition = new Vector2(0f, cutBottom); _dimLeft.sizeDelta = new Vector2(cutLeft, cutTop - cutBottom); }
-                if (_dimRight != null) { _dimRight.anchoredPosition = new Vector2(cutRight, cutBottom); _dimRight.sizeDelta = new Vector2(canvasW - cutRight, cutTop - cutBottom); }
+                _cutoutMask.gameObject.SetActive(true);
+                _cutoutMask.anchoredPosition = center;
+                _cutoutMask.sizeDelta = size + new Vector2(CUTOUT_PADDING * 2f, CUTOUT_PADDING * 2f);
             }
 
             if (_cutoutFrame != null)
@@ -915,14 +840,6 @@ namespace BalloonFlow
                 _cutoutFrame.anchoredPosition = center;
                 _cutoutFrame.sizeDelta = size;
             }
-        }
-
-        private void SetDimPanelsActive(bool active)
-        {
-            if (_dimTop != null) _dimTop.gameObject.SetActive(active);
-            if (_dimBottom != null) _dimBottom.gameObject.SetActive(active);
-            if (_dimLeft != null) _dimLeft.gameObject.SetActive(active);
-            if (_dimRight != null) _dimRight.gameObject.SetActive(active);
         }
 
         /// <summary>
@@ -977,13 +894,8 @@ namespace BalloonFlow
 
         private void SetDimColor(float alpha)
         {
-            Color c = new Color(0f, 0f, 0f, alpha);
-            // CutoutMaskUI 자식 dim 이 새 표준 — 기존 4-panel 은 호환성 위해 유지
-            if (_cutoutDimImage != null) _cutoutDimImage.color = c;
-            if (_dimTopImage != null) _dimTopImage.color = c;
-            if (_dimBottomImage != null) _dimBottomImage.color = c;
-            if (_dimLeftImage != null) _dimLeftImage.color = c;
-            if (_dimRightImage != null) _dimRightImage.color = c;
+            if (_cutoutDimImage != null)
+                _cutoutDimImage.color = new Color(0f, 0f, 0f, alpha);
         }
 
         private void OnSkipPressed()
@@ -1008,7 +920,7 @@ namespace BalloonFlow
 
         private IEnumerator FadeDimCoroutine(float targetAlpha)
         {
-            float startAlpha = _dimTopImage != null ? _dimTopImage.color.a : 0f;
+            float startAlpha = _cutoutDimImage != null ? _cutoutDimImage.color.a : 0f;
             float elapsed = 0f;
 
             while (elapsed < FADE_DURATION)
