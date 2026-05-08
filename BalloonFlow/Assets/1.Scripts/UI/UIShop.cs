@@ -63,13 +63,14 @@ namespace BalloonFlow
         [SerializeField] private float _itemHeightOverride = 0f;
 
         [Header("[Appear Animation]")]
-        [SerializeField] private float _itemAppearScaleDuration = 0.5f;
+        [SerializeField] private float _itemAppearScaleDuration = 1.5f;
         [SerializeField] private float _itemAppearStagger = 0.06f;
         [SerializeField] private Ease _itemAppearEase = Ease.OutBack;
 
         private int _displayedCount;
         private bool _userExpandedMore;
         private readonly List<PopupShopListItem> _spawnedItems = new List<PopupShopListItem>();
+        private int _lastLoadFrame = -1;
 
         protected override void Awake()
         {
@@ -319,6 +320,10 @@ namespace BalloonFlow
         /// <summary>상품 리스트 초기화 + 첫 페이지 로드.</summary>
         private void ResetAndLoadProducts()
         {
+            // 같은 프레임 중복 호출 방지 (Awake 경로 + UILobby.ResetView 동시 트리거 시 등장 연출 1회만)
+            if (_lastLoadFrame == Time.frameCount) return;
+            _lastLoadFrame = Time.frameCount;
+
             for (int i = 0; i < _spawnedItems.Count; i++)
             {
                 if (_spawnedItems[i] != null && _spawnedItems[i].gameObject != null)
