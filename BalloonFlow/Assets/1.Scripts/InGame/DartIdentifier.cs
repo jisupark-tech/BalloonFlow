@@ -47,6 +47,7 @@ namespace BalloonFlow
                 {
                     mat = new Material(_baseMaterial);
                     mat.SetColor("_BaseColor", color);
+                    // [Optimization 2026-05-10 revert] GPU Instancing 채택 — dart 200+ × 28 색.
                     mat.enableInstancing = true;
                     _dartMatCache[key] = mat;
                 }
@@ -73,6 +74,7 @@ namespace BalloonFlow
                     if (_needleOutlineMat == null)
                     {
                         _needleOutlineMat = new Material(_needleBaseMaterial);
+                        // [Optimization 2026-05-10 revert] GPU Instancing 채택.
                         _needleOutlineMat.enableInstancing = true;
                     }
                     for (int i = 0; i < _outlineOnlyRenderers.Length; i++)

@@ -168,6 +168,10 @@ Shader "Custom/ItemShared"
         }
 
         // ──────────────── Pass 1: Outline (Inverted Hull) ────────────────
+        // [Optimization 2026-05-10] _OutlineEnabled<0.5 시 vertex 를 clip 밖 (NaN) 좌표로 출력 → fragment shader 호출 안 됨.
+        // 외곽 풍선 (_OutlineEnabled=1, BalloonController.RefreshOutermostRendererState 가 MPB 로 설정) 만 GPU 에서 outline 처리.
+        // 내부 풍선은 vertex shader 한 번 도는 거의 무비용 reject. CPU draw call 은 1500 그대로지만 SRP Batcher 가 묶음.
+        // 롤백: vertex shader 의 _OutlineEnabled 분기 라인 제거 + 원본 width 0 분기 복원.
         Pass
         {
             Name "Outline"
@@ -216,8 +220,17 @@ Shader "Custom/ItemShared"
                 UNITY_SETUP_INSTANCE_ID(IN);
                 UNITY_TRANSFER_INSTANCE_ID(IN, OUT);
 
-                float width = _OutlineEnabled > 0.5 ? _OutlineWidth : 0.0;
-                float3 expanded = IN.positionOS.xyz + IN.normalOS * width;
+                // [Optimization 2026-05-10] outline 비활성 풍선은 vertex 를 clip 밖으로 출력 → fragment 호출 X.
+                // (2,2,2,1) 은 NDC [-1,1] 밖이라 모든 GPU 가 즉시 frustum culling.
+                // 롤백: 아래 if 블록 제거 + 원본 (width 0 분기) 복원.
+                if (_OutlineEnabled < 0.5)
+                {
+                    OUT.positionHCS = float4(2, 2, 2, 1);
+                    return OUT;
+                }
+
+                // 원본: float width = _OutlineEnabled > 0.5 ? _OutlineWidth : 0.0;
+                float3 expanded = IN.positionOS.xyz + IN.normalOS * _OutlineWidth;
                 OUT.positionHCS = TransformObjectToHClip(expanded);
                 return OUT;
             }

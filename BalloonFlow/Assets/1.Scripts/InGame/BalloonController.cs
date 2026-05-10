@@ -93,9 +93,9 @@ namespace BalloonFlow
 
         [Header("[Perf — 외곽 풍선만 Outline 활성]")]
         [Tooltip("외곽 풍선만 Outline pass 활성 (_OutlineEnabled MaterialPropertyBlock). " +
-                 "사용자 보고: 매 pop 시 호출이 spike 원인 + BoardStateManager 외곽 갱신 trigger 비용 큼. " +
-                 "default OFF — 모든 풍선 outline (material default). 외곽만 outline 원하면 ON.")]
-        [SerializeField] private bool _outlineOnOuterOnly = false;
+                 "[2026-05-10] 항상 ON 으로 강제 — Lobby/MapMaker 등 다양한 진입 경로에서도 inspector toggle 의존 없이 자동 적용. " +
+                 "RefreshOutermostRendererState 의 가드 라인도 주석 처리됨. 토글 disable 원하면 가드 라인 + default false 복원.")]
+        [SerializeField] private bool _outlineOnOuterOnly = true;
 
         // Primary data store keyed by balloonId
         private readonly Dictionary<int, BalloonData> _balloons = new Dictionary<int, BalloonData>();
@@ -326,6 +326,12 @@ namespace BalloonFlow
 
             // 레벨별 안전 배율 계산 (벨트 초과 레벨만 축소)
             CalculateLevelSafeMult();
+
+            // [Outline 2026-05-10] 맵 세팅 직후 외곽 풍선만 outline 적용 자동 트리거.
+            // throttle reset 으로 첫 호출 보장. _outlineOnOuterOnly = false 면 RefreshOutermostRendererState 가 즉시 return.
+            // 롤백: 아래 두 라인 제거.
+            _lastOutermostRefreshTime = -1f;
+            RefreshOutermostRendererState();
         }
 
         /// <summary>
@@ -458,8 +464,9 @@ namespace BalloonFlow
 
         public void RefreshOutermostRendererState()
         {
-            if (!_outlineOnOuterOnly) return;
-            if (!BoardStateManager.HasInstance) return;
+            // [Outline 2026-05-10] 가드 제거 — Lobby/MapMaker/직접 InGame 진입 등 다양한 경로에서 inspector toggle 의존 없이 항상 작동.
+            // 롤백: 아래 주석 라인 해제.
+            // if (!_outlineOnOuterOnly) return;
 
             // 사용자 보고: 매 pop 시 1620 iterate spike → throttle.
             // 0.1s 안 중복 호출은 skip — 마지막 pop 후 한 번만 정리.
@@ -467,15 +474,35 @@ namespace BalloonFlow
             if (now - _lastOutermostRefreshTime < 0.1f) return;
             _lastOutermostRefreshTime = now;
 
-            var bsm = BoardStateManager.Instance;
             if (_balloonMpb == null) _balloonMpb = new MaterialPropertyBlock();
 
-            // 새 외곽 set 확보 — IsOutermost 호출 1번이 dirty 면 갱신, 이후 cache hit.
-            // dummy 호출로 BoardStateManager 캐시 갱신.
-            bsm.IsOutermost(0);
+            // [Outline 2026-05-10] 사용자 의도 정정 — outline = "공격 가능한 풍선 (DirectionalTargeting contour)" 이지
+            // BoardStateManager.IsOutermost (Wall/Ice 포함 단순 외곽) 가 아님.
+            // DirectionalTargeting.GetAttackableContourIds 가 외곽 + targetable + targetable 풍선 ID 집합 반환.
+            // 롤백: 아래 contour 사용 분기 제거 + 주석 처리된 원본 BoardStateManager 분기 복원.
+            // ── 원본 BoardStateManager.IsOutermost 분기 ──
+            // if (!BoardStateManager.HasInstance) return;
+            // var bsm = BoardStateManager.Instance;
+            // bsm.IsOutermost(0);  // dummy 로 cache 갱신
+            // _outerDiffBuffer.Clear();
+            // var en = _balloonObjects.GetEnumerator();
+            // try {
+            //     while (en.MoveNext()) {
+            //         int id = en.Current.Key;
+            //         if (bsm.IsOutermost(id)) _outerDiffBuffer.Add(id);
+            //     }
+            // } finally { en.Dispose(); }
 
-            // 이전 외곽 → 새 외곽 diff 만 update.
-            // 새 외곽 set: 모든 active 풍선 중 IsOutermost true 인 것 collect.
+            // [Outline 2026-05-10 fix] diff 방식 → 전수 처리 변경.
+            // 이전 diff 방식은 _prevOutermostSet 비어있는 첫 호출 시 비외곽 풍선들에 _OutlineEnabled=0 적용 못함 →
+            // mat default (=1) 그대로 → 모든 풍선 outline 보임. 사용자 보고 "Outline On Outer Only ON 인데 모두 outline".
+            // 전수 sweep 으로 매 호출 시 모든 풍선에 정확한 값 적용 보장.
+            // 비용: _balloonObjects.Count × O(1) HashSet lookup × 0.1s throttle → 부담 작음.
+            // 롤백: 아래 sweep 코드 제거 + 위 주석 처리된 원본 diff 코드 복원.
+            HashSet<int> contourSet = null;
+            var contourCol = DirectionalTargeting.GetAttackableContourIds();
+            if (contourCol is HashSet<int> hs) contourSet = hs;
+
             _outerDiffBuffer.Clear();
             var en = _balloonObjects.GetEnumerator();
             try
@@ -483,37 +510,24 @@ namespace BalloonFlow
                 while (en.MoveNext())
                 {
                     int id = en.Current.Key;
-                    if (bsm.IsOutermost(id)) _outerDiffBuffer.Add(id);
+                    bool isContour = contourSet != null
+                        ? contourSet.Contains(id)
+                        : ContainsContour(contourCol, id);
+                    ApplyOutlineToBalloon(id, isContour);
+                    if (isContour) _outerDiffBuffer.Add(id);
                 }
             }
             finally { en.Dispose(); }
 
-            // 1) 이전 외곽 → 비외곽 (newly inner): _OutlineEnabled = 0
-            var enPrev = _prevOutermostSet.GetEnumerator();
-            try
-            {
-                while (enPrev.MoveNext())
-                {
-                    int id = enPrev.Current;
-                    bool stillOuter = false;
-                    for (int i = 0; i < _outerDiffBuffer.Count; i++)
-                    {
-                        if (_outerDiffBuffer[i] == id) { stillOuter = true; break; }
-                    }
-                    if (!stillOuter) ApplyOutlineToBalloon(id, false);
-                }
-            }
-            finally { enPrev.Dispose(); }
-
-            // 2) 새 외곽: _OutlineEnabled = 1
-            for (int i = 0; i < _outerDiffBuffer.Count; i++)
-            {
-                ApplyOutlineToBalloon(_outerDiffBuffer[i], true);
-            }
-
-            // _prevOutermostSet ← 새 외곽 set 으로 교체
+            // _prevOutermostSet 갱신 (호환 유지 — 외부에서 읽는 코드 있을 수 있음)
             _prevOutermostSet.Clear();
             for (int i = 0; i < _outerDiffBuffer.Count; i++) _prevOutermostSet.Add(_outerDiffBuffer[i]);
+        }
+
+        private static bool ContainsContour(IReadOnlyCollection<int> col, int id)
+        {
+            foreach (int c in col) if (c == id) return true;
+            return false;
         }
 
         private void ApplyOutlineToBalloon(int balloonId, bool enableOutline)
@@ -1212,6 +1226,7 @@ namespace BalloonFlow
 
             mat = new Material(_cachedLitShader);
             mat.SetColor("_BaseColor", color);
+            // [Optimization 2026-05-10 revert] GPU Instancing 채택 — 같은 색 풍선들 1 draw 로 묶임.
             mat.enableInstancing = true;
             _sharedColorMats[color] = mat;
             return mat;

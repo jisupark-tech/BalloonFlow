@@ -542,9 +542,14 @@ namespace BalloonFlow
                 Vector3 pos = rail.GetDartCurrentPosition(dart);
 
                 // 다트 경로 오프셋 — 벨트 중심 방향으로 이동
-                float normT = pathLen > 0f ? dart.progress / pathLen : 0f;
-                normT = ((normT % 1f) + 1f) % 1f;
-                Vector3 tangent = rail.GetDirectionAtNormalized(normT);
+                // [Optimization 2026-05-10] GetDirectionAtNormalized 의 GetPositionAtDistance × 2 + sqrt 패턴을
+                // GetDirectionAtDistance (이진 탐색 1회 + 배열 lookup) 으로 대체. dart 200개 시 매 frame 큰 부하 감소.
+                // 롤백: 아래 새 라인 제거 + 주석 처리된 원본 3줄 복원.
+                // 원본:
+                // float normT = pathLen > 0f ? dart.progress / pathLen : 0f;
+                // normT = ((normT % 1f) + 1f) % 1f;
+                // Vector3 tangent = rail.GetDirectionAtNormalized(normT);
+                Vector3 tangent = rail.GetDirectionAtDistance(dart.progress);
                 Vector3 inward = Vector3.Cross(tangent, Vector3.up).normalized;
 
                 pos += inward * pathOffset;

@@ -101,6 +101,7 @@ namespace BalloonFlow
                 {
                     mat = new Material(_baseMaterial);
                     mat.SetColor("_BaseColor", color);
+                    // [Optimization 2026-05-10 revert] GPU Instancing 채택.
                     mat.enableInstancing = true;
                     _matCache[key] = mat;
                 }

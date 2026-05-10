@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Touchscreen = UnityEngine.InputSystem.Touchscreen;
@@ -25,6 +26,14 @@ namespace BalloonFlow
 
         [SerializeField] private Camera _gameCamera;
         [SerializeField] private LayerMask _holderLayerMask = ~0;
+
+        // [Optimization 2026-05-10] RaycastAll 매 입력마다 RaycastHit[] alloc 하던 부분 제거.
+        // 16 = 한 ray 가 통과하는 holder collider 의 현실적 상한 (보드 holder ~5–8개). 부족 시 size 확장.
+        // 정렬 comparer 도 람다 alloc 대신 정적 캐시 사용.
+        // 롤백: 두 필드 제거 + Tap 메서드 의 RaycastAll/Array.Sort 원본 라인 복원.
+        private static readonly RaycastHit[] _raycastHitsCache = new RaycastHit[16];
+        private static readonly IComparer<RaycastHit> _hitDistanceComparer =
+            Comparer<RaycastHit>.Create((a, b) => a.distance.CompareTo(b.distance));
 
         #endregion
 
@@ -135,15 +144,21 @@ namespace BalloonFlow
             }
 
             // RaycastAll: 앞줄이 뒷줄을 가려도 모든 hit 처리
-            RaycastHit[] hits = Physics.RaycastAll(ray, Mathf.Infinity, _holderLayerMask);
-            if (hits.Length == 0) return;
+            // [Optimization 2026-05-10] RaycastNonAlloc + 정적 buffer + 정적 comparer → 매 입력 GC alloc 0.
+            // 롤백: 캐시 분기 제거 + 아래 주석 처리된 원본 라인 복원.
+            // 원본:
+            // RaycastHit[] hits = Physics.RaycastAll(ray, Mathf.Infinity, _holderLayerMask);
+            // if (hits.Length == 0) return;
+            // System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            int hitCount = Physics.RaycastNonAlloc(ray, _raycastHitsCache, Mathf.Infinity, _holderLayerMask);
+            if (hitCount == 0) return;
 
-            // 카메라에서 가장 가까운 hit부터 정렬
-            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            // 카메라에서 가장 가까운 hit부터 정렬 (buffer 의 앞 hitCount 만)
+            System.Array.Sort(_raycastHitsCache, 0, hitCount, _hitDistanceComparer);
 
-            for (int i = 0; i < hits.Length; i++)
+            for (int i = 0; i < hitCount; i++)
             {
-                HolderIdentifier holder = hits[i].collider.GetComponent<HolderIdentifier>();
+                HolderIdentifier holder = _raycastHitsCache[i].collider.GetComponent<HolderIdentifier>();
                 if (holder == null) continue;
 
                 bool boosterAwaiting = BoosterExecutor.HasInstance

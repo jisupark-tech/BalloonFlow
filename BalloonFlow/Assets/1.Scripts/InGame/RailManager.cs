@@ -135,6 +135,11 @@ namespace BalloonFlow
         private readonly List<Vector3> _smoothedPath = new List<Vector3>(); // smoothed version (or copy of waypoints)
         private readonly List<float> _segmentLengths = new List<float>();
         private readonly List<float> _cumulativeLengths = new List<float>();
+        // [Optimization 2026-05-10] segment 별 normalized direction 캐시. RecalculatePathLengths 에서 1회 build.
+        // GetDirectionAtDistance 가 이진 탐색 + 배열 lookup 으로 O(log n) — 기존 GetDirectionAtNormalized 의 GetPositionAtDistance × 2 + sqrt 패턴 제거.
+        // dart 200개 시 매 frame 이진 탐색 600 → 200, sqrt 400+ → 0 효과.
+        // 롤백: 이 필드 + RecalculatePathLengths 의 build 라인 + GetDirectionAtDistance 메서드 제거 + DartManager 의 호출 원복.
+        private readonly List<Vector3> _segmentDirections = new List<Vector3>();
         private float _totalPathLength;
 
         // Smooth corners
@@ -291,6 +296,11 @@ namespace BalloonFlow
             {
                 _rotationSpeed = 30f;
             }
+
+            // [Optimization 2026-05-10] dart progress descending Comparison 을 1회만 할당.
+            // 이전: UpdateInternal 매 frame 에서 if(null) lazy-init → first-frame 이후엔 무시 가능 비용이지만
+            //       hot path 의 null check 와 람다 closure 가 잠재 alloc 위험. Awake 1회 할당이 가장 안전.
+            _dartProgressDescending = (a, b) => _darts[b].progress.CompareTo(_darts[a].progress);
         }
 
         private void OnEnable()
@@ -376,8 +386,10 @@ namespace BalloonFlow
             float physGap = DartPhysicalGap;
             _sortedDartIndices.Clear();
             for (int i = 0; i < dartCount; i++) _sortedDartIndices.Add(i);
-            if (_dartProgressDescending == null)
-                _dartProgressDescending = (a, b) => _darts[b].progress.CompareTo(_darts[a].progress);
+            // [Optimization 2026-05-10] OnSingletonAwake 에서 1회 init 으로 이동. 매 frame null check 제거.
+            // 롤백: 아래 두 줄 주석 해제 + OnSingletonAwake 의 _dartProgressDescending = ... 라인 제거.
+            // if (_dartProgressDescending == null)
+            //     _dartProgressDescending = (a, b) => _darts[b].progress.CompareTo(_darts[a].progress);
             _sortedDartIndices.Sort(_dartProgressDescending);
 
             // Wrap 감지 — full rail 또는 cluster 가 path 0/pathLen 경계 wrap 시 sort[0] 이 진짜 head 가 아님.
@@ -641,6 +653,17 @@ namespace BalloonFlow
         /// <summary>현재 active deploy point 개수.</summary>
         public int GetActiveDeployPointCount() => _activeDeployPoints.Count;
 
+        public bool ShouldUseFixedDeployPlacement(int holderId)
+        {
+            int physicalCapacity = PhysicalCapacity;
+            int emptySlotsToPhysical = Mathf.Max(0, physicalCapacity - _darts.Count);
+            bool holderIsDeadlock = _deadlockHolderId == holderId;
+            bool holderIsActiveDeployPoint = _activeDeployPoints.Contains(holderId);
+            bool fullOrRecovery = _darts.Count >= physicalCapacity || emptySlotsToPhysical <= DEADLOCK_BELT_ADVANCE_EMPTY_SLOTS;
+
+            return holderIsDeadlock || (holderIsActiveDeployPoint && fullOrRecovery);
+        }
+
         public string GetAdvanceModeDebugInfo()
         {
             int dartCount = _darts.Count;
@@ -858,6 +881,35 @@ namespace BalloonFlow
             Vector3 dir = (posB - posA).normalized;
 
             return dir.sqrMagnitude > 0.001f ? dir : Vector3.forward;
+        }
+
+        /// <summary>
+        /// [Optimization 2026-05-10] distance 기반 forward direction. 사전 계산된 _segmentDirections 사용.
+        /// 기존 GetDirectionAtNormalized 의 GetPositionAtDistance × 2 + sqrt 패턴 제거 — 이진 탐색 1회 + 배열 lookup.
+        /// path smoothed 라 segment dir 자체가 부드럽게 변함 → 시각 차이 무시.
+        /// </summary>
+        public Vector3 GetDirectionAtDistance(float distance)
+        {
+            int segCount = _segmentDirections.Count;
+            if (segCount == 0) return Vector3.forward;
+            if (_totalPathLength <= 0f) return _segmentDirections[0];
+
+            // wrap (GetPositionAtDistance 와 동일 정책)
+            distance = ((distance % _totalPathLength) + _totalPathLength) % _totalPathLength;
+
+            // 이진 탐색 — _cumulativeLengths 와 동일 패턴
+            int lo = 0, hi = _cumulativeLengths.Count - 1;
+            while (lo < hi)
+            {
+                int mid = (lo + hi) >> 1;
+                if (_cumulativeLengths[mid] < distance)
+                    lo = mid + 1;
+                else
+                    hi = mid;
+            }
+            int idx = lo;
+            if (idx >= segCount) idx = segCount - 1;
+            return _segmentDirections[idx];
         }
 
         #endregion
@@ -2696,6 +2748,8 @@ namespace BalloonFlow
         {
             _segmentLengths.Clear();
             _cumulativeLengths.Clear();
+            // [Optimization 2026-05-10] segment direction 캐시도 함께 reset. 롤백: 이 라인 + 아래 _segmentDirections.Add 라인 제거.
+            _segmentDirections.Clear();
             _totalPathLength = 0f;
 
             var path = _smoothedPath;
@@ -2706,10 +2760,13 @@ namespace BalloonFlow
             for (int i = 0; i < segmentCount; i++)
             {
                 int nextIndex = (i + 1) % path.Count;
-                float segLen = Vector3.Distance(path[i], path[nextIndex]);
+                Vector3 delta = path[nextIndex] - path[i];
+                float segLen = delta.magnitude;
                 _segmentLengths.Add(segLen);
                 _totalPathLength += segLen;
                 _cumulativeLengths.Add(_totalPathLength);
+                // [Optimization 2026-05-10] segment direction 사전 계산. segLen==0 이면 fallback forward.
+                _segmentDirections.Add(segLen > 0.0001f ? delta / segLen : Vector3.forward);
             }
 
             _slotSpacing = _totalPathLength > 0f && _slotCount > 0

@@ -31,8 +31,24 @@ namespace BalloonFlow
         }
 
         private static readonly Dictionary<Vector2Int, EdgeTarget> _occupiedCells = new Dictionary<Vector2Int, EdgeTarget>(2048);
-        private static readonly HashSet<Vector2Int> _outsideCells = new HashSet<Vector2Int>();
-        private static readonly Queue<Vector2Int> _floodQueue = new Queue<Vector2Int>();
+        // [Optimization 2026-05-10] 기존 _outsideCells/_floodQueue 의 Vector2Int hash 연산 (HashSet/Dictionary/Queue) 누적 부하 제거.
+        // byte[] grid + int[] queue 기반 BFS 로 재구현 — Profiler 71ms 의 핵심 원인 (BuildEdgeTargetCache → FloodOutside → EnqueueOutsideCell).
+        // 0 = unvisited, 1 = outside, 2 = occupied. 매 frame Array.Clear 후 occupied 표시 + BFS.
+        // 롤백: 아래 grid 필드 + IsOutside 헬퍼 + 새 FloodOutside 구현 제거 + 주석 처리된 원본 (HashSet/Queue 기반) 복원.
+        private static byte[] _cellState;
+        private static int[] _bfsQueue;
+        private static int _floodMinX, _floodMinY, _floodWidth, _floodHeight;
+        private static readonly HashSet<Vector2Int> _outsideCells = new HashSet<Vector2Int>(); // 미사용 (롤백 호환 위해 보존)
+        private static readonly Queue<Vector2Int> _floodQueue = new Queue<Vector2Int>();       // 미사용 (롤백 호환 위해 보존)
+
+        // [Outline 2026-05-10] BalloonController 가 outline 적용 시 사용 — 공격 가능한 외곽 풍선 ID 집합.
+        // BuildEdgeTargetCache 매 frame build 시 함께 채움. 외부 read-only 접근.
+        private static readonly HashSet<int> _attackableContourIds = new HashSet<int>(64);
+        public static IReadOnlyCollection<int> GetAttackableContourIds()
+        {
+            BuildEdgeTargetCache();
+            return _attackableContourIds;
+        }
 
         private static readonly Dictionary<int, EdgeTarget> _leftContourByRow = new Dictionary<int, EdgeTarget>(64);
         private static readonly Dictionary<int, EdgeTarget> _rightContourByRow = new Dictionary<int, EdgeTarget>(64);
@@ -61,6 +77,7 @@ namespace BalloonFlow
             _bottomContourByCol.Clear();
             _topContourByCol.Clear();
             _contourCandidates.Clear();
+            _attackableContourIds.Clear(); // [Outline 2026-05-10]
             ClearShellSnapshot();
             _edgeCacheFrame = -1;
         }
@@ -141,6 +158,7 @@ namespace BalloonFlow
             _bottomContourByCol.Clear();
             _topContourByCol.Clear();
             _contourCandidates.Clear();
+            _attackableContourIds.Clear(); // [Outline 2026-05-10]
 
             if (GameManager.HasInstance)
                 _gridCellSize = GameManager.Instance.Board.cellSpacing;
@@ -199,31 +217,20 @@ namespace BalloonFlow
             int floodMaxY = maxY + 1;
             FloodOutside(floodMinX, floodMaxX, floodMinY, floodMaxY);
 
+            // [Optimization 2026-05-10] _outsideCells.Contains (HashSet hash 연산) → IsOutside (배열 인덱싱) 로 대체.
             foreach (KeyValuePair<Vector2Int, EdgeTarget> kvp in _occupiedCells)
             {
                 Vector2Int cell = kvp.Key;
                 EdgeTarget edge = kvp.Value;
 
-                if (_outsideCells.Contains(new Vector2Int(cell.x - 1, cell.y)))
-                {
-                    AddContourCandidate(edge);
-                }
-
-                if (_outsideCells.Contains(new Vector2Int(cell.x + 1, cell.y)))
-                {
-                    AddContourCandidate(edge);
-                }
-
-                if (_outsideCells.Contains(new Vector2Int(cell.x, cell.y - 1)))
-                {
-                    AddContourCandidate(edge);
-                }
-
-                if (_outsideCells.Contains(new Vector2Int(cell.x, cell.y + 1)))
-                {
-                    AddContourCandidate(edge);
-                }
+                if (IsOutside(cell.x - 1, cell.y)) AddContourCandidate(edge);
+                if (IsOutside(cell.x + 1, cell.y)) AddContourCandidate(edge);
+                if (IsOutside(cell.x, cell.y - 1)) AddContourCandidate(edge);
+                if (IsOutside(cell.x, cell.y + 1)) AddContourCandidate(edge);
             }
+            // [Outline 2026-05-10 fix] _attackableContourIds 는 BuildShellLineMaps 가 4 contour map 채운 후 union 으로 채움.
+            // 이전 "outside neighbor 1+ + targetable" 방식은 hole 인접 풍선까지 포함 → board 에 hole 많으면 거의 전부 contour.
+            // 사용자 의도: dart 가 실제 fire 가능한 "각 row/col 의 가장 외곽 한 줄" — 4 contour map 의 union 이 정확.
 
             EnsureShellSnapshot();
             BuildShellLineMaps();
@@ -278,36 +285,47 @@ namespace BalloonFlow
             // _currentShellIds.Contains 필터 제거 — 현재 contour 모든 풍선을 line maps 에 등록.
             // 단 targetable (= Wall/Ice/ColorCurtain 아님) 만. shell freeze 의 "한 ring 우선 청소" 의도는
             // RecentLinePenalty (line 99) 의 line spreading 으로 대체.
+            // [Optimization 2026-05-10] _outsideCells.Contains → IsOutside. 롤백: 주석 처리된 원본 4 분기 복원.
             foreach (KeyValuePair<Vector2Int, EdgeTarget> kvp in _occupiedCells)
             {
                 Vector2Int cell = kvp.Key;
                 EdgeTarget edge = kvp.Value;
                 if (!edge.targetable) continue;
 
-                if (_outsideCells.Contains(new Vector2Int(cell.x - 1, cell.y)))
+                // 원본 4 분기:
+                // if (_outsideCells.Contains(new Vector2Int(cell.x - 1, cell.y))) { if (!_leftContourByRow.TryGetValue(cell.y, out EdgeTarget existing) || cell.x < existing.cell.x) _leftContourByRow[cell.y] = edge; }
+                // if (_outsideCells.Contains(new Vector2Int(cell.x + 1, cell.y))) { if (!_rightContourByRow.TryGetValue(cell.y, out EdgeTarget existing) || cell.x > existing.cell.x) _rightContourByRow[cell.y] = edge; }
+                // if (_outsideCells.Contains(new Vector2Int(cell.x, cell.y - 1))) { if (!_bottomContourByCol.TryGetValue(cell.x, out EdgeTarget existing) || cell.y < existing.cell.y) _bottomContourByCol[cell.x] = edge; }
+                // if (_outsideCells.Contains(new Vector2Int(cell.x, cell.y + 1))) { if (!_topContourByCol.TryGetValue(cell.x, out EdgeTarget existing) || cell.y > existing.cell.y) _topContourByCol[cell.x] = edge; }
+                if (IsOutside(cell.x - 1, cell.y))
                 {
                     if (!_leftContourByRow.TryGetValue(cell.y, out EdgeTarget existing) || cell.x < existing.cell.x)
                         _leftContourByRow[cell.y] = edge;
                 }
-
-                if (_outsideCells.Contains(new Vector2Int(cell.x + 1, cell.y)))
+                if (IsOutside(cell.x + 1, cell.y))
                 {
                     if (!_rightContourByRow.TryGetValue(cell.y, out EdgeTarget existing) || cell.x > existing.cell.x)
                         _rightContourByRow[cell.y] = edge;
                 }
-
-                if (_outsideCells.Contains(new Vector2Int(cell.x, cell.y - 1)))
+                if (IsOutside(cell.x, cell.y - 1))
                 {
                     if (!_bottomContourByCol.TryGetValue(cell.x, out EdgeTarget existing) || cell.y < existing.cell.y)
                         _bottomContourByCol[cell.x] = edge;
                 }
-
-                if (_outsideCells.Contains(new Vector2Int(cell.x, cell.y + 1)))
+                if (IsOutside(cell.x, cell.y + 1))
                 {
                     if (!_topContourByCol.TryGetValue(cell.x, out EdgeTarget existing) || cell.y > existing.cell.y)
                         _topContourByCol[cell.x] = edge;
                 }
             }
+
+            // [Outline 2026-05-10 fix] _attackableContourIds = 4 contour map (left/right/top/bottom) 의 union.
+            // 각 row/col 의 가장 외곽 1개 풍선 = dart 가 실제 fire 가능한 외곽 한 줄.
+            // BalloonController.RefreshOutermostRendererState 가 이 set 으로 outline 적용.
+            foreach (var kvp in _leftContourByRow) _attackableContourIds.Add(kvp.Value.balloonId);
+            foreach (var kvp in _rightContourByRow) _attackableContourIds.Add(kvp.Value.balloonId);
+            foreach (var kvp in _bottomContourByCol) _attackableContourIds.Add(kvp.Value.balloonId);
+            foreach (var kvp in _topContourByCol) _attackableContourIds.Add(kvp.Value.balloonId);
         }
 
         private static void ClearShellSnapshot()
@@ -316,29 +334,110 @@ namespace BalloonFlow
             _recentLineUseFrame.Clear();
         }
 
+        // [Optimization 2026-05-10] FloodOutside / EnqueueOutsideCell 을 byte[] grid + int[] queue 기반 BFS 로 재구현.
+        // 기존: Vector2Int HashSet/Dictionary/Queue → 매 cell 마다 GetHashCode + Equals (수만 회 누적 → 71ms).
+        // 새: 1D 배열 인덱싱만 사용. occupied = 2, outside = 1, unvisited = 0. Array.Clear 로 매 frame reset.
+        // 동작 보존: BFS 알고리즘 동일 (4-방향 flood, occupied 차단, bbox 안에서만 진행).
+        // 결과: BuildEdgeTargetCache → contour 검사가 IsOutside(x,y) 로 grid lookup → ms 단위 절감.
+        // 롤백: 새 구현 제거 + 주석 처리된 원본 (HashSet/Queue 기반) 두 메서드 복원 + 새 IsOutside 헬퍼 제거 + contour 검사 _outsideCells.Contains 로 복원.
         private static void FloodOutside(int minX, int maxX, int minY, int maxY)
         {
-            EnqueueOutsideCell(new Vector2Int(minX, minY), minX, maxX, minY, maxY);
+            // 원본:
+            // EnqueueOutsideCell(new Vector2Int(minX, minY), minX, maxX, minY, maxY);
+            // while (_floodQueue.Count > 0) {
+            //     Vector2Int cell = _floodQueue.Dequeue();
+            //     EnqueueOutsideCell(new Vector2Int(cell.x + 1, cell.y), minX, maxX, minY, maxY);
+            //     EnqueueOutsideCell(new Vector2Int(cell.x - 1, cell.y), minX, maxX, minY, maxY);
+            //     EnqueueOutsideCell(new Vector2Int(cell.x, cell.y + 1), minX, maxX, minY, maxY);
+            //     EnqueueOutsideCell(new Vector2Int(cell.x, cell.y - 1), minX, maxX, minY, maxY);
+            // }
 
-            while (_floodQueue.Count > 0)
+            _floodMinX = minX;
+            _floodMinY = minY;
+            _floodWidth = maxX - minX + 1;
+            _floodHeight = maxY - minY + 1;
+            int total = _floodWidth * _floodHeight;
+            if (total <= 0) return;
+
+            // 버퍼 보장 (정적 재사용)
+            if (_cellState == null || _cellState.Length < total)
+                _cellState = new byte[Mathf.NextPowerOfTwo(total)];
+            else
+                System.Array.Clear(_cellState, 0, total);
+
+            if (_bfsQueue == null || _bfsQueue.Length < total)
+                _bfsQueue = new int[Mathf.NextPowerOfTwo(total)];
+
+            // occupied cell 표시 (= 2). bbox 가 [minX-1, maxX+1] 라 모든 occupied 가 bbox 안.
+            foreach (KeyValuePair<Vector2Int, EdgeTarget> kvp in _occupiedCells)
             {
-                Vector2Int cell = _floodQueue.Dequeue();
+                int dx = kvp.Key.x - minX;
+                int dy = kvp.Key.y - minY;
+                if ((uint)dx >= (uint)_floodWidth || (uint)dy >= (uint)_floodHeight) continue;
+                _cellState[dy * _floodWidth + dx] = 2;
+            }
 
-                EnqueueOutsideCell(new Vector2Int(cell.x + 1, cell.y), minX, maxX, minY, maxY);
-                EnqueueOutsideCell(new Vector2Int(cell.x - 1, cell.y), minX, maxX, minY, maxY);
-                EnqueueOutsideCell(new Vector2Int(cell.x, cell.y + 1), minX, maxX, minY, maxY);
-                EnqueueOutsideCell(new Vector2Int(cell.x, cell.y - 1), minX, maxX, minY, maxY);
+            // BFS: 시작 (minX, minY) corner. 항상 occupied 아님 (bbox = bbox-of-occupied + 1).
+            int startIdx = 0;
+            if (_cellState[startIdx] != 0) return; // 만일 start 가 막혔다면 BFS 불가
+            _cellState[startIdx] = 1;
+            _bfsQueue[0] = startIdx;
+            int head = 0, tail = 1;
+            int width = _floodWidth;
+            int widthMinus1 = width - 1;
+            int heightMinus1 = _floodHeight - 1;
+
+            while (head < tail)
+            {
+                int curIdx = _bfsQueue[head++];
+                int cy = curIdx / width;
+                int cx = curIdx - cy * width;
+
+                // +X
+                if (cx < widthMinus1)
+                {
+                    int nIdx = curIdx + 1;
+                    if (_cellState[nIdx] == 0) { _cellState[nIdx] = 1; _bfsQueue[tail++] = nIdx; }
+                }
+                // -X
+                if (cx > 0)
+                {
+                    int nIdx = curIdx - 1;
+                    if (_cellState[nIdx] == 0) { _cellState[nIdx] = 1; _bfsQueue[tail++] = nIdx; }
+                }
+                // +Y
+                if (cy < heightMinus1)
+                {
+                    int nIdx = curIdx + width;
+                    if (_cellState[nIdx] == 0) { _cellState[nIdx] = 1; _bfsQueue[tail++] = nIdx; }
+                }
+                // -Y
+                if (cy > 0)
+                {
+                    int nIdx = curIdx - width;
+                    if (_cellState[nIdx] == 0) { _cellState[nIdx] = 1; _bfsQueue[tail++] = nIdx; }
+                }
             }
         }
 
-        private static void EnqueueOutsideCell(Vector2Int cell, int minX, int maxX, int minY, int maxY)
-        {
-            if (cell.x < minX || cell.x > maxX || cell.y < minY || cell.y > maxY) return;
-            if (_outsideCells.Contains(cell)) return;
-            if (_occupiedCells.ContainsKey(cell)) return;
+        // [Optimization 2026-05-10] EnqueueOutsideCell 은 새 BFS 에서 미사용 (FloodOutside 안에 인라인됨).
+        // 원본 보존 — 롤백 시 위 FloodOutside 와 함께 복원.
+        // private static void EnqueueOutsideCell(Vector2Int cell, int minX, int maxX, int minY, int maxY)
+        // {
+        //     if (cell.x < minX || cell.x > maxX || cell.y < minY || cell.y > maxY) return;
+        //     if (_outsideCells.Contains(cell)) return;
+        //     if (_occupiedCells.ContainsKey(cell)) return;
+        //     _outsideCells.Add(cell);
+        //     _floodQueue.Enqueue(cell);
+        // }
 
-            _outsideCells.Add(cell);
-            _floodQueue.Enqueue(cell);
+        /// <summary>[Optimization 2026-05-10] grid 기반 outside cell 조회. _outsideCells.Contains(new Vector2Int(x,y)) 대체.</summary>
+        private static bool IsOutside(int x, int y)
+        {
+            int dx = x - _floodMinX;
+            int dy = y - _floodMinY;
+            if ((uint)dx >= (uint)_floodWidth || (uint)dy >= (uint)_floodHeight) return false;
+            return _cellState[dy * _floodWidth + dx] == 1;
         }
 
         private static bool TryGetEdgeTarget(ScanDirection scanDir, Vector2Int dartCell, int lineOffset, out EdgeTarget edge)

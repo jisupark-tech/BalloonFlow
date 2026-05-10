@@ -284,9 +284,15 @@ namespace DigitalRuby.LightningBolt
             SelectOffsetFromAnimationMode();
         }
 
+        // [Optimization 2026-05-10] Camera.main 매 Update 호출 → 1회 캐시. Camera.main 은 내부적으로 FindGameObjectWithTag 를 도므로 hot path 비용.
+        private Camera _mainCamera;
+
         private void Start()
         {
-            orthographic = (Camera.main != null && Camera.main.orthographic);
+            // [Optimization 2026-05-10] 캐시 후 사용. 롤백: 아래 _mainCamera 초기화 제거 + Camera.main 직접 호출 복원.
+            _mainCamera = Camera.main;
+            // 원본: orthographic = (Camera.main != null && Camera.main.orthographic);
+            orthographic = (_mainCamera != null && _mainCamera.orthographic);
             lineRenderer = GetComponent<LineRenderer>();
             lineRenderer.positionCount = 0;
             UpdateFromMaterialChange();
@@ -294,7 +300,10 @@ namespace DigitalRuby.LightningBolt
 
         private void Update()
         {
-            orthographic = (Camera.main != null && Camera.main.orthographic);
+            // [Optimization 2026-05-10] 캐시 사용 + null safety net (씬 재로드 시 stale 대비). 롤백: 캐시 제거하고 아래 주석 라인으로.
+            if (_mainCamera == null) _mainCamera = Camera.main;
+            // 원본: orthographic = (Camera.main != null && Camera.main.orthographic);
+            orthographic = (_mainCamera != null && _mainCamera.orthographic);
             if (timer <= 0.0f)
             {
                 if (ManualMode)

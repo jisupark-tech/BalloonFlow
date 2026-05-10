@@ -96,6 +96,8 @@ namespace BalloonFlow
                 {
                     mat = new Material(_baseMaterial);
                     mat.SetColor("_BaseColor", color);
+                    // [Optimization 2026-05-10 revert] GPU Instancing path 채택 — 풍선 1500+ × 28 색 시 SRP Batcher 보다 draw call 수 압도적 적음.
+                    // SRP Batcher 와 mutually exclusive 지만 mesh 수 많은 mobile 환경에선 instancing 효율 우선.
                     mat.enableInstancing = true;
                     _balloonMatCache[key] = mat;
                 }

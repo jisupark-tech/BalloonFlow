@@ -1150,8 +1150,11 @@ namespace BalloonFlow
             // 를 한 frame 안에 N placements 로 처리. clamp 도 이 한도 이하로 자르지 않음.
             // 1*physGap 으로 clamp 하면 정상 catch-up (belt frame 당 1+ slot 회전) 도 손실 → cluster 안 빈 slot 누적.
             const int MAX_PLACEMENTS_PER_FRAME = 3;
+            const int MAX_RECOVERY_PLACEMENTS_PER_FRAME = 8;
 
             float totalPathLen = rail.TotalPathLength;
+            bool fixedGapBurstUnlocked = false;
+            int fixedGapBurstPlaced = 0;
 
             while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
             {
@@ -1379,17 +1382,34 @@ namespace BalloonFlow
                 // distSinceLastPlacement = overshoot 으로 잉여만 carry → spacing drift 누적 손실 0.
                 // catch-up: 한 frame 안 N=floor(distSinceLastPlacement / physGap) placements 자연 처리.
                 int placementsThisFrame = 0;
+                bool fixedGateModeThisFrame = rail.ShouldUseFixedDeployPlacement(visual.holderId) || fixedGapBurstUnlocked;
+                int maxPlacementsThisFrame = fixedGateModeThisFrame ? MAX_RECOVERY_PLACEMENTS_PER_FRAME : MAX_PLACEMENTS_PER_FRAME;
                 while (visual.magazineRemaining > 0
-                       && placementsThisFrame < MAX_PLACEMENTS_PER_FRAME
+                       && placementsThisFrame < maxPlacementsThisFrame
                        && distSinceLastPlacement >= physGap)
                 {
                     float overshoot = distSinceLastPlacement - physGap;
-                    bool lockPlacementToDeployPoint = rail.DeadlockHolderId == visual.holderId;
+                    bool fixedGateMode = rail.ShouldUseFixedDeployPlacement(visual.holderId);
+                    if (!fixedGateMode && !fixedGapBurstUnlocked)
+                        fixedGapBurstPlaced = 0;
+
+                    bool lockPlacementToDeployPoint = fixedGateMode && !fixedGapBurstUnlocked;
                     // 이전: deployStarted ? overshoot : 0f.
                     // 문제: deadlock/full 이후 멀리서 fire가 나 capacity만 비면, 실제 fire gap이 deploy point에
                     // 도달하기 전에도 fixedDeployProgress+overshoot 위치에 즉시 배포되어 AABBAABB가 생김.
                     // deadlock holder는 fixed deploy point에 gap이 직접 지나올 때만 배포한다.
-                    float appliedOvershoot = (deployStarted && !lockPlacementToDeployPoint) ? overshoot : 0f;
+                    float appliedOvershoot;
+                    if (fixedGapBurstUnlocked)
+                    {
+                        appliedOvershoot = fixedGapBurstPlaced * physGap;
+                    }
+                    else
+                    {
+                        // 기존 방식: deployStarted ? overshoot : 0f.
+                        // float appliedOvershoot = (deployStarted && !lockPlacementToDeployPoint) ? overshoot : 0f;
+                        // recovery/deadlock에서는 첫 배치만 fixedDeployProgress에 고정해 빈 구간 도착을 확인한다.
+                        appliedOvershoot = (deployStarted && !lockPlacementToDeployPoint) ? overshoot : 0f;
+                    }
                     float placementProgress = fixedDeployProgress + appliedOvershoot;
                     if (totalPathLen > 0f && placementProgress >= totalPathLen) placementProgress -= totalPathLen;
 
@@ -1450,7 +1470,9 @@ namespace BalloonFlow
 
                         if (!useDeadlockFallback)
                         {
-                            float __clampMax_c = MAX_PLACEMENTS_PER_FRAME * physGap;
+                            fixedGapBurstUnlocked = false;
+                            fixedGapBurstPlaced = 0;
+                            float __clampMax_c = (fixedGateMode ? MAX_RECOVERY_PLACEMENTS_PER_FRAME : MAX_PLACEMENTS_PER_FRAME) * physGap;
                             if (distSinceLastPlacement > __clampMax_c) distSinceLastPlacement = __clampMax_c;
                             break;
                         }
@@ -1471,7 +1493,9 @@ namespace BalloonFlow
                         }
 
                         TryEnterDeadlockIfNeeded(rail);
-                        float __clampMax_gap = MAX_PLACEMENTS_PER_FRAME * physGap;
+                        fixedGapBurstUnlocked = false;
+                        fixedGapBurstPlaced = 0;
+                        float __clampMax_gap = (fixedGateMode ? MAX_RECOVERY_PLACEMENTS_PER_FRAME : MAX_PLACEMENTS_PER_FRAME) * physGap;
                         if (distSinceLastPlacement > __clampMax_gap) distSinceLastPlacement = __clampMax_gap;
                         break;
                     }
@@ -1504,7 +1528,16 @@ namespace BalloonFlow
                     if (deployStarted)
                         rail.ActivateDeployPoint(visual.holderId);
 
-                    distSinceLastPlacement = wasFirstPlacement ? 0f : overshoot;  // 첫 배치 전 누적 overshoot는 Deploy Point 정렬을 위해 버림
+                    if (fixedGateMode || fixedGapBurstUnlocked)
+                    {
+                        fixedGapBurstUnlocked = true;
+                        fixedGapBurstPlaced++;
+                        distSinceLastPlacement = Mathf.Max(0f, distSinceLastPlacement - physGap);
+                    }
+                    else
+                    {
+                        distSinceLastPlacement = wasFirstPlacement ? 0f : overshoot;  // 첫 배치 전 누적 overshoot는 Deploy Point 정렬을 위해 버림
+                    }
                     placementsThisFrame++;
                     visual.magazineRemaining--;
 
@@ -1540,6 +1573,12 @@ namespace BalloonFlow
 
                 // magazine이 0이 됐으면 즉시 outer loop 종료 (Continue 경합으로 visual이
                 // CancelDeployAndReturnToQueue로 빠져 CompleteDeployment가 안 불리는 레이스 방지).
+                if (distSinceLastPlacement < physGap)
+                {
+                    fixedGapBurstUnlocked = false;
+                    fixedGapBurstPlaced = 0;
+                }
+
                 if (visual.magazineRemaining <= 0) break;
 
                 yield return null;

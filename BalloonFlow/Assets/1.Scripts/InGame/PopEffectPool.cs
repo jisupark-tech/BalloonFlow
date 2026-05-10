@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BalloonFlow
@@ -18,6 +19,12 @@ namespace BalloonFlow
         /// <summary>이펙트 Y 좌표 고정 (카메라 시야 보이도록).</summary>
         private const float EFFECT_Y = 2.2f;
 
+        /// <summary>[Optimization 2026-05-10] 풀 GameObject → ParticleSystem[] 캐시.
+        /// 매 pop 마다 GetComponentsInChildren 으로 배열 alloc 하던 부분 제거 (콤보 시 GC 압력 큰 폭 감소).
+        /// 풀 재사용 시 동일 GameObject → 캐시 hit. stale (destroyed) 검출 시 자동 재 fetch.
+        /// 롤백: 이 필드 제거 + Play() 의 캐시 분기 제거 + 주석 처리된 원본 라인 복원.</summary>
+        private static readonly Dictionary<GameObject, ParticleSystem[]> _systemsCache = new Dictionary<GameObject, ParticleSystem[]>();
+
         /// <summary>풍선 위치에 pop effect 재생. runner는 코루틴 호스트 (예: BalloonController).</summary>
         public static void Play(Vector3 worldPos, Color color, MonoBehaviour runner)
         {
@@ -34,7 +41,16 @@ namespace BalloonFlow
             go.transform.localScale = Vector3.one * EFFECT_SCALE;
 
             // 모든 ParticleSystem에 색상 적용 + play. 가장 긴 life 시간 = 풀 반환 delay.
-            var systems = go.GetComponentsInChildren<ParticleSystem>(true);
+            // [Optimization 2026-05-10] 풀 재사용 시 ParticleSystem 배열 캐시 → 매 pop 의 GetComponentsInChildren alloc 제거.
+            // 롤백: 아래 캐시 분기 제거 + 주석 처리된 원본 라인 복원.
+            // 원본: var systems = go.GetComponentsInChildren<ParticleSystem>(true);
+            if (!_systemsCache.TryGetValue(go, out var systems)
+                || systems == null
+                || (systems.Length > 0 && systems[0] == null))
+            {
+                systems = go.GetComponentsInChildren<ParticleSystem>(true);
+                _systemsCache[go] = systems;
+            }
             float maxLife = 0f;
             for (int i = 0; i < systems.Length; i++)
             {

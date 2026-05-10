@@ -30,6 +30,10 @@ namespace BalloonFlow
         /// <summary>부스터 취소 버튼 (런타임 생성).</summary>
         private GameObject _cancelButtonGO;
 
+        /// <summary>[Optimization 2026-05-10] Canvas 캐시. ShowCancelButton 의 FindAnyObjectByType 가 매 booster 활성화 시 발생하는 O(scene) lookup 제거.
+        /// 씬 재로드로 destroyed 되면 lazy 재fetch 됨. 롤백: 이 필드 제거 + ShowCancelButton 의 FindAnyObjectByType 직접 호출 라인 복원.</summary>
+        private Canvas _cachedCanvas;
+
         #endregion
 
         #region Lifecycle
@@ -240,7 +244,11 @@ namespace BalloonFlow
             if (_cancelButtonGO != null) { _cancelButtonGO.SetActive(true); return; }
 
             // Canvas 찾기
-            var canvas = FindAnyObjectByType<Canvas>();
+            // [Optimization 2026-05-10] Canvas 를 _cachedCanvas 로 캐시. 씬 재로드 등으로 destroyed 시 lazy 재fetch.
+            // 롤백: 아래 캐시 분기 제거 + 주석 처리된 원본 라인 복원.
+            // 원본: var canvas = FindAnyObjectByType<Canvas>();
+            if (_cachedCanvas == null) _cachedCanvas = FindAnyObjectByType<Canvas>();
+            var canvas = _cachedCanvas;
             if (canvas == null)
             {
                 Debug.LogError("[BoosterExecutor] No Canvas found — cancel button can't be created. Cancelling pending booster (inventory refunded).");
