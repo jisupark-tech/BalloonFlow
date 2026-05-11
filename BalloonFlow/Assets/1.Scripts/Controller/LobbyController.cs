@@ -180,6 +180,9 @@ namespace BalloonFlow
             {
                 _lobby.SetupLevelBoxes(newLevel, highest);
                 _lobby.UpdatePlayButton(newLevel, newDiff);
+                // 안전망 — AnimatorController default state(LobbyBtnChange) 가 자동 재생되지 않도록
+                // 최초 실행 + 비-레벨업 로비 복귀 양 케이스 모두에서 idle 강제 고정.
+                _lobby.EnsureLobbyBtnIdle();
             }
         }
 
