@@ -67,7 +67,7 @@ namespace BalloonFlow
             if (_hpText != null)
             {
                 _hpText.gameObject.SetActive(true);
-                _hpText.text = hp.ToString();
+                _hpText.SetText("{0}", hp);
             }
         }
 

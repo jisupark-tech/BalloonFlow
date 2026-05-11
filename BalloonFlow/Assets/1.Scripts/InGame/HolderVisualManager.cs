@@ -1976,7 +1976,7 @@ namespace BalloonFlow
 
             // 해동 시 텍스트를 탄창 수로 복원
             if (visual.magazineText != null)
-                visual.magazineText.text = visual.magazineRemaining.ToString();
+                visual.magazineText.SetText("{0}", visual.magazineRemaining);
 
             Color originalColor = GetColor(visual.color);
             if (visual.identifier != null && visual.identifier.HasColorRenderers)
@@ -1989,7 +1989,7 @@ namespace BalloonFlow
         {
             if (!_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual)) return;
             if (visual.magazineText != null)
-                visual.magazineText.text = evt.remainingHP.ToString();
+                visual.magazineText.SetText("{0}", evt.remainingHP);
 
         }
 
@@ -2028,7 +2028,7 @@ namespace BalloonFlow
 
             // 텍스트도 "?" → 실제 탄창 수로 변경
             if (visual.magazineText != null)
-                visual.magazineText.text = visual.magazineRemaining.ToString();
+                visual.magazineText.SetText("{0}", visual.magazineRemaining);
         }
 
         private void HandleHolderClickAnim(OnHolderClickAnim evt)

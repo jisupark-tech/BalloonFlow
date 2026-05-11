@@ -322,8 +322,8 @@ namespace BalloonFlow
 
         public void SetLevel(int _levelId)
         {
-            if (_txtLevel != null) _txtLevel.text = $"Level {_levelId}";
-            if (_txtLevelOutline != null) _txtLevelOutline.text = $"Level {_levelId}";
+            if (_txtLevel != null) _txtLevel.SetText("Level {0}", _levelId);
+            if (_txtLevelOutline != null) _txtLevelOutline.SetText("Level {0}", _levelId);
         }
 
         public void SetGold(int _amount)
@@ -340,9 +340,8 @@ namespace BalloonFlow
             if (_fillGaugeImage != null) { _fillGaugeImage.type = Image.Type.Filled; _fillGaugeImage.fillAmount = ratio; }
 
             int percent = Mathf.RoundToInt(ratio * 100f);
-            string txt = $"{percent}%";
-            if (_txtPercentage != null) _txtPercentage.text = txt;
-            if (_txtPercentageOutline != null) _txtPercentageOutline.text = txt;
+            if (_txtPercentage != null) _txtPercentage.SetText("{0}%", percent);
+            if (_txtPercentageOutline != null) _txtPercentageOutline.SetText("{0}%", percent);
         }
 
         public void RefreshBoosterCounts()
