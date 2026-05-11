@@ -36,6 +36,10 @@ namespace BalloonFlow
         private const float RAIL_BOTTOM_ENTER_OFFSET_Y = +120f;
         private const float RAIL_ENTER_DURATION = 0.45f;
 
+        private const float LEVEL_OBJECT_ENTER_START_Y = 1335f;
+        private const float LEVEL_OBJECT_ENTER_END_Y   = 1145f;
+        private const float LEVEL_OBJECT_ENTER_DURATION = 0.45f;
+
         #endregion
 
         #region Serialized Fields
@@ -151,6 +155,7 @@ namespace BalloonFlow
         // Rail 슬라이드 인 트윈 캐시 (중복 호출 시 Kill 후 재시작)
         private Tweener _railTopTween;
         private Tweener _railBottomTween;
+        private Tweener _levelObjectEnterTween;
 
         // Nav text base Y positions (cached before animation)
         private float _baseYShop, _baseYHome, _baseYSetting;
@@ -223,6 +228,7 @@ namespace BalloonFlow
 
             // 최초 진입 시 Rail 슬라이드 인 연출 1회 재생
             PlayRailEnterAnimation();
+            PlayLevelObjectEnterAnimation();
 
             // AnimatorController(LobbyPlayBtn.controller)의 default state 가 LobbyBtnChange 로 잡혀
             // 프리팹 enable 직후 의도치 않게 변경 애니가 자동 재생되는 문제 차단.
@@ -278,6 +284,20 @@ namespace BalloonFlow
                     .SetEase(Ease.OutCubic)
                     .SetUpdate(true);
             }
+        }
+
+        // 인게임 종료 후 로비 복귀 시 Rail Enter 완료 후 LevelObject 가 1335→1145 로 OutCubic 슬라이드 다운 (자연스러운 진입 연출)
+        public void PlayLevelObjectEnterAnimation()
+        {
+            _levelObjectEnterTween?.Kill();
+            if (_levelBoxContainer == null) return;
+
+            var p = _levelBoxContainer.anchoredPosition;
+            _levelBoxContainer.anchoredPosition = new Vector2(p.x, LEVEL_OBJECT_ENTER_START_Y);
+            _levelObjectEnterTween = _levelBoxContainer.DOAnchorPosY(LEVEL_OBJECT_ENTER_END_Y, LEVEL_OBJECT_ENTER_DURATION)
+                .SetDelay(RAIL_ENTER_DURATION)
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(true);
         }
 
         /// <summary>
@@ -383,6 +403,7 @@ namespace BalloonFlow
             _goldTween?.Kill();
             _railTopTween?.Kill();
             _railBottomTween?.Kill();
+            _levelObjectEnterTween?.Kill();
         }
 
         private void Update()
@@ -878,7 +899,11 @@ namespace BalloonFlow
             if (pageIndex == _currentPageIndex) return;
 
             _currentPageIndex = pageIndex;
-            if (pageIndex == 1) PlayRailEnterAnimation();
+            if (pageIndex == 1)
+            {
+                PlayRailEnterAnimation();
+                PlayLevelObjectEnterAnimation();
+            }
             AnimateToPage(pageIndex);
             UpdateNavState(pageIndex);
             if (pageIndex == 0 && _uiShop != null) _uiShop.ResetView();
@@ -998,7 +1023,11 @@ namespace BalloonFlow
                 AnimateToPage(targetPage);
                 UpdateNavState(targetPage);
                 if (targetPage == 0 && prev != 0 && _uiShop != null) _uiShop.ResetView();
-                if (targetPage == 1 && prev != 1) PlayRailEnterAnimation();
+                if (targetPage == 1 && prev != 1)
+                {
+                    PlayRailEnterAnimation();
+                    PlayLevelObjectEnterAnimation();
+                }
             }
         }
 
