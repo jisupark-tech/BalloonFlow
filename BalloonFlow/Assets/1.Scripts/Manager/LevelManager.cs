@@ -328,6 +328,11 @@ namespace BalloonFlow
         /// </summary>
         private void CleanupPreviousLevel()
         {
+            // [2026-05-11] CoinFlyEffect 진행 중 코루틴 + 활성 코인 GameObject 강제 정리.
+            // 정상 클리어 흐름에선 reward 시퀀스 완료 후 다음 레벨이라 자연 정리되지만,
+            // DEV 치트 (JumpLevel) 는 중간 끊김 → stale coroutine + 활성 코인 GameObject 잔존 → 메모리 누수.
+            CoinFlyEffect.StopAll();
+
             if (BalloonController.HasInstance)
                 BalloonController.Instance.ClearAllBalloons();
 

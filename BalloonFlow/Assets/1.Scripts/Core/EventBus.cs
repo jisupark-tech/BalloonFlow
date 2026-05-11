@@ -36,6 +36,15 @@ namespace BalloonFlow
 
             if (_handlers.TryGetValue(eventType, out Delegate existing))
             {
+                // [Leak fix 2026-05-11] 중복 등록 방지 — 씬 전환 / 씬 재로드 시 같은 handler 가 N 번 등록되어
+                // publish 마다 N 배 호출되는 leak (연속 플레이 frame drop 누적의 핵심 원인) 차단.
+                // 롤백: 아래 invocation list 검사 블록 제거 + 주석 처리된 원본 라인 복원.
+                // 원본: _handlers[eventType] = Delegate.Combine(existing, handler);
+                Delegate[] invList = existing.GetInvocationList();
+                for (int i = 0; i < invList.Length; i++)
+                {
+                    if (invList[i].Equals(handler)) return; // 이미 등록됨 — skip
+                }
                 _handlers[eventType] = Delegate.Combine(existing, handler);
             }
             else

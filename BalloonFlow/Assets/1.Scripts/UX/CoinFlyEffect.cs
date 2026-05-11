@@ -20,6 +20,20 @@ namespace BalloonFlow
         /// <summary>진행 중인 연출이 사용 중인 코인 인스턴스 집합. StopAll에서 한번에 반환.</summary>
         private static readonly HashSet<GameObject> _activeCoins = new HashSet<GameObject>();
 
+        /// <summary>[Optimization 2026-05-11] 풀 GameObject → ParticleSystem[] 캐시 (매 spawn GetComponentsInChildren alloc 제거).</summary>
+        private static readonly Dictionary<GameObject, ParticleSystem[]> _particleCache
+            = new Dictionary<GameObject, ParticleSystem[]>();
+
+        /// <summary>[Optimization 2026-05-11] 풀 GameObject → RectTransform 캐시 (매 spawn GetComponent 제거).</summary>
+        private static readonly Dictionary<GameObject, RectTransform> _rectCache
+            = new Dictionary<GameObject, RectTransform>();
+
+        /// <summary>[2026-05-11] 코인 사이 spawn 인터벌 (사용자 요청 0.2f).</summary>
+        private const float SPAWN_INTERVAL = 0.2f;
+
+        /// <summary>[2026-05-11] count 많을 때 총 spawn 시간이 길어지지 않게 cap. (count - 1) × interval ≤ MAX_TOTAL_SPAWN_TIME.</summary>
+        private const float MAX_TOTAL_SPAWN_TIME = 0.5f;
+
         public static void Play(Vector2 screenFrom, Vector2 screenTo, int count,
             Action onEachLand = null, Action onAllComplete = null)
         {
@@ -113,10 +127,18 @@ namespace BalloonFlow
             int landed = 0;
             float scatterRadius = Mathf.Min(cW, cH) * 0.25f;
 
-            // 스폰: "연속적으로 날아가는" 느낌을 위해 모든 코인을 단일 프레임에 발사.
-            // 자연스러운 도착 간격은 코인별 랜덤 flight duration으로 처리됨.
-            // (minDelay/maxDelay는 하위 호환 보존용이지만 여기선 사용하지 않음)
-            _ = minDelay; _ = maxDelay;
+            // [2026-05-11] spawn 인터벌 계산: 기본 0.2s. count 많으면 (count-1) × interval 이 MAX_TOTAL_SPAWN_TIME 초과 시 단축.
+            // count 5 이하 → 0.2s 그대로 (총 0.8s 이하). count 11 → 0.2s (총 2.0s). count 50 → 약 0.04s (총 2.0s).
+            float spawnInterval = count > 1
+                ? Mathf.Min(SPAWN_INTERVAL, MAX_TOTAL_SPAWN_TIME / (count - 1))
+                : 0f;
+
+            // [2026-05-11] 순차 발사 변경 — 사용자 보고: "한꺼번에 뭉쳐서 날아감 → 순차적 + 빠른 텐션감".
+            // 기존 단일 프레임 발사 → minDelay/maxDelay 사용 시간차 발사. 코인이 stagger 으로 흩어지며 날아감.
+            // GameManager.Board 의 coinSpawnDelayMin/Max 로 인터벌 조정 가능.
+            // 롤백: 아래 yield 라인 제거 + 주석 처리된 `_ = minDelay; _ = maxDelay;` 라인 복원.
+            // 원본:
+            // _ = minDelay; _ = maxDelay;
 
             for (int i = 0; i < count; i++)
             {
@@ -135,13 +157,28 @@ namespace BalloonFlow
                 coin.transform.SetParent(parent, false);
                 coin.transform.SetAsLastSibling();
                 _activeCoins.Add(coin);
-                var rt = coin.GetComponent<RectTransform>();
-                if (rt == null) rt = coin.AddComponent<RectTransform>();
+
+                // [Optimization 2026-05-11] RectTransform 캐시 — 매 spawn GetComponent 제거.
+                // 원본: var rt = coin.GetComponent<RectTransform>(); if (rt == null) rt = coin.AddComponent<RectTransform>();
+                if (!_rectCache.TryGetValue(coin, out RectTransform rt) || rt == null)
+                {
+                    rt = coin.GetComponent<RectTransform>();
+                    if (rt == null) rt = coin.AddComponent<RectTransform>();
+                    _rectCache[coin] = rt;
+                }
                 rt.anchoredPosition = from;
                 // 프리팹의 localScale 그대로 사용 — 자식 Light 컴포넌트가 root 스케일 변동에 영향 안 받도록.
                 // (코인 사이즈는 FXGold.prefab 에서 직접 조절)
 
-                var particles = coin.GetComponentsInChildren<ParticleSystem>(true);
+                // [Optimization 2026-05-11] ParticleSystem[] 캐시 — 매 spawn GetComponentsInChildren alloc 제거.
+                // 원본: var particles = coin.GetComponentsInChildren<ParticleSystem>(true);
+                if (!_particleCache.TryGetValue(coin, out var particles)
+                    || particles == null
+                    || (particles.Length > 0 && particles[0] == null))
+                {
+                    particles = coin.GetComponentsInChildren<ParticleSystem>(true);
+                    _particleCache[coin] = particles;
+                }
                 foreach (var ps in particles)
                 {
                     var main = ps.main;
@@ -159,6 +196,10 @@ namespace BalloonFlow
                         onEachLand?.Invoke();
                         if (landed >= count) onAllComplete?.Invoke();
                     }));
+
+                // [2026-05-11] 코인 사이 spawn 인터벌 — count 비례 자동 조정 (RunFly 진입부에서 계산).
+                if (i < count - 1)
+                    yield return new WaitForSecondsRealtime(spawnInterval);
             }
             yield break;
         }

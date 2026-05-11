@@ -108,6 +108,10 @@ namespace BalloonFlow
                 return;
             }
 
+            // [Leak fix 2026-05-11] 중복 활성 검사 — 이미 같은 popup 이 active 면 중복 호출 무시.
+            // 롤백: 아래 if 라인 제거.
+            if (_activePopupId == popupId) return;
+
             if (!IsPopupActive)
             {
                 ActivatePopup(popupId);
@@ -270,6 +274,13 @@ namespace BalloonFlow
 
         private void EnqueuePopup(string popupId, int priority, object data)
         {
+            // [Leak fix 2026-05-11] 중복 enqueue 방지 — 같은 popupId 가 이미 큐에 있으면 무시.
+            // 롤백: 아래 for 루프 제거.
+            for (int i = 0; i < _queue.Count; i++)
+            {
+                if (_queue[i].popupId == popupId) return;
+            }
+
             _queue.Add(new QueuedPopup
             {
                 popupId = popupId,

@@ -25,6 +25,9 @@ namespace BalloonFlow
             get
             {
                 Material baseMat = base.materialForRendering;
+                // [Defense 2026-05-11] baseMat null 방어 — Image 가 destroy 직전 또는 mat 없는 상태 가능.
+                if (baseMat == null) return _cachedMat; // 이전 cache 있으면 그것, 없으면 null
+
                 if (_cachedMat == null || _cachedBaseMat != baseMat)
                 {
                     if (_cachedMat != null) DestroyImmediate(_cachedMat);

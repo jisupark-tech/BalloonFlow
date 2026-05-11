@@ -228,7 +228,15 @@ namespace BalloonFlow
         /// </summary>
         public GameObject LoadPrefab(string _path, Transform _parent)
         {
-            var _go = Instantiate(Resources.Load<GameObject>(_path), _parent);
+            // [Defense 2026-05-11] Resources.Load 결과 null 일 때 Instantiate 가 throw → null prefab 방어.
+            // 원본: var _go = Instantiate(Resources.Load<GameObject>(_path), _parent);
+            var _prefab = Resources.Load<GameObject>(_path);
+            if (_prefab == null)
+            {
+                Debug.LogWarning($"[UIManager] LoadPrefab Resources.Load failed: {_path}");
+                return null;
+            }
+            var _go = Instantiate(_prefab, _parent);
             if (_go != null)
             {
                 _go.transform.localScale = Vector3.one;

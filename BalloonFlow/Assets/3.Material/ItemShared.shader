@@ -45,8 +45,12 @@ Shader "Custom/ItemShared"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_instancing
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS
-            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            // [Optimization 2026-05-11] 사용 안 하는 multi_compile 제거 → variant 수 절감.
+            //   _MAIN_LIGHT_SHADOWS: frag 가 GetMainLight() shadow-less overload 만 사용 + URP Cast Shadows Distance=0 → 영향 없음.
+            //   _ADDITIONAL_LIGHTS: URP Additional Lights=Disabled + frag 에 additional light 코드 없음.
+            // 롤백: 아래 두 라인 주석 해제.
+            // #pragma multi_compile _ _MAIN_LIGHT_SHADOWS
+            // #pragma multi_compile _ _ADDITIONAL_LIGHTS
             #pragma shader_feature_local _NORMALMAP
             #pragma shader_feature_local _EMISSION
 
@@ -62,15 +66,18 @@ Shader "Custom/ItemShared"
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
+            // [Optimization 2026-05-11] positionWS 제거 — Specular 제거 후 frag 에서 사용 안 함. interpolator 1 slot + vertex 계산 절감.
+            // half 정밀도 적용 (normalWS / tangentWS / bitangentWS) — mobile FP16 가 FP32 대비 1.5~2× 빠름. 시각 동등.
+            // 롤백: positionWS line 추가 + half3 → float3 복원.
             struct Varyings
             {
                 float4 positionHCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
-                float3 normalWS : TEXCOORD1;
-                float3 positionWS : TEXCOORD2;
+                half3 normalWS : TEXCOORD1;
+                // 원본: float3 positionWS : TEXCOORD2; (Specular 제거 후 미사용)
             #ifdef _NORMALMAP
-                float3 tangentWS : TEXCOORD3;
-                float3 bitangentWS : TEXCOORD4;
+                half3 tangentWS : TEXCOORD2;
+                half3 bitangentWS : TEXCOORD3;
             #endif
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
@@ -103,13 +110,13 @@ Shader "Custom/ItemShared"
                 UNITY_SETUP_INSTANCE_ID(IN);
                 UNITY_TRANSFER_INSTANCE_ID(IN, OUT);
                 OUT.positionHCS = TransformObjectToHClip(IN.positionOS.xyz);
-                OUT.positionWS = TransformObjectToWorld(IN.positionOS.xyz);
-                OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
+                // [Optimization 2026-05-11] positionWS 계산 제거 (미사용). 원본: OUT.positionWS = TransformObjectToWorld(IN.positionOS.xyz);
+                OUT.normalWS = (half3)TransformObjectToWorldNormal(IN.normalOS);
                 OUT.uv = TRANSFORM_TEX(IN.uv, _BaseMap);
 
             #ifdef _NORMALMAP
-                OUT.tangentWS = TransformObjectToWorldDir(IN.tangentOS.xyz);
-                OUT.bitangentWS = cross(OUT.normalWS, OUT.tangentWS) * IN.tangentOS.w;
+                OUT.tangentWS = (half3)TransformObjectToWorldDir(IN.tangentOS.xyz);
+                OUT.bitangentWS = (half3)cross((float3)OUT.normalWS, (float3)OUT.tangentWS) * IN.tangentOS.w;
             #endif
 
                 return OUT;
@@ -121,22 +128,23 @@ Shader "Custom/ItemShared"
                 half4 texColor = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.uv);
                 half4 baseColor = texColor * _BaseColor;
 
-                // Normal
-                float3 normalWS = normalize(IN.normalWS);
+                // [Optimization 2026-05-11] half 정밀도 — mobile FP16 더 빠름. 원본: float3 normalWS.
+                half3 normalWS = normalize(IN.normalWS);
 
             #ifdef _NORMALMAP
                 half3 normalTS = UnpackNormalScale(
                     SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, IN.uv), _BumpScale);
-                float3 T = normalize(IN.tangentWS);
-                float3 B = normalize(IN.bitangentWS);
+                // 원본: float3 T / float3 B
+                half3 T = normalize(IN.tangentWS);
+                half3 B = normalize(IN.bitangentWS);
                 normalWS = normalize(T * normalTS.x + B * normalTS.y + normalWS * normalTS.z);
             #endif
 
                 Light mainLight = GetMainLight();
 
                 // Diffuse
-                half NdotL = saturate(dot(normalWS, mainLight.direction));
-                half3 diffuse = baseColor.rgb * mainLight.color * NdotL;
+                half NdotL = saturate(dot(normalWS, (half3)mainLight.direction));
+                half3 diffuse = baseColor.rgb * (half3)mainLight.color * NdotL;
 
                 // Ambient
                 half3 ambient = baseColor.rgb * 0.3;
@@ -167,11 +175,11 @@ Shader "Custom/ItemShared"
             ENDHLSL
         }
 
+        // [Optimization 2026-05-10] Outline Pass 통째로 주석 처리 — 풍선 1500개 × Outline Pass = 1500 draws/frame 제거.
+        // 시각: 풍선 외곽선 사라짐. Mobile 디바이스에서 큰 stage 시 frame drop 회복 위해 outline 자체 OFF.
+        // 롤백: 아래 /* */ 블록 주석 해제. 외곽만 outline 원하면 vertex shader 의 _OutlineEnabled<0.5 분기도 함께 해제.
+        /*
         // ──────────────── Pass 1: Outline (Inverted Hull) ────────────────
-        // [Optimization 2026-05-10] _OutlineEnabled<0.5 시 vertex 를 clip 밖 (NaN) 좌표로 출력 → fragment shader 호출 안 됨.
-        // 외곽 풍선 (_OutlineEnabled=1, BalloonController.RefreshOutermostRendererState 가 MPB 로 설정) 만 GPU 에서 outline 처리.
-        // 내부 풍선은 vertex shader 한 번 도는 거의 무비용 reject. CPU draw call 은 1500 그대로지만 SRP Batcher 가 묶음.
-        // 롤백: vertex shader 의 _OutlineEnabled 분기 라인 제거 + 원본 width 0 분기 복원.
         Pass
         {
             Name "Outline"
@@ -220,16 +228,12 @@ Shader "Custom/ItemShared"
                 UNITY_SETUP_INSTANCE_ID(IN);
                 UNITY_TRANSFER_INSTANCE_ID(IN, OUT);
 
-                // [Optimization 2026-05-10] outline 비활성 풍선은 vertex 를 clip 밖으로 출력 → fragment 호출 X.
-                // (2,2,2,1) 은 NDC [-1,1] 밖이라 모든 GPU 가 즉시 frustum culling.
-                // 롤백: 아래 if 블록 제거 + 원본 (width 0 분기) 복원.
                 if (_OutlineEnabled < 0.5)
                 {
                     OUT.positionHCS = float4(2, 2, 2, 1);
                     return OUT;
                 }
 
-                // 원본: float width = _OutlineEnabled > 0.5 ? _OutlineWidth : 0.0;
                 float3 expanded = IN.positionOS.xyz + IN.normalOS * _OutlineWidth;
                 OUT.positionHCS = TransformObjectToHClip(expanded);
                 return OUT;
@@ -242,6 +246,7 @@ Shader "Custom/ItemShared"
             }
             ENDHLSL
         }
+        */
 
         // ──────────────── Pass 2: Depth Only ────────────────
         Pass

@@ -1782,8 +1782,19 @@ namespace BalloonFlow
         {
             Color colorA = GetColor(a.color);
             Color colorB = GetColor(b.color);
+            // [Defense 2026-05-11] Shader.Find 결과 null 가능 (mobile 빌드에서 strip 시) → null 방어.
+            // 원본: if (_sharedChainLineMat == null) _sharedChainLineMat = new Material(Shader.Find("Sprites/Default"));
             if (_sharedChainLineMat == null)
-                _sharedChainLineMat = new Material(Shader.Find("Sprites/Default"));
+            {
+                Shader chainShader = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color");
+                if (chainShader != null)
+                    _sharedChainLineMat = new Material(chainShader);
+                else
+                {
+                    Debug.LogError("[HolderVisualManager] No shader for chain line — chain line will not render.");
+                    return;
+                }
+            }
 
             var go = new GameObject($"ChainLine_{key}");
 

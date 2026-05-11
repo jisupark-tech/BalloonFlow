@@ -273,7 +273,9 @@ namespace BalloonFlow
         private static readonly int _propBlurColor = Shader.PropertyToID("_BlurColor");
         private static readonly int _propOutlineEnabled = Shader.PropertyToID("_OutlineEnabled");
         private static readonly int _propOutlineColor = Shader.PropertyToID("_OutlineColor");
-        private static readonly int _propMainColor = Shader.PropertyToID("_Color");
+        // [2026-05-11] _Color → _BaseColor 로 변경. ItemShared shader 의 [MainColor] property name 매칭.
+        // 원본: private static readonly int _propMainColor = Shader.PropertyToID("_Color");
+        private static readonly int _propMainColor = Shader.PropertyToID("_BaseColor");
         private static MaterialPropertyBlock _sharedMPB;
 
         /// <summary>
@@ -447,6 +449,13 @@ namespace BalloonFlow
         /// </summary>
         private static Material GetOrCreateClonedVariant(Material baseMat, Color color)
         {
+            // [Defense 2026-05-11] baseMat 인자 null 방어 — caller 가 보장 안 하면 NRE.
+            if (baseMat == null)
+            {
+                Debug.LogWarning("[HolderIdentifier] GetOrCreateClonedVariant called with null baseMat.");
+                return null;
+            }
+
             int key = baseMat.GetInstanceID() ^ color.GetHashCode();
             if (_customMatCache.TryGetValue(key, out Material cached))
                 return cached;
@@ -611,12 +620,28 @@ namespace BalloonFlow
         public void SetSpawnerTransparent(bool transparent)
         {
             if (_colorRenderers == null) return;
+            // [Leak fix 2026-05-11] material.color 직접 접근은 매 호출 unique material 인스턴스 복제 → leak.
+            // MaterialPropertyBlock 의 _BaseColor.a override 로 대체. 시각 동등 (alpha 만 변경).
+            // 원본:
+            // for (int i = 0; i < _colorRenderers.Length; i++) {
+            //     if (_colorRenderers[i] == null) continue;
+            //     Color c = _colorRenderers[i].material.color;
+            //     c.a = transparent ? 0.4f : 1f;
+            //     _colorRenderers[i].material.color = c;
+            // }
+            if (_sharedMPB == null) _sharedMPB = new MaterialPropertyBlock();
+            float alpha = transparent ? 0.4f : 1f;
             for (int i = 0; i < _colorRenderers.Length; i++)
             {
                 if (_colorRenderers[i] == null) continue;
-                Color c = _colorRenderers[i].material.color;
-                c.a = transparent ? 0.4f : 1f;
-                _colorRenderers[i].material.color = c;
+                _colorRenderers[i].GetPropertyBlock(_sharedMPB);
+                // sharedMaterial 의 _BaseColor 가져와서 alpha 만 override
+                Color baseCol = _colorRenderers[i].sharedMaterial != null
+                    ? _colorRenderers[i].sharedMaterial.GetColor(_propMainColor)
+                    : Color.white;
+                baseCol.a = alpha;
+                _sharedMPB.SetColor(_propMainColor, baseCol);
+                _colorRenderers[i].SetPropertyBlock(_sharedMPB);
             }
         }
 

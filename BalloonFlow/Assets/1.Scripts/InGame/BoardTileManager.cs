@@ -73,7 +73,10 @@ namespace BalloonFlow
         public int RailSideCount { get; set; } = 4;
 
         // Arrow: 슬롯 기반 회전 (다트처럼 벨트와 함께 이동)
-        private const float ARROW_SPACING = 2.0f; // Arrow 간 월드 거리
+        // [Optimization 2026-05-11] ARROW_SPACING 2.0 → 4.0 — 큰 stage 의 rail path 가 길수록 arrow 수 폭증 (140+ draws).
+        // 시각: 약간 sparse. 동선 흐름 표시는 유지. 롤백: 아래 라인 = 2.0f.
+        // 원본: private const float ARROW_SPACING = 2.0f;
+        private const float ARROW_SPACING = 4.0f; // Arrow 간 월드 거리
         private GameObject[] _arrowObjects;
         private int[] _arrowSlotIndices; // 각 Arrow가 점유한 슬롯 인덱스
 
@@ -859,7 +862,9 @@ namespace BalloonFlow
             if (rail.SlotCount == 0 || rail.TotalPathLength <= 0f) return;
 
             float pathLen = rail.TotalPathLength;
-            int arrowCount = Mathf.Max(4, Mathf.FloorToInt(pathLen / ARROW_SPACING));
+            // [Optimization 2026-05-11] arrow 수 cap 50 추가 — 큰 stage 에서도 max 50.
+            // 원본: int arrowCount = Mathf.Max(4, Mathf.FloorToInt(pathLen / ARROW_SPACING));
+            int arrowCount = Mathf.Clamp(Mathf.FloorToInt(pathLen / ARROW_SPACING), 4, 50);
 
             _arrowObjects = new GameObject[arrowCount];
             _arrowSlotIndices = new int[arrowCount];

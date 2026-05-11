@@ -737,7 +737,10 @@ namespace BalloonFlow
             {
                 int colorIdx = Mathf.Clamp(data.color, 0, BalloonColors.Length - 1);
                 ApplyTintToObject(obj, BalloonColors[colorIdx]);
-                obj.transform.DOPunchScale(Vector3.one * 0.15f, 0.2f, 8, 0.5f);
+                // [Leak fix 2026-05-11] SetLink(KillOnDisable) — pool 반환 시 SetActive(false) 에서 tween 자동 kill.
+                // 원본: obj.transform.DOPunchScale(Vector3.one * 0.15f, 0.2f, 8, 0.5f);
+                obj.transform.DOPunchScale(Vector3.one * 0.15f, 0.2f, 8, 0.5f)
+                    .SetLink(obj, LinkBehaviour.KillOnDisable);
             }
 
             EventBus.Publish(new OnGimmickTriggered
@@ -821,10 +824,18 @@ namespace BalloonFlow
         /// </summary>
         public void ClearAllBalloons()
         {
+            // [Leak fix 2026-05-11] 진행 중 coroutine 정리 — FlyKeyToLock / PopEffectPool.ReturnAfterDelay (runner=this) 등 stale 방지.
+            // 누락 시 SetActive(false) 풍선의 transform.position 을 코루틴이 계속 갱신하거나, pool 반환 timing 어긋남.
+            StopAllCoroutines();
+
             foreach (KeyValuePair<int, GameObject> pair in _balloonObjects)
             {
                 if (pair.Value != null && ObjectPoolManager.HasInstance)
                 {
+                    // [Leak fix 2026-05-11] pool 반환 전 DOTween tween 정리.
+                    // 진행 중인 Sequence (DOScale/DOPunchScale 등) 가 SetActive(false) 된 GameObject 의 transform 을
+                    // 계속 update 하면서 DOTween internal active list 누적 → 매 frame DOTween.Update 비용 증가.
+                    pair.Value.transform.DOKill();
                     // 기믹별 전용 풀로 반환 (없으면 기본 Balloon 풀)
                     string returnKey = PoolKey;
                     if (_balloons.TryGetValue(pair.Key, out BalloonData bd))
@@ -845,6 +856,13 @@ namespace BalloonFlow
             _pinataGroup.Clear();
             _positionIndex.Clear();
             _activeKeyPairIds.Clear();
+            // [Leak fix 2026-05-11] _balloonRenderers / _prevOutermostSet / _frameCachedPositions 정리 추가.
+            // 이전: ClearAllBalloons 가 _nextBalloonId=1 로 reset 하는데 이 dict 들이 stale entry 보유 →
+            //       다음 레벨의 balloonId=1 풍선이 stale Renderer[] / outline state / cached position 과 collision.
+            _balloonRenderers.Clear();
+            _prevOutermostSet.Clear();
+            _frameCachedPositions.Clear();
+            _frameCachedPositionsFrame = -1;
             RemainingCount = 0;
             PoppedCount = 0;
             _nextBalloonId = 1;
@@ -1659,7 +1677,9 @@ namespace BalloonFlow
                     ApplyTintToObject(obj, BalloonColors[colorIdx]);
 
                     // Reveal punch animation
-                    obj.transform.DOPunchScale(Vector3.one * 0.15f, 0.2f, 8, 0.5f);
+                    // [Leak fix 2026-05-11] SetLink(KillOnDisable) — pool 반환 시 자동 kill. 원본: 동일 코드 .SetLink 없이.
+                    obj.transform.DOPunchScale(Vector3.one * 0.15f, 0.2f, 8, 0.5f)
+                        .SetLink(obj, LinkBehaviour.KillOnDisable);
                 }
 
                 EventBus.Publish(new OnGimmickTriggered
@@ -1849,7 +1869,10 @@ namespace BalloonFlow
 
                     // Spawn animation: scale up from zero
                     obj.transform.localScale = Vector3.zero;
-                    obj.transform.DOScale(Vector3.one * _balloonScale, 0.25f).SetEase(Ease.OutBack);
+                    // [Leak fix 2026-05-11] SetLink(KillOnDisable) — pool 재사용 시 SetActive(false) 에서 자동 kill. 원본: .SetLink 없이.
+                    obj.transform.DOScale(Vector3.one * _balloonScale, 0.25f)
+                        .SetEase(Ease.OutBack)
+                        .SetLink(obj, LinkBehaviour.KillOnDisable);
                 }
 
                 // Update position index
@@ -1926,6 +1949,8 @@ namespace BalloonFlow
             // 풍선 스케일업 → 완료 후 PopEffectPool 재생 + 풍선 풀 반환.
             // 이전: BalloonIdentifier에 _popEffect 자식 부착 → detach/reattach + 풍선마다 별도 인스턴스 → 부하.
             // 이후: 단일 CircleParticle 풀에서 가져와 색상 적용 + play, 끝나면 풀 반환.
+            // [Leak fix 2026-05-11] 새 Sequence 시작 전 stale tween 정리 — DOPunchScale 등 진행 중이면 leak + 시각 충돌.
+            obj.transform.DOKill();
             float scaleUpDuration = GameManager.Instance.Board.popScaleDuration;
             float scaleUpMult = GameManager.Instance.Board.popScaleMultiplier;
             Vector3 popPos = obj.transform.position;

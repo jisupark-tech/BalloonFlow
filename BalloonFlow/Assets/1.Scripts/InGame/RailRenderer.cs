@@ -64,11 +64,45 @@ namespace BalloonFlow
             _tileSet = Resources.Load<RailTileSet>("RailTileSet");
 
             // Create default material for non-sprite visual modes (Cylinder, Flat2D)
-            _trackMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit")
-                ?? Shader.Find("Standard")
-                ?? Shader.Find("Sprites/Default"));
-            _trackMaterial.color = _railColor;
-            _trackMaterial.enableInstancing = true;
+            // [Optimization 2026-05-11] mat asset 우선 로드 (Resources 또는 Addressable) → 없으면 shader 기반 fallback.
+            // mat asset 사용 시: shader variant 메모리 절감 + 디자이너가 mat 속성 조정 가능.
+            // shader fallback 시: URP/Unlit (variant 적음) → Unlit/Color → Sprites/Default 순.
+            // 롤백: 아래 코드 전체 제거 + 주석 처리된 원본 복원.
+            // 원본:
+            // _trackMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit")
+            //     ?? Shader.Find("Standard")
+            //     ?? Shader.Find("Sprites/Default"));
+            // _trackMaterial.color = _railColor;
+            // _trackMaterial.enableInstancing = true;
+
+            // 1) Resources 에서 미리 빌드된 mat asset 로드 시도 (sync, addressable 등록 안 됐어도 동작)
+            //    "Resources/Materials/RailTrack.mat" 위치에 사용자가 mat 만들어두면 자동 사용됨.
+            Material assetMat = Resources.Load<Material>("Materials/RailTrack");
+            if (assetMat != null)
+            {
+                // asset 직접 사용 시 mat 의 color 변경이 Editor 의 asset 에 반영됨 → instance 복제 후 color override.
+                _trackMaterial = new Material(assetMat);
+                _trackMaterial.color = _railColor;
+                _trackMaterial.enableInstancing = true;
+            }
+            else
+            {
+                // 2) Fallback: shader 기반으로 새 mat 생성. URP/Unlit 우선 (variant 적음, 메모리 작음).
+                Shader shader = Shader.Find("Universal Render Pipeline/Unlit")
+                    ?? Shader.Find("Unlit/Color")
+                    ?? Shader.Find("Sprites/Default");
+                if (shader != null)
+                {
+                    _trackMaterial = new Material(shader);
+                    _trackMaterial.color = _railColor;
+                    _trackMaterial.enableInstancing = true;
+                }
+                else
+                {
+                    // 3) shader 도 못 찾으면 track 렌더 불가. 에러 로그만 — _trackMaterial 은 null 상태.
+                    Debug.LogError("[RailRenderer] No shader found for track material — track will not render.");
+                }
+            }
         }
 
         private void OnEnable()
