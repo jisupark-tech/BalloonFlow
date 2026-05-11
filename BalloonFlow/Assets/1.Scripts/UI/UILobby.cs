@@ -13,6 +13,8 @@ namespace BalloonFlow
     /// On Awake, a PageContainer is auto-created and the 3 pages are reparented into it.
     /// BottomNav buttons slide the PageContainer left/right with DOTween.
     /// </summary>
+    /// <remarks>Project-wide convention: flat 'namespace BalloonFlow' — do not nest.</remarks>
+    /// <remarks>Not a singleton — scene-level MonoBehaviour managed by Unity lifecycle.</remarks>
     public class UILobby : UIBase
     {
         #region Constants
@@ -744,13 +746,23 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// 레벨업 직후 호출 — pending(NEW) 레벨/난이도를 캐시한 뒤 LobbyBtnChange 애니메이션을 시작.
+        /// 레벨업 케이스 전용 — pending(NEW) 레벨/난이도를 캐시한 뒤 LobbyBtnChange 애니메이션을 시작.
         /// 20프레임(0.333s) 시점에 <see cref="OnLobbyBtnChangeFrameEvent"/> 가 호출되어
         /// UpdatePlayButton 으로 NEW 표기 교체 + onFrameEvent 콜백(부수 UI 갱신) 트리거.
         /// Animator 미할당 시에도 코루틴 폴백으로 동일 시점 트리거 보장.
+        /// non-levelup 케이스(first-launch / 레벨 변화 없는 로비 복귀)에서는 절대 호출되지 않는다.
         /// </summary>
         public void PlayLobbyBtnChangeAnim(int pendingLevelId, DifficultyPurpose pendingDifficulty, System.Action onFrameEvent = null)
         {
+            // 사용자 피드백 가드: 동일 레벨/난이도 재호출은 의미 없으므로 silent no-op.
+            // _hasPendingChange=false 인 시점(이전 Change 가 이미 완료) + 동일 파라미터일 때만 차단해
+            // 첫 호출(_pendingLevelId 디폴트 0)은 정상 통과시킨다.
+            if (_pendingLevelId == pendingLevelId && _pendingDifficulty == pendingDifficulty && !_hasPendingChange)
+            {
+                EnsureLobbyBtnIdle();
+                return;
+            }
+
             _pendingLevelId = pendingLevelId;
             _pendingDifficulty = pendingDifficulty;
             _onChangeAnimFrameEvent = onFrameEvent;

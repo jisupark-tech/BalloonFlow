@@ -11,6 +11,8 @@ namespace BalloonFlow
     /// - BtnGoldPlus / BtnLifePlus → Shop 페이지로 이동 (PopupGoldShop 미사용)
     /// - Updates Gold, Life, Level display via EventBus
     /// </summary>
+    /// <remarks>Project-wide convention: flat 'namespace BalloonFlow' — do not nest.</remarks>
+    /// <remarks>Not a singleton — scene-level MonoBehaviour managed by Unity lifecycle.</remarks>
     public class LobbyController : MonoBehaviour
     {
         private const float COIN_FLY_FLAG_RESET_DELAY = 0.3f;
@@ -133,6 +135,12 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>
+        /// 인게임 종료 후 로비 복귀 시 레벨업 여부 판정 + 분기.
+        /// 레벨업 케이스에서만 LobbyBtnChange 애니메이션을 트리거하며,
+        /// first-launch / 레벨 변화 없는 로비 복귀(no-levelup) 양 케이스에서는
+        /// 버튼·난이도 UI 를 NEW 값으로 즉시 스냅하고 idle 상태를 강제한다.
+        /// </summary>
         void RefreshDisplay()
         {
             if (_lobby == null) return;
@@ -163,11 +171,12 @@ namespace BalloonFlow
                 PlayerPrefs.Save();
             }
 
-            bool isLevelUp = hasPrev && newLevel > prevLevel;
+            bool isLobbyReturn = hasPrev;                          // hasPrev=true → 인게임 거쳐 복귀
+            bool isLevelUp = isLobbyReturn && newLevel > prevLevel;
 
             if (isLevelUp)
             {
-                // OLD 레벨/난이도 + OLD Rail 상태 먼저 표시 → 애니메이션 20f 시점에 NEW 일괄 교체
+                // 기존 그대로 — OLD 레벨/난이도 + OLD Rail 상태 먼저 표시 → LobbyBtnChange 20f 시점에 NEW 일괄 교체
                 int prevHighest = Mathf.Max(0, prevLevel - 1);
                 DifficultyPurpose prevDiff = DifficultyPurpose.Normal;
                 if (LevelManager.HasInstance)
@@ -185,11 +194,11 @@ namespace BalloonFlow
             }
             else
             {
+                // first-launch 와 'lobby-return-no-levelup' 양 케이스.
+                // 사용자 피드백: 레벨 변화가 없으면 LobbyBtnChange 절대 재생 금지 + 버튼/난이도 UI 기존 상태 유지.
                 _lobby.SetupLevelBoxes(newLevel, highest);
                 _lobby.UpdatePlayButton(newLevel, newDiff);
-                // 안전망 — AnimatorController default state(LobbyBtnChange) 가 자동 재생되지 않도록
-                // 최초 실행 + 비-레벨업 로비 복귀 양 케이스 모두에서 idle 강제 고정.
-                _lobby.EnsureLobbyBtnIdle();
+                _lobby.EnsureLobbyBtnIdle();  // default state(LobbyBtnChange) 자동 재생 차단 안전망
             }
         }
 
