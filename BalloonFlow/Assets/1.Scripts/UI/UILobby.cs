@@ -41,8 +41,6 @@ namespace BalloonFlow
         private const float LEVEL_OBJECT_ENTER_START_Y = 1816f;
         private const float LEVEL_OBJECT_ENTER_END_Y   = 1145f;
         private const float LEVEL_OBJECT_ENTER_DURATION = 0.45f;
-        // Rail Enter Animation 재생 시작 1초 후 LevelObject 슬라이드 시작 (사용자 피드백)
-        private const float LEVEL_OBJECT_ENTER_DELAY = 1.0f;
 
         #endregion
 
@@ -290,7 +288,7 @@ namespace BalloonFlow
             }
         }
 
-        // 인게임 종료 후 로비 복귀 시 Rail Enter 재생 시작 1초 뒤 LevelObject 가 1816→1145 로 OutCubic 슬라이드 다운
+        // 인게임 종료 후 로비 복귀 시 LevelObject 가 1816→1145 로 OutCubic 슬라이드 다운 (Rail Enter Animation 과 동시 재생)
         public void PlayLevelObjectEnterAnimation()
         {
             _levelObjectEnterTween?.Kill();
@@ -299,7 +297,6 @@ namespace BalloonFlow
             var p = _levelBoxContainer.anchoredPosition;
             _levelBoxContainer.anchoredPosition = new Vector2(p.x, LEVEL_OBJECT_ENTER_START_Y);
             _levelObjectEnterTween = _levelBoxContainer.DOAnchorPosY(LEVEL_OBJECT_ENTER_END_Y, LEVEL_OBJECT_ENTER_DURATION)
-                .SetDelay(LEVEL_OBJECT_ENTER_DELAY)
                 .SetEase(Ease.OutCubic)
                 .SetUpdate(true);
         }
