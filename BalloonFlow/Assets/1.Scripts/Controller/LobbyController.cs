@@ -14,6 +14,8 @@ namespace BalloonFlow
     public class LobbyController : MonoBehaviour
     {
         private const float COIN_FLY_FLAG_RESET_DELAY = 0.3f;
+        // 게임 시작 직전 표시되던 레벨. 로비 복귀 시 새 레벨(highest+1) 과 비교해 레벨업 여부 판정.
+        private const string PREFS_KEY_LOBBY_LEVEL_AT_GAME_START = "BF_LobbyLevelAtGameStart";
 
         private UILobby _lobby;
         private bool _isCoinFlyInFlight;
@@ -138,13 +140,47 @@ namespace BalloonFlow
             if (LevelManager.HasInstance)
                 highest = LevelManager.Instance.GetHighestCompletedLevel();
 
-            int currentLevel = highest > 0 ? highest + 1 : 1;
-            _lobby.SetupLevelBoxes(currentLevel, highest);
+            int newLevel = highest > 0 ? highest + 1 : 1;
 
-            DifficultyPurpose diff = DifficultyPurpose.Normal;
+            DifficultyPurpose newDiff = DifficultyPurpose.Normal;
             if (LevelManager.HasInstance)
-                diff = LevelManager.Instance.GetLevelDifficulty(currentLevel);
-            _lobby.UpdatePlayButton(currentLevel, diff);
+                newDiff = LevelManager.Instance.GetLevelDifficulty(newLevel);
+
+            // 레벨업 감지 — 직전 게임 시작 시 표시 레벨과 비교.
+            // 키 소비(DeleteKey)는 비교 직후 1회만 — 재 RefreshDisplay 호출 시 중복 트리거 방지.
+            bool hasPrev = PlayerPrefs.HasKey(PREFS_KEY_LOBBY_LEVEL_AT_GAME_START);
+            int prevLevel = hasPrev ? PlayerPrefs.GetInt(PREFS_KEY_LOBBY_LEVEL_AT_GAME_START, newLevel) : newLevel;
+            if (hasPrev)
+            {
+                PlayerPrefs.DeleteKey(PREFS_KEY_LOBBY_LEVEL_AT_GAME_START);
+                PlayerPrefs.Save();
+            }
+
+            bool isLevelUp = hasPrev && newLevel > prevLevel;
+
+            if (isLevelUp)
+            {
+                // OLD 레벨/난이도 + OLD Rail 상태 먼저 표시 → 애니메이션 20f 시점에 NEW 일괄 교체
+                int prevHighest = Mathf.Max(0, prevLevel - 1);
+                DifficultyPurpose prevDiff = DifficultyPurpose.Normal;
+                if (LevelManager.HasInstance)
+                    prevDiff = LevelManager.Instance.GetLevelDifficulty(prevLevel);
+
+                _lobby.SetupLevelBoxes(prevLevel, prevHighest);
+                _lobby.UpdatePlayButton(prevLevel, prevDiff);
+
+                int capturedNewLevel = newLevel;
+                int capturedHighest = highest;
+                _lobby.PlayLobbyBtnChangeAnim(newLevel, newDiff, () =>
+                {
+                    if (_lobby != null) _lobby.SetupLevelBoxes(capturedNewLevel, capturedHighest);
+                });
+            }
+            else
+            {
+                _lobby.SetupLevelBoxes(newLevel, highest);
+                _lobby.UpdatePlayButton(newLevel, newDiff);
+            }
         }
 
         void UpdateLifeTimer()
@@ -212,6 +248,11 @@ namespace BalloonFlow
                 int highest = LevelManager.Instance.GetHighestCompletedLevel();
                 levelId = highest > 0 ? highest + 1 : 1;
             }
+
+            // 로비 복귀 시 레벨업 감지에 사용 — 게임 시작 직전 PlayButton 에 표시되던 레벨을 저장.
+            PlayerPrefs.SetInt(PREFS_KEY_LOBBY_LEVEL_AT_GAME_START, levelId);
+            PlayerPrefs.Save();
+
             // 현재 레벨 RailBox 열림 연출 후 씬 이동
             var activeBox = _lobby.GetActiveRailBox();
             if (activeBox != null)
