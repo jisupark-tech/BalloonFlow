@@ -122,6 +122,9 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprBadgeX3;
         [SerializeField] private Sprite _sprBadgeX5;
 
+        [Header("[Home Page — Play Button Change Animator]")]
+        [SerializeField] private Animator _animPlayBtn;
+
         [Header("[RightArea — Lobby Page]")]
         [SerializeField] private Button _btnNoAds;
         [SerializeField] private Button _btnProfilePanel;
@@ -165,6 +168,17 @@ namespace BalloonFlow
         // 직전 OnPageArrived 도착 페이지. 같은 Shop 탭 내 vertical drag/short tap 으로 재도착 시
         // ResetView 가 다시 불려 스크롤이 상단으로 점프하던 버그를 막기 위한 가드용 캐시.
         private int _lastArrivedPageIndex = -1;
+
+        // LobbyBtnChange 애니메이션 — 레벨업 시 PlayButton 표기 갱신을 20프레임 시점에 일괄 처리.
+        // AnimationEvent(.anim) 와 코루틴 폴백 양쪽에서 동일 메서드를 호출하므로
+        // _hasPendingChange 가드로 1회만 적용한다.
+        private int _pendingLevelId;
+        private DifficultyPurpose _pendingDifficulty;
+        private System.Action _onChangeAnimFrameEvent;
+        private bool _hasPendingChange;
+        private Coroutine _changeAnimCoroutine;
+        private const float LOBBY_BTN_CHANGE_FRAME_TIME = 20f / 60f; // 20프레임 @ 60fps
+        private const string LOBBY_BTN_CHANGE_ANIM_NAME = "LobbyBtnChange";
 
         #endregion
 
@@ -698,6 +712,52 @@ namespace BalloonFlow
             rt.DOKill();
             rt.DOScale(0.95f, 0.08f).SetEase(Ease.InQuad)
               .OnComplete(() => rt.DOScale(1f, 0.08f).SetEase(Ease.OutQuad));
+        }
+
+        /// <summary>
+        /// 레벨업 직후 호출 — pending(NEW) 레벨/난이도를 캐시한 뒤 LobbyBtnChange 애니메이션을 시작.
+        /// 20프레임(0.333s) 시점에 <see cref="OnLobbyBtnChangeFrameEvent"/> 가 호출되어
+        /// UpdatePlayButton 으로 NEW 표기 교체 + onFrameEvent 콜백(부수 UI 갱신) 트리거.
+        /// Animator 미할당 시에도 코루틴 폴백으로 동일 시점 트리거 보장.
+        /// </summary>
+        public void PlayLobbyBtnChangeAnim(int pendingLevelId, DifficultyPurpose pendingDifficulty, System.Action onFrameEvent = null)
+        {
+            _pendingLevelId = pendingLevelId;
+            _pendingDifficulty = pendingDifficulty;
+            _onChangeAnimFrameEvent = onFrameEvent;
+            _hasPendingChange = true;
+
+            if (_animPlayBtn != null && _animPlayBtn.runtimeAnimatorController != null)
+            {
+                _animPlayBtn.Play(LOBBY_BTN_CHANGE_ANIM_NAME, 0, 0f);
+            }
+
+            if (_changeAnimCoroutine != null) StopCoroutine(_changeAnimCoroutine);
+            _changeAnimCoroutine = StartCoroutine(InvokeLobbyBtnChangeFrameCoroutine());
+        }
+
+        private System.Collections.IEnumerator InvokeLobbyBtnChangeFrameCoroutine()
+        {
+            yield return new WaitForSecondsRealtime(LOBBY_BTN_CHANGE_FRAME_TIME);
+            _changeAnimCoroutine = null;
+            OnLobbyBtnChangeFrameEvent();
+        }
+
+        /// <summary>
+        /// LobbyBtnChange 애니메이션 20프레임 시점 AnimationEvent 콜백 — 펜딩 NEW 정보로
+        /// PlayButton 표기 + 부수 UI 일괄 교체. AnimationEvent(.anim) 와 코루틴 폴백 양쪽에서
+        /// 호출 가능 — 가드로 1회만 처리한다.
+        /// </summary>
+        public void OnLobbyBtnChangeFrameEvent()
+        {
+            if (!_hasPendingChange) return;
+            _hasPendingChange = false;
+
+            UpdatePlayButton(_pendingLevelId, _pendingDifficulty);
+
+            var cb = _onChangeAnimFrameEvent;
+            _onChangeAnimFrameEvent = null;
+            cb?.Invoke();
         }
 
         #endregion
