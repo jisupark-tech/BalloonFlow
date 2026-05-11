@@ -179,6 +179,9 @@ namespace BalloonFlow
         private Coroutine _changeAnimCoroutine;
         private const float LOBBY_BTN_CHANGE_FRAME_TIME = 20f / 60f; // 20프레임 @ 60fps
         private const string LOBBY_BTN_CHANGE_ANIM_NAME = "LobbyBtnChange";
+        private const string LOBBY_BTN_IDLE_ANIM_NAME = "LobbyBtn";
+        // Change 애니가 끝까지 재생된 직후 idle 로 자연 복귀가 보장되지 않을 때를 대비한 안전망 지연.
+        private const float LOBBY_BTN_RETURN_TO_IDLE_DELAY = LOBBY_BTN_CHANGE_FRAME_TIME + 0.4f;
 
         #endregion
 
@@ -220,6 +223,11 @@ namespace BalloonFlow
 
             // 최초 진입 시 Rail 슬라이드 인 연출 1회 재생
             PlayRailEnterAnimation();
+
+            // AnimatorController(LobbyPlayBtn.controller)의 default state 가 LobbyBtnChange 로 잡혀
+            // 프리팹 enable 직후 의도치 않게 변경 애니가 자동 재생되는 문제 차단.
+            // 첫 프레임 전에 idle 로 강제 고정한다.
+            EnsureLobbyBtnIdle();
         }
 
         /// <summary>
@@ -758,6 +766,31 @@ namespace BalloonFlow
             var cb = _onChangeAnimFrameEvent;
             _onChangeAnimFrameEvent = null;
             cb?.Invoke();
+
+            ScheduleReturnToIdleAfterChange();
+        }
+
+        /// <summary>
+        /// PlayBtn Animator 를 Idle(LobbyBtn) 상태로 강제 고정.
+        /// AnimatorController 의 default state 가 LobbyBtnChange 로 잡혀있어
+        /// 프리팹 enable 시 의도치 않게 변경 애니메이션이 자동 재생되는 것을 차단.
+        /// 최초 진입 / 레벨업 없는 로비 복귀 / Change 애니 종료 후 모두 호출.
+        /// </summary>
+        public void EnsureLobbyBtnIdle()
+        {
+            if (_animPlayBtn == null || _animPlayBtn.runtimeAnimatorController == null) return;
+            // normalizedTime=0f, layer=0 으로 명시 — Update 전에 Play 호출되면 default state 재생이 prempt 됨.
+            _animPlayBtn.Play(LOBBY_BTN_IDLE_ANIM_NAME, 0, 0f);
+            _animPlayBtn.Update(0f); // 즉시 evaluate — 첫 프레임 LobbyBtnChange 키프레임이 한 프레임 비치는 flicker 차단.
+        }
+
+        /// <summary>
+        /// Change 애니 재생 완료 시점 이후 약간의 지연을 두고 idle 로 복귀.
+        /// AnimatorController 에 Change → LobbyBtn 자동 전이가 없을 때를 대비한 안전망.
+        /// </summary>
+        private void ScheduleReturnToIdleAfterChange()
+        {
+            DOVirtual.DelayedCall(LOBBY_BTN_RETURN_TO_IDLE_DELAY, EnsureLobbyBtnIdle, ignoreTimeScale: true);
         }
 
         #endregion
