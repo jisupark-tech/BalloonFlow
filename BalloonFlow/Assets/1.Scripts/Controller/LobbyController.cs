@@ -64,6 +64,9 @@ namespace BalloonFlow
 
             LoadUI();
             RefreshDisplay();
+
+            // 인게임 종료 후 로비 복귀 시점에도 Rail 슬라이드 인 보장 (Awake 자동 호출 의존하지 않고 컨트롤러에서 명시).
+            if (_lobby != null) _lobby.PlayRailEnterAnimation();
         }
 
         void OnEnable()
