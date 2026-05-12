@@ -1082,6 +1082,11 @@ namespace BalloonFlow
             obj.transform.localScale = Vector3.one * _balloonScale * scaleMult;
             obj.SetActive(true);
 
+            // [Optimization 2026-05-12] Balloon Shadow 의 SpriteRenderer → MeshRenderer 전환.
+            // SpriteRenderer 의 PerRendererData MPB 가 SRP Batcher / GPU Instancing 차단 → MeshRenderer + Quad + 공용 mat 으로 swap.
+            // 같은 sprite (모든 balloon 의 shadow 가 같은 sprite) → 1 mat → SRP Batcher batch.
+            // 이미 변환된 경우 (pool 재사용) SpriteRenderer 없어 noop.
+            SpriteSRPBatcherUtil.ConvertShadowToMeshSprite(obj);
 
             // per-object 색상 변주 (같은 색이라도 톤이 약간씩 다름)
             int colorIdx = Mathf.Clamp(color, 0, BalloonColors.Length - 1);

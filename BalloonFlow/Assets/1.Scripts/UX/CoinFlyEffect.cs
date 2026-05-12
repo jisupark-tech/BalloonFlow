@@ -43,6 +43,33 @@ namespace BalloonFlow
             EnsurePool();
             CoroutineRunner.Get().StartCoroutine(
                 RunFly(screenFrom, screenTo, count, onEachLand, onAllComplete));
+
+            // [2026-05-12] 코인 흡수 동안 진동 4회 균등 분배 (intensity 0.3, duration 0.18s default).
+            // count 1~3 코인 시도 4회 균등 분배 — count 의존 없는 일정한 햅틱 패턴.
+            CoroutineRunner.Get().StartCoroutine(VibrateSequence(count, 4));
+        }
+
+        // [2026-05-12] 코인 흡수 진동 시퀀스 — 전체 spawn+tween 기간 동안 균등 분배.
+        private static IEnumerator VibrateSequence(int count, int times)
+        {
+            if (times <= 0) yield break;
+
+            // 총 진행 시간 추정 — (count-1) × spawn interval + 평균 tween duration
+            float spawnInterval = count > 1 ? Mathf.Min(SPAWN_INTERVAL, MAX_TOTAL_SPAWN_TIME / (count - 1)) : 0f;
+            float avgDur = 0.7f;
+            if (GameManager.HasInstance)
+            {
+                var b = GameManager.Instance.Board;
+                avgDur = (b.coinFlyDurationMin + b.coinFlyDurationMax) * 0.5f;
+            }
+            float totalDuration = Mathf.Max(spawnInterval * (count - 1) + avgDur, 0.4f);
+            float interval = totalDuration / (times + 1);
+
+            for (int i = 0; i < times; i++)
+            {
+                yield return new WaitForSeconds(interval);
+                VibrationManager.VibrateDefault();
+            }
         }
 
         /// <summary>EffectCanvas 우선, 없으면 PopupCanvas, 그것도 없으면 UICanvas 로 fallback.</summary>

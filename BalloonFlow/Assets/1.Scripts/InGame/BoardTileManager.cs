@@ -639,6 +639,10 @@ namespace BalloonFlow
 
         #endregion
 
+        // [Optimization 2026-05-12] SRP Batcher 호환 sprite mat — SpriteSRPBatcherUtil 로 통합.
+        // Balloon Shadow / Arrow / CSTile / CaveTile 등 모든 SpriteRenderer 공유.
+        private static Material GetSpriteSRPBatcherMat() => SpriteSRPBatcherUtil.GetSharedMat();
+
         private void PlaceConveyorSpriteStretched(Sprite sprite, float wx, float wz, float worldW, float worldH)
         {
             if (sprite == null || _conveyorSpriteRoot == null) return;
@@ -648,9 +652,12 @@ namespace BalloonFlow
             go.transform.position = new Vector3(wx, -0.02f, wz);
             go.transform.eulerAngles = new Vector3(90f, 0f, 0f);
 
+            // SpriteRenderer 유지 (이전 안정 패턴). SRP Batcher 호환 shader mat 만 명시.
             var sr = go.AddComponent<SpriteRenderer>();
+            if (sr == null) { Destroy(go); return; }
             sr.sprite = sprite;
             sr.sortingOrder = -1;
+            sr.sharedMaterial = GetSpriteSRPBatcherMat();
 
             // Simple 모드 + localScale로 늘리기
             float sw = sprite.bounds.size.x;
@@ -672,9 +679,12 @@ namespace BalloonFlow
             go.transform.position = new Vector3(wx, -0.01f, wz);
             go.transform.eulerAngles = new Vector3(90f, 0f, 0f);
 
+            // SpriteRenderer 유지 (이전 안정 패턴)
             var sr = go.AddComponent<SpriteRenderer>();
+            if (sr == null) { Destroy(go); return; }
             sr.sprite = sprite;
             sr.sortingOrder = 1; // Arrow(0)보다 위
+            sr.sharedMaterial = GetSpriteSRPBatcherMat();
 
             float sw = sprite.bounds.size.x;
             float sh = sprite.bounds.size.y;
@@ -691,9 +701,12 @@ namespace BalloonFlow
             go.transform.position = new Vector3(wx, -0.02f, wz);
             go.transform.eulerAngles = new Vector3(90f, 0f, 0f);
 
+            // SpriteRenderer 유지 (이전 안정 패턴)
             var sr = go.AddComponent<SpriteRenderer>();
+            if (sr == null) { Destroy(go); return; }
             sr.sprite = sprite;
             sr.sortingOrder = -1;
+            sr.sharedMaterial = GetSpriteSRPBatcherMat();
 
             float sw = sprite.bounds.size.x;
             float sh = sprite.bounds.size.y;
@@ -890,10 +903,13 @@ namespace BalloonFlow
                 // SpriteRenderer 사용
                 if (arrowSprite != null)
                 {
+                    // SpriteRenderer 유지 (이전 안정 패턴)
                     var sr = go.AddComponent<SpriteRenderer>();
+                    if (sr == null) { Destroy(go); continue; }
                     sr.sprite = arrowSprite;
                     sr.sortingOrder = 0;
                     sr.color = new Color(1f, 1f, 1f, 0.6f);
+                    sr.sharedMaterial = GetSpriteSRPBatcherMat();
                     float arrowSize = _railWidth * 0.25f; // 기존 0.5 → 0.25 (반으로 축소)
                     float sw = arrowSprite.bounds.size.x;
                     float sh = arrowSprite.bounds.size.y;
@@ -904,8 +920,10 @@ namespace BalloonFlow
                 {
                     // 폴백: MeshRenderer + Quad
                     var mf = go.AddComponent<MeshFilter>();
+                    if (mf == null) { Destroy(go); continue; }
                     mf.sharedMesh = Resources.GetBuiltinResource<Mesh>("Quad.fbx");
                     var mr = go.AddComponent<MeshRenderer>();
+                    if (mr == null) { Destroy(go); continue; }
                     mr.sharedMaterial = BalloonController.GetOrCreateSharedMaterial(new Color(1f, 1f, 1f, 0.4f));
                     go.transform.localScale = Vector3.one * _railWidth * 0.3f;
                 }

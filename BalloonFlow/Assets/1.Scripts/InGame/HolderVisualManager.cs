@@ -773,6 +773,9 @@ namespace BalloonFlow
             GameObject obj = ObjectPoolManager.Instance.Get(poolKey, position, Quaternion.identity);
             if (obj == null) return null;
 
+            // [Optimization 2026-05-12] Holder Shadow 의 SpriteRenderer → MeshRenderer 전환 (Balloon 과 동일 패턴).
+            SpriteSRPBatcherUtil.ConvertShadowToMeshSprite(obj);
+
             obj.SetActive(true);
             obj.transform.localScale = Vector3.one; // 풀 재사용 시 스케일 초기화
 

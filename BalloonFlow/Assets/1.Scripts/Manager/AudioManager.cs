@@ -232,9 +232,11 @@ namespace BalloonFlow
         {
         }
 
+        // [2026-05-12] 코인 흡수 사운드 1/3 감소 — count 별 매번 재생 시 청각 부담. 3 번째마다 1번 재생.
+        private int _coinSfxCounter;
         private void HandleCoinFlyLanded(OnCoinFlyLanded evt)
         {
-            PlaySFX(_sfxCoinGain);
+            if (_coinSfxCounter++ % 3 == 0) PlaySFX(_sfxCoinGain);
         }
 
         private void HandleSettingsChanged(OnSettingsChanged evt)

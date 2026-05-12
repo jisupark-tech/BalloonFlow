@@ -82,19 +82,17 @@ namespace BalloonFlow
         /// </summary>
         /// <param name="milliseconds">진동 지속 시간 (ms). 양수.</param>
         /// <param name="amplitude">진동 강도 1~255. 255 = 최대 (디바이스 지원 시).</param>
+        // [2026-05-12] Default 햅틱 — intensity 0.3 (amp = 76), duration 0.18s (180ms).
+        public const long DEFAULT_DURATION_MS = 180L;
+        public const int DEFAULT_AMPLITUDE = 76; // 255 × 0.3
+
         public static void Vibrate(long milliseconds, int amplitude = 255)
         {
             if (milliseconds <= 0) return;
             if (SettingsManager.HasInstance && !SettingsManager.Instance.HapticOn) return;
 
-            // Slider multiplier 적용 (UISetting의 강도/지속시간 슬라이더 반영)
-            if (SettingsManager.HasInstance)
-            {
-                var sm = SettingsManager.Instance;
-                milliseconds = (long)(milliseconds * sm.HapticDuration);
-                amplitude    = Mathf.RoundToInt(amplitude * sm.HapticIntensity);
-                if (milliseconds <= 0 || amplitude <= 0) return;
-            }
+            // [2026-05-12] Slider multiplier 제거 — UISetting 의 intensity / duration Slider 삭제. base 값 그대로 사용.
+            // 원본: milliseconds *= sm.HapticDuration; amplitude *= sm.HapticIntensity;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
             InitIfNeeded();
@@ -131,5 +129,8 @@ namespace BalloonFlow
 
         /// <summary>편의: heavy tap (180ms, amp 255).</summary>
         public static void Heavy() => Vibrate(180L, 255);
+
+        /// <summary>[2026-05-12] 코인 흡수 등 default 햅틱 — intensity 0.3 / duration 0.18s.</summary>
+        public static void VibrateDefault() => Vibrate(DEFAULT_DURATION_MS, DEFAULT_AMPLITUDE);
     }
 }
