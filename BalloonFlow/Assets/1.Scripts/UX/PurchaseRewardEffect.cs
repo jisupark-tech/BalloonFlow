@@ -37,11 +37,38 @@ namespace BalloonFlow
 
             if (UIManager.HasInstance)
             {
-                var popup = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
-                if (popup != null)
+                // 구매 성공 팝업은 PopupLoadingSpinner 닫힘 이후에만 표시되도록 spinner.SetCloseCallback에 등록한다 — 사용자 피드백 반영
+                var spinner = UIManager.Instance.GetOpenUI<PopupLoadingSpinner>();
+                if (spinner != null)
                 {
-                    Debug.Log("[PurchaseRewardEffect] Success popup opened, waiting for OK");
-                    popup.ShowPurchaseSuccess(desc, () =>
+                    Debug.Log("[PurchaseRewardEffect] Spinner active — defer success popup until spinner closes");
+                    spinner.SetCloseCallback(() =>
+                    {
+                        var popup = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+                        if (popup != null)
+                        {
+                            popup.ShowPurchaseSuccess(desc, () =>
+                            {
+                                Debug.Log("[PurchaseRewardEffect] Success popup OK clicked → PlayEffectFlow");
+                                StartCoroutine(PlayEffectFlow(coinsAdded));
+                            });
+                        }
+                        else
+                        {
+                            Debug.LogWarning("[PurchaseRewardEffect] OpenUI<PopupError> returned null after spinner close — fallback effect 즉시");
+                            StartCoroutine(PlayEffectFlow(coinsAdded));
+                        }
+                    });
+                    spinner.CloseUI();
+                    return;
+                }
+
+                Debug.LogWarning("[PurchaseRewardEffect] PopupLoadingSpinner not active — fallback direct show");
+                var directPopup = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+                if (directPopup != null)
+                {
+                    Debug.Log("[PurchaseRewardEffect] Success popup opened (fallback), waiting for OK");
+                    directPopup.ShowPurchaseSuccess(desc, () =>
                     {
                         Debug.Log("[PurchaseRewardEffect] Success popup OK clicked → PlayEffectFlow");
                         StartCoroutine(PlayEffectFlow(coinsAdded));

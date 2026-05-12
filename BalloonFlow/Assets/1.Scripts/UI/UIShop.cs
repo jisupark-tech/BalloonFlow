@@ -12,7 +12,7 @@ namespace BalloonFlow
     /// 상품 리스트는 PopupShopListItem 프리팹으로 동적 생성.
     /// Inspector 의 _products 가 비어있으면 BuildDefaultTempProducts() 임시 데이터 사용.
     /// 구매는 ShopManager.PurchaseProduct 로 라우팅.
-    /// 구매 → 로딩 스피너 → 스피너 종료 → 결제 성공 PopupError 순차 노출 (사용자 시각 피드백 체인).
+    /// 구매 성공 popup은 IAP 성공 이벤트(OnPurchaseRewardGranted)를 받은 PurchaseRewardEffect가 spinner 닫은 후 표시한다.
     /// UI 스크립트는 생성·파괴 주기가 짧아 Singleton anti-pattern. Manager 계층만 Singleton 사용.
     /// </summary>
     public class UIShop : UIBase
@@ -559,28 +559,14 @@ namespace BalloonFlow
         }
 
         /// <summary>실제 구매 라우팅 — 확인 popup 의 Yes 콜백. Pre-routing 으로 로딩 스피너 노출(IAP 응답 대기 동안 입력 차단 + 시각적 피드백).
-        /// 스피너 종료(DIM 클릭 등) 시 SetCloseCallback 으로 결제 성공 PopupError 가 자동 이어 표시된다.</summary>
+        /// 결제 성공 PopupError 표시는 PurchaseRewardEffect.HandleReward 가 spinner 를 닫은 후 단일 경로로 수행한다.</summary>
         private void ProceedPurchase(ShopProductData product)
         {
             if (UIManager.HasInstance)
-            {
-                var spinner = UIManager.Instance.OpenUI<PopupLoadingSpinner>(Const.POPUP_LOADING_SPINNER);
-                if (spinner != null)
-                    spinner.SetCloseCallback(() => ShowPurchaseSuccessPopup(product));
-            }
+                UIManager.Instance.OpenUI<PopupLoadingSpinner>(Const.POPUP_LOADING_SPINNER);
 
             if (ShopManager.HasInstance)
                 ShopManager.Instance.PurchaseProduct(product.productId);
-        }
-
-        /// <summary>스피너 종료 후 호출 — 결제 성공 PopupError 를 띄운다.</summary>
-        private void ShowPurchaseSuccessPopup(ShopProductData product)
-        {
-            Debug.Log($"[UIShop] Spinner closed → show success popup for {product.productId}");
-            if (!UIManager.HasInstance) return;
-            var popup = UIManager.Instance.OpenUI<PopupError>(Const.POPUP_ERROR);
-            if (popup != null)
-                popup.ShowPurchaseSuccess("Purchase successful!");
         }
 
         /// <summary>
