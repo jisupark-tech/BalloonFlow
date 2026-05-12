@@ -559,7 +559,8 @@ namespace BalloonFlow
         }
 
         /// <summary>실제 구매 라우팅 — 확인 popup 의 Yes 콜백. Pre-routing 으로 로딩 스피너 노출(IAP 응답 대기 동안 입력 차단 + 시각적 피드백).
-        /// 결제 성공 PopupError 표시는 PurchaseRewardEffect.HandleReward 가 spinner 를 닫은 후 단일 경로로 수행한다.</summary>
+        /// 결제 성공 PopupError 표시는 PurchaseRewardEffect.HandleReward 가 spinner 를 닫은 후 단일 경로로 수행한다.
+        /// 사용자 요구 순서: BuyClick → PopupLoadingSpinner(이 메서드) → IAP → PopupError(PurchaseRewardEffect.HandleReward 에서 spinner.SetCloseCallback 경유). 이 메서드는 1·2단계만 담당.</summary>
         private void ProceedPurchase(ShopProductData product)
         {
             if (UIManager.HasInstance)
