@@ -45,8 +45,10 @@ namespace BalloonFlow
         private BoardState _currentState;
         private int _remainingBalloons;
         private int _currentLevelId;
-        private float _failGraceDelay = 1.5f;
-        // Design ref (doc line 56, 322-329): 실패 조건 = "레일 다트 수 ≥ 허용량-1 + 외곽 매칭 불가 + 1.5초 grace"
+        // [2026-05-12] grace 1.5s → 5s 확장. railFull 조건 제거 후 사용자 dart 발사 + 매칭 recovery 시간 확보.
+        // GameManager.Board.failGraceDelay (Inspector / data) 가 있으면 OnSingletonAwake 에서 override.
+        private float _failGraceDelay = 3.0f;
+        // Design ref (doc line 56, 322-329): 실패 조건 = "rail dart 1+ + 외곽 매칭 불가 + 3초 grace (railFull 조건 제거)"
         // 매칭 가능하면 critical 진입 안 함. 매칭 가능해지거나 슬롯 비면 critical 즉시 해제.
 
         // 6-stage gauge
@@ -143,17 +145,18 @@ namespace BalloonFlow
                 return;
             }
 
-            // 실패 조건 (사용자 정의):
-            //  ① rail 가득 (EFC >= PhysicalCapacity - 1, gap-search 운용 상 rail이
-            //     PC-1 ↔ PC 를 오가는 점 고려)
+            // [2026-05-12] 실패 조건 변경 (사용자 정의 B):
+            //  ① rail 위 dart 존재 (efc > 0) — rail 비어있으면 holder 발사 가능, fail 아님
             //  ② 외곽 풍선 중 rail dart 로 공격 가능한 게 없음 (HasOutermostMatch = false)
             //  ③ 풍선 잔존 (clear 아님)
-            // 셋 다 충족 → 1.5초 grace 후 fail 트리거. 도중 매칭 가능해지면 즉시 회복.
+            // 셋 다 충족 → 5초 grace 후 fail. grace 동안 dart 발사 + 매칭 가능 시 recovery.
+            // 변경: 기존 railFull (efc >= physCap-1) → efc > 0. grace 1.5s → 5s.
+            // physCap / railFull 은 debug log 에서만 사용.
             int efc = RailManager.HasInstance ? RailManager.Instance.EffectiveOccupiedCount : 0;
             int physCap = RailManager.HasInstance ? RailManager.Instance.PhysicalCapacity : 0;
             bool railFull = RailManager.HasInstance && efc >= physCap - 1;
             bool hasMatch = HasOutermostMatchCached;
-            bool stuck = railFull && _remainingBalloons > 0 && !hasMatch;
+            bool stuck = (efc > 0) && _remainingBalloons > 0 && !hasMatch;
 
             // 진단용 주기적 로그 — rail이 많이 차 있는데 stuck 미충족 시 어떤 조건이
             // 막고 있는지 출력 (false negative 케이스 분석용).

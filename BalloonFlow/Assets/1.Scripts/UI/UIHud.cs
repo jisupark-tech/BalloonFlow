@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -42,6 +43,8 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtSpeedOutline;
 
         [Header("[Bottom Panel — 부스터 아이템]")]
+        [Tooltip("아이템 사용 popup 열릴 때 화면 밖 -270 으로 tween — Inspector 에서 BottomPanel root RectTransform 할당")]
+        [SerializeField] private RectTransform _bottomPanelRoot;
         [SerializeField] private Button _itemBtnShuffle;
         [SerializeField] private Button _itemBtnRemove;
         [SerializeField] private Button _itemBtnHand;
@@ -153,6 +156,46 @@ namespace BalloonFlow
         public Button ItemBtnShuffle => _itemBtnShuffle;
         public Button ItemBtnRemove => _itemBtnRemove;
         public Button ItemBtnHand => _itemBtnHand;
+
+        // [2026-05-12] BottomPanel hide / show — UseItem popup 열릴 때 -270 으로 tween. 닫힐 때 원위치 복귀.
+        // 기존 cutout/dim 시스템 (Hole in UI) 대신 패널 자체 비키게 — 보관함/풍선 dim 없이 시각 노출.
+        private const float BOTTOM_PANEL_HIDE_Y = -270f;
+        // [2026-05-12] 0.25s → 0.5s — 너무 빨라서 tween 인지 어려움.
+        private const float BOTTOM_PANEL_TWEEN_DUR = 0.5f;
+        private Vector2 _bottomPanelOrigPos;
+        private bool _bottomPanelOrigCached;
+        private DG.Tweening.Tweener _bottomPanelTween;
+
+        public void HideBottomPanel()
+        {
+            if (_bottomPanelRoot == null)
+            {
+                Debug.LogWarning("[UIHud] HideBottomPanel: _bottomPanelRoot 미할당. Inspector 에서 BottomPanel RectTransform 와이어 필요.");
+                return;
+            }
+            if (!_bottomPanelOrigCached)
+            {
+                _bottomPanelOrigPos = _bottomPanelRoot.anchoredPosition;
+                _bottomPanelOrigCached = true;
+            }
+            _bottomPanelTween?.Kill();
+            float targetY = _bottomPanelOrigPos.y + BOTTOM_PANEL_HIDE_Y;
+            Debug.Log($"[UIHud] HideBottomPanel: origin.y={_bottomPanelOrigPos.y:F1} → target.y={targetY:F1}");
+            _bottomPanelTween = _bottomPanelRoot.DOAnchorPosY(targetY, BOTTOM_PANEL_TWEEN_DUR)
+                .SetEase(DG.Tweening.Ease.OutCubic)
+                .SetUpdate(true); // timeScale=0 (PauseManager) 환경에서도 동작
+        }
+
+        public void ShowBottomPanel()
+        {
+            if (_bottomPanelRoot == null) return;
+            if (!_bottomPanelOrigCached) return;
+            _bottomPanelTween?.Kill();
+            Debug.Log($"[UIHud] ShowBottomPanel: → origin.y={_bottomPanelOrigPos.y:F1}");
+            _bottomPanelTween = _bottomPanelRoot.DOAnchorPosY(_bottomPanelOrigPos.y, BOTTOM_PANEL_TWEEN_DUR)
+                .SetEase(DG.Tweening.Ease.OutCubic)
+                .SetUpdate(true);
+        }
 
         #endregion
 

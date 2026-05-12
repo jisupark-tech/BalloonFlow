@@ -20,6 +20,9 @@ namespace BalloonFlow
         [Header("[Arrow — 화살표]")]
         [SerializeField] private RectTransform _arrowIndicator;
 
+        [Header("[Hand — 손 아이콘 (step 별 override 위치)]")]
+        [SerializeField] private RectTransform _handIndicator;
+
         [Header("[Instruction — 설명 패널]")]
         [SerializeField] private RectTransform _instructionPanel;
         [SerializeField] private TextMeshProUGUI _instructionText;
@@ -32,6 +35,7 @@ namespace BalloonFlow
         public RectTransform CutoutMask => _cutoutMask;
         public RectTransform CutoutFrame => _cutoutFrame;
         public RectTransform ArrowIndicator => _arrowIndicator;
+        public RectTransform HandIndicator => _handIndicator;
         public RectTransform InstructionPanel => _instructionPanel;
         public TextMeshProUGUI InstructionText => _instructionText;
         public Button SkipButton => _skipButton;

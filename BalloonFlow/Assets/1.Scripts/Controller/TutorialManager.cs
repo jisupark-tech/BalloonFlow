@@ -50,6 +50,8 @@ namespace BalloonFlow
 
         // Arrow indicator
         private RectTransform _arrowIndicator;
+        // [2026-05-12] Hand indicator — step 별 override layout 지원
+        private RectTransform _handIndicator;
         private Image _arrowImage;
 
         // Instruction panel
@@ -153,6 +155,7 @@ namespace BalloonFlow
 
                 _arrowIndicator = popup.ArrowIndicator;
                 _arrowImage = _arrowIndicator?.GetComponent<Image>();
+                _handIndicator = popup.HandIndicator;
 
                 _instructionText = popup.InstructionText;
                 // Prefab에서 InstructionPanel이 명시 지정되어 있으면 우선 사용 (디자이너가 위치 이동 가능).
@@ -705,6 +708,40 @@ namespace BalloonFlow
             HideAllVisuals();
         }
 
+        /// <summary>
+        /// [2026-05-12] step 별 visual layout override 적용.
+        /// step.overrideVisualLayout = false 면 noop (highlightTarget 기반 자동 layout 사용).
+        /// CutoutMask sprite, CutoutFrame pos/size, InstructionPanel pos/size, Arrow/Hand pos 모두 처리.
+        /// </summary>
+        private void ApplyStepVisualOverride(TutorialStep step)
+        {
+            if (step == null || !step.overrideVisualLayout) return;
+
+            if (_cutoutFrame != null)
+            {
+                _cutoutFrame.anchoredPosition = step.cutoutFramePosition;
+                _cutoutFrame.sizeDelta = step.cutoutFrameSize;
+            }
+            if (_cutoutMask != null && step.cutoutMaskSprite != null)
+            {
+                var cutoutImg = _cutoutMask.GetComponent<Image>();
+                if (cutoutImg != null) cutoutImg.sprite = step.cutoutMaskSprite;
+            }
+            if (_instructionPanelRect != null)
+            {
+                _instructionPanelRect.anchoredPosition = step.instructionPanelPosition;
+                _instructionPanelRect.sizeDelta = step.instructionPanelSize;
+            }
+            if (_arrowIndicator != null)
+            {
+                _arrowIndicator.anchoredPosition = step.arrowIndicatorPosition;
+            }
+            if (_handIndicator != null)
+            {
+                _handIndicator.anchoredPosition = step.handIndicatorPosition;
+            }
+        }
+
         private void HandleTutorialStarted(OnTutorialStarted evt)
         {
             EnsureTutorialUI();
@@ -721,16 +758,20 @@ namespace BalloonFlow
             Debug.Log($"[TutorialDbg] HandleTutorialStepChanged step={evt.stepIndex} instr='{evt.instruction}'");
             string highlightTarget = string.Empty;
             string requireAction = string.Empty;
+            TutorialStep currentStep = null;
 
             if (TutorialController.HasInstance)
             {
-                TutorialStep step = TutorialController.Instance.GetCurrentStep();
-                if (step != null)
+                currentStep = TutorialController.Instance.GetCurrentStep();
+                if (currentStep != null)
                 {
-                    highlightTarget = step.highlightTarget ?? string.Empty;
-                    requireAction = step.requireAction ?? string.Empty;
+                    highlightTarget = currentStep.highlightTarget ?? string.Empty;
+                    requireAction = currentStep.requireAction ?? string.Empty;
                 }
             }
+
+            // [2026-05-12] step 별 visual layout override 적용 (Inspector / Data 에서 지정 시).
+            ApplyStepVisualOverride(currentStep);
 
             // Show cutout based on target type
             if (!string.IsNullOrEmpty(highlightTarget))

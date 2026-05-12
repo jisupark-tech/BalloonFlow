@@ -17,7 +17,7 @@ namespace BalloonFlow
         private const float EFFECT_SCALE = 0.5f;
 
         /// <summary>이펙트 Y 좌표 고정 (카메라 시야 보이도록).</summary>
-        private const float EFFECT_Y = 2.2f;
+        private const float EFFECT_Y = 1f;
 
         /// <summary>[Optimization 2026-05-10] 풀 GameObject → ParticleSystem[] 캐시.
         /// 매 pop 마다 GetComponentsInChildren 으로 배열 alloc 하던 부분 제거 (콤보 시 GC 압력 큰 폭 감소).

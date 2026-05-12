@@ -72,7 +72,7 @@ namespace BalloonFlow
             _awaitingHolderSelection = false;
 
             ConfirmPendingBooster();
-            HideCancelButton();
+            //HideCancelButton();
             CloseUseItemPopup();
             ExecuteSelectTool(holderId);
 
@@ -115,7 +115,7 @@ namespace BalloonFlow
             BalloonController.Instance.SetOutlineByColor(selectedColor, true, Color.white);
 
             // Execute color remove after brief delay (so player sees the highlight)
-            HideCancelButton();
+            //HideCancelButton();
             CloseUseItemPopup();
             StartCoroutine(DelayedColorRemove(selectedColor));
         }
@@ -145,7 +145,7 @@ namespace BalloonFlow
                 case BoosterManager.SELECT_TOOL:
                     _pendingBoosterType = BoosterManager.SELECT_TOOL;
                     _awaitingHolderSelection = true;
-                    ShowCancelButton();
+                    //ShowCancelButton();
 
                     if (CameraManager.HasInstance && HolderVisualManager.HasInstance)
                     {
@@ -163,7 +163,7 @@ namespace BalloonFlow
 
                 case BoosterManager.COLOR_REMOVE:
                     _pendingBoosterType = BoosterManager.COLOR_REMOVE;
-                    ShowCancelButton();
+                    //ShowCancelButton();
                     _awaitingColorSelection = true;
                     _awaitingBalloonClick = true;
 
@@ -233,7 +233,7 @@ namespace BalloonFlow
                 CameraManager.Instance.MoveBack();
 
             _pendingBoosterType = null;
-            HideCancelButton();
+            //HideCancelButton();
             CloseUseItemPopup();
             ResumeRail();
         }
@@ -256,40 +256,40 @@ namespace BalloonFlow
                 return;
             }
 
-            _cancelButtonGO = new GameObject("BoosterCancelBtn");
-            _cancelButtonGO.transform.SetParent(canvas.transform, false);
+            // _cancelButtonGO = new GameObject("BoosterCancelBtn");
+            // _cancelButtonGO.transform.SetParent(canvas.transform, false);
 
-            var rt = _cancelButtonGO.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(1f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(1f, 1f);
-            rt.anchoredPosition = new Vector2(-20f, -20f);
-            rt.sizeDelta = new Vector2(80f, 80f);
+            // var rt = _cancelButtonGO.AddComponent<RectTransform>();
+            // rt.anchorMin = new Vector2(1f, 1f);
+            // rt.anchorMax = new Vector2(1f, 1f);
+            // rt.pivot = new Vector2(1f, 1f);
+            // rt.anchoredPosition = new Vector2(-20f, -20f);
+            // rt.sizeDelta = new Vector2(80f, 80f);
 
-            var img = _cancelButtonGO.AddComponent<UnityEngine.UI.Image>();
-            img.color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
+            // var img = _cancelButtonGO.AddComponent<UnityEngine.UI.Image>();
+            // img.color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
 
-            var btn = _cancelButtonGO.AddComponent<UnityEngine.UI.Button>();
-            btn.onClick.AddListener(CancelPendingBooster);
+            // var btn = _cancelButtonGO.AddComponent<UnityEngine.UI.Button>();
+            // btn.onClick.AddListener(CancelPendingBooster);
 
-            // X 텍스트
-            var txtGO = new GameObject("X");
-            txtGO.transform.SetParent(_cancelButtonGO.transform, false);
-            var txtRT = txtGO.AddComponent<RectTransform>();
-            txtRT.anchorMin = Vector2.zero; txtRT.anchorMax = Vector2.one;
-            txtRT.offsetMin = Vector2.zero; txtRT.offsetMax = Vector2.zero;
-            var txt = txtGO.AddComponent<TMPro.TextMeshProUGUI>();
-            txt.text = "X";
-            txt.fontSize = 40;
-            txt.alignment = TMPro.TextAlignmentOptions.Center;
-            txt.color = Color.white;
+            // // X 텍스트
+            // var txtGO = new GameObject("X");
+            // txtGO.transform.SetParent(_cancelButtonGO.transform, false);
+            // var txtRT = txtGO.AddComponent<RectTransform>();
+            // txtRT.anchorMin = Vector2.zero; txtRT.anchorMax = Vector2.one;
+            // txtRT.offsetMin = Vector2.zero; txtRT.offsetMax = Vector2.zero;
+            // var txt = txtGO.AddComponent<TMPro.TextMeshProUGUI>();
+            // txt.text = "X";
+            // txt.fontSize = 40;
+            // txt.alignment = TMPro.TextAlignmentOptions.Center;
+            // txt.color = Color.white;
         }
 
         /// <summary>부스터 취소 버튼 숨기기.</summary>
         private void HideCancelButton()
         {
-            if (_cancelButtonGO != null)
-                _cancelButtonGO.SetActive(false);
+            // if (_cancelButtonGO != null)
+            //     _cancelButtonGO.SetActive(false);
         }
 
         /// <summary>Whether an interactive booster is pending (can be cancelled).</summary>
@@ -309,7 +309,7 @@ namespace BalloonFlow
 
             // Execute removal
             _awaitingColorSelection = false;
-            HideCancelButton();
+            //HideCancelButton();
             ConfirmPendingBooster();
             ExecuteColorRemove(color);
 

@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -28,6 +29,12 @@ namespace BalloonFlow
 
         [Header("[Cutout 기준 — 프리팹에서 할당. 자동으로 CutoutMaskUI + Mask + 자식 DimOverlay 추가]")]
         [SerializeField] private RectTransform _cutoutMask;
+
+        [Header("[Cutout Size — boosterType 별 hole sizeDelta]")]
+        [Tooltip("Hand (SELECT_TOOL) 시 hole 크기 — 보관함 영역 cover")]
+        [SerializeField] private Vector2 _cutoutSizeHand = new Vector2(600f, 400f);
+        [Tooltip("Zap (COLOR_REMOVE) 시 hole 크기 — 보드 영역 cover")]
+        [SerializeField] private Vector2 _cutoutSizeZap = new Vector2(900f, 1200f);
 
         [Header("[Buttons]")]
         [SerializeField] private Button _btnBottomExit;
@@ -57,8 +64,9 @@ namespace BalloonFlow
                 _frame.BtnExit.onClick.AddListener(OnCancelClicked);
 
             // BottomExit 화면 하단 고정 — Inspector 세팅 누락 대비 anchor 강제 보정
-            EnsureBottomExitAnchor();
+            //EnsureBottomExitAnchor();
 
+            // [2026-05-12] CutoutMask 시스템 재활성 — UI Mask + Stencil 패턴 (부하 최소).
             SetupShaders();
 
             // 'iconSuffle' 은 atlas 측 의도된 typo
@@ -96,12 +104,13 @@ namespace BalloonFlow
                 _frame.BtnExit.onClick.RemoveAllListeners();
         }
 
-        // [2026-05-12] UseItem 사용 시 게임 일시 정지 + Camera Far 증가 (아이템 사용 시 일부 시각 cull 방지).
-        // 최적화 보존: Pause 중 모든 update 정지, Far 도 popup 닫힐 때 원복.
+        // [2026-05-12] UseItem 사용 시 게임 일시 정지 + Camera Far 증가 + UIHud BottomPanel 비킴.
+        // 최적화 보존: Pause 중 모든 update 정지, Far / BottomPanel 도 popup 닫힐 때 원복.
         private bool _paused;
         private Camera _mainCameraCached;
         private float _savedFarClip;
-        private const float USEITEM_FAR_CLIP = 1000f; // Item 사용 visual culling 방지 — 기존 Far 의 약 2~5배
+        private UIHud _uiHudCached;
+        private const float USEITEM_FAR_CLIP = 1000f;
 
         private void OnEnable()
         {
@@ -117,6 +126,43 @@ namespace BalloonFlow
                 if (_savedFarClip < USEITEM_FAR_CLIP)
                     _mainCameraCached.farClipPlane = USEITEM_FAR_CLIP;
             }
+
+            // UIHud BottomPanel 비킴 — cutout/dim 대신 패널 자체 화면 밖
+            if (_uiHudCached == null || !_uiHudCached)  // Unity fake-null 도 검출
+                _uiHudCached = FindAnyObjectByType<UIHud>(FindObjectsInactive.Include);
+            if (_uiHudCached != null) _uiHudCached.HideBottomPanel();
+
+            // [2026-05-12] BottomExit 버튼 -200 → 0 tween (위로 등장)
+            AnimateBottomExitIn();
+        }
+
+        private const float BTN_BOTTOM_EXIT_HIDDEN_Y = -200f;
+        private const float BTN_BOTTOM_EXIT_TWEEN_DUR = 0.4f;
+        [SerializeField] private RectTransform _BottomExit;
+        private Tweener _btnBottomExitTween;
+
+        private void AnimateBottomExitIn()
+        {
+            if (_BottomExit == null) return;
+
+            _btnBottomExitTween?.Kill();
+            // 시작 위치 즉시 -200 으로 set (첫 frame 깜빡임 회피 위해 같은 frame 내)
+            _BottomExit.anchoredPosition = new Vector2(_BottomExit.anchoredPosition.x, BTN_BOTTOM_EXIT_HIDDEN_Y);
+            _btnBottomExitTween = _BottomExit.DOAnchorPosY(0f, BTN_BOTTOM_EXIT_TWEEN_DUR)
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(true); // PauseManager (timeScale=0) 환경에서도 동작
+        }
+
+        /// <summary>BottomExit 0 → -200 tween. 완료 콜백 가능.</summary>
+        private void AnimateBottomExitOut(System.Action onComplete)
+        {
+            if (_BottomExit == null) { onComplete?.Invoke(); return; }
+
+            _btnBottomExitTween?.Kill();
+            _btnBottomExitTween = _BottomExit.DOAnchorPosY(BTN_BOTTOM_EXIT_HIDDEN_Y, BTN_BOTTOM_EXIT_TWEEN_DUR)
+                .SetEase(Ease.InCubic)
+                .SetUpdate(true)
+                .OnComplete(() => onComplete?.Invoke());
         }
 
         private void OnDisable()
@@ -129,6 +175,9 @@ namespace BalloonFlow
                 _mainCameraCached.farClipPlane = _savedFarClip;
                 _savedFarClip = 0f;
             }
+
+            // UIHud BottomPanel 복귀
+            if (_uiHudCached != null && _uiHudCached) _uiHudCached.ShowBottomPanel();
         }
 
         private Sprite _whiteSprite;
@@ -194,11 +243,14 @@ namespace BalloonFlow
             // 부모(_cutoutMask)가 작아도 자식이 화면 전체를 덮도록 절대 크기로 설정.
             // CutoutMaskUI 의 stencil-invert 로 cutoutMask 영역 "밖"에만 렌더 → 구멍 + 전체 dim.
             var dimRT = dimGO.GetComponent<RectTransform>();
-            dimRT.anchorMin = new Vector2(0.5f, 0.5f);
-            dimRT.anchorMax = new Vector2(0.5f, 0.5f);
-            dimRT.pivot     = new Vector2(0.5f, 0.5f);
-            dimRT.anchoredPosition = Vector2.zero;
-            dimRT.sizeDelta = new Vector2(10000f, 10000f);
+            if(dimRT !=null)
+            {
+                dimRT.anchorMin = new Vector2(0.5f, 0.5f);
+                dimRT.anchorMax = new Vector2(0.5f, 0.5f);
+                dimRT.pivot     = new Vector2(0.5f, 0.5f);
+                dimRT.anchoredPosition = Vector2.zero;
+                dimRT.sizeDelta = new Vector2(10000f, 10000f);
+            }
 
             _dimImage.sprite = GetWhiteSprite();
             _dimImage.type = Image.Type.Simple;
@@ -244,10 +296,9 @@ namespace BalloonFlow
                 };
             }
 
-            // Cutout 위치 설정
+            // [2026-05-12] CutoutMask 재활성 — Hand: 보관함 / Zap: 보드 영역 hole + 외부 dim.
+            if (_cutoutMask != null) _cutoutMask.gameObject.SetActive(true);
             SetupCutout(boosterType);
-
-            // Dim + Cutout 활성화
             if (_cutoutImage != null) _cutoutImage.gameObject.SetActive(true);
             if (_dimImage != null) _dimImage.gameObject.SetActive(true);
 
@@ -261,12 +312,13 @@ namespace BalloonFlow
             Camera cam = Camera.main;
             if (cam == null) return;
 
+            // [2026-05-12] boosterType 별 sizeDelta + 위치 변경. SerializeField 로 Inspector 조정 가능.
             if (boosterType == BoosterManager.SELECT_TOOL)
             {
                 if (HolderVisualManager.HasInstance)
                 {
                     Vector3 queueCenter = HolderVisualManager.Instance.CalculateQueueCenterPosition();
-                    SetCutoutWorldArea(cam, queueCenter, new Vector2(6f, 4f));
+                    SetCutoutScreenArea(cam, queueCenter, _cutoutSizeHand);
                 }
             }
             else if (boosterType == BoosterManager.COLOR_REMOVE)
@@ -275,16 +327,15 @@ namespace BalloonFlow
                 {
                     var board = GameManager.Instance.Board;
                     Vector3 boardCenter = new Vector3(board.boardCenterX, 0f, board.boardCenterZ);
-                    SetCutoutWorldArea(cam, boardCenter, new Vector2(
-                        BoardTileManager.CONVEYOR_WIDTH, BoardTileManager.CONVEYOR_HEIGHT));
+                    SetCutoutScreenArea(cam, boardCenter, _cutoutSizeZap);
                 }
             }
         }
 
-        private void SetCutoutWorldArea(Camera cam, Vector3 worldCenter, Vector2 worldSize)
+        /// <summary>world center → cutoutMask anchoredPosition + sizeDelta (screen 좌표).</summary>
+        private void SetCutoutScreenArea(Camera cam, Vector3 worldCenter, Vector2 screenSize)
         {
-            Vector3 bl = cam.WorldToScreenPoint(worldCenter - new Vector3(worldSize.x * 0.5f, 0f, worldSize.y * 0.5f));
-            Vector3 tr = cam.WorldToScreenPoint(worldCenter + new Vector3(worldSize.x * 0.5f, 0f, worldSize.y * 0.5f));
+            Vector3 screen = cam.WorldToScreenPoint(worldCenter);
 
             Canvas canvas = GetComponentInParent<Canvas>();
             Camera canvasCam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
@@ -292,15 +343,9 @@ namespace BalloonFlow
             RectTransform canvasRT = canvas != null ? canvas.GetComponent<RectTransform>() : null;
             if (canvasRT == null) return;
 
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRT, bl, canvasCam, out Vector2 localBL);
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRT, tr, canvasCam, out Vector2 localTR);
-
-            Vector2 center = (localBL + localTR) * 0.5f;
-            Vector2 size = new Vector2(Mathf.Abs(localTR.x - localBL.x), Mathf.Abs(localTR.y - localBL.y));
-            size += new Vector2(40f, 40f);
-
-            _cutoutMask.anchoredPosition = center;
-            _cutoutMask.sizeDelta = size;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRT, screen, canvasCam, out Vector2 localCenter);
+            _cutoutMask.anchoredPosition = localCenter;
+            _cutoutMask.sizeDelta = screenSize;
         }
 
         private void OnCancelClicked()
@@ -327,7 +372,8 @@ namespace BalloonFlow
             // UIBase.CloseUI()는 alpha=0 만 처리 → OnDisable이 fire 안 됨.
             // BoosterExecutor 자동 close 경로에서도 overlay 잔존 방지.
             HideOverlay();
-            base.CloseUI();
+            // [2026-05-12] BottomExit 0 → -200 tween + 완료 후 base.CloseUI 호출.
+            AnimateBottomExitOut(() => base.CloseUI());
         }
 
         public Sprite GetBoosterSprite(string boosterType)

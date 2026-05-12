@@ -124,6 +124,18 @@ namespace BalloonFlow
         /// <summary>컷아웃/스포트라이트 크기 (화면 비율, 기본 200x200).</summary>
         public float cutoutWidth = 200f;
         public float cutoutHeight = 200f;
+
+        // [2026-05-12] Visual layout override — level data 에서 step 별 layout 지정.
+        // overrideVisualLayout = false 면 highlightTarget 기반 자동 layout 사용.
+        public bool overrideVisualLayout;
+        public Vector2 cutoutFramePosition;
+        public Vector2 cutoutFrameSize;
+        public Vector2 instructionPanelPosition;
+        public Vector2 instructionPanelSize;
+        public Vector2 arrowIndicatorPosition;
+        public Vector2 handIndicatorPosition;
+        /// <summary>CutoutMask 의 Image sprite. null 이면 prefab default 유지.</summary>
+        public Sprite cutoutMaskSprite;
     }
 
     /// <summary>

@@ -31,6 +31,18 @@ namespace BalloonFlow
 
         /// <summary>Whether this step has been completed by the player.</summary>
         public bool isComplete;
+
+        // [2026-05-12] Visual layout override — Inspector / Data 에서 step 별 layout 직접 지정.
+        // overrideVisualLayout = false 면 highlightTarget 기반 자동 layout 사용 (기존 동작).
+        public bool overrideVisualLayout;
+        public Vector2 cutoutFramePosition;
+        public Vector2 cutoutFrameSize;
+        public Vector2 instructionPanelPosition;
+        public Vector2 instructionPanelSize;
+        public Vector2 arrowIndicatorPosition;
+        public Vector2 handIndicatorPosition;
+        /// <summary>CutoutMask 의 Image sprite. null 이면 prefab default 유지.</summary>
+        public Sprite cutoutMaskSprite;
     }
 
     /// <summary>
@@ -620,7 +632,16 @@ namespace BalloonFlow
                     instruction = src.instruction ?? "",
                     highlightTarget = src.highlightTarget ?? "",
                     requireAction = string.IsNullOrEmpty(src.requireAction) ? ACTION_NONE : src.requireAction,
-                    isComplete = false
+                    isComplete = false,
+                    // [2026-05-12] Visual override field 전달
+                    overrideVisualLayout = src.overrideVisualLayout,
+                    cutoutFramePosition = src.cutoutFramePosition,
+                    cutoutFrameSize = src.cutoutFrameSize,
+                    instructionPanelPosition = src.instructionPanelPosition,
+                    instructionPanelSize = src.instructionPanelSize,
+                    arrowIndicatorPosition = src.arrowIndicatorPosition,
+                    handIndicatorPosition = src.handIndicatorPosition,
+                    cutoutMaskSprite = src.cutoutMaskSprite,
                 };
             }
 
