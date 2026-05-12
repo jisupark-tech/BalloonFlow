@@ -83,8 +83,9 @@ namespace BalloonFlow
         /// <param name="milliseconds">진동 지속 시간 (ms). 양수.</param>
         /// <param name="amplitude">진동 강도 1~255. 255 = 최대 (디바이스 지원 시).</param>
         // [2026-05-12] Default 햅틱 — intensity 0.3 (amp = 76), duration 0.18s (180ms).
+        // 주의: DEFAULT_AMPLITUDE 는 #if UNITY_ANDROID 안에 이미 정의 (=-1) → 다른 이름 사용.
         public const long DEFAULT_DURATION_MS = 180L;
-        public const int DEFAULT_AMPLITUDE = 76; // 255 × 0.3
+        public const int DEFAULT_VIBE_AMPLITUDE = 76; // 255 × 0.3
 
         public static void Vibrate(long milliseconds, int amplitude = 255)
         {
@@ -131,6 +132,6 @@ namespace BalloonFlow
         public static void Heavy() => Vibrate(180L, 255);
 
         /// <summary>[2026-05-12] 코인 흡수 등 default 햅틱 — intensity 0.3 / duration 0.18s.</summary>
-        public static void VibrateDefault() => Vibrate(DEFAULT_DURATION_MS, DEFAULT_AMPLITUDE);
+        public static void VibrateDefault() => Vibrate(DEFAULT_DURATION_MS, DEFAULT_VIBE_AMPLITUDE);
     }
 }
