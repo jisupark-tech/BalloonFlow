@@ -72,7 +72,7 @@ namespace BalloonFlow
         private int _displayedCount;
         private bool _userExpandedMore;
         private readonly List<PopupShopListItem> _spawnedItems = new List<PopupShopListItem>();
-        private int _lastLoadFrame = -1;
+        private int _lastLoadFrame = int.MinValue;
 
         // ScrollRect 캐시 — onValueChanged 리스너 등록/해제 + viewport overlap 컬링 기준점.
         private ScrollRect _scrollRect;
@@ -124,27 +124,33 @@ namespace BalloonFlow
         /// <summary>ShopCatalogService 구독. 이미 로드 상태면 즉시 적용. 매니저 부재 시 fallback.</summary>
         private void SubscribeToCatalog()
         {
+            // [2026-05-12] Awake 의 ResetAndLoadProducts 호출 제거 — spawn 은 ResetView (page 진입) 시점만.
+            // 증상: Shop 진입 시 연출 2번 (Awake 의 spawn + ResetView 의 spawn).
+            // Fix: Awake 는 data 만 set, spawn 안 함. catalog 로드 시 OnCatalogReady 가 Shop active 일 때만 spawn.
             if (ShopCatalogService.HasInstance)
             {
                 ShopCatalogService.Instance.OnCatalogLoaded += OnCatalogReady;
                 if (ShopCatalogService.Instance.IsLoaded)
                 {
-                    OnCatalogReady();
+                    // 데이터만 set, spawn X (page 진입 시 ResetView 가 호출)
+                    var user = (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+                        ? UserDataService.Instance.CurrentUser
+                        : null;
+                    var visible = ShopCatalogService.Instance.GetVisibleForUser(user);
+                    _products = visible.Select(ConvertDocToData).ToArray();
                 }
                 else
                 {
-                    // 로딩 대기 중. 일시적으로 임시 데이터 표시 (사용자 빈 화면 방지)
+                    // 로딩 대기 중. 임시 데이터 set 만 (spawn 은 ResetView 가 함)
                     if (_products == null || _products.Length == 0)
                         _products = BuildDefaultTempProducts();
-                    ResetAndLoadProducts();
                 }
             }
             else
             {
-                // 매니저 없음 (Editor 스탠드얼론 테스트 등) — 임시 데이터
+                // 매니저 없음 (Editor 스탠드얼론 테스트 등) — 임시 데이터 set 만
                 if (_products == null || _products.Length == 0)
                     _products = BuildDefaultTempProducts();
-                ResetAndLoadProducts();
             }
         }
 
@@ -158,7 +164,11 @@ namespace BalloonFlow
             var visible = ShopCatalogService.Instance.GetVisibleForUser(user);
             _products = visible.Select(ConvertDocToData).ToArray();
             Debug.Log($"[UIShop] Catalog loaded — {_products.Length} products visible.");
-            ResetAndLoadProducts();
+
+            // [2026-05-12] Shop page active 일 때만 즉시 spawn. 비활성이면 다음 ResetView 호출 시 spawn.
+            // 증상 방지: Awake 시점 spawn + 사용자 Shop 클릭 시 spawn = 2번 연출.
+            if (gameObject.activeInHierarchy)
+                ResetAndLoadProducts();
         }
 
         /// <summary>ShopProductDoc(서버 모델) → ShopProductData(UI 모델) 변환.</summary>
@@ -311,9 +321,18 @@ namespace BalloonFlow
             }
         }
 
+        // [2026-05-12] ResetView 자체 dedup — UILobby.GoToPage 즉시 호출 + AnimateToPage tween OnComplete → OnPageArrived 가 ResetView 두 번 호출.
+        // tween duration (~0.3s ≈ 18 frame) 보다 큰 60 frame range 로 차단. 빠른 page 전환 시 stale 안 됨 (1초 차단 후 통과).
+        // 초기값 -1 + `>= 0` check — int.MinValue 시 Time.frameCount - MinValue overflow 위험 회피 (첫 호출 차단 버그).
+        private int _lastResetViewFrame = -1;
+        private const int RESET_VIEW_DEDUP_FRAMES = 60;
+
         /// <summary>유저가 다른 페이지에서 Shop 탭으로 재진입할 때 호출 — 더보기 상태/리스트/스크롤 위치를 초기 상태로 되돌린다.</summary>
         public void ResetView()
         {
+            if (_lastResetViewFrame >= 0 && Time.frameCount - _lastResetViewFrame < RESET_VIEW_DEDUP_FRAMES) return;
+            _lastResetViewFrame = Time.frameCount;
+
             _userExpandedMore = false;
 
             // 누적된 스크롤 오프셋 wipe — 탭 재진입 시 상단 공백 fix
@@ -322,23 +341,46 @@ namespace BalloonFlow
 
             ResetAndLoadProducts();
 
+            // [2026-05-12] LayoutRebuilder 강제 — VerticalLayoutGroup + ContentSizeFitter 의 height 즉시 정착.
+            // 증상: More 누른 후 다른 탭 → Shop 재진입 시 리스트가 하단으로 내려와 정렬. 원인: layout 미정착 상태로
+            //       scroll reset → ContentSizeFitter 가 다음 frame 에 height 계산 → ScrollRect 의 content rect 변경 시
+            //       normalizedPosition 1f 가 다른 위치로 매핑. ForceRebuildLayoutImmediate 로 즉시 정착 후 reset.
+            if (_contentRoot != null)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(_contentRoot);
+
             // ScrollRect 내부 viewport/content 캐시 flush — 새 content size 기반 normalizedPosition 보장
             Canvas.ForceUpdateCanvases();
 
             // 캔버스 갱신 직후 viewport rect 기준으로 카드 particle 컬링 1회 재평가.
             RefreshAllParticleLights();
 
+            ApplyScrollTop();
+
+            // [2026-05-12] 다음 frame 에 scroll 재reset — ContentSizeFitter 가 다음 frame 에 height 갱신할 수도 있어 이중 보호.
+            StartCoroutine(DelayedScrollReset());
+        }
+
+        /// <summary>ScrollRect + content anchoredPosition 을 상단으로 강제.</summary>
+        private void ApplyScrollTop()
+        {
+            if (_contentRoot == null) return;
+            var sr = _contentRoot.GetComponentInParent<ScrollRect>();
+            if (sr != null)
+            {
+                sr.StopMovement();
+                sr.verticalNormalizedPosition = 1f;
+            }
+            _contentRoot.anchoredPosition = Vector2.zero;
+        }
+
+        private System.Collections.IEnumerator DelayedScrollReset()
+        {
+            yield return null; // 1 frame 대기 — ContentSizeFitter / LayoutGroup 최종 정착
             if (_contentRoot != null)
             {
-                var sr = _contentRoot.GetComponentInParent<ScrollRect>();
-                if (sr != null)
-                {
-                    sr.StopMovement();
-                    sr.verticalNormalizedPosition = 1f;
-                }
-
-                // belt-and-suspenders — 어떤 ScrollRect 캐시 상태에서도 첫 진입과 동일한 상단 위치 보장
-                _contentRoot.anchoredPosition = Vector2.zero;
+                LayoutRebuilder.ForceRebuildLayoutImmediate(_contentRoot);
+                Canvas.ForceUpdateCanvases();
+                ApplyScrollTop();
             }
         }
 

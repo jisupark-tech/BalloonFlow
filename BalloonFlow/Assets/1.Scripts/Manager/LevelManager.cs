@@ -117,6 +117,19 @@ namespace BalloonFlow
                 ownsFade = true;
             }
 
+            // ── 에피소드 prefetch ── 캐시 miss 면 fade overlay 가 가린 동안 fetch.
+            if (LevelEpisodeService.HasInstance)
+            {
+                int needPkg = LevelEpisodeService.PackageIdForLevel(levelId);
+                if (LevelEpisodeService.Instance.CurrentPackageId != needPkg)
+                {
+                    var epTask = LevelEpisodeService.Instance.EnsureEpisodeAsync(needPkg);
+                    while (!epTask.IsCompleted) yield return null;
+                    if (epTask.IsCompletedSuccessfully && !epTask.Result)
+                        Debug.LogWarning($"[LevelManager] Episode {needPkg} prefetch 실패 → 폴백 시도.");
+                }
+            }
+
             // ── Config 로드 ──
             LevelConfig config = LoadConfig(levelId);
             if (config == null)

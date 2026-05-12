@@ -96,6 +96,41 @@ namespace BalloonFlow
                 _frame.BtnExit.onClick.RemoveAllListeners();
         }
 
+        // [2026-05-12] UseItem 사용 시 게임 일시 정지 + Camera Far 증가 (아이템 사용 시 일부 시각 cull 방지).
+        // 최적화 보존: Pause 중 모든 update 정지, Far 도 popup 닫힐 때 원복.
+        private bool _paused;
+        private Camera _mainCameraCached;
+        private float _savedFarClip;
+        private const float USEITEM_FAR_CLIP = 1000f; // Item 사용 visual culling 방지 — 기존 Far 의 약 2~5배
+
+        private void OnEnable()
+        {
+            if (!_paused) { PauseManager.Pause(); _paused = true; }
+
+            // Camera Far 증가
+            if (_mainCameraCached == null && CameraManager.HasInstance)
+                _mainCameraCached = CameraManager.Instance.MainCamera;
+            if (_mainCameraCached == null) _mainCameraCached = Camera.main;
+            if (_mainCameraCached != null)
+            {
+                _savedFarClip = _mainCameraCached.farClipPlane;
+                if (_savedFarClip < USEITEM_FAR_CLIP)
+                    _mainCameraCached.farClipPlane = USEITEM_FAR_CLIP;
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (_paused) { PauseManager.Resume(); _paused = false; }
+
+            // Camera Far 원복 (이전 최적화 보존)
+            if (_mainCameraCached != null && _savedFarClip > 0f)
+            {
+                _mainCameraCached.farClipPlane = _savedFarClip;
+                _savedFarClip = 0f;
+            }
+        }
+
         private Sprite _whiteSprite;
 
         private Sprite GetWhiteSprite()

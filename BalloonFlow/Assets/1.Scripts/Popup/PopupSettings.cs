@@ -47,6 +47,17 @@ namespace BalloonFlow
             EventBus.Subscribe<OnSettingsChanged>(HandleSettingsChanged);
         }
 
+        // [2026-05-12] InGame 중 Setting 열림 시 게임 일시 정지. Lobby 에선 timeScale 의존 X 라 영향 미미.
+        private bool _paused;
+        private void OnEnable()
+        {
+            if (!_paused) { PauseManager.Pause(); _paused = true; }
+        }
+        private void OnDisable()
+        {
+            if (_paused) { PauseManager.Resume(); _paused = false; }
+        }
+
         private void OnExitClickedSelf()
         {
             CloseUI();

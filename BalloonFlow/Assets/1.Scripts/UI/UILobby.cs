@@ -224,10 +224,28 @@ namespace BalloonFlow
             CacheNavTextBaseY();
             ResolveRailRefs();
 
-            if (_btnShop != null) _btnShop.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(0); });
-            if (_btnHome != null) _btnHome.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(1); });
-            if (_btnSetting != null) _btnSetting.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(2); });
-            if (_btnPlay != null) _btnPlay.onClick.AddListener(PlayTouchSFX);
+            // [2026-05-12] RemoveAllListeners — Inspector 의 onClick wire (의도되지 않은 prefab wire) + 코드 wire 중복 방지.
+            // 증상: Shop 패널 열 때 연출 2번 발생 (Inspector + code 둘 다 GoToPage(0) 호출).
+            if (_btnShop != null)
+            {
+                _btnShop.onClick.RemoveAllListeners();
+                _btnShop.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(0); });
+            }
+            if (_btnHome != null)
+            {
+                _btnHome.onClick.RemoveAllListeners();
+                _btnHome.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(1); });
+            }
+            if (_btnSetting != null)
+            {
+                _btnSetting.onClick.RemoveAllListeners();
+                _btnSetting.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(2); });
+            }
+            if (_btnPlay != null)
+            {
+                _btnPlay.onClick.RemoveAllListeners();
+                _btnPlay.onClick.AddListener(PlayTouchSFX);
+            }
 
             AutoConfigureShopScroll();
 

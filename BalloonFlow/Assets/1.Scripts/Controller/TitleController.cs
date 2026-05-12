@@ -335,18 +335,44 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>ShopCatalogService 13개 fetch + Addressable atlas/prefab 사전 로드 보강 대기.</summary>
+        /// <summary>
+        /// ShopCatalogService 13개 fetch + 현재 진행 에피소드 prefetch.
+        /// 에피소드: UserData.highestClearedLevel+1 의 packageId 를 LevelEpisodeService 에 캐싱.
+        /// </summary>
         private IEnumerator WaitForCatalogReady()
         {
-            const float TIMEOUT = 5f;
+            // 다음 플레이 레벨 = highestClearedLevel + 1. UserData 가 아직 없으면 1 기본.
+            int nextLevel = 1;
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+            {
+                var u = UserDataService.Instance.CurrentUser;
+                if (u != null) nextLevel = Mathf.Max(1, u.highestClearedLevel + 1);
+            }
+
+            System.Threading.Tasks.Task<bool> episodeTask = null;
+            if (LevelEpisodeService.HasInstance)
+            {
+                episodeTask = LevelEpisodeService.Instance.EnsureEpisodeForLevelAsync(nextLevel);
+            }
+
+            const float TIMEOUT = 8f;
             float t = 0f;
             while (t < TIMEOUT)
             {
                 bool shopOk = !ShopCatalogService.HasInstance || ShopCatalogService.Instance.IsLoaded;
-                if (shopOk) yield break;
+                bool epOk   = episodeTask == null || episodeTask.IsCompleted;
+                if (shopOk && epOk)
+                {
+                    if (episodeTask != null && episodeTask.IsCompletedSuccessfully && !episodeTask.Result)
+                        Debug.LogWarning($"[TitleController] 에피소드 prefetch 실패 (level {nextLevel}). 게임은 진행 — LevelManager 가 폴백 처리.");
+                    yield break;
+                }
                 t += Time.unscaledDeltaTime;
                 yield return null;
             }
+
+            if (episodeTask != null && !episodeTask.IsCompleted)
+                Debug.LogWarning($"[TitleController] 에피소드 prefetch timeout (level {nextLevel}). 게임 진입 후 LevelManager 가 캐시 miss 시 다시 시도.");
         }
 
         /// <summary>로딩 완료 시 1회 호출 — Lobby 씬 로드.</summary>

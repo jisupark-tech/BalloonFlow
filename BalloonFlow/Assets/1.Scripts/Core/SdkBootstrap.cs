@@ -55,6 +55,7 @@ namespace BalloonFlow
             go.AddComponent<FirebaseManager>();
             go.AddComponent<UserDataService>();
             go.AddComponent<ShopCatalogService>();
+            go.AddComponent<LevelEpisodeService>();
             go.AddComponent<AttributionManager>();
             go.AddComponent<AdManager>();
             go.AddComponent<AnalyticsManager>();

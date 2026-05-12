@@ -3,143 +3,118 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Single source of truth for level configuration data.
-    /// Parses and exposes LevelConfig, HolderSetup[], BalloonLayout[], and RailLayout
-    /// from a LevelDatabase ScriptableObject assigned in the Inspector.
-    /// Publishes no events — pure data provider.
+    /// 레벨 데이터 동기 조회 어댑터.
+    /// 실제 데이터는 LevelEpisodeService 가 에피소드(20레벨) 단위로 캐시 보유.
+    /// 이 클래스는 LevelManager 가 levelId 로 동기 조회할 수 있도록 wrap.
+    ///
+    /// 호출 전 LevelEpisodeService.EnsureEpisodeForLevelAsync(levelId) 가 완료되어 있어야 함.
+    /// Title 진입 시 prefetch 됨. 다른 에피소드 진입 시점은 PackageManager / Lobby 가 prefetch.
+    ///
+    /// Editor: 캐시 miss 시 Resources/LevelDatabase.asset 으로 폴백 (디자이너 편의).
+    /// 디바이스 빌드: 캐시 miss = 경고 + null (호출자가 LevelGenerator 폴백 처리).
     /// </summary>
-    /// <remarks>
-    /// Layer: Game | Genre: Puzzle | Role: Provider | Phase: 1
-    /// DB Reference: No DB match — generated from L3 YAML logicFlow
-    /// </remarks>
     public class LevelDataProvider : MonoBehaviour
     {
         #region Fields
 
+        /// <summary>Editor 폴백 전용 — runtime 에선 LevelEpisodeService 사용. 비워둬도 무관.</summary>
         [SerializeField]
-        private LevelDatabase _levelDatabase;
+        private LevelDatabase _editorFallbackDatabase;
 
         #endregion
 
         #region Properties
 
         /// <summary>
-        /// Whether the database asset is assigned and contains at least one level.
+        /// 현재 에피소드 캐시가 준비됐는지. LevelEpisodeService.IsReady 위임.
+        /// Editor 폴백이 있으면 항상 true.
         /// </summary>
-        public bool IsReady => _levelDatabase != null
-                               && _levelDatabase.levels != null
-                               && _levelDatabase.levels.Length > 0;
+        public bool IsReady
+        {
+            get
+            {
+                if (LevelEpisodeService.HasInstance && LevelEpisodeService.Instance.IsReady) return true;
+#if UNITY_EDITOR
+                return TryLoadEditorFallback() && _editorFallbackDatabase.levels != null && _editorFallbackDatabase.levels.Length > 0;
+#else
+                return false;
+#endif
+            }
+        }
 
         #endregion
 
         #region Public Methods
 
         /// <summary>
-        /// Returns the full LevelConfig for the given level ID (1-based).
-        /// Returns null and logs a warning if the level does not exist.
+        /// levelId (1-based) 의 LevelConfig 반환. 캐시 miss 시 Editor 폴백 또는 null.
         /// </summary>
         public LevelConfig GetLevelData(int levelId)
         {
-            if (!ValidateDatabaseLoaded())
+            // 1) Episode cache hit
+            if (LevelEpisodeService.HasInstance)
             {
-                return null;
+                var fromCache = LevelEpisodeService.Instance.GetLevel(levelId);
+                if (fromCache != null) return fromCache;
             }
 
-            int index = levelId - 1;
-            if (index < 0 || index >= _levelDatabase.levels.Length)
+#if UNITY_EDITOR
+            // 2) Editor 폴백 — Resources/LevelDatabase.asset
+            if (TryLoadEditorFallback())
             {
-                Debug.LogWarning($"[LevelDataProvider] Level {levelId} is out of range " +
-                                 $"(database has {_levelDatabase.levels.Length} levels).");
+                int index = levelId - 1;
+                if (index >= 0 && index < _editorFallbackDatabase.levels.Length)
+                {
+                    Debug.LogWarning($"[LevelDataProvider] Episode 캐시 miss → Editor 폴백 사용 (level {levelId}). 디바이스 빌드에선 prefetch 필요.");
+                    return _editorFallbackDatabase.levels[index];
+                }
+                Debug.LogWarning($"[LevelDataProvider] Level {levelId} out of range " +
+                                 $"(editor fallback has {_editorFallbackDatabase.levels.Length} levels).");
                 return null;
             }
+#endif
 
-            return _levelDatabase.levels[index];
+            Debug.LogWarning($"[LevelDataProvider] Level {levelId} 조회 실패 — LevelEpisodeService.EnsureEpisodeForLevelAsync 선행 필요.");
+            return null;
         }
 
-        /// <summary>
-        /// Returns the holder setup array for the given level ID.
-        /// Returns an empty array if the level does not exist or has no holders.
-        /// </summary>
         public HolderSetup[] GetHolderSetup(int levelId)
         {
-            LevelConfig config = GetLevelData(levelId);
-            if (config == null)
-            {
-                return System.Array.Empty<HolderSetup>();
-            }
-
-            return config.holders ?? System.Array.Empty<HolderSetup>();
+            var config = GetLevelData(levelId);
+            return config?.holders ?? System.Array.Empty<HolderSetup>();
         }
 
-        /// <summary>
-        /// Returns the balloon layout array for the given level ID.
-        /// Returns an empty array if the level does not exist or has no balloons.
-        /// </summary>
         public BalloonLayout[] GetBalloonLayout(int levelId)
         {
-            LevelConfig config = GetLevelData(levelId);
-            if (config == null)
-            {
-                return System.Array.Empty<BalloonLayout>();
-            }
-
-            return config.balloons ?? System.Array.Empty<BalloonLayout>();
+            var config = GetLevelData(levelId);
+            return config?.balloons ?? System.Array.Empty<BalloonLayout>();
         }
 
-        /// <summary>
-        /// Returns the rail layout for the given level ID.
-        /// Returns null if the level does not exist.
-        /// </summary>
         public RailLayout GetRailLayout(int levelId)
         {
-            LevelConfig config = GetLevelData(levelId);
-            return config?.rail;
+            return GetLevelData(levelId)?.rail;
         }
 
         /// <summary>
-        /// Returns the total number of levels in the database.
-        /// Returns 0 if the database is not loaded.
+        /// 게임 전체 레벨 수 = TOTAL_EPISODES * LEVELS_PER_EPISODE.
         /// </summary>
         public int GetLevelCount()
         {
-            if (_levelDatabase == null || _levelDatabase.levels == null)
-            {
-                return 0;
-            }
-
-            return _levelDatabase.levels.Length;
+            return LevelEpisodeService.TOTAL_EPISODES * LevelEpisodeService.LEVELS_PER_EPISODE;
         }
 
         #endregion
 
-        #region Private Methods
+        #region Editor fallback
 
-        private bool ValidateDatabaseLoaded()
+#if UNITY_EDITOR
+        private bool TryLoadEditorFallback()
         {
-            if (_levelDatabase == null)
-            {
-                // Auto-load from Resources if not wired via Inspector
-                _levelDatabase = Resources.Load<LevelDatabase>("LevelDatabase");
-                if (_levelDatabase != null)
-                {
-                    Debug.Log($"[LevelDataProvider] Auto-loaded LevelDatabase from Resources ({_levelDatabase.levels?.Length ?? 0} levels).");
-                }
-            }
-
-            if (_levelDatabase == null)
-            {
-                Debug.LogWarning("[LevelDataProvider] LevelDatabase not found. Run BalloonFlow > Generate 50 Levels.");
-                return false;
-            }
-
-            if (_levelDatabase.levels == null || _levelDatabase.levels.Length == 0)
-            {
-                Debug.LogWarning("[LevelDataProvider] LevelDatabase has no levels.");
-                return false;
-            }
-
-            return true;
+            if (_editorFallbackDatabase != null) return true;
+            _editorFallbackDatabase = Resources.Load<LevelDatabase>("LevelDatabase");
+            return _editorFallbackDatabase != null;
         }
+#endif
 
         #endregion
     }

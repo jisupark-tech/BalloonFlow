@@ -29,10 +29,10 @@ namespace BalloonFlow
             = new Dictionary<GameObject, RectTransform>();
 
         /// <summary>[2026-05-11] 코인 사이 spawn 인터벌 (사용자 요청 0.2f).</summary>
-        private const float SPAWN_INTERVAL = 0.2f;
+        private const float SPAWN_INTERVAL = 0.12f;
 
         /// <summary>[2026-05-11] count 많을 때 총 spawn 시간이 길어지지 않게 cap. (count - 1) × interval ≤ MAX_TOTAL_SPAWN_TIME.</summary>
-        private const float MAX_TOTAL_SPAWN_TIME = 0.5f;
+        private const float MAX_TOTAL_SPAWN_TIME = 0.4f;
 
         public static void Play(Vector2 screenFrom, Vector2 screenTo, int count,
             Action onEachLand = null, Action onAllComplete = null)
@@ -141,7 +141,7 @@ namespace BalloonFlow
             float cH = canvasRT != null ? canvasRT.rect.height : Screen.height;
             float cW = canvasRT != null ? canvasRT.rect.width : Screen.width;
 
-            float minDur = 0.5f, maxDur = 0.9f, minDelay = 0.01f, maxDelay = 0.04f;
+            float minDur = 0.3f, maxDur = 0.5f, minDelay = 0.01f, maxDelay = 0.02f;
             if (GameManager.HasInstance)
             {
                 var b = GameManager.Instance.Board;
