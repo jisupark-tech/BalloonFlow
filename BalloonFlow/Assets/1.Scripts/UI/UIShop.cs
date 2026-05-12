@@ -549,30 +549,11 @@ namespace BalloonFlow
                 root.transform.SetAsLastSibling();
         }
 
-        /// <summary>상품 구매 콜백 → 확인 popup → 확인 시 ShopManager 라우팅.</summary>
+        /// <summary>상품 구매 콜백 → 확인 popup 생략하고 즉시 로딩 스피너 + ShopManager 라우팅.</summary>
         private void OnProductBuy(ShopProductData product)
         {
             Debug.Log($"[UIShop] Buy clicked: {product.productId}, {product.title}, {product.price}");
-
-            if (!UIManager.HasInstance)
-            {
-                ProceedPurchase(product);
-                return;
-            }
-
-            var popup = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
-            if (popup == null)
-            {
-                ProceedPurchase(product);
-                return;
-            }
-
-            string desc = $"Buy {product.title} for {product.price}?";
-            popup.ShowConfirm(
-                title:       "Confirm Purchase",
-                description: desc,
-                onYes:       () => ProceedPurchase(product),
-                onNo:        null);
+            ProceedPurchase(product);
         }
 
         /// <summary>실제 구매 라우팅 — 확인 popup 의 Yes 콜백. Pre-routing 으로 로딩 스피너 노출(IAP 응답 대기 동안 입력 차단 + 시각적 피드백).</summary>
