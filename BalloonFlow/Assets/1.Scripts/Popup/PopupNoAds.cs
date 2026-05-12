@@ -37,7 +37,7 @@ namespace BalloonFlow
         private void OpenLoadingSpinner()
         {
             if (!UIManager.HasInstance) return;
-            UIManager.Instance.OpenUI<PopupLoadingSpinner>("Popup/PopupLoadingSpinner");
+            UIManager.Instance.OpenUI<PopupLoadingSpinner>(Const.POPUP_LOADING_SPINNER);
         }
 
         public override void OpenUI()
