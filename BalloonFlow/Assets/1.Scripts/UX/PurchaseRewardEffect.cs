@@ -29,6 +29,9 @@ namespace BalloonFlow
             base.OnDestroy();
         }
 
+        /// <summary>
+        /// 순서 게이트: 활성 PopupLoadingSpinner 가 있으면 spinner.SetCloseCallback 로 PopupError.ShowPurchaseSuccess 호출을 예약 → spinner.CloseUI() 발화 시 콜백 실행. 결과 순서: PopupLoadingSpinner → PopupError. spinner 부재 시 fallback 직접 표시.
+        /// </summary>
         private void HandleReward(OnPurchaseRewardGranted evt)
         {
             string desc = BuildRewardDescription(evt);
