@@ -60,6 +60,22 @@ namespace BalloonFlow
                 _sprSideHard       = rm.UISpriteOr(Const.SPR_FRAMERESULTHARD,      _sprSideHard);
                 _sprSideSuperHard  = rm.UISpriteOr(Const.SPR_FRAMERESULTSUPERHARD, _sprSideSuperHard);
             }
+
+            // 'ExitButton (1)' 은 prefab 의 복제 GameObject — 사용자 요구로 항상 활성 유지 (PopupError 구매 성공 등 전 케이스 적용)
+            var exitDup = transform.Find("ExitButton (1)");
+            if (exitDup == null)
+            {
+                var allChildren = GetComponentsInChildren<Transform>(true);
+                for (int i = 0; i < allChildren.Length; i++)
+                {
+                    if (allChildren[i].name == "ExitButton (1)")
+                    {
+                        exitDup = allChildren[i];
+                        break;
+                    }
+                }
+            }
+            if (exitDup != null) exitDup.gameObject.SetActive(true);
         }
 
         private void OnEnable()
