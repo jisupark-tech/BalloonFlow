@@ -38,6 +38,11 @@ namespace BalloonFlow
         private const float RAIL_BOTTOM_ENTER_OFFSET_Y = +120f;
         private const float RAIL_ENTER_DURATION = 0.45f;
 
+        // Rail 풀다운(아래방향 드래그) 연출 파라미터. 아래로 RAIL_PULL_DOWN_Y 까지 끌렸다가 0 으로 OutBack 복귀.
+        private const float RAIL_PULL_DOWN_Y = -118.3002f;
+        private const float RAIL_PULL_DOWN_DURATION = 0.18f;
+        private const float RAIL_PULL_DOWN_RETURN_DURATION = 0.32f;
+
         private const float LEVEL_OBJECT_ENTER_START_Y = 1816f;
         private const float LEVEL_OBJECT_ENTER_END_Y   = 1145f;
         private const float LEVEL_OBJECT_ENTER_DURATION = 0.45f;
@@ -154,9 +159,9 @@ namespace BalloonFlow
         private int _displayedCoins;
         private Tweener _goldTween;
 
-        // Rail 슬라이드 인 트윈 캐시 (중복 호출 시 Kill 후 재시작)
-        private Tweener _railTopTween;
-        private Tweener _railBottomTween;
+        // Rail 슬라이드 인 / 풀다운 트윈 캐시 (Sequence 도 담을 수 있도록 Tween 타입).
+        private Tween _railTopTween;
+        private Tween _railBottomTween;
         private Tweener _levelObjectEnterTween;
 
         // Nav text base Y positions (cached before animation)
@@ -170,6 +175,7 @@ namespace BalloonFlow
         private float _dragStartScreenX;
         private float _dragStartPageX;
         private float _dragLastScreenX; // 마지막 터치 위치 저장
+        private float _dragLastScreenY; // 풀다운 판정용 — 종료 시점 deltaY 계산
         private const float SWIPE_THRESHOLD_RATIO = 0.2f; // 화면 폭의 20%
 
         // 직전 OnPageArrived 도착 페이지. 같은 Shop 탭 내 vertical drag/short tap 으로 재도착 시
@@ -284,6 +290,32 @@ namespace BalloonFlow
                 _railBottom.anchoredPosition = new Vector2(p.x, RAIL_BOTTOM_ENTER_OFFSET_Y);
                 _railBottomTween = _railBottom.DOAnchorPosY(0f, RAIL_ENTER_DURATION)
                     .SetEase(Ease.OutCubic)
+                    .SetUpdate(true);
+            }
+        }
+
+        /// <summary>
+        /// 사용자가 아래방향으로 Rail 을 끌어내린 듯한 피드백 — RAIL_PULL_DOWN_Y 까지 내려갔다가 OutBack 으로 0 복귀.
+        /// 진행 중 _railTopTween/_railBottomTween 캐시는 Kill 후 새 Sequence 로 교체.
+        /// </summary>
+        public void PlayRailPullDownAnimation()
+        {
+            _railTopTween?.Kill();
+            _railBottomTween?.Kill();
+
+            if (_railTop != null)
+            {
+                _railTopTween = DOTween.Sequence()
+                    .Append(_railTop.DOAnchorPosY(RAIL_PULL_DOWN_Y, RAIL_PULL_DOWN_DURATION).SetEase(Ease.OutCubic))
+                    .Append(_railTop.DOAnchorPosY(0f, RAIL_PULL_DOWN_RETURN_DURATION).SetEase(Ease.OutBack))
+                    .SetUpdate(true);
+            }
+
+            if (_railBottom != null)
+            {
+                _railBottomTween = DOTween.Sequence()
+                    .Append(_railBottom.DOAnchorPosY(RAIL_PULL_DOWN_Y, RAIL_PULL_DOWN_DURATION).SetEase(Ease.OutCubic))
+                    .Append(_railBottom.DOAnchorPosY(0f, RAIL_PULL_DOWN_RETURN_DURATION).SetEase(Ease.OutBack))
                     .SetUpdate(true);
             }
         }
@@ -652,9 +684,12 @@ namespace BalloonFlow
             if (_btnLifePlus != null) _btnLifePlus.gameObject.SetActive(visible);
         }
 
+        /// <summary>무한 하트 상태에서 _imgInfinite 와 _txtLife/_txtLifeOutline 이 상호배타로 토글됨.</summary>
         public void SetInfiniteImageVisible(bool visible)
         {
             if (_imgInfinite != null) _imgInfinite.SetActive(visible);
+            if (_txtLife != null) _txtLife.gameObject.SetActive(!visible);
+            if (_txtLifeOutline != null) _txtLifeOutline.gameObject.SetActive(!visible);
         }
 
         #endregion
@@ -933,6 +968,9 @@ namespace BalloonFlow
 
         #region Swipe Drag
 
+        // 아래방향 드래그가 이 픽셀 이상이면 Rail 풀다운 연출 발동.
+        private const float RAIL_PULL_DOWN_TRIGGER_PX = 60f;
+
         private float _dragStartScreenY;
         private bool _dragDirectionLocked;
         private bool _dragIsHorizontal;
@@ -966,6 +1004,7 @@ namespace BalloonFlow
                 _dragStartScreenX = screenX;
                 _dragStartScreenY = screenY;
                 _dragLastScreenX = screenX;
+                _dragLastScreenY = screenY;
                 _dragStartPageX = _pageContainer.anchoredPosition.x;
                 _dragDirectionLocked = false;
                 _dragIsHorizontal = false;
@@ -974,6 +1013,7 @@ namespace BalloonFlow
             else if (touching && _isDragging)
             {
                 _dragLastScreenX = screenX;
+                _dragLastScreenY = screenY;
 
                 float deltaX = Mathf.Abs(screenX - _dragStartScreenX);
                 float deltaY = Mathf.Abs(screenY - _dragStartScreenY);
@@ -1009,6 +1049,13 @@ namespace BalloonFlow
 
                 if (!_dragIsHorizontal)
                 {
+                    // 위→아래 방향 드래그 시 Unity 좌표계에서 deltaY 는 음수 — 일정 거리 이상 끌면 Rail 풀다운 연출.
+                    float deltaY = _dragLastScreenY - _dragStartScreenY;
+                    if (deltaY < -RAIL_PULL_DOWN_TRIGGER_PX)
+                    {
+                        PlayRailPullDownAnimation();
+                    }
+
                     // 세로 드래그였으면 페이지 이동 없이 복귀
                     AnimateToPage(_currentPageIndex);
                     return;
