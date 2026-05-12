@@ -45,6 +45,7 @@ namespace BalloonFlow
         public const string POPUP_NEW_FEATURE     = "Popup/NewFeature";
         public const string POPUP_COMMON_FRAME    = "Popup/PopupCommonFrame";
         public const string POPUP_TXT_TOAST       = "Popup/TxtToast";
+        public const string POPUP_LOADING_SPINNER = "Popup/PopupLoadingSpinner";
 
         #endregion
 
