@@ -16,15 +16,28 @@ namespace BalloonFlow
         protected override void Awake()
         {
             base.Awake();
-            if (_frame != null && _frame.BtnExit != null)
-                _frame.BtnExit.onClick.AddListener(() => CloseUI());
+            if (_frame != null)
+            {
+                if (_frame.BtnExit != null) _frame.BtnExit.onClick.AddListener(() => CloseUI());
+                // OK 클릭 시 결제 라우팅 대기용 스피너 노출 — 비즈니스 로직은 본 태스크 범위 외.
+                if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.AddListener(() => OpenLoadingSpinner());
+            }
         }
 
         protected override void OnDestroy()
         {
             base.OnDestroy();
-            if (_frame != null && _frame.BtnExit != null)
-                _frame.BtnExit.onClick.RemoveAllListeners();
+            if (_frame != null)
+            {
+                if (_frame.BtnExit != null) _frame.BtnExit.onClick.RemoveAllListeners();
+                if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.RemoveAllListeners();
+            }
+        }
+
+        private void OpenLoadingSpinner()
+        {
+            if (!UIManager.HasInstance) return;
+            UIManager.Instance.OpenUI<PopupLoadingSpinner>("Popup/PopupLoadingSpinner");
         }
 
         public override void OpenUI()
