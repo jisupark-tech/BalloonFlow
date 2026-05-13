@@ -64,7 +64,8 @@ namespace BalloonFlow
             LoadUI();
 
             // 레벨 로드
-            LoadPendingLevel();
+            int loadedLevelId = LoadPendingLevel();
+            TryShowBoosterUnlockPopup(loadedLevelId);
 
             // 레벨 로드 후 난이도별 배경색 적용
             if (CameraManager.HasInstance)
@@ -344,7 +345,7 @@ namespace BalloonFlow
         }
 
 
-        void LoadPendingLevel()
+        int LoadPendingLevel()
         {
             // 이전 InGame 잔여 풀 오브젝트 정리 (Lobby → InGame 경로에서 오염 방지)
             if (ObjectPoolManager.HasInstance)
@@ -367,6 +368,29 @@ namespace BalloonFlow
 
             if (LevelManager.HasInstance)
                 LevelManager.Instance.LoadLevel(_levelId);
+
+            return _levelId;
+        }
+
+        void TryShowBoosterUnlockPopup(int levelId)
+        {
+            if (_isTestMode) return;
+            if (!UIManager.HasInstance || !BoosterManager.HasInstance) return;
+
+            string boosterType = levelId switch
+            {
+                9  => BoosterManager.HAND,
+                12 => BoosterManager.SHUFFLE,
+                15 => BoosterManager.COLOR_REMOVE,
+                _  => null
+            };
+            if (boosterType == null) return;
+            if (BoosterManager.Instance.IsBoosterUnlocked(boosterType)) return;
+
+            var popup = UIManager.Instance.OpenUI<PopupBuyItem>("Popup/PopupBuyItem");
+            if (popup == null) return;
+            Sprite spr = popup.GetBoosterSprite(boosterType);
+            popup.ShowUnlock("Locked", spr, levelId);
         }
 
         #endregion
