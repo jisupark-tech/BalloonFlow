@@ -222,6 +222,7 @@ namespace BalloonFlow
             Debug.Log("[GameBootstrap] Created EventSystem (was missing)");
         }
 
+        /// <summary>이벤트 구독·해제</summary>
         void OnEnable()
         {
             EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompleted);
@@ -229,6 +230,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
         }
 
+        /// <summary>이벤트 구독·해제</summary>
         void OnDisable()
         {
             EventBus.Unsubscribe<OnLevelCompleted>(HandleLevelCompleted);
@@ -253,6 +255,7 @@ namespace BalloonFlow
 
         #region UI 로드
 
+        /// <summary>InGame 진입 시 HUD/Result/Continue/Fail/Settings/GoldShop/Quit 등 UI·팝업을 로드하고 버튼 리스너와 HUDController 바인딩을 설정한다.</summary>
         void LoadUI()
         {
             if (!UIManager.HasInstance) return;
@@ -353,6 +356,7 @@ namespace BalloonFlow
         }
 
 
+        /// <summary>PlayerPrefs("BF_PendingLevelId") 또는 최고 클리어 레벨+1을 기준으로 LevelManager에 레벨을 로드하고 해당 levelId를 반환한다.</summary>
         int LoadPendingLevel()
         {
             // 이전 InGame 잔여 풀 오브젝트 정리 (Lobby → InGame 경로에서 오염 방지)
@@ -380,6 +384,7 @@ namespace BalloonFlow
             return _levelId;
         }
 
+        /// <summary>레벨 로딩·페이드가 끝난 다음 프레임에 부스터 언락 팝업을 표시해, 로딩 오버레이 뒤에 가려졌다가 갑자기 나타나는 문제를 차단한다.</summary>
         IEnumerator ShowBoosterUnlockPopupDeferred(int levelId)
         {
             yield return null;
@@ -388,6 +393,7 @@ namespace BalloonFlow
             TryShowBoosterUnlockPopup(levelId);
         }
 
+        /// <summary>특정 레벨(9/12/15)에서 최초 1회에 한해 HAND/SHUFFLE/COLOR_REMOVE 부스터 언락 팝업을 표시한다.</summary>
         void TryShowBoosterUnlockPopup(int levelId)
         {
             if (_isTestMode) return;
@@ -418,6 +424,10 @@ namespace BalloonFlow
 
         #region 게임 결과 처리
 
+        /// <summary>
+        /// 모든 레벨 로드 이벤트 수신 시 HUD_Top(160→-60) + BottomPanel(-300→0) 슬라이드-인 연출 트리거.
+        /// 첫 진입/Next/Retry/Continue 경로 일관 보장.
+        /// </summary>
         // WHY: 모든 스테이지 진입(첫 진입/Next/Retry/Continue)에서 HUD_Top 160→-60, BottomPanel -300→0 슬라이드-인 연출 일관 트리거. PlayIngameEnterAnimation 내부에서 _stageEndLatched/_popupOpenCount 클린업 처리.
         void HandleLevelLoaded(OnLevelLoaded _evt)
         {
@@ -425,12 +435,14 @@ namespace BalloonFlow
             if (_hud != null) _hud.PlayIngameEnterAnimation();
         }
 
+        /// <summary>레벨 완료 이벤트를 받아 win 결과 팝업 표시 코루틴을 시작한다.</summary>
         void HandleLevelCompleted(OnLevelCompleted _evt)
         {
             _pendingResultIsWin = true;
             StartCoroutine(ShowResultDelayed(true, _evt.score, _evt.starCount));
         }
 
+        /// <summary>Continue 소진·거절 이후 발생하는 최종 실패 이벤트를 받아 fail 결과 팝업 표시 코루틴을 시작한다.</summary>
         void HandleLevelFailed(OnLevelFailed _evt)
         {
             // OnLevelFailed now only fires after continues are exhausted or declined.
@@ -439,6 +451,7 @@ namespace BalloonFlow
             StartCoroutine(ShowResultDelayed(false, 0, 0));
         }
 
+        /// <summary>스테이지 종료 시 HUD 패널 시프트 후 0.8초 뒤 win/fail 결과 팝업을 표시한다.</summary>
         IEnumerator ShowResultDelayed(bool _isWin, int _score, int _stars)
         {
             // [2026-05-13] 스테이지 종료 시 popup 노출 전 panel shift — popup open 자체 트리거는 latch로 차단, 다음 스테이지 enter 애니에서 원위치로 복귀.
@@ -461,6 +474,7 @@ namespace BalloonFlow
 
         #region 버튼 이벤트
 
+        /// <summary>결과 팝업의 Next 버튼 처리 — 테스트 모드에서는 동일 레벨 재시작, 일반 모드에서는 다음 레벨 로드.</summary>
         void OnNextClicked()
         {
             _pendingResultIsWin = false;
@@ -482,6 +496,7 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>결과 팝업의 Retry 버튼 처리 — 현재 레벨을 재시작한다.</summary>
         void OnRetryClicked()
         {
             _pendingResultIsWin = false;
@@ -492,6 +507,7 @@ namespace BalloonFlow
                 LevelManager.Instance.RetryLevel();
         }
 
+        /// <summary>결과 팝업의 Home 버튼 처리 — 테스트 모드에서는 MapMaker로, 일반 모드에서는 Lobby 씬으로 이동.</summary>
         void OnHomeClicked()
         {
             if (_result != null) _result.CloseUI();
