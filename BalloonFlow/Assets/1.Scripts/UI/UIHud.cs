@@ -51,6 +51,10 @@ namespace BalloonFlow
         [SerializeField] private Material _matSpeedOutlineHard;
         [SerializeField] private Material _matSpeedOutlineSuperHard;
 
+        [Header("[HUD Top — 팝업 오픈 연출용]")]
+        [Tooltip("인게임 팝업 오픈 시 -60→-100→0 sequence tween 적용 — Inspector에서 HUD_Top RectTransform 와이어")]
+        [SerializeField] private RectTransform _hudTopRoot;
+
         [Header("[Bottom Panel — 부스터 아이템]")]
         [Tooltip("아이템 사용 popup 열릴 때 화면 밖 -270 으로 tween — Inspector 에서 BottomPanel root RectTransform 할당")]
         [SerializeField] private RectTransform _bottomPanelRoot;
@@ -175,6 +179,16 @@ namespace BalloonFlow
         private bool _bottomPanelOrigCached;
         private DG.Tweening.Tweener _bottomPanelTween;
 
+        // [2026-05-13] 인게임 팝업 오픈 연출 — 사용자 스펙 절대 anchoredPosition.y값
+        private const float HUD_TOP_OPEN_START        = -60f;
+        private const float HUD_TOP_OPEN_MID          = -100f;
+        private const float HUD_TOP_OPEN_END          = 0f;
+        private const float BOTTOM_PANEL_POPUP_OPEN_Y = -300f;
+        private const float POPUP_OPEN_TWEEN_DUR      = 0.5f; // HUD_Top 전체 duration = BottomPanel duration
+        private Vector2 _hudTopOrigPos;
+        private bool _hudTopOrigCached;
+        private DG.Tweening.Sequence _popupOpenSeq;
+
         public void HideBottomPanel()
         {
             if (_bottomPanelRoot == null)
@@ -204,6 +218,41 @@ namespace BalloonFlow
             _bottomPanelTween = _bottomPanelRoot.DOAnchorPosY(_bottomPanelOrigPos.y, BOTTOM_PANEL_TWEEN_DUR)
                 .SetEase(DG.Tweening.Ease.OutCubic)
                 .SetUpdate(true);
+        }
+
+        /// <summary>인게임 팝업 오픈 연출 — HUD_Top: -60→-100→0 sequence, BottomPanel: 0→-300. 동일 duration.</summary>
+        public void PlayPopupOpenAnimation()
+        {
+            _popupOpenSeq?.Kill();
+            _popupOpenSeq = DG.Tweening.DOTween.Sequence().SetUpdate(true);
+
+            if (_hudTopRoot != null)
+            {
+                if (!_hudTopOrigCached) { _hudTopOrigPos = _hudTopRoot.anchoredPosition; _hudTopOrigCached = true; }
+                // -60 → -100 → 0 (절반 duration씩 2단계)
+                _hudTopRoot.anchoredPosition = new Vector2(_hudTopOrigPos.x, HUD_TOP_OPEN_START);
+                float half = POPUP_OPEN_TWEEN_DUR * 0.5f;
+                _popupOpenSeq.Join(_hudTopRoot.DOAnchorPosY(HUD_TOP_OPEN_MID, half).SetEase(Ease.OutCubic));
+                _popupOpenSeq.Insert(half, _hudTopRoot.DOAnchorPosY(HUD_TOP_OPEN_END, half).SetEase(Ease.OutCubic));
+            }
+            else Debug.LogWarning("[UIHud] PlayPopupOpenAnimation: _hudTopRoot 미할당.");
+
+            if (_bottomPanelRoot != null)
+            {
+                if (!_bottomPanelOrigCached) { _bottomPanelOrigPos = _bottomPanelRoot.anchoredPosition; _bottomPanelOrigCached = true; }
+                _popupOpenSeq.Join(_bottomPanelRoot.DOAnchorPosY(BOTTOM_PANEL_POPUP_OPEN_Y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
+            }
+        }
+
+        /// <summary>인게임 팝업 클로즈 시 원위치 복귀.</summary>
+        public void PlayPopupCloseAnimation()
+        {
+            _popupOpenSeq?.Kill();
+            _popupOpenSeq = DG.Tweening.DOTween.Sequence().SetUpdate(true);
+            if (_hudTopRoot != null && _hudTopOrigCached)
+                _popupOpenSeq.Join(_hudTopRoot.DOAnchorPosY(_hudTopOrigPos.y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
+            if (_bottomPanelRoot != null && _bottomPanelOrigCached)
+                _popupOpenSeq.Join(_bottomPanelRoot.DOAnchorPosY(_bottomPanelOrigPos.y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
         }
 
         #endregion

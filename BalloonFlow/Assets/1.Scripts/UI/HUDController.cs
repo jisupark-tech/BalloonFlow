@@ -191,14 +191,20 @@ namespace BalloonFlow
 
         #region 버튼 이벤트
 
+        // [2026-05-13] 인게임 팝업 오픈/클로즈 시 HUD_Top + BottomPanel 동시 tween 헬퍼
+        private void TriggerPopupOpenAnim() { if (_view != null) _view.PlayPopupOpenAnimation(); }
+        private void TriggerPopupCloseAnim() { if (_view != null) _view.PlayPopupCloseAnimation(); }
+
         private void OnSettingsClicked()
         {
             // PauseGame 제거 — timeScale=0이 UI 입력을 막을 수 있음
+            TriggerPopupOpenAnim();
             if (_popupSettings != null) _popupSettings.OpenUI();
         }
 
         private void OnSettingsCloseClicked()
         {
+            TriggerPopupCloseAnim();
             if (_popupSettings != null) _popupSettings.CloseUI();
         }
 
@@ -209,6 +215,7 @@ namespace BalloonFlow
             // 나가기 확인 팝업이 있으면 표시, 없으면 바로 나가기
             if (_popupQuit != null)
             {
+                TriggerPopupOpenAnim();
                 _popupQuit.OpenUI();
             }
             else
@@ -227,12 +234,14 @@ namespace BalloonFlow
 
         private void OnGoldPlusClicked()
         {
+            TriggerPopupOpenAnim();
             if (_popupGoldShop != null) _popupGoldShop.OpenUI();
             if (GameManager.HasInstance) GameManager.Instance.PauseGame();
         }
 
         private void OnGoldShopCloseClicked()
         {
+            TriggerPopupCloseAnim();
             if (_popupGoldShop != null) _popupGoldShop.CloseUI();
             if (GameManager.HasInstance) GameManager.Instance.ResumeGame();
         }
@@ -240,6 +249,7 @@ namespace BalloonFlow
         /// <summary>나가기 확인 → Home 버튼: Lobby 또는 MapMaker로 이동</summary>
         private void OnQuitHomeClicked()
         {
+            TriggerPopupCloseAnim();
             if (_popupQuit != null) _popupQuit.CloseUI();
             if (GameManager.HasInstance)
             {
@@ -254,6 +264,7 @@ namespace BalloonFlow
         /// <summary>나가기 확인 → Next 버튼: 팝업 닫고 게임 계속</summary>
         private void OnQuitNextClicked()
         {
+            TriggerPopupCloseAnim();
             if (_popupQuit != null) _popupQuit.CloseUI();
             if (GameManager.HasInstance) GameManager.Instance.ResumeGame();
         }
