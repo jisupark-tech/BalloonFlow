@@ -65,7 +65,8 @@ namespace BalloonFlow
 
             // 레벨 로드
             int loadedLevelId = LoadPendingLevel();
-            TryShowBoosterUnlockPopup(loadedLevelId);
+            // WHY: fade-in 종료 전에 팝업이 열리면 로딩 오버레이 뒤에 가려 보였다가 갑자기 나타나는 문제 차단
+            StartCoroutine(ShowBoosterUnlockPopupDeferred(loadedLevelId));
 
             // 레벨 로드 후 난이도별 배경색 적용
             if (CameraManager.HasInstance)
@@ -373,6 +374,14 @@ namespace BalloonFlow
                 LevelManager.Instance.LoadLevel(_levelId);
 
             return _levelId;
+        }
+
+        IEnumerator ShowBoosterUnlockPopupDeferred(int levelId)
+        {
+            yield return null;
+            while (LevelManager.HasInstance && LevelManager.Instance.IsLoading) yield return null;
+            while (UIManager.HasInstance && UIManager.Instance.IsFading) yield return null;
+            TryShowBoosterUnlockPopup(levelId);
         }
 
         void TryShowBoosterUnlockPopup(int levelId)
