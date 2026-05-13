@@ -264,10 +264,10 @@ namespace BalloonFlow
             _hud = UIManager.Instance.OpenUI<UIHud>("UI/UIHud");
 
             // [2026-05-13] 로비→인게임 진입 시 UI 화면 밖에서 슬라이드 인 연출 —
-            // OpenUI 직후, 어떤 RectTransform 레이아웃/렌더 패스도 발생하기 전에 즉시 호출해야
+            // OpenUI 직후, 어떤 RectTransform 레이아웃/렌더 패스도 발생하기 전에 시작 위치를 즉시 강제 세팅해야
             // 초기 위치(HUD_Top -60 / BottomPanel 0)가 1프레임 노출되는 플릭커를 차단한다.
-            // (HUD_Top 160 / BottomPanel -300 으로 즉시 강제 세팅 후 tween 시작)
-            if (_hud != null) _hud.PlayIngameEnterAnimation();
+            // tween 시작은 HandleLevelLoaded → PlayHudEnterAnimationDeferred 코루틴이 IsLoading/IsFading 완료 후 트리거.
+            if (_hud != null) _hud.PrimeIngameEnterStartPos();
 
             // HUDController 바인딩
             if (HUDController.HasInstance && _hud != null)
@@ -428,10 +428,19 @@ namespace BalloonFlow
         /// 모든 레벨 로드 이벤트 수신 시 HUD_Top(160→-60) + BottomPanel(-300→0) 슬라이드-인 연출 트리거.
         /// 첫 진입/Next/Retry/Continue 경로 일관 보장.
         /// </summary>
-        // WHY: 모든 스테이지 진입(첫 진입/Next/Retry/Continue)에서 HUD_Top 160→-60, BottomPanel -300→0 슬라이드-인 연출 일관 트리거. PlayIngameEnterAnimation 내부에서 _stageEndLatched/_popupOpenCount 클린업 처리.
+        // WHY: 모든 스테이지 진입(첫 진입/Next/Retry/Continue)에서 HUD_Top 160→-60, BottomPanel -300→0 슬라이드-인 연출 일관 트리거. 로딩 오버레이(LevelManager.IsLoading) + 페이드(UIManager.IsFading) 완료 후 tween 시작 — 화면 가려진 상태에서 연출 소비 방지.
         void HandleLevelLoaded(OnLevelLoaded _evt)
         {
             _pendingResultIsWin = false;
+            StartCoroutine(PlayHudEnterAnimationDeferred());
+        }
+
+        /// <summary>로딩/페이드 완료 후 HUD 슬라이드-인 연출 트리거. ShowBoosterUnlockPopupDeferred 와 동일 패턴.</summary>
+        IEnumerator PlayHudEnterAnimationDeferred()
+        {
+            yield return null;
+            while (LevelManager.HasInstance && LevelManager.Instance.IsLoading) yield return null;
+            while (UIManager.HasInstance && UIManager.Instance.IsFading) yield return null;
             if (_hud != null) _hud.PlayIngameEnterAnimation();
         }
 
