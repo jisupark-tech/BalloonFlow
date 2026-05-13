@@ -432,6 +432,8 @@ namespace BalloonFlow
 
         IEnumerator ShowResultDelayed(bool _isWin, int _score, int _stars)
         {
+            // [2026-05-13] 스테이지 종료 시 popup 노출 전 panel shift — popup open 자체 트리거는 latch로 차단, 다음 스테이지 enter 애니에서 원위치로 복귀.
+            if (_hud != null) _hud.PlayStageEndPanelShift();
             yield return new WaitForSecondsRealtime(0.8f);
             if (_result != null)
             {
