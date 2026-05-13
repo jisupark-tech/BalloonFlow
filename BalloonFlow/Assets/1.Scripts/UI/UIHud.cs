@@ -13,9 +13,9 @@ namespace BalloonFlow
     {
         #region Constants — Lock Colors
 
-        private static readonly Color LOCK_NORMAL    = new Color(0x9E / 255f, 0xD1 / 255f, 0xFF / 255f); // #9ED1FF
-        private static readonly Color LOCK_HARD      = new Color(0xCF / 255f, 0x9E / 255f, 0xFF / 255f); // #CF9EFF
-        private static readonly Color LOCK_SUPERHARD  = new Color(0xFA / 255f, 0x9F / 255f, 0x7D / 255f); // #FA9F7D
+        private static readonly Color LOCK_NORMAL    = new Color(1f, 1f, 1f); // #FFFFFF
+        private static readonly Color LOCK_HARD      = new Color(1f, 1f, 1f); // #FFFFFF
+        private static readonly Color LOCK_SUPERHARD = new Color(1f, 1f, 1f); // #FFFFFF
 
         #endregion
 
