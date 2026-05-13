@@ -195,6 +195,9 @@ namespace BalloonFlow
         // [2026-05-13] 중첩 팝업 reference-count — 첫 open 에서만 Open 연출, 마지막 close 에서만 Close 연출.
         private int _popupOpenCount;
 
+        // [2026-05-13] 스테이지 종료 시 popup 노출 전 panel shift — popup open 자체 트리거는 latch로 차단, 다음 스테이지 enter 애니에서 원위치로 복귀.
+        private bool _stageEndLatched;
+
         public void HideBottomPanel()
         {
             if (_bottomPanelRoot == null)
@@ -230,14 +233,21 @@ namespace BalloonFlow
         public void NotifyPopupOpened()
         {
             _popupOpenCount++;
-            if (_popupOpenCount == 1) PlayPopupOpenAnimation();
+            if (_popupOpenCount == 1 && !_stageEndLatched) PlayPopupOpenAnimation();
         }
 
         /// <summary>UIBase 가 popup close 시 호출 — count--. 마지막 popup 닫힐 때만 Close 연출.</summary>
         public void NotifyPopupClosed()
         {
             _popupOpenCount = Mathf.Max(0, _popupOpenCount - 1);
-            if (_popupOpenCount == 0) PlayPopupCloseAnimation();
+            if (_popupOpenCount == 0 && !_stageEndLatched) PlayPopupCloseAnimation();
+        }
+
+        /// <summary>스테이지 종료(승/패) 시 popup 노출 직전 panel shift — open 연출 후 latch ON → popup open/close 재트리거 차단, 다음 스테이지 enter 애니에서 -300/160 → 원위치 복귀.</summary>
+        public void PlayStageEndPanelShift()
+        {
+            PlayPopupOpenAnimation();
+            _stageEndLatched = true;
         }
 
         /// <summary>인게임 팝업 오픈 연출 — HUD_Top: -60→-100→0 sequence, BottomPanel: 0→-300. 동일 duration.</summary>
@@ -278,6 +288,10 @@ namespace BalloonFlow
         /// <summary>로비→인게임 진입 시 등장 연출 — HUD_Top: 160→-100→-60 sequence, BottomPanel: -300→0. 동일 duration. 화면 밖에서 슬라이드 인.</summary>
         public void PlayIngameEnterAnimation()
         {
+            // [2026-05-13] 직전 스테이지 종료 latch / popup count 클린업 — 다음 스테이지 진입 직전에 초기화.
+            _stageEndLatched = false;
+            _popupOpenCount = 0;
+
             _popupOpenSeq?.Kill();
             _popupOpenSeq = DG.Tweening.DOTween.Sequence().SetUpdate(true);
 
