@@ -260,6 +260,9 @@ namespace BalloonFlow
                 HUDController.Instance.BindView(_hud);
             }
 
+            // [2026-05-13] 로비→인게임 진입 시 UI 화면 밖에서 슬라이드 인 연출
+            if (_hud != null) _hud.PlayIngameEnterAnimation();
+
             // PopupResult (로드 후 숨김)
             _result = UIManager.Instance.OpenUI<PopupResult>("Popup/PopupResult");
             if (_result != null)

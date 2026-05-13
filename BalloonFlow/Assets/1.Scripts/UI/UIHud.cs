@@ -179,10 +179,10 @@ namespace BalloonFlow
         private bool _bottomPanelOrigCached;
         private DG.Tweening.Tweener _bottomPanelTween;
 
-        // [2026-05-13] 인게임 팝업 오픈 연출 — 사용자 스펙 절대 anchoredPosition.y값
+        // [2026-05-13] 인게임 팝업 오픈 연출 — 사용자 스펙 절대 anchoredPosition.y값 (-60→-100→160 sequence)
         private const float HUD_TOP_OPEN_START        = -60f;
         private const float HUD_TOP_OPEN_MID          = -100f;
-        private const float HUD_TOP_OPEN_END          = 0f;
+        private const float HUD_TOP_OPEN_END          = 160f;
         private const float BOTTOM_PANEL_POPUP_OPEN_Y = -300f;
         private const float POPUP_OPEN_TWEEN_DUR      = 0.5f; // HUD_Top 전체 duration = BottomPanel duration
         private Vector2 _hudTopOrigPos;
@@ -253,6 +253,34 @@ namespace BalloonFlow
                 _popupOpenSeq.Join(_hudTopRoot.DOAnchorPosY(_hudTopOrigPos.y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
             if (_bottomPanelRoot != null && _bottomPanelOrigCached)
                 _popupOpenSeq.Join(_bottomPanelRoot.DOAnchorPosY(_bottomPanelOrigPos.y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
+        }
+
+        /// <summary>로비→인게임 진입 시 등장 연출 — HUD_Top: 160→-100→-60 sequence, BottomPanel: -300→0. 동일 duration. 화면 밖에서 슬라이드 인.</summary>
+        public void PlayIngameEnterAnimation()
+        {
+            _popupOpenSeq?.Kill();
+            _popupOpenSeq = DG.Tweening.DOTween.Sequence().SetUpdate(true);
+
+            if (_hudTopRoot != null)
+            {
+                if (!_hudTopOrigCached) { _hudTopOrigPos = _hudTopRoot.anchoredPosition; _hudTopOrigCached = true; }
+                // 시작 위치 강제 세팅: 160 (화면 밖)
+                _hudTopRoot.anchoredPosition = new Vector2(_hudTopOrigPos.x, HUD_TOP_OPEN_END); // 160
+                float half = POPUP_OPEN_TWEEN_DUR * 0.5f;
+                // 160 → -100 → -60 (절반 duration씩 2단계)
+                _popupOpenSeq.Join(_hudTopRoot.DOAnchorPosY(HUD_TOP_OPEN_MID, half).SetEase(Ease.OutCubic));
+                _popupOpenSeq.Insert(half, _hudTopRoot.DOAnchorPosY(HUD_TOP_OPEN_START, half).SetEase(Ease.OutCubic));
+            }
+            else Debug.LogWarning("[UIHud] PlayIngameEnterAnimation: _hudTopRoot 미할당.");
+
+            if (_bottomPanelRoot != null)
+            {
+                if (!_bottomPanelOrigCached) { _bottomPanelOrigPos = _bottomPanelRoot.anchoredPosition; _bottomPanelOrigCached = true; }
+                // 시작 위치 강제 세팅: -300 (화면 밖)
+                _bottomPanelRoot.anchoredPosition = new Vector2(_bottomPanelOrigPos.x, BOTTOM_PANEL_POPUP_OPEN_Y); // -300
+                // -300 → 0 (원위치)
+                _popupOpenSeq.Join(_bottomPanelRoot.DOAnchorPosY(_bottomPanelOrigPos.y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
+            }
         }
 
         #endregion
