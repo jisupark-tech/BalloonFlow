@@ -28,6 +28,10 @@ namespace BalloonFlow
 
         private Sequence _currentSequence;
 
+        // [2026-05-13] 모든 ingame 팝업 OpenUI/CloseUI 시 UIHud 의 HUD_Top + BottomPanel 연출을 자동 트리거.
+        // UIHud 본인은 popup 이 아니므로 override 로 false. 특별한 비-팝업 UIBase 가 있다면 false 로 끄면 됨.
+        protected virtual bool TriggersHudPopupAnimation => true;
+
         public enum AnimationType
         {
             None,
@@ -72,6 +76,14 @@ namespace BalloonFlow
             // PopupCommonFrame 등장 연출 — OnEnable 만으로 안 트리거되는 prefab 도 있어 명시 호출 (idempotent).
             var popFrame = GetComponentInChildren<PopupCommonFrame>(true);
             if (popFrame != null) popFrame.PlayPopAnimation();
+
+            // [2026-05-13] HUD popup-open 연출 중앙화 — Settings/Quit/GoldShop/UseItem/Result 등 모든 인게임 popup
+            // 이 열리면 UIHud 가 HUD_Top + BottomPanel slide tween 을 자동 실행. UIHud 자신은 override 로 self-skip.
+            if (TriggersHudPopupAnimation)
+            {
+                var hud = UnityEngine.Object.FindAnyObjectByType<UIHud>();
+                if (hud != null && hud != this) hud.NotifyPopupOpened();
+            }
         }
 
         /// <summary>
@@ -80,6 +92,13 @@ namespace BalloonFlow
         /// </summary>
         public virtual void CloseUI()
         {
+            // [2026-05-13] 활성 상태에서만 HUD popup-close 트리거 — 중복 close 호출이 _popupOpenCount 를 음수로 내려가게 막음.
+            if (TriggersHudPopupAnimation && isActiveAndEnabled)
+            {
+                var hud = UnityEngine.Object.FindAnyObjectByType<UIHud>();
+                if (hud != null && hud != this) hud.NotifyPopupClosed();
+            }
+
             KillAnimation();
 
             if (_canvasGroup != null)
