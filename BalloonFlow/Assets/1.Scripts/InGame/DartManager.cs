@@ -831,8 +831,13 @@ namespace BalloonFlow
                 Vector3 fireDir = rail.GetDartFiringDirection(dart.dartId);
 
                 // 이미 reserve 된 풍선은 후보에서 제외 → 다음 closest 풍선을 발사 대상으로 받음.
+                // [2026-05-13] FindTarget = contour-only. inner-stuck color fallback 은 관통 이슈로 비활성.
+                //   inner 만 남은 색 풍선은 hit 불가 → 레벨 디자인으로 회피 (외곽이 같은 색으로 깎이며 노출).
                 int targetId = DirectionalTargeting.FindTarget(dartPos, fireDir, dart.dartColor, _reservedTargets);
                 if (targetId < 0) continue;
+                // [2026-05-13 Diag] 진단 로그 ([DartSkip]) 제거 — DirectionalTargeting.FormatLastDiag()도 비활성.
+                //   재활성: DirectionalTargeting.cs 의 Last* 필드 + FormatLastDiag 주석 해제 후
+                //   이 분기에서 hasMatching 검사 + Debug.Log 복원.
 
                 BalloonData targetData = BalloonController.Instance.GetBalloon(targetId);
                 if (targetData == null || targetData.isPopped) continue;

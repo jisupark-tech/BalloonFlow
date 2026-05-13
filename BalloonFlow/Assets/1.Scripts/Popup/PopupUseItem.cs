@@ -298,8 +298,34 @@ namespace BalloonFlow
             if (_cutoutImage != null) _cutoutImage.gameObject.SetActive(true);
             if (_dimImage != null) _dimImage.gameObject.SetActive(true);
 
+            // [2026-05-13] description/icon 가림 방지 — Dim/Cutout 활성화 후 sibling 순서를
+            // 가장 마지막으로 옮겨 Dim alpha 0.7 위로 덮어 그림. Mask 의 자식이라면
+            // popup root 로 reparent 해 stencil 클리핑 회피.
+            BringDescriptionToFront();
+
             OpenUI();
             _onConfirm?.Invoke();
+        }
+
+        private void BringDescriptionToFront()
+        {
+            Transform popupRoot = transform;
+            if (_rtItemDescription != null)
+            {
+                if (_cutoutMask != null && _rtItemDescription.IsChildOf(_cutoutMask))
+                    _rtItemDescription.SetParent(popupRoot, false);
+                _rtItemDescription.SetAsLastSibling();
+            }
+            if (_imgItem != null)
+            {
+                var iconRT = _imgItem.transform as RectTransform;
+                if (iconRT != null)
+                {
+                    if (_cutoutMask != null && iconRT.IsChildOf(_cutoutMask))
+                        iconRT.SetParent(popupRoot, false);
+                    iconRT.SetAsLastSibling();
+                }
+            }
         }
 
         private void SetupCutout(string boosterType)

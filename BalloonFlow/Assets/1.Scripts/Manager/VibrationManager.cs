@@ -102,11 +102,23 @@ namespace BalloonFlow
 
             try
             {
-                int amp = _hasAmplitudeControl
-                    ? Mathf.Clamp(amplitude, 1, MAX_AMPLITUDE)
-                    : DEFAULT_AMPLITUDE;
+                int ampClamped = Mathf.Clamp(amplitude, 1, MAX_AMPLITUDE);
+                long durToUse = milliseconds;
+                int  ampToUse = ampClamped;
+
+                if (!_hasAmplitudeControl)
+                {
+                    // [2026-05-13] amplitude control 미지원 디바이스 fallback —
+                    // amp=-1 (시스템 기본) 으로 발진 시 항상 최대 강도가 나옴.
+                    // intensity 비율 (amp/255) 만큼 duration 단축으로 체감 강도 보정.
+                    // 예: amp=38 (0.15) × 180ms → 27ms 짧은 탭. amp=255 → 그대로.
+                    float intensityRatio = ampClamped / (float)MAX_AMPLITUDE;
+                    durToUse = (long)Mathf.Max(10f, milliseconds * intensityRatio);
+                    ampToUse = DEFAULT_AMPLITUDE; // system default (api 가 -1 만 허용)
+                }
+
                 using (var effect = _vibrationEffectClass.CallStatic<AndroidJavaObject>(
-                    "createOneShot", milliseconds, amp))
+                    "createOneShot", durToUse, ampToUse))
                 {
                     _vibrator.Call("vibrate", effect);
                 }

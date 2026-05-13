@@ -51,7 +51,23 @@ namespace BalloonFlow.Editor
             public string instruction = "Tap here!";
             public string highlightTarget = "(none)";
             public string requireAction = "none";
+            public bool overrideVisualLayout;
+            public bool useCutoutFrame = true;
+            public Vector2 cutoutFramePosition = Vector2.zero;
             public Vector2 cutoutSize = new Vector2(200, 200);
+            public Sprite cutoutFrameSprite;
+            public Vector2 instructionPanelPosition = new Vector2(0f, 40f);
+            public Vector2 instructionPanelSize = new Vector2(-60f, 200f);
+            public Vector2 arrowIndicatorPosition = Vector2.zero;
+            public bool useHandIndicator;
+            public Vector2 handIndicatorPosition = Vector2.zero;
+            public Sprite handIndicatorSprite;
+            public TutorialHandTweenType handTweenType;
+            public Vector2 handTweenMoveOffset = new Vector2(0f, -30f);
+            public float handTweenScale = 1.12f;
+            public float handTweenRotation;
+            public float handTweenDuration = 0.55f;
+            public Sprite cutoutMaskSprite;
         }
 
         #endregion
@@ -240,8 +256,34 @@ namespace BalloonFlow.Editor
                 actionIdx = EditorGUILayout.Popup("Require Action", actionIdx, ACTION_OPTIONS);
                 step.requireAction = ACTION_OPTIONS[actionIdx];
 
-                // Cutout size
-                step.cutoutSize = EditorGUILayout.Vector2Field("Cutout Size", step.cutoutSize);
+                step.overrideVisualLayout = EditorGUILayout.Toggle("Override Visual Layout", step.overrideVisualLayout);
+                using (new EditorGUI.DisabledScope(!step.overrideVisualLayout))
+                {
+                    EditorGUILayout.LabelField("Cutout Frame", EditorStyles.miniBoldLabel);
+                    step.useCutoutFrame = EditorGUILayout.Toggle("Use Cutout Frame", step.useCutoutFrame);
+                    step.cutoutFramePosition = EditorGUILayout.Vector2Field("Position", step.cutoutFramePosition);
+                    step.cutoutSize = EditorGUILayout.Vector2Field("Size", step.cutoutSize);
+                    step.cutoutFrameSprite = (Sprite)EditorGUILayout.ObjectField("Frame Sprite", step.cutoutFrameSprite, typeof(Sprite), false);
+
+                    EditorGUILayout.LabelField("Instruction Panel", EditorStyles.miniBoldLabel);
+                    step.instructionPanelPosition = EditorGUILayout.Vector2Field("Position", step.instructionPanelPosition);
+                    step.instructionPanelSize = EditorGUILayout.Vector2Field("Size", step.instructionPanelSize);
+
+                    EditorGUILayout.LabelField("Indicators", EditorStyles.miniBoldLabel);
+                    step.arrowIndicatorPosition = EditorGUILayout.Vector2Field("Arrow Position", step.arrowIndicatorPosition);
+                    step.useHandIndicator = EditorGUILayout.Toggle("Use Hand Indicator", step.useHandIndicator);
+                    step.handIndicatorPosition = EditorGUILayout.Vector2Field("Hand Position", step.handIndicatorPosition);
+                    step.handIndicatorSprite = (Sprite)EditorGUILayout.ObjectField("Hand Sprite", step.handIndicatorSprite, typeof(Sprite), false);
+                    step.handTweenType = (TutorialHandTweenType)EditorGUILayout.EnumPopup("Hand Tween", step.handTweenType);
+                    using (new EditorGUI.DisabledScope(step.handTweenType == TutorialHandTweenType.None))
+                    {
+                        step.handTweenMoveOffset = EditorGUILayout.Vector2Field("Move Offset", step.handTweenMoveOffset);
+                        step.handTweenScale = EditorGUILayout.FloatField("Scale Multiplier", step.handTweenScale);
+                        step.handTweenRotation = EditorGUILayout.FloatField("Rotation Delta", step.handTweenRotation);
+                        step.handTweenDuration = EditorGUILayout.FloatField("Tween Duration", step.handTweenDuration);
+                    }
+                    step.cutoutMaskSprite = (Sprite)EditorGUILayout.ObjectField("Cutout Mask Sprite", step.cutoutMaskSprite, typeof(Sprite), false);
+                }
 
                 EditorGUILayout.EndVertical();
                 EditorGUILayout.Space(2);
@@ -401,7 +443,24 @@ namespace BalloonFlow.Editor
                     sb.AppendLine($"            instruction = \"{EscapeString(step.instruction)}\",");
                     sb.AppendLine($"            highlightTarget = {target},");
                     sb.AppendLine($"            requireAction = {action},");
-                    sb.AppendLine("            isComplete = false");
+                    sb.AppendLine("            isComplete = false,");
+                    sb.AppendLine($"            overrideVisualLayout = {step.overrideVisualLayout.ToString().ToLowerInvariant()},");
+                    sb.AppendLine($"            useCutoutFrame = {step.useCutoutFrame.ToString().ToLowerInvariant()},");
+                    sb.AppendLine($"            cutoutFramePosition = {Vector2Code(step.cutoutFramePosition)},");
+                    sb.AppendLine($"            cutoutFrameSize = {Vector2Code(step.cutoutSize)},");
+                    sb.AppendLine($"            cutoutFrameSprite = {SpriteCode(step.cutoutFrameSprite)},");
+                    sb.AppendLine($"            instructionPanelPosition = {Vector2Code(step.instructionPanelPosition)},");
+                    sb.AppendLine($"            instructionPanelSize = {Vector2Code(step.instructionPanelSize)},");
+                    sb.AppendLine($"            arrowIndicatorPosition = {Vector2Code(step.arrowIndicatorPosition)},");
+                    sb.AppendLine($"            useHandIndicator = {step.useHandIndicator.ToString().ToLowerInvariant()},");
+                    sb.AppendLine($"            handIndicatorPosition = {Vector2Code(step.handIndicatorPosition)},");
+                    sb.AppendLine($"            handIndicatorSprite = {SpriteCode(step.handIndicatorSprite)},");
+                    sb.AppendLine($"            handTweenType = TutorialHandTweenType.{step.handTweenType},");
+                    sb.AppendLine($"            handTweenMoveOffset = {Vector2Code(step.handTweenMoveOffset)},");
+                    sb.AppendLine($"            handTweenScale = {FloatCode(step.handTweenScale)},");
+                    sb.AppendLine($"            handTweenRotation = {FloatCode(step.handTweenRotation)},");
+                    sb.AppendLine($"            handTweenDuration = {FloatCode(step.handTweenDuration)},");
+                    sb.AppendLine($"            cutoutMaskSprite = {SpriteCode(step.cutoutMaskSprite)}");
                     sb.AppendLine("        },");
                 }
 
@@ -424,6 +483,34 @@ namespace BalloonFlow.Editor
         {
             if (string.IsNullOrEmpty(s)) return string.Empty;
             return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "");
+        }
+
+        private static string Vector2Code(Vector2 value)
+        {
+            return $"new Vector2({FloatCode(value.x)}, {FloatCode(value.y)})";
+        }
+
+        private static string FloatCode(float value)
+        {
+            return value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "f";
+        }
+
+        private static string SpriteCode(Sprite sprite)
+        {
+            if (sprite == null) return "null";
+
+            string assetPath = AssetDatabase.GetAssetPath(sprite);
+            const string resourcesMarker = "/Resources/";
+            int resourcesIndex = assetPath.IndexOf(resourcesMarker, System.StringComparison.OrdinalIgnoreCase);
+            if (resourcesIndex < 0)
+            {
+                Debug.LogWarning($"[TutorialEditorWindow] Sprite '{sprite.name}' is not under a Resources folder. Generated code will keep it null.");
+                return "null";
+            }
+
+            string resourcePath = assetPath.Substring(resourcesIndex + resourcesMarker.Length);
+            resourcePath = System.IO.Path.ChangeExtension(resourcePath, null).Replace("\\", "/");
+            return $"Resources.Load<Sprite>(\"{EscapeString(resourcePath)}\")";
         }
 
         #endregion

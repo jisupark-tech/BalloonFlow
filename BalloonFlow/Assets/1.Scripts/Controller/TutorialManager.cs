@@ -1,4 +1,5 @@
 using System.Collections;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -53,6 +54,13 @@ namespace BalloonFlow
         // [2026-05-12] Hand indicator — step 별 override layout 지원
         private RectTransform _handIndicator;
         private Image _arrowImage;
+        private Image _handImage;
+        private Sprite _defaultCutoutFrameSprite;
+        private Color _defaultCutoutFrameColor;
+        private Sprite _defaultHandSprite;
+        private Vector3 _defaultHandScale = Vector3.one;
+        private Vector3 _defaultHandRotation = Vector3.zero;
+        private Tween _handTween;
 
         // Instruction panel
         private GameObject _instructionPanel;
@@ -149,6 +157,11 @@ namespace BalloonFlow
                 _cutoutMask = popup.CutoutMask;
                 _cutoutFrame = popup.CutoutFrame;
                 _cutoutFrameImage = _cutoutFrame?.GetComponent<Image>();
+                if (_cutoutFrameImage != null)
+                {
+                    _defaultCutoutFrameSprite = _cutoutFrameImage.sprite;
+                    _defaultCutoutFrameColor = _cutoutFrameImage.color;
+                }
 
                 // _cutoutMask 에 CutoutMaskUI + Mask 부착 → 자식 DimOverlay 자동 생성 (hole "밖"만 dim 렌더, UseItem 패턴).
                 SetupCutoutMask();
@@ -156,6 +169,14 @@ namespace BalloonFlow
                 _arrowIndicator = popup.ArrowIndicator;
                 _arrowImage = _arrowIndicator?.GetComponent<Image>();
                 _handIndicator = popup.HandIndicator;
+                _handImage = _handIndicator?.GetComponent<Image>();
+                if (_handIndicator != null)
+                {
+                    _defaultHandScale = _handIndicator.localScale;
+                    _defaultHandRotation = _handIndicator.localEulerAngles;
+                }
+                if (_handImage != null)
+                    _defaultHandSprite = _handImage.sprite;
 
                 _instructionText = popup.InstructionText;
                 // Prefab에서 InstructionPanel이 명시 지정되어 있으면 우선 사용 (디자이너가 위치 이동 가능).
@@ -569,6 +590,8 @@ namespace BalloonFlow
             _cutoutFrameImage = go.AddComponent<Image>();
             _cutoutFrameImage.color = new Color(1f, 1f, 1f, 0f); // transparent fill
             _cutoutFrameImage.raycastTarget = false;
+            _defaultCutoutFrameSprite = _cutoutFrameImage.sprite;
+            _defaultCutoutFrameColor = _cutoutFrameImage.color;
 
             var outline = go.AddComponent<Outline>();
             outline.effectColor = FRAME_COLOR;
@@ -719,13 +742,35 @@ namespace BalloonFlow
 
             if (_cutoutFrame != null)
             {
+                _isCutoutVisible = true;
+                _cutoutFrame.gameObject.SetActive(step.useCutoutFrame);
                 _cutoutFrame.anchoredPosition = step.cutoutFramePosition;
                 _cutoutFrame.sizeDelta = step.cutoutFrameSize;
+                if (_cutoutFrameImage != null)
+                {
+                    if (step.cutoutFrameSprite != null)
+                    {
+                        _cutoutFrameImage.sprite = step.cutoutFrameSprite;
+                        _cutoutFrameImage.color = Color.white;
+                    }
+                    else
+                    {
+                        _cutoutFrameImage.sprite = _defaultCutoutFrameSprite;
+                        _cutoutFrameImage.color = _defaultCutoutFrameColor;
+                    }
+                }
             }
-            if (_cutoutMask != null && step.cutoutMaskSprite != null)
+            if (_cutoutMask != null)
             {
-                var cutoutImg = _cutoutMask.GetComponent<Image>();
-                if (cutoutImg != null) cutoutImg.sprite = step.cutoutMaskSprite;
+                _cutoutMask.gameObject.SetActive(true);
+                _cutoutMask.anchoredPosition = step.cutoutFramePosition;
+                _cutoutMask.sizeDelta = step.cutoutFrameSize + new Vector2(CUTOUT_PADDING * 2f, CUTOUT_PADDING * 2f);
+
+                if (step.cutoutMaskSprite != null)
+                {
+                    var cutoutImg = _cutoutMask.GetComponent<Image>();
+                    if (cutoutImg != null) cutoutImg.sprite = step.cutoutMaskSprite;
+                }
             }
             if (_instructionPanelRect != null)
             {
@@ -738,8 +783,110 @@ namespace BalloonFlow
             }
             if (_handIndicator != null)
             {
+                _handIndicator.gameObject.SetActive(step.useHandIndicator);
                 _handIndicator.anchoredPosition = step.handIndicatorPosition;
+                _handIndicator.localScale = _defaultHandScale;
+                _handIndicator.localEulerAngles = _defaultHandRotation;
+                if (step.handIndicatorSprite != null)
+                {
+                    if (_handImage == null)
+                    {
+                        _handImage = _handIndicator.GetComponent<Image>();
+                        if (_handImage == null)
+                        {
+                            _handImage = _handIndicator.gameObject.AddComponent<Image>();
+                            _handImage.raycastTarget = false;
+                        }
+                    }
+                    if (_handImage != null)
+                        _handImage.sprite = step.handIndicatorSprite;
+                }
+                else if (_handImage != null)
+                {
+                    _handImage.sprite = _defaultHandSprite;
+                }
+
+                if (step.useHandIndicator)
+                    PlayHandTween(step);
             }
+        }
+
+        private void ResetStepVisualOverrideState()
+        {
+            StopHandTween();
+
+            if (_cutoutFrameImage != null)
+            {
+                _cutoutFrameImage.sprite = _defaultCutoutFrameSprite;
+                _cutoutFrameImage.color = _defaultCutoutFrameColor;
+            }
+
+            if (_handIndicator != null)
+            {
+                _handIndicator.localScale = _defaultHandScale;
+                _handIndicator.localEulerAngles = _defaultHandRotation;
+                _handIndicator.gameObject.SetActive(false);
+            }
+
+            if (_handImage != null)
+                _handImage.sprite = _defaultHandSprite;
+        }
+
+        private void PlayHandTween(TutorialStep step)
+        {
+            if (_handIndicator == null || step.handTweenType == TutorialHandTweenType.None)
+                return;
+
+            StopHandTween();
+
+            float duration = Mathf.Max(0.05f, step.handTweenDuration);
+            Vector2 basePosition = step.handIndicatorPosition;
+            Vector2 targetPosition = basePosition + step.handTweenMoveOffset;
+            Vector3 baseScale = _defaultHandScale;
+            Vector3 targetScale = baseScale * Mathf.Max(0.01f, step.handTweenScale);
+            Vector3 targetRotation = _defaultHandRotation + new Vector3(0f, 0f, step.handTweenRotation);
+
+            Sequence sequence = DOTween.Sequence();
+            sequence.SetUpdate(true);
+            bool hasTween = false;
+
+            if (step.handTweenType == TutorialHandTweenType.Move || step.handTweenType == TutorialHandTweenType.MoveAndPulse)
+            {
+                sequence.Join(_handIndicator.DOAnchorPos(targetPosition, duration).SetEase(Ease.InOutSine));
+                hasTween = true;
+            }
+
+            if (step.handTweenType == TutorialHandTweenType.Pulse || step.handTweenType == TutorialHandTweenType.MoveAndPulse)
+            {
+                sequence.Join(_handIndicator.DOScale(targetScale, duration).SetEase(Ease.InOutSine));
+                hasTween = true;
+            }
+
+            if (step.handTweenType == TutorialHandTweenType.Rotate || Mathf.Abs(step.handTweenRotation) > 0.001f)
+            {
+                sequence.Join(_handIndicator.DOLocalRotate(targetRotation, duration, RotateMode.Fast).SetEase(Ease.InOutSine));
+                hasTween = true;
+            }
+
+            if (!hasTween)
+            {
+                sequence.Kill();
+                return;
+            }
+
+            _handTween = sequence.SetLoops(-1, LoopType.Yoyo);
+        }
+
+        private void StopHandTween()
+        {
+            if (_handTween != null)
+            {
+                _handTween.Kill();
+                _handTween = null;
+            }
+
+            if (_handIndicator != null)
+                _handIndicator.DOKill();
         }
 
         private void HandleTutorialStarted(OnTutorialStarted evt)
@@ -771,7 +918,7 @@ namespace BalloonFlow
             }
 
             // [2026-05-12] step 별 visual layout override 적용 (Inspector / Data 에서 지정 시).
-            ApplyStepVisualOverride(currentStep);
+            ResetStepVisualOverrideState();
 
             // Show cutout based on target type
             if (!string.IsNullOrEmpty(highlightTarget))
@@ -818,6 +965,10 @@ namespace BalloonFlow
                 HideCutout();
                 HideArrow();
             }
+
+            // [2026-05-12] step 별 visual layout override 적용.
+            // 자동 target 배치가 끝난 뒤 적용해야 수동 Cutout/Indicator 위치가 덮이지 않는다.
+            ApplyStepVisualOverride(currentStep);
 
             // Show instruction
             ShowInstruction(evt.instruction);
@@ -922,6 +1073,7 @@ namespace BalloonFlow
 
         private void HideAllVisuals()
         {
+            ResetStepVisualOverrideState();
             HideCutout();
             HideArrow();
             HideInstruction();

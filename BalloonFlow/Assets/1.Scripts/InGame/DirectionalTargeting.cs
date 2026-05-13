@@ -44,6 +44,11 @@ namespace BalloonFlow
         // [Outline 2026-05-10] BalloonController 가 outline 적용 시 사용 — 공격 가능한 외곽 풍선 ID 집합.
         // BuildEdgeTargetCache 매 frame build 시 함께 채움. 외부 read-only 접근.
         private static readonly HashSet<int> _attackableContourIds = new HashSet<int>(64);
+        // [2026-05-13] 현재 4 contour map (left/right/top/bottom) 에 등장하는 color 집합.
+        // FindTarget 의 inner-stuck fallback 판단용 — dart color 가 이 set 에 없으면
+        // contour 어디에도 같은 색 후보 없음 → 영구 대기 방지로 inner scan 진입.
+        // BuildShellLineMaps 끝에서 4 map union 으로 갱신. 매 frame 1회 build, FindTarget 은 O(1) 조회.
+        private static readonly HashSet<int> _contourColors = new HashSet<int>(16);
         public static IReadOnlyCollection<int> GetAttackableContourIds()
         {
             BuildEdgeTargetCache();
@@ -78,9 +83,18 @@ namespace BalloonFlow
             _topContourByCol.Clear();
             _contourCandidates.Clear();
             _attackableContourIds.Clear(); // [Outline 2026-05-10]
+            _contourColors.Clear();        // [2026-05-13]
             ClearShellSnapshot();
             _edgeCacheFrame = -1;
         }
+
+        // [2026-05-13 Diag] 진단 로그는 실측 완료 후 제거. 필요 시 아래 주석을 풀어 재활성:
+        // public static int LastEdgesConsidered, LastRejectTargetable, LastRejectColor,
+        //                   LastRejectExclude, LastRejectFiringDist, LastRejectPerpDist,
+        //                   LastBestId, LastExcludedSameColorId;
+        // public static float LastBestScore, LastBestPerpDist, LastTolerance;
+        // public static ScanDirection LastScanDir; public static Vector2Int LastDartCell;
+        // public static string FormatLastDiag() => $"[FindTargetDiag] scan={LastScanDir} ...";
 
         public static int FindTarget(Vector3 dartPosition, Vector3 firingDirection, int color, HashSet<int> excludeIds = null)
         {
@@ -126,6 +140,13 @@ namespace BalloonFlow
                 }
             }
 
+            // [2026-05-13 rolled back] Inner-stuck color fallback — 관통 이슈로 비활성.
+            //   contour 에 dart color 가 없을 때 inner 풍선을 target 으로 하면 projectile 이
+            //   직선 DOMove 로 다른 색 contour 를 시각 관통. 게임 디자인/레벨 차원에서 해결.
+            //   재활성 옵션: D안 (projectile 아크/페이드) 추가 후 _contourColors 검사 + FindInnerFallback 호출 복원.
+            // if (bestId < 0 && !_contourColors.Contains(color))
+            //     bestId = FindInnerFallback(dartCell, scanDir, color, excludeIds);
+
             if (bestId >= 0)
             {
                 _recentLineUseFrame[GetRecentLineKey(scanDir, bestLine)] = Time.frameCount;
@@ -133,6 +154,34 @@ namespace BalloonFlow
 
             return bestId;
         }
+
+        // [2026-05-13 rolled back] FindInnerFallback — 관통 이슈로 비활성. 재활성 시 복원.
+        // private static int FindInnerFallback(Vector2Int dartCell, ScanDirection scanDir, int color, HashSet<int> excludeIds)
+        // {
+        //     int dx = 0, dy = 0;
+        //     switch (scanDir)
+        //     {
+        //         case ScanDirection.Right: dx = +1; break;
+        //         case ScanDirection.Left:  dx = -1; break;
+        //         case ScanDirection.Up:    dy = +1; break;
+        //         case ScanDirection.Down:  dy = -1; break;
+        //     }
+        //     for (int offset = -LINE_SEARCH_RADIUS; offset <= LINE_SEARCH_RADIUS; offset++)
+        //     {
+        //         if (!TryGetEdgeTarget(scanDir, dartCell, offset, out EdgeTarget contourEdge)) continue;
+        //         int x = contourEdge.cell.x + dx;
+        //         int y = contourEdge.cell.y + dy;
+        //         for (int step = 0; step < 64; step++)
+        //         {
+        //             if (!_occupiedCells.TryGetValue(new Vector2Int(x, y), out EdgeTarget e)) break;
+        //             if (e.targetable && e.color == color
+        //                 && (excludeIds == null || !excludeIds.Contains(e.balloonId)))
+        //                 return e.balloonId;
+        //             x += dx; y += dy;
+        //         }
+        //     }
+        //     return -1;
+        // }
 
         public static ScanDirection DetermineScanDirection(Vector3 movementDirection)
         {
@@ -159,6 +208,7 @@ namespace BalloonFlow
             _topContourByCol.Clear();
             _contourCandidates.Clear();
             _attackableContourIds.Clear(); // [Outline 2026-05-10]
+            _contourColors.Clear();        // [2026-05-13]
 
             if (GameManager.HasInstance)
                 _gridCellSize = GameManager.Instance.Board.cellSpacing;
@@ -322,10 +372,11 @@ namespace BalloonFlow
             // [Outline 2026-05-10 fix] _attackableContourIds = 4 contour map (left/right/top/bottom) 의 union.
             // 각 row/col 의 가장 외곽 1개 풍선 = dart 가 실제 fire 가능한 외곽 한 줄.
             // BalloonController.RefreshOutermostRendererState 가 이 set 으로 outline 적용.
-            foreach (var kvp in _leftContourByRow) _attackableContourIds.Add(kvp.Value.balloonId);
-            foreach (var kvp in _rightContourByRow) _attackableContourIds.Add(kvp.Value.balloonId);
-            foreach (var kvp in _bottomContourByCol) _attackableContourIds.Add(kvp.Value.balloonId);
-            foreach (var kvp in _topContourByCol) _attackableContourIds.Add(kvp.Value.balloonId);
+            // [2026-05-13] _contourColors 도 함께 채움 — FindTarget inner fallback 판단용.
+            foreach (var kvp in _leftContourByRow)   { _attackableContourIds.Add(kvp.Value.balloonId); _contourColors.Add(kvp.Value.color); }
+            foreach (var kvp in _rightContourByRow)  { _attackableContourIds.Add(kvp.Value.balloonId); _contourColors.Add(kvp.Value.color); }
+            foreach (var kvp in _bottomContourByCol) { _attackableContourIds.Add(kvp.Value.balloonId); _contourColors.Add(kvp.Value.color); }
+            foreach (var kvp in _topContourByCol)    { _attackableContourIds.Add(kvp.Value.balloonId); _contourColors.Add(kvp.Value.color); }
         }
 
         private static void ClearShellSnapshot()

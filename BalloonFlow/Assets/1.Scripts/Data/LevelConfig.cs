@@ -2,6 +2,15 @@ using UnityEngine;
 
 namespace BalloonFlow
 {
+    public enum TutorialHandTweenType
+    {
+        None,
+        Pulse,
+        Move,
+        Rotate,
+        MoveAndPulse
+    }
+
     /// <summary>
     /// 레벨 난이도 유형. BeatChart 포지션 규칙에 따라 결정.
     /// </summary>
@@ -128,12 +137,23 @@ namespace BalloonFlow
         // [2026-05-12] Visual layout override — level data 에서 step 별 layout 지정.
         // overrideVisualLayout = false 면 highlightTarget 기반 자동 layout 사용.
         public bool overrideVisualLayout;
+        public bool useCutoutFrame = true;
         public Vector2 cutoutFramePosition;
         public Vector2 cutoutFrameSize;
+        /// <summary>CutoutFrame Image sprite. null이면 prefab/default outline 유지.</summary>
+        public Sprite cutoutFrameSprite;
         public Vector2 instructionPanelPosition;
         public Vector2 instructionPanelSize;
         public Vector2 arrowIndicatorPosition;
+        public bool useHandIndicator;
         public Vector2 handIndicatorPosition;
+        /// <summary>HandIndicator Image sprite. null이면 prefab default 유지.</summary>
+        public Sprite handIndicatorSprite;
+        public TutorialHandTweenType handTweenType;
+        public Vector2 handTweenMoveOffset = new Vector2(0f, -30f);
+        public float handTweenScale = 1.12f;
+        public float handTweenRotation;
+        public float handTweenDuration = 0.55f;
         /// <summary>CutoutMask 의 Image sprite. null 이면 prefab default 유지.</summary>
         public Sprite cutoutMaskSprite;
     }

@@ -75,6 +75,9 @@ namespace BalloonFlow
         private Vector3[] _dartLocalPositions;
         /// <summary>원래 부모 저장 (Dart가 Box 자식일 수 있음)</summary>
         private Transform[] _dartOriginalParents;
+        /// <summary>[2026-05-13] 원래 로컬 스케일 저장 — LaunchNextDart 의 SetParent(null)
+        /// 에서 worldScale 흡수로 dart localScale 누적되는 버그 ResetDarts 에서 복원.</summary>
+        private Vector3[] _dartLocalScales;
 
         /// <summary>The unique identifier for this holder.</summary>
         public int HolderId => _holderId;
@@ -125,17 +128,19 @@ namespace BalloonFlow
                 }
             }
 
-            // Dart 원래 위치 + 부모 캐시 (최초 1회)
+            // Dart 원래 위치 + 부모 + 스케일 캐시 (최초 1회)
             if (_dartSlots != null && _dartLocalPositions == null)
             {
                 _dartLocalPositions = new Vector3[_dartSlots.Length];
                 _dartOriginalParents = new Transform[_dartSlots.Length];
+                _dartLocalScales = new Vector3[_dartSlots.Length];
                 for (int i = 0; i < _dartSlots.Length; i++)
                 {
                     if (_dartSlots[i] != null)
                     {
                         _dartLocalPositions[i] = _dartSlots[i].localPosition;
                         _dartOriginalParents[i] = _dartSlots[i].parent;
+                        _dartLocalScales[i] = _dartSlots[i].localScale;
                     }
                 }
             }
@@ -239,7 +244,7 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// 풀 반환 시: 모든 Dart를 다시 보관함에 붙이고, 원래 위치로 복원, 활성화.
+        /// 풀 반환 시: 모든 Dart를 다시 보관함에 붙이고, 원래 위치/스케일로 복원, 활성화.
         /// </summary>
         public void ResetDarts()
         {
@@ -251,14 +256,20 @@ namespace BalloonFlow
 
                 _dartSlots[i].DOKill();
 
-                // 원래 부모로 복원 (Box 자식이었으면 Box로)
+                // 원래 부모로 복원 (Box 자식이었으면 Box로). worldPositionStays=false 로 부모 스케일을 localScale 에 흡수시키지 않음.
+                // 이전: SetParent(originalParent) 기본 worldPositionStays=true → LaunchNextDart 의 SetParent(null) 과 합쳐
+                // dart.localScale 에 holder DOPunchScale 값이 점진 누적되어 게임 반복 시 다트가 점점 커짐.
                 Transform originalParent = (_dartOriginalParents != null && i < _dartOriginalParents.Length && _dartOriginalParents[i] != null)
                     ? _dartOriginalParents[i]
                     : transform;
-                _dartSlots[i].SetParent(originalParent);
+                _dartSlots[i].SetParent(originalParent, worldPositionStays: false);
 
                 if (_dartLocalPositions != null && i < _dartLocalPositions.Length)
                     _dartSlots[i].localPosition = _dartLocalPositions[i];
+
+                // [2026-05-13] localScale 복원 — Init() 시 캐시한 원본 스케일.
+                if (_dartLocalScales != null && i < _dartLocalScales.Length)
+                    _dartSlots[i].localScale = _dartLocalScales[i];
 
                 _dartSlots[i].gameObject.SetActive(true);
             }
