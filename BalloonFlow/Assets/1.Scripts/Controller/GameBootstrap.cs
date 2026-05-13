@@ -21,6 +21,8 @@ namespace BalloonFlow
         private bool _pendingResultIsWin;
         private bool _isTestMode;
 
+        private const string PREFS_KEY_UNLOCK_POPUP_SHOWN = "BalloonFlow_BoosterUnlockPopupShown_";
+
         void Start()
         {
             // Detect test mode from MapMaker
@@ -397,12 +399,17 @@ namespace BalloonFlow
                 _  => null
             };
             if (boosterType == null) return;
-            if (BoosterManager.Instance.IsBoosterUnlocked(boosterType)) return;
+
+            string shownKey = PREFS_KEY_UNLOCK_POPUP_SHOWN + boosterType;
+            if (PlayerPrefs.GetInt(shownKey, 0) == 1) return;
 
             var popup = UIManager.Instance.OpenUI<PopupBuyItem>("Popup/PopupBuyItem");
             if (popup == null) return;
             Sprite spr = popup.GetBoosterSprite(boosterType);
             popup.ShowUnlock("Unlock", spr, levelId);
+
+            PlayerPrefs.SetInt(shownKey, 1);
+            PlayerPrefs.Save();
         }
 
         #endregion
