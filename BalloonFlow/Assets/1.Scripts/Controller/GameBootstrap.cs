@@ -255,14 +255,17 @@ namespace BalloonFlow
             // UIHud
             _hud = UIManager.Instance.OpenUI<UIHud>("UI/UIHud");
 
+            // [2026-05-13] 로비→인게임 진입 시 UI 화면 밖에서 슬라이드 인 연출 —
+            // OpenUI 직후, 어떤 RectTransform 레이아웃/렌더 패스도 발생하기 전에 즉시 호출해야
+            // 초기 위치(HUD_Top -60 / BottomPanel 0)가 1프레임 노출되는 플릭커를 차단한다.
+            // (HUD_Top 160 / BottomPanel -300 으로 즉시 강제 세팅 후 tween 시작)
+            if (_hud != null) _hud.PlayIngameEnterAnimation();
+
             // HUDController 바인딩
             if (HUDController.HasInstance && _hud != null)
             {
                 HUDController.Instance.BindView(_hud);
             }
-
-            // [2026-05-13] 로비→인게임 진입 시 UI 화면 밖에서 슬라이드 인 연출
-            if (_hud != null) _hud.PlayIngameEnterAnimation();
 
             // PopupResult (로드 후 숨김)
             _result = UIManager.Instance.OpenUI<PopupResult>("Popup/PopupResult");
