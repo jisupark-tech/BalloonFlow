@@ -202,10 +202,8 @@ namespace BalloonFlow
         // [2026-05-13] 중첩 팝업 reference-count — 첫 open 에서만 Open 연출, 마지막 close 에서만 Close 연출.
         private int _popupOpenCount;
 
-        // [2026-05-13] HUD 시프트(HUD_Top y=160 / BottomPanel y=-300) sticky latch.
-        // 첫 popup open 또는 스테이지 종료 시점에 ON → 그 스테이지 내내 popup open/close 가 HUD 위치를 흔들지 않도록 차단.
-        // OFF 복귀 책임은 오직 PlayIngameEnterAnimation (다음 스테이지 진입) — popup close 경로에서는 절대 OFF 안 함.
-        private bool _hudShiftedThisStage;
+        // [2026-05-13 rework] PlayStageEndPanelShift 전용 sticky latch — 일반 popup open/close 경로에는 적용 안 됨. PlayIngameEnterAnimation 에서만 reset.
+        private bool _stageEndShiftLatch;
 
         public void HideBottomPanel()
         {
@@ -239,35 +237,37 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// UIBase 가 popup open 시 호출 — count++. 첫 popup 에서만 Open 연출 트리거 + latch 를 sticky ON.
-        /// latch sticky 의 의미: 첫 popup open 으로 HUD가 시프트(y=160/-300)되면 그 스테이지가 끝날 때까지 (PlayIngameEnterAnimation 까지) 위치 유지.
-        /// 후속 popup open/close, 또는 모든 popup 이 닫혀도 원위치 복귀 시키지 않는다 — UX 안정성 + close 연출 깜빡임 제거.
+        /// UIBase 가 popup open 시 호출 — count++. 첫 popup 에서만 Open 연출 트리거.
+        /// [2026-05-13 rework] 정책 반전: 일반 popup open/close 는 즉시 시프트/복귀 연출. _stageEndShiftLatch ON 일 때만 재트리거 차단.
         /// </summary>
         public void NotifyPopupOpened()
         {
             _popupOpenCount++;
-            if (_popupOpenCount == 1 && !_hudShiftedThisStage)
+            if (_popupOpenCount == 1 && !_stageEndShiftLatch)
             {
                 PlayPopupOpenAnimation();
-                _hudShiftedThisStage = true; // sticky — close 경로에서 OFF 안 함. PlayIngameEnterAnimation 만이 reset.
             }
         }
 
         /// <summary>
-        /// UIBase 가 popup close 시 호출 — count-- 만. HUD 원위치 복귀는 더 이상 여기서 트리거하지 않는다.
-        /// [2026-05-13] popup close 시 HUD 원위치 복귀 정책 폐기 — 스테이지 종료까지 시프트 위치 유지(sticky latch).
-        /// PlayIngameEnterAnimation 만이 위치 복귀 책임자. count 추적은 디버깅·일관성 목적으로 유지.
+        /// UIBase 가 popup close 시 호출 — count-- 및 마지막 popup 이 닫히면 HUD 즉시 복귀 연출.
+        /// [2026-05-13 rework] 정책 반전: popup close 시 즉시 HUD 복귀 연출(HUD_Top 160→-60, BottomPanel -300→0).
+        /// 단, _stageEndShiftLatch ON(스테이지 종료 결과 팝업 흐름)일 때는 복귀 안 함 — 곧 PlayIngameEnterAnimation 이 처리.
         /// </summary>
         public void NotifyPopupClosed()
         {
             _popupOpenCount = Mathf.Max(0, _popupOpenCount - 1);
+            if (_popupOpenCount == 0 && !_stageEndShiftLatch)
+            {
+                PlayPopupCloseAnimation();
+            }
         }
 
-        /// <summary>스테이지 종료(승/패) 시 popup 노출 직전 panel shift — open 연출 후 latch ON → popup open/close 재트리거 차단, 다음 스테이지 enter 애니에서 -300/160 → 원위치 복귀.</summary>
+        /// <summary>스테이지 종료(승/패) 시 popup 노출 직전 panel shift — open 연출 후 latch ON → 이후 popup close 가 복귀 연출 트리거하지 않도록 latch ON, 다음 스테이지 enter 애니에서 -300/160 → 원위치 복귀.</summary>
         public void PlayStageEndPanelShift()
         {
             PlayPopupOpenAnimation();
-            _hudShiftedThisStage = true;
+            _stageEndShiftLatch = true;
         }
 
         /// <summary>인게임 팝업 오픈 연출 — HUD_Top: -60→-100→0 sequence, BottomPanel: 0→-300. 동일 duration.</summary>
@@ -294,23 +294,22 @@ namespace BalloonFlow
             }
         }
 
-        // [2026-05-13] popup close 시 HUD 원위치 복귀 정책 폐기 — 스테이지 종료까지 시프트 위치 유지. PlayIngameEnterAnimation 만이 위치 복귀 책임자.
-        /// <summary>(Deprecated 호출 경로) 인게임 팝업 클로즈 시 원위치 복귀 연출. NotifyPopupClosed 에서 더 이상 호출하지 않으며, 메서드는 의도 추적/외부 직접 호출 가능성을 위해 보존.</summary>
+        /// <summary>인게임 팝업 close 시 HUD 복귀 연출 — NotifyPopupClosed 가 마지막 popup 닫힐 때 호출. HUD_Top: 현재→-60(REST), BottomPanel: 현재→0(REST). 사용자 스펙 절대값.</summary>
         public void PlayPopupCloseAnimation()
         {
             _popupOpenSeq?.Kill();
             _popupOpenSeq = DG.Tweening.DOTween.Sequence().SetUpdate(true);
-            if (_hudTopRoot != null && _hudTopOrigCached)
-                _popupOpenSeq.Join(_hudTopRoot.DOAnchorPosY(_hudTopOrigPos.y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
-            if (_bottomPanelRoot != null && _bottomPanelOrigCached)
-                _popupOpenSeq.Join(_bottomPanelRoot.DOAnchorPosY(_bottomPanelOrigPos.y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
+            if (_hudTopRoot != null)
+                _popupOpenSeq.Join(_hudTopRoot.DOAnchorPosY(HUD_TOP_INGAME_REST_Y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
+            if (_bottomPanelRoot != null)
+                _popupOpenSeq.Join(_bottomPanelRoot.DOAnchorPosY(BOTTOM_PANEL_INGAME_REST_Y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
         }
 
         /// <summary>로비→인게임 진입 시 등장 연출 — HUD_Top: 160→-60, BottomPanel: -300→0. 동일 duration. 화면 밖에서 슬라이드 인.</summary>
         public void PlayIngameEnterAnimation()
         {
             // [2026-05-13] 직전 스테이지 종료 latch / popup count 클린업 — 다음 스테이지 진입 직전에 초기화.
-            _hudShiftedThisStage = false;
+            _stageEndShiftLatch = false;
             _popupOpenCount = 0;
 
             _popupOpenSeq?.Kill();
