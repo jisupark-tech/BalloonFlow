@@ -27,6 +27,7 @@ namespace BalloonFlow
         private static readonly int _animOpenHold = Animator.StringToHash("openHold");
         private static readonly int _animStateBoxOpenDefault = Animator.StringToHash("BoxOpenDefault");
         private static readonly int _animStateBoxOpenIdle = Animator.StringToHash("BoxOpenIdle");
+        private static readonly int _animStateBoxClick = Animator.StringToHash("BoxClick");
 
         [Header("[Dart Visuals — Inspector에서 할당]")]
         [SerializeField] private Transform[] _dartSlots;
@@ -545,11 +546,35 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>클릭 시 대기 박스 애니메이션 — Click 트리거.</summary>
+        /// <summary>클릭 시 대기 박스 애니메이션 — BoxClick state를 직접 Play. Animator가 disabled(비-앞줄)여도 1회 재생 후 복귀.</summary>
         public void TriggerClick()
         {
-            if (_animator != null)
-                _animator.SetTrigger(_animClick);
+            if (_animator == null) return;
+
+            bool wasEnabled = _animator.enabled;
+            if (!wasEnabled) _animator.enabled = true;
+
+            _animator.Play(_animStateBoxClick, 0, 0f);
+            _animator.Update(0f);
+
+            if (!wasEnabled)
+            {
+                if (_boxClickResetRoutine != null) StopCoroutine(_boxClickResetRoutine);
+                if (isActiveAndEnabled)
+                    _boxClickResetRoutine = StartCoroutine(RestoreAnimatorAfterBoxClick());
+            }
+        }
+
+        private Coroutine _boxClickResetRoutine;
+
+        private System.Collections.IEnumerator RestoreAnimatorAfterBoxClick()
+        {
+            // Play 후 Update(0f) 했으므로 state length는 이미 BoxClick 기준.
+            float length = _animator != null ? _animator.GetCurrentAnimatorStateInfo(0).length : 0.8f;
+            if (length <= 0f) length = 0.8f;
+            yield return new WaitForSeconds(length);
+            if (_animator != null) _animator.enabled = false;
+            _boxClickResetRoutine = null;
         }
 
         /// <summary>배포 시작 — Deploy=true.</summary>
