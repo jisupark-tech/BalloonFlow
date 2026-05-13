@@ -28,6 +28,7 @@ namespace BalloonFlow
         private static readonly int _animStateBoxOpenDefault = Animator.StringToHash("BoxOpenDefault");
         private static readonly int _animStateBoxOpenIdle = Animator.StringToHash("BoxOpenIdle");
         private static readonly int _animStateBoxClick = Animator.StringToHash("BoxClick");
+        private static readonly int _animStateBoxDefault = Animator.StringToHash("BoxDefault");
 
         [Header("[Dart Visuals — Inspector에서 할당]")]
         [SerializeField] private Transform[] _dartSlots;
@@ -557,13 +558,20 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>클릭 시 대기 박스 애니메이션 — BoxClick state를 직접 Play. Animator가 disabled(비-앞줄)여도 1회 재생 후 복귀.</summary>
+        /// <summary>현재 state 가 BoxDefault 일 때만 BoxClick state 를 Play.</summary>
         public void TriggerClick()
         {
             if (_animator == null) return;
 
             bool wasEnabled = _animator.enabled;
             if (!wasEnabled) _animator.enabled = true;
+            _animator.Update(0f);
+
+            if (_animator.GetCurrentAnimatorStateInfo(0).shortNameHash != _animStateBoxDefault)
+            {
+                if (!wasEnabled) _animator.enabled = false;
+                return;
+            }
 
             _animator.Play(_animStateBoxClick, 0, 0f);
             _animator.Update(0f);
