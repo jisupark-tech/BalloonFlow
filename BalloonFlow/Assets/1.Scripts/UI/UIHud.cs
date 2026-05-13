@@ -285,7 +285,7 @@ namespace BalloonFlow
                 _popupOpenSeq.Join(_bottomPanelRoot.DOAnchorPosY(_bottomPanelOrigPos.y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
         }
 
-        /// <summary>로비→인게임 진입 시 등장 연출 — HUD_Top: 160→-100→-60 sequence, BottomPanel: -300→0. 동일 duration. 화면 밖에서 슬라이드 인.</summary>
+        /// <summary>로비→인게임 진입 시 등장 연출 — HUD_Top: 160→-60, BottomPanel: -300→0. 동일 duration. 화면 밖에서 슬라이드 인.</summary>
         public void PlayIngameEnterAnimation()
         {
             // [2026-05-13] 직전 스테이지 종료 latch / popup count 클린업 — 다음 스테이지 진입 직전에 초기화.
@@ -300,10 +300,8 @@ namespace BalloonFlow
                 if (!_hudTopOrigCached) { _hudTopOrigPos = _hudTopRoot.anchoredPosition; _hudTopOrigCached = true; }
                 // 시작 위치 강제 세팅: 160 (화면 밖)
                 _hudTopRoot.anchoredPosition = new Vector2(_hudTopOrigPos.x, HUD_TOP_OPEN_END); // 160
-                float half = POPUP_OPEN_TWEEN_DUR * 0.5f;
-                // 160 → -100 → -60 (절반 duration씩 2단계)
-                _popupOpenSeq.Join(_hudTopRoot.DOAnchorPosY(HUD_TOP_OPEN_MID, half).SetEase(Ease.OutCubic));
-                _popupOpenSeq.Insert(half, _hudTopRoot.DOAnchorPosY(HUD_TOP_OPEN_START, half).SetEase(Ease.OutCubic));
+                // 160 → -60 (단일 tween)
+                _popupOpenSeq.Join(_hudTopRoot.DOAnchorPosY(HUD_TOP_OPEN_START, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
             }
             else Debug.LogWarning("[UIHud] PlayIngameEnterAnimation: _hudTopRoot 미할당.");
 
@@ -314,6 +312,21 @@ namespace BalloonFlow
                 _bottomPanelRoot.anchoredPosition = new Vector2(_bottomPanelOrigPos.x, BOTTOM_PANEL_POPUP_OPEN_Y); // -300
                 // -300 → 0 (원위치)
                 _popupOpenSeq.Join(_bottomPanelRoot.DOAnchorPosY(_bottomPanelOrigPos.y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
+            }
+        }
+
+        /// <summary>로비→인게임 진입 시 시작 위치만 강제 세팅 (tween 없이 즉시) — origPos 캐시도 같이. UI 노출 1프레임 플릭커 차단용. tween 시작은 LevelManager.IsLoading/UIManager.IsFading 대기 후 PlayIngameEnterAnimation()이 처리.</summary>
+        public void PrimeIngameEnterStartPos()
+        {
+            if (_hudTopRoot != null)
+            {
+                if (!_hudTopOrigCached) { _hudTopOrigPos = _hudTopRoot.anchoredPosition; _hudTopOrigCached = true; }
+                _hudTopRoot.anchoredPosition = new Vector2(_hudTopOrigPos.x, HUD_TOP_OPEN_END); // 160
+            }
+            if (_bottomPanelRoot != null)
+            {
+                if (!_bottomPanelOrigCached) { _bottomPanelOrigPos = _bottomPanelRoot.anchoredPosition; _bottomPanelOrigCached = true; }
+                _bottomPanelRoot.anchoredPosition = new Vector2(_bottomPanelOrigPos.x, BOTTOM_PANEL_POPUP_OPEN_Y); // -300
             }
         }
 
