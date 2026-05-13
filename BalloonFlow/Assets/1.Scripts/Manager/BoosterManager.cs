@@ -237,20 +237,25 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Returns true if the booster is unlocked based on player's highest completed level.
+        /// Returns true if the booster is unlocked based on player's reached level (entry to the unlock level counts).
         /// Design: Select Tool Lv.9, Shuffle Lv.12, Color Remove Lv.15.
         /// </summary>
         public bool IsBoosterUnlocked(string boosterType)
         {
             if (!_boosterDefs.TryGetValue(boosterType, out var def)) return false;
 
-            int highestLevel = 0;
+            int reachedLevel = 0;
             if (LevelManager.HasInstance)
             {
-                highestLevel = LevelManager.Instance.GetHighestCompletedLevel();
+                // '도달(reached)한 가장 높은 레벨' = 다음 플레이할 레벨(highestCompleted+1)과
+                // 현재 진입 중인 레벨(currentLevelId) 중 큰 값. 로비/상점(currentLevelId=0)에서도
+                // 다음 플레이할 레벨 기준으로 동일하게 동작하고, 레벨 N 진입 즉시 해금.
+                int highestCompleted = LevelManager.Instance.GetHighestCompletedLevel();
+                int currentLevelId   = LevelManager.Instance.GetCurrentLevelId();
+                reachedLevel = Mathf.Max(highestCompleted + 1, currentLevelId);
             }
 
-            return highestLevel >= def.unlockLevel;
+            return reachedLevel >= def.unlockLevel;
         }
 
         /// <summary>
