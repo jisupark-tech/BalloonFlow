@@ -393,7 +393,7 @@ namespace BalloonFlow
             var popup = UIManager.Instance.OpenUI<PopupBuyItem>("Popup/PopupBuyItem");
             if (popup == null) return;
             Sprite spr = popup.GetBoosterSprite(boosterType);
-            popup.ShowUnlock("Locked", spr, levelId);
+            popup.ShowUnlock("Unlock", spr, levelId);
         }
 
         #endregion

@@ -783,7 +783,7 @@ namespace BalloonFlow
             };
 
             Sprite spr = popup.GetBoosterSprite(boosterType);
-            popup.ShowUnlock("Locked", spr, unlockLevel);
+            popup.ShowUnlock("Unlock", spr, unlockLevel);
         }
 
         private void OnColorPicked(int color)
