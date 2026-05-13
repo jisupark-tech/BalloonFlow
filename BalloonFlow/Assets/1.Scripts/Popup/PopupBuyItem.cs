@@ -91,6 +91,9 @@ namespace BalloonFlow
             if (_txtBtnBuyOutline != null) _txtBtnBuyOutline.SetActive(true);
             if (_txtSingleOutline != null) _txtSingleOutline.SetActive(false);
 
+            if (_txtItemAmount != null) _txtItemAmount.gameObject.SetActive(true);
+            if (_txtItemAmountOutline != null) _txtItemAmountOutline.gameObject.SetActive(true);
+
             SetItemDisplay(itemSprite, amount, goldCost);
             OpenUI();
         }
@@ -106,12 +109,15 @@ namespace BalloonFlow
             {
                 _frame.SetTitle(title);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
-                _frame.SetSingleButtonText($"Unlock at Lv.{unlockLevel}");
+                _frame.SetSingleButtonText("Claim");
                 _frame.ShowExitButton(true);
             }
 
             if (_txtBtnBuyOutline != null) _txtBtnBuyOutline.SetActive(false);
             if (_txtSingleOutline != null) _txtSingleOutline.SetActive(true);
+
+            if (_txtItemAmount != null) _txtItemAmount.gameObject.SetActive(false);
+            if (_txtItemAmountOutline != null) _txtItemAmountOutline.gameObject.SetActive(false);
 
             if (_imgItem != null && itemSprite != null) _imgItem.sprite = itemSprite;
             OpenUI();
