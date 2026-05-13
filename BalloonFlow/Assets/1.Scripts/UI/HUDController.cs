@@ -88,6 +88,8 @@ namespace BalloonFlow
                     _popupQuit.HomeButton.onClick.RemoveListener(OnQuitHomeClicked);
                 if (_popupQuit.NextButton != null)
                     _popupQuit.NextButton.onClick.RemoveListener(OnQuitNextClicked);
+                if (_popupQuit.ExitDuplicateButton != null)
+                    _popupQuit.ExitDuplicateButton.onClick.RemoveListener(OnQuitNextClicked);
             }
         }
 
@@ -154,6 +156,8 @@ namespace BalloonFlow
                     _popupQuit.HomeButton.onClick.AddListener(OnQuitHomeClicked);
                 if (_popupQuit.NextButton != null)
                     _popupQuit.NextButton.onClick.AddListener(OnQuitNextClicked);
+                if (_popupQuit.ExitDuplicateButton != null)
+                    _popupQuit.ExitDuplicateButton.onClick.AddListener(OnQuitNextClicked);
             }
         }
 
