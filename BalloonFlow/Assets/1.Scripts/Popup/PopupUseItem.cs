@@ -130,7 +130,7 @@ namespace BalloonFlow
             // UIHud BottomPanel 비킴 — cutout/dim 대신 패널 자체 화면 밖
             if (_uiHudCached == null || !_uiHudCached)  // Unity fake-null 도 검출
                 _uiHudCached = FindAnyObjectByType<UIHud>(FindObjectsInactive.Include);
-            if (_uiHudCached != null) _uiHudCached.HideBottomPanel();
+            if (_uiHudCached != null) _uiHudCached.PlayPopupOpenAnimation();
 
             // [2026-05-12] BottomExit 버튼 -200 → 0 tween (위로 등장)
             AnimateBottomExitIn();
@@ -177,7 +177,7 @@ namespace BalloonFlow
             }
 
             // UIHud BottomPanel 복귀
-            if (_uiHudCached != null && _uiHudCached) _uiHudCached.ShowBottomPanel();
+            if (_uiHudCached != null && _uiHudCached) _uiHudCached.PlayPopupCloseAnimation();
         }
 
         private Sprite _whiteSprite;
