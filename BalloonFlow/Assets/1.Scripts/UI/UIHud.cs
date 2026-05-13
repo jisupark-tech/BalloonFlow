@@ -17,6 +17,9 @@ namespace BalloonFlow
         private static readonly Color LOCK_HARD      = new Color(1f, 1f, 1f); // #FFFFFF
         private static readonly Color LOCK_SUPERHARD = new Color(1f, 1f, 1f); // #FFFFFF
 
+        private const string ANIM_SPEED_X1 = "SpeedBtnX1";
+        private const string ANIM_SPEED_X2 = "SpeedBtnX2";
+
         #endregion
 
         [Header("[Top — 레벨/골드]")]
@@ -41,6 +44,12 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprSpeedSuperHard;
         [SerializeField] private TMP_Text _txtSpeed;
         [SerializeField] private TMP_Text _txtSpeedOutline;
+        [SerializeField] private Animator _animatorSpeedBtn;
+
+        [Header("[TxtSpeedOutline — 난이도별 Material Preset]")]
+        [SerializeField] private Material _matSpeedOutlineNormal;
+        [SerializeField] private Material _matSpeedOutlineHard;
+        [SerializeField] private Material _matSpeedOutlineSuperHard;
 
         [Header("[Bottom Panel — 부스터 아이템]")]
         [Tooltip("아이템 사용 popup 열릴 때 화면 밖 -270 으로 tween — Inspector 에서 BottomPanel root RectTransform 할당")]
@@ -305,6 +314,15 @@ namespace BalloonFlow
             if (_imgSpeedColor != null && speedSpr != null)
                 _imgSpeedColor.sprite = speedSpr;
 
+            // Speed 텍스트 아웃라인 머티리얼
+            Material speedOutlineMat = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _matSpeedOutlineHard,
+                DifficultyPurpose.SuperHard => _matSpeedOutlineSuperHard,
+                _                           => _matSpeedOutlineNormal
+            };
+            if (speedOutlineMat != null && _txtSpeedOutline != null) _txtSpeedOutline.fontMaterial = speedOutlineMat;
+
             // 배경 색상 (frameBottom)
             Sprite bgSpr = difficulty switch
             {
@@ -530,6 +548,9 @@ namespace BalloonFlow
             string speedTxt = on ? "X2" : "X1";
             if (_txtSpeed != null) _txtSpeed.text = speedTxt;
             if (_txtSpeedOutline != null) _txtSpeedOutline.text = speedTxt;
+
+            if (_animatorSpeedBtn != null)
+                _animatorSpeedBtn.Play(on ? ANIM_SPEED_X2 : ANIM_SPEED_X1, 0, 0f);
         }
 
         #endregion
