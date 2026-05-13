@@ -117,3 +117,23 @@ projecthub-mcp/server/.env
 projecthub-mcp/server/mcp.log
 projecthub-mcp/server/mcp.err
 projecthub-mcp/server/run_mcp.cmd
+
+# ─── Unity Editor per-machine garbage (do not commit) ──────────────────────
+# JVM crash logs from Unity Editor
+BalloonFlow/hs_err_pid*.log
+
+# Unity AI Assistant package data (per-machine cache, not for repo)
+BalloonFlow/ProjectSettings/Packages/com.unity.ai.assistant/
+
+# Unity duplicate-on-conflict artifacts (e.g., "Foo 1.asset")
+# Created when Unity resolves merge conflicts on .asset files by renaming
+BalloonFlow/Assets/**/* 1.asset
+BalloonFlow/Assets/**/* 1.asset.meta
+
+# Disabled file backups (per-machine toggle; e.g., settingsTemplate.gradle.DISABLED)
+BalloonFlow/Assets/Plugins/Android/*.DISABLED
+BalloonFlow/Assets/Plugins/Android/*.DISABLED.meta
+
+# Local manual-backup files (from rename to avoid pull conflicts)
+*.local-backup
+*.local-backup.meta

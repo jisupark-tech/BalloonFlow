@@ -40,7 +40,7 @@ fi
 
 # ─── 3) SDK 파일 — jisu 전용 ───
 # Firebase, EDM4U, AppLovin MAX, AdMob, AppsFlyer, Facebook 등 외부 SDK 통합 영역
-SDK_FILES=$(echo "$STAGED" | grep -E "^BalloonFlow/(Assets/(Firebase|ExternalDependencyManager|GeneratedLocalRepo|Plugins|MaxSdk|AppLovin|GoogleMobileAds|AppsFlyer|Facebook|google-services|StreamingAssets/google-services)|ProjectSettings/(AndroidResolverDependencies|GvhProjectSettings))")
+SDK_FILES=$(echo "$STAGED" | grep -E "^BalloonFlow/Assets/(Firebase|ExternalDependencyManager|GeneratedLocalRepo|Plugins|MaxSdk|AppLovin|GoogleMobileAds|AppsFlyer|Facebook|google-services|StreamingAssets/google-services)")
 if [ -n "$SDK_FILES" ]; then
     if [ "$AUTHOR_EMAIL" != "jisu.park@gameberry.co.kr" ]; then
         echo ""
@@ -58,6 +58,62 @@ if [ -n "$SDK_FILES" ]; then
         echo ""
         exit 1
     fi
+fi
+
+# ─── 4) ProjectSettings — jisu 전용 ───
+# Unity ProjectSettings/ 전체 (Player, Graphics, Quality, Input, Audio 등)
+# EDM4U 산출물(AndroidResolverDependencies, GvhProjectSettings) 포함
+PROJSET_FILES=$(echo "$STAGED" | grep -E "^BalloonFlow/ProjectSettings/")
+if [ -n "$PROJSET_FILES" ]; then
+    if [ "$AUTHOR_EMAIL" != "jisu.park@gameberry.co.kr" ]; then
+        echo ""
+        echo "============================================"
+        echo "  BLOCKED: ProjectSettings 커밋 권한이 없습니다."
+        echo "  허용된 사용자: jisu (jisu.park@gameberry.co.kr)"
+        echo ""
+        echo "  변경 감지된 파일:"
+        echo "$PROJSET_FILES" | sed 's/^/    /'
+        echo "============================================"
+        echo ""
+        exit 1
+    fi
+fi
+
+# ─── 6) Hook 자체 — jisu 전용 (방화벽 우회 방지) ───
+HOOK_FILES=$(echo "$STAGED" | grep -E "^\.githooks/")
+if [ -n "$HOOK_FILES" ]; then
+    if [ "$AUTHOR_EMAIL" != "jisu.park@gameberry.co.kr" ]; then
+        echo ""
+        echo "============================================"
+        echo "  BLOCKED: pre-commit hook 수정 권한이 없습니다."
+        echo "  허용된 사용자: jisu (jisu.park@gameberry.co.kr)"
+        echo ""
+        echo "  변경 감지된 파일:"
+        echo "$HOOK_FILES" | sed 's/^/    /'
+        echo "============================================"
+        echo ""
+        exit 1
+    fi
+fi
+
+# ─── 5) Library — 자동생성 디렉토리 (안전망: .gitignore 우회 방지) ───
+# .gitignore 로 1차 차단되지만 `git add -f` 우회 시 hook 에서 무조건 reject
+LIBRARY_FILES=$(echo "$STAGED" | grep -E "^BalloonFlow/Library/")
+if [ -n "$LIBRARY_FILES" ]; then
+    echo ""
+    echo "============================================"
+    echo "  BLOCKED: Library/ 는 Unity 자동생성 디렉토리입니다."
+    echo "  .gitignore 우회 commit 시도가 감지되었습니다 (누구도 커밋 금지)."
+    echo ""
+    echo "  변경 감지된 파일 (앞 10개):"
+    echo "$LIBRARY_FILES" | head -10 | sed 's/^/    /'
+    TOTAL=$(echo "$LIBRARY_FILES" | wc -l)
+    if [ "$TOTAL" -gt 10 ]; then
+        echo "    ... (총 $TOTAL 개)"
+    fi
+    echo "============================================"
+    echo ""
+    exit 1
 fi
 
 exit 0
