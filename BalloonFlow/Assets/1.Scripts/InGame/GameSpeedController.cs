@@ -49,6 +49,13 @@ namespace BalloonFlow
 
         #region Lifecycle
 
+        private void OnEnable()
+        {
+            // 스테이지 in-place 전환(LoadLevel) 시 RailManager.ResetAll()이 UserSpeedMultiplier=1f 로 되돌리므로,
+            // 살아있는 _toggleOn latch 를 새 RailManager 에 재푸시해야 X2 가 끊기지 않는다.
+            EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
+        }
+
         private void Update()
         {
             bool touching = IsTouching();
@@ -77,12 +84,20 @@ namespace BalloonFlow
 
         private void OnDisable()
         {
+            EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
+
             // 씬 전환 시 가속 잔재 모두 리셋 — 사용자 요구: 로비로 나오면 x2 토글도 원복.
             _holdActive = false;
             _touchStartTime = -1f;
             _toggleOn = false;
             if (RailManager.HasInstance)
                 RailManager.Instance.UserSpeedMultiplier = 1f;
+        }
+
+        private void HandleLevelLoaded(OnLevelLoaded _)
+        {
+            // 새 RailManager 인스턴스 / ResetAll() 직후 현재 latch 를 재푸시.
+            ApplyMultiplier();
         }
 
         #endregion

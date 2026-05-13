@@ -361,6 +361,23 @@ namespace BalloonFlow
 
         #endregion
 
+        private void OnEnable()
+        {
+            // 스테이지 in-place 전환 시 GameSpeedController._toggleOn latch 와 HUD 비주얼/텍스트가 어긋날 수 있어,
+            // OnLevelLoaded 발화에 맞춰 X1/X2 비주얼을 재동기화한다.
+            EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
+        }
+
+        private void OnDisable()
+        {
+            EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
+        }
+
+        private void HandleLevelLoaded(OnLevelLoaded _)
+        {
+            RefreshSpeedToggleVisual();
+        }
+
         private void Start()
         {
             WireButtons();
