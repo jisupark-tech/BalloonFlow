@@ -226,12 +226,14 @@ namespace BalloonFlow
         {
             EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompleted);
             EventBus.Subscribe<OnLevelFailed>(HandleLevelFailed);
+            EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
         }
 
         void OnDisable()
         {
             EventBus.Unsubscribe<OnLevelCompleted>(HandleLevelCompleted);
             EventBus.Unsubscribe<OnLevelFailed>(HandleLevelFailed);
+            EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
 
             if (_result != null)
             {
@@ -415,6 +417,13 @@ namespace BalloonFlow
         #endregion
 
         #region 게임 결과 처리
+
+        // WHY: 모든 스테이지 진입(첫 진입/Next/Retry/Continue)에서 HUD_Top 160→-60, BottomPanel -300→0 슬라이드-인 연출 일관 트리거. PlayIngameEnterAnimation 내부에서 _stageEndLatched/_popupOpenCount 클린업 처리.
+        void HandleLevelLoaded(OnLevelLoaded _evt)
+        {
+            _pendingResultIsWin = false;
+            if (_hud != null) _hud.PlayIngameEnterAnimation();
+        }
 
         void HandleLevelCompleted(OnLevelCompleted _evt)
         {
