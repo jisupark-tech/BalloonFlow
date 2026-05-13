@@ -144,6 +144,8 @@ namespace BalloonFlow
         public Sprite cutoutFrameSprite;
         public Vector2 instructionPanelPosition;
         public Vector2 instructionPanelSize;
+        // [2026-05-13] Arrow 활성 토글 — 기본 true (backward compat).
+        public bool useArrowIndicator = true;
         public Vector2 arrowIndicatorPosition;
         public bool useHandIndicator;
         public Vector2 handIndicatorPosition;

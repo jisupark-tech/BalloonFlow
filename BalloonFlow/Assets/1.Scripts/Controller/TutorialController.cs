@@ -42,6 +42,8 @@ namespace BalloonFlow
         public Sprite cutoutFrameSprite;
         public Vector2 instructionPanelPosition;
         public Vector2 instructionPanelSize;
+        // [2026-05-13] Arrow 활성 토글 — 기본 true (backward compat). false 면 step 시작 시 비활성.
+        public bool useArrowIndicator = true;
         public Vector2 arrowIndicatorPosition;
         public bool useHandIndicator;
         public Vector2 handIndicatorPosition;
@@ -652,6 +654,7 @@ namespace BalloonFlow
                     cutoutFrameSprite = src.cutoutFrameSprite,
                     instructionPanelPosition = src.instructionPanelPosition,
                     instructionPanelSize = src.instructionPanelSize,
+                    useArrowIndicator = src.useArrowIndicator,
                     arrowIndicatorPosition = src.arrowIndicatorPosition,
                     useHandIndicator = src.useHandIndicator,
                     handIndicatorPosition = src.handIndicatorPosition,

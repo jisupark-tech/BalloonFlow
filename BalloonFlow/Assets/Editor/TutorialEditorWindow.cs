@@ -58,6 +58,8 @@ namespace BalloonFlow.Editor
             public Sprite cutoutFrameSprite;
             public Vector2 instructionPanelPosition = new Vector2(0f, 40f);
             public Vector2 instructionPanelSize = new Vector2(-60f, 200f);
+            // [2026-05-13] Arrow on/off toggle — 기본 true.
+            public bool useArrowIndicator = true;
             public Vector2 arrowIndicatorPosition = Vector2.zero;
             public bool useHandIndicator;
             public Vector2 handIndicatorPosition = Vector2.zero;
@@ -101,6 +103,14 @@ namespace BalloonFlow.Editor
                 LoadFromTutorialController();
             if (GUILayout.Button("Save to Code", EditorStyles.toolbarButton, GUILayout.Width(100)))
                 SaveToTutorialController();
+            // [2026-05-13] 저장하기 — 에디터 상태를 JSON 파일로 영속화 (재오픈 시 LoadFromFile 로 복원).
+            GUILayout.Space(8);
+            GUI.backgroundColor = new Color(0.55f, 0.85f, 0.55f);
+            if (GUILayout.Button("💾 저장하기", EditorStyles.toolbarButton, GUILayout.Width(100)))
+                SaveToFile();
+            GUI.backgroundColor = Color.white;
+            if (GUILayout.Button("📂 불러오기", EditorStyles.toolbarButton, GUILayout.Width(100)))
+                LoadFromFile();
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("+ New Tutorial", EditorStyles.toolbarButton, GUILayout.Width(110)))
                 AddNewTutorial();
@@ -270,7 +280,12 @@ namespace BalloonFlow.Editor
                     step.instructionPanelSize = EditorGUILayout.Vector2Field("Size", step.instructionPanelSize);
 
                     EditorGUILayout.LabelField("Indicators", EditorStyles.miniBoldLabel);
-                    step.arrowIndicatorPosition = EditorGUILayout.Vector2Field("Arrow Position", step.arrowIndicatorPosition);
+                    // [2026-05-13] Arrow on/off toggle.
+                    step.useArrowIndicator = EditorGUILayout.Toggle("Use Arrow Indicator", step.useArrowIndicator);
+                    using (new EditorGUI.DisabledScope(!step.useArrowIndicator))
+                    {
+                        step.arrowIndicatorPosition = EditorGUILayout.Vector2Field("Arrow Position", step.arrowIndicatorPosition);
+                    }
                     step.useHandIndicator = EditorGUILayout.Toggle("Use Hand Indicator", step.useHandIndicator);
                     step.handIndicatorPosition = EditorGUILayout.Vector2Field("Hand Position", step.handIndicatorPosition);
                     step.handIndicatorSprite = (Sprite)EditorGUILayout.ObjectField("Hand Sprite", step.handIndicatorSprite, typeof(Sprite), false);
@@ -451,6 +466,7 @@ namespace BalloonFlow.Editor
                     sb.AppendLine($"            cutoutFrameSprite = {SpriteCode(step.cutoutFrameSprite)},");
                     sb.AppendLine($"            instructionPanelPosition = {Vector2Code(step.instructionPanelPosition)},");
                     sb.AppendLine($"            instructionPanelSize = {Vector2Code(step.instructionPanelSize)},");
+                    sb.AppendLine($"            useArrowIndicator = {step.useArrowIndicator.ToString().ToLowerInvariant()},");
                     sb.AppendLine($"            arrowIndicatorPosition = {Vector2Code(step.arrowIndicatorPosition)},");
                     sb.AppendLine($"            useHandIndicator = {step.useHandIndicator.ToString().ToLowerInvariant()},");
                     sb.AppendLine($"            handIndicatorPosition = {Vector2Code(step.handIndicatorPosition)},");
@@ -477,6 +493,81 @@ namespace BalloonFlow.Editor
                 $"Generated code for {_tutorials.Count} tutorials has been copied to your clipboard.\n\n" +
                 "Paste the code inside TutorialController.BuildTutorialConfigs() to apply changes.",
                 "OK");
+        }
+
+        // [2026-05-13] JSON file 으로 editor 상태 저장/복원.
+        //   Sprite asset reference 는 GUID + sub-asset 명으로 직렬화 (Unity asset 시스템 외부 JSON 직접 처리 불가).
+        private const string SAVE_FILE_PATH = "Assets/Editor/TutorialEditorState.json";
+
+        [System.Serializable]
+        private class SaveData
+        {
+            public List<EditableTutorial> tutorials = new List<EditableTutorial>();
+            // Sprite 직렬화 보조 — EditableStep 1개 당 cutoutFrame/hand/cutoutMask 3개의 sprite path.
+            // Index = tutorial * 1000 + step (단순 매핑 — tutorial 당 step 1000개 이하 가정).
+            public List<string> spriteRefs = new List<string>();
+        }
+
+        private void SaveToFile()
+        {
+            var data = new SaveData();
+            foreach (var t in _tutorials) data.tutorials.Add(t);
+            foreach (var t in _tutorials)
+                foreach (var s in t.steps)
+                {
+                    data.spriteRefs.Add(SpriteGuid(s.cutoutFrameSprite));
+                    data.spriteRefs.Add(SpriteGuid(s.handIndicatorSprite));
+                    data.spriteRefs.Add(SpriteGuid(s.cutoutMaskSprite));
+                }
+
+            string json = EditorJsonUtility.ToJson(data, prettyPrint: true);
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(SAVE_FILE_PATH));
+            System.IO.File.WriteAllText(SAVE_FILE_PATH, json);
+            AssetDatabase.Refresh();
+            Debug.Log($"[TutorialEditorWindow] Saved {_tutorials.Count} tutorials → {SAVE_FILE_PATH}");
+            EditorUtility.DisplayDialog("저장 완료", $"{_tutorials.Count}개 tutorial 을 {SAVE_FILE_PATH} 에 저장했습니다.", "OK");
+        }
+
+        private void LoadFromFile()
+        {
+            if (!System.IO.File.Exists(SAVE_FILE_PATH))
+            {
+                EditorUtility.DisplayDialog("불러오기 실패", $"{SAVE_FILE_PATH} 가 존재하지 않습니다.", "OK");
+                return;
+            }
+            string json = System.IO.File.ReadAllText(SAVE_FILE_PATH);
+            var data = new SaveData();
+            EditorJsonUtility.FromJsonOverwrite(json, data);
+            _tutorials = data.tutorials ?? new List<EditableTutorial>();
+
+            // Sprite GUID → asset 복원
+            int idx = 0;
+            foreach (var t in _tutorials)
+                foreach (var s in t.steps)
+                {
+                    if (idx + 2 < data.spriteRefs.Count)
+                    {
+                        s.cutoutFrameSprite   = LoadSpriteByGuid(data.spriteRefs[idx]);
+                        s.handIndicatorSprite = LoadSpriteByGuid(data.spriteRefs[idx + 1]);
+                        s.cutoutMaskSprite    = LoadSpriteByGuid(data.spriteRefs[idx + 2]);
+                    }
+                    idx += 3;
+                }
+
+            _selectedTutorial = _tutorials.Count > 0 ? 0 : -1;
+            Debug.Log($"[TutorialEditorWindow] Loaded {_tutorials.Count} tutorials ← {SAVE_FILE_PATH}");
+            Repaint();
+        }
+
+        private static string SpriteGuid(Sprite spr) => spr == null
+            ? string.Empty
+            : AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(spr));
+
+        private static Sprite LoadSpriteByGuid(string guid)
+        {
+            if (string.IsNullOrEmpty(guid)) return null;
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            return string.IsNullOrEmpty(path) ? null : AssetDatabase.LoadAssetAtPath<Sprite>(path);
         }
 
         private static string EscapeString(string s)

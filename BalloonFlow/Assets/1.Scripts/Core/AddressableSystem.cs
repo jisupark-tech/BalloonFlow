@@ -186,6 +186,19 @@ namespace BalloonFlow
 
             try
             {
+                // [2026-05-13] LoadAssetAsync 는 catalog 미등록 key 시 InvalidKeyException 동기 throw —
+                //   외부에서 catch 못 하면 loading flow 전체 중단. 사전 LoadResourceLocations 로 존재 확인.
+                var locHandle = Addressables.LoadResourceLocationsAsync(key, typeof(T));
+                await locHandle.Task;
+                bool exists = locHandle.Status == AsyncOperationStatus.Succeeded
+                              && locHandle.Result != null && locHandle.Result.Count > 0;
+                Addressables.Release(locHandle);
+                if (!exists)
+                {
+                    Debug.LogWarning($"{LOG_TAG} key='{key}' Addressables catalog 미등록 — null 반환 (fallback 경로 활용)");
+                    return null;
+                }
+
                 var handle = Addressables.LoadAssetAsync<T>(key);
                 await handle.Task;
 

@@ -267,7 +267,8 @@ namespace BalloonFlow
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
             PlayPopFeedback(evt.position, evt.color, false);
-            HapticLight();
+            // [2026-05-13] 골드 연출 동일 햅틱 (180ms, amp=38) — 이전: HapticLight() (40ms, amp=200).
+            HapticDefault();
         }
 
         private void HandleComboIncremented(OnComboIncremented evt)
@@ -611,6 +612,13 @@ namespace BalloonFlow
         {
             if (!_hapticEnabled) return;
             VibrationManager.Heavy();
+        }
+
+        /// <summary>[2026-05-13] Default 진동 — 골드 흡수 연출과 동일 (180ms, amp=38). 풍선 pop 에 사용.</summary>
+        public void HapticDefault()
+        {
+            if (!_hapticEnabled) return;
+            VibrationManager.VibrateDefault();
         }
 
         /// <summary>임의 길이 진동 (ms).</summary>

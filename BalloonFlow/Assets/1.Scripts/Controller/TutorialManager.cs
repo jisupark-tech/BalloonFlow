@@ -51,6 +51,8 @@ namespace BalloonFlow
 
         // Arrow indicator
         private RectTransform _arrowIndicator;
+        // [2026-05-13] step.useArrowIndicator=false 시 ShowArrow 호출 무시. ApplyStepVisualOverride 가 설정.
+        private bool _arrowSuppressedByStep;
         // [2026-05-12] Hand indicator — step 별 override layout 지원
         private RectTransform _handIndicator;
         private Image _arrowImage;
@@ -373,6 +375,8 @@ namespace BalloonFlow
         public void ShowArrow(Vector2 canvasPosition, Vector2 direction)
         {
             if (_arrowIndicator == null) return;
+            // [2026-05-13] step.useArrowIndicator=false 면 ShowArrow 무시.
+            if (_arrowSuppressedByStep) return;
 
             _arrowIndicator.gameObject.SetActive(true);
             _arrowIndicator.anchoredPosition = canvasPosition;
@@ -779,8 +783,12 @@ namespace BalloonFlow
                 _instructionPanelRect.anchoredPosition = step.instructionPanelPosition;
                 _instructionPanelRect.sizeDelta = step.instructionPanelSize;
             }
+            // [2026-05-13] Arrow toggle — useArrowIndicator=false 시 비활성 + 후속 ShowArrow 호출도 차단.
+            _arrowSuppressedByStep = !step.useArrowIndicator;
             if (_arrowIndicator != null)
             {
+                if (!step.useArrowIndicator)
+                    _arrowIndicator.gameObject.SetActive(false);
                 _arrowIndicator.anchoredPosition = step.arrowIndicatorPosition;
             }
             if (_handIndicator != null)

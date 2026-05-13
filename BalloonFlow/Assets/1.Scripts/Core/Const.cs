@@ -131,6 +131,8 @@ namespace BalloonFlow
 
         // ── Atlas keys ──────────────────────────────────
         public const string ADDR_ATLAS_UI                                 = "atlas_ui";
+        // [2026-05-13] 인게임 Texture + Sprites (Holder/Box/Balloon 등) — GamePlay.spriteatlasv2 매핑.
+        public const string ADDR_ATLAS_GAMEPLAY                           = "atlas_gameplay";
 
         // ── Atlas sprite names (UI atlas) ───────────────
         public const string SPR_ARROW                                    = "arrow";
