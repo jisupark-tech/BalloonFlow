@@ -11,6 +11,9 @@ namespace BalloonFlow
     /// </summary>
     public class UIHud : UIBase
     {
+        // [2026-05-13] UIBase.OpenUI/CloseUI 중앙화 시 self-trigger 방지 — UIHud 자체는 popup 이 아니다.
+        protected override bool TriggersHudPopupAnimation => false;
+
         #region Constants — Lock Colors
 
         private static readonly Color LOCK_NORMAL    = new Color(1f, 1f, 1f); // #FFFFFF
@@ -189,6 +192,9 @@ namespace BalloonFlow
         private bool _hudTopOrigCached;
         private DG.Tweening.Sequence _popupOpenSeq;
 
+        // [2026-05-13] 중첩 팝업 reference-count — 첫 open 에서만 Open 연출, 마지막 close 에서만 Close 연출.
+        private int _popupOpenCount;
+
         public void HideBottomPanel()
         {
             if (_bottomPanelRoot == null)
@@ -218,6 +224,20 @@ namespace BalloonFlow
             _bottomPanelTween = _bottomPanelRoot.DOAnchorPosY(_bottomPanelOrigPos.y, BOTTOM_PANEL_TWEEN_DUR)
                 .SetEase(DG.Tweening.Ease.OutCubic)
                 .SetUpdate(true);
+        }
+
+        /// <summary>UIBase 가 popup open 시 호출 — count++. 첫 popup 에서만 Open 연출 트리거.</summary>
+        public void NotifyPopupOpened()
+        {
+            _popupOpenCount++;
+            if (_popupOpenCount == 1) PlayPopupOpenAnimation();
+        }
+
+        /// <summary>UIBase 가 popup close 시 호출 — count--. 마지막 popup 닫힐 때만 Close 연출.</summary>
+        public void NotifyPopupClosed()
+        {
+            _popupOpenCount = Mathf.Max(0, _popupOpenCount - 1);
+            if (_popupOpenCount == 0) PlayPopupCloseAnimation();
         }
 
         /// <summary>인게임 팝업 오픈 연출 — HUD_Top: -60→-100→0 sequence, BottomPanel: 0→-300. 동일 duration.</summary>

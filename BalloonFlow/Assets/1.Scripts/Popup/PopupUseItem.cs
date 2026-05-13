@@ -109,7 +109,6 @@ namespace BalloonFlow
         private bool _paused;
         private Camera _mainCameraCached;
         private float _savedFarClip;
-        private UIHud _uiHudCached;
         private const float USEITEM_FAR_CLIP = 1000f;
 
         private void OnEnable()
@@ -127,10 +126,8 @@ namespace BalloonFlow
                     _mainCameraCached.farClipPlane = USEITEM_FAR_CLIP;
             }
 
-            // UIHud BottomPanel 비킴 — cutout/dim 대신 패널 자체 화면 밖
-            if (_uiHudCached == null || !_uiHudCached)  // Unity fake-null 도 검출
-                _uiHudCached = FindAnyObjectByType<UIHud>(FindObjectsInactive.Include);
-            if (_uiHudCached != null) _uiHudCached.PlayPopupOpenAnimation();
+            // [2026-05-13] HUD popup-open 연출은 UIBase.OpenUI() 에서 NotifyPopupOpened 로 중앙 트리거.
+            // 직접 PlayPopupOpenAnimation() 을 호출하면 count 가 2 로 올라가 close 시 미일치 발생 → 제거.
 
             // [2026-05-12] BottomExit 버튼 -200 → 0 tween (위로 등장)
             AnimateBottomExitIn();
@@ -176,8 +173,7 @@ namespace BalloonFlow
                 _savedFarClip = 0f;
             }
 
-            // UIHud BottomPanel 복귀
-            if (_uiHudCached != null && _uiHudCached) _uiHudCached.PlayPopupCloseAnimation();
+            // [2026-05-13] HUD popup-close 연출도 UIBase.CloseUI() 에서 NotifyPopupClosed 로 중앙 트리거 → 직접 호출 제거.
         }
 
         private Sprite _whiteSprite;
