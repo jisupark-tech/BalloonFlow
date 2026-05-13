@@ -123,6 +123,9 @@ namespace BalloonFlow
         private float _stuckEvalTimer;
         private const float STUCK_EVAL_INTERVAL = 0.1f;
 
+        // [2026-05-13] Pause 중 fail eval 정지 + 재개 시 critical 상태 reset 위한 추적.
+        private bool _wasPausedLastFrame;
+
         private void Update()
         {
             var __sw = InGamePerfLogger.StartSection();
@@ -130,6 +133,21 @@ namespace BalloonFlow
             {
             if (_currentState != BoardState.Playing) return;
             if (_failConfirmed) return;
+
+            // [2026-05-13] UseItem/Setting popup 등 PauseManager.IsPaused 중 fail 평가 정지.
+            //   재개 시 _criticalTimer 누적되어 popup 닫자마자 fail 트리거되던 이슈 방지.
+            if (PauseManager.IsPaused)
+            {
+                _wasPausedLastFrame = true;
+                return;
+            }
+            if (_wasPausedLastFrame)
+            {
+                _wasPausedLastFrame = false;
+                _isCritical = false;
+                _criticalTimer = 0f;
+                _stuckEvalTimer = 0f;
+            }
 
             // Throttle — fail evaluation 매 frame 안 함.
             _stuckEvalTimer += Time.deltaTime;
@@ -145,18 +163,20 @@ namespace BalloonFlow
                 return;
             }
 
-            // [2026-05-12] 실패 조건 변경 (사용자 정의 B):
-            //  ① rail 위 dart 존재 (efc > 0) — rail 비어있으면 holder 발사 가능, fail 아님
+            // [2026-05-13] 실패 조건 — 임계치 (벨트 거의 가득) + 공격 불가 + 풍선 잔존.
+            //  ① 레일 거의 가득 (efc >= physCap - FAIL_BUFFER) — 1발만 남은 상태에서 매칭 없다고 끝나는 이슈 차단
             //  ② 외곽 풍선 중 rail dart 로 공격 가능한 게 없음 (HasOutermostMatch = false)
             //  ③ 풍선 잔존 (clear 아님)
-            // 셋 다 충족 → 5초 grace 후 fail. grace 동안 dart 발사 + 매칭 가능 시 recovery.
-            // 변경: 기존 railFull (efc >= physCap-1) → efc > 0. grace 1.5s → 5s.
-            // physCap / railFull 은 debug log 에서만 사용.
+            // 셋 다 충족 → grace 후 fail. grace 동안 dart 발사 + 매칭 가능 시 recovery.
+            // 이전 (2026-05-12): railFull 제거하고 efc > 0 으로 완화 → 1발만 있어도 trigger 되는 부작용.
+            //   사용자 피드백 후 임계치 복원. FAIL_BUFFER 로 1슬롯 정도 여유 (deploy point 차단 고려).
             int efc = RailManager.HasInstance ? RailManager.Instance.EffectiveOccupiedCount : 0;
             int physCap = RailManager.HasInstance ? RailManager.Instance.PhysicalCapacity : 0;
-            bool railFull = RailManager.HasInstance && efc >= physCap - 1;
+            const int FAIL_BUFFER = 1; // efc 가 physCap-1 도달 시 fail 평가 진입
+            bool railFull = RailManager.HasInstance && physCap > 0 && efc >= physCap - FAIL_BUFFER;
             bool hasMatch = HasOutermostMatchCached;
-            bool stuck = (efc > 0) && _remainingBalloons > 0 && !hasMatch;
+            // [2026-05-13] 이전: bool stuck = (efc > 0) && _remainingBalloons > 0 && !hasMatch;
+            bool stuck = railFull && _remainingBalloons > 0 && !hasMatch;
 
             // 진단용 주기적 로그 — rail이 많이 차 있는데 stuck 미충족 시 어떤 조건이
             // 막고 있는지 출력 (false negative 케이스 분석용).

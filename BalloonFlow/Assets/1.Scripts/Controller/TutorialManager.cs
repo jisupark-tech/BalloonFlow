@@ -166,10 +166,12 @@ namespace BalloonFlow
                 // _cutoutMask 에 CutoutMaskUI + Mask 부착 → 자식 DimOverlay 자동 생성 (hole "밖"만 dim 렌더, UseItem 패턴).
                 SetupCutoutMask();
 
+                // [2026-05-13] Unity SerializeField null 은 fake-null 이라 `?.` 가 GetComponent 호출까지 진행해 예외.
+                // 명시적 Unity null 검사 (`x != null` = overloaded ==) 로 변경.
                 _arrowIndicator = popup.ArrowIndicator;
-                _arrowImage = _arrowIndicator?.GetComponent<Image>();
+                _arrowImage = (_arrowIndicator != null) ? _arrowIndicator.GetComponent<Image>() : null;
                 _handIndicator = popup.HandIndicator;
-                _handImage = _handIndicator?.GetComponent<Image>();
+                _handImage = (_handIndicator != null) ? _handIndicator.GetComponent<Image>() : null;
                 if (_handIndicator != null)
                 {
                     _defaultHandScale = _handIndicator.localScale;

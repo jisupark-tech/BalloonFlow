@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  [2026-05-13] Wrapper androidlib for legacy raw assets.
+  Unity 새 빌드 시스템에서 Assets/Plugins/Android/assets/ 경로 raw resources deprecated 됨.
+  .androidlib 내부의 assets/ 는 정상 허용 → adiregistration.properties 이동 보존.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="com.balloonflow.legacyassets">
+    <uses-sdk android:minSdkVersion="23" />
+    <application />
+</manifest>
