@@ -188,6 +188,13 @@ namespace BalloonFlow
         private const float HUD_TOP_OPEN_END          = 160f;
         private const float BOTTOM_PANEL_POPUP_OPEN_Y = -300f;
         private const float POPUP_OPEN_TWEEN_DUR      = 0.5f; // HUD_Top 전체 duration = BottomPanel duration
+
+        // [2026-05-13] 인게임 enter 슬라이드-인 연출 — prefab 캐시(-300/-60)에 의존하지 않는 하드코딩 시작/끝값.
+        // 의미 분리: OPEN_END / POPUP_OPEN_Y 와 수치는 같아도 용도가 다르다 (popup vs ingame enter).
+        private const float HUD_TOP_INGAME_HIDDEN_Y      = 160f;  // 화면 밖 위쪽 시작 위치
+        private const float HUD_TOP_INGAME_REST_Y        = -60f;  // 인게임 정착 위치
+        private const float BOTTOM_PANEL_INGAME_HIDDEN_Y = -300f; // 화면 밖 아래쪽 시작 위치
+        private const float BOTTOM_PANEL_INGAME_REST_Y   = 0f;    // 인게임 정착 위치
         private Vector2 _hudTopOrigPos;
         private bool _hudTopOrigCached;
         private DG.Tweening.Sequence _popupOpenSeq;
@@ -295,38 +302,46 @@ namespace BalloonFlow
             _popupOpenSeq?.Kill();
             _popupOpenSeq = DG.Tweening.DOTween.Sequence().SetUpdate(true);
 
+            // [2026-05-13] prefab 캐시(_hudTopOrigPos / _bottomPanelOrigPos)에 의존하지 않고 하드코딩 상수로 시작/끝값 결정.
+            // 이전 버그: BottomPanel prefab이 anchoredPosition.y=-300 으로 저장되어 있어서 origPos.y(=-300)을 끝값으로 쓰면 -300→-300 no-op.
             if (_hudTopRoot != null)
             {
-                if (!_hudTopOrigCached) { _hudTopOrigPos = _hudTopRoot.anchoredPosition; _hudTopOrigCached = true; }
-                // 시작 위치 강제 세팅: 160 (화면 밖)
-                _hudTopRoot.anchoredPosition = new Vector2(_hudTopOrigPos.x, HUD_TOP_OPEN_END); // 160
-                // 160 → -60 (단일 tween)
-                _popupOpenSeq.Join(_hudTopRoot.DOAnchorPosY(HUD_TOP_OPEN_START, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
+                float startX = _hudTopRoot.anchoredPosition.x;
+                _hudTopOrigPos = new Vector2(startX, HUD_TOP_INGAME_REST_Y);
+                _hudTopOrigCached = true;
+                _hudTopRoot.anchoredPosition = new Vector2(startX, HUD_TOP_INGAME_HIDDEN_Y);
+                _popupOpenSeq.Join(_hudTopRoot.DOAnchorPosY(HUD_TOP_INGAME_REST_Y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
             }
             else Debug.LogWarning("[UIHud] PlayIngameEnterAnimation: _hudTopRoot 미할당.");
 
             if (_bottomPanelRoot != null)
             {
-                if (!_bottomPanelOrigCached) { _bottomPanelOrigPos = _bottomPanelRoot.anchoredPosition; _bottomPanelOrigCached = true; }
-                // 시작 위치 강제 세팅: -300 (화면 밖)
-                _bottomPanelRoot.anchoredPosition = new Vector2(_bottomPanelOrigPos.x, BOTTOM_PANEL_POPUP_OPEN_Y); // -300
-                // -300 → 0 (원위치)
-                _popupOpenSeq.Join(_bottomPanelRoot.DOAnchorPosY(_bottomPanelOrigPos.y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
+                float startX = _bottomPanelRoot.anchoredPosition.x;
+                _bottomPanelOrigPos = new Vector2(startX, BOTTOM_PANEL_INGAME_REST_Y);
+                _bottomPanelOrigCached = true;
+                _bottomPanelRoot.anchoredPosition = new Vector2(startX, BOTTOM_PANEL_INGAME_HIDDEN_Y);
+                _popupOpenSeq.Join(_bottomPanelRoot.DOAnchorPosY(BOTTOM_PANEL_INGAME_REST_Y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
             }
         }
 
         /// <summary>로비→인게임 진입 시 시작 위치만 강제 세팅 (tween 없이 즉시) — origPos 캐시도 같이. UI 노출 1프레임 플릭커 차단용. tween 시작은 LevelManager.IsLoading/UIManager.IsFading 대기 후 PlayIngameEnterAnimation()이 처리.</summary>
         public void PrimeIngameEnterStartPos()
         {
+            // [2026-05-13] origPos 캐시는 prefab anchoredPosition 이 아니라 REST_Y 로 명시 세팅.
+            // 이전 버그: prefab이 -300/-60 으로 저장되어 있어 origPos.y 가 의도된 정착 위치와 달라짐 → popup close 복귀 위치 오류.
             if (_hudTopRoot != null)
             {
-                if (!_hudTopOrigCached) { _hudTopOrigPos = _hudTopRoot.anchoredPosition; _hudTopOrigCached = true; }
-                _hudTopRoot.anchoredPosition = new Vector2(_hudTopOrigPos.x, HUD_TOP_OPEN_END); // 160
+                float startX = _hudTopRoot.anchoredPosition.x;
+                _hudTopOrigPos = new Vector2(startX, HUD_TOP_INGAME_REST_Y);
+                _hudTopOrigCached = true;
+                _hudTopRoot.anchoredPosition = new Vector2(startX, HUD_TOP_INGAME_HIDDEN_Y);
             }
             if (_bottomPanelRoot != null)
             {
-                if (!_bottomPanelOrigCached) { _bottomPanelOrigPos = _bottomPanelRoot.anchoredPosition; _bottomPanelOrigCached = true; }
-                _bottomPanelRoot.anchoredPosition = new Vector2(_bottomPanelOrigPos.x, BOTTOM_PANEL_POPUP_OPEN_Y); // -300
+                float startX = _bottomPanelRoot.anchoredPosition.x;
+                _bottomPanelOrigPos = new Vector2(startX, BOTTOM_PANEL_INGAME_REST_Y);
+                _bottomPanelOrigCached = true;
+                _bottomPanelRoot.anchoredPosition = new Vector2(startX, BOTTOM_PANEL_INGAME_HIDDEN_Y);
             }
         }
 
