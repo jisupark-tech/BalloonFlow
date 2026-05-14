@@ -273,6 +273,25 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>
+        /// Minimum same-holder spacing used for attack order. Keep rail capacity based on slot
+        /// spacing, but prevent one cluster's promoted head from being closer than one balloon cell.
+        /// </summary>
+        public float DartClusterAttackGap
+        {
+            get
+            {
+                float gap = DartPhysicalGap;
+                if (GameManager.HasInstance)
+                {
+                    float cellSpacing = GameManager.Instance.Board.cellSpacing;
+                    if (cellSpacing > 0.0001f)
+                        gap = Mathf.Max(gap, cellSpacing);
+                }
+                return gap;
+            }
+        }
+
         /// <summary>Current belt rotation offset in distance units.</summary>
         public float RotationOffset => _rotationOffset;
 
@@ -386,6 +405,10 @@ namespace BalloonFlow
             // V2UpdateFreezeOnDeployBlock();
 
             float physGap = DartPhysicalGap;
+            // ROLLBACK_DART_CELL_SPACING_CLUSTER_GAP:
+            // Same-holder darts need one balloon-cell spacing so a promoted head maps to the next
+            // scan line, while different holders can still pack on the rail's physical slot gap.
+            float clusterAttackGap = DartClusterAttackGap;
             _sortedDartIndices.Clear();
             for (int i = 0; i < dartCount; i++) _sortedDartIndices.Add(i);
             // [Optimization 2026-05-10] OnSingletonAwake 에서 1회 init 으로 이동. 매 frame null check 제거.
@@ -430,7 +453,7 @@ namespace BalloonFlow
 
                 // Ahead dart 까지 거리 + 같은 cluster 여부.
                 float closest = float.MaxValue;
-                bool sameCluster = false;
+                float closestRequiredGap = physGap;
                 if (dartCount > 1)
                 {
                     int aheadPos = p - 1;
@@ -443,7 +466,8 @@ namespace BalloonFlow
                         if (d > 0.001f)
                         {
                             closest = d;
-                            sameCluster = (_darts[aheadIdx].holderId == dart.holderId);
+                            bool sameCluster = (_darts[aheadIdx].holderId == dart.holderId);
+                            closestRequiredGap = sameCluster ? clusterAttackGap : physGap;
                         }
                     }
                 }
@@ -470,6 +494,7 @@ namespace BalloonFlow
                             if (distToBlock > 0.001f && distToBlock < closest)
                             {
                                 closest = distToBlock;
+                                closestRequiredGap = physGap;
                             }
                         }
                     }
@@ -479,7 +504,7 @@ namespace BalloonFlow
                 float maxAdvance = beltDelta;
                 if (closest < float.MaxValue)
                 {
-                    float stopDist = closest - physGap;
+                    float stopDist = closest - closestRequiredGap;
                     if (stopDist < 0f) stopDist = 0f;
                     // 단순화 — 모든 dart 가 belt 속도 normal advance, ahead 와 physGap 미만 충돌 시만 한도.
                     // catch-up 제거 (corner 의 boundary case 에서 maxAdvance=0 trap 방지).
@@ -1370,7 +1395,7 @@ namespace BalloonFlow
             string splitRisk = GetPlacementSplitRisk(color, holderId, prev, next);
 
             return $"gapDiag progress={normalizedProgress:F2} color={color} holder={holderId} " +
-                   $"{prevInfo} {nextInfo} physGap={DartPhysicalGap:F3} splitRisk={splitRisk}";
+                   $"{prevInfo} {nextInfo} physGap={DartPhysicalGap:F3} clusterGap={DartClusterAttackGap:F3} splitRisk={splitRisk}";
         }
 
         public bool IsDeployProgressPhysicallyClear(float progress, int color, int holderId, out string reason)
@@ -1386,14 +1411,19 @@ namespace BalloonFlow
 
             TryGetPlacementNeighbors(normalizedProgress, -1, out DartOnRail prev, out float prevDist, out DartOnRail next, out float nextDist);
 
-            float requiredGap = Mathf.Max(0f, DartPhysicalGap - DEPLOY_PHYSICAL_GAP_TOLERANCE);
-            bool prevOk = prev == null || prevDist + 0.0001f >= requiredGap;
-            bool nextOk = next == null || nextDist + 0.0001f >= requiredGap;
+            // ROLLBACK_DART_CELL_SPACING_CLUSTER_GAP:
+            // Only same-holder neighbors need balloon-cell spacing. Other holders retain the rail
+            // physical gap so independent clusters do not suppress each other's deployment.
+            float requiredPrevGap = GetDeployRequiredGapForNeighbor(holderId, prev);
+            float requiredNextGap = GetDeployRequiredGapForNeighbor(holderId, next);
+            bool prevOk = prev == null || prevDist + 0.0001f >= requiredPrevGap;
+            bool nextOk = next == null || nextDist + 0.0001f >= requiredNextGap;
             string gapInfo = GetPlacementGapDebugInfo(normalizedProgress, color, holderId);
 
             if (!prevOk || !nextOk)
             {
-                reason = $"physicalGapTooSmall required={requiredGap:F3} prevOk={prevOk} nextOk={nextOk} {gapInfo}";
+                reason = $"physicalGapTooSmall requiredPrev={requiredPrevGap:F3} requiredNext={requiredNextGap:F3} " +
+                         $"prevOk={prevOk} nextOk={nextOk} {gapInfo}";
                 return false;
             }
 
@@ -1401,8 +1431,17 @@ namespace BalloonFlow
             // 문제: fire로 생긴 실제 gap이 deploy point에 도달하지 않아도, 같은 색 cluster 사이의 넓은 틈에
             // 다른 색이 들어가 AABBAABB 패턴을 만들 수 있음.
             // holder 기준까지 막으면 같은 색을 다른 holder가 이어받는 정상 배포까지 막힐 수 있어 color split만 차단한다.
-            reason = $"physicalClear required={requiredGap:F3} {gapInfo}";
+            reason = $"physicalClear requiredPrev={requiredPrevGap:F3} requiredNext={requiredNextGap:F3} {gapInfo}";
             return true;
+        }
+
+        // ROLLBACK_DART_CELL_SPACING_CLUSTER_GAP:
+        private float GetDeployRequiredGapForNeighbor(int holderId, DartOnRail neighbor)
+        {
+            float gap = DartPhysicalGap;
+            if (neighbor != null && neighbor.holderId == holderId)
+                gap = Mathf.Max(gap, DartClusterAttackGap);
+            return Mathf.Max(0f, gap - DEPLOY_PHYSICAL_GAP_TOLERANCE);
         }
 
         private void TryGetPlacementNeighbors(

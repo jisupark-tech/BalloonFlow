@@ -1147,7 +1147,9 @@ namespace BalloonFlow
             // 배치 페이싱: belt 누적 이동 거리(distSinceLastPlacement)가 physicalGap에 도달할 때마다 1회 배치.
             // overshoot은 carry-over + placementProgress 보정으로 흡수 → 다트 간격이 항상 정확히 physicalGap.
             // (이전: IsProgressClear 의 minGap=0.9*physGap 폴링이라 frame 타이밍에 따라 spacing 변동.)
-            float distSinceLastPlacement = rail.DartPhysicalGap; // 첫 다트 즉시 배치
+            // ROLLBACK_DART_CELL_SPACING_CLUSTER_GAP:
+            // Deploy same-holder darts on the same spacing used for attack head promotion.
+            float distSinceLastPlacement = rail.DartClusterAttackGap; // 첫 다트 즉시 배치
 
             // 한 frame 안 catch-up 한도 — belt 가 1.5~3 slot/frame 회전 시 누적된 distSinceLastPlacement
             // 를 한 frame 안에 N placements 로 처리. clamp 도 이 한도 이하로 자르지 않음.
@@ -1209,7 +1211,10 @@ namespace BalloonFlow
                     visual.deadlockPauseLogged = false;
                 }
 
-                float physGap = rail.DartPhysicalGap;
+                // ROLLBACK_DART_CELL_SPACING_CLUSTER_GAP:
+                // Same holder/cluster deployment cadence follows balloon cell spacing, not the
+                // denser rail slot spacing, so promoted heads advance one target line at a time.
+                float physGap = rail.DartClusterAttackGap;
                 // ── 2026-05-08: client-side cluster freeze 분기 폐기 ── 롤백 가능.
                 // V2UpdateFreezeOnDeployBlock 폐기 + packing physics deploy block obstacle 추가에 따라
                 // cluster head 가 다른 deploy block 직전 packing 자연 정지. self.placement 는 cluster head
@@ -1607,7 +1612,10 @@ namespace BalloonFlow
         private const float STUCK_LOG_INTERVAL = 1.0f;
         private const bool ENABLE_DEADLOCK_FALLBACK = false; // 기존 FindClearProgressNear 직접 배포 fallback은 비활성화.
         private const int DEADLOCK_FALLBACK_REMAINING_SLOTS = 1; // 199/200 같은 마지막 1칸 deadlock 보정 전용.
-        private const bool LOG_DEPLOY_GAP_DIAG = true; // 성공 배포가 실제 어떤 앞/뒤 dart 사이에 들어가는지 임시 진단.
+        // ROLLBACK_DART_RUNTIME_LOG_THROTTLE:
+        // Successful deploy logs allocate/format large strings during dense deployment and cause
+        // visible frame drops. Re-enable only while capturing a short placement sample.
+        private const bool LOG_DEPLOY_GAP_DIAG = false; // 성공 배포가 실제 어떤 앞/뒤 dart 사이에 들어가는지 임시 진단.
 
         /// <summary>
         /// 데드락 감지 — rail full + 다중 active deploy point 인 경우 leftmost holder 선택해 EnterDeadlockMode.

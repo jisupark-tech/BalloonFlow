@@ -21,7 +21,6 @@ namespace BalloonFlow
 
         private const string DART_POOL_KEY = "Dart";
         private const float DEFAULT_PROJECTILE_FLIGHT_TIME = 0.1f;
-
         #endregion
 
         #region Serialized Fields
@@ -43,6 +42,7 @@ namespace BalloonFlow
                 float t = FlightTime;
                 float mult = RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f;
                 if (mult > 0.001f) t /= mult;
+
                 return t;
             }
         }
@@ -71,6 +71,8 @@ namespace BalloonFlow
             public Vector3 targetPosition;
             public int targetBalloonId;
             public int color;
+            public DirectionalTargeting.ScanDirection scanDir;
+            public int scanLine;
             public float elapsed;
             public float duration;
             public Vector3 startScale;
@@ -115,6 +117,57 @@ namespace BalloonFlow
         private readonly Dictionary<int, DirectionalTargeting.ScanDirection> _lastScanDirectionByHolder =
             new Dictionary<int, DirectionalTargeting.ScanDirection>(16);
         private readonly Dictionary<int, int> _lastScannedHeadIdByHolder = new Dictionary<int, int>(16);
+        // ROLLBACK_DART_CONSUMED_LINE_LOCK:
+        // _lastScanned* is head-specific so a promoted head can still catch up. That means it cannot
+        // stop the next promoted head from peeling the same row/column after the previous projectile
+        // pops. Keep the last fired line per holder independent of head id and skip only that exact
+        // holder+direction+line.
+        private readonly Dictionary<int, int> _lastFiredLineByHolder = new Dictionary<int, int>(16);
+        private readonly Dictionary<int, DirectionalTargeting.ScanDirection> _lastFiredDirectionByHolder =
+            new Dictionary<int, DirectionalTargeting.ScanDirection>(16);
+        // ROLLBACK_DART_HOLDER_PASS_LINE_SET:
+        // The previous holder-local lock remembered only one last-fired line. When the same holder
+        // fired line -13, then -12, the -13 lock was overwritten and the holder could peel -13 again
+        // a few frames later. Keep every fired line for the current side pass and clear it only when
+        // the holder changes scan direction at a corner/tunnel turn.
+        private readonly Dictionary<int, HashSet<int>> _holderPassLinesByHolder = new Dictionary<int, HashSet<int>>(16);
+        private readonly Dictionary<int, DirectionalTargeting.ScanDirection> _holderPassDirectionByHolder =
+            new Dictionary<int, DirectionalTargeting.ScanDirection>(16);
+        // ROLLBACK_DART_GLOBAL_CONSUMED_LINE_LOCK:
+        // A rail line is a gameplay surface, not a holder-local resource. If holder A pops the
+        // outer cell on (direction,line), holder B must not immediately peel the newly exposed
+        // inner cell on that same surface. Keep it only while a current head is still on that
+        // side/line; once all heads leave, the refreshed outer contour may be attacked next pass.
+        private readonly HashSet<int> _consumedTargetLines = new HashSet<int>();
+        // ROLLBACK_DART_OUTER_PASS_LINE_LOCK:
+        // Global line locks must survive until the fired projectile resolves. Releasing when the
+        // promoted owner head leaves the line is too early: the balloon has not popped yet, so the
+        // same line is open again when the hit finally refreshes the live contour. After resolution,
+        // release only once no current head is still on that side/line.
+        private readonly HashSet<int> _unresolvedConsumedTargetLines = new HashSet<int>();
+        private readonly HashSet<int> _currentHeadLineKeys = new HashSet<int>();
+
+        // ROLLBACK_PROMOTION_SEED_CATCH_UP:
+        // After RemoveDartById, RailManager promotes the next dart in that cluster as the new head
+        // synchronously. The next ScanAndFirePerDart tick sees the new head, but the existing
+        // _lastScannedHeadIdByHolder still references the removed head's dartId, so the catch-up
+        // clause is not entered (`lastHeadId == dart.dartId` fails). At 2x speed + corner/tunnel
+        // bursts, the new head can cross multiple exact lines in one frame and they are all skipped
+        // because catchUpCount stays at 1. Maintain a per-holder promotion seed so the first scan
+        // after head replacement can replay lines crossed between promotion time and now without
+        // touching _lastScanned* (which preserves ROLLBACK_DART_CACHE_ONLY_ON_CANDIDATE).
+        //
+        // Lifecycle:
+        //   - Set: in FireDartCandidate after a successful RemoveDartById (per holder).
+        //   - Consumed: in ScanAndFirePerDart when catch-up uses it (single-use baseline).
+        //   - Cleared: in InvalidateDartScanLines / InvalidateDartScanLineForHolder / ClearAllDarts.
+        // ROLLBACK_DART_POP_SCAN_STATE_STABILITY:
+        //   Pop/projectile resolution must not call InvalidateDartScanLines. That helper clears this
+        //   promotion seed, so a just-promoted head loses the crossed-line replay it needs at x2 speed.
+        private readonly Dictionary<int, int> _promoLineByHolder = new Dictionary<int, int>(16);
+        private readonly Dictionary<int, DirectionalTargeting.ScanDirection> _promoDirByHolder =
+            new Dictionary<int, DirectionalTargeting.ScanDirection>(16);
+        private readonly Dictionary<int, int> _promoHeadByHolder = new Dictionary<int, int>(16);
 
         /// <summary>
         /// Balloon IDs currently targeted by in-flight projectiles.
@@ -124,7 +177,6 @@ namespace BalloonFlow
         private readonly HashSet<int> _reservedTargets = new HashSet<int>();
         // scan tick 안 이미 발사한 holder ID set. 같은 holder 의 다음 head (cache 자동 갱신 후) 가 같은 tick 발사하는 shotgun 차단.
         private readonly HashSet<int> _firedHoldersThisTick = new HashSet<int>();
-
         // ROLLBACK_DART_STABLE_OUTER_HIT:
         // Heavy targeting diagnostics were useful while isolating penetration/miss cases, but
         // they allocate and format large strings for every fire/pop. Keep them opt-in.
@@ -132,21 +184,42 @@ namespace BalloonFlow
         // ROLLBACK_DART_MISS_SUSPECT_DIAG:
         // Debug.Log itself causes visible frame drops during dense firing. Keep this off for play,
         // and enable only while capturing a short miss sample.
-        private static readonly bool DART_MISS_SUSPECT_DEBUG = false;
+        private static readonly bool DART_MISS_SUSPECT_DEBUG = true;
+        // ROLLBACK_DART_ATTACK_ISSUE_DEBUG:
+        // Temporary, throttled diagnostics for continuous-fire and miss paths. Disable this after
+        // capturing a repro sample; every branch below is intentionally log-only except the matching
+        // holder-line guard inside FireDartCandidate.
+        private static readonly bool DART_ATTACK_ISSUE_DEBUG = true;
 
         // ROLLBACK_DART_CROSSED_LINE_CACHE_FIX:
         // At x2 speed or after a long frame, a head can cross several grid lines before this scan
         // runs. Keep this exact-line budget wide enough to replay skipped lines without falling
         // back to adjacent-line targeting.
-        private const int MAX_LINE_CATCH_UP_PER_HEAD = 8;
+        private const int MAX_LINE_CATCH_UP_PER_HEAD = 6;
+        // ROLLBACK_DART_SPEED_SCALED_CATCH_UP:
+        // At x2 and late-game acceleration, a head can cross more exact grid lines per frame than
+        // the base catch-up budget. Scale the replay budget by the user speed multiplier while
+        // keeping a hard cap so targeting work remains bounded.
+        private int MaxLineCatchUpPerHead
+        {
+            get
+            {
+                float mult = RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f;
+                int scaled = Mathf.CeilToInt(MAX_LINE_CATCH_UP_PER_HEAD * Mathf.Max(1f, mult));
+                return Mathf.Clamp(scaled, MAX_LINE_CATCH_UP_PER_HEAD, 24);
+            }
+        }
         // ROLLBACK_DART_POST_FIRE_HEAD_RESCAN:
         // When a head fires, RailManager immediately promotes the next dart in that holder. At x2
         // speed waiting until the next frame lets that new head pass one exact line. Re-scan only
         // that holder's newly promoted head, with a tiny cap, so this does not become free-fire.
         private const int MAX_POST_FIRE_HEAD_RESCANS_PER_HOLDER = 1;
         private const int MAX_MISS_SUSPECT_LOGS_PER_FRAME = 1;
+        private const int MAX_ATTACK_ISSUE_LOGS_PER_FRAME = 8;
         private int _lastMissSuspectLogFrame = -1;
         private int _missSuspectLogsThisFrame;
+        private int _lastAttackIssueLogFrame = -1;
+        private int _attackIssueLogsThisFrame;
         private int _lastFiredHolderId = -1;
 
         private int MAX_FIRES_PER_FRAME => GameManager.HasInstance ? GameManager.Instance.Board.maxFiresPerFrame : 1;
@@ -204,6 +277,11 @@ namespace BalloonFlow
             UpdateSlotDartPositions();
             UpdatePerDartPositions();
 
+            // ROLLBACK_DART_PROJECTILE_RESOLVE_BEFORE_SCAN:
+            // Resolve completed projectiles before scanning new heads. Otherwise a target that should
+            // pop this frame is still in _reservedTargets and the contour cache is stale during scan.
+            UpdateProjectiles();
+
             // 셀 한 칸당 1회 스캔 (cellSpacing/dartSpeed 인터벌). MAX 제약은 제거 — 한 틱당 모든 ready 다트 발사.
             // (매 프레임 호출하면 N*M FindTarget 으로 부하 심함. timer로 ~60% 감소, 발사 정확도는 동일.)
             // ROLLBACK_DART_LINE_DRIVEN_SCAN:
@@ -211,8 +289,6 @@ namespace BalloonFlow
             // targeting work on frames where heads stay on the same line and avoids missing attack
             // lines when a long frame moves a dart across more than one grid line.
             ScanAndFirePerDart();
-
-            UpdateProjectiles();
             }
             finally { InGamePerfLogger.EndSection(__sw, "DartManager.Update"); }
         }
@@ -249,6 +325,7 @@ namespace BalloonFlow
             _activeProjectiles.Clear();
             _reservedTargets.Clear();
             InvalidateDartScanLines();
+            ClearConsumedLineLocks();
             _firedHoldersThisTick.Clear();
             _scanHeadDarts.Clear();
             _fireCandidates.Clear();
@@ -803,6 +880,8 @@ namespace BalloonFlow
                 targetPosition = to,
                 targetBalloonId = targetBalloonId,
                 color = color,
+                scanDir = DirectionalTargeting.DetermineScanDirection(to - from),
+                scanLine = GetScanLine(from, DirectionalTargeting.DetermineScanDirection(to - from)),
                 elapsed = 0f,
                 duration = ft
             };
@@ -850,7 +929,27 @@ namespace BalloonFlow
             // Only cluster heads can fire in normal play. Build a small head list from RailManager's
             // maintained cache instead of scanning every dart and rejecting non-heads one by one.
             rail.GetClusterHeadDarts(_scanHeadDarts);
-            if (_scanHeadDarts.Count == 0) return;
+            if (_scanHeadDarts.Count == 0)
+            {
+                // ROLLBACK_DART_KEEP_LINE_LOCK_WHILE_PROJECTILE:
+                // During the first deployment frames, a holder can fire its only placed dart before
+                // the next dart is spawned, leaving zero rail heads while the projectile is still in
+                // flight. Clearing consumed line locks here reopens the same side/line exactly when
+                // that projectile resolves, so the newly exposed inner cell can be peeled at deploy
+                // start. Only clear when there is no unresolved projectile-owned line left.
+                if (_activeProjectiles.Count == 0 && _unresolvedConsumedTargetLines.Count == 0)
+                {
+                    ClearConsumedLineLocks();
+                }
+                else
+                {
+                    LogAttackIssue(
+                        "DartScanNoHead",
+                        $"activeProjectiles={_activeProjectiles.Count} unresolvedLines={_unresolvedConsumedTargetLines.Count} " +
+                        $"consumedLines={_consumedTargetLines.Count} reservedTargets={_reservedTargets.Count}");
+                }
+                return;
+            }
             _scanHeadDarts.Sort(CompareDartPlacedSeq);
             _fireCandidates.Clear();
 
@@ -863,7 +962,13 @@ namespace BalloonFlow
                 }
 
                 // This list already contains holder heads only.
-                if (_firedHoldersThisTick.Contains(dart.holderId)) continue;
+                if (_firedHoldersThisTick.Contains(dart.holderId))
+                {
+                    LogAttackIssue(
+                        "DartFireBlocked",
+                        $"reason=holderAlreadyFiredThisTick holder={dart.holderId} dartId={dart.dartId} progress={dart.progress:F2}");
+                    continue;
+                }
                     // 이 holder 가 이미 이 tick 에 발사 → skip (cache 갱신된 새 head 도 차단).
 
                 rail.GetDartCurrentPose(dart, out Vector3 dartPos, out Vector3 scanTangent, out Vector3 fireDir);
@@ -872,6 +977,18 @@ namespace BalloonFlow
                 int color = dart.dartColor;
                 int dartId = dart.dartId;
                 int holderId = dart.holderId;
+                if (IsHolderLineConsumed(holderId, currentScanDir, currentLine))
+                {
+                    LogAttackIssue(
+                        "DartFireBlocked",
+                        $"reason=holderLineConsumed stage=current holder={holderId} dartId={dartId} " +
+                        $"progress={dart.progress:F2} scan={currentScanDir} line={currentLine}");
+                    continue;
+                }
+                // ROLLBACK_DART_HOLDER_PASS_LINE_SET:
+                // Do not clear a holder's consumed line just because the head moved to a new line.
+                // That made the same holder re-open an earlier line in the same side pass.
+                bool releaseConsumedLineAfterScan = false;
 
                 // ROLLBACK_DART_LINE_CACHE_INVALIDATION:
                 // The line-driven scan cache must belong to the current head dart, not only to the
@@ -888,23 +1005,73 @@ namespace BalloonFlow
                     && lastDir == currentScanDir
                     && lastLine == currentLine)
                 {
+                    LogAttackIssue(
+                        "DartScanSkip",
+                        $"reason=sameHeadSameLine holder={holderId} dartId={dartId} progress={dart.progress:F2} " +
+                        $"scan={currentScanDir} line={currentLine}");
                     continue;
                 }
 
                 int firstCatchUpLine = currentLine;
                 int catchUpStep = 0;
                 int catchUpCount = 1;
-                if (hasLastScan
+                bool catchUpFromLastScan = hasLastScan
                     && lastHeadId == dart.dartId
-                    && lastDir == currentScanDir)
+                    && lastDir == currentScanDir;
+
+                // lastScan 캐시가 stale (이전 head 의 dartId) 인 head-교체 직후 케이스에서 promotion
+                // seed 를 catch-up 기준선으로 사용한다. 같은 head/같은 dir 일 때만 적용 (다른 holder
+                // 이거나 path 회전으로 scanDir 가 바뀐 경우엔 적용 안 됨).
+                // out 변수는 C# definite-assignment 규칙으로 단락 평가 후 보수적으로 unassigned 로
+                // 간주되어 컴파일 오류 발생 → default 로 미리 선언.
+                int pHead = -1;
+                int pLine = 0;
+                DirectionalTargeting.ScanDirection pDir = currentScanDir;
+                bool catchUpFromPromo = !catchUpFromLastScan
+                    && _promoHeadByHolder.TryGetValue(dart.holderId, out pHead)
+                    && pHead == dart.dartId
+                    && _promoDirByHolder.TryGetValue(dart.holderId, out pDir)
+                    && pDir == currentScanDir
+                    && _promoLineByHolder.TryGetValue(dart.holderId, out pLine);
+
+                if (catchUpFromLastScan)
                 {
                     int delta = currentLine - lastLine;
                     int absDelta = Mathf.Abs(delta);
                     if (absDelta > 1)
                     {
+                        int catchUpBudget = MaxLineCatchUpPerHead;
+                        if (absDelta > catchUpBudget)
+                        {
+                            LogAttackIssue(
+                                "DartCatchUpClamped",
+                                $"source=lastScan holder={holderId} dartId={dartId} scan={currentScanDir} " +
+                                $"lastLine={lastLine} currentLine={currentLine} delta={absDelta} budget={catchUpBudget}");
+                        }
                         catchUpStep = delta >= 0 ? 1 : -1;
-                        catchUpCount = Mathf.Min(absDelta, MAX_LINE_CATCH_UP_PER_HEAD);
+                        catchUpCount = Mathf.Min(absDelta, catchUpBudget);
                         firstCatchUpLine = lastLine + catchUpStep;
+                    }
+                }
+                else if (catchUpFromPromo)
+                {
+                    // promotion-time line 부터 currentLine 까지 (currentLine 포함) 모두 replay.
+                    // lastScan 경로와 달리 catch-up 의 마지막 probe 가 currentLine 이 되도록 +1 한다.
+                    int delta = currentLine - pLine;
+                    int absDelta = Mathf.Abs(delta);
+                    if (absDelta >= 1)
+                    {
+                        int catchUpBudget = MaxLineCatchUpPerHead;
+                        if (absDelta + 1 > catchUpBudget)
+                        {
+                            LogAttackIssue(
+                                "DartCatchUpClamped",
+                                $"source=promo holder={holderId} dartId={dartId} scan={currentScanDir} " +
+                                $"promoLine={pLine} currentLine={currentLine} delta={absDelta + 1} budget={catchUpBudget}");
+                        }
+                        catchUpStep = delta >= 0 ? 1 : -1;
+                        catchUpCount = Mathf.Min(absDelta + 1, catchUpBudget);
+                        firstCatchUpLine = pLine;
                     }
                 }
 
@@ -929,6 +1096,24 @@ namespace BalloonFlow
                     int probeLine = catchUpStep == 0
                         ? currentLine
                         : firstCatchUpLine + lineProbe * catchUpStep;
+                    if (IsTargetLineConsumed(currentScanDir, probeLine))
+                    {
+                        LogAttackIssue(
+                            "DartFireBlocked",
+                            $"reason=targetLineConsumed stage=probe holder={holderId} dartId={dartId} " +
+                            $"progress={dart.progress:F2} scan={currentScanDir} line={probeLine} " +
+                            $"currentLine={currentLine} probe={lineProbe + 1}/{catchUpCount}");
+                        continue;
+                    }
+                    if (IsHolderLineConsumed(holderId, currentScanDir, probeLine))
+                    {
+                        LogAttackIssue(
+                            "DartFireBlocked",
+                            $"reason=holderLineConsumed stage=probe holder={holderId} dartId={dartId} " +
+                            $"progress={dart.progress:F2} scan={currentScanDir} line={probeLine} " +
+                            $"currentLine={currentLine} probe={lineProbe + 1}/{catchUpCount}");
+                        continue;
+                    }
                     Vector3 probePos = catchUpStep == 0
                         ? dartPos
                         : MakeScanPositionForLine(dartPos, currentScanDir, probeLine);
@@ -960,12 +1145,30 @@ namespace BalloonFlow
                         out selectedTargetPos);
                     scanDartPos = dartPos;
                 }
+                if (releaseConsumedLineAfterScan)
+                {
+                    ClearConsumedLineLockForHolder(holderId);
+                }
                 if (!foundTarget)
                 {
+                    // ROLLBACK_PROMOTION_SEED_CATCH_UP:
+                    // Do not mark a failed promo catch-up as scanned. At x2, a transient reserved/noEdge
+                    // miss can become valid shortly after; caching currentLine here recreates the one-by-one
+                    // miss path. The seed is single-use, so the next frame falls back to the current exact
+                    // line without replaying stale behind-the-head lines.
+                    if (catchUpFromPromo)
+                    {
+                        ClearPromoSeedForHolder(holderId);
+                    }
                     LogMissSuspectIfNeeded(holderId, dartId, color, dart.progress, scanDartPos, fireDir, currentScanDir, currentLine);
                     continue;
                 }
-
+                // ROLLBACK_PROMOTION_SEED_CATCH_UP:
+                // foundTarget 인 경우 line 996-998 의 기존 lastScan 캐시 갱신이 baseline 역할을
+                // 하므로, promo seed 만 폐기한다.
+                // ROLLBACK_DART_PROMO_SEED_COMMIT_ONLY:
+                // Do not clear the promotion seed here. The candidate can still fail at commit time
+                // because another candidate consumed the same line/target in this scan tick.
                 // ROLLBACK_CONTOUR_TARGET_DIAG:
                 if (DART_TARGETING_DEBUG)
                 {
@@ -979,23 +1182,31 @@ namespace BalloonFlow
                 BalloonData targetData = BalloonController.Instance.GetBalloon(targetId);
                 if (targetData == null || targetData.isPopped)
                 {
+                    LogAttackIssue(
+                        "DartMissBlocked",
+                        $"reason=targetGoneBeforeCandidate holder={holderId} dartId={dartId} color={color} " +
+                        $"target={targetId} popped={(targetData != null && targetData.isPopped)} " +
+                        $"scan={scanDir} line={targetLine} progress={dart.progress:F2}");
                     continue;
                 }
 
                 int candidateScanLine = targetLine;
-
-                // ROLLBACK_DART_CACHE_ONLY_ON_CANDIDATE:
-                // Do not mark a line as scanned until it produced a live fire candidate. A transient
-                // noEdge/perp/reserved miss can become valid on the next frame while the head remains
-                // on the same line; caching failed scans was the remaining one-by-one miss path.
-                // ROLLBACK_DART_CROSSED_LINE_CACHE_FIX:
-                // A catch-up probe can hit an older crossed line while the physical head is already
-                // on currentLine. Caching currentLine here marks the intervening exact lines as
-                // scanned even though they were never processed, so x2 speed produces one-by-one
-                // misses. Cache the actual accepted target/probe line instead.
-                _lastScannedLineByHolder[dart.holderId] = candidateScanLine;
-                _lastScanDirectionByHolder[dart.holderId] = scanDir;
-                _lastScannedHeadIdByHolder[dart.holderId] = dart.dartId;
+                if (IsTargetLineConsumed(scanDir, candidateScanLine))
+                {
+                    LogAttackIssue(
+                        "DartFireBlocked",
+                        $"reason=targetLineConsumed stage=candidateBuild holder={holderId} dartId={dartId} " +
+                        $"target={targetId} scan={scanDir} line={candidateScanLine} progress={dart.progress:F2}");
+                    continue;
+                }
+                if (IsHolderLineConsumed(holderId, scanDir, candidateScanLine))
+                {
+                    LogAttackIssue(
+                        "DartFireBlocked",
+                        $"reason=holderLineConsumed stage=candidateBuild holder={holderId} dartId={dartId} " +
+                        $"target={targetId} scan={scanDir} line={candidateScanLine} progress={dart.progress:F2}");
+                    continue;
+                }
 
                 // ROLLBACK_DART_CLUSTER_FAIR_FIRE:
                 // Collect every holder head that can fire this scan tick, then choose one holder
@@ -1104,7 +1315,10 @@ namespace BalloonFlow
                     // but if no projectile visual was available it never resolved the hit. Resolve the
                     // original fire-time target immediately so this cannot become a silent miss.
                     _reservedTargets.Remove(targetId);
-                    InvalidateDartScanLines();
+                    // ROLLBACK_DART_POP_SCAN_STATE_STABILITY:
+                    // Visual fallback resolves the same fire-time target immediately. Do not clear the
+                    // holder scan/promotion state here; ExecuteHit invalidates DirectionalTargeting's
+                    // contour cache through BalloonController.ExecutePop.
                     ExecuteHit(targetId, color);
                 }
 
@@ -1124,6 +1338,11 @@ namespace BalloonFlow
                 DartFireCandidate candidate = _fireCandidates[(startIndex + step) % _fireCandidates.Count];
                 if (_reservedTargets.Contains(candidate.targetId))
                 {
+                    LogAttackIssue(
+                        "DartFireBlocked",
+                        $"reason=targetReservedAtCommit holder={candidate.holderId} dartId={candidate.dartId} " +
+                        $"target={candidate.targetId} scan={candidate.scanDir} line={candidate.scanLine} " +
+                        $"candidates={_fireCandidates.Count}");
                     InvalidateDartScanLineForHolder(candidate.holderId);
                     continue;
                 }
@@ -1131,11 +1350,17 @@ namespace BalloonFlow
                 if (FireDartCandidate(rail, candidate))
                 {
                     firedThisScan++;
-                    FireNewlyPromotedHeadIfReady(rail, candidate.holderId);
+                    // ROLLBACK_DART_POST_FIRE_HEAD_RESCAN:
+                    // Disabled: immediate same-frame promoted-head firing reduces some misses, but it also
+                    // reopens continuous attacks because a holder can peel two outline cells before the
+                    // first projectile resolves. Promotion seed catch-up handles the next head on the next
+                    // scan without granting an extra same-frame shot.
+                    // FireNewlyPromotedHeadIfReady(rail, candidate.holderId);
                 }
             }
 
             _fireCandidates.Clear();
+            PruneConsumedTargetLinesForCurrentHeads(rail);
         }
 
         private int FireNewlyPromotedHeadIfReady(RailManager rail, int holderId)
@@ -1197,10 +1422,6 @@ namespace BalloonFlow
             if (targetData == null || targetData.isPopped)
                 return false;
 
-            _lastScannedLineByHolder[holderId] = targetLine;
-            _lastScanDirectionByHolder[holderId] = targetScanDir;
-            _lastScannedHeadIdByHolder[holderId] = dart.dartId;
-
             candidate = new DartFireCandidate
             {
                 isValid = true,
@@ -1227,13 +1448,38 @@ namespace BalloonFlow
 
             if (_reservedTargets.Contains(candidate.targetId))
             {
+                LogAttackIssue(
+                    "DartFireBlocked",
+                    $"reason=targetReservedAtFire holder={candidate.holderId} dartId={candidate.dartId} " +
+                    $"target={candidate.targetId} scan={candidate.scanDir} line={candidate.scanLine}");
                 InvalidateDartScanLineForHolder(candidate.holderId);
+                return false;
+            }
+            if (IsTargetLineConsumed(candidate.scanDir, candidate.scanLine))
+            {
+                LogAttackIssue(
+                    "DartFireBlocked",
+                    $"reason=targetLineConsumed stage=fire holder={candidate.holderId} dartId={candidate.dartId} " +
+                    $"target={candidate.targetId} scan={candidate.scanDir} line={candidate.scanLine}");
+                return false;
+            }
+            if (IsHolderLineConsumed(candidate.holderId, candidate.scanDir, candidate.scanLine))
+            {
+                LogAttackIssue(
+                    "DartFireBlocked",
+                    $"reason=holderLineConsumed stage=fire holder={candidate.holderId} dartId={candidate.dartId} " +
+                    $"target={candidate.targetId} scan={candidate.scanDir} line={candidate.scanLine}");
                 return false;
             }
 
             BalloonData targetData = BalloonController.Instance.GetBalloon(candidate.targetId);
             if (targetData == null || targetData.isPopped)
             {
+                LogAttackIssue(
+                    "DartMissBlocked",
+                    $"reason=targetGoneAtFire holder={candidate.holderId} dartId={candidate.dartId} " +
+                    $"target={candidate.targetId} popped={(targetData != null && targetData.isPopped)} " +
+                    $"scan={candidate.scanDir} line={candidate.scanLine}");
                 InvalidateDartScanLineForHolder(candidate.holderId);
                 return false;
             }
@@ -1267,12 +1513,61 @@ namespace BalloonFlow
             }
             if (!removedFromRail)
             {
+                LogAttackIssue(
+                    "DartMissBlocked",
+                    $"reason=removeDartFailed holder={candidate.holderId} dartId={candidate.dartId} " +
+                    $"target={candidate.targetId} scan={candidate.scanDir} line={candidate.scanLine}");
                 InvalidateDartScanLineForHolder(candidate.holderId);
                 return false;
             }
 
+            // ROLLBACK_DART_SCAN_CACHE_AFTER_FIRE:
+            // A fire candidate can still lose at execution time because an earlier holder in the
+            // same scan tick consumed the same side/line. Caching at candidate-build time made that
+            // losing holder think the line had been processed, so it skipped the refreshed outer cell
+            // later, especially at x2. Record the accepted line only after the dart was actually
+            // removed from the rail and the fire is committed.
+            _lastScannedLineByHolder[candidate.holderId] = candidate.scanLine;
+            _lastScanDirectionByHolder[candidate.holderId] = candidate.scanDir;
+            _lastScannedHeadIdByHolder[candidate.holderId] = candidate.dartId;
+
+            // ROLLBACK_PROMOTION_SEED_CATCH_UP:
+            // RemoveDartById 가 RemoveFromClusterHeadCache → RebuildClusterHeadCache 를 동기 호출해
+            // 새 head 가 즉시 승격되었다. 새 head 의 현재 line 을 seed 로 캡처해 두면, 다음 scan tick
+            // 의 catch-up clause 가 promotion-time line ~ currentLine 사이 crossed exact line 들을
+            // 정상적으로 replay 할 수 있다. _lastScanned* 는 갱신하지 않는다 (anti-pattern 회피).
+            var promotedHead = rail.GetClusterHeadDart(candidate.holderId);
+            if (promotedHead != null && promotedHead.dartColor >= 0)
+            {
+                rail.GetDartCurrentPose(promotedHead, out Vector3 promoPos, out _, out Vector3 promoFireDir);
+                var promoScanDir = DirectionalTargeting.DetermineScanDirection(promoFireDir);
+                _promoHeadByHolder[candidate.holderId] = promotedHead.dartId;
+                _promoDirByHolder[candidate.holderId]  = promoScanDir;
+                _promoLineByHolder[candidate.holderId] = GetScanLine(promoPos, promoScanDir);
+            }
+            else
+            {
+                ClearPromoSeedForHolder(candidate.holderId);
+            }
+
             _firedHoldersThisTick.Add(candidate.holderId);
+            MarkHolderLineConsumed(candidate.holderId, candidate.scanDir, candidate.scanLine);
+            // ROLLBACK_DART_GLOBAL_CONSUMED_LINE_LOCK:
+            // Reserve the whole side/line after a fire, not only the exact balloon id. This prevents
+            // another holder from immediately attacking the newly exposed inner cell on the same row.
+            // ROLLBACK_DART_HOLDER_LINE_LOCK_ONLY:
+            // The global line lock made holder/cluster A suppress holder/cluster B on the same
+            // row/column, which recreated the "one-by-one miss" after another cluster passed a
+            // corner/tunnel. Keep only the holder-local last-fired line above.
+            // _consumedTargetLines.Add(GetConsumedLineKey(candidate.scanDir, candidate.scanLine));
+            MarkTargetLineConsumed(candidate.holderId, candidate.scanDir, candidate.scanLine);
             _reservedTargets.Add(candidate.targetId);
+            LogAttackIssue(
+                "DartFireCommitted",
+                $"holder={candidate.holderId} dartId={candidate.dartId} color={candidate.color} " +
+                $"target={candidate.targetId} scan={candidate.scanDir} line={candidate.scanLine} " +
+                $"progress={candidate.dart.progress:F2} activeProjectiles={_activeProjectiles.Count} " +
+                $"reservedTargets={_reservedTargets.Count} unresolvedLines={_unresolvedConsumedTargetLines.Count}");
 
             GameObject dartObj = null;
             if (_dartVisuals.TryGetValue(candidate.dartId, out var visual))
@@ -1310,6 +1605,8 @@ namespace BalloonFlow
                     targetPosition = travelTarget,
                     targetBalloonId = candidate.targetId,
                     color = candidate.color,
+                    scanDir = candidate.scanDir,
+                    scanLine = candidate.scanLine,
                     elapsed = 0f,
                     duration = ft
                 };
@@ -1325,7 +1622,15 @@ namespace BalloonFlow
                 // but if no projectile visual was available it never resolved the hit. Resolve the
                 // original fire-time target immediately so this cannot become a silent miss.
                 _reservedTargets.Remove(candidate.targetId);
-                InvalidateDartScanLines();
+                // ROLLBACK_DART_POP_SCAN_STATE_STABILITY:
+                // No projectile visual means we resolve the original fire-time target immediately.
+                // Clearing all DartManager scan state here reopens same-line continuous fire and wipes
+                // promotion catch-up seeds for unrelated holders.
+                _unresolvedConsumedTargetLines.Remove(GetConsumedLineKey(candidate.scanDir, candidate.scanLine));
+                LogAttackIssue(
+                    "DartProjectileFallback",
+                    $"reason=noVisualImmediateHit holder={candidate.holderId} dartId={candidate.dartId} " +
+                    $"target={candidate.targetId} scan={candidate.scanDir} line={candidate.scanLine}");
                 ExecuteHit(candidate.targetId, candidate.color);
             }
 
@@ -1373,6 +1678,10 @@ namespace BalloonFlow
             _lastScannedLineByHolder.Clear();
             _lastScanDirectionByHolder.Clear();
             _lastScannedHeadIdByHolder.Clear();
+            // ROLLBACK_PROMOTION_SEED_CATCH_UP:
+            _promoLineByHolder.Clear();
+            _promoDirByHolder.Clear();
+            _promoHeadByHolder.Clear();
         }
 
         private void InvalidateDartScanLineForHolder(int holderId)
@@ -1380,6 +1689,188 @@ namespace BalloonFlow
             _lastScannedLineByHolder.Remove(holderId);
             _lastScanDirectionByHolder.Remove(holderId);
             _lastScannedHeadIdByHolder.Remove(holderId);
+            // ROLLBACK_PROMOTION_SEED_CATCH_UP:
+            _promoLineByHolder.Remove(holderId);
+            _promoDirByHolder.Remove(holderId);
+            _promoHeadByHolder.Remove(holderId);
+        }
+
+        // ROLLBACK_DART_POP_LINE_RESCAN:
+        // A pop changes the outer contour on exactly one grid row and one grid column. Clearing all
+        // DartManager scan state after every pop reopens same-holder peeling and wipes promotion
+        // catch-up, but keeping every line cached makes heads on that line miss the refreshed outer
+        // cell. Reopen only holders whose last accepted scan line matches the popped cell's row/column.
+        private void InvalidateDartScanLinesForPoppedPosition(Vector3 position)
+        {
+            int horizontalLine = GetScanLine(position, DirectionalTargeting.ScanDirection.Left);
+            int verticalLine = GetScanLine(position, DirectionalTargeting.ScanDirection.Up);
+
+            _tempRemoveKeys.Clear();
+            foreach (var kvp in _lastScannedLineByHolder)
+            {
+                int holderId = kvp.Key;
+                int line = kvp.Value;
+                if (!_lastScanDirectionByHolder.TryGetValue(holderId, out DirectionalTargeting.ScanDirection dir))
+                    continue;
+
+                bool sameLine =
+                    ((dir == DirectionalTargeting.ScanDirection.Left || dir == DirectionalTargeting.ScanDirection.Right) && line == horizontalLine)
+                    || ((dir == DirectionalTargeting.ScanDirection.Up || dir == DirectionalTargeting.ScanDirection.Down) && line == verticalLine);
+                if (sameLine)
+                    _tempRemoveKeys.Add(holderId);
+            }
+
+            for (int i = 0; i < _tempRemoveKeys.Count; i++)
+                InvalidateDartScanLineForHolder(_tempRemoveKeys[i]);
+
+            _tempRemoveKeys.Clear();
+        }
+
+        // ROLLBACK_PROMOTION_SEED_CATCH_UP:
+        private void ClearPromoSeedForHolder(int holderId)
+        {
+            _promoLineByHolder.Remove(holderId);
+            _promoDirByHolder.Remove(holderId);
+            _promoHeadByHolder.Remove(holderId);
+        }
+
+        // ROLLBACK_DART_CONSUMED_LINE_LOCK:
+        private bool IsHolderLineConsumed(int holderId, DirectionalTargeting.ScanDirection scanDir, int line)
+        {
+            // ROLLBACK_DART_HOLDER_PASS_LINE_SET:
+            // This must be read-only. At x2 speed a head can briefly report a corner/tunnel tangent
+            // direction before a real fire happens; clearing the pass set during a mere lookup
+            // reopens earlier lines and recreates same-side continuous fire.
+            if (!_holderPassDirectionByHolder.TryGetValue(holderId, out DirectionalTargeting.ScanDirection passDir)
+                || passDir != scanDir)
+            {
+                return false;
+            }
+
+            return _holderPassLinesByHolder.TryGetValue(holderId, out HashSet<int> firedLines)
+                && firedLines.Contains(line);
+        }
+
+        // ROLLBACK_DART_CONSUMED_LINE_LOCK:
+        private bool HasHolderLeftConsumedLine(int holderId, DirectionalTargeting.ScanDirection scanDir, int line)
+        {
+            // ROLLBACK_DART_HOLDER_PASS_LINE_SET:
+            // A line stays consumed for the whole current side pass, not only while the head remains
+            // on that exact line.
+            return false;
+        }
+
+        // ROLLBACK_DART_CONSUMED_LINE_LOCK:
+        private void ClearConsumedLineLockForHolder(int holderId)
+        {
+            _lastFiredLineByHolder.Remove(holderId);
+            _lastFiredDirectionByHolder.Remove(holderId);
+            _holderPassLinesByHolder.Remove(holderId);
+            _holderPassDirectionByHolder.Remove(holderId);
+        }
+
+        // ROLLBACK_DART_CONSUMED_LINE_LOCK:
+        private void ClearConsumedLineLocks()
+        {
+            _lastFiredLineByHolder.Clear();
+            _lastFiredDirectionByHolder.Clear();
+            _holderPassLinesByHolder.Clear();
+            _holderPassDirectionByHolder.Clear();
+            _consumedTargetLines.Clear();
+            _unresolvedConsumedTargetLines.Clear();
+            _currentHeadLineKeys.Clear();
+        }
+
+        // ROLLBACK_DART_HOLDER_PASS_LINE_SET:
+        private void EnsureHolderPassDirection(int holderId, DirectionalTargeting.ScanDirection scanDir)
+        {
+            if (_holderPassDirectionByHolder.TryGetValue(holderId, out DirectionalTargeting.ScanDirection passDir)
+                && passDir == scanDir)
+            {
+                return;
+            }
+
+            _holderPassDirectionByHolder[holderId] = scanDir;
+            if (_holderPassLinesByHolder.TryGetValue(holderId, out HashSet<int> firedLines))
+                firedLines.Clear();
+        }
+
+        // ROLLBACK_DART_HOLDER_PASS_LINE_SET:
+        private void MarkHolderLineConsumed(int holderId, DirectionalTargeting.ScanDirection scanDir, int line)
+        {
+            EnsureHolderPassDirection(holderId, scanDir);
+
+            if (!_holderPassLinesByHolder.TryGetValue(holderId, out HashSet<int> firedLines))
+            {
+                firedLines = new HashSet<int>();
+                _holderPassLinesByHolder[holderId] = firedLines;
+            }
+
+            firedLines.Add(line);
+            _lastFiredLineByHolder[holderId] = line;
+            _lastFiredDirectionByHolder[holderId] = scanDir;
+        }
+
+        // ROLLBACK_DART_OUTER_PASS_LINE_LOCK:
+        private bool IsTargetLineConsumed(DirectionalTargeting.ScanDirection scanDir, int line)
+        {
+            return _consumedTargetLines.Contains(GetConsumedLineKey(scanDir, line));
+        }
+
+        // ROLLBACK_DART_OUTER_PASS_LINE_LOCK:
+        private void MarkTargetLineConsumed(int holderId, DirectionalTargeting.ScanDirection scanDir, int line)
+        {
+            int key = GetConsumedLineKey(scanDir, line);
+            _consumedTargetLines.Add(key);
+            _unresolvedConsumedTargetLines.Add(key);
+        }
+
+        // ROLLBACK_DART_OUTER_PASS_LINE_LOCK:
+        private void PruneConsumedTargetLinesForCurrentHeads(RailManager rail)
+        {
+            if (_consumedTargetLines.Count == 0 || rail == null)
+                return;
+
+            _currentHeadLineKeys.Clear();
+            rail.GetClusterHeadDarts(_scanHeadDarts);
+            for (int i = 0; i < _scanHeadDarts.Count; i++)
+            {
+                var head = _scanHeadDarts[i];
+                if (head == null || head.dartColor < 0)
+                    continue;
+
+                rail.GetDartCurrentPose(head, out Vector3 pos, out _, out Vector3 fireDir);
+                var scanDir = DirectionalTargeting.DetermineScanDirection(fireDir);
+                _currentHeadLineKeys.Add(GetConsumedLineKey(scanDir, GetScanLine(pos, scanDir)));
+            }
+
+            _tempRemoveKeys.Clear();
+            foreach (int consumedKey in _consumedTargetLines)
+            {
+                if (_unresolvedConsumedTargetLines.Contains(consumedKey))
+                    continue;
+
+                if (!_currentHeadLineKeys.Contains(consumedKey))
+                    _tempRemoveKeys.Add(consumedKey);
+            }
+
+            for (int i = 0; i < _tempRemoveKeys.Count; i++)
+            {
+                _consumedTargetLines.Remove(_tempRemoveKeys[i]);
+                _unresolvedConsumedTargetLines.Remove(_tempRemoveKeys[i]);
+            }
+
+            _tempRemoveKeys.Clear();
+            _currentHeadLineKeys.Clear();
+        }
+
+        // ROLLBACK_DART_GLOBAL_CONSUMED_LINE_LOCK:
+        private static int GetConsumedLineKey(DirectionalTargeting.ScanDirection scanDir, int line)
+        {
+            unchecked
+            {
+                return ((int)scanDir * 73856093) ^ line;
+            }
         }
 
         private int GetFireCandidateStartIndex()
@@ -1405,6 +1896,23 @@ namespace BalloonFlow
             }
 
             return start;
+        }
+
+        // ROLLBACK_DART_ATTACK_ISSUE_DEBUG:
+        private void LogAttackIssue(string tag, string message)
+        {
+            if (!DART_ATTACK_ISSUE_DEBUG) return;
+
+            int frame = Time.frameCount;
+            if (_lastAttackIssueLogFrame != frame)
+            {
+                _lastAttackIssueLogFrame = frame;
+                _attackIssueLogsThisFrame = 0;
+            }
+            if (_attackIssueLogsThisFrame >= MAX_ATTACK_ISSUE_LOGS_PER_FRAME) return;
+
+            _attackIssueLogsThisFrame++;
+            Debug.Log($"[{tag}] frame={frame} {message}");
         }
 
         private void LogMissSuspectIfNeeded(
@@ -1435,6 +1943,9 @@ namespace BalloonFlow
                     2,
                     out string diag))
             {
+                _missSuspectLogsThisFrame++;
+                Debug.Log($"[DartMissSuspect] holder={holderId} dartId={dartId} color={color} " +
+                          $"progress={progress:F2} scan={scanDir} scanLine={scanLine} mode=miss noDiag");
                 return;
             }
 
@@ -1488,11 +1999,24 @@ namespace BalloonFlow
 
                 if (proj.elapsed >= proj.duration)
                 {
+                    BalloonData impactData = BalloonController.HasInstance
+                        ? BalloonController.Instance.GetBalloon(proj.targetBalloonId)
+                        : null;
+                    if (impactData == null || impactData.isPopped)
+                    {
+                        LogAttackIssue(
+                            "DartProjectileResolve",
+                            $"reason=targetGoneBeforeImpact target={proj.targetBalloonId} color={proj.color} " +
+                            $"popped={(impactData != null && impactData.isPopped)} scan={proj.scanDir} line={proj.scanLine} " +
+                            $"elapsed={proj.elapsed:F3}/{proj.duration:F3}");
+                    }
                     _reservedTargets.Remove(proj.targetBalloonId);
-                    // ROLLBACK_DART_LINE_CACHE_INVALIDATION:
-                    // Releasing a reservation can make the same line scannable again even when the
-                    // pop is resolved by another path or the original hit no longer succeeds.
-                    InvalidateDartScanLines();
+                    _unresolvedConsumedTargetLines.Remove(GetConsumedLineKey(proj.scanDir, proj.scanLine));
+                    // ROLLBACK_DART_POP_SCAN_STATE_STABILITY:
+                    // The hit below invalidates DirectionalTargeting's outer-contour cache if it
+                    // actually pops. Do not reset DartManager's per-holder scan/promotion state on
+                    // projectile completion; doing so lets the same holder peel the newly exposed
+                    // inner cell and also erases catch-up state for promoted heads at high speed.
                     GameObject projObj = proj.gameObject; // 참조 미리 저장
                     // ROLLBACK_DART_STABLE_OUTER_HIT:
                     // Do not retarget at impact time. Retargeting to the current first-hit cell lets
@@ -1551,7 +2075,12 @@ namespace BalloonFlow
             }
 
             if (result == null || !result.success)
+            {
+                LogAttackIssue(
+                    "DartHitFailed",
+                    $"balloonId={balloonId} color={color} reason={(result != null ? result.reason : "nullResult")}");
                 return;
+            }
 
             // PopProcessor가 점수/콤보 처리 (PopBalloon 중복 호출은 isPopped 체크로 방지)
             EventBus.Publish(new OnDartHitBalloon
@@ -1619,10 +2148,11 @@ namespace BalloonFlow
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
             _reservedTargets.Remove(evt.balloonId);
-            // ROLLBACK_DART_LINE_CACHE_INVALIDATION:
-            // A pop changes the outer contour. A holder head can still be on the same line, but that
-            // line may now have a valid first target, so the line-driven scan cache must be reset.
-            InvalidateDartScanLines();
+            // ROLLBACK_DART_POP_LINE_RESCAN:
+            // BalloonController.ExecutePop already invalidates DirectionalTargeting's contour cache.
+            // Also reopen DartManager's accepted-line cache for the popped row/column only; otherwise
+            // a head that stays on the same line never asks for the refreshed outer target.
+            InvalidateDartScanLinesForPoppedPosition(evt.position);
         }
 
         /// <summary>
