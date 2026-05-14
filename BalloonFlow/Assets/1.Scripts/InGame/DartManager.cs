@@ -97,7 +97,6 @@ namespace BalloonFlow
         /// Cleared when projectile hits or balloon is popped externally.
         /// </summary>
         private readonly HashSet<int> _reservedTargets = new HashSet<int>();
-
         // scan tick 안 이미 발사한 holder ID set. 같은 holder 의 다음 head (cache 자동 갱신 후) 가 같은 tick 발사하는 shotgun 차단.
         private readonly HashSet<int> _firedHoldersThisTick = new HashSet<int>();
 
@@ -671,6 +670,9 @@ namespace BalloonFlow
                 if (_reservedTargets.Contains(targetId)) continue;
 
                 if (!BalloonController.HasInstance) return;
+                // ROLLBACK_CONTOUR_TARGET_DIAG:
+                Debug.Log($"[FindTargetPick] mode=slot holder={slot.holderId} dartId={slot.dartId} slot={slotIdx} " +
+                          $"{DirectionalTargeting.LastFindTargetDiag}");
                 BalloonData targetData = BalloonController.Instance.GetBalloon(targetId);
                 if (targetData == null || targetData.isPopped)
                 {
@@ -829,12 +831,18 @@ namespace BalloonFlow
 
                 Vector3 dartPos = rail.GetDartCurrentPosition(dart);
                 Vector3 fireDir = rail.GetDartFiringDirection(dart.dartId);
+                int color = dart.dartColor;
+                int dartId = dart.dartId;
+                int holderId = dart.holderId;
 
                 // 이미 reserve 된 풍선은 후보에서 제외 → 다음 closest 풍선을 발사 대상으로 받음.
                 // [2026-05-13] FindTarget = contour-only. inner-stuck color fallback 은 관통 이슈로 비활성.
                 //   inner 만 남은 색 풍선은 hit 불가 → 레벨 디자인으로 회피 (외곽이 같은 색으로 깎이며 노출).
                 int targetId = DirectionalTargeting.FindTarget(dartPos, fireDir, dart.dartColor, _reservedTargets);
                 if (targetId < 0) continue;
+                // ROLLBACK_CONTOUR_TARGET_DIAG:
+                Debug.Log($"[FindTargetPick] mode=dart holder={holderId} dartId={dartId} " +
+                          $"progress={dart.progress:F2} {DirectionalTargeting.LastFindTargetDiag}");
                 // [2026-05-13 Diag] 진단 로그 ([DartSkip]) 제거 — DirectionalTargeting.FormatLastDiag()도 비활성.
                 //   재활성: DirectionalTargeting.cs 의 Last* 필드 + FormatLastDiag 주석 해제 후
                 //   이 분기에서 hasMatching 검사 + Debug.Log 복원.
@@ -843,9 +851,6 @@ namespace BalloonFlow
                 if (targetData == null || targetData.isPopped) continue;
 
                 // Fire!
-                int color = dart.dartColor;
-                int dartId = dart.dartId;
-                int holderId = dart.holderId;
                 var fireHead = rail.GetClusterHeadDart(holderId);
                 int fireSlot = rail.GetSlotAtPathDistance(dart.progress);
                 var fireSlotData = rail.GetSlot(fireSlot);

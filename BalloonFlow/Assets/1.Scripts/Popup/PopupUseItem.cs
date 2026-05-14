@@ -354,7 +354,11 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>world center → cutoutMask anchoredPosition + sizeDelta (screen 좌표).</summary>
+        /// <summary>world center → cutoutMask anchoredPosition + sizeDelta.
+        /// [2026-05-13] sizeDelta 단위 fix — RectTransformUtility 로 산출한 localCenter 는 canvas-units 인데
+        /// 기존 코드는 sizeDelta 에 screen-pixel 값을 그대로 박아 CanvasScaler reference 와 device 해상도가
+        /// 다를 때 hole 크기가 부정확했음. Tutorial.WorldToCanvasPosition 패턴(canvas/screen 비율) 적용으로
+        /// position 과 size 둘 다 canvas-units 로 일관성 확보.</summary>
         private void SetCutoutScreenArea(Camera cam, Vector3 worldCenter, Vector2 screenSize)
         {
             Vector3 screen = cam.WorldToScreenPoint(worldCenter);
@@ -367,7 +371,23 @@ namespace BalloonFlow
 
             RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRT, screen, canvasCam, out Vector2 localCenter);
             _cutoutMask.anchoredPosition = localCenter;
-            _cutoutMask.sizeDelta = screenSize;
+
+            // screen-pixel size → canvas-units size. Tutorial 의 WorldToCanvasPosition 과 동일 비율.
+            // canvasRT.rect.size 는 reference resolution 기반 (CanvasScaler 가 scale factor 분리).
+            // Screen.width/height 가 0 인 경우 (편집기 첫 frame 등) 변환 skip → screenSize 그대로 폴백.
+            float sw = Screen.width;
+            float sh = Screen.height;
+            if (sw > 1f && sh > 1f)
+            {
+                Vector2 canvasSize = canvasRT.rect.size;
+                float ratioX = canvasSize.x / sw;
+                float ratioY = canvasSize.y / sh;
+                _cutoutMask.sizeDelta = new Vector2(screenSize.x * ratioX, screenSize.y * ratioY);
+            }
+            else
+            {
+                _cutoutMask.sizeDelta = screenSize;
+            }
         }
 
         private void OnCancelClicked()

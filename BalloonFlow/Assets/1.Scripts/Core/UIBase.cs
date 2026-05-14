@@ -45,6 +45,8 @@ namespace BalloonFlow
         {
             _canvasGroup = GetComponent<CanvasGroup>();
             UIParticleBinder.Bind(gameObject);
+            // [2026-05-13] popup/panel 하위 Button 더블 클릭 방어 자동 부착 (멱등) — 동적 spawn popup 도 처리.
+            UIButtonClickGuard.AttachToHierarchy(gameObject);
         }
 
         /// <summary>초기화. 필요한 데이터 전달 시 사용.</summary>

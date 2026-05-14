@@ -141,7 +141,6 @@ namespace BalloonFlow
         // 롤백: 이 필드 + RecalculatePathLengths 의 build 라인 + GetDirectionAtDistance 메서드 제거 + DartManager 의 호출 원복.
         private readonly List<Vector3> _segmentDirections = new List<Vector3>();
         private float _totalPathLength;
-
         // Smooth corners
         private bool _smoothCorners;
         private float _cornerRadius = 1f;
@@ -962,10 +961,7 @@ namespace BalloonFlow
         /// </summary>
         public RailSide GetSlotRailSide(int slotIndex)
         {
-            Vector3 pos = GetSlotWorldPosition(slotIndex);
             Vector3 dir = GetSlotDirection(slotIndex);
-
-            // Determine which side of the rectangular rail based on movement direction
             float absX = Mathf.Abs(dir.x);
             float absZ = Mathf.Abs(dir.z);
 
@@ -1900,7 +1896,6 @@ namespace BalloonFlow
             float t = _totalPathLength > 0f ? dart.progress / _totalPathLength : 0f;
             t = ((t % 1f) + 1f) % 1f;
             Vector3 moveDir = GetDirectionAtNormalized(t);
-            // Reuse same cardinal logic as GetSlotFiringDirection
             return GetFiringDirectionFromMoveDir(moveDir);
         }
 
@@ -2772,6 +2767,7 @@ namespace BalloonFlow
             _slotSpacing = _totalPathLength > 0f && _slotCount > 0
                 ? _totalPathLength / _slotCount
                 : 1f;
+
         }
 
         /// <summary>

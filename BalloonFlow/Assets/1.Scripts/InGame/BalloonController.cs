@@ -1501,6 +1501,11 @@ namespace BalloonFlow
 
             ProcessGimmickAfterPop(data, result);
 
+            // ROLLBACK_CONTOUR_TARGET_DIAG:
+            // Diagnose whether DirectionalTargeting's frame cache still points at
+            // the popped balloon or shifts contour candidates unexpectedly.
+            DirectionalTargeting.LogContourAfterPop(data.balloonId, data.color, data.position, data.gimmickType);
+
             // 외곽 변경 가능 — 외곽 풍선만 렌더링 toggle 시 Renderer state 갱신
             RefreshOutermostRendererState();
 

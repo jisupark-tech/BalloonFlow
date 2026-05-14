@@ -301,8 +301,9 @@ namespace BalloonFlow
                 {
                     PlayerPrefs.SetInt("BalloonFlow_AdRemoved", 1);
                     PlayerPrefs.Save();
+                    // [2026-05-13] productId 함께 전달 → UserData 에 구매 시각/경로 같이 기록.
                     if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
-                        UserDataService.Instance.SetRemovedAds(true);
+                        UserDataService.Instance.SetRemovedAds(true, productId);
                 }
             }
 

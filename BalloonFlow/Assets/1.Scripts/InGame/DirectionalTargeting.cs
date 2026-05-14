@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 namespace BalloonFlow
@@ -62,7 +63,11 @@ namespace BalloonFlow
         private static readonly List<EdgeTarget> _contourCandidates = new List<EdgeTarget>(256);
         private static readonly HashSet<int> _currentShellIds = new HashSet<int>();
         private static readonly Dictionary<int, int> _recentLineUseFrame = new Dictionary<int, int>(32);
+        // ROLLBACK_CONTOUR_TARGET_DIAG:
+        private static readonly StringBuilder _diagBuilder = new StringBuilder(1024);
         private static int _edgeCacheFrame = -1;
+        // ROLLBACK_CONTOUR_TARGET_DIAG:
+        public static string LastFindTargetDiag { get; private set; } = string.Empty;
 
         public enum ScanDirection
         {
@@ -110,6 +115,7 @@ namespace BalloonFlow
             float bestScore = float.MaxValue;
             float bestFiringDist = float.MaxValue;
             float perpendicularTolerance = _gridCellSize * PERPENDICULAR_TOLERANCE_MULTIPLIER;
+            _diagBuilder.Length = 0;
 
             // Check a narrow band around the aligned line. This keeps non-rectangular
             // motifs targetable when rail smoothing or mobile precision shifts the dart
@@ -117,20 +123,45 @@ namespace BalloonFlow
             for (int offset = -LINE_SEARCH_RADIUS; offset <= LINE_SEARCH_RADIUS; offset++)
             {
                 if (!TryGetEdgeTarget(scanDir, dartCell, offset, out EdgeTarget edge))
+                {
+                    AppendFindTargetCandidateDiag(offset, default, false, false, false, 0f, 0f, 0, 0f, "none");
                     continue;
+                }
 
-                if (!edge.targetable) continue;
-                if (edge.color != color) continue;
-                if (excludeIds != null && excludeIds.Contains(edge.balloonId)) continue;
+                bool reserved = excludeIds != null && excludeIds.Contains(edge.balloonId);
+                if (!edge.targetable)
+                {
+                    AppendFindTargetCandidateDiag(offset, edge, true, false, reserved, 0f, 0f, 0, 0f, "notTargetable");
+                    continue;
+                }
+                if (edge.color != color)
+                {
+                    AppendFindTargetCandidateDiag(offset, edge, true, false, reserved, 0f, 0f, 0, 0f, "color");
+                    continue;
+                }
+                if (reserved)
+                {
+                    AppendFindTargetCandidateDiag(offset, edge, true, false, true, 0f, 0f, 0, 0f, "reserved");
+                    continue;
+                }
 
                 float firingDist = GetFiringAxisDistance(dartPosition, edge.worldPos, scanDir);
-                if (firingDist < 0f) continue;
+                if (firingDist < 0f)
+                {
+                    AppendFindTargetCandidateDiag(offset, edge, true, false, reserved, firingDist, 0f, 0, 0f, "behind");
+                    continue;
+                }
 
                 float perpDist = GetPerpendicularDistance(dartPosition, edge.worldPos, scanDir);
-                if (perpDist > perpendicularTolerance) continue;
+                if (perpDist > perpendicularTolerance)
+                {
+                    AppendFindTargetCandidateDiag(offset, edge, true, false, reserved, firingDist, perpDist, 0, 0f, "perp");
+                    continue;
+                }
 
                 int line = GetLineKey(scanDir, edge.cell);
                 float score = perpDist + GetRecentLinePenalty(scanDir, line);
+                AppendFindTargetCandidateDiag(offset, edge, true, true, reserved, firingDist, perpDist, line, score, "ok");
                 if (score < bestScore || (Mathf.Approximately(score, bestScore) && firingDist < bestFiringDist))
                 {
                     bestScore = score;
@@ -151,6 +182,12 @@ namespace BalloonFlow
             {
                 _recentLineUseFrame[GetRecentLineKey(scanDir, bestLine)] = Time.frameCount;
             }
+
+            LastFindTargetDiag =
+                $"frame={Time.frameCount} cacheFrame={_edgeCacheFrame} color={color} dartCell={dartCell} scan={scanDir} " +
+                $"tol={perpendicularTolerance:F3} chosen={bestId} line={bestLine} " +
+                $"score={(bestScore < float.MaxValue ? bestScore.ToString("F3") : "none")} " +
+                $"fireDist={(bestFiringDist < float.MaxValue ? bestFiringDist.ToString("F3") : "none")} candidates={_diagBuilder}";
 
             return bestId;
         }
@@ -182,6 +219,116 @@ namespace BalloonFlow
         //     }
         //     return -1;
         // }
+
+        // ROLLBACK_CONTOUR_TARGET_DIAG:
+        // Store compact candidate diagnostics for the latest FindTarget call.
+        private static void AppendFindTargetCandidateDiag(
+            int offset,
+            EdgeTarget edge,
+            bool hasEdge,
+            bool accepted,
+            bool reserved,
+            float firingDist,
+            float perpDist,
+            int line,
+            float score,
+            string reason)
+        {
+            if (_diagBuilder.Length > 0)
+                _diagBuilder.Append(" | ");
+
+            _diagBuilder.Append("off=").Append(offset);
+            if (!hasEdge)
+            {
+                _diagBuilder.Append("/none");
+                return;
+            }
+
+            _diagBuilder
+                .Append("/id=").Append(edge.balloonId)
+                .Append("/cell=").Append(edge.cell)
+                .Append("/color=").Append(edge.color)
+                .Append("/targetable=").Append(edge.targetable)
+                .Append("/reserved=").Append(reserved);
+
+            if (accepted || firingDist != 0f || perpDist != 0f)
+            {
+                _diagBuilder
+                    .Append("/fd=").Append(firingDist.ToString("F2"))
+                    .Append("/pd=").Append(perpDist.ToString("F2"));
+            }
+
+            if (accepted)
+            {
+                _diagBuilder
+                    .Append("/line=").Append(line)
+                    .Append("/score=").Append(score.ToString("F2"));
+            }
+
+            _diagBuilder.Append("/").Append(reason);
+        }
+
+        // ROLLBACK_CONTOUR_TARGET_DIAG:
+        // Logs the contour cache state after a pop without forcing a cache rebuild.
+        public static void LogContourAfterPop(int poppedId, int color, Vector3 worldPos, string gimmickType)
+        {
+            BuildEdgeTargetCache();
+
+            Vector2Int poppedCell = WorldToGrid(worldPos);
+            bool cacheHasPoppedCell = _occupiedCells.TryGetValue(poppedCell, out EdgeTarget cachedEdge)
+                                      && cachedEdge.balloonId == poppedId;
+            int shellAlive = 0;
+            foreach (int shellId in _currentShellIds)
+            {
+                if (!BalloonController.HasInstance) continue;
+                BalloonData balloon = BalloonController.Instance.GetBalloon(shellId);
+                if (balloon != null && !balloon.isPopped)
+                    shellAlive++;
+            }
+
+            Debug.Log(
+                $"[ContourAfterPop] frame={Time.frameCount} cacheFrame={_edgeCacheFrame} cacheCurrent={_edgeCacheFrame == Time.frameCount} " +
+                $"popped={poppedId} color={color} gimmick={gimmickType} cell={poppedCell} cacheHasPoppedCell={cacheHasPoppedCell} " +
+                $"cached={(cacheHasPoppedCell ? $"id{cachedEdge.balloonId}/color{cachedEdge.color}/targetable{cachedEdge.targetable}" : "none")} " +
+                $"occupied={_occupiedCells.Count} shell={_currentShellIds.Count} shellAlive={shellAlive} " +
+                $"left={_leftContourByRow.Count} right={_rightContourByRow.Count} bottom={_bottomContourByCol.Count} top={_topContourByCol.Count} " +
+                $"sameColor={FormatSameColorContourSummary(color)}");
+        }
+
+        private static string FormatSameColorContourSummary(int color)
+        {
+            _diagBuilder.Length = 0;
+            AppendSameColorMapSummary("L", _leftContourByRow, color);
+            AppendSameColorMapSummary("R", _rightContourByRow, color);
+            AppendSameColorMapSummary("B", _bottomContourByCol, color);
+            AppendSameColorMapSummary("T", _topContourByCol, color);
+            return _diagBuilder.Length > 0 ? _diagBuilder.ToString() : "none";
+        }
+
+        private static void AppendSameColorMapSummary(string label, Dictionary<int, EdgeTarget> map, int color)
+        {
+            int count = 0;
+            foreach (var kvp in map)
+            {
+                EdgeTarget edge = kvp.Value;
+                if (edge.color != color) continue;
+
+                if (_diagBuilder.Length > 0)
+                    _diagBuilder.Append(" | ");
+
+                _diagBuilder
+                    .Append(label).Append(kvp.Key)
+                    .Append(":id=").Append(edge.balloonId)
+                    .Append("/cell=").Append(edge.cell);
+
+                count++;
+                if (count >= 8)
+                {
+                    _diagBuilder.Append("/...");
+                    break;
+                }
+            }
+        }
 
         public static ScanDirection DetermineScanDirection(Vector3 movementDirection)
         {

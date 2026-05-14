@@ -30,6 +30,9 @@ namespace BalloonFlow
         /// <summary>Firestore 로드/생성 완료 시 1회 발화. 이미 ready 상태로 구독하면 즉시 invoke.</summary>
         public event Action OnUserDataReady;
 
+        /// <summary>프로필 아이콘/프레임 변경 시 발화. Lobby UI 등 표시 위치 refresh 용.</summary>
+        public event Action OnProfileChanged;
+
         protected override void OnSingletonAwake()
         {
             _ = InitAsync();
@@ -223,10 +226,51 @@ namespace BalloonFlow
 
         public void SetRemovedAds(bool value)
         {
+            SetRemovedAds(value, null);
+        }
+
+        /// <summary>[2026-05-13] 광고 제거 플래그 + 구매 시각 + productId 일괄 저장. 유료 상품 추적용 (CS/환불/분석).
+        /// productId 미지정 (null) 시 productId 필드 갱신 생략. value=true 일 때만 timestamp 갱신.</summary>
+        public void SetRemovedAds(bool value, string productId)
+        {
             if (!_isReady) return;
             _user.removedAds = value;
-            FireAndForget(_db.Document($"users/{Uid}").UpdateAsync("removedAds", value),
-                $"SetRemovedAds({value})");
+            var updates = new Dictionary<string, object> { ["removedAds"] = value };
+            if (value)
+            {
+                var now = Firebase.Firestore.Timestamp.GetCurrentTimestamp();
+                _user.removedAdsPurchasedAt = now;
+                updates["removedAdsPurchasedAt"] = now;
+                if (!string.IsNullOrEmpty(productId))
+                {
+                    _user.removedAdsProductId = productId;
+                    updates["removedAdsProductId"] = productId;
+                }
+            }
+            FireAndForget(_db.Document($"users/{Uid}").UpdateAsync(updates),
+                $"SetRemovedAds({value},{productId})");
+        }
+
+        /// <summary>프로필 아이콘 슬롯 변경. 동일 값이면 no-op. OnProfileChanged 발화.</summary>
+        public void SetProfileIconNumber(int iconIndex)
+        {
+            if (!_isReady || iconIndex < 0) return;
+            if (_user.profileIconNumber == iconIndex) return;
+            _user.profileIconNumber = iconIndex;
+            OnProfileChanged?.Invoke();
+            FireAndForget(_db.Document($"users/{Uid}").UpdateAsync("profileIconNumber", iconIndex),
+                $"SetProfileIconNumber({iconIndex})");
+        }
+
+        /// <summary>프로필 프레임 슬롯 변경. 동일 값이면 no-op. OnProfileChanged 발화.</summary>
+        public void SetProfileFrameNumber(int frameIndex)
+        {
+            if (!_isReady || frameIndex < 0) return;
+            if (_user.profileFrameNumber == frameIndex) return;
+            _user.profileFrameNumber = frameIndex;
+            OnProfileChanged?.Invoke();
+            FireAndForget(_db.Document($"users/{Uid}").UpdateAsync("profileFrameNumber", frameIndex),
+                $"SetProfileFrameNumber({frameIndex})");
         }
 
         public void SetPurchasedOnce(string productId, bool purchased = true)

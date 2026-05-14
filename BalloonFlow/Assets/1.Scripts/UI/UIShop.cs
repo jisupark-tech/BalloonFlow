@@ -333,7 +333,14 @@ namespace BalloonFlow
             if (_lastResetViewFrame >= 0 && Time.frameCount - _lastResetViewFrame < RESET_VIEW_DEDUP_FRAMES) return;
             _lastResetViewFrame = Time.frameCount;
 
+            LogContentState("ResetView 진입");
+
             _userExpandedMore = false;
+
+            // [2026-05-13] anchor/VLG/CSF/padding 매 진입 시 재적용 — 탭 재진입 시 Content Height 가 줄어드는 이슈 fix.
+            // Awake 1회만 호출하면 다른 컴포넌트가 anchor/sizeDelta 를 덮어쓰거나 padding 이 초기화되는
+            // 경우 ContentSizeFitter 의 preferredSize 계산이 작아질 수 있음. 멱등 호출이라 안전.
+            EnsureContentLayout();
 
             // 누적된 스크롤 오프셋 wipe — 탭 재진입 시 상단 공백 fix
             if (_contentRoot != null)
@@ -382,6 +389,25 @@ namespace BalloonFlow
                 Canvas.ForceUpdateCanvases();
                 ApplyScrollTop();
             }
+            LogContentState("DelayedScrollReset 완료(layout 정착)");
+        }
+
+        // [2026-05-13] ShopContent height 줄어듬 진단용 — Top stretch anchor, VLG/CSF/padding, spawned items 수 기록.
+        // 첫 진입 vs 재진입 로그 비교로 어떤 값이 달라지는지 즉시 확인 가능. 추후 원인 확정되면 제거.
+        private void LogContentState(string tag)
+        {
+            if (_contentRoot == null) { Debug.Log($"[UIShop][{tag}] _contentRoot=null"); return; }
+            var vlg = _contentRoot.GetComponent<VerticalLayoutGroup>();
+            var csf = _contentRoot.GetComponent<ContentSizeFitter>();
+            string vlgInfo = vlg != null
+                ? $"spacing={vlg.spacing} pad(L{vlg.padding.left}/R{vlg.padding.right}/T{vlg.padding.top}/B{vlg.padding.bottom}) ctrlH={vlg.childControlHeight} expandH={vlg.childForceExpandHeight}"
+                : "VLG=null";
+            string csfInfo = csf != null ? $"vFit={csf.verticalFit}" : "CSF=null";
+            Debug.Log($"[UIShop][{tag}] " +
+                      $"rect.h={_contentRoot.rect.height:F1} sizeDelta={_contentRoot.sizeDelta} " +
+                      $"anchorMin={_contentRoot.anchorMin} anchorMax={_contentRoot.anchorMax} pivot={_contentRoot.pivot} " +
+                      $"anchoredPos={_contentRoot.anchoredPosition} childCount={_contentRoot.childCount} spawned={_spawnedItems.Count} " +
+                      $"VLG[{vlgInfo}] CSF[{csfInfo}]");
         }
 
         /// <summary>상품 리스트 초기화 + 첫 페이지 로드.</summary>
@@ -466,6 +492,8 @@ namespace BalloonFlow
 
                     var goldGo = Instantiate(_prefabGold, goldContainer.transform);
                     goldGo.SetActive(true);
+                    // [2026-05-13] 동적 spawn item 의 Buy 버튼 등에 더블 클릭 가드 부착.
+                    UIButtonClickGuard.AttachToHierarchy(goldGo);
 
                     var goldItem = goldGo.GetComponent<PopupShopListItem>();
                     if (goldItem != null)
@@ -489,6 +517,8 @@ namespace BalloonFlow
 
                 var go = Instantiate(prefab, _contentRoot);
                 go.SetActive(true);
+                // [2026-05-13] 동적 spawn item 의 Buy 버튼 등에 더블 클릭 가드 부착.
+                UIButtonClickGuard.AttachToHierarchy(go);
 
                 PlayAppearAnimation(go.transform, appearOrder++);
 

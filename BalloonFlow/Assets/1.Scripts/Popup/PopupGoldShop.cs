@@ -172,6 +172,8 @@ namespace BalloonFlow
                 int idx = _displayedCount + i;
                 var go = Instantiate(_listItemPrefab, _shopContent);
                 go.SetActive(true);
+                // [2026-05-13] 동적 spawn 카드 buy 버튼 등에 더블 클릭 가드.
+                UIButtonClickGuard.AttachToHierarchy(go);
 
                 // BtnMoreProducts 바로 위에 배치
                 if (_btnMoreProducts != null)

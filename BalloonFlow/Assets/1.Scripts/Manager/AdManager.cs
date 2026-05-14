@@ -118,6 +118,14 @@ namespace BalloonFlow
         /// </summary>
         public void ShowRewardedAd(Action rewardCallback, bool ignoreAdProtection = false)
         {
+            // [2026-05-13] 광고 제거 구매 유저는 보상형 포함 모든 광고 차단 (정책 결정).
+            // 보상은 즉시 callback 으로 지급 — 광고 시청 없이 결과만 부여.
+            if (IAPManager.HasInstance && IAPManager.Instance.AdsRemoved)
+            {
+                Debug.Log($"{LOG_TAG} AdsRemoved=true — skipping rewarded ad, granting reward directly.");
+                rewardCallback?.Invoke();
+                return;
+            }
             if (!ignoreAdProtection && GetAdProtectionLevel() < AD_PROTECTION_LEVEL_THRESHOLD)
             {
                 Debug.Log($"{LOG_TAG} Ad protection active — skipping rewarded ad.");
@@ -138,6 +146,12 @@ namespace BalloonFlow
         /// <summary>Interstitial 광고 표시. 게임 중에는 무시. Lv20 미만 ad protection.</summary>
         public void ShowInterstitialAd()
         {
+            // [2026-05-13] 광고 제거 구매 유저 — interstitial 차단.
+            if (IAPManager.HasInstance && IAPManager.Instance.AdsRemoved)
+            {
+                Debug.Log($"{LOG_TAG} AdsRemoved=true — skipping interstitial.");
+                return;
+            }
             if (GetAdProtectionLevel() < AD_PROTECTION_LEVEL_THRESHOLD) return;
             if (!IsInterstitialAdReady()) return;
             if (_isShowingAd) return;

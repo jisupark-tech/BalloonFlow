@@ -140,6 +140,14 @@ namespace BalloonFlow
         [SerializeField] private Button _btnNoAds;
         [SerializeField] private Button _btnProfilePanel;
 
+        [Header("[Profile Display — 좌상단 표시 sprite]")]
+        [Tooltip("PopupProfile 과 동일한 ProfileAssets ScriptableObject. 아이콘/프레임 sprite 카탈로그.")]
+        [SerializeField] private ProfileAssets _profileAssets;
+        [Tooltip("Lobby 좌상단 프로필 아이콘 Image. UserData.profileIconNumber 로 sprite 자동 설정.")]
+        [SerializeField] private Image _imgProfileIcon;
+        [Tooltip("Lobby 좌상단 프로필 프레임 Image. UserData.profileFrameNumber 로 sprite 자동 설정.")]
+        [SerializeField] private Image _imgProfileFrame;
+
         [Header("[Rail Enter Animation]")]
         [SerializeField] private RectTransform _railTop;
         [SerializeField] private RectTransform _railBottom;
@@ -260,6 +268,52 @@ namespace BalloonFlow
             // 프리팹 enable 직후 의도치 않게 변경 애니가 자동 재생되는 문제 차단.
             // 첫 프레임 전에 idle 로 강제 고정한다.
             EnsureLobbyBtnIdle();
+
+            // [2026-05-13] 프로필 표시 — UserData ready 이후 1회 + 변경 시마다 refresh.
+            HookProfileEvents();
+            RefreshProfileDisplay();
+        }
+
+        private void HookProfileEvents()
+        {
+            if (!UserDataService.HasInstance) return;
+            var svc = UserDataService.Instance;
+            svc.OnUserDataReady += RefreshProfileDisplay;
+            svc.OnProfileChanged += RefreshProfileDisplay;
+        }
+
+        private void UnhookProfileEvents()
+        {
+            if (!UserDataService.HasInstance) return;
+            var svc = UserDataService.Instance;
+            svc.OnUserDataReady -= RefreshProfileDisplay;
+            svc.OnProfileChanged -= RefreshProfileDisplay;
+        }
+
+        /// <summary>좌상단 프로필 아이콘/프레임 sprite 를 UserData index 기반으로 갱신.
+        /// _profileAssets/Image 미할당 시 silent skip → 디자이너 wire 전에도 안전.</summary>
+        private void RefreshProfileDisplay()
+        {
+            if (_profileAssets == null) return;
+            int iconIdx = 0, frameIdx = 0;
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady
+                && UserDataService.Instance.CurrentUser != null)
+            {
+                iconIdx  = UserDataService.Instance.CurrentUser.profileIconNumber;
+                frameIdx = UserDataService.Instance.CurrentUser.profileFrameNumber;
+            }
+            if (_imgProfileIcon != null)
+            {
+                var sp = _profileAssets.GetIcon(iconIdx);
+                _imgProfileIcon.sprite = sp;
+                _imgProfileIcon.enabled = sp != null;
+            }
+            if (_imgProfileFrame != null)
+            {
+                var sp = _profileAssets.GetFrame(frameIdx);
+                _imgProfileFrame.sprite = sp;
+                _imgProfileFrame.enabled = sp != null;
+            }
         }
 
         /// <summary>
@@ -447,9 +501,10 @@ namespace BalloonFlow
             sr.verticalNormalizedPosition = 1f;
         }
 
-        private new void OnDestroy()
+        protected override void OnDestroy()
         {
             base.OnDestroy();
+            UnhookProfileEvents();
             _pageTween?.Kill();
             _goldTween?.Kill();
             _railTopTween?.Kill();
@@ -898,6 +953,8 @@ namespace BalloonFlow
                 // Bottom = currentLevel, going UP = currentLevel+1, +2, ...
                 int levelId = currentLevel + i;
                 var go = Instantiate(_lobbyRailBoxPrefab, _levelBoxContainer);
+                // [2026-05-13] 레벨 박스 버튼 더블 클릭 가드 (멱등).
+                UIButtonClickGuard.AttachToHierarchy(go);
                 var box = go.GetComponent<LobbyRailBox>();
                 if (box != null)
                 {
@@ -961,6 +1018,10 @@ namespace BalloonFlow
             pageIndex = Mathf.Clamp(pageIndex, 0, 2);
             _isDragging = false; // 탭 버튼 클릭 시 드래그 상태 리셋
             if (pageIndex == _currentPageIndex) return;
+
+            // [2026-05-13] 진행 중인 page tween 동안 다른 탭 클릭 무시 — 첫 클릭 연출이 자연스럽게 끝나도록.
+            // 드래그 swipe (HandleSwipeDrag → AnimateToPage 직접 호출) 는 그대로 통과 (user explicit input).
+            if (_pageTween != null && _pageTween.IsActive() && !_pageTween.IsComplete()) return;
 
             _currentPageIndex = pageIndex;
             if (pageIndex == 1)
@@ -1026,7 +1087,8 @@ namespace BalloonFlow
                 _dragStartPageX = _pageContainer.anchoredPosition.x;
                 _dragDirectionLocked = false;
                 _dragIsHorizontal = false;
-                _pageTween?.Kill();
+                // [2026-05-13] 터치 press 시점 Kill 제거 — 단순 탭(=탭 버튼 클릭)도 여기로 진입하므로
+                // 진행 중 page tween 이 매번 끊김. 확정된 가로 드래그 시점에서만 Kill (아래 분기).
             }
             else if (touching && _isDragging)
             {
@@ -1046,6 +1108,8 @@ namespace BalloonFlow
                     // 드래그 중 세로 스크롤이 동시에 일어나는 충돌을 방지.
                     if (_dragIsHorizontal)
                     {
+                        // [2026-05-13] 가로 드래그 확정 시점에서만 진행 중 tween Kill — 드래그가 손가락 위치를 즉시 따라가야 하므로.
+                        _pageTween?.Kill();
                         SetShopInnerScrollEnabled(false);
                     }
                 }
@@ -1074,8 +1138,9 @@ namespace BalloonFlow
                         PlayRailPullDownAnimation();
                     }
 
-                    // 세로 드래그였으면 페이지 이동 없이 복귀
-                    AnimateToPage(_currentPageIndex);
+                    // [2026-05-13] 단순 탭/세로 드래그 release 에서 AnimateToPage 호출 제거 —
+                    // 탭 버튼 클릭으로 진행 중인 page tween 을 Kill+재시작 시키던 회귀 fix.
+                    // page 위치는 이미 정확하거나 (탭/세로) tween 이 자연스럽게 끝까지 도달.
                     return;
                 }
 

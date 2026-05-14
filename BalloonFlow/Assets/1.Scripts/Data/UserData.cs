@@ -34,6 +34,12 @@ namespace BalloonFlow
         [FirestoreProperty] public int highestClearedLevel { get; set; } = 0;
         [FirestoreProperty] public bool allClearedFlag { get; set; } = false;
 
+        // ── Profile ───────────────────────────────────────────────
+        /// <summary>프로필 아이콘 슬롯 index (0 base). 기본 0 = 첫 슬롯.</summary>
+        [FirestoreProperty] public int profileIconNumber { get; set; } = 0;
+        /// <summary>프로필 프레임 슬롯 index (0 base). 기본 0 = 첫 슬롯.</summary>
+        [FirestoreProperty] public int profileFrameNumber { get; set; } = 0;
+
         // ── Boosters ──────────────────────────────────────────────
         [FirestoreProperty] public BoosterInventory boosters { get; set; } = new BoosterInventory();
 
@@ -42,6 +48,10 @@ namespace BalloonFlow
 
         // ── Shop / Ads ────────────────────────────────────────────
         [FirestoreProperty] public bool removedAds { get; set; } = false;
+        /// <summary>광고 제거 구매 시각 (UTC). default(Seconds=0) = 미구매. 환불/CS/분석 용도.</summary>
+        [FirestoreProperty] public Timestamp removedAdsPurchasedAt { get; set; }
+        /// <summary>광고 제거를 부여한 productId. 여러 상품(noads 단품/bundle 포함) 중 어떤 경로로 구매했는지 추적.</summary>
+        [FirestoreProperty] public string removedAdsProductId { get; set; } = "";
         /// <summary>1회 한정 상품 구매 이력. key = productId.</summary>
         [FirestoreProperty] public Dictionary<string, bool> purchasedOnce { get; set; } = new Dictionary<string, bool>();
         /// <summary>NPU = Non-Paying User. 첫 결제 후 false. Best Value Pack 노출 조건.</summary>
@@ -78,6 +88,8 @@ namespace BalloonFlow
                 // default Timestamp(Seconds=0) = unset
                 highestClearedLevel = 0,
                 allClearedFlag = false,
+                profileIconNumber = 0,
+                profileFrameNumber = 0,
                 boosters = new BoosterInventory(),
                 continueState = new ContinueState(),
                 removedAds = false,
