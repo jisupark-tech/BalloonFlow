@@ -3,8 +3,9 @@ using UnityEngine.UI;
 
 namespace AimedPuzzle.BalloonFlow.UI
 {
-    // Per-instance background scroller component (not a singleton — multiple RawImages may have their own).
     /// <summary>RawImage uvRect를 X/Y로 스크롤하면서 CanvasScaler referenceResolution 대비 실제 rect 크기 비율로 uvRect.W/H를 자동 보정한다.</summary>
+    /// <remarks>Per-instance MonoBehaviour; intentionally NOT a singleton — multiple RawImage instances each own their own scroller.</remarks>
+    [DisallowMultipleComponent]
     public class ImagePatternScroller : MonoBehaviour
     {
         [SerializeField] private RawImage rawImage;
@@ -27,8 +28,6 @@ namespace AimedPuzzle.BalloonFlow.UI
             RecalculateUvSize();
         }
 
-        // 세로 reference(예: 1242x2688)에서는 _baseUvSize 그대로 사용.
-        // 화면 rect가 reference보다 커지면 같은 픽셀 크기의 패턴이 더 많이 반복되도록 uv 범위만 비례 확장.
         private void RecalculateUvSize()
         {
             if (rawImage == null || rawImage.texture == null) return;
@@ -39,12 +38,17 @@ namespace AimedPuzzle.BalloonFlow.UI
             Vector2 refRes = GetReferenceResolution();
             if (refRes.x <= 0f || refRes.y <= 0f) return;
 
-            uvRect.width  = _baseUvSize.x * (rectSize.x / refRes.x);
-            uvRect.height = _baseUvSize.y * (rectSize.y / refRes.y);
+            var tex = rawImage.texture;
+            if (tex.width <= 0 || tex.height <= 0) return;
+
+            uvRect.width = _baseUvSize.x * (rectSize.x / refRes.x);
+
+            // 한 타일의 화면 표시 aspect == 텍스처 원본 aspect 가 되도록 uv.h를 uv.w로부터 derive.
+            // 결과: 화면 비율 변화 시 타일은 stretch 되지 않고 반복 개수만 증가.
+            uvRect.height = uvRect.width * ((float)tex.width * rectSize.y) / ((float)tex.height * rectSize.x);
 
             rawImage.uvRect = uvRect;
-
-            _lastTexId = rawImage.texture.GetInstanceID();
+            _lastTexId = tex.GetInstanceID();
         }
 
         private Vector2 GetReferenceResolution()
