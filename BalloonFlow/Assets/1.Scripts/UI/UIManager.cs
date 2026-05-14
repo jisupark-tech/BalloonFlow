@@ -36,6 +36,7 @@ namespace BalloonFlow
         private Canvas _fadeCanvas;
         private Coroutine _fadeCoroutine;
         private Image _fadeImageDisplay;
+        private SplashBackgroundFitter _fadeImageFitter;
         private Sprite _currentFadeSprite;
 
         /// <summary>현재 fade 진행 중 또는 overlay가 가시 상태인지. 중복 fade 호출 방지용.</summary>
@@ -327,26 +328,23 @@ namespace BalloonFlow
             _fadeOverlay.interactable = false;
             _fadeOverlay.blocksRaycasts = false;
 
-            // Custom image overlay (on top of black, disabled by default)
+            // Custom image overlay — envelope cover via SplashBackgroundFitter.
+            // 부모(FadeOverlay)는 stretch로 letterbox 영역 채움 유지, FadeImage만 cover-fit으로 sizeDelta 제어.
             var _imgGO = new GameObject("FadeImage");
             _imgGO.layer = LayerMask.NameToLayer("UI");
-            _imgGO.transform.SetParent(_canvasGO.transform, false);
+            _imgGO.transform.SetParent(_go.transform, false);
             var _imgRT = _imgGO.AddComponent<RectTransform>();
-            _imgRT.anchorMin = Vector2.zero;
-            _imgRT.anchorMax = Vector2.one;
-            _imgRT.offsetMin = Vector2.zero;
-            _imgRT.offsetMax = Vector2.zero;
+            // center anchor — fitter는 sizeDelta-only이며 stretch anchor와 충돌. Awake가 또 강제하지만 사전 일치.
+            _imgRT.anchorMin = new Vector2(0.5f, 0.5f);
+            _imgRT.anchorMax = new Vector2(0.5f, 0.5f);
+            _imgRT.pivot = new Vector2(0.5f, 0.5f);
+            _imgRT.anchoredPosition = Vector2.zero;
+            _imgRT.sizeDelta = Vector2.zero;
             _fadeImageDisplay = _imgGO.AddComponent<Image>();
-            _fadeImageDisplay.preserveAspect = true;
             _fadeImageDisplay.raycastTarget = false;
             _fadeImageDisplay.enabled = false;
-
-            // Add the image GO under the same CanvasGroup so alpha controls both
-            _imgGO.transform.SetParent(_go.transform, false);
-            _imgRT.anchorMin = Vector2.zero;
-            _imgRT.anchorMax = Vector2.one;
-            _imgRT.offsetMin = Vector2.zero;
-            _imgRT.offsetMax = Vector2.zero;
+            // preserveAspect는 SplashBackgroundFitter.Awake가 false로 강제 (sizeDelta가 sprite native aspect와 동일).
+            _fadeImageFitter = _imgGO.AddComponent<SplashBackgroundFitter>();
         }
 
         /// <summary>
@@ -365,6 +363,8 @@ namespace BalloonFlow
                 _fadeImageDisplay.color = Color.white;
                 _fadeImageDisplay.enabled = true;
                 _currentFadeSprite = _resolved;
+                // SplashBackgroundFitter는 parent size 변화만 감지 — sprite 교체 시 명시 재계산 트리거.
+                if (_fadeImageFitter != null) _fadeImageFitter.Refresh();
             }
             else
             {
