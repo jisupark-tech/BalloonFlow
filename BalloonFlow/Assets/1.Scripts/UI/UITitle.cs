@@ -30,6 +30,19 @@ namespace BalloonFlow
 
         public Slider ProgressSlider => _progressSlider;
 
+        private void Awake()
+        {
+            var bg = transform.Find("Background");
+            if (bg == null)
+            {
+                Debug.LogWarning("[UITitle] Background child not found — splash fitter skipped");
+                return;
+            }
+            var go = bg.gameObject;
+            if (go.GetComponent<SplashBackgroundFitter>() == null)
+                go.AddComponent<SplashBackgroundFitter>();
+        }
+
         /// <summary>
         /// 진행도 갱신: 0~1 비율을 슬라이더 + "XX%" 텍스트 (본문 + outline) 둘 다 갱신.
         /// </summary>
