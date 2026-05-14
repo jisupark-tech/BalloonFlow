@@ -3,17 +3,15 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// 1:1(5:5) 스플래시 배경 Image를 부모 RectTransform에 'fit + 축소' 방식으로 배치한다.
+    /// 1:1(5:5) 스플래시 배경 Image를 부모 RectTransform에 항상 cover하는 최소 envelope으로 배치한다.
     ///
     /// 동작:
-    ///  - 부모 rect의 짧은 변(Min(width, height))을 기준으로 정사각형 sizeDelta를 계산.
-    ///  - 추가로 <see cref="_scaleMultiplier"/>(0.5~1.0)를 곱해 더 작게 표시 → 풍선 영역이 잘리지 않고 여백 노출.
+    ///  - 부모 rect의 긴 변(Max(width, height))을 기준으로 정사각형 sizeDelta를 계산 → 부모를 가득 채우는 최소 크기.
+    ///  - 1:1 비율 보존(sizeDelta.x == sizeDelta.y), 중앙 정렬(anchor/pivot=0.5)로 대칭 크롭 → 잘림 최소화.
+    ///  - <see cref="_scaleMultiplier"/>(1.0~1.5)는 디자이너가 추가 확대를 원할 때만 사용. 1.0 = 정확한 cover.
     ///
-    /// 왜 envelope(가득 채우기)가 아닌 fit(축소 우선)인가:
-    ///  - 풍선이 화면 가장자리에서 잘리면 안 된다(아트 디렉션). 항상 전부 보이도록 축소를 선택.
-    ///
-    /// 왜 scaleMultiplier가 있는가:
-    ///  - 디자이너/사용자가 "기본 fit보다 더 작게" 보이기를 요구할 때 인스펙터 한 줄로 조절하기 위함.
+    /// 사용자 요구:
+    ///  - 화면 전체를 항상 가득 채워야 한다(여백 금지) + 잘림은 대칭 중앙 크롭으로 최소화.
     ///
     /// 왜 Singleton이 아닌가:
     ///  - 본 컴포넌트는 단일 RectTransform에 부착되는 per-instance Fitter다. 전역 상태가 없으므로 Singleton 패턴 불필요.
@@ -26,10 +24,8 @@ namespace BalloonFlow
     [RequireComponent(typeof(RectTransform))]
     public class SplashBackgroundFitter : MonoBehaviour
     {
-        private const float SOURCE_ASPECT = 1f;
-
-        [Tooltip("부모 rect의 짧은 변에 곱할 축소 계수. 1.0 = fit 그대로, <1.0 = 더 작게.")]
-        [SerializeField, Range(0.5f, 1f)] private float _scaleMultiplier = 0.82f;
+        [Tooltip("부모 rect의 긴 변에 곱할 확대 계수. 1.0 = 정확한 cover(envelope), >1.0 = 추가 확대.")]
+        [SerializeField, Range(1f, 1.5f)] private float _scaleMultiplier = 1.0f;
 
         private RectTransform _rect;
         private RectTransform _parentRect;
@@ -64,7 +60,7 @@ namespace BalloonFlow
 
             float pw = _parentRect.rect.width;
             float ph = _parentRect.rect.height;
-            float side = Mathf.Min(pw, ph) * _scaleMultiplier * SOURCE_ASPECT;
+            float side = Mathf.Max(pw, ph) * _scaleMultiplier;
 
             _rect.sizeDelta = new Vector2(side, side);
             _lastParentSize = new Vector2(pw, ph);
