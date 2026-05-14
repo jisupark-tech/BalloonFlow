@@ -21,6 +21,7 @@ namespace BalloonFlow
 
         private const string DART_POOL_KEY = "Dart";
         private const float DEFAULT_PROJECTILE_FLIGHT_TIME = 0.1f;
+        private const int ADJACENT_EMPTY_LINE_RESCUE_RADIUS = 1;
         #endregion
 
         #region Serialized Fields
@@ -1027,12 +1028,13 @@ namespace BalloonFlow
                 int pHead = -1;
                 int pLine = 0;
                 DirectionalTargeting.ScanDirection pDir = currentScanDir;
-                bool catchUpFromPromo = !catchUpFromLastScan
+                bool hasPromoSeedForHead = !catchUpFromLastScan
                     && _promoHeadByHolder.TryGetValue(dart.holderId, out pHead)
                     && pHead == dart.dartId
                     && _promoDirByHolder.TryGetValue(dart.holderId, out pDir)
-                    && pDir == currentScanDir
                     && _promoLineByHolder.TryGetValue(dart.holderId, out pLine);
+                bool catchUpFromPromo = hasPromoSeedForHead && pDir == currentScanDir;
+                bool catchUpFromCornerPromo = hasPromoSeedForHead && pDir != currentScanDir;
 
                 if (catchUpFromLastScan)
                 {
@@ -1086,6 +1088,96 @@ namespace BalloonFlow
                 Vector3 scanDartPos = dartPos;
                 bool foundTarget = false;
 
+                // ROLLBACK_DART_CORNER_PROMO_REPLAY:
+                // A promoted/deployed head can carry a seed from the previous side of a rounded
+                // corner. If the next scan already reports the new side, the normal promo catch-up
+                // ignores that seed and the last line before the turn can be skipped. Probe the
+                // seed direction once before switching fully to the current direction.
+                if (catchUpFromCornerPromo)
+                {
+                    int cornerCurrentLine = GetScanLine(dartPos, pDir);
+                    int cornerDelta = cornerCurrentLine - pLine;
+                    int cornerStep = cornerDelta >= 0 ? 1 : -1;
+                    int cornerCount = Mathf.Clamp(Mathf.Abs(cornerDelta) + 1, 1, MaxLineCatchUpPerHead);
+                    Vector3 cornerFireDir = GetFireDirectionForScanDirection(pDir);
+
+                    LogAttackIssue(
+                        "DartCornerPromoReplay",
+                        $"holder={holderId} dartId={dartId} progress={dart.progress:F2} " +
+                        $"seedScan={pDir} currentScan={currentScanDir} seedLine={pLine} " +
+                        $"cornerCurrentLine={cornerCurrentLine} probes={cornerCount}");
+
+                    for (int lineProbe = 0; !foundTarget && lineProbe < cornerCount; lineProbe++)
+                    {
+                        int probeLine = pLine + lineProbe * cornerStep;
+                        if (IsTargetLineConsumed(pDir, probeLine))
+                        {
+                            LogAttackIssue(
+                                "DartFireBlocked",
+                                $"reason=targetLineConsumed stage=cornerPromo holder={holderId} dartId={dartId} " +
+                                $"progress={dart.progress:F2} scan={pDir} line={probeLine} " +
+                                $"currentScan={currentScanDir} probe={lineProbe + 1}/{cornerCount}");
+                            continue;
+                        }
+                        if (IsHolderLineConsumed(holderId, pDir, probeLine))
+                        {
+                            LogAttackIssue(
+                                "DartFireBlocked",
+                                $"reason=holderLineConsumed stage=cornerPromo holder={holderId} dartId={dartId} " +
+                                $"progress={dart.progress:F2} scan={pDir} line={probeLine} " +
+                                $"currentScan={currentScanDir} probe={lineProbe + 1}/{cornerCount}");
+                            continue;
+                        }
+
+                        Vector3 probePos = MakeScanPositionForLine(dartPos, pDir, probeLine);
+                        foundTarget = DirectionalTargeting.TryFindTarget(
+                            probePos,
+                            cornerFireDir,
+                            color,
+                            _reservedTargets,
+                            out targetId,
+                            out scanDir,
+                            out targetLine,
+                            out selectedTargetPos);
+                        scanDartPos = probePos;
+                        if (!foundTarget)
+                        {
+                            foundTarget = TryFindAdjacentEmptyLineRescue(
+                                holderId,
+                                dartId,
+                                color,
+                                dart.progress,
+                                probePos,
+                                cornerFireDir,
+                                pDir,
+                                probeLine,
+                                "cornerPromo",
+                                out targetId,
+                                out scanDir,
+                                out targetLine,
+                                out selectedTargetPos);
+                        }
+                        if (foundTarget)
+                        {
+                            int foundLine = GetScanLine(selectedTargetPos, scanDir);
+                            if (IsTargetLineConsumed(scanDir, foundLine) || IsHolderLineConsumed(holderId, scanDir, foundLine))
+                            {
+                                LogAttackIssue(
+                                    "DartFireBlocked",
+                                    $"reason=consumedCandidate stage=cornerPromo holder={holderId} dartId={dartId} " +
+                                    $"progress={dart.progress:F2} scan={scanDir} line={foundLine} " +
+                                    $"seedScan={pDir} seedLine={probeLine}");
+                                foundTarget = false;
+                                targetId = -1;
+                                continue;
+                            }
+                        }
+                    }
+
+                    if (!foundTarget)
+                        ClearPromoSeedForHolder(holderId);
+                }
+
                 // ROLLBACK_DART_CROSSED_LINE_SCAN:
                 // A long frame or speed burst can move a head across multiple grid lines. The old
                 // catch-up checked only one representative skipped line, then current position, so
@@ -1128,8 +1220,58 @@ namespace BalloonFlow
                         out targetLine,
                         out selectedTargetPos);
                     scanDartPos = probePos;
+                    if (!foundTarget)
+                    {
+                        foundTarget = TryFindAdjacentEmptyLineRescue(
+                            holderId,
+                            dartId,
+                            color,
+                            dart.progress,
+                            probePos,
+                            fireDir,
+                            currentScanDir,
+                            probeLine,
+                            "probe",
+                            out targetId,
+                            out scanDir,
+                            out targetLine,
+                            out selectedTargetPos);
+                    }
                     if (foundTarget)
+                    {
+                        // ROLLBACK_DART_CATCHUP_CONSUMED_CANDIDATE_CONTINUE:
+                        // TryFindTarget can accept a nearby stable line while probing a crossed
+                        // line. At x2 this often resolves back to the just-fired/consumed previous
+                        // line. If we wait until candidate-build validation, the outer head loop
+                        // `continue`s and the remaining catch-up lines are never probed. Reject the
+                        // consumed nearby candidate here and keep scanning the later crossed lines.
+                        int foundLine = GetScanLine(selectedTargetPos, scanDir);
+                        if (IsTargetLineConsumed(scanDir, foundLine))
+                        {
+                            LogAttackIssue(
+                                "DartFireBlocked",
+                                $"reason=targetLineConsumed stage=probeCandidate holder={holderId} dartId={dartId} " +
+                                $"progress={dart.progress:F2} scan={scanDir} line={foundLine} " +
+                                $"probeScan={currentScanDir} probeLine={probeLine} currentLine={currentLine} " +
+                                $"probe={lineProbe + 1}/{catchUpCount}");
+                            foundTarget = false;
+                            targetId = -1;
+                            continue;
+                        }
+                        if (IsHolderLineConsumed(holderId, scanDir, foundLine))
+                        {
+                            LogAttackIssue(
+                                "DartFireBlocked",
+                                $"reason=holderLineConsumed stage=probeCandidate holder={holderId} dartId={dartId} " +
+                                $"progress={dart.progress:F2} scan={scanDir} line={foundLine} " +
+                                $"probeScan={currentScanDir} probeLine={probeLine} currentLine={currentLine} " +
+                                $"probe={lineProbe + 1}/{catchUpCount}");
+                            foundTarget = false;
+                            targetId = -1;
+                            continue;
+                        }
                         break;
+                    }
                 }
 
                 if (!foundTarget && (scanDartPos - dartPos).sqrMagnitude > 0.0001f)
@@ -1144,6 +1286,23 @@ namespace BalloonFlow
                         out targetLine,
                         out selectedTargetPos);
                     scanDartPos = dartPos;
+                    if (!foundTarget)
+                    {
+                        foundTarget = TryFindAdjacentEmptyLineRescue(
+                            holderId,
+                            dartId,
+                            color,
+                            dart.progress,
+                            dartPos,
+                            fireDir,
+                            currentScanDir,
+                            currentLine,
+                            "currentFallback",
+                            out targetId,
+                            out scanDir,
+                            out targetLine,
+                            out selectedTargetPos);
+                    }
                 }
                 if (releaseConsumedLineAfterScan)
                 {
@@ -1541,9 +1700,31 @@ namespace BalloonFlow
             {
                 rail.GetDartCurrentPose(promotedHead, out Vector3 promoPos, out _, out Vector3 promoFireDir);
                 var promoScanDir = DirectionalTargeting.DetermineScanDirection(promoFireDir);
+                int promoCurrentLine = GetScanLine(promoPos, promoScanDir);
+                int promoSeedLine = promoCurrentLine;
+
+                // ROLLBACK_DART_PROMO_SEED_FROM_FIRED_LINE:
+                // At x2 a newly promoted head can already be several exact lines past the dart that
+                // just fired. Seeding from the promoted head's current line skips the in-between
+                // lines (ex: fired line 9, promoted current line 12 => line 10/11 never probed).
+                // If the side did not change, replay starts at the first line after the fired line
+                // in the promoted head's travel direction, then continues through promoCurrentLine.
+                if (promoScanDir == candidate.scanDir)
+                {
+                    int delta = promoCurrentLine - candidate.scanLine;
+                    if (delta != 0)
+                        promoSeedLine = candidate.scanLine + (delta > 0 ? 1 : -1);
+                }
+
                 _promoHeadByHolder[candidate.holderId] = promotedHead.dartId;
                 _promoDirByHolder[candidate.holderId]  = promoScanDir;
-                _promoLineByHolder[candidate.holderId] = GetScanLine(promoPos, promoScanDir);
+                _promoLineByHolder[candidate.holderId] = promoSeedLine;
+
+                LogAttackIssue(
+                    "DartPromoHeadSeed",
+                    $"holder={candidate.holderId} firedDart={candidate.dartId} nextDart={promotedHead.dartId} " +
+                    $"scan={promoScanDir} firedLine={candidate.scanLine} seedLine={promoSeedLine} " +
+                    $"currentLine={promoCurrentLine}");
             }
             else
             {
@@ -1673,6 +1854,86 @@ namespace BalloonFlow
             }
         }
 
+        private static Vector3 GetFireDirectionForScanDirection(DirectionalTargeting.ScanDirection scanDir)
+        {
+            switch (scanDir)
+            {
+                case DirectionalTargeting.ScanDirection.Right:
+                    return Vector3.right;
+                case DirectionalTargeting.ScanDirection.Left:
+                    return Vector3.left;
+                case DirectionalTargeting.ScanDirection.Up:
+                    return Vector3.forward;
+                case DirectionalTargeting.ScanDirection.Down:
+                    return Vector3.back;
+                default:
+                    return Vector3.forward;
+            }
+        }
+
+        private bool TryFindAdjacentEmptyLineRescue(
+            int holderId,
+            int dartId,
+            int color,
+            float progress,
+            Vector3 probePos,
+            Vector3 fireDir,
+            DirectionalTargeting.ScanDirection probeScanDir,
+            int probeLine,
+            string stage,
+            out int targetId,
+            out DirectionalTargeting.ScanDirection scanDir,
+            out int targetLine,
+            out Vector3 selectedTargetPos)
+        {
+            targetId = -1;
+            scanDir = probeScanDir;
+            targetLine = probeLine;
+            selectedTargetPos = Vector3.zero;
+
+            if (!DirectionalTargeting.TryFindTargetOnAdjacentLineWhenExactLineEmpty(
+                    probePos,
+                    fireDir,
+                    color,
+                    _reservedTargets,
+                    ADJACENT_EMPTY_LINE_RESCUE_RADIUS,
+                    out targetId,
+                    out scanDir,
+                    out targetLine,
+                    out selectedTargetPos))
+            {
+                return false;
+            }
+
+            int foundLine = targetLine;
+            if (IsTargetLineConsumed(scanDir, foundLine))
+            {
+                LogAttackIssue(
+                    "DartFireBlocked",
+                    $"reason=targetLineConsumed stage={stage}AdjacentRescue holder={holderId} dartId={dartId} " +
+                    $"progress={progress:F2} scan={scanDir} line={foundLine} " +
+                    $"probeScan={probeScanDir} probeLine={probeLine}");
+                targetId = -1;
+                return false;
+            }
+            if (IsHolderLineConsumed(holderId, scanDir, foundLine))
+            {
+                LogAttackIssue(
+                    "DartFireBlocked",
+                    $"reason=holderLineConsumed stage={stage}AdjacentRescue holder={holderId} dartId={dartId} " +
+                    $"progress={progress:F2} scan={scanDir} line={foundLine} " +
+                    $"probeScan={probeScanDir} probeLine={probeLine}");
+                targetId = -1;
+                return false;
+            }
+
+            LogAttackIssue(
+                "DartAdjacentLineRescue",
+                $"stage={stage} holder={holderId} dartId={dartId} color={color} progress={progress:F2} " +
+                $"probeScan={probeScanDir} probeLine={probeLine} target={targetId} scan={scanDir} line={foundLine}");
+            return true;
+        }
+
         private void InvalidateDartScanLines()
         {
             _lastScannedLineByHolder.Clear();
@@ -1732,6 +1993,36 @@ namespace BalloonFlow
             _promoLineByHolder.Remove(holderId);
             _promoDirByHolder.Remove(holderId);
             _promoHeadByHolder.Remove(holderId);
+        }
+
+        // ROLLBACK_DART_DEPLOY_HEAD_SEED:
+        // At x2 speed a freshly deployed first dart can move from its placement line to a later
+        // line before DartManager's next Update scan. With no previous scan/head-replacement seed,
+        // the first scan only probes the current line and silently skips the crossed lines. Treat a
+        // newly placed holder head like a promoted head so the first scan replays placement line
+        // through current line.
+        private void SeedPlacedHeadCatchUp(OnDartPlaced evt)
+        {
+            if (!RailManager.HasInstance || evt.dartId < 0 || evt.color < 0)
+                return;
+
+            var rail = RailManager.Instance;
+            var head = rail.GetClusterHeadDart(evt.holderId);
+            if (head == null || head.dartId != evt.dartId || head.dartColor < 0)
+                return;
+
+            rail.GetDartCurrentPose(head, out Vector3 seedPos, out _, out Vector3 seedFireDir);
+            var seedScanDir = DirectionalTargeting.DetermineScanDirection(seedFireDir);
+            int seedLine = GetScanLine(seedPos, seedScanDir);
+
+            _promoHeadByHolder[evt.holderId] = evt.dartId;
+            _promoDirByHolder[evt.holderId] = seedScanDir;
+            _promoLineByHolder[evt.holderId] = seedLine;
+
+            LogAttackIssue(
+                "DartDeployHeadSeed",
+                $"holder={evt.holderId} dartId={evt.dartId} color={evt.color} " +
+                $"progress={evt.progress:F2} scan={seedScanDir} line={seedLine}");
         }
 
         // ROLLBACK_DART_CONSUMED_LINE_LOCK:
@@ -2105,6 +2396,7 @@ namespace BalloonFlow
         {
             if (_boardFinished) return;
             CreateDartVisualById(evt.dartId, evt.color, evt.holderId);
+            SeedPlacedHeadCatchUp(evt);
         }
 
         /// <summary>

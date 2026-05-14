@@ -358,6 +358,86 @@ namespace BalloonFlow
             return targetId >= 0;
         }
 
+        // ROLLBACK_DART_EMPTY_LINE_ADJACENT_RESCUE:
+        // Keep normal targeting exact-line only. At x2 speed a dart can quantize onto a line with
+        // no contour edge while the physically aligned edge is exactly one grid line beside it.
+        // Rescue only that empty-line case; if the exact line has any edge, color/front/reserve
+        // rules stay authoritative and adjacent lines cannot steal the shot.
+        public static bool TryFindTargetOnAdjacentLineWhenExactLineEmpty(
+            Vector3 dartPosition,
+            Vector3 firingDirection,
+            int color,
+            HashSet<int> excludeIds,
+            int maxLineOffset,
+            out int targetId,
+            out ScanDirection scanDir,
+            out int targetLine,
+            out Vector3 targetWorldPos)
+        {
+            targetId = -1;
+            targetLine = 0;
+            targetWorldPos = Vector3.zero;
+            scanDir = DetermineScanDirection(firingDirection);
+
+            if (!BalloonController.HasInstance) return false;
+
+            BuildEdgeTargetCache();
+
+            Vector2Int dartCell = WorldToGrid(dartPosition);
+            if (TryGetEdgeTarget(scanDir, dartCell, 0, out _))
+                return false;
+
+            maxLineOffset = Mathf.Max(0, maxLineOffset);
+            if (maxLineOffset == 0)
+                return false;
+
+            float perpendicularTolerance = _gridCellSize * PERPENDICULAR_TOLERANCE_MULTIPLIER;
+            int bestId = -1;
+            int bestLine = 0;
+            Vector3 bestWorldPos = Vector3.zero;
+            float bestScore = float.MaxValue;
+            float bestFiringDist = float.MaxValue;
+
+            for (int offset = -maxLineOffset; offset <= maxLineOffset; offset++)
+            {
+                if (offset == 0) continue;
+                if (!TryGetEdgeTarget(scanDir, dartCell, offset, out EdgeTarget edge))
+                    continue;
+
+                bool reserved = excludeIds != null && excludeIds.Contains(edge.balloonId);
+                if (!edge.targetable || edge.color != color || reserved)
+                    continue;
+
+                float firingDist = GetFiringAxisDistance(dartPosition, edge.worldPos, scanDir);
+                if (firingDist < 0f)
+                    continue;
+
+                float perpDist = GetPerpendicularDistance(dartPosition, edge.worldPos, scanDir);
+                if (perpDist > perpendicularTolerance)
+                    continue;
+
+                int line = GetLineKey(scanDir, edge.cell);
+                float score = Mathf.Abs(offset) * _gridCellSize + perpDist;
+                if (score < bestScore || (Mathf.Approximately(score, bestScore) && firingDist < bestFiringDist))
+                {
+                    bestScore = score;
+                    bestFiringDist = firingDist;
+                    bestLine = line;
+                    bestWorldPos = edge.worldPos;
+                    bestId = edge.balloonId;
+                }
+            }
+
+            if (bestId < 0)
+                return false;
+
+            _recentLineUseFrame[GetRecentLineKey(scanDir, bestLine)] = Time.frameCount;
+            targetId = bestId;
+            targetLine = bestLine;
+            targetWorldPos = bestWorldPos;
+            return true;
+        }
+
         // [2026-05-13 rolled back] FindInnerFallback — 관통 이슈로 비활성. 재활성 시 복원.
         // private static int FindInnerFallback(Vector2Int dartCell, ScanDirection scanDir, int color, HashSet<int> excludeIds)
         // {
