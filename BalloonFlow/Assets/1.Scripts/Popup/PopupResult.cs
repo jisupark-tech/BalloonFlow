@@ -35,10 +35,11 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprStageHard;
         [SerializeField] private Sprite _sprStageSuperHard;
 
-        [Header("[ImageBG — 레벨별 배경]")]
+        [Header("[ImageBG — 난이도별 배경]")]
         [SerializeField] private Image _imageBG;
-        [SerializeField] private Sprite[] _bgSpritesPerLevel;
-        [SerializeField] private Sprite _bgSpriteDefault;
+        [SerializeField] private Sprite _bgSpriteNormal;
+        [SerializeField] private Sprite _bgSpriteHard;
+        [SerializeField] private Sprite _bgSpriteSuperHard;
 
         [Header("[Hard Level Option — Hard/SuperHard 전용]")]
         [SerializeField] private GameObject _hardLevelOption;
@@ -159,9 +160,7 @@ namespace BalloonFlow
             }
 
             UpdateHardLevelOption(difficulty);
-
-            int currentLvl = LevelManager.HasInstance ? LevelManager.Instance.CurrentLevelId : 1;
-            ApplyLevelBackground(currentLvl);
+            ApplyDifficultyBackground(difficulty);
 
             OpenUI();
 
@@ -222,22 +221,18 @@ namespace BalloonFlow
 
         #endregion
 
-        #region Level Background
+        #region Difficulty Background
 
-        private void ApplyLevelBackground(int levelId)
+        private void ApplyDifficultyBackground(DifficultyPurpose difficulty)
         {
             if (_imageBG == null) return;
 
-            Sprite chosen;
-            if (_bgSpritesPerLevel == null || _bgSpritesPerLevel.Length == 0)
+            Sprite chosen = difficulty switch
             {
-                chosen = _bgSpriteDefault;
-            }
-            else
-            {
-                int idx = Mathf.Clamp(levelId - 1, 0, _bgSpritesPerLevel.Length - 1);
-                chosen = _bgSpritesPerLevel[idx] != null ? _bgSpritesPerLevel[idx] : _bgSpriteDefault;
-            }
+                DifficultyPurpose.Hard      => _bgSpriteHard,
+                DifficultyPurpose.SuperHard => _bgSpriteSuperHard,
+                _                           => _bgSpriteNormal
+            };
 
             if (chosen != null) _imageBG.sprite = chosen;
         }
