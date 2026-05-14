@@ -36,6 +36,9 @@ BalloonFlow/Assets/LevelBackups/
 # Crashlytics
 crashlytics-build.properties
 
+#DON'T
+BalloonFlow/fbg.log
+
 # ─── Secrets / SDK Keys (DO NOT COMMIT) ────────────────────────────────────
 # Local SDK key overrides (partial class — actual values per-machine)
 BalloonFlow/Assets/1.Scripts/Core/SdkConfig.local.cs
@@ -137,3 +140,44 @@ BalloonFlow/Assets/Plugins/Android/*.DISABLED.meta
 # Local manual-backup files (from rename to avoid pull conflicts)
 *.local-backup
 *.local-backup.meta
+BalloonFlow/Assets/1.Scripts/Core/UIButtonClickGuard.cs
+BalloonFlow/Assets/1.Scripts/Core/UIButtonClickGuard.cs.meta
+BalloonFlow/Assets/1.Scripts/Data/ProfileAssets.cs
+BalloonFlow/Assets/1.Scripts/Data/ProfileAssets.cs.meta
+BalloonFlow/Assets/1.Scripts/UI/SplashBackgroundFitter.cs
+BalloonFlow/Assets/2.Datas/ProfileAssets.asset
+BalloonFlow/Assets/2.Datas/ProfileAssets.asset.meta
+BalloonFlow/Assets/2.Sprite/TS/TS2.png
+BalloonFlow/Assets/2.Sprite/TS/TS2.png.meta
+BalloonFlow/Assets/2.Sprite/UI/PopupResult!.png
+BalloonFlow/Assets/2.Sprite/UI/PopupResult!.png.meta
+BalloonFlow/Assets/2.Sprite/UI/popupResultA.png
+BalloonFlow/Assets/2.Sprite/UI/popupResultA.png.meta
+BalloonFlow/Assets/2.Sprite/UI/popupResultE.png
+BalloonFlow/Assets/2.Sprite/UI/popupResultE.png.meta
+BalloonFlow/Assets/2.Sprite/UI/popupResultG.png
+BalloonFlow/Assets/2.Sprite/UI/popupResultG.png.meta
+BalloonFlow/Assets/2.Sprite/UI/popupResultHard.png
+BalloonFlow/Assets/2.Sprite/UI/popupResultHard.png.meta
+BalloonFlow/Assets/2.Sprite/UI/popupResultNormal.png
+BalloonFlow/Assets/2.Sprite/UI/popupResultNormal.png.meta
+BalloonFlow/Assets/2.Sprite/UI/popupResultR.png
+BalloonFlow/Assets/2.Sprite/UI/popupResultR.png.meta
+BalloonFlow/Assets/2.Sprite/UI/popupResultSuperHard.png
+BalloonFlow/Assets/2.Sprite/UI/popupResultSuperHard.png.meta
+BalloonFlow/Assets/2.Sprite/UI/popupResultT.png
+BalloonFlow/Assets/2.Sprite/UI/popupResultT.png.meta
+BalloonFlow/Assets/2.Sprite/UI/profiles.png
+BalloonFlow/Assets/2.Sprite/UI/profiles.png.meta
+BalloonFlow/Assets/Editor/ProfileAssetsBuilder.cs
+BalloonFlow/Assets/Editor/ProfileAssetsBuilder.cs.meta
+BalloonFlow/Assets/Editor/TutorialEditorState.json
+BalloonFlow/Assets/Editor/TutorialEditorState.json.meta
+BalloonFlow/Assets/ProjectSettings/UISoftMaskProjectSettings 2.asset
+BalloonFlow/Assets/ProjectSettings/UISoftMaskProjectSettings 2.asset.meta
+BalloonFlow/Assets/Resources/Animation/PopupResultTextIdle.anim
+BalloonFlow/Assets/Resources/Animation/PopupResultTextIdle.anim.meta
+BalloonFlow/Assets/Resources/Animation/PopupResultTextStart.anim
+BalloonFlow/Assets/Resources/Animation/PopupResultTextStart.anim.meta
+BalloonFlow/Assets/Resources/Animator/PopupResult.controller
+BalloonFlow/Assets/Resources/Animator/PopupResult.controller.meta
