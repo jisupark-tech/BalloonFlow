@@ -11,5 +11,22 @@ namespace BalloonFlow
     [AddComponentMenu("BalloonFlow/UI/UIButton")]
     public class UIButton : Button
     {
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            var cb = colors;
+            cb.highlightedColor = Color.white;
+            colors = cb;
+        }
+
+#if UNITY_EDITOR
+        protected override void Reset()
+        {
+            base.Reset();
+            var cb = colors;
+            cb.highlightedColor = Color.white;
+            colors = cb;
+        }
+#endif
     }
 }
