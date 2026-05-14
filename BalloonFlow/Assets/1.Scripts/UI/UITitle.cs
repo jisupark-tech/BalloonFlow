@@ -8,6 +8,8 @@ namespace BalloonFlow
     /// 타이틀 UI. Resources/UI/UITitle 프리팹에서 로드.
     /// CDM 다운로드 + 서버 세팅 진행도를 슬라이더 + "%" 텍스트로 표시.
     /// 100% 도달 시 TitleController 가 게임 자동 입장.
+    ///
+    /// ※ UITitle은 per-scene MonoBehaviour로 Singleton이 아님. 인스턴스 관리는 TitleController가 담당.
     /// </summary>
     public class UITitle : UIBase
     {
@@ -24,6 +26,10 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtStatus;
         [SerializeField] private TMP_Text _txtStatusOutline;
 
+        [Header("[Splash Background — 해상도 대응 대상]")]
+        [Tooltip("잘림 없이 fit + 축소될 배경 Image의 RectTransform (leaf 노드여야 함; Logo/LoadingBar의 부모면 안 됨)")]
+        [SerializeField] private RectTransform _splashBackground;
+
         public Text LogoText => _logoText;
         public Text SubtitleText => _subtitleText;
         public Text TapToStartText => _tapToStartText;
@@ -32,15 +38,32 @@ namespace BalloonFlow
 
         private void Awake()
         {
+            if (_splashBackground != null)
+            {
+                var go = _splashBackground.gameObject;
+                if (go.GetComponent<SplashBackgroundFitter>() == null)
+                    go.AddComponent<SplashBackgroundFitter>();
+                return;
+            }
+
             var bg = transform.Find("Background");
             if (bg == null)
             {
                 Debug.LogWarning("[UITitle] Background child not found — splash fitter skipped");
                 return;
             }
-            var go = bg.gameObject;
-            if (go.GetComponent<SplashBackgroundFitter>() == null)
-                go.AddComponent<SplashBackgroundFitter>();
+
+            var bgGo = bg.gameObject;
+            bool hasImage = bgGo.GetComponent<Image>() != null;
+            bool isLeaf = bg.childCount == 0;
+            if (!hasImage || !isLeaf)
+            {
+                Debug.LogWarning("[UITitle] _splashBackground를 인스펙터에서 명시적으로 wire하세요 — Background 노드가 leaf가 아니거나 Image가 없습니다.");
+                return;
+            }
+
+            if (bgGo.GetComponent<SplashBackgroundFitter>() == null)
+                bgGo.AddComponent<SplashBackgroundFitter>();
         }
 
         /// <summary>
