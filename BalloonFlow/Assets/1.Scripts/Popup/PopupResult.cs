@@ -8,7 +8,7 @@ namespace BalloonFlow
     /// <summary>
     /// 클리어 결과 팝업.
     /// PopupCommonFrame으로 프레임/난이도/버튼 관리.
-    /// NextButton(Green), HomeButton(Red) = Horizontal 레이아웃.
+    /// Single 레이아웃 (Next 1개 버튼).
     /// </summary>
     public class PopupResult : UIBase
     {
@@ -64,9 +64,9 @@ namespace BalloonFlow
         [Header("[코인 연출 — Gold HUD 위치]")]
         [SerializeField] private RectTransform _goldTarget;
 
-        public Button NextButton => _btnNext != null ? _btnNext : (_frame != null ? _frame.BtnHorizGreen : null);
+        public Button NextButton => _btnNext != null ? _btnNext : (_frame != null ? _frame.BtnSingle : null);
         public Button RetryButton => null;
-        public Button HomeButton => _btnHome != null ? _btnHome : (_frame != null ? _frame.BtnHorizRed : null);
+        public Button HomeButton => null;
         public RectTransform GoldTarget => _goldTarget;
 
         public void ShowFail()
@@ -88,12 +88,8 @@ namespace BalloonFlow
 
             // 직접 할당 버튼 우선, 없으면 frame 버튼 fallback (CloseUI 후에도 listener 유지)
             if (_btnNext != null) _btnNext.onClick.AddListener(OnNextClicked);
-            else if (_frame != null && _frame.BtnHorizGreen != null)
-                _frame.BtnHorizGreen.onClick.AddListener(OnNextClicked);
-
-            if (_btnHome != null) _btnHome.onClick.AddListener(OnHomeClicked);
-            else if (_frame != null && _frame.BtnHorizRed != null)
-                _frame.BtnHorizRed.onClick.AddListener(OnHomeClicked);
+            else if (_frame != null && _frame.BtnSingle != null)
+                _frame.BtnSingle.onClick.AddListener(OnNextClicked);
 
             // ExitButton: 직접 할당 + frame 둘 다 와이어 (둘 중 보이는 쪽이 동작)
             if (_btnExit != null) _btnExit.onClick.AddListener(OnHomeClicked);
@@ -109,8 +105,7 @@ namespace BalloonFlow
             if (_btnExit != null) _btnExit.onClick.RemoveAllListeners();
             if (_frame != null)
             {
-                if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.RemoveAllListeners();
-                if (_frame.BtnHorizRed != null) _frame.BtnHorizRed.onClick.RemoveAllListeners();
+                if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.RemoveAllListeners();
                 if (_frame.BtnExit != null) _frame.BtnExit.onClick.RemoveAllListeners();
             }
         }
@@ -123,9 +118,8 @@ namespace BalloonFlow
             {
                 _frame.ApplyDifficulty(difficulty);
                 _frame.SetTitle("Level Clear!");
-                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
-                _frame.SetHorizGreenText("Next");
-                _frame.SetHorizRedText("Home");
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
+                _frame.SetSingleButtonText("Next");
                 // ExitButton은 직접 할당된 게 있으면 그걸 보이도록, 없으면 frame 것 표시
                 _frame.ShowExitButton(_btnExit == null);
             }
@@ -137,26 +131,16 @@ namespace BalloonFlow
                 _btnExit.interactable = true;
             }
 
-            // Next/Home 버튼 강제 활성화 (interactable 미설정/prefab 기본값 false 방어)
+            // Next(Single) 버튼 강제 활성화 (interactable 미설정/prefab 기본값 false 방어)
             if (_btnNext != null)
             {
                 _btnNext.gameObject.SetActive(true);
                 _btnNext.interactable = true;
             }
-            else if (_frame != null && _frame.BtnHorizGreen != null)
+            else if (_frame != null && _frame.BtnSingle != null)
             {
-                _frame.BtnHorizGreen.gameObject.SetActive(true);
-                _frame.BtnHorizGreen.interactable = true;
-            }
-            if (_btnHome != null)
-            {
-                _btnHome.gameObject.SetActive(true);
-                _btnHome.interactable = true;
-            }
-            else if (_frame != null && _frame.BtnHorizRed != null)
-            {
-                _frame.BtnHorizRed.gameObject.SetActive(true);
-                _frame.BtnHorizRed.interactable = true;
+                _frame.BtnSingle.gameObject.SetActive(true);
+                _frame.BtnSingle.interactable = true;
             }
 
             UpdateHardLevelOption(difficulty);
