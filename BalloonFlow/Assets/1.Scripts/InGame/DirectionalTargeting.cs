@@ -12,13 +12,32 @@ namespace BalloonFlow
     public static class DirectionalTargeting
     {
         private const float DEFAULT_GRID_CELL_SIZE = 0.55f;
-        private const int LINE_SEARCH_RADIUS = 2;
+        // ROLLBACK_DART_ADJACENT_LINE_RESCUE:
+        // Adjacent-line rescue reintroduced continuous cross-line attacks. Keep target picking on
+        // the exact scan line; remaining misses should be fixed by scan timing/cache, not by letting
+        // darts choose neighboring rows/columns.
+        private const int LINE_SEARCH_RADIUS = 0;
+        // ROLLBACK_DART_LIVE_LINE_CONTOUR:
+        // The old frozen-shell snapshot kept a whole contour layer until every shell cell died.
+        // That made a row/column go blind after its first edge cell popped, so nearby lines won
+        // the score race and produced penetration, misses, and staggered peeling. Live contour
+        // keeps each exact line advancing to its current first-hit cell.
+        private static readonly bool USE_FROZEN_SHELL_SNAPSHOT = false;
         private const int RECENT_LINE_PENALTY_FRAMES = 18;
         // 사용자 요구 (2026-05-07): "2행만 공격해야 하는데 1행도 공격" 이슈.
         // 1.35 → 0.7 로 strict 화 — dart 가 자기 perp 정렬 line 외 다른 line 의 balloon 후보로 안 잡힘.
         // line penalty 가 across-row 로 redirect 하는 부작용 차단. cellSpacing 만큼 떨어진 인접 row 는 제외 (perpDist > 0.7 × cellSpacing).
-        private const float PERPENDICULAR_TOLERANCE_MULTIPLIER = 0.7f;
+        // ROLLBACK_DART_EXACT_LINE_TOLERANCE:
+        // Miss diagnostics showed exact-line candidates rejected at pd=0.17~0.19 while the next
+        // frame reported the previous/next line as wouldHit. Keep tolerance narrow enough to block
+        // cross-line peeling, while adjacent-line rescue handles pure quantization misses.
+        private const float PERPENDICULAR_TOLERANCE_MULTIPLIER = 0.9f;
         private const float RECENT_LINE_PENALTY_MULTIPLIER = 2.25f;
+        // ROLLBACK_DART_STABLE_OUTER_HIT:
+        // Full candidate/pop diagnostics are very expensive on large boards. Enable only when
+        // actively investigating targeting, not during normal play.
+        private static readonly bool TARGETING_DIAG = false;
+        private static readonly bool CONTOUR_AFTER_POP_DIAG = false;
 
         private static float _gridCellSize = DEFAULT_GRID_CELL_SIZE;
 
@@ -63,9 +82,100 @@ namespace BalloonFlow
         private static readonly List<EdgeTarget> _contourCandidates = new List<EdgeTarget>(256);
         private static readonly HashSet<int> _currentShellIds = new HashSet<int>();
         private static readonly Dictionary<int, int> _recentLineUseFrame = new Dictionary<int, int>(32);
+        // ROLLBACK_DART_MISS_SUSPECT_DIAG:
+        // Normal targeting diagnostics are too expensive and noisy for play mode. This diagnostic is
+        // called only after a head dart crosses a scan line and no target is chosen. It logs only when
+        // a same-color outer contour exists near that line, which is the useful "miss suspect" case.
+        public static bool TryBuildMissSuspectDiag(
+            Vector3 dartPosition,
+            Vector3 firingDirection,
+            int color,
+            HashSet<int> excludeIds,
+            int radius,
+            out string diag)
+        {
+            diag = string.Empty;
+            if (!BalloonController.HasInstance) return false;
+
+            BuildEdgeTargetCache();
+
+            ScanDirection scanDir = DetermineScanDirection(firingDirection);
+            Vector2Int dartCell = WorldToGrid(dartPosition);
+            float tolerance = _gridCellSize * PERPENDICULAR_TOLERANCE_MULTIPLIER;
+            radius = Mathf.Max(0, radius);
+
+            _missDiagBuilder.Length = 0;
+            bool suspect = false;
+            int exactId = -1;
+            string exactReason = "none";
+
+            for (int offset = -radius; offset <= radius; offset++)
+            {
+                if (!TryGetEdgeTarget(scanDir, dartCell, offset, out EdgeTarget edge))
+                {
+                    if (offset == 0)
+                        exactReason = "noEdge";
+                    continue;
+                }
+
+                bool reserved = excludeIds != null && excludeIds.Contains(edge.balloonId);
+                float firingDist = GetFiringAxisDistance(dartPosition, edge.worldPos, scanDir);
+                float perpDist = GetPerpendicularDistance(dartPosition, edge.worldPos, scanDir);
+                bool sameColor = edge.color == color;
+                bool ahead = firingDist >= 0f;
+                bool inTolerance = perpDist <= tolerance;
+                bool viableSameColor = sameColor && edge.targetable && !reserved && ahead;
+
+                string reason;
+                if (!ahead) reason = "behind";
+                else if (!edge.targetable) reason = "notTargetable";
+                else if (!sameColor) reason = "color";
+                else if (reserved) reason = "reserved";
+                else if (!inTolerance) reason = "perp";
+                else reason = "wouldHit";
+
+                if (offset == 0)
+                {
+                    exactId = edge.balloonId;
+                    exactReason = reason;
+                }
+
+                if (!viableSameColor) continue;
+
+                // ROLLBACK_DART_MISS_SUSPECT_DIAG:
+                // Reserved-front entries are usually normal in-flight protection and were spamming
+                // logs. Report only actionable misses: an exact-line candidate barely outside the
+                // tolerance, or a nearby line that would have been hittable.
+                bool nearTolerance = perpDist <= tolerance + _gridCellSize * 0.25f;
+                bool actionableMiss = (offset == 0 && !inTolerance && nearTolerance)
+                    || (offset != 0 && inTolerance);
+                if (actionableMiss)
+                    suspect = true;
+
+                if (_missDiagBuilder.Length > 0)
+                    _missDiagBuilder.Append(" | ");
+                _missDiagBuilder
+                    .Append("off=").Append(offset)
+                    .Append("/id=").Append(edge.balloonId)
+                    .Append("/cell=").Append(edge.cell)
+                    .Append("/fd=").Append(firingDist.ToString("F2"))
+                    .Append("/pd=").Append(perpDist.ToString("F2"))
+                    .Append("/").Append(reason);
+            }
+
+            if (!suspect) return false;
+
+            diag = $"mode=miss frame={Time.frameCount} cacheFrame={_edgeCacheFrame} color={color} " +
+                   $"dartCell={dartCell} scan={scanDir} tol={tolerance:F3} " +
+                   $"exact={exactId}/{exactReason} nearby={_missDiagBuilder}";
+            return true;
+        }
+
         // ROLLBACK_CONTOUR_TARGET_DIAG:
         private static readonly StringBuilder _diagBuilder = new StringBuilder(1024);
+        private static readonly StringBuilder _missDiagBuilder = new StringBuilder(512);
         private static int _edgeCacheFrame = -1;
+        private static bool _edgeCacheDirty = true;
         // ROLLBACK_CONTOUR_TARGET_DIAG:
         public static string LastFindTargetDiag { get; private set; } = string.Empty;
 
@@ -91,6 +201,13 @@ namespace BalloonFlow
             _contourColors.Clear();        // [2026-05-13]
             ClearShellSnapshot();
             _edgeCacheFrame = -1;
+            _edgeCacheDirty = true;
+        }
+
+        public static void InvalidateCache()
+        {
+            _edgeCacheFrame = -1;
+            _edgeCacheDirty = true;
         }
 
         // [2026-05-13 Diag] 진단 로그는 실측 완료 후 제거. 필요 시 아래 주석을 풀어 재활성:
@@ -103,19 +220,54 @@ namespace BalloonFlow
 
         public static int FindTarget(Vector3 dartPosition, Vector3 firingDirection, int color, HashSet<int> excludeIds = null)
         {
-            if (!BalloonController.HasInstance) return -1;
+            int targetId;
+            ScanDirection scanDir;
+            int targetLine;
+            Vector3 targetWorldPos;
+            if (TryFindTarget(dartPosition, firingDirection, color, excludeIds, out targetId, out scanDir, out targetLine, out targetWorldPos))
+                return targetId;
+
+            return -1;
+        }
+
+        public static bool TryFindTarget(
+            Vector3 dartPosition,
+            Vector3 firingDirection,
+            int color,
+            HashSet<int> excludeIds,
+            out int targetId,
+            out ScanDirection scanDir,
+            out int targetLine,
+            out Vector3 targetWorldPos)
+        {
+            targetId = -1;
+            targetLine = 0;
+            targetWorldPos = Vector3.zero;
+            scanDir = DetermineScanDirection(firingDirection);
+
+            if (!BalloonController.HasInstance) return false;
 
             BuildEdgeTargetCache();
 
-            ScanDirection scanDir = DetermineScanDirection(firingDirection);
             Vector2Int dartCell = WorldToGrid(dartPosition);
 
             int bestId = -1;
             int bestLine = 0;
+            Vector3 bestWorldPos = Vector3.zero;
             float bestScore = float.MaxValue;
             float bestFiringDist = float.MaxValue;
+            // ROLLBACK_DART_FRONT_BLOCKER:
+            // A non-matching/untargetable/reserved shell cell in front is a physical blocker.
+            // Treating it as a simple reject lets a same-color candidate on a nearby line win,
+            // which creates the observed color penetration.
+            int blockerId = -1;
+            int blockerLine = 0;
+            float blockerScore = float.MaxValue;
+            float blockerFiringDist = float.MaxValue;
+            string blockerReason = string.Empty;
             float perpendicularTolerance = _gridCellSize * PERPENDICULAR_TOLERANCE_MULTIPLIER;
-            _diagBuilder.Length = 0;
+            if (TARGETING_DIAG)
+                _diagBuilder.Length = 0;
 
             // Check a narrow band around the aligned line. This keeps non-rectangular
             // motifs targetable when rail smoothing or mobile precision shifts the dart
@@ -129,22 +281,6 @@ namespace BalloonFlow
                 }
 
                 bool reserved = excludeIds != null && excludeIds.Contains(edge.balloonId);
-                if (!edge.targetable)
-                {
-                    AppendFindTargetCandidateDiag(offset, edge, true, false, reserved, 0f, 0f, 0, 0f, "notTargetable");
-                    continue;
-                }
-                if (edge.color != color)
-                {
-                    AppendFindTargetCandidateDiag(offset, edge, true, false, reserved, 0f, 0f, 0, 0f, "color");
-                    continue;
-                }
-                if (reserved)
-                {
-                    AppendFindTargetCandidateDiag(offset, edge, true, false, true, 0f, 0f, 0, 0f, "reserved");
-                    continue;
-                }
-
                 float firingDist = GetFiringAxisDistance(dartPosition, edge.worldPos, scanDir);
                 if (firingDist < 0f)
                 {
@@ -160,13 +296,30 @@ namespace BalloonFlow
                 }
 
                 int line = GetLineKey(scanDir, edge.cell);
-                float score = perpDist + GetRecentLinePenalty(scanDir, line);
-                AppendFindTargetCandidateDiag(offset, edge, true, true, reserved, firingDist, perpDist, line, score, "ok");
+                float score = Mathf.Abs(offset) * _gridCellSize + perpDist;
+
+                if (!edge.targetable || edge.color != color || reserved)
+                {
+                    string reason = !edge.targetable ? "blockedTargetable" : (edge.color != color ? "blockedColor" : "reservedFront");
+                    AppendFindTargetCandidateDiag(offset, edge, true, false, reserved, firingDist, perpDist, line, score, reason);
+                    if (score < blockerScore || (Mathf.Approximately(score, blockerScore) && firingDist < blockerFiringDist))
+                    {
+                        blockerScore = score;
+                        blockerFiringDist = firingDist;
+                        blockerLine = line;
+                        blockerId = edge.balloonId;
+                        blockerReason = reason;
+                    }
+                    continue;
+                }
+
+                AppendFindTargetCandidateDiag(offset, edge, true, true, false, firingDist, perpDist, line, score, "ok");
                 if (score < bestScore || (Mathf.Approximately(score, bestScore) && firingDist < bestFiringDist))
                 {
                     bestScore = score;
                     bestFiringDist = firingDist;
                     bestLine = line;
+                    bestWorldPos = edge.worldPos;
                     bestId = edge.balloonId;
                 }
             }
@@ -178,18 +331,31 @@ namespace BalloonFlow
             // if (bestId < 0 && !_contourColors.Contains(color))
             //     bestId = FindInnerFallback(dartCell, scanDir, color, excludeIds);
 
-            if (bestId >= 0)
+            bool blockedByFront = blockerId >= 0 && (bestId < 0 || blockerScore <= bestScore + 0.0001f);
+            if (bestId >= 0 && !blockedByFront)
             {
                 _recentLineUseFrame[GetRecentLineKey(scanDir, bestLine)] = Time.frameCount;
+                targetId = bestId;
+                targetLine = bestLine;
+                targetWorldPos = bestWorldPos;
             }
 
-            LastFindTargetDiag =
-                $"frame={Time.frameCount} cacheFrame={_edgeCacheFrame} color={color} dartCell={dartCell} scan={scanDir} " +
-                $"tol={perpendicularTolerance:F3} chosen={bestId} line={bestLine} " +
-                $"score={(bestScore < float.MaxValue ? bestScore.ToString("F3") : "none")} " +
-                $"fireDist={(bestFiringDist < float.MaxValue ? bestFiringDist.ToString("F3") : "none")} candidates={_diagBuilder}";
+            if (TARGETING_DIAG)
+            {
+                LastFindTargetDiag =
+                    $"mode=auth frame={Time.frameCount} cacheFrame={_edgeCacheFrame} color={color} dartCell={dartCell} scan={scanDir} " +
+                    $"tol={perpendicularTolerance:F3} chosen={targetId} line={targetLine} " +
+                    $"score={(bestScore < float.MaxValue ? bestScore.ToString("F3") : "none")} " +
+                    $"fireDist={(bestFiringDist < float.MaxValue ? bestFiringDist.ToString("F3") : "none")} " +
+                    $"frontBlocker={blockerId}/line={blockerLine}/reason={blockerReason}/score={(blockerScore < float.MaxValue ? blockerScore.ToString("F3") : "none")} " +
+                    $"blockedFront={blockedByFront} candidates={_diagBuilder}";
+            }
+            else
+            {
+                LastFindTargetDiag = string.Empty;
+            }
 
-            return bestId;
+            return targetId >= 0;
         }
 
         // [2026-05-13 rolled back] FindInnerFallback — 관통 이슈로 비활성. 재활성 시 복원.
@@ -234,6 +400,8 @@ namespace BalloonFlow
             float score,
             string reason)
         {
+            if (!TARGETING_DIAG) return;
+
             if (_diagBuilder.Length > 0)
                 _diagBuilder.Append(" | ");
 
@@ -272,6 +440,8 @@ namespace BalloonFlow
         // Logs the contour cache state after a pop without forcing a cache rebuild.
         public static void LogContourAfterPop(int poppedId, int color, Vector3 worldPos, string gimmickType)
         {
+            if (!CONTOUR_AFTER_POP_DIAG) return;
+
             BuildEdgeTargetCache();
 
             Vector2Int poppedCell = WorldToGrid(worldPos);
@@ -344,7 +514,11 @@ namespace BalloonFlow
         private static void BuildEdgeTargetCache()
         {
             int currentFrame = Time.frameCount;
-            if (_edgeCacheFrame == currentFrame) return;
+            // ROLLBACK_DART_TARGET_CACHE_DIRTY:
+            // Rebuilding this cache every frame is expensive and can make a stable line resolve
+            // differently without any board change. Contours only need rebuilding after a pop or
+            // level reset, so use explicit invalidation and keep _edgeCacheFrame for diagnostics.
+            if (!_edgeCacheDirty) return;
 
             _occupiedCells.Clear();
             _outsideCells.Clear();
@@ -356,6 +530,7 @@ namespace BalloonFlow
             _contourCandidates.Clear();
             _attackableContourIds.Clear(); // [Outline 2026-05-10]
             _contourColors.Clear();        // [2026-05-13]
+            _edgeCacheDirty = false;
 
             if (GameManager.HasInstance)
                 _gridCellSize = GameManager.Instance.Board.cellSpacing;
@@ -429,7 +604,10 @@ namespace BalloonFlow
             // 이전 "outside neighbor 1+ + targetable" 방식은 hole 인접 풍선까지 포함 → board 에 hole 많으면 거의 전부 contour.
             // 사용자 의도: dart 가 실제 fire 가능한 "각 row/col 의 가장 외곽 한 줄" — 4 contour map 의 union 이 정확.
 
-            EnsureShellSnapshot();
+            if (USE_FROZEN_SHELL_SNAPSHOT)
+                EnsureShellSnapshot();
+            else
+                ClearShellSnapshot();
             BuildShellLineMaps();
 
             _edgeCacheFrame = currentFrame;
@@ -478,16 +656,17 @@ namespace BalloonFlow
 
         private static void BuildShellLineMaps()
         {
-            // 사용자 요구 (옵션 C): shell snapshot freeze 가 새 contour 발견을 막아 "특정 풍선 탐지 못함" 발생.
-            // _currentShellIds.Contains 필터 제거 — 현재 contour 모든 풍선을 line maps 에 등록.
-            // 단 targetable (= Wall/Ice/ColorCurtain 아님) 만. shell freeze 의 "한 ring 우선 청소" 의도는
-            // RecentLinePenalty (line 99) 의 line spreading 으로 대체.
-            // [Optimization 2026-05-10] _outsideCells.Contains → IsOutside. 롤백: 주석 처리된 원본 4 분기 복원.
+            // ROLLBACK_DART_STABLE_OUTER_HIT:
+            // Build line maps from the frozen visible shell only. Registering newly exposed
+            // inner cells during the same volley causes penetration and ragged multi-line hits.
+            // [Optimization 2026-05-10] _outsideCells.Contains -> IsOutside. Rollback restores the original 4 branches below.
             foreach (KeyValuePair<Vector2Int, EdgeTarget> kvp in _occupiedCells)
             {
                 Vector2Int cell = kvp.Key;
                 EdgeTarget edge = kvp.Value;
                 if (!edge.targetable) continue;
+                if (_currentShellIds.Count > 0 && !_currentShellIds.Contains(edge.balloonId))
+                    continue;
 
                 // 원본 4 분기:
                 // if (_outsideCells.Contains(new Vector2Int(cell.x - 1, cell.y))) { if (!_leftContourByRow.TryGetValue(cell.y, out EdgeTarget existing) || cell.x < existing.cell.x) _leftContourByRow[cell.y] = edge; }
@@ -640,16 +819,37 @@ namespace BalloonFlow
 
         private static bool TryGetEdgeTarget(ScanDirection scanDir, Vector2Int dartCell, int lineOffset, out EdgeTarget edge)
         {
+            int line = 0;
             switch (scanDir)
             {
                 case ScanDirection.Right:
-                    return _leftContourByRow.TryGetValue(dartCell.y + lineOffset, out edge);
                 case ScanDirection.Left:
-                    return _rightContourByRow.TryGetValue(dartCell.y + lineOffset, out edge);
+                    line = dartCell.y + lineOffset;
+                    break;
                 case ScanDirection.Up:
-                    return _bottomContourByCol.TryGetValue(dartCell.x + lineOffset, out edge);
                 case ScanDirection.Down:
-                    return _topContourByCol.TryGetValue(dartCell.x + lineOffset, out edge);
+                    line = dartCell.x + lineOffset;
+                    break;
+                default:
+                    edge = default;
+                    return false;
+            }
+
+            return TryGetEdgeTargetOnLine(scanDir, line, out edge);
+        }
+
+        private static bool TryGetEdgeTargetOnLine(ScanDirection scanDir, int line, out EdgeTarget edge)
+        {
+            switch (scanDir)
+            {
+                case ScanDirection.Right:
+                    return _leftContourByRow.TryGetValue(line, out edge);
+                case ScanDirection.Left:
+                    return _rightContourByRow.TryGetValue(line, out edge);
+                case ScanDirection.Up:
+                    return _bottomContourByCol.TryGetValue(line, out edge);
+                case ScanDirection.Down:
+                    return _topContourByCol.TryGetValue(line, out edge);
                 default:
                     edge = default;
                     return false;

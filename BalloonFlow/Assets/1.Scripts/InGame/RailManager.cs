@@ -90,8 +90,11 @@ namespace BalloonFlow
         // deadlock 상태에서는 빈칸이 deploy point까지 순환해야 하므로 5칸까지 전체 벨트 회전을 유지한다.
         private const int DEADLOCK_BELT_ADVANCE_EMPTY_SLOTS = 5;
         private const float DEPLOY_PHYSICAL_GAP_TOLERANCE = 0.01f;
-        private const bool LOG_RAIL_ADVANCE_DIAG = true;
-        private const bool LOG_DART_REMOVE_DIAG = true;
+        // ROLLBACK_DART_REMOVE_LOG_THROTTLE:
+        // These diagnostics format large strings during active firing/near-full movement. Keep them
+        // opt-in so gameplay profiling measures logic, not console logging.
+        private static readonly bool LOG_RAIL_ADVANCE_DIAG = false;
+        private static readonly bool LOG_DART_REMOVE_DIAG = false;
         private const float RAIL_ADVANCE_DIAG_INTERVAL = 1.0f;
 
         // 가변 수용량 구간 — 총 다트 수 기준으로 레일 수용량 자동 결정
@@ -812,6 +815,83 @@ namespace BalloonFlow
             return GetPositionAtDistance(dart.progress);
         }
 
+        public void GetDartCurrentPose(DartOnRail dart, out Vector3 position, out Vector3 tangent, out Vector3 firingDirection)
+        {
+            if (dart == null)
+            {
+                position = Vector3.zero;
+                tangent = Vector3.forward;
+                firingDirection = Vector3.forward;
+                return;
+            }
+
+            GetPositionAndDirectionAtDistance(dart.progress, out position, out tangent);
+            firingDirection = GetFiringDirectionFromMoveDir(tangent);
+        }
+
+        // ROLLBACK_DART_POSE_LOOKUP_OPT:
+        // DartManager needs both position and direction for every visible dart. Doing separate
+        // GetPositionAtDistance + GetDirectionAtDistance calls performs two binary searches per dart.
+        // This combined lookup keeps the same interpolation but resolves the segment once.
+        public void GetPositionAndDirectionAtDistance(float distance, out Vector3 position, out Vector3 direction)
+        {
+            var path = _smoothedPath;
+            int pathCount = path.Count;
+            if (pathCount == 0)
+            {
+                position = Vector3.zero;
+                direction = Vector3.forward;
+                return;
+            }
+            if (pathCount == 1 || _totalPathLength <= 0f)
+            {
+                position = path[0];
+                direction = _segmentDirections.Count > 0 ? _segmentDirections[0] : Vector3.forward;
+                return;
+            }
+
+            distance = ((distance % _totalPathLength) + _totalPathLength) % _totalPathLength;
+
+            int lo = 0;
+            int hi = _cumulativeLengths.Count - 1;
+            while (lo < hi)
+            {
+                int mid = (lo + hi) >> 1;
+                if (_cumulativeLengths[mid] < distance)
+                    lo = mid + 1;
+                else
+                    hi = mid;
+            }
+
+            int i = lo;
+            int segCount = _segmentLengths.Count;
+            if (i < segCount)
+            {
+                float segStart = (i > 0) ? _cumulativeLengths[i - 1] : 0f;
+                float segLength = _segmentLengths[i];
+                if (segLength <= 0f)
+                {
+                    position = path[i];
+                }
+                else
+                {
+                    float localT = (distance - segStart) / segLength;
+                    int nextIndex = (i + 1) % pathCount;
+                    position = Vector3.Lerp(path[i], path[nextIndex], localT);
+                }
+            }
+            else
+            {
+                i = pathCount - 1;
+                position = path[i];
+            }
+
+            int dirIndex = i;
+            int dirCount = _segmentDirections.Count;
+            if (dirIndex >= dirCount) dirIndex = dirCount - 1;
+            direction = dirIndex >= 0 ? _segmentDirections[dirIndex] : Vector3.forward;
+        }
+
         public Vector3 GetPositionAtDistance(float distance)
         {
             var path = _smoothedPath;
@@ -1183,6 +1263,24 @@ namespace BalloonFlow
 
         /// <summary>Returns all darts on the belt (per-dart system).</summary>
         public IReadOnlyList<DartOnRail> GetAllDarts() => _darts;
+
+        /// <summary>
+        /// Fills results with one active head dart per holder/cluster.
+        /// DartManager uses this to avoid scanning every dart when only cluster heads can fire.
+        /// </summary>
+        public void GetClusterHeadDarts(List<DartOnRail> results)
+        {
+            if (results == null) return;
+
+            results.Clear();
+            foreach (KeyValuePair<int, DartOnRail> kvp in _clusterHeadByHolder)
+            {
+                DartOnRail head = kvp.Value;
+                if (head == null || head.dartColor < 0) continue;
+                if (!_dartById.TryGetValue(head.dartId, out DartOnRail current) || current != head) continue;
+                results.Add(head);
+            }
+        }
 
         /// <summary>월드 좌표를 경로상 progress로 변환 (가장 가까운 지점).</summary>
         public float GetProgressAtWorldPos(Vector3 worldPos)

@@ -223,6 +223,17 @@ namespace BalloonFlow
 
         private Text _txtStatus, _txtSpacing, _txtScale, _railCapacityLabel;
         private Text _queueGenScoreLabel;
+        // 명세 §9 — 큐 생성기 UI v2 (게이지바 + warn + 추천 cols + Confirm)
+        private Text _queueGenWarnLabel;          // Soft warn (red), Hard fail (red bold)
+        private Text _queueGenRecommendLabel;     // "추천 cols: N | sample ammo/holder: M"
+        private Image _queueGenGaugeFill;          // 게이지 바 fillAmount = score/100
+        private Text _queueGenGaugeText;           // 게이지 위 점수 + 등급
+        private Button _queueGenConfirmBtn;        // Generate 성공 후 활성 — SaveToDatabase 호출
+        private bool _queueGenConfirmReady;        // 마지막 Generate 가 성공 (Hard rule 통과) 했는지
+        // Holder Grid 요약 라벨 — §9 mock "보관함 N개 | 다트 X/Y" 실시간 표시
+        private Text _holderSummaryLabel;
+        // queue_columns 자동 추천 vs 수동 입력 — §2-3 디자이너 오버라이드
+        private bool _queueColsAuto = true;
 
         // Level Info UI 참조 (로드 시 갱신용)
         private InputField _levelIdInput;
@@ -1097,10 +1108,29 @@ namespace BalloonFlow
 
         private void BuildHolderSection(Transform p)
         {
-            Lbl(p, "Holder Grid", 14, FontStyle.Bold);
+            Lbl(p, "Holder Grid (= Queue)", 14, FontStyle.Bold);
+
+            // §9 mock — Holder Grid 위 요약 라벨 (실시간 보관함 수 + 다트 합 + 색별 분포)
+            _holderSummaryLabel = Lbl(p, "보관함 -개 | 다트 -", 11);
+            _holderSummaryLabel.color = new Color(0.85f, 0.95f, 0.85f);
+
+            // Cols 행 — Auto/Manual 토글 + (Manual일 때만 입력 활성)
             var r1 = Row(p); Lbl(r1, "Columns", w: 90);
             _holderColsInput = MakeIntField(r1, _holderCols, 1, 20, v =>
             { _holderCols = v; InitGrid(); RebuildHolderUI(); _infoDirty = true; });
+            // §2-3 — Auto 추천 토글
+            Button togBtn = null;
+            togBtn = Btn(r1, _queueColsAuto ? "Auto" : "Manual", () =>
+            {
+                _queueColsAuto = !_queueColsAuto;
+                var tt = togBtn.GetComponentInChildren<Text>();
+                if (tt != null) tt.text = _queueColsAuto ? "Auto" : "Manual";
+                if (_holderColsInput != null)
+                    _holderColsInput.interactable = !_queueColsAuto;
+                SetStatus(_queueColsAuto ? "queue_columns: Auto (§2-3 추천)" : "queue_columns: Manual (수동 입력)");
+            });
+            if (_holderColsInput != null) _holderColsInput.interactable = !_queueColsAuto;
+
             var r2 = Row(p); Lbl(r2, "Rows", w: 90);
             _holderRowsInput = MakeIntField(r2, _holderRows, 1, 20, v =>
             { _holderRows = v; InitGrid(); RebuildHolderUI(); _infoDirty = true; });
@@ -1186,13 +1216,51 @@ namespace BalloonFlow
             Btn(row2, "Set Mag", () => { SetAllMags(); RebuildHolderUI(); _infoDirty = true; });
             Sep(p);
 
-            // ── 큐 생성기 섹션 ──
+            // ── 큐 생성기 섹션 (v2 — 명세 §9 mock 기준) ──
             Lbl(p, "Queue Generator", 14, FontStyle.Bold);
+
+            // 점수 게이지 바 + 등급 텍스트 overlay
+            MakeGaugeBar(p, out _queueGenGaugeFill, out _queueGenGaugeText, 22f);
+
+            // 보관함/다트 요약 + cap 종류 등
             _queueGenScoreLabel = Lbl(p, "Score: -", 12);
+            // 추천 cols / ammo per holder 안내
+            _queueGenRecommendLabel = Lbl(p, "", 11);
+            _queueGenRecommendLabel.color = new Color(0.75f, 0.85f, 1f);
+            // Soft warn / Hard fail 메시지
+            _queueGenWarnLabel = Lbl(p, "", 11, FontStyle.Bold);
+            _queueGenWarnLabel.color = new Color(1f, 0.55f, 0.35f);
+            _queueGenWarnLabel.gameObject.SetActive(false);
+
             var rowGen = Row(p);
             Btn(rowGen, "Generate Queue", () => { GenerateQueue(); RebuildHolderUI(); _infoDirty = true; });
-            Btn(rowGen, "Auto Balance", () => { AutoBalanceHolders(); RebuildHolderUI(); _infoDirty = true; });
+            _queueGenConfirmBtn = Btn(rowGen, "Confirm", () =>
+            {
+                if (!_queueGenConfirmReady) { SetStatus("Confirm: Generate Queue 성공 후 가능합니다."); return; }
+                SaveToDatabase();
+                SetStatus("Queue confirmed — saved to database.");
+            });
+            // Confirm 은 Generate 성공 전까지 비활성
+            SetQueueConfirmReady(false);
+
+            var rowGen2 = Row(p);
+            Btn(rowGen2, "Auto Balance", () => { AutoBalanceHolders(); RebuildHolderUI(); _infoDirty = true; });
             Sep(p);
+        }
+
+        /// <summary>
+        /// Confirm 버튼 활성/비활성 + 시각 상태. Generate Queue 성공 시 true, 실패/수동 변경 시 false.
+        /// </summary>
+        private void SetQueueConfirmReady(bool ready)
+        {
+            _queueGenConfirmReady = ready;
+            if (_queueGenConfirmBtn == null) return;
+            var img = _queueGenConfirmBtn.GetComponent<Image>();
+            if (img != null)
+                img.color = ready ? new Color(0.30f, 0.55f, 0.30f) : new Color(0.22f, 0.22f, 0.28f);
+            var txt = _queueGenConfirmBtn.GetComponentInChildren<Text>();
+            if (txt != null)
+                txt.color = ready ? Color.white : new Color(0.65f, 0.65f, 0.70f);
         }
 
         private void BuildRailSection(Transform p)
@@ -2001,6 +2069,8 @@ namespace BalloonFlow
                                 && HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Lock_Key";
                             _holderLockPairIds[cc, rr] = isLockKeyHolder ? _paintLockPairId : -1;
                             UpdateHolderButton(cc, rr);
+                            // Generate 결과가 수동 변경됨 — Confirm 무효화 (§8 수동 조정 후 재검증)
+                            SetQueueConfirmReady(false);
                             _infoDirty = true;
                         });
                         _holderButtonPool[c, r] = btn;
@@ -2111,6 +2181,44 @@ namespace BalloonFlow
             go.transform.SetParent(p, false);
             go.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.35f);
             go.GetComponent<LayoutElement>().preferredHeight = 1;
+        }
+
+        /// <summary>
+        /// 가로 게이지 바. fillImage 와 overlay text 를 out 으로 반환.
+        /// 명세 §9 큐 생성기 — 난이도 점수 게이지 (0-100%).
+        /// </summary>
+        private void MakeGaugeBar(Transform p, out Image fill, out Text overlay, float height = 18f)
+        {
+            // bg
+            var bgGO = new GameObject("Gauge", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            bgGO.transform.SetParent(p, false);
+            bgGO.GetComponent<Image>().color = new Color(0.14f, 0.14f, 0.18f);
+            bgGO.GetComponent<LayoutElement>().preferredHeight = height;
+            bgGO.GetComponent<LayoutElement>().flexibleWidth = 1;
+
+            // fill
+            var fillGO = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fillGO.transform.SetParent(bgGO.transform, false);
+            var frt = fillGO.GetComponent<RectTransform>();
+            frt.anchorMin = Vector2.zero; frt.anchorMax = Vector2.one;
+            frt.offsetMin = new Vector2(1, 1); frt.offsetMax = new Vector2(-1, -1);
+            var fi = fillGO.GetComponent<Image>();
+            fi.color = new Color(0.30f, 0.65f, 0.30f);
+            fi.type = Image.Type.Filled;
+            fi.fillMethod = Image.FillMethod.Horizontal;
+            fi.fillAmount = 0f;
+            fill = fi;
+
+            // overlay text
+            var txtGO = new GameObject("Txt", typeof(RectTransform), typeof(Text));
+            txtGO.transform.SetParent(bgGO.transform, false);
+            var trt = txtGO.GetComponent<RectTransform>();
+            trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
+            trt.offsetMin = Vector2.zero; trt.offsetMax = Vector2.zero;
+            var t = txtGO.GetComponent<Text>();
+            t.text = "-"; t.font = _font; t.fontSize = 12; t.fontStyle = FontStyle.Bold;
+            t.color = Color.white; t.alignment = TextAnchor.MiddleCenter;
+            overlay = t;
         }
 
         private Slider MakeSlider(Transform p, float min, float max, float val, bool whole, System.Action<float> cb)
@@ -3506,6 +3614,41 @@ namespace BalloonFlow
             }
 
             if (_txtStatus) _txtStatus.text = $"Balloons: {totalBalloons}  Darts: {totalDartsProvided}/{totalDartsNeeded}  WP: {_customWaypoints.Count}";
+
+            // §9 mock — Holder Grid 위 요약 라벨 (실시간)
+            if (_holderSummaryLabel != null)
+            {
+                if (totalHolders == 0)
+                {
+                    _holderSummaryLabel.text = "보관함 -개 | 다트 -";
+                    _holderSummaryLabel.color = new Color(0.65f, 0.65f, 0.70f);
+                }
+                else
+                {
+                    float ammoPerH = (float)totalDartsProvided / totalHolders;
+                    string mark = totalDartsProvided == totalDartsNeeded ? "✓" : "✗";
+                    var sbHol = new System.Text.StringBuilder(96);
+                    sbHol.Append($"보관함 {totalHolders}개 | 다트 {totalDartsProvided}/{totalDartsNeeded} {mark} | {ammoPerH:F1}/h");
+                    _holderSummaryLabel.text = sbHol.ToString();
+                    _holderSummaryLabel.color = totalDartsProvided == totalDartsNeeded
+                        ? new Color(0.55f, 0.95f, 0.55f)
+                        : new Color(1f, 0.65f, 0.35f);
+                }
+            }
+
+            // §2-3 Auto 추천 — 디자이너가 _holderCols 를 변경하면 추천값과의 일치 여부 표시
+            if (_queueGenRecommendLabel != null && !_queueGenConfirmReady)
+            {
+                int rec = totalHolders > 0
+                    ? Mathf.Clamp(RecommendQueueColumns(totalHolders, _difficulty), 2, 5)
+                    : 0;
+                if (rec > 0)
+                    _queueGenRecommendLabel.text = _queueColsAuto
+                        ? $"cols Auto (추천 {rec})"
+                        : $"cols Manual {_holderCols} (추천 {rec})";
+                else
+                    _queueGenRecommendLabel.text = "";
+            }
         }
 
         private void SetStatus(string msg) { if (_txtStatus) _txtStatus.text = msg; }
@@ -3566,39 +3709,50 @@ namespace BalloonFlow
         }
 
         // ════════════════════════════════════════════════════════════════
-        //  큐 생성기 (Queue Generator) — BalloonFlow_큐생성기_명세 기반
+        //  큐 생성기 (Queue Generator) — BalloonFlow_큐생성기_명세 v2 (2026-04-30) 기반
+        //  v1 → v2: cap20 백본 분포 + queue_columns 자동 추천 + cap30/50 가드 + 첫 3행 가드 + 검증 자동 재생성
         // ════════════════════════════════════════════════════════════════
 
         #region Queue Generator
 
-        // 난이도별 탄창 풀 (70% 주력 / 30% 나머지)
-        private static readonly int[][] PRIMARY_POOL = {
-            new[] { 10, 20 },         // Easy (Tutorial, Rest)
-            new[] { 20, 30 },         // Normal
-            new[] { 20, 30, 40 },     // Hard
-            new[] { 20, 30, 40, 50 }  // SuperHard
+        // 명세 §2-1 — 난이도별 cap 가중치 (총합 100). PF picked 1-300 실측 평균.
+        // diffIdx: 0=Tutorial/Rest, 1=Normal/Intro, 2=Hard, 3=SuperHard
+        //   ※ Rest 는 §2-7 cap30 금지로 별도 처리되지만, 가중치 자체는 Tutorial 과 공유.
+        private static readonly int[][] CAP_KEYS = {
+            new[] { 10, 20, 30, 40, 50 },
+            new[] { 10, 20, 30, 40, 50 },
+            new[] { 10, 20, 30, 40, 50 },
+            new[] { 10, 20, 30, 40, 50 },
         };
-        private static readonly int[][] SECONDARY_POOL = {
-            new[] { 30, 40, 50 },     // Easy (spec: 10 제거 — 주력 {10,20}과 중복 방지)
-            new[] { 10, 40, 50 },     // Normal
-            new[] { 10, 50 },         // Hard
-            new[] { 10 }              // SuperHard
+        private static readonly float[][] CAP_WEIGHTS_BASE = {
+            // 10    20    30    40    50      ← 명세 §2-1 표
+            new[] { 0.15f, 0.75f, 0.02f, 0.08f, 0.00f }, // Tutorial
+            new[] { 0.16f, 0.68f, 0.02f, 0.13f, 0.01f }, // Normal
+            new[] { 0.14f, 0.71f, 0.02f, 0.13f, 0.00f }, // Hard
+            new[] { 0.17f, 0.68f, 0.03f, 0.11f, 0.01f }, // SuperHard
         };
-        // 순서 배치 파라미터: 앞 50%에 depth 0 비율 (min~max)
+        // Rest 전용 (§2-7: cap30 금지) — Normal base 에서 cap30 분포를 cap20 으로 흡수.
+        private static readonly float[] CAP_WEIGHTS_REST =
+            new[] { 0.15f, 0.69f, 0.00f, 0.13f, 0.01f };
+
+        // 순서 배치 파라미터: 앞 50%에 depth 0 비율 (min~max) — 명세 §2-4 표.
         private static readonly float[][] DEPTH0_FRONT_RATIO = {
-            new[] { 0.70f, 0.90f }, // Easy
+            new[] { 0.80f, 0.95f }, // Tutorial/Rest
             new[] { 0.40f, 0.65f }, // Normal
             new[] { 0.25f, 0.45f }, // Hard
-            new[] { 0.10f, 0.30f }  // SuperHard
+            new[] { 0.10f, 0.30f }, // SuperHard
         };
-        // 행(가로) 연속 max
+        // 행(가로) 연속 max — 명세 §4-3
         private static readonly int[] SAME_COLOR_MAX_ROW = { 1, 2, 3, 4 };
-        // 열(세로) 연속 max (명세 v1 §4-3 신규 추가)
+        // 열(세로) 연속 max — 명세 §4-3
         private static readonly int[] SAME_COLOR_MAX_COL = { 1, 2, 2, 3 };
+
+        private const int AVG_CAP = 21;                 // 명세 §2-0 — PF 평균 탄창
+        private const int GENERATE_RETRY_MAX = 20;       // 명세 §6 Hard rule fail 시 자동 재생성 최대 시도
 
         private void GenerateQueue()
         {
-            // ── 1. 필드 분석 (Piñata 비앵커 셀 제외) ──
+            // ── 1. 필드 분석 (§1) ──
             var colorDarts = new Dictionary<int, int>();
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
@@ -3619,7 +3773,7 @@ namespace BalloonFlow
                 return;
             }
 
-            // 10배수 올림
+            // 10배수 올림 — 명세 §1 color_darts 정의
             var colorDartsRounded = new Dictionary<int, int>();
             int totalDarts = 0;
             foreach (var kvp in colorDarts)
@@ -3633,38 +3787,133 @@ namespace BalloonFlow
             int railCapacity = RailManager.CalculateCapacity(totalDarts);
             int dartCapMax = GetDartCapacityMax(railCapacity);
 
-            // color_depth + color_dependency 계산 (4면 스캔)
+            // color_depth + color_dependency — 4면 스캔
             var colorDepth = CalcColorDepth(colorDartsRounded);
             var colorDependency = CalcColorDependency(colorDartsRounded);
 
-            // ── 2. 난이도 인덱스 ──
             int diffIdx = GetDifficultyIndex(_difficulty);
+            int levelId = _levelId;
 
-            // ── 3. STEP A: 보관함 분해 ──
-            var allMagazines = new List<(int color, int mag)>();
-            foreach (var kvp in colorDartsRounded)
+            // 명세 §2-8 — 허용 cap 결정 (rail cap + PKG + purpose 가드)
+            var allowedCaps = BuildAllowedCaps(levelId, _difficulty, railCapacity, dartCapMax);
+
+            // 명세 §2-1 — 가중치 → 허용 cap 으로 마스킹 + 재정규화
+            var weights = BuildCapWeights(diffIdx, _difficulty, allowedCaps);
+
+            // ── 명세 §6 — Hard rule fail 시 자동 재생성 (디자이너에게 안 보임) ──
+            List<(int color, int mag)> allMagazines = null;
+            int queueCols = _holderCols;
+            int attempts;
+            string hardFailReason = null;
+            // 진단용 — 각 attempts 의 fail reason 카운트 (디자이너 콘솔 출력)
+            var failReasonCounts = new Dictionary<string, int>();
+            var lastFailDiagnostic = new System.Text.StringBuilder();
+
+            for (attempts = 0; attempts < GENERATE_RETRY_MAX; attempts++)
             {
-                var mags = DecomposeMagazines(kvp.Value, diffIdx, dartCapMax);
-                foreach (int m in mags)
-                    allMagazines.Add((kvp.Key, m));
+                // ── 3. STEP A: 보관함 분해 (§3 v2 — 색상별 holder 수 추정 + 가중치 추첨 + 합계 보정) ──
+                var pending = new List<(int color, int mag)>();
+                foreach (var kvp in colorDartsRounded)
+                {
+                    var mags = DecomposeMagazinesV2(kvp.Value, weights, allowedCaps, dartCapMax);
+                    foreach (int m in mags)
+                        pending.Add((kvp.Key, m));
+                }
+
+                // ── §2-3 — Auto: 추천 사용 / Manual: 디자이너 _holderCols 존중 ──
+                queueCols = _queueColsAuto
+                    ? Mathf.Clamp(RecommendQueueColumns(pending.Count, _difficulty), 2, 5)
+                    : Mathf.Clamp(_holderCols, 2, 5);
+
+                // ── 4. STEP B: 그리드 배치 (§4-2) ──
+                var laid = LayoutByDepth(pending, colorDepth, diffIdx);
+
+                // 2D 그리드 연속 제한 (§4-2 #4)
+                int maxRowConsec = SAME_COLOR_MAX_ROW[diffIdx];
+                int maxColConsec = SAME_COLOR_MAX_COL[diffIdx];
+                EnforceGridConsecutiveLimit(laid, queueCols, maxRowConsec, maxColConsec);
+
+                // 명세 §4-2 step 5 — 첫 3행 깊이 가드 (Hard rule)
+                bool depthGuardOk = EnforceFirst3RowsDepthGuard(
+                    laid, queueCols, colorDepth, maxRowConsec, maxColConsec);
+
+                // 무결성 Hard rule 검증
+                string hardFail = ValidateHardRules(laid, totalDarts, dartCapMax, queueCols);
+                if (hardFail == null && depthGuardOk)
+                {
+                    allMagazines = laid;
+                    hardFailReason = null;
+                    break;
+                }
+                hardFailReason = hardFail ?? "first-3-rows depth guard (§4-2 step 5)";
+                failReasonCounts.TryGetValue(hardFailReason, out int rc);
+                failReasonCounts[hardFailReason] = rc + 1;
+
+                // 마지막 attempt 의 상세 진단 보존 (실패 시 콘솔 출력)
+                if (attempts == GENERATE_RETRY_MAX - 1)
+                {
+                    lastFailDiagnostic.Clear();
+                    lastFailDiagnostic.Append($"\n  laid count={laid.Count} cols={queueCols} rows={(laid.Count + queueCols - 1) / queueCols}");
+                    int sumLaid = 0;
+                    foreach (var m in laid) sumLaid += m.mag;
+                    lastFailDiagnostic.Append($"\n  sum(laid)={sumLaid} target={totalDarts}");
+                    lastFailDiagnostic.Append($"\n  capMax={dartCapMax} allowedCaps=[{string.Join(",", allowedCaps)}]");
+                    var capDist = new Dictionary<int, int>();
+                    foreach (var m in laid)
+                    {
+                        capDist.TryGetValue(m.mag, out int v); capDist[m.mag] = v + 1;
+                    }
+                    var capDistStr = new List<string>();
+                    foreach (var kvp in capDist) capDistStr.Add($"cap{kvp.Key}x{kvp.Value}");
+                    lastFailDiagnostic.Append($"\n  cap distribution: {string.Join(", ", capDistStr)}");
+                }
             }
 
-            // ── 4. STEP B: 그리드 배치 (depth 기반 순서) ──
-            allMagazines = LayoutByDepth(allMagazines, colorDepth, diffIdx);
+            if (allMagazines == null)
+            {
+                // ── 진단 출력 — 콘솔 + 상태바 ──
+                var reasonSummary = new List<string>();
+                foreach (var kvp in failReasonCounts) reasonSummary.Add($"{kvp.Value}× {kvp.Key}");
+                string reasonsText = string.Join("  /  ", reasonSummary);
+
+                var depthSummary = new List<string>();
+                foreach (var kvp in colorDepth)
+                {
+                    string lbl = kvp.Key < COLOR_LABELS.Length ? COLOR_LABELS[kvp.Key] : kvp.Key.ToString();
+                    int darts = colorDartsRounded.ContainsKey(kvp.Key) ? colorDartsRounded[kvp.Key] : 0;
+                    depthSummary.Add($"{lbl}(d{kvp.Value},{darts}d)");
+                }
+
+                Debug.LogWarning(
+                    $"[GenerateQueue] FAIL after {GENERATE_RETRY_MAX} retries\n" +
+                    $"  reasons: {reasonsText}\n" +
+                    $"  field colors: {string.Join(" ", depthSummary)}\n" +
+                    $"  totalDarts={totalDarts} railCap={railCapacity} capMax={dartCapMax} purpose={_difficulty} lv={levelId}\n" +
+                    $"  last attempt:{lastFailDiagnostic}");
+
+                SetStatus($"Generate Queue FAIL — {reasonsText} (콘솔 진단 참조)");
+                if (_queueGenGaugeFill != null) { _queueGenGaugeFill.fillAmount = 0f; _queueGenGaugeFill.color = new Color(0.65f, 0.20f, 0.20f); }
+                if (_queueGenGaugeText != null) { _queueGenGaugeText.text = "FAIL"; _queueGenGaugeText.color = Color.white; }
+                if (_queueGenScoreLabel != null) _queueGenScoreLabel.text = "Score: FAIL";
+                if (_queueGenRecommendLabel != null) _queueGenRecommendLabel.text = $"reasons: {reasonsText}";
+                if (_queueGenWarnLabel != null)
+                {
+                    _queueGenWarnLabel.text = $"⚠ Hard rule 위반 {GENERATE_RETRY_MAX}회 — 콘솔 진단 확인";
+                    _queueGenWarnLabel.color = new Color(1f, 0.30f, 0.30f);
+                    _queueGenWarnLabel.gameObject.SetActive(true);
+                }
+                SetQueueConfirmReady(false);
+                return;
+            }
 
             // ── 5. 홀더 그리드에 반영 ──
-            int queueCols = _holderCols;
             int neededRows = Mathf.CeilToInt((float)allMagazines.Count / queueCols);
-            if (neededRows != _holderRows)
+            if (_holderCols != queueCols || _holderRows != neededRows)
             {
+                _holderCols = queueCols;
                 _holderRows = Mathf.Max(1, neededRows);
                 InitGrid();
             }
-
-            // 2D 그리드 연속 제한 (행/열) — 배치 전 swap으로 해소
-            int maxRowConsec = SAME_COLOR_MAX_ROW[diffIdx];
-            int maxColConsec = SAME_COLOR_MAX_COL[diffIdx];
-            EnforceGridConsecutiveLimit(allMagazines, queueCols, maxRowConsec, maxColConsec);
 
             // Clear holder grid
             for (int c = 0; c < _holderCols; c++)
@@ -3686,58 +3935,455 @@ namespace BalloonFlow
                 }
             }
 
-            // ── 6. 난이도 점수 계산 ──
+            // ── 6. 난이도 점수 (§7) ──
             float score = CalcDifficultyScore(allMagazines, colorDepth, colorDependency, colorDartsRounded, railCapacity);
-            // 새 밴드 (명세 v1, 2026-04-06 업데이트): <35 / 70 / 90
             string grade = score < 35f ? "Easy" : score < 70f ? "Normal" : score < 90f ? "Hard" : "SuperHard";
 
-            if (_queueGenScoreLabel != null)
-                _queueGenScoreLabel.text = $"Score: {score:F0}%  [{grade}]  |  {allMagazines.Count} holders  |  {totalDarts} darts";
+            // ── 7. Soft rule 경고 (§6) ──
+            string softWarn = ValidateSoftRules(allMagazines, colorDartsRounded);
 
-            // ── 7. 무결성 검증 ──
-            int sumCheck = 0;
-            foreach (var m in allMagazines) sumCheck += m.mag;
-            bool valid = sumCheck == totalDarts;
-            SetStatus(valid
-                ? $"Generate Queue OK — {grade} ({score:F0}%)"
-                : $"Generate Queue WARN: dart sum {sumCheck} != {totalDarts}");
-        }
+            // UI v2 — §9 mock 갱신
+            int totalH = allMagazines.Count;
+            float ammoPerHolder = totalH > 0 ? (float)totalDarts / totalH : 0f;
+            int capKinds = CountCapKinds(allMagazines);
 
-        private List<int> DecomposeMagazines(int colorDarts, int diffIdx, int dartCapMax)
-        {
-            var primary = FilterPool(PRIMARY_POOL[diffIdx], dartCapMax);
-            var secondary = FilterPool(SECONDARY_POOL[diffIdx], dartCapMax);
-            if (primary.Length == 0) primary = secondary;
-            if (secondary.Length == 0) secondary = primary;
-            if (primary.Length == 0) return new List<int> { colorDarts }; // fallback
-
-            var result = new List<int>();
-            int remaining = colorDarts;
-
-            int safety = 0;
-            while (remaining > 0 && safety++ < 200)
+            // 게이지 바 (점수 + 등급 색상)
+            if (_queueGenGaugeFill != null)
             {
-                int[] pool = Random.value < 0.7f ? primary : secondary;
-                var candidates = FilterPool(pool, Mathf.Min(remaining, dartCapMax));
-                if (candidates.Length == 0)
-                    candidates = FilterPool(Concat(primary, secondary), Mathf.Min(remaining, dartCapMax));
-                if (candidates.Length == 0)
-                {
-                    result.Add(remaining); // 남은 전부
-                    remaining = 0;
-                    break;
-                }
+                _queueGenGaugeFill.fillAmount = Mathf.Clamp01(score / 100f);
+                // 등급별 색상
+                _queueGenGaugeFill.color =
+                    score < 35f  ? new Color(0.30f, 0.65f, 0.30f) :  // Easy: green
+                    score < 70f  ? new Color(0.30f, 0.55f, 0.85f) :  // Normal: blue
+                    score < 90f  ? new Color(0.85f, 0.55f, 0.25f) :  // Hard: orange
+                                   new Color(0.85f, 0.30f, 0.30f);   // SuperHard: red
+            }
+            if (_queueGenGaugeText != null)
+                _queueGenGaugeText.text = $"{score:F0}%  [{grade}]";
 
-                int mag = candidates[Random.Range(0, candidates.Length)];
-                // 모든 탄창이 10의 배수이므로 remaining - mag는 0 또는 10 이상이어야 유효
-                if (remaining - mag >= 0 && (remaining - mag == 0 || remaining - mag >= 10))
+            // 요약 라벨 — §9 mock "보관함 18개 | 다트 600/600 ✅"
+            int totalCheck = 0;
+            foreach (var m in allMagazines) totalCheck += m.mag;
+            string sumMark = totalCheck == totalDarts ? "✓" : "✗";
+            if (_queueGenScoreLabel != null)
+                _queueGenScoreLabel.text =
+                    $"보관함 {totalH}개  |  다트 {totalCheck}/{totalDarts} {sumMark}  |  caps {capKinds}종";
+
+            // 추천 라벨 — queue_columns + ammo/holder + retry
+            if (_queueGenRecommendLabel != null)
+                _queueGenRecommendLabel.text =
+                    $"cols {queueCols} (추천)  |  ammo/holder {ammoPerHolder:F1}  |  retries {attempts}";
+
+            // Soft warn 라벨
+            if (_queueGenWarnLabel != null)
+            {
+                if (softWarn != null)
                 {
-                    result.Add(mag);
-                    remaining -= mag;
+                    _queueGenWarnLabel.text = $"⚠ Soft: {softWarn}";
+                    _queueGenWarnLabel.color = new Color(1f, 0.65f, 0.25f);
+                    _queueGenWarnLabel.gameObject.SetActive(true);
+                }
+                else
+                {
+                    _queueGenWarnLabel.text = "";
+                    _queueGenWarnLabel.gameObject.SetActive(false);
                 }
             }
 
+            // Confirm 활성화
+            SetQueueConfirmReady(true);
+
+            SetStatus(softWarn == null
+                ? $"Generate Queue OK — {grade} ({score:F0}%)  [retries {attempts}]"
+                : $"Generate Queue OK (soft warn): {softWarn}");
+        }
+
+        // ─── 명세 §2-1, §2-6, §2-7, §2-8 — 가중치/허용 cap 빌드 ───
+
+        /// <summary>
+        /// §2-8 — 레벨별 사용 가능 cap 집합 결정. rail_capacity + PKG + purpose 가드 적용.
+        /// 항상 cap20 백본 포함 보장.
+        /// </summary>
+        private HashSet<int> BuildAllowedCaps(int levelId, DifficultyPurpose purpose, int railCapacity, int dartCapMax)
+        {
+            var caps = new HashSet<int> { 10, 20, 30, 40, 50 };
+
+            // Step 1: rail_capacity / dart cap max 가드
+            if (railCapacity < 80) { caps.Remove(40); caps.Remove(50); }
+            if (railCapacity < 120) caps.Remove(50);
+            caps.RemoveWhere(c => c > dartCapMax);
+
+            // Step 2: cap30 가드 (§2-7)
+            if (purpose == DifficultyPurpose.Tutorial || purpose == DifficultyPurpose.Rest)
+                caps.Remove(30);
+
+            // Step 3: cap50 가드 (§2-6)
+            int pkg = (levelId - 1) / 20 + 1;
+            bool cap50Allowed = true;
+            if (pkg < 2) cap50Allowed = false;
+            else if (purpose == DifficultyPurpose.Tutorial || purpose == DifficultyPurpose.Rest || purpose == DifficultyPurpose.Normal || purpose == DifficultyPurpose.Intro)
+                cap50Allowed = false;
+            else if (pkg >= 11)
+                cap50Allowed = (levelId == 219 || levelId == 249 || levelId == 299);
+            // PKG 2-10: Hard/SuperHard 만 허용 (위 if 분기에서 차단되지 않은 경우)
+            if (!cap50Allowed) caps.Remove(50);
+
+            // Step 4: cap20 백본 보장
+            caps.Add(20);
+
+            return caps;
+        }
+
+        /// <summary>
+        /// §2-1 — 난이도별 cap 가중치 테이블에서 허용 cap 만 마스킹 + cap20 흡수 + 재정규화.
+        /// Rest 는 §2-7 cap30 금지 흡수가 이미 base 에 적용된 별도 표 사용.
+        /// </summary>
+        private Dictionary<int, float> BuildCapWeights(int diffIdx, DifficultyPurpose purpose, HashSet<int> allowed)
+        {
+            float[] baseWeights = purpose == DifficultyPurpose.Rest
+                ? CAP_WEIGHTS_REST
+                : CAP_WEIGHTS_BASE[Mathf.Clamp(diffIdx, 0, CAP_WEIGHTS_BASE.Length - 1)];
+            int[] keys = CAP_KEYS[Mathf.Clamp(diffIdx, 0, CAP_KEYS.Length - 1)];
+
+            var w = new Dictionary<int, float>();
+            float removed = 0f;
+            for (int i = 0; i < keys.Length; i++)
+            {
+                int cap = keys[i];
+                float wi = baseWeights[i];
+                if (allowed.Contains(cap))
+                    w[cap] = wi;
+                else
+                    removed += wi; // 차단된 cap 의 비율은 cap20 에 흡수 (백본 강화)
+            }
+            if (removed > 0f)
+            {
+                if (!w.ContainsKey(20)) w[20] = 0f;
+                w[20] += removed;
+            }
+            // 재정규화 (안전장치 — 위 합산은 이미 1.0 이지만 부동소수 오차 대비)
+            float sum = 0f;
+            foreach (var v in w.Values) sum += v;
+            if (sum > 0f)
+            {
+                var keysList = new List<int>(w.Keys);
+                foreach (var k in keysList) w[k] /= sum;
+            }
+            return w;
+        }
+
+        /// <summary>
+        /// §2-3 — holder_count + purpose 기반 queue_columns 자동 추천.
+        /// PF picked 1-300 분포 검증된 룰. clamp [2,5].
+        /// </summary>
+        private static int RecommendQueueColumns(int holderCount, DifficultyPurpose purpose)
+        {
+            int baseCols;
+            if (holderCount <= 20) baseCols = 3;
+            else if (holderCount <= 35) baseCols = 3;
+            else if (holderCount <= 55) baseCols = 4;
+            else baseCols = 4;
+
+            switch (purpose)
+            {
+                case DifficultyPurpose.Tutorial:
+                    return Mathf.Clamp(baseCols - 1, 2, 4);
+                case DifficultyPurpose.SuperHard:
+                    return Mathf.Clamp(baseCols + 1, 3, 5);
+                default:
+                    return Mathf.Clamp(baseCols, 2, 5);
+            }
+        }
+
+        /// <summary>
+        /// §3 STEP A v2 — 색상별 holder 수 추정(round(color_darts/AVG_CAP)) → 가중치 추첨 → balance_to_target 합계 보정.
+        /// 결과 합계 == colorDarts 보장 (모두 10의 배수).
+        /// </summary>
+        private List<int> DecomposeMagazinesV2(
+            int colorDarts, Dictionary<int, float> weights, HashSet<int> allowed, int dartCapMax)
+        {
+            // 1. 색상별 holder 수 추정
+            int estimated = Mathf.Max(1, Mathf.RoundToInt((float)colorDarts / AVG_CAP));
+
+            // 2. 추첨 가능한 cap 후보 — dartCapMax 이하 + allowed
+            var candidates = new List<int>();
+            var candWeights = new List<float>();
+            foreach (var kvp in weights)
+            {
+                if (kvp.Key > dartCapMax) continue;
+                if (!allowed.Contains(kvp.Key)) continue;
+                if (kvp.Value <= 0f) continue;
+                candidates.Add(kvp.Key);
+                candWeights.Add(kvp.Value);
+            }
+            // 최소 보장 — cap20 백본
+            if (candidates.Count == 0) { candidates.Add(20); candWeights.Add(1f); }
+
+            // 3. holder 개수만큼 cap 추첨
+            var result = new List<int>(estimated);
+            for (int i = 0; i < estimated; i++)
+                result.Add(WeightedRandomPick(candidates, candWeights));
+
+            // 4. 합계 보정
+            BalanceToTarget(result, colorDarts, candidates, dartCapMax);
             return result;
+        }
+
+        private static int WeightedRandomPick(List<int> values, List<float> weights)
+        {
+            float total = 0f;
+            for (int i = 0; i < weights.Count; i++) total += weights[i];
+            if (total <= 0f) return values[Random.Range(0, values.Count)];
+            float roll = Random.value * total;
+            float acc = 0f;
+            for (int i = 0; i < values.Count; i++)
+            {
+                acc += weights[i];
+                if (roll <= acc) return values[i];
+            }
+            return values[values.Count - 1];
+        }
+
+        /// <summary>
+        /// §3 balance_to_target — 합계가 target 과 다르면 cap 교체/추가/제거로 조정.
+        /// 모든 cap 이 10 배수이고 target 도 10 배수이므로 ±10 단위로 수렴.
+        /// </summary>
+        private static void BalanceToTarget(List<int> holders, int target, List<int> candidates, int capMax)
+        {
+            int safety = 0;
+            while (safety++ < 200)
+            {
+                int sum = 0;
+                for (int i = 0; i < holders.Count; i++) sum += holders[i];
+                int diff = target - sum;
+                if (diff == 0) return;
+
+                if (diff > 0)
+                {
+                    // 부족 — 가장 작은 cap 을 한 단계 큰 cap 으로 교체
+                    int smallIdx = FindMinIndex(holders);
+                    if (smallIdx >= 0)
+                    {
+                        int cur = holders[smallIdx];
+                        int next = NextCapUp(cur, candidates, capMax, diff);
+                        if (next > cur)
+                        {
+                            holders[smallIdx] = next;
+                            continue;
+                        }
+                    }
+                    // 교체로 안 되면 새 holder 추가 (cap20 우선, 그 외 가능한 가장 큰 cap)
+                    int addCap = Mathf.Min(capMax, 20);
+                    if (!candidates.Contains(addCap))
+                    {
+                        addCap = 20;
+                        if (!candidates.Contains(addCap))
+                            addCap = candidates.Count > 0 ? candidates[0] : 10;
+                    }
+                    holders.Add(addCap);
+                }
+                else
+                {
+                    // 초과 — 가장 큰 cap 을 한 단계 작은 cap 으로 교체
+                    int bigIdx = FindMaxIndex(holders);
+                    if (bigIdx >= 0)
+                    {
+                        int cur = holders[bigIdx];
+                        int next = NextCapDown(cur, candidates, -diff);
+                        if (next >= 10 && next < cur)
+                        {
+                            holders[bigIdx] = next;
+                            continue;
+                        }
+                        // 더 작은 cap 으로 못 가면 holder 제거 (cap 만큼 sum 감소)
+                        if (holders.Count > 1)
+                        {
+                            holders.RemoveAt(bigIdx);
+                            continue;
+                        }
+                    }
+                    // 안전 종료
+                    break;
+                }
+            }
+        }
+
+        private static int FindMinIndex(List<int> list)
+        {
+            if (list.Count == 0) return -1;
+            int idx = 0;
+            for (int i = 1; i < list.Count; i++) if (list[i] < list[idx]) idx = i;
+            return idx;
+        }
+        private static int FindMaxIndex(List<int> list)
+        {
+            if (list.Count == 0) return -1;
+            int idx = 0;
+            for (int i = 1; i < list.Count; i++) if (list[i] > list[idx]) idx = i;
+            return idx;
+        }
+
+        private static int NextCapUp(int current, List<int> candidates, int capMax, int maxDelta)
+        {
+            int best = current;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                int c = candidates[i];
+                if (c <= current) continue;
+                if (c > capMax) continue;
+                int delta = c - current;
+                if (delta > maxDelta) continue; // diff 초과하는 교체는 금지
+                if (c > best) best = c;
+            }
+            return best;
+        }
+
+        private static int NextCapDown(int current, List<int> candidates, int maxDelta)
+        {
+            int best = current;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                int c = candidates[i];
+                if (c >= current) continue;
+                if (c < 10) continue;
+                int delta = current - c;
+                if (delta > maxDelta) continue;
+                if (c < best || best == current) best = c;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// §4-2 step 5 — 첫 3행 깊이 가드 (Hard Rule).
+        /// 첫 (queueCols × 3) 보관함 내 depth 0 매칭 가능 보관함이 1개 이상 보장.
+        /// 부족하면 뒤쪽(row 4+) depth 0 보관함과 swap 시도. 행/열 연속 위반 시 다음 후보.
+        /// 모든 후보 실패 → false (호출자가 큐 재생성).
+        /// </summary>
+        private bool EnforceFirst3RowsDepthGuard(
+            List<(int color, int mag)> list, int cols,
+            Dictionary<int, int> colorDepth,
+            int maxRow, int maxCol)
+        {
+            int firstZone = Mathf.Min(cols * 3, list.Count);
+            int rows = (list.Count + cols - 1) / cols;
+
+            // 사전 조건: 전체 list 에 depth 0 holder 가 0 개면 가드 skip (필드 자체에 외곽 색 없음 → 가드 의미 없음).
+            // 명세 §4-2 step 5 는 swap 후보가 있다는 가정. 후보 0 개일 때 무한 fail 회피.
+            int totalDepth0 = 0;
+            for (int i = 0; i < list.Count; i++)
+            {
+                int d = colorDepth.ContainsKey(list[i].color) ? colorDepth[list[i].color] : 0;
+                if (d == 0) totalDepth0++;
+            }
+            if (totalDepth0 == 0) return true;
+
+            bool HasDepth0InFirst()
+            {
+                for (int i = 0; i < firstZone; i++)
+                {
+                    int d = colorDepth.ContainsKey(list[i].color) ? colorDepth[list[i].color] : 0;
+                    if (d == 0) return true;
+                }
+                return false;
+            }
+
+            if (HasDepth0InFirst()) return true;
+
+            // Phase 1 — strict swap (행/열 연속 제약 둘 다 만족하는 swap)
+            for (int k = firstZone; k < list.Count; k++)
+            {
+                int d = colorDepth.ContainsKey(list[k].color) ? colorDepth[list[k].color] : 0;
+                if (d != 0) continue;
+
+                for (int i = 0; i < firstZone; i++)
+                {
+                    var a = list[i]; var b = list[k];
+                    list[i] = b; list[k] = a;
+
+                    int ic = i % cols, ir = i / cols;
+                    int kc = k % cols, kr = k / cols;
+                    bool okI = !ViolatesConsecutive(list, cols, rows, ir, ic, maxRow, maxCol);
+                    bool okK = !ViolatesConsecutive(list, cols, rows, kr, kc, maxRow, maxCol);
+
+                    if (okI && okK) return true; // swap 유지
+                    list[i] = a; list[k] = b;
+                }
+            }
+
+            // Phase 2 — best-effort fallback (consec 위반 허용, depth 가드만 만족).
+            // 명세 §4-2 step 5 의 의도 (첫 3행 매칭 보장) 가 §4-3 행/열 연속 (Soft Rule) 보다 우선.
+            // 작은 보드 + tight maxRow/maxCol 조합에서 strict 가 매번 실패해 무한 재생성되는 케이스 회피.
+            for (int k = firstZone; k < list.Count; k++)
+            {
+                int d = colorDepth.ContainsKey(list[k].color) ? colorDepth[list[k].color] : 0;
+                if (d != 0) continue;
+                var a = list[0]; var b = list[k];
+                list[0] = b; list[k] = a;
+                return true;
+            }
+
+            return false; // 뒤쪽에도 depth 0 없음 — 호출자 재생성 (현실적으로 totalDepth0==0 early return 에서 잡힘)
+        }
+
+        // ─── 명세 §6 Hard/Soft Rule 검증 ───
+
+        /// <summary>§6 Hard Rule — 모두 통과해야 함. 실패 시 사유 문자열 반환 (성공 시 null).</summary>
+        private string ValidateHardRules(
+            List<(int color, int mag)> list, int totalDarts, int dartCapMax, int queueCols)
+        {
+            if (list == null || list.Count == 0) return "보관함이 없음";
+
+            int sum = 0;
+            for (int i = 0; i < list.Count; i++)
+            {
+                int m = list[i].mag;
+                if (m != 10 && m != 20 && m != 30 && m != 40 && m != 50)
+                    return $"cap not in {{10,20,30,40,50}}: {m}";
+                if (m > dartCapMax) return $"cap {m} > dart_capacity_max {dartCapMax}";
+                sum += m;
+            }
+            if (sum != totalDarts) return $"sum {sum} != total {totalDarts}";
+
+            if (queueCols < 2 || queueCols > 5) return $"queueColumns {queueCols} not in [2,5]";
+
+            return null;
+        }
+
+        /// <summary>§6 Soft Rule — 경고만. 경고 메시지 반환 (없으면 null).</summary>
+        private string ValidateSoftRules(
+            List<(int color, int mag)> list, Dictionary<int, int> colorDartsRounded)
+        {
+            if (list == null || list.Count == 0) return null;
+
+            int total = 0, cap20 = 0;
+            var capSet = new HashSet<int>();
+            foreach (var m in list)
+            {
+                total += m.mag;
+                if (m.mag == 20) cap20 += m.mag;
+                capSet.Add(m.mag);
+            }
+
+            var warns = new List<string>();
+            float cap20Ratio = total > 0 ? (float)cap20 / total : 0f;
+            if (cap20Ratio < 0.50f)
+                warns.Add($"cap20 ratio {cap20Ratio:P0} < 50% (PF avg 67.5%)");
+
+            if (capSet.Count > 4)
+                warns.Add($"cap kinds {capSet.Count} > 4");
+
+            float ammoPerHolder = list.Count > 0 ? (float)total / list.Count : 0f;
+            if (ammoPerHolder < 18f || ammoPerHolder > 25f)
+                warns.Add($"ammo/holder {ammoPerHolder:F1} out of [18,25] (PF avg 21)");
+
+            return warns.Count == 0 ? null : string.Join("; ", warns);
+        }
+
+        private static int CountCapKinds(List<(int color, int mag)> list)
+        {
+            var set = new HashSet<int>();
+            foreach (var m in list) set.Add(m.mag);
+            return set.Count;
         }
 
         private List<(int color, int mag)> LayoutByDepth(
@@ -4108,22 +4754,6 @@ namespace BalloonFlow
             if (railCapacity <= 50) return 30;
             if (railCapacity <= 100) return 40;
             return 50;
-        }
-
-        private static int[] FilterPool(int[] pool, int max)
-        {
-            var result = new List<int>();
-            for (int i = 0; i < pool.Length; i++)
-                if (pool[i] <= max) result.Add(pool[i]);
-            return result.ToArray();
-        }
-
-        private static int[] Concat(int[] a, int[] b)
-        {
-            var result = new int[a.Length + b.Length];
-            a.CopyTo(result, 0);
-            b.CopyTo(result, a.Length);
-            return result;
         }
 
         private static void Shuffle<T>(List<T> list)

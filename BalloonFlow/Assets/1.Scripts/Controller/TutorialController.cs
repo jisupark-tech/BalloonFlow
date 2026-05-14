@@ -274,13 +274,27 @@ namespace BalloonFlow
         #region Private Methods — Tutorial Config Construction
 
         /// <summary>
-        /// Builds all tutorial configs in code. First 5 levels are basic tutorials;
-        /// levels 11, 21, 31, 41, 61 are gimmick introduction tutorials.
+        /// Builds the tutorial config table.
+        /// Priority: (1) TutorialCatalog SO from Resources, (2) hardcoded fallback below.
+        /// LevelDatabase.tutorialSteps is read per-level in TryBuildFromLevelData() and
+        /// always takes precedence over both — see HandleLevelLoaded flow.
         /// </summary>
         private void BuildTutorialConfigs()
         {
             _configByLevel.Clear();
 
+            // Priority 1: TutorialCatalog SO (primary runtime source — edited via TutorialEditorWindow or Inspector).
+            TutorialCatalog catalog = Resources.Load<TutorialCatalog>(TutorialCatalog.RESOURCES_PATH);
+            if (catalog != null && catalog.Tutorials != null && catalog.Tutorials.Count > 0)
+            {
+                for (int i = 0; i < catalog.Tutorials.Count; i++)
+                {
+                    RegisterConfig(catalog.Tutorials[i]);
+                }
+                return;
+            }
+
+            // Priority 2: hardcoded fallback (legacy — kept for safety until Catalog asset is committed).
             // ── Basic tutorials (Levels 1–5) ──────────────────────────────────
 
             RegisterConfig(new TutorialConfig

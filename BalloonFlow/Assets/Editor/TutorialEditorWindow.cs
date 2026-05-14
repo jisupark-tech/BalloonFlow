@@ -99,18 +99,28 @@ namespace BalloonFlow.Editor
         {
             // Toolbar
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+
+            // [2026-05-14] Primary workflow — read/write directly to TutorialCatalog.asset.
+            // 인게임 런타임이 이 SO 를 우선 로드 (TutorialController.BuildTutorialConfigs Priority 1).
+            GUI.backgroundColor = new Color(0.55f, 0.85f, 0.55f);
+            if (GUILayout.Button("💾 Save → Catalog", EditorStyles.toolbarButton, GUILayout.Width(140)))
+                SaveToCatalog();
+            GUI.backgroundColor = Color.white;
+            if (GUILayout.Button("📂 Load Catalog", EditorStyles.toolbarButton, GUILayout.Width(110)))
+                LoadFromCatalog();
+
+            GUILayout.Space(12);
+
+            // Legacy — 코드/JSON 백업. Catalog 도입 전 워크플로우 유지 (롤백 호환).
             if (GUILayout.Button("Load from Code", EditorStyles.toolbarButton, GUILayout.Width(110)))
                 LoadFromTutorialController();
-            if (GUILayout.Button("Save to Code", EditorStyles.toolbarButton, GUILayout.Width(100)))
+            if (GUILayout.Button("Save to Code (clipboard)", EditorStyles.toolbarButton, GUILayout.Width(165)))
                 SaveToTutorialController();
-            // [2026-05-13] 저장하기 — 에디터 상태를 JSON 파일로 영속화 (재오픈 시 LoadFromFile 로 복원).
-            GUILayout.Space(8);
-            GUI.backgroundColor = new Color(0.55f, 0.85f, 0.55f);
-            if (GUILayout.Button("💾 저장하기", EditorStyles.toolbarButton, GUILayout.Width(100)))
+            if (GUILayout.Button("JSON Save", EditorStyles.toolbarButton, GUILayout.Width(90)))
                 SaveToFile();
-            GUI.backgroundColor = Color.white;
-            if (GUILayout.Button("📂 불러오기", EditorStyles.toolbarButton, GUILayout.Width(100)))
+            if (GUILayout.Button("JSON Load", EditorStyles.toolbarButton, GUILayout.Width(90)))
                 LoadFromFile();
+
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("+ New Tutorial", EditorStyles.toolbarButton, GUILayout.Width(110)))
                 AddNewTutorial();
@@ -495,7 +505,156 @@ namespace BalloonFlow.Editor
                 "OK");
         }
 
-        // [2026-05-13] JSON file 으로 editor 상태 저장/복원.
+        // [2026-05-14] TutorialCatalog SO 직접 read/write — 인게임 런타임 primary source.
+        //   TutorialController.BuildTutorialConfigs() 가 Priority 1 으로 이 asset 로드.
+        //   Resources 폴더에 위치해야 Resources.Load 로 런타임 접근 가능.
+        private const string CATALOG_ASSET_PATH = "Assets/Resources/TutorialCatalog.asset";
+
+        private static TutorialCatalog FindOrCreateCatalog()
+        {
+            var catalog = AssetDatabase.LoadAssetAtPath<TutorialCatalog>(CATALOG_ASSET_PATH);
+            if (catalog != null) return catalog;
+
+            string dir = System.IO.Path.GetDirectoryName(CATALOG_ASSET_PATH);
+            if (!AssetDatabase.IsValidFolder(dir))
+            {
+                System.IO.Directory.CreateDirectory(dir);
+                AssetDatabase.Refresh();
+            }
+
+            catalog = ScriptableObject.CreateInstance<TutorialCatalog>();
+            AssetDatabase.CreateAsset(catalog, CATALOG_ASSET_PATH);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log($"[TutorialEditorWindow] Created new TutorialCatalog at {CATALOG_ASSET_PATH}");
+            return catalog;
+        }
+
+        private void SaveToCatalog()
+        {
+            var catalog = FindOrCreateCatalog();
+            Undo.RecordObject(catalog, "Save Tutorial Catalog");
+
+            var list = catalog.GetMutableList();
+            list.Clear();
+
+            for (int t = 0; t < _tutorials.Count; t++)
+            {
+                var src = _tutorials[t];
+                var config = new TutorialConfig
+                {
+                    tutorialId = src.tutorialId,
+                    levelId = src.levelId,
+                    tutorialName = src.name,
+                    steps = new TutorialStep[src.steps.Count]
+                };
+                for (int i = 0; i < src.steps.Count; i++)
+                {
+                    var s = src.steps[i];
+                    config.steps[i] = new TutorialStep
+                    {
+                        stepIndex = i,
+                        instruction = s.instruction,
+                        highlightTarget = s.highlightTarget == "(none)" ? string.Empty : s.highlightTarget,
+                        requireAction = s.requireAction,
+                        isComplete = false,
+                        overrideVisualLayout = s.overrideVisualLayout,
+                        useCutoutFrame = s.useCutoutFrame,
+                        cutoutFramePosition = s.cutoutFramePosition,
+                        cutoutFrameSize = s.cutoutSize,
+                        cutoutFrameSprite = s.cutoutFrameSprite,
+                        instructionPanelPosition = s.instructionPanelPosition,
+                        instructionPanelSize = s.instructionPanelSize,
+                        useArrowIndicator = s.useArrowIndicator,
+                        arrowIndicatorPosition = s.arrowIndicatorPosition,
+                        useHandIndicator = s.useHandIndicator,
+                        handIndicatorPosition = s.handIndicatorPosition,
+                        handIndicatorSprite = s.handIndicatorSprite,
+                        handTweenType = s.handTweenType,
+                        handTweenMoveOffset = s.handTweenMoveOffset,
+                        handTweenScale = s.handTweenScale,
+                        handTweenRotation = s.handTweenRotation,
+                        handTweenDuration = s.handTweenDuration,
+                        cutoutMaskSprite = s.cutoutMaskSprite
+                    };
+                }
+                list.Add(config);
+            }
+
+            EditorUtility.SetDirty(catalog);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            Debug.Log($"[TutorialEditorWindow] Saved {list.Count} tutorials → {CATALOG_ASSET_PATH}");
+            EditorUtility.DisplayDialog("Catalog 저장 완료",
+                $"{list.Count}개 tutorial 을 TutorialCatalog.asset 에 저장했습니다.\n\n인게임 다음 레벨 진입 시 자동 반영됩니다.\n(Play 중이면 재시작 필요)",
+                "OK");
+        }
+
+        private void LoadFromCatalog()
+        {
+            var catalog = AssetDatabase.LoadAssetAtPath<TutorialCatalog>(CATALOG_ASSET_PATH);
+            if (catalog == null)
+            {
+                EditorUtility.DisplayDialog("Catalog 없음",
+                    $"{CATALOG_ASSET_PATH} 가 존재하지 않습니다.\n\n'Load from Code' 로 기본값을 불러온 뒤 'Save → Catalog' 를 누르면 자동 생성됩니다.",
+                    "OK");
+                return;
+            }
+
+            _tutorials.Clear();
+            _selectedTutorial = -1;
+
+            for (int t = 0; t < catalog.Tutorials.Count; t++)
+            {
+                var src = catalog.Tutorials[t];
+                var edit = new EditableTutorial
+                {
+                    tutorialId = src.tutorialId,
+                    levelId = src.levelId,
+                    name = string.IsNullOrEmpty(src.tutorialName) ? "Untitled" : src.tutorialName,
+                    steps = new List<EditableStep>()
+                };
+                if (src.steps != null)
+                {
+                    for (int i = 0; i < src.steps.Length; i++)
+                    {
+                        var s = src.steps[i];
+                        edit.steps.Add(new EditableStep
+                        {
+                            instruction = s.instruction ?? "",
+                            highlightTarget = string.IsNullOrEmpty(s.highlightTarget) ? "(none)" : s.highlightTarget,
+                            requireAction = string.IsNullOrEmpty(s.requireAction) ? "none" : s.requireAction,
+                            overrideVisualLayout = s.overrideVisualLayout,
+                            useCutoutFrame = s.useCutoutFrame,
+                            cutoutFramePosition = s.cutoutFramePosition,
+                            cutoutSize = s.cutoutFrameSize,
+                            cutoutFrameSprite = s.cutoutFrameSprite,
+                            instructionPanelPosition = s.instructionPanelPosition,
+                            instructionPanelSize = s.instructionPanelSize,
+                            useArrowIndicator = s.useArrowIndicator,
+                            arrowIndicatorPosition = s.arrowIndicatorPosition,
+                            useHandIndicator = s.useHandIndicator,
+                            handIndicatorPosition = s.handIndicatorPosition,
+                            handIndicatorSprite = s.handIndicatorSprite,
+                            handTweenType = s.handTweenType,
+                            handTweenMoveOffset = s.handTweenMoveOffset,
+                            handTweenScale = s.handTweenScale,
+                            handTweenRotation = s.handTweenRotation,
+                            handTweenDuration = s.handTweenDuration,
+                            cutoutMaskSprite = s.cutoutMaskSprite
+                        });
+                    }
+                }
+                _tutorials.Add(edit);
+            }
+
+            _selectedTutorial = _tutorials.Count > 0 ? 0 : -1;
+            Repaint();
+            Debug.Log($"[TutorialEditorWindow] Loaded {_tutorials.Count} tutorials from {CATALOG_ASSET_PATH}");
+        }
+
+        // [2026-05-13] JSON file 으로 editor 상태 저장/복원 — legacy backup.
         //   Sprite asset reference 는 GUID + sub-asset 명으로 직렬화 (Unity asset 시스템 외부 JSON 직접 처리 불가).
         private const string SAVE_FILE_PATH = "Assets/Editor/TutorialEditorState.json";
 

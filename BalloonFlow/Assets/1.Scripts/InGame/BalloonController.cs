@@ -1481,6 +1481,12 @@ namespace BalloonFlow
             // Remove from position index
             _positionIndex.Remove(ToGridKey(data.position));
 
+            // ROLLBACK_DART_TARGET_CACHE_DIRTY:
+            // DirectionalTargeting is now dirty-driven instead of frame-driven. A pop is the exact
+            // moment the outer contour changes, so invalidate once here and rebuild on the next
+            // targeting query instead of rebuilding every frame.
+            DirectionalTargeting.InvalidateCache();
+
             // Publish pop event
             EventBus.Publish(new OnBalloonPopped
             {
