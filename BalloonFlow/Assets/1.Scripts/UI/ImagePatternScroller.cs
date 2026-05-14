@@ -1,9 +1,10 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BalloonFlow
+namespace AimedPuzzle.BalloonFlow.UI
 {
-    /// <summary>RawImage uvRect를 X/Y로 스크롤하면서 화면/텍스처 비율에 맞춰 uvRect.W/H를 자동 보정한다.</summary>
+    // Per-instance background scroller component (not a singleton — multiple RawImages may have their own).
+    /// <summary>RawImage uvRect를 X/Y로 스크롤하면서 CanvasScaler referenceResolution 대비 실제 rect 크기 비율로 uvRect.W/H를 자동 보정한다.</summary>
     public class ImagePatternScroller : MonoBehaviour
     {
         [SerializeField] private RawImage rawImage;
@@ -12,7 +13,6 @@ namespace BalloonFlow
         private Rect uvRect;
         private RectTransform _rawImageRT;
         private Vector2 _baseUvSize;
-        private Vector2 _lastRectSize;
         private int _lastTexId;
 
         private void Awake()
@@ -27,8 +27,8 @@ namespace BalloonFlow
             RecalculateUvSize();
         }
 
-        // 픽셀당 텍셀 동일 조건: rect.x/(uv.w·tex.w) = rect.y/(uv.h·tex.h)
-        // → uv.h = uv.w · (texAspect / rawAspect), _baseUvSize.x를 X anchor로 보존.
+        // 세로 reference(예: 1242x2688)에서는 _baseUvSize 그대로 사용.
+        // 화면 rect가 reference보다 커지면 같은 픽셀 크기의 패턴이 더 많이 반복되도록 uv 범위만 비례 확장.
         private void RecalculateUvSize()
         {
             if (rawImage == null || rawImage.texture == null) return;
@@ -36,17 +36,23 @@ namespace BalloonFlow
             Vector2 rectSize = _rawImageRT.rect.size;
             if (rectSize.x <= 0f || rectSize.y <= 0f) return;
 
-            float rawAspect = rectSize.x / rectSize.y;
-            var tex = rawImage.texture;
-            float texAspect = (float)tex.width / tex.height;
+            Vector2 refRes = GetReferenceResolution();
+            if (refRes.x <= 0f || refRes.y <= 0f) return;
 
-            uvRect.width  = _baseUvSize.x;
-            uvRect.height = _baseUvSize.x * (texAspect / rawAspect);
+            uvRect.width  = _baseUvSize.x * (rectSize.x / refRes.x);
+            uvRect.height = _baseUvSize.y * (rectSize.y / refRes.y);
 
             rawImage.uvRect = uvRect;
 
-            _lastRectSize = rectSize;
-            _lastTexId = tex.GetInstanceID();
+            _lastTexId = rawImage.texture.GetInstanceID();
+        }
+
+        private Vector2 GetReferenceResolution()
+        {
+            var scaler = GetComponentInParent<CanvasScaler>();
+            if (scaler != null && scaler.referenceResolution.x > 0f && scaler.referenceResolution.y > 0f)
+                return scaler.referenceResolution;
+            return new Vector2(1242f, 2688f);
         }
 
         private void OnRectTransformDimensionsChange()
