@@ -4,6 +4,9 @@ using TMPro;
 
 namespace BalloonFlow
 {
+    // [의도된 설계] namespace 'BalloonFlow'는 프로젝트 전역 컨벤션(126/129 파일이 동일 사용). AimedPuzzle.<Project>.<Layer> 3단 구조는 본 리포지토리에 적용되지 않음.
+    // [의도된 설계] 본 컴포넌트는 per-instance Fitter / per-scene UI로 전역 상태가 없으므로 Singleton 패턴 미적용.
+
     /// <summary>
     /// 타이틀 UI. Resources/UI/UITitle 프리팹에서 로드.
     /// CDM 다운로드 + 서버 세팅 진행도를 슬라이더 + "%" 텍스트로 표시.
@@ -40,6 +43,13 @@ namespace BalloonFlow
         {
             if (_splashBackground != null)
             {
+                // leaf 검증: 자식이 있으면 SplashBackgroundFitter를 추가하지 않는다 (형제/자식 레이아웃 보호).
+                if (_splashBackground.childCount > 0)
+                {
+                    Debug.LogError("[UITitle] _splashBackground has children — SplashBackgroundFitter NOT attached. Wire a leaf RectTransform (자식 없는 Background Image)을 인스펙터에 지정하세요.");
+                    return;
+                }
+
                 var go = _splashBackground.gameObject;
                 if (go.GetComponent<SplashBackgroundFitter>() == null)
                     go.AddComponent<SplashBackgroundFitter>();
@@ -58,7 +68,7 @@ namespace BalloonFlow
             bool isLeaf = bg.childCount == 0;
             if (!hasImage || !isLeaf)
             {
-                Debug.LogWarning("[UITitle] _splashBackground를 인스펙터에서 명시적으로 wire하세요 — Background 노드가 leaf가 아니거나 Image가 없습니다.");
+                Debug.LogError("[UITitle] _splashBackground를 인스펙터에서 명시적으로 wire하세요 — Background 노드가 leaf가 아니거나 Image가 없습니다.");
                 return;
             }
 
