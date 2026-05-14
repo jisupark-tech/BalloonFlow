@@ -35,6 +35,11 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprStageHard;
         [SerializeField] private Sprite _sprStageSuperHard;
 
+        [Header("[ImageBG — 레벨별 배경]")]
+        [SerializeField] private Image _imageBG;
+        [SerializeField] private Sprite[] _bgSpritesPerLevel;
+        [SerializeField] private Sprite _bgSpriteDefault;
+
         [Header("[Hard Level Option — Hard/SuperHard 전용]")]
         [SerializeField] private GameObject _hardLevelOption;
         [SerializeField] private Image _iconSkull;
@@ -154,6 +159,10 @@ namespace BalloonFlow
             }
 
             UpdateHardLevelOption(difficulty);
+
+            int currentLvl = LevelManager.HasInstance ? LevelManager.Instance.CurrentLevelId : 1;
+            ApplyLevelBackground(currentLvl);
+
             OpenUI();
 
             // 애니메이션 상태와 무관하게 즉시 클릭 가능
@@ -209,6 +218,28 @@ namespace BalloonFlow
             CloseUI();
             if (PopupManager.HasInstance) PopupManager.Instance.CloseAllPopups();
             if (GameManager.HasInstance) GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY);
+        }
+
+        #endregion
+
+        #region Level Background
+
+        private void ApplyLevelBackground(int levelId)
+        {
+            if (_imageBG == null) return;
+
+            Sprite chosen;
+            if (_bgSpritesPerLevel == null || _bgSpritesPerLevel.Length == 0)
+            {
+                chosen = _bgSpriteDefault;
+            }
+            else
+            {
+                int idx = Mathf.Clamp(levelId - 1, 0, _bgSpritesPerLevel.Length - 1);
+                chosen = _bgSpritesPerLevel[idx] != null ? _bgSpritesPerLevel[idx] : _bgSpriteDefault;
+            }
+
+            if (chosen != null) _imageBG.sprite = chosen;
         }
 
         #endregion
