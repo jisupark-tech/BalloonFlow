@@ -51,6 +51,13 @@ namespace BalloonFlow
                 }
 
                 var go = _splashBackground.gameObject;
+                // sprite native aspect 기반 cover를 사용하므로 Image + sprite 할당 여부를 사전 점검(미할당이면 fitter가 _isDisabled로 자기 보호).
+                var img = go.GetComponent<Image>();
+                if (img == null || img.sprite == null)
+                {
+                    Debug.LogWarning("[UITitle] _splashBackground에 Image 컴포넌트 또는 sprite가 없습니다 — SplashBackgroundFitter는 부착되나 sprite 할당 전까지 sizeDelta를 조작하지 않습니다.");
+                }
+
                 if (go.GetComponent<SplashBackgroundFitter>() == null)
                     go.AddComponent<SplashBackgroundFitter>();
                 return;
@@ -64,12 +71,18 @@ namespace BalloonFlow
             }
 
             var bgGo = bg.gameObject;
-            bool hasImage = bgGo.GetComponent<Image>() != null;
+            var bgImage = bgGo.GetComponent<Image>();
+            bool hasImage = bgImage != null;
             bool isLeaf = bg.childCount == 0;
             if (!hasImage || !isLeaf)
             {
                 Debug.LogError("[UITitle] _splashBackground를 인스펙터에서 명시적으로 wire하세요 — Background 노드가 leaf가 아니거나 Image가 없습니다.");
                 return;
+            }
+
+            if (bgImage.sprite == null)
+            {
+                Debug.LogWarning("[UITitle] Background Image.sprite가 비어있습니다 — SplashBackgroundFitter는 부착되나 sprite 할당 전까지 sizeDelta를 조작하지 않습니다.");
             }
 
             if (bgGo.GetComponent<SplashBackgroundFitter>() == null)
