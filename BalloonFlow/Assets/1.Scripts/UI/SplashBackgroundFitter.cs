@@ -91,6 +91,9 @@ namespace BalloonFlow
             if (cur != _lastParentSize) ApplyFit();
         }
 
+        // Update만으로는 sprite 교체를 감지하지 못함 (parent size만 비교). 외부에서 sprite를 바꾼 직후 호출.
+        public void Refresh() { ApplyFit(); }
+
         private void ApplyFit()
         {
             if (_isDisabled) return;
