@@ -206,6 +206,11 @@ namespace BalloonFlow
         /// </summary>
         private float ConveyorTileSize => 2.0f;
 
+        private const float CAVE_OVERLAY_Y = 0.5f;
+        private const float CAVE_BOTTOM_Z = -5.52f;
+        private const float CAVE_TOP_Z_2_SIDES = 9.3f;
+        private const float CAVE_TOP_Z_3_SIDES = 9.86f;
+
         #endregion
 
         #region Runtime Refs
@@ -2676,18 +2681,18 @@ namespace BalloonFlow
             {
                 if (sides == 3)
                 {
-                    PlaceCaveOverlayTile(caveL, new Vector3(left, rh, bottom), cornerSize);
-                    PlaceCaveOverlayTile(caveL, new Vector3(left, rh, top), cornerSize);
+                    PlaceCaveOverlayTile(caveL, new Vector3(left, rh, bottom), cornerSize, sides, 0);
+                    PlaceCaveOverlayTile(caveL, new Vector3(left, rh, top), cornerSize, sides, 1);
                 }
                 else if (sides == 2)
                 {
-                    PlaceCaveOverlayTile(caveL, new Vector3(left, rh, bottom), cornerSize);
-                    PlaceCaveOverlayTile(caveT, new Vector3(right, rh, top), cornerSize);
+                    PlaceCaveOverlayTile(caveL, new Vector3(left, rh, bottom), cornerSize, sides, 0);
+                    PlaceCaveOverlayTile(caveT, new Vector3(right, rh, top), cornerSize, sides, 1);
                 }
                 else
                 {
-                    PlaceCaveOverlayTile(caveL, new Vector3(left, rh, bottom), cornerSize);
-                    PlaceCaveOverlayTile(caveR, new Vector3(right, rh, bottom), cornerSize);
+                    PlaceCaveOverlayTile(caveL, new Vector3(left, rh, bottom), cornerSize, sides, 0);
+                    PlaceCaveOverlayTile(caveR, new Vector3(right, rh, bottom), cornerSize, sides, 1);
                 }
             }
 
@@ -2841,13 +2846,13 @@ namespace BalloonFlow
             }
         }
 
-        private void PlaceCaveOverlayTile(Sprite sprite, Vector3 position, float tileSize)
+        private void PlaceCaveOverlayTile(Sprite sprite, Vector3 position, float tileSize, int sides, int tunnelIndex)
         {
             if (sprite == null) return;
 
             var go = new GameObject($"CaveTile_{_conveyorPreviewRoot.childCount}");
             go.transform.SetParent(_conveyorPreviewRoot, false);
-            go.transform.position = new Vector3(position.x, -0.01f, position.z);
+            go.transform.position = new Vector3(position.x, CAVE_OVERLAY_Y, GetCaveOverlayZ(sides, tunnelIndex, position.z));
             go.transform.eulerAngles = new Vector3(90f, 0f, 0f);
 
             var sr = go.AddComponent<SpriteRenderer>();
@@ -2858,6 +2863,15 @@ namespace BalloonFlow
             float sh = sprite.bounds.size.y;
             if (sw > 0.001f && sh > 0.001f)
                 go.transform.localScale = new Vector3(tileSize / sw, tileSize / sh, 1f);
+        }
+
+        private static float GetCaveOverlayZ(int sides, int tunnelIndex, float fallbackZ)
+        {
+            if (tunnelIndex == 0) return CAVE_BOTTOM_Z;
+            if (sides == 1) return CAVE_BOTTOM_Z;
+            if (sides == 2) return CAVE_TOP_Z_2_SIDES;
+            if (sides == 3) return CAVE_TOP_Z_3_SIDES;
+            return fallbackZ;
         }
 
         /// <summary>

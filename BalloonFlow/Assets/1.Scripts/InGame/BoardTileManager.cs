@@ -50,6 +50,11 @@ namespace BalloonFlow
         public const float CONVEYOR_HEIGHT    = 15.4f;
         public const float RAIL_THICKNESS     = 5f;
         public const float RAIL_GAP           = 0.2f;
+
+        private const float CAVE_OVERLAY_Y = 0.5f;
+        private const float CAVE_BOTTOM_Z = -5.52f;
+        private const float CAVE_TOP_Z_2_SIDES = 9.3f;
+        private const float CAVE_TOP_Z_3_SIDES = 9.86f;
         
         // Cached rail layout values (computed in InitializeBoard)
         private float _fieldWidth;
@@ -504,18 +509,18 @@ namespace BalloonFlow
             {
                 if (sides == 3)
                 {
-                    PlaceCaveOverlay(caveL, left, bottom, cornerSize, cornerSize);
-                    PlaceCaveOverlay(caveL, left, top, cornerSize, cornerSize);
+                    PlaceCaveOverlay(caveL, left, bottom, cornerSize, cornerSize, sides, 0);
+                    PlaceCaveOverlay(caveL, left, top, cornerSize, cornerSize, sides, 1);
                 }
                 else if (sides == 2)
                 {
-                    PlaceCaveOverlay(caveL, left, bottom, cornerSize, cornerSize);
-                    PlaceCaveOverlay(caveT, right, top, cornerSize, cornerSize);
+                    PlaceCaveOverlay(caveL, left, bottom, cornerSize, cornerSize, sides, 0);
+                    PlaceCaveOverlay(caveT, right, top, cornerSize, cornerSize, sides, 1);
                 }
                 else // 1면 (직선): 터널 높이를 레일 두께에 맞춤
                 {
-                    PlaceCaveOverlay(caveL, left, bottom, cornerSize, cornerSize);
-                    PlaceCaveOverlay(caveR, right, bottom, cornerSize, cornerSize);
+                    PlaceCaveOverlay(caveL, left, bottom, cornerSize, cornerSize, sides, 0);
+                    PlaceCaveOverlay(caveR, right, bottom, cornerSize, cornerSize, sides, 1);
                 }
             }
         }
@@ -670,13 +675,13 @@ namespace BalloonFlow
         /// <summary>
         /// Cave 터널 오버레이 — 캡 위치에 Arrow보다 높은 sortingOrder로 배치.
         /// </summary>
-        private void PlaceCaveOverlay(Sprite sprite, float wx, float wz, float worldW, float worldH)
+        private void PlaceCaveOverlay(Sprite sprite, float wx, float wz, float worldW, float worldH, int sides, int tunnelIndex)
         {
             if (sprite == null || _conveyorSpriteRoot == null) return;
 
             var go = new GameObject("CaveTile");
             go.transform.SetParent(_conveyorSpriteRoot, false);
-            go.transform.position = new Vector3(wx, -0.01f, wz);
+            go.transform.position = new Vector3(wx, CAVE_OVERLAY_Y, GetCaveOverlayZ(sides, tunnelIndex, wz));
             go.transform.eulerAngles = new Vector3(90f, 0f, 0f);
 
             // SpriteRenderer 유지 (이전 안정 패턴)
@@ -690,6 +695,15 @@ namespace BalloonFlow
             float sh = sprite.bounds.size.y;
             if (sw > 0.001f && sh > 0.001f)
                 go.transform.localScale = new Vector3(worldW / sw, worldH / sh, 1f);
+        }
+
+        private static float GetCaveOverlayZ(int sides, int tunnelIndex, float fallbackZ)
+        {
+            if (tunnelIndex == 0) return CAVE_BOTTOM_Z;
+            if (sides == 1) return CAVE_BOTTOM_Z;
+            if (sides == 2) return CAVE_TOP_Z_2_SIDES;
+            if (sides == 3) return CAVE_TOP_Z_3_SIDES;
+            return fallbackZ;
         }
 
         private void PlaceConveyorSprite(Sprite sprite, float wx, float wz, float tileSize)
