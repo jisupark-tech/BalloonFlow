@@ -34,7 +34,7 @@ namespace BalloonFlow
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoSpawn()
         {
-#if DEVELOPMENT_BUILD || UNITY_EDITOR
+#if BALLOONFLOW_ENABLE_IMGUI_DEBUG
             const string GO_NAME = "[DevOverlay]";
             if (GameObject.Find(GO_NAME) != null) return;
             var go = new GameObject(GO_NAME);

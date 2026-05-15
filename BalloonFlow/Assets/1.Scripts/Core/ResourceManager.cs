@@ -161,6 +161,7 @@ namespace BalloonFlow
         private readonly Dictionary<string, GameObject> _addrPrefabCache = new Dictionary<string, GameObject>();
         /// <summary>Resources path 형태 (\"Popup/PopupResult\") → Addressable 키 (\"popup_PopupResult\") 매핑 캐시.</summary>
         private readonly Dictionary<string, string> _resourcePathToAddrKey = new Dictionary<string, string>();
+        private static readonly bool PRELOAD_ADDRESSABLE_PREFABS_AT_STARTUP = false;
 
         /// <summary>
         /// Local_Always (core) + Local_OnDemand (ui) 라벨의 모든 prefab 을 일괄 사전 로드.
@@ -168,6 +169,12 @@ namespace BalloonFlow
         /// </summary>
         public async Task PreloadAddressablePrefabsAsync()
         {
+            // ROLLBACK_ADDRESSABLE_PREFAB_PRELOAD:
+            // Set PRELOAD_ADDRESSABLE_PREFABS_AT_STARTUP true to restore eager core/ui prefab caching.
+            // Current build keeps Resources fallback as the single startup prefab path to avoid
+            // holding duplicate Addressables + Resources prefab dependency graphs in memory.
+            if (!PRELOAD_ADDRESSABLE_PREFABS_AT_STARTUP) return;
+
             await PreloadByLabelAsync(Const.ADDR_LABEL_CORE);
             await PreloadByLabelAsync(Const.ADDR_LABEL_UI);
         }

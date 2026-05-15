@@ -594,7 +594,7 @@ namespace BalloonFlow
 
         #region Debug UI (InGame Only)
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && BALLOONFLOW_ENABLE_IMGUI_DEBUG
         [Header("[Debug UI]")]
         [Tooltip("InGame 우상단 디버그 패널 (TEST ITEM / FORCE FAIL / Lv.N / RESET 등). " +
                  "OnGUI 는 매 프레임 IMGUI 레이아웃 비용 큼 — 모바일 큰 부하. perf 측정 시 OFF.")]

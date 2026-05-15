@@ -219,6 +219,8 @@ namespace BalloonFlow
         // speed waiting until the next frame lets that new head pass one exact line. Re-scan only
         // that holder's newly promoted head, with a tiny cap, so this does not become free-fire.
         private const int MAX_POST_FIRE_HEAD_RESCANS_PER_HOLDER = 1;
+        private const float POST_FIRE_HEAD_RESCAN_MIN_SPEED = 1.01f;
+        private const float POST_FIRE_HEAD_RESCAN_MIN_DELTA_TIME = 1f / 45f;
         private const int MAX_MISS_SUSPECT_LOGS_PER_FRAME = 1;
         private const int MAX_ATTACK_ISSUE_LOGS_PER_FRAME = 8;
         private int _lastMissSuspectLogFrame = -1;
@@ -1533,16 +1535,23 @@ namespace BalloonFlow
                 {
                     firedThisScan++;
                     // ROLLBACK_DART_POST_FIRE_HEAD_RESCAN:
-                    // Disabled: immediate same-frame promoted-head firing reduces some misses, but it also
-                    // reopens continuous attacks because a holder can peel two outline cells before the
-                    // first projectile resolves. Promotion seed catch-up handles the next head on the next
-                    // scan without granting an extra same-frame shot.
-                    // FireNewlyPromotedHeadIfReady(rail, candidate.holderId);
+                    // Re-enabled only for x2/long-frame cases. This is a bounded substep for the
+                    // newly promoted head that would otherwise skip an exact line before the next
+                    // Update. Same-line peeling is still blocked by holder/target consumed-line guards.
+                    if (ShouldRunPostFireHeadRescan())
+                        firedThisScan += FireNewlyPromotedHeadIfReady(rail, candidate.holderId);
                 }
             }
 
             _fireCandidates.Clear();
             PruneConsumedTargetLinesForCurrentHeads(rail);
+        }
+
+        private bool ShouldRunPostFireHeadRescan()
+        {
+            if (!RailManager.HasInstance) return false;
+            if (RailManager.Instance.UserSpeedMultiplier < POST_FIRE_HEAD_RESCAN_MIN_SPEED) return false;
+            return Time.deltaTime >= POST_FIRE_HEAD_RESCAN_MIN_DELTA_TIME;
         }
 
         private int FireNewlyPromotedHeadIfReady(RailManager rail, int holderId)

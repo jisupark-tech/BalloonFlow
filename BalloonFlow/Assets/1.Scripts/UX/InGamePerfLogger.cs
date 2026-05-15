@@ -40,7 +40,7 @@ namespace BalloonFlow
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoSpawn()
         {
-#if DEVELOPMENT_BUILD || UNITY_EDITOR
+#if BALLOONFLOW_ENABLE_PERF_LOGGER
             const string GO_NAME = "[InGamePerfLogger]";
             if (GameObject.Find(GO_NAME) != null) return;
             var go = new GameObject(GO_NAME);
@@ -113,7 +113,7 @@ namespace BalloonFlow
         /// <summary>매니저 측에서 hot path 시작 시 호출. 끝에 EndSection.</summary>
         public static Stopwatch StartSection()
         {
-#if DEVELOPMENT_BUILD || UNITY_EDITOR
+#if BALLOONFLOW_ENABLE_PERF_LOGGER
             return Stopwatch.StartNew();
 #else
             return null;
@@ -123,7 +123,7 @@ namespace BalloonFlow
         /// <summary>매니저 측 hot path 끝. 1초 누적에 합산. label 별 평균 ms 표시.</summary>
         public static void EndSection(Stopwatch sw, string label)
         {
-#if DEVELOPMENT_BUILD || UNITY_EDITOR
+#if BALLOONFLOW_ENABLE_PERF_LOGGER
             if (sw == null) return;
             sw.Stop();
             float ms = (float)sw.Elapsed.TotalMilliseconds;
