@@ -98,7 +98,7 @@ namespace BalloonFlow
         /// CloseUI 먼저 → 콜백 호출 (콜백 안에서 새 popup 띄울 때 race 회피).</summary>
         public void ShowPurchaseSuccess(string description = "Purchase successful!", System.Action onConfirm = null)
         {
-            Show("Success", description, _sprIconCheck);
+            Show("Your Purchase was Completed", description, _sprIconCheck);
 
             // Success popup 은 OK 만 — X 닫기 누르면 보상 연출이 skip 되어 사용자가 혼란.
             if (_frame != null) _frame.ShowExitButton(false);

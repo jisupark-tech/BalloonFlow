@@ -18,8 +18,23 @@ namespace BalloonFlow
     {
         private const int FLY_COUNT = 10;
 
+        // [2026-05-15] Booster / Life / InfiniteHearts fly icon.
+        // Inspector wire 필요 — Resources 안 아이콘 (예: booster_hand.png / heart.png) 를 직접 연결.
+        // null 이면 해당 종류 fly 스킵 + 코인만 fly (안전 폴백).
+        [Header("[Item Fly Icons — 인스펙터 wire]")]
+        [SerializeField] private Sprite _iconBooster;
+        [SerializeField] private Sprite _iconLife;
+
         protected override void OnSingletonAwake()
         {
+            // ResourceManager 에서 atlas fallback — Inspector wire 가 비어 있어도 가능한 한 자동 채움.
+            // PopupBuyItem 의 atlas key 와 동일. iconHeart 키가 atlas 에 없으면 _iconLife 는 null 유지.
+            if (ResourceManager.HasInstance)
+            {
+                var rm = ResourceManager.Instance;
+                _iconBooster = rm.UISpriteOr("iconHand",  _iconBooster);
+                _iconLife    = rm.UISpriteOr("iconHeart", _iconLife);
+            }
             EventBus.Subscribe<OnPurchaseRewardGranted>(HandleReward);
         }
 
@@ -36,6 +51,7 @@ namespace BalloonFlow
         {
             string desc = BuildRewardDescription(evt);
             int coinsAdded = evt.coinsAdded;
+            ShopRewards rewards = evt.rewards;
             Debug.Log($"[PurchaseRewardEffect] HandleReward productId={evt.productId} coinsAdded={coinsAdded}");
 
             if (UIManager.HasInstance)
@@ -53,13 +69,13 @@ namespace BalloonFlow
                             popup.ShowPurchaseSuccess(desc, () =>
                             {
                                 Debug.Log("[PurchaseRewardEffect] Success popup OK clicked → PlayEffectFlow");
-                                StartCoroutine(PlayEffectFlow(coinsAdded));
+                                StartCoroutine(PlayEffectFlow(coinsAdded, rewards));
                             });
                         }
                         else
                         {
                             Debug.LogWarning("[PurchaseRewardEffect] OpenUI<PopupError> returned null after spinner close — fallback effect 즉시");
-                            StartCoroutine(PlayEffectFlow(coinsAdded));
+                            StartCoroutine(PlayEffectFlow(coinsAdded, rewards));
                         }
                     });
                     spinner.CloseUI();
@@ -74,7 +90,7 @@ namespace BalloonFlow
                     directPopup.ShowPurchaseSuccess(desc, () =>
                     {
                         Debug.Log("[PurchaseRewardEffect] Success popup OK clicked → PlayEffectFlow");
-                        StartCoroutine(PlayEffectFlow(coinsAdded));
+                        StartCoroutine(PlayEffectFlow(coinsAdded, rewards));
                     });
                     return;
                 }
@@ -82,10 +98,10 @@ namespace BalloonFlow
             }
 
             // popup 못 띄우면 즉시 effect (UI sync 만이라도 진행)
-            StartCoroutine(PlayEffectFlow(coinsAdded));
+            StartCoroutine(PlayEffectFlow(coinsAdded, rewards));
         }
 
-        private IEnumerator PlayEffectFlow(int coinsAdded)
+        private IEnumerator PlayEffectFlow(int coinsAdded, ShopRewards rewards)
         {
             // 1) Lobby Home 페이지로 전환
             UILobby lobby = FindUILobby();
@@ -95,50 +111,78 @@ namespace BalloonFlow
             // 페이지 전환 애니메이션 잠시 대기 (UILobby PAGE_SWIPE_DURATION = 0.3s)
             yield return new WaitForSecondsRealtime(0.35f);
 
-            if (coinsAdded <= 0 || lobby == null)
-            {
-                // 코인 보상 없음 (noads / 부스터-only 등) — sync 만
-                Debug.Log($"[PurchaseRewardEffect] Skip fly (coinsAdded={coinsAdded}, lobby={(lobby!=null?"OK":"null")}). Sync only.");
-                if (CurrencyManager.HasInstance)
-                    CurrencyManager.Instance.PublishCoinSync();
-                yield break;
-            }
-
-            // 2) FxGold 비행 시작 — 도착 전 표시값을 결제 전 잔액으로 스냅
             Vector2 from = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
-            Vector2 to   = lobby.GetGoldPanelScreenPos();
-            Debug.Log($"[PurchaseRewardEffect] Fly from={from} to={to} count={FLY_COUNT}");
 
-            if (CurrencyManager.HasInstance)
+            // 2) Coin fly to GoldPanel — 기존 로직 그대로
+            if (coinsAdded > 0 && lobby != null)
             {
-                int displayBase = CurrencyManager.Instance.Coins - coinsAdded;
-                lobby.SetGoldText(displayBase);
-                Debug.Log($"[PurchaseRewardEffect] Snap displayBase={displayBase} (currentCoins={CurrencyManager.Instance.Coins})");
+                Vector2 to = lobby.GetGoldPanelScreenPos();
+                Debug.Log($"[PurchaseRewardEffect] Coin fly from={from} to={to} count={FLY_COUNT}");
+
+                if (CurrencyManager.HasInstance)
+                {
+                    int displayBase = CurrencyManager.Instance.Coins - coinsAdded;
+                    lobby.SetGoldText(displayBase);
+                }
+
+                int perCoinDelta = Mathf.Max(1, coinsAdded / FLY_COUNT);
+                int remainder    = coinsAdded - perCoinDelta * FLY_COUNT;
+                int landed       = 0;
+
+                CoinFlyEffect.Play(from, to, FLY_COUNT,
+                    onEachLand: () =>
+                    {
+                        int delta = perCoinDelta + (landed == FLY_COUNT - 1 ? remainder : 0);
+                        landed++;
+                        lobby.AddDisplayedGold(delta);
+                        lobby.PulseGoldPanel();
+                    },
+                    onAllComplete: () =>
+                    {
+                        if (CurrencyManager.HasInstance)
+                        {
+                            lobby.SetGoldText(CurrencyManager.Instance.Coins);
+                            CurrencyManager.Instance.PublishCoinSync();
+                        }
+                    });
+            }
+            else if (CurrencyManager.HasInstance)
+            {
+                CurrencyManager.Instance.PublishCoinSync();
             }
 
-            int perCoinDelta = Mathf.Max(1, coinsAdded / FLY_COUNT);
-            int remainder    = coinsAdded - perCoinDelta * FLY_COUNT;
-            int landed       = 0;
+            // 3) Booster / Life / InfiniteHearts fly to LifePanel
+            if (lobby != null && rewards != null)
+            {
+                Vector2 lifeTo = lobby.GetLifePanelScreenPos();
 
-            CoinFlyEffect.Play(from, to, FLY_COUNT,
-                onEachLand: () =>
+                int boosterCount = 0;
+                if (rewards.boosters != null)
                 {
-                    // 마지막 코인에 잔여분 누적 → 표시값이 정확히 새 잔액으로 떨어짐
-                    int delta = perCoinDelta + (landed == FLY_COUNT - 1 ? remainder : 0);
-                    landed++;
-                    lobby.AddDisplayedGold(delta);
-                    lobby.PulseGoldPanel();
-                },
-                onAllComplete: () =>
+                    boosterCount = rewards.boosters.hand + rewards.boosters.shuffle + rewards.boosters.zap;
+                }
+                if (boosterCount > 0 && _iconBooster != null)
                 {
-                    Debug.Log($"[PurchaseRewardEffect] Fly complete. final coins={(CurrencyManager.HasInstance?CurrencyManager.Instance.Coins:0)}");
-                    // 절대값 보정 + listener sync
-                    if (CurrencyManager.HasInstance)
-                    {
-                        lobby.SetGoldText(CurrencyManager.Instance.Coins);
-                        CurrencyManager.Instance.PublishCoinSync();
-                    }
-                });
+                    ItemFlyEffect.Play(_iconBooster, from, lifeTo, boosterCount,
+                        onEachLand: () => lobby.PulseLifePanel());
+                }
+                else if (boosterCount > 0)
+                {
+                    Debug.LogWarning("[PurchaseRewardEffect] Booster fly skipped — _iconBooster 미할당 (Inspector wire 필요).");
+                }
+
+                // 무한 하트: 5개 가시화 (visual stand-in)
+                int lifeCount = rewards.infiniteHeartsSeconds > 0 ? 5 : 0;
+                if (lifeCount > 0 && _iconLife != null)
+                {
+                    ItemFlyEffect.Play(_iconLife, from, lifeTo, lifeCount,
+                        onEachLand: () => lobby.PulseLifePanel());
+                }
+                else if (lifeCount > 0)
+                {
+                    Debug.LogWarning("[PurchaseRewardEffect] Life fly skipped — _iconLife 미할당 (Inspector wire 필요).");
+                }
+            }
         }
 
         private static UILobby FindUILobby()

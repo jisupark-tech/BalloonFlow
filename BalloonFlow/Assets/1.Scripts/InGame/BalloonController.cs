@@ -1475,8 +1475,10 @@ namespace BalloonFlow
             RemainingCount = Mathf.Max(0, RemainingCount - 1);
             PoppedCount++;
 
+            float effectScaleMultiplier = GetBalloonEffectScaleMultiplier(data.balloonId);
+
             // Return visual to pool
-            ReturnBalloonObject(data.balloonId);
+            ReturnBalloonObject(data.balloonId, effectScaleMultiplier);
 
             // Remove from position index
             _positionIndex.Remove(ToGridKey(data.position));
@@ -1492,7 +1494,8 @@ namespace BalloonFlow
             {
                 balloonId = data.balloonId,
                 color     = data.color,
-                position  = data.position
+                position  = data.position,
+                effectScaleMultiplier = effectScaleMultiplier
             });
 
             // Trigger gimmick side-effects (base behavior only)
@@ -1941,7 +1944,7 @@ namespace BalloonFlow
             return empty;
         }
 
-        private void ReturnBalloonObject(int balloonId)
+        private void ReturnBalloonObject(int balloonId, float effectScaleMultiplier)
         {
             if (!_balloonObjects.TryGetValue(balloonId, out GameObject obj)) return;
             if (obj == null) return;
@@ -1979,7 +1982,7 @@ namespace BalloonFlow
                     identifier.MarkPopped();
 
                 int ci = Mathf.Clamp(popColorIdx, 0, BalloonColors.Length - 1);
-                PopEffectPool.Play(popPos, BalloonColors[ci], this);
+                PopEffectPool.Play(popPos, BalloonColors[ci], this, effectScaleMultiplier);
 
                 if (obj != null && ObjectPoolManager.HasInstance)
                 {
@@ -1990,6 +1993,19 @@ namespace BalloonFlow
         }
 
         /// <summary>Key 프리팹이 포물선으로 Lock 보관함까지 비행 → 도착 시 잠금 해제.</summary>
+        private float GetBalloonEffectScaleMultiplier(int balloonId)
+        {
+            if (_balloonObjects.TryGetValue(balloonId, out GameObject obj) && obj != null)
+            {
+                Vector3 scale = obj.transform.localScale;
+                float visualScale = Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
+                if (visualScale > 0.001f)
+                    return Mathf.Max(0.01f, visualScale / DEFAULT_BALLOON_SCALE);
+            }
+
+            return Mathf.Max(0.01f, _balloonScale / DEFAULT_BALLOON_SCALE);
+        }
+
         private IEnumerator FlyKeyToLock(Vector3 startPos, int pairId)
         {
             // Lock 보관함 찾기
@@ -2145,6 +2161,7 @@ namespace BalloonFlow
             if (!_activeKeyPairIds.TryGetValue(keyId, out int pairId)) return;
 
             _activeKeyPairIds.Remove(keyId);
+            float effectScaleMultiplier = GetBalloonEffectScaleMultiplier(keyId);
 
             // Mark as popped so it's removed from position tracking
             keyData.isPopped = true;
@@ -2171,7 +2188,8 @@ namespace BalloonFlow
             {
                 balloonId = keyId,
                 color = keyData.color,
-                position = keyData.position
+                position = keyData.position,
+                effectScaleMultiplier = effectScaleMultiplier
             });
         }
 

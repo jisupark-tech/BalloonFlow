@@ -92,6 +92,7 @@ namespace BalloonFlow
         private Vector3 _cameraOriginalPosition;
         private Tweener _shakeTweener;
         private bool _isShaking;
+        private readonly Dictionary<GameObject, Vector3> _particleBaseScaleByObject = new Dictionary<GameObject, Vector3>();
 
         #endregion
 
@@ -141,17 +142,17 @@ namespace BalloonFlow
         /// <param name="position">World position of the pop.</param>
         /// <param name="color">Color index for tinting (0-based).</param>
         /// <param name="isSpecial">True for combo/special pops with enhanced feedback.</param>
-        public void PlayPopFeedback(Vector3 position, int color, bool isSpecial)
+        public void PlayPopFeedback(Vector3 position, int color, bool isSpecial, float scaleMultiplier = 1f)
         {
             if (isSpecial)
             {
-                SpawnPooledParticle(POOL_PARTICLE_COMBO, position);
+                SpawnPooledParticle(POOL_PARTICLE_COMBO, position, scaleMultiplier);
                 PlayRandomClip(_comboPopClips, _basePitch);
                 TriggerScreenShake(_shakeIntensitySmall, _shakeDurationSmall);
             }
             else
             {
-                SpawnPooledParticle(POOL_PARTICLE_NORMAL, position);
+                SpawnPooledParticle(POOL_PARTICLE_NORMAL, position, scaleMultiplier);
                 PlayRandomClip(_normalPopClips, _basePitch);
             }
         }
@@ -266,7 +267,8 @@ namespace BalloonFlow
 
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
-            PlayPopFeedback(evt.position, evt.color, false);
+            float scaleMultiplier = evt.effectScaleMultiplier > 0f ? evt.effectScaleMultiplier : 1f;
+            PlayPopFeedback(evt.position, evt.color, false, scaleMultiplier);
             // [2026-05-13] 골드 연출 동일 햅틱 (180ms, amp=38) — 이전: HapticLight() (40ms, amp=200).
             HapticDefault();
         }
@@ -416,7 +418,7 @@ namespace BalloonFlow
             }
         }
 
-        private void SpawnPooledParticle(string poolKey, Vector3 position)
+        private void SpawnPooledParticle(string poolKey, Vector3 position, float scaleMultiplier = 1f)
         {
             if (!ObjectPoolManager.HasInstance) return;
 
@@ -430,6 +432,12 @@ namespace BalloonFlow
             }
 
             particle.transform.position = position;
+            if (!_particleBaseScaleByObject.TryGetValue(particle, out Vector3 baseScale))
+            {
+                baseScale = particle.transform.localScale;
+                _particleBaseScaleByObject[particle] = baseScale;
+            }
+            particle.transform.localScale = baseScale * Mathf.Max(0.01f, scaleMultiplier);
 
             ParticleSystem ps = particle.GetComponent<ParticleSystem>();
             if (ps != null)

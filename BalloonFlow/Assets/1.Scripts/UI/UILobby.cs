@@ -694,6 +694,44 @@ namespace BalloonFlow
             return RectTransformUtility.WorldToScreenPoint(cam, rt.position);
         }
 
+        /// <summary>
+        /// [2026-05-15] LifePanel (TopBar 라이프 텍스트) 의 화면 좌표. ItemFlyEffect 의 도착 지점.
+        /// _txtLife 미할당 시 화면 좌상단 추정값 fallback.
+        /// </summary>
+        public Vector2 GetLifePanelScreenPos()
+        {
+            if (_txtLife == null) return new Vector2(Screen.width * 0.15f, Screen.height * 0.92f);
+            var rt = _txtLife.rectTransform;
+            var canvas = rt.GetComponentInParent<Canvas>();
+            Camera cam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
+                ? canvas.worldCamera : null;
+            return RectTransformUtility.WorldToScreenPoint(cam, rt.position);
+        }
+
+        private Vector3 _lifePanelOriginalScale;
+        private bool _lifePanelOriginalCaptured;
+
+        /// <summary>
+        /// [2026-05-15] LifePanel 펄스 연출 — booster/life/infiniteHearts 도착 시 호출.
+        /// GoldPanel 펄스와 동일 패턴.
+        /// </summary>
+        public void PulseLifePanel(float strength = 0.25f, float duration = 0.5f, int vibrato = 6)
+        {
+            Transform target = (_txtLife != null && _txtLife.transform.parent != null)
+                ? _txtLife.transform.parent
+                : (_txtLife != null ? _txtLife.transform : null);
+            if (target == null) return;
+
+            if (!_lifePanelOriginalCaptured)
+            {
+                _lifePanelOriginalScale = target.localScale;
+                _lifePanelOriginalCaptured = true;
+            }
+            target.DOKill();
+            target.localScale = _lifePanelOriginalScale;
+            target.DOPunchScale(_lifePanelOriginalScale * strength, duration, vibrato, 1f).SetUpdate(true);
+        }
+
         private Vector3 _goldPanelOriginalScale;
         private bool _goldPanelOriginalCaptured;
 

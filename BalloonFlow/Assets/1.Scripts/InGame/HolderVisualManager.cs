@@ -240,6 +240,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnFrozenHPChanged>(HandleFrozenHPChanged);
             EventBus.Subscribe<OnHolderUnlocked>(HandleHolderUnlocked);
             EventBus.Subscribe<OnHolderClickAnim>(HandleHolderClickAnim);
+            EventBus.Subscribe<OnHolderColumnBlocked>(HandleHolderColumnBlocked);
         }
 
         private void OnDisable()
@@ -255,6 +256,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnFrozenHPChanged>(HandleFrozenHPChanged);
             EventBus.Unsubscribe<OnHolderUnlocked>(HandleHolderUnlocked);
             EventBus.Unsubscribe<OnHolderClickAnim>(HandleHolderClickAnim);
+            EventBus.Unsubscribe<OnHolderColumnBlocked>(HandleHolderColumnBlocked);
         }
 
         #endregion
@@ -924,24 +926,17 @@ namespace BalloonFlow
                 return;
 
             visual.isWaiting = true;
-
-            Vector3 deployPoint = GetDeployPoint(visual.column);
-            // Waiting position = 1.5 units behind the deploy point (toward queue)
-            Vector3 waitPos = deployPoint + Vector3.back * 1.5f;
+            // ROLLBACK_HOLDER_WAIT_FOLLOW:
+            // A pre-tapped second holder used to move to a fixed waiting point. If the first holder
+            // was still travelling, queue re-layout or speed changes could leave a visible gap.
+            // Treat the waiting holder as "in transit" visually and keep it one row behind the
+            // currently active holder in the same column until it is promoted.
+            visual.isMovingToRail = true;
 
             if (visual.gameObject != null)
-            {
-                float dist = Vector3.Distance(visual.gameObject.transform.position, waitPos);
-                visual.gameObject.transform.DOMove(waitPos, dist / EffectiveDeployMoveSpeed).SetEase(Ease.OutQuad)
-                    .OnComplete(() =>
-                    {
-                        if (visual.gameObject != null)
-                        {
-                            visual.gameObject.transform.localScale = Vector3.one;
-                            visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
-                        }
-                    });
-            }
+                visual.gameObject.transform.DOKill(false);
+
+            StartCoroutine(FollowWaitingHolderCoroutine(visual));
         }
 
         /// <summary>
@@ -953,7 +948,8 @@ namespace BalloonFlow
             if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual))
                 return;
 
-            if (visual.isDeploying || visual.isMovingToRail) return;
+            if (visual.isDeploying || (visual.isMovingToRail && !visual.isWaiting)) return;
+            visual.isWaiting = false;
 
             // NEW 코루틴은 이전 cancel 플래그 영향 받지 않도록 사전 정리.
             // (Continue 직후 같은 holder를 다시 클릭한 경우, 이전 사이클의 cancel 플래그가
@@ -997,6 +993,69 @@ namespace BalloonFlow
 
             RepositionColumnHolders(visual.column);
             StartCoroutine(DeployCoroutine(visual, gen));
+        }
+
+        private IEnumerator FollowWaitingHolderCoroutine(HolderVisual visual)
+        {
+            if (visual == null || visual.gameObject == null)
+                yield break;
+
+            bool snapped = false;
+            while (!_boardFinished && visual.isWaiting && visual.gameObject != null)
+            {
+                Vector3 target = GetColumnWaitingTarget(visual.column, visual.holderId);
+                Vector3 current = visual.gameObject.transform.position;
+                float step = EffectiveDeployMoveSpeed * Time.deltaTime;
+                visual.gameObject.transform.position = Vector3.MoveTowards(current, target, step);
+
+                if (!snapped && Vector3.Distance(visual.gameObject.transform.position, target) <= 0.05f)
+                {
+                    snapped = true;
+                    visual.gameObject.transform.localScale = Vector3.one;
+                    visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
+                }
+
+                yield return null;
+            }
+        }
+
+        private Vector3 GetColumnWaitingTarget(int column, int waitingHolderId)
+        {
+            Vector3 deployPoint = GetDeployPoint(column);
+            Vector3 target = deployPoint + Vector3.back * _rowSpacing;
+
+            HolderVisual blocker = FindColumnBlockerVisual(column, waitingHolderId, true);
+            if (blocker != null && blocker.gameObject != null)
+            {
+                Vector3 blockerPos = blocker.gameObject.transform.position;
+                float maxZ = deployPoint.z - _rowSpacing;
+                float followZ = blockerPos.z - _rowSpacing;
+                target = new Vector3(deployPoint.x, deployPoint.y, Mathf.Min(maxZ, followZ));
+            }
+
+            return target;
+        }
+
+        private HolderVisual FindColumnBlockerVisual(int column, int excludeHolderId, bool preferWaiting)
+        {
+            HolderVisual active = null;
+            HolderVisual waiting = null;
+            foreach (var kvp in _holderVisuals)
+            {
+                HolderVisual candidate = kvp.Value;
+                if (candidate == null || candidate.holderId == excludeHolderId) continue;
+                if (candidate.column != column || candidate.gameObject == null) continue;
+
+                if (candidate.isWaiting)
+                    waiting = candidate;
+                else if (candidate.isDeploying || candidate.isMovingToRail)
+                    active = candidate;
+            }
+
+            if (preferWaiting && waiting != null)
+                return waiting;
+
+            return active != null ? active : waiting;
         }
 
         private IEnumerator DeployCoroutine(HolderVisual visual, int gen)
@@ -2049,6 +2108,33 @@ namespace BalloonFlow
                 if (visual.identifier != null)
                     visual.identifier.TriggerClick();
             }
+        }
+
+        private void HandleHolderColumnBlocked(OnHolderColumnBlocked evt)
+        {
+            if (!_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual))
+                return;
+            if (visual.gameObject == null)
+                return;
+
+            HolderVisual blocker = FindColumnBlockerVisual(evt.column, evt.holderId, true);
+            Vector3 start = visual.gameObject.transform.position;
+            Vector3 push = start + Vector3.forward * Mathf.Min(_rowSpacing * 0.45f, 0.9f);
+
+            if (blocker != null && blocker.gameObject != null)
+            {
+                Vector3 blockerPos = blocker.gameObject.transform.position;
+                float stopZ = blockerPos.z - _rowSpacing * 0.82f;
+                if (stopZ > start.z + 0.1f)
+                    push = new Vector3(start.x, start.y, Mathf.Min(stopZ, start.z + _rowSpacing * 0.7f));
+            }
+
+            visual.gameObject.transform.DOKill(false);
+            visual.gameObject.transform.localScale = Vector3.one;
+            Sequence seq = DOTween.Sequence();
+            seq.Append(visual.gameObject.transform.DOMove(push, 0.12f).SetEase(Ease.OutQuad));
+            seq.Append(visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.12f, 3, 0.35f));
+            seq.Append(visual.gameObject.transform.DOMove(start, 0.16f).SetEase(Ease.OutQuad));
         }
 
         private void HandleContinueApplied(OnContinueApplied evt)
