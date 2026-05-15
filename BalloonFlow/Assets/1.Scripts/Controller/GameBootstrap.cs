@@ -239,7 +239,7 @@ namespace BalloonFlow
 
             if (_result != null)
             {
-                if (_result.NextButton != null) _result.NextButton.onClick.RemoveListener(OnNextClicked);
+                _result.RemoveNextButtonListener(OnNextClicked);
                 if (_result.RetryButton != null) _result.RetryButton.onClick.RemoveListener(OnRetryClicked);
                 if (_result.HomeButton != null) _result.HomeButton.onClick.RemoveListener(OnHomeClicked);
             }
@@ -280,11 +280,7 @@ namespace BalloonFlow
             if (_result != null)
             {
                 _result.CloseUI();
-                if (_result.NextButton != null)
-                {
-                    _result.NextButton.onClick.RemoveAllListeners();
-                    _result.NextButton.onClick.AddListener(OnNextClicked);
-                }
+                _result.SetNextButtonListener(OnNextClicked);
                 if (_result.RetryButton != null) _result.RetryButton.onClick.AddListener(OnRetryClicked);
                 if (_result.HomeButton != null) _result.HomeButton.onClick.AddListener(OnHomeClicked);
 

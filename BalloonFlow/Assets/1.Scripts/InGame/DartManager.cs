@@ -566,30 +566,33 @@ namespace BalloonFlow
                 if (fireDir.sqrMagnitude > 0.001f)
                     visual.gameObject.transform.rotation = Quaternion.LookRotation(fireDir);
 
+                // [DISABLED 2026-05-15] 터널 진입/이탈 시 Scale Up/Down 연출 주석 처리 (요청)
                 // Cave 스케일: 비순환 레일의 끝점/시작점 근처에서 축소
-                if (isOpen && pathLen > 0f)
-                {
-                    float dist = slotIdx * rail.SlotSpacing + rail.RotationOffset;
-                    float t = ((dist % pathLen) + pathLen) % pathLen / pathLen; // 0~1 정규화
-
-                    float scale = 1f;
-                    float fs = CaveFadeStart, fe = CaveFadeEnd;
-                    float fadeRange = fs - fe;
-                    if (t < fs)
-                    {
-                        // 시작점에서 나옴: FADE_END(0) → FADE_START(1)
-                        scale = t <= fe ? 0f : (t - fe) / fadeRange;
-                    }
-                    else if (t > 1f - fs)
-                    {
-                        // 끝점으로 들어감: (1-FADE_START)(1) → (1-FADE_END)(0)
-                        float distFromEnd = 1f - t;
-                        scale = distFromEnd <= fe ? 0f : (distFromEnd - fe) / fadeRange;
-                    }
-
-                    scale = Mathf.Clamp01(scale);
-                    visual.gameObject.transform.localScale = visual.baseScale * scale;
-                }
+                // if (isOpen && pathLen > 0f)
+                // {
+                //     float dist = slotIdx * rail.SlotSpacing + rail.RotationOffset;
+                //     float t = ((dist % pathLen) + pathLen) % pathLen / pathLen; // 0~1 정규화
+                //
+                //     float scale = 1f;
+                //     float fs = CaveFadeStart, fe = CaveFadeEnd;
+                //     float fadeRange = fs - fe;
+                //     if (t < fs)
+                //     {
+                //         // 시작점에서 나옴: FADE_END(0) → FADE_START(1)
+                //         scale = t <= fe ? 0f : (t - fe) / fadeRange;
+                //     }
+                //     else if (t > 1f - fs)
+                //     {
+                //         // 끝점으로 들어감: (1-FADE_START)(1) → (1-FADE_END)(0)
+                //         float distFromEnd = 1f - t;
+                //         scale = distFromEnd <= fe ? 0f : (distFromEnd - fe) / fadeRange;
+                //     }
+                //
+                //     scale = Mathf.Clamp01(scale);
+                //     visual.gameObject.transform.localScale = visual.baseScale * scale;
+                // }
+                if (visual.gameObject.transform.localScale != visual.baseScale)
+                    visual.gameObject.transform.localScale = visual.baseScale;
             }
 
             // Deferred removal
@@ -635,8 +638,9 @@ namespace BalloonFlow
             float pathOffset = _cachedDartPathOffset;
             float dartScale = _cachedDartScale;
             Vector3 normalScale = Vector3.one * dartScale;
-            float fadeStart = _cachedFadeStart;
-            float fadeEnd = _cachedFadeEnd;
+            // [DISABLED 2026-05-15] 터널 Scale Up/Down 연출 주석 처리에 따라 미사용
+            // float fadeStart = _cachedFadeStart;
+            // float fadeEnd = _cachedFadeEnd;
 
             _tempRemoveKeys.Clear();
 
@@ -680,26 +684,27 @@ namespace BalloonFlow
                         visual.gameObject.transform.rotation = Quaternion.LookRotation(inward);
                 }
 
+                // [DISABLED 2026-05-15] 터널 진입/이탈 시 Scale Up/Down 연출 주석 처리 (요청)
                 // Cave scale for open rails (dartScale 적용 유지)
-                if (isOpen && pathLen > 0f)
-                {
-                    float t = dart.progress / pathLen;
-                    float scale = 1f;
-                    float fadeRange = fadeStart - fadeEnd;
-                    if (fadeRange > 0f)
-                    {
-                        if (t < fadeStart)
-                            scale = t <= fadeEnd ? 0f : (t - fadeEnd) / fadeRange;
-                        else if (t > 1f - fadeStart)
-                        {
-                            float distFromEnd = 1f - t;
-                            scale = distFromEnd <= fadeEnd ? 0f : (distFromEnd - fadeEnd) / fadeRange;
-                        }
-                    }
-                    scale = Mathf.Clamp01(scale);
-                    visual.gameObject.transform.localScale = normalScale * scale;
-                }
-                else if (visual.gameObject.transform.localScale != normalScale)
+                // if (isOpen && pathLen > 0f)
+                // {
+                //     float t = dart.progress / pathLen;
+                //     float scale = 1f;
+                //     float fadeRange = fadeStart - fadeEnd;
+                //     if (fadeRange > 0f)
+                //     {
+                //         if (t < fadeStart)
+                //             scale = t <= fadeEnd ? 0f : (t - fadeEnd) / fadeRange;
+                //         else if (t > 1f - fadeStart)
+                //         {
+                //             float distFromEnd = 1f - t;
+                //             scale = distFromEnd <= fadeEnd ? 0f : (distFromEnd - fadeEnd) / fadeRange;
+                //         }
+                //     }
+                //     scale = Mathf.Clamp01(scale);
+                //     visual.gameObject.transform.localScale = normalScale * scale;
+                // }
+                if (visual.gameObject.transform.localScale != normalScale)
                 {
                     visual.gameObject.transform.localScale = normalScale;
                 }

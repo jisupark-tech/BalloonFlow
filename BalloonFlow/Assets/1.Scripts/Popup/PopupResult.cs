@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 using TMPro;
 
@@ -68,6 +69,7 @@ namespace BalloonFlow
         public Button RetryButton => null;
         public Button HomeButton => null;
         public RectTransform GoldTarget => _goldTarget;
+        private Button FrameNextButton => _frame != null ? _frame.BtnSingle : null;
 
         public void ShowFail()
         {
@@ -87,9 +89,7 @@ namespace BalloonFlow
             }
 
             // 직접 할당 버튼 우선, 없으면 frame 버튼 fallback (CloseUI 후에도 listener 유지)
-            if (_btnNext != null) _btnNext.onClick.AddListener(OnNextClicked);
-            else if (_frame != null && _frame.BtnSingle != null)
-                _frame.BtnSingle.onClick.AddListener(OnNextClicked);
+            AddNextListener(OnNextClicked);
 
             // ExitButton: 직접 할당 + frame 둘 다 와이어 (둘 중 보이는 쪽이 동작)
             if (_btnExit != null) _btnExit.onClick.AddListener(OnHomeClicked);
@@ -111,6 +111,24 @@ namespace BalloonFlow
         }
 
         public void SetGoldTarget(RectTransform target) { _goldTarget = target; }
+
+        public void SetNextButtonListener(UnityAction listener)
+        {
+            ReplaceClickListener(_btnNext, listener);
+
+            Button frameNext = FrameNextButton;
+            if (frameNext != null && frameNext != _btnNext)
+                ReplaceClickListener(frameNext, listener);
+        }
+
+        public void RemoveNextButtonListener(UnityAction listener)
+        {
+            RemoveClickListener(_btnNext, listener);
+
+            Button frameNext = FrameNextButton;
+            if (frameNext != null && frameNext != _btnNext)
+                RemoveClickListener(frameNext, listener);
+        }
 
         public void ShowWin(int score, DifficultyPurpose difficulty = DifficultyPurpose.Normal)
         {
@@ -137,10 +155,11 @@ namespace BalloonFlow
                 _btnNext.gameObject.SetActive(true);
                 _btnNext.interactable = true;
             }
-            else if (_frame != null && _frame.BtnSingle != null)
+            Button frameNext = FrameNextButton;
+            if (frameNext != null && frameNext != _btnNext)
             {
-                _frame.BtnSingle.gameObject.SetActive(true);
-                _frame.BtnSingle.interactable = true;
+                frameNext.gameObject.SetActive(true);
+                frameNext.interactable = true;
             }
 
             UpdateHardLevelOption(difficulty);
@@ -159,6 +178,35 @@ namespace BalloonFlow
         }
 
         #region Button Handlers
+
+        private void AddNextListener(UnityAction listener)
+        {
+            AddClickListener(_btnNext, listener);
+
+            Button frameNext = FrameNextButton;
+            if (frameNext != null && frameNext != _btnNext)
+                AddClickListener(frameNext, listener);
+        }
+
+        private static void AddClickListener(Button button, UnityAction listener)
+        {
+            if (button == null || listener == null) return;
+            button.onClick.AddListener(listener);
+        }
+
+        private static void ReplaceClickListener(Button button, UnityAction listener)
+        {
+            if (button == null) return;
+            button.onClick.RemoveAllListeners();
+            if (listener != null)
+                button.onClick.AddListener(listener);
+        }
+
+        private static void RemoveClickListener(Button button, UnityAction listener)
+        {
+            if (button == null || listener == null) return;
+            button.onClick.RemoveListener(listener);
+        }
 
         private void OnNextClicked()
         {
