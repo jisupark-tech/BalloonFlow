@@ -136,13 +136,13 @@ namespace BalloonFlow
         }
 
         /// <summary>편의: light tap (40ms, amp 200) — 체감 가능하도록 강화.</summary>
-        public static void Light() => Vibrate(30L, 150);
+        public static void Light() => Vibrate(25L, 150);
 
         /// <summary>편의: medium tap (90ms, amp 230).</summary>
-        public static void Medium() => Vibrate(60L, 180);
+        public static void Medium() => Vibrate(50L, 180);
 
         /// <summary>편의: heavy tap (180ms, amp 255).</summary>
-        public static void Heavy() => Vibrate(120L, 210);
+        public static void Heavy() => Vibrate(110L, 210);
 
         /// <summary>[2026-05-12] 코인 흡수 등 default 햅틱 — intensity 0.3 / duration 0.18s.</summary>
         public static void VibrateDefault() => Vibrate(DEFAULT_DURATION_MS, DEFAULT_VIBE_AMPLITUDE);
