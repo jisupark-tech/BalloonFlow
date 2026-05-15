@@ -58,27 +58,14 @@ namespace BalloonFlow
 
         private void Update()
         {
-            bool touching = IsTouching();
-
-            if (touching)
-            {
-                if (_touchStartTime < 0f) _touchStartTime = Time.unscaledTime;
-
-                bool nowActive = (Time.unscaledTime - _touchStartTime) >= HOLD_ACTIVATE_DELAY;
-                if (nowActive != _holdActive)
-                {
-                    _holdActive = nowActive;
-                    ApplyMultiplier();
-                }
-            }
-            else
+            // ROLLBACK_DISABLE_HOLD_SPEED_BOOST:
+            // In-game long press is regular interaction space for holders/boosters. It must not
+            // alter gameplay speed; only the explicit x2 toggle button may change speed now.
+            if (_holdActive || _touchStartTime >= 0f)
             {
                 _touchStartTime = -1f;
-                if (_holdActive)
-                {
-                    _holdActive = false;
-                    ApplyMultiplier();
-                }
+                _holdActive = false;
+                ApplyMultiplier();
             }
         }
 

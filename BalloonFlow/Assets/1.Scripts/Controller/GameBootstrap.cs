@@ -280,7 +280,11 @@ namespace BalloonFlow
             if (_result != null)
             {
                 _result.CloseUI();
-                if (_result.NextButton != null) _result.NextButton.onClick.AddListener(OnNextClicked);
+                if (_result.NextButton != null)
+                {
+                    _result.NextButton.onClick.RemoveAllListeners();
+                    _result.NextButton.onClick.AddListener(OnNextClicked);
+                }
                 if (_result.RetryButton != null) _result.RetryButton.onClick.AddListener(OnRetryClicked);
                 if (_result.HomeButton != null) _result.HomeButton.onClick.AddListener(OnHomeClicked);
 
@@ -500,7 +504,20 @@ namespace BalloonFlow
 
             if (LevelManager.HasInstance)
             {
-                int _next = LevelManager.Instance.GetHighestCompletedLevel() + 1;
+                int _current = LevelManager.Instance.CurrentLevelId;
+                int _next = LevelManager.Instance.GetNextLevelId();
+                if (_next <= _current)
+                {
+                    if (UIManager.HasInstance)
+                    {
+                        var popup = UIManager.Instance.OpenUI<PopupDescription>("Popup/PopupDescription");
+                        if (popup != null)
+                            popup.Show("Congratulations!", "You've cleared all levels!", "OK",
+                                () => { if (GameManager.HasInstance) GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY); });
+                    }
+                    return;
+                }
+
                 LevelManager.Instance.LoadLevel(_next);
             }
         }

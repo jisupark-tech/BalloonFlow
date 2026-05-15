@@ -394,6 +394,11 @@ namespace BalloonFlow
             if (_deployingHolderId[col] >= 0 && _waitingHolderId[col] >= 0)
             {
                 // Column full (deploying + waiting). 3rd touch = bounce back
+                EventBus.Publish(new OnHolderColumnBlocked
+                {
+                    holderId = holder.holderId,
+                    column = col
+                });
                 EventBus.Publish(new OnHolderWarning
                 {
                     waitingCount = 2,

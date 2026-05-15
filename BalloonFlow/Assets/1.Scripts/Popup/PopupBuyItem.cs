@@ -114,7 +114,11 @@ namespace BalloonFlow
             }
 
             if (_txtBtnBuyOutline != null) _txtBtnBuyOutline.SetActive(false);
-            if (_txtSingleOutline != null) _txtSingleOutline.SetActive(true);
+            if (_txtSingleOutline != null)
+            {
+                _txtSingleOutline.SetActive(true);
+                SetTextInChildren(_txtSingleOutline, "Claim");
+            }
 
             if (_txtItemAmount != null) _txtItemAmount.gameObject.SetActive(false);
             if (_txtItemAmountOutline != null) _txtItemAmountOutline.gameObject.SetActive(false);
@@ -151,6 +155,15 @@ namespace BalloonFlow
             string costStr = goldCost.ToString("N0");
             if (_txtGold != null) _txtGold.text = costStr;
             if (_txtGoldOutline != null) _txtGoldOutline.text = costStr;
+        }
+
+        private static void SetTextInChildren(GameObject root, string text)
+        {
+            if (root == null) return;
+
+            TMP_Text[] labels = root.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < labels.Length; i++)
+                labels[i].text = text;
         }
 
         private void OnBuyClicked()

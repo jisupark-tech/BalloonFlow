@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using DG.Tweening;
+using DigitalRuby.LightningBolt;
 
 namespace BalloonFlow
 {
@@ -34,6 +35,25 @@ namespace BalloonFlow
         /// 씬 재로드로 destroyed 되면 lazy 재fetch 됨. 롤백: 이 필드 제거 + ShowCancelButton 의 FindAnyObjectByType 직접 호출 라인 복원.</summary>
         private Canvas _cachedCanvas;
 
+        private const float ZapSelectionHighlightDelay = 0.15f;
+        private const float ZapAppearDuration = 0.45f;
+        private const float ZapMoveDuration = 0.25f;
+        private const float ZapTotalPopDuration = 2.5f;
+        private const float ZapLineLifetime = 0.2f;
+        private const float ZapFinishLifetime = 0.35f;
+        private const float ZapEffectYOffset = 0.12f;
+
+        private readonly List<ZapTarget> _zapTargets = new List<ZapTarget>(128);
+        private GameObject _itemZapPrefab;
+        private GameObject _fxZapLinePrefab;
+        private bool _isColorRemoveSequenceRunning;
+
+        private struct ZapTarget
+        {
+            public int balloonId;
+            public Vector3 position;
+        }
+
         #endregion
 
         #region Lifecycle
@@ -59,8 +79,11 @@ namespace BalloonFlow
         {
             if (!_awaitingColorSelection) return;
             _awaitingColorSelection = false;
+            _awaitingBalloonClick = false;
 
-            ExecuteColorRemove(color);
+            ConfirmPendingBooster();
+            CloseUseItemPopup();
+            StartCoroutine(PlayColorRemoveSequence(color));
         }
 
         /// <summary>
@@ -102,6 +125,7 @@ namespace BalloonFlow
         {
             if (!_awaitingBalloonClick) return;
             _awaitingBalloonClick = false;
+            _awaitingColorSelection = false;
 
             ConfirmPendingBooster();
 
@@ -117,7 +141,7 @@ namespace BalloonFlow
             // Execute color remove after brief delay (so player sees the highlight)
             //HideCancelButton();
             CloseUseItemPopup();
-            StartCoroutine(DelayedColorRemove(selectedColor));
+            StartCoroutine(PlayColorRemoveSequence(selectedColor));
         }
 
         /// <summary>UseItem 팝업 닫기.</summary>
@@ -301,23 +325,89 @@ namespace BalloonFlow
 
         private IEnumerator DelayedColorRemove(int color)
         {
-            yield return new WaitForSeconds(0.3f);
+            yield return PlayColorRemoveSequence(color);
+        }
 
-            // Clear all outlines
+        private IEnumerator PlayColorRemoveSequence(int color)
+        {
+            if (_isColorRemoveSequenceRunning)
+                yield break;
+
+            _isColorRemoveSequenceRunning = true;
+
+            yield return new WaitForSeconds(ZapSelectionHighlightDelay);
+
             if (BalloonController.HasInstance)
                 BalloonController.Instance.ClearAllOutlines();
 
-            // Execute removal
             _awaitingColorSelection = false;
-            //HideCancelButton();
+            _awaitingBalloonClick = false;
             ConfirmPendingBooster();
-            ExecuteColorRemove(color);
 
-            // Camera back
+            CollectZapTargets(color);
+
+            Vector3 attackPosition = GetZapAttackPosition();
+            Vector3 finishPosition = GetZapFinishPosition();
+            GameObject zapObject = CreateItemZap(attackPosition);
+            GameObject zapLineObject = null;
+
+            yield return new WaitForSeconds(ZapAppearDuration);
+
+            if (zapObject != null)
+            {
+                Vector3 spawnPosition = GetZapSpawnPosition(attackPosition);
+                zapObject.transform.position = spawnPosition;
+                Tween moveTween = zapObject.transform
+                    .DOMove(attackPosition, ZapMoveDuration)
+                    .SetEase(Ease.OutCubic);
+                yield return moveTween.WaitForCompletion();
+            }
+            else
+            {
+                yield return new WaitForSeconds(ZapMoveDuration);
+            }
+
+            int fieldRemoved = 0;
+            if (_zapTargets.Count > 0)
+            {
+                zapLineObject = CreateZapLineObject();
+                if (zapLineObject != null)
+                    yield return null;
+
+                float stepDelay = _zapTargets.Count > 1
+                    ? ZapTotalPopDuration / (_zapTargets.Count - 1)
+                    : 0f;
+
+                for (int i = 0; i < _zapTargets.Count; i++)
+                {
+                    ZapTarget target = _zapTargets[i];
+                    Vector3 targetPosition = GetZapEffectPosition(target.position);
+                    ConfigureZapLine(zapLineObject, attackPosition, targetPosition);
+
+                    if (TryPopZapTarget(target.balloonId))
+                        fieldRemoved++;
+
+                    if (i < _zapTargets.Count - 1 && stepDelay > 0f)
+                        yield return new WaitForSeconds(stepDelay);
+                }
+            }
+
+            int totalRemoved = fieldRemoved + RemoveRailAndQueueColor(color);
+            FinalizeColorRemove(color, totalRemoved);
+
+            PlayZapFinish(zapObject, finishPosition);
+
+            if (zapLineObject != null)
+                Destroy(zapLineObject, ZapLineLifetime);
+            if (zapObject != null)
+                Destroy(zapObject, ZapFinishLifetime);
+
             if (CameraManager.HasInstance)
                 CameraManager.Instance.MoveBack();
 
             ResumeRail();
+            _zapTargets.Clear();
+            _isColorRemoveSequenceRunning = false;
         }
 
         /// <summary>
@@ -456,9 +546,14 @@ namespace BalloonFlow
         /// </summary>
         private void ExecuteColorRemove(int color)
         {
-            int totalRemoved = 0;
+            int totalRemoved = PopFieldBalloonsImmediately(color);
+            totalRemoved += RemoveRailAndQueueColor(color);
+            FinalizeColorRemove(color, totalRemoved);
+        }
 
-            // 1) Field — pop all balloons of this color
+        private int PopFieldBalloonsImmediately(int color)
+        {
+            int removed = 0;
             if (BalloonController.HasInstance)
             {
                 BalloonData[] balloons = BalloonController.Instance.GetAllBalloonsByColor(color);
@@ -469,13 +564,19 @@ namespace BalloonFlow
                         if (!balloons[i].isPopped)
                         {
                             BalloonController.Instance.ForcePopBalloon(balloons[i].balloonId);
-                            totalRemoved++;
+                            removed++;
                         }
                     }
                 }
             }
 
-            // 2) Rail — clear all slots with this dart color
+            return removed;
+        }
+
+        private int RemoveRailAndQueueColor(int color)
+        {
+            int removed = 0;
+
             if (RailManager.HasInstance)
             {
                 int slotCount = RailManager.Instance.SlotCount;
@@ -485,12 +586,11 @@ namespace BalloonFlow
                     if (slot.dartColor == color)
                     {
                         RailManager.Instance.ClearSlot(i);
-                        totalRemoved++;
+                        removed++;
                     }
                 }
             }
 
-            // 3) Queue — consume all holders of this color and remove visuals
             if (HolderManager.HasInstance)
             {
                 HolderData[] holders = HolderManager.Instance.GetHolders();
@@ -502,27 +602,28 @@ namespace BalloonFlow
                         {
                             int hid = holders[i].holderId;
 
-                            // Cancel deploy coroutine if active
                             if (HolderVisualManager.HasInstance)
                                 HolderVisualManager.Instance.RemoveHolderVisual(hid);
 
-                            // Reset data state
                             HolderManager.Instance.UndoDeploy(hid);
                             holders[i].magazineCount = 0;
                             holders[i].isConsumed = true;
-                            totalRemoved++;
+                            removed++;
                         }
                     }
                 }
             }
 
-            // Re-distribute remaining holders across columns and refresh visuals
             if (HolderManager.HasInstance)
                 HolderManager.Instance.CompactColumns();
             if (HolderVisualManager.HasInstance)
                 HolderVisualManager.Instance.RefreshAllPositions();
 
-            // Color Remove 연출: 카메라 쉐이크
+            return removed;
+        }
+
+        private void FinalizeColorRemove(int color, int totalRemoved)
+        {
             if (CameraManager.HasInstance && CameraManager.Instance.MainCamera != null)
             {
                 CameraManager.Instance.MainCamera.transform.DOShakePosition(0.3f, 0.15f, 10, 90f, false, true);
@@ -535,6 +636,218 @@ namespace BalloonFlow
                 boosterType = BoosterManager.COLOR_REMOVE,
                 affectedCount = totalRemoved
             });
+        }
+
+        private void CollectZapTargets(int color)
+        {
+            _zapTargets.Clear();
+
+            if (!BalloonController.HasInstance)
+                return;
+
+            BalloonData[] balloons = BalloonController.Instance.GetAllBalloonsByColor(color);
+            if (balloons == null)
+                return;
+
+            for (int i = 0; i < balloons.Length; i++)
+            {
+                BalloonData data = balloons[i];
+                if (data == null || data.isPopped)
+                    continue;
+
+                _zapTargets.Add(new ZapTarget
+                {
+                    balloonId = data.balloonId,
+                    position = BalloonController.Instance.GetBalloonWorldPosition(data.balloonId)
+                });
+            }
+
+            _zapTargets.Sort((a, b) =>
+            {
+                int z = a.position.z.CompareTo(b.position.z);
+                if (z != 0) return z;
+                return a.position.x.CompareTo(b.position.x);
+            });
+        }
+
+        private bool TryPopZapTarget(int balloonId)
+        {
+            if (!BalloonController.HasInstance)
+                return false;
+
+            BalloonData data = BalloonController.Instance.GetBalloon(balloonId);
+            if (data == null || data.isPopped)
+                return false;
+
+            BalloonController.Instance.ForcePopBalloon(balloonId);
+            return true;
+        }
+
+        private Vector3 GetZapSpawnPosition(Vector3 attackPosition)
+        {
+            float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
+            Vector3 spawnPosition = attackPosition;
+            spawnPosition.z -= Mathf.Max(1f, cellSpacing * 2f);
+            return spawnPosition;
+        }
+
+        private Vector3 GetZapAttackPosition()
+        {
+            if (_zapTargets.Count <= 0)
+                return GetZapFallbackPosition();
+
+            float minZ = _zapTargets[0].position.z;
+            float minX = _zapTargets[0].position.x;
+            float maxX = _zapTargets[0].position.x;
+            for (int i = 1; i < _zapTargets.Count; i++)
+            {
+                Vector3 position = _zapTargets[i].position;
+                if (position.z < minZ) minZ = position.z;
+                if (position.x < minX) minX = position.x;
+                if (position.x > maxX) maxX = position.x;
+            }
+
+            float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
+            Vector3 attackPosition = new Vector3((minX + maxX) * 0.5f, 0f, minZ - cellSpacing);
+            return GetZapEffectPosition(attackPosition);
+        }
+
+        private Vector3 GetZapFinishPosition()
+        {
+            if (_zapTargets.Count <= 0)
+                return GetZapFallbackPosition();
+
+            Vector3 lastPosition = _zapTargets[_zapTargets.Count - 1].position;
+            return GetZapEffectPosition(lastPosition);
+        }
+
+        private Vector3 GetZapFallbackPosition()
+        {
+            if (GameManager.HasInstance)
+            {
+                return GetZapEffectPosition(new Vector3(
+                    GameManager.Instance.Board.boardCenterX,
+                    0f,
+                    GameManager.Instance.Board.boardCenterZ));
+            }
+
+            return GetZapEffectPosition(Vector3.zero);
+        }
+
+        private Vector3 GetZapEffectPosition(Vector3 position)
+        {
+            position.y += ZapEffectYOffset;
+            return position;
+        }
+
+        private GameObject CreateItemZap(Vector3 attackPosition)
+        {
+            if (_itemZapPrefab == null)
+                _itemZapPrefab = Resources.Load<GameObject>(Const.PREFAB_ITEM_ZAP);
+
+            if (_itemZapPrefab == null)
+            {
+                Debug.LogWarning($"[BoosterExecutor] Missing ItemZap prefab at Resources/{Const.PREFAB_ITEM_ZAP}.");
+                return null;
+            }
+
+            Vector3 spawnPosition = GetZapSpawnPosition(attackPosition);
+            return Instantiate(_itemZapPrefab, spawnPosition, Quaternion.identity);
+        }
+
+        private GameObject CreateZapLineObject()
+        {
+            if (_fxZapLinePrefab == null)
+                _fxZapLinePrefab = Resources.Load<GameObject>(Const.PREFAB_FX_ZAP_LINE);
+
+            if (_fxZapLinePrefab == null)
+            {
+                Debug.LogWarning($"[BoosterExecutor] Missing FxZapLine prefab at Resources/{Const.PREFAB_FX_ZAP_LINE}.");
+                return null;
+            }
+
+            return Instantiate(_fxZapLinePrefab);
+        }
+
+        private void ConfigureZapLine(GameObject zapLineObject, Vector3 startPosition, Vector3 endPosition)
+        {
+            if (zapLineObject == null)
+                return;
+
+            Transform startTransform = FindChildRecursive(zapLineObject.transform, "LightningStart");
+            Transform endTransform = FindChildRecursive(zapLineObject.transform, "LightningEnd");
+            if (startTransform != null) startTransform.position = startPosition;
+            if (endTransform != null) endTransform.position = endPosition;
+
+            LightningBoltScript bolt = zapLineObject.GetComponentInChildren<LightningBoltScript>(true);
+            if (bolt != null)
+            {
+                bolt.StartObject = null;
+                bolt.EndObject = null;
+                bolt.StartPosition = startPosition;
+                bolt.EndPosition = endPosition;
+                bolt.Trigger();
+            }
+        }
+
+        private Transform FindChildRecursive(Transform root, string childName)
+        {
+            if (root == null)
+                return null;
+
+            Transform[] children = root.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == childName)
+                    return children[i];
+            }
+
+            return null;
+        }
+
+        private void PlayZapFinish(GameObject zapObject, Vector3 finishPosition)
+        {
+            if (zapObject == null)
+                return;
+
+            zapObject.transform.position = finishPosition;
+
+            bool triggered = TrySetZapFinishTrigger(zapObject);
+            ParticleSystem[] particles = zapObject.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < particles.Length; i++)
+            {
+                particles[i].Clear(true);
+                particles[i].Play(true);
+            }
+
+            if (!triggered)
+                zapObject.transform.DOPunchScale(Vector3.one * 0.15f, ZapFinishLifetime, 6, 0.4f);
+        }
+
+        private bool TrySetZapFinishTrigger(GameObject zapObject)
+        {
+            Animator animator = zapObject.GetComponentInChildren<Animator>(true);
+            if (animator == null)
+                return false;
+
+            string[] triggerNames = { "Finish", "ZapFinish", "Zap Finish Trigger" };
+            for (int i = 0; i < animator.parameters.Length; i++)
+            {
+                AnimatorControllerParameter parameter = animator.parameters[i];
+                if (parameter.type != AnimatorControllerParameterType.Trigger)
+                    continue;
+
+                for (int j = 0; j < triggerNames.Length; j++)
+                {
+                    if (parameter.name == triggerNames[j])
+                    {
+                        animator.SetTrigger(parameter.name);
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         // Hand booster now uses SELECT_TOOL behavior (holder selection mode).

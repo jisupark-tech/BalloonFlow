@@ -26,7 +26,7 @@ namespace BalloonFlow
         private static readonly Dictionary<GameObject, ParticleSystem[]> _systemsCache = new Dictionary<GameObject, ParticleSystem[]>();
 
         /// <summary>풍선 위치에 pop effect 재생. runner는 코루틴 호스트 (예: BalloonController).</summary>
-        public static void Play(Vector3 worldPos, Color color, MonoBehaviour runner)
+        public static void Play(Vector3 worldPos, Color color, MonoBehaviour runner, float scaleMultiplier = 1f)
         {
             if (!ObjectPoolManager.HasInstance || runner == null) return;
             if (!ObjectPoolManager.Instance.HasPool(POOL_KEY)) return;
@@ -38,7 +38,9 @@ namespace BalloonFlow
             if (go == null) return;
 
             // prefab 대비 50% 축소.
-            go.transform.localScale = Vector3.one * EFFECT_SCALE;
+            // ROLLBACK_BALLOON_EFFECT_SCALE:
+            // Reset pooled effect size every play and scale it with the popped balloon.
+            go.transform.localScale = Vector3.one * EFFECT_SCALE * Mathf.Max(0.01f, scaleMultiplier);
 
             // 모든 ParticleSystem에 색상 적용 + play. 가장 긴 life 시간 = 풀 반환 delay.
             // [Optimization 2026-05-10] 풀 재사용 시 ParticleSystem 배열 캐시 → 매 pop 의 GetComponentsInChildren alloc 제거.
