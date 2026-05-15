@@ -185,12 +185,12 @@ namespace BalloonFlow
         // ROLLBACK_DART_MISS_SUSPECT_DIAG:
         // Debug.Log itself causes visible frame drops during dense firing. Keep this off for play,
         // and enable only while capturing a short miss sample.
-        private static readonly bool DART_MISS_SUSPECT_DEBUG = true;
+        private static readonly bool DART_MISS_SUSPECT_DEBUG = false;
         // ROLLBACK_DART_ATTACK_ISSUE_DEBUG:
         // Temporary, throttled diagnostics for continuous-fire and miss paths. Disable this after
         // capturing a repro sample; every branch below is intentionally log-only except the matching
         // holder-line guard inside FireDartCandidate.
-        private static readonly bool DART_ATTACK_ISSUE_DEBUG = true;
+        private static readonly bool DART_ATTACK_ISSUE_DEBUG = false;
 
         // ROLLBACK_DART_CROSSED_LINE_CACHE_FIX:
         // At x2 speed or after a long frame, a head can cross several grid lines before this scan
@@ -978,6 +978,7 @@ namespace BalloonFlow
                 int color = dart.dartColor;
                 int dartId = dart.dartId;
                 int holderId = dart.holderId;
+                ResetStraightRailPassIfWrapped(holderId, currentScanDir, currentLine);
                 if (IsHolderLineConsumed(holderId, currentScanDir, currentLine))
                 {
                     LogAttackIssue(
@@ -1932,6 +1933,28 @@ namespace BalloonFlow
                 $"stage={stage} holder={holderId} dartId={dartId} color={color} progress={progress:F2} " +
                 $"probeScan={probeScanDir} probeLine={probeLine} target={targetId} scan={scanDir} line={foundLine}");
             return true;
+        }
+
+        private void ResetStraightRailPassIfWrapped(
+            int holderId,
+            DirectionalTargeting.ScanDirection scanDir,
+            int currentLine)
+        {
+            if (!RailManager.HasInstance) return;
+            if (RailManager.GetRailSideCount(RailManager.Instance.PhysicalCapacity) != 1) return;
+            if (scanDir != DirectionalTargeting.ScanDirection.Up) return;
+
+            if (!_holderPassDirectionByHolder.TryGetValue(holderId, out DirectionalTargeting.ScanDirection passDir)
+                || passDir != scanDir)
+            {
+                return;
+            }
+
+            if (!_lastFiredLineByHolder.TryGetValue(holderId, out int lastFiredLine))
+                return;
+
+            if (currentLine < lastFiredLine - MaxLineCatchUpPerHead)
+                ClearConsumedLineLockForHolder(holderId);
         }
 
         private void InvalidateDartScanLines()
