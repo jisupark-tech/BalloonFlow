@@ -19,6 +19,9 @@ namespace BalloonFlow
         /// <summary>이펙트 Y 좌표 고정 (카메라 시야 보이도록).</summary>
         private const float EFFECT_Y = 1f;
 
+        /// <summary>CircleParticle active cap. Extra pop visuals are skipped to prevent unbounded pool growth.</summary>
+        private const int MAX_ACTIVE_EFFECTS = 60;
+
         /// <summary>[Optimization 2026-05-10] 풀 GameObject → ParticleSystem[] 캐시.
         /// 매 pop 마다 GetComponentsInChildren 으로 배열 alloc 하던 부분 제거 (콤보 시 GC 압력 큰 폭 감소).
         /// 풀 재사용 시 동일 GameObject → 캐시 hit. stale (destroyed) 검출 시 자동 재 fetch.
@@ -30,6 +33,11 @@ namespace BalloonFlow
         {
             if (!ObjectPoolManager.HasInstance || runner == null) return;
             if (!ObjectPoolManager.Instance.HasPool(POOL_KEY)) return;
+
+            // ROLLBACK_POP_EFFECT_ACTIVE_CAP:
+            // Remove this guard to let CircleParticle auto-expand without an active count cap.
+            var poolInfo = ObjectPoolManager.Instance.GetPoolInfo(POOL_KEY);
+            if (poolInfo.inUse >= MAX_ACTIVE_EFFECTS) return;
 
             // Y축 고정 (xz 는 풍선 위치 그대로).
             Vector3 spawnPos = new Vector3(worldPos.x, EFFECT_Y, worldPos.z);

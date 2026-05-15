@@ -490,7 +490,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matSpeedOutlineSuperHard,
                 _                           => _matSpeedOutlineNormal
             };
-            if (speedOutlineMat != null && _txtSpeedOutline != null) _txtSpeedOutline.fontMaterial = speedOutlineMat;
+            if (speedOutlineMat != null && _txtSpeedOutline != null) _txtSpeedOutline.fontSharedMaterial = speedOutlineMat;
 
             // 배경 색상 (frameBottom)
             Sprite bgSpr = difficulty switch
@@ -529,7 +529,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matLvOutlineSuperHard,
                 _                           => _matLvOutlineNormal
             };
-            if (lvOutlineMat != null && _txtLVOutline != null) _txtLVOutline.fontMaterial = lvOutlineMat;
+            if (lvOutlineMat != null && _txtLVOutline != null) _txtLVOutline.fontSharedMaterial = lvOutlineMat;
 
             // Number 텍스트 아웃라인 머티리얼
             Material numberOutlineMat = difficulty switch
@@ -538,7 +538,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matNumberOutlineSuperHard,
                 _                           => _matNumberOutlineNormal
             };
-            if (numberOutlineMat != null && _txtNumberOutline != null) _txtNumberOutline.fontMaterial = numberOutlineMat;
+            if (numberOutlineMat != null && _txtNumberOutline != null) _txtNumberOutline.fontSharedMaterial = numberOutlineMat;
 
             // Percentage 텍스트 아웃라인 머티리얼
             Material percentageOutlineMat = difficulty switch
@@ -547,7 +547,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matPercentageOutlineSuperHard,
                 _                           => _matPercentageOutlineNormal
             };
-            if (percentageOutlineMat != null && _txtPercentageOutline != null) _txtPercentageOutline.fontMaterial = percentageOutlineMat;
+            if (percentageOutlineMat != null && _txtPercentageOutline != null) _txtPercentageOutline.fontSharedMaterial = percentageOutlineMat;
         }
 
         public void SetLevel(int _levelId)

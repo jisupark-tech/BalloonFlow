@@ -841,7 +841,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matPlayOutlineSuperHard,
                 _                           => _matPlayOutlineNormal
             };
-            if (playOutlineMat != null && _txtPlayOutline != null) _txtPlayOutline.fontMaterial = playOutlineMat;
+            if (playOutlineMat != null && _txtPlayOutline != null) _txtPlayOutline.fontSharedMaterial = playOutlineMat;
 
             // PlayLevel 텍스트 아웃라인 머티리얼
             Material playLevelOutlineMat = difficulty switch
@@ -850,7 +850,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matPlayLevelOutlineSuperHard,
                 _                           => _matPlayLevelOutlineNormal
             };
-            if (playLevelOutlineMat != null && _txtPlayLevelOutline != null) _txtPlayLevelOutline.fontMaterial = playLevelOutlineMat;
+            if (playLevelOutlineMat != null && _txtPlayLevelOutline != null) _txtPlayLevelOutline.fontSharedMaterial = playLevelOutlineMat;
 
             ApplyPlayBadge(difficulty);
         }

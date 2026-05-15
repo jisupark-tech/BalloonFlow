@@ -273,7 +273,7 @@ namespace BalloonFlow
                     Material mat = difficulty == DifficultyPurpose.SuperHard
                         ? _matHardLevelOutlineSuperHard
                         : _matHardLevelOutlineHard;
-                    if (mat != null) _txtHardLevelOutline.fontMaterial = mat;
+                    if (mat != null) _txtHardLevelOutline.fontSharedMaterial = mat;
                 }
             }
         }
