@@ -60,12 +60,6 @@ namespace BalloonFlow
         /// <summary>Max active holders across all columns. Design ref: "최대 10개 활성".</summary>
         private const int MAX_ACTIVE_TOTAL = 10;
 
-        // Magazine max per rail capacity tier.
-        // 허용량 기준: 50→max50, 100→max80, 150→max100, 200→max100
-        // 명세: 40→max30, 80→max40, 120→max50, 160→max50
-        private static readonly int[] MAG_CAP_TIERS      = { 40, 80, 120, 160 };
-        private static readonly int[] MAG_CAP_MAX_VALUES  = { 30, 40,  50,  50 };
-
         #endregion
 
         #region Fields
@@ -892,17 +886,11 @@ namespace BalloonFlow
 
         /// <summary>
         /// Returns the magazine max for a given rail capacity tier.
-        /// Design: 50→15, 100→30, 150→50, 200→50.
+        /// Design: 40→30, 80→40, 120→50, 160→50.
         /// </summary>
         private static int GetMagazineMaxForCapacity(int railCapacity)
         {
-            if (railCapacity <= 0) return MAG_CAP_MAX_VALUES[MAG_CAP_MAX_VALUES.Length - 1];
-            for (int i = 0; i < MAG_CAP_TIERS.Length; i++)
-            {
-                if (railCapacity <= MAG_CAP_TIERS[i])
-                    return MAG_CAP_MAX_VALUES[i];
-            }
-            return MAG_CAP_MAX_VALUES[MAG_CAP_MAX_VALUES.Length - 1];
+            return RailManager.GetMagazineMaxForCapacity(railCapacity);
         }
 
         /// <summary>

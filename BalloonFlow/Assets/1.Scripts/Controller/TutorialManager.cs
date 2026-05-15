@@ -280,6 +280,10 @@ namespace BalloonFlow
         /// Shows the cutout around a specific holder by index.
         /// Finds the holder's world position from HolderVisualManager.
         /// </summary>
+        /// <remarks>
+        /// [2026-05-15] 실제 visual GameObject 의 transform.position 사용 (추정 columnSpacing 제거).
+        /// step.cutoutWidth/Height 가 지정돼 있으면 우선 사용, 아니면 200x200 fallback.
+        /// </remarks>
         public void ShowCutoutForHolder(int holderIndex)
         {
             if (!HolderManager.HasInstance) return;
@@ -287,25 +291,43 @@ namespace BalloonFlow
             HolderData[] holders = HolderManager.Instance.GetHolders();
             if (holders == null || holderIndex < 0 || holderIndex >= holders.Length) return;
 
-            // Use HolderVisualManager to find the visual position
+            // [2026-05-15] step 에서 cutout size override 시도. 0/음수면 default 200.
+            Vector2 cutSize = GetStepCutoutSize();
+
             if (HolderVisualManager.HasInstance)
             {
-                Vector3 queueCenter = HolderVisualManager.Instance.CalculateQueueCenterPosition();
-                // Approximate holder position — offset from queue center based on column
-                int column = holders[holderIndex].column;
-                float columnSpacing = 2.0f; // approximate spacing
-                int totalColumns = HolderManager.Instance.QueueColumns;
-                float xOffset = (column - (totalColumns - 1) * 0.5f) * columnSpacing;
-                Vector3 holderWorldPos = new Vector3(queueCenter.x + xOffset, queueCenter.y, queueCenter.z);
+                // 실제 visual GameObject 의 world position 사용 — column 추정값 대신.
+                int holderId = holders[holderIndex].holderId;
+                var holderGO = HolderVisualManager.Instance.GetHolderGameObject(holderId);
+                if (holderGO != null)
+                {
+                    ShowCutout(holderGO.transform.position, cutSize);
+                    return;
+                }
 
-                ShowCutout(holderWorldPos, new Vector2(200f, 200f));
+                // Visual 아직 spawn 전이면 queue center 로 fallback.
+                Vector3 queueCenter = HolderVisualManager.Instance.CalculateQueueCenterPosition();
+                ShowCutout(queueCenter, cutSize);
             }
             else
             {
                 // Fallback: show cutout at screen center bottom area
                 Vector2 canvasSize = _canvasRect.sizeDelta;
-                ApplyCutout(new Vector2(canvasSize.x * 0.5f, canvasSize.y * 0.25f), new Vector2(250f, 250f));
+                ApplyCutout(new Vector2(canvasSize.x * 0.5f, canvasSize.y * 0.25f), cutSize);
             }
+        }
+
+        /// <summary>현재 step 의 cutoutWidth/Height 또는 default(200x200) 반환.</summary>
+        private Vector2 GetStepCutoutSize()
+        {
+            const float DEFAULT = 200f;
+            if (!TutorialController.HasInstance) return new Vector2(DEFAULT, DEFAULT);
+            TutorialStep step = TutorialController.Instance.GetCurrentStep();
+            if (step == null) return new Vector2(DEFAULT, DEFAULT);
+
+            float w = step.cutoutWidth > 0f ? step.cutoutWidth : DEFAULT;
+            float h = step.cutoutHeight > 0f ? step.cutoutHeight : DEFAULT;
+            return new Vector2(w, h);
         }
 
         /// <summary>

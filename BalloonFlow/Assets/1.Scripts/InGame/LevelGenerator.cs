@@ -598,7 +598,7 @@ namespace BalloonFlow
             return new RailLayout
             {
                 waypoints = waypoints.ToArray(),
-                slotCount = 200,
+                slotCount = 0,
                 deployPoints = deployPoints
             };
         }

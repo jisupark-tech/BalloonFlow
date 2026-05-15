@@ -56,6 +56,11 @@ namespace BalloonFlow
         public float handTweenDuration = 0.55f;
         /// <summary>CutoutMask 의 Image sprite. null 이면 prefab default 유지.</summary>
         public Sprite cutoutMaskSprite;
+
+        // [2026-05-15] cutout size — overrideVisualLayout=false 시 ShowCutoutForHolder 가 참조.
+        // 0 이면 기본 200x200 사용 (backward compat).
+        public float cutoutWidth;
+        public float cutoutHeight;
     }
 
     /// <summary>
@@ -679,6 +684,8 @@ namespace BalloonFlow
                     handTweenRotation = src.handTweenRotation,
                     handTweenDuration = src.handTweenDuration,
                     cutoutMaskSprite = src.cutoutMaskSprite,
+                    cutoutWidth = src.cutoutWidth,
+                    cutoutHeight = src.cutoutHeight,
                 };
             }
 

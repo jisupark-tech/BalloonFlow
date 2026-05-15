@@ -47,7 +47,7 @@ namespace BalloonFlow
         /// <summary>
         /// Explicit rail capacity override.
         /// 0 = auto-calculate from total dart count (default).
-        /// Design: darts≤30→50, ≤60→100, ≤100→150, else→200.
+        /// Design: darts≤300→40, ≤500→80, ≤700→120, else→160.
         /// </summary>
         public int railCapacity;
 
@@ -242,7 +242,7 @@ namespace BalloonFlow
         /// <summary>
         /// Total number of discrete slots on the rail conveyor belt.
         /// 0 = use LevelConfig.railCapacity or auto-calculate from total darts.
-        /// Design: 50/100/150/200 variable capacity based on total dart count.
+        /// Design: 40/80/120/160 variable capacity based on total dart count.
         /// </summary>
         public int slotCount;
 

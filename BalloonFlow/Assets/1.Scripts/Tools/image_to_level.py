@@ -73,8 +73,8 @@ GIMMICK_UNLOCK = {
 }
 
 # Rail capacity tiers
-CAPACITY_TIERS = [50, 100, 150, 200]
-CAPACITY_DART_THRESHOLDS = [30, 60, 100, float("inf")]
+CAPACITY_TIERS = [40, 80, 120, 160]
+CAPACITY_DART_THRESHOLDS = [300, 500, 700, float("inf")]
 
 
 # ═══════════════════════════════════════════════

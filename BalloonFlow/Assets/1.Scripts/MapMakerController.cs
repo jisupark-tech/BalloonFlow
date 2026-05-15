@@ -2008,14 +2008,54 @@ namespace BalloonFlow
             {
                 int idx = i;
                 var step = _tutorialSteps[i];
+
+                // Row 1: index + instruction + delete
                 var stepRow = Row(_tutorialStepContainer);
                 Lbl(stepRow, $"#{i}", w: 25);
                 MakeInputField(stepRow, step.instruction, s => _tutorialSteps[idx].instruction = s);
                 Btn(stepRow, "X", () => { _tutorialSteps.RemoveAt(idx); RebuildTutorialStepUI(parent); });
+
+                // [2026-05-15] Row 2: highlightTarget + requireAction + cutout size
+                // — MapMaker 에서 cutout 안 보이던 원인: instruction 외 필드 미노출 + default holder_0/200x200 로 고정되던 문제 해소.
+                var optRow = Row(_tutorialStepContainer);
+                Lbl(optRow, "Target", w: 40);
+                MakeTutorialDropdown(optRow, TUTORIAL_TARGETS, step.highlightTarget,
+                    v => _tutorialSteps[idx].highlightTarget = v);
+                Lbl(optRow, "Act", w: 26);
+                MakeTutorialDropdown(optRow, TUTORIAL_ACTIONS, step.requireAction,
+                    v => _tutorialSteps[idx].requireAction = v);
+                Lbl(optRow, "W", w: 14);
+                MakeFloatField(optRow, step.cutoutWidth, 50f, 2000f,
+                    v => _tutorialSteps[idx].cutoutWidth = v);
+                Lbl(optRow, "H", w: 14);
+                MakeFloatField(optRow, step.cutoutHeight, 50f, 2000f,
+                    v => _tutorialSteps[idx].cutoutHeight = v);
             }
 
             if (_tutorialSteps.Count > 0)
                 SetStatus($"Tutorial: {_tutorialSteps.Count} steps");
+        }
+
+        /// <summary>Tutorial step option dropdown. 현재 값이 옵션 배열에 없으면 첫 항목 사용.</summary>
+        private Dropdown MakeTutorialDropdown(Transform p, string[] options, string current, System.Action<string> cb)
+        {
+            var go = DefaultControls.CreateDropdown(_uiRes);
+            go.transform.SetParent(p, false);
+            var le = go.AddComponent<LayoutElement>(); le.flexibleWidth = 1; le.preferredHeight = 24;
+            go.GetComponent<Image>().color = new Color(0.16f, 0.16f, 0.20f);
+            var dd = go.GetComponent<Dropdown>();
+            dd.ClearOptions();
+            dd.AddOptions(new List<string>(options));
+            int sel = System.Array.IndexOf(options, current);
+            dd.value = sel >= 0 ? sel : 0;
+            dd.captionText.font = _font; dd.captionText.fontSize = 12; dd.captionText.color = Color.white;
+            dd.onValueChanged.AddListener(v =>
+            {
+                if (v >= 0 && v < options.Length) cb?.Invoke(options[v]);
+            });
+            // 초기값 콜백 (배열에 없던 값으로 시작 시 보정)
+            if (sel < 0 && options.Length > 0) cb?.Invoke(options[0]);
+            return dd;
         }
 
         #endregion
@@ -4751,8 +4791,8 @@ namespace BalloonFlow
 
         private static int GetDartCapacityMax(int railCapacity)
         {
-            if (railCapacity <= 50) return 30;
-            if (railCapacity <= 100) return 40;
+            if (railCapacity <= 40) return 30;
+            if (railCapacity <= 80) return 40;
             return 50;
         }
 

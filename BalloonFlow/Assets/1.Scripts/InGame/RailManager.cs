@@ -98,13 +98,14 @@ namespace BalloonFlow
         private const float RAIL_ADVANCE_DIAG_INTERVAL = 1.0f;
 
         // 가변 수용량 구간 — 총 다트 수 기준으로 레일 수용량 자동 결정
-        // ≤300→50, ≤500→100, ≤700→150, 701+→200
-        // 다트 간 간격 제거로 실제 패킹 밀도 증가 → 허용량 상향 (기존 40/80/120/160)
-        private static readonly int[] CAPACITY_TIERS = { 50, 100, 150, 200 };
+        // ≤300→40, ≤500→80, ≤700→120, 701+→160
+        // Spec capacity tiers: 40/80/120/160.
+        private static readonly int[] CAPACITY_TIERS = { 40, 80, 120, 160 };
         private static readonly int[] CAPACITY_DART_THRESHOLDS = { 300, 500, 700, int.MaxValue };
 
         // 이어하기 제거량 — 허용량의 10% (명세: 4/8/12/16)
         private static readonly int[] CONTINUE_REMOVE_COUNTS = { 4, 8, 12, 16 };
+        private static readonly int[] MAGAZINE_MAX_VALUES = { 30, 40, 50, 50 };
 
         /// <summary>허용량에 따른 이어하기 다트 제거량 반환.</summary>
         public static int GetContinueRemoveCount(int capacity)
@@ -117,18 +118,29 @@ namespace BalloonFlow
             return CONTINUE_REMOVE_COUNTS[CONTINUE_REMOVE_COUNTS.Length - 1];
         }
 
+        public static int GetMagazineMaxForCapacity(int capacity)
+        {
+            if (capacity <= 0) return MAGAZINE_MAX_VALUES[MAGAZINE_MAX_VALUES.Length - 1];
+
+            for (int i = 0; i < CAPACITY_TIERS.Length; i++)
+            {
+                if (capacity <= CAPACITY_TIERS[i])
+                    return MAGAZINE_MAX_VALUES[i];
+            }
+            return MAGAZINE_MAX_VALUES[MAGAZINE_MAX_VALUES.Length - 1];
+        }
+
         /// <summary>
         /// 허용량에 따른 레일 면 수 반환.
-        /// 50→1면(하단), 100→2면(하단+우측), 150→3면(하단+우측+상단), 200→4면(전체)
+        /// 40→1면(하단), 80→2면(하단+우측), 120→3면(하단+우측+상단), 160→4면(전체)
         /// </summary>
         public static int GetRailSideCount(int capacity)
         {
-            if (capacity <= 50) return 1;
-            if (capacity <= 100) return 2;
-            if (capacity <= 150) return 3;
+            if (capacity <= 40) return 1;
+            if (capacity <= 80) return 2;
+            if (capacity <= 120) return 3;
             return 4;
         }
-        // darts <= 30 → 50, darts <= 60 → 100, darts <= 100 → 150, else → 200
 
         #endregion
 
@@ -149,7 +161,7 @@ namespace BalloonFlow
         private float _cornerRadius = 1f;
 
         // Slot system
-        private int _slotCount = 200;
+        private int _slotCount = 160;
         private SlotData[] _slots;
         // V2 아키텍처: 110% buffer 제거. 100% slot capacity 만 사용. deadlock 은 leftmost-only suspend 로 해결.
         private int _deadlockBufferSize; // 항상 0 — 코드 호환 위해 필드 유지
@@ -274,22 +286,33 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Minimum same-holder spacing used for attack order. Keep rail capacity based on slot
-        /// spacing, but prevent one cluster's promoted head from being closer than one balloon cell.
+        /// Minimum same-holder spacing used for attack order. It follows balloon cell spacing when
+        /// possible, but is capped so the rail can fill to its physical capacity.
         /// </summary>
         public float DartClusterAttackGap
         {
             get
             {
-                float gap = DartPhysicalGap;
+                float minGap = DartPhysicalGap;
+                float gap = minGap;
                 if (GameManager.HasInstance)
                 {
                     float cellSpacing = GameManager.Instance.Board.cellSpacing;
                     if (cellSpacing > 0.0001f)
                         gap = Mathf.Max(gap, cellSpacing);
                 }
+                float fitCap = GetClusterGapFitCap();
+                if (fitCap > 0.0001f)
+                    gap = Mathf.Min(gap, Mathf.Max(minGap, fitCap));
                 return gap;
             }
+        }
+
+        private float GetClusterGapFitCap()
+        {
+            if (_totalPathLength <= 0.0001f) return 0f;
+            int targetCount = Mathf.Max(1, PhysicalCapacity);
+            return _totalPathLength / targetCount;
         }
 
         /// <summary>Current belt rotation offset in distance units.</summary>
@@ -2305,7 +2328,7 @@ namespace BalloonFlow
 
         /// <summary>
         /// Determines the appropriate rail capacity based on total dart count.
-        /// Design: darts≤30→50, ≤60→100, ≤100→150, else→200.
+        /// Design: darts≤300→40, ≤500→80, ≤700→120, else→160.
         /// If explicitCapacity > 0, uses that instead (LevelConfig override).
         /// </summary>
         public static int CalculateCapacity(int totalDarts, int explicitCapacity = 0)
