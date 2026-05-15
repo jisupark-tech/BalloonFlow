@@ -989,20 +989,6 @@ namespace BalloonFlow
                 int color = dart.dartColor;
                 int dartId = dart.dartId;
                 int holderId = dart.holderId;
-                ResetStraightRailPassIfWrapped(holderId, currentScanDir, currentLine);
-                if (IsHolderLineConsumed(holderId, currentScanDir, currentLine))
-                {
-                    LogAttackIssue(
-                        "DartFireBlocked",
-                        $"reason=holderLineConsumed stage=current holder={holderId} dartId={dartId} " +
-                        $"progress={dart.progress:F2} scan={currentScanDir} line={currentLine}");
-                    continue;
-                }
-                // ROLLBACK_DART_HOLDER_PASS_LINE_SET:
-                // Do not clear a holder's consumed line just because the head moved to a new line.
-                // That made the same holder re-open an earlier line in the same side pass.
-                bool releaseConsumedLineAfterScan = false;
-
                 // ROLLBACK_DART_LINE_CACHE_INVALIDATION:
                 // The line-driven scan cache must belong to the current head dart, not only to the
                 // holder. Otherwise a new head on the same row/column, or an outer contour exposed
@@ -1013,21 +999,6 @@ namespace BalloonFlow
                 bool hasLastScan = _lastScannedLineByHolder.TryGetValue(dart.holderId, out lastLine)
                     && _lastScanDirectionByHolder.TryGetValue(dart.holderId, out lastDir)
                     && _lastScannedHeadIdByHolder.TryGetValue(dart.holderId, out lastHeadId);
-                if (hasLastScan
-                    && lastHeadId == dart.dartId
-                    && lastDir == currentScanDir
-                    && lastLine == currentLine)
-                {
-                    LogAttackIssue(
-                        "DartScanSkip",
-                        $"reason=sameHeadSameLine holder={holderId} dartId={dartId} progress={dart.progress:F2} " +
-                        $"scan={currentScanDir} line={currentLine}");
-                    continue;
-                }
-
-                int firstCatchUpLine = currentLine;
-                int catchUpStep = 0;
-                int catchUpCount = 1;
                 bool catchUpFromLastScan = hasLastScan
                     && lastHeadId == dart.dartId
                     && lastDir == currentScanDir;
@@ -1047,6 +1018,46 @@ namespace BalloonFlow
                     && _promoLineByHolder.TryGetValue(dart.holderId, out pLine);
                 bool catchUpFromPromo = hasPromoSeedForHead && pDir == currentScanDir;
                 bool catchUpFromCornerPromo = hasPromoSeedForHead && pDir != currentScanDir;
+
+                ResetStraightRailPassIfWrapped(holderId, currentScanDir, currentLine);
+                ResetOpenRailPassIfWrapped(
+                    holderId,
+                    currentScanDir,
+                    currentLine,
+                    hasLastScan,
+                    lastDir,
+                    lastLine,
+                    hasPromoSeedForHead,
+                    pDir);
+
+                if (IsHolderLineConsumed(holderId, currentScanDir, currentLine))
+                {
+                    LogAttackIssue(
+                        "DartFireBlocked",
+                        $"reason=holderLineConsumed stage=current holder={holderId} dartId={dartId} " +
+                        $"progress={dart.progress:F2} scan={currentScanDir} line={currentLine}");
+                    continue;
+                }
+                // ROLLBACK_DART_HOLDER_PASS_LINE_SET:
+                // Do not clear a holder's consumed line just because the head moved to a new line.
+                // That made the same holder re-open an earlier line in the same side pass.
+                bool releaseConsumedLineAfterScan = false;
+
+                if (hasLastScan
+                    && lastHeadId == dart.dartId
+                    && lastDir == currentScanDir
+                    && lastLine == currentLine)
+                {
+                    LogAttackIssue(
+                        "DartScanSkip",
+                        $"reason=sameHeadSameLine holder={holderId} dartId={dartId} progress={dart.progress:F2} " +
+                        $"scan={currentScanDir} line={currentLine}");
+                    continue;
+                }
+
+                int firstCatchUpLine = currentLine;
+                int catchUpStep = 0;
+                int catchUpCount = 1;
 
                 if (catchUpFromLastScan)
                 {
@@ -1970,6 +1981,39 @@ namespace BalloonFlow
                 ClearConsumedLineLockForHolder(holderId);
         }
 
+        private void ResetOpenRailPassIfWrapped(
+            int holderId,
+            DirectionalTargeting.ScanDirection currentScanDir,
+            int currentLine,
+            bool hasLastScan,
+            DirectionalTargeting.ScanDirection lastDir,
+            int lastLine,
+            bool hasPromoSeedForHead,
+            DirectionalTargeting.ScanDirection promoDir)
+        {
+            if (!RailManager.HasInstance) return;
+            int sideCount = RailManager.GetRailSideCount(RailManager.Instance.PhysicalCapacity);
+            if (sideCount >= 4) return;
+            if (currentScanDir != DirectionalTargeting.ScanDirection.Up) return;
+
+            bool wrappedFromEndSide = hasLastScan && lastDir != currentScanDir;
+            bool wrappedOnStraightSide = hasLastScan
+                && lastDir == currentScanDir
+                && currentLine < lastLine - MaxLineCatchUpPerHead;
+            bool promotedAcrossWrap = hasPromoSeedForHead && promoDir != currentScanDir;
+
+            if (!wrappedFromEndSide && !wrappedOnStraightSide && !promotedAcrossWrap)
+                return;
+
+            ClearConsumedLineLockForHolder(holderId);
+            ClearResolvedConsumedTargetLinesForDirection(currentScanDir);
+
+            LogAttackIssue(
+                "DartOpenRailWrapReset",
+                $"holder={holderId} sides={sideCount} scan={currentScanDir} currentLine={currentLine} " +
+                $"lastScan={hasLastScan}/{lastDir}/{lastLine} promo={hasPromoSeedForHead}/{promoDir}");
+        }
+
         private void InvalidateDartScanLines()
         {
             _lastScannedLineByHolder.Clear();
@@ -2191,13 +2235,43 @@ namespace BalloonFlow
             _currentHeadLineKeys.Clear();
         }
 
+        private void ClearResolvedConsumedTargetLinesForDirection(DirectionalTargeting.ScanDirection scanDir)
+        {
+            if (_consumedTargetLines.Count == 0)
+                return;
+
+            _tempRemoveKeys.Clear();
+            foreach (int consumedKey in _consumedTargetLines)
+            {
+                if (_unresolvedConsumedTargetLines.Contains(consumedKey))
+                    continue;
+
+                if (IsConsumedLineKeyForDirection(consumedKey, scanDir))
+                    _tempRemoveKeys.Add(consumedKey);
+            }
+
+            for (int i = 0; i < _tempRemoveKeys.Count; i++)
+            {
+                _consumedTargetLines.Remove(_tempRemoveKeys[i]);
+                _unresolvedConsumedTargetLines.Remove(_tempRemoveKeys[i]);
+            }
+
+            _tempRemoveKeys.Clear();
+        }
+
         // ROLLBACK_DART_GLOBAL_CONSUMED_LINE_LOCK:
+        private const int CONSUMED_LINE_KEY_STRIDE = 1000000;
+        private const int CONSUMED_LINE_KEY_OFFSET = 500000;
+
         private static int GetConsumedLineKey(DirectionalTargeting.ScanDirection scanDir, int line)
         {
-            unchecked
-            {
-                return ((int)scanDir * 73856093) ^ line;
-            }
+            return ((int)scanDir * CONSUMED_LINE_KEY_STRIDE) + (line + CONSUMED_LINE_KEY_OFFSET);
+        }
+
+        private static bool IsConsumedLineKeyForDirection(int key, DirectionalTargeting.ScanDirection scanDir)
+        {
+            int start = (int)scanDir * CONSUMED_LINE_KEY_STRIDE;
+            return key >= start && key < start + CONSUMED_LINE_KEY_STRIDE;
         }
 
         private int GetFireCandidateStartIndex()
