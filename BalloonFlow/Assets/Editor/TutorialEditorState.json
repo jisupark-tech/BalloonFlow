@@ -3,21 +3,21 @@
         {
             "tutorialId": 1,
             "levelId": 1,
-            "name": "Tap a holder to deploy",
+            "name": "tutorial_lv1_guide",
             "steps": [
                 {
-                    "instruction": "Tap a holder to deploy its darts!",
+                    "instruction": "Tap a dart box to pop balloons!\r\n",
                     "highlightTarget": "holder_0",
-                    "requireAction": "none",
+                    "requireAction": "tap_holder",
                     "overrideVisualLayout": true,
                     "useCutoutFrame": true,
                     "cutoutFramePosition": {
                         "x": 0.0,
-                        "y": -758.0
+                        "y": -756.0
                     },
                     "cutoutSize": {
-                        "x": 450.0,
-                        "y": 210.0
+                        "x": 420.0,
+                        "y": 220.0
                     },
                     "cutoutFrameSprite": {
                         "fileID": 21300000,
@@ -26,21 +26,21 @@
                     },
                     "instructionPanelPosition": {
                         "x": 0.0,
-                        "y": -24.5
+                        "y": 40.0
                     },
                     "instructionPanelSize": {
                         "x": 1172.0,
-                        "y": 349.0
+                        "y": 350.0
                     },
                     "useArrowIndicator": false,
                     "arrowIndicatorPosition": {
                         "x": 0.0,
                         "y": 0.0
                     },
-                    "useHandIndicator": true,
+                    "useHandIndicator": false,
                     "handIndicatorPosition": {
-                        "x": 270.0,
-                        "y": -860.0
+                        "x": 313.0,
+                        "y": -930.0
                     },
                     "handIndicatorSprite": {
                         "fileID": 21300000,
@@ -50,744 +50,10 @@
                     "handTweenType": 3,
                     "handTweenMoveOffset": {
                         "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 20.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "fileID": 21300000,
-                        "guid": "045413a2b11c5f349960c30bea18590a",
-                        "type": 3
-                    }
-                },
-                {
-                    "instruction": "Well done! Watch the darts fly.",
-                    "highlightTarget": "board",
-                    "requireAction": "wait_pop",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 800.0,
-                        "y": 600.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
                         "y": -30.0
                     },
                     "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                },
-                {
-                    "instruction": "Pop all the balloons to clear the level!",
-                    "highlightTarget": "(none)",
-                    "requireAction": "none",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 200.0,
-                        "y": 200.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                }
-            ],
-            "isExpanded": true
-        },
-        {
-            "tutorialId": 2,
-            "levelId": 2,
-            "name": "Match colors",
-            "steps": [
-                {
-                    "instruction": "Darts only pop balloons of the same color!",
-                    "highlightTarget": "holder_0",
-                    "requireAction": "none",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 200.0,
-                        "y": 200.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                },
-                {
-                    "instruction": "Tap the holder that matches the balloon colors.",
-                    "highlightTarget": "holder_0",
-                    "requireAction": "tap_holder",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 200.0,
-                        "y": 200.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                },
-                {
-                    "instruction": "Great! Now try the other holder.",
-                    "highlightTarget": "holder_1",
-                    "requireAction": "tap_holder",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 200.0,
-                        "y": 200.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                }
-            ],
-            "isExpanded": true
-        },
-        {
-            "tutorialId": 3,
-            "levelId": 3,
-            "name": "Multiple holders",
-            "steps": [
-                {
-                    "instruction": "Three colors now! Match each holder to its balloons.",
-                    "highlightTarget": "board",
-                    "requireAction": "none",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 800.0,
-                        "y": 600.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                },
-                {
-                    "instruction": "Tap the red holder to clear red balloons.",
-                    "highlightTarget": "holder_0",
-                    "requireAction": "tap_holder",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 200.0,
-                        "y": 200.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                },
-                {
-                    "instruction": "Now pick the best holder to clear the board!",
-                    "highlightTarget": "(none)",
-                    "requireAction": "none",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 200.0,
-                        "y": 200.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                }
-            ],
-            "isExpanded": true
-        },
-        {
-            "tutorialId": 4,
-            "levelId": 4,
-            "name": "Watch the overflow",
-            "steps": [
-                {
-                    "instruction": "Watch out! If too many holders pile up you'll fail.",
-                    "highlightTarget": "holder_queue",
-                    "requireAction": "none",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 800.0,
-                        "y": 400.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                },
-                {
-                    "instruction": "Keep the holder queue short — tap holders quickly!",
-                    "highlightTarget": "holder_0",
-                    "requireAction": "tap_holder",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 200.0,
-                        "y": 200.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                },
-                {
-                    "instruction": "Keep tapping before the queue overflows!",
-                    "highlightTarget": "(none)",
-                    "requireAction": "none",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 200.0,
-                        "y": 200.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                }
-            ],
-            "isExpanded": true
-        },
-        {
-            "tutorialId": 5,
-            "levelId": 5,
-            "name": "Choose wisely",
-            "steps": [
-                {
-                    "instruction": "Four colors! Think before you tap.",
-                    "highlightTarget": "board",
-                    "requireAction": "none",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 800.0,
-                        "y": 600.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                },
-                {
-                    "instruction": "Pick the holder with the most matching balloons first.",
-                    "highlightTarget": "(none)",
-                    "requireAction": "tap_holder",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 200.0,
-                        "y": 200.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                },
-                {
-                    "instruction": "Strategy matters — clear the board for 3 stars!",
-                    "highlightTarget": "(none)",
-                    "requireAction": "none",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 200.0,
-                        "y": 200.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
+                    "handTweenRotation": -20.0,
                     "handTweenDuration": 0.550000011920929,
                     "cutoutMaskSprite": {
                         "instanceID": 0
@@ -799,21 +65,21 @@
         {
             "tutorialId": 11,
             "levelId": 11,
-            "name": "Hidden Balloon",
+            "name": "tutorial_hidden_dart_box",
             "steps": [
                 {
-                    "instruction": "Some balloons are hidden! Pop nearby balloons to reveal them.",
+                    "instruction": "Bring them to the front to reveal!",
                     "highlightTarget": "gimmick_hidden",
-                    "requireAction": "none",
-                    "overrideVisualLayout": false,
+                    "requireAction": "tap_holder",
+                    "overrideVisualLayout": true,
                     "useCutoutFrame": true,
                     "cutoutFramePosition": {
                         "x": 0.0,
-                        "y": 0.0
+                        "y": -811.0
                     },
                     "cutoutSize": {
-                        "x": 400.0,
-                        "y": 400.0
+                        "x": 1172.0,
+                        "y": 600.0
                     },
                     "cutoutFrameSprite": {
                         "instanceID": 0
@@ -823,8 +89,8 @@
                         "y": 40.0
                     },
                     "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
+                        "x": 1172.0,
+                        "y": 350.0
                     },
                     "useArrowIndicator": true,
                     "arrowIndicatorPosition": {
@@ -1234,56 +500,6 @@
             "name": "Combo Bonus",
             "steps": [
                 {
-                    "instruction": "Pop balloons in quick succession to build a combo!",
-                    "highlightTarget": "board",
-                    "requireAction": "none",
-                    "overrideVisualLayout": false,
-                    "useCutoutFrame": true,
-                    "cutoutFramePosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "cutoutSize": {
-                        "x": 800.0,
-                        "y": 600.0
-                    },
-                    "cutoutFrameSprite": {
-                        "instanceID": 0
-                    },
-                    "instructionPanelPosition": {
-                        "x": 0.0,
-                        "y": 40.0
-                    },
-                    "instructionPanelSize": {
-                        "x": -60.0,
-                        "y": 200.0
-                    },
-                    "useArrowIndicator": true,
-                    "arrowIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "useHandIndicator": false,
-                    "handIndicatorPosition": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "handIndicatorSprite": {
-                        "instanceID": 0
-                    },
-                    "handTweenType": 0,
-                    "handTweenMoveOffset": {
-                        "x": 0.0,
-                        "y": -30.0
-                    },
-                    "handTweenScale": 1.1200000047683716,
-                    "handTweenRotation": 0.0,
-                    "handTweenDuration": 0.550000011920929,
-                    "cutoutMaskSprite": {
-                        "instanceID": 0
-                    }
-                },
-                {
                     "instruction": "Higher combos mean bonus score — go for 3 stars!",
                     "highlightTarget": "(none)",
                     "requireAction": "none",
@@ -1335,53 +551,69 @@
                 }
             ],
             "isExpanded": true
+        },
+        {
+            "tutorialId": 62,
+            "levelId": 62,
+            "name": "tutorial_rail_warning",
+            "steps": [
+                {
+                    "instruction": "Conveyor almost full! Clear it or fail!",
+                    "highlightTarget": "(none)",
+                    "requireAction": "none",
+                    "overrideVisualLayout": true,
+                    "useCutoutFrame": true,
+                    "cutoutFramePosition": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "cutoutSize": {
+                        "x": 420.0,
+                        "y": 220.0
+                    },
+                    "cutoutFrameSprite": {
+                        "instanceID": 0
+                    },
+                    "instructionPanelPosition": {
+                        "x": 0.0,
+                        "y": 40.0
+                    },
+                    "instructionPanelSize": {
+                        "x": 1172.0,
+                        "y": 350.0
+                    },
+                    "useArrowIndicator": false,
+                    "arrowIndicatorPosition": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "useHandIndicator": false,
+                    "handIndicatorPosition": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "handIndicatorSprite": {
+                        "instanceID": 0
+                    },
+                    "handTweenType": 0,
+                    "handTweenMoveOffset": {
+                        "x": 0.0,
+                        "y": -30.0
+                    },
+                    "handTweenScale": 1.1200000047683716,
+                    "handTweenRotation": 0.0,
+                    "handTweenDuration": 0.550000011920929,
+                    "cutoutMaskSprite": {
+                        "instanceID": 0
+                    }
+                }
+            ],
+            "isExpanded": true
         }
     ],
     "spriteRefs": [
         "045413a2b11c5f349960c30bea18590a",
         "c7ea452107293644d94fc4f8c0480b66",
-        "045413a2b11c5f349960c30bea18590a",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
         "",
         "",
         "",
