@@ -23,6 +23,10 @@ namespace BalloonFlow
         [Tooltip("Niddle 기반 Material (은색). 복제하여 아웃라인 활성화")]
         [SerializeField] private Material _needleBaseMaterial;
 
+        [Header("[Optional impact anchor]")]
+        [Tooltip("Optional world anchor for the needle tip. If empty, Niddle renderer bounds are used.")]
+        [SerializeField] private Transform _needleTip;
+
         /// <summary>색상 적용 대상이 할당되었는지.</summary>
         public bool HasColorRenderers => _colorRenderers != null && _colorRenderers.Length > 0;
 
@@ -33,6 +37,59 @@ namespace BalloonFlow
         private static readonly int _propOutlineEnabled = Shader.PropertyToID("_OutlineEnabled");
         private static readonly int _propOutlineColor = Shader.PropertyToID("_OutlineColor");
         private MaterialPropertyBlock _mpb;
+
+        /// <summary>
+        /// Distance from this prefab root to the needle tip along the current firing direction.
+        /// ROLLBACK_DART_NEEDLE_TIP_IMPACT: remove this helper and let DartManager resolve at flight end.
+        /// </summary>
+        public bool TryGetNeedleTipLead(Vector3 worldDirection, out float lead)
+        {
+            lead = 0f;
+            if (worldDirection.sqrMagnitude <= 0.0001f) return false;
+            Vector3 dir = worldDirection.normalized;
+
+            if (_needleTip != null)
+            {
+                lead = Vector3.Dot(_needleTip.position - transform.position, dir);
+                return lead > 0.0001f;
+            }
+
+            if (TryGetRendererLead(_outlineOnlyRenderers, dir, out lead))
+                return true;
+
+            return TryGetRendererLead(_colorRenderers, dir, out lead);
+        }
+
+        private bool TryGetRendererLead(Renderer[] renderers, Vector3 dir, out float lead)
+        {
+            lead = 0f;
+            if (renderers == null || renderers.Length == 0) return false;
+
+            bool found = false;
+            Vector3 origin = transform.position;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null) continue;
+                Bounds b = r.bounds;
+                Vector3 c = b.center;
+                Vector3 e = b.extents;
+                for (int sx = -1; sx <= 1; sx += 2)
+                for (int sy = -1; sy <= 1; sy += 2)
+                for (int sz = -1; sz <= 1; sz += 2)
+                {
+                    Vector3 p = c + new Vector3(e.x * sx, e.y * sy, e.z * sz);
+                    float d = Vector3.Dot(p - origin, dir);
+                    if (!found || d > lead)
+                    {
+                        lead = d;
+                        found = true;
+                    }
+                }
+            }
+
+            return found && lead > 0.0001f;
+        }
 
         /// <summary>기반 Material을 복제 + 색상 변경하여 적용. Outline/Metallic 유지.</summary>
         public void ApplyColor(Color color)

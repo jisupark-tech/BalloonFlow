@@ -76,6 +76,10 @@ namespace BalloonFlow
             public int scanLine;
             public float elapsed;
             public float duration;
+            // ROLLBACK_DART_NEEDLE_TIP_IMPACT:
+            // Remove impactTime/impactResolved and resolve only at duration to restore center-hit timing.
+            public float impactTime;
+            public bool impactResolved;
             public Vector3 startScale;
             public Vector3 targetScale;
 
@@ -884,9 +888,11 @@ namespace BalloonFlow
                 scanDir = DirectionalTargeting.DetermineScanDirection(to - from),
                 scanLine = GetScanLine(from, DirectionalTargeting.DetermineScanDirection(to - from)),
                 elapsed = 0f,
-                duration = ft
+                duration = ft,
+                impactTime = ft
             };
             ConfigureLaunchScale(proj, launchStartScale, balloonScale);
+            ConfigureNeedleTipImpactTiming(proj, dartObj, from, to, balloonScale);
 
             _activeProjectiles.Add(proj);
 
@@ -1790,9 +1796,11 @@ namespace BalloonFlow
                     scanDir = candidate.scanDir,
                     scanLine = candidate.scanLine,
                     elapsed = 0f,
-                    duration = ft
+                    duration = ft,
+                    impactTime = ft
                 };
                 ConfigureLaunchScale(proj, launchStartScale, balloonScale);
+                ConfigureNeedleTipImpactTiming(proj, dartObj, launchPos, travelTarget, balloonScale);
                 _activeProjectiles.Add(proj);
 
                 dartObj.transform.DOMove(travelTarget, ft).SetEase(Ease.Linear);
@@ -2311,8 +2319,14 @@ namespace BalloonFlow
                     proj.gameObject.transform.localScale = scale;
                 }
 
-                if (proj.elapsed >= proj.duration)
+                // ROLLBACK_DART_NEEDLE_TIP_IMPACT:
+                // Previous behavior resolved when the dart root reached targetPosition
+                // (`proj.elapsed >= proj.duration`). This resolves earlier when the needle tip
+                // reaches the balloon surface, without retargeting or changing scan logic.
+                float resolveTime = Mathf.Clamp(proj.impactTime, 0f, proj.duration);
+                if (!proj.impactResolved && proj.elapsed >= resolveTime)
                 {
+                    proj.impactResolved = true;
                     BalloonData impactData = BalloonController.HasInstance
                         ? BalloonController.Instance.GetBalloon(proj.targetBalloonId)
                         : null;
@@ -2336,6 +2350,8 @@ namespace BalloonFlow
                     // Do not retarget at impact time. Retargeting to the current first-hit cell lets
                     // a late projectile peel newly exposed inner cells, which is the continuous-fire
                     // bug. The authoritative gameplay hit is the fire-time target id.
+                    if (projObj != null)
+                        projObj.transform.DOKill();
                     ExecuteHit(proj.targetBalloonId, proj.color);
 
                     // ExecuteHit → OnBoardCleared → ClearAllDarts로 리스트가 비워질 수 있음
@@ -2346,6 +2362,92 @@ namespace BalloonFlow
                         _activeProjectiles.RemoveAt(i);
                 }
             }
+        }
+
+        // ROLLBACK_DART_NEEDLE_TIP_IMPACT:
+        // Remove this timing setup and the impactTime fields to return to center-arrival pop timing.
+        private static void ConfigureNeedleTipImpactTiming(
+            DartProjectile proj,
+            GameObject dartObj,
+            Vector3 from,
+            Vector3 to,
+            Vector3 balloonScale)
+        {
+            if (proj == null || dartObj == null || proj.duration <= 0f)
+                return;
+
+            Vector3 travel = to - from;
+            float travelDistance = travel.magnitude;
+            if (travelDistance <= 0.0001f)
+            {
+                proj.impactTime = 0f;
+                return;
+            }
+
+            Vector3 travelDir = travel / travelDistance;
+            float needleLead = GetNeedleTipLead(dartObj, travelDir);
+            float balloonSurfaceLead = GetBalloonSurfaceLead(balloonScale);
+            float earlyLead = Mathf.Max(0f, needleLead + balloonSurfaceLead);
+            if (earlyLead <= 0.0001f)
+            {
+                proj.impactTime = proj.duration;
+                return;
+            }
+
+            float impactDistance = Mathf.Clamp(travelDistance - earlyLead, 0f, travelDistance);
+            float impactT = impactDistance / travelDistance;
+            proj.impactTime = Mathf.Clamp(proj.duration * impactT, 0f, proj.duration);
+        }
+
+        private static float GetNeedleTipLead(GameObject dartObj, Vector3 travelDir)
+        {
+            DartIdentifier identifier = dartObj.GetComponent<DartIdentifier>();
+            if (identifier != null && identifier.TryGetNeedleTipLead(travelDir, out float identifierLead))
+                return Mathf.Max(0f, identifierLead);
+
+            Renderer[] renderers = dartObj.GetComponentsInChildren<Renderer>();
+            return TryGetRendererLead(dartObj.transform.position, renderers, travelDir, out float rendererLead)
+                ? Mathf.Max(0f, rendererLead)
+                : 0f;
+        }
+
+        private static bool TryGetRendererLead(Vector3 origin, Renderer[] renderers, Vector3 dir, out float lead)
+        {
+            lead = 0f;
+            if (renderers == null || renderers.Length == 0) return false;
+
+            bool found = false;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null) continue;
+                string n = r.gameObject.name;
+                if (n == "Shadow" || n.Contains("Particle")) continue;
+
+                Bounds b = r.bounds;
+                Vector3 c = b.center;
+                Vector3 e = b.extents;
+                for (int sx = -1; sx <= 1; sx += 2)
+                for (int sy = -1; sy <= 1; sy += 2)
+                for (int sz = -1; sz <= 1; sz += 2)
+                {
+                    Vector3 p = c + new Vector3(e.x * sx, e.y * sy, e.z * sz);
+                    float d = Vector3.Dot(p - origin, dir);
+                    if (!found || d > lead)
+                    {
+                        lead = d;
+                        found = true;
+                    }
+                }
+            }
+
+            return found && lead > 0.0001f;
+        }
+
+        private static float GetBalloonSurfaceLead(Vector3 balloonScale)
+        {
+            float diameter = Mathf.Max(Mathf.Abs(balloonScale.x), Mathf.Abs(balloonScale.z));
+            return Mathf.Max(0f, diameter * 0.5f);
         }
 
         // 발사 punch와 비행 lerp 모두 startScale(=레일 사이즈)을 절대 초과하지 않도록 cap — 사용자 피드백: 다트가 레일 위보다 커보이면 안 됨

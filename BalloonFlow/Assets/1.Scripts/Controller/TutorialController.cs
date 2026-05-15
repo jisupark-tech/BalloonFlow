@@ -61,6 +61,10 @@ namespace BalloonFlow
         // 0 이면 기본 200x200 사용 (backward compat).
         public float cutoutWidth;
         public float cutoutHeight;
+
+        // [2026-05-15] tap_anywhere 액션 시 TextTap/TextTapOutline 활성 + 위치 override.
+        public bool useTextTap = true;
+        public Vector2 textTapPosition;
     }
 
     /// <summary>
@@ -104,6 +108,11 @@ namespace BalloonFlow
         private const string ACTION_TAP_ANYWHERE = "tap_anywhere";
         private const string ACTION_NONE = "none";
 
+        // [2026-05-15] rail_warning 글로벌 튜토리얼 — gauge stage Warning(>=90%) 진입 시 1회 등장.
+        // 일반 level 기반 tutorialId 와 충돌 없는 1000 사용. PlayerPrefs 영구 저장 (앱 단위 1회).
+        private const int RAIL_WARNING_TUTORIAL_ID = 1000;
+        private const string PREFS_RAIL_WARNING_SHOWN = "BF_RailWarningTutorialShown";
+
         #endregion
 
         #region Fields
@@ -114,6 +123,14 @@ namespace BalloonFlow
         private TutorialConfig _activeTutorial;
         private int _currentStepIndex;
         private bool _isTutorialActive;
+
+        // [2026-05-15] 미클리어 재진입 시 튜토리얼 재등장 — 튜토리얼 완료/스킵 후에도 즉시 SaveCompletion 하지 않고,
+        // OnLevelCompleted (실제 스테이지 클리어) 시점에만 영구 저장. 클리어 못 하면 다음 진입 때 다시 등장.
+        // rail_warning 같은 글로벌 튜토리얼은 PREFS_RAIL_WARNING_SHOWN 별도 키로 즉시 저장.
+        private int _pendingCompletionTutorialId = -1;
+
+        // [2026-05-15] rail_warning 글로벌 튜토리얼 config — _configByLevel 안에 들어가지 않음.
+        private TutorialConfig _railWarningConfig;
 
         #endregion
 
@@ -136,6 +153,10 @@ namespace BalloonFlow
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Subscribe<OnHolderTapped>(HandleHolderTapped);
             EventBus.Subscribe<OnBalloonPopped>(HandleBalloonPopped);
+            // [2026-05-15] 미클리어 재진입 시 재등장 — Level 클리어 시점에만 영구 저장.
+            EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompletedForTutorial);
+            // [2026-05-15] rail_warning — gauge stage Warning(>=90%) 진입 시 1회 트리거.
+            EventBus.Subscribe<OnGaugeStageChanged>(HandleGaugeStageForRailWarning);
         }
 
         private void OnDisable()
@@ -143,6 +164,8 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Unsubscribe<OnHolderTapped>(HandleHolderTapped);
             EventBus.Unsubscribe<OnBalloonPopped>(HandleBalloonPopped);
+            EventBus.Unsubscribe<OnLevelCompleted>(HandleLevelCompletedForTutorial);
+            EventBus.Unsubscribe<OnGaugeStageChanged>(HandleGaugeStageForRailWarning);
         }
 
         #endregion
@@ -228,6 +251,10 @@ namespace BalloonFlow
         /// Skips the active tutorial immediately, marks it as complete.
         /// Re-enables input.
         /// </summary>
+        /// <remarks>
+        /// [2026-05-15] SaveCompletion 즉시 호출 제거. _pendingCompletionTutorialId 에만 저장 →
+        /// 스테이지 클리어(OnLevelCompleted) 시점에 영구 저장. Skip 만 하고 못 깨면 다음 진입 시 다시 등장.
+        /// </remarks>
         public void SkipTutorial()
         {
             if (!_isTutorialActive || _activeTutorial == null)
@@ -236,8 +263,8 @@ namespace BalloonFlow
             }
 
             int tutorialId = _activeTutorial.tutorialId;
+            _pendingCompletionTutorialId = tutorialId;
             StopActiveTutorial();
-            SaveCompletion(tutorialId);
 
             EventBus.Publish(new OnTutorialCompleted { tutorialId = tutorialId });
 
@@ -621,6 +648,10 @@ namespace BalloonFlow
 
         private TutorialConfig FindConfigById(int tutorialId)
         {
+            // [2026-05-15] rail_warning 글로벌 튜토리얼 우선 체크.
+            if (_railWarningConfig != null && _railWarningConfig.tutorialId == tutorialId)
+                return _railWarningConfig;
+
             foreach (TutorialConfig config in _configByLevel.Values)
             {
                 if (config.tutorialId == tutorialId)
@@ -686,6 +717,8 @@ namespace BalloonFlow
                     cutoutMaskSprite = src.cutoutMaskSprite,
                     cutoutWidth = src.cutoutWidth,
                     cutoutHeight = src.cutoutHeight,
+                    useTextTap = src.useTextTap,
+                    textTapPosition = src.textTapPosition,
                 };
             }
 
@@ -752,7 +785,9 @@ namespace BalloonFlow
             }
 
             int tutorialId = _activeTutorial.tutorialId;
-            SaveCompletion(tutorialId);
+            // [2026-05-15] 즉시 SaveCompletion 하지 않음 — 스테이지 클리어 시점에 저장.
+            // 튜토리얼만 끝내고 fail/quit 하면 다음 진입에서 다시 등장.
+            _pendingCompletionTutorialId = tutorialId;
             StopActiveTutorial();
 
             EventBus.Publish(new OnTutorialCompleted { tutorialId = tutorialId });
@@ -794,8 +829,72 @@ namespace BalloonFlow
                 StopCoroutine(_startTutorialCoroutine);
                 _startTutorialCoroutine = null;
             }
+            // [2026-05-15] 이전 레벨에서 pending 완료가 있었지만 클리어 안 한 채 다음 레벨 진입 → pending discard.
+            //   (해당 레벨 재진입이 아니라 LoadPendingLevel 등으로 넘어간 경우 클리어 안 한 거니까 pending 폐기.)
+            _pendingCompletionTutorialId = -1;
             // 로딩/fade 끝난 뒤 시작 — 튜토리얼이 로딩 화면 위로 떠 보이는 것 방지
             _startTutorialCoroutine = StartCoroutine(StartTutorialAfterLoad(evt.levelId));
+        }
+
+        /// <summary>
+        /// [2026-05-15] OnLevelCompleted — pending 완료된 튜토리얼이 있으면 영구 저장.
+        /// 클리어 못 한 채 튜토리얼만 끝낸 경우 pending 폐기되어 다음 진입 시 재등장.
+        /// </summary>
+        private void HandleLevelCompletedForTutorial(OnLevelCompleted evt)
+        {
+            if (_pendingCompletionTutorialId > 0)
+            {
+                SaveCompletion(_pendingCompletionTutorialId);
+                Debug.Log($"[TutorialDbg] Stage cleared → tutorialId={_pendingCompletionTutorialId} 영구 저장.");
+                _pendingCompletionTutorialId = -1;
+            }
+        }
+
+        /// <summary>
+        /// [2026-05-15] rail_warning — gauge stage Warning(>=90%) 진입 시 1회 글로벌 튜토리얼.
+        /// PlayerPrefs(PREFS_RAIL_WARNING_SHOWN) 영구 저장 — 앱 단위 평생 1회.
+        /// </summary>
+        private void HandleGaugeStageForRailWarning(OnGaugeStageChanged evt)
+        {
+            // 영구 저장된 적 있으면 skip.
+            if (PlayerPrefs.GetInt(PREFS_RAIL_WARNING_SHOWN, 0) == 1) return;
+            // 다른 튜토리얼 진행 중이면 중첩 방지.
+            if (_isTutorialActive) return;
+            // Warning 단계 (=3) 로 처음 진입할 때만 — 이미 Warning 이상에서 더 올라간 transition 제외.
+            if (evt.currentStage != (int)GaugeStage.Warning) return;
+            if (evt.previousStage >= (int)GaugeStage.Warning) return;
+
+            StartRailWarningTutorial();
+        }
+
+        private void StartRailWarningTutorial()
+        {
+            // 즉시 영구 저장 — 시작했으면 본 것으로 간주 (skip 해도 동일).
+            PlayerPrefs.SetInt(PREFS_RAIL_WARNING_SHOWN, 1);
+            PlayerPrefs.Save();
+
+            if (_railWarningConfig == null)
+            {
+                _railWarningConfig = new TutorialConfig
+                {
+                    tutorialId = RAIL_WARNING_TUTORIAL_ID,
+                    levelId = -1, // 글로벌 (특정 레벨 종속 X)
+                    tutorialName = "Rail Warning",
+                    steps = new TutorialStep[]
+                    {
+                        new TutorialStep
+                        {
+                            stepIndex = 0,
+                            instruction = "레일이 거의 가득 찼어요!\n보관함을 탭해서 비워주세요.",
+                            highlightTarget = string.Empty,
+                            requireAction = ACTION_TAP_ANYWHERE,
+                            isComplete = false,
+                            useTextTap = true
+                        }
+                    }
+                };
+            }
+            StartTutorial(RAIL_WARNING_TUTORIAL_ID);
         }
 
         private IEnumerator StartTutorialAfterLoad(int levelId)

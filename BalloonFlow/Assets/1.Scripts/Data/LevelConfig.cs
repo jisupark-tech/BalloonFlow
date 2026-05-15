@@ -158,6 +158,11 @@ namespace BalloonFlow
         public float handTweenDuration = 0.55f;
         /// <summary>CutoutMask 의 Image sprite. null 이면 prefab default 유지.</summary>
         public Sprite cutoutMaskSprite;
+
+        // [2026-05-15] tap_anywhere 액션 시 TextTap/TextTapOutline 표시 + 위치 override + alpha 깜빡.
+        // useTextTap = true 일 때만 활성 (requireAction="tap_anywhere" 와 무관하게 명시 토글).
+        public bool useTextTap = true;
+        public Vector2 textTapPosition;
     }
 
     /// <summary>

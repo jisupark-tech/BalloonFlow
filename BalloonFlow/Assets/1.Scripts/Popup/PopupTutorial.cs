@@ -31,6 +31,12 @@ namespace BalloonFlow
         [Header("[Tap Anywhere — 전체 화면 탭]")]
         [SerializeField] private Button _tapAnywhereButton;
 
+        [Header("[Tap Anywhere — 안내 텍스트 (tap_anywhere step 에서만 표시 + 깜빡)]")]
+        // [2026-05-15] tap_anywhere 액션 활성 시 TextTap + TextTapOutline 동시 ON/OFF.
+        // step.textTapPosition 으로 위치 조절. DOTween yoyo alpha 로 깜빡 애니메이션.
+        [SerializeField] private RectTransform _textTap;
+        [SerializeField] private RectTransform _textTapOutline;
+
         // ── Properties ──
         public RectTransform CutoutMask => _cutoutMask;
         public RectTransform CutoutFrame => _cutoutFrame;
@@ -40,5 +46,7 @@ namespace BalloonFlow
         public TextMeshProUGUI InstructionText => _instructionText;
         public Button SkipButton => _skipButton;
         public Button TapAnywhereButton => _tapAnywhereButton;
+        public RectTransform TextTap => _textTap;
+        public RectTransform TextTapOutline => _textTapOutline;
     }
 }

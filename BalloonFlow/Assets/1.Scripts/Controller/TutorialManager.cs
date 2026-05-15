@@ -74,6 +74,15 @@ namespace BalloonFlow
         private Button _tapAnywhereButton;
         private GameObject _tapAnywhereGO;
 
+        // [2026-05-15] TextTap / TextTapOutline — tap_anywhere step 에서만 표시 + alpha yoyo 깜빡.
+        private RectTransform _textTap;
+        private RectTransform _textTapOutline;
+        private CanvasGroup _textTapGroup;
+        private CanvasGroup _textTapOutlineGroup;
+        private Vector2 _defaultTextTapPosition;
+        private Vector2 _defaultTextTapOutlinePosition;
+        private Tween _textTapBlinkTween;
+
         // State
         private Coroutine _fadeDimCoroutine;
         private Coroutine _arrowBobCoroutine;
@@ -204,6 +213,24 @@ namespace BalloonFlow
                     {
                         if (TutorialController.HasInstance) TutorialController.Instance.AdvanceStep();
                     });
+
+                // [2026-05-15] TextTap / TextTapOutline 바인딩. CanvasGroup 없으면 부착 (alpha 제어용).
+                _textTap = popup.TextTap;
+                _textTapOutline = popup.TextTapOutline;
+                if (_textTap != null)
+                {
+                    _defaultTextTapPosition = _textTap.anchoredPosition;
+                    _textTapGroup = _textTap.GetComponent<CanvasGroup>();
+                    if (_textTapGroup == null) _textTapGroup = _textTap.gameObject.AddComponent<CanvasGroup>();
+                    _textTap.gameObject.SetActive(false);
+                }
+                if (_textTapOutline != null)
+                {
+                    _defaultTextTapOutlinePosition = _textTapOutline.anchoredPosition;
+                    _textTapOutlineGroup = _textTapOutline.GetComponent<CanvasGroup>();
+                    if (_textTapOutlineGroup == null) _textTapOutlineGroup = _textTapOutline.gameObject.AddComponent<CanvasGroup>();
+                    _textTapOutline.gameObject.SetActive(false);
+                }
             }
             else
             {
@@ -230,6 +257,8 @@ namespace BalloonFlow
             // BindFromPopup / 재바인딩 시 lambda 누적 leak 방지.
             if (_skipButton != null) _skipButton.onClick.RemoveAllListeners();
             if (_tapAnywhereButton != null) _tapAnywhereButton.onClick.RemoveAllListeners();
+            // [2026-05-15] DOTween yoyo loop kill — singleton destroy 시 tween 누수 방지.
+            StopTextTapBlink();
             base.OnDestroy();
         }
 
@@ -453,11 +482,61 @@ namespace BalloonFlow
 
         /// <summary>
         /// Enables or disables the "tap anywhere to continue" overlay.
+        /// [2026-05-15] TextTap/TextTapOutline 도 함께 ON/OFF + alpha 깜빡 yoyo.
+        /// step.useTextTap=false 시 텍스트는 비활성 (overlay 만 enable).
         /// </summary>
         public void SetTapAnywherEnabled(bool enabled)
         {
             if (_tapAnywhereGO != null)
                 _tapAnywhereGO.SetActive(enabled);
+
+            // step.useTextTap 토글 — null 이면 default true.
+            bool wantText = enabled;
+            if (enabled && TutorialController.HasInstance)
+            {
+                TutorialStep step = TutorialController.Instance.GetCurrentStep();
+                if (step != null && !step.useTextTap) wantText = false;
+            }
+
+            if (_textTap != null) _textTap.gameObject.SetActive(wantText);
+            if (_textTapOutline != null) _textTapOutline.gameObject.SetActive(wantText);
+
+            if (wantText) StartTextTapBlink();
+            else StopTextTapBlink();
+        }
+
+        private const float TEXTTAP_BLINK_DURATION = 0.55f;
+        private const float TEXTTAP_BLINK_MIN_ALPHA = 0.25f;
+
+        private void StartTextTapBlink()
+        {
+            StopTextTapBlink();
+            // 시작 alpha 1.0 → MIN_ALPHA yoyo. tap 안내라 빠른 깜빡 (0.55s) + 부드러운 ease.
+            Sequence seq = DOTween.Sequence();
+            seq.SetUpdate(true); // unscaled — 일시정지 영향 안 받음
+            if (_textTapGroup != null)
+            {
+                _textTapGroup.alpha = 1f;
+                seq.Join(_textTapGroup.DOFade(TEXTTAP_BLINK_MIN_ALPHA, TEXTTAP_BLINK_DURATION).SetEase(Ease.InOutSine));
+            }
+            if (_textTapOutlineGroup != null)
+            {
+                _textTapOutlineGroup.alpha = 1f;
+                seq.Join(_textTapOutlineGroup.DOFade(TEXTTAP_BLINK_MIN_ALPHA, TEXTTAP_BLINK_DURATION).SetEase(Ease.InOutSine));
+            }
+            seq.SetLoops(-1, LoopType.Yoyo);
+            _textTapBlinkTween = seq;
+        }
+
+        private void StopTextTapBlink()
+        {
+            if (_textTapBlinkTween != null)
+            {
+                _textTapBlinkTween.Kill();
+                _textTapBlinkTween = null;
+            }
+            if (_textTapGroup != null) _textTapGroup.alpha = 1f;
+            if (_textTapOutlineGroup != null) _textTapOutlineGroup.alpha = 1f;
         }
 
         #endregion
@@ -841,11 +920,18 @@ namespace BalloonFlow
                 if (step.useHandIndicator)
                     PlayHandTween(step);
             }
+
+            // [2026-05-15] TextTap 위치 override (step.textTapPosition!=zero 일 때만 적용 — zero 면 prefab default 유지).
+            if (_textTap != null && step.textTapPosition != Vector2.zero)
+                _textTap.anchoredPosition = step.textTapPosition;
+            if (_textTapOutline != null && step.textTapPosition != Vector2.zero)
+                _textTapOutline.anchoredPosition = step.textTapPosition;
         }
 
         private void ResetStepVisualOverrideState()
         {
             StopHandTween();
+            StopTextTapBlink();
 
             if (_cutoutFrameImage != null)
             {
@@ -858,6 +944,18 @@ namespace BalloonFlow
                 _handIndicator.localScale = _defaultHandScale;
                 _handIndicator.localEulerAngles = _defaultHandRotation;
                 _handIndicator.gameObject.SetActive(false);
+            }
+
+            // [2026-05-15] TextTap 비활성 + 위치 default 복원.
+            if (_textTap != null)
+            {
+                _textTap.anchoredPosition = _defaultTextTapPosition;
+                _textTap.gameObject.SetActive(false);
+            }
+            if (_textTapOutline != null)
+            {
+                _textTapOutline.anchoredPosition = _defaultTextTapOutlinePosition;
+                _textTapOutline.gameObject.SetActive(false);
             }
 
             if (_handImage != null)
