@@ -59,6 +59,32 @@ namespace BalloonFlow
                 _sprShuffle = rm.UISpriteOr("iconSuffle",  _sprShuffle);
                 _sprZap     = rm.UISpriteOr("iconZap",     _sprZap);
             }
+
+            // TopBar 잔액 라이브 갱신 — 누락 시 prefab 의 정적 "1900" 이 그대로 노출되어 사용자가
+            // 실제 보유 골드를 잘못 인지함 (구매 실패 원인 오해). 다른 popup 들 (Continue/Fail01/Fail02/GoldShop)
+            // 과 동일 패턴.
+            EnsureTopBarBinding();
+        }
+
+        private void EnsureTopBarBinding()
+        {
+            Transform topBar = FindChildRecursive(transform, "TopBarArea");
+            Transform gold = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
+            Transform txt = gold != null ? FindChildRecursive(gold, "TxtGold") : null;
+            if (txt != null && txt.GetComponent<AnimatedCoinLabel>() == null)
+                txt.gameObject.AddComponent<AnimatedCoinLabel>();
+        }
+
+        private static Transform FindChildRecursive(Transform parent, string childName)
+        {
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform child = parent.GetChild(i);
+                if (child.name == childName) return child;
+                Transform deep = FindChildRecursive(child, childName);
+                if (deep != null) return deep;
+            }
+            return null;
         }
 
         protected override void OnDestroy()

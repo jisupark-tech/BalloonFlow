@@ -25,6 +25,14 @@ namespace BalloonFlow
         private const int MAX_COLUMNS = 5;
         private const int MAGAZINE_FONT_SIZE = 8;
         private const float DEPLOY_MOVE_SPEED = 12f;
+        // ROLLBACK_DEPLOY_DEBUG_LOGS:
+        // Set BALLOONFLOW_DEPLOY_DEBUG to restore verbose deploy/deadlock diagnostics. Keeping this
+        // off in play builds prevents string formatting and logcat overhead during dense placement.
+#if BALLOONFLOW_DEPLOY_DEBUG
+        private static readonly bool DEPLOY_DEBUG_ENABLED = true;
+#else
+        private static readonly bool DEPLOY_DEBUG_ENABLED = false;
+#endif
 
         /// <summary>유저 가속(홀드/x2 토글) 반영된 보관함 이동 속도.
         /// 벨트와 동일 배율로 스케일 → 2x 토글 시 보관함도 2x 빠르게 배치점 도달.</summary>
@@ -44,6 +52,33 @@ namespace BalloonFlow
         private const float RATIO_RAIL_TO_QUEUE   = 0.65f;    // 필드 폭 × 보관함 거리
 
         #endregion
+
+        [System.Diagnostics.Conditional("BALLOONFLOW_DEPLOY_DEBUG")]
+        private static void LogDeployDebug(string message)
+        {
+            if (!DEPLOY_DEBUG_ENABLED) return;
+            Debug.Log(message);
+        }
+
+        // ROLLBACK_HOLDER_DEPLOY_PUNCH:
+        // Define BALLOONFLOW_HOLDER_DEPLOY_PUNCH or restore the direct DOPunchScale calls below if
+        // the holder bounce visual is required. Keeping it symbol-gated removes DOTween allocations
+        // during dense deploy without touching placement/attack/miss logic.
+        [System.Diagnostics.Conditional("BALLOONFLOW_HOLDER_DEPLOY_PUNCH")]
+        private static void PlayHolderPunch(Transform target, Vector3 strength, float duration, int vibrato, float elasticity)
+        {
+            if (target == null) return;
+            target.DOPunchScale(strength, duration, vibrato, elasticity);
+        }
+
+        // ROLLBACK_HOLDER_DEPLOY_PUNCH:
+        // Same rollback as PlayHolderPunch. This helper exists for sequence-based blocker feedback.
+        [System.Diagnostics.Conditional("BALLOONFLOW_HOLDER_DEPLOY_PUNCH")]
+        private static void AppendHolderPunch(Sequence seq, Transform target, Vector3 strength, float duration, int vibrato, float elasticity)
+        {
+            if (seq == null || target == null) return;
+            seq.Append(target.DOPunchScale(strength, duration, vibrato, elasticity));
+        }
 
         #region Color Palette
 
@@ -1011,8 +1046,9 @@ namespace BalloonFlow
                 if (!snapped && Vector3.Distance(visual.gameObject.transform.position, target) <= 0.05f)
                 {
                     snapped = true;
+                    // ROLLBACK_HOLDER_PUNCH_TWEEN:
+                    // Restore DOPunchScale here if the small holder arrival bounce is required.
                     visual.gameObject.transform.localScale = Vector3.one;
-                    visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
                 }
 
                 yield return null;
@@ -1110,8 +1146,9 @@ namespace BalloonFlow
             {
                 visual.gameObject.transform.position = targetPoint;
                 // deploy point 도착 펀치 (1회)
+                // ROLLBACK_HOLDER_PUNCH_TWEEN:
+                // Restore DOPunchScale here if the deploy arrival bounce is required.
                 visual.gameObject.transform.localScale = Vector3.one;
-                visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
             }
 
             visual.isMovingToRail = false;
@@ -1163,11 +1200,23 @@ namespace BalloonFlow
             // 대기 위치에서 실제 deploy point로 이동 (대기했던 경우)
             if (visual.gameObject != null && Vector3.Distance(visual.gameObject.transform.position, deployPoint) > 0.1f)
             {
+                // ROLLBACK_HOLDER_DEPLOY_MANUAL_MOVE:
+                // Previous behavior used DOMove + WaitForSeconds here. Manual MoveTowards avoids
+                // creating a tween while preserving the same deploy sequencing.
                 visual.gameObject.transform.DOKill();
-                float moveDist = Vector3.Distance(visual.gameObject.transform.position, deployPoint);
-                float moveDur = moveDist / EffectiveDeployMoveSpeed;
-                visual.gameObject.transform.DOMove(deployPoint, moveDur).SetEase(Ease.OutQuad);
-                yield return new WaitForSeconds(moveDur);
+                while (visual.gameObject != null
+                       && visual.deployGeneration == gen
+                       && !_cancelledHolders.Contains(visual.holderId)
+                       && Vector3.Distance(visual.gameObject.transform.position, deployPoint) > 0.1f)
+                {
+                    Vector3 current = visual.gameObject.transform.position;
+                    float step = EffectiveDeployMoveSpeed * Time.deltaTime;
+                    visual.gameObject.transform.position = Vector3.MoveTowards(current, deployPoint, step);
+                    yield return null;
+                }
+
+                if (visual.gameObject != null)
+                    visual.gameObject.transform.position = deployPoint;
             }
 
             // ── Phase 2: 배치 시작 (열 순차 — 내 차례) ──
@@ -1196,12 +1245,15 @@ namespace BalloonFlow
             // deploy point progress를 한 번만 계산 (고정 위치)
             float fixedDeployProgress = rail.GetProgressAtWorldPos(railAttachPoint);
             rail.RegisterDeployPoint(visual.holderId, fixedDeployProgress);
-            int fixedDeploySlot = rail.GetSlotAtPathDistance(fixedDeployProgress);
-            string fixedDeployClearState = rail.GetProgressClearFailReason(fixedDeployProgress, visual.holderId);
-            Debug.Log($"[DeployStart] holder={visual.holderId}(col{visual.column}) gen={gen} mag={visual.magazineRemaining} " +
-                      $"fixedProg={fixedDeployProgress:F2} fixedSlot={fixedDeploySlot} clearNow={rail.IsProgressClear(fixedDeployProgress, visual.holderId)} " +
-                      $"state={fixedDeployClearState} waitFrames={waitFrames} waitSec={(Time.unscaledTime - waitStart):F2} " +
-                      $"Rail={rail.OccupiedCount}/{rail.SlotCount} active={rail.GetActiveDeployPointCount()} dlh={rail.DeadlockHolderId}");
+            if (DEPLOY_DEBUG_ENABLED)
+            {
+                int fixedDeploySlot = rail.GetSlotAtPathDistance(fixedDeployProgress);
+                string fixedDeployClearState = rail.GetProgressClearFailReason(fixedDeployProgress, visual.holderId);
+                LogDeployDebug($"[DeployStart] holder={visual.holderId}(col{visual.column}) gen={gen} mag={visual.magazineRemaining} " +
+                               $"fixedProg={fixedDeployProgress:F2} fixedSlot={fixedDeploySlot} clearNow={rail.IsProgressClear(fixedDeployProgress, visual.holderId)} " +
+                               $"state={fixedDeployClearState} waitFrames={waitFrames} waitSec={(Time.unscaledTime - waitStart):F2} " +
+                               $"Rail={rail.OccupiedCount}/{rail.SlotCount} active={rail.GetActiveDeployPointCount()} dlh={rail.DeadlockHolderId}");
+            }
 
             // 배치 페이싱: belt 누적 이동 거리(distSinceLastPlacement)가 physicalGap에 도달할 때마다 1회 배치.
             // overshoot은 carry-over + placementProgress 보정으로 흡수 → 다트 간격이 항상 정확히 physicalGap.
@@ -1258,7 +1310,7 @@ namespace BalloonFlow
                 {
                     if (!visual.deadlockPauseLogged)
                     {
-                        Debug.Log($"[Deadlock] Holder {visual.holderId} (col {visual.column}) PAUSED — leftmost = {rail.DeadlockHolderId}");
+                        LogDeployDebug($"[Deadlock] Holder {visual.holderId} (col {visual.column}) PAUSED — leftmost = {rail.DeadlockHolderId}");
                         visual.deadlockPauseLogged = true;
                     }
                     yield return null;
@@ -1266,7 +1318,7 @@ namespace BalloonFlow
                 }
                 else if (visual.deadlockPauseLogged && rail.DeadlockHolderId < 0)
                 {
-                    Debug.Log($"[Deadlock] Holder {visual.holderId} RESUMED — deadlock cleared");
+                    LogDeployDebug($"[Deadlock] Holder {visual.holderId} RESUMED — deadlock cleared");
                     visual.deadlockPauseLogged = false;
                 }
 
@@ -1351,7 +1403,9 @@ namespace BalloonFlow
                     }
 
                     // 진단 로그
-                    Debug.Log($"[DEPLOY] holder={visual.holderId} (col {visual.column}) placed dart at slot={deploySlotIndex} (fixedDeployProgress={fixedDeployProgress:F2}). Rail={rail.OccupiedCount}/{rail.SlotCount}. DeadlockHolder={rail.DeadlockHolderId}");
+                    // ROLLBACK_DEPLOY_DEBUG_LOGS:
+                    // Use LogDeployDebug so release/play builds do not allocate this formatted string.
+                    LogDeployDebug($"[DEPLOY] holder={visual.holderId} (col {visual.column}) placed dart at slot={deploySlotIndex} (fixedDeployProgress={fixedDeployProgress:F2}). Rail={rail.OccupiedCount}/{rail.SlotCount}. DeadlockHolder={rail.DeadlockHolderId}");
 
                     if (deployStarted)
                         rail.ActivateDeployPoint(visual.holderId);
@@ -1369,8 +1423,9 @@ namespace BalloonFlow
                             visual.identifier.SetDartsOnRail(true);
                         if (visual.gameObject != null)
                         {
+                            // ROLLBACK_HOLDER_PUNCH_TWEEN:
+                            // Restore DOPunchScale here if the first-placement bounce is required.
                             visual.gameObject.transform.localScale = Vector3.one;
-                            visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
                         }
                     }
 
@@ -1419,7 +1474,7 @@ namespace BalloonFlow
                     }
                     int dartId = rail.PlaceDart(targetSlot, visual.color, visual.holderId);
                     if (dartId < 0) { TryEnterDeadlockIfNeeded(rail); break; }
-                    Debug.Log($"[DEPLOY] holder={visual.holderId} placed at slot={targetSlot}");
+                    LogDeployDebug($"[DEPLOY] holder={visual.holderId} placed at slot={targetSlot}");
                     if (deployStarted) rail.ActivateDeployPoint(visual.holderId);
                     placementsThisFrame_A++;
                     distSinceLastPlacement -= physGap;
@@ -1430,7 +1485,7 @@ namespace BalloonFlow
                         if (visual.identifier != null) visual.identifier.SetDartsOnRail(true);
                         if (visual.gameObject != null) {
                             visual.gameObject.transform.localScale = Vector3.one;
-                            visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
+                            PlayHolderPunch(visual.gameObject.transform, Vector3.one * 0.08f, 0.15f, 4, 0.3f);
                         }
                     }
                     float dartProgress = rail.GetPathDistanceForSlot(targetSlot);
@@ -1448,6 +1503,7 @@ namespace BalloonFlow
                 // placementProgress = fixedDeployProgress + overshoot — belt 가 overshoot 만큼 더 회전한 시점의 deploy 위치.
                 // distSinceLastPlacement = overshoot 으로 잉여만 carry → spacing drift 누적 손실 0.
                 // catch-up: 한 frame 안 N=floor(distSinceLastPlacement / physGap) placements 자연 처리.
+                var __placeBatchSw = InGamePerfLogger.StartSection();
                 int placementsThisFrame = 0;
                 bool fixedGateModeThisFrame = rail.ShouldUseFixedDeployPlacement(visual.holderId) || fixedGapBurstUnlocked;
                 int maxPlacementsThisFrame = fixedGateModeThisFrame ? MAX_RECOVERY_PLACEMENTS_PER_FRAME : MAX_PLACEMENTS_PER_FRAME;
@@ -1487,7 +1543,7 @@ namespace BalloonFlow
                         int originalBlockedSlot = rail.GetSlotAtPathDistance(originalBlockedProgress);
                         // [Stuck] 진단 로그 — IsProgressClear=false 원인 식별 (자기 cluster.tail vs 외부 dart vs capacity)
                         _lastStuckLogTime.TryGetValue(visual.holderId, out float __lastStuckT);
-                        if (Time.unscaledTime - __lastStuckT > STUCK_LOG_INTERVAL)
+                        if (DEPLOY_DEBUG_ENABLED && Time.unscaledTime - __lastStuckT > STUCK_LOG_INTERVAL)
                         {
                             _lastStuckLogTime[visual.holderId] = Time.unscaledTime;
                             int __slotIdx = rail.GetSlotAtPathDistance(placementProgress);
@@ -1497,7 +1553,7 @@ namespace BalloonFlow
                                 ? $"head.dartId={__clusterHead.dartId} head.progress={__clusterHead.progress:F2} head.frozen={__clusterHead.isFrozen}"
                                 : "head=null";
                             string __clearFailReason = rail.GetProgressClearFailReason(placementProgress, visual.holderId);
-                            Debug.Log($"[Stuck] holder={visual.holderId}(col{visual.column}) magRem={visual.magazineRemaining} " +
+                            LogDeployDebug($"[Stuck] holder={visual.holderId}(col{visual.column}) magRem={visual.magazineRemaining} " +
                                       $"placementProg={placementProgress:F2} overshoot={overshoot:F3} dist={distSinceLastPlacement:F3} " +
                                       $"appliedOvershoot={appliedOvershoot:F3} fixedProg={fixedDeployProgress:F2} deployStarted={deployStarted} lockFixed={lockPlacementToDeployPoint} " +
                                       $"→ slot{__slotIdx}: occupiedBy=holder{__slot.holderId} dartId={__slot.dartId} color={__slot.dartColor}. " +
@@ -1525,7 +1581,7 @@ namespace BalloonFlow
                             {
                                 int fallbackSlot = rail.GetSlotAtPathDistance(fallbackProgress);
                                 string fallbackState = rail.GetProgressClearFailReason(fallbackProgress, visual.holderId);
-                                Debug.Log($"[DeadlockFallback] holder={visual.holderId}(col{visual.column}) " +
+                                LogDeployDebug($"[DeadlockFallback] holder={visual.holderId}(col{visual.column}) " +
                                           $"fromProg={originalBlockedProgress:F2} fromSlot={originalBlockedSlot} " +
                                           $"toProg={fallbackProgress:F2} toSlot={fallbackSlot} " +
                                           $"overshoot={overshoot:F3} dist={distSinceLastPlacement:F3} " +
@@ -1548,10 +1604,10 @@ namespace BalloonFlow
                     if (!rail.IsDeployProgressPhysicallyClear(placementProgress, visual.color, visual.holderId, out string placementGapInfo))
                     {
                         _lastGapBlockLogTime.TryGetValue(visual.holderId, out float __lastGapBlockT);
-                        if (Time.unscaledTime - __lastGapBlockT > STUCK_LOG_INTERVAL)
+                        if (DEPLOY_DEBUG_ENABLED && Time.unscaledTime - __lastGapBlockT > STUCK_LOG_INTERVAL)
                         {
                             _lastGapBlockLogTime[visual.holderId] = Time.unscaledTime;
-                            Debug.Log($"[DeployGapBlocked] holder={visual.holderId}(col{visual.column}) magRem={visual.magazineRemaining} " +
+                            LogDeployDebug($"[DeployGapBlocked] holder={visual.holderId}(col{visual.column}) magRem={visual.magazineRemaining} " +
                                       $"placementProg={placementProgress:F2} overshoot={overshoot:F3} dist={distSinceLastPlacement:F3} " +
                                       $"appliedOvershoot={appliedOvershoot:F3} fixedProg={fixedDeployProgress:F2} deployStarted={deployStarted} lockFixed={lockPlacementToDeployPoint} " +
                                       $"reason={placementGapInfo}. " +
@@ -1575,10 +1631,10 @@ namespace BalloonFlow
                     }
 
                     bool wasFirstPlacement = !deployStarted;
-                    if (LOG_DEPLOY_GAP_DIAG || wasFirstPlacement || useDeadlockFallback)
+                    if (DEPLOY_DEBUG_ENABLED && (LOG_DEPLOY_GAP_DIAG || wasFirstPlacement || useDeadlockFallback))
                     {
                         int placedSlot = rail.GetSlotAtPathDistance(placementProgress);
-                        Debug.Log($"[DeployPlace] holder={visual.holderId}(col{visual.column}) dartId={dartId} " +
+                        LogDeployDebug($"[DeployPlace] holder={visual.holderId}(col{visual.column}) dartId={dartId} " +
                                   $"progress={placementProgress:F2} slot={placedSlot} fallback={useDeadlockFallback} first={wasFirstPlacement} " +
                                   $"overshoot={overshoot:F3} appliedOvershoot={appliedOvershoot:F3} lockFixed={lockPlacementToDeployPoint} magBefore={visual.magazineRemaining} " +
                                   $"{placementGapInfo} " +
@@ -1586,7 +1642,7 @@ namespace BalloonFlow
 
                         if (placementGapInfo.Contains("splitRisk=between"))
                         {
-                            Debug.Log($"[DeploySplitRisk] holder={visual.holderId}(col{visual.column}) dartId={dartId} " +
+                            LogDeployDebug($"[DeploySplitRisk] holder={visual.holderId}(col{visual.column}) dartId={dartId} " +
                                       $"progress={placementProgress:F2} slot={placedSlot} magBefore={visual.magazineRemaining} " +
                                       $"lockFixed={lockPlacementToDeployPoint} {placementGapInfo} advance={rail.GetAdvanceModeDebugInfo()}");
                         }
@@ -1617,7 +1673,7 @@ namespace BalloonFlow
                         if (visual.gameObject != null)
                         {
                             visual.gameObject.transform.localScale = Vector3.one;
-                            visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.15f, 4, 0.3f);
+                            PlayHolderPunch(visual.gameObject.transform, Vector3.one * 0.08f, 0.15f, 4, 0.3f);
                         }
                     }
 
@@ -1640,6 +1696,7 @@ namespace BalloonFlow
 
                 // magazine이 0이 됐으면 즉시 outer loop 종료 (Continue 경합으로 visual이
                 // CancelDeployAndReturnToQueue로 빠져 CompleteDeployment가 안 불리는 레이스 방지).
+                InGamePerfLogger.EndSection(__placeBatchSw, "HolderDeploy.PlaceBatch");
                 if (distSinceLastPlacement < physGap)
                 {
                     fixedGapBurstUnlocked = false;
@@ -1700,10 +1757,10 @@ namespace BalloonFlow
             int nearFullThreshold = Mathf.Max(0, rail.PhysicalCapacity - emptyAllowance);
             bool nearFull = rail.OccupiedCount >= nearFullThreshold;
 
-            if (Time.unscaledTime - _lastDeadlockDiagLogTime > DEADLOCK_DIAG_LOG_INTERVAL)
+            if (DEPLOY_DEBUG_ENABLED && Time.unscaledTime - _lastDeadlockDiagLogTime > DEADLOCK_DIAG_LOG_INTERVAL)
             {
                 _lastDeadlockDiagLogTime = Time.unscaledTime;
-                Debug.Log($"[Deadlock][Diag] check: rail={rail.OccupiedCount}/{rail.SlotCount} (nearFull={nearFull}), " +
+                LogDeployDebug($"[Deadlock][Diag] check: rail={rail.OccupiedCount}/{rail.SlotCount} (nearFull={nearFull}), " +
                           $"threshold={nearFullThreshold} emptyAllowance={emptyAllowance}, " +
                           $"activeDeploys={activeCount}, isDeployingHolders={isDeployingCount}, " +
                           $"deadlockHolder={rail.DeadlockHolderId}");
@@ -1731,7 +1788,7 @@ namespace BalloonFlow
                 return;
             }
 
-            Debug.Log($"[Deadlock] Detected. Leftmost = holder {leftmostHolderId} (col {leftmostCol}). " +
+            LogDeployDebug($"[Deadlock] Detected. Leftmost = holder {leftmostHolderId} (col {leftmostCol}). " +
                       $"Rail {rail.OccupiedCount}/{rail.SlotCount}, active deploys = {activeCount}.");
             rail.EnterDeadlockMode(leftmostHolderId);
         }
@@ -2133,7 +2190,7 @@ namespace BalloonFlow
             visual.gameObject.transform.localScale = Vector3.one;
             Sequence seq = DOTween.Sequence();
             seq.Append(visual.gameObject.transform.DOMove(push, 0.12f).SetEase(Ease.OutQuad));
-            seq.Append(visual.gameObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.12f, 3, 0.35f));
+            AppendHolderPunch(seq, visual.gameObject.transform, Vector3.one * 0.08f, 0.12f, 3, 0.35f);
             seq.Append(visual.gameObject.transform.DOMove(start, 0.16f).SetEase(Ease.OutQuad));
         }
 

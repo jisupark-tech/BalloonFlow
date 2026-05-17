@@ -22,7 +22,9 @@ namespace BalloonFlow
         // That made a row/column go blind after its first edge cell popped, so nearby lines won
         // the score race and produced penetration, misses, and staggered peeling. Live contour
         // keeps each exact line advancing to its current first-hit cell.
+#pragma warning disable 0414
         private static readonly bool USE_FROZEN_SHELL_SNAPSHOT = false;
+#pragma warning restore 0414
         private const int RECENT_LINE_PENALTY_FRAMES = 18;
         // 사용자 요구 (2026-05-07): "2행만 공격해야 하는데 1행도 공격" 이슈.
         // 1.35 → 0.7 로 strict 화 — dart 가 자기 perp 정렬 line 외 다른 line 의 balloon 후보로 안 잡힘.
@@ -600,6 +602,7 @@ namespace BalloonFlow
             // level reset, so use explicit invalidation and keep _edgeCacheFrame for diagnostics.
             if (!_edgeCacheDirty) return;
 
+            float __buildStamp = InGamePerfLogger.StartStampMs();
             _occupiedCells.Clear();
             _outsideCells.Clear();
             _floodQueue.Clear();
@@ -618,6 +621,7 @@ namespace BalloonFlow
             if (!BalloonController.HasInstance)
             {
                 _edgeCacheFrame = currentFrame;
+                InGamePerfLogger.EndSection(__buildStamp, "DirectionalTargeting.BuildEdgeCache");
                 return;
             }
 
@@ -625,14 +629,14 @@ namespace BalloonFlow
             if (all == null)
             {
                 _edgeCacheFrame = currentFrame;
+                InGamePerfLogger.EndSection(__buildStamp, "DirectionalTargeting.BuildEdgeCache");
                 return;
             }
 
-            int minX = int.MaxValue;
-            int maxX = int.MinValue;
-            int minY = int.MaxValue;
-            int maxY = int.MinValue;
-
+            // ROLLBACK_DIRECTIONAL_LINE_EDGE_CACHE:
+            // Previous code rebuilt an outside flood-fill grid for every dirty contour cache.
+            // Darts attack along four straight cardinal lines, so keep only each row/column's
+            // first occupied blocker. Non-targetable cells remain in the maps as blockers.
             for (int i = 0; i < all.Length; i++)
             {
                 BalloonData balloon = all[i];
@@ -650,19 +654,24 @@ namespace BalloonFlow
                 };
 
                 _occupiedCells[cell] = edge;
-                if (cell.x < minX) minX = cell.x;
-                if (cell.x > maxX) maxX = cell.x;
-                if (cell.y < minY) minY = cell.y;
-                if (cell.y > maxY) maxY = cell.y;
+                AddStraightLineEdge(_leftContourByRow, cell.y, edge, preferLower: true, useX: true);
+                AddStraightLineEdge(_rightContourByRow, cell.y, edge, preferLower: false, useX: true);
+                AddStraightLineEdge(_bottomContourByCol, cell.x, edge, preferLower: true, useX: false);
+                AddStraightLineEdge(_topContourByCol, cell.x, edge, preferLower: false, useX: false);
             }
 
             if (_occupiedCells.Count == 0)
             {
                 ClearShellSnapshot();
                 _edgeCacheFrame = currentFrame;
+                InGamePerfLogger.EndSection(__buildStamp, "DirectionalTargeting.BuildEdgeCache");
                 return;
             }
 
+            ClearShellSnapshot();
+            RebuildAttackableContourIdsFromLineMaps();
+
+#if false // ROLLBACK_DIRECTIONAL_LINE_EDGE_CACHE: restore this flood-fill block if line-edge cache is rolled back.
             int floodMinX = minX - 1;
             int floodMaxX = maxX + 1;
             int floodMinY = minY - 1;
@@ -689,8 +698,48 @@ namespace BalloonFlow
             else
                 ClearShellSnapshot();
             BuildShellLineMaps();
+#endif
 
             _edgeCacheFrame = currentFrame;
+            InGamePerfLogger.EndSection(__buildStamp, "DirectionalTargeting.BuildEdgeCache");
+        }
+
+        private static void AddStraightLineEdge(
+            Dictionary<int, EdgeTarget> map,
+            int line,
+            EdgeTarget edge,
+            bool preferLower,
+            bool useX)
+        {
+            if (!map.TryGetValue(line, out EdgeTarget existing))
+            {
+                map[line] = edge;
+                return;
+            }
+
+            int current = useX ? edge.cell.x : edge.cell.y;
+            int previous = useX ? existing.cell.x : existing.cell.y;
+            if (preferLower ? current < previous : current > previous)
+                map[line] = edge;
+        }
+
+        private static void RebuildAttackableContourIdsFromLineMaps()
+        {
+            AppendAttackableContourIds(_leftContourByRow);
+            AppendAttackableContourIds(_rightContourByRow);
+            AppendAttackableContourIds(_bottomContourByCol);
+            AppendAttackableContourIds(_topContourByCol);
+        }
+
+        private static void AppendAttackableContourIds(Dictionary<int, EdgeTarget> map)
+        {
+            foreach (var kvp in map)
+            {
+                EdgeTarget edge = kvp.Value;
+                if (!edge.targetable) continue;
+                _attackableContourIds.Add(edge.balloonId);
+                _contourColors.Add(edge.color);
+            }
         }
 
         private static void AddContourCandidate(EdgeTarget edge)
@@ -969,6 +1018,7 @@ namespace BalloonFlow
 
         private static bool IsDirectlyTargetable(BalloonData balloon)
         {
+            if (BalloonController.HasInstance && BalloonController.Instance.IsBalloonConcealed(balloon.balloonId)) return false;
             if (balloon.gimmickType == BalloonController.GimmickWall) return false;
             if (balloon.gimmickType == BalloonController.GimmickIce) return false;
             if (balloon.gimmickType == BalloonController.GimmickColorCurtain) return false;

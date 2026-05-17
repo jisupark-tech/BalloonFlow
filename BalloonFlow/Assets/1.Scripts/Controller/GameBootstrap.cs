@@ -66,9 +66,9 @@ namespace BalloonFlow
             LoadUI();
 
             // 레벨 로드
-            int loadedLevelId = LoadPendingLevel();
-            // WHY: fade-in 종료 전에 팝업이 열리면 로딩 오버레이 뒤에 가려 보였다가 갑자기 나타나는 문제 차단
-            StartCoroutine(ShowBoosterUnlockPopupDeferred(loadedLevelId));
+            LoadPendingLevel();
+            // WHY: 부스터 언락 팝업 트리거는 HandleLevelLoaded 에서 처리.
+            // Start() 만으로 트리거하면 같은 씬 안 Next/Retry 로 9/12/15 진입 시 미발화 → 사용자가 영원히 못 봄.
 
             // 레벨 로드 후 난이도별 배경색 적용
             if (CameraManager.HasInstance)
@@ -433,6 +433,8 @@ namespace BalloonFlow
         {
             _pendingResultIsWin = false;
             StartCoroutine(PlayHudEnterAnimationDeferred());
+            // 첫 진입 + Next/Retry/Continue 경로 일관 — Start() 단발 트리거였을 때 같은 씬 안 레벨 전환 9/12/15 미발화 버그 차단.
+            StartCoroutine(ShowBoosterUnlockPopupDeferred(_evt.levelId));
         }
 
         /// <summary>로딩/페이드 완료 후 HUD 슬라이드-인 연출 트리거. ShowBoosterUnlockPopupDeferred 와 동일 패턴.</summary>

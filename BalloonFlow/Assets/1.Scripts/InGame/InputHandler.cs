@@ -10,105 +10,65 @@ namespace BalloonFlow
     /// Raycasts to Holder colliders and publishes OnHolderTapped events.
     /// Uses New Input System (Unity 6000+).
     /// </summary>
-    /// <remarks>
-    /// Layer: Core | Genre: Puzzle | Role: Handler | Phase: 0
-    /// DB Reference: No DB match found — generated from L3 YAML logicFlow
-    /// </remarks>
     public class InputHandler : SceneSingleton<InputHandler>
     {
-        #region Constants
-
         private const string HOLDER_TAG = "Holder";
-
-        #endregion
-
-        #region Serialized Fields
 
         [SerializeField] private Camera _gameCamera;
         [SerializeField] private LayerMask _holderLayerMask = ~0;
 
-        // [Optimization 2026-05-10] RaycastAll 매 입력마다 RaycastHit[] alloc 하던 부분 제거.
-        // 16 = 한 ray 가 통과하는 holder collider 의 현실적 상한 (보드 holder ~5–8개). 부족 시 size 확장.
-        // 정렬 comparer 도 람다 alloc 대신 정적 캐시 사용.
-        // 롤백: 두 필드 제거 + Tap 메서드 의 RaycastAll/Array.Sort 원본 라인 복원.
+        // ROLLBACK_INPUT_NO_SORT_RAYCAST:
+        // Restore RaycastAll/Array.Sort if exact hit ordering is needed again.
+        // Current gameplay only needs the closest HolderIdentifier hit, so this avoids per-click
+        // sorting and repeated GetComponent calls without changing holder selection rules.
         private static readonly RaycastHit[] _raycastHitsCache = new RaycastHit[16];
-        private static readonly IComparer<RaycastHit> _hitDistanceComparer =
-            Comparer<RaycastHit>.Create((a, b) => a.distance.CompareTo(b.distance));
-
-        #endregion
-
-        #region Fields
+        private static readonly Dictionary<Collider, HolderIdentifier> _holderByCollider =
+            new Dictionary<Collider, HolderIdentifier>(64);
 
         private bool _inputEnabled = true;
 
-        #endregion
-
-        #region Properties
-
-        /// <summary>
-        /// Whether input processing is currently enabled.
-        /// </summary>
         public bool IsInputEnabled() => _inputEnabled;
-
-        #endregion
-
-        #region Lifecycle
 
         protected override void OnSingletonAwake()
         {
             if (_gameCamera == null)
-            {
                 _gameCamera = Camera.main;
-            }
         }
 
         private void Update()
         {
-            if (!_inputEnabled)
+            if (!_inputEnabled) return;
+            var __sw = InGamePerfLogger.StartSection();
+            try
             {
-                return;
+                ProcessInput();
             }
-
-            ProcessInput();
+            finally
+            {
+                InGamePerfLogger.EndSection(__sw, "InputHandler.Update");
+            }
         }
 
-        #endregion
-
-        #region Public Methods
-
-        /// <summary>
-        /// Enables input processing.
-        /// </summary>
         public void EnableInput()
         {
             _inputEnabled = true;
             EventBus.Publish(new OnInputStateChanged { enabled = true });
         }
 
-        /// <summary>
-        /// Disables input processing.
-        /// </summary>
         public void DisableInput()
         {
             _inputEnabled = false;
             EventBus.Publish(new OnInputStateChanged { enabled = false });
         }
 
-        #endregion
-
-        #region Private Methods
-
         private void ProcessInput()
         {
-            // Touch input (mobile)
             if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
             {
-                Vector2 pos = Touchscreen.current.primaryTouch.position.ReadValue();
-                TryRaycastHolder(pos);
+                TryRaycastHolder(Touchscreen.current.primaryTouch.position.ReadValue());
                 return;
             }
 
-            // Mouse input (editor / desktop)
             if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
             {
                 TryRaycastHolder(Mouse.current.position.ReadValue());
@@ -117,71 +77,79 @@ namespace BalloonFlow
 
         private void TryRaycastHolder(Vector2 screenPosition)
         {
-            if (_gameCamera == null)
-            {
-                return;
-            }
+            if (_gameCamera == null) return;
 
             Ray ray = _gameCamera.ScreenPointToRay(screenPosition);
 
-            // Color Remove 모드: 풍선 클릭 감지 (Collider-free)
             if (BoosterExecutor.HasInstance && BoosterExecutor.Instance.IsAwaitingBalloonClick)
             {
                 if (BalloonController.HasInstance)
                 {
-                    // Orthographic 카메라: screenPos → worldPos (Y=0 평면)
+                    var __boosterSw = InGamePerfLogger.StartSection();
                     Vector3 worldPos = _gameCamera.ScreenToWorldPoint(
                         new Vector3(screenPosition.x, screenPosition.y, _gameCamera.nearClipPlane));
-                    worldPos.y = 0.1f; // 풍선 Y 높이
+                    worldPos.y = 0.1f;
 
                     int balloonId = BalloonController.Instance.FindNearestBalloonAtWorldPos(worldPos);
+                    InGamePerfLogger.EndSection(__boosterSw, "Input.BoosterBalloonPick");
                     if (balloonId >= 0)
                     {
                         BoosterExecutor.Instance.OnBalloonClicked(balloonId);
-                        return; // Don't process holder tap
-                    }
-                }
-            }
-
-            // RaycastAll: 앞줄이 뒷줄을 가려도 모든 hit 처리
-            // [Optimization 2026-05-10] RaycastNonAlloc + 정적 buffer + 정적 comparer → 매 입력 GC alloc 0.
-            // 롤백: 캐시 분기 제거 + 아래 주석 처리된 원본 라인 복원.
-            // 원본:
-            // RaycastHit[] hits = Physics.RaycastAll(ray, Mathf.Infinity, _holderLayerMask);
-            // if (hits.Length == 0) return;
-            // System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-            int hitCount = Physics.RaycastNonAlloc(ray, _raycastHitsCache, Mathf.Infinity, _holderLayerMask);
-            if (hitCount == 0) return;
-
-            // 카메라에서 가장 가까운 hit부터 정렬 (buffer 의 앞 hitCount 만)
-            System.Array.Sort(_raycastHitsCache, 0, hitCount, _hitDistanceComparer);
-
-            for (int i = 0; i < hitCount; i++)
-            {
-                HolderIdentifier holder = _raycastHitsCache[i].collider.GetComponent<HolderIdentifier>();
-                if (holder == null) continue;
-
-                bool boosterAwaiting = BoosterExecutor.HasInstance
-                    && BoosterExecutor.Instance.IsAwaitingHolderSelection;
-
-                if (!boosterAwaiting)
-                {
-                    if (HolderVisualManager.HasInstance
-                        && !HolderVisualManager.Instance.IsInFrontRow(holder.HolderId))
-                    {
-                        // 앞줄 아닌 보관함: Click 애니메이션만
-                        EventBus.Publish(new OnHolderClickAnim { holderId = holder.HolderId });
                         return;
                     }
                 }
+            }
 
-                // 앞줄 보관함 또는 부스터 모드: 정상 탭 처리
-                EventBus.Publish(new OnHolderTapped { holderId = holder.HolderId });
+            var __raySw = InGamePerfLogger.StartSection();
+            int hitCount = Physics.RaycastNonAlloc(ray, _raycastHitsCache, Mathf.Infinity, _holderLayerMask);
+            InGamePerfLogger.EndSection(__raySw, "Input.RaycastNonAlloc");
+            if (hitCount == 0) return;
+
+            var __selectSw = InGamePerfLogger.StartSection();
+            HolderIdentifier holder = null;
+            float closestDistance = float.MaxValue;
+            for (int i = 0; i < hitCount; i++)
+            {
+                Collider hitCollider = _raycastHitsCache[i].collider;
+                if (hitCollider == null) continue;
+
+                HolderIdentifier candidate = GetHolderFromCollider(hitCollider);
+                if (candidate == null) continue;
+
+                float distance = _raycastHitsCache[i].distance;
+                if (distance >= closestDistance) continue;
+
+                holder = candidate;
+                closestDistance = distance;
+            }
+            InGamePerfLogger.EndSection(__selectSw, "Input.SelectClosestHolder");
+
+            if (holder == null) return;
+
+            bool boosterAwaiting = BoosterExecutor.HasInstance
+                && BoosterExecutor.Instance.IsAwaitingHolderSelection;
+
+            if (!boosterAwaiting
+                && HolderVisualManager.HasInstance
+                && !HolderVisualManager.Instance.IsInFrontRow(holder.HolderId))
+            {
+                EventBus.Publish(new OnHolderClickAnim { holderId = holder.HolderId });
                 return;
             }
+
+            EventBus.Publish(new OnHolderTapped { holderId = holder.HolderId });
         }
 
-        #endregion
+        private static HolderIdentifier GetHolderFromCollider(Collider col)
+        {
+            if (col == null) return null;
+            if (_holderByCollider.TryGetValue(col, out HolderIdentifier cached))
+                return cached;
+
+            HolderIdentifier holder = col.GetComponent<HolderIdentifier>();
+            _holderByCollider[col] = holder;
+            return holder;
+        }
     }
 
     // HolderIdentifier moved to HolderIdentifier.cs (Unity requires class name == file name for prefab serialization)

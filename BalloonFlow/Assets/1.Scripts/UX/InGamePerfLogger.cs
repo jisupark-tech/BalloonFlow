@@ -27,6 +27,15 @@ namespace BalloonFlow
         private const float SPIKE_THRESHOLD_MS = 33f;     // 30FPS 한계
         private const float REPORT_INTERVAL_S  = 1f;       // 1초마다 누적 통계
 
+        // ROLLBACK_PERF_LOGGER_NO_SPIKE_WARNINGS:
+        // Restore true / BALLOONFLOW_PERF_SPIKE_WARNINGS if per-frame spike callstacks are needed.
+        // In Editor those warnings can become the measured frame spike.
+#if BALLOONFLOW_PERF_SPIKE_WARNINGS
+        private static readonly bool LOG_EACH_FRAME_SPIKE = true;
+#else
+        private static readonly bool LOG_EACH_FRAME_SPIKE = false;
+#endif
+
         private float _accumTime;
         private int   _accumFrames;
         private float _accumMaxMs;
@@ -36,16 +45,28 @@ namespace BalloonFlow
         // 매니저별 누적 ms (1초 윈도우)
         private static readonly System.Collections.Generic.Dictionary<string, float> _sectionTotalMs = new();
         private static readonly System.Collections.Generic.Dictionary<string, int>   _sectionCount   = new();
+        private static readonly System.Collections.Generic.Dictionary<string, float> _sectionMaxMs   = new();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoSpawn()
         {
 #if BALLOONFLOW_ENABLE_PERF_LOGGER
+            // ROLLBACK_PERF_LOGGER_SYMBOL_ONLY:
+            // Restore the UNITY_EDITOR / DEVELOPMENT_BUILD gate if the logger should auto-run there.
             const string GO_NAME = "[InGamePerfLogger]";
             if (GameObject.Find(GO_NAME) != null) return;
             var go = new GameObject(GO_NAME);
             DontDestroyOnLoad(go);
             go.AddComponent<InGamePerfLogger>();
+#endif
+        }
+
+        private void Awake()
+        {
+#if BALLOONFLOW_ENABLE_PERF_LOGGER && !BALLOONFLOW_PERF_KEEP_LOG_STACKTRACE
+            // ROLLBACK_PERF_LOGGER_DISABLE_LOG_STACKTRACE:
+            // Define BALLOONFLOW_PERF_KEEP_LOG_STACKTRACE if perf log callstacks are needed.
+            Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
 #endif
         }
 
@@ -60,7 +81,8 @@ namespace BalloonFlow
             if (ms > SPIKE_THRESHOLD_MS)
             {
                 _accumSpikes += 1;
-                Debug.LogWarning($"[Perf] Frame spike: {ms:F1}ms ({1000f/ms:F0}FPS) at {Time.frameCount}");
+                if (LOG_EACH_FRAME_SPIKE)
+                    Debug.LogWarning($"[Perf] Frame spike: {ms:F1}ms ({1000f/ms:F0}FPS) at {Time.frameCount}");
             }
 
             _reportTimer += dt;
@@ -76,6 +98,7 @@ namespace BalloonFlow
                 {
                     _sectionTotalMs.Clear();
                     _sectionCount.Clear();
+                    _sectionMaxMs.Clear();
                 }
             }
         }
@@ -96,14 +119,22 @@ namespace BalloonFlow
                     foreach (var kv in _sectionTotalMs)
                     {
                         int cnt = _sectionCount.TryGetValue(kv.Key, out int c) ? c : 1;
-                        sb.Append(' ').Append(kv.Key).Append('=').Append((kv.Value / cnt).ToString("F2")).Append("ms");
+                        float max = _sectionMaxMs.TryGetValue(kv.Key, out float m) ? m : 0f;
+                        sb.Append(' ')
+                          .Append(kv.Key)
+                          .Append('=')
+                          .Append((kv.Value / cnt).ToString("F2"))
+                          .Append("ms/")
+                          .Append(max.ToString("F2"))
+                          .Append("max#")
+                          .Append(cnt);
                     }
                     sectionDump = sb.ToString();
                 }
             }
 
             // LogWarning 으로 승격 — Editor Console / logcat 의 priority filter 에서 묻히지 않게
-            Debug.LogWarning($"[Perf] 1s avg={avgFps:F0}FPS ({avgMs:F1}ms), max={_accumMaxMs:F1}ms, spikes={_accumSpikes}/{_accumFrames}{sectionDump}");
+            Debug.Log($"[Perf] 1s avg={avgFps:F0}FPS ({avgMs:F1}ms), max={_accumMaxMs:F1}ms, spikes={_accumSpikes}/{_accumFrames}{sectionDump}");
         }
 
         // ─────────────────────────────────────────
@@ -120,24 +151,59 @@ namespace BalloonFlow
 #endif
         }
 
+        /// <summary>Hot path 안쪽의 작은 구간을 allocation 없이 재기 위한 timestamp.</summary>
+        public static float StartStampMs()
+        {
+#if BALLOONFLOW_ENABLE_PERF_LOGGER
+            return Time.realtimeSinceStartup * 1000f;
+#else
+            return 0f;
+#endif
+        }
+
+        public static void EndSection(float startMs, string label)
+        {
+#if BALLOONFLOW_ENABLE_PERF_LOGGER
+            RecordSectionMs(label, ElapsedMs(startMs));
+#endif
+        }
+
+        public static float ElapsedMs(float startMs)
+        {
+#if BALLOONFLOW_ENABLE_PERF_LOGGER
+            return Time.realtimeSinceStartup * 1000f - startMs;
+#else
+            return 0f;
+#endif
+        }
+
         /// <summary>매니저 측 hot path 끝. 1초 누적에 합산. label 별 평균 ms 표시.</summary>
         public static void EndSection(Stopwatch sw, string label)
         {
 #if BALLOONFLOW_ENABLE_PERF_LOGGER
             if (sw == null) return;
             sw.Stop();
-            float ms = (float)sw.Elapsed.TotalMilliseconds;
+            RecordSectionMs(label, (float)sw.Elapsed.TotalMilliseconds);
+#endif
+        }
+
+        public static void RecordSectionMs(string label, float ms)
+        {
+#if BALLOONFLOW_ENABLE_PERF_LOGGER
             lock (_sectionTotalMs)
             {
                 if (_sectionTotalMs.ContainsKey(label))
                 {
                     _sectionTotalMs[label] += ms;
                     _sectionCount[label]   += 1;
+                    if (!_sectionMaxMs.ContainsKey(label) || ms > _sectionMaxMs[label])
+                        _sectionMaxMs[label] = ms;
                 }
                 else
                 {
                     _sectionTotalMs[label] = ms;
                     _sectionCount[label]   = 1;
+                    _sectionMaxMs[label]   = ms;
                 }
             }
 #endif

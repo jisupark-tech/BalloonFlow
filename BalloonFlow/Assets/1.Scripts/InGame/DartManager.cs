@@ -69,6 +69,10 @@ namespace BalloonFlow
         private class DartProjectile
         {
             public GameObject gameObject;
+            // ROLLBACK_DART_PROJECTILE_MANUAL_MOVE:
+            // Remove startPosition and restore DOMove in FireDartCandidate to return projectile
+            // visuals to DOTween-driven movement.
+            public Vector3 startPosition;
             public Vector3 targetPosition;
             public int targetBalloonId;
             public int color;
@@ -114,6 +118,22 @@ namespace BalloonFlow
         private readonly Dictionary<int, SlotDartVisual> _slotVisuals = new Dictionary<int, SlotDartVisual>();
         private readonly Dictionary<int, SlotDartVisual> _dartVisuals = new Dictionary<int, SlotDartVisual>();
         private readonly List<DartProjectile> _activeProjectiles = new List<DartProjectile>();
+        private readonly Stack<DartProjectile> _projectilePool = new Stack<DartProjectile>(32);
+        // ROLLBACK_DART_RENDERER_LIST_CACHE:
+        // Restore GetComponentsInChildren<Renderer>() array fallback in ApplyColor if this causes
+        // prefab-specific renderer assignment issues.
+        private readonly List<Renderer> _applyColorRendererCache = new List<Renderer>(8);
+        // ROLLBACK_DART_PROJECTILE_MANUAL_MOVE:
+        // Shared scratch list avoids Renderer[] allocation when resolving needle-tip lead from
+        // prefab renderers. Remove this and restore GetComponentsInChildren<Renderer>() fallback
+        // if the manual projectile optimization is rolled back.
+        private static readonly List<Renderer> _needleLeadRendererCache = new List<Renderer>(8);
+        // ROLLBACK_DART_IDENTIFIER_CACHE:
+        // Remove this cache and call dartObj.GetComponent<DartIdentifier>() directly in
+        // GetNeedleTipLead if prefab components are added/removed dynamically at runtime. The cache
+        // only avoids repeated component lookups during fire bursts; it does not change impact math.
+        private static readonly Dictionary<int, DartIdentifier> _dartIdentifierCache =
+            new Dictionary<int, DartIdentifier>(64);
         private readonly List<RailManager.DartOnRail> _scanHeadDarts = new List<RailManager.DartOnRail>(16);
         private readonly List<DartFireCandidate> _fireCandidates = new List<DartFireCandidate>(16);
         private static readonly System.Comparison<RailManager.DartOnRail> CompareDartPlacedSeq =
@@ -185,16 +205,28 @@ namespace BalloonFlow
         // ROLLBACK_DART_STABLE_OUTER_HIT:
         // Heavy targeting diagnostics were useful while isolating penetration/miss cases, but
         // they allocate and format large strings for every fire/pop. Keep them opt-in.
+#if BALLOONFLOW_DART_TARGETING_DEBUG
+        private static readonly bool DART_TARGETING_DEBUG = true;
+#else
         private static readonly bool DART_TARGETING_DEBUG = false;
+#endif
         // ROLLBACK_DART_MISS_SUSPECT_DIAG:
         // Debug.Log itself causes visible frame drops during dense firing. Keep this off for play,
         // and enable only while capturing a short miss sample.
+#if BALLOONFLOW_DART_MISS_SUSPECT_DEBUG
+        private static readonly bool DART_MISS_SUSPECT_DEBUG = true;
+#else
         private static readonly bool DART_MISS_SUSPECT_DEBUG = false;
+#endif
         // ROLLBACK_DART_ATTACK_ISSUE_DEBUG:
         // Temporary, throttled diagnostics for continuous-fire and miss paths. Disable this after
         // capturing a repro sample; every branch below is intentionally log-only except the matching
         // holder-line guard inside FireDartCandidate.
+#if BALLOONFLOW_DART_ATTACK_ISSUE_DEBUG
+        private static readonly bool DART_ATTACK_ISSUE_DEBUG = true;
+#else
         private static readonly bool DART_ATTACK_ISSUE_DEBUG = false;
+#endif
 
         // ROLLBACK_DART_CROSSED_LINE_CACHE_FIX:
         // At x2 speed or after a long frame, a head can cross several grid lines before this scan
@@ -220,7 +252,6 @@ namespace BalloonFlow
         // that holder's newly promoted head, with a tiny cap, so this does not become free-fire.
         private const int MAX_POST_FIRE_HEAD_RESCANS_PER_HOLDER = 1;
         private const float POST_FIRE_HEAD_RESCAN_MIN_SPEED = 1.01f;
-        private const float POST_FIRE_HEAD_RESCAN_MIN_DELTA_TIME = 1f / 45f;
         private const int MAX_MISS_SUSPECT_LOGS_PER_FRAME = 1;
         private const int MAX_ATTACK_ISSUE_LOGS_PER_FRAME = 8;
         private int _lastMissSuspectLogFrame = -1;
@@ -281,13 +312,20 @@ namespace BalloonFlow
             {
             if (_boardFinished) return;
 
+            var __slotSw = InGamePerfLogger.StartSection();
             UpdateSlotDartPositions();
+            InGamePerfLogger.EndSection(__slotSw, "Dart.UpdateSlotDartPositions");
+
+            var __perDartSw = InGamePerfLogger.StartSection();
             UpdatePerDartPositions();
+            InGamePerfLogger.EndSection(__perDartSw, "Dart.UpdatePerDartPositions");
 
             // ROLLBACK_DART_PROJECTILE_RESOLVE_BEFORE_SCAN:
             // Resolve completed projectiles before scanning new heads. Otherwise a target that should
             // pop this frame is still in _reservedTargets and the contour cache is stale during scan.
+            var __projectileSw = InGamePerfLogger.StartSection();
             UpdateProjectiles();
+            InGamePerfLogger.EndSection(__projectileSw, "Dart.UpdateProjectiles");
 
             // 셀 한 칸당 1회 스캔 (cellSpacing/dartSpeed 인터벌). MAX 제약은 제거 — 한 틱당 모든 ready 다트 발사.
             // (매 프레임 호출하면 N*M FindTarget 으로 부하 심함. timer로 ~60% 감소, 발사 정확도는 동일.)
@@ -295,7 +333,9 @@ namespace BalloonFlow
             // Scan head darts by row/column changes, not by a frame-sampled timer. This reduces
             // targeting work on frames where heads stay on the same line and avoids missing attack
             // lines when a long frame moves a dart across more than one grid line.
+            var __scanSw = InGamePerfLogger.StartSection();
             ScanAndFirePerDart();
+            InGamePerfLogger.EndSection(__scanSw, "Dart.ScanAndFirePerDart");
             }
             finally { InGamePerfLogger.EndSection(__sw, "DartManager.Update"); }
         }
@@ -327,7 +367,10 @@ namespace BalloonFlow
             for (int i = _activeProjectiles.Count - 1; i >= 0; i--)
             {
                 if (i < _activeProjectiles.Count)
+                {
                     ReturnDartToPool(_activeProjectiles[i].gameObject);
+                    ReleaseProjectile(_activeProjectiles[i]);
+                }
             }
             _activeProjectiles.Clear();
             _reservedTargets.Clear();
@@ -412,9 +455,10 @@ namespace BalloonFlow
             };
 
             // 배치 연출: pop-in 스케일 애니 (매 배치마다 가시적 피드백)
+            // ROLLBACK_DART_PLACE_POPIN_TWEEN:
+            // Restore zero-scale + DOScale pop-in if the placement animation is needed again.
             dartObj.transform.DOKill();
-            dartObj.transform.localScale = Vector3.zero;
-            dartObj.transform.DOScale(slotTargetScale, 0.22f).SetEase(Ease.OutBack);
+            dartObj.transform.localScale = slotTargetScale;
         }
 
         /// <summary>
@@ -474,9 +518,10 @@ namespace BalloonFlow
             };
 
             // 배치 연출: 0 → targetScale 로 OutBack pop-in (매 배치마다 가시적 피드백).
+            // ROLLBACK_DART_PLACE_POPIN_TWEEN:
+            // Restore zero-scale + DOScale pop-in if the placement animation is needed again.
             dartObj.transform.DOKill();
-            dartObj.transform.localScale = Vector3.zero;
-            dartObj.transform.DOScale(targetScale, 0.22f).SetEase(Ease.OutBack);
+            dartObj.transform.localScale = targetScale;
         }
 
         #endregion
@@ -886,18 +931,16 @@ namespace BalloonFlow
                 : dartObj.transform.localScale;
             Vector3 launchStartScale = dartObj.transform.localScale;
 
-            var proj = new DartProjectile
-            {
-                gameObject = dartObj,
-                targetPosition = to,
-                targetBalloonId = targetBalloonId,
-                color = color,
-                scanDir = DirectionalTargeting.DetermineScanDirection(to - from),
-                scanLine = GetScanLine(from, DirectionalTargeting.DetermineScanDirection(to - from)),
-                elapsed = 0f,
-                duration = ft,
-                impactTime = ft
-            };
+            var proj = GetProjectile();
+            proj.gameObject = dartObj;
+            proj.targetPosition = to;
+            proj.targetBalloonId = targetBalloonId;
+            proj.color = color;
+            proj.scanDir = DirectionalTargeting.DetermineScanDirection(to - from);
+            proj.scanLine = GetScanLine(from, proj.scanDir);
+            proj.elapsed = 0f;
+            proj.duration = ft;
+            proj.impactTime = ft;
             ConfigureLaunchScale(proj, launchStartScale, balloonScale);
             ConfigureNeedleTipImpactTiming(proj, dartObj, from, to, balloonScale);
 
@@ -1535,9 +1578,9 @@ namespace BalloonFlow
                 {
                     firedThisScan++;
                     // ROLLBACK_DART_POST_FIRE_HEAD_RESCAN:
-                    // Re-enabled only for x2/long-frame cases. This is a bounded substep for the
-                    // newly promoted head that would otherwise skip an exact line before the next
-                    // Update. Same-line peeling is still blocked by holder/target consumed-line guards.
+                    // Re-enabled for x2 cases. Straight rails can move ~0.5+ balloon line per normal
+                    // 60fps frame, so gating this only to long frames still misses newly promoted
+                    // heads on stage 1. Same-line peeling is blocked by holder/target line guards.
                     if (ShouldRunPostFireHeadRescan())
                         firedThisScan += FireNewlyPromotedHeadIfReady(rail, candidate.holderId);
                 }
@@ -1550,8 +1593,7 @@ namespace BalloonFlow
         private bool ShouldRunPostFireHeadRescan()
         {
             if (!RailManager.HasInstance) return false;
-            if (RailManager.Instance.UserSpeedMultiplier < POST_FIRE_HEAD_RESCAN_MIN_SPEED) return false;
-            return Time.deltaTime >= POST_FIRE_HEAD_RESCAN_MIN_DELTA_TIME;
+            return RailManager.Instance.UserSpeedMultiplier >= POST_FIRE_HEAD_RESCAN_MIN_SPEED;
         }
 
         private int FireNewlyPromotedHeadIfReady(RailManager rail, int holderId)
@@ -1796,6 +1838,7 @@ namespace BalloonFlow
             {
                 float ds = GameManager.HasInstance ? GameManager.Instance.Board.dartScale : 1f;
                 dartObj.transform.localScale = Vector3.one * ds;
+                dartObj.transform.DOKill();
 
                 EventBus.Publish(new OnDartFired { dartId = candidate.dartId, holderId = -1, color = candidate.color });
 
@@ -1812,23 +1855,27 @@ namespace BalloonFlow
                 Vector3 balloonScale = BalloonController.Instance.GetBalloonWorldScale(candidate.targetId);
                 Vector3 launchStartScale = dartObj.transform.localScale;
 
-                var proj = new DartProjectile
-                {
-                    gameObject = dartObj,
-                    targetPosition = travelTarget,
-                    targetBalloonId = candidate.targetId,
-                    color = candidate.color,
-                    scanDir = candidate.scanDir,
-                    scanLine = candidate.scanLine,
-                    elapsed = 0f,
-                    duration = ft,
-                    impactTime = ft
-                };
+                var proj = GetProjectile();
+                proj.gameObject = dartObj;
+                proj.startPosition = launchPos;
+                proj.targetPosition = travelTarget;
+                proj.targetBalloonId = candidate.targetId;
+                proj.color = candidate.color;
+                proj.scanDir = candidate.scanDir;
+                proj.scanLine = candidate.scanLine;
+                proj.elapsed = 0f;
+                proj.duration = ft;
+                proj.impactTime = ft;
                 ConfigureLaunchScale(proj, launchStartScale, balloonScale);
                 ConfigureNeedleTipImpactTiming(proj, dartObj, launchPos, travelTarget, balloonScale);
                 _activeProjectiles.Add(proj);
 
-                dartObj.transform.DOMove(travelTarget, ft).SetEase(Ease.Linear);
+                // ROLLBACK_DART_PROJECTILE_MANUAL_MOVE:
+                // Previous behavior created a DOTween per fired dart:
+                // dartObj.transform.DOMove(travelTarget, ft).SetEase(Ease.Linear);
+                // Movement is now advanced in UpdateProjectiles so firing does not allocate a
+                // tween and DOTween.Update does not scale with projectile count. Hit timing and
+                // target reservation stay unchanged.
             }
             else
             {
@@ -2055,6 +2102,16 @@ namespace BalloonFlow
             int horizontalLine = GetScanLine(position, DirectionalTargeting.ScanDirection.Left);
             int verticalLine = GetScanLine(position, DirectionalTargeting.ScanDirection.Up);
 
+            // ROLLBACK_DART_POP_RELEASE_RESOLVED_TARGET_LINE:
+            // The global target-line lock is only needed while the fired projectile has not resolved.
+            // Once a real pop happened, keeping that line locked until every head leaves it can make
+            // x2 straight rails skip the refreshed outer cell. Holder-local pass locks below still
+            // prevent the same holder from peeling the same line repeatedly in one pass.
+            ClearResolvedConsumedTargetLine(DirectionalTargeting.ScanDirection.Left, horizontalLine);
+            ClearResolvedConsumedTargetLine(DirectionalTargeting.ScanDirection.Right, horizontalLine);
+            ClearResolvedConsumedTargetLine(DirectionalTargeting.ScanDirection.Up, verticalLine);
+            ClearResolvedConsumedTargetLine(DirectionalTargeting.ScanDirection.Down, verticalLine);
+
             _tempRemoveKeys.Clear();
             foreach (var kvp in _lastScannedLineByHolder)
             {
@@ -2268,6 +2325,15 @@ namespace BalloonFlow
             _tempRemoveKeys.Clear();
         }
 
+        private void ClearResolvedConsumedTargetLine(DirectionalTargeting.ScanDirection scanDir, int line)
+        {
+            int key = GetConsumedLineKey(scanDir, line);
+            if (_unresolvedConsumedTargetLines.Contains(key))
+                return;
+
+            _consumedTargetLines.Remove(key);
+        }
+
         // ROLLBACK_DART_GLOBAL_CONSUMED_LINE_LOCK:
         private const int CONSUMED_LINE_KEY_STRIDE = 1000000;
         private const int CONSUMED_LINE_KEY_OFFSET = 500000;
@@ -2309,6 +2375,7 @@ namespace BalloonFlow
         }
 
         // ROLLBACK_DART_ATTACK_ISSUE_DEBUG:
+        [System.Diagnostics.Conditional("BALLOONFLOW_DART_ATTACK_ISSUE_DEBUG")]
         private void LogAttackIssue(string tag, string message)
         {
             if (!DART_ATTACK_ISSUE_DEBUG) return;
@@ -2325,6 +2392,7 @@ namespace BalloonFlow
             Debug.Log($"[{tag}] frame={frame} {message}");
         }
 
+        [System.Diagnostics.Conditional("BALLOONFLOW_DART_MISS_SUSPECT_DEBUG")]
         private void LogMissSuspectIfNeeded(
             int holderId,
             int dartId,
@@ -2368,8 +2436,50 @@ namespace BalloonFlow
 
         #region Private Methods — Projectile Update
 
+        private DartProjectile GetProjectile()
+        {
+            DartProjectile proj = _projectilePool.Count > 0 ? _projectilePool.Pop() : new DartProjectile();
+            ResetProjectile(proj);
+            return proj;
+        }
+
+        private void ReleaseProjectile(DartProjectile proj)
+        {
+            if (proj == null) return;
+            ResetProjectile(proj);
+            _projectilePool.Push(proj);
+        }
+
+        private static void ResetProjectile(DartProjectile proj)
+        {
+            proj.gameObject = null;
+            proj.startPosition = Vector3.zero;
+            proj.targetPosition = Vector3.zero;
+            proj.targetBalloonId = -1;
+            proj.color = -1;
+            proj.scanDir = default;
+            proj.scanLine = 0;
+            proj.elapsed = 0f;
+            proj.duration = 0f;
+            proj.impactTime = 0f;
+            proj.impactResolved = false;
+            proj.startScale = Vector3.one;
+            proj.targetScale = Vector3.one;
+            proj.launchPunchT = 0f;
+            proj.punchPeakScale = Vector3.one;
+            proj.punchDuration = 0f;
+            proj.lerpStrength = 0f;
+        }
+
         private void UpdateProjectiles()
         {
+            float __moveScaleMs = 0f;
+            float __resolvePrepMs = 0f;
+            float __executeHitMs = 0f;
+            float __returnPoolMs = 0f;
+
+            try
+            {
             for (int i = _activeProjectiles.Count - 1; i >= 0; i--)
             {
                 // Guard: ClearAllDarts may have emptied the list via ExecuteHit → OnBoardCleared chain
@@ -2380,6 +2490,14 @@ namespace BalloonFlow
 
                 if (proj.gameObject != null && proj.duration > 0f)
                 {
+                    float __moveStamp = InGamePerfLogger.StartStampMs();
+                    // ROLLBACK_DART_PROJECTILE_MANUAL_MOVE:
+                    // This replaces per-shot Transform.DOMove allocation with deterministic
+                    // per-frame interpolation. Gameplay still resolves using impactTime below,
+                    // so miss/continuous-fire guards are not changed.
+                    float moveT = Mathf.Clamp01(proj.elapsed / proj.duration);
+                    proj.gameObject.transform.position = Vector3.Lerp(proj.startPosition, proj.targetPosition, moveT);
+
                     Vector3 scale;
                     if (proj.punchDuration > 0f && proj.elapsed < proj.punchDuration)
                     {
@@ -2405,6 +2523,7 @@ namespace BalloonFlow
                         scale = Vector3.Lerp(proj.startScale, proj.targetScale, Mathf.Clamp01(t * proj.lerpStrength));
                     }
                     proj.gameObject.transform.localScale = scale;
+                    __moveScaleMs += InGamePerfLogger.ElapsedMs(__moveStamp);
                 }
 
                 // ROLLBACK_DART_NEEDLE_TIP_IMPACT:
@@ -2414,6 +2533,7 @@ namespace BalloonFlow
                 float resolveTime = Mathf.Clamp(proj.impactTime, 0f, proj.duration);
                 if (!proj.impactResolved && proj.elapsed >= resolveTime)
                 {
+                    float __prepStamp = InGamePerfLogger.StartStampMs();
                     proj.impactResolved = true;
                     BalloonData impactData = BalloonController.HasInstance
                         ? BalloonController.Instance.GetBalloon(proj.targetBalloonId)
@@ -2440,15 +2560,32 @@ namespace BalloonFlow
                     // bug. The authoritative gameplay hit is the fire-time target id.
                     if (projObj != null)
                         projObj.transform.DOKill();
+                    __resolvePrepMs += InGamePerfLogger.ElapsedMs(__prepStamp);
+
+                    float __hitStamp = InGamePerfLogger.StartStampMs();
                     ExecuteHit(proj.targetBalloonId, proj.color);
+                    __executeHitMs += InGamePerfLogger.ElapsedMs(__hitStamp);
 
                     // ExecuteHit → OnBoardCleared → ClearAllDarts로 리스트가 비워질 수 있음
                     if (_boardFinished || _activeProjectiles.Count == 0) return;
 
+                    float __returnStamp = InGamePerfLogger.StartStampMs();
                     ReturnDartToPool(projObj);
                     if (i < _activeProjectiles.Count)
+                    {
                         _activeProjectiles.RemoveAt(i);
+                        ReleaseProjectile(proj);
+                    }
+                    __returnPoolMs += InGamePerfLogger.ElapsedMs(__returnStamp);
                 }
+            }
+            }
+            finally
+            {
+                if (__moveScaleMs > 0f) InGamePerfLogger.RecordSectionMs("Dart.Projectiles.MoveScale", __moveScaleMs);
+                if (__resolvePrepMs > 0f) InGamePerfLogger.RecordSectionMs("Dart.Projectiles.ResolvePrep", __resolvePrepMs);
+                if (__executeHitMs > 0f) InGamePerfLogger.RecordSectionMs("Dart.Projectiles.ExecuteHit", __executeHitMs);
+                if (__returnPoolMs > 0f) InGamePerfLogger.RecordSectionMs("Dart.Projectiles.ReturnPool", __returnPoolMs);
             }
         }
 
@@ -2489,23 +2626,31 @@ namespace BalloonFlow
 
         private static float GetNeedleTipLead(GameObject dartObj, Vector3 travelDir)
         {
-            DartIdentifier identifier = dartObj.GetComponent<DartIdentifier>();
+            int dartObjId = dartObj.GetInstanceID();
+            if (!_dartIdentifierCache.TryGetValue(dartObjId, out DartIdentifier identifier))
+            {
+                dartObj.TryGetComponent(out identifier);
+                _dartIdentifierCache[dartObjId] = identifier;
+            }
             if (identifier != null && identifier.TryGetNeedleTipLead(travelDir, out float identifierLead))
                 return Mathf.Max(0f, identifierLead);
 
-            Renderer[] renderers = dartObj.GetComponentsInChildren<Renderer>();
-            return TryGetRendererLead(dartObj.transform.position, renderers, travelDir, out float rendererLead)
+            _needleLeadRendererCache.Clear();
+            dartObj.GetComponentsInChildren(false, _needleLeadRendererCache);
+            bool found = TryGetRendererLead(dartObj.transform.position, _needleLeadRendererCache, travelDir, out float rendererLead);
+            _needleLeadRendererCache.Clear();
+            return found
                 ? Mathf.Max(0f, rendererLead)
                 : 0f;
         }
 
-        private static bool TryGetRendererLead(Vector3 origin, Renderer[] renderers, Vector3 dir, out float lead)
+        private static bool TryGetRendererLead(Vector3 origin, List<Renderer> renderers, Vector3 dir, out float lead)
         {
             lead = 0f;
-            if (renderers == null || renderers.Length == 0) return false;
+            if (renderers == null || renderers.Count == 0) return false;
 
             bool found = false;
-            for (int i = 0; i < renderers.Length; i++)
+            for (int i = 0; i < renderers.Count; i++)
             {
                 Renderer r = renderers[i];
                 if (r == null) continue;
@@ -2575,7 +2720,9 @@ namespace BalloonFlow
             PopResult result = null;
             if (BalloonController.HasInstance)
             {
+                float __popStamp = InGamePerfLogger.StartStampMs();
                 result = BalloonController.Instance.PopBalloonWithDart(balloonId, color);
+                InGamePerfLogger.EndSection(__popStamp, "Dart.ExecuteHit.PopBalloon");
             }
 
             if (result == null || !result.success)
@@ -2587,12 +2734,14 @@ namespace BalloonFlow
             }
 
             // PopProcessor가 점수/콤보 처리 (PopBalloon 중복 호출은 isPopped 체크로 방지)
+            float __publishStamp = InGamePerfLogger.StartStampMs();
             EventBus.Publish(new OnDartHitBalloon
             {
                 dartId = -1,
                 balloonId = balloonId,
                 color = color
             });
+            InGamePerfLogger.EndSection(__publishStamp, "Dart.ExecuteHit.PublishHit");
         }
 
         #endregion
@@ -2779,14 +2928,18 @@ namespace BalloonFlow
             // fallback: 전체 Renderer (TMP/Shadow/Particle 제외)
             Material shared = BalloonController.GetOrCreateSharedMaterial(c);
             if (shared == null) return;
-            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
-            for (int i = 0; i < renderers.Length; i++)
+            _applyColorRendererCache.Clear();
+            obj.GetComponentsInChildren(false, _applyColorRendererCache);
+            for (int i = 0; i < _applyColorRendererCache.Count; i++)
             {
-                if (renderers[i].GetComponent<TMPro.TMP_Text>() != null) continue;
-                string name = renderers[i].gameObject.name;
+                Renderer renderer = _applyColorRendererCache[i];
+                if (renderer == null) continue;
+                if (renderer.GetComponent<TMPro.TMP_Text>() != null) continue;
+                string name = renderer.gameObject.name;
                 if (name == "Shadow" || name.Contains("Particle")) continue;
-                renderers[i].sharedMaterial = shared;
+                renderer.sharedMaterial = shared;
             }
+            _applyColorRendererCache.Clear();
         }
 
         private void OrientDart(GameObject obj, int slotIndex)

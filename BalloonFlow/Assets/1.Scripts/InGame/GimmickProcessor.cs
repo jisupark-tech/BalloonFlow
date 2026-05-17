@@ -45,6 +45,11 @@ namespace BalloonFlow
         private readonly Dictionary<int, int> _curtainCounters = new Dictionary<int, int>();
         private const int DEFAULT_CURTAIN_COUNTER = 3;
 
+        private readonly List<int> _iceKeysBuffer = new List<int>();
+        private readonly List<int> _iceRemoveBuffer = new List<int>();
+        private readonly List<int> _curtainKeysBuffer = new List<int>();
+        private readonly List<int> _curtainRemoveBuffer = new List<int>();
+
         #endregion
 
         #region Lifecycle
@@ -75,6 +80,10 @@ namespace BalloonFlow
             _surpriseBalloons.Clear();
             _curtainColors.Clear();
             _curtainCounters.Clear();
+            _iceKeysBuffer.Clear();
+            _iceRemoveBuffer.Clear();
+            _curtainKeysBuffer.Clear();
+            _curtainRemoveBuffer.Clear();
         }
 
         /// <summary>
@@ -235,27 +244,35 @@ namespace BalloonFlow
         private void HandleAnyBalloonPopped(OnBalloonPopped evt)
         {
             // === Ice: every pop reduces all Ice balloon HP by 1 ===
-            var iceToRemove = new List<int>();
+            _iceKeysBuffer.Clear();
+            _iceRemoveBuffer.Clear();
             foreach (var kvp in _iceHP)
+                _iceKeysBuffer.Add(kvp.Key);
+
+            for (int i = 0; i < _iceKeysBuffer.Count; i++)
             {
-                int newHP = kvp.Value - 1;
-                _iceHP[kvp.Key] = newHP;
+                int id = _iceKeysBuffer[i];
+                if (!_iceHP.TryGetValue(id, out int hp)) continue;
+
+                int newHP = hp - 1;
+                _iceHP[id] = newHP;
 
                 if (newHP <= 0)
                 {
-                    iceToRemove.Add(kvp.Key);
+                    _iceRemoveBuffer.Add(id);
 
                     EventBus.Publish(new OnGimmickTriggered
                     {
                         gimmickType = BalloonController.GimmickIce,
-                        targetId = kvp.Key
+                        targetId = id
                     });
                 }
             }
 
-            // Remove destroyed Ice balloons from tracking
-            foreach (int id in iceToRemove)
+            // Remove destroyed Ice balloons from tracking before ForcePop can publish recursively.
+            for (int i = 0; i < _iceRemoveBuffer.Count; i++)
             {
+                int id = _iceRemoveBuffer[i];
                 _iceHP.Remove(id);
 
                 // Signal BalloonController to pop this Ice balloon
@@ -266,29 +283,37 @@ namespace BalloonFlow
             }
 
             // === Color Curtain: 해당 색 풍선 팝 시 카운터 -1 ===
-            var curtainToRemove = new List<int>();
+            _curtainKeysBuffer.Clear();
+            _curtainRemoveBuffer.Clear();
             foreach (var kvp in _curtainCounters)
+                _curtainKeysBuffer.Add(kvp.Key);
+
+            for (int i = 0; i < _curtainKeysBuffer.Count; i++)
             {
                 // 팝된 풍선의 색상이 커튼의 요구 색상과 일치해야 카운터 감소
-                if (_curtainColors.TryGetValue(kvp.Key, out int requiredColor) && evt.color == requiredColor)
+                int id = _curtainKeysBuffer[i];
+                if (!_curtainCounters.TryGetValue(id, out int counter)) continue;
+
+                if (_curtainColors.TryGetValue(id, out int requiredColor) && evt.color == requiredColor)
                 {
-                    int newCounter = kvp.Value - 1;
-                    _curtainCounters[kvp.Key] = newCounter;
+                    int newCounter = counter - 1;
+                    _curtainCounters[id] = newCounter;
 
                     if (newCounter <= 0)
                     {
-                        curtainToRemove.Add(kvp.Key);
+                        _curtainRemoveBuffer.Add(id);
                         EventBus.Publish(new OnGimmickTriggered
                         {
                             gimmickType = BalloonController.GimmickColorCurtain,
-                            targetId = kvp.Key
+                            targetId = id
                         });
                     }
                 }
             }
 
-            foreach (int id in curtainToRemove)
+            for (int i = 0; i < _curtainRemoveBuffer.Count; i++)
             {
+                int id = _curtainRemoveBuffer[i];
                 _curtainCounters.Remove(id);
                 _curtainColors.Remove(id);
                 if (BalloonController.HasInstance)

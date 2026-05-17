@@ -152,6 +152,7 @@ namespace BalloonFlow
             // Throttle — fail evaluation 매 frame 안 함.
             _stuckEvalTimer += Time.deltaTime;
             if (_stuckEvalTimer < STUCK_EVAL_INTERVAL) return;
+            float evalDelta = _stuckEvalTimer;
             _stuckEvalTimer = 0f;
 
             // 이어하기 직후 grace 기간 — fail 평가 일시 정지. 이어하기 후 rail 이 여전히 stuck 일 수 있는데
@@ -182,7 +183,7 @@ namespace BalloonFlow
             // 막고 있는지 출력 (false negative 케이스 분석용).
             if (_debugLogFail)
             {
-                _periodicLogTimer += Time.deltaTime;
+                _periodicLogTimer += evalDelta;
                 if (_periodicLogTimer >= PERIODIC_LOG_INTERVAL)
                 {
                     _periodicLogTimer = 0f;
@@ -218,7 +219,9 @@ namespace BalloonFlow
                 return;
             }
 
-            _criticalTimer += Time.deltaTime;
+            // Fail evaluation is throttled, so accumulate the elapsed evaluation window
+            // instead of a single frame delta. Otherwise a 2s grace can stretch far longer.
+            _criticalTimer += evalDelta;
             if (_criticalTimer >= _failGraceDelay)
             {
                 if (_debugLogFail) DumpAttackState("[Fail-DEBUG] Fail 트리거");
@@ -622,6 +625,7 @@ namespace BalloonFlow
                 // 직접 타격 불가 타입 제외 (DirectionalTargeting.FindTarget과 정합):
                 //   Wall: 파괴 불가 / Ice: 인접 pop으로 간접 해동 / ColorCurtain: 간접 제거만
                 // Pin은 doc line 222 + FindTarget(line 117): 같은 색 다트로 직접 타격 가능 → 포함.
+                if (BalloonController.Instance.IsBalloonConcealed(b.balloonId)) continue;
                 if (b.gimmickType == BalloonController.GimmickWall) continue;
                 if (b.gimmickType == BalloonController.GimmickIce) continue;
                 if (b.gimmickType == BalloonController.GimmickColorCurtain) continue;

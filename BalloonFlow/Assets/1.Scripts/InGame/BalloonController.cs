@@ -460,6 +460,7 @@ namespace BalloonFlow
         private static MaterialPropertyBlock _balloonMpb;
         private readonly HashSet<int> _prevOutermostSet = new HashSet<int>();
         private readonly List<int> _outerDiffBuffer = new List<int>(64);
+        private bool _hasAppliedOutermostOutline;
         private float _lastOutermostRefreshTime;
 
         public void RefreshOutermostRendererState()
@@ -499,29 +500,57 @@ namespace BalloonFlow
             // 전수 sweep 으로 매 호출 시 모든 풍선에 정확한 값 적용 보장.
             // 비용: _balloonObjects.Count × O(1) HashSet lookup × 0.1s throttle → 부담 작음.
             // 롤백: 아래 sweep 코드 제거 + 위 주석 처리된 원본 diff 코드 복원.
+            float __contourStamp = InGamePerfLogger.StartStampMs();
             HashSet<int> contourSet = null;
             var contourCol = DirectionalTargeting.GetAttackableContourIds();
             if (contourCol is HashSet<int> hs) contourSet = hs;
+            InGamePerfLogger.EndSection(__contourStamp, "Balloon.RefreshOutline.BuildContour");
 
+            float __applyStamp = InGamePerfLogger.StartStampMs();
             _outerDiffBuffer.Clear();
-            var en = _balloonObjects.GetEnumerator();
-            try
+            if (!_hasAppliedOutermostOutline)
             {
-                while (en.MoveNext())
+                // ROLLBACK_OUTLINE_DIFF_APPLY:
+                // First pass must sweep every balloon because material defaults may have outline on.
+                var en = _balloonObjects.GetEnumerator();
+                try
                 {
-                    int id = en.Current.Key;
-                    bool isContour = contourSet != null
+                    while (en.MoveNext())
+                    {
+                        int id = en.Current.Key;
+                        bool isContour = contourSet != null
+                            ? contourSet.Contains(id)
+                            : ContainsContour(contourCol, id);
+                        ApplyOutlineToBalloon(id, isContour);
+                        if (isContour) _outerDiffBuffer.Add(id);
+                    }
+                }
+                finally { en.Dispose(); }
+                _hasAppliedOutermostOutline = true;
+            }
+            else
+            {
+                foreach (int id in contourCol)
+                {
+                    if (!_prevOutermostSet.Contains(id))
+                        ApplyOutlineToBalloon(id, true);
+                    _outerDiffBuffer.Add(id);
+                }
+
+                foreach (int id in _prevOutermostSet)
+                {
+                    bool stillContour = contourSet != null
                         ? contourSet.Contains(id)
                         : ContainsContour(contourCol, id);
-                    ApplyOutlineToBalloon(id, isContour);
-                    if (isContour) _outerDiffBuffer.Add(id);
+                    if (!stillContour)
+                        ApplyOutlineToBalloon(id, false);
                 }
             }
-            finally { en.Dispose(); }
 
             // _prevOutermostSet 갱신 (호환 유지 — 외부에서 읽는 코드 있을 수 있음)
             _prevOutermostSet.Clear();
             for (int i = 0; i < _outerDiffBuffer.Count; i++) _prevOutermostSet.Add(_outerDiffBuffer[i]);
+            InGamePerfLogger.EndSection(__applyStamp, "Balloon.RefreshOutline.ApplyRenderers");
         }
 
         private static bool ContainsContour(IReadOnlyCollection<int> col, int id)
@@ -752,6 +781,11 @@ namespace BalloonFlow
             return true;
         }
 
+        public bool IsBalloonConcealed(int balloonId)
+        {
+            return _hiddenBalloons.Contains(balloonId);
+        }
+
         /// <summary>
         /// Returns one random hidden (Surprise) balloon ID, or -1 if none.
         /// Used by Hand booster to pick a target.
@@ -861,6 +895,7 @@ namespace BalloonFlow
             //       다음 레벨의 balloonId=1 풍선이 stale Renderer[] / outline state / cached position 과 collision.
             _balloonRenderers.Clear();
             _prevOutermostSet.Clear();
+            _hasAppliedOutermostOutline = false;
             _frameCachedPositions.Clear();
             _frameCachedPositionsFrame = -1;
             RemainingCount = 0;
@@ -1039,6 +1074,15 @@ namespace BalloonFlow
             if (data.gimmickType == GimmickSurprise || data.gimmickType == GimmickHidden)
             {
                 _hiddenBalloons.Add(id);
+            }
+
+            if (GimmickProcessor.HasInstance)
+            {
+                GimmickProcessor.Instance.RegisterBalloonGimmick(
+                    data.balloonId,
+                    data.gimmickType,
+                    data.color,
+                    data.maxHP);
             }
         }
 
@@ -1469,18 +1513,26 @@ namespace BalloonFlow
 
         private PopResult ExecutePop(BalloonData data)
         {
+            float __popTotalStamp = InGamePerfLogger.StartStampMs();
             // Mark popped in data
+            float __markStamp = InGamePerfLogger.StartStampMs();
             data.isPopped = true;
             _balloons[data.balloonId] = data;
             RemainingCount = Mathf.Max(0, RemainingCount - 1);
             PoppedCount++;
+            InGamePerfLogger.EndSection(__markStamp, "Balloon.ExecutePop.MarkData");
 
+            float __scaleStamp = InGamePerfLogger.StartStampMs();
             float effectScaleMultiplier = GetBalloonEffectScaleMultiplier(data.balloonId);
+            InGamePerfLogger.EndSection(__scaleStamp, "Balloon.ExecutePop.GetScale");
 
             // Return visual to pool
+            float __returnObjStamp = InGamePerfLogger.StartStampMs();
             ReturnBalloonObject(data.balloonId, effectScaleMultiplier);
+            InGamePerfLogger.EndSection(__returnObjStamp, "Balloon.ExecutePop.ReturnObject");
 
             // Remove from position index
+            float __invalidateStamp = InGamePerfLogger.StartStampMs();
             _positionIndex.Remove(ToGridKey(data.position));
 
             // ROLLBACK_DART_TARGET_CACHE_DIRTY:
@@ -1488,8 +1540,10 @@ namespace BalloonFlow
             // moment the outer contour changes, so invalidate once here and rebuild on the next
             // targeting query instead of rebuilding every frame.
             DirectionalTargeting.InvalidateCache();
+            InGamePerfLogger.EndSection(__invalidateStamp, "Balloon.ExecutePop.Invalidate");
 
             // Publish pop event
+            float __publishStamp = InGamePerfLogger.StartStampMs();
             EventBus.Publish(new OnBalloonPopped
             {
                 balloonId = data.balloonId,
@@ -1497,6 +1551,7 @@ namespace BalloonFlow
                 position  = data.position,
                 effectScaleMultiplier = effectScaleMultiplier
             });
+            InGamePerfLogger.EndSection(__publishStamp, "Balloon.ExecutePop.PublishPop");
 
             // Trigger gimmick side-effects (base behavior only)
             PopResult result = new PopResult
@@ -1508,15 +1563,22 @@ namespace BalloonFlow
                 gimmickType = data.gimmickType
             };
 
+            float __gimmickStamp = InGamePerfLogger.StartStampMs();
             ProcessGimmickAfterPop(data, result);
+            InGamePerfLogger.EndSection(__gimmickStamp, "Balloon.ExecutePop.Gimmick");
 
             // ROLLBACK_CONTOUR_TARGET_DIAG:
             // Diagnose whether DirectionalTargeting's frame cache still points at
             // the popped balloon or shifts contour candidates unexpectedly.
+            float __diagStamp = InGamePerfLogger.StartStampMs();
             DirectionalTargeting.LogContourAfterPop(data.balloonId, data.color, data.position, data.gimmickType);
+            InGamePerfLogger.EndSection(__diagStamp, "Balloon.ExecutePop.ContourDiag");
 
             // 외곽 변경 가능 — 외곽 풍선만 렌더링 toggle 시 Renderer state 갱신
+            float __outlineStamp = InGamePerfLogger.StartStampMs();
             RefreshOutermostRendererState();
+            InGamePerfLogger.EndSection(__outlineStamp, "Balloon.ExecutePop.RefreshOutline");
+            InGamePerfLogger.EndSection(__popTotalStamp, "Balloon.ExecutePop.Total");
 
             return result;
         }
@@ -1946,6 +2008,7 @@ namespace BalloonFlow
 
         private void ReturnBalloonObject(int balloonId, float effectScaleMultiplier)
         {
+            float __totalStamp = InGamePerfLogger.StartStampMs();
             if (!_balloonObjects.TryGetValue(balloonId, out GameObject obj)) return;
             if (obj == null) return;
 
@@ -1963,12 +2026,15 @@ namespace BalloonFlow
             }
 
             // FrozenLayer 오버레이가 붙어있다면 먼저 풀로 반환
+            float __overlayStamp = InGamePerfLogger.StartStampMs();
             ReturnFrozenOverlay(balloonId);
+            InGamePerfLogger.EndSection(__overlayStamp, "Balloon.ReturnObject.FrozenOverlay");
 
             // 풍선 스케일업 → 완료 후 PopEffectPool 재생 + 풍선 풀 반환.
             // 이전: BalloonIdentifier에 _popEffect 자식 부착 → detach/reattach + 풍선마다 별도 인스턴스 → 부하.
             // 이후: 단일 CircleParticle 풀에서 가져와 색상 적용 + play, 끝나면 풀 반환.
             // [Leak fix 2026-05-11] 새 Sequence 시작 전 stale tween 정리 — DOPunchScale 등 진행 중이면 leak + 시각 충돌.
+            float __tweenSetupStamp = InGamePerfLogger.StartStampMs();
             obj.transform.DOKill();
             float scaleUpDuration = GameManager.Instance.Board.popScaleDuration;
             float scaleUpMult = GameManager.Instance.Board.popScaleMultiplier;
@@ -1990,6 +2056,8 @@ namespace BalloonFlow
                     ObjectPoolManager.Instance.Return(returnKey, obj);
                 }
             });
+            InGamePerfLogger.EndSection(__tweenSetupStamp, "Balloon.ReturnObject.TweenSetup");
+            InGamePerfLogger.EndSection(__totalStamp, "Balloon.ReturnObject.Total");
         }
 
         /// <summary>Key 프리팹이 포물선으로 Lock 보관함까지 비행 → 도착 시 잠금 해제.</summary>
