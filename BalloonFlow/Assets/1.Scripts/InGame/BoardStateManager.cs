@@ -175,9 +175,19 @@ namespace BalloonFlow
             int physCap = RailManager.HasInstance ? RailManager.Instance.PhysicalCapacity : 0;
             const int FAIL_BUFFER = 1; // efc 가 physCap-1 도달 시 fail 평가 진입
             bool railFull = RailManager.HasInstance && physCap > 0 && efc >= physCap - FAIL_BUFFER;
+            bool forceFullBeltAdvance = RailManager.HasInstance && RailManager.Instance.IsForceFullBeltAdvanceActive();
             bool hasMatch = HasOutermostMatchCached;
+            // ROLLBACK_FAIL_NO_MOVES_LEFT_WITH_RAIL_DARTS:
+            // Previously no-move fail only triggered when all holders were empty AND rail was empty.
+            // That missed the real dead state where rail still has darts, but none of their colors
+            // can attack any exposed balloon. Keep railFull for overflow, and add the no-supply path.
+            bool allHoldersEmpty = HolderManager.HasInstance && HolderManager.Instance.AreAllHoldersEmpty();
+            bool noMovesLeft = allHoldersEmpty && _remainingBalloons > 0 && !hasMatch;
             // [2026-05-13] 이전: bool stuck = (efc > 0) && _remainingBalloons > 0 && !hasMatch;
-            bool stuck = railFull && _remainingBalloons > 0 && !hasMatch;
+            // ROLLBACK_FAIL_ON_FORCE_ADVANCE_NO_MATCH:
+            // Forced full-belt advance means the rail is already in recovery/full movement mode.
+            // If nothing can attack while this is active, enter the same grace-based fail flow.
+            bool stuck = _remainingBalloons > 0 && !hasMatch && (railFull || noMovesLeft || forceFullBeltAdvance);
 
             // 진단용 주기적 로그 — rail이 많이 차 있는데 stuck 미충족 시 어떤 조건이
             // 막고 있는지 출력 (false negative 케이스 분석용).
@@ -190,7 +200,7 @@ namespace BalloonFlow
                     bool nearFull = physCap > 0 && efc >= physCap - 1;
                     if (nearFull)
                     {
-                        Debug.Log($"[Fail-DEBUG/Periodic] efc={efc}/{physCap} railFull={railFull} balloons={_remainingBalloons} hasMatch={hasMatch} stuck={stuck} isCritical={_isCritical} timer={_criticalTimer:F2}");
+                        Debug.Log($"[Fail-DEBUG/Periodic] efc={efc}/{physCap} railFull={railFull} forceFullBeltAdvance={forceFullBeltAdvance} allHoldersEmpty={allHoldersEmpty} noMovesLeft={noMovesLeft} balloons={_remainingBalloons} hasMatch={hasMatch} stuck={stuck} isCritical={_isCritical} timer={_criticalTimer:F2}");
                         if (!stuck && nearFull)
                         {
                             DumpAttackState("[Fail-DEBUG/Periodic] stuck=false 상세");
@@ -226,7 +236,7 @@ namespace BalloonFlow
             {
                 if (_debugLogFail) DumpAttackState("[Fail-DEBUG] Fail 트리거");
                 _failConfirmed = true;
-                TriggerFail(FailReason.RailOverflow);
+                TriggerFail(noMovesLeft ? FailReason.NoMovesLeft : FailReason.RailOverflow);
             }
             }
             finally { InGamePerfLogger.EndSection(__sw, "BoardStateManager.Update"); }
@@ -354,13 +364,28 @@ namespace BalloonFlow
                         reason = FailReason.RailOverflow
                     };
                 }
+
+                // ROLLBACK_FAIL_ON_FORCE_ADVANCE_NO_MATCH:
+                // Match Update(): forced full-belt advance with no attackable exposed color is a
+                // fail candidate, even before the rail reaches capacity - 1.
+                if (RailManager.Instance.IsForceFullBeltAdvanceActive() && !HasOutermostMatch())
+                {
+                    return new FailResult
+                    {
+                        isFail = true,
+                        reason = FailReason.RailOverflow
+                    };
+                }
             }
 
             // Condition: No moves left — all holders consumed + all rail darts unable to match + balloons remain
             // (This is a subset of RailOverflow when rail is not full but no more darts can fire)
             if (HolderManager.HasInstance && HolderManager.Instance.AreAllHoldersEmpty())
             {
-                if (RailManager.HasInstance && RailManager.Instance.OccupiedCount == 0 && _remainingBalloons > 0)
+                // ROLLBACK_FAIL_NO_MOVES_LEFT_WITH_RAIL_DARTS:
+                // Old check required rail empty. If rail still has darts but no exposed color can be
+                // hit, the board is equally unwinnable because there are no holders left to add colors.
+                if (_remainingBalloons > 0 && !HasOutermostMatch())
                 {
                     return new FailResult
                     {
@@ -482,7 +507,10 @@ namespace BalloonFlow
             if (_currentState != BoardState.Playing) return;
 
             // All holders consumed. If rail also empty and balloons remain → fail
-            if (RailManager.HasInstance && RailManager.Instance.OccupiedCount == 0 && _remainingBalloons > 0)
+            // ROLLBACK_FAIL_NO_MOVES_LEFT_WITH_RAIL_DARTS:
+            // All holders consumed. Fail when no remaining rail dart color can hit an exposed balloon,
+            // even if darts are still sitting on the rail.
+            if (_remainingBalloons > 0 && !HasOutermostMatch())
             {
                 TriggerFail(FailReason.NoMovesLeft);
             }
@@ -613,7 +641,38 @@ namespace BalloonFlow
             for (int i = 0; i < allBalloons.Length; i++)
             {
                 var b = allBalloons[i];
-                if (b.isPopped) continue;
+                if (b == null || b.isPopped) continue;
+                bool targetable = true;
+                if (BalloonController.Instance.IsBalloonConcealed(b.balloonId)) targetable = false;
+                if (b.gimmickType == BalloonController.GimmickWall) targetable = false;
+                if (b.gimmickType == BalloonController.GimmickIce) targetable = false;
+                if (b.gimmickType == BalloonController.GimmickColorCurtain) targetable = false;
+
+                // ROLLBACK_BARRICADE_MULTI_CELL_OCCUPANCY:
+                // Keep outermost/match checks aligned with DirectionalTargeting's multi-cell sized gimmicks.
+                if (BalloonController.IsSizedFieldGimmick(b.gimmickType) && (b.sizeW > 1 || b.sizeH > 1))
+                {
+                    int width = Mathf.Max(1, b.sizeW);
+                    int height = Mathf.Max(1, b.sizeH);
+                    Vector3 anchor = BalloonController.Instance.GetAdjustedBoardPosition(b.position);
+                    BalloonController.Instance.GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ);
+                    for (int dx = 0; dx < width; dx++)
+                    {
+                        for (int dz = 0; dz < height; dz++)
+                        {
+                            Vector2Int occupiedCell = new Vector2Int(
+                                Mathf.RoundToInt((anchor.x + dx * cellSizeX) / cs),
+                                Mathf.RoundToInt((anchor.z + dz * cellSizeZ) / cs));
+                            _reusablePositionMap.Add(occupiedCell);
+                            if (targetable)
+                            {
+                                _reusableOccupancy[occupiedCell] = b.color;
+                                _reusableCellToBalloonId[occupiedCell] = b.balloonId;
+                            }
+                        }
+                    }
+                    continue;
+                }
                 // FindTarget과 동일하게 GetBalloonWorldPosition 사용 — LevelSafeMult 적용된 실제 위치.
                 Vector3 worldPos = BalloonController.Instance.GetBalloonWorldPosition(b.balloonId);
                 Vector2Int cell = new Vector2Int(
@@ -625,10 +684,7 @@ namespace BalloonFlow
                 // 직접 타격 불가 타입 제외 (DirectionalTargeting.FindTarget과 정합):
                 //   Wall: 파괴 불가 / Ice: 인접 pop으로 간접 해동 / ColorCurtain: 간접 제거만
                 // Pin은 doc line 222 + FindTarget(line 117): 같은 색 다트로 직접 타격 가능 → 포함.
-                if (BalloonController.Instance.IsBalloonConcealed(b.balloonId)) continue;
-                if (b.gimmickType == BalloonController.GimmickWall) continue;
-                if (b.gimmickType == BalloonController.GimmickIce) continue;
-                if (b.gimmickType == BalloonController.GimmickColorCurtain) continue;
+                if (!targetable) continue;
 
                 _reusableOccupancy[cell] = b.color;
                 _reusableCellToBalloonId[cell] = b.balloonId;

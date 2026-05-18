@@ -2725,7 +2725,8 @@ namespace BalloonFlow
                 InGamePerfLogger.EndSection(__popStamp, "Dart.ExecuteHit.PopBalloon");
             }
 
-            if (result == null || !result.success)
+            bool hitAccepted = result != null && (result.success || result.hitAccepted);
+            if (!hitAccepted)
             {
                 LogAttackIssue(
                     "DartHitFailed",
@@ -2734,6 +2735,9 @@ namespace BalloonFlow
             }
 
             // PopProcessor가 점수/콤보 처리 (PopBalloon 중복 호출은 isPopped 체크로 방지)
+            // ROLLBACK_DART_PARTIAL_HIT_ACCEPTANCE:
+            // Partial gimmick hits (Frozen thaw, Barricade/Pinata HP damage) consume the dart and
+            // should not be reported as misses. PopProcessor scores only when the balloon is popped.
             float __publishStamp = InGamePerfLogger.StartStampMs();
             EventBus.Publish(new OnDartHitBalloon
             {
@@ -2806,7 +2810,44 @@ namespace BalloonFlow
             // BalloonController.ExecutePop already invalidates DirectionalTargeting's contour cache.
             // Also reopen DartManager's accepted-line cache for the popped row/column only; otherwise
             // a head that stays on the same line never asks for the refreshed outer target.
-            InvalidateDartScanLinesForPoppedPosition(evt.position);
+            InvalidateDartScanLinesForPoppedBalloon(evt);
+        }
+
+        private void InvalidateDartScanLinesForPoppedBalloon(OnBalloonPopped evt)
+        {
+            if (!BalloonController.HasInstance)
+            {
+                InvalidateDartScanLinesForPoppedPosition(evt.position);
+                return;
+            }
+
+            BalloonData data = BalloonController.Instance.GetBalloon(evt.balloonId);
+            if (data == null || !BalloonController.IsSizedFieldGimmick(data.gimmickType) || (data.sizeW <= 1 && data.sizeH <= 1))
+            {
+                InvalidateDartScanLinesForPoppedPosition(BalloonController.Instance.GetAdjustedBoardPosition(evt.position));
+                return;
+            }
+
+            // ROLLBACK_MULTI_CELL_POP_LINE_RESCAN:
+            // A sized field object can expose refreshed targets on every occupied row/column.
+            // Reopening only the anchor cell leaves other lines locked and creates apparent misses
+            // around irregular A/B shapes and square rails.
+            int width = Mathf.Max(1, data.sizeW);
+            int height = Mathf.Max(1, data.sizeH);
+            Vector3 anchor = BalloonController.Instance.GetAdjustedBoardPosition(data.position);
+            BalloonController.Instance.GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ);
+
+            for (int dx = 0; dx < width; dx++)
+            {
+                for (int dz = 0; dz < height; dz++)
+                {
+                    Vector3 cellWorld = new Vector3(
+                        anchor.x + dx * cellSizeX,
+                        anchor.y,
+                        anchor.z + dz * cellSizeZ);
+                    InvalidateDartScanLinesForPoppedPosition(cellWorld);
+                }
+            }
         }
 
         /// <summary>

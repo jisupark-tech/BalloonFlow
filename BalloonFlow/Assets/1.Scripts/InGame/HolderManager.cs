@@ -34,6 +34,8 @@ namespace BalloonFlow
         public int[] spawnerColors;
         /// <summary>Spawner가 소환할 보관함의 탄창 수.</summary>
         public int spawnerMag = 20;
+        /// <summary>Spawner color sequence cursor. Keeps spawnerColors in authored order.</summary>
+        public int spawnerSpawnedCount;
         /// <summary>Chain 그룹 ID. -1 = Chain 아님. 같은 ID끼리 연결 발동.</summary>
         public int chainGroupId = -1;
         public int lockPairId = -1;
@@ -670,13 +672,16 @@ namespace BalloonFlow
                 spawner.spawnerHP--;
 
                 // 색상 결정: 명시 색상 → 인게임 풍선 색상에서 랜덤
-                int totalHP = spawner.spawnerColors != null ? spawner.spawnerColors.Length : 0;
-                int spawnIndex = totalHP - spawner.spawnerHP - 1;
+                // ROLLBACK_SPAWNER_COLOR_SEQUENCE:
+                // Keep explicit spawnerColors in authored order even when spawnerHP differs
+                // from the color array length.
+                int spawnIndex = spawner.spawnerSpawnedCount;
                 int newColor;
                 if (spawner.spawnerColors != null && spawnIndex >= 0 && spawnIndex < spawner.spawnerColors.Length)
                     newColor = spawner.spawnerColors[spawnIndex];
                 else
                     newColor = PickRandomBalloonColor();
+                spawner.spawnerSpawnedCount++;
 
                 int newMag = spawner.spawnerMag > 0 ? spawner.spawnerMag : 20;
                 AddHolder(newColor, newMag, spawner.column);
@@ -701,8 +706,7 @@ namespace BalloonFlow
         {
             var spawner = FindHolder(holderId);
             if (spawner == null || spawner.spawnerHP <= 0) return -1;
-            int totalHP = spawner.spawnerColors != null ? spawner.spawnerColors.Length : 0;
-            int spawnIndex = totalHP - spawner.spawnerHP;
+            int spawnIndex = spawner.spawnerSpawnedCount;
             if (spawner.spawnerColors != null && spawnIndex >= 0 && spawnIndex < spawner.spawnerColors.Length)
                 return spawner.spawnerColors[spawnIndex];
             return spawner.color; // 기본: Spawner 자체 색상

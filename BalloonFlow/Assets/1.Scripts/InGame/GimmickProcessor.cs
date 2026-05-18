@@ -36,6 +36,7 @@ namespace BalloonFlow
 
         // Pin tracking: balloonId → remaining segments
         private readonly Dictionary<int, int> _pinSegments = new Dictionary<int, int>();
+        private readonly Dictionary<int, int> _pinColors = new Dictionary<int, int>();
 
         // Surprise tracking: balloonIds with hidden color (field balloon)
         private readonly HashSet<int> _surpriseBalloons = new HashSet<int>();
@@ -77,6 +78,7 @@ namespace BalloonFlow
         {
             _iceHP.Clear();
             _pinSegments.Clear();
+            _pinColors.Clear();
             _surpriseBalloons.Clear();
             _curtainColors.Clear();
             _curtainCounters.Clear();
@@ -100,6 +102,7 @@ namespace BalloonFlow
 
                 case BalloonController.GimmickPin:
                     _pinSegments[balloonId] = hp > 0 ? hp : DEFAULT_PIN_LENGTH;
+                    _pinColors[balloonId] = color;
                     break;
 
                 case BalloonController.GimmickSurprise:
@@ -135,6 +138,8 @@ namespace BalloonFlow
 
                 case BalloonController.GimmickPin:
                     // Pin requires same-color dart direct hit for progressive removal
+                    if (_pinColors.TryGetValue(balloonId, out int pinColor) && dartColor != pinColor)
+                        return $"Pin: requires color {pinColor}";
                     if (_pinSegments.TryGetValue(balloonId, out int segments) && segments > 0)
                     {
                         // Check if dart color matches — handled by ProcessPinHit
@@ -143,13 +148,7 @@ namespace BalloonFlow
                     return null;
 
                 case BalloonController.GimmickColorCurtain:
-                    // Only removable by specific color dart
-                    if (_curtainColors.TryGetValue(balloonId, out int reqColor))
-                    {
-                        if (dartColor != reqColor)
-                            return $"ColorCurtain: requires color {reqColor}";
-                    }
-                    return null;
+                    return "ColorCurtain: indirect removal only";
 
                 default:
                     return null; // No block
@@ -196,6 +195,11 @@ namespace BalloonFlow
             return _pinSegments.TryGetValue(balloonId, out int seg) && seg <= 0;
         }
 
+        public int GetPinRemainingSegments(int balloonId)
+        {
+            return _pinSegments.TryGetValue(balloonId, out int seg) ? seg : 0;
+        }
+
         /// <summary>
         /// Reveals a Surprise balloon's color when an adjacent balloon pops.
         /// Returns true if the surprise was revealed.
@@ -205,14 +209,11 @@ namespace BalloonFlow
             if (!_surpriseBalloons.Contains(balloonId)) return false;
             _surpriseBalloons.Remove(balloonId);
 
-            EventBus.Publish(new OnGimmickTriggered
-            {
-                gimmickType = BalloonController.GimmickSurprise,
-                targetId = balloonId
-            });
-
-            Debug.Log($"[GimmickProcessor] Surprise {balloonId} revealed.");
-            return true;
+            bool revealed = BalloonController.HasInstance
+                && BalloonController.Instance.RevealHiddenBalloon(balloonId);
+            if (revealed)
+                Debug.Log($"[GimmickProcessor] Surprise {balloonId} revealed.");
+            return revealed;
         }
 
         /// <summary>
@@ -323,7 +324,7 @@ namespace BalloonFlow
             // === Surprise: reveal adjacent Surprise balloons ===
             if (BalloonController.HasInstance)
             {
-                var adjacentIds = BalloonController.Instance.GetAdjacentBalloonIdsPublic(evt.position);
+                var adjacentIds = BalloonController.Instance.GetAdjacentBalloonIdsForBalloonPublic(evt.balloonId, evt.position);
                 foreach (int adjId in adjacentIds)
                 {
                     if (_surpriseBalloons.Contains(adjId))
@@ -335,6 +336,7 @@ namespace BalloonFlow
                 // === Hidden: reveal adjacent Hidden balloons ===
                 foreach (int adjId in adjacentIds)
                 {
+                    _surpriseBalloons.Remove(adjId);
                     BalloonController.Instance.RevealHiddenBalloon(adjId);
                 }
             }

@@ -643,21 +643,45 @@ namespace BalloonFlow
                 if (balloon == null || balloon.isPopped) continue;
 
                 Vector3 worldPos = BalloonController.Instance.GetBalloonWorldPositionCached(balloon.balloonId);
-                Vector2Int cell = WorldToGrid(worldPos);
-                EdgeTarget edge = new EdgeTarget
+                bool targetable = IsDirectlyTargetable(balloon);
+
+                // ROLLBACK_BARRICADE_MULTI_CELL_OCCUPANCY:
+                // Sized field gimmicks are one object, but they occupy every cell in sizeW x sizeH.
+                if (IsMultiCellSizedFieldGimmick(balloon))
+                {
+                    int width = Mathf.Max(1, balloon.sizeW);
+                    int height = Mathf.Max(1, balloon.sizeH);
+                    Vector3 anchor = BalloonController.Instance.GetAdjustedBoardPosition(balloon.position);
+                    BalloonController.Instance.GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ);
+                    for (int dx = 0; dx < width; dx++)
+                    {
+                        for (int dz = 0; dz < height; dz++)
+                        {
+                            Vector3 cellWorld = new Vector3(
+                                anchor.x + dx * cellSizeX,
+                                worldPos.y,
+                                anchor.z + dz * cellSizeZ);
+                            AddEdgeTarget(new EdgeTarget
+                            {
+                                balloonId = balloon.balloonId,
+                                color = balloon.color,
+                                worldPos = cellWorld,
+                                cell = WorldToGrid(cellWorld),
+                                targetable = targetable
+                            });
+                        }
+                    }
+                    continue;
+                }
+
+                AddEdgeTarget(new EdgeTarget
                 {
                     balloonId = balloon.balloonId,
                     color = balloon.color,
                     worldPos = worldPos,
-                    cell = cell,
-                    targetable = IsDirectlyTargetable(balloon)
-                };
-
-                _occupiedCells[cell] = edge;
-                AddStraightLineEdge(_leftContourByRow, cell.y, edge, preferLower: true, useX: true);
-                AddStraightLineEdge(_rightContourByRow, cell.y, edge, preferLower: false, useX: true);
-                AddStraightLineEdge(_bottomContourByCol, cell.x, edge, preferLower: true, useX: false);
-                AddStraightLineEdge(_topContourByCol, cell.x, edge, preferLower: false, useX: false);
+                    cell = WorldToGrid(worldPos),
+                    targetable = targetable
+                });
             }
 
             if (_occupiedCells.Count == 0)
@@ -721,6 +745,22 @@ namespace BalloonFlow
             int previous = useX ? existing.cell.x : existing.cell.y;
             if (preferLower ? current < previous : current > previous)
                 map[line] = edge;
+        }
+
+        private static void AddEdgeTarget(EdgeTarget edge)
+        {
+            _occupiedCells[edge.cell] = edge;
+            AddStraightLineEdge(_leftContourByRow, edge.cell.y, edge, preferLower: true, useX: true);
+            AddStraightLineEdge(_rightContourByRow, edge.cell.y, edge, preferLower: false, useX: true);
+            AddStraightLineEdge(_bottomContourByCol, edge.cell.x, edge, preferLower: true, useX: false);
+            AddStraightLineEdge(_topContourByCol, edge.cell.x, edge, preferLower: false, useX: false);
+        }
+
+        private static bool IsMultiCellSizedFieldGimmick(BalloonData balloon)
+        {
+            return balloon != null
+                && BalloonController.IsSizedFieldGimmick(balloon.gimmickType)
+                && (balloon.sizeW > 1 || balloon.sizeH > 1);
         }
 
         private static void RebuildAttackableContourIdsFromLineMaps()

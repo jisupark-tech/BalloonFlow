@@ -51,6 +51,8 @@ namespace BalloonFlow
         private const float RATIO_DEPLOY_GAP      = 0.2f;    // 필드 폭 × 도착 거리
         private const float RATIO_RAIL_TO_QUEUE   = 0.65f;    // 필드 폭 × 보관함 거리
 
+        private const float CHAIN_LINE_WIDTH      = 0.30f;   // Chain line thickness. Previous value was 0.15f.
+
         #endregion
 
         [System.Diagnostics.Conditional("BALLOONFLOW_DEPLOY_DEBUG")]
@@ -1913,9 +1915,21 @@ namespace BalloonFlow
             // 원본: if (_sharedChainLineMat == null) _sharedChainLineMat = new Material(Shader.Find("Sprites/Default"));
             if (_sharedChainLineMat == null)
             {
-                Shader chainShader = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color");
+                // ROLLBACK_CHAIN_LINE_URP_MATERIAL:
+                // Previous runtime material used Sprites/Default. Chain lines are LineRenderers,
+                // so prefer URP unlit shaders and avoid pulling Default/Sprite into play builds.
+                Shader chainShader = Shader.Find("Universal Render Pipeline/Particles/Unlit")
+                    ?? Shader.Find("Universal Render Pipeline/Unlit")
+                    ?? Shader.Find("Unlit/Color");
                 if (chainShader != null)
+                {
                     _sharedChainLineMat = new Material(chainShader);
+                    _sharedChainLineMat.hideFlags = HideFlags.HideAndDontSave;
+                    if (_sharedChainLineMat.HasProperty("_BaseColor"))
+                        _sharedChainLineMat.SetColor("_BaseColor", Color.white);
+                    if (_sharedChainLineMat.HasProperty("_Color"))
+                        _sharedChainLineMat.SetColor("_Color", Color.white);
+                }
                 else
                 {
                     Debug.LogError("[HolderVisualManager] No shader for chain line — chain line will not render.");
@@ -1928,8 +1942,8 @@ namespace BalloonFlow
             // A색 절반
             var lrA = go.AddComponent<LineRenderer>();
             lrA.positionCount = 2;
-            lrA.startWidth = 0.15f;
-            lrA.endWidth = 0.15f;
+            lrA.startWidth = CHAIN_LINE_WIDTH;
+            lrA.endWidth = CHAIN_LINE_WIDTH;
             lrA.useWorldSpace = true;
             lrA.sortingOrder = 5;
             lrA.startColor = colorA;
@@ -1941,8 +1955,8 @@ namespace BalloonFlow
             goB.transform.SetParent(go.transform, false);
             var lrB = goB.AddComponent<LineRenderer>();
             lrB.positionCount = 2;
-            lrB.startWidth = 0.15f;
-            lrB.endWidth = 0.15f;
+            lrB.startWidth = CHAIN_LINE_WIDTH;
+            lrB.endWidth = CHAIN_LINE_WIDTH;
             lrB.useWorldSpace = true;
             lrB.sortingOrder = 5;
             lrB.startColor = colorB;

@@ -714,6 +714,25 @@ namespace BalloonFlow
             return holderIsDeadlock || (holderIsActiveDeployPoint && fullOrRecovery);
         }
 
+        // ROLLBACK_FAIL_ON_FORCE_ADVANCE_NO_MATCH:
+        // BoardStateManager uses the same condition as UpdateInternal's forced full-belt advance.
+        // Remove this helper and the BoardStateManager branch if forced-rotation should remain only
+        // a movement recovery mode, not a fail-condition contributor.
+        public bool IsForceFullBeltAdvanceActive()
+        {
+            int dartCount = _darts.Count;
+            if (dartCount == 0 || _frozenDartInfos.Count > 0) return false;
+
+            int physicalCapacity = PhysicalCapacity;
+            bool capacityFull = dartCount >= physicalCapacity;
+            bool deadlockHolderActive = _deadlockHolderId >= 0 && _activeDeployPoints.Contains(_deadlockHolderId);
+            bool deadlockNearFull =
+                _deadlockHolderId >= 0
+                && dartCount >= Mathf.Max(0, physicalCapacity - DEADLOCK_BELT_ADVANCE_EMPTY_SLOTS);
+
+            return capacityFull || deadlockHolderActive || deadlockNearFull;
+        }
+
         public string GetAdvanceModeDebugInfo()
         {
             int dartCount = _darts.Count;

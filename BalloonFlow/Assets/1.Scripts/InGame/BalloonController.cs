@@ -97,6 +97,16 @@ namespace BalloonFlow
                  "RefreshOutermostRendererState 의 가드 라인도 주석 처리됨. 토글 disable 원하면 가드 라인 + default false 복원.")]
         [SerializeField] private bool _outlineOnOuterOnly = true;
 
+        // ROLLBACK_BARRICADE_VISUAL_SETTINGS:
+        // Barricade art has its own pivot/height/body length, so keep visual placement separate
+        // from regular balloons and from logical cell occupancy.
+        [Header("[Barricade Visual]")]
+        [SerializeField] private float _barricadeVisualY = 0.5f;
+        [SerializeField] private Vector3 _barricadeVisualOffset = Vector3.zero;
+        [SerializeField] private float _barricadeLengthMultiplier = 1f;
+        [SerializeField] private float _barricadeLengthPadding = 0f;
+        [SerializeField] private Vector3 _barricadeBodyVisualOffset = Vector3.zero;
+
         // Primary data store keyed by balloonId
         private readonly Dictionary<int, BalloonData> _balloons = new Dictionary<int, BalloonData>();
 
@@ -114,6 +124,14 @@ namespace BalloonFlow
 
         // Spatial index: position key -> balloonId  (for adjacency lookups)
         private readonly Dictionary<Vector3Int, int> _positionIndex = new Dictionary<Vector3Int, int>();
+
+        // ROLLBACK_BARRICADE_MULTI_CELL_OCCUPANCY:
+        // Barricade is one object, but it can occupy multiple logical board cells.
+        private readonly Dictionary<int, List<Vector3Int>> _multiCellOccupancy = new Dictionary<int, List<Vector3Int>>();
+        private readonly Dictionary<Transform, Vector3> _barricadeBodyBaseScales = new Dictionary<Transform, Vector3>();
+        private readonly Dictionary<Transform, Quaternion> _barricadeBodyBaseRotations = new Dictionary<Transform, Quaternion>();
+        private readonly Dictionary<Transform, Vector3> _barricadeBodyBasePositions = new Dictionary<Transform, Vector3>();
+        private readonly List<Vector3Int> _reusableOccupiedCells = new List<Vector3Int>(16);
 
         // Key tracking: balloonId -> lockPairId (for path-based Key release)
         private readonly Dictionary<int, int> _activeKeyPairIds = new Dictionary<int, int>();
@@ -386,6 +404,27 @@ namespace BalloonFlow
             if (_balloons.TryGetValue(balloonId, out BalloonData data))
                 return data.position;
             return Vector3.zero;
+        }
+
+        public Vector3 GetAdjustedBoardPosition(Vector3 position)
+        {
+            Vector3 adjustedPos = position;
+            if (GameManager.HasInstance)
+            {
+                float cx = GameManager.Instance.Board.boardCenterX;
+                float cz = GameManager.Instance.Board.balloonCenterZ;
+                float wm = _levelSafeCalculated ? _levelSafeWm : GameManager.Instance.Board.balloonFieldWidthMult;
+                float hm = _levelSafeCalculated ? _levelSafeHm : GameManager.Instance.Board.balloonFieldHeightMult;
+                float zOffset = GameManager.Instance.Board.balloonGridZOffset;
+                adjustedPos.x = cx + (position.x - cx) * wm;
+                adjustedPos.z = cz + (position.z - cz) * hm + zOffset + _levelSafeZShift;
+            }
+            return adjustedPos;
+        }
+
+        public void GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ)
+        {
+            GetFieldVisualMetrics(out float widthMult, out float heightMult, out _, out cellSizeX, out cellSizeZ, out _);
         }
 
         /// <summary>풍선 월드 위치 — frame 단위 cache. 같은 frame 안에서 N번 호출돼도 transform.position 은 frame 당 1회만.
@@ -718,8 +757,9 @@ namespace BalloonFlow
             if (data.gimmickType == GimmickPin && GimmickProcessor.HasInstance)
             {
                 bool destroyed = GimmickProcessor.Instance.ProcessPinHit(data.balloonId, dartColor, data.color);
+                UpdatePinVisual(data.balloonId, destroyed);
                 if (!destroyed)
-                    return new PopResult { success = false, reason = "Pin: segment removed, not fully destroyed", balloonId = data.balloonId, gimmickType = GimmickPin };
+                    return new PopResult { success = false, hitAccepted = true, reason = "Pin: segment removed, not fully destroyed", balloonId = data.balloonId, gimmickType = GimmickPin };
                 return ExecutePop(data);
             }
 
@@ -736,6 +776,24 @@ namespace BalloonFlow
                 return ProcessPinataHit(data);
 
             return ExecutePop(data);
+        }
+
+        private void UpdatePinVisual(int balloonId, bool destroyed)
+        {
+            if (!_balloonObjects.TryGetValue(balloonId, out GameObject hitObj) || hitObj == null)
+                return;
+
+            var gi = hitObj.GetComponent<GimmickIdentifier>();
+            if (gi == null) return;
+
+            int remaining = 0;
+            if (!destroyed && GimmickProcessor.HasInstance)
+                remaining = Mathf.Max(0, GimmickProcessor.Instance.GetPinRemainingSegments(balloonId));
+
+            gi.UpdateHP(remaining);
+            gi.PlayHitEffect();
+            if (destroyed)
+                gi.PlayEndEffect();
         }
 
         /// <summary>
@@ -771,6 +829,12 @@ namespace BalloonFlow
                 obj.transform.DOPunchScale(Vector3.one * 0.15f, 0.2f, 8, 0.5f)
                     .SetLink(obj, LinkBehaviour.KillOnDisable);
             }
+
+            // ROLLBACK_REVEAL_TARGET_CACHE_INVALIDATION:
+            // A concealed Surprise/Hidden balloon is excluded from targeting. Revealing it must
+            // rebuild the contour cache immediately, otherwise it can stay invisible to darts.
+            DirectionalTargeting.InvalidateCache();
+            RefreshOutermostRendererState();
 
             EventBus.Publish(new OnGimmickTriggered
             {
@@ -811,6 +875,11 @@ namespace BalloonFlow
         public List<int> GetAdjacentBalloonIdsPublic(Vector3 position)
         {
             return GetAdjacentBalloonIds(position);
+        }
+
+        public List<int> GetAdjacentBalloonIdsForBalloonPublic(int balloonId, Vector3 fallbackPosition)
+        {
+            return GetAdjacentBalloonIdsForBalloon(balloonId, fallbackPosition);
         }
 
         /// <summary>
@@ -889,6 +958,7 @@ namespace BalloonFlow
             _hiddenBalloons.Clear();
             _pinataGroup.Clear();
             _positionIndex.Clear();
+            _multiCellOccupancy.Clear();
             _activeKeyPairIds.Clear();
             // [Leak fix 2026-05-11] _balloonRenderers / _prevOutermostSet / _frameCachedPositions 정리 추가.
             // 이전: ClearAllBalloons 가 _nextBalloonId=1 로 reset 하는데 이 dict 들이 stale entry 보유 →
@@ -974,6 +1044,7 @@ namespace BalloonFlow
                         {
                             gi.Initialize();
                             int ci = Mathf.Clamp(data.color, 0, BalloonColors.Length - 1);
+                            gi.UpdateHP(data.maxHP > 0 ? data.maxHP : 3);
                             if (gi.HasColorRenderers)
                                 gi.ApplyColor(BalloonColors[ci]);
                         }
@@ -992,29 +1063,7 @@ namespace BalloonFlow
                                 gi.ApplyColor(WALL_COLOR);
                         }
 
-                        // 멀티셀 stretching — Pinata 와 동일 방식
-                        {
-                            float cs = _cellSpacing > 0 ? _cellSpacing : 0.3f;
-                            float scaleBase = _balloonScale;
-
-                            if (data.sizeW > 1 || data.sizeH > 1)
-                            {
-                                obj.transform.localScale = new Vector3(
-                                    scaleBase * data.sizeW,
-                                    scaleBase,
-                                    scaleBase * data.sizeH);
-                            }
-
-                            // 앵커(좌하단)에서 멀티셀 중심으로 이동
-                            Vector3 centerOffset = new Vector3(
-                                (data.sizeW - 1) * cs * 0.5f,
-                                0f,
-                                (data.sizeH - 1) * cs * 0.5f);
-                            obj.transform.position = new Vector3(
-                                data.position.x + centerOffset.x,
-                                0f,
-                                data.position.z + centerOffset.z);
-                        }
+                        ApplyBarricadeVisualTransform(obj, data);
                     }
                     else if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
                     {
@@ -1030,30 +1079,7 @@ namespace BalloonFlow
                                 gi.ApplyColor(BalloonColors[ci]);
                         }
 
-                        // Piñata 위치/스케일 — 프리팹 세팅 기준, 추가 보정 없음
-                        {
-                            float cs = _cellSpacing > 0 ? _cellSpacing : 0.3f;
-                            float scaleBase = _balloonScale;
-
-                            if (data.sizeW > 1 || data.sizeH > 1)
-                            {
-                                obj.transform.localScale = new Vector3(
-                                    scaleBase * data.sizeW,
-                                    scaleBase,
-                                    scaleBase * data.sizeH);
-                            }
-
-                            // 앵커(좌하단)에서 멀티셀 중심으로 이동
-                            Vector3 centerOffset = new Vector3(
-                                (data.sizeW - 1) * cs * 0.5f,
-                                0f,
-                                (data.sizeH - 1) * cs * 0.5f);
-                            // Y는 프리팹 기준 (0으로 — 프리팹에서 이미 높이 설정됨)
-                            obj.transform.position = new Vector3(
-                                data.position.x + centerOffset.x,
-                                0f,
-                                data.position.z + centerOffset.z);
-                        }
+                        ApplySizedFieldVisualTransform(obj, data);
                     }
                 }
             }
@@ -1108,17 +1134,7 @@ namespace BalloonFlow
             }
 
             // 풍선 타일 영역 배율 적용 (레벨별 안전 배율 사용)
-            Vector3 adjustedPos = position;
-            if (GameManager.HasInstance)
-            {
-                float cx = GameManager.Instance.Board.boardCenterX;
-                float cz = GameManager.Instance.Board.balloonCenterZ;
-                float wm = _levelSafeCalculated ? _levelSafeWm : GameManager.Instance.Board.balloonFieldWidthMult;
-                float hm = _levelSafeCalculated ? _levelSafeHm : GameManager.Instance.Board.balloonFieldHeightMult;
-                float zOffset = GameManager.Instance.Board.balloonGridZOffset;
-                adjustedPos.x = cx + (position.x - cx) * wm;
-                adjustedPos.z = cz + (position.z - cz) * hm + zOffset + _levelSafeZShift;
-            }
+            Vector3 adjustedPos = GetAdjustedBoardPosition(position);
             obj.transform.position = adjustedPos;
             float scaleMult = _levelSafeCalculated
                 ? Mathf.Max(_levelSafeWm, _levelSafeHm)
@@ -1150,11 +1166,299 @@ namespace BalloonFlow
         private void BuildPositionIndex()
         {
             _positionIndex.Clear();
+            _multiCellOccupancy.Clear();
             foreach (BalloonData d in _balloons.Values)
             {
-                Vector3Int key = ToGridKey(d.position);
-                _positionIndex[key] = d.balloonId;
+                RegisterPositionIndexForBalloon(d);
             }
+        }
+
+        private bool UsesMultiCellOccupancy(BalloonData data)
+        {
+            return data != null
+                && IsSizedFieldGimmick(data.gimmickType)
+                && (data.sizeW > 1 || data.sizeH > 1);
+        }
+
+        public static bool IsSizedFieldGimmick(string gimmickType)
+        {
+            return gimmickType == GimmickPinata
+                || gimmickType == GimmickPinataBox
+                || gimmickType == GimmickBarricade;
+        }
+
+        private void BuildOccupiedCells(BalloonData data, List<Vector3Int> output)
+        {
+            output.Clear();
+            if (data == null) return;
+
+            Vector3Int anchor = ToGridKey(data.position);
+            int width = Mathf.Max(1, data.sizeW);
+            int height = Mathf.Max(1, data.sizeH);
+            for (int dx = 0; dx < width; dx++)
+            {
+                for (int dz = 0; dz < height; dz++)
+                    output.Add(new Vector3Int(anchor.x + dx, 0, anchor.z + dz));
+            }
+        }
+
+        private void RegisterPositionIndexForBalloon(BalloonData data)
+        {
+            if (data == null || data.isPopped) return;
+
+            if (!UsesMultiCellOccupancy(data))
+            {
+                _positionIndex[ToGridKey(data.position)] = data.balloonId;
+                return;
+            }
+
+            BuildOccupiedCells(data, _reusableOccupiedCells);
+            var cells = new List<Vector3Int>(_reusableOccupiedCells.Count);
+            for (int i = 0; i < _reusableOccupiedCells.Count; i++)
+            {
+                Vector3Int cell = _reusableOccupiedCells[i];
+                cells.Add(cell);
+                _positionIndex[cell] = data.balloonId;
+            }
+            _multiCellOccupancy[data.balloonId] = cells;
+        }
+
+        private void RemovePositionIndexForBalloon(BalloonData data)
+        {
+            if (data == null) return;
+
+            if (_multiCellOccupancy.TryGetValue(data.balloonId, out List<Vector3Int> cells))
+            {
+                for (int i = 0; i < cells.Count; i++)
+                    _positionIndex.Remove(cells[i]);
+                _multiCellOccupancy.Remove(data.balloonId);
+                return;
+            }
+
+            _positionIndex.Remove(ToGridKey(data.position));
+        }
+
+        private void GetFieldVisualMetrics(
+            out float widthMult,
+            out float heightMult,
+            out float scaleMult,
+            out float cellSizeX,
+            out float cellSizeZ,
+            out float scaleBase)
+        {
+            float cs = _cellSpacing > 0 ? _cellSpacing : 0.3f;
+            widthMult = 1f;
+            heightMult = 1f;
+            scaleMult = _levelSafeCalculated
+                ? Mathf.Max(_levelSafeWm, _levelSafeHm)
+                : (GameManager.HasInstance ? Mathf.Max(GameManager.Instance.Board.balloonFieldWidthMult, GameManager.Instance.Board.balloonFieldHeightMult) : 1f);
+            if (_levelSafeCalculated)
+            {
+                widthMult = _levelSafeWm;
+                heightMult = _levelSafeHm;
+            }
+            else if (GameManager.HasInstance)
+            {
+                widthMult = GameManager.Instance.Board.balloonFieldWidthMult;
+                heightMult = GameManager.Instance.Board.balloonFieldHeightMult;
+            }
+
+            cellSizeX = cs * widthMult;
+            cellSizeZ = cs * heightMult;
+            scaleBase = _balloonScale * scaleMult;
+        }
+
+        private void ApplySizedFieldVisualTransform(GameObject obj, BalloonData data)
+        {
+            if (obj == null || data == null) return;
+
+            GetFieldVisualMetrics(
+                out float widthMult,
+                out float heightMult,
+                out float scaleMult,
+                out float cellSizeX,
+                out float cellSizeZ,
+                out _);
+
+            int width = Mathf.Max(1, data.sizeW);
+            int height = Mathf.Max(1, data.sizeH);
+
+            // ROLLBACK_SIZED_GIMMICK_ANCHOR_VISUAL_CENTER:
+            // MapMaker stores the authored cell as the bottom-left anchor of the sized gimmick.
+            // Most field prefabs scale from their center pivot, so move only the visual root to
+            // the center of that anchored rectangle. Logical occupancy/targeting still uses
+            // data.position as the bottom-left anchor.
+            Vector3 adjustedAnchor = GetAdjustedBoardPosition(data.position);
+            Vector3 visualCenter = new Vector3(
+                adjustedAnchor.x + (width - 1) * cellSizeX * 0.5f,
+                obj.transform.position.y,
+                adjustedAnchor.z + (height - 1) * cellSizeZ * 0.5f);
+            obj.transform.localScale = new Vector3(
+                _balloonScale * widthMult * width,
+                _balloonScale * scaleMult,
+                _balloonScale * heightMult * height);
+            obj.transform.position = visualCenter;
+        }
+
+        private void ApplyBarricadeVisualTransform(GameObject obj, BalloonData data)
+        {
+            if (obj == null || data == null) return;
+
+            GetFieldVisualMetrics(
+                out float widthMult,
+                out float heightMult,
+                out float scaleMult,
+                out float cellSizeX,
+                out float cellSizeZ,
+                out _);
+
+            int width = Mathf.Max(1, data.sizeW);
+            int height = Mathf.Max(1, data.sizeH);
+            bool vertical = height > width;
+
+            // ROLLBACK_BARRICADE_VISUAL_SETTINGS:
+            // The root/head stays on the authored anchor cell. Only BarricadeBody covers the extra cells.
+            Vector3 adjustedAnchor = GetAdjustedBoardPosition(data.position);
+            obj.transform.localScale = new Vector3(
+                _balloonScale * widthMult,
+                _balloonScale * scaleMult,
+                _balloonScale * heightMult);
+            obj.transform.position = new Vector3(
+                adjustedAnchor.x + _barricadeVisualOffset.x,
+                _barricadeVisualY + _barricadeVisualOffset.y,
+                adjustedAnchor.z + _barricadeVisualOffset.z);
+
+            Transform body = FindChildRecursive(obj.transform, "BarricadeBody")
+                ?? FindChildRecursive(obj.transform, "BaricadeBody")
+                ?? FindChildRecursive(obj.transform, "Barricade")
+                ?? FindChildRecursive(obj.transform, "Baricade")
+                ?? FindFirstRenderableChild(obj.transform);
+
+            if (body == null)
+            {
+                Vector3 visualCenter = new Vector3(
+                    adjustedAnchor.x + (width - 1) * cellSizeX * 0.5f,
+                    obj.transform.position.y,
+                    adjustedAnchor.z + (height - 1) * cellSizeZ * 0.5f);
+                obj.transform.localScale = new Vector3(
+                    _balloonScale * widthMult * width,
+                    _balloonScale * scaleMult,
+                    _balloonScale * heightMult * height);
+                obj.transform.position = visualCenter;
+                return;
+            }
+
+            if (!_barricadeBodyBaseScales.TryGetValue(body, out Vector3 baseScale))
+            {
+                baseScale = body.localScale;
+                _barricadeBodyBaseScales[body] = baseScale;
+            }
+            if (!_barricadeBodyBaseRotations.TryGetValue(body, out Quaternion baseRotation))
+            {
+                baseRotation = body.localRotation;
+                _barricadeBodyBaseRotations[body] = baseRotation;
+            }
+            if (!_barricadeBodyBasePositions.TryGetValue(body, out Vector3 basePosition))
+            {
+                basePosition = body.localPosition;
+                _barricadeBodyBasePositions[body] = basePosition;
+            }
+
+            float lengthCells = Mathf.Max(1, vertical ? height : width);
+            int requiredHits = data.maxHP > 0 ? data.maxHP : 2;
+            int remainingHits = Mathf.Clamp(requiredHits - data.hitCount, 0, requiredHits);
+            float hpRatio = requiredHits > 0 ? remainingHits / (float)requiredHits : 1f;
+
+            // ROLLBACK_BARRICADE_BODY_HP_SHRINK:
+            // BarricadeBody covers the cells after the anchor/head. Each hit shortens that body
+            // by the remaining HP ratio while the root/head stays on the authored anchor cell.
+            float bodyCells = Mathf.Max(0f, lengthCells - 1f) * hpRatio;
+            body.gameObject.SetActive(bodyCells > 0.001f);
+            if (bodyCells <= 0.001f)
+                return;
+
+            float targetLength = Mathf.Max(0.001f,
+                bodyCells * (vertical ? cellSizeZ : cellSizeX) * _barricadeLengthMultiplier + _barricadeLengthPadding);
+            Quaternion targetRotation = vertical ? baseRotation * Quaternion.Euler(0f, 90f, 0f) : baseRotation;
+
+            body.localScale = baseScale;
+            body.localRotation = targetRotation;
+            body.localPosition = basePosition;
+            float baseLength = MeasureRendererLength(body, vertical);
+            float scaleFactor = baseLength > 0.001f ? targetLength / baseLength : bodyCells;
+            body.localScale = new Vector3(baseScale.x * scaleFactor, baseScale.y, baseScale.z);
+            body.localRotation = targetRotation;
+
+            if (TryMeasureRendererBounds(body, out Bounds bodyBounds))
+            {
+                float centerDistance = (bodyCells + 1f) * 0.5f * (vertical ? cellSizeZ : cellSizeX);
+                Vector3 desiredCenter = obj.transform.position + (vertical
+                    ? new Vector3(0f, 0f, centerDistance)
+                    : new Vector3(centerDistance, 0f, 0f));
+                desiredCenter += _barricadeBodyVisualOffset;
+                Vector3 delta = desiredCenter - bodyBounds.center;
+                body.position += delta;
+            }
+        }
+
+        private Transform FindChildRecursive(Transform root, string childName)
+        {
+            if (root == null || string.IsNullOrEmpty(childName)) return null;
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform child = root.GetChild(i);
+                if (child.name == childName) return child;
+
+                Transform nested = FindChildRecursive(child, childName);
+                if (nested != null) return nested;
+            }
+            return null;
+        }
+
+        private Transform FindFirstRenderableChild(Transform root)
+        {
+            if (root == null) return null;
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform child = root.GetChild(i);
+                if (child.GetComponent<Renderer>() != null) return child;
+
+                Transform nested = FindFirstRenderableChild(child);
+                if (nested != null) return nested;
+            }
+            return null;
+        }
+
+        private float MeasureRendererLength(Transform root, bool vertical)
+        {
+            if (!TryMeasureRendererBounds(root, out Bounds bounds)) return 0f;
+            return vertical ? bounds.size.z : bounds.size.x;
+        }
+
+        private bool TryMeasureRendererBounds(Transform root, out Bounds bounds)
+        {
+            bounds = default;
+            if (root == null) return false;
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            if (renderers == null || renderers.Length == 0) return false;
+
+            bool hasBounds = false;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null) continue;
+                if (!hasBounds)
+                {
+                    bounds = r.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(r.bounds);
+                }
+            }
+
+            return hasBounds;
         }
 
         private static readonly Color HIDDEN_COLOR = new Color(0.45f, 0.45f, 0.50f);   // Grey mystery balloon
@@ -1413,6 +1717,10 @@ namespace BalloonFlow
             switch (gimmickType)
             {
                 case GimmickBarricade: return BarricadePoolKey;
+                // ROLLBACK_PINATA_WOODENBOARD_PREFAB:
+                // The current Pinata visual is authored in Resources/Prefabs/WoodenBoard
+                // and addressed as prefab_WoodenBoard.
+                case GimmickPinata:    return WoodenBoardPoolKey;
                 case GimmickPinataBox: return IronBoxPoolKey;
                 case GimmickPin:       return WoodenBoardPoolKey;
                 case GimmickWall:      return WoodenBoardPoolKey;
@@ -1533,7 +1841,7 @@ namespace BalloonFlow
 
             // Remove from position index
             float __invalidateStamp = InGamePerfLogger.StartStampMs();
-            _positionIndex.Remove(ToGridKey(data.position));
+            RemovePositionIndexForBalloon(data);
 
             // ROLLBACK_DART_TARGET_CACHE_DIRTY:
             // DirectionalTargeting is now dirty-driven instead of frame-driven. A pop is the exact
@@ -1614,6 +1922,7 @@ namespace BalloonFlow
                 return new PopResult
                 {
                     success     = false,
+                    hitAccepted = true,
                     reason      = "PinataPartialHit",
                     balloonId   = data.balloonId,
                     gimmickType = GimmickPinata
@@ -1639,13 +1948,15 @@ namespace BalloonFlow
             if (_balloonObjects.TryGetValue(data.balloonId, out GameObject hitObj) && hitObj != null)
             {
                 var gi = hitObj.GetComponent<GimmickIdentifier>();
+                int remainHP = Mathf.Max(0, requiredHits - data.hitCount);
                 if (gi != null)
                 {
-                    int remainHP = Mathf.Max(0, requiredHits - data.hitCount);
                     gi.UpdateHP(remainHP);
                     gi.PlayHitEffect();
                     if (remainHP <= 0) gi.PlayEndEffect();
                 }
+
+                ApplyBarricadeVisualTransform(hitObj, data);
             }
 
             if (data.hitCount < requiredHits)
@@ -1653,6 +1964,7 @@ namespace BalloonFlow
                 return new PopResult
                 {
                     success     = false,
+                    hitAccepted = true,
                     reason      = "BarricadePartialHit",
                     balloonId   = data.balloonId,
                     gimmickType = GimmickBarricade
@@ -1689,6 +2001,11 @@ namespace BalloonFlow
                     ApplyTintToObject(obj, BalloonColors[colorIdx]);
                 }
 
+                // ROLLBACK_FROZEN_THAW_TARGET_CACHE_INVALIDATION:
+                // Thawing changes this cell from a frozen target to a normal target without a pop.
+                DirectionalTargeting.InvalidateCache();
+                RefreshOutermostRendererState();
+
                 EventBus.Publish(new OnGimmickTriggered
                 {
                     gimmickType = GimmickFrozenDart,
@@ -1698,6 +2015,7 @@ namespace BalloonFlow
                 return new PopResult
                 {
                     success     = false,
+                    hitAccepted = true,
                     reason      = "FrozenDartThawed",
                     balloonId   = data.balloonId,
                     gimmickType = GimmickFrozenDart
@@ -1736,7 +2054,7 @@ namespace BalloonFlow
             // RemoveAdjacentPins(data.position);  // 문서 기준 비활성
 
             // All pops thaw adjacent Frozen Dart balloons (like Ice adjacency)
-            ThawAdjacentFrozenDarts(data.position);
+            ThawAdjacentFrozenDarts(data);
         }
 
         private void RevealAdjacentHiddenBalloons(Vector3 position)
@@ -1837,6 +2155,7 @@ namespace BalloonFlow
         private void ThawAdjacentIce(Vector3 position)
         {
             int count = CopyAdjacentIds(GetAdjacentBalloonIds(position));
+            bool thawedAny = false;
             for (int i = 0; i < count; i++)
             {
                 int id = _adjCopyBuffer[i];
@@ -1863,6 +2182,16 @@ namespace BalloonFlow
                     gimmickType = GimmickIce,
                     targetId    = id
                 });
+
+                thawedAny = true;
+            }
+
+            if (thawedAny)
+            {
+                // ROLLBACK_FROZEN_THAW_TARGET_CACHE_INVALIDATION:
+                // Ice becomes targetable without a pop, so cached contours must be rebuilt.
+                DirectionalTargeting.InvalidateCache();
+                RefreshOutermostRendererState();
             }
         }
 
@@ -1870,9 +2199,10 @@ namespace BalloonFlow
         /// Thaws adjacent Frozen Dart balloons. Unlike Ice (which becomes targetable),
         /// Frozen Dart thaw converts it to a normal balloon that can be popped in 1 hit.
         /// </summary>
-        private void ThawAdjacentFrozenDarts(Vector3 position)
+        private void ThawAdjacentFrozenDarts(BalloonData source)
         {
-            int count = CopyAdjacentIds(GetAdjacentBalloonIds(position));
+            int count = CopyAdjacentIds(GetAdjacentBalloonIdsForBalloon(source.balloonId, source.position));
+            bool thawedAny = false;
             for (int i = 0; i < count; i++)
             {
                 int id = _adjCopyBuffer[i];
@@ -1900,6 +2230,16 @@ namespace BalloonFlow
                     gimmickType = GimmickFrozenDart,
                     targetId    = id
                 });
+
+                thawedAny = true;
+            }
+
+            if (thawedAny)
+            {
+                // ROLLBACK_FROZEN_THAW_TARGET_CACHE_INVALIDATION:
+                // Adjacent thaw changes targetability without removing the object.
+                DirectionalTargeting.InvalidateCache();
+                RefreshOutermostRendererState();
             }
         }
 
@@ -2236,7 +2576,7 @@ namespace BalloonFlow
             _balloons[keyId] = keyData;
             RemainingCount = Mathf.Max(0, RemainingCount - 1);
             PoppedCount++;
-            _positionIndex.Remove(ToGridKey(keyData.position));
+            RemovePositionIndexForBalloon(keyData);
 
             // Return Key visual to pool
             if (_balloonObjects.TryGetValue(keyId, out GameObject keyObj) && keyObj != null)
@@ -2295,7 +2635,38 @@ namespace BalloonFlow
                 Vector3Int neighbor = center + _adjacentDirs[i];
                 if (_positionIndex.TryGetValue(neighbor, out int neighborId))
                 {
-                    _reusableAdjacentIds.Add(neighborId);
+                    if (!_reusableAdjacentIds.Contains(neighborId))
+                        _reusableAdjacentIds.Add(neighborId);
+                }
+            }
+
+            return _reusableAdjacentIds;
+        }
+
+        private List<int> GetAdjacentBalloonIdsForBalloon(int balloonId, Vector3 fallbackPosition)
+        {
+            _reusableAdjacentIds.Clear();
+
+            if (!_balloons.TryGetValue(balloonId, out BalloonData data) || !UsesMultiCellOccupancy(data))
+                return GetAdjacentBalloonIds(fallbackPosition);
+
+            // ROLLBACK_MULTI_CELL_GIMMICK_ADJACENCY:
+            // Sized field gimmicks occupy a rectangle from the authored bottom-left anchor. Adjacent
+            // effects such as Surprise reveal and Frozen thaw must inspect every occupied edge cell,
+            // not just the anchor cell.
+            BuildOccupiedCells(data, _reusableOccupiedCells);
+            for (int c = 0; c < _reusableOccupiedCells.Count; c++)
+            {
+                Vector3Int cell = _reusableOccupiedCells[c];
+                for (int d = 0; d < _adjacentDirs.Length; d++)
+                {
+                    Vector3Int neighbor = cell + _adjacentDirs[d];
+                    if (_positionIndex.TryGetValue(neighbor, out int neighborId)
+                        && neighborId != balloonId
+                        && !_reusableAdjacentIds.Contains(neighborId))
+                    {
+                        _reusableAdjacentIds.Add(neighborId);
+                    }
                 }
             }
 
@@ -2400,6 +2771,7 @@ namespace BalloonFlow
     public class PopResult
     {
         public bool success;
+        public bool hitAccepted;
         public string reason;
         public int balloonId;
         public int color;

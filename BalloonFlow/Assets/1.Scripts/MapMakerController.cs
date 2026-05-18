@@ -84,6 +84,13 @@ namespace BalloonFlow
         private static readonly string[] TILE_NAMES =
             { "bl", "br", "h", "tl", "tr", "v" };
 
+        // ROLLBACK_BARRICADE_SIZED_FIELD_GIMMICK:
+        // Barricade is authored as a single multi-cell field object, like Pinata/Pinata_Box.
+        private static bool IsSizedFieldGimmick(string gimmickName)
+        {
+            return gimmickName == "Pinata" || gimmickName == "Pinata_Box" || gimmickName == "Barricade";
+        }
+
         private const float LEFT_PANEL_WIDTH = 240f;
         private const float RIGHT_PANEL_WIDTH = 400f;
 
@@ -1040,10 +1047,10 @@ namespace BalloonFlow
 
         private void UpdateFieldGimmickUI(string gimmickName)
         {
-            bool isPinata = gimmickName == "Pinata" || gimmickName == "Pinata_Box";
+            bool isSizedFieldGimmick = IsSizedFieldGimmick(gimmickName);
             bool isLockKey = gimmickName == "Lock_Key";
-            if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(isPinata);
-            if (_fieldGimmickSizeRow != null) _fieldGimmickSizeRow.gameObject.SetActive(isPinata);
+            if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(isSizedFieldGimmick);
+            if (_fieldGimmickSizeRow != null) _fieldGimmickSizeRow.gameObject.SetActive(isSizedFieldGimmick);
             if (_fieldGimmickLockRow != null) _fieldGimmickLockRow.gameObject.SetActive(isLockKey);
         }
 
@@ -2630,9 +2637,9 @@ namespace BalloonFlow
                 {
                     if (_balloonColors[c, r] < 0) continue;
                     int gi = _balloonGimmicks[c, r];
-                    bool isPinata = gi > 0 && gi < GIMMICK_NAMES.Length
-                        && (FIELD_GIMMICK_NAMES[gi] == "Pinata" || FIELD_GIMMICK_NAMES[gi] == "Pinata_Box");
-                    if (isPinata && _balloonPinataW[c, r] == 0) continue;
+                    bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
+                        && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
+                    if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
                     totalDarts++;
                 }
             int capacity = _railSlotCount > 0 ? _railSlotCount : RailManager.CalculateCapacity(totalDarts);
@@ -3263,10 +3270,10 @@ namespace BalloonFlow
                     }
                     else if (!_floodFillMode && !_eraseNeighborMode && !_fillNeighborMode)
                     {
-                        bool isPinataGimmick = _paintGimmick > 0 && _paintGimmick < GIMMICK_NAMES.Length
-                            && (FIELD_GIMMICK_NAMES[_paintGimmick] == "Pinata" || FIELD_GIMMICK_NAMES[_paintGimmick] == "Pinata_Box");
+                        bool isSizedFieldGimmick = _paintGimmick > 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length
+                            && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[_paintGimmick]);
 
-                        if (isPinataGimmick && _paintColor >= 0)
+                        if (isSizedFieldGimmick && _paintColor >= 0)
                         {
                             int pw = _paintPinataW, ph = _paintPinataH;
                             // 범위 내 셀에 같은 색 + Piñata 기믹으로 채움 (프리뷰에서 영역 표시)
@@ -3539,7 +3546,7 @@ namespace BalloonFlow
         {
             if (gimmickIndex <= 0 || gimmickIndex >= FIELD_GIMMICK_NAMES.Length) return 1;
             string g = FIELD_GIMMICK_NAMES[gimmickIndex];
-            if (g == "Pinata" || g == "Pinata_Box")
+            if (IsSizedFieldGimmick(g))
             {
                 // 실제 HP 사용 (기본값 2)
                 int hp = (col >= 0 && row >= 0) ? _balloonGimmickHP[col, row] : 2;
@@ -3575,9 +3582,9 @@ namespace BalloonFlow
                     {
                         // Piñata 비앵커 셀 스킵 (실제 풍선 아님)
                         int gi = _balloonGimmicks[c, r];
-                        bool isPinataCell = gi > 0 && gi < GIMMICK_NAMES.Length
-                            && (FIELD_GIMMICK_NAMES[gi] == "Pinata" || FIELD_GIMMICK_NAMES[gi] == "Pinata_Box");
-                        if (isPinataCell && _balloonPinataW[c, r] == 0) continue;
+                        bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
+                            && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
+                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
 
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
@@ -3715,9 +3722,9 @@ namespace BalloonFlow
                     if (_balloonColors[c, r] >= 0)
                     {
                         int gi = _balloonGimmicks[c, r];
-                        bool isPinata = gi > 0 && gi < GIMMICK_NAMES.Length
-                            && (FIELD_GIMMICK_NAMES[gi] == "Pinata" || FIELD_GIMMICK_NAMES[gi] == "Pinata_Box");
-                        if (isPinata && _balloonPinataW[c, r] == 0) continue;
+                        bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
+                            && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
+                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
                         needed[ci] = (needed.ContainsKey(ci) ? needed[ci] : 0) + life;
@@ -3813,9 +3820,9 @@ namespace BalloonFlow
                     if (_balloonColors[c, r] >= 0)
                     {
                         int gi = _balloonGimmicks[c, r];
-                        bool isPinata = gi > 0 && gi < GIMMICK_NAMES.Length
-                            && (FIELD_GIMMICK_NAMES[gi] == "Pinata" || FIELD_GIMMICK_NAMES[gi] == "Pinata_Box");
-                        if (isPinata && _balloonPinataW[c, r] == 0) continue;
+                        bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
+                            && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
+                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
                         colorDarts[ci] = (colorDarts.ContainsKey(ci) ? colorDarts[ci] : 0) + life;
@@ -5271,9 +5278,11 @@ namespace BalloonFlow
                     if (_balloonColors[c, r] < 0) continue;
                     // Piñata 비앵커 셀(sizeW==0)은 스킵 — 앵커 1개만 생성
                     int gi = _balloonGimmicks[c, r];
-                    bool isPinataCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
-                        && (FIELD_GIMMICK_NAMES[gi] == "Pinata" || FIELD_GIMMICK_NAMES[gi] == "Pinata_Box");
-                    if (isPinataCell && _balloonPinataW[c, r] == 0) continue;
+                    // ROLLBACK_BARRICADE_SIZED_FIELD_GIMMICK:
+                    // Sized field gimmick non-anchor cells(sizeW==0) are skipped; only the anchor emits layout data.
+                    bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
+                        && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
+                    if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
 
                     balloons.Add(new BalloonLayout
                     {
