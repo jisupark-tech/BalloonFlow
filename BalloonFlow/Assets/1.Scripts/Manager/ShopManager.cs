@@ -67,7 +67,7 @@ namespace BalloonFlow
 
             // 2) 코인 구매 부스터 (hand/shuffle/zap)
             if (BoosterManager.HasInstance && IsBoosterId(productId))
-                return BoosterManager.Instance.PurchaseBooster(productId);
+                return PurchaseBoosterWithRewardFx(productId);
 
             Debug.LogWarning($"[ShopManager] {productId} 매칭 실패 — 카탈로그/부스터 어디에도 없음");
             return false;
@@ -75,6 +75,39 @@ namespace BalloonFlow
 
         private static bool IsBoosterId(string id)
             => id == BoosterManager.HAND || id == BoosterManager.SHUFFLE || id == BoosterManager.ZAP;
+
+        private static bool PurchaseBoosterWithRewardFx(string boosterType)
+        {
+            if (!BoosterManager.HasInstance) return false;
+            if (!BoosterManager.Instance.TrySpendBoosterPurchaseCost(boosterType))
+            {
+                EventBus.Publish(new OnPurchaseCompleted { productId = boosterType, success = false });
+                return false;
+            }
+
+            var rewards = new ShopRewards { boosters = new BoosterInventory() };
+            switch (boosterType)
+            {
+                case BoosterManager.HAND:
+                    rewards.boosters.hand = 3;
+                    break;
+                case BoosterManager.SHUFFLE:
+                    rewards.boosters.shuffle = 3;
+                    break;
+                case BoosterManager.ZAP:
+                    rewards.boosters.zap = 3;
+                    break;
+            }
+
+            EventBus.Publish(new OnPurchaseRewardGranted
+            {
+                productId = boosterType,
+                rewards = rewards,
+                coinsAdded = 0
+            });
+            EventBus.Publish(new OnPurchaseCompleted { productId = boosterType, success = true });
+            return true;
+        }
 
         private void SetPanelVisible(bool visible)
         {

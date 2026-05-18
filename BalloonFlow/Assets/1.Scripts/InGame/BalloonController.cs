@@ -28,6 +28,7 @@ namespace BalloonFlow
         private const string FrozenLayerPoolKey = "FrozenLayer"; // Ice / Frozen_Dart overlay child
         private const int PinataRequiredHits = 2;
         private const float DEFAULT_BALLOON_SCALE = 0.5f;
+        private const float BARRICADE_BODY_CELL_LOCAL_SCALE_X = 0.06f;
 
         /// <summary>
         /// Color palette for balloon visualization. Index matches BalloonData.color.
@@ -826,8 +827,7 @@ namespace BalloonFlow
                 ApplyTintToObject(obj, BalloonColors[colorIdx]);
                 // [Leak fix 2026-05-11] SetLink(KillOnDisable) — pool 반환 시 SetActive(false) 에서 tween 자동 kill.
                 // 원본: obj.transform.DOPunchScale(Vector3.one * 0.15f, 0.2f, 8, 0.5f);
-                obj.transform.DOPunchScale(Vector3.one * 0.15f, 0.2f, 8, 0.5f)
-                    .SetLink(obj, LinkBehaviour.KillOnDisable);
+                PlayRevealEffect(obj, colorIdx, balloonId);
             }
 
             // ROLLBACK_REVEAL_TARGET_CACHE_INVALIDATION:
@@ -1377,16 +1377,20 @@ namespace BalloonFlow
             if (bodyCells <= 0.001f)
                 return;
 
-            float targetLength = Mathf.Max(0.001f,
-                bodyCells * (vertical ? cellSizeZ : cellSizeX) * _barricadeLengthMultiplier + _barricadeLengthPadding);
             Quaternion targetRotation = vertical ? baseRotation * Quaternion.Euler(0f, 90f, 0f) : baseRotation;
 
             body.localScale = baseScale;
             body.localRotation = targetRotation;
             body.localPosition = basePosition;
-            float baseLength = MeasureRendererLength(body, vertical);
-            float scaleFactor = baseLength > 0.001f ? targetLength / baseLength : bodyCells;
-            body.localScale = new Vector3(baseScale.x * scaleFactor, baseScale.y, baseScale.z);
+
+            // ROLLBACK_BARRICADE_BODY_CELL_SCALE_X:
+            // The current art maps one board cell to BarricadeBody.localScale.x = 0.06.
+            // Use that authored ratio directly; renderer bounds from the imported FBX are not
+            // reliable enough for 1:1 cell sizing.
+            float bodyScaleX = Mathf.Max(
+                0.001f,
+                BARRICADE_BODY_CELL_LOCAL_SCALE_X * bodyCells * _barricadeLengthMultiplier + _barricadeLengthPadding);
+            body.localScale = new Vector3(bodyScaleX, baseScale.y, baseScale.z);
             body.localRotation = targetRotation;
 
             if (TryMeasureRendererBounds(body, out Bounds bodyBounds))
@@ -2053,8 +2057,33 @@ namespace BalloonFlow
             // Pin은 인접 팝으로 제거 안 됨 — 같은 색 다트 직접 타격으로만 제거
             // RemoveAdjacentPins(data.position);  // 문서 기준 비활성
 
+            // ROLLBACK_ICE_ADJACENT_THAW:
+            // Ice blocks darts while frozen, then becomes a normal target when a neighboring
+            // balloon pops. Keep this adjacent to the Frozen_Dart thaw path so both cache
+            // invalidation paths stay together.
+            ThawAdjacentIce(data);
             // All pops thaw adjacent Frozen Dart balloons (like Ice adjacency)
             ThawAdjacentFrozenDarts(data);
+        }
+
+        private void PlayRevealEffect(GameObject obj, int colorIdx, int balloonId)
+        {
+            if (obj == null) return;
+
+            // ROLLBACK_FIELD_REVEAL_VISIBLE_EFFECT:
+            // The previous reveal was only a tiny punch scale, so Surprise/Hidden and Ice thaw
+            // could look like a silent color swap. Reuse the pooled pop particle at a smaller
+            // scale and run one short pulse without changing gameplay state.
+            obj.transform.DOKill();
+            Vector3 baseScale = obj.transform.localScale;
+            Sequence seq = DOTween.Sequence();
+            seq.Append(obj.transform.DOScale(baseScale * 1.18f, 0.10f).SetEase(Ease.OutQuad));
+            seq.Append(obj.transform.DOScale(baseScale, 0.12f).SetEase(Ease.OutBack));
+            seq.SetLink(obj, LinkBehaviour.KillOnDisable);
+
+            int ci = Mathf.Clamp(colorIdx, 0, BalloonColors.Length - 1);
+            float effectScale = Mathf.Max(0.15f, GetBalloonEffectScaleMultiplier(balloonId) * 0.65f);
+            PopEffectPool.Play(obj.transform.position, BalloonColors[ci], this, effectScale);
         }
 
         private void RevealAdjacentHiddenBalloons(Vector3 position)
@@ -2077,8 +2106,7 @@ namespace BalloonFlow
 
                     // Reveal punch animation
                     // [Leak fix 2026-05-11] SetLink(KillOnDisable) — pool 반환 시 자동 kill. 원본: 동일 코드 .SetLink 없이.
-                    obj.transform.DOPunchScale(Vector3.one * 0.15f, 0.2f, 8, 0.5f)
-                        .SetLink(obj, LinkBehaviour.KillOnDisable);
+                    PlayRevealEffect(obj, colorIdx, id);
                 }
 
                 EventBus.Publish(new OnGimmickTriggered
@@ -2152,9 +2180,11 @@ namespace BalloonFlow
         /// Thaws adjacent Ice balloons. Ice balloons are frozen and cannot be targeted.
         /// When an adjacent balloon pops, Ice converts to a normal balloon (targetable).
         /// </summary>
-        private void ThawAdjacentIce(Vector3 position)
+        private void ThawAdjacentIce(BalloonData source)
         {
-            int count = CopyAdjacentIds(GetAdjacentBalloonIds(position));
+            if (source == null) return;
+
+            int count = CopyAdjacentIds(GetAdjacentBalloonIdsForBalloon(source.balloonId, source.position));
             bool thawedAny = false;
             for (int i = 0; i < count; i++)
             {
@@ -2175,6 +2205,7 @@ namespace BalloonFlow
                 {
                     int colorIdx = Mathf.Clamp(neighbor.color, 0, BalloonColors.Length - 1);
                     ApplyTintToObject(obj, BalloonColors[colorIdx]);
+                    PlayRevealEffect(obj, colorIdx, id);
                 }
 
                 EventBus.Publish(new OnGimmickTriggered

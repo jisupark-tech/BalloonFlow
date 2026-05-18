@@ -103,6 +103,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnRailOccupancyChanged>(HandleRailOccupancy);
             EventBus.Subscribe<OnAllHoldersEmpty>(HandleAllHoldersEmpty);
             EventBus.Subscribe<OnContinueApplied>(HandleContinueApplied);
+            EventBus.Subscribe<OnDeadlockEntered>(HandleDeadlockEntered);
         }
 
         private void OnDisable()
@@ -113,6 +114,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnRailOccupancyChanged>(HandleRailOccupancy);
             EventBus.Unsubscribe<OnAllHoldersEmpty>(HandleAllHoldersEmpty);
             EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
+            EventBus.Unsubscribe<OnDeadlockEntered>(HandleDeadlockEntered);
         }
 
         private float _periodicLogTimer;
@@ -477,6 +479,33 @@ namespace BalloonFlow
                     hasOutermostMatch = HasOutermostMatchCached
                 });
             }
+        }
+
+        private void HandleDeadlockEntered(OnDeadlockEntered evt)
+        {
+            if (_currentState != BoardState.Playing) return;
+            if (_failConfirmed) return;
+            if (_remainingBalloons <= 0) return;
+            if (!RailManager.HasInstance) return;
+
+            // ROLLBACK_FAIL_ON_DEADLOCK_ENTER_NO_MATCH:
+            // Deadlock enter is the exact moment the rail switches into forced/full-belt recovery.
+            // The periodic Update path still owns the grace-based check, but this immediate pass
+            // prevents a near-full forced belt from staying alive when no exposed balloon is
+            // attackable by any rail dart color.
+            _outermostDirty = true;
+            _matchCacheFrame = -1;
+
+            if (!RailManager.Instance.IsForceFullBeltAdvanceActive()) return;
+            if (HasOutermostMatch())
+            {
+                if (_debugLogFail) DumpAttackState("[Fail-DEBUG] Deadlock entered but attackable match exists");
+                return;
+            }
+
+            if (_debugLogFail) DumpAttackState("[Fail-DEBUG] Deadlock entered with no attackable match");
+            _failConfirmed = true;
+            TriggerFail(FailReason.RailOverflow);
         }
 
         private GaugeStage EvaluateGaugeStage(float occupancy)

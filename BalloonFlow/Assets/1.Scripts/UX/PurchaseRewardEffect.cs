@@ -17,24 +17,23 @@ namespace BalloonFlow
     public class PurchaseRewardEffect : Singleton<PurchaseRewardEffect>
     {
         private const int FLY_COUNT = 10;
+        private const int ITEM_FLY_COUNT = 1;
 
         // [2026-05-15] Booster / Life / InfiniteHearts fly icon.
         // Inspector wire 필요 — Resources 안 아이콘 (예: booster_hand.png / heart.png) 를 직접 연결.
         // null 이면 해당 종류 fly 스킵 + 코인만 fly (안전 폴백).
         [Header("[Item Fly Icons — 인스펙터 wire]")]
         [SerializeField] private Sprite _iconBooster;
+        [SerializeField] private Sprite _iconHand;
+        [SerializeField] private Sprite _iconShuffle;
+        [SerializeField] private Sprite _iconZap;
         [SerializeField] private Sprite _iconLife;
 
         protected override void OnSingletonAwake()
         {
             // ResourceManager 에서 atlas fallback — Inspector wire 가 비어 있어도 가능한 한 자동 채움.
             // PopupBuyItem 의 atlas key 와 동일. iconHeart 키가 atlas 에 없으면 _iconLife 는 null 유지.
-            if (ResourceManager.HasInstance)
-            {
-                var rm = ResourceManager.Instance;
-                _iconBooster = rm.UISpriteOr("iconHand",  _iconBooster);
-                _iconLife    = rm.UISpriteOr("iconHeart", _iconLife);
-            }
+            EnsureIconsLoaded();
             EventBus.Subscribe<OnPurchaseRewardGranted>(HandleReward);
         }
 
@@ -110,10 +109,12 @@ namespace BalloonFlow
 
             // 페이지 전환 애니메이션 잠시 대기 (UILobby PAGE_SWIPE_DURATION = 0.3s)
             yield return new WaitForSecondsRealtime(0.35f);
+            EnsureIconsLoaded();
 
             Vector2 from = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
 
             // 2) Coin fly to GoldPanel — 기존 로직 그대로
+            if (coinsAdded > 0 && lobby != null)
             if (coinsAdded > 0 && lobby != null)
             {
                 Vector2 to = lobby.GetGoldPanelScreenPos();
@@ -151,38 +152,75 @@ namespace BalloonFlow
                 CurrencyManager.Instance.PublishCoinSync();
             }
 
-            // 3) Booster / Life / InfiniteHearts fly to LifePanel
-            if (lobby != null && rewards != null)
+            // 3) Booster / Life / InfiniteHearts fly to LifePanel, then grant item rewards.
+            if (rewards != null)
             {
-                Vector2 lifeTo = lobby.GetLifePanelScreenPos();
+                int pendingItemFly = 0;
+                Vector2 boosterTo = lobby != null ? lobby.GetGameStartButtonScreenPos() : from;
+                Vector2 lifeTo = lobby != null ? lobby.GetLifePanelScreenPos() : from;
 
-                int boosterCount = 0;
+                void PlayItem(Sprite icon, int rewardCount, string label, Vector2 target, System.Action onLand)
+                {
+                    if (rewardCount <= 0) return;
+                    if (lobby == null)
+                    {
+                        Debug.LogWarning($"[PurchaseRewardEffect] {label} FXItem skipped - lobby missing. Reward still applies.");
+                        return;
+                    }
+
+                    if (icon == null)
+                        Debug.LogWarning($"[PurchaseRewardEffect] {label} icon missing - using FXItem prefab default sprite.");
+
+                    pendingItemFly++;
+                    ItemFlyEffect.Play(icon, from, target, ITEM_FLY_COUNT,
+                        onEachLand: onLand,
+                        onAllComplete: () => pendingItemFly--);
+                }
+
                 if (rewards.boosters != null)
                 {
-                    boosterCount = rewards.boosters.hand + rewards.boosters.shuffle + rewards.boosters.zap;
-                }
-                if (boosterCount > 0 && _iconBooster != null)
-                {
-                    ItemFlyEffect.Play(_iconBooster, from, lifeTo, boosterCount,
-                        onEachLand: () => lobby.PulseLifePanel());
-                }
-                else if (boosterCount > 0)
-                {
-                    Debug.LogWarning("[PurchaseRewardEffect] Booster fly skipped — _iconBooster 미할당 (Inspector wire 필요).");
+                    PlayItem(_iconHand != null ? _iconHand : _iconBooster, rewards.boosters.hand, "Hand", boosterTo, () => lobby.PulseGameStartButton());
+                    PlayItem(_iconShuffle != null ? _iconShuffle : _iconBooster, rewards.boosters.shuffle, "Shuffle", boosterTo, () => lobby.PulseGameStartButton());
+                    PlayItem(_iconZap != null ? _iconZap : _iconBooster, rewards.boosters.zap, "Zap", boosterTo, () => lobby.PulseGameStartButton());
                 }
 
                 // 무한 하트: 5개 가시화 (visual stand-in)
                 int lifeCount = rewards.infiniteHeartsSeconds > 0 ? 5 : 0;
-                if (lifeCount > 0 && _iconLife != null)
-                {
-                    ItemFlyEffect.Play(_iconLife, from, lifeTo, lifeCount,
-                        onEachLand: () => lobby.PulseLifePanel());
-                }
-                else if (lifeCount > 0)
-                {
-                    Debug.LogWarning("[PurchaseRewardEffect] Life fly skipped — _iconLife 미할당 (Inspector wire 필요).");
-                }
+                PlayItem(_iconLife, lifeCount, "InfiniteHearts", lifeTo, () => lobby.PulseLifePanel());
+
+                while (pendingItemFly > 0)
+                    yield return null;
+
+                ApplyItemRewardsAfterFx(rewards);
             }
+        }
+
+        private void EnsureIconsLoaded()
+        {
+            if (!ResourceManager.HasInstance) return;
+
+            var rm = ResourceManager.Instance;
+            _iconHand    = rm.UISpriteOr(Const.SPR_ICONHAND,   _iconHand);
+            _iconShuffle = rm.UISpriteOr(Const.SPR_ICONSUFFLE, _iconShuffle);
+            _iconZap     = rm.UISpriteOr(Const.SPR_ICONZAP,    _iconZap);
+            _iconBooster = rm.UISpriteOr(Const.SPR_ICONHAND,   _iconBooster);
+            _iconLife    = rm.UISpriteOr(Const.SPR_ICONLIFE,   _iconLife);
+            _iconLife    = rm.UISpriteOr(Const.SPR_ICONHEARINFINITE, _iconLife);
+        }
+
+        private static void ApplyItemRewardsAfterFx(ShopRewards rewards)
+        {
+            if (rewards == null) return;
+
+            if (rewards.boosters != null && BoosterManager.HasInstance)
+            {
+                if (rewards.boosters.hand    > 0) BoosterManager.Instance.AddBooster(BoosterManager.HAND,    rewards.boosters.hand);
+                if (rewards.boosters.shuffle > 0) BoosterManager.Instance.AddBooster(BoosterManager.SHUFFLE, rewards.boosters.shuffle);
+                if (rewards.boosters.zap     > 0) BoosterManager.Instance.AddBooster(BoosterManager.ZAP,     rewards.boosters.zap);
+            }
+
+            if (rewards.infiniteHeartsSeconds > 0 && LifeManager.HasInstance)
+                LifeManager.Instance.ActivateInfiniteHearts(rewards.infiniteHeartsSeconds);
         }
 
         private static UILobby FindUILobby()

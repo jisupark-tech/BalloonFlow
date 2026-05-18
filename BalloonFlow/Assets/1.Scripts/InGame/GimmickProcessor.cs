@@ -50,6 +50,10 @@ namespace BalloonFlow
         private readonly List<int> _iceRemoveBuffer = new List<int>();
         private readonly List<int> _curtainKeysBuffer = new List<int>();
         private readonly List<int> _curtainRemoveBuffer = new List<int>();
+        // ROLLBACK_ICE_GLOBAL_POP_COUNTER:
+        // Ice now thaws from adjacent pops in BalloonController. Keep the old global HP counter
+        // path behind this flag in case the design returns to "any pop damages all Ice".
+        private static readonly bool UseGlobalIcePopCounter = false;
 
         #endregion
 
@@ -244,42 +248,45 @@ namespace BalloonFlow
         /// </summary>
         private void HandleAnyBalloonPopped(OnBalloonPopped evt)
         {
-            // === Ice: every pop reduces all Ice balloon HP by 1 ===
-            _iceKeysBuffer.Clear();
-            _iceRemoveBuffer.Clear();
-            foreach (var kvp in _iceHP)
-                _iceKeysBuffer.Add(kvp.Key);
-
-            for (int i = 0; i < _iceKeysBuffer.Count; i++)
+            if (UseGlobalIcePopCounter)
             {
-                int id = _iceKeysBuffer[i];
-                if (!_iceHP.TryGetValue(id, out int hp)) continue;
+                // === Ice: every pop reduces all Ice balloon HP by 1 ===
+                _iceKeysBuffer.Clear();
+                _iceRemoveBuffer.Clear();
+                foreach (var kvp in _iceHP)
+                    _iceKeysBuffer.Add(kvp.Key);
 
-                int newHP = hp - 1;
-                _iceHP[id] = newHP;
-
-                if (newHP <= 0)
+                for (int i = 0; i < _iceKeysBuffer.Count; i++)
                 {
-                    _iceRemoveBuffer.Add(id);
+                    int id = _iceKeysBuffer[i];
+                    if (!_iceHP.TryGetValue(id, out int hp)) continue;
 
-                    EventBus.Publish(new OnGimmickTriggered
+                    int newHP = hp - 1;
+                    _iceHP[id] = newHP;
+
+                    if (newHP <= 0)
                     {
-                        gimmickType = BalloonController.GimmickIce,
-                        targetId = id
-                    });
+                        _iceRemoveBuffer.Add(id);
+
+                        EventBus.Publish(new OnGimmickTriggered
+                        {
+                            gimmickType = BalloonController.GimmickIce,
+                            targetId = id
+                        });
+                    }
                 }
-            }
 
-            // Remove destroyed Ice balloons from tracking before ForcePop can publish recursively.
-            for (int i = 0; i < _iceRemoveBuffer.Count; i++)
-            {
-                int id = _iceRemoveBuffer[i];
-                _iceHP.Remove(id);
-
-                // Signal BalloonController to pop this Ice balloon
-                if (BalloonController.HasInstance)
+                // Remove destroyed Ice balloons from tracking before ForcePop can publish recursively.
+                for (int i = 0; i < _iceRemoveBuffer.Count; i++)
                 {
-                    BalloonController.Instance.ForcePopBalloon(id);
+                    int id = _iceRemoveBuffer[i];
+                    _iceHP.Remove(id);
+
+                    // Signal BalloonController to pop this Ice balloon
+                    if (BalloonController.HasInstance)
+                    {
+                        BalloonController.Instance.ForcePopBalloon(id);
+                    }
                 }
             }
 

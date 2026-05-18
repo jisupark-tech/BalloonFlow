@@ -1,36 +1,72 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace BalloonFlow
 {
     /// <summary>
-    /// [2026-05-15] Generic UI Image fly. PurchaseRewardEffect 에서 booster/life/infiniteHearts 도착 연출에 사용.
-    /// CoinFlyEffect 와 동일 시각 패턴 (scatter → parabolic converge → target) 이지만 풀 미사용,
-    /// Sprite 외부 주입. 보상 합산이 1~5개 수준이라 매 spawn alloc 부담 작음.
+    /// Item reward fly effect. Uses Resources/UI/UIAssets/FXItem.prefab and applies reward callbacks after landing.
     /// </summary>
     public static class ItemFlyEffect
     {
         private const float SPAWN_INTERVAL = 0.15f;
         private const float MAX_TOTAL_SPAWN_TIME = 0.6f;
-        private const float DURATION_MIN = 0.45f;
-        private const float DURATION_MAX = 0.7f;
-        private const float ICON_SIZE = 120f;
+        private const float DURATION_MIN = 0.9f;
+        private const float DURATION_MAX = 1.2f;
+        private const float FALLBACK_ICON_SIZE = 120f;
+
+        private static bool _poolRegistered;
+        private static GameObject _prefab;
+        private static Sprite _prefabDefaultSprite;
+
+        private static readonly HashSet<GameObject> _activeItems = new HashSet<GameObject>();
+        private static readonly Dictionary<GameObject, RectTransform> _rectCache = new Dictionary<GameObject, RectTransform>();
+        private static readonly Dictionary<GameObject, Image> _imageCache = new Dictionary<GameObject, Image>();
 
         public static void Play(Sprite icon, Vector2 screenFrom, Vector2 screenTo, int count,
             Action onEachLand = null, Action onAllComplete = null)
         {
-            if (icon == null || count <= 0) { onAllComplete?.Invoke(); return; }
+            if (count <= 0) { onAllComplete?.Invoke(); return; }
             if (!UIManager.HasInstance) { onAllComplete?.Invoke(); return; }
 
-            Transform parent = UIManager.Instance.EffectTr != null
-                ? UIManager.Instance.EffectTr
-                : UIManager.Instance.PopupTr;
+            Transform parent = GetParentTransform();
             if (parent == null) { onAllComplete?.Invoke(); return; }
 
+            EnsurePool();
             CoroutineRunner.Get().StartCoroutine(
                 RunFly(parent, icon, screenFrom, screenTo, count, onEachLand, onAllComplete));
+        }
+
+        private static Transform GetParentTransform()
+        {
+            if (!UIManager.HasInstance) return null;
+            var ui = UIManager.Instance;
+            return ui.EffectTr != null ? ui.EffectTr
+                 : ui.PopupTr  != null ? ui.PopupTr
+                 : ui.UiTr;
+        }
+
+        private static void EnsurePool()
+        {
+            if (_prefab == null)
+            {
+                _prefab = Resources.Load<GameObject>(Const.PREFAB_FXITEM);
+                var prefabImage = _prefab != null ? _prefab.GetComponentInChildren<Image>(true) : null;
+                _prefabDefaultSprite = prefabImage != null ? prefabImage.sprite : null;
+            }
+
+            if (_prefab == null)
+            {
+                Debug.LogError($"[ItemFlyEffect] {Const.PREFAB_FXITEM}.prefab not found in Resources.");
+                return;
+            }
+
+            if (_poolRegistered || !ObjectPoolManager.HasInstance) return;
+            if (!ObjectPoolManager.Instance.HasPool(Const.POOL_FXITEM))
+                ObjectPoolManager.Instance.CreatePool(Const.POOL_FXITEM, _prefab, 24);
+            _poolRegistered = true;
         }
 
         private static IEnumerator RunFly(Transform parent, Sprite icon,
@@ -55,6 +91,15 @@ namespace BalloonFlow
 
             for (int i = 0; i < count; i++)
             {
+                GameObject item = GetItemInstance(parent, icon, from);
+                if (item == null)
+                {
+                    landed++;
+                    onEachLand?.Invoke();
+                    if (landed >= count) onAllComplete?.Invoke();
+                    continue;
+                }
+
                 float angle = UnityEngine.Random.Range(0f, 360f) * Mathf.Deg2Rad;
                 float radius = UnityEngine.Random.Range(scatterRadius * 0.5f, scatterRadius);
                 Vector2 scatterDir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
@@ -64,22 +109,11 @@ namespace BalloonFlow
                 mid += scatterDir * UnityEngine.Random.Range(cW * 0.04f, cW * 0.1f);
                 mid.y += UnityEngine.Random.Range(cH * 0.06f, cH * 0.15f);
 
-                var go = new GameObject("ItemFly", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-                go.transform.SetParent(parent, false);
-                go.transform.SetAsLastSibling();
-                var rt = (RectTransform)go.transform;
-                rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-                rt.pivot = new Vector2(0.5f, 0.5f);
-                rt.anchoredPosition = from;
-                rt.sizeDelta = new Vector2(ICON_SIZE, ICON_SIZE);
-                var img = go.GetComponent<Image>();
-                img.sprite = icon;
-                img.raycastTarget = false;
-                img.preserveAspect = true;
-
+                RectTransform rt = _rectCache[item];
+                Image img = _imageCache[item];
                 float dur = UnityEngine.Random.Range(DURATION_MIN, DURATION_MAX);
                 CoroutineRunner.Get().StartCoroutine(
-                    Fly(go, rt, img, from, scatterPos, mid, to, dur, () =>
+                    Fly(item, rt, img, from, scatterPos, mid, to, dur, () =>
                     {
                         landed++;
                         onEachLand?.Invoke();
@@ -91,13 +125,53 @@ namespace BalloonFlow
             }
         }
 
-        private static IEnumerator Fly(GameObject go, RectTransform rt, Image img,
+        private static GameObject GetItemInstance(Transform parent, Sprite icon, Vector2 from)
+        {
+            GameObject item = null;
+            if (ObjectPoolManager.HasInstance && _poolRegistered && ObjectPoolManager.Instance.HasPool(Const.POOL_FXITEM))
+                item = ObjectPoolManager.Instance.Get(Const.POOL_FXITEM);
+            else if (_prefab != null)
+                item = UnityEngine.Object.Instantiate(_prefab);
+
+            if (item == null) return null;
+
+            item.transform.SetParent(parent, false);
+            item.transform.SetAsLastSibling();
+            _activeItems.Add(item);
+
+            if (!_rectCache.TryGetValue(item, out RectTransform rt) || rt == null)
+            {
+                rt = item.GetComponent<RectTransform>();
+                if (rt == null) rt = item.AddComponent<RectTransform>();
+                _rectCache[item] = rt;
+            }
+
+            if (!_imageCache.TryGetValue(item, out Image img) || img == null)
+            {
+                img = item.GetComponentInChildren<Image>(true);
+                if (img == null) img = item.AddComponent<Image>();
+                _imageCache[item] = img;
+            }
+
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = from;
+            if (rt.sizeDelta.sqrMagnitude <= 1f)
+                rt.sizeDelta = new Vector2(FALLBACK_ICON_SIZE, FALLBACK_ICON_SIZE);
+
+            img.sprite = icon != null ? icon : (_prefabDefaultSprite != null ? _prefabDefaultSprite : img.sprite);
+            img.color = Color.white;
+            img.raycastTarget = false;
+            img.preserveAspect = true;
+            return item;
+        }
+
+        private static IEnumerator Fly(GameObject item, RectTransform rt, Image img,
             Vector2 origin, Vector2 scatter, Vector2 mid, Vector2 target,
             float duration, Action onDone)
         {
             float elapsed = 0f;
-            float scatterPhase = 0.18f;
-            Color baseColor = img.color;
+            const float scatterPhase = 0.18f;
 
             while (elapsed < duration)
             {
@@ -118,16 +192,21 @@ namespace BalloonFlow
                     rt.anchoredPosition = u * u * scatter + 2f * u * ease * mid + ease * ease * target;
                 }
 
-                if (t > 0.85f)
+                if (t > 0.85f && img != null)
                 {
                     float a = 1f - (t - 0.85f) / 0.15f;
-                    img.color = new Color(baseColor.r, baseColor.g, baseColor.b, a);
+                    img.color = new Color(1f, 1f, 1f, a);
                 }
                 yield return null;
             }
 
+            _activeItems.Remove(item);
             onDone?.Invoke();
-            UnityEngine.Object.Destroy(go);
+
+            if (ObjectPoolManager.HasInstance && ObjectPoolManager.Instance.HasPool(Const.POOL_FXITEM))
+                ObjectPoolManager.Instance.Return(Const.POOL_FXITEM, item);
+            else
+                UnityEngine.Object.Destroy(item);
         }
 
         private static Vector2 ScreenToLocal(RectTransform canvasRT, Camera cam, Vector2 screen)

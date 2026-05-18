@@ -119,6 +119,9 @@ namespace BalloonFlow
 
             if (_txtItemAmount != null) _txtItemAmount.gameObject.SetActive(true);
             if (_txtItemAmountOutline != null) _txtItemAmountOutline.gameObject.SetActive(true);
+            if (_txtGold != null) _txtGold.gameObject.SetActive(true);
+            if (_txtGoldOutline != null) _txtGoldOutline.gameObject.SetActive(true);
+            if (_imgCoin != null) _imgCoin.gameObject.SetActive(true);
 
             SetItemDisplay(itemSprite, amount, goldCost);
             OpenUI();
@@ -126,6 +129,7 @@ namespace BalloonFlow
 
         /// <summary>아이템 해금 팝업 표시 (Single 버튼).</summary>
         public void ShowUnlock(string title, Sprite itemSprite, int unlockLevel,
+                               string amount = "x3",
                                System.Action onConfirm = null, System.Action onCancel = null)
         {
             _onConfirm = onConfirm;
@@ -146,8 +150,19 @@ namespace BalloonFlow
                 SetTextInChildren(_txtSingleOutline, "Claim");
             }
 
-            if (_txtItemAmount != null) _txtItemAmount.gameObject.SetActive(false);
-            if (_txtItemAmountOutline != null) _txtItemAmountOutline.gameObject.SetActive(false);
+            if (_txtItemAmount != null)
+            {
+                _txtItemAmount.gameObject.SetActive(true);
+                _txtItemAmount.text = amount;
+            }
+            if (_txtItemAmountOutline != null)
+            {
+                _txtItemAmountOutline.gameObject.SetActive(true);
+                _txtItemAmountOutline.text = amount;
+            }
+            if (_txtGold != null) _txtGold.gameObject.SetActive(false);
+            if (_txtGoldOutline != null) _txtGoldOutline.gameObject.SetActive(false);
+            if (_imgCoin != null) _imgCoin.gameObject.SetActive(false);
 
             if (_imgItem != null && itemSprite != null) _imgItem.sprite = itemSprite;
             OpenUI();

@@ -708,6 +708,18 @@ namespace BalloonFlow
             return RectTransformUtility.WorldToScreenPoint(cam, rt.position);
         }
 
+        public Vector2 GetGameStartButtonScreenPos()
+        {
+            if (_btnPlay == null) return new Vector2(Screen.width * 0.5f, Screen.height * 0.25f);
+            var rt = _btnPlay.transform as RectTransform;
+            if (rt == null) return RectTransformUtility.WorldToScreenPoint(null, _btnPlay.transform.position);
+
+            var canvas = rt.GetComponentInParent<Canvas>();
+            Camera cam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
+                ? canvas.worldCamera : null;
+            return RectTransformUtility.WorldToScreenPoint(cam, rt.position);
+        }
+
         private Vector3 _lifePanelOriginalScale;
         private bool _lifePanelOriginalCaptured;
 
@@ -764,6 +776,28 @@ namespace BalloonFlow
         }
 
         /// <summary>4개 골드 텍스트(메인+Outline, Shop+Outline) 동기화. N0 포맷.</summary>
+        private Vector3 _gameStartButtonOriginalScale;
+        private bool _gameStartButtonOriginalCaptured;
+
+        public void PulseGameStartButton(float strength = 0.25f, float duration = 0.5f, int vibrato = 6)
+        {
+            Transform target = _btnPlay != null ? _btnPlay.transform : null;
+            if (target == null) return;
+
+            if (!_gameStartButtonOriginalCaptured)
+            {
+                _gameStartButtonOriginalScale = target.localScale;
+                _gameStartButtonOriginalCaptured = true;
+            }
+
+            target.DOKill();
+            target.localScale = _gameStartButtonOriginalScale;
+            target.DOPunchScale(Vector3.one * strength, duration, vibrato, elasticity: 0.5f)
+                  .SetUpdate(true)
+                  .OnComplete(() => target.localScale = _gameStartButtonOriginalScale)
+                  .OnKill(()     => target.localScale = _gameStartButtonOriginalScale);
+        }
+
         private void ApplyGoldText(int value)
         {
             string formatted = value.ToString("N0");

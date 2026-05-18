@@ -73,6 +73,7 @@ namespace BalloonFlow
         [SerializeField] private int _initialCoins = DEFAULT_INITIAL_COINS;
 
         private int _currentCoins;
+        private int _pendingServerCoinDelta;
         private readonly List<Transaction> _transactionHistory = new List<Transaction>();
 
         #endregion
@@ -96,6 +97,7 @@ namespace BalloonFlow
         protected override void OnSingletonAwake()
         {
             LoadCoins();
+            TrySubscribeUserData();
 
             EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompleted);
         }
@@ -103,6 +105,8 @@ namespace BalloonFlow
         protected override void OnDestroy()
         {
             EventBus.Unsubscribe<OnLevelCompleted>(HandleLevelCompleted);
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.OnUserDataReady -= ReconcileFromFirestore;
 
             base.OnDestroy();
         }
@@ -138,8 +142,7 @@ namespace BalloonFlow
             RecordTransaction(amount, true, source.ToString());
 
             // Firestore 동기화 (atomic increment). UserDataService 미준비 시 무시 (offline).
-            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
-                UserDataService.Instance.AdjustCoins(amount, $"src:{source}");
+            SyncCoinsToFirestore(amount, $"src:{source}");
 
             if (!suppressEvent)
             {
@@ -190,8 +193,7 @@ namespace BalloonFlow
             RecordTransaction(amount, false, sink.ToString());
 
             // Firestore 동기화 (atomic decrement)
-            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
-                UserDataService.Instance.AdjustCoins(-amount, $"sink:{sink}");
+            SyncCoinsToFirestore(-amount, $"sink:{sink}");
 
             EventBus.Publish(new OnCoinChanged
             {
@@ -287,6 +289,53 @@ namespace BalloonFlow
         {
             PlayerPrefs.SetInt(PREFS_KEY_COINS, _currentCoins);
             PlayerPrefs.Save();
+        }
+
+        private void TrySubscribeUserData()
+        {
+            if (!UserDataService.HasInstance) return;
+
+            UserDataService.Instance.OnUserDataReady += ReconcileFromFirestore;
+            if (UserDataService.Instance.IsReady)
+                ReconcileFromFirestore();
+        }
+
+        private void ReconcileFromFirestore()
+        {
+            if (!UserDataService.HasInstance || !UserDataService.Instance.IsReady) return;
+            var user = UserDataService.Instance.CurrentUser;
+            if (user == null) return;
+
+            if (_pendingServerCoinDelta != 0)
+            {
+                UserDataService.Instance.AdjustCoins(_pendingServerCoinDelta, "CurrencyManager.ReconcilePending");
+                _pendingServerCoinDelta = 0;
+                return;
+            }
+
+            if (user.coins == _currentCoins) return;
+
+            int delta = user.coins - _currentCoins;
+            _currentCoins = Mathf.Max(0, user.coins);
+            SaveCoins();
+            EventBus.Publish(new OnCoinChanged
+            {
+                currentCoins = _currentCoins,
+                delta = delta
+            });
+        }
+
+        private void SyncCoinsToFirestore(int delta, string reason)
+        {
+            if (delta == 0) return;
+
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+            {
+                UserDataService.Instance.AdjustCoins(delta, reason);
+                return;
+            }
+
+            _pendingServerCoinDelta += delta;
         }
 
         #endregion

@@ -26,6 +26,8 @@ namespace BalloonFlow
         public const string COLOR_REMOVE = ZAP;
 
         private const string PrefsKeyPrefix = "BalloonFlow_Booster_";
+        private const string UnlockClaimPrefsKeyPrefix = "BalloonFlow_BoosterUnlockClaimed_";
+        public const int UNLOCK_REWARD_COUNT = 3;
 
         #endregion
 
@@ -175,23 +177,64 @@ namespace BalloonFlow
             Debug.Log($"[BoosterManager] Added {count}x {boosterType}. Total: {_inventory[boosterType]}");
         }
 
+        public bool IsUnlockRewardClaimed(string boosterType)
+        {
+            if (!IsValidType(boosterType)) return true;
+            return PlayerPrefs.GetInt(UnlockClaimPrefsKeyPrefix + boosterType, 0) == 1;
+        }
+
+        public bool TryClaimUnlockReward(string boosterType, int count = UNLOCK_REWARD_COUNT)
+        {
+            if (!IsValidType(boosterType))
+            {
+                Debug.LogWarning($"[BoosterManager] TryClaimUnlockReward — unknown type: {boosterType}");
+                return false;
+            }
+
+            if (!IsBoosterUnlocked(boosterType))
+            {
+                Debug.LogWarning($"[BoosterManager] TryClaimUnlockReward before unlock: {boosterType}");
+                return false;
+            }
+
+            if (IsUnlockRewardClaimed(boosterType))
+                return false;
+
+            AddBooster(boosterType, Mathf.Max(1, count));
+            PlayerPrefs.SetInt(UnlockClaimPrefsKeyPrefix + boosterType, 1);
+            PlayerPrefs.Save();
+            Debug.Log($"[BoosterManager] Claimed unlock reward {boosterType} x{count}.");
+            return true;
+        }
+
         /// <summary>
         /// Attempts to purchase one booster using coins.
         /// All boosters are coin-based in v1.0 (no gems).
         /// </summary>
         public bool PurchaseBooster(string boosterType)
         {
+            if (!TrySpendBoosterPurchaseCost(boosterType)) return false;
+            AddBooster(boosterType, 3); // 명세: 구매 시 3개 충전
+            Debug.Log($"[BoosterManager] Purchased {boosterType} x3.");
+            return true;
+        }
+
+        /// <summary>
+        /// Spends the booster purchase cost without granting inventory.
+        /// Used by item fly rewards so inventory is granted after the FXItem landing.
+        /// </summary>
+        public bool TrySpendBoosterPurchaseCost(string boosterType)
+        {
             if (!IsValidType(boosterType))
             {
-                Debug.LogWarning($"[BoosterManager] PurchaseBooster — unknown type: {boosterType}");
+                Debug.LogWarning($"[BoosterManager] TrySpendBoosterPurchaseCost — unknown type: {boosterType}");
                 return false;
             }
 
-            // MapMaker 테스트 플레이 / 디버그 테스트 아이템 모드: 레벨 잠금 + 코인 비용 모두 우회. 무제한 사용.
+            // MapMaker/test item mode keeps the old no-cost behavior; caller grants after the fly.
             if (GameManager.IsTestPlayMode || GameManager.IsTestItemMode)
             {
-                AddBooster(boosterType, 3);
-                Debug.Log($"[BoosterManager] (Test mode) Granted {boosterType} x3 — bypassed lock + cost.");
+                Debug.Log($"[BoosterManager] (Test mode) Spend skipped for {boosterType} purchase.");
                 return true;
             }
 
@@ -202,7 +245,6 @@ namespace BalloonFlow
             }
 
             var def = _boosterDefs[boosterType];
-
             if (!CurrencyManager.HasInstance)
             {
                 Debug.LogWarning("[BoosterManager] CurrencyManager not available.");
@@ -223,8 +265,7 @@ namespace BalloonFlow
                 return false;
             }
 
-            AddBooster(boosterType, 3); // 명세: 구매 시 3개 충전
-            Debug.Log($"[BoosterManager] Purchased {boosterType} x3 for {def.cost} coins.");
+            Debug.Log($"[BoosterManager] Spent {def.cost} coins for {boosterType} purchase.");
             return true;
         }
 

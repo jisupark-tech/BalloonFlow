@@ -86,11 +86,9 @@ namespace BalloonFlow
                 if (BalloonController.HasInstance)
                 {
                     var __boosterSw = InGamePerfLogger.StartSection();
-                    Vector3 worldPos = _gameCamera.ScreenToWorldPoint(
-                        new Vector3(screenPosition.x, screenPosition.y, _gameCamera.nearClipPlane));
-                    worldPos.y = 0.1f;
-
-                    int balloonId = BalloonController.Instance.FindNearestBalloonAtWorldPos(worldPos);
+                    int balloonId = TryGetGroundPoint(ray, out Vector3 worldPos)
+                        ? BalloonController.Instance.FindNearestBalloonAtWorldPos(worldPos)
+                        : -1;
                     InGamePerfLogger.EndSection(__boosterSw, "Input.BoosterBalloonPick");
                     if (balloonId >= 0)
                     {
@@ -138,6 +136,19 @@ namespace BalloonFlow
             }
 
             EventBus.Publish(new OnHolderTapped { holderId = holder.HolderId });
+        }
+
+        private static bool TryGetGroundPoint(Ray ray, out Vector3 worldPos)
+        {
+            Plane boardPlane = new Plane(Vector3.up, Vector3.zero);
+            if (boardPlane.Raycast(ray, out float enter))
+            {
+                worldPos = ray.GetPoint(enter);
+                return true;
+            }
+
+            worldPos = default;
+            return false;
         }
 
         private static HolderIdentifier GetHolderFromCollider(Collider col)

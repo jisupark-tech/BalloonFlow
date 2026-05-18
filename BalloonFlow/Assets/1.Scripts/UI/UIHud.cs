@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using DG.Tweening;
+using System.Collections.Generic;
 
 namespace BalloonFlow
 {
@@ -160,6 +161,7 @@ namespace BalloonFlow
 
         private bool _isMapMakerMode;
         private DifficultyPurpose _currentDifficulty = DifficultyPurpose.Normal;
+        private readonly HashSet<string> _pendingItemRewardFx = new HashSet<string>();
 
         #region Accessors
 
@@ -437,6 +439,37 @@ namespace BalloonFlow
             ApplyItemPanelDifficulty(difficulty);
         }
 
+        public void PlayBoosterRewardFly(string boosterType, int count, Sprite icon, System.Action afterAction)
+        {
+            if (count <= 0)
+            {
+                afterAction?.Invoke();
+                return;
+            }
+
+            if (!_pendingItemRewardFx.Add(boosterType))
+                return;
+
+            void Complete()
+            {
+                _pendingItemRewardFx.Remove(boosterType);
+                afterAction?.Invoke();
+            }
+
+            Sprite flyIcon = icon != null ? icon : GetBoosterFlyIcon(boosterType);
+            if (flyIcon == null)
+            {
+                Complete();
+                return;
+            }
+
+            Vector2 from = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+            Vector2 to = GetBoosterButtonScreenPos(boosterType);
+            ItemFlyEffect.Play(flyIcon, from, to, 1,
+                onEachLand: () => PulseBoosterButton(boosterType),
+                onAllComplete: Complete);
+        }
+
         private void ApplyItemPanelDifficulty(DifficultyPurpose difficulty)
         {
             // 패널 배경
@@ -579,6 +612,7 @@ namespace BalloonFlow
             if (_isMapMakerMode || GameManager.IsTestItemMode || GameManager.IsTestPlayMode)
             {
                 SetCountText(_itemCountShuffle, "\u221E"); // ∞
+                SetCountText(_itemCountRemove, "\u221E");
                 SetCountText(_itemCountRemove, "\u221E");
                 SetCountText(_itemCountHand, "\u221E");
                 SetCountText(_itemCountOutlineShuffle, "\u221E");
@@ -761,6 +795,7 @@ namespace BalloonFlow
 
             // 미해금 → 토스트
             if (!BoosterManager.Instance.IsBoosterUnlocked(boosterType))
+            if (!BoosterManager.Instance.IsBoosterUnlocked(boosterType))
             {
                 int unlockLevel = boosterType switch
                 {
@@ -776,6 +811,12 @@ namespace BalloonFlow
             // 재고 없음 → 구매 팝업
             if (BoosterManager.Instance.GetBoosterCount(boosterType) <= 0)
             {
+                if (!BoosterManager.Instance.IsUnlockRewardClaimed(boosterType))
+                {
+                    ShowUnlockPopup(boosterType);
+                    return;
+                }
+
                 ShowBuyPopup(boosterType);
                 return;
             }
@@ -819,17 +860,17 @@ namespace BalloonFlow
             popup.ShowBuy("Buy Item", spr, "x3", price,
                 onConfirm: () =>
                 {
-                    if (BoosterManager.Instance.PurchaseBooster(boosterType))
+                    if (_pendingItemRewardFx.Contains(boosterType)) return;
+                    if (BoosterManager.Instance.TrySpendBoosterPurchaseCost(boosterType))
                     {
-                        RefreshBoosterCounts();
+                        PlayBoosterRewardFly(boosterType, 3, spr, () =>
+                        {
+                            BoosterManager.Instance.AddBooster(boosterType, 3);
+                            RefreshBoosterCounts();
+                            ShowToast("Purchase successful!");
+                        });
 
                         // 인게임 결제 성공 → 가벼운 토스트로 알림
-                        if (UIManager.HasInstance)
-                        {
-                            Transform parent = UIManager.Instance.PopupTr ?? UIManager.Instance.UiTr;
-                            if (parent != null)
-                                TxtToast.Spawn(parent, "Purchase successful!", new Vector2(0f, -1022f));
-                        }
                     }
                     else
                     {
@@ -855,7 +896,20 @@ namespace BalloonFlow
             };
 
             Sprite spr = popup.GetBoosterSprite(boosterType);
-            popup.ShowUnlock("Unlock", spr, unlockLevel);
+            popup.ShowUnlock("Unlock", spr, unlockLevel, $"x{BoosterManager.UNLOCK_REWARD_COUNT}",
+                onConfirm: () =>
+                {
+                    if (_pendingItemRewardFx.Contains(boosterType)) return;
+                    PlayBoosterRewardFly(boosterType, BoosterManager.UNLOCK_REWARD_COUNT, spr, () =>
+                    {
+                        if (BoosterManager.Instance.TryClaimUnlockReward(boosterType))
+                        {
+                            RefreshBoosterCounts();
+                            RefreshLockState();
+                            ShowToast("Item claimed!");
+                        }
+                    });
+                });
         }
 
         private void OnColorPicked(int color)
@@ -952,6 +1006,53 @@ namespace BalloonFlow
                 BoosterManager.COLOR_REMOVE => "Remove all balloons of a selected color.",
                 _                           => ""
             };
+        }
+
+        private Vector2 GetBoosterButtonScreenPos(string boosterType)
+        {
+            Button button = boosterType switch
+            {
+                BoosterManager.SHUFFLE      => _itemBtnShuffle,
+                BoosterManager.COLOR_REMOVE => _itemBtnRemove,
+                BoosterManager.SELECT_TOOL  => _itemBtnHand,
+                _                           => null
+            };
+
+            RectTransform rt = button != null ? button.transform as RectTransform : null;
+            if (rt == null) return new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+
+            Canvas canvas = rt.GetComponentInParent<Canvas>();
+            Camera cam = canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera
+                ? canvas.worldCamera
+                : null;
+            return RectTransformUtility.WorldToScreenPoint(cam, rt.position);
+        }
+
+        private void PulseBoosterButton(string boosterType)
+        {
+            Button button = boosterType switch
+            {
+                BoosterManager.SHUFFLE      => _itemBtnShuffle,
+                BoosterManager.COLOR_REMOVE => _itemBtnRemove,
+                BoosterManager.SELECT_TOOL  => _itemBtnHand,
+                _                           => null
+            };
+            if (button == null) return;
+            button.transform.DOKill();
+            button.transform.DOPunchScale(Vector3.one * 0.08f, 0.18f, 6, 0.6f).SetUpdate(true);
+        }
+
+        private static Sprite GetBoosterFlyIcon(string boosterType)
+        {
+            if (!ResourceManager.HasInstance) return null;
+            string key = boosterType switch
+            {
+                BoosterManager.SHUFFLE      => Const.SPR_ICONSUFFLE,
+                BoosterManager.COLOR_REMOVE => Const.SPR_ICONZAP,
+                BoosterManager.SELECT_TOOL  => Const.SPR_ICONHAND,
+                _                           => null
+            };
+            return string.IsNullOrEmpty(key) ? null : ResourceManager.Instance.UISpriteOr(key, null);
         }
 
         #endregion

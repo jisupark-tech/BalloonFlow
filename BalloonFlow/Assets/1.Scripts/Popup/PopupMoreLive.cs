@@ -205,13 +205,48 @@ namespace BalloonFlow
         {
             if (!LifeManager.HasInstance) return;
 
-            LifeManager.Instance.GrantAdRewardLife();
-            RefreshDisplay();
+            Sprite icon = ResolveLifeIcon();
+            CloseUI();
 
-            if (LifeManager.Instance.IsFullLives())
-                CloseUI();
+            UILobby lobby = FindUILobby();
+            if (lobby == null || icon == null)
+            {
+                LifeManager.Instance.GrantAdRewardLife();
+                Debug.Log("[PopupMoreLive] Ad reward — +1 life (FXItem fallback)");
+                return;
+            }
 
-            Debug.Log("[PopupMoreLive] Ad reward — +1 life");
+            Vector2 from = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+            Vector2 to = lobby.GetLifePanelScreenPos();
+
+            ItemFlyEffect.Play(icon, from, to, 1,
+                onEachLand: () => lobby.PulseLifePanel(),
+                onAllComplete: () =>
+                {
+                    if (LifeManager.HasInstance)
+                        LifeManager.Instance.GrantAdRewardLife();
+                    Debug.Log("[PopupMoreLive] Ad reward — FXItem landed, +1 life");
+                });
+        }
+
+        private Sprite ResolveLifeIcon()
+        {
+            Sprite icon = _imgLife != null ? _imgLife.sprite : null;
+            if (ResourceManager.HasInstance)
+            {
+                icon = ResourceManager.Instance.UISpriteOr(Const.SPR_ICONLIFE, icon);
+                icon = ResourceManager.Instance.UISpriteOr(Const.SPR_ICONHEARINFINITE, icon);
+            }
+            return icon;
+        }
+
+        private static UILobby FindUILobby()
+        {
+#if UNITY_2023_1_OR_NEWER
+            return Object.FindFirstObjectByType<UILobby>(FindObjectsInactive.Exclude);
+#else
+            return Object.FindObjectOfType<UILobby>();
+#endif
         }
 
         #endregion

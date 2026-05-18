@@ -287,15 +287,8 @@ namespace BalloonFlow
                     coinsAdded = r.coins;
                 }
 
-                if (r.boosters != null && BoosterManager.HasInstance)
-                {
-                    if (r.boosters.hand    > 0) BoosterManager.Instance.AddBooster(BoosterManager.HAND,    r.boosters.hand);
-                    if (r.boosters.shuffle > 0) BoosterManager.Instance.AddBooster(BoosterManager.SHUFFLE, r.boosters.shuffle);
-                    if (r.boosters.zap     > 0) BoosterManager.Instance.AddBooster(BoosterManager.ZAP,     r.boosters.zap);
-                }
-
-                if (r.infiniteHeartsSeconds > 0 && LifeManager.HasInstance)
-                    LifeManager.Instance.ActivateInfiniteHearts(r.infiniteHeartsSeconds);
+                // Item-type rewards are applied by PurchaseRewardEffect after FXItem lands.
+                // Rollback: restore the old immediate AddBooster/ActivateInfiniteHearts block here if needed.
 
                 if (r.removeAds)
                 {

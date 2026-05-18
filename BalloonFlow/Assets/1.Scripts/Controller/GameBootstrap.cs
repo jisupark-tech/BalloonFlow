@@ -409,15 +409,34 @@ namespace BalloonFlow
             if (boosterType == null) return;
 
             string shownKey = PREFS_KEY_UNLOCK_POPUP_SHOWN + boosterType;
-            if (PlayerPrefs.GetInt(shownKey, 0) == 1) return;
+            if (BoosterManager.Instance.IsUnlockRewardClaimed(boosterType)) return;
 
             var popup = UIManager.Instance.OpenUI<PopupBuyItem>("Popup/PopupBuyItem");
             if (popup == null) return;
             Sprite spr = popup.GetBoosterSprite(boosterType);
-            popup.ShowUnlock("Unlock", spr, levelId);
+            popup.ShowUnlock("Unlock", spr, levelId, $"x{BoosterManager.UNLOCK_REWARD_COUNT}",
+                onConfirm: () =>
+                {
+                    void ClaimAfterFx()
+                    {
+                        if (BoosterManager.Instance.TryClaimUnlockReward(boosterType))
+                        {
+                            if (_hud != null)
+                            {
+                                _hud.RefreshBoosterCounts();
+                                _hud.RefreshLockState();
+                            }
+                        }
 
-            PlayerPrefs.SetInt(shownKey, 1);
-            PlayerPrefs.Save();
+                        PlayerPrefs.SetInt(shownKey, 1);
+                        PlayerPrefs.Save();
+                    }
+
+                    if (_hud != null)
+                        _hud.PlayBoosterRewardFly(boosterType, BoosterManager.UNLOCK_REWARD_COUNT, spr, ClaimAfterFx);
+                    else
+                        ClaimAfterFx();
+                });
         }
 
         #endregion

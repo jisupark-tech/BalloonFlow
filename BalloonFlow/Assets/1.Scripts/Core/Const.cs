@@ -52,6 +52,7 @@ namespace BalloonFlow
         #region UI Asset Prefab Paths
 
         public const string PREFAB_FXGOLD             = "UI/UIAssets/FXGold";
+        public const string PREFAB_FXITEM             = "UI/UIAssets/FXItem";
         public const string PREFAB_FX_ZAP_LINE        = "UI/UIAssets/FxZapLine";
         public const string PREFAB_GOLD_PANEL         = "UI/UIAssets/GoldPanel";
         public const string PREFAB_ITEM_BTN           = "UI/UIAssets/ItemBtn";
@@ -97,6 +98,7 @@ namespace BalloonFlow
         public const string POOL_FROZEN_LAYER     = "FrozenLayer";
         public const string POOL_CIRCLE_PARTICLE  = "CircleParticle";
         public const string POOL_FXGOLD           = "FXGold";
+        public const string POOL_FXITEM           = "FXItem";
         public const string POOL_TXT_TOAST        = "TxtToast";
 
         #endregion

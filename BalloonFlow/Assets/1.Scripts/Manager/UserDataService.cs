@@ -117,10 +117,12 @@ namespace BalloonFlow
             }
             catch (Exception tokenEx)
             {
-                Debug.LogWarning($"{LOG_TAG} Token refresh failed: {tokenEx.Message} — SignOut 후 재로그인.");
-                _auth.SignOut();
-                var authResult = await _auth.SignInAnonymouslyAsync();
-                Debug.Log($"{LOG_TAG} Re-signed in anonymously. uid={authResult.User.UserId}");
+                // ⚠️ UID 유지 정책 — TokenAsync 실패 시 SignOut 안 함.
+                // 네트워크 불안정 (offline / 지하철 / 비행기 모드 등) 으로 refresh 실패해도 캐시 UID 유지.
+                // 후속 Firestore 호출에서 자동 재시도 (SDK 가 토큰 만료 인지 시 자동 갱신 시도).
+                // 토큰이 영구 무효화 (revoked / 계정 삭제) 인 경우엔 그 시점에 permission_denied 분기 (line 66~) 가 흡수.
+                // 이전 동작 (SignOut + 새 Anonymous Auth) 은 새 UID 생성으로 진행도 손실 유발했음 — 2026-05-18 변경.
+                Debug.LogWarning($"{LOG_TAG} Token refresh failed: {tokenEx.Message} — 캐시 세션 유지 (uid={_auth.CurrentUser?.UserId ?? "(null)"})");
             }
         }
 
