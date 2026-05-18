@@ -860,6 +860,10 @@ namespace BalloonFlow
             if (PlayerPrefs.GetInt(PREFS_RAIL_WARNING_SHOWN, 0) == 1) return;
             // 다른 튜토리얼 진행 중이면 중첩 방지.
             if (_isTutorialActive) return;
+            // [2026-05-18] 1렙 이후 (lv >= 2) 에만 트리거 — 1렙 첫 진입 튜토리얼과 텍스트 충돌 방지.
+            // CurrentLevelId 가 0/미준비 (LevelManager 부재 등) 인 fallback 케이스도 차단.
+            if (!LevelManager.HasInstance) return;
+            if (LevelManager.Instance.CurrentLevelId <= 1) return;
             // Warning 단계 (=3) 로 처음 진입할 때만 — 이미 Warning 이상에서 더 올라간 transition 제외.
             if (evt.currentStage != (int)GaugeStage.Warning) return;
             if (evt.previousStage >= (int)GaugeStage.Warning) return;

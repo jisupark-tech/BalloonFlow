@@ -54,6 +54,8 @@ namespace BalloonFlow
 
         private Image _dimImage;
         private Image _cutoutImage;
+        private Material _runtimeCutoutMaskMaterial;
+        private Material _runtimeCutoutDimMaterial;
 
         protected override void Awake()
         {
@@ -102,6 +104,9 @@ namespace BalloonFlow
             if (_btnExit != null) _btnExit.onClick.RemoveAllListeners();
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.RemoveAllListeners();
+
+            ReleaseRuntimeMaterial(ref _runtimeCutoutMaskMaterial);
+            ReleaseRuntimeMaterial(ref _runtimeCutoutDimMaterial);
         }
 
         // [2026-05-12] UseItem 사용 시 게임 일시 정지 + Camera Far 증가 + UIHud BottomPanel 비킴.
@@ -210,7 +215,8 @@ namespace BalloonFlow
             if (cutout.sprite == null) cutout.sprite = GetWhiteSprite();
             cutout.type = Image.Type.Simple;
             // alpha=0 으로 본체는 보이지 않게 — geometry 만 stencil 기록용. dim child 가 mask 영역 밖만 그려져 hole 효과
-            cutout.color = new Color(1f, 1f, 1f, 0f);
+            // CutoutMask shader uses ColorMask 0, so it stays invisible while writing stencil.
+            cutout.color = Color.white;
             cutout.raycastTarget = false;
 
             // Mask 컴포넌트 보장. CutoutMaskUI 가 stencil-invert 처리 → 자식 dim 이 mask 영역 "밖" 만 그림.
@@ -218,7 +224,9 @@ namespace BalloonFlow
             // CutoutMaskUI 의 color 는 white 지만 mask 영역은 dim child 에 의해 가려지지 않으므로 결과적으로 투명한 hole 처럼 보임.
             var mask = _cutoutMask.GetComponent<Mask>();
             if (mask == null) mask = _cutoutMask.gameObject.AddComponent<Mask>();
-            mask.showMaskGraphic = true;
+            // Rollback note: enabling Unity Mask clips DimOverlay to the inside of the hole.
+            mask.enabled = false;
+            mask.showMaskGraphic = false;
 
             // DimOverlay: CutoutMask 의 자식 — 부모 Mask 영역 "바깥" 에만 그려져 dim 효과
             Transform existingDim = _cutoutMask.Find("DimOverlay");
@@ -252,9 +260,39 @@ namespace BalloonFlow
             _dimImage.type = Image.Type.Simple;
             _dimImage.raycastTarget = true;  // dim 영역에서 클릭 차단
             _dimImage.color = new Color(0f, 0f, 0f, 0.7f);
+            ApplyCutoutMaterials();
 
             dimGO.SetActive(false);
             _cutoutImage.gameObject.SetActive(false);
+        }
+
+        private void ApplyCutoutMaterials()
+        {
+            Shader maskShader = Shader.Find("UI/CutoutMask");
+            Shader dimShader = Shader.Find("UI/CutoutDim");
+
+            if (_cutoutImage != null && maskShader != null)
+            {
+                if (_runtimeCutoutMaskMaterial == null)
+                    _runtimeCutoutMaskMaterial = new Material(maskShader);
+                _cutoutImage.material = _runtimeCutoutMaskMaterial;
+            }
+
+            if (_dimImage != null && dimShader != null)
+            {
+                if (_runtimeCutoutDimMaterial == null)
+                    _runtimeCutoutDimMaterial = new Material(dimShader);
+                _runtimeCutoutDimMaterial.color = new Color(0f, 0f, 0f, 0.7f);
+                _dimImage.material = _runtimeCutoutDimMaterial;
+            }
+        }
+
+        private static void ReleaseRuntimeMaterial(ref Material material)
+        {
+            if (material == null) return;
+            if (Application.isPlaying) Destroy(material);
+            else DestroyImmediate(material);
+            material = null;
         }
 
         public void Show(string boosterType, string description,

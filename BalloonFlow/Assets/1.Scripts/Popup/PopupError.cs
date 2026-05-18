@@ -101,16 +101,28 @@ namespace BalloonFlow
             Show("Your Purchase was Completed", description, _sprIconCheck);
 
             // Success popup 은 OK 만 — X 닫기 누르면 보상 연출이 skip 되어 사용자가 혼란.
-            if (_frame != null) _frame.ShowExitButton(false);
+            if (_frame != null) _frame.ShowExitButton(true);
+
+            bool handled = false;
+            void ConfirmAndClose()
+            {
+                if (handled) return;
+                handled = true;
+                CloseUI();
+                onConfirm?.Invoke();
+            }
 
             if (_frame != null && _frame.BtnSingle != null)
             {
                 _frame.BtnSingle.onClick.RemoveAllListeners();
-                _frame.BtnSingle.onClick.AddListener(() =>
-                {
-                    CloseUI();
-                    onConfirm?.Invoke();
-                });
+                _frame.BtnSingle.onClick.AddListener(ConfirmAndClose);
+            }
+
+            if (_frame != null && _frame.BtnExit != null)
+            {
+                // Purchase success uses PopupError as a reward gate. Exit mirrors OK.
+                _frame.BtnExit.onClick.RemoveAllListeners();
+                _frame.BtnExit.onClick.AddListener(ConfirmAndClose);
             }
         }
 

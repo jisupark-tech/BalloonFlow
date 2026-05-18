@@ -72,6 +72,7 @@ namespace BalloonFlow
         private int _displayedCount;
         private bool _userExpandedMore;
         private readonly List<PopupShopListItem> _spawnedItems = new List<PopupShopListItem>();
+        private readonly List<GameObject> _spawnedRoots = new List<GameObject>();
         private int _lastLoadFrame = int.MinValue;
 
         // ScrollRect 캐시 — onValueChanged 리스너 등록/해제 + viewport overlap 컬링 기준점.
@@ -417,11 +418,26 @@ namespace BalloonFlow
             if (_lastLoadFrame == Time.frameCount) return;
             _lastLoadFrame = Time.frameCount;
 
-            for (int i = 0; i < _spawnedItems.Count; i++)
+            // Gold rows are wrapped by ShopListGoldAlign. Clear the direct roots
+            // as well, or empty wrappers can remain as top whitespace after
+            // More -> another tab -> Shop.
+            if (_spawnedRoots.Count > 0)
             {
-                if (_spawnedItems[i] != null && _spawnedItems[i].gameObject != null)
-                    Destroy(_spawnedItems[i].gameObject);
+                for (int i = 0; i < _spawnedRoots.Count; i++)
+                {
+                    if (_spawnedRoots[i] != null)
+                        Destroy(_spawnedRoots[i]);
+                }
             }
+            else
+            {
+                for (int i = 0; i < _spawnedItems.Count; i++)
+                {
+                    if (_spawnedItems[i] != null && _spawnedItems[i].gameObject != null)
+                        Destroy(_spawnedItems[i].gameObject);
+                }
+            }
+            _spawnedRoots.Clear();
             _spawnedItems.Clear();
             _displayedCount = 0;
 
@@ -464,6 +480,7 @@ namespace BalloonFlow
                     {
                         goldContainer = Instantiate(_prefabGoldAlign, _contentRoot);
                         goldContainer.SetActive(true);
+                        _spawnedRoots.Add(goldContainer);
 
                         // 부모 컨테이너 root 기준으로 sibling 정렬 — Blue 자식이 _contentRoot 직속이 아니므로 root 사용.
                         if (MoreButtonRoot != null && MoreButtonRoot.transform.parent == _contentRoot)
@@ -517,6 +534,7 @@ namespace BalloonFlow
 
                 var go = Instantiate(prefab, _contentRoot);
                 go.SetActive(true);
+                _spawnedRoots.Add(go);
                 // [2026-05-13] 동적 spawn item 의 Buy 버튼 등에 더블 클릭 가드 부착.
                 UIButtonClickGuard.AttachToHierarchy(go);
 
