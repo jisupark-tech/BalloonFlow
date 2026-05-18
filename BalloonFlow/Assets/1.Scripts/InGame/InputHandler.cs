@@ -135,7 +135,36 @@ namespace BalloonFlow
                 return;
             }
 
+            // Chain: 그룹 전원 앞줄 검증 (AND 조건, 2026-05-18).
+            // 이전 OR 동작 (탭한 보관함만 앞줄이면 chain 전체 배치) → 그룹 전원 앞줄에서만 배치 가능.
+            if (!boosterAwaiting && !AllChainMembersInFrontRow(holder.HolderId))
+            {
+                EventBus.Publish(new OnHolderClickAnim { holderId = holder.HolderId });
+                return;
+            }
+
             EventBus.Publish(new OnHolderTapped { holderId = holder.HolderId });
+        }
+
+        /// <summary>
+        /// Chain group 의 모든 보관함이 앞줄에 있는지 검증.
+        /// 일반 보관함 (chainGroupId &lt; 0) 또는 매니저 미준비 시 true 반환 (early-out).
+        /// </summary>
+        private static bool AllChainMembersInFrontRow(int holderId)
+        {
+            if (!HolderManager.HasInstance || !HolderVisualManager.HasInstance) return true;
+
+            HolderData holder = HolderManager.Instance.FindHolderPublic(holderId);
+            if (holder == null || holder.chainGroupId < 0) return true;
+
+            var members = HolderManager.Instance.GetChainGroup(holder.chainGroupId);
+            for (int i = 0; i < members.Count; i++)
+            {
+                int mid = members[i];
+                if (mid == holderId) continue;
+                if (!HolderVisualManager.Instance.IsInFrontRow(mid)) return false;
+            }
+            return true;
         }
 
         private static bool TryGetGroundPoint(Ray ray, out Vector3 worldPos)

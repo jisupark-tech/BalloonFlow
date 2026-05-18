@@ -404,6 +404,29 @@ namespace BalloonFlow
                 return false;
             }
 
+            // Chain: 그룹 전원 앞줄 검증 (AND 조건, 2026-05-18).
+            // InputHandler 가 1차 차단하지만, 부스터 / 다른 경로 (자동 선택) 에서도 일관 차단 보장.
+            // 정책 진실 소스 = HolderManager.
+            if (holder.chainGroupId >= 0 && HolderVisualManager.HasInstance)
+            {
+                List<int> chainMembers = GetChainGroup(holder.chainGroupId);
+                for (int i = 0; i < chainMembers.Count; i++)
+                {
+                    int mid = chainMembers[i];
+                    if (mid == holder.holderId) continue;
+                    if (!HolderVisualManager.Instance.IsInFrontRow(mid))
+                    {
+                        Debug.Log($"[HolderManager] Chain blocked — member {mid} not in front row (groupId={holder.chainGroupId})");
+                        EventBus.Publish(new OnHolderColumnBlocked
+                        {
+                            holderId = holder.holderId,
+                            column = col
+                        });
+                        return false;
+                    }
+                }
+            }
+
             if (_deployingHolderId[col] >= 0)
             {
                 // Already deploying — this holder becomes the waiting holder

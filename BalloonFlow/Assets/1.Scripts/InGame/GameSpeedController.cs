@@ -14,7 +14,8 @@ namespace BalloonFlow
         #region Constants
 
         private const float HOLD_BOOST_MULTIPLIER   = 1.5f;
-        private const float TOGGLE_BOOST_MULTIPLIER = 2f;
+        // Visual label remains X2. Actual boost is capped at 1.5x to reduce low-FPS misses.
+        private const float TOGGLE_BOOST_MULTIPLIER = 1.5f;
         private const float HOLD_ACTIVATE_DELAY     = 0.1f; // 탭을 홀드로 오인하지 않도록 짧은 지연
 
         #endregion
