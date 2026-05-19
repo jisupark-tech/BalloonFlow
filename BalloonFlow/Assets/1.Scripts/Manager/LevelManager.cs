@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BalloonFlow
@@ -391,7 +392,10 @@ namespace BalloonFlow
                 float bwsFromW = innerW / cols * maxDim;
                 float bwsFromH = innerH / rows * maxDim;
                 float boardWorldSize = Mathf.Min(bwsFromW, bwsFromH);
-                GameManager.Instance.Board.cellSpacing = boardWorldSize / maxDim;
+                // ROLLBACK_DART_SPEED_MAPMAKER_SPACING:
+                // Match MapMaker's loaded-config spacing restore before falling back to formula.
+                float detectedSpacing = DetectSpacingFromBalloons(config.balloons);
+                GameManager.Instance.Board.cellSpacing = detectedSpacing > 0f ? detectedSpacing : boardWorldSize / maxDim;
             }
 
             // Reset score first so subsystems receive the correct thresholds
@@ -654,6 +658,38 @@ namespace BalloonFlow
             }
 
             PlayerPrefs.Save();
+        }
+
+        private static float DetectSpacingFromBalloons(BalloonLayout[] balloons)
+        {
+            if (balloons == null || balloons.Length < 2) return -1f;
+
+            var xs = new List<float>(balloons.Length);
+            var zs = new List<float>(balloons.Length);
+            for (int i = 0; i < balloons.Length; i++)
+            {
+                xs.Add(balloons[i].gridPosition.x);
+                zs.Add(balloons[i].gridPosition.y);
+            }
+
+            xs.Sort();
+            zs.Sort();
+
+            float minGap = float.MaxValue;
+            DetectMinPositiveGap(xs, ref minGap);
+            DetectMinPositiveGap(zs, ref minGap);
+
+            return minGap < float.MaxValue ? minGap : -1f;
+        }
+
+        private static void DetectMinPositiveGap(List<float> values, ref float minGap)
+        {
+            for (int i = 1; i < values.Count; i++)
+            {
+                float gap = values[i] - values[i - 1];
+                if (gap > 0.01f && gap < minGap)
+                    minGap = gap;
+            }
         }
 
         private bool ValidateProvider()

@@ -22,8 +22,13 @@ namespace BalloonFlow
         private const string DART_POOL_KEY = "Dart";
         private const float DEFAULT_PROJECTILE_FLIGHT_TIME = 0.1f;
         private const float PROJECTILE_MIN_FLIGHT_TIME = 0.015f;
-        private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 2.2f;
-        private const float PROJECTILE_MIN_FLIGHT_TIME_SCALE = 0.35f;
+        // ROLLBACK_DART_TRAIL_MIN_VISIBLE_FLIGHT:
+        // Remove this visual floor if close-range darts must resolve in a single frame again. Trail
+        // needs a few transform samples before pooling; below ~0.04s nearby shots pop before the tail
+        // can be seen.
+        private const float PROJECTILE_TRAIL_MIN_VISIBLE_FLIGHT_TIME = 0.045f;
+        private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 3.3f;
+        private const float PROJECTILE_MIN_FLIGHT_TIME_SCALE = 0.3f;
         private const float PROJECTILE_MAX_FLIGHT_TIME_SCALE = 4f;
         private const int ADJACENT_EMPTY_LINE_RESCUE_RADIUS = 1;
         #endregion
@@ -78,7 +83,10 @@ namespace BalloonFlow
             float unitsPerSecond = cellSpacing / baseTime;
             float duration = distance / Mathf.Max(0.001f, unitsPerSecond * speedMultiplier);
 
-            float minDuration = Mathf.Max(PROJECTILE_MIN_FLIGHT_TIME, baseTime * PROJECTILE_MIN_FLIGHT_TIME_SCALE / speedMultiplier);
+            float minDuration = Mathf.Max(
+                PROJECTILE_MIN_FLIGHT_TIME,
+                PROJECTILE_TRAIL_MIN_VISIBLE_FLIGHT_TIME,
+                baseTime * PROJECTILE_MIN_FLIGHT_TIME_SCALE / speedMultiplier);
             float maxDuration = Mathf.Max(minDuration, baseTime * PROJECTILE_MAX_FLIGHT_TIME_SCALE / speedMultiplier);
             return Mathf.Clamp(duration, minDuration, maxDuration);
         }
@@ -279,6 +287,12 @@ namespace BalloonFlow
         // runs. Keep this exact-line budget wide enough to replay skipped lines without falling
         // back to adjacent-line targeting.
         private const int MAX_LINE_CATCH_UP_PER_HEAD = 6;
+        // ROLLBACK_DART_OPEN_RAIL_WRAP_LOCK_RESET:
+        // Remove this constant and restore MaxLineCatchUpPerHead in the wrap checks if pass locks
+        // must again survive large backward line jumps. Catch-up budget scales with x2 speed, but
+        // wrap detection must stay fixed; otherwise a straight/L rail can wrap from +5 to -5 while
+        // the old holderLineConsumed locks remain active and every visible target line is skipped.
+        private const int OPEN_RAIL_WRAP_RESET_LINE_DELTA = MAX_LINE_CATCH_UP_PER_HEAD;
         // ROLLBACK_DART_SPEED_SCALED_CATCH_UP:
         // At x2 and late-game acceleration, a head can cross more exact grid lines per frame than
         // the base catch-up budget. Scale the replay budget by the user speed multiplier while
@@ -963,6 +977,7 @@ namespace BalloonFlow
             }
 
             dartObj.SetActive(true);
+            ApplyColor(dartObj, color);
             dartObj.transform.position = from;
 
             // 직사: 풍선 위치로 직접 발사
@@ -1995,6 +2010,7 @@ namespace BalloonFlow
                 float ds = GameManager.HasInstance ? GameManager.Instance.Board.dartScale : 1f;
                 dartObj.transform.localScale = Vector3.one * ds;
                 dartObj.transform.DOKill();
+                ApplyColor(dartObj, candidate.color);
 
                 EventBus.Publish(new OnDartFired { dartId = candidate.dartId, holderId = -1, color = candidate.color });
 
@@ -2190,7 +2206,7 @@ namespace BalloonFlow
             if (!_lastFiredLineByHolder.TryGetValue(holderId, out int lastFiredLine))
                 return;
 
-            if (currentLine < lastFiredLine - MaxLineCatchUpPerHead)
+            if (currentLine < lastFiredLine - OPEN_RAIL_WRAP_RESET_LINE_DELTA)
                 ClearConsumedLineLockForHolder(holderId);
         }
 
@@ -2212,7 +2228,7 @@ namespace BalloonFlow
             bool wrappedFromEndSide = hasLastScan && lastDir != currentScanDir;
             bool wrappedOnStraightSide = hasLastScan
                 && lastDir == currentScanDir
-                && currentLine < lastLine - MaxLineCatchUpPerHead;
+                && currentLine < lastLine - OPEN_RAIL_WRAP_RESET_LINE_DELTA;
             bool promotedAcrossWrap = hasPromoSeedForHead && promoDir != currentScanDir;
 
             if (!wrappedFromEndSide && !wrappedOnStraightSide && !promotedAcrossWrap)
@@ -2758,6 +2774,14 @@ namespace BalloonFlow
             if (proj == null || dartObj == null || proj.duration <= 0f)
                 return;
 
+            // ROLLBACK_DART_VISUAL_ARRIVAL_POP:
+            // Needle-tip timing made the projectile resolve and return to the pool before the visible
+            // dart root reached the balloon. Keep the fire-time target authoritative, but pop only
+            // when the visible dart reaches its travel target.
+            proj.impactTime = proj.duration;
+            return;
+
+#if false // ROLLBACK_DART_NEEDLE_TIP_IMPACT: restore this block for early needle-surface pop timing.
             Vector3 travel = to - from;
             float travelDistance = travel.magnitude;
             if (travelDistance <= 0.0001f)
@@ -2779,6 +2803,7 @@ namespace BalloonFlow
             float impactDistance = Mathf.Clamp(travelDistance - earlyLead, 0f, travelDistance);
             float impactT = impactDistance / travelDistance;
             proj.impactTime = Mathf.Clamp(proj.duration * impactT, 0f, proj.duration);
+#endif
         }
 
         private static float GetNeedleTipLead(GameObject dartObj, Vector3 travelDir)
@@ -3120,8 +3145,8 @@ namespace BalloonFlow
         // ROLLBACK_DART_FLIGHT_TRAIL:
         // Visual-only hooks. They run when a dart becomes an in-flight projectile and before it
         // returns to the pool, leaving targeting, reservations, fire order, and hit timing intact.
-        // [2026-05-19 DISABLED] Tail/Trail Renderer effect disabled by request. Keep Disable active
-        // so any prefab-attached TrailRenderer is reset before pooling.
+        // [2026-05-19] Tail/Trail Renderer is enabled only while the dart is in flight. Disable still
+        // runs before pooling so old trail vertices cannot leak into the next shot.
         private static readonly bool DART_FLIGHT_TRAIL_ENABLED = true;
 
         private static void EnableDartFlightTrail(GameObject obj)

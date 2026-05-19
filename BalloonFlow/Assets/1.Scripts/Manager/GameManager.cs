@@ -24,9 +24,9 @@ namespace BalloonFlow
         [Range(1f, 3f)]
         public float popScaleMultiplier = 2f;
 
-        [Tooltip("풍선 팝 시 스케일업 시간(초). 이 시간 후 파티클 재생. 동적 반영. (default: 0.2)")]
+        [Tooltip("풍선 팝 시 스케일업 시간(초). 이 시간 후 파티클 재생. 동적 반영. (default: 0.1)")]
         [Range(0f, 1f)]
-        public float popScaleDuration = 0.2f;
+        public float popScaleDuration = 0.1f;
 
         [Header("[풍선 타일 영역 — 동적 조정]")]
         [Tooltip("풍선 타일 영역 가로 배율. 1.0=기본, 인게임 동적 반영. (default: 1.39)")]
