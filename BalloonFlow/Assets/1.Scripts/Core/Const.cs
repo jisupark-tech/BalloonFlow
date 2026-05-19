@@ -47,6 +47,7 @@ namespace BalloonFlow
         public const string POPUP_TXT_TOAST       = "Popup/TxtToast";
         public const string POPUP_LOADING_SPINNER = "Popup/PopupLoadingSpinner";
         public const string POPUP_WINNING_STREAK  = "Popup/PopupWinningStreak";
+        public const string POPUP_WINNING_STREAK_INFO = "Popup/PopupWinningStreakInfo";
 
         #endregion
 
