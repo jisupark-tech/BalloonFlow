@@ -62,6 +62,11 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprHardOptionHard;
         [SerializeField] private Sprite _sprHardOptionSuperHard;
 
+        [Header("[Badge Image — Hard=x3 / SuperHard=x5 / Normal=비활성]")]
+        [SerializeField] private Image _imageBadge;
+        [SerializeField] private Sprite _sprBadgeX3;
+        [SerializeField] private Sprite _sprBadgeX5;
+
         [Header("[코인 연출 — Gold HUD 위치]")]
         [SerializeField] private RectTransform _goldTarget;
 
@@ -86,6 +91,8 @@ namespace BalloonFlow
                 var rm = ResourceManager.Instance;
                 _sprHardOptionHard      = rm.UISpriteOr(Const.SPR_FRAMEHARD,      _sprHardOptionHard);
                 _sprHardOptionSuperHard = rm.UISpriteOr(Const.SPR_FRAMESUPERHARD, _sprHardOptionSuperHard);
+                _sprBadgeX3             = rm.UISpriteOr(Const.SPR_BADGEX3,        _sprBadgeX3);
+                _sprBadgeX5             = rm.UISpriteOr(Const.SPR_BADGEX5,        _sprBadgeX5);
             }
 
             // 직접 할당 버튼 우선, 없으면 frame 버튼 fallback (CloseUI 후에도 listener 유지)
@@ -163,6 +170,7 @@ namespace BalloonFlow
             }
 
             UpdateHardLevelOption(difficulty);
+            ApplyBadge(difficulty);
             ApplyDifficultyBackground(difficulty);
 
             OpenUI();
@@ -372,6 +380,28 @@ namespace BalloonFlow
                     UIOutlineStyle.ApplyMaterialOrColor(_txtHardLevelOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
                     UIOutlineStyle.ApplyMaterialOrColor(_txtMultiplierOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
                 }
+            }
+        }
+
+        private void ApplyBadge(DifficultyPurpose difficulty)
+        {
+            if (_imageBadge == null) return;
+
+            Sprite badge = difficulty switch
+            {
+                DifficultyPurpose.SuperHard => _sprBadgeX5,
+                DifficultyPurpose.Hard      => _sprBadgeX3,
+                _                           => null
+            };
+
+            if (badge != null)
+            {
+                _imageBadge.sprite = badge;
+                _imageBadge.gameObject.SetActive(true);
+            }
+            else
+            {
+                _imageBadge.gameObject.SetActive(false);
             }
         }
 
