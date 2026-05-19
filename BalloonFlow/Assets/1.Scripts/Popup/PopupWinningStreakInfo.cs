@@ -1,34 +1,23 @@
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BalloonFlow
 {
     /// <summary>
-    /// Winning Streak 안내 팝업. PopupCommonFrame 사용.
+    /// Winning Streak 'Info' 팝업. PopupWinningStreak 에서 BtnInfo 클릭 시 진입.
+    /// PopupCommonFrame 의 BtnExit 만 listener 등록.
+    /// _frame 이 prefab 단에서 미할당이면 silent skip — 런타임 NPE 회피 (BtnInfo 미배치 시나리오 동일).
     /// 컨텐츠/디자인은 prefab 단의 SerializeField 로 들어옴.
     /// </summary>
-    public class PopupWinningStreak : UIBase
+    public class PopupWinningStreakInfo : UIBase
     {
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
-
-        [Tooltip("Info 팝업 진입 버튼 — 클릭 시 PopupWinningStreakInfo 오픈. 미할당 시 silent skip.")]
-        [SerializeField] private Button _btnInfo;
 
         protected override void Awake()
         {
             base.Awake();
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.AddListener(() => CloseUI());
-            if (_btnInfo != null)
-            {
-                _btnInfo.onClick.RemoveAllListeners();
-                _btnInfo.onClick.AddListener(() =>
-                {
-                    if (UIManager.HasInstance)
-                        UIManager.Instance.OpenUI<PopupWinningStreakInfo>(Const.POPUP_WINNING_STREAK_INFO);
-                });
-            }
         }
 
         protected override void OnDestroy()
@@ -36,15 +25,13 @@ namespace BalloonFlow
             base.OnDestroy();
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.RemoveAllListeners();
-            if (_btnInfo != null)
-                _btnInfo.onClick.RemoveAllListeners();
         }
 
         public override void OpenUI()
         {
             if (_frame != null)
             {
-                _frame.SetTitle("Winning Streak");
+                _frame.SetTitle("Winning Streak Info");
                 _frame.ShowExitButton(true);
             }
             base.OpenUI();
