@@ -599,7 +599,7 @@ namespace BalloonFlow
         {
             if (!RailManager.HasInstance || !BalloonController.HasInstance) return false;
 
-            HashSet<int> outermostColors = GetOutermostBalloonColors();
+            HashSet<int> outermostColors = GetRailSideOutermostBalloonColors();
             if (outermostColors.Count == 0) return false;
 
             HashSet<int> railColors = RailManager.Instance.GetRailDartColors();
@@ -630,6 +630,7 @@ namespace BalloonFlow
         private readonly Dictionary<int, int> _reusableRowMaxX = new Dictionary<int, int>(64);
         private readonly Dictionary<int, int> _reusableColMinY = new Dictionary<int, int>(64);
         private readonly Dictionary<int, int> _reusableColMaxY = new Dictionary<int, int>(64);
+        private readonly HashSet<int> _reusableRailSideOutermostColors = new HashSet<int>();
         private float _cachedCellSpacing = 0.55f;
 
         /// <summary>
@@ -763,6 +764,60 @@ namespace BalloonFlow
             finally { occEn.Dispose(); }
 
             return _reusableOutermostColors;
+        }
+
+        private HashSet<int> GetRailSideOutermostBalloonColors()
+        {
+            HashSet<int> allOutermostColors = GetOutermostBalloonColors();
+            _reusableRailSideOutermostColors.Clear();
+
+            if (allOutermostColors.Count == 0)
+                return _reusableRailSideOutermostColors;
+
+            if (!RailManager.HasInstance)
+                return _reusableRailSideOutermostColors;
+
+            int sideCount = RailManager.GetRailSideCount(RailManager.Instance.PhysicalCapacity);
+
+            // ROLLBACK_FAIL_RAIL_SIDE_MATCH:
+            // Fail matching must use the same rail sides that can actually fire.
+            // 1: bottom, 2: bottom+right, 3: bottom+right+top, 4: all sides.
+            if (sideCount >= 1) AddColumnBoundaryColors(_reusableColMinY);
+            if (sideCount >= 2) AddRowBoundaryColors(_reusableRowMaxX);
+            if (sideCount >= 3) AddColumnBoundaryColors(_reusableColMaxY);
+            if (sideCount >= 4) AddRowBoundaryColors(_reusableRowMinX);
+
+            return _reusableRailSideOutermostColors;
+        }
+
+        private void AddColumnBoundaryColors(Dictionary<int, int> colToY)
+        {
+            var en = colToY.GetEnumerator();
+            try
+            {
+                while (en.MoveNext())
+                {
+                    Vector2Int cell = new Vector2Int(en.Current.Key, en.Current.Value);
+                    if (_reusableOccupancy.TryGetValue(cell, out int color))
+                        _reusableRailSideOutermostColors.Add(color);
+                }
+            }
+            finally { en.Dispose(); }
+        }
+
+        private void AddRowBoundaryColors(Dictionary<int, int> rowToX)
+        {
+            var en = rowToX.GetEnumerator();
+            try
+            {
+                while (en.MoveNext())
+                {
+                    Vector2Int cell = new Vector2Int(en.Current.Value, en.Current.Key);
+                    if (_reusableOccupancy.TryGetValue(cell, out int color))
+                        _reusableRailSideOutermostColors.Add(color);
+                }
+            }
+            finally { en.Dispose(); }
         }
 
         /// <summary>풍선이 외곽인지 (4방향 중 하나라도 rail 까지 비어있는지). dirty 자동 갱신.
