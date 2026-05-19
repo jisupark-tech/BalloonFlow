@@ -76,12 +76,12 @@ namespace BalloonFlow
             // 슬롯은 함께 destroy 되지만 listener 누수 방어 차원으로 명시 정리.
             if (_keyBlazeContents != null)
             {
-                var slotComps = _keyBlazeContents.GetComponentsInChildren<SlotKeyBlaze>(true);
-                for (int i = 0; i < slotComps.Length; i++)
-                {
-                    if (slotComps[i] != null && slotComps[i].BtnReward != null)
-                        slotComps[i].BtnReward.onClick.RemoveAllListeners();
-                }
+                //var slotComps = _keyBlazeContents.GetComponentsInChildren<PopupWinningStreak>(true);
+                //for (int i = 0; i < slotComps.Length; i++)
+                //{
+                //    if (slotComps[i] != null && slotComps[i].BtnReward != null)
+                //        slotComps[i].BtnReward.onClick.RemoveAllListeners();
+                //}
             }
         }
 
@@ -120,24 +120,24 @@ namespace BalloonFlow
             }
 
             // 25→1 역순 루프: siblingIndex 0이 top이므로 25를 먼저 생성 → top=25, bottom=1
-            for (int i = SLOT_COUNT; i >= 1; i--)
-            {
-                var slot = Instantiate(_slotKeyBlazePrefab, _keyBlazeContents);
-                slot.name = $"SlotKeyBlaze_{i:D2}";
-                SetSlotNumber(slot, i);
+            //for (int i = SLOT_COUNT; i >= 1; i--)
+            //{
+            //    var slot = Instantiate(_slotKeyBlazePrefab, _keyBlazeContents);
+            //    slot.name = $"SlotKeyBlaze_{i:D2}";
+            //    SetSlotNumber(slot, i);
 
-                var slotComp = slot.GetComponent<SlotKeyBlaze>();
-                if (slotComp == null)
-                {
-                    Debug.LogWarning($"[PopupWinningStreak] Slot {i}: SlotKeyBlaze 컴포넌트 없음 — 구버전 prefab 가능성. BtnReward listener 등록 skip.");
-                    continue;
-                }
-                if (slotComp.BtnReward == null) continue;
+            //    var slotComp = slot.GetComponent<PopupWinningStreak>();
+            //    if (slotComp == null)
+            //    {
+            //        Debug.LogWarning($"[PopupWinningStreak] Slot {i}: SlotKeyBlaze 컴포넌트 없음 — 구버전 prefab 가능성. BtnReward listener 등록 skip.");
+            //        continue;
+            //    }
+            //    if (slotComp.BtnReward == null) continue;
 
-                var slotRt = slot.GetComponent<RectTransform>();
-                slotComp.BtnReward.onClick.RemoveAllListeners();
-                slotComp.BtnReward.onClick.AddListener(() => ShowClickInfoForSlot(slotRt));
-            }
+            //    var slotRt = slot.GetComponent<RectTransform>();
+            //    slotComp.BtnReward.onClick.RemoveAllListeners();
+            //    slotComp.BtnReward.onClick.AddListener(() => ShowClickInfoForSlot(slotRt));
+            //}
 
             // verticalNormalizedPosition=0: 시작 위치 맨 아래(=1번 노출)
             if (_scrollRect == null)
