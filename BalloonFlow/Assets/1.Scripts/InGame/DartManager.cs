@@ -22,7 +22,7 @@ namespace BalloonFlow
         private const string DART_POOL_KEY = "Dart";
         private const float DEFAULT_PROJECTILE_FLIGHT_TIME = 0.1f;
         private const float PROJECTILE_MIN_FLIGHT_TIME = 0.015f;
-        private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 2f;
+        private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 2.2f;
         private const float PROJECTILE_MIN_FLIGHT_TIME_SCALE = 0.35f;
         private const float PROJECTILE_MAX_FLIGHT_TIME_SCALE = 4f;
         private const int ADJACENT_EMPTY_LINE_RESCUE_RADIUS = 1;
@@ -242,6 +242,12 @@ namespace BalloonFlow
         // promoted heads must again bypass rail front-to-back ordering. Keeping it as a one-shot
         // guard preserves the old max-one promoted-head rescan per holder per scan tick.
         private readonly HashSet<int> _postFireQueuedHoldersThisTick = new HashSet<int>();
+        // ROLLBACK_DART_DEPLOY_FRAME_PROMOTED_FIRE_GUARD:
+        // Remove this frame stamp and the TryQueuePromotedHeadFireCandidate guard if deployed darts
+        // must be allowed to fire a promoted head again in the exact same frame. Keeping the guard
+        // narrow avoids the visible deploy-time double shot without disabling normal x2 post-fire
+        // catch-up on later frames.
+        private readonly Dictionary<int, int> _lastDeployPlacedFrameByHolder = new Dictionary<int, int>(16);
         // ROLLBACK_DART_STABLE_OUTER_HIT:
         // Heavy targeting diagnostics were useful while isolating penetration/miss cases, but
         // they allocate and format large strings for every fire/pop. Keep them opt-in.
@@ -420,6 +426,7 @@ namespace BalloonFlow
             _postFireQueuedHoldersThisTick.Clear();
             _scanHeadDarts.Clear();
             _fireCandidates.Clear();
+            _lastDeployPlacedFrameByHolder.Clear();
             _lastFiredHolderId = -1;
 
             _tempRemoveKeys.Clear();
@@ -987,6 +994,7 @@ namespace BalloonFlow
             ConfigureNeedleTipImpactTiming(proj, dartObj, from, to, balloonScale);
 
             _activeProjectiles.Add(proj);
+            EnableDartFlightTrail(dartObj);
 
             // [2026-05-19 DISABLED] Flight trail 활성화 — 주석. 재활성 시 DartIdentifier._flightTrail + Enable/DisableTrail 함께 주석 해제.
             // if (dartObj.TryGetComponent<DartIdentifier>(out var dartIdFire))
@@ -1727,6 +1735,15 @@ namespace BalloonFlow
             if (_postFireQueuedHoldersThisTick.Contains(holderId))
                 return false;
 
+            if (_lastDeployPlacedFrameByHolder.TryGetValue(holderId, out int deployFrame)
+                && deployFrame == Time.frameCount)
+            {
+                LogAttackIssue(
+                    "DartFireBlocked",
+                    $"reason=deployFramePromotedHeadGuard holder={holderId} frame={Time.frameCount}");
+                return false;
+            }
+
             if (!TryBuildCurrentHeadFireCandidate(rail, holderId, out DartFireCandidate candidate))
                 return false;
 
@@ -2008,6 +2025,7 @@ namespace BalloonFlow
                 ConfigureLaunchScale(proj, launchStartScale, balloonScale);
                 ConfigureNeedleTipImpactTiming(proj, dartObj, launchPos, travelTarget, balloonScale);
                 _activeProjectiles.Add(proj);
+                EnableDartFlightTrail(dartObj);
 
                 // ROLLBACK_DART_PROJECTILE_MANUAL_MOVE:
                 // Previous behavior created a DOTween per fired dart:
@@ -2900,6 +2918,7 @@ namespace BalloonFlow
         private void HandleDartPlacedPerDart(OnDartPlaced evt)
         {
             if (_boardFinished) return;
+            _lastDeployPlacedFrameByHolder[evt.holderId] = Time.frameCount;
             CreateDartVisualById(evt.dartId, evt.color, evt.holderId);
             SeedPlacedHeadCatchUp(evt);
         }
@@ -3088,6 +3107,7 @@ namespace BalloonFlow
         private void ReturnDartToPool(GameObject obj)
         {
             if (obj == null) return;
+            DisableDartFlightTrail(obj);
 
             // [2026-05-19 DISABLED] Flight trail 비활성화 — 주석. 재활성 시 LaunchProjectile 의 EnableTrail 과 함께 주석 해제.
             // if (obj.TryGetComponent<DartIdentifier>(out var dartId))
@@ -3095,6 +3115,27 @@ namespace BalloonFlow
 
             if (ObjectPoolManager.HasInstance)
                 ObjectPoolManager.Instance.Return(DART_POOL_KEY, obj);
+        }
+
+        // ROLLBACK_DART_FLIGHT_TRAIL:
+        // Visual-only hooks. They run when a dart becomes an in-flight projectile and before it
+        // returns to the pool, leaving targeting, reservations, fire order, and hit timing intact.
+        // [2026-05-19 DISABLED] Tail/Trail Renderer effect disabled by request. Keep Disable active
+        // so any prefab-attached TrailRenderer is reset before pooling.
+        private static readonly bool DART_FLIGHT_TRAIL_ENABLED = true;
+
+        private static void EnableDartFlightTrail(GameObject obj)
+        {
+            if (!DART_FLIGHT_TRAIL_ENABLED) return;
+
+            if (obj != null && obj.TryGetComponent(out DartIdentifier dartId))
+                dartId.EnableTrail();
+        }
+
+        private static void DisableDartFlightTrail(GameObject obj)
+        {
+            if (obj != null && obj.TryGetComponent(out DartIdentifier dartId))
+                dartId.DisableTrail();
         }
 
         private void ApplyColor(GameObject obj, int color)

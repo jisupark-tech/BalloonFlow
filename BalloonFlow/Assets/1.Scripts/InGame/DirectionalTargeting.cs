@@ -415,7 +415,14 @@ namespace BalloonFlow
                     continue;
 
                 float perpDist = GetPerpendicularDistance(dartPosition, edge.worldPos, scanDir);
-                if (perpDist > perpendicularTolerance)
+                // ROLLBACK_DART_ADJACENT_EMPTY_LINE_RESCUE_PERP:
+                // This rescue only runs when the exact scan line has no contour edge. The previous
+                // check compared adjacent-line targets against the exact-line tolerance, so a target
+                // one grid line away (perpDist ~= 1 cell) was rejected by a 0.9-cell limit. Compare
+                // against the expected offset distance instead, keeping the normal TryFindTarget path
+                // exact-line only to avoid same-line continuous attacks.
+                float expectedPerpDist = Mathf.Abs(offset) * _gridCellSize;
+                if (Mathf.Abs(perpDist - expectedPerpDist) > perpendicularTolerance)
                     continue;
 
                 int line = GetLineKey(scanDir, edge.cell);

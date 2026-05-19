@@ -27,6 +27,21 @@ namespace BalloonFlow
         [Tooltip("Optional world anchor for the needle tip. If empty, Niddle renderer bounds are used.")]
         [SerializeField] private Transform _needleTip;
 
+        // ROLLBACK_DART_FLIGHT_TRAIL:
+        // Remove these fields and DartManager Enable/DisableDartFlightTrail hooks if the extra
+        // visual effect causes readability or device-specific renderer cost issues.
+        [Header("[Flight Trail]")]
+        [Tooltip("Optional TrailRenderer used only while this dart is flying. Assign a prefab child renderer.")]
+        [SerializeField] private TrailRenderer _flightTrail;
+
+        [Tooltip("Shared material for the flight trail. Leave empty to reuse the dart color material.")]
+        [SerializeField] private Material _flightTrailMaterial;
+
+        [SerializeField] private float _flightTrailTime = 0.08f;
+        [SerializeField] private float _flightTrailStartWidth = 0.055f;
+        [SerializeField] private float _flightTrailEndWidth = 0f;
+        [SerializeField] private float _flightTrailMinVertexDistance = 0.025f;
+
         // [2026-05-19 DISABLED] Flight Trail (TrailRenderer) — 주석 처리. 재활성 시 아래 + ApplyColor 내 trail 라인 + DartManager hook 함께 주석 해제.
         // [Header("[Flight Trail — 발사 시 활성, 풀 반환 시 비활성]")]
         // [Tooltip("Dart 비행 잔상용 TrailRenderer. Inspector 에서 자식 TrailRenderer 드래그. 미할당 시 trail 없음.")]
@@ -34,6 +49,33 @@ namespace BalloonFlow
 
         /// <summary>색상 적용 대상이 할당되었는지.</summary>
         public bool HasColorRenderers => _colorRenderers != null && _colorRenderers.Length > 0;
+
+        private void Awake()
+        {
+            ConfigureTrail();
+        }
+
+        private void OnDisable()
+        {
+            DisableTrail();
+        }
+
+        public void EnableTrail()
+        {
+            if (!TryResolveTrail(out TrailRenderer trail)) return;
+
+            ConfigureTrail();
+            trail.Clear();
+            trail.emitting = true;
+        }
+
+        public void DisableTrail()
+        {
+            if (!TryResolveTrail(out TrailRenderer trail)) return;
+
+            trail.emitting = false;
+            trail.Clear();
+        }
 
         // [2026-05-19 DISABLED] Flight Trail API — TrailRenderer wire 안 쓰는 동안 주석.
         // /// <summary>
@@ -63,6 +105,40 @@ namespace BalloonFlow
         private static readonly int _propOutlineEnabled = Shader.PropertyToID("_OutlineEnabled");
         private static readonly int _propOutlineColor = Shader.PropertyToID("_OutlineColor");
         private MaterialPropertyBlock _mpb;
+
+        private bool TryResolveTrail(out TrailRenderer trail)
+        {
+            if (_flightTrail == null)
+                _flightTrail = GetComponentInChildren<TrailRenderer>(true);
+
+            trail = _flightTrail;
+            return trail != null;
+        }
+
+        private void ConfigureTrail()
+        {
+            if (!TryResolveTrail(out TrailRenderer trail)) return;
+
+            trail.emitting = false;
+            trail.time = Mathf.Max(0.01f, _flightTrailTime);
+            trail.startWidth = Mathf.Max(0f, _flightTrailStartWidth);
+            trail.endWidth = Mathf.Max(0f, _flightTrailEndWidth);
+            trail.minVertexDistance = Mathf.Max(0.001f, _flightTrailMinVertexDistance);
+            trail.autodestruct = false;
+            // ROLLBACK_DART_FLIGHT_TRAIL_COLOR:
+            // TrailRenderer multiplies the material by vertex color and can also look gray when
+            // generated lighting data is enabled on Lit materials. Keep vertex color pure white
+            // and lighting data off so the assigned shared material is visible as authored.
+            trail.startColor = Color.white;
+            trail.endColor = new Color(1f, 1f, 1f, 0f);
+            trail.generateLightingData = false;
+            trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            trail.receiveShadows = false;
+            trail.Clear();
+
+            if (_flightTrailMaterial != null)
+                trail.sharedMaterial = _flightTrailMaterial;
+        }
 
         /// <summary>
         /// Distance from this prefab root to the needle tip along the current firing direction.
@@ -147,6 +223,9 @@ namespace BalloonFlow
                 if (_colorRenderers[i] != null)
                     _colorRenderers[i].sharedMaterial = mat;
             }
+
+            if (TryResolveTrail(out TrailRenderer trail))
+                trail.sharedMaterial = _flightTrailMaterial != null ? _flightTrailMaterial : mat;
 
             // [2026-05-19 DISABLED] Flight trail material 적용 — 주석. 재활성 시 _flightTrail 필드 함께 주석 해제.
             // if (_flightTrail != null)
