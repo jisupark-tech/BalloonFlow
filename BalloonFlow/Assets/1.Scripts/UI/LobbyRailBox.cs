@@ -49,6 +49,11 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtLevel;
         [SerializeField] private TMP_Text _txtLevelOutline;
 
+        [Header("[TextLevelOutline Difficulty Material Preset]")]
+        [SerializeField] private Material _matLevelOutlineNormal;
+        [SerializeField] private Material _matLevelOutlineHard;
+        [SerializeField] private Material _matLevelOutlineSuperHard;
+
         [Header("[Animator]")]
         [SerializeField] private Animator _animator;
 
@@ -61,6 +66,7 @@ namespace BalloonFlow
 
         private int _levelId;
         private bool _isActive;
+        private DifficultyPurpose _difficulty = DifficultyPurpose.Normal;
 
         private static Sprite s_purpleBoxSprite;
         private Sprite _originalDimSprite;
@@ -89,6 +95,7 @@ namespace BalloonFlow
         {
             _levelId = levelId;
             _isActive = isActive;
+            _difficulty = difficulty;
 
             string levelStr = levelId.ToString();
             if (_txtLevel != null) _txtLevel.text = levelStr;
@@ -116,9 +123,7 @@ namespace BalloonFlow
             if (_txtLevel != null) _txtLevel.color = COLOR_TEXT_ACTIVE;
             if (_txtLevelOutline != null)
             {
-                _txtLevelOutline.color = new Color(
-                    _txtLevelOutline.color.r, _txtLevelOutline.color.g,
-                    _txtLevelOutline.color.b, 1f);
+                ApplyLevelOutline(_difficulty, 1f);
             }
 
             // Effects ON
@@ -175,9 +180,7 @@ namespace BalloonFlow
             // TextLevelOutline: keep color, alpha 0.45
             if (_txtLevelOutline != null)
             {
-                _txtLevelOutline.color = new Color(
-                    _txtLevelOutline.color.r, _txtLevelOutline.color.g,
-                    _txtLevelOutline.color.b, OUTLINE_INACTIVE_ALPHA);
+                ApplyLevelOutline(difficulty, OUTLINE_INACTIVE_ALPHA);
             }
 
             // Effects OFF
@@ -192,6 +195,22 @@ namespace BalloonFlow
             if (s_purpleBoxSprite == null)
                 s_purpleBoxSprite = Resources.Load<Sprite>(PURPLE_BOX_SPRITE_PATH);
             return s_purpleBoxSprite;
+        }
+
+        private void ApplyLevelOutline(DifficultyPurpose difficulty, float alpha)
+        {
+            if (_txtLevelOutline == null) return;
+
+            Material mat = UIOutlineStyle.SelectDifficultyMaterial(
+                difficulty,
+                _matLevelOutlineNormal,
+                _matLevelOutlineHard,
+                _matLevelOutlineSuperHard);
+            UIOutlineStyle.ApplyMaterialOrColor(_txtLevelOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
+
+            Color color = _txtLevelOutline.color;
+            color.a = alpha;
+            _txtLevelOutline.color = color;
         }
 
         private void ApplyAnimator(DifficultyPurpose difficulty)

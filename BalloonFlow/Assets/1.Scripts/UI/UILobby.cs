@@ -875,7 +875,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matPlayOutlineSuperHard,
                 _                           => _matPlayOutlineNormal
             };
-            if (playOutlineMat != null && _txtPlayOutline != null) _txtPlayOutline.fontSharedMaterial = playOutlineMat;
+            UIOutlineStyle.ApplyMaterialOrColor(_txtPlayOutline, playOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
 
             // PlayLevel 텍스트 아웃라인 머티리얼
             Material playLevelOutlineMat = difficulty switch
@@ -884,7 +884,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matPlayLevelOutlineSuperHard,
                 _                           => _matPlayLevelOutlineNormal
             };
-            if (playLevelOutlineMat != null && _txtPlayLevelOutline != null) _txtPlayLevelOutline.fontSharedMaterial = playLevelOutlineMat;
+            UIOutlineStyle.ApplyMaterialOrColor(_txtPlayLevelOutline, playLevelOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
 
             ApplyPlayBadge(difficulty);
         }

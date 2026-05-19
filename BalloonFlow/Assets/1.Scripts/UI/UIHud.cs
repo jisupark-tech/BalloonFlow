@@ -91,6 +91,11 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtLockHand;
         [SerializeField] private TMP_Text _txtLockHandOutline;
 
+        [Header("[TxtLockOutline Difficulty Material Preset]")]
+        [SerializeField] private Material _matLockOutlineNormal;
+        [SerializeField] private Material _matLockOutlineHard;
+        [SerializeField] private Material _matLockOutlineSuperHard;
+
         [Header("[Icon Items — 미해금 시 비활성화]")]
         [SerializeField] private GameObject _iconItemShuffle;
         [SerializeField] private GameObject _iconItemRemove;
@@ -523,7 +528,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matSpeedOutlineSuperHard,
                 _                           => _matSpeedOutlineNormal
             };
-            if (speedOutlineMat != null && _txtSpeedOutline != null) _txtSpeedOutline.fontSharedMaterial = speedOutlineMat;
+            UIOutlineStyle.ApplyMaterialOrColor(_txtSpeedOutline, speedOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
 
             // 배경 색상 (frameBottom)
             Sprite bgSpr = difficulty switch
@@ -562,7 +567,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matLvOutlineSuperHard,
                 _                           => _matLvOutlineNormal
             };
-            if (lvOutlineMat != null && _txtLVOutline != null) _txtLVOutline.fontSharedMaterial = lvOutlineMat;
+            UIOutlineStyle.ApplyMaterialOrColor(_txtLVOutline, lvOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
 
             // Number 텍스트 아웃라인 머티리얼
             Material numberOutlineMat = difficulty switch
@@ -571,7 +576,18 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matNumberOutlineSuperHard,
                 _                           => _matNumberOutlineNormal
             };
-            if (numberOutlineMat != null && _txtNumberOutline != null) _txtNumberOutline.fontSharedMaterial = numberOutlineMat;
+            UIOutlineStyle.ApplyMaterialOrColor(_txtNumberOutline, numberOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+
+            Material lockOutlineMat = difficulty switch
+            {
+                DifficultyPurpose.Hard      => _matLockOutlineHard,
+                DifficultyPurpose.SuperHard => _matLockOutlineSuperHard,
+                _                           => _matLockOutlineNormal
+            };
+            if (lockOutlineMat == null) lockOutlineMat = numberOutlineMat;
+            UIOutlineStyle.ApplyMaterialOrColor(_txtLockShuffleOutline, lockOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+            UIOutlineStyle.ApplyMaterialOrColor(_txtLockRemoveOutline, lockOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+            UIOutlineStyle.ApplyMaterialOrColor(_txtLockHandOutline, lockOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
 
             // Percentage 텍스트 아웃라인 머티리얼
             Material percentageOutlineMat = difficulty switch
@@ -580,7 +596,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matPercentageOutlineSuperHard,
                 _                           => _matPercentageOutlineNormal
             };
-            if (percentageOutlineMat != null && _txtPercentageOutline != null) _txtPercentageOutline.fontSharedMaterial = percentageOutlineMat;
+            UIOutlineStyle.ApplyMaterialOrColor(_txtPercentageOutline, percentageOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
         }
 
         public void SetLevel(int _levelId)

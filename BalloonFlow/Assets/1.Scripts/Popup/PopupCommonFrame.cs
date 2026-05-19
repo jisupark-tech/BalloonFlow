@@ -129,6 +129,11 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtTitle;
         [SerializeField] private TMP_Text _txtTitleOutline;
 
+        [Header("[Title Outline Difficulty Material Preset]")]
+        [SerializeField] private Material _matTitleOutlineNormal;
+        [SerializeField] private Material _matTitleOutlineHard;
+        [SerializeField] private Material _matTitleOutlineSuperHard;
+
         [Header("[Exit Button]")]
         [SerializeField] private Button _btnExit;
 
@@ -224,10 +229,14 @@ namespace BalloonFlow
 
         #region Public Methods — Title
 
+        private DifficultyPurpose _currentDifficulty = DifficultyPurpose.Normal;
+        private bool _hasExplicitDifficulty;
+
         public void SetTitle(string text)
         {
             if (_txtTitle != null) _txtTitle.text = text;
             if (_txtTitleOutline != null) _txtTitleOutline.text = text;
+            ApplyTitleOutline(_hasExplicitDifficulty ? _currentDifficulty : ResolveActiveDifficulty());
         }
 
         #endregion
@@ -296,6 +305,9 @@ namespace BalloonFlow
         /// </summary>
         public void ApplyDifficulty(DifficultyPurpose difficulty)
         {
+            _currentDifficulty = difficulty;
+            _hasExplicitDifficulty = true;
+
             Sprite frameSpr = difficulty switch
             {
                 DifficultyPurpose.Hard      => _sprFrameHard,
@@ -316,6 +328,28 @@ namespace BalloonFlow
                 _leftTopSidePanel.sprite = sideSpr;
             if (_rightTopSidePanel != null && sideSpr != null)
                 _rightTopSidePanel.sprite = sideSpr;
+
+            ApplyTitleOutline(difficulty);
+        }
+
+        private void ApplyTitleOutline(DifficultyPurpose difficulty)
+        {
+            Material mat = UIOutlineStyle.SelectDifficultyMaterial(
+                difficulty,
+                _matTitleOutlineNormal,
+                _matTitleOutlineHard,
+                _matTitleOutlineSuperHard);
+            UIOutlineStyle.ApplyMaterialOrColor(_txtTitleOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
+        }
+
+        private static DifficultyPurpose ResolveActiveDifficulty()
+        {
+            if (!LevelManager.HasInstance) return DifficultyPurpose.Normal;
+
+            int levelId = LevelManager.Instance.CurrentLevelId;
+            return levelId > 0
+                ? LevelManager.Instance.GetLevelDifficulty(levelId)
+                : DifficultyPurpose.Normal;
         }
 
         #endregion

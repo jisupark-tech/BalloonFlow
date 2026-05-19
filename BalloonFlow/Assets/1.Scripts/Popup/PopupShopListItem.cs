@@ -81,6 +81,10 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtTitle;
         [SerializeField] private TMP_Text _txtTitleOutline;
 
+        [Header("[Title Outline Material Preset]")]
+        [SerializeField] private Material _matTitleOutlineNormalBundle;
+        [SerializeField] private Material _matTitleOutlineSpecialBundle;
+
         [Header("[시간 한정 할인]")]
         [SerializeField] private GameObject _timeOffRoot;
         [SerializeField] private TMP_Text _txtTimeOff;
@@ -509,6 +513,9 @@ namespace BalloonFlow
                 if (_imgBtnBuy != null && _sprBtnGreen != null) _imgBtnBuy.sprite = _sprBtnGreen;
                 if (_imgSale != null) _imgSale.SetActive(false);
             }
+
+            Material titleOutlineMat = isSpecial ? _matTitleOutlineSpecialBundle : _matTitleOutlineNormalBundle;
+            UIOutlineStyle.ApplyMaterialOrColor(_txtTitleOutline, titleOutlineMat, UIOutlineStyle.ForShopBundle(isSpecial));
         }
 
         private void Update()

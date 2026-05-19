@@ -2007,7 +2007,10 @@ namespace BalloonFlow
                 Vector3 baseA = vA.gameObject.transform.position;
                 Vector3 baseB = vB.gameObject.transform.position;
                 Vector3 dirAtoB = (baseB - baseA).normalized;
-                Vector3 sideOffset = new Vector3(dirAtoB.x, 0f, dirAtoB.z).normalized * 0.4f;
+                // [2026-05-19] Chain 연결점 = 보관함 띠 가장자리 (중앙→중앙 X, 우측 중앙→좌측 중앙 O).
+                // 0.4f 고정값 → _columnSpacing 의 절반 = 열 경계 = 띠 가장자리.
+                float edgeOffset = _columnSpacing * 0.5f;
+                Vector3 sideOffset = new Vector3(dirAtoB.x, 0f, dirAtoB.z).normalized * edgeOffset;
 
                 Vector3 posA = baseA + Vector3.up * 0.8f + sideOffset;
                 Vector3 posB = baseB + Vector3.up * 0.8f - sideOffset;

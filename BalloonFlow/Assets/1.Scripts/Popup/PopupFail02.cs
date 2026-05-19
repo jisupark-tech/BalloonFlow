@@ -42,6 +42,10 @@ namespace BalloonFlow
 
         [Header("[Fail 이미지 — 난이도별]")]
         [SerializeField] private Image _imageFail;
+        [SerializeField] private TMP_Text _txtFailOutline;
+        [SerializeField] private Material _matFailOutlineNormal;
+        [SerializeField] private Material _matFailOutlineHard;
+        [SerializeField] private Material _matFailOutlineSuperHard;
         [SerializeField] private Sprite _sprFailNormal;
         [SerializeField] private Sprite _sprFailHard;
         [SerializeField] private Sprite _sprFailSuperHard;
@@ -66,6 +70,7 @@ namespace BalloonFlow
         {
             base.Awake();
             LoadStageSpritesFromResources();
+            EnsureFailOutlineBinding();
 
             // Skull (Hard/SuperHard) 는 atlas 에 있음. Stage sprites 는 Resources/ 에만 있어 별도 로드 유지.
             if (ResourceManager.HasInstance)
@@ -107,6 +112,14 @@ namespace BalloonFlow
                 if (deep != null) return deep;
             }
             return null;
+        }
+
+        private void EnsureFailOutlineBinding()
+        {
+            if (_txtFailOutline != null) return;
+            Transform failOutline = FindChildRecursive(transform, "TxtFailOutline");
+            if (failOutline != null)
+                _txtFailOutline = failOutline.GetComponent<TMP_Text>();
         }
 
         private void LoadStageSpritesFromResources()
@@ -172,6 +185,8 @@ namespace BalloonFlow
 
         private void UpdateHardLevelOption(DifficultyPurpose difficulty)
         {
+            EnsureFailOutlineBinding();
+
             // ImageLight 색상
             if (_imageLight != null)
             {
@@ -208,6 +223,13 @@ namespace BalloonFlow
             }
 
             // HardOptionColor: Normal 숨김 / Hard·SuperHard 노출 + 스프라이트 교체
+            Material failOutlineMat = UIOutlineStyle.SelectDifficultyMaterial(
+                difficulty,
+                _matFailOutlineNormal,
+                _matFailOutlineHard,
+                _matFailOutlineSuperHard);
+            UIOutlineStyle.ApplyMaterialOrColor(_txtFailOutline, failOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+
             if (_imageHardOptionColor != null)
             {
                 if (difficulty == DifficultyPurpose.Normal)
@@ -273,7 +295,8 @@ namespace BalloonFlow
                     Material mat = difficulty == DifficultyPurpose.SuperHard
                         ? _matHardLevelOutlineSuperHard
                         : _matHardLevelOutlineHard;
-                    if (mat != null) _txtHardLevelOutline.fontSharedMaterial = mat;
+                    UIOutlineStyle.ApplyMaterialOrColor(_txtHardLevelOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
+                    UIOutlineStyle.ApplyMaterialOrColor(_txtMultiplierOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
                 }
             }
         }

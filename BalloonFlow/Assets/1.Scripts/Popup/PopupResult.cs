@@ -369,7 +369,8 @@ namespace BalloonFlow
                     Material mat = difficulty == DifficultyPurpose.SuperHard
                         ? _matHardLevelOutlineSuperHard
                         : _matHardLevelOutlineHard;
-                    if (mat != null) _txtHardLevelOutline.fontSharedMaterial = mat;
+                    UIOutlineStyle.ApplyMaterialOrColor(_txtHardLevelOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
+                    UIOutlineStyle.ApplyMaterialOrColor(_txtMultiplierOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
                 }
             }
         }
