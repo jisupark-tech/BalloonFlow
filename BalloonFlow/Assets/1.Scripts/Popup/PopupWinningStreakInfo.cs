@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 using DG.Tweening;
 
 namespace BalloonFlow
@@ -14,11 +15,17 @@ namespace BalloonFlow
     /// (디자이너 의도 순서: ImageTxt → Info1 → ImageArrow1 → Info2 → ImageArrow2 → Info3 → Info4 → TextClose)
     /// localScale 0 → 1.1 → 1 OutQuad/InQuad 단계로 순차 팝업.
     /// 이름 기반 Find 가 아닌 prefab 단 명시 할당 방식 — 자식 이름/계층 변경에 내성.
+    ///
+    /// _btnArea: 배경 클릭 닫기, 등장 연출 종료 후에만 활성.
     /// </summary>
     public class PopupWinningStreakInfo : UIBase
     {
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
+
+        [Header("[BtnArea — 배경 클릭 닫기]")]
+        [Tooltip("팝업 전체 영역 뒤의 투명 버튼. 클릭 시 닫기. 등장 연출 종료 후에만 활성화")]
+        [SerializeField] private Button _btnArea;
 
         [Header("[자식 순차 팝업 — 대상]")]
         [Tooltip("등장 순서대로 명시 할당. ImageTxt → Info1 → ImageArrow1 → Info2 → ImageArrow2 → Info3 → Info4 → TextClose")]
@@ -41,6 +48,8 @@ namespace BalloonFlow
             base.Awake();
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.AddListener(() => CloseUI());
+            if (_btnArea != null)
+                _btnArea.onClick.AddListener(() => CloseUI());
         }
 
         protected override void OnDestroy()
@@ -49,6 +58,8 @@ namespace BalloonFlow
             KillPopSequence();
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.RemoveAllListeners();
+            if (_btnArea != null)
+                _btnArea.onClick.RemoveAllListeners();
         }
 
         public override void OpenUI()
@@ -72,8 +83,13 @@ namespace BalloonFlow
         {
             KillPopSequence();
 
+            if (_btnArea != null) _btnArea.interactable = false;
+
             if (_popSequenceTargets == null || _popSequenceTargets.Length == 0)
+            {
+                if (_btnArea != null) _btnArea.interactable = true;
                 return;
+            }
 
             for (int i = 0; i < _popSequenceTargets.Length; i++)
             {
@@ -93,6 +109,8 @@ namespace BalloonFlow
                 if (i < count - 1)
                     _popSequence.AppendInterval(_popStagger);
             }
+
+            _popSequence.OnComplete(() => { if (_btnArea != null) _btnArea.interactable = true; });
         }
 
         private void KillPopSequence()
@@ -107,6 +125,8 @@ namespace BalloonFlow
         private void OnDisable()
         {
             KillPopSequence();
+
+            if (_btnArea != null) _btnArea.interactable = false;
 
             // 재오픈 시 자식이 scale 0 으로 남아 안 보이는 회귀 방지 — 모두 1 로 복구.
             if (_popSequenceTargets == null) return;
