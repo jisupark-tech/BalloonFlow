@@ -139,6 +139,7 @@ namespace BalloonFlow
         [Header("[RightArea — Lobby Page]")]
         [SerializeField] private Button _btnNoAds;
         [SerializeField] private Button _btnProfilePanel;
+        /// <summary>UILobby.prefab 의 RightArea — WinningStreak 버튼. 미할당 시 클릭 핸들러는 등록되지 않음(silent skip).</summary>
         [Tooltip("WinningStreak 팝업 진입 버튼 — 클릭 시 PopupWinningStreak 오픈")]
         [SerializeField] private Button _btnWinningStreak;
 
@@ -516,6 +517,7 @@ namespace BalloonFlow
 
         protected override void OnDestroy()
         {
+            if (_btnWinningStreak != null) _btnWinningStreak.onClick.RemoveAllListeners();
             base.OnDestroy();
             UnhookProfileEvents();
             _pageTween?.Kill();
