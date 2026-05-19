@@ -18,6 +18,7 @@ namespace BalloonFlow
         private const int MIN_COIN_COUNT = 20;
         private const int MAX_COIN_COUNT = 25;
         private const int SCORE_PER_COIN_STEP = 500;
+        private const int GOLD_SUB_CANVAS_SORTING_ORDER = 11; // PopupCanvas(10) 위, EffectCanvas(15) 아래. PopupResult 내부 FX 파티클 위로 Gold 텍스트 표시.
 
         #endregion
 
@@ -171,6 +172,7 @@ namespace BalloonFlow
 
             UpdateHardLevelOption(difficulty);
             ApplyBadge(difficulty);
+            EnsureGoldOnTopOfFx();
             ApplyDifficultyBackground(difficulty);
 
             OpenUI();
@@ -402,6 +404,27 @@ namespace BalloonFlow
             else
             {
                 _imageBadge.gameObject.SetActive(false);
+            }
+        }
+
+        #endregion
+
+        #region Gold Render Order
+
+        private void EnsureGoldOnTopOfFx()
+        {
+            var transforms = GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < transforms.Length; i++)
+            {
+                var t = transforms[i];
+                if (t == null) continue;
+                string n = t.name;
+                if (n != "TxtGoldOutline" && n != "TxtGold" && n != "Gold") continue;
+
+                var canvas = t.GetComponent<Canvas>();
+                if (canvas == null) canvas = t.gameObject.AddComponent<Canvas>();
+                canvas.overrideSorting = true;
+                canvas.sortingOrder = GOLD_SUB_CANVAS_SORTING_ORDER;
             }
         }
 
