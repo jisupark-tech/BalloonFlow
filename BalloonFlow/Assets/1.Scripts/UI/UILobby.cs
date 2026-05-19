@@ -139,6 +139,8 @@ namespace BalloonFlow
         [Header("[RightArea — Lobby Page]")]
         [SerializeField] private Button _btnNoAds;
         [SerializeField] private Button _btnProfilePanel;
+        [Tooltip("WinningStreak 팝업 진입 버튼 — 클릭 시 PopupWinningStreak 오픈")]
+        [SerializeField] private Button _btnWinningStreak;
 
         [Header("[Profile Display — 좌상단 표시 sprite]")]
         [Tooltip("PopupProfile 과 동일한 ProfileAssets ScriptableObject. 아이콘/프레임 sprite 카탈로그.")]
@@ -217,6 +219,7 @@ namespace BalloonFlow
         public Button BtnSetting => _btnSetting;
         public Button BtnNoAds => _btnNoAds;
         public Button BtnProfilePanel => _btnProfilePanel;
+        public Button BtnWinningStreak => _btnWinningStreak;
         public int CurrentPageIndex => _currentPageIndex;
 
         #endregion
@@ -253,6 +256,16 @@ namespace BalloonFlow
             {
                 _btnPlay.onClick.RemoveAllListeners();
                 _btnPlay.onClick.AddListener(PlayTouchSFX);
+            }
+            if (_btnWinningStreak != null)
+            {
+                _btnWinningStreak.onClick.RemoveAllListeners();
+                _btnWinningStreak.onClick.AddListener(() =>
+                {
+                    PlayTouchSFX();
+                    if (UIManager.HasInstance)
+                        UIManager.Instance.OpenUI<PopupWinningStreak>(Const.POPUP_WINNING_STREAK);
+                });
             }
 
             AutoConfigureShopScroll();
