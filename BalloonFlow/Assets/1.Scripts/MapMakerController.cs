@@ -263,6 +263,8 @@ namespace BalloonFlow
             "Assets/EditorData/LevelDatabase_AI.asset",
             "Assets/EditorData/LevelDatabase_Transform.asset"
         };
+        private const string EDITOR_PREF_LAST_DB_TAB = "BalloonFlow_LastEditedDBTab";
+        private const string EDITOR_PREF_LAST_LEVEL = "BalloonFlow_LastEditedLevel";
         private int _activeDBTab = 0;
         private Text[] _dbTabLabels;
 
@@ -320,6 +322,7 @@ namespace BalloonFlow
             _cam = Camera.main;
             if (_cam == null) { Debug.LogError("[MapMaker] Camera.main not found!"); return; }
             SetupCamera();
+            _activeDBTab = Mathf.Clamp(EditorPrefs.GetInt(EDITOR_PREF_LAST_DB_TAB, 0), 0, DB_TAB_NAMES.Length - 1);
             BuildUI();
             RebuildPreview();
             RebuildGridLines();
@@ -329,7 +332,7 @@ namespace BalloonFlow
             RefreshLevelList();
 
             // 테스트 플레이 복귀 시 마지막 편집 레벨, 처음이면 레벨 1 로드
-            int lastEditedLevel = EditorPrefs.GetInt("BalloonFlow_LastEditedLevel", 1);
+            int lastEditedLevel = EditorPrefs.GetInt(EDITOR_PREF_LAST_LEVEL, 1);
             if (lastEditedLevel > 0)
             {
                 LoadLevelById(lastEditedLevel);
@@ -671,7 +674,8 @@ namespace BalloonFlow
 
         private void SetActiveDBTab(int tabIdx)
         {
-            _activeDBTab = tabIdx;
+            _activeDBTab = Mathf.Clamp(tabIdx, 0, DB_TAB_NAMES.Length - 1);
+            EditorPrefs.SetInt(EDITOR_PREF_LAST_DB_TAB, _activeDBTab);
             _targetDB = null; // 캐시 초기화 → LoadLevelDatabase에서 새 DB 로드
             _targetDB_AI = null;
             _targetDB_Transform = null;
@@ -1249,7 +1253,7 @@ namespace BalloonFlow
             _queueGenConfirmBtn = Btn(rowGen, "Confirm", () =>
             {
                 if (!_queueGenConfirmReady) { SetStatus("Confirm: Generate Queue 성공 후 가능합니다."); return; }
-                SaveToDatabase();
+                SaveToActiveDB();
                 SetStatus("Queue confirmed — saved to database.");
             });
             // Confirm 은 Generate 성공 전까지 비활성
@@ -4852,12 +4856,13 @@ namespace BalloonFlow
             }
 
             // 테스트 플레이 전 자동 저장 (돌아올 때 데이터 유실 방지)
-            SaveToDatabase();
+            SaveToActiveDB();
 
             string json = JsonUtility.ToJson(config, false);
             EditorPrefs.SetString("BalloonFlow_TestLevel", json);
             EditorPrefs.SetBool("BalloonFlow_UseTestLevel", true);
-            EditorPrefs.SetInt("BalloonFlow_LastEditedLevel", _levelId);
+            EditorPrefs.SetInt(EDITOR_PREF_LAST_LEVEL, _levelId);
+            EditorPrefs.SetInt(EDITOR_PREF_LAST_DB_TAB, _activeDBTab);
             PlayerPrefs.SetInt("BF_PendingLevelId", _levelId);
             IsTestMode = true;
             GameManager.IsTestPlayMode = true;
@@ -5176,12 +5181,6 @@ namespace BalloonFlow
         // ═══════════════════════════════════════════════════════════════
 
         #region Export
-
-        /// <summary>기존 호출 호환용.</summary>
-        private void SaveToDatabase()
-        {
-            SaveToDB("Assets/Resources/LevelDatabase.asset", ref _targetDB);
-        }
 
         /// <summary>지정된 경로의 LevelDatabase에 저장.</summary>
         private void SaveToDB(string assetPath, ref LevelDatabase db)
