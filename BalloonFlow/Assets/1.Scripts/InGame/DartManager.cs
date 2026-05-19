@@ -21,6 +21,10 @@ namespace BalloonFlow
 
         private const string DART_POOL_KEY = "Dart";
         private const float DEFAULT_PROJECTILE_FLIGHT_TIME = 0.1f;
+        private const float PROJECTILE_MIN_FLIGHT_TIME = 0.015f;
+        private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 1.5f;
+        private const float PROJECTILE_MIN_FLIGHT_TIME_SCALE = 0.35f;
+        private const float PROJECTILE_MAX_FLIGHT_TIME_SCALE = 4f;
         private const int ADJACENT_EMPTY_LINE_RESCUE_RADIUS = 1;
         #endregion
 
@@ -46,6 +50,37 @@ namespace BalloonFlow
 
                 return t;
             }
+        }
+
+        // ROLLBACK_DART_DISTANCE_BASED_FLIGHT_TIME:
+        // Restore callers to EffectiveFlightTime if fixed-speed projectile travel causes gameplay
+        // timing regressions. The existing dartFlightTime is treated as the time to travel one
+        // board cell, so close targets resolve faster and far targets resolve later while preserving
+        // the old one-cell feel.
+        // ROLLBACK_DART_PROJECTILE_SPEED_X3:
+        // Set PROJECTILE_FLIGHT_SPEED_MULTIPLIER back to 1f and PROJECTILE_MIN_FLIGHT_TIME to 0.035f
+        // if the faster dart travel causes hit timing or visual readability regressions.
+        private float CalculateProjectileFlightTime(Vector3 from, Vector3 to)
+        {
+            float baseTime = Mathf.Max(0.001f, FlightTime);
+            float speedMultiplier = RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f;
+            if (speedMultiplier <= 0.001f)
+                speedMultiplier = 1f;
+            speedMultiplier *= PROJECTILE_FLIGHT_SPEED_MULTIPLIER;
+
+            float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
+            if (cellSpacing <= 0.01f)
+                cellSpacing = 0.55f;
+
+            Vector3 flatFrom = new Vector3(from.x, 0f, from.z);
+            Vector3 flatTo = new Vector3(to.x, 0f, to.z);
+            float distance = Vector3.Distance(flatFrom, flatTo);
+            float unitsPerSecond = cellSpacing / baseTime;
+            float duration = distance / Mathf.Max(0.001f, unitsPerSecond * speedMultiplier);
+
+            float minDuration = Mathf.Max(PROJECTILE_MIN_FLIGHT_TIME, baseTime * PROJECTILE_MIN_FLIGHT_TIME_SCALE / speedMultiplier);
+            float maxDuration = Mathf.Max(minDuration, baseTime * PROJECTILE_MAX_FLIGHT_TIME_SCALE / speedMultiplier);
+            return Mathf.Clamp(duration, minDuration, maxDuration);
         }
 
         #endregion
@@ -923,7 +958,7 @@ namespace BalloonFlow
             if (dir.sqrMagnitude > 0.001f)
                 dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
 
-            float ft = EffectiveFlightTime;
+            float ft = CalculateProjectileFlightTime(from, to);
 
             // startScale = 레일 위 다트 현재 사이즈(절대 풍선 사이즈로 바꾸지 말 것 — 사용자 피드백 핵심).
             Vector3 balloonScale = BalloonController.HasInstance
@@ -933,6 +968,7 @@ namespace BalloonFlow
 
             var proj = GetProjectile();
             proj.gameObject = dartObj;
+            proj.startPosition = from;
             proj.targetPosition = to;
             proj.targetBalloonId = targetBalloonId;
             proj.color = color;
@@ -945,6 +981,10 @@ namespace BalloonFlow
             ConfigureNeedleTipImpactTiming(proj, dartObj, from, to, balloonScale);
 
             _activeProjectiles.Add(proj);
+
+            // [2026-05-19 DISABLED] Flight trail 활성화 — 주석. 재활성 시 DartIdentifier._flightTrail + Enable/DisableTrail 함께 주석 해제.
+            // if (dartObj.TryGetComponent<DartIdentifier>(out var dartIdFire))
+            //     dartIdFire.EnableTrail();
 
             // Flight: parabolic arc (곡사) or linear depending on _arcHeight
             if (_arcHeight > 0.01f)
@@ -1515,7 +1555,7 @@ namespace BalloonFlow
                     if (dir.sqrMagnitude > 0.001f)
                         dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
 
-                    float ft = EffectiveFlightTime;
+                    float ft = CalculateProjectileFlightTime(launchPos, travelTarget);
 
                     // startScale = 레일 위 다트 현재 사이즈(절대 풍선 사이즈로 바꾸지 말 것 — 사용자 피드백 핵심).
                     Vector3 balloonScale = BalloonController.Instance.GetBalloonWorldScale(targetId);
@@ -1851,7 +1891,7 @@ namespace BalloonFlow
                 if (dir.sqrMagnitude > 0.001f)
                     dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
 
-                float ft = EffectiveFlightTime;
+                float ft = CalculateProjectileFlightTime(launchPos, travelTarget);
                 Vector3 balloonScale = BalloonController.Instance.GetBalloonWorldScale(candidate.targetId);
                 Vector3 launchStartScale = dartObj.transform.localScale;
 
@@ -2948,10 +2988,14 @@ namespace BalloonFlow
 
         private void ReturnDartToPool(GameObject obj)
         {
-            if (obj != null && ObjectPoolManager.HasInstance)
-            {
+            if (obj == null) return;
+
+            // [2026-05-19 DISABLED] Flight trail 비활성화 — 주석. 재활성 시 LaunchProjectile 의 EnableTrail 과 함께 주석 해제.
+            // if (obj.TryGetComponent<DartIdentifier>(out var dartId))
+            //     dartId.DisableTrail();
+
+            if (ObjectPoolManager.HasInstance)
                 ObjectPoolManager.Instance.Return(DART_POOL_KEY, obj);
-            }
         }
 
         private void ApplyColor(GameObject obj, int color)

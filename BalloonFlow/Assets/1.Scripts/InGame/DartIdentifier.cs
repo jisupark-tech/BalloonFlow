@@ -27,8 +27,34 @@ namespace BalloonFlow
         [Tooltip("Optional world anchor for the needle tip. If empty, Niddle renderer bounds are used.")]
         [SerializeField] private Transform _needleTip;
 
+        // [2026-05-19 DISABLED] Flight Trail (TrailRenderer) — 주석 처리. 재활성 시 아래 + ApplyColor 내 trail 라인 + DartManager hook 함께 주석 해제.
+        // [Header("[Flight Trail — 발사 시 활성, 풀 반환 시 비활성]")]
+        // [Tooltip("Dart 비행 잔상용 TrailRenderer. Inspector 에서 자식 TrailRenderer 드래그. 미할당 시 trail 없음.")]
+        // [SerializeField] private TrailRenderer _flightTrail;
+
         /// <summary>색상 적용 대상이 할당되었는지.</summary>
         public bool HasColorRenderers => _colorRenderers != null && _colorRenderers.Length > 0;
+
+        // [2026-05-19 DISABLED] Flight Trail API — TrailRenderer wire 안 쓰는 동안 주석.
+        // /// <summary>
+        // /// 비행 잔상 활성화 — Fire 시 호출. 풀에서 재사용되는 다트 잔상 잔여를 Clear 후 emit 시작.
+        // /// 색상은 ApplyColor 가 sharedMaterial 로 set (다트 mesh 와 동일 per-color material).
+        // /// _flightTrail 미할당 시 no-op (Inspector wire 안 됐으면 trail 없이 동작).
+        // /// </summary>
+        // public void EnableTrail()
+        // {
+        //     if (_flightTrail == null) return;
+        //     _flightTrail.Clear();   // 풀 재사용 시 직전 잔여 점 제거 — 매 fire 시 초기화 보장
+        //     _flightTrail.emitting = true;
+        // }
+        //
+        // /// <summary>비행 잔상 비활성화 — 풀 반환 시 호출. emit 끄고 잔여 점 Clear.</summary>
+        // public void DisableTrail()
+        // {
+        //     if (_flightTrail == null) return;
+        //     _flightTrail.emitting = false;
+        //     _flightTrail.Clear();
+        // }
 
         /// <summary>기반 Material 복제 캐시 (색상별)</summary>
         private static readonly Dictionary<int, Material> _dartMatCache = new Dictionary<int, Material>();
@@ -121,6 +147,10 @@ namespace BalloonFlow
                 if (_colorRenderers[i] != null)
                     _colorRenderers[i].sharedMaterial = mat;
             }
+
+            // [2026-05-19 DISABLED] Flight trail material 적용 — 주석. 재활성 시 _flightTrail 필드 함께 주석 해제.
+            // if (_flightTrail != null)
+            //     _flightTrail.sharedMaterial = mat;
 
             // Niddle: 은색 유지 + 아웃라인 활성화 (MPB)
             if (_outlineOnlyRenderers != null)

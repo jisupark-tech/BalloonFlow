@@ -88,6 +88,7 @@ namespace BalloonFlow
             _isCritical = false;
             _criticalTimer = 0f;
             _failConfirmed = false;
+            _wasForceFullBeltAdvanceActive = false;
 
             if (GameManager.HasInstance)
             {
@@ -124,6 +125,12 @@ namespace BalloonFlow
         // 매 frame 호출 spike. 0.1s 마다 1번이면 fail 감지 0.1s 지연 — 게임 디자인 영향 미미.
         private float _stuckEvalTimer;
         private const float STUCK_EVAL_INTERVAL = 0.1f;
+        private const float FAIL_RECHECK_MIN_DURATION = 0.5f;
+        private const float FORCE_ADVANCE_RECHECK_MIN_DURATION = 1.0f;
+        private const float FORCE_ADVANCE_RECHECK_MAX_DURATION = 2.0f;
+
+        private float EffectiveFailGraceDelay => Mathf.Max(_failGraceDelay, FAIL_RECHECK_MIN_DURATION);
+        private bool _wasForceFullBeltAdvanceActive;
 
         // [2026-05-13] Pause 중 fail eval 정지 + 재개 시 critical 상태 reset 위한 추적.
         private bool _wasPausedLastFrame;
@@ -149,6 +156,7 @@ namespace BalloonFlow
                 _isCritical = false;
                 _criticalTimer = 0f;
                 _stuckEvalTimer = 0f;
+                _wasForceFullBeltAdvanceActive = false;
             }
 
             // Throttle — fail evaluation 매 frame 안 함.
@@ -163,6 +171,7 @@ namespace BalloonFlow
             {
                 _isCritical = false;
                 _criticalTimer = 0f;
+                _wasForceFullBeltAdvanceActive = false;
                 return;
             }
 
@@ -178,6 +187,14 @@ namespace BalloonFlow
             const int FAIL_BUFFER = 1; // efc 가 physCap-1 도달 시 fail 평가 진입
             bool railFull = RailManager.HasInstance && physCap > 0 && efc >= physCap - FAIL_BUFFER;
             bool forceFullBeltAdvance = RailManager.HasInstance && RailManager.Instance.IsForceFullBeltAdvanceActive();
+            if (forceFullBeltAdvance && !_wasForceFullBeltAdvanceActive)
+            {
+                // ROLLBACK_FAIL_FORCE_ADVANCE_RECHECK_TIMER:
+                // Force-full-belt advance is a recovery window. Reset any previously accumulated
+                // critical timer so the belt gets time to rotate and expose/fire possible matches.
+                _criticalTimer = 0f;
+            }
+            _wasForceFullBeltAdvanceActive = forceFullBeltAdvance;
             bool hasMatch = HasOutermostMatchCached;
             // ROLLBACK_FAIL_NO_MOVES_LEFT_WITH_RAIL_DARTS:
             // Previously no-move fail only triggered when all holders were empty AND rail was empty.
@@ -228,13 +245,14 @@ namespace BalloonFlow
                 if (_debugLogFail) DumpAttackState("[Fail-DEBUG] Critical 회복");
                 _isCritical = false;
                 _criticalTimer = 0f;
+                _wasForceFullBeltAdvanceActive = false;
                 return;
             }
 
             // Fail evaluation is throttled, so accumulate the elapsed evaluation window
             // instead of a single frame delta. Otherwise a 2s grace can stretch far longer.
             _criticalTimer += evalDelta;
-            if (_criticalTimer >= _failGraceDelay)
+            if (_criticalTimer >= GetRequiredFailDelay(forceFullBeltAdvance))
             {
                 if (_debugLogFail) DumpAttackState("[Fail-DEBUG] Fail 트리거");
                 _failConfirmed = true;
@@ -489,23 +507,11 @@ namespace BalloonFlow
             if (!RailManager.HasInstance) return;
 
             // ROLLBACK_FAIL_ON_DEADLOCK_ENTER_NO_MATCH:
-            // Deadlock enter is the exact moment the rail switches into forced/full-belt recovery.
-            // The periodic Update path still owns the grace-based check, but this immediate pass
-            // prevents a near-full forced belt from staying alive when no exposed balloon is
-            // attackable by any rail dart color.
-            _outermostDirty = true;
-            _matchCacheFrame = -1;
-
+            // Previous behavior called HasOutermostMatch + TriggerFail immediately here. That could
+            // fail on the same frame the belt entered recovery, before rail darts had an interval to
+            // advance/fire. Keep the optimized 0.1s Update throttle as the single fail evaluator.
             if (!RailManager.Instance.IsForceFullBeltAdvanceActive()) return;
-            if (HasOutermostMatch())
-            {
-                if (_debugLogFail) DumpAttackState("[Fail-DEBUG] Deadlock entered but attackable match exists");
-                return;
-            }
-
-            if (_debugLogFail) DumpAttackState("[Fail-DEBUG] Deadlock entered with no attackable match");
-            _failConfirmed = true;
-            TriggerFail(FailReason.RailOverflow);
+            EnterFailRecheckWindow("[Fail-DEBUG] Deadlock entered -> recheck window");
         }
 
         private GaugeStage EvaluateGaugeStage(float occupancy)
@@ -539,15 +545,46 @@ namespace BalloonFlow
             // ROLLBACK_FAIL_NO_MOVES_LEFT_WITH_RAIL_DARTS:
             // All holders consumed. Fail when no remaining rail dart color can hit an exposed balloon,
             // even if darts are still sitting on the rail.
-            if (_remainingBalloons > 0 && !HasOutermostMatch())
+            if (_remainingBalloons > 0)
             {
-                TriggerFail(FailReason.NoMovesLeft);
+                EnterFailRecheckWindow("[Fail-DEBUG] All holders empty -> recheck window");
             }
         }
 
         #endregion
 
         #region Private Methods — Condition Evaluation
+
+        private void EnterFailRecheckWindow(string debugTag)
+        {
+            _outermostDirty = true;
+            _matchCacheFrame = -1;
+            _stuckEvalTimer = 0f;
+
+            _isCritical = true;
+            _criticalTimer = 0f;
+
+            if (_debugLogFail)
+                DumpAttackState(debugTag);
+        }
+
+        private float GetRequiredFailDelay(bool forceFullBeltAdvance)
+        {
+            float requiredDelay = EffectiveFailGraceDelay;
+            if (!forceFullBeltAdvance || !RailManager.HasInstance)
+                return requiredDelay;
+
+            float beltSpeed = RailManager.Instance.GetBeltDistancePerSecond();
+            if (beltSpeed <= 0.001f)
+                return Mathf.Max(requiredDelay, FORCE_ADVANCE_RECHECK_MIN_DURATION);
+
+            float requiredTravel = Mathf.Max(
+                GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f,
+                RailManager.Instance.DartClusterAttackGap);
+            float travelDelay = requiredTravel / beltSpeed;
+            travelDelay = Mathf.Clamp(travelDelay, FORCE_ADVANCE_RECHECK_MIN_DURATION, FORCE_ADVANCE_RECHECK_MAX_DURATION);
+            return Mathf.Max(requiredDelay, travelDelay);
+        }
 
         private void EvaluateClearCondition()
         {
