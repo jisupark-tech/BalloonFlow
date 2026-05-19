@@ -58,11 +58,15 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtGold;
         [SerializeField] private TMP_Text _txtGoldOutline;
         [SerializeField] private Button _btnGoldPlus;
+        [Tooltip("코인 fly 도착점 override (fly 전용). 미할당 시 _txtGold 사용. 펄스 연출은 _txtGold 부모 그대로.")]
+        [SerializeField] private RectTransform _goldFlyTargetOverride;
 
         [Header("[TopBar — LifePanel]")]
         [SerializeField] private TMP_Text _txtLife;
         [SerializeField] private TMP_Text _txtLifeOutline;
         [SerializeField] private Button _btnLifePlus;
+        [Tooltip("아이템 fly 도착점 override (fly 전용). 미할당 시 _txtLife 사용. 펄스 연출은 _txtLife 부모 그대로.")]
+        [SerializeField] private RectTransform _lifeFlyTargetOverride;
         [SerializeField] private Image _imgLifeTimer;
         [SerializeField] private TMP_Text _txtLifeTimer;
         [SerializeField] private TMP_Text _txtLifeTimerOutline;
@@ -697,12 +701,14 @@ namespace BalloonFlow
 
         /// <summary>
         /// GoldPanel (TopBar 골드 텍스트) 의 화면 좌표. CoinFlyEffect 의 도착 지점으로 사용.
+        /// _goldFlyTargetOverride 가 할당돼 있으면 우선 사용 → 디자이너가 Inspector 에서 도착점 선택 가능.
         /// _txtGold 미할당 시 화면 우상단 추정값 fallback.
         /// </summary>
         public Vector2 GetGoldPanelScreenPos()
         {
-            if (_txtGold == null) return new Vector2(Screen.width * 0.85f, Screen.height * 0.92f);
-            var rt = _txtGold.rectTransform;
+            RectTransform rt = _goldFlyTargetOverride != null ? _goldFlyTargetOverride
+                : (_txtGold != null ? _txtGold.rectTransform : null);
+            if (rt == null) return new Vector2(Screen.width * 0.85f, Screen.height * 0.92f);
             var canvas = rt.GetComponentInParent<Canvas>();
             Camera cam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
                 ? canvas.worldCamera : null;
@@ -711,12 +717,14 @@ namespace BalloonFlow
 
         /// <summary>
         /// [2026-05-15] LifePanel (TopBar 라이프 텍스트) 의 화면 좌표. ItemFlyEffect 의 도착 지점.
+        /// _lifeFlyTargetOverride 가 할당돼 있으면 우선 사용.
         /// _txtLife 미할당 시 화면 좌상단 추정값 fallback.
         /// </summary>
         public Vector2 GetLifePanelScreenPos()
         {
-            if (_txtLife == null) return new Vector2(Screen.width * 0.15f, Screen.height * 0.92f);
-            var rt = _txtLife.rectTransform;
+            RectTransform rt = _lifeFlyTargetOverride != null ? _lifeFlyTargetOverride
+                : (_txtLife != null ? _txtLife.rectTransform : null);
+            if (rt == null) return new Vector2(Screen.width * 0.15f, Screen.height * 0.92f);
             var canvas = rt.GetComponentInParent<Canvas>();
             Camera cam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
                 ? canvas.worldCamera : null;

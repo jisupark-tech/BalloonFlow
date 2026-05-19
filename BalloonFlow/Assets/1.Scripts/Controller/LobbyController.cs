@@ -22,6 +22,9 @@ namespace BalloonFlow
         private UILobby _lobby;
         private bool _isCoinFlyInFlight;
         private Coroutine _coinFlyResetCoroutine;
+        // [2026-05-19] 하트 증가 감지용 — currentLives 가 이전보다 커지면 LifePanel 펄스 트리거.
+        // -1 sentinel: 첫 HandleLifeChanged 호출은 비교 skip (초기값 설정만).
+        private int _lastDisplayedLives = -1;
 
         void Start()
         {
@@ -387,6 +390,12 @@ namespace BalloonFlow
             bool hidePlus = evt.currentLives >= evt.maxLives
                 || (LifeManager.HasInstance && LifeManager.Instance.IsInfiniteHeartsActive);
             _lobby.SetLifePlusButtonVisible(!hidePlus);
+
+            // [2026-05-19] 하트 증가 시 LifePanel 펄스 — 골드 패널과 동일 패턴.
+            // 음수 delta (레벨 실패 차감) 시는 펄스 안 함. 첫 호출 (초기값 설정) 도 skip.
+            if (_lastDisplayedLives >= 0 && evt.currentLives > _lastDisplayedLives)
+                _lobby.PulseLifePanel();
+            _lastDisplayedLives = evt.currentLives;
         }
 
         #endregion

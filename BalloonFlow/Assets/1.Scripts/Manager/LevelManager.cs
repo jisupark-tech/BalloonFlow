@@ -433,6 +433,26 @@ namespace BalloonFlow
             int explicitCapacity = config.railCapacity > 0 ? config.railCapacity
                 : (config.rail != null && config.rail.slotCount > 0) ? config.rail.slotCount : 0;
             int slotCount = RailManager.CalculateCapacity(totalDarts, explicitCapacity);
+            int railSideCount = RailManager.GetRailSideCount(slotCount);
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            int authoredRailSlotCount = config.rail != null ? config.rail.slotCount : 0;
+            int authoredWaypointCount = config.rail != null && config.rail.waypoints != null ? config.rail.waypoints.Length : 0;
+            int expectedRuntimeWaypointCount = railSideCount >= 4 ? 4 : railSideCount + 1;
+            Debug.Log(
+                $"[LevelManager/RailShape] level={_currentLevelId} totalDarts={totalDarts} " +
+                $"railCapacity={config.railCapacity} rail.slotCount={authoredRailSlotCount} " +
+                $"resolvedCapacity={slotCount} sides={railSideCount} " +
+                $"authoredWaypoints={authoredWaypointCount} runtimeWaypoints={expectedRuntimeWaypointCount}");
+
+            if (authoredWaypointCount > 0 && authoredWaypointCount != expectedRuntimeWaypointCount)
+            {
+                Debug.LogWarning(
+                    $"[LevelManager/RailShape] level={_currentLevelId} authored waypoint count " +
+                    $"{authoredWaypointCount} does not match capacity-derived runtime waypoint count " +
+                    $"{expectedRuntimeWaypointCount}. Authored rail.waypoints are ignored during runtime setup.");
+            }
+#endif
 
             // Initialize 2D floor tilemap and conveyor belt tiles BEFORE rail setup
             // so that BoardTileManager's fixed rail proportions are available for waypoint generation.
@@ -454,7 +474,7 @@ namespace BalloonFlow
                 );
 
                 // RailSideCount를 먼저 설정 → BuildConveyorBelt에서 면 수 반영
-                int railSides = RailManager.GetRailSideCount(slotCount);
+                int railSides = railSideCount;
                 BoardTileManager.Instance.RailSideCount = railSides;
 
                 // 면 수에 맞는 컨베이어벨트 타일 빌드
@@ -471,6 +491,11 @@ namespace BalloonFlow
                 // 허용량에 따라 1~4면 웨이포인트 생성
                 if (BoardTileManager.HasInstance)
                 {
+                    // ROLLBACK_RAIL_SHAPE_FROM_CAPACITY:
+                    // Runtime rail geometry intentionally follows the resolved capacity/sides,
+                    // not serialized rail.waypoints. Episode exports can leave stale authored
+                    // waypoints, which makes MapMaker and runtime appear to use different shapes.
+                    // Revert this block only if authored waypoints become the single source of truth.
                     var btm = BoardTileManager.Instance;
                     float h = 0.1f;
 
@@ -527,7 +552,7 @@ namespace BalloonFlow
                 // 레벨 데이터의 cornerRadius는 의도적으로 무시 — 모든 레벨 1.5f 고정
                 float radius = 1.5f;
                 // 4면만 closedLoop (물리적 순환). 1~3면은 개방 경로 + 슬롯 래핑으로 순간이동
-                int sideCount = RailManager.GetRailSideCount(slotCount);
+                int sideCount = railSideCount;
                 bool isLoop = (sideCount >= 4);
                 RailManager.Instance.SetRailLayout(waypoints, slotCount, isLoop, smooth, radius);
 

@@ -245,24 +245,40 @@ namespace BalloonFlow
         /// <summary>
         /// Activates infinite hearts for the given duration in seconds.
         /// While active, UseLive() always succeeds without consuming lives.
+        /// [2026-05-19] 기존 잔여 시간에 누적 가산 — 기존 2h + 12h = 14h (overwrite X).
         /// </summary>
         public void ActivateInfiniteHearts(float durationSeconds)
         {
-            _infiniteHeartsEndTime = Time.realtimeSinceStartup + durationSeconds;
+            // 기존 활성 상태면 잔여 시간 + 신규 duration. 비활성이면 now + duration.
+            float now = Time.realtimeSinceStartup;
+            float baseTime = (_infiniteHeartsEndTime > now) ? _infiniteHeartsEndTime : now;
+            _infiniteHeartsEndTime = baseTime + durationSeconds;
+
             _currentLives = MAX_LIVES;
             SaveToPrefs();
-            SyncToFirestore($"InfiniteHearts({durationSeconds}s)");
+            SyncToFirestore($"InfiniteHearts(+{durationSeconds}s)");
 
-            // Firestore infiniteHeartsUntil — 절대 시각(UTC)으로 저장 (cross-device 동기화)
+            // Firestore infiniteHeartsUntil — 절대 시각(UTC) 으로 저장. 누적 가산 동일 적용.
             if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
             {
-                var until = Firebase.Firestore.Timestamp.FromDateTime(
-                    DateTime.UtcNow.AddSeconds(durationSeconds));
+                DateTime baseUtc;
+                var user = UserDataService.Instance.CurrentUser;
+                if (user != null && user.infiniteHeartsUntil != null)
+                {
+                    DateTime existingUntil = user.infiniteHeartsUntil.ToDateTime();
+                    baseUtc = existingUntil > DateTime.UtcNow ? existingUntil : DateTime.UtcNow;
+                }
+                else
+                {
+                    baseUtc = DateTime.UtcNow;
+                }
+                var until = Firebase.Firestore.Timestamp.FromDateTime(baseUtc.AddSeconds(durationSeconds));
                 UserDataService.Instance.SetInfiniteHeartsUntil(until);
             }
 
             PublishLifeChanged();
-            Debug.Log($"[LifeManager] Infinite hearts activated for {durationSeconds / 3600f:F1}h");
+            float totalRemaining = _infiniteHeartsEndTime - now;
+            Debug.Log($"[LifeManager] Infinite hearts +{durationSeconds / 3600f:F1}h → total remaining {totalRemaining / 3600f:F1}h");
         }
 
         /// <summary>True while infinite hearts are active.</summary>
