@@ -22,7 +22,7 @@ namespace BalloonFlow
         private const string DART_POOL_KEY = "Dart";
         private const float DEFAULT_PROJECTILE_FLIGHT_TIME = 0.1f;
         private const float PROJECTILE_MIN_FLIGHT_TIME = 0.015f;
-        private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 1.5f;
+        private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 2f;
         private const float PROJECTILE_MIN_FLIGHT_TIME_SCALE = 0.35f;
         private const float PROJECTILE_MAX_FLIGHT_TIME_SCALE = 4f;
         private const int ADJACENT_EMPTY_LINE_RESCUE_RADIUS = 1;
@@ -237,6 +237,11 @@ namespace BalloonFlow
         private readonly HashSet<int> _reservedTargets = new HashSet<int>();
         // scan tick 안 이미 발사한 holder ID set. 같은 holder 의 다음 head (cache 자동 갱신 후) 가 같은 tick 발사하는 shotgun 차단.
         private readonly HashSet<int> _firedHoldersThisTick = new HashSet<int>();
+        // ROLLBACK_DART_FRONT_ORDERED_FIRE_QUEUE:
+        // Remove this set and restore FireNewlyPromotedHeadIfReady immediate firing if post-fire
+        // promoted heads must again bypass rail front-to-back ordering. Keeping it as a one-shot
+        // guard preserves the old max-one promoted-head rescan per holder per scan tick.
+        private readonly HashSet<int> _postFireQueuedHoldersThisTick = new HashSet<int>();
         // ROLLBACK_DART_STABLE_OUTER_HIT:
         // Heavy targeting diagnostics were useful while isolating penetration/miss cases, but
         // they allocate and format large strings for every fire/pop. Keep them opt-in.
@@ -412,6 +417,7 @@ namespace BalloonFlow
             InvalidateDartScanLines();
             ClearConsumedLineLocks();
             _firedHoldersThisTick.Clear();
+            _postFireQueuedHoldersThisTick.Clear();
             _scanHeadDarts.Clear();
             _fireCandidates.Clear();
             _lastFiredHolderId = -1;
@@ -1597,12 +1603,20 @@ namespace BalloonFlow
             // Firing only one candidate per scan still lets another holder's valid line pass by while
             // it waits for the next frame. Fire each currently ready holder head once; exact-line
             // targeting plus target reservations still prevent same-target and same-holder repeats.
-            int startIndex = GetFireCandidateStartIndex();
+            // ROLLBACK_DART_FRONT_ORDERED_FIRE_QUEUE:
+            // Fire candidates in current conveyor front-to-back order. The old fair-rotation start
+            // index could process candidates as 5,4,2,1,3 even when the visible rail order was
+            // 5,4,3,2,1. This only changes commit order; target reservation and consumed-line guards
+            // still decide whether a candidate is allowed to hit.
+            SortFireCandidatesByRailOrder(rail);
             int firedThisScan = 0;
-            int maxFiresThisScan = _fireCandidates.Count;
-            for (int step = 0; step < _fireCandidates.Count && firedThisScan < maxFiresThisScan; step++)
+            int maxFireAttemptsThisScan = Mathf.Max(1, _fireCandidates.Count * (1 + MAX_POST_FIRE_HEAD_RESCANS_PER_HOLDER));
+            for (int attempts = 0; _fireCandidates.Count > 0 && attempts < maxFireAttemptsThisScan && firedThisScan < maxFireAttemptsThisScan; attempts++)
             {
-                DartFireCandidate candidate = _fireCandidates[(startIndex + step) % _fireCandidates.Count];
+                SortFireCandidatesByRailOrder(rail);
+                DartFireCandidate candidate = _fireCandidates[0];
+                _fireCandidates.RemoveAt(0);
+
                 if (_reservedTargets.Contains(candidate.targetId))
                 {
                     LogAttackIssue(
@@ -1621,8 +1635,11 @@ namespace BalloonFlow
                     // Re-enabled for x2 cases. Straight rails can move ~0.5+ balloon line per normal
                     // 60fps frame, so gating this only to long frames still misses newly promoted
                     // heads on stage 1. Same-line peeling is blocked by holder/target line guards.
+                    // ROLLBACK_DART_FRONT_ORDERED_FIRE_QUEUE:
+                    // Queue the promoted head instead of firing it immediately so post-fire rescue
+                    // still obeys the same visible front-to-back order.
                     if (ShouldRunPostFireHeadRescan())
-                        firedThisScan += FireNewlyPromotedHeadIfReady(rail, candidate.holderId);
+                        TryQueuePromotedHeadFireCandidate(rail, candidate.holderId);
                 }
             }
 
@@ -1634,6 +1651,88 @@ namespace BalloonFlow
         {
             if (!RailManager.HasInstance) return false;
             return RailManager.Instance.UserSpeedMultiplier >= POST_FIRE_HEAD_RESCAN_MIN_SPEED;
+        }
+
+        private void SortFireCandidatesByRailOrder(RailManager rail)
+        {
+            int count = _fireCandidates.Count;
+            if (count <= 1) return;
+
+            for (int i = 1; i < count; i++)
+            {
+                DartFireCandidate candidate = _fireCandidates[i];
+                int j = i - 1;
+                while (j >= 0 && ComesAfterInRailProgressOrder(_fireCandidates[j], candidate))
+                {
+                    _fireCandidates[j + 1] = _fireCandidates[j];
+                    j--;
+                }
+                _fireCandidates[j + 1] = candidate;
+            }
+
+            float pathLen = rail != null ? rail.TotalPathLength : 0f;
+            if (pathLen <= 0.0001f || count <= 1) return;
+
+            float highest = _fireCandidates[0].dart != null ? _fireCandidates[0].dart.progress : 0f;
+            float lowest = _fireCandidates[count - 1].dart != null ? _fireCandidates[count - 1].dart.progress : highest;
+            if ((highest - lowest) <= pathLen * 0.5f) return;
+
+            int headPos = 0;
+            float maxGap = -1f;
+            for (int p = 0; p < count; p++)
+            {
+                int prevPos = p == 0 ? count - 1 : p - 1;
+                float curProg = _fireCandidates[p].dart != null ? _fireCandidates[p].dart.progress : 0f;
+                float prevProg = _fireCandidates[prevPos].dart != null ? _fireCandidates[prevPos].dart.progress : curProg;
+                float gap = prevProg - curProg;
+                if (gap < 0f) gap += pathLen;
+                if (gap > maxGap)
+                {
+                    maxGap = gap;
+                    headPos = p;
+                }
+            }
+
+            RotateFireCandidatesLeft(headPos);
+        }
+
+        private static bool ComesAfterInRailProgressOrder(DartFireCandidate current, DartFireCandidate candidate)
+        {
+            float currentProgress = current.dart != null ? current.dart.progress : 0f;
+            float candidateProgress = candidate.dart != null ? candidate.dart.progress : 0f;
+            float delta = currentProgress - candidateProgress;
+            if (Mathf.Abs(delta) > 0.0001f)
+                return currentProgress < candidateProgress;
+
+            long currentSeq = current.dart != null ? current.dart.placedSeq : long.MaxValue;
+            long candidateSeq = candidate.dart != null ? candidate.dart.placedSeq : long.MaxValue;
+            return currentSeq > candidateSeq;
+        }
+
+        private void RotateFireCandidatesLeft(int startIndex)
+        {
+            int count = _fireCandidates.Count;
+            if (startIndex <= 0 || startIndex >= count) return;
+
+            for (int i = 0; i < startIndex; i++)
+            {
+                DartFireCandidate first = _fireCandidates[0];
+                _fireCandidates.RemoveAt(0);
+                _fireCandidates.Add(first);
+            }
+        }
+
+        private bool TryQueuePromotedHeadFireCandidate(RailManager rail, int holderId)
+        {
+            if (_postFireQueuedHoldersThisTick.Contains(holderId))
+                return false;
+
+            if (!TryBuildCurrentHeadFireCandidate(rail, holderId, out DartFireCandidate candidate))
+                return false;
+
+            _postFireQueuedHoldersThisTick.Add(holderId);
+            _fireCandidates.Add(candidate);
+            return true;
         }
 
         private int FireNewlyPromotedHeadIfReady(RailManager rail, int holderId)
