@@ -22,11 +22,6 @@ namespace BalloonFlow
         private const string DART_POOL_KEY = "Dart";
         private const float DEFAULT_PROJECTILE_FLIGHT_TIME = 0.1f;
         private const float PROJECTILE_MIN_FLIGHT_TIME = 0.015f;
-        // ROLLBACK_DART_TRAIL_MIN_VISIBLE_FLIGHT:
-        // Remove this visual floor if close-range darts must resolve in a single frame again. Trail
-        // needs a few transform samples before pooling; below ~0.04s nearby shots pop before the tail
-        // can be seen.
-        private const float PROJECTILE_TRAIL_MIN_VISIBLE_FLIGHT_TIME = 0.045f;
         private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 3.3f;
         private const float PROJECTILE_MIN_FLIGHT_TIME_SCALE = 0.3f;
         private const float PROJECTILE_MAX_FLIGHT_TIME_SCALE = 4f;
@@ -85,7 +80,6 @@ namespace BalloonFlow
 
             float minDuration = Mathf.Max(
                 PROJECTILE_MIN_FLIGHT_TIME,
-                PROJECTILE_TRAIL_MIN_VISIBLE_FLIGHT_TIME,
                 baseTime * PROJECTILE_MIN_FLIGHT_TIME_SCALE / speedMultiplier);
             float maxDuration = Mathf.Max(minDuration, baseTime * PROJECTILE_MAX_FLIGHT_TIME_SCALE / speedMultiplier);
             return Mathf.Clamp(duration, minDuration, maxDuration);
@@ -1009,11 +1003,6 @@ namespace BalloonFlow
             ConfigureNeedleTipImpactTiming(proj, dartObj, from, to, balloonScale);
 
             _activeProjectiles.Add(proj);
-            EnableDartFlightTrail(dartObj);
-
-            // [2026-05-19 DISABLED] Flight trail 활성화 — 주석. 재활성 시 DartIdentifier._flightTrail + Enable/DisableTrail 함께 주석 해제.
-            // if (dartObj.TryGetComponent<DartIdentifier>(out var dartIdFire))
-            //     dartIdFire.EnableTrail();
 
             // Flight: parabolic arc (곡사) or linear depending on _arcHeight
             if (_arcHeight > 0.01f)
@@ -2041,7 +2030,6 @@ namespace BalloonFlow
                 ConfigureLaunchScale(proj, launchStartScale, balloonScale);
                 ConfigureNeedleTipImpactTiming(proj, dartObj, launchPos, travelTarget, balloonScale);
                 _activeProjectiles.Add(proj);
-                EnableDartFlightTrail(dartObj);
 
                 // ROLLBACK_DART_PROJECTILE_MANUAL_MOVE:
                 // Previous behavior created a DOTween per fired dart:
@@ -2774,14 +2762,10 @@ namespace BalloonFlow
             if (proj == null || dartObj == null || proj.duration <= 0f)
                 return;
 
-            // ROLLBACK_DART_VISUAL_ARRIVAL_POP:
-            // Needle-tip timing made the projectile resolve and return to the pool before the visible
-            // dart root reached the balloon. Keep the fire-time target authoritative, but pop only
-            // when the visible dart reaches its travel target.
-            proj.impactTime = proj.duration;
-            return;
-
-#if false // ROLLBACK_DART_NEEDLE_TIP_IMPACT: restore this block for early needle-surface pop timing.
+            // ROLLBACK_DART_NEEDLE_TIP_TRANSFORM_IMPACT:
+            // Restore impactTime = duration if pop timing must return to visual root arrival.
+            // When DartIdentifier has a NeedleTip transform, that authored point wins over bounds,
+            // so the balloon pops as the needle tip reaches the balloon surface.
             Vector3 travel = to - from;
             float travelDistance = travel.magnitude;
             if (travelDistance <= 0.0001f)
@@ -2803,7 +2787,6 @@ namespace BalloonFlow
             float impactDistance = Mathf.Clamp(travelDistance - earlyLead, 0f, travelDistance);
             float impactT = impactDistance / travelDistance;
             proj.impactTime = Mathf.Clamp(proj.duration * impactT, 0f, proj.duration);
-#endif
         }
 
         private static float GetNeedleTipLead(GameObject dartObj, Vector3 travelDir)
@@ -3132,35 +3115,9 @@ namespace BalloonFlow
         private void ReturnDartToPool(GameObject obj)
         {
             if (obj == null) return;
-            DisableDartFlightTrail(obj);
-
-            // [2026-05-19 DISABLED] Flight trail 비활성화 — 주석. 재활성 시 LaunchProjectile 의 EnableTrail 과 함께 주석 해제.
-            // if (obj.TryGetComponent<DartIdentifier>(out var dartId))
-            //     dartId.DisableTrail();
 
             if (ObjectPoolManager.HasInstance)
                 ObjectPoolManager.Instance.Return(DART_POOL_KEY, obj);
-        }
-
-        // ROLLBACK_DART_FLIGHT_TRAIL:
-        // Visual-only hooks. They run when a dart becomes an in-flight projectile and before it
-        // returns to the pool, leaving targeting, reservations, fire order, and hit timing intact.
-        // [2026-05-19] Tail/Trail Renderer is enabled only while the dart is in flight. Disable still
-        // runs before pooling so old trail vertices cannot leak into the next shot.
-        private static readonly bool DART_FLIGHT_TRAIL_ENABLED = true;
-
-        private static void EnableDartFlightTrail(GameObject obj)
-        {
-            if (!DART_FLIGHT_TRAIL_ENABLED) return;
-
-            if (obj != null && obj.TryGetComponent(out DartIdentifier dartId))
-                dartId.EnableTrail();
-        }
-
-        private static void DisableDartFlightTrail(GameObject obj)
-        {
-            if (obj != null && obj.TryGetComponent(out DartIdentifier dartId))
-                dartId.DisableTrail();
         }
 
         private void ApplyColor(GameObject obj, int color)

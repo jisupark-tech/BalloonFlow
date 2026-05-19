@@ -27,78 +27,8 @@ namespace BalloonFlow
         [Tooltip("Optional world anchor for the needle tip. If empty, Niddle renderer bounds are used.")]
         [SerializeField] private Transform _needleTip;
 
-        // ROLLBACK_DART_FLIGHT_TRAIL:
-        // Remove these fields and DartManager Enable/DisableDartFlightTrail hooks if the extra
-        // visual effect causes readability or device-specific renderer cost issues.
-        [Header("[Flight Trail]")]
-        [Tooltip("Optional TrailRenderer used only while this dart is flying. Assign a prefab child renderer.")]
-        [SerializeField] private TrailRenderer _flightTrail;
-
-        [Tooltip("Shared material for the flight trail. Leave empty to reuse the dart color material.")]
-        [SerializeField] private Material _flightTrailMaterial;
-
-        [SerializeField] private float _flightTrailTime = 0.12f;
-        [SerializeField] private float _flightTrailStartWidth = 0.055f;
-        [SerializeField] private float _flightTrailEndWidth = 0f;
-        [SerializeField] private float _flightTrailMinVertexDistance = 0.008f;
-        private bool _trailResolved;
-        private bool _trailConfigured;
-
-        // [2026-05-19 DISABLED] Flight Trail (TrailRenderer) — 주석 처리. 재활성 시 아래 + ApplyColor 내 trail 라인 + DartManager hook 함께 주석 해제.
-        // [Header("[Flight Trail — 발사 시 활성, 풀 반환 시 비활성]")]
-        // [Tooltip("Dart 비행 잔상용 TrailRenderer. Inspector 에서 자식 TrailRenderer 드래그. 미할당 시 trail 없음.")]
-        // [SerializeField] private TrailRenderer _flightTrail;
-
         /// <summary>색상 적용 대상이 할당되었는지.</summary>
         public bool HasColorRenderers => _colorRenderers != null && _colorRenderers.Length > 0;
-
-        private void Awake()
-        {
-            ConfigureTrail();
-        }
-
-        private void OnDisable()
-        {
-            DisableTrail();
-        }
-
-        public void EnableTrail()
-        {
-            if (!TryResolveTrail(out TrailRenderer trail)) return;
-
-            ConfigureTrail();
-            trail.Clear();
-            trail.emitting = true;
-        }
-
-        public void DisableTrail()
-        {
-            if (!TryResolveTrail(out TrailRenderer trail)) return;
-
-            trail.emitting = false;
-            trail.Clear();
-        }
-
-        // [2026-05-19 DISABLED] Flight Trail API — TrailRenderer wire 안 쓰는 동안 주석.
-        // /// <summary>
-        // /// 비행 잔상 활성화 — Fire 시 호출. 풀에서 재사용되는 다트 잔상 잔여를 Clear 후 emit 시작.
-        // /// 색상은 ApplyColor 가 sharedMaterial 로 set (다트 mesh 와 동일 per-color material).
-        // /// _flightTrail 미할당 시 no-op (Inspector wire 안 됐으면 trail 없이 동작).
-        // /// </summary>
-        // public void EnableTrail()
-        // {
-        //     if (_flightTrail == null) return;
-        //     _flightTrail.Clear();   // 풀 재사용 시 직전 잔여 점 제거 — 매 fire 시 초기화 보장
-        //     _flightTrail.emitting = true;
-        // }
-        //
-        // /// <summary>비행 잔상 비활성화 — 풀 반환 시 호출. emit 끄고 잔여 점 Clear.</summary>
-        // public void DisableTrail()
-        // {
-        //     if (_flightTrail == null) return;
-        //     _flightTrail.emitting = false;
-        //     _flightTrail.Clear();
-        // }
 
         /// <summary>기반 Material 복제 캐시 (색상별)</summary>
         private static readonly Dictionary<int, Material> _dartMatCache = new Dictionary<int, Material>();
@@ -106,51 +36,7 @@ namespace BalloonFlow
         private static Material _needleOutlineMat;
         private static readonly int _propOutlineEnabled = Shader.PropertyToID("_OutlineEnabled");
         private static readonly int _propOutlineColor = Shader.PropertyToID("_OutlineColor");
-        private static readonly int _propBaseColor = Shader.PropertyToID("_BaseColor");
-        private static readonly int _propColor = Shader.PropertyToID("_Color");
-        private static readonly int _propEmissionColor = Shader.PropertyToID("_EmissionColor");
-        // ROLLBACK_DART_TRAIL_COLOR_CACHE:
-        // Remove this cache and assign _flightTrailMaterial directly if per-color trail emission is
-        // not needed. One material per trail template/color avoids per-shot Material allocation.
-        private static readonly Dictionary<int, Material> _trailMatCache = new Dictionary<int, Material>();
         private MaterialPropertyBlock _mpb;
-
-        private bool TryResolveTrail(out TrailRenderer trail)
-        {
-            if (!_trailResolved && _flightTrail == null)
-                _flightTrail = GetComponentInChildren<TrailRenderer>(true);
-
-            _trailResolved = true;
-            trail = _flightTrail;
-            return trail != null;
-        }
-
-        private void ConfigureTrail()
-        {
-            if (!TryResolveTrail(out TrailRenderer trail)) return;
-            if (_trailConfigured) return;
-
-            trail.emitting = false;
-            trail.time = Mathf.Max(0.01f, _flightTrailTime);
-            trail.startWidth = Mathf.Max(0f, _flightTrailStartWidth);
-            trail.endWidth = Mathf.Max(0f, _flightTrailEndWidth);
-            // ROLLBACK_DART_CLOSE_RANGE_TRAIL_SAMPLING:
-            // Close shots travel only a short distance before pooling. Cap the vertex spacing so the
-            // trail still receives enough samples without creating excessive vertices on long shots.
-            trail.minVertexDistance = Mathf.Clamp(_flightTrailMinVertexDistance, 0.001f, 0.008f);
-            trail.autodestruct = false;
-            // ROLLBACK_DART_FLIGHT_TRAIL_COLOR:
-            // TrailRenderer multiplies the material by vertex color and can also look gray when
-            // generated lighting data is enabled on Lit materials. Keep vertex color pure white
-            // and lighting data off so the assigned shared material is visible as authored.
-            trail.startColor = Color.white;
-            trail.endColor = new Color(1f, 1f, 1f, 0f);
-            trail.generateLightingData = false;
-            trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            trail.receiveShadows = false;
-            trail.Clear();
-            _trailConfigured = true;
-        }
 
         /// <summary>
         /// Distance from this prefab root to the needle tip along the current firing direction.
@@ -236,12 +122,6 @@ namespace BalloonFlow
                     _colorRenderers[i].sharedMaterial = mat;
             }
 
-            ApplyTrailColor(mat, color);
-
-            // [2026-05-19 DISABLED] Flight trail material 적용 — 주석. 재활성 시 _flightTrail 필드 함께 주석 해제.
-            // if (_flightTrail != null)
-            //     _flightTrail.sharedMaterial = mat;
-
             // Niddle: 은색 유지 + 아웃라인 활성화 (MPB)
             if (_outlineOnlyRenderers != null)
             {
@@ -271,51 +151,6 @@ namespace BalloonFlow
                     _mpb.SetColor(_propOutlineColor, Color.black); // Niddle 아웃라인은 모든 다트에서 검정 고정
                     _outlineOnlyRenderers[i].SetPropertyBlock(_mpb);
                 }
-            }
-        }
-
-        private void ApplyTrailColor(Material dartMaterial, Color color)
-        {
-            if (!TryResolveTrail(out TrailRenderer trail)) return;
-
-            ConfigureTrail();
-            Material trailMat = GetOrCreateTrailMaterial(dartMaterial, color);
-            if (trailMat != null)
-                trail.sharedMaterial = trailMat;
-
-            const float trailAlpha = 0.5f;
-            trail.startColor = new Color(color.r, color.g, color.b, trailAlpha);
-            trail.endColor = new Color(color.r, color.g, color.b, 0f);
-        }
-
-        private Material GetOrCreateTrailMaterial(Material dartMaterial, Color color)
-        {
-            if (_flightTrailMaterial == null)
-                return dartMaterial;
-
-            int key = _flightTrailMaterial.GetInstanceID() ^ color.GetHashCode();
-            if (_trailMatCache.TryGetValue(key, out Material cached))
-                return cached;
-
-            Material mat = new Material(_flightTrailMaterial);
-            ApplyMaterialColor(mat, color);
-            mat.enableInstancing = true;
-            _trailMatCache[key] = mat;
-            return mat;
-        }
-
-        private static void ApplyMaterialColor(Material mat, Color color)
-        {
-            if (mat == null) return;
-
-            if (mat.HasProperty(_propBaseColor))
-                mat.SetColor(_propBaseColor, color);
-            if (mat.HasProperty(_propColor))
-                mat.SetColor(_propColor, color);
-            if (mat.HasProperty(_propEmissionColor))
-            {
-                mat.SetColor(_propEmissionColor, color);
-                mat.EnableKeyword("_EMISSION");
             }
         }
     }
