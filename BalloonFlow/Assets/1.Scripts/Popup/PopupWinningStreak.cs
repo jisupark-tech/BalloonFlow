@@ -8,6 +8,8 @@ namespace BalloonFlow
     /// Winning Streak 안내 팝업. PopupCommonFrame 사용.
     /// 컨텐츠/디자인은 prefab 단의 SerializeField 로 들어옴.
     /// </summary>
+    /// <remarks>Project-wide convention: flat 'namespace BalloonFlow' — do not nest. AimedPuzzle.* 형태는 본 프로젝트 컨벤션이 아님.</remarks>
+    /// <remarks>Not a singleton — UIManager가 lifecycle 관리.</remarks>
     public class PopupWinningStreak : UIBase
     {
         private const int SLOT_COUNT = 25;
@@ -67,21 +69,21 @@ namespace BalloonFlow
         private void BuildKeyBlazeSlots()
         {
             if (_slotsBuilt) return;
-            _slotsBuilt = true;
 
             if (_keyBlazeContents == null)
             {
-                Debug.LogWarning("[PopupWinningStreak] _keyBlazeContents is null; skip slot build.");
+                Debug.LogWarning("[PopupWinningStreak] _keyBlazeContents 미할당 — Editor에서 SerializeField 할당 누락. Inspector에서 ScrollRect Content를 연결해 주세요. (이번 빌드는 skip, 다음 OpenUI 재시도 가능)");
                 return;
             }
             if (_slotKeyBlazePrefab == null)
             {
-                Debug.LogWarning("[PopupWinningStreak] _slotKeyBlazePrefab is null; skip slot build.");
+                Debug.LogWarning("[PopupWinningStreak] _slotKeyBlazePrefab 미할당 — Editor에서 SerializeField 할당 누락. Inspector에서 SlotKeyBlaze 프리팹을 연결해 주세요. (이번 빌드는 skip, 다음 OpenUI 재시도 가능)");
                 return;
             }
             if (_keyBlazeContents.childCount > 0)
             {
                 Debug.LogWarning("[PopupWinningStreak] KeyBlazeContents already populated; skip.");
+                _slotsBuilt = true;
                 return;
             }
 
@@ -94,8 +96,12 @@ namespace BalloonFlow
             }
 
             // verticalNormalizedPosition=0: 시작 위치 맨 아래(=1번 노출)
-            if (_scrollRect != null)
+            if (_scrollRect == null)
+                Debug.LogWarning("[PopupWinningStreak] _scrollRect 미할당 — Editor에서 SerializeField 할당 누락. Inspector에서 ScrollRect를 연결해 주세요. (슬롯은 빌드됐으나 시작 스크롤 위치 보정은 skip)");
+            else
                 _scrollRect.verticalNormalizedPosition = 0f;
+
+            _slotsBuilt = true;
         }
 
         private void SetSlotNumber(GameObject slot, int number)
