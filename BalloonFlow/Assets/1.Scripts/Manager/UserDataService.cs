@@ -292,6 +292,33 @@ namespace BalloonFlow
             FireAndForget(_db.Document($"users/{Uid}").UpdateAsync("isNPU", false), "MarkPaying");
         }
 
+        // ── WinningStreak ────────────────────────────────────────
+        /// <summary>WinningStreak 진행 상태 일괄 저장 (currentStage / currentStagePoints / currentStreak / lifetimePoints / eventFinished).
+        /// claimedStages 는 별도 메서드 사용.</summary>
+        public void SaveWinningStreakProgress()
+        {
+            if (!_isReady || _user.winningStreak == null) return;
+            var ws = _user.winningStreak;
+            FireAndForget(_db.Document($"users/{Uid}").UpdateAsync(new Dictionary<string, object>
+            {
+                ["winningStreak.currentStage"] = ws.currentStage,
+                ["winningStreak.currentStagePoints"] = ws.currentStagePoints,
+                ["winningStreak.currentStreak"] = ws.currentStreak,
+                ["winningStreak.lifetimePoints"] = ws.lifetimePoints,
+                ["winningStreak.eventFinished"] = ws.eventFinished
+            }), "SaveWinningStreakProgress");
+        }
+
+        /// <summary>claimedStages 에 stage 1개 append + 전체 list 저장. 로컬 캐시는 이미 갱신됐다고 가정.</summary>
+        public void SaveWinningStreakClaimedStages()
+        {
+            if (!_isReady || _user.winningStreak == null) return;
+            FireAndForget(_db.Document($"users/{Uid}").UpdateAsync(new Dictionary<string, object>
+            {
+                ["winningStreak.claimedStages"] = _user.winningStreak.claimedStages
+            }), "SaveWinningStreakClaimedStages");
+        }
+
         /// <summary>임의 필드 업데이트. dot-notation 으로 nested 가능 (e.g. "settings.soundOn").</summary>
         public void UpdateField(string fieldPath, object value)
         {

@@ -268,6 +268,8 @@ namespace BalloonFlow
                 _btnWinningStreak.onClick.AddListener(() =>
                 {
                     PlayTouchSFX();
+                    // 미해금 상태에서도 prefab 단계 wire 가 살아있을 수 있으므로 클릭 시점에도 게이트 재확인.
+                    if (!IsWinningStreakUnlocked()) return;
                     if (UIManager.HasInstance)
                         UIManager.Instance.OpenUI<PopupWinningStreak>(Const.POPUP_WINNING_STREAK);
                 });
@@ -290,6 +292,10 @@ namespace BalloonFlow
             // [2026-05-13] 프로필 표시 — UserData ready 이후 1회 + 변경 시마다 refresh.
             HookProfileEvents();
             RefreshProfileDisplay();
+
+            // [2026-05-20] WinningStreak 버튼 — unlockLevel(34) 도달 전엔 숨김.
+            HookWinningStreakEvents();
+            RefreshWinningStreakVisibility();
         }
 
         private void HookProfileEvents()
@@ -306,6 +312,56 @@ namespace BalloonFlow
             var svc = UserDataService.Instance;
             svc.OnUserDataReady -= RefreshProfileDisplay;
             svc.OnProfileChanged -= RefreshProfileDisplay;
+        }
+
+        // ── WinningStreak 버튼 노출 게이트 ─────────────────────────
+
+        /// <summary>UserData/Config 가 ready 되면 버튼 가시성 자동 갱신.
+        /// - UserDataService.OnUserDataReady       : 신규 유저 또는 첫 진입
+        /// - WinningStreakConfigService.OnConfigLoaded : unlockLevel 이 Firestore 에서 도착
+        /// - WinningStreakManager.OnStateChanged   : 레벨 클리어로 highestClearedLevel 증가 시 즉시 반영</summary>
+        private void HookWinningStreakEvents()
+        {
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.OnUserDataReady += RefreshWinningStreakVisibility;
+            if (WinningStreakConfigService.HasInstance)
+                WinningStreakConfigService.Instance.OnConfigLoaded += RefreshWinningStreakVisibility;
+            if (WinningStreakManager.HasInstance)
+                WinningStreakManager.Instance.OnStateChanged += RefreshWinningStreakVisibility;
+        }
+
+        private void UnhookWinningStreakEvents()
+        {
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.OnUserDataReady -= RefreshWinningStreakVisibility;
+            if (WinningStreakConfigService.HasInstance)
+                WinningStreakConfigService.Instance.OnConfigLoaded -= RefreshWinningStreakVisibility;
+            if (WinningStreakManager.HasInstance)
+                WinningStreakManager.Instance.OnStateChanged -= RefreshWinningStreakVisibility;
+        }
+
+        private bool IsWinningStreakUnlocked()
+        {
+            if (WinningStreakManager.HasInstance)
+                return WinningStreakManager.Instance.IsUnlocked;
+
+            // Manager 미준비 시 UserData + 하드 fallback (config 미도착 상황 방어).
+            const int FALLBACK_UNLOCK_LEVEL = 34;
+            int unlockLevel = FALLBACK_UNLOCK_LEVEL;
+            if (WinningStreakConfigService.HasInstance && WinningStreakConfigService.Instance.Config != null)
+                unlockLevel = WinningStreakConfigService.Instance.Config.unlockLevel;
+
+            if (!UserDataService.HasInstance || UserDataService.Instance.CurrentUser == null)
+                return false;
+            return UserDataService.Instance.CurrentUser.highestClearedLevel >= unlockLevel;
+        }
+
+        private void RefreshWinningStreakVisibility()
+        {
+            if (_btnWinningStreak == null) return;
+            bool unlocked = IsWinningStreakUnlocked();
+            if (_btnWinningStreak.gameObject.activeSelf != unlocked)
+                _btnWinningStreak.gameObject.SetActive(unlocked);
         }
 
         /// <summary>좌상단 프로필 아이콘/프레임 sprite 를 UserData index 기반으로 갱신.
@@ -524,6 +580,7 @@ namespace BalloonFlow
             if (_btnWinningStreak != null) _btnWinningStreak.onClick.RemoveAllListeners();
             base.OnDestroy();
             UnhookProfileEvents();
+            UnhookWinningStreakEvents();
             _pageTween?.Kill();
             _goldTween?.Kill();
             _railTopTween?.Kill();

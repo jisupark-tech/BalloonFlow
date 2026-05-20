@@ -56,6 +56,8 @@ namespace BalloonFlow
             go.AddComponent<UserDataService>();
             go.AddComponent<ShopCatalogService>();
             go.AddComponent<LevelEpisodeService>();
+            go.AddComponent<WinningStreakConfigService>();
+            go.AddComponent<WinningStreakManager>();
             go.AddComponent<AttributionManager>();
             go.AddComponent<AdManager>();
             go.AddComponent<AnalyticsManager>();

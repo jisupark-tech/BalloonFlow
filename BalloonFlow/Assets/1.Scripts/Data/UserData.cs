@@ -71,6 +71,9 @@ namespace BalloonFlow
         // ── Attribution (AppsFlyer conversion data 캐시) ──────────
         [FirestoreProperty] public AttributionData attribution { get; set; } = new AttributionData();
 
+        // ── Winning Streak Event ──────────────────────────────────
+        [FirestoreProperty] public WinningStreakState winningStreak { get; set; } = new WinningStreakState();
+
         // ── Factory ───────────────────────────────────────────────
         /// <summary>신규 유저 초기값. 1,000코인 + 5하트 + NPU.</summary>
         public static UserData CreateNewUser(string uid)
@@ -98,9 +101,27 @@ namespace BalloonFlow
                 dailyReward = new DailyRewardState(),
                 settings = new SettingsData(),
                 consents = new ConsentsData(),
-                attribution = new AttributionData()
+                attribution = new AttributionData(),
+                winningStreak = new WinningStreakState()
             };
         }
+    }
+
+    [FirestoreData]
+    public class WinningStreakState
+    {
+        /// <summary>현재 진행 중인 stage (1-base, stage[N-1] 이 활성). eventFinished 이면 사용 안 함.</summary>
+        [FirestoreProperty] public int currentStage { get; set; } = 1;
+        /// <summary>currentStage 내에서 쌓인 누적 포인트. requiredPoints 도달 시 overflow → 다음 stage 로 carry.</summary>
+        [FirestoreProperty] public int currentStagePoints { get; set; } = 0;
+        /// <summary>현재 연승 수. 0 = 시작 또는 직전 실패. 클리어 시 +1. 실패 시 0 으로 리셋.</summary>
+        [FirestoreProperty] public int currentStreak { get; set; } = 0;
+        /// <summary>이벤트 전체에서 누적된 총 포인트 (통계용).</summary>
+        [FirestoreProperty] public long lifetimePoints { get; set; } = 0;
+        /// <summary>이미 수령 완료한 stage 번호 (1-base). 중복 수령 방지 + UI 체크 표시.</summary>
+        [FirestoreProperty] public List<int> claimedStages { get; set; } = new List<int>();
+        /// <summary>마지막 stage 까지 통과 완료 — 더 이상 포인트 누적 없음.</summary>
+        [FirestoreProperty] public bool eventFinished { get; set; } = false;
     }
 
     [FirestoreData]
