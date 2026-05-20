@@ -71,9 +71,11 @@ namespace BalloonFlow
         private static readonly string[] HOLDER_GIMMICK_NAMES =
             { "(none)", "Hidden", "Chain", "Spawner_T", "Spawner_O", "Frozen_Dart", "Lock_Key" };
 
-        // Short gimmick symbols for preview overlay
-        private static readonly string[] GIMMICK_MARKS =
-            { "", "H", "Ch", "Pi", "ST", "Pn", "LK", "?!", "W", "SO", "PB", "Ic", "FD", "CC", "Bc" };
+        // ROLLBACK_FIELD_GIMMICK_MARK_ORDER:
+        // Field cells store FIELD_GIMMICK_NAMES indices, not legacy all-gimmick indices.
+        // Keep preview labels in the exact same order as FIELD_GIMMICK_NAMES.
+        private static readonly string[] FIELD_GIMMICK_MARKS =
+            { "", "Pi", "Pn", "?!", "W", "PB", "Ic", "CC", "LK", "Bc" };
 
         private static readonly Color GIMMICK_WALL_COLOR  = new Color(0.35f, 0.35f, 0.38f);
         private static readonly Color GIMMICK_PIN_COLOR   = new Color(0.70f, 0.50f, 0.20f);
@@ -2430,14 +2432,14 @@ namespace BalloonFlow
                     _previewObjs[c, r] = go;
 
                     // Gimmick label
-                    if (ci >= 0 && gi > 0 && gi < GIMMICK_MARKS.Length && !string.IsNullOrEmpty(GIMMICK_MARKS[gi]))
+                    if (ci >= 0 && gi > 0 && gi < FIELD_GIMMICK_MARKS.Length && !string.IsNullOrEmpty(FIELD_GIMMICK_MARKS[gi]))
                     {
                         var labelGO = new GameObject("GLabel");
                         labelGO.transform.SetParent(_previewRoot, false);
                         labelGO.transform.position = new Vector3(wx, 1.2f, wz);
                         labelGO.transform.eulerAngles = new Vector3(90f, 0f, 0f);
                         var tm = labelGO.AddComponent<TextMesh>();
-                        tm.text = GIMMICK_MARKS[gi];
+                        tm.text = FIELD_GIMMICK_MARKS[gi];
                         tm.fontSize = 32;
                         tm.characterSize = scale * 0.35f;
                         tm.alignment = TextAlignment.Center;
@@ -2509,7 +2511,7 @@ namespace BalloonFlow
             float wz = _boardCenter.y + (r - (_gridRows - 1) * 0.5f) * spacing;
 
             // Reuse existing label or create once; toggle visibility
-            bool needLabel = ci >= 0 && gi > 0 && gi < GIMMICK_MARKS.Length && !string.IsNullOrEmpty(GIMMICK_MARKS[gi]);
+            bool needLabel = ci >= 0 && gi > 0 && gi < FIELD_GIMMICK_MARKS.Length && !string.IsNullOrEmpty(FIELD_GIMMICK_MARKS[gi]);
             if (needLabel)
             {
                 var tm = _previewLabels[c, r];
@@ -2527,7 +2529,7 @@ namespace BalloonFlow
                 }
                 tm.transform.position = new Vector3(wx, 1.2f, wz);
                 tm.characterSize = BalloonScale * 0.35f;
-                tm.text = GIMMICK_MARKS[gi];
+                tm.text = FIELD_GIMMICK_MARKS[gi];
                 tm.gameObject.SetActive(true);
             }
             else if (_previewLabels[c, r] != null)
@@ -3499,7 +3501,7 @@ namespace BalloonFlow
                         var label = _previewLabels[c, r];
                         if (label != null)
                         {
-                            if (ci >= 0 && gi > 0 && gi < GIMMICK_NAMES.Length)
+                            if (ci >= 0 && gi > 0 && gi < FIELD_GIMMICK_NAMES.Length)
                                 label.text = FIELD_GIMMICK_NAMES[gi].Substring(0, System.Math.Min(2, FIELD_GIMMICK_NAMES[gi].Length));
                             else
                                 label.text = "";

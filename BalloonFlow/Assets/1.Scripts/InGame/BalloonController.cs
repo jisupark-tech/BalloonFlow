@@ -28,7 +28,9 @@ namespace BalloonFlow
         private const string FrozenLayerPoolKey = "FrozenLayer"; // Ice / Frozen_Dart overlay child
         private const int PinataRequiredHits = 2;
         private const float DEFAULT_BALLOON_SCALE = 0.5f;
-        private const float BARRICADE_BODY_CELL_LOCAL_SCALE_X = 0.06f;
+        // ROLLBACK_BARRICADE_BODY_1TO1_SCALE:
+        // Updated Barricade/BarricadeBody art is authored at a 1:1 local scale per board cell.
+        private const float BARRICADE_BODY_CELL_LOCAL_SCALE_X = 1f;
 
         /// <summary>
         /// Color palette for balloon visualization. Index matches BalloonData.color.
@@ -248,6 +250,55 @@ namespace BalloonFlow
             _levelSafeCalculated = true;
         }
 
+        private void SyncBoardMetricsForLevelSetup()
+        {
+            // ROLLBACK_GIMMICK_CELLSPACING_SYNC:
+            // Runtime levels can change GameManager.Board.cellSpacing before SetupBalloons.
+            // Keep BalloonController's grid key/adjacency spacing in sync for field gimmicks.
+            if (GameManager.HasInstance)
+            {
+                _cellSpacing = Mathf.Max(0.1f, GameManager.Instance.Board.cellSpacing);
+            }
+
+            _levelSafeWm = 1f;
+            _levelSafeHm = 1f;
+            _levelSafeZShift = 0f;
+            _levelSafeCalculated = false;
+        }
+
+        private void ReapplyAllBalloonVisualTransforms()
+        {
+            float scaleMult = _levelSafeCalculated
+                ? Mathf.Max(_levelSafeWm, _levelSafeHm)
+                : (GameManager.HasInstance ? Mathf.Max(GameManager.Instance.Board.balloonFieldWidthMult, GameManager.Instance.Board.balloonFieldHeightMult) : 1f);
+
+            foreach (var kvp in _balloons)
+            {
+                BalloonData data = kvp.Value;
+                if (data.isPopped) continue;
+                if (!_balloonObjects.TryGetValue(data.balloonId, out GameObject obj) || obj == null) continue;
+
+                if (data.gimmickType == GimmickBarricade)
+                {
+                    ApplyBarricadeVisualTransform(obj, data);
+                    continue;
+                }
+
+                if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
+                {
+                    ApplySizedFieldVisualTransform(obj, data);
+                    continue;
+                }
+
+                obj.transform.position = GetAdjustedBoardPosition(data.position);
+                obj.transform.localScale = Vector3.one * _balloonScale * scaleMult;
+            }
+
+            _frameCachedPositions.Clear();
+            _frameCachedPositionsFrame = -1;
+            _lastCacheRefreshTime = 0f;
+        }
+
         private void OnEnable()
         {
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
@@ -279,25 +330,10 @@ namespace BalloonFlow
         private void RefreshAllBalloonTransforms()
         {
             CalculateLevelSafeMult();
-            float cx = GameManager.Instance.Board.boardCenterX;
-            float cz = GameManager.Instance.Board.balloonCenterZ;
-            float wm = _levelSafeWm;
-            float hm = _levelSafeHm;
-            float zo = GameManager.Instance.Board.balloonGridZOffset;
-            float scaleMult = Mathf.Max(wm, hm);
-
-            foreach (var kvp in _balloons)
-            {
-                if (kvp.Value.isPopped) continue;
-                if (!_balloonObjects.TryGetValue(kvp.Key, out GameObject obj) || obj == null) continue;
-
-                Vector3 origPos = kvp.Value.position;
-                obj.transform.position = new Vector3(
-                    cx + (origPos.x - cx) * wm,
-                    origPos.y,
-                    cz + (origPos.z - cz) * hm + zo + _levelSafeZShift);
-                obj.transform.localScale = Vector3.one * _balloonScale * scaleMult;
-            }
+            // ROLLBACK_EDITOR_SIZED_GIMMICK_REFRESH:
+            // Reuse the runtime path so Pinata/Pinata_Box/Barricade keep their sized transforms
+            // when editor board multipliers change.
+            ReapplyAllBalloonVisualTransforms();
         }
 #endif
 
@@ -315,6 +351,7 @@ namespace BalloonFlow
         {
             ClearAllBalloons();
             _currentLevelId = levelId;
+            SyncBoardMetricsForLevelSetup();
 
             if (layout == null || layout.Count == 0)
             {
@@ -326,6 +363,13 @@ namespace BalloonFlow
             {
                 SpawnBalloonFromSetup(entry);
             }
+
+            // ROLLBACK_GIMMICK_LEVEL_METRICS_REAPPLY:
+            // Level-specific safe multipliers require the full balloon data set. Spawn first,
+            // calculate once, then re-apply visuals so sized gimmicks do not keep stale level
+            // offsets/scales from the previous board.
+            CalculateLevelSafeMult();
+            ReapplyAllBalloonVisualTransforms();
 
             // Wall balloons are indestructible — don't count toward clear condition
             int excludeCount = 0;
@@ -971,6 +1015,13 @@ namespace BalloonFlow
             RemainingCount = 0;
             PoppedCount = 0;
             _nextBalloonId = 1;
+
+            // ROLLBACK_GIMMICK_LEVEL_SAFE_RESET:
+            // Do not let the previous level's safe scale/shift affect the next level's first spawn.
+            _levelSafeWm = 1f;
+            _levelSafeHm = 1f;
+            _levelSafeZShift = 0f;
+            _levelSafeCalculated = false;
         }
 
         #endregion
@@ -1025,7 +1076,8 @@ namespace BalloonFlow
                     // Override visuals for special gimmick types
                     if (data.gimmickType == GimmickWall)
                     {
-                        // WoodenBoard 프리팹 사용 — GimmickIdentifier 있으면 색상 적용 (Wall은 HP 미사용)
+                        // ROLLBACK_WALL_IRONBOX_PREFAB:
+                        // Wall/IronWall uses the IronBox visual; it is still indestructible.
                         ApplyTintToObject(obj, WALL_COLOR);
                         var gi = obj.GetComponent<GimmickIdentifier>();
                         if (gi != null)
@@ -1384,9 +1436,8 @@ namespace BalloonFlow
             body.localPosition = basePosition;
 
             // ROLLBACK_BARRICADE_BODY_CELL_SCALE_X:
-            // The current art maps one board cell to BarricadeBody.localScale.x = 0.06.
-            // Use that authored ratio directly; renderer bounds from the imported FBX are not
-            // reliable enough for 1:1 cell sizing.
+            // BarricadeBody is now authored 1:1 with a board cell. Use that authored ratio
+            // directly; renderer bounds from the imported FBX are not reliable enough for sizing.
             float bodyScaleX = Mathf.Max(
                 0.001f,
                 BARRICADE_BODY_CELL_LOCAL_SCALE_X * bodyCells * _barricadeLengthMultiplier + _barricadeLengthPadding);
@@ -1727,7 +1778,9 @@ namespace BalloonFlow
                 case GimmickPinata:    return WoodenBoardPoolKey;
                 case GimmickPinataBox: return IronBoxPoolKey;
                 case GimmickPin:       return WoodenBoardPoolKey;
-                case GimmickWall:      return WoodenBoardPoolKey;
+                // ROLLBACK_WALL_IRONBOX_PREFAB:
+                // NewFeature maps Wall/IronWall to IronBox; use the same runtime prefab.
+                case GimmickWall:      return IronBoxPoolKey;
                 default:               return PoolKey;
             }
         }
