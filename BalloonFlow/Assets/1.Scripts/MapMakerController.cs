@@ -265,6 +265,8 @@ namespace BalloonFlow
             "Assets/EditorData/LevelDatabase_AI.asset",
             "Assets/EditorData/LevelDatabase_Transform.asset"
         };
+        private const int LEVELS_PER_EXPORT_EPISODE = 20;
+        private const int LEVEL_EPISODE_VERSION = 1;
         private const string EDITOR_PREF_LAST_DB_TAB = "BalloonFlow_LastEditedDBTab";
         private const string EDITOR_PREF_LAST_LEVEL = "BalloonFlow_LastEditedLevel";
         private int _activeDBTab = 0;
@@ -5254,19 +5256,95 @@ namespace BalloonFlow
 
         private void ExportJson()
         {
-            var config = BuildLevelConfig();
-            string json = JsonUtility.ToJson(config, true);
-            string path = EditorUtility.SaveFilePanel("Export JSON", "Assets", $"level_{config.levelId}", "json");
+            LevelEpisode episode = BuildCurrentEpisodeForExport();
+            if (episode == null || episode.levels == null || episode.levels.Length == 0)
+            {
+                SetStatus("Export failed: no levels for current episode");
+                return;
+            }
+
+            string defaultDir = episode.packageId == 1 ? "Assets/StreamingAssets" : "Assets";
+            string json = JsonUtility.ToJson(episode, true);
+            string path = EditorUtility.SaveFilePanel(
+                "Export Episode JSON",
+                defaultDir,
+                $"episode_{episode.packageId:D2}",
+                "json");
             if (!string.IsNullOrEmpty(path))
-            { System.IO.File.WriteAllText(path, json); SetStatus($"Exported: {System.IO.Path.GetFileName(path)}"); }
+            {
+                System.IO.File.WriteAllText(path, json);
+                AssetDatabase.Refresh();
+                SetStatus($"Exported episode {episode.packageId}: {episode.levels.Length} levels -> {System.IO.Path.GetFileName(path)}");
+            }
+        }
+
+        private LevelEpisode BuildCurrentEpisodeForExport()
+        {
+            // ROLLBACK_MAPMAKER_EXPORT_SINGLE_LEVEL_JSON:
+            // Runtime loads LevelEpisode JSON (StreamingAssets/episode_01.json and Firestore
+            // /episodes/{packageId}.levelsJson). MapMaker export must match that shape, while
+            // still merging the currently edited level even if it has not been saved to DB yet.
+            LevelConfig current = BuildLevelConfig();
+            int packageId = GetPackageIdForLevel(current.levelId);
+            int firstLevel = ((packageId - 1) * LEVELS_PER_EXPORT_EPISODE) + 1;
+            int lastLevel = firstLevel + LEVELS_PER_EXPORT_EPISODE - 1;
+
+            var levels = new List<LevelConfig>(LEVELS_PER_EXPORT_EPISODE);
+            LevelDatabase db = LoadLevelDatabase();
+            if (db != null && db.levels != null)
+            {
+                for (int i = 0; i < db.levels.Length; i++)
+                {
+                    LevelConfig level = db.levels[i];
+                    if (level == null) continue;
+                    if (level.levelId < firstLevel || level.levelId > lastLevel) continue;
+                    levels.Add(level);
+                }
+            }
+
+            int currentIndex = levels.FindIndex(l => l.levelId == current.levelId);
+            if (currentIndex >= 0) levels[currentIndex] = current;
+            else levels.Add(current);
+
+            levels.Sort((a, b) => a.levelId.CompareTo(b.levelId));
+            for (int i = 0; i < levels.Count; i++)
+                NormalizeLevelEpisodeFields(levels[i]);
+
+            return new LevelEpisode
+            {
+                packageId = packageId,
+                levelCount = levels.Count,
+                version = LEVEL_EPISODE_VERSION,
+                levels = levels.ToArray()
+            };
+        }
+
+        private static int GetPackageIdForLevel(int levelId)
+        {
+            if (levelId < 1) return 1;
+            return ((levelId - 1) / LEVELS_PER_EXPORT_EPISODE) + 1;
+        }
+
+        private static int GetPositionInPackage(int levelId)
+        {
+            if (levelId < 1) return 1;
+            return ((levelId - 1) % LEVELS_PER_EXPORT_EPISODE) + 1;
+        }
+
+        private static void NormalizeLevelEpisodeFields(LevelConfig level)
+        {
+            if (level == null) return;
+            level.packageId = GetPackageIdForLevel(level.levelId);
+            level.positionInPackage = GetPositionInPackage(level.levelId);
         }
 
         private LevelConfig BuildLevelConfig()
         {
             float spacing = CellSpacing;
+            int packageId = GetPackageIdForLevel(_levelId);
             var config = new LevelConfig
             {
-                levelId = _levelId, packageId = 1, positionInPackage = _levelId,
+                levelId = _levelId, packageId = packageId, positionInPackage = GetPositionInPackage(_levelId),
                 numColors = _numColors, difficultyPurpose = _difficulty,
                 gimmickTypes = CollectGimmicks(), balloonScale = BalloonScale,
             };

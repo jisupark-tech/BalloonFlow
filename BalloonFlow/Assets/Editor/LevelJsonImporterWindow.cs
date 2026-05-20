@@ -22,6 +22,7 @@ namespace BalloonFlow.Editor
         private const float BOARD_CENTER_X   = 0f;
         private const float BOARD_CENTER_Z   = 2f;
         private const float RAIL_PADDING     = 1.5f;
+        private const int   LEVELS_PER_PACKAGE = 20;
 
         #endregion
 
@@ -72,6 +73,7 @@ namespace BalloonFlow.Editor
         {
             public string       filePath;
             public string       fileName;
+            public string       sourceKind;
             public JsonLevelData json;
             public LevelConfig  config;
             public bool         selected = true;
@@ -225,9 +227,15 @@ namespace BalloonFlow.Editor
                 else if (e.config != null)
                     labelStyle.normal.textColor = new Color(0.3f, 0.8f, 0.3f);
 
-                string label = $"{icon}Lv{e.json?.level_number ?? 0:D3}  " +
-                    $"{e.json?.field_rows ?? 0}x{e.json?.field_columns ?? 0}  " +
-                    $"C{e.json?.num_colors ?? 0}  {e.fileName}";
+                int levelId = e.config?.levelId ?? e.json?.level_number ?? 0;
+                int rows = e.config?.gridRows ?? e.json?.field_rows ?? 0;
+                int cols = e.config?.gridCols ?? e.json?.field_columns ?? 0;
+                int colors = e.config?.numColors ?? e.json?.num_colors ?? 0;
+                string kind = string.IsNullOrEmpty(e.sourceKind) ? "JSON" : e.sourceKind;
+
+                string label = $"{icon}Lv{levelId:D3}  " +
+                    $"{rows}x{cols}  " +
+                    $"C{colors}  [{kind}] {e.fileName}";
 
                 if (GUILayout.Button(label, labelStyle))
                 {
@@ -289,7 +297,10 @@ namespace BalloonFlow.Editor
                     (_overwriteConflicts ? "덮어씁니다." : "건너뜁니다."),
                     MessageType.Warning);
 
-            EditorGUILayout.LabelField($"Source: {json.pixel_art_source}", EditorStyles.miniLabel);
+            string source = json != null && !string.IsNullOrEmpty(json.pixel_art_source)
+                ? json.pixel_art_source
+                : entry.fileName;
+            EditorGUILayout.LabelField($"Source: {source}", EditorStyles.miniLabel);
 
             // Zoom
             _previewZoom = EditorGUILayout.Slider("Zoom", _previewZoom, 0.5f, 4f);
@@ -432,6 +443,9 @@ namespace BalloonFlow.Editor
             try
             {
                 string jsonText = File.ReadAllText(path);
+                if (TryLoadLevelEpisode(path, jsonText)) return;
+                if (TryLoadLevelConfig(path, jsonText)) return;
+
                 entry.json = JsonUtility.FromJson<JsonLevelData>(jsonText);
 
                 if (entry.json == null || entry.json.field_rows <= 0)
@@ -440,7 +454,9 @@ namespace BalloonFlow.Editor
                 }
                 else
                 {
+                    entry.sourceKind = "Legacy";
                     entry.config = BuildLevelConfig(entry.json);
+                    NormalizeImportedLevel(entry.config);
                     CheckConflict(entry);
                 }
             }
@@ -450,6 +466,108 @@ namespace BalloonFlow.Editor
             }
 
             _entries.Add(entry);
+        }
+
+        private bool TryLoadLevelEpisode(string path, string jsonText)
+        {
+            if (!jsonText.Contains("\"levels\"", StringComparison.Ordinal))
+                return false;
+
+            LevelEpisode episode = JsonUtility.FromJson<LevelEpisode>(jsonText);
+            if (episode?.levels == null || episode.levels.Length == 0)
+                return false;
+
+            string baseName = Path.GetFileName(path);
+            for (int i = 0; i < episode.levels.Length; i++)
+            {
+                LevelConfig level = episode.levels[i];
+                if (level == null) continue;
+
+                NormalizeImportedLevel(level);
+
+                var entry = new ImportEntry
+                {
+                    filePath = path,
+                    fileName = $"{baseName} : Lv{level.levelId:D3}",
+                    sourceKind = "Episode",
+                    config = level
+                };
+                CheckConflict(entry);
+                _entries.Add(entry);
+            }
+
+            return true;
+        }
+
+        private bool TryLoadLevelConfig(string path, string jsonText)
+        {
+            if (!jsonText.Contains("\"levelId\"", StringComparison.Ordinal))
+                return false;
+
+            LevelConfig level = JsonUtility.FromJson<LevelConfig>(jsonText);
+            if (level == null || level.levelId <= 0)
+                return false;
+
+            // ROLLBACK_IMPORT_RUNTIME_LEVEL_JSON:
+            // MapMaker/runtime JSON can be a LevelConfig or a LevelEpisode. The importer
+            // previously accepted only the old snake_case converter format.
+            if (level.rail == null && level.gridRows <= 0 && level.gridCols <= 0 && level.balloons == null)
+                return false;
+
+            NormalizeImportedLevel(level);
+
+            var entry = new ImportEntry
+            {
+                filePath = path,
+                fileName = Path.GetFileName(path),
+                sourceKind = "LevelConfig",
+                config = level
+            };
+            CheckConflict(entry);
+            _entries.Add(entry);
+            return true;
+        }
+
+        private static void NormalizeImportedLevel(LevelConfig level)
+        {
+            if (level == null) return;
+
+            if (level.packageId <= 0)
+                level.packageId = PackageIdForLevel(level.levelId);
+
+            if (level.positionInPackage <= 0 || level.positionInPackage > LEVELS_PER_PACKAGE)
+                level.positionInPackage = PositionInPackage(level.levelId);
+
+            if (level.balloonCount <= 0 && level.balloons != null)
+                level.balloonCount = level.balloons.Length;
+
+            if (level.numColors <= 0 && level.balloons != null)
+                level.numColors = level.balloons.Select(b => b.color).Distinct().Count();
+
+            if (level.railCapacity <= 0 && level.rail != null && level.rail.slotCount > 0)
+                level.railCapacity = level.rail.slotCount;
+
+            if (level.rail != null && level.rail.slotCount <= 0 && level.railCapacity > 0)
+                level.rail.slotCount = level.railCapacity;
+
+            if (level.star1Threshold <= 0 && level.balloonCount > 0)
+            {
+                level.star1Threshold = level.balloonCount * 100;
+                level.star2Threshold = Mathf.CeilToInt(level.star1Threshold * 1.5f);
+                level.star3Threshold = Mathf.CeilToInt(level.star1Threshold * 2.2f);
+            }
+        }
+
+        private static int PackageIdForLevel(int levelId)
+        {
+            if (levelId < 1) return 1;
+            return ((levelId - 1) / LEVELS_PER_PACKAGE) + 1;
+        }
+
+        private static int PositionInPackage(int levelId)
+        {
+            if (levelId < 1) return 1;
+            return ((levelId - 1) % LEVELS_PER_PACKAGE) + 1;
         }
 
         private void CheckConflict(ImportEntry entry)
