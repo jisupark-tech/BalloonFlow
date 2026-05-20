@@ -70,6 +70,9 @@ namespace DigitalRuby.LightningBolt
         [Tooltip("In manual mode, the trigger method must be called to create a bolt")]
         public bool ManualMode;
 
+        [Tooltip("Keep world Z depth while rendering with an orthographic camera.")]
+        public bool PreserveDepthInOrthographic;
+
         [Range(1, 64)]
         [Tooltip("The number of rows in the texture. Used for animation.")]
         public int Rows = 1;
@@ -146,7 +149,7 @@ namespace DigitalRuby.LightningBolt
             {
                 return;
             }
-            else if (orthographic)
+            else if (orthographic && !PreserveDepthInOrthographic)
             {
                 start.z = end.z = Mathf.Min(start.z, end.z);
             }
@@ -191,7 +194,7 @@ namespace DigitalRuby.LightningBolt
 
         public void RandomVector(ref Vector3 start, ref Vector3 end, float offsetAmount, out Vector3 result)
         {
-            if (orthographic)
+            if (orthographic && !PreserveDepthInOrthographic)
             {
                 Vector3 directionNormalized = (end - start).normalized;
                 Vector3 side = new Vector3(-directionNormalized.y, directionNormalized.x, directionNormalized.z);

@@ -45,6 +45,7 @@ namespace BalloonFlow
         private const float ZapLineLeadBeforePop = 0.015f;
         private const float ZapFinishLifetime = 0.35f;
         private const float ZapEffectYOffset = 0.12f;
+        private const float ZapSpawnYOffset = 2f;
         private const float ZapLineWorldLift = 0.35f;
         private const float ZapLineMinWidth = 0.08f;
         private const int ZapLineSortingOrder = 80;
@@ -181,6 +182,8 @@ namespace BalloonFlow
                     if (CameraManager.HasInstance && HolderVisualManager.HasInstance)
                     {
                         Vector3 queuePosition = HolderVisualManager.Instance.CalculateQueueCenterPosition();
+                        if (CameraManager.Instance.MainCamera != null)
+                            queuePosition.y = CameraManager.Instance.MainCamera.transform.position.y;
                         CameraManager.Instance.MoveToTarget(queuePosition);
                     }
 
@@ -355,7 +358,6 @@ namespace BalloonFlow
             CollectZapTargets(color);
 
             Vector3 attackPosition = GetZapAttackPosition();
-            Vector3 finishPosition = GetZapFinishPosition();
             GameObject zapObject = CreateItemZap(attackPosition);
             GameObject zapLineObject = null;
             bool zapLineFromItemZap = false;
@@ -436,7 +438,7 @@ namespace BalloonFlow
             int totalRemoved = fieldRemoved + RemoveRailAndQueueColor(color);
             FinalizeColorRemove(color, totalRemoved);
 
-            PlayZapFinish(zapObject, finishPosition);
+            PlayZapFinish(zapObject);
 
             if (zapLineObject != null)
             {
@@ -749,6 +751,10 @@ namespace BalloonFlow
         {
             float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
             Vector3 spawnPosition = attackPosition;
+            // ROLLBACK_ZAP_SPAWN_Y_OFFSET:
+            // Raise only the ItemZap summon/start position. Attack target, pop timing, and
+            // FxZapLine endpoints stay on the existing gameplay/effect plane.
+            spawnPosition.y += ZapSpawnYOffset;
             spawnPosition.z -= Mathf.Max(1f, cellSpacing * 2f);
             return spawnPosition;
         }
@@ -871,6 +877,7 @@ namespace BalloonFlow
                     GameObject runtimeLine = Instantiate(childLine.gameObject);
                     runtimeLine.name = "FxZapLine_Runtime";
                     runtimeLine.SetActive(true);
+                    fromItemZap = true;
                     return runtimeLine;
                 }
             }
@@ -914,6 +921,11 @@ namespace BalloonFlow
                 bolt.EndObject = null;
                 bolt.StartPosition = lineStartPosition;
                 bolt.EndPosition = lineEndPosition;
+                // ROLLBACK_ZAP_LINE_KEEP_WORLD_DEPTH:
+                // In this game the board uses world Z as field depth. The generic lightning
+                // script flattens Z for orthographic cameras, which makes Zap lines move only
+                // left/right instead of connecting the Zap model to each balloon.
+                bolt.PreserveDepthInOrthographic = true;
                 // ROLLBACK_ZAP_LINE_CONTINUOUS_VISIBILITY:
                 // ManualMode clears the LineRenderer after Duration. Keep each bolt visible until
                 // the next Zap target so the effect does not blink out between balloon pops.
@@ -961,12 +973,14 @@ namespace BalloonFlow
             return null;
         }
 
-        private void PlayZapFinish(GameObject zapObject, Vector3 finishPosition)
+        private void PlayZapFinish(GameObject zapObject)
         {
             if (zapObject == null)
                 return;
 
-            zapObject.transform.position = finishPosition;
+            // ROLLBACK_ZAP_FINISH_STAY_ON_ATTACK_ORIGIN:
+            // ZapFinish is the authored finish animation for the Zap model. Do not snap the
+            // model to the last popped balloon; FxZapLine already points at each target.
 
             bool triggered = TrySetZapFinishTrigger(zapObject);
             ParticleSystem[] particles = zapObject.GetComponentsInChildren<ParticleSystem>(true);

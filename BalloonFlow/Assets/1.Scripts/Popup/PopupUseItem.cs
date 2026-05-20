@@ -15,6 +15,8 @@ namespace BalloonFlow
     /// </summary>
     public class PopupUseItem : UIBase
     {
+        private static PopupUseItem _activePopup;
+
         protected override bool TriggersHudPopupAnimation => false;
 
         [Header("[Common Frame]")]
@@ -127,6 +129,8 @@ namespace BalloonFlow
 
         private void OnEnable()
         {
+            _activePopup = this;
+
             if (!_paused) { PauseManager.Pause(); _paused = true; }
 
             // Camera Far 증가
@@ -178,6 +182,9 @@ namespace BalloonFlow
 
         private void OnDisable()
         {
+            if (_activePopup == this)
+                _activePopup = null;
+
             if (_paused) { PauseManager.Resume(); _paused = false; }
 
             // Camera Far 원복 (이전 최적화 보존)
@@ -616,6 +623,12 @@ namespace BalloonFlow
 
         private void OnCancelClicked()
         {
+            // ROLLBACK_USEITEM_CLOSE_INPUT_SUPPRESS:
+            // Close buttons overlap active gameplay colliders. Swallow only this close input,
+            // regardless of item type; normal Zap/Hand cutout clicks remain allowed.
+            if (InputHandler.HasInstance)
+                InputHandler.Instance.SuppressInput(0.15f);
+
             _onCancel?.Invoke();
 
             if (BoosterExecutor.HasInstance)
@@ -637,6 +650,34 @@ namespace BalloonFlow
         }
 
         /// <summary>Cutout/Dim overlay 비활성화. Cancel 및 자동 close (BoosterExecutor.CloseUseItemPopup) 모두에서 호출.</summary>
+        public static bool IsScreenPointOverActiveCloseButton(Vector2 screenPosition)
+        {
+            return _activePopup != null
+                && _activePopup.isActiveAndEnabled
+                && _activePopup.IsScreenPointOverCloseButton(screenPosition);
+        }
+
+        private bool IsScreenPointOverCloseButton(Vector2 screenPosition)
+        {
+            Canvas canvas = GetComponentInParent<Canvas>();
+            Camera canvasCamera = canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera
+                ? canvas.worldCamera
+                : null;
+
+            return IsScreenPointOverButton(_btnBottomExit, screenPosition, canvasCamera)
+                || IsScreenPointOverButton(_btnExit, screenPosition, canvasCamera)
+                || (_frame != null && IsScreenPointOverButton(_frame.BtnExit, screenPosition, canvasCamera));
+        }
+
+        private static bool IsScreenPointOverButton(Button button, Vector2 screenPosition, Camera canvasCamera)
+        {
+            if (button == null || !button.gameObject.activeInHierarchy)
+                return false;
+
+            RectTransform rect = button.transform as RectTransform;
+            return rect != null && RectTransformUtility.RectangleContainsScreenPoint(rect, screenPosition, canvasCamera);
+        }
+
         private void HideOverlay()
         {
             if (_cutoutMask != null) _cutoutMask.gameObject.SetActive(false);

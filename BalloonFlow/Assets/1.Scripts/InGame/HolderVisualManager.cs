@@ -567,7 +567,40 @@ namespace BalloonFlow
         /// <summary>Returns the center position of the queue area (for camera targeting).</summary>
         public Vector3 CalculateQueueCenterPosition()
         {
-            return new Vector3(0f, 0.1f, _queueBaseZ);
+            // ROLLBACK_HAND_CAMERA_QUEUE_VISUAL_CENTER:
+            // Hand/Select Tool should focus the holder queue, not a static row anchor that can
+            // sit too close to the balloon field. Use the live holder visuals so the camera
+            // follows the actual visible queue area.
+            bool found = false;
+            Vector3 min = Vector3.zero;
+            Vector3 max = Vector3.zero;
+
+            foreach (var kvp in _holderVisuals)
+            {
+                HolderVisual visual = kvp.Value;
+                if (visual == null || visual.gameObject == null) continue;
+                if (visual.isDeploying || visual.isMovingToRail) continue;
+
+                Vector3 position = visual.gameObject.transform.position;
+                if (!found)
+                {
+                    min = position;
+                    max = position;
+                    found = true;
+                }
+                else
+                {
+                    min = Vector3.Min(min, position);
+                    max = Vector3.Max(max, position);
+                }
+            }
+
+            if (!found)
+                return new Vector3(0f, 0.1f, _queueBaseZ);
+
+            Vector3 center = (min + max) * 0.5f;
+            center.y = 0.1f;
+            return center;
         }
 
         #region Private Methods — Queue Positioning

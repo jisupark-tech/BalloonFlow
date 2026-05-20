@@ -26,6 +26,7 @@ namespace BalloonFlow
             new Dictionary<Collider, HolderIdentifier>(64);
 
         private bool _inputEnabled = true;
+        private float _suppressInputUntilUnscaled;
 
         public bool IsInputEnabled() => _inputEnabled;
 
@@ -38,6 +39,7 @@ namespace BalloonFlow
         private void Update()
         {
             if (!_inputEnabled) return;
+            if (Time.unscaledTime < _suppressInputUntilUnscaled) return;
             var __sw = InGamePerfLogger.StartSection();
             try
             {
@@ -61,26 +63,42 @@ namespace BalloonFlow
             EventBus.Publish(new OnInputStateChanged { enabled = false });
         }
 
+        public void SuppressInput(float duration)
+        {
+            _suppressInputUntilUnscaled = Mathf.Max(
+                _suppressInputUntilUnscaled,
+                Time.unscaledTime + Mathf.Max(0f, duration));
+        }
+
         private void ProcessInput()
         {
             if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
             {
-                TryRaycastHolder(Touchscreen.current.primaryTouch.position.ReadValue());
+                TryRaycastInput(Touchscreen.current.primaryTouch.position.ReadValue());
                 return;
             }
 
             if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
             {
-                TryRaycastHolder(Mouse.current.position.ReadValue());
+                TryRaycastInput(Mouse.current.position.ReadValue());
             }
         }
 
-        private void TryRaycastHolder(Vector2 screenPosition)
+        private void TryRaycastInput(Vector2 screenPosition)
         {
             if (_gameCamera == null) return;
 
+            // ROLLBACK_USEITEM_CLOSE_ONLY_INPUT_BLOCK:
+            // Only the UseItem close buttons should swallow gameplay input. The dim/cutout UI
+            // can cover the board/holder selection area, especially for Zap and Hand.
+            if (PopupUseItem.IsScreenPointOverActiveCloseButton(screenPosition))
+                return;
+
             Ray ray = _gameCamera.ScreenPointToRay(screenPosition);
 
+            // ROLLBACK_ZAP_UI_HOLE_INPUT:
+            // Zap(Color Remove) uses a UI dim with a cutout over the board. UI raycast state can
+            // still be true there, so balloon picking must run before holder-only UI blocking.
             if (BoosterExecutor.HasInstance && BoosterExecutor.Instance.IsAwaitingBalloonClick)
             {
                 if (BalloonController.HasInstance)
