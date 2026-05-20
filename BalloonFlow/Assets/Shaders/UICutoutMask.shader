@@ -11,6 +11,15 @@ Shader "UI/CutoutMask"
     {
         [PerRendererData] _MainTex ("Sprite Texture", 2D) = "white" {}
         _Color ("Tint", Color) = (1,1,1,1)
+        // ROLLBACK_USEITEM_UI_STENCIL_SHADER_PROPS:
+        // Unity UI Mask/MaskableGraphic expects these properties when it builds
+        // materialForRendering. Defaults preserve this shader's original behavior.
+        _StencilComp ("Stencil Comparison", Float) = 8
+        _Stencil ("Stencil ID", Float) = 1
+        _StencilOp ("Stencil Operation", Float) = 2
+        _StencilWriteMask ("Stencil Write Mask", Float) = 255
+        _StencilReadMask ("Stencil Read Mask", Float) = 255
+        _ColorMask ("Color Mask", Float) = 0
     }
     SubShader
     {
@@ -21,15 +30,17 @@ Shader "UI/CutoutMask"
         }
 
         // 화면에 안 그림 (스텐실만 기록)
-        ColorMask 0
+        ColorMask [_ColorMask]
         ZWrite Off
         ZTest Always
 
         Stencil
         {
-            Ref 1
-            Comp Always
-            Pass Replace
+            Ref [_Stencil]
+            Comp [_StencilComp]
+            Pass [_StencilOp]
+            ReadMask [_StencilReadMask]
+            WriteMask [_StencilWriteMask]
         }
 
         Pass

@@ -56,32 +56,39 @@ namespace BalloonFlow
                 // 이전 순서 (Firestore 먼저 → sign-in) 에서 token sync quirk 로 permission_denied 발생.
                 await EnsureSignedInAsync(forceFresh: false);
 
+                // [2026-05-20] UID 변경 감지 — 이전 부팅에서 성공했던 UID 와 다르면 데이터 손실 가능성 경고.
+                // Editor: Firebase Auth Unity SDK 가 영속화 파일을 안 만들어 매 Play UID 가 바뀜 (알려진 한계).
+                // Device: 정상 케이스에선 UID 동일. 다르면 secure storage 손상/리셋/uninstall+reinstall 또는 forceFresh 발동 의심.
+                DetectAndLogUidChange();
+
                 _db = FirebaseEnvironment.GetFirestore();
 
-                // 1차 시도. permission_denied 면 backend 에 user 가 없는(stale) 상태로 보고 sign-out + new sign-in 후 재시도 1회.
+                // permission_denied 처리 정책 (2026-05-20 변경):
+                // - 자동 forceFresh 제거. 이전엔 permission_denied 발생 시 무조건 SignOut → 새 UID → CreateNewUser 했는데,
+                //   네트워크 지연 / 토큰 sync quirk / Firestore 일시 장애 같은 비-stale 원인에도 동작해 유저 데이터를 1000코인
+                //   디폴트로 덮어쓰는 사고가 가능. forceFresh 는 "진짜 stale" 케이스에서도 데이터 복구 못 함.
+                // - 새 정책: 토큰 refresh + 단순 retry 1회. 또 실패하면 _isReady false 유지 → 다른 매니저들은 offline 모드로
+                //   진행. 다음 앱 실행 시 자연 재시도. 진짜 stale user 는 telemetry/수동 절차로 별도 처리.
                 try
                 {
                     await LoadOrCreateUserAsync(_auth.CurrentUser.UserId);
                 }
                 catch (FirestoreException fe) when (fe.ErrorCode == FirestoreError.PermissionDenied)
                 {
-                    Debug.LogWarning($"{LOG_TAG} permission_denied — stale auth 의심. SignOut 후 재로그인 시도.");
-                    await EnsureSignedInAsync(forceFresh: true);
+                    Debug.LogWarning($"{LOG_TAG} permission_denied — 토큰 refresh 후 재시도 1회. (forceFresh 안 함 — 데이터 손실 방어)");
+                    try { await _auth.CurrentUser.TokenAsync(true); }
+                    catch (Exception tokenEx) { Debug.LogWarning($"{LOG_TAG} 토큰 refresh 실패: {tokenEx.Message}"); }
                     await Task.Delay(500);
-                    try { await _auth.CurrentUser.TokenAsync(true); } catch { /* best-effort */ }
+
                     try
                     {
                         await LoadOrCreateUserAsync(_auth.CurrentUser.UserId);
                     }
                     catch (FirestoreException retryFe) when (retryFe.ErrorCode == FirestoreError.PermissionDenied)
                     {
-                        // 2번째 시도도 fail — Unity Firebase SDK Editor token sync quirk 가능성 높음.
-                        // 디바이스 빌드에선 정상 동작이라 게임은 진행 (UserDataService.IsReady 가 false 로 유지되어 다른 매니저들이 가드).
-#if UNITY_EDITOR
-                        Debug.LogWarning($"{LOG_TAG} Editor SDK token sync quirk — Firestore 동기화 skip. 게임은 PlayerPrefs offline 모드로 진행. (디바이스 빌드는 정상)");
-#else
-                        Debug.LogError($"{LOG_TAG} permission_denied retry 실패: {retryFe.Message}");
-#endif
+                        // 재시도도 실패 — IsReady false 유지. 게임은 LifeManager 등의 PlayerPrefs offline cache 로 진행.
+                        // 같은 UID 의 Firestore doc 은 다음 앱 실행 시 자연 회복 시도. 절대로 forceFresh 안 함.
+                        Debug.LogError($"{LOG_TAG} permission_denied retry 실패 — Firestore 동기화 skip. uid={_auth.CurrentUser?.UserId ?? "(null)"}. msg={retryFe.Message}");
                     }
                 }
             }
@@ -146,8 +153,55 @@ namespace BalloonFlow
                 Debug.Log($"{LOG_TAG} New user created. uid={uid} coins={_user.coins}");
             }
 
+            // 성공한 UID 캐시 — 다음 부팅 시 UID 변경 감지에 사용.
+            PersistAuthUid(uid);
+
             _isReady = true;
             OnUserDataReady?.Invoke();
+        }
+
+        /// <summary>
+        /// 이전 부팅에서 성공한 UID 와 이번 sign-in UID 비교.
+        /// 다르면 데이터 손실 위험 신호 — Editor 매 Play, Device 에선 secure storage 손상/reinstall/forceFresh 의심.
+        /// 처음 사인인 (이전 UID 없음) 케이스는 정상 — 로그만 info 레벨.
+        /// </summary>
+        private void DetectAndLogUidChange()
+        {
+            string currentUid = _auth?.CurrentUser?.UserId ?? "";
+            if (string.IsNullOrEmpty(currentUid)) return;
+
+            string previousUid = PlayerPrefs.GetString(Const.PREFS_LAST_AUTH_UID, "");
+
+            if (string.IsNullOrEmpty(previousUid))
+            {
+                Debug.Log($"{LOG_TAG} First-ever sign-in or fresh install. uid={currentUid}");
+                return;
+            }
+
+            if (previousUid == currentUid)
+            {
+                Debug.Log($"{LOG_TAG} Auth session restored — same UID as previous launch. uid={currentUid}");
+                return;
+            }
+
+            // UID 가 변경됨 — 데이터 손실 가능성. Editor 에선 SDK 한계로 흔하지만 Device 에선 비정상.
+#if UNITY_EDITOR
+            Debug.LogWarning($"{LOG_TAG} [EDITOR] UID changed across Play sessions (Firebase Auth Unity SDK Editor 영속화 미작동). prev={previousUid} new={currentUid}");
+#else
+            Debug.LogError($"{LOG_TAG} [CRITICAL] UID changed across launches — 데이터 손실 위험. prev={previousUid} new={currentUid}. " +
+                           "원인 후보: secure storage 손상 / reinstall / forceFresh 발동 / Auth state 외부 변경.");
+            if (FirebaseManager.HasInstance)
+                FirebaseManager.Instance.LogEvent("auth_uid_changed");
+#endif
+        }
+
+        private void PersistAuthUid(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return;
+            string existing = PlayerPrefs.GetString(Const.PREFS_LAST_AUTH_UID, "");
+            if (existing == uid) return;
+            PlayerPrefs.SetString(Const.PREFS_LAST_AUTH_UID, uid);
+            PlayerPrefs.Save();
         }
 
         #region Public API — Atomic increments (서버 진실)

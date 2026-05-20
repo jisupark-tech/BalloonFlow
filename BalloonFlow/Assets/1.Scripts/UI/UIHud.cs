@@ -60,7 +60,7 @@ namespace BalloonFlow
         [SerializeField] private RectTransform _hudTopRoot;
 
         [Header("[Bottom Panel — 부스터 아이템]")]
-        [Tooltip("아이템 사용 popup 열릴 때 화면 밖 -270 으로 tween — Inspector 에서 BottomPanel root RectTransform 할당")]
+        [Tooltip("아이템 사용 popup 열릴 때 화면 밖 -260 으로 tween — Inspector 에서 BottomPanel root RectTransform 할당")]
         [SerializeField] private RectTransform _bottomPanelRoot;
         [SerializeField] private Button _itemBtnShuffle;
         [SerializeField] private Button _itemBtnRemove;
@@ -182,7 +182,7 @@ namespace BalloonFlow
 
         // [2026-05-12] BottomPanel hide / show — UseItem popup 열릴 때 -270 으로 tween. 닫힐 때 원위치 복귀.
         // 기존 cutout/dim 시스템 (Hole in UI) 대신 패널 자체 비키게 — 보관함/풍선 dim 없이 시각 노출.
-        private const float BOTTOM_PANEL_HIDE_Y = -270f;
+        private const float BOTTOM_PANEL_HIDE_Y = -260f;
         // [2026-05-12] 0.25s → 0.5s — 너무 빨라서 tween 인지 어려움.
         private const float BOTTOM_PANEL_TWEEN_DUR = 0.5f;
         private Vector2 _bottomPanelOrigPos;
@@ -225,7 +225,14 @@ namespace BalloonFlow
                 _bottomPanelOrigCached = true;
             }
             _bottomPanelTween?.Kill();
-            float targetY = _bottomPanelOrigPos.y + BOTTOM_PANEL_HIDE_Y;
+            // ROLLBACK_HUD_BOTTOM_DOKILL:
+            // Zap can start immediately after PopupUseItem closes. Kill any bottom-panel tween
+            // already created by popup close/open so the Zap hide tween is not overwritten.
+            _bottomPanelRoot.DOKill(false);
+            // ROLLBACK_USEITEM_BOTTOM_PANEL_ABSOLUTE_HIDE:
+            // UseItem spec is "BottomPanel to y=-260". Do not offset from a stale cached
+            // origin, because scene-enter/popup tweens can leave the cache out of sync.
+            float targetY = BOTTOM_PANEL_HIDE_Y;
             Debug.Log($"[UIHud] HideBottomPanel: origin.y={_bottomPanelOrigPos.y:F1} → target.y={targetY:F1}");
             _bottomPanelTween = _bottomPanelRoot.DOAnchorPosY(targetY, BOTTOM_PANEL_TWEEN_DUR)
                 .SetEase(DG.Tweening.Ease.OutCubic)
@@ -237,6 +244,8 @@ namespace BalloonFlow
             if (_bottomPanelRoot == null) return;
             if (!_bottomPanelOrigCached) return;
             _bottomPanelTween?.Kill();
+            // ROLLBACK_HUD_BOTTOM_DOKILL: see HideBottomPanel.
+            _bottomPanelRoot.DOKill(false);
             Debug.Log($"[UIHud] ShowBottomPanel: → origin.y={_bottomPanelOrigPos.y:F1}");
             _bottomPanelTween = _bottomPanelRoot.DOAnchorPosY(_bottomPanelOrigPos.y, BOTTOM_PANEL_TWEEN_DUR)
                 .SetEase(DG.Tweening.Ease.OutCubic)
@@ -852,6 +861,10 @@ namespace BalloonFlow
         private void ShowUseItemPopup(string boosterType)
         {
             if (!UIManager.HasInstance) return;
+            // ROLLBACK_USEITEM_DIRECT_HUD_HIDE:
+            // This call is on the live UIHud instance. Keep it here so UseItem does not depend
+            // on PopupUseItem finding the correct HUD object while the popup canvas is active.
+            HideBottomPanel();
             var popup = UIManager.Instance.OpenUI<PopupUseItem>("Popup/UseItem");
             Debug.Log($"[UIHud] ShowUseItemPopup: popup={popup != null}, booster={boosterType}");
             if (popup == null) return;

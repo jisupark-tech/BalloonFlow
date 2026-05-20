@@ -211,6 +211,27 @@ namespace BalloonFlow
             }
         }
 
+        protected RectTransform GetBaseDimRectTransform()
+        {
+            return _dim != null ? _dim.transform as RectTransform : null;
+        }
+
+        protected bool TryApplyBaseDimMaterial(Material dimMaterial)
+        {
+            if (_dim == null || dimMaterial == null) return false;
+
+            var graphics = _dim.GetComponentsInChildren<Graphic>(true);
+            if (graphics == null || graphics.Length == 0) return false;
+
+            for (int i = 0; i < graphics.Length; i++)
+            {
+                graphics[i].material = dimMaterial;
+                graphics[i].color = Color.white;
+            }
+
+            return true;
+        }
+
         protected virtual void OnDestroy()
         {
             KillAnimation();

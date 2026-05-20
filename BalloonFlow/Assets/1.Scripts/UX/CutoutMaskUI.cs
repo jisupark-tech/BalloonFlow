@@ -32,7 +32,15 @@ namespace BalloonFlow
                 {
                     if (_cachedMat != null) DestroyImmediate(_cachedMat);
                     _cachedMat = new Material(baseMat);
-                    _cachedMat.SetInt("_StencilComp", (int)CompareFunction.NotEqual);
+                    // ROLLBACK_USEITEM_CUTOUT_WRITER_STENCIL:
+                    // CutoutMaskUI is the stencil writer. It must always stamp the cutout
+                    // area before the dim image renders with NotEqual.
+                    _cachedMat.SetInt("_Stencil", 1);
+                    _cachedMat.SetInt("_StencilComp", (int)CompareFunction.Always);
+                    _cachedMat.SetInt("_StencilOp", (int)StencilOp.Replace);
+                    _cachedMat.SetInt("_StencilReadMask", 255);
+                    _cachedMat.SetInt("_StencilWriteMask", 255);
+                    _cachedMat.SetInt("_ColorMask", 0);
                     _cachedBaseMat = baseMat;
                 }
                 return _cachedMat;

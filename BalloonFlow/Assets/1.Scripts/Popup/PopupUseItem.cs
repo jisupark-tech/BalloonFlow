@@ -2,6 +2,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using DG.Tweening;
+using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
 
 namespace BalloonFlow
 {
@@ -13,6 +15,8 @@ namespace BalloonFlow
     /// </summary>
     public class PopupUseItem : UIBase
     {
+        protected override bool TriggersHudPopupAnimation => false;
+
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
 
@@ -52,10 +56,15 @@ namespace BalloonFlow
         private System.Action _onCancel;
         private string _activeBoosterType;
 
-        private Image _dimImage;
-        private Image _cutoutImage;
-        private Material _runtimeCutoutMaskMaterial;
+        [Header("[Cutout Materials - shared assets preferred]")]
+        [SerializeField] private Material _matCutoutDim;
         private Material _runtimeCutoutDimMaterial;
+        private AsyncOperationHandle<Material> _cutoutDimMaterialHandle;
+        private const string CUTOUT_DIM_MATERIAL_ADDRESS = "mat_UICutoutDim";
+        private static readonly int OVERLAY_RECT_ID = Shader.PropertyToID("_OverlayRect");
+        private static readonly int CUTOUT_CENTER_ID = Shader.PropertyToID("_CutoutCenter");
+        private static readonly int CUTOUT_SIZE_ID = Shader.PropertyToID("_CutoutSize");
+        private static readonly int CUTOUT_SOFTNESS_ID = Shader.PropertyToID("_CutoutSoftness");
 
         protected override void Awake()
         {
@@ -69,7 +78,7 @@ namespace BalloonFlow
             //EnsureBottomExitAnchor();
 
             // [2026-05-12] CutoutMask 시스템 재활성 — UI Mask + Stencil 패턴 (부하 최소).
-            SetupShaders();
+            SetupSimpleCutoutMaterial();
 
             // 'iconSuffle' 은 atlas 측 의도된 typo
             if (ResourceManager.HasInstance)
@@ -105,8 +114,8 @@ namespace BalloonFlow
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.RemoveAllListeners();
 
-            ReleaseRuntimeMaterial(ref _runtimeCutoutMaskMaterial);
             ReleaseRuntimeMaterial(ref _runtimeCutoutDimMaterial);
+            ReleaseAddressableMaterialHandle(ref _cutoutDimMaterialHandle);
         }
 
         // [2026-05-12] UseItem 사용 시 게임 일시 정지 + Camera Far 증가 + UIHud BottomPanel 비킴.
@@ -197,8 +206,72 @@ namespace BalloonFlow
             return _whiteSprite;
         }
 
+        private void SetupSimpleCutoutMaterial()
+        {
+            if (_cutoutMask != null)
+            {
+                // ROLLBACK_USEITEM_SIMPLE_CUTOUT_MATERIAL:
+                // UseItem uses one dim Image with mat_UICutoutDim. This RectTransform only
+                // supplies the hole position/size; it must not render, mask, or own a child dim.
+                Graphic graphic = _cutoutMask.GetComponent<Graphic>();
+                if (graphic != null)
+                {
+                    graphic.enabled = false;
+                    graphic.raycastTarget = false;
+                    // ROLLBACK_USEITEM_CUTOUT_MARKER_ONLY:
+                    // CutoutMask is not the dim Image. Clear any prefab material accidentally
+                    // left on it so only Overlay owns UICutoutDim.
+                    graphic.material = null;
+                }
+
+                Mask mask = _cutoutMask.GetComponent<Mask>();
+                if (mask != null) mask.enabled = false;
+
+                SpriteMask spriteMask = _cutoutMask.GetComponent<SpriteMask>();
+                if (spriteMask != null) spriteMask.enabled = false;
+
+                Transform dimOverlay = _cutoutMask.Find("DimOverlay");
+                if (dimOverlay != null) dimOverlay.gameObject.SetActive(false);
+            }
+
+            ApplyCutoutMaterialToOverlay();
+        }
+
+        private bool ApplyCutoutMaterialToOverlay()
+        {
+            if (_runtimeCutoutDimMaterial == null)
+                _runtimeCutoutDimMaterial = CreateCutoutRuntimeMaterial(
+                    _matCutoutDim,
+                    CUTOUT_DIM_MATERIAL_ADDRESS,
+                    "UI/CutoutDim",
+                    ref _cutoutDimMaterialHandle);
+
+            if (_runtimeCutoutDimMaterial == null) return false;
+
+            _runtimeCutoutDimMaterial.color = new Color(0f, 0f, 0f, 0.7f);
+            _runtimeCutoutDimMaterial.SetFloat(CUTOUT_SOFTNESS_ID, 0.001f);
+
+            RectTransform dimRect = GetBaseDimRectTransform();
+            if (dimRect == null) return false;
+
+            // ROLLBACK_USEITEM_OVERLAY_ONLY_CUTOUT_DIM:
+            // Apply the cutout dim material only to Overlay's own Image. Do not walk children,
+            // because CutoutMask is only a rect marker and must not receive the dim material.
+            Image overlayImage = dimRect.GetComponent<Image>();
+            if (overlayImage == null) return false;
+
+            if (overlayImage.sprite == null)
+                overlayImage.sprite = GetWhiteSprite();
+            overlayImage.type = Image.Type.Simple;
+            overlayImage.raycastTarget = true;
+            overlayImage.color = Color.white;
+            overlayImage.material = _runtimeCutoutDimMaterial;
+            return true;
+        }
+
         private void SetupShaders()
         {
+#if false
             if (_cutoutMask == null) return;
 
             // CutoutMaskUI 컴포넌트 보장 — 기존 Image 가 있으면 교체.
@@ -224,9 +297,12 @@ namespace BalloonFlow
             // CutoutMaskUI 의 color 는 white 지만 mask 영역은 dim child 에 의해 가려지지 않으므로 결과적으로 투명한 hole 처럼 보임.
             var mask = _cutoutMask.GetComponent<Mask>();
             if (mask == null) mask = _cutoutMask.gameObject.AddComponent<Mask>();
-            // Rollback note: enabling Unity Mask clips DimOverlay to the inside of the hole.
-            mask.enabled = false;
-            mask.showMaskGraphic = false;
+            // ROLLBACK_USEITEM_CUTOUT_MASK_ENABLE:
+            // Tutorial uses this same CutoutMaskUI + Mask pattern. The Mask must stay enabled
+            // and showMaskGraphic must be true so the cutout image writes stencil before the
+            // child DimOverlay draws only outside the hole.
+            mask.enabled = true;
+            mask.showMaskGraphic = true;
 
             // DimOverlay: CutoutMask 의 자식 — 부모 Mask 영역 "바깥" 에만 그려져 dim 효과
             Transform existingDim = _cutoutMask.Find("DimOverlay");
@@ -264,27 +340,99 @@ namespace BalloonFlow
 
             dimGO.SetActive(false);
             _cutoutImage.gameObject.SetActive(false);
+#endif
         }
 
         private void ApplyCutoutMaterials()
         {
-            Shader maskShader = Shader.Find("UI/CutoutMask");
-            Shader dimShader = Shader.Find("UI/CutoutDim");
-
-            if (_cutoutImage != null && maskShader != null)
+#if false
+            if (_cutoutImage != null)
             {
                 if (_runtimeCutoutMaskMaterial == null)
-                    _runtimeCutoutMaskMaterial = new Material(maskShader);
+                    _runtimeCutoutMaskMaterial = CreateCutoutRuntimeMaterial(
+                        _matCutoutMask,
+                        CUTOUT_MASK_MATERIAL_ADDRESS,
+                        "UI/CutoutMask",
+                        ref _cutoutMaskMaterialHandle);
                 _cutoutImage.material = _runtimeCutoutMaskMaterial;
             }
 
-            if (_dimImage != null && dimShader != null)
+            if (_dimImage != null)
             {
                 if (_runtimeCutoutDimMaterial == null)
-                    _runtimeCutoutDimMaterial = new Material(dimShader);
-                _runtimeCutoutDimMaterial.color = new Color(0f, 0f, 0f, 0.7f);
+                    _runtimeCutoutDimMaterial = CreateCutoutRuntimeMaterial(
+                        _matCutoutDim,
+                        CUTOUT_DIM_MATERIAL_ADDRESS,
+                        "UI/CutoutDim",
+                        ref _cutoutDimMaterialHandle);
+                if (_runtimeCutoutDimMaterial != null)
+                    _runtimeCutoutDimMaterial.color = new Color(0f, 0f, 0f, 0.7f);
                 _dimImage.material = _runtimeCutoutDimMaterial;
             }
+#endif
+        }
+
+        private static Material CreateCutoutRuntimeMaterial(
+            Material assignedMaterial,
+            string addressableKey,
+            string shaderName,
+            ref AsyncOperationHandle<Material> handle)
+        {
+            // ROLLBACK_USEITEM_ADDRESSABLE_CUTOUT_MATERIALS:
+            // Use the authored Addressable materials (mat_UICutoutMask / mat_UICutoutDim).
+            // Clone once for runtime color changes; do not create duplicate Resources materials.
+            // Addressables are intentionally preferred over Inspector fields because old prefab
+            // assignments can accidentally point both Mask and Dim at UICutoutDim.mat.
+            Material source = LoadAddressableCutoutMaterial(addressableKey, ref handle);
+            if (source == null && IsExpectedCutoutMaterial(assignedMaterial, shaderName))
+                source = assignedMaterial;
+            if (source != null)
+                return new Material(source);
+
+            Shader shader = Shader.Find(shaderName);
+            return shader != null ? new Material(shader) : null;
+        }
+
+        private static bool IsExpectedCutoutMaterial(Material material, string shaderName)
+        {
+            return material != null &&
+                   material.shader != null &&
+                   material.shader.name == shaderName;
+        }
+
+        private static Material LoadAddressableCutoutMaterial(
+            string addressableKey,
+            ref AsyncOperationHandle<Material> handle)
+        {
+            if (handle.IsValid() && handle.Status == AsyncOperationStatus.Succeeded)
+                return handle.Result;
+
+            try
+            {
+                handle = Addressables.LoadAssetAsync<Material>(addressableKey);
+                Material material = handle.WaitForCompletion();
+                if (material != null) return material;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[PopupUseItem] Addressable material '{addressableKey}' load failed: {e.Message}");
+            }
+
+            if (handle.IsValid())
+                Addressables.Release(handle);
+            handle = default;
+            return null;
+        }
+
+        private void SetHudBottomPanelHidden(bool hidden)
+        {
+            UIHud hud = UIManager.HasInstance ? UIManager.Instance.GetOpenUI<UIHud>() : null;
+            if (hud == null)
+                hud = FindAnyObjectByType<UIHud>();
+            if (hud == null) return;
+
+            if (hidden) hud.HideBottomPanel();
+            else hud.ShowBottomPanel();
         }
 
         private static void ReleaseRuntimeMaterial(ref Material material)
@@ -293,6 +441,13 @@ namespace BalloonFlow
             if (Application.isPlaying) Destroy(material);
             else DestroyImmediate(material);
             material = null;
+        }
+
+        private static void ReleaseAddressableMaterialHandle(ref AsyncOperationHandle<Material> handle)
+        {
+            if (handle.IsValid())
+                Addressables.Release(handle);
+            handle = default;
         }
 
         public void Show(string boosterType, string description,
@@ -331,10 +486,12 @@ namespace BalloonFlow
             }
 
             // [2026-05-12] CutoutMask 재활성 — Hand: 보관함 / Zap: 보드 영역 hole + 외부 dim.
+            // [2026-05-20] ROLLBACK_USEITEM_SIMPLE_CUTOUT_MATERIAL:
+            // UseItem uses one dim Image with mat_UICutoutDim. CutoutMask only supplies
+            // the hole rect, so it must not render, mask, or own a second dim layer.
             if (_cutoutMask != null) _cutoutMask.gameObject.SetActive(true);
             SetupCutout(boosterType);
-            if (_cutoutImage != null) _cutoutImage.gameObject.SetActive(true);
-            if (_dimImage != null) _dimImage.gameObject.SetActive(true);
+            ApplyCutoutMaterialToOverlay();
 
             // [2026-05-13] description/icon 가림 방지 — Dim/Cutout 활성화 후 sibling 순서를
             // 가장 마지막으로 옮겨 Dim alpha 0.7 위로 덮어 그림. Mask 의 자식이라면
@@ -342,6 +499,9 @@ namespace BalloonFlow
             BringDescriptionToFront();
 
             OpenUI();
+            Canvas.ForceUpdateCanvases();
+            UpdateCutoutMaterialRect();
+            SetHudBottomPanelHidden(true);
             _onConfirm?.Invoke();
         }
 
@@ -426,14 +586,50 @@ namespace BalloonFlow
             {
                 _cutoutMask.sizeDelta = screenSize;
             }
+
+            UpdateCutoutMaterialRect();
+        }
+
+        private void UpdateCutoutMaterialRect()
+        {
+            if (_runtimeCutoutDimMaterial == null || _cutoutMask == null) return;
+
+            Canvas.ForceUpdateCanvases();
+            RectTransform dimRect = GetBaseDimRectTransform();
+            if (dimRect == null) return;
+
+            Rect rect = dimRect.rect;
+            if (rect.width <= 0f || rect.height <= 0f) return;
+
+            Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(dimRect, _cutoutMask);
+            Vector2 center = new Vector2(
+                Mathf.InverseLerp(rect.xMin, rect.xMax, bounds.center.x),
+                Mathf.InverseLerp(rect.yMin, rect.yMax, bounds.center.y));
+            Vector2 size = new Vector2(
+                Mathf.Clamp01(bounds.size.x / rect.width),
+                Mathf.Clamp01(bounds.size.y / rect.height));
+
+            _runtimeCutoutDimMaterial.SetVector(OVERLAY_RECT_ID, new Vector4(rect.xMin, rect.yMin, rect.width, rect.height));
+            _runtimeCutoutDimMaterial.SetVector(CUTOUT_CENTER_ID, new Vector4(center.x, center.y, 0f, 0f));
+            _runtimeCutoutDimMaterial.SetVector(CUTOUT_SIZE_ID, new Vector4(size.x, size.y, 0f, 0f));
         }
 
         private void OnCancelClicked()
         {
+            _onCancel?.Invoke();
+
             if (BoosterExecutor.HasInstance)
+            {
+                bool hadPendingBooster = BoosterExecutor.Instance.HasPendingBooster;
                 BoosterExecutor.Instance.CancelPendingBooster();
 
-            _onCancel?.Invoke();
+                if (hadPendingBooster)
+                {
+                    _activeBoosterType = null;
+                    return;
+                }
+            }
+
             _activeBoosterType = null;
 
             HideOverlay();
@@ -443,15 +639,22 @@ namespace BalloonFlow
         /// <summary>Cutout/Dim overlay 비활성화. Cancel 및 자동 close (BoosterExecutor.CloseUseItemPopup) 모두에서 호출.</summary>
         private void HideOverlay()
         {
-            if (_cutoutImage != null) _cutoutImage.gameObject.SetActive(false);
-            if (_dimImage != null) _dimImage.gameObject.SetActive(false);
+            if (_cutoutMask != null) _cutoutMask.gameObject.SetActive(false);
+            SetHudBottomPanelHidden(false);
         }
 
         public override void CloseUI()
         {
+            CloseUI(true);
+        }
+
+        public void CloseUI(bool restoreBottomPanel)
+        {
             // UIBase.CloseUI()는 alpha=0 만 처리 → OnDisable이 fire 안 됨.
             // BoosterExecutor 자동 close 경로에서도 overlay 잔존 방지.
             HideOverlay();
+            if (restoreBottomPanel)
+                SetHudBottomPanelHidden(false);
             // [2026-05-12] BottomExit 0 → -200 tween + 완료 후 base.CloseUI 호출.
             AnimateBottomExitOut(() => base.CloseUI());
         }

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 using DG.Tweening;
 using DigitalRuby.LightningBolt;
 
@@ -38,10 +39,16 @@ namespace BalloonFlow
         private const float ZapSelectionHighlightDelay = 0.15f;
         private const float ZapAppearDuration = 0.45f;
         private const float ZapMoveDuration = 0.25f;
-        private const float ZapTotalPopDuration = 2.5f;
+        private const float ZapMaxTotalEffectDuration = 2f;
         private const float ZapLineLifetime = 0.2f;
+        private const float ZapMinLeadInterval = 0.03f;
+        private const float ZapLineLeadBeforePop = 0.015f;
         private const float ZapFinishLifetime = 0.35f;
         private const float ZapEffectYOffset = 0.12f;
+        private const float ZapLineWorldLift = 0.35f;
+        private const float ZapLineMinWidth = 0.08f;
+        private const int ZapLineSortingOrder = 80;
+        private const float ZapFieldBottomPaddingCells = 1.5f;
 
         private readonly List<ZapTarget> _zapTargets = new List<ZapTarget>(128);
         private GameObject _itemZapPrefab;
@@ -82,7 +89,7 @@ namespace BalloonFlow
             _awaitingBalloonClick = false;
 
             ConfirmPendingBooster();
-            CloseUseItemPopup();
+            CloseUseItemPopup(false);
             StartCoroutine(PlayColorRemoveSequence(color));
         }
 
@@ -96,7 +103,7 @@ namespace BalloonFlow
 
             ConfirmPendingBooster();
             //HideCancelButton();
-            CloseUseItemPopup();
+            CloseUseItemPopup(true);
             ExecuteSelectTool(holderId);
 
             if (CameraManager.HasInstance)
@@ -140,17 +147,17 @@ namespace BalloonFlow
 
             // Execute color remove after brief delay (so player sees the highlight)
             //HideCancelButton();
-            CloseUseItemPopup();
+            CloseUseItemPopup(false);
             StartCoroutine(PlayColorRemoveSequence(selectedColor));
         }
 
         /// <summary>UseItem 팝업 닫기.</summary>
-        private void CloseUseItemPopup()
+        private void CloseUseItemPopup(bool restoreBottomPanel = true)
         {
             if (UIManager.HasInstance)
             {
                 var popup = UIManager.Instance.GetOpenUI<PopupUseItem>();
-                if (popup != null) popup.CloseUI();
+                if (popup != null) popup.CloseUI(restoreBottomPanel);
             }
         }
 
@@ -334,6 +341,7 @@ namespace BalloonFlow
                 yield break;
 
             _isColorRemoveSequenceRunning = true;
+            SetHudBottomPanelHiddenForZap(true);
 
             yield return new WaitForSeconds(ZapSelectionHighlightDelay);
 
@@ -350,6 +358,7 @@ namespace BalloonFlow
             Vector3 finishPosition = GetZapFinishPosition();
             GameObject zapObject = CreateItemZap(attackPosition);
             GameObject zapLineObject = null;
+            bool zapLineFromItemZap = false;
 
             yield return new WaitForSeconds(ZapAppearDuration);
 
@@ -370,26 +379,58 @@ namespace BalloonFlow
             int fieldRemoved = 0;
             if (_zapTargets.Count > 0)
             {
-                zapLineObject = CreateZapLineObject();
+                zapLineObject = CreateZapLineObject(zapObject, out zapLineFromItemZap);
                 if (zapLineObject != null)
                     yield return null;
 
+                // ROLLBACK_ZAP_ATTACK_TRIGGER_ONCE:
+                // ZapAttack is an attack-start animation, not a per-target hit animation.
+                // Keep it as a single trigger while FxZapLine retargets for every popped balloon.
+                PlayZapAttack(zapObject);
+
+                // ROLLBACK_ZAP_FIXED_TOTAL_POP_TIME:
+                // Do not multiply a minimum interval by target count. The full balloon-pop
+                // pass must stay inside the remaining 2s item-effect budget, so dense boards
+                // can pop multiple targets in the same frame instead of stretching the item
+                // effect for seconds.
+                float popDurationBudget = Mathf.Max(
+                    0.1f,
+                    ZapMaxTotalEffectDuration - ZapSelectionHighlightDelay - ZapAppearDuration - ZapMoveDuration - ZapLineLifetime);
+                float popStartTime = Time.time;
                 float stepDelay = _zapTargets.Count > 1
-                    ? ZapTotalPopDuration / (_zapTargets.Count - 1)
+                    ? popDurationBudget / (_zapTargets.Count - 1)
+                    : 0f;
+                float lineLeadBeforePop = stepDelay >= ZapMinLeadInterval
+                    ? Mathf.Min(ZapLineLeadBeforePop, stepDelay * 0.5f)
                     : 0f;
 
                 for (int i = 0; i < _zapTargets.Count; i++)
                 {
+                    if (stepDelay > 0f)
+                    {
+                        float targetTime = popStartTime + stepDelay * i;
+                        while (Time.time < targetTime)
+                            yield return null;
+                    }
+
                     ZapTarget target = _zapTargets[i];
                     Vector3 targetPosition = GetZapEffectPosition(target.position);
-                    ConfigureZapLine(zapLineObject, attackPosition, targetPosition);
+                    float lineVisibleDuration = Mathf.Max(ZapLineLifetime, stepDelay + lineLeadBeforePop);
+                    Vector3 lineStartPosition = zapObject != null ? zapObject.transform.position : attackPosition;
+                    ConfigureZapLine(zapLineObject, lineStartPosition, targetPosition, lineVisibleDuration);
+
+                    // ROLLBACK_ZAP_LINE_PREPOP_LEAD:
+                    // Give FxZapLine a rendered moment only when the total-time budget can afford
+                    // it. For dense boards, forcing this wait once per target breaks the 2s cap.
+                    if (lineLeadBeforePop > 0f)
+                        yield return new WaitForSeconds(lineLeadBeforePop);
 
                     if (TryPopZapTarget(target.balloonId))
                         fieldRemoved++;
-
-                    if (i < _zapTargets.Count - 1 && stepDelay > 0f)
-                        yield return new WaitForSeconds(stepDelay);
                 }
+
+                if (zapLineObject != null)
+                    yield return new WaitForSeconds(ZapLineLifetime);
             }
 
             int totalRemoved = fieldRemoved + RemoveRailAndQueueColor(color);
@@ -398,13 +439,19 @@ namespace BalloonFlow
             PlayZapFinish(zapObject, finishPosition);
 
             if (zapLineObject != null)
-                Destroy(zapLineObject, ZapLineLifetime);
+            {
+                if (zapLineFromItemZap)
+                    zapLineObject.SetActive(false);
+                else
+                    Destroy(zapLineObject, ZapLineLifetime);
+            }
             if (zapObject != null)
                 Destroy(zapObject, ZapFinishLifetime);
 
             if (CameraManager.HasInstance)
                 CameraManager.Instance.MoveBack();
 
+            SetHudBottomPanelHiddenForZap(false);
             ResumeRail();
             _zapTargets.Clear();
             _isColorRemoveSequenceRunning = false;
@@ -638,6 +685,21 @@ namespace BalloonFlow
             });
         }
 
+        private void SetHudBottomPanelHiddenForZap(bool hidden)
+        {
+            // ROLLBACK_ZAP_HUD_BOTTOM_PANEL_SHIFT:
+            // Keep the item panel below the screen while the authored Zap attack/finish
+            // sequence is playing, then restore it after the effect completes.
+            UIHud hud = FindAnyObjectByType<UIHud>();
+            if (hud == null)
+                return;
+
+            if (hidden)
+                hud.HideBottomPanel();
+            else
+                hud.ShowBottomPanel();
+        }
+
         private void CollectZapTargets(int color)
         {
             _zapTargets.Clear();
@@ -696,20 +758,56 @@ namespace BalloonFlow
             if (_zapTargets.Count <= 0)
                 return GetZapFallbackPosition();
 
-            float minZ = _zapTargets[0].position.z;
             float minX = _zapTargets[0].position.x;
             float maxX = _zapTargets[0].position.x;
             for (int i = 1; i < _zapTargets.Count; i++)
             {
                 Vector3 position = _zapTargets[i].position;
-                if (position.z < minZ) minZ = position.z;
                 if (position.x < minX) minX = position.x;
                 if (position.x > maxX) maxX = position.x;
             }
 
             float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
-            Vector3 attackPosition = new Vector3((minX + maxX) * 0.5f, 0f, minZ - cellSpacing);
+            float fieldMinZ = GetActiveFieldMinZ();
+            // ROLLBACK_ZAP_FIELD_BOTTOM_ANCHOR:
+            // The Zap item must enter from the bottom of the whole field, not from the first
+            // selected-color row. Selected colors that only exist in middle rows otherwise spawn
+            // the Zap inside the balloon grid.
+            Vector3 attackPosition = new Vector3(
+                (minX + maxX) * 0.5f,
+                0f,
+                fieldMinZ - cellSpacing * ZapFieldBottomPaddingCells);
             return GetZapEffectPosition(attackPosition);
+        }
+
+        private float GetActiveFieldMinZ()
+        {
+            if (!BalloonController.HasInstance)
+                return _zapTargets.Count > 0 ? _zapTargets[0].position.z : 0f;
+
+            BalloonData[] balloons = BalloonController.Instance.GetAllBalloons();
+            bool found = false;
+            float minZ = 0f;
+            if (balloons != null)
+            {
+                for (int i = 0; i < balloons.Length; i++)
+                {
+                    BalloonData data = balloons[i];
+                    if (data == null || data.isPopped)
+                        continue;
+
+                    Vector3 position = BalloonController.Instance.GetBalloonWorldPosition(data.balloonId);
+                    if (!found || position.z < minZ)
+                    {
+                        minZ = position.z;
+                        found = true;
+                    }
+                }
+            }
+
+            return found
+                ? minZ
+                : (_zapTargets.Count > 0 ? _zapTargets[0].position.z : 0f);
         }
 
         private Vector3 GetZapFinishPosition()
@@ -755,8 +853,28 @@ namespace BalloonFlow
             return Instantiate(_itemZapPrefab, spawnPosition, Quaternion.identity);
         }
 
-        private GameObject CreateZapLineObject()
+        private GameObject CreateZapLineObject(GameObject zapObject, out bool fromItemZap)
         {
+            fromItemZap = false;
+            if (zapObject != null)
+            {
+                // ROLLBACK_ITEMZAP_CHILD_LINE:
+                // ItemZap.prefab owns FxZapLine. Prefer that child so the authored ZapStart /
+                // ZapAttack / ZapFinish animation setup drives the same visual object.
+                Transform childLine = FindChildRecursive(zapObject.transform, "FxZapLine");
+                if (childLine != null)
+                {
+                    // ROLLBACK_ZAP_LINE_RUNTIME_CLONE:
+                    // Do not drive the inactive child directly. The ItemZap animator can keep
+                    // authored children disabled while ZapAttack/ZapFinish plays, so clone the
+                    // line as an independent runtime effect and destroy it after the sequence.
+                    GameObject runtimeLine = Instantiate(childLine.gameObject);
+                    runtimeLine.name = "FxZapLine_Runtime";
+                    runtimeLine.SetActive(true);
+                    return runtimeLine;
+                }
+            }
+
             if (_fxZapLinePrefab == null)
                 _fxZapLinePrefab = Resources.Load<GameObject>(Const.PREFAB_FX_ZAP_LINE);
 
@@ -769,25 +887,63 @@ namespace BalloonFlow
             return Instantiate(_fxZapLinePrefab);
         }
 
-        private void ConfigureZapLine(GameObject zapLineObject, Vector3 startPosition, Vector3 endPosition)
+        private void ConfigureZapLine(GameObject zapLineObject, Vector3 startPosition, Vector3 endPosition, float visibleDuration)
         {
             if (zapLineObject == null)
                 return;
 
+            zapLineObject.SetActive(true);
+
             Transform startTransform = FindChildRecursive(zapLineObject.transform, "LightningStart");
             Transform endTransform = FindChildRecursive(zapLineObject.transform, "LightningEnd");
-            if (startTransform != null) startTransform.position = startPosition;
-            if (endTransform != null) endTransform.position = endPosition;
+            Vector3 lineStartPosition = GetZapLineRenderPosition(startPosition);
+            Vector3 lineEndPosition = GetZapLineRenderPosition(endPosition);
+            if (startTransform != null) startTransform.position = lineStartPosition;
+            if (endTransform != null) endTransform.position = lineEndPosition;
 
             LightningBoltScript bolt = zapLineObject.GetComponentInChildren<LightningBoltScript>(true);
             if (bolt != null)
             {
+                LineRenderer lineRenderer = bolt.GetComponent<LineRenderer>();
+                PrepareZapLineRenderer(lineRenderer);
+                // ROLLBACK_ZAP_LINE_FORCE_WORLD_SPACE:
+                // ItemZap owns FxZapLine as an animated child. Force this particular lightning
+                // renderer to world-space so the line always connects the Zap object and target
+                // balloon instead of inheriting animated local offsets from the prefab.
                 bolt.StartObject = null;
                 bolt.EndObject = null;
-                bolt.StartPosition = startPosition;
-                bolt.EndPosition = endPosition;
+                bolt.StartPosition = lineStartPosition;
+                bolt.EndPosition = lineEndPosition;
+                // ROLLBACK_ZAP_LINE_CONTINUOUS_VISIBILITY:
+                // ManualMode clears the LineRenderer after Duration. Keep each bolt visible until
+                // the next Zap target so the effect does not blink out between balloon pops.
+                bolt.ManualMode = true;
+                bolt.Duration = Mathf.Max(0.01f, visibleDuration);
                 bolt.Trigger();
             }
+        }
+
+        private Vector3 GetZapLineRenderPosition(Vector3 position)
+        {
+            // ROLLBACK_ZAP_LINE_RENDER_LIFT:
+            // Keep the lightning slightly above holder/balloon meshes. This affects only the
+            // visual line, not Zap pop timing or target selection.
+            position.y += ZapLineWorldLift;
+            return position;
+        }
+
+        private void PrepareZapLineRenderer(LineRenderer lineRenderer)
+        {
+            if (lineRenderer == null)
+                return;
+
+            lineRenderer.enabled = true;
+            lineRenderer.useWorldSpace = true;
+            lineRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            lineRenderer.receiveShadows = false;
+            lineRenderer.sortingOrder = Mathf.Max(lineRenderer.sortingOrder, ZapLineSortingOrder);
+            lineRenderer.widthMultiplier = Mathf.Max(lineRenderer.widthMultiplier, ZapLineMinWidth);
+            lineRenderer.numCapVertices = Mathf.Max(lineRenderer.numCapVertices, 2);
         }
 
         private Transform FindChildRecursive(Transform root, string childName)
@@ -824,13 +980,31 @@ namespace BalloonFlow
                 zapObject.transform.DOPunchScale(Vector3.one * 0.15f, ZapFinishLifetime, 6, 0.4f);
         }
 
+        private bool PlayZapAttack(GameObject zapObject)
+        {
+            if (zapObject == null)
+                return false;
+
+            // ROLLBACK_ITEMZAP_ATTACK_TRIGGER:
+            // ItemZap animator exposes ZapAttack as the authored attack trigger.
+            bool triggered = TrySetZapTrigger(zapObject, "ZapAttack");
+            if (!triggered)
+                zapObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.12f, 3, 0.35f);
+
+            return triggered;
+        }
+
         private bool TrySetZapFinishTrigger(GameObject zapObject)
+        {
+            return TrySetZapTrigger(zapObject, "ZapFinish", "Finish", "Zap Finish Trigger");
+        }
+
+        private bool TrySetZapTrigger(GameObject zapObject, params string[] triggerNames)
         {
             Animator animator = zapObject.GetComponentInChildren<Animator>(true);
             if (animator == null)
                 return false;
 
-            string[] triggerNames = { "Finish", "ZapFinish", "Zap Finish Trigger" };
             for (int i = 0; i < animator.parameters.Length; i++)
             {
                 AnimatorControllerParameter parameter = animator.parameters[i];

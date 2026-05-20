@@ -96,6 +96,7 @@ namespace DigitalRuby.LightningBolt
         private int animationOffsetIndex;
         private int animationPingPongDirection = 1;
         private bool orthographic;
+        private bool materialInitialized;
 
         private void GetPerpendicularVector(ref Vector3 directionNormalized, out Vector3 side)
         {
@@ -216,6 +217,11 @@ namespace DigitalRuby.LightningBolt
 
         private void SelectOffsetFromAnimationMode()
         {
+            if (offsets == null || offsets.Length == 0)
+            {
+                return;
+            }
+
             int index;
 
             if (AnimationMode == LightningBoltAnimationMode.None)
@@ -263,6 +269,11 @@ namespace DigitalRuby.LightningBolt
 
         private void UpdateLineRenderer()
         {
+            if (!EnsureInitialized())
+            {
+                return;
+            }
+
             int segmentCount = (segments.Count - startIndex) + 1;
             lineRenderer.positionCount = segmentCount;
 
@@ -289,21 +300,16 @@ namespace DigitalRuby.LightningBolt
 
         private void Start()
         {
-            // [Optimization 2026-05-10] 캐시 후 사용. 롤백: 아래 _mainCamera 초기화 제거 + Camera.main 직접 호출 복원.
-            _mainCamera = Camera.main;
-            // 원본: orthographic = (Camera.main != null && Camera.main.orthographic);
-            orthographic = (_mainCamera != null && _mainCamera.orthographic);
-            lineRenderer = GetComponent<LineRenderer>();
-            lineRenderer.positionCount = 0;
-            UpdateFromMaterialChange();
+            EnsureInitialized(true);
         }
 
         private void Update()
         {
-            // [Optimization 2026-05-10] 캐시 사용 + null safety net (씬 재로드 시 stale 대비). 롤백: 캐시 제거하고 아래 주석 라인으로.
-            if (_mainCamera == null) _mainCamera = Camera.main;
-            // 원본: orthographic = (Camera.main != null && Camera.main.orthographic);
-            orthographic = (_mainCamera != null && _mainCamera.orthographic);
+            if (!EnsureInitialized())
+            {
+                return;
+            }
+
             if (timer <= 0.0f)
             {
                 if (ManualMode)
@@ -324,6 +330,11 @@ namespace DigitalRuby.LightningBolt
         /// </summary>
         public void Trigger()
         {
+            if (!EnsureInitialized())
+            {
+                return;
+            }
+
             Vector3 start, end;
             timer = Duration + Mathf.Min(0.0f, timer);
             if (StartObject == null)
@@ -352,16 +363,61 @@ namespace DigitalRuby.LightningBolt
         /// </summary>
         public void UpdateFromMaterialChange()
         {
-            size = new Vector2(1.0f / (float)Columns, 1.0f / (float)Rows);
-            lineRenderer.material.mainTextureScale = size;
-            offsets = new Vector2[Rows * Columns];
-            for (int y = 0; y < Rows; y++)
+            if (!EnsureLineRenderer())
             {
-                for (int x = 0; x < Columns; x++)
+                return;
+            }
+
+            int columns = Mathf.Max(1, Columns);
+            int rows = Mathf.Max(1, Rows);
+            size = new Vector2(1.0f / (float)columns, 1.0f / (float)rows);
+            lineRenderer.material.mainTextureScale = size;
+            offsets = new Vector2[rows * columns];
+            for (int y = 0; y < rows; y++)
+            {
+                for (int x = 0; x < columns; x++)
                 {
-                    offsets[x + (y * Columns)] = new Vector2((float)x / Columns, (float)y / Rows);
+                    offsets[x + (y * columns)] = new Vector2((float)x / columns, (float)y / rows);
                 }
             }
+            materialInitialized = true;
+        }
+
+        private bool EnsureInitialized(bool clearPositions = false)
+        {
+            // ROLLBACK_LIGHTNING_LAZY_INIT:
+            // ItemZap can enable an inactive child FxZapLine and call Trigger in the same frame.
+            // Unity calls Start later, so lazily cache LineRenderer/material data before use.
+            if (_mainCamera == null) _mainCamera = Camera.main;
+            orthographic = (_mainCamera != null && _mainCamera.orthographic);
+
+            if (!EnsureLineRenderer())
+            {
+                return false;
+            }
+
+            if (clearPositions)
+            {
+                lineRenderer.positionCount = 0;
+            }
+
+            int expectedOffsetCount = Mathf.Max(1, Rows) * Mathf.Max(1, Columns);
+            if (!materialInitialized || offsets == null || offsets.Length != expectedOffsetCount)
+            {
+                UpdateFromMaterialChange();
+            }
+
+            return true;
+        }
+
+        private bool EnsureLineRenderer()
+        {
+            if (lineRenderer == null)
+            {
+                lineRenderer = GetComponent<LineRenderer>();
+            }
+
+            return lineRenderer != null;
         }
     }
 }

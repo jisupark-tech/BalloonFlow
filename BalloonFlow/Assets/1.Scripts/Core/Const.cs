@@ -474,6 +474,8 @@ namespace BalloonFlow
         public const string PREFS_DAILY_LAST_CLAIM  = "BF_DailyReward_LastClaim";
         public const string PREFS_DAILY_STREAK_DAY  = "BF_DailyReward_StreakDay";
         public const string PREFS_PENDING_LEVEL_ID  = "BF_PendingLevelId";
+        /// <summary>마지막 성공한 Firebase Auth UID. 다음 부팅 시 UID 변경(데이터 손실 위험) 감지용.</summary>
+        public const string PREFS_LAST_AUTH_UID     = "BF_LastAuthUid";
 
         #endregion
     }

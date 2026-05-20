@@ -58,6 +58,14 @@ namespace BalloonFlow
             PopupTr = _popupCanvasTr != null ? _popupCanvasTr : _uiCanvasTr;
             EffectTr = _effectCanvasTr != null ? _effectCanvasTr : PopupTr;
 
+            // ROLLBACK_UI_CANVAS_RENDER_GUARD:
+            // Title/Lobby/MapMaker/InGame can reuse different live canvases. Force the three
+            // scene roots into a stable overlay order so world holders/balloons cannot render
+            // above HUD or popup item windows.
+            ConfigureSceneCanvas(UiTr, 100);
+            ConfigureSceneCanvas(PopupTr, 200);
+            ConfigureSceneCanvas(EffectTr, 300);
+
             PersistRoot(UiTr);
             if (PopupTr != UiTr) PersistRoot(PopupTr);
             if (EffectTr != PopupTr && EffectTr != UiTr) PersistRoot(EffectTr);
@@ -74,6 +82,22 @@ namespace BalloonFlow
             // 이미 DontDestroyOnLoad 인 GameObject 는 무시 (root.scene.buildIndex == -1)
             if (root.scene.buildIndex < 0) return;
             DontDestroyOnLoad(root);
+        }
+
+        private static void ConfigureSceneCanvas(Transform root, int sortingOrder)
+        {
+            if (root == null) return;
+
+            Canvas canvas = root.GetComponent<Canvas>();
+            if (canvas == null)
+                canvas = root.gameObject.AddComponent<Canvas>();
+
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = sortingOrder;
+
+            if (root.GetComponent<GraphicRaycaster>() == null)
+                root.gameObject.AddComponent<GraphicRaycaster>();
         }
 
         #endregion
