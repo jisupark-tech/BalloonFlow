@@ -7,7 +7,8 @@ namespace BalloonFlow
 {
     /// <summary>
     /// FxGold를 EffectCanvas에 직접 넣고 시작점→끝점 랜덤 포물선 비행.
-    /// EffectCanvas (sortingOrder=15) 가 PopupCanvas (10) 위에 렌더되어 popup 으로 가려지지 않음.
+    /// EffectCanvas (sortingOrder=300) 가 PopupCanvas (200) / UICanvas (100) 위에 렌더되어 popup 으로 가려지지 않음.
+    /// (UIManager.ConfigureSceneCanvas 가 강제 부여 — 2026-05-20 변경)
     /// 연출 끝나면 ObjectPoolManager로 반환.
     /// </summary>
     public static class CoinFlyEffect
@@ -16,6 +17,7 @@ namespace BalloonFlow
         private const string POOL_KEY    = "FXGold";
 
         private static bool _poolRegistered;
+        private static GameObject _prefab;
 
         /// <summary>진행 중인 연출이 사용 중인 코인 인스턴스 집합. StopAll에서 한번에 반환.</summary>
         private static readonly HashSet<GameObject> _activeCoins = new HashSet<GameObject>();
@@ -38,11 +40,22 @@ namespace BalloonFlow
             Action onEachLand = null, Action onAllComplete = null)
         {
             if (count <= 0) { onAllComplete?.Invoke(); return; }
-            if (!UIManager.HasInstance || GetParentTransform() == null) return;
+            if (!UIManager.HasInstance)
+            {
+                onAllComplete?.Invoke();
+                return;
+            }
+
+            Transform parent = GetParentTransform();
+            if (parent == null)
+            {
+                onAllComplete?.Invoke();
+                return;
+            }
 
             EnsurePool();
             CoroutineRunner.Get().StartCoroutine(
-                RunFly(screenFrom, screenTo, count, onEachLand, onAllComplete));
+                RunFly(parent, screenFrom, screenTo, count, onEachLand, onAllComplete));
 
             // [2026-05-12] 코인 흡수 동안 진동 4회 균등 분배 (intensity 0.3, duration 0.18s default).
             // count 1~3 코인 시도 4회 균등 분배 — count 의존 없는 일정한 햅틱 패턴.
@@ -94,7 +107,7 @@ namespace BalloonFlow
 
             // 활성 코인 오브젝트를 풀로 반환 — Pool.Return 이 SetParent(_poolParent, false) 처리하므로 직접 detach 안 함
             // (worldPositionStays=true 기본값으로 detach 시 캔버스 스케일이 localScale 로 흡수되어 누적 증가 버그)
-            if (ObjectPoolManager.HasInstance)
+            if (ObjectPoolManager.HasInstance && ObjectPoolManager.Instance.HasPool(POOL_KEY))
             {
                 foreach (var coin in _activeCoins)
                 {
@@ -105,31 +118,39 @@ namespace BalloonFlow
             else
             {
                 foreach (var coin in _activeCoins)
-                    if (coin != null) coin.SetActive(false);
+                    if (coin != null) UnityEngine.Object.Destroy(coin);
             }
             _activeCoins.Clear();
         }
 
         private static void EnsurePool()
         {
-            if (_poolRegistered || !ObjectPoolManager.HasInstance) return;
+            if (_prefab == null)
+                _prefab = Resources.Load<GameObject>(PREFAB_PATH);
 
-            GameObject prefab = Resources.Load<GameObject>(PREFAB_PATH);
-            if (prefab == null)
+            if (_prefab == null)
             {
                 Debug.LogError($"[CoinFlyEffect] {PREFAB_PATH}.prefab not found in Resources.");
                 return;
             }
 
+            if (!ObjectPoolManager.HasInstance) return;
+
+            // ROLLBACK_POPUP_RESULT_REWARD_FX_POOL_REPAIR
+            // _poolRegistered is static, while ObjectPoolManager can be recreated between scenes.
+            if (_poolRegistered && ObjectPoolManager.Instance.HasPool(POOL_KEY)) return;
+
+            GameObject prefab = _prefab;
+
             // 프리팹에 붙어있는 ParticleSystem 만 사용. UIParticleRenderer 자동 부착 제거.
-            ObjectPoolManager.Instance.CreatePool(POOL_KEY, prefab, 28);
+            if (!ObjectPoolManager.Instance.HasPool(POOL_KEY))
+                ObjectPoolManager.Instance.CreatePool(POOL_KEY, prefab, 28);
             _poolRegistered = true;
         }
 
-        private static IEnumerator RunFly(Vector2 fromScreen, Vector2 toScreen, int count,
+        private static IEnumerator RunFly(Transform parent, Vector2 fromScreen, Vector2 toScreen, int count,
             Action onEachLand, Action onAllComplete)
         {
-            Transform parent = GetParentTransform();
             if (parent == null) yield break;
             Canvas canvas = parent.GetComponentInParent<Canvas>();
             Camera cam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
@@ -180,10 +201,14 @@ namespace BalloonFlow
                 mid += scatterDir * UnityEngine.Random.Range(cW * 0.05f, cW * 0.15f);
                 mid.y += UnityEngine.Random.Range(cH * 0.08f, cH * 0.25f);
 
-                GameObject coin = ObjectPoolManager.Instance.Get(POOL_KEY);
-                coin.transform.SetParent(parent, false);
-                coin.transform.SetAsLastSibling();
-                _activeCoins.Add(coin);
+                GameObject coin = GetCoinInstance(parent);
+                if (coin == null)
+                {
+                    landed++;
+                    onEachLand?.Invoke();
+                    if (landed >= count) onAllComplete?.Invoke();
+                    continue;
+                }
 
                 // [Optimization 2026-05-11] RectTransform 캐시 — 매 spawn GetComponent 제거.
                 // 원본: var rt = coin.GetComponent<RectTransform>(); if (rt == null) rt = coin.AddComponent<RectTransform>();
@@ -231,6 +256,22 @@ namespace BalloonFlow
             yield break;
         }
 
+        private static GameObject GetCoinInstance(Transform parent)
+        {
+            GameObject coin = null;
+            if (ObjectPoolManager.HasInstance && ObjectPoolManager.Instance.HasPool(POOL_KEY))
+                coin = ObjectPoolManager.Instance.Get(POOL_KEY);
+            else if (_prefab != null)
+                coin = UnityEngine.Object.Instantiate(_prefab);
+
+            if (coin == null) return null;
+
+            coin.transform.SetParent(parent, false);
+            coin.transform.SetAsLastSibling();
+            _activeCoins.Add(coin);
+            return coin;
+        }
+
         /// <summary>
         /// 2단계 비행: 폭발(scatter) → 포물선 수렴(converge).
         /// Phase 1 (0~0.25): from → scatterPos (빠르게 퍼짐)
@@ -272,10 +313,10 @@ namespace BalloonFlow
             // Pool.Return 이 SetParent(_poolParent, worldPositionStays=false) 로 localScale 보존하며 분리.
             // 직접 SetParent(null) 호출하면 worldPositionStays=true(기본값) 라 캔버스 스케일이 localScale 로 흡수됨.
             _activeCoins.Remove(coin);
-            if (ObjectPoolManager.HasInstance)
+            if (ObjectPoolManager.HasInstance && ObjectPoolManager.Instance.HasPool(POOL_KEY))
                 ObjectPoolManager.Instance.Return(POOL_KEY, coin);
             else
-                coin.SetActive(false);
+                UnityEngine.Object.Destroy(coin);
             onDone?.Invoke();
         }
 

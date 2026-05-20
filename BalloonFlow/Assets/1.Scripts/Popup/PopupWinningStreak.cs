@@ -367,7 +367,7 @@ namespace BalloonFlow
             float prefabHeight = slotRt != null ? slotRt.rect.height : 0f;
             if (prefabHeight <= 1f && slotRt != null)
                 prefabHeight = LayoutUtility.GetPreferredHeight(slotRt);
-            if (prefabHeight <= 1f) prefabHeight = 100f;
+            if (prefabHeight <= 1f) prefabHeight = 300f;
 
             if (_scrollRect == null || _scrollRect.viewport == null) return prefabHeight;
 

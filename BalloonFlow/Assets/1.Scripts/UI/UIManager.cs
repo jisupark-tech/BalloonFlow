@@ -92,7 +92,11 @@ namespace BalloonFlow
             if (canvas == null)
                 canvas = root.gameObject.AddComponent<Canvas>();
 
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            // [2026-05-20] renderMode 강제 전환 제거 — 씬 prefab 설정 그대로 보존.
+            // 기존 ScreenSpaceCamera 모드를 ScreenSpaceOverlay 로 강제하면 ParticleSystem 기반
+            // FXGold 코인 연출이 카메라 깊이 정렬을 잃어 안 보임. 인게임 결과 팝업 등 popup 내
+            // 카메라 의존 비주얼도 동일 영향. world holders/balloons 가 UI 위에 렌더되는 이슈는
+            // sortingOrder 강제 부여만으로 충분히 해결됨 (canvas 가 일정 order 이상이면 layering 보장).
             canvas.overrideSorting = true;
             canvas.sortingOrder = sortingOrder;
 

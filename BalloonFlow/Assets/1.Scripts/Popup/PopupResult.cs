@@ -18,7 +18,6 @@ namespace BalloonFlow
         private const int MIN_COIN_COUNT = 20;
         private const int MAX_COIN_COUNT = 25;
         private const int SCORE_PER_COIN_STEP = 500;
-        private const string SORT_LAYER_POPUP = "Popup";
 
         #endregion
 
@@ -140,6 +139,11 @@ namespace BalloonFlow
 
         public void ShowWin(int score, DifficultyPurpose difficulty = DifficultyPurpose.Normal)
         {
+            ShowWin(score, DifficultyToRewardStarCount(difficulty), difficulty);
+        }
+
+        public void ShowWin(int score, int starCount, DifficultyPurpose difficulty = DifficultyPurpose.Normal)
+        {
             if (_frame != null)
             {
                 _frame.ApplyDifficulty(difficulty);
@@ -172,7 +176,7 @@ namespace BalloonFlow
 
             UpdateHardLevelOption(difficulty);
             ApplyBadge(difficulty);
-            EnsureGoldOnTopOfFx();
+            EnsureRewardVisible(starCount);
             ApplyDifficultyBackground(difficulty);
 
             OpenUI();
@@ -407,38 +411,184 @@ namespace BalloonFlow
             }
         }
 
-        #endregion
-
-        #region Gold Render Order
-
-        private void EnsureGoldOnTopOfFx()
+        private void EnsureRewardVisible(int starCount)
         {
-            var transforms = GetComponentsInChildren<Transform>(true);
-            for (int i = 0; i < transforms.Length; i++)
-            {
-                var t = transforms[i];
-                if (t == null) continue;
-                int order = GetSortingOrderForName(t.name);
-                if (order < 0) continue;
+            // ROLLBACK_POPUP_RESULT_REWARD_BINDING
+            // PopupResult reward visuals are prefab-driven, so make the required gold nodes visible
+            // and bind the same clear reward amount that CurrencyManager grants.
+            int reward = 0;
+            if (CurrencyManager.HasInstance)
+                reward = CurrencyManager.Instance.GetCoinRewardForStars(starCount);
 
-                var canvas = t.GetComponent<Canvas>();
-                if (canvas == null) canvas = t.gameObject.AddComponent<Canvas>();
-                canvas.overrideSorting = true;
-                canvas.sortingLayerName = SORT_LAYER_POPUP;
-                canvas.sortingOrder = order;
+            // [2026-05-20] Reward 의 부모 체인 (Contents, PopupCommonFrame, ...) 활성화 보장.
+            Transform rewardRoot = FindChildRecursive(transform, "Reward");
+            if (rewardRoot != null)
+            {
+                ActivateNodeWithAncestors("Reward");
+                // Reward 의 모든 자식 (ImageStage / FX / Gold / TxtGoldOutline / ...) subtree 강제 가시화 +
+                // baked-in Canvas overrideSorting 정상화 + CanvasGroup alpha / Image·TMP enabled 보정.
+                ForceVisibleSubtree(rewardRoot);
+                // 디자이너 의도 z-order 복원 — back(ImageStage) → middle(FX) → front(Gold/Txt).
+                ApplyRewardLayerOrder(rewardRoot);
+            }
+
+            SetRewardText("TxtGold", reward);
+            SetRewardText("TxtGoldOutline", reward);
+        }
+
+        /// <summary>
+        /// Reward subtree 의 z-order 를 PopupCanvas sortingOrder 기준 상대 offset 으로 재할당.
+        /// 옛 prefab 의 baked 값 (ImageStage=1, Gold=2 등) 은 PopupCanvas=10 스킴 기준. 새 스킴(=200) 에선
+        /// 절대값이 200 보다 작아 부모 뒤로 묻힘 — ForceVisibleSubtree 에서 모두 false 로 정리한 뒤 이 메서드가
+        /// 각 노드에 새 sortingOrder 를 명시 부여.
+        ///
+        /// 디자이너 의도 layering (back → front):
+        ///   ImageStage       base+1
+        ///   FX ParticleSystem base+2
+        ///   Gold             base+3
+        ///   TxtGoldOutline   base+3 (Gold 와 같은 layer, sibling order 로 micro z 결정)
+        ///   TxtGold          base+4 (outline 위)
+        /// </summary>
+        private void ApplyRewardLayerOrder(Transform rewardRoot)
+        {
+            Canvas parentCanvas = GetComponentInParent<Canvas>();
+            int baseOrder = parentCanvas != null ? parentCanvas.sortingOrder : 0;
+            string layer = parentCanvas != null ? parentCanvas.sortingLayerName : "Default";
+
+            AssignChildCanvasOrder(rewardRoot, "ImageStage", baseOrder + 1, layer);
+            // FX subtree 의 세부 노드들은 사용자 검증된 절대 sortingOrder 4/5/6 사용 — base+2 (=202) 에선 미작동.
+            // 디자이너가 FX 안쪽 micro layering 을 prefab 에 의도해둔 값. FX 부모 자체는 건드리지 않음.
+            AssignChildCanvasOrder(rewardRoot, "FX_Glow",       4, layer);
+            AssignChildCanvasOrder(rewardRoot, "FX_BackLightR", 5, layer);
+            AssignChildParticleOrder(rewardRoot, "ParticleLight", 6, layer);
+            AssignChildCanvasOrder(rewardRoot, "Gold", baseOrder + 3, layer);
+            AssignChildCanvasOrder(rewardRoot, "TxtGoldOutline", baseOrder + 3, layer);
+            AssignChildCanvasOrder(rewardRoot, "TxtGold", baseOrder + 4, layer);
+        }
+
+        private static void AssignChildCanvasOrder(Transform root, string nodeName, int order, string layer)
+        {
+            Transform node = FindChildRecursive(root, nodeName);
+            if (node == null) return;
+            var canvas = node.GetComponent<Canvas>();
+            if (canvas == null) canvas = node.gameObject.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingLayerName = layer;
+            canvas.sortingOrder = order;
+        }
+
+        private static void AssignChildParticleOrder(Transform root, string nodeName, int order, string layer)
+        {
+            Transform node = FindChildRecursive(root, nodeName);
+            if (node == null) return;
+            var psrs = node.GetComponentsInChildren<ParticleSystemRenderer>(true);
+            for (int i = 0; i < psrs.Length; i++)
+            {
+                if (psrs[i] == null) continue;
+                psrs[i].sortingLayerName = layer;
+                psrs[i].sortingOrder = order;
             }
         }
 
-        private static int GetSortingOrderForName(string name) => name switch
+        /// <summary>
+        /// root 부터 시작해 전체 subtree 를 순회하며 가시성 차단 요소를 모두 보정.
+        /// 1) GameObject 비활성 → SetActive(true)
+        /// 2) Canvas overrideSorting=true (낮은 sortingOrder) → false (부모 PopupCanvas=200 상속)
+        /// 3) CanvasGroup alpha 0 → 1
+        /// 4) Image / TMP_Text enabled=false → true
+        /// 5) ParticleSystemRenderer sortingOrder 가 0 이면 부모 캔버스 위로 올림 (FX 노드 대응)
+        /// </summary>
+        private void ForceVisibleSubtree(Transform root)
         {
-            "TxtGoldOutline" => 11,
-            "TxtGold"        => 12,
-            "Gold"           => 12,
-            "ImageStage"     => 10,
-            _                => -1
+            Canvas parentCanvas = GetComponentInParent<Canvas>();
+            int parentCanvasOrder = parentCanvas != null ? parentCanvas.sortingOrder : 0;
+            string parentCanvasLayer = parentCanvas != null ? parentCanvas.sortingLayerName : "Default";
+
+            var allTransforms = root.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < allTransforms.Length; i++)
+            {
+                var t = allTransforms[i];
+                if (t == null) continue;
+
+                if (!t.gameObject.activeSelf)
+                    t.gameObject.SetActive(true);
+
+                var canvas = t.GetComponent<Canvas>();
+                if (canvas != null && canvas.overrideSorting)
+                    canvas.overrideSorting = false;
+
+                var cg = t.GetComponent<CanvasGroup>();
+                if (cg != null && cg.alpha < 1f) cg.alpha = 1f;
+
+                var img = t.GetComponent<Image>();
+                if (img != null && !img.enabled) img.enabled = true;
+
+                var tmp = t.GetComponent<TMP_Text>();
+                if (tmp != null && !tmp.enabled) tmp.enabled = true;
+
+                // ParticleSystemRenderer 가 ScreenSpaceOverlay 캔버스 안에서 묻히는 케이스 보정.
+                // PopupCanvas 의 sortingOrder=200 보다 한 단계 위로 올려야 파티클이 보임.
+                var psr = t.GetComponent<ParticleSystemRenderer>();
+                if (psr != null && psr.sortingOrder < parentCanvasOrder)
+                {
+                    psr.sortingOrder = parentCanvasOrder + 1;
+                    psr.sortingLayerName = parentCanvasLayer;
+                }
+            }
+        }
+
+        private void ActivateNodeWithAncestors(string nodeName)
+        {
+            Transform node = FindChildRecursive(transform, nodeName);
+            if (node == null) return;
+
+            Transform popupRoot = transform;
+            Transform cursor = node;
+            while (cursor != null && cursor != popupRoot)
+            {
+                if (!cursor.gameObject.activeSelf)
+                    cursor.gameObject.SetActive(true);
+
+                // CanvasGroup alpha 0 인 부모만 보정 — interactable/blocksRaycasts 는 원본 의도 보존.
+                var cg = cursor.GetComponent<CanvasGroup>();
+                if (cg != null && cg.alpha < 1f) cg.alpha = 1f;
+
+                cursor = cursor.parent;
+            }
+        }
+
+        private static int DifficultyToRewardStarCount(DifficultyPurpose difficulty) => difficulty switch
+        {
+            DifficultyPurpose.SuperHard => 3,
+            DifficultyPurpose.Hard => 2,
+            _ => 1
         };
 
+        private void SetRewardText(string nodeName, int reward)
+        {
+            Transform node = FindChildRecursive(transform, nodeName);
+            if (node == null) return;
+
+            node.gameObject.SetActive(true);
+            var tmp = node.GetComponent<TMP_Text>();
+            if (tmp != null && reward > 0)
+                tmp.text = reward.ToString("N0");
+        }
+
+        private static Transform FindChildRecursive(Transform root, string nodeName)
+        {
+            if (root == null || string.IsNullOrEmpty(nodeName)) return null;
+            var children = root.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                Transform child = children[i];
+                if (child != null && child.name == nodeName) return child;
+            }
+            return null;
+        }
+
         #endregion
+
 
         #region Coin Fly
 

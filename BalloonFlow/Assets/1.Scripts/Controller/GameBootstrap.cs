@@ -494,7 +494,7 @@ namespace BalloonFlow
                     DifficultyPurpose diff = DifficultyPurpose.Normal;
                     if (LevelManager.HasInstance)
                         diff = LevelManager.Instance.GetLevelDifficulty(LevelManager.Instance.CurrentLevelId);
-                    _result.ShowWin(_score, diff);
+                    _result.ShowWin(_score, _stars, diff);
                 }
                 else _result.ShowFail();
             }
