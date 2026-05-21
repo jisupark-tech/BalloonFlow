@@ -1720,6 +1720,71 @@ namespace BalloonFlow
             return bestId;
         }
 
+        /// <summary>
+        /// Finds the nearest active balloon to a screen point using the rendered transform position.
+        /// Used by Zap item picking so camera tilt and runtime field scaling do not shift selection.
+        /// </summary>
+        public int FindNearestBalloonAtScreenPoint(Camera camera, Vector2 screenPosition, float thresholdPixels = 0f)
+        {
+            if (camera == null) return -1;
+
+            int bestId = -1;
+            float baseThreshold = thresholdPixels > 0f
+                ? thresholdPixels
+                : EstimateBalloonPickRadiusPixels(camera);
+            float bestDist = baseThreshold * baseThreshold;
+
+            foreach (var kvp in _balloons)
+            {
+                BalloonData data = kvp.Value;
+                if (data == null || data.isPopped) continue;
+
+                Vector3 world = GetBalloonWorldPosition(data.balloonId);
+                Vector3 screen = camera.WorldToScreenPoint(world);
+                if (screen.z < camera.nearClipPlane || screen.z > camera.farClipPlane) continue;
+
+                float candidateRadius = baseThreshold;
+                if (IsSizedFieldGimmick(data.gimmickType))
+                    candidateRadius *= Mathf.Max(1f, Mathf.Max(data.sizeW, data.sizeH) * 0.75f);
+
+                float dx = screen.x - screenPosition.x;
+                float dy = screen.y - screenPosition.y;
+                float sqrDist = dx * dx + dy * dy;
+                float allowed = candidateRadius * candidateRadius;
+                if (sqrDist < bestDist && sqrDist <= allowed)
+                {
+                    bestDist = sqrDist;
+                    bestId = kvp.Key;
+                }
+            }
+
+            return bestId;
+        }
+
+        private float EstimateBalloonPickRadiusPixels(Camera camera)
+        {
+            const float fallback = 72f;
+            if (camera == null || !GameManager.HasInstance)
+                return fallback;
+
+            float cellSpacing = Mathf.Max(0.1f, GameManager.Instance.Board.cellSpacing);
+            Vector3 origin = new Vector3(
+                GameManager.Instance.Board.boardCenterX,
+                0.1f,
+                GameManager.Instance.Board.balloonCenterZ);
+
+            Vector3 center = camera.WorldToScreenPoint(origin);
+            Vector3 right = camera.WorldToScreenPoint(origin + Vector3.right * cellSpacing);
+            Vector3 forward = camera.WorldToScreenPoint(origin + Vector3.forward * cellSpacing);
+
+            float pxPerCell = Mathf.Max(
+                Vector2.Distance(new Vector2(center.x, center.y), new Vector2(right.x, right.y)),
+                Vector2.Distance(new Vector2(center.x, center.y), new Vector2(forward.x, forward.y)));
+
+            if (pxPerCell <= 1f) return fallback;
+            return Mathf.Clamp(pxPerCell * 0.65f, 42f, 110f);
+        }
+
         /// <summary>Clear all outlines on all balloons.</summary>
         public void ClearAllOutlines()
         {

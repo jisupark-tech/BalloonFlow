@@ -104,9 +104,13 @@ namespace BalloonFlow
                 if (BalloonController.HasInstance)
                 {
                     var __boosterSw = InGamePerfLogger.StartSection();
-                    int balloonId = TryGetGroundPoint(ray, out Vector3 worldPos)
-                        ? BalloonController.Instance.FindNearestBalloonAtWorldPos(worldPos)
-                        : -1;
+                    // ROLLBACK_ZAP_SCREEN_SPACE_PICK:
+                    // Zap selection must follow the rendered balloon positions. Projecting the
+                    // click ray onto Y=0 shifts the pick on the tilted in-game camera and can
+                    // select the balloon visually above the touch point.
+                    int balloonId = BalloonController.Instance.FindNearestBalloonAtScreenPoint(
+                        _gameCamera,
+                        screenPosition);
                     InGamePerfLogger.EndSection(__boosterSw, "Input.BoosterBalloonPick");
                     if (balloonId >= 0)
                     {
