@@ -456,14 +456,110 @@ namespace BalloonFlow
             string layer = parentCanvas != null ? parentCanvas.sortingLayerName : "Default";
 
             AssignChildCanvasOrder(rewardRoot, "ImageStage", baseOrder + 1, layer);
-            // FX subtree 의 세부 노드들은 사용자 검증된 절대 sortingOrder 4/5/6 사용 — base+2 (=202) 에선 미작동.
-            // 디자이너가 FX 안쪽 micro layering 을 prefab 에 의도해둔 값. FX 부모 자체는 건드리지 않음.
-            AssignChildCanvasOrder(rewardRoot, "FX_Glow",       4, layer);
-            AssignChildCanvasOrder(rewardRoot, "FX_BackLightR", 5, layer);
-            AssignChildParticleOrder(rewardRoot, "ParticleLight", 6, layer);
+            // FX subtree 전체 (Canvas + ParticleSystem) 를 base+2 (ImageStage 와 Gold 사이) 로 일괄.
+            // 옛 "4/5/6 시도" 는 overrideSorting=true 가 실제로 적용 안 됐던 quirk 때문에 visible 처럼 보였을 뿐,
+            // 새 코드에서 override 가 정상 적용되므로 절대 4/5/6 은 global 4/5/6 (PopupCanvas=200 보다 아래) 으로
+            // 진짜 invisible 이 됨. base+2 (=202) 로 ImageStage(201) 와 Gold(203) 사이에 명시 배치.
+            ApplyFxSubtreeOrder(rewardRoot, baseOrder + 2, layer);
             AssignChildCanvasOrder(rewardRoot, "Gold", baseOrder + 3, layer);
             AssignChildCanvasOrder(rewardRoot, "TxtGoldOutline", baseOrder + 3, layer);
             AssignChildCanvasOrder(rewardRoot, "TxtGold", baseOrder + 4, layer);
+
+            DebugDumpRewardLayering(rewardRoot, baseOrder, layer);
+        }
+
+        /// <summary>
+        /// FX subtree (Reward/FX 의 모든 자손) 의 Canvas override + PSR sortingOrder 를 일괄 부여.
+        /// - 자식 Canvas: overrideSorting=true 로 sub-canvas 생성, layer/order 동일하게
+        /// - 자식 ParticleSystemRenderer: 같은 sortingLayer/sortingOrder
+        /// 결과: FX subtree 가 같은 sortingOrder 안에서 하나의 layer 로 합쳐져 다른 형제 노드 (ImageStage/Gold)
+        /// 와 명확한 z-order 분리.
+        /// </summary>
+        private static void ApplyFxSubtreeOrder(Transform rewardRoot, int order, string layer)
+        {
+            Transform fxNode = FindChildRecursive(rewardRoot, "FX");
+            if (fxNode == null) return;
+
+            var allTransforms = fxNode.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < allTransforms.Length; i++)
+            {
+                var t = allTransforms[i];
+                if (t == null) continue;
+
+                var canvas = t.GetComponent<Canvas>();
+                if (canvas != null)
+                {
+                    canvas.sortingLayerName = layer;
+                    canvas.sortingOrder = order;
+                    canvas.overrideSorting = true;
+                }
+
+                var psr = t.GetComponent<ParticleSystemRenderer>();
+                if (psr != null)
+                {
+                    psr.sortingLayerName = layer;
+                    psr.sortingOrder = order;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Reward subtree 의 실제 런타임 상태 (Canvas overrideSorting/sortingOrder, ParticleSystemRenderer
+        /// sortingLayer/sortingOrder, UIParticleRenderer 부착 여부, Mask 컴포넌트 여부) 를 한 번에 덤프.
+        /// FX 파티클이 최상단으로 보이는 원인 추적용.
+        /// </summary>
+        private static void DebugDumpRewardLayering(Transform rewardRoot, int baseOrder, string layer)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append("[PopupResult] Reward layering dump — parentCanvas order=").Append(baseOrder)
+              .Append(" layer='").Append(layer).Append("'\n");
+
+            var all = rewardRoot.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                var t = all[i];
+                if (t == null) continue;
+
+                string path = BuildPathFromRoot(rewardRoot, t);
+                sb.Append("  ").Append(path);
+
+                var canvas = t.GetComponent<Canvas>();
+                if (canvas != null)
+                    sb.Append(" | Canvas{override=").Append(canvas.overrideSorting)
+                      .Append(",order=").Append(canvas.sortingOrder)
+                      .Append(",layer='").Append(canvas.sortingLayerName).Append("'}");
+
+                var psr = t.GetComponent<ParticleSystemRenderer>();
+                if (psr != null)
+                    sb.Append(" | PSR{enabled=").Append(psr.enabled)
+                      .Append(",order=").Append(psr.sortingOrder)
+                      .Append(",layer='").Append(psr.sortingLayerName).Append("'}");
+
+                var uipr = t.GetComponent<UIParticleRenderer>();
+                if (uipr != null)
+                    sb.Append(" | UIParticleRenderer attached (PSR disabled, renders via canvas)");
+
+                var mask = t.GetComponent<UnityEngine.UI.Mask>();
+                if (mask != null)
+                    sb.Append(" | Mask{enabled=").Append(mask.enabled).Append("}");
+
+                sb.Append('\n');
+            }
+
+            Debug.Log(sb.ToString());
+        }
+
+        private static string BuildPathFromRoot(Transform root, Transform node)
+        {
+            if (node == root) return root.name;
+            string path = node.name;
+            Transform p = node.parent;
+            while (p != null && p != root)
+            {
+                path = p.name + "/" + path;
+                p = p.parent;
+            }
+            return root.name + "/" + path;
         }
 
         private static void AssignChildCanvasOrder(Transform root, string nodeName, int order, string layer)
@@ -472,9 +568,11 @@ namespace BalloonFlow
             if (node == null) return;
             var canvas = node.GetComponent<Canvas>();
             if (canvas == null) canvas = node.gameObject.AddComponent<Canvas>();
-            canvas.overrideSorting = true;
+            // [2026-05-20] property 순서 중요 — sortingLayer/sortingOrder 먼저, overrideSorting=true 를 마지막.
+            // 역순으로 set 하면 일부 Canvas 가 override 를 false 로 되돌리는 케이스 관찰됨 (Unity quirk).
             canvas.sortingLayerName = layer;
             canvas.sortingOrder = order;
+            canvas.overrideSorting = true;
         }
 
         private static void AssignChildParticleOrder(Transform root, string nodeName, int order, string layer)
