@@ -76,6 +76,8 @@ namespace BalloonFlow
         private int _lastLoadFrame = int.MinValue;
         // [2026-05-21] Pool: 첫 빌드 또는 catalog 변경 시에만 destroy/respawn. 그 외 탭 재진입은 spawn 재사용.
         private bool _listDirty = true;
+        // 초기 build 후 _spawnedRoots 안 첫 페이지 root 갯수 — More 클릭으로 추가된 항목과 구분.
+        private int _firstPageRootCount;
 
         // ScrollRect 캐시 — onValueChanged 리스너 등록/해제 + viewport overlap 컬링 기준점.
         private ScrollRect _scrollRect;
@@ -422,15 +424,29 @@ namespace BalloonFlow
             if (_lastLoadFrame == Time.frameCount) return;
             _lastLoadFrame = Time.frameCount;
 
-            // Pool fast path — 이미 spawn 된 item 그대로 재사용. 활성 보장만.
+            // Pool fast path — 이미 spawn 된 item 재사용. 단, More 펼친 상태는 reset (옛 UX 보존).
             if (!_listDirty && _spawnedItems.Count > 0)
             {
+                // 1) More 로 추가된 root (첫 페이지 이후) 비활성화.
                 for (int i = 0; i < _spawnedRoots.Count; i++)
                 {
-                    if (_spawnedRoots[i] != null && !_spawnedRoots[i].activeSelf)
-                        _spawnedRoots[i].SetActive(true);
+                    if (_spawnedRoots[i] == null) continue;
+                    bool isFirstPage = i < _firstPageRootCount;
+                    if (_spawnedRoots[i].activeSelf != isFirstPage)
+                        _spawnedRoots[i].SetActive(isFirstPage);
                 }
+                // 2) state reset — 다음 More 클릭이 다시 의미를 가지도록.
+                _userExpandedMore = false;
+                _displayedCount = Mathf.Min(_displayedCount, _firstPageRootCount > 0 ? ITEMS_PER_PAGE : _displayedCount);
+                // 3) More 버튼 노출 결정 (UpdateMoreButton 가 _userExpandedMore 확인).
                 UpdateMoreButton();
+                // 4) 첫 페이지 root 에 appear 연출 재생 — reset 끝난 뒤 마지막 단계.
+                int order = 0;
+                for (int i = 0; i < _firstPageRootCount && i < _spawnedRoots.Count; i++)
+                {
+                    if (_spawnedRoots[i] != null && _spawnedRoots[i].activeSelf)
+                        PlayAppearAnimation(_spawnedRoots[i].transform, order++);
+                }
                 return;
             }
 
@@ -456,18 +472,36 @@ namespace BalloonFlow
             _spawnedRoots.Clear();
             _spawnedItems.Clear();
             _displayedCount = 0;
+            _firstPageRootCount = 0;
 
             LoadMoreProducts();
             UpdateMoreButton();
             _listDirty = false;
         }
 
-        /// <summary>사용자가 BtnMoreProducts를 직접 클릭했을 때만 호출 — 추가 로드 후 버튼 영구 숨김.</summary>
+        /// <summary>사용자가 BtnMoreProducts를 직접 클릭했을 때만 호출 — 추가 로드 후 버튼 영구 숨김.
+        /// [2026-05-21] Pool: 이전 More 클릭으로 spawn 됐다가 탭 reset 으로 숨겨진 item 들이 pool 에 남아있으면
+        /// 재활성만 하고 Instantiate 생략 — 두 번째 More 클릭부터 stutter 없음.</summary>
         private void OnMoreProductsClicked()
         {
             _userExpandedMore = true;
-            // More 버튼 1회 클릭 시 남은 전체 로드 (6번째 coin 이상 잔존 상품 누락 fix)
-            LoadMoreProducts(_products != null ? _products.Length - _displayedCount : -1);
+
+            bool poolHasHiddenMore = _firstPageRootCount > 0 && _spawnedRoots.Count > _firstPageRootCount;
+            if (poolHasHiddenMore)
+            {
+                for (int i = _firstPageRootCount; i < _spawnedRoots.Count; i++)
+                {
+                    if (_spawnedRoots[i] != null && !_spawnedRoots[i].activeSelf)
+                        _spawnedRoots[i].SetActive(true);
+                }
+                _displayedCount = _products != null ? _products.Length : _displayedCount;
+            }
+            else
+            {
+                // 첫 More 클릭 — 남은 전체 로드 (6번째 coin 이상 잔존 상품 누락 fix).
+                LoadMoreProducts(_products != null ? _products.Length - _displayedCount : -1);
+            }
+
             // 부모 컨테이너 전체 비활성 — Button GameObject 단독이 아닌 root 기준.
             if (MoreButtonRoot != null && MoreButtonRoot.activeSelf)
                 MoreButtonRoot.SetActive(false);
@@ -479,6 +513,9 @@ namespace BalloonFlow
         private void LoadMoreProducts(int loadOverride = -1)
         {
             if (_products == null || _contentRoot == null) return;
+
+            // 첫 build (이전 spawn 없음) 인지 — _firstPageRootCount 기록 시점 결정.
+            int rootCountBefore = _spawnedRoots.Count;
 
             GameObject goldContainer = null;
             int appearOrder = 0;
@@ -590,6 +627,10 @@ namespace BalloonFlow
 
             _displayedCount += loadCount;
 
+            // 첫 build 한 경우 첫 페이지 root 갯수 기록 — Pool reset 시 More 로 추가된 항목 식별 기준.
+            if (rootCountBefore == 0 && _firstPageRootCount == 0)
+                _firstPageRootCount = _spawnedRoots.Count;
+
             // 동적 spawn 후에도 부모 컨테이너 root 가 항상 마지막 sibling 이 되도록 한 번 더 보정.
             if (MoreButtonRoot != null && MoreButtonRoot.transform.parent == _contentRoot)
                 MoreButtonRoot.transform.SetAsLastSibling();
@@ -625,6 +666,8 @@ namespace BalloonFlow
         private void PlayAppearAnimation(Transform target, int orderIndex)
         {
             if (target == null) return;
+            // Pool 재사용 시 이전 tween 잔존하면 충돌 → kill 먼저.
+            target.DOKill();
             target.localScale = Vector3.zero;
             target.DOScale(Vector3.one, _itemAppearScaleDuration)
                   .SetEase(_itemAppearEase)
