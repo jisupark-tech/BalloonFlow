@@ -176,10 +176,13 @@ namespace BalloonFlow
 
             UpdateHardLevelOption(difficulty);
             ApplyBadge(difficulty);
-            EnsureRewardVisible(starCount);
             ApplyDifficultyBackground(difficulty);
 
+            // OpenUI() 가 EnsureRewardVisible 보다 먼저 와야 함 — Canvas.overrideSorting=true 는
+            // GameObject.activeInHierarchy=false 일 때 silently 무시되기 때문 (Reward subtree 의 sub-canvas
+            // 분리가 깨져 FX 파티클이 Gold/Text 위로 떠 보이는 회귀 발생).
             OpenUI();
+            EnsureRewardVisible(starCount);
 
             // 애니메이션 상태와 무관하게 즉시 클릭 가능
             if (_canvasGroup != null)
@@ -456,24 +459,16 @@ namespace BalloonFlow
             string layer = parentCanvas != null ? parentCanvas.sortingLayerName : "Default";
 
             AssignChildCanvasOrder(rewardRoot, "ImageStage", baseOrder + 1, layer);
-            // FX subtree 전체 (Canvas + ParticleSystem) 를 base+2 (ImageStage 와 Gold 사이) 로 일괄.
-            // 옛 "4/5/6 시도" 는 overrideSorting=true 가 실제로 적용 안 됐던 quirk 때문에 visible 처럼 보였을 뿐,
-            // 새 코드에서 override 가 정상 적용되므로 절대 4/5/6 은 global 4/5/6 (PopupCanvas=200 보다 아래) 으로
-            // 진짜 invisible 이 됨. base+2 (=202) 로 ImageStage(201) 와 Gold(203) 사이에 명시 배치.
             ApplyFxSubtreeOrder(rewardRoot, baseOrder + 2, layer);
             AssignChildCanvasOrder(rewardRoot, "Gold", baseOrder + 3, layer);
             AssignChildCanvasOrder(rewardRoot, "TxtGoldOutline", baseOrder + 3, layer);
             AssignChildCanvasOrder(rewardRoot, "TxtGold", baseOrder + 4, layer);
-
-            DebugDumpRewardLayering(rewardRoot, baseOrder, layer);
         }
 
         /// <summary>
-        /// FX subtree (Reward/FX 의 모든 자손) 의 Canvas override + PSR sortingOrder 를 일괄 부여.
-        /// - 자식 Canvas: overrideSorting=true 로 sub-canvas 생성, layer/order 동일하게
-        /// - 자식 ParticleSystemRenderer: 같은 sortingLayer/sortingOrder
-        /// 결과: FX subtree 가 같은 sortingOrder 안에서 하나의 layer 로 합쳐져 다른 형제 노드 (ImageStage/Gold)
-        /// 와 명확한 z-order 분리.
+        /// FX subtree (Reward/FX 의 모든 자손) Canvas override + PSR sortingOrder 일괄 부여.
+        /// FX 의 raw ParticleSystemRenderer 들은 자체 sortingLayer/Order 로 렌더되므로 ImageStage(base+1) 와
+        /// Gold(base+3) 사이 (base+2) 에 명시 배치해야 z-order 분리가 보장됨.
         /// </summary>
         private static void ApplyFxSubtreeOrder(Transform rewardRoot, int order, string layer)
         {
@@ -489,9 +484,9 @@ namespace BalloonFlow
                 var canvas = t.GetComponent<Canvas>();
                 if (canvas != null)
                 {
+                    canvas.overrideSorting = true;
                     canvas.sortingLayerName = layer;
                     canvas.sortingOrder = order;
-                    canvas.overrideSorting = true;
                 }
 
                 var psr = t.GetComponent<ParticleSystemRenderer>();
@@ -503,76 +498,17 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>
-        /// Reward subtree 의 실제 런타임 상태 (Canvas overrideSorting/sortingOrder, ParticleSystemRenderer
-        /// sortingLayer/sortingOrder, UIParticleRenderer 부착 여부, Mask 컴포넌트 여부) 를 한 번에 덤프.
-        /// FX 파티클이 최상단으로 보이는 원인 추적용.
-        /// </summary>
-        private static void DebugDumpRewardLayering(Transform rewardRoot, int baseOrder, string layer)
-        {
-            var sb = new System.Text.StringBuilder();
-            sb.Append("[PopupResult] Reward layering dump — parentCanvas order=").Append(baseOrder)
-              .Append(" layer='").Append(layer).Append("'\n");
-
-            var all = rewardRoot.GetComponentsInChildren<Transform>(true);
-            for (int i = 0; i < all.Length; i++)
-            {
-                var t = all[i];
-                if (t == null) continue;
-
-                string path = BuildPathFromRoot(rewardRoot, t);
-                sb.Append("  ").Append(path);
-
-                var canvas = t.GetComponent<Canvas>();
-                if (canvas != null)
-                    sb.Append(" | Canvas{override=").Append(canvas.overrideSorting)
-                      .Append(",order=").Append(canvas.sortingOrder)
-                      .Append(",layer='").Append(canvas.sortingLayerName).Append("'}");
-
-                var psr = t.GetComponent<ParticleSystemRenderer>();
-                if (psr != null)
-                    sb.Append(" | PSR{enabled=").Append(psr.enabled)
-                      .Append(",order=").Append(psr.sortingOrder)
-                      .Append(",layer='").Append(psr.sortingLayerName).Append("'}");
-
-                var uipr = t.GetComponent<UIParticleRenderer>();
-                if (uipr != null)
-                    sb.Append(" | UIParticleRenderer attached (PSR disabled, renders via canvas)");
-
-                var mask = t.GetComponent<UnityEngine.UI.Mask>();
-                if (mask != null)
-                    sb.Append(" | Mask{enabled=").Append(mask.enabled).Append("}");
-
-                sb.Append('\n');
-            }
-
-            Debug.Log(sb.ToString());
-        }
-
-        private static string BuildPathFromRoot(Transform root, Transform node)
-        {
-            if (node == root) return root.name;
-            string path = node.name;
-            Transform p = node.parent;
-            while (p != null && p != root)
-            {
-                path = p.name + "/" + path;
-                p = p.parent;
-            }
-            return root.name + "/" + path;
-        }
-
+        // Canvas.overrideSorting=true 는 GameObject.activeInHierarchy=false 일 때 silently 무시됨 →
+        // 호출 측 (ShowWin) 이 OpenUI() 후 EnsureRewardVisible() 를 부르는 순서를 반드시 지켜야 함.
         private static void AssignChildCanvasOrder(Transform root, string nodeName, int order, string layer)
         {
             Transform node = FindChildRecursive(root, nodeName);
             if (node == null) return;
             var canvas = node.GetComponent<Canvas>();
             if (canvas == null) canvas = node.gameObject.AddComponent<Canvas>();
-            // [2026-05-20] property 순서 중요 — sortingLayer/sortingOrder 먼저, overrideSorting=true 를 마지막.
-            // 역순으로 set 하면 일부 Canvas 가 override 를 false 로 되돌리는 케이스 관찰됨 (Unity quirk).
+            canvas.overrideSorting = true;
             canvas.sortingLayerName = layer;
             canvas.sortingOrder = order;
-            canvas.overrideSorting = true;
         }
 
         private static void AssignChildParticleOrder(Transform root, string nodeName, int order, string layer)
@@ -589,19 +525,19 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// root 부터 시작해 전체 subtree 를 순회하며 가시성 차단 요소를 모두 보정.
+        /// root 부터 시작해 전체 subtree 를 순회하며 가시성 차단 요소만 보정 (z-order 는 건드리지 않음).
         /// 1) GameObject 비활성 → SetActive(true)
-        /// 2) Canvas overrideSorting=true (낮은 sortingOrder) → false (부모 PopupCanvas=200 상속)
-        /// 3) CanvasGroup alpha 0 → 1
-        /// 4) Image / TMP_Text enabled=false → true
-        /// 5) ParticleSystemRenderer sortingOrder 가 0 이면 부모 캔버스 위로 올림 (FX 노드 대응)
+        /// 2) CanvasGroup alpha 0 → 1
+        /// 3) Image / TMP_Text enabled=false → true
+        ///
+        /// [2026-05-21] Canvas overrideSorting 토글 및 PSR.sortingOrder bump 제거.
+        ///   이전 구현은 모든 Canvas overrideSorting 을 false 로 강제 + PSR.sortingOrder 가 parentCanvas
+        ///   미만이면 parentCanvas+1 로 끌어올렸음. 그 결과 FX 의 raw ParticleSystemRenderer 들이
+        ///   PopupCanvas(=200) 위 (201) 로 떠서 Gold/TxtGold 위에 표시되는 부작용 발생.
+        ///   z-order 는 ApplyRewardLayerOrder 가 단독 책임지도록 분리.
         /// </summary>
         private void ForceVisibleSubtree(Transform root)
         {
-            Canvas parentCanvas = GetComponentInParent<Canvas>();
-            int parentCanvasOrder = parentCanvas != null ? parentCanvas.sortingOrder : 0;
-            string parentCanvasLayer = parentCanvas != null ? parentCanvas.sortingLayerName : "Default";
-
             var allTransforms = root.GetComponentsInChildren<Transform>(true);
             for (int i = 0; i < allTransforms.Length; i++)
             {
@@ -611,10 +547,6 @@ namespace BalloonFlow
                 if (!t.gameObject.activeSelf)
                     t.gameObject.SetActive(true);
 
-                var canvas = t.GetComponent<Canvas>();
-                if (canvas != null && canvas.overrideSorting)
-                    canvas.overrideSorting = false;
-
                 var cg = t.GetComponent<CanvasGroup>();
                 if (cg != null && cg.alpha < 1f) cg.alpha = 1f;
 
@@ -623,15 +555,6 @@ namespace BalloonFlow
 
                 var tmp = t.GetComponent<TMP_Text>();
                 if (tmp != null && !tmp.enabled) tmp.enabled = true;
-
-                // ParticleSystemRenderer 가 ScreenSpaceOverlay 캔버스 안에서 묻히는 케이스 보정.
-                // PopupCanvas 의 sortingOrder=200 보다 한 단계 위로 올려야 파티클이 보임.
-                var psr = t.GetComponent<ParticleSystemRenderer>();
-                if (psr != null && psr.sortingOrder < parentCanvasOrder)
-                {
-                    psr.sortingOrder = parentCanvasOrder + 1;
-                    psr.sortingLayerName = parentCanvasLayer;
-                }
             }
         }
 
