@@ -22,7 +22,7 @@ namespace BalloonFlow.Editor
     /// </summary>
     public static class LevelEpisodeUploader
     {
-        private const string DB_PATH           = "Assets/Resources/LevelDatabase.asset";
+        private const string DB_PATH           = "Assets/EditorData/LevelDatabase.asset";
         private const string STREAMING_FILE    = "Assets/StreamingAssets/episode_01.json";
         private const int    LEVELS_PER_EP     = 20;
         private const int    EPISODE_VERSION   = 1;

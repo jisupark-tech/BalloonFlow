@@ -29,6 +29,10 @@ namespace BalloonFlow
         /// <summary>[Optimization 2026-05-11] 풀 GameObject → RectTransform 캐시 (매 spawn GetComponent 제거).</summary>
         private static readonly Dictionary<GameObject, RectTransform> _rectCache
             = new Dictionary<GameObject, RectTransform>();
+        private static readonly Dictionary<GameObject, Vector3> _rootScaleCache
+            = new Dictionary<GameObject, Vector3>();
+        private static readonly Dictionary<GameObject, Vector2> _rootSizeDeltaCache
+            = new Dictionary<GameObject, Vector2>();
 
         // ROLLBACK_FXGOLD_RAW_PARTICLE_RENDERER
         // FxGold uses raw ParticleSystemRenderer now. Runtime must not auto-add UIParticleRenderer.
@@ -114,6 +118,7 @@ namespace BalloonFlow
                 foreach (var coin in _activeCoins)
                 {
                     if (coin == null) continue;
+                    ResetPooledTransform(coin);
                     ObjectPoolManager.Instance.Return(POOL_KEY, coin);
                 }
             }
@@ -211,7 +216,6 @@ namespace BalloonFlow
                     if (landed >= count) onAllComplete?.Invoke();
                     continue;
                 }
-
                 // [Optimization 2026-05-11] RectTransform 캐시 — 매 spawn GetComponent 제거.
                 // 원본: var rt = coin.GetComponent<RectTransform>(); if (rt == null) rt = coin.AddComponent<RectTransform>();
                 if (!_rectCache.TryGetValue(coin, out RectTransform rt) || rt == null)
@@ -268,32 +272,29 @@ namespace BalloonFlow
 
             if (coin == null) return null;
 
+            CacheInitialTransformState(coin);
             coin.transform.SetParent(parent, false);
-            coin.transform.localScale = Vector3.one;
+            ResetPooledTransform(coin);
             coin.transform.SetAsLastSibling();
             PrepareRawParticles(coin, parent);
             _activeCoins.Add(coin);
             return coin;
         }
 
-        private const float FXGOLD_UI_PARTICLE_MESH_SCALE = 10f;
-
         private static void PrepareRawParticles(GameObject root, Transform parent)
         {
-            if (root == null) return;
-
-            // ScreenSpaceOverlay Canvas 에서 raw PSR 은 카메라 렌더 후 그려지는 UI 위로 못 올라옴.
-            // → UIParticleRenderer 부착해서 Canvas vertex stream 으로 baking. Idempotent.
-            // 가로 늘어짐 (Stretched Billboard) 이슈는 prefab 의 PSR Renderer 모듈에서 Render Mode=Billboard
-            // 로 디자이너가 잡아야 함 — 런타임 강제 override 는 디자이너 의도와 충돌 가능.
-            UIParticleBinder.Bind(root);
-
-            // FXGold 전용 mesh scale — UIParticleRenderer default 100 은 코인이 화면에 거대하게 baking 됨.
-            var uiRenderers = root.GetComponentsInChildren<UIParticleRenderer>(true);
-            for (int i = 0; i < uiRenderers.Length; i++)
+            // [2026-05-21] 런타임 UIParticleRenderer 자동 부착 제거 — 아트팀이 prefab inspector 에서
+            // 필요한 ParticleSystem 에 직접 UIParticleRenderer 부착 + _meshScale 조정.
+            // (Default 100 이 화면에 너무 크거나 작게 baking 되는 문제를 코드에서 보정하지 않음.)
+            var uiParticles = root.GetComponentsInChildren<UIParticleRenderer>(true);
+            for (int i = 0; i < uiParticles.Length; i++)
             {
-                if (uiRenderers[i] == null) continue;
-                uiRenderers[i].SetMeshScale(FXGOLD_UI_PARTICLE_MESH_SCALE);
+                if (uiParticles[i] == null) continue;
+
+                // ROLLBACK_FXGOLD_UI_PARTICLE_SCALE_RESET
+                // Older pooled instances may still carry a runtime SetMeshScale override.
+                // Reset to each component's serialized prefab value without forcing a new number.
+                uiParticles[i].ResetMeshScale();
             }
         }
 
@@ -339,10 +340,51 @@ namespace BalloonFlow
             // 직접 SetParent(null) 호출하면 worldPositionStays=true(기본값) 라 캔버스 스케일이 localScale 로 흡수됨.
             _activeCoins.Remove(coin);
             if (ObjectPoolManager.HasInstance && ObjectPoolManager.Instance.HasPool(POOL_KEY))
+            {
+                ResetPooledTransform(coin);
                 ObjectPoolManager.Instance.Return(POOL_KEY, coin);
+            }
             else
                 UnityEngine.Object.Destroy(coin);
             onDone?.Invoke();
+        }
+
+        private static void CacheInitialTransformState(GameObject root)
+        {
+            if (root == null) return;
+
+            if (!_rootScaleCache.ContainsKey(root))
+                _rootScaleCache[root] = root.transform.localScale;
+
+            if (root.transform is RectTransform rt && !_rootSizeDeltaCache.ContainsKey(root))
+                _rootSizeDeltaCache[root] = rt.sizeDelta;
+        }
+
+        private static void ResetPooledTransform(GameObject root)
+        {
+            if (root == null) return;
+
+            // ROLLBACK_FXGOLD_POOL_SCALE_RESET
+            // Pool.Return preserves local transform values. Reset on reuse/return so Canvas scale
+            // or tween side effects cannot accumulate across repeated pooled flights.
+            Vector3 scale = _prefab != null
+                ? _prefab.transform.localScale
+                : _rootScaleCache.TryGetValue(root, out Vector3 cachedScale)
+                    ? cachedScale
+                    : Vector3.one;
+            root.transform.localScale = scale;
+            root.transform.localRotation = Quaternion.identity;
+
+            if (root.transform is RectTransform rt)
+            {
+                rt.localScale = root.transform.localScale;
+                rt.anchoredPosition = Vector2.zero;
+                rt.localRotation = Quaternion.identity;
+                if (_prefab != null && _prefab.transform is RectTransform prefabRt)
+                    rt.sizeDelta = prefabRt.sizeDelta;
+                else if (_rootSizeDeltaCache.TryGetValue(root, out Vector2 sizeDelta))
+                    rt.sizeDelta = sizeDelta;
+            }
         }
 
         private static Vector2 ScreenToLocal(RectTransform canvasRT, Camera cam, Vector2 screen)

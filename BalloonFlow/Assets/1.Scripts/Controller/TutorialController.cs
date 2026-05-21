@@ -1,6 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace BalloonFlow
 {
@@ -668,18 +671,29 @@ namespace BalloonFlow
         /// </summary>
         private TutorialConfig TryBuildFromLevelData(int levelId)
         {
-            var db = Resources.Load<LevelDatabase>("LevelDatabase");
-            if (db == null || db.levels == null) return null;
-
             LevelConfig levelConfig = null;
-            for (int i = 0; i < db.levels.Length; i++)
+            if (LevelEpisodeService.HasInstance)
+                levelConfig = LevelEpisodeService.Instance.GetLevel(levelId);
+
+#if UNITY_EDITOR
+            // ROLLBACK_TUTORIAL_LEVELDATABASE_NO_RESOURCES:
+            // Keep LevelDatabase editor-only so Resources does not pull it into builds.
+            if (levelConfig == null)
             {
-                if (db.levels[i].levelId == levelId)
+                var db = AssetDatabase.LoadAssetAtPath<LevelDatabase>("Assets/EditorData/LevelDatabase.asset");
+                if (db != null && db.levels != null)
                 {
-                    levelConfig = db.levels[i];
-                    break;
+                    for (int i = 0; i < db.levels.Length; i++)
+                    {
+                        if (db.levels[i].levelId == levelId)
+                        {
+                            levelConfig = db.levels[i];
+                            break;
+                        }
+                    }
                 }
             }
+#endif
 
             if (levelConfig == null || levelConfig.tutorialSteps == null || levelConfig.tutorialSteps.Length == 0)
                 return null;

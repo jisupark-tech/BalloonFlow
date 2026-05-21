@@ -1,4 +1,7 @@
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace BalloonFlow
 {
@@ -10,7 +13,7 @@ namespace BalloonFlow
     /// 호출 전 LevelEpisodeService.EnsureEpisodeForLevelAsync(levelId) 가 완료되어 있어야 함.
     /// Title 진입 시 prefetch 됨. 다른 에피소드 진입 시점은 PackageManager / Lobby 가 prefetch.
     ///
-    /// Editor: 캐시 miss 시 Resources/LevelDatabase.asset 으로 폴백 (디자이너 편의).
+    /// Editor: 캐시 miss 시 EditorData/LevelDatabase.asset 으로 폴백 (디자이너 편의).
     /// 디바이스 빌드: 캐시 miss = 경고 + null (호출자가 LevelGenerator 폴백 처리).
     /// </summary>
     public class LevelDataProvider : MonoBehaviour
@@ -59,7 +62,7 @@ namespace BalloonFlow
             }
 
 #if UNITY_EDITOR
-            // 2) Editor 폴백 — Resources/LevelDatabase.asset
+            // 2) Editor 폴백 — EditorData/LevelDatabase.asset
             if (TryLoadEditorFallback())
             {
                 int index = levelId - 1;
@@ -111,7 +114,7 @@ namespace BalloonFlow
         private bool TryLoadEditorFallback()
         {
             if (_editorFallbackDatabase != null) return true;
-            _editorFallbackDatabase = Resources.Load<LevelDatabase>("LevelDatabase");
+            _editorFallbackDatabase = AssetDatabase.LoadAssetAtPath<LevelDatabase>("Assets/EditorData/LevelDatabase.asset");
             return _editorFallbackDatabase != null;
         }
 #endif

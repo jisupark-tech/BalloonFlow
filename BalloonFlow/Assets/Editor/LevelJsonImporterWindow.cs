@@ -95,7 +95,7 @@ namespace BalloonFlow.Editor
 
         private static readonly string[] DB_NAMES = { "Origin", "AI Extractor", "Transform Extractor" };
         private static readonly string[] DB_ASSET_PATHS = {
-            "Assets/Resources/LevelDatabase.asset",
+            "Assets/EditorData/LevelDatabase.asset",
             "Assets/EditorData/LevelDatabase_AI.asset",
             "Assets/EditorData/LevelDatabase_Transform.asset"
         };
@@ -1206,8 +1206,8 @@ namespace BalloonFlow.Editor
         {
             string dbPath = DB_ASSET_PATHS[_targetDBIndex];
 
-            if (!AssetDatabase.IsValidFolder("Assets/Resources"))
-                AssetDatabase.CreateFolder("Assets", "Resources");
+            if (!AssetDatabase.IsValidFolder("Assets/EditorData"))
+                AssetDatabase.CreateFolder("Assets", "EditorData");
 
             var db = AssetDatabase.LoadAssetAtPath<LevelDatabase>(dbPath);
             if (db == null)

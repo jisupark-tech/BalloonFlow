@@ -1878,9 +1878,9 @@ namespace BalloonFlow.Editor
             // Filter out null configs
             var validConfigs = _generatedConfigs.Where(c => c != null).ToArray();
 
-            string path = "Assets/Resources/LevelDatabase.asset";
-            if (!AssetDatabase.IsValidFolder("Assets/Resources"))
-                AssetDatabase.CreateFolder("Assets", "Resources");
+            string path = "Assets/EditorData/LevelDatabase.asset";
+            if (!AssetDatabase.IsValidFolder("Assets/EditorData"))
+                AssetDatabase.CreateFolder("Assets", "EditorData");
 
             var db = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
             if (db == null)

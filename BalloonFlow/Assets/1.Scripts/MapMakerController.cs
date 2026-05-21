@@ -261,7 +261,7 @@ namespace BalloonFlow
 
         private static readonly string[] DB_TAB_NAMES = { "Ori", "AI", "Transform" };
         private static readonly string[] DB_PATHS = {
-            "Assets/Resources/LevelDatabase.asset",
+            "Assets/EditorData/LevelDatabase.asset",
             "Assets/EditorData/LevelDatabase_AI.asset",
             "Assets/EditorData/LevelDatabase_Transform.asset"
         };

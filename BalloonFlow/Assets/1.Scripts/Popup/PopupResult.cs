@@ -15,8 +15,10 @@ namespace BalloonFlow
     {
         #region Constants
 
-        private const int MIN_COIN_COUNT = 20;
-        private const int MAX_COIN_COUNT = 25;
+        // ROLLBACK_RESULT_COIN_FLY_COUNT_10
+        // Match lobby purchase FxGold density. 20~25 coins overlapped too tightly within
+        // CoinFlyEffect's spawn cap and made the same prefab look oversized in-game.
+        private const int RESULT_COIN_COUNT = 10;
         private const int SCORE_PER_COIN_STEP = 500;
 
         #endregion
@@ -473,18 +475,14 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// FX subtree (Reward/FX 의 모든 자손) — ScreenSpaceOverlay Canvas 에서 raw
-        /// ParticleSystemRenderer 는 UI 위로 못 올라오므로 UIParticleRenderer 로 vertex stream baking.
-        /// UIParticleRenderer.Awake 가 PSR.enabled=false 처리 + canvas 메시로 렌더.
-        /// sortingOrder 는 ApplyRewardLayerOrder 의 sibling 단위 Canvas override 가 책임 (FX/Gold/TxtGold sub-canvas).
+        /// FX subtree (Reward/FX 의 모든 자손) 활성 + Play 보장 + FX node 에 Canvas override 부여
+        /// (ImageStage(base+1) / Gold(base+3) 사이 = order 위치 분리).
+        /// 런타임 UIParticleRenderer 자동 부착은 안 함 — 아트팀이 prefab 에서 직접 부착 + _meshScale 조정.
         /// </summary>
         private static void ApplyFxSubtreeOrder(Transform rewardRoot, int order, string layer)
         {
             Transform fxNode = FindChildRecursive(rewardRoot, "FX");
             if (fxNode == null) return;
-
-            // SSO 에서 raw PSR 은 UI 뒤로 묻힘 → UIParticleRenderer 부착으로 Canvas vertex stream 에 baking.
-            UIParticleBinder.Bind(fxNode.gameObject);
 
             // FX node 자체에 Canvas override 부여 — sibling ImageStage(base+1) / Gold(base+3) 사이 (=order) 에 분리.
             var fxCanvas = fxNode.GetComponent<Canvas>();
@@ -632,7 +630,7 @@ namespace BalloonFlow
             }
             if (target == null) { Debug.LogWarning("[CoinFly] target null"); return; }
 
-            int coinCount = Mathf.Clamp(MIN_COIN_COUNT + (score / SCORE_PER_COIN_STEP), MIN_COIN_COUNT, MAX_COIN_COUNT);
+            int coinCount = RESULT_COIN_COUNT;
             Vector2 screenCenter = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
             // target의 screen 좌표 (어떤 Canvas에 있든 동작)
             Canvas targetCanvas = target.GetComponentInParent<Canvas>();
