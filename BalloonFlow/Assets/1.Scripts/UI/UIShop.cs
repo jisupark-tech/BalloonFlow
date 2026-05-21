@@ -74,6 +74,8 @@ namespace BalloonFlow
         private readonly List<PopupShopListItem> _spawnedItems = new List<PopupShopListItem>();
         private readonly List<GameObject> _spawnedRoots = new List<GameObject>();
         private int _lastLoadFrame = int.MinValue;
+        // [2026-05-21] Pool: 첫 빌드 또는 catalog 변경 시에만 destroy/respawn. 그 외 탭 재진입은 spawn 재사용.
+        private bool _listDirty = true;
 
         // ScrollRect 캐시 — onValueChanged 리스너 등록/해제 + viewport overlap 컬링 기준점.
         private ScrollRect _scrollRect;
@@ -165,6 +167,9 @@ namespace BalloonFlow
             var visible = ShopCatalogService.Instance.GetVisibleForUser(user);
             _products = visible.Select(ConvertDocToData).ToArray();
             Debug.Log($"[UIShop] Catalog loaded — {_products.Length} products visible.");
+
+            // 카탈로그 갱신 → 다음 ResetView 는 반드시 rebuild.
+            _listDirty = true;
 
             // [2026-05-12] Shop page active 일 때만 즉시 spawn. 비활성이면 다음 ResetView 호출 시 spawn.
             // 증상 방지: Awake 시점 spawn + 사용자 Shop 클릭 시 spawn = 2번 연출.
@@ -336,36 +341,32 @@ namespace BalloonFlow
 
             LogContentState("ResetView 진입");
 
-            _userExpandedMore = false;
-
             // [2026-05-13] anchor/VLG/CSF/padding 매 진입 시 재적용 — 탭 재진입 시 Content Height 가 줄어드는 이슈 fix.
-            // Awake 1회만 호출하면 다른 컴포넌트가 anchor/sizeDelta 를 덮어쓰거나 padding 이 초기화되는
-            // 경우 ContentSizeFitter 의 preferredSize 계산이 작아질 수 있음. 멱등 호출이라 안전.
             EnsureContentLayout();
 
             // 누적된 스크롤 오프셋 wipe — 탭 재진입 시 상단 공백 fix
             if (_contentRoot != null)
                 _contentRoot.anchoredPosition = Vector2.zero;
 
+            // [2026-05-21] Pool path 판별 — _listDirty 면 destroy/respawn, 아니면 기존 item 재사용 (stutter 제거).
+            bool isFreshBuild = _listDirty || _spawnedItems.Count == 0;
             ResetAndLoadProducts();
 
-            // [2026-05-12] LayoutRebuilder 강제 — VerticalLayoutGroup + ContentSizeFitter 의 height 즉시 정착.
-            // 증상: More 누른 후 다른 탭 → Shop 재진입 시 리스트가 하단으로 내려와 정렬. 원인: layout 미정착 상태로
-            //       scroll reset → ContentSizeFitter 가 다음 frame 에 height 계산 → ScrollRect 의 content rect 변경 시
-            //       normalizedPosition 1f 가 다른 위치로 매핑. ForceRebuildLayoutImmediate 로 즉시 정착 후 reset.
-            if (_contentRoot != null)
-                LayoutRebuilder.ForceRebuildLayoutImmediate(_contentRoot);
+            if (isFreshBuild)
+            {
+                // 신규/재빌드 — layout 정착 + scroll 위치 정확하게 잡기 위해 강제 rebuild.
+                if (_contentRoot != null)
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(_contentRoot);
+                Canvas.ForceUpdateCanvases();
 
-            // ScrollRect 내부 viewport/content 캐시 flush — 새 content size 기반 normalizedPosition 보장
-            Canvas.ForceUpdateCanvases();
+                // 다음 frame 에 ContentSizeFitter 가 한 번 더 갱신할 수도 있어 이중 보호.
+                StartCoroutine(DelayedScrollReset());
+            }
 
-            // 캔버스 갱신 직후 viewport rect 기준으로 카드 particle 컬링 1회 재평가.
+            // 캔버스 정착 후 viewport rect 기준으로 카드 particle 컬링 갱신 (pool path 도 위치 동일하니 한 번이면 충분).
             RefreshAllParticleLights();
 
             ApplyScrollTop();
-
-            // [2026-05-12] 다음 frame 에 scroll 재reset — ContentSizeFitter 가 다음 frame 에 height 갱신할 수도 있어 이중 보호.
-            StartCoroutine(DelayedScrollReset());
         }
 
         /// <summary>ScrollRect + content anchoredPosition 을 상단으로 강제.</summary>
@@ -411,16 +412,31 @@ namespace BalloonFlow
                       $"VLG[{vlgInfo}] CSF[{csfInfo}]");
         }
 
-        /// <summary>상품 리스트 초기화 + 첫 페이지 로드.</summary>
+        /// <summary>
+        /// 상품 리스트 초기화 + 첫 페이지 로드.
+        /// [2026-05-21] Pool: _listDirty=false 면 destroy/respawn 생략. 탭 재진입 시 spawn 비용 0.
+        /// </summary>
         private void ResetAndLoadProducts()
         {
             // 같은 프레임 중복 호출 방지 (Awake 경로 + UILobby.ResetView 동시 트리거 시 등장 연출 1회만)
             if (_lastLoadFrame == Time.frameCount) return;
             _lastLoadFrame = Time.frameCount;
 
-            // Gold rows are wrapped by ShopListGoldAlign. Clear the direct roots
-            // as well, or empty wrappers can remain as top whitespace after
-            // More -> another tab -> Shop.
+            // Pool fast path — 이미 spawn 된 item 그대로 재사용. 활성 보장만.
+            if (!_listDirty && _spawnedItems.Count > 0)
+            {
+                for (int i = 0; i < _spawnedRoots.Count; i++)
+                {
+                    if (_spawnedRoots[i] != null && !_spawnedRoots[i].activeSelf)
+                        _spawnedRoots[i].SetActive(true);
+                }
+                UpdateMoreButton();
+                return;
+            }
+
+            // Fresh rebuild — 기존 spawn 폐기 후 첫 페이지 재로드.
+            _userExpandedMore = false;
+
             if (_spawnedRoots.Count > 0)
             {
                 for (int i = 0; i < _spawnedRoots.Count; i++)
@@ -443,6 +459,7 @@ namespace BalloonFlow
 
             LoadMoreProducts();
             UpdateMoreButton();
+            _listDirty = false;
         }
 
         /// <summary>사용자가 BtnMoreProducts를 직접 클릭했을 때만 호출 — 추가 로드 후 버튼 영구 숨김.</summary>
