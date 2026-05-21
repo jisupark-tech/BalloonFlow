@@ -52,7 +52,8 @@ namespace BalloonFlow
                     if (!snap.Exists)
                     {
                         Debug.LogWarning($"{LOG_TAG} {DOC_PATH} doc 미존재 — Editor uploader 로 시드 업로드 필요. 빈 config 로 fallback.");
-                        _config = new WinningStreakConfigDoc();
+                        UseFallbackConfig($"{DOC_PATH} doc missing");
+                        return;
                     }
                     else
                     {
@@ -74,14 +75,25 @@ namespace BalloonFlow
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError($"{LOG_TAG} Fetch failed: {e.Message}");
+                    UseFallbackConfig($"Fetch failed: {e.Message}");
                     return;
                 }
             }
-            Debug.LogError($"{LOG_TAG} Fetch retries exhausted: {lastEx?.Message}");
+            UseFallbackConfig($"Fetch retries exhausted: {lastEx?.Message}");
         }
 
         /// <summary>1-base stage 번호 → stage doc. 범위 밖 또는 미로드 시 null.</summary>
+        private void UseFallbackConfig(string reason)
+        {
+            // ROLLBACK_WINNING_STREAK_CONFIG_FALLBACK:
+            // Firestore rules can temporarily block /config/winningStreak. The feature should
+            // keep working with the shipped defaults instead of leaving Config null.
+            _config = WinningStreakConfigDoc.CreateDefault();
+            _isLoaded = true;
+            Debug.LogWarning($"{LOG_TAG} {reason}. Using fallback config - unlockLevel={_config.unlockLevel}, stages={_config.stages.Count}");
+            OnConfigLoaded?.Invoke();
+        }
+
         public WinningStreakStage GetStage(int stage1Based)
         {
             if (_config == null || _config.stages == null) return null;

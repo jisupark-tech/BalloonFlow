@@ -129,6 +129,11 @@ namespace BalloonFlow
             _lobby = UIManager.Instance.OpenUI<UILobby>("UI/UILobby");
             if (_lobby != null)
             {
+                // ROLLBACK_LOBBY_RETURN_FORCE_MAIN_PANEL:
+                // Returning from InGame can reuse an inactive UILobby that still remembers
+                // Shop/Setting page position. Lobby entry must always start from Main/Home.
+                _lobby.ShowMainPanelImmediate();
+
                 if (_lobby.BtnPlay != null) _lobby.BtnPlay.onClick.AddListener(OnPlayClicked);
                 if (_lobby.BtnGoldPlus != null) _lobby.BtnGoldPlus.onClick.AddListener(OnGoToShop);
                 if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.AddListener(OnGoToShop);

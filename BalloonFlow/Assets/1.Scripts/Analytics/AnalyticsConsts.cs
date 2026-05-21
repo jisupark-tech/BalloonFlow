@@ -60,6 +60,14 @@ namespace BalloonFlow.Analytics
         public const string P_TOTAL_SPEND_USD     = "total_spend_usd";
         public const string P_TOTAL_AD_REVENUE_USD = "total_ad_revenue_usd";
 
+        // ─── purchase_event ───
+        public const string P_PRODUCT_ID          = "product_id";
+        public const string P_PRICE_USD           = "price_usd";
+        public const string P_CURRENCY            = "currency";
+        public const string P_STORE               = "store";                // google_play | app_store | editor
+        public const string P_TRANSACTION_ID      = "transaction_id";
+        public const string P_PRODUCT_CATEGORY    = "product_category";     // coin|bundle|noads|offer
+
         // ─── 25-param overflow consolidation ───
         // level_play_event 44 컬럼 → 25 limit. extra_json 으로 통합:
         //   play_time_sec, background_time_sec, moves_given, moves_remaining, undo_count,

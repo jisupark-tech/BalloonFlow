@@ -58,6 +58,10 @@ namespace BalloonFlow
         private System.Action _onCancel;
         private string _activeBoosterType;
 
+        private const int USEITEM_POPUP_SORTING_BUMP = 20;
+        private const float CUTOUT_CONTENT_PADDING = 24f;
+        private const float CUTOUT_MIN_CANVAS_HEIGHT = 120f;
+
         [Header("[Cutout Materials - shared assets preferred]")]
         [SerializeField] private Material _matCutoutDim;
         private Material _runtimeCutoutDimMaterial;
@@ -75,6 +79,8 @@ namespace BalloonFlow
             if (_btnExit != null) _btnExit.onClick.AddListener(OnCancelClicked);
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.AddListener(OnCancelClicked);
+
+            EnsurePopupSortingCanvas();
 
             // BottomExit 화면 하단 고정 — Inspector 세팅 누락 대비 anchor 강제 보정
             //EnsureBottomExitAnchor();
@@ -242,6 +248,41 @@ namespace BalloonFlow
             }
 
             ApplyCutoutMaterialToOverlay();
+        }
+
+        private void EnsurePopupSortingCanvas()
+        {
+            // ROLLBACK_USEITEM_POPUP_SORTING_CANVAS:
+            // UseItem intentionally shows the board/holders through a shader cutout. Give the
+            // popup its own nested sorting canvas so popup controls stay above world renderers
+            // and any stale parent-canvas mode/order from scene transitions.
+            Canvas parentCanvas = transform.parent != null ? transform.parent.GetComponentInParent<Canvas>() : null;
+            Canvas popupCanvas = GetComponent<Canvas>();
+            if (popupCanvas == null)
+                popupCanvas = gameObject.AddComponent<Canvas>();
+
+            popupCanvas.overrideSorting = true;
+            popupCanvas.sortingOrder = (parentCanvas != null ? parentCanvas.sortingOrder : 200) + USEITEM_POPUP_SORTING_BUMP;
+
+            if (GetComponent<GraphicRaycaster>() == null)
+                gameObject.AddComponent<GraphicRaycaster>();
+        }
+
+        private void EnsurePopupVisualsAboveCutout()
+        {
+            // ROLLBACK_USEITEM_CUTOUT_SIBLING_GUARD:
+            // Overlay/CutoutMask are background layers. If prefab sibling order drifts, the
+            // transparent hole can make field objects look like they render over popup content.
+            RectTransform dimRect = GetBaseDimRectTransform();
+            if (dimRect != null) dimRect.SetAsFirstSibling();
+            if (_cutoutMask != null) _cutoutMask.SetAsFirstSibling();
+
+            if (_frame != null) _frame.transform.SetAsLastSibling();
+            if (_imgItem != null) _imgItem.transform.SetAsLastSibling();
+            if (_rtItemDescription != null) _rtItemDescription.SetAsLastSibling();
+            if (_btnExit != null) _btnExit.transform.SetAsLastSibling();
+            if (_BottomExit != null) _BottomExit.SetAsLastSibling();
+            else if (_btnBottomExit != null) _btnBottomExit.transform.SetAsLastSibling();
         }
 
         private bool ApplyCutoutMaterialToOverlay()
@@ -496,14 +537,17 @@ namespace BalloonFlow
             // [2026-05-20] ROLLBACK_USEITEM_SIMPLE_CUTOUT_MATERIAL:
             // UseItem uses one dim Image with mat_UICutoutDim. CutoutMask only supplies
             // the hole rect, so it must not render, mask, or own a second dim layer.
+            EnsurePopupSortingCanvas();
             if (_cutoutMask != null) _cutoutMask.gameObject.SetActive(true);
             SetupCutout(boosterType);
+            ClampCutoutAwayFromPopupContent();
             ApplyCutoutMaterialToOverlay();
 
             // [2026-05-13] description/icon 가림 방지 — Dim/Cutout 활성화 후 sibling 순서를
             // 가장 마지막으로 옮겨 Dim alpha 0.7 위로 덮어 그림. Mask 의 자식이라면
             // popup root 로 reparent 해 stencil 클리핑 회피.
             BringDescriptionToFront();
+            EnsurePopupVisualsAboveCutout();
 
             OpenUI();
             Canvas.ForceUpdateCanvases();
@@ -564,11 +608,64 @@ namespace BalloonFlow
         /// 기존 코드는 sizeDelta 에 screen-pixel 값을 그대로 박아 CanvasScaler reference 와 device 해상도가
         /// 다를 때 hole 크기가 부정확했음. Tutorial.WorldToCanvasPosition 패턴(canvas/screen 비율) 적용으로
         /// position 과 size 둘 다 canvas-units 로 일관성 확보.</summary>
+        private void ClampCutoutAwayFromPopupContent()
+        {
+            if (_cutoutMask == null) return;
+
+            RectTransform dimRect = GetBaseDimRectTransform();
+            if (dimRect == null) return;
+
+            float protectedTop = float.NegativeInfinity;
+            IncludeProtectedTop(dimRect, _imgItem != null ? _imgItem.transform as RectTransform : null, ref protectedTop);
+            IncludeProtectedTop(dimRect, _rtItemDescription, ref protectedTop);
+            IncludeProtectedTop(dimRect, _btnExit != null ? _btnExit.transform as RectTransform : null, ref protectedTop);
+            IncludeProtectedTop(dimRect, _btnBottomExit != null ? _btnBottomExit.transform as RectTransform : null, ref protectedTop);
+            IncludeProtectedTop(dimRect, _BottomExit, ref protectedTop);
+
+            if (float.IsNegativeInfinity(protectedTop)) return;
+
+            Bounds cutoutBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(dimRect, _cutoutMask);
+            float safeBottom = protectedTop + CUTOUT_CONTENT_PADDING;
+            if (cutoutBounds.min.y >= safeBottom || cutoutBounds.max.y <= safeBottom)
+                return;
+
+            float trim = safeBottom - cutoutBounds.min.y;
+            float newHeight = Mathf.Max(CUTOUT_MIN_CANVAS_HEIGHT, _cutoutMask.sizeDelta.y - trim);
+            float appliedTrim = _cutoutMask.sizeDelta.y - newHeight;
+            if (appliedTrim <= 0.01f) return;
+
+            // ROLLBACK_USEITEM_CUTOUT_CONTENT_CLAMP:
+            // Keep the transparent hole away from UseItem's own icon/text/close controls.
+            // Field objects should show through only the intended board/holder area, not the
+            // popup content area, otherwise they appear to render above the popup.
+            _cutoutMask.sizeDelta = new Vector2(_cutoutMask.sizeDelta.x, newHeight);
+            _cutoutMask.anchoredPosition = new Vector2(
+                _cutoutMask.anchoredPosition.x,
+                _cutoutMask.anchoredPosition.y + appliedTrim * 0.5f);
+        }
+
+        private static void IncludeProtectedTop(RectTransform space, RectTransform target, ref float protectedTop)
+        {
+            if (space == null || target == null || !target.gameObject.activeInHierarchy)
+                return;
+
+            Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(space, target);
+            protectedTop = Mathf.Max(protectedTop, bounds.max.y);
+        }
+
         private void SetCutoutScreenArea(Camera cam, Vector3 worldCenter, Vector2 screenSize)
         {
             Vector3 screen = cam.WorldToScreenPoint(worldCenter);
 
-            Canvas canvas = GetComponentInParent<Canvas>();
+            // ROLLBACK_USEITEM_PARENT_CANVAS_COORDS:
+            // PopupUseItem owns a nested sorting canvas, but cutout coordinates must still be
+            // calculated against the full popup canvas. Using the nested canvas can skew the
+            // hole if the popup root is not exactly the same rect as its parent canvas.
+            Canvas canvas = transform.parent != null
+                ? transform.parent.GetComponentInParent<Canvas>()
+                : GetComponentInParent<Canvas>();
+            if (canvas == null)
+                canvas = GetComponentInParent<Canvas>();
             Camera canvasCam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
                 ? canvas.worldCamera : null;
             RectTransform canvasRT = canvas != null ? canvas.GetComponent<RectTransform>() : null;

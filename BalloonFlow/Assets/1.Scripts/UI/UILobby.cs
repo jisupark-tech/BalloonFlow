@@ -1186,6 +1186,23 @@ namespace BalloonFlow
             if (pageIndex == 0 && _uiShop != null) _uiShop.ResetView();
         }
 
+        /// <summary>
+        /// Lobby scene entry must always expose the main/home page, even when UIManager
+        /// reuses an inactive UILobby left under the persistent canvas after InGame.
+        /// </summary>
+        public void ShowMainPanelImmediate()
+        {
+            // ROLLBACK_LOBBY_RETURN_FORCE_MAIN_PANEL:
+            // GameManager.CloseUIAll clears UIManager's list but does not destroy the
+            // inactive UILobby under the persistent canvas. Reopening that instance can
+            // preserve the previous Shop/Setting page, so LobbyController forces Home.
+            _isDragging = false;
+            _pageTween?.Kill();
+            SetShopInnerScrollEnabled(true);
+            SetPageImmediate(1);
+            _lastArrivedPageIndex = 1;
+        }
+
         private void SetPageImmediate(int pageIndex)
         {
             _currentPageIndex = pageIndex;

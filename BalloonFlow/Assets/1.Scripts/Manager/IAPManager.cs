@@ -5,6 +5,7 @@ using UnityEngine.Purchasing.Extension;
 
 using System.Collections.Generic;
 using UnityEngine;
+using BalloonFlow.Analytics;
 
 namespace BalloonFlow
 {
@@ -153,7 +154,7 @@ namespace BalloonFlow
             }
 #else
             Debug.Log($"{LOG_TAG} Sim — {productId} 구매");
-            ProcessPurchaseReward(productId);
+            ProcessPurchaseReward(productId, transactionId: "");
             PublishPurchaseResult(productId, true);
 #endif
         }
@@ -239,10 +240,11 @@ namespace BalloonFlow
 
         public PurchaseProcessingResult ProcessPurchase(PurchaseEventArgs args)
         {
-            string productId = args.purchasedProduct.definition.id;
-            Debug.Log($"{LOG_TAG} 구매 성공: {productId}");
+            string productId     = args.purchasedProduct.definition.id;
+            string transactionId = args.purchasedProduct.transactionID ?? "";
+            Debug.Log($"{LOG_TAG} 구매 성공: {productId} txId={transactionId}");
 
-            ProcessPurchaseReward(productId);
+            ProcessPurchaseReward(productId, transactionId);
             PublishPurchaseResult(productId, true);
 
             // TODO: Phase 3 — Cloud Functions validatePurchase 호출 후 보상 지급으로 라우팅 변경 예정
@@ -266,8 +268,9 @@ namespace BalloonFlow
         /// ShopCatalogService 의 보상 정의를 읽어 매니저에 위임. 클라 단독 처리 (Phase 3 전).
         /// 코인은 CurrencyManager.AddCoins(suppressEvent=true) 로 silent 지급 — UILobby 즉시 갱신 차단.
         /// 후속 OnPurchaseRewardGranted 이벤트로 PurchaseRewardEffect 가 success popup + FxGold 연출 처리.
+        /// transactionId 는 purchase_event 의 transaction_id 컬럼에 그대로 들어감 (sim 모드면 "").
         /// </summary>
-        private void ProcessPurchaseReward(string productId)
+        private void ProcessPurchaseReward(string productId, string transactionId)
         {
             var doc = ShopCatalogService.HasInstance ? ShopCatalogService.Instance.Get(productId) : null;
             if (doc == null)
@@ -275,6 +278,12 @@ namespace BalloonFlow
                 Debug.LogWarning($"{LOG_TAG} {productId} 카탈로그 lookup 실패 — 보상 지급 안 함");
                 return;
             }
+
+            // Snapshot 누적 갱신 → 같은 이벤트의 total_spend_usd 가 post-purchase 상태를 반영하도록 emit 전에.
+            if (UserSnapshotCache.HasInstance && doc.priceUsd > 0)
+                UserSnapshotCache.Instance.OnPurchaseVerified(doc.priceUsd);
+
+            EmitPurchaseEvent(doc, transactionId);
 
             var r = doc.rewards;
             int coinsAdded = 0;
@@ -323,6 +332,52 @@ namespace BalloonFlow
         private static void PublishPurchaseResult(string productId, bool success)
         {
             EventBus.Publish(new OnPurchaseCompleted { productId = productId, success = success });
+        }
+
+        /// <summary>
+        /// purchase_event (BigQuery raw) emit. transactionId 가 비어 있으면 sim_<guid> 로 채움.
+        /// Phase 3 Cloud Functions validatePurchase 도입 시엔 verified 콜백 시점으로 이동 예정.
+        /// </summary>
+        private static void EmitPurchaseEvent(ShopProductDoc doc, string transactionId)
+        {
+            if (doc == null) return;
+
+            string txId = string.IsNullOrEmpty(transactionId)
+                ? $"sim_{System.Guid.NewGuid():N}"
+                : transactionId;
+
+            var p = new Dictionary<string, object>(20);
+            p[AnalyticsConsts.P_EVENT_ID]         = System.Guid.NewGuid().ToString("N");
+            p[AnalyticsConsts.P_SESSION_ID]       = AnalyticsSessionTracker.HasInstance
+                ? AnalyticsSessionTracker.Instance.CurrentSessionId : "";
+            p[AnalyticsConsts.P_GAME_ID]          = AnalyticsConsts.GAME_ID;
+            p[AnalyticsConsts.P_UID]              = AnalyticsSessionTracker.ResolveUid();
+            p[AnalyticsConsts.P_EVENT_TS]         = System.DateTime.UtcNow.ToString("o");
+            p[AnalyticsConsts.P_APP_VERSION]      = Application.version;
+            p[AnalyticsConsts.P_GEO_COUNTRY]      = AnalyticsSessionTracker.ResolveGeoCountry();
+            p[AnalyticsConsts.P_PLATFORM]         = AnalyticsSessionTracker.ResolvePlatform();
+            p[AnalyticsConsts.P_DEVICE_MODEL]     = SystemInfo.deviceModel;
+            p[AnalyticsConsts.P_PRODUCT_ID]       = doc.productId ?? "";
+            p[AnalyticsConsts.P_PRICE_USD]        = doc.priceUsd;
+            p[AnalyticsConsts.P_CURRENCY]         = string.IsNullOrEmpty(doc.currency) ? "USD" : doc.currency;
+            p[AnalyticsConsts.P_STORE]            = ResolveStore();
+            p[AnalyticsConsts.P_TRANSACTION_ID]   = txId;
+            p[AnalyticsConsts.P_PRODUCT_CATEGORY] = doc.category ?? "";
+
+            if (UserSnapshotCache.HasInstance)
+                UserSnapshotCache.Instance.Stamp(p);
+
+            AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_PURCHASE, p);
+        }
+
+        private static string ResolveStore()
+        {
+            switch (Application.platform)
+            {
+                case RuntimePlatform.Android:      return "google_play";
+                case RuntimePlatform.IPhonePlayer: return "app_store";
+                default:                           return "editor";
+            }
         }
     }
 }
