@@ -30,6 +30,8 @@ namespace BalloonFlow
         private static readonly Dictionary<GameObject, RectTransform> _rectCache
             = new Dictionary<GameObject, RectTransform>();
 
+        // ROLLBACK_FXGOLD_RAW_PARTICLE_RENDERER
+        // FxGold uses raw ParticleSystemRenderer now. Runtime must not auto-add UIParticleRenderer.
         /// <summary>[2026-05-11] 코인 사이 spawn 인터벌 (사용자 요청 0.2f).</summary>
         private const float SPAWN_INTERVAL = 0.12f;
 
@@ -267,9 +269,32 @@ namespace BalloonFlow
             if (coin == null) return null;
 
             coin.transform.SetParent(parent, false);
+            coin.transform.localScale = Vector3.one;
             coin.transform.SetAsLastSibling();
+            PrepareRawParticles(coin, parent);
             _activeCoins.Add(coin);
             return coin;
+        }
+
+        private const float FXGOLD_UI_PARTICLE_MESH_SCALE = 10f;
+
+        private static void PrepareRawParticles(GameObject root, Transform parent)
+        {
+            if (root == null) return;
+
+            // ScreenSpaceOverlay Canvas 에서 raw PSR 은 카메라 렌더 후 그려지는 UI 위로 못 올라옴.
+            // → UIParticleRenderer 부착해서 Canvas vertex stream 으로 baking. Idempotent.
+            // 가로 늘어짐 (Stretched Billboard) 이슈는 prefab 의 PSR Renderer 모듈에서 Render Mode=Billboard
+            // 로 디자이너가 잡아야 함 — 런타임 강제 override 는 디자이너 의도와 충돌 가능.
+            UIParticleBinder.Bind(root);
+
+            // FXGold 전용 mesh scale — UIParticleRenderer default 100 은 코인이 화면에 거대하게 baking 됨.
+            var uiRenderers = root.GetComponentsInChildren<UIParticleRenderer>(true);
+            for (int i = 0; i < uiRenderers.Length; i++)
+            {
+                if (uiRenderers[i] == null) continue;
+                uiRenderers[i].SetMeshScale(FXGOLD_UI_PARTICLE_MESH_SCALE);
+            }
         }
 
         /// <summary>

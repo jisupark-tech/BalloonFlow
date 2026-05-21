@@ -261,6 +261,9 @@ namespace BalloonFlow
             {
                 _btnPlay.onClick.RemoveAllListeners();
                 _btnPlay.onClick.AddListener(PlayTouchSFX);
+                // SSO Canvas 환경에서 raw ParticleSystemRenderer 는 UI 위로 못 올라옴 →
+                // PlayButton 자식 ParticleSystem 에 UIParticleRenderer 부착해 Canvas vertex stream 으로 baking.
+                UIParticleBinder.Bind(_btnPlay.gameObject);
             }
             if (_btnWinningStreak != null)
             {

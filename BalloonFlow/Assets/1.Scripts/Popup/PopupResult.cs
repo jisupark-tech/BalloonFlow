@@ -458,43 +458,52 @@ namespace BalloonFlow
             int baseOrder = parentCanvas != null ? parentCanvas.sortingOrder : 0;
             string layer = parentCanvas != null ? parentCanvas.sortingLayerName : "Default";
 
-            AssignChildCanvasOrder(rewardRoot, "ImageStage", baseOrder + 1, layer);
-            ApplyFxSubtreeOrder(rewardRoot, baseOrder + 2, layer);
-            AssignChildCanvasOrder(rewardRoot, "Gold", baseOrder + 3, layer);
-            AssignChildCanvasOrder(rewardRoot, "TxtGoldOutline", baseOrder + 3, layer);
-            AssignChildCanvasOrder(rewardRoot, "TxtGold", baseOrder + 4, layer);
+            // ROLLBACK_POPUP_RESULT_REWARD_FX_ORDER_BUMP
+            // PopupResult has nested frame/background canvases. Using parent+1..4 can leave
+            // Reward/FX behind authored popup children, which makes the FX visible only after
+            // moving it outside the canvas hierarchy. Keep the internal reward layering, but
+            // lift the whole reward stack above the popup frame.
+            int rewardBaseOrder = baseOrder + 40;
+
+            AssignChildCanvasOrder(rewardRoot, "ImageStage", rewardBaseOrder + 1, layer);
+            ApplyFxSubtreeOrder(rewardRoot, rewardBaseOrder + 2, layer);
+            AssignChildCanvasOrder(rewardRoot, "Gold", rewardBaseOrder + 3, layer);
+            AssignChildCanvasOrder(rewardRoot, "TxtGoldOutline", rewardBaseOrder + 3, layer);
+            AssignChildCanvasOrder(rewardRoot, "TxtGold", rewardBaseOrder + 4, layer);
         }
 
         /// <summary>
-        /// FX subtree (Reward/FX 의 모든 자손) Canvas override + PSR sortingOrder 일괄 부여.
-        /// FX 의 raw ParticleSystemRenderer 들은 자체 sortingLayer/Order 로 렌더되므로 ImageStage(base+1) 와
-        /// Gold(base+3) 사이 (base+2) 에 명시 배치해야 z-order 분리가 보장됨.
+        /// FX subtree (Reward/FX 의 모든 자손) — ScreenSpaceOverlay Canvas 에서 raw
+        /// ParticleSystemRenderer 는 UI 위로 못 올라오므로 UIParticleRenderer 로 vertex stream baking.
+        /// UIParticleRenderer.Awake 가 PSR.enabled=false 처리 + canvas 메시로 렌더.
+        /// sortingOrder 는 ApplyRewardLayerOrder 의 sibling 단위 Canvas override 가 책임 (FX/Gold/TxtGold sub-canvas).
         /// </summary>
         private static void ApplyFxSubtreeOrder(Transform rewardRoot, int order, string layer)
         {
             Transform fxNode = FindChildRecursive(rewardRoot, "FX");
             if (fxNode == null) return;
 
-            var allTransforms = fxNode.GetComponentsInChildren<Transform>(true);
-            for (int i = 0; i < allTransforms.Length; i++)
+            // SSO 에서 raw PSR 은 UI 뒤로 묻힘 → UIParticleRenderer 부착으로 Canvas vertex stream 에 baking.
+            UIParticleBinder.Bind(fxNode.gameObject);
+
+            // FX node 자체에 Canvas override 부여 — sibling ImageStage(base+1) / Gold(base+3) 사이 (=order) 에 분리.
+            var fxCanvas = fxNode.GetComponent<Canvas>();
+            if (fxCanvas == null) fxCanvas = fxNode.gameObject.AddComponent<Canvas>();
+            fxCanvas.overrideSorting = true;
+            fxCanvas.sortingLayerName = layer;
+            fxCanvas.sortingOrder = order;
+            if (fxNode.GetComponent<GraphicRaycaster>() == null)
+                fxNode.gameObject.AddComponent<GraphicRaycaster>();
+
+            // ParticleSystem 활성 + Play 보장.
+            var particles = fxNode.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < particles.Length; i++)
             {
-                var t = allTransforms[i];
-                if (t == null) continue;
-
-                var canvas = t.GetComponent<Canvas>();
-                if (canvas != null)
-                {
-                    canvas.overrideSorting = true;
-                    canvas.sortingLayerName = layer;
-                    canvas.sortingOrder = order;
-                }
-
-                var psr = t.GetComponent<ParticleSystemRenderer>();
-                if (psr != null)
-                {
-                    psr.sortingLayerName = layer;
-                    psr.sortingOrder = order;
-                }
+                if (particles[i] == null) continue;
+                if (!particles[i].gameObject.activeSelf)
+                    particles[i].gameObject.SetActive(true);
+                if (!particles[i].isPlaying)
+                    particles[i].Play(true);
             }
         }
 
