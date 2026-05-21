@@ -2,6 +2,8 @@ using System.Collections;
 using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
 using TMPro;
 
 namespace BalloonFlow
@@ -28,7 +30,8 @@ namespace BalloonFlow
         private const float ARROW_BOB_FREQUENCY = 2f;
         private const float CUTOUT_PADDING = 20f;
         private const float FRAME_THICKNESS = 4f;
-        private const int CANVAS_SORT_ORDER = 200;
+        // PopupTr (=200) 와 EffectTr (=300) 사이. PopupCanvas 안 다른 popup 위에 dim 이 떠야 가시화됨.
+        private const int CANVAS_SORT_ORDER = 250;
         private static readonly Color FRAME_COLOR = new Color(1f, 1f, 1f, 0.9f);
         private static readonly Color INSTRUCTION_BG_COLOR = new Color(0.1f, 0.1f, 0.15f, 0.92f);
 
@@ -94,6 +97,18 @@ namespace BalloonFlow
         private CanvasGroup _prefabRootCanvasGroup;
         private UnityEngine.UI.GraphicRaycaster _prefabRootRaycaster;
 
+        // [2026-05-21] PopupUseItem 와 동일 패턴 — mat_UICutoutDim shader 로 hole-in-UI dim 처리.
+        private Material _runtimeCutoutDimMaterial;
+        private AsyncOperationHandle<Material> _cutoutDimMaterialHandle;
+        private const string CUTOUT_DIM_MATERIAL_ADDRESS = "mat_UICutoutDim";
+        private static readonly int OVERLAY_RECT_ID = Shader.PropertyToID("_OverlayRect");
+        private static readonly int CUTOUT_CENTER_ID = Shader.PropertyToID("_CutoutCenter");
+        private static readonly int CUTOUT_SIZE_ID = Shader.PropertyToID("_CutoutSize");
+        private static readonly int CUTOUT_SOFTNESS_ID = Shader.PropertyToID("_CutoutSoftness");
+        private static readonly int CUTOUT_MASK_TEX_ID = Shader.PropertyToID("_CutoutMaskTex");
+        private static readonly int CUTOUT_MASK_UV_RECT_ID = Shader.PropertyToID("_CutoutMaskUVRect");
+        private Texture2D _whiteMaskTex; // _CutoutMaskTex default — sprite 없을 때 사각형 hole.
+
         #endregion
 
         #region Lifecycle
@@ -154,9 +169,19 @@ namespace BalloonFlow
 
             // 프리팹의 Canvas/Raycaster 참조만 보관. raycast 인터셉트는 튜토리얼이 실제 active 일 때만.
             // (평소엔 비활성 → Tutorial canvas 가 HUD 아이템 클릭 가로채는 부작용 방지.)
+            //
+            // [2026-05-21] Tutorial.prefab 의 root 에 Canvas 가 없으면 dim 이 PopupCanvas batch 안에서
+            //   sibling order 만으로 결정돼 다른 popup 뒤에 깔리는 회귀. overrideSorting=true 가 적용되려면
+            //   Canvas 컴포넌트가 필수이므로 없을 시 런타임 부착.
             _prefabRootCanvas = root.GetComponent<Canvas>();
+            if (_prefabRootCanvas == null)
+                _prefabRootCanvas = root.AddComponent<Canvas>();
             _prefabRootCanvasGroup = root.GetComponent<CanvasGroup>();
+            if (_prefabRootCanvasGroup == null)
+                _prefabRootCanvasGroup = root.AddComponent<CanvasGroup>();
             _prefabRootRaycaster = root.GetComponent<UnityEngine.UI.GraphicRaycaster>();
+            if (_prefabRootRaycaster == null)
+                _prefabRootRaycaster = root.AddComponent<UnityEngine.UI.GraphicRaycaster>();
             SetTutorialCanvasInteractive(false);
             Debug.Log($"[TutorialDbg] BindFromPopup done. parentCanvas={(_canvas != null ? _canvas.name : "NULL")} " +
                       $"sortingOrder={(_canvas != null ? _canvas.sortingOrder : -1)} " +
@@ -259,6 +284,26 @@ namespace BalloonFlow
             if (_tapAnywhereButton != null) _tapAnywhereButton.onClick.RemoveAllListeners();
             // [2026-05-15] DOTween yoyo loop kill — singleton destroy 시 tween 누수 방지.
             StopTextTapBlink();
+
+            // [2026-05-21] Addressable cutout dim material 정리.
+            if (_runtimeCutoutDimMaterial != null)
+            {
+                if (Application.isPlaying) Destroy(_runtimeCutoutDimMaterial);
+                else DestroyImmediate(_runtimeCutoutDimMaterial);
+                _runtimeCutoutDimMaterial = null;
+            }
+            if (_cutoutDimMaterialHandle.IsValid())
+            {
+                Addressables.Release(_cutoutDimMaterialHandle);
+                _cutoutDimMaterialHandle = default;
+            }
+            if (_whiteMaskTex != null)
+            {
+                if (Application.isPlaying) Destroy(_whiteMaskTex);
+                else DestroyImmediate(_whiteMaskTex);
+                _whiteMaskTex = null;
+            }
+
             base.OnDestroy();
         }
 
@@ -375,13 +420,17 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Hides the cutout and dim overlay.
+        /// Hide cutout highlight. shader 패턴에선 _cutoutMask (=Dim) 가 항상 stretch 로 화면 전체 dim;
+        /// hole 은 shader 의 _CutoutSize 를 0 으로 만들어 닫음.
         /// </summary>
         public void HideCutout()
         {
             _isCutoutVisible = false;
 
-            if (_cutoutMask != null)
+            if (_runtimeCutoutDimMaterial != null)
+                _runtimeCutoutDimMaterial.SetVector(CUTOUT_SIZE_ID, new Vector4(0f, 0f, 0f, 0f));
+
+            if (_cutoutMask != null && !_isDimActive)
                 _cutoutMask.gameObject.SetActive(false);
 
             if (_cutoutFrame != null)
@@ -471,6 +520,16 @@ namespace BalloonFlow
 
             if (_fadeDimCoroutine != null)
                 StopCoroutine(_fadeDimCoroutine);
+
+            if (active)
+            {
+                // _cutoutMask (=Dim) 는 prefab 의 stretch anchor 그대로 화면 전체 dim. 활성 보장만.
+                if (_cutoutMask != null && !_cutoutMask.gameObject.activeSelf)
+                    _cutoutMask.gameObject.SetActive(true);
+                if (_cutoutDimImage != null && !_cutoutDimImage.gameObject.activeSelf)
+                    _cutoutDimImage.gameObject.SetActive(true);
+                UpdateOverlayRect();
+            }
 
             float targetAlpha = active ? DIM_ALPHA : 0f;
             _fadeDimCoroutine = StartCoroutine(FadeDimCoroutine(targetAlpha));
@@ -615,72 +674,144 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// UseItem 패턴 (PopupUseItem.SetupShaders 와 동일):
-        /// _cutoutMask (RectTransform) 에 CutoutMaskUI + Mask 부착 → _cutoutMask 영역 = hole. 자식 DimOverlay 자동 생성 → hole "밖"만 dim 렌더.
-        /// _cutoutFrame 이 _cutoutMask 자식이면 mask 영향으로 frame 가시성 깨지므로 형제로 reparent.
+        /// [2026-05-21] PopupUseItem 와 동일한 mat_UICutoutDim shader 패턴 — hole-in-UI 지원.
+        ///   _cutoutMask (=Dim, stretch anchor) 의 Image 에 runtime 클론한 mat_UICutoutDim 적용.
+        ///   shader 가 _OverlayRect / _CutoutCenter / _CutoutSize 로 hole 영역을 제외한 영역만 dim 렌더.
+        /// 옛 CutoutMaskUI + Mask + 자식 DimOverlay 패턴은 stencil 동작이 hole-in-UI 가 아니어서 제거.
         /// </summary>
         private void SetupCutoutMask()
         {
             if (_cutoutMask == null) return;
 
-            // CutoutMaskUI 보장 — 기존 Image 가 있으면 교체.
-            var existingImage = _cutoutMask.GetComponent<Image>();
-            CutoutMaskUI cutout = _cutoutMask.GetComponent<CutoutMaskUI>();
-            if (cutout == null)
-            {
-                if (existingImage != null && !(existingImage is CutoutMaskUI))
-                    DestroyImmediate(existingImage);
-                cutout = _cutoutMask.gameObject.AddComponent<CutoutMaskUI>();
-            }
-            // 메시 보장용 흰색 sprite (stencil write 가능)
-            if (cutout.sprite == null)
-            {
-                var tex = new Texture2D(4, 4);
-                var px = new Color[16]; for (int i = 0; i < 16; i++) px[i] = Color.white;
-                tex.SetPixels(px); tex.Apply();
-                cutout.sprite = Sprite.Create(tex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
-            }
-            cutout.type = Image.Type.Simple;
-            cutout.color = new Color(1f, 1f, 1f, 0f); // 본체는 안 보임 — geometry/stencil 만
-            cutout.raycastTarget = false;
+            // 옛 stencil 패턴 잔재 정리.
+            var oldCutoutMaskUI = _cutoutMask.GetComponent<CutoutMaskUI>();
+            if (oldCutoutMaskUI != null) DestroyImmediate(oldCutoutMaskUI);
+            var oldMask = _cutoutMask.GetComponent<Mask>();
+            if (oldMask != null) oldMask.enabled = false;
+            var oldDimOverlay = _cutoutMask.Find("DimOverlay");
+            if (oldDimOverlay != null) oldDimOverlay.gameObject.SetActive(false);
 
-            // Mask — showMaskGraphic=true 여야 stencil 정상 기록.
-            var mask = _cutoutMask.GetComponent<Mask>();
-            if (mask == null) mask = _cutoutMask.gameObject.AddComponent<Mask>();
-            mask.showMaskGraphic = true;
+            // [2026-05-21] CutoutFrame reparent 제거 — shader 패턴에선 Mask 가 없어 clipping 영향 없음.
+            // designer 가 prefab 의 Dim 자식으로 배치한 위치/anchor/sprite 그대로 사용.
 
-            // _cutoutFrame 이 _cutoutMask 자식이면 mask 영향으로 frame 안 보임 → 한 단계 위로 reparent.
-            if (_cutoutFrame != null && _cutoutFrame.parent == _cutoutMask)
+            // CutoutFrame.Image 가 prefab 에서 mat_UICutoutMask (legacy stencil mask, ColorMask=0)
+            // 로 할당된 경우 sprite 의 픽셀이 안 그려져 invisible. default UI material 로 reset.
+            if (_cutoutFrameImage != null && _cutoutFrameImage.material != null)
             {
-                Transform grand = _cutoutMask.parent != null ? _cutoutMask.parent
-                    : (_tutorialCanvas != null ? _tutorialCanvas.transform : null);
-                if (grand != null) _cutoutFrame.SetParent(grand, false);
+                var sh = _cutoutFrameImage.material.shader;
+                if (sh != null && (sh.name == "UI/CutoutMask" || sh.name == "UI/CutoutDim"))
+                    _cutoutFrameImage.material = null; // 기본 UI/Default 로 폴백
             }
 
-            // 자식 DimOverlay — 부모 _cutoutMask 의 mask 영역 "밖" 만 그려짐.
-            Transform existingDim = _cutoutMask.Find("DimOverlay");
-            GameObject dimGO;
-            if (existingDim != null)
+            // _cutoutMask (=Dim) 의 Image 확보.
+            _cutoutDimImage = _cutoutMask.GetComponent<Image>();
+            if (_cutoutDimImage == null)
+                _cutoutDimImage = _cutoutMask.gameObject.AddComponent<Image>();
+            if (_cutoutDimImage.sprite == null)
             {
-                dimGO = existingDim.gameObject;
-                _cutoutDimImage = dimGO.GetComponent<Image>();
-                if (_cutoutDimImage == null) _cutoutDimImage = dimGO.AddComponent<Image>();
+                _cutoutDimImage.sprite = GetOrCreateWhiteSprite();
+                _cutoutDimImage.type = Image.Type.Simple;
+            }
+            _cutoutDimImage.color = Color.white; // 색은 shader 가 결정
+            _cutoutDimImage.raycastTarget = true;
+
+            // mat_UICutoutDim 로드 + 클론 + Image 에 적용.
+            if (_runtimeCutoutDimMaterial == null)
+                _runtimeCutoutDimMaterial = CreateCutoutRuntimeMaterial();
+            if (_runtimeCutoutDimMaterial != null)
+            {
+                _cutoutDimImage.material = _runtimeCutoutDimMaterial;
+                _runtimeCutoutDimMaterial.color = new Color(0f, 0f, 0f, 0f); // alpha 0 시작 → SetDimColor 가 페이드
+                _runtimeCutoutDimMaterial.SetFloat(CUTOUT_SOFTNESS_ID, 0.001f);
+                // 초기엔 hole 없음 (size=0).
+                _runtimeCutoutDimMaterial.SetVector(CUTOUT_CENTER_ID, new Vector4(0.5f, 0.5f, 0f, 0f));
+                _runtimeCutoutDimMaterial.SetVector(CUTOUT_SIZE_ID, new Vector4(0f, 0f, 0f, 0f));
+                UpdateOverlayRect();
+            }
+        }
+
+        private Material CreateCutoutRuntimeMaterial()
+        {
+            Material source = null;
+            try
+            {
+                _cutoutDimMaterialHandle = Addressables.LoadAssetAsync<Material>(CUTOUT_DIM_MATERIAL_ADDRESS);
+                source = _cutoutDimMaterialHandle.WaitForCompletion();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[TutorialManager] Addressable material '{CUTOUT_DIM_MATERIAL_ADDRESS}' load failed: {e.Message}");
+            }
+            if (source != null) return new Material(source);
+
+            // fallback — 같은 shader 가 다른 경로로 로드돼 있는 경우.
+            Shader shader = Shader.Find("UI/CutoutDim");
+            return shader != null ? new Material(shader) : null;
+        }
+
+        private void UpdateOverlayRect()
+        {
+            if (_runtimeCutoutDimMaterial == null || _cutoutMask == null) return;
+            Rect r = _cutoutMask.rect;
+            if (r.width <= 0f || r.height <= 0f) return;
+            _runtimeCutoutDimMaterial.SetVector(OVERLAY_RECT_ID, new Vector4(r.xMin, r.yMin, r.width, r.height));
+        }
+
+        private Sprite _whiteSprite;
+        private Sprite GetOrCreateWhiteSprite()
+        {
+            if (_whiteSprite != null) return _whiteSprite;
+            var tex = new Texture2D(4, 4);
+            var px = new Color[16]; for (int i = 0; i < 16; i++) px[i] = Color.white;
+            tex.SetPixels(px); tex.Apply();
+            _whiteSprite = Sprite.Create(tex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
+            return _whiteSprite;
+        }
+
+        private Texture2D GetOrCreateWhiteMaskTex()
+        {
+            if (_whiteMaskTex != null) return _whiteMaskTex;
+            _whiteMaskTex = new Texture2D(4, 4);
+            var px = new Color[16]; for (int i = 0; i < 16; i++) px[i] = Color.white;
+            _whiteMaskTex.SetPixels(px); _whiteMaskTex.Apply();
+            return _whiteMaskTex;
+        }
+
+        /// <summary>
+        /// CutoutFrame 의 sprite 를 hole 모양 mask 로 shader 에 전달. sprite alpha = hole.
+        /// CutoutFrame.Image 자체는 안 보이게 (alpha=0) — sprite 의 픽셀이 화면에 안 나옴.
+        /// sprite=null 이면 mask 를 white 로 reset (사각형 hole).
+        /// Atlas sprite 호환 — Sprite.textureRect 로 atlas 안 sub-rect 계산해 shader 에 전달.
+        /// </summary>
+        private void ApplyCutoutFrameSpriteAsHoleMask(Sprite sprite)
+        {
+            if (_cutoutFrameImage != null)
+            {
+                _cutoutFrameImage.sprite = sprite; // 참조 유지 (texture 접근용) — 화면엔 안 보임.
+                _cutoutFrameImage.color = new Color(0f, 0f, 0f, 0f);
+            }
+            if (_runtimeCutoutDimMaterial == null) return;
+
+            Texture tex;
+            Vector4 uvRect;
+            if (sprite != null && sprite.texture != null)
+            {
+                tex = sprite.texture;
+                Rect r = sprite.textureRect;
+                float tw = tex.width, th = tex.height;
+                if (tw > 0f && th > 0f)
+                    uvRect = new Vector4(r.x / tw, r.y / th, r.width / tw, r.height / th);
+                else
+                    uvRect = new Vector4(0f, 0f, 1f, 1f);
             }
             else
             {
-                dimGO = new GameObject("DimOverlay", typeof(RectTransform), typeof(Image));
-                dimGO.transform.SetParent(_cutoutMask, false);
-                _cutoutDimImage = dimGO.GetComponent<Image>();
+                tex = GetOrCreateWhiteMaskTex();
+                uvRect = new Vector4(0f, 0f, 1f, 1f);
             }
-            // 부모 _cutoutMask 이 작아도 자식이 화면 전체를 덮도록 절대 크기.
-            var dimRT = dimGO.GetComponent<RectTransform>();
-            dimRT.anchorMin = new Vector2(0.5f, 0.5f);
-            dimRT.anchorMax = new Vector2(0.5f, 0.5f);
-            dimRT.pivot     = new Vector2(0.5f, 0.5f);
-            dimRT.anchoredPosition = Vector2.zero;
-            dimRT.sizeDelta = new Vector2(10000f, 10000f);
-            _cutoutDimImage.color = new Color(0f, 0f, 0f, 0f); // 알파는 SetDimColor 로 페이드
-            _cutoutDimImage.raycastTarget = true; // dim 영역 클릭 차단
+
+            _runtimeCutoutDimMaterial.SetTexture(CUTOUT_MASK_TEX_ID, tex);
+            _runtimeCutoutDimMaterial.SetVector(CUTOUT_MASK_UV_RECT_ID, uvRect);
         }
 
         private RectTransform CreateCutoutFrame(Transform parent)
@@ -855,30 +986,16 @@ namespace BalloonFlow
                 _cutoutFrame.sizeDelta = step.cutoutFrameSize;
                 if (_cutoutFrameImage != null)
                 {
-                    if (step.cutoutFrameSprite != null)
-                    {
-                        _cutoutFrameImage.sprite = step.cutoutFrameSprite;
-                        _cutoutFrameImage.color = Color.white;
-                    }
-                    else
-                    {
-                        _cutoutFrameImage.sprite = _defaultCutoutFrameSprite;
-                        _cutoutFrameImage.color = _defaultCutoutFrameColor;
-                    }
+                    Sprite spr = step.cutoutFrameSprite != null ? step.cutoutFrameSprite : _defaultCutoutFrameSprite;
+                    ApplyCutoutFrameSpriteAsHoleMask(spr);
                 }
             }
-            if (_cutoutMask != null)
-            {
+            // [2026-05-21] shader 패턴: _cutoutMask 는 stretch dim 본체 — transform 건드리면 dim 영역이 깨짐.
+            //   hole 위치/크기는 shader 파라미터로만 갱신. cutoutMaskSprite 도 shader 가 mesh quad 만 쓰므로 무시.
+            if (_cutoutMask != null && !_cutoutMask.gameObject.activeSelf)
                 _cutoutMask.gameObject.SetActive(true);
-                _cutoutMask.anchoredPosition = step.cutoutFramePosition;
-                _cutoutMask.sizeDelta = step.cutoutFrameSize + new Vector2(CUTOUT_PADDING * 2f, CUTOUT_PADDING * 2f);
-
-                if (step.cutoutMaskSprite != null)
-                {
-                    var cutoutImg = _cutoutMask.GetComponent<Image>();
-                    if (cutoutImg != null) cutoutImg.sprite = step.cutoutMaskSprite;
-                }
-            }
+            UpdateCutoutMaterialHole(step.cutoutFramePosition,
+                step.cutoutFrameSize + new Vector2(CUTOUT_PADDING * 2f, CUTOUT_PADDING * 2f));
             if (_instructionPanelRect != null)
             {
                 _instructionPanelRect.anchoredPosition = step.instructionPanelPosition;
@@ -935,8 +1052,7 @@ namespace BalloonFlow
 
             if (_cutoutFrameImage != null)
             {
-                _cutoutFrameImage.sprite = _defaultCutoutFrameSprite;
-                _cutoutFrameImage.color = _defaultCutoutFrameColor;
+                ApplyCutoutFrameSpriteAsHoleMask(_defaultCutoutFrameSprite);
             }
 
             if (_handIndicator != null)
@@ -1141,42 +1257,75 @@ namespace BalloonFlow
         #region Private Methods — Cutout Positioning
 
         /// <summary>
-        /// _cutoutMask 의 RectTransform 을 hole 위치/크기로 갱신 (UseItem 패턴). center/size 는 canvas space.
-        /// CutoutMaskUI 가 _cutoutMask 영역을 stencil-invert → 자식 DimOverlay 가 hole "밖"만 dim 렌더.
-        /// _cutoutFrame 도 동일 위치/크기로 따라가서 hole 가장자리 frame 표시.
+        /// hole 영역을 mat_UICutoutDim shader 의 _CutoutCenter/_CutoutSize 로 전달.
+        /// 입력 center 는 canvas-pixel (bottom-left 0..W) — WorldToCanvasPosition 의 출력.
+        /// 내부에서 Dim 의 local pivot-centered (-W/2..W/2) 로 변환 후 UpdateCutoutMaterialHole 전달.
+        /// _cutoutFrame 은 별도 highlight outline — anchor center 라 local pivot-centered 로 위치 지정.
         /// </summary>
-        private void ApplyCutout(Vector2 center, Vector2 size)
+        private void ApplyCutout(Vector2 canvasPixelCenter, Vector2 size)
         {
             _isCutoutVisible = true;
 
+            if (_cutoutMask != null && !_cutoutMask.gameObject.activeSelf)
+                _cutoutMask.gameObject.SetActive(true);
+
+            // canvas-pixel (0..W bottom-left) → Dim local pivot-centered (-W/2..W/2).
+            Vector2 localCenter = canvasPixelCenter;
             if (_cutoutMask != null)
             {
-                _cutoutMask.gameObject.SetActive(true);
-                _cutoutMask.anchoredPosition = center;
-                _cutoutMask.sizeDelta = size + new Vector2(CUTOUT_PADDING * 2f, CUTOUT_PADDING * 2f);
+                Rect r = _cutoutMask.rect;
+                localCenter = canvasPixelCenter + new Vector2(r.xMin, r.yMin); // r.xMin = -W/2 → 0 → -W/2 (left edge)
             }
+
+            UpdateCutoutMaterialHole(localCenter, size + new Vector2(CUTOUT_PADDING * 2f, CUTOUT_PADDING * 2f));
 
             if (_cutoutFrame != null)
             {
                 _cutoutFrame.gameObject.SetActive(true);
-                _cutoutFrame.anchoredPosition = center;
+                _cutoutFrame.anchoredPosition = localCenter;
                 _cutoutFrame.sizeDelta = size;
             }
         }
 
         /// <summary>
+        /// hole 위치/크기를 mat_UICutoutDim shader 의 normalized UV (0..1) 로 변환해서 전달.
+        /// 입력 좌표계: Dim 의 local pivot-centered (-W/2..W/2). step.cutoutFramePosition (CutoutFrame 의
+        /// center-anchored anchoredPosition) 과 동일.
+        /// shader: local01 = (vertex - OverlayRect.xy) / OverlayRect.zw. local pivot-centered 라
+        /// OverlayRect.xy = (-W/2, -H/2), zw = (W, H) → vertex 0 (center) 시 local01 = 0.5 (UV center).
+        /// </summary>
+        private void UpdateCutoutMaterialHole(Vector2 localCenter, Vector2 localSize)
+        {
+            if (_runtimeCutoutDimMaterial == null || _cutoutMask == null) return;
+            Rect rect = _cutoutMask.rect;
+            if (rect.width <= 0f || rect.height <= 0f) return;
+
+            // local pivot-centered → (0..1) UV.
+            float normCx = Mathf.Clamp01((localCenter.x - rect.xMin) / rect.width);
+            float normCy = Mathf.Clamp01((localCenter.y - rect.yMin) / rect.height);
+            float normSx = Mathf.Clamp01(localSize.x / rect.width);
+            float normSy = Mathf.Clamp01(localSize.y / rect.height);
+
+            _runtimeCutoutDimMaterial.SetVector(OVERLAY_RECT_ID, new Vector4(rect.xMin, rect.yMin, rect.width, rect.height));
+            _runtimeCutoutDimMaterial.SetVector(CUTOUT_CENTER_ID, new Vector4(normCx, normCy, 0f, 0f));
+            _runtimeCutoutDimMaterial.SetVector(CUTOUT_SIZE_ID, new Vector4(normSx, normSy, 0f, 0f));
+        }
+
+        /// <summary>
         /// Converts a world position to canvas position (in canvas space coordinates).
         /// Canvas coordinates: (0,0) at bottom-left, (canvasWidth, canvasHeight) at top-right.
+        /// [2026-05-21] sizeDelta → rect.size. stretched RectTransform 에선 sizeDelta 가 offset (0,0)
+        ///   이라 변환비가 0 으로 깨졌음. rect.size 는 실제 local rect width/height.
         /// </summary>
         private Vector2 WorldToCanvasPosition(Vector3 worldPos)
         {
             Camera cam = Camera.main;
-            if (cam == null) return Vector2.zero;
+            if (cam == null || _canvasRect == null) return Vector2.zero;
 
             Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
-            Vector2 canvasSize = _canvasRect.sizeDelta;
+            Vector2 canvasSize = _canvasRect.rect.size;
+            if (canvasSize.x <= 0f || canvasSize.y <= 0f) return Vector2.zero;
 
-            // Screen to canvas ratio
             float ratioX = canvasSize.x / Screen.width;
             float ratioY = canvasSize.y / Screen.height;
 
@@ -1203,22 +1352,24 @@ namespace BalloonFlow
 
         private void HideAllVisuals()
         {
+            // dim flag 먼저 끄기 — HideCutout 이 _isDimActive 를 보고 _cutoutMask 비활성 여부를 결정하기 때문.
+            _isDimActive = false;
+            SetDimColor(0f);
+
             ResetStepVisualOverrideState();
             HideCutout();
             HideArrow();
             HideInstruction();
             SetTapAnywherEnabled(false);
-
-            _isDimActive = false;
-
-            // Ensure dim panels have zero alpha
-            SetDimColor(0f);
         }
 
         private void SetDimColor(float alpha)
         {
-            if (_cutoutDimImage != null)
-                _cutoutDimImage.color = new Color(0f, 0f, 0f, alpha);
+            // mat_UICutoutDim shader: color.rgb 가 dim tint, alpha 가 dim 강도. RGB 보존, alpha 만 변경.
+            if (_runtimeCutoutDimMaterial == null) return;
+            var c = _runtimeCutoutDimMaterial.color;
+            c.a = alpha;
+            _runtimeCutoutDimMaterial.color = c;
         }
 
         private void OnSkipPressed()
@@ -1243,7 +1394,7 @@ namespace BalloonFlow
 
         private IEnumerator FadeDimCoroutine(float targetAlpha)
         {
-            float startAlpha = _cutoutDimImage != null ? _cutoutDimImage.color.a : 0f;
+            float startAlpha = _runtimeCutoutDimMaterial != null ? _runtimeCutoutDimMaterial.color.a : 0f;
             float elapsed = 0f;
 
             while (elapsed < FADE_DURATION)
