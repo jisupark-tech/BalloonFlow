@@ -32,6 +32,24 @@ namespace BalloonFlow
         // UIHud 본인은 popup 이 아니므로 override 로 false. 특별한 비-팝업 UIBase 가 있다면 false 로 끄면 됨.
         protected virtual bool TriggersHudPopupAnimation => true;
 
+        // [2026-05-22] LoadUI 사전 로드(OpenUI→CloseUI 즉시 닫기) 패턴에서 HUD popup 연출 트리거 우회용 1회성 flag.
+        // 한 번 소비되면 자동 reset 되어 다음 OpenUI/CloseUI 는 일반 동작.
+        private bool _suppressNextHudNotify;
+        public void SuppressNextHudNotify() => _suppressNextHudNotify = true;
+        private bool ConsumeSuppressHudNotify()
+        {
+            bool s = _suppressNextHudNotify;
+            _suppressNextHudNotify = false;
+            return s;
+        }
+
+        /// <summary>SuppressNextHudNotify + CloseUI 의 syntactic shortcut — 사전 로드 패턴 전용.</summary>
+        public void CloseUISilent()
+        {
+            SuppressNextHudNotify();
+            CloseUI();
+        }
+
         public enum AnimationType
         {
             None,
@@ -44,7 +62,6 @@ namespace BalloonFlow
         protected virtual void Awake()
         {
             _canvasGroup = GetComponent<CanvasGroup>();
-            UIParticleBinder.Bind(gameObject);
             // [2026-05-13] popup/panel 하위 Button 더블 클릭 방어 자동 부착 (멱등) — 동적 spawn popup 도 처리.
             UIButtonClickGuard.AttachToHierarchy(gameObject);
         }
@@ -81,7 +98,9 @@ namespace BalloonFlow
 
             // [2026-05-13] HUD popup-open 연출 중앙화 — Settings/Quit/GoldShop/UseItem/Result 등 모든 인게임 popup
             // 이 열리면 UIHud 가 HUD_Top + BottomPanel slide tween 을 자동 실행. UIHud 자신은 override 로 self-skip.
-            if (TriggersHudPopupAnimation)
+            // [2026-05-22] 사전 로드(LoadUI) 경로는 SuppressNextHudNotify 로 우회 — popup 즉시 close 가 HUD tween 발사 안 함.
+            bool suppress = ConsumeSuppressHudNotify();
+            if (TriggersHudPopupAnimation && !suppress)
             {
                 var hud = UnityEngine.Object.FindAnyObjectByType<UIHud>();
                 if (hud != null && hud != this) hud.NotifyPopupOpened();
@@ -95,7 +114,9 @@ namespace BalloonFlow
         public virtual void CloseUI()
         {
             // [2026-05-13] 활성 상태에서만 HUD popup-close 트리거 — 중복 close 호출이 _popupOpenCount 를 음수로 내려가게 막음.
-            if (TriggersHudPopupAnimation && isActiveAndEnabled)
+            // [2026-05-22] 사전 로드 경로는 CloseUISilent / SuppressNextHudNotify 로 우회.
+            bool suppress = ConsumeSuppressHudNotify();
+            if (TriggersHudPopupAnimation && isActiveAndEnabled && !suppress)
             {
                 var hud = UnityEngine.Object.FindAnyObjectByType<UIHud>();
                 if (hud != null && hud != this) hud.NotifyPopupClosed();

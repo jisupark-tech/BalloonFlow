@@ -113,7 +113,15 @@ namespace BalloonFlow
         /// path가 "Popup/"으로 시작하면 PopupTr에, 아니면 UiTr에 생성.
         /// 중복 생성 방지: (1) _openUIList stale cleanup → (2) 리스트 재사용 → (3) Scene FindAny → (4) Instantiate.
         /// </summary>
-        public T OpenUI<T>(string _path) where T : UIBase
+        public T OpenUI<T>(string _path) where T : UIBase => OpenUIInternal<T>(_path, suppressHudNotify: false);
+
+        /// <summary>
+        /// LoadUI 사전 로드 전용 — OpenUI 호출 시 UIHud popup 연출 트리거를 우회.
+        /// 보통은 OpenUI<T>(path) 후 popup.CloseUISilent() 와 쌍으로 사용.
+        /// </summary>
+        public T OpenUISilent<T>(string _path) where T : UIBase => OpenUIInternal<T>(_path, suppressHudNotify: true);
+
+        private T OpenUIInternal<T>(string _path, bool suppressHudNotify) where T : UIBase
         {
             // (1) 씬 전환 등으로 destroyed 된 항목을 리스트에서 정리 (Unity fake-null)
             for (int i = _openUIList.Count - 1; i >= 0; i--)
@@ -126,6 +134,7 @@ namespace BalloonFlow
             {
                 if (_openUIList[i] is T existing && existing != null)
                 {
+                    if (suppressHudNotify) existing.SuppressNextHudNotify();
                     existing.OpenUI();
                     return existing;
                 }
@@ -138,6 +147,7 @@ namespace BalloonFlow
             if (existingInScene != null)
             {
                 _openUIList.Add(existingInScene);
+                if (suppressHudNotify) existingInScene.SuppressNextHudNotify();
                 existingInScene.OpenUI();
                 return existingInScene;
             }
@@ -161,6 +171,7 @@ namespace BalloonFlow
 
             if (_ui != null)
             {
+                if (suppressHudNotify) _ui.SuppressNextHudNotify();
                 _ui.OpenUI();
                 _openUIList.Add(_ui);
             }

@@ -380,22 +380,38 @@ namespace BalloonFlow
         private void SetupLevel(LevelConfig config)
         {
             // 풍선 필드 사이즈 자동 계산
-            // boardWorldSize를 컨베이어 내부 최대 영역에서 역산
+            // 컨베이어 inner area에 cols/rows가 들어갈 최대 spacing을 산출.
+            // 베이크된 좌표가 다른 spacing을 쓰면 board center 기준으로 rescale —
+            // 임포터/MapMaker/Procedural 어디서 만들어진 데이터든 현재 conveyor에 맞춰짐.
             if (GameManager.HasInstance && config.gridCols > 0)
             {
                 float innerW = BoardTileManager.CONVEYOR_WIDTH - BoardTileManager.RAIL_THICKNESS - BoardTileManager.RAIL_GAP * 2f;
                 float innerH = BoardTileManager.CONVEYOR_HEIGHT - BoardTileManager.RAIL_THICKNESS - BoardTileManager.RAIL_GAP * 2f;
                 int cols = config.gridCols;
                 int rows = config.gridRows > 0 ? config.gridRows : cols;
-                int maxDim = Mathf.Max(cols, rows);
-                // maxDim 기준으로 boardWorldSize 역산 (가로/세로 중 제한되는 쪽)
-                float bwsFromW = innerW / cols * maxDim;
-                float bwsFromH = innerH / rows * maxDim;
-                float boardWorldSize = Mathf.Min(bwsFromW, bwsFromH);
+                float targetSpacing = Mathf.Min(innerW / cols, innerH / rows);
+
                 // ROLLBACK_DART_SPEED_MAPMAKER_SPACING:
-                // Match MapMaker's loaded-config spacing restore before falling back to formula.
+                // detected spacing은 grid-aligned 여부 판별용 — grid 데이터는 targetSpacing으로
+                // 재투영하고, 비균등 배치(detect 실패)는 그대로 둠.
                 float detectedSpacing = DetectSpacingFromBalloons(config.balloons);
-                GameManager.Instance.Board.cellSpacing = detectedSpacing > 0f ? detectedSpacing : boardWorldSize / maxDim;
+                if (detectedSpacing > 0f && config.balloons != null
+                    && !Mathf.Approximately(detectedSpacing, targetSpacing))
+                {
+                    float scale = targetSpacing / detectedSpacing;
+                    float cx = GameManager.Instance.Board.boardCenterX;
+                    float cz = GameManager.Instance.Board.boardCenterZ;
+                    for (int i = 0; i < config.balloons.Length; i++)
+                    {
+                        var bl = config.balloons[i];
+                        if (bl == null) continue;
+                        bl.gridPosition = new Vector2(
+                            cx + (bl.gridPosition.x - cx) * scale,
+                            cz + (bl.gridPosition.y - cz) * scale);
+                    }
+                }
+
+                GameManager.Instance.Board.cellSpacing = targetSpacing;
             }
 
             // Reset score first so subsystems receive the correct thresholds

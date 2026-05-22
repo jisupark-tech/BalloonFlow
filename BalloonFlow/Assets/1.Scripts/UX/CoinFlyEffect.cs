@@ -34,8 +34,6 @@ namespace BalloonFlow
         private static readonly Dictionary<GameObject, Vector2> _rootSizeDeltaCache
             = new Dictionary<GameObject, Vector2>();
 
-        // ROLLBACK_FXGOLD_RAW_PARTICLE_RENDERER
-        // FxGold uses raw ParticleSystemRenderer now. Runtime must not auto-add UIParticleRenderer.
         /// <summary>[2026-05-11] 코인 사이 spawn 인터벌 (사용자 요청 0.2f).</summary>
         private const float SPAWN_INTERVAL = 0.12f;
 
@@ -149,7 +147,6 @@ namespace BalloonFlow
 
             GameObject prefab = _prefab;
 
-            // 프리팹에 붙어있는 ParticleSystem 만 사용. UIParticleRenderer 자동 부착 제거.
             if (!ObjectPoolManager.Instance.HasPool(POOL_KEY))
                 ObjectPoolManager.Instance.CreatePool(POOL_KEY, prefab, 28);
             _poolRegistered = true;
@@ -276,26 +273,8 @@ namespace BalloonFlow
             coin.transform.SetParent(parent, false);
             ResetPooledTransform(coin);
             coin.transform.SetAsLastSibling();
-            PrepareRawParticles(coin, parent);
             _activeCoins.Add(coin);
             return coin;
-        }
-
-        private static void PrepareRawParticles(GameObject root, Transform parent)
-        {
-            // [2026-05-21] 런타임 UIParticleRenderer 자동 부착 제거 — 아트팀이 prefab inspector 에서
-            // 필요한 ParticleSystem 에 직접 UIParticleRenderer 부착 + _meshScale 조정.
-            // (Default 100 이 화면에 너무 크거나 작게 baking 되는 문제를 코드에서 보정하지 않음.)
-            var uiParticles = root.GetComponentsInChildren<UIParticleRenderer>(true);
-            for (int i = 0; i < uiParticles.Length; i++)
-            {
-                if (uiParticles[i] == null) continue;
-
-                // ROLLBACK_FXGOLD_UI_PARTICLE_SCALE_RESET
-                // Older pooled instances may still carry a runtime SetMeshScale override.
-                // Reset to each component's serialized prefab value without forcing a new number.
-                uiParticles[i].ResetMeshScale();
-            }
         }
 
         /// <summary>

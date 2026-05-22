@@ -1032,6 +1032,25 @@ namespace BalloonFlow
             }
         }
 
+        // [2026-05-22 DBG-TopLeft] 외부에서 contour map 상태 조회 — DartManager 좌상단 진단용. 캡쳐 끝나면 제거.
+        public static bool TryGetContourEdgeForDirection(
+            ScanDirection scanDir, int line,
+            out int balloonId, out int cellX, out int cellY, out int color, out bool targetable)
+        {
+            BuildEdgeTargetCache();
+            if (TryGetEdgeTargetOnLine(scanDir, line, out EdgeTarget edge))
+            {
+                balloonId = edge.balloonId;
+                cellX = edge.cell.x;
+                cellY = edge.cell.y;
+                color = edge.color;
+                targetable = edge.targetable;
+                return true;
+            }
+            balloonId = -1; cellX = 0; cellY = 0; color = -1; targetable = false;
+            return false;
+        }
+
         private static int GetLineKey(ScanDirection scanDir, Vector2Int cell)
         {
             switch (scanDir)

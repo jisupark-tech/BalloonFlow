@@ -264,7 +264,8 @@ namespace BalloonFlow
 #if BALLOONFLOW_DART_MISS_SUSPECT_DEBUG
         private static readonly bool DART_MISS_SUSPECT_DEBUG = true;
 #else
-        private static readonly bool DART_MISS_SUSPECT_DEBUG = false;
+        // [2026-05-22 DBG-TopLeft] 좌상단 풍선 BOTTOM/RIGHT rail 공격 미발사 재현용 — 캡쳐 끝나면 false 로 복귀.
+        private static readonly bool DART_MISS_SUSPECT_DEBUG = true;
 #endif
         // ROLLBACK_DART_ATTACK_ISSUE_DEBUG:
         // Temporary, throttled diagnostics for continuous-fire and miss paths. Disable this after
@@ -273,8 +274,12 @@ namespace BalloonFlow
 #if BALLOONFLOW_DART_ATTACK_ISSUE_DEBUG
         private static readonly bool DART_ATTACK_ISSUE_DEBUG = true;
 #else
-        private static readonly bool DART_ATTACK_ISSUE_DEBUG = false;
+        // [2026-05-22 DBG-TopLeft] 좌상단 풍선 BOTTOM/RIGHT rail 공격 미발사 재현용 — 캡쳐 끝나면 false 로 복귀.
+        private static readonly bool DART_ATTACK_ISSUE_DEBUG = true;
 #endif
+
+        // [2026-05-22 DBG-TopLeft] 좌상단 공격 미발사 진단 — 캡쳐 끝나면 const false 로 복귀.
+        private static readonly bool DBG_TOPLEFT_DUMP = true;
 
         // ROLLBACK_DART_CROSSED_LINE_CACHE_FIX:
         // At x2 speed or after a long frame, a head can cross several grid lines before this scan
@@ -2591,6 +2596,70 @@ namespace BalloonFlow
             _missSuspectLogsThisFrame++;
             Debug.Log($"[DartMissSuspect] holder={holderId} dartId={dartId} color={color} " +
                       $"progress={progress:F2} scan={scanDir} scanLine={scanLine} {diag}");
+
+            // [2026-05-22 DBG-TopLeft] BOTTOM/RIGHT rail 다트 미발사 시 lock 상태와 contour 좌상단 상태 dump.
+            // 캡쳐 끝나면 본 블록 + DBG_TOPLEFT_DUMP 상수 제거.
+            if (DBG_TOPLEFT_DUMP &&
+                (scanDir == DirectionalTargeting.ScanDirection.Up ||
+                 scanDir == DirectionalTargeting.ScanDirection.Left))
+            {
+                System.Text.StringBuilder sb = new System.Text.StringBuilder(256);
+                sb.Append("[DBG-TopLeft] holder=").Append(holderId)
+                  .Append(" dartId=").Append(dartId)
+                  .Append(" color=").Append(color)
+                  .Append(" scan=").Append(scanDir)
+                  .Append(" scanLine=").Append(scanLine);
+
+                // 이 holder 의 pass 방향/소비 라인 set
+                if (_holderPassDirectionByHolder.TryGetValue(holderId, out DirectionalTargeting.ScanDirection passDir))
+                    sb.Append(" passDir=").Append(passDir);
+                else sb.Append(" passDir=none");
+                if (_holderPassLinesByHolder.TryGetValue(holderId, out HashSet<int> passLines) && passLines != null)
+                {
+                    sb.Append(" passLines={");
+                    bool first = true;
+                    foreach (int l in passLines)
+                    {
+                        if (!first) sb.Append(',');
+                        sb.Append(l);
+                        first = false;
+                    }
+                    sb.Append('}');
+                }
+                else sb.Append(" passLines={}");
+
+                // 글로벌 in-flight consumed line 집합 (현재 scanDir 만)
+                sb.Append(" globalConsumed[").Append(scanDir).Append("]={");
+                bool firstG = true;
+                foreach (int key in _consumedTargetLines)
+                {
+                    if (!IsConsumedLineKeyForDirection(key, scanDir)) continue;
+                    if (!firstG) sb.Append(',');
+                    int line = (key % CONSUMED_LINE_KEY_STRIDE) - CONSUMED_LINE_KEY_OFFSET;
+                    sb.Append(line);
+                    bool unresolved = _unresolvedConsumedTargetLines.Contains(key);
+                    if (unresolved) sb.Append('!');
+                    firstG = false;
+                }
+                sb.Append('}');
+
+                // 좌상단 contour 후보: scanLine 자신 (=col 0 또는 row max 가 와야 정상)
+                if (DirectionalTargeting.TryGetContourEdgeForDirection(scanDir, scanLine,
+                        out int contourBalloonId, out int contourCellX, out int contourCellY,
+                        out int contourColor, out bool contourTargetable))
+                {
+                    sb.Append(" contourEdge=id").Append(contourBalloonId)
+                      .Append("/cell(").Append(contourCellX).Append(',').Append(contourCellY).Append(')')
+                      .Append("/color=").Append(contourColor)
+                      .Append("/targetable=").Append(contourTargetable);
+                }
+                else
+                {
+                    sb.Append(" contourEdge=none(forLine=").Append(scanLine).Append(')');
+                }
+
+                Debug.Log(sb.ToString());
+            }
         }
 
         #endregion

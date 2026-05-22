@@ -198,9 +198,9 @@ namespace BalloonFlow
 
         // [2026-05-13] 인게임 enter 슬라이드-인 연출 — prefab 캐시(-300/-60)에 의존하지 않는 하드코딩 시작/끝값.
         // 의미 분리: OPEN_END / POPUP_OPEN_Y 와 수치는 같아도 용도가 다르다 (popup vs ingame enter).
-        private const float HUD_TOP_INGAME_HIDDEN_Y      = 160f;  // 화면 밖 위쪽 시작 위치
+        private const float HUD_TOP_INGAME_HIDDEN_Y      = 240f;  // 화면 밖 위쪽 시작 위치
         private const float HUD_TOP_INGAME_REST_Y        = -60f;  // 인게임 정착 위치
-        private const float BOTTOM_PANEL_INGAME_HIDDEN_Y = -300f; // 화면 밖 아래쪽 시작 위치
+        private const float BOTTOM_PANEL_INGAME_HIDDEN_Y = -260f; // 화면 밖 아래쪽 시작 위치
         private const float BOTTOM_PANEL_INGAME_REST_Y   = 0f;    // 인게임 정착 위치
         private Vector2 _hudTopOrigPos;
         private bool _hudTopOrigCached;
@@ -376,21 +376,45 @@ namespace BalloonFlow
 
         #endregion
 
+        // [2026-05-22] 인스턴스화 즉시 HIDDEN_Y 강제 — UIManager.OpenUI 의 SetActive(true) 이후 prefab REST 위치가
+        // 1프레임 노출되는 플리커 차단. PrimeIngameEnterStartPos 가 LoadUI 단계에서 한 번 더 호출되어도 idempotent.
+        protected override void Awake()
+        {
+            base.Awake();
+            PrimeIngameEnterStartPos();
+        }
+
         private void OnEnable()
         {
             // 스테이지 in-place 전환 시 GameSpeedController._toggleOn latch 와 HUD 비주얼/텍스트가 어긋날 수 있어,
             // OnLevelLoaded 발화에 맞춰 X1/X2 비주얼을 재동기화한다.
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
+            // [2026-05-22] 씬 전환 시작 즉시 UIHud 강제 숨김 — Win/Fail Home, mid-game Settings→Quit 등 모든 로비 이탈 경로 커버.
+            // latch off 경로에서 NotifyPopupClosed 가 PlayPopupCloseAnimation 으로 REST 복귀 연출을 트리거하던 재노출 차단.
+            EventBus.Subscribe<OnSceneTransitionStarted>(HandleSceneTransitionStarted);
         }
 
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
+            EventBus.Unsubscribe<OnSceneTransitionStarted>(HandleSceneTransitionStarted);
         }
 
         private void HandleLevelLoaded(OnLevelLoaded _)
         {
             RefreshSpeedToggleVisual();
+        }
+
+        private void HandleSceneTransitionStarted(OnSceneTransitionStarted _)
+        {
+            _popupOpenSeq?.Kill();
+            _bottomPanelTween?.Kill();
+            if (_canvasGroup != null)
+            {
+                _canvasGroup.alpha = 0f;
+                _canvasGroup.interactable = false;
+                _canvasGroup.blocksRaycasts = false;
+            }
         }
 
         private void Start()

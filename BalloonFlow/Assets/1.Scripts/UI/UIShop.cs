@@ -64,11 +64,6 @@ namespace BalloonFlow
         [Tooltip("동적 아이템에 적용할 preferredHeight (LayoutElement). 프리팹 자체 size 사용 시 0.")]
         [SerializeField] private float _itemHeightOverride = 0f;
 
-        [Header("[Appear Animation]")]
-        [SerializeField] private float _itemAppearScaleDuration = 0.3f;
-        [SerializeField] private float _itemAppearStagger = 0.06f;
-        [SerializeField] private Ease _itemAppearEase = Ease.OutBack;
-
         private int _displayedCount;
         private bool _userExpandedMore;
         private readonly List<PopupShopListItem> _spawnedItems = new List<PopupShopListItem>();
@@ -440,13 +435,6 @@ namespace BalloonFlow
                 _displayedCount = Mathf.Min(_displayedCount, _firstPageRootCount > 0 ? ITEMS_PER_PAGE : _displayedCount);
                 // 3) More 버튼 노출 결정 (UpdateMoreButton 가 _userExpandedMore 확인).
                 UpdateMoreButton();
-                // 4) 첫 페이지 root 에 appear 연출 재생 — reset 끝난 뒤 마지막 단계.
-                int order = 0;
-                for (int i = 0; i < _firstPageRootCount && i < _spawnedRoots.Count; i++)
-                {
-                    if (_spawnedRoots[i] != null && _spawnedRoots[i].activeSelf)
-                        PlayAppearAnimation(_spawnedRoots[i].transform, order++);
-                }
                 return;
             }
 
@@ -518,7 +506,6 @@ namespace BalloonFlow
             int rootCountBefore = _spawnedRoots.Count;
 
             GameObject goldContainer = null;
-            int appearOrder = 0;
 
             int remaining = _products.Length - _displayedCount;
             int loadCount = (loadOverride > 0) ? Mathf.Min(loadOverride, remaining) : Mathf.Min(ITEMS_PER_PAGE, remaining);
@@ -557,8 +544,6 @@ namespace BalloonFlow
                         // 데이터 없는 빈 카드 노출 방지.
                         for (int c = goldContainer.transform.childCount - 1; c >= 0; c--)
                             Destroy(goldContainer.transform.GetChild(c).gameObject);
-
-                        PlayAppearAnimation(goldContainer.transform, appearOrder++);
                     }
 
                     var goldGo = Instantiate(_prefabGold, goldContainer.transform);
@@ -591,8 +576,6 @@ namespace BalloonFlow
                 _spawnedRoots.Add(go);
                 // [2026-05-13] 동적 spawn item 의 Buy 버튼 등에 더블 클릭 가드 부착.
                 UIButtonClickGuard.AttachToHierarchy(go);
-
-                PlayAppearAnimation(go.transform, appearOrder++);
 
                 // 부모 컨테이너 root 기준으로 그 직전에 배치 (스크롤 끝에 더보기 유지)
                 if (MoreButtonRoot != null && MoreButtonRoot.transform.parent == _contentRoot)
@@ -660,19 +643,6 @@ namespace BalloonFlow
                 if (item == null) continue;
                 item.RefreshParticleLightVisibility(_viewport);
             }
-        }
-
-        // ShopContent 행 단위 순차 등장 — Gold 그룹은 컨테이너 1개를 1행으로 묶어 한 번만 stagger.
-        private void PlayAppearAnimation(Transform target, int orderIndex)
-        {
-            if (target == null) return;
-            // Pool 재사용 시 이전 tween 잔존하면 충돌 → kill 먼저.
-            target.DOKill();
-            target.localScale = Vector3.zero;
-            target.DOScale(Vector3.one, _itemAppearScaleDuration)
-                  .SetEase(_itemAppearEase)
-                  .SetDelay(orderIndex * _itemAppearStagger)
-                  .SetLink(target.gameObject);
         }
 
         /// <summary>

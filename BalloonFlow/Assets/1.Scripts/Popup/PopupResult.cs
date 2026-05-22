@@ -477,7 +477,6 @@ namespace BalloonFlow
         /// <summary>
         /// FX subtree (Reward/FX 의 모든 자손) 활성 + Play 보장 + FX node 에 Canvas override 부여
         /// (ImageStage(base+1) / Gold(base+3) 사이 = order 위치 분리).
-        /// 런타임 UIParticleRenderer 자동 부착은 안 함 — 아트팀이 prefab 에서 직접 부착 + _meshScale 조정.
         /// </summary>
         private static void ApplyFxSubtreeOrder(Transform rewardRoot, int order, string layer)
         {

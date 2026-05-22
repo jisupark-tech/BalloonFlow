@@ -14,7 +14,7 @@ public static class ForceReserializeLevelData
     {
         var paths = new[]
         {
-            "Assets/Resources/LevelDatabase.asset",
+            "Assets/EditorData/LevelDatabase.asset",
             "Assets/EditorData/LevelDatabase_AI.asset",
             "Assets/EditorData/LevelDatabase_Transform.asset"
         };

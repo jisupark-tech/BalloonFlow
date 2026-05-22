@@ -346,7 +346,7 @@ namespace BalloonFlow
                 return WinningStreakManager.Instance.IsUnlocked;
 
             // Manager 미준비 시 UserData + 하드 fallback (config 미도착 상황 방어).
-            const int FALLBACK_UNLOCK_LEVEL = 34;
+            const int FALLBACK_UNLOCK_LEVEL = 10;//Ori : 34
             int unlockLevel = FALLBACK_UNLOCK_LEVEL;
             if (WinningStreakConfigService.HasInstance && WinningStreakConfigService.Instance.Config != null)
                 unlockLevel = WinningStreakConfigService.Instance.Config.unlockLevel;
