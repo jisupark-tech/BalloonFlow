@@ -65,7 +65,7 @@ namespace BalloonFlow
 
         // 풍선(필드) 기믹만
         private static readonly string[] FIELD_GIMMICK_NAMES =
-            { "(none)", "Pinata", "Pin", "Surprise", "Wall", "Pinata_Box", "Ice", "Color_Curtain", "Lock_Key", "Barricade" };
+            { "(none)", "Pinata", "Pin", "Surprise", "Wall", "Pinata_Box", "Ice", "Color_Curtain", "Lock_Key", "Barricade", "FlexTube" };
 
         // 보관함(큐) 기믹만
         private static readonly string[] HOLDER_GIMMICK_NAMES =
@@ -75,7 +75,7 @@ namespace BalloonFlow
         // Field cells store FIELD_GIMMICK_NAMES indices, not legacy all-gimmick indices.
         // Keep preview labels in the exact same order as FIELD_GIMMICK_NAMES.
         private static readonly string[] FIELD_GIMMICK_MARKS =
-            { "", "Pi", "Pn", "?!", "W", "PB", "Ic", "CC", "LK", "Bc" };
+            { "", "Pi", "Pn", "?!", "W", "PB", "Ic", "CC", "LK", "Bc", "FT" };
 
         private static readonly Color GIMMICK_WALL_COLOR  = new Color(0.35f, 0.35f, 0.38f);
         private static readonly Color GIMMICK_PIN_COLOR   = new Color(0.70f, 0.50f, 0.20f);
@@ -150,6 +150,16 @@ namespace BalloonFlow
         private int _nextLockPairId = 1;   // 자동 증가 Lock pair ID
         private int[,] _balloonLockPairIds; // 풍선별 Lock pair ID (-1 = 없음)
         private int[,] _holderLockPairIds;  // 보관함별 Lock pair ID (-1 = 없음)
+
+        // FlexTube — 같은 groupId 셀들이 StartCap → Segments → EndCap 한 줄로 연결.
+        // partType / rotation 은 BuildLevelConfig 시점에 sequenceIndex + 인접 셀 위치로 자동 계산.
+        private int[,] _balloonFlexTubeGroupId;       // -1 = FlexTube 셀 아님
+        private int[,] _balloonFlexTubeSequenceIndex; // -1 = 미설정, 0..N-1 = paint 순서
+        private int _paintFlexTubeGroupId = 1;        // 현재 paint 중인 그룹 ID (수정 가능)
+        private int _nextFlexTubeGroupId = 1;         // 자동 증가 다음 ID
+        private readonly List<Vector2Int> _flexTubePaintOrder = new List<Vector2Int>(); // 현재 그룹의 paint 순서 (sequenceIndex 추적)
+        private RectTransform _fieldGimmickFlexTubeRow;
+        private Text _flexTubeStatusText;
 
         private int _railDir;
         private float _railPadding = 1.5f;
@@ -1045,10 +1055,36 @@ namespace BalloonFlow
             });
             _fieldGimmickLockRow = lockRow.GetComponent<RectTransform>();
 
+            // FlexTube — Group ID input + Finish Group 버튼 + 상태 텍스트
+            var flexRow = Row(p); Lbl(flexRow, "FlexTube GID", w: 110);
+            MakeIntField(flexRow, _paintFlexTubeGroupId, 1, 999, v => {
+                _paintFlexTubeGroupId = v;
+                _flexTubePaintOrder.Clear();
+                UpdateFlexTubeStatusText();
+                SetStatus($"FlexTube Group: {v}");
+            });
+            Btn(flexRow, "New", () => {
+                _paintFlexTubeGroupId = _nextFlexTubeGroupId++;
+                _flexTubePaintOrder.Clear();
+                UpdateFlexTubeStatusText();
+                SetStatus($"New FlexTube Group: {_paintFlexTubeGroupId}");
+            });
+            Btn(flexRow, "Finish", () => {
+                _paintFlexTubeGroupId = _nextFlexTubeGroupId++;
+                _flexTubePaintOrder.Clear();
+                UpdateFlexTubeStatusText();
+                SetStatus($"FlexTube group finished — next: {_paintFlexTubeGroupId}");
+            });
+            _flexTubeStatusText = Lbl(p, "FlexTube: 0 cells", 11);
+            _flexTubeStatusText.color = new Color(0.6f, 0.7f, 0.6f);
+            _fieldGimmickFlexTubeRow = flexRow.GetComponent<RectTransform>();
+
             // Initially hide all gimmick-specific rows (none selected)
             _fieldGimmickHPRow.gameObject.SetActive(false);
             _fieldGimmickSizeRow.gameObject.SetActive(false);
             _fieldGimmickLockRow.gameObject.SetActive(false);
+            _fieldGimmickFlexTubeRow.gameObject.SetActive(false);
+            if (_flexTubeStatusText != null) _flexTubeStatusText.gameObject.SetActive(false);
 
             Sep(p);
         }
@@ -1057,9 +1093,18 @@ namespace BalloonFlow
         {
             bool isSizedFieldGimmick = IsSizedFieldGimmick(gimmickName);
             bool isLockKey = gimmickName == "Lock_Key";
+            bool isFlexTube = gimmickName == "FlexTube";
             if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(isSizedFieldGimmick);
             if (_fieldGimmickSizeRow != null) _fieldGimmickSizeRow.gameObject.SetActive(isSizedFieldGimmick);
             if (_fieldGimmickLockRow != null) _fieldGimmickLockRow.gameObject.SetActive(isLockKey);
+            if (_fieldGimmickFlexTubeRow != null) _fieldGimmickFlexTubeRow.gameObject.SetActive(isFlexTube);
+            if (_flexTubeStatusText != null) _flexTubeStatusText.gameObject.SetActive(isFlexTube);
+        }
+
+        private void UpdateFlexTubeStatusText()
+        {
+            if (_flexTubeStatusText == null) return;
+            _flexTubeStatusText.text = $"FlexTube Group {_paintFlexTubeGroupId}: {_flexTubePaintOrder.Count} cells";
         }
 
         private void UpdateHolderGimmickUI(string gimmickName)
@@ -3280,8 +3325,31 @@ namespace BalloonFlow
                     {
                         bool isSizedFieldGimmick = _paintGimmick > 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length
                             && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[_paintGimmick]);
+                        bool isFlexTubeGimmick = _paintGimmick > 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length
+                            && FIELD_GIMMICK_NAMES[_paintGimmick] == "FlexTube";
 
-                        if (isSizedFieldGimmick && _paintColor >= 0)
+                        if (isFlexTubeGimmick && _paintColor >= 0)
+                        {
+                            // FlexTube 모드 — wasPressedThisFrame 일 때만 paint, hold/drag 프레임은 no-op.
+                            // 일반 paint 분기로 절대 fallback 하지 않음 (fallback 시 clear 코드가 데이터 삭제).
+                            if (mouse.leftButton.wasPressedThisFrame
+                                && _balloonFlexTubeGroupId[col, row] != _paintFlexTubeGroupId)
+                            {
+                                _balloonColors[col, row] = _paintColor;
+                                _balloonGimmicks[col, row] = _paintGimmick;
+                                _balloonGimmickHP[col, row] = _paintPinataHP;
+                                _balloonPinataW[col, row] = 1;
+                                _balloonPinataH[col, row] = 1;
+                                _balloonLockPairIds[col, row] = -1;
+                                _balloonFlexTubeGroupId[col, row] = _paintFlexTubeGroupId;
+                                _balloonFlexTubeSequenceIndex[col, row] = _flexTubePaintOrder.Count;
+                                _flexTubePaintOrder.Add(new Vector2Int(col, row));
+                                UpdatePreviewCell(col, row);
+                                UpdateFlexTubeStatusText();
+                                _infoDirty = true;
+                            }
+                        }
+                        else if (isSizedFieldGimmick && _paintColor >= 0)
                         {
                             int pw = _paintPinataW, ph = _paintPinataH;
                             // 범위 내 셀에 같은 색 + Piñata 기믹으로 채움 (프리뷰에서 영역 표시)
@@ -3295,6 +3363,9 @@ namespace BalloonFlow
                                     _balloonGimmickHP[cx, cy] = _paintPinataHP;
                                     _balloonPinataW[cx, cy] = 0; // 비앵커 셀: sizeW=0 (앵커 아님 표시)
                                     _balloonPinataH[cx, cy] = 0;
+                                    // 잔존 FlexTube 데이터 클리어 — 다른 gimmick 으로 덮어쓰는 cell.
+                                    _balloonFlexTubeGroupId[cx, cy] = -1;
+                                    _balloonFlexTubeSequenceIndex[cx, cy] = -1;
                                     UpdatePreviewCell(cx, cy);
                                 }
                             // 앵커 셀에만 사이즈 저장
@@ -3315,6 +3386,9 @@ namespace BalloonFlow
                             bool isLockKeyGimmick = gimmickToSet > 0 && gimmickToSet < FIELD_GIMMICK_NAMES.Length
                                 && FIELD_GIMMICK_NAMES[gimmickToSet] == "Lock_Key";
                             _balloonLockPairIds[col, row] = isLockKeyGimmick ? _paintLockPairId : -1;
+                            // 잔존 FlexTube 데이터 클리어 — erase / 일반 색 / 다른 gimmick paint 모두 이 경로.
+                            _balloonFlexTubeGroupId[col, row] = -1;
+                            _balloonFlexTubeSequenceIndex[col, row] = -1;
                             UpdatePreviewCell(col, row);
                             _infoDirty = true;
                         }
@@ -4995,6 +5069,8 @@ namespace BalloonFlow
             _balloonPinataW = new int[_gridCols, _gridRows];
             _balloonPinataH = new int[_gridCols, _gridRows];
             _balloonLockPairIds = new int[_gridCols, _gridRows];
+            _balloonFlexTubeGroupId = new int[_gridCols, _gridRows];
+            _balloonFlexTubeSequenceIndex = new int[_gridCols, _gridRows];
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                 {
@@ -5004,6 +5080,8 @@ namespace BalloonFlow
                     _balloonPinataW[c, r] = 1;
                     _balloonPinataH[c, r] = 1;
                     _balloonLockPairIds[c, r] = -1;
+                    _balloonFlexTubeGroupId[c, r] = -1;
+                    _balloonFlexTubeSequenceIndex[c, r] = -1;
                 }
 
             if (config.balloons != null)
@@ -5021,6 +5099,12 @@ namespace BalloonFlow
                         _balloonGimmicks[col, row] = gi;
                         _balloonGimmickHP[col, row] = b.hp > 0 ? b.hp : 2;
                         _balloonLockPairIds[col, row] = b.lockPairId;
+                        // FlexTube 데이터는 gimmickType 이 실제 "FlexTube" 일 때만 복원 — 잔존 데이터 방지.
+                        bool isFlexTubeLoad = b.gimmickType == "FlexTube";
+                        _balloonFlexTubeGroupId[col, row] = isFlexTubeLoad ? b.flexTubeGroupId : -1;
+                        _balloonFlexTubeSequenceIndex[col, row] = isFlexTubeLoad ? b.flexTubeSequenceIndex : -1;
+                        if (isFlexTubeLoad && b.flexTubeGroupId >= _nextFlexTubeGroupId)
+                            _nextFlexTubeGroupId = b.flexTubeGroupId + 1;
 
                         // Piñata 사이즈 복원 + 비앵커 셀 채우기
                         int bpw = b.sizeW > 0 ? b.sizeW : 1;
@@ -5349,6 +5433,83 @@ namespace BalloonFlow
                 gimmickTypes = CollectGimmicks(), balloonScale = BalloonScale,
             };
 
+            // FlexTube partType 사전 계산 — 현재 _balloonGimmicks 가 실제로 FlexTube 인 cell 만 인정.
+            // (erase 후 다른 gimmick 으로 paint 한 경우 잔존 groupId 가 있을 수 있어 가드.)
+            var flexTubeMaxSeq = new Dictionary<int, int>();
+            var flexTubeCells = new Dictionary<int, List<(int c, int r, int seq, int color)>>(); // 검증용
+            // 디버그: 모든 FlexTube cell 의 grid 상태 dump.
+            int dbgScanCount = 0;
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                {
+                    int gimmickIdx = _balloonGimmicks[c, r];
+                    bool isFlexTubeCell = gimmickIdx > 0 && gimmickIdx < FIELD_GIMMICK_NAMES.Length
+                                          && FIELD_GIMMICK_NAMES[gimmickIdx] == "FlexTube";
+                    if (!isFlexTubeCell) continue;
+                    dbgScanCount++;
+
+                    int gid = _balloonFlexTubeGroupId[c, r];
+                    int seq = _balloonFlexTubeSequenceIndex[c, r];
+                    Debug.Log($"[MapMaker:FlexTube] scan cell ({c},{r}) color={_balloonColors[c, r]} groupId={gid} seq={seq}");
+                    if (gid < 0) continue;
+                    if (!flexTubeMaxSeq.TryGetValue(gid, out int curMax) || seq > curMax)
+                        flexTubeMaxSeq[gid] = seq;
+                    if (!flexTubeCells.TryGetValue(gid, out var list))
+                    {
+                        list = new List<(int, int, int, int)>();
+                        flexTubeCells[gid] = list;
+                    }
+                    list.Add((c, r, seq, _balloonColors[c, r]));
+                }
+            Debug.Log($"[MapMaker:FlexTube] total scanned FlexTube cells = {dbgScanCount}, groups = {flexTubeCells.Count}");
+
+            // 그룹별 무결성 검증 — 부족/끊김 발견 시 경고 로그.
+            foreach (var kv in flexTubeCells)
+            {
+                int gid = kv.Key;
+                var cells = kv.Value;
+                if (cells.Count < 2)
+                {
+                    Debug.LogWarning($"[MapMaker:FlexTube] Group {gid}: cells={cells.Count} (need at least 2: StartCap+EndCap)");
+                    SetStatus($"FlexTube G{gid}: incomplete ({cells.Count} cells)");
+                    continue;
+                }
+                // sequenceIndex 가 0..N-1 연속이어야 함
+                cells.Sort((a, b) => a.seq.CompareTo(b.seq));
+                bool seqOK = true;
+                for (int i = 0; i < cells.Count; i++)
+                {
+                    if (cells[i].seq != i) { seqOK = false; break; }
+                }
+                if (!seqOK)
+                {
+                    Debug.LogWarning($"[MapMaker:FlexTube] Group {gid}: sequenceIndex 불연속 — paint 순서 손상");
+                    SetStatus($"FlexTube G{gid}: sequence broken");
+                }
+                // 인접성 검증 — sequenceIndex i, i+1 이 4-방향(상하좌우) 인접해야 함
+                for (int i = 0; i < cells.Count - 1; i++)
+                {
+                    int dx = Mathf.Abs(cells[i + 1].c - cells[i].c);
+                    int dy = Mathf.Abs(cells[i + 1].r - cells[i].r);
+                    if (dx + dy != 1)
+                    {
+                        Debug.LogWarning($"[MapMaker:FlexTube] Group {gid}: seq {i}↔{i + 1} 셀 끊김 ({cells[i].c},{cells[i].r}) → ({cells[i + 1].c},{cells[i + 1].r})");
+                        SetStatus($"FlexTube G{gid}: cells disconnected at seq {i}→{i + 1}");
+                    }
+                }
+                // 색상 일관성 — 그룹 내 모든 셀이 같은 색이어야 함
+                int firstColor = cells[0].color;
+                foreach (var cell in cells)
+                {
+                    if (cell.color != firstColor)
+                    {
+                        Debug.LogWarning($"[MapMaker:FlexTube] Group {gid}: 색상 불일치 — seq {cell.seq} color={cell.color}, 그룹 색={firstColor}");
+                        SetStatus($"FlexTube G{gid}: color mismatch");
+                        break;
+                    }
+                }
+            }
+
             var balloons = new List<BalloonLayout>();
             int bid = 0;
             for (int c = 0; c < _gridCols; c++)
@@ -5363,6 +5524,24 @@ namespace BalloonFlow
                         && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
                     if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
 
+                    // FlexTube — sequenceIndex 로 partType 자동 결정. rotation 은 런타임 spawn 에서 계산(0 저장).
+                    // 가드: 현재 _balloonGimmicks 가 FlexTube 인 cell 만 ftGroupId/Seq 유효 처리.
+                    bool cellIsFlexTube = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && FIELD_GIMMICK_NAMES[gi] == "FlexTube";
+                    int ftGroupId = -1;
+                    int ftSeq = -1;
+                    string ftPart = "";
+                    if (cellIsFlexTube)
+                    {
+                        ftGroupId = _balloonFlexTubeGroupId[c, r];
+                        ftSeq = _balloonFlexTubeSequenceIndex[c, r];
+                        if (ftGroupId >= 0 && flexTubeMaxSeq.TryGetValue(ftGroupId, out int maxSeq))
+                        {
+                            if (ftSeq == 0) ftPart = "StartCap";
+                            else if (ftSeq == maxSeq) ftPart = "EndCap";
+                            else ftPart = "Segment";
+                        }
+                    }
+
                     balloons.Add(new BalloonLayout
                     {
                         balloonId = bid++, color = _balloonColors[c, r],
@@ -5374,7 +5553,11 @@ namespace BalloonFlow
                         sizeH = _balloonPinataH[c, r],
                         hp = _balloonGimmickHP[c, r],
                         lockPairId = _balloonLockPairIds != null && c < _balloonLockPairIds.GetLength(0) && r < _balloonLockPairIds.GetLength(1)
-                            ? _balloonLockPairIds[c, r] : -1
+                            ? _balloonLockPairIds[c, r] : -1,
+                        flexTubeGroupId = ftGroupId,
+                        flexTubeSequenceIndex = ftSeq,
+                        flexTubePartType = ftPart,
+                        flexTubeRotation = 0   // 런타임 spawn 에서 인접 셀 위치로 계산
                     });
                 }
             config.balloons = balloons.ToArray();

@@ -232,6 +232,18 @@ namespace BalloonFlow
 
         /// <summary>Lock_Key pair ID. -1 = 없음. Key 풍선: 터지면 같은 pairId의 Lock 보관함 해제.</summary>
         public int lockPairId = -1;
+
+        /// <summary>FlexTube 그룹 ID. -1 = FlexTube 아님. 같은 groupId 의 셀들이 하나의 FlexTube 를 구성.</summary>
+        public int flexTubeGroupId = -1;
+
+        /// <summary>FlexTube 부품의 시각 회전 (0/90/180/270). ㄴ/ㄷ/ㄹ 자 형태에서 코너 셀이 회전됨.</summary>
+        public int flexTubeRotation;
+
+        /// <summary>FlexTube 부품 종류 — "StartCap" / "Segment" / "EndCap". 빈 문자열 = FlexTube 셀 아님.</summary>
+        public string flexTubePartType = "";
+
+        /// <summary>FlexTube 배치 순서 인덱스. StartCap=0 부터 EndCap 까지 증가. -1 = 미설정.</summary>
+        public int flexTubeSequenceIndex = -1;
     }
 
     /// <summary>

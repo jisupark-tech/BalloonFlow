@@ -24,7 +24,7 @@ namespace BalloonFlow
         private const float PROJECTILE_MIN_FLIGHT_TIME = 0.015f;
         private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 3.3f;
         private const float PROJECTILE_MIN_FLIGHT_TIME_SCALE = 0.3f;
-        private const float PROJECTILE_MAX_FLIGHT_TIME_SCALE = 4f;
+        private const float PROJECTILE_MAX_FLIGHT_TIME_SCALE = 20f;
         private const int ADJACENT_EMPTY_LINE_RESCUE_RADIUS = 1;
         #endregion
 

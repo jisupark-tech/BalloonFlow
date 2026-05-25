@@ -35,12 +35,46 @@ namespace BalloonFlow
             // PopupBuyItem 의 atlas key 와 동일. iconHeart 키가 atlas 에 없으면 _iconLife 는 null 유지.
             EnsureIconsLoaded();
             EventBus.Subscribe<OnPurchaseRewardGranted>(HandleReward);
+            EventBus.Subscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
         }
 
         protected override void OnDestroy()
         {
             EventBus.Unsubscribe<OnPurchaseRewardGranted>(HandleReward);
+            EventBus.Unsubscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
             base.OnDestroy();
+        }
+
+        /// <summary>
+        /// 구매 실패 처리. success=true 는 OnPurchaseRewardGranted (HandleReward) 가 먼저 발화돼서 spinner/UI 전이를 이미 처리.
+        /// success=false 면 OnPurchaseRewardGranted 가 발행되지 않으므로 여기서 spinner 닫고 에러 popup.
+        /// 트리거: IAPManager 의 미초기화 / product unavailable / 1회 한정 재구매 / OnPurchaseFailed callback.
+        /// </summary>
+        private void HandlePurchaseCompleted(OnPurchaseCompleted evt)
+        {
+            if (evt.success) return;
+
+            Debug.LogWarning($"[PurchaseRewardEffect] HandlePurchaseCompleted fail productId={evt.productId}");
+
+            if (!UIManager.HasInstance) return;
+
+            var spinner = UIManager.Instance.GetOpenUI<PopupLoadingSpinner>();
+            if (spinner != null)
+            {
+                spinner.SetCloseCallback(() => OpenPaymentFailedPopup());
+                spinner.CloseUI();
+                return;
+            }
+
+            OpenPaymentFailedPopup();
+        }
+
+        private static void OpenPaymentFailedPopup()
+        {
+            if (!UIManager.HasInstance) return;
+            var popup = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+            if (popup != null) popup.ShowPaymentFailed();
+            else Debug.LogWarning("[PurchaseRewardEffect] OpenUI<PopupError> returned null on payment fail");
         }
 
         /// <summary>

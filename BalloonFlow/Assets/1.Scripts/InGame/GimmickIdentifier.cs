@@ -22,7 +22,17 @@ namespace BalloonFlow
             LockKey,
             Barricade,
             SpawnerT,
-            SpawnerO
+            SpawnerO,
+            FlexTube
+        }
+
+        /// <summary>FlexTube 부품 종류 — 단일 "FlexTube" 기믹 안에서 셀 역할 구분.</summary>
+        public enum FlexTubePart
+        {
+            None,
+            StartCap,
+            Segment,
+            EndCap
         }
 
         [Header("[기믹 타입 선택]")]
@@ -135,7 +145,31 @@ namespace BalloonFlow
                 case GimmickType.Barricade:    return BalloonController.GimmickBarricade;
                 case GimmickType.SpawnerT:     return BalloonController.GimmickSpawnerT;
                 case GimmickType.SpawnerO:     return BalloonController.GimmickSpawnerO;
+                case GimmickType.FlexTube:     return BalloonController.GimmickFlexTube;
                 default:                       return "";
+            }
+        }
+
+        /// <summary>FlexTubePart enum ↔ 직렬화용 문자열 변환.</summary>
+        public static string FlexTubePartToString(FlexTubePart part)
+        {
+            switch (part)
+            {
+                case FlexTubePart.StartCap: return "StartCap";
+                case FlexTubePart.Segment:  return "Segment";
+                case FlexTubePart.EndCap:   return "EndCap";
+                default:                    return "";
+            }
+        }
+
+        public static FlexTubePart FlexTubePartFromString(string s)
+        {
+            switch (s)
+            {
+                case "StartCap": return FlexTubePart.StartCap;
+                case "Segment":  return FlexTubePart.Segment;
+                case "EndCap":   return FlexTubePart.EndCap;
+                default:         return FlexTubePart.None;
             }
         }
     }

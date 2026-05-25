@@ -84,6 +84,7 @@ namespace BalloonFlow
         public const string GimmickFrozenDart   = "Frozen_Dart";     // Lv.241 동결 풍선 (2히트 필요: 1히트=해동, 2히트=팝)
         public const string GimmickColorCurtain = "Color_Curtain";   // Lv.281 지정 색상 간접 제거
         public const string GimmickBarricade    = "Barricade";       // destructible wall (HP-based)
+        public const string GimmickFlexTube     = "FlexTube";        // 다중 셀 ㄴ/ㄷ/ㄹ 형 튜브 — 같은 색 다트로 EndCap 쪽부터 1셀씩 제거
 
         #endregion
 
@@ -115,6 +116,7 @@ namespace BalloonFlow
 
         // Visual GameObject handles keyed by balloonId
         private readonly Dictionary<int, GameObject> _balloonObjects = new Dictionary<int, GameObject>();
+        private readonly List<GameObject> _flexTubeRoots = new List<GameObject>(); // FlexTube 부모 GameObject 캐시 — ClearAllBalloons 시 일괄 destroy.
 
         // Renderer cache per balloonId — _outermostCulling 시 매 호출 GetComponentsInChildren 비용 회피
         private readonly Dictionary<int, Renderer[]> _balloonRenderers = new Dictionary<int, Renderer[]>();
@@ -363,6 +365,9 @@ namespace BalloonFlow
             {
                 SpawnBalloonFromSetup(entry);
             }
+
+            // FlexTube 그룹 단위 prefab 인스턴스화 — 모든 BalloonData 등록 직후, 자식 부품 GameObject 를 _balloonObjects 에 매핑.
+            BuildFlexTubes(layout);
 
             // ROLLBACK_GIMMICK_LEVEL_METRICS_REAPPLY:
             // Level-specific safe multipliers require the full balloon data set. Spawn first,
@@ -761,6 +766,12 @@ namespace BalloonFlow
                 return ProcessBarricadeHit(data);
             }
 
+            // FlexTube: dartColor 없는 경로(force-pop 시도, indirect)는 무조건 reject — 색 검증 필요.
+            if (data.gimmickType == GimmickFlexTube)
+            {
+                return new PopResult { success = false, reason = "FlexTube: requires dart color", balloonId = data.balloonId, gimmickType = GimmickFlexTube };
+            }
+
             // Pinata and Pinata Box require multiple hits
             if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
             {
@@ -816,6 +827,18 @@ namespace BalloonFlow
             if (data.gimmickType == GimmickBarricade)
                 return ProcessBarricadeHit(data);
 
+            // FlexTube: 부모 FlexTube 컴포넌트로 위임. 가짜 풍선 GameObject 에 IDartHittable(FlexTubePart) 부착됨.
+            // 같은 색 매칭/HP 차감/연출은 FlexTube.OnDartHit 가 일괄 처리. 다트는 hit 인정 후 소진.
+            if (data.gimmickType == GimmickFlexTube)
+            {
+                if (_balloonObjects.TryGetValue(balloonId, out GameObject ftObj) && ftObj != null)
+                {
+                    var hittable = ftObj.GetComponent<IDartHittable>();
+                    if (hittable != null) hittable.OnDartHit(dartColor);
+                }
+                return new PopResult { success = false, hitAccepted = true, reason = "FlexTube: delegated to owner", balloonId = data.balloonId, gimmickType = GimmickFlexTube };
+            }
+
             // Pinata/PinataBox
             if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
                 return ProcessPinataHit(data);
@@ -850,6 +873,7 @@ namespace BalloonFlow
             if (!_balloons.TryGetValue(balloonId, out BalloonData data)) return;
             if (data.isPopped) return;
             if (data.gimmickType == GimmickLockKey) return;
+            if (data.gimmickType == GimmickFlexTube) return; // FlexTube 는 같은 색 다트로만 제거 가능 — indirect/force-pop 차단.
             ExecutePop(data);
         }
 
@@ -983,6 +1007,9 @@ namespace BalloonFlow
                     // 진행 중인 Sequence (DOScale/DOPunchScale 등) 가 SetActive(false) 된 GameObject 의 transform 을
                     // 계속 update 하면서 DOTween internal active list 누적 → 매 frame DOTween.Update 비용 증가.
                     pair.Value.transform.DOKill();
+                    // FlexTube 부품은 pool 외 (Instantiate 직접 생성) — 부모 FlexTube 와 함께 아래 _flexTubeRoots 루프에서 destroy.
+                    if (_balloons.TryGetValue(pair.Key, out BalloonData bdFt) && bdFt.gimmickType == GimmickFlexTube)
+                        continue;
                     // 기믹별 전용 풀로 반환 (없으면 기본 Balloon 풀)
                     string returnKey = PoolKey;
                     if (_balloons.TryGetValue(pair.Key, out BalloonData bd))
@@ -993,6 +1020,13 @@ namespace BalloonFlow
                     ObjectPoolManager.Instance.Return(returnKey, pair.Value);
                 }
             }
+
+            // FlexTube 부모 일괄 destroy — 자식 FlexTubePart 들도 같이 정리됨.
+            for (int i = 0; i < _flexTubeRoots.Count; i++)
+            {
+                if (_flexTubeRoots[i] != null) Destroy(_flexTubeRoots[i]);
+            }
+            _flexTubeRoots.Clear();
 
             // FrozenLayer 오버레이 자식들도 모두 풀로 반환
             ReturnAllFrozenOverlays();
@@ -1044,10 +1078,20 @@ namespace BalloonFlow
                 maxHP       = resolvedHP,
                 sizeW       = entry.sizeW > 0 ? entry.sizeW : 1,
                 sizeH       = entry.sizeH > 0 ? entry.sizeH : 1,
-                lockPairId  = entry.lockPairId
+                lockPairId  = entry.lockPairId,
+                flexTubeGroupId       = entry.flexTubeGroupId,
+                flexTubeSequenceIndex = entry.flexTubeSequenceIndex,
+                flexTubePartType      = entry.flexTubePartType
             };
 
             _balloons[id] = data;
+
+            // FlexTube cell — visual 은 BuildFlexTubes 가 spawn. 일반 풍선 풀에서 visual 가져오지 않음.
+            // GimmickProcessor 등록도 skip (CheckDartBlocker 가 BalloonData 만으로 색 매칭).
+            if (data.gimmickType == GimmickFlexTube)
+            {
+                return;
+            }
 
             // Lock_Key: 풍선 대신 Key 프리팹을 셀에 독립 배치 (풀링)
             if (data.gimmickType == GimmickLockKey)
@@ -1162,6 +1206,164 @@ namespace BalloonFlow
                     data.color,
                     data.maxHP);
             }
+        }
+
+        /// <summary>
+        /// FlexTube 그룹별 prefab 인스턴스화 — SetupBalloons 의 SpawnBalloonFromSetup 일괄 완료 직후 호출.
+        /// 같은 flexTubeGroupId 의 BalloonData 들을 sequenceIndex 순으로 정렬 → FlexTube 부모 + StartCap/Segment/EndCap 자식 배치.
+        /// 각 자식 GameObject 는 _balloonObjects[balloonId] 에 등록되어 다트 hit 시 IDartHittable(FlexTubePart) 진입점이 됨.
+        /// HP = Segment 수 (Cap 제외), color = 첫 cell 색상.
+        /// </summary>
+        private void BuildFlexTubes(List<BalloonSetupData> layout)
+        {
+            // 그룹별 balloonId 수집 + sequenceIndex 정렬
+            var groups = new Dictionary<int, List<int>>();
+            foreach (var kv in _balloons)
+            {
+                var d = kv.Value;
+                if (d.gimmickType != GimmickFlexTube) continue;
+                if (d.flexTubeGroupId < 0) continue;
+                if (!groups.TryGetValue(d.flexTubeGroupId, out var ids))
+                {
+                    ids = new List<int>();
+                    groups[d.flexTubeGroupId] = ids;
+                }
+                ids.Add(d.balloonId);
+            }
+
+            if (groups.Count == 0) return;
+
+            // prefab 일괄 로드 (Resources 캐시)
+            GameObject flexTubePrefab = Resources.Load<GameObject>("Prefabs/FlexTube");
+            GameObject startCapPrefab = Resources.Load<GameObject>("Prefabs/FlexTube_StartCap");
+            GameObject segmentPrefab  = Resources.Load<GameObject>("Prefabs/FlexTube_Segment");
+            GameObject endCapPrefab   = Resources.Load<GameObject>("Prefabs/FlexTube_EndCap");
+            if (flexTubePrefab == null || startCapPrefab == null || segmentPrefab == null || endCapPrefab == null)
+            {
+                Debug.LogWarning("[BalloonController] FlexTube prefab(s) missing in Resources/Prefabs/. FlexTube spawn skipped.");
+                return;
+            }
+
+            foreach (var kv in groups)
+            {
+                int groupId = kv.Key;
+                var ids = kv.Value;
+                ids.Sort((a, b) => _balloons[a].flexTubeSequenceIndex.CompareTo(_balloons[b].flexTubeSequenceIndex));
+
+                // 디버그: 그룹별 cells 정보. spawn 누락 추적용.
+                var sb = new System.Text.StringBuilder();
+                sb.Append($"[FlexTube] Group {groupId}: {ids.Count} cells —");
+                for (int k = 0; k < ids.Count; k++)
+                {
+                    var d = _balloons[ids[k]];
+                    sb.Append($" [{k}: id={ids[k]} seq={d.flexTubeSequenceIndex} pos=({d.position.x:F2},{d.position.z:F2})]");
+                }
+                Debug.Log(sb.ToString());
+
+                if (ids.Count < 2)
+                {
+                    Debug.LogWarning($"[FlexTube] Group {groupId}: cells={ids.Count} (need at least 2: StartCap + EndCap). Skipping.");
+                    continue;
+                }
+
+                // FlexTube 부모 생성 — Animator + FlexTube 컴포넌트는 prefab 에 부착돼 있다고 가정.
+                // world origin 으로 강제 — 자식 부품의 world position 이 prefab transform offset 영향 안 받게.
+                var tubeObj = Instantiate(flexTubePrefab);
+                tubeObj.name = $"FlexTube_Group{groupId}";
+                tubeObj.transform.position = Vector3.zero;
+                tubeObj.transform.rotation = Quaternion.identity;
+                tubeObj.transform.localScale = Vector3.one;
+                var tube = tubeObj.GetComponent<FlexTube>() ?? tubeObj.AddComponent<FlexTube>();
+                _flexTubeRoots.Add(tubeObj);
+                Quaternion extraRot = Quaternion.Euler(0f, tube.ExtraYRotation, 0f);
+
+                var cellPositions = new List<Vector3>(ids.Count);
+                foreach (var id in ids) cellPositions.Add(_balloons[id].position);
+
+                int groupColor = _balloons[ids[0]].color;
+                int colorIdx = Mathf.Clamp(groupColor, 0, BalloonColors.Length - 1);
+
+                var parts = new List<FlexTubePart>(ids.Count);
+                for (int i = 0; i < ids.Count; i++)
+                {
+                    int id = ids[i];
+                    var data = _balloons[id];
+
+                    GimmickIdentifier.FlexTubePart partType =
+                        i == 0 ? GimmickIdentifier.FlexTubePart.StartCap :
+                        i == ids.Count - 1 ? GimmickIdentifier.FlexTubePart.EndCap :
+                                              GimmickIdentifier.FlexTubePart.Segment;
+
+                    GameObject prefab = partType == GimmickIdentifier.FlexTubePart.StartCap ? startCapPrefab
+                                       : partType == GimmickIdentifier.FlexTubePart.EndCap   ? endCapPrefab
+                                                                                              : segmentPrefab;
+
+                    Quaternion rotation = CalculateFlexTubePartRotation(cellPositions, i) * extraRot;
+                    // 명시적 spawn — world position/rotation 강제 후 parent 연결 (worldPositionStays=true).
+                    // prefab 원래 localScale 보존 — Cap/Segment 크기 변경 없음.
+                    var partObj = Instantiate(prefab);
+                    if (partObj == null)
+                    {
+                        Debug.LogWarning($"[FlexTube] Instantiate failed for group {groupId} seq {i}.");
+                        continue;
+                    }
+                    partObj.transform.position = data.position;
+                    partObj.transform.rotation = rotation;
+                    partObj.transform.SetParent(tubeObj.transform, worldPositionStays: true);
+
+                    // 충돌은 BalloonController 자료구조 + DirectionalTargeting 으로 처리 — Collider 불필요.
+                    // FlexTubePart 는 PopBalloonWithDart 분기에서 _balloonObjects[id].GetComponent<IDartHittable>() 로 진입.
+                    var part = partObj.GetComponent<FlexTubePart>();
+                    if (part == null) part = partObj.AddComponent<FlexTubePart>();
+                    if (part == null)
+                    {
+                        Debug.LogWarning($"[FlexTube] FlexTubePart AddComponent failed on prefab {prefab.name}.");
+                        continue;
+                    }
+                    part.SetPartType(partType);
+                    parts.Add(part);
+                    _balloonObjects[id] = partObj;
+
+                    // 색 적용 — Pin/Pinata 와 동일 패턴. GimmickIdentifier 가 있으면 ApplyColor,
+                    // 없으면 자식 Renderer 들에 공유 material 직접 적용 (fallback).
+                    var partGi = partObj.GetComponent<GimmickIdentifier>();
+                    if (partGi != null)
+                    {
+                        partGi.Initialize();
+                        if (partGi.HasColorRenderers)
+                            partGi.ApplyColor(BalloonColors[colorIdx]);
+                    }
+                    else
+                    {
+                        ApplyTintToObject(partObj, BalloonColors[colorIdx]);
+                    }
+
+                    Debug.Log($"[FlexTube]   spawned {partType} id={id} at ({data.position.x:F2},{data.position.z:F2}) rot.y={rotation.eulerAngles.y:F0} color={colorIdx}");
+                }
+
+                // HP = Segment 수 (Cap 제외). 최소 1.
+                int segmentCount = Mathf.Max(1, ids.Count - 2);
+                int color = _balloons[ids[0]].color;
+                tube.Initialize(segmentCount, color, groupId, parts);
+            }
+        }
+
+        /// <summary>FlexTube 부품의 회전 계산 — prefab forward = +z (Unity 기본) 가정. cell index i 의 이전/다음 위치로 방향 추론.</summary>
+        private static Quaternion CalculateFlexTubePartRotation(List<Vector3> cellPositions, int i)
+        {
+            int n = cellPositions.Count;
+            Vector3 self = cellPositions[i];
+            Vector3 dir;
+            if (i == 0)
+                dir = cellPositions[1] - self;                       // StartCap — 다음 Segment 방향으로 향함
+            else if (i == n - 1)
+                dir = self - cellPositions[n - 2];                   // EndCap — 이전 Segment 에서 자신 쪽 방향
+            else
+                dir = cellPositions[i + 1] - cellPositions[i - 1];   // Segment — 이전→다음 (직선/대각)
+
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 0.0001f) return Quaternion.identity;
+            return Quaternion.LookRotation(dir.normalized, Vector3.up);
         }
 
         private GameObject GetOrCreateBalloonObject(int balloonId, Vector3 position, int color)
@@ -2891,6 +3093,13 @@ namespace BalloonFlow
         /// <summary>Piñata 세로 크기.</summary>
         public int sizeH = 1;
         public int lockPairId = -1;
+
+        /// <summary>FlexTube 그룹 ID. -1 = FlexTube cell 아님.</summary>
+        public int flexTubeGroupId = -1;
+        /// <summary>FlexTube paint 순서 인덱스. 0=StartCap, max=EndCap.</summary>
+        public int flexTubeSequenceIndex = -1;
+        /// <summary>FlexTube 부품 종류 — "StartCap" / "Segment" / "EndCap".</summary>
+        public string flexTubePartType = "";
     }
 
     /// <summary>
@@ -2912,6 +3121,13 @@ namespace BalloonFlow
         public int sizeH = 1;
         public int hp = 0;
         public int lockPairId = -1;
+
+        /// <summary>FlexTube 그룹 ID. -1 = FlexTube 셀 아님.</summary>
+        public int flexTubeGroupId = -1;
+        /// <summary>FlexTube 부품 종류 (StartCap/Segment/EndCap).</summary>
+        public string flexTubePartType = "";
+        /// <summary>FlexTube 그룹 안 paint 순서 (0..N).</summary>
+        public int flexTubeSequenceIndex = -1;
     }
 
     /// <summary>

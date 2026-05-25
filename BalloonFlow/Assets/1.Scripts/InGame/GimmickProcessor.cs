@@ -154,6 +154,17 @@ namespace BalloonFlow
                 case BalloonController.GimmickColorCurtain:
                     return "ColorCurtain: indirect removal only";
 
+                case BalloonController.GimmickFlexTube:
+                    // FlexTube: same-color dart direct hit only. 다른 색은 blocker — 다트가 hit 하지 않음.
+                    // 같은 색일 때 PopBalloonWithDart 가 FlexTube.OnDartHit 로 위임 (ZapAttack 트리거 + Segment 비활성).
+                    if (BalloonController.HasInstance)
+                    {
+                        var data = BalloonController.Instance.GetBalloon(balloonId);
+                        if (data != null && dartColor >= 0 && dartColor != data.color)
+                            return $"FlexTube: requires color {data.color}";
+                    }
+                    return null;
+
                 default:
                     return null; // No block
             }
