@@ -770,7 +770,7 @@ namespace BalloonFlow
                     SetSpriteSafe(pooled.btnRewardImage, _sprSlot);
                     SetActiveSafe(pooled.iconLock, true);
                     SetActiveSafe(pooled.iconCheck, false);
-                    if (pooled.button != null) pooled.button.interactable = false;
+                    if (pooled.button != null) pooled.button.interactable = true;
                     break;
 
                 case SlotState.InProgress:
@@ -782,8 +782,7 @@ namespace BalloonFlow
                     SetSpriteSafe(pooled.btnRewardImage, _sprSlot);
                     SetActiveSafe(pooled.iconCheck, false);
                     SetActiveSafe(pooled.iconLock, true);
-                    if (pooled.button != null)
-                        pooled.button.interactable = (state == SlotState.AchievedUnclaimed);
+                    if (pooled.button != null) pooled.button.interactable = true;
                     break;
 
                 case SlotState.Claimed:
@@ -794,7 +793,7 @@ namespace BalloonFlow
                     SetSpriteSafe(pooled.imageInnerFrame, _sprFrameNumberDefault);
                     SetSpriteSafe(pooled.imageArrow, _sprSlot);
                     SetSpriteSafe(pooled.btnRewardImage, _sprArrowComplete);
-                    if (pooled.button != null) pooled.button.interactable = false;
+                    if (pooled.button != null) pooled.button.interactable = true;
                     break;
             }
             // imageDefault/imageGet 는 ImageInnerFrame sprite 와 충돌할 수 있어 여기서 토글하지 않음.
