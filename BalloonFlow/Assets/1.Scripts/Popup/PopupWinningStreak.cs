@@ -920,14 +920,7 @@ namespace BalloonFlow
         {
             if (_tooltipInstance != null) return;
 
-            GameObject prefab = null;
-            if (ResourceManager.HasInstance)
-            {
-                // ResourceManager 가 prefab 캐시를 갖는 경우 우선 사용 — 없으면 fallback.
-                prefab = Resources.Load<GameObject>(TooltipPrefabResource);
-            }
-            if (prefab == null)
-                prefab = Resources.Load<GameObject>(TooltipPrefabResource);
+            GameObject prefab = Resources.Load<GameObject>(TooltipPrefabResource);
             if (prefab == null)
             {
                 Debug.LogWarning("[PopupWinningStreak] WinningStreakClickInfo prefab not found at Resources/" + TooltipPrefabResource);
