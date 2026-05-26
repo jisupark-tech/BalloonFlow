@@ -240,9 +240,11 @@ namespace BalloonFlow
             if (GameManager.HasInstance) GameManager.Instance.ResumeGame();
         }
 
-        /// <summary>나가기 확인 → Home 버튼: Lobby 또는 MapMaker로 이동</summary>
+        /// <summary>나가기 확인 → Home 버튼: 1차 클릭은 LoseLife→WinningStreak 토글, 2차 클릭에 Lobby/MapMaker로 이동</summary>
         private void OnQuitHomeClicked()
         {
+            if (_popupQuit != null && _popupQuit.TryAdvanceHomeButton()) return;
+
             if (_popupQuit != null) _popupQuit.CloseUI();
             if (GameManager.HasInstance)
             {
