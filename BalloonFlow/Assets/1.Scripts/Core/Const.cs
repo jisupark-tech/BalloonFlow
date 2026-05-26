@@ -218,6 +218,10 @@ namespace BalloonFlow
         public const string SPR_FRAMERESULTSUPERHARD                     = "frameResultSuperHard";
         public const string SPR_FRAMESUPERHARD                           = "frameSuperhard";
         public const string SPR_FRAMETUTORIAL                            = "frameTutorial";
+        public const string SPR_FRAMEWINNERSTREAKNUMBERDEFAULT           = "FrameWinnerStreakNumberDefault";
+        public const string SPR_FRAMEWINNINGSTREAKSLOT                   = "frameWinningStreakSlot";
+        public const string SPR_FRAMEWINNINGSTREAKSLOTARROW              = "frameWinningStreakSlotArrow";
+        public const string SPR_FRAMEWINNINGSTREAKSLOTARROWCOMPLETE      = "frameWinningStreakSlotArrowComplete";
         public const string SPR_FXZAP                                    = "Fxzap";
         public const string SPR_GAME_TOPUI_SETTING                       = "Game_TopUi_Setting";
         public const string SPR_GAME_TOPUI_STARBACKGROUND                = "Game_TopUi_StarBackground";
