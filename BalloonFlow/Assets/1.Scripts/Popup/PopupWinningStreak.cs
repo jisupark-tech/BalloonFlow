@@ -379,6 +379,10 @@ namespace BalloonFlow
         {
             if (_keyBlazeContents == null) return;
 
+            // 안전망 — prefab 에 VerticalLayoutGroup 누락 시 런타임에 부착.
+            if (_keyBlazeContents.GetComponent<VerticalLayoutGroup>() == null)
+                _keyBlazeContents.gameObject.AddComponent<VerticalLayoutGroup>();
+
             // VerticalLayoutGroup 은 런타임에 활성 상태로 유지 (slot 가시 정렬을 위해 필요).
             // 나머지 LayoutGroup 종류는 가상 스크롤 좌표 계산과 충돌하므로 비활성화.
             LayoutGroup[] layoutGroups = _keyBlazeContents.GetComponents<LayoutGroup>();
@@ -483,6 +487,11 @@ namespace BalloonFlow
                 pooled.button = anyBtn;
             }
             pooled.btnRewardImage = btnRewardGo != null ? btnRewardGo.GetComponent<Image>() : null;
+
+            // 구분선 — 첫 슬롯은 lineBottom, 마지막 슬롯은 lineTop 만 비활성화.
+            pooled.lineTop = FindChildGOByName(slot, "LineTop");
+            pooled.lineBottom = FindChildGOByName(slot, "LineBottom");
+
             pooled.frameInner = FindChildGOByName(slot, "FrameInner")?.transform as RectTransform;
             pooled.iconCheck = FindChildGOByName(slot, "IconCheck");
             pooled.iconLock = FindChildGOByName(slot, "IconLock");
@@ -657,6 +666,10 @@ namespace BalloonFlow
             pooled.lastState = slotState;
             ApplySlotState(pooled, slotState);
             BindRewardItems(pooled, stageDoc);
+
+            int totalStages = DataCount;
+            SetActiveSafe(pooled.lineBottom, stage1Based != 1);
+            SetActiveSafe(pooled.lineTop, stage1Based != totalStages);
         }
 
         private SlotState ResolveSlotState(WinningStreakManager mgr, int stage1Based)
@@ -891,6 +904,8 @@ namespace BalloonFlow
             public Image btnRewardImage;
             public Transform rewardItemRoot;
             public SlotState lastState = SlotState.Locked;
+            public GameObject lineTop;
+            public GameObject lineBottom;
         }
     }
 }
