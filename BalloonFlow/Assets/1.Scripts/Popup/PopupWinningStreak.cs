@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DG.Tweening;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -24,6 +25,7 @@ namespace BalloonFlow
         private const float SlotFixedHeight = 300f;
         private const string TooltipPrefabResource = "UI/UIAssets/WinningStreakClickInfo";
         private const float TooltipViewportFlipThreshold = 0.5f;
+        private const float TooltipPopDuration = 0.22f;
 
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
@@ -71,6 +73,7 @@ namespace BalloonFlow
         private GameObject _tooltipArrowTop;
         private GameObject _tooltipArrowBottom;
         private int _activeTooltipStage = -1;
+        private Tween _tooltipPopTween;
 
         private int DataCount
         {
@@ -136,6 +139,9 @@ namespace BalloonFlow
             }
 
             _pooledSlots.Clear();
+
+            _tooltipPopTween?.Kill();
+            _tooltipPopTween = null;
 
             if (_tooltipInstance != null)
             {
@@ -960,6 +966,12 @@ namespace BalloonFlow
             PositionTooltip(anchor);
             _tooltipInstance.transform.SetAsLastSibling();
             _activeTooltipStage = pooled.boundStage;
+
+            _tooltipPopTween?.Kill();
+            _tooltipRect.localScale = Vector3.zero;
+            _tooltipPopTween = _tooltipRect.DOScale(Vector3.one, TooltipPopDuration)
+                .SetEase(Ease.OutBack)
+                .SetUpdate(true);
         }
 
         private void EnsureTooltipInstance()
@@ -1015,17 +1027,17 @@ namespace BalloonFlow
                 }
             }
 
+            _tooltipRect.pivot = placeBelow ? new Vector2(0.5f, 1f) : new Vector2(0.5f, 0f);
             SetActiveSafe(_tooltipArrowTop, placeBelow);
             SetActiveSafe(_tooltipArrowBottom, !placeBelow);
 
-            // 3) 툴팁 위치 — 버튼 위/아래로 오프셋 (버튼 높이의 절반 + 툴팁 높이의 절반).
+            // 3) 툴팁 위치 — 버튼 위/아래로 오프셋 (pivot 이 변 쪽에 붙어 tipHalfH 보정 불필요).
             float btnHalfH = anchorButtonRect.rect.height * 0.5f * anchorButtonRect.lossyScale.y
                              / Mathf.Max(0.0001f, popupRect.lossyScale.y);
-            float tipHalfH = _tooltipRect.rect.height * 0.5f;
             float targetX = anchorLocalInPopup.x;
             float targetY = placeBelow
-                ? anchorLocalInPopup.y - btnHalfH - tipHalfH
-                : anchorLocalInPopup.y + btnHalfH + tipHalfH;
+                ? anchorLocalInPopup.y - btnHalfH
+                : anchorLocalInPopup.y + btnHalfH;
 
             _tooltipRect.anchoredPosition = new Vector2(targetX, targetY);
 
@@ -1057,6 +1069,8 @@ namespace BalloonFlow
 
         private void HideTooltip()
         {
+            _tooltipPopTween?.Kill();
+            _tooltipPopTween = null;
             if (_tooltipInstance != null && _tooltipInstance.activeSelf)
                 _tooltipInstance.SetActive(false);
             _activeTooltipStage = -1;
