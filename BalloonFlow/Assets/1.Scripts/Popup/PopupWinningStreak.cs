@@ -8,7 +8,8 @@ namespace BalloonFlow
     /// <summary>
     /// WinningStreak 이벤트 메인 팝업. 25 stage 보상 리스트를 virtual scroll 로 표시.
     /// 데이터: WinningStreakConfigService.Config + UserData.winningStreak (WinningStreakManager 경유).
-    /// 슬롯 BtnReward 클릭 → 달성/미수령 stage 면 ClaimStage 호출. KeyBlazeClickInfo 는 사용 안 함.
+    /// 슬롯 BtnReward 클릭 → 달성/미수령 stage 면 ClaimStage 호출 + WinningStreakClickInfo 툴팁 표시 (slot 기준 자동 플립 + clamp).
+    /// Claim 과 툴팁 동작은 공존 — 클릭 한 번으로 보상 수령(가능 시)과 보상 내용 확인이 동시에 일어남.
     /// </summary>
     public class PopupWinningStreak : UIBase
     {
@@ -21,6 +22,8 @@ namespace BalloonFlow
         private const string SlotPrefabResource = "UI/UIAssets/SlotWinningStreak";
         private const float SlotFixedWidth = 900f;
         private const float SlotFixedHeight = 300f;
+        private const string TooltipPrefabResource = "UI/UIAssets/WinningStreakClickInfo";
+        private const float TooltipViewportFlipThreshold = 0.5f;
 
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
@@ -58,6 +61,14 @@ namespace BalloonFlow
         private float _slotStrideY;
         private float _contentTopPadding;
         private float _contentBottomPadding;
+
+        // BtnReward 클릭 시 표시되는 WinningStreakClickInfo 툴팁 — popup root 자식으로 lazy instantiate.
+        // _keyBlazeContents 자식으로 두면 ScrollRect Mask 에 잘리므로 절대 사용 금지.
+        private GameObject _tooltipInstance;
+        private RectTransform _tooltipRect;
+        private GameObject _tooltipArrowTop;
+        private GameObject _tooltipArrowBottom;
+        private int _activeTooltipStage = -1;
 
         private int DataCount
         {
@@ -115,6 +126,16 @@ namespace BalloonFlow
             }
 
             _pooledSlots.Clear();
+
+            if (_tooltipInstance != null)
+            {
+                Destroy(_tooltipInstance);
+                _tooltipInstance = null;
+                _tooltipRect = null;
+                _tooltipArrowTop = null;
+                _tooltipArrowBottom = null;
+            }
+            _activeTooltipStage = -1;
         }
 
         public override void OpenUI()
@@ -592,6 +613,7 @@ namespace BalloonFlow
         private void HandleScrollValueChanged(Vector2 _)
         {
             if (_suppressScrollCallback) return;
+            HideTooltip();
             RefreshVisibleSlots();
         }
 
@@ -866,6 +888,139 @@ namespace BalloonFlow
                 BindSlotData(pooled, pooled.boundStage);
                 RefreshHeader();
             }
+
+            ToggleTooltipForSlot(pooled);
+        }
+
+        // ── 툴팁 (WinningStreakClickInfo) ────────────────────────
+
+        private void ToggleTooltipForSlot(PooledSlot pooled)
+        {
+            if (pooled == null || pooled.button == null || pooled.boundStage <= 0) return;
+
+            if (_activeTooltipStage == pooled.boundStage && _tooltipInstance != null && _tooltipInstance.activeSelf)
+            {
+                HideTooltip();
+                return;
+            }
+
+            EnsureTooltipInstance();
+            if (_tooltipInstance == null || _tooltipRect == null) return;
+
+            RectTransform anchor = pooled.button.transform as RectTransform;
+            if (anchor == null) return;
+
+            _tooltipInstance.SetActive(true);
+            PositionTooltip(anchor);
+            _tooltipInstance.transform.SetAsLastSibling();
+            _activeTooltipStage = pooled.boundStage;
+        }
+
+        private void EnsureTooltipInstance()
+        {
+            if (_tooltipInstance != null) return;
+
+            GameObject prefab = null;
+            if (ResourceManager.HasInstance)
+            {
+                // ResourceManager 가 prefab 캐시를 갖는 경우 우선 사용 — 없으면 fallback.
+                prefab = Resources.Load<GameObject>(TooltipPrefabResource);
+            }
+            if (prefab == null)
+                prefab = Resources.Load<GameObject>(TooltipPrefabResource);
+            if (prefab == null)
+            {
+                Debug.LogWarning("[PopupWinningStreak] WinningStreakClickInfo prefab not found at Resources/" + TooltipPrefabResource);
+                return;
+            }
+
+            // popup root (this.transform) 자식으로 생성 — ScrollRect Mask 영향 밖.
+            _tooltipInstance = Instantiate(prefab, transform);
+            _tooltipInstance.name = "WinningStreakClickInfo";
+            _tooltipRect = _tooltipInstance.GetComponent<RectTransform>();
+            _tooltipArrowTop = FindChildGOByName(_tooltipInstance, "ArrowTop");
+            _tooltipArrowBottom = FindChildGOByName(_tooltipInstance, "ArrowBottom");
+            _tooltipInstance.SetActive(false);
+        }
+
+        private void PositionTooltip(RectTransform anchorButtonRect)
+        {
+            if (_tooltipRect == null || anchorButtonRect == null) return;
+
+            RectTransform popupRect = transform as RectTransform;
+            if (popupRect == null) return;
+
+            RectTransform viewport = _scrollRect != null ? _scrollRect.viewport : null;
+            Canvas canvas = GetComponentInParent<Canvas>();
+            Camera cam = (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay) ? canvas.worldCamera : null;
+
+            // 1) 버튼 중심을 popup local 좌표로 변환 (툴팁 SetParent(popup) 가정).
+            Vector3 anchorWorldCenter = anchorButtonRect.TransformPoint(anchorButtonRect.rect.center);
+            Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(cam, anchorWorldCenter);
+            Vector2 anchorLocalInPopup;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(popupRect, screenPoint, cam, out anchorLocalInPopup))
+                return;
+
+            // 2) 버튼이 viewport 상반부에 있는지 판정 → 상/하 플립.
+            bool placeBelow = true;
+            if (viewport != null)
+            {
+                Vector2 anchorLocalInViewport;
+                if (RectTransformUtility.ScreenPointToLocalPointInRectangle(viewport, screenPoint, cam, out anchorLocalInViewport))
+                {
+                    Rect vRect = viewport.rect;
+                    float normalizedY = vRect.height > 0f
+                        ? (anchorLocalInViewport.y - vRect.yMin) / vRect.height
+                        : 1f;
+                    placeBelow = normalizedY > TooltipViewportFlipThreshold;
+                }
+            }
+
+            SetActiveSafe(_tooltipArrowTop, placeBelow);
+            SetActiveSafe(_tooltipArrowBottom, !placeBelow);
+
+            // 3) 툴팁 위치 — 버튼 위/아래로 오프셋 (버튼 높이의 절반 + 툴팁 높이의 절반).
+            float btnHalfH = anchorButtonRect.rect.height * 0.5f * anchorButtonRect.lossyScale.y
+                             / Mathf.Max(0.0001f, popupRect.lossyScale.y);
+            float tipHalfH = _tooltipRect.rect.height * 0.5f;
+            float targetX = anchorLocalInPopup.x;
+            float targetY = placeBelow
+                ? anchorLocalInPopup.y - btnHalfH - tipHalfH
+                : anchorLocalInPopup.y + btnHalfH + tipHalfH;
+
+            _tooltipRect.anchoredPosition = new Vector2(targetX, targetY);
+
+            // 4) Clamp — 4 코너를 popup rect 안으로.
+            Canvas.ForceUpdateCanvases();
+            Vector3[] tipCorners = new Vector3[4];
+            _tooltipRect.GetWorldCorners(tipCorners);
+            Vector3[] popupCorners = new Vector3[4];
+            popupRect.GetWorldCorners(popupCorners);
+
+            float minX = popupCorners[0].x;
+            float maxX = popupCorners[2].x;
+            float minY = popupCorners[0].y;
+            float maxY = popupCorners[2].y;
+
+            float dx = 0f, dy = 0f;
+            if (tipCorners[0].x < minX) dx = minX - tipCorners[0].x;
+            else if (tipCorners[2].x > maxX) dx = maxX - tipCorners[2].x;
+            if (tipCorners[0].y < minY) dy = minY - tipCorners[0].y;
+            else if (tipCorners[2].y > maxY) dy = maxY - tipCorners[2].y;
+
+            if (dx != 0f || dy != 0f)
+            {
+                float scaleX = Mathf.Max(0.0001f, popupRect.lossyScale.x);
+                float scaleY = Mathf.Max(0.0001f, popupRect.lossyScale.y);
+                _tooltipRect.anchoredPosition += new Vector2(dx / scaleX, dy / scaleY);
+            }
+        }
+
+        private void HideTooltip()
+        {
+            if (_tooltipInstance != null && _tooltipInstance.activeSelf)
+                _tooltipInstance.SetActive(false);
+            _activeTooltipStage = -1;
         }
 
         // ── 내부 데이터 구조 ──────────────────────────────────────
