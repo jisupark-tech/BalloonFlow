@@ -19,6 +19,8 @@ namespace BalloonFlow
         private const float ScrollElasticity = 0.18f;
         private const float ScrollDecelerationRate = 0.12f;
         private const string SlotPrefabResource = "UI/UIAssets/SlotWinningStreak";
+        private const float SlotFixedWidth = 900f;
+        private const float SlotFixedHeight = 300f;
 
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
@@ -370,21 +372,7 @@ namespace BalloonFlow
 
         private float CalculateSlotHeightForFiveVisible(RectTransform slotRt)
         {
-            float prefabHeight = slotRt != null ? slotRt.rect.height : 0f;
-            if (prefabHeight <= 1f && slotRt != null)
-                prefabHeight = LayoutUtility.GetPreferredHeight(slotRt);
-            if (prefabHeight <= 1f) prefabHeight = 300f;
-
-            if (_scrollRect == null || _scrollRect.viewport == null) return prefabHeight;
-
-            float viewportHeight = _scrollRect.viewport.rect.height;
-            if (viewportHeight <= 1f) return prefabHeight;
-
-            float availableHeight = viewportHeight - _contentTopPadding - _contentBottomPadding;
-            availableHeight -= _slotSpacingY * Mathf.Max(0, VisibleSlotCount - 1);
-            if (availableHeight <= 1f) return prefabHeight;
-
-            return availableHeight / VisibleSlotCount;
+            return SlotFixedHeight;
         }
 
         private void DisableContentLayoutControllers()
@@ -543,6 +531,7 @@ namespace BalloonFlow
                 ApplySlotLayout(_pooledSlots[i].root);
         }
 
+        // 사이즈/VLG 영향 완전 차단: 900x300 고정 + ignoreLayout
         private void ApplySlotLayout(RectTransform slotRt)
         {
             if (slotRt == null) return;
@@ -551,15 +540,19 @@ namespace BalloonFlow
             slotRt.anchorMin = new Vector2(0f, 1f);
             slotRt.anchorMax = new Vector2(1f, 1f);
             slotRt.pivot = new Vector2(0.5f, 1f);
-            slotRt.sizeDelta = new Vector2(slotRt.sizeDelta.x, _slotHeightY);
+            slotRt.sizeDelta = new Vector2(SlotFixedWidth, SlotFixedHeight);
 
             LayoutElement layoutElement = slotRt.GetComponent<LayoutElement>();
-            if (layoutElement != null)
-            {
-                layoutElement.minHeight = _slotHeightY;
-                layoutElement.preferredHeight = _slotHeightY;
-                layoutElement.flexibleHeight = 0f;
-            }
+            if (layoutElement == null)
+                layoutElement = slotRt.gameObject.AddComponent<LayoutElement>();
+
+            layoutElement.minWidth = SlotFixedWidth;
+            layoutElement.preferredWidth = SlotFixedWidth;
+            layoutElement.minHeight = SlotFixedHeight;
+            layoutElement.preferredHeight = SlotFixedHeight;
+            layoutElement.flexibleWidth = 0f;
+            layoutElement.flexibleHeight = 0f;
+            layoutElement.ignoreLayout = true;
         }
 
         private void ClearSlotContent(GameObject template)
