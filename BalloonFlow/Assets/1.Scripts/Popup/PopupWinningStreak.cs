@@ -385,8 +385,16 @@ namespace BalloonFlow
         {
             if (_keyBlazeContents == null) return;
 
+            // VerticalLayoutGroup 은 런타임에 활성 상태로 유지 (slot 가시 정렬을 위해 필요).
+            // 나머지 LayoutGroup 종류는 가상 스크롤 좌표 계산과 충돌하므로 비활성화.
             LayoutGroup[] layoutGroups = _keyBlazeContents.GetComponents<LayoutGroup>();
-            for (int i = 0; i < layoutGroups.Length; i++) layoutGroups[i].enabled = false;
+            for (int i = 0; i < layoutGroups.Length; i++)
+            {
+                if (layoutGroups[i] is VerticalLayoutGroup)
+                    layoutGroups[i].enabled = true;
+                else
+                    layoutGroups[i].enabled = false;
+            }
 
             ContentSizeFitter fitter = _keyBlazeContents.GetComponent<ContentSizeFitter>();
             if (fitter != null) fitter.enabled = false;
