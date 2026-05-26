@@ -112,6 +112,17 @@ BalloonFlow/BalloonFlow_Shot/BalloonFlow_InGame_20260427_143308.png
 firebase/seed/service-account.json
 firebase/seed/node_modules/
 
+# Cloud Functions — node_modules + emulator/CLI 자동 생성물 + service account
+firebase/functions/node_modules/
+firebase/functions/service-account.json
+firebase/functions/.firebase/
+firebase/.firebaserc
+firebase/.firebase/
+firebase/firebase-debug.log
+firebase/firebase-debug.*.log
+firebase/functions/firebase-debug.log
+firebase/functions/firebase-debug.*.log
+
 # ProjectHub MCP runtime + secrets (do not commit)
 projecthub-mcp/server/.env
 projecthub-mcp/server/mcp.log

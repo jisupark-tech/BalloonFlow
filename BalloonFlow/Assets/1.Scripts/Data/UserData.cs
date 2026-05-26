@@ -74,6 +74,14 @@ namespace BalloonFlow
         // ── Winning Streak Event ──────────────────────────────────
         [FirestoreProperty] public WinningStreakState winningStreak { get; set; } = new WinningStreakState();
 
+        // ── Push Notification (Phase 2) ───────────────────────────
+        /// <summary>FCM 등록 토큰. 빈 문자열 = 미등록 / 사용자 거부.</summary>
+        [FirestoreProperty] public string fcmToken { get; set; } = "";
+        /// <summary>D1~D7 이탈 복귀 푸시 최근 발송 일자 ("YYYY-MM-DD" UTC). 같은 날 중복 발송 방지.</summary>
+        [FirestoreProperty] public string lastReturnPushSent { get; set; } = "";
+        /// <summary>데일리 보상 미수령 푸시 최근 발송 일자 ("YYYY-MM-DD" UTC). 같은 날 중복 발송 방지.</summary>
+        [FirestoreProperty] public string lastDailyPushSent { get; set; } = "";
+
         // ── Factory ───────────────────────────────────────────────
         /// <summary>신규 유저 초기값. 1,000코인 + 5하트 + NPU.</summary>
         public static UserData CreateNewUser(string uid)
@@ -102,7 +110,10 @@ namespace BalloonFlow
                 settings = new SettingsData(),
                 consents = new ConsentsData(),
                 attribution = new AttributionData(),
-                winningStreak = new WinningStreakState()
+                winningStreak = new WinningStreakState(),
+                fcmToken = "",
+                lastReturnPushSent = "",
+                lastDailyPushSent = ""
             };
         }
     }

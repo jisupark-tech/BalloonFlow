@@ -309,6 +309,18 @@ namespace BalloonFlow
             return remaining.TotalSeconds > 0 ? remaining : TimeSpan.Zero;
         }
 
+        /// <summary>
+        /// 모든 하트가 풀충전될 예상 UTC 시각. 이미 풀이면 DateTime.MinValue 반환.
+        /// 로컬 푸시 알림(#1) 스케줄링 용도.
+        /// </summary>
+        public DateTime PredictFullLivesUtc()
+        {
+            if (_currentLives >= MAX_LIVES) return DateTime.MinValue;
+            int missing = MAX_LIVES - _currentLives;
+            DateTime lastRecharge = new DateTime(_lastRechargeUtcTicks, DateTimeKind.Utc);
+            return lastRecharge.AddSeconds((double)RECHARGE_SECONDS * missing);
+        }
+
         #endregion
 
         #region Private Methods

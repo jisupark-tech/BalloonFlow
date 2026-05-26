@@ -246,6 +246,17 @@ namespace BalloonFlow
                 "SetInfiniteHeartsUntil");
         }
 
+        /// <summary>FCM 등록 토큰 갱신. 빈 문자열 = unregister(서버 push 대상에서 제외). Phase 2 서버 cron에서 참조.</summary>
+        public void SetFcmToken(string token)
+        {
+            if (!_isReady) return;
+            token ??= "";
+            if (_user.fcmToken == token) return;
+            _user.fcmToken = token;
+            FireAndForget(_db.Document($"users/{Uid}").UpdateAsync("fcmToken", token),
+                "SetFcmToken");
+        }
+
         public void AdjustBooster(string boosterId, int delta, string reason)
         {
             if (!_isReady || delta == 0) return;

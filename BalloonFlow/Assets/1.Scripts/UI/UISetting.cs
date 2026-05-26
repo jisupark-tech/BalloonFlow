@@ -116,9 +116,32 @@ namespace BalloonFlow
             if (SettingsManager.HasInstance) SettingsManager.Instance.ToggleHaptic();
         }
 
-        private void OnNotificationClicked()
+        private async void OnNotificationClicked()
         {
-            if (SettingsManager.HasInstance) SettingsManager.Instance.ToggleNotification();
+            if (!SettingsManager.HasInstance) return;
+            var sm = SettingsManager.Instance;
+
+            // OFF → ON 전환: OS 권한 확인 후 처리. (업계 표준 — 권한 거부 상태로 토글만 ON 되는 상태 방지)
+            if (!sm.NotificationOn && NotificationManager.HasInstance)
+            {
+                var nm = NotificationManager.Instance;
+                nm.RefreshPermissionStatus();
+
+                if (nm.Status == NotificationManager.PermissionState.Denied)
+                {
+                    // 한 번 거부된 권한은 앱에서 재요청 불가 → OS 설정 화면 deep link.
+                    nm.OpenSystemNotificationSettings();
+                    return;
+                }
+
+                if (nm.Status == NotificationManager.PermissionState.NotDetermined)
+                {
+                    bool granted = await nm.RequestPermissionAsync();
+                    if (!granted) return; // 거부 시 앱 내 토글도 ON 시키지 않음.
+                }
+            }
+
+            sm.ToggleNotification();
         }
 
         #endregion
