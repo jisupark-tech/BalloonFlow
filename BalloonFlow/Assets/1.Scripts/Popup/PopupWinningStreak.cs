@@ -569,6 +569,7 @@ namespace BalloonFlow
             pooled.frameInner = FindChildGOByName(slot, "FrameInner")?.transform as RectTransform;
             pooled.iconCheck = FindChildGOByName(slot, "IconCheck");
             pooled.iconLock = FindChildGOByName(slot, "IconLock");
+            pooled.grandPrize = FindChildGOByName(slot, "GrandPrize");
 
             // 상태 스프라이트 타겟 — 사용자 스펙대로 RotateLight / ImageInnerFrame / ImageArrow.
             pooled.rotateLight = FindChildGOByName(slot, "RotateLight");
@@ -745,6 +746,7 @@ namespace BalloonFlow
             int totalStages = DataCount;
             SetActiveSafe(pooled.lineBottom, stage1Based != 1);
             SetActiveSafe(pooled.lineTop, stage1Based != totalStages);
+            SetActiveSafe(pooled.grandPrize, stage1Based == totalStages);
         }
 
         private SlotState ResolveSlotState(WinningStreakManager mgr, int stage1Based)
@@ -1114,6 +1116,7 @@ namespace BalloonFlow
             public SlotState lastState = SlotState.Locked;
             public GameObject lineTop;
             public GameObject lineBottom;
+            public GameObject grandPrize;
         }
     }
 }
