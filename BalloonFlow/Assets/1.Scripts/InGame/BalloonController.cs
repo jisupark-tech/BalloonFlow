@@ -376,11 +376,12 @@ namespace BalloonFlow
             CalculateLevelSafeMult();
             ReapplyAllBalloonVisualTransforms();
 
-            // Wall balloons are indestructible — don't count toward clear condition
+            // Wall / FlexTube cells don't count toward clear condition
             int excludeCount = 0;
             foreach (BalloonData d in _balloons.Values)
             {
                 if (d.gimmickType == GimmickWall) excludeCount++;
+                else if (d.gimmickType == GimmickFlexTube) excludeCount++;
             }
             RemainingCount = _balloons.Count - excludeCount;
             PoppedCount = 0;
@@ -798,6 +799,44 @@ namespace BalloonFlow
         {
             if (!_balloons.TryGetValue(balloonId, out BalloonData data))
                 return new PopResult { success = false, reason = "NotFound" };
+
+            // FlexTube: isPopped 가드 이전에 처리 — stale target(이미 비활성 cell 향한 다트) 도 부모 FlexTube 에 위임.
+            // FlexTube 가 _destroying / 활성 segment 유무 / 색 매칭 자체 판단. 다트는 hit 인정 후 소진.
+            if (data.gimmickType == GimmickFlexTube)
+            {
+                // _balloonObjects 에서 자식 GameObject 가 제거됐어도(MarkFlexTubeCellInactive),
+                // _flexTubeRoots 안 FlexTube 컴포넌트로 직접 위임 (groupId 매칭).
+                IDartHittable hittable = null;
+                if (_balloonObjects.TryGetValue(balloonId, out GameObject ftObj) && ftObj != null)
+                    hittable = ftObj.GetComponent<IDartHittable>();
+                if (hittable == null)
+                {
+                    // Fallback — _flexTubeRoots 안에서 같은 groupId 의 FlexTube 찾기.
+                    for (int i = 0; i < _flexTubeRoots.Count; i++)
+                    {
+                        var root = _flexTubeRoots[i];
+                        if (root == null) continue;
+                        var ft = root.GetComponent<FlexTube>();
+                        if (ft != null && ft.GroupId == data.flexTubeGroupId)
+                        {
+                            hittable = ft as IDartHittable;
+                            // FlexTube 자체는 IDartHittable 안 구현. FlexTubePart 부품 중 활성된 것 하나 찾아서 위임.
+                            foreach (var p in ft.Parts)
+                            {
+                                if (p != null && p.gameObject.activeSelf)
+                                {
+                                    hittable = p;
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (hittable != null) hittable.OnDartHit(dartColor);
+                return new PopResult { success = false, hitAccepted = true, reason = "FlexTube: delegated to owner", balloonId = data.balloonId, gimmickType = GimmickFlexTube };
+            }
+
             if (data.isPopped)
                 return new PopResult { success = false, reason = "AlreadyPopped" };
 
@@ -826,18 +865,6 @@ namespace BalloonFlow
             // Barricade: destructible wall with HP
             if (data.gimmickType == GimmickBarricade)
                 return ProcessBarricadeHit(data);
-
-            // FlexTube: 부모 FlexTube 컴포넌트로 위임. 가짜 풍선 GameObject 에 IDartHittable(FlexTubePart) 부착됨.
-            // 같은 색 매칭/HP 차감/연출은 FlexTube.OnDartHit 가 일괄 처리. 다트는 hit 인정 후 소진.
-            if (data.gimmickType == GimmickFlexTube)
-            {
-                if (_balloonObjects.TryGetValue(balloonId, out GameObject ftObj) && ftObj != null)
-                {
-                    var hittable = ftObj.GetComponent<IDartHittable>();
-                    if (hittable != null) hittable.OnDartHit(dartColor);
-                }
-                return new PopResult { success = false, hitAccepted = true, reason = "FlexTube: delegated to owner", balloonId = data.balloonId, gimmickType = GimmickFlexTube };
-            }
 
             // Pinata/PinataBox
             if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
@@ -875,6 +902,29 @@ namespace BalloonFlow
             if (data.gimmickType == GimmickLockKey) return;
             if (data.gimmickType == GimmickFlexTube) return; // FlexTube 는 같은 색 다트로만 제거 가능 — indirect/force-pop 차단.
             ExecutePop(data);
+        }
+
+        /// <summary>
+        /// FlexTube 의 비활성된 Segment cell 을 다트 target 후보에서 제외 — _balloons.isPopped=true 마킹 + _balloonObjects 에서 분리.
+        /// Pop 점수/이벤트 발화 없이 silent 제거 (FlexTube 는 RemainingCount 영향 제외).
+        /// </summary>
+        public void MarkFlexTubeCellInactive(int balloonId)
+        {
+            if (!_balloons.TryGetValue(balloonId, out BalloonData data)) return;
+            if (data.gimmickType != GimmickFlexTube) return;
+            if (data.isPopped) return;
+            data.isPopped = true;
+            _balloons[balloonId] = data;
+            // _balloonObjects 는 유지 — PopBalloonWithDart FlexTube 분기가 stale target 일 때도 IDartHittable 위임 가능하게.
+            // (단 FlexTube.OnDartHit 가 _destroying / 활성 segment 유무 자체 판단.)
+            _frameCachedPositions.Remove(balloonId);
+            // _positionIndex 는 Vector3Int → balloonId 매핑이라 reverse lookup 필요 — 해당 entry 제거.
+            Vector3Int? keyToRemove = null;
+            foreach (var kv in _positionIndex)
+            {
+                if (kv.Value == balloonId) { keyToRemove = kv.Key; break; }
+            }
+            if (keyToRemove.HasValue) _positionIndex.Remove(keyToRemove.Value);
         }
 
         /// <summary>
@@ -1321,6 +1371,7 @@ namespace BalloonFlow
                         continue;
                     }
                     part.SetPartType(partType);
+                    part.SetBalloonId(id);
                     parts.Add(part);
                     _balloonObjects[id] = partObj;
 
