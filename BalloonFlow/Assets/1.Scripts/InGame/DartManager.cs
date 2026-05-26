@@ -996,7 +996,11 @@ namespace BalloonFlow
             proj.color = color;
             proj.scanDir = DirectionalTargeting.DetermineScanDirection(to - from);
             proj.scanLine = GetScanLine(from, proj.scanDir);
-            proj.elapsed = 0f;
+            // [ROLLBACK_DART_LAUNCH_INITIAL_PROGRESS]
+            // 초기 elapsed offset — 다트 발사 직후 빠른 가속 효과 + 비행 다트끼리 spacing 줄임.
+            // 기존: proj.elapsed = 0f;
+            float initialProgress = GameManager.HasInstance ? GameManager.Instance.Board.dartLaunchInitialProgress : 0f;
+            proj.elapsed = Mathf.Clamp(initialProgress, 0f, Mathf.Max(0f, ft - 0.01f));
             proj.duration = ft;
             proj.impactTime = ft;
             ConfigureLaunchScale(proj, launchStartScale, balloonScale);
@@ -2030,7 +2034,10 @@ namespace BalloonFlow
                 proj.color = candidate.color;
                 proj.scanDir = candidate.scanDir;
                 proj.scanLine = candidate.scanLine;
-                proj.elapsed = 0f;
+                // [ROLLBACK_DART_LAUNCH_INITIAL_PROGRESS]
+                // 기존: proj.elapsed = 0f;
+                float initialProgress2 = GameManager.HasInstance ? GameManager.Instance.Board.dartLaunchInitialProgress : 0f;
+                proj.elapsed = Mathf.Clamp(initialProgress2, 0f, Mathf.Max(0f, ft - 0.01f));
                 proj.duration = ft;
                 proj.impactTime = ft;
                 ConfigureLaunchScale(proj, launchStartScale, balloonScale);

@@ -55,6 +55,14 @@ namespace BalloonFlow
         [Range(0.10f, 100.00f)]
         public float dartFlightSpeedMultiplier = 10.00f;
 
+        // [ROLLBACK_DART_LAUNCH_INITIAL_PROGRESS]
+        // 다트 발사 직후 시각 위치는 start 에서 시작하되 내부 elapsed 만 n초 앞당겨 진행.
+        // 효과: 발사 직후 강한 가속처럼 보이며 비행 중 다트끼리 spacing 줄어듦.
+        // n=0 = 비활성(기존 동작). n 값이 크면 spacing 작아짐. 단 duration 보다 작아야 의미 있음.
+        [Tooltip("발사 직후 초기 elapsed offset(초). 0=비활성. 양수면 다트가 발사 직후 빠르게 가속한 듯 보이며 비행 다트 spacing 작아짐. 동적 반영. (default: 0)")]
+        [Range(0f, 1f)]
+        public float dartLaunchInitialProgress = 0f;
+
         [Tooltip("공격 스캔 배율. railSpeed에 비례하여 스캔 빈도 결정. 높을수록 공격 빠름. 동적 반영. (default: 1.0)")]
         [Range(0.5f, 10f)]
         public float attackSpeedMultiplier = 1f;
