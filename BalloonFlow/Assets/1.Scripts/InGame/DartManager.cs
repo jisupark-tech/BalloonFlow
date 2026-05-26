@@ -20,69 +20,62 @@ namespace BalloonFlow
         #region Constants
 
         private const string DART_POOL_KEY = "Dart";
-        private const float DEFAULT_PROJECTILE_FLIGHT_TIME = 0.1f;
+        // [ROLLBACK_DART_FLIGHT_TIME_TO_SPEED_MULT]
+        // 비행 속도 결정을 시간(초)→배수로 변경. 롤백 시 아래 상수 + 기존 CalculateProjectileFlightTime 복원.
+        // private const float DEFAULT_PROJECTILE_FLIGHT_TIME = 0.1f;
+        // private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 12f; // 3.3 × 1.8 × 1.8 (80% 추가 증가)
+        // private const float PROJECTILE_MIN_FLIGHT_TIME_SCALE = 0.3f;
+        // private const float PROJECTILE_MAX_FLIGHT_TIME_SCALE = 20f;
         private const float PROJECTILE_MIN_FLIGHT_TIME = 0.015f;
-        private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 12f; // 3.3 × 1.8 × 1.8 (80% 추가 증가)
-        private const float PROJECTILE_MIN_FLIGHT_TIME_SCALE = 0.3f;
-        private const float PROJECTILE_MAX_FLIGHT_TIME_SCALE = 20f;
+        private const float PROJECTILE_MAX_FLIGHT_TIME = 5f;
         private const int ADJACENT_EMPTY_LINE_RESCUE_RADIUS = 1;
         #endregion
 
         #region Serialized Fields
 
-        [SerializeField] private float _projectileFlightTime = DEFAULT_PROJECTILE_FLIGHT_TIME;
+        // [ROLLBACK_DART_FLIGHT_TIME_TO_SPEED_MULT]
+        // 비행 시간 → 배수 전환. dartFlightSpeedMultiplier (GameManager) 가 단일 source.
+        // [SerializeField] private float _projectileFlightTime = DEFAULT_PROJECTILE_FLIGHT_TIME;
 
         [Tooltip("다트 포물선 곡사 높이. 0=직선, >0=곡사. Design ref: 피드백디렉션 §다트궤적")]
         [SerializeField] private float _arcHeight = 0f; // 0 = 직사, >0 = 곡사
 
-        /// <summary>동적 비행 시간 (GameManager에서 실시간 참조).</summary>
-        private float FlightTime => GameManager.HasInstance ? GameManager.Instance.Board.dartFlightTime : _projectileFlightTime;
+        // [ROLLBACK_DART_FLIGHT_TIME_TO_SPEED_MULT]
+        // FlightTime / EffectiveFlightTime property — dartFlightTime 기반 dead code.
+        // private float FlightTime => GameManager.HasInstance ? GameManager.Instance.Board.dartFlightTime : _projectileFlightTime;
+        // private float EffectiveFlightTime
+        // {
+        //     get
+        //     {
+        //         float t = FlightTime;
+        //         float mult = RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f;
+        //         if (mult > 0.001f) t /= mult;
+        //         return t;
+        //     }
+        // }
 
-        /// <summary>유저 가속 반영된 비행 시간.
-        /// x2 토글 시 투사체도 2x 빠르게 풍선에 도달 → 공격 플로우 일관성.</summary>
-        private float EffectiveFlightTime
-        {
-            get
-            {
-                float t = FlightTime;
-                float mult = RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f;
-                if (mult > 0.001f) t /= mult;
-
-                return t;
-            }
-        }
-
-        // ROLLBACK_DART_DISTANCE_BASED_FLIGHT_TIME:
-        // Restore callers to EffectiveFlightTime if fixed-speed projectile travel causes gameplay
-        // timing regressions. The existing dartFlightTime is treated as the time to travel one
-        // board cell, so close targets resolve faster and far targets resolve later while preserving
-        // the old one-cell feel.
-        // ROLLBACK_DART_PROJECTILE_SPEED_X3:
-        // Set PROJECTILE_FLIGHT_SPEED_MULTIPLIER back to 1f and PROJECTILE_MIN_FLIGHT_TIME to 0.035f
-        // if the faster dart travel causes hit timing or visual readability regressions.
+        // [ROLLBACK_DART_FLIGHT_TIME_TO_SPEED_MULT]
+        // 새 식: duration = distance / (cellSpacing × multiplier × userSpeedMult).
+        // multiplier 단위는 "셀/초" — 1=한 cell 통과 1초, 10=0.1초. 직관적.
+        // 기존 식(시간 기반 + min/max scale clamp)은 위 ROLLBACK 주석 + 상수 해제로 복원.
         private float CalculateProjectileFlightTime(Vector3 from, Vector3 to)
         {
-            float baseTime = Mathf.Max(0.001f, FlightTime);
-            float speedMultiplier = RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f;
-            if (speedMultiplier <= 0.001f)
-                speedMultiplier = 1f;
-            speedMultiplier *= PROJECTILE_FLIGHT_SPEED_MULTIPLIER;
+            float multiplier = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightSpeedMultiplier : 10f;
+            if (multiplier <= 0.001f) multiplier = 1f;
+
+            float userSpeed = RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f;
+            if (userSpeed <= 0.001f) userSpeed = 1f;
+            multiplier *= userSpeed;
 
             float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
-            if (cellSpacing <= 0.01f)
-                cellSpacing = 0.55f;
+            if (cellSpacing <= 0.01f) cellSpacing = 0.55f;
 
             Vector3 flatFrom = new Vector3(from.x, 0f, from.z);
             Vector3 flatTo = new Vector3(to.x, 0f, to.z);
             float distance = Vector3.Distance(flatFrom, flatTo);
-            float unitsPerSecond = cellSpacing / baseTime;
-            float duration = distance / Mathf.Max(0.001f, unitsPerSecond * speedMultiplier);
+            float duration = distance / (cellSpacing * multiplier);
 
-            float minDuration = Mathf.Max(
-                PROJECTILE_MIN_FLIGHT_TIME,
-                baseTime * PROJECTILE_MIN_FLIGHT_TIME_SCALE / speedMultiplier);
-            float maxDuration = Mathf.Max(minDuration, baseTime * PROJECTILE_MAX_FLIGHT_TIME_SCALE / speedMultiplier);
-            return Mathf.Clamp(duration, minDuration, maxDuration);
+            return Mathf.Clamp(duration, PROJECTILE_MIN_FLIGHT_TIME, PROJECTILE_MAX_FLIGHT_TIME);
         }
 
         #endregion
@@ -330,10 +323,12 @@ namespace BalloonFlow
 
         protected override void OnSingletonAwake()
         {
-            if (GameManager.HasInstance)
-            {
-                _projectileFlightTime = GameManager.Instance.Board.dartFlightTime;
-            }
+            // [ROLLBACK_DART_FLIGHT_TIME_TO_SPEED_MULT]
+            // _projectileFlightTime sync — dartFlightTime 제거로 dead code. 새 흐름: CalculateProjectileFlightTime 가 매 호출 시 multiplier 동적 참조.
+            // if (GameManager.HasInstance)
+            // {
+            //     _projectileFlightTime = GameManager.Instance.Board.dartFlightTime;
+            // }
         }
 
         /// <summary>Frozen dart visuals: pinned at world position, don't move with belt.</summary>
@@ -1009,21 +1004,23 @@ namespace BalloonFlow
 
             _activeProjectiles.Add(proj);
 
-            // Flight: parabolic arc (곡사) or linear depending on _arcHeight
-            Ease ease = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightEase : Ease.InQuad;
-            if (_arcHeight > 0.01f)
-            {
-                Vector3 midPoint = (from + to) * 0.5f;
-                midPoint.y += _arcHeight;
-                Vector3[] path = { from, midPoint, to };
-                dartObj.transform.DOPath(path, ft, PathType.CatmullRom)
-                    .SetEase(ease)
-                    .SetLookAt(0.01f); // face movement direction
-            }
-            else
-            {
-                dartObj.transform.DOMove(to, ft).SetEase(ease);
-            }
+            // [ROLLBACK_DART_DOMOVE_DEAD_CALL]
+            // UpdateProjectiles 가 매 frame transform.position 을 manual lerp 로 덮어쓰므로 DOMove/DOPath 는 dead call.
+            // Ease 는 UpdateProjectiles 의 manual lerp 에서 DOVirtual.EasedValue 로 적용. 롤백 시 아래 주석 해제.
+            // Ease ease = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightEase : Ease.InQuad;
+            // if (_arcHeight > 0.01f)
+            // {
+            //     Vector3 midPoint = (from + to) * 0.5f;
+            //     midPoint.y += _arcHeight;
+            //     Vector3[] path = { from, midPoint, to };
+            //     dartObj.transform.DOPath(path, ft, PathType.CatmullRom)
+            //         .SetEase(ease)
+            //         .SetLookAt(0.01f);
+            // }
+            // else
+            // {
+            //     dartObj.transform.DOMove(to, ft).SetEase(ease);
+            // }
         }
 
         /// <summary>
@@ -1597,8 +1594,10 @@ namespace BalloonFlow
                     ConfigureLaunchScale(proj, launchStartScale, balloonScale);
                     _activeProjectiles.Add(proj);
 
-                    Ease ease2 = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightEase : Ease.Linear;
-                    dartObj.transform.DOMove(travelTarget, ft).SetEase(ease2);
+                    // [ROLLBACK_DART_DOMOVE_DEAD_CALL]
+                    // UpdateProjectiles 의 manual lerp 가 transform.position 을 덮어쓰므로 dead call. Ease 는 거기서 적용.
+                    // Ease ease2 = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightEase : Ease.Linear;
+                    // dartObj.transform.DOMove(travelTarget, ft).SetEase(ease2);
                 }
                 else
                 {
@@ -2727,8 +2726,15 @@ namespace BalloonFlow
                     // This replaces per-shot Transform.DOMove allocation with deterministic
                     // per-frame interpolation. Gameplay still resolves using impactTime below,
                     // so miss/continuous-fire guards are not changed.
+                    // [ROLLBACK_DART_MANUAL_LERP_EASE]
+                    // 이전: linear lerp (Ease 무효).
+                    //   float moveT = Mathf.Clamp01(proj.elapsed / proj.duration);
+                    //   proj.gameObject.transform.position = Vector3.Lerp(proj.startPosition, proj.targetPosition, moveT);
+                    // 변경: DOVirtual.EasedValue 로 GameManager.dartFlightEase 동적 반영. 롤백 시 위 두 줄 복원 + 아래 블록 주석.
                     float moveT = Mathf.Clamp01(proj.elapsed / proj.duration);
-                    proj.gameObject.transform.position = Vector3.Lerp(proj.startPosition, proj.targetPosition, moveT);
+                    Ease lerpEase = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightEase : Ease.Linear;
+                    float easedT = DOVirtual.EasedValue(0f, 1f, moveT, lerpEase);
+                    proj.gameObject.transform.position = Vector3.Lerp(proj.startPosition, proj.targetPosition, easedT);
 
                     Vector3 scale;
                     if (proj.punchDuration > 0f && proj.elapsed < proj.punchDuration)

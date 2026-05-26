@@ -38,14 +38,22 @@ namespace BalloonFlow
         public float balloonFieldHeightMult = 1.44f;
 
         [Header("[다트 — Dart]")]
-        [Tooltip("다트 비행 시간(초). 발사→풍선 도달까지 걸리는 시간. 클수록 느림. 동적 반영. (default: 0.1)")]
-        public float dartFlightTime = 0.1f;
+        // [ROLLBACK_DART_FLIGHT_TIME_TO_SPEED_MULT]
+        // 비행 속도 결정을 시간(초) 대신 배수로 변경. 롤백 시 아래 주석 해제 + CalculateProjectileFlightTime 원복.
+        // [Tooltip("다트 비행 시간(초). 발사→풍선 도달까지 걸리는 시간. 클수록 느림. 동적 반영. (default: 0.1)")]
+        // public float dartFlightTime = 0.1f;
 
-        [Tooltip("다트 레일 이동 속도. 현재 미사용 (railRotationSpeed가 벨트 속도 담당). (default: 8)")]
-        public float dartRailSpeed = 8f;
+        // [ROLLBACK_DART_RAIL_SPEED_DEAD]
+        // dartRailSpeed 는 railRotationSpeed 가 벨트 속도를 담당하므로 미사용 — dead code.
+        // [Tooltip("다트 레일 이동 속도. 현재 미사용 (railRotationSpeed가 벨트 속도 담당). (default: 8)")]
+        // public float dartRailSpeed = 8f;
 
         [Tooltip("다트 발사→풍선 비행 DOTween Ease 곡선. Linear=등속, OutQuad=감속, InQuad=가속, InOutSine=완만한 가감속 등. 동적 반영. (default: Linear)")]
         public Ease dartFlightEase = Ease.Linear;
+
+        [Tooltip("다트 비행 속도 배수 (셀/초). 1 = 1초당 1셀 이동, 10 = 0.1초당 1셀. 클수록 빠름. 동적 반영. (default: 10.00)")]
+        [Range(0.10f, 100.00f)]
+        public float dartFlightSpeedMultiplier = 10.00f;
 
         [Tooltip("공격 스캔 배율. railSpeed에 비례하여 스캔 빈도 결정. 높을수록 공격 빠름. 동적 반영. (default: 1.0)")]
         [Range(0.5f, 10f)]
@@ -133,7 +141,7 @@ namespace BalloonFlow
         public int railSlotCount = 200;
 
         [Tooltip("레일 회전 속도(슬롯/초). 벨트+다트+화살표 이동 속도 통일 기준. (default: 30)")]
-        public float railRotationSpeed = 30f;
+        public float railRotationSpeed = 35f;
 
         [Tooltip("보드 가장자리 ~ 레일 간격. (default: 1.5)")]
         public float railPadding = 1.5f;
