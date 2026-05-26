@@ -4,6 +4,55 @@
 AUTHOR_EMAIL=$(git config user.email)
 STAGED=$(git diff --cached --name-only)
 
+# ─── 0a) woohyun whitelist — 레벨 영역 외 commit 금지 ───
+# LevelDatabase / LevelBackups / Editor/Level* 외 모든 path 차단.
+if [ "$AUTHOR_EMAIL" = "woohyun.lim@aimed.xyz" ]; then
+    NON_LEVEL=$(echo "$STAGED" | grep -vE "(LevelDatabase|LevelBackups|^BalloonFlow/Assets/Editor/.*Level)")
+    if [ -n "$NON_LEVEL" ]; then
+        echo ""
+        echo "============================================"
+        echo "  BLOCKED: woohyun 은 레벨 영역만 commit 가능합니다."
+        echo "  허용 패턴: LevelDatabase / LevelBackups / Editor/Level*"
+        echo ""
+        echo "  허용 외 변경 (앞 20개):"
+        echo "$NON_LEVEL" | head -20 | sed 's/^/    /'
+        TOTAL=$(echo "$NON_LEVEL" | wc -l)
+        if [ "$TOTAL" -gt 20 ]; then
+            echo "    ... (총 $TOTAL 개)"
+        fi
+        echo "============================================"
+        echo ""
+        exit 1
+    fi
+fi
+
+# ─── 0b) 다희 whitelist — 아트 영역 외 commit 금지 ───
+# 아트 영역: 2.Sprite / 3.Material / TextMesh Pro / 0.Scenes / Resources.
+# 추가 가드: .cs / .asmdef 어디 있든 차단 (art→main 머지 코드 회귀 방지).
+if [ "$AUTHOR_EMAIL" = "dahee.shin@aimed.xyz" ]; then
+    NON_ART=$(echo "$STAGED" | grep -vE '^BalloonFlow/Assets/(2\.Sprite|3\.Material|TextMesh Pro|0\.Scenes|Resources)/')
+    CODE_FILES=$(echo "$STAGED" | grep -E '\.(cs|asmdef)$')
+    if [ -n "$NON_ART" ] || [ -n "$CODE_FILES" ]; then
+        echo ""
+        echo "============================================"
+        echo "  BLOCKED: 다희는 아트 영역만 commit 가능합니다."
+        echo "  허용 영역: Assets/2.Sprite / 3.Material / TextMesh Pro / 0.Scenes / Resources"
+        echo "  추가 차단: .cs / .asmdef (코드 회귀 방지)"
+        echo ""
+        if [ -n "$NON_ART" ]; then
+            echo "  아트 외 변경 (앞 20개):"
+            echo "$NON_ART" | head -20 | sed 's/^/    /'
+        fi
+        if [ -n "$CODE_FILES" ]; then
+            echo "  코드 파일 차단 (.cs/.asmdef):"
+            echo "$CODE_FILES" | head -10 | sed 's/^/    /'
+        fi
+        echo "============================================"
+        echo ""
+        exit 1
+    fi
+fi
+
 # ─── 1) Level Data — woohyun 전용 ───
 LEVEL_FILES=$(echo "$STAGED" | grep -E "LevelDatabase|LevelBackups")
 if [ -n "$LEVEL_FILES" ]; then
