@@ -6,8 +6,22 @@ namespace BalloonFlow
 {
     public class PopupContinue : UIBase
     {
+        private const string DECLINE_DUP_NAME = "DeclineButton (1)";
+        private const string LOSELIFE_NAME = "LoseLife";
+        private const string WINNINGSTREAK_NAME = "WinningStreak";
+
+        private enum ContinueView { LoseLife, WinningStreak }
+
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
+
+        private Button _btnDeclineDuplicate;
+        private bool _declineDuplicateSearched;
+
+        private GameObject _loseLifeView;
+        private GameObject _winningStreakView;
+        private bool _stateViewsSearched;
+        private ContinueView _currentView = ContinueView.LoseLife;
 
         [Header("[Buttons — 직접 할당]")]
         [SerializeField] private Button _btnContinue;
@@ -33,6 +47,16 @@ namespace BalloonFlow
 
         public Button ContinueButton => ContinueBtn;
         public Button DeclineButton => DeclineBtn;
+
+        // 'DeclineButton (1)' 복제 GameObject의 Button. 2단계 상태머신: 1차 클릭 → LoseLife/WinningStreak 토글, 2차 클릭 → 로비 이동.
+        public Button DeclineDuplicateButton
+        {
+            get
+            {
+                if (!_declineDuplicateSearched) CacheDeclineDuplicateButton();
+                return _btnDeclineDuplicate;
+            }
+        }
 
         private void OnEnable()
         {
@@ -68,7 +92,70 @@ namespace BalloonFlow
             if (DeclineBtn != null) DeclineBtn.onClick.AddListener(OnDeclineClicked);
             if (ExitBtn != null) ExitBtn.onClick.AddListener(OnDeclineClicked);
 
+            CacheStateViews();
+            CacheDeclineDuplicateButton();
+            if (_btnDeclineDuplicate != null)
+                _btnDeclineDuplicate.onClick.AddListener(OnDeclineDuplicateClicked);
+
             EnsureTopBarBinding();
+        }
+
+        private void CacheDeclineDuplicateButton()
+        {
+            _declineDuplicateSearched = true;
+
+            Transform found = transform.Find(DECLINE_DUP_NAME);
+            if (found == null)
+            {
+                var allChildren = GetComponentsInChildren<Transform>(true);
+                for (int i = 0; i < allChildren.Length; i++)
+                {
+                    if (allChildren[i].name == DECLINE_DUP_NAME)
+                    {
+                        found = allChildren[i];
+                        break;
+                    }
+                }
+            }
+            if (found != null) _btnDeclineDuplicate = found.GetComponent<Button>();
+        }
+
+        private void CacheStateViews()
+        {
+            _stateViewsSearched = true;
+
+            Transform loseLife = transform.Find(LOSELIFE_NAME);
+            Transform winningStreak = transform.Find(WINNINGSTREAK_NAME);
+
+            if (loseLife == null || winningStreak == null)
+            {
+                var allChildren = GetComponentsInChildren<Transform>(true);
+                for (int i = 0; i < allChildren.Length; i++)
+                {
+                    string n = allChildren[i].name;
+                    if (loseLife == null && n == LOSELIFE_NAME) loseLife = allChildren[i];
+                    else if (winningStreak == null && n == WINNINGSTREAK_NAME) winningStreak = allChildren[i];
+                    if (loseLife != null && winningStreak != null) break;
+                }
+            }
+
+            if (loseLife != null) _loseLifeView = loseLife.gameObject;
+            if (winningStreak != null) _winningStreakView = winningStreak.gameObject;
+        }
+
+        private void ResetToLoseLife()
+        {
+            if (!_stateViewsSearched) CacheStateViews();
+            if (_loseLifeView != null) _loseLifeView.SetActive(true);
+            if (_winningStreakView != null) _winningStreakView.SetActive(false);
+            _currentView = ContinueView.LoseLife;
+        }
+
+        public override void OpenUI()
+        {
+            ResetToLoseLife();
+            base.OpenUI();
+            ResetToLoseLife();
         }
 
         protected override void OnDestroy()
@@ -77,6 +164,7 @@ namespace BalloonFlow
             if (ContinueBtn != null) ContinueBtn.onClick.RemoveAllListeners();
             if (DeclineBtn != null) DeclineBtn.onClick.RemoveAllListeners();
             if (ExitBtn != null) ExitBtn.onClick.RemoveAllListeners();
+            if (_btnDeclineDuplicate != null) _btnDeclineDuplicate.onClick.RemoveAllListeners();
         }
 
         private void EnsureTopBarBinding()
@@ -117,6 +205,7 @@ namespace BalloonFlow
             }
             ApplyContinuePanelDifficulty(diff);
             UpdateCostDisplay();
+            ResetToLoseLife();
             OpenUI();
         }
 
@@ -160,6 +249,40 @@ namespace BalloonFlow
             {
                 PopupManager.Instance.ClosePopup("popup_continue");
                 PopupManager.Instance.ShowPopup("popup_fail02", 50);
+            }
+        }
+
+        /// <summary>
+        /// DeclineButton (1) 클릭 핸들러. 2단계 상태머신:
+        /// 1차 클릭 → LoseLife→WinningStreak 자식 토글, 2차 클릭 → 팝업 닫고 로비/MapMaker 이동.
+        /// 자식 view가 미배선이면 기존 OnDeclineClicked() fallback(회귀 차단).
+        /// </summary>
+        public void OnDeclineDuplicateClicked()
+        {
+            if (!_stateViewsSearched) CacheStateViews();
+
+            if (_loseLifeView == null && _winningStreakView == null)
+            {
+                OnDeclineClicked();
+                return;
+            }
+
+            if (_currentView == ContinueView.LoseLife)
+            {
+                if (_loseLifeView != null) _loseLifeView.SetActive(false);
+                if (_winningStreakView != null) _winningStreakView.SetActive(true);
+                _currentView = ContinueView.WinningStreak;
+                return;
+            }
+
+            if (PopupManager.HasInstance) PopupManager.Instance.ClosePopup("popup_continue");
+            if (GameManager.HasInstance)
+            {
+                GameManager.Instance.ResumeGame();
+                if (GameManager.IsTestPlayMode)
+                    GameManager.Instance.GoToMapMaker();
+                else
+                    GameManager.Instance.GoToLobby();
             }
         }
 
