@@ -22,7 +22,7 @@ namespace BalloonFlow
         private const string DART_POOL_KEY = "Dart";
         private const float DEFAULT_PROJECTILE_FLIGHT_TIME = 0.1f;
         private const float PROJECTILE_MIN_FLIGHT_TIME = 0.015f;
-        private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 3.3f;
+        private const float PROJECTILE_FLIGHT_SPEED_MULTIPLIER = 5.94f; // 3.3 × 1.8 (80% 증가)
         private const float PROJECTILE_MIN_FLIGHT_TIME_SCALE = 0.3f;
         private const float PROJECTILE_MAX_FLIGHT_TIME_SCALE = 20f;
         private const int ADJACENT_EMPTY_LINE_RESCUE_RADIUS = 1;
