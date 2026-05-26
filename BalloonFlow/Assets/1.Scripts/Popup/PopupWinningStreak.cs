@@ -56,6 +56,8 @@ namespace BalloonFlow
         private bool _scrollListenerBound;
         private bool _suppressScrollCallback;
         private bool _eventsSubscribed;
+        // BtnSingle(PLAY) 1회 가드 — Awake 등록, OpenUI 리셋, OnSingleFrameClicked 진입 시 set.
+        private bool _singleClickHandled;
         private float _slotHeightY;
         private float _slotSpacingY;
         private float _slotStrideY;
@@ -92,6 +94,12 @@ namespace BalloonFlow
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.AddListener(CloseUI);
 
+            if (_frame != null && _frame.BtnSingle != null)
+            {
+                _frame.BtnSingle.onClick.RemoveAllListeners();
+                _frame.BtnSingle.onClick.AddListener(OnSingleFrameClicked);
+            }
+
             if (_btnInfo != null)
             {
                 _btnInfo.onClick.RemoveAllListeners();
@@ -111,6 +119,8 @@ namespace BalloonFlow
 
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.RemoveAllListeners();
+            if (_frame != null && _frame.BtnSingle != null)
+                _frame.BtnSingle.onClick.RemoveAllListeners();
             if (_btnInfo != null)
                 _btnInfo.onClick.RemoveAllListeners();
             if (_scrollRect != null && _scrollListenerBound)
@@ -148,12 +158,49 @@ namespace BalloonFlow
             {
                 _frame.SetTitle("Winning Streak");
                 _frame.ShowExitButton(true);
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
+                _frame.SetSingleButtonText("PLAY");
+                if (_frame.BtnSingle != null) _frame.BtnSingle.interactable = true;
+                _singleClickHandled = false;
             }
 
             base.OpenUI();
             BuildVirtualSlots();
             ResetScrollPosition();
             RefreshHeader();
+        }
+
+        // BtnSingle(PLAY) — LobbyController.OnPlayClicked 패턴 모사. 라이프 부족 시 PopupMoreLive 분기.
+        private void OnSingleFrameClicked()
+        {
+            if (_singleClickHandled) return;
+            _singleClickHandled = true;
+            if (_frame != null && _frame.BtnSingle != null)
+                _frame.BtnSingle.interactable = false;
+
+            if (!GameManager.HasInstance) return;
+
+            // 라이프 부족 → PopupMoreLive. WinningStreak 팝업은 닫지 않음 — MoreLive 흐름 우선.
+            if (LifeManager.HasInstance && !LifeManager.Instance.IsInfiniteHeartsActive && !LifeManager.Instance.HasLife())
+            {
+                if (UIManager.HasInstance)
+                    UIManager.Instance.OpenUI<PopupMoreLive>("Popup/PopupMoreLive");
+                // 라이프 회복 후 재시도 가능하도록 가드 해제.
+                _singleClickHandled = false;
+                if (_frame != null && _frame.BtnSingle != null)
+                    _frame.BtnSingle.interactable = true;
+                return;
+            }
+
+            int levelId = 1;
+            if (LevelManager.HasInstance)
+            {
+                int highest = LevelManager.Instance.GetHighestCompletedLevel();
+                levelId = highest > 0 ? highest + 1 : 1;
+            }
+
+            CloseUI();
+            GameManager.Instance.StartLevel(levelId);
         }
 
         // ── State 이벤트 ─────────────────────────────────────────
