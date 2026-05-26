@@ -1333,70 +1333,111 @@ namespace BalloonFlow
                 int groupColor = _balloons[ids[0]].color;
                 int colorIdx = Mathf.Clamp(groupColor, 0, BalloonColors.Length - 1);
 
-                var parts = new List<FlexTubePart>(ids.Count);
+                // visual segment count per cell — prefab mesh 가 cell 폭 1/N 이라는 전제. cell 폭이 visual 적으로 끊김 없이 채워짐.
+                int visualSegmentsPerCell = Mathf.Max(1, tube.VisualSegmentsPerCell);
+                float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
+                if (cellSpacing < 0.01f) cellSpacing = 0.55f;
+                float visualStep = cellSpacing / visualSegmentsPerCell;
+
+                // parts list 용량 = 2 Cap + (cells - 2) × N visual segment
+                int segmentCellCount = Mathf.Max(0, ids.Count - 2);
+                int partsCapacity = 2 + segmentCellCount * visualSegmentsPerCell;
+                var parts = new List<FlexTubePart>(partsCapacity);
+
                 for (int i = 0; i < ids.Count; i++)
                 {
                     int id = ids[i];
                     var data = _balloons[id];
 
+                    bool isStart = (i == 0);
+                    bool isEnd   = (i == ids.Count - 1);
                     GimmickIdentifier.FlexTubePart partType =
-                        i == 0 ? GimmickIdentifier.FlexTubePart.StartCap :
-                        i == ids.Count - 1 ? GimmickIdentifier.FlexTubePart.EndCap :
-                                              GimmickIdentifier.FlexTubePart.Segment;
+                        isStart ? GimmickIdentifier.FlexTubePart.StartCap :
+                        isEnd   ? GimmickIdentifier.FlexTubePart.EndCap   :
+                                  GimmickIdentifier.FlexTubePart.Segment;
 
                     GameObject prefab = partType == GimmickIdentifier.FlexTubePart.StartCap ? startCapPrefab
                                        : partType == GimmickIdentifier.FlexTubePart.EndCap   ? endCapPrefab
                                                                                               : segmentPrefab;
 
                     Quaternion rotation = CalculateFlexTubePartRotation(cellPositions, i) * extraRot;
-                    // 명시적 spawn — world position/rotation 강제 후 parent 연결 (worldPositionStays=true).
-                    // prefab 원래 localScale 보존 — Cap/Segment 크기 변경 없음.
-                    var partObj = Instantiate(prefab);
-                    if (partObj == null)
-                    {
-                        Debug.LogWarning($"[FlexTube] Instantiate failed for group {groupId} seq {i}.");
-                        continue;
-                    }
-                    partObj.transform.position = data.position;
-                    partObj.transform.rotation = rotation;
-                    partObj.transform.SetParent(tubeObj.transform, worldPositionStays: true);
 
-                    // 충돌은 BalloonController 자료구조 + DirectionalTargeting 으로 처리 — Collider 불필요.
-                    // FlexTubePart 는 PopBalloonWithDart 분기에서 _balloonObjects[id].GetComponent<IDartHittable>() 로 진입.
-                    var part = partObj.GetComponent<FlexTubePart>();
-                    if (part == null) part = partObj.AddComponent<FlexTubePart>();
-                    if (part == null)
-                    {
-                        Debug.LogWarning($"[FlexTube] FlexTubePart AddComponent failed on prefab {prefab.name}.");
-                        continue;
-                    }
-                    part.SetPartType(partType);
-                    part.SetBalloonId(id);
-                    parts.Add(part);
-                    _balloonObjects[id] = partObj;
+                    // visual segment 가 여러 개일 때 cell 안에서 tangent 방향으로 1/N step 으로 분산.
+                    // Cap (Start/End) 은 분해 안 함 — 항상 cell center 1개.
+                    int visualCount = (partType == GimmickIdentifier.FlexTubePart.Segment) ? visualSegmentsPerCell : 1;
+                    Vector3 tangent = ComputeFlexTubeTangent(cellPositions, i); // cellPositions 기반 forward
+                    bool useTangent = visualCount > 1 && tangent.sqrMagnitude > 0.0001f;
 
-                    // 색 적용 — Pin/Pinata 와 동일 패턴. GimmickIdentifier 가 있으면 ApplyColor,
-                    // 없으면 자식 Renderer 들에 공유 material 직접 적용 (fallback).
-                    var partGi = partObj.GetComponent<GimmickIdentifier>();
-                    if (partGi != null)
+                    // cell center 에 있는 visual 을 _balloonObjects[id] 로 등록 — 다트 target 위치가 cell center 와 일치하도록.
+                    // 끝쪽부터 사라지는 정책상 center visual 은 cell 죽기 직전까지 active 유지 → target lookup 안정.
+                    int centerVisualIdx = visualCount / 2;
+
+                    for (int v = 0; v < visualCount; v++)
                     {
-                        partGi.Initialize();
-                        if (partGi.HasColorRenderers)
-                            partGi.ApplyColor(BalloonColors[colorIdx]);
-                    }
-                    else
-                    {
-                        ApplyTintToObject(partObj, BalloonColors[colorIdx]);
+                        // visual segment center offset — cell center 기준 -(N-1)/2 .. +(N-1)/2 × visualStep.
+                        Vector3 spawnPos = data.position;
+                        if (useTangent)
+                            spawnPos += tangent * ((v - (visualCount - 1) * 0.5f) * visualStep);
+
+                        var partObj = Instantiate(prefab);
+                        if (partObj == null)
+                        {
+                            Debug.LogWarning($"[FlexTube] Instantiate failed for group {groupId} seq {i} visual {v}.");
+                            continue;
+                        }
+                        partObj.transform.position = spawnPos;
+                        partObj.transform.rotation = rotation;
+                        partObj.transform.SetParent(tubeObj.transform, worldPositionStays: true);
+
+                        var part = partObj.GetComponent<FlexTubePart>();
+                        if (part == null) part = partObj.AddComponent<FlexTubePart>();
+                        if (part == null)
+                        {
+                            Debug.LogWarning($"[FlexTube] FlexTubePart AddComponent failed on prefab {prefab.name}.");
+                            continue;
+                        }
+                        part.SetPartType(partType);
+                        part.SetBalloonId(id);
+                        parts.Add(part);
+
+                        // _balloonObjects 는 cell 당 1 object 만 — center visual 등록 (위치=cell center, 죽기 직전까지 active).
+                        if (v == centerVisualIdx)
+                            _balloonObjects[id] = partObj;
+
+                        var partGi = partObj.GetComponent<GimmickIdentifier>();
+                        if (partGi != null)
+                        {
+                            partGi.Initialize();
+                            if (partGi.HasColorRenderers)
+                                partGi.ApplyColor(BalloonColors[colorIdx]);
+                        }
+                        else
+                        {
+                            ApplyTintToObject(partObj, BalloonColors[colorIdx]);
+                        }
                     }
 
-                    Debug.Log($"[FlexTube]   spawned {partType} id={id} at ({data.position.x:F2},{data.position.z:F2}) rot.y={rotation.eulerAngles.y:F0} color={colorIdx}");
+                    Debug.Log($"[FlexTube]   spawned {partType} id={id} at ({data.position.x:F2},{data.position.z:F2}) rot.y={rotation.eulerAngles.y:F0} color={colorIdx} visualCount={visualCount}");
                 }
 
-                // HP = Segment 수 (Cap 제외). 최소 1.
-                int segmentCount = Mathf.Max(1, ids.Count - 2);
+                // HP = (visual segment 수) — cell 단위가 아닌 visual segment 단위.
+                // segmentCellCount = 0 (cap 만) 이면 안전 fallback 1.
+                int totalVisualSegments = Mathf.Max(1, segmentCellCount * visualSegmentsPerCell);
                 int color = _balloons[ids[0]].color;
-                tube.Initialize(segmentCount, color, groupId, parts);
+                tube.Initialize(totalVisualSegments, color, groupId, parts);
             }
+        }
+
+        /// <summary>cell index i 의 forward tangent (visual segment 분산 시 사용). 직선/대각 모두 정상 동작. y=0 평면 기준.</summary>
+        private static Vector3 ComputeFlexTubeTangent(List<Vector3> cellPositions, int i)
+        {
+            int n = cellPositions.Count;
+            Vector3 dir;
+            if (i == 0)                dir = cellPositions[1] - cellPositions[0];
+            else if (i == n - 1)       dir = cellPositions[n - 1] - cellPositions[n - 2];
+            else                        dir = cellPositions[i + 1] - cellPositions[i - 1];
+            dir.y = 0f;
+            return dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector3.zero;
         }
 
         /// <summary>FlexTube 부품의 회전 계산 — prefab forward = +z (Unity 기본) 가정. cell index i 의 이전/다음 위치로 방향 추론.</summary>

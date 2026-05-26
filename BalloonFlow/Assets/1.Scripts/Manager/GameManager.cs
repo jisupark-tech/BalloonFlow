@@ -44,6 +44,9 @@ namespace BalloonFlow
         [Tooltip("다트 레일 이동 속도. 현재 미사용 (railRotationSpeed가 벨트 속도 담당). (default: 8)")]
         public float dartRailSpeed = 8f;
 
+        [Tooltip("다트 발사→풍선 비행 DOTween Ease 곡선. Linear=등속, OutQuad=감속, InQuad=가속, InOutSine=완만한 가감속 등. 동적 반영. (default: Linear)")]
+        public Ease dartFlightEase = Ease.Linear;
+
         [Tooltip("공격 스캔 배율. railSpeed에 비례하여 스캔 빈도 결정. 높을수록 공격 빠름. 동적 반영. (default: 1.0)")]
         [Range(0.5f, 10f)]
         public float attackSpeedMultiplier = 1f;

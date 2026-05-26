@@ -1010,18 +1010,19 @@ namespace BalloonFlow
             _activeProjectiles.Add(proj);
 
             // Flight: parabolic arc (곡사) or linear depending on _arcHeight
+            Ease ease = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightEase : Ease.InQuad;
             if (_arcHeight > 0.01f)
             {
                 Vector3 midPoint = (from + to) * 0.5f;
                 midPoint.y += _arcHeight;
                 Vector3[] path = { from, midPoint, to };
                 dartObj.transform.DOPath(path, ft, PathType.CatmullRom)
-                    .SetEase(Ease.Linear)
+                    .SetEase(ease)
                     .SetLookAt(0.01f); // face movement direction
             }
             else
             {
-                dartObj.transform.DOMove(to, ft).SetEase(Ease.Linear);
+                dartObj.transform.DOMove(to, ft).SetEase(ease);
             }
         }
 
@@ -1596,7 +1597,8 @@ namespace BalloonFlow
                     ConfigureLaunchScale(proj, launchStartScale, balloonScale);
                     _activeProjectiles.Add(proj);
 
-                    dartObj.transform.DOMove(travelTarget, ft).SetEase(Ease.Linear);
+                    Ease ease2 = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightEase : Ease.Linear;
+                    dartObj.transform.DOMove(travelTarget, ft).SetEase(ease2);
                 }
                 else
                 {
