@@ -48,5 +48,28 @@ namespace BalloonFlow
         public Button TapAnywhereButton => _tapAnywhereButton;
         public RectTransform TextTap => _textTap;
         public RectTransform TextTapOutline => _textTapOutline;
+
+        protected override void Awake()
+        {
+            base.Awake();
+            EnsureSlicedImages();
+        }
+
+        private void EnsureSlicedImages()
+        {
+            ApplySliced(_cutoutMask);
+            ApplySliced(_cutoutFrame);
+            ApplySliced(_instructionPanel);
+        }
+
+        private static void ApplySliced(RectTransform rt)
+        {
+            if (rt == null) return;
+            Image image = rt.GetComponent<Image>();
+            if (image == null || image.sprite == null) return;
+            // Sprite border=0 일 때 Sliced 적용 시 깨짐 방어
+            if (image.sprite.border == Vector4.zero) return;
+            image.type = Image.Type.Sliced;
+        }
     }
 }

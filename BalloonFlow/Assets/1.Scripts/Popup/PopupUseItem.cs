@@ -63,6 +63,7 @@ namespace BalloonFlow
         private const int USEITEM_POPUP_SORTING_BUMP = 20;
         private const float CUTOUT_CONTENT_PADDING = 24f;
         private const float CUTOUT_MIN_CANVAS_HEIGHT = 120f;
+        private const float HAND_CUTOUT_Y_OVERRIDE = -830f;
 
         [Header("[Cutout Materials - shared assets preferred]")]
         [SerializeField] private Material _matCutoutDim;
@@ -599,6 +600,10 @@ namespace BalloonFlow
                 {
                     Vector3 queueCenter = HolderVisualManager.Instance.CalculateQueueCenterPosition();
                     SetCutoutScreenArea(cam, queueCenter, _cutoutSizeHand);
+                    // [2026-05-27] Hand cutout Y fixed to -830 per design
+                    Vector2 handPos = _cutoutMask.anchoredPosition;
+                    handPos.y = HAND_CUTOUT_Y_OVERRIDE;
+                    _cutoutMask.anchoredPosition = handPos;
                 }
             }
             else if (boosterType == BoosterManager.COLOR_REMOVE)
