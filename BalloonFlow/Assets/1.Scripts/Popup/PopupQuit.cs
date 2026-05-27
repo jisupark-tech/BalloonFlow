@@ -115,6 +115,7 @@ namespace BalloonFlow
         /// <summary>
         /// HomeButton 클릭 시 호출. LoseLife 상태이면 WinningStreak로 전환하고 true 반환(클릭 소비),
         /// 이미 WinningStreak이거나 자식 GameObject가 미배선이면 false 반환(Caller가 로비 이동 수행).
+        /// 1배 (currentStreak=1) 인 경우엔 WinningStreak 노출 skip — 즉시 false 반환해서 로비로.
         /// </summary>
         public bool TryAdvanceHomeButton()
         {
@@ -125,9 +126,17 @@ namespace BalloonFlow
 
             if (_currentView == QuitView.LoseLife)
             {
+                int multiplier = WinningStreakUI.ResolveCurrentMultiplier();
+                if (multiplier <= 1)
+                {
+                    // 1배 상태 → WinningStreak 노출 skip. caller 가 로비 이동.
+                    return false;
+                }
+
                 _loseLifeView.SetActive(false);
                 _winningStreakView.SetActive(true);
                 _currentView = QuitView.WinningStreak;
+                WinningStreakUI.PlayMultiplierIdle(_winningStreakView, multiplier);
                 return true;
             }
             return false;

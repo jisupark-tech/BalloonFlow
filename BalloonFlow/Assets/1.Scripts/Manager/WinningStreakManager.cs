@@ -34,6 +34,9 @@ namespace BalloonFlow
             // 레벨 클리어/실패 이벤트 자동 hook.
             EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompletedEvent);
             EventBus.Subscribe<OnLevelFailed>(HandleLevelFailedEvent);
+
+            // 보상 수령 시 WinningStreakGetReward.prefab spawn 연출 자동 hook.
+            WinningStreakGetRewardSpawner.EnsureSubscribed();
         }
 
         protected override void OnDestroy()

@@ -13,6 +13,13 @@ Shader "UI/CutoutDim"
         _CutoutSoftness ("Cutout Softness (Normalized Local)", Float) = 0.001
         _CutoutMaskTex ("Cutout Mask (alpha = hole)", 2D) = "white" {}
         _CutoutMaskUVRect ("Cutout Mask UV Rect in atlas (xMin,yMin,w,h 0..1)", Vector) = (0,0,1,1)
+        // ROLLBACK_CUTOUTDIM_9SLICE: start
+        // 9-slice border 정보 — 모두 0 이면 기존 stretch 동작 그대로.
+        // _BorderRect: rect 기준 normalized border (bL/rectW, bB/rectH, bR/rectW, bT/rectH)
+        // _BorderSprite: sprite 기준 normalized border (bL/spriteW, bB/spriteH, bR/spriteW, bT/spriteH)
+        _BorderRect ("Cutout Border (rect-normalized) L,B,R,T", Vector) = (0,0,0,0)
+        _BorderSprite ("Cutout Border (sprite-normalized) L,B,R,T", Vector) = (0,0,0,0)
+        // ROLLBACK_CUTOUTDIM_9SLICE: end
         _StencilComp ("Stencil Comparison", Float) = 8
         _Stencil ("Stencil ID", Float) = 0
         _StencilOp ("Stencil Operation", Float) = 0
@@ -59,6 +66,10 @@ Shader "UI/CutoutDim"
             float4 _CutoutCenter;
             float4 _CutoutSize;
             float _CutoutSoftness;
+            // ROLLBACK_CUTOUTDIM_9SLICE: start
+            float4 _BorderRect;     // (bL/rw, bB/rh, bR/rw, bT/rh) — 0 이면 기존 stretch
+            float4 _BorderSprite;   // (bL/sw, bB/sh, bR/sw, bT/sh)
+            // ROLLBACK_CUTOUTDIM_9SLICE: end
 
             struct appdata
             {
@@ -109,7 +120,40 @@ Shader "UI/CutoutDim"
                 float maskAlpha = 0.0;
                 if (maskUV.x >= 0.0 && maskUV.x <= 1.0 && maskUV.y >= 0.0 && maskUV.y <= 1.0)
                 {
-                    float2 atlasUV = _CutoutMaskUVRect.xy + maskUV * _CutoutMaskUVRect.zw;
+                    // ROLLBACK_CUTOUTDIM_9SLICE: start
+                    // _BorderRect 가 모두 0 이면 단순 stretch (기존 동작). 0 이 아니면 9-slice 매핑.
+                    // X axis 처리
+                    float2 spriteUV = maskUV;
+                    float bRL = _BorderRect.x, bRB = _BorderRect.y, bRR = _BorderRect.z, bRT = _BorderRect.w;
+                    float bSL = _BorderSprite.x, bSB = _BorderSprite.y, bSR = _BorderSprite.z, bST = _BorderSprite.w;
+                    if (bRL > 0.0001 || bRR > 0.0001)
+                    {
+                        if (maskUV.x < bRL)
+                            spriteUV.x = (bRL > 0.0001) ? maskUV.x * (bSL / bRL) : maskUV.x;
+                        else if (maskUV.x > 1.0 - bRR)
+                            spriteUV.x = (bRR > 0.0001) ? 1.0 - (1.0 - maskUV.x) * (bSR / bRR) : maskUV.x;
+                        else
+                        {
+                            float centerRect = max(1.0 - bRL - bRR, 0.0001);
+                            float centerSprite = max(1.0 - bSL - bSR, 0.0001);
+                            spriteUV.x = bSL + ((maskUV.x - bRL) / centerRect) * centerSprite;
+                        }
+                    }
+                    if (bRB > 0.0001 || bRT > 0.0001)
+                    {
+                        if (maskUV.y < bRB)
+                            spriteUV.y = (bRB > 0.0001) ? maskUV.y * (bSB / bRB) : maskUV.y;
+                        else if (maskUV.y > 1.0 - bRT)
+                            spriteUV.y = (bRT > 0.0001) ? 1.0 - (1.0 - maskUV.y) * (bST / bRT) : maskUV.y;
+                        else
+                        {
+                            float centerRect = max(1.0 - bRB - bRT, 0.0001);
+                            float centerSprite = max(1.0 - bSB - bST, 0.0001);
+                            spriteUV.y = bSB + ((maskUV.y - bRB) / centerRect) * centerSprite;
+                        }
+                    }
+                    float2 atlasUV = _CutoutMaskUVRect.xy + spriteUV * _CutoutMaskUVRect.zw;
+                    // ROLLBACK_CUTOUTDIM_9SLICE: end
                     maskAlpha = tex2D(_CutoutMaskTex, atlasUV).a;
                 }
 

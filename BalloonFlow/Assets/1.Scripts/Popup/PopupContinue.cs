@@ -269,8 +269,20 @@ namespace BalloonFlow
 
             if (_currentView == ContinueView.LoseLife)
             {
+                int multiplier = WinningStreakUI.ResolveCurrentMultiplier();
+                if (multiplier <= 1)
+                {
+                    // 1배 → WinningStreak skip, 즉시 LoseLife 로직 (Give Up = 팝업 닫고 fail02)
+                    OnDeclineClicked();
+                    return;
+                }
+
                 if (_loseLifeView != null) _loseLifeView.SetActive(false);
-                if (_winningStreakView != null) _winningStreakView.SetActive(true);
+                if (_winningStreakView != null)
+                {
+                    _winningStreakView.SetActive(true);
+                    WinningStreakUI.PlayMultiplierIdle(_winningStreakView, multiplier);
+                }
                 _currentView = ContinueView.WinningStreak;
                 return;
             }

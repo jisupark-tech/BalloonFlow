@@ -244,6 +244,10 @@ namespace BalloonFlow
 
             // 충전 중: (+) 보임, 시간 표시
             _lobby.SetLifePlusButtonVisible(true);
+            // ROLLBACK_LIFE_TEXT_CHARGING_REFRESH:
+            // RefreshDisplay 의 1회 호출이 LifeManager init race 로 skip 되거나, _txtLife 가 prefab default ("") 인 채
+            // OnLifeChanged 이벤트 전까지 빈 텍스트로 남는 케이스 차단. 매 frame 호출이라 stale 도 자동 회복.
+            _lobby.SetLifeText(lm.CurrentLives, lm.MaxLives);
             TimeSpan remaining = lm.GetTimeToNextLife();
             if (remaining.TotalSeconds > 0)
                 _lobby.SetLifeTimerText($"{remaining.Minutes:D2}:{remaining.Seconds:D2}");

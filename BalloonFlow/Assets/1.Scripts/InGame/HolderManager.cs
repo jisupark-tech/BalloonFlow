@@ -191,6 +191,14 @@ namespace BalloonFlow
             for (int i = 0; i < holderSetups.Length; i++)
             {
                 var setup = holderSetups[i];
+                // [ROLLBACK_LOCKKEY_DEPRECATE]
+                // Lock_Key holder dead 처리 — 기존 LevelData 호환을 위해 정규화: Lock_Key → 일반 holder.
+                if (setup.queueGimmick == GimmickManager.GIMMICK_LOCK_KEY)
+                {
+                    setup.queueGimmick = "";
+                    setup.lockPairId = -1;
+                }
+
                 // position.x = MapMaker 그리드의 열 번호 (빈 칸 포함 원래 위치)
                 int col = Mathf.Clamp((int)setup.position.x, 0, _queueColumns - 1);
 

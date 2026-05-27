@@ -100,13 +100,18 @@ namespace BalloonFlow
         // [2026-05-21] PopupUseItem 와 동일 패턴 — mat_UICutoutDim shader 로 hole-in-UI dim 처리.
         private Material _runtimeCutoutDimMaterial;
         private AsyncOperationHandle<Material> _cutoutDimMaterialHandle;
-        private const string CUTOUT_DIM_MATERIAL_ADDRESS = "mat_UICutoutDim";
+        // Addressables 에는 full asset path 로 등록됨 (audit: 'Assets/3.Material/UICutoutDim.mat')
+        // 짧은 alias 'mat_UICutoutDim' 은 미등록 — InvalidKeyException 회피용 full path 사용.
+        private const string CUTOUT_DIM_MATERIAL_ADDRESS = "Assets/3.Material/UICutoutDim.mat";
         private static readonly int OVERLAY_RECT_ID = Shader.PropertyToID("_OverlayRect");
         private static readonly int CUTOUT_CENTER_ID = Shader.PropertyToID("_CutoutCenter");
         private static readonly int CUTOUT_SIZE_ID = Shader.PropertyToID("_CutoutSize");
         private static readonly int CUTOUT_SOFTNESS_ID = Shader.PropertyToID("_CutoutSoftness");
         private static readonly int CUTOUT_MASK_TEX_ID = Shader.PropertyToID("_CutoutMaskTex");
         private static readonly int CUTOUT_MASK_UV_RECT_ID = Shader.PropertyToID("_CutoutMaskUVRect");
+        // ROLLBACK_CUTOUTDIM_9SLICE: 9-slice 호환을 위해 sprite border 를 shader 에 전달.
+        private static readonly int BORDER_RECT_ID = Shader.PropertyToID("_BorderRect");
+        private static readonly int BORDER_SPRITE_ID = Shader.PropertyToID("_BorderSprite");
         private Texture2D _whiteMaskTex; // _CutoutMaskTex default — sprite 없을 때 사각형 hole.
 
         #endregion
@@ -789,6 +794,10 @@ namespace BalloonFlow
             {
                 _cutoutFrameImage.sprite = sprite; // 참조 유지 (texture 접근용) — 화면엔 안 보임.
                 _cutoutFrameImage.color = new Color(0f, 0f, 0f, 0f);
+                // 9-slice 지원 — Sprite Editor 에서 Slice 한 border 가 있으면 size 변경 시 모서리 보존.
+                // sprite.border 가 모두 0 이면 Sliced 가 Simple 처럼 동작 — 안전 default.
+                _cutoutFrameImage.type = Image.Type.Sliced;
+                _cutoutFrameImage.pixelsPerUnitMultiplier = 1f;
             }
             if (_runtimeCutoutDimMaterial == null) return;
 
@@ -812,6 +821,32 @@ namespace BalloonFlow
 
             _runtimeCutoutDimMaterial.SetTexture(CUTOUT_MASK_TEX_ID, tex);
             _runtimeCutoutDimMaterial.SetVector(CUTOUT_MASK_UV_RECT_ID, uvRect);
+
+            // ROLLBACK_CUTOUTDIM_9SLICE: start
+            // sprite.border 가 모두 0 이면 (0,0,0,0) 전달 → shader 가 기존 stretch 경로.
+            // border 가 있으면 rect-norm + sprite-norm 계산해서 shader 9-slice 매핑.
+            // [2026-05-27] 임시 비활성 — Dim 통째 투명 회귀 의심. 진단 후 다시 활성.
+            //   조사: CutoutFrame 의 Material wire 가 UI/CutoutDim 인지 (잘못된 prefab 설정),
+            //         또는 shader 9-slice 로직의 회귀. 둘 다 확인 후 분리해서 fix.
+            const bool ENABLE_9SLICE = false;
+            Vector4 borderRect = Vector4.zero;
+            Vector4 borderSprite = Vector4.zero;
+            if (ENABLE_9SLICE && sprite != null)
+            {
+                Vector4 b = sprite.border; // (left, bottom, right, top) pixels
+                Vector2 rectSize = _cutoutFrame != null ? _cutoutFrame.rect.size : Vector2.zero;
+                Vector2 spriteSize = sprite.rect.size;
+                if (b.sqrMagnitude > 0.0001f
+                    && rectSize.x > 0.001f && rectSize.y > 0.001f
+                    && spriteSize.x > 0.001f && spriteSize.y > 0.001f)
+                {
+                    borderRect = new Vector4(b.x / rectSize.x, b.y / rectSize.y, b.z / rectSize.x, b.w / rectSize.y);
+                    borderSprite = new Vector4(b.x / spriteSize.x, b.y / spriteSize.y, b.z / spriteSize.x, b.w / spriteSize.y);
+                }
+            }
+            _runtimeCutoutDimMaterial.SetVector(BORDER_RECT_ID, borderRect);
+            _runtimeCutoutDimMaterial.SetVector(BORDER_SPRITE_ID, borderSprite);
+            // ROLLBACK_CUTOUTDIM_9SLICE: end
         }
 
         private RectTransform CreateCutoutFrame(Transform parent)
@@ -828,6 +863,7 @@ namespace BalloonFlow
             _cutoutFrameImage = go.AddComponent<Image>();
             _cutoutFrameImage.color = new Color(1f, 1f, 1f, 0f); // transparent fill
             _cutoutFrameImage.raycastTarget = false;
+            _cutoutFrameImage.type = Image.Type.Sliced; // 9-slice 활용 — sprite border 따라 자동 작동.
             _defaultCutoutFrameSprite = _cutoutFrameImage.sprite;
             _defaultCutoutFrameColor = _cutoutFrameImage.color;
 
@@ -835,8 +871,56 @@ namespace BalloonFlow
             outline.effectColor = FRAME_COLOR;
             outline.effectDistance = new Vector2(FRAME_THICKNESS, FRAME_THICKNESS);
 
+            // ROLLBACK_TUTORIAL_CUTOUT_SOFTMASK: start
+            // SpriteMask 가 9-slice 미지원 → mob-sakai/SoftMaskForUGUI 의 SoftMask 사용.
+            // SoftMask 는 같은 GameObject 의 Image.sprite (Sliced) 를 mask 로 활용 — 9-slice 모서리 보존.
+            // 롤백: 이 블록 제거 + prefab 에 기존 SpriteMask 복원.
+            TryAttachSoftMask(go);
+            // ROLLBACK_TUTORIAL_CUTOUT_SOFTMASK: end
+
             return rect;
         }
+
+        // ROLLBACK_TUTORIAL_CUTOUT_SOFTMASK: start
+        // SoftMask 패키지 (com.coffee.softmask-for-ugui) 타입을 reflection 으로 부착.
+        // 패키지가 다른 asmdef (Coffee.SoftMaskForUGUI) 라 직접 using 시 컴파일 의존 — reflection 으로 안전 fallback.
+        // 패키지 정보 (Library/PackageCache/com.coffee.softmask-for-ugui@...): namespace=Coffee.UISoftMask, assembly=Coffee.SoftMaskForUGUI.
+        public static System.Type GetSoftMaskType() => SoftMaskTypeResolver.Resolve();
+
+        public static void TryAttachSoftMask(GameObject go)
+        {
+            var t = SoftMaskTypeResolver.Resolve();
+            if (t == null) return;
+            if (go.GetComponent(t) != null) return;
+            go.AddComponent(t);
+        }
+
+        private static class SoftMaskTypeResolver
+        {
+            private static System.Type s_type;
+            private static bool s_resolved;
+
+            public static System.Type Resolve()
+            {
+                if (s_resolved) return s_type;
+                s_resolved = true;
+                // Assembly-qualified — Coffee.UISoftMask.SoftMask, Coffee.SoftMaskForUGUI
+                s_type = System.Type.GetType("Coffee.UISoftMask.SoftMask, Coffee.SoftMaskForUGUI");
+                if (s_type == null)
+                {
+                    // Fallback — 모든 loaded assembly 에서 검색 (assembly 이름 변경 대비).
+                    foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        s_type = asm.GetType("Coffee.UISoftMask.SoftMask", false);
+                        if (s_type != null) break;
+                    }
+                }
+                if (s_type == null)
+                    Debug.LogWarning("[TutorialManager] Coffee.UISoftMask.SoftMask not found — com.coffee.softmask-for-ugui 패키지 확인 필요.");
+                return s_type;
+            }
+        }
+        // ROLLBACK_TUTORIAL_CUTOUT_SOFTMASK: end
 
         private RectTransform CreateArrowIndicator(Transform parent)
         {

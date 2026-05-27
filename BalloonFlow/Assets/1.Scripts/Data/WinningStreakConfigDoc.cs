@@ -12,7 +12,7 @@ namespace BalloonFlow
     public class WinningStreakConfigDoc
     {
         /// <summary>WinningStreak 이벤트 해금 레벨 (highestClearedLevel 이 이 값 이상이면 노출).</summary>
-        [FirestoreProperty] public int unlockLevel { get; set; } = 34;
+        [FirestoreProperty] public int unlockLevel { get; set; } = 10;//34;
 
         [FirestoreProperty] public StreakMultipliers streakMultipliers { get; set; } = new StreakMultipliers();
         [FirestoreProperty] public DifficultyMultipliers difficultyMultipliers { get; set; } = new DifficultyMultipliers();

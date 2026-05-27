@@ -118,7 +118,9 @@ namespace BalloonFlow
             var sprite = _image.sprite;
             if (sprite == null)
             {
-                if (!_spriteMissingWarned)
+                // Image가 비활성(렌더 안 함)이면 sprite-less placeholder 상태(예: 단색 페이드 오버레이) — fit/경고 불필요.
+                // sprite는 표시 직전 ApplyFadeImage 등에서 할당 후 Refresh()로 재계산되므로 여기서 조용히 스킵.
+                if (_image.enabled && !_spriteMissingWarned)
                 {
                     Debug.LogError("[SplashBackgroundFitter] Image.sprite is null — cannot read native aspect; sizeDelta untouched. Assign a sprite to the Image component.");
                     _spriteMissingWarned = true;

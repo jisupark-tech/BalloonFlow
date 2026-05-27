@@ -49,9 +49,15 @@ namespace BalloonFlow
 
         // SlotWinningStreak 상태 스프라이트 캐시 — atlas_ui 가 늦게 로드될 수 있어 lazy fetch.
         private Sprite _sprFrameNumberDefault;
+        private Sprite _sprFrameNumberComplete;
         private Sprite _sprArrow;
         private Sprite _sprArrowComplete;
         private Sprite _sprSlot;
+        private Sprite _sprSlotComplete;
+
+        // TMP font materials — Resources/TextMesh Pro/Fonts & Materials/.
+        private Material _fontMatGreenOutline;
+        private Material _fontMatPurpleOutline;
 
         private readonly List<PooledSlot> _pooledSlots = new List<PooledSlot>(FallbackPoolSlots);
         private bool _slotsBuilt;
@@ -249,7 +255,18 @@ namespace BalloonFlow
             var cfg = mgr?.Config;
 
             RefreshMultiplierSlots(cfg);
+            RefreshMultiplierSelection();
             RefreshDescriptionText(state, cfg);
+        }
+
+        /// <summary>"Multiplier" GameObject 의 SelectFrame / TextYellow 를 현재 배수 위치로 정적 셋팅 (애니메이션 없음).
+        /// Popup 매핑 (Quit/Continue 의 HUD 매핑과 다른 값) 사용.</summary>
+        private void RefreshMultiplierSelection()
+        {
+            var multiplierGo = FindChildGOByName(gameObject, "Multiplier");
+            if (multiplierGo == null) return;
+            int multiplier = WinningStreakUI.ResolveCurrentMultiplier();
+            WinningStreakUI.ApplyPopupPositionsForMultiplier(multiplierGo.transform, multiplier);
         }
 
         /// <summary>ImageMultiplier 아래의 SlotMultiplier(0..4) 5개에 streak1..streak5+ 배수 텍스트 채움.
@@ -763,7 +780,10 @@ namespace BalloonFlow
             if (go != null && go.activeSelf != active) go.SetActive(active);
         }
 
-        /// <summary>3가지 상태(Lock / 현재 레벨 / 완료)별 SlotWinningStreak 시각 세팅.</summary>
+        /// <summary>3가지 상태(Lock / 현재 레벨 / 완료)별 SlotWinningStreak 시각 세팅 (사용자 명세 정정).
+        /// Claimed: ImageInnerFrame=Complete, BtnReward=SlotComplete, ImageArrow=ArrowComplete, font=Green, IconCheck on.
+        /// InProgress/Locked: ImageInnerFrame=Default, BtnReward=Slot, ImageArrow=Slot, font=Purple, IconLock on.
+        /// RotateLight 는 InProgress 만 on.</summary>
         private void ApplySlotState(PooledSlot pooled, SlotState state)
         {
             EnsureStreakSprites();
@@ -771,11 +791,11 @@ namespace BalloonFlow
             switch (state)
             {
                 case SlotState.Locked:
-                    // Lock 상태 — RotateLight off, Arrow=일반.
                     SetActiveSafe(pooled.rotateLight, false);
                     SetSpriteSafe(pooled.imageInnerFrame, _sprFrameNumberDefault);
-                    SetSpriteSafe(pooled.imageArrow, _sprArrow);
+                    SetSpriteSafe(pooled.imageArrow, _sprSlot);
                     SetSpriteSafe(pooled.btnRewardImage, _sprSlot);
+                    SetFontMaterialSafe(pooled.textNumberOutline, _fontMatPurpleOutline);
                     SetActiveSafe(pooled.iconLock, true);
                     SetActiveSafe(pooled.iconCheck, false);
                     if (pooled.button != null) pooled.button.interactable = true;
@@ -783,28 +803,34 @@ namespace BalloonFlow
 
                 case SlotState.InProgress:
                 case SlotState.AchievedUnclaimed:
-                    // 현재 레벨 상태 — RotateLight on, Arrow=Complete. (스펙: IconLock 활성화 유지)
                     SetActiveSafe(pooled.rotateLight, true);
                     SetSpriteSafe(pooled.imageInnerFrame, _sprFrameNumberDefault);
-                    SetSpriteSafe(pooled.imageArrow, _sprArrowComplete);
+                    SetSpriteSafe(pooled.imageArrow, _sprSlot);
                     SetSpriteSafe(pooled.btnRewardImage, _sprSlot);
+                    SetFontMaterialSafe(pooled.textNumberOutline, _fontMatPurpleOutline);
                     SetActiveSafe(pooled.iconCheck, false);
                     SetActiveSafe(pooled.iconLock, true);
                     if (pooled.button != null) pooled.button.interactable = true;
                     break;
 
                 case SlotState.Claimed:
-                    // 완료 상태 — Arrow/BtnReward 스프라이트 swap.
                     SetActiveSafe(pooled.rotateLight, false);
+                    SetSpriteSafe(pooled.imageInnerFrame, _sprFrameNumberComplete);
+                    SetSpriteSafe(pooled.imageArrow, _sprArrowComplete);
+                    SetSpriteSafe(pooled.btnRewardImage, _sprSlotComplete);
+                    SetFontMaterialSafe(pooled.textNumberOutline, _fontMatGreenOutline);
                     SetActiveSafe(pooled.iconLock, false);
                     SetActiveSafe(pooled.iconCheck, true);
-                    SetSpriteSafe(pooled.imageInnerFrame, _sprFrameNumberDefault);
-                    SetSpriteSafe(pooled.imageArrow, _sprSlot);
-                    SetSpriteSafe(pooled.btnRewardImage, _sprArrowComplete);
                     if (pooled.button != null) pooled.button.interactable = true;
                     break;
             }
             // imageDefault/imageGet 는 ImageInnerFrame sprite 와 충돌할 수 있어 여기서 토글하지 않음.
+        }
+
+        private static void SetFontMaterialSafe(TMP_Text text, Material mat)
+        {
+            if (text == null || mat == null) return;
+            text.fontSharedMaterial = mat;
         }
 
         private static void SetSpriteSafe(Image image, Sprite sprite)
@@ -817,10 +843,14 @@ namespace BalloonFlow
         {
             if (!ResourceManager.HasInstance) return;
             var rm = ResourceManager.Instance;
-            if (_sprFrameNumberDefault == null) _sprFrameNumberDefault = rm.GetUISprite(Const.SPR_FRAMEWINNERSTREAKNUMBERDEFAULT);
-            if (_sprArrow == null) _sprArrow = rm.GetUISprite(Const.SPR_FRAMEWINNINGSTREAKSLOTARROW);
-            if (_sprArrowComplete == null) _sprArrowComplete = rm.GetUISprite(Const.SPR_FRAMEWINNINGSTREAKSLOTARROWCOMPLETE);
-            if (_sprSlot == null) _sprSlot = rm.GetUISprite(Const.SPR_FRAMEWINNINGSTREAKSLOT);
+            if (_sprFrameNumberDefault == null)  _sprFrameNumberDefault  = rm.GetUISprite(Const.SPR_FRAMEWINNERSTREAKNUMBERDEFAULT);
+            if (_sprFrameNumberComplete == null) _sprFrameNumberComplete = rm.GetUISprite(Const.SPR_FRAMEWINNERSTREAKNUMBERCOMPLETE);
+            if (_sprArrow == null)               _sprArrow               = rm.GetUISprite(Const.SPR_FRAMEWINNINGSTREAKSLOTARROW);
+            if (_sprArrowComplete == null)       _sprArrowComplete       = rm.GetUISprite(Const.SPR_FRAMEWINNINGSTREAKSLOTARROWCOMPLETE);
+            if (_sprSlot == null)                _sprSlot                = rm.GetUISprite(Const.SPR_FRAMEWINNINGSTREAKSLOT);
+            if (_sprSlotComplete == null)        _sprSlotComplete        = rm.GetUISprite(Const.SPR_FRAMEWINNINGSTREAKSLOTCOMPLETE);
+            if (_fontMatGreenOutline == null)    _fontMatGreenOutline    = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_GREEN_OUTLINE);
+            if (_fontMatPurpleOutline == null)   _fontMatPurpleOutline   = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_PURPLE_OUTLINE);
         }
 
         private void SetSlotNumber(PooledSlot pooled, int number)
@@ -963,6 +993,12 @@ namespace BalloonFlow
 
             RectTransform anchor = pooled.button.transform as RectTransform;
             if (anchor == null) return;
+
+            // 클릭된 stage 의 보상으로 tooltip 내용 갱신.
+            var stageDoc = WinningStreakConfigService.HasInstance
+                ? WinningStreakConfigService.Instance.GetStage(pooled.boundStage)
+                : null;
+            WinningStreakClickInfoBinder.Bind(_tooltipInstance, stageDoc);
 
             _tooltipInstance.SetActive(true);
             PositionTooltip(anchor);

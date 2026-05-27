@@ -41,6 +41,8 @@ namespace BalloonFlow
         [SerializeField] private Vector2 _cutoutSizeHand = new Vector2(600f, 400f);
         [Tooltip("Zap (COLOR_REMOVE) 시 hole 크기 — 보드 영역 cover")]
         [SerializeField] private Vector2 _cutoutSizeZap = new Vector2(900f, 1200f);
+        [Tooltip("Hand (SELECT_TOOL) CutoutMask anchoredPosition.y")]
+        [SerializeField] private float _cutoutAnchoredYHand = -830f;
 
         [Header("[Buttons]")]
         [SerializeField] private Button _btnBottomExit;
@@ -66,7 +68,9 @@ namespace BalloonFlow
         [SerializeField] private Material _matCutoutDim;
         private Material _runtimeCutoutDimMaterial;
         private AsyncOperationHandle<Material> _cutoutDimMaterialHandle;
-        private const string CUTOUT_DIM_MATERIAL_ADDRESS = "mat_UICutoutDim";
+        // Addressables 에는 full asset path 로 등록됨 (audit: 'Assets/3.Material/UICutoutDim.mat')
+        // 짧은 alias 'mat_UICutoutDim' 은 미등록.
+        private const string CUTOUT_DIM_MATERIAL_ADDRESS = "Assets/3.Material/UICutoutDim.mat";
         private static readonly int OVERLAY_RECT_ID = Shader.PropertyToID("_OverlayRect");
         private static readonly int CUTOUT_CENTER_ID = Shader.PropertyToID("_CutoutCenter");
         private static readonly int CUTOUT_SIZE_ID = Shader.PropertyToID("_CutoutSize");
@@ -242,6 +246,10 @@ namespace BalloonFlow
 
                 SpriteMask spriteMask = _cutoutMask.GetComponent<SpriteMask>();
                 if (spriteMask != null) spriteMask.enabled = false;
+
+                // [2026-05-27] PopupUseItem 은 Tutorial 과 흐름이 다름 — dim 처리는 Overlay 가 shader 로 함.
+                // CutoutMask 는 marker. SoftMask 부착해도 효과 X (Image.enabled=false, child DimOverlay 비활성).
+                // hole 9-slice 가 필요하면 shader 측 _BorderRect/_BorderSprite 전달로 처리 — UpdateCutoutMaterialRect 에서.
 
                 Transform dimOverlay = _cutoutMask.Find("DimOverlay");
                 if (dimOverlay != null) dimOverlay.gameObject.SetActive(false);
@@ -541,6 +549,7 @@ namespace BalloonFlow
             if (_cutoutMask != null) _cutoutMask.gameObject.SetActive(true);
             SetupCutout(boosterType);
             ClampCutoutAwayFromPopupContent();
+            ApplyHandCutoutYOverride(boosterType);
             ApplyCutoutMaterialToOverlay();
 
             // [2026-05-13] description/icon 가림 방지 — Dim/Cutout 활성화 후 sibling 순서를
@@ -608,6 +617,15 @@ namespace BalloonFlow
         /// 기존 코드는 sizeDelta 에 screen-pixel 값을 그대로 박아 CanvasScaler reference 와 device 해상도가
         /// 다를 때 hole 크기가 부정확했음. Tutorial.WorldToCanvasPosition 패턴(canvas/screen 비율) 적용으로
         /// position 과 size 둘 다 canvas-units 로 일관성 확보.</summary>
+        private void ApplyHandCutoutYOverride(string boosterType)
+        {
+            if (_cutoutMask == null || boosterType != BoosterManager.SELECT_TOOL) return;
+            Vector2 pos = _cutoutMask.anchoredPosition;
+            pos.y = _cutoutAnchoredYHand;
+            _cutoutMask.anchoredPosition = pos;
+            UpdateCutoutMaterialRect();
+        }
+
         private void ClampCutoutAwayFromPopupContent()
         {
             if (_cutoutMask == null) return;

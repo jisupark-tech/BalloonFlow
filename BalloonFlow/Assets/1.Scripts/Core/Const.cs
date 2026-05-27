@@ -53,17 +53,17 @@ namespace BalloonFlow
 
         #region UI Asset Prefab Paths
 
-        public const string PREFAB_FXGOLD             = "UI/UIAssets/FXGold";
-        public const string PREFAB_FXITEM             = "UI/UIAssets/FXItem";
-        public const string PREFAB_FX_ZAP_LINE        = "UI/UIAssets/FxZapLine";
-        public const string PREFAB_GOLD_PANEL         = "UI/UIAssets/GoldPanel";
-        public const string PREFAB_ITEM_BTN           = "UI/UIAssets/ItemBtn";
-        public const string PREFAB_LOBBY_RAIL_BOX     = "UI/UIAssets/LobbyRailBox";
-        public const string PREFAB_SHOP_ITEM          = "UI/UIAssets/ShopItem";
-        public const string PREFAB_SHOP_LIST_AD       = "UI/UIAssets/ShopListAd";
-        public const string PREFAB_SHOP_LIST_GOLD     = "UI/UIAssets/ShopListGold";
-        public const string PREFAB_SHOP_LIST_GOLD_ALIGN = "UI/UIAssets/ShopListGoldAlign";
-        public const string PREFAB_SHOP_LIST_ITEM     = "UI/UIAssets/ShopListItem";
+        public const string PREFAB_FXGOLD             = "UI/FXGold";
+        public const string PREFAB_FXITEM             = "UI/FXItem";
+        public const string PREFAB_FX_ZAP_LINE        = "UI/FxZapLine";
+        public const string PREFAB_GOLD_PANEL         = "UI/GoldPanel";
+        public const string PREFAB_ITEM_BTN           = "UI/ItemBtn";
+        public const string PREFAB_LOBBY_RAIL_BOX     = "UI/LobbyRailBox";
+        public const string PREFAB_SHOP_ITEM          = "UI/ShopItem";
+        public const string PREFAB_SHOP_LIST_AD       = "UI/ShopListAd";
+        public const string PREFAB_SHOP_LIST_GOLD     = "UI/ShopListGold";
+        public const string PREFAB_SHOP_LIST_GOLD_ALIGN = "UI/ShopListGoldAlign";
+        public const string PREFAB_SHOP_LIST_ITEM     = "UI/ShopListItem";
 
         #endregion
 
@@ -137,6 +137,9 @@ namespace BalloonFlow
         public const string ADDR_ATLAS_UI                                 = "atlas_ui";
         // [2026-05-13] 인게임 Texture + Sprites (Holder/Box/Balloon 등) — GamePlay.spriteatlasv2 매핑.
         public const string ADDR_ATLAS_GAMEPLAY                           = "atlas_gameplay";
+
+        // ── Material keys (Addressables 그룹 entries 의 full path) ─────
+        public const string ADDR_MAT_BALLOON_HIDDEN                       = "Assets/3.Material/BalloonHidden.mat";
 
         // ── Atlas sprite names (UI atlas) ───────────────
         public const string SPR_ARROW                                    = "arrow";
@@ -219,9 +222,15 @@ namespace BalloonFlow
         public const string SPR_FRAMESUPERHARD                           = "frameSuperhard";
         public const string SPR_FRAMETUTORIAL                            = "frameTutorial";
         public const string SPR_FRAMEWINNERSTREAKNUMBERDEFAULT           = "FrameWinnerStreakNumberDefault";
+        public const string SPR_FRAMEWINNERSTREAKNUMBERCOMPLETE          = "FrameWinnerStreakNumberComplete";
         public const string SPR_FRAMEWINNINGSTREAKSLOT                   = "frameWinningStreakSlot";
+        public const string SPR_FRAMEWINNINGSTREAKSLOTCOMPLETE           = "frameWinningStreakSlotComplete";
         public const string SPR_FRAMEWINNINGSTREAKSLOTARROW              = "frameWinningStreakSlotArrow";
         public const string SPR_FRAMEWINNINGSTREAKSLOTARROWCOMPLETE      = "frameWinningStreakSlotArrowComplete";
+
+        // ── TMP font materials (Resources/TextMesh Pro/) ─────────
+        public const string FONT_MAT_POPPINS_BOLD_GREEN_OUTLINE   = "Fonts & Materials/Poppins-Bold-GreenOutline";
+        public const string FONT_MAT_POPPINS_BOLD_PURPLE_OUTLINE  = "Fonts & Materials/Poppins-Bold-PurpleOutline";
         public const string SPR_FXZAP                                    = "Fxzap";
         public const string SPR_GAME_TOPUI_SETTING                       = "Game_TopUi_Setting";
         public const string SPR_GAME_TOPUI_STARBACKGROUND                = "Game_TopUi_StarBackground";
@@ -266,6 +275,13 @@ namespace BalloonFlow
         public const string SPR_ICONWIFI                                 = "iconWifi";
         public const string SPR_ICONZAP                                  = "iconZap";
         public const string SPR_ICONZAPINGAME                            = "iconZapIngame";
+
+        // ── WinningStreakGetReward (보상 수령 연출 prefab 의 ImageReward 용) ─────
+        public const string SPR_REWARDGOLD                                = "rewardGold";
+        public const string SPR_REWARDLIFE                                = "rewardLife";
+        public const string SPR_REWARDHAND                                = "rewardHand";
+        public const string SPR_REWARDSUFFLE                              = "rewardSuffle";
+        public const string SPR_REWARDZAP                                 = "rewardZap";
         public const string SPR_IMGBOXDIM                                = "ImgBoxDim";
         public const string SPR_INGAMEBTNFASTARROW                       = "ingameBtnFastArrow";
         public const string SPR_INGAMEBTNFASTFRAME                       = "ingameBtnFastFrame";

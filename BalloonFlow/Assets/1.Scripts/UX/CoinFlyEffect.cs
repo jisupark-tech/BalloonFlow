@@ -13,7 +13,7 @@ namespace BalloonFlow
     /// </summary>
     public static class CoinFlyEffect
     {
-        private const string PREFAB_PATH = "UI/UIAssets/FXGold";
+        private const string PREFAB_PATH = "UI/FXGold";
         private const string POOL_KEY    = "FXGold";
 
         private static bool _poolRegistered;

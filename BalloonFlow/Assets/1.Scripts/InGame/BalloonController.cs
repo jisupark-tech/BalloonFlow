@@ -862,9 +862,17 @@ namespace BalloonFlow
             if (data.gimmickType == GimmickFrozenDart)
                 return ProcessFrozenDartHit(data);
 
-            // Barricade: destructible wall with HP
-            if (data.gimmickType == GimmickBarricade)
-                return ProcessBarricadeHit(data);
+            // [ROLLBACK_PIN_BARRICADE_MERGE]
+            // Barricade 가 Pin mechanic (색 매칭 + segment 점진 제거) 사용 + Barricade visual transform.
+            // 롤백 시 이 블록 제거 + 아래 ProcessBarricadeHit 분기 복원.
+            if (data.gimmickType == GimmickBarricade && GimmickProcessor.HasInstance)
+            {
+                bool destroyed = GimmickProcessor.Instance.ProcessPinHit(data.balloonId, dartColor, data.color);
+                UpdateBarricadeVisualAfterHit(data, destroyed);
+                if (!destroyed)
+                    return new PopResult { success = false, hitAccepted = true, reason = "Barricade: segment removed, not fully destroyed", balloonId = data.balloonId, gimmickType = GimmickBarricade };
+                return ExecutePop(data);
+            }
 
             // Pinata/PinataBox
             if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
@@ -884,6 +892,27 @@ namespace BalloonFlow
             int remaining = 0;
             if (!destroyed && GimmickProcessor.HasInstance)
                 remaining = Mathf.Max(0, GimmickProcessor.Instance.GetPinRemainingSegments(balloonId));
+
+            gi.UpdateHP(remaining);
+            gi.PlayHitEffect();
+            if (destroyed)
+                gi.PlayEndEffect();
+        }
+
+        // [ROLLBACK_PIN_BARRICADE_MERGE]
+        // Pin mechanic + Barricade visual 통합. HP 텍스트만 차감 (Pin 처럼) + Barricade visual transform 은 spawn 시점 그대로 유지.
+        // 롤백 시 이 메서드 + PopBalloonWithDart Barricade 분기의 호출 제거.
+        private void UpdateBarricadeVisualAfterHit(BalloonData data, bool destroyed)
+        {
+            if (!_balloonObjects.TryGetValue(data.balloonId, out GameObject hitObj) || hitObj == null)
+                return;
+
+            var gi = hitObj.GetComponent<GimmickIdentifier>();
+            if (gi == null) return;
+
+            int remaining = 0;
+            if (!destroyed && GimmickProcessor.HasInstance)
+                remaining = Mathf.Max(0, GimmickProcessor.Instance.GetPinRemainingSegments(data.balloonId));
 
             gi.UpdateHP(remaining);
             gi.PlayHitEffect();
@@ -1116,6 +1145,25 @@ namespace BalloonFlow
         {
             int id = _nextBalloonId++;
 
+            // [ROLLBACK_LOCKKEY_DEPRECATE]
+            // Lock_Key 기믹 dead 처리 — 기존 LevelData 호환을 위해 정규화: Lock_Key → none (일반 풍선).
+            // 새 레벨에서 사용 안 함. 롤백 시 이 if 블록 제거.
+            if (entry.gimmickType == GimmickLockKey)
+            {
+                entry.gimmickType = GimmickNone;
+                entry.lockPairId = -1;
+            }
+
+            // [ROLLBACK_PIN_BARRICADE_MERGE]
+            // Pin → Barricade 통합 (옵션 A): Pin mechanic (같은 색 다트만 점진 제거) + Barricade 시각.
+            // SpawnBalloonFromSetup 진입 시 Pin gimmickType 을 Barricade 로 마이그. 기존 LevelData 호환.
+            // 통합 후: Barricade visual prefab + 색 매칭 + segment 점진 제거 동작.
+            // 롤백 시: 이 if 블록 제거 + GimmickProcessor.RegisterBalloonGimmick Barricade 케이스 원복 + PopBalloonWithDart Barricade 분기 원복.
+            if (entry.gimmickType == GimmickPin)
+            {
+                entry.gimmickType = GimmickBarricade;
+            }
+
             int resolvedHP = entry.hp > 0 ? entry.hp : PinataRequiredHits;
             BalloonData data = new BalloonData
             {
@@ -1197,16 +1245,19 @@ namespace BalloonFlow
                     }
                     else if (data.gimmickType == GimmickBarricade)
                     {
-                        // Baricade 프리팹 사용 — HP 기반 파괴 가능 벽.
-                        // 명세: Pinata 처럼 sizeW/sizeH 만큼 길이 stretch (여러 개 뭉친 게 아닌 한 덩어리).
+                        // [ROLLBACK_PIN_BARRICADE_MERGE]
+                        // Pin → Barricade 통합 (옵션 A): Pin mechanic + Barricade visual.
+                        // 색 적용을 WALL_COLOR(grey) 대신 BalloonColors[data.color] 로 변경 — Pin 처럼 색 매칭.
+                        // 롤백 시 ApplyColor(WALL_COLOR) 로 원복.
                         var gi = obj.GetComponent<GimmickIdentifier>();
                         if (gi != null)
                         {
                             gi.Initialize();
                             int hp = data.maxHP - data.hitCount;
                             gi.UpdateHP(Mathf.Max(1, hp));
+                            int ci = Mathf.Clamp(data.color, 0, BalloonColors.Length - 1);
                             if (gi.HasColorRenderers)
-                                gi.ApplyColor(WALL_COLOR);
+                                gi.ApplyColor(BalloonColors[ci]);
                         }
 
                         ApplyBarricadeVisualTransform(obj, data);

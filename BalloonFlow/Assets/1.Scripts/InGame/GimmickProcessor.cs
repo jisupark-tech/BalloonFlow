@@ -109,6 +109,14 @@ namespace BalloonFlow
                     _pinColors[balloonId] = color;
                     break;
 
+                // [ROLLBACK_PIN_BARRICADE_MERGE]
+                // Barricade 가 Pin mechanic (색 매칭 + 점진 제거) 사용. _pinSegments / _pinColors 동일 등록.
+                // 롤백 시 이 case 제거.
+                case BalloonController.GimmickBarricade:
+                    _pinSegments[balloonId] = hp > 0 ? hp : DEFAULT_PIN_LENGTH;
+                    _pinColors[balloonId] = color;
+                    break;
+
                 case BalloonController.GimmickSurprise:
                     _surpriseBalloons.Add(balloonId);
                     break;
@@ -149,6 +157,13 @@ namespace BalloonFlow
                         // Check if dart color matches — handled by ProcessPinHit
                         return null; // Allow the hit, ProcessPinHit will handle logic
                     }
+                    return null;
+
+                // [ROLLBACK_PIN_BARRICADE_MERGE]
+                // Barricade 가 Pin mechanic (색 매칭) 사용. 다른 색은 blocker.
+                case BalloonController.GimmickBarricade:
+                    if (_pinColors.TryGetValue(balloonId, out int bColor) && dartColor != bColor)
+                        return $"Barricade: requires color {bColor}";
                     return null;
 
                 case BalloonController.GimmickColorCurtain:
@@ -339,24 +354,27 @@ namespace BalloonFlow
                     BalloonController.Instance.ForcePopBalloon(id);
             }
 
-            // === Surprise: reveal adjacent Surprise balloons ===
+            // === Surprise / Hidden: reveal adjacent concealed balloons ===
             if (BalloonController.HasInstance)
             {
                 var adjacentIds = BalloonController.Instance.GetAdjacentBalloonIdsForBalloonPublic(evt.balloonId, evt.position);
-                foreach (int adjId in adjacentIds)
+                // [디버그] reveal 흐름 추적 — adjacent 개수 + 각 id 의 concealed 여부.
+                int revealedCount = 0;
+                int concealedCount = 0;
+                for (int i = 0; i < adjacentIds.Count; i++)
                 {
+                    int adjId = adjacentIds[i];
+                    bool wasConcealed = BalloonController.Instance.IsBalloonConcealed(adjId);
+                    if (wasConcealed) concealedCount++;
                     if (_surpriseBalloons.Contains(adjId))
                     {
                         RevealSurprise(adjId);
                     }
-                }
-
-                // === Hidden: reveal adjacent Hidden balloons ===
-                foreach (int adjId in adjacentIds)
-                {
                     _surpriseBalloons.Remove(adjId);
-                    BalloonController.Instance.RevealHiddenBalloon(adjId);
+                    if (BalloonController.Instance.RevealHiddenBalloon(adjId))
+                        revealedCount++;
                 }
+                Debug.Log($"[Reveal] popped={evt.balloonId} adjacent={adjacentIds.Count} concealed={concealedCount} revealed={revealedCount}");
             }
         }
 

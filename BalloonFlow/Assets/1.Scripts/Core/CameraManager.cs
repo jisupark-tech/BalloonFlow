@@ -242,10 +242,15 @@ namespace BalloonFlow
         {
             if (MainCamera == null) return;
 
-            _savedPosition = _expectedPosition;
+            // 기존 tween 정리 — 중복 호출 시 두 tween 동시 진행으로 인한 jitter 차단.
+            MainCamera.transform.DOKill();
+
+            // 이전 enforce 위치가 있으면 그것 저장 (현재 transform.position 은 이전 tween 의 중간 위치일 수 있음).
+            _savedPosition = _enforcePosition ? _expectedPosition : MainCamera.transform.position;
             _enforcePosition = false;
 
-            MainCamera.transform.DOMove(targetPosition, duration).SetEase(Ease.OutQuad);
+            // InOutSine — 끝 부분 deceleration 이 부드러워서 OutQuad 보다 자연스러움.
+            MainCamera.transform.DOMove(targetPosition, duration).SetEase(Ease.InOutSine);
         }
 
         /// <summary>Smoothly move camera back to the saved position.</summary>
@@ -253,10 +258,16 @@ namespace BalloonFlow
         {
             if (MainCamera == null) return;
 
-            MainCamera.transform.DOMove(_savedPosition, duration).SetEase(Ease.OutQuad)
+            // 기존 tween 정리.
+            MainCamera.transform.DOKill();
+
+            MainCamera.transform.DOMove(_savedPosition, duration).SetEase(Ease.InOutSine)
                 .OnComplete(() =>
                 {
+                    // floating point 미세 오차 보정 — 끝 위치를 정확히 _savedPosition 으로.
+                    // 이게 없으면 다음 LateUpdate 의 enforce 가 1 frame 안에 즉시 jump 시켜 덜컹 느낌 발생.
                     _expectedPosition = _savedPosition;
+                    MainCamera.transform.position = _savedPosition;
                     _enforcePosition = true;
                 });
         }

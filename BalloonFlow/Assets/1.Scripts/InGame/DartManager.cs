@@ -78,6 +78,17 @@ namespace BalloonFlow
             return Mathf.Clamp(duration, PROJECTILE_MIN_FLIGHT_TIME, PROJECTILE_MAX_FLIGHT_TIME);
         }
 
+        // [ROLLBACK_DART_FX_TRAIL]
+        // 다트 prefab 안 자식 FXDartTrail 활성/비활성 토글.
+        // 레일 위(spawn) = false, 발사 시 = true. 롤백 시 이 메서드 + 모든 호출처 제거.
+        private static void SetDartTrailActive(GameObject dartObj, bool active)
+        {
+            if (dartObj == null) return;
+            var trail = dartObj.transform.Find("FXDartTrail");
+            if (trail != null && trail.gameObject.activeSelf != active)
+                trail.gameObject.SetActive(active);
+        }
+
         #endregion
 
         #region Nested Types
@@ -303,7 +314,11 @@ namespace BalloonFlow
         // speed waiting until the next frame lets that new head pass one exact line. Re-scan only
         // that holder's newly promoted head, with a tiny cap, so this does not become free-fire.
         private const int MAX_POST_FIRE_HEAD_RESCANS_PER_HOLDER = 1;
-        private const float POST_FIRE_HEAD_RESCAN_MIN_SPEED = 1.01f;
+        // [ROLLBACK_POST_FIRE_RESCAN_X1] 1.01 → 0.0 — X1 모드(default) 에서도 promoted head 동일 tick rescan 활성.
+        // 이전: X2 (UserSpeedMultiplier >= 1.01) 에서만 rescan. X1 에서는 한 holder 한 tick 1발 제한 → 외곽 풍선 놓침 발생.
+        // 변경 후: 항상 rescan — 같은 holder 의 promoted head 가 같은 tick 안 발사 후보로 큐잉됨.
+        // 롤백 시 1.01f 로 원복.
+        private const float POST_FIRE_HEAD_RESCAN_MIN_SPEED = 0.0f;
         private const int MAX_MISS_SUSPECT_LOGS_PER_FRAME = 1;
         private const int MAX_ATTACK_ISSUE_LOGS_PER_FRAME = 8;
         private int _lastMissSuspectLogFrame = -1;
@@ -486,6 +501,9 @@ namespace BalloonFlow
             ApplyColor(dartObj, color);
             OrientDart(dartObj, slotIndex);
 
+            // [ROLLBACK_DART_FX_TRAIL] 레일 위 = 비활성.
+            SetDartTrailActive(dartObj, false);
+
             // 슬롯 간격보다 다트가 크면 스케일 축소 (겹침 방지)
             float spacing = RailManager.Instance.SlotSpacing;
             if (spacing > 0.01f)
@@ -549,6 +567,9 @@ namespace BalloonFlow
             dartObj.SetActive(true);
             dartObj.transform.localScale = Vector3.one; // 풀 재사용 시 스케일 리셋
             ApplyColor(dartObj, color);
+
+            // [ROLLBACK_DART_FX_TRAIL] 레일 위 = 비활성. fire 시 활성.
+            SetDartTrailActive(dartObj, false);
 
             // 슬롯 간격 기반 스케일 축소 (겹침 방지)
             float spacing = RailManager.Instance.SlotSpacing;
@@ -1007,6 +1028,9 @@ namespace BalloonFlow
             ConfigureNeedleTipImpactTiming(proj, dartObj, from, to, balloonScale);
 
             _activeProjectiles.Add(proj);
+
+            // [ROLLBACK_DART_FX_TRAIL] 발사 = FXDartTrail 활성.
+            SetDartTrailActive(dartObj, true);
 
             // [ROLLBACK_DART_DOMOVE_DEAD_CALL]
             // UpdateProjectiles 가 매 frame transform.position 을 manual lerp 로 덮어쓰므로 DOMove/DOPath 는 dead call.
@@ -2043,6 +2067,9 @@ namespace BalloonFlow
                 ConfigureLaunchScale(proj, launchStartScale, balloonScale);
                 ConfigureNeedleTipImpactTiming(proj, dartObj, launchPos, travelTarget, balloonScale);
                 _activeProjectiles.Add(proj);
+
+                // [ROLLBACK_DART_FX_TRAIL] 발사 = FXDartTrail 활성 (외곽 fire path).
+                SetDartTrailActive(dartObj, true);
 
                 // ROLLBACK_DART_PROJECTILE_MANUAL_MOVE:
                 // Previous behavior created a DOTween per fired dart:
@@ -3199,6 +3226,9 @@ namespace BalloonFlow
         private void ReturnDartToPool(GameObject obj)
         {
             if (obj == null) return;
+
+            // [ROLLBACK_DART_FX_TRAIL] pool 반환 전 FXDartTrail 비활성 — 다음 spawn 시 깨끗한 상태.
+            SetDartTrailActive(obj, false);
 
             if (ObjectPoolManager.HasInstance)
                 ObjectPoolManager.Instance.Return(DART_POOL_KEY, obj);

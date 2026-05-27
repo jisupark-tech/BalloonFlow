@@ -53,7 +53,7 @@ namespace BalloonFlow
 
         [Tooltip("다트 비행 속도 배수 (셀/초). 1 = 1초당 1셀 이동, 10 = 0.1초당 1셀. 클수록 빠름. 동적 반영. (default: 10.00)")]
         [Range(0.10f, 100.00f)]
-        public float dartFlightSpeedMultiplier = 10.00f;
+        public float dartFlightSpeedMultiplier = 82.00f;
 
         // [ROLLBACK_DART_LAUNCH_INITIAL_PROGRESS]
         // 다트 발사 직후 시각 위치는 start 에서 시작하되 내부 elapsed 만 n초 앞당겨 진행.

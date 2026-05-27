@@ -15,7 +15,7 @@ namespace BalloonFlow
         private const float MAX_TOTAL_SPAWN_TIME = 0.6f;
         private const float DURATION_MIN = 0.9f;
         private const float DURATION_MAX = 1.2f;
-        private const float FALLBACK_ICON_SIZE = 120f;
+        private const float FALLBACK_ICON_SIZE = 180f;
 
         private static bool _poolRegistered;
         private static GameObject _prefab;

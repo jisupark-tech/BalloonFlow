@@ -63,19 +63,21 @@ namespace BalloonFlow
             { "(none)", "Hidden", "Chain", "Pinata", "Spawner_T", "Pin", "Lock_Key",
               "Surprise", "Wall", "Spawner_O", "Pinata_Box", "Ice", "Frozen_Dart", "Color_Curtain", "Barricade" };
 
+        // [ROLLBACK_LOCKKEY_DEPRECATE]
+        // Lock_Key 기믹 dropdown 제거 — 새 레벨에서 사용 안 함. 기존 LevelData 호환은 BalloonController/HolderManager 에서 처리.
         // 풍선(필드) 기믹만
         private static readonly string[] FIELD_GIMMICK_NAMES =
-            { "(none)", "Pinata", "Pin", "Surprise", "Wall", "Pinata_Box", "Ice", "Color_Curtain", "Lock_Key", "Barricade", "FlexTube" };
+            { "(none)", "Pinata", "Pin", "Surprise", "Wall", "Pinata_Box", "Ice", "Color_Curtain", "Barricade", "FlexTube" };
 
         // 보관함(큐) 기믹만
         private static readonly string[] HOLDER_GIMMICK_NAMES =
-            { "(none)", "Hidden", "Chain", "Spawner_T", "Spawner_O", "Frozen_Dart", "Lock_Key" };
+            { "(none)", "Hidden", "Chain", "Spawner_T", "Spawner_O", "Frozen_Dart" };
 
         // ROLLBACK_FIELD_GIMMICK_MARK_ORDER:
         // Field cells store FIELD_GIMMICK_NAMES indices, not legacy all-gimmick indices.
         // Keep preview labels in the exact same order as FIELD_GIMMICK_NAMES.
         private static readonly string[] FIELD_GIMMICK_MARKS =
-            { "", "Pi", "Pn", "?!", "W", "PB", "Ic", "CC", "LK", "Bc", "FT" };
+            { "", "Pi", "Pn", "?!", "W", "PB", "Ic", "CC", "Bc", "FT" };
 
         private static readonly Color GIMMICK_WALL_COLOR  = new Color(0.35f, 0.35f, 0.38f);
         private static readonly Color GIMMICK_PIN_COLOR   = new Color(0.70f, 0.50f, 0.20f);
@@ -425,7 +427,7 @@ namespace BalloonFlow
                 _cam.orthographicSize = Mathf.Clamp(_cam.orthographicSize - scroll * 0.8f, 0.5f, 40f);
 
             // Middle mouse OR right mouse pan
-            if (mouse.middleButton.isPressed || mouse.rightButton.isPressed)
+            if (mouse.middleButton.isPressed || (mouse.rightButton.isPressed && !_blockRightMousePanUntilRelease))
             {
                 Vector2 delta = mouse.delta.ReadValue();
                 float s = _cam.orthographicSize * 0.003f;
@@ -513,6 +515,8 @@ namespace BalloonFlow
             _balloonPinataW = ResizeGrid(_balloonPinataW, _gridCols, _gridRows, 1);
             _balloonPinataH = ResizeGrid(_balloonPinataH, _gridCols, _gridRows, 1);
             _balloonLockPairIds = ResizeGrid(_balloonLockPairIds, _gridCols, _gridRows, -1);
+            _balloonFlexTubeGroupId = ResizeGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, -1);
+            _balloonFlexTubeSequenceIndex = ResizeGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, -1);
             _holderLockPairIds = ResizeGrid(_holderLockPairIds, _holderCols, _holderRows, -1);
             _pathGrid = ResizeBoolGrid(_pathGrid, _gridCols + PATH_PAD * 2, _gridRows + PATH_PAD * 2);
         }
@@ -588,6 +592,108 @@ namespace BalloonFlow
                     g[c, r] = (old != null && c < old.GetLength(0) && r < old.GetLength(1))
                         ? old[c, r] : def;
             return g;
+        }
+
+        private int[,] InsertRowGrid(int[,] old, int cols, int rows, int insertAt, int def)
+        {
+            var g = new int[cols, rows + 1];
+            for (int c = 0; c < cols; c++)
+                for (int r = 0; r < rows + 1; r++)
+                    g[c, r] = def;
+
+            for (int c = 0; c < cols; c++)
+                for (int r = 0; r < rows; r++)
+                {
+                    int dr = r < insertAt ? r : r + 1;
+                    g[c, dr] = (old != null && c < old.GetLength(0) && r < old.GetLength(1)) ? old[c, r] : def;
+                }
+            return g;
+        }
+
+        private int[,] InsertColGrid(int[,] old, int cols, int rows, int insertAt, int def)
+        {
+            var g = new int[cols + 1, rows];
+            for (int c = 0; c < cols + 1; c++)
+                for (int r = 0; r < rows; r++)
+                    g[c, r] = def;
+
+            for (int c = 0; c < cols; c++)
+                for (int r = 0; r < rows; r++)
+                {
+                    int dc = c < insertAt ? c : c + 1;
+                    g[dc, r] = (old != null && c < old.GetLength(0) && r < old.GetLength(1)) ? old[c, r] : def;
+                }
+            return g;
+        }
+
+        private int[,] DeleteRowGrid(int[,] old, int cols, int rows, int deleteAt, int def)
+        {
+            var g = new int[cols, rows - 1];
+            for (int c = 0; c < cols; c++)
+            {
+                int dr = 0;
+                for (int r = 0; r < rows; r++)
+                {
+                    if (r == deleteAt) continue;
+                    g[c, dr] = (old != null && c < old.GetLength(0) && r < old.GetLength(1)) ? old[c, r] : def;
+                    dr++;
+                }
+            }
+            return g;
+        }
+
+        private int[,] DeleteColGrid(int[,] old, int cols, int rows, int deleteAt, int def)
+        {
+            var g = new int[cols - 1, rows];
+            for (int r = 0; r < rows; r++)
+            {
+                int dc = 0;
+                for (int c = 0; c < cols; c++)
+                {
+                    if (c == deleteAt) continue;
+                    g[dc, r] = (old != null && c < old.GetLength(0) && r < old.GetLength(1)) ? old[c, r] : def;
+                    dc++;
+                }
+            }
+            return g;
+        }
+
+        private void ShiftFlexTubePaintOrderAfterRowInsert(int insertAt)
+        {
+            for (int i = 0; i < _flexTubePaintOrder.Count; i++)
+            {
+                Vector2Int p = _flexTubePaintOrder[i];
+                if (p.y >= insertAt) _flexTubePaintOrder[i] = new Vector2Int(p.x, p.y + 1);
+            }
+        }
+
+        private void ShiftFlexTubePaintOrderAfterColInsert(int insertAt)
+        {
+            for (int i = 0; i < _flexTubePaintOrder.Count; i++)
+            {
+                Vector2Int p = _flexTubePaintOrder[i];
+                if (p.x >= insertAt) _flexTubePaintOrder[i] = new Vector2Int(p.x + 1, p.y);
+            }
+        }
+
+        private void ShiftFlexTubePaintOrderAfterRowDelete(int deleteAt)
+        {
+            for (int i = _flexTubePaintOrder.Count - 1; i >= 0; i--)
+            {
+                Vector2Int p = _flexTubePaintOrder[i];
+                if (p.y == deleteAt) _flexTubePaintOrder.RemoveAt(i);
+                else if (p.y > deleteAt) _flexTubePaintOrder[i] = new Vector2Int(p.x, p.y - 1);
+            }
+        }
+
+        private void ShiftFlexTubePaintOrderAfterColDelete(int deleteAt)
+        {
+            for (int i = _flexTubePaintOrder.Count - 1; i >= 0; i--)
+            {
+                Vector2Int p = _flexTubePaintOrder[i];
+                if (p.x == deleteAt) _flexTubePaintOrder.RemoveAt(i);
+                else if (p.x > deleteAt) _flexTubePaintOrder[i] = new Vector2Int(p.x - 1, p.y);
+            }
         }
 
         #endregion
@@ -987,7 +1093,6 @@ namespace BalloonFlow
 
             RebuildColorToggleGrid();
             RebuildPalette();
-            AutoRoundBalloonCounts();
             OnBalloonGridChanged();
             RebuildHolderUI();
             _infoDirty = true;
@@ -1012,7 +1117,10 @@ namespace BalloonFlow
             fieldGimmickDD.GetComponent<Image>().color = new Color(0.16f, 0.16f, 0.20f);
             var fgdd = fieldGimmickDD.GetComponent<Dropdown>();
             fgdd.ClearOptions();
-            fgdd.AddOptions(new List<string>(FIELD_GIMMICK_NAMES));
+            // [ROLLBACK_GIMMICK_DISPLAY_NAME] FIELD_GIMMICK_NAMES 의 코드 식별자 → display name 매핑.
+            var fieldDisplayNames = new List<string>(FIELD_GIMMICK_NAMES.Length);
+            for (int i = 0; i < FIELD_GIMMICK_NAMES.Length; i++) fieldDisplayNames.Add(GimmickDisplayName.Get(FIELD_GIMMICK_NAMES[i]));
+            fgdd.AddOptions(fieldDisplayNames);
             fgdd.value = 0;
             fgdd.captionText.font = _font; fgdd.captionText.fontSize = 12; fgdd.captionText.color = Color.white;
             fgdd.onValueChanged.AddListener(v => {
@@ -1164,7 +1272,9 @@ namespace BalloonFlow
             var row2 = Row(p);
             Btn(row2, "Erase Color", () => { EraseColor(_paintColor); OnBalloonGridChanged(); });
             Btn(row2, "Erase Neighbor", () => { _eraseNeighborMode = true; SetStatus("Click a cell to erase same-color neighbors"); });
-            Btn(row2, "Fill Neighbor", () => { _fillNeighborMode = true; SetStatus("Click an empty cell to fill same-empty neighbors"); });
+            Btn(row2, "Fill Neighbor", () => { _fillNeighborMode = true; SetStatus("Click a cell to fill same-color neighbors"); });
+            var row3 = Row(p);
+            Btn(row3, "Round x10", RoundCurrentBalloonCountsToTen);
             Sep(p);
         }
 
@@ -1219,7 +1329,10 @@ namespace BalloonFlow
             holderGimmickDD.GetComponent<Image>().color = new Color(0.20f, 0.16f, 0.22f);
             var hgdd = holderGimmickDD.GetComponent<Dropdown>();
             hgdd.ClearOptions();
-            hgdd.AddOptions(new List<string>(HOLDER_GIMMICK_NAMES));
+            // [ROLLBACK_GIMMICK_DISPLAY_NAME] HOLDER_GIMMICK_NAMES 의 코드 식별자 → display name 매핑.
+            var holderDisplayNames = new List<string>(HOLDER_GIMMICK_NAMES.Length);
+            for (int i = 0; i < HOLDER_GIMMICK_NAMES.Length; i++) holderDisplayNames.Add(GimmickDisplayName.Get(HOLDER_GIMMICK_NAMES[i]));
+            hgdd.AddOptions(holderDisplayNames);
             hgdd.value = 0;
             hgdd.captionText.font = _font; hgdd.captionText.fontSize = 12; hgdd.captionText.color = Color.white;
             hgdd.onValueChanged.AddListener(v => {
@@ -3240,14 +3353,17 @@ namespace BalloonFlow
         #region Paint Input
 
         private bool _conveyorClickConsumed;
+        private bool _blockRightMousePanUntilRelease;
 
         private void HandlePaintInput()
         {
             if (_cam == null) return;
-            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
             var mouse = Mouse.current;
             if (mouse == null) return;
+            if (!mouse.rightButton.isPressed)
+                _blockRightMousePanUntilRelease = false;
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
             if (_conveyorPaintMode)
             {
@@ -3256,7 +3372,7 @@ namespace BalloonFlow
             }
             else
             {
-                if (!mouse.leftButton.isPressed) return;
+                if (!mouse.leftButton.isPressed && !mouse.rightButton.wasPressedThisFrame) return;
             }
 
 
@@ -3264,6 +3380,8 @@ namespace BalloonFlow
             if (!RaycastToGround(mouse, out hit)) return;
 
             float spacing = CellSpacing;
+            bool leftDown = mouse.leftButton.wasPressedThisFrame;
+            bool rightDown = mouse.rightButton.wasPressedThisFrame;
 
             if (_conveyorPaintMode)
             {
@@ -3299,24 +3417,39 @@ namespace BalloonFlow
             else
             {
                 // Balloon paint mode
-                int col = Mathf.RoundToInt((hit.x - _boardCenter.x) / spacing + (_gridCols - 1) * 0.5f);
-                int row = Mathf.RoundToInt((hit.z - _boardCenter.y) / spacing + (_gridRows - 1) * 0.5f);
+                float colFloat = (hit.x - _boardCenter.x) / spacing + (_gridCols - 1) * 0.5f;
+                float rowFloat = (hit.z - _boardCenter.y) / spacing + (_gridRows - 1) * 0.5f;
+                int col = Mathf.RoundToInt(colFloat);
+                int row = Mathf.RoundToInt(rowFloat);
 
                 if (col >= 0 && col < _gridCols && row >= 0 && row < _gridRows)
                 {
-                    if (_eraseNeighborMode && mouse.leftButton.wasPressedThisFrame)
+                    if (HandleBalloonGridShortcut(col, row, colFloat, rowFloat, leftDown, rightDown))
+                        return;
+
+                    if (rightDown)
+                    {
+                        EraseBalloonCell(col, row);
+                        UpdatePreviewCell(col, row);
+                        _blockRightMousePanUntilRelease = true;
+                        _infoDirty = true;
+                        SetStatus($"Erased cell ({col}, {row})");
+                        return;
+                    }
+
+                    if (_eraseNeighborMode && leftDown)
                     {
                         EraseNeighborSameColor(col, row);
                         _eraseNeighborMode = false;
                         OnBalloonGridChanged();
                     }
-                    else if (_fillNeighborMode && mouse.leftButton.wasPressedThisFrame)
+                    else if (_fillNeighborMode && leftDown)
                     {
-                        FillNeighborEmpty(col, row, _paintColor);
+                        FillNeighborSameColor(col, row, _paintColor);
                         _fillNeighborMode = false;
                         OnBalloonGridChanged();
                     }
-                    else if (_floodFillMode && mouse.leftButton.wasPressedThisFrame)
+                    else if (_floodFillMode && leftDown)
                     {
                         FloodFill(col, row, _paintColor);
                         OnBalloonGridChanged();
@@ -3397,6 +3530,79 @@ namespace BalloonFlow
             }
         }
 
+        private bool HandleBalloonGridShortcut(int col, int row, float colFloat, float rowFloat, bool leftDown, bool rightDown)
+        {
+            if (!leftDown && !rightDown) return false;
+
+            var kb = Keyboard.current;
+            if (kb == null) return false;
+
+            bool shift = kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed;
+
+            if (kb[Key.R].isPressed)
+            {
+                if (rightDown)
+                {
+                    _blockRightMousePanUntilRelease = true;
+                    DeleteRow(row);
+                }
+                else
+                {
+                    int insertAt = GetClosestInsertIndex(rowFloat, _gridRows);
+                    InsertRow(insertAt, true);
+                }
+                return true;
+            }
+
+            if (kb[Key.T].isPressed)
+            {
+                if (rightDown)
+                {
+                    _blockRightMousePanUntilRelease = true;
+                    DeleteCol(col);
+                }
+                else
+                {
+                    int insertAt = GetClosestInsertIndex(colFloat, _gridCols);
+                    InsertCol(insertAt, true);
+                }
+                return true;
+            }
+
+            if (kb[Key.F].isPressed)
+            {
+                if (shift)
+                {
+                    if (rightDown)
+                        _blockRightMousePanUntilRelease = true;
+                    ReplaceClickedColorWithBrush(col, row);
+                    return true;
+                }
+
+                if (leftDown)
+                {
+                    FillNeighborSameColor(col, row, _paintColor);
+                    OnBalloonGridChanged();
+                    return true;
+                }
+
+                if (rightDown)
+                {
+                    _blockRightMousePanUntilRelease = true;
+                    EraseNeighborSameColor(col, row);
+                    OnBalloonGridChanged();
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static int GetClosestInsertIndex(float cellFloat, int cellCount)
+        {
+            return Mathf.Clamp(Mathf.FloorToInt(cellFloat + 0.5f), 0, cellCount);
+        }
+
         private bool RaycastToGround(Mouse mouse, out Vector3 hit)
         {
             hit = Vector3.zero;
@@ -3434,6 +3640,14 @@ namespace BalloonFlow
             if (kb[Key.Digit0].wasPressedThisFrame) SetPaintColor(-1);
             if (kb[Key.Backquote].wasPressedThisFrame) SetPaintColor(-1);
             if (kb[Key.Tab].wasPressedThisFrame) ToggleConveyorMode();
+
+            bool shift = kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed;
+            if (shift && kb[Key.S].wasPressedThisFrame)
+                SaveToActiveDB();
+            if (kb[Key.F5].wasPressedThisFrame)
+                TestPlay();
+            if (kb[Key.O].wasPressedThisFrame)
+                RoundCurrentBalloonCountsToTen();
         }
 
         private void ToggleConveyorMode()
@@ -3501,6 +3715,13 @@ namespace BalloonFlow
 
             if (needsRound)
                 RoundColorCounts(_balloonColors, _gridCols, _gridRows, _importRoundTo);
+        }
+
+        private void RoundCurrentBalloonCountsToTen()
+        {
+            RoundColorCounts(_balloonColors, _gridCols, _gridRows, 10);
+            OnBalloonGridChanged();
+            SetStatus("Rounded balloon color counts to x10");
         }
 
         private void OnBalloonGridChanged()
@@ -5860,23 +6081,16 @@ namespace BalloonFlow
             insertAt = Mathf.Clamp(insertAt, 0, _gridRows);
             int newRows = _gridRows + 1;
 
-            var newColors = new int[_gridCols, newRows];
-            var newGimmicks = new int[_gridCols, newRows];
-            for (int c = 0; c < _gridCols; c++)
-                for (int r = 0; r < newRows; r++)
-                { newColors[c, r] = -1; newGimmicks[c, r] = 0; }
-
-            for (int c = 0; c < _gridCols; c++)
-                for (int r = 0; r < _gridRows; r++)
-                {
-                    int dr = r < insertAt ? r : r + 1;
-                    newColors[c, dr] = _balloonColors[c, r];
-                    newGimmicks[c, dr] = _balloonGimmicks[c, r];
-                }
-
+            _balloonColors = InsertRowGrid(_balloonColors, _gridCols, _gridRows, insertAt, -1);
+            _balloonGimmicks = InsertRowGrid(_balloonGimmicks, _gridCols, _gridRows, insertAt, 0);
+            _balloonGimmickHP = InsertRowGrid(_balloonGimmickHP, _gridCols, _gridRows, insertAt, 2);
+            _balloonPinataW = InsertRowGrid(_balloonPinataW, _gridCols, _gridRows, insertAt, 1);
+            _balloonPinataH = InsertRowGrid(_balloonPinataH, _gridCols, _gridRows, insertAt, 1);
+            _balloonLockPairIds = InsertRowGrid(_balloonLockPairIds, _gridCols, _gridRows, insertAt, -1);
+            _balloonFlexTubeGroupId = InsertRowGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, insertAt, -1);
+            _balloonFlexTubeSequenceIndex = InsertRowGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, insertAt, -1);
+            ShiftFlexTubePaintOrderAfterRowInsert(insertAt);
             _gridRows = newRows;
-            _balloonColors = newColors;
-            _balloonGimmicks = newGimmicks;
             OnBalloonGridChanged();
             SetStatus($"Inserted row {(above ? "above" : "below")} {at}");
         }
@@ -5887,23 +6101,16 @@ namespace BalloonFlow
             insertAt = Mathf.Clamp(insertAt, 0, _gridCols);
             int newCols = _gridCols + 1;
 
-            var newColors = new int[newCols, _gridRows];
-            var newGimmicks = new int[newCols, _gridRows];
-            for (int c = 0; c < newCols; c++)
-                for (int r = 0; r < _gridRows; r++)
-                { newColors[c, r] = -1; newGimmicks[c, r] = 0; }
-
-            for (int c = 0; c < _gridCols; c++)
-                for (int r = 0; r < _gridRows; r++)
-                {
-                    int dc = c < insertAt ? c : c + 1;
-                    newColors[dc, r] = _balloonColors[c, r];
-                    newGimmicks[dc, r] = _balloonGimmicks[c, r];
-                }
-
+            _balloonColors = InsertColGrid(_balloonColors, _gridCols, _gridRows, insertAt, -1);
+            _balloonGimmicks = InsertColGrid(_balloonGimmicks, _gridCols, _gridRows, insertAt, 0);
+            _balloonGimmickHP = InsertColGrid(_balloonGimmickHP, _gridCols, _gridRows, insertAt, 2);
+            _balloonPinataW = InsertColGrid(_balloonPinataW, _gridCols, _gridRows, insertAt, 1);
+            _balloonPinataH = InsertColGrid(_balloonPinataH, _gridCols, _gridRows, insertAt, 1);
+            _balloonLockPairIds = InsertColGrid(_balloonLockPairIds, _gridCols, _gridRows, insertAt, -1);
+            _balloonFlexTubeGroupId = InsertColGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, insertAt, -1);
+            _balloonFlexTubeSequenceIndex = InsertColGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, insertAt, -1);
+            ShiftFlexTubePaintOrderAfterColInsert(insertAt);
             _gridCols = newCols;
-            _balloonColors = newColors;
-            _balloonGimmicks = newGimmicks;
             OnBalloonGridChanged();
             SetStatus($"Inserted col {(left ? "left of" : "right of")} {at}");
         }
@@ -5916,36 +6123,16 @@ namespace BalloonFlow
             if (at < 0 || at >= _gridRows) { SetStatus($"Row {at} out of range (0-{_gridRows - 1})"); return; }
             int newRows = _gridRows - 1;
 
-            var newColors = new int[_gridCols, newRows];
-            var newGimmicks = new int[_gridCols, newRows];
-            var newHP = new int[_gridCols, newRows];
-            var newPW = new int[_gridCols, newRows];
-            var newPH = new int[_gridCols, newRows];
-
-            for (int c = 0; c < _gridCols; c++)
-            {
-                int dr = 0;
-                for (int r = 0; r < _gridRows; r++)
-                {
-                    if (r == at) continue;
-                    newColors[c, dr] = _balloonColors[c, r];
-                    newGimmicks[c, dr] = _balloonGimmicks[c, r];
-                    if (_balloonGimmickHP != null && c < _balloonGimmickHP.GetLength(0) && r < _balloonGimmickHP.GetLength(1))
-                        newHP[c, dr] = _balloonGimmickHP[c, r];
-                    if (_balloonPinataW != null && c < _balloonPinataW.GetLength(0) && r < _balloonPinataW.GetLength(1))
-                        newPW[c, dr] = _balloonPinataW[c, r];
-                    if (_balloonPinataH != null && c < _balloonPinataH.GetLength(0) && r < _balloonPinataH.GetLength(1))
-                        newPH[c, dr] = _balloonPinataH[c, r];
-                    dr++;
-                }
-            }
-
+            _balloonColors = DeleteRowGrid(_balloonColors, _gridCols, _gridRows, at, -1);
+            _balloonGimmicks = DeleteRowGrid(_balloonGimmicks, _gridCols, _gridRows, at, 0);
+            _balloonGimmickHP = DeleteRowGrid(_balloonGimmickHP, _gridCols, _gridRows, at, 2);
+            _balloonPinataW = DeleteRowGrid(_balloonPinataW, _gridCols, _gridRows, at, 1);
+            _balloonPinataH = DeleteRowGrid(_balloonPinataH, _gridCols, _gridRows, at, 1);
+            _balloonLockPairIds = DeleteRowGrid(_balloonLockPairIds, _gridCols, _gridRows, at, -1);
+            _balloonFlexTubeGroupId = DeleteRowGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, at, -1);
+            _balloonFlexTubeSequenceIndex = DeleteRowGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, at, -1);
+            ShiftFlexTubePaintOrderAfterRowDelete(at);
             _gridRows = newRows;
-            _balloonColors = newColors;
-            _balloonGimmicks = newGimmicks;
-            _balloonGimmickHP = newHP;
-            _balloonPinataW = newPW;
-            _balloonPinataH = newPH;
             OnBalloonGridChanged();
             SetStatus($"Deleted row {at}");
         }
@@ -5956,36 +6143,16 @@ namespace BalloonFlow
             if (at < 0 || at >= _gridCols) { SetStatus($"Col {at} out of range (0-{_gridCols - 1})"); return; }
             int newCols = _gridCols - 1;
 
-            var newColors = new int[newCols, _gridRows];
-            var newGimmicks = new int[newCols, _gridRows];
-            var newHP = new int[newCols, _gridRows];
-            var newPW = new int[newCols, _gridRows];
-            var newPH = new int[newCols, _gridRows];
-
-            for (int r = 0; r < _gridRows; r++)
-            {
-                int dc = 0;
-                for (int c = 0; c < _gridCols; c++)
-                {
-                    if (c == at) continue;
-                    newColors[dc, r] = _balloonColors[c, r];
-                    newGimmicks[dc, r] = _balloonGimmicks[c, r];
-                    if (_balloonGimmickHP != null && c < _balloonGimmickHP.GetLength(0) && r < _balloonGimmickHP.GetLength(1))
-                        newHP[dc, r] = _balloonGimmickHP[c, r];
-                    if (_balloonPinataW != null && c < _balloonPinataW.GetLength(0) && r < _balloonPinataW.GetLength(1))
-                        newPW[dc, r] = _balloonPinataW[c, r];
-                    if (_balloonPinataH != null && c < _balloonPinataH.GetLength(0) && r < _balloonPinataH.GetLength(1))
-                        newPH[dc, r] = _balloonPinataH[c, r];
-                    dc++;
-                }
-            }
-
+            _balloonColors = DeleteColGrid(_balloonColors, _gridCols, _gridRows, at, -1);
+            _balloonGimmicks = DeleteColGrid(_balloonGimmicks, _gridCols, _gridRows, at, 0);
+            _balloonGimmickHP = DeleteColGrid(_balloonGimmickHP, _gridCols, _gridRows, at, 2);
+            _balloonPinataW = DeleteColGrid(_balloonPinataW, _gridCols, _gridRows, at, 1);
+            _balloonPinataH = DeleteColGrid(_balloonPinataH, _gridCols, _gridRows, at, 1);
+            _balloonLockPairIds = DeleteColGrid(_balloonLockPairIds, _gridCols, _gridRows, at, -1);
+            _balloonFlexTubeGroupId = DeleteColGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, at, -1);
+            _balloonFlexTubeSequenceIndex = DeleteColGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, at, -1);
+            ShiftFlexTubePaintOrderAfterColDelete(at);
             _gridCols = newCols;
-            _balloonColors = newColors;
-            _balloonGimmicks = newGimmicks;
-            _balloonGimmickHP = newHP;
-            _balloonPinataW = newPW;
-            _balloonPinataH = newPH;
             OnBalloonGridChanged();
             SetStatus($"Deleted col {at}");
         }
@@ -5993,6 +6160,44 @@ namespace BalloonFlow
         // ── Feature 7: Flood Fill ──
 
         /// <summary>특정 색상의 풍선을 전부 제거.</summary>
+        private void EraseBalloonCell(int col, int row)
+        {
+            _balloonColors[col, row] = -1;
+            _balloonGimmicks[col, row] = 0;
+            _balloonGimmickHP[col, row] = 2;
+            _balloonPinataW[col, row] = 1;
+            _balloonPinataH[col, row] = 1;
+            _balloonLockPairIds[col, row] = -1;
+            _balloonFlexTubeGroupId[col, row] = -1;
+            _balloonFlexTubeSequenceIndex[col, row] = -1;
+            _flexTubePaintOrder.RemoveAll(p => p.x == col && p.y == row);
+        }
+
+        private void FillBalloonCellWithBrush(int col, int row, int color)
+        {
+            _balloonColors[col, row] = color;
+            _balloonGimmicks[col, row] = color >= 0 ? _paintGimmick : 0;
+            _balloonGimmickHP[col, row] = _paintPinataHP;
+            _balloonPinataW[col, row] = 1;
+            _balloonPinataH[col, row] = 1;
+
+            bool isLockKeyGimmick = _balloonGimmicks[col, row] > 0
+                && _balloonGimmicks[col, row] < FIELD_GIMMICK_NAMES.Length
+                && FIELD_GIMMICK_NAMES[_balloonGimmicks[col, row]] == "Lock_Key";
+            _balloonLockPairIds[col, row] = isLockKeyGimmick ? _paintLockPairId : -1;
+            _balloonFlexTubeGroupId[col, row] = -1;
+            _balloonFlexTubeSequenceIndex[col, row] = -1;
+            _flexTubePaintOrder.RemoveAll(p => p.x == col && p.y == row);
+        }
+
+        private void ReplaceClickedColorWithBrush(int col, int row)
+        {
+            int fromColor = _balloonColors[col, row];
+            if (fromColor < 0) { SetStatus("Click a colored cell"); return; }
+            if (_paintColor < 0) { SetStatus("Select a target color first"); return; }
+            SwapColors(fromColor, _paintColor);
+        }
+
         private void EraseColor(int color)
         {
             if (color < 0) { SetStatus("Select a color first"); return; }
@@ -6001,8 +6206,7 @@ namespace BalloonFlow
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] == color)
                     {
-                        _balloonColors[c, r] = -1;
-                        _balloonGimmicks[c, r] = 0;
+                        EraseBalloonCell(c, r);
                         count++;
                     }
             SetStatus($"Erased {count} cells of color {color}");
@@ -6023,8 +6227,7 @@ namespace BalloonFlow
             {
                 var cell = queue.Dequeue();
                 int c = cell.x, r = cell.y;
-                _balloonColors[c, r] = -1;
-                _balloonGimmicks[c, r] = 0;
+                EraseBalloonCell(c, r);
 
                 Vector2Int[] dirs = { new Vector2Int(1, 0), new Vector2Int(-1, 0),
                                       new Vector2Int(0, 1), new Vector2Int(0, -1) };
@@ -6044,11 +6247,11 @@ namespace BalloonFlow
         }
 
         /// <summary>클릭한 빈 셀과 이웃한 빈 셀들을 현재 브러시 색상으로 채움 (BFS).</summary>
-        private void FillNeighborEmpty(int startCol, int startRow, int fillColor)
+        private void FillNeighborSameColor(int startCol, int startRow, int fillColor)
         {
-            if (_balloonColors[startCol, startRow] >= 0) { SetStatus("Click an empty cell"); return; }
             if (fillColor < 0) { SetStatus("Select a color first"); return; }
 
+            int targetColor = _balloonColors[startCol, startRow];
             var queue = new Queue<Vector2Int>();
             var visited = new HashSet<Vector2Int>();
             queue.Enqueue(new Vector2Int(startCol, startRow));
@@ -6058,8 +6261,7 @@ namespace BalloonFlow
             {
                 var cell = queue.Dequeue();
                 int c = cell.x, r = cell.y;
-                _balloonColors[c, r] = fillColor;
-                _balloonGimmicks[c, r] = _paintGimmick;
+                FillBalloonCellWithBrush(c, r, fillColor);
 
                 Vector2Int[] dirs = { new Vector2Int(1, 0), new Vector2Int(-1, 0),
                                       new Vector2Int(0, 1), new Vector2Int(0, -1) };
@@ -6068,14 +6270,14 @@ namespace BalloonFlow
                     int nc = c + d.x, nr = r + d.y;
                     var np = new Vector2Int(nc, nr);
                     if (nc >= 0 && nc < _gridCols && nr >= 0 && nr < _gridRows
-                        && !visited.Contains(np) && _balloonColors[nc, nr] < 0)
+                        && !visited.Contains(np) && _balloonColors[nc, nr] == targetColor)
                     {
                         visited.Add(np);
                         queue.Enqueue(np);
                     }
                 }
             }
-            SetStatus($"Filled {visited.Count} empty neighbor cells (color {fillColor})");
+            SetStatus($"Filled {visited.Count} neighbor cells ({targetColor} -> {fillColor})");
         }
 
         private void FloodFill(int startCol, int startRow, int newColor)
@@ -6092,8 +6294,10 @@ namespace BalloonFlow
             {
                 var cell = queue.Dequeue();
                 int c = cell.x, r = cell.y;
-                _balloonColors[c, r] = newColor;
-                _balloonGimmicks[c, r] = newColor >= 0 ? _paintGimmick : 0;
+                if (newColor >= 0)
+                    FillBalloonCellWithBrush(c, r, newColor);
+                else
+                    EraseBalloonCell(c, r);
 
                 Vector2Int[] dirs = { new Vector2Int(1, 0), new Vector2Int(-1, 0),
                                       new Vector2Int(0, 1), new Vector2Int(0, -1) };

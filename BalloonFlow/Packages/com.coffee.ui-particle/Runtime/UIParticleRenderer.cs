@@ -43,7 +43,25 @@ namespace Coffee.UIExtensions
         private ParticleSystemRenderer _renderer;
         private ParticleSystem _mainEmitter;
 
-        public override Texture mainTexture => _isTrail ? null : _particleSystem.GetTextureForSprite();
+        // [ROLLBACK_UIPARTICLE_MATERIAL_TEXTURE_FALLBACK]
+        // 기본은 _isTrail 시 null, 아니면 GetTextureForSprite (Texture Sheet Animation Sprite mode 만 동작).
+        // 사용자가 ParticleSystem.Renderer.material 의 _MainTex 에 texture 직접 부착하는 케이스도 지원하기 위해
+        // sprite texture 가 null 이면 sharedMaterial.mainTexture fallback.
+        // 롤백 시 위 한 줄로 원복:  public override Texture mainTexture => _isTrail ? null : _particleSystem.GetTextureForSprite();
+        public override Texture mainTexture
+        {
+            get
+            {
+                if (_isTrail) return null;
+                if (_particleSystem == null) return null;
+                Texture spriteTex = _particleSystem.GetTextureForSprite();
+                if (spriteTex != null) return spriteTex;
+                // Fallback: Particle Renderer 의 sharedMaterial 에 직접 부착된 _MainTex.
+                if (_renderer != null && _renderer.sharedMaterial != null)
+                    return _renderer.sharedMaterial.mainTexture;
+                return null;
+            }
+        }
 
         public override bool raycastTarget => false;
 

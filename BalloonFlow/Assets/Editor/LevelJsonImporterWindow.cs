@@ -870,6 +870,17 @@ namespace BalloonFlow.Editor
                     int colorId = field[x, y];
                     if (colorId <= 0) continue; // 빈 셀
 
+                    // [ROLLBACK_IMPORTER_COLOR_RANGE_VALIDATION]
+                    // colorId - 1 변환 후 BalloonColors 배열(28 색) 범위 검증.
+                    // JSON 의 colorId 가 잘못된 값이면 invalid color 인덱스가 만들어져 다트 hit 매칭 실패 발생.
+                    // 롤백 시 이 if 블록 제거.
+                    int colorIdx = colorId - 1;
+                    if (colorIdx < 0 || colorIdx >= BalloonController.BalloonColors.Length)
+                    {
+                        Debug.LogWarning($"[Importer] Invalid colorId={colorId} (mapped to {colorIdx}) at field cell ({x},{y}) — out of BalloonColors[0..{BalloonController.BalloonColors.Length - 1}]. Skipping balloon.");
+                        continue;
+                    }
+
                     float wx = BOARD_CENTER_X + x * cs - halfGridX;
                     // Y축 반전: FieldMap 텍스트 첫 줄(y=0) → 게임 화면 상단(max Z)
                     float wz = BOARD_CENTER_Z + (rows - 1 - y) * cs - halfGridY;
@@ -877,7 +888,7 @@ namespace BalloonFlow.Editor
                     balloons.Add(new BalloonLayout
                     {
                         balloonId = bid++,
-                        color = colorId - 1, // 1-based → 0-based
+                        color = colorIdx, // validated 0-based
                         gridPosition = new Vector2(wx, wz),
                         gimmickType = ""
                     });
@@ -937,30 +948,64 @@ namespace BalloonFlow.Editor
 
         #region Holder 생성
 
+        // [ROLLBACK_JSON_IMPORTER_GIMMICK_LIFE_FIX]
+        // 기존 GetGimmickLife 가 (1) Pin=0 → 다트 0개 → 매칭 hit 불가, (2) Pinata HP hardcoded 2 → JSON hp 무시,
+        // (3) Barricade/FrozenDart/ColorCurtain/Surprise/Hidden/Chain/Spawner/FlexTube 등 누락 → default 1
+        // → 일부 색 풍선의 다트가 부족하여 import 된 레벨에서 "공격 못 함" 발생.
+        // 수정: BalloonLayout.hp 값 우선 사용 + 모든 활성 기믹 반영.
+        // 롤백 시 위 두 메서드 원형으로 복원.
         private int[] CountDartsPerColor(BalloonLayout[] balloons, int maxColors)
         {
             int[] counts = new int[maxColors];
             foreach (var b in balloons)
             {
-                int life = GetGimmickLife(b.gimmickType);
+                int life = GetGimmickLife(b.gimmickType, b.hp);
                 if (b.color >= 0 && b.color < maxColors)
                     counts[b.color] += life;
             }
             return counts;
         }
 
-        private int GetGimmickLife(string gimmickType)
+        // 풍선 1개당 필요한 다트 수 — 색별 holder magazine 산정에 사용. 0 = 다트 안 듦 (hit 불가).
+        // 대소문자 모두 케이스. BalloonController.Gimmick* 상수와 동기화.
+        private int GetGimmickLife(string gimmickType, int hp)
         {
-            if (string.IsNullOrEmpty(gimmickType)) return 1;
-            return gimmickType switch
+            if (string.IsNullOrEmpty(gimmickType) || gimmickType == "none") return 1;
+            string g = gimmickType.ToLowerInvariant();
+            int hpOrDefault(int dflt) => hp > 0 ? hp : dflt;
+            switch (g)
             {
-                "pinata"     => 2,
-                "pinata_box" => 2,
-                "wall"       => 0,
-                "pin"        => 0,
-                "ice"        => 0,
-                _            => 1
-            };
+                // 직접 hit 불가 — 다트 0개 필요 (간접 제거).
+                case "wall":          return 0;  // indestructible
+                case "ice":           return 0;  // indirect only
+                case "color_curtain": return 0;  // indirect only
+
+                // FlexTube 는 자체 색별 hit. HP=segment 수.
+                case "flextube":      return hpOrDefault(1);
+
+                // HP 기반 기믹 — JSON hp 우선.
+                case "pinata":        return hpOrDefault(2);
+                case "pinata_box":    return hpOrDefault(2);
+                case "barricade":     return hpOrDefault(3);  // Pin 통합 후 색 매칭 + HP
+                case "pin":           return hpOrDefault(3);  // legacy — Barricade 로 정규화되지만 import 시 매핑
+
+                // 2-hit (thaw + pop) — 항상 2 발 필요.
+                case "frozen_dart":   return 2;
+
+                // 일반 풍선 처럼 1 발이지만 별도 mechanic (concealed visual).
+                case "surprise":      return 1;
+                case "hidden":        return 1;
+
+                // Holder 전용 기믹 — 풍선엔 적용 안 됨. fallback 1.
+                case "chain":         return 1;
+                case "spawner_t":     return 1;
+                case "spawner_o":     return 1;
+
+                // Lock_Key — dead 처리. 일반 풍선처럼 1 발.
+                case "lock_key":      return 1;
+
+                default:              return 1;
+            }
         }
 
         private HolderSetup[] BuildHolders(int[] dartsPerColor, int[] allowedMags,
