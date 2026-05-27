@@ -78,10 +78,10 @@ namespace BalloonFlow
         public int RailSideCount { get; set; } = 4;
 
         // Arrow: 슬롯 기반 회전 (다트처럼 벨트와 함께 이동)
-        // [Optimization 2026-05-11] ARROW_SPACING 2.0 → 4.0 — 큰 stage 의 rail path 가 길수록 arrow 수 폭증 (140+ draws).
+        // [Adjustment 2026-05-27] ARROW_SPACING 4.0 → 2.2 — 다트 간격 시각 밀도 재조정 (모든 레벨/플랫폼 공통)
         // 시각: 약간 sparse. 동선 흐름 표시는 유지. 롤백: 아래 라인 = 2.0f.
-        // 원본: private const float ARROW_SPACING = 2.0f;
-        private const float ARROW_SPACING = 4.0f; // Arrow 간 월드 거리
+        // 직전: private const float ARROW_SPACING = 4.0f;
+        private const float ARROW_SPACING = 2.2f; // Arrow 간 월드 거리
         private GameObject[] _arrowObjects;
         private int[] _arrowSlotIndices; // 각 Arrow가 점유한 슬롯 인덱스
 
