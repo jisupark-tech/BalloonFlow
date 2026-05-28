@@ -86,9 +86,9 @@ namespace BalloonFlow
         /// <summary>현재 유저 레벨 + 구매 이력 + visibleInShop 기준으로 노출 가능한 상품 필터.</summary>
         public List<ShopProductDoc> GetVisibleForUser(UserData user)
         {
-            var result = new List<ShopProductDoc>(_all.Count);
-            int playerLevel = user != null ? Mathf.Max(1, user.highestClearedLevel + 1) : 1;
+            return StoreProductExposure.BuildProducts(_all, user, expanded: true);
 
+#if false
             foreach (var p in _all)
             {
                 if (!p.visibleInShop) continue;
@@ -102,6 +102,7 @@ namespace BalloonFlow
                 result.Add(p);
             }
             return result;
+#endif
         }
 
         public ShopProductDoc Get(string productId)

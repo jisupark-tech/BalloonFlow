@@ -39,6 +39,11 @@ namespace BalloonFlow
 
         public Slider ProgressSlider => _progressSlider;
 
+        private Image _splashImage;
+
+        /// <summary>스플래시 배경 sprite — 첫 실행 시 레벨 진입 전환에 그대로 이어 보여주기 위해 사용 (별도 전환 이미지 없음).</summary>
+        public Sprite SplashSprite => _splashImage != null ? _splashImage.sprite : null;
+
         private void Awake()
         {
             if (_splashBackground != null)
@@ -53,6 +58,7 @@ namespace BalloonFlow
                 var go = _splashBackground.gameObject;
                 // sprite native aspect 기반 cover를 사용하므로 Image + sprite 할당 여부를 사전 점검(미할당이면 fitter가 _isDisabled로 자기 보호).
                 var img = go.GetComponent<Image>();
+                _splashImage = img;
                 if (img == null || img.sprite == null)
                 {
                     Debug.LogWarning("[UITitle] _splashBackground에 Image 컴포넌트 또는 sprite가 없습니다 — SplashBackgroundFitter는 부착되나 sprite 할당 전까지 sizeDelta를 조작하지 않습니다.");
@@ -72,6 +78,7 @@ namespace BalloonFlow
 
             var bgGo = bg.gameObject;
             var bgImage = bgGo.GetComponent<Image>();
+            _splashImage = bgImage;
             bool hasImage = bgImage != null;
             bool isLeaf = bg.childCount == 0;
             if (!hasImage || !isLeaf)

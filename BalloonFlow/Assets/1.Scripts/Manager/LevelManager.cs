@@ -591,6 +591,8 @@ namespace BalloonFlow
                 railRenderer.VisualType = vt;
             }
 
+            NormalizeLevelGimmickTypes(config);
+
             // Initialize holders from level config (column-based queue)
             // Pass slotCount for per-tier magazine cap enforcement
             if (HolderManager.HasInstance && config.holders != null)
@@ -611,15 +613,18 @@ namespace BalloonFlow
                 for (int i = 0; i < config.balloons.Length; i++)
                 {
                     BalloonLayout bl = config.balloons[i];
+                    string gimmickType = GimmickDisplayName.Normalize(bl.gimmickType);
                     balloonLayout.Add(new BalloonSetupData
                     {
                         color       = bl.color,
                         position    = new Vector3(bl.gridPosition.x, 0.1f, bl.gridPosition.y),
-                        gimmickType = bl.gimmickType,
+                        gimmickType = gimmickType,
                         groupId     = -1,
                         sizeW       = bl.sizeW > 0 ? bl.sizeW : 1,
                         sizeH       = bl.sizeH > 0 ? bl.sizeH : 1,
                         hp          = bl.hp,
+                        eggColors   = bl.eggColors,
+                        eggHps      = bl.eggHps,
                         lockPairId  = bl.lockPairId,
                         flexTubeGroupId       = bl.flexTubeGroupId,
                         flexTubePartType      = bl.flexTubePartType,
@@ -740,6 +745,36 @@ namespace BalloonFlow
             }
 
             FailLevel();
+        }
+
+        private static void NormalizeLevelGimmickTypes(LevelConfig config)
+        {
+            if (config == null) return;
+
+            if (config.gimmickTypes != null)
+            {
+                for (int i = 0; i < config.gimmickTypes.Length; i++)
+                    config.gimmickTypes[i] = GimmickDisplayName.Normalize(config.gimmickTypes[i]);
+            }
+
+            if (config.balloons != null)
+            {
+                for (int i = 0; i < config.balloons.Length; i++)
+                {
+                    if (config.balloons[i] == null) continue;
+                    config.balloons[i].gimmickType = GimmickDisplayName.Normalize(config.balloons[i].gimmickType);
+                }
+            }
+
+            if (config.holders != null)
+            {
+                for (int i = 0; i < config.holders.Length; i++)
+                {
+                    if (config.holders[i] == null) continue;
+                    string queueGimmick = GimmickDisplayName.Normalize(config.holders[i].queueGimmick);
+                    config.holders[i].queueGimmick = queueGimmick == "none" ? "" : queueGimmick;
+                }
+            }
         }
 
         #endregion

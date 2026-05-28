@@ -38,6 +38,16 @@ namespace BalloonFlow
             _ = InitAsync();
         }
 
+        private void OnEnable()
+        {
+            EventBus.Subscribe<OnBoosterEffectApplied>(HandleBoosterEffectApplied);
+        }
+
+        private void OnDisable()
+        {
+            EventBus.Unsubscribe<OnBoosterEffectApplied>(HandleBoosterEffectApplied);
+        }
+
         private async Task InitAsync()
         {
             try
@@ -319,6 +329,36 @@ namespace BalloonFlow
         }
 
         /// <summary>프로필 아이콘 슬롯 변경. 동일 값이면 no-op. OnProfileChanged 발화.</summary>
+        public void SetZapTutorialCompleted(bool value = true)
+        {
+            PlayerPrefs.SetInt(Const.PREFS_ZAP_TUTORIAL_COMPLETED, value ? 1 : 0);
+            PlayerPrefs.Save();
+
+            if (!_isReady || _user == null) return;
+            if (_user.zapTutorialCompleted == value) return;
+            _user.zapTutorialCompleted = value;
+            FireAndForget(_db.Document($"users/{Uid}").UpdateAsync("zapTutorialCompleted", value),
+                $"SetZapTutorialCompleted({value})");
+        }
+
+        public void SetFirstInterstitialShown(bool value = true)
+        {
+            PlayerPrefs.SetInt(Const.PREFS_FIRST_INTERSTITIAL_SHOWN, value ? 1 : 0);
+            PlayerPrefs.Save();
+
+            if (!_isReady || _user == null) return;
+            if (_user.firstInterstitialShown == value) return;
+            _user.firstInterstitialShown = value;
+            FireAndForget(_db.Document($"users/{Uid}").UpdateAsync("firstInterstitialShown", value),
+                $"SetFirstInterstitialShown({value})");
+        }
+
+        private void HandleBoosterEffectApplied(OnBoosterEffectApplied evt)
+        {
+            if (evt.boosterType == BoosterManager.COLOR_REMOVE || evt.boosterType == BoosterManager.ZAP)
+                SetZapTutorialCompleted(true);
+        }
+
         public void SetProfileIconNumber(int iconIndex)
         {
             if (!_isReady || iconIndex < 0) return;

@@ -15,11 +15,11 @@ namespace BalloonFlow
 
         /// <summary>LevelConfig.gimmickTypes (MapMaker 명명) → PopupNewFeature.featureKey 매핑.
         /// 미매핑 기믹은 팝업 안 띄움.</summary>
-        private static readonly Dictionary<string, string> GimmickToFeatureKey = new Dictionary<string, string>
+        private static readonly Dictionary<string, string> GimmickToFeatureKey = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
         {
             { "Hidden",       "Hidden" },
             { "Pinata",       "Pinata" },
-            { "Pinata_Box",   "Pinata" },
+            { "Pinata_Box",   "TargetBox" },
             { "Spawner_T",    "Spawner" },
             { "Spawner_O",    "Spawner" },
             { "Lock_Key",     "KeyLock" },
@@ -60,7 +60,7 @@ namespace BalloonFlow
             var addedThisCall = new HashSet<string>();
             for (int i = 0; i < config.gimmickTypes.Length; i++)
             {
-                string gimmick = config.gimmickTypes[i];
+                string gimmick = GimmickDisplayName.Normalize(config.gimmickTypes[i]);
                 if (string.IsNullOrEmpty(gimmick)) continue;
                 if (!GimmickToFeatureKey.TryGetValue(gimmick, out string featureKey)) continue;
                 if (addedThisCall.Contains(featureKey)) continue;

@@ -21,18 +21,12 @@ namespace BalloonFlow
         // Piñata default HP (overridden by level data)
         private const int DEFAULT_PINATA_HP = 2;
 
-        // Ice HP — reduced by ANY balloon pop (indirect)
-        private const int DEFAULT_ICE_HP = 3;
-
         // Pin progressive removal — same-color dart direct hit removes 1 segment
         private const int DEFAULT_PIN_LENGTH = 3;
 
         #endregion
 
         #region Fields
-
-        // Ice HP tracking: balloonId → remaining HP
-        private readonly Dictionary<int, int> _iceHP = new Dictionary<int, int>();
 
         // Pin tracking: balloonId → remaining segments
         private readonly Dictionary<int, int> _pinSegments = new Dictionary<int, int>();
@@ -46,14 +40,9 @@ namespace BalloonFlow
         private readonly Dictionary<int, int> _curtainCounters = new Dictionary<int, int>();
         private const int DEFAULT_CURTAIN_COUNTER = 3;
 
-        private readonly List<int> _iceKeysBuffer = new List<int>();
-        private readonly List<int> _iceRemoveBuffer = new List<int>();
         private readonly List<int> _curtainKeysBuffer = new List<int>();
         private readonly List<int> _curtainRemoveBuffer = new List<int>();
-        // ROLLBACK_ICE_GLOBAL_POP_COUNTER:
-        // Ice now thaws from adjacent pops in BalloonController. Keep the old global HP counter
-        // path behind this flag in case the design returns to "any pop damages all Ice".
-        private static readonly bool UseGlobalIcePopCounter = false;
+        // Ice 는 BalloonController 의 인접 팝 해동(ThawAdjacentIce)으로만 제거된다. HP/전역 카운터 모델은 폐기됨.
 
         #endregion
 
@@ -80,14 +69,11 @@ namespace BalloonFlow
 
         public void ResetAll()
         {
-            _iceHP.Clear();
             _pinSegments.Clear();
             _pinColors.Clear();
             _surpriseBalloons.Clear();
             _curtainColors.Clear();
             _curtainCounters.Clear();
-            _iceKeysBuffer.Clear();
-            _iceRemoveBuffer.Clear();
             _curtainKeysBuffer.Clear();
             _curtainRemoveBuffer.Clear();
         }
@@ -98,11 +84,11 @@ namespace BalloonFlow
         /// </summary>
         public void RegisterBalloonGimmick(int balloonId, string gimmickType, int color, int hp = 0)
         {
+            gimmickType = GimmickDisplayName.Normalize(gimmickType);
             switch (gimmickType)
             {
-                case BalloonController.GimmickIce:
-                    _iceHP[balloonId] = hp > 0 ? hp : DEFAULT_ICE_HP;
-                    break;
+                // Ice 는 GimmickProcessor 등록 불필요 — 인접 해동은 BalloonController 가 BalloonData 로 처리,
+                // 다트 차단은 CheckDartBlocker 가 gimmickType 으로 처리.
 
                 case BalloonController.GimmickPin:
                     _pinSegments[balloonId] = hp > 0 ? hp : DEFAULT_PIN_LENGTH;
@@ -139,14 +125,15 @@ namespace BalloonFlow
         /// </summary>
         public string CheckDartBlocker(int balloonId, string gimmickType, int dartColor)
         {
+            gimmickType = GimmickDisplayName.Normalize(gimmickType);
             switch (gimmickType)
             {
                 case BalloonController.GimmickWall:
                     return "Wall: indestructible";
 
                 case BalloonController.GimmickIce:
-                    // Ice is indirect-only — darts cannot target directly
-                    return "Ice: indirect removal only (any pop reduces HP)";
+                    // Ice is indirect-only — darts cannot target directly (인접 풍선 팝으로 해동)
+                    return "Ice: indirect removal only (adjacent pop thaws)";
 
                 case BalloonController.GimmickPin:
                     // Pin requires same-color dart direct hit for progressive removal
@@ -254,68 +241,18 @@ namespace BalloonFlow
             return _surpriseBalloons.Contains(balloonId);
         }
 
-        /// <summary>
-        /// Returns the remaining Ice HP for a balloon, or 0 if not tracked/already removed.
-        /// </summary>
-        public int GetIceHP(int balloonId)
-        {
-            return _iceHP.TryGetValue(balloonId, out int hp) ? hp : 0;
-        }
-
         #endregion
 
-        #region Private Methods — Global Pop Handler (Ice indirect, Lock-Key)
+        #region Private Methods — Global Pop Handler (Color Curtain, Surprise)
 
         /// <summary>
         /// Handles ANY balloon pop — used for indirect gimmick effects:
-        /// - Ice: ALL pops reduce Ice HP by 1
-        /// - Lock-Key: popping a Key color unlocks corresponding Locks
+        /// - Color Curtain: matching-color pop decrements counter; at 0 the curtain is removed
         /// - Surprise: adjacent pop reveals hidden color
+        /// (Ice 는 BalloonController 의 인접 해동으로 처리 — 여기서 다루지 않음.)
         /// </summary>
         private void HandleAnyBalloonPopped(OnBalloonPopped evt)
         {
-            if (UseGlobalIcePopCounter)
-            {
-                // === Ice: every pop reduces all Ice balloon HP by 1 ===
-                _iceKeysBuffer.Clear();
-                _iceRemoveBuffer.Clear();
-                foreach (var kvp in _iceHP)
-                    _iceKeysBuffer.Add(kvp.Key);
-
-                for (int i = 0; i < _iceKeysBuffer.Count; i++)
-                {
-                    int id = _iceKeysBuffer[i];
-                    if (!_iceHP.TryGetValue(id, out int hp)) continue;
-
-                    int newHP = hp - 1;
-                    _iceHP[id] = newHP;
-
-                    if (newHP <= 0)
-                    {
-                        _iceRemoveBuffer.Add(id);
-
-                        EventBus.Publish(new OnGimmickTriggered
-                        {
-                            gimmickType = BalloonController.GimmickIce,
-                            targetId = id
-                        });
-                    }
-                }
-
-                // Remove destroyed Ice balloons from tracking before ForcePop can publish recursively.
-                for (int i = 0; i < _iceRemoveBuffer.Count; i++)
-                {
-                    int id = _iceRemoveBuffer[i];
-                    _iceHP.Remove(id);
-
-                    // Signal BalloonController to pop this Ice balloon
-                    if (BalloonController.HasInstance)
-                    {
-                        BalloonController.Instance.ForcePopBalloon(id);
-                    }
-                }
-            }
-
             // === Color Curtain: 해당 색 풍선 팝 시 카운터 -1 ===
             _curtainKeysBuffer.Clear();
             _curtainRemoveBuffer.Clear();

@@ -230,6 +230,12 @@ namespace BalloonFlow
         /// <summary>Piñata HP (기본 2).</summary>
         public int hp = 0;
 
+        /// <summary>Pinata_Box(Target Box) 셀별 알 색상. 길이 = sizeW*sizeH, row-major (index = r*sizeW + c).
+        /// null/빈 배열이면 단일 박스(레거시) — color/hp 단일값 사용.</summary>
+        public int[] eggColors;
+        /// <summary>Pinata_Box 셀별 알 HP. eggColors 와 같은 길이/순서. 0/null 이면 색매칭 1히트.</summary>
+        public int[] eggHps;
+
         /// <summary>Lock_Key pair ID. -1 = 없음. Key 풍선: 터지면 같은 pairId의 Lock 보관함 해제.</summary>
         public int lockPairId = -1;
 

@@ -40,6 +40,8 @@ namespace BalloonFlow
         [SerializeField] private GameObject _boxFrozen;
         [Tooltip("Frozen 해동 이펙트 (ParticleFrozenExplosion)")]
         [SerializeField] private GameObject _frozenExplosionEffect;
+        [Tooltip("Frozen Box 전용 Material. 미할당/기본 Material 상태일 때 런타임 fallback으로 사용.")]
+        [SerializeField] private Material _frozenBoxMaterial;
 
         [Header("[Hidden 기믹 — Inspector에서 할당]")]
         [Tooltip("Hidden Body용 Material (색상 숨김)")]
@@ -79,6 +81,12 @@ namespace BalloonFlow
         /// <summary>[2026-05-13] 원래 로컬 스케일 저장 — LaunchNextDart 의 SetParent(null)
         /// 에서 worldScale 흡수로 dart localScale 누적되는 버그 ResetDarts 에서 복원.</summary>
         private Vector3[] _dartLocalScales;
+        private bool _isFrozenVisual;
+        private readonly Dictionary<Renderer, Material[]> _frozenMaterialRestore = new Dictionary<Renderer, Material[]>();
+        private Transform _frozenEffectOriginalParent;
+        private Vector3 _frozenEffectOriginalLocalPosition;
+        private Quaternion _frozenEffectOriginalLocalRotation;
+        private bool _frozenEffectTransformCached;
 
         /// <summary>The unique identifier for this holder.</summary>
         public int HolderId => _holderId;
@@ -523,18 +531,148 @@ namespace BalloonFlow
             if (frozen && _boxFrozen == null)
                 Debug.LogWarning($"[HolderIdentifier] Holder {_holderId}: _boxFrozen 미할당! Inspector에서 BoxFrozen 오브젝트를 드래그하세요.");
 
-            if (_box != null) _box.SetActive(!frozen);
-            if (_boxFrozen != null) _boxFrozen.SetActive(frozen);
-            if (!frozen && _frozenExplosionEffect != null)
-                _frozenExplosionEffect.SetActive(true);
+            bool wasFrozen = _isFrozenVisual || (_boxFrozen != null && _boxFrozen.activeSelf);
+            _isFrozenVisual = frozen;
+
+            if (!frozen && wasFrozen)
+                PlayFrozenBreakEffect();
+
+            if (_box != null) _box.SetActive(!frozen || _boxFrozen == null);
+            if (_boxFrozen != null)
+            {
+                _boxFrozen.SetActive(frozen);
+                if (frozen) ApplyFrozenMaterialFallback(_boxFrozen);
+            }
+            else if (frozen && _box != null)
+            {
+                ApplyFrozenMaterialFallback(_box);
+            }
+
+            if (!frozen)
+                RestoreFrozenMaterialFallback();
         }
 
         /// <summary>풀 반환 시 Box 상태 초기화 (일반 상태로).</summary>
         public void ResetBox()
         {
+            _isFrozenVisual = false;
+            RestoreFrozenMaterialFallback();
+            RestoreFrozenEffectTransform();
             if (_box != null) _box.SetActive(true);
             if (_boxFrozen != null) _boxFrozen.SetActive(false);
             if (_frozenExplosionEffect != null) _frozenExplosionEffect.SetActive(false);
+        }
+
+        private void PlayFrozenBreakEffect()
+        {
+            if (_frozenExplosionEffect != null)
+            {
+                CacheFrozenEffectTransform();
+                Vector3 worldPosition = _frozenExplosionEffect.transform.position;
+                Quaternion worldRotation = _frozenExplosionEffect.transform.rotation;
+                _frozenExplosionEffect.transform.SetParent(transform, true);
+                _frozenExplosionEffect.transform.SetPositionAndRotation(worldPosition, worldRotation);
+                _frozenExplosionEffect.SetActive(false);
+                _frozenExplosionEffect.SetActive(true);
+                var particles = _frozenExplosionEffect.GetComponentsInChildren<ParticleSystem>(true);
+                for (int i = 0; i < particles.Length; i++)
+                    particles[i].Play(true);
+            }
+
+            transform.DOPunchScale(Vector3.one * 0.14f, 0.26f, 8, 0.72f);
+            transform.DOShakeRotation(0.22f, new Vector3(0f, 8f, 0f), 8, 55f);
+        }
+
+        private void ApplyFrozenMaterialFallback(GameObject root)
+        {
+            if (root == null) return;
+            Material mat = _frozenBoxMaterial != null ? _frozenBoxMaterial : GetOrCreateFrozenFallbackMaterial();
+            if (mat == null) return;
+
+            var renderers = root.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null) continue;
+                Material[] shared = r.sharedMaterials;
+                bool changed = false;
+                for (int j = 0; j < shared.Length; j++)
+                {
+                    if (!NeedsFrozenMaterial(shared[j])) continue;
+                    shared[j] = mat;
+                    changed = true;
+                }
+
+                if (!changed) continue;
+                if (!_frozenMaterialRestore.ContainsKey(r))
+                    _frozenMaterialRestore[r] = r.sharedMaterials;
+                r.sharedMaterials = shared;
+            }
+        }
+
+        private void RestoreFrozenMaterialFallback()
+        {
+            foreach (var kvp in _frozenMaterialRestore)
+            {
+                if (kvp.Key != null)
+                    kvp.Key.sharedMaterials = kvp.Value;
+            }
+            _frozenMaterialRestore.Clear();
+        }
+
+        private void CacheFrozenEffectTransform()
+        {
+            if (_frozenExplosionEffect == null || _frozenEffectTransformCached) return;
+            Transform t = _frozenExplosionEffect.transform;
+            _frozenEffectOriginalParent = t.parent;
+            _frozenEffectOriginalLocalPosition = t.localPosition;
+            _frozenEffectOriginalLocalRotation = t.localRotation;
+            _frozenEffectTransformCached = true;
+        }
+
+        private void RestoreFrozenEffectTransform()
+        {
+            if (_frozenExplosionEffect == null || !_frozenEffectTransformCached) return;
+            Transform t = _frozenExplosionEffect.transform;
+            t.SetParent(_frozenEffectOriginalParent, false);
+            t.localPosition = _frozenEffectOriginalLocalPosition;
+            t.localRotation = _frozenEffectOriginalLocalRotation;
+        }
+
+        private static bool NeedsFrozenMaterial(Material mat)
+        {
+            if (mat == null) return true;
+            string n = mat.name;
+            return n.Contains("Default")
+                || n.Contains("BoxBodyShared")
+                || n.Contains("BoxLidShared")
+                || n.Contains("PaintBox");
+        }
+
+        private static Material _runtimeFrozenFallbackMaterial;
+        private static Material GetOrCreateFrozenFallbackMaterial()
+        {
+            if (_runtimeFrozenFallbackMaterial != null) return _runtimeFrozenFallbackMaterial;
+
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit")
+                ?? Shader.Find("Universal Render Pipeline/Simple Lit")
+                ?? Shader.Find("Standard");
+            if (shader == null) return null;
+
+            var mat = new Material(shader)
+            {
+                name = "RuntimeFrozenBoxFallback",
+                hideFlags = HideFlags.HideAndDontSave,
+                enableInstancing = true
+            };
+            Color ice = new Color(0.46f, 0.86f, 1f, 0.92f);
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", ice);
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", ice);
+            if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.05f);
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.82f);
+            if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", new Color(0.1f, 0.55f, 0.8f) * 0.45f);
+            _runtimeFrozenFallbackMaterial = mat;
+            return _runtimeFrozenFallbackMaterial;
         }
 
         #endregion

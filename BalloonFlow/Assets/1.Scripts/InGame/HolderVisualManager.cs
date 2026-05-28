@@ -52,6 +52,11 @@ namespace BalloonFlow
         private const float RATIO_RAIL_TO_QUEUE   = 0.65f;    // 필드 폭 × 보관함 거리
 
         private const float CHAIN_LINE_WIDTH      = 0.30f;   // Chain line thickness. Previous value was 0.15f.
+        private const float CHAIN_LINE_Y_OFFSET   = 1.05f;
+        private const float CHAIN_LINE_EDGE_RATIO = 0.34f;
+        private const float CHAIN_LINE_MIN_LENGTH = 0.45f;
+        private const float PIPE_INNER_Z_OFFSET   = 0.38f;
+        private const float PIPE_INNER_SCALE      = 0.86f;
 
         #endregion
 
@@ -459,6 +464,7 @@ namespace BalloonFlow
                 ReturnHolderToPool(visual);
                 _holderVisuals.Remove(holderId);
                 RepositionColumnHolders(col);
+                RebuildChainLines();
                 return;
             }
 
@@ -484,6 +490,7 @@ namespace BalloonFlow
 
             ReturnHolderToPool(visual);
             _holderVisuals.Remove(holderId);
+            RebuildChainLines();
         }
 
         /// <summary>
@@ -769,6 +776,7 @@ namespace BalloonFlow
                 if (colHolders[row].gameObject == null) continue;
 
                 Vector3 targetPos;
+                bool insideSpawner = row > 0 && spawnerCount > 0;
                 if (row == 0)
                 {
                     // 앞줄: 정상 위치
@@ -777,17 +785,15 @@ namespace BalloonFlow
                 else if (spawnerCount > 0)
                 {
                     // Spawner보다 살짝 앞에 배치
-                    targetPos = spawnerPos + new Vector3(0f, 0f, 0.3f);
+                    targetPos = spawnerPos + new Vector3(0f, 0f, 0.3f - PIPE_INNER_Z_OFFSET * (row - 1));
                 }
                 else
                 {
                     targetPos = CalculateQueuePosition(column, row);
                 }
 
-                bool insideSpawner = row > 0 && spawnerCount > 0;
-
                 colHolders[row].gameObject.transform.DOKill(false);
-                colHolders[row].gameObject.transform.localScale = Vector3.one;
+                colHolders[row].gameObject.transform.localScale = insideSpawner ? Vector3.one * PIPE_INNER_SCALE : Vector3.one;
 
                 // Spawner 안 대기: TEXT 숨김 / 앞줄: TEXT 보이기
                 if (colHolders[row].magazineText != null)
@@ -1899,6 +1905,7 @@ namespace BalloonFlow
 
             // Reposition remaining holders in this column
             RepositionColumnHolders(col);
+            RebuildChainLines();
         }
 
         #endregion
@@ -1911,29 +1918,108 @@ namespace BalloonFlow
             ClearChainLines();
             if (!HolderManager.HasInstance) return;
 
-            var processed = new HashSet<string>();
+            var processedGroups = new HashSet<int>();
             foreach (var kvp in _holderVisuals)
             {
                 var hData = HolderManager.Instance.FindHolderPublic(kvp.Value.holderId);
                 if (hData == null || hData.chainGroupId < 0 || hData.isConsumed) continue;
+                if (!processedGroups.Add(hData.chainGroupId)) continue;
 
                 var members = HolderManager.Instance.GetChainGroup(hData.chainGroupId);
-                for (int i = 0; i < members.Count; i++)
+                CreateMinimalChainLines(members);
+            }
+        }
+
+        private struct ChainEdge
+        {
+            public int idA;
+            public int idB;
+            public float sqrDistance;
+        }
+
+        private readonly List<HolderVisual> _chainGroupVisuals = new List<HolderVisual>();
+        private readonly List<ChainEdge> _chainCandidateEdges = new List<ChainEdge>();
+
+        private void CreateMinimalChainLines(List<int> members)
+        {
+            _chainGroupVisuals.Clear();
+            _chainCandidateEdges.Clear();
+
+            for (int i = 0; i < members.Count; i++)
+            {
+                int id = members[i];
+                if (_holderVisuals.TryGetValue(id, out HolderVisual visual) && visual.gameObject != null)
+                    _chainGroupVisuals.Add(visual);
+            }
+            if (_chainGroupVisuals.Count < 2) return;
+
+            for (int i = 0; i < _chainGroupVisuals.Count; i++)
+            {
+                for (int j = i + 1; j < _chainGroupVisuals.Count; j++)
                 {
-                    for (int j = i + 1; j < members.Count; j++)
+                    Vector3 a = _chainGroupVisuals[i].gameObject.transform.position;
+                    Vector3 b = _chainGroupVisuals[j].gameObject.transform.position;
+                    Vector2 flat = new Vector2(a.x - b.x, a.z - b.z);
+                    _chainCandidateEdges.Add(new ChainEdge
                     {
-                        int idA = members[i], idB = members[j];
-                        string key = idA < idB ? $"{idA}_{idB}" : $"{idB}_{idA}";
-                        if (processed.Contains(key)) continue;
-                        processed.Add(key);
-
-                        if (!_holderVisuals.TryGetValue(idA, out HolderVisual vA) || vA.gameObject == null) continue;
-                        if (!_holderVisuals.TryGetValue(idB, out HolderVisual vB) || vB.gameObject == null) continue;
-
-                        CreateChainLine(key, vA, vB);
-                    }
+                        idA = _chainGroupVisuals[i].holderId,
+                        idB = _chainGroupVisuals[j].holderId,
+                        sqrDistance = flat.sqrMagnitude
+                    });
                 }
             }
+
+            _chainCandidateEdges.Sort((a, b) =>
+            {
+                int dist = a.sqrDistance.CompareTo(b.sqrDistance);
+                if (dist != 0) return dist;
+                int minA = Mathf.Min(a.idA, a.idB);
+                int minB = Mathf.Min(b.idA, b.idB);
+                if (minA != minB) return minA.CompareTo(minB);
+                return Mathf.Max(a.idA, a.idB).CompareTo(Mathf.Max(b.idA, b.idB));
+            });
+
+            var parent = new Dictionary<int, int>(_chainGroupVisuals.Count);
+            for (int i = 0; i < _chainGroupVisuals.Count; i++)
+                parent[_chainGroupVisuals[i].holderId] = _chainGroupVisuals[i].holderId;
+
+            int created = 0;
+            for (int i = 0; i < _chainCandidateEdges.Count && created < _chainGroupVisuals.Count - 1; i++)
+            {
+                var edge = _chainCandidateEdges[i];
+                if (!UnionChain(parent, edge.idA, edge.idB)) continue;
+
+                if (!_holderVisuals.TryGetValue(edge.idA, out HolderVisual vA) || vA.gameObject == null) continue;
+                if (!_holderVisuals.TryGetValue(edge.idB, out HolderVisual vB) || vB.gameObject == null) continue;
+
+                string key = edge.idA < edge.idB ? $"{edge.idA}_{edge.idB}" : $"{edge.idB}_{edge.idA}";
+                CreateChainLine(key, vA, vB);
+                created++;
+            }
+        }
+
+        private static int FindChainRoot(Dictionary<int, int> parent, int id)
+        {
+            int root = id;
+            while (parent[root] != root)
+                root = parent[root];
+
+            while (parent[id] != id)
+            {
+                int next = parent[id];
+                parent[id] = root;
+                id = next;
+            }
+            return root;
+        }
+
+        private static bool UnionChain(Dictionary<int, int> parent, int a, int b)
+        {
+            int rootA = FindChainRoot(parent, a);
+            int rootB = FindChainRoot(parent, b);
+            if (rootA == rootB) return false;
+            parent[rootB] = rootA;
+            return true;
         }
 
         // 모든 ChainLine 이 공유하는 단일 Material. LineRenderer.startColor/endColor 가
@@ -1978,6 +2064,8 @@ namespace BalloonFlow
             lrA.startWidth = CHAIN_LINE_WIDTH;
             lrA.endWidth = CHAIN_LINE_WIDTH;
             lrA.useWorldSpace = true;
+            lrA.alignment = LineAlignment.View;
+            lrA.numCapVertices = 4;
             lrA.sortingOrder = 5;
             lrA.startColor = colorA;
             lrA.endColor = colorA;
@@ -1991,6 +2079,8 @@ namespace BalloonFlow
             lrB.startWidth = CHAIN_LINE_WIDTH;
             lrB.endWidth = CHAIN_LINE_WIDTH;
             lrB.useWorldSpace = true;
+            lrB.alignment = LineAlignment.View;
+            lrB.numCapVertices = 4;
             lrB.sortingOrder = 5;
             lrB.startColor = colorB;
             lrB.endColor = colorB;
@@ -2039,14 +2129,20 @@ namespace BalloonFlow
 
                 Vector3 baseA = vA.gameObject.transform.position;
                 Vector3 baseB = vB.gameObject.transform.position;
-                Vector3 dirAtoB = (baseB - baseA).normalized;
+                Vector3 flatDelta = new Vector3(baseB.x - baseA.x, 0f, baseB.z - baseA.z);
+                float planarDistance = flatDelta.magnitude;
+                Vector3 dirAtoB = planarDistance > 0.001f ? flatDelta / planarDistance : Vector3.right;
                 // [2026-05-19] Chain 연결점 = 보관함 띠 가장자리 (중앙→중앙 X, 우측 중앙→좌측 중앙 O).
-                // 0.4f 고정값 → _columnSpacing 의 절반 = 열 경계 = 띠 가장자리.
-                float edgeOffset = _columnSpacing * 0.5f;
-                Vector3 sideOffset = new Vector3(dirAtoB.x, 0f, dirAtoB.z).normalized * edgeOffset;
+                // Same-row adjacent holders collapse to a zero-length line if the offset is half spacing,
+                // so keep a visible bridge segment between the two edges.
+                float spacingBase = Mathf.Min(_columnSpacing, _rowSpacing);
+                float edgeOffset = Mathf.Min(spacingBase * CHAIN_LINE_EDGE_RATIO, planarDistance * CHAIN_LINE_EDGE_RATIO);
+                float maxEdgeOffset = Mathf.Max(0f, (planarDistance - CHAIN_LINE_MIN_LENGTH) * 0.5f);
+                edgeOffset = Mathf.Min(edgeOffset, maxEdgeOffset);
+                Vector3 sideOffset = dirAtoB * edgeOffset;
 
-                Vector3 posA = baseA + Vector3.up * 0.8f + sideOffset;
-                Vector3 posB = baseB + Vector3.up * 0.8f - sideOffset;
+                Vector3 posA = baseA + Vector3.up * CHAIN_LINE_Y_OFFSET + sideOffset;
+                Vector3 posB = baseB + Vector3.up * CHAIN_LINE_Y_OFFSET - sideOffset;
                 Vector3 mid = (posA + posB) * 0.5f;
 
                 if (cache.lrA != null) { cache.lrA.SetPosition(0, posA); cache.lrA.SetPosition(1, mid); }
@@ -2066,6 +2162,7 @@ namespace BalloonFlow
                 if (kvp.Value != null) Destroy(kvp.Value);
             }
             _chainLines.Clear();
+            _chainCache.Clear();
         }
 
         #endregion
@@ -2151,6 +2248,9 @@ namespace BalloonFlow
             if (visual.identifier != null)
                 visual.identifier.SetFrozen(false);
 
+            if (visual.gameObject != null)
+                visual.gameObject.transform.DOPunchScale(Vector3.one * 0.16f, 0.28f, 8, 0.75f);
+
             // 해동 시 텍스트를 탄창 수로 복원
             if (visual.magazineText != null)
                 visual.magazineText.SetText("{0}", visual.magazineRemaining);
@@ -2185,6 +2285,7 @@ namespace BalloonFlow
                     _holderVisuals.Remove(evt.holderId);
                     // Reposition holders in this column (fill the gap)
                     RepositionColumnHolders(col);
+                    RebuildChainLines();
                 });
         }
 
@@ -2196,6 +2297,16 @@ namespace BalloonFlow
             if (visual.identifier != null)
                 visual.identifier.TriggerHiddenEnd();
 
+            if (visual.magazineText != null)
+                visual.magazineText.SetText(string.Empty);
+
+            Transform tr = visual.gameObject != null ? visual.gameObject.transform : null;
+            if (tr != null)
+            {
+                tr.DOPunchScale(Vector3.one * 0.18f, 0.32f, 8, 0.78f);
+                tr.DOPunchRotation(new Vector3(0f, 10f, 0f), 0.28f, 6, 0.65f);
+            }
+
             // Hidden Material → 원래 색상 복원
             Color originalColor = GetColor(visual.color);
             if (visual.identifier != null && visual.identifier.HasColorRenderers)
@@ -2204,8 +2315,11 @@ namespace BalloonFlow
                 ApplyColorToRenderers(visual.gameObject, originalColor);
 
             // 텍스트도 "?" → 실제 탄창 수로 변경
-            if (visual.magazineText != null)
-                visual.magazineText.SetText("{0}", visual.magazineRemaining);
+            DOVirtual.DelayedCall(0.1f, () =>
+            {
+                if (visual.magazineText != null)
+                    visual.magazineText.SetText("{0}", visual.magazineRemaining);
+            });
         }
 
         private void HandleHolderClickAnim(OnHolderClickAnim evt)

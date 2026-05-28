@@ -42,8 +42,6 @@ namespace BalloonFlow
             _poolRoot = new GameObject("_PoolRoot").transform;
             _poolRoot.SetParent(transform);
 
-            bool hasDefinitions = false;
-
             if (_poolDefinitions != null)
             {
                 foreach (var def in _poolDefinitions)
@@ -51,16 +49,13 @@ namespace BalloonFlow
                     if (!string.IsNullOrEmpty(def.key) && def.prefab != null)
                     {
                         CreatePool(def.key, def.prefab, def.initialSize, def.autoExpand);
-                        hasDefinitions = true;
                     }
                 }
             }
 
-            // Fallback: auto-register pools from Resources/Prefabs/ if no definitions wired
-            if (!hasDefinitions)
-            {
-                AutoRegisterFromResources();
-            }
+            // Fallback: keep Resources/Prefabs/ defaults available even when a scene wires
+            // only a partial PoolDefinition list through the Inspector.
+            AutoRegisterFromResources();
         }
 
         #endregion
@@ -216,7 +211,8 @@ namespace BalloonFlow
                 new { key = "Lock",        path = "Prefabs/Lock",        initialSize = 5 },
                 // Gimmick visual variants (Lv.91+ unlock content)
                 new { key = "Baricade",    path = "Prefabs/Baricade",    initialSize = 5 },  // Barricade gimmick (destructible wall)
-                new { key = "IronBox",     path = "Prefabs/IronBox",     initialSize = 5 },  // Pinata_Box gimmick (Lv.161)
+                new { key = "IronBox",     path = "Prefabs/IronBox",     initialSize = 5 },  // Wall/IronWall visual
+                new { key = "paint",       path = "Prefabs/paint",       initialSize = 5 },  // Pinata_Box / Target Box visual
                 new { key = "WoodenBoard", path = "Prefabs/WoodenBoard", initialSize = 8 },  // Pin gimmick (Lv.61, 1×N progressive)
                 new { key = "FrozenLayer", path = "Prefabs/FrozenLayer", initialSize = 10 }, // Ice/Frozen_Dart overlay
                 new { key = "CircleParticle", path = "Prefabs/CircleParticle", initialSize = 30 }, // 풍선 pop 이펙트
@@ -224,6 +220,8 @@ namespace BalloonFlow
 
             foreach (var entry in defaultPools)
             {
+                if (_pools.ContainsKey(entry.key)) continue;
+
                 GameObject prefab = Resources.Load<GameObject>(entry.path);
                 if (prefab != null)
                 {

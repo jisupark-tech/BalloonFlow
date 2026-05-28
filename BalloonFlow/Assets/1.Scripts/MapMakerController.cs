@@ -66,8 +66,10 @@ namespace BalloonFlow
         // [ROLLBACK_LOCKKEY_DEPRECATE]
         // Lock_Key 기믹 dropdown 제거 — 새 레벨에서 사용 안 함. 기존 LevelData 호환은 BalloonController/HolderManager 에서 처리.
         // 풍선(필드) 기믹만
+        // [PIN_DEPRECATE] Pin 은 Barricade 로 통합(런타임 BalloonController:1171 에서 normalize) → 드롭다운에서 제거.
+        // 레거시 Pin 레벨은 로드 시 Barricade 로 매핑(아래 LoadLevel). 인덱스는 문자열로 해석되므로 시프트 안전.
         private static readonly string[] FIELD_GIMMICK_NAMES =
-            { "(none)", "Pinata", "Pin", "Surprise", "Wall", "Pinata_Box", "Ice", "Color_Curtain", "Barricade", "FlexTube" };
+            { "(none)", "Pinata", "Surprise", "Wall", "Pinata_Box", "Ice", "Color_Curtain", "Barricade", "FlexTube" };
 
         // 보관함(큐) 기믹만
         private static readonly string[] HOLDER_GIMMICK_NAMES =
@@ -77,7 +79,7 @@ namespace BalloonFlow
         // Field cells store FIELD_GIMMICK_NAMES indices, not legacy all-gimmick indices.
         // Keep preview labels in the exact same order as FIELD_GIMMICK_NAMES.
         private static readonly string[] FIELD_GIMMICK_MARKS =
-            { "", "Pi", "Pn", "?!", "W", "PB", "Ic", "CC", "Bc", "FT" };
+            { "", "Pi", "?!", "W", "PB", "Ic", "CC", "Ba", "FT" };
 
         private static readonly Color GIMMICK_WALL_COLOR  = new Color(0.35f, 0.35f, 0.38f);
         private static readonly Color GIMMICK_PIN_COLOR   = new Color(0.70f, 0.50f, 0.20f);
@@ -90,9 +92,24 @@ namespace BalloonFlow
 
         // ROLLBACK_BARRICADE_SIZED_FIELD_GIMMICK:
         // Barricade is authored as a single multi-cell field object, like Pinata/Pinata_Box.
+        // Wall도 multi-cell footprint(정사각 1/2/3) 지원 — 런타임은 이미 multi-cell wall 처리(BalloonController.IsSizedFieldGimmick에 Wall 포함).
         private static bool IsSizedFieldGimmick(string gimmickName)
         {
+            return gimmickName == "Pinata" || gimmickName == "Pinata_Box" || gimmickName == "Barricade" || gimmickName == "Wall";
+        }
+
+        // HP/Size(자유 W×H 1~6) 옵션이 의미 있는 sized 기믹 — Wall은 정사각 1/2/3 전용 row가 따로 있음.
+        private static bool NeedsPinataHpAndSize(string gimmickName)
+        {
             return gimmickName == "Pinata" || gimmickName == "Pinata_Box" || gimmickName == "Barricade";
+        }
+
+        // 배경색 밝기 기반 가독 텍스트 색. White(6) 등 밝은 셀 위 흰 글자가 안 보이는 문제 해결.
+        // Rec.601 luma > 0.6 이면 검정, 아니면 흰색.
+        private static Color ContrastTextColor(Color bg)
+        {
+            float luma = 0.299f * bg.r + 0.587f * bg.g + 0.114f * bg.b;
+            return luma > 0.6f ? Color.black : Color.white;
         }
 
         private const float LEFT_PANEL_WIDTH = 240f;
@@ -116,6 +133,12 @@ namespace BalloonFlow
         private int _activeTab = 0;
         private int _paintGimmick = 0;       // FIELD_GIMMICK_NAMES 인덱스
         private int _paintHolderGimmick = 0; // HOLDER_GIMMICK_NAMES 인덱스
+
+        // 큐/필드 기믹 paint 모드 — 색상·개수는 유지하고 기믹만 조작.
+        // Normal: 색상+기믹 동시 / GimmickOnly: 기존 셀에 기믹만 덮어쓰기 / GimmickErase: 기믹만 제거.
+        private enum GimmickPaintMode { Normal, GimmickOnly, GimmickErase }
+        private GimmickPaintMode _holderPaintMode = GimmickPaintMode.Normal;
+        private bool _fieldGimmickOnlyMode; // 필드: 색상 유지하고 기믹만 추가 (Surprise/Ice 등)
 
         private int _gridCols = 5;
         private int _gridRows = 5;
@@ -143,6 +166,7 @@ namespace BalloonFlow
         private int _paintPinataHP = 2;    // 브러시용 Piñata HP
         private int _paintPinataW = 1;     // 브러시용 Piñata 가로
         private int _paintPinataH = 1;     // 브러시용 Piñata 세로
+        private int _paintWallSize = 1;    // 브러시용 Wall 정사각 사이즈 (1/2/3) — Pinata 사이즈와 carryover 차단
         private int _paintChainGroup = 0;  // 브러시용 Chain 그룹 ID
         private int _nextChainGroupId = 1; // 자동 증가 Chain 그룹 ID
         private int _paintFrozenHP = 3;    // 브러시용 Frozen Dart 해동 체력
@@ -193,6 +217,7 @@ namespace BalloonFlow
         // Gimmick-specific UI rows (Balloon/Field brush)
         private RectTransform _fieldGimmickHPRow;
         private RectTransform _fieldGimmickSizeRow;
+        private RectTransform _fieldGimmickWallSizeRow;
         private RectTransform _fieldGimmickLockRow;
         private RectTransform _fieldGimmickChainRow;
         private RectTransform _fieldGimmickFrozenRow;
@@ -1130,6 +1155,16 @@ namespace BalloonFlow
                 SetStatus($"Field Gimmick: {name}");
             });
 
+            // 필드 기믹만 모드 토글 — ON 이면 풍선 색상 유지하고 기믹만 덮어쓰기 (Surprise/Ice 등).
+            var fieldModeRow = Row(p); Lbl(fieldModeRow, "Paint Mode", w: 110);
+            Button fieldModeBtn = null;
+            fieldModeBtn = Btn(fieldModeRow, _fieldGimmickOnlyMode ? "기믹만 추가" : "색상+기믹", () => {
+                _fieldGimmickOnlyMode = !_fieldGimmickOnlyMode;
+                var tt = fieldModeBtn.GetComponentInChildren<Text>();
+                if (tt != null) tt.text = _fieldGimmickOnlyMode ? "기믹만 추가" : "색상+기믹";
+                SetStatus(_fieldGimmickOnlyMode ? "필드: 기믹만 추가 (색상 유지)" : "필드: 색상+기믹");
+            });
+
             // Piñata HP (shown for Pinata/Pinata_Box)
             var hpRow = Row(p); Lbl(hpRow, "Piñata HP", w: 110);
             MakeIntField(hpRow, _paintPinataHP, 1, 50, v => {
@@ -1150,6 +1185,25 @@ namespace BalloonFlow
                 SetStatus($"Piñata Size: {_paintPinataW}x{_paintPinataH}");
             });
             _fieldGimmickSizeRow = sizeRow.GetComponent<RectTransform>();
+
+            // Wall Size (Wall 전용 — 정사각 1×1 / 2×2 / 3×3). Pinata와 별도 row로 분리해 자유 W×H 옵션과 혼동을 피함.
+            // 선택 시 _paintPinataW = _paintPinataH = N 으로 기록 → 기존 sized 페인트 경로(앵커 + footprint) 재사용.
+            var wallSizeRow = Row(p); Lbl(wallSizeRow, "Wall Size", w: 110);
+            var wallDD = DefaultControls.CreateDropdown(_uiRes);
+            wallDD.transform.SetParent(wallSizeRow, false);
+            var wsLE = wallDD.AddComponent<LayoutElement>(); wsLE.flexibleWidth = 1; wsLE.preferredHeight = 24;
+            wallDD.GetComponent<Image>().color = new Color(0.16f, 0.16f, 0.20f);
+            var wsdd = wallDD.GetComponent<Dropdown>();
+            wsdd.ClearOptions();
+            wsdd.AddOptions(new List<string> { "1×1", "2×2", "3×3" });
+            int initWallIdx = (_paintWallSize >= 1 && _paintWallSize <= 3) ? _paintWallSize - 1 : 0;
+            wsdd.value = initWallIdx;
+            wsdd.captionText.font = _font; wsdd.captionText.fontSize = 12; wsdd.captionText.color = Color.white;
+            wsdd.onValueChanged.AddListener(v => {
+                _paintWallSize = v + 1; // 0→1, 1→2, 2→3
+                SetStatus($"Wall Size: {_paintWallSize}×{_paintWallSize}");
+            });
+            _fieldGimmickWallSizeRow = wallSizeRow.GetComponent<RectTransform>();
 
             // Lock_Key pair ID (Field — Key 풍선용)
             var lockRow = Row(p); Lbl(lockRow, "Lock PairId", w: 110);
@@ -1190,6 +1244,7 @@ namespace BalloonFlow
             // Initially hide all gimmick-specific rows (none selected)
             _fieldGimmickHPRow.gameObject.SetActive(false);
             _fieldGimmickSizeRow.gameObject.SetActive(false);
+            _fieldGimmickWallSizeRow.gameObject.SetActive(false);
             _fieldGimmickLockRow.gameObject.SetActive(false);
             _fieldGimmickFlexTubeRow.gameObject.SetActive(false);
             if (_flexTubeStatusText != null) _flexTubeStatusText.gameObject.SetActive(false);
@@ -1199,11 +1254,14 @@ namespace BalloonFlow
 
         private void UpdateFieldGimmickUI(string gimmickName)
         {
-            bool isSizedFieldGimmick = IsSizedFieldGimmick(gimmickName);
+            // Pinata 계열(자유 W×H + HP)과 Wall(정사각 1/2/3) 은 별도 row 로 분기.
+            bool needsPinataHpSize = NeedsPinataHpAndSize(gimmickName);
+            bool isWall = gimmickName == "Wall";
             bool isLockKey = gimmickName == "Lock_Key";
             bool isFlexTube = gimmickName == "FlexTube";
-            if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(isSizedFieldGimmick);
-            if (_fieldGimmickSizeRow != null) _fieldGimmickSizeRow.gameObject.SetActive(isSizedFieldGimmick);
+            if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(needsPinataHpSize);
+            if (_fieldGimmickSizeRow != null) _fieldGimmickSizeRow.gameObject.SetActive(needsPinataHpSize);
+            if (_fieldGimmickWallSizeRow != null) _fieldGimmickWallSizeRow.gameObject.SetActive(isWall);
             if (_fieldGimmickLockRow != null) _fieldGimmickLockRow.gameObject.SetActive(isLockKey);
             if (_fieldGimmickFlexTubeRow != null) _fieldGimmickFlexTubeRow.gameObject.SetActive(isFlexTube);
             if (_flexTubeStatusText != null) _flexTubeStatusText.gameObject.SetActive(isFlexTube);
@@ -1339,6 +1397,17 @@ namespace BalloonFlow
                 _paintHolderGimmick = v;
                 UpdateHolderGimmickUI(HOLDER_GIMMICK_NAMES[v]);
                 SetStatus($"Holder Gimmick: {HOLDER_GIMMICK_NAMES[v]}");
+            });
+
+            // 큐 Paint 모드 토글 — 색상+기믹 / 기믹만 추가 / 기믹 제거 순환.
+            // GimmickOnly·GimmickErase 는 기존 다트박스의 색상·개수를 보존한 채 기믹만 조작.
+            var holderModeRow = Row(p); Lbl(holderModeRow, "Paint Mode", w: 110);
+            Button holderModeBtn = null;
+            holderModeBtn = Btn(holderModeRow, HolderPaintModeLabel(), () => {
+                _holderPaintMode = (GimmickPaintMode)(((int)_holderPaintMode + 1) % 3);
+                var tt = holderModeBtn.GetComponentInChildren<Text>();
+                if (tt != null) tt.text = HolderPaintModeLabel();
+                SetStatus($"큐 Paint Mode: {HolderPaintModeLabel()}");
             });
 
             // Chain 그룹 ID 설정
@@ -2272,25 +2341,7 @@ namespace BalloonFlow
                         btn.transform.SetParent(_holderGridContainer, false);
                         var t = btn.GetComponentInChildren<Text>();
                         t.font = _font; t.fontSize = 8; t.color = Color.white;
-                        btn.GetComponent<Button>().onClick.AddListener(() => {
-                            _holderColors[cc, rr] = _paintColor;
-                            _holderMags[cc, rr] = _paintColor >= 0 ? _defaultMag : 0;
-                            _holderGimmicks[cc, rr] = _paintColor >= 0 ? _paintHolderGimmick : 0;
-                            _holderChainGroups[cc, rr] = _paintColor >= 0 ? _paintChainGroup : -1;
-                            _holderFrozenHP[cc, rr] = _paintFrozenHP;
-                            bool isSpawnerGimmick = _paintHolderGimmick > 0 && _paintHolderGimmick < HOLDER_GIMMICK_NAMES.Length
-                                && (HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Spawner_T"
-                                 || HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Spawner_O");
-                            _holderSpawnerHP[cc, rr] = isSpawnerGimmick ? _paintSpawnerHP : 0;
-                            _holderSpawnerMag[cc, rr] = isSpawnerGimmick ? _paintSpawnerMag : 20;
-                            bool isLockKeyHolder = _paintHolderGimmick > 0 && _paintHolderGimmick < HOLDER_GIMMICK_NAMES.Length
-                                && HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Lock_Key";
-                            _holderLockPairIds[cc, rr] = isLockKeyHolder ? _paintLockPairId : -1;
-                            UpdateHolderButton(cc, rr);
-                            // Generate 결과가 수동 변경됨 — Confirm 무효화 (§8 수동 조정 후 재검증)
-                            SetQueueConfirmReady(false);
-                            _infoDirty = true;
-                        });
+                        btn.GetComponent<Button>().onClick.AddListener(() => PaintHolderCell(cc, rr));
                         _holderButtonPool[c, r] = btn;
                     }
 
@@ -2303,6 +2354,75 @@ namespace BalloonFlow
                     UpdateHolderButton(c, r);
         }
 
+        private string HolderPaintModeLabel()
+        {
+            switch (_holderPaintMode)
+            {
+                case GimmickPaintMode.GimmickOnly:  return "기믹만 추가";
+                case GimmickPaintMode.GimmickErase: return "기믹 제거";
+                default:                            return "색상+기믹";
+            }
+        }
+
+        /// <summary>
+        /// 큐 셀 paint — _holderPaintMode 에 따라 색상+기믹 / 기믹만 / 기믹제거 분기.
+        /// GimmickOnly·GimmickErase 는 색상·개수(magazineCount) 를 보존한다.
+        /// </summary>
+        private void PaintHolderCell(int cc, int rr)
+        {
+            switch (_holderPaintMode)
+            {
+                case GimmickPaintMode.GimmickErase:
+                    // 색상/개수 유지, 배치된 기믹만 제거.
+                    ClearHolderGimmick(cc, rr);
+                    break;
+
+                case GimmickPaintMode.GimmickOnly:
+                    // 색상 있는 셀에만 기믹 덮어쓰기 (색상·개수 보존). 빈 셀은 무시.
+                    if (_holderColors[cc, rr] >= 0)
+                        ApplyHolderGimmick(cc, rr);
+                    break;
+
+                default: // Normal — 색상+개수+기믹 동시 설정 (기존 동작)
+                    _holderColors[cc, rr] = _paintColor;
+                    _holderMags[cc, rr] = _paintColor >= 0 ? _defaultMag : 0;
+                    if (_paintColor >= 0) ApplyHolderGimmick(cc, rr);
+                    else ClearHolderGimmick(cc, rr);
+                    break;
+            }
+            UpdateHolderButton(cc, rr);
+            // Generate 결과가 수동 변경됨 — Confirm 무효화 (§8 수동 조정 후 재검증)
+            SetQueueConfirmReady(false);
+            _infoDirty = true;
+        }
+
+        /// <summary>현재 브러시 기믹 + 부속 파라미터를 큐 셀에 적용 (색상/개수는 안 건드림).</summary>
+        private void ApplyHolderGimmick(int cc, int rr)
+        {
+            _holderGimmicks[cc, rr] = _paintHolderGimmick;
+            _holderChainGroups[cc, rr] = _paintChainGroup;
+            _holderFrozenHP[cc, rr] = _paintFrozenHP;
+            bool isSpawnerGimmick = _paintHolderGimmick > 0 && _paintHolderGimmick < HOLDER_GIMMICK_NAMES.Length
+                && (HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Spawner_T"
+                 || HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Spawner_O");
+            _holderSpawnerHP[cc, rr] = isSpawnerGimmick ? _paintSpawnerHP : 0;
+            _holderSpawnerMag[cc, rr] = isSpawnerGimmick ? _paintSpawnerMag : 20;
+            bool isLockKeyHolder = _paintHolderGimmick > 0 && _paintHolderGimmick < HOLDER_GIMMICK_NAMES.Length
+                && HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Lock_Key";
+            _holderLockPairIds[cc, rr] = isLockKeyHolder ? _paintLockPairId : -1;
+        }
+
+        /// <summary>큐 셀의 기믹 부속 데이터를 기본값으로 리셋 (색상/개수는 유지).</summary>
+        private void ClearHolderGimmick(int cc, int rr)
+        {
+            _holderGimmicks[cc, rr] = 0;
+            _holderChainGroups[cc, rr] = -1;
+            _holderFrozenHP[cc, rr] = _paintFrozenHP;
+            _holderSpawnerHP[cc, rr] = 0;
+            _holderSpawnerMag[cc, rr] = 20;
+            _holderLockPairIds[cc, rr] = -1;
+        }
+
         private void UpdateHolderButton(int c, int r)
         {
             if (_holderButtonPool == null || c >= _holderButtonPool.GetLength(0) || r >= _holderButtonPool.GetLength(1)) return;
@@ -2310,8 +2430,10 @@ namespace BalloonFlow
             if (btn == null) return;
             int ci = _holderColors[c, r];
             int gi = _holderGimmicks[c, r];
-            btn.GetComponent<Image>().color = (ci >= 0 && ci < PALETTE.Length) ? PALETTE[ci] : new Color(0.22f, 0.22f, 0.26f);
+            Color cellBg = (ci >= 0 && ci < PALETTE.Length) ? PALETTE[ci] : new Color(0.22f, 0.22f, 0.26f);
+            btn.GetComponent<Image>().color = cellBg;
             var t = btn.GetComponentInChildren<Text>();
+            t.color = ContrastTextColor(cellBg);
             string gimmickMark = (gi > 0 && gi < HOLDER_GIMMICK_NAMES.Length) ? HOLDER_GIMMICK_NAMES[gi].Substring(0, System.Math.Min(2, HOLDER_GIMMICK_NAMES[gi].Length)) : "";
             int chainGrp = _holderChainGroups[c, r];
             string chainMark = chainGrp > 0 ? $"C{chainGrp}" : "";
@@ -2525,7 +2647,7 @@ namespace BalloonFlow
             var le = go.AddComponent<LayoutElement>(); le.preferredWidth = 34; le.preferredHeight = 34;
             go.GetComponent<Image>().color = color;
             var t = go.GetComponentInChildren<Text>();
-            t.text = label; t.font = _font; t.fontSize = 14; t.fontStyle = FontStyle.Bold; t.color = Color.white;
+            t.text = label; t.font = _font; t.fontSize = 14; t.fontStyle = FontStyle.Bold; t.color = ContrastTextColor(color);
             go.GetComponent<Button>().onClick.AddListener(() => cb?.Invoke());
             return go.GetComponent<Button>();
         }
@@ -2636,7 +2758,7 @@ namespace BalloonFlow
                 string gn = FIELD_GIMMICK_NAMES[gimmickIndex];
                 if (gn == "Wall") return GIMMICK_WALL_COLOR;
                 if (gn == "Pin") return GIMMICK_PIN_COLOR;
-                if (gn == "Ice") return GIMMICK_ICE_COLOR;
+                // Ice / Barricade 는 색상값 있는 기믹 — 풍선 색상 그대로 표시 (약자 라벨로 기믹 구분).
                 if (gn == "Hidden") return GIMMICK_HIDDEN_COLOR;
                 if (gn == "Pinata" || gn == "Pinata_Box") return GIMMICK_PINATA_COLOR;
             }
@@ -2684,9 +2806,9 @@ namespace BalloonFlow
                     tm.fontSize = 32;
                     tm.alignment = TextAlignment.Center;
                     tm.anchor = TextAnchor.MiddleCenter;
-                    tm.color = Color.white;
                     _previewLabels[c, r] = tm;
                 }
+                tm.color = ContrastTextColor(GetPreviewColor(ci, gi));
                 tm.transform.position = new Vector3(wx, 1.2f, wz);
                 tm.characterSize = BalloonScale * 0.35f;
                 tm.text = FIELD_GIMMICK_MARKS[gi];
@@ -2805,7 +2927,9 @@ namespace BalloonFlow
                     int gi = _balloonGimmicks[c, r];
                     bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
                         && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
-                    if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
+                    // Pinata_Box 는 알마다 색/HP 가 달라 각 셀(알)을 카운트. 그 외 sized 는 anchor 1개만.
+                    bool countEggCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && FIELD_GIMMICK_NAMES[gi] == "Pinata_Box";
+                    if (isSizedFieldCell && _balloonPinataW[c, r] == 0 && !countEggCell) continue;
                     totalDarts++;
                 }
             int capacity = _railSlotCount > 0 ? _railSlotCount : RailManager.CalculateCapacity(totalDarts);
@@ -3437,6 +3561,26 @@ namespace BalloonFlow
                         return;
                     }
 
+                    // 필드 기믹만 모드 — 기존 풍선 색상 유지하고 기믹만 추가 (Surprise/Ice 등).
+                    // 빈 셀(색상 없음)은 무시. sized/FlexTube 기믹은 단순 set (anchor 1×1).
+                    if (_fieldGimmickOnlyMode && mouse.leftButton.isPressed)
+                    {
+                        if (_balloonColors[col, row] >= 0)
+                        {
+                            _balloonGimmicks[col, row] = _paintGimmick;
+                            _balloonLockPairIds[col, row] = -1;
+                            _balloonFlexTubeGroupId[col, row] = -1;
+                            _balloonFlexTubeSequenceIndex[col, row] = -1;
+                            UpdatePreviewCell(col, row);
+                            _infoDirty = true;
+                        }
+                        else if (leftDown)
+                        {
+                            SetStatus($"빈 셀 — 기믹만 추가는 색상 있는 셀에만 ({col},{row})");
+                        }
+                        return;
+                    }
+
                     if (_eraseNeighborMode && leftDown)
                     {
                         EraseNeighborSameColor(col, row);
@@ -3482,9 +3626,25 @@ namespace BalloonFlow
                                 _infoDirty = true;
                             }
                         }
+                        else if (isSizedFieldGimmick && _paintColor >= 0
+                                 && FIELD_GIMMICK_NAMES[_paintGimmick] == "Pinata_Box"
+                                 && _balloonGimmicks[col, row] == _paintGimmick
+                                 && _balloonPinataW[col, row] == 0)
+                        {
+                            // Target Box 셀별 알 편집 — 기존 박스의 *비앵커(내부)* 셀 클릭 시 그 알 색/HP 만 갱신.
+                            // (앵커/빈 칸 클릭은 아래 footprint 분기로 → 새 박스 생성·리사이즈 가능. 1칸 고정 버그 방지.)
+                            _balloonColors[col, row] = _paintColor;
+                            _balloonGimmickHP[col, row] = _paintPinataHP;
+                            UpdatePreviewCell(col, row);
+                            _infoDirty = true;
+                            SetStatus($"Target Box 알 셀 ({col},{row}) → 색 {_paintColor}, HP {_paintPinataHP}");
+                        }
                         else if (isSizedFieldGimmick && _paintColor >= 0)
                         {
-                            int pw = _paintPinataW, ph = _paintPinataH;
+                            // Wall 은 정사각 _paintWallSize(1/2/3) 사용 — Pinata 자유 W×H 와 분리해 carryover 방지.
+                            bool isWallSized = FIELD_GIMMICK_NAMES[_paintGimmick] == "Wall";
+                            int pw = isWallSized ? _paintWallSize : _paintPinataW;
+                            int ph = isWallSized ? _paintWallSize : _paintPinataH;
                             // 범위 내 셀에 같은 색 + Piñata 기믹으로 채움 (프리뷰에서 영역 표시)
                             for (int dx = 0; dx < pw; dx++)
                                 for (int dy = 0; dy < ph; dy++)
@@ -3849,13 +4009,15 @@ namespace BalloonFlow
         {
             if (gimmickIndex <= 0 || gimmickIndex >= FIELD_GIMMICK_NAMES.Length) return 1;
             string g = FIELD_GIMMICK_NAMES[gimmickIndex];
+            // Wall/Pin/Ice 는 직접 hit 불가 → 다트 0개. Wall 이 sized(multi-cell) 라도 HP 산정에선 제외하므로
+            // IsSizedFieldGimmick HP 분기보다 먼저 처리한다 (Wall 편입 후 회귀 방지).
+            if (g == "Wall" || g == "Pin" || g == "Ice") return 0;
             if (IsSizedFieldGimmick(g))
             {
                 // 실제 HP 사용 (기본값 2)
                 int hp = (col >= 0 && row >= 0) ? _balloonGimmickHP[col, row] : 2;
                 return hp > 0 ? hp : 2;
             }
-            if (g == "Wall" || g == "Pin" || g == "Ice") return 0;
             return 1;
         }
 
@@ -3883,11 +4045,12 @@ namespace BalloonFlow
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] >= 0)
                     {
-                        // Piñata 비앵커 셀 스킵 (실제 풍선 아님)
+                        // Piñata 비앵커 셀 스킵 (실제 풍선 아님). 단 Pinata_Box 는 알마다 색/HP 달라 각 셀 카운트.
                         int gi = _balloonGimmicks[c, r];
                         bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
                             && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
-                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
+                        bool countEggCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && FIELD_GIMMICK_NAMES[gi] == "Pinata_Box";
+                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0 && !countEggCell) continue;
 
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
@@ -4027,7 +4190,8 @@ namespace BalloonFlow
                         int gi = _balloonGimmicks[c, r];
                         bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
                             && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
-                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
+                        bool countEggCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && FIELD_GIMMICK_NAMES[gi] == "Pinata_Box";
+                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0 && !countEggCell) continue;
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
                         needed[ci] = (needed.ContainsKey(ci) ? needed[ci] : 0) + life;
@@ -4125,7 +4289,8 @@ namespace BalloonFlow
                         int gi = _balloonGimmicks[c, r];
                         bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
                             && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
-                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
+                        bool countEggCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && FIELD_GIMMICK_NAMES[gi] == "Pinata_Box";
+                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0 && !countEggCell) continue;
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
                         colorDarts[ci] = (colorDarts.ContainsKey(ci) ? colorDarts[ci] : 0) + life;
@@ -5314,14 +5479,17 @@ namespace BalloonFlow
                     {
                         _balloonColors[col, row] = b.color;
                         int gi = 0;
-                        if (!string.IsNullOrEmpty(b.gimmickType))
+                        string normalizedGimmick = GimmickDisplayName.Normalize(b.gimmickType);
+                        // [PIN_DEPRECATE] 레거시 Pin → Barricade (런타임 normalize 와 동일). Pin 은 드롭다운에서 제거됨.
+                        if (normalizedGimmick == "Pin") normalizedGimmick = "Barricade";
+                        if (!string.IsNullOrEmpty(normalizedGimmick))
                             for (int g = 0; g < FIELD_GIMMICK_NAMES.Length; g++)
-                                if (FIELD_GIMMICK_NAMES[g] == b.gimmickType) { gi = g; break; }
+                                if (FIELD_GIMMICK_NAMES[g] == normalizedGimmick) { gi = g; break; }
                         _balloonGimmicks[col, row] = gi;
                         _balloonGimmickHP[col, row] = b.hp > 0 ? b.hp : 2;
                         _balloonLockPairIds[col, row] = b.lockPairId;
                         // FlexTube 데이터는 gimmickType 이 실제 "FlexTube" 일 때만 복원 — 잔존 데이터 방지.
-                        bool isFlexTubeLoad = b.gimmickType == "FlexTube";
+                        bool isFlexTubeLoad = normalizedGimmick == "FlexTube";
                         _balloonFlexTubeGroupId[col, row] = isFlexTubeLoad ? b.flexTubeGroupId : -1;
                         _balloonFlexTubeSequenceIndex[col, row] = isFlexTubeLoad ? b.flexTubeSequenceIndex : -1;
                         if (isFlexTubeLoad && b.flexTubeGroupId >= _nextFlexTubeGroupId)
@@ -5332,7 +5500,27 @@ namespace BalloonFlow
                         int bph = b.sizeH > 0 ? b.sizeH : 1;
                         _balloonPinataW[col, row] = bpw;
                         _balloonPinataH[col, row] = bph;
-                        if (bpw > 1 || bph > 1)
+
+                        // Pinata_Box: 셀별 알 색/HP 복원 (anchor 포함 footprint 전체).
+                        bool isPinataBoxEggs = normalizedGimmick == "Pinata_Box"
+                            && b.eggColors != null && b.eggColors.Length == bpw * bph;
+                        if (isPinataBoxEggs)
+                        {
+                            for (int dy = 0; dy < bph; dy++)
+                                for (int dx = 0; dx < bpw; dx++)
+                                {
+                                    int cx = col + dx, cy = row + dy;
+                                    if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
+                                    int idx = dy * bpw + dx;
+                                    _balloonColors[cx, cy] = b.eggColors[idx];
+                                    _balloonGimmicks[cx, cy] = gi;
+                                    _balloonGimmickHP[cx, cy] = (b.eggHps != null && idx < b.eggHps.Length && b.eggHps[idx] > 0) ? b.eggHps[idx] : 1;
+                                    // 앵커만 sizeW/H 보유, 나머지는 0(비앵커 표시).
+                                    _balloonPinataW[cx, cy] = (dx == 0 && dy == 0) ? bpw : 0;
+                                    _balloonPinataH[cx, cy] = (dx == 0 && dy == 0) ? bph : 0;
+                                }
+                        }
+                        else if (bpw > 1 || bph > 1)
                         {
                             // 비앵커 셀에 같은 색+기믹, sizeW=0 (비앵커 표시)
                             for (int dx = 0; dx < bpw; dx++)
@@ -5377,7 +5565,10 @@ namespace BalloonFlow
                         _holderColors[hc, hr] = h.color;
                         _holderMags[hc, hr] = h.magazineCount;
                         // 보관함 기믹 복원
-                        int hgi = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, h.queueGimmick ?? "");
+                        string normalizedHolderGimmick = GimmickDisplayName.Normalize(h.queueGimmick);
+                        if (normalizedHolderGimmick == "none")
+                            normalizedHolderGimmick = "";
+                        int hgi = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, normalizedHolderGimmick);
                         _holderGimmicks[hc, hr] = hgi > 0 ? hgi : 0;
                         _holderChainGroups[hc, hr] = h.chainGroupId;
                         _holderFrozenHP[hc, hr] = h.frozenHP > 0 ? h.frozenHP : 3;
@@ -5763,6 +5954,26 @@ namespace BalloonFlow
                         }
                     }
 
+                    // Pinata_Box(Target Box): footprint 셀들의 색/HP 를 알 배열로 모음 (anchor 만 emit).
+                    int[] eggColors = null, eggHps = null;
+                    if (gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && FIELD_GIMMICK_NAMES[gi] == "Pinata_Box")
+                    {
+                        int bw = Mathf.Max(1, _balloonPinataW[c, r]);
+                        int bh = Mathf.Max(1, _balloonPinataH[c, r]);
+                        eggColors = new int[bw * bh];
+                        eggHps = new int[bw * bh];
+                        for (int dy = 0; dy < bh; dy++)
+                            for (int dx = 0; dx < bw; dx++)
+                            {
+                                int cx = c + dx, cy = r + dy;
+                                int idx = dy * bw + dx;
+                                bool inBounds = cx < _gridCols && cy < _gridRows;
+                                eggColors[idx] = inBounds ? _balloonColors[cx, cy] : _balloonColors[c, r];
+                                int cellHp = inBounds ? _balloonGimmickHP[cx, cy] : 0;
+                                eggHps[idx] = cellHp > 0 ? cellHp : 1;
+                            }
+                    }
+
                     balloons.Add(new BalloonLayout
                     {
                         balloonId = bid++, color = _balloonColors[c, r],
@@ -5773,6 +5984,8 @@ namespace BalloonFlow
                         sizeW = _balloonPinataW[c, r],
                         sizeH = _balloonPinataH[c, r],
                         hp = _balloonGimmickHP[c, r],
+                        eggColors = eggColors,
+                        eggHps = eggHps,
                         lockPairId = _balloonLockPairIds != null && c < _balloonLockPairIds.GetLength(0) && r < _balloonLockPairIds.GetLength(1)
                             ? _balloonLockPairIds[c, r] : -1,
                         flexTubeGroupId = ftGroupId,

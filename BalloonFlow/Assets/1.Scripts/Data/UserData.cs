@@ -56,6 +56,10 @@ namespace BalloonFlow
         [FirestoreProperty] public Dictionary<string, bool> purchasedOnce { get; set; } = new Dictionary<string, bool>();
         /// <summary>NPU = Non-Paying User. 첫 결제 후 false. Best Value Pack 노출 조건.</summary>
         [FirestoreProperty] public bool isNPU { get; set; } = true;
+        /// <summary>Lv.15 Zap unlock 후 실제 1회 사용 완료. Store Stage 2 노출 조건.</summary>
+        [FirestoreProperty] public bool zapTutorialCompleted { get; set; } = false;
+        /// <summary>첫 전면 광고 노출 경험. Store Stage 3 노출 조건.</summary>
+        [FirestoreProperty] public bool firstInterstitialShown { get; set; } = false;
         /// <summary>스페셜오퍼 마지막 노출 시각 (20분 쿨타임용). default = 미노출.</summary>
         [FirestoreProperty] public Timestamp lastSpecialOfferAt { get; set; }
 
@@ -106,6 +110,8 @@ namespace BalloonFlow
                 removedAds = false,
                 purchasedOnce = new Dictionary<string, bool>(),
                 isNPU = true,
+                zapTutorialCompleted = false,
+                firstInterstitialShown = false,
                 dailyReward = new DailyRewardState(),
                 settings = new SettingsData(),
                 consents = new ConsentsData(),

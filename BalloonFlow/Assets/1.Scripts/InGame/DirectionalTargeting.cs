@@ -658,12 +658,24 @@ namespace BalloonFlow
                 {
                     int width = Mathf.Max(1, balloon.sizeW);
                     int height = Mathf.Max(1, balloon.sizeH);
+                    // Target Box 알 모델: 셀마다 egg 색으로 노출 → 그 색 다트가 해당 셀을 조준.
+                    bool isEggBox = balloon.gimmickType == BalloonController.GimmickPinataBox
+                        && balloon.eggColors != null && balloon.eggColors.Length == width * height;
                     Vector3 anchor = BalloonController.Instance.GetAdjustedBoardPosition(balloon.position);
                     BalloonController.Instance.GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ);
                     for (int dx = 0; dx < width; dx++)
                     {
                         for (int dz = 0; dz < height; dz++)
                         {
+                            int eggIdx = dz * width + dx;
+                            int cellColor = isEggBox ? balloon.eggColors[eggIdx] : balloon.color;
+                            // 알 박스: 죽은 알(hp 0) 셀은 비타겟(blocker) — 그 색 다트가 더는 조준 안 함.
+                            bool cellTargetable = targetable;
+                            if (isEggBox)
+                            {
+                                bool eggAlive = balloon.eggHps != null && eggIdx < balloon.eggHps.Length && balloon.eggHps[eggIdx] > 0;
+                                cellTargetable = targetable && eggAlive;
+                            }
                             Vector3 cellWorld = new Vector3(
                                 anchor.x + dx * cellSizeX,
                                 worldPos.y,
@@ -671,10 +683,10 @@ namespace BalloonFlow
                             AddEdgeTarget(new EdgeTarget
                             {
                                 balloonId = balloon.balloonId,
-                                color = balloon.color,
+                                color = cellColor,
                                 worldPos = cellWorld,
                                 cell = WorldToGrid(cellWorld),
-                                targetable = targetable
+                                targetable = cellTargetable
                             });
                         }
                     }

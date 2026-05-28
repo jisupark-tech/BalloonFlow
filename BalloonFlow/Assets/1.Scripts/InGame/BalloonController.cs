@@ -23,7 +23,8 @@ namespace BalloonFlow
         private const string PoolKey = "Balloon";
         // Gimmick prefab pool keys — must match Resources/Prefabs/<key>.prefab exactly.
         private const string BarricadePoolKey  = "Baricade";     // Barricade gimmick visual
-        private const string IronBoxPoolKey    = "IronBox";      // Pinata_Box gimmick visual (Lv.161)
+        private const string IronBoxPoolKey    = "IronBox";      // Wall/IronWall visual
+        private const string TargetBoxPoolKey  = "paint";        // Pinata_Box / Target Box visual
         private const string WoodenBoardPoolKey = "WoodenBoard"; // Pin gimmick visual (Lv.61)
         private const string FrozenLayerPoolKey = "FrozenLayer"; // Ice / Frozen_Dart overlay child
         private const int PinataRequiredHits = 2;
@@ -110,6 +111,7 @@ namespace BalloonFlow
         [SerializeField] private float _barricadeLengthMultiplier = 1f;
         [SerializeField] private float _barricadeLengthPadding = 0f;
         [SerializeField] private Vector3 _barricadeBodyVisualOffset = Vector3.zero;
+        [SerializeField] private Vector3 _barricadeEdgeOffset = Vector3.zero;
 
         // Primary data store keyed by balloonId
         private readonly Dictionary<int, BalloonData> _balloons = new Dictionary<int, BalloonData>();
@@ -136,6 +138,7 @@ namespace BalloonFlow
         private readonly Dictionary<Transform, Vector3> _barricadeBodyBaseScales = new Dictionary<Transform, Vector3>();
         private readonly Dictionary<Transform, Quaternion> _barricadeBodyBaseRotations = new Dictionary<Transform, Quaternion>();
         private readonly Dictionary<Transform, Vector3> _barricadeBodyBasePositions = new Dictionary<Transform, Vector3>();
+        private readonly Dictionary<Transform, Quaternion> _barricadeEdgeBaseRotations = new Dictionary<Transform, Quaternion>();
         private readonly List<Vector3Int> _reusableOccupiedCells = new List<Vector3Int>(16);
 
         // Key tracking: balloonId -> lockPairId (for path-based Key release)
@@ -286,14 +289,27 @@ namespace BalloonFlow
                     continue;
                 }
 
-                if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
+                // Target Box 알 모델: PinataBoxView + eggColors 있으면 알 격자 방식으로 재배치.
+                if (data.gimmickType == GimmickPinataBox)
                 {
+                    var pbView = obj.GetComponentInChildren<PinataBoxView>(true);
+                    if (pbView != null && data.eggColors != null && data.eggColors.Length > 0)
+                    {
+                        ApplyPinataBoxVisual(obj, data, pbView);
+                        continue;
+                    }
+                }
+
+                if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox
+                    || (data.gimmickType == GimmickWall && (data.sizeW > 1 || data.sizeH > 1)))
+                {
+                    // multi-cell Wall(2×2/3×3) 도 footprint 스케일 유지 — 미포함 시 rest 스케일(1×)로 리셋되어 사이즈가 사라짐.
                     ApplySizedFieldVisualTransform(obj, data);
                     continue;
                 }
 
                 obj.transform.position = GetAdjustedBoardPosition(data.position);
-                obj.transform.localScale = Vector3.one * _balloonScale * scaleMult;
+                obj.transform.localScale = GetBalloonRestScale(scaleMult);
             }
 
             _frameCachedPositions.Clear();
@@ -511,8 +527,13 @@ namespace BalloonFlow
             float scaleMult = _levelSafeCalculated
                 ? Mathf.Max(_levelSafeWm, _levelSafeHm)
                 : (GameManager.HasInstance ? Mathf.Max(GameManager.Instance.Board.balloonFieldWidthMult, GameManager.Instance.Board.balloonFieldHeightMult) : 1f);
-            return Vector3.one * _balloonScale * scaleMult;
+            return GetBalloonRestScale(scaleMult);
         }
+
+        // 밀집 레벨 안전 배율(scaleMult)로 풍선이 축소돼도 화면 높이(Y, 월드 업)는 유지.
+        // footprint(X/Z)만 축소해 제거 시 pop 피드백이 납작해지지 않게 한다.
+        private Vector3 GetBalloonRestScale(float scaleMult)
+            => new Vector3(_balloonScale * scaleMult, _balloonScale, _balloonScale * scaleMult);
 
         /// <summary>
         /// Returns all non-popped balloons matching the specified color.
@@ -874,11 +895,53 @@ namespace BalloonFlow
                 return ExecutePop(data);
             }
 
-            // Pinata/PinataBox
+            // Target Box 알 모델: 다트 색과 같은 색 알의 HP 차감, 해당 알 0이면 제거, 전부 제거 시 박스 파괴.
+            if (data.gimmickType == GimmickPinataBox
+                && data.eggColors != null && data.eggHps != null && data.eggColors.Length > 0)
+                return ProcessPinataBoxEggHit(data, dartColor);
+
+            // Pinata/PinataBox (legacy 단일 박스)
             if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
                 return ProcessPinataHit(data);
 
             return ExecutePop(data);
+        }
+
+        // Target Box 알 모델 타격: 같은 색 살아있는 알 1개의 HP -1 → 0 이면 시각 제거(HideEgg) → 전부 제거 시 박스 pop.
+        private PopResult ProcessPinataBoxEggHit(BalloonData data, int dartColor)
+        {
+            int[] colors = data.eggColors;
+            int[] hps = data.eggHps;
+
+            int target = -1;
+            for (int i = 0; i < colors.Length; i++)
+                if (colors[i] == dartColor && i < hps.Length && hps[i] > 0) { target = i; break; }
+
+            // 박스에 없는 색 다트 — 타격 무효 (타겟팅이 정상이면 거의 발생 안 함).
+            if (target < 0)
+                return new PopResult { success = false, reason = "TargetBox: no live egg of color", balloonId = data.balloonId, gimmickType = GimmickPinataBox };
+
+            hps[target] = Mathf.Max(0, hps[target] - 1);
+
+            bool eggDied = hps[target] == 0;
+            if (eggDied && _balloonObjects.TryGetValue(data.balloonId, out GameObject obj) && obj != null)
+            {
+                var view = obj.GetComponentInChildren<PinataBoxView>(true);
+                if (view != null) view.HideEgg(target);
+            }
+
+            bool anyAlive = false;
+            for (int i = 0; i < hps.Length; i++) if (hps[i] > 0) { anyAlive = true; break; }
+
+            if (!anyAlive)
+                return ExecutePop(data); // 모든 알 제거 → 박스 파괴
+
+            // 알 1개가 죽었으면 그 셀은 더는 조준 대상이 아님 → 타겟팅 재빌드.
+            if (eggDied)
+                DirectionalTargeting.InvalidateCache();
+
+            // 알 1개 제거됐지만 박스는 유지 — 다트는 hit 인정(소진).
+            return new PopResult { success = false, hitAccepted = true, reason = "TargetBox: egg removed", balloonId = data.balloonId, color = dartColor, gimmickType = GimmickPinataBox };
         }
 
         private void UpdatePinVisual(int balloonId, bool destroyed)
@@ -1144,6 +1207,7 @@ namespace BalloonFlow
         private void SpawnBalloonFromSetup(BalloonSetupData entry)
         {
             int id = _nextBalloonId++;
+            entry.gimmickType = GimmickDisplayName.Normalize(entry.gimmickType);
 
             // [ROLLBACK_LOCKKEY_DEPRECATE]
             // Lock_Key 기믹 dead 처리 — 기존 LevelData 호환을 위해 정규화: Lock_Key → none (일반 풍선).
@@ -1176,6 +1240,9 @@ namespace BalloonFlow
                 maxHP       = resolvedHP,
                 sizeW       = entry.sizeW > 0 ? entry.sizeW : 1,
                 sizeH       = entry.sizeH > 0 ? entry.sizeH : 1,
+                // 알 배열: eggHps 는 런타임 차감되므로 clone (레벨 에셋 원본 보호). eggColors 는 read-only 라 공유.
+                eggColors   = entry.eggColors,
+                eggHps      = entry.eggHps != null ? (int[])entry.eggHps.Clone() : null,
                 lockPairId  = entry.lockPairId,
                 flexTubeGroupId       = entry.flexTubeGroupId,
                 flexTubeSequenceIndex = entry.flexTubeSequenceIndex,
@@ -1228,6 +1295,11 @@ namespace BalloonFlow
                             if (gi.HasColorRenderers)
                                 gi.ApplyColor(WALL_COLOR);
                         }
+
+                        // multi-cell Wall(2×2/3×3) 만 footprint 에 맞춰 시각 스케일/중앙정렬.
+                        // 1×1 은 기존 기본 배치를 유지해 기존 레벨 Wall 외형 회귀 방지.
+                        if (data.sizeW > 1 || data.sizeH > 1)
+                            ApplySizedFieldVisualTransform(obj, data);
                     }
                     else if (data.gimmickType == GimmickPin)
                     {
@@ -1262,9 +1334,31 @@ namespace BalloonFlow
 
                         ApplyBarricadeVisualTransform(obj, data);
                     }
-                    else if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox)
+                    else if (data.gimmickType == GimmickPinataBox)
                     {
-                        // PinataBox는 IronBox 프리팹, 일반 Pinata는 Balloon 풀 폴백
+                        // Target Box 알 모델: eggColors + PinataBoxView 있으면 W×H 알 격자 생성(셀별 색).
+                        var view = obj.GetComponentInChildren<PinataBoxView>(true);
+                        if (view != null && data.eggColors != null && data.eggColors.Length > 0)
+                        {
+                            ApplyPinataBoxVisual(obj, data, view);
+                        }
+                        else
+                        {
+                            // 폴백(레거시/뷰 미부착): 단일 박스 — 기존 색+스케일.
+                            var gi = obj.GetComponent<GimmickIdentifier>();
+                            if (gi != null)
+                            {
+                                gi.Initialize();
+                                int hp = data.maxHP - data.hitCount;
+                                gi.UpdateHP(Mathf.Max(1, hp));
+                                int ci = Mathf.Clamp(data.color, 0, BalloonColors.Length - 1);
+                                if (gi.HasColorRenderers) gi.ApplyColor(BalloonColors[ci]);
+                            }
+                            ApplySizedFieldVisualTransform(obj, data);
+                        }
+                    }
+                    else if (data.gimmickType == GimmickPinata)
+                    {
                         var gi = obj.GetComponent<GimmickIdentifier>();
                         if (gi != null)
                         {
@@ -1378,17 +1472,17 @@ namespace BalloonFlow
                 _flexTubeRoots.Add(tubeObj);
                 Quaternion extraRot = Quaternion.Euler(0f, tube.ExtraYRotation, 0f);
 
+                // 다른 모든 필드 요소와 동일 좌표계로 정렬 — raw position 을 보드 보정(GetAdjustedBoardPosition)에 통과.
+                // 누락 시 보드가 스케일/오프셋된 레벨에서 튜브가 셀 그리드를 벗어남(캡 미정렬 포함).
                 var cellPositions = new List<Vector3>(ids.Count);
-                foreach (var id in ids) cellPositions.Add(_balloons[id].position);
+                foreach (var id in ids) cellPositions.Add(GetAdjustedBoardPosition(_balloons[id].position));
 
                 int groupColor = _balloons[ids[0]].color;
                 int colorIdx = Mathf.Clamp(groupColor, 0, BalloonColors.Length - 1);
 
                 // visual segment count per cell — prefab mesh 가 cell 폭 1/N 이라는 전제. cell 폭이 visual 적으로 끊김 없이 채워짐.
                 int visualSegmentsPerCell = Mathf.Max(1, tube.VisualSegmentsPerCell);
-                float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
-                if (cellSpacing < 0.01f) cellSpacing = 0.55f;
-                float visualStep = cellSpacing / visualSegmentsPerCell;
+                // visualStep(1/N 폭 분산 간격)은 보정된 인접 셀 실제 거리 기반으로 cell 별 계산(아래 루프). raw cellSpacing 미사용.
 
                 // parts list 용량 = 2 Cap + (cells - 2) × N visual segment
                 int segmentCellCount = Mathf.Max(0, ids.Count - 2);
@@ -1418,6 +1512,8 @@ namespace BalloonFlow
                     int visualCount = (partType == GimmickIdentifier.FlexTubePart.Segment) ? visualSegmentsPerCell : 1;
                     Vector3 tangent = ComputeFlexTubeTangent(cellPositions, i); // cellPositions 기반 forward
                     bool useTangent = visualCount > 1 && tangent.sqrMagnitude > 0.0001f;
+                    // 1/N 폭 visual 이 보정된 cell 을 정확히 채우도록 — 보정된 인접 셀 거리 / N.
+                    float visualStep = AdjacentCellDistance(cellPositions, i) / visualSegmentsPerCell;
 
                     // cell center 에 있는 visual 을 _balloonObjects[id] 로 등록 — 다트 target 위치가 cell center 와 일치하도록.
                     // 끝쪽부터 사라지는 정책상 center visual 은 cell 죽기 직전까지 active 유지 → target lookup 안정.
@@ -1425,8 +1521,8 @@ namespace BalloonFlow
 
                     for (int v = 0; v < visualCount; v++)
                     {
-                        // visual segment center offset — cell center 기준 -(N-1)/2 .. +(N-1)/2 × visualStep.
-                        Vector3 spawnPos = data.position;
+                        // visual segment center offset — 보정된 cell center 기준 -(N-1)/2 .. +(N-1)/2 × visualStep.
+                        Vector3 spawnPos = cellPositions[i];
                         if (useTangent)
                             spawnPos += tangent * ((v - (visualCount - 1) * 0.5f) * visualStep);
 
@@ -1491,6 +1587,18 @@ namespace BalloonFlow
             return dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector3.zero;
         }
 
+        /// <summary>보정된 cell index i 의 인접 셀 간 실제 거리. 양끝은 한쪽, 중간은 양쪽 평균.
+        /// visual segment 분산 간격(visualStep = 거리/N) 계산용 — 보드 스케일 반영된 셀 폭과 일치.</summary>
+        private static float AdjacentCellDistance(List<Vector3> cellPositions, int i)
+        {
+            int n = cellPositions.Count;
+            if (n < 2) return 0f;
+            if (i <= 0)       return Vector3.Distance(cellPositions[0], cellPositions[1]);
+            if (i >= n - 1)   return Vector3.Distance(cellPositions[n - 1], cellPositions[n - 2]);
+            return 0.5f * (Vector3.Distance(cellPositions[i], cellPositions[i - 1])
+                         + Vector3.Distance(cellPositions[i], cellPositions[i + 1]));
+        }
+
         /// <summary>FlexTube 부품의 회전 계산 — prefab forward = +z (Unity 기본) 가정. cell index i 의 이전/다음 위치로 방향 추론.</summary>
         private static Quaternion CalculateFlexTubePartRotation(List<Vector3> cellPositions, int i)
         {
@@ -1536,7 +1644,7 @@ namespace BalloonFlow
             float scaleMult = _levelSafeCalculated
                 ? Mathf.Max(_levelSafeWm, _levelSafeHm)
                 : (GameManager.HasInstance ? Mathf.Max(GameManager.Instance.Board.balloonFieldWidthMult, GameManager.Instance.Board.balloonFieldHeightMult) : 1f);
-            obj.transform.localScale = Vector3.one * _balloonScale * scaleMult;
+            obj.transform.localScale = GetBalloonRestScale(scaleMult);
             obj.SetActive(true);
 
             // [Optimization 2026-05-12] Balloon Shadow 의 SpriteRenderer → MeshRenderer 전환.
@@ -1577,11 +1685,16 @@ namespace BalloonFlow
                 && (data.sizeW > 1 || data.sizeH > 1);
         }
 
+        // 멀티셀 footprint(occupancy/blocking/targeting)을 갖는 sized field 기믹의 단일 소스.
+        // 모든 소비처(UsesMultiCellOccupancy / DirectionalTargeting / BoardStateManager / DartManager)가 이 함수를 참조.
+        // Wall 도 정사각 2×2/3×3 footprint 전체가 blocker 로 깔려야 하므로 포함 (미포함 시 anchor 1칸만 막혀 다트가 관통).
         public static bool IsSizedFieldGimmick(string gimmickType)
         {
-            return gimmickType == GimmickPinata
-                || gimmickType == GimmickPinataBox
-                || gimmickType == GimmickBarricade;
+            string normalized = GimmickDisplayName.Normalize(gimmickType);
+            return normalized == GimmickPinata
+                || normalized == GimmickPinataBox
+                || normalized == GimmickBarricade
+                || normalized == GimmickWall;
         }
 
         private void BuildOccupiedCells(BalloonData data, List<Vector3Int> output)
@@ -1665,6 +1778,31 @@ namespace BalloonFlow
             scaleBase = _balloonScale * scaleMult;
         }
 
+        // Target Box(Pinata_Box) 알 모델 비주얼: 박스 루트를 footprint 중앙·identity scale 로 놓고
+        // PinataBoxView 가 W×H 알을 셀 간격으로 배치·색칠. 단일 mesh 확대가 아니므로 이웃 셀 침범 없음.
+        private void ApplyPinataBoxVisual(GameObject obj, BalloonData data, PinataBoxView view)
+        {
+            if (obj == null || data == null || view == null) return;
+
+            GetFieldVisualMetrics(
+                out _, out _, out float scaleMult,
+                out float cellSizeX, out float cellSizeZ, out _);
+
+            int width = Mathf.Max(1, data.sizeW);
+            int height = Mathf.Max(1, data.sizeH);
+
+            Vector3 anchor = GetAdjustedBoardPosition(data.position);
+            Vector3 center = new Vector3(
+                anchor.x + (width - 1) * cellSizeX * 0.5f,
+                obj.transform.position.y,
+                anchor.z + (height - 1) * cellSizeZ * 0.5f);
+            obj.transform.position = center;
+            obj.transform.localScale = Vector3.one; // 알/틀 크기는 view 가 제어 (루트 scale=1 가정)
+
+            // eggScale = 밀집 레벨 축소(scaleMult)만. 알 기본 크기는 프리팹 템플릿 + _eggScaleMultiplier 로 제어.
+            view.Build(width, height, data.eggColors, cellSizeX, cellSizeZ, scaleMult);
+        }
+
         private void ApplySizedFieldVisualTransform(GameObject obj, BalloonData data)
         {
             if (obj == null || data == null) return;
@@ -1725,11 +1863,17 @@ namespace BalloonFlow
                 _barricadeVisualY + _barricadeVisualOffset.y,
                 adjustedAnchor.z + _barricadeVisualOffset.z);
 
-            Transform body = FindChildRecursive(obj.transform, "BarricadeBody")
-                ?? FindChildRecursive(obj.transform, "BaricadeBody")
-                ?? FindChildRecursive(obj.transform, "Barricade")
-                ?? FindChildRecursive(obj.transform, "Baricade")
-                ?? FindFirstRenderableChild(obj.transform);
+            // Inspector 에서 GimmickIdentifier 에 명시 할당한 참조를 우선 사용. 미할당 시 이름 자동 탐색(기존 동작).
+            GimmickIdentifier gid = obj.GetComponent<GimmickIdentifier>();
+            Transform edge = gid != null ? gid.BarricadeEdge : null;
+
+            Transform body = (gid != null && gid.BarricadeBody != null)
+                ? gid.BarricadeBody
+                : FindChildRecursive(obj.transform, "BarricadeBody")
+                    ?? FindChildRecursive(obj.transform, "BaricadeBody")
+                    ?? FindChildRecursive(obj.transform, "Barricade")
+                    ?? FindChildRecursive(obj.transform, "Baricade")
+                    ?? FindFirstRenderableChild(obj.transform);
 
             if (body == null)
             {
@@ -1772,7 +1916,11 @@ namespace BalloonFlow
             float bodyCells = Mathf.Max(0f, lengthCells - 1f) * hpRatio;
             body.gameObject.SetActive(bodyCells > 0.001f);
             if (bodyCells <= 0.001f)
+            {
+                // 몸통이 사라지면 끝 마감(Edge)도 함께 숨김.
+                if (edge != null) edge.gameObject.SetActive(false);
                 return;
+            }
 
             Quaternion targetRotation = vertical ? baseRotation * Quaternion.Euler(0f, 90f, 0f) : baseRotation;
 
@@ -1798,6 +1946,22 @@ namespace BalloonFlow
                 desiredCenter += _barricadeBodyVisualOffset;
                 Vector3 delta = desiredCenter - bodyBounds.center;
                 body.position += delta;
+
+                // Edge(끝 마감)를 늘어난 body 의 먼 쪽 끝으로 이동 — HP 감소로 body 가 짧아지면 Edge 도 따라옴.
+                if (edge != null)
+                {
+                    edge.gameObject.SetActive(true);
+                    if (!_barricadeEdgeBaseRotations.TryGetValue(edge, out Quaternion edgeBaseRotation))
+                    {
+                        edgeBaseRotation = edge.localRotation;
+                        _barricadeEdgeBaseRotations[edge] = edgeBaseRotation;
+                    }
+                    edge.localRotation = vertical ? edgeBaseRotation * Quaternion.Euler(0f, 90f, 0f) : edgeBaseRotation;
+
+                    float halfLen = 0.5f * (vertical ? bodyBounds.size.z : bodyBounds.size.x);
+                    Vector3 dir = vertical ? Vector3.forward : Vector3.right;
+                    edge.position = desiredCenter + dir * halfLen + _barricadeEdgeOffset;
+                }
             }
         }
 
@@ -2178,15 +2342,16 @@ namespace BalloonFlow
         /// </summary>
         private static string ResolveGimmickPoolKey(string gimmickType)
         {
-            if (string.IsNullOrEmpty(gimmickType)) return PoolKey;
-            switch (gimmickType)
+            string normalized = GimmickDisplayName.Normalize(gimmickType);
+            if (string.IsNullOrEmpty(normalized)) return PoolKey;
+            switch (normalized)
             {
                 case GimmickBarricade: return BarricadePoolKey;
                 // ROLLBACK_PINATA_WOODENBOARD_PREFAB:
                 // The current Pinata visual is authored in Resources/Prefabs/WoodenBoard
                 // and addressed as prefab_WoodenBoard.
                 case GimmickPinata:    return WoodenBoardPoolKey;
-                case GimmickPinataBox: return IronBoxPoolKey;
+                case GimmickPinataBox: return TargetBoxPoolKey;
                 case GimmickPin:       return WoodenBoardPoolKey;
                 // ROLLBACK_WALL_IRONBOX_PREFAB:
                 // NewFeature maps Wall/IronWall to IronBox; use the same runtime prefab.
@@ -3237,6 +3402,11 @@ namespace BalloonFlow
         public int sizeH = 1;
         public int lockPairId = -1;
 
+        /// <summary>Pinata_Box 셀별 알 색상 (len=sizeW*sizeH, row-major). null=레거시 단일 박스.</summary>
+        public int[] eggColors;
+        /// <summary>Pinata_Box 셀별 알 HP (eggColors 와 동일 길이/순서). 런타임에 차감됨.</summary>
+        public int[] eggHps;
+
         /// <summary>FlexTube 그룹 ID. -1 = FlexTube cell 아님.</summary>
         public int flexTubeGroupId = -1;
         /// <summary>FlexTube paint 순서 인덱스. 0=StartCap, max=EndCap.</summary>
@@ -3264,6 +3434,11 @@ namespace BalloonFlow
         public int sizeH = 1;
         public int hp = 0;
         public int lockPairId = -1;
+
+        /// <summary>Pinata_Box 셀별 알 색상 (len=sizeW*sizeH, row-major). null=레거시 단일 박스.</summary>
+        public int[] eggColors;
+        /// <summary>Pinata_Box 셀별 알 HP (eggColors 와 동일 길이/순서).</summary>
+        public int[] eggHps;
 
         /// <summary>FlexTube 그룹 ID. -1 = FlexTube 셀 아님.</summary>
         public int flexTubeGroupId = -1;

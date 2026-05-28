@@ -2,6 +2,9 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
+#if UNITY_EDITOR
+using UnityEngine.InputSystem;
+#endif
 
 namespace BalloonFlow
 {
@@ -79,6 +82,27 @@ namespace BalloonFlow
 
             Debug.Log($"[GameBootstrap] InGame 초기화 완료 (testMode={_isTestMode})");
         }
+
+#if UNITY_EDITOR
+        // 테스트 플레이 중 F6 → MapMaker 에디터로 즉시 복귀. (F5 는 에디터→테스트 진입용이라 분리)
+        void Update()
+        {
+            if (!_isTestMode) return;
+            var kb = Keyboard.current;
+            if (kb == null) return;
+            if (kb[Key.F6].wasPressedThisFrame)
+                ReturnToMapMaker();
+        }
+
+        private void ReturnToMapMaker()
+        {
+            GameManager.IsTestPlayMode = false;
+            if (GameManager.HasInstance)
+                GameManager.Instance.GoToMapMaker();
+            else
+                UnityEngine.SceneManagement.SceneManager.LoadScene(GameManager.SCENE_MAPMAKER);
+        }
+#endif
 
         /// <summary>
         /// Ensures GameManager, UIManager, CameraManager exist.

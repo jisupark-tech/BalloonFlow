@@ -191,6 +191,11 @@ namespace BalloonFlow
             for (int i = 0; i < holderSetups.Length; i++)
             {
                 var setup = holderSetups[i];
+                string normalizedGimmick = GimmickDisplayName.Normalize(setup.queueGimmick);
+                if (normalizedGimmick == "none")
+                    normalizedGimmick = "";
+                setup.queueGimmick = normalizedGimmick;
+
                 // [ROLLBACK_LOCKKEY_DEPRECATE]
                 // Lock_Key holder dead 처리 — 기존 LevelData 호환을 위해 정규화: Lock_Key → 일반 holder.
                 if (setup.queueGimmick == GimmickManager.GIMMICK_LOCK_KEY)
@@ -384,6 +389,15 @@ namespace BalloonFlow
                 return false;
             }
 
+            // Chain/Linked Dart Box: validate the whole group before mutating any holder state.
+            // This prevents split loads such as 1 member moving first and the remaining members later.
+            if (holder.chainGroupId >= 0)
+            {
+                List<int> chainMembers = GetChainGroup(holder.chainGroupId);
+                if (chainMembers.Count > 1)
+                    return TrySelectChainGroup(holder, chainMembers);
+            }
+
             // Check global active limit: "최대 10개 활성"
             int activeCount = GetActiveHolderCount();
             if (activeCount >= MAX_ACTIVE_TOTAL)
@@ -527,6 +541,106 @@ namespace BalloonFlow
                         });
                     }
                 }
+            }
+
+            return true;
+        }
+
+        private bool TrySelectChainGroup(HolderData triggerHolder, List<int> chainMemberIds)
+        {
+            if (triggerHolder == null || chainMemberIds == null || chainMemberIds.Count <= 1)
+                return false;
+
+            var members = new List<HolderData>(chainMemberIds.Count);
+            for (int i = 0; i < chainMemberIds.Count; i++)
+            {
+                HolderData member = FindHolder(chainMemberIds[i]);
+                if (member == null || member.isDeploying || member.isWaiting || member.isMovingToRail || member.isConsumed)
+                    return false;
+
+                if (member.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T ||
+                    member.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O)
+                    return false;
+
+                if (member.isLockObject || IsBlockedByLock(member))
+                    return false;
+
+                if (member.magazineCount <= 0 || member.isHidden || member.isFrozen)
+                    return false;
+
+                if (HolderVisualManager.HasInstance && !HolderVisualManager.Instance.IsInFrontRow(member.holderId))
+                {
+                    Debug.Log($"[HolderManager] Chain blocked - member {member.holderId} not in front row (groupId={triggerHolder.chainGroupId})");
+                    EventBus.Publish(new OnHolderColumnBlocked
+                    {
+                        holderId = triggerHolder.holderId,
+                        column = triggerHolder.column
+                    });
+                    return false;
+                }
+
+                members.Add(member);
+            }
+
+            int activeAfterSelect = GetActiveHolderCount() + members.Count;
+            if (activeAfterSelect > MAX_ACTIVE_TOTAL)
+            {
+                Debug.LogWarning($"[HolderManager] Chain group {triggerHolder.chainGroupId} blocked - active holders would exceed {MAX_ACTIVE_TOTAL} ({activeAfterSelect}).");
+                EventBus.Publish(new OnHolderWarning
+                {
+                    waitingCount = activeAfterSelect,
+                    maxSlots = MAX_ACTIVE_TOTAL,
+                    isDanger = true
+                });
+                return false;
+            }
+
+            int[] chainMembersPerColumn = new int[MAX_QUEUE_COLUMNS];
+            for (int i = 0; i < members.Count; i++)
+            {
+                int col = members[i].column;
+                if (col < 0 || col >= _queueColumns)
+                    return false;
+                chainMembersPerColumn[col]++;
+            }
+
+            for (int col = 0; col < _queueColumns; col++)
+            {
+                if (chainMembersPerColumn[col] <= 0) continue;
+
+                // Linked boxes are expected to load together. If any member would have to wait
+                // behind an already active holder, block the whole group instead of splitting it.
+                if (_deployingHolderId[col] >= 0 || _waitingHolderId[col] >= 0 || chainMembersPerColumn[col] > 1)
+                {
+                    EventBus.Publish(new OnHolderColumnBlocked
+                    {
+                        holderId = triggerHolder.holderId,
+                        column = col
+                    });
+                    EventBus.Publish(new OnHolderWarning
+                    {
+                        waitingCount = 2,
+                        maxSlots = 2,
+                        isDanger = true
+                    });
+                    return false;
+                }
+            }
+
+            for (int i = 0; i < members.Count; i++)
+            {
+                HolderData member = members[i];
+                int col = member.column;
+                member.isDeploying = true;
+                member.isMovingToRail = true;
+                _deployingHolderId[col] = member.holderId;
+
+                EventBus.Publish(new OnHolderSelected
+                {
+                    holderId = member.holderId,
+                    color = member.color,
+                    magazineCount = member.magazineCount
+                });
             }
 
             return true;

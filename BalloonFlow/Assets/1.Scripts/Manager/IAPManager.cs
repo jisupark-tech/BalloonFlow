@@ -110,7 +110,6 @@ namespace BalloonFlow
         {
             // 영구 광고 제거 / 1회 한정 상품 → NonConsumable. 나머지 → Consumable
             if (p.category == CAT_NOADS) return ProductType.NonConsumable;
-            if (p.maxPurchases == 1)     return ProductType.NonConsumable;
             return ProductType.Consumable;
         }
 #endif
@@ -230,6 +229,28 @@ namespace BalloonFlow
                     _cachedPrices[product.definition.id] = product.metadata.localizedPriceString;
             }
             Debug.Log($"{LOG_TAG} Store 초기화 완료 — {_cachedPrices.Count} products");
+            RestoreOwnedEntitlements();
+        }
+
+        private void RestoreOwnedEntitlements()
+        {
+            if (_storeController == null || !ShopCatalogService.HasInstance) return;
+
+            foreach (Product product in _storeController.products.all)
+            {
+                if (product == null || !product.hasReceipt) continue;
+                var doc = ShopCatalogService.Instance.Get(product.definition.id);
+                if (doc == null || doc.category != CAT_NOADS) continue;
+
+                PlayerPrefs.SetInt(Const.PREFS_AD_REMOVED, 1);
+                PlayerPrefs.SetInt(Const.PREFS_NO_ADS_OWNED, 1);
+                PlayerPrefs.Save();
+
+                if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+                    UserDataService.Instance.SetRemovedAds(true, doc.productId);
+
+                EventBus.Publish(new OnPurchaseRestored { productId = doc.productId });
+            }
         }
 
         public void OnInitializeFailed(InitializationFailureReason error)
@@ -301,7 +322,8 @@ namespace BalloonFlow
 
                 if (r.removeAds)
                 {
-                    PlayerPrefs.SetInt("BalloonFlow_AdRemoved", 1);
+                    PlayerPrefs.SetInt(Const.PREFS_AD_REMOVED, 1);
+                    PlayerPrefs.SetInt(Const.PREFS_NO_ADS_OWNED, 1);
                     PlayerPrefs.Save();
                     // [2026-05-13] productId 함께 전달 → UserData 에 구매 시각/경로 같이 기록.
                     if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
@@ -314,6 +336,12 @@ namespace BalloonFlow
                 && UserDataService.HasInstance && UserDataService.Instance.IsReady)
             {
                 UserDataService.Instance.SetPurchasedOnce(productId, true);
+            }
+
+            if (doc.maxPurchases == 1 && doc.category == "offer")
+            {
+                PlayerPrefs.SetInt(Const.PREFS_STARTER_PURCHASED, 1);
+                PlayerPrefs.Save();
             }
 
             // NPU 해제

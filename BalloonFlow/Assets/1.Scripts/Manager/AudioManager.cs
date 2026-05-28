@@ -28,6 +28,8 @@ namespace BalloonFlow
         [SerializeField] private AudioClip _sfxClear;
         [SerializeField] private AudioClip _sfxFail;
         [SerializeField] private AudioClip _sfxHolderDeploy;
+        [SerializeField] private AudioClip _sfxHolderReveal;
+        [SerializeField] private AudioClip _sfxHolderFrozenBreak;
 
         [Header("[SFX — Booster]")]
         [SerializeField] private AudioClip _sfxItemHand;
@@ -90,6 +92,10 @@ namespace BalloonFlow
             if (_sfxClear == null)        _sfxClear        = Resources.Load<AudioClip>("Sound/Effect/Stage_Clear");
             if (_sfxFail == null)         _sfxFail         = Resources.Load<AudioClip>("Sound/Effect/Stage_Fail");
             if (_sfxHolderDeploy == null) _sfxHolderDeploy = Resources.Load<AudioClip>("Sound/Effect/Stage_Object_Drop");
+            if (_sfxHolderReveal == null) _sfxHolderReveal = Resources.Load<AudioClip>("Sound/Effect/Stage_Holder_Reveal")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Object_Drop");
+            if (_sfxHolderFrozenBreak == null) _sfxHolderFrozenBreak = Resources.Load<AudioClip>("Sound/Effect/Stage_Holder_FrozenBreak")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Onedestroy");
             if (_sfxItemHand == null)     _sfxItemHand     = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Onedestroy");
             if (_sfxItemShuffle == null)  _sfxItemShuffle  = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Cross");
             if (_sfxItemZap == null)      _sfxItemZap      = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_ColorBomb");
@@ -104,6 +110,8 @@ namespace BalloonFlow
             EventBus.Subscribe<OnHolderSelected>(HandleHolderSelected);
             EventBus.Subscribe<OnHolderTapped>(HandleHolderTapped);
             EventBus.Subscribe<OnHolderClickAnim>(HandleHolderClickAnim);
+            EventBus.Subscribe<OnHolderRevealed>(HandleHolderRevealed);
+            EventBus.Subscribe<OnHolderThawed>(HandleHolderThawed);
             EventBus.Subscribe<OnCoinFlyLanded>(HandleCoinFlyLanded);
             EventBus.Subscribe<OnSettingsChanged>(HandleSettingsChanged);
         }
@@ -117,6 +125,8 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnHolderSelected>(HandleHolderSelected);
             EventBus.Unsubscribe<OnHolderTapped>(HandleHolderTapped);
             EventBus.Unsubscribe<OnHolderClickAnim>(HandleHolderClickAnim);
+            EventBus.Unsubscribe<OnHolderRevealed>(HandleHolderRevealed);
+            EventBus.Unsubscribe<OnHolderThawed>(HandleHolderThawed);
             EventBus.Unsubscribe<OnCoinFlyLanded>(HandleCoinFlyLanded);
             EventBus.Unsubscribe<OnSettingsChanged>(HandleSettingsChanged);
         }
@@ -230,6 +240,16 @@ namespace BalloonFlow
 
         private void HandleHolderClickAnim(OnHolderClickAnim evt)
         {
+        }
+
+        private void HandleHolderRevealed(OnHolderRevealed evt)
+        {
+            PlaySFX(_sfxHolderReveal);
+        }
+
+        private void HandleHolderThawed(OnHolderThawed evt)
+        {
+            PlaySFX(_sfxHolderFrozenBreak);
         }
 
         // [2026-05-12] 코인 흡수 사운드 1/3 감소 — count 별 매번 재생 시 청각 부담. 3 번째마다 1번 재생.

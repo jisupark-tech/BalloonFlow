@@ -30,16 +30,17 @@ namespace BalloonFlow
 
         public async Task FetchAsync()
         {
+            // 엄격 서버 기준: 서버 config 를 못 읽으면 클라 기본값으로 진행하지 않음 (Config=null → 이벤트 미노출/미진행).
             // FirebaseManager dep check 완료까지 대기 — 직접 호출 시 InvalidOperationException.
             for (int i = 0; i < 150 && !(FirebaseManager.HasInstance && FirebaseManager.Instance.IsReady); i++)
                 await Task.Delay(100);
             if (!FirebaseManager.HasInstance || !FirebaseManager.Instance.IsReady)
             {
-                Debug.LogError($"{LOG_TAG} FirebaseManager not ready (timeout) — fetch skipped");
+                Debug.LogError($"{LOG_TAG} FirebaseManager not ready (timeout) — 서버 config 미로드. 이벤트 미진행(엄격 서버 기준).");
                 return;
             }
 
-            const int MAX_RETRIES = 3;
+            const int MAX_RETRIES = 5;
             Exception lastEx = null;
 
             for (int attempt = 1; attempt <= MAX_RETRIES; attempt++)
@@ -51,47 +52,35 @@ namespace BalloonFlow
 
                     if (!snap.Exists)
                     {
-                        Debug.LogWarning($"{LOG_TAG} {DOC_PATH} doc 미존재 — Editor uploader 로 시드 업로드 필요. 빈 config 로 fallback.");
-                        UseFallbackConfig($"{DOC_PATH} doc missing");
+                        // 시드 미업로드 — fallback 없이 미진행. Editor uploader 로 업로드 필요.
+                        Debug.LogError($"{LOG_TAG} {DOC_PATH} doc 미존재 — Editor uploader 로 시드 업로드 필요. 이벤트 미진행.");
                         return;
                     }
-                    else
-                    {
-                        _config = snap.ConvertTo<WinningStreakConfigDoc>();
-                        if (_config.stages == null)
-                            _config.stages = new System.Collections.Generic.List<WinningStreakStage>();
-                    }
+
+                    _config = snap.ConvertTo<WinningStreakConfigDoc>();
+                    if (_config.stages == null)
+                        _config.stages = new System.Collections.Generic.List<WinningStreakStage>();
 
                     _isLoaded = true;
-                    Debug.Log($"{LOG_TAG} Loaded — unlockLevel={_config.unlockLevel}, stages={_config.stages.Count}");
+                    Debug.Log($"{LOG_TAG} Loaded(server) — unlockLevel={_config.unlockLevel}, stages={_config.stages.Count}");
                     OnConfigLoaded?.Invoke();
                     return;
                 }
                 catch (FirestoreException fe) when (fe.ErrorCode == FirestoreError.Unavailable && attempt < MAX_RETRIES)
                 {
+                    // 일시적 네트워크 오류만 재시도. 권한 거부 등은 재시도해도 안 되므로 아래 generic catch 로.
                     lastEx = fe;
                     Debug.LogWarning($"{LOG_TAG} Firestore unavailable. Retry {attempt}/{MAX_RETRIES} in {attempt}s...");
                     await Task.Delay(1000 * attempt);
                 }
                 catch (Exception e)
                 {
-                    UseFallbackConfig($"Fetch failed: {e.Message}");
+                    // 권한 거부(Missing or insufficient permissions) 등 — Rules 수정 전까지 재시도 무의미. 미진행.
+                    Debug.LogError($"{LOG_TAG} Fetch failed: {e.Message}. 이벤트 미진행(엄격 서버 기준 — Firestore Rules /config/winningStreak read 허용 확인).");
                     return;
                 }
             }
-            UseFallbackConfig($"Fetch retries exhausted: {lastEx?.Message}");
-        }
-
-        /// <summary>1-base stage 번호 → stage doc. 범위 밖 또는 미로드 시 null.</summary>
-        private void UseFallbackConfig(string reason)
-        {
-            // ROLLBACK_WINNING_STREAK_CONFIG_FALLBACK:
-            // Firestore rules can temporarily block /config/winningStreak. The feature should
-            // keep working with the shipped defaults instead of leaving Config null.
-            _config = WinningStreakConfigDoc.CreateDefault();
-            _isLoaded = true;
-            Debug.LogWarning($"{LOG_TAG} {reason}. Using fallback config - unlockLevel={_config.unlockLevel}, stages={_config.stages.Count}");
-            OnConfigLoaded?.Invoke();
+            Debug.LogError($"{LOG_TAG} Fetch retries exhausted: {lastEx?.Message}. 이벤트 미진행(엄격 서버 기준).");
         }
 
         public WinningStreakStage GetStage(int stage1Based)

@@ -489,6 +489,8 @@ namespace BalloonFlow
         public const string PREFS_AD_REMOVED        = "BalloonFlow_AdRemoved";
         public const string PREFS_NO_ADS_OWNED      = "BalloonFlow_NoAdsOwned";
         public const string PREFS_STARTER_PURCHASED = "BalloonFlow_StarterPurchased";
+        public const string PREFS_ZAP_TUTORIAL_COMPLETED = "BalloonFlow_ZapTutorialCompleted";
+        public const string PREFS_FIRST_INTERSTITIAL_SHOWN = "BalloonFlow_FirstInterstitialShown";
         public const string PREFS_CURRENT_LIVES     = "BF_CurrentLives";
         public const string PREFS_LAST_RECHARGE_UTC = "BF_LastRechargeUtc";
         public const string PREFS_DAILY_LAST_CLAIM  = "BF_DailyReward_LastClaim";

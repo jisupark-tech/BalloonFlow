@@ -268,7 +268,11 @@ namespace BalloonFlow
         }
 
         private void OnInterstitialDisplayedCb(string adUnitId, MaxSdkBase.AdInfo info)
-            => OnInterstitialAdDisplayed?.Invoke();
+        {
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.SetFirstInterstitialShown(true);
+            OnInterstitialAdDisplayed?.Invoke();
+        }
 
         private void OnInterstitialHiddenCb(string adUnitId, MaxSdkBase.AdInfo info)
         {

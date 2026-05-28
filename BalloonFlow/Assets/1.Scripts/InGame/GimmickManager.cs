@@ -85,6 +85,7 @@ namespace BalloonFlow
         /// <param name="levelId">Global level ID (1-based).</param>
         public bool IsGimmickUnlocked(string gimmickType, int levelId)
         {
+            gimmickType = GimmickDisplayName.Normalize(gimmickType);
             if (string.IsNullOrEmpty(gimmickType))
             {
                 return false;
@@ -132,6 +133,7 @@ namespace BalloonFlow
         /// </summary>
         public string GetGimmickDescription(string gimmickType)
         {
+            gimmickType = GimmickDisplayName.Normalize(gimmickType);
             if (string.IsNullOrEmpty(gimmickType))
             {
                 return string.Empty;
@@ -200,20 +202,21 @@ namespace BalloonFlow
 
             foreach (string gimmickType in levelConfig.gimmickTypes)
             {
-                if (string.IsNullOrEmpty(gimmickType))
+                string normalized = GimmickDisplayName.Normalize(gimmickType);
+                if (string.IsNullOrEmpty(normalized))
                 {
                     continue;
                 }
 
-                if (IsGimmickUnlocked(gimmickType, levelConfig.levelId))
+                if (IsGimmickUnlocked(normalized, levelConfig.levelId))
                 {
-                    _activeGimmicks.Add(gimmickType);
+                    _activeGimmicks.Add(normalized);
                 }
                 else
                 {
                     Debug.Log(
-                        $"[GimmickManager] Gimmick '{gimmickType}' in level {levelConfig.levelId} " +
-                        $"is not yet unlocked (unlocks at level {GetUnlockLevel(gimmickType)}).");
+                        $"[GimmickManager] Gimmick '{normalized}' in level {levelConfig.levelId} " +
+                        $"is not yet unlocked (unlocks at level {GetUnlockLevel(normalized)}).");
                 }
             }
 
@@ -235,7 +238,7 @@ namespace BalloonFlow
         /// </summary>
         private int GetUnlockLevel(string gimmickType)
         {
-            switch (gimmickType)
+            switch (GimmickDisplayName.Normalize(gimmickType))
             {
                 case GIMMICK_HIDDEN:        return UNLOCK_LEVEL_HIDDEN;
                 case GIMMICK_CHAIN:         return UNLOCK_LEVEL_CHAIN;

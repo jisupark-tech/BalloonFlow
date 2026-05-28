@@ -342,18 +342,8 @@ namespace BalloonFlow
 
         private bool IsWinningStreakUnlocked()
         {
-            if (WinningStreakManager.HasInstance)
-                return WinningStreakManager.Instance.IsUnlocked;
-
-            // Manager 미준비 시 UserData + 하드 fallback (config 미도착 상황 방어).
-            const int FALLBACK_UNLOCK_LEVEL = 10;//Ori : 34
-            int unlockLevel = FALLBACK_UNLOCK_LEVEL;
-            if (WinningStreakConfigService.HasInstance && WinningStreakConfigService.Instance.Config != null)
-                unlockLevel = WinningStreakConfigService.Instance.Config.unlockLevel;
-
-            if (!UserDataService.HasInstance || UserDataService.Instance.CurrentUser == null)
-                return false;
-            return UserDataService.Instance.CurrentUser.highestClearedLevel >= unlockLevel;
+            // 엄격 서버 기준: 서버 config 기반 Manager 판정만 사용. config 미로드 시 IsUnlocked=false → 미노출.
+            return WinningStreakManager.HasInstance && WinningStreakManager.Instance.IsUnlocked;
         }
 
         private void RefreshWinningStreakVisibility()

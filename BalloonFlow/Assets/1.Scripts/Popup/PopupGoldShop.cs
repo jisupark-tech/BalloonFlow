@@ -47,6 +47,13 @@ namespace BalloonFlow
         private readonly List<PopupShopListItem> _spawnedItems = new List<PopupShopListItem>();
 
         private System.Action _onCloseCallback;
+        private bool _userExpandedMore;
+        private bool _moreOffersAvailable;
+
+        private UserData CurrentUserOrNull =>
+            (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+                ? UserDataService.Instance.CurrentUser
+                : null;
 
         protected override void Awake()
         {
@@ -65,9 +72,47 @@ namespace BalloonFlow
             }
 
             if (_btnMoreProducts != null)
-                _btnMoreProducts.onClick.AddListener(LoadMoreProducts);
+                _btnMoreProducts.onClick.AddListener(OnMoreProductsClicked);
 
             EnsureTopBarBinding();
+            SubscribeToCatalog();
+        }
+
+        private void OnEnable()
+        {
+            EventBus.Subscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
+            EventBus.Subscribe<OnPurchaseRestored>(HandlePurchaseRestored);
+        }
+
+        private void OnDisable()
+        {
+            EventBus.Unsubscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
+            EventBus.Unsubscribe<OnPurchaseRestored>(HandlePurchaseRestored);
+        }
+
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+
+            if (ShopCatalogService.HasInstance)
+                ShopCatalogService.Instance.OnCatalogLoaded -= OnCatalogReady;
+            EventBus.Unsubscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
+            EventBus.Unsubscribe<OnPurchaseRestored>(HandlePurchaseRestored);
+        }
+
+        private void SubscribeToCatalog()
+        {
+            if (!ShopCatalogService.HasInstance) return;
+            ShopCatalogService.Instance.OnCatalogLoaded += OnCatalogReady;
+            if (ShopCatalogService.Instance.IsLoaded)
+                RefreshProductExposure();
+        }
+
+        private void OnCatalogReady()
+        {
+            RefreshProductExposure();
+            if (gameObject.activeInHierarchy)
+                ResetAndLoadProducts(_userExpandedMore);
         }
 
         private void BindExitClick(Button btn, HashSet<Button> bound)
@@ -131,11 +176,43 @@ namespace BalloonFlow
             }
             base.OpenUI();
             RefreshGold();
-            ResetAndLoadProducts();
+            ResetAndLoadProducts(expanded: false);
         }
 
         /// <summary>보유 골드 즉시 스냅 — prefab 의 _txtGold 와이어링이 TopBar 가 아닌 다른 노드를
         /// 가리킬 때 fallback. TopBar 잔액은 AnimatedCoinLabel 이 EventBus 로 자동 갱신.</summary>
+        private void RefreshProductExposure()
+        {
+            if (!ShopCatalogService.HasInstance || !ShopCatalogService.Instance.IsLoaded)
+            {
+                _moreOffersAvailable = false;
+                return;
+            }
+
+            var user = CurrentUserOrNull;
+            var docs = StoreProductExposure.BuildProducts(
+                ShopCatalogService.Instance.All,
+                user,
+                _userExpandedMore);
+            var products = new List<ShopProductData>(docs.Count);
+            for (int i = 0; i < docs.Count; i++)
+                products.Add(UIShop.ConvertDocToData(docs[i]));
+            _products = products.ToArray();
+            _moreOffersAvailable = StoreProductExposure.CanExpand(ShopCatalogService.Instance.All, user);
+        }
+
+        private void HandlePurchaseCompleted(OnPurchaseCompleted evt)
+        {
+            if (evt.success && gameObject.activeInHierarchy)
+                ResetAndLoadProducts(_userExpandedMore);
+        }
+
+        private void HandlePurchaseRestored(OnPurchaseRestored evt)
+        {
+            if (gameObject.activeInHierarchy)
+                ResetAndLoadProducts(_userExpandedMore);
+        }
+
         private void RefreshGold()
         {
             if (!CurrencyManager.HasInstance) return;
@@ -144,8 +221,11 @@ namespace BalloonFlow
         }
 
         /// <summary>상품 리스트 초기화 + 첫 페이지 로드.</summary>
-        private void ResetAndLoadProducts()
+        private void ResetAndLoadProducts(bool expanded = false)
         {
+            _userExpandedMore = expanded;
+            RefreshProductExposure();
+
             // 기존 아이템 제거
             foreach (var item in _spawnedItems)
             {
@@ -155,18 +235,24 @@ namespace BalloonFlow
             _spawnedItems.Clear();
             _displayedCount = 0;
 
-            LoadMoreProducts();
+            LoadMoreProducts(_userExpandedMore ? (_products != null ? _products.Length : -1) : -1);
 
             // 더 보기 버튼 상태
             UpdateMoreButton();
         }
 
         /// <summary>다음 페이지 상품 추가.</summary>
-        private void LoadMoreProducts()
+        private void OnMoreProductsClicked()
+        {
+            ResetAndLoadProducts(expanded: true);
+        }
+
+        private void LoadMoreProducts(int loadOverride = -1)
         {
             if (_products == null || _listItemPrefab == null || _shopContent == null) return;
 
-            int loadCount = Mathf.Min(ITEMS_PER_PAGE, _products.Length - _displayedCount);
+            int remaining = _products.Length - _displayedCount;
+            int loadCount = loadOverride > 0 ? Mathf.Min(loadOverride, remaining) : Mathf.Min(ITEMS_PER_PAGE, remaining);
             for (int i = 0; i < loadCount; i++)
             {
                 int idx = _displayedCount + i;
@@ -194,7 +280,7 @@ namespace BalloonFlow
         private void UpdateMoreButton()
         {
             if (_btnMoreProducts != null)
-                _btnMoreProducts.gameObject.SetActive(_products != null && _displayedCount < _products.Length);
+                _btnMoreProducts.gameObject.SetActive(!_userExpandedMore && _moreOffersAvailable);
         }
 
         /// <summary>상품 구매 콜백.</summary>

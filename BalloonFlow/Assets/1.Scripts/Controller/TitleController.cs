@@ -89,7 +89,7 @@ namespace BalloonFlow
             // 로딩 완료 후 자동 입장 (모든 진행도 == 1.0)
             if (_loadingComplete)
             {
-                EnterLobby();
+                Enter();
                 return;
             }
 
@@ -101,7 +101,7 @@ namespace BalloonFlow
                 {
                     Debug.LogWarning("[TitleController] Loading watchdog timeout → 강제 입장");
                     if (_ui != null) _ui.SetProgress(1f);
-                    EnterLobby();
+                    Enter();
                 }
             }
         }
@@ -375,13 +375,43 @@ namespace BalloonFlow
                 Debug.LogWarning($"[TitleController] 에피소드 prefetch timeout (level {nextLevel}). 게임 진입 후 LevelManager 가 캐시 miss 시 다시 시도.");
         }
 
-        /// <summary>로딩 완료 시 1회 호출 — Lobby 씬 로드.</summary>
-        private void EnterLobby()
+        /// <summary>첫 실행 진입 여부를 기록하는 로컬 플래그 — 이후 실행은 Lobby 로.</summary>
+        private const string FIRST_LAUNCH_KEY = "BF_FirstLaunchEntered";
+
+        /// <summary>로딩 완료 시 1회 호출 — 첫 실행이면 레벨1 인게임, 그 외엔 Lobby 로 진입.</summary>
+        private void Enter()
         {
             if (_entered) return;
             _entered = true;
-            if (GameManager.HasInstance)
+            if (!GameManager.HasInstance) return;
+
+            if (ShouldEnterFirstLevel())
+            {
+                PlayerPrefs.SetInt(FIRST_LAUNCH_KEY, 1);
+                PlayerPrefs.Save();
+                // 스플래시 유지: 스플래시 배경을 전환 오버레이로 그대로 이어 보여주며 레벨1 진입.
+                // 별도 전환 이미지를 띄우지 않아 splash→레벨 사이 단색/이중 노출이 없음.
+                if (_ui != null && _ui.SplashSprite != null)
+                    GameManager.Instance.SetTransitionImage(_ui.SplashSprite);
+                GameManager.Instance.StartLevel(1);
+            }
+            else
+            {
                 GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY);
+            }
+        }
+
+        /// <summary>첫 실행(로컬 플래그 없음)이고 클리어 기록이 없는 신규 유저일 때만 레벨1 직행.
+        /// 재설치 등으로 진행도가 복원된 유저는 Lobby 로 보낸다.</summary>
+        private bool ShouldEnterFirstLevel()
+        {
+            if (PlayerPrefs.GetInt(FIRST_LAUNCH_KEY, 0) != 0) return false;
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+            {
+                var u = UserDataService.Instance.CurrentUser;
+                if (u != null && u.highestClearedLevel > 0) return false;
+            }
+            return true;
         }
 
         static GameObject CreateCanvas(string name, int sortingOrder)

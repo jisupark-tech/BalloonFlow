@@ -54,8 +54,23 @@ namespace BalloonFlow
         [Tooltip("기반 Material. 복제하여 색상만 변경")]
         [SerializeField] private Material _baseMaterial;
 
+        [Header("[Barricade 전용 — Gimmick Type이 Barricade일 때만 할당]")]
+        [Tooltip("머리/베이스 메시 (Barricade)")]
+        [SerializeField] private Transform _barricadeHead;
+        [Tooltip("늘어나는 몸통 (BarricadeBody) — 미할당 시 이름으로 자동 탐색")]
+        [SerializeField] private Transform _barricadeBody;
+        [Tooltip("몸통 끝 마감 (Edge) — 할당 시 코드가 body 끝으로 이동")]
+        [SerializeField] private Transform _barricadeEdge;
+
         /// <summary>현재 기믹 타입.</summary>
         public GimmickType Type => _gimmickType;
+
+        /// <summary>Barricade 머리/베이스 (Inspector 할당, 선택).</summary>
+        public Transform BarricadeHead => _barricadeHead;
+        /// <summary>Barricade 늘어나는 몸통 (Inspector 할당, 선택).</summary>
+        public Transform BarricadeBody => _barricadeBody;
+        /// <summary>Barricade 끝 마감 (Inspector 할당, 선택).</summary>
+        public Transform BarricadeEdge => _barricadeEdge;
 
         /// <summary>색상 적용 대상이 할당되었는지.</summary>
         public bool HasColorRenderers => _colorRenderers != null && _colorRenderers.Length > 0;

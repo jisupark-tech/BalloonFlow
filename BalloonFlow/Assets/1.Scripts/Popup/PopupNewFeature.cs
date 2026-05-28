@@ -83,7 +83,7 @@ namespace BalloonFlow
 
         /// <summary>
         /// 기믹 이름으로 팝업 표시.
-        /// featureKey: "Loop"/"Pinata"/"Hidden"/"IronBox"/"Spawner"/"KeyLock"/"FrozenLayer"/"Baricade"/"FrozenBox"
+        /// featureKey: "Loop"/"Pinata"/"TargetBox"/"Hidden"/"IronBox"/"Spawner"/"KeyLock"/"FrozenLayer"/"Baricade"/"FrozenBox"
         /// 매핑된 Inspector Sprite 가 null 이면 경고 로그 + 이미지 비활성.
         /// </summary>
         public void Show(string featureKey, string description = null)
@@ -92,6 +92,7 @@ namespace BalloonFlow
             {
                 "Loop"        => _sprLoop,
                 "Pinata"      => _sprPinata,
+                "TargetBox"   => _sprPinata,
                 "Hidden"      => _sprHidden,
                 "IronBox"     => _sprIronBox,
                 "Spawner"     => _sprSpawner,
@@ -145,6 +146,7 @@ namespace BalloonFlow
             {
                 "Loop"        => "Loop",
                 "Pinata"      => "Pinata",
+                "TargetBox"   => "Target Box",
                 "Hidden"      => "Hidden Balloon",
                 "IronBox"     => "Iron Box",
                 "Spawner"     => "Spawner",

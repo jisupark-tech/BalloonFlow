@@ -71,6 +71,7 @@ namespace BalloonFlow
         private int _lastLoadFrame = int.MinValue;
         // [2026-05-21] Pool: 첫 빌드 또는 catalog 변경 시에만 destroy/respawn. 그 외 탭 재진입은 spawn 재사용.
         private bool _listDirty = true;
+        private bool _moreOffersAvailable;
         // 초기 build 후 _spawnedRoots 안 첫 페이지 root 갯수 — More 클릭으로 추가된 항목과 구분.
         private int _firstPageRootCount;
 
@@ -78,6 +79,11 @@ namespace BalloonFlow
         private ScrollRect _scrollRect;
         private RectTransform _viewport;
         private bool _scrollListenerRegistered;
+
+        private UserData CurrentUserOrNull =>
+            (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+                ? UserDataService.Instance.CurrentUser
+                : null;
 
         protected override void Awake()
         {
@@ -109,16 +115,32 @@ namespace BalloonFlow
             SubscribeToCatalog();
         }
 
-        private void OnDestroy()
+        protected override void OnDestroy()
         {
+            base.OnDestroy();
+
             if (ShopCatalogService.HasInstance)
                 ShopCatalogService.Instance.OnCatalogLoaded -= OnCatalogReady;
+            EventBus.Unsubscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
+            EventBus.Unsubscribe<OnPurchaseRestored>(HandlePurchaseRestored);
 
             if (_scrollRect != null && _scrollListenerRegistered)
             {
                 _scrollRect.onValueChanged.RemoveListener(OnScrollValueChanged);
                 _scrollListenerRegistered = false;
             }
+        }
+
+        private void OnEnable()
+        {
+            EventBus.Subscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
+            EventBus.Subscribe<OnPurchaseRestored>(HandlePurchaseRestored);
+        }
+
+        private void OnDisable()
+        {
+            EventBus.Unsubscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
+            EventBus.Unsubscribe<OnPurchaseRestored>(HandlePurchaseRestored);
         }
 
         /// <summary>ShopCatalogService 구독. 이미 로드 상태면 즉시 적용. 매니저 부재 시 fallback.</summary>
@@ -136,8 +158,7 @@ namespace BalloonFlow
                     var user = (UserDataService.HasInstance && UserDataService.Instance.IsReady)
                         ? UserDataService.Instance.CurrentUser
                         : null;
-                    var visible = ShopCatalogService.Instance.GetVisibleForUser(user);
-                    _products = visible.Select(ConvertDocToData).ToArray();
+                    RefreshProductExposure();
                 }
                 else
                 {
@@ -155,14 +176,49 @@ namespace BalloonFlow
         }
 
         /// <summary>Firestore 카탈로그 로드 완료 시 실행. UserData 기준 필터 + 변환 + 재구성.</summary>
+        private void RefreshProductExposure()
+        {
+            if (!ShopCatalogService.HasInstance || !ShopCatalogService.Instance.IsLoaded)
+            {
+                if (_products == null || _products.Length == 0)
+                    _products = BuildDefaultTempProducts();
+                _moreOffersAvailable = false;
+                return;
+            }
+
+            var user = CurrentUserOrNull;
+            var docs = StoreProductExposure.BuildProducts(
+                ShopCatalogService.Instance.All,
+                user,
+                _userExpandedMore);
+            _products = docs.Select(ConvertDocToData).ToArray();
+            _moreOffersAvailable = StoreProductExposure.CanExpand(ShopCatalogService.Instance.All, user);
+        }
+
+        private void RefreshAfterPurchaseChange()
+        {
+            _listDirty = true;
+            if (gameObject.activeInHierarchy)
+                ResetAndLoadProducts(_userExpandedMore);
+        }
+
+        private void HandlePurchaseCompleted(OnPurchaseCompleted evt)
+        {
+            if (evt.success) RefreshAfterPurchaseChange();
+        }
+
+        private void HandlePurchaseRestored(OnPurchaseRestored evt)
+        {
+            RefreshAfterPurchaseChange();
+        }
+
         private void OnCatalogReady()
         {
             var user = (UserDataService.HasInstance && UserDataService.Instance.IsReady)
                 ? UserDataService.Instance.CurrentUser
                 : null;
 
-            var visible = ShopCatalogService.Instance.GetVisibleForUser(user);
-            _products = visible.Select(ConvertDocToData).ToArray();
+            RefreshProductExposure();
             Debug.Log($"[UIShop] Catalog loaded — {_products.Length} products visible.");
 
             // 카탈로그 갱신 → 다음 ResetView 는 반드시 rebuild.
@@ -175,7 +231,7 @@ namespace BalloonFlow
         }
 
         /// <summary>ShopProductDoc(서버 모델) → ShopProductData(UI 모델) 변환.</summary>
-        private static ShopProductData ConvertDocToData(ShopProductDoc doc)
+        internal static ShopProductData ConvertDocToData(ShopProductDoc doc)
         {
             var category = MapCategory(doc.category);
             string title;
@@ -413,7 +469,7 @@ namespace BalloonFlow
         /// 상품 리스트 초기화 + 첫 페이지 로드.
         /// [2026-05-21] Pool: _listDirty=false 면 destroy/respawn 생략. 탭 재진입 시 spawn 비용 0.
         /// </summary>
-        private void ResetAndLoadProducts()
+        private void ResetAndLoadProducts(bool expanded = false)
         {
             // 같은 프레임 중복 호출 방지 (Awake 경로 + UILobby.ResetView 동시 트리거 시 등장 연출 1회만)
             if (_lastLoadFrame == Time.frameCount) return;
@@ -431,7 +487,7 @@ namespace BalloonFlow
                         _spawnedRoots[i].SetActive(isFirstPage);
                 }
                 // 2) state reset — 다음 More 클릭이 다시 의미를 가지도록.
-                _userExpandedMore = false;
+                _userExpandedMore = expanded;
                 _displayedCount = Mathf.Min(_displayedCount, _firstPageRootCount > 0 ? ITEMS_PER_PAGE : _displayedCount);
                 // 3) More 버튼 노출 결정 (UpdateMoreButton 가 _userExpandedMore 확인).
                 UpdateMoreButton();
@@ -439,7 +495,8 @@ namespace BalloonFlow
             }
 
             // Fresh rebuild — 기존 spawn 폐기 후 첫 페이지 재로드.
-            _userExpandedMore = false;
+            _userExpandedMore = expanded;
+            RefreshProductExposure();
 
             if (_spawnedRoots.Count > 0)
             {
@@ -462,7 +519,7 @@ namespace BalloonFlow
             _displayedCount = 0;
             _firstPageRootCount = 0;
 
-            LoadMoreProducts();
+            LoadMoreProducts(_userExpandedMore ? (_products != null ? _products.Length : -1) : -1);
             UpdateMoreButton();
             _listDirty = false;
         }
@@ -472,8 +529,9 @@ namespace BalloonFlow
         /// 재활성만 하고 Instantiate 생략 — 두 번째 More 클릭부터 stutter 없음.</summary>
         private void OnMoreProductsClicked()
         {
-            _userExpandedMore = true;
-
+            _listDirty = true;
+            ResetAndLoadProducts(expanded: true);
+            if (_userExpandedMore) return;
             bool poolHasHiddenMore = _firstPageRootCount > 0 && _spawnedRoots.Count > _firstPageRootCount;
             if (poolHasHiddenMore)
             {
@@ -654,7 +712,7 @@ namespace BalloonFlow
         {
             if (_btnMoreProducts == null) return;
             var root = MoreButtonRoot;
-            if (_userExpandedMore)
+            if (_userExpandedMore || !_moreOffersAvailable)
             {
                 // 부모 컨테이너 전체 비활성.
                 if (root != null && root.activeSelf)

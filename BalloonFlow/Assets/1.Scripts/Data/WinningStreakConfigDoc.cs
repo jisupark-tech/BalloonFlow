@@ -21,67 +21,8 @@ namespace BalloonFlow
         /// <summary>stage 1..N 순서 보상 테이블. 길이는 디자인 따라 가변 가능 (현재 25).</summary>
         [FirestoreProperty] public List<WinningStreakStage> stages { get; set; } = new List<WinningStreakStage>();
 
-        public static WinningStreakConfigDoc CreateDefault()
-        {
-            var doc = new WinningStreakConfigDoc();
-
-            // ROLLBACK_WINNING_STREAK_CONFIG_FALLBACK:
-            // Keep the client playable when Firestore /config/winningStreak cannot be read
-            // because of missing rules, offline state, or a not-yet-uploaded config doc.
-            int[,] table =
-            {
-                {  1,    1,    0, 0, 0, 0,  900 },
-                {  2,   10,   50, 0, 0, 0,    0 },
-                {  3,  200,    0, 0, 1, 0,    0 },
-                {  4,  500,  100, 0, 0, 0,    0 },
-                {  5,  250,    0, 0, 0, 0,  900 },
-                {  6, 1000,    0, 1, 1, 0,    0 },
-                {  7,  200,  100, 0, 0, 0,    0 },
-                {  8,  250,    0, 0, 1, 0,    0 },
-                {  9,  500,    0, 0, 0, 0, 1800 },
-                { 10, 1000,    0, 1, 1, 0,    0 },
-                { 11,  200,  200, 0, 0, 0,    0 },
-                { 12,  500,    0, 0, 1, 0,    0 },
-                { 13,  750,    0, 1, 0, 0,    0 },
-                { 14, 1500,    0, 0, 0, 0, 1800 },
-                { 15,  250,    0, 0, 1, 1,    0 },
-                { 16,  500,  400, 0, 0, 0,    0 },
-                { 17, 1000,    0, 1, 0, 1,    0 },
-                { 18, 2000,    0, 1, 0, 0,    0 },
-                { 19,  500,    0, 0, 0, 0, 3600 },
-                { 20, 1000,    0, 1, 1, 1,    0 },
-                { 21, 1500,    0, 0, 1, 0,    0 },
-                { 22, 3000, 1000, 0, 0, 0,    0 },
-                { 23,  750,    0, 0, 0, 1,    0 },
-                { 24, 2000,    0, 0, 0, 0, 7200 },
-                { 25, 5000, 5000, 0, 0, 0,    0 }
-            };
-
-            doc.stages = new List<WinningStreakStage>(table.GetLength(0));
-            for (int i = 0; i < table.GetLength(0); i++)
-            {
-                doc.stages.Add(new WinningStreakStage
-                {
-                    stage = table[i, 0],
-                    requiredPoints = table[i, 1],
-                    rewards = new ShopRewards
-                    {
-                        coins = table[i, 2],
-                        boosters = new BoosterInventory
-                        {
-                            hand = table[i, 3],
-                            shuffle = table[i, 4],
-                            zap = table[i, 5]
-                        },
-                        infiniteHeartsSeconds = table[i, 6],
-                        removeAds = false
-                    },
-                    collectionXRewards = new ShopRewards()
-                });
-            }
-
-            return doc;
-        }
+        // 엄격 서버 기준: 클라 기본 config(CreateDefault) 제거 — 서버(config/winningStreak) 만이 단일 진실.
+        // 시드 원본은 firebase/seed/winningStreak/config.json, 업로드는 WinningStreakConfigUploader(Editor).
     }
 
     [FirestoreData]
