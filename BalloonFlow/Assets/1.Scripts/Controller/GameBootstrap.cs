@@ -133,6 +133,16 @@ namespace BalloonFlow
                 Debug.Log("[GameBootstrap] Created ResourceManager (was missing — test mode or direct scene load)");
             }
 
+            // GimmickProcessor (SceneSingleton) — Surprise/Hidden·Color Curtain 공개, Pin/Barricade 타격,
+            // 다트 blocker 가 이 매니저에 의존. InGame 씬에 없으면 RegisterBalloonGimmick/OnBalloonPopped 구독이
+            // 전부 스킵되어 공개가 작동 안 함. SetupBalloons(Surprise 등록) 전에 보장돼야 하므로 여기서 생성.
+            if (!GimmickProcessor.HasInstance)
+            {
+                var _go = new GameObject("GimmickProcessor");
+                _go.AddComponent<GimmickProcessor>();
+                Debug.Log("[GameBootstrap] Created GimmickProcessor (was missing — Surprise/Curtain reveal depends on it)");
+            }
+
             // UIManager (required for all UI: HUD, popups, fade transitions)
             if (!UIManager.HasInstance)
             {

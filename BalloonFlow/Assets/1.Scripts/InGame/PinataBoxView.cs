@@ -4,18 +4,17 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Pinata_Box(Target Box) 비주얼 — 틀(frame) + W×H 알(paint) 격자.
+    /// Pinata_Box(Target Box) 비주얼 — 틀(frame) + 명시 egg 리스트(N개)의 알(paint).
     ///
-    /// [Inspector 링크 — IronBox 프리팹 루트에 부착]
-    ///  - _frame      : 박스 틀 (paintbox). footprint 에 맞춰 bounds-fit 스케일됨. 없으면 스킵.
-    ///  - _eggTemplate: 알 1개 (paint) 템플릿. Build 가 이것을 W×H 복제해서 사용 → 원본은 자동 비활성.
-    ///                  프리팹에 남아있는 다른 paint(정적 알)들은 제거하거나 비활성 권장(이중 렌더 방지).
+    /// [egg 템플릿(paint) 구조]  paint → Cylinder(몸체) + texture(균열 오버레이)
+    ///  - 색상은 Cylinder 에만 적용. texture 는 평소 비활성, HP 가 절반 이하로 닳으면 활성화(균열 표시).
     ///
-    /// [동작]
-    ///  - BalloonController 가 스폰 시 Build() 호출. 알을 개별 mesh 로 셀 간격에 배치하므로
-    ///    단일 mesh 확대(ApplySizedFieldVisualTransform)로 인한 이웃 셀 침범이 없다.
-    ///  - 각 알에 eggColors[i] 색을 적용 (BalloonController 공용 머티리얼 캐시 재사용).
-    ///  - Phase D(메커닉)에서 알 제거는 HideEgg(index) 로 시각 처리.
+    /// [배치]  N(= Add 한 egg 수)개를 ceil(√N) 격자로 footprint 중앙에 배치, 각 알을 격자 셀 크기에 맞춰 자동 스케일.
+    ///         footprint(W×H)는 박스 영역(occupancy), 알 수 N 은 그와 무관(명시 리스트).
+    ///
+    /// [Inspector 링크 — paint 프리팹의 알/틀 노드에 부착]
+    ///  - _frame      : 박스 틀(paintbox). footprint 에 맞춰 bounds-fit. 없으면 스킵.
+    ///  - _eggTemplate: 알 1개(paint) 템플릿. Build 가 N개 복제 → 원본 자동 비활성.
     /// </summary>
     [DisallowMultipleComponent]
     public class PinataBoxView : MonoBehaviour
@@ -23,86 +22,127 @@ namespace BalloonFlow
         [Header("[Inspector 링크 — 드래그해서 연결]")]
         [Tooltip("박스 틀(paintbox) Transform. footprint 크기에 맞춰 자동 스케일. 비워두면 스킵.")]
         [SerializeField] private Transform _frame;
-        [Tooltip("알 1개 템플릿(paint) GameObject. Build 가 이걸 복제해 W×H 격자 생성 → 원본은 자동 비활성.")]
+        [Tooltip("알 1개 템플릿(paint) GameObject. Build 가 N개 복제. (자식: Cylinder=몸체, texture=균열)")]
         [SerializeField] private GameObject _eggTemplate;
 
         [Header("[튜닝]")]
-        [Tooltip("알 크기 배수(축별). 프리팹 메시가 3× 크면 X/Z 를 0.333 으로 설정. Y 는 보통 1 유지. (1,1,1)=원본.")]
-        [SerializeField] private Vector3 _eggScaleMultiplier = Vector3.one;
+        [Tooltip("자동 맞춤된 알 크기에 곱하는 여유 배수 (1=셀 꽉 채움, 0.9=약간 여백). 보통 0.85~1.")]
+        [SerializeField, Range(0.3f, 1.2f)] private float _eggFillRatio = 0.9f;
+
+        [Header("[알 자식 링크 — 템플릿(_eggTemplate) 안의 노드를 드래그]")]
+        [Tooltip("색 적용 대상(몸체) — 템플릿 안의 Cylinder 를 드래그. 비우면 이름으로 탐색.")]
+        [SerializeField] private Transform _bodyOnTemplate;
+        [Tooltip("균열 오버레이 — 템플릿 안의 texture 를 드래그. 비우면 이름으로 탐색.")]
+        [SerializeField] private Transform _textureOnTemplate;
+
+        [Header("[자식 이름 — 링크 안 돼 있을 때만 사용하는 fallback]")]
+        [Tooltip("색 적용 대상(몸체) 자식 이름. _bodyOnTemplate 미링크 시 이 이름으로 탐색.")]
+        [SerializeField] private string _bodyChildName = "Cylinder";
+        [Tooltip("균열 오버레이 자식 이름. _textureOnTemplate 미링크 시 이 이름으로 탐색.")]
+        [SerializeField] private string _textureChildName = "texture";
 
         private readonly List<GameObject> _eggs = new List<GameObject>();
+        private readonly List<GameObject> _eggTextures = new List<GameObject>();
+        private readonly List<int> _eggMaxHps = new List<int>();
 
-        /// <summary>생성된 알 개수 (= W*H, 범위 내).</summary>
         public int EggCount => _eggs.Count;
 
-        /// <summary>index 번째 알 GameObject (row-major). 범위 밖이면 null.</summary>
-        public GameObject GetEgg(int index)
-            => (index >= 0 && index < _eggs.Count) ? _eggs[index] : null;
-
         /// <summary>
-        /// W×H 알 격자 생성 + 색 적용 + 틀 스케일.
-        /// 박스 루트는 footprint 중앙·identity scale 로 BalloonController 가 배치하고,
-        /// 여기서는 월드 셀 간격(cellSizeX/Z)으로 알을 로컬 배치한다(루트 scale=1 가정).
+        /// 알 배치 — eggColors 항목 수(N)만큼. Cylinder 만 색칠, texture 는 비활성으로 시작.
         /// </summary>
-        /// <param name="w">가로 셀 수</param>
-        /// <param name="h">세로 셀 수</param>
-        /// <param name="eggColors">셀별 색 인덱스 (len=w*h, row-major). null 이면 색 미적용.</param>
-        /// <param name="cellSizeX">월드 셀 가로 간격</param>
-        /// <param name="cellSizeZ">월드 셀 세로 간격</param>
-        /// <param name="eggScale">알 1개 스케일 (보통 _balloonScale*scaleMult). 템플릿 로컬 스케일에 곱.</param>
-        public void Build(int w, int h, int[] eggColors, float cellSizeX, float cellSizeZ, float eggScale)
+        public void Build(int w, int h, int[] eggColors, int[] eggHps, float cellSizeX, float cellSizeZ, float eggScale)
         {
             Clear();
 
             if (_eggTemplate == null)
             {
-                Debug.LogError("[PinataBoxView] _eggTemplate 미할당 — 알을 생성할 수 없습니다. IronBox 프리팹에서 paint 1개를 _eggTemplate 에 링크하세요.", this);
+                Debug.LogError("[PinataBoxView] _eggTemplate 미할당 — paint 1개를 _eggTemplate 에 링크하세요.", this);
                 return;
             }
 
             w = Mathf.Max(1, w);
             h = Mathf.Max(1, h);
-            _eggTemplate.SetActive(false); // 원본 템플릿 숨김 (복제본만 표시)
+            int n = (eggColors != null && eggColors.Length > 0) ? eggColors.Length : 1;
+
+            // ceil(√N) 격자 → footprint 영역을 채우도록 배치.
+            int cols = Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(n)));
+            int rows = Mathf.CeilToInt((float)n / cols);
+
+            // 격자 한 칸의 월드 크기 (footprint 를 cols×rows 로 나눔).
+            float gridCellW = (w * cellSizeX) / cols;
+            float gridCellZ = (h * cellSizeZ) / rows;
+
+            // 템플릿 월드 bounds 측정 → 격자 칸에 맞출 스케일 계수 산출. 측정 위해 잠깐 활성화.
+            bool tplWasActive = _eggTemplate.activeSelf;
+            if (!tplWasActive) _eggTemplate.SetActive(true);
+            float tplSizeX, tplSizeZ;
+            MeasureTemplateSize(out tplSizeX, out tplSizeZ);
+
+            _eggTemplate.SetActive(false); // 원본 숨김(복제본만 표시)
 
             Vector3 tplScale = _eggTemplate.transform.localScale;
             Quaternion tplRot = _eggTemplate.transform.localRotation;
             float tplY = _eggTemplate.transform.localPosition.y;
 
-            // 월드 셀 간격을 이 컴포넌트(부모) 로컬 단위로 변환 — 부모가 스케일돼 있어도 알이 정확히 셀 간격으로 배치.
+            // 격자 칸(월드)에 맞춘 균일 스케일 계수 — 작은 축 기준으로 셀 안에 들어가게.
+            float fitK = 1f;
+            if (tplSizeX > 0.0001f && tplSizeZ > 0.0001f)
+                fitK = Mathf.Min(gridCellW / tplSizeX, gridCellZ / tplSizeZ) * _eggFillRatio;
+            fitK *= Mathf.Max(0.01f, eggScale);
+
+            // 월드 격자 간격 → 로컬 단위(부모 스케일 보정).
             Vector3 ls = transform.lossyScale;
-            float localCellX = cellSizeX / Mathf.Max(0.0001f, Mathf.Abs(ls.x));
-            float localCellZ = cellSizeZ / Mathf.Max(0.0001f, Mathf.Abs(ls.z));
+            float localGridX = gridCellW / Mathf.Max(0.0001f, Mathf.Abs(ls.x));
+            float localGridZ = gridCellZ / Mathf.Max(0.0001f, Mathf.Abs(ls.z));
 
-            for (int dy = 0; dy < h; dy++)
+            // 링크된 Cylinder/texture 의 템플릿 기준 자식 경로(인덱스) 미리 계산 — 클론에서 동일 경로로 해석.
+            // 미링크면 null → 이름으로 fallback.
+            var bodyPath = (_bodyOnTemplate != null) ? GetChildIndexPath(_eggTemplate.transform, _bodyOnTemplate) : null;
+            var texPath = (_textureOnTemplate != null) ? GetChildIndexPath(_eggTemplate.transform, _textureOnTemplate) : null;
+
+            for (int i = 0; i < n; i++)
             {
-                for (int dx = 0; dx < w; dx++)
-                {
-                    int idx = dy * w + dx;
-                    GameObject egg = Instantiate(_eggTemplate, transform);
-                    egg.SetActive(true);
-                    egg.transform.localRotation = tplRot;
-                    // 축별 배수(_eggScaleMultiplier: 예 X/Z=0.333)로 메시 과대 보정 + 밀집 축소(eggScale).
-                    egg.transform.localScale = Vector3.Scale(tplScale, _eggScaleMultiplier) * Mathf.Max(0.01f, eggScale);
-                    // 컴포넌트 로컬 원점 기준 중앙 정렬 (BalloonController 가 이 노드를 footprint 중앙에 둠)
-                    float ox = (dx - (w - 1) * 0.5f) * localCellX;
-                    float oz = (dy - (h - 1) * 0.5f) * localCellZ;
-                    egg.transform.localPosition = new Vector3(ox, tplY, oz);
+                int gc = i % cols;
+                int gr = i / cols;
 
-                    if (eggColors != null && idx < eggColors.Length)
-                        ApplyEggColor(egg, eggColors[idx]);
+                GameObject egg = Instantiate(_eggTemplate, transform);
+                egg.SetActive(true);
+                egg.transform.localRotation = tplRot;
+                egg.transform.localScale = tplScale * fitK;
+                float ox = (gc - (cols - 1) * 0.5f) * localGridX;
+                float oz = (gr - (rows - 1) * 0.5f) * localGridZ;
+                egg.transform.localPosition = new Vector3(ox, tplY, oz);
 
-                    _eggs.Add(egg);
-                }
+                int color = (eggColors != null && i < eggColors.Length) ? eggColors[i] : 0;
+                int maxHp = (eggHps != null && i < eggHps.Length && eggHps[i] > 0) ? eggHps[i] : 1;
+
+                GameObject texChild;
+                SetupEggVisual(egg, color, bodyPath, texPath, out texChild);
+
+                _eggs.Add(egg);
+                _eggTextures.Add(texChild);
+                _eggMaxHps.Add(maxHp);
             }
 
             ScaleFrameToFootprint(w, h, cellSizeX, cellSizeZ);
         }
 
-        /// <summary>index 번째 알을 시각적으로 제거(비활성). 남은 활성 알이 있으면 true.</summary>
-        public bool HideEgg(int index)
+        /// <summary>알 항목 i 의 현재 HP 반영 — 0 이하면 알 제거, 절반 이하면 균열(texture) 활성. 남은 알 있으면 true.</summary>
+        public bool UpdateEggHp(int index, int currentHp)
         {
             if (index >= 0 && index < _eggs.Count && _eggs[index] != null)
-                _eggs[index].SetActive(false);
+            {
+                if (currentHp <= 0)
+                {
+                    _eggs[index].SetActive(false);
+                }
+                else if (index < _eggTextures.Count && _eggTextures[index] != null)
+                {
+                    int maxHp = index < _eggMaxHps.Count ? _eggMaxHps[index] : currentHp;
+                    bool damaged = currentHp * 2 <= maxHp; // 절반 이상 닳음
+                    _eggTextures[index].SetActive(damaged);
+                }
+            }
 
             for (int i = 0; i < _eggs.Count; i++)
                 if (_eggs[i] != null && _eggs[i].activeSelf) return true;
@@ -114,31 +154,102 @@ namespace BalloonFlow
             for (int i = 0; i < _eggs.Count; i++)
                 if (_eggs[i] != null) Destroy(_eggs[i]);
             _eggs.Clear();
+            _eggTextures.Clear();
+            _eggMaxHps.Clear();
         }
 
-        private static void ApplyEggColor(GameObject egg, int colorIndex)
+        // Cylinder(몸체)만 색 적용, texture(균열)는 비활성으로 시작.
+        // 링크된 경로(bodyPath/texPath) 우선, 없으면 이름으로 fallback.
+        private void SetupEggVisual(GameObject egg, int colorIndex, List<int> bodyPath, List<int> texPath, out GameObject textureChild)
         {
-            var renderers = egg.GetComponentsInChildren<Renderer>(true);
-            if (renderers == null || renderers.Length == 0) return;
+            textureChild = null;
+
+            Transform body = ResolveChild(egg.transform, bodyPath, _bodyChildName);
+            Transform tex = ResolveChild(egg.transform, texPath, _textureChildName);
 
             Color c = BalloonController.BalloonColors[
                 Mathf.Clamp(colorIndex, 0, BalloonController.BalloonColors.Length - 1)];
             Material mat = BalloonController.GetOrCreateSharedMaterial(c);
-            if (mat == null) return;
-            for (int i = 0; i < renderers.Length; i++)
-                if (renderers[i] != null) renderers[i].sharedMaterial = mat;
+
+            // 색은 Cylinder 에만 (못 찾으면 texture 제외한 알 전체 폴백).
+            if (body != null) ApplyMatToRenderers(body.gameObject, mat);
+            else if (mat != null) ApplyMatToRenderersExcept(egg, mat, tex);
+
+            if (tex != null)
+            {
+                tex.gameObject.SetActive(false); // 평소 비활성
+                textureChild = tex.gameObject;
+            }
         }
 
-        // 틀의 renderer bounds 를 측정해 footprint(w*cellSizeX × h*cellSizeZ)에 맞춰 스케일 (self-calibrating).
-        // 모서리 늘어남(2×2 틀을 1×3 등으로)은 아트 보강 영역 — 단순 스케일로 진행.
+        // 클론에서 자식 해석: 인덱스 경로(링크) 우선 → 없으면 이름으로 Find.
+        private static Transform ResolveChild(Transform cloneRoot, List<int> indexPath, string fallbackName)
+        {
+            if (indexPath != null)
+            {
+                Transform t = cloneRoot;
+                bool ok = true;
+                for (int i = 0; i < indexPath.Count; i++)
+                {
+                    int idx = indexPath[i];
+                    if (idx < 0 || idx >= t.childCount) { ok = false; break; }
+                    t = t.GetChild(idx);
+                }
+                if (ok && t != cloneRoot) return t;
+            }
+            return !string.IsNullOrEmpty(fallbackName) ? cloneRoot.Find(fallbackName) : null;
+        }
+
+        // target 의 root 기준 자식 sibling-index 경로. target 이 root 하위가 아니면 null.
+        private static List<int> GetChildIndexPath(Transform root, Transform target)
+        {
+            if (root == null || target == null) return null;
+            var path = new List<int>();
+            Transform t = target;
+            while (t != null && t != root)
+            {
+                path.Insert(0, t.GetSiblingIndex());
+                t = t.parent;
+            }
+            return (t == root && path.Count > 0) ? path : null;
+        }
+
+        private static void ApplyMatToRenderers(GameObject go, Material mat)
+        {
+            if (mat == null) return;
+            var rends = go.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < rends.Length; i++)
+                if (rends[i] != null) rends[i].sharedMaterial = mat;
+        }
+
+        private static void ApplyMatToRenderersExcept(GameObject root, Material mat, Transform exclude)
+        {
+            var rends = root.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < rends.Length; i++)
+            {
+                if (rends[i] == null) continue;
+                if (exclude != null && rends[i].transform.IsChildOf(exclude)) continue;
+                rends[i].sharedMaterial = mat;
+            }
+        }
+
+        private void MeasureTemplateSize(out float sizeX, out float sizeZ)
+        {
+            sizeX = 0f; sizeZ = 0f;
+            var rends = _eggTemplate.GetComponentsInChildren<Renderer>(true);
+            if (rends == null || rends.Length == 0) return;
+            Bounds b = rends[0].bounds;
+            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+            sizeX = b.size.x; sizeZ = b.size.z;
+        }
+
+        // 틀의 renderer bounds → footprint(w*cellSizeX × h*cellSizeZ)에 맞춰 스케일.
         private void ScaleFrameToFootprint(int w, int h, float cellSizeX, float cellSizeZ)
         {
             if (_frame == null) return;
-
             var rends = _frame.GetComponentsInChildren<Renderer>(true);
             if (rends == null || rends.Length == 0) return;
 
-            // 현재 스케일 기준 bounds → 단위 스케일 base size 역산.
             Bounds b = rends[0].bounds;
             for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
             Vector3 cur = _frame.lossyScale;

@@ -658,21 +658,24 @@ namespace BalloonFlow
                 {
                     int width = Mathf.Max(1, balloon.sizeW);
                     int height = Mathf.Max(1, balloon.sizeH);
-                    // Target Box 알 모델: 셀마다 egg 색으로 노출 → 그 색 다트가 해당 셀을 조준.
+                    // Target Box 알 모델: footprint 셀에 egg 색을 분배(modulo N) → 그 색 다트가 박스를 조준.
+                    // eggColors 길이 N 은 footprint 셀 수(W*H)와 무관(명시 egg 리스트).
                     bool isEggBox = balloon.gimmickType == BalloonController.GimmickPinataBox
-                        && balloon.eggColors != null && balloon.eggColors.Length == width * height;
+                        && balloon.eggColors != null && balloon.eggColors.Length > 0;
+                    int eggN = isEggBox ? balloon.eggColors.Length : 0;
                     Vector3 anchor = BalloonController.Instance.GetAdjustedBoardPosition(balloon.position);
                     BalloonController.Instance.GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ);
                     for (int dx = 0; dx < width; dx++)
                     {
                         for (int dz = 0; dz < height; dz++)
                         {
-                            int eggIdx = dz * width + dx;
-                            int cellColor = isEggBox ? balloon.eggColors[eggIdx] : balloon.color;
-                            // 알 박스: 죽은 알(hp 0) 셀은 비타겟(blocker) — 그 색 다트가 더는 조준 안 함.
+                            int cellColor = balloon.color;
                             bool cellTargetable = targetable;
                             if (isEggBox)
                             {
+                                int eggIdx = (dz * width + dx) % eggN;
+                                cellColor = balloon.eggColors[eggIdx];
+                                // 죽은 알(hp 0) 색 셀은 비타겟(blocker) — 그 색 다트가 더는 조준 안 함.
                                 bool eggAlive = balloon.eggHps != null && eggIdx < balloon.eggHps.Length && balloon.eggHps[eggIdx] > 0;
                                 cellTargetable = targetable && eggAlive;
                             }

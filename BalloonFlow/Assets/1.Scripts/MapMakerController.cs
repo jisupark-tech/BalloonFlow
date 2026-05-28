@@ -148,6 +148,15 @@ namespace BalloonFlow
         private int[,] _balloonColors;
         private int[,] _balloonGimmicks;
 
+        // [Target Box Egg 패널] footprint(박스 영역)과 분리된 명시적 알 리스트.
+        // 브러시용 현재 알 목록(색/HP) + 칠한 박스 anchor 별 저장.
+        private readonly System.Collections.Generic.List<int> _boxEggColors = new System.Collections.Generic.List<int>();
+        private readonly System.Collections.Generic.List<int> _boxEggHps = new System.Collections.Generic.List<int>();
+        private readonly System.Collections.Generic.Dictionary<Vector2Int, int[]> _boxEggConfigColors = new System.Collections.Generic.Dictionary<Vector2Int, int[]>();
+        private readonly System.Collections.Generic.Dictionary<Vector2Int, int[]> _boxEggConfigHps = new System.Collections.Generic.Dictionary<Vector2Int, int[]>();
+        private Text _boxEggStatusLabel;          // UI 상태 라벨
+        private RectTransform _fieldGimmickEggRow; // Egg 패널 row (Target Box 일 때만 표시)
+
         private int _holderCols = 5;
         private int _holderRows = 1;
         private int _defaultMag = 3;
@@ -1205,6 +1214,24 @@ namespace BalloonFlow
             });
             _fieldGimmickWallSizeRow = wallSizeRow.GetComponent<RectTransform>();
 
+            // Target Box Egg 패널 (Pinata_Box 전용) — footprint(박스 영역)과 분리된 명시적 알 리스트.
+            // 현재 팔레트 색 + Piñata HP 로 "+추가" → 알 N개·색·HP 를 직접 구성. 박스를 빈 칸에 그리면 이 리스트가 적용됨.
+            var eggRow = Row(p); Lbl(eggRow, "Box Eggs", w: 110);
+            Btn(eggRow, "+추가", () => {
+                _boxEggColors.Add(_paintColor);
+                _boxEggHps.Add(Mathf.Max(1, _paintPinataHP));
+                UpdateBoxEggLabel();
+                SetStatus($"Egg 추가: 색 {_paintColor} HP {_paintPinataHP} (총 {_boxEggColors.Count})");
+            });
+            Btn(eggRow, "비우기", () => {
+                _boxEggColors.Clear(); _boxEggHps.Clear();
+                UpdateBoxEggLabel();
+                SetStatus("Egg 리스트 비움");
+            });
+            _boxEggStatusLabel = Lbl(p, "Eggs: (없음)", 11);
+            _boxEggStatusLabel.color = new Color(0.7f, 0.85f, 0.6f);
+            _fieldGimmickEggRow = eggRow.GetComponent<RectTransform>();
+
             // Lock_Key pair ID (Field — Key 풍선용)
             var lockRow = Row(p); Lbl(lockRow, "Lock PairId", w: 110);
             MakeIntField(lockRow, _paintLockPairId, 0, 99, v => {
@@ -1247,9 +1274,28 @@ namespace BalloonFlow
             _fieldGimmickWallSizeRow.gameObject.SetActive(false);
             _fieldGimmickLockRow.gameObject.SetActive(false);
             _fieldGimmickFlexTubeRow.gameObject.SetActive(false);
+            if (_fieldGimmickEggRow != null) _fieldGimmickEggRow.gameObject.SetActive(false);
+            if (_boxEggStatusLabel != null) _boxEggStatusLabel.gameObject.SetActive(false);
             if (_flexTubeStatusText != null) _flexTubeStatusText.gameObject.SetActive(false);
 
             Sep(p);
+        }
+
+        private void UpdateBoxEggLabel()
+        {
+            if (_boxEggStatusLabel == null) return;
+            if (_boxEggColors.Count == 0)
+            {
+                _boxEggStatusLabel.text = "Eggs: (없음 → 빈 박스는 현재 색 1개)";
+                return;
+            }
+            var sb = new System.Text.StringBuilder("Eggs: ");
+            for (int i = 0; i < _boxEggColors.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append($"c{_boxEggColors[i]}×{_boxEggHps[i]}");
+            }
+            _boxEggStatusLabel.text = sb.ToString();
         }
 
         private void UpdateFieldGimmickUI(string gimmickName)
@@ -1259,12 +1305,16 @@ namespace BalloonFlow
             bool isWall = gimmickName == "Wall";
             bool isLockKey = gimmickName == "Lock_Key";
             bool isFlexTube = gimmickName == "FlexTube";
+            bool isTargetBox = gimmickName == "Pinata_Box";
             if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(needsPinataHpSize);
             if (_fieldGimmickSizeRow != null) _fieldGimmickSizeRow.gameObject.SetActive(needsPinataHpSize);
             if (_fieldGimmickWallSizeRow != null) _fieldGimmickWallSizeRow.gameObject.SetActive(isWall);
             if (_fieldGimmickLockRow != null) _fieldGimmickLockRow.gameObject.SetActive(isLockKey);
             if (_fieldGimmickFlexTubeRow != null) _fieldGimmickFlexTubeRow.gameObject.SetActive(isFlexTube);
             if (_flexTubeStatusText != null) _flexTubeStatusText.gameObject.SetActive(isFlexTube);
+            // Target Box Egg 패널 — Pinata_Box 일 때만.
+            if (_fieldGimmickEggRow != null) _fieldGimmickEggRow.gameObject.SetActive(isTargetBox);
+            if (_boxEggStatusLabel != null) { _boxEggStatusLabel.gameObject.SetActive(isTargetBox); if (isTargetBox) UpdateBoxEggLabel(); }
         }
 
         private void UpdateFlexTubeStatusText()
@@ -3626,19 +3676,6 @@ namespace BalloonFlow
                                 _infoDirty = true;
                             }
                         }
-                        else if (isSizedFieldGimmick && _paintColor >= 0
-                                 && FIELD_GIMMICK_NAMES[_paintGimmick] == "Pinata_Box"
-                                 && _balloonGimmicks[col, row] == _paintGimmick
-                                 && _balloonPinataW[col, row] == 0)
-                        {
-                            // Target Box 셀별 알 편집 — 기존 박스의 *비앵커(내부)* 셀 클릭 시 그 알 색/HP 만 갱신.
-                            // (앵커/빈 칸 클릭은 아래 footprint 분기로 → 새 박스 생성·리사이즈 가능. 1칸 고정 버그 방지.)
-                            _balloonColors[col, row] = _paintColor;
-                            _balloonGimmickHP[col, row] = _paintPinataHP;
-                            UpdatePreviewCell(col, row);
-                            _infoDirty = true;
-                            SetStatus($"Target Box 알 셀 ({col},{row}) → 색 {_paintColor}, HP {_paintPinataHP}");
-                        }
                         else if (isSizedFieldGimmick && _paintColor >= 0)
                         {
                             // Wall 은 정사각 _paintWallSize(1/2/3) 사용 — Pinata 자유 W×H 와 분리해 carryover 방지.
@@ -3664,6 +3701,24 @@ namespace BalloonFlow
                             // 앵커 셀에만 사이즈 저장
                             _balloonPinataW[col, row] = pw;
                             _balloonPinataH[col, row] = ph;
+
+                            // Target Box: 패널에서 구성한 알 리스트를 이 박스 anchor 에 저장 (footprint 와 분리).
+                            // 리스트가 비어있으면 현재 색 1개로 기본.
+                            if (FIELD_GIMMICK_NAMES[_paintGimmick] == "Pinata_Box")
+                            {
+                                var key = new Vector2Int(col, row);
+                                if (_boxEggColors.Count > 0)
+                                {
+                                    _boxEggConfigColors[key] = _boxEggColors.ToArray();
+                                    _boxEggConfigHps[key] = _boxEggHps.ToArray();
+                                }
+                                else
+                                {
+                                    _boxEggConfigColors[key] = new[] { _paintColor };
+                                    _boxEggConfigHps[key] = new[] { Mathf.Max(1, _paintPinataHP) };
+                                }
+                            }
+
                             UpdatePreviewCell(col, row);
                             _infoDirty = true;
                         }
@@ -5501,23 +5556,29 @@ namespace BalloonFlow
                         _balloonPinataW[col, row] = bpw;
                         _balloonPinataH[col, row] = bph;
 
-                        // Pinata_Box: 셀별 알 색/HP 복원 (anchor 포함 footprint 전체).
-                        bool isPinataBoxEggs = normalizedGimmick == "Pinata_Box"
-                            && b.eggColors != null && b.eggColors.Length == bpw * bph;
-                        if (isPinataBoxEggs)
+                        // Pinata_Box(Target Box): 알 config(anchor 별)를 복원. footprint 셀은 영역 표시용 uniform.
+                        bool isTargetBox = normalizedGimmick == "Pinata_Box";
+                        if (isTargetBox)
                         {
-                            for (int dy = 0; dy < bph; dy++)
-                                for (int dx = 0; dx < bpw; dx++)
+                            if (b.eggColors != null && b.eggColors.Length > 0)
+                            {
+                                var key = new Vector2Int(col, row);
+                                _boxEggConfigColors[key] = (int[])b.eggColors.Clone();
+                                _boxEggConfigHps[key] = (b.eggHps != null && b.eggHps.Length == b.eggColors.Length)
+                                    ? (int[])b.eggHps.Clone() : null;
+                            }
+                            // footprint 비앵커 셀 uniform 마킹 (영역 표시).
+                            for (int dx = 0; dx < bpw; dx++)
+                                for (int dy = 0; dy < bph; dy++)
                                 {
+                                    if (dx == 0 && dy == 0) continue;
                                     int cx = col + dx, cy = row + dy;
                                     if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
-                                    int idx = dy * bpw + dx;
-                                    _balloonColors[cx, cy] = b.eggColors[idx];
+                                    _balloonColors[cx, cy] = b.color;
                                     _balloonGimmicks[cx, cy] = gi;
-                                    _balloonGimmickHP[cx, cy] = (b.eggHps != null && idx < b.eggHps.Length && b.eggHps[idx] > 0) ? b.eggHps[idx] : 1;
-                                    // 앵커만 sizeW/H 보유, 나머지는 0(비앵커 표시).
-                                    _balloonPinataW[cx, cy] = (dx == 0 && dy == 0) ? bpw : 0;
-                                    _balloonPinataH[cx, cy] = (dx == 0 && dy == 0) ? bph : 0;
+                                    _balloonGimmickHP[cx, cy] = b.hp > 0 ? b.hp : 2;
+                                    _balloonPinataW[cx, cy] = 0;
+                                    _balloonPinataH[cx, cy] = 0;
                                 }
                         }
                         else if (bpw > 1 || bph > 1)
@@ -5954,24 +6015,24 @@ namespace BalloonFlow
                         }
                     }
 
-                    // Pinata_Box(Target Box): footprint 셀들의 색/HP 를 알 배열로 모음 (anchor 만 emit).
+                    // Pinata_Box(Target Box): 패널에서 구성한 알 리스트(anchor 별 저장)를 직렬화. footprint 와 분리.
                     int[] eggColors = null, eggHps = null;
                     if (gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && FIELD_GIMMICK_NAMES[gi] == "Pinata_Box")
                     {
-                        int bw = Mathf.Max(1, _balloonPinataW[c, r]);
-                        int bh = Mathf.Max(1, _balloonPinataH[c, r]);
-                        eggColors = new int[bw * bh];
-                        eggHps = new int[bw * bh];
-                        for (int dy = 0; dy < bh; dy++)
-                            for (int dx = 0; dx < bw; dx++)
-                            {
-                                int cx = c + dx, cy = r + dy;
-                                int idx = dy * bw + dx;
-                                bool inBounds = cx < _gridCols && cy < _gridRows;
-                                eggColors[idx] = inBounds ? _balloonColors[cx, cy] : _balloonColors[c, r];
-                                int cellHp = inBounds ? _balloonGimmickHP[cx, cy] : 0;
-                                eggHps[idx] = cellHp > 0 ? cellHp : 1;
-                            }
+                        var key = new Vector2Int(c, r);
+                        if (_boxEggConfigColors.TryGetValue(key, out int[] cfgC) && cfgC != null && cfgC.Length > 0)
+                        {
+                            eggColors = (int[])cfgC.Clone();
+                            eggHps = (_boxEggConfigHps.TryGetValue(key, out int[] cfgH) && cfgH != null && cfgH.Length == cfgC.Length)
+                                ? (int[])cfgH.Clone()
+                                : null;
+                        }
+                        else
+                        {
+                            // config 없으면 anchor 색 1개로 폴백.
+                            eggColors = new[] { _balloonColors[c, r] };
+                            eggHps = new[] { _balloonGimmickHP[c, r] > 0 ? _balloonGimmickHP[c, r] : 1 };
+                        }
                     }
 
                     balloons.Add(new BalloonLayout

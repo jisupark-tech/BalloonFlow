@@ -721,9 +721,10 @@ namespace BalloonFlow
                 {
                     int width = Mathf.Max(1, b.sizeW);
                     int height = Mathf.Max(1, b.sizeH);
-                    // Target Box 알 모델: 셀별 egg 색으로 occupancy 등록, 죽은 알 셀은 색 매칭 제외.
+                    // Target Box 알 모델: footprint 셀에 egg 색 분배(modulo N) — N(명시 egg 수)은 W*H 와 무관.
                     bool isEggBox = b.gimmickType == BalloonController.GimmickPinataBox
-                        && b.eggColors != null && b.eggColors.Length == width * height;
+                        && b.eggColors != null && b.eggColors.Length > 0;
+                    int eggN = isEggBox ? b.eggColors.Length : 0;
                     Vector3 anchor = BalloonController.Instance.GetAdjustedBoardPosition(b.position);
                     BalloonController.Instance.GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ);
                     for (int dx = 0; dx < width; dx++)
@@ -735,11 +736,12 @@ namespace BalloonFlow
                                 Mathf.RoundToInt((anchor.z + dz * cellSizeZ) / cs));
                             _reusablePositionMap.Add(occupiedCell);
 
-                            int eggIdx = dz * width + dx;
-                            int cellColor = isEggBox ? b.eggColors[eggIdx] : b.color;
+                            int cellColor = b.color;
                             bool cellTargetable = targetable;
                             if (isEggBox)
                             {
+                                int eggIdx = (dz * width + dx) % eggN;
+                                cellColor = b.eggColors[eggIdx];
                                 bool eggAlive = b.eggHps != null && eggIdx < b.eggHps.Length && b.eggHps[eggIdx] > 0;
                                 cellTargetable = targetable && eggAlive;
                             }

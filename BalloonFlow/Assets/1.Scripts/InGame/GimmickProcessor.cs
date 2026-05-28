@@ -56,6 +56,7 @@ namespace BalloonFlow
         private void OnEnable()
         {
             EventBus.Subscribe<OnBalloonPopped>(HandleAnyBalloonPopped);
+            Debug.Log("[GimmickProcessor] OnEnable — subscribed to OnBalloonPopped");
         }
 
         private void OnDisable()
@@ -253,6 +254,8 @@ namespace BalloonFlow
         /// </summary>
         private void HandleAnyBalloonPopped(OnBalloonPopped evt)
         {
+            Debug.Log($"[HandleAnyPop] 진입 balloon={evt.balloonId} color={evt.color} surpriseSet={_surpriseBalloons.Count}");
+
             // === Color Curtain: 해당 색 풍선 팝 시 카운터 -1 ===
             _curtainKeysBuffer.Clear();
             _curtainRemoveBuffer.Clear();

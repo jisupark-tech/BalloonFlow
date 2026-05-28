@@ -29,7 +29,6 @@ namespace BalloonFlow
 
         private int  _currentLives;
         private long _lastRechargeUtcTicks;   // stored as long ticks for precision
-        private float _rechargeTimer;
         private float _infiniteHeartsEndTime; // realtimeSinceStartup when infinite hearts expire
 
         #endregion
@@ -102,20 +101,23 @@ namespace BalloonFlow
         /// </summary>
         private void Update()
         {
-            if (_currentLives >= MAX_LIVES)
-            {
-                return;
-            }
+            if (_currentLives >= MAX_LIVES) return;
 
-            _rechargeTimer += Time.deltaTime;
+            // 단일 시계(wall-clock) 기준 — UI 타이머(GetTimeToNextLife)와 동일 소스로 통일.
+            // 기존 _rechargeTimer(Time.deltaTime)는 일시정지/timeScale/백그라운드에서 wall-clock 과 어긋나
+            // "타이머는 0(미표시)인데 충전은 안 되는" 상태를 유발했음.
+            DateTime lastRecharge = new DateTime(_lastRechargeUtcTicks, DateTimeKind.Utc);
+            double elapsed = (DateTime.UtcNow - lastRecharge).TotalSeconds;
+            if (elapsed < RECHARGE_SECONDS) return;
 
-            if (_rechargeTimer >= RECHARGE_SECONDS)
-            {
-                _rechargeTimer -= RECHARGE_SECONDS;
-                AddLife(1);
-                _lastRechargeUtcTicks = DateTime.UtcNow.Ticks;
-                SaveToPrefs();
-            }
+            int earned = Mathf.Min((int)(elapsed / RECHARGE_SECONDS), MAX_LIVES - _currentLives);
+            if (earned <= 0) return;
+
+            _currentLives += earned;
+            _lastRechargeUtcTicks = lastRecharge.AddSeconds((double)earned * RECHARGE_SECONDS).Ticks;
+            SaveToPrefs();
+            SyncToFirestore("Recharge");
+            PublishLifeChanged();
         }
 
         #endregion
@@ -175,7 +177,6 @@ namespace BalloonFlow
             if (_currentLives < MAX_LIVES)
             {
                 _lastRechargeUtcTicks = DateTime.UtcNow.Ticks;
-                _rechargeTimer = 0f;
             }
 
             SaveToPrefs();
@@ -206,7 +207,6 @@ namespace BalloonFlow
         public void RefillLives()
         {
             _currentLives = MAX_LIVES;
-            _rechargeTimer = 0f;
             SaveToPrefs();
             SyncToFirestore("RefillLives");
             PublishLifeChanged();
@@ -369,37 +369,21 @@ namespace BalloonFlow
 
         private void ProcessOfflineRecharge()
         {
-            if (_currentLives >= MAX_LIVES)
-            {
-                return;
-            }
+            if (_currentLives >= MAX_LIVES) return;
 
+            // wall-clock 기준 — Update 와 동일 로직. 콜드 스타트 시 즉시 catch-up.
             DateTime lastRecharge = new DateTime(_lastRechargeUtcTicks, DateTimeKind.Utc);
             double   elapsedSecs  = (DateTime.UtcNow - lastRecharge).TotalSeconds;
+            if (elapsedSecs < RECHARGE_SECONDS) return;
 
-            if (elapsedSecs < RECHARGE_SECONDS)
-            {
-                // Prime the timer with elapsed time already accumulated
-                _rechargeTimer = (float)elapsedSecs;
-                return;
-            }
-
-            int livesEarned = (int)(elapsedSecs / RECHARGE_SECONDS);
-            livesEarned     = Mathf.Min(livesEarned, MAX_LIVES - _currentLives);
-
+            int livesEarned = Mathf.Min((int)(elapsedSecs / RECHARGE_SECONDS), MAX_LIVES - _currentLives);
             if (livesEarned > 0)
             {
-                _currentLives = Mathf.Min(_currentLives + livesEarned, MAX_LIVES);
-                double usedSecs = livesEarned * RECHARGE_SECONDS;
-                _lastRechargeUtcTicks = lastRecharge.AddSeconds(usedSecs).Ticks;
+                _currentLives += livesEarned;
+                _lastRechargeUtcTicks = lastRecharge.AddSeconds((double)livesEarned * RECHARGE_SECONDS).Ticks;
                 SaveToPrefs();
                 PublishLifeChanged();
             }
-
-            // Set timer for partial time toward next life
-            DateTime updatedLast = new DateTime(_lastRechargeUtcTicks, DateTimeKind.Utc);
-            _rechargeTimer = (float)(DateTime.UtcNow - updatedLast).TotalSeconds;
-            _rechargeTimer = Mathf.Max(_rechargeTimer, 0f);
         }
 
         private void PublishLifeChanged()

@@ -923,11 +923,12 @@ namespace BalloonFlow
 
             hps[target] = Mathf.Max(0, hps[target] - 1);
 
+            // 비주얼: egg 항목별 1:1. HP 반영 — 절반 이하면 균열(texture) 활성, 0 이면 알 제거.
             bool eggDied = hps[target] == 0;
-            if (eggDied && _balloonObjects.TryGetValue(data.balloonId, out GameObject obj) && obj != null)
+            if (_balloonObjects.TryGetValue(data.balloonId, out GameObject obj) && obj != null)
             {
                 var view = obj.GetComponentInChildren<PinataBoxView>(true);
-                if (view != null) view.HideEgg(target);
+                if (view != null) view.UpdateEggHp(target, hps[target]);
             }
 
             bool anyAlive = false;
@@ -936,7 +937,7 @@ namespace BalloonFlow
             if (!anyAlive)
                 return ExecutePop(data); // 모든 알 제거 → 박스 파괴
 
-            // 알 1개가 죽었으면 그 셀은 더는 조준 대상이 아님 → 타겟팅 재빌드.
+            // 알 1개가 죽었으면 그 색 셀이 조준 대상에서 빠질 수 있음 → 타겟팅 재빌드.
             if (eggDied)
                 DirectionalTargeting.InvalidateCache();
 
@@ -1799,8 +1800,8 @@ namespace BalloonFlow
             obj.transform.position = center;
             obj.transform.localScale = Vector3.one; // 알/틀 크기는 view 가 제어 (루트 scale=1 가정)
 
-            // eggScale = 밀집 레벨 축소(scaleMult)만. 알 기본 크기는 프리팹 템플릿 + _eggScaleMultiplier 로 제어.
-            view.Build(width, height, data.eggColors, cellSizeX, cellSizeZ, scaleMult);
+            // eggScale = 밀집 레벨 축소(scaleMult). 알은 격자 셀에 자동 맞춤되고 eggHps 로 초기 균열 상태 판단.
+            view.Build(width, height, data.eggColors, data.eggHps, cellSizeX, cellSizeZ, scaleMult);
         }
 
         private void ApplySizedFieldVisualTransform(GameObject obj, BalloonData data)
