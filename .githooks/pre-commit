@@ -53,8 +53,10 @@ if [ "$AUTHOR_EMAIL" = "dahee.shin@aimed.xyz" ]; then
     fi
 fi
 
-# ─── 1) Level Data — woohyun 전용 ───
-LEVEL_FILES=$(echo "$STAGED" | grep -E "LevelDatabase|LevelBackups")
+# ─── 1) Level Data — woohyun 전용 (에디터 코드 .cs/.asmdef 는 제외) ───
+# LevelDatabase*.asset / LevelBackups 등 데이터만 보호. Assets/Editor/LevelDatabase*.cs 같은
+# 에디터 툴 코드는 일반 코드로 취급 → 누구나(jisu 포함) commit 가능.
+LEVEL_FILES=$(echo "$STAGED" | grep -E "LevelDatabase|LevelBackups" | grep -vE '\.(cs|asmdef)$|\.(cs|asmdef)\.meta$')
 if [ -n "$LEVEL_FILES" ]; then
     if [ "$AUTHOR_EMAIL" != "woohyun.lim@aimed.xyz" ]; then
         echo ""
