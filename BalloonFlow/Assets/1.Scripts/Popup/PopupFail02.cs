@@ -323,6 +323,12 @@ namespace BalloonFlow
         {
             CloseUI();
             if (PopupManager.HasInstance) PopupManager.Instance.CloseAllPopups();
+
+            // [#4] 전면 광고 — ③ Level Failed 나가기 지면 (interstitial_fail_quit). 조건 충족 시 오버레이 노출.
+            // Try Again(OnRetryClicked)은 재도전 의지 보호를 위해 광고 X (명세 v1.2.30).
+            if (AdManager.HasInstance)
+                AdManager.Instance.TryShowInterstitial(AdManager.InterstitialPlacement.FailQuit);
+
             if (GameManager.HasInstance) GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY);
         }
     }

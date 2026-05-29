@@ -259,6 +259,26 @@ namespace BalloonFlow
             return null;
         }
 
+        /// <summary>
+        /// 백버튼 라우팅용 — 현재 화면에 실제로 보이는(활성) 최상단 "팝업"(ConsumesBackButton=true)을 반환.
+        /// _openUIList 는 열린 순서대로 추가되므로 뒤에서부터 탐색 = 최상단 우선.
+        /// 씬 UI(UIHud/UILobby 등 ConsumesBackButton=false)와 숨겨진(비활성/alpha 0) 사전로드 팝업은 제외.
+        /// </summary>
+        public UIBase GetTopmostBackConsumingUI()
+        {
+            for (int i = _openUIList.Count - 1; i >= 0; i--)
+            {
+                var ui = _openUIList[i];
+                if (ui == null) continue;
+                if (!ui.ConsumesBackButton) continue;
+                if (!ui.gameObject.activeInHierarchy) continue;
+                var cg = ui.GetComponent<CanvasGroup>();
+                if (cg != null && cg.alpha <= 0.01f) continue;
+                return ui;
+            }
+            return null;
+        }
+
         #endregion
 
         #region LoadPrefab

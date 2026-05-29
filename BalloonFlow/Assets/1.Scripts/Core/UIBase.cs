@@ -59,6 +59,38 @@ namespace BalloonFlow
             SlideFromTop,   // 위에서 내려옴
         }
 
+        /// <summary>안드로이드 백버튼 처리 결과 (BackButtonRouter 라우팅용).</summary>
+        public enum BackResult
+        {
+            NotHandled, // 이 UI 가 백버튼을 처리하지 않음 → 라우터가 다음(씬) 단계로 위임
+            Handled,    // 처리됨 (닫힘 등) → 입력 소비
+            Blocked,    // 의도적 차단 (결제/광고/학습 의사결정 보호) → 입력 소비, 동작 없음
+        }
+
+        /// <summary>
+        /// 백버튼 라우팅에서 "팝업"으로 취급될지. 팝업이면 씬 컨트롤러보다 우선해서 백버튼을 받는다.
+        /// 씬 UI(UIHud/UILobby/UIShop/UISetting/UITitle)는 override 로 false → 팝업 없을 때만 씬 단위 백버튼 처리.
+        /// </summary>
+        public virtual bool ConsumesBackButton => true;
+
+        /// <summary>
+        /// 백버튼이 이 팝업에 도달했을 때의 동작 (UX플로우 §5-3-0 매트릭스).
+        /// 기본: [X] 버튼과 동일 동작 (PopupCommonFrame.BtnExit 있으면 그 onClick, 없으면 CloseUI).
+        /// 차단이 필요한 팝업(이어하기·클리어·튜토리얼)은 override 로 <see cref="BackResult.Blocked"/> 반환.
+        /// </summary>
+        public virtual BackResult OnBackPressed()
+        {
+            var frame = GetComponentInChildren<PopupCommonFrame>(true);
+            if (frame != null && frame.BtnExit != null && frame.BtnExit.gameObject.activeInHierarchy
+                && frame.BtnExit.interactable)
+            {
+                frame.BtnExit.onClick.Invoke();
+                return BackResult.Handled;
+            }
+            CloseUI();
+            return BackResult.Handled;
+        }
+
         protected virtual void Awake()
         {
             _canvasGroup = GetComponent<CanvasGroup>();

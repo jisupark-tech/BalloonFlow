@@ -409,6 +409,10 @@ namespace BalloonFlow
             ApplyInitialFrozenDartState();
             ApplyInitialColorCurtainState();
 
+            // [#13/§11] Ice 영역(인접 연결 성분) 그룹핑 + 영역별 공유 HP 확정. ice 등록·위치 인덱스 완료 후.
+            if (GimmickProcessor.HasInstance)
+                GimmickProcessor.Instance.InitIceRegions();
+
             // 레벨별 안전 배율 계산 (벨트 초과 레벨만 축소)
             CalculateLevelSafeMult();
 
@@ -1241,6 +1245,7 @@ namespace BalloonFlow
                 maxHP       = resolvedHP,
                 sizeW       = entry.sizeW > 0 ? entry.sizeW : 1,
                 sizeH       = entry.sizeH > 0 ? entry.sizeH : 1,
+                iceBlockSize = entry.iceBlockSize > 0 ? entry.iceBlockSize : 1,
                 // 알 배열: eggHps 는 런타임 차감되므로 clone (레벨 에셋 원본 보호). eggColors 는 read-only 라 공유.
                 eggColors   = entry.eggColors,
                 eggHps      = entry.eggHps != null ? (int[])entry.eggHps.Clone() : null,
@@ -1470,6 +1475,14 @@ namespace BalloonFlow
                 tubeObj.transform.rotation = Quaternion.identity;
                 tubeObj.transform.localScale = Vector3.one;
                 var tube = tubeObj.GetComponent<FlexTube>() ?? tubeObj.AddComponent<FlexTube>();
+
+                // [FlexTube fix] flexTubePrefab 에 디자인 시점 템플릿 자식(예시 StartCap/Segment/EndCap)이 남아 있으면
+                // 런타임에 스폰하는 실제 캡 클론과 중복 노출됨(스크린샷의 'FlexTube > 캡들' + 'FlexTube_StartCap(Clone)').
+                // tubeObj 는 컨테이너로만 쓰고(자식 참조 X, parts 리스트만 사용) 실제 파츠는 아래에서 root 에 붙이므로,
+                // 인스턴스화 직후 기존 자식을 모두 제거해 템플릿 잔재를 정리한다.
+                for (int ci = tubeObj.transform.childCount - 1; ci >= 0; ci--)
+                    Destroy(tubeObj.transform.GetChild(ci).gameObject);
+
                 _flexTubeRoots.Add(tubeObj);
                 Quaternion extraRot = Quaternion.Euler(0f, tube.ExtraYRotation, 0f);
 
@@ -1536,6 +1549,14 @@ namespace BalloonFlow
                         partObj.transform.position = spawnPos;
                         partObj.transform.rotation = rotation;
                         partObj.transform.SetParent(tubeObj.transform, worldPositionStays: true);
+
+                        // [FlexTube] Segment visual 만 x,y 스케일 보정 (z=길이축 유지). 캡(Start/End)은 프리팹 기본 유지.
+                        if (partType == GimmickIdentifier.FlexTubePart.Segment)
+                        {
+                            Vector3 ls = partObj.transform.localScale;
+                            float ss = tube.SegmentScaleXY;
+                            partObj.transform.localScale = new Vector3(ss, ss, ls.z);
+                        }
 
                         var part = partObj.GetComponent<FlexTubePart>();
                         if (part == null) part = partObj.AddComponent<FlexTubePart>();
@@ -2072,15 +2093,135 @@ namespace BalloonFlow
         /// </summary>
         private void ApplyInitialIceState()
         {
-            foreach (BalloonData d in _balloons.Values)
+            // [#13/§11] Ice 영역을 인접 연결 성분으로 묶고, 영역의 blockSize(2=2×2 등) 로 타일링 렌더.
+            // blockSize<=1 이면 셀당 오버레이(기본·하위호환). >1 이면 블록당 1개 오버레이로 병합 렌더.
+            var regions = GetIceRegions();
+            if (regions.Count == 0) return;
+
+            GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ);
+
+            for (int r = 0; r < regions.Count; r++)
             {
-                if (d.isPopped || d.gimmickType != GimmickIce) continue;
-                if (_balloonObjects.TryGetValue(d.balloonId, out GameObject obj) && obj != null)
+                var region = regions[r];
+                int blockSize = 1;
+                if (region.Count > 0 && _balloons.TryGetValue(region[0], out BalloonData first))
+                    blockSize = Mathf.Max(1, first.iceBlockSize);
+
+                if (blockSize <= 1)
                 {
-                    ApplyTintToObject(obj, ICE_COLOR);
-                    AttachFrozenOverlay(d.balloonId, obj);
+                    // 셀당 오버레이 (기본)
+                    for (int i = 0; i < region.Count; i++)
+                    {
+                        int id = region[i];
+                        if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
+                        {
+                            ApplyTintToObject(obj, ICE_COLOR);
+                            AttachFrozenOverlay(id, obj);
+                        }
+                    }
+                    continue;
+                }
+
+                RenderIceRegionBlocks(region, blockSize, cellSizeX, cellSizeZ);
+            }
+        }
+
+        /// <summary>
+        /// [#13/§11] 한 Ice 영역을 blockSize×blockSize 블록으로 분할해 블록당 FrozenLayer 1개를 부착(병합 렌더).
+        /// 블록 내 모든 셀 본체는 숨김, 앵커(블록 내 최소 col,row 셀)에 blockSize 배율 오버레이를 블록 중앙으로 오프셋해 부착.
+        /// 그리드 좌표는 월드 위치를 셀 크기로 스냅해 산출. (월드 축 정렬 가정 — 시각 오프셋/스케일은 Editor 미세조정 대상)
+        /// </summary>
+        private void RenderIceRegionBlocks(List<int> region, int blockSize, float cellSizeX, float cellSizeZ)
+        {
+            float invX = 1f / Mathf.Max(0.0001f, cellSizeX);
+            float invZ = 1f / Mathf.Max(0.0001f, cellSizeZ);
+
+            float minX = float.MaxValue, minZ = float.MaxValue;
+            for (int i = 0; i < region.Count; i++)
+                if (_balloons.TryGetValue(region[i], out BalloonData d))
+                {
+                    if (d.position.x < minX) minX = d.position.x;
+                    if (d.position.z < minZ) minZ = d.position.z;
+                }
+
+            var cellCol = new Dictionary<int, int>();
+            var cellRow = new Dictionary<int, int>();
+            var blocks  = new Dictionary<(int, int), List<int>>();
+            for (int i = 0; i < region.Count; i++)
+            {
+                int id = region[i];
+                if (!_balloons.TryGetValue(id, out BalloonData d)) continue;
+                int col = Mathf.RoundToInt((d.position.x - minX) * invX);
+                int row = Mathf.RoundToInt((d.position.z - minZ) * invZ);
+                cellCol[id] = col;
+                cellRow[id] = row;
+                var key = (col / blockSize, row / blockSize);
+                if (!blocks.TryGetValue(key, out var list)) { list = new List<int>(); blocks[key] = list; }
+                list.Add(id);
+            }
+
+            foreach (var kv in blocks)
+            {
+                var cells = kv.Value;
+                // 앵커 = 블록 내 (row, col) 최소 셀
+                int anchorId = -1, best = int.MaxValue;
+                for (int i = 0; i < cells.Count; i++)
+                {
+                    int id = cells[i];
+                    int rank = cellRow[id] * 100000 + cellCol[id];
+                    if (rank < best) { best = rank; anchorId = id; }
+                }
+                if (anchorId < 0) continue;
+
+                // 블록 내 모든 셀 본체 숨김 (얼음 블록만 보이게)
+                for (int i = 0; i < cells.Count; i++)
+                {
+                    if (_balloonObjects.TryGetValue(cells[i], out GameObject cobj) && cobj != null)
+                    {
+                        var cbi = cobj.GetComponent<BalloonIdentifier>();
+                        if (cbi != null) cbi.SetVisible(false);
+                    }
+                }
+
+                // 앵커에 blockSize 배율 오버레이 — 블록 중앙으로 오프셋
+                if (_balloonObjects.TryGetValue(anchorId, out GameObject aobj) && aobj != null)
+                {
+                    int blockColBase = kv.Key.Item1 * blockSize;
+                    int blockRowBase = kv.Key.Item2 * blockSize;
+                    float offCellsX = (blockSize - 1) * 0.5f - (cellCol[anchorId] - blockColBase);
+                    float offCellsZ = (blockSize - 1) * 0.5f - (cellRow[anchorId] - blockRowBase);
+                    AttachIceBlockOverlay(anchorId, aobj, blockSize, offCellsX * cellSizeX, offCellsZ * cellSizeZ);
                 }
             }
+        }
+
+        /// <summary>
+        /// [#13/§11] Ice 블록 앵커에 blockSize 배율 FrozenLayer 오버레이 부착 (블록 중앙 오프셋). 본체 숨김은 호출 측이 처리.
+        /// </summary>
+        private void AttachIceBlockOverlay(int anchorId, GameObject anchor, int blockSize, float offsetX, float offsetZ)
+        {
+            if (anchor == null || !ObjectPoolManager.HasInstance) return;
+            if (_frozenOverlays.ContainsKey(anchorId)) return;
+            if (!ObjectPoolManager.Instance.HasPool(FrozenLayerPoolKey)) return;
+
+            GameObject overlay = ObjectPoolManager.Instance.Get(FrozenLayerPoolKey);
+            if (overlay == null) return;
+
+            overlay.transform.SetParent(anchor.transform, false);
+            overlay.transform.localRotation = Quaternion.identity;
+
+            // 스케일: 1×1 은 FROZEN_OVERLAY_SCALE(여백 포함) 그대로. 블록은 셀 수만큼 확장하되 여백은 고정 →
+            // (blockSize-1) + FROZEN_OVERLAY_SCALE. (1.3*B 는 여백이 B 배로 과대해져 footprint 를 벗어남)
+            float s = (blockSize - 1) + FROZEN_OVERLAY_SCALE;
+            overlay.transform.localScale = Vector3.one * s;
+
+            // 위치 보정(Wall 패턴): 앵커=블록 코너 셀 → footprint 중앙으로 이동. localPosition 은 부모(_balloonScale)
+            // 스케일에 곱해져 어긋나므로 월드 위치로 직접 설정 (offsetX/Z 는 이미 월드 단위 = (B-1)*0.5*cellSize).
+            Vector3 aw = anchor.transform.position;
+            overlay.transform.position = new Vector3(aw.x + offsetX, aw.y, aw.z + offsetZ);
+            overlay.SetActive(true);
+
+            _frozenOverlays[anchorId] = overlay;
         }
 
         /// <summary>
@@ -2686,12 +2827,11 @@ namespace BalloonFlow
             // Pin은 인접 팝으로 제거 안 됨 — 같은 색 다트 직접 타격으로만 제거
             // RemoveAdjacentPins(data.position);  // 문서 기준 비활성
 
-            // ROLLBACK_ICE_ADJACENT_THAW:
-            // Ice blocks darts while frozen, then becomes a normal target when a neighboring
-            // balloon pops. Keep this adjacent to the Frozen_Dart thaw path so both cache
-            // invalidation paths stay together.
-            ThawAdjacentIce(data);
-            // All pops thaw adjacent Frozen Dart balloons (like Ice adjacency)
+            // Ice(§11): 영역 공유 HP 모델 — 어떤 풍선이든 제거 시 GimmickProcessor.HandleAnyBalloonPopped
+            // (OnBalloonPopped 구독)가 영역 HP 를 깎고, HP 0 시 BalloonController.BreakAllIce 로 일괄 해제.
+            // (이전 인접 팝 해동 ThawAdjacentIce 모델은 폐기 — 명세 HP 모델로 리라이트.)
+
+            // All pops thaw adjacent Frozen Dart balloons
             ThawAdjacentFrozenDarts(data);
         }
 
@@ -2806,33 +2946,32 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Thaws adjacent Ice balloons. Ice balloons are frozen and cannot be targeted.
-        /// When an adjacent balloon pops, Ice converts to a normal balloon (targetable).
+        /// [#13 / 기믹명세 §11] 한 Ice 영역의 공유 HP 가 0 에 도달하면 GimmickProcessor 가 호출 —
+        /// 해당 영역의 얼음만 동시에 해제한다. 얼음이 깨지며 아래 가려진 풍선(=Ice 풍선 본체)이 노출되어
+        /// 다트로 타격 가능해진다. (이전 인접 팝 해동 ThawAdjacentIce / 전체 일괄 BreakAllIce 모델은 폐기.)
         /// </summary>
-        private void ThawAdjacentIce(BalloonData source)
+        public void BreakIceRegion(IEnumerable<int> ids)
         {
-            if (source == null) return;
-
-            int count = CopyAdjacentIds(GetAdjacentBalloonIdsForBalloon(source.balloonId, source.position));
+            if (ids == null) return;
             bool thawedAny = false;
-            for (int i = 0; i < count; i++)
+            foreach (int id in ids)
             {
-                int id = _adjCopyBuffer[i];
-                if (!_balloons.TryGetValue(id, out BalloonData neighbor)) continue;
-                if (neighbor.isPopped) continue;
-                if (neighbor.gimmickType != GimmickIce) continue;
+                if (!_balloons.TryGetValue(id, out BalloonData ice)) continue;
+                if (ice.isPopped || ice.gimmickType != GimmickIce) continue;
 
-                // Thaw: convert Ice to normal balloon (now targetable by darts)
-                neighbor.gimmickType = GimmickNone;
-                _balloons[id] = neighbor;
+                // 얼음 해제: 일반 풍선으로 전환 (이제 다트로 타격 가능)
+                ice.gimmickType = GimmickNone;
+                _balloons[id] = ice;
 
-                // 얼음 쉘 오버레이 제거
+                // 얼음 쉘 오버레이 제거 → (앵커) 풍선 본체 재표시
                 ReturnFrozenOverlay(id);
 
-                // Visual: restore color (Ice was shown as frozen/blue tint)
+                // Visual: 본체 강제 표시(블록 비앵커 셀은 오버레이 없이 숨겨져 있었음) → 원래 색 복원 + 노출 연출
                 if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
                 {
-                    int colorIdx = Mathf.Clamp(neighbor.color, 0, BalloonColors.Length - 1);
+                    var bi = obj.GetComponent<BalloonIdentifier>();
+                    if (bi != null) bi.SetVisible(true);
+                    int colorIdx = Mathf.Clamp(ice.color, 0, BalloonColors.Length - 1);
                     ApplyTintToObject(obj, BalloonColors[colorIdx]);
                     PlayRevealEffect(obj, colorIdx, id);
                 }
@@ -2848,11 +2987,53 @@ namespace BalloonFlow
 
             if (thawedAny)
             {
-                // ROLLBACK_FROZEN_THAW_TARGET_CACHE_INVALIDATION:
-                // Ice becomes targetable without a pop, so cached contours must be rebuilt.
+                // Ice 가 팝 없이 타격 가능해지므로 캐시 윤곽을 재구성.
                 DirectionalTargeting.InvalidateCache();
                 RefreshOutermostRendererState();
             }
+        }
+
+        /// <summary>
+        /// [#13 / 기믹명세 §11] 필드의 Ice 풍선들을 인접 연결 성분(영역)으로 묶어 반환.
+        /// 각 영역 = 공유 HP 단위. GimmickProcessor.InitIceRegions 가 셋업 직후 1회 호출.
+        /// 4방향 인접(상하좌우) flood-fill 기준.
+        /// </summary>
+        public List<List<int>> GetIceRegions()
+        {
+            var regions = new List<List<int>>();
+            var visited = new HashSet<int>();
+            var stack = new Stack<int>();
+
+            foreach (var kvp in _balloons)
+            {
+                if (kvp.Value.isPopped || kvp.Value.gimmickType != GimmickIce) continue;
+                if (visited.Contains(kvp.Key)) continue;
+
+                var region = new List<int>();
+                stack.Clear();
+                stack.Push(kvp.Key);
+                visited.Add(kvp.Key);
+
+                while (stack.Count > 0)
+                {
+                    int id = stack.Pop();
+                    region.Add(id);
+                    if (!_balloons.TryGetValue(id, out BalloonData cur)) continue;
+
+                    int cnt = CopyAdjacentIds(GetAdjacentBalloonIdsForBalloon(id, cur.position));
+                    for (int i = 0; i < cnt; i++)
+                    {
+                        int nb = _adjCopyBuffer[i];
+                        if (visited.Contains(nb)) continue;
+                        if (!_balloons.TryGetValue(nb, out BalloonData nbData)) continue;
+                        if (nbData.isPopped || nbData.gimmickType != GimmickIce) continue;
+                        visited.Add(nb);
+                        stack.Push(nb);
+                    }
+                }
+                regions.Add(region);
+            }
+            return regions;
         }
 
         /// <summary>
@@ -3403,6 +3584,9 @@ namespace BalloonFlow
         public int sizeH = 1;
         public int lockPairId = -1;
 
+        /// <summary>[Ice §11] 얼음 블록 변 길이(셀). 2=2×2 타일. 1=셀당. 영역 공유 HP·렌더 블록화에 사용.</summary>
+        public int iceBlockSize = 1;
+
         /// <summary>Pinata_Box 셀별 알 색상 (len=sizeW*sizeH, row-major). null=레거시 단일 박스.</summary>
         public int[] eggColors;
         /// <summary>Pinata_Box 셀별 알 HP (eggColors 와 동일 길이/순서). 런타임에 차감됨.</summary>
@@ -3435,6 +3619,9 @@ namespace BalloonFlow
         public int sizeH = 1;
         public int hp = 0;
         public int lockPairId = -1;
+
+        /// <summary>[Ice §11] 얼음 블록 변 길이(셀). 2=2×2 타일. 1=셀당(기본).</summary>
+        public int iceBlockSize = 1;
 
         /// <summary>Pinata_Box 셀별 알 색상 (len=sizeW*sizeH, row-major). null=레거시 단일 박스.</summary>
         public int[] eggColors;

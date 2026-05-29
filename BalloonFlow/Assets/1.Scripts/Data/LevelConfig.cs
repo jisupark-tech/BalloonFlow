@@ -250,6 +250,10 @@ namespace BalloonFlow
 
         /// <summary>FlexTube 배치 순서 인덱스. StartCap=0 부터 EndCap 까지 증가. -1 = 미설정.</summary>
         public int flexTubeSequenceIndex = -1;
+
+        /// <summary>[Ice §11] 얼음 1개의 변 길이(셀). 2 = 2×2 얼음 단위로 렌더링. 1 = 셀당(기본).
+        /// 같은 Ice 영역의 셀들은 동일값. 다트로 직접 안 깨므로 풍선 색/HP 와 무관, 시각 타일링 전용.</summary>
+        public int iceBlockSize = 1;
     }
 
     /// <summary>

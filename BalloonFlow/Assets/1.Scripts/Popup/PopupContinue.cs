@@ -6,6 +6,10 @@ namespace BalloonFlow
 {
     public class PopupContinue : UIBase
     {
+        // [#15] 이어하기 팝업(① Out of Space! / ② Continue?) — 백버튼 차단 (결제/광고 의사결정 보호, UX플로우 §5-3-0).
+        // 명시적 [No thanks]/[X] 탭만 다음 단계 진행 가능.
+        public override BackResult OnBackPressed() => BackResult.Blocked;
+
         private const string DECLINE_DUP_NAME = "DeclineButton (1)";
         private const string LOSELIFE_NAME = "LoseLife";
         private const string WINNINGSTREAK_NAME = "WinningStreak";

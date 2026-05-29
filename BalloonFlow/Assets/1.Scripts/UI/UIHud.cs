@@ -15,6 +15,9 @@ namespace BalloonFlow
         // [2026-05-13] UIBase.OpenUI/CloseUI 중앙화 시 self-trigger 방지 — UIHud 자체는 popup 이 아니다.
         protected override bool TriggersHudPopupAnimation => false;
 
+        // [#15] 씬 UI — 백버튼은 열린 팝업이 우선. HUD 자체는 백버튼을 소비하지 않음 (씬 단위 라우팅으로 위임).
+        public override bool ConsumesBackButton => false;
+
         #region Constants — Lock Colors
 
         private static readonly Color LOCK_NORMAL    = new Color(1f, 1f, 1f); // #FFFFFF

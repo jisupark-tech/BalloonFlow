@@ -62,6 +62,8 @@ namespace BalloonFlow
             go.AddComponent<AdManager>();
             go.AddComponent<AnalyticsManager>();
             go.AddComponent<PurchaseRewardEffect>();
+            // 안드로이드 백버튼 중앙 라우터 (UX플로우 §5-3-0). 전 씬 공통.
+            go.AddComponent<BackButtonRouter>();
 
             Debug.Log("[SdkBootstrap] Boot object created. Managers attached.");
         }

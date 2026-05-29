@@ -227,7 +227,9 @@ namespace BalloonFlow
                     isHidden = hidden,
                     isFrozen = frozen,
                     frozenHP = fHP,
-                    chainGroupId = setup.chainGroupId,
+                    // [Chain fix] Chain(Linked) holder 에만 chainGroupId 적용 — 비-Chain holder 의 stale 그룹값
+                    // (구버전 레벨 데이터)으로 인한 의도치 않은 연결 차단. GetChainGroup 은 chainGroupId 매칭이라 -1 이면 비연결.
+                    chainGroupId = (gimmick == GimmickManager.GIMMICK_CHAIN) ? setup.chainGroupId : -1,
                     lockPairId = setup.lockPairId,
                     isLocked = (gimmick == GimmickManager.GIMMICK_LOCK_KEY) && setup.lockPairId >= 0,
                     isLockObject = (gimmick == GimmickManager.GIMMICK_LOCK_KEY) && setup.lockPairId >= 0,

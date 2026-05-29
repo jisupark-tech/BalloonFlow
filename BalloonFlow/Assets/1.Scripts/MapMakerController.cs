@@ -172,6 +172,7 @@ namespace BalloonFlow
         private int[,] _balloonGimmickHP;  // Piñata HP (기본 2)
         private int[,] _balloonPinataW;   // Piñata 가로 크기 (앵커 셀에만 저장)
         private int[,] _balloonPinataH;   // Piñata 세로 크기
+        private int[,] _balloonIceBlockSize; // [Ice §11] 얼음 블록 변 길이(셀). 기본 1. Ice 셀에만 의미.
         private int _paintPinataHP = 2;    // 브러시용 Piñata HP
         private int _paintPinataW = 1;     // 브러시용 Piñata 가로
         private int _paintPinataH = 1;     // 브러시용 Piñata 세로
@@ -374,18 +375,22 @@ namespace BalloonFlow
             SetupCamera();
             _activeDBTab = Mathf.Clamp(EditorPrefs.GetInt(EDITOR_PREF_LAST_DB_TAB, 0), 0, DB_TAB_NAMES.Length - 1);
             BuildUI();
-            RebuildPreview();
-            RebuildGridLines();
-            RebuildConveyorPreview();
-            RebuildWaypointPreview();
-            RefreshInfo();
-            RefreshLevelList();
 
-            // 테스트 플레이 복귀 시 마지막 편집 레벨, 처음이면 레벨 1 로드
+            // 테스트 플레이 복귀 시 마지막 편집 레벨, 처음이면 레벨 1 로드.
+            // 로드가 성공하면 LoadLevelFromDB 경로가 프리뷰/그리드/컨베이어/웨이포인트/레벨리스트를
+            // 전부 다시 그리므로(OnBalloonGridChanged 는 _previewObjs==null 이라 풀 리빌드 진입),
+            // 시작 시 초기 빌드는 로드할 레벨이 없을 때만 수행해 중복 작업을 제거한다.
             int lastEditedLevel = EditorPrefs.GetInt(EDITOR_PREF_LAST_LEVEL, 1);
-            if (lastEditedLevel > 0)
+            bool loaded = lastEditedLevel > 0 && LoadLevelById(lastEditedLevel);
+
+            if (!loaded)
             {
-                LoadLevelById(lastEditedLevel);
+                RebuildPreview();
+                RebuildGridLines();
+                RebuildConveyorPreview();
+                RebuildWaypointPreview();
+                RefreshInfo();
+                RefreshLevelList();
             }
         }
 
@@ -490,19 +495,23 @@ namespace BalloonFlow
         #region Materials & Grid
 
         /// <summary>Find the best available lit shader (URP first, then Standard fallback).</summary>
+        /// <remarks>Shader.Find 는 비용이 있어 1회 조회 후 캐시. 프리뷰/컨베이어/웨이포인트에서 매 리빌드마다 호출되던 것을 제거.</remarks>
+        private static Shader _cachedLitShader;
         private static Shader FindLitShader()
         {
+            if (_cachedLitShader != null) return _cachedLitShader;
+
             // URP Lit (most BalloonFlow setups)
             var s = Shader.Find("Universal Render Pipeline/Lit");
-            if (s != null) return s;
             // URP Simple Lit
-            s = Shader.Find("Universal Render Pipeline/Simple Lit");
-            if (s != null) return s;
+            if (s == null) s = Shader.Find("Universal Render Pipeline/Simple Lit");
             // Built-in Standard
-            s = Shader.Find("Standard");
-            if (s != null) return s;
+            if (s == null) s = Shader.Find("Standard");
             // Last resort
-            return Shader.Find("Sprites/Default");
+            if (s == null) s = Shader.Find("Sprites/Default");
+
+            _cachedLitShader = s;
+            return s;
         }
 
         /// <summary>Create a material with the correct color property for any pipeline.</summary>
@@ -548,6 +557,7 @@ namespace BalloonFlow
             _balloonGimmickHP = ResizeGrid(_balloonGimmickHP, _gridCols, _gridRows, 2);
             _balloonPinataW = ResizeGrid(_balloonPinataW, _gridCols, _gridRows, 1);
             _balloonPinataH = ResizeGrid(_balloonPinataH, _gridCols, _gridRows, 1);
+            _balloonIceBlockSize = ResizeGrid(_balloonIceBlockSize, _gridCols, _gridRows, 1);
             _balloonLockPairIds = ResizeGrid(_balloonLockPairIds, _gridCols, _gridRows, -1);
             _balloonFlexTubeGroupId = ResizeGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, -1);
             _balloonFlexTubeSequenceIndex = ResizeGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, -1);
@@ -1306,9 +1316,12 @@ namespace BalloonFlow
             bool isLockKey = gimmickName == "Lock_Key";
             bool isFlexTube = gimmickName == "FlexTube";
             bool isTargetBox = gimmickName == "Pinata_Box";
-            if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(needsPinataHpSize);
+            // [#13/§11] Ice 는 영역 공유 HP(Health) 를 가지므로 HP row 노출. 단 W×H Size 는 없음(셀 단위, 인접 연결로 영역화).
+            // 얼음 블록 변 길이(2×2 등)는 Wall-size row(정사각 1/2/3) 를 재사용해 작성 → _paintWallSize 가 blockSize.
+            bool isIce = gimmickName == "Ice";
+            if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(needsPinataHpSize || isIce);
             if (_fieldGimmickSizeRow != null) _fieldGimmickSizeRow.gameObject.SetActive(needsPinataHpSize);
-            if (_fieldGimmickWallSizeRow != null) _fieldGimmickWallSizeRow.gameObject.SetActive(isWall);
+            if (_fieldGimmickWallSizeRow != null) _fieldGimmickWallSizeRow.gameObject.SetActive(isWall || isIce);
             if (_fieldGimmickLockRow != null) _fieldGimmickLockRow.gameObject.SetActive(isLockKey);
             if (_fieldGimmickFlexTubeRow != null) _fieldGimmickFlexTubeRow.gameObject.SetActive(isFlexTube);
             if (_flexTubeStatusText != null) _flexTubeStatusText.gameObject.SetActive(isFlexTube);
@@ -2450,7 +2463,11 @@ namespace BalloonFlow
         private void ApplyHolderGimmick(int cc, int rr)
         {
             _holderGimmicks[cc, rr] = _paintHolderGimmick;
-            _holderChainGroups[cc, rr] = _paintChainGroup;
+            // [Chain fix] chainGroup 은 Chain(Linked) 기믹일 때만 기록. 무조건 기록하면 이후 다른 기믹/색을 칠할 때
+            // _paintChainGroup 이 남아 선택 안 한 holder 까지 같은 그룹에 편입됨(연결 버그). Spawner/Lock 과 동일 게이팅.
+            bool isChainHolder = _paintHolderGimmick > 0 && _paintHolderGimmick < HOLDER_GIMMICK_NAMES.Length
+                && HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Chain";
+            _holderChainGroups[cc, rr] = isChainHolder ? _paintChainGroup : -1;
             _holderFrozenHP[cc, rr] = _paintFrozenHP;
             bool isSpawnerGimmick = _paintHolderGimmick > 0 && _paintHolderGimmick < HOLDER_GIMMICK_NAMES.Length
                 && (HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Spawner_T"
@@ -3654,6 +3671,10 @@ namespace BalloonFlow
                             && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[_paintGimmick]);
                         bool isFlexTubeGimmick = _paintGimmick > 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length
                             && FIELD_GIMMICK_NAMES[_paintGimmick] == "FlexTube";
+                        // [Ice §11] Ice + blockSize(Wall-size row 재사용)>1 → B×B footprint 를 모두 개별 ice 셀로 채움.
+                        // 각 셀 아래 풍선 은닉(흡수 X), 런타임은 인접 영역을 blockSize 블록으로 묶어 1개 오버레이로 병합 렌더.
+                        bool isIceBlockGimmick = _paintGimmick > 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length
+                            && FIELD_GIMMICK_NAMES[_paintGimmick] == "Ice" && _paintWallSize > 1;
 
                         if (isFlexTubeGimmick && _paintColor >= 0)
                         {
@@ -3675,6 +3696,28 @@ namespace BalloonFlow
                                 UpdateFlexTubeStatusText();
                                 _infoDirty = true;
                             }
+                        }
+                        else if (isIceBlockGimmick && _paintColor >= 0)
+                        {
+                            // [Ice §11] B×B footprint 를 모두 개별 ice 셀로 채움 (흡수 X — 각 셀이 풍선).
+                            int b = Mathf.Max(2, _paintWallSize);
+                            for (int dx = 0; dx < b; dx++)
+                                for (int dy = 0; dy < b; dy++)
+                                {
+                                    int cx = col + dx, cy = row + dy;
+                                    if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
+                                    _balloonColors[cx, cy] = _paintColor;
+                                    _balloonGimmicks[cx, cy] = _paintGimmick;
+                                    _balloonGimmickHP[cx, cy] = _paintPinataHP;
+                                    _balloonIceBlockSize[cx, cy] = b;
+                                    _balloonPinataW[cx, cy] = 1; // 개별 셀 (sized 흡수 아님)
+                                    _balloonPinataH[cx, cy] = 1;
+                                    _balloonLockPairIds[cx, cy] = -1;
+                                    _balloonFlexTubeGroupId[cx, cy] = -1;
+                                    _balloonFlexTubeSequenceIndex[cx, cy] = -1;
+                                    UpdatePreviewCell(cx, cy);
+                                }
+                            _infoDirty = true;
                         }
                         else if (isSizedFieldGimmick && _paintColor >= 0)
                         {
@@ -3730,6 +3773,10 @@ namespace BalloonFlow
                             _balloonGimmickHP[col, row] = _paintPinataHP;
                             _balloonPinataW[col, row] = 1;
                             _balloonPinataH[col, row] = 1;
+                            // [Ice §11] Ice 셀 blockSize = wall-size 브러시(1/2/3) 재사용. 그 외 기믹은 1.
+                            bool isIceGimmick = gimmickToSet > 0 && gimmickToSet < FIELD_GIMMICK_NAMES.Length
+                                && FIELD_GIMMICK_NAMES[gimmickToSet] == "Ice";
+                            _balloonIceBlockSize[col, row] = isIceGimmick ? Mathf.Max(1, _paintWallSize) : 1;
                             // Lock_Key pairId
                             bool isLockKeyGimmick = gimmickToSet > 0 && gimmickToSet < FIELD_GIMMICK_NAMES.Length
                                 && FIELD_GIMMICK_NAMES[gimmickToSet] == "Lock_Key";
@@ -5452,13 +5499,15 @@ namespace BalloonFlow
             SetStatus($"Loaded Level {db.levels[index].levelId}");
         }
 
-        private void LoadLevelById(int levelId)
+        /// <summary>levelId 로 레벨 로드. 성공 여부 반환 (Awake 초기 빌드 분기에 사용).</summary>
+        private bool LoadLevelById(int levelId)
         {
             var db = LoadLevelDatabase();
-            if (db == null || db.levels == null) { SetStatus("No LevelDatabase"); return; }
+            if (db == null || db.levels == null) { SetStatus("No LevelDatabase"); return false; }
             for (int i = 0; i < db.levels.Length; i++)
-                if (db.levels[i].levelId == levelId) { LoadLevelFromDB(i); return; }
+                if (db.levels[i].levelId == levelId) { LoadLevelFromDB(i); return true; }
             SetStatus($"Level {levelId} not found");
+            return false;
         }
 
         /// <summary>풍선 좌표에서 실제 spacing 감지. 같은 행/열의 인접 풍선 간 최소 거리.</summary>
@@ -5509,6 +5558,7 @@ namespace BalloonFlow
             _balloonGimmickHP = new int[_gridCols, _gridRows];
             _balloonPinataW = new int[_gridCols, _gridRows];
             _balloonPinataH = new int[_gridCols, _gridRows];
+            _balloonIceBlockSize = new int[_gridCols, _gridRows];
             _balloonLockPairIds = new int[_gridCols, _gridRows];
             _balloonFlexTubeGroupId = new int[_gridCols, _gridRows];
             _balloonFlexTubeSequenceIndex = new int[_gridCols, _gridRows];
@@ -5520,15 +5570,33 @@ namespace BalloonFlow
                     _balloonGimmickHP[c, r] = 2;
                     _balloonPinataW[c, r] = 1;
                     _balloonPinataH[c, r] = 1;
+                    _balloonIceBlockSize[c, r] = 1;
                     _balloonLockPairIds[c, r] = -1;
                     _balloonFlexTubeGroupId[c, r] = -1;
                     _balloonFlexTubeSequenceIndex[c, r] = -1;
                 }
 
+            // [import fix] 소스 JSON 의 X 원점 컨벤션과 무관하게 풍선 클러스터를 그리드에 중앙 정렬.
+            // 풍선 X 범위(minX..maxX)를 그리드 가운데에 배치 → 이미 중앙정렬된 레벨은 동일 col 로 보존(왕복 일치),
+            // 좌정렬 등으로 우측 쏠린 레벨은 중앙으로 교정. (행/Z 는 기존 절대식 유지)
+            float _impMinX = 0f; int _impColOffset = 0;
+            if (config.balloons != null && config.balloons.Length > 0)
+            {
+                float lo = float.MaxValue, hi = float.MinValue;
+                foreach (var b in config.balloons)
+                {
+                    if (b.gridPosition.x < lo) lo = b.gridPosition.x;
+                    if (b.gridPosition.x > hi) hi = b.gridPosition.x;
+                }
+                _impMinX = lo;
+                int contentCols = Mathf.RoundToInt((hi - lo) / spacing) + 1;
+                _impColOffset = Mathf.Max(0, (_gridCols - contentCols) / 2);
+            }
+
             if (config.balloons != null)
                 foreach (var b in config.balloons)
                 {
-                    int col = Mathf.RoundToInt((b.gridPosition.x - _boardCenter.x) / spacing + (_gridCols - 1) * 0.5f);
+                    int col = _impColOffset + Mathf.RoundToInt((b.gridPosition.x - _impMinX) / spacing);
                     int row = Mathf.RoundToInt((b.gridPosition.y - _boardCenter.y) / spacing + (_gridRows - 1) * 0.5f);
                     if (col >= 0 && col < _gridCols && row >= 0 && row < _gridRows)
                     {
@@ -5542,6 +5610,7 @@ namespace BalloonFlow
                                 if (FIELD_GIMMICK_NAMES[g] == normalizedGimmick) { gi = g; break; }
                         _balloonGimmicks[col, row] = gi;
                         _balloonGimmickHP[col, row] = b.hp > 0 ? b.hp : 2;
+                        _balloonIceBlockSize[col, row] = b.iceBlockSize > 0 ? b.iceBlockSize : 1;
                         _balloonLockPairIds[col, row] = b.lockPairId;
                         // FlexTube 데이터는 gimmickType 이 실제 "FlexTube" 일 때만 복원 — 잔존 데이터 방지.
                         bool isFlexTubeLoad = normalizedGimmick == "FlexTube";
@@ -6045,6 +6114,7 @@ namespace BalloonFlow
                         sizeW = _balloonPinataW[c, r],
                         sizeH = _balloonPinataH[c, r],
                         hp = _balloonGimmickHP[c, r],
+                        iceBlockSize = _balloonIceBlockSize[c, r],
                         eggColors = eggColors,
                         eggHps = eggHps,
                         lockPairId = _balloonLockPairIds != null && c < _balloonLockPairIds.GetLength(0) && r < _balloonLockPairIds.GetLength(1)
@@ -6078,7 +6148,8 @@ namespace BalloonFlow
                     holders.Add(new HolderSetup
                     { holderId = hid++, color = _holderColors[c, r], magazineCount = _holderMags[c, r],
                       position = new Vector2(c, r), queueGimmick = hgName,
-                      chainGroupId = chainGrp > 0 ? chainGrp : -1,
+                      // [Chain fix] Chain(Linked) 기믹 holder 에만 chainGroupId 저장 — 비-Chain 의 stale 그룹값(구버전 데이터) 차단.
+                      chainGroupId = (hgName == "Chain" && chainGrp > 0) ? chainGrp : -1,
                       frozenHP = _holderFrozenHP[c, r],
                       spawnerHP = isSpawner ? _holderSpawnerHP[c, r] : 0,
                       spawnerMag = isSpawner ? (_holderSpawnerMag[c, r] > 0 ? _holderSpawnerMag[c, r] : 20) : 0,
@@ -6360,6 +6431,7 @@ namespace BalloonFlow
             _balloonGimmickHP = InsertRowGrid(_balloonGimmickHP, _gridCols, _gridRows, insertAt, 2);
             _balloonPinataW = InsertRowGrid(_balloonPinataW, _gridCols, _gridRows, insertAt, 1);
             _balloonPinataH = InsertRowGrid(_balloonPinataH, _gridCols, _gridRows, insertAt, 1);
+            _balloonIceBlockSize = InsertRowGrid(_balloonIceBlockSize, _gridCols, _gridRows, insertAt, 1);
             _balloonLockPairIds = InsertRowGrid(_balloonLockPairIds, _gridCols, _gridRows, insertAt, -1);
             _balloonFlexTubeGroupId = InsertRowGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, insertAt, -1);
             _balloonFlexTubeSequenceIndex = InsertRowGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, insertAt, -1);
@@ -6380,6 +6452,7 @@ namespace BalloonFlow
             _balloonGimmickHP = InsertColGrid(_balloonGimmickHP, _gridCols, _gridRows, insertAt, 2);
             _balloonPinataW = InsertColGrid(_balloonPinataW, _gridCols, _gridRows, insertAt, 1);
             _balloonPinataH = InsertColGrid(_balloonPinataH, _gridCols, _gridRows, insertAt, 1);
+            _balloonIceBlockSize = InsertColGrid(_balloonIceBlockSize, _gridCols, _gridRows, insertAt, 1);
             _balloonLockPairIds = InsertColGrid(_balloonLockPairIds, _gridCols, _gridRows, insertAt, -1);
             _balloonFlexTubeGroupId = InsertColGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, insertAt, -1);
             _balloonFlexTubeSequenceIndex = InsertColGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, insertAt, -1);
@@ -6402,6 +6475,7 @@ namespace BalloonFlow
             _balloonGimmickHP = DeleteRowGrid(_balloonGimmickHP, _gridCols, _gridRows, at, 2);
             _balloonPinataW = DeleteRowGrid(_balloonPinataW, _gridCols, _gridRows, at, 1);
             _balloonPinataH = DeleteRowGrid(_balloonPinataH, _gridCols, _gridRows, at, 1);
+            _balloonIceBlockSize = DeleteRowGrid(_balloonIceBlockSize, _gridCols, _gridRows, at, 1);
             _balloonLockPairIds = DeleteRowGrid(_balloonLockPairIds, _gridCols, _gridRows, at, -1);
             _balloonFlexTubeGroupId = DeleteRowGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, at, -1);
             _balloonFlexTubeSequenceIndex = DeleteRowGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, at, -1);
@@ -6422,6 +6496,7 @@ namespace BalloonFlow
             _balloonGimmickHP = DeleteColGrid(_balloonGimmickHP, _gridCols, _gridRows, at, 2);
             _balloonPinataW = DeleteColGrid(_balloonPinataW, _gridCols, _gridRows, at, 1);
             _balloonPinataH = DeleteColGrid(_balloonPinataH, _gridCols, _gridRows, at, 1);
+            _balloonIceBlockSize = DeleteColGrid(_balloonIceBlockSize, _gridCols, _gridRows, at, 1);
             _balloonLockPairIds = DeleteColGrid(_balloonLockPairIds, _gridCols, _gridRows, at, -1);
             _balloonFlexTubeGroupId = DeleteColGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, at, -1);
             _balloonFlexTubeSequenceIndex = DeleteColGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, at, -1);
@@ -6441,6 +6516,7 @@ namespace BalloonFlow
             _balloonGimmickHP[col, row] = 2;
             _balloonPinataW[col, row] = 1;
             _balloonPinataH[col, row] = 1;
+            _balloonIceBlockSize[col, row] = 1;
             _balloonLockPairIds[col, row] = -1;
             _balloonFlexTubeGroupId[col, row] = -1;
             _balloonFlexTubeSequenceIndex[col, row] = -1;

@@ -13,6 +13,9 @@ namespace BalloonFlow
     /// </summary>
     public class UISetting : UIBase
     {
+        // [#15] 씬 UI(로비 세팅 탭) — 백버튼 비소비. 로비 컨텍스트라 라우터가 Quit Game 처리.
+        public override bool ConsumesBackButton => false;
+
         #region Serialized Fields
 
         [Header("[Title]")]

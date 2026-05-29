@@ -139,6 +139,9 @@ namespace BalloonFlow
         [FirestoreProperty] public List<int> claimedStages { get; set; } = new List<int>();
         /// <summary>마지막 stage 까지 통과 완료 — 더 이상 포인트 누적 없음.</summary>
         [FirestoreProperty] public bool eventFinished { get; set; } = false;
+        /// <summary>현재 진행 중인 회차(round) ID. 서버 config.activeRoundId 와 다르면 새 회차 → 상태 리셋(명세 §2.3·§11.1).
+        /// 빈 문자열 = 아직 회차 배정 전. lifetimePoints 만 회차 무관 누적 유지.</summary>
+        [FirestoreProperty] public string activeRoundId { get; set; } = "";
     }
 
     [FirestoreData]

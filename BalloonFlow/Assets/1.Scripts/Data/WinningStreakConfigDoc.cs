@@ -11,8 +11,12 @@ namespace BalloonFlow
     [FirestoreData]
     public class WinningStreakConfigDoc
     {
-        /// <summary>WinningStreak 이벤트 해금 레벨 (highestClearedLevel 이 이 값 이상이면 노출).</summary>
-        [FirestoreProperty] public int unlockLevel { get; set; } = 10;//34;
+        /// <summary>WinningStreak 이벤트 해금 레벨 (highestClearedLevel 이 이 값 이상이면 노출). 명세 §2.2 = 35.</summary>
+        [FirestoreProperty] public int unlockLevel { get; set; } = 35;
+
+        /// <summary>현재 활성 회차(round) ID (예: "2026-W30-A"). 서버가 회차마다 갱신.
+        /// 클라 State.activeRoundId 와 다르면 새 회차 → 상태 리셋 (명세 §2.3·§8.2). 빈 값이면 회차 미운영 → 리셋 안 함.</summary>
+        [FirestoreProperty] public string activeRoundId { get; set; } = "";
 
         [FirestoreProperty] public StreakMultipliers streakMultipliers { get; set; } = new StreakMultipliers();
         [FirestoreProperty] public DifficultyMultipliers difficultyMultipliers { get; set; } = new DifficultyMultipliers();

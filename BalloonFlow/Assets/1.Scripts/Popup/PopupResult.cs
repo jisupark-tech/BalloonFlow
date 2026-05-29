@@ -13,6 +13,9 @@ namespace BalloonFlow
     /// </summary>
     public class PopupResult : UIBase
     {
+        // [#15] 클리어 팝업 — 백버튼 차단 (광고 의사결정 보호, UX플로우 §5-3-0). [Next] 탭만 진행.
+        public override BackResult OnBackPressed() => BackResult.Blocked;
+
         #region Constants
 
         // ROLLBACK_RESULT_COIN_FLY_COUNT_10
@@ -259,6 +262,8 @@ namespace BalloonFlow
                     return;
                 }
 
+                // 참고: 인게임 라이브 Next 핸들러는 GameBootstrap.OnNextClicked (SetNextButtonListener 로 교체).
+                // 전면 광고(clear_next) + Lv.36+ 로비 분기는 그쪽에서 처리. 이 경로는 테스트/맵메이커 등 폴백용.
                 LevelManager.Instance.LoadLevel(nextId);
             }
         }
@@ -421,9 +426,15 @@ namespace BalloonFlow
             // ROLLBACK_POPUP_RESULT_REWARD_BINDING
             // PopupResult reward visuals are prefab-driven, so make the required gold nodes visible
             // and bind the same clear reward amount that CurrencyManager grants.
+            // 보상은 난이도 기준(노말 20/하드 60/슈하 100) — CurrencyManager.HandleLevelCompleted 와 동일 산정.
             int reward = 0;
             if (CurrencyManager.HasInstance)
-                reward = CurrencyManager.Instance.GetCoinRewardForStars(starCount);
+            {
+                DifficultyPurpose diff = LevelManager.HasInstance
+                    ? LevelManager.Instance.GetLevelDifficulty(LevelManager.Instance.CurrentLevelId)
+                    : DifficultyPurpose.Normal;
+                reward = CurrencyManager.Instance.GetCoinRewardForDifficulty(diff);
+            }
 
             // [2026-05-20] Reward 의 부모 체인 (Contents, PopupCommonFrame, ...) 활성화 보장.
             Transform rewardRoot = FindChildRecursive(transform, "Reward");

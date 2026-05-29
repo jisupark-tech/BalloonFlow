@@ -42,7 +42,20 @@ namespace BalloonFlow
 
         private readonly List<int> _curtainKeysBuffer = new List<int>();
         private readonly List<int> _curtainRemoveBuffer = new List<int>();
-        // Ice 는 BalloonController 의 인접 팝 해동(ThawAdjacentIce)으로만 제거된다. HP/전역 카운터 모델은 폐기됨.
+
+        // Ice (Lv.201, 기믹명세 §11): 영역(region) 공유 HP 모델.
+        //  - 인접 연결된 ice 셀들이 하나의 영역을 이룸(런타임 flood-fill, InitIceRegions). 레벨당 여러 영역 가능.
+        //  - 필드에서 "어떤 풍선이든" 제거될 때마다 활성 영역들의 HP 각각 -1.
+        //  - 영역 HP 0 → 그 영역 얼음만 동시 해제(BalloonController.BreakIceRegion) → 아래 가려진 풍선 노출/타격 가능.
+        //  - 영역 HP 는 레벨 데이터(ice 풍선 maxHP 중 최댓값) 에서 소싱. 미지정(0) 이면 영역 셀 수로 fallback.
+        private sealed class IceRegion
+        {
+            public readonly HashSet<int> ids = new HashSet<int>();
+            public int hp;
+        }
+        private readonly HashSet<int> _iceBalloons = new HashSet<int>();   // 아직 얼어있는(미해제) ice 풍선 전체
+        private readonly Dictionary<int, int> _iceBalloonHp = new Dictionary<int, int>(); // 등록 시 캡처한 셀별 maxHP
+        private readonly List<IceRegion> _iceRegions = new List<IceRegion>();
 
         #endregion
 
@@ -77,6 +90,9 @@ namespace BalloonFlow
             _curtainCounters.Clear();
             _curtainKeysBuffer.Clear();
             _curtainRemoveBuffer.Clear();
+            _iceBalloons.Clear();
+            _iceBalloonHp.Clear();
+            _iceRegions.Clear();
         }
 
         /// <summary>
@@ -88,8 +104,12 @@ namespace BalloonFlow
             gimmickType = GimmickDisplayName.Normalize(gimmickType);
             switch (gimmickType)
             {
-                // Ice 는 GimmickProcessor 등록 불필요 — 인접 해동은 BalloonController 가 BalloonData 로 처리,
-                // 다트 차단은 CheckDartBlocker 가 gimmickType 으로 처리.
+                // Ice (기믹명세 §11): 영역 공유 HP. 각 ice 풍선과 셀별 maxHP 를 캡처만 해둔다.
+                // 인접 연결 영역으로의 그룹핑 + 영역 HP 확정은 셋업 완료 후 InitIceRegions 에서 수행.
+                case BalloonController.GimmickIce:
+                    _iceBalloons.Add(balloonId);
+                    _iceBalloonHp[balloonId] = hp;
+                    break;
 
                 case BalloonController.GimmickPin:
                     _pinSegments[balloonId] = hp > 0 ? hp : DEFAULT_PIN_LENGTH;
@@ -116,6 +136,36 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>
+        /// [#13/§11] 셋업 완료 후 호출 — 등록된 ice 풍선들을 인접 연결 영역(region)으로 묶고 각 영역의 공유 HP 를 확정.
+        /// 영역 HP = 그 영역 셀들의 maxHP 중 최댓값(같은 영역이면 동일값 가정). 모두 0 이면 영역 셀 수로 fallback.
+        /// BalloonController.SetupBalloons 의 ApplyInitialIceState 직후 1회 호출.
+        /// </summary>
+        public void InitIceRegions()
+        {
+            _iceRegions.Clear();
+            if (_iceBalloons.Count == 0 || !BalloonController.HasInstance) return;
+
+            var components = BalloonController.Instance.GetIceRegions();
+            for (int c = 0; c < components.Count; c++)
+            {
+                var comp = components[c];
+                if (comp == null || comp.Count == 0) continue;
+
+                var region = new IceRegion();
+                int maxHp = 0;
+                for (int i = 0; i < comp.Count; i++)
+                {
+                    int id = comp[i];
+                    region.ids.Add(id);
+                    if (_iceBalloonHp.TryGetValue(id, out int h) && h > maxHp) maxHp = h;
+                }
+                region.hp = maxHp > 0 ? maxHp : region.ids.Count; // 데이터 미지정 시 셀 수 fallback
+                _iceRegions.Add(region);
+            }
+            Debug.Log($"[GimmickProcessor] Ice 영역 {_iceRegions.Count}개 초기화 (총 {_iceBalloons.Count} 셀)");
+        }
+
         #endregion
 
         #region Public Methods — Field Gimmick Pre-Pop Guards
@@ -133,8 +183,8 @@ namespace BalloonFlow
                     return "Wall: indestructible";
 
                 case BalloonController.GimmickIce:
-                    // Ice is indirect-only — darts cannot target directly (인접 풍선 팝으로 해동)
-                    return "Ice: indirect removal only (adjacent pop thaws)";
+                    // Ice is indirect-only — darts cannot target directly. 영역 공유 HP 0 도달 시 일괄 해제(§11).
+                    return "Ice: indirect removal only (region HP)";
 
                 case BalloonController.GimmickPin:
                     // Pin requires same-color dart direct hit for progressive removal
@@ -248,13 +298,32 @@ namespace BalloonFlow
 
         /// <summary>
         /// Handles ANY balloon pop — used for indirect gimmick effects:
+        /// - Ice (§11): 어떤 풍선이든 제거 시 영역 공유 HP -1, HP 0 → 영역 전체 동시 해제
         /// - Color Curtain: matching-color pop decrements counter; at 0 the curtain is removed
         /// - Surprise: adjacent pop reveals hidden color
-        /// (Ice 는 BalloonController 의 인접 해동으로 처리 — 여기서 다루지 않음.)
         /// </summary>
         private void HandleAnyBalloonPopped(OnBalloonPopped evt)
         {
             Debug.Log($"[HandleAnyPop] 진입 balloon={evt.balloonId} color={evt.color} surpriseSet={_surpriseBalloons.Count}");
+
+            // === Ice (§11): 영역별 공유 HP — 어떤 풍선이든 제거되면 활성 영역 HP 각각 -1 ===
+            // 아직 얼어있는 ice 풍선의 팝은 제외(해제 전엔 팝 불가, 해제 후엔 _iceBalloons 에서 빠짐).
+            // 영역 HP 0 → 그 영역 얼음만 동시 해제 → 아래 가려진 풍선 노출.
+            if (_iceRegions.Count > 0 && !_iceBalloons.Contains(evt.balloonId))
+            {
+                for (int i = _iceRegions.Count - 1; i >= 0; i--)
+                {
+                    var region = _iceRegions[i];
+                    region.hp--;
+                    if (region.hp <= 0)
+                    {
+                        if (BalloonController.HasInstance)
+                            BalloonController.Instance.BreakIceRegion(region.ids);
+                        foreach (int id in region.ids) _iceBalloons.Remove(id);
+                        _iceRegions.RemoveAt(i);
+                    }
+                }
+            }
 
             // === Color Curtain: 해당 색 풍선 팝 시 카운터 -1 ===
             _curtainKeysBuffer.Clear();

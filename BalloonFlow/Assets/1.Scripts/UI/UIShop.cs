@@ -17,6 +17,9 @@ namespace BalloonFlow
     /// </summary>
     public class UIShop : UIBase
     {
+        // [#15] 씬 UI(로비 상점 탭) — 백버튼 비소비. 로비 컨텍스트라 라우터가 Quit Game 처리.
+        public override bool ConsumesBackButton => false;
+
         [Header("[Shop Title]")]
         [SerializeField] private TMP_Text _txtTitle;
         [SerializeField] private TMP_Text _txtTitleOutline;

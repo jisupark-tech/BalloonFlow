@@ -17,6 +17,9 @@ namespace BalloonFlow
     /// <remarks>Not a singleton — scene-level MonoBehaviour managed by Unity lifecycle.</remarks>
     public class UILobby : UIBase
     {
+        // [#15] 씬 UI(로비 메인) — 백버튼 비소비. 라우터가 로비 컨텍스트 Quit Game 처리.
+        public override bool ConsumesBackButton => false;
+
         #region Constants
 
         private static readonly Color COLOR_NAV_ACTIVE   = Color.white;
@@ -378,6 +381,20 @@ namespace BalloonFlow
                 _imgProfileFrame.sprite = sp;
                 _imgProfileFrame.enabled = sp != null;
             }
+        }
+
+        /// <summary>
+        /// [1.0] Profile/Avatar 는 1.1 기능. 좌상단 프로필 패널(편집 진입 버튼 + 아이콘/프레임 표시)을
+        /// 통째로 숨긴다. 버튼이 패널 root 이면 자식 아이콘/프레임도 함께 사라지며, 별도 배치된 경우에도
+        /// 안전하도록 Image GameObject 도 명시적으로 비활성화한다. Const.PROFILE_ENABLED=true 시 노출 복귀.</summary>
+        public void SetProfilePanelActive(bool active)
+        {
+            if (_btnProfilePanel != null && _btnProfilePanel.gameObject.activeSelf != active)
+                _btnProfilePanel.gameObject.SetActive(active);
+            if (_imgProfileIcon != null && _imgProfileIcon.gameObject.activeSelf != active)
+                _imgProfileIcon.gameObject.SetActive(active);
+            if (_imgProfileFrame != null && _imgProfileFrame.gameObject.activeSelf != active)
+                _imgProfileFrame.gameObject.SetActive(active);
         }
 
         /// <summary>

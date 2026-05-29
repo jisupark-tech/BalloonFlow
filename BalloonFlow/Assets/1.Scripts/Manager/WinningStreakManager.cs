@@ -10,8 +10,9 @@ namespace BalloonFlow
     ///   - 레벨 실패:    WinningStreakManager.Instance.OnLevelFailed()
     ///   - 슬롯 Claim:   WinningStreakManager.Instance.ClaimStage(stage1Based) → 보상 지급
     ///
-    /// 보상 지급은 자동이 아니라 슬롯의 BtnReward 클릭으로만. (사양 협의)
-    /// 이벤트 해금: highestClearedLevel >= unlockLevel (Firestore config 에서 동적).
+    /// 보상 지급은 stage 임계 도달 즉시 자동 지급 (명세 §11.4). 슬롯 ClaimStage 는 이미 지급된 건 no-op.
+    /// 회차(round): config.activeRoundId 가 State.activeRoundId 와 다르면 새 회차 → 상태 리셋 (명세 §2.3·§11.1).
+    /// 이벤트 해금: highestClearedLevel >= unlockLevel (Firestore config 에서 동적, 명세 §2.2 = 35).
     /// 진행 상태는 UserData.winningStreak (Firestore 동기화).
     /// </summary>
     public class WinningStreakManager : Singleton<WinningStreakManager>
@@ -49,7 +50,41 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnLevelFailed>(HandleLevelFailedEvent);
         }
 
-        private void HandleConfigLoaded() => OnStateChanged?.Invoke();
+        private void HandleConfigLoaded()
+        {
+            EnsureActiveRound();   // config 도착 시 회차 경계 판정 (새 회차면 상태 리셋)
+            OnStateChanged?.Invoke();
+        }
+
+        /// <summary>
+        /// 회차(round) 경계 판정 (명세 §2.3·§11.1). 서버 config.activeRoundId 가 현재 State.activeRoundId 와
+        /// 다르면 새 회차로 보고 streak/진행도/단계/수령내역을 전부 0으로 리셋한다 (회차 독립, 보상 재수령 가능).
+        /// 서버가 회차를 운영하지 않으면(activeRoundId 빈 값) 리셋하지 않는다 — 엄격 서버 기준.
+        /// lifetimePoints 는 통계용이라 회차 무관 누적 유지.
+        /// </summary>
+        private void EnsureActiveRound()
+        {
+            var cfg = Config;
+            var s = State;
+            if (cfg == null || s == null) return;
+
+            string roundId = cfg.activeRoundId;
+            if (string.IsNullOrEmpty(roundId)) return; // 서버 회차 미운영 → 리셋 안 함
+            if (s.activeRoundId == roundId) return;     // 동일 회차 → 유지
+
+            Debug.Log($"{LOG_TAG} 새 회차 감지: '{s.activeRoundId}' → '{roundId}'. 진행 상태 리셋.");
+            s.activeRoundId      = roundId;
+            s.currentStreak      = 0;
+            s.currentStage       = 1;
+            s.currentStagePoints = 0;
+            s.eventFinished      = false;
+            if (s.claimedStages != null) s.claimedStages.Clear();
+            else s.claimedStages = new System.Collections.Generic.List<int>();
+
+            SaveProgressFireAndForget();
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.SaveWinningStreakClaimedStages();
+        }
 
         private void HandleLevelCompletedEvent(OnLevelCompleted evt)
         {
@@ -112,6 +147,8 @@ namespace BalloonFlow
         {
             var s = State;
             if (s == null) return;
+
+            EnsureActiveRound();   // 회차 경계면 먼저 리셋 후 이번 클리어를 새 회차에 반영
 
             s.currentStreak += 1;
 
@@ -182,6 +219,7 @@ namespace BalloonFlow
                 s.currentStage += 1;
                 s.currentStagePoints = 0;
                 OnStageAchieved?.Invoke(achievedStage);
+                AutoGrantStage(achievedStage);   // [#6/7] 임계 도달 즉시 자동 지급 (명세 §11.4)
 
                 if (s.currentStage > totalStages)
                 {
@@ -192,9 +230,33 @@ namespace BalloonFlow
             }
         }
 
-        // ── Claim ────────────────────────────────────────────────
+        // ── Auto-grant / Claim ───────────────────────────────────
 
-        /// <summary>달성 완료된 stage 보상을 수령. 이미 수령했거나 미달성이면 false.</summary>
+        /// <summary>
+        /// [#6/7] stage 임계 도달 즉시 보상 자동 지급 (명세 §11.4). AddPointsInternal 에서 호출.
+        /// 이미 수령된 stage 면 무시 (중복 방지). 수령 후 claimedStages 기록 + OnStageClaimed 연출 트리거.
+        /// </summary>
+        private void AutoGrantStage(int stage1Based)
+        {
+            var s = State;
+            var svc = WinningStreakConfigService.HasInstance ? WinningStreakConfigService.Instance : null;
+            if (s == null || svc == null) return;
+            if (s.claimedStages != null && s.claimedStages.Contains(stage1Based)) return;
+
+            var stage = svc.GetStage(stage1Based);
+            if (stage == null || stage.rewards == null) return;
+
+            GrantRewards(stage.rewards, $"WinningStreak.autoGrant.stage{stage1Based}");
+            if (s.claimedStages == null) s.claimedStages = new System.Collections.Generic.List<int>();
+            s.claimedStages.Add(stage1Based);
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.SaveWinningStreakClaimedStages();
+
+            OnStageClaimed?.Invoke(stage1Based);
+        }
+
+        /// <summary>달성 완료된 stage 보상을 수령 (자동 지급 도입 후엔 대부분 이미 지급됨 → no-op).
+        /// 슬롯 BtnReward 폴백/구버전 호환용. 이미 수령했거나 미달성이면 false.</summary>
         public bool ClaimStage(int stage1Based)
         {
             var s = State;

@@ -623,6 +623,7 @@ namespace BalloonFlow
                         sizeW       = bl.sizeW > 0 ? bl.sizeW : 1,
                         sizeH       = bl.sizeH > 0 ? bl.sizeH : 1,
                         hp          = bl.hp,
+                        iceBlockSize = bl.iceBlockSize > 0 ? bl.iceBlockSize : 1,
                         eggColors   = bl.eggColors,
                         eggHps      = bl.eggHps,
                         lockPairId  = bl.lockPairId,

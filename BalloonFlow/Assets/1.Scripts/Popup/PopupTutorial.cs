@@ -11,6 +11,9 @@ namespace BalloonFlow
     /// </summary>
     public class PopupTutorial : UIBase
     {
+        // [#15] 튜토리얼 모달 — 백버튼 차단 (튜토리얼 완료 강제, UX플로우 §5-3-0). 안 눌림.
+        public override BackResult OnBackPressed() => BackResult.Blocked;
+
         [Header("[Cutout 기준 — 프리팹에서 할당. 자동으로 CutoutMaskUI + Mask + 자식 DimOverlay 추가]")]
         [SerializeField] private RectTransform _cutoutMask;
 

@@ -105,19 +105,7 @@ namespace BalloonFlow
         void Update()
         {
             UpdateLifeTimer();
-
-            // 백버튼(Escape) → 종료 확인 팝업
-            if (Keyboard.current != null && Keyboard.current[Key.Escape].wasPressedThisFrame)
-                ShowQuitConfirm();
-        }
-
-        void ShowQuitConfirm()
-        {
-            if (!UIManager.HasInstance) return;
-            var popup = UIManager.Instance.OpenUI<PopupDescription>("Popup/PopupDescription");
-            if (popup != null)
-                popup.Show("Quit", "Are you sure you want to quit?", "Quit",
-                    () => Application.Quit());
+            // [#15] 백버튼(Escape) 처리는 BackButtonRouter 로 중앙화됨 (로비 컨텍스트 → Quit Game).
         }
 
         #region UI Load
@@ -139,7 +127,17 @@ namespace BalloonFlow
                 if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.AddListener(OnGoToShop);
                 if (_lobby.BtnLifeBar != null) _lobby.BtnLifeBar.onClick.AddListener(OnLifeBarClicked);
                 if (_lobby.BtnNoAds != null) _lobby.BtnNoAds.onClick.AddListener(OnNoAdsClicked);
-                if (_lobby.BtnProfilePanel != null) _lobby.BtnProfilePanel.onClick.AddListener(OnProfileClicked);
+
+                // [1.0] Profile/Avatar 는 1.1 기능 → 1.0 빌드에서 좌상단 프로필 패널 숨김 + 진입 비배선.
+                if (Const.PROFILE_ENABLED)
+                {
+                    _lobby.SetProfilePanelActive(true);
+                    if (_lobby.BtnProfilePanel != null) _lobby.BtnProfilePanel.onClick.AddListener(OnProfileClicked);
+                }
+                else
+                {
+                    _lobby.SetProfilePanelActive(false);
+                }
             }
         }
 

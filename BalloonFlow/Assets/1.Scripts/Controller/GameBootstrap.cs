@@ -70,6 +70,11 @@ namespace BalloonFlow
 
             // 레벨 로드
             LoadPendingLevel();
+
+            // [#5/12] FTUE 무한 하트 24h (UX플로우 §3-2·§3-3): 첫 Lv.1 진입 시각 기준 24h, 1회만 부여.
+            // 24h 동안 하트 차감 X (실패해도 무소모). ActivateInfiniteHearts 가 Firestore(infiniteHeartsUntil)에
+            // 절대 시각으로 저장 → 세션 재시작 시 ApplyInfiniteHeartsFromUserData 로 잔여시간 복원.
+            TryGrantFtueInfiniteHearts();
             // WHY: 부스터 언락 팝업 트리거는 HandleLevelLoaded 에서 처리.
             // Start() 만으로 트리거하면 같은 씬 안 Next/Retry 로 9/12/15 진입 시 미발화 → 사용자가 영원히 못 봄.
 
@@ -390,6 +395,26 @@ namespace BalloonFlow
         }
 
 
+        /// <summary>
+        /// [#5/12] 첫 Lv.1 진입 시 1회 무한 하트 24h 부여 (UX플로우 §3-2·§3-3).
+        /// 신규 유저(최고 클리어 0) + 1회 플래그 미설정 시에만. 테스트 모드 제외.
+        /// </summary>
+        private const string PREFS_FTUE_INFINITE_HEARTS = "BF_FtueInfiniteHeartsGranted";
+        private const float  FTUE_INFINITE_HEARTS_SECONDS = 24f * 60f * 60f; // 24h
+        void TryGrantFtueInfiniteHearts()
+        {
+            if (_isTestMode) return;
+            if (PlayerPrefs.GetInt(PREFS_FTUE_INFINITE_HEARTS, 0) != 0) return;
+            // 신규 유저만 (이미 진행한 유저에게 소급 부여 금지).
+            if (FtueGate.HighestClearedLevel > 0) return;
+            if (!LifeManager.HasInstance) return;
+
+            LifeManager.Instance.ActivateInfiniteHearts(FTUE_INFINITE_HEARTS_SECONDS);
+            PlayerPrefs.SetInt(PREFS_FTUE_INFINITE_HEARTS, 1);
+            PlayerPrefs.Save();
+            Debug.Log("[GameBootstrap] FTUE 무한 하트 24h 부여 (첫 Lv.1 진입)");
+        }
+
         /// <summary>PlayerPrefs("BF_PendingLevelId") 또는 최고 클리어 레벨+1을 기준으로 LevelManager에 레벨을 로드하고 해당 levelId를 반환한다.</summary>
         int LoadPendingLevel()
         {
@@ -503,7 +528,35 @@ namespace BalloonFlow
         void HandleLevelCompleted(OnLevelCompleted _evt)
         {
             _pendingResultIsWin = true;
+
+            // [#5/12] 온보딩 강제 집중 (UX플로우 §3-3·§5-4): Lv.1~4 클리어는 클리어 팝업 생략 + 자동 다음 레벨.
+            // 코인 보상은 CurrencyManager.HandleLevelCompleted 가 백그라운드로 이미 지급(토스트 없음).
+            // Lv.5 클리어부터 정상 클리어 팝업 노출 (온보딩 종료 신호). 테스트 모드는 예외.
+            if (!_isTestMode && _evt.levelId < FtueGate.ONBOARDING_CLEAR_LEVEL)
+            {
+                StartCoroutine(AutoAdvanceAfterClear());
+                return;
+            }
+
             StartCoroutine(ShowResultDelayed(true, _evt.score, _evt.starCount));
+        }
+
+        /// <summary>[#5/12] Lv.1~4 온보딩 — 클리어 팝업 없이 칭찬 연출 후 자동으로 다음 레벨 진입.</summary>
+        IEnumerator AutoAdvanceAfterClear()
+        {
+            if (_hud != null) _hud.PlayStageEndPanelShift();
+            // 칭찬 문구/클리어 FX 가 짧게 노출되도록 결과 팝업과 동일한 지연 유지.
+            yield return new WaitForSecondsRealtime(0.8f);
+
+            _pendingResultIsWin = false;
+            if (_hud != null) _hud.OpenUI();
+
+            if (LevelManager.HasInstance)
+            {
+                int _next = LevelManager.Instance.GetNextLevelId();
+                int _current = LevelManager.Instance.CurrentLevelId;
+                if (_next > _current) LevelManager.Instance.LoadLevel(_next);
+            }
         }
 
         /// <summary>Continue 소진·거절 이후 발생하는 최종 실패 이벤트를 받아 fail 결과 팝업 표시 코루틴을 시작한다.</summary>
@@ -566,6 +619,19 @@ namespace BalloonFlow
                             popup.Show("Congratulations!", "You've cleared all levels!", "OK",
                                 () => { if (GameManager.HasInstance) GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY); });
                     }
+                    return;
+                }
+
+                // [#4] 전면 광고 — Clear → Next 지면 (interstitial_clear_next). 오버레이이므로 이후 동선은 그대로 진행.
+                if (AdManager.HasInstance)
+                    AdManager.Instance.TryShowInterstitial(AdManager.InterstitialPlacement.ClearNext);
+
+                // [#5/12] Next 분기 (UX플로우 §5-4·§435):
+                //   - Lv.5~34 클리어 → 다음 레벨 자동 진입 (학습·진행 흐름 유지)
+                //   - Lv.35 클리어부터 → 로비씬 (Lv.35 = WinningStreak 해금 안내, Lv.36+ = 이벤트 참여)
+                if (_current >= FtueGate.WINNING_STREAK_UNLOCK_CLEAR_LEVEL)
+                {
+                    if (GameManager.HasInstance) GameManager.Instance.GoToLobby();
                     return;
                 }
 

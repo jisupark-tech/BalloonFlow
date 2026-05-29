@@ -19,10 +19,12 @@ namespace BalloonFlow
         private const int DEFAULT_INITIAL_COINS = 1000;
         private const int MAX_TRANSACTION_HISTORY = 50;
 
-        // Level clear coin rewards (design: Normal 50, Hard 75, SuperHard 100)
-        private const int COINS_CLEAR_NORMAL    = 50;
-        private const int COINS_CLEAR_HARD      = 75;
-        private const int COINS_CLEAR_SUPERHARD = 100;
+        // 레벨 클리어 코인 보상 — 난이도 기준 (명세: 노말 20 / 하드 60(×3) / 슈퍼하드 100(×5)).
+        // 2026-04-07 PO 결정: 별점(성과) 기준 50/75/100 → 난이도 기준 20/60/100 으로 변경.
+        // (아웃게임디렉션 §코인 소스, 인수인계서 §3-1, WS hard_coef 1/3/5 정합)
+        private const int COINS_CLEAR_NORMAL    = 20;   // Normal / Tutorial / Rest / Intro
+        private const int COINS_CLEAR_HARD      = 60;   // Hard (= 20 × 3)
+        private const int COINS_CLEAR_SUPERHARD = 100;  // SuperHard (= 20 × 5)
 
         #endregion
 
@@ -223,23 +225,18 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Returns the coin reward for a given star count.
+        /// 레벨 난이도(DifficultyPurpose)에 따른 클리어 코인 보상.
+        /// 명세: 노말 20 / 하드 60 / 슈퍼하드 100. Tutorial·Rest·Intro 는 노말과 동일(20).
+        /// 보상은 성과(별점)가 아닌 레벨 난이도에 고정 — 별점 무관.
         /// </summary>
-        /// <param name="starCount">Stars earned (1-3).</param>
-        /// <returns>Coin reward amount.</returns>
-        /// <summary>
-        /// Returns coin reward based on star count.
-        /// Design: Normal clear 50, Hard clear 75, SuperHard clear 100.
-        /// Maps stars as proxy: 1★=Normal(50), 2★=Hard(75), 3★=SuperHard(100).
-        /// </summary>
-        public int GetCoinRewardForStars(int starCount)
+        public int GetCoinRewardForDifficulty(DifficultyPurpose difficulty)
         {
-            switch (starCount)
+            switch (difficulty)
             {
-                case 1: return COINS_CLEAR_NORMAL;
-                case 2: return COINS_CLEAR_HARD;
-                case 3: return COINS_CLEAR_SUPERHARD;
-                default: return 0;
+                case DifficultyPurpose.SuperHard: return COINS_CLEAR_SUPERHARD;
+                case DifficultyPurpose.Hard:      return COINS_CLEAR_HARD;
+                // Normal / Tutorial / Rest / Intro
+                default:                          return COINS_CLEAR_NORMAL;
             }
         }
 
@@ -368,7 +365,11 @@ namespace BalloonFlow
 
         private void HandleLevelCompleted(OnLevelCompleted evt)
         {
-            int reward = GetCoinRewardForStars(evt.starCount);
+            // 보상은 레벨 난이도 기준 (성과 별점 아님). LevelManager 미존재 시 Normal 로 폴백.
+            DifficultyPurpose diff = LevelManager.HasInstance
+                ? LevelManager.Instance.GetLevelDifficulty(evt.levelId)
+                : DifficultyPurpose.Normal;
+            int reward = GetCoinRewardForDifficulty(diff);
             if (reward > 0)
             {
                 AddCoins(reward, CoinSource.LevelClear);

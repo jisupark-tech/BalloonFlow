@@ -89,6 +89,11 @@ namespace BalloonFlow
             RefreshToggles();
             base.OpenUI();
 
+            // [#5/12] 온보딩(Lv.5 클리어 전) 중에는 Quit(Home) 버튼 비노출 — 이탈 경로 차단 (UX플로우 §5-3·§3-3).
+            // 세팅 자체(Sound/Music/Haptic + Continue)는 정상 노출. 백버튼도 이 상태의 세팅을 연다(#15).
+            if (HomeButton != null)
+                HomeButton.gameObject.SetActive(FtueGate.IsOnboardingComplete);
+
             // 애니메이션 사용 시 base.OpenUI 가 interactable=false 로 시작 → ExitButton 클릭 안 됨.
             // 즉시 클릭 가능하도록 강제.
             if (_canvasGroup != null)

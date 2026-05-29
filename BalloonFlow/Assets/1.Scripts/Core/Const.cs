@@ -484,6 +484,15 @@ namespace BalloonFlow
 
         #endregion
 
+        #region Feature Flags (1.0 출시 게이팅)
+
+        // 출시 후 기능을 1.0 빌드에서 차단하기 위한 컴파일 상수.
+        //   - Profile/Avatar : 1.1 기능. 1.0 에서 좌상단 프로필 패널(편집 진입) 숨김.
+        // 1.1+ 정식 노출 시 true 로 전환.
+        public const bool PROFILE_ENABLED = false;
+
+        #endregion
+
         #region PlayerPrefs Keys
 
         public const string PREFS_AD_REMOVED        = "BalloonFlow_AdRemoved";

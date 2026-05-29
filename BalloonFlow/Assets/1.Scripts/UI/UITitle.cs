@@ -16,6 +16,9 @@ namespace BalloonFlow
     /// </summary>
     public class UITitle : UIBase
     {
+        // [#15] 씬 UI — 백버튼 비소비. 타이틀/로딩 컨텍스트는 라우터가 무시.
+        public override bool ConsumesBackButton => false;
+
         [Header("[Title 텍스트]")]
         [SerializeField] private Text _logoText;
         [SerializeField] private Text _subtitleText;

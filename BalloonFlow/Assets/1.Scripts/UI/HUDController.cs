@@ -200,6 +200,39 @@ namespace BalloonFlow
             if (_popupSettings != null) _popupSettings.OpenUI();
         }
 
+        /// <summary>
+        /// 인게임 플레이 중 안드로이드 백버튼 처리 (UX플로우 §5-3-0). 팝업이 하나도 열려있지 않을 때
+        /// BackButtonRouter 가 호출. 우선순위:
+        ///   1) 부스터 사용 중간 단계 → 부스터 사용 취소 (자원 소모 X, BoosterExecutor.CancelPendingBooster)
+        ///   2) 온보딩 중 (Lv.5 클리어 전) → 인게임 세팅 팝업 (Quit 비노출 — PopupSettings 가 FtueGate 로 처리)
+        ///   3) 온보딩 후 → Quit Level 확인 팝업
+        /// </summary>
+        public void HandleInGameBack()
+        {
+            // 1) 부스터 사용 중간 취소
+            if (BoosterExecutor.HasInstance)
+            {
+                var be = BoosterExecutor.Instance;
+                if (be.HasPendingBooster || be.IsAwaitingColorSelection
+                    || be.IsAwaitingHolderSelection || be.IsAwaitingBalloonClick)
+                {
+                    be.CancelPendingBooster();
+                    return;
+                }
+            }
+
+            // 2) 온보딩 중 → 인게임 세팅 팝업 (Quit 버튼은 PopupSettings 가 온보딩 여부로 숨김)
+            if (!FtueGate.IsOnboardingComplete)
+            {
+                if (_popupSettings != null) _popupSettings.OpenUI();
+                return;
+            }
+
+            // 3) 온보딩 후 → Quit Level 확인 (Settings → Quit 과 동일 종착)
+            if (_popupQuit != null) _popupQuit.OpenUI();
+            else if (_popupSettings != null) _popupSettings.OpenUI();
+        }
+
         private void OnSettingsCloseClicked()
         {
             if (_popupSettings != null) _popupSettings.CloseUI();

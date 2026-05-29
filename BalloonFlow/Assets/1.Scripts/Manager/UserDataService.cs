@@ -410,7 +410,8 @@ namespace BalloonFlow
                 ["winningStreak.currentStagePoints"] = ws.currentStagePoints,
                 ["winningStreak.currentStreak"] = ws.currentStreak,
                 ["winningStreak.lifetimePoints"] = ws.lifetimePoints,
-                ["winningStreak.eventFinished"] = ws.eventFinished
+                ["winningStreak.eventFinished"] = ws.eventFinished,
+                ["winningStreak.activeRoundId"] = ws.activeRoundId
             }), "SaveWinningStreakProgress");
         }
 

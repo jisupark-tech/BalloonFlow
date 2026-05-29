@@ -17,9 +17,24 @@ namespace BalloonFlow
         #region Constants
 
         private const int    AD_PROTECTION_LEVEL_THRESHOLD = 20;
-        private const int    INTERSTITIAL_FAIL_INTERVAL    = 3;
+        // 전면 광고 공통 쿨다운 (UX플로우 §6-1·§7-2·§595 "모든 지면 공통 20초").
+        private const float  INTERSTITIAL_COOLDOWN_SECONDS = 20f;
         private const int    MAX_RETRY_EXPONENT            = 6; // 2^6 = 64s
         private const string LOG_TAG                       = "[AdManager]";
+
+        #endregion
+
+        #region Types
+
+        /// <summary>
+        /// 전면 광고 지면 (UX플로우 §6-1·§7-1, v1.2.30/31 Yarn Loop 방식).
+        /// 1.0 메인 지면 2종만 — Try Again·실패횟수 트리거는 폐기됨.
+        /// </summary>
+        public enum InterstitialPlacement
+        {
+            ClearNext, // Clear → Next 직후 (interstitial_clear_next)
+            FailQuit   // ③ Level Failed 나가기 → 로비 직전 (interstitial_fail_quit)
+        }
 
         #endregion
 
@@ -44,10 +59,11 @@ namespace BalloonFlow
         private bool   _isInitialized;
         private int    _rewardedRetryAttempt;
         private int    _interstitialRetryAttempt;
-        private int    _failCount;
         private int    _currentLevel = 1;
         private bool   _isShowingAd;
         private Action _pendingRewardCallback;
+        // 마지막 전면 광고 노출 종료 시각 (realtime). 20초 공통 쿨다운 판정용.
+        private float  _lastInterstitialShownRealtime = -9999f;
 
         #endregion
 
@@ -71,13 +87,11 @@ namespace BalloonFlow
         private void OnEnable()
         {
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
-            EventBus.Subscribe<OnLevelFailed>(HandleLevelFailed);
         }
 
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
-            EventBus.Unsubscribe<OnLevelFailed>(HandleLevelFailed);
         }
 
         #endregion
@@ -143,29 +157,49 @@ namespace BalloonFlow
             MaxSdk.ShowRewardedAd(SdkConfig.AppLovinRewardedAdUnitId);
         }
 
-        /// <summary>Interstitial 광고 표시. 게임 중에는 무시. Lv20 미만 ad protection.</summary>
-        public void ShowInterstitialAd()
+        /// <summary>
+        /// 명세 기반 전면 광고 노출 시도 (UX플로우 §6-1·§7-1, v1.2.30/31 Yarn Loop).
+        /// 두 지면(Clear→Next, ③ 실패 나가기)에서만 호출. 다음 조건 모두 충족 시에만 노출:
+        ///   - 광고 제거 미구매
+        ///   - Lv.20 <b>클리어</b> 후 (highest cleared ≥ 20) — FTUE 보호
+        ///   - 마지막 노출로부터 20초 경과 (공통 쿨다운)
+        ///   - 광고 로드 완료 + 표시 중 아님 + 인게임 플레이 중 아님
+        /// </summary>
+        /// <returns>실제로 표시를 트리거했으면 true (호출 측이 광고 후 동선을 분기할 필요는 없음 — 광고는 오버레이).</returns>
+        public bool TryShowInterstitial(InterstitialPlacement placement)
         {
             // [2026-05-13] 광고 제거 구매 유저 — interstitial 차단.
             if (IAPManager.HasInstance && IAPManager.Instance.AdsRemoved)
             {
-                Debug.Log($"{LOG_TAG} AdsRemoved=true — skipping interstitial.");
-                return;
+                Debug.Log($"{LOG_TAG} AdsRemoved=true — skipping interstitial ({placement}).");
+                return false;
             }
-            if (GetAdProtectionLevel() < AD_PROTECTION_LEVEL_THRESHOLD) return;
-            if (!IsInterstitialAdReady()) return;
-            if (_isShowingAd) return;
-
+            // Lv.20 클리어 후 해금 (현재 진입 레벨이 아닌 최고 클리어 레벨 기준).
+            if (GetHighestClearedLevel() < AD_PROTECTION_LEVEL_THRESHOLD) return false;
+            // 공통 20초 쿨다운.
+            if (Time.realtimeSinceStartup - _lastInterstitialShownRealtime < INTERSTITIAL_COOLDOWN_SECONDS) return false;
+            if (_isShowingAd) return false;
+            if (!IsInterstitialAdReady())
+            {
+                LoadInterstitialAd();
+                return false;
+            }
             if (BoardStateManager.HasInstance &&
                 BoardStateManager.Instance.GetBoardState() == BoardState.Playing)
             {
-                Debug.LogWarning($"{LOG_TAG} Cannot show interstitial during gameplay.");
-                return;
+                Debug.LogWarning($"{LOG_TAG} Cannot show interstitial during gameplay ({placement}).");
+                return false;
             }
 
             _isShowingAd = true;
+            Debug.Log($"{LOG_TAG} Showing interstitial — placement={placement}");
             MaxSdk.ShowInterstitial(SdkConfig.AppLovinInterstitialAdUnitId);
+            return true;
         }
+
+        /// <summary>최고 클리어 레벨 (Lv.20 클리어 해금 판정용). LevelManager 미존재 시 0.</summary>
+        private int GetHighestClearedLevel()
+            => LevelManager.HasInstance ? LevelManager.Instance.GetHighestCompletedLevel() : 0;
 
         public bool IsRewardedAdReady() =>
             _isInitialized
@@ -178,6 +212,9 @@ namespace BalloonFlow
             && MaxSdk.IsInterstitialReady(SdkConfig.AppLovinInterstitialAdUnitId);
 
         public int GetAdProtectionLevel() => _currentLevel;
+
+        /// <summary>전면/보상형 광고가 현재 표시 중인지. 백버튼은 광고 중 SDK 가 처리하므로 라우터가 무시.</summary>
+        public bool IsShowingAd => _isShowingAd;
 
         #endregion
 
@@ -277,6 +314,8 @@ namespace BalloonFlow
         private void OnInterstitialHiddenCb(string adUnitId, MaxSdkBase.AdInfo info)
         {
             _isShowingAd = false;
+            // 노출 종료 시점에 쿨다운 타이머 시작 (명세: "show() end → last_shown_at = now → 20s cooldown").
+            _lastInterstitialShownRealtime = Time.realtimeSinceStartup;
             OnInterstitialAdHidden?.Invoke();
             LoadInterstitialAd();
         }
@@ -294,19 +333,9 @@ namespace BalloonFlow
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
             _currentLevel = evt.levelId;
-            _failCount    = 0;
 
             if (!IsRewardedAdReady())     LoadRewardedAd();
             if (!IsInterstitialAdReady()) LoadInterstitialAd();
-        }
-
-        private void HandleLevelFailed(OnLevelFailed evt)
-        {
-            _failCount++;
-            if (_failCount % INTERSTITIAL_FAIL_INTERVAL == 0)
-            {
-                ShowInterstitialAd();
-            }
         }
 
         #endregion

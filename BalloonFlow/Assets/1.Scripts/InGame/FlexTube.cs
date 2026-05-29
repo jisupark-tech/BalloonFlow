@@ -42,7 +42,10 @@ namespace BalloonFlow
         [SerializeField] private int _visualSegmentsPerCell = 3;
         [Tooltip("다트 hit 마다 마지막 활성 visual segment 가 scale 0 으로 줄어드는 시간(초). 0 = 즉시 비활성.")]
         [SerializeField] private float _segmentShrinkDuration = 0.12f;
+        [Tooltip("Segment visual 의 x,y 로컬 스케일 (z=길이축은 유지). 캡(Start/End)에는 미적용.")]
+        [SerializeField] private float _segmentScaleXY = 0.8f;
         public int VisualSegmentsPerCell => Mathf.Max(1, _visualSegmentsPerCell);
+        public float SegmentScaleXY => _segmentScaleXY;
 
         private int _hp;          // 남은 HP — 활성 visual segment 수와 1:1 (cell 수 × N)
         private int _color = -1;  // -1 = 임의 색 적중 (디버그/테스트 용)
