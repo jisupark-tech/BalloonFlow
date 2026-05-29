@@ -45,9 +45,9 @@ namespace BalloonFlow
         private BoardState _currentState;
         private int _remainingBalloons;
         private int _currentLevelId;
-        // [2026-05-12] grace 1.5s → 5s 확장. railFull 조건 제거 후 사용자 dart 발사 + 매칭 recovery 시간 확보.
-        // GameManager.Board.failGraceDelay (Inspector / data) 가 있으면 OnSingletonAwake 에서 override.
-        private float _failGraceDelay = 3.0f;
+        // 명세(§5-5) fail grace = 1.5s. GameManager.Board.failGraceDelay (Inspector/data) 가 OnSingletonAwake 에서 override(권위).
+        // (과거 1.5→5→3s 확장 튜닝 이력 있었으나 명세 정합으로 1.5 복귀 — recovery 시간 필요 시 GameManager.Board 값으로 조정)
+        private float _failGraceDelay = 1.5f;
         // Design ref (doc line 56, 322-329): 실패 조건 = "rail dart 1+ + 외곽 매칭 불가 + 3초 grace (railFull 조건 제거)"
         // 매칭 가능하면 critical 진입 안 함. 매칭 가능해지거나 슬롯 비면 critical 즉시 해제.
 

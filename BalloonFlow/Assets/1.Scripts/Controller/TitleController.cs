@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace BalloonFlow
 {
@@ -15,6 +16,9 @@ namespace BalloonFlow
     {
         /// <summary>안전 timeout — 어떤 단계가 너무 오래 걸려도 결국 진입.</summary>
         private const float MAX_LOADING_TIME = 30.0f;
+
+        /// <summary>[#9] 로딩 완료 후 "Tap to Start" 노출 시간 — 이 시간 내 탭하면 즉시 진입, 미탭 시 자동 진입(doc: 자동 진입 유지).</summary>
+        private const float TITLE_AUTO_ENTER_DELAY = 1.0f;
 
         /// <summary>실제 작업이 너무 빠를 때 사용자가 볼 수 있도록 step 마다 보장하는 최소 시간 (초).</summary>
         private const float MIN_STEP_DURATION = 0.4f;
@@ -40,6 +44,9 @@ namespace BalloonFlow
         private float _watchdogTimer;
         /// <summary>네트워크 대기 중일 때 watchdog 일시 정지 (오프라인이면 30s timeout 으로 Lobby 강제 진입 막기).</summary>
         private bool _isWaitingForNetwork;
+        /// <summary>[#9] 로딩 완료 후 "Tap to Start" hint 노출 1회 가드 + 자동 진입 카운트다운.</summary>
+        private bool _completeHintShown;
+        private float _completeTimer;
 
         /// <summary>현재 step 의 0~1 진행도 — step 작업이 직접 갱신. StepProgressDriver 가 매 프레임 UITitle 에 반영.</summary>
         private float _stepProgress;
@@ -86,10 +93,18 @@ namespace BalloonFlow
         {
             if (_entered) return;
 
-            // 로딩 완료 후 자동 입장 (모든 진행도 == 1.0)
+            // [#9] 로딩 완료 → "Tap to Start" 노출. 탭하면 즉시 진입, 미탭 시 짧은 지연 후 자동 진입(doc: 자동 진입 유지).
             if (_loadingComplete)
             {
-                Enter();
+                if (!_completeHintShown)
+                {
+                    _completeHintShown = true;
+                    _completeTimer = 0f;
+                    if (_ui != null) _ui.SetTapHintVisible(true);
+                }
+                _completeTimer += Time.deltaTime;
+                if (AnyTapThisFrame() || _completeTimer >= TITLE_AUTO_ENTER_DELAY)
+                    Enter();
                 return;
             }
 
@@ -104,6 +119,18 @@ namespace BalloonFlow
                     Enter();
                 }
             }
+        }
+
+        /// <summary>[#9] 탭/클릭/키 입력 감지 (신규 Input System). "Tap to Start" 즉시 진입용.</summary>
+        private static bool AnyTapThisFrame()
+        {
+            var ts = Touchscreen.current;
+            if (ts != null && ts.primaryTouch.press.wasPressedThisFrame) return true;
+            var mouse = Mouse.current;
+            if (mouse != null && mouse.leftButton.wasPressedThisFrame) return true;
+            var kb = Keyboard.current;
+            if (kb != null && kb.anyKey.wasPressedThisFrame) return true;
+            return false;
         }
 
         /// <summary>

@@ -68,6 +68,13 @@ namespace BalloonFlow.Analytics
         public const string P_TRANSACTION_ID      = "transaction_id";
         public const string P_PRODUCT_CATEGORY    = "product_category";     // coin|bundle|noads|offer
 
+        // ─── ad_event (impression-level revenue, MAX OnAdRevenuePaidEvent) ───
+        public const string P_AD_TYPE             = "ad_type";              // interstitial|rewarded|banner|mrec
+        public const string P_AD_PLACEMENT        = "ad_placement";         // MAX placement (있으면)
+        public const string P_AD_REVENUE_USD      = "ad_revenue_usd";
+        public const string P_AD_NETWORK          = "ad_network";           // mediated network name
+        public const string P_AD_UNIT_ID          = "ad_unit_id";
+
         // ─── 25-param overflow consolidation ───
         // level_play_event 44 컬럼 → 25 limit. extra_json 으로 통합:
         //   play_time_sec, background_time_sec, moves_given, moves_remaining, undo_count,

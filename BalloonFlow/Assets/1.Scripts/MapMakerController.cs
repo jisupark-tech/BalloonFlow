@@ -4382,6 +4382,21 @@ namespace BalloonFlow
 
         private void GenerateQueue()
         {
+            // ── STEP C 입력 — 현재 칠해진 홀더 큐 기믹 개수 (그리드 재구성 전 캡처) ──
+            //   레벨의 "기믹 데이터"(칠해진 Hidden/Chain/Frozen 수)를 읽어 STEP C 가 위치를 알고리즘 배치.
+            int stepCHidden = 0, stepCChain = 0, stepCFrozen = 0;
+            if (_holderGimmicks != null)
+                for (int c = 0; c < _holderCols; c++)
+                    for (int r = 0; r < _holderRows; r++)
+                    {
+                        int g = _holderGimmicks[c, r];
+                        if (g <= 0 || g >= HOLDER_GIMMICK_NAMES.Length) continue;
+                        string gn = HOLDER_GIMMICK_NAMES[g];
+                        if (gn == "Hidden") stepCHidden++;
+                        else if (gn == "Chain") stepCChain++;
+                        else if (gn == "Frozen_Dart") stepCFrozen++;
+                    }
+
             // ── 1. 필드 분석 (§1) ──
             var colorDarts = new Dictionary<int, int>();
             for (int c = 0; c < _gridCols; c++)
@@ -4566,6 +4581,30 @@ namespace BalloonFlow
                 }
             }
 
+            // ── 5-C. STEP C — 큐 기믹 자동 배치 (ProjectHub queue-generator.ts 1:1 포팅) ──
+            //   홀더는 매 생성마다 재배치되므로 기존 기믹 위치는 무효 → 배열 초기화 후 STEP C 로 재배치.
+            //   STEP C 관리 대상은 Hidden/Chain/Frozen 뿐. Spawner/Lock 이 칠해져 있었다면 재생성으로 사라지므로 경고.
+            int clearedOther = 0;
+            for (int c = 0; c < _holderCols; c++)
+                for (int r = 0; r < _holderRows; r++)
+                {
+                    int g = _holderGimmicks[c, r];
+                    if (g > 0 && g < HOLDER_GIMMICK_NAMES.Length)
+                    {
+                        string gn = HOLDER_GIMMICK_NAMES[g];
+                        if (gn != "Hidden" && gn != "Chain" && gn != "Frozen_Dart") clearedOther++;
+                    }
+                    _holderGimmicks[c, r] = 0;
+                    _holderChainGroups[c, r] = -1;
+                    _holderFrozenHP[c, r] = 3;
+                }
+            if (clearedOther > 0)
+                Debug.LogWarning($"[GenerateQueue] STEP C 재배치로 Spawner/Lock 홀더 기믹 {clearedOther}개가 초기화됨 — 필요 시 수동 재배치 요망.");
+            int stepCPlaced = 0;
+            if (stepCHidden + stepCChain + stepCFrozen > 0)
+                stepCPlaced = ApplyStepC(allMagazines, queueCols, colorDartsRounded, totalDarts,
+                    stepCHidden, stepCChain, stepCFrozen, _difficulty, levelId);
+
             // ── 6. 난이도 점수 (§7) ──
             float score = CalcDifficultyScore(allMagazines, colorDepth, colorDependency, colorDartsRounded, railCapacity);
             string grade = score < 35f ? "Easy" : score < 70f ? "Normal" : score < 90f ? "Hard" : "SuperHard";
@@ -4603,7 +4642,8 @@ namespace BalloonFlow
             // 추천 라벨 — queue_columns + ammo/holder + retry
             if (_queueGenRecommendLabel != null)
                 _queueGenRecommendLabel.text =
-                    $"cols {queueCols} (추천)  |  ammo/holder {ammoPerHolder:F1}  |  retries {attempts}";
+                    $"cols {queueCols} (추천)  |  ammo/holder {ammoPerHolder:F1}  |  retries {attempts}"
+                    + (stepCPlaced > 0 ? $"  |  기믹 자동배치 {stepCPlaced}" : "");
 
             // Soft warn 라벨
             if (_queueGenWarnLabel != null)
@@ -4635,6 +4675,424 @@ namespace BalloonFlow
         /// §2-8 — 레벨별 사용 가능 cap 집합 결정. rail_capacity + PKG + purpose 가드 적용.
         /// 항상 cap20 백본 포함 보장.
         /// </summary>
+        // ════════════════════════════════════════════════════════════════
+        //  STEP C — 큐 기믹 자동 배치 (BalloonFlow_큐생성기_명세 v3.15)
+        //  ProjectHub queue-generator.ts generateStepC 1:1 포팅 (홀더 큐 기믹 한정).
+        //  순서: Linked(Chain) → Frozen → Hidden. 사슬 인접(col diff≤1)/cycle 검사 + 다중기믹 가드.
+        //  RNG 은 기존 GenerateQueue 와 동일하게 UnityEngine.Random 사용.
+        //  ※ 에디터는 홀더당 기믹 1개만 표현 가능 → Hidden 은 Linked/Frozen 위치를 제외
+        //    (원본 TS 는 Hidden+Linked 공존 허용하나, 단일 슬롯 제약상 분리).
+        // ════════════════════════════════════════════════════════════════
+
+        private static readonly Dictionary<int, string> INTRO_LVS_QUEUE = new Dictionary<int, string>
+        {
+            { 11, "Hidden" }, { 21, "Chain" }, { 41, "Spawner_T" },
+            { 81, "Lock_Key" }, { 141, "Spawner_O" }, { 241, "Frozen_Dart" },
+        };
+        private const float HIDDEN_FRONT_HALF_BIAS = 0.58f;
+        private const float COLOR_W_RARE_THRESHOLD = 0.05f;
+        private const float COLOR_W_UNCOMMON_THRESHOLD = 0.10f;
+        private const float COLOR_W_RARE_BOOST = 3.0f;
+        private const float COLOR_W_UNCOMMON_BOOST = 1.5f;
+        private const float COLOR_W_COMMON_PENALTY = 0.4f;
+        private static readonly Dictionary<int, float> LINKED_SAME_COLOR_PROB = new Dictionary<int, float>
+        {
+            { 2, 0.08f }, { 3, 0.40f }, { 4, 0.62f }, { 5, 1.0f },
+        };
+
+        private class QueueGimmickOverlay
+        {
+            public List<int> hiddenIds = new List<int>();
+            public List<(List<int> ids, bool sameColor)> linkedGroups = new List<(List<int>, bool)>();
+            public List<(int id, int health)> frozen = new List<(int, int)>();
+        }
+
+        /// <summary>STEP C 실행 + 홀더 기믹 배열에 반영. 배치된 기믹 총 개수 반환.</summary>
+        private int ApplyStepC(
+            List<(int color, int mag)> holders, int queueCols,
+            Dictionary<int, int> colorDarts, int totalDarts,
+            int hiddenN, int chainN, int frozenN,
+            DifficultyPurpose diff, int lv)
+        {
+            var overlay = GenerateStepC(holders, queueCols, colorDarts, totalDarts, hiddenN, chainN, frozenN, diff, lv);
+
+            int chainIdx = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, "Chain");
+            int frozenIdx = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, "Frozen_Dart");
+            int hiddenIdx = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, "Hidden");
+            int placed = 0;
+
+            // Chain (Linked) — 그룹 ID 부여
+            for (int gi = 0; gi < overlay.linkedGroups.Count; gi++)
+                foreach (int id in overlay.linkedGroups[gi].ids)
+                {
+                    int col = id % queueCols, row = id / queueCols;
+                    if (col < _holderCols && row < _holderRows && _holderColors[col, row] >= 0)
+                    {
+                        _holderGimmicks[col, row] = chainIdx;
+                        _holderChainGroups[col, row] = gi;
+                        placed++;
+                    }
+                }
+            // Frozen
+            foreach (var f in overlay.frozen)
+            {
+                int col = f.id % queueCols, row = f.id / queueCols;
+                if (col < _holderCols && row < _holderRows && _holderColors[col, row] >= 0)
+                {
+                    _holderGimmicks[col, row] = frozenIdx;
+                    _holderFrozenHP[col, row] = f.health;
+                    placed++;
+                }
+            }
+            // Hidden
+            foreach (int id in overlay.hiddenIds)
+            {
+                int col = id % queueCols, row = id / queueCols;
+                if (col < _holderCols && row < _holderRows && _holderColors[col, row] >= 0)
+                {
+                    _holderGimmicks[col, row] = hiddenIdx;
+                    placed++;
+                }
+            }
+            return placed;
+        }
+
+        private QueueGimmickOverlay GenerateStepC(
+            List<(int color, int mag)> holders, int queueCols,
+            Dictionary<int, int> colorDarts, int totalDarts,
+            int hiddenN, int chainN, int frozenN,
+            DifficultyPurpose diff, int lv)
+        {
+            // INTRO_LVS 격리 — 도입 lv면 도입 기믹만 활성
+            if (INTRO_LVS_QUEUE.TryGetValue(lv, out string introKey))
+            {
+                if (introKey != "Hidden") hiddenN = 0;
+                if (introKey != "Chain") chainN = 0;
+                if (introKey != "Frozen_Dart") frozenN = 0;
+            }
+
+            int totalSh = holders.Count;
+            var overlay = new QueueGimmickOverlay();
+
+            // 1. Linked (Chain) — 큰 묶음 먼저. 그룹마다 인접/cycle 검사, 실패 시 재추첨.
+            if (chainN >= 2 && totalSh >= 2)
+            {
+                var partitions = SplitChain(chainN, diff);
+                const int MAX_GROUP_RETRY = 5, MAX_OUTER = 5;
+                for (int outer = 0; outer < MAX_OUTER; outer++)
+                {
+                    overlay.linkedGroups.Clear();
+                    var used = new HashSet<int>();
+                    bool allOk = true;
+                    foreach (int linkN in partitions)
+                    {
+                        if (linkN < 2) continue;
+                        bool groupOk = false;
+                        for (int attempt = 0; attempt < MAX_GROUP_RETRY; attempt++)
+                        {
+                            var positions = PickLinkedPositions(totalSh, queueCols, linkN, used);
+                            if (positions.Count != linkN) break;
+                            var tentative = new List<List<int>>();
+                            foreach (var g in overlay.linkedGroups) tentative.Add(g.ids);
+                            tentative.Add(positions);
+                            if (!ValidateChainAdjacency(tentative, queueCols)) continue;
+                            if (HasCycle(BuildChainDependencyGraph(tentative, queueCols, totalSh))) continue;
+                            float p = LINKED_SAME_COLOR_PROB.TryGetValue(linkN, out float pv) ? pv : 0.1f;
+                            overlay.linkedGroups.Add((positions, Random.value < p));
+                            foreach (int pp in positions) used.Add(pp);
+                            groupOk = true;
+                            break;
+                        }
+                        if (!groupOk) { allOk = false; break; }
+                    }
+                    if (allOk) break;
+                }
+            }
+
+            var linkedIds = new HashSet<int>();
+            foreach (var g in overlay.linkedGroups) foreach (int id in g.ids) linkedIds.Add(id);
+
+            // 2. Frozen — Linked 제외, front-half 편향
+            if (frozenN >= 1)
+            {
+                var used = new HashSet<int>(linkedIds);
+                for (int i = 0; i < frozenN; i++)
+                {
+                    int id = PickFrozenPosition(totalSh, queueCols, diff, used);
+                    if (id < 0) break;
+                    used.Add(id);
+                    overlay.frozen.Add((id, PickFrozenHealth(totalSh, diff)));
+                }
+            }
+
+            // 3. Hidden — Frozen + Linked 제외(단일 슬롯), line 0 금지, 희소색 가중
+            if (hiddenN >= 1)
+            {
+                var exclude = new HashSet<int>(linkedIds);
+                foreach (var f in overlay.frozen) exclude.Add(f.id);
+                overlay.hiddenIds = PickHiddenPositions(holders, queueCols, hiddenN, exclude, colorDarts, totalDarts);
+            }
+
+            return overlay;
+        }
+
+        // §5.3.1 — splitChain: 95% 2-link 반복(+홀수 끝 3), 5% 변형
+        private static List<int> SplitChain(int total, DifficultyPurpose diff)
+        {
+            var outList = new List<int>();
+            if (total < 2) return outList;
+            if (Random.value < 0.95f)
+            {
+                if (total == 2) { outList.Add(2); return outList; }
+                if (total == 3) { outList.Add(3); return outList; }
+                if (total % 2 == 0) { for (int i = 0; i < total / 2; i++) outList.Add(2); return outList; }
+                for (int i = 0; i < (total - 3) / 2; i++) outList.Add(2);
+                outList.Add(3);
+                return outList;
+            }
+            if (total == 4) { outList.Add(4); return outList; }
+            if (total == 5 && diff == DifficultyPurpose.SuperHard) { outList.Add(5); return outList; }
+            if (total >= 6)
+            {
+                int big = total >= 8 ? 4 : 3;
+                outList.Add(big);
+                outList.AddRange(SplitChain(total - big, diff));
+                return outList;
+            }
+            for (int i = 0; i < total / 2; i++) outList.Add(2);
+            return outList;
+        }
+
+        // §5.3.2 — pickLinkedPositions: seed + row tier fallback(1,3,nRows) + col diff≤1 + 방향 가중
+        private static List<int> PickLinkedPositions(int totalSh, int queueCols, int linkN, HashSet<int> exclude)
+        {
+            var available = new List<int>();
+            for (int i = 0; i < totalSh; i++) if (!exclude.Contains(i)) available.Add(i);
+            if (available.Count < linkN) return new List<int>();
+
+            int nRows = Mathf.CeilToInt((float)totalSh / queueCols);
+            int seedId = available[Mathf.FloorToInt(Random.value * available.Count)];
+            int seedRow = seedId / queueCols, seedCol = seedId % queueCols;
+
+            int[][] tiers = { new[] { 1, 1 }, new[] { 3, 1 }, new[] { nRows, 1 } };
+            foreach (var tier in tiers)
+            {
+                int rowMax = tier[0], colMax = tier[1];
+                var cands = new List<int>();
+                var ws = new List<float>();
+                foreach (int sid in available)
+                {
+                    if (sid == seedId) continue;
+                    int r = sid / queueCols, c = sid % queueCols;
+                    int rowDist = Mathf.Abs(r - seedRow), colDist = Mathf.Abs(c - seedCol);
+                    if (rowDist > rowMax || colDist > colMax) continue;
+                    float w = rowDist == 1 ? 0.74f : rowDist == 2 ? 0.18f : 0.08f;
+                    int dRow = r - seedRow, dCol = c - seedCol;
+                    float dirW;
+                    if (dRow > 0 && dCol == 0) dirW = 1.6f;       // down
+                    else if (dRow == 0 && dCol > 0) dirW = 1.0f;  // right
+                    else if (dRow > 0 && dCol > 0) dirW = 0.7f;   // down-right
+                    else if (dRow > 0 && dCol < 0) dirW = 0.7f;   // down-left
+                    else dirW = 0.2f;                              // up / left / etc.
+                    cands.Add(sid);
+                    ws.Add(w * dirW);
+                }
+                if (cands.Count >= linkN - 1)
+                {
+                    var picked = WeightedSampleNoReplace(cands, ws, linkN - 1);
+                    var result = new List<int> { seedId };
+                    result.AddRange(picked);
+                    return result;
+                }
+            }
+            return new List<int>();
+        }
+
+        // v3.12 — 사슬 인접: (col,row) 정렬 후 연속 col diff ≤ 1
+        private static bool ValidateChainAdjacency(List<List<int>> groups, int queueCols)
+        {
+            foreach (var grp in groups)
+            {
+                if (grp.Count < 2) continue;
+                var sorted = new List<int>(grp);
+                sorted.Sort((a, b) =>
+                {
+                    int ca = a % queueCols, cb = b % queueCols;
+                    if (ca != cb) return ca.CompareTo(cb);
+                    return (a / queueCols).CompareTo(b / queueCols);
+                });
+                for (int i = 1; i < sorted.Count; i++)
+                    if ((sorted[i] % queueCols) - (sorted[i - 1] % queueCols) > 1) return false;
+            }
+            return true;
+        }
+
+        // v3.15 — 그룹 의존성 그래프: row>0 보관함은 같은 col 위쪽 다른 그룹에 의존
+        private static Dictionary<int, HashSet<int>> BuildChainDependencyGraph(List<List<int>> groups, int queueCols, int totalSh)
+        {
+            var sidToGid = new Dictionary<int, int>();
+            for (int gid = 0; gid < groups.Count; gid++)
+                foreach (int sid in groups[gid]) sidToGid[sid] = gid;
+            var deps = new Dictionary<int, HashSet<int>>();
+            for (int gid = 0; gid < groups.Count; gid++) deps[gid] = new HashSet<int>();
+            for (int gid = 0; gid < groups.Count; gid++)
+                foreach (int sid in groups[gid])
+                {
+                    int row = sid / queueCols, col = sid % queueCols;
+                    if (row == 0) continue;
+                    for (int r2 = 0; r2 < row; r2++)
+                    {
+                        int sid2 = r2 * queueCols + col;
+                        if (sid2 >= totalSh) continue;
+                        if (sidToGid.TryGetValue(sid2, out int gid2) && gid2 != gid) deps[gid].Add(gid2);
+                    }
+                }
+            return deps;
+        }
+
+        private static bool HasCycle(Dictionary<int, HashSet<int>> deps)
+        {
+            var color = new Dictionary<int, int>();   // 0=white,1=gray,2=black
+            foreach (var k in deps.Keys) color[k] = 0;
+            foreach (var gid in deps.Keys)
+                if (color[gid] == 0 && HasCycleDfs(gid, deps, color)) return true;
+            return false;
+        }
+        private static bool HasCycleDfs(int node, Dictionary<int, HashSet<int>> deps, Dictionary<int, int> color)
+        {
+            color[node] = 1;
+            if (deps.TryGetValue(node, out var nexts))
+                foreach (int next in nexts)
+                {
+                    int c = color.TryGetValue(next, out int cv) ? cv : 0;
+                    if (c == 1) return true;
+                    if (c == 0 && HasCycleDfs(next, deps, color)) return true;
+                }
+            color[node] = 2;
+            return false;
+        }
+
+        private static float FrozenFrontHalfBias(DifficultyPurpose d)
+        {
+            switch (d)
+            {
+                case DifficultyPurpose.SuperHard: return 0.80f;
+                case DifficultyPurpose.Normal:
+                case DifficultyPurpose.Intro: return 0.60f;
+                default: return 0.55f; // Tutorial / Rest / Hard
+            }
+        }
+
+        // §5.5 — Frozen 위치: front-half 편향
+        private static int PickFrozenPosition(int totalSh, int queueCols, DifficultyPurpose diff, HashSet<int> exclude)
+        {
+            int halfLineCount = Mathf.CeilToInt(Mathf.CeilToInt((float)totalSh / queueCols) / 2f);
+            int halfHolderIdx = halfLineCount * queueCols;
+            float frontBias = FrozenFrontHalfBias(diff);
+            var available = new List<int>();
+            var weights = new List<float>();
+            for (int i = 0; i < totalSh; i++)
+            {
+                if (exclude.Contains(i)) continue;
+                available.Add(i);
+                weights.Add(i < halfHolderIdx ? frontBias : (1f - frontBias));
+            }
+            if (available.Count == 0) return -1;
+            var picked = WeightedSampleNoReplace(available, weights, 1);
+            return picked.Count > 0 ? picked[0] : -1;
+        }
+
+        // §5.5 — Frozen health: PF picked 분포 v1.2.23 (난이도별)
+        private static int PickFrozenHealth(int totalSh, DifficultyPurpose diff)
+        {
+            int[] vals; float[] ws;
+            switch (diff)
+            {
+                case DifficultyPurpose.Hard:
+                    vals = new[] { 6, 16, 18, 24, 26, 30, 32, 42 };
+                    ws = new[] { 0.08f, 0.20f, 0.10f, 0.25f, 0.10f, 0.10f, 0.10f, 0.07f };
+                    break;
+                case DifficultyPurpose.SuperHard:
+                    vals = new[] { 16, 24, 30, 42, 52, 61, 32 };
+                    ws = new[] { 0.10f, 0.15f, 0.15f, 0.15f, 0.20f, 0.15f, 0.10f };
+                    break;
+                case DifficultyPurpose.Normal:
+                    vals = new[] { 6, 8, 10, 16, 24, 18, 30 };
+                    ws = new[] { 0.20f, 0.15f, 0.10f, 0.20f, 0.15f, 0.10f, 0.10f };
+                    break;
+                default: // Tutorial / Rest / Intro
+                    vals = new[] { 6, 8, 10, 16, 4 };
+                    ws = new[] { 0.40f, 0.25f, 0.20f, 0.10f, 0.05f };
+                    break;
+            }
+            float totalW = 0f;
+            foreach (float w in ws) totalW += w;
+            float roll = Random.value * totalW;
+            for (int i = 0; i < vals.Length; i++)
+            {
+                roll -= ws[i];
+                if (roll <= 0f) return Mathf.Max(2, Mathf.Min(totalSh - 1, vals[i]));
+            }
+            return Mathf.Max(2, Mathf.Min(totalSh - 1, vals[vals.Length - 1]));
+        }
+
+        // §5.4 — Hidden 위치: front-half 약한 편향 + 희소색 가중 + line 0 금지(Hard Rule)
+        private static List<int> PickHiddenPositions(
+            List<(int color, int mag)> holders, int queueCols, int n,
+            HashSet<int> exclude, Dictionary<int, int> colorDarts, int totalDarts)
+        {
+            int totalSh = holders.Count;
+            int halfLineCount = Mathf.CeilToInt(Mathf.CeilToInt((float)totalSh / queueCols) / 2f);
+            int halfHolderIdx = halfLineCount * queueCols;
+            int lineFirstSize = queueCols;
+            var available = new List<int>();
+            var weights = new List<float>();
+            for (int i = 0; i < totalSh; i++)
+            {
+                if (exclude.Contains(i)) continue;
+                if (i < lineFirstSize) continue;   // Hidden line 0 금지
+                available.Add(i);
+                float positionW = i < halfHolderIdx ? HIDDEN_FRONT_HALF_BIAS : (1f - HIDDEN_FRONT_HALF_BIAS);
+                weights.Add(positionW * ColorWeightForHidden(holders[i].color, colorDarts, totalDarts));
+            }
+            return WeightedSampleNoReplace(available, weights, n);
+        }
+        private static float ColorWeightForHidden(int color, Dictionary<int, int> colorDarts, int totalDarts)
+        {
+            float share = totalDarts > 0
+                ? (float)(colorDarts.TryGetValue(color, out int cd) ? cd : 0) / totalDarts : 0f;
+            if (share <= COLOR_W_RARE_THRESHOLD) return COLOR_W_RARE_BOOST;
+            if (share <= COLOR_W_UNCOMMON_THRESHOLD) return COLOR_W_UNCOMMON_BOOST;
+            return COLOR_W_COMMON_PENALTY;
+        }
+
+        // 가중 비복원 추출 (TS weightedSample 1:1)
+        private static List<int> WeightedSampleNoReplace(List<int> items, List<float> weights, int k)
+        {
+            var remaining = new List<int>(items);
+            var remW = new List<float>(weights);
+            var outList = new List<int>();
+            int pickK = Mathf.Min(k, remaining.Count);
+            for (int i = 0; i < pickK; i++)
+            {
+                float total = 0f;
+                for (int j = 0; j < remW.Count; j++) total += remW[j];
+                if (total <= 0f) break;
+                float roll = Random.value * total;
+                int chosen = -1;
+                for (int j = 0; j < remaining.Count; j++)
+                {
+                    roll -= remW[j];
+                    if (roll <= 0f) { chosen = j; break; }
+                }
+                if (chosen < 0) chosen = remaining.Count - 1;
+                outList.Add(remaining[chosen]);
+                remaining.RemoveAt(chosen);
+                remW.RemoveAt(chosen);
+            }
+            return outList;
+        }
+
         private HashSet<int> BuildAllowedCaps(int levelId, DifficultyPurpose purpose, int railCapacity, int dartCapMax)
         {
             var caps = new HashSet<int> { 10, 20, 30, 40, 50 };
@@ -5063,9 +5521,28 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// 2D 그리드 연속 제한 (명세 v1 §4-2 #4).
+        /// (r,c)를 포함하는 최대 4개 2×2 정사각형 중 단색(같은 색 4칸)이 하나라도 있으면 true.
+        /// 행/열 run 체크(ViolatesConsecutive)가 Normal(maxRow=2,maxCol=2)에서 2×2 정사각형을 못 잡는 보완.
+        /// </summary>
+        private bool InMonoSquare(List<(int color, int mag)> list, int cols, int rows, int r, int c)
+        {
+            int[][] tops = { new[] { r, c }, new[] { r, c - 1 }, new[] { r - 1, c }, new[] { r - 1, c - 1 } };
+            foreach (var t in tops)
+            {
+                int tr = t[0], tc = t[1];
+                if (tr < 0 || tc < 0 || tr + 1 >= rows || tc + 1 >= cols) continue;
+                int i00 = tr * cols + tc, i01 = tr * cols + (tc + 1), i10 = (tr + 1) * cols + tc, i11 = (tr + 1) * cols + (tc + 1);
+                if (i00 >= list.Count || i01 >= list.Count || i10 >= list.Count || i11 >= list.Count) continue;
+                int col = list[i00].color;
+                if (list[i01].color == col && list[i10].color == col && list[i11].color == col) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 2D 그리드 연속 제한 (명세 v1 §4-2 #4) + 2×2 정사각형 뭉침 차단.
         /// row-major (i % cols, i / cols)로 배치된 리스트에서
-        /// 행(가로)과 열(세로) 연속을 동시에 체크하고 swap으로 해소.
+        /// 행(가로)/열(세로) 연속 + 같은색 2×2 정사각형을 swap으로 해소.
         /// swap 대상이 없으면 현재 배치 유지 (Soft Rule).
         /// </summary>
         private void EnforceGridConsecutiveLimit(
@@ -5074,16 +5551,18 @@ namespace BalloonFlow
             if (list.Count == 0 || cols <= 0) return;
             int rows = (list.Count + cols - 1) / cols;
 
-            for (int pass = 0; pass < 2; pass++)
+            // 2×2 차단을 추가하면서 수렴 위해 3 pass.
+            for (int pass = 0; pass < 3; pass++)
             {
                 for (int i = 0; i < list.Count; i++)
                 {
                     int c = i % cols;
                     int r = i / cols;
 
-                    if (ViolatesConsecutive(list, cols, rows, r, c, maxRow, maxCol))
+                    if (ViolatesConsecutive(list, cols, rows, r, c, maxRow, maxCol)
+                        || InMonoSquare(list, cols, rows, r, c))
                     {
-                        // 뒤쪽에서 swap 후 양쪽 다 만족하는 후보 찾기
+                        // 뒤쪽에서 swap 후 양쪽 다 (연속 + 2×2) 만족하는 후보 찾기
                         for (int k = i + 1; k < list.Count; k++)
                         {
                             if (list[k].color == list[i].color) continue;
@@ -5093,8 +5572,10 @@ namespace BalloonFlow
                             list[i] = b; list[k] = a;
 
                             int kc = k % cols, kr = k / cols;
-                            bool okI = !ViolatesConsecutive(list, cols, rows, r, c, maxRow, maxCol);
-                            bool okK = !ViolatesConsecutive(list, cols, rows, kr, kc, maxRow, maxCol);
+                            bool okI = !ViolatesConsecutive(list, cols, rows, r, c, maxRow, maxCol)
+                                       && !InMonoSquare(list, cols, rows, r, c);
+                            bool okK = !ViolatesConsecutive(list, cols, rows, kr, kc, maxRow, maxCol)
+                                       && !InMonoSquare(list, cols, rows, kr, kc);
 
                             if (okI && okK) break; // swap 유지
                             // 복원

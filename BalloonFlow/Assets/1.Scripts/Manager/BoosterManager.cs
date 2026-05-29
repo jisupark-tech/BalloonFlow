@@ -27,7 +27,8 @@ namespace BalloonFlow
 
         private const string PrefsKeyPrefix = "BalloonFlow_Booster_";
         private const string UnlockClaimPrefsKeyPrefix = "BalloonFlow_BoosterUnlockClaimed_";
-        public const int UNLOCK_REWARD_COUNT = 3;
+        // 명세(UX §4-2 / D_01): 첫 해금 시 ×2 지급 → 튜토리얼 강제 1회 사용 → ×1 보유.
+        public const int UNLOCK_REWARD_COUNT = 2;
 
         #endregion
 

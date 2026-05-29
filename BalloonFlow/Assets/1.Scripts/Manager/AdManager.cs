@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using BalloonFlow.Analytics;
 
 namespace BalloonFlow
 {
@@ -117,6 +118,10 @@ namespace BalloonFlow
             MaxSdkCallbacks.Interstitial.OnAdDisplayedEvent     += OnInterstitialDisplayedCb;
             MaxSdkCallbacks.Interstitial.OnAdHiddenEvent        += OnInterstitialHiddenCb;
             MaxSdkCallbacks.Interstitial.OnAdDisplayFailedEvent += OnInterstitialDisplayFailedCb;
+
+            // [#17] impression-level 수익 → ad_event 발행. MAX 는 포맷별 중첩 콜백이라 사용 포맷(인터스티셜/보상형)에 각각 구독.
+            MaxSdkCallbacks.Interstitial.OnAdRevenuePaidEvent += OnAdRevenuePaidCb;
+            MaxSdkCallbacks.Rewarded.OnAdRevenuePaidEvent     += OnAdRevenuePaidCb;
 
             LoadRewardedAd();
             LoadInterstitialAd();
@@ -324,6 +329,57 @@ namespace BalloonFlow
         {
             _isShowingAd = false;
             LoadInterstitialAd();
+        }
+
+        #endregion
+
+        #region Ad Revenue → ad_event (#17)
+
+        /// <summary>MAX impression-level 수익 콜백 — 누적 ad revenue 갱신 + ad_event 발행 (BigQuery 광고 분석).</summary>
+        private void OnAdRevenuePaidCb(string adUnitId, MaxSdkBase.AdInfo adInfo)
+        {
+            if (adInfo == null) return;
+            // 누적 광고 수익 먼저 갱신 → 이벤트의 total_ad_revenue_usd 가 post-impression 반영.
+            if (UserSnapshotCache.HasInstance)
+                UserSnapshotCache.Instance.OnAdRevenueGranted(adInfo.Revenue);
+            EmitAdEvent(adUnitId, adInfo);
+        }
+
+        private static void EmitAdEvent(string adUnitId, MaxSdkBase.AdInfo adInfo)
+        {
+            var p = new System.Collections.Generic.Dictionary<string, object>(20);
+            p[AnalyticsConsts.P_EVENT_ID]       = System.Guid.NewGuid().ToString("N");
+            p[AnalyticsConsts.P_SESSION_ID]     = AnalyticsSessionTracker.HasInstance
+                ? AnalyticsSessionTracker.Instance.CurrentSessionId : "";
+            p[AnalyticsConsts.P_GAME_ID]        = AnalyticsConsts.GAME_ID;
+            p[AnalyticsConsts.P_UID]            = AnalyticsSessionTracker.ResolveUid();
+            p[AnalyticsConsts.P_EVENT_TS]       = System.DateTime.UtcNow.ToString("o");
+            p[AnalyticsConsts.P_APP_VERSION]    = Application.version;
+            p[AnalyticsConsts.P_GEO_COUNTRY]    = AnalyticsSessionTracker.ResolveGeoCountry();
+            p[AnalyticsConsts.P_PLATFORM]       = AnalyticsSessionTracker.ResolvePlatform();
+            p[AnalyticsConsts.P_DEVICE_MODEL]   = SystemInfo.deviceModel;
+            p[AnalyticsConsts.P_AD_TYPE]        = ResolveAdType(adInfo.AdFormat);
+            p[AnalyticsConsts.P_AD_PLACEMENT]   = adInfo.Placement ?? "";
+            p[AnalyticsConsts.P_AD_REVENUE_USD] = adInfo.Revenue;
+            p[AnalyticsConsts.P_AD_NETWORK]     = adInfo.NetworkName ?? "";
+            p[AnalyticsConsts.P_AD_UNIT_ID]     = adUnitId ?? "";
+
+            if (UserSnapshotCache.HasInstance)
+                UserSnapshotCache.Instance.Stamp(p);
+
+            AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_AD, p);
+        }
+
+        /// <summary>MAX AdFormat 문자열("INTER"/"REWARDED"/"BANNER"/"MREC" 등) → 분석 스키마 ad_type 정규화.</summary>
+        private static string ResolveAdType(string adFormat)
+        {
+            if (string.IsNullOrEmpty(adFormat)) return "";
+            string f = adFormat.ToLowerInvariant();
+            if (f.Contains("inter"))  return "interstitial";
+            if (f.Contains("reward")) return "rewarded";
+            if (f.Contains("banner")) return "banner";
+            if (f.Contains("mrec"))   return "mrec";
+            return f;
         }
 
         #endregion
