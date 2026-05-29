@@ -24,6 +24,8 @@ namespace BalloonFlow.Editor
     {
         private const string DB_PATH           = "Assets/EditorData/LevelDatabase.asset";
         private const string STREAMING_FILE    = "Assets/StreamingAssets/episode_01.json";
+        // 단일 episode 스토어 (git 교환 + MapMaker 라운드트립 + JSON Importer 출력 위치).
+        private const string EDITORDATA_DIR    = "Assets/EditorData/Episodes";
         private const int    LEVELS_PER_EP     = 20;
         private const int    EPISODE_VERSION   = 1;
 
@@ -44,6 +46,113 @@ namespace BalloonFlow.Editor
             AssetDatabase.Refresh();
             Debug.Log($"[LevelEpisodeUploader] Ep1 → {STREAMING_FILE} ({ep1.levels.Length} levels, {json.Length} bytes)");
             EditorUtility.DisplayDialog("Export 완료", $"Episode 1 → StreamingAssets\n{ep1.levels.Length} 레벨", "OK");
+        }
+
+        // ─── EditorData 라운드트립 (git 교환 + MapMaker) ─────────────────────
+        // 워크플로:
+        //   디자이너: MapMaker 로 편집(SO) → "Export DB → EditorData Episodes" → episode_XX.json 만 commit/push
+        //   팀원    : git pull → "Import EditorData Episodes → DB" → MapMaker 에서 바로 사용
+        // 18MB LevelDatabase.asset 은 git 에 올릴 필요 없음 (로컬 캐시). 변경분은 패키지 파일 단위로 diff.
+
+        [MenuItem(MENU_ROOT + "Export DB → EditorData Episodes (git 교환용)")]
+        public static void ExportToEditorDataEpisodes()
+        {
+            var db = LoadDatabase();
+            if (db == null) return;
+
+            var (episodes, total) = ExportToEditorDataCore(db);
+            Debug.Log($"[LevelEpisodeUploader] DB → EditorData Episodes: {episodes} 에피소드 / {total} 레벨 → {EDITORDATA_DIR}");
+            EditorUtility.DisplayDialog("Export 완료",
+                $"{episodes} 에피소드 / {total} 레벨 → {EDITORDATA_DIR}\n\n" +
+                "git 에는 episode_XX.json (+ StreamingAssets/episode_01.json) 만 commit/push 하세요.\n" +
+                "(LevelDatabase.asset 은 올릴 필요 없음)", "OK");
+        }
+
+        /// <summary>SO → EditorData/Episodes/episode_XX.json (+ pkg1 StreamingAssets). 다이얼로그 없이 코어만.</summary>
+        private static (int episodes, int total) ExportToEditorDataCore(LevelDatabase db)
+        {
+            Directory.CreateDirectory(EDITORDATA_DIR);
+            int episodes = 0, total = 0;
+            for (int pkg = 1; pkg <= 15; pkg++)
+            {
+                var ep = BuildEpisode(db, pkg);
+                if (ep == null || ep.levels == null || ep.levels.Length == 0) continue;
+
+                string json = JsonUtility.ToJson(ep, prettyPrint: false);
+                string path = $"{EDITORDATA_DIR}/episode_{pkg:D2}.json";
+                File.WriteAllText(path, json);
+                AssetDatabase.ImportAsset(path);
+
+                if (pkg == 1)
+                {
+                    EnsureDirectoryFor(STREAMING_FILE);
+                    File.WriteAllText(STREAMING_FILE, json);
+                    AssetDatabase.ImportAsset(STREAMING_FILE);
+                }
+
+                Debug.Log($"  - episode_{pkg:D2}.json  levels={ep.levels.Length}");
+                episodes++; total += ep.levels.Length;
+            }
+            return (episodes, total);
+        }
+
+        [MenuItem(MENU_ROOT + "Import EditorData Episodes → DB (pull 후 MapMaker용)")]
+        public static void ImportFromEditorDataEpisodes()
+        {
+            if (!Directory.Exists(EDITORDATA_DIR))
+            {
+                EditorUtility.DisplayDialog("실패", $"{EDITORDATA_DIR} 폴더 없음.\n먼저 Export 하거나 git pull 하세요.", "OK");
+                return;
+            }
+            var files = Directory.GetFiles(EDITORDATA_DIR, "episode_*.json").OrderBy(f => f).ToArray();
+            if (files.Length == 0)
+            {
+                EditorUtility.DisplayDialog("실패", $"{EDITORDATA_DIR} 에 episode_*.json 없음.", "OK");
+                return;
+            }
+
+            // 모든 에피소드의 레벨 수집 (levelId 중복 시 마지막 우선).
+            var byId = new Dictionary<int, LevelConfig>();
+            foreach (var f in files)
+            {
+                try
+                {
+                    var ep = JsonUtility.FromJson<LevelEpisode>(File.ReadAllText(f));
+                    if (ep?.levels == null) continue;
+                    foreach (var l in ep.levels) if (l != null) byId[l.levelId] = l;
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[LevelEpisodeUploader] {Path.GetFileName(f)} 읽기 실패: {e.Message}");
+                }
+            }
+
+            var levels = byId.Values.OrderBy(l => l.levelId).ToArray();
+
+            var db = AssetDatabase.LoadAssetAtPath<LevelDatabase>(DB_PATH);
+            if (db == null)
+            {
+                db = ScriptableObject.CreateInstance<LevelDatabase>();
+                AssetDatabase.CreateAsset(db, DB_PATH);
+            }
+            db.levels = levels;
+            EditorUtility.SetDirty(db);
+            AssetDatabase.SaveAssets(); // Undo/전체 Refresh 없이 — 로컬 SO 재생성만
+
+            Debug.Log($"[LevelEpisodeUploader] EditorData Episodes → DB: {levels.Length} 레벨 ({files.Length} 에피소드 파일)");
+            EditorUtility.DisplayDialog("Import 완료",
+                $"{files.Length} 에피소드 / {levels.Length} 레벨 → LevelDatabase.asset\n\n" +
+                "MapMaker 에서 바로 사용 가능합니다.", "OK");
+        }
+
+        /// <summary>EditorData/Episodes/*.json → firebase/seed/episodes (node 업로더가 읽는 위치).</summary>
+        private static void CopyEditorDataEpisodesToSeed()
+        {
+            if (!Directory.Exists(EDITORDATA_DIR)) return;
+            string seedDir = GetSeedEpisodesDir();
+            Directory.CreateDirectory(seedDir);
+            foreach (var f in Directory.GetFiles(EDITORDATA_DIR, "episode_*.json"))
+                File.Copy(f, Path.Combine(seedDir, Path.GetFileName(f)), overwrite: true);
         }
 
         [MenuItem(MENU_ROOT + "Export All Episodes → firebase/seed/episodes")]
@@ -90,7 +199,11 @@ namespace BalloonFlow.Editor
         [MenuItem(MENU_ROOT + "Export & Upload to Firestore")]
         public static void ExportAndUpload()
         {
-            ExportAllEpisodes();
+            // 단일 스토어(EditorData) 갱신 후 seed 로 복사 → node 업로더 실행.
+            var db = LoadDatabase();
+            if (db == null) return;
+            ExportToEditorDataCore(db);
+            CopyEditorDataEpisodesToSeed();
 
             if (!EditorUtility.DisplayDialog(
                     "Firestore 업로드 확인",

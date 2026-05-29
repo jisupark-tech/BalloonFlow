@@ -11,7 +11,10 @@ namespace BalloonFlow.Editor
 {
     /// <summary>
     /// BalloonFlow > Import Level Data From JSON
-    /// Pixel Art Converter에서 Export한 JSON 파일을 읽어 LevelDatabase.asset에 추가.
+    /// Pixel Art Converter / Episode / LevelConfig JSON 을 읽어 episode JSON 에 직접 병합·저장.
+    ///   - firebase/seed/episodes/episode_XX.json (각 패키지=20레벨, node upload-episodes.js 로 Firestore 업로드)
+    ///   - pkg1 은 StreamingAssets/episode_01.json 로도 동기화 (앱 번들/오프라인)
+    /// LevelDatabase.asset(18MB SO)은 거치지 않는다 — freeze 제거. MapMaker(SO 기반)와는 별도 경로.
     /// designer_note의 [FieldMap]을 파싱하여 정확한 픽셀 위치/색상으로 풍선을 배치.
     /// </summary>
     public class LevelJsonImporterWindow : EditorWindow
@@ -93,14 +96,6 @@ namespace BalloonFlow.Editor
         private bool    _overwriteConflicts = true;
         private float   _previewZoom = 1f;
 
-        private static readonly string[] DB_NAMES = { "Origin", "AI Extractor", "Transform Extractor" };
-        private static readonly string[] DB_ASSET_PATHS = {
-            "Assets/EditorData/LevelDatabase.asset",
-            "Assets/EditorData/LevelDatabase_AI.asset",
-            "Assets/EditorData/LevelDatabase_Transform.asset"
-        };
-        private int _targetDBIndex = 0;
-
         #endregion
 
         #region Menu
@@ -163,12 +158,9 @@ namespace BalloonFlow.Editor
 
             GUILayout.Space(10);
 
-            GUILayout.Label("저장 대상:", EditorStyles.miniLabel, GUILayout.Width(55));
-            _targetDBIndex = EditorGUILayout.Popup(_targetDBIndex, DB_NAMES, EditorStyles.toolbarPopup, GUILayout.Width(120));
-
-            GUI.enabled = _entries.Any(e => e.selected && e.config != null);
-            if (GUILayout.Button($"{DB_NAMES[_targetDBIndex]}에 추가", EditorStyles.toolbarButton, GUILayout.Width(140)))
-                ApplyToDatabase();
+            GUI.enabled = _entries.Any(e => e.selected && e.config != null && e.error == null);
+            if (GUILayout.Button("Episode 파일에 적용", EditorStyles.toolbarButton, GUILayout.Width(150)))
+                ApplyToEpisodes();
             GUI.enabled = true;
 
             EditorGUILayout.EndHorizontal();
@@ -293,7 +285,7 @@ namespace BalloonFlow.Editor
 
             if (entry.conflict)
                 EditorGUILayout.HelpBox(
-                    $"LevelDatabase에 levelId={config.levelId} 이미 존재. " +
+                    $"episode_{PackageIdForLevel(config.levelId):D2}.json 에 levelId={config.levelId} 이미 존재. " +
                     (_overwriteConflicts ? "덮어씁니다." : "건너뜁니다."),
                     MessageType.Warning);
 
@@ -573,12 +565,22 @@ namespace BalloonFlow.Editor
         private void CheckConflict(ImportEntry entry)
         {
             if (entry.config == null) return;
+            int pkg = PackageIdForLevel(entry.config.levelId);
+            entry.conflict = GetEpisodeLevelIds(pkg).Contains(entry.config.levelId);
+        }
 
-            var db = AssetDatabase.LoadAssetAtPath<LevelDatabase>(
-                DB_ASSET_PATHS[_targetDBIndex]);
-            if (db?.levels == null) return;
+        // 패키지별 기존 levelId 집합 캐시 — 파일마다 episode 를 재로드하던 O(N×M) 제거. ApplyToEpisodes 후 무효화.
+        private readonly Dictionary<int, HashSet<int>> _episodeLevelIds = new();
 
-            entry.conflict = db.levels.Any(lv => lv.levelId == entry.config.levelId);
+        private HashSet<int> GetEpisodeLevelIds(int pkg)
+        {
+            if (_episodeLevelIds.TryGetValue(pkg, out var set)) return set;
+            set = new HashSet<int>();
+            LevelEpisode ep = LoadEpisodeFile(pkg);
+            if (ep?.levels != null)
+                foreach (var l in ep.levels) if (l != null) set.Add(l.levelId);
+            _episodeLevelIds[pkg] = set;
+            return set;
         }
 
         #endregion
@@ -1245,83 +1247,182 @@ namespace BalloonFlow.Editor
 
         #endregion
 
-        #region LevelDatabase에 적용
+        #region Episode JSON 에 적용 (LevelDatabase SO 미경유)
 
-        private void ApplyToDatabase()
+        // 단일 episode 스토어 = Assets/EditorData/Episodes/episode_01~15.json (git 교환 + MapMaker 라운드트립).
+        //   - 각 패키지=20레벨. pkg1 은 StreamingAssets/episode_01.json 로도 동기화 (앱 번들/오프라인).
+        //   - Firestore 업로드는 'BalloonFlow/Level Episodes' 메뉴가 이 폴더에서 seed 로 복사 후 node 업로더 실행.
+        // Importer 는 18MB LevelDatabase.asset 을 거치지 않고 영향받는 패키지 파일만 병합·쓰기 → freeze 제거.
+
+        private const int    LEVELS_PER_EPISODE = LEVELS_PER_PACKAGE; // 20
+        private const int    TOTAL_EPISODES     = 15;
+        private const int    BUNDLED_PACKAGE_ID = 1;
+        private const int    EPISODE_VERSION    = 1;
+        private const string EPISODES_DIR       = "Assets/EditorData/Episodes";
+        private const string STREAMING_EP1      = "Assets/StreamingAssets/episode_01.json";
+
+        private void ApplyToEpisodes()
         {
-            string dbPath = DB_ASSET_PATHS[_targetDBIndex];
+            var toApply = _entries.Where(e => e.selected && e.config != null && e.error == null).ToList();
+            if (toApply.Count == 0) { _statusMessage = "적용할 항목 없음"; Repaint(); return; }
 
-            if (!AssetDatabase.IsValidFolder("Assets/EditorData"))
-                AssetDatabase.CreateFolder("Assets", "EditorData");
-
-            var db = AssetDatabase.LoadAssetAtPath<LevelDatabase>(dbPath);
-            if (db == null)
+            // 패키지(=에피소드)별 그룹. levelId 로 패키지/포지션 결정 (JSON 의 packageId 는 신뢰하지 않음).
+            var byPkg = new Dictionary<int, List<LevelConfig>>();
+            int outOfRange = 0;
+            foreach (var e in toApply)
             {
-                db = ScriptableObject.CreateInstance<LevelDatabase>();
-                db.levels = Array.Empty<LevelConfig>();
-                AssetDatabase.CreateAsset(db, dbPath);
+                int levelId = e.config.levelId;
+                int pkg = PackageIdForLevel(levelId);
+                if (levelId < 1 || pkg < 1 || pkg > TOTAL_EPISODES)
+                {
+                    Debug.LogWarning($"[Importer] levelId={levelId} → pkg {pkg} 범위 밖(1~{TOTAL_EPISODES}). skip.");
+                    outOfRange++;
+                    continue;
+                }
+                if (!byPkg.TryGetValue(pkg, out var list)) { list = new List<LevelConfig>(); byPkg[pkg] = list; }
+                list.Add(e.config);
             }
 
-            // 덮어쓰기가 있으면 자동 백업
-            bool hasOverwrite = _overwriteConflicts &&
-                _entries.Any(e => e.selected && e.conflict && e.config != null && e.error == null);
-            if (hasOverwrite)
-                LevelDatabaseTools.CreateBackup(db, "before_overwrite");
-
-            Undo.RecordObject(db, "Import Level Data From JSON");
-
-            var existingLevels = db.levels != null
-                ? new List<LevelConfig>(db.levels)
-                : new List<LevelConfig>();
-
             int added = 0, overwritten = 0, skipped = 0;
+            var touchedPkgs = new List<int>();
+            string ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
 
-            foreach (var entry in _entries.Where(e => e.selected && e.config != null && e.error == null))
+            foreach (var kv in byPkg.OrderBy(k => k.Key))
             {
-                int targetId = entry.config.levelId;
-                int existingIdx = existingLevels.FindIndex(lv => lv.levelId == targetId);
+                int pkg = kv.Key;
 
-                if (existingIdx >= 0)
+                // 기존 episode 로드 (병합 기준). 없으면 새 패키지로 시작.
+                LevelEpisode ep = LoadEpisodeFile(pkg);
+                var levels = (ep?.levels != null)
+                    ? new List<LevelConfig>(ep.levels.Where(l => l != null))
+                    : new List<LevelConfig>();
+
+                // 덮어쓰기 전 백업 (기존 파일 존재 시).
+                BackupEpisodeFile(pkg, ts);
+
+                var idxById = new Dictionary<int, int>();
+                for (int i = 0; i < levels.Count; i++) idxById[levels[i].levelId] = i;
+
+                foreach (var lv in kv.Value)
                 {
-                    if (_overwriteConflicts)
+                    if (idxById.TryGetValue(lv.levelId, out int idx))
                     {
-                        existingLevels[existingIdx] = entry.config;
-                        overwritten++;
+                        if (_overwriteConflicts) { levels[idx] = lv; overwritten++; }
+                        else { skipped++; }
                     }
                     else
                     {
-                        skipped++;
+                        levels.Add(lv);
+                        idxById[lv.levelId] = levels.Count - 1;
+                        added++;
                     }
                 }
-                else
+
+                // levelId 정렬 + packageId/positionInPackage 정규화.
+                levels.Sort((a, b) => a.levelId.CompareTo(b.levelId));
+                for (int i = 0; i < levels.Count; i++)
                 {
-                    existingLevels.Add(entry.config);
-                    added++;
+                    levels[i].packageId = pkg;
+                    levels[i].positionInPackage = PositionInPackage(levels[i].levelId);
                 }
+
+                ValidateEpisodeContiguity(pkg, levels);
+                WriteEpisodeFile(pkg, levels);
+                touchedPkgs.Add(pkg);
             }
 
-            // levelId 순으로 정렬
-            existingLevels.Sort((a, b) => a.levelId.CompareTo(b.levelId));
-            db.levels = existingLevels.ToArray();
+            // 충돌 캐시 무효화 + 재계산.
+            _episodeLevelIds.Clear();
+            foreach (var e in _entries) CheckConflict(e);
 
-            EditorUtility.SetDirty(db);
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
+            string pkgList = touchedPkgs.Count > 0 ? string.Join(", ", touchedPkgs) : "(없음)";
+            bool needUpload = touchedPkgs.Any(p => p != BUNDLED_PACKAGE_ID);
 
-            _statusMessage = $"완료 — 추가: {added}, 덮어쓰기: {overwritten}, 건너뜀: {skipped}  " +
-                $"(총 {db.levels.Length}개 레벨)";
-
-            // 충돌 상태 갱신
-            foreach (var entry in _entries)
-                CheckConflict(entry);
-
+            _statusMessage = $"완료 — 추가:{added} 덮어쓰기:{overwritten} 건너뜀:{skipped}" +
+                             (outOfRange > 0 ? $" 범위밖:{outOfRange}" : "") + $"  (episode {pkgList})";
             Debug.Log($"[LevelJsonImporter] {_statusMessage}");
-            EditorUtility.DisplayDialog("Import 완료",
-                $"추가: {added}\n덮어쓰기: {overwritten}\n건너뜀: {skipped}\n\n" +
-                $"LevelDatabase 총 {db.levels.Length}개 레벨",
+
+            EditorUtility.DisplayDialog("Episode 적용 완료",
+                $"추가: {added}\n덮어쓰기: {overwritten}\n건너뜀: {skipped}" +
+                (outOfRange > 0 ? $"\n범위 밖(skip): {outOfRange}" : "") +
+                $"\n\n갱신된 episode: {pkgList}\n" +
+                (needUpload
+                    ? "\npkg 2~15 는 Firestore 반영을 위해\n'BalloonFlow/Level Episodes/Export & Upload to Firestore'\n또는 node upload-episodes.js 를 실행하세요."
+                    : "\npkg1 은 StreamingAssets/episode_01.json (번들) 갱신 완료."),
                 "OK");
 
             Repaint();
+        }
+
+        private static string EpisodePath(int pkg) => $"{EPISODES_DIR}/episode_{pkg:D2}.json";
+
+        private LevelEpisode LoadEpisodeFile(int pkg)
+        {
+            string path = EpisodePath(pkg);
+            if (!File.Exists(path)) return null;
+            try
+            {
+                return JsonUtility.FromJson<LevelEpisode>(File.ReadAllText(path));
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Importer] episode_{pkg:D2}.json 읽기 실패: {e.Message}");
+                return null;
+            }
+        }
+
+        private void WriteEpisodeFile(int pkg, List<LevelConfig> levels)
+        {
+            var ep = new LevelEpisode
+            {
+                packageId  = pkg,
+                levelCount = levels.Count,
+                version    = EPISODE_VERSION,
+                levels     = levels.ToArray()
+            };
+            string json = JsonUtility.ToJson(ep, false); // 업로드/런타임과 동일 포맷
+
+            Directory.CreateDirectory(EPISODES_DIR);
+            File.WriteAllText(EpisodePath(pkg), json);
+            AssetDatabase.ImportAsset(EpisodePath(pkg)); // EditorData 하위 → 전체 Refresh 대신 해당 파일만
+            Debug.Log($"[Importer] {EpisodePath(pkg)} 갱신 ({levels.Count}레벨, {json.Length} bytes)");
+
+            if (pkg == BUNDLED_PACKAGE_ID)
+            {
+                string streamDir = Path.GetDirectoryName(STREAMING_EP1);
+                if (!string.IsNullOrEmpty(streamDir)) Directory.CreateDirectory(streamDir);
+                File.WriteAllText(STREAMING_EP1, json);
+                AssetDatabase.ImportAsset(STREAMING_EP1);
+                Debug.Log("[Importer] pkg1 → StreamingAssets/episode_01.json (번들) 동기화");
+            }
+        }
+
+        private void BackupEpisodeFile(int pkg, string ts)
+        {
+            string src = EpisodePath(pkg);
+            if (!File.Exists(src)) return;
+            const string backupDir = "Assets/LevelBackups";
+            Directory.CreateDirectory(backupDir);
+            File.Copy(src, $"{backupDir}/episode_{pkg:D2}_{ts}.json", true);
+        }
+
+        /// <summary>
+        /// 런타임 LevelEpisodeService.GetLevel 은 levels[positionInPackage-1] 로 직접 인덱싱한다.
+        /// 따라서 position 이 1..N 연속·정렬돼 있어야 정상 매핑. 어긋나면 경고 (저장은 진행).
+        /// </summary>
+        private void ValidateEpisodeContiguity(int pkg, List<LevelConfig> levels)
+        {
+            for (int i = 0; i < levels.Count; i++)
+            {
+                if (levels[i].positionInPackage != i + 1)
+                {
+                    Debug.LogWarning($"[Importer] episode_{pkg:D2}: position 불연속 — index {i} = level {levels[i].levelId} " +
+                        $"(position={levels[i].positionInPackage}, 기대={i + 1}). 런타임 GetLevel 매핑이 어긋날 수 있음 — 빠진 levelId 를 채우세요.");
+                    break;
+                }
+            }
+            if (levels.Count != LEVELS_PER_EPISODE)
+                Debug.LogWarning($"[Importer] episode_{pkg:D2}: 레벨 {levels.Count}개 (정상 {LEVELS_PER_EPISODE}). 미완성 패키지일 수 있음.");
         }
 
         #endregion
