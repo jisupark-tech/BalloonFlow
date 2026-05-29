@@ -25,6 +25,7 @@ namespace BalloonFlow
 
         private bool _isInitialized;
         private bool _initStarted;
+        private bool _catalogSubscribed;
         private readonly Dictionary<string, string> _cachedPrices = new Dictionary<string, string>();
 
 #if UNITY_IAP
@@ -66,13 +67,19 @@ namespace BalloonFlow
                 return;
             }
 
-            ShopCatalogService.Instance.OnCatalogLoaded += HandleCatalogLoaded;
+            // 카탈로그 로드 완료 시 init. 중복 구독 방지(미초기화 구매 시 TryStartInit 재호출될 수 있음).
+            if (!_catalogSubscribed)
+            {
+                ShopCatalogService.Instance.OnCatalogLoaded += HandleCatalogLoaded;
+                _catalogSubscribed = true;
+            }
         }
 
         private void HandleCatalogLoaded()
         {
             if (ShopCatalogService.HasInstance)
                 ShopCatalogService.Instance.OnCatalogLoaded -= HandleCatalogLoaded;
+            _catalogSubscribed = false;
             StartInit(ShopCatalogService.Instance.All);
         }
 
@@ -136,7 +143,11 @@ namespace BalloonFlow
 #if UNITY_IAP
             if (!_isInitialized)
             {
-                Debug.LogWarning($"{LOG_TAG} 미초기화 상태 — 구매 불가");
+                Debug.LogWarning($"{LOG_TAG} 미초기화 상태 — 구매 불가. 카탈로그/IAP 재초기화 시도(다음 구매부터 가능).");
+                // 자가 복구: 카탈로그 미로드(콜드스타트 일시 PermissionDenied 등)가 결제 Fail 의 주 원인.
+                // 재fetch 성공 시 OnCatalogLoaded → StartInit → 이후 구매 가능. 이번 구매는 실패 처리.
+                if (ShopCatalogService.HasInstance) ShopCatalogService.Instance.RetryFetch();
+                TryStartInit();
                 PublishPurchaseResult(productId, false);
                 return;
             }
