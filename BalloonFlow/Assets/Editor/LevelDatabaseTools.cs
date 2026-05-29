@@ -14,7 +14,7 @@ namespace BalloonFlow.Editor
     /// </summary>
     public static class LevelDatabaseTools
     {
-        private const string DB_PATH = "Assets/Resources/LevelDatabase.asset";
+        private const string DB_PATH = "Assets/EditorData/LevelDatabase.asset";
         private const string BACKUP_FOLDER = "Assets/LevelBackups";
 
         public static void ExportAll()
