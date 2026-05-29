@@ -29,6 +29,9 @@ namespace BalloonFlow
         [Tooltip("자동 맞춤된 알 크기에 곱하는 여유 배수 (1=셀 꽉 채움, 0.9=약간 여백). 보통 0.85~1.")]
         [SerializeField, Range(0.3f, 1.2f)] private float _eggFillRatio = 0.9f;
 
+        [Tooltip("알 격자가 차지하는 박스 안쪽 영역 비율 (틀 테두리 안에 들어가도록). 1=footprint 전체, 0.7=안쪽 70%. 알이 틀을 벗어나면 줄이세요.")]
+        [SerializeField, Range(0.3f, 1f)] private float _innerAreaRatio = 0.7f;
+
         [Header("[알 자식 링크 — 템플릿(_eggTemplate) 안의 노드를 드래그]")]
         [Tooltip("색 적용 대상(몸체) — 템플릿 안의 Cylinder 를 드래그. 비우면 이름으로 탐색.")]
         [SerializeField] private Transform _bodyOnTemplate;
@@ -68,9 +71,11 @@ namespace BalloonFlow
             int cols = Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(n)));
             int rows = Mathf.CeilToInt((float)n / cols);
 
-            // 격자 한 칸의 월드 크기 (footprint 를 cols×rows 로 나눔).
-            float gridCellW = (w * cellSizeX) / cols;
-            float gridCellZ = (h * cellSizeZ) / rows;
+            // 격자 한 칸의 월드 크기 — footprint 의 안쪽 영역(_innerAreaRatio)을 cols×rows 로 나눔.
+            // 틀(paintbox) 테두리 안에 알이 들어가도록 footprint 보다 작게. (틀은 full footprint 로 스케일)
+            float ir = Mathf.Clamp(_innerAreaRatio, 0.1f, 1f);
+            float gridCellW = (w * cellSizeX * ir) / cols;
+            float gridCellZ = (h * cellSizeZ * ir) / rows;
 
             // 템플릿 월드 bounds 측정 → 격자 칸에 맞출 스케일 계수 산출. 측정 위해 잠깐 활성화.
             bool tplWasActive = _eggTemplate.activeSelf;
