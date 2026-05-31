@@ -250,7 +250,9 @@ namespace BalloonFlow
             _enforcePosition = false;
 
             // InOutSine — 끝 부분 deceleration 이 부드러워서 OutQuad 보다 자연스러움.
-            MainCamera.transform.DOMove(targetPosition, duration).SetEase(Ease.InOutSine);
+            // SetUpdate(true): 아이템(부스터) 사용 시 PopupUseItem 이 PauseManager 로 timeScale=0 을
+            //   만든 상태에서 카메라를 옮기므로 unscaled time 으로 돌려야 tween 이 진행됨 (안 그러면 폰 빌드에서 멈춤).
+            MainCamera.transform.DOMove(targetPosition, duration).SetEase(Ease.InOutSine).SetUpdate(true);
         }
 
         /// <summary>Smoothly move camera back to the saved position.</summary>
@@ -261,7 +263,8 @@ namespace BalloonFlow
             // 기존 tween 정리.
             MainCamera.transform.DOKill();
 
-            MainCamera.transform.DOMove(_savedPosition, duration).SetEase(Ease.InOutSine)
+            // SetUpdate(true): MoveToTarget 과 대칭 — 일시정지(timeScale=0) 중에도 복귀 tween 이 진행되도록.
+            MainCamera.transform.DOMove(_savedPosition, duration).SetEase(Ease.InOutSine).SetUpdate(true)
                 .OnComplete(() =>
                 {
                     // floating point 미세 오차 보정 — 끝 위치를 정확히 _savedPosition 으로.

@@ -199,6 +199,12 @@ namespace BalloonFlow
         private readonly Dictionary<int, HashSet<int>> _holderPassLinesByHolder = new Dictionary<int, HashSet<int>>(16);
         private readonly Dictionary<int, DirectionalTargeting.ScanDirection> _holderPassDirectionByHolder =
             new Dictionary<int, DirectionalTargeting.ScanDirection>(16);
+        // ROLLBACK_DART_STRAIGHT_RAIL_PROGRESS_WRAP:
+        // ㅡ자(개방 단면) 레일은 끝→시작으로 순간이동(wrap)할 때 holder pass lock 을 풀어야 다음 pass 에서
+        // 같은 컬럼을 다시 공격할 수 있다. 기존 line-delta(6) 임계는 보드 컬럼 폭이 6 이하인 좁은 ㅡ 레벨에서
+        // 영원히 충족되지 않아 lock 이 영구 지속 → 발사 정지 → rail 가득 → 전체 정지(데드락) 발생.
+        // head 의 rail progress 변화로 wrap 을 판정해 보드 폭과 무관하게 lock 을 해제한다.
+        private readonly Dictionary<int, float> _lastStraightHeadProgressByHolder = new Dictionary<int, float>(16);
         // ROLLBACK_DART_GLOBAL_CONSUMED_LINE_LOCK:
         // A rail line is a gameplay surface, not a holder-local resource. If holder A pops the
         // outer cell on (direction,line), holder B must not immediately peel the newly exposed
@@ -1153,7 +1159,7 @@ namespace BalloonFlow
                 bool catchUpFromPromo = hasPromoSeedForHead && pDir == currentScanDir;
                 bool catchUpFromCornerPromo = hasPromoSeedForHead && pDir != currentScanDir;
 
-                ResetStraightRailPassIfWrapped(holderId, currentScanDir, currentLine);
+                ResetStraightRailPassIfWrapped(holderId, currentScanDir, currentLine, dart.progress);
                 ResetOpenRailPassIfWrapped(
                     holderId,
                     currentScanDir,
@@ -2219,23 +2225,46 @@ namespace BalloonFlow
         private void ResetStraightRailPassIfWrapped(
             int holderId,
             DirectionalTargeting.ScanDirection scanDir,
-            int currentLine)
+            int currentLine,
+            float headProgress)
         {
             if (!RailManager.HasInstance) return;
-            if (RailManager.GetRailSideCount(RailManager.Instance.PhysicalCapacity) != 1) return;
+            RailManager rail = RailManager.Instance;
+            if (RailManager.GetRailSideCount(rail.PhysicalCapacity) != 1) return;
             if (scanDir != DirectionalTargeting.ScanDirection.Up) return;
 
+            // head progress 변화량으로 wrap 판정 (board 너비 무관). 매 tick baseline 갱신.
+            float pathLen = rail.TotalPathLength;
+            bool hasLastProg = _lastStraightHeadProgressByHolder.TryGetValue(holderId, out float lastProg);
+            _lastStraightHeadProgressByHolder[holderId] = headProgress;
+
+            // pass 가 현재 scanDir 로 활성일 때만 lock 해제 의미 있음.
             if (!_holderPassDirectionByHolder.TryGetValue(holderId, out DirectionalTargeting.ScanDirection passDir)
                 || passDir != scanDir)
             {
                 return;
             }
 
-            if (!_lastFiredLineByHolder.TryGetValue(holderId, out int lastFiredLine))
-                return;
+            bool wrapped = false;
 
-            if (currentLine < lastFiredLine - OPEN_RAIL_WRAP_RESET_LINE_DELTA)
+            // 1) progress 기반: 개방 ㅡ 레일은 끝→시작 순간이동 시 progress 가 pathLen 만큼 급감.
+            //    head 교체(앞 다트 발사)로 인한 감소는 한 다트 간격 수준이라 pathLen*0.5 임계에 안 걸림.
+            if (pathLen > 0f && hasLastProg && headProgress < lastProg - pathLen * 0.5f)
+                wrapped = true;
+
+            // 2) 보조: 넓은 보드에서 catch-up 으로 큰 backward line jump (기존 동작 유지).
+            if (!wrapped
+                && _lastFiredLineByHolder.TryGetValue(holderId, out int lastFiredLine)
+                && currentLine < lastFiredLine - OPEN_RAIL_WRAP_RESET_LINE_DELTA)
+                wrapped = true;
+
+            if (wrapped)
+            {
+                // 양쪽 게이트 모두 해제 — holder-local pass lock + global target-line lock
+                // (ResetOpenRailPassIfWrapped 와 동일). 둘 중 하나라도 남으면 발사가 다시 막힘.
                 ClearConsumedLineLockForHolder(holderId);
+                ClearResolvedConsumedTargetLinesForDirection(scanDir);
+            }
         }
 
         private void ResetOpenRailPassIfWrapped(
@@ -2414,6 +2443,7 @@ namespace BalloonFlow
             _lastFiredDirectionByHolder.Clear();
             _holderPassLinesByHolder.Clear();
             _holderPassDirectionByHolder.Clear();
+            _lastStraightHeadProgressByHolder.Clear();
             _consumedTargetLines.Clear();
             _unresolvedConsumedTargetLines.Clear();
             _currentHeadLineKeys.Clear();
