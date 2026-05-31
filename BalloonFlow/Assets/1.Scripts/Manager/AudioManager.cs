@@ -29,7 +29,19 @@ namespace BalloonFlow
         [SerializeField] private AudioClip _sfxFail;
         [SerializeField] private AudioClip _sfxHolderDeploy;
         [SerializeField] private AudioClip _sfxHolderReveal;
-        [SerializeField] private AudioClip _sfxHolderFrozenBreak;
+        [SerializeField] private AudioClip _sfxHolderFrozenBreak; // = icebreak (Frozen Dart Box 해동 + Ice 풍선 HP 0)
+
+        [Header("[SFX — InGame v2 (2026-05-31 사운드 추가)]")]
+        [Tooltip("woodbreak — Wooden Board / Target Box / Pinata 나무 타격")]
+        [SerializeField] private AudioClip _sfxWoodBreak;
+        [Tooltip("achieve — 인게임 진행도 100% / Play 버튼 레벨 갱신 성취감 chime")]
+        [SerializeField] private AudioClip _sfxAchieve;
+        [Tooltip("shortfail — 실패 판정(out-of-space 팝업 등장) 짧은 멈칫음")]
+        [SerializeField] private AudioClip _sfxShortFail;
+        [Tooltip("coinuse — 코인 사용(돈 짤랑)")]
+        [SerializeField] private AudioClip _sfxCoinUse;
+        [Tooltip("deny — 이동 불가 보관함 잘못 탭(덜컹/거부)")]
+        [SerializeField] private AudioClip _sfxDeny;
 
         [Header("[SFX — Booster]")]
         [SerializeField] private AudioClip _sfxItemHand;
@@ -86,19 +98,31 @@ namespace BalloonFlow
             // Inspector에서 미할당된 클립만 Resources에서 자동 로드
             if (_sfxNormalTouch == null)  _sfxNormalTouch  = Resources.Load<AudioClip>("Sound/Effect/Common_Normal_Touch");
             if (_sfxPopupTouch == null)   _sfxPopupTouch   = Resources.Load<AudioClip>("Sound/Effect/Common_Popup_Touch");
-            if (_sfxCoinGain == null)     _sfxCoinGain     = Resources.Load<AudioClip>("Sound/Effect/Common_Coin_Gain");
+            if (_sfxCoinGain == null)     _sfxCoinGain     = Resources.Load<AudioClip>("Sound/Effect/coinearn")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Common_Coin_Gain");
             if (_sfxBalloonPop == null)   _sfxBalloonPop   = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal");
             if (_sfxBalloonPop2 == null)  _sfxBalloonPop2  = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal_2");
-            if (_sfxClear == null)        _sfxClear        = Resources.Load<AudioClip>("Sound/Effect/Stage_Clear");
-            if (_sfxFail == null)         _sfxFail         = Resources.Load<AudioClip>("Sound/Effect/Stage_Fail");
+            if (_sfxClear == null)        _sfxClear        = Resources.Load<AudioClip>("Sound/Effect/congratuation")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Clear");
+            if (_sfxFail == null)         _sfxFail         = Resources.Load<AudioClip>("Sound/Effect/fail")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Fail");
             if (_sfxHolderDeploy == null) _sfxHolderDeploy = Resources.Load<AudioClip>("Sound/Effect/Stage_Object_Drop");
             if (_sfxHolderReveal == null) _sfxHolderReveal = Resources.Load<AudioClip>("Sound/Effect/Stage_Holder_Reveal")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Object_Drop");
-            if (_sfxHolderFrozenBreak == null) _sfxHolderFrozenBreak = Resources.Load<AudioClip>("Sound/Effect/Stage_Holder_FrozenBreak")
+            // icebreak — Frozen Dart Box 해동 + Ice 풍선 HP 0 공용
+            if (_sfxHolderFrozenBreak == null) _sfxHolderFrozenBreak = Resources.Load<AudioClip>("Sound/Effect/icebreak")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Holder_FrozenBreak")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Onedestroy");
             if (_sfxItemHand == null)     _sfxItemHand     = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Onedestroy");
             if (_sfxItemShuffle == null)  _sfxItemShuffle  = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Cross");
             if (_sfxItemZap == null)      _sfxItemZap      = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_ColorBomb");
+
+            // [2026-05-31] 신규 사운드 — Resources/Sound/Effect/ 에 파일 배치 (이름 일치).
+            if (_sfxWoodBreak == null)    _sfxWoodBreak    = Resources.Load<AudioClip>("Sound/Effect/woodbreak");
+            if (_sfxAchieve == null)      _sfxAchieve      = Resources.Load<AudioClip>("Sound/Effect/achieve");
+            if (_sfxShortFail == null)    _sfxShortFail    = Resources.Load<AudioClip>("Sound/Effect/shortfail");
+            if (_sfxCoinUse == null)      _sfxCoinUse      = Resources.Load<AudioClip>("Sound/Effect/coinuse");
+            if (_sfxDeny == null)         _sfxDeny         = Resources.Load<AudioClip>("Sound/Effect/deny");
         }
 
         private void OnEnable()
@@ -114,6 +138,12 @@ namespace BalloonFlow
             EventBus.Subscribe<OnHolderThawed>(HandleHolderThawed);
             EventBus.Subscribe<OnCoinFlyLanded>(HandleCoinFlyLanded);
             EventBus.Subscribe<OnSettingsChanged>(HandleSettingsChanged);
+            // [2026-05-31] 신규 사운드 라우팅
+            EventBus.Subscribe<OnLevelFailed>(HandleLevelFailed);               // fail (최종 실패)
+            EventBus.Subscribe<OnGimmickTriggered>(HandleGimmickTriggered);     // woodbreak / icebreak(Ice 풍선)
+            EventBus.Subscribe<OnHolderColumnBlocked>(HandleHolderColumnBlocked); // deny (컬럼풀/체인)
+            EventBus.Subscribe<OnCoinChanged>(HandleCoinChangedAudio);          // coinuse (delta<0)
+            EventBus.Subscribe<OnContinueApplied>(HandleContinueApplied);       // BGM 재개
         }
 
         private void OnDisable()
@@ -129,6 +159,11 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnHolderThawed>(HandleHolderThawed);
             EventBus.Unsubscribe<OnCoinFlyLanded>(HandleCoinFlyLanded);
             EventBus.Unsubscribe<OnSettingsChanged>(HandleSettingsChanged);
+            EventBus.Unsubscribe<OnLevelFailed>(HandleLevelFailed);
+            EventBus.Unsubscribe<OnGimmickTriggered>(HandleGimmickTriggered);
+            EventBus.Unsubscribe<OnHolderColumnBlocked>(HandleHolderColumnBlocked);
+            EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChangedAudio);
+            EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
         }
 
         #region Public — BGM
@@ -160,6 +195,18 @@ namespace BalloonFlow
         public void PlayNormalTouch()
         {
             PlaySFX(_sfxNormalTouch);
+        }
+
+        /// <summary>achieve — 인게임 진행도 100% / Play 버튼 레벨 갱신 성취감 chime.</summary>
+        public void PlayAchieve()
+        {
+            PlaySFX(_sfxAchieve);
+        }
+
+        /// <summary>deny — 이동 불가 보관함 잘못 탭(덜컹/거부). Hidden/Frozen/Lock reject 분기에서 직접 호출.</summary>
+        public void PlayDeny()
+        {
+            PlaySFX(_sfxDeny);
         }
 
         #endregion
@@ -209,12 +256,62 @@ namespace BalloonFlow
 
         private void HandleBoardCleared(OnBoardCleared evt)
         {
+            // congratuation (클리어 팡파레) + play BGM 정지
+            StopBGM();
             PlaySFX(_sfxClear);
         }
 
         private void HandleBoardFailed(OnBoardFailed evt)
         {
+            // shortfail (실패 판정 → out-of-space/PopupFail01 등장, 멈칫) + play BGM 정지.
+            // 최종 실패음(fail)은 OnLevelFailed 에서 (이어하기 거절 후).
+            StopBGM();
+            PlaySFX(_sfxShortFail != null ? _sfxShortFail : _sfxFail);
+        }
+
+        private void HandleLevelFailed(OnLevelFailed evt)
+        {
+            // fail (최종 실패음, ~2-3s). BGM 은 이미 OnBoardFailed 에서 정지됨.
             PlaySFX(_sfxFail);
+        }
+
+        // 기믹 타격/파괴 사운드 — Ice(icebreak) / Pinata·Pin·PinataBox(woodbreak). 연속 셀 spam 쿨다운.
+        private float _lastGimmickSfxTime;
+        private const float GIMMICK_SFX_COOLDOWN = 0.08f;
+        private void HandleGimmickTriggered(OnGimmickTriggered evt)
+        {
+            float now = Time.unscaledTime;
+            if (now - _lastGimmickSfxTime < GIMMICK_SFX_COOLDOWN) return;
+
+            AudioClip clip = null;
+            if (evt.gimmickType == BalloonController.GimmickIce)
+                clip = _sfxHolderFrozenBreak; // = icebreak
+            else if (evt.gimmickType == BalloonController.GimmickPinata
+                  || evt.gimmickType == BalloonController.GimmickPin
+                  || evt.gimmickType == BalloonController.GimmickPinataBox)
+                clip = _sfxWoodBreak;
+
+            if (clip == null) return; // 그 외 기믹(Spawner/Lock/Wall 등)은 무음
+            _lastGimmickSfxTime = now;
+            PlaySFX(clip);
+        }
+
+        private void HandleHolderColumnBlocked(OnHolderColumnBlocked evt)
+        {
+            // deny (이동 불가 보관함 — 컬럼풀 3번째 탭 / 체인 앞줄 미충족)
+            PlayDeny();
+        }
+
+        private void HandleCoinChangedAudio(OnCoinChanged evt)
+        {
+            // coinuse — 코인 사용(소비)만. 획득(delta>0)은 OnCoinFlyLanded 가 처리.
+            if (evt.delta < 0) PlaySFX(_sfxCoinUse);
+        }
+
+        private void HandleContinueApplied(OnContinueApplied evt)
+        {
+            // 이어하기 → 게임 재개 시 InGame BGM 복구 (OnBoardFailed 에서 정지했으므로).
+            PlayInGameBGM();
         }
 
         private void HandleBoosterUsed(OnBoosterUsed evt)

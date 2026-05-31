@@ -33,6 +33,9 @@ namespace BalloonFlow
         {
             if (!WinningStreakManager.HasInstance) return 1;
             var mgr = WinningStreakManager.Instance;
+            // [#1] WS 미해금/미활성(서버 config 미로드 포함) 시 배수 1 → Continue/Quit 팝업의 WS view 미노출.
+            // (OnLevelCleared 는 미해금에서도 currentStreak 를 올리므로 여기서 게이트하지 않으면 비-WS 유저도 연승 UI 노출됨)
+            if (!mgr.IsUnlocked) return 1;
             var state = mgr.State;
             if (state == null) return 1;
             int streak = Mathf.Max(1, state.currentStreak);

@@ -312,6 +312,15 @@ namespace BalloonFlow
                 EventBus.Publish(new OnHolderThawed { holderId = holderId });
             }
 
+            // Hidden → 해금 (연출 포함). Hand/SelectTool 은 Hidden 도 강제 선택 가능하므로,
+            // 자동 앞줄 해금(RevealHiddenHolder)과 동일한 해금 연출(OnHolderRevealed)을 내보낸다.
+            // (기존엔 isDeploying 만 세팅 → 기능은 동작하나 해금 연출 누락.)
+            if (holder.isHidden)
+            {
+                holder.isHidden = false;
+                EventBus.Publish(new OnHolderRevealed { holderId = holderId });
+            }
+
             int col = holder.column;
             holder.isDeploying = true;
             _deployingHolderId[col] = holder.holderId;
@@ -334,6 +343,7 @@ namespace BalloonFlow
                     if (m != null && !m.isDeploying && !m.isWaiting && !m.isMovingToRail && !m.isConsumed)
                     {
                         if (m.isFrozen) { m.isFrozen = false; EventBus.Publish(new OnHolderThawed { holderId = mid }); }
+                        if (m.isHidden) { m.isHidden = false; EventBus.Publish(new OnHolderRevealed { holderId = mid }); }
                         m.isDeploying = true;
                         EventBus.Publish(new OnHolderSelected { holderId = mid, color = m.color, magazineCount = m.magazineCount });
                     }
@@ -366,11 +376,17 @@ namespace BalloonFlow
 
             // Lock: Lock 자체는 선택 불가
             if (holder.isLockObject)
+            {
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayDeny();
                 return false;
+            }
 
             // Lock에 의해 차단된 보관함은 선택 불가
             if (IsBlockedByLock(holder))
+            {
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayDeny();
                 return false;
+            }
 
             if (holder.magazineCount <= 0)
             {
@@ -381,6 +397,7 @@ namespace BalloonFlow
             if (holder.isHidden)
             {
                 Debug.Log($"[HolderManager] Holder {holderId} is Hidden — cannot select.");
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayDeny();
                 return false;
             }
 
@@ -388,6 +405,7 @@ namespace BalloonFlow
             if (holder.isFrozen)
             {
                 Debug.Log($"[HolderManager] Holder {holderId} is Frozen — cannot select.");
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayDeny();
                 return false;
             }
 

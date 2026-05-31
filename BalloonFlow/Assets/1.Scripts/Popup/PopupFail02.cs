@@ -87,6 +87,8 @@ namespace BalloonFlow
             }
 
             if (RetryBtn != null) RetryBtn.onClick.AddListener(OnRetryClicked);
+            // [#4] 단일버튼(BtnSingleFrame) = Try Again. RetryBtn(BtnHorizGreen)만 연결돼 BtnSingle 이 죽어있던 버그 수정.
+            if (_frame != null && _frame.BtnSingle != null) _frame.BtnSingle.onClick.AddListener(OnRetryClicked);
             if (HomeBtn != null) HomeBtn.onClick.AddListener(OnHomeClicked);
             if (ExitBtn != null) ExitBtn.onClick.AddListener(OnHomeClicked);
 
@@ -137,6 +139,7 @@ namespace BalloonFlow
         {
             base.OnDestroy();
             if (RetryBtn != null) RetryBtn.onClick.RemoveAllListeners();
+            if (_frame != null && _frame.BtnSingle != null) _frame.BtnSingle.onClick.RemoveAllListeners();
             if (HomeBtn != null) HomeBtn.onClick.RemoveAllListeners();
             if (ExitBtn != null) ExitBtn.onClick.RemoveAllListeners();
         }
@@ -174,9 +177,9 @@ namespace BalloonFlow
             {
                 _frame.ApplyDifficulty(difficulty);
                 _frame.SetTitle("Stage Failed");
-                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
-                _frame.SetHorizGreenText("Retry");
-                _frame.SetHorizRedText("Home");
+                // [#4] 명세 ③ Level Failed = [Try Again] 단일버튼 + [X](나가기→로비). 단일버튼(BtnSingle) 레이아웃 사용.
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
+                _frame.SetSingleButtonText("Try Again");
                 _frame.ShowExitButton(true);
             }
             UpdateHardLevelOption(difficulty);

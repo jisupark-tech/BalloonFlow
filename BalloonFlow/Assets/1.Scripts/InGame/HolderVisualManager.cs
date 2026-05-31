@@ -533,6 +533,11 @@ namespace BalloonFlow
 
                 visual.queuePosition = targetPos;
 
+                // [#6] 큐 재배치(Zap/Shuffle 등)로 hidden holder 가 앞줄(row 0)에 도달하면 색 공개.
+                // reveal 이 RepositionColumnHolders 에만 있어 RefreshAllPositions 경로에서 누락되던 버그 수정.
+                if (row == 0 && holders[i].isHidden && HolderManager.HasInstance)
+                    HolderManager.Instance.RevealHiddenHolder(holders[i].holderId);
+
                 // Apply front-row shader: row 0 = active outline, row 1+ = inactive + text alpha 25%
                 if (visual.identifier != null)
                 {
@@ -1794,7 +1799,9 @@ namespace BalloonFlow
             int deployPressure = Mathf.Max(1, Mathf.Max(activeCount, isDeployingCount));
             // 이전: min 2칸. active=1/isDeploying=1에서도 197/200에서 자기 cluster tail에 막히는 케이스 발생.
             // deadlock advance 허용치와 맞춰 최소 3칸부터 nearFull로 취급한다.
-            int emptyAllowance = Mathf.Clamp(deployPressure + 1, 3, 5);
+            // ㅡ자(단면) 다열 레일은 deploy-point 밀도 최고 → 윈도우를 deploys 로 더 키움 (RailManager.DeadlockBeltAdvanceEmptySlots 와 정합).
+            //   기존 clamp(+1, 3, 5) 는 5 에서 캡 → 5열 ㅡ 에서 빈칸 여유 0 → 잠김. +2 / 상한 8 로 완화.
+            int emptyAllowance = Mathf.Clamp(deployPressure + 2, 3, 8);
             int nearFullThreshold = Mathf.Max(0, rail.PhysicalCapacity - emptyAllowance);
             bool nearFull = rail.OccupiedCount >= nearFullThreshold;
 

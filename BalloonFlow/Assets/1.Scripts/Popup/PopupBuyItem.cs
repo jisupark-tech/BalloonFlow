@@ -66,13 +66,25 @@ namespace BalloonFlow
             EnsureTopBarBinding();
         }
 
+        /// <summary>[#2] TopBar 잔액 GoldPanel — 무료 제공(ShowUnlock) 시 숨기고, 유료 구매(ShowBuy) 시 노출.</summary>
+        private Transform _topBarGoldPanel;
+
         private void EnsureTopBarBinding()
         {
             Transform topBar = FindChildRecursive(transform, "TopBarArea");
             Transform gold = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
+            _topBarGoldPanel = gold;
             Transform txt = gold != null ? FindChildRecursive(gold, "TxtGold") : null;
             if (txt != null && txt.GetComponent<AnimatedCoinLabel>() == null)
                 txt.gameObject.AddComponent<AnimatedCoinLabel>();
+        }
+
+        /// <summary>[#2] TopBar 잔액 GoldPanel 노출 토글.</summary>
+        private void SetTopBarGoldPanelVisible(bool visible)
+        {
+            if (_topBarGoldPanel == null) EnsureTopBarBinding();
+            if (_topBarGoldPanel != null && _topBarGoldPanel.gameObject.activeSelf != visible)
+                _topBarGoldPanel.gameObject.SetActive(visible);
         }
 
         private static Transform FindChildRecursive(Transform parent, string childName)
@@ -122,6 +134,7 @@ namespace BalloonFlow
             if (_txtGold != null) _txtGold.gameObject.SetActive(true);
             if (_txtGoldOutline != null) _txtGoldOutline.gameObject.SetActive(true);
             if (_imgCoin != null) _imgCoin.gameObject.SetActive(true);
+            SetTopBarGoldPanelVisible(true);   // [#2] 유료 구매 — 잔액 노출
 
             SetItemDisplay(itemSprite, amount, goldCost);
             OpenUI();
@@ -163,6 +176,7 @@ namespace BalloonFlow
             if (_txtGold != null) _txtGold.gameObject.SetActive(false);
             if (_txtGoldOutline != null) _txtGoldOutline.gameObject.SetActive(false);
             if (_imgCoin != null) _imgCoin.gameObject.SetActive(false);
+            SetTopBarGoldPanelVisible(false);   // [#2] 무료 제공(해금/Claim) — TopBar 잔액 GoldPanel 숨김
 
             if (_imgItem != null && itemSprite != null) _imgItem.sprite = itemSprite;
             OpenUI();

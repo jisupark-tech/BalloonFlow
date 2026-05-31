@@ -903,7 +903,8 @@ namespace BalloonFlow
                         new TutorialStep
                         {
                             stepIndex = 0,
-                            instruction = "레일이 거의 가득 찼어요!\n보관함을 탭해서 비워주세요.",
+                            // [#4] 1.0 EN-only — 한국어 글리프 미포함 폰트라 깨져 보임. 명세 §4-3 영문으로 교체.
+                            instruction = "Conveyor almost full!\nClear it or fail!",
                             highlightTarget = string.Empty,
                             requireAction = ACTION_TAP_ANYWHERE,
                             isComplete = false,

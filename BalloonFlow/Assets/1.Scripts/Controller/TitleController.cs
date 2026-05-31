@@ -314,6 +314,9 @@ namespace BalloonFlow
                     break;
 
                 case 2: // Loading SDKs — AppsFlyer / MAX / Facebook / Analytics / IAP 등
+                    // [#3] 알림 권한 요청을 스플래시 로딩 중간에 노출 (fire-and-forget — 로딩은 계속 진행).
+                    // RequestPermissionAsync 는 NotDetermined 일 때만 실제 다이얼로그, 이미 결정됐으면 즉시 반환.
+                    if (NotificationManager.HasInstance) _ = NotificationManager.Instance.RequestPermissionAsync();
                     yield return WaitForSdkReady();
                     break;
 

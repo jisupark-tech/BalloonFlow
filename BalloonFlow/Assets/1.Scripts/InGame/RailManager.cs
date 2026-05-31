@@ -389,7 +389,7 @@ namespace BalloonFlow
 
             int physicalCapacity = PhysicalCapacity;
             bool deadlockHolderActive = _deadlockHolderId >= 0 && _activeDeployPoints.Contains(_deadlockHolderId);
-            bool deadlockNearFull = _deadlockHolderId >= 0 && dartCount >= Mathf.Max(0, physicalCapacity - DEADLOCK_BELT_ADVANCE_EMPTY_SLOTS);
+            bool deadlockNearFull = _deadlockHolderId >= 0 && dartCount >= Mathf.Max(0, physicalCapacity - DeadlockBeltAdvanceEmptySlots());
             bool shouldAdvanceAsFullBelt =
                 _frozenDartInfos.Count == 0
                 && (dartCount >= physicalCapacity
@@ -703,13 +703,23 @@ namespace BalloonFlow
         /// <summary>현재 active deploy point 개수.</summary>
         public int GetActiveDeployPointCount() => _activeDeployPoints.Count;
 
+        /// <summary>
+        /// 데드락 강제-벨트회전 빈칸 윈도우 N (= 회전 개입 임계 capacity-N).
+        /// ㅡ자(단면, GetRailSideCount=1) 레일은 path 가 짧은데 deploy point 는 열 수만큼(최대 5) 밀집 →
+        /// deploy-point 밀도 최고 → 빈칸이 구간 사이에 갇혀 순환 못 함.
+        /// active deploy point 가 많을수록(=ㅡ 다열) 윈도우를 키워, 잠기기 전에 강제회전이 개입하도록 함.
+        /// floor=DEADLOCK_BELT_ADVANCE_EMPTY_SLOTS(5, 기존), deploys+2 스케일, ceiling=8.
+        /// </summary>
+        private int DeadlockBeltAdvanceEmptySlots()
+            => Mathf.Clamp(_activeDeployPoints.Count + 2, DEADLOCK_BELT_ADVANCE_EMPTY_SLOTS, 8);
+
         public bool ShouldUseFixedDeployPlacement(int holderId)
         {
             int physicalCapacity = PhysicalCapacity;
             int emptySlotsToPhysical = Mathf.Max(0, physicalCapacity - _darts.Count);
             bool holderIsDeadlock = _deadlockHolderId == holderId;
             bool holderIsActiveDeployPoint = _activeDeployPoints.Contains(holderId);
-            bool fullOrRecovery = _darts.Count >= physicalCapacity || emptySlotsToPhysical <= DEADLOCK_BELT_ADVANCE_EMPTY_SLOTS;
+            bool fullOrRecovery = _darts.Count >= physicalCapacity || emptySlotsToPhysical <= DeadlockBeltAdvanceEmptySlots();
 
             return holderIsDeadlock || (holderIsActiveDeployPoint && fullOrRecovery);
         }
@@ -728,7 +738,7 @@ namespace BalloonFlow
             bool deadlockHolderActive = _deadlockHolderId >= 0 && _activeDeployPoints.Contains(_deadlockHolderId);
             bool deadlockNearFull =
                 _deadlockHolderId >= 0
-                && dartCount >= Mathf.Max(0, physicalCapacity - DEADLOCK_BELT_ADVANCE_EMPTY_SLOTS);
+                && dartCount >= Mathf.Max(0, physicalCapacity - DeadlockBeltAdvanceEmptySlots());
 
             return capacityFull || deadlockHolderActive || deadlockNearFull;
         }
@@ -737,7 +747,7 @@ namespace BalloonFlow
         {
             int dartCount = _darts.Count;
             int physicalCapacity = PhysicalCapacity;
-            int deadlockAdvanceThreshold = Mathf.Max(0, physicalCapacity - DEADLOCK_BELT_ADVANCE_EMPTY_SLOTS);
+            int deadlockAdvanceThreshold = Mathf.Max(0, physicalCapacity - DeadlockBeltAdvanceEmptySlots());
             bool capacityFull = dartCount >= physicalCapacity;
             bool deadlockNearFull = _deadlockHolderId >= 0 && dartCount >= deadlockAdvanceThreshold;
             bool deadlockHolderActive = _deadlockHolderId >= 0 && _activeDeployPoints.Contains(_deadlockHolderId);

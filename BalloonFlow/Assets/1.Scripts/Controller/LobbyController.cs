@@ -182,6 +182,9 @@ namespace BalloonFlow
 
             if (isLevelUp)
             {
+                // achieve — Play 버튼 레벨 갱신(레벨업) 성취감 chime.
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayAchieve();
+
                 // 기존 그대로 — OLD 레벨/난이도 + OLD Rail 상태 먼저 표시 → LobbyBtnChange 20f 시점에 NEW 일괄 교체
                 int prevHighest = Mathf.Max(0, prevLevel - 1);
                 DifficultyPurpose prevDiff = DifficultyPurpose.Normal;

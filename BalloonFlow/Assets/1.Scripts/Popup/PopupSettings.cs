@@ -43,6 +43,9 @@ namespace BalloonFlow
             // (HUDController는 추가 listener를 더 등록하지만, 중복 등록은 onClick.Invoke가 모두 호출해 안전.)
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.AddListener(OnExitClickedSelf);
+            // [#2] 온보딩 시 단일버튼(BtnSingle="Continue") = 닫기. HUDController 가 BtnSingle 은 안 묶으므로 직접 배선.
+            if (_frame != null && _frame.BtnSingle != null)
+                _frame.BtnSingle.onClick.AddListener(OnExitClickedSelf);
 
             EventBus.Subscribe<OnSettingsChanged>(HandleSettingsChanged);
         }
@@ -71,28 +74,36 @@ namespace BalloonFlow
             if (_btnHaptic != null) _btnHaptic.onClick.RemoveAllListeners();
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.RemoveListener(OnExitClickedSelf);
+            if (_frame != null && _frame.BtnSingle != null)
+                _frame.BtnSingle.onClick.RemoveListener(OnExitClickedSelf);
 
             EventBus.Unsubscribe<OnSettingsChanged>(HandleSettingsChanged);
         }
 
         public override void OpenUI()
         {
+            // [#2/#5/12] 온보딩(Lv.5 클리어 전): 하단 단일버튼 [Continue]만 (Home/Quit 비노출 — 이탈 경로 차단).
+            //            온보딩 후: Horizontal [Continue]+[Home].
+            bool onboarding = !FtueGate.IsOnboardingComplete;
             if (_frame != null)
             {
                 _frame.SetTitle("Settings");
-                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
-                _frame.SetHorizGreenText("Continue");
-                _frame.SetHorizRedText("Home");
+                if (onboarding)
+                {
+                    _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
+                    _frame.SetSingleButtonText("Continue");
+                }
+                else
+                {
+                    _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
+                    _frame.SetHorizGreenText("Continue");
+                    _frame.SetHorizRedText("Home");
+                }
                 _frame.ShowExitButton(true);
             }
 
             RefreshToggles();
             base.OpenUI();
-
-            // [#5/12] 온보딩(Lv.5 클리어 전) 중에는 Quit(Home) 버튼 비노출 — 이탈 경로 차단 (UX플로우 §5-3·§3-3).
-            // 세팅 자체(Sound/Music/Haptic + Continue)는 정상 노출. 백버튼도 이 상태의 세팅을 연다(#15).
-            if (HomeButton != null)
-                HomeButton.gameObject.SetActive(FtueGate.IsOnboardingComplete);
 
             // 애니메이션 사용 시 base.OpenUI 가 interactable=false 로 시작 → ExitButton 클릭 안 됨.
             // 즉시 클릭 가능하도록 강제.

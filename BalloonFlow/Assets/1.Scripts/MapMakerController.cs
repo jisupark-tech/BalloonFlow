@@ -4355,15 +4355,15 @@ namespace BalloonFlow
             new[] { 10, 20, 30, 40, 50 },
         };
         private static readonly float[][] CAP_WEIGHTS_BASE = {
-            // 10    20    30    40    50      ← 명세 §2-1 표
-            new[] { 0.15f, 0.75f, 0.02f, 0.08f, 0.00f }, // Tutorial
-            new[] { 0.16f, 0.68f, 0.02f, 0.13f, 0.01f }, // Normal
-            new[] { 0.14f, 0.71f, 0.02f, 0.13f, 0.00f }, // Hard
-            new[] { 0.17f, 0.68f, 0.03f, 0.11f, 0.01f }, // SuperHard
+            // 10    20    30    40    50      ← 명세 §2-1 표 (v5.1, 2026-05-13 — cap10/40 점진곡선 명확화)
+            new[] { 0.28f, 0.64f, 0.00f, 0.08f, 0.00f }, // Tutorial (28/64/0/8/0)
+            new[] { 0.19f, 0.67f, 0.02f, 0.12f, 0.00f }, // Normal   (19/67/2/12/0)
+            new[] { 0.16f, 0.64f, 0.03f, 0.16f, 0.01f }, // Hard     (16/64/3/16/1)
+            new[] { 0.14f, 0.62f, 0.03f, 0.18f, 0.03f }, // SuperHard(14/62/3/18/3)
         };
-        // Rest 전용 (§2-7: cap30 금지) — Normal base 에서 cap30 분포를 cap20 으로 흡수.
+        // Rest 전용 (§2-7: cap30 금지) — §2-1 v5.1 휴식 행 22/68/0/10/0.
         private static readonly float[] CAP_WEIGHTS_REST =
-            new[] { 0.15f, 0.69f, 0.00f, 0.13f, 0.01f };
+            new[] { 0.22f, 0.68f, 0.00f, 0.10f, 0.00f };
 
         // 순서 배치 파라미터: 앞 50%에 depth 0 비율 (min~max) — 명세 §2-4 표.
         private static readonly float[][] DEPTH0_FRONT_RATIO = {
@@ -4372,10 +4372,26 @@ namespace BalloonFlow
             new[] { 0.25f, 0.45f }, // Hard
             new[] { 0.10f, 0.30f }, // SuperHard
         };
-        // 행(가로) 연속 max — 명세 §4-3
-        private static readonly int[] SAME_COLOR_MAX_ROW = { 1, 2, 3, 4 };
-        // 열(세로) 연속 max — 명세 §4-3
-        private static readonly int[] SAME_COLOR_MAX_COL = { 1, 2, 2, 3 };
+        // 행(가로)/열(세로) 연속 max — 명세 §4-3 / §2-4 v2.2 (2026-05-13, PF picked 1-300 max 회귀).
+        //   ※ 구버전 v2.1(2026-04-30) ROW{1,2,3,4}/COL{1,2,2,3} 은 PF max 보다 빡빡 → 50% 위반 처리.
+        //   diffIdx(4-index) 표는 fallback. Rest 는 Tutorial 과 다르므로 GetConsecutiveLimits() 로 분기.
+        private static readonly int[] SAME_COLOR_MAX_ROW = { 1, 3, 3, 4 };
+        private static readonly int[] SAME_COLOR_MAX_COL = { 2, 4, 4, 5 };
+
+        /// <summary>§4-3 / §2-4 v2.2 — purpose 별 같은 색 연속 max (행, 열). Rest 를 Tutorial 과 구분.</summary>
+        private static void GetConsecutiveLimits(DifficultyPurpose purpose, out int rowMax, out int colMax)
+        {
+            switch (purpose)
+            {
+                case DifficultyPurpose.Tutorial:  rowMax = 1; colMax = 2; return; // 튜토 1/2
+                case DifficultyPurpose.Rest:      rowMax = 2; colMax = 3; return; // 휴식 2/3
+                case DifficultyPurpose.Hard:      rowMax = 3; colMax = 4; return; // 하드 3/4
+                case DifficultyPurpose.SuperHard: rowMax = 4; colMax = 5; return; // 슈하 4/5
+                case DifficultyPurpose.Normal:
+                case DifficultyPurpose.Intro:
+                default:                          rowMax = 3; colMax = 4; return; // 노말 3/4
+            }
+        }
 
         private const int AVG_CAP = 21;                 // 명세 §2-0 — PF 평균 탄창
         private const int GENERATE_RETRY_MAX = 20;       // 명세 §6 Hard rule fail 시 자동 재생성 최대 시도
@@ -4475,8 +4491,7 @@ namespace BalloonFlow
                 var laid = LayoutByDepth(pending, colorDepth, diffIdx);
 
                 // 2D 그리드 연속 제한 (§4-2 #4)
-                int maxRowConsec = SAME_COLOR_MAX_ROW[diffIdx];
-                int maxColConsec = SAME_COLOR_MAX_COL[diffIdx];
+                GetConsecutiveLimits(_difficulty, out int maxRowConsec, out int maxColConsec);
                 EnforceGridConsecutiveLimit(laid, queueCols, maxRowConsec, maxColConsec);
 
                 // 명세 §4-2 step 5 — 첫 3행 깊이 가드 (Hard rule)
@@ -5134,23 +5149,21 @@ namespace BalloonFlow
                 : CAP_WEIGHTS_BASE[Mathf.Clamp(diffIdx, 0, CAP_WEIGHTS_BASE.Length - 1)];
             int[] keys = CAP_KEYS[Mathf.Clamp(diffIdx, 0, CAP_KEYS.Length - 1)];
 
+            // §3 step 4 v5.1 (2026-05-13) — 정규화 방식: 차단 cap 은 단순 제외 후 남은 cap 비율 보존하며 합 1.0.
+            //   이전 v4 는 차단 cap 가중치를 cap20 에 단순 흡수 → cap40 비율 손실. v5.1 은 비율 보존.
+            //   cap20 백본은 BuildAllowedCaps(§2-8) 가 항상 20 을 allowed 에 포함시켜 보장 (여기서 흡수 X).
             var w = new Dictionary<int, float>();
-            float removed = 0f;
             for (int i = 0; i < keys.Length; i++)
             {
                 int cap = keys[i];
                 float wi = baseWeights[i];
+                if (wi <= 0f) continue;
                 if (allowed.Contains(cap))
                     w[cap] = wi;
-                else
-                    removed += wi; // 차단된 cap 의 비율은 cap20 에 흡수 (백본 강화)
             }
-            if (removed > 0f)
-            {
-                if (!w.ContainsKey(20)) w[20] = 0f;
-                w[20] += removed;
-            }
-            // 재정규화 (안전장치 — 위 합산은 이미 1.0 이지만 부동소수 오차 대비)
+            // cap20 백본 안전장치 — allowed 에 20 있으나 base 가중치가 0 인 극단 케이스 최소 비율 부여.
+            if (allowed.Contains(20) && !w.ContainsKey(20)) w[20] = 0.01f;
+            // v5.1 정규화 — 남은 cap 의 v5.1 비율 보존하며 합 1.0.
             float sum = 0f;
             foreach (var v in w.Values) sum += v;
             if (sum > 0f)

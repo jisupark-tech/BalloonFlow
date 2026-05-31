@@ -360,7 +360,14 @@ namespace BalloonFlow
             int remaining = BalloonController.Instance.RemainingCount;
             int total = popped + remaining;
             _view.SetProgress(popped, total);
+
+            // achieve — 진행도 100% 도달 순간 1회(상승 엣지). 100% 미만으로 떨어지면(새 레벨) 리셋.
+            bool atFull = total > 0 && popped >= total;
+            if (atFull && !_progressWasFull && AudioManager.HasInstance)
+                AudioManager.Instance.PlayAchieve();
+            _progressWasFull = atFull;
         }
+        private bool _progressWasFull;
 
         private void HandleCoinChanged(OnCoinChanged _evt)
         {

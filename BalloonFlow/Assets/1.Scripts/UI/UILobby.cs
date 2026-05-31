@@ -389,6 +389,7 @@ namespace BalloonFlow
         /// 안전하도록 Image GameObject 도 명시적으로 비활성화한다. Const.PROFILE_ENABLED=true 시 노출 복귀.</summary>
         public void SetProfilePanelActive(bool active)
         {
+            // [#3] Profile 숨김 시 GameObject 를 비활성화 → LayoutGroup 슬롯이 접히며 골드 패널이 Profile 자리로 이동(의도된 동작).
             if (_btnProfilePanel != null && _btnProfilePanel.gameObject.activeSelf != active)
                 _btnProfilePanel.gameObject.SetActive(active);
             if (_imgProfileIcon != null && _imgProfileIcon.gameObject.activeSelf != active)
