@@ -710,6 +710,53 @@ namespace BalloonFlow
             return _reusableColorList.ToArray();
         }
 
+        // 이어하기 랜덤 풍선 제거용 후보 id 버퍼 (재사용). balloonId 는 안정적이라
+        // pop 중 발생하는 이벤트가 _reusableColorList 를 건드려도 영향 없음.
+        private List<int> _continueColorBalloonIds;
+
+        /// <summary>
+        /// 이어하기 전용: 지정 색 풍선을 '랜덤'하게 최대 count 개 pop. 실제 pop 개수 반환.
+        /// LockKey / FlexTube 기믹은 force-pop 대상에서 제외 (있는 만큼만).
+        /// </summary>
+        public int PopRandomBalloonsByColor(int color, int count)
+        {
+            if (count <= 0) return 0;
+
+            if (_continueColorBalloonIds == null) _continueColorBalloonIds = new List<int>(64);
+            _continueColorBalloonIds.Clear();
+            foreach (KeyValuePair<int, BalloonData> pair in _balloons)
+            {
+                BalloonData data = pair.Value;
+                if (data.isPopped) continue;
+                if (data.gimmickType == GimmickLockKey) continue;
+                if (data.gimmickType == GimmickFlexTube) continue;
+                if (data.color == color) _continueColorBalloonIds.Add(data.balloonId);
+            }
+
+            int available = _continueColorBalloonIds.Count;
+            int toPop = Mathf.Min(count, available);
+            if (toPop <= 0) return 0;
+
+            // Fisher-Yates 부분 셔플 — 앞 toPop 개를 무작위로 선정.
+            for (int i = 0; i < toPop; i++)
+            {
+                int j = UnityEngine.Random.Range(i, available);
+                int tmp = _continueColorBalloonIds[i];
+                _continueColorBalloonIds[i] = _continueColorBalloonIds[j];
+                _continueColorBalloonIds[j] = tmp;
+            }
+
+            int popped = 0;
+            for (int i = 0; i < toPop; i++)
+            {
+                int id = _continueColorBalloonIds[i];
+                if (!_balloons.TryGetValue(id, out BalloonData bd) || bd.isPopped) continue;
+                ForcePopBalloon(id);
+                popped++;
+            }
+            return popped;
+        }
+
         /// <summary>재사용 배열 — GetAllBalloons GC 방지</summary>
         private BalloonData[] _reusableAllBalloons;
 

@@ -86,6 +86,11 @@ namespace BalloonFlow
                 _ui.SetTapHintVisible(false);
             }
 
+            // [#3] 알림 권한 요청을 게임 시작 직후 노출 (사용자 요구 2026-05-31: "처음 시작하자마자").
+            // fire-and-forget — RequestPermissionAsync 는 NotDetermined 일 때만 실제 다이얼로그, 이미
+            // 결정됐으면 즉시 반환. NotificationManager 는 AfterSceneLoad 로 이미 생성·채널등록 완료된 상태.
+            if (NotificationManager.HasInstance) _ = NotificationManager.Instance.RequestPermissionAsync();
+
             StartCoroutine(LoadingFlow());
         }
 
@@ -314,9 +319,7 @@ namespace BalloonFlow
                     break;
 
                 case 2: // Loading SDKs — AppsFlyer / MAX / Facebook / Analytics / IAP 등
-                    // [#3] 알림 권한 요청을 스플래시 로딩 중간에 노출 (fire-and-forget — 로딩은 계속 진행).
-                    // RequestPermissionAsync 는 NotDetermined 일 때만 실제 다이얼로그, 이미 결정됐으면 즉시 반환.
-                    if (NotificationManager.HasInstance) _ = NotificationManager.Instance.RequestPermissionAsync();
+                    // 알림 권한 요청은 Start() 로 이동 (게임 시작 직후 노출).
                     yield return WaitForSdkReady();
                     break;
 

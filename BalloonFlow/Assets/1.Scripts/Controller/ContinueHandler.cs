@@ -158,20 +158,15 @@ namespace BalloonFlow
             int balloonsRemoved = 0;
             if (RailManager.HasInstance)
             {
-                int capacity = RailManager.Instance.SlotCount;
-                int targetRemove = RailManager.GetContinueRemoveCount(capacity);
-                var res = RailManager.Instance.RemoveRecentDartsAndMatchingBalloons(targetRemove);
+                // 레일에서 가장 많은 색 다트 전부 제거 + 그 수만큼 같은 색 필드 풍선 랜덤 제거.
+                var res = RailManager.Instance.RemoveMostCommonColorDartsAndRandomBalloons();
                 dartsRemoved = res.removedDarts;
                 balloonsRemoved = res.removedBalloons;
-                Debug.Log($"[ContinueHandler] Continue removed {dartsRemoved} recent darts ({res.distinctColors} colors) + {balloonsRemoved} matching balloons (target={targetRemove}, capacity={capacity}).");
+                Debug.Log($"[ContinueHandler] Continue removed {dartsRemoved} darts of most-common color + {balloonsRemoved} random matching balloons.");
             }
 
-            // 2) 배포중인 holder는 그대로 유지 (계속 배포).
-            //    대기 중/이동 중인 holder만 큐로 복귀.
-            if (HolderManager.HasInstance)
-            {
-                ReturnWaitingHoldersToQueue();
-            }
+            // 2) 보관함(holder)은 영향 없음 (사용자 요구 2026-05-31).
+            //    배포중/대기/이동 holder 모두 현재 상태 그대로 유지 — 큐 복귀/제거 안 함.
 
             // 3) 풍선 제거는 새 API에서 직접 처리됨. 이벤트는 보드 상태 재개용.
             //    removedColor = -1 → BoardStateManager 가 추가 풍선 pop 을 시도하지 않음.

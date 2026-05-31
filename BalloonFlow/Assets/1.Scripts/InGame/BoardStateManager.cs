@@ -650,6 +650,12 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// 현재 레일 면에서 '공격 가능한' 외곽 풍선 색 집합 (read-only, dirty-cached 재사용 set).
+        /// DartManager 의 dead-head 릴리프(공격 불가 head 를 건너뛰고 매칭 다트 발사)에서 사용.
+        /// </summary>
+        public HashSet<int> GetReachableOutermostColors() => GetRailSideOutermostBalloonColors();
+
+        /// <summary>
         /// Returns the set of balloon colors exposed on the outermost edges
         /// (directly targetable from any rail side).
         /// Uses per-column nearest-to-rail check (IsOutermostInDirection) for all 4 directions.

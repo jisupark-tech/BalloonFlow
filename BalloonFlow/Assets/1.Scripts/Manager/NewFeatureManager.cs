@@ -32,6 +32,10 @@ namespace BalloonFlow
         private readonly Queue<string> _pendingFeatures = new Queue<string>();
         private bool _isShowingPopup;
 
+        /// <summary>설명 팝업(PopupNewFeature) 큐가 진행 중인지. 튜토리얼이 이 동안 대기하여
+        /// "설명 먼저 → 닫히면 튜토리얼" 순차 노출을 보장 (TutorialController.StartTutorialAfterLoad).</summary>
+        public bool IsShowingPopup => _isShowingPopup;
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void AutoCreate()
         {

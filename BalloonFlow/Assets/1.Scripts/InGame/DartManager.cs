@@ -1102,6 +1102,36 @@ namespace BalloonFlow
                 }
                 return;
             }
+            // ROLLBACK_DART_DEAD_HEAD_RELIEF:
+            // head-only 발사 규칙은 head 색이 외곽에서 공격 불가인데(매칭 풍선 없음) 같은 클러스터
+            // 안쪽에 공격 가능한 색 다트가 있으면 그 클러스터를 영원히 막아 데드락을 만든다
+            // (실패판정 HasOutermostMatch 는 '모든' 다트색 기준이라 매칭이 보여 fail 도 안 뜸 → 모든 모양 공통).
+            // 'dead head'(색이 reachable-outermost 집합에 없음)인 경우에만 front-most 매칭 다트로 후보를 치환.
+            // 정상 클러스터(head 색 매칭 가능)는 전혀 건드리지 않아 head-first 흐름/연속공격 가드 유지.
+            // 치환된 다트도 이후 동일한 TryFindTarget + consumed-line lock 게이트를 거치므로 연속공격 재발 없음.
+            if (BoardStateManager.HasInstance)
+            {
+                HashSet<int> reachable = BoardStateManager.Instance.GetReachableOutermostColors();
+                if (reachable != null && reachable.Count > 0)
+                {
+                    for (int i = 0; i < _scanHeadDarts.Count; i++)
+                    {
+                        var head = _scanHeadDarts[i];
+                        if (head == null || head.dartColor < 0) continue;
+                        if (reachable.Contains(head.dartColor)) continue; // head 가 공격 가능 → 그대로 (정상 경로)
+                        var sub = rail.GetFrontmostFireableDart(head.holderId, reachable);
+                        if (sub != null && sub != head)
+                        {
+                            _scanHeadDarts[i] = sub;
+                            LogAttackIssue(
+                                "DartDeadHeadRelief",
+                                $"holder={head.holderId} deadHead={head.dartId}(col {head.dartColor}) " +
+                                $"=> fire={sub.dartId}(col {sub.dartColor})");
+                        }
+                    }
+                }
+            }
+
             _scanHeadDarts.Sort(CompareDartPlacedSeq);
             _fireCandidates.Clear();
 

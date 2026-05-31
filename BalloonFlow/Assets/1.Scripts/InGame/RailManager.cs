@@ -1359,6 +1359,25 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>
+        /// 데드락 릴리프 전용: 지정 holder 클러스터에서 색이 matchableColors 에 속하는
+        /// front-most(최저 placedSeq) 다트 반환. head 색이 공격 불가일 때만 호출됨.
+        /// 없으면 null. (head-only 규칙을 dead-head 한정으로만 우회 — 정상 클러스터엔 미사용.)
+        /// </summary>
+        public DartOnRail GetFrontmostFireableDart(int holderId, HashSet<int> matchableColors)
+        {
+            if (matchableColors == null || matchableColors.Count == 0) return null;
+            DartOnRail best = null;
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                DartOnRail d = _darts[i];
+                if (d == null || d.holderId != holderId || d.dartColor < 0) continue;
+                if (!matchableColors.Contains(d.dartColor)) continue;
+                if (best == null || d.placedSeq < best.placedSeq) best = d;
+            }
+            return best;
+        }
+
         /// <summary>월드 좌표를 경로상 progress로 변환 (가장 가까운 지점).</summary>
         public float GetProgressAtWorldPos(Vector3 worldPos)
         {
@@ -2535,31 +2554,23 @@ namespace BalloonFlow
         private static System.Comparison<DartOnRail> _placedSeqDescending;
 
         /// <summary>
-        /// 이어하기 정본 API: 최근 배치된 다트 N개를 제거하고, 같은 색의 풍선을 1:1로 제거.
-        /// (1) placedSeq 내림차순 상위 count개 다트 선정
-        /// (2) 색별 카운트 후 다트 제거
-        /// (3) 같은 색 풍선을 같은 개수만큼 ForcePopBalloon (다트 < 풍선이면 가능한 만큼만)
+        /// 이어하기 정본 API (2026-05-31 재설계): 레일 다트 중 '가장 많은 색'을 전부 제거하고,
+        /// 그 수만큼 같은 색 필드 풍선을 '랜덤'하게 제거. 보관함(holder)은 건드리지 않음.
+        /// (1) 레일 다트 색 분포 집계 → 최다 색 선정 (동률이면 먼저 등장한 색)
+        /// (2) 해당 색 레일 다트 전부 제거
+        /// (3) 같은 색 필드 풍선을 제거 다트 수만큼 랜덤 pop (필드에 적게 남았으면 있는 만큼만)
         /// </summary>
-        public ContinueRemoveResult RemoveRecentDartsAndMatchingBalloons(int count)
+        public ContinueRemoveResult RemoveMostCommonColorDartsAndRandomBalloons()
         {
             ContinueRemoveResult result = default;
-            if (count <= 0 || _darts.Count == 0) return result;
+            if (_darts.Count == 0) return result;
 
-            // (1) 활성 다트를 placedSeq 내림차순으로 정렬 — 재사용 버퍼.
-            _continueRecentBuffer.Clear();
-            for (int i = 0; i < _darts.Count; i++) _continueRecentBuffer.Add(_darts[i]);
-            if (_placedSeqDescending == null)
-                _placedSeqDescending = (a, b) => b.placedSeq.CompareTo(a.placedSeq);
-            _continueRecentBuffer.Sort(_placedSeqDescending);
-
-            int take = Mathf.Min(count, _continueRecentBuffer.Count);
-
-            // (2) 상위 take개의 색 분포 누적 — 재사용 List 2-parallel (Dictionary alloc 회피).
+            // (1) 레일 다트 색 분포 집계 — 재사용 List 2-parallel (Dictionary alloc 회피).
             _continueRemoveColors.Clear();
             _continueRemoveCounts.Clear();
-            for (int i = 0; i < take; i++)
+            for (int i = 0; i < _darts.Count; i++)
             {
-                int c = _continueRecentBuffer[i].dartColor;
+                int c = _darts[i].dartColor;
                 if (c < 0) continue;
 
                 bool found = false;
@@ -2579,42 +2590,34 @@ namespace BalloonFlow
                     _continueRemoveCounts.Add(1);
                 }
             }
+            if (_continueRemoveColors.Count == 0) return result;
 
-            // (3) 다트 제거. 시각은 다음 frame UpdatePerDartPositions 에서 자동 정리.
-            for (int i = 0; i < take; i++)
+            // 최다 색 선정.
+            int targetColor = _continueRemoveColors[0];
+            int maxCount = _continueRemoveCounts[0];
+            for (int k = 1; k < _continueRemoveColors.Count; k++)
             {
-                if (RemoveDartById(_continueRecentBuffer[i].dartId))
-                    result.removedDarts++;
-            }
-
-            // (4) 같은 색 풍선을 1:1로 제거.
-            if (BalloonController.HasInstance)
-            {
-                int colorN = _continueRemoveColors.Count;
-                for (int k = 0; k < colorN; k++)
+                if (_continueRemoveCounts[k] > maxCount)
                 {
-                    int color = _continueRemoveColors[k];
-                    int targetPops = _continueRemoveCounts[k];
-
-                    BalloonData[] balloons = BalloonController.Instance.GetAllBalloonsByColor(color);
-                    if (balloons == null) continue;
-
-                    int popped = 0;
-                    for (int b = 0; b < balloons.Length && popped < targetPops; b++)
-                    {
-                        BalloonData bd = balloons[b];
-                        if (bd == null || bd.isPopped) continue;
-                        BalloonController.Instance.ForcePopBalloon(bd.balloonId);
-                        popped++;
-                    }
-                    result.removedBalloons += popped;
+                    maxCount = _continueRemoveCounts[k];
+                    targetColor = _continueRemoveColors[k];
                 }
             }
 
-            result.distinctColors = _continueRemoveColors.Count;
-
-            // 버퍼 안의 strong reference 정리 (다음 호출 전까지 GC 차단 방지).
+            // (2) 해당 색 레일 다트 전부 제거. (RemoveDartById 가 _darts 를 수정하므로 대상 먼저 수집.)
             _continueRecentBuffer.Clear();
+            for (int i = 0; i < _darts.Count; i++)
+                if (_darts[i].dartColor == targetColor) _continueRecentBuffer.Add(_darts[i]);
+            for (int i = 0; i < _continueRecentBuffer.Count; i++)
+                if (RemoveDartById(_continueRecentBuffer[i].dartId)) result.removedDarts++;
+            _continueRecentBuffer.Clear();
+
+            // (3) 같은 색 필드 풍선을 제거 다트 수만큼 랜덤 제거 (있는 만큼만).
+            if (BalloonController.HasInstance && result.removedDarts > 0)
+                result.removedBalloons =
+                    BalloonController.Instance.PopRandomBalloonsByColor(targetColor, result.removedDarts);
+
+            result.distinctColors = 1;
 
             if (result.removedDarts > 0) PublishOccupancyChanged();
             return result;

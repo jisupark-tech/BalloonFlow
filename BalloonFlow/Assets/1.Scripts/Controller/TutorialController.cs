@@ -921,6 +921,14 @@ namespace BalloonFlow
             while (LevelManager.HasInstance && LevelManager.Instance.IsLoading) yield return null;
             while (UIManager.HasInstance && UIManager.Instance.IsFading) yield return null;
 
+            // [2026-05-31] 기믹/아이템 설명 팝업(PopupNewFeature)과 튜토리얼이 둘 다 OnLevelLoaded 에서
+            //   발화돼 동시에 뜨던 문제 수정: 설명 팝업을 '먼저' 보여주고, 모두 닫힌 뒤에 튜토리얼 시작.
+            //   yield 1회 보장 — OnLevelLoaded 동기 dispatch 가 끝나 NewFeatureManager 가 _isShowingPopup 를
+            //   설정한 뒤 검사하도록 (이벤트 구독 순서와 무관하게 안전, no-loading 진입 케이스 포함).
+            yield return null;
+            while (NewFeatureManager.HasInstance && NewFeatureManager.Instance.IsShowingPopup)
+                yield return null;
+
             Debug.Log($"[TutorialDbg] HandleLevelLoaded levelId={levelId}");
 
             // 1) LevelConfig에 tutorialSteps가 있으면 우선 사용
