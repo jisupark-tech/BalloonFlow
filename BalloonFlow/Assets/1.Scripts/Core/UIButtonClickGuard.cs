@@ -76,6 +76,8 @@ namespace BalloonFlow
             // Button.OnPointerClick 이 같은 dispatch loop 에서 onClick.Invoke() 를 이미 실행한 상태.
             // 다음 클릭 차단 — EventSystem 이 disabled Button 에 OnPointerClick 미dispatch.
             _button.enabled = false;
+            // 전역 UI 버튼 SFX (Common_Button_Touch). 개별 팝업의 PlayNormalTouch/PlayPopupTouch 호출과 별개 — 누락 보강.
+            if (AudioManager.HasInstance) AudioManager.Instance.PlayButtonClick();
             _cooldownActive = true;
             _restoreAt = Time.unscaledTime + COOLDOWN;
         }

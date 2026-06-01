@@ -302,10 +302,13 @@ namespace BalloonFlow
     // ────────────────────────────────────────
 
     /// <summary>A gimmick was triggered (Hidden, Spawner, BigObject, Chain).</summary>
+    /// <remarks>isDestroyed: 타격으로 HP가 모두 소진되어 파괴된 경우 true (woodbreak/icebreak SFX),
+    /// 타격만 가해진 경우 false (풍선 pop SFX). 기본값 false (struct default).</remarks>
     public struct OnGimmickTriggered
     {
         public string gimmickType;
         public int targetId;
+        public bool isDestroyed;
     }
 
     /// <summary>Key 풍선이 터져서 열쇠 해방 → Lock 보관함으로 비행.</summary>
