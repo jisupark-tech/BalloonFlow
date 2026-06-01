@@ -113,26 +113,10 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>현재 유저 레벨 + 구매 이력 + visibleInShop 기준으로 노출 가능한 상품 필터.</summary>
+        /// <summary>StoreProductExposure.BuildProducts 로 위임 — 단계 판정은 거기서 단일 소스로 관리.</summary>
         public List<ShopProductDoc> GetVisibleForUser(UserData user)
         {
             return StoreProductExposure.BuildProducts(_all, user, expanded: true);
-
-#if false
-            foreach (var p in _all)
-            {
-                if (!p.visibleInShop) continue;
-                if (playerLevel < p.unlockLevel) continue;
-
-                // maxPurchases=1 이고 이미 산 상품이면 숨김 (Best Value Pack, Remove Ads 등)
-                if (p.maxPurchases == 1 && user != null
-                    && user.purchasedOnce.TryGetValue(p.productId, out bool purchased) && purchased)
-                    continue;
-
-                result.Add(p);
-            }
-            return result;
-#endif
         }
 
         public ShopProductDoc Get(string productId)
