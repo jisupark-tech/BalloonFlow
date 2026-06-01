@@ -248,29 +248,27 @@ namespace BalloonFlow
             if (_btnShop != null)
             {
                 _btnShop.onClick.RemoveAllListeners();
-                _btnShop.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(0); });
+                _btnShop.onClick.AddListener(() => GoToPage(0));
             }
             if (_btnHome != null)
             {
                 _btnHome.onClick.RemoveAllListeners();
-                _btnHome.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(1); });
+                _btnHome.onClick.AddListener(() => GoToPage(1));
             }
             if (_btnSetting != null)
             {
                 _btnSetting.onClick.RemoveAllListeners();
-                _btnSetting.onClick.AddListener(() => { PlayTouchSFX(); GoToPage(2); });
+                _btnSetting.onClick.AddListener(() => GoToPage(2));
             }
             if (_btnPlay != null)
             {
                 _btnPlay.onClick.RemoveAllListeners();
-                _btnPlay.onClick.AddListener(PlayTouchSFX);
             }
             if (_btnWinningStreak != null)
             {
                 _btnWinningStreak.onClick.RemoveAllListeners();
                 _btnWinningStreak.onClick.AddListener(() =>
                 {
-                    PlayTouchSFX();
                     // 미해금 상태에서도 prefab 단계 wire 가 살아있을 수 있으므로 클릭 시점에도 게이트 재확인.
                     if (!IsWinningStreakUnlocked()) return;
                     if (UIManager.HasInstance)
@@ -1524,11 +1522,6 @@ namespace BalloonFlow
         }
 
         #endregion
-
-        private static void PlayTouchSFX()
-        {
-            // 팝업 Touch SFX 제거 — 전역 Button Click SFX(UIButtonClickGuard)만 사용
-        }
 
         #region Legacy Compatibility
 
