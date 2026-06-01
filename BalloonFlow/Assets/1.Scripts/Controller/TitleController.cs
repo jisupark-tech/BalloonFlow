@@ -374,13 +374,9 @@ namespace BalloonFlow
         /// </summary>
         private IEnumerator WaitForCatalogReady()
         {
-            // 다음 플레이 레벨 = highestClearedLevel + 1. UserData 가 아직 없으면 1 기본.
-            int nextLevel = 1;
-            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
-            {
-                var u = UserDataService.Instance.CurrentUser;
-                if (u != null) nextLevel = Mathf.Max(1, u.highestClearedLevel + 1);
-            }
+            // 다음 플레이 레벨 = FtueGate.HighestClearedLevel + 1 (단일 진실 소스: PlayerPrefs).
+            // 온보딩 범위(1~5) 내로 클램프 — Lv.5 클리어 이후엔 Lv.5 에피소드를 prefetch (Lobby 진입 후 별도 처리).
+            int nextLevel = Mathf.Clamp(FtueGate.HighestClearedLevel + 1, 1, FtueGate.ONBOARDING_CLEAR_LEVEL);
 
             System.Threading.Tasks.Task<bool> episodeTask = null;
             if (LevelEpisodeService.HasInstance)
@@ -438,15 +434,10 @@ namespace BalloonFlow
             return GetHighestClearedLevel() < FtueGate.ONBOARDING_CLEAR_LEVEL;
         }
 
-        /// <summary>UserDataService 가 준비 안 됐으면 0 — 안전한 기본값(온보딩 진입).</summary>
+        /// <summary>온보딩 진행도 단일 소스 = FtueGate(PlayerPrefs 기반). UserDataService.highestClearedLevel은 현재 미사용 — Firestore 동기화는 별도 작업.</summary>
         private static int GetHighestClearedLevel()
         {
-            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
-            {
-                var u = UserDataService.Instance.CurrentUser;
-                if (u != null) return u.highestClearedLevel;
-            }
-            return 0;
+            return FtueGate.HighestClearedLevel;
         }
 
         static GameObject CreateCanvas(string name, int sortingOrder)
