@@ -3545,6 +3545,11 @@ namespace BalloonFlow
 
         private bool _conveyorClickConsumed;
         private bool _blockRightMousePanUntilRelease;
+        // [perf] 좌클릭 hold 페인트 시 같은 셀 중복 처리 방지용 마지막 페인트 셀.
+        // 가드 없으면 같은 셀에 들고만 있어도 매 프레임 RefreshInfo(딕셔너리 3개 alloc + 전체 그리드 스캔)
+        // 가 돌아 MapMaker EditorLoop 스파이크 발생.
+        private int _lastPaintCol = -1;
+        private int _lastPaintRow = -1;
 
         private void HandlePaintInput()
         {
@@ -3554,6 +3559,12 @@ namespace BalloonFlow
             if (mouse == null) return;
             if (!mouse.rightButton.isPressed)
                 _blockRightMousePanUntilRelease = false;
+            // 좌클릭 해제 시 마지막 페인트 셀 리셋 → 다음 press 는 같은 셀이라도 다시 페인트.
+            if (!mouse.leftButton.isPressed)
+            {
+                _lastPaintCol = -1;
+                _lastPaintRow = -1;
+            }
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
             if (_conveyorPaintMode)
@@ -3617,6 +3628,14 @@ namespace BalloonFlow
                 {
                     if (HandleBalloonGridShortcut(col, row, colFloat, rowFloat, leftDown, rightDown))
                         return;
+
+                    // [perf] 좌클릭 hold 중 같은 셀이면(드래그로 셀이 안 바뀜) 중복 paint + 매 프레임
+                    //   RefreshInfo(전체 그리드 스캔 + GC)를 스킵 → MapMaker EditorLoop 스파이크 제거.
+                    //   fresh click(leftDown/rightDown)은 항상 통과.
+                    if (!leftDown && !rightDown && col == _lastPaintCol && row == _lastPaintRow)
+                        return;
+                    _lastPaintCol = col;
+                    _lastPaintRow = row;
 
                     if (rightDown)
                     {

@@ -3276,6 +3276,10 @@ namespace BalloonFlow
             float scaleUpMult = GameManager.Instance.Board.popScaleMultiplier;
             Vector3 popPos = obj.transform.position;
             Sequence seq = DOTween.Sequence();
+            // SetUpdate(true): 이어하기는 fail 팝업(PauseManager, timeScale=0)이 열린 상태에서 풍선을
+            //   pop 하므로, scaled tween 이면 시퀀스(스케일업→풀반환 콜백)가 정지해 풍선이 화면에 남는다.
+            //   unscaled 로 돌려 timeScale=0 에서도 시각 제거가 완료되게 함. (timeScale=1 일반 플레이에선 동일 동작.)
+            seq.SetUpdate(true);
             seq.Append(obj.transform.DOScale(Vector3.one * savedScale * scaleUpMult, scaleUpDuration).SetEase(Ease.OutQuad));
             seq.AppendCallback(() =>
             {

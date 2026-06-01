@@ -29,6 +29,10 @@ namespace BalloonFlow
 
         #endregion
 
+        [Header("[CHEAT — 스테이지 강제 클리어]")]
+        [Tooltip("치트 버튼. 클릭 시 현재 스테이지를 즉시 클리어 처리. Inspector 에서 BtnClear 와이어.")]
+        [SerializeField] private Button _btnClear;
+
         [Header("[Top — 레벨/골드]")]
         [SerializeField] private TMP_Text _txtLevelOutline;
         [SerializeField] private TMP_Text _txtLevel;
@@ -772,6 +776,7 @@ namespace BalloonFlow
             if (_color2Button != null) _color2Button.onClick.AddListener(() => OnColorPicked(2));
             if (_color3Button != null) _color3Button.onClick.AddListener(() => OnColorPicked(3));
             if (_speedToggleButton != null) _speedToggleButton.onClick.AddListener(OnSpeedToggleClicked);
+            if (_btnClear != null) _btnClear.onClick.AddListener(OnClearCheatClicked);
             RefreshSpeedToggleVisual();
         }
 
@@ -785,6 +790,16 @@ namespace BalloonFlow
             if (_color2Button != null) _color2Button.onClick.RemoveAllListeners();
             if (_color3Button != null) _color3Button.onClick.RemoveAllListeners();
             if (_speedToggleButton != null) _speedToggleButton.onClick.RemoveAllListeners();
+            if (_btnClear != null) _btnClear.onClick.RemoveAllListeners();
+        }
+
+        /// <summary>[CHEAT] BtnClear 클릭 — 현재 스테이지를 즉시 클리어 처리.</summary>
+        private void OnClearCheatClicked()
+        {
+            if (BoardStateManager.HasInstance)
+                BoardStateManager.Instance.ForceClearStage();
+            else
+                Debug.LogWarning("[UIHud] OnClearCheatClicked: BoardStateManager 인스턴스 없음 — 클리어 불가.");
         }
 
         private void OnSpeedToggleClicked()

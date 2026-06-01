@@ -63,6 +63,8 @@ namespace BalloonFlow
         private const float POST_CONTINUE_GRACE_DURATION = 3f;
         /// <summary>이어하기 grace 종료 시각 (Time.unscaledTime 기준). 0 이면 비활성.</summary>
         private float _postContinueGraceUntil;
+        /// <summary>Continue restored rail space. Do not re-fail while the player has not made the next move.</summary>
+        private bool _awaitingPostContinuePlayerAction;
 
         // Danger 시각 경고 임계 (점유율 80%+에서 보드 위험 표시)
         // 단일 실패 경로는 '레일 가득 + 공격 불가 2초 grace' — stall 검출은 제거됨
@@ -105,6 +107,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnAllHoldersEmpty>(HandleAllHoldersEmpty);
             EventBus.Subscribe<OnContinueApplied>(HandleContinueApplied);
             EventBus.Subscribe<OnDeadlockEntered>(HandleDeadlockEntered);
+            EventBus.Subscribe<OnHolderTapped>(HandleHolderTapped);
         }
 
         private void OnDisable()
@@ -116,6 +119,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnAllHoldersEmpty>(HandleAllHoldersEmpty);
             EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
             EventBus.Unsubscribe<OnDeadlockEntered>(HandleDeadlockEntered);
+            EventBus.Unsubscribe<OnHolderTapped>(HandleHolderTapped);
         }
 
         private float _periodicLogTimer;
@@ -182,6 +186,23 @@ namespace BalloonFlow
             // 셋 다 충족 → grace 후 fail. grace 동안 dart 발사 + 매칭 가능 시 recovery.
             // 이전 (2026-05-12): railFull 제거하고 efc > 0 으로 완화 → 1발만 있어도 trigger 되는 부작용.
             //   사용자 피드백 후 임계치 복원. FAIL_BUFFER 로 1슬롯 정도 여유 (deploy point 차단 고려).
+            if (_awaitingPostContinuePlayerAction)
+            {
+                int continueEfc = RailManager.HasInstance ? RailManager.Instance.EffectiveOccupiedCount : 0;
+                int continuePhysCap = RailManager.HasInstance ? RailManager.Instance.PhysicalCapacity : 0;
+                bool railStillHasSpace = !RailManager.HasInstance || continuePhysCap <= 0 || continueEfc < continuePhysCap - 1;
+                if (railStillHasSpace)
+                {
+                    _isCritical = false;
+                    _criticalTimer = 0f;
+                    _wasForceFullBeltAdvanceActive = false;
+                    return;
+                }
+
+                // If restore failed to make space for any reason, fall back to the normal fail evaluator.
+                _awaitingPostContinuePlayerAction = false;
+            }
+
             int efc = RailManager.HasInstance ? RailManager.Instance.EffectiveOccupiedCount : 0;
             int physCap = RailManager.HasInstance ? RailManager.Instance.PhysicalCapacity : 0;
             const int FAIL_BUFFER = 1; // efc 가 physCap-1 도달 시 fail 평가 진입
@@ -336,6 +357,8 @@ namespace BalloonFlow
             _isCritical = false;
             _criticalTimer = 0f;
             _failConfirmed = false;
+            _postContinueGraceUntil = 0f;
+            _awaitingPostContinuePlayerAction = false;
 
             PublishBoardStateChanged();
         }
@@ -374,6 +397,14 @@ namespace BalloonFlow
             // PhysicalCapacity 기준 (SlotCount > PhysicalCapacity 케이스 대응).
             if (RailManager.HasInstance)
             {
+                if (_awaitingPostContinuePlayerAction)
+                {
+                    int postContinueOccupied = RailManager.Instance.EffectiveOccupiedCount;
+                    int postContinueCapacity = RailManager.Instance.PhysicalCapacity;
+                    if (postContinueCapacity <= 0 || postContinueOccupied < postContinueCapacity - 1)
+                        return new FailResult { isFail = false, reason = FailReason.None };
+                }
+
                 int occupied = RailManager.Instance.EffectiveOccupiedCount;
                 int capacity = RailManager.Instance.PhysicalCapacity;
                 if (occupied >= capacity - 1 && !HasOutermostMatch())
@@ -426,6 +457,14 @@ namespace BalloonFlow
         {
             _currentLevelId = evt.levelId;
             _outermostDirty = true;
+            _awaitingPostContinuePlayerAction = false;
+            _postContinueGraceUntil = 0f;
+        }
+
+        private void HandleHolderTapped(OnHolderTapped evt)
+        {
+            _awaitingPostContinuePlayerAction = false;
+            _postContinueGraceUntil = 0f;
         }
 
         private void HandleBalloonPopped(OnBalloonPopped evt)
@@ -589,7 +628,12 @@ namespace BalloonFlow
         private void EvaluateClearCondition()
         {
             if (!IsBoardClear()) return;
+            PublishBoardCleared();
+        }
 
+        /// <summary>클리어 발행 공통 경로 — 정상 클리어(EvaluateClearCondition)와 치트 강제 클리어(ForceClearStage)가 공유.</summary>
+        private void PublishBoardCleared()
+        {
             int score = ScoreManager.HasInstance ? ScoreManager.Instance.CurrentScore : 0;
             int starCount = ScoreManager.HasInstance ? ScoreManager.Instance.GetStarCountForScore(score) : 0;
 
@@ -603,6 +647,19 @@ namespace BalloonFlow
             });
 
             Debug.Log($"[BoardStateManager] Board cleared! Level={_currentLevelId}, Score={score}, Stars={starCount}");
+        }
+
+        /// <summary>[CHEAT] btnClear(UIHud) 전용 — IsBoardClear 게이트를 무시하고 현재 스테이지를 즉시 클리어 처리.
+        /// Playing 상태일 때만 동작(이미 Cleared/Failed 면 중복 발행 방지).</summary>
+        public void ForceClearStage()
+        {
+            if (_currentState != BoardState.Playing)
+            {
+                Debug.LogWarning($"[BoardStateManager] [CHEAT] ForceClearStage 무시 — 현재 상태={_currentState}");
+                return;
+            }
+            Debug.Log("[BoardStateManager] [CHEAT] ForceClearStage 호출 — 강제 클리어");
+            PublishBoardCleared();
         }
 
         // 프레임 캐싱: HasOutermostMatch는 비용이 있어 매 프레임 다중 호출 회피.
@@ -941,6 +998,7 @@ namespace BalloonFlow
             _failConfirmed = false;
 
             // 이어하기 후 grace 시작 — rail 이 여전히 stuck 이어도 일정 시간 fail 평가 멈춤
+            _awaitingPostContinuePlayerAction = true;
             _postContinueGraceUntil = Time.unscaledTime + POST_CONTINUE_GRACE_DURATION;
 
             if (evt.removedColor >= 0 && evt.dartsRemoved > 0)

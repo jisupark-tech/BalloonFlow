@@ -199,6 +199,12 @@ namespace BalloonFlow
         private readonly Dictionary<int, HashSet<int>> _holderPassLinesByHolder = new Dictionary<int, HashSet<int>>(16);
         private readonly Dictionary<int, DirectionalTargeting.ScanDirection> _holderPassDirectionByHolder =
             new Dictionary<int, DirectionalTargeting.ScanDirection>(16);
+        // ROLLBACK_DART_STUCK_HOLDER_LINE_RELIEF:
+        // holder 가 '자기 pass lock 에 막혀' 발사 못 한 채로 머문 시작 시각(unscaled). 임계 초과 시
+        // 그 라인 lock 해제 (RelieveStuckHolderLineLocks). 발사 성공/비-막힘 시 제거.
+        private readonly Dictionary<int, float> _holderLineStuckSince = new Dictionary<int, float>(16);
+        // 막힌 채 이 시간(초) 이상 지나면 그 라인만 잠금 해제 — 연속공격 방지 간격 + 놓침 방지.
+        private const float HOLDER_LINE_STUCK_RESET_SECONDS = 0.4f;
         // ROLLBACK_DART_STRAIGHT_RAIL_PROGRESS_WRAP:
         // ㅡ자(개방 단면) 레일은 끝→시작으로 순간이동(wrap)할 때 holder pass lock 을 풀어야 다음 pass 에서
         // 같은 컬럼을 다시 공격할 수 있다. 기존 line-delta(6) 임계는 보드 컬럼 폭이 6 이하인 좁은 ㅡ 레벨에서
@@ -1102,36 +1108,6 @@ namespace BalloonFlow
                 }
                 return;
             }
-            // ROLLBACK_DART_DEAD_HEAD_RELIEF:
-            // head-only 발사 규칙은 head 색이 외곽에서 공격 불가인데(매칭 풍선 없음) 같은 클러스터
-            // 안쪽에 공격 가능한 색 다트가 있으면 그 클러스터를 영원히 막아 데드락을 만든다
-            // (실패판정 HasOutermostMatch 는 '모든' 다트색 기준이라 매칭이 보여 fail 도 안 뜸 → 모든 모양 공통).
-            // 'dead head'(색이 reachable-outermost 집합에 없음)인 경우에만 front-most 매칭 다트로 후보를 치환.
-            // 정상 클러스터(head 색 매칭 가능)는 전혀 건드리지 않아 head-first 흐름/연속공격 가드 유지.
-            // 치환된 다트도 이후 동일한 TryFindTarget + consumed-line lock 게이트를 거치므로 연속공격 재발 없음.
-            if (BoardStateManager.HasInstance)
-            {
-                HashSet<int> reachable = BoardStateManager.Instance.GetReachableOutermostColors();
-                if (reachable != null && reachable.Count > 0)
-                {
-                    for (int i = 0; i < _scanHeadDarts.Count; i++)
-                    {
-                        var head = _scanHeadDarts[i];
-                        if (head == null || head.dartColor < 0) continue;
-                        if (reachable.Contains(head.dartColor)) continue; // head 가 공격 가능 → 그대로 (정상 경로)
-                        var sub = rail.GetFrontmostFireableDart(head.holderId, reachable);
-                        if (sub != null && sub != head)
-                        {
-                            _scanHeadDarts[i] = sub;
-                            LogAttackIssue(
-                                "DartDeadHeadRelief",
-                                $"holder={head.holderId} deadHead={head.dartId}(col {head.dartColor}) " +
-                                $"=> fire={sub.dartId}(col {sub.dartColor})");
-                        }
-                    }
-                }
-            }
-
             _scanHeadDarts.Sort(CompareDartPlacedSeq);
             _fireCandidates.Clear();
 
@@ -1726,7 +1702,58 @@ namespace BalloonFlow
             }
 
             _fireCandidates.Clear();
+            RelieveStuckHolderLineLocks(rail);
             PruneConsumedTargetLinesForCurrentHeads(rail);
+        }
+
+        // ROLLBACK_DART_STUCK_HOLDER_LINE_RELIEF:
+        // holder pass lock(IsHolderLineConsumed)은 한 pass 동안 같은 라인 재발사를 막아 연속공격
+        // (같은 색 스택 즉시 벗기기)을 방지한다. 그런데 그 라인의 바깥 풍선을 깐 뒤 '새 외곽'이
+        // 노출되면, 같은 라인이라 lock 에 막혀 그 색 holder 가 유일할 경우 pass 리셋(wrap/코너)까지
+        // 영구 대기 → "공격 놓침"(reason=holderLineConsumed, 2026-06-01 로그 확정).
+        // 해결: head 가 '자기 pass lock 에 막혀' 일정 시간(unscaled) 발사 못 하면 '그 라인만' 잠금 해제해
+        // 재공격을 허용. 정상 플레이(쏠 unconsumed 라인이 남음)에선 매 tick fire → streak 리셋이라
+        // 절대 작동 안 하고, 스택은 임계 간격으로만 풀려 연속공격이 재발하지 않는다.
+        private void RelieveStuckHolderLineLocks(RailManager rail)
+        {
+            rail.GetClusterHeadDarts(_scanHeadDarts);
+            for (int i = 0; i < _scanHeadDarts.Count; i++)
+            {
+                var head = _scanHeadDarts[i];
+                if (head == null || head.dartColor < 0) continue;
+                int holderId = head.holderId;
+
+                // 발사 성공 → 진행 중이므로 stuck 타이머 해제. (타이머는 '발사할 때만' 리셋.)
+                if (_firedHoldersThisTick.Contains(holderId))
+                {
+                    _holderLineStuckSince.Remove(holderId);
+                    continue;
+                }
+
+                rail.GetDartCurrentPose(head, out Vector3 pos, out _, out Vector3 fireDir);
+                var scanDir = DirectionalTargeting.DetermineScanDirection(fireDir);
+                int line = GetScanLine(pos, scanDir);
+
+                if (!_holderLineStuckSince.TryGetValue(holderId, out float since))
+                {
+                    // 자기 pass lock 에 막힌 순간부터 타이머 시작.
+                    // (이전 버그: head 가 sweep 중 빈 라인을 지날 때 타이머를 리셋해 0.4s 도달 불가.
+                    //  → 이제 발사 전까지 타이머를 유지한다.)
+                    if (IsHolderLineConsumed(holderId, scanDir, line))
+                        _holderLineStuckSince[holderId] = Time.unscaledTime;
+                    continue;
+                }
+
+                // 임계 시간 동안 '한 번도 발사 못 함' → pass lock 전체 해제 (코너 전환과 동일 효과).
+                // 한 sweep 동안 각 라인을 한 번씩만 재발사하고 즉시 재-consume 되므로, 같은 라인
+                // 연속 재발사(스택 즉시 벗기기)는 발생하지 않는다 → "놓침 X, 연속공격 X" 동시 충족.
+                if (Time.unscaledTime - since >= HOLDER_LINE_STUCK_RESET_SECONDS)
+                {
+                    ClearConsumedLineLockForHolder(holderId);
+                    _holderLineStuckSince.Remove(holderId);
+                    LogAttackIssue("DartStuckHolderLineReset", $"holder={holderId} scan={scanDir} line={line}");
+                }
+            }
         }
 
         private bool ShouldRunPostFireHeadRescan()
@@ -2474,6 +2501,7 @@ namespace BalloonFlow
             _holderPassLinesByHolder.Clear();
             _holderPassDirectionByHolder.Clear();
             _lastStraightHeadProgressByHolder.Clear();
+            _holderLineStuckSince.Clear();
             _consumedTargetLines.Clear();
             _unresolvedConsumedTargetLines.Clear();
             _currentHeadLineKeys.Clear();
@@ -2636,7 +2664,11 @@ namespace BalloonFlow
         }
 
         // ROLLBACK_DART_ATTACK_ISSUE_DEBUG:
-        [System.Diagnostics.Conditional("BALLOONFLOW_DART_ATTACK_ISSUE_DEBUG")]
+        // [2026-06-01 TEMP] attack-miss 데드락 진단을 위해 [Conditional] 임시 해제 — define 없이도
+        //   런타임 플래그(DART_ATTACK_ISSUE_DEBUG)+throttle 로 [DartFireBlocked] reason 로그가 찍힌다.
+        //   진단/캡쳐 후 아래 한 줄 주석을 해제해 다시 컴파일-제거(hot path 문자열 비용 0)로 되돌릴 것.
+        //   (call site 문자열 인자 비용이 생기므로 진단 빌드 전용.)
+        // [System.Diagnostics.Conditional("BALLOONFLOW_DART_ATTACK_ISSUE_DEBUG")]
         private void LogAttackIssue(string tag, string message)
         {
             if (!DART_ATTACK_ISSUE_DEBUG) return;

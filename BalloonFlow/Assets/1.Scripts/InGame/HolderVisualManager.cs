@@ -2369,17 +2369,21 @@ namespace BalloonFlow
         {
             _boardFinished = false;
 
-            // 모든 활성 DeployCoroutine 무효화 — generation 증가 시 OLD 코루틴이 mismatch 감지하고 정리 후 자동 종료.
-            // (cancel 플래그 방식은 NEW 클릭과 race 발생 → generation token이 안전.)
-            foreach (var kvp in _holderVisuals)
-                kvp.Value.deployGeneration++;
-
+            // [2026-06-01] 보관함 영향 X (사용자 결정): 대기 큐 holder 는 그대로 두고,
+            //   보드 fail 로 deploy 코루틴이 종료된 '배포중/이동중' holder 만 큐로 복귀시킨다.
+            //   이전: 모든 holder 에 deployGeneration++/isWaiting=false/UndoDeploy → 대기 holder 의
+            //   wait 코루틴(while isWaiting)까지 끊겨 "보관함이 사라짐". 이제 active deployer 만 처리.
             ResetDeployQueues();
 
-            // 비주얼 + 데이터 상태 동시 리셋
             foreach (var kvp in _holderVisuals)
             {
                 HolderVisual visual = kvp.Value;
+
+                // 대기 큐 holder 는 미변경 (영향 X).
+                if (!visual.isDeploying && !visual.isMovingToRail) continue;
+
+                // active deploy 코루틴 무효화 (generation token).
+                visual.deployGeneration++;
 
                 // deploy point 해제
                 if (visual.isDeploying && RailManager.HasInstance)
@@ -2389,7 +2393,7 @@ namespace BalloonFlow
                     RailManager.Instance.ExitDeployPlacement(visual.holderId);
                 }
 
-                // 비주얼 상태 리셋
+                // 비주얼 상태 리셋 → 큐 복귀
                 visual.isDeploying = false;
                 visual.isMovingToRail = false;
                 visual.isWaiting = false;
@@ -2404,11 +2408,9 @@ namespace BalloonFlow
                 // HolderManager 데이터도 강제 리셋
                 if (HolderManager.HasInstance)
                     HolderManager.Instance.UndoDeploy(visual.holderId);
-            }
 
-            // 모든 열 리포지셔닝 (큐 위치 복원 — 즉시 이동)
-            for (int col = 0; col < _queueColumns; col++)
-                RepositionColumnHolders(col);
+                RepositionColumnHolders(visual.column);
+            }
         }
 
         #endregion

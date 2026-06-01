@@ -1087,6 +1087,8 @@ namespace BalloonFlow
             _nextDartId = 0;
             _nextPlacedSeq = 0;
             _boardFinished = false;
+            _continueSnapColor = -1;
+            _continueSnapCount = 0;
             _darts.Clear();
             _dartById.Clear();
             _clusterHeadByHolder.Clear();
@@ -2552,74 +2554,89 @@ namespace BalloonFlow
         private readonly List<int> _continueRemoveColors = new List<int>(16);
         private readonly List<int> _continueRemoveCounts = new List<int>(16);
         private static System.Comparison<DartOnRail> _placedSeqDescending;
+        // 보드 fail 시 HandleBoardFailed 가 _darts 를 즉시 비우므로, continue 가 쓸 '최다 색+개수'를
+        // fail 직전에 스냅샷해 둔다. (continue 시점엔 레일 다트가 0개라 live 계산이 불가능.)
+        private int _continueSnapColor = -1;
+        private int _continueSnapCount;
 
-        /// <summary>
-        /// 이어하기 정본 API (2026-05-31 재설계): 레일 다트 중 '가장 많은 색'을 전부 제거하고,
-        /// 그 수만큼 같은 색 필드 풍선을 '랜덤'하게 제거. 보관함(holder)은 건드리지 않음.
-        /// (1) 레일 다트 색 분포 집계 → 최다 색 선정 (동률이면 먼저 등장한 색)
-        /// (2) 해당 색 레일 다트 전부 제거
-        /// (3) 같은 색 필드 풍선을 제거 다트 수만큼 랜덤 pop (필드에 적게 남았으면 있는 만큼만)
-        /// </summary>
-        public ContinueRemoveResult RemoveMostCommonColorDartsAndRandomBalloons()
+        /// <summary>레일 다트 중 가장 많은 색과 그 개수 반환. 없으면 (-1, count=0). 동률이면 먼저 등장한 색.</summary>
+        private int ComputeMostCommonDartColor(out int count)
         {
-            ContinueRemoveResult result = default;
-            if (_darts.Count == 0) return result;
-
-            // (1) 레일 다트 색 분포 집계 — 재사용 List 2-parallel (Dictionary alloc 회피).
+            count = 0;
             _continueRemoveColors.Clear();
             _continueRemoveCounts.Clear();
             for (int i = 0; i < _darts.Count; i++)
             {
                 int c = _darts[i].dartColor;
                 if (c < 0) continue;
-
                 bool found = false;
-                int n = _continueRemoveColors.Count;
-                for (int k = 0; k < n; k++)
+                for (int k = 0; k < _continueRemoveColors.Count; k++)
                 {
-                    if (_continueRemoveColors[k] == c)
-                    {
-                        _continueRemoveCounts[k]++;
-                        found = true;
-                        break;
-                    }
+                    if (_continueRemoveColors[k] == c) { _continueRemoveCounts[k]++; found = true; break; }
                 }
-                if (!found)
-                {
-                    _continueRemoveColors.Add(c);
-                    _continueRemoveCounts.Add(1);
-                }
+                if (!found) { _continueRemoveColors.Add(c); _continueRemoveCounts.Add(1); }
             }
-            if (_continueRemoveColors.Count == 0) return result;
-
-            // 최다 색 선정.
-            int targetColor = _continueRemoveColors[0];
-            int maxCount = _continueRemoveCounts[0];
-            for (int k = 1; k < _continueRemoveColors.Count; k++)
+            int targetColor = -1, maxCount = 0;
+            for (int k = 0; k < _continueRemoveColors.Count; k++)
             {
-                if (_continueRemoveCounts[k] > maxCount)
-                {
-                    maxCount = _continueRemoveCounts[k];
-                    targetColor = _continueRemoveColors[k];
-                }
+                if (_continueRemoveCounts[k] > maxCount) { maxCount = _continueRemoveCounts[k]; targetColor = _continueRemoveColors[k]; }
+            }
+            count = maxCount;
+            return targetColor;
+        }
+
+        /// <summary>보드 fail 이 _darts 를 비우기 직전에 호출 — continue 용 최다 색+개수를 스냅샷.</summary>
+        public void CaptureContinueSnapshot()
+        {
+            _continueSnapColor = ComputeMostCommonDartColor(out _continueSnapCount);
+        }
+
+        /// <summary>
+        /// 이어하기 정본 API: 레일 다트 중 '가장 많은 색'을 제거하고, 그 수만큼 같은 색 필드 풍선을
+        /// '랜덤' 제거 (필드에 적게 남았으면 있는 만큼만). 보관함(holder)은 건드리지 않음.
+        /// ※ 보드 fail 이 이미 _darts 를 비웠으므로(HandleBoardFailed), 레일이 비어 있으면 fail 직전
+        ///   스냅샷(CaptureContinueSnapshot)의 색/개수를 사용한다. 이게 'removed 0 darts → 풍선 0개' 버그의 핵심 수정.
+        /// </summary>
+        public ContinueRemoveResult RemoveMostCommonColorDartsAndRandomBalloons()
+        {
+            ContinueRemoveResult result = default;
+
+            int targetColor;
+            int targetCount;
+
+            if (_darts.Count > 0)
+            {
+                // 방어적: 레일에 다트가 남아 있으면 live 계산 후 그 색 다트 제거.
+                targetColor = ComputeMostCommonDartColor(out targetCount);
+                if (targetColor < 0 || targetCount <= 0) return result;
+
+                _continueRecentBuffer.Clear();
+                for (int i = 0; i < _darts.Count; i++)
+                    if (_darts[i].dartColor == targetColor) _continueRecentBuffer.Add(_darts[i]);
+                for (int i = 0; i < _continueRecentBuffer.Count; i++)
+                    if (RemoveDartById(_continueRecentBuffer[i].dartId)) result.removedDarts++;
+                _continueRecentBuffer.Clear();
+
+                if (result.removedDarts > 0) PublishOccupancyChanged();
+            }
+            else
+            {
+                // 일반 경로: fail 직전 스냅샷 사용 (레일 다트는 이미 fail 로 비워짐).
+                targetColor = _continueSnapColor;
+                targetCount = _continueSnapCount;
+                if (targetColor < 0 || targetCount <= 0) return result;
+                result.removedDarts = targetCount; // 레일에 있던(=fail 로 비워진) 다트 수
             }
 
-            // (2) 해당 색 레일 다트 전부 제거. (RemoveDartById 가 _darts 를 수정하므로 대상 먼저 수집.)
-            _continueRecentBuffer.Clear();
-            for (int i = 0; i < _darts.Count; i++)
-                if (_darts[i].dartColor == targetColor) _continueRecentBuffer.Add(_darts[i]);
-            for (int i = 0; i < _continueRecentBuffer.Count; i++)
-                if (RemoveDartById(_continueRecentBuffer[i].dartId)) result.removedDarts++;
-            _continueRecentBuffer.Clear();
-
-            // (3) 같은 색 필드 풍선을 제거 다트 수만큼 랜덤 제거 (있는 만큼만).
-            if (BalloonController.HasInstance && result.removedDarts > 0)
-                result.removedBalloons =
-                    BalloonController.Instance.PopRandomBalloonsByColor(targetColor, result.removedDarts);
+            // 같은 색 필드 풍선을 그 수만큼 랜덤 제거 (있는 만큼만).
+            if (BalloonController.HasInstance && targetColor >= 0 && targetCount > 0)
+                result.removedBalloons = BalloonController.Instance.PopRandomBalloonsByColor(targetColor, targetCount);
 
             result.distinctColors = 1;
 
-            if (result.removedDarts > 0) PublishOccupancyChanged();
+            // 스냅샷 1회 소비 — 다음 fail 에서 다시 캡쳐.
+            _continueSnapColor = -1;
+            _continueSnapCount = 0;
             return result;
         }
 
@@ -2890,6 +2907,8 @@ namespace BalloonFlow
 
         private void HandleBoardFailed(OnBoardFailed evt)
         {
+            // continue 가 쓸 '최다 색+개수'를 _darts 비우기 전에 스냅샷 (continue 시점엔 레일이 비어있음).
+            CaptureContinueSnapshot();
             _boardFinished = true;
             _deployPoints.Clear();
             _activeDeployPoints.Clear();
