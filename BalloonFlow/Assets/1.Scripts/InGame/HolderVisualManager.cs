@@ -45,6 +45,9 @@ namespace BalloonFlow
         private const float MIN_DEPLOY_GAP        = 2f;     // 컨베이어 ~ 도착위치 최소 거리
         private const float MIN_RAIL_TO_QUEUE     = 5f;     // 컨베이어 ~ 보관함 1열 최소 거리
 
+        // 같은 열에 대기 중인 보관함의 월드 Z 좌표(모든 레벨 공통) — _rowSpacing 동적 계산이 너무 멀어 보였던 문제 보정
+        private const float WAITING_HOLDER_Z = -9.2f;
+
         // 비율 기준 (큰 필드에서 비례 확장)
         private const float RATIO_COL_SPACING     = 0.352f;   // 필드 폭 × (보관함+간격) (+20%)
         private const float RATIO_ROW_SPACING     = 0.374f;   // 필드 폭 × 행 간격 (+20%)
@@ -1104,15 +1107,12 @@ namespace BalloonFlow
         private Vector3 GetColumnWaitingTarget(int column, int waitingHolderId)
         {
             Vector3 deployPoint = GetDeployPoint(column);
-            Vector3 target = deployPoint + Vector3.back * _rowSpacing;
+            Vector3 target = new Vector3(deployPoint.x, deployPoint.y, WAITING_HOLDER_Z);
 
             HolderVisual blocker = FindColumnBlockerVisual(column, waitingHolderId, true);
             if (blocker != null && blocker.gameObject != null)
             {
-                Vector3 blockerPos = blocker.gameObject.transform.position;
-                float maxZ = deployPoint.z - _rowSpacing;
-                float followZ = blockerPos.z - _rowSpacing;
-                target = new Vector3(deployPoint.x, deployPoint.y, Mathf.Min(maxZ, followZ));
+                target = new Vector3(deployPoint.x, deployPoint.y, WAITING_HOLDER_Z);
             }
 
             return target;
@@ -1156,7 +1156,7 @@ namespace BalloonFlow
             // 같은 열에 이미 배치 중인 보관함이 있으면 바로 뒤에 대기
             bool hasDeploying = _colBusy[visual.column];
             Vector3 targetPoint = hasDeploying
-                ? deployPoint + Vector3.back * _rowSpacing
+                ? new Vector3(deployPoint.x, deployPoint.y, WAITING_HOLDER_Z)
                 : deployPoint;
 
             // 기존 DOTween 전부 킬 (RepositionColumnHolders의 DOMove 등)
