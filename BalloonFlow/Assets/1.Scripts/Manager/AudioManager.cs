@@ -97,10 +97,14 @@ namespace BalloonFlow
 
         private void AutoLoadClips()
         {
-            // Inspector에서 미할당된 클립만 Resources에서 자동 로드
+            // Inspector에서 미할당된 클립만 Resources에서 자동 로드.
+            // 태스크 명세 파일명(Common_Button_Touch, shortfail, woodbreak, achieve, coinuse, deny 등)이
+            // 아직 Resources 에 배치되지 않은 상태에서도 무음이 되지 않도록 ?? 체인으로 현존 클립에 폴백.
             if (_sfxNormalTouch == null)  _sfxNormalTouch  = Resources.Load<AudioClip>("Sound/Effect/Common_Normal_Touch");
             if (_sfxPopupTouch == null)   _sfxPopupTouch   = Resources.Load<AudioClip>("Sound/Effect/Common_Popup_Touch");
-            if (_sfxButtonClick == null)  _sfxButtonClick  = Resources.Load<AudioClip>("Sound/Effect/Common_Button_Touch");
+            if (_sfxButtonClick == null)  _sfxButtonClick  = Resources.Load<AudioClip>("Sound/Effect/Common_Button_Touch")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Common_Normal_Touch")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Common_Popup_Touch");
             if (_sfxCoinGain == null)     _sfxCoinGain     = Resources.Load<AudioClip>("Sound/Effect/coinearn")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Common_Coin_Gain");
             if (_sfxBalloonPop == null)   _sfxBalloonPop   = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal");
@@ -121,11 +125,48 @@ namespace BalloonFlow
             if (_sfxItemZap == null)      _sfxItemZap      = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_ColorBomb");
 
             // [2026-05-31] 신규 사운드 — Resources/Sound/Effect/ 에 파일 배치 (이름 일치).
-            if (_sfxWoodBreak == null)    _sfxWoodBreak    = Resources.Load<AudioClip>("Sound/Effect/woodbreak");
-            if (_sfxAchieve == null)      _sfxAchieve      = Resources.Load<AudioClip>("Sound/Effect/achieve");
-            if (_sfxShortFail == null)    _sfxShortFail    = Resources.Load<AudioClip>("Sound/Effect/shortfail");
-            if (_sfxCoinUse == null)      _sfxCoinUse      = Resources.Load<AudioClip>("Sound/Effect/coinuse");
-            if (_sfxDeny == null)         _sfxDeny         = Resources.Load<AudioClip>("Sound/Effect/deny");
+            // 파일이 아직 없는 동안에도 청취 가능한 폴백을 적용해 사일런트 회귀 방지.
+            if (_sfxWoodBreak == null)    _sfxWoodBreak    = Resources.Load<AudioClip>("Sound/Effect/woodbreak")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Object_Drop")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal");
+            if (_sfxAchieve == null)      _sfxAchieve      = Resources.Load<AudioClip>("Sound/Effect/achieve")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Clear");
+            if (_sfxShortFail == null)    _sfxShortFail    = Resources.Load<AudioClip>("Sound/Effect/shortfail")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Fail");
+            if (_sfxCoinUse == null)      _sfxCoinUse      = Resources.Load<AudioClip>("Sound/Effect/coinuse")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Common_Coin_Gain")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Common_Normal_Touch");
+            if (_sfxDeny == null)         _sfxDeny         = Resources.Load<AudioClip>("Sound/Effect/deny")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Common_Normal_Touch");
+
+#if UNITY_EDITOR
+            // Editor 전용 진단 — 폴백조차 실패해 여전히 null 인 SFX 의 '원본 명세 파일명' 을 한 줄로 보고.
+            // Runtime 빌드에서는 제외되어 로그 부담 없음.
+            var missing = new System.Collections.Generic.List<string>();
+            if (_sfxNormalTouch == null)       missing.Add("Common_Normal_Touch");
+            if (_sfxPopupTouch == null)        missing.Add("Common_Popup_Touch");
+            if (_sfxButtonClick == null)       missing.Add("Common_Button_Touch");
+            if (_sfxCoinGain == null)          missing.Add("coinearn");
+            if (_sfxBalloonPop == null)        missing.Add("Stage_Match_Normal");
+            if (_sfxBalloonPop2 == null)       missing.Add("Stage_Match_Normal_2");
+            if (_sfxClear == null)             missing.Add("congratuation");
+            if (_sfxFail == null)              missing.Add("fail");
+            if (_sfxHolderDeploy == null)      missing.Add("Stage_Object_Drop");
+            if (_sfxHolderReveal == null)      missing.Add("Stage_Holder_Reveal");
+            if (_sfxHolderFrozenBreak == null) missing.Add("icebreak");
+            if (_sfxItemHand == null)          missing.Add("Stage_ItemUse_Onedestroy");
+            if (_sfxItemShuffle == null)       missing.Add("Stage_ItemUse_Cross");
+            if (_sfxItemZap == null)           missing.Add("Stage_ItemUse_ColorBomb");
+            if (_sfxWoodBreak == null)         missing.Add("woodbreak");
+            if (_sfxAchieve == null)           missing.Add("achieve");
+            if (_sfxShortFail == null)         missing.Add("shortfail");
+            if (_sfxCoinUse == null)           missing.Add("coinuse");
+            if (_sfxDeny == null)              missing.Add("deny");
+            if (missing.Count > 0)
+            {
+                Debug.LogWarning($"[AudioManager] Missing SFX clips (place files under Resources/Sound/Effect/): {string.Join(", ", missing)}");
+            }
+#endif
         }
 
         private void OnEnable()
