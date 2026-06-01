@@ -23,6 +23,8 @@ namespace BalloonFlow
         private PopupGoldShop _goldShop;
         private bool _pendingResultIsWin;
         private bool _isTestMode;
+        // OnLevelLoaded 다중 발화 race 차단 — yield 이전 동기 latch 필수.
+        private bool _ftueInfiniteHeartsRequested;
 
         private const string PREFS_KEY_UNLOCK_POPUP_SHOWN = "BalloonFlow_BoosterUnlockPopupShown_";
 
@@ -408,7 +410,9 @@ namespace BalloonFlow
         /// 직접 호출하지 말 것 (HandleLevelLoaded → TryGrantFtueInfiniteHeartsDeferred 가 정식 경로).</summary>
         void TryGrantFtueInfiniteHearts()
         {
+            if (_ftueInfiniteHeartsRequested) return;
             if (!CanGrantFtueInfiniteHearts(levelId: 1)) return;
+            _ftueInfiniteHeartsRequested = true;
             GrantFtueInfiniteHeartsOnce();
         }
 
@@ -418,6 +422,8 @@ namespace BalloonFlow
         /// </summary>
         IEnumerator TryGrantFtueInfiniteHeartsDeferred(int levelId)
         {
+            // 안전판: latch 없이 외부에서 직접 코루틴을 띄운 경우 차단(정식 경로는 HandleLevelLoaded 동기 latch 통과).
+            if (!_ftueInfiniteHeartsRequested) yield break;
             yield return null;
             while (LevelManager.HasInstance && LevelManager.Instance.IsLoading) yield return null;
             while (UIManager.HasInstance && UIManager.Instance.IsFading) yield return null;
@@ -556,7 +562,12 @@ namespace BalloonFlow
             // 첫 진입 + Next/Retry/Continue 경로 일관 — Start() 단발 트리거였을 때 같은 씬 안 레벨 전환 9/12/15 미발화 버그 차단.
             StartCoroutine(ShowBoosterUnlockPopupDeferred(_evt.levelId));
             // FTUE 무한 하트 24h — 서버 pending 플래그 + Lv.1 로딩 완료 후 평생 1회 부여.
-            StartCoroutine(TryGrantFtueInfiniteHeartsDeferred(_evt.levelId));
+            // OnLevelLoaded 다중 발화 race 차단 — yield 이전 동기 latch 필수(같은 프레임 N개 이벤트 중 1번만 코루틴 진입).
+            if (_evt.levelId == 1 && !_ftueInfiniteHeartsRequested && CanGrantFtueInfiniteHearts(_evt.levelId))
+            {
+                _ftueInfiniteHeartsRequested = true;
+                StartCoroutine(TryGrantFtueInfiniteHeartsDeferred(_evt.levelId));
+            }
         }
 
         /// <summary>로딩/페이드 완료 후 HUD 슬라이드-인 연출 트리거. ShowBoosterUnlockPopupDeferred 와 동일 패턴.</summary>
