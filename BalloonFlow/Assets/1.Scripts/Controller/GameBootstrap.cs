@@ -71,10 +71,10 @@ namespace BalloonFlow
             // 레벨 로드
             LoadPendingLevel();
 
-            // [#5/12] FTUE 무한 하트 24h (UX플로우 §3-2·§3-3): 첫 Lv.1 진입 시각 기준 24h, 1회만 부여.
-            // 24h 동안 하트 차감 X (실패해도 무소모). ActivateInfiniteHearts 가 Firestore(infiniteHeartsUntil)에
-            // 절대 시각으로 저장 → 세션 재시작 시 ApplyInfiniteHeartsFromUserData 로 잔여시간 복원.
-            TryGrantFtueInfiniteHearts();
+            // [#5/12] FTUE 무한 하트 24h (UX플로우 §3-2·§3-3): 첫 Lv.1 진입 시각 기준 24h, 평생 1회.
+            // 신규 uid 발급(UserData.CreateNewUser) = 트리거 기준. 부여 트리거는 HandleLevelLoaded
+            // (인게임 로딩 완료 + 페이드 종료 이후) — Start() 시점엔 LevelManager/UIManager 로딩 중일 수 있어
+            // 화면이 비어 있는 상태에서 무한 하트 UI 가 노출되는 플릭커 + 서버 doc 미준비 케이스를 회피.
             // WHY: 부스터 언락 팝업 트리거는 HandleLevelLoaded 에서 처리.
             // Start() 만으로 트리거하면 같은 씬 안 Next/Retry 로 9/12/15 진입 시 미발화 → 사용자가 영원히 못 봄.
 
@@ -396,23 +396,65 @@ namespace BalloonFlow
 
 
         /// <summary>
-        /// [#5/12] 첫 Lv.1 진입 시 1회 무한 하트 24h 부여 (UX플로우 §3-2·§3-3).
-        /// 신규 유저(최고 클리어 0) + 1회 플래그 미설정 시에만. 테스트 모드 제외.
+        /// [#5/12] FTUE 무한 하트 24h 부여 (UX플로우 §3-2·§3-3).
+        /// 트리거 기준: 신규 uid 발급(UserData.CreateNewUser) = ftueInfiniteHeartsPending=true.
+        /// 부여 시점: 첫 Lv.1 인게임 로딩 완료(LevelManager.IsLoading=false + UIManager.IsFading=false) 직후, 평생 1회.
+        /// 진실 소스: Firestore(_user.ftueInfiniteHeartsPending). PlayerPrefs 는 Firestore 미준비 시 fallback 보조 가드.
         /// </summary>
         private const string PREFS_FTUE_INFINITE_HEARTS = "BF_FtueInfiniteHeartsGranted";
         private const float  FTUE_INFINITE_HEARTS_SECONDS = 24f * 60f * 60f; // 24h
+
+        /// <summary>레거시 진입점 — 본문은 새 deferred 코루틴과 동일하게 단순화. 외부 호출 안전.
+        /// 직접 호출하지 말 것 (HandleLevelLoaded → TryGrantFtueInfiniteHeartsDeferred 가 정식 경로).</summary>
         void TryGrantFtueInfiniteHearts()
         {
-            if (_isTestMode) return;
-            if (PlayerPrefs.GetInt(PREFS_FTUE_INFINITE_HEARTS, 0) != 0) return;
-            // 신규 유저만 (이미 진행한 유저에게 소급 부여 금지).
-            if (FtueGate.HighestClearedLevel > 0) return;
-            if (!LifeManager.HasInstance) return;
+            if (!CanGrantFtueInfiniteHearts(levelId: 1)) return;
+            GrantFtueInfiniteHeartsOnce();
+        }
 
+        /// <summary>
+        /// 인게임 로딩/페이드 완료 후 FTUE 무한 하트 부여 (ShowBoosterUnlockPopupDeferred 와 동일 패턴).
+        /// 평생 1회 가드는 Firestore(_user.ftueInfiniteHeartsPending) 기준. PlayerPrefs 는 fallback.
+        /// </summary>
+        IEnumerator TryGrantFtueInfiniteHeartsDeferred(int levelId)
+        {
+            yield return null;
+            while (LevelManager.HasInstance && LevelManager.Instance.IsLoading) yield return null;
+            while (UIManager.HasInstance && UIManager.Instance.IsFading) yield return null;
+            if (!CanGrantFtueInfiniteHearts(levelId)) yield break;
+            GrantFtueInfiniteHeartsOnce();
+        }
+
+        /// <summary>FTUE 무한 하트 부여 조건 가드. 서버 doc(ftueInfiniteHeartsPending) = 진실, 보조 가드는 중복 방지용.</summary>
+        bool CanGrantFtueInfiniteHearts(int levelId)
+        {
+            if (_isTestMode) return false;
+            if (levelId != 1) return false;
+            if (!LifeManager.HasInstance) return false;
+
+            // 서버 진실: Firestore /users/{uid}.ftueInfiniteHeartsPending
+            if (!UserDataService.HasInstance) return false;
+            var uds = UserDataService.Instance;
+            if (!uds.IsReady || uds.CurrentUser == null) return false;
+            if (!uds.CurrentUser.ftueInfiniteHeartsPending) return false;
+
+            // 보조 가드 — 진행한 유저 소급 차단(서버 pending=true 와 모순 시 안전판).
+            if (FtueGate.HighestClearedLevel > 0) return false;
+
+            // 보조 가드 — PlayerPrefs 로컬 중복 방지(Firestore write 지연 사이 재호출 흡수).
+            if (PlayerPrefs.GetInt(PREFS_FTUE_INFINITE_HEARTS, 0) != 0) return false;
+
+            return true;
+        }
+
+        void GrantFtueInfiniteHeartsOnce()
+        {
             LifeManager.Instance.ActivateInfiniteHearts(FTUE_INFINITE_HEARTS_SECONDS);
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.MarkFtueInfiniteHeartsGranted();
             PlayerPrefs.SetInt(PREFS_FTUE_INFINITE_HEARTS, 1);
             PlayerPrefs.Save();
-            Debug.Log("[GameBootstrap] FTUE 무한 하트 24h 부여 (첫 Lv.1 진입)");
+            Debug.Log("[GameBootstrap] FTUE 무한 하트 24h 부여 (Lv.1 인게임 로딩 완료 / 평생 1회 / 신규 uid 기준)");
         }
 
         /// <summary>PlayerPrefs("BF_PendingLevelId") 또는 최고 클리어 레벨+1을 기준으로 LevelManager에 레벨을 로드하고 해당 levelId를 반환한다.</summary>
@@ -513,6 +555,8 @@ namespace BalloonFlow
             StartCoroutine(PlayHudEnterAnimationDeferred());
             // 첫 진입 + Next/Retry/Continue 경로 일관 — Start() 단발 트리거였을 때 같은 씬 안 레벨 전환 9/12/15 미발화 버그 차단.
             StartCoroutine(ShowBoosterUnlockPopupDeferred(_evt.levelId));
+            // FTUE 무한 하트 24h — 서버 pending 플래그 + Lv.1 로딩 완료 후 평생 1회 부여.
+            StartCoroutine(TryGrantFtueInfiniteHeartsDeferred(_evt.levelId));
         }
 
         /// <summary>로딩/페이드 완료 후 HUD 슬라이드-인 연출 트리거. ShowBoosterUnlockPopupDeferred 와 동일 패턴.</summary>

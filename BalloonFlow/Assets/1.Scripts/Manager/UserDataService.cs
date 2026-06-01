@@ -256,6 +256,24 @@ namespace BalloonFlow
                 "SetInfiniteHeartsUntil");
         }
 
+        /// <summary>FTUE 무한 하트 24h 부여를 서버 doc 에 1회 기록.
+        /// 신규 uid 발급(UserData.CreateNewUser) → 평생 1회 → Lv.1 인게임 로딩 완료 후 호출.
+        /// pending=true 일 때만 동작. pending=false 면 early return (중복 set 방지 — 동일 doc 두 번 업데이트 금지).</summary>
+        public void MarkFtueInfiniteHeartsGranted()
+        {
+            if (!_isReady || _user == null) return;
+            if (!_user.ftueInfiniteHeartsPending) return;
+
+            var now = Timestamp.GetCurrentTimestamp();
+            _user.ftueInfiniteHeartsPending = false;
+            _user.ftueInfiniteHeartsGrantedAt = now;
+            FireAndForget(_db.Document($"users/{Uid}").UpdateAsync(new Dictionary<string, object>
+            {
+                ["ftueInfiniteHeartsPending"]   = false,
+                ["ftueInfiniteHeartsGrantedAt"] = now
+            }), "MarkFtueInfiniteHeartsGranted");
+        }
+
         /// <summary>FCM 등록 토큰 갱신. 빈 문자열 = unregister(서버 push 대상에서 제외). Phase 2 서버 cron에서 참조.</summary>
         public void SetFcmToken(string token)
         {

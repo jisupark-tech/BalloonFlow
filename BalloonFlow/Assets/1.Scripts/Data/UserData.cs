@@ -29,6 +29,11 @@ namespace BalloonFlow
         [FirestoreProperty] public Timestamp nextLifeAt { get; set; }
         /// <summary>무한 하트 종료 시각 (UTC). default = 비활성.</summary>
         [FirestoreProperty] public Timestamp infiniteHeartsUntil { get; set; }
+        /// <summary>FTUE 무한 하트 24h 부여 대기. 신규 uid 발급(UserData.CreateNewUser) 시점에만 true.
+        /// 첫 Lv.1 인게임 로딩 완료 후 평생 1회 부여 → false 로 전환. 기본 false → 기존 유저 소급 차단.</summary>
+        [FirestoreProperty] public bool ftueInfiniteHeartsPending { get; set; } = false;
+        /// <summary>FTUE 무한 하트 24h 부여 시각 (UTC). default(Seconds=0) = 미부여.</summary>
+        [FirestoreProperty] public Timestamp ftueInfiniteHeartsGrantedAt { get; set; }
 
         // ── Progress ──────────────────────────────────────────────
         [FirestoreProperty] public int highestClearedLevel { get; set; } = 0;
@@ -101,6 +106,8 @@ namespace BalloonFlow
                 lives = DEFAULT_MAX_LIVES,
                 maxLives = DEFAULT_MAX_LIVES,
                 // default Timestamp(Seconds=0) = unset
+                // 서버 기준 신규 uid 발급 시점에만 true → 첫 Lv.1 진입 시 1회 부여 대기
+                ftueInfiniteHeartsPending = true,
                 highestClearedLevel = 0,
                 allClearedFlag = false,
                 profileIconNumber = 0,
