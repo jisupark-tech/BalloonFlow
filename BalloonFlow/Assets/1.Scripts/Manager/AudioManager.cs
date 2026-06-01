@@ -144,6 +144,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnHolderColumnBlocked>(HandleHolderColumnBlocked); // deny (컬럼풀/체인)
             EventBus.Subscribe<OnCoinChanged>(HandleCoinChangedAudio);          // coinuse (delta<0)
             EventBus.Subscribe<OnContinueApplied>(HandleContinueApplied);       // BGM 재개
+            EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);               // 레벨 진입 시 InGame BGM 재시작
         }
 
         private void OnDisable()
@@ -164,6 +165,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnHolderColumnBlocked>(HandleHolderColumnBlocked);
             EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChangedAudio);
             EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
+            EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
         }
 
         #region Public — BGM
@@ -311,6 +313,15 @@ namespace BalloonFlow
         private void HandleContinueApplied(OnContinueApplied evt)
         {
             // 이어하기 → 게임 재개 시 InGame BGM 복구 (OnBoardFailed 에서 정지했으므로).
+            PlayInGameBGM();
+        }
+
+        // 모든 레벨 진입(첫 진입/Next/Retry/Continue/CheatJump) 시 InGame BGM 재시작.
+        // HandleBoardCleared 가 StopBGM() 하므로 Next Level 전환에서 무음이 되는 케이스 차단.
+        // PlayBGM 의 same-clip 가드 우회를 위해 Stop 후 Play 시퀀스.
+        private void HandleLevelLoaded(OnLevelLoaded evt)
+        {
+            if (_bgmSource != null) _bgmSource.Stop();
             PlayInGameBGM();
         }
 
