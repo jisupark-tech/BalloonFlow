@@ -1041,8 +1041,8 @@ namespace BalloonFlow
 
             _activeProjectiles.Add(proj);
 
-            // [ROLLBACK_DART_FX_TRAIL] 발사 = FXDartTrail 활성.
-            SetDartTrailActive(dartObj, true);
+            // [ROLLBACK_DART_FX_TRAIL] 발사 시에도 FXDartTrail 비활성 유지 (요청: 도중 활성화 금지).
+            SetDartTrailActive(dartObj, false);
 
             // [ROLLBACK_DART_DOMOVE_DEAD_CALL]
             // UpdateProjectiles 가 매 frame transform.position 을 manual lerp 로 덮어쓰므로 DOMove/DOPath 는 dead call.
@@ -2131,8 +2131,8 @@ namespace BalloonFlow
                 ConfigureNeedleTipImpactTiming(proj, dartObj, launchPos, travelTarget, balloonScale);
                 _activeProjectiles.Add(proj);
 
-                // [ROLLBACK_DART_FX_TRAIL] 발사 = FXDartTrail 활성 (외곽 fire path).
-                SetDartTrailActive(dartObj, true);
+                // [ROLLBACK_DART_FX_TRAIL] 발사 시에도 FXDartTrail 비활성 유지 (요청: 도중 활성화 금지, 외곽 fire path).
+                SetDartTrailActive(dartObj, false);
 
                 // ROLLBACK_DART_PROJECTILE_MANUAL_MOVE:
                 // Previous behavior created a DOTween per fired dart:
