@@ -14,8 +14,11 @@ namespace BalloonFlow
         #region Constants
 
         private const float HOLD_BOOST_MULTIPLIER   = 1.5f;
-        // Visual label remains X2. Actual boost is capped at 1.5x to reduce low-FPS misses.
-        private const float TOGGLE_BOOST_MULTIPLIER = 1.5f;
+        // ROLLBACK_GAMEPLAY_SPEED_TUNE_20260601:
+        // Previous speed model: base 1.0f, x2 toggle actual 1.5f.
+        // Visual label remains X2, but gameplay uses 1.3f normally and 1.8f when toggled.
+        private const float DEFAULT_GAMEPLAY_SPEED_MULTIPLIER = 1.3f;
+        private const float TOGGLE_GAMEPLAY_SPEED_MULTIPLIER  = 1.8f;
         private const float HOLD_ACTIVATE_DELAY     = 0.1f; // 탭을 홀드로 오인하지 않도록 짧은 지연
 
         #endregion
@@ -105,9 +108,9 @@ namespace BalloonFlow
         {
             if (!RailManager.HasInstance) return;
 
-            float mult = 1f;
-            if (_holdActive) mult *= HOLD_BOOST_MULTIPLIER;
-            if (_toggleOn)   mult *= TOGGLE_BOOST_MULTIPLIER;
+            float mult = _toggleOn
+                ? TOGGLE_GAMEPLAY_SPEED_MULTIPLIER
+                : DEFAULT_GAMEPLAY_SPEED_MULTIPLIER;
 
             RailManager.Instance.UserSpeedMultiplier = mult;
         }

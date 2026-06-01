@@ -1669,7 +1669,14 @@ namespace BalloonFlow
             SortFireCandidatesByRailOrder(rail);
             int firedThisScan = 0;
             int maxFireAttemptsThisScan = Mathf.Max(1, _fireCandidates.Count * (1 + MAX_POST_FIRE_HEAD_RESCANS_PER_HOLDER));
-            for (int attempts = 0; _fireCandidates.Count > 0 && attempts < maxFireAttemptsThisScan && firedThisScan < maxFireAttemptsThisScan; attempts++)
+            // ROLLBACK_DART_PER_FRAME_FIRE_CAP_20260601:
+            // Previous loop used maxFireAttemptsThisScan as both attempt cap and success cap, so one
+            // scan tick could commit several normal dart hits. Keep the existing candidate ordering,
+            // reservations, line locks, and post-fire queue logic, but restore the Board-configured
+            // fire cap (default 1) for committed fires only. Candidates skipped by the cap are not
+            // marked as scanned, so line catch-up can retry them on the next frame instead of missing.
+            int maxCommittedFiresThisScan = Mathf.Max(1, MAX_FIRES_PER_FRAME);
+            for (int attempts = 0; _fireCandidates.Count > 0 && attempts < maxFireAttemptsThisScan && firedThisScan < maxCommittedFiresThisScan; attempts++)
             {
                 SortFireCandidatesByRailOrder(rail);
                 DartFireCandidate candidate = _fireCandidates[0];

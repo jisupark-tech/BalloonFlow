@@ -1854,7 +1854,7 @@ namespace BalloonFlow
             if (obj == null || data == null || view == null) return;
 
             GetFieldVisualMetrics(
-                out _, out _, out float scaleMult,
+                out _, out _, out _,
                 out float cellSizeX, out float cellSizeZ, out _);
 
             int width = Mathf.Max(1, data.sizeW);
@@ -1868,8 +1868,9 @@ namespace BalloonFlow
             obj.transform.position = center;
             obj.transform.localScale = Vector3.one; // 알/틀 크기는 view 가 제어 (루트 scale=1 가정)
 
-            // eggScale = 밀집 레벨 축소(scaleMult). 알은 격자 셀에 자동 맞춤되고 eggHps 로 초기 균열 상태 판단.
-            view.Build(width, height, data.eggColors, data.eggHps, cellSizeX, cellSizeZ, scaleMult);
+            // 알은 footprint 안쪽 격자 셀에 자동 맞춤(cellSize 기준). eggHps 로 초기 균열 상태 판단.
+            // scaleMult 는 전달하지 않는다 — cellSizeX/Z 가 이미 field mult 를 포함하므로 알엔 재적용 불필요.
+            view.Build(width, height, data.eggColors, data.eggHps, cellSizeX, cellSizeZ);
         }
 
         private void ApplySizedFieldVisualTransform(GameObject obj, BalloonData data)

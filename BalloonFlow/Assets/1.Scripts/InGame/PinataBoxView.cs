@@ -9,8 +9,9 @@ namespace BalloonFlow
     /// [egg 템플릿(paint) 구조]  paint → Cylinder(몸체) + texture(균열 오버레이)
     ///  - 색상은 Cylinder 에만 적용. texture 는 평소 비활성, HP 가 절반 이하로 닳으면 활성화(균열 표시).
     ///
-    /// [배치]  N(= Add 한 egg 수)개를 ceil(√N) 격자로 footprint 중앙에 배치, 각 알을 격자 셀 크기에 맞춰 자동 스케일.
-    ///         footprint(W×H)는 박스 영역(occupancy), 알 수 N 은 그와 무관(명시 리스트).
+    /// [배치]  알을 footprint 의 W×H 격자에 row-major(index = r*W + c)로 1:1 배치.
+    ///         각 알 = 풍선 1칸 크기(레벨 cellSize 기준) — 레벨 풍선 사이즈에 맞춰 자동 스케일.
+    ///         eggColors 길이는 W*H 여야 함(불일치 시 알이 잘리지 않도록 행만 확장하고 경고).
     ///
     /// [Inspector 링크 — paint 프리팹의 알/틀 노드에 부착]
     ///  - _frame      : 박스 틀(paintbox). footprint 에 맞춰 bounds-fit. 없으면 스킵.
@@ -26,11 +27,11 @@ namespace BalloonFlow
         [SerializeField] private GameObject _eggTemplate;
 
         [Header("[튜닝]")]
-        [Tooltip("자동 맞춤된 알 크기에 곱하는 여유 배수 (1=셀 꽉 채움, 0.9=약간 여백). 보통 0.85~1.")]
-        [SerializeField, Range(0.3f, 1.2f)] private float _eggFillRatio = 0.9f;
+        [Tooltip("격자 한 칸 대비 알 크기 배수 (1=칸 꽉 채움, 0.9=약간 여백). 보통 0.9~1.")]
+        [SerializeField, Range(0.3f, 1.2f)] private float _eggFillRatio = 0.95f;
 
-        [Tooltip("알 격자가 차지하는 박스 안쪽 영역 비율 (틀 테두리 안에 들어가도록). 1=footprint 전체, 0.7=안쪽 70%. 알이 틀을 벗어나면 줄이세요.")]
-        [SerializeField, Range(0.3f, 1f)] private float _innerAreaRatio = 0.7f;
+        [Tooltip("알 격자가 차지하는 박스 안쪽 영역 비율 — paintbox 테두리 안에 들어가도록. 1=footprint 전체(테두리에 닿음), 0.85=안쪽 85%. 알이 틀을 벗어나면 줄이세요.")]
+        [SerializeField, Range(0.3f, 1f)] private float _innerAreaRatio = 0.85f;
 
         [Header("[알 자식 링크 — 템플릿(_eggTemplate) 안의 노드를 드래그]")]
         [Tooltip("색 적용 대상(몸체) — 템플릿 안의 Cylinder 를 드래그. 비우면 이름으로 탐색.")]
@@ -53,7 +54,7 @@ namespace BalloonFlow
         /// <summary>
         /// 알 배치 — eggColors 항목 수(N)만큼. Cylinder 만 색칠, texture 는 비활성으로 시작.
         /// </summary>
-        public void Build(int w, int h, int[] eggColors, int[] eggHps, float cellSizeX, float cellSizeZ, float eggScale)
+        public void Build(int w, int h, int[] eggColors, int[] eggHps, float cellSizeX, float cellSizeZ)
         {
             Clear();
 
@@ -67,12 +68,16 @@ namespace BalloonFlow
             h = Mathf.Max(1, h);
             int n = (eggColors != null && eggColors.Length > 0) ? eggColors.Length : 1;
 
-            // ceil(√N) 격자 → footprint 영역을 채우도록 배치.
-            int cols = Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(n)));
-            int rows = Mathf.CeilToInt((float)n / cols);
+            // [타겟박스] authoring 된 footprint W×H 격자에 row-major(index = r*W + c)로 1:1 배치.
+            // 각 알 = 풍선 1칸. eggColors 길이는 W*H 여야 하며, 불일치 시 알이 잘리지 않도록 행만 확장.
+            int cols = Mathf.Max(1, w);
+            int rows = Mathf.Max(h, Mathf.CeilToInt((float)n / cols));
+            if (n != w * h)
+                Debug.LogWarning($"[PinataBoxView] egg 수({n}) != footprint {w}×{h}(={w * h}). " +
+                                 "각 알=풍선 1칸 모델이므로 eggColors 길이를 W*H 로 맞추세요.", this);
 
-            // 격자 한 칸의 월드 크기 — footprint 의 안쪽 영역(_innerAreaRatio)을 cols×rows 로 나눔.
-            // 틀(paintbox) 테두리 안에 알이 들어가도록 footprint 보다 작게. (틀은 full footprint 로 스케일)
+            // 격자 한 칸 = footprint 안쪽 영역(_innerAreaRatio)을 cols×rows 로 나눈 크기.
+            // paintbox 테두리 안에 알이 들어가도록 footprint 전체가 아니라 안쪽만 사용한다.
             float ir = Mathf.Clamp(_innerAreaRatio, 0.1f, 1f);
             float gridCellW = (w * cellSizeX * ir) / cols;
             float gridCellZ = (h * cellSizeZ * ir) / rows;
@@ -93,7 +98,8 @@ namespace BalloonFlow
             float fitK = 1f;
             if (tplSizeX > 0.0001f && tplSizeZ > 0.0001f)
                 fitK = Mathf.Min(gridCellW / tplSizeX, gridCellZ / tplSizeZ) * _eggFillRatio;
-            fitK *= Mathf.Max(0.01f, eggScale);
+            // NOTE: eggScale(scaleMult)을 곱하지 않는다 — cellSizeX/Z 가 이미 widthMult/heightMult 를 포함하므로
+            //       여기서 또 곱하면 이중 적용되어 알이 paintbox 를 벗어난다.
 
             // 월드 격자 간격 → 로컬 단위(부모 스케일 보정).
             Vector3 ls = transform.lossyScale;

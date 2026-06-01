@@ -923,6 +923,12 @@ namespace BalloonFlow
         private void ShowBuyPopup(string boosterType)
         {
             if (!UIManager.HasInstance) return;
+
+            // [구매 desync 방지] buy 팝업 노출 직전 HUD 골드를 권위값(_currentCoins)과 강제 동기화.
+            // OnCoinChanged 이벤트를 놓쳤거나 startup reconcile 이후 표시가 어긋난 "유령 골드" 차단 —
+            // 사용자가 실제 보유액 기준으로 구매를 결정하게 한다.
+            if (CurrencyManager.HasInstance) CurrencyManager.Instance.PublishCoinSync();
+
             var popup = UIManager.Instance.OpenUI<PopupBuyItem>("Popup/PopupBuyItem");
             if (popup == null) return;
 
@@ -932,6 +938,16 @@ namespace BalloonFlow
                 onConfirm: () =>
                 {
                     if (_pendingItemRewardFx.Contains(boosterType)) return;
+
+                    // 진짜 코인 부족만 "코인 부족"으로 표시. TrySpend 는 미해금/매니저 부재 등 다른 사유로도
+                    // false 를 반환하므로, 사유를 선판정하지 않으면 코인이 충분한데도 "코인 부족"으로 오표시된다.
+                    if (!CurrencyManager.HasInstance || !CurrencyManager.Instance.HasEnoughCoins(price))
+                    {
+                        var errCoins = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+                        if (errCoins != null) errCoins.ShowPaymentFailed("Not enough coins.");
+                        return;
+                    }
+
                     if (BoosterManager.Instance.TrySpendBoosterPurchaseCost(boosterType))
                     {
                         PlayBoosterRewardFly(boosterType, 3, spr, () =>
@@ -945,9 +961,12 @@ namespace BalloonFlow
                     }
                     else
                     {
-                        // 결제 실패
+                        // 코인은 충분한데 차감 실패 → 코인 문제가 아님(미해금/매니저 부재 등). 실제 사유 로그 + 정직한 메시지.
+                        Debug.LogWarning($"[UIHud] Booster 구매 실패(코인 충분): type={boosterType}, price={price}, " +
+                            $"unlocked={BoosterManager.Instance.IsBoosterUnlocked(boosterType)}, " +
+                            $"coins={(CurrencyManager.HasInstance ? CurrencyManager.Instance.Coins : -1)}");
                         var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
-                        if (err != null) err.ShowPaymentFailed("Not enough coins.");
+                        if (err != null) err.Show("Purchase Failed", "Purchase could not be completed. Please try again.");
                     }
                 });
         }

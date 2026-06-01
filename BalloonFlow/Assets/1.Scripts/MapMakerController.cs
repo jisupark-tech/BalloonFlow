@@ -1197,11 +1197,13 @@ namespace BalloonFlow
             MakeIntField(sizeRow, _paintPinataW, 1, 6, v => {
                 _paintPinataW = v;
                 SetStatus($"Piñata Size: {_paintPinataW}x{_paintPinataH}");
+                UpdateBoxEggLabel(); // footprint 변경 → Egg 라벨의 W×H 기대치 갱신
             });
             Lbl(sizeRow, "x", w: 15);
             MakeIntField(sizeRow, _paintPinataH, 1, 6, v => {
                 _paintPinataH = v;
                 SetStatus($"Piñata Size: {_paintPinataW}x{_paintPinataH}");
+                UpdateBoxEggLabel();
             });
             _fieldGimmickSizeRow = sizeRow.GetComponent<RectTransform>();
 
@@ -1294,12 +1296,15 @@ namespace BalloonFlow
         private void UpdateBoxEggLabel()
         {
             if (_boxEggStatusLabel == null) return;
+            int footprint = Mathf.Max(1, _paintPinataW) * Mathf.Max(1, _paintPinataH);
             if (_boxEggColors.Count == 0)
             {
-                _boxEggStatusLabel.text = "Eggs: (없음 → 빈 박스는 현재 색 1개)";
+                _boxEggStatusLabel.text = $"Eggs: (없음 → footprint {_paintPinataW}×{_paintPinataH}={footprint}개 현재 색 자동채움)";
                 return;
             }
-            var sb = new System.Text.StringBuilder("Eggs: ");
+            // 각 알 = 풍선 1칸 모델: 명시 리스트는 footprint(W*H)와 개수가 맞아야 정상.
+            string match = _boxEggColors.Count == footprint ? "" : $"  ⚠ footprint {_paintPinataW}×{_paintPinataH}={footprint} 와 불일치";
+            var sb = new System.Text.StringBuilder($"Eggs({_boxEggColors.Count}){match}: ");
             for (int i = 0; i < _boxEggColors.Count; i++)
             {
                 if (i > 0) sb.Append(", ");
@@ -3776,8 +3781,17 @@ namespace BalloonFlow
                                 }
                                 else
                                 {
-                                    _boxEggConfigColors[key] = new[] { _paintColor };
-                                    _boxEggConfigHps[key] = new[] { Mathf.Max(1, _paintPinataHP) };
+                                    // 명시 리스트 없으면 footprint W×H 만큼 현재 색/HP 로 자동 채움 (각 알 = 풍선 1칸).
+                                    int cellCount = Mathf.Max(1, pw * ph);
+                                    var fillColors = new int[cellCount];
+                                    var fillHps = new int[cellCount];
+                                    for (int i = 0; i < cellCount; i++)
+                                    {
+                                        fillColors[i] = _paintColor;
+                                        fillHps[i] = Mathf.Max(1, _paintPinataHP);
+                                    }
+                                    _boxEggConfigColors[key] = fillColors;
+                                    _boxEggConfigHps[key] = fillHps;
                                 }
                             }
 
