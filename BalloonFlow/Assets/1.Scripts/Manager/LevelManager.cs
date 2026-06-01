@@ -18,7 +18,7 @@ namespace BalloonFlow
     {
         #region Constants
 
-        private const string PREFS_KEY_HIGHEST_LEVEL    = "BF_HighestLevel";
+        public  const string PREFS_KEY_HIGHEST_LEVEL    = "BF_HighestLevel";
         private const string PREFS_KEY_STARS_PREFIX      = "BF_Stars_";
         private const int    FIRST_LEVEL_ID              = 1;
         private const int    LEVELS_PER_PACKAGE          = 20;
