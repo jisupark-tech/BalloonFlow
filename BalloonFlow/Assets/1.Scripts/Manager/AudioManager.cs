@@ -20,6 +20,8 @@ namespace BalloonFlow
         [Header("[SFX — Common]")]
         [SerializeField] private AudioClip _sfxNormalTouch;
         [SerializeField] private AudioClip _sfxPopupTouch;
+        [Tooltip("Common_Button_Touch — 전역 UI 버튼 탭 SFX (UIButtonClickGuard 후크).")]
+        [SerializeField] private AudioClip _sfxButtonClick;
         [SerializeField] private AudioClip _sfxCoinGain;
 
         [Header("[SFX — InGame]")]
@@ -98,6 +100,7 @@ namespace BalloonFlow
             // Inspector에서 미할당된 클립만 Resources에서 자동 로드
             if (_sfxNormalTouch == null)  _sfxNormalTouch  = Resources.Load<AudioClip>("Sound/Effect/Common_Normal_Touch");
             if (_sfxPopupTouch == null)   _sfxPopupTouch   = Resources.Load<AudioClip>("Sound/Effect/Common_Popup_Touch");
+            if (_sfxButtonClick == null)  _sfxButtonClick  = Resources.Load<AudioClip>("Sound/Effect/Common_Button_Touch");
             if (_sfxCoinGain == null)     _sfxCoinGain     = Resources.Load<AudioClip>("Sound/Effect/coinearn")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Common_Coin_Gain");
             if (_sfxBalloonPop == null)   _sfxBalloonPop   = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal");
@@ -199,6 +202,12 @@ namespace BalloonFlow
             PlaySFX(_sfxNormalTouch);
         }
 
+        /// <summary>Common_Button_Touch — UIButtonClickGuard 전역 후크에서 모든 UI 버튼 탭 시 호출.</summary>
+        public void PlayButtonClick()
+        {
+            PlaySFX(_sfxButtonClick);
+        }
+
         /// <summary>achieve — 인게임 진행도 100% / Play 버튼 레벨 갱신 성취감 chime.</summary>
         public void PlayAchieve()
         {
@@ -278,6 +287,8 @@ namespace BalloonFlow
         }
 
         // 기믹 타격/파괴 사운드 — Ice(icebreak) / Pinata·Pin·PinataBox(woodbreak). 연속 셀 spam 쿨다운.
+        // isDestroyed=false (HP>0, 타격 only) → 풍선 pop SFX (_sfxBalloonPop=Stage_Match_Normal).
+        // isDestroyed=true  (HP=0, 파괴)     → 기존 woodbreak/icebreak.
         private float _lastGimmickSfxTime;
         private const float GIMMICK_SFX_COOLDOWN = 0.08f;
         private void HandleGimmickTriggered(OnGimmickTriggered evt)
@@ -287,11 +298,11 @@ namespace BalloonFlow
 
             AudioClip clip = null;
             if (evt.gimmickType == BalloonController.GimmickIce)
-                clip = _sfxHolderFrozenBreak; // = icebreak
+                clip = _sfxHolderFrozenBreak; // = icebreak (Ice 영역 해제 = 파괴)
             else if (evt.gimmickType == BalloonController.GimmickPinata
                   || evt.gimmickType == BalloonController.GimmickPin
                   || evt.gimmickType == BalloonController.GimmickPinataBox)
-                clip = _sfxWoodBreak;
+                clip = evt.isDestroyed ? _sfxWoodBreak : _sfxBalloonPop;
 
             if (clip == null) return; // 그 외 기믹(Spawner/Lock/Wall 등)은 무음
             _lastGimmickSfxTime = now;

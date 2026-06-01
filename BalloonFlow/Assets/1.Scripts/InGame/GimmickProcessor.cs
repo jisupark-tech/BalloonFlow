@@ -245,10 +245,12 @@ namespace BalloonFlow
             remaining--;
             _pinSegments[balloonId] = remaining;
 
+            // 마지막 segment 제거 시 isDestroyed=true → woodbreak SFX, 그 이전엔 풍선 pop SFX.
             EventBus.Publish(new OnGimmickTriggered
             {
-                gimmickType = BalloonController.GimmickPin,
-                targetId = balloonId
+                gimmickType  = BalloonController.GimmickPin,
+                targetId     = balloonId,
+                isDestroyed  = remaining <= 0
             });
 
             Debug.Log($"[GimmickProcessor] Pin {balloonId}: segment removed. Remaining={remaining}");

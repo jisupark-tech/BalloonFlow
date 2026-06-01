@@ -2733,11 +2733,12 @@ namespace BalloonFlow
 
             if (data.hitCount < requiredHits)
             {
-                // Partial hit — not yet destroyed
+                // Partial hit — not yet destroyed → 풍선 pop SFX 라우팅용 (isDestroyed=false)
                 EventBus.Publish(new OnGimmickTriggered
                 {
-                    gimmickType = GimmickPinata,
-                    targetId    = data.balloonId
+                    gimmickType  = GimmickPinata,
+                    targetId     = data.balloonId,
+                    isDestroyed  = false
                 });
 
                 return new PopResult
@@ -2750,7 +2751,13 @@ namespace BalloonFlow
                 };
             }
 
-            // Final hit — execute full pop
+            // Final hit — execute full pop. 파괴 SFX(woodbreak) 라우팅용 publish (isDestroyed=true).
+            EventBus.Publish(new OnGimmickTriggered
+            {
+                gimmickType  = GimmickPinata,
+                targetId     = data.balloonId,
+                isDestroyed  = true
+            });
             return ExecutePop(data);
         }
 
@@ -2859,7 +2866,8 @@ namespace BalloonFlow
                     break;
 
                 case GimmickPinataBox:
-                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickPinataBox, targetId = data.balloonId });
+                    // PinataBox 는 단일 타격으로 파괴 — isDestroyed=true 로 woodbreak SFX 라우팅.
+                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickPinataBox, targetId = data.balloonId, isDestroyed = true });
                     break;
 
                 case GimmickLockKey:
