@@ -408,10 +408,7 @@ namespace BalloonFlow
                 Debug.LogWarning($"[TitleController] 에피소드 prefetch timeout (level {nextLevel}). 게임 진입 후 LevelManager 가 캐시 miss 시 다시 시도.");
         }
 
-        /// <summary>첫 실행 진입 여부를 기록하는 로컬 플래그 — 이후 실행은 Lobby 로.</summary>
-        private const string FIRST_LAUNCH_KEY = "BF_FirstLaunchEntered";
-
-        /// <summary>로딩 완료 시 1회 호출 — 첫 실행이면 레벨1 인게임, 그 외엔 Lobby 로 진입.</summary>
+        /// <summary>로딩 완료 시 1회 호출 — 온보딩(Lv.5 미클리어) 세션이면 인게임으로 직행, 그 외엔 Lobby.</summary>
         private void Enter()
         {
             if (_entered) return;
@@ -420,13 +417,14 @@ namespace BalloonFlow
 
             if (ShouldEnterFirstLevel())
             {
-                PlayerPrefs.SetInt(FIRST_LAUNCH_KEY, 1);
-                PlayerPrefs.Save();
-                // 스플래시 유지: 스플래시 배경을 전환 오버레이로 그대로 이어 보여주며 레벨1 진입.
+                // 스플래시 유지: 스플래시 배경을 전환 오버레이로 그대로 이어 보여주며 InGame 진입.
                 // 별도 전환 이미지를 띄우지 않아 splash→레벨 사이 단색/이중 노출이 없음.
                 if (_ui != null && _ui.SplashSprite != null)
                     GameManager.Instance.SetTransitionImage(_ui.SplashSprite);
-                GameManager.Instance.StartLevel(1);
+
+                // 사용자가 이전 세션에서 Lv.3까지 깼다면 Lv.4부터 시작. 온보딩 범위(1~5) 내로 클램프.
+                int resumeLevel = Mathf.Clamp(GetHighestClearedLevel() + 1, 1, FtueGate.ONBOARDING_CLEAR_LEVEL);
+                GameManager.Instance.StartLevel(resumeLevel);
             }
             else
             {
@@ -434,17 +432,21 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>첫 실행(로컬 플래그 없음)이고 클리어 기록이 없는 신규 유저일 때만 레벨1 직행.
-        /// 재설치 등으로 진행도가 복원된 유저는 Lobby 로 보낸다.</summary>
+        /// <summary>온보딩 미완료(Lv.5 미클리어) 세션이면 인게임 직행. 결정 기준은 오직 highestClearedLevel 하나.</summary>
         private bool ShouldEnterFirstLevel()
         {
-            if (PlayerPrefs.GetInt(FIRST_LAUNCH_KEY, 0) != 0) return false;
+            return GetHighestClearedLevel() < FtueGate.ONBOARDING_CLEAR_LEVEL;
+        }
+
+        /// <summary>UserDataService 가 준비 안 됐으면 0 — 안전한 기본값(온보딩 진입).</summary>
+        private static int GetHighestClearedLevel()
+        {
             if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
             {
                 var u = UserDataService.Instance.CurrentUser;
-                if (u != null && u.highestClearedLevel > 0) return false;
+                if (u != null) return u.highestClearedLevel;
             }
-            return true;
+            return 0;
         }
 
         static GameObject CreateCanvas(string name, int sortingOrder)
