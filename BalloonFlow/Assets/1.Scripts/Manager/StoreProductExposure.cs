@@ -11,23 +11,40 @@ namespace BalloonFlow
     }
 
     /// <summary>
-    /// Shared shop exposure rules for lobby shop tab and in-game shop popup.
+    /// Shared shop exposure rules for lobby shop tab (UIShop) and in-game shop popup (PopupGoldShop).
+    /// 단일 진실 소스 — ShopCatalogService.GetVisibleForUser 및 두 UI 진입점이 모두 BuildProducts 로 위임한다.
+    ///
+    /// 단계 정책 (1.0 소프트런칭):
+    /// - Stage1 (기본): 코인 카테고리만 노출.
+    /// - Stage2: highestClearedLevel+1 ≥ <see cref="Stage2MinLevel"/> AND zapTutorialCompleted=true
+    ///           → offer + bundle + coin 노출.
+    /// - Stage3: highestClearedLevel+1 ≥ <see cref="Stage3MinLevel"/> AND firstInterstitialShown=true
+    ///           → offer + noads + bundle + coin 노출.
+    ///
+    /// expanded=false (메인 배너 모드): 배너 슬롯 <see cref="MainBannerSlots"/> 개,
+    /// 그 후 코인 <see cref="MainCoinSlotsAfterStage1"/> 개까지 노출.
+    /// expanded=true: 카테고리 전체 노출 (단계별 허용 범위 내).
     /// </summary>
     public static class StoreProductExposure
     {
         private const int MainBannerSlots = 3;
         private const int MainCoinSlotsAfterStage1 = 2;
+        private const int Stage2MinLevel = 15;
+        private const int Stage3MinLevel = 20;
 
+        /// <summary>유저의 진척도/플래그를 보고 현재 노출 단계(Stage1~3)를 판정.</summary>
         public static StoreExposureStage DetermineStage(UserData user)
         {
             int maxReachedLevel = GetMaxReachedLevel(user);
-            if (maxReachedLevel >= 20 && HasFirstInterstitialShown(user))
+            if (maxReachedLevel >= Stage3MinLevel && HasFirstInterstitialShown(user))
                 return StoreExposureStage.Stage3;
-            if (maxReachedLevel >= 15 && HasZapTutorialCompleted(user))
+            if (maxReachedLevel >= Stage2MinLevel && HasZapTutorialCompleted(user))
                 return StoreExposureStage.Stage2;
             return StoreExposureStage.Stage1;
         }
 
+        /// <summary>단계 판정 후 catalog 를 필터·정렬해 실제 노출 리스트를 만든다.
+        /// expanded=false 면 배너 슬롯 + 코인 일부만, true 면 단계별 허용 전체.</summary>
         public static List<ShopProductDoc> BuildProducts(
             IReadOnlyList<ShopProductDoc> catalog,
             UserData user,
