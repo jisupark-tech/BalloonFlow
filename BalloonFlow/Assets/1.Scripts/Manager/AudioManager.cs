@@ -308,23 +308,19 @@ namespace BalloonFlow
 
         private void HandleBoardCleared(OnBoardCleared evt)
         {
-            // congratuation (클리어 팡파레) + play BGM 정지
+            // 클리어 팝업 등장음 제거 — 전역 Button SFX(UIButtonClickGuard)만 사용
             StopBGM();
-            PlaySFX(_sfxClear);
         }
 
         private void HandleBoardFailed(OnBoardFailed evt)
         {
-            // shortfail (실패 판정 → out-of-space/PopupFail01 등장, 멈칫) + play BGM 정지.
-            // 최종 실패음(fail)은 OnLevelFailed 에서 (이어하기 거절 후).
+            // 실패/outofspace 팝업 등장음 제거 — 전역 Button SFX만 사용
             StopBGM();
-            PlaySFX(_sfxShortFail != null ? _sfxShortFail : _sfxFail);
         }
 
         private void HandleLevelFailed(OnLevelFailed evt)
         {
-            // fail (최종 실패음, ~2-3s). BGM 은 이미 OnBoardFailed 에서 정지됨.
-            PlaySFX(_sfxFail);
+            // fail 최종 실패음 제거 — 사용자 피드백: 팝업 등장음 미사용
         }
 
         // 기믹 타격/파괴 사운드 — Ice(icebreak) / Pinata·Pin·PinataBox(woodbreak). 연속 셀 spam 쿨다운.
