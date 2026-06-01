@@ -1527,7 +1527,7 @@ namespace BalloonFlow
 
         private static void PlayTouchSFX()
         {
-            if (AudioManager.HasInstance) AudioManager.Instance.PlayPopupTouch();
+            // 팝업 Touch SFX 제거 — 전역 Button Click SFX(UIButtonClickGuard)만 사용
         }
 
         #region Legacy Compatibility

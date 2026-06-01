@@ -379,14 +379,7 @@ namespace BalloonFlow
 
         private void HandleBoosterUsed(OnBoosterUsed evt)
         {
-            AudioClip clip = evt.boosterType switch
-            {
-                BoosterManager.SELECT_TOOL  => _sfxItemHand,
-                BoosterManager.SHUFFLE      => _sfxItemShuffle,
-                BoosterManager.COLOR_REMOVE => _sfxItemZap,
-                _                           => null
-            };
-            PlaySFX(clip);
+            // 부스터 SFX 제거 — 전역 Button Click SFX(UIButtonClickGuard)만 사용
         }
 
         private void HandleHolderSelected(OnHolderSelected evt)
