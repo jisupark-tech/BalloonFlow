@@ -15,10 +15,9 @@ namespace BalloonFlow
 
         private const float HOLD_BOOST_MULTIPLIER   = 1.5f;
         // ROLLBACK_GAMEPLAY_SPEED_TUNE_20260601:
-        // Previous speed model: base 1.0f, x2 toggle actual 1.5f.
-        // Visual label remains X2, but gameplay uses 1.3f normally and 1.8f when toggled.
-        private const float DEFAULT_GAMEPLAY_SPEED_MULTIPLIER = 1.3f;
-        private const float TOGGLE_GAMEPLAY_SPEED_MULTIPLIER  = 1.8f;
+        // Previous tuning: 1.3 / 1.8. Restored to base 1.0 and toggle 1.5 per design directive 2026-06-01.
+        private const float DEFAULT_GAMEPLAY_SPEED_MULTIPLIER = 1.0f;
+        private const float TOGGLE_GAMEPLAY_SPEED_MULTIPLIER  = 1.5f;
         private const float HOLD_ACTIVATE_DELAY     = 0.1f; // 탭을 홀드로 오인하지 않도록 짧은 지연
 
         #endregion
