@@ -112,6 +112,9 @@ namespace BalloonFlow
         // ROLLBACK_CUTOUTDIM_9SLICE: 9-slice 호환을 위해 sprite border 를 shader 에 전달.
         private static readonly int BORDER_RECT_ID = Shader.PropertyToID("_BorderRect");
         private static readonly int BORDER_SPRITE_ID = Shader.PropertyToID("_BorderSprite");
+        // 9-slice 캐시 — UpdateCutoutMaterialHole 에서 holePx 기준 정규화에 사용.
+        private Vector4 _currentCutoutSpriteBorder;
+        private Vector2 _currentCutoutSpriteSize;
         private Texture2D _whiteMaskTex; // _CutoutMaskTex default — sprite 없을 때 사각형 hole.
 
         #endregion
@@ -822,31 +825,24 @@ namespace BalloonFlow
             _runtimeCutoutDimMaterial.SetTexture(CUTOUT_MASK_TEX_ID, tex);
             _runtimeCutoutDimMaterial.SetVector(CUTOUT_MASK_UV_RECT_ID, uvRect);
 
-            // ROLLBACK_CUTOUTDIM_9SLICE: start
-            // sprite.border 가 모두 0 이면 (0,0,0,0) 전달 → shader 가 기존 stretch 경로.
-            // border 가 있으면 rect-norm + sprite-norm 계산해서 shader 9-slice 매핑.
-            // [2026-05-27] 임시 비활성 — Dim 통째 투명 회귀 의심. 진단 후 다시 활성.
-            //   조사: CutoutFrame 의 Material wire 가 UI/CutoutDim 인지 (잘못된 prefab 설정),
-            //         또는 shader 9-slice 로직의 회귀. 둘 다 확인 후 분리해서 fix.
-            const bool ENABLE_9SLICE = false;
-            Vector4 borderRect = Vector4.zero;
-            Vector4 borderSprite = Vector4.zero;
-            if (ENABLE_9SLICE && sprite != null)
+            // 9-slice 메타데이터 캐싱 — 실제 _BorderRect/_BorderSprite 계산은 UpdateCutoutMaterialHole 에서 holePx 기준 정규화.
+            if (sprite != null && sprite.border.sqrMagnitude > 0.0001f)
             {
-                Vector4 b = sprite.border; // (left, bottom, right, top) pixels
-                Vector2 rectSize = _cutoutFrame != null ? _cutoutFrame.rect.size : Vector2.zero;
-                Vector2 spriteSize = sprite.rect.size;
-                if (b.sqrMagnitude > 0.0001f
-                    && rectSize.x > 0.001f && rectSize.y > 0.001f
-                    && spriteSize.x > 0.001f && spriteSize.y > 0.001f)
-                {
-                    borderRect = new Vector4(b.x / rectSize.x, b.y / rectSize.y, b.z / rectSize.x, b.w / rectSize.y);
-                    borderSprite = new Vector4(b.x / spriteSize.x, b.y / spriteSize.y, b.z / spriteSize.x, b.w / spriteSize.y);
-                }
+                _currentCutoutSpriteBorder = sprite.border;
+                _currentCutoutSpriteSize = sprite.rect.size;
             }
-            _runtimeCutoutDimMaterial.SetVector(BORDER_RECT_ID, borderRect);
-            _runtimeCutoutDimMaterial.SetVector(BORDER_SPRITE_ID, borderSprite);
-            // ROLLBACK_CUTOUTDIM_9SLICE: end
+            else
+            {
+                _currentCutoutSpriteBorder = Vector4.zero;
+                _currentCutoutSpriteSize = Vector2.zero;
+            }
+
+            // sprite 변경 직후 즉시 9-slice 반영 (기존엔 다음 ApplyCutout 까지 대기).
+            if (_isCutoutVisible && _cutoutMask != null && _cutoutMask.rect.width > 0f && _cutoutFrame != null)
+            {
+                UpdateCutoutMaterialHole(_cutoutFrame.anchoredPosition,
+                    _cutoutFrame.sizeDelta + new Vector2(CUTOUT_PADDING * 2f, CUTOUT_PADDING * 2f));
+            }
         }
 
         private RectTransform CreateCutoutFrame(Transform parent)
@@ -1393,6 +1389,27 @@ namespace BalloonFlow
             _runtimeCutoutDimMaterial.SetVector(OVERLAY_RECT_ID, new Vector4(rect.xMin, rect.yMin, rect.width, rect.height));
             _runtimeCutoutDimMaterial.SetVector(CUTOUT_CENTER_ID, new Vector4(normCx, normCy, 0f, 0f));
             _runtimeCutoutDimMaterial.SetVector(CUTOUT_SIZE_ID, new Vector4(normSx, normSy, 0f, 0f));
+
+            // 9-slice: holePx (=localSize, padding 포함) 기준 정규화. border 합이 hole 보다 크면 stretch fallback (셰이더 division-by-tiny 방지).
+            Vector4 borderRect = Vector4.zero;
+            Vector4 borderSprite = Vector4.zero;
+            Vector4 spriteBorder = _currentCutoutSpriteBorder;
+            Vector2 spriteSize = _currentCutoutSpriteSize;
+            Vector2 holePx = localSize;
+            if (spriteBorder.sqrMagnitude > 0.0001f
+                && spriteSize.x > 0.001f && spriteSize.y > 0.001f
+                && holePx.x > spriteBorder.x + spriteBorder.z
+                && holePx.y > spriteBorder.y + spriteBorder.w)
+            {
+                borderRect = new Vector4(
+                    spriteBorder.x / holePx.x, spriteBorder.y / holePx.y,
+                    spriteBorder.z / holePx.x, spriteBorder.w / holePx.y);
+                borderSprite = new Vector4(
+                    spriteBorder.x / spriteSize.x, spriteBorder.y / spriteSize.y,
+                    spriteBorder.z / spriteSize.x, spriteBorder.w / spriteSize.y);
+            }
+            _runtimeCutoutDimMaterial.SetVector(BORDER_RECT_ID, borderRect);
+            _runtimeCutoutDimMaterial.SetVector(BORDER_SPRITE_ID, borderSprite);
         }
 
         /// <summary>
