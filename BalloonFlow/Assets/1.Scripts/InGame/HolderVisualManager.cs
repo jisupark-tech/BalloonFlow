@@ -2365,52 +2365,89 @@ namespace BalloonFlow
             seq.Append(visual.gameObject.transform.DOMove(start, 0.16f).SetEase(Ease.OutQuad));
         }
 
+        private readonly List<int> _continueReturnIds = new List<int>(8);
+        private readonly List<int> _continueRedriveIds = new List<int>(8);
+
         private void HandleContinueApplied(OnContinueApplied evt)
         {
             _boardFinished = false;
 
-            // [2026-06-01] 보관함 영향 X (사용자 결정): 대기 큐 holder 는 그대로 두고,
-            //   보드 fail 로 deploy 코루틴이 종료된 '배포중/이동중' holder 만 큐로 복귀시킨다.
-            //   이전: 모든 holder 에 deployGeneration++/isWaiting=false/UndoDeploy → 대기 holder 의
-            //   wait 코루틴(while isWaiting)까지 끊겨 "보관함이 사라짐". 이제 active deployer 만 처리.
+            // fail 시 HandleBoardFailed 의 StopAllCoroutines 로 deploy 코루틴이 이미 죽은 상태.
+            // 죽은 코루틴의 stale 큐 항목 제거 — 아래 재구동(StartDeploy)이 깨끗하게 재enqueue.
             ResetDeployQueues();
 
+            // [색상 필터] 제거된 다트 색(holderResetColor) holder 만 큐 복귀, 다른 색은 재구동(이어 배포).
+            //   이전: 색 구분 없이 전부 큐 복귀 → 다른 색 보관함이 레일에서 빠져 "사라짐". 그게 본 버그.
+            //   -1(제거 없음/fallback)이면 전부 큐 복귀(이전 동작).
+            int resetColor = evt.holderResetColor;
+
+            // 반복 중 StartDeploy 가 큐/코루틴을 건드리므로 ID 를 먼저 수집한 뒤 처리.
+            _continueReturnIds.Clear();
+            _continueRedriveIds.Clear();
             foreach (var kvp in _holderVisuals)
             {
                 HolderVisual visual = kvp.Value;
-
-                // 대기 큐 holder 는 미변경 (영향 X).
-                if (!visual.isDeploying && !visual.isMovingToRail) continue;
-
-                // active deploy 코루틴 무효화 (generation token).
-                visual.deployGeneration++;
-
-                // deploy point 해제
-                if (visual.isDeploying && RailManager.HasInstance)
-                {
-                    RailManager.Instance.UnregisterDeployPoint(visual.holderId);
-                    RailManager.Instance.ReleaseHolderReservation(visual.holderId);
-                    RailManager.Instance.ExitDeployPlacement(visual.holderId);
-                }
-
-                // 비주얼 상태 리셋 → 큐 복귀
-                visual.isDeploying = false;
-                visual.isMovingToRail = false;
-                visual.isWaiting = false;
-                visual.isClusterFrozen = false;
-
-                if (visual.gameObject != null)
-                {
-                    visual.gameObject.transform.DOKill();
-                    visual.gameObject.transform.localScale = Vector3.one;
-                }
-
-                // HolderManager 데이터도 강제 리셋
-                if (HolderManager.HasInstance)
-                    HolderManager.Instance.UndoDeploy(visual.holderId);
-
-                RepositionColumnHolders(visual.column);
+                if (!visual.isDeploying && !visual.isMovingToRail) continue; // 대기(미탭) holder 영향 X
+                bool isTarget = resetColor < 0 || visual.color == resetColor;
+                (isTarget ? _continueReturnIds : _continueRedriveIds).Add(visual.holderId);
             }
+
+            // 제거된 색 holder: 큐 복귀(재탭 대상) — 다트가 사라졌으니 즉시 재배포하지 않음.
+            for (int i = 0; i < _continueReturnIds.Count; i++)
+                ReturnActiveHolderToQueue(_continueReturnIds[i]);
+
+            // 다른 색 holder: 검증된 탭 경로(StartDeploy)로 재구동 → 남은 magazine 이어 배포(놓침 방지).
+            for (int i = 0; i < _continueRedriveIds.Count; i++)
+                RedriveActiveHolder(_continueRedriveIds[i]);
+        }
+
+        /// <summary>활성 holder 를 큐로 복귀(재탭 대상): 배포점 해제 + 데이터 리셋 + 컬럼 재배치.</summary>
+        private void ReturnActiveHolderToQueue(int holderId)
+        {
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual)) return;
+
+            visual.deployGeneration++; // 죽은 코루틴 잔재 stale 처리
+            if (RailManager.HasInstance)
+            {
+                RailManager.Instance.UnregisterDeployPoint(holderId);
+                RailManager.Instance.ReleaseHolderReservation(holderId);
+                RailManager.Instance.ExitDeployPlacement(holderId);
+            }
+            visual.isDeploying = false;
+            visual.isMovingToRail = false;
+            visual.isWaiting = false;
+            visual.isClusterFrozen = false;
+            if (visual.gameObject != null)
+            {
+                visual.gameObject.transform.DOKill();
+                visual.gameObject.transform.localScale = Vector3.one;
+            }
+            if (HolderManager.HasInstance) HolderManager.Instance.UndoDeploy(holderId);
+            RepositionColumnHolders(visual.column);
+        }
+
+        /// <summary>죽은 deploy 코루틴 복구 — 배포점/플래그 정리 후 StartDeploy 로 남은 magazine 이어 배포.
+        /// 검증된 탭 경로를 재사용해 신규 데드락/연속공격 위험 최소화.</summary>
+        private void RedriveActiveHolder(int holderId)
+        {
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual)) return;
+
+            // 기존 배포점/예약 정리 → StartDeploy 가 깨끗하게 재등록.
+            if (RailManager.HasInstance)
+            {
+                RailManager.Instance.UnregisterDeployPoint(holderId);
+                RailManager.Instance.ReleaseHolderReservation(holderId);
+                RailManager.Instance.ExitDeployPlacement(holderId);
+            }
+            visual.deployGeneration++;     // 죽은 코루틴 잔재 stale 처리
+            visual.isDeploying = false;
+            visual.isMovingToRail = false; // StartDeploy 진입 가드 통과
+            visual.isWaiting = false;
+            visual.isClusterFrozen = false;
+            if (visual.gameObject != null) visual.gameObject.transform.DOKill();
+            _cancelledHolders.Remove(holderId); // 직전 cancel 플래그 잔재 제거(즉시 yield break 방지)
+
+            StartDeploy(holderId);          // 검증된 경로로 재배포 (move → 남은 magazine fire)
         }
 
         #endregion

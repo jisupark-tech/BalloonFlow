@@ -2547,6 +2547,8 @@ namespace BalloonFlow
             public int removedDarts;
             public int removedBalloons;
             public int distinctColors;
+            /// <summary>제거된(가장 많은) 다트 색상. -1 = 제거 없음. 이어하기 holder 색상 필터용.</summary>
+            public int targetColor;
         }
 
         // GC alloc 0 — 매 호출 재사용 버퍼.
@@ -2600,6 +2602,7 @@ namespace BalloonFlow
         public ContinueRemoveResult RemoveMostCommonColorDartsAndRandomBalloons()
         {
             ContinueRemoveResult result = default;
+            result.targetColor = -1; // 제거 없을 시 안전값(color 0 오인 방지)
 
             int targetColor;
             int targetCount;
@@ -2633,6 +2636,7 @@ namespace BalloonFlow
                 result.removedBalloons = BalloonController.Instance.PopRandomBalloonsByColor(targetColor, targetCount);
 
             result.distinctColors = 1;
+            result.targetColor = targetColor; // 이어하기 holder 색상 필터용
 
             // 스냅샷 1회 소비 — 다음 fail 에서 다시 캡쳐.
             _continueSnapColor = -1;

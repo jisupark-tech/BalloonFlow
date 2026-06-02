@@ -150,6 +150,19 @@ namespace BalloonFlow
         [Tooltip("WinningStreak 팝업 진입 버튼 — 클릭 시 PopupWinningStreak 오픈")]
         [SerializeField] private Button _btnWinningStreak;
 
+        [Header("[WinningStreak — 로비 미니 표시 (미할당 시 해당 항목 갱신 skip)]")]
+        [Tooltip("연승 진행 게이지 Slider — 현재 stage 포인트/요구치 비율(0~1).")]
+        [SerializeField] private Slider _wsProgressSlider;
+        [Tooltip("WS 미니 표시 root — 내부에서 배수(TextGauge/Outline)·시간(TextTimer/Outline)을 이름으로 탐색. 미할당 시 WS 버튼 기준.")]
+        [SerializeField] private GameObject _wsDisplayRoot;
+        [Tooltip("현재 stage 대표 보상 — RewardItem 구조(내부 아이콘 Image + TextReward/Outline). root 를 할당.")]
+        [SerializeField] private GameObject _wsRewardItem;
+        private float _wsTimerTick;
+
+        // 이름 기반 텍스트 쌍 캐시 (outline + main).
+        private TMP_Text _wsTxtTimer, _wsTxtTimerOutline, _wsTxtGauge, _wsTxtGaugeOutline;
+        private bool _wsTextsResolved;
+
         [Header("[Profile Display — 좌상단 표시 sprite]")]
         [Tooltip("PopupProfile 과 동일한 ProfileAssets ScriptableObject. 아이콘/프레임 sprite 카탈로그.")]
         [SerializeField] private ProfileAssets _profileAssets;
@@ -353,6 +366,113 @@ namespace BalloonFlow
             bool unlocked = IsWinningStreakUnlocked();
             if (_btnWinningStreak.gameObject.activeSelf != unlocked)
                 _btnWinningStreak.gameObject.SetActive(unlocked);
+
+            if (unlocked) RefreshWinningStreakDisplay();
+        }
+
+        /// <summary>로비 WS 미니 표시(진행 게이지/배수/타이머/보상 아이콘) 갱신.
+        /// OnStateChanged/OnConfigLoaded/OnUserDataReady 시 호출. 타이머는 Update 에서 매초 추가 갱신.</summary>
+        private void RefreshWinningStreakDisplay()
+        {
+            if (!WinningStreakManager.HasInstance) return;
+            var mgr = WinningStreakManager.Instance;
+            if (!mgr.IsUnlocked) return;
+
+            var state = mgr.State;
+            ResolveWsTexts();
+
+            // 배수 (TextGauge + Outline)
+            string mult = $"x{WinningStreakUI.ResolveCurrentMultiplier()}";
+            if (_wsTxtGauge != null) _wsTxtGauge.text = mult;
+            if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = mult;
+
+            // 회차 남은 시간 (TextTimer + Outline). Update 가 매초 갱신하지만 즉시 1회도 세팅.
+            {
+                var r = mgr.RoundRemaining;
+                string time = $"{(int)r.TotalDays}d {r.Hours:D2}h";
+                if (_wsTxtTimer != null) _wsTxtTimer.text = time;
+                if (_wsTxtTimerOutline != null) _wsTxtTimerOutline.text = time;
+            }
+
+            // 현재 stage 진행 게이지 + 대표 보상(RewardItem)
+            WinningStreakStage stage = (state != null && WinningStreakConfigService.HasInstance)
+                ? WinningStreakConfigService.Instance.GetStage(state.currentStage) : null;
+
+            if (_wsProgressSlider != null)
+            {
+                float ratio = (stage != null && stage.requiredPoints > 0 && state != null)
+                    ? Mathf.Clamp01((float)state.currentStagePoints / stage.requiredPoints) : 0f;
+                _wsProgressSlider.value = ratio;
+            }
+
+            BindWsRewardItem(stage);
+        }
+
+        /// <summary>WS 미니 표시의 배수(TextGauge/Outline)·시간(TextTimer/Outline) 텍스트를 이름으로 1회 해석·캐시.
+        /// root 미준비 시 resolved 를 유지하지 않아 다음 호출에서 재시도.</summary>
+        private void ResolveWsTexts()
+        {
+            if (_wsTextsResolved) return;
+            Transform root = _wsDisplayRoot != null ? _wsDisplayRoot.transform
+                           : (_btnWinningStreak != null ? _btnWinningStreak.transform : null);
+            if (root == null) return; // 아직 root 없음 → 다음 기회에 재시도
+
+            _wsTxtTimer        = FindChildComponentByName<TMP_Text>(root, "TextTimer");
+            _wsTxtTimerOutline = FindChildComponentByName<TMP_Text>(root, "TextTimerOutline");
+            _wsTxtGauge        = FindChildComponentByName<TMP_Text>(root, "TextGauge");
+            _wsTxtGaugeOutline = FindChildComponentByName<TMP_Text>(root, "TextGaugeOutline");
+            _wsTextsResolved = true;
+        }
+
+        // RewardItem 구조 내부 아이콘 Image 후보 이름(popup 과 동일).
+        private static readonly string[] WsRewardIconNames = { "ImageRewardItem", "ImageItem", "ImageReward", "ImageGift" };
+
+        /// <summary>RewardItem 구조(_wsRewardItem)에 현재 stage 대표 보상의 아이콘 + 카운트 텍스트 바인딩.</summary>
+        private void BindWsRewardItem(WinningStreakStage stage)
+        {
+            if (_wsRewardItem == null) return;
+
+            ResolveWsPrimaryReward(stage, out string spriteKey, out int count);
+
+            // 아이콘
+            Image icon = null;
+            for (int i = 0; i < WsRewardIconNames.Length && icon == null; i++)
+                icon = FindChildComponentByName<Image>(_wsRewardItem.transform, WsRewardIconNames[i]);
+            if (icon != null && !string.IsNullOrEmpty(spriteKey) && ResourceManager.HasInstance)
+            {
+                var spr = ResourceManager.Instance.GetUISprite(spriteKey);
+                if (spr != null) { icon.sprite = spr; icon.enabled = true; }
+            }
+
+            // 카운트 텍스트 (TextReward + Outline)
+            string countText = count > 0 ? $"x{count}" : "";
+            var t1 = FindChildComponentByName<TMP_Text>(_wsRewardItem.transform, "TextReward");
+            if (t1 != null) t1.text = countText;
+            var t2 = FindChildComponentByName<TMP_Text>(_wsRewardItem.transform, "TextRewardOutline");
+            if (t2 != null) t2.text = countText;
+        }
+
+        /// <summary>stage 의 대표 보상(코인>핸드>셔플>잽>무한하트 우선) 아이콘 키 + 카운트.</summary>
+        private static void ResolveWsPrimaryReward(WinningStreakStage stage, out string spriteKey, out int count)
+        {
+            spriteKey = null; count = 0;
+            if (stage == null || stage.rewards == null) return;
+            var r = stage.rewards;
+            if (r.coins > 0)                                  { spriteKey = Const.SPR_ICONGOLD;        count = r.coins; }
+            else if (r.boosters != null && r.boosters.hand > 0)    { spriteKey = Const.SPR_ICONHAND;    count = r.boosters.hand; }
+            else if (r.boosters != null && r.boosters.shuffle > 0) { spriteKey = Const.SPR_ICONSUFFLE;  count = r.boosters.shuffle; }
+            else if (r.boosters != null && r.boosters.zap > 0)     { spriteKey = Const.SPR_ICONZAP;     count = r.boosters.zap; }
+            else if (r.infiniteHeartsSeconds > 0)             { spriteKey = Const.SPR_ICONHEARINFINITE; count = 0; } // 하트는 시간이라 카운트 미표시
+        }
+
+        /// <summary>root 하위에서 이름이 일치하는 첫 컴포넌트(T) 탐색 (비활성 포함).</summary>
+        private static T FindChildComponentByName<T>(Transform root, string name) where T : Component
+        {
+            if (root == null) return null;
+            var all = root.GetComponentsInChildren<T>(true);
+            for (int i = 0; i < all.Length; i++)
+                if (all[i] != null && all[i].gameObject.name == name) return all[i];
+            return null;
         }
 
         /// <summary>좌상단 프로필 아이콘/프레임 sprite 를 UserData index 기반으로 갱신.
@@ -597,6 +717,24 @@ namespace BalloonFlow
         private void Update()
         {
             HandleSwipeDrag();
+
+            // WS 회차 타이머 1초 갱신 (버튼 노출 중일 때만).
+            if (_btnWinningStreak != null && _btnWinningStreak.gameObject.activeSelf)
+            {
+                _wsTimerTick += Time.unscaledDeltaTime;
+                if (_wsTimerTick >= 1f)
+                {
+                    _wsTimerTick = 0f;
+                    if (WinningStreakManager.HasInstance && WinningStreakManager.Instance.IsUnlocked)
+                    {
+                        ResolveWsTexts();
+                        var r = WinningStreakManager.Instance.RoundRemaining;
+                        string time = $"{(int)r.TotalDays}d {r.Hours:D2}h";
+                        if (_wsTxtTimer != null) _wsTxtTimer.text = time;
+                        if (_wsTxtTimerOutline != null) _wsTxtTimerOutline.text = time;
+                    }
+                }
+            }
         }
 
         /// <summary>

@@ -156,17 +156,18 @@ namespace BalloonFlow
             // 1) 최근 배치 다트 N개 + 같은 색 풍선 1:1 제거. 제거량은 레일 허용량 기준(4/8/12/16).
             int dartsRemoved = 0;
             int balloonsRemoved = 0;
+            int targetColor = -1;
             if (RailManager.HasInstance)
             {
                 // 레일에서 가장 많은 색 다트 전부 제거 + 그 수만큼 같은 색 필드 풍선 랜덤 제거.
                 var res = RailManager.Instance.RemoveMostCommonColorDartsAndRandomBalloons();
                 dartsRemoved = res.removedDarts;
                 balloonsRemoved = res.removedBalloons;
-                Debug.Log($"[ContinueHandler] Continue removed {dartsRemoved} darts of most-common color + {balloonsRemoved} random matching balloons.");
+                targetColor = res.targetColor;
+                Debug.Log($"[ContinueHandler] Continue removed {dartsRemoved} darts of most-common color({targetColor}) + {balloonsRemoved} random matching balloons.");
             }
 
-            // 2) 보관함(holder)은 영향 없음 (사용자 요구 2026-05-31).
-            //    배포중/대기/이동 holder 모두 현재 상태 그대로 유지 — 큐 복귀/제거 안 함.
+            // 2) 보관함(holder): 제거된 색만 큐 복귀, 다른 색은 재구동(이어 배포). HolderVisualManager 가 처리.
 
             // 3) 풍선 제거는 새 API에서 직접 처리됨. 이벤트는 보드 상태 재개용.
             //    removedColor = -1 → BoardStateManager 가 추가 풍선 pop 을 시도하지 않음.
@@ -174,7 +175,9 @@ namespace BalloonFlow
             {
                 dartsRemoved = dartsRemoved,
                 removedColor = -1,
-                levelId = _currentLevelId
+                levelId = _currentLevelId,
+                // 같은 색 holder 만 큐 복귀, 다른 색 holder 는 재구동(이어 배포) — 다른 색 보관함 사라짐 방지.
+                holderResetColor = targetColor
             });
 
             // 4) 보드 상태 리셋하여 게임플레이 재개

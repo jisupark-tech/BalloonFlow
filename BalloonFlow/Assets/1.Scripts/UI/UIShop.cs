@@ -478,6 +478,13 @@ namespace BalloonFlow
             if (_lastLoadFrame == Time.frameCount) return;
             _lastLoadFrame = Time.frameCount;
 
+            // [More→collapse 재진입 fix] 확장 상태(_userExpandedMore=전체 상품 spawn)에서 collapse 로 돌아올 때,
+            //   현재 spawn 은 '전체 상품'이라 pool 토글만으로는 스테이지별(collapsed) 상품으로 못 줄인다.
+            //   강제 재빌드(_listDirty)로 RefreshProductExposure 가 스테이지에 맞게 재필터하게 한다.
+            //   (평소 collapsed 재진입은 그대로 pool fast path → stutter 없음.)
+            if (!expanded && _userExpandedMore)
+                _listDirty = true;
+
             // Pool fast path — 이미 spawn 된 item 재사용. 단, More 펼친 상태는 reset (옛 UX 보존).
             if (!_listDirty && _spawnedItems.Count > 0)
             {

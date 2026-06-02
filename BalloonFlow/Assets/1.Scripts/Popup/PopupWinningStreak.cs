@@ -301,21 +301,22 @@ namespace BalloonFlow
 
         /// <summary>ImageMultiplier 아래의 SlotMultiplier(0..4) 5개에 streak1..streak5+ 배수 텍스트 채움.
         /// Firestore config 도착 전엔 디자이너가 prefab 에 박아둔 placeholder 텍스트가 유지됨.</summary>
+        // prefab 의 배수 라벨 이름(좌→우 = x1..x100). 자식 sibling 순서에 의존하면 첫칸이 x10 으로 나오는
+        // 버그가 있어, 이름으로 직접 매핑해 순서 비의존으로 값을 채운다.
+        private static readonly string[] MultiplierSlotNames =
+            { "TextMultiplierx1", "TextMultiplierx5", "TextMultiplierx10", "TextMultiplierx25", "TextMultiplierx100" };
+
         private void RefreshMultiplierSlots(WinningStreakConfigDoc cfg)
         {
-            if (_multiplierSlotsRoot == null) return;
             if (cfg == null || cfg.streakMultipliers == null) return;
 
-            ResolveMultiplierTexts();
-            if (_multiplierTexts.Count == 0) return;
-
+            GameObject root = _multiplierSlotsRoot != null ? _multiplierSlotsRoot.gameObject : gameObject;
             var m = cfg.streakMultipliers;
             int[] values = { m.streak1, m.streak2, m.streak3, m.streak4, m.streak5Plus };
 
-            int n = Mathf.Min(_multiplierTexts.Count, values.Length);
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < MultiplierSlotNames.Length && i < values.Length; i++)
             {
-                var tmp = _multiplierTexts[i];
+                var tmp = FindChildByName<TMP_Text>(root, MultiplierSlotNames[i]);
                 if (tmp != null) tmp.text = $"x{values[i]}";
             }
         }
@@ -622,22 +623,20 @@ namespace BalloonFlow
             pooled.rotateLight = FindChildGOByName(slot, "RotateLight");
             pooled.imageInnerFrame = FindChildByName<Image>(slot, "ImageInnerFrame");
             pooled.imageArrow = FindChildByName<Image>(slot, "ImageArrow");
-            // RewardItem 부모 컨테이너 — FrameInner 와 동일 (별도 root 없음).
-            pooled.rewardItemRoot = pooled.frameInner;
-
-            // RewardItem 템플릿 — FrameInner 의 첫 RewardItem
-            if (pooled.frameInner != null)
+            // RewardItem 템플릿 — 구조 변경 내성: 슬롯 전체에서 "RewardItem" 을 직접 탐색.
+            //   실제 프리팹 구조는 BtnReward > RewardImg > RewardItem 이라 이전 'FrameInner' 가정이 깨져
+            //   frameInner=null → 보상 바인딩 전체가 no-op(이미지 미적용) 였다. 부모(RewardImg)를 컨테이너로 사용.
+            GameObject rewardItemGo = null;
             {
-                for (int i = 0; i < pooled.frameInner.childCount; i++)
-                {
-                    var child = pooled.frameInner.GetChild(i);
-                    if (child.name.StartsWith("RewardItem"))
-                    {
-                        pooled.rewardItemTemplate = child.gameObject;
-                        break;
-                    }
-                }
+                var trs = slot.GetComponentsInChildren<Transform>(true);
+                for (int i = 0; i < trs.Length; i++)
+                    if (trs[i] != null && trs[i].name.StartsWith("RewardItem")) { rewardItemGo = trs[i].gameObject; break; }
             }
+            pooled.rewardItemTemplate = rewardItemGo;
+            RectTransform rewardParent = rewardItemGo != null ? rewardItemGo.transform.parent as RectTransform : pooled.frameInner;
+            pooled.rewardItemRoot = rewardParent;
+            pooled.frameInner = rewardParent; // BindRewardItems 의 frameInner null-check 호환
+
             if (pooled.rewardItemTemplate != null)
             {
                 pooled.rewardItems = new List<RewardItemRefs>();
@@ -645,12 +644,50 @@ namespace BalloonFlow
             }
         }
 
+        // 보상 아이콘(sprite swap 대상) 후보. 실제 프리팹은 "ImageItem". (Heart/Gift 는 alt 로 별도 처리)
+        private static readonly string[] RewardIconNames = { "ImageItem", "ImageRewardItem", "ImageReward" };
+
         private static RewardItemRefs CaptureRewardItemRefs(GameObject item)
         {
+            // 1) 알려진 후보 이름으로 sprite-swap 아이콘 탐색.
+            Image icon = null;
+            for (int i = 0; i < RewardIconNames.Length && icon == null; i++)
+                icon = FindChildByName<Image>(item, RewardIconNames[i]);
+
+            // 2) fallback — 후보 미일치 시, 배경/틀/깃발/하트/기프트류를 제외한 첫 Image 를 아이콘으로 사용.
+            if (icon == null)
+            {
+                var imgs = item.GetComponentsInChildren<Image>(true);
+                for (int i = 0; i < imgs.Length; i++)
+                {
+                    if (imgs[i] == null || imgs[i].gameObject == item) continue;
+                    string n = imgs[i].gameObject.name;
+                    if (n.IndexOf("Flag",  System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    if (n.IndexOf("Frame", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    if (n.IndexOf("Back",  System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    if (n.IndexOf("Bg",    System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    if (n.IndexOf("Heart", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    if (n.IndexOf("Gift",  System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    icon = imgs[i];
+                    break;
+                }
+#if UNITY_EDITOR
+                if (icon == null)
+                {
+                    var names = new System.Text.StringBuilder();
+                    for (int i = 0; i < imgs.Length; i++) { if (i > 0) names.Append(", "); names.Append(imgs[i] != null ? imgs[i].gameObject.name : "null"); }
+                    Debug.LogWarning($"[PopupWinningStreak] RewardItem 아이콘 child 못 찾음 — 보상 이미지 미표시. " +
+                                     $"후보=[{string.Join("/", RewardIconNames)}], 실제 Image children=[{names}]", item);
+                }
+#endif
+            }
+
             return new RewardItemRefs
             {
                 root = item,
-                icon = FindChildByName<Image>(item, "ImageRewardItem"),
+                icon = icon,
+                altHeart = FindChildGOByName(item, "ImageHeart"),
+                altGift = FindChildGOByName(item, "ImageGift"),
                 text = FindChildByName<TMP_Text>(item, "TextReward"),
                 textOutline = FindChildByName<TMP_Text>(item, "TextRewardOutline")
             };
@@ -728,12 +765,31 @@ namespace BalloonFlow
             _suppressScrollCallback = true;
             _scrollRect.StopMovement();
             _scrollRect.velocity = Vector2.zero;
-            _scrollRect.verticalNormalizedPosition = 0f;
+            // 팝업 오픈 시 현재 시도 중인 스테이지(currentStage)가 뷰포트에 보이도록 스크롤.
+            //   매핑: stage = dataCount - dataIndex (높은 stage 위, stage1 아래). vnp=1 top, 0 bottom.
+            _scrollRect.verticalNormalizedPosition = ComputeScrollToCurrentStage();
             Canvas.ForceUpdateCanvases();
             _scrollRect.velocity = Vector2.zero;
             _suppressScrollCallback = false;
 
             RefreshVisibleSlots();
+        }
+
+        /// <summary>현재 스테이지를 뷰포트 중앙쯤에 두는 verticalNormalizedPosition(0~1) 산출.</summary>
+        private float ComputeScrollToCurrentStage()
+        {
+            int dataCount = DataCount;
+            int visible = Mathf.Max(1, _pooledSlots.Count);
+            int maxFirstDataIndex = Mathf.Max(0, dataCount - visible);
+            if (maxFirstDataIndex <= 0) return 1f;
+
+            int currentStage = 1;
+            var mgr = WinningStreakManager.HasInstance ? WinningStreakManager.Instance : null;
+            if (mgr?.State != null) currentStage = Mathf.Clamp(mgr.State.currentStage, 1, dataCount);
+
+            int currentDataIndex = dataCount - currentStage;          // 0=최상단 stage
+            int firstDataIndex = Mathf.Clamp(currentDataIndex - visible / 2, 0, maxFirstDataIndex);
+            return 1f - (float)firstDataIndex / maxFirstDataIndex;    // firstDataIndex=0 → vnp 1(top)
         }
 
         // ── 슬롯 데이터 바인딩 ────────────────────────────────────
@@ -923,12 +979,18 @@ namespace BalloonFlow
                 if (i < rewards.Count)
                 {
                     item.root.SetActive(true);
+
+                    // 타입별 대체 이미지(Heart/Gift)는 숨기고, 단일 아이콘(ImageItem)에 sprite swap + 활성화.
+                    if (item.altHeart != null) item.altHeart.SetActive(false);
+                    if (item.altGift != null) item.altGift.SetActive(false);
                     if (item.icon != null)
                     {
                         var sprite = ResolveRewardSprite(rewards[i].type);
                         if (sprite != null) item.icon.sprite = sprite;
                         item.icon.enabled = true;
+                        if (!item.icon.gameObject.activeSelf) item.icon.gameObject.SetActive(true); // ImageItem 기본 비활성 → 활성화
                     }
+
                     string countText = rewards[i].count > 0 ? $"x{rewards[i].count}" : "";
                     if (item.text != null) item.text.text = countText;
                     if (item.textOutline != null) item.textOutline.text = countText;
@@ -1155,7 +1217,9 @@ namespace BalloonFlow
         private class RewardItemRefs
         {
             public GameObject root;
-            public Image icon;
+            public Image icon;          // ImageItem — 코인/부스터/하트 sprite 를 swap 해서 표시(단일 아이콘).
+            public GameObject altHeart; // ImageHeart — 기본 활성이라 숨겨야 ImageItem 과 안 겹침.
+            public GameObject altGift;  // ImageGift — WS 보상 타입에 매핑 없음, 숨김.
             public TMP_Text text;
             public TMP_Text textOutline;
         }

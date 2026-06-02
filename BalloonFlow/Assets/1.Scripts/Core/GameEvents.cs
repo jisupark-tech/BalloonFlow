@@ -57,8 +57,10 @@ namespace BalloonFlow
     public struct OnContinueApplied
     {
         public int dartsRemoved;
-        public int removedColor; // 제거된 다트 색상 (같은 색 풍선도 제거)
+        public int removedColor; // 제거된 다트 색상 (같은 색 풍선도 제거). -1 고정(BoardStateManager 추가 pop 방지)
         public int levelId;
+        /// <summary>이어하기로 제거된 다트 색상 — 같은 색 holder 만 큐 복귀, 다른 색은 재구동. -1 = 색 구분 없이 전부 복귀(fallback).</summary>
+        public int holderResetColor;
     }
 
     /// <summary>Holder waiting area is filling up — P0 feedback trigger.
