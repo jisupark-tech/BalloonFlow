@@ -39,8 +39,8 @@ namespace BalloonFlow
         [SerializeField] private GimmickType _gimmickType = GimmickType.None;
 
         [Header("[HP 표시 — Pinata/PinataBox/Pin/Ice용]")]
-        [Tooltip("HP 텍스트 (MagazineText)")]
-        [SerializeField] private TMPro.TMP_Text _hpText;
+        [Tooltip("HP 텍스트들 — 인스펙터에서 2개의 TMP_Text를 할당. 두 항목 모두 동일 HP 값으로 동기 갱신됨")]
+        [SerializeField] private TMPro.TMP_Text[] _hpTexts;
 
         [Header("[이펙트]")]
         [Tooltip("피격 이펙트 (HitParticle)")]
@@ -83,16 +83,28 @@ namespace BalloonFlow
         {
             if (_hitEffect != null) _hitEffect.SetActive(false);
             if (_endEffect != null) _endEffect.SetActive(false);
-            if (_hpText != null) _hpText.gameObject.SetActive(false);
+            if (_hpTexts != null)
+            {
+                for (int i = 0; i < _hpTexts.Length; i++)
+                {
+                    if (_hpTexts[i] != null) _hpTexts[i].gameObject.SetActive(false);
+                }
+            }
         }
 
-        /// <summary>HP 텍스트 표시 + 갱신.</summary>
+        /// <summary>HP 텍스트 표시 + 갱신. 할당된 모든 _hpTexts 항목을 동기 갱신.</summary>
         public void UpdateHP(int hp)
         {
-            if (_hpText != null)
+            if (_hpTexts != null)
             {
-                _hpText.gameObject.SetActive(true);
-                _hpText.SetText("{0}", hp);
+                for (int i = 0; i < _hpTexts.Length; i++)
+                {
+                    if (_hpTexts[i] != null)
+                    {
+                        _hpTexts[i].gameObject.SetActive(true);
+                        _hpTexts[i].SetText("{0}", hp);
+                    }
+                }
             }
         }
 
