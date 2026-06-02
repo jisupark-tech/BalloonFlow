@@ -115,6 +115,53 @@ namespace BalloonFlow
 
         #endregion
 
+        #region Timer (Key Blaze 회차 카운트다운 등 — Inspector 링크 우선, 미할당 시 이름으로 fallback)
+
+        [Header("[Timer — Inspector 링크. 비우면 이름(Timer/TextTimer/TextTimerOutline)으로 자동 탐색(fallback)]")]
+        [Tooltip("Timer 그룹(ImageClock + TextTimer) 루트. 비우면 이름 'Timer' 로 탐색.")]
+        [SerializeField] private Transform _timerGroup;
+        [Tooltip("회차 카운트다운 본문 텍스트. 비우면 이름 'TextTimer' 로 탐색.")]
+        [SerializeField] private TMP_Text _txtTimer;
+        [Tooltip("회차 카운트다운 아웃라인 텍스트. 비우면 이름 'TextTimerOutline' 로 탐색.")]
+        [SerializeField] private TMP_Text _txtTimerOutline;
+        private bool _timerResolved;
+
+        /// <summary>직렬화로 와이어된 참조는 그대로 쓰고, null 인 것만 이름으로 fallback 해석.</summary>
+        private void ResolveTimerRefs()
+        {
+            if (_timerResolved) return;
+            _timerResolved = true;
+
+            // 셋 다 Inspector 링크돼 있으면 탐색 불필요.
+            if (_timerGroup != null && _txtTimer != null && _txtTimerOutline != null) return;
+
+            var all = GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                string n = all[i].name;
+                if (_timerGroup == null && n == "Timer") _timerGroup = all[i];
+                else if (_txtTimer == null && n == "TextTimer") _txtTimer = all[i].GetComponent<TMP_Text>();
+                else if (_txtTimerOutline == null && n == "TextTimerOutline") _txtTimerOutline = all[i].GetComponent<TMP_Text>();
+            }
+        }
+
+        /// <summary>Timer 그룹(ImageClock + TextTimer) 표시/숨김.</summary>
+        public void ShowTimer(bool show)
+        {
+            ResolveTimerRefs();
+            if (_timerGroup != null) _timerGroup.gameObject.SetActive(show);
+        }
+
+        /// <summary>Timer 텍스트 설정 (TextTimer + Outline 동시).</summary>
+        public void SetTimerText(string text)
+        {
+            ResolveTimerRefs();
+            if (_txtTimer != null) _txtTimer.text = text;
+            if (_txtTimerOutline != null) _txtTimerOutline.text = text;
+        }
+
+        #endregion
+
 
         #region Serialized Fields — Frame
 

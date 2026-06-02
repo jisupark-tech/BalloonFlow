@@ -57,9 +57,9 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// 회차(round) 경계 판정 (명세 §2.3·§11.1). 서버 config.activeRoundId 가 현재 State.activeRoundId 와
-        /// 다르면 새 회차로 보고 streak/진행도/단계/수령내역을 전부 0으로 리셋한다 (회차 독립, 보상 재수령 가능).
-        /// 서버가 회차를 운영하지 않으면(activeRoundId 빈 값) 리셋하지 않는다 — 엄격 서버 기준.
+        /// 회차(round) 경계 판정. 클라 UTC 스케줄(월/금 00:00 경계, [[WinningStreakSchedule]])로 회차 ID 를 산출하고,
+        /// State.activeRoundId 와 다르면 새 회차로 보고 streak/진행도/단계/수령내역을 전부 0으로 리셋한다(다음 회차 0단계부터).
+        /// 서버 config.activeRoundId 는 수동 강제리셋 override 로만 사용(평소 고정값) — 스케줄 ID 와 결합해 비교.
         /// lifetimePoints 는 통계용이라 회차 무관 누적 유지.
         /// </summary>
         private void EnsureActiveRound()
@@ -68,8 +68,9 @@ namespace BalloonFlow
             var s = State;
             if (cfg == null || s == null) return;
 
-            string roundId = cfg.activeRoundId;
-            if (string.IsNullOrEmpty(roundId)) return; // 서버 회차 미운영 → 리셋 안 함
+            // 스케줄 회차(UTC) + 서버 override(고정값) 결합. 둘 중 하나라도 바뀌면 새 회차.
+            string roundId = WinningStreakSchedule.GetCurrentRoundId()
+                             + "|" + (cfg.activeRoundId ?? string.Empty);
             if (s.activeRoundId == roundId) return;     // 동일 회차 → 유지
 
             Debug.Log($"{LOG_TAG} 새 회차 감지: '{s.activeRoundId}' → '{roundId}'. 진행 상태 리셋.");
@@ -122,6 +123,26 @@ namespace BalloonFlow
         }
 
         public int TotalStageCount => Config?.stages?.Count ?? 0;
+
+        /// <summary>이벤트 진행 중 여부 — 해금 상태면 상시 진행(스케줄이 한 주를 빈틈없이 덮음). UX(로비 복귀) 게이트용.</summary>
+        public bool IsEventActive => IsUnlocked;
+
+        /// <summary>현재 회차 종료 UTC 시각(타이머용).</summary>
+        public System.DateTime RoundEndUtc => WinningStreakSchedule.GetCurrentRoundEndUtc();
+
+        /// <summary>현재 회차 종료까지 남은 시간(타이머용, 0 미만이면 0).</summary>
+        public System.TimeSpan RoundRemaining => WinningStreakSchedule.GetRemaining();
+
+        /// <summary>회차 경계 통과 여부를 외부(로비/팝업 주기 체크)에서 트리거. 경계 넘었으면 리셋 후 UI 갱신 알림.</summary>
+        public void CheckRoundBoundary()
+        {
+            var s = State;
+            if (s == null) return;
+            string before = s.activeRoundId;
+            EnsureActiveRound();
+            if (s.activeRoundId != before)
+                OnStateChanged?.Invoke();
+        }
 
         /// <summary>stage1Based 가 이미 수령 완료된 stage 인지.</summary>
         public bool IsStageClaimed(int stage1Based)

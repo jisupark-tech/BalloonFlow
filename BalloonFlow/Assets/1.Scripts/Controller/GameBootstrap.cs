@@ -681,10 +681,13 @@ namespace BalloonFlow
                 if (AdManager.HasInstance)
                     AdManager.Instance.TryShowInterstitial(AdManager.InterstitialPlacement.ClearNext);
 
-                // [#5/12] Next 분기 (UX플로우 §5-4·§435):
-                //   - Lv.5~34 클리어 → 다음 레벨 자동 진입 (학습·진행 흐름 유지)
-                //   - Lv.35 클리어부터 → 로비씬 (Lv.35 = WinningStreak 해금 안내, Lv.36+ = 이벤트 참여)
-                if (_current >= FtueGate.WINNING_STREAK_UNLOCK_CLEAR_LEVEL)
+                // [#5/12] Next 분기 (UX플로우 §5-4·§435 + Key Blaze 스펙):
+                //   - Lv.5~33 클리어 → 다음 레벨 자동 진입 (학습·진행 흐름 유지)
+                //   - 해금 바로 전 스테이지(=UNLOCK_LEVEL-1, Lv.34) 클리어부터 → 로비 강제.
+                //     34 클리어 → 로비(다음이 35) → 35 클리어 시 highestCleared=35 로 WS 해금 → 로비에서 노출.
+                //   - 이벤트 진행 중(IsEventActive)이면 하위 레벨 재도전 포함 매 클리어마다 로비.
+                bool wsActive = WinningStreakManager.HasInstance && WinningStreakManager.Instance.IsEventActive;
+                if (_current >= FtueGate.WINNING_STREAK_UNLOCK_CLEAR_LEVEL - 1 || wsActive)
                 {
                     if (GameManager.HasInstance) GameManager.Instance.GoToLobby();
                     return;

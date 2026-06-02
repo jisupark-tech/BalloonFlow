@@ -180,6 +180,36 @@ namespace BalloonFlow
             BuildVirtualSlots();
             ResetScrollPosition();
             RefreshHeader();
+
+            _timerTick = 0f;
+            UpdateRoundTimer();   // 열자마자 회차 카운트다운 즉시 표시 + 경계 체크
+        }
+
+        // ── 회차 카운트다운 (클라 UTC 스케줄) ─────────────────────
+        private float _timerTick;
+
+        private void Update()
+        {
+            _timerTick += Time.unscaledDeltaTime;
+            if (_timerTick < 1f) return;   // 시:분 단위 표시라 1초 주기면 충분
+            _timerTick = 0f;
+            UpdateRoundTimer();
+        }
+
+        /// <summary>회차 남은시간을 "Xd YYh" 로 Timer 에 표시. 경계 통과(남은시간 0) 시 CheckRoundBoundary 가 리셋.</summary>
+        private void UpdateRoundTimer()
+        {
+            if (_frame == null) return;
+            if (!WinningStreakManager.HasInstance) { _frame.ShowTimer(false); return; }
+            var mgr = WinningStreakManager.Instance;
+
+            mgr.CheckRoundBoundary();   // 경계 넘었으면 리셋 + OnStateChanged → 헤더/슬롯 갱신
+
+            var remaining = mgr.RoundRemaining;
+            int days = (int)remaining.TotalDays;
+            int hours = remaining.Hours;
+            _frame.ShowTimer(true);
+            _frame.SetTimerText($"{days}d {hours:D2}h");
         }
 
         // BtnSingle(PLAY) — LobbyController.OnPlayClicked 패턴 모사. 라이프 부족 시 PopupMoreLive 분기.
