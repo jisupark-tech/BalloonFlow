@@ -3,6 +3,7 @@ using UnityEngine.Purchasing;
 using UnityEngine.Purchasing.Extension;
 #endif
 
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using BalloonFlow.Analytics;
@@ -26,6 +27,8 @@ namespace BalloonFlow
         private bool _isInitialized;
         private bool _initStarted;
         private bool _catalogSubscribed;
+        private const float PurchaseInitWaitTimeoutSeconds = 20f;
+        private readonly HashSet<string> _pendingInitPurchases = new HashSet<string>();
         private readonly Dictionary<string, string> _cachedPrices = new Dictionary<string, string>();
 
 #if UNITY_IAP
@@ -148,7 +151,10 @@ namespace BalloonFlow
                 // 재fetch 성공 시 OnCatalogLoaded → StartInit → 이후 구매 가능. 이번 구매는 실패 처리.
                 if (ShopCatalogService.HasInstance) ShopCatalogService.Instance.RetryFetch();
                 TryStartInit();
-                PublishPurchaseResult(productId, false);
+                if (_pendingInitPurchases.Add(productId))
+                    StartCoroutine(PurchaseAfterInit(productId));
+                else
+                    Debug.LogWarning($"{LOG_TAG} Purchase already waiting for IAP init: {productId}");
                 return;
             }
 
@@ -168,6 +174,31 @@ namespace BalloonFlow
             PublishPurchaseResult(productId, true);
 #endif
         }
+
+#if UNITY_IAP
+        private IEnumerator PurchaseAfterInit(string productId)
+        {
+            float t = 0f;
+            while (t < PurchaseInitWaitTimeoutSeconds && !_isInitialized)
+            {
+                if (ShopCatalogService.HasInstance) ShopCatalogService.Instance.RetryFetch();
+                TryStartInit();
+                t += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            _pendingInitPurchases.Remove(productId);
+
+            if (!_isInitialized)
+            {
+                Debug.LogWarning($"{LOG_TAG} IAP init wait timed out. Purchase failed: {productId}");
+                PublishPurchaseResult(productId, false);
+                yield break;
+            }
+
+            PurchaseProduct(productId);
+        }
+#endif
 
         public void RestorePurchases()
         {

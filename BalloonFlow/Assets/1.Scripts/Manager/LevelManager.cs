@@ -680,6 +680,12 @@ namespace BalloonFlow
             if (levelId > highest)
             {
                 PlayerPrefs.SetInt(PREFS_KEY_HIGHEST_LEVEL, levelId);
+                // ROLLBACK_WINNING_STREAK_HIGHEST_LEVEL_SYNC_20260601:
+                // Previous behavior updated only PlayerPrefs. WinningStreakManager gates on
+                // UserData.highestClearedLevel, so keep the Firebase-backed user state in sync when
+                // a new highest clear is recorded.
+                if (UserDataService.HasInstance)
+                    UserDataService.Instance.SetHighestClearedLevel(levelId);
             }
 
             PlayerPrefs.Save();

@@ -37,6 +37,8 @@ namespace BalloonFlow.Analytics
         private float  _activeBackgroundSec;
         private DateTime? _bgEnteredUtc;
 
+        public string CurrentPlayId => _activePlayId ?? "";
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoCreate()
         {

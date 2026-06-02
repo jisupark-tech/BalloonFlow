@@ -357,15 +357,18 @@ namespace BalloonFlow
         /// <summary>IAPManager 초기화 까지 대기 — 5초 timeout. (AdManager 는 자체 비동기, 차단하지 않음.)</summary>
         private IEnumerator WaitForSdkReady()
         {
-            const float TIMEOUT = 5f;
+            const float TIMEOUT = 20f;
             float t = 0f;
             while (t < TIMEOUT)
             {
-                bool iapOk = !IAPManager.HasInstance || IAPManager.Instance.IsInitialized();
-                if (iapOk) yield break;
+                if (IsIapReadyForShop()) yield break;
+                if (ShopCatalogService.HasInstance && !ShopCatalogService.Instance.IsLoaded)
+                    ShopCatalogService.Instance.RetryFetch();
                 t += Time.unscaledDeltaTime;
                 yield return null;
             }
+
+            Debug.LogWarning("[TitleController] IAP init wait timeout. Shop purchase will retry on click.");
         }
 
         /// <summary>
@@ -390,7 +393,8 @@ namespace BalloonFlow
             {
                 bool shopOk = !ShopCatalogService.HasInstance || ShopCatalogService.Instance.IsLoaded;
                 bool epOk   = episodeTask == null || episodeTask.IsCompleted;
-                if (shopOk && epOk)
+                bool iapOk  = IsIapReadyForShop();
+                if (shopOk && epOk && iapOk)
                 {
                     if (episodeTask != null && episodeTask.IsCompletedSuccessfully && !episodeTask.Result)
                         Debug.LogWarning($"[TitleController] 에피소드 prefetch 실패 (level {nextLevel}). 게임은 진행 — LevelManager 가 폴백 처리.");
@@ -402,6 +406,12 @@ namespace BalloonFlow
 
             if (episodeTask != null && !episodeTask.IsCompleted)
                 Debug.LogWarning($"[TitleController] 에피소드 prefetch timeout (level {nextLevel}). 게임 진입 후 LevelManager 가 캐시 miss 시 다시 시도.");
+        }
+
+        /// <summary>Returns true only after IAPManager exists and Unity IAP finished initialization.</summary>
+        private static bool IsIapReadyForShop()
+        {
+            return IAPManager.HasInstance && IAPManager.Instance.IsInitialized();
         }
 
         /// <summary>로딩 완료 시 1회 호출 — 온보딩(Lv.5 미클리어) 세션이면 인게임으로 직행, 그 외엔 Lobby.</summary>

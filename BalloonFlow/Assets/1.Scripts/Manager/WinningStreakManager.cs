@@ -150,14 +150,16 @@ namespace BalloonFlow
 
             EnsureActiveRound();   // 회차 경계면 먼저 리셋 후 이번 클리어를 새 회차에 반영
 
-            s.currentStreak += 1;
-
+            // [연승은 해금 후에만 증가] 미해금/종료 시에는 streak 증가도 포인트 적립도 하지 않는다.
+            // (이전: 게이트 앞에서 무조건 +1 → 해금 전에도 연승 숫자가 올라 표시 혼란.)
             if (!IsUnlocked || s.eventFinished)
             {
-                SaveProgressFireAndForget();
+                SaveProgressFireAndForget();   // EnsureActiveRound 로 회차 리셋됐을 수 있어 저장.
                 OnStateChanged?.Invoke();
                 return;
             }
+
+            s.currentStreak += 1;
 
             var svc = WinningStreakConfigService.Instance;
             int streakMult = svc.ResolveStreakMultiplier(s.currentStreak);

@@ -190,7 +190,7 @@ namespace BalloonFlow.Analytics
         {
             bool hasInstance = AnalyticsManager.HasInstance;
             bool firebaseReady = hasInstance && AnalyticsManager.Instance.FirebaseReady;
-            if (firebaseReady)
+            if (hasInstance)
             {
                 AnalyticsManager.Instance.LogEvent(evtName, p);
                 LogEventToConsole(evtName, p);
@@ -220,6 +220,113 @@ namespace BalloonFlow.Analytics
             }
             sb.Append(" }");
             Debug.Log(sb.ToString());
+        }
+    }
+
+    /// <summary>
+    /// Emits item_use_event and economy_event for BigQuery export via Firebase Analytics.
+    /// Kept in this compiled file so editor project regeneration is not required for CI-style builds.
+    /// </summary>
+    public class AnalyticsItemEconomyTracker : Singleton<AnalyticsItemEconomyTracker>
+    {
+        private const string ITEM_TYPE_BOOSTER = "booster";
+        private const string ITEM_CONTEXT_IN_LEVEL = "in_level";
+        private const string CURRENCY_COIN = "coin";
+        private const string FLOW_EARN = "earn";
+        private const string FLOW_SPEND = "spend";
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void AutoCreate()
+        {
+            if (HasInstance) return;
+            var go = new GameObject("AnalyticsItemEconomyTracker");
+            go.AddComponent<AnalyticsItemEconomyTracker>();
+        }
+
+        protected override void OnSingletonAwake()
+        {
+            EventBus.Subscribe<OnBoosterUsed>(HandleBoosterUsed);
+        }
+
+        protected override void OnDestroy()
+        {
+            EventBus.Unsubscribe<OnBoosterUsed>(HandleBoosterUsed);
+            base.OnDestroy();
+        }
+
+        public static void EmitCoinEarn(string source, int amount, int balanceAfter)
+        {
+            EmitCoinEconomy(FLOW_EARN, source, "", amount, balanceAfter);
+        }
+
+        public static void EmitCoinSpend(string sink, int amount, int balanceAfter)
+        {
+            EmitCoinEconomy(FLOW_SPEND, "", sink, amount, balanceAfter);
+        }
+
+        private static void EmitCoinEconomy(string flowType, string source, string sink, int amount, int balanceAfter)
+        {
+            if (amount <= 0) return;
+
+            var p = BuildCommonParams(24);
+            p[AnalyticsConsts.P_CURRENCY_TYPE] = CURRENCY_COIN;
+            p[AnalyticsConsts.P_FLOW_TYPE] = flowType;
+            p[AnalyticsConsts.P_AMOUNT] = amount;
+            p[AnalyticsConsts.P_BALANCE_AFTER] = balanceAfter;
+
+            if (!string.IsNullOrEmpty(source))
+                p[AnalyticsConsts.P_SOURCE] = source;
+            if (!string.IsNullOrEmpty(sink))
+                p[AnalyticsConsts.P_SINK] = sink;
+
+            AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_ECONOMY, p);
+        }
+
+        private static void HandleBoosterUsed(OnBoosterUsed evt)
+        {
+            if (string.IsNullOrEmpty(evt.boosterType)) return;
+
+            var p = BuildCommonParams(24);
+            p[AnalyticsConsts.P_ITEM_ID] = evt.boosterType;
+            p[AnalyticsConsts.P_ITEM_TYPE] = ITEM_TYPE_BOOSTER;
+            p[AnalyticsConsts.P_ITEM_CONTEXT] = ITEM_CONTEXT_IN_LEVEL;
+            p[AnalyticsConsts.P_QUANTITY] = 1;
+
+            if (BoosterManager.HasInstance)
+                p[AnalyticsConsts.P_BALANCE_AFTER] = BoosterManager.Instance.GetBoosterCount(evt.boosterType);
+
+            AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_ITEM_USE, p);
+        }
+
+        private static Dictionary<string, object> BuildCommonParams(int capacity)
+        {
+            var p = new Dictionary<string, object>(capacity);
+            p[AnalyticsConsts.P_EVENT_ID] = Guid.NewGuid().ToString("N");
+            p[AnalyticsConsts.P_SESSION_ID] = AnalyticsSessionTracker.HasInstance
+                ? AnalyticsSessionTracker.Instance.CurrentSessionId : "";
+            p[AnalyticsConsts.P_GAME_ID] = AnalyticsConsts.GAME_ID;
+            p[AnalyticsConsts.P_UID] = AnalyticsSessionTracker.ResolveUid();
+            p[AnalyticsConsts.P_EVENT_TS] = DateTime.UtcNow.ToString("o");
+            p[AnalyticsConsts.P_APP_VERSION] = Application.version;
+            p[AnalyticsConsts.P_GEO_COUNTRY] = AnalyticsSessionTracker.ResolveGeoCountry();
+            p[AnalyticsConsts.P_PLATFORM] = AnalyticsSessionTracker.ResolvePlatform();
+            p[AnalyticsConsts.P_DEVICE_MODEL] = SystemInfo.deviceModel;
+
+            if (AnalyticsLevelTracker.HasInstance)
+            {
+                string playId = AnalyticsLevelTracker.Instance.CurrentPlayId;
+                if (!string.IsNullOrEmpty(playId))
+                    p[AnalyticsConsts.P_PLAY_ID] = playId;
+            }
+
+            int levelNumber = LevelManager.HasInstance ? LevelManager.Instance.GetCurrentLevelId() : 0;
+            if (levelNumber > 0)
+                p[AnalyticsConsts.P_LEVEL_NUMBER] = levelNumber;
+
+            if (UserSnapshotCache.HasInstance)
+                UserSnapshotCache.Instance.Stamp(p);
+
+            return p;
         }
     }
 }

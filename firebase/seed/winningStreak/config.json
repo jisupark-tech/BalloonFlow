@@ -1,6 +1,6 @@
 {
   "unlockLevel": 35,
-  "activeRoundId": "",
+  "activeRoundId": "2026-06-R1",
   "streakMultipliers": { "streak1": 1, "streak2": 5, "streak3": 10, "streak4": 25, "streak5Plus": 100 },
   "difficultyMultipliers": { "normal": 1, "hard": 3, "superHard": 5 },
   "boosterCosts": { "undo": 300, "shuffle": 300, "slotExpand3": 900, "magnet": 600 },

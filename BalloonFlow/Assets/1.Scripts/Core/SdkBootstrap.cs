@@ -55,6 +55,10 @@ namespace BalloonFlow
             go.AddComponent<FirebaseManager>();
             go.AddComponent<UserDataService>();
             go.AddComponent<ShopCatalogService>();
+            // ROLLBACK_IAP_BOOTSTRAP_INIT_20260602:
+            // IAP depends on the shop catalog, so create it beside ShopCatalogService before
+            // TitleController starts waiting. GameManager.InitLobby will reuse this singleton.
+            go.AddComponent<IAPManager>();
             go.AddComponent<LevelEpisodeService>();
             go.AddComponent<WinningStreakConfigService>();
             go.AddComponent<WinningStreakManager>();

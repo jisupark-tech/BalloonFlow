@@ -47,10 +47,18 @@ namespace BalloonFlow
         public int VisualSegmentsPerCell => Mathf.Max(1, _visualSegmentsPerCell);
         public float SegmentScaleXY => _segmentScaleXY;
 
-        private int _hp;          // 남은 HP — 활성 visual segment 수와 1:1 (cell 수 × N)
+        private int _hp;          // 남은 HP — segment cell 수(튜브 길이) 기준. visual segment 총수와 분리.
+        private int _maxHp;       // 초기 HP — 활성 segment 수를 HP 비율로 환산할 때 분모.
         private int _color = -1;  // -1 = 임의 색 적중 (디버그/테스트 용)
         private int _groupId = -1;
         private bool _destroying;
+
+        // 끝(EndCap)→시작(StartCap) 순서의 visual Segment 제거 큐.
+        // shrink 지연(activeSelf 갱신이 tween 완료 후) 때문에 activeSelf 스캔으로 "마지막 활성"을 고르면
+        // 같은 hit 에서 여러 개를 지울 때 동일 segment 가 재선택될 수 있어, cursor(_removedSegmentCount)로 추적한다.
+        private readonly List<FlexTubePart> _segmentsRemovalOrder = new List<FlexTubePart>();
+        private int _totalSegments;        // 초기 visual Segment 총수.
+        private int _removedSegmentCount;  // 지금까지 제거 착수한 visual Segment 수 (cursor).
 
         public int Color => _color;
         public int GroupId => _groupId;
@@ -61,12 +69,25 @@ namespace BalloonFlow
         public void Initialize(int hp, int color, int groupId, List<FlexTubePart> parts)
         {
             _hp = Mathf.Max(1, hp);
+            _maxHp = _hp;
             _color = color;
             _groupId = groupId;
             if (parts != null && parts.Count > 0)
                 _parts = parts;
             for (int i = 0; i < _parts.Count; i++)
                 if (_parts[i] != null) _parts[i].SetOwner(this);
+
+            // visual Segment 제거 순서 구성 — EndCap 쪽(높은 index)부터 StartCap 쪽으로.
+            // _parts = StartCap(0), Segment(1..last-1), EndCap(last).
+            _segmentsRemovalOrder.Clear();
+            for (int i = _parts.Count - 2; i >= 1; i--)
+            {
+                var p = _parts[i];
+                if (p != null && p.PartType == GimmickIdentifier.FlexTubePart.Segment)
+                    _segmentsRemovalOrder.Add(p);
+            }
+            _totalSegments = _segmentsRemovalOrder.Count;
+            _removedSegmentCount = 0;
 
             if (_animator == null)
                 _animator = GetComponentInChildren<Animator>();
@@ -81,102 +102,96 @@ namespace BalloonFlow
             // 매 hit 마다 ZapAttack — Animator trigger 는 자체적으로 reset 되므로 overwrite 안전.
             if (_animator != null) _animator.SetTrigger(ANIM_TRIGGER_ATTACK);
 
-            bool removed = DeactivateLastActiveSegment();
-            if (removed)
+            if (_hp <= 0) { BeginFinish(); return; }
+            _hp--;
+
+            // 남은 HP 비율에 맞춰 활성 visual Segment 수를 목표치까지 줄인다 (HP 1당 1개가 아니라 비율).
+            // 예) HP=cell 수, totalSegments=cell 수×N → 한 hit 마다 N(=visualSegmentsPerCell)개씩 함께 사라짐.
+            int targetActive = (_maxHp > 0)
+                ? Mathf.CeilToInt((float)_hp / _maxHp * _totalSegments)
+                : 0;
+            targetActive = Mathf.Clamp(targetActive, 0, _totalSegments);
+            int targetRemoved = _totalSegments - targetActive;
+
+            Vector3 lastRemovedPos = Vector3.zero;
+            bool anyRemoved = false;
+            while (_removedSegmentCount < targetRemoved && _removedSegmentCount < _segmentsRemovalOrder.Count)
             {
-                _hp--;
-                if (_hp <= 0) BeginFinish();
+                var part = _segmentsRemovalOrder[_removedSegmentCount];
+                _removedSegmentCount++;
+                if (part == null || !part.gameObject.activeSelf) continue;
+
+                lastRemovedPos = part.transform.position;
+                anyRemoved = true;
+                ShrinkAndDeactivateSegment(part);
+                MarkCellInactiveIfDepleted(part);
             }
-            else if (_hp > 0)
-            {
-                // 활성 Segment 0개인데 HP 양수 — race 또는 segment=0 spawn 케이스. 안전 종료.
-                _hp = 0;
+            if (anyRemoved) SlideEndCapTo(lastRemovedPos);
+
+            // HP 0 또는 모든 segment 소진 → 종료.
+            if (_hp <= 0 || _removedSegmentCount >= _segmentsRemovalOrder.Count)
                 BeginFinish();
+        }
+
+        /// <summary>visual segment 1개 shrink → SetActive(false). _segmentShrinkDuration<=0 이면 즉시 비활성.</summary>
+        private void ShrinkAndDeactivateSegment(FlexTubePart part)
+        {
+            var t = part.transform;
+            t.DOKill();
+            FlexTubePart captured = part;
+            if (_segmentShrinkDuration > 0.001f)
+            {
+                t.DOScale(Vector3.zero, _segmentShrinkDuration)
+                    .SetEase(Ease.InQuad)
+                    .OnComplete(() =>
+                    {
+                        if (captured != null && captured.gameObject != null)
+                            captured.gameObject.SetActive(false);
+                    });
+            }
+            else
+            {
+                part.gameObject.SetActive(false);
             }
         }
 
-        /// <summary>
-        /// EndCap 쪽(끝)부터 가장 가까운 활성 visual segment 1개를 shrink → SetActive(false).
-        /// + EndCap 슬라이드 (사라질 segment 위치로). + 같은 cell 의 모든 visual segment 가 비활성됐을 때만 cell 단위 MarkFlexTubeCellInactive.
-        /// 비활성될 segment 가 있으면 true.
-        /// </summary>
-        private bool DeactivateLastActiveSegment()
+        /// <summary>EndCap 을 이번 hit 에서 마지막으로 사라진 segment 위치로 슬라이드 — "쑥쑥 줄어드는" 효과.</summary>
+        private void SlideEndCapTo(Vector3 targetPos)
         {
             int last = _parts.Count - 1;
             FlexTubePart endCap = last >= 0 ? _parts[last] : null;
+            if (endCap == null || !endCap.gameObject.activeSelf) return;
 
-            // 양 끝(StartCap=0, EndCap=last) 제외 — Segment 만 대상.
-            for (int i = last - 1; i >= 1; i--)
+            // 회전 보정 — 새 끝점이 될 (다음 제거 대상 = 남은 마지막 활성) segment 기준 방향.
+            Quaternion targetRot = endCap.transform.rotation;
+            FlexTubePart newEndSeg = (_removedSegmentCount < _segmentsRemovalOrder.Count)
+                ? _segmentsRemovalOrder[_removedSegmentCount] : null;
+            if (newEndSeg != null)
             {
-                var part = _parts[i];
-                if (part == null) continue;
-                if (!part.gameObject.activeSelf) continue;
-                if (part.PartType != GimmickIdentifier.FlexTubePart.Segment) continue;
-
-                Vector3 targetPos = part.transform.position;
-                int cellId = part.BalloonId;
-
-                // visual segment shrink. _segmentShrinkDuration <= 0 이면 즉시 비활성 (DOTween 미사용).
-                var t = part.transform;
-                t.DOKill();
-                FlexTubePart capturedPart = part;
-                if (_segmentShrinkDuration > 0.001f)
-                {
-                    t.DOScale(Vector3.zero, _segmentShrinkDuration)
-                        .SetEase(Ease.InQuad)
-                        .OnComplete(() =>
-                        {
-                            if (capturedPart != null && capturedPart.gameObject != null)
-                                capturedPart.gameObject.SetActive(false);
-                        });
-                }
-                else
-                {
-                    part.gameObject.SetActive(false);
-                }
-
-                // EndCap 슬라이드 — 항상 사라질 segment 자리로 (visual segment 단위 미세 이동 = "쑥쑥 줄어드는" 효과).
-                if (endCap != null && endCap.gameObject.activeSelf)
-                {
-                    Quaternion targetRot = endCap.transform.rotation;
-                    if (i - 1 >= 0 && _parts[i - 1] != null)
-                    {
-                        Vector3 dir = targetPos - _parts[i - 1].transform.position;
-                        dir.y = 0f;
-                        if (dir.sqrMagnitude > 0.0001f)
-                        {
-                            targetRot = Quaternion.LookRotation(dir.normalized, Vector3.up)
-                                        * Quaternion.Euler(0f, _extraYRotation, 0f);
-                        }
-                    }
-
-                    endCap.transform.DOKill();
-                    endCap.transform.DOMove(targetPos, _endCapMoveDuration).SetEase(_endCapMoveEase);
-                    endCap.transform.DORotateQuaternion(targetRot, _endCapMoveDuration).SetEase(_endCapMoveEase);
-                }
-
-                // cell 단위 비활성 — 같은 BalloonId 의 다른 active Segment 가 있으면 cell 은 살아있음.
-                // shrink tween 완료 전이라도 SetActive 호출 시점 기준이 아니라 "이번에 사라질 segment" 까지 전부 비활성으로 가정해서 검사.
-                if (cellId >= 0)
-                {
-                    bool cellHasOtherActive = false;
-                    for (int k = 1; k < last; k++)
-                    {
-                        if (k == i) continue;
-                        var p = _parts[k];
-                        if (p == null) continue;
-                        if (p.BalloonId != cellId) continue;
-                        if (p.PartType != GimmickIdentifier.FlexTubePart.Segment) continue;
-                        if (!p.gameObject.activeSelf) continue;
-                        cellHasOtherActive = true;
-                        break;
-                    }
-                    if (!cellHasOtherActive && BalloonController.HasInstance)
-                        BalloonController.Instance.MarkFlexTubeCellInactive(cellId);
-                }
-                return true;
+                Vector3 dir = targetPos - newEndSeg.transform.position;
+                dir.y = 0f;
+                if (dir.sqrMagnitude > 0.0001f)
+                    targetRot = Quaternion.LookRotation(dir.normalized, Vector3.up)
+                                * Quaternion.Euler(0f, _extraYRotation, 0f);
             }
-            return false;
+
+            endCap.transform.DOKill();
+            endCap.transform.DOMove(targetPos, _endCapMoveDuration).SetEase(_endCapMoveEase);
+            endCap.transform.DORotateQuaternion(targetRot, _endCapMoveDuration).SetEase(_endCapMoveEase);
+        }
+
+        /// <summary>해당 segment 의 cell 에 아직 제거 안 된 visual segment 가 없으면 cell 단위 비활성(타겟 제외) 마킹.</summary>
+        private void MarkCellInactiveIfDepleted(FlexTubePart part)
+        {
+            int cellId = part.BalloonId;
+            if (cellId < 0) return;
+            for (int k = _removedSegmentCount; k < _segmentsRemovalOrder.Count; k++)
+            {
+                var p = _segmentsRemovalOrder[k];
+                if (p != null && p.BalloonId == cellId) return; // 같은 cell 의 미제거 segment 남음
+            }
+            if (BalloonController.HasInstance)
+                BalloonController.Instance.MarkFlexTubeCellInactive(cellId);
         }
 
         private void BeginFinish()

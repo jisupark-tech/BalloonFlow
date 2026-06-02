@@ -14,9 +14,11 @@ namespace BalloonFlow
     public class AnalyticsManager : Singleton<AnalyticsManager>
     {
         private const string LOG_TAG = "[AnalyticsManager]";
+        private const int MAX_PENDING_FIREBASE_EVENTS = 128;
 
         private bool _firebaseReady;
         private bool _facebookReady;
+        private readonly Queue<PendingFirebaseEvent> _pendingFirebaseEvents = new Queue<PendingFirebaseEvent>();
 
         public bool FirebaseReady => _firebaseReady;
         public bool FacebookReady => _facebookReady;
@@ -50,6 +52,7 @@ namespace BalloonFlow
             _firebaseReady = true;
             FirebaseAnalytics.SetAnalyticsCollectionEnabled(true);
             Debug.Log($"{LOG_TAG} Firebase Analytics ready.");
+            FlushPendingFirebaseEvents();
         }
 
         private void InitFacebook()
@@ -113,7 +116,11 @@ namespace BalloonFlow
 
         private void LogToFirebase(string eventName, Dictionary<string, object> parameters)
         {
-            if (!_firebaseReady) return;
+            if (!_firebaseReady)
+            {
+                EnqueueFirebaseEvent(eventName, parameters);
+                return;
+            }
 
             if (parameters == null || parameters.Count == 0)
             {
@@ -128,6 +135,34 @@ namespace BalloonFlow
                 fbParams[i++] = ToFirebaseParameter(kv.Key, kv.Value);
             }
             FirebaseAnalytics.LogEvent(eventName, fbParams);
+        }
+
+        private void EnqueueFirebaseEvent(string eventName, Dictionary<string, object> parameters)
+        {
+            // ROLLBACK_ANALYTICS_FIREBASE_QUEUE_20260602:
+            // Previous behavior dropped events fired before Firebase Analytics became ready.
+            if (_pendingFirebaseEvents.Count >= MAX_PENDING_FIREBASE_EVENTS)
+            {
+                _pendingFirebaseEvents.Dequeue();
+                Debug.LogWarning($"{LOG_TAG} Firebase event queue full. Dropping oldest pending event.");
+            }
+
+            _pendingFirebaseEvents.Enqueue(new PendingFirebaseEvent
+            {
+                eventName = eventName,
+                parameters = parameters != null
+                    ? new Dictionary<string, object>(parameters)
+                    : null
+            });
+        }
+
+        private void FlushPendingFirebaseEvents()
+        {
+            while (_pendingFirebaseEvents.Count > 0)
+            {
+                var pending = _pendingFirebaseEvents.Dequeue();
+                LogToFirebase(pending.eventName, pending.parameters);
+            }
         }
 
         private void LogToFacebook(string eventName, Dictionary<string, object> parameters)
@@ -165,10 +200,17 @@ namespace BalloonFlow
             {
                 case long lv:   return new Parameter(key, lv);
                 case int iv:    return new Parameter(key, iv);
+                case bool bv:   return new Parameter(key, bv ? 1L : 0L);
                 case double dv: return new Parameter(key, dv);
                 case float fv:  return new Parameter(key, fv);
                 default:        return new Parameter(key, value?.ToString() ?? "");
             }
+        }
+
+        private struct PendingFirebaseEvent
+        {
+            public string eventName;
+            public Dictionary<string, object> parameters;
         }
 
         #endregion

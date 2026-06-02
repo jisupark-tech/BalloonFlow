@@ -1636,11 +1636,12 @@ namespace BalloonFlow
                     Debug.Log($"[FlexTube]   spawned {partType} id={id} at ({data.position.x:F2},{data.position.z:F2}) rot.y={rotation.eulerAngles.y:F0} color={colorIdx} visualCount={visualCount}");
                 }
 
-                // HP = (visual segment 수) — cell 단위가 아닌 visual segment 단위.
+                // HP = segment cell 수(튜브 길이). cell 당 1히트로 파괴되고, visual segment(cell×N)는
+                // FlexTube 가 parts 에서 세어 HP 비율로 비례 감소시킨다(한 hit 당 N개씩).
                 // segmentCellCount = 0 (cap 만) 이면 안전 fallback 1.
-                int totalVisualSegments = Mathf.Max(1, segmentCellCount * visualSegmentsPerCell);
+                int flexTubeHp = Mathf.Max(1, segmentCellCount);
                 int color = _balloons[ids[0]].color;
-                tube.Initialize(totalVisualSegments, color, groupId, parts);
+                tube.Initialize(flexTubeHp, color, groupId, parts);
             }
         }
 
@@ -2863,7 +2864,10 @@ namespace BalloonFlow
             switch (data.gimmickType)
             {
                 case GimmickChain:
-                    ChainPopAdjacentSameColor(data);
+                    // ROLLBACK_DISABLE_FIELD_CHAIN_POP_20260602:
+                    // Previous behavior chain-popped same-color adjacent balloons after a normal dart hit.
+                    // Linked Dart Box now uses the same "Chain" key on holder/queue data, so field balloon
+                    // pops must stay dart:balloon = 1:1 and should not trigger extra balloon pops here.
                     break;
 
                 case GimmickPinataBox:

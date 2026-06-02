@@ -76,11 +76,23 @@ namespace BalloonFlow
                 Debug.LogWarning($"[PinataBoxView] egg 수({n}) != footprint {w}×{h}(={w * h}). " +
                                  "각 알=풍선 1칸 모델이므로 eggColors 길이를 W*H 로 맞추세요.", this);
 
-            // 격자 한 칸 = footprint 안쪽 영역(_innerAreaRatio)을 cols×rows 로 나눈 크기.
-            // paintbox 테두리 안에 알이 들어가도록 footprint 전체가 아니라 안쪽만 사용한다.
+            // 틀(paintbox)을 footprint 에 맞춰 먼저 스케일 → 이후 알을 '틀의 실제 안쪽 영역'에 맞춘다.
+            // 알 크기를 footprint(cellSize) 가 아니라 '틀의 실제 bounds' 기준으로 잡아야, 틀이 footprint 와
+            // 다른 크기(아트가 더 작거나, _frame 미와이어로 스케일 안 됨)여도 알이 항상 틀 안에 들어간다.
+            ScaleFrameToFootprint(w, h, cellSizeX, cellSizeZ);
+
+            // 알 격자가 들어갈 영역(월드 크기): 틀이 있으면 틀의 실제 bounds, 없으면 footprint 로 폴백.
+            float areaX, areaZ;
+            if (!TryGetFrameWorldSize(out areaX, out areaZ))
+            {
+                areaX = w * cellSizeX;
+                areaZ = h * cellSizeZ;
+            }
+
+            // 격자 한 칸 = 영역 안쪽(_innerAreaRatio)을 cols×rows 로 나눈 크기. 테두리 여백 확보.
             float ir = Mathf.Clamp(_innerAreaRatio, 0.1f, 1f);
-            float gridCellW = (w * cellSizeX * ir) / cols;
-            float gridCellZ = (h * cellSizeZ * ir) / rows;
+            float gridCellW = (areaX * ir) / cols;
+            float gridCellZ = (areaZ * ir) / rows;
 
             // 템플릿 월드 bounds 측정 → 격자 칸에 맞출 스케일 계수 산출. 측정 위해 잠깐 활성화.
             bool tplWasActive = _eggTemplate.activeSelf;
@@ -134,8 +146,21 @@ namespace BalloonFlow
                 _eggTextures.Add(texChild);
                 _eggMaxHps.Add(maxHp);
             }
+            // 틀 스케일은 위(격자 산출 전)에서 이미 수행했다.
+        }
 
-            ScaleFrameToFootprint(w, h, cellSizeX, cellSizeZ);
+        /// <summary>틀(_frame)의 현재 renderer world bounds 크기. 미와이어/렌더러 없음/0크기면 false.</summary>
+        private bool TryGetFrameWorldSize(out float sizeX, out float sizeZ)
+        {
+            sizeX = 0f; sizeZ = 0f;
+            if (_frame == null) return false;
+            var rends = _frame.GetComponentsInChildren<Renderer>(true);
+            if (rends == null || rends.Length == 0) return false;
+            Bounds b = rends[0].bounds;
+            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+            if (b.size.x <= 0.0001f || b.size.z <= 0.0001f) return false;
+            sizeX = b.size.x; sizeZ = b.size.z;
+            return true;
         }
 
         /// <summary>알 항목 i 의 현재 HP 반영 — 0 이하면 알 제거, 절반 이하면 균열(texture) 활성. 남은 알 있으면 true.</summary>

@@ -68,6 +68,20 @@ namespace BalloonFlow.Analytics
         public const string P_TRANSACTION_ID      = "transaction_id";
         public const string P_PRODUCT_CATEGORY    = "product_category";     // coin|bundle|noads|offer
 
+        // item_use_event
+        public const string P_ITEM_ID             = "item_id";
+        public const string P_ITEM_TYPE           = "item_type";            // booster|life|other
+        public const string P_ITEM_CONTEXT        = "item_context";         // in_level|lobby|shop|other
+        public const string P_QUANTITY            = "quantity";
+        public const string P_BALANCE_AFTER       = "balance_after";
+
+        // economy_event
+        public const string P_CURRENCY_TYPE       = "currency_type";        // coin|gem|life|booster
+        public const string P_FLOW_TYPE           = "flow_type";            // earn|spend
+        public const string P_SOURCE              = "source";
+        public const string P_SINK                = "sink";
+        public const string P_AMOUNT              = "amount";
+
         // ─── ad_event (impression-level revenue, MAX OnAdRevenuePaidEvent) ───
         public const string P_AD_TYPE             = "ad_type";              // interstitial|rewarded|banner|mrec
         public const string P_AD_PLACEMENT        = "ad_placement";         // MAX placement (있으면)
