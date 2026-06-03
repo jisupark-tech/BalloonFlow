@@ -32,7 +32,6 @@ namespace BalloonFlow
         private const float ICON_SCALE_INACTIVE = 0.9f;
         private const float ICON_Y_OFFSET = 25f; // 활성 +25, 비활성 -25
         private const float ICON_SCALE_DURATION = 0.2f;
-        private const string WS_FX_FIRE_PREFAB_RESOURCE = "Prefabs/FXFire";
         private const float WS_FIRE_FLY_DURATION = 0.55f;
         private const float WS_FIRE_PULSE_DURATION = 0.18f;
         private const float WS_SLIDER_FILL_DURATION = 0.45f;
@@ -406,6 +405,9 @@ namespace BalloonFlow
             if (root != null && !root.activeSelf) root.SetActive(true);
             if (_btnWinningStreak != null && !_btnWinningStreak.gameObject.activeSelf)
                 _btnWinningStreak.gameObject.SetActive(true);
+
+            // 강제표시(프리뷰)에서도 현재 배율 숫자(TextGauge)·Multiplier 가 보이게.
+            RefreshWsMultiplierDisplay();
         }
 
         /// <summary>로비 WS 미니 표시(진행 게이지/배수/타이머/보상 아이콘) 갱신.
@@ -419,10 +421,8 @@ namespace BalloonFlow
             var state = mgr.State;
             ResolveWsTexts();
 
-            // 배수 (TextGauge + Outline)
-            string mult = $"x{WinningStreakUI.ResolveCurrentMultiplier()}";
-            if (_wsTxtGauge != null) _wsTxtGauge.text = mult;
-            if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = mult;
+            // 현재 배율(TextGauge/Outline 숫자 + Multiplier Animator) 반영.
+            RefreshWsMultiplierDisplay();
 
             // 회차 남은 시간 (TextTimer + Outline). Update 가 매초 갱신하지만 즉시 1회도 세팅.
             {
@@ -444,6 +444,20 @@ namespace BalloonFlow
             }
 
             BindWsRewardItem(stage);
+        }
+
+        /// <summary>현재 배율(ResolveCurrentMultiplier)을 TextGauge/TextGaugeOutline 숫자 + Multiplier Animator 에 반영.
+        /// IsUnlocked 게이트와 무관하게 호출 가능 — 로비 표시·프리뷰(강제표시) 양쪽에서 항상 현재 배율 숫자가 보이게 한다.</summary>
+        private void RefreshWsMultiplierDisplay()
+        {
+            ResolveWsTexts();
+            int curMultiplier = WinningStreakUI.ResolveCurrentMultiplier();
+            string mult = $"x{curMultiplier}";
+            if (_wsTxtGauge != null) _wsTxtGauge.text = mult;
+            if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = mult;
+            ResolveWsFxRefs();
+            if (_wsMultiplier != null)
+                WinningStreakUI.PlayMultiplierState(_wsMultiplier, curMultiplier);
         }
 
         /// <summary>WS 미니 표시의 배수(TextGauge/Outline)·시간(TextTimer/Outline) 텍스트를 이름으로 1회 해석·캐시.
@@ -490,6 +504,9 @@ namespace BalloonFlow
             yield return PlayWsFireFlyAndPulse();
 
             // FxFire 가 커졌다 작아진 직후 → Multiplier 가 X=10 으로 튕기듯 슬라이드 인.
+            // 슬라이드 인 전에 현재 배수 상태로 Animator 세팅 (FX 중 정확한 배수 표시).
+            if (_wsMultiplier != null)
+                WinningStreakUI.PlayMultiplierState(_wsMultiplier, WinningStreakUI.ResolveCurrentMultiplier());
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
 
             if (_wsProgressSlider != null)
@@ -541,16 +558,32 @@ namespace BalloonFlow
             yield return _wsLobbyFxSequence.WaitForCompletion();
         }
 
+        /// <summary>FxItem(iconWinningStreak) 을 화면 중앙→target(ImageIcon) 으로 날린 뒤, target 이 커졌다 복귀하고,
+        /// 마지막에 FxFire(반짝이 효과)를 활성화한다. (날아가는 것=FxItem, 도착지=ImageIcon, FxFire=반짝이 only)</summary>
         private IEnumerator PlayWsFireFlyAndPulse()
         {
-            RectTransform target = ResolveWsFireTarget();
+            RectTransform target = ResolveWsFireTarget();   // ImageIcon
             Transform parent = ResolveWsFxParent();
-            GameObject firePrefab = Resources.Load<GameObject>(WS_FX_FIRE_PREFAB_RESOURCE);
+            GameObject flyPrefab = Resources.Load<GameObject>(Const.PREFAB_FXITEM);
 
-            if (firePrefab != null && parent != null && target != null)
+            if (flyPrefab != null && parent != null && target != null)
             {
-                GameObject fly = Instantiate(firePrefab, parent);
-                fly.name = "FXFire_WinningStreak_Fly";
+                GameObject fly = Instantiate(flyPrefab, parent);
+                fly.name = "FXItem_WinningStreak_Fly";
+
+                // 날아가는 아이콘을 iconWinningStreak 으로 교체.
+                var flyImg = fly.GetComponentInChildren<Image>(true);
+                if (flyImg != null)
+                {
+                    if (ResourceManager.HasInstance)
+                    {
+                        var spr = ResourceManager.Instance.GetUISprite(Const.SPR_ICONWINNINGSTREAK);
+                        if (spr != null) { flyImg.sprite = spr; flyImg.preserveAspect = true; }
+                    }
+                    flyImg.color = Color.white;
+                    flyImg.raycastTarget = false;
+                }
+
                 RectTransform flyRt = fly.GetComponent<RectTransform>();
                 RectTransform parentRt = parent as RectTransform;
 
@@ -574,25 +607,24 @@ namespace BalloonFlow
                     _wsLobbyFxSequence.Append(fly.transform.DOLocalMove(targetLocal, WS_FIRE_FLY_DURATION)
                         .SetEase(Ease.InOutCubic));
                 }
-
-                _wsLobbyFxSequence.Join(fly.transform.DOScale(Vector3.one * 0.72f, WS_FIRE_FLY_DURATION)
-                    .SetEase(Ease.InOutSine));
                 yield return _wsLobbyFxSequence.WaitForCompletion();
                 Destroy(fly);
             }
 
-            Transform pulseTarget = _wsFxFire != null ? _wsFxFire.transform : (target != null ? target : null);
-            if (pulseTarget == null) yield break;
+            // 도착 후 target(ImageIcon) 펄스 — 커졌다 원래대로.
+            if (target != null)
+            {
+                Vector3 baseScale = target.localScale;
+                _wsLobbyFxSequence?.Kill();
+                _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
+                _wsLobbyFxSequence.Append(target.DOScale(baseScale * 1.25f, WS_FIRE_PULSE_DURATION).SetEase(Ease.OutBack));
+                _wsLobbyFxSequence.Append(target.DOScale(baseScale, WS_FIRE_PULSE_DURATION).SetEase(Ease.OutCubic));
+                yield return _wsLobbyFxSequence.WaitForCompletion();
+            }
 
+            // 펄스 후 FxFire(반짝이 효과) 활성화.
             if (_wsFxFire != null && !_wsFxFire.activeSelf)
                 _wsFxFire.SetActive(true);
-
-            Vector3 baseScale = pulseTarget.localScale;
-            _wsLobbyFxSequence?.Kill();
-            _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
-            _wsLobbyFxSequence.Append(pulseTarget.DOScale(baseScale * 1.25f, WS_FIRE_PULSE_DURATION).SetEase(Ease.OutBack));
-            _wsLobbyFxSequence.Append(pulseTarget.DOScale(baseScale, WS_FIRE_PULSE_DURATION).SetEase(Ease.OutCubic));
-            yield return _wsLobbyFxSequence.WaitForCompletion();
         }
 
         private IEnumerator PlayWsRewardRise()
@@ -632,14 +664,24 @@ namespace BalloonFlow
         {
             Transform root = _wsDisplayRoot != null ? _wsDisplayRoot.transform
                            : (_btnWinningStreak != null ? _btnWinningStreak.transform : transform);
+
+            // [방어] _wsFxFire/_wsFxReward/_wsFxFireTarget 는 '하이어라키(씬) 인스턴스'여야 함.
+            // 실수로 Project 의 FXFire.prefab(에셋)을 넣으면 위치가 씬 좌표가 아니라 에셋 좌표(0 등)라
+            // 날아오는 불꽃이 엉뚱한 곳으로 감 → 에셋 참조는 버리고 아래에서 이름으로 재탐색.
+            if (_wsFxFire != null && !_wsFxFire.scene.IsValid()) _wsFxFire = null;
+            if (_wsFxReward != null && !_wsFxReward.scene.IsValid()) _wsFxReward = null;
+            if (_wsFxFireTarget != null && !_wsFxFireTarget.gameObject.scene.IsValid()) _wsFxFireTarget = null;
+
             if (_wsFxFire == null)
                 _wsFxFire = FindChildComponentByName<Transform>(root, "FxFire")?.gameObject
                          ?? FindChildComponentByName<Transform>(root, "FXFire")?.gameObject;
             if (_wsFxReward == null)
                 _wsFxReward = FindChildComponentByName<Transform>(root, "FxReward")?.gameObject
                            ?? FindChildComponentByName<Transform>(root, "FXReward")?.gameObject;
-            if (_wsFxFireTarget == null && _wsFxFire != null)
-                _wsFxFireTarget = _wsFxFire.transform as RectTransform;
+            // 날아가는 FxItem 의 도착지 = ImageIcon. 미할당 시 이름으로 탐색, 최후에만 FxFire 로 폴백.
+            if (_wsFxFireTarget == null)
+                _wsFxFireTarget = FindChildComponentByName<RectTransform>(root, "ImageIcon")
+                               ?? (_wsFxFire != null ? _wsFxFire.transform as RectTransform : null);
             if (_wsMultiplier == null)
             {
                 var maskArea = FindChildComponentByName<Transform>(root, "MultiplierMaskArea");
@@ -710,7 +752,8 @@ namespace BalloonFlow
             _wsTxtTimerOutline = FindChildComponentByName<TMP_Text>(root, "TextTimerOutline");
             _wsTxtGauge        = FindChildComponentByName<TMP_Text>(root, "TextGauge");
             _wsTxtGaugeOutline = FindChildComponentByName<TMP_Text>(root, "TextGaugeOutline");
-            _wsTextsResolved = true;
+            // 핵심 텍스트(TextGauge)를 실제로 찾았을 때만 캐시. 못 찾으면 다음 호출에서 재시도(영구 null 방지).
+            _wsTextsResolved = _wsTxtGauge != null;
         }
 
         // RewardItem 구조 내부 아이콘 Image 후보 이름(popup 과 동일).
@@ -1036,6 +1079,9 @@ namespace BalloonFlow
             // [에디터 전용] z 키 → WinningStreak 로비 연출 전체를 세팅한 대로 1회 재생(검증용, 실제 보상 미지급).
             if (Keyboard.current != null && Keyboard.current.zKey.wasPressedThisFrame)
                 StartWinningStreakLobbyFxPreview();
+            // [에디터 전용] x 키 → 실패 연출 미리보기 (Multiplier 가 높은 배수에서 1 로 떨어지는 연출, 실제 state 변경 없음).
+            if (Keyboard.current != null && Keyboard.current.xKey.wasPressedThisFrame)
+                StartWinningStreakFailPreview();
 #endif
         }
 
@@ -1062,6 +1108,46 @@ namespace BalloonFlow
                 achievedStages = new System.Collections.Generic.List<int> { stage },
             };
             yield return PlayWinningStreakLobbyFx(preview, grantRewards: false, forceVisible: true);
+            _wsLobbyFxCoroutine = null;
+        }
+
+        /// <summary>[에디터 전용] 실패 연출 미리보기 — Multiplier 를 높은 배수로 띄운 뒤 1 로 떨어뜨려 실패 시 배수 리셋을 시각화.
+        /// 실제 WS state(streak/points)는 건드리지 않음.</summary>
+        private void StartWinningStreakFailPreview()
+        {
+            if (_wsLobbyFxCoroutine != null) StopCoroutine(_wsLobbyFxCoroutine);
+            _wsLobbyFxCoroutine = StartCoroutine(PlayWinningStreakFailPreviewRoutine());
+        }
+
+        private IEnumerator PlayWinningStreakFailPreviewRoutine()
+        {
+            ForceShowWinningStreakUI();
+            ResolveWsFxRefs();
+
+            // Multiplier 오브젝트가 비활성이면 슬라이드/연출이 안 보이므로 강제 활성화.
+            if (_wsMultiplier != null && !_wsMultiplier.gameObject.activeSelf)
+                _wsMultiplier.gameObject.SetActive(true);
+
+            // 데모용으로 현재 배수(최소 x5 보장)를 먼저 보여준 뒤 1 로 드롭.
+            int shownMultiplier = Mathf.Max(5, WinningStreakUI.ResolveCurrentMultiplier());
+
+            SetWsMultiplierX(WS_MULTIPLIER_HIDDEN_X);
+            if (_wsMultiplier != null)
+                WinningStreakUI.PlayMultiplierState(_wsMultiplier, shownMultiplier);
+            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
+
+            // 잠깐 보여준 뒤 → 실패 → 배수 1 로 리셋(드롭).
+            yield return new WaitForSecondsRealtime(0.6f);
+            if (_wsMultiplier != null)
+            {
+                WinningStreakUI.PlayMultiplierState(_wsMultiplier, 1);
+                // Animator 유무와 무관하게 '떨어지는' 느낌이 나도록 아래로 펀치 + 살짝 축소 후 복귀.
+                _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, -36f), 0.4f, 8, 0.7f).SetUpdate(true);
+                _wsMultiplier.DOPunchScale(new Vector3(-0.18f, -0.18f, 0f), 0.4f, 8, 0.7f).SetUpdate(true);
+            }
+
+            yield return new WaitForSecondsRealtime(0.7f);
+            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
             _wsLobbyFxCoroutine = null;
         }
 #endif

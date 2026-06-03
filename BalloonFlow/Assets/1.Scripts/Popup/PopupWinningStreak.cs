@@ -297,6 +297,8 @@ namespace BalloonFlow
             if (multiplierGo == null) return;
             int multiplier = WinningStreakUI.ResolveCurrentMultiplier();
             WinningStreakUI.ApplyPopupPositionsForMultiplier(multiplierGo.transform, multiplier);
+            // 실제 배수 반영 — Animator 상태(Multiplier5/10/25/100, 배수 1 은 기본 상태) 재생.
+            WinningStreakUI.PlayMultiplierState(multiplierGo.transform, multiplier);
         }
 
         /// <summary>ImageMultiplier 아래의 SlotMultiplier(0..4) 5개에 streak1..streak5+ 배수 텍스트 채움.

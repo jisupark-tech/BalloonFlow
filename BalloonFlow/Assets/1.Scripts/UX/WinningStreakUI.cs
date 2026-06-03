@@ -109,6 +109,20 @@ namespace BalloonFlow
             animator.Play(stateName, 0, 0f);
         }
 
+        /// <summary>Multiplier 루트의 Animator 로 현재 배수 상태를 재생 (HUD/Popup/Lobby 공통).
+        /// 배수 5/10/25/100 → Multiplier{N} 상태 재생. 배수 1(연승 없음/실패 리셋)은 전용 anim 이 없어 Animator 를 기본 상태로 리셋.
+        /// Animator 미존재/비활성 시 no-op. 실제 배수(ResolveCurrentMultiplier) 를 그대로 넘겨 호출.</summary>
+        public static void PlayMultiplierState(Transform multiplierRoot, int multiplier)
+        {
+            if (multiplierRoot == null) return;
+            var animator = multiplierRoot.GetComponentInChildren<Animator>(true);
+            if (animator == null || !animator.isActiveAndEnabled) return;
+            if (multiplier > 1)
+                animator.Play($"Multiplier{multiplier}", 0, 0f);
+            else
+                animator.Rebind();   // 배수 1 → 기본(x1/idle) 상태로 복귀
+        }
+
         // ─── helpers ─────────────────────────────────────────────
 
         private static int IndexForMultiplier(int multiplier)

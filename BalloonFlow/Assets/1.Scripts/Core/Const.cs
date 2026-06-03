@@ -273,6 +273,7 @@ namespace BalloonFlow
         public const string SPR_ICONSUFFLE                               = "iconSuffle";
         public const string SPR_ICONSUFFLEINGAME                         = "iconSuffleIngame";
         public const string SPR_ICONWIFI                                 = "iconWifi";
+        public const string SPR_ICONWINNINGSTREAK                        = "iconWinningStreak";
         public const string SPR_ICONZAP                                  = "iconZap";
         public const string SPR_ICONZAPINGAME                            = "iconZapIngame";
 

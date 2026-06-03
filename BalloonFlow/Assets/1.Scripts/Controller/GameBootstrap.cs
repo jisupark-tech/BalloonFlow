@@ -684,8 +684,9 @@ namespace BalloonFlow
                 // [#5/12] Next 분기 (UX플로우 §5-4·§435 + Key Blaze 스펙):
                 //   - Lv.5~33 클리어 → 다음 레벨 자동 진입 (학습·진행 흐름 유지)
                 //   - 해금 바로 전 스테이지(=UNLOCK_LEVEL-1, Lv.34) 클리어부터 → 로비 강제.
-                //     34 클리어 → 로비(다음이 35) → 35 클리어 시 highestCleared=35 로 WS 해금 → 로비에서 노출.
-                //   - 이벤트 진행 중(IsEventActive)이면 하위 레벨 재도전 포함 매 클리어마다 로비.
+                //     34 클리어 → highestCleared=34 → WS 노출(IsUnlocked, 활성화만) → 로비.
+                //     35 클리어 → highestCleared=35 → 점수·보상 적립 시작(IsScoringActive). (노출과 적립 게이트 분리)
+                //   - 이벤트 진행 중(IsEventActive=IsUnlocked)이면 하위 레벨 재도전 포함 매 클리어마다 로비.
                 bool wsActive = WinningStreakManager.HasInstance && WinningStreakManager.Instance.IsEventActive;
                 if (_current >= FtueGate.WINNING_STREAK_UNLOCK_CLEAR_LEVEL - 1 || wsActive)
                 {

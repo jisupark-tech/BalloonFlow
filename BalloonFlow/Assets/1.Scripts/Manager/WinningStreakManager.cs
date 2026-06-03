@@ -127,6 +127,20 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>점수/보상 적립 가능 여부 — 해금 레벨(unlockLevel)을 실제로 클리어한 뒤부터.
+        /// 노출/로비복귀 게이트(IsUnlocked)는 unlockLevel-1 클리어 시 true(한 단계 빠름)지만,
+        /// 적립은 unlockLevel 클리어부터 시작한다. (명세: unlockLevel=35 → 34 클리어=활성화/로비복귀만, 35 클리어부터 적립.)</summary>
+        public bool IsScoringActive
+        {
+            get
+            {
+                var cfg = Config;
+                var u = UserDataService.HasInstance ? UserDataService.Instance.CurrentUser : null;
+                if (cfg == null || u == null) return false;
+                return u.highestClearedLevel >= cfg.unlockLevel;
+            }
+        }
+
         public int TotalStageCount => Config?.stages?.Count ?? 0;
 
         /// <summary>이벤트 진행 중 여부 — 해금 상태면 상시 진행(스케줄이 한 주를 빈틈없이 덮음). UX(로비 복귀) 게이트용.</summary>
@@ -189,9 +203,11 @@ namespace BalloonFlow
 
             EnsureActiveRound();   // 회차 경계면 먼저 리셋 후 이번 클리어를 새 회차에 반영
 
-            // [연승은 해금 후에만 증가] 미해금/종료 시에는 streak 증가도 포인트 적립도 하지 않는다.
-            // (이전: 게이트 앞에서 무조건 +1 → 해금 전에도 연승 숫자가 올라 표시 혼란.)
-            if (!IsUnlocked || s.eventFinished)
+            // [적립은 unlockLevel 클리어부터] IsScoringActive 게이트.
+            //   - 노출(IsUnlocked)은 unlockLevel-1(=34) 클리어 시 켜져 로비에 WS UI 가 활성화되지만,
+            //     streak 증가·포인트 적립은 unlockLevel(=35) 클리어부터 시작한다.
+            //   - 즉 34 클리어 = 활성화/로비복귀만, 35 클리어부터 점수·보상 누적.
+            if (!IsScoringActive || s.eventFinished)
             {
                 SaveProgressFireAndForget();   // EnsureActiveRound 로 회차 리셋됐을 수 있어 저장.
                 OnStateChanged?.Invoke();
