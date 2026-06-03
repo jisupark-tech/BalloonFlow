@@ -333,6 +333,22 @@ namespace BalloonFlow
             // [2026-05-20] WinningStreak 버튼 — unlockLevel(34) 도달 전엔 숨김.
             HookWinningStreakEvents();
             RefreshWinningStreakVisibility();
+            // WS 로비 연출 트리거는 OpenUI() 로 이동 — UILobby 는 UiTr(DontDestroyOnLoad) 아래 지속 인스턴스라
+            // Awake 는 최초 1회만 실행됨. 매 로비 진입(인게임→로비 재진입 포함)마다 연출되도록 OpenUI 에서 발동한다.
+        }
+
+        /// <summary>로비가 열릴 때마다(신규 생성·재사용 모두 OpenUI 경유) 호출. 대기 중인 WS 로비 연출을 재생한다.</summary>
+        public override void OpenUI()
+        {
+            base.OpenUI();
+            RefreshWinningStreakVisibility();
+            TriggerPendingWinningStreakLobbyFx();
+        }
+
+        /// <summary>대기 중인 WS 로비 연출 코루틴을 (재)시작. 진행 중이면 중단 후 재시작해 매 진입마다 확실히 발동.</summary>
+        private void TriggerPendingWinningStreakLobbyFx()
+        {
+            if (_wsLobbyFxCoroutine != null) StopCoroutine(_wsLobbyFxCoroutine);
             _wsLobbyFxCoroutine = StartCoroutine(PlayPendingWinningStreakLobbyFxDeferred());
         }
 
@@ -527,7 +543,8 @@ namespace BalloonFlow
                         ? WinningStreakConfigService.Instance.GetStage(achievedStage)
                         : null;
                     BindWsRewardItem(achievedDoc);
-                    yield return PlayWsRewardRise();
+                    // 빛(FXReward) 대신 RewardItem 위치에서 WinningStreakGetReward 스폰 → 위로 상승(프리팹 Animator).
+                    yield return PlayWsGetRewardSpawn(achievedDoc);
                     if (grantRewards && WinningStreakManager.HasInstance && !WinningStreakManager.Instance.IsStageClaimed(achievedStage))
                         WinningStreakManager.Instance.ClaimStage(achievedStage);
                 }
@@ -627,37 +644,34 @@ namespace BalloonFlow
                 _wsFxFire.SetActive(true);
         }
 
-        private IEnumerator PlayWsRewardRise()
+        /// <summary>보상 수령 연출 — RewardItem 위치에서 WinningStreakGetReward 프리팹을 스폰해 위로 상승시킨다.
+        /// (이전: FXReward 빛 상승. 변경: 빛 대신 WinningStreakGetReward 가 RewardItem 에서 나와 올라감.)
+        /// 상승+페이드는 프리팹 자체 Animator 가 처리하므로 여기선 스폰 후 재생 시간만 대기.</summary>
+        private IEnumerator PlayWsGetRewardSpawn(WinningStreakStage stage)
         {
             ResolveWsFxRefs();
-            if (_wsFxReward == null)
-                yield break;
+            if (stage == null || stage.rewards == null) yield break;
 
-            RectTransform rt = _wsFxReward.transform as RectTransform;
-            Vector3 startLocal = _wsFxReward.transform.localPosition;
-            Vector2 startAnchored = rt != null ? rt.anchoredPosition : Vector2.zero;
+            Vector2 anchor = ResolveWsRewardItemAnchor();
+            WinningStreakGetRewardSpawner.Play(stage.rewards, anchor);
 
-            CanvasGroup cg = _wsFxReward.GetComponent<CanvasGroup>();
-            if (cg == null) cg = _wsFxReward.AddComponent<CanvasGroup>();
-            cg.alpha = 1f;
+            // 프리팹 내부 상승/페이드 Animator 재생 대기.
+            yield return new WaitForSecondsRealtime(WS_REWARD_RISE_DURATION + 0.25f);
+        }
 
-            _wsFxReward.SetActive(true);
+        /// <summary>RewardItem 의 화면 위치를 WinningStreakGetReward 스폰 부모(EffectTr) 로컬 좌표로 변환.</summary>
+        private Vector2 ResolveWsRewardItemAnchor()
+        {
+            RectTransform rewardRt = _wsRewardItem != null ? _wsRewardItem.transform as RectTransform : null;
+            RectTransform parentRt = ResolveWsFxParent() as RectTransform;
+            if (rewardRt == null || parentRt == null) return Vector2.zero;
 
-            _wsLobbyFxSequence?.Kill();
-            _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
-            if (rt != null)
-                _wsLobbyFxSequence.Append(rt.DOAnchorPos(startAnchored + Vector2.up * WS_REWARD_RISE_Y, WS_REWARD_RISE_DURATION)
-                    .SetEase(Ease.OutCubic));
-            else
-                _wsLobbyFxSequence.Append(_wsFxReward.transform.DOLocalMove(startLocal + Vector3.up * WS_REWARD_RISE_Y, WS_REWARD_RISE_DURATION)
-                    .SetEase(Ease.OutCubic));
-            _wsLobbyFxSequence.Join(cg.DOFade(0f, WS_REWARD_RISE_DURATION).SetEase(Ease.InCubic));
-            yield return _wsLobbyFxSequence.WaitForCompletion();
-
-            if (rt != null) rt.anchoredPosition = startAnchored;
-            else _wsFxReward.transform.localPosition = startLocal;
-            cg.alpha = 1f;
-            _wsFxReward.SetActive(false);
+            Canvas canvas = parentRt.GetComponentInParent<Canvas>();
+            Camera cam = (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay) ? canvas.worldCamera : null;
+            Vector2 screen = RectTransformUtility.WorldToScreenPoint(cam, rewardRt.position);
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRt, screen, cam, out Vector2 local))
+                return local;
+            return Vector2.zero;
         }
 
         private void ResolveWsFxRefs()
@@ -759,38 +773,64 @@ namespace BalloonFlow
         // RewardItem 구조 내부 아이콘 Image 후보 이름(popup 과 동일).
         private static readonly string[] WsRewardIconNames = { "ImageRewardItem", "ImageItem", "ImageReward", "ImageGift" };
 
-        /// <summary>RewardItem 구조(_wsRewardItem)에 현재 stage 대표 보상의 아이콘 + 카운트 텍스트 바인딩.</summary>
+        /// <summary>RewardItem(_wsRewardItem) 변형 전환 + 아이콘/카운트 바인딩.
+        /// 구조: RewardGold(코인용·ImageGold 고정) / RewardItem(아이템용·ImageItem swap) / ImageGift(WS 미사용).
+        /// 코인 → RewardGold 활성, 그 외 → RewardItem 변형 활성 + ImageItem sprite swap.
+        /// 아이콘 키는 PopupWinningStreak 와 동일(SPR_ICON*)이라 팝업과 같은 이미지가 나오게 한다.</summary>
         private void BindWsRewardItem(WinningStreakStage stage)
         {
             if (_wsRewardItem == null) return;
 
-            ResolveWsPrimaryReward(stage, out string spriteKey, out int count);
+            ResolveWsPrimaryReward(stage, out string spriteKey, out int count, out bool isCoin);
 
-            // 아이콘
-            Image icon = null;
-            for (int i = 0; i < WsRewardIconNames.Length && icon == null; i++)
-                icon = FindChildComponentByName<Image>(_wsRewardItem.transform, WsRewardIconNames[i]);
-            if (icon != null && !string.IsNullOrEmpty(spriteKey) && ResourceManager.HasInstance)
+            Transform root = _wsRewardItem.transform;
+            GameObject goldVariant = FindDirectChildGO(root, "RewardGold");
+            GameObject itemVariant = FindDirectChildGO(root, "RewardItem");   // root 와 동명 → 직계 자식만 탐색
+            GameObject giftVariant = FindDirectChildGO(root, "ImageGift");
+
+            // 타입별 변형 토글 (코인=골드, 그 외=아이템; WS 보상엔 Gift 없음).
+            if (goldVariant != null) goldVariant.SetActive(isCoin);
+            if (itemVariant != null) itemVariant.SetActive(!isCoin);
+            if (giftVariant != null) giftVariant.SetActive(false);
+
+            Transform active = ((isCoin ? goldVariant : itemVariant) != null
+                ? (isCoin ? goldVariant : itemVariant).transform
+                : root);
+
+            // 비코인 변형만 아이콘 sprite swap (코인은 ImageGold 고정 비주얼).
+            if (!isCoin && !string.IsNullOrEmpty(spriteKey) && ResourceManager.HasInstance)
             {
+                Image icon = null;
+                for (int i = 0; i < WsRewardIconNames.Length && icon == null; i++)
+                    icon = FindChildComponentByName<Image>(active, WsRewardIconNames[i]);
                 var spr = ResourceManager.Instance.GetUISprite(spriteKey);
-                if (spr != null) { icon.sprite = spr; icon.enabled = true; }
+                if (icon != null && spr != null) { icon.sprite = spr; icon.enabled = true; }
             }
 
-            // 카운트 텍스트 (TextReward + Outline)
+            // 카운트 텍스트 (활성 변형 내부 TextReward + Outline).
             string countText = count > 0 ? $"x{count}" : "";
-            var t1 = FindChildComponentByName<TMP_Text>(_wsRewardItem.transform, "TextReward");
+            var t1 = FindChildComponentByName<TMP_Text>(active, "TextReward");
             if (t1 != null) t1.text = countText;
-            var t2 = FindChildComponentByName<TMP_Text>(_wsRewardItem.transform, "TextRewardOutline");
+            var t2 = FindChildComponentByName<TMP_Text>(active, "TextRewardOutline");
             if (t2 != null) t2.text = countText;
         }
 
-        /// <summary>stage 의 대표 보상(코인>핸드>셔플>잽>무한하트 우선) 아이콘 키 + 카운트.</summary>
-        private static void ResolveWsPrimaryReward(WinningStreakStage stage, out string spriteKey, out int count)
+        /// <summary>root 의 직계 자식 중 이름 일치하는 첫 GameObject (비활성 포함). root 와 동명인 변형 child 탐색용.</summary>
+        private static GameObject FindDirectChildGO(Transform root, string name)
         {
-            spriteKey = null; count = 0;
+            if (root == null) return null;
+            for (int i = 0; i < root.childCount; i++)
+                if (root.GetChild(i).name == name) return root.GetChild(i).gameObject;
+            return null;
+        }
+
+        /// <summary>stage 의 대표 보상(코인>핸드>셔플>잽>무한하트 우선) 아이콘 키 + 카운트 + 코인 여부.</summary>
+        private static void ResolveWsPrimaryReward(WinningStreakStage stage, out string spriteKey, out int count, out bool isCoin)
+        {
+            spriteKey = null; count = 0; isCoin = false;
             if (stage == null || stage.rewards == null) return;
             var r = stage.rewards;
-            if (r.coins > 0)                                  { spriteKey = Const.SPR_ICONGOLD;        count = r.coins; }
+            if (r.coins > 0)                                       { spriteKey = Const.SPR_ICONGOLD;        count = r.coins; isCoin = true; }
             else if (r.boosters != null && r.boosters.hand > 0)    { spriteKey = Const.SPR_ICONHAND;    count = r.boosters.hand; }
             else if (r.boosters != null && r.boosters.shuffle > 0) { spriteKey = Const.SPR_ICONSUFFLE;  count = r.boosters.shuffle; }
             else if (r.boosters != null && r.boosters.zap > 0)     { spriteKey = Const.SPR_ICONZAP;     count = r.boosters.zap; }
