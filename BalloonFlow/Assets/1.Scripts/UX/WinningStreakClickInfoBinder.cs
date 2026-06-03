@@ -35,6 +35,12 @@ namespace BalloonFlow
 
         // ── Entries 구성 ─────────────────────────────────────────
 
+        public static int CountRewards(WinningStreakStage stage)
+            => stage != null ? CountRewards(stage.rewards) : 0;
+
+        public static int CountRewards(ShopRewards rewards)
+            => BuildEntries(rewards).Count;
+
         private static List<Entry> BuildEntries(WinningStreakStage stage)
             => stage != null ? BuildEntries(stage.rewards) : new List<Entry>();
 

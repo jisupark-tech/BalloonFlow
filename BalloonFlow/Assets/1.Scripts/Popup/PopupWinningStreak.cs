@@ -879,7 +879,7 @@ namespace BalloonFlow
                 case SlotState.Locked:
                     SetActiveSafe(pooled.rotateLight, false);
                     SetSpriteSafe(pooled.imageInnerFrame, _sprFrameNumberDefault);
-                    SetSpriteSafe(pooled.imageArrow, _sprSlot);
+                    SetSpriteSafe(pooled.imageArrow, _sprArrow);
                     SetSpriteSafe(pooled.btnRewardImage, _sprSlot);
                     SetFontMaterialSafe(pooled.textNumberOutline, _fontMatPurpleOutline);
                     SetActiveSafe(pooled.iconLock, true);
@@ -891,7 +891,7 @@ namespace BalloonFlow
                 case SlotState.AchievedUnclaimed:
                     SetActiveSafe(pooled.rotateLight, true);
                     SetSpriteSafe(pooled.imageInnerFrame, _sprFrameNumberDefault);
-                    SetSpriteSafe(pooled.imageArrow, _sprSlot);
+                    SetSpriteSafe(pooled.imageArrow, _sprArrow);
                     SetSpriteSafe(pooled.btnRewardImage, _sprSlot);
                     SetFontMaterialSafe(pooled.textNumberOutline, _fontMatPurpleOutline);
                     SetActiveSafe(pooled.iconCheck, false);
@@ -1056,6 +1056,12 @@ namespace BalloonFlow
             if (pooled == null || pooled.boundStage <= 0) return;
             if (!WinningStreakManager.HasInstance) return;
 
+            if (WinningStreakManager.Instance.IsStageClaimed(pooled.boundStage))
+            {
+                HideTooltip();
+                return;
+            }
+
             bool ok = WinningStreakManager.Instance.ClaimStage(pooled.boundStage);
             if (ok)
             {
@@ -1063,6 +1069,8 @@ namespace BalloonFlow
                 // 즉시 시각 갱신.
                 BindSlotData(pooled, pooled.boundStage);
                 RefreshHeader();
+                HideTooltip();
+                return;
             }
 
             ToggleTooltipForSlot(pooled);
@@ -1090,6 +1098,11 @@ namespace BalloonFlow
             var stageDoc = WinningStreakConfigService.HasInstance
                 ? WinningStreakConfigService.Instance.GetStage(pooled.boundStage)
                 : null;
+            if (WinningStreakClickInfoBinder.CountRewards(stageDoc) <= 1)
+            {
+                HideTooltip();
+                return;
+            }
             WinningStreakClickInfoBinder.Bind(_tooltipInstance, stageDoc);
 
             _tooltipInstance.SetActive(true);

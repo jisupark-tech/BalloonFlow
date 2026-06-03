@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using UnityEngine.InputSystem;
 using DG.Tweening;
 using TMPro;
+using System.Collections;
 
 namespace BalloonFlow
 {
@@ -31,6 +32,17 @@ namespace BalloonFlow
         private const float ICON_SCALE_INACTIVE = 0.9f;
         private const float ICON_Y_OFFSET = 25f; // 활성 +25, 비활성 -25
         private const float ICON_SCALE_DURATION = 0.2f;
+        private const string WS_FX_FIRE_PREFAB_RESOURCE = "Prefabs/FXFire";
+        private const float WS_FIRE_FLY_DURATION = 0.55f;
+        private const float WS_FIRE_PULSE_DURATION = 0.18f;
+        private const float WS_SLIDER_FILL_DURATION = 0.45f;
+        private const float WS_REWARD_RISE_DURATION = 0.55f;
+        private const float WS_REWARD_RISE_Y = 130f;
+        // MultiplierMaskArea/Multiplier 슬라이드 — 연출 중 X=10 으로 튕겨 들어오고, 연출 종료 시 X=-725 로 빠짐.
+        private const float WS_MULTIPLIER_SHOWN_X = 10f;
+        private const float WS_MULTIPLIER_HIDDEN_X = -725f;
+        private const float WS_MULTIPLIER_SLIDE_IN_DURATION = 0.4f;
+        private const float WS_MULTIPLIER_SLIDE_OUT_DURATION = 0.35f;
 
         // Rail 슬라이드 인 연출 파라미터.
         // Top/Bottom Rail 모두 화면 위쪽 +120 에서 시작해 OutCubic 으로 제자리(0) 로 내려오는
@@ -157,11 +169,23 @@ namespace BalloonFlow
         [SerializeField] private GameObject _wsDisplayRoot;
         [Tooltip("현재 stage 대표 보상 — RewardItem 구조(내부 아이콘 Image + TextReward/Outline). root 를 할당.")]
         [SerializeField] private GameObject _wsRewardItem;
+
+        [Header("[WinningStreak — 로비 FX 연출 참조 (미할당 시 이름으로 자동 탐색)]")]
+        [Tooltip("WinningStreak/FXFire — 게이지 위 불꽃. 펄스(커졌다 작아짐) 대상. 미할당 시 root 하위 'FxFire'/'FXFire' 탐색.")]
+        [SerializeField] private GameObject _wsFxFire;
+        [Tooltip("WinningStreak/FXReward — 보상 상승·페이드 연출 오브젝트. 미할당 시 root 하위 'FxReward'/'FXReward' 탐색.")]
+        [SerializeField] private GameObject _wsFxReward;
+        [Tooltip("날아온 FXFire 가 도착할 위치 RectTransform. 보통 FXFire 의 RectTransform. 미할당 시 _wsFxFire 기준.")]
+        [SerializeField] private RectTransform _wsFxFireTarget;
+        [Tooltip("WinningStreak/MultiplierMaskArea/Multiplier RectTransform. 연출 중 X=10 으로 튕겨 들어오고 종료 시 X=-725 로 빠짐. 미할당 시 'MultiplierMaskArea'→'Multiplier' 탐색.")]
+        [SerializeField] private RectTransform _wsMultiplier;
         private float _wsTimerTick;
 
         // 이름 기반 텍스트 쌍 캐시 (outline + main).
         private TMP_Text _wsTxtTimer, _wsTxtTimerOutline, _wsTxtGauge, _wsTxtGaugeOutline;
         private bool _wsTextsResolved;
+        private Coroutine _wsLobbyFxCoroutine;
+        private Sequence _wsLobbyFxSequence;
 
         [Header("[Profile Display — 좌상단 표시 sprite]")]
         [Tooltip("PopupProfile 과 동일한 ProfileAssets ScriptableObject. 아이콘/프레임 sprite 카탈로그.")]
@@ -310,6 +334,7 @@ namespace BalloonFlow
             // [2026-05-20] WinningStreak 버튼 — unlockLevel(34) 도달 전엔 숨김.
             HookWinningStreakEvents();
             RefreshWinningStreakVisibility();
+            _wsLobbyFxCoroutine = StartCoroutine(PlayPendingWinningStreakLobbyFxDeferred());
         }
 
         private void HookProfileEvents()
@@ -370,6 +395,19 @@ namespace BalloonFlow
             if (unlocked) RefreshWinningStreakDisplay();
         }
 
+        /// <summary>[프리뷰 전용] unlock 게이트와 무관하게 WS UI(표시 root + 버튼)를 무조건 활성화.
+        /// _wsDisplayRoot 미할당 시 FXFire 의 부모(WinningStreak 루트)로 폴백.</summary>
+        private void ForceShowWinningStreakUI()
+        {
+            ResolveWsFxRefs();
+            GameObject root = _wsDisplayRoot != null
+                ? _wsDisplayRoot
+                : (_wsFxFire != null && _wsFxFire.transform.parent != null ? _wsFxFire.transform.parent.gameObject : null);
+            if (root != null && !root.activeSelf) root.SetActive(true);
+            if (_btnWinningStreak != null && !_btnWinningStreak.gameObject.activeSelf)
+                _btnWinningStreak.gameObject.SetActive(true);
+        }
+
         /// <summary>로비 WS 미니 표시(진행 게이지/배수/타이머/보상 아이콘) 갱신.
         /// OnStateChanged/OnConfigLoaded/OnUserDataReady 시 호출. 타이머는 Update 에서 매초 추가 갱신.</summary>
         private void RefreshWinningStreakDisplay()
@@ -410,6 +448,257 @@ namespace BalloonFlow
 
         /// <summary>WS 미니 표시의 배수(TextGauge/Outline)·시간(TextTimer/Outline) 텍스트를 이름으로 1회 해석·캐시.
         /// root 미준비 시 resolved 를 유지하지 않아 다음 호출에서 재시도.</summary>
+        private IEnumerator PlayPendingWinningStreakLobbyFxDeferred()
+        {
+            yield return null;
+            yield return null;
+
+            if (!WinningStreakManager.HasInstance) yield break;
+
+            var mgr = WinningStreakManager.Instance;
+            while (mgr.TryDequeuePendingLobbyAnimation(out var anim))
+            {
+                yield return PlayWinningStreakLobbyFx(anim);
+            }
+
+            _wsLobbyFxCoroutine = null;
+        }
+
+        private IEnumerator PlayWinningStreakLobbyFx(WinningStreakManager.PendingLobbyAnimation anim, bool grantRewards = true, bool forceVisible = false)
+        {
+            if (anim == null) yield break;
+
+            ResolveWsFxRefs();
+
+            // forceVisible(에디터 프리뷰): unlock 게이트 무시하고 WS UI 무조건 활성화.
+            if (forceVisible) ForceShowWinningStreakUI();
+            else RefreshWinningStreakVisibility();
+
+            // 연출 시작 전 Multiplier 를 숨김 위치(-725)로 즉시 리셋.
+            SetWsMultiplierX(WS_MULTIPLIER_HIDDEN_X);
+
+            int stageForFill = Mathf.Max(1, anim.startStage);
+            float startRatio = ResolveWsStageRatio(stageForFill, anim.startPoints);
+            bool stageCompleted = anim.achievedStages != null && anim.achievedStages.Count > 0;
+            float endRatio = stageCompleted
+                ? 1f
+                : ResolveWsStageRatio(Mathf.Max(1, anim.endStage), anim.endPoints);
+
+            if (_wsProgressSlider != null)
+                _wsProgressSlider.value = startRatio;
+
+            yield return PlayWsFireFlyAndPulse();
+
+            // FxFire 가 커졌다 작아진 직후 → Multiplier 가 X=10 으로 튕기듯 슬라이드 인.
+            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
+
+            if (_wsProgressSlider != null)
+            {
+                _wsLobbyFxSequence?.Kill();
+                _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
+                _wsLobbyFxSequence.Append(_wsProgressSlider.DOValue(endRatio, WS_SLIDER_FILL_DURATION)
+                    .SetEase(Ease.OutCubic));
+                yield return _wsLobbyFxSequence.WaitForCompletion();
+            }
+
+            if (stageCompleted)
+            {
+                for (int i = 0; i < anim.achievedStages.Count; i++)
+                {
+                    int achievedStage = anim.achievedStages[i];
+                    var achievedDoc = WinningStreakConfigService.HasInstance
+                        ? WinningStreakConfigService.Instance.GetStage(achievedStage)
+                        : null;
+                    BindWsRewardItem(achievedDoc);
+                    yield return PlayWsRewardRise();
+                    if (grantRewards && WinningStreakManager.HasInstance && !WinningStreakManager.Instance.IsStageClaimed(achievedStage))
+                        WinningStreakManager.Instance.ClaimStage(achievedStage);
+                }
+            }
+
+            // 나머지 연출이 끝나면 Multiplier 를 X=-725 로 슬라이드 아웃.
+            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
+
+            RefreshWinningStreakDisplay();
+        }
+
+        /// <summary>MultiplierMaskArea/Multiplier 를 지정 X(anchoredPosition.x)로 즉시 세팅.</summary>
+        private void SetWsMultiplierX(float x)
+        {
+            if (_wsMultiplier == null) return;
+            var p = _wsMultiplier.anchoredPosition;
+            p.x = x;
+            _wsMultiplier.anchoredPosition = p;
+        }
+
+        /// <summary>Multiplier 를 지정 X 로 슬라이드(anchoredPosition.x 트윈). 미할당 시 즉시 종료.</summary>
+        private IEnumerator PlayWsMultiplierSlide(float targetX, float duration, Ease ease)
+        {
+            if (_wsMultiplier == null) yield break;
+            _wsLobbyFxSequence?.Kill();
+            _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
+            _wsLobbyFxSequence.Append(_wsMultiplier.DOAnchorPosX(targetX, duration).SetEase(ease));
+            yield return _wsLobbyFxSequence.WaitForCompletion();
+        }
+
+        private IEnumerator PlayWsFireFlyAndPulse()
+        {
+            RectTransform target = ResolveWsFireTarget();
+            Transform parent = ResolveWsFxParent();
+            GameObject firePrefab = Resources.Load<GameObject>(WS_FX_FIRE_PREFAB_RESOURCE);
+
+            if (firePrefab != null && parent != null && target != null)
+            {
+                GameObject fly = Instantiate(firePrefab, parent);
+                fly.name = "FXFire_WinningStreak_Fly";
+                RectTransform flyRt = fly.GetComponent<RectTransform>();
+                RectTransform parentRt = parent as RectTransform;
+
+                Vector3 startLocal;
+                Vector3 targetLocal;
+                ResolveWsFxLocalPoints(parentRt, target, out startLocal, out targetLocal);
+
+                _wsLobbyFxSequence?.Kill();
+                _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
+                if (flyRt != null)
+                {
+                    flyRt.anchorMin = flyRt.anchorMax = new Vector2(0.5f, 0.5f);
+                    flyRt.pivot = new Vector2(0.5f, 0.5f);
+                    flyRt.anchoredPosition = startLocal;
+                    _wsLobbyFxSequence.Append(flyRt.DOAnchorPos(targetLocal, WS_FIRE_FLY_DURATION)
+                        .SetEase(Ease.InOutCubic));
+                }
+                else
+                {
+                    fly.transform.localPosition = startLocal;
+                    _wsLobbyFxSequence.Append(fly.transform.DOLocalMove(targetLocal, WS_FIRE_FLY_DURATION)
+                        .SetEase(Ease.InOutCubic));
+                }
+
+                _wsLobbyFxSequence.Join(fly.transform.DOScale(Vector3.one * 0.72f, WS_FIRE_FLY_DURATION)
+                    .SetEase(Ease.InOutSine));
+                yield return _wsLobbyFxSequence.WaitForCompletion();
+                Destroy(fly);
+            }
+
+            Transform pulseTarget = _wsFxFire != null ? _wsFxFire.transform : (target != null ? target : null);
+            if (pulseTarget == null) yield break;
+
+            if (_wsFxFire != null && !_wsFxFire.activeSelf)
+                _wsFxFire.SetActive(true);
+
+            Vector3 baseScale = pulseTarget.localScale;
+            _wsLobbyFxSequence?.Kill();
+            _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
+            _wsLobbyFxSequence.Append(pulseTarget.DOScale(baseScale * 1.25f, WS_FIRE_PULSE_DURATION).SetEase(Ease.OutBack));
+            _wsLobbyFxSequence.Append(pulseTarget.DOScale(baseScale, WS_FIRE_PULSE_DURATION).SetEase(Ease.OutCubic));
+            yield return _wsLobbyFxSequence.WaitForCompletion();
+        }
+
+        private IEnumerator PlayWsRewardRise()
+        {
+            ResolveWsFxRefs();
+            if (_wsFxReward == null)
+                yield break;
+
+            RectTransform rt = _wsFxReward.transform as RectTransform;
+            Vector3 startLocal = _wsFxReward.transform.localPosition;
+            Vector2 startAnchored = rt != null ? rt.anchoredPosition : Vector2.zero;
+
+            CanvasGroup cg = _wsFxReward.GetComponent<CanvasGroup>();
+            if (cg == null) cg = _wsFxReward.AddComponent<CanvasGroup>();
+            cg.alpha = 1f;
+
+            _wsFxReward.SetActive(true);
+
+            _wsLobbyFxSequence?.Kill();
+            _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
+            if (rt != null)
+                _wsLobbyFxSequence.Append(rt.DOAnchorPos(startAnchored + Vector2.up * WS_REWARD_RISE_Y, WS_REWARD_RISE_DURATION)
+                    .SetEase(Ease.OutCubic));
+            else
+                _wsLobbyFxSequence.Append(_wsFxReward.transform.DOLocalMove(startLocal + Vector3.up * WS_REWARD_RISE_Y, WS_REWARD_RISE_DURATION)
+                    .SetEase(Ease.OutCubic));
+            _wsLobbyFxSequence.Join(cg.DOFade(0f, WS_REWARD_RISE_DURATION).SetEase(Ease.InCubic));
+            yield return _wsLobbyFxSequence.WaitForCompletion();
+
+            if (rt != null) rt.anchoredPosition = startAnchored;
+            else _wsFxReward.transform.localPosition = startLocal;
+            cg.alpha = 1f;
+            _wsFxReward.SetActive(false);
+        }
+
+        private void ResolveWsFxRefs()
+        {
+            Transform root = _wsDisplayRoot != null ? _wsDisplayRoot.transform
+                           : (_btnWinningStreak != null ? _btnWinningStreak.transform : transform);
+            if (_wsFxFire == null)
+                _wsFxFire = FindChildComponentByName<Transform>(root, "FxFire")?.gameObject
+                         ?? FindChildComponentByName<Transform>(root, "FXFire")?.gameObject;
+            if (_wsFxReward == null)
+                _wsFxReward = FindChildComponentByName<Transform>(root, "FxReward")?.gameObject
+                           ?? FindChildComponentByName<Transform>(root, "FXReward")?.gameObject;
+            if (_wsFxFireTarget == null && _wsFxFire != null)
+                _wsFxFireTarget = _wsFxFire.transform as RectTransform;
+            if (_wsMultiplier == null)
+            {
+                var maskArea = FindChildComponentByName<Transform>(root, "MultiplierMaskArea");
+                _wsMultiplier = FindChildComponentByName<RectTransform>(maskArea != null ? maskArea : root, "Multiplier");
+            }
+        }
+
+        private RectTransform ResolveWsFireTarget()
+        {
+            ResolveWsFxRefs();
+            if (_wsFxFireTarget != null) return _wsFxFireTarget;
+            if (_btnWinningStreak != null) return _btnWinningStreak.transform as RectTransform;
+            return transform as RectTransform;
+        }
+
+        private Transform ResolveWsFxParent()
+        {
+            if (UIManager.HasInstance)
+            {
+                var ui = UIManager.Instance;
+                if (ui.EffectTr != null) return ui.EffectTr;
+                if (ui.UiTr != null) return ui.UiTr;
+            }
+            return transform;
+        }
+
+        private void ResolveWsFxLocalPoints(RectTransform parentRt, RectTransform target, out Vector3 startLocal, out Vector3 targetLocal)
+        {
+            startLocal = Vector3.zero;
+            targetLocal = Vector3.zero;
+            if (parentRt == null || target == null)
+            {
+                if (target != null) targetLocal = target.localPosition;
+                return;
+            }
+
+            Canvas canvas = parentRt.GetComponentInParent<Canvas>();
+            Camera cam = (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay) ? canvas.worldCamera : null;
+
+            Vector2 start;
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    parentRt, new Vector2(Screen.width * 0.5f, Screen.height * 0.5f), cam, out start))
+                startLocal = start;
+
+            Vector2 targetScreen = RectTransformUtility.WorldToScreenPoint(cam, target.position);
+            Vector2 end;
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRt, targetScreen, cam, out end))
+                targetLocal = end;
+        }
+
+        private float ResolveWsStageRatio(int stage1Based, int points)
+        {
+            var stage = WinningStreakConfigService.HasInstance
+                ? WinningStreakConfigService.Instance.GetStage(stage1Based)
+                : null;
+            if (stage == null || stage.requiredPoints <= 0) return 0f;
+            return Mathf.Clamp01((float)Mathf.Max(0, points) / stage.requiredPoints);
+        }
+
         private void ResolveWsTexts()
         {
             if (_wsTextsResolved) return;
@@ -712,6 +1001,13 @@ namespace BalloonFlow
             _railTopTween?.Kill();
             _railBottomTween?.Kill();
             _levelObjectEnterTween?.Kill();
+            if (_wsLobbyFxCoroutine != null)
+            {
+                StopCoroutine(_wsLobbyFxCoroutine);
+                _wsLobbyFxCoroutine = null;
+            }
+            _wsLobbyFxSequence?.Kill();
+            _wsLobbyFxSequence = null;
         }
 
         private void Update()
@@ -735,7 +1031,40 @@ namespace BalloonFlow
                     }
                 }
             }
+
+#if UNITY_EDITOR
+            // [에디터 전용] z 키 → WinningStreak 로비 연출 전체를 세팅한 대로 1회 재생(검증용, 실제 보상 미지급).
+            if (Keyboard.current != null && Keyboard.current.zKey.wasPressedThisFrame)
+                StartWinningStreakLobbyFxPreview();
+#endif
         }
+
+#if UNITY_EDITOR
+        /// <summary>[에디터 전용] WS 로비 연출 전체를 샘플 데이터로 재생. stage 보상 연출까지 포함하되 ClaimStage 는 호출하지 않음.</summary>
+        private void StartWinningStreakLobbyFxPreview()
+        {
+            if (_wsLobbyFxCoroutine != null) StopCoroutine(_wsLobbyFxCoroutine);
+            _wsLobbyFxCoroutine = StartCoroutine(PlayWinningStreakLobbyFxPreviewRoutine());
+        }
+
+        private IEnumerator PlayWinningStreakLobbyFxPreviewRoutine()
+        {
+            int stage = (WinningStreakManager.HasInstance && WinningStreakManager.Instance.State != null)
+                ? Mathf.Max(1, WinningStreakManager.Instance.State.currentStage)
+                : 1;
+            var preview = new WinningStreakManager.PendingLobbyAnimation
+            {
+                startStage = stage,
+                startPoints = 0,
+                endStage = stage,
+                endPoints = 0,
+                gainedPoints = 1,
+                achievedStages = new System.Collections.Generic.List<int> { stage },
+            };
+            yield return PlayWinningStreakLobbyFx(preview, grantRewards: false, forceVisible: true);
+            _wsLobbyFxCoroutine = null;
+        }
+#endif
 
         /// <summary>
         /// Canvas/screen 사이즈가 바뀔 때(해상도·회전 등) 페이지 레이아웃 재계산.

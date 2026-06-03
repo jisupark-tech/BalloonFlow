@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BalloonFlow
@@ -26,6 +27,8 @@ namespace BalloonFlow
         /// <summary>특정 stage 보상이 수령되었을 때.</summary>
         public event Action<int> OnStageClaimed;
 
+        private readonly Queue<PendingLobbyAnimation> _pendingLobbyAnimations = new Queue<PendingLobbyAnimation>();
+
         protected override void OnSingletonAwake()
         {
             // Config service 가 fetch 끝나면 UI 자동 갱신.
@@ -37,7 +40,8 @@ namespace BalloonFlow
             EventBus.Subscribe<OnLevelFailed>(HandleLevelFailedEvent);
 
             // 보상 수령 시 WinningStreakGetReward.prefab spawn 연출 자동 hook.
-            WinningStreakGetRewardSpawner.EnsureSubscribed();
+            // ROLLBACK_WS_LOBBY_REWARD_FLOW_20260602:
+            // Rewards are now granted after the lobby fire/slider/reward animation, not in-game.
         }
 
         protected override void OnDestroy()
@@ -118,7 +122,8 @@ namespace BalloonFlow
                 var cfg = Config;
                 var u = UserDataService.HasInstance ? UserDataService.Instance.CurrentUser : null;
                 if (cfg == null || u == null) return false;
-                return u.highestClearedLevel >= cfg.unlockLevel;
+                int reachedLevel = Mathf.Max(1, u.highestClearedLevel + 1);
+                return reachedLevel >= cfg.unlockLevel;
             }
         }
 
@@ -126,6 +131,19 @@ namespace BalloonFlow
 
         /// <summary>이벤트 진행 중 여부 — 해금 상태면 상시 진행(스케줄이 한 주를 빈틈없이 덮음). UX(로비 복귀) 게이트용.</summary>
         public bool IsEventActive => IsUnlocked;
+
+        public bool TryDequeuePendingLobbyAnimation(out PendingLobbyAnimation animation)
+        {
+            while (_pendingLobbyAnimations.Count > 0)
+            {
+                animation = _pendingLobbyAnimations.Dequeue();
+                if (animation != null && animation.gainedPoints > 0)
+                    return true;
+            }
+
+            animation = null;
+            return false;
+        }
 
         /// <summary>현재 회차 종료 UTC 시각(타이머용).</summary>
         public System.DateTime RoundEndUtc => WinningStreakSchedule.GetCurrentRoundEndUtc();
@@ -188,7 +206,23 @@ namespace BalloonFlow
             int gained = Mathf.Max(0, streakMult * diffMult);
 
             if (gained > 0)
-                AddPointsInternal(gained);
+            {
+                int startStage = s.currentStage;
+                int startPoints = s.currentStagePoints;
+                var achievedStages = new List<int>(2);
+
+                AddPointsInternal(gained, achievedStages);
+
+                _pendingLobbyAnimations.Enqueue(new PendingLobbyAnimation
+                {
+                    startStage = startStage,
+                    startPoints = startPoints,
+                    endStage = s.currentStage,
+                    endPoints = s.currentStagePoints,
+                    gainedPoints = gained,
+                    achievedStages = achievedStages
+                });
+            }
 
             SaveProgressFireAndForget();
             OnStateChanged?.Invoke();
@@ -207,7 +241,7 @@ namespace BalloonFlow
 
         // ── Points / overflow ─────────────────────────────────────
 
-        private void AddPointsInternal(int amount)
+        private void AddPointsInternal(int amount, List<int> achievedStages)
         {
             var s = State;
             if (s == null || amount <= 0) return;
@@ -242,7 +276,8 @@ namespace BalloonFlow
                 s.currentStage += 1;
                 s.currentStagePoints = 0;
                 OnStageAchieved?.Invoke(achievedStage);
-                AutoGrantStage(achievedStage);   // [#6/7] 임계 도달 즉시 자동 지급 (명세 §11.4)
+                if (achievedStages != null && !achievedStages.Contains(achievedStage))
+                    achievedStages.Add(achievedStage);
 
                 if (s.currentStage > totalStages)
                 {
@@ -259,25 +294,6 @@ namespace BalloonFlow
         /// [#6/7] stage 임계 도달 즉시 보상 자동 지급 (명세 §11.4). AddPointsInternal 에서 호출.
         /// 이미 수령된 stage 면 무시 (중복 방지). 수령 후 claimedStages 기록 + OnStageClaimed 연출 트리거.
         /// </summary>
-        private void AutoGrantStage(int stage1Based)
-        {
-            var s = State;
-            var svc = WinningStreakConfigService.HasInstance ? WinningStreakConfigService.Instance : null;
-            if (s == null || svc == null) return;
-            if (s.claimedStages != null && s.claimedStages.Contains(stage1Based)) return;
-
-            var stage = svc.GetStage(stage1Based);
-            if (stage == null || stage.rewards == null) return;
-
-            GrantRewards(stage.rewards, $"WinningStreak.autoGrant.stage{stage1Based}");
-            if (s.claimedStages == null) s.claimedStages = new System.Collections.Generic.List<int>();
-            s.claimedStages.Add(stage1Based);
-            if (UserDataService.HasInstance)
-                UserDataService.Instance.SaveWinningStreakClaimedStages();
-
-            OnStageClaimed?.Invoke(stage1Based);
-        }
-
         /// <summary>달성 완료된 stage 보상을 수령 (자동 지급 도입 후엔 대부분 이미 지급됨 → no-op).
         /// 슬롯 BtnReward 폴백/구버전 호환용. 이미 수령했거나 미달성이면 false.</summary>
         public bool ClaimStage(int stage1Based)
@@ -351,6 +367,16 @@ namespace BalloonFlow
         {
             if (UserDataService.HasInstance)
                 UserDataService.Instance.SaveWinningStreakProgress();
+        }
+
+        public class PendingLobbyAnimation
+        {
+            public int startStage;
+            public int startPoints;
+            public int endStage;
+            public int endPoints;
+            public int gainedPoints;
+            public List<int> achievedStages;
         }
     }
 }

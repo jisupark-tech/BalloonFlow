@@ -32,6 +32,6 @@ namespace BalloonFlow
 
         /// <summary>WinningStreak 해금 여부 (Lv.35 클리어 후). 단, 활성 회차 여부는 서버 config 기준 별도 판정.</summary>
         public static bool IsWinningStreakUnlocked
-            => HighestClearedLevel >= WINNING_STREAK_UNLOCK_CLEAR_LEVEL;
+            => HighestClearedLevel + 1 >= WINNING_STREAK_UNLOCK_CLEAR_LEVEL;
     }
 }
