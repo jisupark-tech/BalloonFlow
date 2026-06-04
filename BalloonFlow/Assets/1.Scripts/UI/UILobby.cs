@@ -94,6 +94,10 @@ namespace BalloonFlow
         [SerializeField] private GameObject _lifePanelFxFire;
         /// <summary>직전 PlayLifePanelFxFire 가 Instantiate 한 인스턴스 — 살아있는 동안 중복 발화 차단.</summary>
         private GameObject _activeLifePanelFxFireInstance;
+        // Life 증가 감지(이전 표시값 캐시) + multi-heart 시퀀스에서 FxFire 1회로 coalesce 하기 위한 debounce.
+        private int _lastShownLife = -1;
+        private float _lastFxFireTime = -1f;
+        private const float FX_FIRE_DEBOUNCE_SEC = 1.5f;
 
         [Header("[Shop — 골드 표시]")]
         [SerializeField] private TMP_Text _txtShopGold;
@@ -770,7 +774,7 @@ namespace BalloonFlow
             GoldPanelFxFireUtil.DisableUnderLifePanel(_lifePanelFxFire.transform.parent);
         }
 
-        public void PlayLifePanelFxFire()
+        private void PlayLifePanelFxFire()
         {
             ResolveLifePanelFxFire();
             if (_lifePanelFxFire == null) return;
@@ -1571,11 +1575,16 @@ namespace BalloonFlow
         private bool _lifePanelOriginalCaptured;
 
         /// <summary>
-        /// [2026-05-15] LifePanel 펄스 연출 — booster/life/infiniteHearts 도착 시 호출.
-        /// GoldPanel 펄스와 동일 패턴.
+        /// LifePanel 펄스 연출 — booster/life/infiniteHearts 도착 시 호출.
+        /// 수량 증가일 때만 스케일 펀치 + FxFire 발화(debounce 1.5s 로 multi-heart 시퀀스 1회 coalesce).
+        /// 초기 로비 진입(첫 호출, _lastShownLife==-1) 또는 감소 시는 no-op.
         /// </summary>
-        public void PulseLifePanel(float strength = 0.25f, float duration = 0.5f, int vibrato = 6)
+        public void PulseLifePanel(int newLifeCount, float strength = 0.25f, float duration = 0.5f, int vibrato = 6)
         {
+            bool isIncrease = (_lastShownLife >= 0) && (newLifeCount > _lastShownLife);
+            _lastShownLife = newLifeCount;
+            if (!isIncrease) return;
+
             Transform target = (_txtLife != null && _txtLife.transform.parent != null)
                 ? _txtLife.transform.parent
                 : (_txtLife != null ? _txtLife.transform : null);
@@ -1586,6 +1595,14 @@ namespace BalloonFlow
                 _lifePanelOriginalScale = target.localScale;
                 _lifePanelOriginalCaptured = true;
             }
+
+            // 스케일 펀치 시작 시점에 FxFire 1회 발화(debounce). multi-heart 시퀀스에서 첫 1회만 통과.
+            if ((Time.unscaledTime - _lastFxFireTime) > FX_FIRE_DEBOUNCE_SEC)
+            {
+                PlayLifePanelFxFire();
+                _lastFxFireTime = Time.unscaledTime;
+            }
+
             target.DOKill();
             target.localScale = _lifePanelOriginalScale;
             target.DOPunchScale(_lifePanelOriginalScale * strength, duration, vibrato, 1f).SetUpdate(true);
