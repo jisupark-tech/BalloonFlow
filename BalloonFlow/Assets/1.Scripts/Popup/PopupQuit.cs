@@ -46,6 +46,20 @@ namespace BalloonFlow
             CacheStateViews();
         }
 
+        // [2026-06-04] InGame 중 Quit 팝업 열림 시 게임 일시정지 + 보관함(Holder) 터치 차단.
+        // PopupSettings 와 동일 패턴 (_paused 가드로 OnEnable 중복 호출 방어).
+        private bool _paused;
+        private void OnEnable()
+        {
+            if (!_paused) { PauseManager.Pause(); _paused = true; }
+            if (InputHandler.HasInstance) InputHandler.Instance.DisableInput();
+        }
+        private void OnDisable()
+        {
+            if (_paused) { PauseManager.Resume(); _paused = false; }
+            if (InputHandler.HasInstance) InputHandler.Instance.EnableInput();
+        }
+
         private void CacheExitDuplicateButton()
         {
             _exitDuplicateSearched = true;
