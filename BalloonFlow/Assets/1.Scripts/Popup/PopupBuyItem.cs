@@ -81,9 +81,17 @@ namespace BalloonFlow
                 txt.gameObject.AddComponent<AnimatedCoinLabel>();
         }
 
+        // InGame 중 BuyItem 열림 시 게임 일시 정지 (PopupSettings 패턴 동일).
+        private bool _paused;
         private void OnEnable()
         {
             GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
+            if (!_paused) { PauseManager.Pause(); _paused = true; }
+        }
+
+        private void OnDisable()
+        {
+            if (_paused) { PauseManager.Resume(); _paused = false; }
         }
 
         /// <summary>[#2] TopBar 잔액 GoldPanel 노출 토글.</summary>

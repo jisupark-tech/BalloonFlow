@@ -78,17 +78,21 @@ namespace BalloonFlow
             SubscribeToCatalog();
         }
 
+        // InGame 중 GoldShop 열림 시 게임 일시 정지 (PopupSettings 패턴 동일).
+        private bool _paused;
         private void OnEnable()
         {
             GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
             EventBus.Subscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
             EventBus.Subscribe<OnPurchaseRestored>(HandlePurchaseRestored);
+            if (!_paused) { PauseManager.Pause(); _paused = true; }
         }
 
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
             EventBus.Unsubscribe<OnPurchaseRestored>(HandlePurchaseRestored);
+            if (_paused) { PauseManager.Resume(); _paused = false; }
         }
 
         protected override void OnDestroy()

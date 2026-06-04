@@ -93,6 +93,9 @@ namespace BalloonFlow
         {
             if (_gameCamera == null) return;
 
+            // 팝업(Settings/GoldShop/BuyItem 등)이 열려 있는 동안 다트 보관함 등 인게임 오브젝트 터치 차단.
+            if (PauseManager.IsPaused) return;
+
             // ROLLBACK_USEITEM_CLOSE_ONLY_INPUT_BLOCK:
             // Only the UseItem close buttons should swallow gameplay input. The dim/cutout UI
             // can cover the board/holder selection area, especially for Zap and Hand.
