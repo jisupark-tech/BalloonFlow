@@ -102,6 +102,7 @@ namespace BalloonFlow
             if (_frame != null)
             {
                 _frame.SetTitle("Quit Level?");
+                _frame.SetDescription("You will lose a life.");
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
                 _frame.SetHorizGreenText("Stay");
                 _frame.SetHorizRedText("Quit");
@@ -136,6 +137,7 @@ namespace BalloonFlow
                 _loseLifeView.SetActive(false);
                 _winningStreakView.SetActive(true);
                 _currentView = QuitView.WinningStreak;
+                if (_frame != null) _frame.SetDescription($"You will lose your x{multiplier} multiplier!");
                 WinningStreakUI.PlayMultiplierIdle(_winningStreakView, multiplier);
                 return true;
             }

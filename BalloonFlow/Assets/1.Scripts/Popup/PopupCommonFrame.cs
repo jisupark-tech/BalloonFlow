@@ -176,6 +176,10 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtTitle;
         [SerializeField] private TMP_Text _txtTitleOutline;
 
+        [Header("[Description]")]
+        [SerializeField] private TMP_Text _txtDescription;
+        [SerializeField] private TMP_Text _txtDescriptionOutline;
+
         [Header("[Title Outline Difficulty Material Preset]")]
         [SerializeField] private Material _matTitleOutlineNormal;
         [SerializeField] private Material _matTitleOutlineHard;
@@ -284,6 +288,13 @@ namespace BalloonFlow
             if (_txtTitle != null) _txtTitle.text = text;
             if (_txtTitleOutline != null) _txtTitleOutline.text = text;
             ApplyTitleOutline(_hasExplicitDifficulty ? _currentDifficulty : ResolveActiveDifficulty());
+        }
+
+        /// <summary>Description 텍스트 설정 (TxtDescription + Outline 동시). 미배선 시 null-safe로 skip.</summary>
+        public void SetDescription(string text)
+        {
+            if (_txtDescription != null) _txtDescription.text = text;
+            if (_txtDescriptionOutline != null) _txtDescriptionOutline.text = text;
         }
 
         #endregion
