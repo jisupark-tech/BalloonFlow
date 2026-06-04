@@ -1,4 +1,5 @@
 using System.Collections;
+using AimedPuzzle.BalloonFlow.UI;
 using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
@@ -1518,6 +1519,7 @@ namespace BalloonFlow
 
         // [2026-06-04] 튜토리얼 등장 직후 INPUT_BLOCK_AFTER_SHOW_SECONDS 동안 캔버스 interactable 차단.
         //   timeScale=0 (popup pause) 상황에서도 정확히 동작하도록 WaitForSecondsRealtime 사용.
+        //   hole 이 있는 step 에서는 필터가 hole 만 통과시키므로 grace 동안에도 강조 영역은 즉시 클릭 가능.
         private void StartInputBlockGrace()
         {
             if (_inputBlockCoroutine != null) StopCoroutine(_inputBlockCoroutine);
@@ -1528,7 +1530,7 @@ namespace BalloonFlow
         {
             if (_prefabRootCanvasGroup != null)
                 _prefabRootCanvasGroup.interactable = false;
-            // interactable=false 만으론 dim Image 의 raycastTarget 을 막지 못함 — filter 가 hole 까지 일괄 차단.
+            // hole 없는 step 에서만 dim 전체 차단 효과 — hole 있는 step 은 filter 가 hole 을 항상 pass-through.
             if (_cutoutRaycastFilter != null) _cutoutRaycastFilter.SetGraceActive(true);
             yield return new WaitForSecondsRealtime(INPUT_BLOCK_AFTER_SHOW_SECONDS);
             if (_prefabRootCanvasGroup != null)
