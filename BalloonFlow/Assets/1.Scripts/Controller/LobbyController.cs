@@ -374,6 +374,7 @@ namespace BalloonFlow
 
             _isCoinFlyInFlight = true;
             _lobby.AddDisplayedGold(1);
+            _lobby.PulseGoldPanel();
 
             if (_coinFlyResetCoroutine != null) StopCoroutine(_coinFlyResetCoroutine);
             _coinFlyResetCoroutine = StartCoroutine(ResetCoinFlyFlag());
