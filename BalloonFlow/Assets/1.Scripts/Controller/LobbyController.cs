@@ -16,6 +16,9 @@ namespace BalloonFlow
     public class LobbyController : MonoBehaviour
     {
         private const float COIN_FLY_FLAG_RESET_DELAY = 0.3f;
+        // Play 클릭 후 GameManager.StartLevel 호출 전 의도된 추가 지연(초).
+        // 이 시간 동안 RailBox 열림 잔여 프레임 + PlayButtonPressAnim 의 buttonPress 연출이 자연스럽게 유지된다.
+        private const float PLAY_TO_LOADING_DELAY = 0.3f;
         // 게임 시작 직전 표시되던 레벨. 로비 복귀 시 새 레벨(highest+1) 과 비교해 레벨업 여부 판정.
         private const string PREFS_KEY_LOBBY_LEVEL_AT_GAME_START = "BF_LobbyLevelAtGameStart";
 
@@ -292,13 +295,20 @@ namespace BalloonFlow
                 int capturedLevelId = levelId;
                 activeBox.PlayStartGameAnimation(() =>
                 {
-                    GameManager.Instance.StartLevel(capturedLevelId);
+                    StartCoroutine(DelayedStartLevel(capturedLevelId));
                 });
             }
             else
             {
-                GameManager.Instance.StartLevel(levelId);
+                StartCoroutine(DelayedStartLevel(levelId));
             }
+        }
+
+        System.Collections.IEnumerator DelayedStartLevel(int levelId)
+        {
+            yield return new WaitForSecondsRealtime(PLAY_TO_LOADING_DELAY);
+            if (GameManager.HasInstance)
+                GameManager.Instance.StartLevel(levelId);
         }
 
         /// <summary>BtnGoldPlus / BtnLifePlus → Shop 페이지로 스와이프 이동</summary>
