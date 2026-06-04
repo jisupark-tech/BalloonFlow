@@ -768,6 +768,7 @@ namespace BalloonFlow
             {
                 PlayerPrefs.DeleteAll();
                 PlayerPrefs.Save();
+                ResetRuntimeUserDataState();
                 // 다음 실행 시 모든 매니저가 초기값으로 로드 (골드, 하트, 레벨, 부스터 전부)
                 LoadScene(SCENE_LOBBY);
             }
@@ -776,6 +777,18 @@ namespace BalloonFlow
         }
 
         /// <summary>레벨 전환 전 정리. 게임 오브젝트 + 팝업 + 상태 초기화.</summary>
+        private void ResetRuntimeUserDataState()
+        {
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.ResetCurrentUserDataForDebug();
+
+            if (CurrencyManager.HasInstance)
+                CurrencyManager.Instance.ResetToInitial();
+
+            if (LifeManager.HasInstance)
+                LifeManager.Instance.ResetToInitial();
+        }
+
         private void CleanupBeforeLevelSwitch()
         {
             // 풍선 풀 반환 (Destroy 전에 정리해야 풀 오브젝트 유실 방지)

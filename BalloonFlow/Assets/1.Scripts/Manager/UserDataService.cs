@@ -214,6 +214,25 @@ namespace BalloonFlow
             PlayerPrefs.Save();
         }
 
+        /// <summary>Debug/user reset path: overwrite current Firestore user doc and memory cache with fresh defaults.</summary>
+        public void ResetCurrentUserDataForDebug()
+        {
+            if (_auth == null || _db == null || string.IsNullOrEmpty(Uid))
+            {
+                Debug.LogWarning($"{LOG_TAG} ResetCurrentUserDataForDebug skipped - Firebase/Auth not ready.");
+                return;
+            }
+
+            string uid = Uid;
+            _user = UserData.CreateNewUser(uid);
+            _isReady = true;
+            PersistAuthUid(uid);
+
+            FireAndForget(_db.Document($"users/{uid}").SetAsync(_user), "ResetCurrentUserDataForDebug");
+            OnUserDataReady?.Invoke();
+            Debug.Log($"{LOG_TAG} UserData reset to defaults. uid={uid} coins={_user.coins} lives={_user.lives}/{_user.maxLives}");
+        }
+
         #region Public API — Atomic increments (서버 진실)
 
         /// <summary>코인 증감. 양수=획득, 음수=소비. 로컬 캐시 즉시 반영 + Firestore atomic increment.</summary>

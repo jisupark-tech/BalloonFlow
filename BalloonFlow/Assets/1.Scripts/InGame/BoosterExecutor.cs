@@ -46,8 +46,8 @@ namespace BalloonFlow
         private const float ZapFinishLifetime = 0.35f;
         private const float ZapEffectYOffset = 0.12f;
 
-        // Hand 부스터 사용 시 카메라가 보관함 쪽으로 추가 이동할 -Z 오프셋 (unit).
-        private const float HAND_CAMERA_Z_OFFSET = 2f;
+        // Hand 부스터 사용 시 카메라가 보관함 큐의 앞쪽 몇 개 행을 보여줄지 (5줄 요구).
+        private const int HAND_VISIBLE_ROWS = 5;
         private const float ZapSpawnYOffset = 2f;
         private const float ZapLineWorldLift = 0.35f;
         private const float ZapLineMinWidth = 0.08f;
@@ -187,12 +187,12 @@ namespace BalloonFlow
 
                     if (CameraManager.HasInstance && HolderVisualManager.HasInstance)
                     {
-                        Vector3 queuePosition = HolderVisualManager.Instance.CalculateQueueCenterPosition();
+                        // Hand: 보관함 큐의 앞쪽 HAND_VISIBLE_ROWS(5)개 행이 화면에 들어오도록 그 행들의 중심으로 포커스.
+                        // (이전: 전체 holder bbox 중심 + 고정 -2Z → 행이 많으면 너무 깊게 잡혀 5줄이 안 보였음.)
+                        Vector3 focusPosition = HolderVisualManager.Instance.CalculateRowFocusPosition(HAND_VISIBLE_ROWS);
                         if (CameraManager.Instance.MainCamera != null)
-                            queuePosition.y = CameraManager.Instance.MainCamera.transform.position.y;
-                        // Hand: 보관함 쪽으로 z 더 이동 (-Z 방향, 카메라가 보관함에 더 가까워짐).
-                        queuePosition.z -= HAND_CAMERA_Z_OFFSET;
-                        CameraManager.Instance.MoveToTarget(queuePosition);
+                            focusPosition.y = CameraManager.Instance.MainCamera.transform.position.y; // 카메라 높이 유지(XZ 이동)
+                        CameraManager.Instance.MoveToTarget(focusPosition);
                     }
 
                     if (HolderVisualManager.HasInstance)

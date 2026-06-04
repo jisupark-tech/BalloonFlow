@@ -714,12 +714,6 @@ namespace BalloonFlow
             if (!wasEnabled) _animator.enabled = true;
             _animator.Update(0f);
 
-            if (_animator.GetCurrentAnimatorStateInfo(0).shortNameHash != _animStateBoxDefault)
-            {
-                if (!wasEnabled) _animator.enabled = false;
-                return;
-            }
-
             _animator.Play(_animStateBoxClick, 0, 0f);
             _animator.Update(0f);
 
@@ -747,17 +741,23 @@ namespace BalloonFlow
         public void StartDeploy()
         {
             if (_animator != null)
+            {
+                if (!_animator.enabled) _animator.enabled = true;
                 _animator.SetBool(_animDeploy, true);
+            }
         }
 
         /// <summary>첫 다트가 레일에 배치되는 시점에 true → BoxOpenIdle로 강제 전환. 풀 반환/취소 시 false → BoxOpenDefault. BoxOpen.ani(뚜껑 원샷) 진행 중이면 완료될 때까지 코루틴으로 대기 후 Play — 컨트롤러 transition이 깨져도 강건.</summary>
         public void SetDartsOnRail(bool onRail)
         {
             if (_animator == null) return;
+            if (!_animator.enabled) _animator.enabled = true;
             _animator.SetBool(_animOpenHold, onRail);
             if (_onRailRoutine != null) StopCoroutine(_onRailRoutine);
             if (isActiveAndEnabled)
                 _onRailRoutine = StartCoroutine(ApplyOnRailState(onRail));
+            else
+                _animator.Play(onRail ? _animStateBoxOpenIdle : _animStateBoxOpenDefault, 0, 0f);
         }
 
         private Coroutine _onRailRoutine;
@@ -778,6 +778,11 @@ namespace BalloonFlow
                 }
                 timeout -= Time.deltaTime;
                 yield return null;
+            }
+            if (_animator != null)
+            {
+                _animator.Play(target, 0, 0f);
+                _animator.Update(0f);
             }
             _onRailRoutine = null;
         }

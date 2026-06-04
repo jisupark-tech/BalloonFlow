@@ -33,25 +33,44 @@ namespace BalloonFlow
         {
             if (root == null || string.IsNullOrEmpty(resourcePath)) return;
             EnsureLoaded();
-            if (_byResource == null || !_byResource.TryGetValue(resourcePath, out List<Entry> entries)) return;
+            if (_byResource == null || !_byResource.TryGetValue(resourcePath, out List<Entry> entries))
+            {
+                Debug.Log($"[Localization] {resourcePath}: CSV 엔트리 없음 — 매핑 skip.");
+                return;
+            }
 
+            int applied = 0;
+            List<string> missed = null; // 경로 못 찾음/Text 컴포넌트 없음 — 진단용
             for (int i = 0; i < entries.Count; i++)
             {
                 Transform t = string.IsNullOrEmpty(entries[i].sub)
                     ? root.transform
                     : root.transform.Find(entries[i].sub);
-                if (t == null) continue;
-                SetText(t, entries[i].text);
+                if (t != null && SetText(t, entries[i].text))
+                {
+                    applied++;
+                }
+                else
+                {
+                    (missed ??= new List<string>()).Add(entries[i].sub);
+                }
             }
+
+            // [검증 로그] UI 별 매핑 결과. EN 은 화면상 동일(idempotent)이라 콘솔로 동작 확인.
+            if (missed == null)
+                Debug.Log($"[Localization] {resourcePath}: {applied}/{entries.Count} text 매핑 완료 ✓");
+            else
+                Debug.LogWarning($"[Localization] {resourcePath}: {applied}/{entries.Count} 매핑, {missed.Count} 누락(경로/컴포넌트 불일치): {string.Join(" | ", missed)}");
         }
 
-        private static void SetText(Transform t, string text)
+        /// <summary>TMP 우선, 없으면 legacy UI.Text 에 세팅. 적용 성공 시 true.</summary>
+        private static bool SetText(Transform t, string text)
         {
-            // TMP 우선, 없으면 legacy UI.Text.
             var tmp = t.GetComponent<TMP_Text>();
-            if (tmp != null) { tmp.text = text; return; }
+            if (tmp != null) { tmp.text = text; return true; }
             var ui = t.GetComponent<Text>();
-            if (ui != null) ui.text = text;
+            if (ui != null) { ui.text = text; return true; }
+            return false;
         }
 
         // ─── CSV 로드/파싱 ──────────────────────────────────────────

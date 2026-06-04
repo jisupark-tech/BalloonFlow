@@ -686,6 +686,18 @@ namespace BalloonFlow
             return center;
         }
 
+        /// <summary>핸드/셀렉트 카메라 포커스 — 큐 앞쪽 rowCount 개 행이 화면에 들어오도록 그 행들의 중심 위치 반환.
+        /// X = 대기 holder bbox 중심, Z = 앞 행(row 0..rowCount-1)의 중심(_queueBaseZ - (rowCount-1)/2 * _rowSpacing).
+        /// (이전 핸드 카메라는 전체 holder bbox 중심이라 행이 많으면 너무 깊게 잡혀 앞쪽 행이 적게 보였음.)</summary>
+        public Vector3 CalculateRowFocusPosition(int rowCount)
+        {
+            Vector3 c = CalculateQueueCenterPosition(); // X 중심 + y=0.1 재사용
+            rowCount = Mathf.Max(1, rowCount);
+            // 행은 _queueBaseZ(front=row0) 기준 뒤로(-Z) _rowSpacing 간격 → 앞 rowCount 행의 중심 Z.
+            c.z = _queueBaseZ - (rowCount - 1) * 0.5f * _rowSpacing;
+            return c;
+        }
+
         #region Private Methods — Queue Positioning
 
         /// <summary>
@@ -2533,6 +2545,8 @@ namespace BalloonFlow
                 visual.gameObject.transform.DOKill();
                 visual.gameObject.transform.localScale = Vector3.one;
             }
+            if (visual.identifier != null)
+                visual.identifier.SetDartsOnRail(false);
             if (HolderManager.HasInstance) HolderManager.Instance.UndoDeploy(holderId);
             RepositionColumnHolders(visual.column);
         }

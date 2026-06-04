@@ -281,6 +281,24 @@ namespace BalloonFlow
             Debug.Log($"[LifeManager] Infinite hearts +{durationSeconds / 3600f:F1}h → total remaining {totalRemaining / 3600f:F1}h");
         }
 
+        /// <summary>Resets local lives and clears any active infinite-hearts state.</summary>
+        public void ResetToInitial()
+        {
+            _currentLives = MAX_LIVES;
+            _lastRechargeUtcTicks = DateTime.UtcNow.Ticks;
+            _infiniteHeartsEndTime = 0f;
+
+            SaveToPrefs();
+
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+            {
+                SyncToFirestore("ResetToInitial");
+                UserDataService.Instance.SetInfiniteHeartsUntil(default(Firebase.Firestore.Timestamp));
+            }
+
+            PublishLifeChanged();
+        }
+
         /// <summary>True while infinite hearts are active.</summary>
         public bool IsInfiniteHeartsActive => Time.realtimeSinceStartup < _infiniteHeartsEndTime;
 

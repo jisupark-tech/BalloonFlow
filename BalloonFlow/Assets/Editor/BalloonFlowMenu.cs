@@ -37,7 +37,7 @@ namespace BalloonFlow.Editor
 
             if (EditorApplication.isPlaying)
             {
-                TryDeleteFirestoreUserDocFromPlayMode();
+                ResetRuntimeManagersFromPlayMode();
             }
 
             Debug.Log("[BalloonFlow] 유저 데이터 초기화 완료");
@@ -61,6 +61,20 @@ namespace BalloonFlow.Editor
         }
 
         /// <summary>Play 중일 때 실행. FirebaseManager + UserDataService 가 살아있다고 가정하고 /users/{uid} doc 삭제.</summary>
+        private static void ResetRuntimeManagersFromPlayMode()
+        {
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.ResetCurrentUserDataForDebug();
+            else
+                Debug.LogWarning("[BalloonFlow] UserDataService not ready - Firestore reset skipped");
+
+            if (CurrencyManager.HasInstance)
+                CurrencyManager.Instance.ResetToInitial();
+
+            if (LifeManager.HasInstance)
+                LifeManager.Instance.ResetToInitial();
+        }
+
         private static async void TryDeleteFirestoreUserDocFromPlayMode()
         {
             if (!FirebaseManager.HasInstance)

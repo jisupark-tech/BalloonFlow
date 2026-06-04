@@ -166,10 +166,33 @@ namespace BalloonFlow
             return item;
         }
 
+        // [스케일 업 후 비행] 원점에서 작게→원래 크기로 팝(in place) 한 뒤 비행 시작 (스케일업·비행 동시 X).
+        private const float SCALEUP_FROM = 0.3f;
+        private const float SCALEUP_DURATION = 0.15f;
+
         private static IEnumerator Fly(GameObject item, RectTransform rt, Image img,
             Vector2 origin, Vector2 scatter, Vector2 mid, Vector2 target,
             float duration, Action onDone)
         {
+            // ── Phase 0: 스케일 업 (원점 고정, 비행 전) ──
+            if (rt != null)
+            {
+                rt.anchoredPosition = origin;
+                Vector3 baseScale = rt.localScale;
+                Vector3 fromScale = baseScale * SCALEUP_FROM;
+                rt.localScale = fromScale;
+                float su = 0f;
+                while (su < SCALEUP_DURATION)
+                {
+                    su += Time.unscaledDeltaTime;
+                    float k = Mathf.Clamp01(su / SCALEUP_DURATION);
+                    k = 1f - (1f - k) * (1f - k); // OutQuad — 톡 튀는 팝 느낌
+                    rt.localScale = Vector3.LerpUnclamped(fromScale, baseScale, k);
+                    yield return null;
+                }
+                rt.localScale = baseScale;
+            }
+
             float elapsed = 0f;
             const float scatterPhase = 0.18f;
 

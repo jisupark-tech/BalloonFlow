@@ -283,10 +283,33 @@ namespace BalloonFlow
         /// Phase 2 (0.25~1.0): scatterPos → mid → to (베지어 포물선으로 목표 수렴)
         /// 스케일 변경은 Light 등 자식 컴포넌트에 영향 가니 안 함 — 위치만 애니메이트.
         /// </summary>
+        // [스케일 업 후 비행] 원점에서 작게→원래 크기로 팝 후 비행 (동시 X). 팝은 짧고, 이후 비행은 원래 스케일 유지.
+        private const float SCALEUP_FROM = 0.3f;
+        private const float SCALEUP_DURATION = 0.15f;
+
         private static IEnumerator Fly(GameObject coin, RectTransform rt,
             Vector2 origin, Vector2 scatter, Vector2 mid, Vector2 target,
             float duration, Action onDone)
         {
+            // ── Phase 0: 스케일 업 (원점 고정, 비행 전) ──
+            if (rt != null)
+            {
+                rt.anchoredPosition = origin;
+                Vector3 baseScale = rt.localScale;
+                Vector3 fromScale = baseScale * SCALEUP_FROM;
+                rt.localScale = fromScale;
+                float su = 0f;
+                while (su < SCALEUP_DURATION)
+                {
+                    su += Time.unscaledDeltaTime;
+                    float k = Mathf.Clamp01(su / SCALEUP_DURATION);
+                    k = 1f - (1f - k) * (1f - k); // OutQuad
+                    rt.localScale = Vector3.LerpUnclamped(fromScale, baseScale, k);
+                    yield return null;
+                }
+                rt.localScale = baseScale; // 비행 중엔 원래 스케일 (Light 등 자식 영향 최소화)
+            }
+
             float elapsed = 0f;
             // 스캐터 단계를 짧게 유지해 코인이 빠르게 타겟으로 수렴 (연속 비행 느낌).
             float scatterPhase = 0.08f;

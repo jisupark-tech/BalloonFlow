@@ -204,6 +204,10 @@ namespace BalloonFlow
                 _userExpandedMore);
             _products = docs.Select(ConvertDocToData).ToArray();
             _moreOffersAvailable = StoreProductExposure.CanExpand(ShopCatalogService.Instance.All, user);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            // [검증 로그] 상점 노출 재평가가 실제로 불렸는지 + 결과 개수 — "클리어해도 안 바뀜" 진단용.
+            Debug.Log($"[Shop] RefreshProductExposure 실행 → 노출 {_products.Length}개 (expandedMore={_userExpandedMore}, moreAvail={_moreOffersAvailable})");
+#endif
         }
 
         private void RefreshAfterPurchaseChange()
