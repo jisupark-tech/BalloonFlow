@@ -65,6 +65,14 @@ namespace BalloonFlow
         [Tooltip("Chain 연결 시 활성화할 Loop 오브젝트")]
         [SerializeField] private GameObject _chainLoop;
 
+        [Header("[Hand Booster Highlight — Inspector에서 할당]")]
+        [Tooltip("Hand(SelectTool) 부스터 활성 시 박스에 표시할 Stroke 오브젝트")]
+        [SerializeField] private GameObject _controlBoxStroke;
+
+        private Tweener _strokeIdleTween;
+        private Vector3 _baseStrokeScale;
+        private bool _strokeScaleCached;
+
         /// <summary>다음에 날릴 Dart 슬롯 인덱스</summary>
         private int _nextDartIndex;
 
@@ -561,6 +569,7 @@ namespace BalloonFlow
             if (_box != null) _box.SetActive(true);
             if (_boxFrozen != null) _boxFrozen.SetActive(false);
             if (_frozenExplosionEffect != null) _frozenExplosionEffect.SetActive(false);
+            SetControlBoxStrokeActive(false);
         }
 
         private void PlayFrozenBreakEffect()
@@ -836,6 +845,51 @@ namespace BalloonFlow
         {
             if (_chainLoop != null)
                 _chainLoop.SetActive(active);
+        }
+
+        #endregion
+
+        #region Hand Booster Highlight
+
+        /// <summary>
+        /// Hand(SelectTool) 부스터 활성 동안 ControlBoxStroke 오브젝트를 토글 + Scale yoyo idle 연출.
+        /// active=true: stroke 켜고 1→1.05→1 yoyo 루프 (popup 중에도 돌도록 SetUpdate(true)).
+        /// active=false: tween Kill + 원본 scale 복원 + stroke 끔.
+        /// _controlBoxStroke 가 Inspector 미할당이면 no-op.
+        /// </summary>
+        public void SetControlBoxStrokeActive(bool active)
+        {
+            if (_controlBoxStroke == null) return;
+
+            Transform strokeT = _controlBoxStroke.transform;
+
+            if (active)
+            {
+                if (!_strokeScaleCached)
+                {
+                    _baseStrokeScale = strokeT.localScale;
+                    _strokeScaleCached = true;
+                }
+
+                _controlBoxStroke.SetActive(true);
+                strokeT.DOKill();
+                strokeT.localScale = _baseStrokeScale;
+
+                _strokeIdleTween = strokeT
+                    .DOScale(_baseStrokeScale * 1.05f, 0.5f)
+                    .SetEase(Ease.InOutSine)
+                    .SetLoops(-1, LoopType.Yoyo)
+                    .SetUpdate(true);
+            }
+            else
+            {
+                _strokeIdleTween?.Kill();
+                _strokeIdleTween = null;
+                strokeT.DOKill();
+                if (_strokeScaleCached)
+                    strokeT.localScale = _baseStrokeScale;
+                _controlBoxStroke.SetActive(false);
+            }
         }
 
         #endregion

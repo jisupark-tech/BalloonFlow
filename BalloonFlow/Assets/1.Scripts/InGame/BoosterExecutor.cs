@@ -105,6 +105,9 @@ namespace BalloonFlow
             if (!_awaitingHolderSelection) return;
             _awaitingHolderSelection = false;
 
+            if (HolderVisualManager.HasInstance)
+                HolderVisualManager.Instance.SetHandSelectionHighlightActive(false);
+
             ConfirmPendingBooster();
             //HideCancelButton();
             CloseUseItemPopup(true);
@@ -192,6 +195,9 @@ namespace BalloonFlow
                         CameraManager.Instance.MoveToTarget(queuePosition);
                     }
 
+                    if (HolderVisualManager.HasInstance)
+                        HolderVisualManager.Instance.SetHandSelectionHighlightActive(true);
+
                     Debug.Log("[BoosterExecutor] Select Tool activated. Waiting for holder selection.");
                     break;
 
@@ -251,6 +257,9 @@ namespace BalloonFlow
         public void CancelPendingBooster()
         {
             if (string.IsNullOrEmpty(_pendingBoosterType)) return;
+
+            if (HolderVisualManager.HasInstance)
+                HolderVisualManager.Instance.SetHandSelectionHighlightActive(false);
 
             // Refund inventory
             if (BoosterManager.HasInstance)
