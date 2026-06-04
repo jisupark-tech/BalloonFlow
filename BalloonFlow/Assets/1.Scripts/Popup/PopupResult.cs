@@ -152,7 +152,10 @@ namespace BalloonFlow
             if (_frame != null)
             {
                 _frame.ApplyDifficulty(difficulty);
-                _frame.SetTitle("Level Clear!");
+                string clearTitle = LevelManager.HasInstance
+                    ? $"Level {LevelManager.Instance.CurrentLevelId}"
+                    : "Level Clear!";
+                _frame.SetTitle(clearTitle);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
                 _frame.SetSingleButtonText("Next");
                 // ExitButton은 직접 할당된 게 있으면 그걸 보이도록, 없으면 frame 것 표시
