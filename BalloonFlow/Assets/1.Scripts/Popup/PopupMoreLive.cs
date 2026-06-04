@@ -241,8 +241,10 @@ namespace BalloonFlow
             Vector2 from = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
             Vector2 to = lobby.GetLifePanelScreenPos();
 
+            // LifeManager.CurrentLives 는 GrantAdRewardLife 까지 미증가 — 시각 펄스용 가상 +1 값 전달.
+            int lifeAfter = (LifeManager.HasInstance ? LifeManager.Instance.CurrentLives : 0) + 1;
             ItemFlyEffect.Play(icon, from, to, 1,
-                onEachLand: () => { lobby.PulseLifePanel(); lobby.PlayLifePanelFxFire(); },
+                onEachLand: () => lobby.PulseLifePanel(lifeAfter),
                 onAllComplete: () =>
                 {
                     if (LifeManager.HasInstance)

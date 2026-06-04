@@ -412,10 +412,9 @@ namespace BalloonFlow
                 || (LifeManager.HasInstance && LifeManager.Instance.IsInfiniteHeartsActive);
             _lobby.SetLifePlusButtonVisible(!hidePlus);
 
-            // [2026-05-19] 하트 증가 시 LifePanel 펄스 — 골드 패널과 동일 패턴.
-            // 음수 delta (레벨 실패 차감) 시는 펄스 안 함. 첫 호출 (초기값 설정) 도 skip.
-            if (_lastDisplayedLives >= 0 && evt.currentLives > _lastDisplayedLives)
-                _lobby.PulseLifePanel();
+            // PulseLifePanel 내부에서 isIncrease(_lastShownLife 캐시) + FxFire debounce 처리.
+            // 첫 호출(초기 진입) / 감소(라이프 사용) 시는 내부에서 no-op.
+            _lobby.PulseLifePanel(evt.currentLives);
             _lastDisplayedLives = evt.currentLives;
         }
 
