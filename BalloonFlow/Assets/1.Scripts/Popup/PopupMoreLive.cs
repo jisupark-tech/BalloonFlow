@@ -100,7 +100,7 @@ namespace BalloonFlow
         {
             if (_frame != null)
             {
-                _frame.SetTitle("Need Lives!");
+                _frame.SetTitle("More Lives");
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Vertical);
                 // Vertical(Green+Blue) — Red 미사용, 빈 문자열 전달
                 _frame.SetVertButtonTexts("Refill", string.Empty, "Free");
