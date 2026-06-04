@@ -222,6 +222,7 @@ namespace BalloonFlow
             {
                 _frame.ApplyDifficulty(diff);
                 _frame.SetTitle("Continue?");
+                _frame.SetDescription("Spend coins to keep playing.");
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
                 _frame.SetHorizGreenText("Continue");
                 _frame.SetHorizRedText("Give Up");
@@ -307,6 +308,7 @@ namespace BalloonFlow
                     _winningStreakView.SetActive(true);
                     WinningStreakUI.PlayMultiplierIdle(_winningStreakView, multiplier);
                 }
+                if (_frame != null) _frame.SetDescription($"You will lose your x{multiplier} multiplier!");
                 _currentView = ContinueView.WinningStreak;
                 return;
             }

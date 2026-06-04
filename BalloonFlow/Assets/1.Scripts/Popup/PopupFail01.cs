@@ -123,6 +123,7 @@ namespace BalloonFlow
             {
                 _frame.ApplyDifficulty(difficulty);
                 _frame.SetTitle("Continue?");
+                _frame.SetDescription("Spend coins to keep playing.");
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
                 _frame.SetHorizGreenText("Continue");
                 _frame.SetHorizRedText("Give Up");
