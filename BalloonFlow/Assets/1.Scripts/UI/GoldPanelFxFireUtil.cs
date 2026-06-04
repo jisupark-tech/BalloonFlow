@@ -13,12 +13,21 @@ namespace BalloonFlow
             DisableNamed(goldPanel, "FxFire");
         }
 
+        public static void DisableUnderLifePanel(Transform lifePanel)
+        {
+            if (lifePanel == null) return;
+            DisableNamed(lifePanel, "FXFire");
+            DisableNamed(lifePanel, "FxFire");
+        }
+
         public static void DisableUnderTopBarRoot(Transform popupRoot)
         {
             if (popupRoot == null) return;
             Transform topBar = FindChildRecursive(popupRoot, "TopBarArea");
             Transform gold = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
             DisableUnderGoldPanel(gold);
+            Transform life = topBar != null ? FindChildRecursive(topBar, "LifePanel") : null;
+            DisableUnderLifePanel(life);
         }
 
         private static void DisableNamed(Transform root, string fxName)

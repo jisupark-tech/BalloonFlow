@@ -90,6 +90,10 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtLifeTimerOutline;
         [SerializeField] private Button _btnLifeBar;
         [SerializeField] private GameObject _imgInfinite;
+        [Tooltip("LifePanel 자식 FXFire ParticleSystem 원본(템플릿). 자체 재생 X — PlayLifePanelFxFire() 호출마다 Instantiate 되어 N번째 발화가 N-1번째 인스턴스를 중단/리셋하지 않음. 미할당 시 _txtLife 부모(LifePanel) 하위에서 'FXFire'/'FxFire' 이름으로 자동 탐색.")]
+        [SerializeField] private GameObject _lifePanelFxFire;
+        /// <summary>직전 PlayLifePanelFxFire 가 Instantiate 한 인스턴스 — 살아있는 동안 중복 발화 차단.</summary>
+        private GameObject _activeLifePanelFxFireInstance;
 
         [Header("[Shop — 골드 표시]")]
         [SerializeField] private TMP_Text _txtShopGold;
@@ -328,6 +332,8 @@ namespace BalloonFlow
             // FxGold 도착+PulseGoldPanel 결합 전 prefab Play-On-Awake 자동 재생 차단.
             ResolveGoldPanelFxFire();
             DisableGoldPanelFxFireOnEnter();
+            ResolveLifePanelFxFire();
+            DisableLifePanelFxFireOnEnter();
 
             // 최초 진입 시 Rail 슬라이드 인 연출 1회 재생
             PlayRailEnterAnimation();
@@ -744,6 +750,67 @@ namespace BalloonFlow
 
             // 안전망 — stopAction 이 looping 등의 이유로 발동되지 않는 케이스 대비 강제 정리.
             if (maxLifetime > 0f) Destroy(_activeGoldPanelFxFireInstance, maxLifetime + 1f);
+        }
+
+        private void ResolveLifePanelFxFire()
+        {
+            if (_lifePanelFxFire != null && !_lifePanelFxFire.scene.IsValid()) _lifePanelFxFire = null;
+            if (_lifePanelFxFire != null) return;
+            Transform root = (_txtLife != null && _txtLife.transform.parent != null) ? _txtLife.transform.parent : null;
+            if (root == null) return;
+            _lifePanelFxFire = FindChildComponentByName<Transform>(root, "FXFire")?.gameObject
+                            ?? FindChildComponentByName<Transform>(root, "FxFire")?.gameObject;
+        }
+
+        private void DisableLifePanelFxFireOnEnter()
+        {
+            // 템플릿은 항상 비활성/정지 상태로 보존 — 로비 진입 시 자동 재생 차단.
+            // 실제 재생은 PlayLifePanelFxFire() 가 Instantiate 한 인스턴스에서만 발생.
+            if (_lifePanelFxFire == null) return;
+            GoldPanelFxFireUtil.DisableUnderLifePanel(_lifePanelFxFire.transform.parent);
+        }
+
+        public void PlayLifePanelFxFire()
+        {
+            ResolveLifePanelFxFire();
+            if (_lifePanelFxFire == null) return;
+
+            Transform parent = _lifePanelFxFire.transform.parent;
+            if (parent == null) return;
+
+            // 직전 인스턴스가 아직 살아있으면 신규 발화 금지 — '하트 N개 도착해도 FXFire 는 최초 1회만'.
+            // 자연 종료(stopAction=Destroy + Destroy(life+1)) 후 Unity-null 이 되면 다음 호출에서 정상 생성.
+            if (_activeLifePanelFxFireInstance != null) return;
+
+            // 최초 1회만 Instantiate — 인스턴스가 살아있는 동안 후속 호출(하트 2~N번째 도착)은 무시.
+            _activeLifePanelFxFireInstance = Instantiate(_lifePanelFxFire, parent, false);
+            var srcTr = _lifePanelFxFire.transform;
+            var dstTr = _activeLifePanelFxFireInstance.transform;
+            dstTr.localPosition = srcTr.localPosition;
+            dstTr.localRotation = srcTr.localRotation;
+            dstTr.localScale    = srcTr.localScale;
+            _activeLifePanelFxFireInstance.SetActive(true);
+
+            var systems = _activeLifePanelFxFireInstance.GetComponentsInChildren<ParticleSystem>(true);
+            float maxLifetime = 0f;
+            for (int i = 0; i < systems.Length; i++)
+            {
+                var ps = systems[i];
+                var main = ps.main;
+                // 루트 PS 가 자연 종료되면 Unity 가 GameObject 까지 자동 정리 — 누수 방지.
+                if (i == 0) main.stopAction = ParticleSystemStopAction.Destroy;
+
+                float dur  = main.duration;
+                float life = main.startLifetime.constantMax > 0f ? main.startLifetime.constantMax : main.startLifetime.constant;
+                float total = dur + life;
+                if (total > maxLifetime) maxLifetime = total;
+
+                ps.Clear(true);
+                ps.Play(true);
+            }
+
+            // 안전망 — stopAction 이 looping 등의 이유로 발동되지 않는 케이스 대비 강제 정리.
+            if (maxLifetime > 0f) Destroy(_activeLifePanelFxFireInstance, maxLifetime + 1f);
         }
 
         private void ResolveWsFxRefs()
@@ -1509,6 +1576,9 @@ namespace BalloonFlow
         /// </summary>
         public void PulseLifePanel(float strength = 0.25f, float duration = 0.5f, int vibrato = 6)
         {
+            // FxHeart 한 알 도착 + 스케일 펀치 1회와 동기 발화 → 하트 획득당 정확히 1회 FXFire(인스턴스 살아있는 동안 중복 발화 차단).
+            PlayLifePanelFxFire();
+
             Transform target = (_txtLife != null && _txtLife.transform.parent != null)
                 ? _txtLife.transform.parent
                 : (_txtLife != null ? _txtLife.transform : null);
