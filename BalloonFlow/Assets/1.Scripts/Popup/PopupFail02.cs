@@ -117,6 +117,7 @@ namespace BalloonFlow
         {
             Transform topBar = FindChildRecursive(transform, "TopBarArea");
             Transform gold = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
+            if (gold != null) GoldPanelFxFireUtil.DisableUnderGoldPanel(gold);
             Transform txt = gold != null ? FindChildRecursive(gold, "TxtGold") : null;
             if (txt != null && txt.GetComponent<AnimatedCoinLabel>() == null)
                 txt.gameObject.AddComponent<AnimatedCoinLabel>();
@@ -166,6 +167,8 @@ namespace BalloonFlow
 
         private void OnEnable()
         {
+            GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
+
             // PopupManager가 SetActive(true) 할 때 호출됨
             // 실패 확정 시 하트 1개 소모
             if (!_lifeConsumed && LifeManager.HasInstance)
