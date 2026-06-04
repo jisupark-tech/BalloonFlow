@@ -220,7 +220,7 @@ namespace BalloonFlow
 
                 // 무한 하트: 5개 가시화 (visual stand-in)
                 int lifeCount = rewards.infiniteHeartsSeconds > 0 ? 5 : 0;
-                PlayItem(_iconLife, lifeCount, "InfiniteHearts", lifeTo, () => lobby.PulseLifePanel());
+                PlayItem(_iconLife, lifeCount, "InfiniteHearts", lifeTo, () => { lobby.PulseLifePanel(); lobby.PlayLifePanelFxFire(); });
 
                 while (pendingItemFly > 0)
                     yield return null;

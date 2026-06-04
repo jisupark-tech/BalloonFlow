@@ -1576,9 +1576,6 @@ namespace BalloonFlow
         /// </summary>
         public void PulseLifePanel(float strength = 0.25f, float duration = 0.5f, int vibrato = 6)
         {
-            // FxHeart 한 알 도착 + 스케일 펀치 1회와 동기 발화 → 하트 획득당 정확히 1회 FXFire(인스턴스 살아있는 동안 중복 발화 차단).
-            PlayLifePanelFxFire();
-
             Transform target = (_txtLife != null && _txtLife.transform.parent != null)
                 ? _txtLife.transform.parent
                 : (_txtLife != null ? _txtLife.transform : null);
