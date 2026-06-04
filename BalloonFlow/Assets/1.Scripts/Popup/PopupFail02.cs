@@ -57,6 +57,9 @@ namespace BalloonFlow
 
         private const int RETRY_BONUS_GOLD = 20;
 
+        private const int OVERLAY_SORT_ORDER = 260; // Tutorial(=250) 위에 항상 표시 — 사용자 요청 2026-06-04
+        private Canvas _overrideCanvas;
+
         // 난이도별 ImageLight 색상 (PopupResult와 동일)
         private static readonly Color LIGHT_NORMAL    = new Color(0x00 / 255f, 0x9B / 255f, 0xFF / 255f); // #009BFF
         private static readonly Color LIGHT_HARD      = new Color(0xAF / 255f, 0x20 / 255f, 0xE5 / 255f); // #AF20E5
@@ -69,6 +72,7 @@ namespace BalloonFlow
         protected override void Awake()
         {
             base.Awake();
+            EnsureOverlaySorting();
             LoadStageSpritesFromResources();
             EnsureFailOutlineBinding();
 
@@ -93,6 +97,20 @@ namespace BalloonFlow
             if (ExitBtn != null) ExitBtn.onClick.AddListener(OnHomeClicked);
 
             EnsureTopBarBinding();
+        }
+
+        /// <summary>
+        /// PopupFail02는 Tutorial(sortingOrder=250) 위에 항상 표시되어야 함 — 사용자 요청 2026-06-04.
+        /// Tutorial이 자체 Canvas.overrideSorting=true 로 PopupCanvas(=200)을 덮어쓰므로,
+        /// 같은 메커니즘으로 PopupFail02 에도 Canvas+GraphicRaycaster 런타임 부착 + sortingOrder 260 부여.
+        /// </summary>
+        private void EnsureOverlaySorting()
+        {
+            _overrideCanvas = GetComponent<Canvas>();
+            if (_overrideCanvas == null) _overrideCanvas = gameObject.AddComponent<Canvas>();
+            _overrideCanvas.overrideSorting = true;
+            _overrideCanvas.sortingOrder = OVERLAY_SORT_ORDER;
+            if (GetComponent<GraphicRaycaster>() == null) gameObject.AddComponent<GraphicRaycaster>();
         }
 
         private void EnsureTopBarBinding()
