@@ -234,11 +234,11 @@ namespace BalloonFlow
 
             _lobby.SetInfiniteImageVisible(false);
 
-            // FULL 상태: FULL 텍스트, (+) 숨김
+            // Full 상태: Full 텍스트, (+) 숨김
             if (lm.IsFullLives())
             {
                 _lobby.SetLifeText(lm.MaxLives, lm.MaxLives);
-                _lobby.SetLifeTimerText("FULL");
+                _lobby.SetLifeTimerText("Full");
                 _lobby.SetLifePlusButtonVisible(false);
                 return;
             }
@@ -331,7 +331,7 @@ namespace BalloonFlow
                 return;
             }
 
-            // FULL → TxtToast 토스트
+            // Full → TxtToast 토스트
             if (LifeManager.Instance.IsFullLives())
             {
                 ShowToast("Your lives are full!");
