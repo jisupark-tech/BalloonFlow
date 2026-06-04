@@ -14,6 +14,9 @@ namespace BalloonFlow
         private const string LOSELIFE_NAME = "LoseLife";
         private const string WINNINGSTREAK_NAME = "WinningStreak";
 
+        private const int OVERLAY_SORT_ORDER = 260; // Tutorial(=250) 위에 항상 표시 — 사용자 요청 2026-06-04
+        private Canvas _overrideCanvas;
+
         private enum ContinueView { LoseLife, WinningStreak }
 
         [Header("[Common Frame]")]
@@ -76,6 +79,7 @@ namespace BalloonFlow
         protected override void Awake()
         {
             base.Awake();
+            EnsureOverlaySorting();
 
             if (ResourceManager.HasInstance)
             {
@@ -169,6 +173,20 @@ namespace BalloonFlow
             if (DeclineBtn != null) DeclineBtn.onClick.RemoveAllListeners();
             if (ExitBtn != null) ExitBtn.onClick.RemoveAllListeners();
             if (_btnDeclineDuplicate != null) _btnDeclineDuplicate.onClick.RemoveAllListeners();
+        }
+
+        /// <summary>
+        /// PopupContinue는 Tutorial(sortingOrder=250) 위에 항상 표시되어야 함 — 사용자 요청 2026-06-04.
+        /// Tutorial이 자체 Canvas.overrideSorting=true 로 PopupCanvas(=200)을 덮어쓰므로,
+        /// 같은 메커니즘으로 PopupContinue 에도 Canvas+GraphicRaycaster 런타임 부착 + sortingOrder 260 부여.
+        /// </summary>
+        private void EnsureOverlaySorting()
+        {
+            _overrideCanvas = GetComponent<Canvas>();
+            if (_overrideCanvas == null) _overrideCanvas = gameObject.AddComponent<Canvas>();
+            _overrideCanvas.overrideSorting = true;
+            _overrideCanvas.sortingOrder = OVERLAY_SORT_ORDER;
+            if (GetComponent<GraphicRaycaster>() == null) gameObject.AddComponent<GraphicRaycaster>();
         }
 
         private void EnsureTopBarBinding()
