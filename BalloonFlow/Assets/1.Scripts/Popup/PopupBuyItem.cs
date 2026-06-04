@@ -119,7 +119,8 @@ namespace BalloonFlow
 
         /// <summary>아이템 구매 팝업 표시 (Single 버튼 — Buy).</summary>
         public void ShowBuy(string title, Sprite itemSprite, string amount, int goldCost,
-                            System.Action onConfirm = null, System.Action onCancel = null)
+                            System.Action onConfirm = null, System.Action onCancel = null,
+                            string description = null)
         {
             _onConfirm = onConfirm;
             _onCancel = onCancel;
@@ -131,6 +132,9 @@ namespace BalloonFlow
                 _frame.SetSingleButtonText("Buy");
                 _frame.ShowExitButton(true);
             }
+
+            if (_txtDescription != null && !string.IsNullOrEmpty(description))
+                _txtDescription.text = description;
 
             if (_txtBtnBuyOutline != null) _txtBtnBuyOutline.SetActive(true);
             if (_txtSingleOutline != null) _txtSingleOutline.SetActive(false);
@@ -149,7 +153,8 @@ namespace BalloonFlow
         /// <summary>아이템 해금 팝업 표시 (Single 버튼).</summary>
         public void ShowUnlock(string title, Sprite itemSprite, int unlockLevel,
                                string amount = "x3",
-                               System.Action onConfirm = null, System.Action onCancel = null)
+                               System.Action onConfirm = null, System.Action onCancel = null,
+                               string description = null)
         {
             _onConfirm = onConfirm;
             _onCancel = onCancel;
@@ -161,6 +166,9 @@ namespace BalloonFlow
                 _frame.SetSingleButtonText("Claim");
                 _frame.ShowExitButton(true);
             }
+
+            if (_txtDescription != null && !string.IsNullOrEmpty(description))
+                _txtDescription.text = description;
 
             if (_txtBtnBuyOutline != null) _txtBtnBuyOutline.SetActive(false);
             if (_txtSingleOutline != null)
