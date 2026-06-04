@@ -154,9 +154,10 @@ namespace BalloonFlow
 
         /// <summary>Paid buy popup. Keeps the popup open when the confirm callback returns false.</summary>
         public void ShowBuyResult(string title, Sprite itemSprite, string amount, int goldCost,
-                                  System.Func<bool> onConfirm = null, System.Action onCancel = null)
+                                  System.Func<bool> onConfirm = null, System.Action onCancel = null,
+                                  string description = null)
         {
-            ShowBuy(title, itemSprite, amount, goldCost, onConfirm: null, onCancel: onCancel);
+            ShowBuy(title, itemSprite, amount, goldCost, onConfirm: null, onCancel: onCancel, description: description);
             _onConfirmResult = onConfirm;
         }
 

@@ -654,8 +654,30 @@ namespace BalloonFlow
         #endregion
 
         // [Optimization 2026-05-12] SRP Batcher 호환 sprite mat — SpriteSRPBatcherUtil 로 통합.
-        // Balloon Shadow / Arrow / CSTile / CaveTile 등 모든 SpriteRenderer 공유.
+        // Balloon Shadow / Arrow / CSTile 등 SpriteRenderer 공유.
         private static Material GetSpriteSRPBatcherMat() => SpriteSRPBatcherUtil.GetSharedMat();
+        private const int CAVE_RENDER_QUEUE = 1990; // Default 3D holders render after this queue.
+        private static Material _caveOverlayMat;
+
+        private static Material GetCaveOverlayMat()
+        {
+            if (_caveOverlayMat != null) return _caveOverlayMat;
+
+            var baseMat = GetSpriteSRPBatcherMat();
+            if (baseMat == null) return null;
+
+            _caveOverlayMat = new Material(baseMat)
+            {
+                hideFlags = HideFlags.HideAndDontSave,
+                renderQueue = CAVE_RENDER_QUEUE
+            };
+
+            // Cave remains a transparent sprite, but draws before 3D holder meshes.
+            if (_caveOverlayMat.HasProperty("_ZWrite"))
+                _caveOverlayMat.SetFloat("_ZWrite", 0f);
+
+            return _caveOverlayMat;
+        }
 
         private void PlaceConveyorSpriteStretched(Sprite sprite, float wx, float wz, float worldW, float worldH)
         {
@@ -697,8 +719,8 @@ namespace BalloonFlow
             var sr = go.AddComponent<SpriteRenderer>();
             if (sr == null) { Destroy(go); return; }
             sr.sprite = sprite;
-            sr.sortingOrder = -1; // Cave 위치는 유지하고 holder/default renderer(0)보다 뒤로 렌더
-            sr.sharedMaterial = GetSpriteSRPBatcherMat();
+            sr.sortingOrder = -1; // Cave 위치는 유지하고 renderQueue로 3D holder보다 먼저 렌더
+            sr.sharedMaterial = GetCaveOverlayMat();
 
             float sw = sprite.bounds.size.x;
             float sh = sprite.bounds.size.y;

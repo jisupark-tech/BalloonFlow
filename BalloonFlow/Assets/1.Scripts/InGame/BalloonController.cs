@@ -3257,7 +3257,7 @@ namespace BalloonFlow
 
             var identifier = obj.GetComponent<BalloonIdentifier>();
 
-            float savedScale = _balloonScale;
+            Vector3 restScale = obj.transform.localScale;
             string returnKey = PoolKey;
             int popColorIdx = 0;
             if (_balloons.TryGetValue(balloonId, out BalloonData retData))
@@ -3280,12 +3280,13 @@ namespace BalloonFlow
             float scaleUpDuration = GameManager.Instance.Board.popScaleDuration;
             float scaleUpMult = GameManager.Instance.Board.popScaleMultiplier;
             Vector3 popPos = obj.transform.position;
+            Vector3 popTargetScale = GetFixedHeightPopScale(restScale, scaleUpMult);
             Sequence seq = DOTween.Sequence();
             // SetUpdate(true): 이어하기는 fail 팝업(PauseManager, timeScale=0)이 열린 상태에서 풍선을
             //   pop 하므로, scaled tween 이면 시퀀스(스케일업→풀반환 콜백)가 정지해 풍선이 화면에 남는다.
             //   unscaled 로 돌려 timeScale=0 에서도 시각 제거가 완료되게 함. (timeScale=1 일반 플레이에선 동일 동작.)
             seq.SetUpdate(true);
-            seq.Append(obj.transform.DOScale(Vector3.one * savedScale * scaleUpMult, scaleUpDuration).SetEase(Ease.OutQuad));
+            seq.Append(obj.transform.DOScale(popTargetScale, scaleUpDuration).SetEase(Ease.OutQuad));
             seq.AppendCallback(() =>
             {
                 // 스케일업 완료 시점에 애니메이터 Pop 트리거 (파티클은 PopEffectPool 가 처리)
@@ -3297,7 +3298,7 @@ namespace BalloonFlow
 
                 if (obj != null && ObjectPoolManager.HasInstance)
                 {
-                    obj.transform.localScale = Vector3.one * savedScale;
+                    obj.transform.localScale = restScale;
                     ObjectPoolManager.Instance.Return(returnKey, obj);
                 }
             });
@@ -3305,7 +3306,16 @@ namespace BalloonFlow
             InGamePerfLogger.EndSection(__totalStamp, "Balloon.ReturnObject.Total");
         }
 
-        /// <summary>Key 프리팹이 포물선으로 Lock 보관함까지 비행 → 도착 시 잠금 해제.</summary>
+        /// <summary>Uses a fixed absolute height delta so all balloon sizes stretch upward by the same visual amount.</summary>
+        private static Vector3 GetFixedHeightPopScale(Vector3 restScale, float popScaleMultiplier)
+        {
+            // ROLLBACK_FIXED_POP_SCALE_DELTA:
+            // Previous behavior was restScale * popScaleMultiplier. That made smaller balloons
+            // grow less upward on pop. Keep X/Z footprint unchanged and stretch only height.
+            float delta = DEFAULT_BALLOON_SCALE * Mathf.Max(0f, popScaleMultiplier - 1f);
+            return new Vector3(restScale.x, restScale.y + delta, restScale.z);
+        }
+
         private float GetBalloonEffectScaleMultiplier(int balloonId)
         {
             if (_balloonObjects.TryGetValue(balloonId, out GameObject obj) && obj != null)

@@ -167,6 +167,8 @@ namespace BalloonFlow
 
             Transform parent = _path.StartsWith("Popup/") ? PopupTr : UiTr;
             var _go = Instantiate(_prefab, parent);
+            // [Localization] CSV(TextData) 기반 UI 텍스트 자동 세팅 — 인스턴스화 직후, OpenUI 전.
+            LocalizationService.Apply(_go, _path);
             var _ui = _go.GetComponent<T>();
 
             if (_ui != null)
