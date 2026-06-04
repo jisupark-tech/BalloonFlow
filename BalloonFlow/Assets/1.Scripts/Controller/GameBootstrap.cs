@@ -31,6 +31,8 @@ namespace BalloonFlow
         private const float FINISH_LOGO_HOLD_SECONDS = 1.7f;
         // 온보딩(Lv.1~4) 자동 진행 경로에서 PopupResult를 띄우지 않고 FinishLogo만 1.7초간 노출 후 자동 종료
         private const float FINISH_LOGO_ONBOARDING_HOLD_SECONDS = 1.7f;
+        private const int SPINE_LOGO_SORTING_ORDER = 10;
+        private const int FINISH_LOGO_PARTICLE_SORTING_ORDER = 0;
 
         void Start()
         {
@@ -681,10 +683,36 @@ namespace BalloonFlow
                 _logoGO.transform.localRotation = Quaternion.identity;
             }
 
+            // SpineLogo는 항상 파티클 위에 — 사용자 요구사항.
+            Transform _spineLogoTr = null;
+            var _allChildren = _logoGO.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < _allChildren.Length; i++)
+            {
+                if (_allChildren[i] != null && _allChildren[i].name == "SpineLogo") { _spineLogoTr = _allChildren[i]; break; }
+            }
+            if (_spineLogoTr == null)
+            {
+                for (int i = 0; i < _allChildren.Length; i++)
+                {
+                    if (_allChildren[i] == null) continue;
+                    string _n = _allChildren[i].name;
+                    if (_n.Contains("Spine") || _n.Contains("Logo")) { _spineLogoTr = _allChildren[i]; break; }
+                }
+            }
+            if (_spineLogoTr != null)
+            {
+                _spineLogoTr.SetAsLastSibling();
+                var _spineCanvas = _spineLogoTr.GetComponent<Canvas>();
+                if (_spineCanvas != null) { _spineCanvas.overrideSorting = true; _spineCanvas.sortingOrder = SPINE_LOGO_SORTING_ORDER; }
+            }
+            else Debug.LogWarning("[GameBootstrap] FinishLogo prefab에 SpineLogo 자식이 없습니다 — 정렬 스킵.");
+
             var _particles = _logoGO.GetComponentsInChildren<ParticleSystem>(true);
             for (int i = 0; i < _particles.Length; i++)
             {
                 if (_particles[i] == null) continue;
+                var _psr = _particles[i].GetComponent<ParticleSystemRenderer>();
+                if (_psr != null) _psr.sortingOrder = FINISH_LOGO_PARTICLE_SORTING_ORDER;
                 _particles[i].gameObject.SetActive(true);
                 _particles[i].Play(true);
             }
