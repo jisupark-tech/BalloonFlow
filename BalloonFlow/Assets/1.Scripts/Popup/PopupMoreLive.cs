@@ -242,7 +242,7 @@ namespace BalloonFlow
             Vector2 to = lobby.GetLifePanelScreenPos();
 
             ItemFlyEffect.Play(icon, from, to, 1,
-                onEachLand: () => lobby.PulseLifePanel(),
+                onEachLand: () => { lobby.PulseLifePanel(); lobby.PlayLifePanelFxFire(); },
                 onAllComplete: () =>
                 {
                     if (LifeManager.HasInstance)
