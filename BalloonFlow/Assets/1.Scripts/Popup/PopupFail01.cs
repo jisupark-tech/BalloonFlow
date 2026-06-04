@@ -15,6 +15,9 @@ namespace BalloonFlow
         [SerializeField] private Button _btnExit;
         [SerializeField] private Button _btnGoldPlus;
 
+        private const int OVERLAY_SORT_ORDER = 260; // Tutorial(=250) 위에 항상 표시 — 사용자 요청 2026-06-04
+        private Canvas _overrideCanvas;
+
         [Header("[코스트 텍스트]")]
         [SerializeField] private TMP_Text _costText;
         [SerializeField] private TMP_Text _costTextOutline;
@@ -53,6 +56,7 @@ namespace BalloonFlow
         protected override void Awake()
         {
             base.Awake();
+            EnsureOverlaySorting();
             if (ContinueBtn != null) ContinueBtn.onClick.AddListener(OnContinueClicked);
             if (DeclineBtn != null) DeclineBtn.onClick.AddListener(OnDeclineClicked);
             if (ExitBtn != null) ExitBtn.onClick.AddListener(OnDeclineClicked);
@@ -74,6 +78,20 @@ namespace BalloonFlow
             if (DeclineBtn != null) DeclineBtn.onClick.RemoveAllListeners();
             if (ExitBtn != null) ExitBtn.onClick.RemoveAllListeners();
             if (_btnGoldPlus != null) _btnGoldPlus.onClick.RemoveAllListeners();
+        }
+
+        /// <summary>
+        /// PopupFail01은 Tutorial(sortingOrder=250) 위에 항상 표시되어야 함 — 사용자 요청 2026-06-04.
+        /// Tutorial이 자체 Canvas.overrideSorting=true 로 PopupCanvas(=200)을 덮어쓰므로,
+        /// 같은 메커니즘으로 PopupFail01 에도 Canvas+GraphicRaycaster 런타임 부착 + sortingOrder 260 부여.
+        /// </summary>
+        private void EnsureOverlaySorting()
+        {
+            _overrideCanvas = GetComponent<Canvas>();
+            if (_overrideCanvas == null) _overrideCanvas = gameObject.AddComponent<Canvas>();
+            _overrideCanvas.overrideSorting = true;
+            _overrideCanvas.sortingOrder = OVERLAY_SORT_ORDER;
+            if (GetComponent<GraphicRaycaster>() == null) gameObject.AddComponent<GraphicRaycaster>();
         }
 
         private void EnsureTopBarBinding()
