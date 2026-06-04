@@ -16,10 +16,11 @@ namespace BalloonFlow
     ///
     /// 단계 정책 (1.0 소프트런칭):
     /// - Stage1 (기본): 코인 카테고리만 노출.
-    /// - Stage2: highestClearedLevel+1 ≥ <see cref="Stage2MinLevel"/> AND zapTutorialCompleted=true
+    /// - Stage2: highestClearedLevel ≥ <see cref="Stage2MinLevel"/>
     ///           → offer + bundle + coin 노출.
-    /// - Stage3: highestClearedLevel+1 ≥ <see cref="Stage3MinLevel"/> AND firstInterstitialShown=true
+    /// - Stage3: highestClearedLevel ≥ <see cref="Stage3MinLevel"/>
     ///           → offer + noads + bundle + coin 노출.
+    /// 맥락: 유저가 충분히 게임을 학습한 시점(레벨 15·20 클리어)에 노출.
     ///
     /// expanded=false (메인 배너 모드): 배너 슬롯 <see cref="MainBannerSlots"/> 개,
     /// 그 후 코인 <see cref="MainCoinSlotsAfterStage1"/> 개까지 노출.
@@ -32,14 +33,12 @@ namespace BalloonFlow
         private const int Stage2MinLevel = 15;
         private const int Stage3MinLevel = 20;
 
-        /// <summary>유저의 진척도/플래그를 보고 현재 노출 단계(Stage1~3)를 판정.</summary>
+        /// <summary>유저의 진척도를 보고 현재 노출 단계(Stage1~3)를 판정.</summary>
         public static StoreExposureStage DetermineStage(UserData user)
         {
-            int maxReachedLevel = GetMaxReachedLevel(user);
-            if (maxReachedLevel >= Stage3MinLevel && HasFirstInterstitialShown(user))
-                return StoreExposureStage.Stage3;
-            if (maxReachedLevel >= Stage2MinLevel && HasZapTutorialCompleted(user))
-                return StoreExposureStage.Stage2;
+            int cleared = user != null ? user.highestClearedLevel : 0;
+            if (cleared >= Stage3MinLevel) return StoreExposureStage.Stage3;
+            if (cleared >= Stage2MinLevel) return StoreExposureStage.Stage2;
             return StoreExposureStage.Stage1;
         }
 
@@ -154,23 +153,6 @@ namespace BalloonFlow
                 return true;
 
             return false;
-        }
-
-        private static int GetMaxReachedLevel(UserData user)
-        {
-            return user != null ? Mathf.Max(1, user.highestClearedLevel + 1) : 1;
-        }
-
-        private static bool HasZapTutorialCompleted(UserData user)
-        {
-            if (user != null && user.zapTutorialCompleted) return true;
-            return PlayerPrefs.GetInt(Const.PREFS_ZAP_TUTORIAL_COMPLETED, 0) == 1;
-        }
-
-        private static bool HasFirstInterstitialShown(UserData user)
-        {
-            if (user != null && user.firstInterstitialShown) return true;
-            return PlayerPrefs.GetInt(Const.PREFS_FIRST_INTERSTITIAL_SHOWN, 0) == 1;
         }
 
         private static string NormalizeCategory(string category)
