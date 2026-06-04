@@ -24,6 +24,8 @@ namespace BalloonFlow
         private const string SPAWNER_POOL_KEY = "Spawner";
         private const int MAX_COLUMNS = 5;
         private const int MAGAZINE_FONT_SIZE = 8;
+        private const int HIDDEN_MAGAZINE_FONT_SIZE = 10;
+        private static readonly Color HIDDEN_MAGAZINE_COLOR = new Color(1f, 1f, 1f, 1f); // 명세: opacity 255 고정
         private const float DEPLOY_MOVE_SPEED = 12f;
         // ROLLBACK_DEPLOY_DEBUG_LOGS:
         // Set BALLOONFLOW_DEPLOY_DEBUG to restore verbose deploy/deadlock diagnostics. Keeping this
@@ -608,9 +610,18 @@ namespace BalloonFlow
                 }
                 if (visual.magazineText != null)
                 {
-                    visual.magazineText.color = row == 0
-                        ? Color.white
-                        : new Color(1f, 1f, 1f, 0.5f);
+                    if (holders[i].isHidden)
+                    {
+                        // Hidden: row 무관, alpha 1.0 + fontSize 10 강제 (명세)
+                        visual.magazineText.color = HIDDEN_MAGAZINE_COLOR;
+                        visual.magazineText.fontSize = HIDDEN_MAGAZINE_FONT_SIZE;
+                    }
+                    else
+                    {
+                        visual.magazineText.color = row == 0
+                            ? Color.white
+                            : new Color(1f, 1f, 1f, 0.5f);
+                    }
                 }
             }
         }
@@ -867,9 +878,24 @@ namespace BalloonFlow
                     // 비활성화(row 1+): 텍스트 투명도 50%
                     if (!insideSpawner && colHolders[row].magazineText != null)
                     {
-                        colHolders[row].magazineText.color = row == 0
-                            ? Color.white
-                            : new Color(1f, 1f, 1f, 0.5f);
+                        bool hiddenGuard = false;
+                        if (HolderManager.HasInstance)
+                        {
+                            var holderData = HolderManager.Instance.FindHolderPublic(colHolders[row].holderId);
+                            hiddenGuard = holderData != null && holderData.isHidden;
+                        }
+                        if (hiddenGuard)
+                        {
+                            // Hidden: row 무관, alpha 1.0 + fontSize 10 강제 (명세)
+                            colHolders[row].magazineText.color = HIDDEN_MAGAZINE_COLOR;
+                            colHolders[row].magazineText.fontSize = HIDDEN_MAGAZINE_FONT_SIZE;
+                        }
+                        else
+                        {
+                            colHolders[row].magazineText.color = row == 0
+                                ? Color.white
+                                : new Color(1f, 1f, 1f, 0.5f);
+                        }
                     }
                 }
 
@@ -988,8 +1014,17 @@ namespace BalloonFlow
                 else
                     displayText = data.magazineCount.ToString();
                 textMesh.text = displayText;
-                textMesh.color = Color.white;
-                textMesh.fontSize = MAGAZINE_FONT_SIZE;
+                if (data.isHidden)
+                {
+                    // Hidden: alpha 1.0(=255) + fontSize 10 강제 고정 (명세)
+                    textMesh.color = HIDDEN_MAGAZINE_COLOR;
+                    textMesh.fontSize = HIDDEN_MAGAZINE_FONT_SIZE;
+                }
+                else
+                {
+                    textMesh.color = Color.white;
+                    textMesh.fontSize = MAGAZINE_FONT_SIZE;
+                }
                 textMesh.alignment = TextAlignmentOptions.Center;
             }
 
@@ -2396,7 +2431,12 @@ namespace BalloonFlow
             DOVirtual.DelayedCall(0.1f, () =>
             {
                 if (visual.magazineText != null)
+                {
+                    // 해제 시 일반 표시 규칙 복귀: fontSize/color 원복 후 SetText
+                    visual.magazineText.fontSize = MAGAZINE_FONT_SIZE;
+                    visual.magazineText.color = Color.white;
                     visual.magazineText.SetText("{0}", visual.magazineRemaining);
+                }
             });
         }
 
