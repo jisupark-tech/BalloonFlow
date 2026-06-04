@@ -421,10 +421,35 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// Hand(SelectTool) 부스터 활성 동안 큐의 클릭 가능한 보관함(front row)에 stroke + yoyo idle 표시.
+        /// active=true: IsInFrontRow 통과 holder 만 켬 (deploy 중인 row 0 제외).
+        /// active=false: 조건 무시 전체 끔 → 상태 누수 차단 (선택 완료/취소/팝업 close 시).
+        /// </summary>
+        public void SetHandSelectionHighlightActive(bool active)
+        {
+            foreach (var kvp in _holderVisuals)
+            {
+                HolderVisual visual = kvp.Value;
+                if (visual == null || visual.identifier == null) continue;
+
+                if (active)
+                {
+                    if (IsInFrontRow(kvp.Key))
+                        visual.identifier.SetControlBoxStrokeActive(true);
+                }
+                else
+                {
+                    visual.identifier.SetControlBoxStrokeActive(false);
+                }
+            }
+        }
+
+        /// <summary>
         /// Clears all holder visuals and returns objects to pool.
         /// </summary>
         public void ClearAllVisuals()
         {
+            SetHandSelectionHighlightActive(false);
             StopAllCoroutines();
             _cancelledHolders.Clear();
 
