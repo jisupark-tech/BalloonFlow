@@ -940,7 +940,7 @@ namespace BalloonFlow
 
             int price = BoosterManager.Instance.GetBoosterPrice(boosterType);
             Sprite spr = popup.GetBoosterSprite(boosterType);
-            popup.ShowBuy("Buy Item", spr, "x3", price,
+            popup.ShowBuy(GetBoosterDisplayName(boosterType), spr, "x3", price,
                 onConfirm: () =>
                 {
                     if (_pendingItemRewardFx.Contains(boosterType)) return;
@@ -974,7 +974,8 @@ namespace BalloonFlow
                         var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
                         if (err != null) err.Show("Purchase Failed", "Purchase could not be completed. Please try again.");
                     }
-                });
+                },
+                description: GetBoosterBuyDescription(boosterType));
         }
 
         private void ShowUnlockPopup(string boosterType)
@@ -992,7 +993,7 @@ namespace BalloonFlow
             };
 
             Sprite spr = popup.GetBoosterSprite(boosterType);
-            popup.ShowUnlock("Unlock", spr, unlockLevel, $"x{BoosterManager.UNLOCK_REWARD_COUNT}",
+            popup.ShowUnlock(GetBoosterDisplayName(boosterType), spr, unlockLevel, $"x{BoosterManager.UNLOCK_REWARD_COUNT}",
                 onConfirm: () =>
                 {
                     if (_pendingItemRewardFx.Contains(boosterType)) return;
@@ -1005,7 +1006,8 @@ namespace BalloonFlow
                             ShowToast("Item claimed!");
                         }
                     });
-                });
+                },
+                description: GetBoosterBuyDescription(boosterType));
         }
 
         private void OnColorPicked(int color)
@@ -1100,6 +1102,28 @@ namespace BalloonFlow
                 BoosterManager.SELECT_TOOL  => "Select a holder from the queue to deploy.",
                 BoosterManager.SHUFFLE      => "Shuffle the holder queue order.",
                 BoosterManager.COLOR_REMOVE => "Remove all balloons of a selected color.",
+                _                           => ""
+            };
+        }
+
+        private static string GetBoosterDisplayName(string boosterType)
+        {
+            return boosterType switch
+            {
+                BoosterManager.SELECT_TOOL  => "Hand",
+                BoosterManager.SHUFFLE      => "Shuffle",
+                BoosterManager.COLOR_REMOVE => "Zap",
+                _                           => ""
+            };
+        }
+
+        private static string GetBoosterBuyDescription(string boosterType)
+        {
+            return boosterType switch
+            {
+                BoosterManager.SELECT_TOOL  => "Place any box directly!",
+                BoosterManager.SHUFFLE      => "Shuffle all boxes instantly!",
+                BoosterManager.COLOR_REMOVE => "Pop everything of one color!",
                 _                           => ""
             };
         }
