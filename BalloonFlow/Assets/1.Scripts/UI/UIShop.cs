@@ -95,7 +95,15 @@ namespace BalloonFlow
             if (_txtTitleOutline != null) _txtTitleOutline.text = "Shop";
 
             if (_btnMoreProducts != null)
+            {
                 _btnMoreProducts.onClick.AddListener(OnMoreProductsClicked);
+                // PopupTextInventory P0-2 — 'More Offers!' → 'More Offers' (binary prefab 정정 불가, 런타임 override).
+                var moreTexts = _btnMoreProducts.GetComponentsInChildren<TMP_Text>(true);
+                for (int i = 0; i < moreTexts.Length; i++)
+                {
+                    if (moreTexts[i] != null) moreTexts[i].text = "More Offers";
+                }
+            }
 
             // Resources 폴백 — Inspector 미할당 시 prefab 자동 로드
             if (_autoLoadFromResources)
