@@ -1,12 +1,14 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BalloonFlow
+namespace AimedPuzzle.BalloonFlow.UI
 {
     /// <summary>
     /// CutoutDim Image 에 부착되어 hole 영역 안쪽 raycast 를 통과시키는 필터.
-    /// 외부=차단(=raycast 적중 → 입력 흡수), 내부=하위 UI/게임 오브젝트로 클릭 전달.
-    /// SetGraceActive(true) 동안엔 hole 까지 포함 전체 차단 — 튜토리얼 등장 직후 입력 차단 grace 용.
+    /// 정책: 하이라이트된 CutoutFrame(hole) 영역은 항상 클릭 가능, dim 영역은 항상 차단.
+    /// SetGraceActive(true) 는 hole 이 없는 step(useCutoutFrame=false)에서만 의미가 있으며,
+    /// 그 경우 튜토리얼 등장 직후 입력 차단 grace 로 dim 전체를 흡수한다.
+    /// hole 이 있는 step 에서는 grace 여부와 무관하게 hole 내부는 pass-through.
     /// </summary>
     [RequireComponent(typeof(Graphic))]
     public class TutorialCutoutRaycastFilter : MonoBehaviour, ICanvasRaycastFilter
@@ -42,21 +44,23 @@ namespace BalloonFlow
 
         public bool IsRaycastLocationValid(Vector2 screenPoint, Camera eventCamera)
         {
-            // grace 중이면 hole 포함 전체 차단.
-            if (_graceActive) return true;
-            if (!_hasHole || _maskRect == null) return true;
+            // hole 이 있는 step: grace 여부와 무관하게 hole 내부 좌표는 pass-through, 외부는 차단.
+            if (_hasHole && _maskRect != null)
+            {
+                Vector2 localPoint;
+                if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(_maskRect, screenPoint, eventCamera, out localPoint))
+                    return true;
 
-            Vector2 localPoint;
-            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(_maskRect, screenPoint, eventCamera, out localPoint))
+                float halfW = _holeSize.x * 0.5f;
+                float halfH = _holeSize.y * 0.5f;
+                if (localPoint.x >= _holeLocalCenter.x - halfW && localPoint.x <= _holeLocalCenter.x + halfW &&
+                    localPoint.y >= _holeLocalCenter.y - halfH && localPoint.y <= _holeLocalCenter.y + halfH)
+                    return false;
+
                 return true;
+            }
 
-            // hole 내부면 raycast pass-through (= false → 입력이 하위로 전달).
-            float halfW = _holeSize.x * 0.5f;
-            float halfH = _holeSize.y * 0.5f;
-            if (localPoint.x >= _holeLocalCenter.x - halfW && localPoint.x <= _holeLocalCenter.x + halfW &&
-                localPoint.y >= _holeLocalCenter.y - halfH && localPoint.y <= _holeLocalCenter.y + halfH)
-                return false;
-
+            // hole 없는 step: grace 활성 시 dim 전체 차단.
             return true;
         }
     }
