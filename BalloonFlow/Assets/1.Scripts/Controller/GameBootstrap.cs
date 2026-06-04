@@ -28,9 +28,9 @@ namespace BalloonFlow
         private bool _ftueInfiniteHeartsRequested;
 
         private const string PREFS_KEY_UNLOCK_POPUP_SHOWN = "BalloonFlow_BoosterUnlockPopupShown_";
-        private const float FINISH_LOGO_HOLD_SECONDS = 1f;
-        // 온보딩(Lv.1~4) 자동 진행 경로에서 PopupResult를 띄우지 않고 FinishLogo만 1초간 노출 후 자동 종료
-        private const float FINISH_LOGO_ONBOARDING_HOLD_SECONDS = 1f;
+        private const float FINISH_LOGO_HOLD_SECONDS = 1.5f;
+        // 온보딩(Lv.1~4) 자동 진행 경로에서 PopupResult를 띄우지 않고 FinishLogo만 1.5초간 노출 후 자동 종료
+        private const float FINISH_LOGO_ONBOARDING_HOLD_SECONDS = 1.5f;
 
         void Start()
         {
@@ -399,7 +399,7 @@ namespace BalloonFlow
                 HUDController.Instance.SetQuitPopup(_quitPopup);
             }
 
-            // FinishLogo 프리팹 사전 로드 — Win 결과 직전 1초 컨페티 연출용. 런타임 hitching 방지.
+            // FinishLogo 프리팹 사전 로드 — Win 결과 직전 1.5초 컨페티 연출용. 런타임 hitching 방지.
             _finishLogoPrefab = Resources.Load<GameObject>(Const.POPUP_FINISH_LOGO);
         }
 
@@ -634,7 +634,7 @@ namespace BalloonFlow
         }
 
         /// <summary>스테이지 종료 시 HUD 패널 시프트 후 0.8초 뒤 win/fail 결과 팝업을 표시한다.
-        /// Win 경로는 PopupResult 직전 FinishLogo 프리팹을 띄워 1초간 FxConfetti를 재생 후 종료.</summary>
+        /// Win 경로는 PopupResult 직전 FinishLogo 프리팹을 띄워 1.5초간 FxConfetti를 재생 후 종료.</summary>
         IEnumerator ShowResultDelayed(bool _isWin, int _score, int _stars)
         {
             // [2026-05-13] 스테이지 종료 시 popup 노출 전 panel shift — popup open 자체 트리거는 latch로 차단, 다음 스테이지 enter 애니에서 원위치로 복귀.
