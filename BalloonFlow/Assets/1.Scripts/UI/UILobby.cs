@@ -74,9 +74,8 @@ namespace BalloonFlow
         [SerializeField] private Button _btnGoldPlus;
         [Tooltip("코인 fly 도착점 override (fly 전용). 미할당 시 _txtGold 사용. 펄스 연출은 _txtGold 부모 그대로.")]
         [SerializeField] private RectTransform _goldFlyTargetOverride;
-        [Tooltip("GoldPanel 자식 FXFire ParticleSystem (FxGold 도착+펄스 시 1회 재생). 미할당 시 _txtGold 부모(GoldPanel) 하위에서 'FXFire'/'FxFire' 이름으로 자동 탐색.")]
+        [Tooltip("GoldPanel 자식 FXFire ParticleSystem 원본(템플릿). 자체 재생 X — PlayGoldPanelFxFire() 호출마다 Instantiate 되어 N번째 발화가 N-1번째 인스턴스를 중단/리셋하지 않음. 미할당 시 _txtGold 부모(GoldPanel) 하위에서 'FXFire'/'FxFire' 이름으로 자동 탐색.")]
         [SerializeField] private GameObject _goldPanelFxFire;
-        private ParticleSystem _goldPanelFxFirePs;
 
         [Header("[TopBar — LifePanel]")]
         [SerializeField] private TMP_Text _txtLife;
@@ -683,33 +682,63 @@ namespace BalloonFlow
 
         private void ResolveGoldPanelFxFire()
         {
-            if (_goldPanelFxFire != null && !_goldPanelFxFire.scene.IsValid()) { _goldPanelFxFire = null; _goldPanelFxFirePs = null; }
+            if (_goldPanelFxFire != null && !_goldPanelFxFire.scene.IsValid()) _goldPanelFxFire = null;
             if (_goldPanelFxFire != null) return;
             Transform root = (_txtGold != null && _txtGold.transform.parent != null) ? _txtGold.transform.parent : null;
             if (root == null) return;
             _goldPanelFxFire = FindChildComponentByName<Transform>(root, "FXFire")?.gameObject
                             ?? FindChildComponentByName<Transform>(root, "FxFire")?.gameObject;
-            if (_goldPanelFxFire != null)
-                _goldPanelFxFirePs = _goldPanelFxFire.GetComponent<ParticleSystem>();
         }
 
         private void DisableGoldPanelFxFireOnEnter()
         {
-            if (_goldPanelFxFire == null || !_goldPanelFxFire.activeSelf) return;
+            // 템플릿은 항상 비활성/정지 상태로 보존 — 로비 진입 시 자동 재생 차단.
+            // 실제 재생은 PlayGoldPanelFxFire() 가 Instantiate 한 인스턴스에서만 발생.
+            if (_goldPanelFxFire == null) return;
             var systems = _goldPanelFxFire.GetComponentsInChildren<ParticleSystem>(true);
             for (int i = 0; i < systems.Length; i++)
                 systems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-            _goldPanelFxFire.SetActive(false);
+            if (_goldPanelFxFire.activeSelf) _goldPanelFxFire.SetActive(false);
         }
 
         public void PlayGoldPanelFxFire()
         {
             ResolveGoldPanelFxFire();
             if (_goldPanelFxFire == null) return;
-            if (!_goldPanelFxFire.activeSelf) _goldPanelFxFire.SetActive(true);
-            if (_goldPanelFxFirePs == null) _goldPanelFxFirePs = _goldPanelFxFire.GetComponent<ParticleSystem>();
-            var systems = _goldPanelFxFire.GetComponentsInChildren<ParticleSystem>(true);
-            for (int i = 0; i < systems.Length; i++) { systems[i].Clear(true); systems[i].Play(true); }
+
+            Transform parent = _goldPanelFxFire.transform.parent;
+            if (parent == null) return;
+
+            // 매 호출마다 새 인스턴스 추가 — 직전 인스턴스가 살아있어도 중단/리셋하지 않고 겹쳐 재생됨.
+            // (FxGold 1알 = PulseGoldPanel 1회 = PlayGoldPanelFxFire 1회 = 인스턴스 1개)
+            GameObject instance = Instantiate(_goldPanelFxFire, parent, false);
+            var srcTr = _goldPanelFxFire.transform;
+            var dstTr = instance.transform;
+            dstTr.localPosition = srcTr.localPosition;
+            dstTr.localRotation = srcTr.localRotation;
+            dstTr.localScale    = srcTr.localScale;
+            instance.SetActive(true);
+
+            var systems = instance.GetComponentsInChildren<ParticleSystem>(true);
+            float maxLifetime = 0f;
+            for (int i = 0; i < systems.Length; i++)
+            {
+                var ps = systems[i];
+                var main = ps.main;
+                // 루트 PS 가 자연 종료되면 Unity 가 GameObject 까지 자동 정리 — 누수 방지.
+                if (i == 0) main.stopAction = ParticleSystemStopAction.Destroy;
+
+                float dur  = main.duration;
+                float life = main.startLifetime.constantMax > 0f ? main.startLifetime.constantMax : main.startLifetime.constant;
+                float total = dur + life;
+                if (total > maxLifetime) maxLifetime = total;
+
+                ps.Clear(true);
+                ps.Play(true);
+            }
+
+            // 안전망 — stopAction 이 looping 등의 이유로 발동되지 않는 케이스 대비 강제 정리.
+            if (maxLifetime > 0f) Destroy(instance, maxLifetime + 1f);
         }
 
         private void ResolveWsFxRefs()
