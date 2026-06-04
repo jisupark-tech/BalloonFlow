@@ -21,12 +21,14 @@ namespace BalloonFlow
         private PopupContinue _continuePopup;
         private PopupSettings _settings;
         private PopupGoldShop _goldShop;
+        private GameObject _finishLogoPrefab;
         private bool _pendingResultIsWin;
         private bool _isTestMode;
         // OnLevelLoaded 다중 발화 race 차단 — yield 이전 동기 latch 필수.
         private bool _ftueInfiniteHeartsRequested;
 
         private const string PREFS_KEY_UNLOCK_POPUP_SHOWN = "BalloonFlow_BoosterUnlockPopupShown_";
+        private const float FINISH_LOGO_HOLD_SECONDS = 3f;
 
         void Start()
         {
@@ -394,6 +396,9 @@ namespace BalloonFlow
                 HUDController.Instance.SetGoldShopPopup(_goldShop);
                 HUDController.Instance.SetQuitPopup(_quitPopup);
             }
+
+            // FinishLogo 프리팹 사전 로드 — Win 결과 직전 3초 컨페티 연출용. 런타임 hitching 방지.
+            _finishLogoPrefab = Resources.Load<GameObject>(Const.POPUP_FINISH_LOGO);
         }
 
 
@@ -623,12 +628,51 @@ namespace BalloonFlow
             StartCoroutine(ShowResultDelayed(false, 0, 0));
         }
 
-        /// <summary>스테이지 종료 시 HUD 패널 시프트 후 0.8초 뒤 win/fail 결과 팝업을 표시한다.</summary>
+        /// <summary>스테이지 종료 시 HUD 패널 시프트 후 0.8초 뒤 win/fail 결과 팝업을 표시한다.
+        /// Win 경로는 PopupResult 직전 FinishLogo 프리팹을 띄워 3초간 FxConfetti 를 재생.</summary>
         IEnumerator ShowResultDelayed(bool _isWin, int _score, int _stars)
         {
             // [2026-05-13] 스테이지 종료 시 popup 노출 전 panel shift — popup open 자체 트리거는 latch로 차단, 다음 스테이지 enter 애니에서 원위치로 복귀.
             if (_hud != null) _hud.PlayStageEndPanelShift();
             yield return new WaitForSecondsRealtime(0.8f);
+
+            if (_isWin && _finishLogoPrefab != null)
+            {
+                Transform _parent = null;
+                if (UIManager.HasInstance)
+                    _parent = UIManager.Instance.EffectTr != null ? UIManager.Instance.EffectTr
+                            : (UIManager.Instance.PopupTr != null ? UIManager.Instance.PopupTr
+                                                                  : UIManager.Instance.UiTr);
+                if (_parent == null) _parent = transform;
+
+                GameObject _logoGO = Instantiate(_finishLogoPrefab, _parent, false);
+                var _rt = _logoGO.transform as RectTransform;
+                if (_rt != null)
+                {
+                    _rt.anchoredPosition = Vector2.zero;
+                    _rt.localScale = Vector3.one;
+                    _rt.localRotation = Quaternion.identity;
+                }
+                else
+                {
+                    _logoGO.transform.localPosition = Vector3.zero;
+                    _logoGO.transform.localScale = Vector3.one;
+                    _logoGO.transform.localRotation = Quaternion.identity;
+                }
+
+                var _particles = _logoGO.GetComponentsInChildren<ParticleSystem>(true);
+                for (int i = 0; i < _particles.Length; i++)
+                {
+                    if (_particles[i] == null) continue;
+                    _particles[i].gameObject.SetActive(true);
+                    _particles[i].Play(true);
+                }
+
+                yield return new WaitForSecondsRealtime(FINISH_LOGO_HOLD_SECONDS);
+
+                if (_logoGO != null) Destroy(_logoGO);
+            }
+
             if (_result != null)
             {
                 if (_isWin)
