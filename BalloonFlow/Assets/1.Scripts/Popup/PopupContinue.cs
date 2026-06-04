@@ -68,6 +68,7 @@ namespace BalloonFlow
         private void OnEnable()
         {
             UpdateCostDisplay();
+            GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
 
             DifficultyPurpose diff = DifficultyPurpose.Normal;
             if (LevelManager.HasInstance)
@@ -193,6 +194,7 @@ namespace BalloonFlow
         {
             Transform topBar = FindChildRecursive(transform, "TopBarArea");
             Transform gold = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
+            if (gold != null) GoldPanelFxFireUtil.DisableUnderGoldPanel(gold);
             Transform txt = gold != null ? FindChildRecursive(gold, "TxtGold") : null;
             if (txt != null && txt.GetComponent<AnimatedCoinLabel>() == null)
                 txt.gameObject.AddComponent<AnimatedCoinLabel>();

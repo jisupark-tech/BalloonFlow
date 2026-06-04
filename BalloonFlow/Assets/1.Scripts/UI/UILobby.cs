@@ -695,10 +695,7 @@ namespace BalloonFlow
             // 템플릿은 항상 비활성/정지 상태로 보존 — 로비 진입 시 자동 재생 차단.
             // 실제 재생은 PlayGoldPanelFxFire() 가 Instantiate 한 인스턴스에서만 발생.
             if (_goldPanelFxFire == null) return;
-            var systems = _goldPanelFxFire.GetComponentsInChildren<ParticleSystem>(true);
-            for (int i = 0; i < systems.Length; i++)
-                systems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-            if (_goldPanelFxFire.activeSelf) _goldPanelFxFire.SetActive(false);
+            GoldPanelFxFireUtil.DisableUnderGoldPanel(_goldPanelFxFire.transform.parent);
         }
 
         public void PlayGoldPanelFxFire()

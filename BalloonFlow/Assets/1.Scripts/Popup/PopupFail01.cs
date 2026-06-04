@@ -37,6 +37,7 @@ namespace BalloonFlow
         {
             UpdateCostDisplay();
             PlayImgFailAnimation();
+            GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
         }
 
         private void PlayImgFailAnimation()
@@ -98,6 +99,7 @@ namespace BalloonFlow
         {
             Transform topBar = FindChildRecursive(transform, "TopBarArea");
             Transform gold = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
+            if (gold != null) GoldPanelFxFireUtil.DisableUnderGoldPanel(gold);
             Transform txt = gold != null ? FindChildRecursive(gold, "TxtGold") : null;
             if (txt != null && txt.GetComponent<AnimatedCoinLabel>() == null)
                 txt.gameObject.AddComponent<AnimatedCoinLabel>();
