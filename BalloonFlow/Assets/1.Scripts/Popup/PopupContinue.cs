@@ -73,7 +73,19 @@ namespace BalloonFlow
             DifficultyPurpose diff = DifficultyPurpose.Normal;
             if (LevelManager.HasInstance)
                 diff = LevelManager.Instance.GetLevelDifficulty(LevelManager.Instance.CurrentLevelId);
-            if (_frame != null) _frame.ApplyDifficulty(diff);
+
+            // [v1.2.40] PopupManager.ShowPopup 경로(PopupFail01)에서 진입 시 Show() 미호출 → 프리팹 placeholder가 노출되던 P0 버그.
+            // OnEnable에서 항상 텍스트를 주입해 진입 경로와 무관하게 일관된 표시 보장.
+            if (_frame != null)
+            {
+                _frame.ApplyDifficulty(diff);
+                _frame.SetTitle("Continue?");
+                _frame.SetDescription("Spend coins to keep playing.");
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
+                _frame.SetHorizGreenText("Continue");
+                _frame.SetHorizRedText("Give Up");
+                _frame.ShowExitButton(true);
+            }
             ApplyContinuePanelDifficulty(diff);
         }
 
@@ -341,7 +353,8 @@ namespace BalloonFlow
         {
             if (_costText == null || !ContinueHandler.HasInstance) return;
             int cost = ContinueHandler.Instance.GetContinueCost();
-            _costText.text = cost <= 0 ? "FREE" : cost.ToString("N0");
+            // [v1.2.40] 'FREE' 문구 제거 — 항상 동적 가격(코인)을 표기. cost<=0이면 빈 문자열.
+            _costText.text = cost > 0 ? cost.ToString("N0") : string.Empty;
         }
     }
 }
