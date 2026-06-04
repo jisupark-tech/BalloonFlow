@@ -44,7 +44,7 @@ namespace BalloonFlow
         {
             if (_frame != null)
             {
-                _frame.SetTitle("No Ads");
+                _frame.SetTitle("NO ADS");
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
                 _frame.SetSingleButtonText("OK");
                 _frame.ShowExitButton(true);

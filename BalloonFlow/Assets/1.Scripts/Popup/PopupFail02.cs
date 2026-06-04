@@ -302,7 +302,7 @@ namespace BalloonFlow
 
             if (show)
             {
-                string label = difficulty == DifficultyPurpose.SuperHard ? "SuperHard" : "Hard";
+                string label = difficulty == DifficultyPurpose.SuperHard ? "Super Hard Level" : "Hard Level";
                 if (_txtHardLevel != null) _txtHardLevel.text = label;
                 if (_txtHardLevelOutline != null) _txtHardLevelOutline.text = label;
 
