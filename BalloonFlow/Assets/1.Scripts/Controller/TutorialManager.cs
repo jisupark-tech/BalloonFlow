@@ -26,6 +26,8 @@ namespace BalloonFlow
 
         private const float DIM_ALPHA = 0.75f;
         private const float FADE_DURATION = 0.25f;
+        // [2026-06-04] 튜토리얼 등장 직후 입력 차단 grace period — 사용자가 내용을 읽기 전 오클릭 방지.
+        private const float INPUT_BLOCK_AFTER_SHOW_SECONDS = 2f;
         private const float ARROW_BOB_AMPLITUDE = 10f;
         private const float ARROW_BOB_FREQUENCY = 2f;
         private const float CUTOUT_PADDING = 20f;
@@ -89,6 +91,8 @@ namespace BalloonFlow
         // State
         private Coroutine _fadeDimCoroutine;
         private Coroutine _arrowBobCoroutine;
+        // [2026-06-04] 튜토리얼 등장 직후 INPUT_BLOCK_AFTER_SHOW_SECONDS 동안 입력 차단 코루틴 핸들.
+        private Coroutine _inputBlockCoroutine;
         private bool _isDimActive;
         private bool _isCutoutVisible;
 
@@ -1222,6 +1226,10 @@ namespace BalloonFlow
                       $"canvasActive={(_tutorialCanvas != null ? _tutorialCanvas.activeInHierarchy : false)} " +
                       $"instructionPanel={_instructionPanel != null} instructionText={_instructionText != null}");
             SetTutorialCanvasInteractive(true);
+            // [2026-06-04] 튜토리얼 등장 직후 INPUT_BLOCK_AFTER_SHOW_SECONDS 동안 Skip/TapAnywhere 등
+            //   모든 튜토리얼 캔버스 내부 버튼 입력 차단 — 사용자가 내용을 충분히 읽도록.
+            //   blocksRaycasts 는 SetTutorialCanvasInteractive 가 이미 true 로 설정 → 게임 UI 로 클릭 안 떨어짐.
+            StartInputBlockGrace();
             SetDimOverlay(true);
         }
 
@@ -1307,6 +1315,7 @@ namespace BalloonFlow
         private void HandleTutorialCompleted(OnTutorialCompleted evt)
         {
             HideAllVisuals();
+            if (_inputBlockCoroutine != null) { StopCoroutine(_inputBlockCoroutine); _inputBlockCoroutine = null; }
             SetTutorialCanvasInteractive(false);
         }
 
@@ -1492,6 +1501,24 @@ namespace BalloonFlow
         #endregion
 
         #region Coroutines
+
+        // [2026-06-04] 튜토리얼 등장 직후 INPUT_BLOCK_AFTER_SHOW_SECONDS 동안 캔버스 interactable 차단.
+        //   timeScale=0 (popup pause) 상황에서도 정확히 동작하도록 WaitForSecondsRealtime 사용.
+        private void StartInputBlockGrace()
+        {
+            if (_inputBlockCoroutine != null) StopCoroutine(_inputBlockCoroutine);
+            _inputBlockCoroutine = StartCoroutine(BlockInputForGraceCoroutine());
+        }
+
+        private IEnumerator BlockInputForGraceCoroutine()
+        {
+            if (_prefabRootCanvasGroup != null)
+                _prefabRootCanvasGroup.interactable = false;
+            yield return new WaitForSecondsRealtime(INPUT_BLOCK_AFTER_SHOW_SECONDS);
+            if (_prefabRootCanvasGroup != null)
+                _prefabRootCanvasGroup.interactable = true;
+            _inputBlockCoroutine = null;
+        }
 
         private IEnumerator FadeDimCoroutine(float targetAlpha)
         {
