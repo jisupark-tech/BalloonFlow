@@ -420,26 +420,58 @@ namespace BalloonFlow
             return null;
         }
 
+        /// <summary>Hand 부스터 하이라이트 대상 행 수 (각 column 의 앞쪽 N 행).</summary>
+        private const int HAND_HIGHLIGHT_TOP_ROWS = 3;
+
+        // 부스터 토글 시점 외에는 사용되지 않는 재사용 풀. 매 호출 Clear 후 재충전.
+        private readonly Dictionary<int, List<HolderVisual>> _tempHighlightByCol = new Dictionary<int, List<HolderVisual>>();
+        private static readonly System.Comparison<HolderVisual> s_highlightZDescComparer =
+            (a, b) => b.gameObject.transform.position.z.CompareTo(a.gameObject.transform.position.z);
+
         /// <summary>
-        /// Hand(SelectTool) 부스터 활성 동안 큐의 클릭 가능한 보관함(front row)에 stroke + yoyo idle 표시.
-        /// active=true: IsInFrontRow 통과 holder 만 켬 (deploy 중인 row 0 제외).
+        /// Hand(SelectTool) 부스터 활성 동안 큐의 클릭 가능한 보관함에 stroke + yoyo idle 표시.
+        /// active=true: column 별로 앞에서 HAND_HIGHLIGHT_TOP_ROWS 행까지 켬 (deploy/이동 중 holder 제외).
         /// active=false: 조건 무시 전체 끔 → 상태 누수 차단 (선택 완료/취소/팝업 close 시).
         /// </summary>
         public void SetHandSelectionHighlightActive(bool active)
         {
+            if (!active)
+            {
+                foreach (var kvp in _holderVisuals)
+                {
+                    HolderVisual visual = kvp.Value;
+                    if (visual == null || visual.identifier == null) continue;
+                    visual.identifier.SetControlBoxStrokeActive(false);
+                }
+                return;
+            }
+
+            foreach (var bucket in _tempHighlightByCol.Values)
+                bucket.Clear();
+
             foreach (var kvp in _holderVisuals)
             {
                 HolderVisual visual = kvp.Value;
                 if (visual == null || visual.identifier == null) continue;
+                if (visual.gameObject == null) continue;
+                if (visual.isDeploying || visual.isMovingToRail) continue;
 
-                if (active)
+                if (!_tempHighlightByCol.TryGetValue(visual.column, out List<HolderVisual> bucket))
                 {
-                    if (IsInFrontRow(kvp.Key))
-                        visual.identifier.SetControlBoxStrokeActive(true);
+                    bucket = new List<HolderVisual>(8);
+                    _tempHighlightByCol[visual.column] = bucket;
                 }
-                else
+                bucket.Add(visual);
+            }
+
+            foreach (var bucket in _tempHighlightByCol.Values)
+            {
+                if (bucket.Count == 0) continue;
+                bucket.Sort(s_highlightZDescComparer);
+                int limit = bucket.Count < HAND_HIGHLIGHT_TOP_ROWS ? bucket.Count : HAND_HIGHLIGHT_TOP_ROWS;
+                for (int i = 0; i < limit; i++)
                 {
-                    visual.identifier.SetControlBoxStrokeActive(false);
+                    bucket[i].identifier.SetControlBoxStrokeActive(true);
                 }
             }
         }
