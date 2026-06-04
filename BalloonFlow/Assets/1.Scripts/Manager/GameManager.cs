@@ -525,6 +525,10 @@ namespace BalloonFlow
         /// <summary>InGame 진입 시 강제 최소 로딩 시간 (초). fade-out + setup + warmup 합산이 이 값 미만이면 대기.</summary>
         private const float MIN_INGAME_LOAD_DURATION = 2.5f;
 
+        /// <summary>FadeOut(로딩 화면) 표시 직전 추가 지연 (초). 이 시간 동안 fade 가 시작되지 않아 로비 잔여 연출이 보인다.
+        /// elapsed 에 자연스럽게 포함되므로 MIN_INGAME_LOAD_DURATION 보정은 불필요.</summary>
+        private const float LOADING_SCREEN_PREDELAY = 0.15f;
+
         IEnumerator LoadSceneCoroutine(string _sceneName)
         {
             _isTransitioning = true;
@@ -547,6 +551,8 @@ namespace BalloonFlow
             _transitionSprite = null;
             if (UIManager.HasInstance)
             {
+                // 로딩 화면 표시 직전 짧은 지연 — fade 가 시작되지 않은 동안 로비/Play 버튼 잔여 연출이 보임.
+                yield return new WaitForSecondsRealtime(LOADING_SCREEN_PREDELAY);
                 UIManager.Instance.FadeOut(0.5f, _fadeSprite);
                 yield return new WaitForSecondsRealtime(0.55f);
                 UIManager.Instance.CloseUIAll();
