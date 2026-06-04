@@ -19,7 +19,7 @@ namespace BalloonFlow
 
         private const int    MAX_LIVES              = 5;
         private const int    RECHARGE_SECONDS        = 1800;   // 30 minutes
-        private const int    COIN_REFILL_COST        = 900;
+        public const int     COIN_REFILL_COST        = 900;
         private const string PREFS_CURRENT_LIVES     = "BF_CurrentLives";
         private const string PREFS_LAST_RECHARGE_UTC = "BF_LastRechargeUtc";
 
@@ -226,7 +226,7 @@ namespace BalloonFlow
 
             if (!CurrencyManager.Instance.SpendCoins(COIN_REFILL_COST, CurrencyManager.CoinSink.HeartRefill))
             {
-                Debug.Log("[LifeManager] Not enough coins for life refill.");
+                Debug.Log($"[LifeManager] Not enough coins for life refill. have={CurrencyManager.Instance.Coins}, need={COIN_REFILL_COST}");
                 return false;
             }
 

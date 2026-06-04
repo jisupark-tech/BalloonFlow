@@ -38,6 +38,7 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprZap;
 
         private System.Action _onConfirm;
+        private System.Func<bool> _onConfirmResult;
         private System.Action _onCancel;
 
         protected override void Awake()
@@ -123,6 +124,7 @@ namespace BalloonFlow
                             string description = null)
         {
             _onConfirm = onConfirm;
+            _onConfirmResult = null;
             _onCancel = onCancel;
 
             if (_frame != null)
@@ -150,6 +152,14 @@ namespace BalloonFlow
             OpenUI();
         }
 
+        /// <summary>Paid buy popup. Keeps the popup open when the confirm callback returns false.</summary>
+        public void ShowBuyResult(string title, Sprite itemSprite, string amount, int goldCost,
+                                  System.Func<bool> onConfirm = null, System.Action onCancel = null)
+        {
+            ShowBuy(title, itemSprite, amount, goldCost, onConfirm: null, onCancel: onCancel);
+            _onConfirmResult = onConfirm;
+        }
+
         /// <summary>아이템 해금 팝업 표시 (Single 버튼).</summary>
         public void ShowUnlock(string title, Sprite itemSprite, int unlockLevel,
                                string amount = "x3",
@@ -157,6 +167,7 @@ namespace BalloonFlow
                                string description = null)
         {
             _onConfirm = onConfirm;
+            _onConfirmResult = null;
             _onCancel = onCancel;
 
             if (_frame != null)
@@ -237,6 +248,9 @@ namespace BalloonFlow
 
         private void OnBuyClicked()
         {
+            if (_onConfirmResult != null && !_onConfirmResult.Invoke())
+                return;
+
             _onConfirm?.Invoke();
             CloseUI();
         }

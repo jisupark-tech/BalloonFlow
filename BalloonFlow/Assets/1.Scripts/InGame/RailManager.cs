@@ -2608,32 +2608,47 @@ namespace BalloonFlow
             int targetCount;
 
             if (_darts.Count > 0)
-            {
-                // 방어적: 레일에 다트가 남아 있으면 live 계산 후 그 색 다트 제거.
+                // 방어적: 레일에 다트가 남아 있으면 live 계산.
                 targetColor = ComputeMostCommonDartColor(out targetCount);
-                if (targetColor < 0 || targetCount <= 0) return result;
-
-                _continueRecentBuffer.Clear();
-                for (int i = 0; i < _darts.Count; i++)
-                    if (_darts[i].dartColor == targetColor) _continueRecentBuffer.Add(_darts[i]);
-                for (int i = 0; i < _continueRecentBuffer.Count; i++)
-                    if (RemoveDartById(_continueRecentBuffer[i].dartId)) result.removedDarts++;
-                _continueRecentBuffer.Clear();
-
-                if (result.removedDarts > 0) PublishOccupancyChanged();
-            }
             else
             {
                 // 일반 경로: fail 직전 스냅샷 사용 (레일 다트는 이미 fail 로 비워짐).
                 targetColor = _continueSnapColor;
                 targetCount = _continueSnapCount;
-                if (targetColor < 0 || targetCount <= 0) return result;
-                result.removedDarts = targetCount; // 레일에 있던(=fail 로 비워진) 다트 수
             }
 
-            // 같은 색 필드 풍선을 그 수만큼 랜덤 제거 (있는 만큼만).
-            if (BalloonController.HasInstance && targetColor >= 0 && targetCount > 0)
-                result.removedBalloons = BalloonController.Instance.PopRandomBalloonsByColor(targetColor, targetCount);
+            if (targetColor < 0 || targetCount <= 0) return result;
+
+            // [1:1 보정] 풍선을 먼저 제거해 "실제 제거된 풍선 수(M)" 를 확정한다.
+            //   PopRandomBalloonsByColor 는 잠금(LockKey)/플렉스튜브(FlexTube) 풍선 제외 + available 클램프라
+            //   targetCount 미만일 수 있다. 다트를 풍선보다 많이 제거하면 "다트 소진·풍선 잔존 → 데드락" 이 되므로,
+            //   다트도 정확히 M 개만 제거해 다트:풍선 = 1:1 을 유지한다.
+            int balloonsRemoved = 0;
+            if (BalloonController.HasInstance)
+                balloonsRemoved = BalloonController.Instance.PopRandomBalloonsByColor(targetColor, targetCount);
+            result.removedBalloons = balloonsRemoved;
+
+            if (_darts.Count > 0)
+            {
+                // 레일 다트를 풍선 제거 수(M)만큼만, 최근 배치(높은 dartId) 우선 제거.
+                if (balloonsRemoved > 0)
+                {
+                    _continueRecentBuffer.Clear();
+                    for (int i = 0; i < _darts.Count; i++)
+                        if (_darts[i].dartColor == targetColor) _continueRecentBuffer.Add(_darts[i]);
+                    _continueRecentBuffer.Sort((a, b) => b.dartId.CompareTo(a.dartId));
+                    for (int i = 0; i < _continueRecentBuffer.Count && result.removedDarts < balloonsRemoved; i++)
+                        if (RemoveDartById(_continueRecentBuffer[i].dartId)) result.removedDarts++;
+                    _continueRecentBuffer.Clear();
+
+                    if (result.removedDarts > 0) PublishOccupancyChanged();
+                }
+            }
+            else
+            {
+                // 스냅샷 경로: 레일은 이미 fail 로 비워져 물리 제거 없음. 보고값만 풍선과 1:1.
+                result.removedDarts = balloonsRemoved;
+            }
 
             result.distinctColors = 1;
             result.targetColor = targetColor; // 이어하기 holder 색상 필터용

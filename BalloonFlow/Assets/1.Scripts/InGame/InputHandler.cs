@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 using Touchscreen = UnityEngine.InputSystem.Touchscreen;
 
 namespace BalloonFlow
@@ -24,6 +26,9 @@ namespace BalloonFlow
         private static readonly RaycastHit[] _raycastHitsCache = new RaycastHit[16];
         private static readonly Dictionary<Collider, HolderIdentifier> _holderByCollider =
             new Dictionary<Collider, HolderIdentifier>(64);
+        private static readonly List<RaycastResult> _uiRaycastResults = new List<RaycastResult>(16);
+        private static PointerEventData _uiPointerEventData;
+        private static EventSystem _uiPointerEventSystem;
 
         private bool _inputEnabled = true;
         private float _suppressInputUntilUnscaled;
@@ -92,6 +97,12 @@ namespace BalloonFlow
             // Only the UseItem close buttons should swallow gameplay input. The dim/cutout UI
             // can cover the board/holder selection area, especially for Zap and Hand.
             if (PopupUseItem.IsScreenPointOverActiveCloseButton(screenPosition))
+                return;
+
+            // UI buttons must consume the touch before it can hit world holder colliders behind them.
+            // Keep this button-only so UseItem/Tutorial cutout dim images can still pass intentional
+            // holder/balloon selection through the cutout area.
+            if (IsScreenPointOverBlockingUIControl(screenPosition))
                 return;
 
             Ray ray = _gameCamera.ScreenPointToRay(screenPosition);
@@ -211,6 +222,35 @@ namespace BalloonFlow
             HolderIdentifier holder = col.GetComponent<HolderIdentifier>();
             _holderByCollider[col] = holder;
             return holder;
+        }
+
+        private static bool IsScreenPointOverBlockingUIControl(Vector2 screenPosition)
+        {
+            EventSystem eventSystem = EventSystem.current;
+            if (eventSystem == null) return false;
+
+            if (_uiPointerEventData == null || _uiPointerEventSystem != eventSystem)
+            {
+                _uiPointerEventData = new PointerEventData(eventSystem);
+                _uiPointerEventSystem = eventSystem;
+            }
+
+            _uiPointerEventData.Reset();
+            _uiPointerEventData.position = screenPosition;
+            _uiRaycastResults.Clear();
+            eventSystem.RaycastAll(_uiPointerEventData, _uiRaycastResults);
+
+            for (int i = 0; i < _uiRaycastResults.Count; i++)
+            {
+                GameObject hit = _uiRaycastResults[i].gameObject;
+                if (hit == null || !hit.activeInHierarchy) continue;
+
+                Selectable selectable = hit.GetComponentInParent<Selectable>();
+                if (selectable != null && selectable.IsActive())
+                    return true;
+            }
+
+            return false;
         }
     }
 

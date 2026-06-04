@@ -117,7 +117,7 @@ namespace BalloonFlow
 
                 if (!CurrencyManager.Instance.SpendCoins(cost, CurrencyManager.CoinSink.Continue))
                 {
-                    Debug.LogWarning($"[ContinueHandler] Not enough coins to continue (needs {cost}).");
+                    Debug.LogWarning($"[ContinueHandler] Not enough coins to continue. have={CurrencyManager.Instance.Coins}, need={cost}");
                     return false;
                 }
             }

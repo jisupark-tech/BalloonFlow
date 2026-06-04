@@ -130,7 +130,7 @@ namespace BalloonFlow
             if (_txtLifeOutline != null) _txtLifeOutline.text = lifeStr;
 
             // Coin cost — popup 내부 cost 라벨 전용 (TopBar 잔액과 분리)
-            int cost = 900; // LifeManager.COIN_REFILL_COST
+            int cost = LifeManager.COIN_REFILL_COST;
             string costStr = cost.ToString("N0");
             if (_txtGold != null) _txtGold.text = costStr;
             if (_txtGoldOutline != null) _txtGoldOutline.text = costStr;
@@ -171,9 +171,19 @@ namespace BalloonFlow
         {
             if (!LifeManager.HasInstance) return;
 
+            if (CurrencyManager.HasInstance) CurrencyManager.Instance.PublishCoinSync();
+
             // 사양: 골드 부족 시 GreenBtn 무동작 — 사전 차단으로 명시적 보장
-            if (!CurrencyManager.HasInstance || !CurrencyManager.Instance.HasEnoughCoins(900))
+            int cost = LifeManager.COIN_REFILL_COST;
+            int coins = CurrencyManager.HasInstance ? CurrencyManager.Instance.Coins : -1;
+            if (!CurrencyManager.HasInstance || !CurrencyManager.Instance.HasEnoughCoins(cost))
             {
+                Debug.LogWarning($"[PopupMoreLive] Coin refill blocked by coins. have={coins}, need={cost}");
+                if (UIManager.HasInstance)
+                {
+                    var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+                    if (err != null) err.ShowPaymentFailed("Not enough coins.");
+                }
                 Debug.Log("[PopupMoreLive] 골드 부족 — GreenBtn 무동작");
                 return;
             }
@@ -186,6 +196,12 @@ namespace BalloonFlow
             }
             else
             {
+                Debug.LogWarning($"[PopupMoreLive] Coin refill failed after precheck. have={(CurrencyManager.HasInstance ? CurrencyManager.Instance.Coins : -1)}, need={cost}");
+                if (UIManager.HasInstance)
+                {
+                    var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+                    if (err != null) err.Show("Purchase Failed", "Purchase could not be completed. Please try again.");
+                }
                 Debug.Log("[PopupMoreLive] 골드 부족");
             }
         }

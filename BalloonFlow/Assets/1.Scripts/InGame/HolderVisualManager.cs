@@ -1332,6 +1332,8 @@ namespace BalloonFlow
                     rail.ExitDeployPlacement(visual.holderId);
                     _colBusy[visual.column] = false;
                     visual.isDeploying = false;
+                    // 데드락 트리거 holder 가 abort 로 종료 → ExitDeadlockMode 누락 방지(다른 holder 영구 pause 차단).
+                    if (rail.DeadlockHolderId == visual.holderId) rail.ExitDeadlockMode();
                     yield break;
                 }
                 // 취소 체크
@@ -1343,7 +1345,8 @@ namespace BalloonFlow
                     rail.ReleaseHolderReservation(visual.holderId); // 사용자 요구: Slot Reservation 해제
                     rail.ExitDeployPlacement(visual.holderId);
                     _colBusy[visual.column] = false;
-
+                    // 데드락 트리거 holder 가 취소로 종료 → ExitDeadlockMode 누락 방지(다른 holder 영구 pause 차단).
+                    if (rail.DeadlockHolderId == visual.holderId) rail.ExitDeadlockMode();
                     yield break;
                 }
 
@@ -1785,7 +1788,18 @@ namespace BalloonFlow
         /// </summary>
         private void TryEnterDeadlockIfNeeded(RailManager rail)
         {
-            if (rail.DeadlockHolderId >= 0) return; // 이미 진입
+            // [데드락 트리거 stale 방어] 트리거 holder 가 더 이상 isDeploying 이 아니면(abort/취소/소멸 등으로
+            //   ExitDeadlockMode 가 누락된 경우) 데드락 모드를 해제한다 — 다른 holder 가 1355 라인에서 영구
+            //   pause 되어 "배포 멈춤" 이 되는 버그 복구. 트리거가 정상 배포 중이면 기존 동작 그대로 유지.
+            if (rail.DeadlockHolderId >= 0)
+            {
+                if (_holderVisuals.TryGetValue(rail.DeadlockHolderId, out HolderVisual dlVisual)
+                    && dlVisual != null && dlVisual.isDeploying)
+                    return; // 트리거 유효 — 정상 직렬화 유지.
+
+                rail.ExitDeadlockMode(); // 트리거 stale → 해제. 다음 프레임 재평가에서 유효 트리거로 재진입 가능.
+                return;
+            }
 
             int activeCount = rail.GetActiveDeployPointCount();
             int isDeployingCount = 0;

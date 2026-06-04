@@ -5,6 +5,7 @@ using UnityEngine.Purchasing.Extension;
 
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 using BalloonFlow.Analytics;
 
@@ -34,6 +35,7 @@ namespace BalloonFlow
 #if UNITY_IAP
         private IStoreController    _storeController;
         private IExtensionProvider  _extensionProvider;
+        private readonly Dictionary<string, ProductType> _registeredProductTypes = new Dictionary<string, ProductType>();
 #endif
 
         /// <summary>광고 영구 제거 여부. Firestore UserData.removedAds 가 진실 소스. 미준비 시 PlayerPrefs fallback.</summary>
@@ -94,11 +96,16 @@ namespace BalloonFlow
 #if UNITY_IAP
             var builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance());
             int registered = 0;
+            _registeredProductTypes.Clear();
+            Debug.Log($"{LOG_TAG} IAP catalog received. count={(catalog == null ? 0 : catalog.Count)} platform={Application.platform} bundleId={Application.identifier}");
             foreach (var p in catalog)
             {
                 if (string.IsNullOrEmpty(p.productId)) continue;
-                builder.AddProduct(p.productId, ResolveProductType(p));
+                ProductType productType = ResolveProductType(p);
+                builder.AddProduct(p.productId, productType);
+                _registeredProductTypes[p.productId] = productType;
                 registered++;
+                Debug.Log($"{LOG_TAG} IAP register product id={p.productId} category={p.category} type={productType} priceUsd={p.priceUsd:F2} maxPurchases={p.maxPurchases}");
             }
             UnityPurchasing.Initialize(this, builder);
             Debug.Log($"{LOG_TAG} Unity IAP init started — {registered} products registered.");
@@ -161,10 +168,14 @@ namespace BalloonFlow
             Product product = _storeController.products.WithID(productId);
             if (product != null && product.availableToPurchase)
             {
+                LogProductDetails("PurchaseProduct-ready", product);
                 _storeController.InitiatePurchase(product);
             }
             else
             {
+                Debug.LogWarning($"{LOG_TAG} {productId} not available for purchase.");
+                LogProductDetails("PurchaseProduct-unavailable", product, productId);
+                DumpIapProductDetails("PurchaseProduct-unavailable");
                 Debug.LogWarning($"{LOG_TAG} {productId} 미등록/구매불가");
                 PublishPurchaseResult(productId, false);
             }
@@ -271,7 +282,78 @@ namespace BalloonFlow
                     _cachedPrices[product.definition.id] = product.metadata.localizedPriceString;
             }
             Debug.Log($"{LOG_TAG} Store 초기화 완료 — {_cachedPrices.Count} products");
+            Debug.Log($"{LOG_TAG} Store init completed - {_cachedPrices.Count} available products cached.");
+            DumpIapProductDetails("OnInitialized");
             RestoreOwnedEntitlements();
+        }
+
+        private void DumpIapProductDetails(string context)
+        {
+            if (_storeController == null)
+            {
+                Debug.LogWarning($"{LOG_TAG} IAP ProductDetails dump skipped ({context}) - storeController is null. registered={_registeredProductTypes.Count}");
+                DumpRegisteredProducts(context);
+                return;
+            }
+
+            Product[] products = _storeController.products.all;
+            int total = products != null ? products.Length : 0;
+            int available = 0;
+            int unavailable = 0;
+
+            Debug.Log($"{LOG_TAG} IAP ProductDetails dump start ({context}) platform={Application.platform} bundleId={Application.identifier} registered={_registeredProductTypes.Count} returned={total}");
+
+            foreach (var pair in _registeredProductTypes)
+            {
+                Product product = _storeController.products.WithID(pair.Key);
+                if (product != null && product.availableToPurchase) available++;
+                else unavailable++;
+
+                LogProductDetails($"registered type={pair.Value}", product, pair.Key);
+            }
+
+            Debug.Log($"{LOG_TAG} IAP ProductDetails dump end ({context}) available={available} unavailable={unavailable}");
+        }
+
+        private void DumpRegisteredProducts(string context)
+        {
+            if (_registeredProductTypes.Count == 0)
+            {
+                Debug.LogWarning($"{LOG_TAG} IAP registered products empty ({context}). ShopCatalogService may not have loaded.");
+                return;
+            }
+
+            var sb = new StringBuilder();
+            sb.Append(LOG_TAG).Append(" IAP registered products (").Append(context).Append("): ");
+            bool first = true;
+            foreach (var pair in _registeredProductTypes)
+            {
+                if (!first) sb.Append(", ");
+                first = false;
+                sb.Append(pair.Key).Append(":").Append(pair.Value);
+            }
+            Debug.Log(sb.ToString());
+        }
+
+        private void LogProductDetails(string context, Product product, string expectedId = null)
+        {
+            if (product == null)
+            {
+                Debug.LogWarning($"{LOG_TAG} IAP ProductDetails {context}: id={expectedId ?? "<null>"} product=null");
+                return;
+            }
+
+            ProductDefinition definition = product.definition;
+            ProductMetadata metadata = product.metadata;
+            string id = definition != null ? definition.id : "<null>";
+            string storeSpecificId = definition != null ? definition.storeSpecificId : "<null>";
+            string type = definition != null ? definition.type.ToString() : "<null>";
+            string price = metadata != null ? metadata.localizedPriceString : "<null>";
+            string currency = metadata != null ? metadata.isoCurrencyCode : "<null>";
+            string title = metadata != null ? metadata.localizedTitle : "<null>";
+            string transactionId = string.IsNullOrEmpty(product.transactionID) ? "<empty>" : product.transactionID;
+
+            Debug.Log($"{LOG_TAG} IAP ProductDetails {context}: id={id} storeId={storeSpecificId} type={type} available={product.availableToPurchase} hasReceipt={product.hasReceipt} price='{price}' currency='{currency}' title='{title}' tx='{transactionId}'");
         }
 
         private void RestoreOwnedEntitlements()
@@ -316,14 +398,30 @@ namespace BalloonFlow
 
         public void OnPurchaseFailed(Product product, PurchaseFailureReason failureReason)
         {
+            string productId = product != null && product.definition != null ? product.definition.id : "";
+            Debug.LogWarning($"{LOG_TAG} Purchase failed: {productId} reason={failureReason}");
+            LogProductDetails($"OnPurchaseFailed reason={failureReason}", product, productId);
+            if (product == null || product.definition == null)
+            {
+                PublishPurchaseResult(productId, false);
+                return;
+            }
             Debug.LogWarning($"{LOG_TAG} 구매 실패: {product.definition.id} — {failureReason}");
-            PublishPurchaseResult(product.definition.id, false);
+            PublishPurchaseResult(productId, false);
         }
 
         public void OnPurchaseFailed(Product product, PurchaseFailureDescription failureDescription)
         {
+            string productId = product != null && product.definition != null ? product.definition.id : "";
+            Debug.LogWarning($"{LOG_TAG} Purchase failed: {productId} reason={failureDescription.reason} message={failureDescription.message}");
+            LogProductDetails($"OnPurchaseFailed reason={failureDescription.reason}", product, productId);
+            if (product == null || product.definition == null)
+            {
+                PublishPurchaseResult(productId, false);
+                return;
+            }
             Debug.LogWarning($"{LOG_TAG} 구매 실패: {product.definition.id} — {failureDescription.message}");
-            PublishPurchaseResult(product.definition.id, false);
+            PublishPurchaseResult(productId, false);
         }
 #endif
 

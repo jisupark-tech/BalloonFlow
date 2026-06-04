@@ -940,18 +940,28 @@ namespace BalloonFlow
 
             int price = BoosterManager.Instance.GetBoosterPrice(boosterType);
             Sprite spr = popup.GetBoosterSprite(boosterType);
-            popup.ShowBuy(GetBoosterDisplayName(boosterType), spr, "x3", price,
+            popup.ShowBuyResult(GetBoosterDisplayName(boosterType), spr, "x3", price,
                 onConfirm: () =>
                 {
-                    if (_pendingItemRewardFx.Contains(boosterType)) return;
+                    int coins = CurrencyManager.HasInstance ? CurrencyManager.Instance.Coins : -1;
+                    bool unlocked = BoosterManager.Instance.IsBoosterUnlocked(boosterType);
+                    bool pending = _pendingItemRewardFx.Contains(boosterType);
+                    Debug.Log($"[UIHud] Buy booster confirm: type={boosterType}, price={price}, coins={coins}, unlocked={unlocked}, pendingFx={pending}");
+
+                    if (pending)
+                    {
+                        ShowToast("Please wait.");
+                        return false;
+                    }
 
                     // 진짜 코인 부족만 "코인 부족"으로 표시. TrySpend 는 미해금/매니저 부재 등 다른 사유로도
                     // false 를 반환하므로, 사유를 선판정하지 않으면 코인이 충분한데도 "코인 부족"으로 오표시된다.
                     if (!CurrencyManager.HasInstance || !CurrencyManager.Instance.HasEnoughCoins(price))
                     {
+                        Debug.LogWarning($"[UIHud] Booster buy blocked by coins: type={boosterType}, price={price}, coins={coins}");
                         var errCoins = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
                         if (errCoins != null) errCoins.ShowPaymentFailed("Not enough coins.");
-                        return;
+                        return false;
                     }
 
                     if (BoosterManager.Instance.TrySpendBoosterPurchaseCost(boosterType))
@@ -964,6 +974,7 @@ namespace BalloonFlow
                         });
 
                         // 인게임 결제 성공 → 가벼운 토스트로 알림
+                        return true;
                     }
                     else
                     {
@@ -973,6 +984,7 @@ namespace BalloonFlow
                             $"coins={(CurrencyManager.HasInstance ? CurrencyManager.Instance.Coins : -1)}");
                         var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
                         if (err != null) err.Show("Purchase Failed", "Purchase could not be completed. Please try again.");
+                        return false;
                     }
                 },
                 description: GetBoosterBuyDescription(boosterType));

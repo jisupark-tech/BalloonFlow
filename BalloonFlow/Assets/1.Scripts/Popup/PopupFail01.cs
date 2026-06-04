@@ -138,8 +138,17 @@ namespace BalloonFlow
             if (!ContinueHandler.HasInstance) return;
 
             int cost = ContinueHandler.Instance.GetContinueCost();
-            if (CurrencyManager.HasInstance && CurrencyManager.Instance.Coins < cost && cost > 0)
+            if (CurrencyManager.HasInstance) CurrencyManager.Instance.PublishCoinSync();
+
+            int coins = CurrencyManager.HasInstance ? CurrencyManager.Instance.Coins : -1;
+            if (cost > 0 && (!CurrencyManager.HasInstance || !CurrencyManager.Instance.HasEnoughCoins(cost)))
             {
+                Debug.LogWarning($"[PopupFail01] Continue blocked by coins. have={coins}, need={cost}");
+                if (UIManager.HasInstance)
+                {
+                    var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+                    if (err != null) err.ShowPaymentFailed("Not enough coins.");
+                }
                 Debug.Log("[PopupFail01] 골드 부족");
                 return;
             }
@@ -148,6 +157,11 @@ namespace BalloonFlow
             if (success)
             {
                 if (PopupManager.HasInstance) PopupManager.Instance.ClosePopup("popup_fail01");
+            }
+            else if (UIManager.HasInstance)
+            {
+                var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+                if (err != null) err.Show("Continue Failed", "Continue could not be completed. Please try again.");
             }
         }
 

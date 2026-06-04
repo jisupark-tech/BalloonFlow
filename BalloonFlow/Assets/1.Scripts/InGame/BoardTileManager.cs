@@ -697,7 +697,7 @@ namespace BalloonFlow
             var sr = go.AddComponent<SpriteRenderer>();
             if (sr == null) { Destroy(go); return; }
             sr.sprite = sprite;
-            sr.sortingOrder = 1; // Arrow(0)보다 위
+            sr.sortingOrder = -1; // Cave 위치는 유지하고 holder/default renderer(0)보다 뒤로 렌더
             sr.sharedMaterial = GetSpriteSRPBatcherMat();
 
             float sw = sprite.bounds.size.x;
