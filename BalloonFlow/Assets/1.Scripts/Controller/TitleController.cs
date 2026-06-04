@@ -86,12 +86,27 @@ namespace BalloonFlow
                 _ui.SetTapHintVisible(false);
             }
 
-            // [#3] 알림 권한 요청을 게임 시작 직후 노출 (사용자 요구 2026-05-31: "처음 시작하자마자").
-            // fire-and-forget — RequestPermissionAsync 는 NotDetermined 일 때만 실제 다이얼로그, 이미
-            // 결정됐으면 즉시 반환. NotificationManager 는 AfterSceneLoad 로 이미 생성·채널등록 완료된 상태.
-            if (NotificationManager.HasInstance) _ = NotificationManager.Instance.RequestPermissionAsync();
+            // [#3] 알림 권한 — 로딩 "시작 전"에 1회 요청하고, 결정될 때까지 대기한 뒤 로딩 진행.
+            //   - NotificationManager 가 아직 없으면(AfterSceneLoad 타이밍) EnsureCreated 로 생성 보장.
+            //   - RequestPermissionAsync 는 OS 가 NotDetermined 일 때만 실제 다이얼로그. await 로 응답까지 대기.
+            StartCoroutine(StartupFlow());
+        }
 
-            StartCoroutine(LoadingFlow());
+        /// <summary>[#3] 알림 권한 요청(로딩 전, 결정까지 대기) → 그 다음 로딩 진행.</summary>
+        private IEnumerator StartupFlow()
+        {
+            yield return RequestNotificationPermissionRoutine();
+            yield return LoadingFlow();
+        }
+
+        private IEnumerator RequestNotificationPermissionRoutine()
+        {
+            NotificationManager.EnsureCreated();
+            if (!NotificationManager.HasInstance) yield break;
+
+            var task = NotificationManager.Instance.RequestPermissionAsync();
+            // OS 권한 다이얼로그 응답(또는 이미 결정 시 즉시) 완료까지 대기.
+            while (task != null && !task.IsCompleted) yield return null;
         }
 
         void Update()
@@ -105,7 +120,8 @@ namespace BalloonFlow
                 {
                     _completeHintShown = true;
                     _completeTimer = 0f;
-                    if (_ui != null) _ui.SetTapHintVisible(true);
+                    // "Tap to Start" 문구는 표시하지 않음(사용자 요구) — 탭/자동 진입 동작은 유지.
+                    if (_ui != null) _ui.SetTapHintVisible(false);
                 }
                 _completeTimer += Time.deltaTime;
                 if (AnyTapThisFrame() || _completeTimer >= TITLE_AUTO_ENTER_DELAY)

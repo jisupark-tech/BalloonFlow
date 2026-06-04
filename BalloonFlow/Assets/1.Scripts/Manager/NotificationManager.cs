@@ -83,7 +83,11 @@ namespace BalloonFlow
         #region Lifecycle
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void AutoCreate()
+        private static void AutoCreate() => EnsureCreated();
+
+        /// <summary>인스턴스가 없으면 생성·초기화(채널등록·권한상태 refresh)를 보장. AfterSceneLoad 타이밍이
+        /// 호출자(예: TitleController.Start)보다 늦어 HasInstance 가 false 인 경우를 위한 명시적 보장용.</summary>
+        public static void EnsureCreated()
         {
             if (HasInstance) return;
             var go = new GameObject("NotificationManager");

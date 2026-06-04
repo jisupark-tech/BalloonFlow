@@ -5,6 +5,35 @@ using DG.Tweening;
 
 namespace BalloonFlow
 {
+    [System.Serializable]
+    public class CaveResolutionOffset
+    {
+        public string label = "Resolution";
+        [Tooltip("Inclusive minimum screen aspect ratio. aspect = Screen.width / Screen.height.")]
+        public float minAspect = 0.0f;
+        [Tooltip("Inclusive maximum screen aspect ratio. aspect = Screen.width / Screen.height.")]
+        public float maxAspect = 1.0f;
+        [Tooltip("Extra cave offset for bottom/start cave. X=world X, Y=world Z.")]
+        public Vector2 bottomOffset = Vector2.zero;
+        [Tooltip("Extra cave offset for 2-side top/end cave. X=world X, Y=world Z.")]
+        public Vector2 top2SideOffset = Vector2.zero;
+        [Tooltip("Extra cave offset for 3-side top/end cave. X=world X, Y=world Z.")]
+        public Vector2 top3SideOffset = Vector2.zero;
+
+        public bool Matches(float aspect)
+        {
+            return aspect >= minAspect && aspect <= maxAspect;
+        }
+
+        public Vector2 GetOffset(int sides, int tunnelIndex)
+        {
+            if (tunnelIndex == 0 || sides == 1) return bottomOffset;
+            if (sides == 2) return top2SideOffset;
+            if (sides == 3) return top3SideOffset;
+            return Vector2.zero;
+        }
+    }
+
     /// <summary>
     /// 보드 관련 수치를 Inspector에서 조절할 수 있는 설정 클래스.
     /// GameManager.Board를 통해 전체 InGame 시스템에서 참조.
@@ -134,6 +163,19 @@ namespace BalloonFlow
         public float caveFadeStart4Side = 0.0315f;
         [Tooltip("4면(ㅁ자) Cave Fade End. (default: 0.03)")]
         public float caveFadeEnd4Side = 0.03f;
+
+        [Header("[Cave Position - Resolution Profiles]")]
+        [Tooltip("Base cave art offset from the actual rail end. X=world X, Y=world Z. Keeps the previous default bottom cave position.")]
+        public Vector2 caveBottomBaseOffset = new Vector2(0f, -0.22f);
+
+        [Tooltip("Base cave art offset from the actual 2-side rail end. X=world X, Y=world Z. Keeps the previous default 2-side top cave position.")]
+        public Vector2 caveTop2SideBaseOffset = new Vector2(0f, -0.80f);
+
+        [Tooltip("Base cave art offset from the actual 3-side rail end. X=world X, Y=world Z. Keeps the previous default 3-side top cave position.")]
+        public Vector2 caveTop3SideBaseOffset = new Vector2(0f, -0.24f);
+
+        [Tooltip("Optional per-aspect cave offsets. Add entries for device groups that differ from the live target resolution.")]
+        public CaveResolutionOffset[] caveResolutionOffsets = new CaveResolutionOffset[0];
 
         [Header("[골드 연출 — Coin Fly]")]
         [Tooltip("코인 비행 최소 시간(초). (default: 0.3)")]

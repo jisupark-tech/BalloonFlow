@@ -55,6 +55,10 @@ namespace BalloonFlow
         private const float CAVE_BOTTOM_Z = -5.52f;
         private const float CAVE_TOP_Z_2_SIDES = 9.3f;
         private const float CAVE_TOP_Z_3_SIDES = 9.86f;
+        private const float DEFAULT_BOARD_CENTER_Z = 2.4f;
+        private const float DEFAULT_CAVE_BOTTOM_OFFSET_Z = CAVE_BOTTOM_Z - (DEFAULT_BOARD_CENTER_Z - CONVEYOR_HEIGHT * 0.5f);
+        private const float DEFAULT_CAVE_TOP_2_SIDE_OFFSET_Z = CAVE_TOP_Z_2_SIDES - (DEFAULT_BOARD_CENTER_Z + CONVEYOR_HEIGHT * 0.5f);
+        private const float DEFAULT_CAVE_TOP_3_SIDE_OFFSET_Z = CAVE_TOP_Z_3_SIDES - (DEFAULT_BOARD_CENTER_Z + CONVEYOR_HEIGHT * 0.5f);
         
         // Cached rail layout values (computed in InitializeBoard)
         private float _fieldWidth;
@@ -103,6 +107,7 @@ namespace BalloonFlow
         private float _lastBuildCellSpacing = -1f;
         private int _lastBuildCols = -1;
         private int _lastBuildRows = -1;
+        private float _lastBuildScreenAspect = -1f;
 
         #endregion
 
@@ -392,11 +397,14 @@ namespace BalloonFlow
         public void BuildConveyorBelt()
         {
             // 동일 dimensions 재빌드 스킵 (스테이지 전환 시 stutter 감소)
+            float screenAspect = GetScreenAspect();
+
             if (_conveyorSpriteRoot != null
                 && _lastBuildSides == RailSideCount
                 && Mathf.Approximately(_lastBuildCellSpacing, _cellSpacing)
                 && _lastBuildCols == _cols
-                && _lastBuildRows == _rows)
+                && _lastBuildRows == _rows
+                && Mathf.Approximately(_lastBuildScreenAspect, screenAspect))
             {
                 return;
             }
@@ -404,6 +412,7 @@ namespace BalloonFlow
             _lastBuildCellSpacing = _cellSpacing;
             _lastBuildCols = _cols;
             _lastBuildRows = _rows;
+            _lastBuildScreenAspect = screenAspect;
 
             ClearConveyorSprites();
             // 컨베이어가 새로 빌드되면 danger overlay도 무효화 (자식 참조 stale 방지)
@@ -681,7 +690,7 @@ namespace BalloonFlow
 
             var go = new GameObject("CaveTile");
             go.transform.SetParent(_conveyorSpriteRoot, false);
-            go.transform.position = new Vector3(wx, CAVE_OVERLAY_Y, GetCaveOverlayZ(sides, tunnelIndex, wz));
+            go.transform.position = GetCaveOverlayPosition(wx, wz, sides, tunnelIndex);
             go.transform.eulerAngles = new Vector3(90f, 0f, 0f);
 
             // SpriteRenderer 유지 (이전 안정 패턴)
@@ -697,13 +706,62 @@ namespace BalloonFlow
                 go.transform.localScale = new Vector3(worldW / sw, worldH / sh, 1f);
         }
 
-        private static float GetCaveOverlayZ(int sides, int tunnelIndex, float fallbackZ)
+        private static Vector3 GetCaveOverlayPosition(float wx, float fallbackZ, int sides, int tunnelIndex)
         {
-            if (tunnelIndex == 0) return CAVE_BOTTOM_Z;
-            if (sides == 1) return CAVE_BOTTOM_Z;
-            if (sides == 2) return CAVE_TOP_Z_2_SIDES;
-            if (sides == 3) return CAVE_TOP_Z_3_SIDES;
-            return fallbackZ;
+            Vector2 offset = GetCaveBaseOffset(sides, tunnelIndex) + GetCaveResolutionOffset(sides, tunnelIndex);
+            return new Vector3(wx + offset.x, CAVE_OVERLAY_Y, fallbackZ + offset.y);
+        }
+
+        private static Vector2 GetCaveBaseOffset(int sides, int tunnelIndex)
+        {
+            BoardConfig board = GameManager.HasInstance ? GameManager.Instance.Board : null;
+            if (board != null && HasConfiguredCaveBaseOffset(board))
+            {
+                if (tunnelIndex == 0 || sides == 1) return board.caveBottomBaseOffset;
+                if (sides == 2) return board.caveTop2SideBaseOffset;
+                if (sides == 3) return board.caveTop3SideBaseOffset;
+                return Vector2.zero;
+            }
+
+            if (tunnelIndex == 0 || sides == 1) return new Vector2(0f, DEFAULT_CAVE_BOTTOM_OFFSET_Z);
+            if (sides == 2) return new Vector2(0f, DEFAULT_CAVE_TOP_2_SIDE_OFFSET_Z);
+            if (sides == 3) return new Vector2(0f, DEFAULT_CAVE_TOP_3_SIDE_OFFSET_Z);
+            return Vector2.zero;
+        }
+
+        private static bool HasConfiguredCaveBaseOffset(BoardConfig board)
+        {
+            return !IsZero(board.caveBottomBaseOffset)
+                || !IsZero(board.caveTop2SideBaseOffset)
+                || !IsZero(board.caveTop3SideBaseOffset);
+        }
+
+        private static Vector2 GetCaveResolutionOffset(int sides, int tunnelIndex)
+        {
+            BoardConfig board = GameManager.HasInstance ? GameManager.Instance.Board : null;
+            var profiles = board != null ? board.caveResolutionOffsets : null;
+            if (profiles == null || profiles.Length == 0) return Vector2.zero;
+
+            float aspect = GetScreenAspect();
+            for (int i = 0; i < profiles.Length; i++)
+            {
+                var profile = profiles[i];
+                if (profile != null && profile.Matches(aspect))
+                    return profile.GetOffset(sides, tunnelIndex);
+            }
+            return Vector2.zero;
+        }
+
+        private static float GetScreenAspect()
+        {
+            if (Screen.height > 0) return (float)Screen.width / Screen.height;
+            Camera cam = Camera.main;
+            return cam != null && cam.aspect > 0f ? cam.aspect : 1242f / 2688f;
+        }
+
+        private static bool IsZero(Vector2 value)
+        {
+            return Mathf.Approximately(value.x, 0f) && Mathf.Approximately(value.y, 0f);
         }
 
         private void PlaceConveyorSprite(Sprite sprite, float wx, float wz, float tileSize)

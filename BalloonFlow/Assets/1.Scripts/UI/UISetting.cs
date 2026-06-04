@@ -63,6 +63,19 @@ namespace BalloonFlow
         private const float NOTIFICATION_TOGGLE_X_OFF = -96f;
         private const float NOTIFICATION_TOGGLE_DUR   = 0.15f;
 
+        [Header("[Legal / Support]")]
+        [Tooltip("개인정보처리방침 페이지로 이동 (외부 브라우저)")]
+        [SerializeField] private Button _btnPrivacy;
+        [Tooltip("이용약관 페이지로 이동 (외부 브라우저)")]
+        [SerializeField] private Button _btnTerms;
+        [Tooltip("이메일 문의 (mailto:support@aimed.xyz)")]
+        [SerializeField] private Button _btnSupports;
+
+        // [TODO] 실제 정책 페이지 URL 로 교체 — 현재는 support 이메일 도메인(aimed.xyz) 기반 추정 placeholder.
+        private const string URL_PRIVACY   = "https://aimed.xyz/privacy";
+        private const string URL_TERMS     = "https://aimed.xyz/terms";
+        private const string SUPPORT_EMAIL = "support@aimed.xyz";
+
         #endregion
 
         #region Lifecycle
@@ -76,6 +89,9 @@ namespace BalloonFlow
             if (_btnHaptic != null) _btnHaptic.onClick.AddListener(OnHapticClicked);
             if (_btnNotification != null) _btnNotification.onClick.AddListener(OnNotificationClicked);
 
+            if (_btnPrivacy != null) _btnPrivacy.onClick.AddListener(OnPrivacyClicked);
+            if (_btnTerms != null) _btnTerms.onClick.AddListener(OnTermsClicked);
+            if (_btnSupports != null) _btnSupports.onClick.AddListener(OnSupportsClicked);
         }
 
         private void OnEnable()
@@ -98,6 +114,9 @@ namespace BalloonFlow
             if (_btnMusic != null) _btnMusic.onClick.RemoveListener(OnMusicClicked);
             if (_btnHaptic != null) _btnHaptic.onClick.RemoveListener(OnHapticClicked);
             if (_btnNotification != null) _btnNotification.onClick.RemoveListener(OnNotificationClicked);
+            if (_btnPrivacy != null) _btnPrivacy.onClick.RemoveListener(OnPrivacyClicked);
+            if (_btnTerms != null) _btnTerms.onClick.RemoveListener(OnTermsClicked);
+            if (_btnSupports != null) _btnSupports.onClick.RemoveListener(OnSupportsClicked);
         }
 
         #endregion
@@ -145,6 +164,26 @@ namespace BalloonFlow
             }
 
             sm.ToggleNotification();
+        }
+
+        /// <summary>개인정보처리방침 페이지를 외부 브라우저로 연다.</summary>
+        private void OnPrivacyClicked() => OpenUrlSafe(URL_PRIVACY);
+
+        /// <summary>이용약관 페이지를 외부 브라우저로 연다.</summary>
+        private void OnTermsClicked() => OpenUrlSafe(URL_TERMS);
+
+        /// <summary>support 이메일로 문의 메일 작성 화면을 연다 (mailto).</summary>
+        private void OnSupportsClicked()
+        {
+            string subject = System.Uri.EscapeDataString("[BalloonFlow] 문의");
+            OpenUrlSafe($"mailto:{SUPPORT_EMAIL}?subject={subject}");
+        }
+
+        private static void OpenUrlSafe(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return;
+            try { Application.OpenURL(url); }
+            catch (System.Exception ex) { Debug.LogWarning($"[UISetting] OpenURL 실패: {url} — {ex.Message}"); }
         }
 
         #endregion
