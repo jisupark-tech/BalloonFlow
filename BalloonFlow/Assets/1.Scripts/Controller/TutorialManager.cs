@@ -53,6 +53,8 @@ namespace BalloonFlow
         private Image _cutoutFrameImage;
         /// <summary>풀스크린 dim Image — CutoutMaskUI 가 자식 영역(=CutoutFrame) "밖"에만 그려지도록 펀칭.</summary>
         private Image _cutoutDimImage;
+        // hole 안쪽 raycast pass-through 의도 — ICanvasRaycastFilter 가 frame 영역만 클릭 통과시킴.
+        private TutorialCutoutRaycastFilter _cutoutRaycastFilter;
 
         // Arrow indicator
         private RectTransform _arrowIndicator;
@@ -450,6 +452,9 @@ namespace BalloonFlow
 
             if (_arrowIndicator != null)
                 _arrowIndicator.gameObject.SetActive(false);
+
+            // hole 닫힘 → filter 가 풀스크린 차단 (기존 동작 유지).
+            if (_cutoutRaycastFilter != null) _cutoutRaycastFilter.ClearHole();
         }
 
         #endregion
@@ -740,6 +745,11 @@ namespace BalloonFlow
                 _runtimeCutoutDimMaterial.SetVector(CUTOUT_SIZE_ID, new Vector4(0f, 0f, 0f, 0f));
                 UpdateOverlayRect();
             }
+
+            // hole 안쪽 raycast pass-through 용 filter — Image 가 있는 같은 GO 에 부착해야 ICanvasRaycastFilter 호출됨.
+            _cutoutRaycastFilter = _cutoutMask.gameObject.GetComponent<TutorialCutoutRaycastFilter>()
+                ?? _cutoutMask.gameObject.AddComponent<TutorialCutoutRaycastFilter>();
+            _cutoutRaycastFilter.Initialize(_cutoutMask);
         }
 
         private Material CreateCutoutRuntimeMaterial()
@@ -1316,6 +1326,7 @@ namespace BalloonFlow
         {
             HideAllVisuals();
             if (_inputBlockCoroutine != null) { StopCoroutine(_inputBlockCoroutine); _inputBlockCoroutine = null; }
+            if (_cutoutRaycastFilter != null) _cutoutRaycastFilter.ClearHole();
             SetTutorialCanvasInteractive(false);
         }
 
@@ -1374,6 +1385,9 @@ namespace BalloonFlow
                 _cutoutFrame.anchoredPosition = localCenter;
                 _cutoutFrame.sizeDelta = size;
             }
+
+            // raycast hole 은 padding 없는 실제 frame 영역만 (시각적 강조 frame 영역만 클릭 통과).
+            if (_cutoutRaycastFilter != null) _cutoutRaycastFilter.SetHole(localCenter, size);
         }
 
         /// <summary>
@@ -1514,9 +1528,12 @@ namespace BalloonFlow
         {
             if (_prefabRootCanvasGroup != null)
                 _prefabRootCanvasGroup.interactable = false;
+            // interactable=false 만으론 dim Image 의 raycastTarget 을 막지 못함 — filter 가 hole 까지 일괄 차단.
+            if (_cutoutRaycastFilter != null) _cutoutRaycastFilter.SetGraceActive(true);
             yield return new WaitForSecondsRealtime(INPUT_BLOCK_AFTER_SHOW_SECONDS);
             if (_prefabRootCanvasGroup != null)
                 _prefabRootCanvasGroup.interactable = true;
+            if (_cutoutRaycastFilter != null) _cutoutRaycastFilter.SetGraceActive(false);
             _inputBlockCoroutine = null;
         }
 
