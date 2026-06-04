@@ -183,7 +183,19 @@ namespace BalloonFlow
             if (LevelManager.HasInstance)
                 diff = LevelManager.Instance.GetLevelDifficulty(LevelManager.Instance.CurrentLevelId);
 
-            if (_frame != null) _frame.ApplyDifficulty(diff);
+            // [v1.2.40] Title/Button 텍스트도 OnEnable에서 항상 주입 — Show() 미호출 진입 경로(PopupContinue→popup_fail02)에서
+            // 프리팹 placeholder("Title"/"Resume")가 노출되던 P0 버그 수정.
+            if (_frame != null)
+            {
+                _frame.ApplyDifficulty(diff);
+                string failTitle = LevelManager.HasInstance
+                    ? $"Level {LevelManager.Instance.CurrentLevelId}"
+                    : "Level Failed";
+                _frame.SetTitle(failTitle);
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
+                _frame.SetSingleButtonText("Retry");
+                _frame.ShowExitButton(true);
+            }
             UpdateHardLevelOption(diff);
         }
 
