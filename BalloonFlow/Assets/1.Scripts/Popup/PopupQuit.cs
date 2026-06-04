@@ -101,10 +101,10 @@ namespace BalloonFlow
         {
             if (_frame != null)
             {
-                _frame.SetTitle("Quit Game?");
+                _frame.SetTitle("Quit Level?");
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
-                _frame.SetHorizGreenText("Continue");
-                _frame.SetHorizRedText("Home");
+                _frame.SetHorizGreenText("Stay");
+                _frame.SetHorizRedText("Quit");
                 _frame.ShowExitButton(true);
             }
             ResetToLoseLife();

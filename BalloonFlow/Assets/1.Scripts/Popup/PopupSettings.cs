@@ -96,8 +96,8 @@ namespace BalloonFlow
                 else
                 {
                     _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
-                    _frame.SetHorizGreenText("Continue");
-                    _frame.SetHorizRedText("Home");
+                    _frame.SetHorizGreenText("Stay");
+                    _frame.SetHorizRedText("Quit");
                 }
                 _frame.ShowExitButton(true);
             }

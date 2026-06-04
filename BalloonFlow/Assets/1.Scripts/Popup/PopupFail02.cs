@@ -197,10 +197,10 @@ namespace BalloonFlow
             if (_frame != null)
             {
                 _frame.ApplyDifficulty(difficulty);
-                _frame.SetTitle("Stage Failed");
-                // [#4] 명세 ③ Level Failed = [Try Again] 단일버튼 + [X](나가기→로비). 단일버튼(BtnSingle) 레이아웃 사용.
+                _frame.SetTitle("Level Failed");
+                // [#4] 명세 ③ Level Failed = [Retry] 단일버튼 + [X](나가기→로비). 단일버튼(BtnSingle) 레이아웃 사용.
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
-                _frame.SetSingleButtonText("Try Again");
+                _frame.SetSingleButtonText("Retry");
                 _frame.ShowExitButton(true);
             }
             UpdateHardLevelOption(difficulty);
