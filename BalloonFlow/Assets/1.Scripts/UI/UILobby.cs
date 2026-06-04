@@ -74,6 +74,9 @@ namespace BalloonFlow
         [SerializeField] private Button _btnGoldPlus;
         [Tooltip("코인 fly 도착점 override (fly 전용). 미할당 시 _txtGold 사용. 펄스 연출은 _txtGold 부모 그대로.")]
         [SerializeField] private RectTransform _goldFlyTargetOverride;
+        [Tooltip("GoldPanel 자식 FXFire ParticleSystem (FxGold 도착+펄스 시 1회 재생). 미할당 시 _txtGold 부모(GoldPanel) 하위에서 'FXFire'/'FxFire' 이름으로 자동 탐색.")]
+        [SerializeField] private GameObject _goldPanelFxFire;
+        private ParticleSystem _goldPanelFxFirePs;
 
         [Header("[TopBar — LifePanel]")]
         [SerializeField] private TMP_Text _txtLife;
@@ -316,6 +319,10 @@ namespace BalloonFlow
 
             // Start on Home(Lobby) page
             SetPageImmediate(1);
+
+            // FxGold 도착+PulseGoldPanel 결합 전 prefab Play-On-Awake 자동 재생 차단.
+            ResolveGoldPanelFxFire();
+            DisableGoldPanelFxFireOnEnter();
 
             // 최초 진입 시 Rail 슬라이드 인 연출 1회 재생
             PlayRailEnterAnimation();
@@ -672,6 +679,37 @@ namespace BalloonFlow
             if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRt, screen, cam, out Vector2 local))
                 return local;
             return Vector2.zero;
+        }
+
+        private void ResolveGoldPanelFxFire()
+        {
+            if (_goldPanelFxFire != null && !_goldPanelFxFire.scene.IsValid()) { _goldPanelFxFire = null; _goldPanelFxFirePs = null; }
+            if (_goldPanelFxFire != null) return;
+            Transform root = (_txtGold != null && _txtGold.transform.parent != null) ? _txtGold.transform.parent : null;
+            if (root == null) return;
+            _goldPanelFxFire = FindChildComponentByName<Transform>(root, "FXFire")?.gameObject
+                            ?? FindChildComponentByName<Transform>(root, "FxFire")?.gameObject;
+            if (_goldPanelFxFire != null)
+                _goldPanelFxFirePs = _goldPanelFxFire.GetComponent<ParticleSystem>();
+        }
+
+        private void DisableGoldPanelFxFireOnEnter()
+        {
+            if (_goldPanelFxFire == null || !_goldPanelFxFire.activeSelf) return;
+            var systems = _goldPanelFxFire.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < systems.Length; i++)
+                systems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            _goldPanelFxFire.SetActive(false);
+        }
+
+        public void PlayGoldPanelFxFire()
+        {
+            ResolveGoldPanelFxFire();
+            if (_goldPanelFxFire == null) return;
+            if (!_goldPanelFxFire.activeSelf) _goldPanelFxFire.SetActive(true);
+            if (_goldPanelFxFirePs == null) _goldPanelFxFirePs = _goldPanelFxFire.GetComponent<ParticleSystem>();
+            var systems = _goldPanelFxFire.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < systems.Length; i++) { systems[i].Clear(true); systems[i].Play(true); }
         }
 
         private void ResolveWsFxRefs()
@@ -1436,6 +1474,9 @@ namespace BalloonFlow
                 ? _txtGold.transform.parent
                 : (_txtGold != null ? _txtGold.transform : null);
             if (target == null) return;
+
+            // FxGold 한 알 도착 + 스케일 펀치 1회와 동기 발화 → 코인당 정확히 1회 FXFire.
+            PlayGoldPanelFxFire();
 
             // 원본 scale 캡처 (1회만, prefab 기본값 보존)
             if (!_goldPanelOriginalCaptured)
