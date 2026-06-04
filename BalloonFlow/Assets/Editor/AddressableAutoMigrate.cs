@@ -195,8 +195,8 @@ namespace BalloonFlow.EditorTools
         public static void MigrateAudio()
         {
             // Audio 는 큼 + 빈도 낮은 변경 → Remote_CDM 후보. 일단 Local_OnDemand 도 옵션.
-            // 정책: 6.Sound/ (Resources 밖) 의 모든 audio 를 Remote_CDM + cdm 라벨로
-            MigrateFolder("Assets/6.Sound", GROUP_REMOTE_CDM, "cdm", "audio_");
+            // 정책: Resources/Sound/ 의 모든 audio 를 Remote_CDM + cdm 라벨로 (Resources.Load 와 Addressable 양쪽 모두 가능)
+            MigrateFolder("Assets/Resources/Sound", GROUP_REMOTE_CDM, "cdm", "audio_");
         }
 
         [MenuItem("BalloonFlow/Addressables/Migrate Materials (3.Material → Local_OnDemand)")]

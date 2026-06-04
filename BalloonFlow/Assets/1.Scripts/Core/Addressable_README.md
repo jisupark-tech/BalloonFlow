@@ -118,7 +118,7 @@ KEEP (Resources/ 잔존): **UITitle.prefab**, **PopupError.prefab** — 항상 �
 - **ResourceManager.PreloadAddressablePrefabsAsync**: Title Step 0 에서 호출 — `core` + `ui` 라벨 모든 prefab 사전 로드 → cache 키 매핑 (popup_PopupResult ↔ "Popup/PopupResult")
 - **ResourceManager.PreloadUIAtlasAsync**: UI atlas 사전 로드 → popup 들이 sync 로 sprite 추출
 - **ObjectPoolManager**: 변경 없음 — Prefabs/* 는 Resources/ 에 잔존 + Addressables 동시 등록 (양쪽 모두 작동)
-- **AudioManager**: 변경 없음 — Sound/ 는 Resources/ 에 잔존 (audio Addressable 은 6.Sound/ 만, future migration 포인트)
+- **AudioManager**: 변경 없음 — 모든 audio 는 Resources/Sound/ 로 통합 완료 (BGM + Effect). Resources.Load 와 Addressable(cdm 라벨) 둘 다 가능
 
 ## 주의사항
 
