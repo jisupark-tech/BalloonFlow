@@ -389,6 +389,12 @@ namespace BalloonFlow
         {
             base.Awake();
             PrimeIngameEnterStartPos();
+
+            // [PopupTextInventory P0-18 / P0-19a] prefab 정적 텍스트('level 00', '1000.0' 등) 잔재 1프레임 노출 차단.
+            // SetLevel/SetGold 가 HUDController 에서 호출되기 전 단계에서 안전한 기본값으로 덮어쓴다.
+            if (_txtLevel != null) _txtLevel.SetText("Level {0}", 1);
+            if (_txtLevelOutline != null) _txtLevelOutline.SetText("Level {0}", 1);
+            if (_goldText != null) _goldText.text = "0";
         }
 
         private void OnEnable()

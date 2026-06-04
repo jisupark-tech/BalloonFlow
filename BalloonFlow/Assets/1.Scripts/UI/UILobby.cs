@@ -76,6 +76,8 @@ namespace BalloonFlow
         [SerializeField] private RectTransform _goldFlyTargetOverride;
         [Tooltip("GoldPanel 자식 FXFire ParticleSystem 원본(템플릿). 자체 재생 X — PlayGoldPanelFxFire() 호출마다 Instantiate 되어 N번째 발화가 N-1번째 인스턴스를 중단/리셋하지 않음. 미할당 시 _txtGold 부모(GoldPanel) 하위에서 'FXFire'/'FxFire' 이름으로 자동 탐색.")]
         [SerializeField] private GameObject _goldPanelFxFire;
+        /// <summary>직전 PlayGoldPanelFxFire 가 Instantiate 한 인스턴스 — 살아있는 동안 중복 발화 차단.</summary>
+        private GameObject _activeGoldPanelFxFireInstance;
 
         [Header("[TopBar — LifePanel]")]
         [SerializeField] private TMP_Text _txtLife;
@@ -316,6 +318,10 @@ namespace BalloonFlow
 
             AutoConfigureShopScroll();
 
+            // [PopupTextInventory 정합] prefab 정적 텍스트 일괄 정정 — 'Setting'→'Settings', 'No Ads'→'NO ADS' 등.
+            // prefab 이 binary 직렬화라 m_text 직접 수정 불가 → 런타임 OnEnable 단계에서 강제 덮어쓰기.
+            ApplyStaticTextOverrides();
+
             // Start on Home(Lobby) page
             SetPageImmediate(1);
 
@@ -448,8 +454,7 @@ namespace BalloonFlow
 
             // 회차 남은 시간 (TextTimer + Outline). Update 가 매초 갱신하지만 즉시 1회도 세팅.
             {
-                var r = mgr.RoundRemaining;
-                string time = $"{(int)r.TotalDays}d {r.Hours:D2}h";
+                string time = FormatWsRoundRemaining(mgr.RoundRemaining);
                 if (_wsTxtTimer != null) _wsTxtTimer.text = time;
                 if (_wsTxtTimerOutline != null) _wsTxtTimerOutline.text = time;
             }
@@ -706,17 +711,20 @@ namespace BalloonFlow
             Transform parent = _goldPanelFxFire.transform.parent;
             if (parent == null) return;
 
-            // 매 호출마다 새 인스턴스 추가 — 직전 인스턴스가 살아있어도 중단/리셋하지 않고 겹쳐 재생됨.
-            // (FxGold 1알 = PulseGoldPanel 1회 = PlayGoldPanelFxFire 1회 = 인스턴스 1개)
-            GameObject instance = Instantiate(_goldPanelFxFire, parent, false);
+            // 직전 인스턴스가 아직 살아있으면 신규 발화 금지 — '코인 N개 도착해도 FXFire 는 최초 1회만'.
+            // 자연 종료(stopAction=Destroy + Destroy(life+1)) 후 Unity-null 이 되면 다음 호출에서 정상 생성.
+            if (_activeGoldPanelFxFireInstance != null) return;
+
+            // 최초 1회만 Instantiate — 인스턴스가 살아있는 동안 후속 호출(코인 2~N번째 도착)은 무시.
+            _activeGoldPanelFxFireInstance = Instantiate(_goldPanelFxFire, parent, false);
             var srcTr = _goldPanelFxFire.transform;
-            var dstTr = instance.transform;
+            var dstTr = _activeGoldPanelFxFireInstance.transform;
             dstTr.localPosition = srcTr.localPosition;
             dstTr.localRotation = srcTr.localRotation;
             dstTr.localScale    = srcTr.localScale;
-            instance.SetActive(true);
+            _activeGoldPanelFxFireInstance.SetActive(true);
 
-            var systems = instance.GetComponentsInChildren<ParticleSystem>(true);
+            var systems = _activeGoldPanelFxFireInstance.GetComponentsInChildren<ParticleSystem>(true);
             float maxLifetime = 0f;
             for (int i = 0; i < systems.Length; i++)
             {
@@ -735,7 +743,7 @@ namespace BalloonFlow
             }
 
             // 안전망 — stopAction 이 looping 등의 이유로 발동되지 않는 케이스 대비 강제 정리.
-            if (maxLifetime > 0f) Destroy(instance, maxLifetime + 1f);
+            if (maxLifetime > 0f) Destroy(_activeGoldPanelFxFireInstance, maxLifetime + 1f);
         }
 
         private void ResolveWsFxRefs()
@@ -817,6 +825,36 @@ namespace BalloonFlow
                 : null;
             if (stage == null || stage.requiredPoints <= 0) return 0f;
             return Mathf.Clamp01((float)Mathf.Max(0, points) / stage.requiredPoints);
+        }
+
+        /// <summary>PopupTextInventory 정합 — prefab 정적 텍스트(영문 리터럴) 런타임 강제 적용.
+        /// prefab 이 binary 직렬화라 m_text 직접 수정이 불가능하므로 OnEnable 시점에 코드로 덮어쓴다.
+        /// 로컬라이제이션 도입 시 이 메서드를 LocalizationKey 조회로 치환.</summary>
+        private void ApplyStaticTextOverrides()
+        {
+            // BottomNav — 'Setting' → 'Settings' (P0-23)
+            if (_txtSetting != null) _txtSetting.text = "Settings";
+
+            // RightArea — 'No Ads' → 'NO ADS' (P0-3a)
+            if (_btnNoAds != null)
+            {
+                var noAdsTexts = _btnNoAds.GetComponentsInChildren<TMP_Text>(true);
+                for (int i = 0; i < noAdsTexts.Length; i++)
+                {
+                    if (noAdsTexts[i] != null) noAdsTexts[i].text = "NO ADS";
+                }
+            }
+        }
+
+        /// <summary>WS 회차 남은 시간 표기 — 1d+: dd:hh, 1h+: hh:mm, &lt;1h: mm:ss.</summary>
+        private static string FormatWsRoundRemaining(System.TimeSpan r)
+        {
+            if (r.Ticks < 0) r = System.TimeSpan.Zero;
+            if (r.TotalDays >= 1.0)
+                return $"{(int)r.TotalDays:D2}:{r.Hours:D2}";
+            if (r.TotalHours >= 1.0)
+                return $"{r.Hours:D2}:{r.Minutes:D2}";
+            return $"{r.Minutes:D2}:{r.Seconds:D2}";
         }
 
         private void ResolveWsTexts()
@@ -1171,8 +1209,7 @@ namespace BalloonFlow
                     if (WinningStreakManager.HasInstance && WinningStreakManager.Instance.IsUnlocked)
                     {
                         ResolveWsTexts();
-                        var r = WinningStreakManager.Instance.RoundRemaining;
-                        string time = $"{(int)r.TotalDays}d {r.Hours:D2}h";
+                        string time = FormatWsRoundRemaining(WinningStreakManager.Instance.RoundRemaining);
                         if (_wsTxtTimer != null) _wsTxtTimer.text = time;
                         if (_wsTxtTimerOutline != null) _wsTxtTimerOutline.text = time;
                     }

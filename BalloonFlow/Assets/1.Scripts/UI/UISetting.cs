@@ -98,6 +98,8 @@ namespace BalloonFlow
         {
             if (_txtTitle != null) _txtTitle.text = "Settings";
             if (_txtTitleOutline != null) _txtTitleOutline.text = "Settings";
+
+            // 항목 라벨 정합(Sound/Music/Haptic/Notifications) 은 RefreshAll() 내부에서 수행.
             RefreshAll();
             EventBus.Subscribe<OnSettingsChanged>(HandleSettingsChanged);
         }
@@ -192,20 +194,27 @@ namespace BalloonFlow
 
         private void RefreshAll()
         {
-            // ON/OFF 텍스트 대소문자 통일 (prefab 기본값 "On"/"OFF" → "ON"/"OFF")
-            EnsureToggleLabel(_soundOn, "ON");
-            EnsureToggleLabel(_soundOff, "OFF");
-            EnsureToggleLabel(_musicOn, "ON");
-            EnsureToggleLabel(_musicOff, "OFF");
-            EnsureToggleLabel(_hapticOn, "ON");
-            EnsureToggleLabel(_hapticOff, "OFF");
-            EnsureToggleLabel(_notificationOn, "ON");
-            EnsureToggleLabel(_notificationOff, "OFF");
+            // PopupTextInventory P0-27 — On/Off (title case) 로 통일.
+            EnsureToggleLabel(_soundOn, "On");
+            EnsureToggleLabel(_soundOff, "Off");
+            EnsureToggleLabel(_musicOn, "On");
+            EnsureToggleLabel(_musicOff, "Off");
+            EnsureToggleLabel(_hapticOn, "On");
+            EnsureToggleLabel(_hapticOff, "Off");
+            EnsureToggleLabel(_notificationOn, "On");
+            EnsureToggleLabel(_notificationOff, "Off");
 
-            if (_txtNotificationOn != null) _txtNotificationOn.text = "ON";
-            if (_txtNotificationOnOutline != null) _txtNotificationOnOutline.text = "ON";
-            if (_txtNotificationOff != null) _txtNotificationOff.text = "OFF";
-            if (_txtNotificationOffOutline != null) _txtNotificationOffOutline.text = "OFF";
+            if (_txtNotificationOn != null) _txtNotificationOn.text = "On";
+            if (_txtNotificationOnOutline != null) _txtNotificationOnOutline.text = "On";
+            if (_txtNotificationOff != null) _txtNotificationOff.text = "Off";
+            if (_txtNotificationOffOutline != null) _txtNotificationOffOutline.text = "Off";
+
+            // [PopupTextInventory P0-8 / P0-13a] 항목 라벨 정합 — 'Notification'→'Notifications', trailing space 제거.
+            if (_txtNotification != null) _txtNotification.text = "Notifications";
+            if (_txtNotificationOutline != null) _txtNotificationOutline.text = "Notifications";
+            if (_txtSound != null) _txtSound.text = "Sound";
+            if (_txtMusic != null) _txtMusic.text = "Music";
+            if (_txtHaptic != null) _txtHaptic.text = "Haptic";
 
             if (!SettingsManager.HasInstance) return;
 
