@@ -375,9 +375,9 @@ popupwinningstreak.txtbtnbuy,Buy
 popupwinningstreak.txtbtnbuyoutline,Buy
 popupwinningstreak.txtbtnsingle,Play
 popupwinningstreak.txtdescription,"Win levels to collect <color=#FFD700> Flames! </color>
-Longer streak, more Rewards!"
+Longer streak, more rewards!"
 popupwinningstreak.txtdescriptionoutline,"Win levels to collect <color=#FFD700> Flames! </color>
-Longer streak, more Rewards!"
+Longer streak, more rewards!"
 popupwinningstreak.txtgold,1900
 popupwinningstreak.txtgoldoutline,1900
 popupwinningstreak.txtgreen,Stay
@@ -390,9 +390,9 @@ popupwinningstreak.txttitle,Winning Streak
 popupwinningstreak.txttitleoutline,Winning Streak
 popupwinningstreakinfo.textclose,Tap to Continue
 popupwinningstreakinfo.textdescription,"If you <color=#e7656b>fail</color> a level,
-the multiplier will reset!"
+your multiplier will reset!"
 popupwinningstreakinfo.textdescriptionoutline,"If you <color=#FFD700>fail</color> a level,
-the multiplier will reset!"
+your multiplier will reset!"
 popupwinningstreakinfo.textinfo1,"Win levels,
 collect <color=#FFD700> Flames! </color>"
 popupwinningstreakinfo.textinfo2,"Multiply <color=#FFD700> Flames </color>

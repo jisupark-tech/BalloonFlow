@@ -987,9 +987,15 @@ namespace BalloonFlow
 
         private void SetSlotNumber(PooledSlot pooled, int number)
         {
-            string s = number.ToString();
-            if (pooled.textNumber != null) pooled.textNumber.text = s;
-            if (pooled.textNumberOutline != null) pooled.textNumberOutline.text = s;
+            // 사용자 스펙: 단계 번호(SlotWinningStreak/TextNumber) 노출 제거. 프리팹 수정 대신 런타임 비활성.
+            if (pooled.textNumber != null) {
+                pooled.textNumber.text = number.ToString();
+                if (pooled.textNumber.gameObject.activeSelf) pooled.textNumber.gameObject.SetActive(false);
+            }
+            if (pooled.textNumberOutline != null) {
+                pooled.textNumberOutline.text = number.ToString();
+                if (pooled.textNumberOutline.gameObject.activeSelf) pooled.textNumberOutline.gameObject.SetActive(false);
+            }
         }
 
         // ── 보상 아이템 ──────────────────────────────────────────
@@ -1099,7 +1105,11 @@ namespace BalloonFlow
                 if (!item.icon.gameObject.activeSelf) item.icon.gameObject.SetActive(true);
             }
 
-            string countText = hasSingle ? GetRewardCountText(primary) : "";
+            string countText;
+            if (rewards != null && rewards.Count >= 2)
+                countText = BuildBoxRewardText(rewards);                              // "Hand x1 + Shuffle x1"
+            else
+                countText = hasSingle ? GetRewardCountText(primary) : "";
             if (item.text != null) item.text.text = countText;
             if (item.textOutline != null) item.textOutline.text = countText;
         }
@@ -1124,8 +1134,41 @@ namespace BalloonFlow
 
         private static string GetRewardCountText(RewardEntry reward)
         {
-            if (reward.type == RewardType.InfiniteHearts) return "";
-            return reward.count > 0 ? $"x{reward.count}" : "";
+            if (reward.count <= 0) return "";
+            switch (reward.type)
+            {
+                case RewardType.Coin: return reward.count.ToString();           // "5000", no x
+                case RewardType.InfiniteHearts: return FormatInfiniteHearts(reward.count);
+                default: return $"x{reward.count}";                              // booster: "x1", "x3"
+            }
+        }
+
+        private static string FormatInfiniteHearts(int seconds)
+        {
+            if (seconds <= 0) return "";
+            int h = seconds / 3600;
+            if (h >= 1) return $"{h}h";
+            int m = seconds / 60;
+            return m > 0 ? $"{m}m" : $"{seconds}s";
+        }
+
+        private static string BuildBoxRewardText(List<RewardEntry> rewards)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < rewards.Count; i++)
+            {
+                if (i > 0) sb.Append(" + ");
+                var r = rewards[i];
+                switch (r.type)
+                {
+                    case RewardType.Hand:           sb.Append($"Hand x{r.count}"); break;
+                    case RewardType.Shuffle:        sb.Append($"Shuffle x{r.count}"); break;
+                    case RewardType.Zap:            sb.Append($"Zap x{r.count}"); break;
+                    case RewardType.InfiniteHearts: sb.Append(FormatInfiniteHearts(r.count)); break;
+                    case RewardType.Coin:           sb.Append(r.count.ToString()); break;
+                }
+            }
+            return sb.ToString();
         }
 
         // 보상 아이콘은 항상 atlas_ui (Addressable) 에서 동적 로드 — Shop / PurchaseRewardEffect 와 동일 패턴.

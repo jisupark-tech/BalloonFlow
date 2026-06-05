@@ -126,15 +126,18 @@ namespace BalloonFlow
 
         private static string FormatEntryText(Entry entry)
         {
-            if (entry.type == RewardKind.InfiniteHearts)
+            if (entry.count <= 0) return "";
+            switch (entry.type)
             {
-                int seconds = Mathf.Max(0, entry.count);
-                int hours = seconds / 3600;
-                if (hours >= 1) return $"x{hours}h";
-                int mins = seconds / 60;
-                return mins > 0 ? $"x{mins}m" : $"x{seconds}s";
+                case RewardKind.Coin: return entry.count.ToString();             // "5000", no x
+                case RewardKind.InfiniteHearts:
+                    int s = entry.count;
+                    int h = s / 3600;
+                    if (h >= 1) return $"{h}h";
+                    int m = s / 60;
+                    return m > 0 ? $"{m}m" : $"{s}s";
+                default: return $"x{entry.count}";                                // booster
             }
-            return entry.count > 0 ? $"x{entry.count}" : "";
         }
 
         private static Sprite ResolveRewardSprite(RewardKind type)
