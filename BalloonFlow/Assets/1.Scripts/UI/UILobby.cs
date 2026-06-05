@@ -903,8 +903,8 @@ namespace BalloonFlow
         /// 로컬라이제이션 도입 시 이 메서드를 LocalizationKey 조회로 치환.</summary>
         private void ApplyStaticTextOverrides()
         {
-            // BottomNav — 'Setting' → 'Settings' (P0-23)
-            if (_txtSetting != null) _txtSetting.text = "Settings";
+            // BottomNav — 'Setting' → 'Settings' (P0-23). 텍스트는 CSV(TextData) Key 로드.
+            if (_txtSetting != null) _txtSetting.text = LocalizationService.Get("ui.settings.title");
 
             // RightArea — 'No Ads' → 'NO ADS' (P0-3a)
             if (_btnNoAds != null)
@@ -912,7 +912,7 @@ namespace BalloonFlow
                 var noAdsTexts = _btnNoAds.GetComponentsInChildren<TMP_Text>(true);
                 for (int i = 0; i < noAdsTexts.Length; i++)
                 {
-                    if (noAdsTexts[i] != null) noAdsTexts[i].text = "NO ADS";
+                    if (noAdsTexts[i] != null) noAdsTexts[i].text = LocalizationService.Get("ui.lobby.noads");
                 }
             }
         }
@@ -1718,14 +1718,14 @@ namespace BalloonFlow
             {
                 case DifficultyPurpose.Hard:
                     if (_imgPlayButton != null && _sprBtnPurple != null) _imgPlayButton.sprite = _sprBtnPurple;
-                    if (_txtPlayLevel != null) { _txtPlayLevel.gameObject.SetActive(true); _txtPlayLevel.text = "Hard Level"; }
-                    if (_txtPlayLevelOutline != null) { _txtPlayLevelOutline.gameObject.SetActive(true); _txtPlayLevelOutline.text = "Hard Level"; }
+                    if (_txtPlayLevel != null) { _txtPlayLevel.gameObject.SetActive(true); _txtPlayLevel.text = LocalizationService.Get("ui.lobby.hard_level"); }
+                    if (_txtPlayLevelOutline != null) { _txtPlayLevelOutline.gameObject.SetActive(true); _txtPlayLevelOutline.text = LocalizationService.Get("ui.lobby.hard_level"); }
                     break;
 
                 case DifficultyPurpose.SuperHard:
                     if (_imgPlayButton != null && _sprBtnRed != null) _imgPlayButton.sprite = _sprBtnRed;
-                    if (_txtPlayLevel != null) { _txtPlayLevel.gameObject.SetActive(true); _txtPlayLevel.text = "Super Hard"; }
-                    if (_txtPlayLevelOutline != null) { _txtPlayLevelOutline.gameObject.SetActive(true); _txtPlayLevelOutline.text = "Super Hard"; }
+                    if (_txtPlayLevel != null) { _txtPlayLevel.gameObject.SetActive(true); _txtPlayLevel.text = LocalizationService.Get("ui.lobby.super_hard"); }
+                    if (_txtPlayLevelOutline != null) { _txtPlayLevelOutline.gameObject.SetActive(true); _txtPlayLevelOutline.text = LocalizationService.Get("ui.lobby.super_hard"); }
                     break;
 
                 default: // Normal, Tutorial, Rest, Intro

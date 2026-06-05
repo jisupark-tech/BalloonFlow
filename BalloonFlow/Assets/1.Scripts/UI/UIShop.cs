@@ -91,17 +91,17 @@ namespace BalloonFlow
         protected override void Awake()
         {
             base.Awake();
-            if (_txtTitle != null) _txtTitle.text = "Shop";
-            if (_txtTitleOutline != null) _txtTitleOutline.text = "Shop";
+            if (_txtTitle != null) _txtTitle.text = LocalizationService.Get("ui.shop.title");
+            if (_txtTitleOutline != null) _txtTitleOutline.text = LocalizationService.Get("ui.shop.title");
 
             if (_btnMoreProducts != null)
             {
                 _btnMoreProducts.onClick.AddListener(OnMoreProductsClicked);
-                // PopupTextInventory P0-2 — 'More Offers!' → 'More Offers' (binary prefab 정정 불가, 런타임 override).
+                // PopupTextInventory P0-2 — 'More Offers!' → 'More Offers'. 텍스트는 CSV(TextData) Key 로드.
                 var moreTexts = _btnMoreProducts.GetComponentsInChildren<TMP_Text>(true);
                 for (int i = 0; i < moreTexts.Length; i++)
                 {
-                    if (moreTexts[i] != null) moreTexts[i].text = "More Offers";
+                    if (moreTexts[i] != null) moreTexts[i].text = LocalizationService.Get("ui.shop.more_offers");
                 }
             }
 

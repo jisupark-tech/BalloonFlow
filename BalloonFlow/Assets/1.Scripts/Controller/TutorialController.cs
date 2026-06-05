@@ -16,8 +16,11 @@ namespace BalloonFlow
         /// <summary>Zero-based index of this step within its tutorial.</summary>
         public int stepIndex;
 
-        /// <summary>Human-readable instruction shown to the player.</summary>
+        /// <summary>Human-readable instruction shown to the player. (instructionKey 비었을 때 폴백)</summary>
         public string instruction;
+
+        /// <summary>CSV(TextData) Key. 지정 시 LocalizationService.Get 으로 해석해 instruction 대신 표시.</summary>
+        public string instructionKey;
 
         /// <summary>
         /// Identifier of the UI/game element to highlight.
@@ -707,6 +710,7 @@ namespace BalloonFlow
                 {
                     stepIndex = i,
                     instruction = src.instruction ?? "",
+                    instructionKey = src.instructionKey ?? "",
                     highlightTarget = src.highlightTarget ?? "",
                     requireAction = string.IsNullOrEmpty(src.requireAction) ? ACTION_NONE : src.requireAction,
                     isComplete = false,
@@ -787,7 +791,10 @@ namespace BalloonFlow
             {
                 tutorialId = _activeTutorial.tutorialId,
                 stepIndex = step.stepIndex,
-                instruction = step.instruction
+                // instructionKey 지정 시 CSV 텍스트로 해석, 없으면 직접입력 instruction 사용(하위호환).
+                instruction = !string.IsNullOrEmpty(step.instructionKey)
+                    ? LocalizationService.Get(step.instructionKey)
+                    : step.instruction
             });
         }
 

@@ -1041,7 +1041,7 @@ namespace BalloonFlow
             skipTextRect.offsetMax = Vector2.zero;
 
             var skipText = skipTextGO.AddComponent<TextMeshProUGUI>();
-            skipText.text = "SKIP";
+            skipText.text = LocalizationService.Get("ui.tutorial.skip");
             skipText.fontSize = 28f;
             skipText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
             skipText.alignment = TextAlignmentOptions.Center;

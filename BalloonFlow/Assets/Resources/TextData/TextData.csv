@@ -1,929 +1,632 @@
-﻿"SuggestedKey","AssetPath","ObjectPath","Text_EN"
-"newfeature.textunlockoutline","Assets/Resources/Popup/NewFeature.prefab","NewFeature/NewFeature/Title/TextUnlockOutline","Unlocked!"
-"newfeature.textunlock","Assets/Resources/Popup/NewFeature.prefab","NewFeature/NewFeature/Title/TextUnlockOutline/TextUnlock","Unlocked!"
-"newfeature.textnameoutline","Assets/Resources/Popup/NewFeature.prefab","NewFeature/NewFeature/TextNameOutline","Hidden Box!"
-"newfeature.textname","Assets/Resources/Popup/NewFeature.prefab","NewFeature/NewFeature/TextNameOutline/TextName","Hidden Box!"
-"newfeature.textdesctiption","Assets/Resources/Popup/NewFeature.prefab","NewFeature/NewFeature/TextNameOutline/TextDesctiption","TextDesctiptionTextDesctiptionTextDesctiptionTextDesctiptionTextDesctiptionTextDesctiption"
-"newfeature.txtplayoutline","Assets/Resources/Popup/NewFeature.prefab","NewFeature/NewFeature/OKButton/ImageButton/TxtArea/TxtPlayOutline","Continue
+﻿"Key","Text_EN"
+"frozenlayer.magazinetext","00"
+"goldpanel.txtgold","1000"
+"holder.magazinetext","00"
+"itembtn.textitem","0"
+"itembtn.textitemoutline","0"
+"itembtn.txtlock","Lv.15"
+"itembtn.txtlockoutline","Lv.15"
+"lobbyrailbox.textlevel","30"
+"lobbyrailbox.textleveloutline","30"
+"multiplier.textmultiplierx1","x1"
+"multiplier.textmultiplierx10","x10"
+"multiplier.textmultiplierx100","x100"
+"multiplier.textmultiplierx25","x25"
+"multiplier.textmultiplierx5","x5"
+"multiplier.textyellowoutlinex10","x10"
+"multiplier.textyellowoutlinex100","x100"
+"multiplier.textyellowoutlinex1_","x1"
+"multiplier.textyellowoutlinex25","x25"
+"multiplier.textyellowoutlinex5","x5"
+"multiplier.textyellowx10","x10"
+"multiplier.textyellowx100","x100"
+"multiplier.textyellowx1_","x1"
+"multiplier.textyellowx25","x25"
+"multiplier_1.textmultiplierx1","x1"
+"multiplier_1.textmultiplierx10","x10"
+"multiplier_1.textmultiplierx100","x100"
+"multiplier_1.textmultiplierx25","x25"
+"multiplier_1.textmultiplierx5","x5"
+"multiplier_1.textyellowoutlinex10","x10"
+"multiplier_1.textyellowoutlinex100","x100"
+"multiplier_1.textyellowoutlinex1_","x1"
+"multiplier_1.textyellowoutlinex25","x25"
+"multiplier_1.textyellowoutlinex5","x5"
+"multiplier_1.textyellowx10","x10"
+"multiplier_1.textyellowx100","x100"
+"multiplier_1.textyellowx1_","x1"
+"multiplier_1.textyellowx25","x25"
+"newfeature.textdesctiption","TextDesctiptionTextDesctiptionTextDesctiptionTextDesctiptionTextDesctiptionTextDesctiption"
+"newfeature.textname","Hidden Box!"
+"newfeature.textnameoutline","Hidden Box!"
+"newfeature.textunlock","Unlocked!"
+"newfeature.textunlockoutline","Unlocked!"
+"newfeature.txtplay","Continue
+"
+"newfeature.txtplayoutline","Continue
+"
+"popupbuyitem.btnsingleoutline","Resume
+"
+"popupbuyitem.txtblueoutline","Quit
+"
+"popupbuyitem.txtbtnbuy","Buy"
+"popupbuyitem.txtbtnbuyoutline","Buy"
+"popupbuyitem.txtbtnsingle","Resume
+"
+"popupbuyitem.txtdescription","Item DescriptionItem DescriptionItem Description"
+"popupbuyitem.txtgold","1900"
+"popupbuyitem.txtgoldoutline","1900"
+"popupbuyitem.txtgreen","Stay"
+"popupbuyitem.txtgreenoutline","Stay"
+"popupbuyitem.txtitemamount","x10"
+"popupbuyitem.txtitemamountoutline","x10"
+"popupbuyitem.txtred","Quit
+"
+"popupbuyitem.txtredoutline","Quit
+"
+"popupbuyitem.txttitle","Zap"
+"popupbuyitem.txttitleoutline","Zap"
+"popupcommonframe.txtblueoutline","Quit
+"
+"popupcommonframe.txtbtnsingle","Resume
+"
+"popupcommonframe.txtgreen","Stay"
+"popupcommonframe.txtgreenoutline","Stay"
+"popupcommonframe.txtred","Quit
+"
+"popupcommonframe.txtredoutline","Quit
+"
+"popupcommonframe.txtsingleoutline","Resume
+"
+"popupcommonframe.txttitle","Title
+"
+"popupcommonframe.txttitleoutline","Title
+"
+"popupcontinue.costlabel","Cost:"
+"popupcontinue.costtext","FREE"
+"popupcontinue.textmultiplierx1","x1"
+"popupcontinue.textmultiplierx10","x10"
+"popupcontinue.textmultiplierx100","x100"
+"popupcontinue.textmultiplierx25","x25"
+"popupcontinue.textmultiplierx5","x5"
+"popupcontinue.textyellowoutlinex10","x10"
+"popupcontinue.textyellowoutlinex100","x100"
+"popupcontinue.textyellowoutlinex1_","x1"
+"popupcontinue.textyellowoutlinex25","x25"
+"popupcontinue.textyellowoutlinex5","x5"
+"popupcontinue.textyellowx10","x10"
+"popupcontinue.textyellowx100","x100"
+"popupcontinue.textyellowx1_","x1"
+"popupcontinue.textyellowx25","x25"
+"popupcontinue.txtblueoutline","Quit
 "
-"newfeature.txtplay","Assets/Resources/Popup/NewFeature.prefab","NewFeature/NewFeature/OKButton/ImageButton/TxtArea/TxtPlayOutline/TxtPlay","Continue
+"popupcontinue.txtbtnsingle","Resume
 "
-"popupbuyitem.txttitleoutline","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/Title/TxtTitleOutline","Zap"
-"popupbuyitem.txttitle","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Zap"
-"popupbuyitem.txtgreenoutline","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Stay"
-"popupbuyitem.txtgreen","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Stay"
-"popupbuyitem.txtredoutline","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
+"popupcontinue.txtcontinue","Play On"
+"popupcontinue.txtcontinueoutline","Play On"
+"popupcontinue.txtcontinuetitle","Continue?"
+"popupcontinue.txtcontinuetitleoutline","Continue?"
+"popupcontinue.txtdescription","You will lose 1 Life!!"
+"popupcontinue.txtgold","1000"
+"popupcontinue.txtgoldoutline","900"
+"popupcontinue.txtgreen","Stay"
+"popupcontinue.txtgreenoutline","Stay"
+"popupcontinue.txtred","Quit
 "
-"popupbuyitem.txtred","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
+"popupcontinue.txtredoutline","Quit
 "
-"popupbuyitem.txtgreenoutline","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
+"popupcontinue.txtsingleoutline","Resume
 "
-"popupbuyitem.txtgreen","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
+"popupcontinue.txttitle","Title
 "
-"popupbuyitem.txtredoutline","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
+"popupcontinue.txttitleoutline","Title
 "
-"popupbuyitem.txtred","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
+"popupdescription.txtblueoutline","Quit
 "
-"popupbuyitem.txtblueoutline","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
+"popupdescription.txtbtnsingle","Resume
 "
-"popupbuyitem.txtred","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
+"popupdescription.txtdescription","TxtDescriptionTxtDescriptionTxtDescriptionTxtDescriptionTxtDescription"
+"popupdescription.txtgreen","Continue"
+"popupdescription.txtgreenoutline","Continue"
+"popupdescription.txtred","Quit
 "
-"popupbuyitem.btnsingleoutline","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/ButtonSingle/BtnSingleFrame/BtnSingleOutline","Resume
+"popupdescription.txtredoutline","Quit
 "
-"popupbuyitem.txtbtnsingle","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/ButtonSingle/BtnSingleFrame/BtnSingleOutline/TxtBtnSingle","Resume
+"popupdescription.txtsingleoutline","Resume
 "
-"popupbuyitem.txtbtnbuyoutline","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtBtnBuyOutline","Buy"
-"popupbuyitem.txtbtnbuy","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtBtnBuyOutline/TxtBtnBuy","Buy"
-"popupbuyitem.txtgoldoutline","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtBtnBuyOutline/TxtGoldOutline","1900"
-"popupbuyitem.txtgold","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtBtnBuyOutline/TxtGoldOutline/TxtGold","1900"
-"popupbuyitem.txtitemamountoutline","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/Contents/ItemInnerFrame/TxtItemAmountOutline","x10"
-"popupbuyitem.txtitemamount","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/Contents/ItemInnerFrame/TxtItemAmountOutline/TxtItemAmount","x10"
-"popupbuyitem.txtdescription","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/PopupCommonFrame/Contents/TxtFrame /TxtDescription","Item DescriptionItem DescriptionItem Description"
-"popupbuyitem.txtgold","Assets/Resources/Popup/PopupBuyItem.prefab","PopupBuyItem/TopBarArea/GoldPanel/TxtGold","1000"
-"popupcommonframe.txttitleoutline","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/Title/TxtTitleOutline","Title
+"popupdescription.txttitle","Title
 "
-"popupcommonframe.txttitle","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Title
+"popupdescription.txttitleoutline","Title
 "
-"popupcommonframe.txtgreenoutline","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Stay"
-"popupcommonframe.txtgreen","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Stay"
-"popupcommonframe.txtredoutline","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
+"popuperror.txtblueoutline","Quit
 "
-"popupcommonframe.txtred","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
+"popuperror.txtbtnsingle","Resume
 "
-"popupcommonframe.txtgreenoutline","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
+"popuperror.txtdescription","Item DescriptionItem DescriptionItem Description"
+"popuperror.txtgreen","Continue"
+"popuperror.txtgreenoutline","Continue"
+"popuperror.txtred","Quit
 "
-"popupcommonframe.txtgreen","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
+"popuperror.txtredoutline","Quit
 "
-"popupcommonframe.txtredoutline","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
+"popuperror.txtsingleoutline","Resume
 "
-"popupcommonframe.txtred","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
+"popuperror.txttitle","Title"
+"popuperror.txttitleoutline","Title"
+"popupfail01.continuetitle","Continue?"
+"popupfail01.costlabel","Cost:"
+"popupfail01.costtext","FREE"
+"popupfail01.txtcontinue","Add Space
 "
-"popupcommonframe.txtblueoutline","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
+"popupfail01.txtcontinueoutline","Add Space
 "
-"popupcommonframe.txtred","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
+"popupfail01.txtgold","1000"
+"popupfail01.txtgoldoutline","900"
+"popupfail02.txtblueoutline","Quit
 "
-"popupcommonframe.txtsingleoutline","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline","Resume
+"popupfail02.txtbtnsingle","Resume
 "
-"popupcommonframe.txtbtnsingle","Assets/Resources/Popup/PopupCommonFrame.prefab","PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline/TxtBtnSingle","Resume
+"popupfail02.txtfail","Level Failed!"
+"popupfail02.txtfailoutline","Level Failed!"
+"popupfail02.txtgold","20"
+"popupfail02.txtgoldoutline","20"
+"popupfail02.txtgreen","Stay"
+"popupfail02.txtgreenoutline","Stay"
+"popupfail02.txthardlevel","Hard!"
+"popupfail02.txthardleveloutline","Hard!"
+"popupfail02.txtred","Quit
 "
-"popupcontinue.txtgold","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/TopBarArea/GoldPanel/TxtGold","1000"
-"popupcontinue.txtcontinueoutline","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/ContinueButton/ImageButton/Contents/LeftArea/TxtContinueOutline","Play On"
-"popupcontinue.txtcontinue","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/ContinueButton/ImageButton/Contents/LeftArea/TxtContinue","Play On"
-"popupcontinue.txtgoldoutline","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/ContinueButton/ImageButton/Contents/RightArea/TxtGold/TxtGoldOutline","900"
-"popupcontinue.txtgold","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/ContinueButton/ImageButton/Contents/RightArea/TxtGold/TxtGold","900
+"popupfail02.txtredoutline","Quit
 "
-"popupcontinue.txtcontinuetitleoutline","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/TxtContinueTitleOutline","Continue?"
-"popupcontinue.txtcontinuetitle","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/TxtContinueTitleOutline/TxtContinueTitle","Continue?"
-"popupcontinue.txtdescription","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/LoseLife/TxtDescription","You will lose 1 Life!!"
-"popupcontinue.textmultiplierx1","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/TextNormal/TextMultiplierx1","x1"
-"popupcontinue.textmultiplierx5","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/TextNormal/TextMultiplierx5","x5"
-"popupcontinue.textmultiplierx10","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/TextNormal/TextMultiplierx10","x10"
-"popupcontinue.textmultiplierx25","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/TextNormal/TextMultiplierx25","x25"
-"popupcontinue.textmultiplierx100","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/TextNormal/TextMultiplierx100","x100"
-"popupcontinue.textyellowoutlinex1_","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex1 ","x1"
-"popupcontinue.textyellowx1_","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex1 /TextYellowx1 ","x1"
-"popupcontinue.textyellowoutlinex5","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex5","x5"
-"popupcontinue.textyellowx1_","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex5/TextYellowx1 ","x5"
-"popupcontinue.textyellowoutlinex10","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex10","x10"
-"popupcontinue.textyellowx10","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex10/TextYellowx10","x10"
-"popupcontinue.textyellowoutlinex25","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex25","x25"
-"popupcontinue.textyellowx25","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex25/TextYellowx25","x25"
-"popupcontinue.textyellowoutlinex100","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex100","x100"
-"popupcontinue.textyellowx100","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex100/TextYellowx100","x100"
-"popupcontinue.txtdescription","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/Contents/WinningStreak/TxtDescription","You will lose your x{100} multiplier!"
-"popupcontinue.txttitleoutline","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/Title/TxtTitleOutline","Title
+"popupfail02.txtsingleoutline","Resume
 "
-"popupcontinue.txttitle","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Title
+"popupfail02.txttitle","Title
 "
-"popupcontinue.txtgreenoutline","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Stay"
-"popupcontinue.txtgreen","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Stay"
-"popupcontinue.txtredoutline","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
+"popupfail02.txttitleoutline","Title
 "
-"popupcontinue.txtred","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
+"popupgoldshop.textamount","x1"
+"popupgoldshop.textamountoutline","x1"
+"popupgoldshop.textprice","Price
 "
-"popupcontinue.txtgreenoutline","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
+"popupgoldshop.textpriceoutline","Price
 "
-"popupcontinue.txtgreen","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
-"
-"popupcontinue.txtredoutline","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupcontinue.txtred","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupcontinue.txtblueoutline","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
-"
-"popupcontinue.txtred","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
-"
-"popupcontinue.txtsingleoutline","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline","Resume
-"
-"popupcontinue.txtbtnsingle","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline/TxtBtnSingle","Resume
-"
-"popupcontinue.txtdescription","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/PopupCommonFrame/Contents/TxtDescription","You will lose 1 Life!!"
-"popupcontinue.costlabel","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/CostLabel","Cost:"
-"popupcontinue.costtext","Assets/Resources/Popup/PopupContinue.prefab","PopupContinue/ContinuePanel/CostText","FREE"
-"popupdescription.txttitleoutline","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/Title/TxtTitleOutline","Title
-"
-"popupdescription.txttitle","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Title
-"
-"popupdescription.txtgreenoutline","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Continue"
-"popupdescription.txtgreen","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Continue"
-"popupdescription.txtredoutline","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupdescription.txtred","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupdescription.txtgreenoutline","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
-"
-"popupdescription.txtgreen","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
-"
-"popupdescription.txtredoutline","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupdescription.txtred","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupdescription.txtblueoutline","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
-"
-"popupdescription.txtred","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
-"
-"popupdescription.txtsingleoutline","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline","Resume
-"
-"popupdescription.txtbtnsingle","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline/TxtBtnSingle","Resume
-"
-"popupdescription.txtdescription","Assets/Resources/Popup/PopupDescription.prefab","PopupDescription/PopupCommonFrame/Contents/TxtDescription","TxtDescriptionTxtDescriptionTxtDescriptionTxtDescriptionTxtDescription"
-"popuperror.txttitleoutline","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/Title/TxtTitleOutline","Title"
-"popuperror.txttitle","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Title"
-"popuperror.txtgreenoutline","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Continue"
-"popuperror.txtgreen","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Continue"
-"popuperror.txtredoutline","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popuperror.txtred","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popuperror.txtgreenoutline","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
-"
-"popuperror.txtgreen","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
-"
-"popuperror.txtredoutline","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popuperror.txtred","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popuperror.txtblueoutline","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
-"
-"popuperror.txtred","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
-"
-"popuperror.txtsingleoutline","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline","Resume
-"
-"popuperror.txtbtnsingle","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline/TxtBtnSingle","Resume
-"
-"popuperror.txtdescription","Assets/Resources/Popup/PopupError.prefab","PopupError/PopupCommonFrame/Contents/TxtDescription","Item DescriptionItem DescriptionItem Description"
-"popupfail01.txtgold","Assets/Resources/Popup/PopupFail01.prefab","PopupFail01/TopBarArea/GoldPanel/TxtGold","1000"
-"popupfail01.txtcontinueoutline","Assets/Resources/Popup/PopupFail01.prefab","PopupFail01/FailPanel/ContinueButton/ImageButton/Contents/LeftArea/TxtContinueOutline","Add Space
-"
-"popupfail01.txtcontinue","Assets/Resources/Popup/PopupFail01.prefab","PopupFail01/FailPanel/ContinueButton/ImageButton/Contents/LeftArea/TxtContinueOutline/TxtContinue","Add Space
-"
-"popupfail01.txtgoldoutline","Assets/Resources/Popup/PopupFail01.prefab","PopupFail01/FailPanel/ContinueButton/ImageButton/Contents/RightArea/TxtGold/TxtGoldOutline","900"
-"popupfail01.txtgold","Assets/Resources/Popup/PopupFail01.prefab","PopupFail01/FailPanel/ContinueButton/ImageButton/Contents/RightArea/TxtGold/TxtGold","900"
-"popupfail01.continuetitle","Assets/Resources/Popup/PopupFail01.prefab","PopupFail01/FailPanel/ContinueTitle","Continue?"
-"popupfail01.costlabel","Assets/Resources/Popup/PopupFail01.prefab","PopupFail01/FailPanel/CostLabel","Cost:"
-"popupfail01.costtext","Assets/Resources/Popup/PopupFail01.prefab","PopupFail01/FailPanel/CostText","FREE"
-"popupfail02.txthardleveloutline","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/HardLevelOption/TxtHardLevelOutline","Hard!"
-"popupfail02.txthardlevel","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/HardLevelOption/TxtHardLevelOutline/TxtHardLevel","Hard!"
-"popupfail02.txttitleoutline","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/Title/TxtTitleOutline","Title
-"
-"popupfail02.txttitle","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Title
-"
-"popupfail02.txtgreenoutline","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Stay"
-"popupfail02.txtgreen","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Stay"
-"popupfail02.txtredoutline","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupfail02.txtred","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupfail02.txtgreenoutline","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
-"
-"popupfail02.txtgreen","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
-"
-"popupfail02.txtredoutline","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupfail02.txtred","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupfail02.txtblueoutline","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
-"
-"popupfail02.txtred","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
-"
-"popupfail02.txtsingleoutline","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline","Resume
-"
-"popupfail02.txtbtnsingle","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline/TxtBtnSingle","Resume
-"
-"popupfail02.txtgoldoutline","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/Contents/Reward/TxtGoldOutline","20"
-"popupfail02.txtgold","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/Contents/Reward/TxtGoldOutline/TxtGold","20"
-"popupfail02.txtfailoutline","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/Contents/Fail/TxtFailOutline","Level Failed!"
-"popupfail02.txtfail","Assets/Resources/Popup/PopupFail02.prefab","PopupFail02/PopupCommonFrame/Contents/Fail/TxtFailOutline/TxtFail","Level Failed!"
-"popupgoldshop.textpriceoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Products/LeftArea/TextPriceOutline","Price
-"
-"popupgoldshop.textprice","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Products/LeftArea/TextPriceOutline/TextPrice","Price
-"
-"popupgoldshop.textamountoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Products/RightArea/itemArea/ShopItem/TextAmountOutline","x1"
-"popupgoldshop.textamount","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Products/RightArea/itemArea/ShopItem/TextAmountOutline/TextAmount","x1"
-"popupgoldshop.textamountoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Products/RightArea/itemArea/ShopItem (1)/TextAmountOutline","x1"
-"popupgoldshop.textamount","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Products/RightArea/itemArea/ShopItem (1)/TextAmountOutline/TextAmount","x1"
-"popupgoldshop.textamountoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Products/RightArea/BoostArea/ShopItem/TextAmountOutline","x1"
-"popupgoldshop.textamount","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Products/RightArea/BoostArea/ShopItem/TextAmountOutline/TextAmount","x1"
-"popupgoldshop.textamountoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Products/RightArea/BoostArea/ShopItem (1)/TextAmountOutline","x1"
-"popupgoldshop.textamount","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Products/RightArea/BoostArea/ShopItem (1)/TextAmountOutline/TextAmount","x1"
-"popupgoldshop.textamountoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Products/RightArea/BoostArea/ShopItem (2)/TextAmountOutline","x1"
-"popupgoldshop.textamount","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Products/RightArea/BoostArea/ShopItem (2)/TextAmountOutline/TextAmount","x1"
-"popupgoldshop.txttitleoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Title/TxtTitleOutline","Title
-"
-"popupgoldshop.txttitle","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Title/TxtTitleOutline/TxtTitle","Title
-"
-"popupgoldshop.textsaleoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/ImgSale/TextSaleOutline","90% OFF"
-"popupgoldshop.textsale","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/ImgSale/TextSaleOutline/TextSale","90% OFF"
-"popupgoldshop.txttimeoff","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/TimeOff/TxtTimeOff","COCOCO"
-"popupgoldshop.txtoffper","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"popupgoldshop.txtbtnbuyoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/BtnBuy/BtnBuyGreen/TxtBtnBuyOutline","$ 100"
-"popupgoldshop.txtbtnbuy","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/BtnBuy/BtnBuyGreen/TxtBtnBuyOutline/TxtBtnBuy","$ 100"
-"popupgoldshop.txttitleoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Title/TxtTitleOutline","NO ADS!"
-"popupgoldshop.txttitle","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Title/TxtTitleOutline/TxtTitle","NO ADS!"
-"popupgoldshop.txtdescriptionoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Title/TxtDescriptionOutline","No Ads,
+"popupgoldshop.textsale","90% OFF"
+"popupgoldshop.textsaleoutline","90% OFF"
+"popupgoldshop.titleshop","SHOP"
+"popupgoldshop.titleshopoutline","SHOP"
+"popupgoldshop.txtbtnbuy","$ 100"
+"popupgoldshop.txtbtnbuyoutline","$ 100"
+"popupgoldshop.txtbtnmoreproducts__1_","More Offers!"
+"popupgoldshop.txtbtnmoreproductsoutline","More Offers!"
+"popupgoldshop.txtdescription","No Ads,
 Just Fun!"
-"popupgoldshop.txtdescription","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Title/TxtDescriptionOutline/TxtDescription","No Ads,
+"popupgoldshop.txtdescriptionoutline","No Ads,
 Just Fun!"
-"popupgoldshop.txttimeoff","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/TimeOff/TxtTimeOff","COCOCO"
-"popupgoldshop.txtoffper","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"popupgoldshop.txtbtnbuyoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/BtnBuy/BtnBuy/TxtBtnBuyOutline","$ 100"
-"popupgoldshop.txtbtnbuy","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/BtnBuy/BtnBuy/TxtBtnBuyOutline/TxtBtnBuy","$ 100"
-"popupgoldshop.textpriceoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Products/LeftArea/TextPriceOutline","Price
+"popupgoldshop.txtgold","1000"
+"popupgoldshop.txtoffper","90% OFF"
+"popupgoldshop.txttimeoff","COCOCO"
+"popupgoldshop.txttitle","Title
 "
-"popupgoldshop.textprice","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Products/LeftArea/TextPriceOutline/TextPrice","Price
+"popupgoldshop.txttitleoutline","Title
 "
-"popupgoldshop.textamountoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Products/RightArea/itemArea/ShopItem/TextAmountOutline","x1"
-"popupgoldshop.textamount","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Products/RightArea/itemArea/ShopItem/TextAmountOutline/TextAmount","x1"
-"popupgoldshop.textamountoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Products/RightArea/itemArea/ShopItem (1)/TextAmountOutline","x1"
-"popupgoldshop.textamount","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Products/RightArea/itemArea/ShopItem (1)/TextAmountOutline/TextAmount","x1"
-"popupgoldshop.textamountoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Products/RightArea/BoostArea/ShopItem/TextAmountOutline","x1"
-"popupgoldshop.textamount","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Products/RightArea/BoostArea/ShopItem/TextAmountOutline/TextAmount","x1"
-"popupgoldshop.textamountoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Products/RightArea/BoostArea/ShopItem (1)/TextAmountOutline","x1"
-"popupgoldshop.textamount","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Products/RightArea/BoostArea/ShopItem (1)/TextAmountOutline/TextAmount","x1"
-"popupgoldshop.textamountoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Products/RightArea/BoostArea/ShopItem (2)/TextAmountOutline","x1"
-"popupgoldshop.textamount","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Products/RightArea/BoostArea/ShopItem (2)/TextAmountOutline/TextAmount","x1"
-"popupgoldshop.txttitleoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Title/TxtTitleOutline","Title
+"popupitemdescription.txtblueoutline","Quit
 "
-"popupgoldshop.txttitle","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/Title/TxtTitleOutline/TxtTitle","Title
+"popupitemdescription.txtbtnsingle","Claim
+"
+"popupitemdescription.txtdescription","Item DescriptionItem DescriptionItem Description"
+"popupitemdescription.txtgold","1000"
+"popupitemdescription.txtgreen","Stay"
+"popupitemdescription.txtgreenoutline","Stay"
+"popupitemdescription.txtred","Quit
 "
-"popupgoldshop.textsaleoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/ImgSale/TextSaleOutline","90% OFF"
-"popupgoldshop.textsale","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/ImgSale/TextSaleOutline/TextSale","90% OFF"
-"popupgoldshop.txttimeoff","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/TimeOff/TxtTimeOff","COCOCO"
-"popupgoldshop.txtoffper","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"popupgoldshop.txtbtnbuyoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/BtnBuy/BtnBuyGreen/TxtBtnBuyOutline","$ 100"
-"popupgoldshop.txtbtnbuy","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem (1)/BtnBuy/BtnBuyGreen/TxtBtnBuyOutline/TxtBtnBuy","$ 100"
-"popupgoldshop.textpriceoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (1)/Products/TextPriceOutline","Price
+"popupitemdescription.txtredoutline","Quit
 "
-"popupgoldshop.textprice","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (1)/Products/TextPriceOutline/TextPrice","Price
+"popupitemdescription.txtsingleoutline","Claim
 "
-"popupgoldshop.txttimeoff","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (1)/TimeOff/TxtTimeOff","COCOCO"
-"popupgoldshop.txtoffper","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (1)/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"popupgoldshop.txtbtnbuyoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (1)/BtnBuy/BtnBuy/TxtBtnBuyOutline","$10"
-"popupgoldshop.txtbtnbuy","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (1)/BtnBuy/BtnBuy/TxtBtnBuyOutline/TxtBtnBuy","$10"
-"popupgoldshop.textpriceoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (2)/Products/TextPriceOutline","Price
+"popupitemdescription.txttitle","Title
 "
-"popupgoldshop.textprice","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (2)/Products/TextPriceOutline/TextPrice","Price
+"popupitemdescription.txttitleoutline","Title
 "
-"popupgoldshop.txttimeoff","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (2)/TimeOff/TxtTimeOff","COCOCO"
-"popupgoldshop.txtoffper","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (2)/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"popupgoldshop.txtbtnbuyoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (2)/BtnBuy/BtnBuy/TxtBtnBuyOutline","$10"
-"popupgoldshop.txtbtnbuy","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (2)/BtnBuy/BtnBuy/TxtBtnBuyOutline/TxtBtnBuy","$10"
-"popupgoldshop.txtbtnmoreproductsoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/BtnMoreProducts/TxtBtnMoreProductsOutline","More Offers!"
-"popupgoldshop.txtbtnmoreproducts__1_","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/Panel/MainPanel/ScrollView/Viewport/ShopContent/BtnMoreProducts/TxtBtnMoreProductsOutline/TxtBtnMoreProducts (1)","More Offers!"
-"popupgoldshop.txtgold","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/TopPanel/TopBarArea/GoldPanel/TxtGold","1000"
-"popupgoldshop.titleshopoutline","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/TopPanel/TitleShopOutline","SHOP"
-"popupgoldshop.titleshop","Assets/Resources/Popup/PopupGoldShop.prefab","PopupGoldShop/TopPanel/TitleShopOutline/TitleShop","SHOP"
-"popupitemdescription.txttitleoutline","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/Title/TxtTitleOutline","Title
+"popupmorelive.textlifeamount","0"
+"popupmorelive.textlifeamountoutline","0"
+"popupmorelive.txtblueoutline","Quit
 "
-"popupitemdescription.txttitle","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Title
+"popupmorelive.txtbtnsingle","Resume
 "
-"popupitemdescription.txtgreenoutline","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Stay"
-"popupitemdescription.txtgreen","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Stay"
-"popupitemdescription.txtredoutline","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
+"popupmorelive.txtdescription","Time to next life"
+"popupmorelive.txtfree","FREE"
+"popupmorelive.txtfreeoutline","FREE"
+"popupmorelive.txtgold","1000"
+"popupmorelive.txtgoldoutline","900"
+"popupmorelive.txtgreen","Continue"
+"popupmorelive.txtgreenoutline","Continue"
+"popupmorelive.txtlife","FULL"
+"popupmorelive.txtlifeoutline","+5"
+"popupmorelive.txtred","Quit
 "
-"popupitemdescription.txtred","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
+"popupmorelive.txtredoutline","Quit
 "
-"popupitemdescription.txtgreenoutline","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
+"popupmorelive.txtsingleoutline","Resume
 "
-"popupitemdescription.txtgreen","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
+"popupmorelive.txttimer","00:00"
+"popupmorelive.txttitle","Title
 "
-"popupitemdescription.txtredoutline","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
+"popupmorelive.txttitleoutline","Title
 "
-"popupitemdescription.txtred","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
+"popupnoads.btnsingleoutline","USD 4.99"
+"popupnoads.txtblueoutline","Quit
 "
-"popupitemdescription.txtblueoutline","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
+"popupnoads.txtbtnbuy","Buy"
+"popupnoads.txtbtnbuyoutline","Buy"
+"popupnoads.txtbtnsingle","USD 4.99
 "
-"popupitemdescription.txtred","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
+"popupnoads.txtdescription","Remove forced ads forever!"
+"popupnoads.txtdescriptionoutline","Remove forced ads forever!"
+"popupnoads.txtgold","1900"
+"popupnoads.txtgoldoutline","1900"
+"popupnoads.txtgreen","Stay"
+"popupnoads.txtgreenoutline","Stay"
+"popupnoads.txtred","Quit
 "
-"popupitemdescription.txtsingleoutline","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline","Claim
+"popupnoads.txtredoutline","Quit
 "
-"popupitemdescription.txtbtnsingle","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline/TxtBtnSingle","Claim
+"popupnoads.txttitle","No ADS"
+"popupnoads.txttitleoutline","No ADS"
+"popupprofile.txtblueoutline","Quit
 "
-"popupitemdescription.txtdescription","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/PopupCommonFrame/Contents/TxtDescription","Item DescriptionItem DescriptionItem Description"
-"popupitemdescription.txtgold","Assets/Resources/Popup/PopupItemDescription.prefab","PopupItemDescription/TopBarArea/GoldPanel/TxtGold","1000"
-"popupmorelive.txtgold","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/TopBarArea/GoldPanel/TxtGold","1000"
-"popupmorelive.txtlife","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/TopBarArea/LifePanel/TxtLife","FULL"
-"popupmorelive.textlifeamountoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/TopBarArea/LifePanel/ImageLife/TextLifeAmountOutline","0"
-"popupmorelive.textlifeamount","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/TopBarArea/LifePanel/ImageLife/TextLifeAmountOutline/TextLifeAmount","0"
-"popupmorelive.txttitleoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/Title/TxtTitleOutline","Title
+"popupprofile.txtbtnsingle","Claim
 "
-"popupmorelive.txttitle","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Title
+"popupprofile.txtbtntapavatar","Avatar"
+"popupprofile.txtbtntapavataroutline","Avatar"
+"popupprofile.txtbtntapframe","Frame"
+"popupprofile.txtbtntapframeoutline","Frame"
+"popupprofile.txtbtntapname","Name"
+"popupprofile.txtbtntapnameoutline","Name"
+"popupprofile.txtbtntaptoken","Token"
+"popupprofile.txtbtntaptokenoutline","Token"
+"popupprofile.txtdescription","Item DescriptionItem DescriptionItem Description"
+"popupprofile.txtgreen","Stay"
+"popupprofile.txtgreenoutline","Stay"
+"popupprofile.txtred","Quit
 "
-"popupmorelive.txtgreenoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Continue"
-"popupmorelive.txtgreen","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Continue"
-"popupmorelive.txtredoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
+"popupprofile.txtredoutline","Quit
 "
-"popupmorelive.txtred","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
+"popupprofile.txtsingleoutline","Claim
 "
-"popupmorelive.txtgreenoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
+"popupprofile.txttitle","Title
 "
-"popupmorelive.txtgreen","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
+"popupprofile.txttitleoutline","Title
 "
-"popupmorelive.txtlifeoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/ImageLife/TxtLifeOutline","+5"
-"popupmorelive.txtlife","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/ImageLife/TxtLifeOutline/TxtLife","+5"
-"popupmorelive.txtgoldoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGoldOutline","900"
-"popupmorelive.txtgold","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGoldOutline/TxtGold","900"
-"popupmorelive.txtredoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
+"popupquit.textmultiplierx1","x1"
+"popupquit.textmultiplierx10","x10"
+"popupquit.textmultiplierx100","x100"
+"popupquit.textmultiplierx25","x25"
+"popupquit.textmultiplierx5","x5"
+"popupquit.textyellowoutlinex10","x10"
+"popupquit.textyellowoutlinex100","x100"
+"popupquit.textyellowoutlinex1_","x1"
+"popupquit.textyellowoutlinex25","x25"
+"popupquit.textyellowoutlinex5","x5"
+"popupquit.textyellowx10","x10"
+"popupquit.textyellowx100","x100"
+"popupquit.textyellowx1_","x1"
+"popupquit.textyellowx25","x25"
+"popupquit.txtblueoutline","Quit
 "
-"popupmorelive.txtred","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
+"popupquit.txtbtnsingle","Resume
 "
-"popupmorelive.txtblueoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
+"popupquit.txtdescription","You will lose 1 Life!!"
+"popupquit.txtgreen","Stay"
+"popupquit.txtgreenoutline","Stay"
+"popupquit.txtred","Quit
 "
-"popupmorelive.txtred","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
+"popupquit.txtredoutline","Quit
 "
-"popupmorelive.txtlifeoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/ImageLife/TxtLifeOutline","+1
+"popupquit.txtsingleoutline","Resume
 "
-"popupmorelive.txtlife","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/ImageLife/TxtLifeOutline/TxtLife","+1
+"popupquit.txttitle","Title
 "
-"popupmorelive.txtfreeoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtFreeOutline","FREE"
-"popupmorelive.txtfree","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtFreeOutline/TxtFree","FREE"
-"popupmorelive.txtsingleoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline","Resume
+"popupquit.txttitleoutline","Title
 "
-"popupmorelive.txtbtnsingle","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline/TxtBtnSingle","Resume
+"popupresult.txtblueoutline","Quit
 "
-"popupmorelive.txtdescription","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/Contents/TxtDescription","Time to next life"
-"popupmorelive.txttimer","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/Contents/Timer/TxtTimer","00:00"
-"popupmorelive.txtlifeoutline","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/Contents/ImageLife/TxtLifeOutline","5"
-"popupmorelive.txtlife","Assets/Resources/Popup/PopupMoreLive.prefab","PopupMoreLive/PopupCommonFrame/Contents/ImageLife/TxtLifeOutline/TxtLife","5"
-"popupnoads.txttitleoutline","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/Title/TxtTitleOutline","No ADS"
-"popupnoads.txttitle","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","No ADS"
-"popupnoads.txtgreenoutline","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Stay"
-"popupnoads.txtgreen","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Stay"
-"popupnoads.txtredoutline","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
+"popupresult.txtbtnsingle","Resume
 "
-"popupnoads.txtred","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
+"popupresult.txtgold","20"
+"popupresult.txtgoldoutline","20"
+"popupresult.txtgreen","Stay"
+"popupresult.txtgreenoutline","Stay"
+"popupresult.txthardlevel","Hard!"
+"popupresult.txthardleveloutline","Hard!"
+"popupresult.txtred","Quit
 "
-"popupnoads.txtgreenoutline","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
+"popupresult.txtredoutline","Quit
 "
-"popupnoads.txtgreen","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
+"popupresult.txtsingleoutline","Resume
 "
-"popupnoads.txtredoutline","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
+"popupresult.txttitle","Title
 "
-"popupnoads.txtred","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
+"popupresult.txttitleoutline","Title
 "
-"popupnoads.txtblueoutline","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
+"popupsettings.txtblueoutline","Quit
 "
-"popupnoads.txtred","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
+"popupsettings.txtbtnsingle","Resume
 "
-"popupnoads.btnsingleoutline","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/ButtonSingle/BtnSingleFrame/BtnSingleOutline","USD 4.99"
-"popupnoads.txtbtnsingle","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/ButtonSingle/BtnSingleFrame/BtnSingleOutline/TxtBtnSingle","USD 4.99
+"popupsettings.txtgreen","Stay"
+"popupsettings.txtgreenoutline","Stay"
+"popupsettings.txthaptic","Haptic"
+"popupsettings.txtmusic","Music"
+"popupsettings.txtred","Quit
 "
-"popupnoads.txtbtnbuyoutline","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtBtnBuyOutline","Buy"
-"popupnoads.txtbtnbuy","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtBtnBuyOutline/TxtBtnBuy","Buy"
-"popupnoads.txtgoldoutline","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtBtnBuyOutline/TxtGoldOutline","1900"
-"popupnoads.txtgold","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtBtnBuyOutline/TxtGoldOutline/TxtGold","1900"
-"popupnoads.txtdescriptionoutline","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/Contents/Benefit/Benefit1/TxtDescriptionOutline","Remove forced ads forever!"
-"popupnoads.txtdescription","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/Contents/Benefit/Benefit1/TxtDescriptionOutline/TxtDescription","Remove forced ads forever!"
-"popupnoads.txtdescriptionoutline","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/Contents/Benefit/Benefit2/TxtDescriptionOutline","Keep optional
-bonus ads! "
-"popupnoads.txtdescription","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/PopupCommonFrame/Contents/Benefit/Benefit2/TxtDescriptionOutline/TxtDescription","Keep optional
-bonus ads! "
-"popupnoads.txtgold","Assets/Resources/Popup/PopupNoAds.prefab","PopupNoAds/TopBarArea/GoldPanel/TxtGold","1000"
-"popupprofile.txttitleoutline","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/Title/TxtTitleOutline","Title
+"popupsettings.txtredoutline","Quit
 "
-"popupprofile.txttitle","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Title
+"popupsettings.txtsingleoutline","Resume
 "
-"popupprofile.txtgreenoutline","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Stay"
-"popupprofile.txtgreen","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Stay"
-"popupprofile.txtredoutline","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
+"popupsettings.txtsound","Sound
 "
-"popupprofile.txtred","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
+"popupsettings.txttitle","Title
 "
-"popupprofile.txtgreenoutline","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
+"popupsettings.txttitleoutline","Title
 "
-"popupprofile.txtgreen","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
+"popupwinningstreak.btnsingleoutline","Play"
+"popupwinningstreak.textmultiplierx1","x1"
+"popupwinningstreak.textmultiplierx10","x10"
+"popupwinningstreak.textmultiplierx100","x100"
+"popupwinningstreak.textmultiplierx25","x25"
+"popupwinningstreak.textmultiplierx5","x5"
+"popupwinningstreak.textreward","100"
+"popupwinningstreak.textrewardoutline","100"
+"popupwinningstreak.texttimer","0d 00h"
+"popupwinningstreak.texttimeroutline","0d 00h"
+"popupwinningstreak.textyellowoutlinex10","x10"
+"popupwinningstreak.textyellowoutlinex100","x100"
+"popupwinningstreak.textyellowoutlinex1_","x1"
+"popupwinningstreak.textyellowoutlinex25","x25"
+"popupwinningstreak.textyellowoutlinex5","x5"
+"popupwinningstreak.textyellowx10","x10"
+"popupwinningstreak.textyellowx100","x100"
+"popupwinningstreak.textyellowx1_","x1"
+"popupwinningstreak.textyellowx25","x25"
+"popupwinningstreak.txtblueoutline","Quit
 "
-"popupprofile.txtredoutline","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupprofile.txtred","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupprofile.txtblueoutline","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
-"
-"popupprofile.txtred","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
-"
-"popupprofile.txtsingleoutline","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline","Claim
-"
-"popupprofile.txtbtnsingle","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline/TxtBtnSingle","Claim
-"
-"popupprofile.txtdescription","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/Contents/TxtDescription","Item DescriptionItem DescriptionItem Description"
-"popupprofile.txtbtntapavataroutline","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ProfilePanel/ProfileBottom/Taps/BtnTapAvatar/TxtBtnTapAvatarOutLine","Avatar"
-"popupprofile.txtbtntapavatar","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ProfilePanel/ProfileBottom/Taps/BtnTapAvatar/TxtBtnTapAvatarOutLine/TxtBtnTapAvatar","Avatar"
-"popupprofile.txtbtntapframeoutline","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ProfilePanel/ProfileBottom/Taps/BtnTapFrame/TxtBtnTapFrameOutLine","Frame"
-"popupprofile.txtbtntapframe","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ProfilePanel/ProfileBottom/Taps/BtnTapFrame/TxtBtnTapFrameOutLine/TxtBtnTapFrame","Frame"
-"popupprofile.txtbtntapnameoutline","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ProfilePanel/ProfileBottom/Taps/BtnTapName/TxtBtnTapNameOutLine","Name"
-"popupprofile.txtbtntapname","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ProfilePanel/ProfileBottom/Taps/BtnTapName/TxtBtnTapNameOutLine/TxtBtnTapName","Name"
-"popupprofile.txtbtntaptokenoutline","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ProfilePanel/ProfileBottom/Taps/BtnTapToken/TxtBtnTapTokenOutLine","Token"
-"popupprofile.txtbtntaptoken","Assets/Resources/Popup/PopupProfile.prefab","PopupProfile/PopupCommonFrame/ProfilePanel/ProfileBottom/Taps/BtnTapToken/TxtBtnTapTokenOutLine/TxtBtnTapToken","Token"
-"popupquit.txttitleoutline","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Title/TxtTitleOutline","Title
-"
-"popupquit.txttitle","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Title
-"
-"popupquit.txtgreenoutline","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Stay"
-"popupquit.txtgreen","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Stay"
-"popupquit.txtredoutline","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupquit.txtred","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupquit.txtgreenoutline","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
-"
-"popupquit.txtgreen","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
-"
-"popupquit.txtredoutline","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupquit.txtred","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupquit.txtblueoutline","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
-"
-"popupquit.txtred","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
-"
-"popupquit.txtsingleoutline","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline","Resume
-"
-"popupquit.txtbtnsingle","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline/TxtBtnSingle","Resume
-"
-"popupquit.txtdescription","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/LoseLife/TxtDescription","You will lose 1 Life!!"
-"popupquit.txtdescription","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/TxtDescription","You will lose your x{100} multiplier!"
-"popupquit.textmultiplierx1","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/TextNormal/TextMultiplierx1","x1"
-"popupquit.textmultiplierx5","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/TextNormal/TextMultiplierx5","x5"
-"popupquit.textmultiplierx10","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/TextNormal/TextMultiplierx10","x10"
-"popupquit.textmultiplierx25","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/TextNormal/TextMultiplierx25","x25"
-"popupquit.textmultiplierx100","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/TextNormal/TextMultiplierx100","x100"
-"popupquit.textyellowoutlinex1_","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex1 ","x1"
-"popupquit.textyellowx1_","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex1 /TextYellowx1 ","x1"
-"popupquit.textyellowoutlinex5","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex5","x5"
-"popupquit.textyellowx1_","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex5/TextYellowx1 ","x5"
-"popupquit.textyellowoutlinex10","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex10","x10"
-"popupquit.textyellowx10","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex10/TextYellowx10","x10"
-"popupquit.textyellowoutlinex25","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex25","x25"
-"popupquit.textyellowx25","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex25/TextYellowx25","x25"
-"popupquit.textyellowoutlinex100","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex100","x100"
-"popupquit.textyellowx100","Assets/Resources/Popup/PopupQuit.prefab","PopupQuit/PopupCommonFrame/Contents/WinningStreak/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex100/TextYellowx100","x100"
-"popupresult.txthardleveloutline","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/HardLevelOption/TxtHardLevelOutline","Hard!"
-"popupresult.txthardlevel","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/HardLevelOption/TxtHardLevelOutline/TxtHardLevel","Hard!"
-"popupresult.txttitleoutline","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/Title/TxtTitleOutline","Title
-"
-"popupresult.txttitle","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Title
-"
-"popupresult.txtgreenoutline","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Stay"
-"popupresult.txtgreen","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Stay"
-"popupresult.txtredoutline","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupresult.txtred","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupresult.txtgreenoutline","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
-"
-"popupresult.txtgreen","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
-"
-"popupresult.txtredoutline","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupresult.txtred","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupresult.txtblueoutline","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
-"
-"popupresult.txtred","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
-"
-"popupresult.txtsingleoutline","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline","Resume
-"
-"popupresult.txtbtnsingle","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline/TxtBtnSingle","Resume
-"
-"popupresult.txtgoldoutline","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/Contents/Reward/TxtGoldOutline","20"
-"popupresult.txtgold","Assets/Resources/Popup/PopupResult.prefab","PopupResult/PopupCommonFrame/Contents/Reward/TxtGoldOutline/TxtGold","20"
-"popupsettings.txttitleoutline","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/Title/TxtTitleOutline","Title
-"
-"popupsettings.txttitle","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Title
-"
-"popupsettings.txtgreenoutline","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Stay"
-"popupsettings.txtgreen","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Stay"
-"popupsettings.txtredoutline","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupsettings.txtred","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupsettings.txtgreenoutline","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
-"
-"popupsettings.txtgreen","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
-"
-"popupsettings.txtredoutline","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupsettings.txtred","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupsettings.txtblueoutline","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
-"
-"popupsettings.txtred","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
-"
-"popupsettings.txtsingleoutline","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline","Resume
-"
-"popupsettings.txtbtnsingle","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtSingleOutline/TxtBtnSingle","Resume
-"
-"popupsettings.txtsound","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/SettingArea/Option/Sound/TxtSound","Sound
-"
-"popupsettings.txtmusic","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/SettingArea/Option/Music/TxtMusic","Music"
-"popupsettings.txthaptic","Assets/Resources/Popup/PopupSettings.prefab","PopupSettings/PopupCommonFrame/SettingArea/Option/Haptic/TxtHaptic","Haptic"
-"popupwinningstreak.txttitleoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Title/TxtTitleOutline","Winning Streak"
-"popupwinningstreak.txttitle","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Title/TxtTitleOutline/TxtTitle","Winning Streak"
-"popupwinningstreak.texttimeroutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Timer/TextTimerOutline","0d 00h"
-"popupwinningstreak.texttimer","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Timer/TextTimerOutline/TextTimer","0d 00h"
-"popupwinningstreak.txtgreenoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline","Stay"
-"popupwinningstreak.txtgreen","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/BtnHorizontal/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Stay"
-"popupwinningstreak.txtredoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupwinningstreak.txtred","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/BtnHorizontal/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupwinningstreak.txtgreenoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline","Resume
-"
-"popupwinningstreak.txtgreen","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/ButtonVertical/GreenButton/GreenFrame/TxtGreenOutline/TxtGreen","Resume
-"
-"popupwinningstreak.txtredoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline","Quit
-"
-"popupwinningstreak.txtred","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/ButtonVertical/RedButton/RedFrame/TxtRedOutline/TxtRed","Quit
-"
-"popupwinningstreak.txtblueoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline","Quit
-"
-"popupwinningstreak.txtred","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/ButtonVertical/BlueButton /BlueFrame/TxtBlueOutline/TxtRed","Quit
-"
-"popupwinningstreak.btnsingleoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/ButtonSingle/BtnSingleFrame/BtnSingleOutline","Play"
-"popupwinningstreak.txtbtnsingle","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/ButtonSingle/BtnSingleFrame/BtnSingleOutline/TxtBtnSingle","Play"
-"popupwinningstreak.txtbtnbuyoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtBtnBuyOutline","Buy"
-"popupwinningstreak.txtbtnbuy","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtBtnBuyOutline/TxtBtnBuy","Buy"
-"popupwinningstreak.txtgoldoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtBtnBuyOutline/TxtGoldOutline","1900"
-"popupwinningstreak.txtgold","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/ButtonSingle/BtnSingleFrame/TxtBtnBuyOutline/TxtGoldOutline/TxtGold","1900"
-"popupwinningstreak.txtdescriptionoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/TxtDescriptionOutline","Win levels to collect <color=#FFD700> Flames! </color>
+"popupwinningstreak.txtbtnbuy","Buy"
+"popupwinningstreak.txtbtnbuyoutline","Buy"
+"popupwinningstreak.txtbtnsingle","Play"
+"popupwinningstreak.txtdescription","Win levels to collect <color=#FFD700> Flames! </color>
 Longer streak, more Rewards!"
-"popupwinningstreak.txtdescription","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/TxtDescriptionOutline/TxtDescription","Win levels to collect <color=#FFD700> Flames! </color>
+"popupwinningstreak.txtdescriptionoutline","Win levels to collect <color=#FFD700> Flames! </color>
 Longer streak, more Rewards!"
-"popupwinningstreak.textrewardoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/KeyBlazeClickInfo/ImageFrame/RewardItem/RewardGold/TextRewardOutline","100"
-"popupwinningstreak.textreward","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/KeyBlazeClickInfo/ImageFrame/RewardItem/RewardGold/TextRewardOutline/TextReward","100"
-"popupwinningstreak.textrewardoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/KeyBlazeClickInfo/ImageFrame/RewardItem/RewardItem/TextRewardOutline","x1"
-"popupwinningstreak.textreward","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/KeyBlazeClickInfo/ImageFrame/RewardItem/RewardItem/TextRewardOutline/TextReward","x1"
-"popupwinningstreak.textrewardoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/KeyBlazeClickInfo/ImageFrame/RewardItem (1)/RewardGold/TextRewardOutline","100"
-"popupwinningstreak.textreward","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/KeyBlazeClickInfo/ImageFrame/RewardItem (1)/RewardGold/TextRewardOutline/TextReward","100"
-"popupwinningstreak.textrewardoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/KeyBlazeClickInfo/ImageFrame/RewardItem (1)/RewardItem/TextRewardOutline","x1"
-"popupwinningstreak.textreward","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/KeyBlazeClickInfo/ImageFrame/RewardItem (1)/RewardItem/TextRewardOutline/TextReward","x1"
-"popupwinningstreak.textrewardoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/KeyBlazeClickInfo/ImageFrame/RewardItem (2)/RewardGold/TextRewardOutline","100"
-"popupwinningstreak.textreward","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/KeyBlazeClickInfo/ImageFrame/RewardItem (2)/RewardGold/TextRewardOutline/TextReward","100"
-"popupwinningstreak.textrewardoutline","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/KeyBlazeClickInfo/ImageFrame/RewardItem (2)/RewardItem/TextRewardOutline","x1"
-"popupwinningstreak.textreward","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/KeyBlazeClickInfo/ImageFrame/RewardItem (2)/RewardItem/TextRewardOutline/TextReward","x1"
-"popupwinningstreak.textmultiplierx1","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/TextNormal/TextMultiplierx1","x1"
-"popupwinningstreak.textmultiplierx5","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/TextNormal/TextMultiplierx5","x5"
-"popupwinningstreak.textmultiplierx10","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/TextNormal/TextMultiplierx10","x10"
-"popupwinningstreak.textmultiplierx25","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/TextNormal/TextMultiplierx25","x25"
-"popupwinningstreak.textmultiplierx100","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/TextNormal/TextMultiplierx100","x100"
-"popupwinningstreak.textyellowoutlinex1_","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex1 ","x1"
-"popupwinningstreak.textyellowx1_","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex1 /TextYellowx1 ","x1"
-"popupwinningstreak.textyellowoutlinex5","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex5","x5"
-"popupwinningstreak.textyellowx1_","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex5/TextYellowx1 ","x5"
-"popupwinningstreak.textyellowoutlinex10","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex10","x10"
-"popupwinningstreak.textyellowx10","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex10/TextYellowx10","x10"
-"popupwinningstreak.textyellowoutlinex25","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex25","x25"
-"popupwinningstreak.textyellowx25","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex25/TextYellowx25","x25"
-"popupwinningstreak.textyellowoutlinex100","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex100","x100"
-"popupwinningstreak.textyellowx100","Assets/Resources/Popup/PopupWinningStreak.prefab","PopupWinningStreak/PopupCommonFrame/Contents/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex100/TextYellowx100","x100"
-"popupwinningstreakinfo.textclose","Assets/Resources/Popup/PopupWinningStreakinfo.prefab","PopupWinningStreakinfo/InfoPanel/TextClose","Tap to Continue"
-"popupwinningstreakinfo.textinfo1","Assets/Resources/Popup/PopupWinningStreakinfo.prefab","PopupWinningStreakinfo/InfoPanel/Contents/Info1/TextInfo1","Win levels,
+"popupwinningstreak.txtgold","1900"
+"popupwinningstreak.txtgoldoutline","1900"
+"popupwinningstreak.txtgreen","Stay"
+"popupwinningstreak.txtgreenoutline","Stay"
+"popupwinningstreak.txtred","Quit
+"
+"popupwinningstreak.txtredoutline","Quit
+"
+"popupwinningstreak.txttitle","Winning Streak"
+"popupwinningstreak.txttitleoutline","Winning Streak"
+"popupwinningstreakinfo.textclose","Tap to Continue"
+"popupwinningstreakinfo.textdescription","If you <color=#e7656b>fail</color> a level,
+the multiplier will reset!"
+"popupwinningstreakinfo.textdescriptionoutline","If you <color=#FFD700>fail</color> a level,
+the multiplier will reset!"
+"popupwinningstreakinfo.textinfo1","Win levels,
 collect <color=#FFD700> Flames! </color>"
-"popupwinningstreakinfo.textinfo2","Assets/Resources/Popup/PopupWinningStreakinfo.prefab","PopupWinningStreakinfo/InfoPanel/Contents/Info2/TextInfo2","Multiply <color=#FFD700> Flames </color>
+"popupwinningstreakinfo.textinfo2","Multiply <color=#FFD700> Flames </color>
 up to x100!"
-"popupwinningstreakinfo.textinfo3","Assets/Resources/Popup/PopupWinningStreakinfo.prefab","PopupWinningStreakinfo/InfoPanel/Contents/Info3/TextInfo3","Get <color=#FFD700>rewards!"
-"popupwinningstreakinfo.textdescriptionoutline","Assets/Resources/Popup/PopupWinningStreakinfo.prefab","PopupWinningStreakinfo/InfoPanel/Contents/Info4/TextDescriptionOutline","If you <color=#FFD700>fail</color> a level,
-the multiplier will reset!"
-"popupwinningstreakinfo.textdescription","Assets/Resources/Popup/PopupWinningStreakinfo.prefab","PopupWinningStreakinfo/InfoPanel/Contents/Info4/TextDescriptionOutline/TextDescription","If you <color=#e7656b>fail</color> a level,
-the multiplier will reset!"
-"tutorial.instructiontext","Assets/Resources/Popup/Tutorial.prefab","Tutorial/InstructionPanel/InstructionText","Tutorial instruction text"
-"tutorial.text","Assets/Resources/Popup/Tutorial.prefab","Tutorial/InstructionPanel/SkipButton/Text","SKIP"
-"tutorial.texttapoutline","Assets/Resources/Popup/Tutorial.prefab","Tutorial/TextTapOutline","Tap to anywhere"
-"tutorial.texttap","Assets/Resources/Popup/Tutorial.prefab","Tutorial/TextTapOutline/TextTap","Tap to anywhere"
-"txttoast.txttoastoutline","Assets/Resources/Popup/TxtToast.prefab","TxtToast/TxtToastOutline","Your lives are unlimited!
-"
-"txttoast.txttoast","Assets/Resources/Popup/TxtToast.prefab","TxtToast/TxtToastOutline/TxtToast","Your lives are unlimited!
-"
-"useitem.txtdescriptionoutline","Assets/Resources/Popup/UseItem.prefab","UseItem/ItemDescription/TxtDescription/TxtDescriptionOutline","Your lives are unlimited!
-"
-"useitem.txtdescription","Assets/Resources/Popup/UseItem.prefab","UseItem/ItemDescription/TxtDescription/TxtDescriptionOutline/TxtDescription","Your lives are unlimited!
-"
-"frozenlayer.magazinetext","Assets/Resources/Prefabs/FrozenLayer.prefab","FrozenLayer/FrozenLayer/FrozenLayer/MagazineText","00"
-"holder.magazinetext","Assets/Resources/Prefabs/Holder.prefab","Holder/box/MagazineText","00"
-"spawner.magazinetext","Assets/Resources/Prefabs/Spawner.prefab","Spawner/Spawner/MagazineText","00"
-"woodenboard.magazinetext","Assets/Resources/Prefabs/WoodenBoard.prefab","WoodenBoard/Pinata/MagazineText","00"
-"goldpanel.txtgold","Assets/Resources/UI/GoldPanel.prefab","GoldPanel/TxtGold","1000"
-"itembtn.txtlockoutline","Assets/Resources/UI/ItemBtn.prefab","ItemBtn/ItemFrame/ItemBtnColor/IconLock/TxtLockOutline","Lv.15"
-"itembtn.txtlock","Assets/Resources/UI/ItemBtn.prefab","ItemBtn/ItemFrame/ItemBtnColor/IconLock/TxtLockOutline/TxtLock","Lv.15"
-"itembtn.textitemoutline","Assets/Resources/UI/ItemBtn.prefab","ItemBtn/CountBadge/TextItemOutline","0"
-"itembtn.textitem","Assets/Resources/UI/ItemBtn.prefab","ItemBtn/CountBadge/TextItemOutline/TextItem","0"
-"lobbyrailbox.textleveloutline","Assets/Resources/UI/LobbyRailBox.prefab","LobbyRailBox/Box/TextLevelOutline","30"
-"lobbyrailbox.textlevel","Assets/Resources/UI/LobbyRailBox.prefab","LobbyRailBox/Box/TextLevelOutline/TextLevel","30"
-"shopitem.textamountoutline","Assets/Resources/UI/ShopItem.prefab","ShopItem/TextAmountOutline","x1"
-"shopitem.textamount","Assets/Resources/UI/ShopItem.prefab","ShopItem/TextAmountOutline/TextAmount","x1"
-"shoplistad.txttitleoutline","Assets/Resources/UI/ShopListAd.prefab","ShopListAd/Title/TxtTitleOutline","NO ADS!"
-"shoplistad.txttitle","Assets/Resources/UI/ShopListAd.prefab","ShopListAd/Title/TxtTitleOutline/TxtTitle","NO ADS!"
-"shoplistad.txtdescriptionoutline","Assets/Resources/UI/ShopListAd.prefab","ShopListAd/Title/TxtDescriptionOutline","No Ads,
+"popupwinningstreakinfo.textinfo3","Get <color=#FFD700>rewards!"
+"rewardimg.textreward","100"
+"rewardimg.textrewardoutline","100"
+"shopitem.textamount","x1"
+"shopitem.textamountoutline","x1"
+"shoplistad.txtbtnbuy","$ 100"
+"shoplistad.txtbtnbuyoutline","$ 100"
+"shoplistad.txtdescription","No Ads,
 Just Fun!"
-"shoplistad.txtdescription","Assets/Resources/UI/ShopListAd.prefab","ShopListAd/Title/TxtDescriptionOutline/TxtDescription","No Ads,
+"shoplistad.txtdescriptionoutline","No Ads,
 Just Fun!"
-"shoplistad.txttimeoff","Assets/Resources/UI/ShopListAd.prefab","ShopListAd/TimeOff/TxtTimeOff","COCOCO"
-"shoplistad.txtoffper","Assets/Resources/UI/ShopListAd.prefab","ShopListAd/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"shoplistad.txtbtnbuyoutline","Assets/Resources/UI/ShopListAd.prefab","ShopListAd/BtnBuy/BtnBuy/TxtBtnBuyOutline","$ 100"
-"shoplistad.txtbtnbuy","Assets/Resources/UI/ShopListAd.prefab","ShopListAd/BtnBuy/BtnBuy/TxtBtnBuyOutline/TxtBtnBuy","$ 100"
-"shoplistgold.textpriceoutline","Assets/Resources/UI/ShopListGold.prefab","ShopListGold/Products/TextPriceOutline","Price
+"shoplistad.txtoffper","90% OFF"
+"shoplistad.txttimeoff","COCOCO"
+"shoplistad.txttitle","NO ADS!"
+"shoplistad.txttitleoutline","NO ADS!"
+"shoplistgold.textprice","Price
 "
-"shoplistgold.textprice","Assets/Resources/UI/ShopListGold.prefab","ShopListGold/Products/TextPriceOutline/TextPrice","Price
+"shoplistgold.textpriceoutline","Price
 "
-"shoplistgold.txttimeoff","Assets/Resources/UI/ShopListGold.prefab","ShopListGold/TimeOff/TxtTimeOff","COCOCO"
-"shoplistgold.txtoffper","Assets/Resources/UI/ShopListGold.prefab","ShopListGold/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"shoplistgold.txtbtnbuyoutline","Assets/Resources/UI/ShopListGold.prefab","ShopListGold/BtnBuy/BtnBuy/TxtBtnBuyOutline","$10"
-"shoplistgold.txtbtnbuy","Assets/Resources/UI/ShopListGold.prefab","ShopListGold/BtnBuy/BtnBuy/TxtBtnBuyOutline/TxtBtnBuy","$10"
-"shoplistgoldalign.textpriceoutline","Assets/Resources/UI/ShopListGoldAlign.prefab","ShopListGoldAlign/ShopListGold (1)/Products/TextPriceOutline","Price
+"shoplistgold.txtbtnbuy","$10"
+"shoplistgold.txtbtnbuyoutline","$10"
+"shoplistgold.txtoffper","90% OFF"
+"shoplistgold.txttimeoff","COCOCO"
+"shoplistgoldalign.textprice","Price
 "
-"shoplistgoldalign.textprice","Assets/Resources/UI/ShopListGoldAlign.prefab","ShopListGoldAlign/ShopListGold (1)/Products/TextPriceOutline/TextPrice","Price
+"shoplistgoldalign.textpriceoutline","Price
 "
-"shoplistgoldalign.txttimeoff","Assets/Resources/UI/ShopListGoldAlign.prefab","ShopListGoldAlign/ShopListGold (1)/TimeOff/TxtTimeOff","COCOCO"
-"shoplistgoldalign.txtoffper","Assets/Resources/UI/ShopListGoldAlign.prefab","ShopListGoldAlign/ShopListGold (1)/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"shoplistgoldalign.txtbtnbuyoutline","Assets/Resources/UI/ShopListGoldAlign.prefab","ShopListGoldAlign/ShopListGold (1)/BtnBuy/BtnBuy/TxtBtnBuyOutline","$10"
-"shoplistgoldalign.txtbtnbuy","Assets/Resources/UI/ShopListGoldAlign.prefab","ShopListGoldAlign/ShopListGold (1)/BtnBuy/BtnBuy/TxtBtnBuyOutline/TxtBtnBuy","$10"
-"shoplistgoldalign.textpriceoutline","Assets/Resources/UI/ShopListGoldAlign.prefab","ShopListGoldAlign/ShopListGold (2)/Products/TextPriceOutline","Price
+"shoplistgoldalign.txtbtnbuy","$10"
+"shoplistgoldalign.txtbtnbuyoutline","$10"
+"shoplistgoldalign.txtoffper","90% OFF"
+"shoplistgoldalign.txttimeoff","COCOCO"
+"shoplistitem.textamount","x1"
+"shoplistitem.textamountoutline","x1"
+"shoplistitem.textprice","Price
 "
-"shoplistgoldalign.textprice","Assets/Resources/UI/ShopListGoldAlign.prefab","ShopListGoldAlign/ShopListGold (2)/Products/TextPriceOutline/TextPrice","Price
+"shoplistitem.textpriceoutline","Price
 "
-"shoplistgoldalign.txttimeoff","Assets/Resources/UI/ShopListGoldAlign.prefab","ShopListGoldAlign/ShopListGold (2)/TimeOff/TxtTimeOff","COCOCO"
-"shoplistgoldalign.txtoffper","Assets/Resources/UI/ShopListGoldAlign.prefab","ShopListGoldAlign/ShopListGold (2)/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"shoplistgoldalign.txtbtnbuyoutline","Assets/Resources/UI/ShopListGoldAlign.prefab","ShopListGoldAlign/ShopListGold (2)/BtnBuy/BtnBuy/TxtBtnBuyOutline","$10"
-"shoplistgoldalign.txtbtnbuy","Assets/Resources/UI/ShopListGoldAlign.prefab","ShopListGoldAlign/ShopListGold (2)/BtnBuy/BtnBuy/TxtBtnBuyOutline/TxtBtnBuy","$10"
-"shoplistitem.textpriceoutline","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Products/LeftArea/TextPriceOutline","Price
+"shoplistitem.textsale","90% OFF"
+"shoplistitem.textsaleoutline","90% OFF"
+"shoplistitem.txtbtnbuy","$ 100"
+"shoplistitem.txtbtnbuyoutline","$ 100"
+"shoplistitem.txtoffper","90% OFF"
+"shoplistitem.txttimeoff","COCOCO"
+"shoplistitem.txttitle","Title
 "
-"shoplistitem.textprice","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Products/LeftArea/TextPriceOutline/TextPrice","Price
+"shoplistitem.txttitleoutline","Title
 "
-"shoplistitem.textamountoutline","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Products/RightArea/itemArea/ShopItem/TextAmountOutline","x1"
-"shoplistitem.textamount","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Products/RightArea/itemArea/ShopItem/TextAmountOutline/TextAmount","x1"
-"shoplistitem.textamountoutline","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Products/RightArea/itemArea/ShopItem (1)/TextAmountOutline","x1"
-"shoplistitem.textamount","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Products/RightArea/itemArea/ShopItem (1)/TextAmountOutline/TextAmount","x1"
-"shoplistitem.textamountoutline","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Products/RightArea/BoostArea/ShopItem/TextAmountOutline","x1"
-"shoplistitem.textamount","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Products/RightArea/BoostArea/ShopItem/TextAmountOutline/TextAmount","x1"
-"shoplistitem.textamountoutline","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Products/RightArea/BoostArea/ShopItem (1)/TextAmountOutline","x1"
-"shoplistitem.textamount","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Products/RightArea/BoostArea/ShopItem (1)/TextAmountOutline/TextAmount","x1"
-"shoplistitem.textamountoutline","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Products/RightArea/BoostArea/ShopItem (2)/TextAmountOutline","x1"
-"shoplistitem.textamount","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Products/RightArea/BoostArea/ShopItem (2)/TextAmountOutline/TextAmount","x1"
-"shoplistitem.txttitleoutline","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Title/TxtTitleOutline","Title
+"slotwinningstreak.textnumber","1"
+"slotwinningstreak.textnumberoutline","1"
+"slotwinningstreak.textreward","100"
+"slotwinningstreak.textrewardoutline","100"
+"slotwinningstreak.txtgrandprize","Grand Prize"
+"spawner.magazinetext","00"
+"tutorial.instructiontext","Tutorial instruction text"
+"tutorial.text","SKIP"
+"tutorial.texttap","Tap to anywhere"
+"tutorial.texttapoutline","Tap to anywhere"
+"txttoast.txttoast","Your lives are unlimited!
 "
-"shoplistitem.txttitle","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/Title/TxtTitleOutline/TxtTitle","Title
+"txttoast.txttoastoutline","Your lives are unlimited!
 "
-"shoplistitem.textsaleoutline","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/ImgSale/TextSaleOutline","90% OFF"
-"shoplistitem.textsale","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/ImgSale/TextSaleOutline/TextSale","90% OFF"
-"shoplistitem.txttimeoff","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/TimeOff/TxtTimeOff","COCOCO"
-"shoplistitem.txtoffper","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"shoplistitem.txtbtnbuyoutline","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/BtnBuy/BtnBuyGreen/TxtBtnBuyOutline","$ 100"
-"shoplistitem.txtbtnbuy","Assets/Resources/UI/ShopListItem.prefab","ShopListItem/BtnBuy/BtnBuyGreen/TxtBtnBuyOutline/TxtBtnBuy","$ 100"
-"multiplier_1.textmultiplierx1","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/TextNormal/TextMultiplierx1","x1"
-"multiplier_1.textmultiplierx5","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/TextNormal/TextMultiplierx5","x5"
-"multiplier_1.textmultiplierx10","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/TextNormal/TextMultiplierx10","x10"
-"multiplier_1.textmultiplierx25","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/TextNormal/TextMultiplierx25","x25"
-"multiplier_1.textmultiplierx100","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/TextNormal/TextMultiplierx100","x100"
-"multiplier_1.textyellowoutlinex1_","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/SelectFrame/TextMask/TextYellow/TextYellowOutlinex1 ","x1"
-"multiplier_1.textyellowx1_","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/SelectFrame/TextMask/TextYellow/TextYellowOutlinex1 /TextYellowx1 ","x1"
-"multiplier_1.textyellowoutlinex5","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/SelectFrame/TextMask/TextYellow/TextYellowOutlinex5","x5"
-"multiplier_1.textyellowx1_","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/SelectFrame/TextMask/TextYellow/TextYellowOutlinex5/TextYellowx1 ","x5"
-"multiplier_1.textyellowoutlinex10","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/SelectFrame/TextMask/TextYellow/TextYellowOutlinex10","x10"
-"multiplier_1.textyellowx10","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/SelectFrame/TextMask/TextYellow/TextYellowOutlinex10/TextYellowx10","x10"
-"multiplier_1.textyellowoutlinex25","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/SelectFrame/TextMask/TextYellow/TextYellowOutlinex25","x25"
-"multiplier_1.textyellowx25","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/SelectFrame/TextMask/TextYellow/TextYellowOutlinex25/TextYellowx25","x25"
-"multiplier_1.textyellowoutlinex100","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/SelectFrame/TextMask/TextYellow/TextYellowOutlinex100","x100"
-"multiplier_1.textyellowx100","Assets/Resources/UI/UIAssets/Multiplier 1.prefab","Multiplier 1/SelectFrame/TextMask/TextYellow/TextYellowOutlinex100/TextYellowx100","x100"
-"multiplier.textmultiplierx1","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextNormal/TextMultiplierx1","x1"
-"multiplier.textmultiplierx5","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextNormal/TextMultiplierx5","x5"
-"multiplier.textmultiplierx10","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextNormal/TextMultiplierx10","x10"
-"multiplier.textmultiplierx25","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextNormal/TextMultiplierx25","x25"
-"multiplier.textmultiplierx100","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextNormal/TextMultiplierx100","x100"
-"multiplier.textyellowoutlinex1_","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextMask/TextYellow/TextYellowOutlinex1 ","x1"
-"multiplier.textyellowx1_","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextMask/TextYellow/TextYellowOutlinex1 /TextYellowx1 ","x1"
-"multiplier.textyellowoutlinex5","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextMask/TextYellow/TextYellowOutlinex5","x5"
-"multiplier.textyellowx1_","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextMask/TextYellow/TextYellowOutlinex5/TextYellowx1 ","x5"
-"multiplier.textyellowoutlinex10","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextMask/TextYellow/TextYellowOutlinex10","x10"
-"multiplier.textyellowx10","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextMask/TextYellow/TextYellowOutlinex10/TextYellowx10","x10"
-"multiplier.textyellowoutlinex25","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextMask/TextYellow/TextYellowOutlinex25","x25"
-"multiplier.textyellowx25","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextMask/TextYellow/TextYellowOutlinex25/TextYellowx25","x25"
-"multiplier.textyellowoutlinex100","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextMask/TextYellow/TextYellowOutlinex100","x100"
-"multiplier.textyellowx100","Assets/Resources/UI/UIAssets/Multiplier.prefab","Multiplier/TextMask/TextYellow/TextYellowOutlinex100/TextYellowx100","x100"
-"rewardimg.textrewardoutline","Assets/Resources/UI/UIAssets/RewardImg.prefab","RewardImg/RewardGold/TextRewardOutline","100"
-"rewardimg.textreward","Assets/Resources/UI/UIAssets/RewardImg.prefab","RewardImg/RewardGold/TextRewardOutline/TextReward","100"
-"rewardimg.textrewardoutline","Assets/Resources/UI/UIAssets/RewardImg.prefab","RewardImg/RewardItem/TextRewardOutline","x1"
-"rewardimg.textreward","Assets/Resources/UI/UIAssets/RewardImg.prefab","RewardImg/RewardItem/TextRewardOutline/TextReward","x1"
-"slotwinningstreak.textnumberoutline","Assets/Resources/UI/UIAssets/SlotWinningStreak.prefab","SlotWinningStreak/Number/FrameNumber/TextNumberOutline","1"
-"slotwinningstreak.textnumber","Assets/Resources/UI/UIAssets/SlotWinningStreak.prefab","SlotWinningStreak/Number/FrameNumber/TextNumberOutline/TextNumber","1"
-"slotwinningstreak.textrewardoutline","Assets/Resources/UI/UIAssets/SlotWinningStreak.prefab","SlotWinningStreak/BtnReward/RewardImg/RewardGold/TextRewardOutline","100"
-"slotwinningstreak.textreward","Assets/Resources/UI/UIAssets/SlotWinningStreak.prefab","SlotWinningStreak/BtnReward/RewardImg/RewardGold/TextRewardOutline/TextReward","100"
-"slotwinningstreak.textrewardoutline","Assets/Resources/UI/UIAssets/SlotWinningStreak.prefab","SlotWinningStreak/BtnReward/RewardImg/RewardItem/TextRewardOutline","x1"
-"slotwinningstreak.textreward","Assets/Resources/UI/UIAssets/SlotWinningStreak.prefab","SlotWinningStreak/BtnReward/RewardImg/RewardItem/TextRewardOutline/TextReward","x1"
-"slotwinningstreak.txtgrandprize","Assets/Resources/UI/UIAssets/SlotWinningStreak.prefab","SlotWinningStreak/BtnReward/GrandPrize/TxtGrandPrize","Grand Prize"
-"winningstreakclickinfo.textrewardoutline","Assets/Resources/UI/UIAssets/WinningStreakClickInfo.prefab","WinningStreakClickInfo/ImageFrame/RewardItem/RewardGold/TextRewardOutline","100"
-"winningstreakclickinfo.textreward","Assets/Resources/UI/UIAssets/WinningStreakClickInfo.prefab","WinningStreakClickInfo/ImageFrame/RewardItem/RewardGold/TextRewardOutline/TextReward","100"
-"winningstreakclickinfo.textrewardoutline","Assets/Resources/UI/UIAssets/WinningStreakClickInfo.prefab","WinningStreakClickInfo/ImageFrame/RewardItem/RewardItem/TextRewardOutline","x1"
-"winningstreakclickinfo.textreward","Assets/Resources/UI/UIAssets/WinningStreakClickInfo.prefab","WinningStreakClickInfo/ImageFrame/RewardItem/RewardItem/TextRewardOutline/TextReward","x1"
-"winningstreakclickinfo.textrewardoutline","Assets/Resources/UI/UIAssets/WinningStreakClickInfo.prefab","WinningStreakClickInfo/ImageFrame/RewardItem (1)/RewardGold/TextRewardOutline","100"
-"winningstreakclickinfo.textreward","Assets/Resources/UI/UIAssets/WinningStreakClickInfo.prefab","WinningStreakClickInfo/ImageFrame/RewardItem (1)/RewardGold/TextRewardOutline/TextReward","100"
-"winningstreakclickinfo.textrewardoutline","Assets/Resources/UI/UIAssets/WinningStreakClickInfo.prefab","WinningStreakClickInfo/ImageFrame/RewardItem (1)/RewardItem/TextRewardOutline","x1"
-"winningstreakclickinfo.textreward","Assets/Resources/UI/UIAssets/WinningStreakClickInfo.prefab","WinningStreakClickInfo/ImageFrame/RewardItem (1)/RewardItem/TextRewardOutline/TextReward","x1"
-"winningstreakclickinfo.textrewardoutline","Assets/Resources/UI/UIAssets/WinningStreakClickInfo.prefab","WinningStreakClickInfo/ImageFrame/RewardItem (2)/RewardGold/TextRewardOutline","100"
-"winningstreakclickinfo.textreward","Assets/Resources/UI/UIAssets/WinningStreakClickInfo.prefab","WinningStreakClickInfo/ImageFrame/RewardItem (2)/RewardGold/TextRewardOutline/TextReward","100"
-"winningstreakclickinfo.textrewardoutline","Assets/Resources/UI/UIAssets/WinningStreakClickInfo.prefab","WinningStreakClickInfo/ImageFrame/RewardItem (2)/RewardItem/TextRewardOutline","x1"
-"winningstreakclickinfo.textreward","Assets/Resources/UI/UIAssets/WinningStreakClickInfo.prefab","WinningStreakClickInfo/ImageFrame/RewardItem (2)/RewardItem/TextRewardOutline/TextReward","x1"
-"winningstreakgetreward.textrewardoutline","Assets/Resources/UI/UIAssets/WinningStreakGetReward.prefab","WinningStreakGetReward/GameObject/TextRewardOutline","+1"
-"winningstreakgetreward.textreward","Assets/Resources/UI/UIAssets/WinningStreakGetReward.prefab","WinningStreakGetReward/GameObject/TextRewardOutline/TextReward","+1"
-"uihud.textspeedoutline","Assets/Resources/UI/UIHud.prefab","UIHud/HUD_Top/SpeedBtn/SpeedColor/TextSpeedOutline","x1"
-"uihud.textspeed","Assets/Resources/UI/UIHud.prefab","UIHud/HUD_Top/SpeedBtn/SpeedColor/TextSpeedOutline/TextSpeed","x1"
-"uihud.txtgold","Assets/Resources/UI/UIHud.prefab","UIHud/HUD_Top/GoldPanel/TxtGold","1000"
-"uihud.txtnumberoutline","Assets/Resources/UI/UIHud.prefab","UIHud/HUD_Top/LvPanel/LV/TxtNumberOutline","Level 1"
-"uihud.txtnumber","Assets/Resources/UI/UIHud.prefab","UIHud/HUD_Top/LvPanel/LV/TxtNumberOutline/TxtNumber","Level 1"
-"uihud.txtleveloutline","Assets/Resources/UI/UIHud.prefab","UIHud/HUD_Top/Level/TxtLevelOutline","level 00"
-"uihud.txtlevel","Assets/Resources/UI/UIHud.prefab","UIHud/HUD_Top/Level/TxtLevel","level 00"
-"uihud.txtlockoutline","Assets/Resources/UI/UIHud.prefab","UIHud/BottomPanel/ButtonContainer/ItemBtnHand/ItemFrame/ItemBtnColor/IconLock/TxtLockOutline","Lv.15"
-"uihud.txtlock","Assets/Resources/UI/UIHud.prefab","UIHud/BottomPanel/ButtonContainer/ItemBtnHand/ItemFrame/ItemBtnColor/IconLock/TxtLockOutline/TxtLock","Lv.15"
-"uihud.textitemoutline","Assets/Resources/UI/UIHud.prefab","UIHud/BottomPanel/ButtonContainer/ItemBtnHand/CountBadge/TextItemOutline","0"
-"uihud.textitem","Assets/Resources/UI/UIHud.prefab","UIHud/BottomPanel/ButtonContainer/ItemBtnHand/CountBadge/TextItemOutline/TextItem","0"
-"uihud.txtlockoutline","Assets/Resources/UI/UIHud.prefab","UIHud/BottomPanel/ButtonContainer/ItemBtnSuffle/ItemFrame/ItemBtnColor/IconLock/TxtLockOutline","Lv.15"
-"uihud.txtlock","Assets/Resources/UI/UIHud.prefab","UIHud/BottomPanel/ButtonContainer/ItemBtnSuffle/ItemFrame/ItemBtnColor/IconLock/TxtLockOutline/TxtLock","Lv.15"
-"uihud.textitemoutline","Assets/Resources/UI/UIHud.prefab","UIHud/BottomPanel/ButtonContainer/ItemBtnSuffle/CountBadge/TextItemOutline","0"
-"uihud.textitem","Assets/Resources/UI/UIHud.prefab","UIHud/BottomPanel/ButtonContainer/ItemBtnSuffle/CountBadge/TextItemOutline/TextItem","0"
-"uihud.txtlockoutline","Assets/Resources/UI/UIHud.prefab","UIHud/BottomPanel/ButtonContainer/ItemBtnZap/ItemFrame/ItemBtnColor/IconLock/TxtLockOutline","Lv.15"
-"uihud.txtlock","Assets/Resources/UI/UIHud.prefab","UIHud/BottomPanel/ButtonContainer/ItemBtnZap/ItemFrame/ItemBtnColor/IconLock/TxtLockOutline/TxtLock","Lv.15"
-"uihud.textitemoutline","Assets/Resources/UI/UIHud.prefab","UIHud/BottomPanel/ButtonContainer/ItemBtnZap/CountBadge/TextItemOutline","0"
-"uihud.textitem","Assets/Resources/UI/UIHud.prefab","UIHud/BottomPanel/ButtonContainer/ItemBtnZap/CountBadge/TextItemOutline/TextItem","0"
-"uihud.remainingtext","Assets/Resources/UI/UIHud.prefab","UIHud/HUD_Sub/RemainingText","Balloons: --"
-"uihud.scoretext","Assets/Resources/UI/UIHud.prefab","UIHud/HUD_Sub/ScoreText","0"
-"uihud.holdertext","Assets/Resources/UI/UIHud.prefab","UIHud/HUD_Sub/HolderText","On Rail: 0/9"
-"uilobby.txtbtnmoreproductsoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Shop/UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/BtnMoreProducts/BtnMoreProductsBlue/TxtBtnMoreProductsOutline","More Offers!"
-"uilobby.txtbtnmoreproducts__1_","Assets/Resources/UI/UILobby.prefab","UILobby/Shop/UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/BtnMoreProducts/BtnMoreProductsBlue/TxtBtnMoreProductsOutline/TxtBtnMoreProducts (1)","More Offers!"
-"uilobby.txtgold","Assets/Resources/UI/UILobby.prefab","UILobby/Shop/UIShop/TopPanel/TopBarArea/GoldPanel/TxtGold","1000"
-"uilobby.titleshopoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Shop/UIShop/TopPanel/TitleShopOutline","SHOP"
-"uilobby.titleshop","Assets/Resources/UI/UILobby.prefab","UILobby/Shop/UIShop/TopPanel/TitleShopOutline/TitleShop","SHOP"
-"uilobby.txtplayoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/PlayButton/PlayButton/ImageButton/TxtArea/TxtPlayOutline","Level 00"
-"uilobby.txtplay","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/PlayButton/PlayButton/ImageButton/TxtArea/TxtPlayOutline/TxtPlay","Level 00"
-"uilobby.txtleveloutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/PlayButton/PlayButton/ImageButton/TxtArea/TxtLevelOutline","Supur Hard"
-"uilobby.txtlevel","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/PlayButton/PlayButton/ImageButton/TxtArea/TxtLevelOutline/TxtLevel","Supur Hard"
-"uilobby.textleveloutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/Rail/LevelObject/RailBox/Box/TextLevelOutline","30"
-"uilobby.textlevel","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/Rail/LevelObject/RailBox/Box/TextLevelOutline/TextLevel","30"
-"uilobby.textleveloutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/Rail/LevelObject/RailBox (1)/Box/TextLevelOutline","30"
-"uilobby.textlevel","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/Rail/LevelObject/RailBox (1)/Box/TextLevelOutline/TextLevel","30"
-"uilobby.textleveloutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/Rail/LevelObject/RailBox (2)/Box/TextLevelOutline","30"
-"uilobby.textlevel","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/Rail/LevelObject/RailBox (2)/Box/TextLevelOutline/TextLevel","30"
-"uilobby.textleveloutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/Rail/LevelObject/RailBox (3)/Box/TextLevelOutline","30"
-"uilobby.textlevel","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/Rail/LevelObject/RailBox (3)/Box/TextLevelOutline/TextLevel","30"
-"uilobby.txtgold","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/TopBar/TopBarArea/GoldPanel/TxtGold","1000"
-"uilobby.txtlife","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/TopBar/TopBarArea/LifePanel/TxtLife","FULL"
-"uilobby.textlifeamountoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/TopBar/TopBarArea/LifePanel/ImageLife/TextLifeAmountOutline","0"
-"uilobby.textlifeamount","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/TopBar/TopBarArea/LifePanel/ImageLife/TextLifeAmountOutline/TextLifeAmount","0"
-"uilobby.textnoadsoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/RightArea/BtnNoAds/ImageFlag/TextNoAdsOutline","No Ads"
-"uilobby.textnoads","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/RightArea/BtnNoAds/ImageFlag/TextNoAdsOutline/TextNoAds","No Ads"
-"uilobby.textgaugeoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/Gauge/TextGaugeOutline","100/100"
-"uilobby.textgauge","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/Gauge/TextGaugeOutline/TextGauge","100/100"
-"uilobby.texttimeroutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/Timer/TextTimerOutline","0d 00h"
-"uilobby.texttimer","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/Timer/TextTimerOutline/TextTimer","0d 00h"
-"uilobby.textmultiplierx1","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/TextNormal/TextMultiplierx1","x1"
-"uilobby.textmultiplierx5","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/TextNormal/TextMultiplierx5","x5"
-"uilobby.textmultiplierx10","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/TextNormal/TextMultiplierx10","x10"
-"uilobby.textmultiplierx25","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/TextNormal/TextMultiplierx25","x25"
-"uilobby.textmultiplierx100","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/TextNormal/TextMultiplierx100","x100"
-"uilobby.textyellowoutlinex1_","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex1 ","x1"
-"uilobby.textyellowx1_","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex1 /TextYellowx1 ","x1"
-"uilobby.textyellowoutlinex5","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex5","x5"
-"uilobby.textyellowx1_","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex5/TextYellowx1 ","x5"
-"uilobby.textyellowoutlinex10","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex10","x10"
-"uilobby.textyellowx10","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex10/TextYellowx10","x10"
-"uilobby.textyellowoutlinex25","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex25","x25"
-"uilobby.textyellowx25","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex25/TextYellowx25","x25"
-"uilobby.textyellowoutlinex100","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex100","x100"
-"uilobby.textyellowx100","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/MultiplierMaskArea/Multiplier/SelectFrame/TextMask/TextYellow/TextYellowOutlinex100/TextYellowx100","x100"
-"uilobby.textgaugeoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/WinningIcon/Multiple/TextGaugeOutline","x1"
-"uilobby.textgauge","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/WinningIcon/Multiple/TextGaugeOutline/TextGauge","x1"
-"uilobby.textrewardoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/RewardItem/RewardGold/TextRewardOutline","100"
-"uilobby.textreward","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/RewardItem/RewardGold/TextRewardOutline/TextReward","100"
-"uilobby.textrewardoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/RewardItem/RewardItem/TextRewardOutline","x1"
-"uilobby.textreward","Assets/Resources/UI/UILobby.prefab","UILobby/Lobby/WinningStreak/RewardItem/RewardItem/TextRewardOutline/TextReward","x1"
-"uilobby.txtnotificationoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Notification/TxtNotificationOutline","Notification"
-"uilobby.txtnotification","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Notification/TxtNotificationOutline/TxtNotification","Notification"
-"uilobby.txtnotificationoffoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Notification/BtnNotification/FrameNotification/TxtNotificationOffOutline","OFF
+"uihud.holdertext","On Rail: 0/9"
+"uihud.remainingtext","Balloons: --"
+"uihud.scoretext","0"
+"uihud.textitem","0"
+"uihud.textitemoutline","0"
+"uihud.textspeed","x1"
+"uihud.textspeedoutline","x1"
+"uihud.txtgold","1000"
+"uihud.txtlevel","level 00"
+"uihud.txtleveloutline","level 00"
+"uihud.txtlock","Lv.15"
+"uihud.txtlockoutline","Lv.15"
+"uihud.txtnumber","Level 1"
+"uihud.txtnumberoutline","Level 1"
+"uilobby.text","Home
 "
-"uilobby.txtnotificationoff","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Notification/BtnNotification/FrameNotification/TxtNotificationOffOutline/TxtNotificationOff","OFF
+"uilobby.textgauge","100/100"
+"uilobby.textgaugeoutline","100/100"
+"uilobby.texthome","Home
 "
-"uilobby.txtnotificationonoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Notification/BtnNotification/FrameNotification/TxtNotificationOnOutline","On"
-"uilobby.txtnotificationon","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Notification/BtnNotification/FrameNotification/TxtNotificationOnOutline/TxtNotificationOn","On"
-"uilobby.txtsound","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Option/Sound/TxtSound","Sound
+"uilobby.textlevel","30"
+"uilobby.textleveloutline","30"
+"uilobby.textlifeamount","0"
+"uilobby.textlifeamountoutline","0"
+"uilobby.textmultiplierx1","x1"
+"uilobby.textmultiplierx10","x10"
+"uilobby.textmultiplierx100","x100"
+"uilobby.textmultiplierx25","x25"
+"uilobby.textmultiplierx5","x5"
+"uilobby.textnoads","No Ads"
+"uilobby.textnoadsoutline","No Ads"
+"uilobby.textprivacy","Privacy"
+"uilobby.textprivacyoutline","Privacy"
+"uilobby.textreward","100"
+"uilobby.textrewardoutline","100"
+"uilobby.textsetting","Setting"
+"uilobby.textshop","Shop"
+"uilobby.textsupport","Support"
+"uilobby.textsupportoutline","Support"
+"uilobby.textterms","Terms"
+"uilobby.texttermsoutline","Terms"
+"uilobby.texttimer","0d 00h"
+"uilobby.texttimeroutline","0d 00h"
+"uilobby.textyellowoutlinex10","x10"
+"uilobby.textyellowoutlinex100","x100"
+"uilobby.textyellowoutlinex1_","x1"
+"uilobby.textyellowoutlinex25","x25"
+"uilobby.textyellowoutlinex5","x5"
+"uilobby.textyellowx10","x10"
+"uilobby.textyellowx100","x100"
+"uilobby.textyellowx1_","x1"
+"uilobby.textyellowx25","x25"
+"uilobby.titlesetting","SETTING
 "
-"uilobby.txtmusic","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Option/Music/TxtMusic","Music"
-"uilobby.txthaptic","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Option/Haptic/TxtHaptic","Haptic"
-"uilobby.textsupportoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Privacy/BtnPrivacy/ImgPrivacyBg/ImgPrivacy/TextSupportOutline","Support"
-"uilobby.textsupport","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Privacy/BtnPrivacy/ImgPrivacyBg/ImgPrivacy/TextSupportOutline/TextSupport","Support"
-"uilobby.texttermsoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Connect/BtnTerms/ImgTermsBg/ImgTerms/TextTermsOutline","Terms"
-"uilobby.textterms","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Connect/BtnTerms/ImgTermsBg/ImgTerms/TextTermsOutline/TextTerms","Terms"
-"uilobby.textprivacyoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Connect/BtnPrivacy/ImgPrivacyBg/ImgPrivacy/TextPrivacyOutline","Privacy"
-"uilobby.textprivacy","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Connect/BtnPrivacy/ImgPrivacyBg/ImgPrivacy/TextPrivacyOutline/TextPrivacy","Privacy"
-"uilobby.titlesettingoutline","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/TopPanel/TitleSettingOutline","SETTING
+"uilobby.titlesettingoutline","SETTING
 "
-"uilobby.titlesetting","Assets/Resources/UI/UILobby.prefab","UILobby/Setting/UISetting/TopPanel/TitleSettingOutline/TitleSetting","SETTING
+"uilobby.titleshop","SHOP"
+"uilobby.titleshopoutline","SHOP"
+"uilobby.txtbtnmoreproducts__1_","More Offers!"
+"uilobby.txtbtnmoreproductsoutline","More Offers!"
+"uilobby.txtgold","1000"
+"uilobby.txthaptic","Haptic"
+"uilobby.txtlevel","Supur Hard"
+"uilobby.txtleveloutline","Supur Hard"
+"uilobby.txtlife","FULL"
+"uilobby.txtmusic","Music"
+"uilobby.txtnotification","Notification"
+"uilobby.txtnotificationoff","OFF
 "
-"uilobby.textshop","Assets/Resources/UI/UILobby.prefab","UILobby/BottomNav/BottomNavIArea/BtnShop/Btn/TextShop","Shop"
-"uilobby.textshop","Assets/Resources/UI/UILobby.prefab","UILobby/BottomNav/BottomNavIArea/BtnShop/Btn/TextShop/TextShop","Shop"
-"uilobby.texthome","Assets/Resources/UI/UILobby.prefab","UILobby/BottomNav/BottomNavIArea/BtnHome/TextHome","Home
+"uilobby.txtnotificationoffoutline","OFF
 "
-"uilobby.text","Assets/Resources/UI/UILobby.prefab","UILobby/BottomNav/BottomNavIArea/BtnHome/TextHome/Text","Home
+"uilobby.txtnotificationon","On"
+"uilobby.txtnotificationonoutline","On"
+"uilobby.txtnotificationoutline","Notification"
+"uilobby.txtplay","Level 00"
+"uilobby.txtplayoutline","Level 00"
+"uilobby.txtsound","Sound
 "
-"uilobby.textsetting","Assets/Resources/UI/UILobby.prefab","UILobby/BottomNav/BottomNavIArea/BtnSetting/Btn/TextSetting","Setting"
-"uilobby.text","Assets/Resources/UI/UILobby.prefab","UILobby/BottomNav/BottomNavIArea/BtnSetting/Btn/TextSetting/Text","Setting"
-"uilobby.text","Assets/Resources/UI/UILobby.prefab","UILobby/BottomNav/BottomNavIArea/BtnFriend/HitArea/Text","text"
-"uilobby.text","Assets/Resources/UI/UILobby.prefab","UILobby/BottomNav/BottomNavIArea/BtnCard/HitArea/Text","text"
-"uisetting.txtnotificationoutline","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Notification/TxtNotificationOutline","Notification"
-"uisetting.txtnotification","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Notification/TxtNotificationOutline/TxtNotification","Notification"
-"uisetting.txtnotificationoffoutline","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Notification/BtnNotification/FrameNotification/TxtNotificationOffOutline","OFF
+"uisetting.textprivacy","Privacy"
+"uisetting.textprivacyoutline","Privacy"
+"uisetting.textsupport","Support"
+"uisetting.textsupportoutline","Support"
+"uisetting.textterms","Terms"
+"uisetting.texttermsoutline","Terms"
+"uisetting.titlesetting","SETTING
 "
-"uisetting.txtnotificationoff","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Notification/BtnNotification/FrameNotification/TxtNotificationOffOutline/TxtNotificationOff","OFF
+"uisetting.titlesettingoutline","SETTING
 "
-"uisetting.txtnotificationonoutline","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Notification/BtnNotification/FrameNotification/TxtNotificationOnOutline","On"
-"uisetting.txtnotificationon","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Notification/BtnNotification/FrameNotification/TxtNotificationOnOutline/TxtNotificationOn","On"
-"uisetting.txtsound","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Option/Sound/TxtSound","Sound
+"uisetting.txthaptic","Haptic"
+"uisetting.txtmusic","Music"
+"uisetting.txtnotification","Notification"
+"uisetting.txtnotificationoff","OFF
 "
-"uisetting.txtmusic","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Option/Music/TxtMusic","Music"
-"uisetting.txthaptic","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Option/Haptic/TxtHaptic","Haptic"
-"uisetting.textsupportoutline","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Privacy/BtnPrivacy/ImgPrivacyBg/ImgPrivacy/TextSupportOutline","Support"
-"uisetting.textsupport","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Privacy/BtnPrivacy/ImgPrivacyBg/ImgPrivacy/TextSupportOutline/TextSupport","Support"
-"uisetting.texttermsoutline","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Connect/BtnTerms/ImgTermsBg/ImgTerms/TextTermsOutline","Terms"
-"uisetting.textterms","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Connect/BtnTerms/ImgTermsBg/ImgTerms/TextTermsOutline/TextTerms","Terms"
-"uisetting.textprivacyoutline","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Connect/BtnPrivacy/ImgPrivacyBg/ImgPrivacy/TextPrivacyOutline","Privacy"
-"uisetting.textprivacy","Assets/Resources/UI/UISetting.prefab","UISetting/Background/Panel/MainPanel/ScrollView/Viewport/SettingContent/Connect/BtnPrivacy/ImgPrivacyBg/ImgPrivacy/TextPrivacyOutline/TextPrivacy","Privacy"
-"uisetting.titlesettingoutline","Assets/Resources/UI/UISetting.prefab","UISetting/TopPanel/TitleSettingOutline","SETTING
+"uisetting.txtnotificationoffoutline","OFF
 "
-"uisetting.titlesetting","Assets/Resources/UI/UISetting.prefab","UISetting/TopPanel/TitleSettingOutline/TitleSetting","SETTING
+"uisetting.txtnotificationon","On"
+"uisetting.txtnotificationonoutline","On"
+"uisetting.txtnotificationoutline","Notification"
+"uisetting.txtsound","Sound
 "
-"uishop.textpriceoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Products/LeftArea/TextPriceOutline","Price
+"uishop.textamount","x1"
+"uishop.textamountoutline","x1"
+"uishop.textprice","Price
 "
-"uishop.textprice","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Products/LeftArea/TextPriceOutline/TextPrice","Price
+"uishop.textpriceoutline","Price
 "
-"uishop.textamountoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Products/RightArea/itemArea/ShopItem/TextAmountOutline","x1"
-"uishop.textamount","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Products/RightArea/itemArea/ShopItem/TextAmountOutline/TextAmount","x1"
-"uishop.textamountoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Products/RightArea/itemArea/ShopItem (1)/TextAmountOutline","x1"
-"uishop.textamount","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Products/RightArea/itemArea/ShopItem (1)/TextAmountOutline/TextAmount","x1"
-"uishop.textamountoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Products/RightArea/BoostArea/ShopItem/TextAmountOutline","x1"
-"uishop.textamount","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Products/RightArea/BoostArea/ShopItem/TextAmountOutline/TextAmount","x1"
-"uishop.textamountoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Products/RightArea/BoostArea/ShopItem (1)/TextAmountOutline","x1"
-"uishop.textamount","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Products/RightArea/BoostArea/ShopItem (1)/TextAmountOutline/TextAmount","x1"
-"uishop.textamountoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Products/RightArea/BoostArea/ShopItem (2)/TextAmountOutline","x1"
-"uishop.textamount","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Products/RightArea/BoostArea/ShopItem (2)/TextAmountOutline/TextAmount","x1"
-"uishop.txttitleoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Title/TxtTitleOutline","Title
-"
-"uishop.txttitle","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/Title/TxtTitleOutline/TxtTitle","Title
-"
-"uishop.textsaleoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/ImgSale/TextSaleOutline","90% OFF"
-"uishop.textsale","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/ImgSale/TextSaleOutline/TextSale","90% OFF"
-"uishop.txttimeoff","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/TimeOff/TxtTimeOff","COCOCO"
-"uishop.txtoffper","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"uishop.txtbtnbuyoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/BtnBuy/BtnBuyGreen/TxtBtnBuyOutline","$ 100"
-"uishop.txtbtnbuy","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListAd/BtnBuy/BtnBuyGreen/TxtBtnBuyOutline/TxtBtnBuy","$ 100"
-"uishop.txttitleoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Title/TxtTitleOutline","NO ADS!"
-"uishop.txttitle","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Title/TxtTitleOutline/TxtTitle","NO ADS!"
-"uishop.txtdescriptionoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Title/TxtDescriptionOutline","No Ads,
+"uishop.textsale","90% OFF"
+"uishop.textsaleoutline","90% OFF"
+"uishop.titleshop","SHOP"
+"uishop.titleshopoutline","SHOP"
+"uishop.txtbtnbuy","$ 100"
+"uishop.txtbtnbuyoutline","$ 100"
+"uishop.txtbtnmoreproducts__1_","More Offers!"
+"uishop.txtbtnmoreproductsoutline","More Offers!"
+"uishop.txtdescription","No Ads,
 Just Fun!"
-"uishop.txtdescription","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/Title/TxtDescriptionOutline/TxtDescription","No Ads,
+"uishop.txtdescriptionoutline","No Ads,
 Just Fun!"
-"uishop.txttimeoff","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/TimeOff/TxtTimeOff","COCOCO"
-"uishop.txtoffper","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"uishop.txtbtnbuyoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/BtnBuy/BtnBuy/TxtBtnBuyOutline","$ 100"
-"uishop.txtbtnbuy","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListItem/BtnBuy/BtnBuy/TxtBtnBuyOutline/TxtBtnBuy","$ 100"
-"uishop.textpriceoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (1)/Products/TextPriceOutline","Price
+"uishop.txtgold","1000"
+"uishop.txtoffper","90% OFF"
+"uishop.txttimeoff","COCOCO"
+"uishop.txttitle","Title
 "
-"uishop.textprice","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (1)/Products/TextPriceOutline/TextPrice","Price
+"uishop.txttitleoutline","Title
 "
-"uishop.txttimeoff","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (1)/TimeOff/TxtTimeOff","COCOCO"
-"uishop.txtoffper","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (1)/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"uishop.txtbtnbuyoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (1)/BtnBuy/BtnBuy/TxtBtnBuyOutline","$10"
-"uishop.txtbtnbuy","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (1)/BtnBuy/BtnBuy/TxtBtnBuyOutline/TxtBtnBuy","$10"
-"uishop.textpriceoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (2)/Products/TextPriceOutline","Price
+"uititle.subtitletext","Pop & Flow Puzzle"
+"uititle.taptostart","Tap to Start"
+"uititle.txtloading","Loading.."
+"uititle.txtloadingoutline","Loading.."
+"useitem.txtdescription","Your lives are unlimited!
 "
-"uishop.textprice","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (2)/Products/TextPriceOutline/TextPrice","Price
+"useitem.txtdescriptionoutline","Your lives are unlimited!
 "
-"uishop.txttimeoff","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (2)/TimeOff/TxtTimeOff","COCOCO"
-"uishop.txtoffper","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (2)/OffPercent/ImgOff/TxtOffPer","90% OFF"
-"uishop.txtbtnbuyoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (2)/BtnBuy/BtnBuy/TxtBtnBuyOutline","$10"
-"uishop.txtbtnbuy","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/ShopListGoldAlign/ShopListGold (2)/BtnBuy/BtnBuy/TxtBtnBuyOutline/TxtBtnBuy","$10"
-"uishop.txtbtnmoreproductsoutline","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/BtnMoreProducts/BtnMoreProductsBlue/TxtBtnMoreProductsOutline","More Offers!"
-"uishop.txtbtnmoreproducts__1_","Assets/Resources/UI/UIShop.prefab","UIShop/Background/Panel/MainPanel/ScrollView/Viewport/ShopContent/BtnMoreProducts/BtnMoreProductsBlue/TxtBtnMoreProductsOutline/TxtBtnMoreProducts (1)","More Offers!"
-"uishop.txtgold","Assets/Resources/UI/UIShop.prefab","UIShop/TopPanel/TopBarArea/GoldPanel/TxtGold","1000"
-"uishop.titleshopoutline","Assets/Resources/UI/UIShop.prefab","UIShop/TopPanel/TitleShopOutline","SHOP"
-"uishop.titleshop","Assets/Resources/UI/UIShop.prefab","UIShop/TopPanel/TitleShopOutline/TitleShop","SHOP"
-"uititle.txtloadingoutline","Assets/Resources/UI/UITitle.prefab","UITitle/Loading/LoadingBar/TxtLoadingOutline","Loading.."
-"uititle.txtloading","Assets/Resources/UI/UITitle.prefab","UITitle/Loading/LoadingBar/TxtLoadingOutline/TxtLoading","Loading.."
-"uititle.subtitletext","Assets/Resources/UI/UITitle.prefab","UITitle/SubtitleText","Pop & Flow Puzzle"
-"uititle.taptostart","Assets/Resources/UI/UITitle.prefab","UITitle/TapToStart","Tap to Start"
+"winningstreakclickinfo.textreward","100"
+"winningstreakclickinfo.textrewardoutline","100"
+"winningstreakgetreward.textreward","+1"
+"winningstreakgetreward.textrewardoutline","+1"
+"woodenboard.magazinetext","00"
+"ui.settings.title","Settings"
+"ui.common.on","On"
+"ui.common.off","Off"
+"ui.settings.notifications","Notifications"
+"ui.settings.sound","Sound"
+"ui.settings.music","Music"
+"ui.settings.haptic","Haptic"
+"ui.lobby.noads","NO ADS"
+"ui.lobby.hard_level","Hard Level"
+"ui.lobby.super_hard","Super Hard"
+"ui.shop.title","Shop"
+"ui.shop.more_offers","More Offers"
+"ui.morelive.free","FREE"
+"ui.morelive.unlimited","UNLIMITED"
+"ui.morelive.full","FULL"
+"ui.tutorial.skip","SKIP"

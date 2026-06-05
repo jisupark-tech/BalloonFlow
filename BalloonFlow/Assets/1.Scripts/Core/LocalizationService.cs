@@ -1,127 +1,135 @@
 using System.Collections.Generic;
 using System.Text;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BalloonFlow
 {
     /// <summary>
-    /// CSV(Resources/TextData/TextData.csv) 기반 UI 텍스트 자동 세팅.
-    /// 컬럼: SuggestedKey, AssetPath, ObjectPath, Text_EN (+ 나라 베리에이션 컬럼 예정).
+    /// Key 기반 로컬라이징 사전. Resources/TextData/TextData.csv 를 1회 로드해 메모리에 보관.
+    /// CSV 컬럼: Key, Text_EN (+ Text_KO, Text_JA ... 나라 추가 시 컬럼만 늘리면 됨).
     ///
-    /// 매칭(프리팹/컴포넌트 무수정):
-    ///   - AssetPath("Assets/Resources/UI/UILobby.prefab") → Resources 키("UI/UILobby") = UIManager.OpenUI 의 path
-    ///   - ObjectPath("UILobby/.../TxtX") → 첫 세그먼트(루트명) 제거 후 인스턴스 루트 기준 Transform.Find
+    /// 사용:
+    ///   - UI: 텍스트 GameObject 에 <see cref="UIText"/> 컴포넌트를 붙이고 Key 지정 → OnEnable 에 자동 적용.
+    ///   - 코드/튜토리얼: LocalizationService.Get("some.key") 로 직접 조회.
     ///
-    /// 사용: UI 프리팹 인스턴스화 직후 LocalizationService.Apply(rootGO, resourcePath).
-    /// 1.0 = Text_EN(EN 전용). 1.1+ 언어 분기는 SetLanguage 로 컬럼 선택 확장.
+    /// 언어 분기(1.1+): SetLanguageByCode("KO") 로 컬럼 전환 → OnLanguageChanged 로 모든 UIText 갱신.
+    /// 1.0 = EN 전용(_lang=0). 키 미존재 시 key 문자열을 그대로 반환(누락이 화면에 바로 보이게).
     /// </summary>
     public static class LocalizationService
     {
-        private const string CSV_RESOURCE  = "TextData/TextData";
-        private const string ASSET_PREFIX  = "Assets/Resources/";
-        private const string PREFAB_SUFFIX = ".prefab";
+        private const string CSV_RESOURCE = "TextData/TextData";
 
-        private struct Entry { public string sub; public string text; }
+        // key → 언어별 텍스트 배열([0]=EN, [1]=KO, ...). 컬럼 순서는 헤더의 Text_* 등장 순서.
+        private static Dictionary<string, string[]> _byKey;
+        private static string[] _langCodes;   // ["EN","KO",...] — Text_ 접두 제거한 코드
+        private static int _lang = 0;          // 현재 언어 슬롯 index
 
-        // resourceKey("UI/UILobby") → [(루트 제거 경로, 텍스트)]
-        private static Dictionary<string, List<Entry>> _byResource;
+        /// <summary>언어가 바뀌면 발생 — UIText 들이 구독해 즉시 재적용.</summary>
+        public static event System.Action OnLanguageChanged;
 
-        /// <summary>인스턴스화된 UI 루트에 CSV 텍스트를 자동 적용. resourcePath = OpenUI 에 넘긴 키("UI/..","Popup/..").</summary>
-        public static void Apply(GameObject root, string resourcePath)
+        // ─── 조회 ──────────────────────────────────────────────────
+
+        /// <summary>현재 언어 텍스트. 없으면 EN fallback, 그것도 없으면 key 그대로.</summary>
+        public static string Get(string key)
         {
-            if (root == null || string.IsNullOrEmpty(resourcePath)) return;
+            if (string.IsNullOrEmpty(key)) return string.Empty;
             EnsureLoaded();
-            if (_byResource == null || !_byResource.TryGetValue(resourcePath, out List<Entry> entries))
+            if (_byKey != null && _byKey.TryGetValue(key, out string[] vals) && vals != null && vals.Length > 0)
             {
-                Debug.Log($"[Localization] {resourcePath}: CSV 엔트리 없음 — 매핑 skip.");
-                return;
+                if (_lang >= 0 && _lang < vals.Length && !string.IsNullOrEmpty(vals[_lang]))
+                    return vals[_lang];
+                return vals[0] ?? key;   // 해당 언어 비었으면 EN(슬롯0)
             }
-
-            int applied = 0;
-            List<string> missed = null; // 경로 못 찾음/Text 컴포넌트 없음 — 진단용
-            for (int i = 0; i < entries.Count; i++)
-            {
-                Transform t = string.IsNullOrEmpty(entries[i].sub)
-                    ? root.transform
-                    : root.transform.Find(entries[i].sub);
-                if (t != null && SetText(t, entries[i].text))
-                {
-                    applied++;
-                }
-                else
-                {
-                    (missed ??= new List<string>()).Add(entries[i].sub);
-                }
-            }
-
-            // [검증 로그] UI 별 매핑 결과. EN 은 화면상 동일(idempotent)이라 콘솔로 동작 확인.
-            if (missed == null)
-                Debug.Log($"[Localization] {resourcePath}: {applied}/{entries.Count} text 매핑 완료 ✓");
-            else
-                Debug.LogWarning($"[Localization] {resourcePath}: {applied}/{entries.Count} 매핑, {missed.Count} 누락(경로/컴포넌트 불일치): {string.Join(" | ", missed)}");
+            return key;                  // 미존재 → key 노출(진단 용이)
         }
 
-        /// <summary>TMP 우선, 없으면 legacy UI.Text 에 세팅. 적용 성공 시 true.</summary>
-        private static bool SetText(Transform t, string text)
+        public static bool Has(string key)
         {
-            var tmp = t.GetComponent<TMP_Text>();
-            if (tmp != null) { tmp.text = text; return true; }
-            var ui = t.GetComponent<Text>();
-            if (ui != null) { ui.text = text; return true; }
-            return false;
+            if (string.IsNullOrEmpty(key)) return false;
+            EnsureLoaded();
+            return _byKey != null && _byKey.ContainsKey(key);
         }
 
-        // ─── CSV 로드/파싱 ──────────────────────────────────────────
+        /// <summary>에디터 드롭다운용 — 모든 Key. (런타임에서도 안전)</summary>
+        public static IReadOnlyCollection<string> AllKeys
+        {
+            get { EnsureLoaded(); return _byKey != null ? (IReadOnlyCollection<string>)_byKey.Keys : System.Array.Empty<string>(); }
+        }
+
+        // ─── 언어 전환 ─────────────────────────────────────────────
+
+        /// <summary>"EN","KO" 등 헤더 Text_&lt;CODE&gt; 의 CODE 로 언어 선택. 없으면 EN 유지.</summary>
+        public static void SetLanguageByCode(string code)
+        {
+            EnsureLoaded();
+            if (_langCodes == null || string.IsNullOrEmpty(code)) return;
+            for (int i = 0; i < _langCodes.Length; i++)
+            {
+                if (string.Equals(_langCodes[i], code, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    if (_lang != i) { _lang = i; OnLanguageChanged?.Invoke(); }
+                    return;
+                }
+            }
+            Debug.LogWarning($"[Localization] 언어 코드 '{code}' 없음 — EN 유지. (가용: {string.Join(",", _langCodes)})");
+        }
+
+        public static string CurrentLanguageCode
+            => (_langCodes != null && _lang >= 0 && _lang < _langCodes.Length) ? _langCodes[_lang] : "EN";
+
+        // ─── CSV 로드/파싱 ─────────────────────────────────────────
+
+        /// <summary>강제 재로드(에디터 마이그레이션 직후 등).</summary>
+        public static void Reload() { _byKey = null; _langCodes = null; EnsureLoaded(); OnLanguageChanged?.Invoke(); }
 
         private static void EnsureLoaded()
         {
-            if (_byResource != null) return;
-            _byResource = new Dictionary<string, List<Entry>>(256);
+            if (_byKey != null) return;
+            _byKey = new Dictionary<string, string[]>(512);
 
             var ta = Resources.Load<TextAsset>(CSV_RESOURCE);
             if (ta == null)
             {
                 Debug.LogWarning($"[Localization] Resources/{CSV_RESOURCE}.csv not found — UI 텍스트 자동세팅 skip.");
+                _langCodes = new[] { "EN" };
                 return;
             }
 
             List<string[]> rows = ParseCsvRows(ta.text);
-            // 0행 = 헤더(SuggestedKey,AssetPath,ObjectPath,Text_EN). 데이터는 1행부터.
+            if (rows.Count == 0) { _langCodes = new[] { "EN" }; return; }
+
+            // 헤더 파싱: Key 컬럼 + Text_* 언어 컬럼들.
+            string[] header = rows[0];
+            int keyCol = -1;
+            var langCols = new List<int>();
+            var langCodes = new List<string>();
+            for (int c = 0; c < header.Length; c++)
+            {
+                string h = (header[c] ?? "").Trim();
+                if (keyCol < 0 && h.Equals("Key", System.StringComparison.OrdinalIgnoreCase)) { keyCol = c; continue; }
+                if (h.StartsWith("Text_", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    langCols.Add(c);
+                    langCodes.Add(h.Substring("Text_".Length));
+                }
+            }
+            if (keyCol < 0) keyCol = 0;                       // 헤더에 Key 없으면 0번 컬럼으로 가정
+            if (langCols.Count == 0) { langCols.Add(1); langCodes.Add("EN"); }  // 최소 1개 언어 보장
+            _langCodes = langCodes.ToArray();
+
             for (int r = 1; r < rows.Count; r++)
             {
                 string[] f = rows[r];
-                if (f.Length < 4) continue;
-                string resourceKey = AssetPathToResourceKey(f[1]);
-                if (string.IsNullOrEmpty(resourceKey)) continue;
+                if (keyCol >= f.Length) continue;
+                string key = (f[keyCol] ?? "").Trim();
+                if (string.IsNullOrEmpty(key)) continue;
+                if (_byKey.ContainsKey(key)) continue;        // 중복 Key → 첫 항목 유지(드롭)
 
-                if (!_byResource.TryGetValue(resourceKey, out List<Entry> list))
-                {
-                    list = new List<Entry>(8);
-                    _byResource[resourceKey] = list;
-                }
-                list.Add(new Entry { sub = StripRoot(f[2]), text = f[3] });
+                var vals = new string[langCols.Count];
+                for (int l = 0; l < langCols.Count; l++)
+                    vals[l] = langCols[l] < f.Length ? f[langCols[l]] : "";
+                _byKey[key] = vals;
             }
-        }
-
-        private static string AssetPathToResourceKey(string assetPath)
-        {
-            if (string.IsNullOrEmpty(assetPath)) return null;
-            string k = assetPath.Replace('\\', '/');
-            int idx = k.IndexOf(ASSET_PREFIX, System.StringComparison.Ordinal);
-            if (idx >= 0) k = k.Substring(idx + ASSET_PREFIX.Length);
-            if (k.EndsWith(PREFAB_SUFFIX, System.StringComparison.Ordinal))
-                k = k.Substring(0, k.Length - PREFAB_SUFFIX.Length);
-            return k;
-        }
-
-        /// <summary>ObjectPath 의 첫 세그먼트(루트 GO 명)를 제거 → 인스턴스 루트 기준 상대 경로.</summary>
-        private static string StripRoot(string objectPath)
-        {
-            if (string.IsNullOrEmpty(objectPath)) return "";
-            int slash = objectPath.IndexOf('/');
-            return slash < 0 ? "" : objectPath.Substring(slash + 1);
         }
 
         /// <summary>RFC-4180 최소 파서 — 따옴표 필드 내 콤마/줄바꿈/이스케이프("") 지원.</summary>
@@ -161,7 +169,6 @@ namespace BalloonFlow
                     else sb.Append(c);
                 }
             }
-            // 마지막 줄(개행 없이 끝나는 경우)
             if (sb.Length > 0 || fields.Count > 0)
             {
                 fields.Add(sb.ToString());

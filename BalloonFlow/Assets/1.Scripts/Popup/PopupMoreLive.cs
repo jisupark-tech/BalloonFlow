@@ -136,8 +136,8 @@ namespace BalloonFlow
             if (_txtGoldOutline != null) _txtGoldOutline.text = costStr;
 
             // Ad text
-            if (_txtFree != null) _txtFree.text = "FREE";
-            if (_txtFreeOutline != null) _txtFreeOutline.text = "FREE";
+            if (_txtFree != null) _txtFree.text = LocalizationService.Get("ui.morelive.free");
+            if (_txtFreeOutline != null) _txtFreeOutline.text = LocalizationService.Get("ui.morelive.free");
 
             UpdateTimer();
         }
@@ -148,13 +148,13 @@ namespace BalloonFlow
 
             if (LifeManager.Instance.IsInfiniteHeartsActive)
             {
-                if (_txtTimer != null) _txtTimer.text = "UNLIMITED";
+                if (_txtTimer != null) _txtTimer.text = LocalizationService.Get("ui.morelive.unlimited");
                 return;
             }
 
             if (LifeManager.Instance.IsFullLives())
             {
-                if (_txtTimer != null) _txtTimer.text = "FULL";
+                if (_txtTimer != null) _txtTimer.text = LocalizationService.Get("ui.morelive.full");
                 return;
             }
 

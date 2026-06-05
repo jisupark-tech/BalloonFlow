@@ -96,8 +96,8 @@ namespace BalloonFlow
 
         private void OnEnable()
         {
-            if (_txtTitle != null) _txtTitle.text = "Settings";
-            if (_txtTitleOutline != null) _txtTitleOutline.text = "Settings";
+            if (_txtTitle != null) _txtTitle.text = LocalizationService.Get("ui.settings.title");
+            if (_txtTitleOutline != null) _txtTitleOutline.text = LocalizationService.Get("ui.settings.title");
 
             // 항목 라벨 정합(Sound/Music/Haptic/Notifications) 은 RefreshAll() 내부에서 수행.
             RefreshAll();
@@ -204,17 +204,17 @@ namespace BalloonFlow
             EnsureToggleLabel(_notificationOn, "On");
             EnsureToggleLabel(_notificationOff, "Off");
 
-            if (_txtNotificationOn != null) _txtNotificationOn.text = "On";
-            if (_txtNotificationOnOutline != null) _txtNotificationOnOutline.text = "On";
-            if (_txtNotificationOff != null) _txtNotificationOff.text = "Off";
-            if (_txtNotificationOffOutline != null) _txtNotificationOffOutline.text = "Off";
+            if (_txtNotificationOn != null) _txtNotificationOn.text = LocalizationService.Get("ui.common.on");
+            if (_txtNotificationOnOutline != null) _txtNotificationOnOutline.text = LocalizationService.Get("ui.common.on");
+            if (_txtNotificationOff != null) _txtNotificationOff.text = LocalizationService.Get("ui.common.off");
+            if (_txtNotificationOffOutline != null) _txtNotificationOffOutline.text = LocalizationService.Get("ui.common.off");
 
-            // [PopupTextInventory P0-8 / P0-13a] 항목 라벨 정합 — 'Notification'→'Notifications', trailing space 제거.
-            if (_txtNotification != null) _txtNotification.text = "Notifications";
-            if (_txtNotificationOutline != null) _txtNotificationOutline.text = "Notifications";
-            if (_txtSound != null) _txtSound.text = "Sound";
-            if (_txtMusic != null) _txtMusic.text = "Music";
-            if (_txtHaptic != null) _txtHaptic.text = "Haptic";
+            // [PopupTextInventory P0-8 / P0-13a] 항목 라벨 정합. 텍스트는 CSV(TextData) Key 로드.
+            if (_txtNotification != null) _txtNotification.text = LocalizationService.Get("ui.settings.notifications");
+            if (_txtNotificationOutline != null) _txtNotificationOutline.text = LocalizationService.Get("ui.settings.notifications");
+            if (_txtSound != null) _txtSound.text = LocalizationService.Get("ui.settings.sound");
+            if (_txtMusic != null) _txtMusic.text = LocalizationService.Get("ui.settings.music");
+            if (_txtHaptic != null) _txtHaptic.text = LocalizationService.Get("ui.settings.haptic");
 
             if (!SettingsManager.HasInstance) return;
 

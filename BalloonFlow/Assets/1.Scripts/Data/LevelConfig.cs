@@ -121,8 +121,11 @@ namespace BalloonFlow
     [System.Serializable]
     public class TutorialStepData
     {
-        /// <summary>설명 텍스트 (TMPro로 표시).</summary>
+        /// <summary>설명 텍스트 (TMPro로 표시). instructionKey 비었을 때 폴백.</summary>
         public string instruction;
+
+        /// <summary>CSV(TextData) Key. 지정 시 LocalizationService.Get 으로 해석해 표시.</summary>
+        public string instructionKey;
 
         /// <summary>하이라이트 대상. "holder_0", "board", "gimmick_hidden" 등.</summary>
         public string highlightTarget;
