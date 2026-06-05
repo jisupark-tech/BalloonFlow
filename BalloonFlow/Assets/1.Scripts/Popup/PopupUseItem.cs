@@ -352,7 +352,7 @@ namespace BalloonFlow
 
             if (_runtimeCutoutDimMaterial == null) return false;
 
-            _runtimeCutoutDimMaterial.color = new Color(0f, 0f, 0f, 0.7f);
+            _runtimeCutoutDimMaterial.color = new Color(0f, 0f, 0f, 143f / 255f); // Overlay alpha = 143/255 (디자인 요구)
             _runtimeCutoutDimMaterial.SetFloat(CUTOUT_SOFTNESS_ID, 0.001f);
 
             RectTransform dimRect = GetBaseDimRectTransform();
