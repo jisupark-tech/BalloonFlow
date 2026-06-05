@@ -1,0 +1,632 @@
+﻿"Key","Text_EN","Text_Updated"
+"frozenlayer.magazinetext","00",""
+"goldpanel.txtgold","1000",""
+"holder.magazinetext","00",""
+"itembtn.textitem","0",""
+"itembtn.textitemoutline","0",""
+"itembtn.txtlock","Lv.15",""
+"itembtn.txtlockoutline","Lv.15",""
+"lobbyrailbox.textlevel","30",""
+"lobbyrailbox.textleveloutline","30",""
+"multiplier.textmultiplierx1","x1",""
+"multiplier.textmultiplierx10","x10",""
+"multiplier.textmultiplierx100","x100",""
+"multiplier.textmultiplierx25","x25",""
+"multiplier.textmultiplierx5","x5",""
+"multiplier.textyellowoutlinex10","x10",""
+"multiplier.textyellowoutlinex100","x100",""
+"multiplier.textyellowoutlinex1_","x1",""
+"multiplier.textyellowoutlinex25","x25",""
+"multiplier.textyellowoutlinex5","x5",""
+"multiplier.textyellowx10","x10",""
+"multiplier.textyellowx100","x100",""
+"multiplier.textyellowx1_","x1",""
+"multiplier.textyellowx25","x25",""
+"multiplier_1.textmultiplierx1","x1",""
+"multiplier_1.textmultiplierx10","x10",""
+"multiplier_1.textmultiplierx100","x100",""
+"multiplier_1.textmultiplierx25","x25",""
+"multiplier_1.textmultiplierx5","x5",""
+"multiplier_1.textyellowoutlinex10","x10",""
+"multiplier_1.textyellowoutlinex100","x100",""
+"multiplier_1.textyellowoutlinex1_","x1",""
+"multiplier_1.textyellowoutlinex25","x25",""
+"multiplier_1.textyellowoutlinex5","x5",""
+"multiplier_1.textyellowx10","x10",""
+"multiplier_1.textyellowx100","x100",""
+"multiplier_1.textyellowx1_","x1",""
+"multiplier_1.textyellowx25","x25",""
+"newfeature.textdesctiption","TextDesctiptionTextDesctiptionTextDesctiptionTextDesctiptionTextDesctiptionTextDesctiption",""
+"newfeature.textname","Hidden Box!","Hidden Dart Box"
+"newfeature.textnameoutline","Hidden Box!","Hidden Dart Box"
+"newfeature.textunlock","Unlocked!",""
+"newfeature.textunlockoutline","Unlocked!",""
+"newfeature.txtplay","Continue
+",""
+"newfeature.txtplayoutline","Continue
+",""
+"popupbuyitem.btnsingleoutline","Resume
+",""
+"popupbuyitem.txtblueoutline","Quit
+",""
+"popupbuyitem.txtbtnbuy","Buy",""
+"popupbuyitem.txtbtnbuyoutline","Buy",""
+"popupbuyitem.txtbtnsingle","Resume
+",""
+"popupbuyitem.txtdescription","Item DescriptionItem DescriptionItem Description",""
+"popupbuyitem.txtgold","1900",""
+"popupbuyitem.txtgoldoutline","1900",""
+"popupbuyitem.txtgreen","Stay",""
+"popupbuyitem.txtgreenoutline","Stay",""
+"popupbuyitem.txtitemamount","x10","x3"
+"popupbuyitem.txtitemamountoutline","x10","x3"
+"popupbuyitem.txtred","Quit
+",""
+"popupbuyitem.txtredoutline","Quit
+",""
+"popupbuyitem.txttitle","Zap",""
+"popupbuyitem.txttitleoutline","Zap",""
+"popupcommonframe.txtblueoutline","Quit
+",""
+"popupcommonframe.txtbtnsingle","Resume
+",""
+"popupcommonframe.txtgreen","Stay",""
+"popupcommonframe.txtgreenoutline","Stay",""
+"popupcommonframe.txtred","Quit
+",""
+"popupcommonframe.txtredoutline","Quit
+",""
+"popupcommonframe.txtsingleoutline","Resume
+",""
+"popupcommonframe.txttitle","Title
+",""
+"popupcommonframe.txttitleoutline","Title
+",""
+"popupcontinue.costlabel","Cost:",""
+"popupcontinue.costtext","FREE",""
+"popupcontinue.textmultiplierx1","x1",""
+"popupcontinue.textmultiplierx10","x10",""
+"popupcontinue.textmultiplierx100","x100",""
+"popupcontinue.textmultiplierx25","x25",""
+"popupcontinue.textmultiplierx5","x5",""
+"popupcontinue.textyellowoutlinex10","x10",""
+"popupcontinue.textyellowoutlinex100","x100",""
+"popupcontinue.textyellowoutlinex1_","x1",""
+"popupcontinue.textyellowoutlinex25","x25",""
+"popupcontinue.textyellowoutlinex5","x5",""
+"popupcontinue.textyellowx10","x10",""
+"popupcontinue.textyellowx100","x100",""
+"popupcontinue.textyellowx1_","x1",""
+"popupcontinue.textyellowx25","x25",""
+"popupcontinue.txtblueoutline","Quit
+",""
+"popupcontinue.txtbtnsingle","Resume
+",""
+"popupcontinue.txtcontinue","Play On",""
+"popupcontinue.txtcontinueoutline","Play On",""
+"popupcontinue.txtcontinuetitle","Continue?",""
+"popupcontinue.txtcontinuetitleoutline","Continue?",""
+"popupcontinue.txtdescription","You will lose 1 Life!!",""
+"popupcontinue.txtgold","1000",""
+"popupcontinue.txtgoldoutline","900",""
+"popupcontinue.txtgreen","Stay",""
+"popupcontinue.txtgreenoutline","Stay",""
+"popupcontinue.txtred","Quit
+",""
+"popupcontinue.txtredoutline","Quit
+",""
+"popupcontinue.txtsingleoutline","Resume
+",""
+"popupcontinue.txttitle","Title
+",""
+"popupcontinue.txttitleoutline","Title
+",""
+"popupdescription.txtblueoutline","Quit
+",""
+"popupdescription.txtbtnsingle","Resume
+",""
+"popupdescription.txtdescription","TxtDescriptionTxtDescriptionTxtDescriptionTxtDescriptionTxtDescription",""
+"popupdescription.txtgreen","Continue",""
+"popupdescription.txtgreenoutline","Continue",""
+"popupdescription.txtred","Quit
+",""
+"popupdescription.txtredoutline","Quit
+",""
+"popupdescription.txtsingleoutline","Resume
+",""
+"popupdescription.txttitle","Title
+",""
+"popupdescription.txttitleoutline","Title
+",""
+"popuperror.txtblueoutline","Quit
+",""
+"popuperror.txtbtnsingle","Resume
+","Continue"
+"popuperror.txtdescription","Item DescriptionItem DescriptionItem Description",""
+"popuperror.txtgreen","Continue",""
+"popuperror.txtgreenoutline","Continue",""
+"popuperror.txtred","Quit
+",""
+"popuperror.txtredoutline","Quit
+",""
+"popuperror.txtsingleoutline","Resume
+","Continue"
+"popuperror.txttitle","Title",""
+"popuperror.txttitleoutline","Title",""
+"popupfail01.continuetitle","Continue?",""
+"popupfail01.costlabel","Cost:",""
+"popupfail01.costtext","FREE",""
+"popupfail01.txtcontinue","Add Space
+",""
+"popupfail01.txtcontinueoutline","Add Space
+",""
+"popupfail01.txtgold","1000",""
+"popupfail01.txtgoldoutline","900",""
+"popupfail02.txtblueoutline","Quit
+",""
+"popupfail02.txtbtnsingle","Resume
+","Retry"
+"popupfail02.txtfail","Level Failed!","Level Failed"
+"popupfail02.txtfailoutline","Level Failed!","Level Failed"
+"popupfail02.txtgold","20",""
+"popupfail02.txtgoldoutline","20",""
+"popupfail02.txtgreen","Stay",""
+"popupfail02.txtgreenoutline","Stay",""
+"popupfail02.txthardlevel","Hard!","Hard Level"
+"popupfail02.txthardleveloutline","Hard!","Hard Level"
+"popupfail02.txtred","Quit
+",""
+"popupfail02.txtredoutline","Quit
+",""
+"popupfail02.txtsingleoutline","Resume
+","Retry"
+"popupfail02.txttitle","Title
+",""
+"popupfail02.txttitleoutline","Title
+",""
+"popupgoldshop.textamount","x1",""
+"popupgoldshop.textamountoutline","x1",""
+"popupgoldshop.textprice","Price
+",""
+"popupgoldshop.textpriceoutline","Price
+",""
+"popupgoldshop.textsale","90% OFF",""
+"popupgoldshop.textsaleoutline","90% OFF",""
+"popupgoldshop.titleshop","SHOP","Shop"
+"popupgoldshop.titleshopoutline","SHOP","Shop"
+"popupgoldshop.txtbtnbuy","$ 100",""
+"popupgoldshop.txtbtnbuyoutline","$ 100",""
+"popupgoldshop.txtbtnmoreproducts__1_","More Offers!","More Offers"
+"popupgoldshop.txtbtnmoreproductsoutline","More Offers!","More Offers"
+"popupgoldshop.txtdescription","No Ads,
+Just Fun!",""
+"popupgoldshop.txtdescriptionoutline","No Ads,
+Just Fun!",""
+"popupgoldshop.txtgold","1000",""
+"popupgoldshop.txtoffper","90% OFF",""
+"popupgoldshop.txttimeoff","COCOCO",""
+"popupgoldshop.txttitle","Title
+",""
+"popupgoldshop.txttitleoutline","Title
+",""
+"popupitemdescription.txtblueoutline","Quit
+",""
+"popupitemdescription.txtbtnsingle","Claim
+",""
+"popupitemdescription.txtdescription","Item DescriptionItem DescriptionItem Description",""
+"popupitemdescription.txtgold","1000",""
+"popupitemdescription.txtgreen","Stay",""
+"popupitemdescription.txtgreenoutline","Stay",""
+"popupitemdescription.txtred","Quit
+",""
+"popupitemdescription.txtredoutline","Quit
+",""
+"popupitemdescription.txtsingleoutline","Claim
+",""
+"popupitemdescription.txttitle","Title
+",""
+"popupitemdescription.txttitleoutline","Title
+",""
+"popupmorelive.textlifeamount","0",""
+"popupmorelive.textlifeamountoutline","0",""
+"popupmorelive.txtblueoutline","Quit
+",""
+"popupmorelive.txtbtnsingle","Resume
+",""
+"popupmorelive.txtdescription","Time to next life","Next life in"
+"popupmorelive.txtfree","FREE",""
+"popupmorelive.txtfreeoutline","FREE",""
+"popupmorelive.txtgold","1000",""
+"popupmorelive.txtgoldoutline","900",""
+"popupmorelive.txtgreen","Continue",""
+"popupmorelive.txtgreenoutline","Continue",""
+"popupmorelive.txtlife","FULL",""
+"popupmorelive.txtlifeoutline","+5",""
+"popupmorelive.txtred","Quit
+",""
+"popupmorelive.txtredoutline","Quit
+",""
+"popupmorelive.txtsingleoutline","Resume
+",""
+"popupmorelive.txttimer","00:00",""
+"popupmorelive.txttitle","Title
+","More Lives"
+"popupmorelive.txttitleoutline","Title
+","More Lives"
+"popupnoads.btnsingleoutline","USD 4.99","$4.99"
+"popupnoads.txtblueoutline","Quit
+",""
+"popupnoads.txtbtnbuy","Buy",""
+"popupnoads.txtbtnbuyoutline","Buy",""
+"popupnoads.txtbtnsingle","USD 4.99
+","$4.99"
+"popupnoads.txtdescription","Remove forced ads forever!",""
+"popupnoads.txtdescriptionoutline","Remove forced ads forever!",""
+"popupnoads.txtgold","1900",""
+"popupnoads.txtgoldoutline","1900",""
+"popupnoads.txtgreen","Stay",""
+"popupnoads.txtgreenoutline","Stay",""
+"popupnoads.txtred","Quit
+",""
+"popupnoads.txtredoutline","Quit
+",""
+"popupnoads.txttitle","No ADS","NO ADS"
+"popupnoads.txttitleoutline","No ADS","NO ADS"
+"popupprofile.txtblueoutline","Quit
+",""
+"popupprofile.txtbtnsingle","Claim
+",""
+"popupprofile.txtbtntapavatar","Avatar",""
+"popupprofile.txtbtntapavataroutline","Avatar",""
+"popupprofile.txtbtntapframe","Frame",""
+"popupprofile.txtbtntapframeoutline","Frame",""
+"popupprofile.txtbtntapname","Name",""
+"popupprofile.txtbtntapnameoutline","Name",""
+"popupprofile.txtbtntaptoken","Token",""
+"popupprofile.txtbtntaptokenoutline","Token",""
+"popupprofile.txtdescription","Item DescriptionItem DescriptionItem Description",""
+"popupprofile.txtgreen","Stay",""
+"popupprofile.txtgreenoutline","Stay",""
+"popupprofile.txtred","Quit
+",""
+"popupprofile.txtredoutline","Quit
+",""
+"popupprofile.txtsingleoutline","Claim
+",""
+"popupprofile.txttitle","Title
+","Profile"
+"popupprofile.txttitleoutline","Title
+","Profile"
+"popupquit.textmultiplierx1","x1",""
+"popupquit.textmultiplierx10","x10",""
+"popupquit.textmultiplierx100","x100",""
+"popupquit.textmultiplierx25","x25",""
+"popupquit.textmultiplierx5","x5",""
+"popupquit.textyellowoutlinex10","x10",""
+"popupquit.textyellowoutlinex100","x100",""
+"popupquit.textyellowoutlinex1_","x1",""
+"popupquit.textyellowoutlinex25","x25",""
+"popupquit.textyellowoutlinex5","x5",""
+"popupquit.textyellowx10","x10",""
+"popupquit.textyellowx100","x100",""
+"popupquit.textyellowx1_","x1",""
+"popupquit.textyellowx25","x25",""
+"popupquit.txtblueoutline","Quit
+",""
+"popupquit.txtbtnsingle","Resume
+",""
+"popupquit.txtdescription","You will lose 1 Life!!","You will lose a life."
+"popupquit.txtgreen","Stay",""
+"popupquit.txtgreenoutline","Stay",""
+"popupquit.txtred","Quit
+",""
+"popupquit.txtredoutline","Quit
+",""
+"popupquit.txtsingleoutline","Resume
+",""
+"popupquit.txttitle","Title
+","Quit Level?"
+"popupquit.txttitleoutline","Title
+","Quit Level?"
+"popupresult.txtblueoutline","Quit
+",""
+"popupresult.txtbtnsingle","Resume
+","Next"
+"popupresult.txtgold","20",""
+"popupresult.txtgoldoutline","20",""
+"popupresult.txtgreen","Stay",""
+"popupresult.txtgreenoutline","Stay",""
+"popupresult.txthardlevel","Hard!","Hard Level"
+"popupresult.txthardleveloutline","Hard!","Hard Level"
+"popupresult.txtred","Quit
+",""
+"popupresult.txtredoutline","Quit
+",""
+"popupresult.txtsingleoutline","Resume
+","Next"
+"popupresult.txttitle","Title
+",""
+"popupresult.txttitleoutline","Title
+",""
+"popupsettings.txtblueoutline","Quit
+",""
+"popupsettings.txtbtnsingle","Resume
+","Continue"
+"popupsettings.txtgreen","Stay",""
+"popupsettings.txtgreenoutline","Stay",""
+"popupsettings.txthaptic","Haptic",""
+"popupsettings.txtmusic","Music",""
+"popupsettings.txtred","Quit
+",""
+"popupsettings.txtredoutline","Quit
+",""
+"popupsettings.txtsingleoutline","Resume
+","Continue"
+"popupsettings.txtsound","Sound
+","Sound"
+"popupsettings.txttitle","Title
+","Settings"
+"popupsettings.txttitleoutline","Title
+","Settings"
+"popupwinningstreak.btnsingleoutline","Play",""
+"popupwinningstreak.textmultiplierx1","x1",""
+"popupwinningstreak.textmultiplierx10","x10",""
+"popupwinningstreak.textmultiplierx100","x100",""
+"popupwinningstreak.textmultiplierx25","x25",""
+"popupwinningstreak.textmultiplierx5","x5",""
+"popupwinningstreak.textreward","100",""
+"popupwinningstreak.textrewardoutline","100",""
+"popupwinningstreak.texttimer","0d 00h",""
+"popupwinningstreak.texttimeroutline","0d 00h",""
+"popupwinningstreak.textyellowoutlinex10","x10",""
+"popupwinningstreak.textyellowoutlinex100","x100",""
+"popupwinningstreak.textyellowoutlinex1_","x1",""
+"popupwinningstreak.textyellowoutlinex25","x25",""
+"popupwinningstreak.textyellowoutlinex5","x5",""
+"popupwinningstreak.textyellowx10","x10",""
+"popupwinningstreak.textyellowx100","x100",""
+"popupwinningstreak.textyellowx1_","x1",""
+"popupwinningstreak.textyellowx25","x25",""
+"popupwinningstreak.txtblueoutline","Quit
+",""
+"popupwinningstreak.txtbtnbuy","Buy",""
+"popupwinningstreak.txtbtnbuyoutline","Buy",""
+"popupwinningstreak.txtbtnsingle","Play",""
+"popupwinningstreak.txtdescription","Win levels to collect <color=#FFD700> Flames! </color>
+Longer streak, more Rewards!",""
+"popupwinningstreak.txtdescriptionoutline","Win levels to collect <color=#FFD700> Flames! </color>
+Longer streak, more Rewards!",""
+"popupwinningstreak.txtgold","1900",""
+"popupwinningstreak.txtgoldoutline","1900",""
+"popupwinningstreak.txtgreen","Stay",""
+"popupwinningstreak.txtgreenoutline","Stay",""
+"popupwinningstreak.txtred","Quit
+",""
+"popupwinningstreak.txtredoutline","Quit
+",""
+"popupwinningstreak.txttitle","Winning Streak",""
+"popupwinningstreak.txttitleoutline","Winning Streak",""
+"popupwinningstreakinfo.textclose","Tap to Continue",""
+"popupwinningstreakinfo.textdescription","If you <color=#e7656b>fail</color> a level,
+the multiplier will reset!",""
+"popupwinningstreakinfo.textdescriptionoutline","If you <color=#FFD700>fail</color> a level,
+the multiplier will reset!",""
+"popupwinningstreakinfo.textinfo1","Win levels,
+collect <color=#FFD700> Flames! </color>",""
+"popupwinningstreakinfo.textinfo2","Multiply <color=#FFD700> Flames </color>
+up to x100!",""
+"popupwinningstreakinfo.textinfo3","Get <color=#FFD700>rewards!",""
+"rewardimg.textreward","100",""
+"rewardimg.textrewardoutline","100",""
+"shopitem.textamount","x1",""
+"shopitem.textamountoutline","x1",""
+"shoplistad.txtbtnbuy","$ 100","$4.99"
+"shoplistad.txtbtnbuyoutline","$ 100","$4.99"
+"shoplistad.txtdescription","No Ads,
+Just Fun!",""
+"shoplistad.txtdescriptionoutline","No Ads,
+Just Fun!",""
+"shoplistad.txtoffper","90% OFF",""
+"shoplistad.txttimeoff","COCOCO",""
+"shoplistad.txttitle","NO ADS!","NO ADS"
+"shoplistad.txttitleoutline","NO ADS!","NO ADS"
+"shoplistgold.textprice","Price
+",""
+"shoplistgold.textpriceoutline","Price
+",""
+"shoplistgold.txtbtnbuy","$10",""
+"shoplistgold.txtbtnbuyoutline","$10",""
+"shoplistgold.txtoffper","90% OFF",""
+"shoplistgold.txttimeoff","COCOCO",""
+"shoplistgoldalign.textprice","Price
+",""
+"shoplistgoldalign.textpriceoutline","Price
+",""
+"shoplistgoldalign.txtbtnbuy","$10",""
+"shoplistgoldalign.txtbtnbuyoutline","$10",""
+"shoplistgoldalign.txtoffper","90% OFF",""
+"shoplistgoldalign.txttimeoff","COCOCO",""
+"shoplistitem.textamount","x1",""
+"shoplistitem.textamountoutline","x1",""
+"shoplistitem.textprice","Price
+",""
+"shoplistitem.textpriceoutline","Price
+",""
+"shoplistitem.textsale","90% OFF",""
+"shoplistitem.textsaleoutline","90% OFF",""
+"shoplistitem.txtbtnbuy","$ 100",""
+"shoplistitem.txtbtnbuyoutline","$ 100",""
+"shoplistitem.txtoffper","90% OFF",""
+"shoplistitem.txttimeoff","COCOCO",""
+"shoplistitem.txttitle","Title
+",""
+"shoplistitem.txttitleoutline","Title
+",""
+"slotwinningstreak.textnumber","1",""
+"slotwinningstreak.textnumberoutline","1",""
+"slotwinningstreak.textreward","100",""
+"slotwinningstreak.textrewardoutline","100",""
+"slotwinningstreak.txtgrandprize","Grand Prize",""
+"spawner.magazinetext","00",""
+"tutorial.instructiontext","Tutorial instruction text",""
+"tutorial.text","SKIP",""
+"tutorial.texttap","Tap to anywhere",""
+"tutorial.texttapoutline","Tap to anywhere",""
+"txttoast.txttoast","Your lives are unlimited!
+",""
+"txttoast.txttoastoutline","Your lives are unlimited!
+",""
+"uihud.holdertext","On Rail: 0/9",""
+"uihud.remainingtext","Balloons: --",""
+"uihud.scoretext","0",""
+"uihud.textitem","0",""
+"uihud.textitemoutline","0",""
+"uihud.textspeed","x1",""
+"uihud.textspeedoutline","x1",""
+"uihud.txtgold","1000",""
+"uihud.txtlevel","level 00",""
+"uihud.txtleveloutline","level 00",""
+"uihud.txtlock","Lv.15",""
+"uihud.txtlockoutline","Lv.15",""
+"uihud.txtnumber","Level 1",""
+"uihud.txtnumberoutline","Level 1",""
+"uilobby.text","Home
+",""
+"uilobby.textgauge","100/100",""
+"uilobby.textgaugeoutline","100/100",""
+"uilobby.texthome","Home
+",""
+"uilobby.textlevel","30",""
+"uilobby.textleveloutline","30",""
+"uilobby.textlifeamount","0",""
+"uilobby.textlifeamountoutline","0",""
+"uilobby.textmultiplierx1","x1",""
+"uilobby.textmultiplierx10","x10",""
+"uilobby.textmultiplierx100","x100",""
+"uilobby.textmultiplierx25","x25",""
+"uilobby.textmultiplierx5","x5",""
+"uilobby.textnoads","No Ads","NO ADS"
+"uilobby.textnoadsoutline","No Ads","NO ADS"
+"uilobby.textprivacy","Privacy",""
+"uilobby.textprivacyoutline","Privacy",""
+"uilobby.textreward","100",""
+"uilobby.textrewardoutline","100",""
+"uilobby.textsetting","Setting","Settings"
+"uilobby.textshop","Shop",""
+"uilobby.textsupport","Support",""
+"uilobby.textsupportoutline","Support",""
+"uilobby.textterms","Terms",""
+"uilobby.texttermsoutline","Terms",""
+"uilobby.texttimer","0d 00h",""
+"uilobby.texttimeroutline","0d 00h",""
+"uilobby.textyellowoutlinex10","x10",""
+"uilobby.textyellowoutlinex100","x100",""
+"uilobby.textyellowoutlinex1_","x1",""
+"uilobby.textyellowoutlinex25","x25",""
+"uilobby.textyellowoutlinex5","x5",""
+"uilobby.textyellowx10","x10",""
+"uilobby.textyellowx100","x100",""
+"uilobby.textyellowx1_","x1",""
+"uilobby.textyellowx25","x25",""
+"uilobby.titlesetting","SETTING
+","Settings"
+"uilobby.titlesettingoutline","SETTING
+","Settings"
+"uilobby.titleshop","SHOP","Shop"
+"uilobby.titleshopoutline","SHOP","Shop"
+"uilobby.txtbtnmoreproducts__1_","More Offers!","More Offers"
+"uilobby.txtbtnmoreproductsoutline","More Offers!","More Offers"
+"uilobby.txtgold","1000",""
+"uilobby.txthaptic","Haptic",""
+"uilobby.txtlevel","Supur Hard","Super Hard"
+"uilobby.txtleveloutline","Supur Hard","Super Hard"
+"uilobby.txtlife","FULL","Full"
+"uilobby.txtmusic","Music",""
+"uilobby.txtnotification","Notification","Notifications"
+"uilobby.txtnotificationoff","OFF
+","Off"
+"uilobby.txtnotificationoffoutline","OFF
+","Off"
+"uilobby.txtnotificationon","On",""
+"uilobby.txtnotificationonoutline","On",""
+"uilobby.txtnotificationoutline","Notification","Notifications"
+"uilobby.txtplay","Level 00",""
+"uilobby.txtplayoutline","Level 00",""
+"uilobby.txtsound","Sound
+","Sound"
+"uisetting.textprivacy","Privacy",""
+"uisetting.textprivacyoutline","Privacy",""
+"uisetting.textsupport","Support",""
+"uisetting.textsupportoutline","Support",""
+"uisetting.textterms","Terms",""
+"uisetting.texttermsoutline","Terms",""
+"uisetting.titlesetting","SETTING
+","Settings"
+"uisetting.titlesettingoutline","SETTING
+","Settings"
+"uisetting.txthaptic","Haptic",""
+"uisetting.txtmusic","Music",""
+"uisetting.txtnotification","Notification","Notifications"
+"uisetting.txtnotificationoff","OFF
+","Off"
+"uisetting.txtnotificationoffoutline","OFF
+","Off"
+"uisetting.txtnotificationon","On",""
+"uisetting.txtnotificationonoutline","On",""
+"uisetting.txtnotificationoutline","Notification","Notifications"
+"uisetting.txtsound","Sound
+","Sound"
+"uishop.textamount","x1",""
+"uishop.textamountoutline","x1",""
+"uishop.textprice","Price
+",""
+"uishop.textpriceoutline","Price
+",""
+"uishop.textsale","90% OFF",""
+"uishop.textsaleoutline","90% OFF",""
+"uishop.titleshop","SHOP","Shop"
+"uishop.titleshopoutline","SHOP","Shop"
+"uishop.txtbtnbuy","$ 100",""
+"uishop.txtbtnbuyoutline","$ 100",""
+"uishop.txtbtnmoreproducts__1_","More Offers!","More Offers"
+"uishop.txtbtnmoreproductsoutline","More Offers!","More Offers"
+"uishop.txtdescription","No Ads,
+Just Fun!",""
+"uishop.txtdescriptionoutline","No Ads,
+Just Fun!",""
+"uishop.txtgold","1000",""
+"uishop.txtoffper","90% OFF",""
+"uishop.txttimeoff","COCOCO",""
+"uishop.txttitle","Title
+",""
+"uishop.txttitleoutline","Title
+",""
+"uititle.subtitletext","Pop & Flow Puzzle",""
+"uititle.taptostart","Tap to Start",""
+"uititle.txtloading","Loading..","Loading..."
+"uititle.txtloadingoutline","Loading..","Loading..."
+"useitem.txtdescription","Your lives are unlimited!
+",""
+"useitem.txtdescriptionoutline","Your lives are unlimited!
+",""
+"winningstreakclickinfo.textreward","100",""
+"winningstreakclickinfo.textrewardoutline","100",""
+"winningstreakgetreward.textreward","+1",""
+"winningstreakgetreward.textrewardoutline","+1",""
+"woodenboard.magazinetext","00",""
+"ui.settings.title","Settings",""
+"ui.common.on","On",""
+"ui.common.off","Off",""
+"ui.settings.notifications","Notifications",""
+"ui.settings.sound","Sound",""
+"ui.settings.music","Music",""
+"ui.settings.haptic","Haptic",""
+"ui.lobby.noads","NO ADS",""
+"ui.lobby.hard_level","Hard Level",""
+"ui.lobby.super_hard","Super Hard",""
+"ui.shop.title","Shop",""
+"ui.shop.more_offers","More Offers",""
+"ui.morelive.free","FREE",""
+"ui.morelive.unlimited","UNLIMITED",""
+"ui.morelive.full","FULL",""
+"ui.tutorial.skip","SKIP",""
