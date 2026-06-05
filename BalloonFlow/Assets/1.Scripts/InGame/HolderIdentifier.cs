@@ -48,6 +48,8 @@ namespace BalloonFlow
         [SerializeField] private Material _hiddenBodyMaterial;
         [Tooltip("Hidden Lid용 Material (색상 숨김)")]
         [SerializeField] private Material _hiddenLidMaterial;
+        [Tooltip("Hidden → Normal 전환 시 1회 재생하는 파티클 (평상시 비활성)")]
+        [SerializeField] private GameObject _hiddenAppearParticle;
 
         [Header("[색상 적용 대상 Renderer — Inspector에서 할당]")]
         [Tooltip("Box Body, Handle, Dart Body 등 색상만 적용할 Renderer")]
@@ -90,6 +92,7 @@ namespace BalloonFlow
         /// 에서 worldScale 흡수로 dart localScale 누적되는 버그 ResetDarts 에서 복원.</summary>
         private Vector3[] _dartLocalScales;
         private bool _isFrozenVisual;
+        private bool _isHidden;
         private readonly Dictionary<Renderer, Material[]> _frozenMaterialRestore = new Dictionary<Renderer, Material[]>();
         private Transform _frozenEffectOriginalParent;
         private Vector3 _frozenEffectOriginalLocalPosition;
@@ -410,6 +413,12 @@ namespace BalloonFlow
         /// </summary>
         public void ApplyColor(Color color)
         {
+            if (_isHidden)
+            {
+                _isHidden = false;
+                PlayHiddenAppearEffect();
+            }
+
             int colorCount = _colorRenderers != null ? _colorRenderers.Length : 0;
             int customCount = _customMatRenderers != null ? _customMatRenderers.Length : 0;
             bool hasBase = _customBaseMaterial != null;
@@ -503,6 +512,7 @@ namespace BalloonFlow
         /// <summary>Hidden 상태 적용 — body/lid를 Hidden Material로 교체.</summary>
         public void SetHidden(bool hidden)
         {
+            _isHidden = hidden;
             if (hidden)
             {
                 // Hidden Material 적용 (색상 숨김)
@@ -564,11 +574,13 @@ namespace BalloonFlow
         public void ResetBox()
         {
             _isFrozenVisual = false;
+            _isHidden = false;
             RestoreFrozenMaterialFallback();
             RestoreFrozenEffectTransform();
             if (_box != null) _box.SetActive(true);
             if (_boxFrozen != null) _boxFrozen.SetActive(false);
             if (_frozenExplosionEffect != null) _frozenExplosionEffect.SetActive(false);
+            if (_hiddenAppearParticle != null) _hiddenAppearParticle.SetActive(false);
             SetControlBoxStrokeActive(false);
         }
 
@@ -590,6 +602,16 @@ namespace BalloonFlow
 
             transform.DOPunchScale(Vector3.one * 0.14f, 0.26f, 8, 0.72f);
             transform.DOShakeRotation(0.22f, new Vector3(0f, 8f, 0f), 8, 55f);
+        }
+
+        private void PlayHiddenAppearEffect()
+        {
+            if (_hiddenAppearParticle == null) return;
+            _hiddenAppearParticle.SetActive(false);
+            _hiddenAppearParticle.SetActive(true);
+            var particles = _hiddenAppearParticle.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < particles.Length; i++)
+                particles[i].Play(true);
         }
 
         private void ApplyFrozenMaterialFallback(GameObject root)
