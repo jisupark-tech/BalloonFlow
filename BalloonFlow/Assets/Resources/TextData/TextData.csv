@@ -1,632 +1,611 @@
-﻿"Key","Text_EN"
-"frozenlayer.magazinetext","00"
-"goldpanel.txtgold","1000"
-"holder.magazinetext","00"
-"itembtn.textitem","0"
-"itembtn.textitemoutline","0"
-"itembtn.txtlock","Lv.15"
-"itembtn.txtlockoutline","Lv.15"
-"lobbyrailbox.textlevel","30"
-"lobbyrailbox.textleveloutline","30"
-"multiplier.textmultiplierx1","x1"
-"multiplier.textmultiplierx10","x10"
-"multiplier.textmultiplierx100","x100"
-"multiplier.textmultiplierx25","x25"
-"multiplier.textmultiplierx5","x5"
-"multiplier.textyellowoutlinex10","x10"
-"multiplier.textyellowoutlinex100","x100"
-"multiplier.textyellowoutlinex1_","x1"
-"multiplier.textyellowoutlinex25","x25"
-"multiplier.textyellowoutlinex5","x5"
-"multiplier.textyellowx10","x10"
-"multiplier.textyellowx100","x100"
-"multiplier.textyellowx1_","x1"
-"multiplier.textyellowx25","x25"
-"multiplier_1.textmultiplierx1","x1"
-"multiplier_1.textmultiplierx10","x10"
-"multiplier_1.textmultiplierx100","x100"
-"multiplier_1.textmultiplierx25","x25"
-"multiplier_1.textmultiplierx5","x5"
-"multiplier_1.textyellowoutlinex10","x10"
-"multiplier_1.textyellowoutlinex100","x100"
-"multiplier_1.textyellowoutlinex1_","x1"
-"multiplier_1.textyellowoutlinex25","x25"
-"multiplier_1.textyellowoutlinex5","x5"
-"multiplier_1.textyellowx10","x10"
-"multiplier_1.textyellowx100","x100"
-"multiplier_1.textyellowx1_","x1"
-"multiplier_1.textyellowx25","x25"
-"newfeature.textdesctiption","TextDesctiptionTextDesctiptionTextDesctiptionTextDesctiptionTextDesctiptionTextDesctiption"
-"newfeature.textname","Hidden Box!"
-"newfeature.textnameoutline","Hidden Box!"
-"newfeature.textunlock","Unlocked!"
-"newfeature.textunlockoutline","Unlocked!"
-"newfeature.txtplay","Continue
+﻿Key,Text_EN
+frozenlayer.magazinetext,00
+goldpanel.txtgold,1000
+holder.magazinetext,00
+itembtn.textitem,0
+itembtn.textitemoutline,0
+itembtn.txtlock,Lv.15
+itembtn.txtlockoutline,Lv.15
+lobbyrailbox.textlevel,30
+lobbyrailbox.textleveloutline,30
+multiplier.textmultiplierx1,x1
+multiplier.textmultiplierx10,x10
+multiplier.textmultiplierx100,x100
+multiplier.textmultiplierx25,x25
+multiplier.textmultiplierx5,x5
+multiplier.textyellowoutlinex10,x10
+multiplier.textyellowoutlinex100,x100
+multiplier.textyellowoutlinex1_,x1
+multiplier.textyellowoutlinex25,x25
+multiplier.textyellowoutlinex5,x5
+multiplier.textyellowx10,x10
+multiplier.textyellowx100,x100
+multiplier.textyellowx1_,x1
+multiplier.textyellowx25,x25
+multiplier_1.textmultiplierx1,x1
+multiplier_1.textmultiplierx10,x10
+multiplier_1.textmultiplierx100,x100
+multiplier_1.textmultiplierx25,x25
+multiplier_1.textmultiplierx5,x5
+multiplier_1.textyellowoutlinex10,x10
+multiplier_1.textyellowoutlinex100,x100
+multiplier_1.textyellowoutlinex1_,x1
+multiplier_1.textyellowoutlinex25,x25
+multiplier_1.textyellowoutlinex5,x5
+multiplier_1.textyellowx10,x10
+multiplier_1.textyellowx100,x100
+multiplier_1.textyellowx1_,x1
+multiplier_1.textyellowx25,x25
+newfeature.textdesctiption,TextDesctiptionTextDesctiptionTextDesctiptionTextDesctiptionTextDesctiptionTextDesctiption
+newfeature.textname,Hidden Dart Box
+newfeature.textnameoutline,Hidden Dart Box
+newfeature.textunlock,Unlocked!
+newfeature.textunlockoutline,Unlocked!
+newfeature.txtplay,"Continue
 "
-"newfeature.txtplayoutline","Continue
+newfeature.txtplayoutline,"Continue
 "
-"popupbuyitem.btnsingleoutline","Resume
+popupbuyitem.btnsingleoutline,"Resume
 "
-"popupbuyitem.txtblueoutline","Quit
+popupbuyitem.txtblueoutline,"Quit
 "
-"popupbuyitem.txtbtnbuy","Buy"
-"popupbuyitem.txtbtnbuyoutline","Buy"
-"popupbuyitem.txtbtnsingle","Resume
+popupbuyitem.txtbtnbuy,Buy
+popupbuyitem.txtbtnbuyoutline,Buy
+popupbuyitem.txtbtnsingle,"Resume
 "
-"popupbuyitem.txtdescription","Item DescriptionItem DescriptionItem Description"
-"popupbuyitem.txtgold","1900"
-"popupbuyitem.txtgoldoutline","1900"
-"popupbuyitem.txtgreen","Stay"
-"popupbuyitem.txtgreenoutline","Stay"
-"popupbuyitem.txtitemamount","x10"
-"popupbuyitem.txtitemamountoutline","x10"
-"popupbuyitem.txtred","Quit
+popupbuyitem.txtdescription,Item DescriptionItem DescriptionItem Description
+popupbuyitem.txtgold,1900
+popupbuyitem.txtgoldoutline,1900
+popupbuyitem.txtgreen,Stay
+popupbuyitem.txtgreenoutline,Stay
+popupbuyitem.txtitemamount,x3
+popupbuyitem.txtitemamountoutline,x3
+popupbuyitem.txtred,"Quit
 "
-"popupbuyitem.txtredoutline","Quit
+popupbuyitem.txtredoutline,"Quit
 "
-"popupbuyitem.txttitle","Zap"
-"popupbuyitem.txttitleoutline","Zap"
-"popupcommonframe.txtblueoutline","Quit
+popupbuyitem.txttitle,Zap
+popupbuyitem.txttitleoutline,Zap
+popupcommonframe.txtblueoutline,"Quit
 "
-"popupcommonframe.txtbtnsingle","Resume
+popupcommonframe.txtbtnsingle,"Resume
 "
-"popupcommonframe.txtgreen","Stay"
-"popupcommonframe.txtgreenoutline","Stay"
-"popupcommonframe.txtred","Quit
+popupcommonframe.txtgreen,Stay
+popupcommonframe.txtgreenoutline,Stay
+popupcommonframe.txtred,"Quit
 "
-"popupcommonframe.txtredoutline","Quit
+popupcommonframe.txtredoutline,"Quit
 "
-"popupcommonframe.txtsingleoutline","Resume
+popupcommonframe.txtsingleoutline,"Resume
 "
-"popupcommonframe.txttitle","Title
+popupcommonframe.txttitle,"Title
 "
-"popupcommonframe.txttitleoutline","Title
+popupcommonframe.txttitleoutline,"Title
 "
-"popupcontinue.costlabel","Cost:"
-"popupcontinue.costtext","FREE"
-"popupcontinue.textmultiplierx1","x1"
-"popupcontinue.textmultiplierx10","x10"
-"popupcontinue.textmultiplierx100","x100"
-"popupcontinue.textmultiplierx25","x25"
-"popupcontinue.textmultiplierx5","x5"
-"popupcontinue.textyellowoutlinex10","x10"
-"popupcontinue.textyellowoutlinex100","x100"
-"popupcontinue.textyellowoutlinex1_","x1"
-"popupcontinue.textyellowoutlinex25","x25"
-"popupcontinue.textyellowoutlinex5","x5"
-"popupcontinue.textyellowx10","x10"
-"popupcontinue.textyellowx100","x100"
-"popupcontinue.textyellowx1_","x1"
-"popupcontinue.textyellowx25","x25"
-"popupcontinue.txtblueoutline","Quit
+popupcontinue.costlabel,Cost:
+popupcontinue.costtext,FREE
+popupcontinue.textmultiplierx1,x1
+popupcontinue.textmultiplierx10,x10
+popupcontinue.textmultiplierx100,x100
+popupcontinue.textmultiplierx25,x25
+popupcontinue.textmultiplierx5,x5
+popupcontinue.textyellowoutlinex10,x10
+popupcontinue.textyellowoutlinex100,x100
+popupcontinue.textyellowoutlinex1_,x1
+popupcontinue.textyellowoutlinex25,x25
+popupcontinue.textyellowoutlinex5,x5
+popupcontinue.textyellowx10,x10
+popupcontinue.textyellowx100,x100
+popupcontinue.textyellowx1_,x1
+popupcontinue.textyellowx25,x25
+popupcontinue.txtblueoutline,"Quit
 "
-"popupcontinue.txtbtnsingle","Resume
+popupcontinue.txtbtnsingle,"Resume
 "
-"popupcontinue.txtcontinue","Play On"
-"popupcontinue.txtcontinueoutline","Play On"
-"popupcontinue.txtcontinuetitle","Continue?"
-"popupcontinue.txtcontinuetitleoutline","Continue?"
-"popupcontinue.txtdescription","You will lose 1 Life!!"
-"popupcontinue.txtgold","1000"
-"popupcontinue.txtgoldoutline","900"
-"popupcontinue.txtgreen","Stay"
-"popupcontinue.txtgreenoutline","Stay"
-"popupcontinue.txtred","Quit
+popupcontinue.txtcontinue,Play On
+popupcontinue.txtcontinueoutline,Play On
+popupcontinue.txtcontinuetitle,Continue?
+popupcontinue.txtcontinuetitleoutline,Continue?
+popupcontinue.txtdescription,You will lose 1 Life!!
+popupcontinue.txtgold,1000
+popupcontinue.txtgoldoutline,900
+popupcontinue.txtgreen,Stay
+popupcontinue.txtgreenoutline,Stay
+popupcontinue.txtred,"Quit
 "
-"popupcontinue.txtredoutline","Quit
+popupcontinue.txtredoutline,"Quit
 "
-"popupcontinue.txtsingleoutline","Resume
+popupcontinue.txtsingleoutline,"Resume
 "
-"popupcontinue.txttitle","Title
+popupcontinue.txttitle,"Title
 "
-"popupcontinue.txttitleoutline","Title
+popupcontinue.txttitleoutline,"Title
 "
-"popupdescription.txtblueoutline","Quit
+popupdescription.txtblueoutline,"Quit
 "
-"popupdescription.txtbtnsingle","Resume
+popupdescription.txtbtnsingle,"Resume
 "
-"popupdescription.txtdescription","TxtDescriptionTxtDescriptionTxtDescriptionTxtDescriptionTxtDescription"
-"popupdescription.txtgreen","Continue"
-"popupdescription.txtgreenoutline","Continue"
-"popupdescription.txtred","Quit
+popupdescription.txtdescription,TxtDescriptionTxtDescriptionTxtDescriptionTxtDescriptionTxtDescription
+popupdescription.txtgreen,Continue
+popupdescription.txtgreenoutline,Continue
+popupdescription.txtred,"Quit
 "
-"popupdescription.txtredoutline","Quit
+popupdescription.txtredoutline,"Quit
 "
-"popupdescription.txtsingleoutline","Resume
+popupdescription.txtsingleoutline,"Resume
 "
-"popupdescription.txttitle","Title
+popupdescription.txttitle,"Title
 "
-"popupdescription.txttitleoutline","Title
+popupdescription.txttitleoutline,"Title
 "
-"popuperror.txtblueoutline","Quit
+popuperror.txtblueoutline,"Quit
 "
-"popuperror.txtbtnsingle","Resume
+popuperror.txtbtnsingle,"Resume
 "
-"popuperror.txtdescription","Item DescriptionItem DescriptionItem Description"
-"popuperror.txtgreen","Continue"
-"popuperror.txtgreenoutline","Continue"
-"popuperror.txtred","Quit
+popuperror.txtdescription,Item DescriptionItem DescriptionItem Description
+popuperror.txtgreen,Continue
+popuperror.txtgreenoutline,Continue
+popuperror.txtred,"Quit
 "
-"popuperror.txtredoutline","Quit
+popuperror.txtredoutline,"Quit
 "
-"popuperror.txtsingleoutline","Resume
+popuperror.txtsingleoutline,"Resume
 "
-"popuperror.txttitle","Title"
-"popuperror.txttitleoutline","Title"
-"popupfail01.continuetitle","Continue?"
-"popupfail01.costlabel","Cost:"
-"popupfail01.costtext","FREE"
-"popupfail01.txtcontinue","Add Space
+popuperror.txttitle,Title
+popuperror.txttitleoutline,Title
+popupfail01.continuetitle,Continue?
+popupfail01.costlabel,Cost:
+popupfail01.costtext,FREE
+popupfail01.txtcontinue,"Add Space
 "
-"popupfail01.txtcontinueoutline","Add Space
+popupfail01.txtcontinueoutline,"Add Space
 "
-"popupfail01.txtgold","1000"
-"popupfail01.txtgoldoutline","900"
-"popupfail02.txtblueoutline","Quit
+popupfail01.txtgold,1000
+popupfail01.txtgoldoutline,900
+popupfail02.txtblueoutline,"Quit
 "
-"popupfail02.txtbtnsingle","Resume
+popupfail02.txtbtnsingle,Retry
+popupfail02.txtfail,Level Failed!
+popupfail02.txtfailoutline,Level Failed!
+popupfail02.txtgold,20
+popupfail02.txtgoldoutline,20
+popupfail02.txtgreen,Stay
+popupfail02.txtgreenoutline,Stay
+popupfail02.txthardlevel,Hard Level
+popupfail02.txthardleveloutline,Hard Level
+popupfail02.txtred,"Quit
 "
-"popupfail02.txtfail","Level Failed!"
-"popupfail02.txtfailoutline","Level Failed!"
-"popupfail02.txtgold","20"
-"popupfail02.txtgoldoutline","20"
-"popupfail02.txtgreen","Stay"
-"popupfail02.txtgreenoutline","Stay"
-"popupfail02.txthardlevel","Hard!"
-"popupfail02.txthardleveloutline","Hard!"
-"popupfail02.txtred","Quit
+popupfail02.txtredoutline,"Quit
 "
-"popupfail02.txtredoutline","Quit
+popupfail02.txtsingleoutline,Retry
+popupfail02.txttitle,"Title
 "
-"popupfail02.txtsingleoutline","Resume
+popupfail02.txttitleoutline,"Title
 "
-"popupfail02.txttitle","Title
+popupgoldshop.textamount,x1
+popupgoldshop.textamountoutline,x1
+popupgoldshop.textprice,"Price
 "
-"popupfail02.txttitleoutline","Title
+popupgoldshop.textpriceoutline,"Price
 "
-"popupgoldshop.textamount","x1"
-"popupgoldshop.textamountoutline","x1"
-"popupgoldshop.textprice","Price
-"
-"popupgoldshop.textpriceoutline","Price
-"
-"popupgoldshop.textsale","90% OFF"
-"popupgoldshop.textsaleoutline","90% OFF"
-"popupgoldshop.titleshop","SHOP"
-"popupgoldshop.titleshopoutline","SHOP"
-"popupgoldshop.txtbtnbuy","$ 100"
-"popupgoldshop.txtbtnbuyoutline","$ 100"
-"popupgoldshop.txtbtnmoreproducts__1_","More Offers!"
-"popupgoldshop.txtbtnmoreproductsoutline","More Offers!"
-"popupgoldshop.txtdescription","No Ads,
+popupgoldshop.textsale,90% OFF
+popupgoldshop.textsaleoutline,90% OFF
+popupgoldshop.titleshop,Shop
+popupgoldshop.titleshopoutline,Shop
+popupgoldshop.txtbtnbuy,$100 
+popupgoldshop.txtbtnbuyoutline,$100 
+popupgoldshop.txtbtnmoreproducts__1_,More Offers
+popupgoldshop.txtbtnmoreproductsoutline,More Offers
+popupgoldshop.txtdescription,"NO ADS,
 Just Fun!"
-"popupgoldshop.txtdescriptionoutline","No Ads,
+popupgoldshop.txtdescriptionoutline,"NO ADS,
 Just Fun!"
-"popupgoldshop.txtgold","1000"
-"popupgoldshop.txtoffper","90% OFF"
-"popupgoldshop.txttimeoff","COCOCO"
-"popupgoldshop.txttitle","Title
+popupgoldshop.txtgold,1000
+popupgoldshop.txtoffper,90% OFF
+popupgoldshop.txttimeoff,COCOCO
+popupgoldshop.txttitle,"Title
 "
-"popupgoldshop.txttitleoutline","Title
+popupgoldshop.txttitleoutline,"Title
 "
-"popupitemdescription.txtblueoutline","Quit
+popupitemdescription.txtblueoutline,"Quit
 "
-"popupitemdescription.txtbtnsingle","Claim
+popupitemdescription.txtbtnsingle,"Claim
 "
-"popupitemdescription.txtdescription","Item DescriptionItem DescriptionItem Description"
-"popupitemdescription.txtgold","1000"
-"popupitemdescription.txtgreen","Stay"
-"popupitemdescription.txtgreenoutline","Stay"
-"popupitemdescription.txtred","Quit
+popupitemdescription.txtdescription,Item DescriptionItem DescriptionItem Description
+popupitemdescription.txtgold,1000
+popupitemdescription.txtgreen,Stay
+popupitemdescription.txtgreenoutline,Stay
+popupitemdescription.txtred,"Quit
 "
-"popupitemdescription.txtredoutline","Quit
+popupitemdescription.txtredoutline,"Quit
 "
-"popupitemdescription.txtsingleoutline","Claim
+popupitemdescription.txtsingleoutline,"Claim
 "
-"popupitemdescription.txttitle","Title
+popupitemdescription.txttitle,"Title
 "
-"popupitemdescription.txttitleoutline","Title
+popupitemdescription.txttitleoutline,"Title
 "
-"popupmorelive.textlifeamount","0"
-"popupmorelive.textlifeamountoutline","0"
-"popupmorelive.txtblueoutline","Quit
+popupmorelive.textlifeamount,0
+popupmorelive.textlifeamountoutline,0
+popupmorelive.txtblueoutline,"Quit
 "
-"popupmorelive.txtbtnsingle","Resume
+popupmorelive.txtbtnsingle,"Resume
 "
-"popupmorelive.txtdescription","Time to next life"
-"popupmorelive.txtfree","FREE"
-"popupmorelive.txtfreeoutline","FREE"
-"popupmorelive.txtgold","1000"
-"popupmorelive.txtgoldoutline","900"
-"popupmorelive.txtgreen","Continue"
-"popupmorelive.txtgreenoutline","Continue"
-"popupmorelive.txtlife","FULL"
-"popupmorelive.txtlifeoutline","+5"
-"popupmorelive.txtred","Quit
+popupmorelive.txtdescription,Next life in
+popupmorelive.txtfree,FREE
+popupmorelive.txtfreeoutline,FREE
+popupmorelive.txtgold,1000
+popupmorelive.txtgoldoutline,900
+popupmorelive.txtgreen,Continue
+popupmorelive.txtgreenoutline,Continue
+popupmorelive.txtlife,FULL
+popupmorelive.txtlifeoutline,5
+popupmorelive.txtred,"Quit
 "
-"popupmorelive.txtredoutline","Quit
+popupmorelive.txtredoutline,"Quit
 "
-"popupmorelive.txtsingleoutline","Resume
+popupmorelive.txtsingleoutline,"Resume
 "
-"popupmorelive.txttimer","00:00"
-"popupmorelive.txttitle","Title
+popupmorelive.txttimer,0:00
+popupmorelive.txttitle,More Lives
+popupmorelive.txttitleoutline,More Lives
+popupnoads.btnsingleoutline,$4.99 
+popupnoads.txtblueoutline,"Quit
 "
-"popupmorelive.txttitleoutline","Title
+popupnoads.txtbtnbuy,Buy
+popupnoads.txtbtnbuyoutline,Buy
+popupnoads.txtbtnsingle,$4.99 
+popupnoads.txtdescription,Remove forced ads forever!
+popupnoads.txtdescriptionoutline,Remove forced ads forever!
+popupnoads.txtgold,1900
+popupnoads.txtgoldoutline,1900
+popupnoads.txtgreen,Stay
+popupnoads.txtgreenoutline,Stay
+popupnoads.txtred,"Quit
 "
-"popupnoads.btnsingleoutline","USD 4.99"
-"popupnoads.txtblueoutline","Quit
+popupnoads.txtredoutline,"Quit
 "
-"popupnoads.txtbtnbuy","Buy"
-"popupnoads.txtbtnbuyoutline","Buy"
-"popupnoads.txtbtnsingle","USD 4.99
+popupnoads.txttitle,NO ADS
+popupnoads.txttitleoutline,NO ADS
+popupprofile.txtblueoutline,"Quit
 "
-"popupnoads.txtdescription","Remove forced ads forever!"
-"popupnoads.txtdescriptionoutline","Remove forced ads forever!"
-"popupnoads.txtgold","1900"
-"popupnoads.txtgoldoutline","1900"
-"popupnoads.txtgreen","Stay"
-"popupnoads.txtgreenoutline","Stay"
-"popupnoads.txtred","Quit
+popupprofile.txtbtnsingle,"Claim
 "
-"popupnoads.txtredoutline","Quit
+popupprofile.txtbtntapavatar,Avatar
+popupprofile.txtbtntapavataroutline,Avatar
+popupprofile.txtbtntapframe,Frame
+popupprofile.txtbtntapframeoutline,Frame
+popupprofile.txtbtntapname,Name
+popupprofile.txtbtntapnameoutline,Name
+popupprofile.txtbtntaptoken,Token
+popupprofile.txtbtntaptokenoutline,Token
+popupprofile.txtdescription,Item DescriptionItem DescriptionItem Description
+popupprofile.txtgreen,Stay
+popupprofile.txtgreenoutline,Stay
+popupprofile.txtred,"Quit
 "
-"popupnoads.txttitle","No ADS"
-"popupnoads.txttitleoutline","No ADS"
-"popupprofile.txtblueoutline","Quit
+popupprofile.txtredoutline,"Quit
 "
-"popupprofile.txtbtnsingle","Claim
+popupprofile.txtsingleoutline,"Claim
 "
-"popupprofile.txtbtntapavatar","Avatar"
-"popupprofile.txtbtntapavataroutline","Avatar"
-"popupprofile.txtbtntapframe","Frame"
-"popupprofile.txtbtntapframeoutline","Frame"
-"popupprofile.txtbtntapname","Name"
-"popupprofile.txtbtntapnameoutline","Name"
-"popupprofile.txtbtntaptoken","Token"
-"popupprofile.txtbtntaptokenoutline","Token"
-"popupprofile.txtdescription","Item DescriptionItem DescriptionItem Description"
-"popupprofile.txtgreen","Stay"
-"popupprofile.txtgreenoutline","Stay"
-"popupprofile.txtred","Quit
+popupprofile.txttitle,Profile
+popupprofile.txttitleoutline,Profile
+popupquit.textmultiplierx1,x1
+popupquit.textmultiplierx10,x10
+popupquit.textmultiplierx100,x100
+popupquit.textmultiplierx25,x25
+popupquit.textmultiplierx5,x5
+popupquit.textyellowoutlinex10,x10
+popupquit.textyellowoutlinex100,x100
+popupquit.textyellowoutlinex1_,x1
+popupquit.textyellowoutlinex25,x25
+popupquit.textyellowoutlinex5,x5
+popupquit.textyellowx10,x10
+popupquit.textyellowx100,x100
+popupquit.textyellowx1_,x1
+popupquit.textyellowx25,x25
+popupquit.txtblueoutline,"Quit
 "
-"popupprofile.txtredoutline","Quit
+popupquit.txtbtnsingle,"Resume
 "
-"popupprofile.txtsingleoutline","Claim
+popupquit.txtdescription,You will lose a life!
+popupquit.txtgreen,Stay
+popupquit.txtgreenoutline,Stay
+popupquit.txtred,"Quit
 "
-"popupprofile.txttitle","Title
+popupquit.txtredoutline,"Quit
 "
-"popupprofile.txttitleoutline","Title
+popupquit.txtsingleoutline,"Resume
 "
-"popupquit.textmultiplierx1","x1"
-"popupquit.textmultiplierx10","x10"
-"popupquit.textmultiplierx100","x100"
-"popupquit.textmultiplierx25","x25"
-"popupquit.textmultiplierx5","x5"
-"popupquit.textyellowoutlinex10","x10"
-"popupquit.textyellowoutlinex100","x100"
-"popupquit.textyellowoutlinex1_","x1"
-"popupquit.textyellowoutlinex25","x25"
-"popupquit.textyellowoutlinex5","x5"
-"popupquit.textyellowx10","x10"
-"popupquit.textyellowx100","x100"
-"popupquit.textyellowx1_","x1"
-"popupquit.textyellowx25","x25"
-"popupquit.txtblueoutline","Quit
+popupquit.txttitle,Quit Level?
+popupquit.txttitleoutline,Quit Level?
+popupresult.txtblueoutline,"Quit
 "
-"popupquit.txtbtnsingle","Resume
+popupresult.txtbtnsingle,"Resume
 "
-"popupquit.txtdescription","You will lose 1 Life!!"
-"popupquit.txtgreen","Stay"
-"popupquit.txtgreenoutline","Stay"
-"popupquit.txtred","Quit
+popupresult.txtgold,20
+popupresult.txtgoldoutline,20
+popupresult.txtgreen,Stay
+popupresult.txtgreenoutline,Stay
+popupresult.txthardlevel,Hard Level
+popupresult.txthardleveloutline,Hard Level
+popupresult.txtred,"Quit
 "
-"popupquit.txtredoutline","Quit
+popupresult.txtredoutline,"Quit
 "
-"popupquit.txtsingleoutline","Resume
+popupresult.txtsingleoutline,"Resume
 "
-"popupquit.txttitle","Title
+popupresult.txttitle,"Title
 "
-"popupquit.txttitleoutline","Title
+popupresult.txttitleoutline,"Title
 "
-"popupresult.txtblueoutline","Quit
+popupsettings.txtblueoutline,"Quit
 "
-"popupresult.txtbtnsingle","Resume
+popupsettings.txtbtnsingle,"Resume
 "
-"popupresult.txtgold","20"
-"popupresult.txtgoldoutline","20"
-"popupresult.txtgreen","Stay"
-"popupresult.txtgreenoutline","Stay"
-"popupresult.txthardlevel","Hard!"
-"popupresult.txthardleveloutline","Hard!"
-"popupresult.txtred","Quit
+popupsettings.txtgreen,Stay
+popupsettings.txtgreenoutline,Stay
+popupsettings.txthaptic,Haptic
+popupsettings.txtmusic,Music
+popupsettings.txtred,"Quit
 "
-"popupresult.txtredoutline","Quit
+popupsettings.txtredoutline,"Quit
 "
-"popupresult.txtsingleoutline","Resume
+popupsettings.txtsingleoutline,"Resume
 "
-"popupresult.txttitle","Title
+popupsettings.txtsound,"Sound
 "
-"popupresult.txttitleoutline","Title
+popupsettings.txttitle,Settings
+popupsettings.txttitleoutline,Settings
+popupwinningstreak.btnsingleoutline,Play
+popupwinningstreak.textmultiplierx1,x1
+popupwinningstreak.textmultiplierx10,x10
+popupwinningstreak.textmultiplierx100,x100
+popupwinningstreak.textmultiplierx25,x25
+popupwinningstreak.textmultiplierx5,x5
+popupwinningstreak.textreward,100
+popupwinningstreak.textrewardoutline,100
+popupwinningstreak.texttimer,0d 00h
+popupwinningstreak.texttimeroutline,0d 00h
+popupwinningstreak.textyellowoutlinex10,x10
+popupwinningstreak.textyellowoutlinex100,x100
+popupwinningstreak.textyellowoutlinex1_,x1
+popupwinningstreak.textyellowoutlinex25,x25
+popupwinningstreak.textyellowoutlinex5,x5
+popupwinningstreak.textyellowx10,x10
+popupwinningstreak.textyellowx100,x100
+popupwinningstreak.textyellowx1_,x1
+popupwinningstreak.textyellowx25,x25
+popupwinningstreak.txtblueoutline,"Quit
 "
-"popupsettings.txtblueoutline","Quit
-"
-"popupsettings.txtbtnsingle","Resume
-"
-"popupsettings.txtgreen","Stay"
-"popupsettings.txtgreenoutline","Stay"
-"popupsettings.txthaptic","Haptic"
-"popupsettings.txtmusic","Music"
-"popupsettings.txtred","Quit
-"
-"popupsettings.txtredoutline","Quit
-"
-"popupsettings.txtsingleoutline","Resume
-"
-"popupsettings.txtsound","Sound
-"
-"popupsettings.txttitle","Title
-"
-"popupsettings.txttitleoutline","Title
-"
-"popupwinningstreak.btnsingleoutline","Play"
-"popupwinningstreak.textmultiplierx1","x1"
-"popupwinningstreak.textmultiplierx10","x10"
-"popupwinningstreak.textmultiplierx100","x100"
-"popupwinningstreak.textmultiplierx25","x25"
-"popupwinningstreak.textmultiplierx5","x5"
-"popupwinningstreak.textreward","100"
-"popupwinningstreak.textrewardoutline","100"
-"popupwinningstreak.texttimer","0d 00h"
-"popupwinningstreak.texttimeroutline","0d 00h"
-"popupwinningstreak.textyellowoutlinex10","x10"
-"popupwinningstreak.textyellowoutlinex100","x100"
-"popupwinningstreak.textyellowoutlinex1_","x1"
-"popupwinningstreak.textyellowoutlinex25","x25"
-"popupwinningstreak.textyellowoutlinex5","x5"
-"popupwinningstreak.textyellowx10","x10"
-"popupwinningstreak.textyellowx100","x100"
-"popupwinningstreak.textyellowx1_","x1"
-"popupwinningstreak.textyellowx25","x25"
-"popupwinningstreak.txtblueoutline","Quit
-"
-"popupwinningstreak.txtbtnbuy","Buy"
-"popupwinningstreak.txtbtnbuyoutline","Buy"
-"popupwinningstreak.txtbtnsingle","Play"
-"popupwinningstreak.txtdescription","Win levels to collect <color=#FFD700> Flames! </color>
+popupwinningstreak.txtbtnbuy,Buy
+popupwinningstreak.txtbtnbuyoutline,Buy
+popupwinningstreak.txtbtnsingle,Play
+popupwinningstreak.txtdescription,"Win levels to collect <color=#FFD700> Flames! </color>
 Longer streak, more Rewards!"
-"popupwinningstreak.txtdescriptionoutline","Win levels to collect <color=#FFD700> Flames! </color>
+popupwinningstreak.txtdescriptionoutline,"Win levels to collect <color=#FFD700> Flames! </color>
 Longer streak, more Rewards!"
-"popupwinningstreak.txtgold","1900"
-"popupwinningstreak.txtgoldoutline","1900"
-"popupwinningstreak.txtgreen","Stay"
-"popupwinningstreak.txtgreenoutline","Stay"
-"popupwinningstreak.txtred","Quit
+popupwinningstreak.txtgold,1900
+popupwinningstreak.txtgoldoutline,1900
+popupwinningstreak.txtgreen,Stay
+popupwinningstreak.txtgreenoutline,Stay
+popupwinningstreak.txtred,"Quit
 "
-"popupwinningstreak.txtredoutline","Quit
+popupwinningstreak.txtredoutline,"Quit
 "
-"popupwinningstreak.txttitle","Winning Streak"
-"popupwinningstreak.txttitleoutline","Winning Streak"
-"popupwinningstreakinfo.textclose","Tap to Continue"
-"popupwinningstreakinfo.textdescription","If you <color=#e7656b>fail</color> a level,
+popupwinningstreak.txttitle,Winning Streak
+popupwinningstreak.txttitleoutline,Winning Streak
+popupwinningstreakinfo.textclose,Tap to Continue
+popupwinningstreakinfo.textdescription,"If you <color=#e7656b>fail</color> a level,
 the multiplier will reset!"
-"popupwinningstreakinfo.textdescriptionoutline","If you <color=#FFD700>fail</color> a level,
+popupwinningstreakinfo.textdescriptionoutline,"If you <color=#FFD700>fail</color> a level,
 the multiplier will reset!"
-"popupwinningstreakinfo.textinfo1","Win levels,
+popupwinningstreakinfo.textinfo1,"Win levels,
 collect <color=#FFD700> Flames! </color>"
-"popupwinningstreakinfo.textinfo2","Multiply <color=#FFD700> Flames </color>
+popupwinningstreakinfo.textinfo2,"Multiply <color=#FFD700> Flames </color>
 up to x100!"
-"popupwinningstreakinfo.textinfo3","Get <color=#FFD700>rewards!"
-"rewardimg.textreward","100"
-"rewardimg.textrewardoutline","100"
-"shopitem.textamount","x1"
-"shopitem.textamountoutline","x1"
-"shoplistad.txtbtnbuy","$ 100"
-"shoplistad.txtbtnbuyoutline","$ 100"
-"shoplistad.txtdescription","No Ads,
+popupwinningstreakinfo.textinfo3,Get <color=#FFD700>rewards!
+rewardimg.textreward,100
+rewardimg.textrewardoutline,100
+shopitem.textamount,x1
+shopitem.textamountoutline,x1
+shoplistad.txtbtnbuy,$100 
+shoplistad.txtbtnbuyoutline,$100 
+shoplistad.txtdescription,"NO ADS,
 Just Fun!"
-"shoplistad.txtdescriptionoutline","No Ads,
+shoplistad.txtdescriptionoutline,"NO ADS,
 Just Fun!"
-"shoplistad.txtoffper","90% OFF"
-"shoplistad.txttimeoff","COCOCO"
-"shoplistad.txttitle","NO ADS!"
-"shoplistad.txttitleoutline","NO ADS!"
-"shoplistgold.textprice","Price
+shoplistad.txtoffper,90% OFF
+shoplistad.txttimeoff,COCOCO
+shoplistad.txttitle,NO ADS
+shoplistad.txttitleoutline,NO ADS
+shoplistgold.textprice,"Price
 "
-"shoplistgold.textpriceoutline","Price
+shoplistgold.textpriceoutline,"Price
 "
-"shoplistgold.txtbtnbuy","$10"
-"shoplistgold.txtbtnbuyoutline","$10"
-"shoplistgold.txtoffper","90% OFF"
-"shoplistgold.txttimeoff","COCOCO"
-"shoplistgoldalign.textprice","Price
+shoplistgold.txtbtnbuy,$10 
+shoplistgold.txtbtnbuyoutline,$10 
+shoplistgold.txtoffper,90% OFF
+shoplistgold.txttimeoff,COCOCO
+shoplistgoldalign.textprice,"Price
 "
-"shoplistgoldalign.textpriceoutline","Price
+shoplistgoldalign.textpriceoutline,"Price
 "
-"shoplistgoldalign.txtbtnbuy","$10"
-"shoplistgoldalign.txtbtnbuyoutline","$10"
-"shoplistgoldalign.txtoffper","90% OFF"
-"shoplistgoldalign.txttimeoff","COCOCO"
-"shoplistitem.textamount","x1"
-"shoplistitem.textamountoutline","x1"
-"shoplistitem.textprice","Price
+shoplistgoldalign.txtbtnbuy,$10 
+shoplistgoldalign.txtbtnbuyoutline,$10 
+shoplistgoldalign.txtoffper,90% OFF
+shoplistgoldalign.txttimeoff,COCOCO
+shoplistitem.textamount,x1
+shoplistitem.textamountoutline,x1
+shoplistitem.textprice,"Price
 "
-"shoplistitem.textpriceoutline","Price
+shoplistitem.textpriceoutline,"Price
 "
-"shoplistitem.textsale","90% OFF"
-"shoplistitem.textsaleoutline","90% OFF"
-"shoplistitem.txtbtnbuy","$ 100"
-"shoplistitem.txtbtnbuyoutline","$ 100"
-"shoplistitem.txtoffper","90% OFF"
-"shoplistitem.txttimeoff","COCOCO"
-"shoplistitem.txttitle","Title
+shoplistitem.textsale,90% OFF
+shoplistitem.textsaleoutline,90% OFF
+shoplistitem.txtbtnbuy,$100 
+shoplistitem.txtbtnbuyoutline,$100 
+shoplistitem.txtoffper,90% OFF
+shoplistitem.txttimeoff,COCOCO
+shoplistitem.txttitle,"Title
 "
-"shoplistitem.txttitleoutline","Title
+shoplistitem.txttitleoutline,"Title
 "
-"slotwinningstreak.textnumber","1"
-"slotwinningstreak.textnumberoutline","1"
-"slotwinningstreak.textreward","100"
-"slotwinningstreak.textrewardoutline","100"
-"slotwinningstreak.txtgrandprize","Grand Prize"
-"spawner.magazinetext","00"
-"tutorial.instructiontext","Tutorial instruction text"
-"tutorial.text","SKIP"
-"tutorial.texttap","Tap to anywhere"
-"tutorial.texttapoutline","Tap to anywhere"
-"txttoast.txttoast","Your lives are unlimited!
+slotwinningstreak.textnumber,1
+slotwinningstreak.textnumberoutline,1
+slotwinningstreak.textreward,100
+slotwinningstreak.textrewardoutline,100
+slotwinningstreak.txtgrandprize,Grand Prize
+spawner.magazinetext,00
+tutorial.instructiontext,Tutorial instruction text
+tutorial.text,SKIP
+tutorial.texttap,Tap to anywhere
+tutorial.texttapoutline,Tap to anywhere
+txttoast.txttoast,"Your lives are unlimited!
 "
-"txttoast.txttoastoutline","Your lives are unlimited!
+txttoast.txttoastoutline,"Your lives are unlimited!
 "
-"uihud.holdertext","On Rail: 0/9"
-"uihud.remainingtext","Balloons: --"
-"uihud.scoretext","0"
-"uihud.textitem","0"
-"uihud.textitemoutline","0"
-"uihud.textspeed","x1"
-"uihud.textspeedoutline","x1"
-"uihud.txtgold","1000"
-"uihud.txtlevel","level 00"
-"uihud.txtleveloutline","level 00"
-"uihud.txtlock","Lv.15"
-"uihud.txtlockoutline","Lv.15"
-"uihud.txtnumber","Level 1"
-"uihud.txtnumberoutline","Level 1"
-"uilobby.text","Home
+uihud.holdertext,On Rail: 0/9
+uihud.remainingtext,Balloons: --
+uihud.scoretext,0
+uihud.textitem,0
+uihud.textitemoutline,0
+uihud.textspeed,x1
+uihud.textspeedoutline,x1
+uihud.txtgold,1000
+uihud.txtlevel,level 00
+uihud.txtleveloutline,level 00
+uihud.txtlock,Lv.15
+uihud.txtlockoutline,Lv.15
+uihud.txtnumber,Level 1
+uihud.txtnumberoutline,Level 1
+uilobby.text,"Home
 "
-"uilobby.textgauge","100/100"
-"uilobby.textgaugeoutline","100/100"
-"uilobby.texthome","Home
+uilobby.textgauge,100/100
+uilobby.textgaugeoutline,100/100
+uilobby.texthome,"Home
 "
-"uilobby.textlevel","30"
-"uilobby.textleveloutline","30"
-"uilobby.textlifeamount","0"
-"uilobby.textlifeamountoutline","0"
-"uilobby.textmultiplierx1","x1"
-"uilobby.textmultiplierx10","x10"
-"uilobby.textmultiplierx100","x100"
-"uilobby.textmultiplierx25","x25"
-"uilobby.textmultiplierx5","x5"
-"uilobby.textnoads","No Ads"
-"uilobby.textnoadsoutline","No Ads"
-"uilobby.textprivacy","Privacy"
-"uilobby.textprivacyoutline","Privacy"
-"uilobby.textreward","100"
-"uilobby.textrewardoutline","100"
-"uilobby.textsetting","Setting"
-"uilobby.textshop","Shop"
-"uilobby.textsupport","Support"
-"uilobby.textsupportoutline","Support"
-"uilobby.textterms","Terms"
-"uilobby.texttermsoutline","Terms"
-"uilobby.texttimer","0d 00h"
-"uilobby.texttimeroutline","0d 00h"
-"uilobby.textyellowoutlinex10","x10"
-"uilobby.textyellowoutlinex100","x100"
-"uilobby.textyellowoutlinex1_","x1"
-"uilobby.textyellowoutlinex25","x25"
-"uilobby.textyellowoutlinex5","x5"
-"uilobby.textyellowx10","x10"
-"uilobby.textyellowx100","x100"
-"uilobby.textyellowx1_","x1"
-"uilobby.textyellowx25","x25"
-"uilobby.titlesetting","SETTING
+uilobby.textlevel,30
+uilobby.textleveloutline,30
+uilobby.textlifeamount,0
+uilobby.textlifeamountoutline,0
+uilobby.textmultiplierx1,x1
+uilobby.textmultiplierx10,x10
+uilobby.textmultiplierx100,x100
+uilobby.textmultiplierx25,x25
+uilobby.textmultiplierx5,x5
+uilobby.textnoads,NO ADS
+uilobby.textnoadsoutline,NO ADS
+uilobby.textprivacy,Privacy
+uilobby.textprivacyoutline,Privacy
+uilobby.textreward,100
+uilobby.textrewardoutline,100
+uilobby.textsetting,Settings
+uilobby.textshop,Shop
+uilobby.textsupport,Support
+uilobby.textsupportoutline,Support
+uilobby.textterms,Terms
+uilobby.texttermsoutline,Terms
+uilobby.texttimer,0d 00h
+uilobby.texttimeroutline,0d 00h
+uilobby.textyellowoutlinex10,x10
+uilobby.textyellowoutlinex100,x100
+uilobby.textyellowoutlinex1_,x1
+uilobby.textyellowoutlinex25,x25
+uilobby.textyellowoutlinex5,x5
+uilobby.textyellowx10,x10
+uilobby.textyellowx100,x100
+uilobby.textyellowx1_,x1
+uilobby.textyellowx25,x25
+uilobby.titlesetting,Settings
+uilobby.titlesettingoutline,Settings
+uilobby.titleshop,Shop
+uilobby.titleshopoutline,Shop
+uilobby.txtbtnmoreproducts__1_,More Offers
+uilobby.txtbtnmoreproductsoutline,More Offers
+uilobby.txtgold,1000
+uilobby.txthaptic,Haptic
+uilobby.txtlevel,Super Hard
+uilobby.txtleveloutline,Super Hard
+uilobby.txtlife,Full
+uilobby.txtmusic,Music
+uilobby.txtnotification,Notifications
+uilobby.txtnotificationoff,Off
+uilobby.txtnotificationoffoutline,Off
+uilobby.txtnotificationon,On
+uilobby.txtnotificationonoutline,On
+uilobby.txtnotificationoutline,Notification
+uilobby.txtplay,Level 00
+uilobby.txtplayoutline,Level 00
+uilobby.txtsound,Sound
+uisetting.textprivacy,Privacy
+uisetting.textprivacyoutline,Privacy
+uisetting.textsupport,Support
+uisetting.textsupportoutline,Support
+uisetting.textterms,Terms
+uisetting.texttermsoutline,Terms
+uisetting.titlesetting,Settings
+uisetting.titlesettingoutline,Settings
+uisetting.txthaptic,Haptic
+uisetting.txtmusic,Music
+uisetting.txtnotification,Notifications
+uisetting.txtnotificationoff,Off
+uisetting.txtnotificationoffoutline,Off
+uisetting.txtnotificationon,On
+uisetting.txtnotificationonoutline,On
+uisetting.txtnotificationoutline,Notifications
+uisetting.txtsound,Sound
+uishop.textamount,x1
+uishop.textamountoutline,x1
+uishop.textprice,"Price
 "
-"uilobby.titlesettingoutline","SETTING
+uishop.textpriceoutline,"Price
 "
-"uilobby.titleshop","SHOP"
-"uilobby.titleshopoutline","SHOP"
-"uilobby.txtbtnmoreproducts__1_","More Offers!"
-"uilobby.txtbtnmoreproductsoutline","More Offers!"
-"uilobby.txtgold","1000"
-"uilobby.txthaptic","Haptic"
-"uilobby.txtlevel","Supur Hard"
-"uilobby.txtleveloutline","Supur Hard"
-"uilobby.txtlife","FULL"
-"uilobby.txtmusic","Music"
-"uilobby.txtnotification","Notification"
-"uilobby.txtnotificationoff","OFF
-"
-"uilobby.txtnotificationoffoutline","OFF
-"
-"uilobby.txtnotificationon","On"
-"uilobby.txtnotificationonoutline","On"
-"uilobby.txtnotificationoutline","Notification"
-"uilobby.txtplay","Level 00"
-"uilobby.txtplayoutline","Level 00"
-"uilobby.txtsound","Sound
-"
-"uisetting.textprivacy","Privacy"
-"uisetting.textprivacyoutline","Privacy"
-"uisetting.textsupport","Support"
-"uisetting.textsupportoutline","Support"
-"uisetting.textterms","Terms"
-"uisetting.texttermsoutline","Terms"
-"uisetting.titlesetting","SETTING
-"
-"uisetting.titlesettingoutline","SETTING
-"
-"uisetting.txthaptic","Haptic"
-"uisetting.txtmusic","Music"
-"uisetting.txtnotification","Notification"
-"uisetting.txtnotificationoff","OFF
-"
-"uisetting.txtnotificationoffoutline","OFF
-"
-"uisetting.txtnotificationon","On"
-"uisetting.txtnotificationonoutline","On"
-"uisetting.txtnotificationoutline","Notification"
-"uisetting.txtsound","Sound
-"
-"uishop.textamount","x1"
-"uishop.textamountoutline","x1"
-"uishop.textprice","Price
-"
-"uishop.textpriceoutline","Price
-"
-"uishop.textsale","90% OFF"
-"uishop.textsaleoutline","90% OFF"
-"uishop.titleshop","SHOP"
-"uishop.titleshopoutline","SHOP"
-"uishop.txtbtnbuy","$ 100"
-"uishop.txtbtnbuyoutline","$ 100"
-"uishop.txtbtnmoreproducts__1_","More Offers!"
-"uishop.txtbtnmoreproductsoutline","More Offers!"
-"uishop.txtdescription","No Ads,
+uishop.textsale,90% OFF
+uishop.textsaleoutline,90% OFF
+uishop.titleshop,Shop
+uishop.titleshopoutline,Shop
+uishop.txtbtnbuy,$100 
+uishop.txtbtnbuyoutline,$100 
+uishop.txtbtnmoreproducts__1_,More Offers
+uishop.txtbtnmoreproductsoutline,More Offers
+uishop.txtdescription,"No Ads,
 Just Fun!"
-"uishop.txtdescriptionoutline","No Ads,
+uishop.txtdescriptionoutline,"No Ads,
 Just Fun!"
-"uishop.txtgold","1000"
-"uishop.txtoffper","90% OFF"
-"uishop.txttimeoff","COCOCO"
-"uishop.txttitle","Title
+uishop.txtgold,1000
+uishop.txtoffper,90% OFF
+uishop.txttimeoff,COCOCO
+uishop.txttitle,"Title
 "
-"uishop.txttitleoutline","Title
+uishop.txttitleoutline,"Title
 "
-"uititle.subtitletext","Pop & Flow Puzzle"
-"uititle.taptostart","Tap to Start"
-"uititle.txtloading","Loading.."
-"uititle.txtloadingoutline","Loading.."
-"useitem.txtdescription","Your lives are unlimited!
+uititle.subtitletext,Pop & Flow Puzzle
+uititle.taptostart,Tap to Start
+uititle.txtloading,Loading..
+uititle.txtloadingoutline,Loading..
+useitem.txtdescription,"Your lives are unlimited!
 "
-"useitem.txtdescriptionoutline","Your lives are unlimited!
+useitem.txtdescriptionoutline,"Your lives are unlimited!
 "
-"winningstreakclickinfo.textreward","100"
-"winningstreakclickinfo.textrewardoutline","100"
-"winningstreakgetreward.textreward","+1"
-"winningstreakgetreward.textrewardoutline","+1"
-"woodenboard.magazinetext","00"
-"ui.settings.title","Settings"
-"ui.common.on","On"
-"ui.common.off","Off"
-"ui.settings.notifications","Notifications"
-"ui.settings.sound","Sound"
-"ui.settings.music","Music"
-"ui.settings.haptic","Haptic"
-"ui.lobby.noads","NO ADS"
-"ui.lobby.hard_level","Hard Level"
-"ui.lobby.super_hard","Super Hard"
-"ui.shop.title","Shop"
-"ui.shop.more_offers","More Offers"
-"ui.morelive.free","FREE"
-"ui.morelive.unlimited","UNLIMITED"
-"ui.morelive.full","FULL"
-"ui.tutorial.skip","SKIP"
+winningstreakclickinfo.textreward,100
+winningstreakclickinfo.textrewardoutline,100
+winningstreakgetreward.textreward,1
+winningstreakgetreward.textrewardoutline,1
+woodenboard.magazinetext,00
+ui.settings.title,Settings
+ui.common.on,On
+ui.common.off,Off
+ui.settings.notifications,Notifications
+ui.settings.sound,Sound
+ui.settings.music,Music
+ui.settings.haptic,Haptic
+ui.lobby.noads,NO ADS
+ui.lobby.hard_level,Hard Level
+ui.lobby.super_hard,Super Hard
+ui.shop.title,Shop
+ui.shop.more_offers,More Offers
+ui.morelive.free,FREE
+ui.morelive.unlimited,UNLIMITED
+ui.morelive.full,FULL
+ui.tutorial.skip,SKIP
