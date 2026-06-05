@@ -140,8 +140,7 @@ popupdescription.txttitleoutline,"Title
 "
 popuperror.txtblueoutline,"Quit
 "
-popuperror.txtbtnsingle,"Resume
-"
+popuperror.txtbtnsingle,Continue
 popuperror.txtdescription,Item DescriptionItem DescriptionItem Description
 popuperror.txtgreen,Continue
 popuperror.txtgreenoutline,Continue
@@ -149,8 +148,7 @@ popuperror.txtred,"Quit
 "
 popuperror.txtredoutline,"Quit
 "
-popuperror.txtsingleoutline,"Resume
-"
+popuperror.txtsingleoutline,Continue
 popuperror.txttitle,Title
 popuperror.txttitleoutline,Title
 popupfail01.continuetitle,Continue?
@@ -192,8 +190,8 @@ popupgoldshop.textsale,90% OFF
 popupgoldshop.textsaleoutline,90% OFF
 popupgoldshop.titleshop,Shop
 popupgoldshop.titleshopoutline,Shop
-popupgoldshop.txtbtnbuy,$100 
-popupgoldshop.txtbtnbuyoutline,$100 
+popupgoldshop.txtbtnbuy,$100
+popupgoldshop.txtbtnbuyoutline,$100
 popupgoldshop.txtbtnmoreproducts__1_,More Offers
 popupgoldshop.txtbtnmoreproductsoutline,More Offers
 popupgoldshop.txtdescription,"NO ADS,
@@ -249,12 +247,12 @@ popupmorelive.txtsingleoutline,"Resume
 popupmorelive.txttimer,0:00
 popupmorelive.txttitle,More Lives
 popupmorelive.txttitleoutline,More Lives
-popupnoads.btnsingleoutline,$4.99 
+popupnoads.btnsingleoutline,$4.99
 popupnoads.txtblueoutline,"Quit
 "
 popupnoads.txtbtnbuy,Buy
 popupnoads.txtbtnbuyoutline,Buy
-popupnoads.txtbtnsingle,$4.99 
+popupnoads.txtbtnsingle,$4.99
 popupnoads.txtdescription,Remove forced ads forever!
 popupnoads.txtdescriptionoutline,Remove forced ads forever!
 popupnoads.txtgold,1900
@@ -321,8 +319,7 @@ popupquit.txttitle,Quit Level?
 popupquit.txttitleoutline,Quit Level?
 popupresult.txtblueoutline,"Quit
 "
-popupresult.txtbtnsingle,"Resume
-"
+popupresult.txtbtnsingle,Next
 popupresult.txtgold,20
 popupresult.txtgoldoutline,20
 popupresult.txtgreen,Stay
@@ -333,16 +330,14 @@ popupresult.txtred,"Quit
 "
 popupresult.txtredoutline,"Quit
 "
-popupresult.txtsingleoutline,"Resume
-"
+popupresult.txtsingleoutline,Next
 popupresult.txttitle,"Title
 "
 popupresult.txttitleoutline,"Title
 "
 popupsettings.txtblueoutline,"Quit
 "
-popupsettings.txtbtnsingle,"Resume
-"
+popupsettings.txtbtnsingle,Continue
 popupsettings.txtgreen,Stay
 popupsettings.txtgreenoutline,Stay
 popupsettings.txthaptic,Haptic
@@ -351,10 +346,8 @@ popupsettings.txtred,"Quit
 "
 popupsettings.txtredoutline,"Quit
 "
-popupsettings.txtsingleoutline,"Resume
-"
-popupsettings.txtsound,"Sound
-"
+popupsettings.txtsingleoutline,Continue
+popupsettings.txtsound,Sound
 popupsettings.txttitle,Settings
 popupsettings.txttitleoutline,Settings
 popupwinningstreak.btnsingleoutline,Play
@@ -409,8 +402,8 @@ rewardimg.textreward,100
 rewardimg.textrewardoutline,100
 shopitem.textamount,x1
 shopitem.textamountoutline,x1
-shoplistad.txtbtnbuy,$100 
-shoplistad.txtbtnbuyoutline,$100 
+shoplistad.txtbtnbuy,$4.99
+shoplistad.txtbtnbuyoutline,$4.99
 shoplistad.txtdescription,"NO ADS,
 Just Fun!"
 shoplistad.txtdescriptionoutline,"NO ADS,
@@ -423,16 +416,16 @@ shoplistgold.textprice,"Price
 "
 shoplistgold.textpriceoutline,"Price
 "
-shoplistgold.txtbtnbuy,$10 
-shoplistgold.txtbtnbuyoutline,$10 
+shoplistgold.txtbtnbuy,$10
+shoplistgold.txtbtnbuyoutline,$10
 shoplistgold.txtoffper,90% OFF
 shoplistgold.txttimeoff,COCOCO
 shoplistgoldalign.textprice,"Price
 "
 shoplistgoldalign.textpriceoutline,"Price
 "
-shoplistgoldalign.txtbtnbuy,$10 
-shoplistgoldalign.txtbtnbuyoutline,$10 
+shoplistgoldalign.txtbtnbuy,$10
+shoplistgoldalign.txtbtnbuyoutline,$10
 shoplistgoldalign.txtoffper,90% OFF
 shoplistgoldalign.txttimeoff,COCOCO
 shoplistitem.textamount,x1
@@ -443,8 +436,8 @@ shoplistitem.textpriceoutline,"Price
 "
 shoplistitem.textsale,90% OFF
 shoplistitem.textsaleoutline,90% OFF
-shoplistitem.txtbtnbuy,$100 
-shoplistitem.txtbtnbuyoutline,$100 
+shoplistitem.txtbtnbuy,$100
+shoplistitem.txtbtnbuyoutline,$100
 shoplistitem.txtoffper,90% OFF
 shoplistitem.txttimeoff,COCOCO
 shoplistitem.txttitle,"Title
@@ -534,7 +527,7 @@ uilobby.txtnotificationoff,Off
 uilobby.txtnotificationoffoutline,Off
 uilobby.txtnotificationon,On
 uilobby.txtnotificationonoutline,On
-uilobby.txtnotificationoutline,Notification
+uilobby.txtnotificationoutline,Notifications
 uilobby.txtplay,Level 00
 uilobby.txtplayoutline,Level 00
 uilobby.txtsound,Sound
@@ -565,8 +558,8 @@ uishop.textsale,90% OFF
 uishop.textsaleoutline,90% OFF
 uishop.titleshop,Shop
 uishop.titleshopoutline,Shop
-uishop.txtbtnbuy,$100 
-uishop.txtbtnbuyoutline,$100 
+uishop.txtbtnbuy,$100
+uishop.txtbtnbuyoutline,$100
 uishop.txtbtnmoreproducts__1_,More Offers
 uishop.txtbtnmoreproductsoutline,More Offers
 uishop.txtdescription,"No Ads,
