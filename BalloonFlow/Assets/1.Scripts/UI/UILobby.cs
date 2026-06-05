@@ -184,6 +184,8 @@ namespace BalloonFlow
         [Header("[WinningStreak — 로비 FX 연출 참조 (미할당 시 이름으로 자동 탐색)]")]
         [Tooltip("WinningStreak/FXFire — 게이지 위 불꽃. 펄스(커졌다 작아짐) 대상. 미할당 시 root 하위 'FxFire'/'FXFire' 탐색.")]
         [SerializeField] private GameObject _wsFxFire;
+        [Tooltip("WinningStreak/FXLight - disabled on lobby entry; enabled only by pending WS reward animation.")]
+        [SerializeField] private GameObject _wsFxLight;
         [Tooltip("WinningStreak/FXReward — 보상 상승·페이드 연출 오브젝트. 미할당 시 root 하위 'FxReward'/'FXReward' 탐색.")]
         [SerializeField] private GameObject _wsFxReward;
         [Tooltip("날아온 FXFire 가 도착할 위치 RectTransform. 보통 FXFire 의 RectTransform. 미할당 시 _wsFxFire 기준.")]
@@ -338,6 +340,8 @@ namespace BalloonFlow
             DisableGoldPanelFxFireOnEnter();
             ResolveLifePanelFxFire();
             DisableLifePanelFxFireOnEnter();
+            ResolveWsFxRefs();
+            DisableWinningStreakFxOnEnter();
 
             // 최초 진입 시 Rail 슬라이드 인 연출 1회 재생
             PlayRailEnterAnimation();
@@ -363,6 +367,7 @@ namespace BalloonFlow
         public override void OpenUI()
         {
             base.OpenUI();
+            DisableWinningStreakFxOnEnter();
             RefreshWinningStreakVisibility();
             TriggerPendingWinningStreakLobbyFx();
             TryAutoOpenWinningStreakPopup();
@@ -572,9 +577,11 @@ namespace BalloonFlow
 
             // FxFire 가 커졌다 작아진 직후 → Multiplier 가 X=10 으로 튕기듯 슬라이드 인.
             // 슬라이드 인 전에 현재 배수 상태로 Animator 세팅 (FX 중 정확한 배수 표시).
+            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
+            // ROLLBACK_WINNING_STREAK_MULTIPLIER_AFTER_ENTER_20260605:
+            // Designer spec: after the Multiplier entrance motion, move SelectFrame/TextYellow to the current value.
             if (_wsMultiplier != null)
                 WinningStreakUI.PlayMultiplierState(_wsMultiplier, WinningStreakUI.ResolveCurrentMultiplier());
-            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
 
             if (_wsProgressSlider != null)
             {
@@ -690,9 +697,9 @@ namespace BalloonFlow
                 yield return _wsLobbyFxSequence.WaitForCompletion();
             }
 
-            // 펄스 후 FxFire(반짝이 효과) 활성화.
-            if (_wsFxFire != null && !_wsFxFire.activeSelf)
-                _wsFxFire.SetActive(true);
+            // ROLLBACK_WINNING_STREAK_LOBBY_FX_ENTRY_OFF:
+            // Lobby entry keeps FXLight/FXFire off. Pending WS clear-return animation enables both.
+            SetWinningStreakFxActive(true);
         }
 
         /// <summary>보상 수령 연출 — RewardItem 위치에서 WinningStreakGetReward 프리팹을 스폰해 위로 상승시킨다.
@@ -847,6 +854,42 @@ namespace BalloonFlow
             if (maxLifetime > 0f) Destroy(_activeLifePanelFxFireInstance, maxLifetime + 1f);
         }
 
+        private void DisableWinningStreakFxOnEnter()
+        {
+            ResolveWsFxRefs();
+            SetWinningStreakFxActive(false);
+        }
+
+        private void SetWinningStreakFxActive(bool active)
+        {
+            SetParticleObjectActive(_wsFxLight, active);
+            SetParticleObjectActive(_wsFxFire, active);
+        }
+
+        private static void SetParticleObjectActive(GameObject go, bool active)
+        {
+            if (go == null) return;
+            if (active && !go.activeSelf)
+                go.SetActive(true);
+
+            var systems = go.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < systems.Length; i++)
+            {
+                if (systems[i] == null) continue;
+                if (active)
+                {
+                    systems[i].Clear(true);
+                    systems[i].Play(true);
+                }
+                else
+                {
+                    systems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                }
+            }
+            if (!active && go.activeSelf)
+                go.SetActive(active);
+        }
+
         private void ResolveWsFxRefs()
         {
             Transform root = _wsDisplayRoot != null ? _wsDisplayRoot.transform
@@ -856,12 +899,16 @@ namespace BalloonFlow
             // 실수로 Project 의 FXFire.prefab(에셋)을 넣으면 위치가 씬 좌표가 아니라 에셋 좌표(0 등)라
             // 날아오는 불꽃이 엉뚱한 곳으로 감 → 에셋 참조는 버리고 아래에서 이름으로 재탐색.
             if (_wsFxFire != null && !_wsFxFire.scene.IsValid()) _wsFxFire = null;
+            if (_wsFxLight != null && !_wsFxLight.scene.IsValid()) _wsFxLight = null;
             if (_wsFxReward != null && !_wsFxReward.scene.IsValid()) _wsFxReward = null;
             if (_wsFxFireTarget != null && !_wsFxFireTarget.gameObject.scene.IsValid()) _wsFxFireTarget = null;
 
             if (_wsFxFire == null)
                 _wsFxFire = FindChildComponentByName<Transform>(root, "FxFire")?.gameObject
                          ?? FindChildComponentByName<Transform>(root, "FXFire")?.gameObject;
+            if (_wsFxLight == null)
+                _wsFxLight = FindChildComponentByName<Transform>(root, "FxLight")?.gameObject
+                          ?? FindChildComponentByName<Transform>(root, "FXLight")?.gameObject;
             if (_wsFxReward == null)
                 _wsFxReward = FindChildComponentByName<Transform>(root, "FxReward")?.gameObject
                            ?? FindChildComponentByName<Transform>(root, "FXReward")?.gameObject;
@@ -985,6 +1032,10 @@ namespace BalloonFlow
             if (_wsRewardItem == null) return;
 
             ResolveWsPrimaryReward(stage, out string spriteKey, out int count, out bool isCoin);
+            int rewardEntryCount = CountWsRewardEntries(stage != null ? stage.rewards : null);
+            bool useGift = rewardEntryCount >= 2;
+            bool useGold = rewardEntryCount == 1 && isCoin;
+            bool useItem = rewardEntryCount == 1 && !isCoin;
 
             Transform root = _wsRewardItem.transform;
             GameObject goldVariant = FindDirectChildGO(root, "RewardGold");
@@ -992,16 +1043,18 @@ namespace BalloonFlow
             GameObject giftVariant = FindDirectChildGO(root, "ImageGift");
 
             // 타입별 변형 토글 (코인=골드, 그 외=아이템; WS 보상엔 Gift 없음).
-            if (goldVariant != null) goldVariant.SetActive(isCoin);
-            if (itemVariant != null) itemVariant.SetActive(!isCoin);
-            if (giftVariant != null) giftVariant.SetActive(false);
+            // ROLLBACK_WINNING_STREAK_REWARDIMG_VARIANT_RULE:
+            // RewardGold=gold only, RewardItem=single item/heart, ImageGift=composite rewards.
+            if (goldVariant != null) goldVariant.SetActive(useGold);
+            if (itemVariant != null) itemVariant.SetActive(useItem);
+            if (giftVariant != null) giftVariant.SetActive(useGift);
 
-            Transform active = ((isCoin ? goldVariant : itemVariant) != null
-                ? (isCoin ? goldVariant : itemVariant).transform
+            Transform active = ((useGold ? goldVariant : useItem ? itemVariant : giftVariant) != null
+                ? (useGold ? goldVariant : useItem ? itemVariant : giftVariant).transform
                 : root);
 
             // 비코인 변형만 아이콘 sprite swap (코인은 ImageGold 고정 비주얼).
-            if (!isCoin && !string.IsNullOrEmpty(spriteKey) && ResourceManager.HasInstance)
+            if (useItem && !string.IsNullOrEmpty(spriteKey) && ResourceManager.HasInstance)
             {
                 Image icon = null;
                 for (int i = 0; i < WsRewardIconNames.Length && icon == null; i++)
@@ -1011,7 +1064,7 @@ namespace BalloonFlow
             }
 
             // 카운트 텍스트 (활성 변형 내부 TextReward + Outline).
-            string countText = count > 0 ? $"x{count}" : "";
+            string countText = (useGold || useItem) && count > 0 ? $"x{count}" : "";
             var t1 = FindChildComponentByName<TMP_Text>(active, "TextReward");
             if (t1 != null) t1.text = countText;
             var t2 = FindChildComponentByName<TMP_Text>(active, "TextRewardOutline");
@@ -1025,6 +1078,21 @@ namespace BalloonFlow
             for (int i = 0; i < root.childCount; i++)
                 if (root.GetChild(i).name == name) return root.GetChild(i).gameObject;
             return null;
+        }
+
+        private static int CountWsRewardEntries(ShopRewards rewards)
+        {
+            if (rewards == null) return 0;
+            int count = 0;
+            if (rewards.coins > 0) count++;
+            if (rewards.boosters != null)
+            {
+                if (rewards.boosters.hand > 0) count++;
+                if (rewards.boosters.shuffle > 0) count++;
+                if (rewards.boosters.zap > 0) count++;
+            }
+            if (rewards.infiniteHeartsSeconds > 0) count++;
+            return count;
         }
 
         /// <summary>stage 의 대표 보상(코인>핸드>셔플>잽>무한하트 우선) 아이콘 키 + 카운트 + 코인 여부.</summary>

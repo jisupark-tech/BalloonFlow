@@ -24,12 +24,15 @@ namespace BalloonFlow
         private const float SlotFixedWidth = 900f;
         private const float SlotFixedHeight = 300f;
         private const string TooltipPrefabResource = "UI/UIAssets/WinningStreakClickInfo";
+        private const string EXIT_DUP_NAME = "ExitButton (1)";
         private const float TooltipViewportFlipThreshold = 0.5f;
         private const float TooltipPopDuration = 0.22f;
 
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
         [SerializeField] private Button _btnInfo;
+        private Button _btnExitDuplicate;
+        private bool _exitDuplicateSearched;
 
         [Header("[Key Blaze Slots]")]
         [SerializeField] private RectTransform _keyBlazeContents;
@@ -102,6 +105,12 @@ namespace BalloonFlow
 
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.AddListener(CloseUI);
+            CacheExitDuplicateButton();
+            if (_btnExitDuplicate != null)
+            {
+                _btnExitDuplicate.onClick.RemoveAllListeners();
+                _btnExitDuplicate.onClick.AddListener(CloseUI);
+            }
 
             if (_frame != null && _frame.BtnSingle != null)
             {
@@ -128,6 +137,8 @@ namespace BalloonFlow
 
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.RemoveAllListeners();
+            if (_btnExitDuplicate != null)
+                _btnExitDuplicate.onClick.RemoveAllListeners();
             if (_frame != null && _frame.BtnSingle != null)
                 _frame.BtnSingle.onClick.RemoveAllListeners();
             if (_btnInfo != null)
@@ -158,6 +169,29 @@ namespace BalloonFlow
                 _tooltipArrowBottom = null;
             }
             _activeTooltipStage = -1;
+        }
+
+        private void CacheExitDuplicateButton()
+        {
+            if (_exitDuplicateSearched) return;
+            _exitDuplicateSearched = true;
+
+            Transform found = transform.Find(EXIT_DUP_NAME);
+            if (found == null)
+            {
+                var allChildren = GetComponentsInChildren<Transform>(true);
+                for (int i = 0; i < allChildren.Length; i++)
+                {
+                    if (allChildren[i].name == EXIT_DUP_NAME)
+                    {
+                        found = allChildren[i];
+                        break;
+                    }
+                }
+            }
+
+            if (found != null)
+                _btnExitDuplicate = found.GetComponent<Button>();
         }
 
         public override void OpenUI()
@@ -296,7 +330,6 @@ namespace BalloonFlow
             var multiplierGo = FindChildGOByName(gameObject, "Multiplier");
             if (multiplierGo == null) return;
             int multiplier = WinningStreakUI.ResolveCurrentMultiplier();
-            WinningStreakUI.ApplyPopupPositionsForMultiplier(multiplierGo.transform, multiplier);
             // 실제 배수 반영 — Animator 상태(Multiplier5/10/25/100, 배수 1 은 기본 상태) 재생.
             WinningStreakUI.PlayMultiplierState(multiplierGo.transform, multiplier);
         }
@@ -628,14 +661,19 @@ namespace BalloonFlow
             // RewardItem 템플릿 — 구조 변경 내성: 슬롯 전체에서 "RewardItem" 을 직접 탐색.
             //   실제 프리팹 구조는 BtnReward > RewardImg > RewardItem 이라 이전 'FrameInner' 가정이 깨져
             //   frameInner=null → 보상 바인딩 전체가 no-op(이미지 미적용) 였다. 부모(RewardImg)를 컨테이너로 사용.
+            GameObject rewardImgGo = FindChildGOByName(slot, "RewardImg");
             GameObject rewardItemGo = null;
             {
                 var trs = slot.GetComponentsInChildren<Transform>(true);
                 for (int i = 0; i < trs.Length; i++)
                     if (trs[i] != null && trs[i].name.StartsWith("RewardItem")) { rewardItemGo = trs[i].gameObject; break; }
             }
-            pooled.rewardItemTemplate = rewardItemGo;
-            RectTransform rewardParent = rewardItemGo != null ? rewardItemGo.transform.parent as RectTransform : pooled.frameInner;
+            // ROLLBACK_WINNING_STREAK_REWARDIMG_VARIANT_RULE:
+            // Template used to be the inner RewardItem child and multiple reward items were cloned
+            // for composite rewards. New spec treats RewardImg as one variant container:
+            // RewardGold=gold only, RewardItem=single item/heart, ImageGift=composite rewards.
+            pooled.rewardItemTemplate = rewardImgGo != null ? rewardImgGo : rewardItemGo;
+            RectTransform rewardParent = pooled.rewardItemTemplate != null ? pooled.rewardItemTemplate.transform.parent as RectTransform : pooled.frameInner;
             pooled.rewardItemRoot = rewardParent;
             pooled.frameInner = rewardParent; // BindRewardItems 의 frameInner null-check 호환
 
@@ -651,18 +689,22 @@ namespace BalloonFlow
 
         private static RewardItemRefs CaptureRewardItemRefs(GameObject item)
         {
+            GameObject rewardGold = FindChildGOByName(item, "RewardGold");
+            GameObject rewardItemVariant = FindChildGOByName(item, "RewardItem");
+            GameObject imageGift = FindChildGOByName(item, "ImageGift");
+            GameObject iconSearchRoot = rewardItemVariant != null ? rewardItemVariant : item;
             // 1) 알려진 후보 이름으로 sprite-swap 아이콘 탐색.
             Image icon = null;
             for (int i = 0; i < RewardIconNames.Length && icon == null; i++)
-                icon = FindChildByName<Image>(item, RewardIconNames[i]);
+                icon = FindChildByName<Image>(iconSearchRoot, RewardIconNames[i]);
 
             // 2) fallback — 후보 미일치 시, 배경/틀/깃발/하트/기프트류를 제외한 첫 Image 를 아이콘으로 사용.
             if (icon == null)
             {
-                var imgs = item.GetComponentsInChildren<Image>(true);
+                var imgs = iconSearchRoot.GetComponentsInChildren<Image>(true);
                 for (int i = 0; i < imgs.Length; i++)
                 {
-                    if (imgs[i] == null || imgs[i].gameObject == item) continue;
+                    if (imgs[i] == null || imgs[i].gameObject == iconSearchRoot) continue;
                     string n = imgs[i].gameObject.name;
                     if (n.IndexOf("Flag",  System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
                     if (n.IndexOf("Frame", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
@@ -687,9 +729,11 @@ namespace BalloonFlow
             return new RewardItemRefs
             {
                 root = item,
+                rewardGold = rewardGold,
+                rewardItemVariant = rewardItemVariant,
                 icon = icon,
                 altHeart = FindChildGOByName(item, "ImageHeart"),
-                altGift = FindChildGOByName(item, "ImageGift"),
+                altGift = imageGift,
                 text = FindChildByName<TMP_Text>(item, "TextReward"),
                 textOutline = FindChildByName<TMP_Text>(item, "TextRewardOutline")
             };
@@ -969,7 +1013,9 @@ namespace BalloonFlow
             }
 
             List<RewardEntry> rewards = BuildRewardEntries(stageDoc);
-            int requiredCount = Mathf.Max(1, rewards.Count); // 빈 stage 도 템플릿 1개는 켜둠 (이상치 방지)
+            // ROLLBACK_WINNING_STREAK_REWARDIMG_VARIANT_RULE:
+            // New spec uses one RewardImg variant container. Old behavior used rewards.Count clones.
+            int requiredCount = 1;
 
             EnsureRewardItemCount(pooled, requiredCount);
 
@@ -978,9 +1024,17 @@ namespace BalloonFlow
                 var item = pooled.rewardItems[i];
                 if (item?.root == null) continue;
 
+                if (i > 0)
+                {
+                    item.root.SetActive(false);
+                    continue;
+                }
+
                 if (i < rewards.Count)
                 {
                     item.root.SetActive(true);
+                    BindRewardImgVariant(item, rewards);
+                    if (UseRewardImgVariantRule()) continue;
 
                     // 타입별 대체 이미지(Heart/Gift)는 숨기고, 단일 아이콘(ImageItem)에 sprite swap + 활성화.
                     if (item.altHeart != null) item.altHeart.SetActive(false);
@@ -1014,6 +1068,42 @@ namespace BalloonFlow
             }
         }
 
+        private static bool UseRewardImgVariantRule()
+        {
+            return true;
+        }
+
+        // ROLLBACK_WINNING_STREAK_REWARDIMG_VARIANT_RULE:
+        // New RewardImg rule:
+        // - RewardGold: gold-only reward
+        // - RewardItem: exactly one item reward, including infinite hearts
+        // - ImageGift: two or more reward entries, or mixed/composite rewards
+        private void BindRewardImgVariant(RewardItemRefs item, List<RewardEntry> rewards)
+        {
+            bool hasSingle = rewards != null && rewards.Count == 1;
+            bool useGold = hasSingle && rewards[0].type == RewardType.Coin;
+            bool useItem = hasSingle && rewards[0].type != RewardType.Coin;
+            bool useGift = rewards != null && rewards.Count >= 2;
+
+            if (item.rewardGold != null) item.rewardGold.SetActive(useGold);
+            if (item.rewardItemVariant != null) item.rewardItemVariant.SetActive(useItem);
+            if (item.altGift != null) item.altGift.SetActive(useGift);
+            if (item.altHeart != null) item.altHeart.SetActive(false);
+
+            RewardEntry primary = hasSingle ? rewards[0] : default;
+            if (useItem && item.icon != null)
+            {
+                var sprite = ResolveRewardSprite(primary.type);
+                if (sprite != null) item.icon.sprite = sprite;
+                item.icon.enabled = true;
+                if (!item.icon.gameObject.activeSelf) item.icon.gameObject.SetActive(true);
+            }
+
+            string countText = hasSingle ? GetRewardCountText(primary) : "";
+            if (item.text != null) item.text.text = countText;
+            if (item.textOutline != null) item.textOutline.text = countText;
+        }
+
         private static List<RewardEntry> BuildRewardEntries(WinningStreakStage stageDoc)
         {
             var list = new List<RewardEntry>(3);
@@ -1030,6 +1120,12 @@ namespace BalloonFlow
             if (r.infiniteHeartsSeconds > 0)
                 list.Add(new RewardEntry { type = RewardType.InfiniteHearts, count = r.infiniteHeartsSeconds });
             return list;
+        }
+
+        private static string GetRewardCountText(RewardEntry reward)
+        {
+            if (reward.type == RewardType.InfiniteHearts) return "";
+            return reward.count > 0 ? $"x{reward.count}" : "";
         }
 
         // 보상 아이콘은 항상 atlas_ui (Addressable) 에서 동적 로드 — Shop / PurchaseRewardEffect 와 동일 패턴.
@@ -1232,6 +1328,8 @@ namespace BalloonFlow
         private class RewardItemRefs
         {
             public GameObject root;
+            public GameObject rewardGold;
+            public GameObject rewardItemVariant;
             public Image icon;          // ImageItem — 코인/부스터/하트 sprite 를 swap 해서 표시(단일 아이콘).
             public GameObject altHeart; // ImageHeart — 기본 활성이라 숨겨야 ImageItem 과 안 겹침.
             public GameObject altGift;  // ImageGift — WS 보상 타입에 매핑 없음, 숨김.

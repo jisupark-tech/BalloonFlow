@@ -167,12 +167,13 @@ namespace BalloonFlow
 
             // HiddenAppearParticle baseline 보장 — 프리팹 활성/PlayOnAwake로 인한 스폰 직후 오발화 차단.
             // SetHolderId→Init이 obj.SetActive(true) 직후 동일 프레임 동기 실행되므로 렌더 전에 비활성화됨.
-            if (_hiddenAppearParticle != null)
+            GameObject hiddenFx = ResolveHiddenAppearParticle();
+            if (hiddenFx != null)
             {
-                var baselineParticles = _hiddenAppearParticle.GetComponentsInChildren<ParticleSystem>(true);
+                var baselineParticles = hiddenFx.GetComponentsInChildren<ParticleSystem>(true);
                 for (int i = 0; i < baselineParticles.Length; i++)
                     baselineParticles[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-                _hiddenAppearParticle.SetActive(false);
+                hiddenFx.SetActive(false);
             }
         }
 
@@ -604,7 +605,8 @@ namespace BalloonFlow
             if (_box != null) _box.SetActive(true);
             if (_boxFrozen != null) _boxFrozen.SetActive(false);
             if (_frozenExplosionEffect != null) _frozenExplosionEffect.SetActive(false);
-            if (_hiddenAppearParticle != null) _hiddenAppearParticle.SetActive(false);
+            GameObject hiddenFx = ResolveHiddenAppearParticle();
+            if (hiddenFx != null) hiddenFx.SetActive(false);
             SetControlBoxStrokeActive(false);
         }
 
@@ -630,7 +632,7 @@ namespace BalloonFlow
 
         private void PlayHiddenAppearEffect()
         {
-            GameObject fx = _hiddenAppearParticle;
+            GameObject fx = ResolveHiddenAppearParticle();
             if (fx == null)
             {
                 // 인스펙터 미할당 폴백 — 계층에서 "HiddenAppearParticle" GO 탐색(비활성 포함).
@@ -987,6 +989,17 @@ namespace BalloonFlow
         #endregion
 
         #region Utility
+
+        private GameObject ResolveHiddenAppearParticle()
+        {
+            if (_hiddenAppearParticle != null) return _hiddenAppearParticle;
+
+            Transform found = FindDeep(transform, "HiddenAppearParticle");
+            if (found != null)
+                _hiddenAppearParticle = found.gameObject;
+
+            return _hiddenAppearParticle;
+        }
 
         private static Transform FindDeep(Transform parent, string name)
         {

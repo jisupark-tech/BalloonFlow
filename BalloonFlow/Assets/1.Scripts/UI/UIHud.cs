@@ -69,6 +69,8 @@ namespace BalloonFlow
         [Header("[Bottom Panel — 부스터 아이템]")]
         [Tooltip("아이템 사용 popup 열릴 때 화면 밖 -260 으로 tween — Inspector 에서 BottomPanel root RectTransform 할당")]
         [SerializeField] private RectTransform _bottomPanelRoot;
+        [Tooltip("UseItem popup 때 실제로 이동할 버튼 묶음. 미할당 시 'ButtonContainer' 이름으로 자동 탐색.")]
+        [SerializeField] private RectTransform _buttonContainerRoot;
         [SerializeField] private Button _itemBtnShuffle;
         [SerializeField] private Button _itemBtnRemove;
         [SerializeField] private Button _itemBtnHand;
@@ -190,11 +192,15 @@ namespace BalloonFlow
         // [2026-05-12] BottomPanel hide / show — UseItem popup 열릴 때 -270 으로 tween. 닫힐 때 원위치 복귀.
         // 기존 cutout/dim 시스템 (Hole in UI) 대신 패널 자체 비키게 — 보관함/풍선 dim 없이 시각 노출.
         private const float BOTTOM_PANEL_HIDE_Y = -260f;
+        private const float HUD_TOP_USEITEM_Y = 160f;
         // [2026-05-12] 0.25s → 0.5s — 너무 빨라서 tween 인지 어려움.
         private const float BOTTOM_PANEL_TWEEN_DUR = 0.5f;
         private Vector2 _bottomPanelOrigPos;
         private bool _bottomPanelOrigCached;
+        private Vector2 _buttonContainerOrigPos;
+        private bool _buttonContainerOrigCached;
         private DG.Tweening.Tweener _bottomPanelTween;
+        private DG.Tweening.Tweener _hudTopUseItemTween;
 
         // [2026-05-13] 인게임 팝업 오픈 연출 — 사용자 스펙 절대 anchoredPosition.y값 (-60→-100→160 sequence)
         private const float HUD_TOP_OPEN_START        = -60f;
@@ -221,42 +227,92 @@ namespace BalloonFlow
 
         public void HideBottomPanel()
         {
-            if (_bottomPanelRoot == null)
+            RectTransform moveTarget = GetButtonContainerRoot();
+            if (moveTarget == null)
             {
                 Debug.LogWarning("[UIHud] HideBottomPanel: _bottomPanelRoot 미할당. Inspector 에서 BottomPanel RectTransform 와이어 필요.");
                 return;
             }
-            if (!_bottomPanelOrigCached)
+            if (!_buttonContainerOrigCached)
             {
-                _bottomPanelOrigPos = _bottomPanelRoot.anchoredPosition;
-                _bottomPanelOrigCached = true;
+                _buttonContainerOrigPos = moveTarget.anchoredPosition;
+                _buttonContainerOrigCached = true;
             }
             _bottomPanelTween?.Kill();
             // ROLLBACK_HUD_BOTTOM_DOKILL:
             // Zap can start immediately after PopupUseItem closes. Kill any bottom-panel tween
             // already created by popup close/open so the Zap hide tween is not overwritten.
-            _bottomPanelRoot.DOKill(false);
+            moveTarget.DOKill(false);
             // ROLLBACK_USEITEM_BOTTOM_PANEL_ABSOLUTE_HIDE:
             // UseItem spec is "BottomPanel to y=-260". Do not offset from a stale cached
             // origin, because scene-enter/popup tweens can leave the cache out of sync.
             float targetY = BOTTOM_PANEL_HIDE_Y;
-            Debug.Log($"[UIHud] HideBottomPanel: origin.y={_bottomPanelOrigPos.y:F1} → target.y={targetY:F1}");
-            _bottomPanelTween = _bottomPanelRoot.DOAnchorPosY(targetY, BOTTOM_PANEL_TWEEN_DUR)
+            Debug.Log($"[UIHud] HideBottomPanel: origin.y={_buttonContainerOrigPos.y:F1} -> target.y={targetY:F1}");
+            MoveHudTopForUseItem(true);
+            _bottomPanelTween = moveTarget.DOAnchorPosY(targetY, BOTTOM_PANEL_TWEEN_DUR)
                 .SetEase(DG.Tweening.Ease.OutCubic)
                 .SetUpdate(true); // timeScale=0 (PauseManager) 환경에서도 동작
         }
 
         public void ShowBottomPanel()
         {
-            if (_bottomPanelRoot == null) return;
-            if (!_bottomPanelOrigCached) return;
+            RectTransform moveTarget = GetButtonContainerRoot();
+            if (moveTarget == null) return;
+            if (!_buttonContainerOrigCached)
+            {
+                MoveHudTopForUseItem(false);
+                return;
+            }
             _bottomPanelTween?.Kill();
             // ROLLBACK_HUD_BOTTOM_DOKILL: see HideBottomPanel.
-            _bottomPanelRoot.DOKill(false);
-            Debug.Log($"[UIHud] ShowBottomPanel: → origin.y={_bottomPanelOrigPos.y:F1}");
-            _bottomPanelTween = _bottomPanelRoot.DOAnchorPosY(_bottomPanelOrigPos.y, BOTTOM_PANEL_TWEEN_DUR)
+            moveTarget.DOKill(false);
+            Debug.Log($"[UIHud] ShowBottomPanel: -> origin.y={_buttonContainerOrigPos.y:F1}");
+            MoveHudTopForUseItem(false);
+            _bottomPanelTween = moveTarget.DOAnchorPosY(_buttonContainerOrigPos.y, BOTTOM_PANEL_TWEEN_DUR)
                 .SetEase(DG.Tweening.Ease.OutCubic)
                 .SetUpdate(true);
+        }
+
+        private RectTransform GetButtonContainerRoot()
+        {
+            if (_buttonContainerRoot != null) return _buttonContainerRoot;
+
+            Transform found = FindDeep(transform, "ButtonContainer");
+            if (found != null)
+                _buttonContainerRoot = found as RectTransform;
+
+            return _buttonContainerRoot != null ? _buttonContainerRoot : _bottomPanelRoot;
+        }
+
+        private void MoveHudTopForUseItem(bool hidden)
+        {
+            if (_hudTopRoot == null) return;
+            if (!_hudTopOrigCached)
+            {
+                _hudTopOrigPos = _hudTopRoot.anchoredPosition;
+                _hudTopOrigCached = true;
+            }
+
+            _hudTopUseItemTween?.Kill();
+            _hudTopRoot.DOKill(false);
+            float targetY = hidden ? HUD_TOP_USEITEM_Y : HUD_TOP_INGAME_REST_Y;
+            _hudTopUseItemTween = _hudTopRoot.DOAnchorPosY(targetY, BOTTOM_PANEL_TWEEN_DUR)
+                .SetEase(DG.Tweening.Ease.OutCubic)
+                .SetUpdate(true);
+        }
+
+        private static Transform FindDeep(Transform root, string name)
+        {
+            if (root == null) return null;
+            if (root.name == name) return root;
+
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform found = FindDeep(root.GetChild(i), name);
+                if (found != null) return found;
+            }
+
+            return null;
         }
 
         /// <summary>

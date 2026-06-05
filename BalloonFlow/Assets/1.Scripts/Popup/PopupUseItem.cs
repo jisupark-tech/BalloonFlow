@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using DG.Tweening;
+using Coffee.UIExtensions;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
 
@@ -228,9 +229,79 @@ namespace BalloonFlow
 
         private void SetFxParticlesVisible(bool visible)
         {
-            if (_fxLight != null) _fxLight.SetActive(visible);
-            if (_fxBackLightR != null) _fxBackLightR.SetActive(visible);
-            if (_fxFire != null) _fxFire.SetActive(visible);
+            ResolveFxReferences();
+            SetFxParticleVisible(_fxLight, visible);
+            SetFxParticleVisible(_fxBackLightR, visible);
+            SetFxParticleVisible(_fxFire, visible);
+        }
+
+        private void ResolveFxReferences()
+        {
+            if (_fxLight == null)
+                _fxLight = FindDeep(transform, "FX_Light")?.gameObject;
+            if (_fxBackLightR == null)
+                _fxBackLightR = FindDeep(transform, "FX_BackLightR")?.gameObject;
+            if (_fxFire == null)
+                _fxFire = FindDeep(transform, "FX_Fire")?.gameObject;
+        }
+
+        private static void SetFxParticleVisible(GameObject root, bool visible)
+        {
+            if (root == null) return;
+
+            root.SetActive(visible);
+
+            UIParticle[] uiParticles = root.GetComponentsInChildren<UIParticle>(true);
+            for (int i = 0; i < uiParticles.Length; i++)
+            {
+                UIParticle uiParticle = uiParticles[i];
+                if (uiParticle == null) continue;
+                uiParticle.gameObject.SetActive(visible);
+                if (visible)
+                {
+                    uiParticle.RefreshParticles();
+                    uiParticle.Clear();
+                    uiParticle.Play();
+                }
+                else
+                {
+                    uiParticle.Stop();
+                }
+            }
+
+            ParticleSystem[] systems = root.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < systems.Length; i++)
+            {
+                ParticleSystem ps = systems[i];
+                if (ps == null) continue;
+
+                if (visible)
+                {
+                    ps.gameObject.SetActive(true);
+                    ParticleSystem.MainModule main = ps.main;
+                    main.useUnscaledTime = true;
+                    ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    ps.Play(true);
+                }
+                else
+                {
+                    ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                }
+            }
+        }
+
+        private static Transform FindDeep(Transform root, string name)
+        {
+            if (root == null) return null;
+            if (root.name == name) return root;
+
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform found = FindDeep(root.GetChild(i), name);
+                if (found != null) return found;
+            }
+
+            return null;
         }
 
         private void OnDisable()

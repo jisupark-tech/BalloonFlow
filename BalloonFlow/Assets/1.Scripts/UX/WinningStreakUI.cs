@@ -17,6 +17,7 @@ namespace BalloonFlow
         public const float MULTIPLIER_ENTER_FROM_X = -724f;
         public const float MULTIPLIER_ENTER_TO_X   = 0f;
         public const float MULTIPLIER_ENTER_DURATION = 0.35f;
+        public const float MULTIPLIER_SELECT_MOVE_DURATION = 0.18f;
 
         private static readonly int[] Tiers = { 1, 5, 10, 25, 100 };
 
@@ -25,8 +26,10 @@ namespace BalloonFlow
         private static readonly float[] HudTextYellowX  = {  358f,  170f, -10f, -190f, -370f };
 
         // PopupWinningStreak — 위치만, 애니메이션 없음.
-        private static readonly float[] PopupSelectFrameX = { -360f, -184f, -10f, 174f, 350f };
-        private static readonly float[] PopupTextYellowX  = {  360f,  184f,  10f, -174f, -350f };
+        // ROLLBACK_WINNING_STREAK_MULTIPLIER_POS_20260605:
+        // Popup/Lobby use the same designer-provided positions. Mask stays fixed.
+        private static readonly float[] PopupSelectFrameX = { -338f, -150f,  30f,  210f,  390f };
+        private static readonly float[] PopupTextYellowX  = {  358f,  170f, -10f, -190f, -370f };
 
         /// <summary>현재 streak 의 배수 (1/5/10/25/100). State/Config 미준비 시 1 반환.</summary>
         public static int ResolveCurrentMultiplier()
@@ -68,14 +71,32 @@ namespace BalloonFlow
 
         private static void ApplyPositions(Transform multiplierRoot, int multiplier, float[] selectFrameX, float[] textYellowX)
         {
+            ApplyPositions(multiplierRoot, multiplier, selectFrameX, textYellowX, 0f);
+        }
+
+        private static void ApplyPositions(Transform multiplierRoot, int multiplier, float[] selectFrameX, float[] textYellowX, float duration)
+        {
             if (multiplierRoot == null) return;
             int idx = IndexForMultiplier(multiplier);
             var selectFrame = FindChildRect(multiplierRoot, "SelectFrame");
             var textYellow  = FindChildRect(multiplierRoot, "TextYellow");
-            if (selectFrame != null)
-                selectFrame.anchoredPosition = new Vector2(selectFrameX[idx], selectFrame.anchoredPosition.y);
-            if (textYellow != null)
-                textYellow.anchoredPosition = new Vector2(textYellowX[idx], textYellow.anchoredPosition.y);
+            MoveRectX(selectFrame, selectFrameX[idx], duration);
+            MoveRectX(textYellow, textYellowX[idx], duration);
+        }
+
+        private static void MoveRectX(RectTransform rect, float x, float duration)
+        {
+            if (rect == null) return;
+            rect.DOKill();
+            if (duration <= 0f)
+            {
+                rect.anchoredPosition = new Vector2(x, rect.anchoredPosition.y);
+                return;
+            }
+
+            rect.DOAnchorPosX(x, duration)
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(true);
         }
 
         /// <summary>Popup (Quit/Continue) WinningStreak view 안 Multiplier 등장 연출 + 위치 + Animator state.
@@ -96,7 +117,9 @@ namespace BalloonFlow
                 rt.anchoredPosition = start;
                 rt.DOAnchorPosX(MULTIPLIER_ENTER_TO_X, MULTIPLIER_ENTER_DURATION)
                     .SetEase(Ease.OutCubic)
-                    .SetUpdate(true); // popup 이라 timescale 무관.
+                    .SetUpdate(true) // popup 이라 timescale 무관.
+                    .OnComplete(() => PlayMultiplierState(multiplierRoot, multiplier));
+                return;
             }
 
             // (2) SelectFrame / TextYellow 배수별 위치 (Popup Quit/Continue 매핑 사용).
@@ -115,6 +138,7 @@ namespace BalloonFlow
         public static void PlayMultiplierState(Transform multiplierRoot, int multiplier)
         {
             if (multiplierRoot == null) return;
+            ApplyPositions(multiplierRoot, multiplier, HudSelectFrameX, HudTextYellowX, MULTIPLIER_SELECT_MOVE_DURATION);
             var animator = multiplierRoot.GetComponentInChildren<Animator>(true);
             if (animator == null || !animator.isActiveAndEnabled) return;
             if (multiplier > 1)

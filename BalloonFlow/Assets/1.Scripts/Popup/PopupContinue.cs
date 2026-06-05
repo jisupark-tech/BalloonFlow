@@ -13,6 +13,8 @@ namespace BalloonFlow
         private const string DECLINE_DUP_NAME = "DeclineButton (1)";
         private const string LOSELIFE_NAME = "LoseLife";
         private const string WINNINGSTREAK_NAME = "WinningStreak";
+        private const string MULTIPLIER_NAME = "Multiplier";
+        private const string POPUP_QUIT_RESOURCE_PATH = "Popup/PopupQuit";
 
         private const int OVERLAY_SORT_ORDER = 260; // Tutorial(=250) 위에 항상 표시 — 사용자 요청 2026-06-04
         private Canvas _overrideCanvas;
@@ -161,7 +163,51 @@ namespace BalloonFlow
             }
 
             if (loseLife != null) _loseLifeView = loseLife.gameObject;
-            if (winningStreak != null) _winningStreakView = winningStreak.gameObject;
+            if (winningStreak != null)
+            {
+                _winningStreakView = winningStreak.gameObject;
+                EnsureWinningStreakMultiplierFromQuitPrefab();
+            }
+        }
+
+        /// <summary>
+        /// ROLLBACK_POPUP_CONTINUE_MULTIPLIER_20260605:
+        /// PopupContinue prefab is binary in this branch, so keep the existing prefab untouched and clone
+        /// PopupQuit/WinningStreak/Multiplier at runtime when PopupContinue is missing the same object.
+        /// </summary>
+        private void EnsureWinningStreakMultiplierFromQuitPrefab()
+        {
+            if (_winningStreakView == null) return;
+            if (FindChildRecursive(_winningStreakView.transform, MULTIPLIER_NAME) != null) return;
+
+            var quitPrefab = Resources.Load<GameObject>(POPUP_QUIT_RESOURCE_PATH);
+            if (quitPrefab == null) return;
+
+            Transform quitWinningStreak = FindChildRecursive(quitPrefab.transform, WINNINGSTREAK_NAME);
+            Transform sourceMultiplier = quitWinningStreak != null
+                ? FindChildRecursive(quitWinningStreak, MULTIPLIER_NAME)
+                : FindChildRecursive(quitPrefab.transform, MULTIPLIER_NAME);
+            if (sourceMultiplier == null) return;
+
+            GameObject clone = Instantiate(sourceMultiplier.gameObject, _winningStreakView.transform, false);
+            clone.name = MULTIPLIER_NAME;
+
+            if (sourceMultiplier is RectTransform sourceRect && clone.transform is RectTransform cloneRect)
+                CopyRectTransform(sourceRect, cloneRect);
+        }
+
+        private static void CopyRectTransform(RectTransform source, RectTransform target)
+        {
+            if (source == null || target == null) return;
+            target.anchorMin = source.anchorMin;
+            target.anchorMax = source.anchorMax;
+            target.anchoredPosition = source.anchoredPosition;
+            target.sizeDelta = source.sizeDelta;
+            target.pivot = source.pivot;
+            target.localRotation = source.localRotation;
+            target.localScale = source.localScale;
+            target.offsetMin = source.offsetMin;
+            target.offsetMax = source.offsetMax;
         }
 
         private void ResetToLoseLife()
@@ -214,6 +260,7 @@ namespace BalloonFlow
 
         private static Transform FindChildRecursive(Transform parent, string childName)
         {
+            if (parent == null) return null;
             for (int i = 0; i < parent.childCount; i++)
             {
                 Transform child = parent.GetChild(i);
@@ -331,6 +378,7 @@ namespace BalloonFlow
                 if (_winningStreakView != null)
                 {
                     _winningStreakView.SetActive(true);
+                    EnsureWinningStreakMultiplierFromQuitPrefab();
                     WinningStreakUI.PlayMultiplierIdle(_winningStreakView, multiplier);
                 }
                 if (_frame != null) _frame.SetDescription($"You will lose your x{multiplier} multiplier!");

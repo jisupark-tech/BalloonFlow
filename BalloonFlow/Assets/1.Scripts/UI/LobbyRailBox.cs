@@ -32,8 +32,9 @@ namespace BalloonFlow
         // TextLevelOutline: alpha 0.45 (색상 변경 없이)
         private const float OUTLINE_INACTIVE_ALPHA = 0.45f;
 
-        // Hard 난이도 전용 dim sprite (Normal/SuperHard는 prefab 원본 유지)
+        // Difficulty-specific dim sprites. Normal keeps the prefab original.
         private const string PURPLE_BOX_SPRITE_PATH = "Sprites/purpleBox";
+        private const string RED_BOX_SPRITE_PATH = "Sprites/RedBox";
 
         #endregion
 
@@ -69,6 +70,7 @@ namespace BalloonFlow
         private DifficultyPurpose _difficulty = DifficultyPurpose.Normal;
 
         private static Sprite s_purpleBoxSprite;
+        private static Sprite s_redBoxSprite;
         private Sprite _originalDimSprite;
 
         #endregion
@@ -152,10 +154,8 @@ namespace BalloonFlow
             {
                 _imgBoxDim.gameObject.SetActive(true);
 
-                // Hard 난이도일 때만 purpleBox sprite로 교체, 그 외엔 prefab 원본 유지
-                Sprite targetSprite = difficulty == DifficultyPurpose.Hard
-                    ? GetPurpleBoxSprite()
-                    : _originalDimSprite;
+                // Hard/SuperHard use dedicated box sprites. Normal keeps the prefab original.
+                Sprite targetSprite = GetDimBoxSprite(difficulty);
                 if (targetSprite != null) _imgBoxDim.sprite = targetSprite;
 
                 _imgBoxDim.color = difficulty switch
@@ -195,6 +195,26 @@ namespace BalloonFlow
             if (s_purpleBoxSprite == null)
                 s_purpleBoxSprite = Resources.Load<Sprite>(PURPLE_BOX_SPRITE_PATH);
             return s_purpleBoxSprite;
+        }
+
+        private Sprite GetDimBoxSprite(DifficultyPurpose difficulty)
+        {
+            switch (difficulty)
+            {
+                case DifficultyPurpose.SuperHard:
+                    return GetRedBoxSprite() ?? _originalDimSprite;
+                case DifficultyPurpose.Hard:
+                    return GetPurpleBoxSprite() ?? _originalDimSprite;
+                default:
+                    return _originalDimSprite;
+            }
+        }
+
+        private static Sprite GetRedBoxSprite()
+        {
+            if (s_redBoxSprite == null)
+                s_redBoxSprite = Resources.Load<Sprite>(RED_BOX_SPRITE_PATH);
+            return s_redBoxSprite;
         }
 
         private void ApplyLevelOutline(DifficultyPurpose difficulty, float alpha)

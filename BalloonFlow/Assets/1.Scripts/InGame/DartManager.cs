@@ -203,6 +203,14 @@ namespace BalloonFlow
         // holder 가 '자기 pass lock 에 막혀' 발사 못 한 채로 머문 시작 시각(unscaled). 임계 초과 시
         // 그 라인 lock 해제 (RelieveStuckHolderLineLocks). 발사 성공/비-막힘 시 제거.
         private readonly Dictionary<int, float> _holderLineStuckSince = new Dictionary<int, float>(16);
+        // ROLLBACK_DART_STUCK_LINE_KEYED_RELIEF:
+        // Remove these two dictionaries and restore holder-only _holderLineStuckSince usage if this
+        // rescue should again ignore scanDir/line changes. The current fix keeps the stuck timer tied
+        // to the exact holder+direction+line so a moving head cannot inherit stale stuck time from a
+        // previous rail line and repeatedly clear the wrong lock.
+        private readonly Dictionary<int, DirectionalTargeting.ScanDirection> _holderLineStuckDirection =
+            new Dictionary<int, DirectionalTargeting.ScanDirection>(16);
+        private readonly Dictionary<int, int> _holderLineStuckLine = new Dictionary<int, int>(16);
         // 막힌 채 이 시간(초) 이상 지나면 그 라인만 잠금 해제 — 연속공격 방지 간격 + 놓침 방지.
         private const float HOLDER_LINE_STUCK_RESET_SECONDS = 0.4f;
         // ROLLBACK_DART_STRAIGHT_RAIL_PROGRESS_WRAP:
@@ -1733,7 +1741,7 @@ namespace BalloonFlow
                 // 발사 성공 → 진행 중이므로 stuck 타이머 해제. (타이머는 '발사할 때만' 리셋.)
                 if (_firedHoldersThisTick.Contains(holderId))
                 {
-                    _holderLineStuckSince.Remove(holderId);
+                    ClearHolderLineStuckState(holderId);
                     continue;
                 }
 
@@ -1741,13 +1749,33 @@ namespace BalloonFlow
                 var scanDir = DirectionalTargeting.DetermineScanDirection(fireDir);
                 int line = GetScanLine(pos, scanDir);
 
+                bool isCurrentlyConsumed = IsHolderLineConsumed(holderId, scanDir, line);
+                if (!isCurrentlyConsumed)
+                {
+                    ClearHolderLineStuckState(holderId);
+                    continue;
+                }
+
                 if (!_holderLineStuckSince.TryGetValue(holderId, out float since))
                 {
                     // 자기 pass lock 에 막힌 순간부터 타이머 시작.
                     // (이전 버그: head 가 sweep 중 빈 라인을 지날 때 타이머를 리셋해 0.4s 도달 불가.
                     //  → 이제 발사 전까지 타이머를 유지한다.)
-                    if (IsHolderLineConsumed(holderId, scanDir, line))
-                        _holderLineStuckSince[holderId] = Time.unscaledTime;
+                    SetHolderLineStuckState(holderId, scanDir, line, Time.unscaledTime);
+                    continue;
+                }
+
+                // ROLLBACK_DART_STUCK_LINE_KEYED_RELIEF:
+                // A holder head moves while the timer is running. If it reaches another direction
+                // or line, restart the timer instead of treating the new line as the same stuck lock.
+                bool sameStuckLine =
+                    _holderLineStuckDirection.TryGetValue(holderId, out var stuckDir)
+                    && stuckDir == scanDir
+                    && _holderLineStuckLine.TryGetValue(holderId, out int stuckLine)
+                    && stuckLine == line;
+                if (!sameStuckLine)
+                {
+                    SetHolderLineStuckState(holderId, scanDir, line, Time.unscaledTime);
                     continue;
                 }
 
@@ -1757,10 +1785,35 @@ namespace BalloonFlow
                 if (Time.unscaledTime - since >= HOLDER_LINE_STUCK_RESET_SECONDS)
                 {
                     ClearConsumedLineLockForHolder(holderId);
-                    _holderLineStuckSince.Remove(holderId);
+                    // ROLLBACK_DART_STUCK_LINE_KEYED_RELIEF:
+                    // New holder placement fixes the deadlock because it seeds a fresh scan line.
+                    // Do the same for the stuck holder after clearing its pass lock so the next scan
+                    // does not reuse stale same-head/same-line cache or an obsolete promo seed.
+                    InvalidateDartScanLineForHolder(holderId);
+                    ClearHolderLineStuckState(holderId);
                     LogAttackIssue("DartStuckHolderLineReset", $"holder={holderId} scan={scanDir} line={line}");
                 }
             }
+        }
+
+        // ROLLBACK_DART_STUCK_LINE_KEYED_RELIEF:
+        // Remove these helpers and write only _holderLineStuckSince if holder-only stuck relief is restored.
+        private void SetHolderLineStuckState(
+            int holderId,
+            DirectionalTargeting.ScanDirection scanDir,
+            int line,
+            float since)
+        {
+            _holderLineStuckSince[holderId] = since;
+            _holderLineStuckDirection[holderId] = scanDir;
+            _holderLineStuckLine[holderId] = line;
+        }
+
+        private void ClearHolderLineStuckState(int holderId)
+        {
+            _holderLineStuckSince.Remove(holderId);
+            _holderLineStuckDirection.Remove(holderId);
+            _holderLineStuckLine.Remove(holderId);
         }
 
         private bool ShouldRunPostFireHeadRescan()
@@ -2509,6 +2562,8 @@ namespace BalloonFlow
             _holderPassDirectionByHolder.Clear();
             _lastStraightHeadProgressByHolder.Clear();
             _holderLineStuckSince.Clear();
+            _holderLineStuckDirection.Clear();
+            _holderLineStuckLine.Clear();
             _consumedTargetLines.Clear();
             _unresolvedConsumedTargetLines.Clear();
             _currentHeadLineKeys.Clear();
