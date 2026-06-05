@@ -9,7 +9,7 @@ namespace BalloonFlow
     {
         // #1 하트 풀충전 — 로컬 알림 (Phase 1)
         public const string HEART_FULL_TITLE = "Hearts fully recharged!";
-        public const string HEART_FULL_BODY  = "Your hearts are full. Time to pop!";
+        public const string HEART_FULL_BODY  = "💖 Lives are full! Time to pop some balloons.";
 
         // #2 이탈 복귀 D1~D7 — 서버 푸시 (Phase 2). 클라 참조용으로 보관.
         public const string RETURN_D1 = "Take a break? Come pop some balloons!";
@@ -22,5 +22,11 @@ namespace BalloonFlow
 
         // #3 데일리 보상 미수령 — 서버 푸시 (Phase 2)
         public const string DAILY_REWARD = "⏰ Don't miss today's reward! Tap to collect before it's gone.";
+
+        // #4 Winning Streak 이벤트 푸시 — 서버 푸시 (Phase 2). 클라 참조용으로 보관.
+        // string.Format({0} ← WINNING_STREAK_EVENT_NAME) 으로 사용.
+        public const string WINNING_STREAK_EVENT_NAME       = "Winning Streak";
+        public const string WINNING_STREAK_EVENT_START_FMT  = "🎉 {0} is live! Jump in and earn exclusive rewards.";
+        public const string WINNING_STREAK_EVENT_END_1H_FMT = "🏆 {0} ends in 1 hour! Grab your rewards before time runs out.";
     }
 }
