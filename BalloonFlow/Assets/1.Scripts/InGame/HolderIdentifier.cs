@@ -164,6 +164,16 @@ namespace BalloonFlow
                     }
                 }
             }
+
+            // HiddenAppearParticle baseline 보장 — 프리팹 활성/PlayOnAwake로 인한 스폰 직후 오발화 차단.
+            // SetHolderId→Init이 obj.SetActive(true) 직후 동일 프레임 동기 실행되므로 렌더 전에 비활성화됨.
+            if (_hiddenAppearParticle != null)
+            {
+                var baselineParticles = _hiddenAppearParticle.GetComponentsInChildren<ParticleSystem>(true);
+                for (int i = 0; i < baselineParticles.Length; i++)
+                    baselineParticles[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                _hiddenAppearParticle.SetActive(false);
+            }
         }
 
         /// <summary>Sets the holder ID (used by editor setup).</summary>
