@@ -423,10 +423,18 @@ namespace BalloonFlow
         /// </summary>
         public void ApplyColor(Color color)
         {
-            if (_isHidden)
+            // Hidden→Normal material 실제 전환 시에만 1회 재생 — _isHidden 플래그가 아니라 swap 전 sharedMaterial 비교로 판정.
+            bool wasHiddenMaterial = false;
+            if (_hiddenBodyMaterial != null && _colorRenderers != null)
             {
-                _isHidden = false;
-                PlayHiddenAppearEffect();
+                for (int i = 0; i < _colorRenderers.Length; i++)
+                {
+                    if (_colorRenderers[i] != null && _colorRenderers[i].sharedMaterial == _hiddenBodyMaterial)
+                    {
+                        wasHiddenMaterial = true;
+                        break;
+                    }
+                }
             }
 
             int colorCount = _colorRenderers != null ? _colorRenderers.Length : 0;
@@ -467,6 +475,12 @@ namespace BalloonFlow
                             _customMatRenderers[i].sharedMaterial = cloned;
                     }
                 }
+            }
+
+            if (wasHiddenMaterial)
+            {
+                _isHidden = false;
+                PlayHiddenAppearEffect();
             }
         }
 
