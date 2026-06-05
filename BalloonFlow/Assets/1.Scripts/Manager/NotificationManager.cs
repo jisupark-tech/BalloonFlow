@@ -32,7 +32,7 @@ namespace BalloonFlow
         private const string PREFS_INSTALL_UTC      = "BF_NotifInstallUtcTicks";
         private const string PREFS_FIRST_PERM_ASKED = "BF_NotifFirstPermAsked";
 
-        /// <summary>설치 후 24시간 가드 (아웃게임 §9 L675). HeartFull 은 예외.</summary>
+        /// <summary>설치 후 24시간 가드 (아웃게임 §9 L675). 신규 유저 24h 가드 — 모든 알림에 적용.</summary>
         private static readonly TimeSpan FirstDayGuard = TimeSpan.FromHours(24);
 
         #endregion
@@ -68,7 +68,7 @@ namespace BalloonFlow
         /// <summary>토글 ON + OS 권한 Granted — 알림 발송 가능 상태.</summary>
         public bool CanSend => ToggleOn && _cachedState == PermissionState.Granted;
 
-        /// <summary>설치 후 24h 이내 — HeartFull 외 알림 미발송 (§9 L675).</summary>
+        /// <summary>설치 후 24h 이내 — 신규 유저 24h 가드 적용 시 알림 미발송 (§9 L675).</summary>
         public bool IsWithinFirst24Hours
         {
             get
@@ -236,7 +236,7 @@ namespace BalloonFlow
         /// 로컬 알림 스케줄. fireAt 은 UTC.
         /// 토글 OFF / 권한 미허용 / 과거 시각이면 no-op.
         /// </summary>
-        /// <param name="respectFirst24h">true 면 §9 L675 첫 24h 가드 적용 (HeartFull 은 false).</param>
+        /// <param name="respectFirst24h">true 면 §9 L675 신규 유저 24h 가드 적용 (기본 정책: 모든 알림 적용).</param>
         public void Schedule(NotificationKind kind, DateTime fireAtUtc,
             string title, string body, bool respectFirst24h = true)
         {
@@ -320,12 +320,12 @@ namespace BalloonFlow
 
         #region #1 Heart Full (Phase 1)
 
-        /// <summary>하트 풀충전 예상 시각에 로컬 알림 등록. 24h 가드 예외 (§9 L675).</summary>
+        /// <summary>하트 풀충전 예상 시각에 로컬 알림 등록. 신규 유저 24h 가드 적용 (§9 L675).</summary>
         public void ScheduleHeartFull(DateTime fireAtUtc)
         {
             Schedule(NotificationKind.HeartFull, fireAtUtc,
                 PushTexts.HEART_FULL_TITLE, PushTexts.HEART_FULL_BODY,
-                respectFirst24h: false);
+                respectFirst24h: true);
         }
 
         public void CancelHeartFull() => Cancel(NotificationKind.HeartFull);
