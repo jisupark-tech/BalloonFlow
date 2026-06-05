@@ -111,7 +111,7 @@ namespace BalloonFlow
             }
 
             string displayName = GetDisplayName(featureKey);
-            ShowWithSprite(spr, displayName, description ?? $"New feature unlocked: {displayName}!");
+            ShowWithSprite(spr, displayName, description ?? GetDescription(featureKey) ?? $"New feature unlocked: {displayName}!");
         }
 
         /// <summary>직접 Sprite 지정하여 팝업 표시.</summary>
@@ -155,6 +155,20 @@ namespace BalloonFlow
                 "Baricade"    => "Barricade",
                 "FrozenBox"   => "Frozen Box",
                 _             => featureKey
+            };
+        }
+
+        /// <summary>
+        /// 기믹별 튜토리얼 본문. 명세에 명시된 키만 채우고, 미명시 키는 null 반환하여
+        /// 호출부에서 기존 generic fallback("New feature unlocked: {name}!")으로 폴백되도록 한다.
+        /// </summary>
+        private static string GetDescription(string featureKey)
+        {
+            return featureKey switch
+            {
+                "Hidden" => "Bring them to the front to reveal!",
+                "Pinata" => "Shoot the same color to break it!",
+                _        => null
             };
         }
     }
