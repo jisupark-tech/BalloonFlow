@@ -153,8 +153,8 @@ namespace BalloonFlow
             {
                 _frame.ApplyDifficulty(difficulty);
                 string clearTitle = LevelManager.HasInstance
-                    ? $"Level {LevelManager.Instance.CurrentLevelId}"
-                    : "Level Clear!";
+                    ? string.Format(LocalizationService.Get("popup.title.level"), LevelManager.Instance.CurrentLevelId)
+                    : LocalizationService.Get("popup.title.level_clear");
                 _frame.SetTitle(clearTitle);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
                 _frame.SetSingleButtonText("Next");

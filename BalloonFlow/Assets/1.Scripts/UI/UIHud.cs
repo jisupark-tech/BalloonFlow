@@ -1167,9 +1167,9 @@ namespace BalloonFlow
         {
             return boosterType switch
             {
-                BoosterManager.SELECT_TOOL  => "Select a holder from the queue to deploy.",
-                BoosterManager.SHUFFLE      => "Shuffle the holder queue order.",
-                BoosterManager.COLOR_REMOVE => "Remove all balloons of a selected color.",
+                BoosterManager.SELECT_TOOL  => LocalizationService.Get("booster.hand.usedesc"),
+                BoosterManager.SHUFFLE      => LocalizationService.Get("booster.shuffle.usedesc"),
+                BoosterManager.COLOR_REMOVE => LocalizationService.Get("booster.zap.usedesc"),
                 _                           => ""
             };
         }
@@ -1178,9 +1178,9 @@ namespace BalloonFlow
         {
             return boosterType switch
             {
-                BoosterManager.SELECT_TOOL  => "Hand",
-                BoosterManager.SHUFFLE      => "Shuffle",
-                BoosterManager.COLOR_REMOVE => "Zap",
+                BoosterManager.SELECT_TOOL  => LocalizationService.Get("booster.hand.name"),
+                BoosterManager.SHUFFLE      => LocalizationService.Get("booster.shuffle.name"),
+                BoosterManager.COLOR_REMOVE => LocalizationService.Get("booster.zap.name"),
                 _                           => ""
             };
         }
@@ -1189,9 +1189,9 @@ namespace BalloonFlow
         {
             return boosterType switch
             {
-                BoosterManager.SELECT_TOOL  => "Place any box directly!",
-                BoosterManager.SHUFFLE      => "Shuffle all boxes instantly!",
-                BoosterManager.COLOR_REMOVE => "Pop everything of one color!",
+                BoosterManager.SELECT_TOOL  => LocalizationService.Get("booster.hand.buydesc"),
+                BoosterManager.SHUFFLE      => LocalizationService.Get("booster.shuffle.buydesc"),
+                BoosterManager.COLOR_REMOVE => LocalizationService.Get("booster.zap.buydesc"),
                 _                           => ""
             };
         }

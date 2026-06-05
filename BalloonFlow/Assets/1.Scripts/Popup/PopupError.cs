@@ -82,23 +82,26 @@ namespace BalloonFlow
             OpenUI();
         }
 
-        /// <summary>결제 실패 팝업 (iconCancel).</summary>
-        public void ShowPaymentFailed(string description = "Payment failed. Please try again.")
+        /// <summary>결제 실패 팝업 (iconCancel). 텍스트는 CSV(TextData) Key 로드. description=null 이면 CSV 기본문구.</summary>
+        public void ShowPaymentFailed(string description = null)
         {
-            Show("Error", description, _sprIconCancel);
+            Show(LocalizationService.Get("error.payment.title"),
+                 description ?? LocalizationService.Get("error.payment.desc"), _sprIconCancel);
         }
 
         /// <summary>인터넷 연결 없음 팝업 (iconWifi).</summary>
-        public void ShowNoInternet(string description = "No internet connection. Please check your network.")
+        public void ShowNoInternet(string description = null)
         {
-            Show("Connection Error", description, _sprIconWifi);
+            Show(LocalizationService.Get("error.network.title"),
+                 description ?? LocalizationService.Get("error.network.desc"), _sprIconWifi);
         }
 
         /// <summary>결제 성공 팝업 (iconCheck). OK (또는 X) 누르면 onConfirm 콜백.
         /// CloseUI 먼저 → 콜백 호출 (콜백 안에서 새 popup 띄울 때 race 회피).</summary>
-        public void ShowPurchaseSuccess(string description = "Purchase successful!", System.Action onConfirm = null)
+        public void ShowPurchaseSuccess(string description = null, System.Action onConfirm = null)
         {
-            Show("Your Purchase was Completed", description, _sprIconCheck);
+            Show(LocalizationService.Get("error.success.title"),
+                 description ?? LocalizationService.Get("error.success.desc"), _sprIconCheck);
 
             // Success popup 은 OK 만 — X 닫기 누르면 보상 연출이 skip 되어 사용자가 혼란.
             if (_frame != null) _frame.ShowExitButton(true);

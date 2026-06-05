@@ -602,3 +602,21 @@ ui.morelive.free,FREE
 ui.morelive.unlimited,UNLIMITED
 ui.morelive.full,FULL
 ui.tutorial.skip,SKIP
+"popup.title.level","Level {0}"
+"popup.title.level_failed","Level Failed"
+"popup.title.level_clear","Level Clear!"
+"error.network.title","Connection Error"
+"error.network.desc","No internet connection. Please check your network."
+"error.payment.title","Error"
+"error.payment.desc","Payment failed. Please try again."
+"error.success.title","Your Purchase was Completed"
+"error.success.desc","Purchase successful!"
+"booster.hand.name","Hand"
+"booster.shuffle.name","Shuffle"
+"booster.zap.name","Zap"
+"booster.hand.buydesc","Place any box directly!"
+"booster.shuffle.buydesc","Shuffle all boxes instantly!"
+"booster.zap.buydesc","Pop everything of one color!"
+"booster.hand.usedesc","Select a holder from the queue to deploy."
+"booster.shuffle.usedesc","Shuffle the holder queue order."
+"booster.zap.usedesc","Remove all balloons of a selected color."
