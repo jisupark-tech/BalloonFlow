@@ -189,7 +189,9 @@ namespace BalloonFlow.Analytics
             p[AnalyticsConsts.P_RESULT]                = result;
             p[AnalyticsConsts.P_END_REASON]            = endReason;
             p[AnalyticsConsts.P_LIVES_AFTER]           = livesAfter;
-            p[AnalyticsConsts.P_PEAK_RESOURCE]         = 0; // TODO: BoardStateManager / RailManager 측 peak 점유율 노출 시 wiring
+            // peak_resource_usage_ratio (0.0~1.0) — RailManager 가 레벨 동안 기록한 레일 최대 점유율.
+            // §20: ≥0.8 → narrow_clear. (RailManager.PeakOccupancyRatio = EffectiveOccupiedCount/PhysicalCapacity max)
+            p[AnalyticsConsts.P_PEAK_RESOURCE]         = RailManager.HasInstance ? RailManager.Instance.PeakOccupancyRatio : 0f;
 
             if (UserSnapshotCache.HasInstance)
                 UserSnapshotCache.Instance.Stamp(p);

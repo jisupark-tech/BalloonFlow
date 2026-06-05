@@ -365,6 +365,7 @@ namespace BalloonFlow
             base.OpenUI();
             RefreshWinningStreakVisibility();
             TriggerPendingWinningStreakLobbyFx();
+            TryAutoOpenWinningStreakPopup();
         }
 
         /// <summary>대기 중인 WS 로비 연출 코루틴을 (재)시작. 진행 중이면 중단 후 재시작해 매 진입마다 확실히 발동.</summary>
@@ -372,6 +373,35 @@ namespace BalloonFlow
         {
             if (_wsLobbyFxCoroutine != null) StopCoroutine(_wsLobbyFxCoroutine);
             _wsLobbyFxCoroutine = StartCoroutine(PlayPendingWinningStreakLobbyFxDeferred());
+        }
+
+        // ── WinningStreak 자동 팝업 (명세 §5.4 해금 안내 1회 + §11.2 회차 첫 진입 1회) ──
+        private const string WS_PREFS_UNLOCK_POPUP_SHOWN = "BF_WS_UnlockPopupShown";
+        private const string WS_PREFS_ROUND_POPUP_SHOWN  = "BF_WS_RoundPopupShown";
+
+        /// <summary>Lv.35 적립 시작(IsScoringActive) 이후 로비 진입 시: 최초 1회 해금 안내(Info) → 이후 회차별 첫 진입 1회 메인 팝업 자동 노출.</summary>
+        private void TryAutoOpenWinningStreakPopup()
+        {
+            if (!WinningStreakManager.HasInstance || !UIManager.HasInstance) return;
+            var wsm = WinningStreakManager.Instance;
+            if (!wsm.IsScoringActive) return;   // Lv.35 클리어(적립 시작) 시점부터. 이벤트 off 면 false.
+
+            // 1) 최초 해금 안내(튜토리얼) 1회 — 영구 플래그
+            if (PlayerPrefs.GetInt(WS_PREFS_UNLOCK_POPUP_SHOWN, 0) == 0)
+            {
+                PlayerPrefs.SetInt(WS_PREFS_UNLOCK_POPUP_SHOWN, 1);
+                PlayerPrefs.Save();
+                UIManager.Instance.OpenUI<PopupWinningStreakInfo>(Const.POPUP_WINNING_STREAK_INFO);
+                return;
+            }
+
+            // 2) 회차 첫 로비 진입 1회 — activeRoundId 가 바뀌면(새 회차) 재노출
+            string roundId = wsm.State != null ? wsm.State.activeRoundId : null;
+            if (string.IsNullOrEmpty(roundId)) return;
+            if (PlayerPrefs.GetString(WS_PREFS_ROUND_POPUP_SHOWN, "") == roundId) return;
+            PlayerPrefs.SetString(WS_PREFS_ROUND_POPUP_SHOWN, roundId);
+            PlayerPrefs.Save();
+            UIManager.Instance.OpenUI<PopupWinningStreak>(Const.POPUP_WINNING_STREAK);
         }
 
         private void HookProfileEvents()

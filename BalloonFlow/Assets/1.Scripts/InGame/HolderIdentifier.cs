@@ -480,7 +480,7 @@ namespace BalloonFlow
             if (wasHiddenMaterial)
             {
                 _isHidden = false;
-                PlayHiddenAppearEffect();
+                // 파티클 재생은 TriggerHiddenEnd(해금 순간 단일 경로)로 일원화 — 여기서 중복 재생하지 않음.
             }
         }
 
@@ -630,12 +630,50 @@ namespace BalloonFlow
 
         private void PlayHiddenAppearEffect()
         {
-            if (_hiddenAppearParticle == null) return;
-            _hiddenAppearParticle.SetActive(false);
-            _hiddenAppearParticle.SetActive(true);
-            var particles = _hiddenAppearParticle.GetComponentsInChildren<ParticleSystem>(true);
+            GameObject fx = _hiddenAppearParticle;
+            if (fx == null)
+            {
+                // 인스펙터 미할당 폴백 — 계층에서 "HiddenAppearParticle" GO 탐색(비활성 포함).
+                var all = GetComponentsInChildren<Transform>(true);
+                for (int i = 0; i < all.Length; i++)
+                {
+                    if (all[i] != null && all[i].name == "HiddenAppearParticle") { fx = all[i].gameObject; break; }
+                }
+            }
+            if (fx == null)
+            {
+                Debug.LogWarning($"[Holder {_holderId}] HiddenAppearParticle 미할당/미발견 — 파티클 재생 불가. 홀더 프리팹 인스펙터의 _hiddenAppearParticle 슬롯을 확인하세요.", this);
+                return;
+            }
+
+            fx.SetActive(false);
+            fx.SetActive(true);
+            var particles = fx.GetComponentsInChildren<ParticleSystem>(true);
+            if (particles.Length == 0)
+            {
+                // 구조 문제: GO 는 있는데 실제 ParticleSystem 이 없음 (빈 컨테이너).
+                Debug.LogWarning($"[Holder {_holderId}] '{fx.name}' 하위에 ParticleSystem 이 없습니다 — 파티클 이펙트가 프리팹에 미배치된 구조입니다.", fx);
+                return;
+            }
+            var diag = new System.Text.StringBuilder();
+            diag.Append($"[Holder {_holderId}] HiddenAppear FX='{fx.name}' active={fx.activeInHierarchy} pos={fx.transform.position} lossyScale={fx.transform.lossyScale} PS수={particles.Length}");
             for (int i = 0; i < particles.Length; i++)
-                particles[i].Play(true);
+            {
+                var ps = particles[i];
+                ps.Clear(true);   // 잔여 파티클 제거 후 깨끗하게 1회 재생
+                ps.Play(true);
+
+                var main = ps.main;
+                var rend = ps.GetComponent<ParticleSystemRenderer>();
+                bool rendOn = rend != null && rend.enabled;
+                string matName = (rend != null && rend.sharedMaterial != null) ? rend.sharedMaterial.name : "NULL";
+                string shader = (rend != null && rend.sharedMaterial != null && rend.sharedMaterial.shader != null) ? rend.sharedMaterial.shader.name : "NULL";
+                diag.Append($"\n  · '{ps.gameObject.name}' goActive={ps.gameObject.activeInHierarchy} isPlaying={ps.isPlaying} " +
+                            $"startSize={main.startSize.constant} alpha={main.startColor.color.a} maxParticles={main.maxParticles} " +
+                            $"emission={ps.emission.enabled} renderer={rend != null}/enabled={rendOn} mat={matName} shader={shader} " +
+                            $"sortLayer={(rend != null ? rend.sortingLayerName : "-")} order={(rend != null ? rend.sortingOrder : 0)}");
+            }
+            Debug.Log(diag.ToString(), fx);
         }
 
         private void ApplyFrozenMaterialFallback(GameObject root)
@@ -749,6 +787,9 @@ namespace BalloonFlow
                 _animator.SetBool(_animHidden, false);
                 _animator.SetTrigger(_animHiddenEnd);
             }
+            // 히든박스가 풀리는 순간 HiddenAppearParticle 1회 재생.
+            // reveal 단일 경로(HandleHolderRevealed→TriggerHiddenEnd)라 HasColorRenderers 유무와 무관하게 보장.
+            PlayHiddenAppearEffect();
         }
 
         /// <summary>현재 state 가 BoxDefault 일 때만 BoxClick state 를 Play.</summary>

@@ -375,7 +375,9 @@ namespace BalloonFlow
             EnsurePersistent<CurrencyManager>("Mgr_Currency");
             EnsurePersistent<GemManager>("Mgr_Gem");
             EnsurePersistent<LifeManager>("Mgr_Life");
-            EnsurePersistent<DailyRewardManager>("Mgr_DailyReward");
+            // [1.0 비포함] DailyReward 는 1.0 명세/문서에 없고 UI 진입점도 없음 — 부트스트랩 제거(기능 비활성).
+            // 1.1+ 데일리 보상 도입 시 이 줄 복구. (DailyRewardManager 코드 자체는 보존)
+            // EnsurePersistent<DailyRewardManager>("Mgr_DailyReward");
             EnsurePersistent<BoosterManager>("Mgr_Booster");
             EnsurePersistent<ContinueHandler>("Mgr_Continue");
 

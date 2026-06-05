@@ -388,6 +388,12 @@ namespace BalloonFlow
             if (dartCount == 0) return;
 
             int physicalCapacity = PhysicalCapacity;
+            UpdateAlmostThereState(physicalCapacity);   // [Almost There] 클리어 임박 가속 + 메시지
+            if (physicalCapacity > 0)                   // [Analytics] 레일 최대 점유율 갱신
+            {
+                float occ = (float)EffectiveOccupiedCount / physicalCapacity;
+                if (occ > _peakOccupancyRatio) _peakOccupancyRatio = Mathf.Min(1f, occ);
+            }
             bool deadlockHolderActive = _deadlockHolderId >= 0 && _activeDeployPoints.Contains(_deadlockHolderId);
             bool deadlockNearFull = _deadlockHolderId >= 0 && dartCount >= Mathf.Max(0, physicalCapacity - DeadlockBeltAdvanceEmptySlots());
             bool shouldAdvanceAsFullBelt =
@@ -564,14 +570,66 @@ namespace BalloonFlow
             }
         }
 
+        // [Almost There] 클리어 임박 가속. 명세상 "레일 ×2 가속"이나, 과거 상시 ×2 가 deploy 동기 깨짐(cluster
+        // spacing 벌어짐)을 유발했으므로 실제 배율은 1.8 로 완화(UI/명세 표기는 ×2). 트리거 = 총 잔여 다트 < 레일 capacity.
+        private const float ALMOST_THERE_SPEED_MULT = 1.8f;
+        private bool _almostThere;            // 현재 클리어 임박 상태(가속 on)
+        private bool _almostThereToastShown;  // "Almost There!" 토스트 1회 발사 가드
+
+        // [Analytics] 레벨 동안의 레일 최대 점유율(0~1). AnalyticsLevelTracker 의 peak_resource_usage_ratio wiring 용
+        // (해당 파일 TODO: "RailManager 측 peak 점유율 노출 시 wiring"). InitializeSlots 에서 0 으로 리셋.
+        private float _peakOccupancyRatio;
+        /// <summary>이번 레벨 동안 기록된 레일 최대 점유율(EffectiveOccupiedCount / PhysicalCapacity, 0~1).</summary>
+        public float PeakOccupancyRatio => _peakOccupancyRatio;
+
         /// <summary>
-        /// 점유율 기반 속도 배율 (배치 감속 제외).
-        /// 사용자 요구 (2026-05-08): belt 속도 일정 유지 — 1 slot rotation 당 1 deploy 동기화.
-        /// 이전: 다트 < capacity 시 2x 가속 → deploy 가 못 따라가서 cluster spacing 벌어짐.
+        /// 점유율 기반 속도 배율. 클리어 임박(총 잔여 다트 &lt; 레일 capacity) 시 1.8배, 그 외 1배.
+        /// (2026-05-08 상시 ×2 가속은 deploy 동기 문제로 폐기 — 임박 구간에서만 1.8배 재도입.)
         /// </summary>
         public float GetOccupancySpeedMultiplier()
         {
-            return 1f;
+            return _almostThere ? ALMOST_THERE_SPEED_MULT : 1f;
+        }
+
+        /// <summary>홀더 미배포 magazine + 레일 위 다트의 합 = 레벨에 남은 총 다트 수.</summary>
+        private int GetTotalRemainingDarts()
+        {
+            int total = _darts.Count;
+            if (HolderManager.HasInstance)
+            {
+                var holders = HolderManager.Instance.GetHolders();
+                if (holders != null)
+                    for (int i = 0; i < holders.Length; i++)
+                        if (!holders[i].isConsumed && holders[i].magazineCount > 0)
+                            total += holders[i].magazineCount;
+            }
+            return total;
+        }
+
+        /// <summary>매 프레임 클리어 임박 상태 갱신 + 진입 순간(rising edge) "Almost There!" 토스트 1회.</summary>
+        private void UpdateAlmostThereState(int capacity)
+        {
+            bool imminent = capacity > 0 && _darts.Count > 0 && GetTotalRemainingDarts() < capacity;
+            _almostThere = imminent;
+            if (imminent)
+            {
+                if (!_almostThereToastShown) { _almostThereToastShown = true; ShowAlmostThereMessage(); }
+            }
+            else
+            {
+                // 이어하기 등으로 다트가 다시 늘어 임박이 풀리면 재무장(다음 임박 때 재노출).
+                _almostThereToastShown = false;
+            }
+        }
+
+        private void ShowAlmostThereMessage()
+        {
+            if (!UIManager.HasInstance) return;
+            Transform parent = UIManager.Instance.PopupTr ?? UIManager.Instance.UiTr;
+            if (parent == null) return;
+            string msg = LocalizationService.Get("ingame_almost_there");
+            if (msg == "ingame_almost_there") msg = "Almost There!";   // CSV 미등록 시 폴백
+            TxtToast.Spawn(parent, msg, Vector2.zero);
         }
 
         /// <summary>
@@ -1089,6 +1147,9 @@ namespace BalloonFlow
             _boardFinished = false;
             _continueSnapColor = -1;
             _continueSnapCount = 0;
+            _almostThere = false;            // [Almost There] 새 레벨 시 가속/토스트 상태 리셋
+            _almostThereToastShown = false;
+            _peakOccupancyRatio = 0f;        // [Analytics] 피크 점유율 리셋
             _darts.Clear();
             _dartById.Clear();
             _clusterHeadByHolder.Clear();

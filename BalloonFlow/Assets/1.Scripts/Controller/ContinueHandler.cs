@@ -3,13 +3,12 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// Handles "continue after fail" with free first + coin-based escalating costs.
-    /// Design ref: 아웃게임디렉션 §이어하기
-    ///   1st continue: FREE
-    ///   2nd: 900 coins
-    ///   3rd: 1900 coins
-    ///   4th+: 2900 coins (cap — 횟수 제한 자체는 없음)
-    /// Restart resets cost back to free.
+    /// Handles "continue after fail" with coin-based escalating costs.
+    /// Design ref: 아웃게임디렉션 §3 / UX플로우 §7-1 (v1.2.37, 2026-05-28: "첫 실패 무료 1회" 명세 폐기 — 첫 실패부터 유료)
+    ///   1st continue: 900 coins
+    ///   2nd: 1900 coins
+    ///   3rd+: 2900 coins (cap — 횟수 제한 자체는 없음)
+    /// Restart resets cost back to 1회차(900).
     /// </summary>
     /// <remarks>
     /// Layer: Domain | Genre: Puzzle | Role: Handler | Phase: 3
@@ -20,8 +19,9 @@ namespace BalloonFlow
 
         // 이어하기 제거량은 RailManager.GetContinueRemoveCount()로 결정 (허용량 기반)
 
-        // Escalating coin costs (index 0 = free, then 900 → 1900 → 2900). idx 가 배열 길이를 넘으면 마지막(2900)으로 캡.
-        private static readonly int[] ContinueCosts = { 0, 900, 1900, 2900 };
+        // Escalating coin costs (1회차 900 → 2회차 1900 → 3회차+ 2900). idx 가 배열 길이를 넘으면 마지막(2900)으로 캡.
+        // v1.2.37: "첫 실패 무료 1회" 폐기 — index 0 부터 유료(900).
+        private static readonly int[] ContinueCosts = { 900, 1900, 2900 };
 
         #endregion
 
@@ -72,11 +72,11 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// Returns true if the next continue is free (first continue).
+        /// v1.2.37 이후 무료 이어하기 없음 — 항상 false. (호출부 호환용으로 메서드 유지)
         /// </summary>
         public bool IsNextContinueFree()
         {
-            return _continueCount < ContinueCosts.Length && ContinueCosts[_continueCount] == 0;
+            return false;
         }
 
         /// <summary>
