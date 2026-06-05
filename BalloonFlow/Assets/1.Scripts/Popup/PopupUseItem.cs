@@ -127,6 +127,9 @@ namespace BalloonFlow
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.RemoveAllListeners();
 
+            _btnBottomExitTween?.Kill();
+            _topTween?.Kill();
+
             ReleaseRuntimeMaterial(ref _runtimeCutoutDimMaterial);
             ReleaseAddressableMaterialHandle(ref _cutoutDimMaterialHandle);
         }
@@ -160,12 +163,28 @@ namespace BalloonFlow
 
             // [2026-05-12] BottomExit 버튼 -200 → 0 tween (위로 등장)
             AnimateBottomExitIn();
+            AnimateTopIn();
+            SetFxParticlesVisible(true);
         }
 
         private const float BTN_BOTTOM_EXIT_HIDDEN_Y = -200f;
         private const float BTN_BOTTOM_EXIT_TWEEN_DUR = 0.4f;
         [SerializeField] private RectTransform _BottomExit;
         private Tweener _btnBottomExitTween;
+
+        [Header("[Top Slide Animation]")]
+        [Tooltip("팝업 표시 중 위에서 내려오는 Top 오브젝트. Y=600(off) → 0(on) tween.")]
+        [SerializeField] private RectTransform _Top;
+
+        [Header("[FX Particles — 팝업 표시 중 항상 보이도록 유지]")]
+        [SerializeField] private GameObject _fxLight;
+        [SerializeField] private GameObject _fxBackLightR;
+        [SerializeField] private GameObject _fxFire;
+
+        private const float TOP_HIDDEN_Y = 600f;
+        private const float TOP_SHOWN_Y = 0f;
+        private const float TOP_TWEEN_DUR = 0.4f;
+        private Tweener _topTween;
 
         private void AnimateBottomExitIn()
         {
@@ -189,6 +208,29 @@ namespace BalloonFlow
                 .SetEase(Ease.InCubic)
                 .SetUpdate(true)
                 .OnComplete(() => onComplete?.Invoke());
+        }
+
+        private void AnimateTopIn()
+        {
+            if (_Top == null) return;
+            _topTween?.Kill();
+            _Top.anchoredPosition = new Vector2(_Top.anchoredPosition.x, TOP_HIDDEN_Y);
+            _topTween = _Top.DOAnchorPosY(TOP_SHOWN_Y, TOP_TWEEN_DUR).SetEase(Ease.OutCubic).SetUpdate(true);
+        }
+
+        private void AnimateTopOut(System.Action onComplete)
+        {
+            if (_Top == null) { onComplete?.Invoke(); return; }
+            _topTween?.Kill();
+            _topTween = _Top.DOAnchorPosY(TOP_HIDDEN_Y, TOP_TWEEN_DUR).SetEase(Ease.InCubic).SetUpdate(true)
+                .OnComplete(() => onComplete?.Invoke());
+        }
+
+        private void SetFxParticlesVisible(bool visible)
+        {
+            if (_fxLight != null) _fxLight.SetActive(visible);
+            if (_fxBackLightR != null) _fxBackLightR.SetActive(visible);
+            if (_fxFire != null) _fxFire.SetActive(visible);
         }
 
         private void OnDisable()
@@ -292,6 +334,11 @@ namespace BalloonFlow
             if (_btnExit != null) _btnExit.transform.SetAsLastSibling();
             if (_BottomExit != null) _BottomExit.SetAsLastSibling();
             else if (_btnBottomExit != null) _btnBottomExit.transform.SetAsLastSibling();
+
+            if (_Top != null) _Top.SetAsLastSibling();
+            if (_fxLight != null) _fxLight.transform.SetAsLastSibling();
+            if (_fxBackLightR != null) _fxBackLightR.transform.SetAsLastSibling();
+            if (_fxFire != null) _fxFire.transform.SetAsLastSibling();
         }
 
         private bool ApplyCutoutMaterialToOverlay()
@@ -817,6 +864,8 @@ namespace BalloonFlow
             if (restoreBottomPanel)
                 SetHudBottomPanelHidden(false);
             // [2026-05-12] BottomExit 0 → -200 tween + 완료 후 base.CloseUI 호출.
+            SetFxParticlesVisible(false);
+            AnimateTopOut(null);
             AnimateBottomExitOut(() => base.CloseUI());
         }
 
