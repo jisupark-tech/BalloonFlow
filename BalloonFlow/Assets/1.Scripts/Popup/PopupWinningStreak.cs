@@ -202,10 +202,12 @@ namespace BalloonFlow
 
             if (_frame != null)
             {
-                _frame.SetTitle("Winning Streak");
+                // ROLLBACK_WINNING_STREAK_TITLE_USE_CSV_20260607: 이전 = SetTitle("Winning Streak"). 방침: CSV 영문 사용.
+                _frame.SetTitle(LocalizationService.Get("popupwinningstreak.txttitle"));
                 _frame.ShowExitButton(true);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
-                _frame.SetSingleButtonText("PLAY");
+                // ROLLBACK_WINNING_STREAK_PLAYBTN_USE_CSV_20260607: 이전 = SetSingleButtonText("PLAY").
+                _frame.SetSingleButtonText(LocalizationService.Get("popupwinningstreak.txtbtnsingle"));
                 if (_frame.BtnSingle != null) _frame.BtnSingle.interactable = true;
                 _singleClickHandled = false;
             }
@@ -379,34 +381,16 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>TxtDescription (inner) + TxtDescriptionOutline (outer) 둘 다 같은 내용으로 동기 갱신.</summary>
+        /// <summary>TxtDescription (inner) + TxtDescriptionOutline (outer) 를 CSV(TextData) 영문으로 세팅.
+        /// ROLLBACK_WINNING_STREAK_DESC_USE_CSV_20260607: 이전엔 한국어 동적("{n}연승 x{m} / 다음까지 {need}") +
+        /// eventFinished "All rewards completed!" 로 덮어써 CSV 영문(박지수 spec 7-4 "more rewards!")이 안 보였음.
+        /// 방침("모든 text 는 TextData CSV 영문") 적용 → CSV 정적 영문 사용. 되돌리려면 동적 분기 로직으로 복원.</summary>
         private void RefreshDescriptionText(WinningStreakState state, WinningStreakConfigDoc cfg)
         {
-            if (_txtDescription == null && _txtDescriptionOutline == null) return;
-
-            string text;
-            if (state == null || cfg == null)
-            {
-                text = "";
-            }
-            else if (state.eventFinished)
-            {
-                text = "All rewards completed!";
-            }
-            else
-            {
-                int multiplier = WinningStreakConfigService.HasInstance
-                    ? WinningStreakConfigService.Instance.ResolveStreakMultiplier(Mathf.Max(1, state.currentStreak))
-                    : 1;
-                var stage = WinningStreakConfigService.HasInstance
-                    ? WinningStreakConfigService.Instance.GetStage(state.currentStage)
-                    : null;
-                int need = stage != null ? Mathf.Max(0, stage.requiredPoints - state.currentStagePoints) : 0;
-                text = $"{Mathf.Max(1, state.currentStreak)}연승 x{multiplier} / 다음까지 {need}";
-            }
-
-            if (_txtDescription != null) _txtDescription.text = text;
-            if (_txtDescriptionOutline != null) _txtDescriptionOutline.text = text;
+            if (_txtDescription != null)
+                _txtDescription.text = LocalizationService.Get("popupwinningstreak.txtdescription");
+            if (_txtDescriptionOutline != null)
+                _txtDescriptionOutline.text = LocalizationService.Get("popupwinningstreak.txtdescriptionoutline");
         }
 
         // ── Slot pool / virtual scroll ───────────────────────────

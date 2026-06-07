@@ -575,6 +575,9 @@ namespace BalloonFlow
 
             yield return PlayWsFireFlyAndPulse();
 
+            // [배치7-2] 클리어 후 획득 Flame "+{n}" 토스트 (gainedPoints).
+            ShowWsFlameGainToast(anim.gainedPoints);
+
             // FxFire 가 커졌다 작아진 직후 → Multiplier 가 X=10 으로 튕기듯 슬라이드 인.
             // 슬라이드 인 전에 현재 배수 상태로 Animator 세팅 (FX 중 정확한 배수 표시).
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
@@ -612,6 +615,17 @@ namespace BalloonFlow
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
 
             RefreshWinningStreakDisplay();
+        }
+
+        /// <summary>[배치7-2] 클리어 후 획득 Flame 을 "+{n}" 토스트로 표시.
+        /// ROLLBACK_WINNING_STREAK_FLAME_GAIN_TOAST_20260607: 되돌리려면 호출부(PlayWinningStreakLobbyFx)의
+        /// ShowWsFlameGainToast(...) 한 줄과 이 메서드를 삭제. (토스트 위치=화면 중앙, 디자인 확정 시 조정)</summary>
+        private void ShowWsFlameGainToast(int gained)
+        {
+            if (gained <= 0 || !UIManager.HasInstance) return;
+            Transform parent = UIManager.Instance.PopupTr ?? UIManager.Instance.UiTr;
+            if (parent == null) return;
+            TxtToast.Spawn(parent, $"+{gained}", Vector2.zero);
         }
 
         /// <summary>MultiplierMaskArea/Multiplier 를 지정 X(anchoredPosition.x)로 즉시 세팅.</summary>
