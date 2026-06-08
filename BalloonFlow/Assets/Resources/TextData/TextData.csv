@@ -49,19 +49,19 @@ newfeature.textdesctiption.GlassPipe,Tap nearby boxes to release a new one!,
 newfeature.textname.Barricade,Barricade,레벨 61 등장
 newfeature.textdesctiption.Barricade,Shoot the same color to clear the path!,
 ,,레벨 81 등장
-,,
-,,레벨 101 등장 
-,,
-,,레벨 121 등장
-,,
-,,레벨 141 등장
-,,
-,,레벨 161 등장
-,,
-,,레벨 201 등장
-,,
-,,레벨 241 등장 
-,,
+newfeature.textdesctiption.Barricad,Free the key to unlock the lock!,
+newfeature.textname.HiddenBalloon,HiddenBalloon,레벨 101 등장 
+newfeature.textdesctiption.HiddenBalloon,Pop nearby balloons to reveal!,
+newfeature.textname.IronWall,Iron Wall,레벨 121 등장
+newfeature.textdesctiption.IronWall,It blocks darts' path!,
+newfeature.textname.Pipe,Pipe,레벨 141 등장
+newfeature.textdesctiption.Pipe,Tap nearby boxes to release a mystery one!,
+newfeature.textname.TargetBox,Target Box,레벨 161 등장
+newfeature.textdesctiption.TargetBox,Shoot the same colors to break it all!,
+newfeature.textname.Ice,Ice,레벨 201 등장
+newfeature.textdesctiption.Ice,Pop any balloon to shatter the ice!,
+newfeature.textname.FrozenDartBox,Frozen Dart Box,레벨 241 등장 
+newfeature.textdesctiption.FrozenDartBox,Tap other boxes to shatter the ice!,
 popupcommonframe.txtgreen,Stay,
 popupcommonframe.txtgreenoutline,Stay,
 popupcommonframe.txtred,"Quit
@@ -79,7 +79,7 @@ popupcommonframe.txttitle.NetworkError,Not Connected,인터넷 연결
 popupcommonframe.txttitle.Setting,Settings,설정
 popupcommonframe.txttitle.AllClear,Congratulations!,Lv.300 클리어 후 또는 Lv.301 터치 시
 popupcommonframe.txttitle.ResultClear,Level {n},결과팝업 성공 실패 시 동일
-,Level {n},
+popupcommonframe.txttitle.NoAds,NO ADS,광고제거 팝
 ,,
 ,,
 ,,
@@ -128,6 +128,8 @@ popupdescription.txtblueoutline,"Quit
 popupdescription.txtbtnsingle,"Resume
 ",
 popupdescription.txtdescription,TxtDescriptionTxtDescriptionTxtDescriptionTxtDescriptionTxtDescription,
+popupdescription.txtdescription.Quit,Do you really want to quit?,
+,,
 popupdescription.txtgreen,Continue,
 popupdescription.txtgreenoutline,Continue,
 popupdescription.txtred,"Quit
@@ -190,15 +192,11 @@ popupgoldshop.textpriceoutline,"Price
 ",
 popupgoldshop.textsale,90% OFF,
 popupgoldshop.textsaleoutline,90% OFF,
-popupgoldshop.titleshop,Shop,
-popupgoldshop.titleshopoutline,Shop,
 popupgoldshop.txtbtnbuy,$100,
 popupgoldshop.txtbtnbuyoutline,$100,
 popupgoldshop.txtbtnmoreproducts__1_,More Offers,
 popupgoldshop.txtbtnmoreproductsoutline,More Offers,
 popupgoldshop.txtdescription,"NO ADS,
-Just Fun!",
-popupgoldshop.txtdescriptionoutline,"NO ADS,
 Just Fun!",
 popupgoldshop.txtgold,1000,
 popupgoldshop.txtoffper,90% OFF,
@@ -232,7 +230,7 @@ popupmorelive.txtblueoutline,"Quit
 popupmorelive.txtbtnsingle,"Resume
 ",
 popupmorelive.txtdescription,Next life in,
-popupmorelive.txtfree,FREE,
+popupmorelive.txtfree,Watch,
 popupmorelive.txtgold,1000,
 popupmorelive.txtgoldoutline,900,
 popupmorelive.txtgreen,Continue,
@@ -247,14 +245,13 @@ popupmorelive.txtsingleoutline,"Resume
 popupmorelive.txttimer,0:00,
 popupmorelive.txttitle,More Lives,
 popupmorelive.txttitleoutline,More Lives,
-popupnoads.btnsingleoutline,$4.99,
 popupnoads.txtblueoutline,"Quit
 ",
 popupnoads.txtbtnbuy,Buy,
 popupnoads.txtbtnbuyoutline,Buy,
 popupnoads.txtbtnsingle,$4.99,
-popupnoads.txtdescription,Remove forced ads forever!,
-popupnoads.txtdescriptionoutline,Remove forced ads forever!,
+popupnoads.txtdescription1,Remove forced ads forever!,
+popupnoads.txtdescription2,Keep optional bonus ads!,
 popupnoads.txtgold,1900,
 popupnoads.txtgoldoutline,1900,
 popupnoads.txtgreen,Stay,
@@ -263,8 +260,6 @@ popupnoads.txtred,"Quit
 ",
 popupnoads.txtredoutline,"Quit
 ",
-popupnoads.txttitle,NO ADS,
-popupnoads.txttitleoutline,NO ADS,
 popupprofile.txtblueoutline,"Quit
 ",
 popupprofile.txtbtnsingle,"Claim
@@ -402,16 +397,8 @@ rewardimg.textreward,100,
 rewardimg.textrewardoutline,100,
 shopitem.textamount,x1,
 shopitem.textamountoutline,x1,
-shoplistad.txtbtnbuy,$4.99,
-shoplistad.txtbtnbuyoutline,$4.99,
-shoplistad.txtdescription,"NO ADS,
-Just Fun!",
-shoplistad.txtdescriptionoutline,"NO ADS,
-Just Fun!",
 shoplistad.txtoffper,90% OFF,
 shoplistad.txttimeoff,COCOCO,
-shoplistad.txttitle,NO ADS,
-shoplistad.txttitleoutline,NO ADS,
 shoplistgold.textprice,"Price
 ",
 shoplistgold.textpriceoutline,"Price
@@ -487,8 +474,6 @@ uilobby.textmultiplierx10,x10,
 uilobby.textmultiplierx100,x100,
 uilobby.textmultiplierx25,x25,
 uilobby.textmultiplierx5,x5,
-uilobby.textnoads,NO ADS,
-uilobby.textnoadsoutline,NO ADS,
 uilobby.textprivacy,Privacy,
 uilobby.textprivacyoutline,Privacy,
 uilobby.textreward,100,
@@ -528,8 +513,7 @@ uilobby.txtnotificationoffoutline,Off,
 uilobby.txtnotificationon,On,
 uilobby.txtnotificationonoutline,On,
 uilobby.txtnotificationoutline,Notifications,
-uilobby.txtplay,Level 00,
-uilobby.txtplayoutline,Level 00,
+uilobby.txtplay,Level {n},
 uilobby.txtsound,Sound,
 uisetting.textprivacy,Privacy,
 uisetting.textprivacyoutline,Privacy,
@@ -560,12 +544,7 @@ uishop.titleshop,Shop,
 uishop.titleshopoutline,Shop,
 uishop.txtbtnbuy,$100,
 uishop.txtbtnbuyoutline,$100,
-uishop.txtbtnmoreproducts__1_,More Offers,
-uishop.txtbtnmoreproductsoutline,More Offers,
-uishop.txtdescription,"No Ads,
-Just Fun!",
-uishop.txtdescriptionoutline,"No Ads,
-Just Fun!",
+uishop.txtbtnmoreproducts,More Offers,
 uishop.txtgold,1000,
 uishop.txtoffper,90% OFF,
 uishop.txttimeoff,COCOCO,
@@ -576,7 +555,6 @@ uishop.txttitleoutline,"Title
 uititle.subtitletext,Pop & Flow Puzzle,
 uititle.taptostart,Tap to Start,
 uititle.txtloading,Loading..,
-uititle.txtloadingoutline,Loading..,
 useitem.txtdescription,"Your lives are unlimited!
 ",
 useitem.txtdescriptionoutline,"Your lives are unlimited!
@@ -593,9 +571,8 @@ ui.settings.notifications,Notifications,
 ui.settings.sound,Sound,
 ui.settings.music,Music,
 ui.settings.haptic,Haptic,
-ui.lobby.noads,NO ADS,
-ui.lobby.hard_level,Hard Level,
-ui.lobby.super_hard,Super Hard,
+ui.hard,Hard Level,
+ui.super_hard,Super Hard,
 ui.shop.title,Shop,
 ui.shop.more_offers,More Offers,
 ui.morelive.free,FREE,
@@ -620,3 +597,8 @@ booster.zap.buydesc,Pop everything of one color!,
 booster.hand.usedesc,Select a holder from the queue to deploy.,
 booster.shuffle.usedesc,Shuffle the holder queue order.,
 booster.zap.usedesc,Remove all balloons of a selected color.,
+common.ok,OK,
+common.cancel,Cancel,
+common.close,Close,
+common.continue,Continue,
+common.quit,Quit,
