@@ -48,6 +48,19 @@ namespace BalloonFlow
         private readonly List<GameObject> _eggs = new List<GameObject>();
         private readonly List<GameObject> _eggTextures = new List<GameObject>();
         private readonly List<int> _eggMaxHps = new List<int>();
+        private readonly List<Renderer> _eggTexRenderers = new List<Renderer>();
+
+        // [균열 단계 텍스처] paint0(데미지 시작) → paint1 → paint2(저체력). 풀피 = texture 비활성(균열 없음).
+        // CrackOverlay 셰이더 = Custom/SpriteInstanced, [MainTexture] _BaseMap. 알별 독립 교체는 MaterialPropertyBlock.
+        private static Texture[] s_crackTex;
+        private static Texture[] CrackTex => s_crackTex ??= new[]
+        {
+            Resources.Load<Texture>("Texture/paint0"),
+            Resources.Load<Texture>("Texture/paint1"),
+            Resources.Load<Texture>("Texture/paint2"),
+        };
+        private static readonly int CrackBaseMap = Shader.PropertyToID("_BaseMap");
+        private MaterialPropertyBlock _crackMpb;
 
         public int EggCount => _eggs.Count;
 
@@ -145,6 +158,8 @@ namespace BalloonFlow
                 _eggs.Add(egg);
                 _eggTextures.Add(texChild);
                 _eggMaxHps.Add(maxHp);
+                // [균열 단계] texture 자식의 Renderer 캐시 — HP 단계별 _BaseMap 텍스처 교체용.
+                _eggTexRenderers.Add(texChild != null ? texChild.GetComponentInChildren<Renderer>(true) : null);
             }
             // 틀 스케일은 위(격자 산출 전)에서 이미 수행했다.
         }
@@ -174,9 +189,20 @@ namespace BalloonFlow
                 }
                 else if (index < _eggTextures.Count && _eggTextures[index] != null)
                 {
-                    int maxHp = index < _eggMaxHps.Count ? _eggMaxHps[index] : currentHp;
-                    bool damaged = currentHp * 2 <= maxHp; // 절반 이상 닳음
-                    _eggTextures[index].SetActive(damaged);
+                    // ROLLBACK_PINATABOX_CRACK_STAGE_20260608: 이전 = 절반 이하면 texture 단일 토글.
+                    // 변경(박지수 명세): 풀피=비활성(균열X), 데미지 받으면 paint0→paint1→paint2 (3등분, 저체력일수록 paint2).
+                    int maxHp = index < _eggMaxHps.Count && _eggMaxHps[index] > 0 ? _eggMaxHps[index] : currentHp;
+                    if (currentHp >= maxHp)
+                    {
+                        _eggTextures[index].SetActive(false);   // 풀피 = 균열 없음
+                    }
+                    else
+                    {
+                        float ratio = (float)currentHp / Mathf.Max(1, maxHp);
+                        int stage = Mathf.Clamp(Mathf.FloorToInt((1f - ratio) * 3f), 0, 2); // 데미지 시작=paint0
+                        _eggTextures[index].SetActive(true);
+                        ApplyCrackTexture(index, stage);
+                    }
                 }
             }
 
@@ -192,6 +218,20 @@ namespace BalloonFlow
             _eggs.Clear();
             _eggTextures.Clear();
             _eggMaxHps.Clear();
+            _eggTexRenderers.Clear();
+        }
+
+        /// <summary>[균열 단계] 알 index 의 texture Renderer 의 _BaseMap 을 paint{stage} 로 교체 (MaterialPropertyBlock — 공유 머티리얼 오염 없음).</summary>
+        private void ApplyCrackTexture(int index, int stage)
+        {
+            if (index < 0 || index >= _eggTexRenderers.Count) return;
+            var r = _eggTexRenderers[index];
+            var tex = CrackTex;
+            if (r == null || tex == null || stage < 0 || stage >= tex.Length || tex[stage] == null) return;
+            _crackMpb ??= new MaterialPropertyBlock();
+            r.GetPropertyBlock(_crackMpb);
+            _crackMpb.SetTexture(CrackBaseMap, tex[stage]);
+            r.SetPropertyBlock(_crackMpb);
         }
 
         // Cylinder(몸체)만 색 적용, texture(균열)는 비활성으로 시작.
