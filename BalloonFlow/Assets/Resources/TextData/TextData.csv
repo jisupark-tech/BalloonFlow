@@ -1,41 +1,8 @@
 Key,Text_EN,비고
 frozenlayer.magazinetext,0,
-goldpanel.txtgold,1000,
 holder.magazinetext,0,
-itembtn.textitem,0,
-itembtn.textitemoutline,0,
-itembtn.txtlock,Lv.15,
-itembtn.txtlockoutline,Lv.15,
-lobbyrailbox.textlevel,30,
-lobbyrailbox.textleveloutline,30,
-multiplier.textmultiplierx1,x1,
-multiplier.textmultiplierx10,x10,
-multiplier.textmultiplierx100,x100,
-multiplier.textmultiplierx25,x25,
-multiplier.textmultiplierx5,x5,
-multiplier.textyellowoutlinex10,x10,
-multiplier.textyellowoutlinex100,x100,
-multiplier.textyellowoutlinex1_,x1,
-multiplier.textyellowoutlinex25,x25,
-multiplier.textyellowoutlinex5,x5,
-multiplier.textyellowx10,x10,
-multiplier.textyellowx100,x100,
-multiplier.textyellowx1_,x1,
-multiplier.textyellowx25,x25,
-multiplier_1.textmultiplierx1,x1,
-multiplier_1.textmultiplierx10,x10,
-multiplier_1.textmultiplierx100,x100,
-multiplier_1.textmultiplierx25,x25,
-multiplier_1.textmultiplierx5,x5,
-multiplier_1.textyellowoutlinex10,x10,
-multiplier_1.textyellowoutlinex100,x100,
-multiplier_1.textyellowoutlinex1_,x1,
-multiplier_1.textyellowoutlinex25,x25,
-multiplier_1.textyellowoutlinex5,x5,
-multiplier_1.textyellowx10,x10,
-multiplier_1.textyellowx100,x100,
-multiplier_1.textyellowx1_,x1,
-multiplier_1.textyellowx25,x25,
+itembtn.txtlock,Lv.{n},
+newfeature.textunlock,Unlocked!,
 장치 해금 팝업 ,,
 newfeature.textdesctiption,TextDesctiptionTextDesctiptionTextDesctiptionTextDesctiptionTextDesctiptionTextDesctiption,
 newfeature.textname.HiddenDartBox,Hidden Dart Box,레벨 11 등장 
@@ -48,532 +15,105 @@ newfeature.textname.GlassPipe,Glass Pipe,레벨 41 등장
 newfeature.textdesctiption.GlassPipe,Tap nearby boxes to release a new one!,
 newfeature.textname.Barricade,Barricade,레벨 61 등장
 newfeature.textdesctiption.Barricade,Shoot the same color to clear the path!,
-,,레벨 81 등장
-newfeature.textdesctiption.Barricad,Free the key to unlock the lock!,
-newfeature.textname.HiddenBalloon,HiddenBalloon,레벨 101 등장 
+newfeature.textname.HiddenBalloon,HiddenBalloon,레벨 81 등장
 newfeature.textdesctiption.HiddenBalloon,Pop nearby balloons to reveal!,
-newfeature.textname.IronWall,Iron Wall,레벨 121 등장
+newfeature.textname.IronWall,Iron Wall,레벨 101 등장 
 newfeature.textdesctiption.IronWall,It blocks darts' path!,
-newfeature.textname.Pipe,Pipe,레벨 141 등장
+newfeature.textname.Pipe,Pipe,레벨 121 등장
 newfeature.textdesctiption.Pipe,Tap nearby boxes to release a mystery one!,
+newfeature.textname.flextube,Flex Tube,레벨 141 등장
+newfeature.textdesctiption.flextube,Shoot the same color to shrink the tube!,
 newfeature.textname.TargetBox,Target Box,레벨 161 등장
 newfeature.textdesctiption.TargetBox,Shoot the same colors to break it all!,
 newfeature.textname.Ice,Ice,레벨 201 등장
 newfeature.textdesctiption.Ice,Pop any balloon to shatter the ice!,
 newfeature.textname.FrozenDartBox,Frozen Dart Box,레벨 241 등장 
 newfeature.textdesctiption.FrozenDartBox,Tap other boxes to shatter the ice!,
-popupcommonframe.txtgreen,Stay,
-popupcommonframe.txtgreenoutline,Stay,
-popupcommonframe.txtred,"Quit
-",
-popupcommonframe.txtredoutline,"Quit
-",
-popupcommonframe.txtsingleoutline,"Resume
-",
-공통 팝업 제목 ,,
-popupcommonframe.txttitle,"Title
-",
-popupcommonframe.txttitle.MoreLives,More Lives,
-popupcommonframe.txttitle.Quit,Quit Game?,안드로이드 백버튼 시 등장
-popupcommonframe.txttitle.NetworkError,Not Connected,인터넷 연결
-popupcommonframe.txttitle.Setting,Settings,설정
-popupcommonframe.txttitle.AllClear,Congratulations!,Lv.300 클리어 후 또는 Lv.301 터치 시
-popupcommonframe.txttitle.ResultClear,Level {n},결과팝업 성공 실패 시 동일
-popupcommonframe.txttitle.NoAds,NO ADS,광고제거 팝
-,,
-,,
-,,
-,,
 popupcontinue.costlabel,Cost:,
-popupcontinue.costtext,FREE,
-popupcontinue.textmultiplierx1,x1,
-popupcontinue.textmultiplierx10,x10,
-popupcontinue.textmultiplierx100,x100,
-popupcontinue.textmultiplierx25,x25,
-popupcontinue.textmultiplierx5,x5,
-popupcontinue.textyellowoutlinex10,x10,
-popupcontinue.textyellowoutlinex100,x100,
-popupcontinue.textyellowoutlinex1_,x1,
-popupcontinue.textyellowoutlinex25,x25,
-popupcontinue.textyellowoutlinex5,x5,
-popupcontinue.textyellowx10,x10,
-popupcontinue.textyellowx100,x100,
-popupcontinue.textyellowx1_,x1,
-popupcontinue.textyellowx25,x25,
-popupcontinue.txtblueoutline,"Quit
-",
-popupcontinue.txtbtnsingle,"Resume
-",
 popupcontinue.txtcontinue,Play On,
-popupcontinue.txtcontinueoutline,Play On,
 popupcontinue.txtcontinuetitle,Continue?,
-popupcontinue.txtcontinuetitleoutline,Continue?,
 popupcontinue.txtdescription,You will lose 1 Life!!,
-popupcontinue.txtgold,1000,
-popupcontinue.txtgoldoutline,900,
-popupcontinue.txtgreen,Stay,
-popupcontinue.txtgreenoutline,Stay,
-popupcontinue.txtred,"Quit
-",
-popupcontinue.txtredoutline,"Quit
-",
-popupcontinue.txtsingleoutline,"Resume
-",
-popupcontinue.txttitle,"Title
-",
-popupcontinue.txttitleoutline,"Title
-",
-popupdescription.txtblueoutline,"Quit
-",
-popupdescription.txtbtnsingle,"Resume
-",
+popupcontinue.txtdescription.multiplier,You will lose your x{n} multiplier!,
 popupdescription.txtdescription,TxtDescriptionTxtDescriptionTxtDescriptionTxtDescriptionTxtDescription,
-popupdescription.txtdescription.Quit,Do you really want to quit?,
-,,
-popupdescription.txtgreen,Continue,
-popupdescription.txtgreenoutline,Continue,
-popupdescription.txtred,"Quit
-",
-popupdescription.txtredoutline,"Quit
-",
 popupdescription.txtsingleoutline,"Resume
 ",
-popupdescription.txttitle,"Title
-",
-popupdescription.txttitleoutline,"Title
-",
-popuperror.txtblueoutline,"Quit
-",
-popuperror.txtbtnsingle,Continue,
 popuperror.txtdescription,Item DescriptionItem DescriptionItem Description,
-popuperror.txtgreen,Continue,
-popuperror.txtgreenoutline,Continue,
-popuperror.txtred,"Quit
-",
-popuperror.txtredoutline,"Quit
-",
-popuperror.txtsingleoutline,Continue,
-popuperror.txttitle,Title,
-popuperror.txttitleoutline,Title,
 popupfail01.continuetitle,Continue?,
 popupfail01.costlabel,Cost:,
 popupfail01.costtext,FREE,
 popupfail01.txtcontinue,"Add Space
 ",
-popupfail01.txtcontinueoutline,"Add Space
-",
-popupfail01.txtgold,1000,
-popupfail01.txtgoldoutline,900,
-popupfail02.txtblueoutline,"Quit
-",
-popupfail02.txtbtnsingle,Retry,
 popupfail02.txtfail,Level Failed!,
-popupfail02.txtfailoutline,Level Failed!,
-popupfail02.txtgold,20,
-popupfail02.txtgoldoutline,20,
-popupfail02.txtgreen,Stay,
-popupfail02.txtgreenoutline,Stay,
-popupfail02.txthardlevel,Hard Level,
-popupfail02.txthardleveloutline,Hard Level,
-popupfail02.txtred,"Quit
-",
-popupfail02.txtredoutline,"Quit
-",
-popupfail02.txtsingleoutline,Retry,
-popupfail02.txttitle,"Title
-",
-popupfail02.txttitleoutline,"Title
-",
-popupgoldshop.textamount,x1,
-popupgoldshop.textamountoutline,x1,
-popupgoldshop.textprice,"Price
-",
-popupgoldshop.textpriceoutline,"Price
-",
-popupgoldshop.textsale,90% OFF,
-popupgoldshop.textsaleoutline,90% OFF,
-popupgoldshop.txtbtnbuy,$100,
-popupgoldshop.txtbtnbuyoutline,$100,
-popupgoldshop.txtbtnmoreproducts__1_,More Offers,
-popupgoldshop.txtbtnmoreproductsoutline,More Offers,
-popupgoldshop.txtdescription,"NO ADS,
-Just Fun!",
-popupgoldshop.txtgold,1000,
-popupgoldshop.txtoffper,90% OFF,
-popupgoldshop.txttimeoff,COCOCO,
-popupgoldshop.txttitle,"Title
-",
-popupgoldshop.txttitleoutline,"Title
-",
-popupitemdescription.txtblueoutline,"Quit
-",
-popupitemdescription.txtbtnsingle,"Claim
-",
-popupitemdescription.txtdescription,Item DescriptionItem DescriptionItem Description,
-popupitemdescription.txtgold,1000,
-popupitemdescription.txtgreen,Stay,
-popupitemdescription.txtgreenoutline,Stay,
-popupitemdescription.txtred,"Quit
-",
-popupitemdescription.txtredoutline,"Quit
-",
-popupitemdescription.txtsingleoutline,"Claim
-",
-popupitemdescription.txttitle,"Title
-",
-popupitemdescription.txttitleoutline,"Title
-",
-popupmorelive.textlifeamount,0,
-popupmorelive.textlifeamountoutline,0,
-popupmorelive.txtblueoutline,"Quit
-",
 popupmorelive.txtbtnsingle,"Resume
 ",
 popupmorelive.txtdescription,Next life in,
 popupmorelive.txtfree,Watch,
-popupmorelive.txtgold,1000,
-popupmorelive.txtgoldoutline,900,
-popupmorelive.txtgreen,Continue,
-popupmorelive.txtgreenoutline,Continue,
 popupmorelive.txtlife,{n},
-popupmorelive.txtred,"Quit
-",
-popupmorelive.txtredoutline,"Quit
-",
 popupmorelive.txtsingleoutline,"Resume
 ",
-popupmorelive.txttimer,0:00,
 popupmorelive.txttitle,More Lives,
-popupmorelive.txttitleoutline,More Lives,
-popupnoads.txtblueoutline,"Quit
-",
-popupnoads.txtbtnbuy,Buy,
-popupnoads.txtbtnbuyoutline,Buy,
-popupnoads.txtbtnsingle,$4.99,
 popupnoads.txtdescription1,Remove forced ads forever!,
 popupnoads.txtdescription2,Keep optional bonus ads!,
-popupnoads.txtgold,1900,
-popupnoads.txtgoldoutline,1900,
-popupnoads.txtgreen,Stay,
-popupnoads.txtgreenoutline,Stay,
-popupnoads.txtred,"Quit
-",
-popupnoads.txtredoutline,"Quit
-",
-popupprofile.txtblueoutline,"Quit
-",
-popupprofile.txtbtnsingle,"Claim
-",
 popupprofile.txtbtntapavatar,Avatar,
 popupprofile.txtbtntapavataroutline,Avatar,
 popupprofile.txtbtntapframe,Frame,
-popupprofile.txtbtntapframeoutline,Frame,
 popupprofile.txtbtntapname,Name,
 popupprofile.txtbtntapnameoutline,Name,
 popupprofile.txtbtntaptoken,Token,
 popupprofile.txtbtntaptokenoutline,Token,
-popupprofile.txtdescription,Item DescriptionItem DescriptionItem Description,
-popupprofile.txtgreen,Stay,
-popupprofile.txtgreenoutline,Stay,
-popupprofile.txtred,"Quit
-",
-popupprofile.txtredoutline,"Quit
-",
-popupprofile.txtsingleoutline,"Claim
-",
 popupprofile.txttitle,Profile,
 popupprofile.txttitleoutline,Profile,
-popupquit.textmultiplierx1,x1,
-popupquit.textmultiplierx10,x10,
-popupquit.textmultiplierx100,x100,
-popupquit.textmultiplierx25,x25,
-popupquit.textmultiplierx5,x5,
-popupquit.textyellowoutlinex10,x10,
-popupquit.textyellowoutlinex100,x100,
-popupquit.textyellowoutlinex1_,x1,
-popupquit.textyellowoutlinex25,x25,
-popupquit.textyellowoutlinex5,x5,
-popupquit.textyellowx10,x10,
-popupquit.textyellowx100,x100,
-popupquit.textyellowx1_,x1,
-popupquit.textyellowx25,x25,
-popupquit.txtblueoutline,"Quit
-",
-popupquit.txtbtnsingle,"Resume
-",
-popupquit.txtdescription,You will lose a life!,
-popupquit.txtgreen,Stay,
-popupquit.txtgreenoutline,Stay,
-popupquit.txtred,"Quit
-",
-popupquit.txtredoutline,"Quit
-",
-popupquit.txtsingleoutline,"Resume
-",
-popupquit.txttitle,Quit Level?,
-popupquit.txttitleoutline,Quit Level?,
-popupresult.txtblueoutline,"Quit
-",
 popupresult.txtbtnsingle,Next,
-popupresult.txtgold,20,
-popupresult.txtgoldoutline,20,
-popupresult.txtgreen,Stay,
-popupresult.txtgreenoutline,Stay,
-popupresult.txthardlevel,Hard Level,
-popupresult.txthardleveloutline,Hard Level,
-popupresult.txtred,"Quit
-",
-popupresult.txtredoutline,"Quit
-",
-popupresult.txtsingleoutline,Next,
-popupresult.txttitle,"Title
-",
-popupresult.txttitleoutline,"Title
-",
-popupsettings.txtblueoutline,"Quit
-",
-popupsettings.txtbtnsingle,Continue,
-popupsettings.txtgreen,Stay,
-popupsettings.txtgreenoutline,Stay,
-popupsettings.txthaptic,Haptic,
-popupsettings.txtmusic,Music,
-popupsettings.txtred,"Quit
-",
-popupsettings.txtredoutline,"Quit
-",
-popupsettings.txtsingleoutline,Continue,
-popupsettings.txtsound,Sound,
-popupsettings.txttitle,Settings,
-popupsettings.txttitleoutline,Settings,
-popupwinningstreak.btnsingleoutline,Play,
-popupwinningstreak.textmultiplierx1,x1,
-popupwinningstreak.textmultiplierx10,x10,
-popupwinningstreak.textmultiplierx100,x100,
-popupwinningstreak.textmultiplierx25,x25,
-popupwinningstreak.textmultiplierx5,x5,
-popupwinningstreak.textreward,100,
-popupwinningstreak.textrewardoutline,100,
-popupwinningstreak.texttimer,0d 00h,
-popupwinningstreak.texttimeroutline,0d 00h,
-popupwinningstreak.textyellowoutlinex10,x10,
-popupwinningstreak.textyellowoutlinex100,x100,
-popupwinningstreak.textyellowoutlinex1_,x1,
-popupwinningstreak.textyellowoutlinex25,x25,
-popupwinningstreak.textyellowoutlinex5,x5,
-popupwinningstreak.textyellowx10,x10,
-popupwinningstreak.textyellowx100,x100,
-popupwinningstreak.textyellowx1_,x1,
-popupwinningstreak.textyellowx25,x25,
-popupwinningstreak.txtblueoutline,"Quit
-",
-popupwinningstreak.txtbtnbuy,Buy,
-popupwinningstreak.txtbtnbuyoutline,Buy,
+popup.txtbtnbuy,Buy,
 popupwinningstreak.txtbtnsingle,Play,
-popupwinningstreak.txtdescription,"Win levels to collect <color=#FFD700> Flames! </color>
-Longer streak, more rewards!",
-popupwinningstreak.txtdescriptionoutline,"Win levels to collect <color=#FFD700> Flames! </color>
-Longer streak, more rewards!",
-popupwinningstreak.txtgold,1900,
-popupwinningstreak.txtgoldoutline,1900,
-popupwinningstreak.txtgreen,Stay,
-popupwinningstreak.txtgreenoutline,Stay,
-popupwinningstreak.txtred,"Quit
-",
-popupwinningstreak.txtredoutline,"Quit
-",
+popupwinningstreak.txtdescription,"Win levels to collect <color=#FFD700> Flames! </color>/nLonger streak, more rewards!",
 popupwinningstreak.txttitle,Winning Streak,
-popupwinningstreak.txttitleoutline,Winning Streak,
 popupwinningstreakinfo.textclose,Tap to Continue,
-popupwinningstreakinfo.textdescription,"If you <color=#e7656b>fail</color> a level,
-your multiplier will reset!",
-popupwinningstreakinfo.textdescriptionoutline,"If you <color=#FFD700>fail</color> a level,
-your multiplier will reset!",
-popupwinningstreakinfo.textinfo1,"Win levels,
-collect <color=#FFD700> Flames! </color>",
-popupwinningstreakinfo.textinfo2,"Multiply <color=#FFD700> Flames </color>
-up to x100!",
+popupwinningstreakinfo.textdescription,"If you <color=#e7656b>fail</color> a level,\nyour multiplier will reset!",
+popupwinningstreakinfo.textinfo1,"Win levels,/ncollect <color=#FFD700> Flames! </color>",
+popupwinningstreakinfo.textinfo2,Multiply <color=#FFD700> Flames </color>/nup to x100!,
 popupwinningstreakinfo.textinfo3,Get <color=#FFD700>rewards!,
-rewardimg.textreward,100,
-rewardimg.textrewardoutline,100,
-shopitem.textamount,x1,
-shopitem.textamountoutline,x1,
-shoplistad.txtoffper,90% OFF,
-shoplistad.txttimeoff,COCOCO,
-shoplistgold.textprice,"Price
-",
-shoplistgold.textpriceoutline,"Price
-",
-shoplistgold.txtbtnbuy,$10,
-shoplistgold.txtbtnbuyoutline,$10,
-shoplistgold.txtoffper,90% OFF,
-shoplistgold.txttimeoff,COCOCO,
-shoplistgoldalign.textprice,"Price
-",
-shoplistgoldalign.textpriceoutline,"Price
-",
-shoplistgoldalign.txtbtnbuy,$10,
-shoplistgoldalign.txtbtnbuyoutline,$10,
-shoplistgoldalign.txtoffper,90% OFF,
-shoplistgoldalign.txttimeoff,COCOCO,
-shoplistitem.textamount,x1,
-shoplistitem.textamountoutline,x1,
-shoplistitem.textprice,"Price
-",
-shoplistitem.textpriceoutline,"Price
-",
-shoplistitem.textsale,90% OFF,
-shoplistitem.textsaleoutline,90% OFF,
-shoplistitem.txtbtnbuy,$100,
-shoplistitem.txtbtnbuyoutline,$100,
-shoplistitem.txtoffper,90% OFF,
-shoplistitem.txttimeoff,COCOCO,
-shoplistitem.txttitle,"Title
-",
-shoplistitem.txttitleoutline,"Title
-",
-slotwinningstreak.textnumber,1,
-slotwinningstreak.textnumberoutline,1,
-slotwinningstreak.textreward,100,
-slotwinningstreak.textrewardoutline,100,
+shoplistitem.textsale,{n}% OFF,
+상점 번들 이름 ,,
+shoplistitem.txttitleoutline.t1,Pop Pack,
+shoplistitem.txttitleoutline.t2,Super Pack,
+shoplistitem.txttitleoutline.t3,Mega Pack,
+shoplistitem.txttitleoutline.t4,Giant Pack,
+shoplistitem.txttitleoutline.t5,Ultimate Pack,
 slotwinningstreak.txtgrandprize,Grand Prize,
 spawner.magazinetext,0,
 tutorial.instructiontext,Tutorial instruction text,
 tutorial.text,SKIP,
 tutorial.texttap,Tap to anywhere,
-tutorial.texttapoutline,Tap to anywhere,
 txttoast.txttoast,"Your lives are unlimited!
-",
-txttoast.txttoastoutline,"Your lives are unlimited!
 ",
 uihud.holdertext,On Rail: 0/9,
 uihud.remainingtext,Balloons: --,
-uihud.scoretext,0,
-uihud.textitem,0,
-uihud.textitemoutline,0,
-uihud.textspeed,x1,
-uihud.textspeedoutline,x1,
-uihud.txtgold,1000,
-uihud.txtlevel,level 00,
-uihud.txtleveloutline,level 00,
-uihud.txtlock,Lv.15,
-uihud.txtlockoutline,Lv.15,
-uihud.txtnumber,Level 1,
-uihud.txtnumberoutline,Level 1,
 uilobby.text,"Home
 ",
-uilobby.textgauge,100/100,
-uilobby.textgaugeoutline,100/100,
+uilobby.textgauge,{n}/{n},
+uilobby.multiplier,x{n},
 uilobby.texthome,"Home
 ",
-uilobby.textlevel,30,
-uilobby.textleveloutline,30,
-uilobby.textlifeamount,0,
-uilobby.textlifeamountoutline,0,
-uilobby.textmultiplierx1,x1,
-uilobby.textmultiplierx10,x10,
-uilobby.textmultiplierx100,x100,
-uilobby.textmultiplierx25,x25,
-uilobby.textmultiplierx5,x5,
-uilobby.textprivacy,Privacy,
-uilobby.textprivacyoutline,Privacy,
-uilobby.textreward,100,
-uilobby.textrewardoutline,100,
-uilobby.textsetting,Settings,
 uilobby.textshop,Shop,
-uilobby.textsupport,Support,
-uilobby.textsupportoutline,Support,
-uilobby.textterms,Terms,
-uilobby.texttermsoutline,Terms,
-uilobby.texttimer,0d 00h,
-uilobby.texttimeroutline,0d 00h,
-uilobby.textyellowoutlinex10,x10,
-uilobby.textyellowoutlinex100,x100,
-uilobby.textyellowoutlinex1_,x1,
-uilobby.textyellowoutlinex25,x25,
-uilobby.textyellowoutlinex5,x5,
-uilobby.textyellowx10,x10,
-uilobby.textyellowx100,x100,
-uilobby.textyellowx1_,x1,
-uilobby.textyellowx25,x25,
-uilobby.titlesetting,Settings,
-uilobby.titlesettingoutline,Settings,
-uilobby.titleshop,Shop,
-uilobby.titleshopoutline,Shop,
-uilobby.txtbtnmoreproducts__1_,More Offers,
-uilobby.txtbtnmoreproductsoutline,More Offers,
-uilobby.txtgold,1000,
-uilobby.txthaptic,Haptic,
-uilobby.txtlevel,Super Hard,
-uilobby.txtleveloutline,Super Hard,
+uilobby.texttimer,{}d {}h,
 uilobby.txtlife,Full,
-uilobby.txtmusic,Music,
 uilobby.txtnotification,Notifications,
-uilobby.txtnotificationoff,Off,
-uilobby.txtnotificationoffoutline,Off,
-uilobby.txtnotificationon,On,
-uilobby.txtnotificationonoutline,On,
-uilobby.txtnotificationoutline,Notifications,
-uilobby.txtplay,Level {n},
-uilobby.txtsound,Sound,
 uisetting.textprivacy,Privacy,
-uisetting.textprivacyoutline,Privacy,
 uisetting.textsupport,Support,
-uisetting.textsupportoutline,Support,
 uisetting.textterms,Terms,
-uisetting.texttermsoutline,Terms,
-uisetting.titlesetting,Settings,
-uisetting.titlesettingoutline,Settings,
-uisetting.txthaptic,Haptic,
-uisetting.txtmusic,Music,
-uisetting.txtnotification,Notifications,
-uisetting.txtnotificationoff,Off,
-uisetting.txtnotificationoffoutline,Off,
-uisetting.txtnotificationon,On,
-uisetting.txtnotificationonoutline,On,
-uisetting.txtnotificationoutline,Notifications,
-uisetting.txtsound,Sound,
-uishop.textamount,x1,
-uishop.textamountoutline,x1,
-uishop.textprice,"Price
-",
-uishop.textpriceoutline,"Price
-",
-uishop.textsale,90% OFF,
-uishop.textsaleoutline,90% OFF,
-uishop.titleshop,Shop,
-uishop.titleshopoutline,Shop,
-uishop.txtbtnbuy,$100,
-uishop.txtbtnbuyoutline,$100,
-uishop.txtbtnmoreproducts,More Offers,
-uishop.txtgold,1000,
-uishop.txtoffper,90% OFF,
-uishop.txttimeoff,COCOCO,
-uishop.txttitle,"Title
-",
-uishop.txttitleoutline,"Title
-",
-uititle.subtitletext,Pop & Flow Puzzle,
-uititle.taptostart,Tap to Start,
 uititle.txtloading,Loading..,
-useitem.txtdescription,"Your lives are unlimited!
-",
-useitem.txtdescriptionoutline,"Your lives are unlimited!
-",
-winningstreakclickinfo.textreward,100,
-winningstreakclickinfo.textrewardoutline,100,
-winningstreakgetreward.textreward,1,
-winningstreakgetreward.textrewardoutline,1,
-woodenboard.magazinetext,0,
-ui.settings.title,Settings,
-ui.common.on,On,
-ui.common.off,Off,
-ui.settings.notifications,Notifications,
+useitem.txtdescription.hand,"Tap any box to place it!
+",UseItem
+useitem.txtdescription.zap,Tap any color to pop them all!,
+,,
+popupcommonframe.txttitle.setting,Settings,설정
 ui.settings.sound,Sound,
 ui.settings.music,Music,
-ui.settings.haptic,Haptic,
-ui.hard,Hard Level,
-ui.super_hard,Super Hard,
-ui.shop.title,Shop,
+uisetting.txthaptic,Haptic,
+ui.hard,Hard,
+ui.hardlevel,Hard Level,
+ui.superhard,Super Hard,
 ui.shop.more_offers,More Offers,
 ui.morelive.free,FREE,
 ui.morelive.unlimited,UNLIMITED,
@@ -588,17 +128,48 @@ error.payment.title,Error,
 error.payment.desc,Payment failed. Please try again.,
 error.success.title,Your Purchase was Completed,
 error.success.desc,Purchase successful!,
-booster.hand.name,Hand,
-booster.shuffle.name,Shuffle,
-booster.zap.name,Zap,
-booster.hand.buydesc,Place any box directly!,
-booster.shuffle.buydesc,Shuffle all boxes instantly!,
-booster.zap.buydesc,Pop everything of one color!,
-booster.hand.usedesc,Select a holder from the queue to deploy.,
-booster.shuffle.usedesc,Shuffle the holder queue order.,
-booster.zap.usedesc,Remove all balloons of a selected color.,
-common.ok,OK,
-common.cancel,Cancel,
-common.close,Close,
-common.continue,Continue,
-common.quit,Quit,
+popupgoldshop.txtdescription,"No Ads,/nJust Fun!",
+ui.common.ok,OK,
+ui.common.cancel,Cancel,
+ui.common.close,Close,
+ui.common.continue,Continue,
+ui.common.quit,Quit,
+ui.common.on,On,
+ui.common.off,Off,
+ui.common.stay,Stay,
+ui.common.cliam,Claim,
+ui.common.resume,Resume,
+ui.common.retry,Retry,
+,,
+uilobby.txtplay,,
+,,
+팝업 제목 ,,
+popup.txttitle,,
+popup.txttitle.moreLives,More Lives,
+popup..txttitle.quit,Quit Game?,안드로이드 백버튼 시 등장 (PopupDescription)
+popup.txttitle.networkerror,Not Connected,인터넷 연결 (PopupError)
+popup.txttitle.,,
+popup.txttitle.allclear,Congratulations!,Lv.300 클리어 후 또는 Lv.301 터치 시 (PopupDescription)
+popup.txttitle.lv,Level {n},결과팝업 성공 실패 시 동일
+popup.txttitle.noads,NO ADS,광고제거 팝업
+popup.txttitle.purchaseerror,Not Charged,결제실패 (PopupDescription)
+popup.txttitle.purchasesuccess,Success,PopupError
+popup.txttitle.settingquit,Quit Level?,PopupQuit
+popup.txttitle.hand,Hand,PopupBuyItem
+popup.txttitle.suffle,Shuffle,PopupBuyItem
+popup.txttitle.zap,Zap,PopupBuyItem
+popup.txttitle.unlock,Unlock,PopupBuyItem
+,,
+팝업 설명,,
+popup.txtdescription.quit,Do you really want to quit?,PopupDescription
+popup.txtdescription.networkerror,Your internet is disconnected.,PopupDescription
+popup.txtdescription.purchaseerror,Your purchase was canceled.,PopupDescription
+popup.txtdescription.purchasesuccess,Your purchase was completed.,PopupDescription
+popup.txtdescription.settingquit,You will lose a life!,PopupQuit
+popup.txtdescription.allclear,New Levels Coming Soon!,PopupDescription
+popup.txtdescription.hand,Place any box directly!,PopupBuyItem
+ppopup.txtdescription.suffle,Shuffle all boxes instantly!,PopupBuyItem
+popup.txtdescription.zap,Pop everything of one color!,PopupBuyItem
+popup.txtdescription.zap,,
+popup.txtdescription.zap,,
+popup.txtdescription.zap,,
