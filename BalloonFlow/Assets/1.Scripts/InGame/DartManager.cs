@@ -60,17 +60,18 @@ namespace BalloonFlow
         // 기존 식(시간 기반 + min/max scale clamp)은 위 ROLLBACK 주석 + 상수 해제로 복원.
         private float CalculateProjectileFlightTime(Vector3 from, Vector3 to)
         {
-            float multiplier = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightSpeedMultiplier : 10f;
-            if (multiplier <= 0.001f) multiplier = 1f;
+            // [이미지 속도 프로파일 / ROLLBACK_DART_FLIGHT_VELOCITY_RAMP_20260608]
+            // 이전: 등속 — duration = distance / (cellSpacing × mult × userSpeed × almostThere).
+            // 변경: 속도(mult)가 start(dartFlightSpeedMultiplier=66) → DART_FLIGHT_MAX_MULT(120) 로 0.4초간 선형 가속 후 일정.
+            //   distance 를 이 프로파일로 덮는 시간을 역함수(DartRampTimeForUnits)로 산출. userSpeed/almostThere 는 필요 이동량 q 를 줄여 가속.
+            float startMult = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightSpeedMultiplier : 66f;
+            if (startMult <= 0.001f) startMult = 1f;
 
             float userSpeed = RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f;
             if (userSpeed <= 0.001f) userSpeed = 1f;
-            multiplier *= userSpeed;
-
-            // [Almost There] 클리어 임박 가속 시 다트 비행속도도 동일 배율(1.8)로 가속 — 벨트만 빨라지던 문제 보정.
-            // RailManager.GetOccupancySpeedMultiplier() = 임박 시 ALMOST_THERE_SPEED_MULT, 그 외 1.
             float almostThere = RailManager.HasInstance ? RailManager.Instance.GetOccupancySpeedMultiplier() : 1f;
-            if (almostThere > 0.001f) multiplier *= almostThere;
+            if (almostThere <= 0.001f) almostThere = 1f;
+            float scalars = userSpeed * almostThere;
 
             float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
             if (cellSpacing <= 0.01f) cellSpacing = 0.55f;
@@ -78,9 +79,44 @@ namespace BalloonFlow
             Vector3 flatFrom = new Vector3(from.x, 0f, from.z);
             Vector3 flatTo = new Vector3(to.x, 0f, to.z);
             float distance = Vector3.Distance(flatFrom, flatTo);
-            float duration = distance / (cellSpacing * multiplier);
 
+            float q = distance / (cellSpacing * scalars);          // 덮어야 할 누적 mult-units
+            float duration = DartRampTimeForUnits(q, startMult);
             return Mathf.Clamp(duration, PROJECTILE_MIN_FLIGHT_TIME, PROJECTILE_MAX_FLIGHT_TIME);
+        }
+
+        // [이미지 속도 프로파일] 속도(mult): start → MAX 로 RAMP_TIME 선형 가속 후 일정.
+        private const float DART_FLIGHT_RAMP_TIME = 0.4f;   // 가속 구간(초)
+        private const float DART_FLIGHT_MAX_MULT  = 120f;   // 천장(이전 ~100 → 120). 시작 = dartFlightSpeedMultiplier(66)
+
+        /// <summary>속도가 startMult→MAX 로 RAMP_TIME 선형가속 후 일정일 때 0..t 누적 이동량(∫mult dt). cellSpacing/스칼라 제외(비율에서 상쇄).</summary>
+        private static float DartRampDistanceUnits(float t, float startMult)
+        {
+            if (t <= 0f) return 0f;
+            float maxMult = DART_FLIGHT_MAX_MULT;
+            if (startMult >= maxMult) return startMult * t;                       // 이미 천장이면 등속
+            float slope = (maxMult - startMult) / DART_FLIGHT_RAMP_TIME;
+            if (t <= DART_FLIGHT_RAMP_TIME) return startMult * t + 0.5f * slope * t * t;
+            float atRamp = startMult * DART_FLIGHT_RAMP_TIME + 0.5f * slope * DART_FLIGHT_RAMP_TIME * DART_FLIGHT_RAMP_TIME;
+            return atRamp + maxMult * (t - DART_FLIGHT_RAMP_TIME);
+        }
+
+        /// <summary>DartRampDistanceUnits 역함수 — 누적 이동량 q 도달 시간(duration 산출용).</summary>
+        private static float DartRampTimeForUnits(float q, float startMult)
+        {
+            if (q <= 0f) return 0f;
+            float maxMult = DART_FLIGHT_MAX_MULT;
+            if (startMult >= maxMult) return q / Mathf.Max(0.001f, startMult);
+            float slope = (maxMult - startMult) / DART_FLIGHT_RAMP_TIME;
+            float atRamp = startMult * DART_FLIGHT_RAMP_TIME + 0.5f * slope * DART_FLIGHT_RAMP_TIME * DART_FLIGHT_RAMP_TIME;
+            if (q <= atRamp)
+            {
+                // 0.5*slope*t² + startMult*t - q = 0
+                float a = 0.5f * slope, b = startMult;
+                float disc = b * b + 4f * a * q;
+                return (-b + Mathf.Sqrt(Mathf.Max(0f, disc))) / (2f * a);
+            }
+            return DART_FLIGHT_RAMP_TIME + (q - atRamp) / maxMult;
         }
 
         // [ROLLBACK_DART_FX_TRAIL]
@@ -2924,7 +2960,14 @@ namespace BalloonFlow
                     //   float moveT = Mathf.Clamp01(proj.elapsed / proj.duration);
                     //   proj.gameObject.transform.position = Vector3.Lerp(proj.startPosition, proj.targetPosition, moveT);
                     // 변경: DOVirtual.EasedValue 로 GameManager.dartFlightEase 동적 반영. 롤백 시 위 두 줄 복원 + 아래 블록 주석.
-                    float moveT = Mathf.Clamp01(proj.elapsed / proj.duration);
+                    // [이미지 속도 프로파일] 위치 보간을 등속이 아니라 가속→등속 누적이동량 비율로.
+                    // ROLLBACK_DART_FLIGHT_VELOCITY_RAMP_20260608: 아래 ramp 블록 → moveT = Clamp01(proj.elapsed/proj.duration) 로 복원.
+                    float startMultRT = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightSpeedMultiplier : 66f;
+                    if (startMultRT <= 0.001f) startMultRT = 1f;
+                    float rampDenom = DartRampDistanceUnits(proj.duration, startMultRT);
+                    float moveT = rampDenom > 0.0001f
+                        ? Mathf.Clamp01(DartRampDistanceUnits(proj.elapsed, startMultRT) / rampDenom)
+                        : Mathf.Clamp01(proj.elapsed / proj.duration);
                     Ease lerpEase = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightEase : Ease.Linear;
                     float easedT = DOVirtual.EasedValue(0f, 1f, moveT, lerpEase);
                     proj.gameObject.transform.position = Vector3.Lerp(proj.startPosition, proj.targetPosition, easedT);
