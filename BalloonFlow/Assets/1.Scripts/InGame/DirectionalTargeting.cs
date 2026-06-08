@@ -652,6 +652,51 @@ namespace BalloonFlow
                 Vector3 worldPos = BalloonController.Instance.GetBalloonWorldPositionCached(balloon.balloonId);
                 bool targetable = IsDirectlyTargetable(balloon);
 
+                // ROLLBACK_BARRICADE_DIR_FOOTPRINT_20260608:
+                // [Barricade] 방향(barricadeDir)+길이(barricadeLength)+HP 기반 directional footprint.
+                //   점유 셀 = head(2) + body(length×남은HP/maxHP, 올림) + edge(1) 을 dir 축으로, 두께 2칸.
+                //   HP 줄면 body 셀 수 감소 → 막는/조준 범위도 함께 축소(스펙). sizeW/H 미사용.
+                // [BACKWARD_COMPAT] barricadeLength 미저작(기본 1=레거시)은 멀티셀 미적용 → 단일셀(아래 일반 경로)로 폴백.
+                //   레거시 바리케이드가 강제 3×2 확장되어 이웃 레인을 덮고 발사 차단되던 회귀 방지(2026-06-08).
+                if (balloon.gimmickType == BalloonController.GimmickBarricade && balloon.barricadeLength > 1)
+                {
+                    int reqHits = balloon.maxHP > 0 ? balloon.maxHP : 2;
+                    int remHits = Mathf.Clamp(reqHits - balloon.hitCount, 0, reqHits);
+                    float ratio = reqHits > 0 ? remHits / (float)reqHits : 1f;
+                    // barricadeLength = 진행축 전체 칸 수(head2+body+edge1). body = max(0,length-3)×HP비율.
+                    int totalLen = Mathf.Max(3, balloon.barricadeLength);
+                    int bodyCells = Mathf.CeilToInt(Mathf.Max(0, totalLen - 3) * ratio);
+                    int bdir = ((balloon.barricadeDir % 4) + 4) % 4;   // 0=N(+Z) 1=E(+X) 2=S(-Z) 3=W(-X)
+                    bool axisZ = (bdir == 0 || bdir == 2);
+                    int sign = (bdir == 0 || bdir == 1) ? 1 : -1;
+                    // head2 + body + edge1. edge 항상 포함 → full HP 면 length 칸, HP=0(body=0)면 3칸(스펙: 3칸 차지 후 Pop).
+                    int alongCount = 2 + bodyCells + 1;
+
+                    Vector3 bAnchor = BalloonController.Instance.GetAdjustedBoardPosition(balloon.position);
+                    BalloonController.Instance.GetAdjustedCellSize(out float bCellX, out float bCellZ);
+                    float cellAlong = axisZ ? bCellZ : bCellX;
+                    float cellPerp  = axisZ ? bCellX : bCellZ;
+                    for (int a = 0; a < alongCount; a++)
+                    {
+                        for (int p = 0; p < 2; p++)   // 두께 2칸
+                        {
+                            Vector3 cw = bAnchor;
+                            if (axisZ) { cw.z += a * sign * cellAlong; cw.x += p * cellPerp; }
+                            else       { cw.x += a * sign * cellAlong; cw.z += p * cellPerp; }
+                            cw.y = worldPos.y;
+                            AddEdgeTarget(new EdgeTarget
+                            {
+                                balloonId = balloon.balloonId,
+                                color = balloon.color,
+                                worldPos = cw,
+                                cell = WorldToGrid(cw),
+                                targetable = targetable
+                            });
+                        }
+                    }
+                    continue;
+                }
+
                 // ROLLBACK_BARRICADE_MULTI_CELL_OCCUPANCY:
                 // Sized field gimmicks are one object, but they occupy every cell in sizeW x sizeH.
                 if (IsMultiCellSizedFieldGimmick(balloon))

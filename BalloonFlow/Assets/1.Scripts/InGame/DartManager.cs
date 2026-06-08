@@ -86,8 +86,8 @@ namespace BalloonFlow
         }
 
         // [이미지 속도 프로파일] 속도(mult): start → MAX 로 RAMP_TIME 선형 가속 후 일정.
-        private const float DART_FLIGHT_RAMP_TIME = 0.4f;   // 가속 구간(초)
-        private const float DART_FLIGHT_MAX_MULT  = 120f;   // 천장(이전 ~100 → 120). 시작 = dartFlightSpeedMultiplier(66)
+        private const float DART_FLIGHT_RAMP_TIME = 0.285f;   // 가속 구간(초)
+        private const float DART_FLIGHT_MAX_MULT  = 150f;   // 천장(이전 ~100 → 120). 시작 = dartFlightSpeedMultiplier(66)
 
         /// <summary>속도가 startMult→MAX 로 RAMP_TIME 선형가속 후 일정일 때 0..t 누적 이동량(∫mult dt). cellSpacing/스칼라 제외(비율에서 상쇄).</summary>
         private static float DartRampDistanceUnits(float t, float startMult)

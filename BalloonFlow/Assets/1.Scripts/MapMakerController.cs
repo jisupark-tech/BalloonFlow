@@ -101,7 +101,10 @@ namespace BalloonFlow
         // HP/Size(자유 W×H 1~6) 옵션이 의미 있는 sized 기믹 — Wall은 정사각 1/2/3 전용 row가 따로 있음.
         private static bool NeedsPinataHpAndSize(string gimmickName)
         {
-            return gimmickName == "Pinata" || gimmickName == "Pinata_Box" || gimmickName == "Barricade";
+            // ROLLBACK_BARRICADE_NO_PINATA_SIZE_20260608: Barricade 는 sizeW×sizeH(Pinata Size) 미사용 — dir/length 로만 저작.
+            //   (옛 sized 방식 잔재. Pinata Size 로 5×1 넣으면 평면 1줄 sized rect 가 돼 2-thick dir/length 와 충돌)
+            //   HP row 는 UpdateFieldGimmickUI 의 `|| isBarricade` 로 유지, 길이는 Barricade 전용 row(dir+length)로.
+            return gimmickName == "Pinata" || gimmickName == "Pinata_Box";
         }
 
         // 배경색 밝기 기반 가독 텍스트 색. White(6) 등 밝은 셀 위 흰 글자가 안 보이는 문제 해결.
@@ -173,10 +176,21 @@ namespace BalloonFlow
         private int[,] _balloonPinataW;   // Piñata 가로 크기 (앵커 셀에만 저장)
         private int[,] _balloonPinataH;   // Piñata 세로 크기
         private int[,] _balloonIceBlockSize; // [Ice §11] 얼음 블록 변 길이(셀). 기본 1. Ice 셀에만 의미.
+        // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+        // Optional explicit Ice grouping. groupId 0 keeps old adjacency grouping.
+        private int[,] _balloonIceGroupId;
+        private int[,] _balloonIceGroupHp;
+        private int[,] _balloonIceGroupHpMode; // 1=sum member HP, 2=override
+        // ROLLBACK_BARRICADE_MAPMAKER_20260608: 바리케이드 방향(0=N/1=E/2=S/3=W)+길이(셀) 셀별 저작. Barricade 셀에만 의미.
+        private int[,] _balloonBarricadeDir;    // 바리케이드 방향 (기본 1=E)
+        private int[,] _balloonBarricadeLength; // 바리케이드 길이(body 셀 수, 기본 1)
         private int _paintPinataHP = 2;    // 브러시용 Piñata HP
         private int _paintPinataW = 1;     // 브러시용 Piñata 가로
         private int _paintPinataH = 1;     // 브러시용 Piñata 세로
         private int _paintWallSize = 1;    // 브러시용 Wall 정사각 사이즈 (1/2/3) — Pinata 사이즈와 carryover 차단
+        private int _paintIceGroupId = 0;
+        private int _paintIceGroupHp = 0;
+        private int _paintIceGroupHpMode = 1;
         private int _paintChainGroup = 0;  // 브러시용 Chain 그룹 ID
         private int _nextChainGroupId = 1; // 자동 증가 Chain 그룹 ID
         private int _paintFrozenHP = 3;    // 브러시용 Frozen Dart 해동 체력
@@ -184,6 +198,9 @@ namespace BalloonFlow
         private int _paintSpawnerMag = 20; // 브러시용 Spawner 소환 탄창
         private int _paintLockPairId = 0;  // 브러시용 Lock_Key pair ID
         private int _nextLockPairId = 1;   // 자동 증가 Lock pair ID
+        // ROLLBACK_BARRICADE_MAPMAKER_20260608: 바리케이드 브러시 파라미터.
+        private int _paintBarricadeDir = 1;    // 브러시용 바리케이드 방향 (0=N/1=E/2=S/3=W)
+        private int _paintBarricadeLength = 3; // 브러시용 바리케이드 길이(진행축 전체 칸, 최소 3=head2+edge1)
         private int[,] _balloonLockPairIds; // 풍선별 Lock pair ID (-1 = 없음)
         private int[,] _holderLockPairIds;  // 보관함별 Lock pair ID (-1 = 없음)
 
@@ -228,6 +245,8 @@ namespace BalloonFlow
         private RectTransform _fieldGimmickHPRow;
         private RectTransform _fieldGimmickSizeRow;
         private RectTransform _fieldGimmickWallSizeRow;
+        private RectTransform _fieldGimmickIceGroupRow;
+        private RectTransform _fieldGimmickBarricadeRow; // [Barricade] 방향+길이 row (Barricade 일 때만 표시)
         private RectTransform _fieldGimmickLockRow;
         private RectTransform _fieldGimmickChainRow;
         private RectTransform _fieldGimmickFrozenRow;
@@ -558,6 +577,11 @@ namespace BalloonFlow
             _balloonPinataW = ResizeGrid(_balloonPinataW, _gridCols, _gridRows, 1);
             _balloonPinataH = ResizeGrid(_balloonPinataH, _gridCols, _gridRows, 1);
             _balloonIceBlockSize = ResizeGrid(_balloonIceBlockSize, _gridCols, _gridRows, 1);
+            _balloonIceGroupId = ResizeGrid(_balloonIceGroupId, _gridCols, _gridRows, 0);
+            _balloonIceGroupHp = ResizeGrid(_balloonIceGroupHp, _gridCols, _gridRows, 0);
+            _balloonIceGroupHpMode = ResizeGrid(_balloonIceGroupHpMode, _gridCols, _gridRows, 1);
+            _balloonBarricadeDir = ResizeGrid(_balloonBarricadeDir, _gridCols, _gridRows, 1);
+            _balloonBarricadeLength = ResizeGrid(_balloonBarricadeLength, _gridCols, _gridRows, 1);
             _balloonLockPairIds = ResizeGrid(_balloonLockPairIds, _gridCols, _gridRows, -1);
             _balloonFlexTubeGroupId = ResizeGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, -1);
             _balloonFlexTubeSequenceIndex = ResizeGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, -1);
@@ -1226,6 +1250,55 @@ namespace BalloonFlow
             });
             _fieldGimmickWallSizeRow = wallSizeRow.GetComponent<RectTransform>();
 
+            // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+            // Ice-only explicit grouping. Group 0 uses legacy adjacency grouping.
+            var iceGroupRow = Row(p); Lbl(iceGroupRow, "Ice Group", w: 110);
+            MakeIntField(iceGroupRow, _paintIceGroupId, 0, 999, v => {
+                _paintIceGroupId = Mathf.Max(0, v);
+                SetStatus($"Ice Group: {_paintIceGroupId} (0=Auto)");
+            });
+            Lbl(iceGroupRow, "HP", w: 24);
+            MakeIntField(iceGroupRow, _paintIceGroupHp, 0, 999, v => {
+                _paintIceGroupHp = Mathf.Max(0, v);
+                SetStatus($"Ice Group HP Override: {_paintIceGroupHp}");
+            });
+            var iceModeDD = DefaultControls.CreateDropdown(_uiRes);
+            iceModeDD.transform.SetParent(iceGroupRow, false);
+            var iceModeLE = iceModeDD.AddComponent<LayoutElement>(); iceModeLE.preferredWidth = 95; iceModeLE.preferredHeight = 24;
+            iceModeDD.GetComponent<Image>().color = new Color(0.16f, 0.16f, 0.20f);
+            var imdd = iceModeDD.GetComponent<Dropdown>();
+            imdd.ClearOptions();
+            imdd.AddOptions(new List<string> { "Sum", "Override" });
+            imdd.value = _paintIceGroupHpMode == 2 ? 1 : 0;
+            imdd.captionText.font = _font; imdd.captionText.fontSize = 12; imdd.captionText.color = Color.white;
+            imdd.onValueChanged.AddListener(v => {
+                _paintIceGroupHpMode = v == 1 ? 2 : 1;
+                SetStatus(_paintIceGroupHpMode == 2 ? "Ice HP Mode: Override" : "Ice HP Mode: Sum");
+            });
+            _fieldGimmickIceGroupRow = iceGroupRow.GetComponent<RectTransform>();
+
+            // ROLLBACK_BARRICADE_MAPMAKER_20260608: Barricade 전용 — 방향(N/E/S/W) + 길이(body 셀). HP 는 위 Piñata HP row 재사용.
+            var barRow = Row(p); Lbl(barRow, "Barricade 방향", w: 110);
+            var barDD = DefaultControls.CreateDropdown(_uiRes);
+            barDD.transform.SetParent(barRow, false);
+            var barLE = barDD.AddComponent<LayoutElement>(); barLE.flexibleWidth = 1; barLE.preferredHeight = 24;
+            barDD.GetComponent<Image>().color = new Color(0.16f, 0.16f, 0.20f);
+            var barddd = barDD.GetComponent<Dropdown>();
+            barddd.ClearOptions();
+            barddd.AddOptions(new List<string> { "N(북/+Z)", "E(동/+X)", "S(남/-Z)", "W(서/-X)" }); // index = dir 0/1/2/3
+            barddd.value = ((_paintBarricadeDir % 4) + 4) % 4;
+            barddd.captionText.font = _font; barddd.captionText.fontSize = 12; barddd.captionText.color = Color.white;
+            barddd.onValueChanged.AddListener(v => {
+                _paintBarricadeDir = v;
+                SetStatus($"Barricade 방향: {v} (0=N/1=E/2=S/3=W), 길이 {_paintBarricadeLength}");
+            });
+            Lbl(barRow, "길이", w: 35);
+            MakeIntField(barRow, _paintBarricadeLength, 3, 12, v => {
+                _paintBarricadeLength = Mathf.Max(3, v);
+                SetStatus($"Barricade 길이: {_paintBarricadeLength} (방향 {_paintBarricadeDir}, footprint {_paintBarricadeLength}×2)");
+            });
+            _fieldGimmickBarricadeRow = barRow.GetComponent<RectTransform>();
+
             // Target Box Egg 패널 (Pinata_Box 전용) — footprint(박스 영역)과 분리된 명시적 알 리스트.
             // 현재 팔레트 색 + Piñata HP 로 "+추가" → 알 N개·색·HP 를 직접 구성. 박스를 빈 칸에 그리면 이 리스트가 적용됨.
             var eggRow = Row(p); Lbl(eggRow, "Box Eggs", w: 110);
@@ -1284,6 +1357,8 @@ namespace BalloonFlow
             _fieldGimmickHPRow.gameObject.SetActive(false);
             _fieldGimmickSizeRow.gameObject.SetActive(false);
             _fieldGimmickWallSizeRow.gameObject.SetActive(false);
+            if (_fieldGimmickIceGroupRow != null) _fieldGimmickIceGroupRow.gameObject.SetActive(false);
+            if (_fieldGimmickBarricadeRow != null) _fieldGimmickBarricadeRow.gameObject.SetActive(false); // [Barricade] 초기 숨김 누락 보완
             _fieldGimmickLockRow.gameObject.SetActive(false);
             _fieldGimmickFlexTubeRow.gameObject.SetActive(false);
             if (_fieldGimmickEggRow != null) _fieldGimmickEggRow.gameObject.SetActive(false);
@@ -1324,9 +1399,13 @@ namespace BalloonFlow
             // [#13/§11] Ice 는 영역 공유 HP(Health) 를 가지므로 HP row 노출. 단 W×H Size 는 없음(셀 단위, 인접 연결로 영역화).
             // 얼음 블록 변 길이(2×2 등)는 Wall-size row(정사각 1/2/3) 를 재사용해 작성 → _paintWallSize 가 blockSize.
             bool isIce = gimmickName == "Ice";
-            if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(needsPinataHpSize || isIce);
+            // ROLLBACK_BARRICADE_MAPMAKER_20260608: Barricade 는 HP(파괴 히트수) + 방향/길이 row 노출. W×H Size 는 없음.
+            bool isBarricade = gimmickName == "Barricade";
+            if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(needsPinataHpSize || isIce || isBarricade);
             if (_fieldGimmickSizeRow != null) _fieldGimmickSizeRow.gameObject.SetActive(needsPinataHpSize);
             if (_fieldGimmickWallSizeRow != null) _fieldGimmickWallSizeRow.gameObject.SetActive(isWall || isIce);
+            if (_fieldGimmickIceGroupRow != null) _fieldGimmickIceGroupRow.gameObject.SetActive(isIce);
+            if (_fieldGimmickBarricadeRow != null) _fieldGimmickBarricadeRow.gameObject.SetActive(isBarricade);
             if (_fieldGimmickLockRow != null) _fieldGimmickLockRow.gameObject.SetActive(isLockKey);
             if (_fieldGimmickFlexTubeRow != null) _fieldGimmickFlexTubeRow.gameObject.SetActive(isFlexTube);
             if (_flexTubeStatusText != null) _flexTubeStatusText.gameObject.SetActive(isFlexTube);
@@ -2793,7 +2872,9 @@ namespace BalloonFlow
                         labelGO.transform.position = new Vector3(wx, 1.2f, wz);
                         labelGO.transform.eulerAngles = new Vector3(90f, 0f, 0f);
                         var tm = labelGO.AddComponent<TextMesh>();
-                        tm.text = FIELD_GIMMICK_MARKS[gi];
+                        // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+                        // Show explicit Ice group id in MapMaker preview. Group 0 keeps the legacy auto group label.
+                        tm.text = GetFieldGimmickPreviewMark(c, r, gi);
                         tm.fontSize = 32;
                         tm.characterSize = scale * 0.35f;
                         tm.alignment = TextAlignment.Center;
@@ -2883,13 +2964,32 @@ namespace BalloonFlow
                 tm.color = ContrastTextColor(GetPreviewColor(ci, gi));
                 tm.transform.position = new Vector3(wx, 1.2f, wz);
                 tm.characterSize = BalloonScale * 0.35f;
-                tm.text = FIELD_GIMMICK_MARKS[gi];
+                // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+                // Show explicit Ice group id in MapMaker preview. Group 0 keeps the legacy auto group label.
+                tm.text = GetFieldGimmickPreviewMark(c, r, gi);
                 tm.gameObject.SetActive(true);
             }
             else if (_previewLabels[c, r] != null)
             {
                 _previewLabels[c, r].gameObject.SetActive(false);
             }
+        }
+
+        private string GetFieldGimmickPreviewMark(int c, int r, int gimmickIndex)
+        {
+            string mark = FIELD_GIMMICK_MARKS[gimmickIndex];
+            if (gimmickIndex > 0
+                && gimmickIndex < FIELD_GIMMICK_NAMES.Length
+                && FIELD_GIMMICK_NAMES[gimmickIndex] == "Ice"
+                && _balloonIceGroupId != null
+                && c < _balloonIceGroupId.GetLength(0)
+                && r < _balloonIceGroupId.GetLength(1)
+                && _balloonIceGroupId[c, r] > 0)
+            {
+                return $"{mark}\nG{_balloonIceGroupId[c, r]}";
+            }
+
+            return mark;
         }
 
         #endregion
@@ -3699,6 +3799,9 @@ namespace BalloonFlow
                         // 각 셀 아래 풍선 은닉(흡수 X), 런타임은 인접 영역을 blockSize 블록으로 묶어 1개 오버레이로 병합 렌더.
                         bool isIceBlockGimmick = _paintGimmick > 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length
                             && FIELD_GIMMICK_NAMES[_paintGimmick] == "Ice" && _paintWallSize > 1;
+                        // ROLLBACK_BARRICADE_MAPMAKER_FOOTPRINT_20260608: 바리케이드는 dir+length 로 length×2 footprint 채움.
+                        bool isBarricadeGimmick = _paintGimmick > 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length
+                            && FIELD_GIMMICK_NAMES[_paintGimmick] == "Barricade";
 
                         if (isFlexTubeGimmick && _paintColor >= 0)
                         {
@@ -3713,6 +3816,7 @@ namespace BalloonFlow
                                 _balloonPinataW[col, row] = 1;
                                 _balloonPinataH[col, row] = 1;
                                 _balloonLockPairIds[col, row] = -1;
+                                ApplyIceGroupBrushMeta(col, row, false);
                                 _balloonFlexTubeGroupId[col, row] = _paintFlexTubeGroupId;
                                 _balloonFlexTubeSequenceIndex[col, row] = _flexTubePaintOrder.Count;
                                 _flexTubePaintOrder.Add(new Vector2Int(col, row));
@@ -3734,9 +3838,43 @@ namespace BalloonFlow
                                     _balloonGimmicks[cx, cy] = _paintGimmick;
                                     _balloonGimmickHP[cx, cy] = _paintPinataHP;
                                     _balloonIceBlockSize[cx, cy] = b;
+                                    ApplyIceGroupBrushMeta(cx, cy, true);
                                     _balloonPinataW[cx, cy] = 1; // 개별 셀 (sized 흡수 아님)
                                     _balloonPinataH[cx, cy] = 1;
                                     _balloonLockPairIds[cx, cy] = -1;
+                                    _balloonFlexTubeGroupId[cx, cy] = -1;
+                                    _balloonFlexTubeSequenceIndex[cx, cy] = -1;
+                                    UpdatePreviewCell(cx, cy);
+                                }
+                            _infoDirty = true;
+                        }
+                        else if (isBarricadeGimmick && _paintColor >= 0)
+                        {
+                            // ROLLBACK_BARRICADE_MAPMAKER_FOOTPRINT_20260608:
+                            // footprint = 진행축 length칸 × 두께 2칸. anchor(col,row) 에서 dir 로 뻗음.
+                            // 비앵커 셀은 색+기믹 채워 GUI 에 영역 표시, sizeW=0 → emit 스킵(앵커만 저장). 런타임은 dir+length 로 계산.
+                            int blen = Mathf.Max(3, _paintBarricadeLength);
+                            int bdir = ((_paintBarricadeDir % 4) + 4) % 4; // 0=N(+row) 1=E(+col) 2=S(-row) 3=W(-col)
+                            int aCol = (bdir == 1) ? 1 : (bdir == 3) ? -1 : 0; // 진행축 col 델타(E/W)
+                            int aRow = (bdir == 0) ? 1 : (bdir == 2) ? -1 : 0; // 진행축 row 델타(N/S)
+                            int pCol = (bdir == 0 || bdir == 2) ? 1 : 0;       // N/S 는 두께가 col
+                            int pRow = (bdir == 1 || bdir == 3) ? 1 : 0;       // E/W 는 두께가 row
+                            for (int a = 0; a < blen; a++)
+                                for (int p = 0; p < 2; p++)
+                                {
+                                    int cx = col + aCol * a + pCol * p;
+                                    int cy = row + aRow * a + pRow * p;
+                                    if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
+                                    bool isAnchor = (a == 0 && p == 0);
+                                    _balloonColors[cx, cy] = _paintColor;
+                                    _balloonGimmicks[cx, cy] = _paintGimmick;
+                                    _balloonGimmickHP[cx, cy] = _paintPinataHP;
+                                    _balloonPinataW[cx, cy] = isAnchor ? 1 : 0; // 비앵커=0 → emit 스킵
+                                    _balloonPinataH[cx, cy] = isAnchor ? 1 : 0;
+                                    _balloonBarricadeDir[cx, cy] = bdir;
+                                    _balloonBarricadeLength[cx, cy] = blen;
+                                    _balloonLockPairIds[cx, cy] = -1;
+                                    ApplyIceGroupBrushMeta(cx, cy, false);
                                     _balloonFlexTubeGroupId[cx, cy] = -1;
                                     _balloonFlexTubeSequenceIndex[cx, cy] = -1;
                                     UpdatePreviewCell(cx, cy);
@@ -3760,6 +3898,7 @@ namespace BalloonFlow
                                     _balloonGimmickHP[cx, cy] = _paintPinataHP;
                                     _balloonPinataW[cx, cy] = 0; // 비앵커 셀: sizeW=0 (앵커 아님 표시)
                                     _balloonPinataH[cx, cy] = 0;
+                                    ApplyIceGroupBrushMeta(cx, cy, false);
                                     // 잔존 FlexTube 데이터 클리어 — 다른 gimmick 으로 덮어쓰는 cell.
                                     _balloonFlexTubeGroupId[cx, cy] = -1;
                                     _balloonFlexTubeSequenceIndex[cx, cy] = -1;
@@ -3810,6 +3949,10 @@ namespace BalloonFlow
                             bool isIceGimmick = gimmickToSet > 0 && gimmickToSet < FIELD_GIMMICK_NAMES.Length
                                 && FIELD_GIMMICK_NAMES[gimmickToSet] == "Ice";
                             _balloonIceBlockSize[col, row] = isIceGimmick ? Mathf.Max(1, _paintWallSize) : 1;
+                            ApplyIceGroupBrushMeta(col, row, isIceGimmick);
+                            // ROLLBACK_BARRICADE_MAPMAKER_20260608: 이 단일셀 경로는 바리케이드 미해당(footprint 분기에서 처리) — 기본값(1/1) 으로 정리.
+                            _balloonBarricadeDir[col, row] = 1;
+                            _balloonBarricadeLength[col, row] = 1;
                             // Lock_Key pairId
                             bool isLockKeyGimmick = gimmickToSet > 0 && gimmickToSet < FIELD_GIMMICK_NAMES.Length
                                 && FIELD_GIMMICK_NAMES[gimmickToSet] == "Lock_Key";
@@ -6086,6 +6229,11 @@ namespace BalloonFlow
             _balloonPinataW = new int[_gridCols, _gridRows];
             _balloonPinataH = new int[_gridCols, _gridRows];
             _balloonIceBlockSize = new int[_gridCols, _gridRows];
+            _balloonIceGroupId = new int[_gridCols, _gridRows];
+            _balloonIceGroupHp = new int[_gridCols, _gridRows];
+            _balloonIceGroupHpMode = new int[_gridCols, _gridRows];
+            _balloonBarricadeDir = new int[_gridCols, _gridRows];
+            _balloonBarricadeLength = new int[_gridCols, _gridRows];
             _balloonLockPairIds = new int[_gridCols, _gridRows];
             _balloonFlexTubeGroupId = new int[_gridCols, _gridRows];
             _balloonFlexTubeSequenceIndex = new int[_gridCols, _gridRows];
@@ -6098,6 +6246,11 @@ namespace BalloonFlow
                     _balloonPinataW[c, r] = 1;
                     _balloonPinataH[c, r] = 1;
                     _balloonIceBlockSize[c, r] = 1;
+                    _balloonIceGroupId[c, r] = 0;
+                    _balloonIceGroupHp[c, r] = 0;
+                    _balloonIceGroupHpMode[c, r] = 1;
+                    _balloonBarricadeDir[c, r] = 1;
+                    _balloonBarricadeLength[c, r] = 1;
                     _balloonLockPairIds[c, r] = -1;
                     _balloonFlexTubeGroupId[c, r] = -1;
                     _balloonFlexTubeSequenceIndex[c, r] = -1;
@@ -6138,6 +6291,14 @@ namespace BalloonFlow
                         _balloonGimmicks[col, row] = gi;
                         _balloonGimmickHP[col, row] = b.hp > 0 ? b.hp : 2;
                         _balloonIceBlockSize[col, row] = b.iceBlockSize > 0 ? b.iceBlockSize : 1;
+                        // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+                        // Restore explicit Ice grouping metadata. Non-Ice cells ignore these at runtime.
+                        _balloonIceGroupId[col, row] = b.iceGroupId;
+                        _balloonIceGroupHp[col, row] = b.iceGroupHp;
+                        _balloonIceGroupHpMode[col, row] = b.iceGroupHpMode == 2 ? 2 : 1;
+                        // ROLLBACK_BARRICADE_MAPMAKER_20260608: 바리케이드 방향/길이 복원 (기본 dir=1=E, length=1).
+                        _balloonBarricadeDir[col, row] = ((b.barricadeDir % 4) + 4) % 4;
+                        _balloonBarricadeLength[col, row] = b.barricadeLength >= 3 ? b.barricadeLength : 3;
                         _balloonLockPairIds[col, row] = b.lockPairId;
                         // FlexTube 데이터는 gimmickType 이 실제 "FlexTube" 일 때만 복원 — 잔존 데이터 방지.
                         bool isFlexTubeLoad = normalizedGimmick == "FlexTube";
@@ -6193,6 +6354,31 @@ namespace BalloonFlow
                                         _balloonPinataW[cx, cy] = 0; // 비앵커 표시
                                         _balloonPinataH[cx, cy] = 0;
                                     }
+                                }
+                        }
+                        else if (normalizedGimmick == "Barricade")
+                        {
+                            // ROLLBACK_BARRICADE_MAPMAKER_FOOTPRINT_20260608: 앵커 dir+length 로 length×2 footprint 비앵커 셀 재구성(GUI 표시).
+                            int blen = Mathf.Max(3, _balloonBarricadeLength[col, row]);
+                            int bdir = _balloonBarricadeDir[col, row];
+                            int aCol = (bdir == 1) ? 1 : (bdir == 3) ? -1 : 0;
+                            int aRow = (bdir == 0) ? 1 : (bdir == 2) ? -1 : 0;
+                            int pCol = (bdir == 0 || bdir == 2) ? 1 : 0;
+                            int pRow = (bdir == 1 || bdir == 3) ? 1 : 0;
+                            for (int a = 0; a < blen; a++)
+                                for (int p = 0; p < 2; p++)
+                                {
+                                    if (a == 0 && p == 0) continue; // 앵커 스킵
+                                    int cx = col + aCol * a + pCol * p;
+                                    int cy = row + aRow * a + pRow * p;
+                                    if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
+                                    _balloonColors[cx, cy] = b.color;
+                                    _balloonGimmicks[cx, cy] = gi;
+                                    _balloonGimmickHP[cx, cy] = b.hp > 0 ? b.hp : 2;
+                                    _balloonPinataW[cx, cy] = 0;
+                                    _balloonPinataH[cx, cy] = 0;
+                                    _balloonBarricadeDir[cx, cy] = bdir;
+                                    _balloonBarricadeLength[cx, cy] = blen;
                                 }
                         }
                     }
@@ -6587,11 +6773,18 @@ namespace BalloonFlow
                     if (_balloonColors[c, r] < 0) continue;
                     // Piñata 비앵커 셀(sizeW==0)은 스킵 — 앵커 1개만 생성
                     int gi = _balloonGimmicks[c, r];
+                    // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+                    // Persist explicit Ice grouping only on Ice cells. Group 0 preserves legacy adjacency grouping.
+                    bool isIceCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
+                        && FIELD_GIMMICK_NAMES[gi] == "Ice";
                     // ROLLBACK_BARRICADE_SIZED_FIELD_GIMMICK:
                     // Sized field gimmick non-anchor cells(sizeW==0) are skipped; only the anchor emits layout data.
                     bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
                         && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
-                    if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
+                    // ROLLBACK_BARRICADE_MAPMAKER_FOOTPRINT_20260608: 바리케이드 비앵커 footprint 셀(sizeW==0)도 스킵 — 앵커만 emit.
+                    bool isBarricadeCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
+                        && FIELD_GIMMICK_NAMES[gi] == "Barricade";
+                    if ((isSizedFieldCell || isBarricadeCell) && _balloonPinataW[c, r] == 0) continue;
 
                     // FlexTube — sequenceIndex 로 partType 자동 결정. rotation 은 런타임 spawn 에서 계산(0 저장).
                     // 가드: 현재 _balloonGimmicks 가 FlexTube 인 cell 만 ftGroupId/Seq 유효 처리.
@@ -6642,6 +6835,12 @@ namespace BalloonFlow
                         sizeH = _balloonPinataH[c, r],
                         hp = _balloonGimmickHP[c, r],
                         iceBlockSize = _balloonIceBlockSize[c, r],
+                        iceGroupId = isIceCell ? _balloonIceGroupId[c, r] : 0,
+                        iceGroupHp = isIceCell ? _balloonIceGroupHp[c, r] : 0,
+                        iceGroupHpMode = isIceCell ? (_balloonIceGroupHpMode[c, r] == 2 ? 2 : 1) : 0,
+                        // ROLLBACK_BARRICADE_MAPMAKER_20260608: 바리케이드 방향/길이 emit (Barricade 외 셀은 런타임 무시).
+                        barricadeDir = _balloonBarricadeDir[c, r],
+                        barricadeLength = _balloonBarricadeLength[c, r],
                         eggColors = eggColors,
                         eggHps = eggHps,
                         lockPairId = _balloonLockPairIds != null && c < _balloonLockPairIds.GetLength(0) && r < _balloonLockPairIds.GetLength(1)
@@ -6959,6 +7158,13 @@ namespace BalloonFlow
             _balloonPinataW = InsertRowGrid(_balloonPinataW, _gridCols, _gridRows, insertAt, 1);
             _balloonPinataH = InsertRowGrid(_balloonPinataH, _gridCols, _gridRows, insertAt, 1);
             _balloonIceBlockSize = InsertRowGrid(_balloonIceBlockSize, _gridCols, _gridRows, insertAt, 1);
+            // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+            // Keep explicit Ice group metadata aligned when rows/columns are edited.
+            _balloonIceGroupId = InsertRowGrid(_balloonIceGroupId, _gridCols, _gridRows, insertAt, 0);
+            _balloonIceGroupHp = InsertRowGrid(_balloonIceGroupHp, _gridCols, _gridRows, insertAt, 0);
+            _balloonIceGroupHpMode = InsertRowGrid(_balloonIceGroupHpMode, _gridCols, _gridRows, insertAt, 1);
+            _balloonBarricadeDir = InsertRowGrid(_balloonBarricadeDir, _gridCols, _gridRows, insertAt, 1);
+            _balloonBarricadeLength = InsertRowGrid(_balloonBarricadeLength, _gridCols, _gridRows, insertAt, 1);
             _balloonLockPairIds = InsertRowGrid(_balloonLockPairIds, _gridCols, _gridRows, insertAt, -1);
             _balloonFlexTubeGroupId = InsertRowGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, insertAt, -1);
             _balloonFlexTubeSequenceIndex = InsertRowGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, insertAt, -1);
@@ -6980,6 +7186,13 @@ namespace BalloonFlow
             _balloonPinataW = InsertColGrid(_balloonPinataW, _gridCols, _gridRows, insertAt, 1);
             _balloonPinataH = InsertColGrid(_balloonPinataH, _gridCols, _gridRows, insertAt, 1);
             _balloonIceBlockSize = InsertColGrid(_balloonIceBlockSize, _gridCols, _gridRows, insertAt, 1);
+            // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+            // Keep explicit Ice group metadata aligned when rows/columns are edited.
+            _balloonIceGroupId = InsertColGrid(_balloonIceGroupId, _gridCols, _gridRows, insertAt, 0);
+            _balloonIceGroupHp = InsertColGrid(_balloonIceGroupHp, _gridCols, _gridRows, insertAt, 0);
+            _balloonIceGroupHpMode = InsertColGrid(_balloonIceGroupHpMode, _gridCols, _gridRows, insertAt, 1);
+            _balloonBarricadeDir = InsertColGrid(_balloonBarricadeDir, _gridCols, _gridRows, insertAt, 1);
+            _balloonBarricadeLength = InsertColGrid(_balloonBarricadeLength, _gridCols, _gridRows, insertAt, 1);
             _balloonLockPairIds = InsertColGrid(_balloonLockPairIds, _gridCols, _gridRows, insertAt, -1);
             _balloonFlexTubeGroupId = InsertColGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, insertAt, -1);
             _balloonFlexTubeSequenceIndex = InsertColGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, insertAt, -1);
@@ -7003,6 +7216,13 @@ namespace BalloonFlow
             _balloonPinataW = DeleteRowGrid(_balloonPinataW, _gridCols, _gridRows, at, 1);
             _balloonPinataH = DeleteRowGrid(_balloonPinataH, _gridCols, _gridRows, at, 1);
             _balloonIceBlockSize = DeleteRowGrid(_balloonIceBlockSize, _gridCols, _gridRows, at, 1);
+            // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+            // Keep explicit Ice group metadata aligned when rows/columns are edited.
+            _balloonIceGroupId = DeleteRowGrid(_balloonIceGroupId, _gridCols, _gridRows, at, 0);
+            _balloonIceGroupHp = DeleteRowGrid(_balloonIceGroupHp, _gridCols, _gridRows, at, 0);
+            _balloonIceGroupHpMode = DeleteRowGrid(_balloonIceGroupHpMode, _gridCols, _gridRows, at, 1);
+            _balloonBarricadeDir = DeleteRowGrid(_balloonBarricadeDir, _gridCols, _gridRows, at, 1);
+            _balloonBarricadeLength = DeleteRowGrid(_balloonBarricadeLength, _gridCols, _gridRows, at, 1);
             _balloonLockPairIds = DeleteRowGrid(_balloonLockPairIds, _gridCols, _gridRows, at, -1);
             _balloonFlexTubeGroupId = DeleteRowGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, at, -1);
             _balloonFlexTubeSequenceIndex = DeleteRowGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, at, -1);
@@ -7024,6 +7244,13 @@ namespace BalloonFlow
             _balloonPinataW = DeleteColGrid(_balloonPinataW, _gridCols, _gridRows, at, 1);
             _balloonPinataH = DeleteColGrid(_balloonPinataH, _gridCols, _gridRows, at, 1);
             _balloonIceBlockSize = DeleteColGrid(_balloonIceBlockSize, _gridCols, _gridRows, at, 1);
+            // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+            // Keep explicit Ice group metadata aligned when rows/columns are edited.
+            _balloonIceGroupId = DeleteColGrid(_balloonIceGroupId, _gridCols, _gridRows, at, 0);
+            _balloonIceGroupHp = DeleteColGrid(_balloonIceGroupHp, _gridCols, _gridRows, at, 0);
+            _balloonIceGroupHpMode = DeleteColGrid(_balloonIceGroupHpMode, _gridCols, _gridRows, at, 1);
+            _balloonBarricadeDir = DeleteColGrid(_balloonBarricadeDir, _gridCols, _gridRows, at, 1);
+            _balloonBarricadeLength = DeleteColGrid(_balloonBarricadeLength, _gridCols, _gridRows, at, 1);
             _balloonLockPairIds = DeleteColGrid(_balloonLockPairIds, _gridCols, _gridRows, at, -1);
             _balloonFlexTubeGroupId = DeleteColGrid(_balloonFlexTubeGroupId, _gridCols, _gridRows, at, -1);
             _balloonFlexTubeSequenceIndex = DeleteColGrid(_balloonFlexTubeSequenceIndex, _gridCols, _gridRows, at, -1);
@@ -7036,6 +7263,24 @@ namespace BalloonFlow
         // ── Feature 7: Flood Fill ──
 
         /// <summary>특정 색상의 풍선을 전부 제거.</summary>
+        private void ApplyIceGroupBrushMeta(int col, int row, bool isIce)
+        {
+            // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+            // Ice group metadata is meaningful only for Ice cells. Other gimmicks clear it to avoid stale groups.
+            if (isIce)
+            {
+                _balloonIceGroupId[col, row] = Mathf.Max(0, _paintIceGroupId);
+                _balloonIceGroupHp[col, row] = Mathf.Max(0, _paintIceGroupHp);
+                _balloonIceGroupHpMode[col, row] = _paintIceGroupHpMode == 2 ? 2 : 1;
+            }
+            else
+            {
+                _balloonIceGroupId[col, row] = 0;
+                _balloonIceGroupHp[col, row] = 0;
+                _balloonIceGroupHpMode[col, row] = 1;
+            }
+        }
+
         private void EraseBalloonCell(int col, int row)
         {
             _balloonColors[col, row] = -1;
@@ -7044,6 +7289,7 @@ namespace BalloonFlow
             _balloonPinataW[col, row] = 1;
             _balloonPinataH[col, row] = 1;
             _balloonIceBlockSize[col, row] = 1;
+            ApplyIceGroupBrushMeta(col, row, false);
             _balloonLockPairIds[col, row] = -1;
             _balloonFlexTubeGroupId[col, row] = -1;
             _balloonFlexTubeSequenceIndex[col, row] = -1;
@@ -7061,6 +7307,10 @@ namespace BalloonFlow
             bool isLockKeyGimmick = _balloonGimmicks[col, row] > 0
                 && _balloonGimmicks[col, row] < FIELD_GIMMICK_NAMES.Length
                 && FIELD_GIMMICK_NAMES[_balloonGimmicks[col, row]] == "Lock_Key";
+            bool isIceGimmick = _balloonGimmicks[col, row] > 0
+                && _balloonGimmicks[col, row] < FIELD_GIMMICK_NAMES.Length
+                && FIELD_GIMMICK_NAMES[_balloonGimmicks[col, row]] == "Ice";
+            ApplyIceGroupBrushMeta(col, row, isIceGimmick);
             _balloonLockPairIds[col, row] = isLockKeyGimmick ? _paintLockPairId : -1;
             _balloonFlexTubeGroupId[col, row] = -1;
             _balloonFlexTubeSequenceIndex[col, row] = -1;

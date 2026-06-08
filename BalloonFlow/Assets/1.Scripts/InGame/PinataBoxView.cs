@@ -83,12 +83,9 @@ namespace BalloonFlow
 
             // [타겟박스] authoring 된 footprint W×H 격자에 row-major(index = r*W + c)로 1:1 배치.
             // 각 알 = 풍선 1칸. eggColors 길이는 W*H 여야 하며, 불일치 시 알이 잘리지 않도록 행만 확장.
-            int cols = Mathf.Max(1, w);
-            int rows = Mathf.Max(h, Mathf.CeilToInt((float)n / cols));
-            if (n != w * h)
-                Debug.LogWarning($"[PinataBoxView] egg 수({n}) != footprint {w}×{h}(={w * h}). " +
-                                 "각 알=풍선 1칸 모델이므로 eggColors 길이를 W*H 로 맞추세요.", this);
-
+            // ROLLBACK_TARGETBOX_BALANCED_EGG_LAYOUT_20260608:
+            // Egg count is authored in MapMaker; choose a balanced centered grid for that count.
+            ChooseEggGrid(n, w, h, out int cols, out int rows);
             // 틀(paintbox)을 footprint 에 맞춰 먼저 스케일 → 이후 알을 '틀의 실제 안쪽 영역'에 맞춘다.
             // 알 크기를 footprint(cellSize) 가 아니라 '틀의 실제 bounds' 기준으로 잡아야, 틀이 footprint 와
             // 다른 크기(아트가 더 작거나, _frame 미와이어로 스케일 안 됨)여도 알이 항상 틀 안에 들어간다.
@@ -104,8 +101,14 @@ namespace BalloonFlow
 
             // 격자 한 칸 = 영역 안쪽(_innerAreaRatio)을 cols×rows 로 나눈 크기. 테두리 여백 확보.
             float ir = Mathf.Clamp(_innerAreaRatio, 0.1f, 1f);
-            float gridCellW = (areaX * ir) / cols;
-            float gridCellZ = (areaZ * ir) / rows;
+            // ROLLBACK_TARGETBOX_CELL_EGG_SCALE_20260608:
+            // Keep egg/Cylinder size fixed to one board cell instead of deriving it from frame bounds.
+            float gridCellW = cellSizeX * ir;
+            float gridCellZ = cellSizeZ * ir;
+            float layoutCellW = (areaX * ir) / Mathf.Max(1, cols);
+            float layoutCellZ = (areaZ * ir) / Mathf.Max(1, rows);
+            float eggCellW = Mathf.Min(gridCellW, layoutCellW);
+            float eggCellZ = Mathf.Min(gridCellZ, layoutCellZ);
 
             // 템플릿 월드 bounds 측정 → 격자 칸에 맞출 스케일 계수 산출. 측정 위해 잠깐 활성화.
             bool tplWasActive = _eggTemplate.activeSelf;
@@ -115,6 +118,8 @@ namespace BalloonFlow
 
             _eggTemplate.SetActive(false); // 원본 숨김(복제본만 표시)
 
+            HideAuthoredEggSamples();
+
             Vector3 tplScale = _eggTemplate.transform.localScale;
             Quaternion tplRot = _eggTemplate.transform.localRotation;
             float tplY = _eggTemplate.transform.localPosition.y;
@@ -122,14 +127,14 @@ namespace BalloonFlow
             // 격자 칸(월드)에 맞춘 균일 스케일 계수 — 작은 축 기준으로 셀 안에 들어가게.
             float fitK = 1f;
             if (tplSizeX > 0.0001f && tplSizeZ > 0.0001f)
-                fitK = Mathf.Min(gridCellW / tplSizeX, gridCellZ / tplSizeZ) * _eggFillRatio;
+                fitK = Mathf.Min(eggCellW / tplSizeX, eggCellZ / tplSizeZ) * _eggFillRatio;
             // NOTE: eggScale(scaleMult)을 곱하지 않는다 — cellSizeX/Z 가 이미 widthMult/heightMult 를 포함하므로
             //       여기서 또 곱하면 이중 적용되어 알이 paintbox 를 벗어난다.
 
             // 월드 격자 간격 → 로컬 단위(부모 스케일 보정).
             Vector3 ls = transform.lossyScale;
-            float localGridX = gridCellW / Mathf.Max(0.0001f, Mathf.Abs(ls.x));
-            float localGridZ = gridCellZ / Mathf.Max(0.0001f, Mathf.Abs(ls.z));
+            float localGridX = layoutCellW / Mathf.Max(0.0001f, Mathf.Abs(ls.x));
+            float localGridZ = layoutCellZ / Mathf.Max(0.0001f, Mathf.Abs(ls.z));
 
             // 링크된 Cylinder/texture 의 템플릿 기준 자식 경로(인덱스) 미리 계산 — 클론에서 동일 경로로 해석.
             // 미링크면 null → 이름으로 fallback.
@@ -145,7 +150,9 @@ namespace BalloonFlow
                 egg.SetActive(true);
                 egg.transform.localRotation = tplRot;
                 egg.transform.localScale = tplScale * fitK;
-                float ox = (gc - (cols - 1) * 0.5f) * localGridX;
+                int rowStart = gr * cols;
+                int rowCount = Mathf.Min(cols, n - rowStart);
+                float ox = (gc - (rowCount - 1) * 0.5f) * localGridX;
                 float oz = (gr - (rows - 1) * 0.5f) * localGridZ;
                 egg.transform.localPosition = new Vector3(ox, tplY, oz);
 
@@ -162,6 +169,58 @@ namespace BalloonFlow
                 _eggTexRenderers.Add(texChild != null ? texChild.GetComponentInChildren<Renderer>(true) : null);
             }
             // 틀 스케일은 위(격자 산출 전)에서 이미 수행했다.
+        }
+
+        /// <summary>MapMaker가 지정한 egg 개수를 footprint 비율에 맞춰 균형 격자로 배치한다.</summary>
+        private static void ChooseEggGrid(int count, int footprintW, int footprintH, out int cols, out int rows)
+        {
+            count = Mathf.Max(1, count);
+            footprintW = Mathf.Max(1, footprintW);
+            footprintH = Mathf.Max(1, footprintH);
+
+            float targetAspect = (float)footprintW / footprintH;
+            cols = count;
+            rows = 1;
+            float bestScore = float.MaxValue;
+
+            for (int candidateRows = 1; candidateRows <= count; candidateRows++)
+            {
+                int candidateCols = Mathf.CeilToInt((float)count / candidateRows);
+                int emptySlots = candidateCols * candidateRows - count;
+                float aspect = (float)candidateCols / candidateRows;
+                float score = Mathf.Abs(Mathf.Log(Mathf.Max(0.0001f, aspect / targetAspect))) + emptySlots * 0.08f;
+
+                if (score < bestScore - 0.0001f ||
+                    (Mathf.Abs(score - bestScore) <= 0.0001f && candidateCols > cols))
+                {
+                    bestScore = score;
+                    cols = candidateCols;
+                    rows = candidateRows;
+                }
+            }
+        }
+
+        private void HideAuthoredEggSamples()
+        {
+            if (_eggTemplate == null) return;
+
+            for (int i = 0; i < transform.childCount; i++)
+            {
+                Transform child = transform.GetChild(i);
+                if (child == null || child.gameObject == _eggTemplate) continue;
+                if (_frame != null && (child == _frame || child.IsChildOf(_frame))) continue;
+
+                if (LooksLikeEggSample(child))
+                    child.gameObject.SetActive(false);
+            }
+        }
+
+        private bool LooksLikeEggSample(Transform root)
+        {
+            if (root == null) return false;
+            if (!string.IsNullOrEmpty(_bodyChildName) && root.Find(_bodyChildName) != null) return true;
+            if (!string.IsNullOrEmpty(_textureChildName) && root.Find(_textureChildName) != null) return true;
+            return false;
         }
 
         /// <summary>틀(_frame)의 현재 renderer world bounds 크기. 미와이어/렌더러 없음/0크기면 false.</summary>

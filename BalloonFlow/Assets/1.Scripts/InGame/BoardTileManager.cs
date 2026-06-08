@@ -656,10 +656,10 @@ namespace BalloonFlow
         // [Optimization 2026-05-12] SRP Batcher 호환 sprite mat — SpriteSRPBatcherUtil 로 통합.
         // Balloon Shadow / Arrow / CSTile 등 SpriteRenderer 공유.
         private static Material GetSpriteSRPBatcherMat() => SpriteSRPBatcherUtil.GetSharedMat();
-        // ROLLBACK_CAVE_RENDER_OVER_RAIL_20260608: 이전 1990(opaque 이전) → cave 가 rail(opaque 2000) 밑으로 그려짐.
-        // 변경: 2001(opaque 직후). cave 셰이더 ZTest=LEqual(기본) 이므로 깊이로 자동 정리 —
-        //   cave(Y=0.5) > rail(Y=0) → rail 위에 그려지고, 더 높은 3D holder(가까움)는 깊이로 cave 를 가림(holder 위 유지).
-        private const int CAVE_RENDER_QUEUE = 2001;
+        // ROLLBACK_CAVE_RENDER_OVER_RAIL_20260608:
+        // Rail sprites use a transparent sprite material, so queue 2001 can draw Cave before Rail.
+        // Draw Cave after Rail sprites, while keeping depth test so opaque 3D holders can still mask it.
+        private const int CAVE_RENDER_QUEUE = 3001;
         private static Material _caveOverlayMat;
 
         private static Material GetCaveOverlayMat()
@@ -722,7 +722,9 @@ namespace BalloonFlow
             var sr = go.AddComponent<SpriteRenderer>();
             if (sr == null) { Destroy(go); return; }
             sr.sprite = sprite;
-            sr.sortingOrder = -1; // Cave 위치는 유지하고 renderQueue로 3D holder보다 먼저 렌더
+            // ROLLBACK_CAVE_SORTING_ORDER_20260608:
+            // Restore the previous visual order: Cave above Rail(-1) and Arrow(0).
+            sr.sortingOrder = 1;
             sr.sharedMaterial = GetCaveOverlayMat();
 
             float sw = sprite.bounds.size.x;

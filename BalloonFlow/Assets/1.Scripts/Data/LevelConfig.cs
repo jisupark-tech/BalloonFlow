@@ -257,6 +257,20 @@ namespace BalloonFlow
         /// <summary>[Ice §11] 얼음 1개의 변 길이(셀). 2 = 2×2 얼음 단위로 렌더링. 1 = 셀당(기본).
         /// 같은 Ice 영역의 셀들은 동일값. 다트로 직접 안 깨므로 풍선 색/HP 와 무관, 시각 타일링 전용.</summary>
         public int iceBlockSize = 1;
+
+        // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+        // Manual Ice grouping for MapMaker-authored levels. 0 keeps the old adjacency flood-fill behavior.
+        // hpMode: 0/1 = sum member HP, 2 = use iceGroupHp as the shared group HP.
+        public int iceGroupId = 0;
+        public int iceGroupHp = 0;
+        public int iceGroupHpMode = 0;
+
+        /// <summary>[Barricade] 진행 방향 0=N(+Z)/1=E(+X)/2=S(-Z)/3=W(-X). head 에서 body 가 뻗는 방향.
+        /// 바리케이드는 sizeW/H 미사용 — 방향(dir)+길이(barricadeLength)+HP(hp)로만 결정.</summary>
+        public int barricadeDir = 1;
+        /// <summary>[Barricade] body 길이(셀). 전체 = head(2) + body(barricadeLength) + edge(1), 두께 2칸 고정.
+        /// HP 와 별개로 세팅(런타임 표시 body = barricadeLength × 남은HP/maxHP 비율 축소).</summary>
+        public int barricadeLength = 1;
     }
 
     /// <summary>

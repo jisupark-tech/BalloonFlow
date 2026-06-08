@@ -52,9 +52,16 @@ namespace BalloonFlow
         {
             public readonly HashSet<int> ids = new HashSet<int>();
             public int hp;
+            public int maxHp;
+            public int manualGroupId;
         }
         private readonly HashSet<int> _iceBalloons = new HashSet<int>();   // 아직 얼어있는(미해제) ice 풍선 전체
         private readonly Dictionary<int, int> _iceBalloonHp = new Dictionary<int, int>(); // 등록 시 캡처한 셀별 maxHP
+        // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+        // Optional MapMaker-authored Ice group metadata. Missing/0 group ids keep legacy adjacency grouping.
+        private readonly Dictionary<int, int> _iceBalloonGroupId = new Dictionary<int, int>();
+        private readonly Dictionary<int, int> _iceBalloonGroupHp = new Dictionary<int, int>();
+        private readonly Dictionary<int, int> _iceBalloonGroupHpMode = new Dictionary<int, int>();
         private readonly List<IceRegion> _iceRegions = new List<IceRegion>();
 
         #endregion
@@ -92,6 +99,10 @@ namespace BalloonFlow
             _curtainRemoveBuffer.Clear();
             _iceBalloons.Clear();
             _iceBalloonHp.Clear();
+            _iceBalloonGroupId.Clear();
+            _iceBalloonGroupHp.Clear();
+            _iceBalloonGroupHpMode.Clear();
+            ClearIceHpLabels();
             _iceRegions.Clear();
         }
 
@@ -99,7 +110,8 @@ namespace BalloonFlow
         /// Registers a balloon's gimmick state during level setup.
         /// Call for each balloon with a gimmick type after BalloonController.SetupBalloons().
         /// </summary>
-        public void RegisterBalloonGimmick(int balloonId, string gimmickType, int color, int hp = 0)
+        public void RegisterBalloonGimmick(int balloonId, string gimmickType, int color, int hp = 0,
+            int iceGroupId = 0, int iceGroupHp = 0, int iceGroupHpMode = 0)
         {
             gimmickType = GimmickDisplayName.Normalize(gimmickType);
             switch (gimmickType)
@@ -109,6 +121,9 @@ namespace BalloonFlow
                 case BalloonController.GimmickIce:
                     _iceBalloons.Add(balloonId);
                     _iceBalloonHp[balloonId] = hp;
+                    _iceBalloonGroupId[balloonId] = Mathf.Max(0, iceGroupId);
+                    _iceBalloonGroupHp[balloonId] = Mathf.Max(0, iceGroupHp);
+                    _iceBalloonGroupHpMode[balloonId] = iceGroupHpMode;
                     break;
 
                 case BalloonController.GimmickPin:
@@ -143,6 +158,7 @@ namespace BalloonFlow
         /// </summary>
         public void InitIceRegions()
         {
+            ClearIceHpLabels();
             _iceRegions.Clear();
             if (_iceBalloons.Count == 0 || !BalloonController.HasInstance) return;
 
@@ -154,16 +170,63 @@ namespace BalloonFlow
 
                 var region = new IceRegion();
                 int maxHp = 0;
+                int sumHp = 0;
+                int manualGroupId = 0;
+                int manualGroupHp = 0;
+                int manualGroupHpMode = 0;
                 for (int i = 0; i < comp.Count; i++)
                 {
                     int id = comp[i];
                     region.ids.Add(id);
-                    if (_iceBalloonHp.TryGetValue(id, out int h) && h > maxHp) maxHp = h;
+                    int h = _iceBalloonHp.TryGetValue(id, out int hp) ? Mathf.Max(0, hp) : 0;
+                    if (h > maxHp) maxHp = h;
+                    sumHp += h;
+                    if (manualGroupId <= 0 && _iceBalloonGroupId.TryGetValue(id, out int gid) && gid > 0)
+                    {
+                        manualGroupId = gid;
+                        manualGroupHp = _iceBalloonGroupHp.TryGetValue(id, out int ghp) ? ghp : 0;
+                        manualGroupHpMode = _iceBalloonGroupHpMode.TryGetValue(id, out int mode) ? mode : 0;
+                    }
                 }
-                region.hp = maxHp > 0 ? maxHp : region.ids.Count; // 데이터 미지정 시 셀 수 fallback
+                region.manualGroupId = manualGroupId;
+                if (manualGroupId > 0)
+                {
+                    bool useOverride = manualGroupHpMode == 2 && manualGroupHp > 0;
+                    region.hp = useOverride ? manualGroupHp : (sumHp > 0 ? sumHp : region.ids.Count);
+                }
+                else
+                {
+                    region.hp = maxHp > 0 ? maxHp : region.ids.Count; // 데이터 미지정 시 셀 수 fallback
+                }
+                region.maxHp = region.hp;
+                CreateOrUpdateIceHpLabel(region);
                 _iceRegions.Add(region);
             }
             Debug.Log($"[GimmickProcessor] Ice 영역 {_iceRegions.Count}개 초기화 (총 {_iceBalloons.Count} 셀)");
+        }
+
+        private void ClearIceHpLabels()
+        {
+            if (!BalloonController.HasInstance) return;
+            for (int i = 0; i < _iceRegions.Count; i++)
+            {
+                if (_iceRegions[i] != null)
+                    BalloonController.Instance.ClearIceRegionHpText(_iceRegions[i].ids);
+            }
+        }
+
+        private void CreateOrUpdateIceHpLabel(IceRegion region)
+        {
+            if (region == null || region.ids.Count == 0 || !BalloonController.HasInstance) return;
+            // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+            // Only explicit MapMaker Ice groups get the shared center HP label. Legacy auto-adjacent
+            // Ice regions keep their previous visual behavior.
+            if (region.manualGroupId <= 0) return;
+
+            // ROLLBACK_ICE_MAGAZINE_TEXT_20260608:
+            // Do not create a standalone TextMesh. Activate one MagazineText from FrozenLayer.prefab
+            // and place it at the grouped Ice center instead.
+            BalloonController.Instance.SetIceRegionHpText(region.ids, Mathf.Max(0, region.hp));
         }
 
         #endregion
@@ -320,9 +383,16 @@ namespace BalloonFlow
                     if (region.hp <= 0)
                     {
                         if (BalloonController.HasInstance)
+                        {
+                            BalloonController.Instance.ClearIceRegionHpText(region.ids);
                             BalloonController.Instance.BreakIceRegion(region.ids);
+                        }
                         foreach (int id in region.ids) _iceBalloons.Remove(id);
                         _iceRegions.RemoveAt(i);
+                    }
+                    else
+                    {
+                        CreateOrUpdateIceHpLabel(region);
                     }
                 }
             }

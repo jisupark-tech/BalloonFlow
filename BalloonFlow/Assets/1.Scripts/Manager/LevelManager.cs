@@ -624,6 +624,13 @@ namespace BalloonFlow
                         sizeH       = bl.sizeH > 0 ? bl.sizeH : 1,
                         hp          = bl.hp,
                         iceBlockSize = bl.iceBlockSize > 0 ? bl.iceBlockSize : 1,
+                        // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+                        // Pass optional MapMaker-authored Ice group metadata to runtime.
+                        iceGroupId = bl.iceGroupId,
+                        iceGroupHp = bl.iceGroupHp,
+                        iceGroupHpMode = bl.iceGroupHpMode,
+                        barricadeDir    = bl.barricadeDir,
+                        barricadeLength = bl.barricadeLength > 0 ? bl.barricadeLength : 1,
                         eggColors   = bl.eggColors,
                         eggHps      = bl.eggHps,
                         lockPairId  = bl.lockPairId,

@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using DG.Tweening;
+using TMPro;
 
 namespace BalloonFlow
 {
@@ -35,6 +36,8 @@ namespace BalloonFlow
         // ROLLBACK_BARRICADE_BODY_1TO1_SCALE:
         // Updated Barricade/BarricadeBody art is authored at a 1:1 local scale per board cell.
         private const float BARRICADE_BODY_CELL_LOCAL_SCALE_X = 1f;
+        // [Barricade] head(Barricade) 가 차지하는 축방향 칸 수(2). body 는 head 뒤에서 시작.
+        private const float BARRICADE_HEAD_CELLS = 2f;
 
         /// <summary>
         /// Color palette for balloon visualization. Index matches BalloonData.color.
@@ -90,6 +93,12 @@ namespace BalloonFlow
         public const string GimmickBarricade    = "Barricade";       // destructible wall (HP-based)
         public const string GimmickFlexTube     = "FlexTube";        // 다중 셀 ㄴ/ㄷ/ㄹ 형 튜브 — 같은 색 다트로 EndCap 쪽부터 1셀씩 제거
 
+        // ROLLBACK_FLEXTUBE_SEGMENT_VISUAL_SCALE_20260608:
+        // FlexTube_Segment authored visual scale requested by art/design. This is visual-only;
+        // FlexTube HP, cell occupancy, targeting, and hit logic still use the original cell data.
+        private static readonly Vector3 FlexTubeSegmentVisualScale = new Vector3(0.5f, 0.35f, 0.86f);
+        private const float FLEXTUBE_ENDCAP_CONNECTOR_INSET = 0.35f;
+
         #endregion
 
         #region Fields
@@ -115,6 +124,9 @@ namespace BalloonFlow
         [SerializeField] private float _barricadeLengthPadding = 0f;
         [SerializeField] private Vector3 _barricadeBodyVisualOffset = Vector3.zero;
         [SerializeField] private Vector3 _barricadeEdgeOffset = Vector3.zero;
+        // ROLLBACK_BARRICADE_VISUAL_JOIN_20260608:
+        // Visual-only yaw compensation for authored Barricade head/edge meshes. Targeting uses barricadeDir unchanged.
+        [SerializeField] private float _barricadeHeadYawOffset = 0f;
 
         // Primary data store keyed by balloonId
         private readonly Dictionary<int, BalloonData> _balloons = new Dictionary<int, BalloonData>();
@@ -142,6 +154,11 @@ namespace BalloonFlow
         private readonly Dictionary<Transform, Quaternion> _barricadeBodyBaseRotations = new Dictionary<Transform, Quaternion>();
         private readonly Dictionary<Transform, Vector3> _barricadeBodyBasePositions = new Dictionary<Transform, Vector3>();
         private readonly Dictionary<Transform, Quaternion> _barricadeEdgeBaseRotations = new Dictionary<Transform, Quaternion>();
+        // ROLLBACK_BARRICADE_HEAD_ROTATION_20260608: head(Barricade) 방향(N/E/S/W) 회전용 base 캐시.
+        private readonly Dictionary<Transform, Quaternion> _barricadeHeadBaseRotations = new Dictionary<Transform, Quaternion>();
+        // ROLLBACK_BARRICADE_ASSEMBLY_20260608: assembly("Baricade (1)") base 회전 + body base 길이(최장축) 캐시.
+        private readonly Dictionary<Transform, Quaternion> _barricadeAssemblyBaseRot = new Dictionary<Transform, Quaternion>();
+        private readonly Dictionary<Transform, float> _barricadeBodyBaseLen = new Dictionary<Transform, float>();
         private readonly List<Vector3Int> _reusableOccupiedCells = new List<Vector3Int>(16);
 
         // Key tracking: balloonId -> lockPairId (for path-based Key release)
@@ -296,7 +313,7 @@ namespace BalloonFlow
                 if (data.gimmickType == GimmickPinataBox)
                 {
                     var pbView = obj.GetComponentInChildren<PinataBoxView>(true);
-                    if (pbView != null && data.eggColors != null && data.eggColors.Length > 0)
+                    if (pbView != null)
                     {
                         ApplyPinataBoxVisual(obj, data, pbView);
                         continue;
@@ -480,7 +497,7 @@ namespace BalloonFlow
             if (_balloonObjects.TryGetValue(balloonId, out GameObject obj) && obj != null)
                 return obj.transform.position;
             if (_balloons.TryGetValue(balloonId, out BalloonData data))
-                return data.position;
+                return GetAdjustedBoardPosition(data.position);
             return Vector3.zero;
         }
 
@@ -1025,7 +1042,8 @@ namespace BalloonFlow
         }
 
         // [ROLLBACK_PIN_BARRICADE_MERGE]
-        // Pin mechanic + Barricade visual 통합. HP 텍스트만 차감 (Pin 처럼) + Barricade visual transform 은 spawn 시점 그대로 유지.
+        // Pin mechanic + Barricade visual 통합. HP 텍스트 차감(Pin 처럼) + 히트마다 body/edge 를 HP 비율로 reshape
+        // (ROLLBACK_BARRICADE_HP_RESHAPE_20260608) + footprint 재빌드.
         // 롤백 시 이 메서드 + PopBalloonWithDart Barricade 분기의 호출 제거.
         private void UpdateBarricadeVisualAfterHit(BalloonData data, bool destroyed)
         {
@@ -1038,6 +1056,15 @@ namespace BalloonFlow
             int remaining = 0;
             if (!destroyed && GimmickProcessor.HasInstance)
                 remaining = Mathf.Max(0, GimmickProcessor.Instance.GetPinRemainingSegments(data.balloonId));
+
+            // ROLLBACK_BARRICADE_HP_RESHAPE_20260608:
+            // 이전엔 spawn 시점 비주얼만 유지(HP 텍스트만 차감) → 이제 히트마다 body/edge 를 HP 비율로 reshape.
+            // _pinSegments(=remaining) 가 진짜 HP. ApplyBarricadeVisualTransform 은 hitCount/maxHP 로 비율 계산하므로
+            // hitCount 를 (maxHP - remaining) 으로 동기화한 뒤 재배치. maxHP==등록 hp 라 분모 일치.
+            data.hitCount = Mathf.Clamp(data.maxHP - remaining, 0, data.maxHP);
+            ApplyBarricadeVisualTransform(hitObj, data);
+            // footprint(DirectionalTargeting) 도 hitCount 기반 → 재빌드해 막는/조준 범위 축소 반영.
+            DirectionalTargeting.InvalidateCache();
 
             gi.UpdateHP(remaining);
             gi.PlayHitEffect();
@@ -1303,6 +1330,11 @@ namespace BalloonFlow
                 sizeW       = entry.sizeW > 0 ? entry.sizeW : 1,
                 sizeH       = entry.sizeH > 0 ? entry.sizeH : 1,
                 iceBlockSize = entry.iceBlockSize > 0 ? entry.iceBlockSize : 1,
+                iceGroupId = entry.iceGroupId,
+                iceGroupHp = entry.iceGroupHp,
+                iceGroupHpMode = entry.iceGroupHpMode,
+                barricadeDir    = entry.barricadeDir,
+                barricadeLength = entry.barricadeLength > 0 ? entry.barricadeLength : 1,
                 // 알 배열: eggHps 는 런타임 차감되므로 clone (레벨 에셋 원본 보호). eggColors 는 read-only 라 공유.
                 eggColors   = entry.eggColors,
                 eggHps      = entry.eggHps != null ? (int[])entry.eggHps.Clone() : null,
@@ -1401,7 +1433,7 @@ namespace BalloonFlow
                     {
                         // Target Box 알 모델: eggColors + PinataBoxView 있으면 W×H 알 격자 생성(셀별 색).
                         var view = obj.GetComponentInChildren<PinataBoxView>(true);
-                        if (view != null && data.eggColors != null && data.eggColors.Length > 0)
+                        if (view != null)
                         {
                             ApplyPinataBoxVisual(obj, data, view);
                         }
@@ -1462,7 +1494,10 @@ namespace BalloonFlow
                     data.balloonId,
                     data.gimmickType,
                     data.color,
-                    data.maxHP);
+                    data.maxHP,
+                    data.iceGroupId,
+                    data.iceGroupHp,
+                    data.iceGroupHpMode);
             }
         }
 
@@ -1537,8 +1572,7 @@ namespace BalloonFlow
                 // 런타임에 스폰하는 실제 캡 클론과 중복 노출됨(스크린샷의 'FlexTube > 캡들' + 'FlexTube_StartCap(Clone)').
                 // tubeObj 는 컨테이너로만 쓰고(자식 참조 X, parts 리스트만 사용) 실제 파츠는 아래에서 root 에 붙이므로,
                 // 인스턴스화 직후 기존 자식을 모두 제거해 템플릿 잔재를 정리한다.
-                for (int ci = tubeObj.transform.childCount - 1; ci >= 0; ci--)
-                    Destroy(tubeObj.transform.GetChild(ci).gameObject);
+                ClearFlexTubeTemplateChildren(tubeObj);
 
                 _flexTubeRoots.Add(tubeObj);
                 Quaternion extraRot = Quaternion.Euler(0f, tube.ExtraYRotation, 0f);
@@ -1552,7 +1586,10 @@ namespace BalloonFlow
                 int colorIdx = Mathf.Clamp(groupColor, 0, BalloonColors.Length - 1);
 
                 // visual segment count per cell — prefab mesh 가 cell 폭 1/N 이라는 전제. cell 폭이 visual 적으로 끊김 없이 채워짐.
-                int visualSegmentsPerCell = Mathf.Max(1, tube.VisualSegmentsPerCell);
+                // ROLLBACK_FLEXTUBE_FORCE_DENSE_SEGMENTS_20260608:
+                // The FlexTube prefab can serialize an older low segment count, so script defaults may not apply.
+                // Force enough runtime visual pieces per logical cell to avoid large block-looking hose chunks.
+                int visualSegmentsPerCell = Mathf.Max(5, tube.VisualSegmentsPerCell);
                 // visualStep(1/N 폭 분산 간격)은 보정된 인접 셀 실제 거리 기반으로 cell 별 계산(아래 루프). raw cellSpacing 미사용.
 
                 // parts list 용량 = 2 Cap + (cells - 2) × N visual segment
@@ -1576,13 +1613,16 @@ namespace BalloonFlow
                                        : partType == GimmickIdentifier.FlexTubePart.EndCap   ? endCapPrefab
                                                                                               : segmentPrefab;
 
-                    Quaternion rotation = CalculateFlexTubePartRotation(cellPositions, i) * extraRot;
+                    Quaternion basePartRotation = CalculateFlexTubePartRotation(cellPositions, i) * extraRot;
 
                     // visual segment 가 여러 개일 때 cell 안에서 tangent 방향으로 1/N step 으로 분산.
                     // Cap (Start/End) 은 분해 안 함 — 항상 cell center 1개.
                     int visualCount = (partType == GimmickIdentifier.FlexTubePart.Segment) ? visualSegmentsPerCell : 1;
                     Vector3 tangent = ComputeFlexTubeTangent(cellPositions, i); // cellPositions 기반 forward
                     bool useTangent = visualCount > 1 && tangent.sqrMagnitude > 0.0001f;
+                    bool useCornerCurve = partType == GimmickIdentifier.FlexTubePart.Segment
+                        && visualCount > 1
+                        && IsFlexTubeCorner(cellPositions, i);
                     // 1/N 폭 visual 이 보정된 cell 을 정확히 채우도록 — 보정된 인접 셀 거리 / N.
                     float visualStep = AdjacentCellDistance(cellPositions, i) / visualSegmentsPerCell;
 
@@ -1594,8 +1634,37 @@ namespace BalloonFlow
                     {
                         // visual segment center offset — 보정된 cell center 기준 -(N-1)/2 .. +(N-1)/2 × visualStep.
                         Vector3 spawnPos = cellPositions[i];
-                        if (useTangent)
+                        Quaternion visualRotation = basePartRotation;
+                        // ROLLBACK_FLEXTUBE_DENSE_CURVE_20260608:
+                        // Do not rotate multiple straight segment meshes along a corner curve. That creates a fan-shaped
+                        // broken U-turn. Keep visual pieces aligned to the cell tangent; only density changes, not path logic.
+                        if (useCornerCurve)
+                        {
+                            // ROLLBACK_FLEXTUBE_DENSE_CURVE_20260608:
+                            // Curved cells should be a fan-shaped bend. Put pieces on a local
+                            // quadratic curve and rotate each one to the curve tangent.
+                            // ROLLBACK_FLEXTUBE_CORNER_FULLSPAN_20260608: t 를 0..1 전체로 균등 분포(centers (v+0.5)/N).
+                            //   이전 0.15~0.85 는 코너 양끝(이웃 직선부와 만나는 mid 지점)에 안 닿아 끊겨 보였음.
+                            float t = (v + 0.5f) / visualCount;
+                            spawnPos = EvaluateFlexTubeCornerPosition(cellPositions, i, t);
+                            Vector3 curveTangent = EvaluateFlexTubeCornerTangent(cellPositions, i, t);
+                            if (curveTangent.sqrMagnitude > 0.0001f)
+                                visualRotation = Quaternion.LookRotation(curveTangent.normalized, Vector3.up) * extraRot;
+                        }
+                        else if (useTangent)
+                        {
                             spawnPos += tangent * ((v - (visualCount - 1) * 0.5f) * visualStep);
+                        }
+                        else if (partType == GimmickIdentifier.FlexTubePart.EndCap && i > 0)
+                        {
+                            // ROLLBACK_FLEXTUBE_ENDCAP_CONNECT_20260608:
+                            // EndCap authored cell center leaves a visible gap to the last Segment.
+                            // Pull only the visual cap toward the previous segment; logical cell/HP stays unchanged.
+                            Vector3 toPrev = cellPositions[i - 1] - cellPositions[i];
+                            toPrev.y = 0f;
+                            if (toPrev.sqrMagnitude > 0.0001f)
+                                spawnPos += toPrev.normalized * (toPrev.magnitude * FLEXTUBE_ENDCAP_CONNECTOR_INSET);
+                        }
 
                         var partObj = Instantiate(prefab);
                         if (partObj == null)
@@ -1604,15 +1673,16 @@ namespace BalloonFlow
                             continue;
                         }
                         partObj.transform.position = spawnPos;
-                        partObj.transform.rotation = rotation;
+                        partObj.transform.rotation = visualRotation;
                         partObj.transform.SetParent(tubeObj.transform, worldPositionStays: true);
 
                         // [FlexTube] Segment visual 만 x,y 스케일 보정 (z=길이축 유지). 캡(Start/End)은 프리팹 기본 유지.
                         if (partType == GimmickIdentifier.FlexTubePart.Segment)
                         {
-                            Vector3 ls = partObj.transform.localScale;
-                            float ss = tube.SegmentScaleXY;
-                            partObj.transform.localScale = new Vector3(ss, ss, ls.z);
+                            // ROLLBACK_FLEXTUBE_SEGMENT_VISUAL_SCALE_20260608:
+                            // Use the authored segment size requested by design instead of
+                            // uniform x/y scaling plus prefab z.
+                            partObj.transform.localScale = FlexTubeSegmentVisualScale;
                         }
 
                         var part = partObj.GetComponent<FlexTubePart>();
@@ -1637,13 +1707,13 @@ namespace BalloonFlow
                             if (partGi.HasColorRenderers)
                                 partGi.ApplyColor(BalloonColors[colorIdx]);
                         }
-                        else
-                        {
-                            ApplyTintToObject(partObj, BalloonColors[colorIdx]);
-                        }
+                        // ROLLBACK_FLEXTUBE_TINT_ALL_RENDERERS_20260608:
+                        // FlexTube prefabs can contain child renderers not wired to GimmickIdentifier._colorRenderers.
+                        // Tint every child renderer so parts do not remain black/gray.
+                        ApplyTintToRenderersInChildren(partObj, BalloonColors[colorIdx]);
                     }
 
-                    Debug.Log($"[FlexTube]   spawned {partType} id={id} at ({data.position.x:F2},{data.position.z:F2}) rot.y={rotation.eulerAngles.y:F0} color={colorIdx} visualCount={visualCount}");
+                    Debug.Log($"[FlexTube]   spawned {partType} id={id} at ({data.position.x:F2},{data.position.z:F2}) rot.y={basePartRotation.eulerAngles.y:F0} color={colorIdx} visualCount={visualCount}");
                 }
 
                 // HP = segment cell 수(튜브 길이). cell 당 1히트로 파괴되고, visual segment(cell×N)는
@@ -1680,6 +1750,82 @@ namespace BalloonFlow
         }
 
         /// <summary>FlexTube 부품의 회전 계산 — prefab forward = +z (Unity 기본) 가정. cell index i 의 이전/다음 위치로 방향 추론.</summary>
+        // ROLLBACK_FLEXTUBE_DENSE_CURVE_20260608:
+        // Visual-only corner smoothing. It does not alter FlexTube cell ids, HP, or targeting objects.
+        private static void ClearFlexTubeTemplateChildren(GameObject tubeObj)
+        {
+            if (tubeObj == null) return;
+
+            for (int ci = tubeObj.transform.childCount - 1; ci >= 0; ci--)
+            {
+                Transform child = tubeObj.transform.GetChild(ci);
+                if (child == null) continue;
+
+                // ROLLBACK_FLEXTUBE_HIDE_TEMPLATE_CHILDREN_20260608:
+                // FlexTube.prefab may contain authored sample parts. Destroy() removes them at end of frame,
+                // so disable first to prevent black/default template pieces from being visible with runtime parts.
+                child.gameObject.SetActive(false);
+                if (Application.isPlaying)
+                    Destroy(child.gameObject);
+                else
+                    DestroyImmediate(child.gameObject);
+            }
+        }
+
+        private static bool IsFlexTubeCorner(List<Vector3> cellPositions, int i)
+        {
+            if (cellPositions == null || i <= 0 || i >= cellPositions.Count - 1) return false;
+            Vector3 a = cellPositions[i] - cellPositions[i - 1];
+            Vector3 b = cellPositions[i + 1] - cellPositions[i];
+            a.y = 0f;
+            b.y = 0f;
+            if (a.sqrMagnitude < 0.0001f || b.sqrMagnitude < 0.0001f) return false;
+            return Mathf.Abs(Vector3.Dot(a.normalized, b.normalized)) < 0.95f;
+        }
+
+        private static Vector3 EvaluateFlexTubeCornerPosition(List<Vector3> cellPositions, int i, float t)
+        {
+            Vector3 prev = cellPositions[i - 1];
+            Vector3 self = cellPositions[i];
+            Vector3 next = cellPositions[i + 1];
+            Vector3 start = Vector3.Lerp(prev, self, 0.5f);
+            Vector3 end = Vector3.Lerp(self, next, 0.5f);
+            Vector3 control = GetFlexTubeCornerControlPoint(prev, self, next);
+            t = Mathf.Clamp01(t);
+            float inv = 1f - t;
+            return inv * inv * start + 2f * inv * t * control + t * t * end;
+        }
+
+        private static Vector3 EvaluateFlexTubeCornerTangent(List<Vector3> cellPositions, int i, float t)
+        {
+            Vector3 prev = cellPositions[i - 1];
+            Vector3 self = cellPositions[i];
+            Vector3 next = cellPositions[i + 1];
+            Vector3 start = Vector3.Lerp(prev, self, 0.5f);
+            Vector3 end = Vector3.Lerp(self, next, 0.5f);
+            Vector3 control = GetFlexTubeCornerControlPoint(prev, self, next);
+            t = Mathf.Clamp01(t);
+            Vector3 tangent = 2f * (1f - t) * (control - start) + 2f * t * (end - control);
+            tangent.y = 0f;
+            return tangent;
+        }
+
+        private static Vector3 GetFlexTubeCornerControlPoint(Vector3 prev, Vector3 self, Vector3 next)
+        {
+            Vector3 fromPrev = self - prev;
+            Vector3 toNext = next - self;
+            fromPrev.y = 0f;
+            toNext.y = 0f;
+            if (fromPrev.sqrMagnitude < 0.0001f || toNext.sqrMagnitude < 0.0001f)
+                return self;
+
+            // ROLLBACK_FLEXTUBE_CORNER_CONTROL_20260608:
+            //   control = 코너 꼭짓점(self). start=mid(prev,self), end=mid(self,next) 와 함께 두 직선부에 접하는
+            //   깔끔한 2차 라운딩이 됨(삼각형 start-self-end 안에 머물러 elbow 밖으로 안 튀어나옴).
+            //   이전 self + (fromPrev+toNext)×0.18 은 바깥(외측 대각)으로 불룩해 segment 가 튀어나오던 원인.
+            return self;
+        }
+
         private static Quaternion CalculateFlexTubePartRotation(List<Vector3> cellPositions, int i)
         {
             int n = cellPositions.Count;
@@ -1915,6 +2061,12 @@ namespace BalloonFlow
                 _balloonScale * scaleMult,
                 _balloonScale * heightMult * height);
             obj.transform.position = visualCenter;
+
+            // ROLLBACK_SIZED_FIELD_BOUNDS_FIT_20260608:
+            // Multi-cell 1x1-authored prefabs such as Wall can have renderer bounds smaller than
+            // one board cell. Fit the visible x/z bounds to the occupied footprint instead of
+            // assuming localScale * sizeW/H fills the board cells.
+            FitRendererBoundsToFootprint(obj, visualCenter, cellSizeX * width, cellSizeZ * height);
         }
 
         private void ApplyBarricadeVisualTransform(GameObject obj, BalloonData data)
@@ -1931,119 +2083,124 @@ namespace BalloonFlow
 
             int width = Mathf.Max(1, data.sizeW);
             int height = Mathf.Max(1, data.sizeH);
-            bool vertical = height > width;
+            // ROLLBACK_BARRICADE_DIR_LENGTH_20260608: 이전 vertical=height>width(2방향) → barricadeDir(N/S/E/W 4방향)+barricadeLength.
+            // bdir: 0=N(+Z) 1=E(+X) 2=S(-Z) 3=W(-X). vertical(=N/S, Z축) 은 기존 회전/축 로직 재사용용 별칭, dirSign 은 S/W 음수 확장.
+            int bdir = ((data.barricadeDir % 4) + 4) % 4;
+            bool vertical = (bdir == 0 || bdir == 2);
+            float dirSign = (bdir == 0 || bdir == 1) ? 1f : -1f;
 
             // ROLLBACK_BARRICADE_VISUAL_SETTINGS:
             // The root/head stays on the authored anchor cell. Only BarricadeBody covers the extra cells.
             Vector3 adjustedAnchor = GetAdjustedBoardPosition(data.position);
-            obj.transform.localScale = new Vector3(
-                _balloonScale * widthMult,
-                _balloonScale * scaleMult,
-                _balloonScale * heightMult);
+            // ROLLBACK_BARRICADE_UNIFORM_SCALE_20260608: 수평 균일 스케일(X=Z) — Y회전 shear 방지 + head 두께 fit 시 모든 조각 비율 유지.
+            float baseUniform = _balloonScale * scaleMult;
+            obj.transform.localScale = new Vector3(baseUniform, baseUniform, baseUniform);
             obj.transform.position = new Vector3(
                 adjustedAnchor.x + _barricadeVisualOffset.x,
                 _barricadeVisualY + _barricadeVisualOffset.y,
                 adjustedAnchor.z + _barricadeVisualOffset.z);
 
-            // Inspector 에서 GimmickIdentifier 에 명시 할당한 참조를 우선 사용. 미할당 시 이름 자동 탐색(기존 동작).
+            // GimmickIdentifier 에 Head/Body/Edge 가 할당됨(사용자 확인). 미할당 시 이름 폴백.
             GimmickIdentifier gid = obj.GetComponent<GimmickIdentifier>();
-            Transform edge = gid != null ? gid.BarricadeEdge : null;
-
+            Transform head = (gid != null && gid.BarricadeHead != null)
+                ? gid.BarricadeHead
+                : FindChildRecursive(obj.transform, "Barricade") ?? FindChildRecursive(obj.transform, "BarricadeHead");
             Transform body = (gid != null && gid.BarricadeBody != null)
                 ? gid.BarricadeBody
-                : FindChildRecursive(obj.transform, "BarricadeBody")
-                    ?? FindChildRecursive(obj.transform, "BaricadeBody")
-                    ?? FindChildRecursive(obj.transform, "Barricade")
-                    ?? FindChildRecursive(obj.transform, "Baricade")
-                    ?? FindFirstRenderableChild(obj.transform);
+                : FindChildRecursive(obj.transform, "BarricadeBody") ?? FindChildRecursive(obj.transform, "BaricadeBody");
+            Transform edge = (gid != null && gid.BarricadeEdge != null)
+                ? gid.BarricadeEdge
+                : FindChildRecursive(obj.transform, "Edge") ?? FindChildRecursive(obj.transform, "BarricadeEdge");
 
-            if (body == null)
+            // ROLLBACK_BARRICADE_ASSEMBLY_20260608 [재설계]:
+            //   head/body/edge 는 "Baricade (1)"(=body.parent) 아래 author 된 연결 유닛. 개별 월드배치(이전 방식) 폐기.
+            //   1) assembly 통째 방향 회전 → 연결 그대로 유지, 회전 후 head 를 anchor 에 재고정.
+            //   2) body(피벗=Head쪽, 로컬+X)만 localScale.x 로 늘림 → Head쪽 고정·Edge쪽으로 자람.
+            //   3) edge 를 body 끝(body.position + body.right × bodyLen)으로 이동. (회전은 assembly 가 담당)
+            Transform assembly = (body != null) ? body.parent : (head != null ? head.parent : null);
+            if (body == null || assembly == null)
             {
-                Vector3 visualCenter = new Vector3(
-                    adjustedAnchor.x + (width - 1) * cellSizeX * 0.5f,
-                    obj.transform.position.y,
-                    adjustedAnchor.z + (height - 1) * cellSizeZ * 0.5f);
                 obj.transform.localScale = new Vector3(
-                    _balloonScale * widthMult * width,
-                    _balloonScale * scaleMult,
-                    _balloonScale * heightMult * height);
-                obj.transform.position = visualCenter;
+                    _balloonScale * widthMult * width, _balloonScale * scaleMult, _balloonScale * heightMult * height);
                 return;
             }
 
+            // 1) 방향 회전 + head 를 anchor 에 재고정.
+            //    authored 기본 = +X = East = bdir1 → yaw=(bdir-1)*90. 머리 방향이 어긋나면 _barricadeHeadYawOffset 로 90° 단위 보정.
+            if (!_barricadeAssemblyBaseRot.TryGetValue(assembly, out Quaternion asmBase))
+            {
+                asmBase = assembly.localRotation;
+                _barricadeAssemblyBaseRot[assembly] = asmBase;
+            }
+            assembly.localRotation = asmBase * Quaternion.Euler(0f, (bdir - 1) * 90f + _barricadeHeadYawOffset, 0f);
+            if (head != null)
+                assembly.position += (obj.transform.position - head.position);
+
+            // ROLLBACK_BARRICADE_UNIFORM_SCALE_20260608: 두께 2칸 = head 두께가 2칸이 되도록 obj 를 "균일" 스케일 fit.
+            //   → body/edge 는 같은 배율로 묶여 프리팹 비율 유지(독립 두께 보정 X, body 가 과하게 넓어지지 않음).
+            float cellPerp = vertical ? cellSizeX : cellSizeZ;
+            if (head != null && TryGetProjectedBounds(head, head.forward, out float hNear, out float hFar))
+            {
+                float headThick = Mathf.Max(0.0001f, hFar - hNear);
+                float fUniform = (2f * cellPerp) / headThick;
+                float u = baseUniform * fUniform;
+                obj.transform.localScale = new Vector3(u, u, u);
+                assembly.position += (obj.transform.position - head.position); // 스케일 변경으로 head 가 움직였으니 재고정
+            }
+
+            // 2) 레거시(length<=1)는 멀티셀 비활성 → head 만(body/edge 숨김).
+            if (data.barricadeLength <= 1)
+            {
+                body.gameObject.SetActive(false);
+                if (edge != null) edge.gameObject.SetActive(false);
+                return;
+            }
+
+            // 길이/HP → body 월드 길이. (충돌 footprint 와 동일 모델: total = head2 + body + edge1)
+            float lengthCells = Mathf.Max(3, data.barricadeLength);
+            int requiredHits = data.maxHP > 0 ? data.maxHP : 2;
+            int remainingHits = Mathf.Clamp(requiredHits - data.hitCount, 0, requiredHits);
+            float hpRatio = requiredHits > 0 ? remainingHits / (float)requiredHits : 1f;
+            float bodyCells = Mathf.Max(0f, lengthCells - 3f) * hpRatio;
+            float cellAlong = vertical ? cellSizeZ : cellSizeX;
+            float bodyWorldLen = Mathf.Max(0f, bodyCells * cellAlong * _barricadeLengthMultiplier + _barricadeLengthPadding);
+
+            // 3) body 늘리기 — 피벗 Head쪽·로컬 +X. base 최장축 길이 대비 비율로 localScale.x.
             if (!_barricadeBodyBaseScales.TryGetValue(body, out Vector3 baseScale))
             {
                 baseScale = body.localScale;
                 _barricadeBodyBaseScales[body] = baseScale;
             }
-            if (!_barricadeBodyBaseRotations.TryGetValue(body, out Quaternion baseRotation))
+            // baseLen = body 의 "길이축(body.right)" 월드 길이 — 최장축(max size) 이 아니라 진행축으로 측정해야 5칸이 정확히 참.
+            if (!_barricadeBodyBaseLen.TryGetValue(body, out float baseLen))
             {
-                baseRotation = body.localRotation;
-                _barricadeBodyBaseRotations[body] = baseRotation;
+                Vector3 prev = body.localScale;
+                body.localScale = baseScale;
+                baseLen = TryGetProjectedBounds(body, body.right, out float bN, out float bF)
+                    ? Mathf.Max(0.0001f, bF - bN) : 1f;
+                _barricadeBodyBaseLen[body] = baseLen;
+                body.localScale = prev;
             }
-            if (!_barricadeBodyBasePositions.TryGetValue(body, out Vector3 basePosition))
+            bool hasBody = bodyWorldLen > 0.001f;
+            body.gameObject.SetActive(hasBody);
+            if (hasBody)
+                // 길이(X)만 늘림. 두께(Z)는 baseScale 유지 → 균일 obj 스케일에 의해 프리팹 비율 그대로(넓어지지 않음).
+                body.localScale = new Vector3(baseScale.x * (bodyWorldLen / baseLen), baseScale.y, baseScale.z);
+
+            // 4) edge 를 body 끝으로. body.position=피벗(Head쪽 끝=Head 연결점), body.right=월드 +X(assembly 회전 반영).
+            //    bodyWorldLen=0(length=3)이면 edge 가 head 바로 뒤(=body 피벗)로 옴. 회전은 assembly 가 담당하므로 edge 회전 별도 설정 안 함.
+            if (edge != null)
             {
-                basePosition = body.localPosition;
-                _barricadeBodyBasePositions[body] = basePosition;
-            }
-
-            float lengthCells = Mathf.Max(1, vertical ? height : width);
-            int requiredHits = data.maxHP > 0 ? data.maxHP : 2;
-            int remainingHits = Mathf.Clamp(requiredHits - data.hitCount, 0, requiredHits);
-            float hpRatio = requiredHits > 0 ? remainingHits / (float)requiredHits : 1f;
-
-            // ROLLBACK_BARRICADE_BODY_HP_SHRINK:
-            // BarricadeBody covers the cells after the anchor/head. Each hit shortens that body
-            // by the remaining HP ratio while the root/head stays on the authored anchor cell.
-            float bodyCells = Mathf.Max(0f, lengthCells - 1f) * hpRatio;
-            body.gameObject.SetActive(bodyCells > 0.001f);
-            if (bodyCells <= 0.001f)
-            {
-                // 몸통이 사라지면 끝 마감(Edge)도 함께 숨김.
-                if (edge != null) edge.gameObject.SetActive(false);
-                return;
-            }
-
-            Quaternion targetRotation = vertical ? baseRotation * Quaternion.Euler(0f, 90f, 0f) : baseRotation;
-
-            body.localScale = baseScale;
-            body.localRotation = targetRotation;
-            body.localPosition = basePosition;
-
-            // ROLLBACK_BARRICADE_BODY_CELL_SCALE_X:
-            // BarricadeBody is now authored 1:1 with a board cell. Use that authored ratio
-            // directly; renderer bounds from the imported FBX are not reliable enough for sizing.
-            float bodyScaleX = Mathf.Max(
-                0.001f,
-                BARRICADE_BODY_CELL_LOCAL_SCALE_X * bodyCells * _barricadeLengthMultiplier + _barricadeLengthPadding);
-            body.localScale = new Vector3(bodyScaleX, baseScale.y, baseScale.z);
-            body.localRotation = targetRotation;
-
-            if (TryMeasureRendererBounds(body, out Bounds bodyBounds))
-            {
-                float centerDistance = (bodyCells + 1f) * 0.5f * (vertical ? cellSizeZ : cellSizeX);
-                Vector3 desiredCenter = obj.transform.position + (vertical
-                    ? new Vector3(0f, 0f, centerDistance)
-                    : new Vector3(centerDistance, 0f, 0f));
-                desiredCenter += _barricadeBodyVisualOffset;
-                Vector3 delta = desiredCenter - bodyBounds.center;
-                body.position += delta;
-
-                // Edge(끝 마감)를 늘어난 body 의 먼 쪽 끝으로 이동 — HP 감소로 body 가 짧아지면 Edge 도 따라옴.
-                if (edge != null)
-                {
-                    edge.gameObject.SetActive(true);
-                    if (!_barricadeEdgeBaseRotations.TryGetValue(edge, out Quaternion edgeBaseRotation))
-                    {
-                        edgeBaseRotation = edge.localRotation;
-                        _barricadeEdgeBaseRotations[edge] = edgeBaseRotation;
-                    }
-                    edge.localRotation = vertical ? edgeBaseRotation * Quaternion.Euler(0f, 90f, 0f) : edgeBaseRotation;
-
-                    float halfLen = 0.5f * (vertical ? bodyBounds.size.z : bodyBounds.size.x);
-                    Vector3 dir = vertical ? Vector3.forward : Vector3.right;
-                    edge.position = desiredCenter + dir * halfLen + _barricadeEdgeOffset;
-                }
+                edge.gameObject.SetActive(true);
+                // ROLLBACK_BARRICADE_EDGE_JOIN_20260608:
+                //   edge.near 면을 body.far 면에 실측으로 붙임(계산값 bodyWorldLen 대신 실제 렌더 bounds). body.right=진행축 월드방향.
+                //   body 없으면(length=3, 비활성→bounds 실패) head 바로 뒤(body 피벗)로 폴백.
+                Vector3 along = body.right;
+                if (hasBody && TryGetProjectedBounds(body, along, out _, out float bodyFar)
+                    && MoveProjectedNearTo(edge, along, bodyFar))
+                    edge.position += _barricadeEdgeOffset;
+                else
+                    edge.position = body.position + along.normalized * bodyWorldLen + _barricadeEdgeOffset;
             }
         }
 
@@ -2056,6 +2213,22 @@ namespace BalloonFlow
                 if (child.name == childName) return child;
 
                 Transform nested = FindChildRecursive(child, childName);
+                if (nested != null) return nested;
+            }
+            return null;
+        }
+
+        private Transform FindChildRecursiveContains(Transform root, string namePart)
+        {
+            if (root == null || string.IsNullOrEmpty(namePart)) return null;
+            string needle = namePart.ToLowerInvariant();
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform child = root.GetChild(i);
+                if (!string.IsNullOrEmpty(child.name) && child.name.ToLowerInvariant().Contains(needle))
+                    return child;
+
+                Transform nested = FindChildRecursiveContains(child, namePart);
                 if (nested != null) return nested;
             }
             return null;
@@ -2079,6 +2252,50 @@ namespace BalloonFlow
         {
             if (!TryMeasureRendererBounds(root, out Bounds bounds)) return 0f;
             return vertical ? bounds.size.z : bounds.size.x;
+        }
+
+        // ROLLBACK_BARRICADE_VISUAL_JOIN_20260608:
+        // Visual-only projected bounds helpers for chaining Barricade Head -> Body -> Edge without
+        // assuming prefab pivots or authored mesh lengths match board cells exactly.
+        private bool TryGetProjectedBounds(Transform root, Vector3 axis, out float near, out float far)
+        {
+            near = 0f;
+            far = 0f;
+            if (axis.sqrMagnitude < 0.0001f || !TryMeasureRendererBounds(root, out Bounds bounds))
+                return false;
+
+            Vector3 n = axis.normalized;
+            float center = Vector3.Dot(bounds.center, n);
+            float extent =
+                Mathf.Abs(n.x) * bounds.extents.x +
+                Mathf.Abs(n.y) * bounds.extents.y +
+                Mathf.Abs(n.z) * bounds.extents.z;
+            near = center - extent;
+            far = center + extent;
+            return true;
+        }
+
+        private bool MoveProjectedNearTo(Transform root, Vector3 axis, float targetNear)
+        {
+            if (root == null || axis.sqrMagnitude < 0.0001f) return false;
+            Vector3 n = axis.normalized;
+            if (!TryGetProjectedBounds(root, n, out float near, out _)) return false;
+            root.position += n * (targetNear - near);
+            return true;
+        }
+
+        // ROLLBACK_BARRICADE_THICKNESS_FIT_20260608:
+        //   조각(head/body/edge)의 두께(perpendicular, 로컬 Z=forward)를 worldTarget(=2칸×cellPerp)에 맞춤.
+        //   현재 렌더 두께를 실측 → localScale.z 비례 보정(수렴형). 길이축(로컬 X)은 안 건드림.
+        private void FitThicknessToWorld(Transform t, float worldTarget)
+        {
+            if (t == null || worldTarget <= 0.0001f) return;
+            Vector3 axis = t.forward; // 로컬 +Z = 두께 방향 (조각은 로컬 +X 로 뻗음)
+            if (!TryGetProjectedBounds(t, axis, out float near, out float far)) return;
+            float ext = Mathf.Max(0.0001f, far - near);
+            Vector3 ls = t.localScale;
+            ls.z *= worldTarget / ext;
+            t.localScale = ls;
         }
 
         private bool TryMeasureRendererBounds(Transform root, out Bounds bounds)
@@ -2105,6 +2322,74 @@ namespace BalloonFlow
             }
 
             return hasBounds;
+        }
+
+        // ROLLBACK_SIZED_FIELD_BOUNDS_FIT_20260608:
+        // Visual-only bounds fitting for 1x1-authored prefabs stretched to multi-cell footprints.
+        // Excludes TMP and shadow renderers so labels/shadows do not shrink the actual obstacle art.
+        private void FitRendererBoundsToFootprint(GameObject obj, Vector3 targetCenter, float targetSizeX, float targetSizeZ)
+        {
+            if (obj == null) return;
+            if (!TryMeasureVisualRendererBounds(obj.transform, out Bounds bounds)) return;
+
+            Vector3 localScale = obj.transform.localScale;
+            if (bounds.size.x > 0.0001f)
+                localScale.x *= Mathf.Max(0.0001f, targetSizeX) / bounds.size.x;
+            if (bounds.size.z > 0.0001f)
+                localScale.z *= Mathf.Max(0.0001f, targetSizeZ) / bounds.size.z;
+            obj.transform.localScale = localScale;
+
+            if (TryMeasureVisualRendererBounds(obj.transform, out Bounds fitted))
+            {
+                Vector3 delta = new Vector3(
+                    targetCenter.x - fitted.center.x,
+                    0f,
+                    targetCenter.z - fitted.center.z);
+                obj.transform.position += delta;
+            }
+        }
+
+        private bool TryMeasureVisualRendererBounds(Transform root, out Bounds bounds)
+        {
+            bounds = default;
+            if (root == null) return false;
+
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            if (renderers == null || renderers.Length == 0) return false;
+
+            bool hasBounds = false;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null || !r.enabled || !r.gameObject.activeInHierarchy) continue;
+                if (r.GetComponent<TMP_Text>() != null) continue;
+                if (IsShadowRenderer(r)) continue;
+
+                if (!hasBounds)
+                {
+                    bounds = r.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(r.bounds);
+                }
+            }
+
+            return hasBounds;
+        }
+
+        private static bool IsShadowRenderer(Renderer renderer)
+        {
+            if (renderer == null) return false;
+            Transform t = renderer.transform;
+            while (t != null)
+            {
+                if (t.name.IndexOf("Shadow", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+                t = t.parent;
+            }
+            return false;
         }
 
         private static readonly Color HIDDEN_COLOR = new Color(0.45f, 0.45f, 0.50f);   // Grey mystery balloon
@@ -2250,7 +2535,7 @@ namespace BalloonFlow
                     int blockRowBase = kv.Key.Item2 * blockSize;
                     float offCellsX = (blockSize - 1) * 0.5f - (cellCol[anchorId] - blockColBase);
                     float offCellsZ = (blockSize - 1) * 0.5f - (cellRow[anchorId] - blockRowBase);
-                    AttachIceBlockOverlay(anchorId, aobj, blockSize, offCellsX * cellSizeX, offCellsZ * cellSizeZ);
+                    AttachIceBlockOverlay(anchorId, aobj, blockSize, offCellsX * cellSizeX, offCellsZ * cellSizeZ, cellSizeX, cellSizeZ);
                 }
             }
         }
@@ -2258,7 +2543,7 @@ namespace BalloonFlow
         /// <summary>
         /// [#13/§11] Ice 블록 앵커에 blockSize 배율 FrozenLayer 오버레이 부착 (블록 중앙 오프셋). 본체 숨김은 호출 측이 처리.
         /// </summary>
-        private void AttachIceBlockOverlay(int anchorId, GameObject anchor, int blockSize, float offsetX, float offsetZ)
+        private void AttachIceBlockOverlay(int anchorId, GameObject anchor, int blockSize, float offsetX, float offsetZ, float cellSizeX, float cellSizeZ)
         {
             if (anchor == null || !ObjectPoolManager.HasInstance) return;
             if (_frozenOverlays.ContainsKey(anchorId)) return;
@@ -2267,19 +2552,32 @@ namespace BalloonFlow
             GameObject overlay = ObjectPoolManager.Instance.Get(FrozenLayerPoolKey);
             if (overlay == null) return;
 
+            ResetFrozenOverlayMagazineText(overlay);
+
             overlay.transform.SetParent(anchor.transform, false);
             overlay.transform.localRotation = Quaternion.identity;
 
             // 스케일: 1×1 은 FROZEN_OVERLAY_SCALE(여백 포함) 그대로. 블록은 셀 수만큼 확장하되 여백은 고정 →
             // (blockSize-1) + FROZEN_OVERLAY_SCALE. (1.3*B 는 여백이 B 배로 과대해져 footprint 를 벗어남)
-            float s = (blockSize - 1) + FROZEN_OVERLAY_SCALE;
-            overlay.transform.localScale = Vector3.one * s;
+            overlay.transform.localScale = Vector3.one;
 
             // 위치 보정(Wall 패턴): 앵커=블록 코너 셀 → footprint 중앙으로 이동. localPosition 은 부모(_balloonScale)
             // 스케일에 곱해져 어긋나므로 월드 위치로 직접 설정 (offsetX/Z 는 이미 월드 단위 = (B-1)*0.5*cellSize).
             Vector3 aw = anchor.transform.position;
             overlay.transform.position = new Vector3(aw.x + offsetX, aw.y, aw.z + offsetZ);
             overlay.SetActive(true);
+
+            // ROLLBACK_ICE_BLOCK_BOUNDS_SCALE_20260608:
+            // 1x1 Ice was tuned at FROZEN_OVERLAY_SCALE. Preserve that per-cell visual coverage
+            // for larger blocks by multiplying instead of additive growth or bounds fitting.
+            float s = blockSize * FROZEN_OVERLAY_SCALE;
+            overlay.transform.localScale = Vector3.one * s;
+
+            // ROLLBACK_ICE_BLOCK_FOOTPRINT_FIT_20260608:
+            // FrozenLayer is authored as a 1x1 visual shell, but its renderer bounds are not
+            // guaranteed to equal one board cell. Fit x/z bounds to the block footprint so
+            // 2x2/3x3 Ice covers the same area as the hidden balloons beneath it.
+            FitRendererBoundsToFootprint(overlay, overlay.transform.position, cellSizeX * blockSize, cellSizeZ * blockSize);
 
             _frozenOverlays[anchorId] = overlay;
         }
@@ -2538,6 +2836,28 @@ namespace BalloonFlow
             }
         }
 
+        private static void ApplyTintToRenderersInChildren(GameObject obj, Color color)
+        {
+            if (obj == null) return;
+            Material shared = GetOrCreateSharedMaterial(color);
+            if (shared == null) return;
+
+            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>(true);
+            if (renderers == null || renderers.Length == 0)
+            {
+                ApplyTintToObject(obj, color);
+                return;
+            }
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null) continue;
+                renderer.enabled = true;
+                renderer.sharedMaterial = shared;
+            }
+        }
+
         /// <summary>
         /// 기믹 타입에 따라 사용할 풀 키를 반환. 전용 비주얼 프리팹이 없는 기믹은
         /// 기본 Balloon 풀로 폴백. (Lock_Key는 별도 처리이므로 여기서 다루지 않음)
@@ -2585,6 +2905,8 @@ namespace BalloonFlow
             GameObject overlay = ObjectPoolManager.Instance.Get(FrozenLayerPoolKey);
             if (overlay == null) return;
 
+            ResetFrozenOverlayMagazineText(overlay);
+
             overlay.transform.SetParent(parentBalloon.transform, false);
             overlay.transform.localPosition = Vector3.zero;
             overlay.transform.localRotation = Quaternion.identity;
@@ -2597,6 +2919,135 @@ namespace BalloonFlow
             if (bi != null) bi.SetVisible(false);
 
             _frozenOverlays[balloonId] = overlay;
+        }
+
+        // ROLLBACK_ICE_MAGAZINE_TEXT_20260608:
+        // Grouped Ice HP now uses the MagazineText child already authored inside FrozenLayer.prefab.
+        // Remove these helpers and restore GimmickProcessor's legacy TextMesh label path to roll back.
+        public void SetIceRegionHpText(IEnumerable<int> ids, int hp)
+        {
+            if (ids == null) return;
+
+            Vector3 center = Vector3.zero;
+            int count = 0;
+            foreach (int id in ids)
+            {
+                if (TryGetBalloonWorldPosition(id, out Vector3 pos))
+                {
+                    center += pos;
+                    count++;
+                }
+            }
+            if (count <= 0) return;
+
+            center /= count;
+            center.y += 0.55f;
+
+            GameObject selectedOverlay = null;
+            float selectedDistance = float.MaxValue;
+            foreach (int id in ids)
+            {
+                if (!_frozenOverlays.TryGetValue(id, out GameObject overlay) || overlay == null) continue;
+
+                ResetFrozenOverlayMagazineText(overlay);
+                float distance = (overlay.transform.position - center).sqrMagnitude;
+                if (distance < selectedDistance)
+                {
+                    selectedDistance = distance;
+                    selectedOverlay = overlay;
+                }
+            }
+
+            if (selectedOverlay != null && hp > 0)
+                ShowFrozenOverlayMagazineText(selectedOverlay, hp, center);
+        }
+
+        public void ClearIceRegionHpText(IEnumerable<int> ids)
+        {
+            if (ids == null) return;
+
+            foreach (int id in ids)
+            {
+                if (_frozenOverlays.TryGetValue(id, out GameObject overlay) && overlay != null)
+                    ResetFrozenOverlayMagazineText(overlay);
+            }
+        }
+
+        private static void ShowFrozenOverlayMagazineText(GameObject overlay, int hp, Vector3 worldPosition)
+        {
+            FrozenOverlayMagazineTextState state = GetFrozenOverlayMagazineTextState(overlay);
+            if (state == null || state.Text == null) return;
+
+            state.RestoreDefaults();
+            state.Text.text = Mathf.Max(0, hp).ToString();
+            state.Text.transform.position = worldPosition;
+            state.Text.gameObject.SetActive(true);
+            state.Text.ForceMeshUpdate();
+        }
+
+        private static void ResetFrozenOverlayMagazineText(GameObject overlay)
+        {
+            FrozenOverlayMagazineTextState state = GetFrozenOverlayMagazineTextState(overlay);
+            if (state == null || state.Text == null) return;
+
+            state.Text.text = string.Empty;
+            state.RestoreDefaults();
+            state.Text.gameObject.SetActive(false);
+        }
+
+        private static FrozenOverlayMagazineTextState GetFrozenOverlayMagazineTextState(GameObject overlay)
+        {
+            if (overlay == null) return null;
+
+            FrozenOverlayMagazineTextState state = overlay.GetComponent<FrozenOverlayMagazineTextState>();
+            if (state != null && state.Text != null) return state;
+
+            TMP_Text text = null;
+            TMP_Text[] texts = overlay.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < texts.Length; i++)
+            {
+                string n = texts[i].name;
+                if (n == "MagazineText" || n == "MagaineText")
+                {
+                    text = texts[i];
+                    break;
+                }
+            }
+            if (text == null && texts.Length > 0)
+                text = texts[0];
+            if (text == null) return null;
+
+            if (state == null)
+                state = overlay.AddComponent<FrozenOverlayMagazineTextState>();
+            state.Capture(text);
+            return state;
+        }
+
+        private sealed class FrozenOverlayMagazineTextState : MonoBehaviour
+        {
+            public TMP_Text Text { get; private set; }
+
+            private Vector3 _defaultLocalPosition;
+            private Quaternion _defaultLocalRotation;
+            private Vector3 _defaultLocalScale;
+
+            public void Capture(TMP_Text text)
+            {
+                Text = text;
+                Transform t = text.transform;
+                _defaultLocalPosition = t.localPosition;
+                _defaultLocalRotation = t.localRotation;
+                _defaultLocalScale = t.localScale;
+            }
+
+            public void RestoreDefaults()
+            {
+                if (Text == null) return;
+                Transform t = Text.transform;
+                t.localPosition = _defaultLocalPosition;
+                t.localRotation = _defaultLocalRotation;
+                t.localScale = _defaultLocalScale;
+            }
         }
 
         /// <summary>
@@ -2616,6 +3067,7 @@ namespace BalloonFlow
             }
 
             if (overlay == null) return;
+            ResetFrozenOverlayMagazineText(overlay);
             overlay.transform.SetParent(null, false);
             if (ObjectPoolManager.HasInstance)
                 ObjectPoolManager.Instance.Return(FrozenLayerPoolKey, overlay);
@@ -2640,6 +3092,7 @@ namespace BalloonFlow
                 }
 
                 if (overlay == null) continue;
+                ResetFrozenOverlayMagazineText(overlay);
                 overlay.transform.SetParent(null, false);
                 if (ObjectPoolManager.HasInstance)
                     ObjectPoolManager.Instance.Return(FrozenLayerPoolKey, overlay);
@@ -3074,10 +3527,25 @@ namespace BalloonFlow
             var regions = new List<List<int>>();
             var visited = new HashSet<int>();
             var stack = new Stack<int>();
+            // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+            // Manual MapMaker Ice groups override adjacency. Ice cells with groupId > 0 are grouped
+            // by that id even when they are not adjacent. groupId == 0 keeps the previous flood-fill behavior.
+            var manualGroups = new Dictionary<int, List<int>>();
 
             foreach (var kvp in _balloons)
             {
                 if (kvp.Value.isPopped || kvp.Value.gimmickType != GimmickIce) continue;
+                if (kvp.Value.iceGroupId > 0)
+                {
+                    if (!manualGroups.TryGetValue(kvp.Value.iceGroupId, out var manual))
+                    {
+                        manual = new List<int>();
+                        manualGroups[kvp.Value.iceGroupId] = manual;
+                    }
+                    manual.Add(kvp.Key);
+                    visited.Add(kvp.Key);
+                    continue;
+                }
                 if (visited.Contains(kvp.Key)) continue;
 
                 var region = new List<int>();
@@ -3098,13 +3566,33 @@ namespace BalloonFlow
                         if (visited.Contains(nb)) continue;
                         if (!_balloons.TryGetValue(nb, out BalloonData nbData)) continue;
                         if (nbData.isPopped || nbData.gimmickType != GimmickIce) continue;
+                        if (nbData.iceGroupId > 0) continue;
                         visited.Add(nb);
                         stack.Push(nb);
                     }
                 }
                 regions.Add(region);
             }
+            foreach (var kvp in manualGroups)
+                if (kvp.Value != null && kvp.Value.Count > 0)
+                    regions.Add(kvp.Value);
             return regions;
+        }
+
+        public bool TryGetBalloonWorldPosition(int balloonId, out Vector3 position)
+        {
+            if (_balloonObjects.TryGetValue(balloonId, out GameObject obj) && obj != null)
+            {
+                position = obj.transform.position;
+                return true;
+            }
+            if (_balloons.TryGetValue(balloonId, out BalloonData data))
+            {
+                position = GetAdjustedBoardPosition(data.position);
+                return true;
+            }
+            position = default;
+            return false;
         }
 
         /// <summary>
@@ -3660,6 +4148,17 @@ namespace BalloonFlow
 
         /// <summary>[Ice §11] 얼음 블록 변 길이(셀). 2=2×2 타일. 1=셀당. 영역 공유 HP·렌더 블록화에 사용.</summary>
         public int iceBlockSize = 1;
+        // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+        // 0 = old adjacency grouping. >0 = explicit MapMaker-authored Ice group.
+        // hpMode: 0/1 sum member HP, 2 override with iceGroupHp.
+        public int iceGroupId = 0;
+        public int iceGroupHp = 0;
+        public int iceGroupHpMode = 0;
+
+        /// <summary>[Barricade] 방향 0=N/1=E/2=S/3=W (head→body). 회전·footprint 결정. sizeW/H 미사용.</summary>
+        public int barricadeDir = 1;
+        /// <summary>[Barricade] body 길이(셀). 전체 head(2)+body+edge(1), 두께2. 표시/막는범위 = length×남은HP/maxHP.</summary>
+        public int barricadeLength = 1;
 
         /// <summary>Pinata_Box 셀별 알 색상 (len=sizeW*sizeH, row-major). null=레거시 단일 박스.</summary>
         public int[] eggColors;
@@ -3696,6 +4195,16 @@ namespace BalloonFlow
 
         /// <summary>[Ice §11] 얼음 블록 변 길이(셀). 2=2×2 타일. 1=셀당(기본).</summary>
         public int iceBlockSize = 1;
+        // ROLLBACK_ICE_MANUAL_GROUP_20260608:
+        // Manual Ice group metadata passed from LevelConfig/MapMaker.
+        public int iceGroupId = 0;
+        public int iceGroupHp = 0;
+        public int iceGroupHpMode = 0;
+
+        /// <summary>[Barricade] 방향 0=N/1=E/2=S/3=W.</summary>
+        public int barricadeDir = 1;
+        /// <summary>[Barricade] body 길이(셀).</summary>
+        public int barricadeLength = 1;
 
         /// <summary>Pinata_Box 셀별 알 색상 (len=sizeW*sizeH, row-major). null=레거시 단일 박스.</summary>
         public int[] eggColors;

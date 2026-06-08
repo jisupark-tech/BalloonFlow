@@ -39,7 +39,9 @@ namespace BalloonFlow
 
         [Header("[Visual 분해 — 한 cell 을 여러 visual segment 로 채움]")]
         [Tooltip("Segment cell 1개당 spawn 되는 visual segment 개수. mesh 가 cell 폭의 1/N 인 prefab 가정 (예: 3D Box 기준 1/3 폭).")]
-        [SerializeField] private int _visualSegmentsPerCell = 3;
+        // ROLLBACK_FLEXTUBE_DENSE_CURVE_20260608:
+        // More visual segments per logical cell make turns/connectors denser without changing HP/targeting.
+        [SerializeField] private int _visualSegmentsPerCell = 5;
         [Tooltip("다트 hit 마다 마지막 활성 visual segment 가 scale 0 으로 줄어드는 시간(초). 0 = 즉시 비활성.")]
         [SerializeField] private float _segmentShrinkDuration = 0.12f;
         [Tooltip("Segment visual 의 x,y 로컬 스케일 (z=길이축은 유지). 캡(Start/End)에는 미적용.")]
