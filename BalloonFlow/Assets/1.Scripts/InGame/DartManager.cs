@@ -67,6 +67,11 @@ namespace BalloonFlow
             if (userSpeed <= 0.001f) userSpeed = 1f;
             multiplier *= userSpeed;
 
+            // [Almost There] 클리어 임박 가속 시 다트 비행속도도 동일 배율(1.8)로 가속 — 벨트만 빨라지던 문제 보정.
+            // RailManager.GetOccupancySpeedMultiplier() = 임박 시 ALMOST_THERE_SPEED_MULT, 그 외 1.
+            float almostThere = RailManager.HasInstance ? RailManager.Instance.GetOccupancySpeedMultiplier() : 1f;
+            if (almostThere > 0.001f) multiplier *= almostThere;
+
             float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
             if (cellSpacing <= 0.01f) cellSpacing = 0.55f;
 

@@ -30,6 +30,8 @@ namespace BalloonFlow
         private const int PinataRequiredHits = 2;
         private const float DEFAULT_BALLOON_SCALE = 0.5f;
         private const float BALLOON_FIXED_SPAWN_Y = 0.1f;
+        // [#2] 풍선 소환 시 높이(scale.y)를 레벨/맵사이즈와 무관하게 절대 고정 — 레벨마다 풍선 높이가 달라지던 문제 보정.
+        private const float BALLOON_FIXED_SCALE_Y = 0.35f;
         // ROLLBACK_BARRICADE_BODY_1TO1_SCALE:
         // Updated Barricade/BarricadeBody art is authored at a 1:1 local scale per board cell.
         private const float BARRICADE_BODY_CELL_LOCAL_SCALE_X = 1f;
@@ -309,7 +311,11 @@ namespace BalloonFlow
                     continue;
                 }
 
-                obj.transform.position = GetAdjustedBoardPosition(data.position);
+                // [#2-B] ROLLBACK_BALLOON_UNPIN_SPAWN_Y_20260608: 풍선만 Y 위치 고정(0.1) 해제 → 자연 Y 사용.
+                // 높이는 scale.y=0.35 가 담당. 공유 헬퍼는 그대로라 다트/기믹/바리케이드 Y 는 영향 없음.
+                Vector3 bp = GetAdjustedBoardPosition(data.position);
+                bp.y = data.position.y;
+                obj.transform.position = bp;
                 obj.transform.localScale = GetBalloonRestScale(scaleMult);
             }
 
@@ -538,8 +544,10 @@ namespace BalloonFlow
 
         // 밀집 레벨 안전 배율(scaleMult)로 풍선이 축소돼도 화면 높이(Y, 월드 업)는 유지.
         // footprint(X/Z)만 축소해 제거 시 pop 피드백이 납작해지지 않게 한다.
+        // ROLLBACK_BALLOON_FIXED_SCALE_Y_20260608: 이전 Y = _balloonScale (레벨/맵별 가변 → 레벨마다 높이 차이).
+        // [#2] Y 를 0.35 절대 고정. X/Z(footprint)는 맵사이즈(_balloonScale*scaleMult)대로 유지.
         private Vector3 GetBalloonRestScale(float scaleMult)
-            => new Vector3(_balloonScale * scaleMult, _balloonScale, _balloonScale * scaleMult);
+            => new Vector3(_balloonScale * scaleMult, BALLOON_FIXED_SCALE_Y, _balloonScale * scaleMult);
 
         /// <summary>
         /// Returns all non-popped balloons matching the specified color.
@@ -1712,6 +1720,7 @@ namespace BalloonFlow
 
             // 풍선 타일 영역 배율 적용 (레벨별 안전 배율 사용)
             Vector3 adjustedPos = GetAdjustedBoardPosition(position);
+            adjustedPos.y = position.y;   // [#2-B] 풍선 Y 위치 고정(0.1) 해제 → 자연 Y. 높이는 scale.y=0.35. (다트/기믹 무관)
             obj.transform.position = adjustedPos;
             float scaleMult = _levelSafeCalculated
                 ? Mathf.Max(_levelSafeWm, _levelSafeHm)
