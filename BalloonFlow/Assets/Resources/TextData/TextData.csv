@@ -52,8 +52,8 @@ popupmorelive.txtlife,{n},
 popupmorelive.txtsingleoutline,"Resume
 ",
 popupmorelive.txttitle,More Lives,
-popupnoads.txtdescription1,Remove forced ads forever!,
-popupnoads.txtdescription2,Keep optional bonus ads!,
+popupnoads.txtdescription1,Remove forced\n<color=#FFD700>ads forever!,
+popupnoads.txtdescription2,Keep optional\n<color=#FFD700>bonus ads!,
 popupprofile.txtbtntapavatar,Avatar,
 popupprofile.txtbtntapavataroutline,Avatar,
 popupprofile.txtbtntapframe,Frame,
@@ -66,20 +66,20 @@ popupprofile.txttitleoutline,Profile,
 popupresult.txtbtnsingle,Next,
 popup.txtbtnbuy,Buy,
 popupwinningstreak.txtbtnsingle,Play,
-popupwinningstreak.txtdescription,"Win levels to collect <color=#FFD700> Flames! </color>/nLonger streak, more rewards!",
+popupwinningstreak.txtdescription,"Win levels to collect <color=#FFD700> Flames! </color>\nLonger streak, more rewards!",
 popupwinningstreak.txttitle,Winning Streak,
 popupwinningstreakinfo.textclose,Tap to Continue,
 popupwinningstreakinfo.textdescription,"If you <color=#e7656b>fail</color> a level,\nyour multiplier will reset!",
-popupwinningstreakinfo.textinfo1,"Win levels,/ncollect <color=#FFD700> Flames! </color>",
-popupwinningstreakinfo.textinfo2,Multiply <color=#FFD700> Flames </color>/nup to x100!,
+popupwinningstreakinfo.textinfo1,"Win levels,\ncollect <color=#FFD700> Flames! </color>",
+popupwinningstreakinfo.textinfo2,Multiply <color=#FFD700> Flames </color>\nup to x100!,
 popupwinningstreakinfo.textinfo3,Get <color=#FFD700>rewards!,
 shoplistitem.textsale,{n}% OFF,
 상점 번들 이름 ,,
-shoplistitem.txttitleoutline.t1,Pop Pack,
-shoplistitem.txttitleoutline.t2,Super Pack,
-shoplistitem.txttitleoutline.t3,Mega Pack,
-shoplistitem.txttitleoutline.t4,Giant Pack,
-shoplistitem.txttitleoutline.t5,Ultimate Pack,
+shoplistitem.t1,Pop Pack,
+shoplistitem.t2,Super Pack,
+shoplistitem.t3,Mega Pack,
+shoplistitem.t4,Giant Pack,
+shoplistitem.t5,Ultimate Pack,
 slotwinningstreak.txtgrandprize,Grand Prize,
 spawner.magazinetext,0,
 tutorial.instructiontext,Tutorial instruction text,
@@ -128,7 +128,7 @@ error.payment.title,Error,
 error.payment.desc,Payment failed. Please try again.,
 error.success.title,Your Purchase was Completed,
 error.success.desc,Purchase successful!,
-popupgoldshop.txtdescription,"No Ads,/nJust Fun!",
+popupgoldshop.txtdescription,"No Ads,\nJust Fun!",
 ui.common.ok,OK,
 ui.common.cancel,Cancel,
 ui.common.close,Close,
@@ -146,7 +146,7 @@ uilobby.txtplay,,
 팝업 제목 ,,
 popup.txttitle,,
 popup.txttitle.moreLives,More Lives,
-popup..txttitle.quit,Quit Game?,안드로이드 백버튼 시 등장 (PopupDescription)
+popup.txttitle.quit,Quit Game?,안드로이드 백버튼 시 등장 (PopupDescription)
 popup.txttitle.networkerror,Not Connected,인터넷 연결 (PopupError)
 popup.txttitle.,,
 popup.txttitle.allclear,Congratulations!,Lv.300 클리어 후 또는 Lv.301 터치 시 (PopupDescription)
@@ -162,9 +162,9 @@ popup.txttitle.unlock,Unlock,PopupBuyItem
 ,,
 팝업 설명,,
 popup.txtdescription.quit,Do you really want to quit?,PopupDescription
-popup.txtdescription.networkerror,Your internet is disconnected.,PopupDescription
-popup.txtdescription.purchaseerror,Your purchase was canceled.,PopupDescription
-popup.txtdescription.purchasesuccess,Your purchase was completed.,PopupDescription
+popup.txtdescription.networkerror,Your internet is\ndisconnected.,PopupDescription
+popup.txtdescription.purchaseerror,Your purchase\nwas canceled.,PopupDescription
+popup.txtdescription.purchasesuccess,Your purchase\nwas completed.,PopupDescription
 popup.txtdescription.settingquit,You will lose a life!,PopupQuit
 popup.txtdescription.allclear,New Levels Coming Soon!,PopupDescription
 popup.txtdescription.hand,Place any box directly!,PopupBuyItem
