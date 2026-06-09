@@ -75,8 +75,10 @@ namespace BalloonFlow
         /// <summary>색상 적용 대상이 할당되었는지.</summary>
         public bool HasColorRenderers => _colorRenderers != null && _colorRenderers.Length > 0;
 
-        private static readonly System.Collections.Generic.Dictionary<int, Material> _matCache
-            = new System.Collections.Generic.Dictionary<int, Material>();
+        // ROLLBACK_HOLDER_MATCACHE_KEY_20260609: 홀더와 동일 — 여러 기믹 프리팹의 서로 다른 _baseMaterial 이 한 static 캐시를
+        //   공유하므로 XOR int 키는 (baseMat,color) 충돌 가능 → 일부 기믹 색 오표시(빌드별 InstanceID 차이로 빌드/일부만). (baseMat,color) 튜플 키로 충돌 차단.
+        private static readonly System.Collections.Generic.Dictionary<(int, Color), Material> _matCache
+            = new System.Collections.Generic.Dictionary<(int, Color), Material>();
 
         /// <summary>초기화 — 이펙트 비활성, HP 숨김.</summary>
         public void Initialize()
@@ -133,13 +135,15 @@ namespace BalloonFlow
             Material mat;
             if (_baseMaterial != null)
             {
-                int key = _baseMaterial.GetInstanceID() ^ color.GetHashCode();
+                var key = (_baseMaterial.GetInstanceID(), color);
                 if (!_matCache.TryGetValue(key, out mat))
                 {
                     mat = new Material(_baseMaterial);
                     mat.SetColor("_BaseColor", color);
-                    // [Optimization 2026-05-10 revert] GPU Instancing 채택.
-                    mat.enableInstancing = true;
+                    // ROLLBACK_HOLDER_VARIANT_STRIP_20260609: 홀더와 동일 — _baseMaterial 이 _NORMALMAP/_EMISSION 를 켠 기믹이면
+                    //   instancing 강제 ON 이 빌드에서 strip 되는 조합 variant 를 만들어 색이 틀릴 수 있음. 에셋 instancing 설정을 그대로 사용.
+                    //   (기믹은 소수라 instancing 손실 무시 가능. 롤백: 아래 한 줄 복원.)
+                    // mat.enableInstancing = true;
                     _matCache[key] = mat;
                 }
             }

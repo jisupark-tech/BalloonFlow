@@ -358,6 +358,15 @@ namespace BalloonFlow
         public string boosterType;
     }
 
+    /// <summary>A booster inventory count changed and UI should resync from BoosterManager.</summary>
+    public struct OnBoosterInventoryChanged
+    {
+        public string boosterType;
+        public int currentCount;
+        public int delta;
+        public string reason;
+    }
+
     /// <summary>A booster effect was applied to the game state.</summary>
     public struct OnBoosterEffectApplied
     {

@@ -31,6 +31,12 @@ namespace BalloonFlow
         [Tooltip("Hidden 기믹 상태 전용 머테리얼 (BalloonHidden.mat). 프리팹에 드래그 할당.")]
         [SerializeField] private Material _hiddenMaterial;
 
+        // ROLLBACK_BALLOON_HIGHLIGHT_TINT_20260609: 풍선 상단 하이라이트 이미지(balloonHighlight) 를 풍선 색으로 틴트(알파는 유지).
+        //   롤백: 이 필드 + Init() 자동탐색 + ApplyColor() 틴트 블록 제거.
+        [Header("[풍선 상단 하이라이트 이미지 — 풍선 색으로 틴트(알파는 유지)]")]
+        [Tooltip("balloonHighlight SpriteRenderer. 비워두면 Init 에서 자식에서 자동 탐색.")]
+        [SerializeField] private SpriteRenderer _highlightRenderer;
+
         /// <summary>Hidden 머테리얼 존재 여부.</summary>
         public bool HasHiddenMaterial => _hiddenMaterial != null;
 
@@ -52,6 +58,8 @@ namespace BalloonFlow
         /// <summary>외부 호출 entry — 사용자 요구로 Animator 제거. 현재 비어있음.</summary>
         public void Init()
         {
+            // ROLLBACK_BALLOON_HIGHLIGHT_TINT_20260609: 하이라이트 미할당 시 1회 자동 탐색(인스턴스에 캐시 — 풀 재사용 시 재탐색 없음).
+            if (_highlightRenderer == null) _highlightRenderer = GetComponentInChildren<SpriteRenderer>(true);
             // Animator 검색 + CullCompletely 설정 코드 제거됨.
             // [LEGACY 주석]
             // if (_animator == null) _animator = GetComponent<Animator>();
@@ -119,6 +127,15 @@ namespace BalloonFlow
                     _colorRenderers[i].enabled = true;
                     _colorRenderers[i].sharedMaterial = mat;
                 }
+            }
+
+            // ROLLBACK_BALLOON_HIGHLIGHT_TINT_20260609: 상단 하이라이트 이미지를 풍선 색(RGB)으로 틴트. 알파는 프리팹 값 그대로 유지.
+            //   SpriteRenderer.color 는 vertex stream 으로 들어가 sprite 배칭을 안 깸(머티리얼/MPB 변경 아님).
+            if (_highlightRenderer != null)
+            {
+                Color hc = color;
+                hc.a = _highlightRenderer.color.a;   // 알파 수정 X
+                _highlightRenderer.color = hc;
             }
         }
 

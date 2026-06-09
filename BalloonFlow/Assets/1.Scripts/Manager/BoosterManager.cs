@@ -102,6 +102,7 @@ namespace BalloonFlow
                 // Firestore 가 더 많음 — local 을 끌어올림 (PlayerPrefs 만 갱신, 이미 서버에 있는 값이라 push 불필요)
                 _inventory[id] = firestoreCount;
                 SaveInventory(id);
+                PublishInventoryChanged(id, firestoreCount - local, "ReconcileFromFirestore");
             }
             else if (local > firestoreCount)
             {
@@ -143,6 +144,7 @@ namespace BalloonFlow
             _inventory[boosterType]--;
             SaveInventory(boosterType);
             SyncBoosterToFirestore(boosterType, -1, "UseBooster");
+            PublishInventoryChanged(boosterType, -1, "UseBooster");
 
             EventBus.Publish(new OnBoosterUsed { boosterType = boosterType });
             Debug.Log($"[BoosterManager] Used {boosterType}. Remaining: {_inventory[boosterType]}");
@@ -175,6 +177,7 @@ namespace BalloonFlow
             _inventory[boosterType] += count;
             SaveInventory(boosterType);
             SyncBoosterToFirestore(boosterType, count, "AddBooster");
+            PublishInventoryChanged(boosterType, count, "AddBooster");
             Debug.Log($"[BoosterManager] Added {count}x {boosterType}. Total: {_inventory[boosterType]}");
         }
 
@@ -340,6 +343,17 @@ namespace BalloonFlow
                 PlayerPrefs.SetInt(PrefsKeyPrefix + boosterType, count);
                 PlayerPrefs.Save();
             }
+        }
+
+        private void PublishInventoryChanged(string boosterType, int delta, string reason)
+        {
+            EventBus.Publish(new OnBoosterInventoryChanged
+            {
+                boosterType = boosterType,
+                currentCount = GetBoosterCount(boosterType),
+                delta = delta,
+                reason = reason
+            });
         }
 
         #endregion

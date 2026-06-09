@@ -726,12 +726,21 @@ namespace BalloonFlow
         public static Material GetOutlineHullMaterial()
         {
             if (_outlineHullMat != null) return _outlineHullMat;
-            if (_outlineShaderCached == null) _outlineShaderCached = Shader.Find("Custom/OutlineHull");
-            if (_outlineShaderCached == null) return null;
-            _outlineHullMat = new Material(_outlineShaderCached);
+
+            // ROLLBACK_OUTLINEHULL_BUILD_STRIP_20260609: 빌드 스트리핑 방지.
+            //   OutlineHull 셰이더는 코드(Shader.Find)에서만 참조 → 이를 쓰는 머티리얼 에셋이 없으면 빌드에서 strip 되어
+            //   Shader.Find 가 null → 빌드에서만 아웃라인 사라짐(에디터는 정상). Resources 머티리얼을 두면 빌드에 항상 포함됨.
+            //   Resources 우선 로드, 실패 시 기존 Shader.Find 폴백(에디터/안전망).
+            _outlineHullMat = Resources.Load<Material>("Materials/OutlineHull");
+            if (_outlineHullMat == null)
+            {
+                if (_outlineShaderCached == null) _outlineShaderCached = Shader.Find("Custom/OutlineHull");
+                if (_outlineShaderCached == null) return null;
+                _outlineHullMat = new Material(_outlineShaderCached);
+                _outlineHullMat.SetColor("_OutlineColor", Color.black);
+                _outlineHullMat.SetFloat("_OutlineWidth", 0.0005f); // 기본 두께 0.0005 (요구)
+            }
             _outlineHullMat.enableInstancing = true;
-            _outlineHullMat.SetColor("_OutlineColor", Color.black);
-            _outlineHullMat.SetFloat("_OutlineWidth", 0.0005f); // 기본 두께 0.0005 (요구)
             _outlinedTwins.Clear(); // 더 이상 사용 안 함(트윈 방식 폐기)
             return _outlineHullMat;
         }

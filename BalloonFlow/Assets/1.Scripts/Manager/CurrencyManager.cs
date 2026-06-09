@@ -170,6 +170,38 @@ namespace BalloonFlow
             });
         }
 
+        public bool RefreshFromUserDataCache()
+        {
+            // ROLLBACK_CURRENCY_USERDATA_CACHE_REFRESH_20260609:
+            // Coin spends still use CurrencyManager as the source of truth. This only pulls the
+            // already-loaded UserData cache into CurrencyManager before a purchase affordability check.
+            if (!UserDataService.HasInstance || !UserDataService.Instance.IsReady)
+                return false;
+
+            var user = UserDataService.Instance.CurrentUser;
+            if (user == null) return false;
+
+            if (_pendingServerCoinDelta != 0)
+            {
+                ReconcileFromFirestore();
+                return false;
+            }
+
+            int serverCoins = Mathf.Max(0, user.coins);
+            if (serverCoins == _currentCoins) return true;
+
+            int delta = serverCoins - _currentCoins;
+            _currentCoins = serverCoins;
+            SaveCoins();
+            EventBus.Publish(new OnCoinChanged
+            {
+                currentCoins = _currentCoins,
+                delta = delta
+            });
+            Debug.Log($"[CurrencyManager] Refreshed coins from UserData cache. coins={_currentCoins}, delta={delta}");
+            return true;
+        }
+
         /// <summary>
         /// Attempts to spend coins on a specified sink. Returns false if insufficient.
         /// Publishes OnCoinChanged on success.

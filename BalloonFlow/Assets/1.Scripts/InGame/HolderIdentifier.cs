@@ -500,7 +500,11 @@ namespace BalloonFlow
         /// _customBaseMaterial 기반 색상별 Material 클론 캐시.
         /// Normal Map, Smoothness 등 기반 Material 설정 유지 + 색상만 변경.
         /// </summary>
-        private static readonly Dictionary<int, Material> _customMatCache = new Dictionary<int, Material>();
+        // ROLLBACK_HOLDER_MATCACHE_KEY_20260609: (baseMat,color) 복합 키.
+        //   이전 `instanceID ^ color.GetHashCode()` XOR 단일 int 키는 서로 다른 (baseMat,color) 조합이 충돌 가능 →
+        //   홀더가 여러 베이스 머티리얼을 한 static 캐시에 섞어 쓰므로 일부 홀더 색이 다른 색으로 표시됨(빌드마다 InstanceID 가 달라 빌드에서만/일부만 재현).
+        //   튜플 키는 Dictionary 가 Equals 로 두 요소를 모두 비교 → 거짓 히트 불가.
+        private static readonly Dictionary<(int, Color), Material> _customMatCache = new Dictionary<(int, Color), Material>();
 
         private bool IsInCustomRenderers(Renderer r)
         {
@@ -525,13 +529,20 @@ namespace BalloonFlow
                 return null;
             }
 
-            int key = baseMat.GetInstanceID() ^ color.GetHashCode();
+            // ROLLBACK_HOLDER_MATCACHE_KEY_20260609: XOR 단일 int 키(충돌 가능) → (instanceID, color) 튜플 키.
+            var key = (baseMat.GetInstanceID(), color);
             if (_customMatCache.TryGetValue(key, out Material cached))
                 return cached;
 
             Material clone = new Material(baseMat);
             clone.SetColor("_BaseColor", color);
-            clone.enableInstancing = true;
+            // ROLLBACK_HOLDER_VARIANT_STRIP_20260609: instancing 강제 ON 제거 (빌드 색 오류의 진짜 원인).
+            //   baseMat 가 _NORMALMAP/_EMISSION(shader_feature) 를 켠 경우(BoxLidShared/IronBox), 런타임에서 instancing 을 더하면
+            //   "_NORMALMAP(+_EMISSION) + INSTANCING" 조합 variant 가 필요한데 이를 참조하는 에셋이 없어 빌드에서 strip →
+            //   잘못된 variant/fallback 로 렌더되어 색이 틀림(에디터는 on-demand 컴파일이라 정상). 다트/풍선은 _NORMALMAP OFF 라 무관.
+            //   new Material(baseMat) 가 baseMat 의 instancing 설정을 복사 → 클론 variant == 에셋 variant → 빌드에 항상 포함.
+            //   (홀더는 소수라 instancing 손실 무시 가능. 롤백: 아래 한 줄 복원.)
+            // clone.enableInstancing = true;
             _customMatCache[key] = clone;
             return clone;
         }

@@ -177,8 +177,20 @@ namespace BalloonFlow
         /// <summary>support 이메일로 문의 메일 작성 화면을 연다 (mailto).</summary>
         private void OnSupportsClicked()
         {
-            string subject = System.Uri.EscapeDataString("[BalloonFlow] 문의");
-            OpenUrlSafe($"mailto:{SUPPORT_EMAIL}?subject={subject}");
+            string deviceId = string.IsNullOrEmpty(SystemInfo.deviceUniqueIdentifier)
+                ? "unknown"
+                : SystemInfo.deviceUniqueIdentifier;
+            string version = string.IsNullOrEmpty(Application.version)
+                ? "unknown"
+                : Application.version;
+
+            // ROLLBACK_SUPPORT_MAIL_FORMAT_20260609:
+            // Support mail includes device/app context up front so CS can identify the user.
+            string subject = System.Uri.EscapeDataString($"Grand Games Car Match Support Ticket - 8 - {deviceId}");
+            string body = System.Uri.EscapeDataString(
+                $"DeviceID : {deviceId} Version {version}\r\n" +
+                "Please describe your issue here. We will get back to you as soon as possible.");
+            OpenUrlSafe($"mailto:{SUPPORT_EMAIL}?subject={subject}&body={body}");
         }
 
         private static void OpenUrlSafe(string url)

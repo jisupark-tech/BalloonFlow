@@ -458,6 +458,10 @@ namespace BalloonFlow
             // 스테이지 in-place 전환 시 GameSpeedController._toggleOn latch 와 HUD 비주얼/텍스트가 어긋날 수 있어,
             // OnLevelLoaded 발화에 맞춰 X1/X2 비주얼을 재동기화한다.
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
+            // ROLLBACK_HUD_BOOSTER_INVENTORY_SYNC_20260609:
+            // Booster counts can change through use, purchase rewards, unlock rewards, daily rewards,
+            // or Firestore reconcile. Refresh from the source of truth whenever inventory changes.
+            EventBus.Subscribe<OnBoosterInventoryChanged>(HandleBoosterInventoryChanged);
             // [2026-05-22] 씬 전환 시작 즉시 UIHud 강제 숨김 — Win/Fail Home, mid-game Settings→Quit 등 모든 로비 이탈 경로 커버.
             // latch off 경로에서 NotifyPopupClosed 가 PlayPopupCloseAnimation 으로 REST 복귀 연출을 트리거하던 재노출 차단.
             EventBus.Subscribe<OnSceneTransitionStarted>(HandleSceneTransitionStarted);
@@ -466,12 +470,20 @@ namespace BalloonFlow
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
+            EventBus.Unsubscribe<OnBoosterInventoryChanged>(HandleBoosterInventoryChanged);
             EventBus.Unsubscribe<OnSceneTransitionStarted>(HandleSceneTransitionStarted);
         }
 
         private void HandleLevelLoaded(OnLevelLoaded _)
         {
             RefreshSpeedToggleVisual();
+            RefreshBoosterCounts();
+            RefreshLockState();
+        }
+
+        private void HandleBoosterInventoryChanged(OnBoosterInventoryChanged _)
+        {
+            RefreshBoosterCounts();
         }
 
         private void HandleSceneTransitionStarted(OnSceneTransitionStarted _)
@@ -999,10 +1011,21 @@ namespace BalloonFlow
             popup.ShowBuyResult(GetBoosterDisplayName(boosterType), spr, "x3", price,
                 onConfirm: () =>
                 {
+                    if (CurrencyManager.HasInstance)
+                    {
+                        // ROLLBACK_BOOSTER_BUY_COIN_CACHE_REFRESH_20260609:
+                        // If UserData loaded after CurrencyManager's local PlayerPrefs cache, pull
+                        // the latest cached server balance before deciding whether the user can buy.
+                        CurrencyManager.Instance.RefreshFromUserDataCache();
+                    }
+
                     int coins = CurrencyManager.HasInstance ? CurrencyManager.Instance.Coins : -1;
+                    int serverCoins = UserDataService.HasInstance && UserDataService.Instance.IsReady && UserDataService.Instance.CurrentUser != null
+                        ? UserDataService.Instance.CurrentUser.coins
+                        : -1;
                     bool unlocked = BoosterManager.Instance.IsBoosterUnlocked(boosterType);
                     bool pending = _pendingItemRewardFx.Contains(boosterType);
-                    Debug.Log($"[UIHud] Buy booster confirm: type={boosterType}, price={price}, coins={coins}, unlocked={unlocked}, pendingFx={pending}");
+                    Debug.Log($"[UIHud] Buy booster confirm: type={boosterType}, price={price}, coins={coins}, serverCoins={serverCoins}, unlocked={unlocked}, pendingFx={pending}");
 
                     if (pending)
                     {
@@ -1014,7 +1037,8 @@ namespace BalloonFlow
                     // false 를 반환하므로, 사유를 선판정하지 않으면 코인이 충분한데도 "코인 부족"으로 오표시된다.
                     if (!CurrencyManager.HasInstance || !CurrencyManager.Instance.HasEnoughCoins(price))
                     {
-                        Debug.LogWarning($"[UIHud] Booster buy blocked by coins: type={boosterType}, price={price}, coins={coins}");
+                        Debug.LogWarning($"[UIHud] Booster buy blocked by coins: type={boosterType}, price={price}, coins={coins}, serverCoins={serverCoins}");
+                        if (CurrencyManager.HasInstance) CurrencyManager.Instance.PublishCoinSync();
                         var errCoins = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
                         if (errCoins != null) errCoins.ShowPaymentFailed("Not enough coins.");
                         return false;
@@ -1037,7 +1061,8 @@ namespace BalloonFlow
                         // 코인은 충분한데 차감 실패 → 코인 문제가 아님(미해금/매니저 부재 등). 실제 사유 로그 + 정직한 메시지.
                         Debug.LogWarning($"[UIHud] Booster 구매 실패(코인 충분): type={boosterType}, price={price}, " +
                             $"unlocked={BoosterManager.Instance.IsBoosterUnlocked(boosterType)}, " +
-                            $"coins={(CurrencyManager.HasInstance ? CurrencyManager.Instance.Coins : -1)}");
+                            $"coins={(CurrencyManager.HasInstance ? CurrencyManager.Instance.Coins : -1)}, serverCoins={serverCoins}");
+                        if (CurrencyManager.HasInstance) CurrencyManager.Instance.PublishCoinSync();
                         var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
                         if (err != null) err.Show("Purchase Failed", "Purchase could not be completed. Please try again.");
                         return false;

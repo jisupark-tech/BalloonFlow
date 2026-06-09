@@ -374,7 +374,9 @@ namespace BalloonFlow
 
             if (show)
             {
-                string label = difficulty == DifficultyPurpose.SuperHard ? "Super Hard Level" : "Hard Level";
+                // 텍스트는 TextData(LocalizationService)에서 — SuperHard→ui.superhard, Hard→ui.hard. (하드코딩 "Super Hard Level"/"Hard Level" 제거)
+                string label = LocalizationService.Get(
+                    difficulty == DifficultyPurpose.SuperHard ? "ui.superhard" : "ui.hard");
                 if (_txtHardLevel != null) _txtHardLevel.text = label;
                 if (_txtHardLevelOutline != null) _txtHardLevelOutline.text = label;
 
