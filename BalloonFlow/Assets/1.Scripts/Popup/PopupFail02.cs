@@ -60,6 +60,13 @@ namespace BalloonFlow
         private const int OVERLAY_SORT_ORDER = 260; // Tutorial(=250) 위에 항상 표시 — 사용자 요청 2026-06-04
         private Canvas _overrideCanvas;
 
+        // PopupFail02 Sorting Order 사양 (FX=240/ImageStage=243/Gold=244/TxtGoldOutline=247/TxtGold=248)
+        private const int REWARD_ORDER_FX               = 240;
+        private const int REWARD_ORDER_IMAGE_STAGE      = 243;
+        private const int REWARD_ORDER_GOLD             = 244;
+        private const int REWARD_ORDER_TXT_GOLD_OUTLINE = 247;
+        private const int REWARD_ORDER_TXT_GOLD         = 248;
+
         // 난이도별 ImageLight 색상 (PopupResult와 동일)
         private static readonly Color LIGHT_NORMAL    = new Color(0x00 / 255f, 0x9B / 255f, 0xFF / 255f); // #009BFF
         private static readonly Color LIGHT_HARD      = new Color(0xAF / 255f, 0x20 / 255f, 0xE5 / 255f); // #AF20E5
@@ -135,6 +142,52 @@ namespace BalloonFlow
             return null;
         }
 
+        // PopupResult.ApplyRewardLayerOrder 와 동일 매핑 — 단, PopupFail02 는 절대값 사양(FX=240/ImageStage=243/
+        // Gold=244/TxtGoldOutline=247/TxtGold=248)을 그대로 부여 (parentCanvas+offset 패턴 미사용).
+        private void ApplyRewardSortingOrder(Transform rewardRoot, string layer)
+        {
+            AssignChildCanvasOrder(rewardRoot, "ImageStage",     REWARD_ORDER_IMAGE_STAGE,      layer);
+            AssignChildCanvasOrder(rewardRoot, "Gold",           REWARD_ORDER_GOLD,             layer);
+            ApplyFxSubtreeOrder(rewardRoot,                      REWARD_ORDER_FX,               layer);
+            AssignChildCanvasOrder(rewardRoot, "TxtGoldOutline", REWARD_ORDER_TXT_GOLD_OUTLINE, layer);
+            AssignChildCanvasOrder(rewardRoot, "TxtGold",        REWARD_ORDER_TXT_GOLD,         layer);
+        }
+
+        private static void AssignChildCanvasOrder(Transform root, string nodeName, int order, string layer)
+        {
+            Transform node = FindChildRecursive(root, nodeName);
+            if (node == null) return;
+            var canvas = node.GetComponent<Canvas>();
+            if (canvas == null) canvas = node.gameObject.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingLayerName = layer;
+            canvas.sortingOrder = order;
+        }
+
+        private static void ApplyFxSubtreeOrder(Transform rewardRoot, int order, string layer)
+        {
+            Transform fxNode = FindChildRecursive(rewardRoot, "FX");
+            if (fxNode == null) return;
+
+            var fxCanvas = fxNode.GetComponent<Canvas>();
+            if (fxCanvas == null) fxCanvas = fxNode.gameObject.AddComponent<Canvas>();
+            fxCanvas.overrideSorting = true;
+            fxCanvas.sortingLayerName = layer;
+            fxCanvas.sortingOrder = order;
+            if (fxNode.GetComponent<GraphicRaycaster>() == null)
+                fxNode.gameObject.AddComponent<GraphicRaycaster>();
+
+            var particles = fxNode.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < particles.Length; i++)
+            {
+                if (particles[i] == null) continue;
+                if (!particles[i].gameObject.activeSelf)
+                    particles[i].gameObject.SetActive(true);
+                if (!particles[i].isPlaying)
+                    particles[i].Play(true);
+            }
+        }
+
         private void EnsureFailOutlineBinding()
         {
             if (_txtFailOutline != null) return;
@@ -197,6 +250,17 @@ namespace BalloonFlow
                 _frame.ShowExitButton(true);
             }
             UpdateHardLevelOption(diff);
+
+            // Reward subtree sorting order 부여 — Canvas.overrideSorting 은 GameObject.activeInHierarchy=false 일 때
+            // silently 무시되므로 호출 전 활성화 보장 (PopupResult.cs:197-199 동일 메커니즘).
+            Transform rewardRoot = FindChildRecursive(transform, "Reward");
+            if (rewardRoot != null)
+            {
+                if (!rewardRoot.gameObject.activeSelf) rewardRoot.gameObject.SetActive(true);
+                Canvas parentCanvas = GetComponentInParent<Canvas>();
+                string layer = parentCanvas != null ? parentCanvas.sortingLayerName : "Default";
+                ApplyRewardSortingOrder(rewardRoot, layer);
+            }
         }
 
         private void OnDisable()
