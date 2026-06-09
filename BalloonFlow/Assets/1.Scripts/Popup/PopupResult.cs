@@ -24,11 +24,11 @@ namespace BalloonFlow
         private const int RESULT_COIN_COUNT = 10;
         private const int SCORE_PER_COIN_STEP = 500;
 
-        // PopupResult Sorting Order 사양 (ImageStage=243/Gold=244/FX=246/TxtGoldOutline=247/TxtGold=248)
+        // PopupResult Sorting Order 사양 (FX=240/ImageStage=243/Gold=244/TxtGoldOutline=247/TxtGold=248)
         // rewardBaseOrder(=PopupCanvas.sortingOrder+40, 보통 240) 기준 child offset.
         private const int OFFSET_REWARD_IMAGE_STAGE       = 3;
         private const int OFFSET_REWARD_GOLD              = 4;
-        private const int OFFSET_REWARD_FX                = 6;
+        private const int OFFSET_REWARD_FX                = 0;
         private const int OFFSET_REWARD_TXT_GOLD_OUTLINE  = 7;
         private const int OFFSET_REWARD_TXT_GOLD          = 8;
 
@@ -508,9 +508,9 @@ namespace BalloonFlow
         /// 각 노드에 새 sortingOrder 를 명시 부여.
         ///
         /// 디자이너 의도 layering (back → front, rewardBaseOrder=PopupCanvas+40, 보통 240):
+        ///   FX ParticleSystem  base+0  (= 240, 배경 파티클 — ImageStage 뒤에 묻혀도 OK)
         ///   ImageStage       base+3  (= 243)
         ///   Gold             base+4  (= 244)
-        ///   FX ParticleSystem base+6  (= 246, Gold 와 TxtGoldOutline 사이 — 코인 FX 가 텍스트 가리지 않도록)
         ///   TxtGoldOutline   base+7  (= 247)
         ///   TxtGold          base+8  (= 248, outline 위)
         /// </summary>
@@ -521,13 +521,12 @@ namespace BalloonFlow
             string layer = parentCanvas != null ? parentCanvas.sortingLayerName : "Default";
 
             // ROLLBACK_POPUP_RESULT_REWARD_FX_ORDER_BUMP
-            // PopupResult has nested frame/background canvases. Using parent+1..4 can leave
-            // Reward/FX behind authored popup children, which makes the FX visible only after
-            // moving it outside the canvas hierarchy. Keep the internal reward layering, but
-            // lift the whole reward stack above the popup frame.
+            // FX 는 ImageStage 뒤(=rewardBaseOrder+0, abs 240)로 내려 디자이너 사양에 맞춤 — 텍스트 가독성 확보.
+            // rewardBaseOrder = baseOrder+40 (=240) 자체가 PopupCanvas frame 위로 lift 되어 있으므로
+            // FX 가 사양상 backmost(=240) 여도 frame 뒤로는 가지 않음.
             int rewardBaseOrder = baseOrder + 40;
 
-            // PopupResult Sorting Order 사양 (ImageStage=243/Gold=244/TxtGoldOutline=247/TxtGold=248)
+            // PopupResult Sorting Order 사양 (FX=240/ImageStage=243/Gold=244/TxtGoldOutline=247/TxtGold=248)
             AssignChildCanvasOrder(rewardRoot, "ImageStage",     rewardBaseOrder + OFFSET_REWARD_IMAGE_STAGE,      layer);
             AssignChildCanvasOrder(rewardRoot, "Gold",           rewardBaseOrder + OFFSET_REWARD_GOLD,             layer);
             ApplyFxSubtreeOrder(rewardRoot,                      rewardBaseOrder + OFFSET_REWARD_FX,               layer);
@@ -536,15 +535,16 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// FX subtree (Reward/FX 의 모든 자손) 활성 + Play 보장 + FX node 에 Canvas override 부여
-        /// (ImageStage(base+1) / Gold(base+3) 사이 = order 위치 분리).
+        /// FX subtree (Reward/FX 의 모든 자손) 활성 + Play 보장 + FX node 에 Canvas override 부여.
+        /// FX 는 backmost(rewardBaseOrder+0=abs 240) — ImageStage(243)/Gold(244) 보다 뒤.
+        /// ParticleSystem 은 Reward subtree 외곽 배경 빛 역할.
         /// </summary>
         private static void ApplyFxSubtreeOrder(Transform rewardRoot, int order, string layer)
         {
             Transform fxNode = FindChildRecursive(rewardRoot, "FX");
             if (fxNode == null) return;
 
-            // FX node 자체에 Canvas override 부여 — sibling ImageStage(base+1) / Gold(base+3) 사이 (=order) 에 분리.
+            // FX node 자체에 Canvas override 부여 — backmost(rewardBaseOrder+0=abs 240) 로 분리.
             var fxCanvas = fxNode.GetComponent<Canvas>();
             if (fxCanvas == null) fxCanvas = fxNode.gameObject.AddComponent<Canvas>();
             fxCanvas.overrideSorting = true;
