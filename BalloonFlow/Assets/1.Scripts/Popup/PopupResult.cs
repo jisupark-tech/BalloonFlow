@@ -330,36 +330,9 @@ namespace BalloonFlow
                 if (stageSpr != null) _imageStage.sprite = stageSpr;
             }
 
-            // HardOptionColor: Normal 숨김 / Hard=framehard / SuperHard=frameSuperhard.
-            // 암묵 fallback (Hard 외 모든 비-Normal → Hard) 대신 switch 로 명시 — Awake() 의
-            // ResourceManager.UISpriteOr 가 둘 다 null 반환한 비정상 케이스에서는 흰색 박스 노출
-            // 방지를 위해 SetActive(false) 로 안전 처리.
-            if (_imageHardOptionColor != null)
-            {
-                Sprite hardOptSpr;
-                switch (difficulty)
-                {
-                    case DifficultyPurpose.Hard:
-                        hardOptSpr = _sprHardOptionHard;
-                        break;
-                    case DifficultyPurpose.SuperHard:
-                        hardOptSpr = _sprHardOptionSuperHard;
-                        break;
-                    default:
-                        hardOptSpr = null;
-                        break;
-                }
-
-                if (difficulty == DifficultyPurpose.Normal || hardOptSpr == null)
-                {
-                    _imageHardOptionColor.gameObject.SetActive(false);
-                }
-                else
-                {
-                    _imageHardOptionColor.sprite = hardOptSpr;
-                    _imageHardOptionColor.gameObject.SetActive(true);
-                }
-            }
+            // HardOptionColor 분기는 ApplyHardOptionColor 로 추출 — 외부에서 난이도 변경 시
+            // RefreshHardOptionColor() 진입점으로 즉시 갱신 가능.
+            ApplyHardOptionColor(difficulty);
 
             // HardLevelOption 표시: Normal=숨김, Hard/SuperHard=노출
             bool show = difficulty == DifficultyPurpose.Hard || difficulty == DifficultyPurpose.SuperHard;
@@ -413,6 +386,48 @@ namespace BalloonFlow
                     UIOutlineStyle.ApplyMaterialOrColor(_txtHardLevelOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
                     UIOutlineStyle.ApplyMaterialOrColor(_txtMultiplierOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
                 }
+            }
+        }
+
+        /// <summary>
+        /// 외부(난이도 토글 등)에서 팝업이 열린 상태에서도 _imageHardOptionColor 프레임 이미지를
+        /// 즉시 framehard/frameSuperhard 로 갱신할 수 있는 진입점.
+        /// </summary>
+        public void RefreshHardOptionColor(DifficultyPurpose difficulty)
+        {
+            ApplyHardOptionColor(difficulty);
+        }
+
+        // HardOptionColor: Normal 숨김 / Hard=framehard / SuperHard=frameSuperhard.
+        // 암묵 fallback (Hard 외 모든 비-Normal → Hard) 대신 switch 로 명시 — Awake() 의
+        // ResourceManager.UISpriteOr 가 둘 다 null 반환한 비정상 케이스에서는 흰색 박스 노출
+        // 방지를 위해 SetActive(false) 로 안전 처리.
+        private void ApplyHardOptionColor(DifficultyPurpose difficulty)
+        {
+            if (_imageHardOptionColor == null) return;
+
+            Sprite hardOptSpr;
+            switch (difficulty)
+            {
+                case DifficultyPurpose.Hard:
+                    hardOptSpr = _sprHardOptionHard;
+                    break;
+                case DifficultyPurpose.SuperHard:
+                    hardOptSpr = _sprHardOptionSuperHard;
+                    break;
+                default:
+                    hardOptSpr = null;
+                    break;
+            }
+
+            if (difficulty == DifficultyPurpose.Normal || hardOptSpr == null)
+            {
+                _imageHardOptionColor.gameObject.SetActive(false);
+            }
+            else
+            {
+                _imageHardOptionColor.sprite = hardOptSpr;
+                _imageHardOptionColor.gameObject.SetActive(true);
             }
         }
 
