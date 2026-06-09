@@ -18,8 +18,7 @@ namespace BalloonFlow
         private const float OkButtonOvershootScale = 1.1f;
 
         private Coroutine _okDelayCo;
-        private Tween _btnOkTween;
-        private Tween _btnSingleTween;
+        private Tween _okRootTween;
 
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
@@ -34,6 +33,10 @@ namespace BalloonFlow
         [Header("[Buttons]")]
         [Tooltip("프리팹의 OK 버튼 직접 링크")]
         [SerializeField] private Button _btnOk;
+
+        [Header("[OK Button Root — 등장 연출 대상]")]
+        [Tooltip("OKButton 루트 GameObject. 텍스트·이미지·프레임 모든 자식이 함께 스케일 등장. 미할당 시 _btnOk.transform.parent 자동 사용")]
+        [SerializeField] private Transform _okButtonRoot;
 
         [Header("[Feature Images — Inspector에서 할당]")]
         [Tooltip("newFeatureLoop.png 드래그")]
@@ -88,8 +91,7 @@ namespace BalloonFlow
                 StopCoroutine(_okDelayCo);
                 _okDelayCo = null;
             }
-            _btnOkTween?.Kill();
-            _btnSingleTween?.Kill();
+            _okRootTween?.Kill();
             base.OnDestroy();
             if (_btnOk != null) _btnOk.onClick.RemoveAllListeners();
             if (_frame != null)
@@ -155,20 +157,14 @@ namespace BalloonFlow
             if (_txtDescription != null) _txtDescription.text = description;
             if (_txtDescriptionOutline != null) _txtDescriptionOutline.text = description;
 
-            _btnOkTween?.Kill();
-            _btnSingleTween?.Kill();
-
-            if (_btnOk != null)
+            _okRootTween?.Kill();
+            var root = ResolveOkButtonRoot();
+            if (_btnOk != null) _btnOk.interactable = false;
+            if (_frame != null && _frame.BtnSingle != null) _frame.BtnSingle.interactable = false;
+            if (root != null)
             {
-                _btnOk.interactable = false;
-                _btnOk.transform.localScale = Vector3.zero;
-                _btnOk.gameObject.SetActive(false);
-            }
-            if (_frame != null && _frame.BtnSingle != null)
-            {
-                _frame.BtnSingle.interactable = false;
-                _frame.BtnSingle.transform.localScale = Vector3.zero;
-                _frame.BtnSingle.gameObject.SetActive(false);
+                root.localScale = Vector3.zero;
+                root.gameObject.SetActive(false);
             }
 
             OpenUI();
@@ -177,43 +173,37 @@ namespace BalloonFlow
             _okDelayCo = StartCoroutine(EnableOkButtonAfterDelay());
         }
 
+        private Transform ResolveOkButtonRoot()
+        {
+            if (_okButtonRoot != null) return _okButtonRoot;
+            if (_btnOk != null && _btnOk.transform.parent != null) return _btnOk.transform.parent;
+            if (_btnOk != null) return _btnOk.transform;
+            return null;
+        }
+
         private IEnumerator EnableOkButtonAfterDelay()
         {
             yield return new WaitForSecondsRealtime(OkButtonDelaySeconds);
 
-            if (_btnOk != null)
-            {
-                _btnOk.gameObject.SetActive(true);
-                _btnOk.transform.localScale = Vector3.zero;
+            var root = ResolveOkButtonRoot();
+            if (root == null) { _okDelayCo = null; yield break; }
 
-                _btnOkTween?.Kill();
-                var btnOk = _btnOk;
-                _btnOkTween = DOTween.Sequence()
-                    .Append(btnOk.transform.DOScale(Vector3.one * OkButtonOvershootScale, OkButtonScaleUpDuration).SetEase(Ease.OutQuad))
-                    .Append(btnOk.transform.DOScale(Vector3.one, OkButtonScaleDownDuration).SetEase(Ease.InQuad))
-                    .SetUpdate(true)
-                    .OnComplete(() =>
-                    {
-                        if (btnOk != null) btnOk.interactable = true;
-                    });
-            }
+            root.gameObject.SetActive(true);
+            root.localScale = Vector3.zero;
 
-            if (_frame != null && _frame.BtnSingle != null)
-            {
-                var btnSingle = _frame.BtnSingle;
-                btnSingle.gameObject.SetActive(true);
-                btnSingle.transform.localScale = Vector3.zero;
-
-                _btnSingleTween?.Kill();
-                _btnSingleTween = DOTween.Sequence()
-                    .Append(btnSingle.transform.DOScale(Vector3.one * OkButtonOvershootScale, OkButtonScaleUpDuration).SetEase(Ease.OutQuad))
-                    .Append(btnSingle.transform.DOScale(Vector3.one, OkButtonScaleDownDuration).SetEase(Ease.InQuad))
-                    .SetUpdate(true)
-                    .OnComplete(() =>
-                    {
-                        if (btnSingle != null) btnSingle.interactable = true;
-                    });
-            }
+            _okRootTween?.Kill();
+            var rootRef = root;
+            var btnOkRef = _btnOk;
+            var btnSingleRef = _frame != null ? _frame.BtnSingle : null;
+            _okRootTween = DOTween.Sequence()
+                .Append(rootRef.DOScale(Vector3.one * OkButtonOvershootScale, OkButtonScaleUpDuration).SetEase(Ease.OutQuad))
+                .Append(rootRef.DOScale(Vector3.one, OkButtonScaleDownDuration).SetEase(Ease.InQuad))
+                .SetUpdate(true)
+                .OnComplete(() =>
+                {
+                    if (btnOkRef != null) btnOkRef.interactable = true;
+                    if (btnSingleRef != null) btnSingleRef.interactable = true;
+                });
 
             _okDelayCo = null;
         }
