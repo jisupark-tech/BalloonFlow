@@ -155,7 +155,8 @@ namespace BalloonFlow
                 _imgBoxDim.gameObject.SetActive(true);
 
                 // Hard/SuperHard use dedicated box sprites. Normal keeps the prefab original.
-                Sprite targetSprite = GetDimBoxSprite(difficulty);
+                // SuperHard RedBox only when locked; Hard purpleBox applies to all dimmed Hard boxes.
+                Sprite targetSprite = GetDimBoxSprite(difficulty, isLocked);
                 if (targetSprite != null) _imgBoxDim.sprite = targetSprite;
 
                 _imgBoxDim.color = difficulty switch
@@ -197,12 +198,12 @@ namespace BalloonFlow
             return s_purpleBoxSprite;
         }
 
-        private Sprite GetDimBoxSprite(DifficultyPurpose difficulty)
+        private Sprite GetDimBoxSprite(DifficultyPurpose difficulty, bool isLocked)
         {
             switch (difficulty)
             {
                 case DifficultyPurpose.SuperHard:
-                    return GetRedBoxSprite() ?? _originalDimSprite;
+                    return isLocked ? (GetRedBoxSprite() ?? _originalDimSprite) : _originalDimSprite;
                 case DifficultyPurpose.Hard:
                     return GetPurpleBoxSprite() ?? _originalDimSprite;
                 default:
