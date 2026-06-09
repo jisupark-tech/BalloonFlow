@@ -330,20 +330,34 @@ namespace BalloonFlow
                 if (stageSpr != null) _imageStage.sprite = stageSpr;
             }
 
-            // HardOptionColor: Normal 숨김 / Hard·SuperHard 노출 + 스프라이트 교체
+            // HardOptionColor: Normal 숨김 / Hard=framehard / SuperHard=frameSuperhard.
+            // 암묵 fallback (Hard 외 모든 비-Normal → Hard) 대신 switch 로 명시 — Awake() 의
+            // ResourceManager.UISpriteOr 가 둘 다 null 반환한 비정상 케이스에서는 흰색 박스 노출
+            // 방지를 위해 SetActive(false) 로 안전 처리.
             if (_imageHardOptionColor != null)
             {
-                if (difficulty == DifficultyPurpose.Normal)
+                Sprite hardOptSpr;
+                switch (difficulty)
+                {
+                    case DifficultyPurpose.Hard:
+                        hardOptSpr = _sprHardOptionHard;
+                        break;
+                    case DifficultyPurpose.SuperHard:
+                        hardOptSpr = _sprHardOptionSuperHard;
+                        break;
+                    default:
+                        hardOptSpr = null;
+                        break;
+                }
+
+                if (difficulty == DifficultyPurpose.Normal || hardOptSpr == null)
                 {
                     _imageHardOptionColor.gameObject.SetActive(false);
                 }
                 else
                 {
+                    _imageHardOptionColor.sprite = hardOptSpr;
                     _imageHardOptionColor.gameObject.SetActive(true);
-                    Sprite hardOptSpr = difficulty == DifficultyPurpose.SuperHard
-                        ? _sprHardOptionSuperHard
-                        : _sprHardOptionHard;
-                    if (hardOptSpr != null) _imageHardOptionColor.sprite = hardOptSpr;
                 }
             }
 
