@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -36,6 +37,15 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprHand;
         [SerializeField] private Sprite _sprShuffle;
         [SerializeField] private Sprite _sprZap;
+
+        [Header("[Idle Motion — ImageItem 아이들 연출]")]
+        [SerializeField] private float _idleDelay = 1.0f;       // 매 루프 시작 전 대기 시간(초)
+        [SerializeField] private float _idleDuration = 0.3f;    // 1.0 → peak / peak → 1.0 각 구간 시간(초)
+        [SerializeField] private float _idlePeakScale = 1.2f;   // 원본 스케일 대비 피크 배율
+
+        private Sequence _idleSeq;
+        private Vector3 _imgItemOrigScale;
+        private bool _imgItemOrigScaleCaptured;
 
         private System.Action _onConfirm;
         private System.Func<bool> _onConfirmResult;
@@ -87,11 +97,42 @@ namespace BalloonFlow
         {
             GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
             if (!_paused) { PauseManager.Pause(); _paused = true; }
+            StartIdleMotion();
         }
 
         private void OnDisable()
         {
             if (_paused) { PauseManager.Resume(); _paused = false; }
+            StopIdleMotion();
+        }
+
+        private void StartIdleMotion()
+        {
+            if (_imgItem == null) return;
+
+            if (!_imgItemOrigScaleCaptured)
+            {
+                _imgItemOrigScale = _imgItem.transform.localScale;
+                _imgItemOrigScaleCaptured = true;
+            }
+
+            _idleSeq?.Kill();
+            _imgItem.transform.localScale = _imgItemOrigScale;
+
+            _idleSeq = DOTween.Sequence()
+                .AppendInterval(_idleDelay)
+                .Append(_imgItem.transform.DOScale(_imgItemOrigScale * _idlePeakScale, _idleDuration).SetEase(Ease.OutQuad))
+                .Append(_imgItem.transform.DOScale(_imgItemOrigScale, _idleDuration).SetEase(Ease.InQuad))
+                .SetLoops(-1, LoopType.Restart)
+                .SetUpdate(true);
+        }
+
+        private void StopIdleMotion()
+        {
+            _idleSeq?.Kill();
+            _idleSeq = null;
+            if (_imgItem != null && _imgItemOrigScaleCaptured)
+                _imgItem.transform.localScale = _imgItemOrigScale;
         }
 
         /// <summary>[#2] TopBar 잔액 GoldPanel 노출 토글.</summary>
@@ -117,6 +158,7 @@ namespace BalloonFlow
         protected override void OnDestroy()
         {
             base.OnDestroy();
+            StopIdleMotion();
             if (_frame != null)
             {
                 if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.RemoveAllListeners();
