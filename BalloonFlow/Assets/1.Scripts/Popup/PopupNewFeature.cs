@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -11,9 +12,14 @@ namespace BalloonFlow
     /// </summary>
     public class PopupNewFeature : UIBase
     {
-        private const float OkButtonDelaySeconds = 1.5f;
+        private const float OkButtonDelaySeconds = 3f;
+        private const float OkButtonScaleUpDuration = 0.18f;
+        private const float OkButtonScaleDownDuration = 0.12f;
+        private const float OkButtonOvershootScale = 1.1f;
 
         private Coroutine _okDelayCo;
+        private Tween _btnOkTween;
+        private Tween _btnSingleTween;
 
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
@@ -82,6 +88,8 @@ namespace BalloonFlow
                 StopCoroutine(_okDelayCo);
                 _okDelayCo = null;
             }
+            _btnOkTween?.Kill();
+            _btnSingleTween?.Kill();
             base.OnDestroy();
             if (_btnOk != null) _btnOk.onClick.RemoveAllListeners();
             if (_frame != null)
@@ -147,14 +155,19 @@ namespace BalloonFlow
             if (_txtDescription != null) _txtDescription.text = description;
             if (_txtDescriptionOutline != null) _txtDescriptionOutline.text = description;
 
+            _btnOkTween?.Kill();
+            _btnSingleTween?.Kill();
+
             if (_btnOk != null)
             {
                 _btnOk.interactable = false;
+                _btnOk.transform.localScale = Vector3.zero;
                 _btnOk.gameObject.SetActive(false);
             }
             if (_frame != null && _frame.BtnSingle != null)
             {
                 _frame.BtnSingle.interactable = false;
+                _frame.BtnSingle.transform.localScale = Vector3.zero;
                 _frame.BtnSingle.gameObject.SetActive(false);
             }
 
@@ -167,16 +180,41 @@ namespace BalloonFlow
         private IEnumerator EnableOkButtonAfterDelay()
         {
             yield return new WaitForSecondsRealtime(OkButtonDelaySeconds);
+
             if (_btnOk != null)
             {
                 _btnOk.gameObject.SetActive(true);
-                _btnOk.interactable = true;
+                _btnOk.transform.localScale = Vector3.zero;
+
+                _btnOkTween?.Kill();
+                var btnOk = _btnOk;
+                _btnOkTween = DOTween.Sequence()
+                    .Append(btnOk.transform.DOScale(Vector3.one * OkButtonOvershootScale, OkButtonScaleUpDuration).SetEase(Ease.OutQuad))
+                    .Append(btnOk.transform.DOScale(Vector3.one, OkButtonScaleDownDuration).SetEase(Ease.InQuad))
+                    .SetUpdate(true)
+                    .OnComplete(() =>
+                    {
+                        if (btnOk != null) btnOk.interactable = true;
+                    });
             }
+
             if (_frame != null && _frame.BtnSingle != null)
             {
-                _frame.BtnSingle.gameObject.SetActive(true);
-                _frame.BtnSingle.interactable = true;
+                var btnSingle = _frame.BtnSingle;
+                btnSingle.gameObject.SetActive(true);
+                btnSingle.transform.localScale = Vector3.zero;
+
+                _btnSingleTween?.Kill();
+                _btnSingleTween = DOTween.Sequence()
+                    .Append(btnSingle.transform.DOScale(Vector3.one * OkButtonOvershootScale, OkButtonScaleUpDuration).SetEase(Ease.OutQuad))
+                    .Append(btnSingle.transform.DOScale(Vector3.one, OkButtonScaleDownDuration).SetEase(Ease.InQuad))
+                    .SetUpdate(true)
+                    .OnComplete(() =>
+                    {
+                        if (btnSingle != null) btnSingle.interactable = true;
+                    });
             }
+
             _okDelayCo = null;
         }
 
