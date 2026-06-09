@@ -125,7 +125,12 @@ namespace BalloonFlow
                 // Shop/Setting page position. Lobby entry must always start from Main/Home.
                 _lobby.ShowMainPanelImmediate();
 
-                if (_lobby.BtnPlay != null) _lobby.BtnPlay.onClick.AddListener(OnPlayClicked);
+                if (_lobby.BtnPlay != null)
+                {
+                    _lobby.BtnPlay.onClick.AddListener(OnPlayClicked);
+                    // UIManager.OpenUI 가 캐시된 UILobby 를 재사용해 직전 진입 시 false 상태가 잔존하는 경우 방어.
+                    _lobby.BtnPlay.interactable = true;
+                }
                 if (_lobby.BtnGoldPlus != null) _lobby.BtnGoldPlus.onClick.AddListener(OnGoToShop);
                 if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.AddListener(OnGoToShop);
                 if (_lobby.BtnLifeBar != null) _lobby.BtnLifeBar.onClick.AddListener(OnLifeBarClicked);
@@ -265,6 +270,9 @@ namespace BalloonFlow
 
         void OnPlayClicked()
         {
+            // 인게임 진입 연출 중복 트리거 방지 — onClick 코드 invoke / 연타 양쪽 모두 차단.
+            if (_lobby != null && _lobby.BtnPlay != null && !_lobby.BtnPlay.interactable) return;
+
             if (_lobby != null) _lobby.PlayButtonPressAnim();
 
             if (!GameManager.HasInstance) return;
@@ -283,6 +291,9 @@ namespace BalloonFlow
                 int highest = LevelManager.Instance.GetHighestCompletedLevel();
                 levelId = highest > 0 ? highest + 1 : 1;
             }
+
+            // 인게임 진입 연출 중복 트리거 방지 — 씬 전환까지 차단 유지.
+            if (_lobby != null && _lobby.BtnPlay != null) _lobby.BtnPlay.interactable = false;
 
             // 로비 복귀 시 레벨업 감지에 사용 — 게임 시작 직전 PlayButton 에 표시되던 레벨을 저장.
             PlayerPrefs.SetInt(PREFS_KEY_LOBBY_LEVEL_AT_GAME_START, levelId);
