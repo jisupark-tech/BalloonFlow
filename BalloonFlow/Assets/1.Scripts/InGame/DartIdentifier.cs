@@ -141,15 +141,20 @@ namespace BalloonFlow
                     }
                 }
 
-                // 아웃라인 MPB 적용
-                if (_mpb == null) _mpb = new MaterialPropertyBlock();
-                for (int i = 0; i < _outlineOnlyRenderers.Length; i++)
+                // ROLLBACK_OUTLINE_PHASE2_DART_20260609: PHASE2 ON 일 때만 아웃라인 MPB 적용.
+                //   [2026-06-09 배칭 회귀] MPB(SetPropertyBlock) 자체가 SRP Batcher + GPU Resident Drawer 인스턴싱을 깸 →
+                //   OFF 동안엔 MPB 를 아예 안 찍어 다트 배칭 유지(200+ 개별 draw 방지). PHASE2 는 베이크 방식으로 재검토.
+                if (BalloonController.EnableDartOutline_Phase2)
                 {
-                    if (_outlineOnlyRenderers[i] == null) continue;
-                    _outlineOnlyRenderers[i].GetPropertyBlock(_mpb);
-                    _mpb.SetFloat(_propOutlineEnabled, 1f);
-                    _mpb.SetColor(_propOutlineColor, Color.black); // Niddle 아웃라인은 모든 다트에서 검정 고정
-                    _outlineOnlyRenderers[i].SetPropertyBlock(_mpb);
+                    if (_mpb == null) _mpb = new MaterialPropertyBlock();
+                    for (int i = 0; i < _outlineOnlyRenderers.Length; i++)
+                    {
+                        if (_outlineOnlyRenderers[i] == null) continue;
+                        _outlineOnlyRenderers[i].GetPropertyBlock(_mpb);
+                        _mpb.SetFloat(_propOutlineEnabled, 1f);
+                        _mpb.SetColor(_propOutlineColor, Color.black); // Niddle 아웃라인은 모든 다트에서 검정 고정
+                        _outlineOnlyRenderers[i].SetPropertyBlock(_mpb);
+                    }
                 }
             }
         }

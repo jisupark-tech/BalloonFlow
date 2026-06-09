@@ -403,6 +403,9 @@ namespace BalloonFlow
 
             foreach (BalloonSetupData entry in layout)
             {
+                if (TrySpawnSizedIceAsCellBrush(entry))
+                    continue;
+
                 SpawnBalloonFromSetup(entry);
             }
 
@@ -600,13 +603,36 @@ namespace BalloonFlow
         /// 첫 호출: 모든 풍선 0 + 외곽 set 1. 이후: 이전 외곽 vs 새 외곽 diff 만 update.</summary>
         private static readonly int _propBalloonOutlineEnabled = Shader.PropertyToID("_OutlineEnabled");
         private static MaterialPropertyBlock _balloonMpb;
+        // ROLLBACK_OUTLINE_MATERIAL_SWAP_20260609 (Option A): 외곽 풍선 아웃라인 = MPB 대신 머티리얼 swap.
+        //   MPB 는 SRP Batcher 를 깸 → 내부 1500 배칭 유지 위해, 외곽선 대상만 multi-pass outline 셰이더 머티리얼로 교체.
+        //   _outlinedTwins: 원본 머티리얼 → outline 트윈(셰이더만 ItemSharedOutline) 캐시(공유). _balloonOutlinedOriginals: 복원용 원본 보관.
+        //   롤백: ApplyOutlineToBalloon 을 MPB 버전으로 복원 + 이 3 필드 제거 + ItemSharedOutline.shader 삭제.
+        private static Shader _outlineShaderCached;
+        private static Material _outlineHullMat; // 공유 Custom/OutlineHull 머티리얼(모든 외곽선 material[1] 공용 → 한 배치)
+        private static readonly Dictionary<Material, Material> _outlinedTwins = new Dictionary<Material, Material>(); // (구 트윈 방식 — 미사용)
+        private readonly Dictionary<int, Material[]> _balloonOutlinedOriginals = new Dictionary<int, Material[]>();
         private readonly HashSet<int> _prevOutermostSet = new HashSet<int>();
         private readonly List<int> _outerDiffBuffer = new List<int>(64);
         private bool _hasAppliedOutermostOutline;
         private float _lastOutermostRefreshTime;
 
+        // ROLLBACK_OUTLINE_PHASES_20260609: 3D 퀄업 아웃라인 단계별 게이트 (ItemShared Outline Pass 부활 전제).
+        //   PHASE1 = 보관함 front-row (HolderIdentifier 가 직접, 별도 플래그 없음 — 항상 ON).
+        //   PHASE2 = 다트 아웃라인 → 진행 시 EnableDartOutline_Phase2 = true.
+        //   PHASE3 = 외곽 contour 풍선 아웃라인 → 진행 시 EnableContourOutline_Phase3 = true.
+        //   PHASE4 = 풍선 광택(_GLOSS) — 셰이더/머티리얼 별도(미구현).
+        //   롤백: 두 플래그 false 로 두면 해당 단계 비활성(Pass 는 살아있어도 ON 오브젝트 없음 → batch 유지).
+        public static bool EnableDartOutline_Phase2 = false;
+        // ROLLBACK_OUTLINE_PHASE3_ON_20260609: 풍선 contour(최외각) 아웃라인 ON (Option A 머티리얼 swap).
+        //   contour 풍선만 ItemSharedOutline 머티리얼로 swap(MPB 아님) → 그 소수(~수십)만 multi-pass 개별 draw.
+        //   내부 1500 은 ItemShared(single-pass) 유지 → SRP Batch. (과거 프레임드랍 = 공유 셰이더 multi-pass 였음 — 해결.)
+        public static bool EnableContourOutline_Phase3 = true;
+
         public void RefreshOutermostRendererState()
         {
+            // ROLLBACK_OUTLINE_PHASE3_CONTOUR_20260609: PHASE3 OFF 동안 외곽 contour 아웃라인 미적용
+            //   → 풍선에 MPB 안 찍어 instanced batch 유지(PHASE1 격리). PHASE3 진행 시 플래그 true.
+            if (!EnableContourOutline_Phase3) return;
             // [Outline 2026-05-10] 가드 제거 — Lobby/MapMaker/직접 InGame 진입 등 다양한 경로에서 inspector toggle 의존 없이 항상 작동.
             // 롤백: 아래 주석 라인 해제.
             // if (!_outlineOnOuterOnly) return;
@@ -652,22 +678,15 @@ namespace BalloonFlow
             _outerDiffBuffer.Clear();
             if (!_hasAppliedOutermostOutline)
             {
-                // ROLLBACK_OUTLINE_DIFF_APPLY:
-                // First pass must sweep every balloon because material defaults may have outline on.
-                var en = _balloonObjects.GetEnumerator();
-                try
+                // ROLLBACK_OUTLINE_SUBSET_MPB_20260609: 첫 패스 전수 sweep 폐지 → contour(외곽)만 MPB.
+                //   비-contour 1500 은 머티리얼 default _OutlineEnabled=0 이라 MPB 불필요 → MPB 안 찍어 인스턴싱/배칭 유지.
+                //   (과거: 전부 sweep → 1500 MPB → SRP Batcher/GRD 깨짐 → 2140 개별 draw. 그게 프레임드랍 원인.)
+                //   롤백: 아래를 _balloonObjects 전수 루프 + ApplyOutlineToBalloon(id, isContour) 로 복원.
+                foreach (int id in contourCol)
                 {
-                    while (en.MoveNext())
-                    {
-                        int id = en.Current.Key;
-                        bool isContour = contourSet != null
-                            ? contourSet.Contains(id)
-                            : ContainsContour(contourCol, id);
-                        ApplyOutlineToBalloon(id, isContour);
-                        if (isContour) _outerDiffBuffer.Add(id);
-                    }
+                    ApplyOutlineToBalloon(id, true);
+                    _outerDiffBuffer.Add(id);
                 }
-                finally { en.Dispose(); }
                 _hasAppliedOutermostOutline = true;
             }
             else
@@ -701,22 +720,60 @@ namespace BalloonFlow
             return false;
         }
 
+        // ROLLBACK_OUTLINE_MATERIAL_SWAP_20260609 (Option A): 머티리얼 swap 방식.
+        //   enable: 렌더러 sharedMaterial 을 outline 트윈으로 교체(원본 보관). disable: 원본 복원. MPB 미사용 → 내부 batch 무손상.
+        // public: 공유 outline-hull 머티리얼 1개(Custom/OutlineHull, single-pass). 모든 외곽선이 이 1개를 material[1] 로 공유 → 한 배치.
+        public static Material GetOutlineHullMaterial()
+        {
+            if (_outlineHullMat != null) return _outlineHullMat;
+            if (_outlineShaderCached == null) _outlineShaderCached = Shader.Find("Custom/OutlineHull");
+            if (_outlineShaderCached == null) return null;
+            _outlineHullMat = new Material(_outlineShaderCached);
+            _outlineHullMat.enableInstancing = true;
+            _outlineHullMat.SetColor("_OutlineColor", Color.black);
+            _outlineHullMat.SetFloat("_OutlineWidth", 0.0005f); // 기본 두께 0.0005 (요구)
+            _outlinedTwins.Clear(); // 더 이상 사용 안 함(트윈 방식 폐기)
+            return _outlineHullMat;
+        }
+
+        // ROLLBACK_OUTLINE_MATERIAL_SWAP_20260609: 외곽선 = body 렌더러의 material[1] 에 공유 hull 추가/제거.
+        //   body = BalloonIdentifier.ColorRenderers (그림자/라벨 제외 — prefab 구성 유지). MPB/멀티패스 셰이더 안 씀.
+        //   → body(material[0]) 는 그대로 SRP batch, hull(material[1]=공유 1개) 끼리 한 배치. 풍선 1500 무손상.
         private void ApplyOutlineToBalloon(int balloonId, bool enableOutline)
         {
-            if (!_balloonObjects.TryGetValue(balloonId, out GameObject obj) || obj == null) return;
-            if (!_balloonRenderers.TryGetValue(balloonId, out Renderer[] cachedRenderers))
+            if (!_balloonObjects.TryGetValue(balloonId, out GameObject obj) || obj == null)
             {
-                cachedRenderers = obj.GetComponentsInChildren<Renderer>(includeInactive: true);
-                _balloonRenderers[balloonId] = cachedRenderers;
+                _balloonOutlinedOriginals.Remove(balloonId);
+                return;
             }
-            float v = enableOutline ? 1f : 0f;
-            for (int r = 0; r < cachedRenderers.Length; r++)
+            BalloonIdentifier bi = obj.GetComponent<BalloonIdentifier>();
+            Renderer[] bodyRenderers = (bi != null) ? bi.ColorRenderers : null;
+            if (bodyRenderers == null || bodyRenderers.Length == 0) return;
+
+            if (enableOutline)
             {
-                var rend = cachedRenderers[r];
-                if (rend == null) continue;
-                rend.GetPropertyBlock(_balloonMpb);
-                _balloonMpb.SetFloat(_propBalloonOutlineEnabled, v);
-                rend.SetPropertyBlock(_balloonMpb);
+                if (_balloonOutlinedOriginals.ContainsKey(balloonId)) return; // 이미 outlined
+                Material hull = GetOutlineHullMaterial();
+                if (hull == null) return;
+                var originals = new Material[bodyRenderers.Length];
+                for (int r = 0; r < bodyRenderers.Length; r++)
+                {
+                    var rend = bodyRenderers[r];
+                    if (rend == null) continue;
+                    originals[r] = rend.sharedMaterial;                                  // 단일 body 머티리얼 보관
+                    rend.sharedMaterials = new Material[] { rend.sharedMaterial, hull }; // material[1] 에 hull 추가
+                }
+                _balloonOutlinedOriginals[balloonId] = originals;
+            }
+            else
+            {
+                if (!_balloonOutlinedOriginals.TryGetValue(balloonId, out Material[] originals)) return;
+                for (int r = 0; r < bodyRenderers.Length && r < originals.Length; r++)
+                {
+                    var rend = bodyRenderers[r];
+                    if (rend != null && originals[r] != null) rend.sharedMaterial = originals[r]; // 단일 머티리얼로 복원(hull 제거)
+                }
+                _balloonOutlinedOriginals.Remove(balloonId);
             }
         }
 
@@ -1274,6 +1331,7 @@ namespace BalloonFlow
             //       다음 레벨의 balloonId=1 풍선이 stale Renderer[] / outline state / cached position 과 collision.
             _balloonRenderers.Clear();
             _prevOutermostSet.Clear();
+            _balloonOutlinedOriginals.Clear(); // ROLLBACK_OUTLINE_MATERIAL_SWAP_20260609: outline swap 원본 상태 정리(stale 방지)
             _hasAppliedOutermostOutline = false;
             _frameCachedPositions.Clear();
             _frameCachedPositionsFrame = -1;
@@ -1292,6 +1350,60 @@ namespace BalloonFlow
         #endregion
 
         #region Private Methods — Setup
+
+        private bool TrySpawnSizedIceAsCellBrush(BalloonSetupData entry)
+        {
+            if (entry == null) return false;
+
+            string normalized = GimmickDisplayName.Normalize(entry.gimmickType);
+            int width = Mathf.Max(1, entry.sizeW);
+            int height = Mathf.Max(1, entry.sizeH);
+            if (normalized != GimmickIce || (width <= 1 && height <= 1))
+                return false;
+
+            // ROLLBACK_ICE_CELL_BRUSH_20260609:
+            // Legacy levels may still contain one Ice layout with sizeW/sizeH > 1. Ice size is a
+            // brush footprint, not one scaled object, so split it into real 1x1 Ice cells at load.
+            float spacing = _cellSpacing > 0.0001f ? _cellSpacing : 0.55f;
+            for (int dx = 0; dx < width; dx++)
+            {
+                for (int dz = 0; dz < height; dz++)
+                {
+                    SpawnBalloonFromSetup(CreateIceCellSetup(entry, normalized, dx, dz, spacing));
+                }
+            }
+
+            return true;
+        }
+
+        private BalloonSetupData CreateIceCellSetup(BalloonSetupData source, string normalizedGimmick, int dx, int dz, float spacing)
+        {
+            return new BalloonSetupData
+            {
+                color = source.color,
+                position = new Vector3(
+                    source.position.x + dx * spacing,
+                    source.position.y,
+                    source.position.z + dz * spacing),
+                gimmickType = normalizedGimmick,
+                groupId = source.groupId,
+                sizeW = 1,
+                sizeH = 1,
+                hp = source.hp,
+                lockPairId = source.lockPairId,
+                iceBlockSize = Mathf.Max(1, source.iceBlockSize),
+                iceGroupId = source.iceGroupId,
+                iceGroupHp = source.iceGroupHp,
+                iceGroupHpMode = source.iceGroupHpMode,
+                barricadeDir = source.barricadeDir,
+                barricadeLength = source.barricadeLength,
+                eggColors = source.eggColors,
+                eggHps = source.eggHps,
+                flexTubeGroupId = source.flexTubeGroupId,
+                flexTubePartType = source.flexTubePartType,
+                flexTubeSequenceIndex = source.flexTubeSequenceIndex
+            };
+        }
 
         private void SpawnBalloonFromSetup(BalloonSetupData entry)
         {
@@ -2093,12 +2205,21 @@ namespace BalloonFlow
             // The root/head stays on the authored anchor cell. Only BarricadeBody covers the extra cells.
             Vector3 adjustedAnchor = GetAdjustedBoardPosition(data.position);
             // ROLLBACK_BARRICADE_UNIFORM_SCALE_20260608: 수평 균일 스케일(X=Z) — Y회전 shear 방지 + head 두께 fit 시 모든 조각 비율 유지.
+            // ROLLBACK_BARRICADE_HEAD_CENTER_20260609:
+            // MapMaker's anchor is the first occupied cell (a=0,p=0), while the Barricade head
+            // is authored as a 2x2 visual. Move the visual target from the first cell center to
+            // the head footprint center so x/z lines up with the authored footprint.
+            Vector3 alongDir = bdir == 1 ? Vector3.right : bdir == 3 ? Vector3.left : bdir == 0 ? Vector3.forward : Vector3.back;
+            Vector3 perpDir = vertical ? Vector3.right : Vector3.forward;
+            Vector3 headCenterOffset =
+                alongDir * ((BARRICADE_HEAD_CELLS - 1f) * 0.5f * (vertical ? cellSizeZ : cellSizeX)) +
+                perpDir * (0.5f * (vertical ? cellSizeX : cellSizeZ));
             float baseUniform = _balloonScale * scaleMult;
             obj.transform.localScale = new Vector3(baseUniform, baseUniform, baseUniform);
             obj.transform.position = new Vector3(
-                adjustedAnchor.x + _barricadeVisualOffset.x,
+                adjustedAnchor.x + headCenterOffset.x + _barricadeVisualOffset.x,
                 _barricadeVisualY + _barricadeVisualOffset.y,
-                adjustedAnchor.z + _barricadeVisualOffset.z);
+                adjustedAnchor.z + headCenterOffset.z + _barricadeVisualOffset.z);
 
             // GimmickIdentifier 에 Head/Body/Edge 가 할당됨(사용자 확인). 미할당 시 이름 폴백.
             GimmickIdentifier gid = obj.GetComponent<GimmickIdentifier>();
@@ -2443,16 +2564,11 @@ namespace BalloonFlow
             var regions = GetIceRegions();
             if (regions.Count == 0) return;
 
-            GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ);
-
             for (int r = 0; r < regions.Count; r++)
             {
                 var region = regions[r];
-                int blockSize = 1;
-                if (region.Count > 0 && _balloons.TryGetValue(region[0], out BalloonData first))
-                    blockSize = Mathf.Max(1, first.iceBlockSize);
-
-                if (blockSize <= 1)
+                // ROLLBACK_ICE_CELL_BRUSH_20260609:
+                // Ice brush size paints multiple real 1x1 Ice cells. Render every authored cell.
                 {
                     // 셀당 오버레이 (기본)
                     for (int i = 0; i < region.Count; i++)
@@ -2464,10 +2580,7 @@ namespace BalloonFlow
                             AttachFrozenOverlay(id, obj);
                         }
                     }
-                    continue;
                 }
-
-                RenderIceRegionBlocks(region, blockSize, cellSizeX, cellSizeZ);
             }
         }
 
@@ -2625,15 +2738,17 @@ namespace BalloonFlow
             int variant = Random.Range(0, VARIATION_COUNT);
             switch (variant)
             {
+                // ROLLBACK_BALLOON_COLOR_VARIATION_HALF_20260609: 변주 범위 절반(체감 5~8% → 2~4%).
+                //   진한: S+0.03→+0.015, V-0.03→-0.015 / 연한: S-0.04→-0.02, V+0.03→+0.015. 롤백 시 원래 델타 복원.
                 case 1: // 진한 톤 (미세 변주)
                     Color.RGBToHSV(baseColor, out float h1, out float s1, out float v1);
                     // 그레이스케일(s≈0)은 saturation 변주 생략 (h=0 + s>0 = 빨강 끼어들음)
-                    float newS1 = s1 < 0.01f ? 0f : Mathf.Min(s1 + 0.03f, 1f);
-                    return Color.HSVToRGB(h1, newS1, Mathf.Max(v1 - 0.03f, 0.2f));
+                    float newS1 = s1 < 0.01f ? 0f : Mathf.Min(s1 + 0.015f, 1f);
+                    return Color.HSVToRGB(h1, newS1, Mathf.Max(v1 - 0.015f, 0.2f));
                 case 2: // 연한 톤 (미세 변주)
                     Color.RGBToHSV(baseColor, out float h2, out float s2, out float v2);
-                    float newS2 = s2 < 0.01f ? 0f : Mathf.Max(s2 - 0.04f, 0.1f);
-                    return Color.HSVToRGB(h2, newS2, Mathf.Min(v2 + 0.03f, 1f));
+                    float newS2 = s2 < 0.01f ? 0f : Mathf.Max(s2 - 0.02f, 0.1f);
+                    return Color.HSVToRGB(h2, newS2, Mathf.Min(v2 + 0.015f, 1f));
                 default: // 기본 톤
                     return baseColor;
             }
@@ -3054,6 +3169,17 @@ namespace BalloonFlow
         /// 특정 풍선의 FrozenLayer 오버레이를 풀로 반환 (해동/팝/클리어 시 호출).
         /// 풍선 본체 비주얼 다시 보이게 복원.
         /// </summary>
+        private void ReturnFrozenOverlayInstance(GameObject overlay)
+        {
+            if (overlay == null) return;
+            ResetFrozenOverlayMagazineText(overlay);
+            overlay.transform.SetParent(null, false);
+            if (ObjectPoolManager.HasInstance)
+                ObjectPoolManager.Instance.Return(FrozenLayerPoolKey, overlay);
+            else
+                overlay.SetActive(false);
+        }
+
         private void ReturnFrozenOverlay(int balloonId)
         {
             if (!_frozenOverlays.TryGetValue(balloonId, out GameObject overlay)) return;
@@ -3066,13 +3192,7 @@ namespace BalloonFlow
                 if (bi != null) bi.SetVisible(true);
             }
 
-            if (overlay == null) return;
-            ResetFrozenOverlayMagazineText(overlay);
-            overlay.transform.SetParent(null, false);
-            if (ObjectPoolManager.HasInstance)
-                ObjectPoolManager.Instance.Return(FrozenLayerPoolKey, overlay);
-            else
-                overlay.SetActive(false);
+            ReturnFrozenOverlayInstance(overlay);
         }
 
         /// <summary>모든 FrozenLayer 오버레이를 풀로 반환 (보드 클리어 시).
@@ -3091,13 +3211,7 @@ namespace BalloonFlow
                     if (bi != null) bi.SetVisible(true);
                 }
 
-                if (overlay == null) continue;
-                ResetFrozenOverlayMagazineText(overlay);
-                overlay.transform.SetParent(null, false);
-                if (ObjectPoolManager.HasInstance)
-                    ObjectPoolManager.Instance.Return(FrozenLayerPoolKey, overlay);
-                else
-                    overlay.SetActive(false);
+                ReturnFrozenOverlayInstance(overlay);
             }
             _frozenOverlays.Clear();
         }

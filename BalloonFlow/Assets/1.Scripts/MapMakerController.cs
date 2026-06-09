@@ -3828,6 +3828,9 @@ namespace BalloonFlow
                         else if (isIceBlockGimmick && _paintColor >= 0)
                         {
                             // [Ice §11] B×B footprint 를 모두 개별 ice 셀로 채움 (흡수 X — 각 셀이 풍선).
+                            // ROLLBACK_ICE_CELL_BRUSH_20260609:
+                            // Ice size is a brush size, not a sized single object. Every covered
+                            // cell must stay as a real 1x1 Ice cell so the board is visibly filled.
                             int b = Mathf.Max(2, _paintWallSize);
                             for (int dx = 0; dx < b; dx++)
                                 for (int dy = 0; dy < b; dy++)
@@ -3839,7 +3842,7 @@ namespace BalloonFlow
                                     _balloonGimmickHP[cx, cy] = _paintPinataHP;
                                     _balloonIceBlockSize[cx, cy] = b;
                                     ApplyIceGroupBrushMeta(cx, cy, true);
-                                    _balloonPinataW[cx, cy] = 1; // 개별 셀 (sized 흡수 아님)
+                                    _balloonPinataW[cx, cy] = 1;
                                     _balloonPinataH[cx, cy] = 1;
                                     _balloonLockPairIds[cx, cy] = -1;
                                     _balloonFlexTubeGroupId[cx, cy] = -1;
@@ -6315,6 +6318,14 @@ namespace BalloonFlow
 
                         // Pinata_Box(Target Box): 알 config(anchor 별)를 복원. footprint 셀은 영역 표시용 uniform.
                         bool isTargetBox = normalizedGimmick == "Pinata_Box";
+                        bool isSizedIceLoad = normalizedGimmick == "Ice" && (bpw > 1 || bph > 1);
+                        if (isSizedIceLoad)
+                        {
+                            // ROLLBACK_ICE_CELL_BRUSH_20260609:
+                            // Old anchor-sized Ice becomes a normal 1x1 Ice cell on the anchor too.
+                            _balloonPinataW[col, row] = 1;
+                            _balloonPinataH[col, row] = 1;
+                        }
                         if (isTargetBox)
                         {
                             if (b.eggColors != null && b.eggColors.Length > 0)
@@ -6353,6 +6364,17 @@ namespace BalloonFlow
                                         _balloonGimmickHP[cx, cy] = b.hp > 0 ? b.hp : 2;
                                         _balloonPinataW[cx, cy] = 0; // 비앵커 표시
                                         _balloonPinataH[cx, cy] = 0;
+                                        if (isSizedIceLoad)
+                                        {
+                                            // ROLLBACK_ICE_CELL_BRUSH_20260609:
+                                            // Migrate old anchor-sized Ice into real 1x1 Ice cells on load.
+                                            _balloonPinataW[cx, cy] = 1;
+                                            _balloonPinataH[cx, cy] = 1;
+                                            _balloonIceBlockSize[cx, cy] = Mathf.Max(1, b.iceBlockSize);
+                                            _balloonIceGroupId[cx, cy] = b.iceGroupId;
+                                            _balloonIceGroupHp[cx, cy] = b.iceGroupHp;
+                                            _balloonIceGroupHpMode[cx, cy] = b.iceGroupHpMode == 2 ? 2 : 1;
+                                        }
                                     }
                                 }
                         }

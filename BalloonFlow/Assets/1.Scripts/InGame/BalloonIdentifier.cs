@@ -46,6 +46,9 @@ namespace BalloonFlow
         /// <summary>색상 적용 대상이 할당되었는지.</summary>
         public bool HasColorRenderers => _colorRenderers != null && _colorRenderers.Length > 0;
 
+        /// <summary>ROLLBACK_OUTLINE_MATERIAL_SWAP_20260609: body(색상) 렌더러 — 외곽선 hull 을 body 에만 붙이기 위함(그림자/라벨 제외).</summary>
+        public Renderer[] ColorRenderers => _colorRenderers;
+
         /// <summary>외부 호출 entry — 사용자 요구로 Animator 제거. 현재 비어있음.</summary>
         public void Init()
         {

@@ -70,6 +70,7 @@ namespace BalloonFlow
         public void Build(int w, int h, int[] eggColors, int[] eggHps, float cellSizeX, float cellSizeZ)
         {
             Clear();
+            ResolvePaintBoxLinks();
 
             if (_eggTemplate == null)
             {
@@ -218,8 +219,8 @@ namespace BalloonFlow
         private bool LooksLikeEggSample(Transform root)
         {
             if (root == null) return false;
-            if (!string.IsNullOrEmpty(_bodyChildName) && root.Find(_bodyChildName) != null) return true;
-            if (!string.IsNullOrEmpty(_textureChildName) && root.Find(_textureChildName) != null) return true;
+            if (!string.IsNullOrEmpty(_bodyChildName) && FindChildRecursive(root, _bodyChildName) != null) return true;
+            if (!string.IsNullOrEmpty(_textureChildName) && FindChildRecursive(root, _textureChildName) != null) return true;
             return false;
         }
 
@@ -308,7 +309,7 @@ namespace BalloonFlow
 
             // 색은 Cylinder 에만 (못 찾으면 texture 제외한 알 전체 폴백).
             if (body != null) ApplyMatToRenderers(body.gameObject, mat);
-            else if (mat != null) ApplyMatToRenderersExcept(egg, mat, tex);
+            else if (mat != null) ApplyMatToRenderersExcept(egg, mat, tex, GetFrameNameForExclusion());
 
             if (tex != null)
             {
@@ -332,7 +333,7 @@ namespace BalloonFlow
                 }
                 if (ok && t != cloneRoot) return t;
             }
-            return !string.IsNullOrEmpty(fallbackName) ? cloneRoot.Find(fallbackName) : null;
+            return !string.IsNullOrEmpty(fallbackName) ? FindChildRecursive(cloneRoot, fallbackName) : null;
         }
 
         // target 의 root 기준 자식 sibling-index 경로. target 이 root 하위가 아니면 null.
@@ -357,13 +358,14 @@ namespace BalloonFlow
                 if (rends[i] != null) rends[i].sharedMaterial = mat;
         }
 
-        private static void ApplyMatToRenderersExcept(GameObject root, Material mat, Transform exclude)
+        private static void ApplyMatToRenderersExcept(GameObject root, Material mat, Transform exclude, string excludeName)
         {
             var rends = root.GetComponentsInChildren<Renderer>(true);
             for (int i = 0; i < rends.Length; i++)
             {
                 if (rends[i] == null) continue;
                 if (exclude != null && rends[i].transform.IsChildOf(exclude)) continue;
+                if (!string.IsNullOrEmpty(excludeName) && IsSelfOrParentNamed(rends[i].transform, excludeName)) continue;
                 rends[i].sharedMaterial = mat;
             }
         }
@@ -373,9 +375,103 @@ namespace BalloonFlow
             sizeX = 0f; sizeZ = 0f;
             var rends = _eggTemplate.GetComponentsInChildren<Renderer>(true);
             if (rends == null || rends.Length == 0) return;
-            Bounds b = rends[0].bounds;
-            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+            string frameName = GetFrameNameForExclusion();
+            bool hasBounds = false;
+            Bounds b = default;
+            for (int i = 0; i < rends.Length; i++)
+            {
+                if (rends[i] == null) continue;
+                if (!string.IsNullOrEmpty(frameName) && IsSelfOrParentNamed(rends[i].transform, frameName)) continue;
+
+                if (!hasBounds)
+                {
+                    b = rends[i].bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    b.Encapsulate(rends[i].bounds);
+                }
+            }
+            if (!hasBounds) return;
             sizeX = b.size.x; sizeZ = b.size.z;
+        }
+
+        private void ResolvePaintBoxLinks()
+        {
+            // ROLLBACK_TARGETBOX_PREFAB_LINK_REPAIR_20260609:
+            // paint.prefab should keep "paintbox" as a frame only. Build must clone/color the
+            // egg template, not the frame, even if the prefab links were left empty or miswired.
+            if (_frame == null)
+                _frame = FindChildRecursive(transform, "paintbox");
+
+            bool templateIsFrame = _eggTemplate != null
+                && _frame != null
+                && (_eggTemplate.transform == _frame || _eggTemplate.transform.IsChildOf(_frame));
+
+            if (_eggTemplate == null || templateIsFrame || _eggTemplate.transform == transform)
+            {
+                Transform candidate = FindEggTemplateCandidate(transform);
+                if (candidate != null)
+                    _eggTemplate = candidate.gameObject;
+            }
+
+            if (_eggTemplate != null)
+            {
+                if (_bodyOnTemplate == null || !_bodyOnTemplate.IsChildOf(_eggTemplate.transform))
+                    _bodyOnTemplate = FindChildRecursive(_eggTemplate.transform, _bodyChildName);
+                if (_textureOnTemplate == null || !_textureOnTemplate.IsChildOf(_eggTemplate.transform))
+                    _textureOnTemplate = FindChildRecursive(_eggTemplate.transform, _textureChildName);
+            }
+        }
+
+        private Transform FindEggTemplateCandidate(Transform root)
+        {
+            if (root == null) return null;
+
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform child = root.GetChild(i);
+                if (child == null) continue;
+                if (_frame != null && (child == _frame || child.IsChildOf(_frame))) continue;
+
+                if (FindChildRecursive(child, _bodyChildName) != null
+                    || FindChildRecursive(child, _textureChildName) != null)
+                {
+                    return child;
+                }
+            }
+
+            return null;
+        }
+
+        private string GetFrameNameForExclusion()
+        {
+            return _frame != null && !string.IsNullOrEmpty(_frame.name) ? _frame.name : "paintbox";
+        }
+
+        private static Transform FindChildRecursive(Transform root, string childName)
+        {
+            if (root == null || string.IsNullOrEmpty(childName)) return null;
+            if (root.name == childName) return root;
+
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform found = FindChildRecursive(root.GetChild(i), childName);
+                if (found != null) return found;
+            }
+
+            return null;
+        }
+
+        private static bool IsSelfOrParentNamed(Transform transform, string name)
+        {
+            while (transform != null)
+            {
+                if (transform.name == name) return true;
+                transform = transform.parent;
+            }
+            return false;
         }
 
         // 틀의 renderer bounds → footprint(w*cellSizeX × h*cellSizeZ)에 맞춰 스케일.

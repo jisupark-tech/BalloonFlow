@@ -94,7 +94,16 @@ namespace BalloonFlow
             if (_gameCamera == null) return;
 
             // 팝업(Settings/GoldShop/BuyItem 등)이 열려 있는 동안 다트 보관함 등 인게임 오브젝트 터치 차단.
-            if (PauseManager.IsPaused) return;
+            bool awaitingHolderSelection = BoosterExecutor.HasInstance
+                && BoosterExecutor.Instance.IsAwaitingHolderSelection;
+            bool awaitingBalloonClick = BoosterExecutor.HasInstance
+                && BoosterExecutor.Instance.IsAwaitingBalloonClick;
+            bool awaitingUseItemWorldSelection = awaitingHolderSelection || awaitingBalloonClick;
+
+            // ROLLBACK_USEITEM_PAUSE_WORLD_INPUT_20260609:
+            // UseItem pauses the game while Hand/Zap wait for a world click. Keep normal popup
+            // pause blocking, but allow only these interactive item selections to pass through.
+            if (PauseManager.IsPaused && !awaitingUseItemWorldSelection) return;
 
             // ROLLBACK_USEITEM_CLOSE_ONLY_INPUT_BLOCK:
             // Only the UseItem close buttons should swallow gameplay input. The dim/cutout UI
@@ -113,7 +122,7 @@ namespace BalloonFlow
             // ROLLBACK_ZAP_UI_HOLE_INPUT:
             // Zap(Color Remove) uses a UI dim with a cutout over the board. UI raycast state can
             // still be true there, so balloon picking must run before holder-only UI blocking.
-            if (BoosterExecutor.HasInstance && BoosterExecutor.Instance.IsAwaitingBalloonClick)
+            if (awaitingBalloonClick)
             {
                 if (BalloonController.HasInstance)
                 {
@@ -132,6 +141,11 @@ namespace BalloonFlow
                         return;
                     }
                 }
+
+                // ROLLBACK_USEITEM_ZAP_CONSUME_MISS_20260609:
+                // During Zap selection, a miss should not fall through into holder tapping while
+                // the UseItem popup is paused/open.
+                return;
             }
 
             var __raySw = InGamePerfLogger.StartSection();
@@ -160,8 +174,7 @@ namespace BalloonFlow
 
             if (holder == null) return;
 
-            bool boosterAwaiting = BoosterExecutor.HasInstance
-                && BoosterExecutor.Instance.IsAwaitingHolderSelection;
+            bool boosterAwaiting = awaitingHolderSelection;
 
             if (!boosterAwaiting
                 && HolderVisualManager.HasInstance

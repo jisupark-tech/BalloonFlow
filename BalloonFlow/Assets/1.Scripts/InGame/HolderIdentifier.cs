@@ -320,6 +320,13 @@ namespace BalloonFlow
         // 원본: private static readonly int _propMainColor = Shader.PropertyToID("_Color");
         private static readonly int _propMainColor = Shader.PropertyToID("_BaseColor");
         private static MaterialPropertyBlock _sharedMPB;
+        // ROLLBACK_HOLDER_OUTLINE_SWAP_20260609 (Option A): 홀더 아웃라인 = MPB → 머티리얼 swap.
+        //   ItemShared 는 single-pass 유지(배칭) + MPB 가 배칭 깸 → outline ON 상태에선 _colorRenderers/_customMatRenderers 를
+        //   ItemSharedOutline 트윈으로 교체, OFF 면 원본 복원. 홀더 소수(~28)만 multi-pass 개별 draw → 풍선 1500 무손상.
+        //   롤백: ApplyMPBToAll/ClearMPBFromAll 을 MPB 버전으로 원복 + 이 필드/헬퍼 제거.
+        private bool _outlineSwapActive;
+        private Material[] _outlineOrigColor;
+        private Material[] _outlineOrigCustom;
 
         /// <summary>
         /// 미선택 상태: 흰색 블러 오버레이 + 흰색 아웃라인.
@@ -327,14 +334,8 @@ namespace BalloonFlow
         /// </summary>
         public void SetUnselected(bool unselected)
         {
-            if (_sharedMPB == null) _sharedMPB = new MaterialPropertyBlock();
-
-            float blur = unselected ? 0.45f : 0f;
-            Color blurCol = Color.white;
-            float outlineOn = unselected ? 1f : 0f;
-            Color outlineCol = Color.white;
-
-            ApplyMPBToAll(blur, blurCol, outlineOn, outlineCol);
+            // ROLLBACK_HOLDER_FIRSTROW_ONLY_20260609: 아웃라인은 "첫 줄(SetActiveFrontRow)만"으로 제한.
+            //   선택/미선택 상태는 outline 미관여 → 행 기반 결정 유지. (blur 는 셰이더 비활성이라 어차피 무효)
         }
 
         /// <summary>활성화 상태 (row 0): 검은색 아웃라인, 블러 없음, idle 애니메이션 재생.</summary>
@@ -353,64 +354,69 @@ namespace BalloonFlow
             if (_animator != null) _animator.enabled = false;
         }
 
-        /// <summary>선택됨 — 블러 해제 + 아웃라인 원복 (기반 Material 설정 따름).</summary>
+        /// <summary>선택됨 — ROLLBACK_HOLDER_FIRSTROW_ONLY_20260609: outline 은 행만 제어 → 선택은 미관여.</summary>
         public void SetSelected()
         {
-            if (_sharedMPB == null) _sharedMPB = new MaterialPropertyBlock();
-            // 블러 0 + 아웃라인은 기반 Material 기본값 사용 (MPB 제거)
-            ClearMPBFromAll();
         }
 
-        /// <summary>Chain 연결 표시 — 검은색 아웃라인만 적용 (블러 없음).</summary>
+        /// <summary>Chain 연결 표시 — ROLLBACK_HOLDER_FIRSTROW_ONLY_20260609: 첫 줄만 아웃라인 → chain 은 outline 미사용(필요 시 별도 연출).</summary>
         public void SetChainHighlight(bool active)
         {
-            if (_sharedMPB == null) _sharedMPB = new MaterialPropertyBlock();
-            ApplyMPBToAll(0f, Color.white, active ? 1f : 0f, Color.black);
         }
 
+        // ROLLBACK_HOLDER_OUTLINE_SWAP_20260609: 기존 MPB 적용 → 머티리얼 swap.
+        //   outlineOn>0.5 → ItemSharedOutline 트윈으로 교체, 아니면 원본 복원. blur 는 셰이더 비활성이라 무시.
+        //   (outline 색은 트윈 기본 검정 — front-row 검정. 흰색 등 색 분기는 단순화 위해 검정 통일.)
         private void ApplyMPBToAll(float blur, Color blurCol, float outlineOn, Color outlineCol)
         {
-            // _colorRenderers
-            if (_colorRenderers != null)
-            {
-                for (int i = 0; i < _colorRenderers.Length; i++)
-                {
-                    if (_colorRenderers[i] == null) continue;
-                    _colorRenderers[i].GetPropertyBlock(_sharedMPB);
-                    _sharedMPB.SetFloat(_propBlurAmount, blur);
-                    _sharedMPB.SetColor(_propBlurColor, blurCol);
-                    _sharedMPB.SetFloat(_propOutlineEnabled, outlineOn);
-                    _sharedMPB.SetColor(_propOutlineColor, outlineCol);
-                    _colorRenderers[i].SetPropertyBlock(_sharedMPB);
-                }
-            }
-            // _customMatRenderers
-            if (_customMatRenderers != null)
-            {
-                for (int i = 0; i < _customMatRenderers.Length; i++)
-                {
-                    if (_customMatRenderers[i] == null) continue;
-                    _customMatRenderers[i].GetPropertyBlock(_sharedMPB);
-                    _sharedMPB.SetFloat(_propBlurAmount, blur);
-                    _sharedMPB.SetColor(_propBlurColor, blurCol);
-                    _sharedMPB.SetFloat(_propOutlineEnabled, outlineOn);
-                    _sharedMPB.SetColor(_propOutlineColor, outlineCol);
-                    _customMatRenderers[i].SetPropertyBlock(_sharedMPB);
-                }
-            }
+            SwapOutlineMaterial(outlineOn > 0.5f);
         }
 
         private void ClearMPBFromAll()
         {
-            _sharedMPB.Clear();
-            if (_colorRenderers != null)
-                for (int i = 0; i < _colorRenderers.Length; i++)
-                    if (_colorRenderers[i] != null)
-                        _colorRenderers[i].SetPropertyBlock(_sharedMPB);
-            if (_customMatRenderers != null)
-                for (int i = 0; i < _customMatRenderers.Length; i++)
-                    if (_customMatRenderers[i] != null)
-                        _customMatRenderers[i].SetPropertyBlock(_sharedMPB);
+            SwapOutlineMaterial(false);
+        }
+
+        private void SwapOutlineMaterial(bool on)
+        {
+            if (on == _outlineSwapActive) return;
+            if (on)
+            {
+                _outlineOrigColor = SwapRenderersToTwin(_colorRenderers);
+                _outlineOrigCustom = SwapRenderersToTwin(_customMatRenderers);
+                _outlineSwapActive = true;
+            }
+            else
+            {
+                RestoreRenderers(_colorRenderers, _outlineOrigColor);
+                RestoreRenderers(_customMatRenderers, _outlineOrigCustom);
+                _outlineOrigColor = null;
+                _outlineOrigCustom = null;
+                _outlineSwapActive = false;
+            }
+        }
+
+        // ROLLBACK_HOLDER_OUTLINE_SWAP_20260609: 공유 OutlineHull 머티리얼을 material[1] 로 추가(트윈 방식 폐기).
+        //   material[0]=원본(배칭 유지), material[1]=공유 hull(외곽선들 한 배치). 복원 시 단일 머티리얼로.
+        private static Material[] SwapRenderersToTwin(Renderer[] rends)
+        {
+            if (rends == null) return null;
+            Material hull = BalloonFlow.BalloonController.GetOutlineHullMaterial();
+            var orig = new Material[rends.Length];
+            for (int i = 0; i < rends.Length; i++)
+            {
+                if (rends[i] == null) continue;
+                orig[i] = rends[i].sharedMaterial;
+                if (hull != null) rends[i].sharedMaterials = new Material[] { rends[i].sharedMaterial, hull };
+            }
+            return orig;
+        }
+
+        private static void RestoreRenderers(Renderer[] rends, Material[] orig)
+        {
+            if (rends == null || orig == null) return;
+            for (int i = 0; i < rends.Length && i < orig.Length; i++)
+                if (rends[i] != null && orig[i] != null) rends[i].sharedMaterial = orig[i];
         }
 
         #endregion
