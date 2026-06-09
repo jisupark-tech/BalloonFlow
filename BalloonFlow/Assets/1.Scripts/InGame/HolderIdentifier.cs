@@ -412,11 +412,20 @@ namespace BalloonFlow
             return orig;
         }
 
+        // ROLLBACK_HOLDER_OUTLINE_STALE_RESTORE_20260609: 캡처해둔 orig 복원 금지 — 풀 재사용 시 이전 스테이지 색 잔존 버그의 원인.
+        //   swap-on 시점에 캡처한 orig[]는 그 스테이지의 색 머티리얼이라, 풀에서 다른 색으로 재사용된 홀더에 복원하면 이전 색이 다시 칠해짐.
+        //   ApplyColor 가 현재 색을 element[0]에 유지하므로(.sharedMaterial 단일 setter 는 [0]만 교체, hull[1] 유지),
+        //   복원은 "현재 [0]을 그대로 두고 hull([1])만 제거"로 처리한다. (orig 파라미터는 호환 위해 유지하되 미사용)
         private static void RestoreRenderers(Renderer[] rends, Material[] orig)
         {
-            if (rends == null || orig == null) return;
-            for (int i = 0; i < rends.Length && i < orig.Length; i++)
-                if (rends[i] != null && orig[i] != null) rends[i].sharedMaterial = orig[i];
+            if (rends == null) return;
+            for (int i = 0; i < rends.Length; i++)
+            {
+                if (rends[i] == null) continue;
+                Material[] arr = rends[i].sharedMaterials;
+                if (arr != null && arr.Length > 1)
+                    rends[i].sharedMaterials = new Material[] { arr[0] };
+            }
         }
 
         #endregion
