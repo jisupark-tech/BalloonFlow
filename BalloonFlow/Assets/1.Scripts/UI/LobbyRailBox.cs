@@ -9,7 +9,7 @@ namespace BalloonFlow
     /// Individual level box on the lobby rail.
     /// Active = highlighted + effects ON + open animation.
     /// Inactive = ImgBoxDim ON (난이도별 색상), text color by difficulty.
-    /// 난이도: Normal=Blue, Hard=Purple, SuperHard=Red.
+    /// 난이도: Normal=Blue, Hard=Purple, SuperHard: ImageBox=RedBox.png, ImgBoxDim=default.
     /// </summary>
     public class LobbyRailBox : MonoBehaviour
     {
@@ -72,6 +72,7 @@ namespace BalloonFlow
         private static Sprite s_purpleBoxSprite;
         private static Sprite s_redBoxSprite;
         private Sprite _originalDimSprite;
+        private Sprite _originalBoxSprite;
 
         #endregion
 
@@ -87,6 +88,7 @@ namespace BalloonFlow
         private void Awake()
         {
             if (_imgBoxDim != null) _originalDimSprite = _imgBoxDim.sprite;
+            if (_imgBox != null) _originalBoxSprite = _imgBox.sprite;
         }
 
         /// <summary>
@@ -135,6 +137,7 @@ namespace BalloonFlow
             // ImgBoxDim OFF
             if (_imgBoxDim != null) _imgBoxDim.gameObject.SetActive(false);
 
+            if (_imgBox != null) _imgBox.sprite = GetBoxSprite(_difficulty);
             if (_imgBox != null) _imgBox.rectTransform.localScale = Vector3.one * 1.5f;
 
             // 현재 레벨 박스: DefaultToIdle 애니메이션
@@ -146,7 +149,8 @@ namespace BalloonFlow
 
         private void SetInactiveState(bool isLocked, DifficultyPurpose difficulty)
         {
-            // ImageBox scale
+            // ImageBox sprite + scale
+            if (_imgBox != null) _imgBox.sprite = GetBoxSprite(difficulty);
             if (_imgBox != null) _imgBox.rectTransform.localScale = Vector3.one * 1.5f;
 
             // ImgBoxDim ON with difficulty color
@@ -198,12 +202,19 @@ namespace BalloonFlow
             return s_purpleBoxSprite;
         }
 
+        private Sprite GetBoxSprite(DifficultyPurpose difficulty)
+        {
+            return difficulty == DifficultyPurpose.SuperHard
+                ? (GetRedBoxSprite() ?? _originalBoxSprite)
+                : _originalBoxSprite;
+        }
+
         private Sprite GetDimBoxSprite(DifficultyPurpose difficulty, bool isLocked)
         {
             switch (difficulty)
             {
                 case DifficultyPurpose.SuperHard:
-                    return isLocked ? (GetRedBoxSprite() ?? _originalDimSprite) : _originalDimSprite;
+                    return _originalDimSprite;  // ImgBoxDim.png (prefab default) 유지
                 case DifficultyPurpose.Hard:
                     return GetPurpleBoxSprite() ?? _originalDimSprite;
                 default:
