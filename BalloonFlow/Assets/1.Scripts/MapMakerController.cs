@@ -333,6 +333,10 @@ namespace BalloonFlow
         };
         private const int LEVELS_PER_EXPORT_EPISODE = 20;
         private const int LEVEL_EPISODE_VERSION = 1;
+        // ROLLBACK_MAPMAKER_EPISODE_STORE_20260609: Origin 탭은 LevelDatabase SO 폐기 → Episode JSON 직접 로드/저장.
+        //   importer(LevelJsonImporterWindow) 와 같은 저장소를 보게 되어, import 한 레벨이 MapMaker 에 즉시 보임.
+        private const string MM_EPISODES_DIR = "Assets/EditorData/Episodes";
+        private const string MM_STREAMING_EP1 = "Assets/StreamingAssets/episode_01.json";
         private const string EDITOR_PREF_LAST_DB_TAB = "BalloonFlow_LastEditedDBTab";
         private const string EDITOR_PREF_LAST_LEVEL = "BalloonFlow_LastEditedLevel";
         private int _activeDBTab = 0;
@@ -6521,10 +6525,43 @@ namespace BalloonFlow
                     _targetDB_Transform = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
                     return _targetDB_Transform;
                 default:
+                    // ROLLBACK_MAPMAKER_EPISODE_STORE_20260609: Origin 탭은 SO 대신 Episode JSON 들을 합쳐 로드(SO 폐기).
+                    //   롤백: 아래 두 줄을 `_targetDB = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);` 로 복원.
                     if (_targetDB != null) return _targetDB;
-                    _targetDB = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
+                    _targetDB = LoadEpisodesAsLevelDatabase();
                     return _targetDB;
             }
+        }
+
+        /// <summary>
+        /// ROLLBACK_MAPMAKER_EPISODE_STORE_20260609: Assets/EditorData/Episodes/episode_*.json 전부를 읽어
+        /// levels 를 합친 in-memory LevelDatabase 를 만든다(에셋 아님). importer 와 동일 저장소 → import 즉시 반영.
+        /// </summary>
+        private LevelDatabase LoadEpisodesAsLevelDatabase()
+        {
+            var all = new List<LevelConfig>();
+            if (System.IO.Directory.Exists(MM_EPISODES_DIR))
+            {
+                string[] files = System.IO.Directory.GetFiles(MM_EPISODES_DIR, "episode_*.json");
+                System.Array.Sort(files);
+                foreach (string p in files)
+                {
+                    try
+                    {
+                        var ep = JsonUtility.FromJson<LevelEpisode>(System.IO.File.ReadAllText(p));
+                        if (ep?.levels != null)
+                            foreach (var lv in ep.levels) if (lv != null) all.Add(lv);
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogError($"[MapMaker] {p} 읽기 실패: {e.Message}");
+                    }
+                }
+            }
+            all.Sort((a, b) => a.levelId.CompareTo(b.levelId));
+            var db = ScriptableObject.CreateInstance<LevelDatabase>();
+            db.levels = all.ToArray();
+            return db;
         }
 
         /// <summary>활성 DB 탭에 저장.</summary>
@@ -6535,8 +6572,84 @@ namespace BalloonFlow
             {
                 case 1:  SaveToDB(path, ref _targetDB_AI); break;
                 case 2:  SaveToDB(path, ref _targetDB_Transform); break;
-                default: SaveToDB(path, ref _targetDB); break;
+                // ROLLBACK_MAPMAKER_EPISODE_STORE_20260609: Origin 탭 저장은 SO 대신 Episode JSON 으로(importer 와 동일 저장소).
+                //   롤백: `SaveToDB(path, ref _targetDB);` 로 복원.
+                default: SaveCurrentLevelToEpisode(); break;
             }
+        }
+
+        /// <summary>
+        /// ROLLBACK_MAPMAKER_EPISODE_STORE_20260609: 현재 편집 중인 레벨을 해당 패키지의 episode JSON 에 병합·저장.
+        /// importer(WriteEpisodeFile) 와 동일 포맷/경로 → 라운드트립. pkg1 은 StreamingAssets 동기화.
+        /// </summary>
+        private void SaveCurrentLevelToEpisode()
+        {
+            if (!_levelLoaded)
+            {
+                SetStatus("ERROR: No level loaded. Load or create a level first.");
+                return;
+            }
+
+            LevelConfig config = BuildLevelConfig();
+            int pkg = GetPackageIdForLevel(config.levelId);
+            string path = $"{MM_EPISODES_DIR}/episode_{pkg:D2}.json";
+
+            // 기존 episode 로드(병합 기준).
+            var levels = new List<LevelConfig>();
+            if (System.IO.File.Exists(path))
+            {
+                try
+                {
+                    var existing = JsonUtility.FromJson<LevelEpisode>(System.IO.File.ReadAllText(path));
+                    if (existing?.levels != null)
+                        foreach (var lv in existing.levels) if (lv != null) levels.Add(lv);
+                }
+                catch (System.Exception e) { Debug.LogError($"[MapMaker] {path} 읽기 실패: {e.Message}"); }
+            }
+
+            // 덮어쓰기 전 백업.
+            BackupEpisodeFileMM(pkg);
+
+            int idx = levels.FindIndex(l => l.levelId == config.levelId);
+            if (idx >= 0) levels[idx] = config; else levels.Add(config);
+            levels.Sort((a, b) => a.levelId.CompareTo(b.levelId));
+            foreach (var lv in levels) NormalizeLevelEpisodeFields(lv);
+
+            var ep = new LevelEpisode
+            {
+                packageId  = pkg,
+                levelCount = levels.Count,
+                version    = LEVEL_EPISODE_VERSION,
+                levels     = levels.ToArray()
+            };
+            string json = JsonUtility.ToJson(ep, false); // importer/런타임과 동일 포맷
+
+            System.IO.Directory.CreateDirectory(MM_EPISODES_DIR);
+            System.IO.File.WriteAllText(path, json);
+            AssetDatabase.ImportAsset(path);
+
+            if (pkg == 1)
+            {
+                string streamDir = System.IO.Path.GetDirectoryName(MM_STREAMING_EP1);
+                if (!string.IsNullOrEmpty(streamDir)) System.IO.Directory.CreateDirectory(streamDir);
+                System.IO.File.WriteAllText(MM_STREAMING_EP1, json);
+                AssetDatabase.ImportAsset(MM_STREAMING_EP1);
+            }
+
+            _targetDB = null; // episode-backed 캐시 무효화 → 다음 로드 시 재빌드(저장 레벨 즉시 반영)
+            SetStatus($"Saved Level {config.levelId} → episode_{pkg:D2}.json ({levels.Count} levels)" +
+                      (pkg != 1 ? "  · Firestore 반영은 'Export & Upload' 필요" : "  · StreamingAssets 동기화"));
+            RefreshLevelList();
+        }
+
+        private void BackupEpisodeFileMM(int pkg)
+        {
+            string src = $"{MM_EPISODES_DIR}/episode_{pkg:D2}.json";
+            if (!System.IO.File.Exists(src)) return;
+            const string backupDir = "Assets/LevelBackups";
+            System.IO.Directory.CreateDirectory(backupDir);
+            string ts = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            System.IO.File.Copy(src, $"{backupDir}/episode_{pkg:D2}_{ts}.json", true);
         }
 
         #endregion
