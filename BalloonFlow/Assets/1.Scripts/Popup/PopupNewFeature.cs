@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -10,6 +11,10 @@ namespace BalloonFlow
     /// </summary>
     public class PopupNewFeature : UIBase
     {
+        private const float OkButtonDelaySeconds = 1.5f;
+
+        private Coroutine _okDelayCo;
+
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
 
@@ -72,6 +77,11 @@ namespace BalloonFlow
 
         protected override void OnDestroy()
         {
+            if (_okDelayCo != null)
+            {
+                StopCoroutine(_okDelayCo);
+                _okDelayCo = null;
+            }
             base.OnDestroy();
             if (_btnOk != null) _btnOk.onClick.RemoveAllListeners();
             if (_frame != null)
@@ -137,7 +147,37 @@ namespace BalloonFlow
             if (_txtDescription != null) _txtDescription.text = description;
             if (_txtDescriptionOutline != null) _txtDescriptionOutline.text = description;
 
+            if (_btnOk != null)
+            {
+                _btnOk.interactable = false;
+                _btnOk.gameObject.SetActive(false);
+            }
+            if (_frame != null && _frame.BtnSingle != null)
+            {
+                _frame.BtnSingle.interactable = false;
+                _frame.BtnSingle.gameObject.SetActive(false);
+            }
+
             OpenUI();
+
+            if (_okDelayCo != null) StopCoroutine(_okDelayCo);
+            _okDelayCo = StartCoroutine(EnableOkButtonAfterDelay());
+        }
+
+        private IEnumerator EnableOkButtonAfterDelay()
+        {
+            yield return new WaitForSecondsRealtime(OkButtonDelaySeconds);
+            if (_btnOk != null)
+            {
+                _btnOk.gameObject.SetActive(true);
+                _btnOk.interactable = true;
+            }
+            if (_frame != null && _frame.BtnSingle != null)
+            {
+                _frame.BtnSingle.gameObject.SetActive(true);
+                _frame.BtnSingle.interactable = true;
+            }
+            _okDelayCo = null;
         }
 
         private static string GetDisplayName(string featureKey)
