@@ -12,7 +12,7 @@ namespace BalloonFlow
     /// </summary>
     public class PopupNewFeature : UIBase
     {
-        private const float OkButtonDelaySeconds = 3f;
+        private const float OkButtonDelaySeconds = 2f;
         private const float OkButtonScaleUpDuration = 0.18f;
         private const float OkButtonScaleDownDuration = 0.12f;
         private const float OkButtonOvershootScale = 1.1f;
