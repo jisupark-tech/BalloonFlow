@@ -392,16 +392,25 @@ namespace BalloonFlow
         /// <summary>
         /// 외부(난이도 토글 등)에서 팝업이 열린 상태에서도 _imageHardOptionColor 프레임 이미지를
         /// 즉시 framehard/frameSuperhard 로 갱신할 수 있는 진입점.
+        /// Hard→framehard / SuperHard→frameSuperhard 즉시 갱신 (Normal 은 숨김).
         /// </summary>
         public void RefreshHardOptionColor(DifficultyPurpose difficulty)
         {
             ApplyHardOptionColor(difficulty);
         }
 
-        // HardOptionColor: Normal 숨김 / Hard=framehard / SuperHard=frameSuperhard.
-        // 암묵 fallback (Hard 외 모든 비-Normal → Hard) 대신 switch 로 명시 — Awake() 의
-        // ResourceManager.UISpriteOr 가 둘 다 null 반환한 비정상 케이스에서는 흰색 박스 노출
-        // 방지를 위해 SetActive(false) 로 안전 처리.
+        /// <summary>
+        /// _imageHardOptionColor 프레임 이미지를 난이도별 스프라이트로 분기.
+        /// 매핑 사양:
+        ///   <list type="bullet">
+        ///     <item><description>Hard → <c>framehard</c> (키: <see cref="Const.SPR_FRAMEHARD"/>, 자산: Assets/2.Sprite/UI/framehard.png)</description></item>
+        ///     <item><description>SuperHard → <c>frameSuperhard</c> (키: <see cref="Const.SPR_FRAMESUPERHARD"/>, 자산: Assets/2.Sprite/UI/frameSuperhard.png)</description></item>
+        ///     <item><description>Normal / 그 외 → <c>SetActive(false)</c> (숨김)</description></item>
+        ///   </list>
+        /// 암묵 fallback (Hard 외 모든 비-Normal → Hard) 대신 switch 로 명시.
+        /// Awake() 의 ResourceManager.UISpriteOr 가 둘 다 null 반환한 비정상 케이스에서는
+        /// 흰색 박스 노출 방지를 위해 SetActive(false) 로 안전 처리한다.
+        /// </summary>
         private void ApplyHardOptionColor(DifficultyPurpose difficulty)
         {
             if (_imageHardOptionColor == null) return;
