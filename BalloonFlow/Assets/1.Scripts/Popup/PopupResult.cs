@@ -24,6 +24,14 @@ namespace BalloonFlow
         private const int RESULT_COIN_COUNT = 10;
         private const int SCORE_PER_COIN_STEP = 500;
 
+        // PopupResult Sorting Order 사양 (ImageStage=243/Gold=244/FX=246/TxtGoldOutline=247/TxtGold=248)
+        // rewardBaseOrder(=PopupCanvas.sortingOrder+40, 보통 240) 기준 child offset.
+        private const int OFFSET_REWARD_IMAGE_STAGE       = 3;
+        private const int OFFSET_REWARD_GOLD              = 4;
+        private const int OFFSET_REWARD_FX                = 6;
+        private const int OFFSET_REWARD_TXT_GOLD_OUTLINE  = 7;
+        private const int OFFSET_REWARD_TXT_GOLD          = 8;
+
         #endregion
 
         [Header("[Common Frame]")]
@@ -499,12 +507,12 @@ namespace BalloonFlow
         /// 절대값이 200 보다 작아 부모 뒤로 묻힘 — ForceVisibleSubtree 에서 모두 false 로 정리한 뒤 이 메서드가
         /// 각 노드에 새 sortingOrder 를 명시 부여.
         ///
-        /// 디자이너 의도 layering (back → front):
-        ///   ImageStage       base+1
-        ///   FX ParticleSystem base+2
-        ///   Gold             base+3
-        ///   TxtGoldOutline   base+3 (Gold 와 같은 layer, sibling order 로 micro z 결정)
-        ///   TxtGold          base+4 (outline 위)
+        /// 디자이너 의도 layering (back → front, rewardBaseOrder=PopupCanvas+40, 보통 240):
+        ///   ImageStage       base+3  (= 243)
+        ///   Gold             base+4  (= 244)
+        ///   FX ParticleSystem base+6  (= 246, Gold 와 TxtGoldOutline 사이 — 코인 FX 가 텍스트 가리지 않도록)
+        ///   TxtGoldOutline   base+7  (= 247)
+        ///   TxtGold          base+8  (= 248, outline 위)
         /// </summary>
         private void ApplyRewardLayerOrder(Transform rewardRoot)
         {
@@ -519,11 +527,12 @@ namespace BalloonFlow
             // lift the whole reward stack above the popup frame.
             int rewardBaseOrder = baseOrder + 40;
 
-            AssignChildCanvasOrder(rewardRoot, "ImageStage", rewardBaseOrder + 1, layer);
-            ApplyFxSubtreeOrder(rewardRoot, rewardBaseOrder + 2, layer);
-            AssignChildCanvasOrder(rewardRoot, "Gold", rewardBaseOrder + 3, layer);
-            AssignChildCanvasOrder(rewardRoot, "TxtGoldOutline", rewardBaseOrder + 3, layer);
-            AssignChildCanvasOrder(rewardRoot, "TxtGold", rewardBaseOrder + 4, layer);
+            // PopupResult Sorting Order 사양 (ImageStage=243/Gold=244/TxtGoldOutline=247/TxtGold=248)
+            AssignChildCanvasOrder(rewardRoot, "ImageStage",     rewardBaseOrder + OFFSET_REWARD_IMAGE_STAGE,      layer);
+            AssignChildCanvasOrder(rewardRoot, "Gold",           rewardBaseOrder + OFFSET_REWARD_GOLD,             layer);
+            ApplyFxSubtreeOrder(rewardRoot,                      rewardBaseOrder + OFFSET_REWARD_FX,               layer);
+            AssignChildCanvasOrder(rewardRoot, "TxtGoldOutline", rewardBaseOrder + OFFSET_REWARD_TXT_GOLD_OUTLINE, layer);
+            AssignChildCanvasOrder(rewardRoot, "TxtGold",        rewardBaseOrder + OFFSET_REWARD_TXT_GOLD,         layer);
         }
 
         /// <summary>
