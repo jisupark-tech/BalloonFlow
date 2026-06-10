@@ -13,6 +13,7 @@ dependencies {
     implementation 'com.android.support:cardview-v7:25.3.1' // Facebook.Unity.Editor.AndroidSupportLibraryResolver.addSupportLibraryDependency
     implementation 'com.android.support:customtabs:25.3.1' // Facebook.Unity.Editor.AndroidSupportLibraryResolver.addSupportLibraryDependency
     implementation 'com.android.support:support-v4:25.3.1' // Facebook.Unity.Editor.AndroidSupportLibraryResolver.addSupportLibraryDependency
+    implementation 'com.applovin.mediation:google-adapter:[25.3.0.0]' // Assets/MaxSdk/Mediation/Google/Editor/Dependencies.xml:5
     implementation 'com.applovin:applovin-sdk:13.6.2' // Assets/MaxSdk/AppLovin/Editor/Dependencies.xml:4
     implementation 'com.appsflyer:af-android-sdk:6.17.6' // Assets/AppsFlyer/Editor/AppsFlyerDependencies.xml:5
     implementation 'com.appsflyer:purchase-connector:2.2.0' // Assets/AppsFlyer/Editor/AppsFlyerDependencies.xml:8
