@@ -763,6 +763,10 @@ namespace BalloonFlow
                 _outlineHullMat.SetFloat("_OutlineWidth", 0.0005f); // 기본 두께 0.0005 (요구)
             }
             _outlineHullMat.enableInstancing = true;
+            // ROLLBACK_OUTLINE_GROUP_SILHOUETTE_20260610: 바디(Geometry=2000) 전부 이후에 hull 을 그려야
+            //   stencil 마스크(바디=1, hull=NotEqual)가 전체 유니온에 성립 → 그룹 실루엣 아웃라인.
+            //   Resources .mat 에 옛 queue 가 직렬화돼 있을 수 있어 셰이더 Queue+10 과 별개로 코드에서 명시.
+            _outlineHullMat.renderQueue = 2010;
             _outlinedTwins.Clear(); // 더 이상 사용 안 함(트윈 방식 폐기)
             return _outlineHullMat;
         }

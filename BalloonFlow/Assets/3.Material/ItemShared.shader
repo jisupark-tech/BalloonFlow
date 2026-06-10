@@ -42,6 +42,16 @@ Shader "Custom/ItemShared"
             Name "MainColor"
             Tags { "LightMode" = "UniversalForward" }
 
+            // ROLLBACK_OUTLINE_GROUP_SILHOUETTE_20260610: 바디 픽셀에 stencil=1 마킹.
+            //   OutlineHull(Queue+10, Comp NotEqual)이 바디 위에는 안 그려져 인접 풍선 사이 내부 외곽선이 제거되고
+            //   그룹 실루엣만 남음. 상세/롤백은 OutlineHull.shader 주석 참조.
+            Stencil
+            {
+                Ref 1
+                Comp Always
+                Pass Replace
+            }
+
             Cull Back   // 명시: backface culling — 카메라 반대면 픽셀 skip (default 와 동일, 명확성 위한 명시)
             ZWrite On
 

@@ -48,6 +48,14 @@ Shader "Custom/ItemSharedOutline"
             Name "MainColor"
             Tags { "LightMode" = "UniversalForward" }
 
+            // ROLLBACK_OUTLINE_GROUP_SILHOUETTE_20260610: ItemShared 와 동일 — 바디 픽셀 stencil=1 마킹.
+            Stencil
+            {
+                Ref 1
+                Comp Always
+                Pass Replace
+            }
+
             Cull Back
             ZWrite On
 
@@ -162,6 +170,15 @@ Shader "Custom/ItemSharedOutline"
         {
             Name "Outline"
             Tags { "LightMode" = "SRPDefaultUnlit" }
+
+            // ROLLBACK_OUTLINE_GROUP_SILHOUETTE_20260610: OutlineHull 과 동일 — 바디 없는 픽셀에만 외곽선.
+            //   (multi-pass 라 같은 머티리얼 queue 에서 바디 직후 그려짐 — 이웃 바디가 나중에 그려지면 그 픽셀은 이미 외곽선이
+            //   찍힌 뒤라 유니온 마스킹이 불완전. 현 런타임은 OutlineHull material[1] 경로만 사용하므로 영향 없음.)
+            Stencil
+            {
+                Ref 1
+                Comp NotEqual
+            }
 
             Cull Front
             ZWrite On

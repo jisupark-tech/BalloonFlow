@@ -13,12 +13,25 @@ Shader "Custom/OutlineHull"
 
     SubShader
     {
-        Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" "Queue" = "Geometry" }
+        // ROLLBACK_OUTLINE_GROUP_SILHOUETTE_20260610: Queue Geometry+10 — 모든 바디(2000)를 먼저 그린 뒤 hull.
+        //   바디가 깔아둔 stencil=1 마스크가 전체 유니온에 대해 성립해야 그룹 실루엣이 나옴.
+        Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" "Queue" = "Geometry+10" }
 
         Pass
         {
             Name "OutlineHull"
             Tags { "LightMode" = "UniversalForward" }
+
+            // ROLLBACK_OUTLINE_GROUP_SILHOUETTE_20260610: 그룹(유니온) 실루엣 아웃라인.
+            //   바디(ItemShared/ItemSharedOutline)가 stencil=1 을 깔고, hull 은 stencil!=1(=바디가 안 보이는 픽셀)에만 그림.
+            //   → 인접 풍선 사이 내부 외곽선 제거, 덩어리 바깥 실루엣(+구멍 둘레)만 남음.
+            //   stencil 은 depth/stencil 하드웨어 상태라 추가 비용 ~0. 패스 수/배칭/RT 변화 없음.
+            //   롤백: 이 Stencil 블록 + Queue+10 + 바디 셰이더의 Stencil 블록 + GetOutlineHullMaterial 의 renderQueue 라인 제거.
+            Stencil
+            {
+                Ref 1
+                Comp NotEqual
+            }
 
             Cull Front      // 뒷면만 — 확장된 헐의 바깥 테두리만 보임
             ZWrite On
