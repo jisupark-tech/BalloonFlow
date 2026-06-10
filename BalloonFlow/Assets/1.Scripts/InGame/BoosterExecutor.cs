@@ -52,6 +52,8 @@ namespace BalloonFlow
         private const float ZapLineWorldLift = 0.35f;
         private const float ZapLineMinWidth = 0.08f;
         private const int ZapLineSortingOrder = 80;
+        // ROLLBACK_ZAP_LINE_ALWAYS_ON_TOP_20260610: renderQueue 강제 상향. Overlay+ 영역으로 띄워 풍선 mesh 뒤로 가려지지 않게 한다.
+        private const int ZapLineRenderQueue = 4000;
         private const float ZapFieldBottomPaddingCells = 1.5f;
         private const int ZapLineConcurrentCount = 4;
         private const float ZapLineForkOffset = 0.45f; // 4갈래(±0.5Δ, ±1.5Δ)로 벌어지는 perpendicular 오프셋(월드 단위)
@@ -1306,6 +1308,19 @@ namespace BalloonFlow
             lineRenderer.shadowCastingMode = ShadowCastingMode.Off;
             lineRenderer.receiveShadows = false;
             lineRenderer.sortingOrder = Mathf.Max(lineRenderer.sortingOrder, ZapLineSortingOrder);
+            // ROLLBACK_ZAP_LINE_ALWAYS_ON_TOP_20260610:
+            // 풍선(MeshRenderer, Geometry queue 2000) depth buffer 에 의해 LineRenderer 가 가려지는 문제 해결.
+            // sortingOrder 만으로는 부족 — Transparent shader 의 ZTest LEqual 기본값이 픽셀을 컬링.
+            // material 인스턴스(공유 X)에 _ZTest = Always(8) 강제 + renderQueue 상향.
+            Material runtimeMat = lineRenderer.material; // instance 생성(원본 prefab 보호)
+            if (runtimeMat != null)
+            {
+                if (runtimeMat.HasProperty("_ZTest"))
+                    runtimeMat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
+                if (runtimeMat.HasProperty("_ZWrite"))
+                    runtimeMat.SetInt("_ZWrite", 0);
+                runtimeMat.renderQueue = ZapLineRenderQueue;
+            }
             if (!_zapLineTargetWidths.ContainsKey(lineRenderer))
             {
                 float targetWidth = Mathf.Max(lineRenderer.widthMultiplier, ZapLineMinWidth);
