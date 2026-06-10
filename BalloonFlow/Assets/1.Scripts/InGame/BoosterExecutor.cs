@@ -388,7 +388,10 @@ namespace BalloonFlow
                 if (zapLineObject != null)
                     yield return null;
 
-                // Do not fire ZapAttack trigger — keep ZapAttackIdle running uninterrupted while FxZapLine plays.
+                // ItemZap.prefab Animator는 생성과 동시에 ZapStart → ZapAttackIdle을 1회 자동 진행한다.
+                // FxZapLine 출력 구간 동안에는 zapObject에 Animator.Play/CrossFade/Rebind/SetActive 등 어떤 형태로도
+                // 재진입을 트리거하지 마라 — ZapAttackIdle이 처음부터 다시 재생되어 연출이 깨진다.
+                // ZAP을 새로 사용할 때마다 ItemZap 인스턴스가 새로 생성되므로 ZapStart부터의 자연스러운 재생은 그쪽에서 보장된다.
 
                 // ROLLBACK_ZAP_FIXED_TOTAL_POP_TIME:
                 // Do not multiply a minimum interval by target count. The full balloon-pop
@@ -992,20 +995,6 @@ namespace BalloonFlow
 
             if (!triggered)
                 zapObject.transform.DOPunchScale(Vector3.one * 0.15f, ZapFinishLifetime, 6, 0.4f);
-        }
-
-        private bool PlayZapAttack(GameObject zapObject)
-        {
-            if (zapObject == null)
-                return false;
-
-            // ROLLBACK_ITEMZAP_ATTACK_TRIGGER:
-            // ItemZap animator exposes ZapAttack as the authored attack trigger.
-            bool triggered = TrySetZapTrigger(zapObject, "ZapAttack");
-            if (!triggered)
-                zapObject.transform.DOPunchScale(Vector3.one * 0.08f, 0.12f, 3, 0.35f);
-
-            return triggered;
         }
 
         private bool TrySetZapFinishTrigger(GameObject zapObject)
