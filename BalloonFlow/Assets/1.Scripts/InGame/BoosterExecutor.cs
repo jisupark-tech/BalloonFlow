@@ -63,7 +63,7 @@ namespace BalloonFlow
 
         // Fade in/out 연출 — 라인이 뚝 끊겨 보이지 않도록 width+alpha 를 함께 보간한다.
         private const float ZapLineFadeInDuration = 0.07f;   // 사용자 사양 0.05~0.1s 중간값
-        private const float ZapLineFadeOutDuration = 0.07f;
+        private const float ZapLineFadeOutDuration = 0.10f;
 
         private readonly List<ZapTarget> _zapTargets = new List<ZapTarget>(128);
         private GameObject _itemZapPrefab;
@@ -493,13 +493,15 @@ namespace BalloonFlow
 
             PlayZapFinish(zapObject);
 
-            // NEW: 페이드아웃 — 자글거림은 잠시 더 유지하다가 페이드아웃 직후 정지.
+            // Jiggle 코루틴을 먼저 정지한다 — Jiggle 이 매 tick baseline.start 를 덮어쓰기 때문에
+            // FadeOutZapLinesRoutine 의 suction lerp(start→end) 가 무효화된다. 페이드아웃 루틴이
+            // 매 프레임 Trigger() 를 호출하므로 자글거림은 그대로 유지된다.
+            StopZapLineJiggle();
+
+            // 페이드아웃 — 각 라인의 StartPosition 을 EndPosition 방향으로 빨려들어가듯 보간하며
+            // 매 프레임 LightningBoltScript.Trigger() 를 호출해 자글거림을 유지한다.
             if (zapLineObjects != null && zapLineObjects.Count > 0)
                 yield return StartCoroutine(FadeOutZapLinesRoutine(zapLineObjects));
-
-            // 라인을 SetActive(false)/Destroy 하기 전에 자글거림 코루틴을 중지해야
-            // 비활성/파괴된 LightningBoltScript 에 Trigger() 가 호출되는 것을 막을 수 있다.
-            StopZapLineJiggle();
 
             if (zapLineObjects != null)
             {
@@ -1236,43 +1238,101 @@ namespace BalloonFlow
         private IEnumerator FadeOutZapLinesRoutine(List<GameObject> zapLineObjects)
         {
             if (zapLineObjects == null || zapLineObjects.Count == 0) yield break;
-            var renderers = new List<LineRenderer>(zapLineObjects.Count);
-            var startWidths = new List<float>(zapLineObjects.Count);
-            var startAlphas = new List<float>(zapLineObjects.Count);
-            for (int i = 0; i < zapLineObjects.Count; i++)
+
+            // 라인별 캐시(LineRenderer + LightningBoltScript + 원본 start/end + 페이드 시작 width/alpha).
+            // GC alloc 최소화를 위해 한 번만 할당, foreach 미사용.
+            int count = zapLineObjects.Count;
+            var renderers = new List<LineRenderer>(count);
+            var bolts = new List<LightningBoltScript>(count);
+            var originalStarts = new List<Vector3>(count);
+            var originalEnds = new List<Vector3>(count);
+            var startWidths = new List<float>(count);
+            var startAlphas = new List<float>(count);
+
+            for (int i = 0; i < count; i++)
             {
                 GameObject line = zapLineObjects[i];
                 if (line == null) continue;
                 LineRenderer lr = line.GetComponentInChildren<LineRenderer>(true);
-                if (lr == null) continue;
+                LightningBoltScript bolt = line.GetComponentInChildren<LightningBoltScript>(true);
+                if (lr == null && bolt == null) continue;
+
                 renderers.Add(lr);
-                startWidths.Add(lr.widthMultiplier);
-                startAlphas.Add(lr.startColor.a);
+                bolts.Add(bolt);
+                originalStarts.Add(bolt != null ? bolt.StartPosition : Vector3.zero);
+                originalEnds.Add(bolt != null ? bolt.EndPosition : Vector3.zero);
+                startWidths.Add(lr != null ? lr.widthMultiplier : 0f);
+                startAlphas.Add(lr != null ? lr.startColor.a : 0f);
             }
-            if (renderers.Count == 0) yield break;
+
+            int cached = renderers.Count;
+            if (cached == 0) yield break;
+
             float t = 0f;
             while (t < ZapLineFadeOutDuration)
             {
                 t += Time.deltaTime;
-                float k = 1f - Mathf.Clamp01(t / ZapLineFadeOutDuration);
-                for (int i = 0; i < renderers.Count; i++)
+                float ratio = Mathf.Clamp01(t / ZapLineFadeOutDuration);
+                float widthAlphaK = 1f - ratio;
+
+                for (int i = 0; i < cached; i++)
                 {
+                    // FxZapLine / FxZapLine2 동일 처리(분기 없음).
+                    LightningBoltScript bolt = bolts[i];
+                    if (bolt != null)
+                    {
+                        Vector3 origStart = originalStarts[i];
+                        Vector3 origEnd = originalEnds[i];
+                        Vector3 currentStart = Vector3.Lerp(origStart, origEnd, ratio);
+
+                        Vector3 jitterStart = new Vector3(
+                            Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
+                            Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
+                            Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter));
+                        Vector3 jitterEnd = new Vector3(
+                            Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
+                            Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
+                            Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter));
+
+                        bolt.StartPosition = currentStart + jitterStart;
+                        bolt.EndPosition = origEnd + jitterEnd;
+                        // 매 프레임 Trigger() 호출 시 ManualMode 라인이 사라지지 않도록 Duration 보강.
+                        bolt.Duration = Mathf.Max(bolt.Duration, ZapLineJiggleMaxInterval * 1.5f);
+                        bolt.Trigger();
+                    }
+
                     LineRenderer lr = renderers[i];
-                    if (lr == null) continue;
-                    lr.widthMultiplier = startWidths[i] * k;
-                    float a = startAlphas[i] * k;
-                    Color sc = lr.startColor; sc.a = a; lr.startColor = sc;
-                    Color ec = lr.endColor;   ec.a = a; lr.endColor   = ec;
+                    if (lr != null)
+                    {
+                        lr.widthMultiplier = startWidths[i] * widthAlphaK;
+                        float a = startAlphas[i] * widthAlphaK;
+                        Color sc = lr.startColor; sc.a = a; lr.startColor = sc;
+                        Color ec = lr.endColor;   ec.a = a; lr.endColor   = ec;
+                    }
                 }
+
                 yield return null;
             }
-            for (int i = 0; i < renderers.Count; i++)
+
+            // 완전 수렴: StartPosition=EndPosition 으로 한 번 더 Trigger() 호출(번개 잔상 없이 깔끔히 사라짐).
+            for (int i = 0; i < cached; i++)
             {
+                LightningBoltScript bolt = bolts[i];
+                if (bolt != null)
+                {
+                    Vector3 origEnd = originalEnds[i];
+                    bolt.StartPosition = origEnd;
+                    bolt.EndPosition = origEnd;
+                    bolt.Trigger();
+                }
+
                 LineRenderer lr = renderers[i];
-                if (lr == null) continue;
-                lr.widthMultiplier = 0f;
-                Color sc = lr.startColor; sc.a = 0f; lr.startColor = sc;
-                Color ec = lr.endColor;   ec.a = 0f; lr.endColor   = ec;
+                if (lr != null)
+                {
+                    lr.widthMultiplier = 0f;
+                    Color sc = lr.startColor; sc.a = 0f; lr.startColor = sc;
+                    Color ec = lr.endColor;   ec.a = 0f; lr.endColor   = ec;
+                }
             }
         }
 
