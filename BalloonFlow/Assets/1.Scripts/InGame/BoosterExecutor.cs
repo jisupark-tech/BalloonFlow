@@ -388,10 +388,7 @@ namespace BalloonFlow
                 if (zapLineObject != null)
                     yield return null;
 
-                // ROLLBACK_ZAP_ATTACK_TRIGGER_ONCE:
-                // ZapAttack is an attack-start animation, not a per-target hit animation.
-                // Keep it as a single trigger while FxZapLine retargets for every popped balloon.
-                PlayZapAttack(zapObject);
+                // Do not fire ZapAttack trigger — keep ZapAttackIdle running uninterrupted while FxZapLine plays.
 
                 // ROLLBACK_ZAP_FIXED_TOTAL_POP_TIME:
                 // Do not multiply a minimum interval by target count. The full balloon-pop
