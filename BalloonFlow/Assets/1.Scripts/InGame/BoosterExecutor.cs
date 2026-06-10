@@ -53,12 +53,13 @@ namespace BalloonFlow
         private const float ZapLineMinWidth = 0.08f;
         private const int ZapLineSortingOrder = 80;
         private const float ZapFieldBottomPaddingCells = 1.5f;
-        private const int ZapLineConcurrentCount = 3;
-        private const float ZapLineForkOffset = 0.55f; // 3갈래로 벌어지는 perpendicular 오프셋(월드 단위)
+        private const int ZapLineConcurrentCount = 4;
+        private const float ZapLineForkOffset = 0.45f; // 4갈래(±0.5Δ, ±1.5Δ)로 벌어지는 perpendicular 오프셋(월드 단위)
 
         private readonly List<ZapTarget> _zapTargets = new List<ZapTarget>(128);
         private GameObject _itemZapPrefab;
         private GameObject _fxZapLinePrefab;
+        private GameObject _fxZapLine2Prefab;
         private bool _isColorRemoveSequenceRunning;
         private bool _isZapAnimationPlaying = false;
         private Animator _zapAnimator = null;
@@ -380,7 +381,7 @@ namespace BalloonFlow
             GameObject zapObject = CreateItemZap(attackPosition);
             Vector3 zapFixedPosition = zapObject != null ? zapObject.transform.position : ZapSpawnPosition;
             List<GameObject> zapLineObjects = null;
-            bool zapLineFromItemZap = false;
+            List<bool> zapLineFromItemZapFlags = null;
 
             yield return new WaitForSeconds(ZapAppearDuration);
             yield return new WaitForSeconds(ZapMoveDuration);
@@ -395,7 +396,7 @@ namespace BalloonFlow
             int fieldRemoved = 0;
             if (_zapTargets.Count > 0)
             {
-                zapLineObjects = CreateZapLineObjects(zapObject, ZapLineConcurrentCount, out zapLineFromItemZap);
+                zapLineObjects = CreateZapLineObjects(zapObject, ZapLineConcurrentCount, out zapLineFromItemZapFlags);
                 if (zapLineObjects != null && zapLineObjects.Count > 0)
                     yield return null;
 
@@ -460,7 +461,10 @@ namespace BalloonFlow
                 {
                     GameObject line = zapLineObjects[i];
                     if (line == null) continue;
-                    if (zapLineFromItemZap)
+                    bool fromItemZap = zapLineFromItemZapFlags != null && i < zapLineFromItemZapFlags.Count
+                        ? zapLineFromItemZapFlags[i]
+                        : false;
+                    if (fromItemZap)
                         line.SetActive(false);
                     else
                         Destroy(line, ZapLineLifetime);
@@ -924,60 +928,79 @@ namespace BalloonFlow
             return runtimeLine;
         }
 
-        // 3갈래(Fan) Zap 라인용 다중 복제 생성.
-        // 자식 'FxZapLine'이 있으면 우선 복제하고, 없으면 PREFAB_FX_ZAP_LINE을 사용한다.
-        // 원본 child는 비활성 상태 그대로 두고 복제본만 활성화한다.
-        private List<GameObject> CreateZapLineObjects(GameObject zapObject, int count, out bool fromItemZap)
+        // 4갈래(Fan) Zap 라인용 다중 복제 생성.
+        // 앞쪽 절반은 FxZapLine 소스(자식 우선, 없으면 PREFAB_FX_ZAP_LINE), 뒤쪽 절반은 PREFAB_FX_ZAP_LINE2.
+        // 라인별 origin(fromItemZap)을 fromItemZapFlags로 반환해 cleanup 분기에 사용한다.
+        private List<GameObject> CreateZapLineObjects(GameObject zapObject, int count, out List<bool> fromItemZapFlags)
         {
-            fromItemZap = false;
             var lines = new List<GameObject>(Mathf.Max(1, count));
+            fromItemZapFlags = new List<bool>(Mathf.Max(1, count));
             if (count <= 0)
                 return lines;
 
-            GameObject source = null;
-            bool sourceFromItemZap = false;
+            // FxZapLine source (앞쪽 절반): ItemZap 자식 우선, 없으면 PREFAB_FX_ZAP_LINE.
+            GameObject zapLineSource = null;
+            bool zapLineSourceFromItemZap = false;
 
             if (zapObject != null)
             {
                 Transform childLine = FindChildRecursive(zapObject.transform, "FxZapLine");
                 if (childLine != null)
                 {
-                    source = childLine.gameObject;
-                    sourceFromItemZap = true;
+                    zapLineSource = childLine.gameObject;
+                    zapLineSourceFromItemZap = true;
                 }
             }
 
-            if (source == null)
+            if (zapLineSource == null)
             {
                 if (_fxZapLinePrefab == null)
                     _fxZapLinePrefab = Resources.Load<GameObject>(Const.PREFAB_FX_ZAP_LINE);
-
-                if (_fxZapLinePrefab == null)
-                {
-                    Debug.LogWarning($"[BoosterExecutor] Missing FxZapLine prefab at Resources/{Const.PREFAB_FX_ZAP_LINE}.");
-                    return lines;
-                }
-
-                source = _fxZapLinePrefab;
-                sourceFromItemZap = false;
+                zapLineSource = _fxZapLinePrefab;
+                zapLineSourceFromItemZap = false;
             }
 
-            fromItemZap = sourceFromItemZap;
+            int halfCount = count / 2;
 
             for (int i = 0; i < count; i++)
             {
+                bool useFxZapLine = i < halfCount;
+                GameObject source;
+                bool sourceFromItemZap;
+                string runtimeName;
+
+                if (useFxZapLine)
+                {
+                    if (zapLineSource == null)
+                    {
+                        Debug.LogWarning($"[BoosterExecutor] Missing FxZapLine prefab at Resources/{Const.PREFAB_FX_ZAP_LINE}.");
+                        continue;
+                    }
+                    source = zapLineSource;
+                    sourceFromItemZap = zapLineSourceFromItemZap;
+                    runtimeName = $"FxZapLine_Runtime_{i}";
+                }
+                else
+                {
+                    if (_fxZapLine2Prefab == null)
+                        _fxZapLine2Prefab = Resources.Load<GameObject>(Const.PREFAB_FX_ZAP_LINE2);
+
+                    if (_fxZapLine2Prefab == null)
+                    {
+                        Debug.LogWarning($"[BoosterExecutor] Missing FxZapLine2 prefab at Resources/{Const.PREFAB_FX_ZAP_LINE2}.");
+                        continue;
+                    }
+                    source = _fxZapLine2Prefab;
+                    sourceFromItemZap = false;
+                    runtimeName = $"FxZapLine2_Runtime_{i - halfCount}";
+                }
+
                 GameObject runtimeLine = Instantiate(source);
                 runtimeLine.transform.position = ZapSpawnPosition;
-                if (i == 0)
-                    runtimeLine.name = "FxZapLine_Runtime";
-                else if (i == 1)
-                    runtimeLine.name = "FxZapLine_Runtime_L";
-                else if (i == 2)
-                    runtimeLine.name = "FxZapLine_Runtime_R";
-                else
-                    runtimeLine.name = $"FxZapLine_Runtime_{i}";
+                runtimeLine.name = runtimeName;
                 runtimeLine.SetActive(true);
                 lines.Add(runtimeLine);
+                fromItemZapFlags.Add(sourceFromItemZap);
             }
 
             return lines;
@@ -1024,8 +1047,8 @@ namespace BalloonFlow
             }
         }
 
-        // 3갈래 Zap 라인을 동일 타이밍에 ConfigureZapLine으로 활성화.
-        // 공통 시작점=startPosition, 끝점=endPosition + perp * {-Δ, 0, +Δ}.
+        // 4갈래 Zap 라인을 동일 타이밍에 ConfigureZapLine으로 활성화.
+        // 공통 시작점=startPosition, 끝점=endPosition + perp * {-1.5Δ, -0.5Δ, +0.5Δ, +1.5Δ}.
         private void ConfigureZapLineFan(List<GameObject> zapLineObjects, Vector3 startPosition, Vector3 endPosition, float visibleDuration)
         {
             if (zapLineObjects == null || zapLineObjects.Count == 0)
@@ -1033,7 +1056,7 @@ namespace BalloonFlow
 
             int count = zapLineObjects.Count;
 
-            // 라인 수가 3이 아니면 가드: 모두 동일 endPosition 사용.
+            // 라인 수가 ZapLineConcurrentCount(=4)가 아니면 가드: 모두 동일 endPosition 사용.
             if (count != ZapLineConcurrentCount)
             {
                 for (int i = 0; i < count; i++)
@@ -1055,7 +1078,12 @@ namespace BalloonFlow
                     perp = Vector3.right;
             }
 
-            float[] offsets = { -ZapLineForkOffset, 0f, ZapLineForkOffset };
+            float[] offsets = {
+                -1.5f * ZapLineForkOffset,
+                -0.5f * ZapLineForkOffset,
+                 0.5f * ZapLineForkOffset,
+                 1.5f * ZapLineForkOffset
+            };
             for (int i = 0; i < count; i++)
             {
                 Vector3 forkedEnd = endPosition + perp * offsets[i];

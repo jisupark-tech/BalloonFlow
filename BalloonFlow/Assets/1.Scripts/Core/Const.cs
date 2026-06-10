@@ -57,6 +57,7 @@ namespace BalloonFlow
         public const string PREFAB_FXGOLD             = "UI/FXGold";
         public const string PREFAB_FXITEM             = "UI/FXItem";
         public const string PREFAB_FX_ZAP_LINE        = "UI/FxZapLine";
+        public const string PREFAB_FX_ZAP_LINE2       = "UI/FxZapLine2";
         public const string PREFAB_GOLD_PANEL         = "UI/GoldPanel";
         public const string PREFAB_ITEM_BTN           = "UI/ItemBtn";
         public const string PREFAB_LOBBY_RAIL_BOX     = "UI/LobbyRailBox";
