@@ -605,12 +605,13 @@ namespace BalloonFlow
         private static MaterialPropertyBlock _balloonMpb;
         // ROLLBACK_OUTLINE_MATERIAL_SWAP_20260609 (Option A): 외곽 풍선 아웃라인 = MPB 대신 머티리얼 swap.
         //   MPB 는 SRP Batcher 를 깸 → 내부 1500 배칭 유지 위해, 외곽선 대상만 multi-pass outline 셰이더 머티리얼로 교체.
-        //   _outlinedTwins: 원본 머티리얼 → outline 트윈(셰이더만 ItemSharedOutline) 캐시(공유). _balloonOutlinedOriginals: 복원용 원본 보관.
+        //   _outlinedTwins: 원본 머티리얼 → outline 트윈(셰이더만 ItemSharedOutline) 캐시(공유). _outlinedBalloonIds: 현재 hull 부착 중인 풍선 ID.
         //   롤백: ApplyOutlineToBalloon 을 MPB 버전으로 복원 + 이 3 필드 제거 + ItemSharedOutline.shader 삭제.
         private static Shader _outlineShaderCached;
         private static Material _outlineHullMat; // 공유 Custom/OutlineHull 머티리얼(모든 외곽선 material[1] 공용 → 한 배치)
         private static readonly Dictionary<Material, Material> _outlinedTwins = new Dictionary<Material, Material>(); // (구 트윈 방식 — 미사용)
-        private readonly Dictionary<int, Material[]> _balloonOutlinedOriginals = new Dictionary<int, Material[]>();
+        private readonly HashSet<int> _outlinedBalloonIds = new HashSet<int>();
+        private static readonly List<Material> _sharedMatBuffer = new List<Material>(4); // GetSharedMaterials 무할당 조회용
         private readonly HashSet<int> _prevOutermostSet = new HashSet<int>();
         private readonly List<int> _outerDiffBuffer = new List<int>(64);
         private bool _hasAppliedOutermostOutline;
@@ -748,11 +749,13 @@ namespace BalloonFlow
         // ROLLBACK_OUTLINE_MATERIAL_SWAP_20260609: 외곽선 = body 렌더러의 material[1] 에 공유 hull 추가/제거.
         //   body = BalloonIdentifier.ColorRenderers (그림자/라벨 제외 — prefab 구성 유지). MPB/멀티패스 셰이더 안 씀.
         //   → body(material[0]) 는 그대로 SRP batch, hull(material[1]=공유 1개) 끼리 한 배치. 풍선 1500 무손상.
+        // [Outline fix 2026-06-10] disable 가 .sharedMaterial(=[0]만 교체) 로 복원해 hull([1]) 이 영구 잔존하던 버그 수정.
+        //   HolderIdentifier.RestoreRenderers 와 동일 패턴 — 현재 [0](현재 색) 유지 + hull 만 제거. 원본 배열 보관 폐기.
         private void ApplyOutlineToBalloon(int balloonId, bool enableOutline)
         {
             if (!_balloonObjects.TryGetValue(balloonId, out GameObject obj) || obj == null)
             {
-                _balloonOutlinedOriginals.Remove(balloonId);
+                _outlinedBalloonIds.Remove(balloonId);
                 return;
             }
             BalloonIdentifier bi = obj.GetComponent<BalloonIdentifier>();
@@ -761,28 +764,34 @@ namespace BalloonFlow
 
             if (enableOutline)
             {
-                if (_balloonOutlinedOriginals.ContainsKey(balloonId)) return; // 이미 outlined
+                if (!_outlinedBalloonIds.Add(balloonId)) return; // 이미 outlined
                 Material hull = GetOutlineHullMaterial();
-                if (hull == null) return;
-                var originals = new Material[bodyRenderers.Length];
+                if (hull == null) { _outlinedBalloonIds.Remove(balloonId); return; }
                 for (int r = 0; r < bodyRenderers.Length; r++)
                 {
                     var rend = bodyRenderers[r];
                     if (rend == null) continue;
-                    originals[r] = rend.sharedMaterial;                                  // 단일 body 머티리얼 보관
                     rend.sharedMaterials = new Material[] { rend.sharedMaterial, hull }; // material[1] 에 hull 추가
                 }
-                _balloonOutlinedOriginals[balloonId] = originals;
             }
             else
             {
-                if (!_balloonOutlinedOriginals.TryGetValue(balloonId, out Material[] originals)) return;
-                for (int r = 0; r < bodyRenderers.Length && r < originals.Length; r++)
-                {
-                    var rend = bodyRenderers[r];
-                    if (rend != null && originals[r] != null) rend.sharedMaterial = originals[r]; // 단일 머티리얼로 복원(hull 제거)
-                }
-                _balloonOutlinedOriginals.Remove(balloonId);
+                if (!_outlinedBalloonIds.Remove(balloonId)) return;
+                StripOutlineHull(bodyRenderers);
+            }
+        }
+
+        // hull([1]) 제거 — [0](현재 색)은 유지. disable 복원 + 풀 재사용 풍선의 잔존 hull 정리 공용.
+        private static void StripOutlineHull(Renderer[] bodyRenderers)
+        {
+            if (bodyRenderers == null) return;
+            for (int r = 0; r < bodyRenderers.Length; r++)
+            {
+                var rend = bodyRenderers[r];
+                if (rend == null) continue;
+                rend.GetSharedMaterials(_sharedMatBuffer);
+                if (_sharedMatBuffer.Count > 1)
+                    rend.sharedMaterials = new Material[] { _sharedMatBuffer[0] };
             }
         }
 
@@ -1340,7 +1349,7 @@ namespace BalloonFlow
             //       다음 레벨의 balloonId=1 풍선이 stale Renderer[] / outline state / cached position 과 collision.
             _balloonRenderers.Clear();
             _prevOutermostSet.Clear();
-            _balloonOutlinedOriginals.Clear(); // ROLLBACK_OUTLINE_MATERIAL_SWAP_20260609: outline swap 원본 상태 정리(stale 방지)
+            _outlinedBalloonIds.Clear(); // ROLLBACK_OUTLINE_MATERIAL_SWAP_20260609: outline swap 상태 정리(stale 방지)
             _hasAppliedOutermostOutline = false;
             _frameCachedPositions.Clear();
             _frameCachedPositionsFrame = -1;
@@ -2010,6 +2019,9 @@ namespace BalloonFlow
             BalloonIdentifier identifier = obj.GetComponent<BalloonIdentifier>();
             if (identifier != null)
             {
+                // [Outline fix 2026-06-10] pop 풍선(=외곽이라 hull 부착)이 hull 단 채 풀 반환 → 재사용 시
+                // ApplyColor 가 [0]만 교체해 hull 잔존 → "모든 풍선 아웃라인" 증상. 스폰 시 잔존 hull 제거.
+                StripOutlineHull(identifier.ColorRenderers);
                 identifier.Initialize(balloonId, color);
             }
 
