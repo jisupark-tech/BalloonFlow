@@ -103,14 +103,7 @@ namespace BalloonFlow
 
             ResolveReferences();
 
-            if (_frame != null && _frame.BtnExit != null)
-                _frame.BtnExit.onClick.AddListener(CloseUI);
-            CacheExitDuplicateButton();
-            if (_btnExitDuplicate != null)
-            {
-                _btnExitDuplicate.onClick.RemoveAllListeners();
-                _btnExitDuplicate.onClick.AddListener(CloseUI);
-            }
+            BindExitButtons();
 
             if (_frame != null && _frame.BtnSingle != null)
             {
@@ -191,12 +184,45 @@ namespace BalloonFlow
             }
 
             if (found != null)
-                _btnExitDuplicate = found.GetComponent<Button>();
+                _btnExitDuplicate = ResolveButtonOnExitTransform(found);
+        }
+
+        private static Button ResolveButtonOnExitTransform(Transform root)
+        {
+            if (root == null) return null;
+            Button button = root.GetComponent<Button>();
+            if (button != null) return button;
+
+            // ROLLBACK_WINNING_STREAK_EXIT_REBIND_20260610:
+            // ExitButton (1) can be a visual wrapper with the actual Button on a child.
+            // If only the wrapper is found, it blocks the normal exit button but never closes.
+            return root.GetComponentInChildren<Button>(true);
+        }
+
+        private void BindExitButtons()
+        {
+            ResolveReferences();
+
+            if (_frame != null && _frame.BtnExit != null)
+            {
+                _frame.BtnExit.onClick.RemoveListener(CloseUI);
+                _frame.BtnExit.onClick.AddListener(CloseUI);
+                _frame.BtnExit.interactable = true;
+            }
+
+            CacheExitDuplicateButton();
+            if (_btnExitDuplicate != null)
+            {
+                _btnExitDuplicate.onClick.RemoveListener(CloseUI);
+                _btnExitDuplicate.onClick.AddListener(CloseUI);
+                _btnExitDuplicate.interactable = true;
+            }
         }
 
         public override void OpenUI()
         {
             ResolveReferences();
+            BindExitButtons();
             BindScrollListener();
             SubscribeStateEvents();
 
@@ -226,11 +252,34 @@ namespace BalloonFlow
 
         private void Update()
         {
+#if UNITY_EDITOR
+            // [에디터 전용] 1~5 키 → Multiplier 등장 연출 + 배수 위치 프리뷰 (x1/x5/x10/x25/x100). 실제 state 변경 없음.
+            // (z/x 로비 프리뷰와 별개 — 이 팝업의 배수 연출 검증용은 숫자 키 사용. 타이머 틱 early-return 보다 먼저 체크.)
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb != null)
+            {
+                if (kb.digit1Key.wasPressedThisFrame) PreviewMultiplierFx(1);
+                if (kb.digit2Key.wasPressedThisFrame) PreviewMultiplierFx(5);
+                if (kb.digit3Key.wasPressedThisFrame) PreviewMultiplierFx(10);
+                if (kb.digit4Key.wasPressedThisFrame) PreviewMultiplierFx(25);
+                if (kb.digit5Key.wasPressedThisFrame) PreviewMultiplierFx(100);
+            }
+#endif
             _timerTick += Time.unscaledDeltaTime;
             if (_timerTick < 1f) return;   // 시:분 단위 표시라 1초 주기면 충분
             _timerTick = 0f;
             UpdateRoundTimer();
         }
+
+#if UNITY_EDITOR
+        /// <summary>[에디터 전용] 지정 배수로 SelectFrame/TextYellow 동시 이동 재생 (root 슬라이드 없음).</summary>
+        private void PreviewMultiplierFx(int multiplier)
+        {
+            var multiplierGo = FindChildGOByName(gameObject, "Multiplier");
+            if (multiplierGo == null) return;
+            WinningStreakUI.PlayMultiplierSelect(multiplierGo.transform, multiplier);
+        }
+#endif
 
         /// <summary>회차 남은시간을 "Xd YYh" 로 Timer 에 표시. 경계 통과(남은시간 0) 시 CheckRoundBoundary 가 리셋.</summary>
         private void UpdateRoundTimer()
@@ -325,15 +374,15 @@ namespace BalloonFlow
             RefreshDescriptionText(state, cfg);
         }
 
-        /// <summary>"Multiplier" GameObject 의 SelectFrame / TextYellow 를 현재 배수 위치로 정적 셋팅 (애니메이션 없음).
-        /// Popup 매핑 (Quit/Continue 의 HUD 매핑과 다른 값) 사용.</summary>
+        /// <summary>"Multiplier" GameObject — SelectFrame / TextYellow 만 현재 배수 위치로 동시 이동 (코드 트윈, Animator 미사용).
+        /// 이 팝업에선 Multiplier root 슬라이드 불필요 (root 슬라이드는 UILobby WS 쪽만). Mask 위치 고정.
+        /// x1: SF -338 / TY 358, x5: -150/170, x10: 30/-10, x25: 210/-190, x100: 390/-370.</summary>
         private void RefreshMultiplierSelection()
         {
             var multiplierGo = FindChildGOByName(gameObject, "Multiplier");
             if (multiplierGo == null) return;
             int multiplier = WinningStreakUI.ResolveCurrentMultiplier();
-            // 실제 배수 반영 — Animator 상태(Multiplier5/10/25/100, 배수 1 은 기본 상태) 재생.
-            WinningStreakUI.PlayMultiplierState(multiplierGo.transform, multiplier);
+            WinningStreakUI.PlayMultiplierSelect(multiplierGo.transform, multiplier);
         }
 
         /// <summary>ImageMultiplier 아래의 SlotMultiplier(0..4) 5개에 streak1..streak5+ 배수 텍스트 채움.
@@ -439,6 +488,9 @@ namespace BalloonFlow
 
         private void ResolveReferences()
         {
+            if (_frame == null)
+                _frame = GetComponentInChildren<PopupCommonFrame>(true);
+
             if (_scrollRect == null)
                 _scrollRect = GetComponentInChildren<ScrollRect>(true);
 

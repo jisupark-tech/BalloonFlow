@@ -524,7 +524,7 @@ namespace BalloonFlow
             var state = mgr.State;
             ResolveWsTexts();
 
-            // 현재 배율(TextGauge/Outline 숫자 + Multiplier Animator) 반영.
+            // 현재 배율(TextGauge/Outline 숫자 + Multiplier SelectFrame/TextYellow 위치) 반영.
             RefreshWsMultiplierDisplay();
 
             // 회차 남은 시간 (TextTimer + Outline). Update 가 매초 갱신하지만 즉시 1회도 세팅.
@@ -548,7 +548,8 @@ namespace BalloonFlow
             BindWsRewardItem(stage);
         }
 
-        /// <summary>현재 배율(ResolveCurrentMultiplier)을 TextGauge/TextGaugeOutline 숫자 + Multiplier Animator 에 반영.
+        /// <summary>현재 배율(ResolveCurrentMultiplier)을 TextGauge/TextGaugeOutline 숫자 + Multiplier SelectFrame/TextYellow 위치에 반영.
+        /// [2026-06-10] Animator 방식 폐기 → 코드 트윈(PlayMultiplierSelect). Animator 가 위치를 덮어써 이동이 안 먹던 문제 해소.
         /// IsUnlocked 게이트와 무관하게 호출 가능 — 로비 표시·프리뷰(강제표시) 양쪽에서 항상 현재 배율 숫자가 보이게 한다.</summary>
         private void RefreshWsMultiplierDisplay()
         {
@@ -559,7 +560,7 @@ namespace BalloonFlow
             if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = mult;
             ResolveWsFxRefs();
             if (_wsMultiplier != null)
-                WinningStreakUI.PlayMultiplierState(_wsMultiplier, curMultiplier);
+                WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, curMultiplier);
         }
 
         /// <summary>WS 미니 표시의 배수(TextGauge/Outline)·시간(TextTimer/Outline) 텍스트를 이름으로 1회 해석·캐시.
@@ -609,12 +610,12 @@ namespace BalloonFlow
             ShowWsFlameGainToast(anim.gainedPoints);
 
             // FxFire 가 커졌다 작아진 직후 → Multiplier 가 X=10 으로 튕기듯 슬라이드 인.
-            // 슬라이드 인 전에 현재 배수 상태로 Animator 세팅 (FX 중 정확한 배수 표시).
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
             // ROLLBACK_WINNING_STREAK_MULTIPLIER_AFTER_ENTER_20260605:
             // Designer spec: after the Multiplier entrance motion, move SelectFrame/TextYellow to the current value.
+            // [2026-06-10] Animator(PlayMultiplierState) → 코드 트윈(PlayMultiplierSelect) — Animator 가 위치를 덮어쓰던 문제 해소.
             if (_wsMultiplier != null)
-                WinningStreakUI.PlayMultiplierState(_wsMultiplier, WinningStreakUI.ResolveCurrentMultiplier());
+                WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, WinningStreakUI.ResolveCurrentMultiplier());
 
             if (_wsProgressSlider != null)
             {
@@ -1437,6 +1438,23 @@ namespace BalloonFlow
             // [에디터 전용] x 키 → 실패 연출 미리보기 (Multiplier 가 높은 배수에서 1 로 떨어지는 연출, 실제 state 변경 없음).
             if (Keyboard.current != null && Keyboard.current.xKey.wasPressedThisFrame)
                 StartWinningStreakFailPreview();
+            // [에디터 전용] c 키 → PopupWinningStreak 바로 오픈 (해금 게이트 무시 — 팝업 안에서 1~5 키로 배수 연출 프리뷰).
+            if (Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame && UIManager.HasInstance)
+                UIManager.Instance.OpenUI<PopupWinningStreak>(Const.POPUP_WINNING_STREAK);
+            // [에디터 전용] 1~5 키 → 로비 WS Multiplier 배수 연출 프리뷰 (x1/x5/x10/x25/x100).
+            //   숨김 상태면 슬라이드 인부터, 표시 중이면 SelectFrame/TextYellow 이동만. z 연출과 조합해 확인용.
+            //   PopupWinningStreak 가 열려 있으면 팝업 쪽 1~5 키가 우선 — 로비는 무시.
+            if (Keyboard.current != null)
+            {
+                int wsPreviewMultiplier = 0;
+                if (Keyboard.current.digit1Key.wasPressedThisFrame) wsPreviewMultiplier = 1;
+                else if (Keyboard.current.digit2Key.wasPressedThisFrame) wsPreviewMultiplier = 5;
+                else if (Keyboard.current.digit3Key.wasPressedThisFrame) wsPreviewMultiplier = 10;
+                else if (Keyboard.current.digit4Key.wasPressedThisFrame) wsPreviewMultiplier = 25;
+                else if (Keyboard.current.digit5Key.wasPressedThisFrame) wsPreviewMultiplier = 100;
+                if (wsPreviewMultiplier > 0 && FindObjectOfType<PopupWinningStreak>() == null)
+                    StartCoroutine(PreviewWsMultiplierSelect(wsPreviewMultiplier));
+            }
 #endif
         }
 
@@ -1487,16 +1505,17 @@ namespace BalloonFlow
             int shownMultiplier = Mathf.Max(5, WinningStreakUI.ResolveCurrentMultiplier());
 
             SetWsMultiplierX(WS_MULTIPLIER_HIDDEN_X);
+            // [2026-06-10] Animator → 코드 트윈 (PlayMultiplierSelect) 전환.
             if (_wsMultiplier != null)
-                WinningStreakUI.PlayMultiplierState(_wsMultiplier, shownMultiplier);
+                WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, shownMultiplier);
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
 
             // 잠깐 보여준 뒤 → 실패 → 배수 1 로 리셋(드롭).
             yield return new WaitForSecondsRealtime(0.6f);
             if (_wsMultiplier != null)
             {
-                WinningStreakUI.PlayMultiplierState(_wsMultiplier, 1);
-                // Animator 유무와 무관하게 '떨어지는' 느낌이 나도록 아래로 펀치 + 살짝 축소 후 복귀.
+                WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, 1);
+                // '떨어지는' 느낌이 나도록 아래로 펀치 + 살짝 축소 후 복귀.
                 _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, -36f), 0.4f, 8, 0.7f).SetUpdate(true);
                 _wsMultiplier.DOPunchScale(new Vector3(-0.18f, -0.18f, 0f), 0.4f, 8, 0.7f).SetUpdate(true);
             }
@@ -1504,6 +1523,24 @@ namespace BalloonFlow
             yield return new WaitForSecondsRealtime(0.7f);
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
             _wsLobbyFxCoroutine = null;
+        }
+
+        /// <summary>[에디터 전용] 1~5 키 — 로비 WS Multiplier 배수 연출 프리뷰.
+        /// 숨김 위치면 슬라이드 인 후 SelectFrame/TextYellow 이동, 이미 표시 중이면 이동만 (배수 전환 비교용).
+        /// 실제 state 변경 없음.</summary>
+        private IEnumerator PreviewWsMultiplierSelect(int multiplier)
+        {
+            ForceShowWinningStreakUI();   // 미해금이어도 WS UI 강제 표시
+            ResolveWsFxRefs();
+            if (_wsMultiplier == null) yield break;
+            if (!_wsMultiplier.gameObject.activeSelf)
+                _wsMultiplier.gameObject.SetActive(true);
+
+            // 숨김 위치(-725 쪽)에 있으면 등장 슬라이드부터 — 등장 후 select 이동 순서 그대로 재현.
+            if (_wsMultiplier.anchoredPosition.x < WS_MULTIPLIER_SHOWN_X - 1f)
+                yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
+
+            WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, multiplier);
         }
 #endif
 

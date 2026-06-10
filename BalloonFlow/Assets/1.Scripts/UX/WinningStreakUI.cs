@@ -80,6 +80,12 @@ namespace BalloonFlow
             int idx = IndexForMultiplier(multiplier);
             var selectFrame = FindChildRect(multiplierRoot, "SelectFrame");
             var textYellow  = FindChildRect(multiplierRoot, "TextYellow");
+#if UNITY_EDITOR
+            // [2026-06-10] "이동 안 됨" 진단용 — 프리팹 이름 불일치 시 원인 즉시 노출.
+            if (selectFrame == null || textYellow == null)
+                Debug.LogWarning($"[WinningStreakUI] SelectFrame/TextYellow 탐색 실패 — root={multiplierRoot.name}, " +
+                                 $"SelectFrame={(selectFrame != null)}, TextYellow={(textYellow != null)}");
+#endif
             MoveRectX(selectFrame, selectFrameX[idx], duration);
             MoveRectX(textYellow, textYellowX[idx], duration);
         }
@@ -99,8 +105,9 @@ namespace BalloonFlow
                 .SetUpdate(true);
         }
 
-        /// <summary>Popup (Quit/Continue) WinningStreak view 안 Multiplier 등장 연출 + 위치 + Animator state.
-        /// 절차: (1) x=-724 → 0 슬라이드 (2) SelectFrame/TextYellow 위치 배수별 매핑 (3) Multiplier5/10/25/100 Animator state 재생.
+        /// <summary>Popup (Quit/Continue) WinningStreak view 안 Multiplier 등장 연출 + 위치 (전부 코드 트윈, Animator 미사용).
+        /// 절차: (1) x=-724 → 0 슬라이드 (2) 완료 후 SelectFrame/TextYellow 배수 위치로 동시 이동.
+        /// [2026-06-10] (3) Animator state 재생 폐기 — PlayMultiplierSelect 로 통일 (Animator 가 위치 덮어쓰던 문제).
         /// multiplier=1 이면 호출하지 않음 (caller 가 view 자체 skip).</summary>
         public static void PlayMultiplierIdle(GameObject winningStreakView, int multiplier)
         {
@@ -118,23 +125,31 @@ namespace BalloonFlow
                 rt.DOAnchorPosX(MULTIPLIER_ENTER_TO_X, MULTIPLIER_ENTER_DURATION)
                     .SetEase(Ease.OutCubic)
                     .SetUpdate(true) // popup 이라 timescale 무관.
-                    .OnComplete(() => PlayMultiplierState(multiplierRoot, multiplier));
+                    .OnComplete(() => PlayMultiplierSelect(multiplierRoot, multiplier));
                 return;
             }
 
-            // (2) SelectFrame / TextYellow 배수별 위치 (Popup Quit/Continue 매핑 사용).
-            ApplyHudPositionsForMultiplier(multiplierRoot, multiplier);
-
-            // (3) Animator state — Multiplier5/10/25/100.
-            var animator = multiplierRoot.GetComponentInChildren<Animator>(true);
-            if (animator == null) return;
-            string stateName = $"Multiplier{multiplier}";
-            animator.Play(stateName, 0, 0f);
+            // (2) RectTransform 아님 — 슬라이드 생략, select 이동만 (안전망).
+            PlayMultiplierSelect(multiplierRoot, multiplier);
         }
 
-        /// <summary>Multiplier 루트의 Animator 로 현재 배수 상태를 재생 (HUD/Popup/Lobby 공통).
-        /// 배수 5/10/25/100 → Multiplier{N} 상태 재생. 배수 1(연승 없음/실패 리셋)은 전용 anim 이 없어 Animator 를 기본 상태로 리셋.
-        /// Animator 미존재/비활성 시 no-op. 실제 배수(ResolveCurrentMultiplier) 를 그대로 넘겨 호출.</summary>
+        /// <summary>SelectFrame / TextYellow 를 현재 배수 위치로 "동시" 코드 트윈 이동 — Animator 미사용 (코드 방식 확정).
+        /// - PopupWinningStreak: Multiplier root 슬라이드 불필요 → 이것만 호출.
+        /// - UILobby WS: root 슬라이드(코드, PlayWsMultiplierSlide)는 호출측이 재생, 완료 후 이것 호출.
+        /// [2026-06-10 fix] 기존 PlayMultiplierState 는 위치 트윈과 동시에 Animator state 를 재생 — Animator 가
+        /// SelectFrame/TextYellow 위치를 매 프레임 덮어써 이동이 안 먹던 원인. 여기선 Animator 를 비활성화해 코드가 이기게 함.
+        /// Mask(TextMask) 는 안 만짐. 롤백: 호출부를 PlayMultiplierState 로 복원 + animator.enabled 라인 제거.</summary>
+        public static void PlayMultiplierSelect(Transform multiplierRoot, int multiplier)
+        {
+            if (multiplierRoot == null) return;
+            var animator = multiplierRoot.GetComponentInChildren<Animator>(true);
+            if (animator != null && animator.enabled) animator.enabled = false; // 코드 이동을 Animator 가 덮어쓰지 않게 차단
+            ApplyPositions(multiplierRoot, multiplier, PopupSelectFrameX, PopupTextYellowX, MULTIPLIER_SELECT_MOVE_DURATION);
+        }
+
+        /// <summary>[미사용 2026-06-10 — Animator 방식 롤백용 보존] Multiplier 루트의 Animator 로 현재 배수 상태를 재생.
+        /// 전 호출부가 PlayMultiplierSelect(코드 트윈) 로 전환됨. Animator 가 SelectFrame/TextYellow 위치를 덮어쓰는 문제로 폐기.
+        /// 배수 5/10/25/100 → Multiplier{N} 상태 재생. 배수 1 은 Animator 기본 상태 리셋.</summary>
         public static void PlayMultiplierState(Transform multiplierRoot, int multiplier)
         {
             if (multiplierRoot == null) return;
