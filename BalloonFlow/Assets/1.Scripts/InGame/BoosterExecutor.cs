@@ -56,7 +56,6 @@ namespace BalloonFlow
         private const int ZapLineRenderQueue = 4000;
         private const float ZapFieldBottomPaddingCells = 1.5f;
         private const int ZapLineConcurrentCount = 4;
-        private const float ZapLineForkOffset = 0.45f; // 4갈래(±0.5Δ, ±1.5Δ)로 벌어지는 perpendicular 오프셋(월드 단위)
         // 번개 라인이 활성화된 동안 매 tick 마다 끝점에 미세 jitter 를 더해 LightningBoltScript.Trigger() 를 재호출해 자글거리게 만든다.
         private const float ZapLineJiggleMinInterval = 0.03f;
         private const float ZapLineJiggleMaxInterval = 0.06f;
@@ -1106,7 +1105,8 @@ namespace BalloonFlow
         }
 
         // 4갈래 Zap 라인을 동일 타이밍에 ConfigureZapLine으로 활성화.
-        // 공통 시작점=startPosition, 끝점=endPosition + perp * {-1.5Δ, -0.5Δ, +0.5Δ, +1.5Δ}.
+        // 라인 인덱스별 (X, Z) 고정 오프셋을 startPosition/endPosition 양쪽에 동일하게 더해 평행 이동.
+        // Y는 GetZapLineRenderPosition 가 결정한 값 그대로(위아래 튀지 않게).
         private void ConfigureZapLineFan(List<GameObject> zapLineObjects, Vector3 startPosition, Vector3 endPosition, float visibleDuration)
         {
             if (zapLineObjects == null || zapLineObjects.Count == 0)
@@ -1122,30 +1122,17 @@ namespace BalloonFlow
                 return;
             }
 
-            Vector3 dir = endPosition - startPosition;
-            dir.y = 0f;
-            Vector3 perp;
-            if (dir.sqrMagnitude < 0.0001f)
-            {
-                perp = Vector3.right;
-            }
-            else
-            {
-                perp = Vector3.Cross(dir.normalized, Vector3.up).normalized;
-                if (perp.sqrMagnitude < 0.0001f)
-                    perp = Vector3.right;
-            }
-
-            float[] offsets = {
-                -1.5f * ZapLineForkOffset,
-                -0.5f * ZapLineForkOffset,
-                 0.5f * ZapLineForkOffset,
-                 1.5f * ZapLineForkOffset
+            Vector2[] perLineOffsetsXZ = {
+                new Vector2(+0.00f, +0.00f),
+                new Vector2(+0.08f, +0.04f),
+                new Vector2(-0.08f, -0.04f),
+                new Vector2(+0.04f, -0.08f),
             };
+
             for (int i = 0; i < count; i++)
             {
-                Vector3 forkedEnd = endPosition + perp * offsets[i];
-                ConfigureZapLine(zapLineObjects[i], startPosition, forkedEnd, visibleDuration);
+                Vector3 off = new Vector3(perLineOffsetsXZ[i].x, 0f, perLineOffsetsXZ[i].y);
+                ConfigureZapLine(zapLineObjects[i], startPosition + off, endPosition + off, visibleDuration);
             }
         }
 
