@@ -372,25 +372,14 @@ namespace BalloonFlow
             CollectZapTargets(color);
 
             Vector3 attackPosition = GetZapAttackPosition();
+            // ItemZap stays at ZapSpawnPosition for the entire effect — do not tween or reposition.
             GameObject zapObject = CreateItemZap(attackPosition);
+            Vector3 zapFixedPosition = zapObject != null ? zapObject.transform.position : ZapSpawnPosition;
             GameObject zapLineObject = null;
             bool zapLineFromItemZap = false;
 
             yield return new WaitForSeconds(ZapAppearDuration);
-
-            if (zapObject != null)
-            {
-                Vector3 spawnPosition = GetZapSpawnPosition(attackPosition);
-                zapObject.transform.position = spawnPosition;
-                Tween moveTween = zapObject.transform
-                    .DOMove(attackPosition, ZapMoveDuration)
-                    .SetEase(Ease.OutCubic);
-                yield return moveTween.WaitForCompletion();
-            }
-            else
-            {
-                yield return new WaitForSeconds(ZapMoveDuration);
-            }
+            yield return new WaitForSeconds(ZapMoveDuration);
 
             int fieldRemoved = 0;
             if (_zapTargets.Count > 0)
@@ -432,7 +421,7 @@ namespace BalloonFlow
                     ZapTarget target = _zapTargets[i];
                     Vector3 targetPosition = GetZapEffectPosition(target.position);
                     float lineVisibleDuration = Mathf.Max(ZapLineLifetime, stepDelay + lineLeadBeforePop);
-                    Vector3 lineStartPosition = zapObject != null ? zapObject.transform.position : attackPosition;
+                    Vector3 lineStartPosition = zapFixedPosition;
                     ConfigureZapLine(zapLineObject, lineStartPosition, targetPosition, lineVisibleDuration);
 
                     // ROLLBACK_ZAP_LINE_PREPOP_LEAD:
