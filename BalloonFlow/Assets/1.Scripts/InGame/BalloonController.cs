@@ -33,6 +33,10 @@ namespace BalloonFlow
         private const float BALLOON_FIXED_SPAWN_Y = 0.1f;
         // [#2] 풍선 소환 시 높이(scale.y)를 레벨/맵사이즈와 무관하게 절대 고정 — 레벨마다 풍선 높이가 달라지던 문제 보정.
         private const float BALLOON_FIXED_SCALE_Y = 0.35f;
+        // [#2 개정 2026-06-10] 보드 가로(gridCols) 기준 분기 — 작은 보드(≤26)는 y = x×1.1 비례, 큰 보드(≥27)는 0.35 고정 유지.
+        //   ex. 1레벨 scale.x≈0.5 → scale.y≈0.55. gridCols 미설정(0, 구버전 JSON)이면 기존 0.35 고정으로 폴백.
+        private const int SMALL_BOARD_MAX_GRID_COLS = 26;
+        private const float SMALL_BOARD_SCALE_Y_RATIO = 1.1f;
         // ROLLBACK_BARRICADE_BODY_1TO1_SCALE:
         // Updated Barricade/BarricadeBody art is authored at a 1:1 local scale per board cell.
         private const float BARRICADE_BODY_CELL_LOCAL_SCALE_X = 1f;
@@ -189,6 +193,15 @@ namespace BalloonFlow
         public void SetBalloonScale(float scale)
         {
             _balloonScale = Mathf.Clamp(scale, 0.2f, 1.0f);
+        }
+
+        // [#2 개정 2026-06-10] 레벨 보드 가로 칸수 — scale.y 분기(≤26: x×1.1 / ≥27: 0.35 고정) 기준.
+        private int _boardGridCols;
+
+        /// <summary>레벨 보드 가로 칸수 설정. LevelManager 가 레벨 적용 시 매번 호출 (0 = 미설정 → 0.35 고정 폴백).</summary>
+        public void SetBoardGridCols(int cols)
+        {
+            _boardGridCols = Mathf.Max(0, cols);
         }
 
         /// <summary>
@@ -566,8 +579,16 @@ namespace BalloonFlow
         // footprint(X/Z)만 축소해 제거 시 pop 피드백이 납작해지지 않게 한다.
         // ROLLBACK_BALLOON_FIXED_SCALE_Y_20260608: 이전 Y = _balloonScale (레벨/맵별 가변 → 레벨마다 높이 차이).
         // [#2] Y 를 0.35 절대 고정. X/Z(footprint)는 맵사이즈(_balloonScale*scaleMult)대로 유지.
+        // [#2 개정 2026-06-10] 보드 가로(gridCols) ≤26 이면 y = x×1.1 비례 (작은 보드는 풍선이 커서 0.35 가 납작해 보임),
+        //   ≥27 또는 미설정(0)이면 기존 0.35 고정. 롤백: 아래를 0.35 고정 단일식으로 복원 + SetBoardGridCols 제거.
         private Vector3 GetBalloonRestScale(float scaleMult)
-            => new Vector3(_balloonScale * scaleMult, BALLOON_FIXED_SCALE_Y, _balloonScale * scaleMult);
+        {
+            float xz = _balloonScale * scaleMult;
+            float y = (_boardGridCols > 0 && _boardGridCols <= SMALL_BOARD_MAX_GRID_COLS)
+                ? xz * SMALL_BOARD_SCALE_Y_RATIO
+                : BALLOON_FIXED_SCALE_Y;
+            return new Vector3(xz, y, xz);
+        }
 
         /// <summary>
         /// Returns all non-popped balloons matching the specified color.

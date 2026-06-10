@@ -606,6 +606,13 @@ namespace BalloonFlow
                 BalloonController.Instance.SetBalloonScale(config.balloonScale);
             }
 
+            // [#2 개정 2026-06-10] 보드 가로 칸수 전달 — scale.y 분기(≤26: x×1.1 / ≥27: 0.35 고정) 기준.
+            // balloonScale 가드와 별개로 매 레벨 무조건 갱신 (이전 레벨 값 잔존 방지. 0=미설정 폴백).
+            if (BalloonController.HasInstance)
+            {
+                BalloonController.Instance.SetBoardGridCols(config.gridCols);
+            }
+
             // Initialize balloons from level config
             if (BalloonController.HasInstance && config.balloons != null)
             {
