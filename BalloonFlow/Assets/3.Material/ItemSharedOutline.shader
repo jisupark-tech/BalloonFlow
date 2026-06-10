@@ -1,4 +1,10 @@
-Shader "Custom/ItemShared"
+// ROLLBACK_ITEMSHAREDOUTLINE_20260609 (Option A):
+//   ItemShared 의 multi-pass(Outline 포함) 버전 — "외곽선 대상 소수"(외곽 풍선 / 보관함 front-row) 전용.
+//   내부 1500 풍선은 single-pass Custom/ItemShared 유지 → SRP Batcher 로 묶임.
+//   이 셰이더는 multi-pass 라 SRP Batcher 가 노드마다 끊지만, 쓰는 오브젝트가 소수(~수십)라 영향 작음.
+//   프로퍼티 레이아웃은 ItemShared 와 동일(+_OutlineEnabled default 1) → 머티리얼 복제(new Material(src){shader=this}) 호환.
+//   롤백: 이 파일 삭제 + BalloonController/HolderIdentifier 의 material swap 코드 원복.
+Shader "Custom/ItemSharedOutline"
 {
     Properties
     {
@@ -23,12 +29,12 @@ Shader "Custom/ItemShared"
         _BlurColor("Blur Color", Color) = (1, 1, 1, 1)
 
         [Header(Outline)]
-        [Toggle] _OutlineEnabled("Outline Enabled", Float) = 0
+        [Toggle] _OutlineEnabled("Outline Enabled", Float) = 1   // outlined 전용이라 기본 ON
         _OutlineColor("Outline Color", Color) = (0, 0, 0, 1)
         _OutlineWidth("Outline Width", Range(0.0001, 0.01)) = 0.002
 
         [Header(Shadow Tint)]
-        // [Shadow Tint 2026-06-10] 음영면 진하기 — baseColor² 에 곱해지는 계수. 0 = 검정, 클수록 밝고 찐한 자기 색.
+        // [Shadow Tint 2026-06-10] ItemShared 와 동일 — 음영면 진하기 (baseColor² 계수).
         _ShadowTintStrength("Shadow Tint Strength", Range(0, 1.5)) = 0.6
     }
 
@@ -36,25 +42,19 @@ Shader "Custom/ItemShared"
     {
         Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" "Queue" = "Geometry" }
 
-        // ──────────────── Pass 0: Main Color ────────────────
+        // ──────────────── Pass 0: Main Color (ItemShared 와 동일) ────────────────
         Pass
         {
             Name "MainColor"
             Tags { "LightMode" = "UniversalForward" }
 
-            Cull Back   // 명시: backface culling — 카메라 반대면 픽셀 skip (default 와 동일, 명확성 위한 명시)
+            Cull Back
             ZWrite On
 
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_instancing
-            // [Optimization 2026-05-11] 사용 안 하는 multi_compile 제거 → variant 수 절감.
-            //   _MAIN_LIGHT_SHADOWS: frag 가 GetMainLight() shadow-less overload 만 사용 + URP Cast Shadows Distance=0 → 영향 없음.
-            //   _ADDITIONAL_LIGHTS: URP Additional Lights=Disabled + frag 에 additional light 코드 없음.
-            // 롤백: 아래 두 라인 주석 해제.
-            // #pragma multi_compile _ _MAIN_LIGHT_SHADOWS
-            // #pragma multi_compile _ _ADDITIONAL_LIGHTS
             #pragma shader_feature_local _NORMALMAP
             #pragma shader_feature_local _EMISSION
 
@@ -70,15 +70,11 @@ Shader "Custom/ItemShared"
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
-            // [Optimization 2026-05-11] positionWS 제거 — Specular 제거 후 frag 에서 사용 안 함. interpolator 1 slot + vertex 계산 절감.
-            // half 정밀도 적용 (normalWS / tangentWS / bitangentWS) — mobile FP16 가 FP32 대비 1.5~2× 빠름. 시각 동등.
-            // 롤백: positionWS line 추가 + half3 → float3 복원.
             struct Varyings
             {
                 float4 positionHCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 half3 normalWS : TEXCOORD1;
-                // 원본: float3 positionWS : TEXCOORD2; (Specular 제거 후 미사용)
             #ifdef _NORMALMAP
                 half3 tangentWS : TEXCOORD2;
                 half3 bitangentWS : TEXCOORD3;
@@ -115,7 +111,6 @@ Shader "Custom/ItemShared"
                 UNITY_SETUP_INSTANCE_ID(IN);
                 UNITY_TRANSFER_INSTANCE_ID(IN, OUT);
                 OUT.positionHCS = TransformObjectToHClip(IN.positionOS.xyz);
-                // [Optimization 2026-05-11] positionWS 계산 제거 (미사용). 원본: OUT.positionWS = TransformObjectToWorld(IN.positionOS.xyz);
                 OUT.normalWS = (half3)TransformObjectToWorldNormal(IN.normalOS);
                 OUT.uv = TRANSFORM_TEX(IN.uv, _BaseMap);
 
@@ -133,61 +128,35 @@ Shader "Custom/ItemShared"
                 half4 texColor = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.uv);
                 half4 baseColor = texColor * _BaseColor;
 
-                // [Optimization 2026-05-11] half 정밀도 — mobile FP16 더 빠름. 원본: float3 normalWS.
                 half3 normalWS = normalize(IN.normalWS);
 
             #ifdef _NORMALMAP
                 half3 normalTS = UnpackNormalScale(
                     SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, IN.uv), _BumpScale);
-                // 원본: float3 T / float3 B
                 half3 T = normalize(IN.tangentWS);
                 half3 B = normalize(IN.bitangentWS);
                 normalWS = normalize(T * normalTS.x + B * normalTS.y + normalWS * normalTS.z);
             #endif
 
                 Light mainLight = GetMainLight();
-
                 half NdotL = saturate(dot(normalWS, (half3)mainLight.direction));
-                // [Shadow Tint 2026-06-10] 음영면이 회색빛(baseColor*0.3 만 잔존)으로 칙칙 → 자기 색 multiply 그림자로 교체 (아트 요구).
-                //   shadowColor = baseColor² × _ShadowTintStrength — multiply 블렌드라 어두워지며 채도가 올라가 자기 색으로 "찐하게" 보임.
-                //   litColor = 기존 NdotL=1 결과(diffuse+ambient)와 동일값 → 밝은 면 시각 변화 없음, 어두운 끝점만 교체.
-                //   롤백: 아래 2줄을 원본으로 복원 + finalColor 의 원본 lerp 복원.
+                // [Shadow Tint 2026-06-10] ItemShared 와 동일 — 음영면을 자기 색 multiply(baseColor²) 그림자로. 두 셰이더 항상 동기 유지.
                 // 원본: half3 diffuse = baseColor.rgb * (half3)mainLight.color * NdotL;
                 //       half3 ambient = baseColor.rgb * 0.3;
+                //       half3 finalColor = lerp(diffuse + ambient, baseColor.rgb + ambient * 0.5, _Metallic);
                 half3 litColor    = baseColor.rgb * ((half3)mainLight.color + 0.3);
                 half3 shadowColor = baseColor.rgb * baseColor.rgb * _ShadowTintStrength;
-
-                // 사용자 요구로 Specular 제거 — 모바일 pow + exp2 가 fragment shader 의 가장 큰 부하.
-                // Smoothness 0.15 default 에선 시각 거의 동일.
-                // [LEGACY: Blinn-Phong Specular]
-                // float3 viewDir = normalize(GetWorldSpaceViewDir(IN.positionWS));
-                // float3 halfDir = normalize(mainLight.direction + viewDir);
-                // half NdotH = saturate(dot(normalWS, halfDir));
-                // half specPower = exp2(10.0 * _Smoothness + 1.0);
-                // half3 specular = mainLight.color * pow(NdotH, specPower) * _Smoothness;
-
-                // Metallic blend — specular 없는 단순 형태. _Metallic 0 이면 shadowColor↔litColor 음영 램프.
-                // 원본: half3 finalColor = lerp(diffuse + ambient, baseColor.rgb + ambient * 0.5, _Metallic);  (metallic 항 = baseColor*1.15 와 동일)
                 half3 finalColor = lerp(lerp(shadowColor, litColor, NdotL), baseColor.rgb * 1.15, _Metallic);
-                // [LEGACY] finalColor += specular * (1.0 - _Metallic) * 0.3;
 
-                // Emission
             #ifdef _EMISSION
                 finalColor += _EmissionColor.rgb;
             #endif
-
-                // Blur overlay: 비활성 (흰색 아웃라인만 사용)
-                // finalColor = lerp(finalColor, _BlurColor.rgb, _BlurAmount);
 
                 return half4(finalColor, baseColor.a);
             }
             ENDHLSL
         }
 
-        // [Optimization 2026-05-10] Outline Pass 통째로 주석 처리 — 풍선 1500개 × Outline Pass = 1500 draws/frame 제거.
-        // 시각: 풍선 외곽선 사라짐. Mobile 디바이스에서 큰 stage 시 frame drop 회복 위해 outline 자체 OFF.
-        // 롤백: 아래 /* */ 블록 주석 해제. 외곽만 outline 원하면 vertex shader 의 _OutlineEnabled<0.5 분기도 함께 해제.
-        /*
         // ──────────────── Pass 1: Outline (Inverted Hull) ────────────────
         Pass
         {
@@ -240,7 +209,7 @@ Shader "Custom/ItemShared"
 
                 if (_OutlineEnabled < 0.5)
                 {
-                    OUT.positionHCS = float4(2, 2, 2, 1);
+                    OUT.positionHCS = float4(2, 2, 2, 1); // degenerate clip
                     return OUT;
                 }
 
@@ -256,15 +225,14 @@ Shader "Custom/ItemShared"
             }
             ENDHLSL
         }
-        */
 
-        // ──────────────── Pass 2: Depth Only ────────────────
+        // ──────────────── Pass 2: Depth Only (ItemShared 와 동일) ────────────────
         Pass
         {
             Name "DepthOnly"
             Tags { "LightMode" = "DepthOnly" }
 
-            Cull Back   // 명시: backface culling
+            Cull Back
             ZWrite On
             ColorMask 0
 
