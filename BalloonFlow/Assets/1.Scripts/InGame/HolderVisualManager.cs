@@ -25,6 +25,19 @@ namespace BalloonFlow
         private const int MAX_COLUMNS = 5;
         private const int MAGAZINE_FONT_SIZE = 8;
         private const int HIDDEN_MAGAZINE_FONT_SIZE = 10;
+        // [TMP 부하 2026-06-10] 탄창 텍스트 표시 행 게이트 — row 0~4 만 표시, row 5+ 는 GO 비활성.
+        //   기존엔 큐 전체(5열 × n행 = 5n 개)의 TMP 가 전부 살아있었음. TMP SDF 는 투명 쿼드라 alpha 50% 라도
+        //   드로우+오버드로우 발생 → 깊은 큐 레벨에서 부하. 큐 전진/재배치 시마다 행 기준 재평가됨.
+        //   롤백: 이 const + ApplyMagazineTextRowVisibility 호출 3곳 제거.
+        private const int MAGAZINE_TEXT_VISIBLE_ROWS = 5;
+
+        private static void ApplyMagazineTextRowVisibility(HolderVisual visual, int row)
+        {
+            if (visual == null || visual.magazineText == null) return;
+            bool show = row < MAGAZINE_TEXT_VISIBLE_ROWS;
+            if (visual.magazineText.gameObject.activeSelf != show)
+                visual.magazineText.gameObject.SetActive(show);
+        }
         private static readonly Color HIDDEN_MAGAZINE_COLOR = new Color(1f, 1f, 1f, 1f); // 명세: opacity 255 고정
         private const float DEPLOY_MOVE_SPEED = 12f;
         // ROLLBACK_DEPLOY_DEBUG_LOGS:
@@ -372,6 +385,8 @@ namespace BalloonFlow
                     {
                         _holderVisuals[allInCol[row].holderId] = visual;
                         spawnedCount++;
+                        // [TMP 부하 2026-06-10] 초기 스폰부터 row 2+ 텍스트 비활성 (재배치 전까지 전부 켜져있던 문제).
+                        ApplyMagazineTextRowVisibility(visual, row);
                     }
                 }
             }
@@ -622,6 +637,8 @@ namespace BalloonFlow
                             ? Color.white
                             : new Color(1f, 1f, 1f, 0.5f);
                     }
+                    // [TMP 부하 2026-06-10] row 2+ 텍스트 비활성 — Zap/Shuffle 재배치 경로에서도 게이트 유지.
+                    ApplyMagazineTextRowVisibility(visual, row);
                 }
             }
         }
@@ -884,9 +901,10 @@ namespace BalloonFlow
                 colHolders[row].gameObject.transform.localScale = insideSpawner ? Vector3.one * PIPE_INNER_SCALE : Vector3.one;
 
                 // Spawner 안 대기: TEXT 숨김 / 앞줄: TEXT 보이기
+                // [TMP 부하 2026-06-10] row 2+ 도 텍스트 비활성 (MAGAZINE_TEXT_VISIBLE_ROWS 게이트).
                 if (colHolders[row].magazineText != null)
                 {
-                    colHolders[row].magazineText.gameObject.SetActive(!insideSpawner);
+                    colHolders[row].magazineText.gameObject.SetActive(!insideSpawner && row < MAGAZINE_TEXT_VISIBLE_ROWS);
                     // 비활성화(row 1+): 텍스트 투명도 50%
                     if (!insideSpawner && colHolders[row].magazineText != null)
                     {
@@ -1015,6 +1033,10 @@ namespace BalloonFlow
             TMP_Text textMesh = obj.GetComponentInChildren<TMP_Text>(true);
             if (textMesh != null)
             {
+                // [TMP 부하 2026-06-10] 풀 재사용 안전망 — row 2+ 비활성 상태로 반환된 홀더가 재사용될 때
+                // 텍스트가 꺼진 채 나오지 않게 기본 활성. 행 게이트는 생성 직후 호출부/재배치에서 다시 적용됨.
+                if (!textMesh.gameObject.activeSelf)
+                    textMesh.gameObject.SetActive(true);
                 // Frozen: frozenHP / Hidden: "?" / Spawner: 소환횟수 / 일반: 탄창 수
                 string displayText;
                 if (data.isHidden)
