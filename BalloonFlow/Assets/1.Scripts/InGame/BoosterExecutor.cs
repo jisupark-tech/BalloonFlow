@@ -60,6 +60,10 @@ namespace BalloonFlow
         private const float ZapLineJiggleMaxInterval = 0.06f;
         private const float ZapLineJiggleEndpointJitter = 0.07f;
 
+        // Fade in/out 연출 — 라인이 뚝 끊겨 보이지 않도록 width+alpha 를 함께 보간한다.
+        private const float ZapLineFadeInDuration = 0.07f;   // 사용자 사양 0.05~0.1s 중간값
+        private const float ZapLineFadeOutDuration = 0.07f;
+
         private readonly List<ZapTarget> _zapTargets = new List<ZapTarget>(128);
         private GameObject _itemZapPrefab;
         private GameObject _fxZapLinePrefab;
@@ -73,6 +77,11 @@ namespace BalloonFlow
         // 직전과 OnDisable 에서 반드시 중지하여 누수/이중 호출을 막는다.
         private Coroutine _zapLineJiggleCo;
         private readonly Dictionary<LightningBoltScript, ZapLineBaseline> _zapLineBaselines = new Dictionary<LightningBoltScript, ZapLineBaseline>(8);
+
+        // 라인별 목표 widthMultiplier(프리팹의 원본 값). 첫 ConfigureZapLine 호출 시 캡처 → 페이드인의 보간 타깃이 된다.
+        private readonly Dictionary<LineRenderer, float> _zapLineTargetWidths = new Dictionary<LineRenderer, float>(8);
+        // 진행 중인 fade 코루틴(라인 단위). 시퀀스 중단/재시작 시 안전하게 StopCoroutine 하기 위해 보관.
+        private readonly List<Coroutine> _zapLineFadeCoroutines = new List<Coroutine>(8);
 
         private struct ZapLineBaseline
         {
@@ -99,6 +108,13 @@ namespace BalloonFlow
         {
             EventBus.Unsubscribe<OnBoosterUsed>(HandleBoosterUsed);
             StopZapLineJiggle();
+            for (int i = 0; i < _zapLineFadeCoroutines.Count; i++)
+            {
+                Coroutine c = _zapLineFadeCoroutines[i];
+                if (c != null) StopCoroutine(c);
+            }
+            _zapLineFadeCoroutines.Clear();
+            _zapLineTargetWidths.Clear();
         }
 
         #endregion
@@ -476,6 +492,10 @@ namespace BalloonFlow
 
             PlayZapFinish(zapObject);
 
+            // NEW: 페이드아웃 — 자글거림은 잠시 더 유지하다가 페이드아웃 직후 정지.
+            if (zapLineObjects != null && zapLineObjects.Count > 0)
+                yield return StartCoroutine(FadeOutZapLinesRoutine(zapLineObjects));
+
             // 라인을 SetActive(false)/Destroy 하기 전에 자글거림 코루틴을 중지해야
             // 비활성/파괴된 LightningBoltScript 에 Trigger() 가 호출되는 것을 막을 수 있다.
             StopZapLineJiggle();
@@ -492,9 +512,11 @@ namespace BalloonFlow
                     if (fromItemZap)
                         line.SetActive(false);
                     else
-                        Destroy(line, ZapLineLifetime);
+                        Destroy(line); // 페이드아웃 완료 후이므로 ZapLineLifetime 지연 인자 제거
                 }
             }
+            _zapLineTargetWidths.Clear();
+            _zapLineFadeCoroutines.Clear();
             if (zapObject != null)
                 Destroy(zapObject, ZapFinishLifetime);
 
@@ -1049,7 +1071,12 @@ namespace BalloonFlow
             if (bolt != null)
             {
                 LineRenderer lineRenderer = bolt.GetComponent<LineRenderer>();
+                bool isFirstActivation = lineRenderer != null && !_zapLineTargetWidths.ContainsKey(lineRenderer);
                 PrepareZapLineRenderer(lineRenderer);
+                if (isFirstActivation && lineRenderer != null && _zapLineTargetWidths.TryGetValue(lineRenderer, out float fadeTarget))
+                {
+                    _zapLineFadeCoroutines.Add(StartCoroutine(FadeInZapLineRoutine(lineRenderer, fadeTarget)));
+                }
                 // ROLLBACK_ZAP_LINE_FORCE_WORLD_SPACE:
                 // ItemZap owns FxZapLine as an animated child. Force this particular lightning
                 // renderer to world-space so the line always connects the Zap object and target
@@ -1195,6 +1222,71 @@ namespace BalloonFlow
             _zapLineBaselines.Clear();
         }
 
+        private IEnumerator FadeInZapLineRoutine(LineRenderer lr, float targetWidth)
+        {
+            if (lr == null) yield break;
+            float t = 0f;
+            while (t < ZapLineFadeInDuration)
+            {
+                if (lr == null) yield break;
+                t += Time.deltaTime;
+                float k = Mathf.Clamp01(t / ZapLineFadeInDuration);
+                lr.widthMultiplier = Mathf.Lerp(0f, targetWidth, k);
+                Color sc = lr.startColor; sc.a = k; lr.startColor = sc;
+                Color ec = lr.endColor;   ec.a = k; lr.endColor   = ec;
+                yield return null;
+            }
+            if (lr != null)
+            {
+                lr.widthMultiplier = targetWidth;
+                Color sc = lr.startColor; sc.a = 1f; lr.startColor = sc;
+                Color ec = lr.endColor;   ec.a = 1f; lr.endColor   = ec;
+            }
+        }
+
+        private IEnumerator FadeOutZapLinesRoutine(List<GameObject> zapLineObjects)
+        {
+            if (zapLineObjects == null || zapLineObjects.Count == 0) yield break;
+            var renderers = new List<LineRenderer>(zapLineObjects.Count);
+            var startWidths = new List<float>(zapLineObjects.Count);
+            var startAlphas = new List<float>(zapLineObjects.Count);
+            for (int i = 0; i < zapLineObjects.Count; i++)
+            {
+                GameObject line = zapLineObjects[i];
+                if (line == null) continue;
+                LineRenderer lr = line.GetComponentInChildren<LineRenderer>(true);
+                if (lr == null) continue;
+                renderers.Add(lr);
+                startWidths.Add(lr.widthMultiplier);
+                startAlphas.Add(lr.startColor.a);
+            }
+            if (renderers.Count == 0) yield break;
+            float t = 0f;
+            while (t < ZapLineFadeOutDuration)
+            {
+                t += Time.deltaTime;
+                float k = 1f - Mathf.Clamp01(t / ZapLineFadeOutDuration);
+                for (int i = 0; i < renderers.Count; i++)
+                {
+                    LineRenderer lr = renderers[i];
+                    if (lr == null) continue;
+                    lr.widthMultiplier = startWidths[i] * k;
+                    float a = startAlphas[i] * k;
+                    Color sc = lr.startColor; sc.a = a; lr.startColor = sc;
+                    Color ec = lr.endColor;   ec.a = a; lr.endColor   = ec;
+                }
+                yield return null;
+            }
+            for (int i = 0; i < renderers.Count; i++)
+            {
+                LineRenderer lr = renderers[i];
+                if (lr == null) continue;
+                lr.widthMultiplier = 0f;
+                Color sc = lr.startColor; sc.a = 0f; lr.startColor = sc;
+                Color ec = lr.endColor;   ec.a = 0f; lr.endColor   = ec;
+            }
+        }
+
         private Vector3 GetZapLineRenderPosition(Vector3 position)
         {
             // ROLLBACK_ZAP_LINE_RENDER_LIFT:
@@ -1214,7 +1306,14 @@ namespace BalloonFlow
             lineRenderer.shadowCastingMode = ShadowCastingMode.Off;
             lineRenderer.receiveShadows = false;
             lineRenderer.sortingOrder = Mathf.Max(lineRenderer.sortingOrder, ZapLineSortingOrder);
-            lineRenderer.widthMultiplier = Mathf.Max(lineRenderer.widthMultiplier, ZapLineMinWidth);
+            if (!_zapLineTargetWidths.ContainsKey(lineRenderer))
+            {
+                float targetWidth = Mathf.Max(lineRenderer.widthMultiplier, ZapLineMinWidth);
+                _zapLineTargetWidths[lineRenderer] = targetWidth;
+                lineRenderer.widthMultiplier = 0f;
+                Color sc = lineRenderer.startColor; sc.a = 0f; lineRenderer.startColor = sc;
+                Color ec = lineRenderer.endColor;   ec.a = 0f; lineRenderer.endColor   = ec;
+            }
             lineRenderer.numCapVertices = Mathf.Max(lineRenderer.numCapVertices, 2);
         }
 
