@@ -43,7 +43,7 @@ namespace BalloonFlow
         private const float ZapLineLifetime = 0.2f;
         private const float ZapMinLeadInterval = 0.03f;
         private const float ZapLineLeadBeforePop = 0.015f;
-        private const float ZapFinishLifetime = 0.35f;
+        private const float ZapFinishLifetime = 0.6f;
         private const float ZapEffectYOffset = 0.12f;
 
         // Hand 부스터 사용 시 카메라가 보관함 큐의 앞쪽 몇 개 행을 보여줄지 (5줄 요구).
@@ -491,8 +491,6 @@ namespace BalloonFlow
             int totalRemoved = fieldRemoved + RemoveRailAndQueueColor(color);
             FinalizeColorRemove(color, totalRemoved);
 
-            PlayZapFinish(zapObject);
-
             // Jiggle 코루틴을 먼저 정지한다 — Jiggle 이 매 tick baseline.start 를 덮어쓰기 때문에
             // FadeOutZapLinesRoutine 의 suction lerp(start→end) 가 무효화된다. 페이드아웃 루틴이
             // 매 프레임 Trigger() 를 호출하므로 자글거림은 그대로 유지된다.
@@ -520,6 +518,8 @@ namespace BalloonFlow
             }
             _zapLineTargetWidths.Clear();
             _zapLineFadeCoroutines.Clear();
+            // FxZapLine 라인 페이드아웃·정리 완료 후에 ZapFinish 트리거 → ZapAttackIdle → ZapAttackFinish 자연 전이
+            PlayZapFinish(zapObject);
             if (zapObject != null)
                 Destroy(zapObject, ZapFinishLifetime);
 
