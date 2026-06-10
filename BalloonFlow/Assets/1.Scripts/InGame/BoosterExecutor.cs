@@ -55,6 +55,10 @@ namespace BalloonFlow
         private const float ZapFieldBottomPaddingCells = 1.5f;
         private const int ZapLineConcurrentCount = 4;
         private const float ZapLineForkOffset = 0.45f; // 4갈래(±0.5Δ, ±1.5Δ)로 벌어지는 perpendicular 오프셋(월드 단위)
+        // 번개 라인이 활성화된 동안 매 tick 마다 끝점에 미세 jitter 를 더해 LightningBoltScript.Trigger() 를 재호출해 자글거리게 만든다.
+        private const float ZapLineJiggleMinInterval = 0.03f;
+        private const float ZapLineJiggleMaxInterval = 0.06f;
+        private const float ZapLineJiggleEndpointJitter = 0.07f;
 
         private readonly List<ZapTarget> _zapTargets = new List<ZapTarget>(128);
         private GameObject _itemZapPrefab;
@@ -63,6 +67,18 @@ namespace BalloonFlow
         private bool _isColorRemoveSequenceRunning;
         private bool _isZapAnimationPlaying = false;
         private Animator _zapAnimator = null;
+
+        // FxZapLine 자글거림(번개 재트리거) 코루틴. ConfigureZapLine 이 마지막에 설정한 baseline 을 읽고
+        // jitter 를 더해 매 tick LightningBoltScript.Trigger() 를 호출한다. 정리(라인 SetActive(false)/Destroy)
+        // 직전과 OnDisable 에서 반드시 중지하여 누수/이중 호출을 막는다.
+        private Coroutine _zapLineJiggleCo;
+        private readonly Dictionary<LightningBoltScript, ZapLineBaseline> _zapLineBaselines = new Dictionary<LightningBoltScript, ZapLineBaseline>(8);
+
+        private struct ZapLineBaseline
+        {
+            public Vector3 start;
+            public Vector3 end;
+        }
 
         private struct ZapTarget
         {
@@ -82,6 +98,7 @@ namespace BalloonFlow
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnBoosterUsed>(HandleBoosterUsed);
+            StopZapLineJiggle();
         }
 
         #endregion
@@ -398,7 +415,11 @@ namespace BalloonFlow
             {
                 zapLineObjects = CreateZapLineObjects(zapObject, ZapLineConcurrentCount, out zapLineFromItemZapFlags);
                 if (zapLineObjects != null && zapLineObjects.Count > 0)
+                {
+                    _zapLineBaselines.Clear();
+                    _zapLineJiggleCo = StartCoroutine(JiggleZapLinesRoutine(zapLineObjects));
                     yield return null;
+                }
 
                 // ItemZap.prefab Animator는 생성과 동시에 ZapStart → ZapAttackIdle을 1회 자동 진행한다.
                 // FxZapLine 출력 구간 동안에는 zapObject에 Animator.Play/CrossFade/Rebind/SetActive 등 어떤 형태로도
@@ -454,6 +475,10 @@ namespace BalloonFlow
             FinalizeColorRemove(color, totalRemoved);
 
             PlayZapFinish(zapObject);
+
+            // 라인을 SetActive(false)/Destroy 하기 전에 자글거림 코루틴을 중지해야
+            // 비활성/파괴된 LightningBoltScript 에 Trigger() 가 호출되는 것을 막을 수 있다.
+            StopZapLineJiggle();
 
             if (zapLineObjects != null)
             {
@@ -1044,6 +1069,10 @@ namespace BalloonFlow
                 bolt.ManualMode = true;
                 bolt.Duration = Mathf.Max(0.01f, visibleDuration);
                 bolt.Trigger();
+
+                // 자글거림 코루틴이 매 tick 절대 좌표로 재설정할 수 있도록 baseline 기록.
+                // (jitter 누적 드리프트 방지 — 코루틴은 baseline + jitter 로 항상 새 절대값을 쓴다.)
+                _zapLineBaselines[bolt] = new ZapLineBaseline { start = lineStartPosition, end = lineEndPosition };
             }
         }
 
@@ -1089,6 +1118,81 @@ namespace BalloonFlow
                 Vector3 forkedEnd = endPosition + perp * offsets[i];
                 ConfigureZapLine(zapLineObjects[i], startPosition, forkedEnd, visibleDuration);
             }
+        }
+
+        // FxZapLine 라인이 활성화된 동안 매 tick LightningBoltScript.Trigger() 를 재호출하여
+        // 번개 모양이 매번 새로 그려지도록(자글거리도록) 한다. 끝점에는 미세 jitter 만 더해
+        // 라인이 잡고 있는 시작/타겟 방향성은 유지한다.
+        private IEnumerator JiggleZapLinesRoutine(List<GameObject> zapLineObjects)
+        {
+            if (zapLineObjects == null || zapLineObjects.Count == 0)
+                yield break;
+
+            // 시작 시 한 번만 LightningBoltScript 캐시. ConfigureZapLine 이 baseline 을
+            // 매번 갱신하므로 코루틴은 jitter 적용만 담당한다.
+            var bolts = new List<LightningBoltScript>(zapLineObjects.Count);
+            for (int i = 0; i < zapLineObjects.Count; i++)
+            {
+                GameObject line = zapLineObjects[i];
+                if (line == null)
+                    continue;
+                LightningBoltScript bolt = line.GetComponentInChildren<LightningBoltScript>(true);
+                if (bolt != null)
+                    bolts.Add(bolt);
+            }
+
+            if (bolts.Count == 0)
+                yield break;
+
+            while (true)
+            {
+                bool anyActive = false;
+                for (int i = 0; i < zapLineObjects.Count; i++)
+                {
+                    GameObject line = zapLineObjects[i];
+                    if (line == null || !line.activeInHierarchy)
+                        continue;
+
+                    LightningBoltScript bolt = i < bolts.Count ? bolts[i] : null;
+                    if (bolt == null)
+                        continue;
+
+                    if (!_zapLineBaselines.TryGetValue(bolt, out ZapLineBaseline baseline))
+                        continue;
+
+                    anyActive = true;
+
+                    Vector3 jitterStart = new Vector3(
+                        Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
+                        Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
+                        Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter));
+                    Vector3 jitterEnd = new Vector3(
+                        Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
+                        Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
+                        Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter));
+
+                    bolt.StartPosition = baseline.start + jitterStart;
+                    bolt.EndPosition = baseline.end + jitterEnd;
+                    // 다음 tick 까지 라인이 사라지지 않도록 Duration 보강(ConfigureZapLine 의 값이 너무 짧을 때 대비).
+                    bolt.Duration = Mathf.Max(bolt.Duration, ZapLineJiggleMaxInterval * 1.5f);
+                    bolt.Trigger();
+                }
+
+                if (!anyActive)
+                    yield break;
+
+                yield return new WaitForSeconds(Random.Range(ZapLineJiggleMinInterval, ZapLineJiggleMaxInterval));
+            }
+        }
+
+        private void StopZapLineJiggle()
+        {
+            if (_zapLineJiggleCo != null)
+            {
+                StopCoroutine(_zapLineJiggleCo);
+                _zapLineJiggleCo = null;
+            }
+            _zapLineBaselines.Clear();
         }
 
         private Vector3 GetZapLineRenderPosition(Vector3 position)
