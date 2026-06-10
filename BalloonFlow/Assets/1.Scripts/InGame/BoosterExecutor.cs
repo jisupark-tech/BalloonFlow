@@ -53,6 +53,8 @@ namespace BalloonFlow
         private const float ZapLineMinWidth = 0.08f;
         private const int ZapLineSortingOrder = 80;
         private const float ZapFieldBottomPaddingCells = 1.5f;
+        private const int ZapLineConcurrentCount = 3;
+        private const float ZapLineForkOffset = 0.55f; // 3갈래로 벌어지는 perpendicular 오프셋(월드 단위)
 
         private readonly List<ZapTarget> _zapTargets = new List<ZapTarget>(128);
         private GameObject _itemZapPrefab;
@@ -377,7 +379,7 @@ namespace BalloonFlow
             // ItemZap stays at ZapSpawnPosition for the entire effect — do not tween or reposition.
             GameObject zapObject = CreateItemZap(attackPosition);
             Vector3 zapFixedPosition = zapObject != null ? zapObject.transform.position : ZapSpawnPosition;
-            GameObject zapLineObject = null;
+            List<GameObject> zapLineObjects = null;
             bool zapLineFromItemZap = false;
 
             yield return new WaitForSeconds(ZapAppearDuration);
@@ -393,8 +395,8 @@ namespace BalloonFlow
             int fieldRemoved = 0;
             if (_zapTargets.Count > 0)
             {
-                zapLineObject = CreateZapLineObject(zapObject, out zapLineFromItemZap);
-                if (zapLineObject != null)
+                zapLineObjects = CreateZapLineObjects(zapObject, ZapLineConcurrentCount, out zapLineFromItemZap);
+                if (zapLineObjects != null && zapLineObjects.Count > 0)
                     yield return null;
 
                 // ItemZap.prefab Animator는 생성과 동시에 ZapStart → ZapAttackIdle을 1회 자동 진행한다.
@@ -431,7 +433,7 @@ namespace BalloonFlow
                     Vector3 targetPosition = GetZapEffectPosition(target.position);
                     float lineVisibleDuration = Mathf.Max(ZapLineLifetime, stepDelay + lineLeadBeforePop);
                     Vector3 lineStartPosition = zapFixedPosition;
-                    ConfigureZapLine(zapLineObject, lineStartPosition, targetPosition, lineVisibleDuration);
+                    ConfigureZapLineFan(zapLineObjects, lineStartPosition, targetPosition, lineVisibleDuration);
 
                     // ROLLBACK_ZAP_LINE_PREPOP_LEAD:
                     // Give FxZapLine a rendered moment only when the total-time budget can afford
@@ -443,7 +445,7 @@ namespace BalloonFlow
                         fieldRemoved++;
                 }
 
-                if (zapLineObject != null)
+                if (zapLineObjects != null && zapLineObjects.Count > 0)
                     yield return new WaitForSeconds(ZapLineLifetime);
             }
 
@@ -452,12 +454,17 @@ namespace BalloonFlow
 
             PlayZapFinish(zapObject);
 
-            if (zapLineObject != null)
+            if (zapLineObjects != null)
             {
-                if (zapLineFromItemZap)
-                    zapLineObject.SetActive(false);
-                else
-                    Destroy(zapLineObject, ZapLineLifetime);
+                for (int i = 0; i < zapLineObjects.Count; i++)
+                {
+                    GameObject line = zapLineObjects[i];
+                    if (line == null) continue;
+                    if (zapLineFromItemZap)
+                        line.SetActive(false);
+                    else
+                        Destroy(line, ZapLineLifetime);
+                }
             }
             if (zapObject != null)
                 Destroy(zapObject, ZapFinishLifetime);
@@ -917,6 +924,65 @@ namespace BalloonFlow
             return runtimeLine;
         }
 
+        // 3갈래(Fan) Zap 라인용 다중 복제 생성.
+        // 자식 'FxZapLine'이 있으면 우선 복제하고, 없으면 PREFAB_FX_ZAP_LINE을 사용한다.
+        // 원본 child는 비활성 상태 그대로 두고 복제본만 활성화한다.
+        private List<GameObject> CreateZapLineObjects(GameObject zapObject, int count, out bool fromItemZap)
+        {
+            fromItemZap = false;
+            var lines = new List<GameObject>(Mathf.Max(1, count));
+            if (count <= 0)
+                return lines;
+
+            GameObject source = null;
+            bool sourceFromItemZap = false;
+
+            if (zapObject != null)
+            {
+                Transform childLine = FindChildRecursive(zapObject.transform, "FxZapLine");
+                if (childLine != null)
+                {
+                    source = childLine.gameObject;
+                    sourceFromItemZap = true;
+                }
+            }
+
+            if (source == null)
+            {
+                if (_fxZapLinePrefab == null)
+                    _fxZapLinePrefab = Resources.Load<GameObject>(Const.PREFAB_FX_ZAP_LINE);
+
+                if (_fxZapLinePrefab == null)
+                {
+                    Debug.LogWarning($"[BoosterExecutor] Missing FxZapLine prefab at Resources/{Const.PREFAB_FX_ZAP_LINE}.");
+                    return lines;
+                }
+
+                source = _fxZapLinePrefab;
+                sourceFromItemZap = false;
+            }
+
+            fromItemZap = sourceFromItemZap;
+
+            for (int i = 0; i < count; i++)
+            {
+                GameObject runtimeLine = Instantiate(source);
+                runtimeLine.transform.position = ZapSpawnPosition;
+                if (i == 0)
+                    runtimeLine.name = "FxZapLine_Runtime";
+                else if (i == 1)
+                    runtimeLine.name = "FxZapLine_Runtime_L";
+                else if (i == 2)
+                    runtimeLine.name = "FxZapLine_Runtime_R";
+                else
+                    runtimeLine.name = $"FxZapLine_Runtime_{i}";
+                runtimeLine.SetActive(true);
+                lines.Add(runtimeLine);
+            }
+
+            return lines;
+        }
+
         private void ConfigureZapLine(GameObject zapLineObject, Vector3 startPosition, Vector3 endPosition, float visibleDuration)
         {
             if (zapLineObject == null)
@@ -955,6 +1021,45 @@ namespace BalloonFlow
                 bolt.ManualMode = true;
                 bolt.Duration = Mathf.Max(0.01f, visibleDuration);
                 bolt.Trigger();
+            }
+        }
+
+        // 3갈래 Zap 라인을 동일 타이밍에 ConfigureZapLine으로 활성화.
+        // 공통 시작점=startPosition, 끝점=endPosition + perp * {-Δ, 0, +Δ}.
+        private void ConfigureZapLineFan(List<GameObject> zapLineObjects, Vector3 startPosition, Vector3 endPosition, float visibleDuration)
+        {
+            if (zapLineObjects == null || zapLineObjects.Count == 0)
+                return;
+
+            int count = zapLineObjects.Count;
+
+            // 라인 수가 3이 아니면 가드: 모두 동일 endPosition 사용.
+            if (count != ZapLineConcurrentCount)
+            {
+                for (int i = 0; i < count; i++)
+                    ConfigureZapLine(zapLineObjects[i], startPosition, endPosition, visibleDuration);
+                return;
+            }
+
+            Vector3 dir = endPosition - startPosition;
+            dir.y = 0f;
+            Vector3 perp;
+            if (dir.sqrMagnitude < 0.0001f)
+            {
+                perp = Vector3.right;
+            }
+            else
+            {
+                perp = Vector3.Cross(dir.normalized, Vector3.up).normalized;
+                if (perp.sqrMagnitude < 0.0001f)
+                    perp = Vector3.right;
+            }
+
+            float[] offsets = { -ZapLineForkOffset, 0f, ZapLineForkOffset };
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 forkedEnd = endPosition + perp * offsets[i];
+                ConfigureZapLine(zapLineObjects[i], startPosition, forkedEnd, visibleDuration);
             }
         }
 
