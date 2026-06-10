@@ -391,6 +391,13 @@ namespace BalloonFlow
         public string productId;
     }
 
+    /// <summary>Permanent no-ads entitlement changed; lobby/shop UI should hide no-ads entry points.</summary>
+    public struct OnAdsRemovedChanged
+    {
+        public bool removed;
+        public string productId;
+    }
+
     /// <summary>
     /// 결제 성공 후 보상이 메모리에 지급됐고 UI 연출만 남은 시점에 발행.
     /// PurchaseRewardEffect (또는 동등) 가 구독해 success popup → 확인 → FxGold fly → GoldPanel 펄스 진행.

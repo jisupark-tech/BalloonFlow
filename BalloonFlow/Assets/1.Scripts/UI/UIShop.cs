@@ -134,6 +134,7 @@ namespace BalloonFlow
                 ShopCatalogService.Instance.OnCatalogLoaded -= OnCatalogReady;
             EventBus.Unsubscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
             EventBus.Unsubscribe<OnPurchaseRestored>(HandlePurchaseRestored);
+            EventBus.Unsubscribe<OnAdsRemovedChanged>(HandleAdsRemovedChanged);
 
             if (_scrollRect != null && _scrollListenerRegistered)
             {
@@ -146,12 +147,14 @@ namespace BalloonFlow
         {
             EventBus.Subscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
             EventBus.Subscribe<OnPurchaseRestored>(HandlePurchaseRestored);
+            EventBus.Subscribe<OnAdsRemovedChanged>(HandleAdsRemovedChanged);
         }
 
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
             EventBus.Unsubscribe<OnPurchaseRestored>(HandlePurchaseRestored);
+            EventBus.Unsubscribe<OnAdsRemovedChanged>(HandleAdsRemovedChanged);
         }
 
         /// <summary>ShopCatalogService 구독. 이미 로드 상태면 즉시 적용. 매니저 부재 시 fallback.</summary>
@@ -225,6 +228,11 @@ namespace BalloonFlow
         private void HandlePurchaseRestored(OnPurchaseRestored evt)
         {
             RefreshAfterPurchaseChange();
+        }
+
+        private void HandleAdsRemovedChanged(OnAdsRemovedChanged evt)
+        {
+            if (evt.removed) RefreshAfterPurchaseChange();
         }
 
         private void OnCatalogReady()

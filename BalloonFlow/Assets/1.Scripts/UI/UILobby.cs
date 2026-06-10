@@ -331,6 +331,7 @@ namespace BalloonFlow
             // [PopupTextInventory 정합] prefab 정적 텍스트 일괄 정정 — 'Setting'→'Settings', 'No Ads'→'NO ADS' 등.
             // prefab 이 binary 직렬화라 m_text 직접 수정 불가 → 런타임 OnEnable 단계에서 강제 덮어쓰기.
             ApplyStaticTextOverrides();
+            EventBus.Subscribe<OnAdsRemovedChanged>(HandleAdsRemovedChanged);
 
             // Start on Home(Lobby) page
             SetPageImmediate(1);
@@ -359,6 +360,7 @@ namespace BalloonFlow
             // [2026-05-20] WinningStreak 버튼 — unlockLevel(34) 도달 전엔 숨김.
             HookWinningStreakEvents();
             RefreshWinningStreakVisibility();
+            RefreshNoAdsVisibility();
             // WS 로비 연출 트리거는 OpenUI() 로 이동 — UILobby 는 UiTr(DontDestroyOnLoad) 아래 지속 인스턴스라
             // Awake 는 최초 1회만 실행됨. 매 로비 진입(인게임→로비 재진입 포함)마다 연출되도록 OpenUI 에서 발동한다.
         }
@@ -367,6 +369,7 @@ namespace BalloonFlow
         public override void OpenUI()
         {
             base.OpenUI();
+            RefreshNoAdsVisibility();
             DisableWinningStreakFxOnEnter();
             RefreshWinningStreakVisibility();
             TriggerPendingWinningStreakLobbyFx();
@@ -415,6 +418,7 @@ namespace BalloonFlow
             var svc = UserDataService.Instance;
             svc.OnUserDataReady += RefreshProfileDisplay;
             svc.OnProfileChanged += RefreshProfileDisplay;
+            svc.OnUserDataReady += RefreshNoAdsVisibility;
         }
 
         private void UnhookProfileEvents()
@@ -423,6 +427,7 @@ namespace BalloonFlow
             var svc = UserDataService.Instance;
             svc.OnUserDataReady -= RefreshProfileDisplay;
             svc.OnProfileChanged -= RefreshProfileDisplay;
+            svc.OnUserDataReady -= RefreshNoAdsVisibility;
         }
 
         // ── WinningStreak 버튼 노출 게이트 ─────────────────────────
@@ -465,6 +470,31 @@ namespace BalloonFlow
                 _btnWinningStreak.gameObject.SetActive(unlocked);
 
             if (unlocked) RefreshWinningStreakDisplay();
+        }
+
+        private void HandleAdsRemovedChanged(OnAdsRemovedChanged evt)
+        {
+            if (evt.removed) RefreshNoAdsVisibility();
+        }
+
+        private void RefreshNoAdsVisibility()
+        {
+            if (_btnNoAds == null) return;
+            bool shouldShow = !IsAdsRemoved();
+            if (_btnNoAds.gameObject.activeSelf != shouldShow)
+                _btnNoAds.gameObject.SetActive(shouldShow);
+        }
+
+        private static bool IsAdsRemoved()
+        {
+            if (IAPManager.HasInstance && IAPManager.Instance.AdsRemoved)
+                return true;
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady
+                && UserDataService.Instance.CurrentUser != null
+                && UserDataService.Instance.CurrentUser.removedAds)
+                return true;
+            return PlayerPrefs.GetInt(Const.PREFS_AD_REMOVED, 0) == 1
+                || PlayerPrefs.GetInt(Const.PREFS_NO_ADS_OWNED, 0) == 1;
         }
 
         /// <summary>[프리뷰 전용] unlock 게이트와 무관하게 WS UI(표시 root + 버튼)를 무조건 활성화.
@@ -1362,6 +1392,7 @@ namespace BalloonFlow
         {
             if (_btnWinningStreak != null) _btnWinningStreak.onClick.RemoveAllListeners();
             base.OnDestroy();
+            EventBus.Unsubscribe<OnAdsRemovedChanged>(HandleAdsRemovedChanged);
             UnhookProfileEvents();
             UnhookWinningStreakEvents();
             _pageTween?.Kill();

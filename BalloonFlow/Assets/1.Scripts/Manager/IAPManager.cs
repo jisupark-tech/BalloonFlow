@@ -364,15 +364,9 @@ namespace BalloonFlow
             {
                 if (product == null || !product.hasReceipt) continue;
                 var doc = ShopCatalogService.Instance.Get(product.definition.id);
-                if (doc == null || doc.category != CAT_NOADS) continue;
+                if (!IsNoAdsProduct(doc)) continue;
 
-                PlayerPrefs.SetInt(Const.PREFS_AD_REMOVED, 1);
-                PlayerPrefs.SetInt(Const.PREFS_NO_ADS_OWNED, 1);
-                PlayerPrefs.Save();
-
-                if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
-                    UserDataService.Instance.SetRemovedAds(true, doc.productId);
-
+                GrantRemoveAdsEntitlement(doc.productId, "restore");
                 EventBus.Publish(new OnPurchaseRestored { productId = doc.productId });
             }
         }
@@ -460,15 +454,16 @@ namespace BalloonFlow
                 // Item-type rewards are applied by PurchaseRewardEffect after FXItem lands.
                 // Rollback: restore the old immediate AddBooster/ActivateInfiniteHearts block here if needed.
 
-                if (r.removeAds)
+                bool grantsRemoveAds = r.removeAds || IsNoAdsProduct(doc);
+                if (grantsRemoveAds)
                 {
-                    PlayerPrefs.SetInt(Const.PREFS_AD_REMOVED, 1);
-                    PlayerPrefs.SetInt(Const.PREFS_NO_ADS_OWNED, 1);
-                    PlayerPrefs.Save();
+                    GrantRemoveAdsEntitlement(productId, r.removeAds ? "reward" : "category");
                     // [2026-05-13] productId 함께 전달 → UserData 에 구매 시각/경로 같이 기록.
-                    if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
-                        UserDataService.Instance.SetRemovedAds(true, productId);
                 }
+            }
+            else if (IsNoAdsProduct(doc))
+            {
+                GrantRemoveAdsEntitlement(productId, "category-no-rewards");
             }
 
             // 1회 한정 마킹 (UserData.purchasedOnce)
@@ -495,6 +490,31 @@ namespace BalloonFlow
                 rewards     = r,
                 coinsAdded  = coinsAdded
             });
+        }
+
+        private static bool IsNoAdsProduct(ShopProductDoc doc)
+        {
+            return doc != null && string.Equals(doc.category, CAT_NOADS, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void GrantRemoveAdsEntitlement(string productId, string reason)
+        {
+            // ROLLBACK_NOADS_CATEGORY_ENTITLEMENT_20260610:
+            // No-ads is an entitlement category. Some product docs may omit rewards.removeAds,
+            // so category=noads must still grant and hide no-ads entry points.
+            PlayerPrefs.SetInt(Const.PREFS_AD_REMOVED, 1);
+            PlayerPrefs.SetInt(Const.PREFS_NO_ADS_OWNED, 1);
+            PlayerPrefs.Save();
+
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+                UserDataService.Instance.SetRemovedAds(true, productId);
+
+            EventBus.Publish(new OnAdsRemovedChanged
+            {
+                removed = true,
+                productId = productId
+            });
+            Debug.Log($"{LOG_TAG} Ads removed entitlement granted. productId={productId}, reason={reason}");
         }
 
         private static void PublishPurchaseResult(string productId, bool success)

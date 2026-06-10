@@ -85,6 +85,7 @@ namespace BalloonFlow
             GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
             EventBus.Subscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
             EventBus.Subscribe<OnPurchaseRestored>(HandlePurchaseRestored);
+            EventBus.Subscribe<OnAdsRemovedChanged>(HandleAdsRemovedChanged);
             if (!_paused) { PauseManager.Pause(); _paused = true; }
         }
 
@@ -92,6 +93,7 @@ namespace BalloonFlow
         {
             EventBus.Unsubscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
             EventBus.Unsubscribe<OnPurchaseRestored>(HandlePurchaseRestored);
+            EventBus.Unsubscribe<OnAdsRemovedChanged>(HandleAdsRemovedChanged);
             if (_paused) { PauseManager.Resume(); _paused = false; }
         }
 
@@ -103,6 +105,7 @@ namespace BalloonFlow
                 ShopCatalogService.Instance.OnCatalogLoaded -= OnCatalogReady;
             EventBus.Unsubscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
             EventBus.Unsubscribe<OnPurchaseRestored>(HandlePurchaseRestored);
+            EventBus.Unsubscribe<OnAdsRemovedChanged>(HandleAdsRemovedChanged);
         }
 
         private void SubscribeToCatalog()
@@ -216,6 +219,12 @@ namespace BalloonFlow
         private void HandlePurchaseRestored(OnPurchaseRestored evt)
         {
             if (gameObject.activeInHierarchy)
+                ResetAndLoadProducts(_userExpandedMore);
+        }
+
+        private void HandleAdsRemovedChanged(OnAdsRemovedChanged evt)
+        {
+            if (evt.removed && gameObject.activeInHierarchy)
                 ResetAndLoadProducts(_userExpandedMore);
         }
 
