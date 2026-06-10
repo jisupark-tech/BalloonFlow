@@ -58,6 +58,8 @@ namespace BalloonFlow
         private GameObject _itemZapPrefab;
         private GameObject _fxZapLinePrefab;
         private bool _isColorRemoveSequenceRunning;
+        private bool _isZapAnimationPlaying = false;
+        private Animator _zapAnimator = null;
 
         private struct ZapTarget
         {
@@ -381,6 +383,13 @@ namespace BalloonFlow
             yield return new WaitForSeconds(ZapAppearDuration);
             yield return new WaitForSeconds(ZapMoveDuration);
 
+            // 사용자 보고 버그(ZapStart→ZapIdle 반복) 방어: 컨트롤러 전환에 의존하지 않고 ZapAttackIdle을 코드로 1회 강제 진입.
+            if (!_isZapAnimationPlaying && _zapAnimator != null)
+            {
+                _isZapAnimationPlaying = true;
+                _zapAnimator.Play("ZapAttackIdle", 0, 0f);
+            }
+
             int fieldRemoved = 0;
             if (_zapTargets.Count > 0)
             {
@@ -460,6 +469,8 @@ namespace BalloonFlow
             ResumeRail();
             _zapTargets.Clear();
             _isColorRemoveSequenceRunning = false;
+            _isZapAnimationPlaying = false;
+            _zapAnimator = null;
         }
 
         /// <summary>
@@ -854,7 +865,16 @@ namespace BalloonFlow
             }
 
             Vector3 spawnPosition = GetZapSpawnPosition(attackPosition);
-            return Instantiate(_itemZapPrefab, spawnPosition, Quaternion.identity);
+            GameObject zapObject = Instantiate(_itemZapPrefab, spawnPosition, Quaternion.identity);
+            if (zapObject != null)
+            {
+                _zapAnimator = zapObject.GetComponentInChildren<Animator>(true);
+                if (_zapAnimator != null)
+                {
+                    _zapAnimator.keepAnimatorStateOnDisable = true;
+                }
+            }
+            return zapObject;
         }
 
         private GameObject CreateZapLineObject(GameObject zapObject, out bool fromItemZap)
@@ -980,6 +1000,7 @@ namespace BalloonFlow
         {
             if (zapObject == null)
                 return;
+            _isZapAnimationPlaying = false;
 
             // ROLLBACK_ZAP_FINISH_STAY_ON_ATTACK_ORIGIN:
             // ZapFinish is the authored finish animation for the Zap model. Do not snap the
