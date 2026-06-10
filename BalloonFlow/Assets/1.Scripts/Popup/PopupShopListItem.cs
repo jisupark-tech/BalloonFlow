@@ -193,7 +193,7 @@ namespace BalloonFlow
             }
 
             // 타이틀
-            SetTextWithOutline(_txtTitle, _txtTitleOutline, data.title);
+            SetTextWithOutline(_txtTitle, _txtTitleOutline, ResolveLocalizedTitle(data));
 
             // 가격
             SetTextWithOutline(_txtBtnBuy, _txtBtnBuyOutline, data.price);
@@ -221,7 +221,8 @@ namespace BalloonFlow
             {
                 _offPercentRoot.SetActive(!isCoinProduct && !forceNormalBundle && data.hasDiscount && data.discountPercent > 0);
                 if (!isCoinProduct && !forceNormalBundle && data.hasDiscount)
-                    SetTextWithOutline(_txtOffPer, _txtOffPerOutline, $"{data.discountPercent}% OFF!");
+                    SetTextWithOutline(_txtOffPer, _txtOffPerOutline,
+                        LocalizationService.GetWith("shoplistitem.textsale", "n", data.discountPercent));
             }
 
             // 구매 버튼
@@ -552,6 +553,30 @@ namespace BalloonFlow
         {
             if (main != null) main.text = value;
             if (outline != null) outline.text = value;
+        }
+
+        private static string ResolveLocalizedText(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            return LocalizationService.Has(value) ? LocalizationService.Get(value) : value;
+        }
+
+        private static string ResolveLocalizedTitle(ShopProductData data)
+        {
+            if (data == null) return string.Empty;
+
+            if (data.category == ShopItemCategory.Gold && data.rewards != null && data.rewards.coins > 0)
+                return FormatCoins(data.rewards.coins);
+
+            string title = data.title;
+            if (!string.IsNullOrEmpty(title) && LocalizationService.Has(title))
+                return LocalizationService.Get(title);
+
+            string productKey = UIShop.ProductTitleKeyFromId(data.productId);
+            if (!string.IsNullOrEmpty(productKey) && LocalizationService.Has(productKey))
+                return LocalizationService.Get(productKey);
+
+            return ResolveLocalizedText(title);
         }
 
         // RectTransform.GetWorldCorners 결과 재사용용 — 매 프레임 호출 시 GC alloc 방지.

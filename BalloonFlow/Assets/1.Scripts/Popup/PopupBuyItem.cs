@@ -181,7 +181,7 @@ namespace BalloonFlow
             {
                 _frame.SetTitle(title);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
-                _frame.SetSingleButtonText("Buy");
+                _frame.SetSingleButtonText(LocalizationService.Get("popup.txtbtnbuy"));
                 _frame.ShowExitButton(true);
             }
 
@@ -225,7 +225,7 @@ namespace BalloonFlow
             {
                 _frame.SetTitle(title);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
-                _frame.SetSingleButtonText("Claim");
+                _frame.SetSingleButtonText(LocalizationService.Get("ui.common.cliam"));
                 _frame.ShowExitButton(true);
             }
 
@@ -236,7 +236,7 @@ namespace BalloonFlow
             if (_txtSingleOutline != null)
             {
                 _txtSingleOutline.SetActive(true);
-                SetTextInChildren(_txtSingleOutline, "Claim");
+                SetTextInChildren(_txtSingleOutline, LocalizationService.Get("ui.common.cliam"));
             }
 
             if (_txtItemAmount != null)

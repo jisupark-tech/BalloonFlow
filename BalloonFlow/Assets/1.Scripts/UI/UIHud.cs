@@ -1192,9 +1192,9 @@ namespace BalloonFlow
         {
             return boosterType switch
             {
-                BoosterManager.SELECT_TOOL  => LocalizationService.Get("booster.hand.usedesc"),
-                BoosterManager.SHUFFLE      => LocalizationService.Get("booster.shuffle.usedesc"),
-                BoosterManager.COLOR_REMOVE => LocalizationService.Get("booster.zap.usedesc"),
+                BoosterManager.SELECT_TOOL  => LocalizationService.Get("useitem.txtdescription.hand"),
+                BoosterManager.SHUFFLE      => LocalizationService.Get("popup.txtdescription.suffle"),
+                BoosterManager.COLOR_REMOVE => LocalizationService.Get("useitem.txtdescription.zap"),
                 _                           => ""
             };
         }
@@ -1203,9 +1203,9 @@ namespace BalloonFlow
         {
             return boosterType switch
             {
-                BoosterManager.SELECT_TOOL  => LocalizationService.Get("booster.hand.name"),
-                BoosterManager.SHUFFLE      => LocalizationService.Get("booster.shuffle.name"),
-                BoosterManager.COLOR_REMOVE => LocalizationService.Get("booster.zap.name"),
+                BoosterManager.SELECT_TOOL  => LocalizationService.Get("popup.txttitle.hand"),
+                BoosterManager.SHUFFLE      => LocalizationService.Get("popup.txttitle.suffle"),
+                BoosterManager.COLOR_REMOVE => LocalizationService.Get("popup.txttitle.zap"),
                 _                           => ""
             };
         }
@@ -1214,9 +1214,9 @@ namespace BalloonFlow
         {
             return boosterType switch
             {
-                BoosterManager.SELECT_TOOL  => LocalizationService.Get("booster.hand.buydesc"),
-                BoosterManager.SHUFFLE      => LocalizationService.Get("booster.shuffle.buydesc"),
-                BoosterManager.COLOR_REMOVE => LocalizationService.Get("booster.zap.buydesc"),
+                BoosterManager.SELECT_TOOL  => LocalizationService.Get("popup.txtdescription.hand"),
+                BoosterManager.SHUFFLE      => LocalizationService.Get("popup.txtdescription.suffle"),
+                BoosterManager.COLOR_REMOVE => LocalizationService.Get("popup.txtdescription.zap"),
                 _                           => ""
             };
         }

@@ -61,7 +61,7 @@ namespace BalloonFlow
             {
                 _frame.SetTitle(title);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
-                _frame.SetSingleButtonText("OK");
+                _frame.SetSingleButtonText(LocalizationService.Get("ui.common.continue"));
                 _frame.ShowExitButton(true);
             }
 
@@ -85,23 +85,23 @@ namespace BalloonFlow
         /// <summary>결제 실패 팝업 (iconCancel). 텍스트는 CSV(TextData) Key 로드. description=null 이면 CSV 기본문구.</summary>
         public void ShowPaymentFailed(string description = null)
         {
-            Show(LocalizationService.Get("error.payment.title"),
-                 description ?? LocalizationService.Get("error.payment.desc"), _sprIconCancel);
+            Show(LocalizationService.Get("popup.txttitle.purchaseerror"),
+                 description ?? LocalizationService.Get("popup.txtdescription.purchaseerror"), _sprIconCancel);
         }
 
         /// <summary>인터넷 연결 없음 팝업 (iconWifi).</summary>
         public void ShowNoInternet(string description = null)
         {
-            Show(LocalizationService.Get("error.network.title"),
-                 description ?? LocalizationService.Get("error.network.desc"), _sprIconWifi);
+            Show(LocalizationService.Get("popup.txttitle.networkerror"),
+                 description ?? LocalizationService.Get("popup.txtdescription.networkerror"), _sprIconWifi);
         }
 
         /// <summary>결제 성공 팝업 (iconCheck). OK (또는 X) 누르면 onConfirm 콜백.
         /// CloseUI 먼저 → 콜백 호출 (콜백 안에서 새 popup 띄울 때 race 회피).</summary>
         public void ShowPurchaseSuccess(string description = null, System.Action onConfirm = null)
         {
-            Show(LocalizationService.Get("error.success.title"),
-                 description ?? LocalizationService.Get("error.success.desc"), _sprIconCheck);
+            Show(LocalizationService.Get("popup.txttitle.purchasesuccess"),
+                 description ?? LocalizationService.Get("popup.txtdescription.purchasesuccess"), _sprIconCheck);
 
             // Success popup 은 OK 만 — X 닫기 누르면 보상 연출이 skip 되어 사용자가 혼란.
             if (_frame != null) _frame.ShowExitButton(true);

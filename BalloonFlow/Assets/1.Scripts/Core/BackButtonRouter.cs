@@ -81,7 +81,9 @@ namespace BalloonFlow
             // 이미 Quit Game 팝업이 떠 있으면 중복 오픈 방지 — 위 (2) 단계가 잡지 못하는 경우 가드.
             var popup = UIManager.Instance.OpenUI<PopupDescription>(Const.POPUP_DESCRIPTION);
             if (popup != null)
-                popup.Show("Quit", "Are you sure you want to quit?", "Quit",
+                popup.Show(LocalizationService.Get("popup.txttitle.quit"),
+                    LocalizationService.Get("popup.txtdescription.quit"),
+                    LocalizationService.Get("ui.common.quit"),
                     () => Application.Quit());
         }
 

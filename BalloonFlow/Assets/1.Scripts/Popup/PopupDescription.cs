@@ -42,7 +42,7 @@ namespace BalloonFlow
         /// <summary>타이틀 + 설명 텍스트 설정 후 열기.</summary>
         public void Show(string title, string description)
         {
-            Show(title, description, "OK", null);
+            Show(title, description, LocalizationService.Get("ui.common.ok"), null);
         }
 
         /// <summary>타이틀 + 설명 + 버튼 텍스트 + 콜백.</summary>

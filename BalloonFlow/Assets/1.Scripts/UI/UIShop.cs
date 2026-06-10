@@ -257,20 +257,7 @@ namespace BalloonFlow
         internal static ShopProductData ConvertDocToData(ShopProductDoc doc)
         {
             var category = MapCategory(doc.category);
-            string title;
-            if (!string.IsNullOrEmpty(doc.title_loc_key))
-            {
-                title = doc.title_loc_key;
-            }
-            else if (category == ShopItemCategory.Gold && doc.rewards != null && doc.rewards.coins > 0)
-            {
-                // coin 카테고리는 title_loc_key 비어있을 때 productId 대신 코인 수량 표시 — ShopListGold prefab의 TextPrice가 _txtTitle 슬롯에 wire 되어 있어 발생한 productId 노출 회귀 fix.
-                title = doc.rewards.coins.ToString("N0");
-            }
-            else
-            {
-                title = doc.productId;
-            }
+            string title = ResolveProductTitleKey(doc, category);
 
             return new ShopProductData
             {
@@ -286,6 +273,38 @@ namespace BalloonFlow
                 goldIconKey      = doc.goldIconKey ?? string.Empty,
                 rewards          = doc.rewards   // 동적 보상 표시용
             };
+        }
+
+        private static string ResolveProductTitleKey(ShopProductDoc doc, ShopItemCategory category)
+        {
+            if (doc == null) return string.Empty;
+
+            if (category == ShopItemCategory.Gold && doc.rewards != null && doc.rewards.coins > 0)
+                return doc.rewards.coins.ToString("N0");
+
+            if (!string.IsNullOrEmpty(doc.title_loc_key))
+                return doc.title_loc_key;
+
+            string productKey = ProductTitleKeyFromId(doc.productId);
+            if (!string.IsNullOrEmpty(productKey))
+                return productKey;
+
+            return doc.productId;
+        }
+
+        internal static string ProductTitleKeyFromId(string productId)
+        {
+            switch (productId)
+            {
+                case "xyz.aimed.balloonloop.offer.starter": return "shoplistitem.starter";
+                case "xyz.aimed.balloonloop.noads": return "shoplistitem.noads";
+                case "xyz.aimed.balloonloop.bundle.tier1": return "shoplistitem.t1";
+                case "xyz.aimed.balloonloop.bundle.tier2": return "shoplistitem.t2";
+                case "xyz.aimed.balloonloop.bundle.tier3": return "shoplistitem.t3";
+                case "xyz.aimed.balloonloop.bundle.tier4": return "shoplistitem.t4";
+                case "xyz.aimed.balloonloop.bundle.tier5": return "shoplistitem.t5";
+                default: return string.Empty;
+            }
         }
 
         /// <summary>Firestore /products 의 카테고리 문자열 → UI prefab 분기 enum.

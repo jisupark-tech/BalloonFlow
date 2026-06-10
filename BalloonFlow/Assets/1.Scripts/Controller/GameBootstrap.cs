@@ -751,7 +751,9 @@ namespace BalloonFlow
                     {
                         var popup = UIManager.Instance.OpenUI<PopupDescription>("Popup/PopupDescription");
                         if (popup != null)
-                            popup.Show("Congratulations!", "You've cleared all levels!", "OK",
+                            popup.Show(LocalizationService.Get("popup.txttitle.allclear"),
+                                LocalizationService.Get("popup.txtdescription.allclear"),
+                                LocalizationService.Get("ui.common.continue"),
                                 () => { if (GameManager.HasInstance) GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY); });
                     }
                     return;

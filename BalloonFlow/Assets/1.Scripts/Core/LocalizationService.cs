@@ -43,6 +43,14 @@ namespace BalloonFlow
             return key;                  // 미존재 → key 노출(진단 용이)
         }
 
+        public static string GetWith(string key, string token, object value)
+        {
+            string text = Get(key);
+            if (string.IsNullOrEmpty(token)) return text;
+            string replacement = value != null ? value.ToString() : string.Empty;
+            return text.Replace("{" + token + "}", replacement);
+        }
+
         public static bool Has(string key)
         {
             if (string.IsNullOrEmpty(key)) return false;
@@ -105,7 +113,7 @@ namespace BalloonFlow
             var langCodes = new List<string>();
             for (int c = 0; c < header.Length; c++)
             {
-                string h = (header[c] ?? "").Trim();
+                string h = TrimBom(header[c]).Trim();
                 if (keyCol < 0 && h.Equals("Key", System.StringComparison.OrdinalIgnoreCase)) { keyCol = c; continue; }
                 if (h.StartsWith("Text_", System.StringComparison.OrdinalIgnoreCase))
                 {
@@ -121,7 +129,7 @@ namespace BalloonFlow
             {
                 string[] f = rows[r];
                 if (keyCol >= f.Length) continue;
-                string key = (f[keyCol] ?? "").Trim();
+                string key = TrimBom(f[keyCol]).Trim();
                 if (string.IsNullOrEmpty(key)) continue;
                 if (_byKey.ContainsKey(key)) continue;        // 중복 Key → 첫 항목 유지(드롭)
 
@@ -130,6 +138,11 @@ namespace BalloonFlow
                     vals[l] = langCols[l] < f.Length ? f[langCols[l]] : "";
                 _byKey[key] = vals;
             }
+        }
+
+        private static string TrimBom(string value)
+        {
+            return string.IsNullOrEmpty(value) ? string.Empty : value.TrimStart('\uFEFF');
         }
 
         /// <summary>RFC-4180 최소 파서 — 따옴표 필드 내 콤마/줄바꿈/이스케이프("") 지원.</summary>
@@ -142,7 +155,7 @@ namespace BalloonFlow
             var sb = new StringBuilder(64);
             bool inQuotes = false;
             int i = 0;
-            if (text[0] == '﻿') i = 1; // BOM 제거
+            if (text[0] == '\uFEFF') i = 1; // BOM 제거
 
             for (; i < text.Length; i++)
             {

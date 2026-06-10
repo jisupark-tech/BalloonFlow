@@ -179,7 +179,7 @@ namespace BalloonFlow
         {
             if (_frame != null)
             {
-                _frame.SetTitle("Shop");
+                _frame.SetTitle(LocalizationService.Get("ui.shop.title"));
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.None);
                 _frame.ShowExitButton(true);
             }

@@ -268,7 +268,9 @@ namespace BalloonFlow
                 {
                     var popup = UIManager.Instance.OpenUI<PopupDescription>("Popup/PopupDescription");
                     if (popup != null)
-                        popup.Show("Congratulations!", "You've cleared all levels!", "OK",
+                        popup.Show(LocalizationService.Get("popup.txttitle.allclear"),
+                            LocalizationService.Get("popup.txtdescription.allclear"),
+                            LocalizationService.Get("ui.common.continue"),
                             () => { if (GameManager.HasInstance) GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY); });
                     return;
                 }
@@ -376,7 +378,7 @@ namespace BalloonFlow
             {
                 // 텍스트는 TextData(LocalizationService)에서 — SuperHard→ui.superhard, Hard→ui.hard. (하드코딩 "Super Hard Level"/"Hard Level" 제거)
                 string label = LocalizationService.Get(
-                    difficulty == DifficultyPurpose.SuperHard ? "ui.superhard" : "ui.hard");
+                    difficulty == DifficultyPurpose.SuperHard ? "ui.superhard" : "ui.hardlevel");
                 if (_txtHardLevel != null) _txtHardLevel.text = label;
                 if (_txtHardLevelOutline != null) _txtHardLevelOutline.text = label;
 
