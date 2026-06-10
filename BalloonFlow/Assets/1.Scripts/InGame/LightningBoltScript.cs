@@ -73,6 +73,9 @@ namespace DigitalRuby.LightningBolt
         [Tooltip("Keep world Z depth while rendering with an orthographic camera.")]
         public bool PreserveDepthInOrthographic;
 
+        [Tooltip("체크 시 라인의 시작/끝/중간 포인트가 모두 동일 Y를 유지하도록 chaos/random offset 의 Y 성분을 0으로 처리")]
+        public bool LockYAxis;
+
         [Range(1, 64)]
         [Tooltip("The number of rows in the texture. Used for animation.")]
         public int Rows = 1;
@@ -200,6 +203,7 @@ namespace DigitalRuby.LightningBolt
                 Vector3 side = new Vector3(-directionNormalized.y, directionNormalized.x, directionNormalized.z);
                 float distance = ((float)RandomGenerator.NextDouble() * offsetAmount * 2.0f) - offsetAmount;
                 result = side * distance;
+                if (LockYAxis) result.y = 0f;
             }
             else
             {
@@ -215,6 +219,7 @@ namespace DigitalRuby.LightningBolt
 
                 // rotate around the direction and then offset by the perpendicular vector
                 result = Quaternion.AngleAxis(rotationAngle, directionNormalized) * side * distance;
+                if (LockYAxis) result.y = 0f;
             }
         }
 

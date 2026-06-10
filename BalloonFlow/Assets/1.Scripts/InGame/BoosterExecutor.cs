@@ -1067,12 +1067,14 @@ namespace BalloonFlow
             Transform endTransform = FindChildRecursive(zapLineObject.transform, "LightningEnd");
             Vector3 lineStartPosition = GetZapLineRenderPosition(startPosition);
             Vector3 lineEndPosition = GetZapLineRenderPosition(endPosition);
+            lineEndPosition.y = lineStartPosition.y;
             if (startTransform != null) startTransform.position = lineStartPosition;
             if (endTransform != null) endTransform.position = lineEndPosition;
 
             LightningBoltScript bolt = zapLineObject.GetComponentInChildren<LightningBoltScript>(true);
             if (bolt != null)
             {
+                bolt.LockYAxis = true;
                 LineRenderer lineRenderer = bolt.GetComponent<LineRenderer>();
                 bool isFirstActivation = lineRenderer != null && !_zapLineTargetWidths.ContainsKey(lineRenderer);
                 PrepareZapLineRenderer(lineRenderer);
@@ -1182,11 +1184,11 @@ namespace BalloonFlow
 
                     Vector3 jitterStart = new Vector3(
                         Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
-                        Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
+                        0f,
                         Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter));
                     Vector3 jitterEnd = new Vector3(
                         Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
-                        Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
+                        0f,
                         Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter));
 
                     bolt.StartPosition = baseline.start + jitterStart;
@@ -1287,11 +1289,11 @@ namespace BalloonFlow
 
                         Vector3 jitterStart = new Vector3(
                             Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
-                            Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
+                            0f,
                             Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter));
                         Vector3 jitterEnd = new Vector3(
                             Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
-                            Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
+                            0f,
                             Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter));
 
                         bolt.StartPosition = currentStart + jitterStart;
