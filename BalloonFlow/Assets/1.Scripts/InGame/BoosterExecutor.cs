@@ -1109,7 +1109,7 @@ namespace BalloonFlow
         }
 
         // 4갈래 Zap 라인을 동일 타이밍에 ConfigureZapLine으로 활성화.
-        // 라인 인덱스별 (X, Z) 고정 오프셋을 startPosition/endPosition 양쪽에 동일하게 더해 평행 이동.
+        // 시작점은 약하게 fan-out, 끝점은 더 크게 X/Z 분산해 부채꼴로 퍼지게 한다.
         // Y는 GetZapLineRenderPosition 가 결정한 값 그대로(위아래 튀지 않게).
         private void ConfigureZapLineFan(List<GameObject> zapLineObjects, Vector3 startPosition, Vector3 endPosition, float visibleDuration)
         {
@@ -1126,17 +1126,27 @@ namespace BalloonFlow
                 return;
             }
 
-            Vector2[] perLineOffsetsXZ = {
+            // 시작점 fan-out — 시작점이 너무 겹치지 않을 정도로만 약하게.
+            Vector2[] startOffsetsXZ = {
                 new Vector2(+0.00f, +0.00f),
-                new Vector2(+0.08f, +0.04f),
-                new Vector2(-0.08f, -0.04f),
-                new Vector2(+0.04f, -0.08f),
+                new Vector2(+0.05f, +0.03f),
+                new Vector2(-0.05f, -0.03f),
+                new Vector2(+0.03f, -0.05f),
+            };
+
+            // 끝점 fan-out — 4개 라인이 부채꼴로 퍼지도록 더 크게, 각 라인 부호/크기 모두 다르게.
+            Vector2[] endOffsetsXZ = {
+                new Vector2(+0.18f, +0.12f),
+                new Vector2(-0.20f, +0.10f),
+                new Vector2(+0.15f, -0.18f),
+                new Vector2(-0.16f, -0.14f),
             };
 
             for (int i = 0; i < count; i++)
             {
-                Vector3 off = new Vector3(perLineOffsetsXZ[i].x, 0f, perLineOffsetsXZ[i].y);
-                ConfigureZapLine(zapLineObjects[i], startPosition + off, endPosition + off, visibleDuration);
+                Vector3 startOff = new Vector3(startOffsetsXZ[i].x, 0f, startOffsetsXZ[i].y);
+                Vector3 endOff = new Vector3(endOffsetsXZ[i].x, 0f, endOffsetsXZ[i].y);
+                ConfigureZapLine(zapLineObjects[i], startPosition + startOff, endPosition + endOff, visibleDuration);
             }
         }
 
