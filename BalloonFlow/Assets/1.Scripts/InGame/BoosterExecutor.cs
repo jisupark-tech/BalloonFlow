@@ -44,6 +44,8 @@ namespace BalloonFlow
         private const float ZapMinLeadInterval = 0.03f;
         private const float ZapLineLeadBeforePop = 0.015f;
         private const float ZapFinishLifetime = 0.6f;
+        private const float ZapFinishTransitionGrace = 0.4f;
+        private const float ZapFinishPostPlayBuffer = 0.05f;
         private const float ZapEffectYOffset = 0.12f;
 
         // Hand 부스터 사용 시 카메라가 보관함 큐의 앞쪽 몇 개 행을 보여줄지 (5줄 요구).
@@ -519,9 +521,7 @@ namespace BalloonFlow
             _zapLineTargetWidths.Clear();
             _zapLineFadeCoroutines.Clear();
             // FxZapLine 라인 페이드아웃·정리 완료 후에 ZapFinish 트리거 → ZapAttackIdle → ZapAttackFinish 자연 전이
-            PlayZapFinish(zapObject);
-            if (zapObject != null)
-                Destroy(zapObject, ZapFinishLifetime);
+            yield return StartCoroutine(WaitForZapFinishThenDestroyRoutine(zapObject));
 
             if (CameraManager.HasInstance)
                 CameraManager.Instance.MoveBack();
@@ -1426,6 +1426,66 @@ namespace BalloonFlow
 
             if (!triggered)
                 zapObject.transform.DOPunchScale(Vector3.one * 0.15f, ZapFinishLifetime, 6, 0.4f);
+        }
+
+        // FxZapLine 종료 → ZapFinish 트리거 발사 → ZapAttackFinish 클립 재생 완료(또는 Grace 경과) 후 비활성화 + Destroy. 타이머 기반 Destroy(0.6f) 대비 ZapAttackFinish 클립이 컷되지 않도록 Animator 상태 머신을 직접 폴링한다.
+        private IEnumerator WaitForZapFinishThenDestroyRoutine(GameObject zapObject)
+        {
+            if (zapObject == null)
+                yield break;
+
+            PlayZapFinish(zapObject);
+
+            Animator animator = zapObject.GetComponentInChildren<Animator>(true);
+            if (animator == null)
+            {
+                yield return new WaitForSeconds(ZapFinishLifetime);
+            }
+            else
+            {
+                float graceElapsed = 0f;
+                while (graceElapsed < ZapFinishTransitionGrace)
+                {
+                    if (animator == null)
+                        break;
+                    if (animator.IsInTransition(0))
+                    {
+                        graceElapsed += Time.deltaTime;
+                        yield return null;
+                        continue;
+                    }
+                    if (animator.GetCurrentAnimatorStateInfo(0).IsName("ZapAttackFinish"))
+                        break;
+                    graceElapsed += Time.deltaTime;
+                    yield return null;
+                }
+
+                if (animator != null && animator.GetCurrentAnimatorStateInfo(0).IsName("ZapAttackFinish"))
+                {
+                    float stateLength = animator.GetCurrentAnimatorStateInfo(0).length;
+                    float playElapsed = 0f;
+                    while (animator != null)
+                    {
+                        AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
+                        if (!info.IsName("ZapAttackFinish"))
+                            break;
+                        if (info.normalizedTime >= 0.98f)
+                            break;
+                        if (playElapsed >= stateLength)
+                            break;
+                        playElapsed += Time.deltaTime;
+                        yield return null;
+                    }
+                }
+            }
+
+            yield return new WaitForSeconds(ZapFinishPostPlayBuffer);
+
+            if (zapObject != null)
+            {
+                zapObject.SetActive(false);
+                Destroy(zapObject);
+            }
         }
 
         private bool TrySetZapFinishTrigger(GameObject zapObject)
