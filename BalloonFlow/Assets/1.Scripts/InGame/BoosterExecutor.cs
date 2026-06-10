@@ -48,7 +48,7 @@ namespace BalloonFlow
 
         // Hand 부스터 사용 시 카메라가 보관함 큐의 앞쪽 몇 개 행을 보여줄지 (5줄 요구).
         private const int HAND_VISIBLE_ROWS = 5;
-        private const float ZapSpawnYOffset = 2f;
+        private static readonly Vector3 ZapSpawnPosition = new Vector3(-0.1911252f, 1.95f, -7.79f);
         private const float ZapLineWorldLift = 0.35f;
         private const float ZapLineMinWidth = 0.08f;
         private const int ZapLineSortingOrder = 80;
@@ -763,14 +763,9 @@ namespace BalloonFlow
 
         private Vector3 GetZapSpawnPosition(Vector3 attackPosition)
         {
-            float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
-            Vector3 spawnPosition = attackPosition;
-            // ROLLBACK_ZAP_SPAWN_Y_OFFSET:
-            // Raise only the ItemZap summon/start position. Attack target, pop timing, and
-            // FxZapLine endpoints stay on the existing gameplay/effect plane.
-            spawnPosition.y += ZapSpawnYOffset;
-            spawnPosition.z -= Mathf.Max(1f, cellSpacing * 2f);
-            return spawnPosition;
+            // ROLLBACK_ZAP_SPAWN_Y_OFFSET: ItemZap 등장 위치를 고정 좌표로 사용 (기존 동적 계산 제거).
+            // fixed spawn — attackPosition unused, kept for caller compatibility.
+            return ZapSpawnPosition;
         }
 
         private Vector3 GetZapAttackPosition()
