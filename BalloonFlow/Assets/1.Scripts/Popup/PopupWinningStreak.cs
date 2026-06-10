@@ -770,9 +770,34 @@ namespace BalloonFlow
                 icon = icon,
                 altHeart = FindChildGOByName(item, "ImageHeart"),
                 altGift = imageGift,
-                text = FindChildByName<TMP_Text>(item, "TextReward"),
-                textOutline = FindChildByName<TMP_Text>(item, "TextRewardOutline")
+                // [{n} fix 2026-06-10] 변형별 쌍 전부 수집 — 단일 FindChildByName 은 첫 쌍만 잡혀 "{n}" 노출.
+                texts = CollectTextsByName(item, "TextReward"),
+                textOutlines = CollectTextsByName(item, "TextRewardOutline")
             };
+        }
+
+        /// <summary>root 아래에서 이름이 정확히 일치하는 TMP_Text 전부 수집 (비활성 포함).</summary>
+        private static List<TMP_Text> CollectTextsByName(GameObject root, string name)
+        {
+            var list = new List<TMP_Text>(2);
+            if (root == null) return list;
+            var arr = root.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < arr.Length; i++)
+                if (arr[i] != null && arr[i].name == name) list.Add(arr[i]);
+            return list;
+        }
+
+        /// <summary>RewardItemRefs 의 모든 TextReward/TextRewardOutline 에 같은 수치 텍스트 기록.
+        /// 활성 변형이 무엇이든 올바른 값이 들어가고, 비활성 변형은 안 보이므로 무해.</summary>
+        private static void SetRewardCountText(RewardItemRefs item, string value)
+        {
+            if (item == null) return;
+            if (item.texts != null)
+                for (int i = 0; i < item.texts.Count; i++)
+                    if (item.texts[i] != null) item.texts[i].text = value;
+            if (item.textOutlines != null)
+                for (int i = 0; i < item.textOutlines.Count; i++)
+                    if (item.textOutlines[i] != null) item.textOutlines[i].text = value;
         }
 
         private void ApplyPoolSlotLayout()
@@ -1090,8 +1115,7 @@ namespace BalloonFlow
                     }
 
                     string countText = rewards[i].count > 0 ? $"x{rewards[i].count}" : "";
-                    if (item.text != null) item.text.text = countText;
-                    if (item.textOutline != null) item.textOutline.text = countText;
+                    SetRewardCountText(item, countText);
                 }
                 else
                 {
@@ -1146,8 +1170,7 @@ namespace BalloonFlow
                 countText = BuildBoxRewardText(rewards);                              // "Hand x1 + Shuffle x1"
             else
                 countText = hasSingle ? GetRewardCountText(primary) : "";
-            if (item.text != null) item.text.text = countText;
-            if (item.textOutline != null) item.textOutline.text = countText;
+            SetRewardCountText(item, countText);
         }
 
         private static List<RewardEntry> BuildRewardEntries(WinningStreakStage stageDoc)
@@ -1412,8 +1435,10 @@ namespace BalloonFlow
             public Image icon;          // ImageItem — 코인/부스터/하트 sprite 를 swap 해서 표시(단일 아이콘).
             public GameObject altHeart; // ImageHeart — 기본 활성이라 숨겨야 ImageItem 과 안 겹침.
             public GameObject altGift;  // ImageGift — WS 보상 타입에 매핑 없음, 숨김.
-            public TMP_Text text;
-            public TMP_Text textOutline;
+            // [{n} fix 2026-06-10] RewardImg 는 변형(RewardGold/RewardItem)마다 TextReward/Outline 쌍을 따로 가짐.
+            //   단일 캡처는 첫 쌍만 잡아 다른 변형 활성 시 prefab placeholder "{n}" 가 그대로 노출됐다 → 전부 수집.
+            public List<TMP_Text> texts;
+            public List<TMP_Text> textOutlines;
         }
 
         private class PooledSlot

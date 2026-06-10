@@ -254,9 +254,15 @@ namespace BalloonFlow
                 {
                     GameManager.Instance.ResumeGame();
                     if (GameManager.IsTestPlayMode)
+                    {
                         GameManager.Instance.GoToMapMaker();
+                    }
                     else
+                    {
+                        // [WS quit-fail 2026-06-10] 미클리어 중도 이탈 = 실패 — streak 리셋 + 로비 배수 드롭 연출 예약.
+                        if (WinningStreakManager.HasInstance) WinningStreakManager.Instance.OnLevelAbandoned();
                         GameManager.Instance.GoToLobby();
+                    }
                 }
             }
         }
@@ -283,9 +289,15 @@ namespace BalloonFlow
             {
                 GameManager.Instance.ResumeGame();
                 if (GameManager.IsTestPlayMode)
+                {
                     GameManager.Instance.GoToMapMaker();
+                }
                 else
+                {
+                    // [WS quit-fail 2026-06-10] 미클리어 중도 이탈 = 실패 — streak 리셋 + 로비 배수 드롭 연출 예약.
+                    if (WinningStreakManager.HasInstance) WinningStreakManager.Instance.OnLevelAbandoned();
                     GameManager.Instance.GoToLobby();
+                }
             }
         }
 

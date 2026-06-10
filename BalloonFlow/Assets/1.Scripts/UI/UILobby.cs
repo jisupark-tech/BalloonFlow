@@ -578,7 +578,35 @@ namespace BalloonFlow
                 yield return PlayWinningStreakLobbyFx(anim);
             }
 
+            // [WS quit-fail 2026-06-10] 실패(중도 이탈 포함)로 streak 이 리셋됐으면 배수 드롭 연출 1회 재생.
+            if (mgr.TryConsumePendingFailFx(out int failFromMultiplier))
+                yield return PlayWsMultiplierFailFx(failFromMultiplier);
+
             _wsLobbyFxCoroutine = null;
+        }
+
+        /// <summary>[WS quit-fail 2026-06-10] 배수 드롭 실패 연출 — 이전 배수로 슬라이드 인 → 잠시 후 1 로 드롭(펀치) → 슬라이드 아웃.
+        /// 실제 streak 은 이미 리셋된 상태라 연출 종료 후 표시 갱신만 수행. 에디터 실패 프리뷰(x 키)와 동일 시퀀스.</summary>
+        private IEnumerator PlayWsMultiplierFailFx(int fromMultiplier)
+        {
+            ResolveWsFxRefs();
+            if (_wsMultiplier == null) yield break;
+            if (!_wsMultiplier.gameObject.activeSelf)
+                _wsMultiplier.gameObject.SetActive(true);
+
+            SetWsMultiplierX(WS_MULTIPLIER_HIDDEN_X);
+            WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, fromMultiplier);
+            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
+
+            yield return new WaitForSecondsRealtime(0.6f);
+            WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, 1);
+            // '떨어지는' 느낌 — 아래로 펀치 + 살짝 축소 후 복귀.
+            _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, -36f), 0.4f, 8, 0.7f).SetUpdate(true);
+            _wsMultiplier.DOPunchScale(new Vector3(-0.18f, -0.18f, 0f), 0.4f, 8, 0.7f).SetUpdate(true);
+
+            yield return new WaitForSecondsRealtime(0.7f);
+            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
+            RefreshWinningStreakDisplay();
         }
 
         private IEnumerator PlayWinningStreakLobbyFx(WinningStreakManager.PendingLobbyAnimation anim, bool grantRewards = true, bool forceVisible = false)
@@ -1495,33 +1523,10 @@ namespace BalloonFlow
         private IEnumerator PlayWinningStreakFailPreviewRoutine()
         {
             ForceShowWinningStreakUI();
-            ResolveWsFxRefs();
-
-            // Multiplier 오브젝트가 비활성이면 슬라이드/연출이 안 보이므로 강제 활성화.
-            if (_wsMultiplier != null && !_wsMultiplier.gameObject.activeSelf)
-                _wsMultiplier.gameObject.SetActive(true);
-
             // 데모용으로 현재 배수(최소 x5 보장)를 먼저 보여준 뒤 1 로 드롭.
+            // [WS quit-fail 2026-06-10] 본체는 런타임 실패 연출(PlayWsMultiplierFailFx) 재사용 — 프리뷰/실연출 동일 시퀀스 보장.
             int shownMultiplier = Mathf.Max(5, WinningStreakUI.ResolveCurrentMultiplier());
-
-            SetWsMultiplierX(WS_MULTIPLIER_HIDDEN_X);
-            // [2026-06-10] Animator → 코드 트윈 (PlayMultiplierSelect) 전환.
-            if (_wsMultiplier != null)
-                WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, shownMultiplier);
-            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
-
-            // 잠깐 보여준 뒤 → 실패 → 배수 1 로 리셋(드롭).
-            yield return new WaitForSecondsRealtime(0.6f);
-            if (_wsMultiplier != null)
-            {
-                WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, 1);
-                // '떨어지는' 느낌이 나도록 아래로 펀치 + 살짝 축소 후 복귀.
-                _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, -36f), 0.4f, 8, 0.7f).SetUpdate(true);
-                _wsMultiplier.DOPunchScale(new Vector3(-0.18f, -0.18f, 0f), 0.4f, 8, 0.7f).SetUpdate(true);
-            }
-
-            yield return new WaitForSecondsRealtime(0.7f);
-            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
+            yield return PlayWsMultiplierFailFx(shownMultiplier);
             _wsLobbyFxCoroutine = null;
         }
 

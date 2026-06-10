@@ -244,15 +244,33 @@ namespace BalloonFlow
             OnStateChanged?.Invoke();
         }
 
-        /// <summary>레벨 실패 시 streak 리셋. 포인트는 보존.</summary>
+        /// <summary>레벨 실패 시 streak 리셋. 포인트는 보존.
+        /// [WS quit-fail 2026-06-10] 리셋 전 배수가 2 이상이면 로비 실패 연출(배수 드롭)을 예약 — UILobby 가 로비 진입 시 1회 소비.</summary>
         public void OnLevelFailed()
         {
             var s = State;
             if (s == null) return;
             if (s.currentStreak == 0) return;
+            int fromMultiplier = WinningStreakUI.ResolveCurrentMultiplier(); // 미해금/비활성이면 1 → 연출 미예약
+            if (fromMultiplier > 1) _pendingFailFxMultiplier = fromMultiplier;
             s.currentStreak = 0;
             SaveProgressFireAndForget();
             OnStateChanged?.Invoke();
+        }
+
+        // [WS quit-fail 2026-06-10] 인게임 중도 이탈(미클리어 상태로 로비 이동) = 실패.
+        //   호출부: HUDController(PopupQuit/Settings Home), PopupContinue(포기 2단계) — GoToLobby 직전.
+        private int _pendingFailFxMultiplier;
+
+        /// <summary>중도 포기(quit→로비) — 레벨 실패와 동일 처리 (streak 리셋 + 실패 연출 예약). 멱등.</summary>
+        public void OnLevelAbandoned() => OnLevelFailed();
+
+        /// <summary>로비 실패 연출(배수 N→1 드롭) 예약 1회 소비. 예약 없으면 false.</summary>
+        public bool TryConsumePendingFailFx(out int fromMultiplier)
+        {
+            fromMultiplier = _pendingFailFxMultiplier;
+            _pendingFailFxMultiplier = 0;
+            return fromMultiplier > 1;
         }
 
         // ── Points / overflow ─────────────────────────────────────

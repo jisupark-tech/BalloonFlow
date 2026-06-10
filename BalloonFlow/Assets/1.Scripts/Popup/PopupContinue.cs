@@ -391,9 +391,15 @@ namespace BalloonFlow
             {
                 GameManager.Instance.ResumeGame();
                 if (GameManager.IsTestPlayMode)
+                {
                     GameManager.Instance.GoToMapMaker();
+                }
                 else
+                {
+                    // [WS quit-fail 2026-06-10] WS 경고 2단계에서 포기(미클리어 로비 이동) = 실패 — streak 리셋 + 로비 드롭 연출 예약.
+                    if (WinningStreakManager.HasInstance) WinningStreakManager.Instance.OnLevelAbandoned();
                     GameManager.Instance.GoToLobby();
+                }
             }
         }
 

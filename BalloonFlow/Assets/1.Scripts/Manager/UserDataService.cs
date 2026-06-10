@@ -150,7 +150,20 @@ namespace BalloonFlow
 
             if (snap.Exists)
             {
-                _user = snap.ConvertTo<UserData>();
+                try
+                {
+                    _user = snap.ConvertTo<UserData>();
+                }
+                catch (ArgumentException convertEx)
+                {
+                    // 과거 SetPurchasedOnce 가 string field path 로 써서 productId 의 '.' 이
+                    // 중첩 맵으로 오염된 문서 — purchasedOnce 를 평탄화해 복구 후 재시도.
+                    Debug.LogWarning($"{LOG_TAG} UserData deserialize failed ({convertEx.Message}) — purchasedOnce 복구 시도.");
+                    await RepairCorruptedPurchasedOnceAsync(docRef, snap);
+                    snap = await docRef.GetSnapshotAsync();
+                    _user = snap.ConvertTo<UserData>();
+                    Debug.Log($"{LOG_TAG} purchasedOnce 복구 완료. keys={_user.purchasedOnce.Count}");
+                }
                 _user.lastLoginAt = Timestamp.GetCurrentTimestamp();
                 // lastLoginAt 비동기 update (실패해도 게임 진행 막지 않음)
                 _ = docRef.UpdateAsync("lastLoginAt", _user.lastLoginAt);
@@ -168,6 +181,33 @@ namespace BalloonFlow
 
             _isReady = true;
             OnUserDataReady?.Invoke();
+        }
+
+        /// <summary>
+        /// nested map 으로 오염된 purchasedOnce 를 원래의 flat {productId: bool} 로 복구.
+        /// "xyz" → "aimed" → ... → "starter": true 경로를 '.' 으로 join 해 productId 재구성.
+        /// 맵 값으로 쓰는 Dictionary 의 key 는 field path 가 아니므로 '.' 이 리터럴로 보존됨.
+        /// </summary>
+        private async Task RepairCorruptedPurchasedOnceAsync(DocumentReference docRef, DocumentSnapshot snap)
+        {
+            var flat = new Dictionary<string, object>();
+            if (snap.TryGetValue("purchasedOnce", out Dictionary<string, object> raw) && raw != null)
+                FlattenBoolMap(raw, "", flat);
+
+            await docRef.UpdateAsync("purchasedOnce", flat);
+        }
+
+        private static void FlattenBoolMap(Dictionary<string, object> node, string prefix, Dictionary<string, object> output)
+        {
+            foreach (var kvp in node)
+            {
+                string key = string.IsNullOrEmpty(prefix) ? kvp.Key : prefix + "." + kvp.Key;
+                if (kvp.Value is Dictionary<string, object> child)
+                    FlattenBoolMap(child, key, output);
+                else if (kvp.Value is bool b)
+                    output[key] = b;
+                // bool 도 map 도 아닌 값은 폐기 (스키마 외 오염 데이터)
+            }
         }
 
         /// <summary>
@@ -421,9 +461,12 @@ namespace BalloonFlow
         {
             if (!_isReady || string.IsNullOrEmpty(productId)) return;
             _user.purchasedOnce[productId] = purchased;
-            FireAndForget(_db.Document($"users/{Uid}").UpdateAsync(new Dictionary<string, object>
+            // productId 에 '.' 이 포함됨 (xyz.aimed.balloonloop.*) — string field path 는 '.' 을
+            // 중첩 맵 구분자로 해석해 purchasedOnce 가 nested map 으로 오염됨 (ConvertTo<UserData> 실패).
+            // FieldPath 세그먼트 배열은 '.' 을 리터럴 키로 취급.
+            FireAndForget(_db.Document($"users/{Uid}").UpdateAsync(new Dictionary<FieldPath, object>
             {
-                [$"purchasedOnce.{productId}"] = purchased
+                [new FieldPath("purchasedOnce", productId)] = purchased
             }), $"SetPurchasedOnce({productId})");
         }
 

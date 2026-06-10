@@ -218,6 +218,10 @@ namespace BalloonFlow
             new Dictionary<int, DartIdentifier>(64);
         private readonly List<RailManager.DartOnRail> _scanHeadDarts = new List<RailManager.DartOnRail>(16);
         private readonly List<DartFireCandidate> _fireCandidates = new List<DartFireCandidate>(16);
+        // DEAD_HEAD_RELIEF: 릴리프 평가 시점의 레일면 외곽 색 스냅샷 + holder 별 타이머 (GC 방지 재사용).
+        private readonly HashSet<int> _deadHeadReachableColors = new HashSet<int>(16);
+        private readonly Dictionary<int, float> _deadHeadSince = new Dictionary<int, float>(8);
+        private readonly Dictionary<int, float> _deadHeadLastReliefFireAt = new Dictionary<int, float>(8);
         private static readonly System.Comparison<RailManager.DartOnRail> CompareDartPlacedSeq =
             (a, b) => a.placedSeq.CompareTo(b.placedSeq);
         private readonly Dictionary<int, int> _lastScannedLineByHolder = new Dictionary<int, int>(16);
@@ -329,8 +333,8 @@ namespace BalloonFlow
 #if BALLOONFLOW_DART_MISS_SUSPECT_DEBUG
         private static readonly bool DART_MISS_SUSPECT_DEBUG = true;
 #else
-        // [2026-05-22 DBG-TopLeft] 좌상단 풍선 BOTTOM/RIGHT rail 공격 미발사 재현용 — 캡쳐 끝나면 false 로 복귀.
-        private static readonly bool DART_MISS_SUSPECT_DEBUG = true;
+        // [2026-06-10 perf] DBG-TopLeft 캡쳐 종료 — false 복귀 (원 주석 "캡쳐 끝나면 false 로 복귀" 이행).
+        private static readonly bool DART_MISS_SUSPECT_DEBUG = false;
 #endif
         // ROLLBACK_DART_ATTACK_ISSUE_DEBUG:
         // Temporary, throttled diagnostics for continuous-fire and miss paths. Disable this after
@@ -339,12 +343,13 @@ namespace BalloonFlow
 #if BALLOONFLOW_DART_ATTACK_ISSUE_DEBUG
         private static readonly bool DART_ATTACK_ISSUE_DEBUG = true;
 #else
-        // [2026-05-22 DBG-TopLeft] 좌상단 풍선 BOTTOM/RIGHT rail 공격 미발사 재현용 — 캡쳐 끝나면 false 로 복귀.
-        private static readonly bool DART_ATTACK_ISSUE_DEBUG = true;
+        // [2026-06-10 perf] DBG-TopLeft 캡쳐 종료 — false 복귀. true 방치로 매 프레임 Debug.Log(스택트레이스+IO)가
+        // 상시 부하를 만들고 있었음 (Zap 미사용 시에도 인게임 프레임 드랍 원인).
+        private static readonly bool DART_ATTACK_ISSUE_DEBUG = false;
 #endif
 
-        // [2026-05-22 DBG-TopLeft] 좌상단 공격 미발사 진단 — 캡쳐 끝나면 const false 로 복귀.
-        private static readonly bool DBG_TOPLEFT_DUMP = true;
+        // [2026-06-10 perf] DBG-TopLeft 캡쳐 종료 — false 복귀.
+        private static readonly bool DBG_TOPLEFT_DUMP = false;
 
         // ROLLBACK_DART_CROSSED_LINE_CACHE_FIX:
         // At x2 speed or after a long frame, a head can cross several grid lines before this scan
@@ -1760,6 +1765,106 @@ namespace BalloonFlow
             _fireCandidates.Clear();
             RelieveStuckHolderLineLocks(rail);
             PruneConsumedTargetLinesForCurrentHeads(rail);
+            RelieveDeadHeadStall(rail, firedThisScan);
+        }
+
+        // DEAD_HEAD_RELIEF (2026-06-10):
+        // fail 판정(HasOutermostMatch)은 '레일 전체 다트 색 ∩ 레일면 외곽 색'으로 매칭을 보는데,
+        // 발사는 holder 별 cluster head 만 후보다. head 색이 현재 레일면 외곽 어디에도 없으면
+        // head 는 보드가 변하기 전까지 발사 불가 → 뒤의 매칭 다트도 영원히 차단 →
+        // '실패도 안 뜨고 공격도 안 하는' 영구 순환이 생긴다.
+        // 복구 원칙 (놓침/연속공격/부하 0):
+        //   - 정상 head-only 스캔·catch-up·wrap 로직은 일절 변경하지 않음 (놓침 회귀 차단).
+        //   - 이번 tick 정상 발사 0 + head 가 DEAD_HEAD_OBSERVE_SECONDS 동안 계속 dead 일 때만,
+        //     그 클러스터의 front-most 매칭 다트 1발을 기존 commit 경로(FireDartCandidate)로 발사.
+        //   - holder 당 릴리프 발사 간격 ≥ DEAD_HEAD_RELIEF_FIRE_INTERVAL + 전역 tick 당 1발
+        //     + 기존 target/holder line lock·target 예약 그대로 적용 → 연속공격(스택 즉시 벗기기) 불가.
+        //   - 발사가 전혀 없는 tick 에만 동작 + 재사용 컬렉션만 사용(alloc 0) → 프레임 부하 무시 가능.
+        private const float DEAD_HEAD_OBSERVE_SECONDS = 0.4f;
+        private const float DEAD_HEAD_RELIEF_FIRE_INTERVAL = 0.4f;
+
+        private void RelieveDeadHeadStall(RailManager rail, int committedFiresThisScan)
+        {
+            // 정상 발사가 있는 tick = 보드 진행 중 → head-only 규칙 그대로 유지.
+            if (committedFiresThisScan > 0) return;
+            if (!BoardStateManager.HasInstance) return;
+
+            // 스냅샷 복사 — BoardStateManager 의 재사용 set 은 pop 이벤트 처리 중 내용이 바뀔 수 있음.
+            _deadHeadReachableColors.Clear();
+            foreach (int c in BoardStateManager.Instance.GetReachableOutermostColors())
+                _deadHeadReachableColors.Add(c);
+            if (_deadHeadReachableColors.Count == 0)
+                return; // 외곽 매칭 자체가 없음 — HasOutermostMatch=false → fail 판정 영역.
+
+            rail.GetClusterHeadDarts(_scanHeadDarts);
+            _scanHeadDarts.Sort(CompareDartPlacedSeq);
+            float now = Time.unscaledTime;
+
+            for (int i = 0; i < _scanHeadDarts.Count; i++)
+            {
+                var head = _scanHeadDarts[i];
+                if (head == null || head.dartColor < 0) continue;
+                int holderId = head.holderId;
+
+                if (_deadHeadReachableColors.Contains(head.dartColor))
+                {
+                    // head 색이 외곽에 존재 — belt 회전이 결국 그 라인에 도달하므로 릴리프 대상 아님.
+                    _deadHeadSince.Remove(holderId);
+                    continue;
+                }
+
+                if (!_deadHeadSince.TryGetValue(holderId, out float since))
+                {
+                    _deadHeadSince[holderId] = now;
+                    continue;
+                }
+                if (now - since < DEAD_HEAD_OBSERVE_SECONDS) continue;
+                if (_deadHeadLastReliefFireAt.TryGetValue(holderId, out float lastFire)
+                    && now - lastFire < DEAD_HEAD_RELIEF_FIRE_INTERVAL)
+                    continue;
+
+                var sub = rail.GetFrontmostFireableDart(holderId, _deadHeadReachableColors);
+                if (sub == null || sub.dartId == head.dartId) continue;
+
+                rail.GetDartCurrentPose(sub, out Vector3 subPos, out _, out Vector3 subFireDir);
+                if (!DirectionalTargeting.TryFindTarget(
+                        subPos, subFireDir, sub.dartColor, _reservedTargets,
+                        out int targetId, out var scanDir, out int targetLine, out Vector3 targetPos))
+                    continue;
+
+                if (IsTargetLineConsumed(scanDir, targetLine)) continue;
+                if (IsHolderLineConsumed(holderId, scanDir, targetLine)) continue;
+
+                var candidate = new DartFireCandidate
+                {
+                    isValid = true,
+                    dart = sub,
+                    dartPos = subPos,
+                    scanDartPos = subPos,
+                    fireDir = subFireDir,
+                    holderId = holderId,
+                    dartId = sub.dartId,
+                    color = sub.dartColor,
+                    targetId = targetId,
+                    scanLine = targetLine,
+                    scanDir = scanDir,
+                    selectedTargetPos = targetPos,
+                    findTargetDiag = DirectionalTargeting.LastFindTargetDiag
+                };
+
+                if (FireDartCandidate(rail, candidate))
+                {
+                    _deadHeadLastReliefFireAt[holderId] = now;
+                    // 다음 릴리프도 dead 관찰 시간부터 다시 시작 (정상 발사가 재개되면 자연 소멸).
+                    _deadHeadSince.Remove(holderId);
+                    LogAttackIssue(
+                        "DartDeadHeadRelief",
+                        $"holder={holderId} headDart={head.dartId} headColor={head.dartColor} " +
+                        $"subDart={sub.dartId} subColor={sub.dartColor} target={targetId} " +
+                        $"scan={scanDir} line={targetLine}");
+                    break; // 릴리프는 tick 당 전역 1발.
+                }
+            }
         }
 
         // ROLLBACK_DART_STUCK_HOLDER_LINE_RELIEF:
@@ -2467,6 +2572,9 @@ namespace BalloonFlow
             _promoLineByHolder.Clear();
             _promoDirByHolder.Clear();
             _promoHeadByHolder.Clear();
+            // DEAD_HEAD_RELIEF: 레벨 전환/전체 리셋 시 holder 타이머 잔존 방지.
+            _deadHeadSince.Clear();
+            _deadHeadLastReliefFireAt.Clear();
         }
 
         private void InvalidateDartScanLineForHolder(int holderId)
@@ -2772,6 +2880,10 @@ namespace BalloonFlow
         //   진단/캡쳐 후 아래 한 줄 주석을 해제해 다시 컴파일-제거(hot path 문자열 비용 0)로 되돌릴 것.
         //   (call site 문자열 인자 비용이 생기므로 진단 빌드 전용.)
         // [System.Diagnostics.Conditional("BALLOONFLOW_DART_ATTACK_ISSUE_DEBUG")]
+        // [2026-06-10 perf] Conditional 전환 — 심볼 미정의 시 호출부(문자열 보간 인자 포함)가 통째로 컴파일 제거됨.
+        //   기존엔 플래그 false 여도 36개 호출부의 $"..." 보간이 매번 평가·할당돼 GC 압박을 만들었음.
+        //   진단 필요 시 Scripting Define Symbols 에 BALLOONFLOW_DART_ATTACK_ISSUE_DEBUG 추가.
+        [System.Diagnostics.Conditional("BALLOONFLOW_DART_ATTACK_ISSUE_DEBUG")]
         private void LogAttackIssue(string tag, string message)
         {
             if (!DART_ATTACK_ISSUE_DEBUG) return;

@@ -476,6 +476,8 @@ namespace BalloonFlow
 
         private void HandleLevelLoaded(OnLevelLoaded _)
         {
+            // [구매 fix 2026-06-10] 이전 레벨에서 끊긴 보상 FX 의 pending 플래그 정리 — 연출 dedupe 가 새 레벨까지 잠그지 않게.
+            _pendingItemRewardFx.Clear();
             RefreshSpeedToggleVisual();
             RefreshBoosterCounts();
             RefreshLockState();
@@ -1001,7 +1003,13 @@ namespace BalloonFlow
             // [구매 desync 방지] buy 팝업 노출 직전 HUD 골드를 권위값(_currentCoins)과 강제 동기화.
             // OnCoinChanged 이벤트를 놓쳤거나 startup reconcile 이후 표시가 어긋난 "유령 골드" 차단 —
             // 사용자가 실제 보유액 기준으로 구매를 결정하게 한다.
-            if (CurrencyManager.HasInstance) CurrencyManager.Instance.PublishCoinSync();
+            // [구매 fix 2026-06-10] 표시 전에 UserData 캐시 잔액까지 끌어와 팝업의 잔액/구매 가능 판정이 권위값 기준이 되게 함
+            //   (빌드에서 CurrencyManager 가 PlayerPrefs 초기값으로 남아 실제 보유 골드보다 적게 보이던 케이스).
+            if (CurrencyManager.HasInstance)
+            {
+                CurrencyManager.Instance.RefreshFromUserDataCache();
+                CurrencyManager.Instance.PublishCoinSync();
+            }
 
             var popup = UIManager.Instance.OpenUI<PopupBuyItem>("Popup/PopupBuyItem");
             if (popup == null) return;
@@ -1027,11 +1035,9 @@ namespace BalloonFlow
                     bool pending = _pendingItemRewardFx.Contains(boosterType);
                     Debug.Log($"[UIHud] Buy booster confirm: type={boosterType}, price={price}, coins={coins}, serverCoins={serverCoins}, unlocked={unlocked}, pendingFx={pending}");
 
-                    if (pending)
-                    {
-                        ShowToast("Please wait.");
-                        return false;
-                    }
+                    // [구매 fix 2026-06-10] pending FX 에 의한 구매 차단("Please wait.") 제거 —
+                    //   빌드에서 FX 코루틴이 끊기면(씬 전환/러너 소실) pending 이 영구 잔존해 골드가 있어도
+                    //   구매가 막히던 원인. 지급이 FX 와 분리됐으므로 차단 자체가 불필요.
 
                     // 진짜 코인 부족만 "코인 부족"으로 표시. TrySpend 는 미해금/매니저 부재 등 다른 사유로도
                     // false 를 반환하므로, 사유를 선판정하지 않으면 코인이 충분한데도 "코인 부족"으로 오표시된다.
@@ -1046,14 +1052,13 @@ namespace BalloonFlow
 
                     if (BoosterManager.Instance.TrySpendBoosterPurchaseCost(boosterType))
                     {
-                        PlayBoosterRewardFly(boosterType, 3, spr, () =>
-                        {
-                            BoosterManager.Instance.AddBooster(boosterType, 3);
-                            RefreshBoosterCounts();
-                            ShowToast("Purchase successful!");
-                        });
-
-                        // 인게임 결제 성공 → 가벼운 토스트로 알림
+                        // [구매 fix 2026-06-10] 지급을 FX 완료 콜백에서 분리 — 차감 즉시 지급 (데이터 무결성).
+                        //   기존: 차감 → FX 비행 완료 후 AddBooster. FX 가 죽으면 코인만 차감되고 지급 누락 + pending 영구 잠금.
+                        //   변경: 차감 → 즉시 지급/표시 갱신/토스트, FX 는 연출 전용 (완료 시 카운트 펄스 겸 재갱신).
+                        BoosterManager.Instance.AddBooster(boosterType, 3);
+                        RefreshBoosterCounts();
+                        ShowToast("Purchase successful!");
+                        PlayBoosterRewardFly(boosterType, 3, spr, RefreshBoosterCounts);
                         return true;
                     }
                     else
@@ -1089,16 +1094,14 @@ namespace BalloonFlow
             popup.ShowUnlock(GetBoosterDisplayName(boosterType), spr, unlockLevel, $"x{BoosterManager.UNLOCK_REWARD_COUNT}",
                 onConfirm: () =>
                 {
-                    if (_pendingItemRewardFx.Contains(boosterType)) return;
-                    PlayBoosterRewardFly(boosterType, BoosterManager.UNLOCK_REWARD_COUNT, spr, () =>
+                    // [구매 fix 2026-06-10] 해금 보상도 즉시 지급 — FX 는 연출 전용 (구매 흐름과 동일 원칙).
+                    if (BoosterManager.Instance.TryClaimUnlockReward(boosterType))
                     {
-                        if (BoosterManager.Instance.TryClaimUnlockReward(boosterType))
-                        {
-                            RefreshBoosterCounts();
-                            RefreshLockState();
-                            ShowToast("Item claimed!");
-                        }
-                    });
+                        RefreshBoosterCounts();
+                        RefreshLockState();
+                        ShowToast("Item claimed!");
+                        PlayBoosterRewardFly(boosterType, BoosterManager.UNLOCK_REWARD_COUNT, spr, RefreshBoosterCounts);
+                    }
                 },
                 description: GetBoosterBuyDescription(boosterType));
         }

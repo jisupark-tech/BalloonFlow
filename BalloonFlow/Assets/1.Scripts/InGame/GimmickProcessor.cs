@@ -367,9 +367,13 @@ namespace BalloonFlow
         /// - Color Curtain: matching-color pop decrements counter; at 0 the curtain is removed
         /// - Surprise: adjacent pop reveals hidden color
         /// </summary>
+        // 풍선 팝마다 2개씩 찍히는 진단 로그 게이트 — LogStringToConsole 비용이 커서 평소 false 유지.
+        private static readonly bool POP_DEBUG = false;
+
         private void HandleAnyBalloonPopped(OnBalloonPopped evt)
         {
-            Debug.Log($"[HandleAnyPop] 진입 balloon={evt.balloonId} color={evt.color} surpriseSet={_surpriseBalloons.Count}");
+            if (POP_DEBUG)
+                Debug.Log($"[HandleAnyPop] 진입 balloon={evt.balloonId} color={evt.color} surpriseSet={_surpriseBalloons.Count}");
 
             // === Ice (§11): 영역별 공유 HP — 어떤 풍선이든 제거되면 활성 영역 HP 각각 -1 ===
             // 아직 얼어있는 ice 풍선의 팝은 제외(해제 전엔 팝 불가, 해제 후엔 _iceBalloons 에서 빠짐).
@@ -455,7 +459,8 @@ namespace BalloonFlow
                     if (BalloonController.Instance.RevealHiddenBalloon(adjId))
                         revealedCount++;
                 }
-                Debug.Log($"[Reveal] popped={evt.balloonId} adjacent={adjacentIds.Count} concealed={concealedCount} revealed={revealedCount}");
+                if (POP_DEBUG)
+                    Debug.Log($"[Reveal] popped={evt.balloonId} adjacent={adjacentIds.Count} concealed={concealedCount} revealed={revealedCount}");
             }
         }
 
