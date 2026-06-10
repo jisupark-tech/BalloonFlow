@@ -883,13 +883,13 @@ namespace BalloonFlow
                     // Do not drive the inactive child directly. The ItemZap animator can keep
                     // authored children disabled while ZapAttack/ZapFinish plays, so clone the
                     // line as an independent runtime effect and destroy it after the sequence.
-                    GameObject runtimeLine = Instantiate(childLine.gameObject);
+                    GameObject clonedRuntimeLine = Instantiate(childLine.gameObject);
                     // FxZapLine_Runtime stays at fixed ZapSpawnPosition for its full lifetime per design.
-                    runtimeLine.transform.position = ZapSpawnPosition;
-                    runtimeLine.name = "FxZapLine_Runtime";
-                    runtimeLine.SetActive(true);
+                    clonedRuntimeLine.transform.position = ZapSpawnPosition;
+                    clonedRuntimeLine.name = "FxZapLine_Runtime";
+                    clonedRuntimeLine.SetActive(true);
                     fromItemZap = true;
-                    return runtimeLine;
+                    return clonedRuntimeLine;
                 }
             }
 
