@@ -884,6 +884,8 @@ namespace BalloonFlow
                     // authored children disabled while ZapAttack/ZapFinish plays, so clone the
                     // line as an independent runtime effect and destroy it after the sequence.
                     GameObject runtimeLine = Instantiate(childLine.gameObject);
+                    // FxZapLine_Runtime stays at fixed ZapSpawnPosition for its full lifetime per design.
+                    runtimeLine.transform.position = ZapSpawnPosition;
                     runtimeLine.name = "FxZapLine_Runtime";
                     runtimeLine.SetActive(true);
                     fromItemZap = true;
@@ -900,7 +902,10 @@ namespace BalloonFlow
                 return null;
             }
 
-            return Instantiate(_fxZapLinePrefab);
+            GameObject runtimeLine = Instantiate(_fxZapLinePrefab);
+            // FxZapLine_Runtime stays at fixed ZapSpawnPosition for its full lifetime per design.
+            runtimeLine.transform.position = ZapSpawnPosition;
+            return runtimeLine;
         }
 
         private void ConfigureZapLine(GameObject zapLineObject, Vector3 startPosition, Vector3 endPosition, float visibleDuration)
