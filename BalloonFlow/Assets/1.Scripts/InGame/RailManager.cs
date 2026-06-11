@@ -2987,16 +2987,23 @@ namespace BalloonFlow
 
         private void HandleBoardFailed(OnBoardFailed evt)
         {
-            // continue 가 쓸 '최다 색+개수'를 _darts 비우기 전에 스냅샷 (continue 시점엔 레일이 비어있음).
+            // continue 가 쓸 '최다 색+개수' 스냅샷 (레일이 이미 비어있는 fail 경로 대비 폴백).
             CaptureContinueSnapshot();
             _boardFinished = true;
             _deployPoints.Clear();
             _activeDeployPoints.Clear();
             _holderReservations.Clear();
             _nextReservationOrder = 0;
-            _darts.Clear();
-            _dartById.Clear();
-            _clusterHeadByHolder.Clear();
+            // [이어하기 1:1 정합 2026-06-11] fail 시 레일 다트를 비우지 않는다.
+            //   기존 전체 Clear 는 이어하기 보상(최다색 1:1 제거)에 포함되지 않는 '다른 색' 다트를
+            //   보상 없이 소멸시켜 다트:풍선 개수 불일치(그 색 풍선 영구 잔존 → 클리어 불가)를 만들었다.
+            //   유지하면 continue 가 live 경로로 최다색만 정확히 M개 제거하고 나머지 색은 레일에 남아
+            //   1:1 이 보존된다. _boardFinished=true 가 벨트/스캔/발사를 정지시키므로 잔존 다트는 동결
+            //   상태이며, 이어하기 거절/재시작 시엔 레벨 로드 경로(ClearAllDarts)가 정리한다.
+            //   롤백: 아래 3줄 복원.
+            // _darts.Clear();
+            // _dartById.Clear();
+            // _clusterHeadByHolder.Clear();
         }
 
         private void HandleContinueApplied(OnContinueApplied evt)

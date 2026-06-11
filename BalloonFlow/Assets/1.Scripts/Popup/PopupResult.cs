@@ -315,8 +315,38 @@ namespace BalloonFlow
         private static readonly Color LIGHT_HARD      = new Color(0xAF / 255f, 0x20 / 255f, 0xE5 / 255f); // #AF20E5
         private static readonly Color LIGHT_SUPERHARD  = new Color(0xFF / 255f, 0x59 / 255f, 0x00 / 255f); // #FF5900
 
+        /// <summary>[2026-06-11] HardLevelOption 관련 SerializeField 미할당(프리팹 노드 추가 후 와이어 누락) 시
+        /// 이름 기반 자동 해석 — null 이면 코드 전체가 무음 no-op 이라 Very Hard/Super Hard 에서
+        /// HardOptionColor/텍스트가 안 바뀌던 원인. 프리팹 수정 없이 동작 보장.</summary>
+        private void ResolveHardLevelOptionRefs()
+        {
+            if (_hardLevelOption == null)
+            {
+                var t = FindDeepChild(transform, "HardLevelOption");
+                if (t != null) _hardLevelOption = t.gameObject;
+            }
+            Transform scope = _hardLevelOption != null ? _hardLevelOption.transform : transform;
+            if (_imageHardOptionColor == null)
+                _imageHardOptionColor = FindDeepChild(scope, "HardOptionColor")?.GetComponent<Image>();
+            if (_txtHardLevelOutline == null)
+                _txtHardLevelOutline = FindDeepChild(scope, "TxtHardLevelOutline")?.GetComponent<TMP_Text>();
+            if (_txtHardLevel == null)
+                _txtHardLevel = FindDeepChild(scope, "TxtHardLevel")?.GetComponent<TMP_Text>();
+        }
+
+        private static Transform FindDeepChild(Transform root, string name)
+        {
+            if (root == null) return null;
+            var all = root.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+                if (all[i] != null && all[i].name == name) return all[i];
+            return null;
+        }
+
         private void UpdateHardLevelOption(DifficultyPurpose difficulty)
         {
+            ResolveHardLevelOptionRefs();
+
             // ImageLight 색상
             if (_imageLight != null)
             {
@@ -408,6 +438,7 @@ namespace BalloonFlow
         /// </summary>
         public void RefreshHardOptionColor(DifficultyPurpose difficulty)
         {
+            ResolveHardLevelOptionRefs(); // 미할당 프리팹 참조 자동 해석 (UpdateHardLevelOption 경유 안 하는 외부 진입점)
             ApplyHardOptionColor(difficulty);
         }
 

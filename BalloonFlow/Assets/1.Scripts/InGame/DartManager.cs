@@ -3441,6 +3441,15 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>[2026-06-11] FlexTube 등 'silent cell 제거'(OnBalloonPopped 미발행) 알림 —
+        /// 팝과 동일하게 해당 위치 라인의 head 스캔 수락 캐시를 재개방한다.
+        /// 미호출 시 같은 라인에 머무는 head 가 새로 노출된 타겟을 재스캔하지 않아
+        /// '공격 가능한데 공격 안 함' 상태가 되고, 홀더 선택 같은 전체 무효화 때까지 지속된다.</summary>
+        public void NotifySilentCellRemoved(Vector3 adjustedWorldPosition)
+        {
+            InvalidateDartScanLinesForPoppedPosition(adjustedWorldPosition);
+        }
+
         /// <summary>
         /// Board cleared — stop all dart activity and clear remaining darts from rail.
         /// Surplus darts exist due to Chain gimmick auto-popping adjacent balloons without darts.

@@ -1154,8 +1154,11 @@ namespace BalloonFlow
             _wsTextsResolved = _wsTxtGauge != null || _wsTxtPoints != null;
         }
 
-        // RewardItem 구조 내부 아이콘 Image 후보 이름(popup 과 동일).
-        private static readonly string[] WsRewardIconNames = { "ImageRewardItem", "ImageItem", "ImageReward", "ImageGift" };
+        // RewardItem 구조 내부 아이콘 Image 후보 이름.
+        // [2026-06-11 스펙] 로비 프리팹의 아이템 변형(RewardItem>RewardItem) 아이콘은 "ImageGold" 이름 —
+        // 이 이미지를 해당 보상 sprite 로 교체한다 (RewardGold 변형의 ImageGold 는 골드 고정, 스코프 분리로 안전).
+        // ImageGift 는 중첩 상자 이미지라 후보에서 제외 (오인 스왑 방지).
+        private static readonly string[] WsRewardIconNames = { "ImageRewardItem", "ImageItem", "ImageGold", "ImageReward" };
 
         /// <summary>RewardItem(_wsRewardItem) 변형 전환 + 아이콘/카운트 바인딩.
         /// 구조: RewardGold(코인용·ImageGold 고정) / RewardItem(아이템용·ImageItem swap) / ImageGift(WS 미사용).
@@ -1195,18 +1198,22 @@ namespace BalloonFlow
             // 아이템 변형 내부 비주얼 정리 — heart 대체 이미지는 항상 끄고(infinite heart 도 ImageItem sprite swap),
             // gift 모드에선 아이템 아이콘/깃발류를 숨겨 '상자만' 보이게.
             Transform itemScope = itemVariant != null ? itemVariant.transform : root;
-            // [2026-06-11 fix] ImageItem 이 Image 없는 홀더 GO 일 수 있어 Transform 기준으로 탐색.
-            GameObject imageItemGo = FindChildComponentByName<Transform>(itemScope, "ImageItem")?.gameObject;
             GameObject imageHeartGo = FindChildComponentByName<Transform>(itemScope, "ImageHeart")?.gameObject;
             if (imageHeartGo != null) imageHeartGo.SetActive(false);
             if (useGift)
             {
-                if (imageItemGo != null) imageItemGo.SetActive(false);
+                // 상자(선물) 모드 — 아이템 아이콘 후보(ImageItem/ImageGold 등) 전부 숨기고 깃발류도 끔 ('상자만').
+                for (int i = 0; i < WsRewardIconNames.Length; i++)
+                {
+                    var go = FindChildComponentByName<Transform>(itemScope, WsRewardIconNames[i])?.gameObject;
+                    if (go != null && go != giftVariant) go.SetActive(false);
+                }
                 SetWsItemFlagsActive(itemScope, false);
             }
             else if (useItem)
             {
-                SetWsItemFlagsActive(itemScope, true); // 직전 gift 바인딩이 꺼둔 깃발 복원
+                // [2026-06-11 스펙] 단일 아이템(상자 아님) — FlagBack (1)/FlagBack/RewardFlag 활성 + 수량/아이콘 표시.
+                SetWsItemFlagsActive(itemScope, true);
             }
 
             // 비코인 단일 변형만 아이콘 sprite swap (코인은 ImageGold 고정 비주얼).

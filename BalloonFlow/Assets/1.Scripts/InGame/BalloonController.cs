@@ -389,6 +389,8 @@ namespace BalloonFlow
             // Reuse the runtime path so Pinata/Pinata_Box/Barricade keep their sized transforms
             // when editor board multipliers change.
             ReapplyAllBalloonVisualTransforms();
+            // [SHADOW_BATCH] 에디터 배율 변경으로 그림자 위치/스케일이 움직였으니 combined mesh 재 bake.
+            RebuildShadowBatch();
         }
 #endif
 
@@ -461,6 +463,34 @@ namespace BalloonFlow
             // 롤백: 아래 두 라인 제거.
             _lastOutermostRefreshTime = -1f;
             RefreshOutermostRendererState();
+
+            // [SHADOW_BATCH 2026-06-11] 정적 풍선 그림자 렌더러 N개 → combined mesh 통합 (렌더러 수 비례
+            // 컬링/추출/Submit 비용 절감 — 대형 보드 프레임 드랍 대응). 모든 비주얼 변환 적용 후 1회 bake.
+            RebuildShadowBatch();
+        }
+
+        // ── [SHADOW_BATCH 2026-06-11] ─────────────────────────────
+        private BalloonShadowBatcher _shadowBatcher;
+
+        /// <summary>정적 풍선(스케일 트윈 없는 타입)만 그림자 통합 대상.
+        /// Pinata/Barricade/FlexTube 등은 hit 펀치/축소 트윈이 그림자에 함께 걸리므로 개별 유지.</summary>
+        private static bool IsShadowBatchable(string gimmickType)
+            => gimmickType == GimmickNone
+            || gimmickType == GimmickSurprise
+            || gimmickType == GimmickHidden;
+
+        private void RebuildShadowBatch()
+        {
+            if (_shadowBatcher == null) _shadowBatcher = new BalloonShadowBatcher();
+            _shadowBatcher.BeginBuild();
+            foreach (var kvp in _balloonObjects)
+            {
+                if (kvp.Value == null) continue;
+                bool batchable = _balloons.TryGetValue(kvp.Key, out BalloonData d)
+                                 && !d.isPopped && IsShadowBatchable(d.gimmickType);
+                _shadowBatcher.AddOrRestore(kvp.Key, kvp.Value, batchable);
+            }
+            _shadowBatcher.EndBuild();
         }
 
         /// <summary>
@@ -1213,6 +1243,11 @@ namespace BalloonFlow
             DirectionalTargeting.InvalidateCache();
             if (BoardStateManager.HasInstance)
                 BoardStateManager.Instance.InvalidateOutermostCache();
+            // 같은 이유로 DartManager 의 head 스캔 수락 캐시도 라인 단위 재개방 — 팝 경로의
+            // InvalidateDartScanLinesForPoppedBalloon 대응. 누락 시 같은 라인의 head 가
+            // 새로 노출된 타겟을 영영 재스캔하지 않음 (홀더 선택 등 전체 무효화 전까지 공격 정지).
+            if (DartManager.HasInstance)
+                DartManager.Instance.NotifySilentCellRemoved(GetAdjustedBoardPosition(data.position));
         }
 
         /// <summary>
@@ -1368,6 +1403,9 @@ namespace BalloonFlow
 
             // FrozenLayer 오버레이 자식들도 모두 풀로 반환
             ReturnAllFrozenOverlays();
+
+            // [SHADOW_BATCH] 통합 그림자 mesh 정리 — 다음 레벨 RebuildShadowBatch 가 재구성.
+            _shadowBatcher?.Clear();
 
             _balloons.Clear();
             _balloonObjects.Clear();
@@ -3291,6 +3329,8 @@ namespace BalloonFlow
             // Return visual to pool
             float __returnObjStamp = InGamePerfLogger.StartStampMs();
             ReturnBalloonObject(data.balloonId, effectScaleMultiplier);
+            // [SHADOW_BATCH] 통합 mesh 에서 이 풍선의 그림자 쿼드 제거 (비대상이면 no-op).
+            _shadowBatcher?.HideShadow(data.balloonId);
             InGamePerfLogger.EndSection(__returnObjStamp, "Balloon.ExecutePop.ReturnObject");
 
             // Remove from position index
