@@ -617,9 +617,9 @@ namespace BalloonFlow
 
             yield return new WaitForSecondsRealtime(0.6f);
             WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, 1);
-            // '떨어지는' 느낌 — 아래로 펀치 + 살짝 축소 후 복귀.
-            _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, -36f), 0.4f, 8, 0.7f).SetUpdate(true);
-            _wsMultiplier.DOPunchScale(new Vector3(-0.18f, -0.18f, 0f), 0.4f, 8, 0.7f).SetUpdate(true);
+            // [2026-06-11] '떨어지는' 펀치(덜컹거림) 비활성 — 사용자 요청. 롤백: 아래 2줄 주석 해제.
+            // _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, -36f), 0.4f, 8, 0.7f).SetUpdate(true);
+            // _wsMultiplier.DOPunchScale(new Vector3(-0.18f, -0.18f, 0f), 0.4f, 8, 0.7f).SetUpdate(true);
 
             yield return new WaitForSecondsRealtime(0.7f);
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
@@ -675,12 +675,13 @@ namespace BalloonFlow
             if (_wsMultiplier != null)
             {
                 WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, toMult);
-                if (toMult > fromMult)
-                {
-                    // '오르는' 느낌 — 위로 살짝 펀치 + 미세 확대 (실패 드롭 연출의 반대 방향).
-                    _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, 24f), 0.35f, 6, 0.6f).SetUpdate(true);
-                    _wsMultiplier.DOPunchScale(new Vector3(0.12f, 0.12f, 0f), 0.35f, 6, 0.6f).SetUpdate(true);
-                }
+                // [2026-06-11] '오르는' 펀치(덜컹거림) 비활성 — 사용자 요청. SelectFrame 이동만 유지.
+                // 롤백: 아래 if 블록 주석 해제.
+                // if (toMult > fromMult)
+                // {
+                //     _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, 24f), 0.35f, 6, 0.6f).SetUpdate(true);
+                //     _wsMultiplier.DOPunchScale(new Vector3(0.12f, 0.12f, 0f), 0.35f, 6, 0.6f).SetUpdate(true);
+                // }
             }
 
             if (_wsProgressSlider != null)
@@ -1216,7 +1217,30 @@ namespace BalloonFlow
                 SetWsItemFlagsActive(itemScope, true);
             }
 
-            // 비코인 단일 변형만 아이콘 sprite swap (코인은 ImageGold 고정 비주얼).
+            // [2026-06-11 스펙 확정] 골드 보상 = RewardGold 변형 + 그 자식 ImageGold(골드 고정 비주얼) 표시.
+            // 변형 GO 만 켜면 ImageGold 가 프리팹에서 꺼져 있을 때 이미지가 안 나옴 → 명시 활성화.
+            if (useGold && goldVariant != null)
+            {
+                var goldIconTr = FindChildComponentByName<Transform>(goldVariant.transform, "ImageGold");
+                if (goldIconTr != null)
+                {
+                    Image goldImg = goldIconTr.GetComponent<Image>();
+                    if (goldImg == null) goldImg = goldIconTr.GetComponentInChildren<Image>(true);
+                    if (goldImg != null)
+                    {
+                        goldImg.enabled = true;
+                        for (Transform t = goldImg.transform; t != null && t != goldVariant.transform; t = t.parent)
+                            if (!t.gameObject.activeSelf) t.gameObject.SetActive(true);
+                        if (!goldIconTr.gameObject.activeSelf) goldIconTr.gameObject.SetActive(true);
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning("[UILobby] WS RewardGold 의 ImageGold 미발견 — 프리팹 구조 확인 필요.");
+                }
+            }
+
+            // 아이템 보상 = RewardItem 변형 + 그 자식 ImageItem 을 보상 sprite 로 swap (코인은 ImageGold 고정 비주얼).
             if (useItem && !string.IsNullOrEmpty(spriteKey) && ResourceManager.HasInstance)
             {
                 // [2026-06-11 fix] '이름 일치 Image 컴포넌트' 탐색은 ImageItem 이 홀더(Image 없는 GO)인

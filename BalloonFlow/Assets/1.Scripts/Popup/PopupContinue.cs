@@ -381,7 +381,9 @@ namespace BalloonFlow
                     EnsureWinningStreakMultiplierFromQuitPrefab();
                     WinningStreakUI.PlayMultiplierIdle(_winningStreakView, multiplier);
                 }
-                if (_frame != null) _frame.SetDescription($"You will lose your x{multiplier} multiplier!");
+                // [2026-06-11] 하드코딩 영어 → TextData 키 + {n} 치환 (placeholder 키는 반드시 Format 소비 룰).
+                if (_frame != null)
+                    _frame.SetDescription(LocalizationService.GetWith("popupcontinue.txtdescription.multiplier", "n", multiplier));
                 _currentView = ContinueView.WinningStreak;
                 return;
             }

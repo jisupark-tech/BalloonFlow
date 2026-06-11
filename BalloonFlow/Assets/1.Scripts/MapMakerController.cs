@@ -2348,8 +2348,10 @@ namespace BalloonFlow
             Lbl(p, "Export / Import", 14, FontStyle.Bold);
             var row = Row(p);
             Btn(row, "Save to DB", SaveToActiveDB);
-            Btn(row, "Export JSON", ExportJson);
             Btn(row, "Load Level", () => LoadLevelById(_levelId));
+            var exportRow = Row(p);
+            Btn(exportRow, "Export Episode JSON", ExportEpisodeJson);
+            Btn(exportRow, "Export Level JSON", ExportLevelJson);
             Sep(p);
 
             // ── Tutorial Steps ──
@@ -6728,8 +6730,14 @@ namespace BalloonFlow
             public LevelConfig[] levels;
         }
 
-        private void ExportJson()
+        private void ExportEpisodeJson()
         {
+            if (!_levelLoaded)
+            {
+                SetStatus("Export failed: no level loaded");
+                return;
+            }
+
             LevelEpisode episode = BuildCurrentEpisodeForExport();
             if (episode == null || episode.levels == null || episode.levels.Length == 0)
             {
@@ -6737,19 +6745,46 @@ namespace BalloonFlow
                 return;
             }
 
-            string defaultDir = episode.packageId == 1 ? "Assets/StreamingAssets" : "Assets";
-            string json = JsonUtility.ToJson(episode, true);
-            string path = EditorUtility.SaveFilePanel(
+            SaveLevelEpisodeJson(
+                episode,
                 "Export Episode JSON",
-                defaultDir,
+                episode.packageId == 1 ? "Assets/StreamingAssets" : "Assets",
                 $"episode_{episode.packageId:D2}",
-                "json");
-            if (!string.IsNullOrEmpty(path))
+                $"Exported episode {episode.packageId}: {episode.levels.Length} levels");
+        }
+
+        private void ExportLevelJson()
+        {
+            if (!_levelLoaded)
             {
-                System.IO.File.WriteAllText(path, json);
-                AssetDatabase.Refresh();
-                SetStatus($"Exported episode {episode.packageId}: {episode.levels.Length} levels -> {System.IO.Path.GetFileName(path)}");
+                SetStatus("Export failed: no level loaded");
+                return;
             }
+
+            LevelEpisode episode = BuildCurrentLevelEpisodeForExport();
+            SaveLevelEpisodeJson(
+                episode,
+                "Export Current Level JSON",
+                "Assets",
+                $"level_{_levelId:D4}",
+                $"Exported level {_levelId}");
+        }
+
+        private void SaveLevelEpisodeJson(LevelEpisode episode, string title, string defaultDir, string defaultName, string statusPrefix)
+        {
+            if (episode == null || episode.levels == null || episode.levels.Length == 0)
+            {
+                SetStatus("Export failed: no levels");
+                return;
+            }
+
+            string json = JsonUtility.ToJson(episode, true);
+            string path = EditorUtility.SaveFilePanel(title, defaultDir, defaultName, "json");
+            if (string.IsNullOrEmpty(path)) return;
+
+            System.IO.File.WriteAllText(path, json);
+            AssetDatabase.Refresh();
+            SetStatus($"{statusPrefix} -> {System.IO.Path.GetFileName(path)}");
         }
 
         private LevelEpisode BuildCurrentEpisodeForExport()
@@ -6790,6 +6825,22 @@ namespace BalloonFlow
                 levelCount = levels.Count,
                 version = LEVEL_EPISODE_VERSION,
                 levels = levels.ToArray()
+            };
+        }
+
+        private LevelEpisode BuildCurrentLevelEpisodeForExport()
+        {
+            // ROLLBACK_MAPMAKER_EXPORT_SINGLE_LEVEL_JSON:
+            // Keep the same LevelEpisode container as episode export so the exported file can be
+            // merged/imported by tools that already understand episode JSON. Only the levels array is narrowed to the current level.
+            LevelConfig current = BuildLevelConfig();
+            NormalizeLevelEpisodeFields(current);
+            return new LevelEpisode
+            {
+                packageId = current.packageId,
+                levelCount = 1,
+                version = LEVEL_EPISODE_VERSION,
+                levels = new[] { current }
             };
         }
 

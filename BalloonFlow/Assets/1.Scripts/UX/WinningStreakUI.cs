@@ -22,14 +22,14 @@ namespace BalloonFlow
         private static readonly int[] Tiers = { 1, 5, 10, 25, 100 };
 
         // HUD (UIHud 의 Multiplier) — SelectFrame / TextYellow X 위치 (Mask 고정).
-        private static readonly float[] HudSelectFrameX = { -360f, -184f,  10f,  174f,  350f };
+        private static readonly float[] HudSelectFrameX = { -338f, -150f,  30f,  210f,  390f };
         private static readonly float[] HudTextYellowX  = {  358f,  170f, -10f, -190f, -370f };
 
         // PopupWinningStreak — 위치만, 애니메이션 없음.
         // ROLLBACK_WINNING_STREAK_MULTIPLIER_POS_20260605:
         // Popup/Lobby use the same designer-provided positions. Mask stays fixed.
-        private static readonly float[] PopupSelectFrameX = { -338f, -150f,  30f,  210f,  390f };
-        private static readonly float[] PopupTextYellowX  = {  358f,  170f, -10f, -190f, -370f };
+        private static readonly float[] PopupSelectFrameX = { -360f, -184f,  -10f,  174f,  350f };
+        private static readonly float[] PopupTextYellowX  = {  360f,  184f, -10f, -174f, -350f };
 
         /// <summary>현재 streak 의 배수 (1/5/10/25/100). State/Config 미준비 시 1 반환.</summary>
         public static int ResolveCurrentMultiplier()

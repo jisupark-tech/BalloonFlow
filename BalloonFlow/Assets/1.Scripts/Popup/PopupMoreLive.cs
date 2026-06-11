@@ -121,7 +121,13 @@ namespace BalloonFlow
 
         private void RefreshDisplay()
         {
-            if (!LifeManager.HasInstance) return;
+            if (!LifeManager.HasInstance)
+            {
+                // [2026-06-11] 가드로 스킵되면 프리팹 저작 placeholder("{n}")가 그대로 노출 — 빈 값으로 클리어.
+                if (_txtLife != null) _txtLife.text = string.Empty;
+                if (_txtLifeOutline != null) _txtLifeOutline.text = string.Empty;
+                return;
+            }
 
             int current = LifeManager.Instance.CurrentLives;
             string lifeStr = $"{current}";

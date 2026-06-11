@@ -125,6 +125,7 @@ namespace BalloonFlow
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnBoosterUsed>(HandleBoosterUsed);
+            _handCamReturnSaved = false; // [HAND_CAMERA_5ROWS] 레벨 전환 시 보존 좌표 잔존 방지
             StopZapLineJiggle();
             for (int i = 0; i < _zapLineFadeCoroutines.Count; i++)
             {
@@ -169,10 +170,28 @@ namespace BalloonFlow
             CloseUseItemPopup(true);
             ExecuteSelectTool(holderId);
 
-            if (CameraManager.HasInstance)
-                CameraManager.Instance.MoveBack();
+            RestoreHandCameraOrMoveBack();
 
             ResumeRail();
+        }
+
+        // [HAND_CAMERA_5ROWS 원복 fix 2026-06-11] Hand 진입 시 보존한 좌표로 명시 복귀.
+        // (CameraManager.MoveBack 의 _savedPosition 은 MoveToTarget 중복 호출 시 오염 가능 — 보존값 우선.)
+        private Vector3 _handCamReturnPos;
+        private bool _handCamReturnSaved;
+
+        private void RestoreHandCameraOrMoveBack()
+        {
+            if (!CameraManager.HasInstance) return;
+            if (_handCamReturnSaved)
+            {
+                CameraManager.Instance.RestoreTo(_handCamReturnPos);
+                _handCamReturnSaved = false;
+            }
+            else
+            {
+                CameraManager.Instance.MoveBack();
+            }
         }
 
         /// <summary>
@@ -243,11 +262,22 @@ namespace BalloonFlow
 
                     if (CameraManager.HasInstance && HolderVisualManager.HasInstance)
                     {
-                        // Hand: 보관함 큐의 앞쪽 HAND_VISIBLE_ROWS(5)개 행이 화면에 들어오도록 그 행들의 중심으로 포커스.
-                        // (이전: 전체 holder bbox 중심 + 고정 -2Z → 행이 많으면 너무 깊게 잡혀 5줄이 안 보였음.)
+                        // Hand: 보관함 큐의 앞쪽 HAND_VISIBLE_ROWS(5)개 행이 전부 화면에 들어오게 포커스.
+                        // [HAND_CAMERA_5ROWS 2026-06-11] XZ 센터 이동만으론 카메라 기울기/FOV 에 따라
+                        // 양끝 행이 잘렸음 → 회전·FOV 기준으로 5행 z-span 이 수직 시야(상하 8% 마진)에
+                        // 들어오는 높이/Z 를 계산해 이동.
+                        // [원복 fix] 복귀 좌표를 여기서 직접 보존(RestoreTo) — CameraManager._savedPosition 은
+                        // MoveToTarget 중복 호출 시 이동 중간 위치로 오염돼 MoveBack 이 원위치로 못 돌아갔음.
+                        if (!_handCamReturnSaved)
+                        {
+                            _handCamReturnPos = CameraManager.Instance.CurrentStablePosition;
+                            _handCamReturnSaved = true;
+                        }
                         Vector3 focusPosition = HolderVisualManager.Instance.CalculateRowFocusPosition(HAND_VISIBLE_ROWS);
-                        if (CameraManager.Instance.MainCamera != null)
-                            focusPosition.y = CameraManager.Instance.MainCamera.transform.position.y; // 카메라 높이 유지(XZ 이동)
+                        Camera handCam = CameraManager.Instance.MainCamera;
+                        if (handCam != null)
+                            focusPosition = ComputeHandCameraPosition(handCam, focusPosition,
+                                HolderVisualManager.Instance.RowSpacing);
                         CameraManager.Instance.MoveToTarget(focusPosition);
                     }
 
@@ -288,6 +318,50 @@ namespace BalloonFlow
 
                 // HAND = SELECT_TOOL (명세 통합) → 위 SELECT_TOOL case에서 처리
             }
+        }
+
+        // [HAND_CAMERA_5ROWS 2026-06-11] 카메라 회전/FOV 로부터 holder 평면(y=rowFocus.y)에서
+        // 보이는 z-span 의 높이당 기울기를 구해, 5행 span(행 4간격 + 양끝 반행 여유)이 들어오는
+        // 높이와 '5행 중심 = 화면 세로 중앙'이 되는 Z 를 닫힌식으로 계산한다.
+        // 현재 높이로 이미 충분하면 높이 유지(줌인 방지). 카메라가 내려보지 않는 비정상 각도면 기존 동작 폴백.
+        private static Vector3 ComputeHandCameraPosition(Camera cam, Vector3 rowFocus, float rowSpacing)
+        {
+            Transform ct = cam.transform;
+            float planeY = rowFocus.y; // CalculateRowFocusPosition 의 holder 평면 높이
+
+            // [Orthographic 분기] 본 플로우 InGame 은 ConfigureInGame 이 ortho(size 15) 강제 —
+            // 높이 변경은 프레이밍에 무효이고, '화면 중심에 보이는 지점'이 카메라 위치에서 forward 로
+            // 비껴간 지점(pitch 65°·높이 20 기준 z 약 9유닛)이라 XZ=focus 이동만으론 큐가 화면
+            // 위쪽으로 밀려 5행이 잘렸다 → forward 투영 오프셋을 보정해 5행 중심을 화면 중앙에.
+            // (ortho size 15 의 평면 z-span ≈ 2*15/sin65° ≈ 33유닛 ≫ 5행 ~9유닛 — 중심만 맞으면 충분.)
+            if (cam.orthographic)
+            {
+                Vector3 fwd = ct.forward;
+                if (fwd.y >= -0.01f)
+                    return new Vector3(rowFocus.x, ct.position.y, rowFocus.z); // 폴백: 기존 동작
+                float t = (ct.position.y - planeY) / -fwd.y;
+                return new Vector3(rowFocus.x - fwd.x * t, ct.position.y, rowFocus.z - fwd.z * t);
+            }
+
+            // 뷰포트 상하(8% 마진) 중앙 ray 방향 — 방향은 카메라 위치와 무관(회전/FOV/종횡비만 영향).
+            Vector3 dirB = cam.ViewportPointToRay(new Vector3(0.5f, 0.08f, 0f)).direction;
+            Vector3 dirT = cam.ViewportPointToRay(new Vector3(0.5f, 0.92f, 0f)).direction;
+            if (dirB.y >= -0.01f || dirT.y >= -0.01f)
+                return new Vector3(rowFocus.x, ct.position.y, rowFocus.z); // 폴백: 기존 XZ 이동
+
+            float kB = dirB.z / -dirB.y;            // 높이 1 당 ray 가 닿는 평면 z 오프셋
+            float kT = dirT.z / -dirT.y;
+            float slopeSpan = Mathf.Abs(kT - kB);   // 높이 1 당 보이는 z-span
+            if (slopeSpan < 0.0001f)
+                return new Vector3(rowFocus.x, ct.position.y, rowFocus.z);
+
+            float requiredSpan = HAND_VISIBLE_ROWS * rowSpacing;
+            float requiredH = requiredSpan / slopeSpan;
+            float currentH = ct.position.y - planeY;
+            float h = Mathf.Max(currentH, requiredH);          // 부족할 때만 상승
+            float camY = planeY + h;
+            float camZ = rowFocus.z - (kT + kB) * 0.5f * h;    // 5행 중심이 화면 세로 중앙에 오게
+            return new Vector3(rowFocus.x, camY, camZ);
         }
 
         /// <summary>Resume rail rotation after booster completes.</summary>
@@ -332,9 +406,8 @@ namespace BalloonFlow
             if (BalloonController.HasInstance)
                 BalloonController.Instance.ClearAllOutlines();
 
-            // Move camera back
-            if (CameraManager.HasInstance)
-                CameraManager.Instance.MoveBack();
+            // Move camera back — Hand 는 보존 좌표로 명시 복귀, 그 외(Zap 등)는 기존 MoveBack.
+            RestoreHandCameraOrMoveBack();
 
             _pendingBoosterType = null;
             //HideCancelButton();

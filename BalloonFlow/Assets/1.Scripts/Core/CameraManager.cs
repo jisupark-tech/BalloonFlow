@@ -255,6 +255,29 @@ namespace BalloonFlow
             MainCamera.transform.DOMove(targetPosition, duration).SetEase(Ease.InOutSine).SetUpdate(true);
         }
 
+        /// <summary>tween 중간값이 아닌 '안정 위치' — enforce 중이면 확정 위치, 아니면 현재 transform.
+        /// 부스터 등에서 복귀 좌표를 직접 보존할 때 사용 (이동 중 캡처로 인한 오염 방지).</summary>
+        public Vector3 CurrentStablePosition
+            => MainCamera == null ? Vector3.zero
+             : (_enforcePosition ? _expectedPosition : MainCamera.transform.position);
+
+        /// <summary>[2026-06-11] 명시 좌표 복귀 — MoveBack 과 동일 동작이지만 _savedPosition 대신
+        /// 호출자가 보존한 좌표 사용. MoveToTarget 이 중복 호출되면 _savedPosition 이 이동 중간
+        /// 위치로 오염돼 MoveBack 이 원위치로 못 돌아가는 케이스(Hand 카메라 원복 실패)를 우회.</summary>
+        public void RestoreTo(Vector3 position, float duration = 0.5f)
+        {
+            if (MainCamera == null) return;
+
+            MainCamera.transform.DOKill();
+            MainCamera.transform.DOMove(position, duration).SetEase(Ease.InOutSine).SetUpdate(true)
+                .OnComplete(() =>
+                {
+                    _expectedPosition = position;
+                    MainCamera.transform.position = position;
+                    _enforcePosition = true;
+                });
+        }
+
         /// <summary>Smoothly move camera back to the saved position.</summary>
         public void MoveBack(float duration = 0.5f)
         {

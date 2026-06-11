@@ -742,6 +742,9 @@ namespace BalloonFlow
         private float _rowSpacing = 1.8f;
         private float _deployGap = 1.6f;
 
+        /// <summary>[HAND_CAMERA_5ROWS] Hand 부스터 카메라 프레이밍용 — 큐 행 간격(레이아웃 계산 후 값).</summary>
+        public float RowSpacing => _rowSpacing;
+
         private void ComputeDynamicLayout()
         {
             CacheRailBottom();

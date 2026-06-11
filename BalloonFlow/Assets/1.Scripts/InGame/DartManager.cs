@@ -2389,7 +2389,10 @@ namespace BalloonFlow
                 // No projectile visual means we resolve the original fire-time target immediately.
                 // Clearing all DartManager scan state here reopens same-line continuous fire and wipes
                 // promotion catch-up seeds for unrelated holders.
-                _unresolvedConsumedTargetLines.Remove(GetConsumedLineKey(candidate.scanDir, candidate.scanLine));
+                int fallbackLineKey = GetConsumedLineKey(candidate.scanDir, candidate.scanLine);
+                _unresolvedConsumedTargetLines.Remove(fallbackLineKey);
+                // RESOLVED_LINE_DWELL_RELEASE: 즉시 resolve 경로도 dwell 기준 시각 기록.
+                _resolvedConsumedLineAt[fallbackLineKey] = Time.unscaledTime;
                 LogAttackIssue(
                     "DartProjectileFallback",
                     $"reason=noVisualImmediateHit holder={candidate.holderId} dartId={candidate.dartId} " +
@@ -2750,6 +2753,7 @@ namespace BalloonFlow
             _consumedTargetLines.Clear();
             _unresolvedConsumedTargetLines.Clear();
             _currentHeadLineKeys.Clear();
+            _resolvedConsumedLineAt.Clear();
         }
 
         // ROLLBACK_DART_HOLDER_PASS_LINE_SET:
@@ -2796,6 +2800,17 @@ namespace BalloonFlow
             _unresolvedConsumedTargetLines.Add(key);
         }
 
+        // RESOLVED_LINE_DWELL_RELEASE (2026-06-11):
+        // 글로벌 라인 락은 'resolve 후 head 가 그 라인을 떠나야' 해제되는 설계(즉시 peel 방지)였는데,
+        // 패킹 정지 등으로 head 가 라인을 영영 못 떠나면 락이 영구 잔존 — 그 라인의 새 외곽 풍선은
+        // 영구 놓침이 되고, 다른 곳 발사가 이어지면 전역 워치독도 안 걸린다 (부분 정지).
+        // resolve 시각을 기록해 두고, head 가 주차 중이어도 dwell(0.4s — 기존 stuck-relief 와 동일
+        // 한도) 경과 시 락을 해제 + 그 라인에 주차한 holder 의 스캔 라인을 무효화해 현재 라인
+        // 재스캔을 허용한다. resolve 직후 같은 라인 즉시 재발사(연속공격)는 dwell 이 그대로 차단.
+        private readonly Dictionary<int, float> _resolvedConsumedLineAt = new Dictionary<int, float>(16);
+        private readonly HashSet<int> _dwellReleasedLineKeys = new HashSet<int>();
+        private const float RESOLVED_LINE_HEAD_DWELL_RELEASE_SECONDS = 0.4f;
+
         // ROLLBACK_DART_OUTER_PASS_LINE_LOCK:
         private void PruneConsumedTargetLinesForCurrentHeads(RailManager rail)
         {
@@ -2816,19 +2831,52 @@ namespace BalloonFlow
             }
 
             _tempRemoveKeys.Clear();
+            _dwellReleasedLineKeys.Clear();
+            float now = Time.unscaledTime;
             foreach (int consumedKey in _consumedTargetLines)
             {
                 if (_unresolvedConsumedTargetLines.Contains(consumedKey))
                     continue;
 
                 if (!_currentHeadLineKeys.Contains(consumedKey))
+                {
                     _tempRemoveKeys.Add(consumedKey);
+                    continue;
+                }
+
+                // RESOLVED_LINE_DWELL_RELEASE: head 주차 중이어도 resolve 후 dwell 경과 시 해제.
+                if (_resolvedConsumedLineAt.TryGetValue(consumedKey, out float resolvedAt)
+                    && now - resolvedAt >= RESOLVED_LINE_HEAD_DWELL_RELEASE_SECONDS)
+                {
+                    _tempRemoveKeys.Add(consumedKey);
+                    _dwellReleasedLineKeys.Add(consumedKey);
+                }
             }
 
             for (int i = 0; i < _tempRemoveKeys.Count; i++)
             {
                 _consumedTargetLines.Remove(_tempRemoveKeys[i]);
                 _unresolvedConsumedTargetLines.Remove(_tempRemoveKeys[i]);
+                _resolvedConsumedLineAt.Remove(_tempRemoveKeys[i]);
+            }
+
+            // dwell 해제된 라인에 주차 중인 holder 는 스캔 라인 무효화 — 라인 횡단 없이도 재스캔.
+            if (_dwellReleasedLineKeys.Count > 0)
+            {
+                for (int i = 0; i < _scanHeadDarts.Count; i++)
+                {
+                    var head = _scanHeadDarts[i];
+                    if (head == null || head.dartColor < 0) continue;
+                    rail.GetDartCurrentPose(head, out Vector3 pos, out _, out Vector3 fireDir);
+                    var scanDir = DirectionalTargeting.DetermineScanDirection(fireDir);
+                    if (_dwellReleasedLineKeys.Contains(GetConsumedLineKey(scanDir, GetScanLine(pos, scanDir))))
+                    {
+                        InvalidateDartScanLineForHolder(head.holderId);
+                        LogAttackIssue("DartDwellLineRelease",
+                            $"holder={head.holderId} dart={head.dartId} color={head.dartColor} scan={scanDir} line={GetScanLine(pos, scanDir)}");
+                    }
+                }
+                _dwellReleasedLineKeys.Clear();
             }
 
             _tempRemoveKeys.Clear();
@@ -2854,6 +2902,7 @@ namespace BalloonFlow
             {
                 _consumedTargetLines.Remove(_tempRemoveKeys[i]);
                 _unresolvedConsumedTargetLines.Remove(_tempRemoveKeys[i]);
+                _resolvedConsumedLineAt.Remove(_tempRemoveKeys[i]);
             }
 
             _tempRemoveKeys.Clear();
@@ -2866,6 +2915,7 @@ namespace BalloonFlow
                 return;
 
             _consumedTargetLines.Remove(key);
+            _resolvedConsumedLineAt.Remove(key);
         }
 
         // ROLLBACK_DART_GLOBAL_CONSUMED_LINE_LOCK:
@@ -3167,7 +3217,10 @@ namespace BalloonFlow
                             $"elapsed={proj.elapsed:F3}/{proj.duration:F3}");
                     }
                     _reservedTargets.Remove(proj.targetBalloonId);
-                    _unresolvedConsumedTargetLines.Remove(GetConsumedLineKey(proj.scanDir, proj.scanLine));
+                    int resolvedLineKey = GetConsumedLineKey(proj.scanDir, proj.scanLine);
+                    _unresolvedConsumedTargetLines.Remove(resolvedLineKey);
+                    // RESOLVED_LINE_DWELL_RELEASE: head 주차 라인 락의 dwell 해제 기준 시각 기록.
+                    _resolvedConsumedLineAt[resolvedLineKey] = Time.unscaledTime;
                     // ROLLBACK_DART_POP_SCAN_STATE_STABILITY:
                     // The hit below invalidates DirectionalTargeting's outer-contour cache if it
                     // actually pops. Do not reset DartManager's per-holder scan/promotion state on

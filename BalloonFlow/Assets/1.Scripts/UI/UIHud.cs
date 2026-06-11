@@ -1138,7 +1138,9 @@ namespace BalloonFlow
 
         private static void SetLockText(TMP_Text main, TMP_Text outline, bool locked, int level)
         {
-            string txt = locked ? $"Lv.{level}" : string.Empty;
+            // [2026-06-11] 하드코딩 "Lv.{level}" → TextData 키(itembtn.txtlock="Lv.{n}") + 치환
+            // (placeholder 가 있는 키는 반드시 Format/GetWith 로 소비 룰).
+            string txt = locked ? LocalizationService.GetWith("itembtn.txtlock", "n", level) : string.Empty;
             if (main != null)
             {
                 main.gameObject.SetActive(locked);
