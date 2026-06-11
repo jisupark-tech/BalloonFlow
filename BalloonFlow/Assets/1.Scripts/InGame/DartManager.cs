@@ -1766,6 +1766,37 @@ namespace BalloonFlow
             RelieveStuckHolderLineLocks(rail);
             PruneConsumedTargetLinesForCurrentHeads(rail);
             RelieveDeadHeadStall(rail, firedThisScan);
+            UpdateStallWatchdog(rail, firedThisScan);
+        }
+
+        // DART_STALL_WATCHDOG (2026-06-11):
+        // '매칭이 존재(HasOutermostMatch=true → fail 도 안 뜸)하는데 발사도 비행체도 일정 시간 0' 인
+        // 정지 상태의 원인 불문 최후 안전망. 개별 안전망(데드헤드 릴리프 = head 색이 외곽에 없을 때만,
+        // 라인락 릴리프 = holder pass 락만, 팝 기반 재개방 = 팝이 있어야 동작)이 못 덮는 조합 —
+        // 예: 패킹 정지로 head 들이 라인을 못 건너고 + 현재 라인은 이미 소비됨 + 팝이 없어 재개방 없음 —
+        // 에서 수동 홀더 선택이 하던 전체 스캔라인 무효화를 자동 수행해 현재 라인 재스캔을 강제한다.
+        // 연속공격 안전: 비행체 0 + 발사 0 이 STALL_WATCHDOG_SECONDS 지속된 뒤에만 발동하므로
+        // '직전 발사 직후 같은 라인 재발사' 위험 창과 겹치지 않는다 (발사/비행 발생 즉시 타이머 리셋).
+        private float _stallWatchTimer;
+        private const float STALL_WATCHDOG_SECONDS = 1.5f;
+
+        private void UpdateStallWatchdog(RailManager rail, int committedFiresThisScan)
+        {
+            if (committedFiresThisScan > 0 || _activeProjectiles.Count > 0 || PauseManager.IsPaused
+                || rail == null || rail.EffectiveOccupiedCount == 0
+                || !BoardStateManager.HasInstance || !BoardStateManager.Instance.HasOutermostMatchCached)
+            {
+                _stallWatchTimer = 0f;
+                return;
+            }
+
+            _stallWatchTimer += Time.deltaTime;
+            if (_stallWatchTimer < STALL_WATCHDOG_SECONDS) return;
+            _stallWatchTimer = 0f;
+
+            InvalidateDartScanLines();
+            LogAttackIssue("DartStallWatchdog",
+                $"no fire/projectile for {STALL_WATCHDOG_SECONDS:F1}s with match present — full scan-line invalidate");
         }
 
         // DEAD_HEAD_RELIEF (2026-06-10):
@@ -2575,6 +2606,9 @@ namespace BalloonFlow
             // DEAD_HEAD_RELIEF: 레벨 전환/전체 리셋 시 holder 타이머 잔존 방지.
             _deadHeadSince.Clear();
             _deadHeadLastReliefFireAt.Clear();
+            // DART_STALL_WATCHDOG: 전체 무효화 = 새 스캔 패스 시작 — 정지 감시 타이머도 리셋
+            // (레벨 전환/홀더 배치/워치독 자신 어느 경로든 이월 누적 방지).
+            _stallWatchTimer = 0f;
         }
 
         private void InvalidateDartScanLineForHolder(int holderId)
