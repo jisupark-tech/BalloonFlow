@@ -139,9 +139,51 @@ namespace BalloonFlow
         /// <summary>UI atlas 에서 sprite 단건 sync 추출. atlas 미로드 또는 sprite 없음이면 null.</summary>
         public Sprite GetUISprite(string spriteName)
         {
-            if (_uiAtlas == null || string.IsNullOrEmpty(spriteName)) return null;
-            return _uiAtlas.GetSprite(spriteName);
+            if (string.IsNullOrEmpty(spriteName)) return null;
+            Sprite s = _uiAtlas != null ? _uiAtlas.GetSprite(spriteName) : null;
+#if UNITY_EDITOR
+            // [2026-06-11] Sprite Atlas V2 가 'build-time packing' 모드면 에디터 플레이에선 atlas 가
+            // 비어 GetSprite 가 전부 null (WS 보상 아이콘 미표시 원인). 에디터 한정 AssetDatabase
+            // 직로드 폴백 — 빌드 경로는 atlas 그대로라 동작/성능 영향 없음.
+            if (s == null) s = EditorLoadUISpriteFallback(spriteName);
+#endif
+            return s;
         }
+
+#if UNITY_EDITOR
+        private static readonly Dictionary<string, Sprite> _editorSpriteFallbackCache = new Dictionary<string, Sprite>();
+        private static bool _editorSpriteFallbackNotified;
+
+        private static Sprite EditorLoadUISpriteFallback(string spriteName)
+        {
+            if (_editorSpriteFallbackCache.TryGetValue(spriteName, out Sprite cached)) return cached;
+
+            // 1) 표준 위치 직로드 (2.Sprite/UI — atlas packable 폴더).
+            Sprite s = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>($"Assets/2.Sprite/UI/{spriteName}.png");
+
+            // 2) 폴더 외 위치 — 이름 일치 sprite 전체 검색 (에디터 전용 + 결과 캐시라 비용 무시 가능).
+            if (s == null)
+            {
+                string[] guids = UnityEditor.AssetDatabase.FindAssets($"{spriteName} t:Sprite");
+                for (int i = 0; i < guids.Length && s == null; i++)
+                {
+                    string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[i]);
+                    if (System.IO.Path.GetFileNameWithoutExtension(path) == spriteName)
+                        s = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(path);
+                }
+            }
+
+            if (s != null && !_editorSpriteFallbackNotified)
+            {
+                _editorSpriteFallbackNotified = true;
+                Debug.Log("[ResourceManager] UI atlas 에 sprite 없음 → 에디터 AssetDatabase 폴백 사용 중. " +
+                          "(Sprite Packer Mode 가 build-time packing 이면 정상 — 빌드에선 atlas 사용)");
+            }
+
+            _editorSpriteFallbackCache[spriteName] = s; // null 도 캐시 (반복 검색 방지)
+            return s;
+        }
+#endif
 
         /// <summary>
         /// UI atlas 에서 sprite 추출 — 없으면 fallback 반환. popup Awake 에서 1줄로 sprite 교체용.

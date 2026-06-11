@@ -192,8 +192,29 @@ namespace BalloonFlow
                 var p = _segmentsRemovalOrder[k];
                 if (p != null && p.BalloonId == cellId) return; // 같은 cell 의 미제거 segment 남음
             }
+            // [2026-06-11] 첫 cell 소진 시 EndCap 의 원래 cell 도 타겟 제외.
+            // 캡 visual 은 SlideEndCapTo 로 안쪽 cell 로 옮겨가는데 논리 cell 을 남겨두면
+            // 비워진 끝자리에 계속 공격이 가능 — '줄어들면 공격 가능한 부분도 cell 기준으로
+            // 줄어든다' 위반 + 허공 타격. (남은 Seg/StartCap cell 은 그대로 공격 가능.)
+            ReleaseEndCapCellOnce();
             if (BalloonController.HasInstance)
                 BalloonController.Instance.MarkFlexTubeCellInactive(cellId);
+        }
+
+        private bool _endCapCellReleased;
+
+        /// <summary>EndCap 의 논리 cell 을 1회 타겟 제외 — 첫 segment cell 소진 시점(캡이 원래 cell 을 비움).</summary>
+        private void ReleaseEndCapCellOnce()
+        {
+            if (_endCapCellReleased) return;
+            _endCapCellReleased = true;
+            int last = _parts.Count - 1;
+            FlexTubePart endCap = last >= 0 ? _parts[last] : null;
+            if (endCap != null && endCap.PartType == GimmickIdentifier.FlexTubePart.EndCap
+                && endCap.BalloonId >= 0 && BalloonController.HasInstance)
+            {
+                BalloonController.Instance.MarkFlexTubeCellInactive(endCap.BalloonId);
+            }
         }
 
         private void BeginFinish()

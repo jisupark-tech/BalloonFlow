@@ -31,6 +31,14 @@ namespace BalloonFlow
         //   롤백: 이 const + ApplyMagazineTextRowVisibility 호출 3곳 제거.
         private const int MAGAZINE_TEXT_VISIBLE_ROWS = 5;
 
+        // [HOLDER_LAZY_SPAWN 2026-06-11] 보관함 비주얼 지연 스폰 행 임계 — 레벨 시작 시 열당 앞 N행만
+        // 풀에서 꺼내 활성화, 뒤 행은 행 당김으로 임계에 들어올 때 RepositionColumnHolders 가 생성.
+        // 73홀더 레벨의 로드 스파이크(풀 Get + GetComponentsInChildren 다수 + 색/TMP 세팅 일괄) 제거 +
+        // 상시 활성 렌더러 감소. 로직은 HolderManager 데이터 구동이라 게임플레이 무영향.
+        // 예외(즉시 스폰): Spawner(위치 앵커), Chain 그룹(연결선). 롤백: 게이트 2곳(초기 스폰/재배치) 제거.
+        private const int VISIBLE_HOLDER_ROWS = 5;
+        private readonly List<HolderData> _tempLazyColumnData = new List<HolderData>(16);
+
         private static void ApplyMagazineTextRowVisibility(HolderVisual visual, int row)
         {
             if (visual == null || visual.magazineText == null) return;
@@ -379,11 +387,21 @@ namespace BalloonFlow
 
                 for (int row = 0; row < allInCol.Count; row++)
                 {
+                    // [HOLDER_LAZY_SPAWN 2026-06-11] 레벨 시작 시 앞 VISIBLE_HOLDER_ROWS 행만 비주얼 생성.
+                    // 뒤 행은 행이 당겨져 임계 안에 들어올 때 RepositionColumnHolders 가 풀에서 꺼낸다.
+                    // 로직(배포/실패/스포너/체인)은 HolderManager 데이터 구동이라 비주얼 지연은 게임플레이 무영향.
+                    // 예외: Spawner(위치 앵커 + 고정 표시)·Chain 그룹(연결선이 멤버 비주얼 필요)은 즉시 생성.
+                    HolderData hd = allInCol[row];
+                    bool isSpawnerHolder = hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                                        || hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O;
+                    if (row >= VISIBLE_HOLDER_ROWS && !isSpawnerHolder && hd.chainGroupId < 0)
+                        continue; // 지연 스폰 대상
+
                     Vector3 pos = CalculateQueuePosition(col, row);
-                    HolderVisual visual = CreateHolderVisual(allInCol[row], pos, col);
+                    HolderVisual visual = CreateHolderVisual(hd, pos, col);
                     if (visual != null)
                     {
-                        _holderVisuals[allInCol[row].holderId] = visual;
+                        _holderVisuals[hd.holderId] = visual;
                         spawnedCount++;
                         // [TMP 부하 2026-06-10] 초기 스폰부터 row 2+ 텍스트 비활성 (재배치 전까지 전부 켜져있던 문제).
                         ApplyMagazineTextRowVisibility(visual, row);
@@ -814,6 +832,7 @@ namespace BalloonFlow
             // Spawner에 의해 새로 추가된 보관함 — Spawner 위치에서 생성, 정상 스케일
             // Spawner 위치 찾기
             Vector3 spawnerPos = CalculateQueuePosition(column, 1); // fallback
+            bool columnHasSpawner = false;
             foreach (var kvp2 in _holderVisuals)
             {
                 if (kvp2.Value.column == column && kvp2.Value.gameObject != null)
@@ -823,24 +842,38 @@ namespace BalloonFlow
                                         || spData.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O))
                     {
                         spawnerPos = kvp2.Value.gameObject.transform.position;
+                        columnHasSpawner = true;
                         break;
                     }
                 }
             }
 
-            // 비주얼 없는 일반 보관함 생성 (Spawner에서 소환된 보관함)
+            // 비주얼 없는 일반 보관함 생성 — ① Spawner 소환분 ② [HOLDER_LAZY_SPAWN] 지연 스폰분.
+            // 열 잔여(미소비·비스포너) 순번 = holderId 순(초기 배치 row 순서 보존) — 임계 안만 생성.
             HolderData[] allHolders = HolderManager.Instance.GetHolders();
+            _tempLazyColumnData.Clear();
             for (int i = 0; i < allHolders.Length; i++)
             {
                 var hd = allHolders[i];
                 if (hd.column != column || hd.isConsumed) continue;
-                if (_holderVisuals.ContainsKey(hd.holderId)) continue;
                 // Spawner 자체는 SpawnWaitingHolders에서 생성됨
                 if (hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
                  || hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O) continue;
+                _tempLazyColumnData.Add(hd);
+            }
+            _tempLazyColumnData.Sort((a, b) => a.holderId.CompareTo(b.holderId));
 
-                // Spawner 위치에서 생성 → 아래 리포지셔닝으로 앞 칸 이동
-                Vector3 startPos = spawnerPos;
+            for (int row = 0; row < _tempLazyColumnData.Count; row++)
+            {
+                var hd = _tempLazyColumnData[row];
+                if (_holderVisuals.ContainsKey(hd.holderId)) continue;
+                // 아직 임계 밖이면 지연 유지 (Chain 멤버는 연결선 때문에 항상 생성).
+                if (row >= VISIBLE_HOLDER_ROWS && hd.chainGroupId < 0) continue;
+
+                // 스폰 위치: Spawner 열은 기존처럼 Spawner 배출 위치(연출 유지),
+                // 일반 열의 지연 스폰분은 목표보다 한 행 뒤에서 등장 → 아래 리포지셔닝 트윈으로
+                // 다른 홀더와 같이 자연스럽게 당겨짐 (가시 경계 팝인 방지).
+                Vector3 startPos = columnHasSpawner ? spawnerPos : CalculateQueuePosition(column, row + 1);
                 HolderVisual newVisual = CreateHolderVisual(hd, startPos, column, false);
                 if (newVisual != null)
                     _holderVisuals[hd.holderId] = newVisual;

@@ -1206,6 +1206,13 @@ namespace BalloonFlow
                 if (kv.Value == balloonId) { keyToRemove = kv.Key; break; }
             }
             if (keyToRemove.HasValue) _positionIndex.Remove(keyToRemove.Value);
+
+            // [2026-06-11 fix] silent 제거는 ExecutePop 을 안 타서 타게팅 contour 와 실패판정 외곽 캐시가
+            // 다음 실제 팝까지 stale — 튜브 셀 제거로 노출된 풍선을 못 쏘는 '놓침' + fail 오판 위험.
+            // ExecutePop 과 동일하게 양쪽 캐시를 직접 무효화한다.
+            DirectionalTargeting.InvalidateCache();
+            if (BoardStateManager.HasInstance)
+                BoardStateManager.Instance.InvalidateOutermostCache();
         }
 
         /// <summary>
