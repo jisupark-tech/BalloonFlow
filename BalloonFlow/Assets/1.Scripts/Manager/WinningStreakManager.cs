@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -214,6 +214,8 @@ namespace BalloonFlow
                 return;
             }
 
+            // [WS 배수 증가 연출 2026-06-11] 클리어 전/후 배수를 캡처 — 로비 FX 가 from→to 이동으로 표현.
+            int startMultiplier = ResolveMultiplierForStreak(s.currentStreak);
             s.currentStreak += 1;
 
             var svc = WinningStreakConfigService.Instance;
@@ -236,7 +238,9 @@ namespace BalloonFlow
                     endStage = s.currentStage,
                     endPoints = s.currentStagePoints,
                     gainedPoints = gained,
-                    achievedStages = achievedStages
+                    achievedStages = achievedStages,
+                    startMultiplier = startMultiplier,
+                    endMultiplier = ResolveMultiplierForStreak(s.currentStreak)
                 });
             }
 
@@ -411,6 +415,18 @@ namespace BalloonFlow
             public int endPoints;
             public int gainedPoints;
             public List<int> achievedStages;
+            // [WS 배수 증가 연출 2026-06-11] 클리어 전/후 배수 (1/5/10/25/100). 0 = 미캡처(현재값 사용).
+            public int startMultiplier;
+            public int endMultiplier;
+        }
+
+        /// <summary>streak 값의 배수 해석 — config 우선, 미준비 시 UI fallback 티어 (1/5/10/25/100).</summary>
+        private static int ResolveMultiplierForStreak(int streak)
+        {
+            streak = Mathf.Max(1, streak);
+            if (WinningStreakConfigService.HasInstance)
+                return WinningStreakConfigService.Instance.ResolveStreakMultiplier(streak);
+            return WinningStreakUI.TierFromStreak(streak);
         }
     }
 }

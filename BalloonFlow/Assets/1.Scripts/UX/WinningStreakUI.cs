@@ -22,7 +22,7 @@ namespace BalloonFlow
         private static readonly int[] Tiers = { 1, 5, 10, 25, 100 };
 
         // HUD (UIHud 의 Multiplier) — SelectFrame / TextYellow X 위치 (Mask 고정).
-        private static readonly float[] HudSelectFrameX = { -338f, -150f,  30f,  210f,  390f };
+        private static readonly float[] HudSelectFrameX = { -360f, -184f,  10f,  174f,  350f };
         private static readonly float[] HudTextYellowX  = {  358f,  170f, -10f, -190f, -370f };
 
         // PopupWinningStreak — 위치만, 애니메이션 없음.

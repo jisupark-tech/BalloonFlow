@@ -92,10 +92,13 @@ namespace BalloonFlow
 
         private static void BindRewardItem(GameObject rewardItemRoot, Entry entry)
         {
-            // 자식 variant: RewardGold / RewardItem (내부) / ImageGift
-            GameObject vRewardGold = FindChildGo(rewardItemRoot.transform, "RewardGold");
-            GameObject vRewardItem = FindChildGo(rewardItemRoot.transform, "RewardItem");
-            GameObject vImageGift  = FindChildGo(rewardItemRoot.transform, "ImageGift");
+            // 자식 variant: RewardGold / RewardItem (내부) / ImageGift — 전부 직계 자식.
+            // [2026-06-11 fix] 슬롯 루트(첫 슬롯 이름이 정확히 "RewardItem")와 내부 변형이 동명이라
+            // GetComponentsInChildren 기반 탐색(루트 자신 포함)은 슬롯 0 에서 자기 자신을 변형으로 오인 →
+            // 코인 보상이면 슬롯 전체 비활성(갯수 안 맞음), 아이템 보상이면 내부 변형 미활성(아이콘 미표시).
+            GameObject vRewardGold = FindDirectChildGo(rewardItemRoot.transform, "RewardGold");
+            GameObject vRewardItem = FindDirectChildGo(rewardItemRoot.transform, "RewardItem");
+            GameObject vImageGift  = FindDirectChildGo(rewardItemRoot.transform, "ImageGift");
 
             bool useGold = entry.type == RewardKind.Coin;
             bool useGift = false; // 현재 명세상 generic gift 없음. 추후 special reward 시 활성.
@@ -183,6 +186,15 @@ namespace BalloonFlow
         {
             var t = FindChild(root, name);
             return t != null ? t.gameObject : null;
+        }
+
+        /// <summary>직계 자식만 탐색 (비활성 포함). 루트와 동명인 변형 child 를 안전하게 찾기 위함.</summary>
+        private static GameObject FindDirectChildGo(Transform root, string name)
+        {
+            if (root == null) return null;
+            for (int i = 0; i < root.childCount; i++)
+                if (root.GetChild(i).name == name) return root.GetChild(i).gameObject;
+            return null;
         }
 
         private static TMP_Text FindChildTmp(Transform root, string name)

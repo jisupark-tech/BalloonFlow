@@ -880,31 +880,80 @@ namespace BalloonFlow
             return _reusableOutermostColors;
         }
 
+        // RAIL_SIDE_COLOR_CACHE (등급2 perf 2026-06-11):
+        // 이전엔 매 호출(HasOutermostMatchCached 경유 매 프레임)마다 side 필터를 재계산했다.
+        // 입력은 ① 외곽 boundary/occupancy(_outermostDirty 로만 변함) ② sideCount(레벨 중 사실상 고정) 뿐이므로
+        // 둘 다 변하지 않은 호출은 직전 결과를 그대로 반환한다 (입력 동일 → 출력 동일).
+        // 무효화는 별도 플래그 없이 '진입 시점의 _outermostDirty 관찰'로 기존 dirty 마킹 지점과 자동 동기화 —
+        // 새 invalidate 지점을 빠뜨릴 수 없는 구조.
+        private bool _railSideColorsValid;
+        private int _railSideCachedSideCount = int.MinValue;
+
         private HashSet<int> GetRailSideOutermostBalloonColors()
         {
-            HashSet<int> allOutermostColors = GetOutermostBalloonColors();
-            _reusableRailSideOutermostColors.Clear();
+            bool outermostDirtyAtEntry = _outermostDirty;
+            GetOutermostBalloonColors(); // boundary/occupancy 최신화 (+_outermostDirty 해제)
 
-            if (allOutermostColors.Count == 0)
+            int sideCount = RailManager.HasInstance
+                ? RailManager.GetRailSideCount(RailManager.Instance.PhysicalCapacity)
+                : -1; // RailManager 부재도 캐시 키에 포함 (부재 시 결과 = 빈 집합)
+
+            if (!outermostDirtyAtEntry && _railSideColorsValid && sideCount == _railSideCachedSideCount)
+            {
+#if UNITY_EDITOR
+                ValidateRailSideColorsCache(sideCount);
+#endif
                 return _reusableRailSideOutermostColors;
+            }
 
-            if (!RailManager.HasInstance)
-                return _reusableRailSideOutermostColors;
+            RebuildRailSideColors(sideCount, _reusableRailSideOutermostColors);
+            _railSideColorsValid = true;
+            _railSideCachedSideCount = sideCount;
+            return _reusableRailSideOutermostColors;
+        }
 
-            int sideCount = RailManager.GetRailSideCount(RailManager.Instance.PhysicalCapacity);
+        /// <summary>side 필터 본체 — 기존 로직 그대로, 출력 set 만 파라미터화 (검증 어서트와 공유).</summary>
+        private void RebuildRailSideColors(int sideCount, HashSet<int> output)
+        {
+            output.Clear();
+
+            if (_reusableOutermostColors.Count == 0)
+                return;
+
+            if (sideCount < 0) // RailManager 부재
+                return;
 
             // ROLLBACK_FAIL_RAIL_SIDE_MATCH:
             // Fail matching must use the same rail sides that can actually fire.
             // 1: bottom, 2: bottom+right, 3: bottom+right+top, 4: all sides.
-            if (sideCount >= 1) AddColumnBoundaryColors(_reusableColMinY);
-            if (sideCount >= 2) AddRowBoundaryColors(_reusableRowMaxX);
-            if (sideCount >= 3) AddColumnBoundaryColors(_reusableColMaxY);
-            if (sideCount >= 4) AddRowBoundaryColors(_reusableRowMinX);
-
-            return _reusableRailSideOutermostColors;
+            if (sideCount >= 1) AddColumnBoundaryColors(_reusableColMinY, output);
+            if (sideCount >= 2) AddRowBoundaryColors(_reusableRowMaxX, output);
+            if (sideCount >= 3) AddColumnBoundaryColors(_reusableColMaxY, output);
+            if (sideCount >= 4) AddRowBoundaryColors(_reusableRowMinX, output);
         }
 
-        private void AddColumnBoundaryColors(Dictionary<int, int> colToY)
+#if UNITY_EDITOR
+        // RAIL_SIDE_COLOR_CACHE 검증 (에디터 전용·한시 운용): 캐시 적중 시 주기적으로 fresh 재계산과 비교.
+        // 불일치 = invalidate 누락 → 놓침/데드락으로 직결되므로 즉시 에러 로그. 검증 기간 후 블록 제거 가능.
+        private static readonly HashSet<int> _railSideValidationSet = new HashSet<int>();
+        private void ValidateRailSideColorsCache(int sideCount)
+        {
+            if (Time.frameCount % 30 != 0) return;
+            RebuildRailSideColors(sideCount, _railSideValidationSet);
+            if (!_railSideValidationSet.SetEquals(_reusableRailSideOutermostColors))
+            {
+                Debug.LogError(
+                    $"[BoardStateManager] RailSide color cache 불일치 — invalidate 누락 의심! " +
+                    $"cached=[{string.Join(",", _reusableRailSideOutermostColors)}] " +
+                    $"fresh=[{string.Join(",", _railSideValidationSet)}] sideCount={sideCount}");
+                // 안전 복구: fresh 결과로 교체.
+                _reusableRailSideOutermostColors.Clear();
+                foreach (int c in _railSideValidationSet) _reusableRailSideOutermostColors.Add(c);
+            }
+        }
+#endif
+
+        private void AddColumnBoundaryColors(Dictionary<int, int> colToY, HashSet<int> output)
         {
             var en = colToY.GetEnumerator();
             try
@@ -913,13 +962,13 @@ namespace BalloonFlow
                 {
                     Vector2Int cell = new Vector2Int(en.Current.Key, en.Current.Value);
                     if (_reusableOccupancy.TryGetValue(cell, out int color))
-                        _reusableRailSideOutermostColors.Add(color);
+                        output.Add(color);
                 }
             }
             finally { en.Dispose(); }
         }
 
-        private void AddRowBoundaryColors(Dictionary<int, int> rowToX)
+        private void AddRowBoundaryColors(Dictionary<int, int> rowToX, HashSet<int> output)
         {
             var en = rowToX.GetEnumerator();
             try
@@ -928,7 +977,7 @@ namespace BalloonFlow
                 {
                     Vector2Int cell = new Vector2Int(en.Current.Value, en.Current.Key);
                     if (_reusableOccupancy.TryGetValue(cell, out int color))
-                        _reusableRailSideOutermostColors.Add(color);
+                        output.Add(color);
                 }
             }
             finally { en.Dispose(); }

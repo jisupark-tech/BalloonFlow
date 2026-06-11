@@ -196,6 +196,9 @@ namespace BalloonFlow
 
         // 이름 기반 텍스트 쌍 캐시 (outline + main).
         private TMP_Text _wsTxtTimer, _wsTxtTimerOutline, _wsTxtGauge, _wsTxtGaugeOutline;
+        // [WS 게이지 텍스트 2026-06-11] 프리팹엔 TextGauge/Outline 쌍이 둘 — Gauge 하단(포인트 {n}/{n})과
+        // WinningIcon 하단(배수 x{n}). 전역 단일 탐색은 첫 쌍에 배수를 써버려 포인트 표기가 없었음.
+        private TMP_Text _wsTxtPoints, _wsTxtPointsOutline;
         private bool _wsTextsResolved;
         private Coroutine _wsLobbyFxCoroutine;
         private Sequence _wsLobbyFxSequence;
@@ -545,10 +548,13 @@ namespace BalloonFlow
                 _wsProgressSlider.value = ratio;
             }
 
+            // Gauge 하단 포인트 텍스트 — "현재 포인트/필요 포인트".
+            SetWsPointsText(state != null ? state.currentStagePoints : 0, stage);
+
             BindWsRewardItem(stage);
         }
 
-        /// <summary>현재 배율(ResolveCurrentMultiplier)을 TextGauge/TextGaugeOutline 숫자 + Multiplier SelectFrame/TextYellow 위치에 반영.
+        /// <summary>현재 배율(ResolveCurrentMultiplier)을 WinningIcon 하단 TextGauge/Outline 숫자 + Multiplier SelectFrame/TextYellow 위치에 반영.
         /// [2026-06-10] Animator 방식 폐기 → 코드 트윈(PlayMultiplierSelect). Animator 가 위치를 덮어써 이동이 안 먹던 문제 해소.
         /// IsUnlocked 게이트와 무관하게 호출 가능 — 로비 표시·프리뷰(강제표시) 양쪽에서 항상 현재 배율 숫자가 보이게 한다.</summary>
         private void RefreshWsMultiplierDisplay()
@@ -561,6 +567,17 @@ namespace BalloonFlow
             ResolveWsFxRefs();
             if (_wsMultiplier != null)
                 WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, curMultiplier);
+        }
+
+        /// <summary>Gauge 하단 TextGauge/Outline 에 "{현재 포인트}/{필요 포인트}" 기록. stage 미준비 시 빈 문자열.</summary>
+        private void SetWsPointsText(int currentPoints, WinningStreakStage stage)
+        {
+            if (_wsTxtPoints == null && _wsTxtPointsOutline == null) return;
+            string pts = (stage != null && stage.requiredPoints > 0)
+                ? $"{Mathf.Max(0, currentPoints)}/{stage.requiredPoints}"
+                : "";
+            if (_wsTxtPoints != null) _wsTxtPoints.text = pts;
+            if (_wsTxtPointsOutline != null) _wsTxtPointsOutline.text = pts;
         }
 
         /// <summary>WS 미니 표시의 배수(TextGauge/Outline)·시간(TextTimer/Outline) 텍스트를 이름으로 1회 해석·캐시.
@@ -622,6 +639,13 @@ namespace BalloonFlow
             // 연출 시작 전 Multiplier 를 숨김 위치(-725)로 즉시 리셋.
             SetWsMultiplierX(WS_MULTIPLIER_HIDDEN_X);
 
+            // [WS 배수 증가 연출 2026-06-11] 클리어 전 배수로 SelectFrame 을 세팅해 두고(숨김 상태),
+            // 슬라이드 인 후 클리어 후 배수로 이동 → '증가' 가 보이게. 미캡처(0) 시 현재값 유지.
+            int fromMult = anim.startMultiplier > 0 ? anim.startMultiplier : WinningStreakUI.ResolveCurrentMultiplier();
+            int toMult   = anim.endMultiplier   > 0 ? anim.endMultiplier   : WinningStreakUI.ResolveCurrentMultiplier();
+            if (_wsMultiplier != null)
+                WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, fromMult);
+
             int stageForFill = Mathf.Max(1, anim.startStage);
             float startRatio = ResolveWsStageRatio(stageForFill, anim.startPoints);
             bool stageCompleted = anim.achievedStages != null && anim.achievedStages.Count > 0;
@@ -631,6 +655,11 @@ namespace BalloonFlow
 
             if (_wsProgressSlider != null)
                 _wsProgressSlider.value = startRatio;
+
+            // 게이지 하단 포인트 텍스트도 연출 시작 값으로 세팅 (채움 완료 후 아래에서 종료 값 갱신).
+            WinningStreakStage fillStageDoc = WinningStreakConfigService.HasInstance
+                ? WinningStreakConfigService.Instance.GetStage(stageForFill) : null;
+            SetWsPointsText(anim.startPoints, fillStageDoc);
 
             yield return PlayWsFireFlyAndPulse();
 
@@ -642,8 +671,17 @@ namespace BalloonFlow
             // ROLLBACK_WINNING_STREAK_MULTIPLIER_AFTER_ENTER_20260605:
             // Designer spec: after the Multiplier entrance motion, move SelectFrame/TextYellow to the current value.
             // [2026-06-10] Animator(PlayMultiplierState) → 코드 트윈(PlayMultiplierSelect) — Animator 가 위치를 덮어쓰던 문제 해소.
+            // [2026-06-11] 이전 배수(fromMult)로 등장한 뒤 새 배수(toMult)로 이동 — 배수 '증가' 연출.
             if (_wsMultiplier != null)
-                WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, WinningStreakUI.ResolveCurrentMultiplier());
+            {
+                WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, toMult);
+                if (toMult > fromMult)
+                {
+                    // '오르는' 느낌 — 위로 살짝 펀치 + 미세 확대 (실패 드롭 연출의 반대 방향).
+                    _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, 24f), 0.35f, 6, 0.6f).SetUpdate(true);
+                    _wsMultiplier.DOPunchScale(new Vector3(0.12f, 0.12f, 0f), 0.35f, 6, 0.6f).SetUpdate(true);
+                }
+            }
 
             if (_wsProgressSlider != null)
             {
@@ -653,6 +691,13 @@ namespace BalloonFlow
                     .SetEase(Ease.OutCubic));
                 yield return _wsLobbyFxSequence.WaitForCompletion();
             }
+
+            // 채움 종료 값으로 포인트 텍스트 갱신 — 스테이지 완주면 만땅 표기, 아니면 endPoints.
+            if (stageCompleted)
+                SetWsPointsText(fillStageDoc != null ? fillStageDoc.requiredPoints : anim.endPoints, fillStageDoc);
+            else
+                SetWsPointsText(anim.endPoints, WinningStreakConfigService.HasInstance
+                    ? WinningStreakConfigService.Instance.GetStage(Mathf.Max(1, anim.endStage)) : null);
 
             if (stageCompleted)
             {
@@ -1087,10 +1132,26 @@ namespace BalloonFlow
 
             _wsTxtTimer        = FindChildComponentByName<TMP_Text>(root, "TextTimer");
             _wsTxtTimerOutline = FindChildComponentByName<TMP_Text>(root, "TextTimerOutline");
-            _wsTxtGauge        = FindChildComponentByName<TMP_Text>(root, "TextGauge");
-            _wsTxtGaugeOutline = FindChildComponentByName<TMP_Text>(root, "TextGaugeOutline");
-            // 핵심 텍스트(TextGauge)를 실제로 찾았을 때만 캐시. 못 찾으면 다음 호출에서 재시도(영구 null 방지).
-            _wsTextsResolved = _wsTxtGauge != null;
+
+            // [WS 게이지 텍스트 2026-06-11] 두 쌍을 부모 스코프로 분리 해석:
+            //   Gauge 하단 TextGauge/Outline       = 현재 포인트 "{cur}/{required}"
+            //   WinningIcon 하단 TextGauge/Outline = 현재 배수 "x{n}"
+            Transform gaugeRoot = FindChildComponentByName<Transform>(root, "Gauge");
+            Transform iconRoot  = FindChildComponentByName<Transform>(root, "WinningIcon");
+            _wsTxtPoints        = gaugeRoot != null ? FindChildComponentByName<TMP_Text>(gaugeRoot, "TextGauge") : null;
+            _wsTxtPointsOutline = gaugeRoot != null ? FindChildComponentByName<TMP_Text>(gaugeRoot, "TextGaugeOutline") : null;
+            _wsTxtGauge         = iconRoot != null ? FindChildComponentByName<TMP_Text>(iconRoot, "TextGauge") : null;
+            _wsTxtGaugeOutline  = iconRoot != null ? FindChildComponentByName<TMP_Text>(iconRoot, "TextGaugeOutline") : null;
+
+            // 폴백 — 스코프 부모를 못 찾는 프리팹 변형에선 기존 전역 탐색으로 배수만이라도 표시.
+            if (_wsTxtGauge == null && _wsTxtPoints == null)
+            {
+                _wsTxtGauge        = FindChildComponentByName<TMP_Text>(root, "TextGauge");
+                _wsTxtGaugeOutline = FindChildComponentByName<TMP_Text>(root, "TextGaugeOutline");
+            }
+
+            // 핵심 텍스트를 실제로 찾았을 때만 캐시. 못 찾으면 다음 호출에서 재시도(영구 null 방지).
+            _wsTextsResolved = _wsTxtGauge != null || _wsTxtPoints != null;
         }
 
         // RewardItem 구조 내부 아이콘 Image 후보 이름(popup 과 동일).
@@ -1113,35 +1174,108 @@ namespace BalloonFlow
             Transform root = _wsRewardItem.transform;
             GameObject goldVariant = FindDirectChildGO(root, "RewardGold");
             GameObject itemVariant = FindDirectChildGO(root, "RewardItem");   // root 와 동명 → 직계 자식만 탐색
-            GameObject giftVariant = FindDirectChildGO(root, "ImageGift");
+            // [2026-06-11 fix] ImageGift 는 직계가 아니라 RewardItem 내부에 중첩된 프리팹 구조
+            // (PopupWinningStreak 슬롯과 동일). 전체 탐색 + 중첩 시 부모(RewardItem)도 함께 활성화.
+            GameObject giftVariant = FindDirectChildGO(root, "ImageGift")
+                ?? FindChildComponentByName<Transform>(root, "ImageGift")?.gameObject;
+            bool giftInsideItem = giftVariant != null && itemVariant != null
+                && giftVariant.transform.IsChildOf(itemVariant.transform);
 
-            // 타입별 변형 토글 (코인=골드, 그 외=아이템; WS 보상엔 Gift 없음).
+            // 타입별 변형 토글.
             // ROLLBACK_WINNING_STREAK_REWARDIMG_VARIANT_RULE:
-            // RewardGold=gold only, RewardItem=single item/heart, ImageGift=composite rewards.
+            // RewardGold=gold only, RewardItem=single item/heart, ImageGift=composite rewards(상자만).
             if (goldVariant != null) goldVariant.SetActive(useGold);
-            if (itemVariant != null) itemVariant.SetActive(useItem);
+            if (itemVariant != null) itemVariant.SetActive(useItem || (useGift && giftInsideItem));
             if (giftVariant != null) giftVariant.SetActive(useGift);
 
             Transform active = ((useGold ? goldVariant : useItem ? itemVariant : giftVariant) != null
                 ? (useGold ? goldVariant : useItem ? itemVariant : giftVariant).transform
                 : root);
 
-            // 비코인 변형만 아이콘 sprite swap (코인은 ImageGold 고정 비주얼).
+            // 아이템 변형 내부 비주얼 정리 — heart 대체 이미지는 항상 끄고(infinite heart 도 ImageItem sprite swap),
+            // gift 모드에선 아이템 아이콘/깃발류를 숨겨 '상자만' 보이게.
+            Transform itemScope = itemVariant != null ? itemVariant.transform : root;
+            // [2026-06-11 fix] ImageItem 이 Image 없는 홀더 GO 일 수 있어 Transform 기준으로 탐색.
+            GameObject imageItemGo = FindChildComponentByName<Transform>(itemScope, "ImageItem")?.gameObject;
+            GameObject imageHeartGo = FindChildComponentByName<Transform>(itemScope, "ImageHeart")?.gameObject;
+            if (imageHeartGo != null) imageHeartGo.SetActive(false);
+            if (useGift)
+            {
+                if (imageItemGo != null) imageItemGo.SetActive(false);
+                SetWsItemFlagsActive(itemScope, false);
+            }
+            else if (useItem)
+            {
+                SetWsItemFlagsActive(itemScope, true); // 직전 gift 바인딩이 꺼둔 깃발 복원
+            }
+
+            // 비코인 단일 변형만 아이콘 sprite swap (코인은 ImageGold 고정 비주얼).
             if (useItem && !string.IsNullOrEmpty(spriteKey) && ResourceManager.HasInstance)
             {
+                // [2026-06-11 fix] '이름 일치 Image 컴포넌트' 탐색은 ImageItem 이 홀더(Image 없는 GO)인
+                // 구조에서 무음 실패(텍스트만 갱신) → GO 기준 탐색 + Image 는 자신→자식 순 해석 (popup 동일).
                 Image icon = null;
                 for (int i = 0; i < WsRewardIconNames.Length && icon == null; i++)
-                    icon = FindChildComponentByName<Image>(active, WsRewardIconNames[i]);
+                {
+                    var iconTr = FindChildComponentByName<Transform>(active, WsRewardIconNames[i]);
+                    if (iconTr == null) continue;
+                    icon = iconTr.GetComponent<Image>();
+                    if (icon == null) icon = iconTr.GetComponentInChildren<Image>(true);
+                }
                 var spr = ResourceManager.Instance.GetUISprite(spriteKey);
-                if (icon != null && spr != null) { icon.sprite = spr; icon.enabled = true; }
+                if (icon != null && spr != null)
+                {
+                    icon.sprite = spr;
+                    icon.enabled = true;
+                    // ImageItem 은 프리팹 기본 비활성일 수 있고 Image 가 홀더의 자식일 수도 있어
+                    // 변형 루트(active)까지 조상 활성화.
+                    for (Transform t = icon.transform; t != null && t != active; t = t.parent)
+                        if (!t.gameObject.activeSelf) t.gameObject.SetActive(true);
+                }
+                else
+                {
+                    Debug.LogWarning($"[UILobby] WS RewardItem 아이콘 갱신 실패 — icon={(icon != null)} sprite={(spr != null)} key={spriteKey}");
+                }
             }
 
             // 카운트 텍스트 (활성 변형 내부 TextReward + Outline).
-            string countText = (useGold || useItem) && count > 0 ? $"x{count}" : "";
+            // 포맷은 PopupWinningStreak 와 통일: 코인=숫자, 부스터=xN, 무한하트=24h, gift=빈칸(상자만).
+            string countText = "";
+            if (useGold && count > 0) countText = count.ToString();
+            else if (useItem)
+            {
+                var r = stage != null ? stage.rewards : null;
+                if (r != null && r.infiniteHeartsSeconds > 0) countText = FormatWsInfiniteHearts(r.infiniteHeartsSeconds);
+                else if (count > 0) countText = $"x{count}";
+            }
             var t1 = FindChildComponentByName<TMP_Text>(active, "TextReward");
             if (t1 != null) t1.text = countText;
             var t2 = FindChildComponentByName<TMP_Text>(active, "TextRewardOutline");
             if (t2 != null) t2.text = countText;
+        }
+
+        /// <summary>RewardItem 변형 내부의 깃발/카운트 배경(FlagBack*, RewardFlag) 토글 — gift 모드에서 '상자만' 표시용.</summary>
+        private static void SetWsItemFlagsActive(Transform itemScope, bool active)
+        {
+            if (itemScope == null) return;
+            var all = itemScope.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] == null) continue;
+                string n = all[i].gameObject.name;
+                if (n.StartsWith("FlagBack") || n == "RewardFlag")
+                    all[i].gameObject.SetActive(active);
+            }
+        }
+
+        /// <summary>무한하트 보상 시간 표기 — PopupWinningStreak.FormatInfiniteHearts 와 동일 규칙.</summary>
+        private static string FormatWsInfiniteHearts(int seconds)
+        {
+            if (seconds <= 0) return "";
+            int h = seconds / 3600;
+            if (h >= 1) return $"{h}h";
+            int m = seconds / 60;
+            return m > 0 ? $"{m}m" : $"{seconds}s";
         }
 
         /// <summary>root 의 직계 자식 중 이름 일치하는 첫 GameObject (비활성 포함). root 와 동명인 변형 child 탐색용.</summary>

@@ -165,7 +165,13 @@ Shader "Custom/ItemShared"
                 // 원본: half3 diffuse = baseColor.rgb * (half3)mainLight.color * NdotL;
                 //       half3 ambient = baseColor.rgb * 0.3;
                 half3 litColor    = baseColor.rgb * ((half3)mainLight.color + 0.3);
-                half3 shadowColor = baseColor.rgb * baseColor.rgb * _ShadowTintStrength;
+                // [Shadow Tint 밝은색 보정 2026-06-11] 흰색 계열은 baseColor²≈1 이라 tint 1 에서 그림자가
+                // 사라짐(음영 안 보임) → 휘도 0.6~0.9 구간에서 strength 를 1.0x→0.35x 로 감쇠.
+                // 진한 색(luma≤0.6)은 기존 그대로, 흰색(luma≥0.9)은 0.35 배. 롤백: 아래 2줄 제거 + 원본 1줄 복원.
+                // 원본: half3 shadowColor = baseColor.rgb * baseColor.rgb * _ShadowTintStrength;
+                half brightLuma = dot(baseColor.rgb, half3(0.299, 0.587, 0.114));
+                half3 shadowColor = baseColor.rgb * baseColor.rgb
+                    * (_ShadowTintStrength * lerp(1.0, 0.35, smoothstep(0.6, 0.9, brightLuma)));
 
                 // 사용자 요구로 Specular 제거 — 모바일 pow + exp2 가 fragment shader 의 가장 큰 부하.
                 // Smoothness 0.15 default 에선 시각 거의 동일.

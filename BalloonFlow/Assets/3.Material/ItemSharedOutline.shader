@@ -153,7 +153,12 @@ Shader "Custom/ItemSharedOutline"
                 //       half3 ambient = baseColor.rgb * 0.3;
                 //       half3 finalColor = lerp(diffuse + ambient, baseColor.rgb + ambient * 0.5, _Metallic);
                 half3 litColor    = baseColor.rgb * ((half3)mainLight.color + 0.3);
-                half3 shadowColor = baseColor.rgb * baseColor.rgb * _ShadowTintStrength;
+                // [Shadow Tint 밝은색 보정 2026-06-11] ItemShared 와 동일 — 흰색 계열(luma 0.6~0.9+)은
+                // strength 를 1.0x→0.35x 감쇠해 밝은 색에서도 음영이 보이게. 두 셰이더 항상 동기 유지.
+                // 원본: half3 shadowColor = baseColor.rgb * baseColor.rgb * _ShadowTintStrength;
+                half brightLuma = dot(baseColor.rgb, half3(0.299, 0.587, 0.114));
+                half3 shadowColor = baseColor.rgb * baseColor.rgb
+                    * (_ShadowTintStrength * lerp(1.0, 0.35, smoothstep(0.6, 0.9, brightLuma)));
                 half3 finalColor = lerp(lerp(shadowColor, litColor, NdotL), baseColor.rgb * 1.15, _Metallic);
 
             #ifdef _EMISSION

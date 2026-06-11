@@ -730,9 +730,17 @@ namespace BalloonFlow
             GameObject imageGift = FindChildGOByName(item, "ImageGift");
             GameObject iconSearchRoot = rewardItemVariant != null ? rewardItemVariant : item;
             // 1) 알려진 후보 이름으로 sprite-swap 아이콘 탐색.
+            // [2026-06-11 fix] '이름이 일치하는 Image 컴포넌트' 방식은 ImageItem 이 홀더(Image 없는 GO)이고
+            // 실제 Image 가 자식에 있는 구조에서 무음 실패(텍스트만 갱신, 아이콘 안 바뀜) →
+            // GO 기준으로 찾고 Image 는 자신 → 자식 순으로 해석.
             Image icon = null;
             for (int i = 0; i < RewardIconNames.Length && icon == null; i++)
-                icon = FindChildByName<Image>(iconSearchRoot, RewardIconNames[i]);
+            {
+                GameObject iconGo = FindChildGOByName(iconSearchRoot, RewardIconNames[i]);
+                if (iconGo == null) continue;
+                icon = iconGo.GetComponent<Image>();
+                if (icon == null) icon = iconGo.GetComponentInChildren<Image>(true);
+            }
 
             // 2) fallback — 후보 미일치 시, 배경/틀/깃발/하트/기프트류를 제외한 첫 Image 를 아이콘으로 사용.
             if (icon == null)
@@ -1048,14 +1056,15 @@ namespace BalloonFlow
 
         private void SetSlotNumber(PooledSlot pooled, int number)
         {
-            // 사용자 스펙: 단계 번호(SlotWinningStreak/TextNumber) 노출 제거. 프리팹 수정 대신 런타임 비활성.
+            // [2026-06-11 스펙 변경] 단계 번호(TextNumber/Outline) 다시 노출 — 이전 '노출 제거' 스펙 폐기.
+            // Outline 이 부모, TextNumber 가 자식 구조라 둘 다 활성화해야 보인다.
             if (pooled.textNumber != null) {
                 pooled.textNumber.text = number.ToString();
-                if (pooled.textNumber.gameObject.activeSelf) pooled.textNumber.gameObject.SetActive(false);
+                if (!pooled.textNumber.gameObject.activeSelf) pooled.textNumber.gameObject.SetActive(true);
             }
             if (pooled.textNumberOutline != null) {
                 pooled.textNumberOutline.text = number.ToString();
-                if (pooled.textNumberOutline.gameObject.activeSelf) pooled.textNumberOutline.gameObject.SetActive(false);
+                if (!pooled.textNumberOutline.gameObject.activeSelf) pooled.textNumberOutline.gameObject.SetActive(true);
             }
         }
 
@@ -1151,8 +1160,14 @@ namespace BalloonFlow
             bool useItem = hasSingle && rewards[0].type != RewardType.Coin;
             bool useGift = rewards != null && rewards.Count >= 2;
 
+            // [2026-06-11 fix] ImageGift 는 RewardItem '내부'에 중첩된 프리팹 구조 — gift 만 켜고
+            // 부모(RewardItem)를 끄면 상자가 영영 안 보였다. gift 모드에선 부모를 켜되 내부
+            // 아이템 비주얼(아이콘/하트/깃발)을 숨겨 '상자 이미지만' 노출 (사용자 스펙).
+            bool giftInsideItem = item.altGift != null && item.rewardItemVariant != null
+                && item.altGift.transform.IsChildOf(item.rewardItemVariant.transform);
+
             if (item.rewardGold != null) item.rewardGold.SetActive(useGold);
-            if (item.rewardItemVariant != null) item.rewardItemVariant.SetActive(useItem);
+            if (item.rewardItemVariant != null) item.rewardItemVariant.SetActive(useItem || (useGift && giftInsideItem));
             if (item.altGift != null) item.altGift.SetActive(useGift);
             if (item.altHeart != null) item.altHeart.SetActive(false);
 
@@ -1161,16 +1176,46 @@ namespace BalloonFlow
             {
                 var sprite = ResolveRewardSprite(primary.type);
                 if (sprite != null) item.icon.sprite = sprite;
+                else Debug.LogWarning($"[PopupWinningStreak] 보상 아이콘 sprite 미해석 — type={primary.type} (atlas_ui 미로드/키 누락 의심)");
                 item.icon.enabled = true;
-                if (!item.icon.gameObject.activeSelf) item.icon.gameObject.SetActive(true);
+                // [2026-06-11 fix] Image 가 홀더(ImageItem)의 자식일 수 있어 변형 루트까지 조상 활성화.
+                SetActiveUpTo(item.icon.transform,
+                    item.rewardItemVariant != null ? item.rewardItemVariant.transform : item.root.transform);
             }
+            else if (useItem)
+            {
+                Debug.LogWarning("[PopupWinningStreak] RewardItem 아이콘 Image 미발견 — RewardImg 프리팹 구조 확인 필요.");
+            }
+            else if (useGift && item.icon != null && item.icon.gameObject.activeSelf)
+            {
+                item.icon.gameObject.SetActive(false); // gift 모드 — 아이템 아이콘 숨김 (상자만)
+            }
+            SetRewardItemFlagsActive(item, useItem); // 깃발/카운트 배경은 단일 아이템에서만
 
-            string countText;
-            if (rewards != null && rewards.Count >= 2)
-                countText = BuildBoxRewardText(rewards);                              // "Hand x1 + Shuffle x1"
-            else
-                countText = hasSingle ? GetRewardCountText(primary) : "";
+            // 다중 보상 = 상자 이미지만 (내용은 슬롯 클릭 시 WinningStreakClickInfo 툴팁이 표시).
+            string countText = hasSingle ? GetRewardCountText(primary) : "";
             SetRewardCountText(item, countText);
+        }
+
+        /// <summary>leaf 부터 stopExclusive 직전까지 조상 GameObject 활성화 — 홀더 구조의 아이콘 노출 보장.</summary>
+        private static void SetActiveUpTo(Transform leaf, Transform stopExclusive)
+        {
+            for (Transform t = leaf; t != null && t != stopExclusive; t = t.parent)
+                if (!t.gameObject.activeSelf) t.gameObject.SetActive(true);
+        }
+
+        /// <summary>RewardItem 변형 내부의 깃발/카운트 배경(FlagBack*, RewardFlag) 토글 — gift 모드 '상자만' 표시용.</summary>
+        private static void SetRewardItemFlagsActive(RewardItemRefs item, bool active)
+        {
+            if (item?.rewardItemVariant == null) return;
+            var all = item.rewardItemVariant.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] == null) continue;
+                string n = all[i].gameObject.name;
+                if (n.StartsWith("FlagBack") || n == "RewardFlag")
+                    all[i].gameObject.SetActive(active);
+            }
         }
 
         private static List<RewardEntry> BuildRewardEntries(WinningStreakStage stageDoc)

@@ -88,6 +88,19 @@ namespace BalloonFlow
         // 진행 중인 fade 코루틴(라인 단위). 시퀀스 중단/재시작 시 안전하게 StopCoroutine 하기 위해 보관.
         private readonly List<Coroutine> _zapLineFadeCoroutines = new List<Coroutine>(8);
 
+        // ZAP_LINE_POOL (등급1 perf 2026-06-11):
+        // zap 1회 사용마다 라인 4개를 Instantiate/Destroy 하던 것을 비활성 보관 후 재사용.
+        //   - 시각 동작 불변: ConfigureZapLine/PrepareZapLineRenderer 가 매 사용 시 위치·페이드를 재설정.
+        //   - fromItemZap 클론이 SetActive(false) 후 방치돼 zap 사용마다 비활성 오브젝트가
+        //     누적되던 leak + LineRenderer.material 인스턴스 재생성 비용도 함께 해소.
+        private readonly Dictionary<string, Stack<GameObject>> _zapLinePool = new Dictionary<string, Stack<GameObject>>(4);
+        private Transform _zapLinePoolRoot;
+        private const int ZapLinePoolMaxPerKey = 8;
+
+        // ConfigureZapLine 이 타겟 스텝마다 반복하던 재귀 탐색(GetComponentsInChildren alloc) 라인별 1회 캐시.
+        private struct ZapLineRefs { public Transform start; public Transform end; public LightningBoltScript bolt; }
+        private readonly Dictionary<GameObject, ZapLineRefs> _zapLineRefsCache = new Dictionary<GameObject, ZapLineRefs>(8);
+
         private struct ZapLineBaseline
         {
             public Vector3 start;
@@ -514,10 +527,9 @@ namespace BalloonFlow
                     bool fromItemZap = zapLineFromItemZapFlags != null && i < zapLineFromItemZapFlags.Count
                         ? zapLineFromItemZapFlags[i]
                         : false;
-                    if (fromItemZap)
-                        line.SetActive(false);
-                    else
-                        Destroy(line); // 페이드아웃 완료 후이므로 ZapLineLifetime 지연 인자 제거
+                    // ZAP_LINE_POOL: Destroy/방치(SetActive false leak) 대신 풀 반납 — 다음 zap 에서 재사용.
+                    bool isLine2 = line.name.StartsWith("FxZapLine2");
+                    ReleaseZapLineToPool(line, GetZapLinePoolKey(fromItemZap, isLine2));
                 }
             }
             _zapLineTargetWidths.Clear();
@@ -1047,7 +1059,11 @@ namespace BalloonFlow
                     runtimeName = $"FxZapLine2_Runtime_{i - halfCount}";
                 }
 
-                GameObject runtimeLine = Instantiate(source);
+                // ZAP_LINE_POOL: 풀에 보관된 라인 우선 재사용, 없을 때만 Instantiate.
+                string poolKey = GetZapLinePoolKey(sourceFromItemZap, !useFxZapLine);
+                GameObject runtimeLine = TakeZapLineFromPool(poolKey);
+                if (runtimeLine == null) runtimeLine = Instantiate(source);
+                else runtimeLine.transform.SetParent(null, false);
                 runtimeLine.transform.position = ZapSpawnPosition;
                 runtimeLine.name = runtimeName;
                 runtimeLine.SetActive(true);
@@ -1058,6 +1074,64 @@ namespace BalloonFlow
             return lines;
         }
 
+        // ── ZAP_LINE_POOL (등급1 perf 2026-06-11) ─────────────────────────────
+        // key: FxZapLine(Resources) / FxZapLine2(Resources) / ItemZap 자식 클론 — 세 템플릿 모두
+        // 각 zap 사용에서 동일 프리팹 원본이므로 이름 기반 키로 재사용해도 비주얼 동일.
+        private static string GetZapLinePoolKey(bool fromItemZap, bool isLine2)
+            => isLine2 ? "Line2" : (fromItemZap ? "ItemChild" : "Line1");
+
+        private GameObject TakeZapLineFromPool(string poolKey)
+        {
+            if (!_zapLinePool.TryGetValue(poolKey, out Stack<GameObject> stack)) return null;
+            while (stack.Count > 0)
+            {
+                GameObject line = stack.Pop();
+                if (line != null) return line; // 씬 전환 등으로 파괴된 항목은 스킵
+            }
+            return null;
+        }
+
+        private void ReleaseZapLineToPool(GameObject line, string poolKey)
+        {
+            if (line == null) return;
+
+            // 재사용 대비 리셋 — 페이드아웃이 0 으로 만든 width/alpha 를 캡처된 원본 값으로 복원.
+            // (PrepareZapLineRenderer 가 다음 사용 시 '현재 width'를 페이드 타깃으로 캡처하므로
+            //  0 인 채 보관하면 재사용 라인이 MinWidth 로만 페이드되는 문제가 생긴다.)
+            LineRenderer lr = line.GetComponentInChildren<LineRenderer>(true);
+            if (lr != null)
+            {
+                if (_zapLineTargetWidths.TryGetValue(lr, out float targetWidth))
+                    lr.widthMultiplier = targetWidth;
+                Color sc = lr.startColor; sc.a = 1f; lr.startColor = sc;
+                Color ec = lr.endColor;   ec.a = 1f; lr.endColor   = ec;
+                lr.positionCount = 0;
+            }
+
+            line.SetActive(false);
+
+            if (!_zapLinePool.TryGetValue(poolKey, out Stack<GameObject> stack))
+            {
+                stack = new Stack<GameObject>(ZapLinePoolMaxPerKey);
+                _zapLinePool[poolKey] = stack;
+            }
+            if (stack.Count >= ZapLinePoolMaxPerKey)
+            {
+                _zapLineRefsCache.Remove(line);
+                Destroy(line);
+                return;
+            }
+
+            if (_zapLinePoolRoot == null)
+            {
+                var rootGo = new GameObject("[ZapLinePool]");
+                rootGo.transform.SetParent(transform, false);
+                _zapLinePoolRoot = rootGo.transform;
+            }
+            line.transform.SetParent(_zapLinePoolRoot, false);
+            stack.Push(line);
+        }
+
         private void ConfigureZapLine(GameObject zapLineObject, Vector3 startPosition, Vector3 endPosition, float visibleDuration)
         {
             if (zapLineObject == null)
@@ -1065,15 +1139,27 @@ namespace BalloonFlow
 
             zapLineObject.SetActive(true);
 
-            Transform startTransform = FindChildRecursive(zapLineObject.transform, "LightningStart");
-            Transform endTransform = FindChildRecursive(zapLineObject.transform, "LightningEnd");
+            // 등급1 perf: 타겟 스텝마다 반복되던 재귀 탐색(GetComponentsInChildren alloc)을 라인별 1회 캐시.
+            // 풀 재사용 시에도 동일 GameObject/자식 구조라 캐시 그대로 유효.
+            if (!_zapLineRefsCache.TryGetValue(zapLineObject, out ZapLineRefs lineRefs))
+            {
+                lineRefs = new ZapLineRefs
+                {
+                    start = FindChildRecursive(zapLineObject.transform, "LightningStart"),
+                    end   = FindChildRecursive(zapLineObject.transform, "LightningEnd"),
+                    bolt  = zapLineObject.GetComponentInChildren<LightningBoltScript>(true)
+                };
+                _zapLineRefsCache[zapLineObject] = lineRefs;
+            }
+            Transform startTransform = lineRefs.start;
+            Transform endTransform = lineRefs.end;
             Vector3 lineStartPosition = GetZapLineRenderPosition(startPosition);
             Vector3 lineEndPosition = GetZapLineRenderPosition(endPosition);
             lineEndPosition.y = lineStartPosition.y + ZapLineEndYOffset;
             if (startTransform != null) startTransform.position = lineStartPosition;
             if (endTransform != null) endTransform.position = lineEndPosition;
 
-            LightningBoltScript bolt = zapLineObject.GetComponentInChildren<LightningBoltScript>(true);
+            LightningBoltScript bolt = lineRefs.bolt;
             if (bolt != null)
             {
                 bolt.LockYAxis = true;
@@ -1213,7 +1299,10 @@ namespace BalloonFlow
                 if (!anyActive)
                     yield break;
 
-                yield return new WaitForSeconds(Random.Range(ZapLineJiggleMinInterval, ZapLineJiggleMaxInterval));
+                // 등급1 perf: 매 tick `new WaitForSeconds` 할당 제거 — 수동 타이머 (동작 동일, scaled time).
+                float wait = Random.Range(ZapLineJiggleMinInterval, ZapLineJiggleMaxInterval);
+                for (float t = 0f; t < wait; t += Time.deltaTime)
+                    yield return null;
             }
         }
 
