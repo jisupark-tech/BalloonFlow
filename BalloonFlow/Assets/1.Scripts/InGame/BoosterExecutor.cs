@@ -67,10 +67,8 @@ namespace BalloonFlow
 
         // Fade in/out 연출 — 라인이 뚝 끊겨 보이지 않도록 width+alpha 를 함께 보간한다.
         private const float ZapLineFadeInDuration = 0.07f;   // 사용자 사양 0.05~0.1s 중간값
-        // 사용자 사양 0.08~0.15s 의 중간 안전값 — start→end suction 과 width/alpha 0 수렴이 함께 끝나는 길이.
+        // 사용자 사양 0.08~0.15s 의 중간 안전값 — width/alpha 0 수렴이 끝나는 길이. (start/end 위치는 종료까지 유지)
         private const float ZapLineFadeOutDuration = 0.12f;
-        // 사용자 사양 0.80~0.90 — 100% 수렴 시 LineRenderer Width Curve 시작구간이 점처럼 뭉치는 현상 차단.
-        private const float ZapLineFadeOutMaxSuctionRatio = 0.85f;
 
         private readonly List<ZapTarget> _zapTargets = new List<ZapTarget>(128);
         private GameObject _itemZapPrefab;
@@ -1489,8 +1487,8 @@ namespace BalloonFlow
                     {
                         Vector3 origStart = originalStarts[i];
                         Vector3 origEnd = originalEnds[i];
-                        Vector3 currentStart = Vector3.Lerp(origStart, origEnd, ratio * ZapLineFadeOutMaxSuctionRatio);
 
+                        // FadeOut 중 StartPosition↔EndPosition 거리를 줄이지 않는다 — suction 시 Width Curve 시작구간만 남아 점처럼 뭉치는 결함 차단. 위치는 origStart/origEnd 유지, 종료 효과는 widthMultiplier+vertex alpha+material alpha 만으로 처리.
                         Vector3 jitterStart = new Vector3(
                             Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
                             0f,
@@ -1500,7 +1498,7 @@ namespace BalloonFlow
                             0f,
                             Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter));
 
-                        bolt.StartPosition = currentStart + jitterStart;
+                        bolt.StartPosition = origStart + jitterStart;
                         bolt.EndPosition = origEnd + jitterEnd;
                         // 매 프레임 Trigger() 호출 시 ManualMode 라인이 사라지지 않도록 Duration 보강.
                         bolt.Duration = Mathf.Max(bolt.Duration, ZapLineJiggleMaxInterval * 1.5f);
@@ -1539,7 +1537,7 @@ namespace BalloonFlow
                 yield return null;
             }
 
-            // suction 은 0.85 까지만(start==end 만들지 않음) — width/alpha 만 0 으로 정리해 자연스럽게 사라지게 함.
+            // 종료 정리 — 페이드아웃 직후 width/alpha 를 확실히 0 으로 수렴시켜 잔상 차단(위치는 origStart/origEnd 그대로 유지됨).
             for (int i = 0; i < cached; i++)
             {
                 LineRenderer lr = renderers[i];
