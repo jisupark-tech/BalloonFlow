@@ -27,6 +27,7 @@ namespace BalloonFlow
             { "Ice",          "FrozenLayer" },
             { "Frozen_Dart",  "FrozenBox" },
             { "Barricade",    "Baricade" }, // PopupNewFeature 측 typo 유지
+            { "FlexTube",     "FlexTube" }, // [2026-06-12] newFeatureFlexTube.png 추가에 맞춰 해금 팝업 활성화
         };
 
         private readonly Queue<string> _pendingFeatures = new Queue<string>();

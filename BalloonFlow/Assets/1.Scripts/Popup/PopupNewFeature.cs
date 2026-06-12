@@ -57,6 +57,8 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprBaricade;
         [Tooltip("newFeatureFrozenBox.png 드래그")]
         [SerializeField] private Sprite _sprFrozenBox;
+        [Tooltip("newFeatureFlexTube.png 드래그 (미할당 시 Awake 의 UISpriteOr 로 자동 로드)")]
+        [SerializeField] private Sprite _sprFlexTube;
 
         protected override void Awake()
         {
@@ -81,6 +83,7 @@ namespace BalloonFlow
                 _sprFrozenLayer = rm.UISpriteOr("newFeatureFrozenLayer",   _sprFrozenLayer);
                 _sprBaricade    = rm.UISpriteOr("newFeatureBaricade",      _sprBaricade);
                 _sprFrozenBox   = rm.UISpriteOr("newFeatureFrozenBox",     _sprFrozenBox);
+                _sprFlexTube    = rm.UISpriteOr("newFeatureFlexTube",      _sprFlexTube);
             }
         }
 
@@ -103,7 +106,7 @@ namespace BalloonFlow
 
         /// <summary>
         /// 기믹 이름으로 팝업 표시.
-        /// featureKey: "Loop"/"Pinata"/"TargetBox"/"Hidden"/"IronBox"/"Spawner"/"KeyLock"/"FrozenLayer"/"Baricade"/"FrozenBox"
+        /// featureKey: "Loop"/"Pinata"/"TargetBox"/"Hidden"/"IronBox"/"Spawner"/"KeyLock"/"FrozenLayer"/"Baricade"/"FrozenBox"/"FlexTube"
         /// 매핑된 Inspector Sprite 가 null 이면 경고 로그 + 이미지 비활성.
         /// </summary>
         public void Show(string featureKey, string description = null)
@@ -120,6 +123,7 @@ namespace BalloonFlow
                 "FrozenLayer" => _sprFrozenLayer,
                 "Baricade"    => _sprBaricade,
                 "FrozenBox"   => _sprFrozenBox,
+                "FlexTube"    => _sprFlexTube,
                 _             => null
             };
 
@@ -222,6 +226,7 @@ namespace BalloonFlow
                 "FrozenLayer" => "Frozen Layer",
                 "Baricade"    => "Barricade",
                 "FrozenBox"   => "Frozen Box",
+                "FlexTube"    => "Flex Tube",
                 _             => featureKey
             };
         }

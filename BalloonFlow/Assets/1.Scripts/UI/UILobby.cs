@@ -592,6 +592,8 @@ namespace BalloonFlow
             var mgr = WinningStreakManager.Instance;
             while (mgr.TryDequeuePendingLobbyAnimation(out var anim))
             {
+                // [WS 0단계 2026-06-12] 로비 연출 앞에 Dim 보상 팝업(연승 수치 상승) 먼저 재생 — 승리 복귀에서만.
+                yield return PlayWinningStreakRewardPopup(anim);
                 yield return PlayWinningStreakLobbyFx(anim);
             }
 
@@ -600,6 +602,22 @@ namespace BalloonFlow
                 yield return PlayWsMultiplierFailFx(failFromMultiplier);
 
             _wsLobbyFxCoroutine = null;
+        }
+
+        /// <summary>[WS 0단계 2026-06-12] PopupWinningStreakReward — Dim + 획득 포인트 수 연산 연출.
+        /// 모델(confirmed): 1(기본, FXItem 비행) × 난이도배수(FXBadge — Hard/SuperHard 만) × 연승배수(FXMultiple — x1 초과 시).
+        /// 종료까지 대기 후 기존 로비 연출(flame 비행→게이지) 진행. streak 미캡처(구버전 큐 잔존, endStreak==0)면 skip.</summary>
+        private IEnumerator PlayWinningStreakRewardPopup(WinningStreakManager.PendingLobbyAnimation anim)
+        {
+            if (anim == null || anim.endStreak <= 0) yield break;
+            bool showBadge = anim.clearedDifficulty == DifficultyPurpose.Hard
+                          || anim.clearedDifficulty == DifficultyPurpose.SuperHard;
+            int diffMult = WinningStreakConfigService.HasInstance
+                ? WinningStreakConfigService.Instance.ResolveDifficultyMultiplier(anim.clearedDifficulty) : 1;
+            int streakMult = anim.endMultiplier > 0 ? anim.endMultiplier : WinningStreakUI.ResolveCurrentMultiplier();
+            var popup = PopupWinningStreakReward.Play(diffMult, streakMult, anim.gainedPoints, showBadge);
+            while (popup != null && !popup.IsFinished)
+                yield return null;
         }
 
         /// <summary>[WS quit-fail 2026-06-10] 배수 드롭 실패 연출 — 이전 배수로 슬라이드 인 → 잠시 후 1 로 드롭(펀치) → 슬라이드 아웃.
@@ -661,8 +679,10 @@ namespace BalloonFlow
                 ? WinningStreakConfigService.Instance.GetStage(stageForFill) : null;
             SetWsPointsText(anim.startPoints, fillStageDoc);
 
-            // [2026-06-12] "+{n}" 은 별도 토스트 대신 flame(FxItem)에 직접 표기 — ShowWsFlameGainToast 호출 폐기.
-            yield return PlayWsFireFlyAndPulse(anim.gainedPoints);
+            // [2026-06-12] "+{n}" flame 라벨 폐기 (사용자 지시: FxItem 에 Text 안 씀) —
+            // 획득 포인트는 0단계 PopupWinningStreakReward 의 수 연산 카운터가 보여줌.
+            // 롤백: 인자에 anim.gainedPoints 복원.
+            yield return PlayWsFireFlyAndPulse();
 
             // FxFire 가 커졌다 작아진 직후 → Multiplier 가 X=10 으로 튕기듯 슬라이드 인.
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
@@ -776,7 +796,8 @@ namespace BalloonFlow
 
         /// <summary>FxItem(iconWinningStreak) 을 화면 중앙→target(ImageIcon) 으로 날린 뒤, target 이 커졌다 복귀하고,
         /// 마지막에 FxFire(반짝이 효과)를 활성화한다. (날아가는 것=FxItem, 도착지=ImageIcon, FxFire=반짝이 only)
-        /// [2026-06-12] gainedPoints &gt; 0 이면 flame 에 "+{n}" 라벨을 함께 부착 (별도 토스트 폐기).</summary>
+        /// [2026-06-12] "+{n}" 라벨은 폐기 (사용자 지시: FxItem 에 Text 안 씀 — 포인트는 0단계 팝업이 표시).
+        /// gainedPoints 인자는 롤백용으로만 유지, 기본 호출은 인자 없이(0).</summary>
         private IEnumerator PlayWsFireFlyAndPulse(int gainedPoints = 0)
         {
             RectTransform target = ResolveWsFireTarget();   // ImageIcon
@@ -1728,15 +1749,28 @@ namespace BalloonFlow
             int stage = (WinningStreakManager.HasInstance && WinningStreakManager.Instance.State != null)
                 ? Mathf.Max(1, WinningStreakManager.Instance.State.currentStage)
                 : 1;
+            int previewStreak = (WinningStreakManager.HasInstance && WinningStreakManager.Instance.State != null)
+                ? Mathf.Max(1, WinningStreakManager.Instance.State.currentStreak)
+                : 1;
+            // [WS 0단계 2026-06-12] 프리뷰 gainedPoints 를 수 연산 모델(1×난이도×배수)과 일치시킴 —
+            // 어긋나면 팝업의 최종 보정이 단계 곱을 덮어써 프리뷰가 어색해짐.
+            int previewDiffMult = WinningStreakConfigService.HasInstance
+                ? WinningStreakConfigService.Instance.ResolveDifficultyMultiplier(DifficultyPurpose.Hard) : 1;
+            int previewStreakMult = WinningStreakUI.ResolveCurrentMultiplier();
             var preview = new WinningStreakManager.PendingLobbyAnimation
             {
                 startStage = stage,
                 startPoints = 0,
                 endStage = stage,
                 endPoints = 0,
-                gainedPoints = 1,
+                gainedPoints = Mathf.Max(1, previewDiffMult) * Mathf.Max(1, previewStreakMult),
                 achievedStages = new System.Collections.Generic.List<int> { stage },
+                // [WS 0단계 2026-06-12] Dim 보상 팝업 프리뷰 — Hard 클리어 가정(FXBadge 노출 확인용).
+                startStreak = previewStreak,
+                endStreak = previewStreak + 1,
+                clearedDifficulty = DifficultyPurpose.Hard,
             };
+            yield return PlayWinningStreakRewardPopup(preview);
             yield return PlayWinningStreakLobbyFx(preview, grantRewards: false, forceVisible: true);
             _wsLobbyFxCoroutine = null;
         }
@@ -2430,7 +2464,9 @@ namespace BalloonFlow
 
             // [2026-06-12] 팝업(WinningStreak 등)이 떠 있는 동안 로비 페이지 스와이프 차단 —
             // 팝업 뒤로 터치가 통과해 좌우 슬라이드로 샵 이동되던 문제. 드래그 진행 중이었다면 상태 리셋.
-            if (UIManager.HasInstance && UIManager.Instance.GetTopmostBackConsumingUI() != null)
+            // PopupWinningStreakReward(WS 0단계)는 UIBase 가 아니라 별도 정적 플래그로 게이트.
+            if (PopupWinningStreakReward.IsShowing
+                || (UIManager.HasInstance && UIManager.Instance.GetTopmostBackConsumingUI() != null))
             {
                 _isDragging = false;
                 _dragDirectionLocked = false;

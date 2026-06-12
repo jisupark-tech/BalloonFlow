@@ -216,6 +216,7 @@ namespace BalloonFlow
 
             // [WS 배수 증가 연출 2026-06-11] 클리어 전/후 배수를 캡처 — 로비 FX 가 from→to 이동으로 표현.
             int startMultiplier = ResolveMultiplierForStreak(s.currentStreak);
+            int startStreak = s.currentStreak;
             s.currentStreak += 1;
 
             var svc = WinningStreakConfigService.Instance;
@@ -240,7 +241,10 @@ namespace BalloonFlow
                     gainedPoints = gained,
                     achievedStages = achievedStages,
                     startMultiplier = startMultiplier,
-                    endMultiplier = ResolveMultiplierForStreak(s.currentStreak)
+                    endMultiplier = ResolveMultiplierForStreak(s.currentStreak),
+                    startStreak = startStreak,
+                    endStreak = s.currentStreak,
+                    clearedDifficulty = difficulty
                 });
             }
 
@@ -418,6 +422,11 @@ namespace BalloonFlow
             // [WS 배수 증가 연출 2026-06-11] 클리어 전/후 배수 (1/5/10/25/100). 0 = 미캡처(현재값 사용).
             public int startMultiplier;
             public int endMultiplier;
+            // [WS 0단계 보상 팝업 2026-06-12] 클리어 전/후 연승 수 + 클리어한 레벨 난이도 —
+            // PopupWinningStreakReward 가 수치 상승(from→to)과 FXBadge(하드/슈퍼하드 한정) 노출에 사용.
+            public int startStreak;
+            public int endStreak;
+            public DifficultyPurpose clearedDifficulty;
         }
 
         /// <summary>streak 값의 배수 해석 — config 우선, 미준비 시 UI fallback 티어 (1/5/10/25/100).</summary>

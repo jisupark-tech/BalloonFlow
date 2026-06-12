@@ -340,6 +340,8 @@ namespace BalloonFlow
         private const string MM_EPISODES_DIR = "Assets/EditorData/Episodes";
         private const string MM_STREAMING_EP1 = "Assets/StreamingAssets/episode_01.json";
         private const string EDITOR_PREF_LAST_LEVEL = "BalloonFlow_LastEditedLevel";
+        // [2026-06-12] 다량 episode 일괄 export 입력 ("1-15" / "1,5,6,7" / 혼합 "1-3,7").
+        private string _bulkExportEpisodesInput = "1-15";
 
         // Grid lines
         private Transform _gridLineRoot;
@@ -2361,6 +2363,11 @@ namespace BalloonFlow
             var exportRow = Row(p);
             Btn(exportRow, "Export Episode JSON", ExportEpisodeJson);
             Btn(exportRow, "Export Level JSON", ExportLevelJson);
+            // [2026-06-12] 다량 episode 일괄 export — "1-15" 또는 "1,5,6,7" (혼합 "1-3,7" 가능) 입력 후
+            // 폴더 선택 → 해당 episode_XX.json 들을 한 번에 복사. (미저장 편집분은 Save This Level 먼저)
+            var bulkRow = Row(p);
+            MakeInputField(bulkRow, _bulkExportEpisodesInput, s => _bulkExportEpisodesInput = s);
+            Btn(bulkRow, "Export Episodes...", ExportEpisodesBulk);
             Sep(p);
 
             // ── Tutorial Steps ──
@@ -6311,24 +6318,36 @@ namespace BalloonFlow
             // 풍선 X 범위(minX..maxX)를 그리드 가운데에 배치 → 이미 중앙정렬된 레벨은 동일 col 로 보존(왕복 일치),
             // 좌정렬 등으로 우측 쏠린 레벨은 중앙으로 교정. (행/Z 는 기존 절대식 유지)
             float _impMinX = 0f; int _impColOffset = 0;
+            float _impMinY = 0f; int _impRowAnchor = 0;
             if (config.balloons != null && config.balloons.Length > 0)
             {
                 float lo = float.MaxValue, hi = float.MinValue;
+                float loY = float.MaxValue;
                 foreach (var b in config.balloons)
                 {
                     if (b.gridPosition.x < lo) lo = b.gridPosition.x;
                     if (b.gridPosition.x > hi) hi = b.gridPosition.x;
+                    if (b.gridPosition.y < loY) loY = b.gridPosition.y;
                 }
                 _impMinX = lo;
                 int contentCols = Mathf.RoundToInt((hi - lo) / spacing) + 1;
                 _impColOffset = Mathf.Max(0, (_gridCols - contentCols) / 2);
+
+                // [2026-06-12] 행 매핑을 '앵커(minY) 1회 절대 라운딩 + 풍선별 상대 라운딩'으로 변경.
+                //   기존 풍선별 절대식(y/spacing + (rows-1)*0.5)은 gridRows 와 콘텐츠 행 패리티가
+                //   어긋난 데이터(Importer position 정규화 등)에서 값이 정확히 .5 경계에 놓여
+                //   Mathf.RoundToInt(banker's rounding)가 행을 건너뜀 → 미리보기에만 빈 줄 발생.
+                //   앵커 기준 상대 오프셋은 항상 정수 근처라 경계 문제가 없고, 앵커 자체는 기존
+                //   절대식과 동일한 위치로 라운딩되므로 라운드트립/실제 레벨 좌표에는 영향 없음.
+                _impMinY = loY;
+                _impRowAnchor = Mathf.RoundToInt((loY - _boardCenter.y) / spacing + (_gridRows - 1) * 0.5f);
             }
 
             if (config.balloons != null)
                 foreach (var b in config.balloons)
                 {
                     int col = _impColOffset + Mathf.RoundToInt((b.gridPosition.x - _impMinX) / spacing);
-                    int row = Mathf.RoundToInt((b.gridPosition.y - _boardCenter.y) / spacing + (_gridRows - 1) * 0.5f);
+                    int row = _impRowAnchor + Mathf.RoundToInt((b.gridPosition.y - _impMinY) / spacing);
                     if (col >= 0 && col < _gridCols && row >= 0 && row < _gridRows)
                     {
                         _balloonColors[col, row] = b.color;
@@ -6802,6 +6821,67 @@ namespace BalloonFlow
                 levelBackupDir,
                 $"level_{_levelId:D4}",
                 $"Exported level {_levelId}");
+        }
+
+        /// <summary>[2026-06-12] 다량 episode 일괄 export — 입력("1-15"/"1,5,6,7"/혼합)에 해당하는
+        /// episode_XX.json 들을 선택 폴더로 한 번에 복사. 저장소 파일 기준이므로 미저장 편집분은
+        /// Save This Level 후 실행해야 반영됨.</summary>
+        private void ExportEpisodesBulk()
+        {
+            List<int> ids = ParseEpisodeRangeInput(_bulkExportEpisodesInput);
+            if (ids.Count == 0)
+            {
+                SetStatus("Export failed: invalid input (예: 1-15 또는 1,5,6,7)");
+                return;
+            }
+
+            string dir = EditorUtility.OpenFolderPanel("Export Episodes To Folder", "", "");
+            if (string.IsNullOrEmpty(dir)) return;
+
+            int copied = 0;
+            var missing = new List<int>();
+            foreach (int id in ids)
+            {
+                string src = $"{MM_EPISODES_DIR}/episode_{id:D2}.json";
+                if (!System.IO.File.Exists(src)) { missing.Add(id); continue; }
+                System.IO.File.Copy(src, System.IO.Path.Combine(dir, $"episode_{id:D2}.json"), true);
+                copied++;
+            }
+
+            string msg = $"Exported {copied} episode(s) -> {dir}";
+            if (missing.Count > 0) msg += $" / missing: {string.Join(",", missing)}";
+            SetStatus(msg);
+            Debug.Log($"[MapMaker] {msg}");
+        }
+
+        /// <summary>"1-15", "1,5,6,7", "1-3,7,10-12" 형태를 episode 번호 목록(중복 제거·오름차순)으로 파싱.
+        /// 토큰 단위로 관대하게 — 잘못된 토큰은 무시하고 유효한 것만 수집.</summary>
+        private static List<int> ParseEpisodeRangeInput(string input)
+        {
+            var result = new SortedSet<int>();
+            if (string.IsNullOrWhiteSpace(input)) return new List<int>();
+
+            foreach (string raw in input.Split(','))
+            {
+                string token = raw.Trim();
+                if (token.Length == 0) continue;
+
+                int dash = token.IndexOf('-');
+                if (dash > 0)
+                {
+                    string a = token.Substring(0, dash).Trim();
+                    string b = token.Substring(dash + 1).Trim();
+                    if (int.TryParse(a, out int lo) && int.TryParse(b, out int hi) && lo >= 1 && hi >= lo)
+                    {
+                        for (int i = lo; i <= hi; i++) result.Add(i);
+                    }
+                }
+                else if (int.TryParse(token, out int v) && v >= 1)
+                {
+                    result.Add(v);
+                }
+            }
+            return new List<int>(result);
         }
 
         private void SaveLevelEpisodeJson(LevelEpisode episode, string title, string defaultDir, string defaultName, string statusPrefix)

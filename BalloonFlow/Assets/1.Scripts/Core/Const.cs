@@ -48,6 +48,7 @@ namespace BalloonFlow
         public const string POPUP_LOADING_SPINNER = "Popup/PopupLoadingSpinner";
         public const string POPUP_WINNING_STREAK  = "Popup/PopupWinningStreak";
         public const string POPUP_WINNING_STREAK_INFO = "Popup/PopupWinningStreakinfo";
+        public const string POPUP_WINNING_STREAK_REWARD = "Popup/PopupWinningStreakReward";
         public const string POPUP_FINISH_LOGO     = "Popup/FinishLogo";
 
         #endregion
