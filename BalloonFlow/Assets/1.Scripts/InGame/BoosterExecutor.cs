@@ -60,6 +60,14 @@ namespace BalloonFlow
         private const int ZapLineRenderQueue = 4000;
         private const float ZapFieldBottomPaddingCells = 1.5f;
         private const int ZapLineConcurrentCount = 4;
+        // [ZAP_SMALL_COUNT_FAST 2026-06-12] 제거 대상이 적은데도 2초 예산을 다 쓰는 느낌 (사용자 피드백).
+        //   v2 확정 의도: '대상이 많을 때의 개당 터뜨리는 속도'를 적을 때도 동일하게 —
+        //   예산 분배(stepDelay = budget/(N-1))는 N 이 작을수록 간격이 늘어지는 구조라 개당 간격에
+        //   상한 캡(ZapStepMaxDelay)을 적용. dense 보드(16개+)의 개당 간격이 ~0.06s 이하이므로
+        //   그 cadence 를 모든 N 에 보장 → 총 시간이 개수에 비례해 짧아짐.
+        //   임계(15 이하)는 등장 구간 절반/라인 잔류 절반/라인 수 축소(≤4 → 대상 수)에 사용.
+        private const int ZapFastSmallCountThreshold = 15;
+        private const float ZapStepMaxDelay = 0.03f; // [2026-06-12] 0.06 → 0.03 — 더 빠르게 (사용자 피드백)
         // 번개 라인이 활성화된 동안 매 tick 마다 끝점에 미세 jitter 를 더해 LightningBoltScript.Trigger() 를 재호출해 자글거리게 만든다.
         private const float ZapLineJiggleMinInterval = 0.03f;
         private const float ZapLineJiggleMaxInterval = 0.06f;
@@ -492,6 +500,13 @@ namespace BalloonFlow
 
             CollectZapTargets(color);
 
+            // [ZAP_SMALL_COUNT_FAST 2026-06-12 확장] 대상 15개 이하면 팝 간격(0.1s/개)만이 아니라
+            // 등장 구간(Appear/Move 대기)도 절반으로 — '풍선이 적으면 전체가 빨리 끝나야' (사용자 피드백:
+            // 팝 간격 단축만으론 등장 0.7s + 꼬리가 그대로라 체감 변화 없음). ItemZap Animator 의
+            // ZapStart 클립과 대기가 어긋나도 아래 ZapAttackIdle 강제 진입이 받아준다.
+            bool zapFastSmallCount = _zapTargets.Count > 0 && _zapTargets.Count <= ZapFastSmallCountThreshold;
+            float zapIntroScale = zapFastSmallCount ? 0.5f : 1f;
+
             Vector3 attackPosition = GetZapAttackPosition();
             // ItemZap stays at ZapSpawnPosition for the entire effect — do not tween or reposition.
             GameObject zapObject = CreateItemZap(attackPosition);
@@ -499,8 +514,8 @@ namespace BalloonFlow
             List<GameObject> zapLineObjects = null;
             List<bool> zapLineFromItemZapFlags = null;
 
-            yield return new WaitForSeconds(ZapAppearDuration);
-            yield return new WaitForSeconds(ZapMoveDuration);
+            yield return new WaitForSeconds(ZapAppearDuration * zapIntroScale);
+            yield return new WaitForSeconds(ZapMoveDuration * zapIntroScale);
 
             // 사용자 보고 버그(ZapStart→ZapIdle 반복) 방어: 컨트롤러 전환에 의존하지 않고 ZapAttackIdle을 코드로 1회 강제 진입.
             if (!_isZapAnimationPlaying && _zapAnimator != null)
@@ -512,7 +527,9 @@ namespace BalloonFlow
             int fieldRemoved = 0;
             if (_zapTargets.Count > 0)
             {
-                zapLineObjects = CreateZapLineObjects(zapObject, ZapLineConcurrentCount, out zapLineFromItemZapFlags);
+                // [ZAP_SMALL_COUNT_FAST] 대상 4개 이하 → 라인 수 = 대상 수 (기존: 항상 4갈래).
+                int zapLineCount = Mathf.Min(ZapLineConcurrentCount, Mathf.Max(1, _zapTargets.Count));
+                zapLineObjects = CreateZapLineObjects(zapObject, zapLineCount, out zapLineFromItemZapFlags);
                 if (zapLineObjects != null && zapLineObjects.Count > 0)
                 {
                     _zapLineBaselines.Clear();
@@ -530,12 +547,15 @@ namespace BalloonFlow
                 // pass must stay inside the remaining 2s item-effect budget, so dense boards
                 // can pop multiple targets in the same frame instead of stretching the item
                 // effect for seconds.
+                // [ZAP_SMALL_COUNT_FAST v2] 개당 간격 = min(예산 분배, ZapStepMaxDelay 캡).
+                //   많을 때(분배 간격이 캡 이하)는 기존 그대로, 적을 때는 캡이 걸려 '많을 때와 같은
+                //   개당 속도'로 터뜨림 → 총 팝 시간이 개수에 비례 (3개 ≈ 0.12s, 10개 ≈ 0.54s).
                 float popDurationBudget = Mathf.Max(
                     0.1f,
                     ZapMaxTotalEffectDuration - ZapSelectionHighlightDelay - ZapAppearDuration - ZapMoveDuration - ZapLineLifetime);
                 float popStartTime = Time.time;
                 float stepDelay = _zapTargets.Count > 1
-                    ? popDurationBudget / (_zapTargets.Count - 1)
+                    ? Mathf.Min(popDurationBudget / (_zapTargets.Count - 1), ZapStepMaxDelay)
                     : 0f;
                 float lineLeadBeforePop = stepDelay >= ZapMinLeadInterval
                     ? Mathf.Min(ZapLineLeadBeforePop, stepDelay * 0.5f)
@@ -545,6 +565,7 @@ namespace BalloonFlow
                 {
                     if (stepDelay > 0f)
                     {
+                        // 첫 팝 즉시 — dense 보드와 동일 cadence (개당 간격만 stepDelay).
                         float targetTime = popStartTime + stepDelay * i;
                         while (Time.time < targetTime)
                             yield return null;
@@ -567,7 +588,8 @@ namespace BalloonFlow
                 }
 
                 if (zapLineObjects != null && zapLineObjects.Count > 0)
-                    yield return new WaitForSeconds(ZapLineLifetime);
+                    // [ZAP_SMALL_COUNT_FAST] 소수 모드는 마지막 라인 잔류도 절반으로 단축.
+                    yield return new WaitForSeconds(zapFastSmallCount ? ZapLineLifetime * 0.5f : ZapLineLifetime);
             }
 
             int totalRemoved = fieldRemoved + RemoveRailAndQueueColor(color);
@@ -599,7 +621,11 @@ namespace BalloonFlow
             }
             _zapLineTargetWidths.Clear();
             // FxZapLine 라인 페이드아웃·정리 완료 후에 ZapFinish 트리거 → ZapAttackIdle → ZapAttackFinish 자연 전이
-            yield return StartCoroutine(WaitForZapFinishThenDestroyRoutine(zapObject));
+            // [2026-06-12] yield 제거 — ZapFinish(아이템 퇴장 연출, 0.6s+)가 끝날 때까지 레일 재개/카메라
+            // 복귀/HUD 복원이 통째로 블록되어 '제거가 끝났는데도 zap 이 안 끝나는' 체감의 본체였다.
+            // 퇴장 연출은 백그라운드로 재생하고 게임플레이는 즉시 재개한다 (zapObject 는 비주얼 전용).
+            // 롤백: 아래 줄을 `yield return StartCoroutine(...)` 으로 복원.
+            StartCoroutine(WaitForZapFinishThenDestroyRoutine(zapObject));
 
             if (CameraManager.HasInstance)
                 CameraManager.Instance.MoveBack();
@@ -1290,8 +1316,9 @@ namespace BalloonFlow
 
             int count = zapLineObjects.Count;
 
-            // 라인 수가 ZapLineConcurrentCount(=4)가 아니면 가드: 모두 동일 endPosition 사용.
-            if (count != ZapLineConcurrentCount)
+            // [2026-06-12] 가드 완화: fan 테이블(4) '초과'일 때만 동일 endPosition 폴백.
+            //   ZAP_SMALL_COUNT_FAST 로 라인 수가 1~3개로 줄어도 앞쪽 count 개 오프셋으로 부채꼴 유지.
+            if (count > ZapLineConcurrentCount)
             {
                 for (int i = 0; i < count; i++)
                     ConfigureZapLine(zapLineObjects[i], startPosition, endPosition, visibleDuration);
