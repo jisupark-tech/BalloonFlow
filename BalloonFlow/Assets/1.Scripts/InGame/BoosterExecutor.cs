@@ -67,7 +67,8 @@ namespace BalloonFlow
 
         // Fade in/out 연출 — 라인이 뚝 끊겨 보이지 않도록 width+alpha 를 함께 보간한다.
         private const float ZapLineFadeInDuration = 0.07f;   // 사용자 사양 0.05~0.1s 중간값
-        private const float ZapLineFadeOutDuration = 0.10f;
+        // 사용자 사양 0.08~0.15s 의 중간 안전값 — start→end suction 과 width/alpha 0 수렴이 함께 끝나는 길이.
+        private const float ZapLineFadeOutDuration = 0.12f;
 
         private readonly List<ZapTarget> _zapTargets = new List<ZapTarget>(128);
         private GameObject _itemZapPrefab;
@@ -1178,6 +1179,20 @@ namespace BalloonFlow
                     lr.widthMultiplier = targetWidth;
                 Color sc = lr.startColor; sc.a = 1f; lr.startColor = sc;
                 Color ec = lr.endColor;   ec.a = 1f; lr.endColor   = ec;
+                // 페이드아웃이 material alpha(_TintColor/_Color) 도 0 으로 만들어 두므로 vertex 만 1 로 돌리면
+                // 다음 zap 재사용 시 material alpha=0 이 남아 라인 전체가 투명해진다. 가드 후 1f 복원.
+                Material runtimeMat = lr.sharedMaterial != null ? lr.material : null;
+                if (runtimeMat != null)
+                {
+                    if (runtimeMat.HasProperty("_TintColor"))
+                    {
+                        Color tc = runtimeMat.GetColor("_TintColor"); tc.a = 1f; runtimeMat.SetColor("_TintColor", tc);
+                    }
+                    if (runtimeMat.HasProperty("_Color"))
+                    {
+                        Color mc = runtimeMat.GetColor("_Color"); mc.a = 1f; runtimeMat.SetColor("_Color", mc);
+                    }
+                }
                 lr.positionCount = 0;
             }
 
@@ -1237,10 +1252,13 @@ namespace BalloonFlow
             {
                 bolt.LockYAxis = true;
                 LineRenderer lineRenderer = bolt.GetComponent<LineRenderer>();
-                bool isFirstActivation = lineRenderer != null && !_zapLineTargetWidths.ContainsKey(lineRenderer);
                 PrepareZapLineRenderer(lineRenderer);
-                if (isFirstActivation && lineRenderer != null && _zapLineTargetWidths.TryGetValue(lineRenderer, out float fadeTarget))
+                // 풀 재사용 라인도 매 활성화마다 width/alpha 0 → 타깃으로 페이드인 — 시작·종료 대칭 보장.
+                if (lineRenderer != null && _zapLineTargetWidths.TryGetValue(lineRenderer, out float fadeTarget))
                 {
+                    lineRenderer.widthMultiplier = 0f;
+                    Color sc0 = lineRenderer.startColor; sc0.a = 0f; lineRenderer.startColor = sc0;
+                    Color ec0 = lineRenderer.endColor;   ec0.a = 0f; lineRenderer.endColor   = ec0;
                     _zapLineFadeCoroutines.Add(StartCoroutine(FadeInZapLineRoutine(lineRenderer, fadeTarget)));
                 }
                 // ROLLBACK_ZAP_LINE_FORCE_WORLD_SPACE:
@@ -1424,6 +1442,11 @@ namespace BalloonFlow
             var originalEnds = new List<Vector3>(count);
             var startWidths = new List<float>(count);
             var startAlphas = new List<float>(count);
+            // 라인별 runtime material 캐시(매 프레임 lr.material 호출 시 인스턴스 재생성 비용 방지).
+            // _TintColor / _Color 의 alpha 도 width 와 동일 widthAlphaK 로 페이드 — particle/unlit 셰이더 양쪽 대응.
+            var runtimeMats = new List<Material>(count);
+            var startTintAlphas = new List<float>(count);
+            var startColorAlphas = new List<float>(count);
 
             for (int i = 0; i < count; i++)
             {
@@ -1439,6 +1462,11 @@ namespace BalloonFlow
                 originalEnds.Add(bolt != null ? bolt.EndPosition : Vector3.zero);
                 startWidths.Add(lr != null ? lr.widthMultiplier : 0f);
                 startAlphas.Add(lr != null ? lr.startColor.a : 0f);
+
+                Material runtimeMat = lr != null ? lr.material : null;
+                runtimeMats.Add(runtimeMat);
+                startTintAlphas.Add(runtimeMat != null && runtimeMat.HasProperty("_TintColor") ? runtimeMat.GetColor("_TintColor").a : 1f);
+                startColorAlphas.Add(runtimeMat != null && runtimeMat.HasProperty("_Color") ? runtimeMat.GetColor("_Color").a : 1f);
             }
 
             int cached = renderers.Count;
@@ -1485,6 +1513,25 @@ namespace BalloonFlow
                         Color sc = lr.startColor; sc.a = a; lr.startColor = sc;
                         Color ec = lr.endColor;   ec.a = a; lr.endColor   = ec;
                     }
+
+                    // Material alpha fade — vertex color 만 0 으로 만들어도 particle/_TintColor 셰이더는
+                    // material._TintColor.a 가 곱연산되어 끝까지 잔상이 남는다. width 와 같은 K 로 동기 페이드.
+                    Material runtimeMat = runtimeMats[i];
+                    if (runtimeMat != null)
+                    {
+                        if (runtimeMat.HasProperty("_TintColor"))
+                        {
+                            Color tc = runtimeMat.GetColor("_TintColor");
+                            tc.a = startTintAlphas[i] * widthAlphaK;
+                            runtimeMat.SetColor("_TintColor", tc);
+                        }
+                        if (runtimeMat.HasProperty("_Color"))
+                        {
+                            Color mc = runtimeMat.GetColor("_Color");
+                            mc.a = startColorAlphas[i] * widthAlphaK;
+                            runtimeMat.SetColor("_Color", mc);
+                        }
+                    }
                 }
 
                 yield return null;
@@ -1508,6 +1555,19 @@ namespace BalloonFlow
                     lr.widthMultiplier = 0f;
                     Color sc = lr.startColor; sc.a = 0f; lr.startColor = sc;
                     Color ec = lr.endColor;   ec.a = 0f; lr.endColor   = ec;
+                }
+
+                Material runtimeMat = runtimeMats[i];
+                if (runtimeMat != null)
+                {
+                    if (runtimeMat.HasProperty("_TintColor"))
+                    {
+                        Color tc = runtimeMat.GetColor("_TintColor"); tc.a = 0f; runtimeMat.SetColor("_TintColor", tc);
+                    }
+                    if (runtimeMat.HasProperty("_Color"))
+                    {
+                        Color mc = runtimeMat.GetColor("_Color"); mc.a = 0f; runtimeMat.SetColor("_Color", mc);
+                    }
                 }
             }
         }
