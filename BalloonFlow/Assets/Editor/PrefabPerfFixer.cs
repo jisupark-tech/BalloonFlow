@@ -25,7 +25,7 @@ namespace BalloonFlow.EditorTools
             "Assets/Resources/Prefabs/Spawner.prefab",
         };
 
-        [MenuItem("BalloonFlow/DON'T USE/Fix Prefab Perf Settings (Animator + Particle)")]
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/DON'T USE/Fix Prefab Perf Settings (Animator + Particle)")]
         public static void Fix()
         {
             int totalChanges = 0;

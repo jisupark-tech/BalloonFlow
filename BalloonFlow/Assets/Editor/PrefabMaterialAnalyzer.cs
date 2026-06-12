@@ -37,13 +37,13 @@ namespace BalloonFlow.EditorTools
         };
 
         // ─── Analyze menus ──────────────────────────────
-        [MenuItem("BalloonFlow/Analyze Materials/Balloon")]      public static void AnalyzeBalloon()    => Analyze("Assets/Resources/Prefabs/Balloon.prefab");
-        [MenuItem("BalloonFlow/Analyze Materials/Holder")]       public static void AnalyzeHolder()     => Analyze("Assets/Resources/Prefabs/Holder.prefab");
-        [MenuItem("BalloonFlow/Analyze Materials/Rail")]         public static void AnalyzeRail()       => Analyze("Assets/Resources/Prefabs/Rail.prefab");
-        [MenuItem("BalloonFlow/Analyze Materials/Dart")]         public static void AnalyzeDart()       => Analyze("Assets/Resources/Prefabs/Dart.prefab");
-        [MenuItem("BalloonFlow/Analyze Materials/IronBox")]      public static void AnalyzeIronBox()    => Analyze("Assets/Resources/Prefabs/IronBox.prefab");
-        [MenuItem("BalloonFlow/Analyze Materials/FrozenLayer")]  public static void AnalyzeFrozen()     => Analyze("Assets/Resources/Prefabs/FrozenLayer.prefab");
-        [MenuItem("BalloonFlow/Analyze Materials/All In-Game")]
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Analyze Materials/Balloon")]      public static void AnalyzeBalloon()    => Analyze("Assets/Resources/Prefabs/Balloon.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Analyze Materials/Holder")]       public static void AnalyzeHolder()     => Analyze("Assets/Resources/Prefabs/Holder.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Analyze Materials/Rail")]         public static void AnalyzeRail()       => Analyze("Assets/Resources/Prefabs/Rail.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Analyze Materials/Dart")]         public static void AnalyzeDart()       => Analyze("Assets/Resources/Prefabs/Dart.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Analyze Materials/IronBox")]      public static void AnalyzeIronBox()    => Analyze("Assets/Resources/Prefabs/IronBox.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Analyze Materials/FrozenLayer")]  public static void AnalyzeFrozen()     => Analyze("Assets/Resources/Prefabs/FrozenLayer.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Analyze Materials/All In-Game")]
         public static void AnalyzeAll()
         {
             foreach (var p in ALL_INGAME_PREFABS) Analyze(p);
@@ -51,17 +51,17 @@ namespace BalloonFlow.EditorTools
         }
 
         // ─── Unify menus ───────────────────────────────
-        [MenuItem("BalloonFlow/DON'T USE/Unify Materials/Balloon (자동)")] public static void UnifyBalloon() => UnifyAutomatic("Assets/Resources/Prefabs/Balloon.prefab");
-        [MenuItem("BalloonFlow/DON'T USE/Unify Materials/Holder (자동)")]  public static void UnifyHolder()  => UnifyAutomatic("Assets/Resources/Prefabs/Holder.prefab");
-        [MenuItem("BalloonFlow/DON'T USE/Unify Materials/Rail (자동)")]    public static void UnifyRail()    => UnifyAutomatic("Assets/Resources/Prefabs/Rail.prefab");
-        [MenuItem("BalloonFlow/DON'T USE/Unify Materials/Dart (자동)")]    public static void UnifyDart()    => UnifyAutomatic("Assets/Resources/Prefabs/Dart.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/DON'T USE/Unify Materials/Balloon (자동)")] public static void UnifyBalloon() => UnifyAutomatic("Assets/Resources/Prefabs/Balloon.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/DON'T USE/Unify Materials/Holder (자동)")]  public static void UnifyHolder()  => UnifyAutomatic("Assets/Resources/Prefabs/Holder.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/DON'T USE/Unify Materials/Rail (자동)")]    public static void UnifyRail()    => UnifyAutomatic("Assets/Resources/Prefabs/Rail.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/DON'T USE/Unify Materials/Dart (자동)")]    public static void UnifyDart()    => UnifyAutomatic("Assets/Resources/Prefabs/Dart.prefab");
 
         // ─── Shadow disable menus (모바일 즉시 절감) ────
-        [MenuItem("BalloonFlow/DON'T USE/Disable Shadows/Balloon")] public static void DisableShadowsBalloon() => DisableShadows("Assets/Resources/Prefabs/Balloon.prefab");
-        [MenuItem("BalloonFlow/DON'T USE/Disable Shadows/Holder")]  public static void DisableShadowsHolder()  => DisableShadows("Assets/Resources/Prefabs/Holder.prefab");
-        [MenuItem("BalloonFlow/DON'T USE/Disable Shadows/Rail")]    public static void DisableShadowsRail()    => DisableShadows("Assets/Resources/Prefabs/Rail.prefab");
-        [MenuItem("BalloonFlow/DON'T USE/Disable Shadows/Dart")]    public static void DisableShadowsDart()    => DisableShadows("Assets/Resources/Prefabs/Dart.prefab");
-        [MenuItem("BalloonFlow/DON'T USE/Disable Shadows/All In-Game")]
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/DON'T USE/Disable Shadows/Balloon")] public static void DisableShadowsBalloon() => DisableShadows("Assets/Resources/Prefabs/Balloon.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/DON'T USE/Disable Shadows/Holder")]  public static void DisableShadowsHolder()  => DisableShadows("Assets/Resources/Prefabs/Holder.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/DON'T USE/Disable Shadows/Rail")]    public static void DisableShadowsRail()    => DisableShadows("Assets/Resources/Prefabs/Rail.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/DON'T USE/Disable Shadows/Dart")]    public static void DisableShadowsDart()    => DisableShadows("Assets/Resources/Prefabs/Dart.prefab");
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/DON'T USE/Disable Shadows/All In-Game")]
         public static void DisableShadowsAll()
         {
             int total = 0;

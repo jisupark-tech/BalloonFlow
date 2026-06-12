@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
@@ -11,282 +12,225 @@ using Debug = UnityEngine.Debug;
 namespace BalloonFlow.Editor
 {
     /// <summary>
-    /// LevelDatabase.asset 의 300레벨을 15개 에피소드 단위로 분할 → JSON export → (옵션) Node 업로더 호출.
-    /// Episode 1 은 StreamingAssets/episode_01.json 로 함께 export — 앱 번들 fallback.
+    /// [2026-06-12 개편] Level Episodes 메뉴 — 레거시 SO(LevelDatabase.asset) 기반 기능 전부 폐기.
+    /// 현행 단일 스토어 = Assets/EditorData/Episodes/episode_XX.json (MapMaker/Importer 라운드트립).
     ///
-    /// 결과물:
-    ///   - BalloonFlow/Assets/StreamingAssets/episode_01.json   (Ep1, 빌드에 포함)
-    ///   - BallonFlow_Git/firebase/seed/episodes/episode_01.json ~ episode_15.json (업로드용)
-    ///
-    /// Firestore 업로드는 upload-episodes.js (Admin SDK) 호출.
+    ///   1) Upload Episodes to Firestore
+    ///      : EditorData/Episodes → firebase/seed/episodes 복사 → node upload-episodes.js 실행 (SO 미경유)
+    ///   2) Merge Level JSON Folder → Episodes...
+    ///      : 사용자가 지정한 폴더의 개별 레벨 JSON(MapMaker 'Export Level JSON' 산출물 또는 LevelConfig)을
+    ///        기존 episode 에 levelId 단위로만 교체/추가 — 예: 1,5,6,15,18 만 만들었으면 episode_01 의
+    ///        해당 레벨들만 갱신되고 나머지는 보존. 적용 전 episode 자동 백업.
     /// </summary>
     public static class LevelEpisodeUploader
     {
-        private const string DB_PATH           = "Assets/EditorData/LevelDatabase.asset";
-        private const string STREAMING_FILE    = "Assets/StreamingAssets/episode_01.json";
-        // 단일 episode 스토어 (git 교환 + MapMaker 라운드트립 + JSON Importer 출력 위치).
-        private const string EDITORDATA_DIR    = "Assets/EditorData/Episodes";
-        private const int    LEVELS_PER_EP     = 20;
-        private const int    EPISODE_VERSION   = 1;
+        private const string STREAMING_FILE  = "Assets/StreamingAssets/episode_01.json";
+        private const string EDITORDATA_DIR  = "Assets/EditorData/Episodes";
+        private const string BACKUP_DIR      = "Assets/LevelBackups";
+        private const int    LEVELS_PER_EP   = 20;
+        private const int    TOTAL_EPISODES  = 15;
+        private const int    EPISODE_VERSION = 1;
 
         private const string MENU_ROOT = "BalloonFlow/Level Episodes/";
 
-        [MenuItem(MENU_ROOT + "Export Ep1 → StreamingAssets")]
-        public static void ExportEp1ToStreamingAssets()
+        // ─── 1) Firestore 업로드 — 현행 JSON 스토어 기준 ─────────────────────
+
+        [MenuItem(MENU_ROOT + "Upload Episodes to Firestore", false, 10)]
+        public static void UploadEpisodesToFirestore()
         {
-            var db = LoadDatabase();
-            if (db == null) return;
-
-            var ep1 = BuildEpisode(db, packageId: 1);
-            if (ep1 == null) return;
-
-            EnsureDirectoryFor(STREAMING_FILE);
-            string json = JsonUtility.ToJson(ep1, prettyPrint: false);
-            File.WriteAllText(STREAMING_FILE, json);
-            AssetDatabase.Refresh();
-            Debug.Log($"[LevelEpisodeUploader] Ep1 → {STREAMING_FILE} ({ep1.levels.Length} levels, {json.Length} bytes)");
-            EditorUtility.DisplayDialog("Export 완료", $"Episode 1 → StreamingAssets\n{ep1.levels.Length} 레벨", "OK");
-        }
-
-        // ─── EditorData 라운드트립 (git 교환 + MapMaker) ─────────────────────
-        // 워크플로:
-        //   디자이너: MapMaker 로 편집(SO) → "Export DB → EditorData Episodes" → episode_XX.json 만 commit/push
-        //   팀원    : git pull → "Import EditorData Episodes → DB" → MapMaker 에서 바로 사용
-        // 18MB LevelDatabase.asset 은 git 에 올릴 필요 없음 (로컬 캐시). 변경분은 패키지 파일 단위로 diff.
-
-        [MenuItem(MENU_ROOT + "Export DB → EditorData Episodes (git 교환용)")]
-        public static void ExportToEditorDataEpisodes()
-        {
-            var db = LoadDatabase();
-            if (db == null) return;
-
-            var (episodes, total) = ExportToEditorDataCore(db);
-            Debug.Log($"[LevelEpisodeUploader] DB → EditorData Episodes: {episodes} 에피소드 / {total} 레벨 → {EDITORDATA_DIR}");
-            EditorUtility.DisplayDialog("Export 완료",
-                $"{episodes} 에피소드 / {total} 레벨 → {EDITORDATA_DIR}\n\n" +
-                "git 에는 episode_XX.json (+ StreamingAssets/episode_01.json) 만 commit/push 하세요.\n" +
-                "(LevelDatabase.asset 은 올릴 필요 없음)", "OK");
-        }
-
-        /// <summary>SO → EditorData/Episodes/episode_XX.json (+ pkg1 StreamingAssets). 다이얼로그 없이 코어만.</summary>
-        private static (int episodes, int total) ExportToEditorDataCore(LevelDatabase db)
-        {
-            Directory.CreateDirectory(EDITORDATA_DIR);
-            int episodes = 0, total = 0;
-            for (int pkg = 1; pkg <= 15; pkg++)
+            if (!Directory.Exists(EDITORDATA_DIR)
+                || Directory.GetFiles(EDITORDATA_DIR, "episode_*.json").Length == 0)
             {
-                var ep = BuildEpisode(db, pkg);
-                if (ep == null || ep.levels == null || ep.levels.Length == 0) continue;
-
-                string json = JsonUtility.ToJson(ep, prettyPrint: false);
-                string path = $"{EDITORDATA_DIR}/episode_{pkg:D2}.json";
-                File.WriteAllText(path, json);
-                AssetDatabase.ImportAsset(path);
-
-                if (pkg == 1)
-                {
-                    EnsureDirectoryFor(STREAMING_FILE);
-                    File.WriteAllText(STREAMING_FILE, json);
-                    AssetDatabase.ImportAsset(STREAMING_FILE);
-                }
-
-                Debug.Log($"  - episode_{pkg:D2}.json  levels={ep.levels.Length}");
-                episodes++; total += ep.levels.Length;
-            }
-            return (episodes, total);
-        }
-
-        [MenuItem(MENU_ROOT + "Import EditorData Episodes → DB (pull 후 MapMaker용)")]
-        public static void ImportFromEditorDataEpisodes()
-        {
-            if (!Directory.Exists(EDITORDATA_DIR))
-            {
-                EditorUtility.DisplayDialog("실패", $"{EDITORDATA_DIR} 폴더 없음.\n먼저 Export 하거나 git pull 하세요.", "OK");
-                return;
-            }
-            var files = Directory.GetFiles(EDITORDATA_DIR, "episode_*.json").OrderBy(f => f).ToArray();
-            if (files.Length == 0)
-            {
-                EditorUtility.DisplayDialog("실패", $"{EDITORDATA_DIR} 에 episode_*.json 없음.", "OK");
+                EditorUtility.DisplayDialog("실패",
+                    $"{EDITORDATA_DIR} 에 episode_*.json 없음.\nMapMaker 에서 저장하거나 git pull 먼저 하세요.", "OK");
                 return;
             }
 
-            // 모든 에피소드의 레벨 수집 (levelId 중복 시 마지막 우선).
-            var byId = new Dictionary<int, LevelConfig>();
-            foreach (var f in files)
-            {
-                try
-                {
-                    var ep = JsonUtility.FromJson<LevelEpisode>(File.ReadAllText(f));
-                    if (ep?.levels == null) continue;
-                    foreach (var l in ep.levels) if (l != null) byId[l.levelId] = l;
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError($"[LevelEpisodeUploader] {Path.GetFileName(f)} 읽기 실패: {e.Message}");
-                }
-            }
-
-            var levels = byId.Values.OrderBy(l => l.levelId).ToArray();
-
-            var db = AssetDatabase.LoadAssetAtPath<LevelDatabase>(DB_PATH);
-            if (db == null)
-            {
-                db = ScriptableObject.CreateInstance<LevelDatabase>();
-                AssetDatabase.CreateAsset(db, DB_PATH);
-            }
-            db.levels = levels;
-            EditorUtility.SetDirty(db);
-            AssetDatabase.SaveAssets(); // Undo/전체 Refresh 없이 — 로컬 SO 재생성만
-
-            Debug.Log($"[LevelEpisodeUploader] EditorData Episodes → DB: {levels.Length} 레벨 ({files.Length} 에피소드 파일)");
-            EditorUtility.DisplayDialog("Import 완료",
-                $"{files.Length} 에피소드 / {levels.Length} 레벨 → LevelDatabase.asset\n\n" +
-                "MapMaker 에서 바로 사용 가능합니다.", "OK");
-        }
-
-        /// <summary>EditorData/Episodes/*.json → firebase/seed/episodes (node 업로더가 읽는 위치).</summary>
-        private static void CopyEditorDataEpisodesToSeed()
-        {
-            if (!Directory.Exists(EDITORDATA_DIR)) return;
-            string seedDir = GetSeedEpisodesDir();
-            Directory.CreateDirectory(seedDir);
-            foreach (var f in Directory.GetFiles(EDITORDATA_DIR, "episode_*.json"))
-                File.Copy(f, Path.Combine(seedDir, Path.GetFileName(f)), overwrite: true);
-        }
-
-        [MenuItem(MENU_ROOT + "Export All Episodes → firebase/seed/episodes")]
-        public static void ExportAllEpisodes()
-        {
-            var db = LoadDatabase();
-            if (db == null) return;
-
-            string outDir = GetSeedEpisodesDir();
-            Directory.CreateDirectory(outDir);
-
-            int total = 0;
-            int exportedEpisodes = 0;
-            int skipped = 0;
-            for (int pkg = 1; pkg <= 15; pkg++)
-            {
-                var ep = BuildEpisode(db, pkg);
-                if (ep == null || ep.levels == null || ep.levels.Length == 0)
-                {
-                    skipped++;
-                    continue;
-                }
-
-                string json = JsonUtility.ToJson(ep, prettyPrint: false);
-                string fileName = $"episode_{pkg:D2}.json";
-                string fullPath = Path.Combine(outDir, fileName);
-                File.WriteAllText(fullPath, json);
-                Debug.Log($"  - {fileName}  levels={ep.levels.Length}  bytes={json.Length}");
-                total += ep.levels.Length;
-                exportedEpisodes++;
-            }
-            if (skipped > 0)
-                Debug.Log($"[LevelEpisodeUploader] {skipped} 에피소드는 데이터 없음 — skip (LevelDatabase 에 {db.levels.Length}레벨 보유)");
-
-            // Ep1 도 StreamingAssets 에 동기화
-            ExportEp1ToStreamingAssets_NoDialog(db);
-
-            Debug.Log($"[LevelEpisodeUploader] Export 완료. {exportedEpisodes} 에피소드 / {total} 레벨 → {outDir}");
-            EditorUtility.DisplayDialog("Export 완료",
-                $"{exportedEpisodes} 에피소드 / {total} 레벨 → {outDir}\n\n다음 단계:\n1) firebase/seed/service-account.json 준비\n2) cd firebase/seed && npm install\n3) node upload-episodes.js",
-                "OK");
-        }
-
-        [MenuItem(MENU_ROOT + "Export & Upload to Firestore")]
-        public static void ExportAndUpload()
-        {
-            // 단일 스토어(EditorData) 갱신 후 seed 로 복사 → node 업로더 실행.
-            var db = LoadDatabase();
-            if (db == null) return;
-            ExportToEditorDataCore(db);
             CopyEditorDataEpisodesToSeed();
 
-            if (!EditorUtility.DisplayDialog(
-                    "Firestore 업로드 확인",
-                    "JSON export 완료. 지금 Node 업로더 (upload-episodes.js) 를 실행할까요?\n" +
-                    "사전 요구사항:\n" +
-                    "- Node.js 설치\n" +
-                    "- firebase/seed/service-account.json\n" +
-                    "- firebase/seed/node_modules 설치 완료 (npm install)",
+            if (!EditorUtility.DisplayDialog("Firestore 업로드",
+                    "EditorData/Episodes → firebase/seed/episodes 복사 완료.\n" +
+                    "지금 Node 업로더(upload-episodes.js)를 실행할까요?\n\n" +
+                    "사전 요구사항:\n- Node.js 설치\n- firebase/seed/service-account.json\n- firebase/seed npm install 완료",
                     "업로드 실행", "취소"))
                 return;
 
             RunNodeUploader();
         }
 
-        [MenuItem(MENU_ROOT + "Run Node Uploader Only")]
-        public static void RunNodeUploaderMenu()
+        // ─── 2) 개별 레벨 JSON 폴더 → Episode 부분 병합 ──────────────────────
+
+        [MenuItem(MENU_ROOT + "Merge Level JSON Folder → Episodes...", false, 11)]
+        public static void MergeLevelJsonFolder()
         {
-            RunNodeUploader();
+            string defaultDir = Directory.Exists(BACKUP_DIR) ? BACKUP_DIR : "Assets";
+            string folder = EditorUtility.OpenFolderPanel("개별 레벨 JSON 폴더 선택", defaultDir, "");
+            if (string.IsNullOrEmpty(folder)) return;
+
+            string[] files = Directory.GetFiles(folder, "*.json", SearchOption.TopDirectoryOnly);
+            if (files.Length == 0)
+            {
+                EditorUtility.DisplayDialog("실패", $"{folder} 에 .json 파일 없음.", "OK");
+                return;
+            }
+
+            // 레벨 수집 — LevelEpisode 컨테이너(levels 배열) / 단일 LevelConfig 모두 지원.
+            var byId = new Dictionary<int, LevelConfig>();
+            var parseErrors = new List<string>();
+            foreach (string f in files.OrderBy(p => p))
+            {
+                try
+                {
+                    string text = File.ReadAllText(f);
+                    if (text.Contains("\"levels\"", StringComparison.Ordinal))
+                    {
+                        var ep = JsonUtility.FromJson<LevelEpisode>(text);
+                        if (ep?.levels != null)
+                            foreach (var lv in ep.levels)
+                                if (lv != null && lv.levelId > 0) byId[lv.levelId] = lv;
+                    }
+                    else if (text.Contains("\"levelId\"", StringComparison.Ordinal))
+                    {
+                        var lv = JsonUtility.FromJson<LevelConfig>(text);
+                        if (lv != null && lv.levelId > 0) byId[lv.levelId] = lv;
+                    }
+                }
+                catch (Exception e)
+                {
+                    parseErrors.Add($"{Path.GetFileName(f)}: {e.Message}");
+                }
+            }
+
+            if (byId.Count == 0)
+            {
+                EditorUtility.DisplayDialog("실패",
+                    "유효한 레벨 JSON 없음." + (parseErrors.Count > 0 ? $"\n오류 {parseErrors.Count}건 — Console 참고." : ""), "OK");
+                foreach (var err in parseErrors) Debug.LogError($"[LevelEpisodeUploader] {err}");
+                return;
+            }
+
+            // 패키지별 그룹 → 기존 episode 에 levelId 단위 교체/추가 (나머지 레벨 보존).
+            var byPkg = byId.Values.GroupBy(lv => PackageIdForLevel(lv.levelId))
+                            .OrderBy(g => g.Key);
+            string ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            int replaced = 0, added = 0, outOfRange = 0;
+            var summary = new StringBuilder();
+
+            foreach (var grp in byPkg)
+            {
+                int pkg = grp.Key;
+                if (pkg < 1 || pkg > TOTAL_EPISODES)
+                {
+                    outOfRange += grp.Count();
+                    Debug.LogWarning($"[LevelEpisodeUploader] pkg {pkg} 범위 밖(1~{TOTAL_EPISODES}) — skip: " +
+                                     string.Join(",", grp.Select(l => l.levelId)));
+                    continue;
+                }
+
+                string path = $"{EDITORDATA_DIR}/episode_{pkg:D2}.json";
+                var levels = new List<LevelConfig>();
+                if (File.Exists(path))
+                {
+                    try
+                    {
+                        var existing = JsonUtility.FromJson<LevelEpisode>(File.ReadAllText(path));
+                        if (existing?.levels != null)
+                            foreach (var lv in existing.levels) if (lv != null) levels.Add(lv);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError($"[LevelEpisodeUploader] {path} 읽기 실패: {e.Message} — 이 episode skip.");
+                        continue;
+                    }
+
+                    // 덮어쓰기 전 백업.
+                    Directory.CreateDirectory(BACKUP_DIR);
+                    File.Copy(path, $"{BACKUP_DIR}/episode_{pkg:D2}_{ts}.json", true);
+                }
+
+                var mergedIds = new List<int>();
+                foreach (var lv in grp.OrderBy(l => l.levelId))
+                {
+                    int idx = levels.FindIndex(l => l.levelId == lv.levelId);
+                    if (idx >= 0) { levels[idx] = lv; replaced++; }
+                    else          { levels.Add(lv);  added++; }
+                    mergedIds.Add(lv.levelId);
+                }
+
+                // levelId 정렬 + packageId/positionInPackage 정규화 (런타임 position 인덱싱 보장).
+                levels.Sort((a, b) => a.levelId.CompareTo(b.levelId));
+                foreach (var lv in levels)
+                {
+                    lv.packageId = pkg;
+                    lv.positionInPackage = PositionInPackage(lv.levelId);
+                }
+
+                WriteEpisodeFile(pkg, levels);
+                summary.AppendLine($"episode_{pkg:D2}: {string.Join(",", mergedIds)}");
+            }
+
+            EditorUtility.DisplayDialog("Episode 병합 완료",
+                $"교체 {replaced} / 추가 {added}" +
+                (outOfRange > 0 ? $" / 범위밖 skip {outOfRange}" : "") +
+                (parseErrors.Count > 0 ? $" / 파싱오류 {parseErrors.Count}" : "") +
+                $"\n\n{summary}" +
+                "\npkg1 은 StreamingAssets 동기화 완료. pkg2~15 라이브 반영은\n'Upload Episodes to Firestore' 를 실행하세요." +
+                "\nMapMaker 가 열려있으면 Reload 버튼으로 갱신.",
+                "OK");
+            Debug.Log($"[LevelEpisodeUploader] 폴더 병합 완료 — 교체 {replaced}, 추가 {added}\n{summary}");
         }
 
         // ─── helpers ──────────────────────────────────────────────────────
 
-        private static LevelDatabase LoadDatabase()
+        private static int PackageIdForLevel(int levelId)
+            => levelId < 1 ? 0 : ((levelId - 1) / LEVELS_PER_EP) + 1;
+
+        private static int PositionInPackage(int levelId)
+            => levelId < 1 ? 1 : ((levelId - 1) % LEVELS_PER_EP) + 1;
+
+        private static void WriteEpisodeFile(int pkg, List<LevelConfig> levels)
         {
-            var db = AssetDatabase.LoadAssetAtPath<LevelDatabase>(DB_PATH);
-            if (db == null || db.levels == null || db.levels.Length == 0)
+            var ep = new LevelEpisode
             {
-                Debug.LogError($"[LevelEpisodeUploader] {DB_PATH} 로드 실패 또는 빈 DB");
-                EditorUtility.DisplayDialog("실패", $"{DB_PATH} 가 없거나 비어있음", "OK");
-                return null;
-            }
-            return db;
-        }
-
-        private static LevelEpisode BuildEpisode(LevelDatabase db, int packageId)
-        {
-            int startIndex = (packageId - 1) * LEVELS_PER_EP;
-            int endIndex   = Mathf.Min(startIndex + LEVELS_PER_EP, db.levels.Length);
-            if (startIndex >= db.levels.Length)
-                return null;
-
-            var slice = new List<LevelConfig>(LEVELS_PER_EP);
-            for (int i = startIndex; i < endIndex; i++)
-            {
-                if (db.levels[i] != null)
-                    slice.Add(db.levels[i]);
-            }
-
-            return new LevelEpisode
-            {
-                packageId  = packageId,
-                levelCount = slice.Count,
+                packageId  = pkg,
+                levelCount = levels.Count,
                 version    = EPISODE_VERSION,
-                levels     = slice.ToArray()
+                levels     = levels.ToArray()
             };
+            string json = JsonUtility.ToJson(ep, false); // MapMaker/Importer/런타임과 동일 포맷
+
+            Directory.CreateDirectory(EDITORDATA_DIR);
+            string path = $"{EDITORDATA_DIR}/episode_{pkg:D2}.json";
+            File.WriteAllText(path, json);
+            AssetDatabase.ImportAsset(path);
+
+            if (pkg == 1)
+            {
+                string streamDir = Path.GetDirectoryName(STREAMING_FILE);
+                if (!string.IsNullOrEmpty(streamDir)) Directory.CreateDirectory(streamDir);
+                File.WriteAllText(STREAMING_FILE, json);
+                AssetDatabase.ImportAsset(STREAMING_FILE);
+            }
+            Debug.Log($"[LevelEpisodeUploader] {path} 갱신 ({levels.Count}레벨)");
         }
 
-        private static void ExportEp1ToStreamingAssets_NoDialog(LevelDatabase db)
+        /// <summary>EditorData/Episodes/*.json → firebase/seed/episodes (node 업로더가 읽는 위치).</summary>
+        private static void CopyEditorDataEpisodesToSeed()
         {
-            var ep1 = BuildEpisode(db, packageId: 1);
-            if (ep1 == null) return;
-
-            EnsureDirectoryFor(STREAMING_FILE);
-            string json = JsonUtility.ToJson(ep1, prettyPrint: false);
-            File.WriteAllText(STREAMING_FILE, json);
-            AssetDatabase.Refresh();
-            Debug.Log($"[LevelEpisodeUploader] Ep1 → {STREAMING_FILE} ({ep1.levels.Length} levels)");
+            string seedDir = GetSeedEpisodesDir();
+            Directory.CreateDirectory(seedDir);
+            int copied = 0;
+            foreach (var f in Directory.GetFiles(EDITORDATA_DIR, "episode_*.json"))
+            {
+                File.Copy(f, Path.Combine(seedDir, Path.GetFileName(f)), overwrite: true);
+                copied++;
+            }
+            Debug.Log($"[LevelEpisodeUploader] {copied}개 episode → {seedDir}");
         }
 
-        private static void EnsureDirectoryFor(string assetPath)
-        {
-            string dir = Path.GetDirectoryName(assetPath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-        }
-
-        /// <summary>
-        /// firebase/seed/episodes 절대 경로. Unity project root 의 두 단계 위 (BalloonFlow/Assets → repo root).
-        /// </summary>
+        /// <summary>firebase/seed/episodes 절대 경로 — Unity project root 의 한 단계 위(repo root) 기준.</summary>
         private static string GetSeedEpisodesDir()
         {
-            // Application.dataPath = .../BalloonFlow/Assets
-            // repo root            = .../BalloonFlow/ 의 parent
             string assets = Application.dataPath.Replace('\\', '/');
             string unityProj = Path.GetDirectoryName(assets);              // .../BalloonFlow
             string repoRoot  = Path.GetDirectoryName(unityProj);           // .../BallonFlow_Git

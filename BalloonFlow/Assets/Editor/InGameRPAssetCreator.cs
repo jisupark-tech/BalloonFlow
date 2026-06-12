@@ -22,7 +22,7 @@ namespace BalloonFlow.EditorTools
         private const string SRC_PATH = "Assets/Settings/Mobile_RPAsset.asset";
         private const string DST_PATH = "Assets/Settings/InGame_RPAsset.asset";
 
-        [MenuItem("BalloonFlow/Create InGame_RPAsset (인게임 전용 minimal)")]
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Create InGame_RPAsset (인게임 전용 minimal)")]
         public static void Create()
         {
             if (AssetDatabase.LoadMainAssetAtPath(SRC_PATH) == null)

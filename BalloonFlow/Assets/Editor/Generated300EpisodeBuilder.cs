@@ -23,7 +23,7 @@ namespace BalloonFlow.Editor
         private const int EpisodeCount = 15;
         private const int EpisodeVersion = 1;
 
-        [MenuItem("BalloonFlow/Level Episodes/Build Episodes From Generated_300")]
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Level Episodes/Build Episodes From Generated_300")]
         public static void BuildFromMenu()
         {
             BuildGenerated300Episodes();

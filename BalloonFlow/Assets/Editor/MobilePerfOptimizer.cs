@@ -30,7 +30,7 @@ namespace BalloonFlow.EditorTools
         private const string URP_ASSET_PATH = "Assets/Settings/Mobile_RPAsset.asset";
         private const string RENDERER_PATH  = "Assets/Settings/Mobile_Renderer.asset";
 
-        [MenuItem("BalloonFlow/DON'T USE/Optimize URP for Low-end Mobile (S8/A23)")]
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/DON'T USE/Optimize URP for Low-end Mobile (S8/A23)")]
         public static void Optimize()
         {
             int n = 0;

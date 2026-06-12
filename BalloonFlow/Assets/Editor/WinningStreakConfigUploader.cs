@@ -20,7 +20,7 @@ namespace BalloonFlow.Editor
         private const string SEED_DIRNAME = "winningStreak";
         private const string SEED_FILENAME = "config.json";
 
-        [MenuItem(MENU_ROOT + "Export Config → firebase/seed/winningStreak")]
+        // [2026-06-12 메뉴 정리] [MenuItem(MENU_ROOT + "Export Config → firebase/seed/winningStreak")]
         public static void ExportConfigJson()
         {
             string json = BuildDefaultConfigJson();

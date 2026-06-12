@@ -20,7 +20,7 @@ namespace BalloonFlow.EditorTools
             "Assets/Resources/Prefabs/Spawner.prefab",
         };
 
-        [MenuItem("BalloonFlow/Analyze Prefab Hierarchies")]
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Analyze Prefab Hierarchies")]
         public static void Analyze()
         {
             var sb = new StringBuilder();

@@ -31,7 +31,7 @@ namespace BalloonFlow.EditorTools
             "Assets/Resources/Sprites",
         };
 
-        [MenuItem("BalloonFlow/Compress Textures for Android (ASTC 6x6)")]
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Compress Textures for Android (ASTC 6x6)")]
         public static void Compress()
         {
             var paths = new List<string>();
@@ -115,7 +115,7 @@ namespace BalloonFlow.EditorTools
                 "OK");
         }
 
-        [MenuItem("BalloonFlow/DON'T USE/Restore Textures (Android override OFF)")]
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/DON'T USE/Restore Textures (Android override OFF)")]
         public static void Restore()
         {
             if (!EditorUtility.DisplayDialog("Restore Texture Settings",

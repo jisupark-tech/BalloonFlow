@@ -21,7 +21,7 @@ namespace BalloonFlow.EditorTools
         private const string DEFAULT_TRANSFORM_PATH = "Assets/EditorData/LevelDatabase_Transform.asset";
         private const string DEFAULT_ORI_PATH = "Assets/EditorData/LevelDatabase.asset";
 
-        [MenuItem("BalloonFlow/Compare DB Levels")]
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Compare DB Levels")]
         static void Open()
         {
             var w = GetWindow<LevelDatabaseCompareTool>("DB Level Compare");

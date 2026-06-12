@@ -25,7 +25,7 @@ namespace BalloonFlow.EditorTools
         private const string LOG_TAG = "[PrefabRefScan]";
         private const string CSV_OUTPUT = "Assets/Editor/_PrefabRefs.csv";
 
-        [MenuItem("BalloonFlow/Tools/Scan Resources Prefab External Refs")]
+        // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/Tools/Scan Resources Prefab External Refs")]
         public static void Scan()
         {
             var prefabPaths = new List<string>();
