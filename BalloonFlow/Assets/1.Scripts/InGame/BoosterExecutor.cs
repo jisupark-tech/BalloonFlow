@@ -582,13 +582,13 @@ namespace BalloonFlow
             int totalRemoved = fieldRemoved + RemoveRailAndQueueColor(color);
             FinalizeColorRemove(color, totalRemoved);
 
-            // Jiggle 코루틴을 먼저 정지한다 — Jiggle 이 매 tick baseline.start 를 덮어쓰기 때문에
-            // FadeOutZapLinesRoutine 의 suction lerp(start→end) 가 무효화된다. 페이드아웃 루틴이
-            // 매 프레임 Trigger() 를 호출하므로 자글거림은 그대로 유지된다.
+            // Jiggle 코루틴을 먼저 정지한다 — Jiggle 의 baseline 덮어쓰기/Trigger 재호출이 FadeOut 의
+            // width/alpha 페이드를 무효화하지 않도록 보장. (FadeOut 루틴은 더 이상 LightningBoltScript 를
+            // 사용하지 않으므로 Trigger 충돌 자체가 사라짐.)
             StopZapLineJiggle();
 
-            // 페이드아웃 — 각 라인의 StartPosition 을 EndPosition 방향으로 빨려들어가듯 보간하며
-            // 매 프레임 LightningBoltScript.Trigger() 를 호출해 자글거림을 유지한다.
+            // 페이드아웃 — LineRenderer width/vertex alpha + material(_TintColor/_Color) alpha 를 0 으로 수렴.
+            // FadeOut 중에는 LightningBoltScript 미사용 → 위치/Trigger 호출 없음 → 마지막 순간 라인 굵게 튀는 결함 없음.
             if (zapLineObjects != null && zapLineObjects.Count > 0)
                 yield return StartCoroutine(FadeOutZapLinesRoutine(zapLineObjects));
 
@@ -1433,13 +1433,10 @@ namespace BalloonFlow
         {
             if (zapLineObjects == null || zapLineObjects.Count == 0) yield break;
 
-            // 라인별 캐시(LineRenderer + LightningBoltScript + 원본 start/end + 페이드 시작 width/alpha).
+            // LineRenderer + runtime material + 페이드 시작 width/alpha 캐시. FadeOut 중 LightningBoltScript는 사용하지 않음(위치/Trigger 호출 금지 — 마지막 순간 라인 굵게 튀는 결함 차단).
             // GC alloc 최소화를 위해 한 번만 할당, foreach 미사용.
             int count = zapLineObjects.Count;
             var renderers = new List<LineRenderer>(count);
-            var bolts = new List<LightningBoltScript>(count);
-            var originalStarts = new List<Vector3>(count);
-            var originalEnds = new List<Vector3>(count);
             var startWidths = new List<float>(count);
             var startAlphas = new List<float>(count);
             // 라인별 runtime material 캐시(매 프레임 lr.material 호출 시 인스턴스 재생성 비용 방지).
@@ -1453,17 +1450,13 @@ namespace BalloonFlow
                 GameObject line = zapLineObjects[i];
                 if (line == null) continue;
                 LineRenderer lr = line.GetComponentInChildren<LineRenderer>(true);
-                LightningBoltScript bolt = line.GetComponentInChildren<LightningBoltScript>(true);
-                if (lr == null && bolt == null) continue;
+                if (lr == null) continue;
 
                 renderers.Add(lr);
-                bolts.Add(bolt);
-                originalStarts.Add(bolt != null ? bolt.StartPosition : Vector3.zero);
-                originalEnds.Add(bolt != null ? bolt.EndPosition : Vector3.zero);
-                startWidths.Add(lr != null ? lr.widthMultiplier : 0f);
-                startAlphas.Add(lr != null ? lr.startColor.a : 0f);
+                startWidths.Add(lr.widthMultiplier);
+                startAlphas.Add(lr.startColor.a);
 
-                Material runtimeMat = lr != null ? lr.material : null;
+                Material runtimeMat = lr.material;
                 runtimeMats.Add(runtimeMat);
                 startTintAlphas.Add(runtimeMat != null && runtimeMat.HasProperty("_TintColor") ? runtimeMat.GetColor("_TintColor").a : 1f);
                 startColorAlphas.Add(runtimeMat != null && runtimeMat.HasProperty("_Color") ? runtimeMat.GetColor("_Color").a : 1f);
@@ -1481,30 +1474,7 @@ namespace BalloonFlow
 
                 for (int i = 0; i < cached; i++)
                 {
-                    // FxZapLine / FxZapLine2 동일 처리(분기 없음).
-                    LightningBoltScript bolt = bolts[i];
-                    if (bolt != null)
-                    {
-                        Vector3 origStart = originalStarts[i];
-                        Vector3 origEnd = originalEnds[i];
-
-                        // FadeOut 중 StartPosition↔EndPosition 거리를 줄이지 않는다 — suction 시 Width Curve 시작구간만 남아 점처럼 뭉치는 결함 차단. 위치는 origStart/origEnd 유지, 종료 효과는 widthMultiplier+vertex alpha+material alpha 만으로 처리.
-                        Vector3 jitterStart = new Vector3(
-                            Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
-                            0f,
-                            Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter));
-                        Vector3 jitterEnd = new Vector3(
-                            Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
-                            0f,
-                            Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter));
-
-                        bolt.StartPosition = origStart + jitterStart;
-                        bolt.EndPosition = origEnd + jitterEnd;
-                        // 매 프레임 Trigger() 호출 시 ManualMode 라인이 사라지지 않도록 Duration 보강.
-                        bolt.Duration = Mathf.Max(bolt.Duration, ZapLineJiggleMaxInterval * 1.5f);
-                        bolt.Trigger();
-                    }
-
+                    // FadeOut 중 LightningBoltScript 미사용(위치 변경·Trigger 호출·jitter 일체 금지). 위치는 fade 시작 시점의 geometry 그대로 유지하고 width/vertex alpha + material alpha 만 0으로 수렴 → 마지막 순간 라인 굵게 튀는 결함 차단.
                     LineRenderer lr = renderers[i];
                     if (lr != null)
                     {
@@ -1537,7 +1507,7 @@ namespace BalloonFlow
                 yield return null;
             }
 
-            // 종료 정리 — 페이드아웃 직후 width/alpha 를 확실히 0 으로 수렴시켜 잔상 차단(위치는 origStart/origEnd 그대로 유지됨).
+            // 종료 정리 — width/alpha 0 수렴 + positionCount=0 으로 LineRenderer geometry 비움. 직후 ReleaseZapLineToPool 이 SetActive(false)+풀 반납으로 마무리.
             for (int i = 0; i < cached; i++)
             {
                 LineRenderer lr = renderers[i];
@@ -1546,6 +1516,7 @@ namespace BalloonFlow
                     lr.widthMultiplier = 0f;
                     Color sc = lr.startColor; sc.a = 0f; lr.startColor = sc;
                     Color ec = lr.endColor;   ec.a = 0f; lr.endColor   = ec;
+                    lr.positionCount = 0;
                 }
 
                 Material runtimeMat = runtimeMats[i];
