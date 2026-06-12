@@ -1250,6 +1250,10 @@ namespace BalloonFlow
             LightningBoltScript bolt = lineRefs.bolt;
             if (bolt != null)
             {
+                // FadeOut 진입 시 LightningBoltScript.Update() 의 ManualMode 분기가
+                // lineRenderer.positionCount=0 으로 geometry 를 wipe 하는 것을 막기 위해
+                // FadeOutZapLinesRoutine 에서 enabled=false 처리한다. 풀 재사용 시 무조건 활성화 보장.
+                bolt.enabled = true;
                 bolt.LockYAxis = true;
                 LineRenderer lineRenderer = bolt.GetComponent<LineRenderer>();
                 PrepareZapLineRenderer(lineRenderer);
@@ -1451,6 +1455,12 @@ namespace BalloonFlow
                 if (line == null) continue;
                 LineRenderer lr = line.GetComponentInChildren<LineRenderer>(true);
                 if (lr == null) continue;
+
+                // FadeOut 진입 시 LightningBoltScript.Update() 의 ManualMode 분기가
+                // lineRenderer.positionCount=0 으로 geometry 를 wipe 하는 것을 막기 위해 enabled=false 처리.
+                // 풀 재사용 시 ConfigureZapLine 에서 enabled=true 로 복구.
+                LightningBoltScript bolt = line.GetComponentInChildren<LightningBoltScript>(true);
+                if (bolt != null) bolt.enabled = false;
 
                 renderers.Add(lr);
                 startWidths.Add(lr.widthMultiplier);
