@@ -52,8 +52,8 @@ namespace BalloonFlow
         private const int HAND_VISIBLE_ROWS = 5;
         private static readonly Vector3 ZapSpawnPosition = new Vector3(-0.1911252f, 1.95f, -7.79f);
         private const float ZapLineWorldLift = 0.35f;
-        // FxZapLine 끝점(LightningEnd) 의 월드 Y 고정값. ConfigureZapLine 이 매 사용 시 LightningEnd.position.y / bolt.EndPosition.y 를 이 값으로 강제 — prefab 의 EndPosition Y 는 무시됨. 시작점 Y=1.95 → 끝점 Y=0 (약 -1.95) 의 가파른 낙하, LockYAxis=true 로 Y 흔들림은 여전히 0.
-        private const float ZapLineEndYWorld = 0f;
+        // FxZapLine 끝점(LightningEnd) 의 월드 Y 고정값. ConfigureZapLine 이 매 사용 시 LightningEnd.position.y / bolt.EndPosition.y 를 이 값으로 강제 — prefab 의 EndPosition Y 는 무시됨. 시작점 Y=1.95 → 끝점 Y=1 (약 -0.95) 의 완만한 낙하, LockYAxis=true 로 Y 흔들림은 여전히 0.
+        private const float ZapLineEndYWorld = 1f;
         private const float ZapLineMinWidth = 0.08f;
         private const int ZapLineSortingOrder = 80;
         // ROLLBACK_ZAP_LINE_ALWAYS_ON_TOP_20260610: renderQueue 강제 상향. Overlay+ 영역으로 띄워 풍선 mesh 뒤로 가려지지 않게 한다.
