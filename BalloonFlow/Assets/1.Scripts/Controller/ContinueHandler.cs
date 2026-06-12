@@ -229,14 +229,22 @@ namespace BalloonFlow
 
         private void HandleBoardFailed(OnBoardFailed evt)
         {
-            // 실패 흐름: PopupFail01 → PopupContinue → PopupFail02
-            // ContinueHandler는 팝업을 직접 띄우지 않음.
-            // PopupFail01이 먼저 표시되고, Decline 시 PopupContinue를 띄움.
-            // 횟수 제한 제거 — 매 보드 실패마다 표시.
+            // 실패 흐름: [다트 탈선 흩어짐 연출] → PopupFail01 → PopupContinue → PopupFail02
+            // [FAIL_DERAIL 2026-06-12] DartManager 가 같은 이벤트로 레일 다트 탈선 연출을 재생하므로,
+            // 연출이 끝날 때까지(FailScatterPopupDelay) 기다렸다 팝업 표시. realtime — pause 무관.
+            if (_failPopupDelayCo != null) StopCoroutine(_failPopupDelayCo);
+            _failPopupDelayCo = StartCoroutine(ShowFailPopupAfterScatter());
+        }
+
+        private Coroutine _failPopupDelayCo;
+
+        private System.Collections.IEnumerator ShowFailPopupAfterScatter()
+        {
+            yield return new WaitForSecondsRealtime(DartManager.FailScatterPopupDelay);
             if (PopupManager.HasInstance)
                 PopupManager.Instance.ShowPopup("popup_fail01", priority: 50);
-
-            Debug.Log($"[ContinueHandler] Board failed — showing PopupFail01. ContinueCount={_continueCount}");
+            Debug.Log($"[ContinueHandler] Board failed — showing PopupFail01 (after derail fx). ContinueCount={_continueCount}");
+            _failPopupDelayCo = null;
         }
 
         #endregion

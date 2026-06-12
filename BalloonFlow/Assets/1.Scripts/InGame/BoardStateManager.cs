@@ -144,6 +144,12 @@ namespace BalloonFlow
             var __sw = InGamePerfLogger.StartSection();
             try
             {
+#if UNITY_EDITOR
+            // [CHEAT 2026-06-12] 에디터 0 키 — 강제 실패 (다트 탈선→실패 팝업 연출 확인용)
+            var __cheatKb = UnityEngine.InputSystem.Keyboard.current;
+            if (__cheatKb != null && __cheatKb.digit0Key.wasPressedThisFrame)
+                ForceFailStage();
+#endif
             if (_currentState != BoardState.Playing) return;
             if (_failConfirmed) return;
 
@@ -662,6 +668,28 @@ namespace BalloonFlow
             PublishBoardCleared();
         }
 
+        /// <summary>[CHEAT] 에디터 0 키 전용 — 실패 트리거를 강제 발화해 실패 연출(다트 탈선→팝업)을 확인.
+        /// Playing 상태일 때만 동작. disableFail 토글도 우회(연출 확인 목적).</summary>
+        public void ForceFailStage()
+        {
+            if (_currentState != BoardState.Playing)
+            {
+                Debug.LogWarning($"[BoardStateManager] [CHEAT] ForceFailStage 무시 — 현재 상태={_currentState}");
+                return;
+            }
+            Debug.Log("[BoardStateManager] [CHEAT] ForceFailStage 호출 — 강제 실패 (탈선 연출 확인용)");
+            // disableFail 토글이 켜져 있어도 연출 확인이 목적이므로 일시 우회.
+            bool savedDisableFail = false;
+            if (GameManager.HasInstance)
+            {
+                savedDisableFail = GameManager.Instance.Board.disableFail;
+                GameManager.Instance.Board.disableFail = false;
+            }
+            TriggerFail(FailReason.RailOverflow);
+            if (GameManager.HasInstance)
+                GameManager.Instance.Board.disableFail = savedDisableFail;
+        }
+
         // 프레임 캐싱: HasOutermostMatch는 비용이 있어 매 프레임 다중 호출 회피.
         private int _matchCacheFrame = -1;
         private bool _cachedMatchResult;
@@ -788,15 +816,17 @@ namespace BalloonFlow
                     bool isEggBox = b.gimmickType == BalloonController.GimmickPinataBox
                         && b.eggColors != null && b.eggColors.Length > 0;
                     int eggN = isEggBox ? b.eggColors.Length : 0;
-                    Vector3 anchor = BalloonController.Instance.GetAdjustedBoardPosition(b.position);
-                    BalloonController.Instance.GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ);
+                    // [RAW_GRID_SPACE 2026-06-12] 멀티셀 footprint 는 원시 데이터 좌표(b.position) 기준 —
+                    // 스케일 보드에서 보정 월드를 원시 spacing 으로 나누면 행/열이 합쳐지거나 어긋난다.
+                    // [LATTICE_PHASE] 위상 기준 상대 라운딩 — DirectionalTargeting/DartManager 와 동일 키 공간.
+                    BalloonController.Instance.GetRawLatticePhase(out float phX, out float phZ);
                     for (int dx = 0; dx < width; dx++)
                     {
                         for (int dz = 0; dz < height; dz++)
                         {
                             Vector2Int occupiedCell = new Vector2Int(
-                                Mathf.RoundToInt((anchor.x + dx * cellSizeX) / cs),
-                                Mathf.RoundToInt((anchor.z + dz * cellSizeZ) / cs));
+                                Mathf.RoundToInt((b.position.x - phX + dx * cs) / cs),
+                                Mathf.RoundToInt((b.position.z - phZ + dz * cs) / cs));
                             _reusablePositionMap.Add(occupiedCell);
 
                             int cellColor = b.color;
@@ -817,11 +847,15 @@ namespace BalloonFlow
                     }
                     continue;
                 }
-                // FindTarget과 동일하게 GetBalloonWorldPosition 사용 — LevelSafeMult 적용된 실제 위치.
+                // [RAW_GRID_SPACE 2026-06-12] FindTarget 과 동일하게 실제 위치를 쓰되, 역변환으로
+                // 원시 보드 공간에 정규화 후 위상 기준 상대 라운딩 — 스케일/짝수 그리드 모두 정합.
+                // (정적 풍선은 b.position 과 일치, 스포너/이동체는 실시간 위치 반영)
                 Vector3 worldPos = BalloonController.Instance.GetBalloonWorldPosition(b.balloonId);
+                Vector3 rawPos = BalloonController.Instance.WorldToRawBoardPosition(worldPos);
+                BalloonController.Instance.GetRawLatticePhase(out float phaseX, out float phaseZ);
                 Vector2Int cell = new Vector2Int(
-                    Mathf.RoundToInt(worldPos.x / cs),
-                    Mathf.RoundToInt(worldPos.z / cs));
+                    Mathf.RoundToInt((rawPos.x - phaseX) / cs),
+                    Mathf.RoundToInt((rawPos.z - phaseZ) / cs));
 
                 _reusablePositionMap.Add(cell);
 

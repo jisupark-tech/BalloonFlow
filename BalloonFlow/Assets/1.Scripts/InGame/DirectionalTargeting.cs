@@ -1151,28 +1151,47 @@ namespace BalloonFlow
             return true;
         }
 
+        // [RAW_GRID_SPACE 2026-06-12] 모든 셀/라인/거리 계산은 원시 보드 공간에서 수행.
+        //   스케일(Scale Y 0.35 등)/시프트된 대형 보드에서 월드 좌표를 원시 spacing(0.55)으로 직접 나누면
+        //   여러 시각적 행이 한 라인 키로 합쳐져 일부 행이 타겟 불가(놓침)가 된다. 반대로 라인 키 단위를
+        //   렌더 간격(0.19)으로 바꾸면(2026-06-12 Codex 시도) 라인이 3배 촘촘해져 스캔 게이트/라인 락/
+        //   허용오차 등 기존 튜닝 전제가 모두 무너진다(놓침·관통·연속 공격 동시 부활).
+        //   해법: 단위는 그대로 두고 좌표를 GetAdjustedBoardPosition 역변환으로 원시 공간에 정규화 —
+        //   한 줄 = 한 라인 복원 + 모든 기존 상수 유효. 아래 3개 프리미티브가 유일한 변환 지점이며
+        //   호출부는 계속 월드 좌표를 넘긴다 (edge.worldPos 는 발사체 비행용으로 월드 유지).
+        private static Vector3 ToRawBoardSpace(Vector3 worldPos)
+        {
+            return BalloonController.HasInstance
+                ? BalloonController.Instance.WorldToRawBoardPosition(worldPos)
+                : worldPos;
+        }
+
         private static float GetFiringAxisDistance(Vector3 dartPos, Vector3 balloonPos, ScanDirection direction)
         {
+            Vector3 dartRaw = ToRawBoardSpace(dartPos);
+            Vector3 balloonRaw = ToRawBoardSpace(balloonPos);
             switch (direction)
             {
-                case ScanDirection.Right: return balloonPos.x - dartPos.x;
-                case ScanDirection.Left:  return dartPos.x - balloonPos.x;
-                case ScanDirection.Up:    return balloonPos.z - dartPos.z;
-                case ScanDirection.Down:  return dartPos.z - balloonPos.z;
+                case ScanDirection.Right: return balloonRaw.x - dartRaw.x;
+                case ScanDirection.Left:  return dartRaw.x - balloonRaw.x;
+                case ScanDirection.Up:    return balloonRaw.z - dartRaw.z;
+                case ScanDirection.Down:  return dartRaw.z - balloonRaw.z;
                 default:                  return float.MaxValue;
             }
         }
 
         private static float GetPerpendicularDistance(Vector3 dartPos, Vector3 balloonPos, ScanDirection direction)
         {
+            Vector3 dartRaw = ToRawBoardSpace(dartPos);
+            Vector3 balloonRaw = ToRawBoardSpace(balloonPos);
             switch (direction)
             {
                 case ScanDirection.Right:
                 case ScanDirection.Left:
-                    return Mathf.Abs(dartPos.z - balloonPos.z);
+                    return Mathf.Abs(dartRaw.z - balloonRaw.z);
                 case ScanDirection.Up:
                 case ScanDirection.Down:
-                    return Mathf.Abs(dartPos.x - balloonPos.x);
+                    return Mathf.Abs(dartRaw.x - balloonRaw.x);
                 default:
                     return float.MaxValue;
             }
@@ -1181,9 +1200,15 @@ namespace BalloonFlow
         private static Vector2Int WorldToGrid(Vector3 worldPos)
         {
             float cs = _gridCellSize > 0.01f ? _gridCellSize : DEFAULT_GRID_CELL_SIZE;
+            Vector3 raw = ToRawBoardSpace(worldPos);
+            // [LATTICE_PHASE 2026-06-12] 절대 라운딩 금지 — 짝수 그리드 레벨은 좌표가 .5×cs 경계라
+            // 컬럼/행이 합쳐지고 건너뛰어짐(관통·놓침). 위상(min anchor) 기준 상대 라운딩으로 정수 키 보장.
+            float phaseX = 0f, phaseZ = 0f;
+            if (BalloonController.HasInstance)
+                BalloonController.Instance.GetRawLatticePhase(out phaseX, out phaseZ);
             return new Vector2Int(
-                Mathf.RoundToInt(worldPos.x / cs),
-                Mathf.RoundToInt(worldPos.z / cs));
+                Mathf.RoundToInt((raw.x - phaseX) / cs),
+                Mathf.RoundToInt((raw.z - phaseZ) / cs));
         }
     }
 }

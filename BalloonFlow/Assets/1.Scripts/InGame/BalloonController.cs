@@ -433,6 +433,13 @@ namespace BalloonFlow
             // offsets/scales from the previous board.
             CalculateLevelSafeMult();
             ReapplyAllBalloonVisualTransforms();
+            // [RAW_GRID_SPACE 2026-06-12] safe mult 재계산으로 렌더 그리드가 바뀌었으므로
+            // 라인/셀 캐시를 1회 무효화 — 이전 mult 로 빌드된 키 잔존 방지.
+            DirectionalTargeting.InvalidateCache();
+            if (BoardStateManager.HasInstance)
+                BoardStateManager.Instance.InvalidateOutermostCache();
+            // [LATTICE_PHASE 2026-06-12] 격자 위상 앵커 — 모든 셀/라인 스냅의 기준점.
+            RecomputeRawLatticePhase();
 
             // Wall / FlexTube cells don't count toward clear condition
             int excludeCount = 0;
@@ -567,6 +574,64 @@ namespace BalloonFlow
         public void GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ)
         {
             GetFieldVisualMetrics(out float widthMult, out float heightMult, out _, out cellSizeX, out cellSizeZ, out _);
+        }
+
+        /// <summary>[RAW_GRID_SPACE 2026-06-12] GetAdjustedBoardPosition 의 역변환 —
+        /// 월드 좌표를 원시 보드 공간(레벨 데이터 그리드, cellSpacing 단위)으로 되돌린다.
+        /// 스케일/시프트된 대형 보드에서 타겟팅·스캔라인이 "시각적 한 줄 = 라인 키 1개"를 유지하려면
+        /// 라인 키 단위를 바꾸지 말고(기존 튜닝 상수 전제) 좌표를 이 함수로 정규화한 뒤 원시 spacing 으로
+        /// 나눠야 한다. 정적 풍선은 data.position 과 일치, 이동체(스포너/컨베이어)도 같은 변환으로 정합.
+        /// y 는 통과(보존).</summary>
+        public Vector3 WorldToRawBoardPosition(Vector3 worldPos)
+        {
+            Vector3 raw = worldPos;
+            if (GameManager.HasInstance)
+            {
+                float cx = GameManager.Instance.Board.boardCenterX;
+                float cz = GameManager.Instance.Board.balloonCenterZ;
+                float wm = _levelSafeCalculated ? _levelSafeWm : GameManager.Instance.Board.balloonFieldWidthMult;
+                float hm = _levelSafeCalculated ? _levelSafeHm : GameManager.Instance.Board.balloonFieldHeightMult;
+                float zOffset = GameManager.Instance.Board.balloonGridZOffset;
+                if (wm <= 0.0001f) wm = 1f;
+                if (hm <= 0.0001f) hm = 1f;
+                raw.x = cx + (worldPos.x - cx) / wm;
+                raw.z = cz + (worldPos.z - zOffset - _levelSafeZShift - cz) / hm;
+            }
+            return raw;
+        }
+
+        // [LATTICE_PHASE 2026-06-12] 격자 위상 앵커 — 레벨 풍선들의 최소 raw 좌표.
+        //   레벨 데이터는 "보드 폭 고정 / 그리드 수 분할" spacing(예: 30컬럼 → cs=0.22)에
+        //   center 오프셋(balloonCenterZ=2.0 등)이 섞여 있어, 절대 라운딩 Round(raw/cs)는
+        //   짝수 그리드 레벨에서 좌표가 정확히 .5×cs 경계에 놓인다 → Unity 라운딩(짝수行)으로
+        //   인접 두 컬럼/행이 한 라인 키로 합쳐지고 사이 키는 건너뜀 → 관통(합쳐진 라인의
+        //   전면 셀이 옆 컬럼 풍선) + 놓침(건너뛴 키 라인엔 후보 없음). 위상(min) 기준 상대
+        //   라운딩이면 모든 풍선 키가 정확한 정수가 되어 경계 문제가 구조적으로 소멸.
+        //   (MapMaker 미리보기 빈줄 fix 와 동일 클래스 — 2026-06-12)
+        private float _latticePhaseX;
+        private float _latticePhaseZ;
+
+        private void RecomputeRawLatticePhase()
+        {
+            _latticePhaseX = 0f;
+            _latticePhaseZ = 0f;
+            float minX = float.MaxValue, minZ = float.MaxValue;
+            foreach (BalloonData d in _balloons.Values)
+            {
+                if (d == null) continue;
+                if (d.position.x < minX) minX = d.position.x;
+                if (d.position.z < minZ) minZ = d.position.z;
+            }
+            if (minX < float.MaxValue) _latticePhaseX = minX;
+            if (minZ < float.MaxValue) _latticePhaseZ = minZ;
+        }
+
+        /// <summary>모든 셀/라인 스냅(DirectionalTargeting/DartManager/BoardStateManager)이 공유하는
+        /// 격자 위상. raw 보드 공간 좌표에서 이 값을 뺀 뒤 cellSpacing 으로 나눠야 정수 키가 보장된다.</summary>
+        public void GetRawLatticePhase(out float phaseX, out float phaseZ)
+        {
+            phaseX = _latticePhaseX;
+            phaseZ = _latticePhaseZ;
         }
 
         /// <summary>풍선 월드 위치 — frame 단위 cache. 같은 frame 안에서 N번 호출돼도 transform.position 은 frame 당 1회만.
@@ -3941,10 +4006,11 @@ namespace BalloonFlow
                 if (!_positionIndex.ContainsKey(neighbor))
                 {
                     // Convert grid key back to world position
+                    // [LATTICE_PHASE 2026-06-12] 키가 위상 기준이므로 역변환도 위상을 더해 복원.
                     Vector3 worldPos = new Vector3(
-                        neighbor.x * _cellSpacing,
+                        _latticePhaseX + neighbor.x * _cellSpacing,
                         position.y,
-                        neighbor.z * _cellSpacing
+                        _latticePhaseZ + neighbor.z * _cellSpacing
                     );
                     empty.Add(worldPos);
                 }
@@ -4290,10 +4356,12 @@ namespace BalloonFlow
         private Vector3Int ToGridKey(Vector3 worldPos)
         {
             // cellSpacing으로 나누어 인접 셀이 정확히 ±1 차이가 되도록 함
+            // [LATTICE_PHASE 2026-06-12] 위상 기준 상대 라운딩 — 짝수 그리드 레벨의 .5×cs 경계 붕괴 방지.
+            // (입력은 원시 데이터 좌표 — 모든 호출부가 data.position 계열을 넘김)
             return new Vector3Int(
-                Mathf.RoundToInt(worldPos.x / _cellSpacing),
+                Mathf.RoundToInt((worldPos.x - _latticePhaseX) / _cellSpacing),
                 0,
-                Mathf.RoundToInt(worldPos.z / _cellSpacing)
+                Mathf.RoundToInt((worldPos.z - _latticePhaseZ) / _cellSpacing)
             );
         }
 

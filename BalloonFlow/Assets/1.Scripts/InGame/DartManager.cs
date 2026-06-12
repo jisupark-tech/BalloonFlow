@@ -446,6 +446,9 @@ namespace BalloonFlow
             try
             {
             if (_boardFinished) return;
+            // [FAIL_DERAIL 2026-06-12] 이어하기 복귀 연출 중 — 위치 동기가 복귀 lerp 를 덮어쓰지 않게
+            // 동기/스캔/발사 전체를 1프레임 단위로 보류 (복귀 코루틴이 끝나면 자동 재개).
+            if (_continueRestoreActive) return;
 
             var __slotSw = InGamePerfLogger.StartSection();
             UpdateSlotDartPositions();
@@ -484,6 +487,9 @@ namespace BalloonFlow
         /// </summary>
         public void ClearAllDarts()
         {
+            // [FAIL_DERAIL 2026-06-12] 재시작/레벨 이동 정리 — 탈선/복귀 연출 상태 리셋.
+            ResetFailScatterState();
+
             // Dictionary 순회 전 키를 복사 (순회 중 변경 방지)
             _tempRemoveKeys.Clear();
             foreach (var kvp in _slotVisuals)
@@ -2403,19 +2409,40 @@ namespace BalloonFlow
             return true;
         }
 
+        // [RAW_GRID_SPACE 2026-06-12] 스캔라인 키는 원시 보드 공간 기준 — DirectionalTargeting.WorldToGrid 와
+        // 동일 정규화(역변환 후 원시 spacing 나눔). 스케일 보드에서 라인 키 단위(0.55 전제 튜닝)는 유지하면서
+        // 시각적 한 줄 = 한 라인 정합 복원. 라인 락(_consumedTargetLines)/스캔 게이트가 모두 이 키를 공유.
+        private static Vector3 ToRawBoardSpace(Vector3 worldPos)
+        {
+            return BalloonController.HasInstance
+                ? BalloonController.Instance.WorldToRawBoardPosition(worldPos)
+                : worldPos;
+        }
+
+        private static void GetLatticePhase(out float phaseX, out float phaseZ)
+        {
+            phaseX = 0f;
+            phaseZ = 0f;
+            if (BalloonController.HasInstance)
+                BalloonController.Instance.GetRawLatticePhase(out phaseX, out phaseZ);
+        }
+
         private static int GetScanLine(Vector3 pos, DirectionalTargeting.ScanDirection scanDir)
         {
             float cs = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
             if (cs <= 0.01f) cs = 0.55f;
 
+            // [LATTICE_PHASE 2026-06-12] 위상 기준 상대 라운딩 — DirectionalTargeting.WorldToGrid 와 동일 키 공간.
+            Vector3 raw = ToRawBoardSpace(pos);
+            GetLatticePhase(out float phaseX, out float phaseZ);
             switch (scanDir)
             {
                 case DirectionalTargeting.ScanDirection.Right:
                 case DirectionalTargeting.ScanDirection.Left:
-                    return Mathf.RoundToInt(pos.z / cs);
+                    return Mathf.RoundToInt((raw.z - phaseZ) / cs);
                 case DirectionalTargeting.ScanDirection.Up:
                 case DirectionalTargeting.ScanDirection.Down:
-                    return Mathf.RoundToInt(pos.x / cs);
+                    return Mathf.RoundToInt((raw.x - phaseX) / cs);
                 default:
                     return 0;
             }
@@ -2426,17 +2453,28 @@ namespace BalloonFlow
             float cs = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
             if (cs <= 0.01f) cs = 0.55f;
 
+            // 라인 → 원시 공간 좌표(위상 + line×cs) → 월드로 정변환 (결과는 월드 스캔 위치).
+            Vector3 raw = ToRawBoardSpace(currentPos);
+            GetLatticePhase(out float phaseX, out float phaseZ);
             switch (scanDir)
             {
                 case DirectionalTargeting.ScanDirection.Right:
                 case DirectionalTargeting.ScanDirection.Left:
-                    return new Vector3(currentPos.x, currentPos.y, line * cs);
+                    raw.z = phaseZ + line * cs;
+                    break;
                 case DirectionalTargeting.ScanDirection.Up:
                 case DirectionalTargeting.ScanDirection.Down:
-                    return new Vector3(line * cs, currentPos.y, currentPos.z);
+                    raw.x = phaseX + line * cs;
+                    break;
                 default:
                     return currentPos;
             }
+
+            Vector3 world = BalloonController.HasInstance
+                ? BalloonController.Instance.GetAdjustedBoardPosition(raw)
+                : raw;
+            world.y = currentPos.y;   // GetAdjustedBoardPosition 이 y 를 스폰 고도로 덮으므로 복원.
+            return world;
         }
 
         private static Vector3 GetFireDirectionForScanDirection(DirectionalTargeting.ScanDirection scanDir)
@@ -3570,12 +3608,173 @@ namespace BalloonFlow
         private void HandleBoardFailed(OnBoardFailed evt)
         {
             _boardFinished = true;
+            // [FAIL_DERAIL 2026-06-12] 실패 인식 → 레일 다트 탈선 흩어짐 연출.
+            // 실패 팝업은 ContinueHandler 가 FailScatterPopupDelay 만큼 기다렸다 띄운다.
+            if (_failScatterCo != null) StopCoroutine(_failScatterCo);
+            _failScatterCo = StartCoroutine(PlayFailDerailScatter());
         }
 
         private void HandleContinueApplied(OnContinueApplied evt)
         {
             _boardFinished = false;
+            // [FAIL_DERAIL 2026-06-12] 흩어진 상태에서 이어하기 → 제거 다트는 즉시 소멸,
+            // 생존 다트는 라이브 레일 포즈로 복귀 연출 후 동기/스캔 재개.
+            if (_failScatterActive)
+            {
+                if (_continueRestoreCo != null) StopCoroutine(_continueRestoreCo);
+                _continueRestoreCo = StartCoroutine(PlayContinueRestoreFromScatter());
+            }
         }
+
+        #region Fail Derail Scatter — [FAIL_DERAIL 2026-06-12]
+
+        // 실패 시 레일 다트가 탈선하듯 주변으로 흩어졌다가(뒹굴며), 이어하기 시 원래 레일 위치로 복귀.
+        // 연출은 transform 전용 — DartOnRail 논리 상태(슬롯/순서/색, _boardFinished 동결)는 불변이라
+        // 이어하기 1:1 정합(2026-06-11)이 그대로 유지된다. 모든 트윈/대기는 unscaled(팝업 pause 대응).
+        public const float FailScatterDuration = 0.55f;    // 다트별 흩어짐 트윈 길이
+        public const float FailScatterMaxStagger = 0.18f;  // 다트별 시작 시차(랜덤)
+        /// <summary>ContinueHandler 가 실패 팝업을 띄우기 전 대기 시간 (흩어짐 완료 + 여유).</summary>
+        public const float FailScatterPopupDelay = 0.85f;
+        private const float FailScatterMinDistance = 0.35f; // 흩어짐 거리(월드)
+        private const float FailScatterMaxDistance = 0.95f;
+        private const float ContinueRestoreDuration = 0.45f;
+
+        private bool _failScatterActive;       // 흩어진 상태(복귀 전)
+        private bool _continueRestoreActive;   // 복귀 연출 중 — Update(동기/스캔/발사) 전체 억제
+        private Coroutine _failScatterCo;
+        private Coroutine _continueRestoreCo;
+        private readonly Dictionary<int, Vector3> _restoreStartPos = new Dictionary<int, Vector3>(64);
+        private readonly Dictionary<int, Quaternion> _restoreStartRot = new Dictionary<int, Quaternion>(64);
+
+        private IEnumerator PlayFailDerailScatter()
+        {
+            _failScatterActive = true;
+            if (!RailManager.HasInstance) yield break;
+            RailManager rail = RailManager.Instance;
+
+            foreach (var kvp in _dartVisuals)
+            {
+                GameObject go = kvp.Value.gameObject;
+                if (go == null) continue;
+                if (rail.FindDart(kvp.Key) == null) continue; // 레일에 없는 다트(발사체 등) 제외
+
+                Vector3 start = go.transform.position;
+                Vector2 dir2 = Random.insideUnitCircle.normalized;
+                if (dir2.sqrMagnitude < 0.001f) dir2 = Vector2.down;
+                float dist = Random.Range(FailScatterMinDistance, FailScatterMaxDistance);
+                Vector3 end = start + new Vector3(dir2.x, 0f, dir2.y) * dist;
+                float delay = Random.Range(0f, FailScatterMaxStagger);
+
+                // 뒹구는 느낌 — 탑다운 화면 기준 Y 스핀(회전) + X/Z 기울임('누운' 실루엣) 랜덤 조합.
+                Vector3 tumble = new Vector3(
+                    Random.Range(40f, 100f) * (Random.value < 0.5f ? -1f : 1f),
+                    Random.Range(140f, 360f) * (Random.value < 0.5f ? -1f : 1f),
+                    Random.Range(20f, 70f) * (Random.value < 0.5f ? -1f : 1f));
+
+                go.transform.DOKill();
+                var seq = DOTween.Sequence().SetUpdate(true).SetLink(go, LinkBehaviour.KillOnDisable);
+                seq.AppendInterval(delay);
+                seq.Append(go.transform.DOMove(end, FailScatterDuration).SetEase(Ease.OutCubic));
+                seq.Join(go.transform.DORotate(tumble, FailScatterDuration, RotateMode.WorldAxisAdd)
+                    .SetEase(Ease.OutCubic));
+            }
+
+            yield return new WaitForSecondsRealtime(FailScatterMaxStagger + FailScatterDuration);
+            _failScatterCo = null;
+        }
+
+        private IEnumerator PlayContinueRestoreFromScatter()
+        {
+            _continueRestoreActive = true;   // Update 전체 skip — 복귀 중 동기 스톰핑/발사 방지
+            RailManager rail = RailManager.HasInstance ? RailManager.Instance : null;
+            if (rail == null)
+            {
+                _failScatterActive = false;
+                _continueRestoreActive = false;
+                _continueRestoreCo = null;
+                yield break;
+            }
+
+            RefreshFadeCache(); // _cachedDartPathOffset 갱신 (레일 포즈 계산용)
+
+            // 1) 이어하기로 제거된 다트 — "그냥 사라지게" (스펙): 즉시 풀 반환.
+            _tempRemoveKeys.Clear();
+            foreach (var kvp in _dartVisuals)
+            {
+                GameObject go = kvp.Value.gameObject;
+                if (go == null || rail.FindDart(kvp.Key) == null)
+                {
+                    if (go != null) { go.transform.DOKill(); ReturnDartToPool(go); }
+                    _tempRemoveKeys.Add(kvp.Key);
+                }
+            }
+            for (int i = 0; i < _tempRemoveKeys.Count; i++)
+                _dartVisuals.Remove(_tempRemoveKeys[i]);
+
+            // 2) 생존 다트 — 흩어진 현재 포즈에서 '라이브' 레일 포즈로 lerp.
+            //    벨트가 복귀 중에도 전진할 수 있어 목표 포즈를 매 프레임 재계산 → 핸드오프 스냅 없음.
+            _restoreStartPos.Clear();
+            _restoreStartRot.Clear();
+            foreach (var kvp in _dartVisuals)
+            {
+                GameObject go = kvp.Value.gameObject;
+                if (go == null) continue;
+                go.transform.DOKill(); // 흩어짐 트윈 잔존 시 충돌 방지
+                _restoreStartPos[kvp.Key] = go.transform.position;
+                _restoreStartRot[kvp.Key] = go.transform.rotation;
+            }
+
+            float t = 0f;
+            while (t < ContinueRestoreDuration)
+            {
+                t += Time.unscaledDeltaTime;
+                float k = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t / ContinueRestoreDuration));
+                foreach (var kvp in _dartVisuals)
+                {
+                    GameObject go = kvp.Value.gameObject;
+                    if (go == null) continue;
+                    var dart = rail.FindDart(kvp.Key);
+                    if (dart == null) continue;
+                    if (!_restoreStartPos.TryGetValue(kvp.Key, out Vector3 sp)) continue;
+
+                    GetRailVisualPose(rail, dart, out Vector3 railPos, out Quaternion railRot);
+                    go.transform.position = Vector3.Lerp(sp, railPos, k);
+                    if (_restoreStartRot.TryGetValue(kvp.Key, out Quaternion sr))
+                        go.transform.rotation = Quaternion.Slerp(sr, railRot, k);
+                }
+                yield return null;
+            }
+
+            _restoreStartPos.Clear();
+            _restoreStartRot.Clear();
+            _failScatterActive = false;
+            _continueRestoreActive = false;
+            _continueRestoreCo = null;
+        }
+
+        /// <summary>UpdatePerDartPositions 와 동일한 레일 포즈 계산 (위치+조준 회전).</summary>
+        private void GetRailVisualPose(RailManager rail, RailManager.DartOnRail dart, out Vector3 pos, out Quaternion rot)
+        {
+            rail.GetPositionAndDirectionAtDistance(dart.progress, out pos, out Vector3 tangent);
+            Vector3 inward = Vector3.Cross(tangent, Vector3.up).normalized;
+            pos += inward * _cachedDartPathOffset;
+            rot = (tangent.sqrMagnitude > 0.001f && inward.sqrMagnitude > 0.001f)
+                ? Quaternion.LookRotation(inward)
+                : Quaternion.identity;
+        }
+
+        /// <summary>레벨 정리/재시작 경로 — 탈선 연출 상태 리셋.</summary>
+        private void ResetFailScatterState()
+        {
+            if (_failScatterCo != null) { StopCoroutine(_failScatterCo); _failScatterCo = null; }
+            if (_continueRestoreCo != null) { StopCoroutine(_continueRestoreCo); _continueRestoreCo = null; }
+            _failScatterActive = false;
+            _continueRestoreActive = false;
+            _restoreStartPos.Clear();
+            _restoreStartRot.Clear();
+        }
+
+        #endregion
 
         #endregion
 
