@@ -69,6 +69,8 @@ namespace BalloonFlow
         private const float ZapLineFadeInDuration = 0.07f;   // 사용자 사양 0.05~0.1s 중간값
         // 사용자 사양 0.08~0.15s 의 중간 안전값 — start→end suction 과 width/alpha 0 수렴이 함께 끝나는 길이.
         private const float ZapLineFadeOutDuration = 0.12f;
+        // 사용자 사양 0.80~0.90 — 100% 수렴 시 LineRenderer Width Curve 시작구간이 점처럼 뭉치는 현상 차단.
+        private const float ZapLineFadeOutMaxSuctionRatio = 0.85f;
 
         private readonly List<ZapTarget> _zapTargets = new List<ZapTarget>(128);
         private GameObject _itemZapPrefab;
@@ -1487,7 +1489,7 @@ namespace BalloonFlow
                     {
                         Vector3 origStart = originalStarts[i];
                         Vector3 origEnd = originalEnds[i];
-                        Vector3 currentStart = Vector3.Lerp(origStart, origEnd, ratio);
+                        Vector3 currentStart = Vector3.Lerp(origStart, origEnd, ratio * ZapLineFadeOutMaxSuctionRatio);
 
                         Vector3 jitterStart = new Vector3(
                             Random.Range(-ZapLineJiggleEndpointJitter, ZapLineJiggleEndpointJitter),
@@ -1537,18 +1539,9 @@ namespace BalloonFlow
                 yield return null;
             }
 
-            // 완전 수렴: StartPosition=EndPosition 으로 한 번 더 Trigger() 호출(번개 잔상 없이 깔끔히 사라짐).
+            // suction 은 0.85 까지만(start==end 만들지 않음) — width/alpha 만 0 으로 정리해 자연스럽게 사라지게 함.
             for (int i = 0; i < cached; i++)
             {
-                LightningBoltScript bolt = bolts[i];
-                if (bolt != null)
-                {
-                    Vector3 origEnd = originalEnds[i];
-                    bolt.StartPosition = origEnd;
-                    bolt.EndPosition = origEnd;
-                    bolt.Trigger();
-                }
-
                 LineRenderer lr = renderers[i];
                 if (lr != null)
                 {
