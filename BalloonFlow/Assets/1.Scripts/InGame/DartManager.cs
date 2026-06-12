@@ -333,7 +333,7 @@ namespace BalloonFlow
 #if BALLOONFLOW_DART_MISS_SUSPECT_DEBUG
         private static readonly bool DART_MISS_SUSPECT_DEBUG = true;
 #else
-        // [2026-06-10 perf] DBG-TopLeft 캡쳐 종료 — false 복귀 (원 주석 "캡쳐 끝나면 false 로 복귀" 이행).
+        // [2026-06-12] wrap pass-lock 진단 캡처 종료 — false 복귀 (Debug.Log 부하로 플레이 빌드 방치 금지).
         private static readonly bool DART_MISS_SUSPECT_DEBUG = false;
 #endif
         // ROLLBACK_DART_ATTACK_ISSUE_DEBUG:
@@ -2565,30 +2565,32 @@ namespace BalloonFlow
         {
             if (!RailManager.HasInstance) return;
             RailManager rail = RailManager.Instance;
-            if (RailManager.GetRailSideCount(rail.PhysicalCapacity) != 1) return;
-            if (scanDir != DirectionalTargeting.ScanDirection.Up) return;
+            // [WRAP_PASS_RESET 2026-06-12] 1면 한정 → 개방 레일 전체(1~3면)로 확대 + 방향/passDir 게이트 제거.
+            //   증거(holderLineConsumed 영구 차단 로그): 2~3면 레일에서 holder 가 wrap 경계 부근
+            //   라인(좌측 끝 0/1)에서만 발사하면 — ①line-jump 감지는 |현재-마지막발사| < DELTA(6) 라 실패,
+            //   ②방향전환 감지는 스캔 캐시가 발사 시에만 갱신돼 항상 같은 방향이라 실패,
+            //   ③stuck 릴리프는 벨트 이동으로 같은 라인 0.4s 체류가 안 돼 실패 → pass lock 영구 잔존
+            //   → 매칭 풍선이 그 라인에만 있으면 영구 정지(매치 존재로 fail 도 안 뜸).
+            //   progress 급감(> pathLen*0.5)은 기하학적 wrap 그 자체 — 면 수/스캔 방향 무관하게 신뢰 가능,
+            //   head 교체로 인한 감소는 한 다트 간격 수준이라 임계에 안 걸림. 폐루프(4면)는 wrap 이 없고
+            //   코너 방향 전환(EnsureHolderPassDirection)이 pass 를 리셋하므로 제외.
+            if (RailManager.GetRailSideCount(rail.PhysicalCapacity) >= 4) return;
 
             // head progress 변화량으로 wrap 판정 (board 너비 무관). 매 tick baseline 갱신.
             float pathLen = rail.TotalPathLength;
             bool hasLastProg = _lastStraightHeadProgressByHolder.TryGetValue(holderId, out float lastProg);
             _lastStraightHeadProgressByHolder[holderId] = headProgress;
 
-            // pass 가 현재 scanDir 로 활성일 때만 lock 해제 의미 있음.
-            if (!_holderPassDirectionByHolder.TryGetValue(holderId, out DirectionalTargeting.ScanDirection passDir)
-                || passDir != scanDir)
-            {
-                return;
-            }
-
             bool wrapped = false;
 
-            // 1) progress 기반: 개방 ㅡ 레일은 끝→시작 순간이동 시 progress 가 pathLen 만큼 급감.
-            //    head 교체(앞 다트 발사)로 인한 감소는 한 다트 간격 수준이라 pathLen*0.5 임계에 안 걸림.
+            // 1) progress 기반: 개방 레일은 끝→시작 순간이동 시 progress 가 pathLen 만큼 급감.
             if (pathLen > 0f && hasLastProg && headProgress < lastProg - pathLen * 0.5f)
                 wrapped = true;
 
-            // 2) 보조: 넓은 보드에서 catch-up 으로 큰 backward line jump (기존 동작 유지).
+            // 2) 보조: 같은 pass 방향에서 큰 backward line jump (기존 동작 유지 — 방향 일치 시에만 의미).
             if (!wrapped
+                && _holderPassDirectionByHolder.TryGetValue(holderId, out DirectionalTargeting.ScanDirection passDir)
+                && passDir == scanDir
                 && _lastFiredLineByHolder.TryGetValue(holderId, out int lastFiredLine)
                 && currentLine < lastFiredLine - OPEN_RAIL_WRAP_RESET_LINE_DELTA)
                 wrapped = true;
@@ -2599,6 +2601,9 @@ namespace BalloonFlow
                 // (ResetOpenRailPassIfWrapped 와 동일). 둘 중 하나라도 남으면 발사가 다시 막힘.
                 ClearConsumedLineLockForHolder(holderId);
                 ClearResolvedConsumedTargetLinesForDirection(scanDir);
+                LogAttackIssue(
+                    "DartWrapPassReset",
+                    $"holder={holderId} scan={scanDir} line={currentLine} progress={headProgress:F2} pathLen={pathLen:F2}");
             }
         }
 
