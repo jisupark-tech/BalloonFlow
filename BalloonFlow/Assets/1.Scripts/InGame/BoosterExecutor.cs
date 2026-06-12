@@ -65,8 +65,7 @@ namespace BalloonFlow
         private const float ZapLineJiggleMaxInterval = 0.06f;
         private const float ZapLineJiggleEndpointJitter = 0.07f;
 
-        // Fade in/out 연출 — 라인이 뚝 끊겨 보이지 않도록 width+alpha 를 함께 보간한다.
-        private const float ZapLineFadeInDuration = 0.07f;   // 사용자 사양 0.05~0.1s 중간값
+        // FadeOut 연출 — 라인이 뚝 끊겨 보이지 않도록 width+alpha 를 함께 보간한다. (FadeIn 은 제거 — 첫 프레임부터 강하게 출력)
         // 사용자 사양 0.08~0.15s 의 중간 안전값 — width/alpha 0 수렴이 끝나는 길이. (start/end 위치는 종료까지 유지)
         private const float ZapLineFadeOutDuration = 0.12f;
 
@@ -84,10 +83,8 @@ namespace BalloonFlow
         private Coroutine _zapLineJiggleCo;
         private readonly Dictionary<LightningBoltScript, ZapLineBaseline> _zapLineBaselines = new Dictionary<LightningBoltScript, ZapLineBaseline>(8);
 
-        // 라인별 목표 widthMultiplier(프리팹의 원본 값). 첫 ConfigureZapLine 호출 시 캡처 → 페이드인의 보간 타깃이 된다.
+        // 라인별 목표 widthMultiplier(프리팹의 원본 값). 첫 ConfigureZapLine 호출 시 캡처 → 라인 활성화 시 즉시 적용되는 강한 출력 두께.
         private readonly Dictionary<LineRenderer, float> _zapLineTargetWidths = new Dictionary<LineRenderer, float>(8);
-        // 진행 중인 fade 코루틴(라인 단위). 시퀀스 중단/재시작 시 안전하게 StopCoroutine 하기 위해 보관.
-        private readonly List<Coroutine> _zapLineFadeCoroutines = new List<Coroutine>(8);
 
         // ZAP_LINE_POOL (등급1 perf 2026-06-11):
         // zap 1회 사용마다 라인 4개를 Instantiate/Destroy 하던 것을 비활성 보관 후 재사용.
@@ -128,12 +125,6 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnBoosterUsed>(HandleBoosterUsed);
             _handCamReturnSaved = false; // [HAND_CAMERA_5ROWS] 레벨 전환 시 보존 좌표 잔존 방지
             StopZapLineJiggle();
-            for (int i = 0; i < _zapLineFadeCoroutines.Count; i++)
-            {
-                Coroutine c = _zapLineFadeCoroutines[i];
-                if (c != null) StopCoroutine(c);
-            }
-            _zapLineFadeCoroutines.Clear();
             _zapLineTargetWidths.Clear();
         }
 
@@ -607,7 +598,6 @@ namespace BalloonFlow
                 }
             }
             _zapLineTargetWidths.Clear();
-            _zapLineFadeCoroutines.Clear();
             // FxZapLine 라인 페이드아웃·정리 완료 후에 ZapFinish 트리거 → ZapAttackIdle → ZapAttackFinish 자연 전이
             yield return StartCoroutine(WaitForZapFinishThenDestroyRoutine(zapObject));
 
@@ -1257,13 +1247,12 @@ namespace BalloonFlow
                 bolt.LockYAxis = true;
                 LineRenderer lineRenderer = bolt.GetComponent<LineRenderer>();
                 PrepareZapLineRenderer(lineRenderer);
-                // 풀 재사용 라인도 매 활성화마다 width/alpha 0 → 타깃으로 페이드인 — 시작·종료 대칭 보장.
+                // FadeIn 제거(사용자 사양): 번개는 첫 프레임부터 목표 두께/알파로 강하게 출력. ConfigureZapLine 이 타겟 변경마다 호출되어도 매번 0 초기화하지 않으므로 '얇게 시작' 결함 없음.
                 if (lineRenderer != null && _zapLineTargetWidths.TryGetValue(lineRenderer, out float fadeTarget))
                 {
-                    lineRenderer.widthMultiplier = 0f;
-                    Color sc0 = lineRenderer.startColor; sc0.a = 0f; lineRenderer.startColor = sc0;
-                    Color ec0 = lineRenderer.endColor;   ec0.a = 0f; lineRenderer.endColor   = ec0;
-                    _zapLineFadeCoroutines.Add(StartCoroutine(FadeInZapLineRoutine(lineRenderer, fadeTarget)));
+                    lineRenderer.widthMultiplier = fadeTarget;
+                    Color sc0 = lineRenderer.startColor; sc0.a = 1f; lineRenderer.startColor = sc0;
+                    Color ec0 = lineRenderer.endColor;   ec0.a = 1f; lineRenderer.endColor   = ec0;
                 }
                 // ROLLBACK_ZAP_LINE_FORCE_WORLD_SPACE:
                 // ItemZap owns FxZapLine as an animated child. Force this particular lightning
@@ -1409,28 +1398,6 @@ namespace BalloonFlow
                 _zapLineJiggleCo = null;
             }
             _zapLineBaselines.Clear();
-        }
-
-        private IEnumerator FadeInZapLineRoutine(LineRenderer lr, float targetWidth)
-        {
-            if (lr == null) yield break;
-            float t = 0f;
-            while (t < ZapLineFadeInDuration)
-            {
-                if (lr == null) yield break;
-                t += Time.deltaTime;
-                float k = Mathf.Clamp01(t / ZapLineFadeInDuration);
-                lr.widthMultiplier = Mathf.Lerp(0f, targetWidth, k);
-                Color sc = lr.startColor; sc.a = k; lr.startColor = sc;
-                Color ec = lr.endColor;   ec.a = k; lr.endColor   = ec;
-                yield return null;
-            }
-            if (lr != null)
-            {
-                lr.widthMultiplier = targetWidth;
-                Color sc = lr.startColor; sc.a = 1f; lr.startColor = sc;
-                Color ec = lr.endColor;   ec.a = 1f; lr.endColor   = ec;
-            }
         }
 
         private IEnumerator FadeOutZapLinesRoutine(List<GameObject> zapLineObjects)
