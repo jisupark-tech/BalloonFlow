@@ -1196,11 +1196,12 @@ namespace BalloonFlow
                 ? (useGold ? goldVariant : useItem ? itemVariant : giftVariant).transform
                 : root);
 
-            // 아이템 변형 내부 비주얼 정리 — heart 대체 이미지는 항상 끄고(infinite heart 도 ImageItem sprite swap),
+            // 아이템 변형 내부 비주얼 정리 — Heart 보상은 sprite swap 대신 전용 ImageHeart 표시,
             // gift 모드에선 아이템 아이콘/깃발류를 숨겨 '상자만' 보이게.
             Transform itemScope = itemVariant != null ? itemVariant.transform : root;
             GameObject imageHeartGo = FindChildComponentByName<Transform>(itemScope, "ImageHeart")?.gameObject;
-            if (imageHeartGo != null) imageHeartGo.SetActive(false);
+            bool isHeart = useItem && stage?.rewards != null && stage.rewards.infiniteHeartsSeconds > 0;
+            if (imageHeartGo != null) imageHeartGo.SetActive(useItem && isHeart);
             if (useGift)
             {
                 // 상자(선물) 모드 — 아이템 아이콘 후보(ImageItem/ImageGold 등) 전부 숨기고 깃발류도 끔 ('상자만').
@@ -1210,6 +1211,16 @@ namespace BalloonFlow
                     if (go != null && go != giftVariant) go.SetActive(false);
                 }
                 SetWsItemFlagsActive(itemScope, false);
+            }
+            else if (useItem && isHeart)
+            {
+                // Heart 전용 이미지 사용 — ImageItem 후보 아이콘 GO 전부 끔 (sprite swap 스킵).
+                for (int i = 0; i < WsRewardIconNames.Length; i++)
+                {
+                    var go = FindChildComponentByName<Transform>(itemScope, WsRewardIconNames[i])?.gameObject;
+                    if (go != null) go.SetActive(false);
+                }
+                SetWsItemFlagsActive(itemScope, true);
             }
             else if (useItem)
             {
@@ -1241,7 +1252,8 @@ namespace BalloonFlow
             }
 
             // 아이템 보상 = RewardItem 변형 + 그 자식 ImageItem 을 보상 sprite 로 swap (코인은 ImageGold 고정 비주얼).
-            if (useItem && !string.IsNullOrEmpty(spriteKey) && ResourceManager.HasInstance)
+            // Heart 보상은 전용 ImageHeart 사용 → sprite swap 스킵.
+            if (useItem && !isHeart && !string.IsNullOrEmpty(spriteKey) && ResourceManager.HasInstance)
             {
                 // [2026-06-11 fix] '이름 일치 Image 컴포넌트' 탐색은 ImageItem 이 홀더(Image 없는 GO)인
                 // 구조에서 무음 실패(텍스트만 갱신) → GO 기준 탐색 + Image 는 자신→자식 순 해석 (popup 동일).
