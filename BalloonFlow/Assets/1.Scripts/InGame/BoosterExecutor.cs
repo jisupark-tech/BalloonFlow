@@ -52,7 +52,11 @@ namespace BalloonFlow
         private const int HAND_VISIBLE_ROWS = 5;
         private static readonly Vector3 ZapSpawnPosition = new Vector3(-0.1911252f, 1.95f, -7.79f);
         private const float ZapLineWorldLift = 0.35f;
-        // FxZapLine 끝점(LightningEnd) 의 월드 Y 고정값. ConfigureZapLine 이 매 사용 시 LightningEnd.position.y / bolt.EndPosition.y 를 이 값으로 강제 — prefab 의 EndPosition Y 는 무시됨. 시작점 Y=1.95 → 끝점 Y=1 (약 -0.95) 의 완만한 낙하, LockYAxis=true 로 Y 흔들림은 여전히 0.
+        // FxZapLine 끝점(LightningEnd) 의 월드 Y 고정값 — [2026-06-12 v3 확정]
+        //   풍선 Y 기반(중심/윗면) 계산은 풍선 월드 Y 가 낮아 라인이 바닥에 꽂히고 이웃 풍선
+        //   '밑으로' 지나가 가려지는 문제 재현(2회 롤백) → 월드 1f 고정 복원.
+        //   원래의 '관통감'은 fan 끝점 분산(±0.15~0.20)이 풍선 실루엣 밖으로 삐져나간 게 주범 —
+        //   분산 축소(±0.08, ConfigureZapLineFan)는 유지한다.
         private const float ZapLineEndYWorld = 1f;
         private const float ZapLineMinWidth = 0.08f;
         private const int ZapLineSortingOrder = 80;
@@ -1333,12 +1337,13 @@ namespace BalloonFlow
                 new Vector2(0f, 0f),
             };
 
-            // 끝점 fan-out — 4개 라인이 부채꼴로 퍼지도록 더 크게, 각 라인 부호/크기 모두 다르게.
+            // 끝점 fan-out — [2026-06-12 v2] ±0.15~0.20 은 풍선 실루엣을 벗어나 옆을 지나는 관통감 유발
+            // → ±0.08 이내로 축소. 갈래감은 미세 분산 + jiggle jitter(±0.07)가 유지.
             Vector2[] endOffsetsXZ = {
-                new Vector2(+0.18f, +0.12f),
-                new Vector2(-0.20f, +0.10f),
-                new Vector2(+0.15f, -0.18f),
-                new Vector2(-0.16f, -0.14f),
+                new Vector2(+0.08f, +0.05f),
+                new Vector2(-0.08f, +0.04f),
+                new Vector2(+0.06f, -0.08f),
+                new Vector2(-0.07f, -0.05f),
             };
 
             for (int i = 0; i < count; i++)
