@@ -127,7 +127,7 @@ namespace BalloonFlow
                 _endEffect.SetActive(true);
         }
 
-        /// <summary>색상 Material 적용. ParticleSystemRenderer 는 제외 — 파티클 본연의 머티리얼 보존.</summary>
+        /// <summary>색상 적용. MeshRenderer 등은 베이스 머티리얼 복제본 적용, ParticleSystemRenderer 는 머티리얼은 보존하고 ParticleSystem.MainModule.startColor 로 틴트만 적용.</summary>
         public void ApplyColor(Color color)
         {
             if (_colorRenderers == null || _colorRenderers.Length == 0) return;
@@ -157,11 +157,19 @@ namespace BalloonFlow
             {
                 var r = _colorRenderers[i];
                 if (r == null) continue;
-                // ROLLBACK_GIMMICK_BASEMAT_SKIP_PARTICLE_20260612:
+                // ROLLBACK_GIMMICK_PARTICLE_TINT_KEEP_MATERIAL_20260612:
                 // WoodenBoard(Pinata) 등 일부 기믹 프리팹의 _colorRenderers 에 HitParticle/EndParticle/star 의
-                // ParticleSystemRenderer 가 섞여 있으면 베이스 머티리얼이 파티클 렌더러까지 덮어써 연출이 깨짐.
-                // 사용자 사양: 베이스 머티리얼은 Pinata 의 MeshRenderer 에만 적용, ParticleSystemRenderer 는 제외.
-                if (r is ParticleSystemRenderer) continue;
+                // ParticleSystemRenderer 가 섞여 있음. 사용자 사양: 파티클은 오브젝트 색상을 따라가야 하나,
+                // 머티리얼은 보존(VFX 셰이더/블렌드 유지) — sharedMaterial 은 건드리지 않고
+                // ParticleSystem.MainModule.startColor 로 시작 색만 갱신한다.
+                if (r is ParticleSystemRenderer psr)
+                {
+                    var ps = psr.GetComponent<ParticleSystem>();
+                    if (ps == null) continue;
+                    var main = ps.main;
+                    main.startColor = color;
+                    continue;
+                }
                 r.sharedMaterial = mat;
             }
         }
