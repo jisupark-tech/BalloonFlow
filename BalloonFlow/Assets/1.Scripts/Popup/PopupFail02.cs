@@ -57,7 +57,7 @@ namespace BalloonFlow
 
         private const int RETRY_BONUS_GOLD = 20;
 
-        private const int OVERLAY_SORT_ORDER = 260; // Tutorial(=250) 위에 항상 표시 — 사용자 요청 2026-06-04
+        private const int OVERLAY_SORT_ORDER = 200; // PopupCanvas 기본값과 동일 — 사용자 요청 2026-06-12 (이전 260 → 200, Tutorial 위 강제 표시 정책 철회)
         private Canvas _overrideCanvas;
 
         // PopupFail02 Sorting Order 사양 (FX=240/ImageStage=243/Gold=244/TxtGoldOutline=247/TxtGold=248)
@@ -107,9 +107,9 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// PopupFail02는 Tutorial(sortingOrder=250) 위에 항상 표시되어야 함 — 사용자 요청 2026-06-04.
-        /// Tutorial이 자체 Canvas.overrideSorting=true 로 PopupCanvas(=200)을 덮어쓰므로,
-        /// 같은 메커니즘으로 PopupFail02 에도 Canvas+GraphicRaycaster 런타임 부착 + sortingOrder 260 부여.
+        /// PopupFail02 Canvas Sorting Order=200 부여 — 사용자 요청 2026-06-12.
+        /// PopupCanvas 기본 sortingOrder(=200)와 동일 레벨로 표시. 이전(2026-06-04) Tutorial(=250) 위 강제 노출 정책은 철회.
+        /// Canvas+GraphicRaycaster 런타임 부착 메커니즘은 prefab 바이너리 직렬화로 인스펙터 수정이 어려운 본 프로젝트 정책상 유지.
         /// </summary>
         private void EnsureOverlaySorting()
         {
