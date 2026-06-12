@@ -2086,8 +2086,8 @@ namespace BalloonFlow
 
                 case DifficultyPurpose.SuperHard:
                     if (_imgPlayButton != null && _sprBtnRed != null) _imgPlayButton.sprite = _sprBtnRed;
-                    if (_txtPlayLevel != null) { _txtPlayLevel.gameObject.SetActive(true); _txtPlayLevel.text = LocalizationService.Get("ui.lobby.super_hard"); }
-                    if (_txtPlayLevelOutline != null) { _txtPlayLevelOutline.gameObject.SetActive(true); _txtPlayLevelOutline.text = LocalizationService.Get("ui.lobby.super_hard"); }
+                    if (_txtPlayLevel != null) { _txtPlayLevel.gameObject.SetActive(true); _txtPlayLevel.text = LocalizationService.Get("ui.superhard"); }
+                    if (_txtPlayLevelOutline != null) { _txtPlayLevelOutline.gameObject.SetActive(true); _txtPlayLevelOutline.text = LocalizationService.Get("ui.superhard"); }
                     break;
 
                 default: // Normal, Tutorial, Rest, Intro
