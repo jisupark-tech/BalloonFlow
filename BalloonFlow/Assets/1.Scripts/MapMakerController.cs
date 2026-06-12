@@ -321,9 +321,17 @@ namespace BalloonFlow
         private Dropdown _difficultyDropdown;
         private Text[] _palTexts;
         private Transform _holderGridContainer;
-        // [2026-06-12] AI/Transform 탭 폐기 — Episode JSON 단일 스토어만 사용 (SO 완전 미경유).
+        // [2026-06-12] AI/Transform 탭 폐기 — Episode JSON 단일 스토어 (SO 미경유).
         //   _targetDB 는 episode JSON 합본의 in-memory 캐시 (에셋 아님).
-        private LevelDatabase _targetDB;           // Origin (episode JSON 합본 캐시)
+        // [2026-06-12 v2] "Old" 탭 추가 — 옛날 데이터(레거시 SO LevelDatabase.asset) '조회 전용' 소스.
+        //   Old 탭에서 로드한 레벨도 Save 는 항상 Episode JSON 으로 감 → 레거시 → 현행 스토어
+        //   마이그레이션 경로로 사용. (레거시 SO 에 쓰는 코드는 없음)
+        private LevelDatabase _targetDB;           // Episode JSON 합본 캐시
+        private LevelDatabase _targetDBLegacy;     // 레거시 SO 캐시 (읽기 전용)
+        private const string LEGACY_SO_PATH = "Assets/EditorData/LevelDatabase.asset";
+        private static readonly string[] DB_TAB_NAMES = { "Epi", "Old" };
+        private int _activeDBTab; // 0=Episode(기본), 1=Legacy SO(조회 전용)
+        private Text[] _dbTabLabels;
 
         private const int LEVELS_PER_EXPORT_EPISODE = 20;
         private const int LEVEL_EPISODE_VERSION = 1;
@@ -804,10 +812,30 @@ namespace BalloonFlow
             var headerTxt = MakeText(header, "LEVELS", 15, FontStyle.Bold, TextAnchor.MiddleCenter);
             SetFillRect(headerTxt.GetComponent<RectTransform>());
 
-            // [2026-06-12] DB 탭바(Ori/AI/Transform) 제거 — Episode JSON 단일 스토어.
+            // [2026-06-12 v2] DB 탭바 — Epi(Episode JSON, 기본) / Old(레거시 SO 조회 전용).
+            var dbTabBar = MakeRT("DBTabBar", panel);
+            dbTabBar.anchorMin = new Vector2(0, 1);
+            dbTabBar.anchorMax = Vector2.one;
+            dbTabBar.pivot = new Vector2(0.5f, 1);
+            dbTabBar.sizeDelta = new Vector2(0, 28);
+            dbTabBar.anchoredPosition = new Vector2(0, -36);
+            var dbTabHlg = dbTabBar.gameObject.AddComponent<HorizontalLayoutGroup>();
+            dbTabHlg.spacing = 2;
+            dbTabHlg.childForceExpandWidth = true;
+            dbTabHlg.childForceExpandHeight = true;
 
-            // Scroll area (헤더 아래)
-            float topOffset = 36; // header
+            _dbTabLabels = new Text[DB_TAB_NAMES.Length];
+            for (int t = 0; t < DB_TAB_NAMES.Length; t++)
+            {
+                int tabIdx = t;
+                var tabBtn = Btn(dbTabBar, DB_TAB_NAMES[t], () => SetActiveDBTab(tabIdx));
+                _dbTabLabels[t] = tabBtn.GetComponentInChildren<Text>();
+                if (_dbTabLabels[t] != null) _dbTabLabels[t].fontSize = 10;
+            }
+            UpdateDBTabColors();
+
+            // Scroll area (헤더 + DB탭 아래)
+            float topOffset = 36 + 28; // header + dbTab
             var scrollArea = MakeRT("ScrollArea", panel);
             scrollArea.anchorMin = Vector2.zero;
             scrollArea.anchorMax = Vector2.one;
@@ -834,13 +862,36 @@ namespace BalloonFlow
             _levelListContent = content;
         }
 
-        /// <summary>[2026-06-12] AI/Transform 탭 폐기 후 단일 스토어 캐시 리프레시 —
-        /// Importer 적용 등 외부에서 episode JSON 이 바뀐 뒤 목록 갱신용.</summary>
+        /// <summary>[2026-06-12] 활성 탭 캐시 리프레시 — Importer 적용 등 외부 변경 후 목록 갱신용.</summary>
         private void ReloadEpisodeStore()
         {
-            _targetDB = null; // 캐시 초기화 → LoadLevelDatabase 에서 episode JSON 재합본
+            _targetDB = null;       // episode JSON 합본 재빌드
+            _targetDBLegacy = null; // 레거시 SO 재로드
             RefreshLevelList();
-            SetStatus("Episode store reloaded");
+            SetStatus(_activeDBTab == 1 ? "Legacy store reloaded" : "Episode store reloaded");
+        }
+
+        /// <summary>[2026-06-12 v2] Epi(0) / Old(1, 레거시 SO 조회 전용) 탭 전환.</summary>
+        private void SetActiveDBTab(int tabIdx)
+        {
+            _activeDBTab = Mathf.Clamp(tabIdx, 0, DB_TAB_NAMES.Length - 1);
+            UpdateDBTabColors();
+            RefreshLevelList();
+            SetStatus(_activeDBTab == 1
+                ? "DB: Old (레거시 SO 조회 전용 — Save 는 Episode 로 저장됨)"
+                : "DB: Episode JSON");
+        }
+
+        private void UpdateDBTabColors()
+        {
+            if (_dbTabLabels == null) return;
+            for (int i = 0; i < _dbTabLabels.Length; i++)
+            {
+                if (_dbTabLabels[i] == null) continue;
+                var img = _dbTabLabels[i].transform.parent.GetComponent<Image>();
+                if (img != null)
+                    img.color = i == _activeDBTab ? new Color(0.2f, 0.45f, 0.7f) : new Color(0.15f, 0.15f, 0.2f);
+            }
         }
 
         private void BuildCenterOverlay(Transform canvasRoot)
@@ -6506,7 +6557,16 @@ namespace BalloonFlow
 
         private LevelDatabase LoadLevelDatabase()
         {
-            // [2026-06-12] AI/Transform 탭 폐기 — Episode JSON 합본 단일 경로 (SO 미경유).
+            // [2026-06-12 v2] Epi 탭 = Episode JSON 합본 / Old 탭 = 레거시 SO (조회 전용).
+            if (_activeDBTab == 1)
+            {
+                if (_targetDBLegacy != null) return _targetDBLegacy;
+                _targetDBLegacy = AssetDatabase.LoadAssetAtPath<LevelDatabase>(LEGACY_SO_PATH);
+                if (_targetDBLegacy == null)
+                    SetStatus($"Legacy DB 없음: {LEGACY_SO_PATH}");
+                return _targetDBLegacy;
+            }
+
             if (_targetDB != null) return _targetDB;
             _targetDB = LoadEpisodesAsLevelDatabase();
             return _targetDB;
