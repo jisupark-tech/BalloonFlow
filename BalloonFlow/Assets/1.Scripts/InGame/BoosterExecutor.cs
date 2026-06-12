@@ -1281,7 +1281,7 @@ namespace BalloonFlow
         }
 
         // 4갈래 Zap 라인을 동일 타이밍에 ConfigureZapLine으로 활성화.
-        // 시작점은 약하게 fan-out, 끝점은 더 크게 X/Z 분산해 부채꼴로 퍼지게 한다.
+        // 시작점은 4갈래 모두 동일(ZapSpawnPosition 고정 — 사용자 사양: X값 동일), 끝점만 X/Z 분산해 부채꼴로 퍼지게 한다.
         // Y는 GetZapLineRenderPosition 가 결정한 값 그대로(위아래 튀지 않게).
         private void ConfigureZapLineFan(List<GameObject> zapLineObjects, Vector3 startPosition, Vector3 endPosition, float visibleDuration)
         {
@@ -1298,12 +1298,12 @@ namespace BalloonFlow
                 return;
             }
 
-            // 시작점 fan-out — 시작점이 너무 겹치지 않을 정도로만 약하게.
+            // 시작점 고정 — 4갈래 모두 ZapSpawnPosition + ZapLineWorldLift 에서 동일하게 출발 (JiggleZapLinesRoutine 의 ±ZapLineJiggleEndpointJitter 만이 매 tick 미세 진동을 줌)
             Vector2[] startOffsetsXZ = {
-                new Vector2(+0.00f, +0.00f),
-                new Vector2(+0.05f, +0.03f),
-                new Vector2(-0.05f, -0.03f),
-                new Vector2(+0.03f, -0.05f),
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
             };
 
             // 끝점 fan-out — 4개 라인이 부채꼴로 퍼지도록 더 크게, 각 라인 부호/크기 모두 다르게.
