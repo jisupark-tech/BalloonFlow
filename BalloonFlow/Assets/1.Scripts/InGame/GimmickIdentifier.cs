@@ -127,7 +127,7 @@ namespace BalloonFlow
                 _endEffect.SetActive(true);
         }
 
-        /// <summary>색상 Material 적용.</summary>
+        /// <summary>색상 Material 적용. ParticleSystemRenderer 는 제외 — 파티클 본연의 머티리얼 보존.</summary>
         public void ApplyColor(Color color)
         {
             if (_colorRenderers == null || _colorRenderers.Length == 0) return;
@@ -155,8 +155,14 @@ namespace BalloonFlow
             if (mat == null) return;
             for (int i = 0; i < _colorRenderers.Length; i++)
             {
-                if (_colorRenderers[i] != null)
-                    _colorRenderers[i].sharedMaterial = mat;
+                var r = _colorRenderers[i];
+                if (r == null) continue;
+                // ROLLBACK_GIMMICK_BASEMAT_SKIP_PARTICLE_20260612:
+                // WoodenBoard(Pinata) 등 일부 기믹 프리팹의 _colorRenderers 에 HitParticle/EndParticle/star 의
+                // ParticleSystemRenderer 가 섞여 있으면 베이스 머티리얼이 파티클 렌더러까지 덮어써 연출이 깨짐.
+                // 사용자 사양: 베이스 머티리얼은 Pinata 의 MeshRenderer 에만 적용, ParticleSystemRenderer 는 제외.
+                if (r is ParticleSystemRenderer) continue;
+                r.sharedMaterial = mat;
             }
         }
 
