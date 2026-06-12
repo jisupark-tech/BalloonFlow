@@ -286,6 +286,27 @@ namespace BalloonFlow
             string costStr = goldCost.ToString("N0");
             if (_txtGold != null) _txtGold.text = costStr;
             if (_txtGoldOutline != null) _txtGoldOutline.text = costStr;
+
+            // [2026-06-12] Buy 버튼 내 가격 라벨 동적 적용 — 프리팹의 정적 숫자가 아이템과 무관하게
+            // 노출되던 문제 (Hand 1900 / Shuffle 1500 / Zap 2900 은 호출부가 GetBoosterPrice 로 전달).
+            // 버튼 하위 TMP 중 '숫자만'인 텍스트만 교체 — "Buy" 같은 라벨은 보존, 노드명 무관.
+            SetNumericTextsInChildren(_txtBtnBuyOutline, costStr);
+            if (_frame != null && _frame.BtnSingle != null)
+                SetNumericTextsInChildren(_frame.BtnSingle.gameObject, costStr);
+        }
+
+        /// <summary>root 하위 TMP 중 콤마 제거 시 정수로 파싱되는(=가격 표기) 텍스트만 value 로 교체.</summary>
+        private static void SetNumericTextsInChildren(GameObject root, string value)
+        {
+            if (root == null) return;
+            TMP_Text[] labels = root.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < labels.Length; i++)
+            {
+                if (labels[i] == null) continue;
+                string t = labels[i].text != null ? labels[i].text.Replace(",", "").Trim() : null;
+                if (!string.IsNullOrEmpty(t) && int.TryParse(t, out _))
+                    labels[i].text = value;
+            }
         }
 
         private static void SetTextInChildren(GameObject root, string text)

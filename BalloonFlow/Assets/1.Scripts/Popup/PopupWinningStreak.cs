@@ -915,10 +915,12 @@ namespace BalloonFlow
 
             int dataCount = DataCount;
             int maxFirstDataIndex = Mathf.Max(0, dataCount - _pooledSlots.Count);
-            float verticalNormalizedPosition = _scrollRect != null ? Mathf.Clamp01(_scrollRect.verticalNormalizedPosition) : 1f;
-            float normalizedFromTop = 1f - verticalNormalizedPosition;
-            int firstDataIndex = Mathf.RoundToInt(normalizedFromTop * maxFirstDataIndex);
-            firstDataIndex = Mathf.Clamp(firstDataIndex, 0, maxFirstDataIndex);
+            // [2026-06-12 fix] 정규화 스크롤값(vnp) 라운딩 → 콘텐츠 픽셀 기반 인덱스.
+            //   vnp 비율 스케일과 슬롯 stride 픽셀 매핑이 정확히 비례하지 않아(패딩 포함 높이 vs 인덱스 범위)
+            //   리스트 상단부(고단계, 22→23+ 스크롤)에서 슬롯 윈도우가 늦게 이동 — 빈 틈(끊김)이 보이던 원인.
+            //   content 는 pivot(0.5,1)/anchor top 이라 위로 스크롤할수록 anchoredPosition.y 가 + 로 증가.
+            float scrolledY = Mathf.Max(0f, _keyBlazeContents.anchoredPosition.y - _contentTopPadding);
+            int firstDataIndex = Mathf.Clamp(Mathf.FloorToInt(scrolledY / _slotStrideY), 0, maxFirstDataIndex);
 
             for (int poolIndex = 0; poolIndex < _pooledSlots.Count; poolIndex++)
             {

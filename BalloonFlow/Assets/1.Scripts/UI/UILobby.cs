@@ -661,10 +661,8 @@ namespace BalloonFlow
                 ? WinningStreakConfigService.Instance.GetStage(stageForFill) : null;
             SetWsPointsText(anim.startPoints, fillStageDoc);
 
-            yield return PlayWsFireFlyAndPulse();
-
-            // [배치7-2] 클리어 후 획득 Flame "+{n}" 토스트 (gainedPoints).
-            ShowWsFlameGainToast(anim.gainedPoints);
+            // [2026-06-12] "+{n}" 은 별도 토스트 대신 flame(FxItem)에 직접 표기 — ShowWsFlameGainToast 호출 폐기.
+            yield return PlayWsFireFlyAndPulse(anim.gainedPoints);
 
             // FxFire 가 커졌다 작아진 직후 → Multiplier 가 X=10 으로 튕기듯 슬라이드 인.
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
@@ -713,6 +711,30 @@ namespace BalloonFlow
                     yield return PlayWsGetRewardSpawn(achievedDoc);
                     if (grantRewards && WinningStreakManager.HasInstance && !WinningStreakManager.Instance.IsStageClaimed(achievedStage))
                         WinningStreakManager.Instance.ClaimStage(achievedStage);
+
+                    // [2026-06-12 초과달성 연출] 보상 수령 후 초과분을 다음 스테이지 게이지로 캐리 —
+                    // 중간 달성 스테이지는 0→가득, 마지막 캐리는 0→endPoints 비율까지 채움.
+                    // (기존: 80/100 에서 +100 획득 시 다음 단계 300 기준 80 까지 차오르는 연출 부재)
+                    bool isLastAchieved = i == anim.achievedStages.Count - 1;
+                    int carryStage = isLastAchieved
+                        ? Mathf.Max(achievedStage + 1, Mathf.Max(1, anim.endStage))
+                        : anim.achievedStages[i + 1];
+                    var carryDoc = WinningStreakConfigService.HasInstance
+                        ? WinningStreakConfigService.Instance.GetStage(carryStage)
+                        : null;
+                    float carryTarget = isLastAchieved ? ResolveWsStageRatio(carryStage, anim.endPoints) : 1f;
+                    if (_wsProgressSlider != null && carryDoc != null && carryTarget > 0f)
+                    {
+                        BindWsRewardItem(carryDoc); // 다음 스테이지 보상으로 전환 후 채움
+                        _wsProgressSlider.value = 0f;
+                        SetWsPointsText(0, carryDoc);
+                        _wsLobbyFxSequence?.Kill();
+                        _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
+                        _wsLobbyFxSequence.Append(_wsProgressSlider.DOValue(carryTarget, WS_SLIDER_FILL_DURATION)
+                            .SetEase(Ease.OutCubic));
+                        yield return _wsLobbyFxSequence.WaitForCompletion();
+                        SetWsPointsText(isLastAchieved ? anim.endPoints : carryDoc.requiredPoints, carryDoc);
+                    }
                 }
             }
 
@@ -753,8 +775,9 @@ namespace BalloonFlow
         }
 
         /// <summary>FxItem(iconWinningStreak) 을 화면 중앙→target(ImageIcon) 으로 날린 뒤, target 이 커졌다 복귀하고,
-        /// 마지막에 FxFire(반짝이 효과)를 활성화한다. (날아가는 것=FxItem, 도착지=ImageIcon, FxFire=반짝이 only)</summary>
-        private IEnumerator PlayWsFireFlyAndPulse()
+        /// 마지막에 FxFire(반짝이 효과)를 활성화한다. (날아가는 것=FxItem, 도착지=ImageIcon, FxFire=반짝이 only)
+        /// [2026-06-12] gainedPoints &gt; 0 이면 flame 에 "+{n}" 라벨을 함께 부착 (별도 토스트 폐기).</summary>
+        private IEnumerator PlayWsFireFlyAndPulse(int gainedPoints = 0)
         {
             RectTransform target = ResolveWsFireTarget();   // ImageIcon
             Transform parent = ResolveWsFxParent();
@@ -776,6 +799,34 @@ namespace BalloonFlow
                     }
                     flyImg.color = Color.white;
                     flyImg.raycastTarget = false;
+                }
+
+                // [2026-06-12] flame 에 "+{n}" 라벨 부착 — flame 과 함께 비행/소멸. 폰트는 WS 게이지 텍스트 재사용.
+                if (gainedPoints > 0)
+                {
+                    var labelGo = new GameObject("TxtGain", typeof(RectTransform));
+                    labelGo.transform.SetParent(fly.transform, false);
+                    var label = labelGo.AddComponent<TextMeshProUGUI>();
+                    label.text = $"+{gainedPoints}";
+                    label.fontSize = 46f;
+                    label.alignment = TextAlignmentOptions.Center;
+                    label.raycastTarget = false;
+                    ResolveWsTexts();
+                    if (_wsTxtGaugeOutline != null)
+                    {
+                        label.font = _wsTxtGaugeOutline.font;
+                        label.fontSharedMaterial = _wsTxtGaugeOutline.fontSharedMaterial;
+                    }
+                    else if (_wsTxtGauge != null)
+                    {
+                        label.font = _wsTxtGauge.font;
+                        label.fontSharedMaterial = _wsTxtGauge.fontSharedMaterial;
+                    }
+                    var lrt = (RectTransform)labelGo.transform;
+                    lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 0.5f);
+                    lrt.pivot = new Vector2(0.5f, 0.5f);
+                    lrt.anchoredPosition = Vector2.zero;
+                    lrt.sizeDelta = new Vector2(320f, 90f);
                 }
 
                 RectTransform flyRt = fly.GetComponent<RectTransform>();
@@ -1113,15 +1164,16 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>WS 회차 남은 시간 표기 — 1d+: dd:hh, 1h+: hh:mm, &lt;1h: mm:ss.</summary>
+        /// <summary>WS 회차 남은 시간 표기 — [2026-06-12] "02:21" 형식이 의미 모호("2d 21h"로 요청) →
+        /// 1d+: "{d}d {h}h", 1h+: "{h}h {m}m", &lt;1h: "{m}m {s}s".</summary>
         private static string FormatWsRoundRemaining(System.TimeSpan r)
         {
             if (r.Ticks < 0) r = System.TimeSpan.Zero;
             if (r.TotalDays >= 1.0)
-                return $"{(int)r.TotalDays:D2}:{r.Hours:D2}";
+                return $"{(int)r.TotalDays}d {r.Hours}h";
             if (r.TotalHours >= 1.0)
-                return $"{r.Hours:D2}:{r.Minutes:D2}";
-            return $"{r.Minutes:D2}:{r.Seconds:D2}";
+                return $"{r.Hours}h {r.Minutes}m";
+            return $"{r.Minutes}m {r.Seconds}s";
         }
 
         private void ResolveWsTexts()
@@ -2375,6 +2427,16 @@ namespace BalloonFlow
         private void HandleSwipeDrag()
         {
             if (_pageContainer == null) return;
+
+            // [2026-06-12] 팝업(WinningStreak 등)이 떠 있는 동안 로비 페이지 스와이프 차단 —
+            // 팝업 뒤로 터치가 통과해 좌우 슬라이드로 샵 이동되던 문제. 드래그 진행 중이었다면 상태 리셋.
+            if (UIManager.HasInstance && UIManager.Instance.GetTopmostBackConsumingUI() != null)
+            {
+                _isDragging = false;
+                _dragDirectionLocked = false;
+                _dragIsHorizontal = false;
+                return;
+            }
 
             bool touching = false;
             float screenX = 0f;

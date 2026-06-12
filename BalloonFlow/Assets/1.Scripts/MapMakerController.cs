@@ -321,26 +321,17 @@ namespace BalloonFlow
         private Dropdown _difficultyDropdown;
         private Text[] _palTexts;
         private Transform _holderGridContainer;
-        private LevelDatabase _targetDB;           // Origin
-        private LevelDatabase _targetDB_AI;         // AI Extractor
-        private LevelDatabase _targetDB_Transform;  // Transform Extractor
+        // [2026-06-12] AI/Transform 탭 폐기 — Episode JSON 단일 스토어만 사용 (SO 완전 미경유).
+        //   _targetDB 는 episode JSON 합본의 in-memory 캐시 (에셋 아님).
+        private LevelDatabase _targetDB;           // Origin (episode JSON 합본 캐시)
 
-        private static readonly string[] DB_TAB_NAMES = { "Ori", "AI", "Transform" };
-        private static readonly string[] DB_PATHS = {
-            "Assets/EditorData/LevelDatabase.asset",
-            "Assets/EditorData/LevelDatabase_AI.asset",
-            "Assets/EditorData/LevelDatabase_Transform.asset"
-        };
         private const int LEVELS_PER_EXPORT_EPISODE = 20;
         private const int LEVEL_EPISODE_VERSION = 1;
-        // ROLLBACK_MAPMAKER_EPISODE_STORE_20260609: Origin 탭은 LevelDatabase SO 폐기 → Episode JSON 직접 로드/저장.
+        // ROLLBACK_MAPMAKER_EPISODE_STORE_20260609: LevelDatabase SO 폐기 → Episode JSON 직접 로드/저장.
         //   importer(LevelJsonImporterWindow) 와 같은 저장소를 보게 되어, import 한 레벨이 MapMaker 에 즉시 보임.
         private const string MM_EPISODES_DIR = "Assets/EditorData/Episodes";
         private const string MM_STREAMING_EP1 = "Assets/StreamingAssets/episode_01.json";
-        private const string EDITOR_PREF_LAST_DB_TAB = "BalloonFlow_LastEditedDBTab";
         private const string EDITOR_PREF_LAST_LEVEL = "BalloonFlow_LastEditedLevel";
-        private int _activeDBTab = 0;
-        private Text[] _dbTabLabels;
 
         // Grid lines
         private Transform _gridLineRoot;
@@ -396,7 +387,6 @@ namespace BalloonFlow
             _cam = Camera.main;
             if (_cam == null) { Debug.LogError("[MapMaker] Camera.main not found!"); return; }
             SetupCamera();
-            _activeDBTab = Mathf.Clamp(EditorPrefs.GetInt(EDITOR_PREF_LAST_DB_TAB, 0), 0, DB_TAB_NAMES.Length - 1);
             BuildUI();
 
             // 테스트 플레이 복귀 시 마지막 편집 레벨, 처음이면 레벨 1 로드.
@@ -814,30 +804,10 @@ namespace BalloonFlow
             var headerTxt = MakeText(header, "LEVELS", 15, FontStyle.Bold, TextAnchor.MiddleCenter);
             SetFillRect(headerTxt.GetComponent<RectTransform>());
 
-            // DB 탭 (헤더 바로 아래)
-            var dbTabBar = MakeRT("DBTabBar", panel);
-            dbTabBar.anchorMin = new Vector2(0, 1);
-            dbTabBar.anchorMax = Vector2.one;
-            dbTabBar.pivot = new Vector2(0.5f, 1);
-            dbTabBar.sizeDelta = new Vector2(0, 28);
-            dbTabBar.anchoredPosition = new Vector2(0, -36);
-            var dbTabHlg = dbTabBar.gameObject.AddComponent<HorizontalLayoutGroup>();
-            dbTabHlg.spacing = 2;
-            dbTabHlg.childForceExpandWidth = true;
-            dbTabHlg.childForceExpandHeight = true;
+            // [2026-06-12] DB 탭바(Ori/AI/Transform) 제거 — Episode JSON 단일 스토어.
 
-            _dbTabLabels = new Text[DB_TAB_NAMES.Length];
-            for (int t = 0; t < DB_TAB_NAMES.Length; t++)
-            {
-                int tabIdx = t;
-                var btn = Btn(dbTabBar, DB_TAB_NAMES[t], () => SetActiveDBTab(tabIdx));
-                _dbTabLabels[t] = btn.GetComponentInChildren<Text>();
-                if (_dbTabLabels[t] != null) _dbTabLabels[t].fontSize = 10;
-            }
-            UpdateDBTabColors();
-
-            // Scroll area (헤더 + DB탭 아래)
-            float topOffset = 36 + 28; // header + dbTab
+            // Scroll area (헤더 아래)
+            float topOffset = 36; // header
             var scrollArea = MakeRT("ScrollArea", panel);
             scrollArea.anchorMin = Vector2.zero;
             scrollArea.anchorMax = Vector2.one;
@@ -864,28 +834,13 @@ namespace BalloonFlow
             _levelListContent = content;
         }
 
-        private void SetActiveDBTab(int tabIdx)
+        /// <summary>[2026-06-12] AI/Transform 탭 폐기 후 단일 스토어 캐시 리프레시 —
+        /// Importer 적용 등 외부에서 episode JSON 이 바뀐 뒤 목록 갱신용.</summary>
+        private void ReloadEpisodeStore()
         {
-            _activeDBTab = Mathf.Clamp(tabIdx, 0, DB_TAB_NAMES.Length - 1);
-            EditorPrefs.SetInt(EDITOR_PREF_LAST_DB_TAB, _activeDBTab);
-            _targetDB = null; // 캐시 초기화 → LoadLevelDatabase에서 새 DB 로드
-            _targetDB_AI = null;
-            _targetDB_Transform = null;
-            UpdateDBTabColors();
+            _targetDB = null; // 캐시 초기화 → LoadLevelDatabase 에서 episode JSON 재합본
             RefreshLevelList();
-            SetStatus($"DB: {DB_TAB_NAMES[tabIdx]}");
-        }
-
-        private void UpdateDBTabColors()
-        {
-            if (_dbTabLabels == null) return;
-            for (int i = 0; i < _dbTabLabels.Length; i++)
-            {
-                if (_dbTabLabels[i] == null) continue;
-                var img = _dbTabLabels[i].transform.parent.GetComponent<Image>();
-                if (img != null)
-                    img.color = i == _activeDBTab ? new Color(0.2f, 0.45f, 0.7f) : new Color(0.15f, 0.15f, 0.2f);
-            }
+            SetStatus("Episode store reloaded");
         }
 
         private void BuildCenterOverlay(Transform canvasRoot)
@@ -2349,6 +2304,9 @@ namespace BalloonFlow
             var row = Row(p);
             Btn(row, "Save to DB", SaveToActiveDB);
             Btn(row, "Load Level", () => LoadLevelById(_levelId));
+            // [2026-06-12] Importer 'Episode 파일에 적용' 후 MapMaker 캐시가 stale 하던 문제 —
+            // 탭 전환(폐기됨) 대신 명시 Reload 버튼으로 episode 합본 캐시 재빌드.
+            Btn(row, "Reload", ReloadEpisodeStore);
             var exportRow = Row(p);
             Btn(exportRow, "Export Episode JSON", ExportEpisodeJson);
             Btn(exportRow, "Export Level JSON", ExportLevelJson);
@@ -6107,7 +6065,6 @@ namespace BalloonFlow
             EditorPrefs.SetString("BalloonFlow_TestLevel", json);
             EditorPrefs.SetBool("BalloonFlow_UseTestLevel", true);
             EditorPrefs.SetInt(EDITOR_PREF_LAST_LEVEL, _levelId);
-            EditorPrefs.SetInt(EDITOR_PREF_LAST_DB_TAB, _activeDBTab);
             PlayerPrefs.SetInt("BF_PendingLevelId", _levelId);
             IsTestMode = true;
             GameManager.IsTestPlayMode = true;
@@ -6189,7 +6146,32 @@ namespace BalloonFlow
             return false;
         }
 
-        /// <summary>풍선 좌표에서 실제 spacing 감지. 같은 행/열의 인접 풍선 간 최소 거리.</summary>
+        /// <summary>[2026-06-12] 풍선 좌표들이 spacing 격자에 정수배로 안착하는지 검증 —
+        /// 공식 spacing 신뢰 가능 여부 판정 (라운드트립 데이터는 항상 true).</summary>
+        private static bool BalloonsFitSpacing(BalloonLayout[] balloons, float spacing)
+        {
+            if (balloons == null || balloons.Length == 0) return true; // 빈 레벨 — 공식 그대로
+            if (spacing <= 0.0001f) return false;
+
+            float minX = float.MaxValue, minY = float.MaxValue;
+            for (int i = 0; i < balloons.Length; i++)
+            {
+                if (balloons[i].gridPosition.x < minX) minX = balloons[i].gridPosition.x;
+                if (balloons[i].gridPosition.y < minY) minY = balloons[i].gridPosition.y;
+            }
+            for (int i = 0; i < balloons.Length; i++)
+            {
+                float fx = (balloons[i].gridPosition.x - minX) / spacing;
+                float fy = (balloons[i].gridPosition.y - minY) / spacing;
+                if (Mathf.Abs(fx - Mathf.Round(fx)) > 0.2f) return false;
+                if (Mathf.Abs(fy - Mathf.Round(fy)) > 0.2f) return false;
+            }
+            return true;
+        }
+
+        /// <summary>풍선 좌표에서 실제 spacing 감지. 같은 행/열의 인접 풍선 간 최소 거리.
+        /// [2026-06-12] 공식 spacing 이 안 맞는 외부/레거시 데이터 전용 폴백 — 듬성듬성한 레벨에선
+        /// 2칸 간격을 1칸으로 오인할 수 있어 1순위로 쓰지 않는다 (ApplyLevelConfig 참고).</summary>
         private float DetectSpacingFromBalloons(BalloonLayout[] balloons, int cols, int rows)
         {
             if (balloons == null || balloons.Length < 2) return -1f;
@@ -6229,9 +6211,18 @@ namespace BalloonFlow
             _gridCols = Mathf.Max(config.gridCols, 2);
             _gridRows = Mathf.Max(config.gridRows, 2);
 
-            // spacing 자동 감지: 실제 풍선 좌표에서 최소 간격 계산
-            float spacing = DetectSpacingFromBalloons(config.balloons, _gridCols, _gridRows);
-            if (spacing <= 0f) spacing = CellSpacing; // 풍선 없으면 현재 공식 사용
+            // [2026-06-12 fix] spacing 결정을 '공식 우선'으로 변경.
+            //   기존 '최소 간격 자동 감지'는 듬성듬성한 레벨(인접 열/행에 풍선이 전혀 없는 디자인 —
+            //   예: 2칸 간격 도트 패턴)에서 실제 간격의 2배 이상을 감지 → 모든 col/row 가 절반으로
+            //   접혀 '압축'된 모습으로 로드되던 버그 (Export Level JSON → Import 라운드트립 보고).
+            //   저장(BuildLevelConfig)이 쓰는 공식 spacing(CellSpacing — 위에서 세팅된 grid 치수 기반)을
+            //   1순위로 쓰고, 좌표가 공식 그리드에 안 맞는 외부/레거시 데이터만 감지값으로 폴백.
+            float spacing = CellSpacing;
+            if (!BalloonsFitSpacing(config.balloons, spacing))
+            {
+                float detected = DetectSpacingFromBalloons(config.balloons, _gridCols, _gridRows);
+                if (detected > 0f) spacing = detected;
+            }
             _balloonColors = new int[_gridCols, _gridRows];
             _balloonGimmicks = new int[_gridCols, _gridRows];
             _balloonGimmickHP = new int[_gridCols, _gridRows];
@@ -6515,24 +6506,10 @@ namespace BalloonFlow
 
         private LevelDatabase LoadLevelDatabase()
         {
-            string path = DB_PATHS[_activeDBTab];
-            switch (_activeDBTab)
-            {
-                case 1:
-                    if (_targetDB_AI != null) return _targetDB_AI;
-                    _targetDB_AI = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
-                    return _targetDB_AI;
-                case 2:
-                    if (_targetDB_Transform != null) return _targetDB_Transform;
-                    _targetDB_Transform = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
-                    return _targetDB_Transform;
-                default:
-                    // ROLLBACK_MAPMAKER_EPISODE_STORE_20260609: Origin 탭은 SO 대신 Episode JSON 들을 합쳐 로드(SO 폐기).
-                    //   롤백: 아래 두 줄을 `_targetDB = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);` 로 복원.
-                    if (_targetDB != null) return _targetDB;
-                    _targetDB = LoadEpisodesAsLevelDatabase();
-                    return _targetDB;
-            }
+            // [2026-06-12] AI/Transform 탭 폐기 — Episode JSON 합본 단일 경로 (SO 미경유).
+            if (_targetDB != null) return _targetDB;
+            _targetDB = LoadEpisodesAsLevelDatabase();
+            return _targetDB;
         }
 
         /// <summary>
@@ -6566,18 +6543,10 @@ namespace BalloonFlow
             return db;
         }
 
-        /// <summary>활성 DB 탭에 저장.</summary>
+        /// <summary>현재 레벨 저장 — [2026-06-12] AI/Transform 탭 폐기, Episode JSON 단일 경로.</summary>
         private void SaveToActiveDB()
         {
-            string path = DB_PATHS[_activeDBTab];
-            switch (_activeDBTab)
-            {
-                case 1:  SaveToDB(path, ref _targetDB_AI); break;
-                case 2:  SaveToDB(path, ref _targetDB_Transform); break;
-                // ROLLBACK_MAPMAKER_EPISODE_STORE_20260609: Origin 탭 저장은 SO 대신 Episode JSON 으로(importer 와 동일 저장소).
-                //   롤백: `SaveToDB(path, ref _targetDB);` 로 복원.
-                default: SaveCurrentLevelToEpisode(); break;
-            }
+            SaveCurrentLevelToEpisode();
         }
 
         /// <summary>
@@ -7253,34 +7222,10 @@ namespace BalloonFlow
 
         private void SaveLevelToDatabase(int levelId)
         {
-            string path = DB_PATHS[_activeDBTab];
-            LevelDatabase db = _activeDBTab == 1 ? _targetDB_AI
-                              : _activeDBTab == 2 ? _targetDB_Transform
-                              : _targetDB;
-            if (db == null)
-            {
-                db = AssetDatabase.LoadAssetAtPath<LevelDatabase>(path);
-                if (db == null)
-                { db = ScriptableObject.CreateInstance<LevelDatabase>(); AssetDatabase.CreateAsset(db, path); }
-                switch (_activeDBTab)
-                {
-                    case 1: _targetDB_AI = db; break;
-                    case 2: _targetDB_Transform = db; break;
-                    default: _targetDB = db; break;
-                }
-            }
-            var config = BuildLevelConfig();
-            config.levelId = levelId;
-            var levels = db.levels != null ? new List<LevelConfig>(db.levels) : new List<LevelConfig>();
-            int idx = levels.FindIndex(l => l.levelId == levelId);
-            if (idx >= 0) levels[idx] = config; else levels.Add(config);
-            levels.Sort((a, b) => a.levelId.CompareTo(b.levelId));
-            db.levels = levels.ToArray();
-            EditorUtility.SetDirty(db);
-            AssetDatabase.SaveAssets();
-            string dbName = System.IO.Path.GetFileNameWithoutExtension(path);
-            SetStatus($"Saved Level {levelId} to {dbName}");
-            RefreshLevelList();
+            // [2026-06-12] AI/Transform 탭 폐기 — SO 저장 경로 제거, Episode JSON 저장으로 통일
+            // (Save to DB 와 동일 경로: 병합·백업·pkg1 StreamingAssets 동기화 포함).
+            _levelId = levelId;
+            SaveCurrentLevelToEpisode();
         }
 
         // ── Feature 3: Crop Tool ──
