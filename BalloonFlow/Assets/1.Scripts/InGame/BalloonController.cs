@@ -71,7 +71,7 @@ namespace BalloonFlow
             new Color(167/255f, 221/255f, 148/255f),  // 19: Mint
             new Color( 89/255f,  46/255f, 126/255f),  // 20: Indigo
             new Color(220/255f, 120/255f, 129/255f),  // 21: Rose
-            new Color(217/255f, 217/255f, 231/255f),  // 22: Silver
+            new Color(174/255f, 178/255f, 194/255f),  // 22: Silver — [2026-06-12] #D9D9E7→#AEB2C2, 흰색(6)과 구분 강화
             new Color(111/255f, 114/255f, 127/255f),  // 23: Gray
             new Color(252/255f,  56/255f, 165/255f),  // 24: Magenta
             new Color(253/255f, 180/255f,  88/255f),  // 25: Amber

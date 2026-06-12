@@ -44,7 +44,7 @@ namespace BalloonFlow
             new Color(167/255f, 221/255f, 148/255f),  // 19: Mint
             new Color( 89/255f,  46/255f, 126/255f),  // 20: Indigo
             new Color(220/255f, 120/255f, 129/255f),  // 21: Rose
-            new Color(217/255f, 217/255f, 231/255f),  // 22: Silver
+            new Color(174/255f, 178/255f, 194/255f),  // 22: Silver — [2026-06-12] #D9D9E7→#AEB2C2, 흰색(6)과 구분 강화
             new Color(111/255f, 114/255f, 127/255f),  // 23: Gray
             new Color(252/255f,  56/255f, 165/255f),  // 24: Magenta
             new Color(253/255f, 180/255f,  88/255f),  // 25: Amber
@@ -6762,10 +6762,15 @@ namespace BalloonFlow
             }
 
             LevelEpisode episode = BuildCurrentLevelEpisodeForExport();
+            // [2026-06-12] 백업 컨벤션: 기본 저장 위치 = Assets/LevelBackups (Importer 의 episode 백업과
+            // 동일 폴더). Importer 의 '레벨 백업 추가' 버튼이 이 폴더의 level_*.json 을 일괄 로드해
+            // episode 로 병합(SO 미경유)할 수 있다.
+            const string levelBackupDir = "Assets/LevelBackups";
+            System.IO.Directory.CreateDirectory(levelBackupDir);
             SaveLevelEpisodeJson(
                 episode,
                 "Export Current Level JSON",
-                "Assets",
+                levelBackupDir,
                 $"level_{_levelId:D4}",
                 $"Exported level {_levelId}");
         }

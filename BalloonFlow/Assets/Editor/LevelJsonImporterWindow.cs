@@ -144,6 +144,9 @@ namespace BalloonFlow.Editor
             if (GUILayout.Button("폴더 추가...", EditorStyles.toolbarButton, GUILayout.Width(90)))
                 AddFolder();
 
+            if (GUILayout.Button("레벨 백업 추가", EditorStyles.toolbarButton, GUILayout.Width(100)))
+                AddLevelBackups();
+
             if (GUILayout.Button("전체 제거", EditorStyles.toolbarButton, GUILayout.Width(70)))
             {
                 _entries.Clear();
@@ -315,7 +318,7 @@ namespace BalloonFlow.Editor
                 c(110,168,250), c(57,174,46), c(252,94,94), c(50,107,248),
                 c(58,165,139), c(231,167,250), c(183,199,251), c(106,74,48),
                 c(254,227,169), c(253,183,193), c(158,61,94), c(167,221,148),
-                c(89,46,126), c(220,120,129), c(217,217,231), c(111,114,127),
+                c(89,46,126), c(220,120,129), c(174,178,194), c(111,114,127),
                 c(252,56,165), c(253,180,88), c(137,10,8), c(111,175,177),
             };
 
@@ -404,6 +407,27 @@ namespace BalloonFlow.Editor
             if (string.IsNullOrEmpty(path)) return;
             LoadJsonFile(path);
             _statusMessage = $"{_entries.Count}개 파일 로드됨";
+        }
+
+        // [2026-06-12] MapMaker 'Export Level JSON' 백업(Assets/LevelBackups/level_*.json) 일괄 로드 —
+        // 따로 백업해 둔 단일 레벨을 바로 'Episode 파일에 적용'으로 병합(SO 미경유)하는 원클릭 경로.
+        private void AddLevelBackups()
+        {
+            const string backupDir = "Assets/LevelBackups";
+            if (!Directory.Exists(backupDir))
+            {
+                _statusMessage = $"{backupDir} 폴더 없음 — MapMaker 의 'Export Level JSON' 으로 먼저 백업하세요";
+                return;
+            }
+            var files = Directory.GetFiles(backupDir, "level_*.json", SearchOption.TopDirectoryOnly);
+            if (files.Length == 0)
+            {
+                _statusMessage = $"{backupDir} 에 level_*.json 없음";
+                return;
+            }
+            foreach (var f in files.OrderBy(f => f))
+                LoadJsonFile(f);
+            _statusMessage = $"레벨 백업 {files.Length}개 추가됨 (총 {_entries.Count}개)";
         }
 
         private void AddFolder()
@@ -781,7 +805,7 @@ namespace BalloonFlow.Editor
                 {17, new Color(254/255f, 227/255f, 169/255f)}, {18, new Color(253/255f, 183/255f, 193/255f)},
                 {19, new Color(158/255f, 61/255f, 94/255f)},   {20, new Color(167/255f, 221/255f, 148/255f)},
                 {21, new Color(89/255f, 46/255f, 126/255f)},   {22, new Color(220/255f, 120/255f, 129/255f)},
-                {23, new Color(217/255f, 217/255f, 231/255f)}, {24, new Color(111/255f, 114/255f, 127/255f)},
+                {23, new Color(174/255f, 178/255f, 194/255f)}, {24, new Color(111/255f, 114/255f, 127/255f)},
                 {25, new Color(252/255f, 56/255f, 165/255f)},  {26, new Color(253/255f, 180/255f, 88/255f)},
                 {27, new Color(137/255f, 10/255f, 8/255f)},    {28, new Color(111/255f, 175/255f, 177/255f)},
             };
