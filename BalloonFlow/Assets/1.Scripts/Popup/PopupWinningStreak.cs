@@ -1112,15 +1112,23 @@ namespace BalloonFlow
                     BindRewardImgVariant(item, rewards);
                     if (UseRewardImgVariantRule()) continue;
 
-                    // 타입별 대체 이미지(Heart/Gift)는 숨기고, 단일 아이콘(ImageItem)에 sprite swap + 활성화.
-                    if (item.altHeart != null) item.altHeart.SetActive(false);
+                    // Heart 보상은 sprite swap 대신 전용 ImageHeart 표시
+                    bool isHeart = rewards[i].type == RewardType.InfiniteHearts;
+                    if (item.altHeart != null) item.altHeart.SetActive(isHeart);
                     if (item.altGift != null) item.altGift.SetActive(false);
                     if (item.icon != null)
                     {
-                        var sprite = ResolveRewardSprite(rewards[i].type);
-                        if (sprite != null) item.icon.sprite = sprite;
-                        item.icon.enabled = true;
-                        if (!item.icon.gameObject.activeSelf) item.icon.gameObject.SetActive(true); // ImageItem 기본 비활성 → 활성화
+                        if (isHeart)
+                        {
+                            if (item.icon.gameObject.activeSelf) item.icon.gameObject.SetActive(false);
+                        }
+                        else
+                        {
+                            var sprite = ResolveRewardSprite(rewards[i].type);
+                            if (sprite != null) item.icon.sprite = sprite;
+                            item.icon.enabled = true;
+                            if (!item.icon.gameObject.activeSelf) item.icon.gameObject.SetActive(true); // ImageItem 기본 비활성 → 활성화
+                        }
                     }
 
                     string countText = rewards[i].count > 0 ? $"x{rewards[i].count}" : "";
@@ -1166,13 +1174,20 @@ namespace BalloonFlow
             bool giftInsideItem = item.altGift != null && item.rewardItemVariant != null
                 && item.altGift.transform.IsChildOf(item.rewardItemVariant.transform);
 
+            RewardEntry primary = hasSingle ? rewards[0] : default;
+            // Heart 보상은 sprite swap 대신 전용 ImageHeart 표시
+            bool isHeart = useItem && primary.type == RewardType.InfiniteHearts;
+
             if (item.rewardGold != null) item.rewardGold.SetActive(useGold);
             if (item.rewardItemVariant != null) item.rewardItemVariant.SetActive(useItem || (useGift && giftInsideItem));
             if (item.altGift != null) item.altGift.SetActive(useGift);
-            if (item.altHeart != null) item.altHeart.SetActive(false);
+            if (item.altHeart != null) item.altHeart.SetActive(useItem && isHeart);
 
-            RewardEntry primary = hasSingle ? rewards[0] : default;
-            if (useItem && item.icon != null)
+            if (useItem && isHeart)
+            {
+                if (item.icon != null && item.icon.gameObject.activeSelf) item.icon.gameObject.SetActive(false);
+            }
+            else if (useItem && item.icon != null)
             {
                 var sprite = ResolveRewardSprite(primary.type);
                 if (sprite != null) item.icon.sprite = sprite;
