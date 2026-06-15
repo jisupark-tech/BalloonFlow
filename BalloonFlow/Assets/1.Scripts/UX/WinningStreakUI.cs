@@ -160,6 +160,51 @@ namespace BalloonFlow
             ApplyPositions(multiplierRoot, multiplier, LobbySelectFrameX, LobbyTextYellowX, MULTIPLIER_SELECT_MOVE_DURATION);
         }
 
+        /// <summary>[2026-06-15] 2026-06-10 PlayMultiplierState 폐기 결정의 PopupQuit 한정 부분 재도입 —
+        /// 5/10/25/100 Animator clip 재생 후 MultiplierDefault 복귀. SelectFrame/TextYellow 위치는 Animator clip 안
+        /// 키프레임이 끌고 가며, 코드 트윈은 사용하지 않음. PopupQuit 전용 — PopupContinue/UILobby 는 PlayMultiplierIdle/Select 유지.
+        /// 절차: (1) Multiplier root x=-724 → 0 슬라이드 SetUpdate(true) (2) OnComplete 에서 Animator 활성화 + UnscaledTime 모드 +
+        /// Multiplier{N} 재생 (3) clip 길이 후 MultiplierDefault 복귀 (DOVirtual.DelayedCall ignoreTimeScale=true).
+        /// PauseManager 가 timeScale=0 으로 잡으므로 animator.updateMode=UnscaledTime 필수.</summary>
+        public static void PlayMultiplierAnimationForPopupQuit(GameObject winningStreakView, int multiplier)
+        {
+            if (winningStreakView == null || multiplier <= 1) return;
+            var multiplierRoot = FindChild(winningStreakView.transform, "Multiplier");
+            if (multiplierRoot == null) return;
+
+            if (multiplierRoot is RectTransform rt)
+            {
+                rt.DOKill();
+                Vector2 start = rt.anchoredPosition;
+                start.x = MULTIPLIER_ENTER_FROM_X;
+                rt.anchoredPosition = start;
+                rt.DOAnchorPosX(MULTIPLIER_ENTER_TO_X, MULTIPLIER_ENTER_DURATION)
+                    .SetEase(Ease.OutCubic)
+                    .SetUpdate(true)
+                    .OnComplete(() => PlayPopupQuitAnimatorStage(multiplierRoot, multiplier));
+                return;
+            }
+
+            PlayPopupQuitAnimatorStage(multiplierRoot, multiplier);
+        }
+
+        private static void PlayPopupQuitAnimatorStage(Transform multiplierRoot, int multiplier)
+        {
+            if (multiplierRoot == null) return;
+            var animator = multiplierRoot.GetComponentInChildren<Animator>(true);
+            if (animator == null) return;
+            animator.enabled = true;
+            animator.updateMode = AnimatorUpdateMode.UnscaledTime; // PauseManager timeScale=0 대응
+            animator.Play($"Multiplier{multiplier}", 0, 0f);
+            animator.Update(0f);
+            float length = animator.GetCurrentAnimatorStateInfo(0).length;
+            DOVirtual.DelayedCall(length, () =>
+            {
+                if (animator != null && animator.gameObject != null)
+                    animator.Play("MultiplierDefault", 0, 0f);
+            }, ignoreTimeScale: true);
+        }
+
         /// <summary>[미사용 2026-06-10 — Animator 방식 롤백용 보존] Multiplier 루트의 Animator 로 현재 배수 상태를 재생.
         /// 전 호출부가 PlayMultiplierSelect(코드 트윈) 로 전환됨. Animator 가 SelectFrame/TextYellow 위치를 덮어쓰는 문제로 폐기.
         /// 배수 5/10/25/100 → Multiplier{N} 상태 재생. 배수 1 은 Animator 기본 상태 리셋.</summary>
