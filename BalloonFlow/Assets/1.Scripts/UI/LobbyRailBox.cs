@@ -101,9 +101,13 @@ namespace BalloonFlow
             _isActive = isActive;
             _difficulty = difficulty;
 
-            string levelStr = levelId.ToString();
-            if (_txtLevel != null) _txtLevel.text = levelStr;
-            if (_txtLevelOutline != null) _txtLevelOutline.text = levelStr;
+            // SuperHard 레벨은 박스 텍스트를 레벨 번호 대신 'Super Hard'(ui.superhard) 로 표기.
+            // 그 외 난이도는 기존대로 레벨 번호. TxtLevel/TxtLevelOutline 모두 동일 적용.
+            string boxText = difficulty == DifficultyPurpose.SuperHard
+                ? LocalizationService.Get("ui.superhard")
+                : levelId.ToString();
+            if (_txtLevel != null) _txtLevel.text = boxText;
+            if (_txtLevelOutline != null) _txtLevelOutline.text = boxText;
 
             if (isActive)
             {
