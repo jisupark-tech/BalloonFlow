@@ -394,10 +394,30 @@ namespace BalloonFlow
         {
             // ROLLBACK_USEITEM_CUTOUT_SIBLING_GUARD:
             // Dim/Cutout 만 최후방 가드. 그 외 표시 순서(FX/Frame/ImgItem/Desc/Exit/_Top)는 Prefab Hierarchy 가 single source of truth — 코드에서 강제 재정렬하지 않는다.
-            // ImageItem 이 FX 파티클 위로 보이도록 하려면 UseItem.prefab 의 자식 순서를 ImgItem 이 FX_Light/FX_BackLightR/FX_Fire 보다 아래(더 큰 sibling index)에 오도록 편집한다.
+            // [SSOT 예외] UseItem.prefab 이 binary 직렬화이므로 prefab hierarchy 를 SSOT 로 둘 수 없는 단 하나의 ordering 관계(ImgItem > FX_Light/FX_BackLightR/FX_Fire)에 한해, 이 메서드가 SSOT 다. 그 외 모든 sibling 관계는 여전히 prefab 이 SSOT.
+            // [의도] ImageItem (아이템 아이콘) 은 파티클 FX 위에 렌더되어야 한다 (사용자 디자인 요구 2026-06-15).
             RectTransform dimRect = GetBaseDimRectTransform();
             if (dimRect != null) dimRect.SetAsFirstSibling();
             if (_cutoutMask != null) _cutoutMask.SetAsFirstSibling();
+
+            if (_imgItem != null)
+            {
+                Transform imgT = _imgItem.transform;
+                Transform parent = imgT.parent;
+                if (parent != null)
+                {
+                    ResolveFxReferences();
+                    int maxFxIndex = -1;
+                    if (_fxLight != null && _fxLight.transform.parent == parent)
+                        maxFxIndex = Mathf.Max(maxFxIndex, _fxLight.transform.GetSiblingIndex());
+                    if (_fxBackLightR != null && _fxBackLightR.transform.parent == parent)
+                        maxFxIndex = Mathf.Max(maxFxIndex, _fxBackLightR.transform.GetSiblingIndex());
+                    if (_fxFire != null && _fxFire.transform.parent == parent)
+                        maxFxIndex = Mathf.Max(maxFxIndex, _fxFire.transform.GetSiblingIndex());
+                    if (maxFxIndex >= 0 && imgT.GetSiblingIndex() <= maxFxIndex)
+                        imgT.SetSiblingIndex(maxFxIndex + 1);
+                }
+            }
         }
 
         private bool ApplyCutoutMaterialToOverlay()
