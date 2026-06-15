@@ -160,18 +160,23 @@ namespace BalloonFlow
             ApplyPositions(multiplierRoot, multiplier, LobbySelectFrameX, LobbyTextYellowX, MULTIPLIER_SELECT_MOVE_DURATION);
         }
 
-        /// <summary>[2026-06-15] 2026-06-10 PlayMultiplierState 폐기 결정의 PopupQuit 한정 부분 재도입 —
-        /// 5/10/25/100 Animator clip 재생 후 MultiplierDefault 복귀. SelectFrame/TextYellow 위치는 Animator clip 안
-        /// 키프레임이 끌고 가며, 코드 트윈은 사용하지 않음. PopupQuit 전용 — PopupContinue/UILobby 는 PlayMultiplierIdle/Select 유지.
-        /// 절차: (1) Multiplier root x=-724 → 0 슬라이드 SetUpdate(true) (2) OnComplete 에서 Animator 활성화 + UnscaledTime 모드 +
-        /// Multiplier{N} 재생 (3) clip 길이 후 MultiplierDefault 복귀 (DOVirtual.DelayedCall ignoreTimeScale=true).
-        /// PauseManager 가 timeScale=0 으로 잡으므로 animator.updateMode=UnscaledTime 필수.</summary>
+        /// <summary>[2026-06-15] PopupQuit 의 Multiplier 연출 — 노출 즉시 Animator state 진입 + 슬라이드인 동시 진행 + 닫힐 때까지 무한 Loop.
+        /// 절차: (1) Animator 활성화 + UnscaledTime + Multiplier{N} 재생 (노출 즉시) — 슬라이드인보다 먼저 호출해 첫 프레임부터 키프레임 적용.
+        ///        (2) Multiplier root x=-724 → 0 슬라이드 SetUpdate(true) — 루트 위치와 Animator(자식 SelectFrame/TextYellow) 키프레임은 독립이라 동시 안전.
+        ///        (3) 클립 loop=true 로 PopupQuit 닫힐 때까지 무한 재생. MultiplierDefault 복귀는 ResetPopupQuitMultiplierAnimation 가 담당.
+        /// PauseManager 가 timeScale=0 으로 잡으므로 animator.updateMode=UnscaledTime 필수.
+        /// 반드시 Multiplier5/10/25/100.anim 클립의 Loop Time 플래그가 Unity Inspector 에서 켜져 있어야 함 (바이너리 직렬화라 코드로 확인 불가).</summary>
+        /// <remarks>PopupQuit과 PopupContinue 양쪽에서 호출됨 (2026-06-15 PopupContinue 멀티플라이어 통일). 메서드명에 'PopupQuit' 이 남아있는 것은 호환성 유지 위함.</remarks>
         public static void PlayMultiplierAnimationForPopupQuit(GameObject winningStreakView, int multiplier)
         {
             if (winningStreakView == null || multiplier <= 1) return;
             var multiplierRoot = FindChild(winningStreakView.transform, "Multiplier");
             if (multiplierRoot == null) return;
 
+            // (1) 노출 즉시 Animator state 진입 — 슬라이드인 시작 전.
+            PlayPopupQuitAnimatorStage(multiplierRoot, multiplier);
+
+            // (2) 슬라이드인 — 루트 anchoredPosition.x. 자식 Animator 와 독립.
             if (multiplierRoot is RectTransform rt)
             {
                 rt.DOKill();
@@ -180,14 +185,11 @@ namespace BalloonFlow
                 rt.anchoredPosition = start;
                 rt.DOAnchorPosX(MULTIPLIER_ENTER_TO_X, MULTIPLIER_ENTER_DURATION)
                     .SetEase(Ease.OutCubic)
-                    .SetUpdate(true)
-                    .OnComplete(() => PlayPopupQuitAnimatorStage(multiplierRoot, multiplier));
-                return;
+                    .SetUpdate(true);
             }
-
-            PlayPopupQuitAnimatorStage(multiplierRoot, multiplier);
         }
 
+        /// <remarks>PopupQuit과 PopupContinue 양쪽에서 호출됨 (2026-06-15 PopupContinue 멀티플라이어 통일). 메서드명에 'PopupQuit' 이 남아있는 것은 호환성 유지 위함.</remarks>
         private static void PlayPopupQuitAnimatorStage(Transform multiplierRoot, int multiplier)
         {
             if (multiplierRoot == null) return;
@@ -195,14 +197,26 @@ namespace BalloonFlow
             if (animator == null) return;
             animator.enabled = true;
             animator.updateMode = AnimatorUpdateMode.UnscaledTime; // PauseManager timeScale=0 대응
+            // 중복 진입 가드 — 이미 동일 state 재생 중이면 0f 로 되감지 않음 (Loop 끊김 방지).
+            int targetHash = Animator.StringToHash($"Multiplier{multiplier}");
+            if (animator.GetCurrentAnimatorStateInfo(0).shortNameHash == targetHash) return;
             animator.Play($"Multiplier{multiplier}", 0, 0f);
             animator.Update(0f);
-            float length = animator.GetCurrentAnimatorStateInfo(0).length;
-            DOVirtual.DelayedCall(length, () =>
-            {
-                if (animator != null && animator.gameObject != null)
-                    animator.Play("MultiplierDefault", 0, 0f);
-            }, ignoreTimeScale: true);
+        }
+
+        /// <summary>[2026-06-15] PopupQuit.CloseUI 호출 직전 — base.CloseUI 가 SetActive(false) 하기 전에 animator state 초기화.
+        /// 동일 instance 가 재오픈될 때 Multiplier{N} 잔존 방지. Loop 클립이라 자동 복귀가 없으므로 명시적으로 리셋.</summary>
+        /// <remarks>PopupQuit과 PopupContinue 양쪽에서 호출됨 (2026-06-15 PopupContinue 멀티플라이어 통일). 메서드명에 'PopupQuit' 이 남아있는 것은 호환성 유지 위함.</remarks>
+        public static void ResetPopupQuitMultiplierAnimation(GameObject winningStreakView)
+        {
+            if (winningStreakView == null) return;
+            var multiplierRoot = FindChild(winningStreakView.transform, "Multiplier");
+            if (multiplierRoot == null) return;
+            if (multiplierRoot is RectTransform rt) rt.DOKill(); // 진행 중 슬라이드인 tween 정리.
+            var animator = multiplierRoot.GetComponentInChildren<Animator>(true);
+            if (animator == null || !animator.enabled) return;
+            animator.Play("MultiplierDefault", 0, 0f);
+            animator.Update(0f);
         }
 
         /// <summary>[미사용 2026-06-10 — Animator 방식 롤백용 보존] Multiplier 루트의 Animator 로 현재 배수 상태를 재생.
