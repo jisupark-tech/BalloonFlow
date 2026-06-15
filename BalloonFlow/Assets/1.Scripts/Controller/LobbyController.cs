@@ -355,7 +355,7 @@ namespace BalloonFlow
             // Full → TxtToast 토스트
             if (LifeManager.Instance.IsFullLives())
             {
-                ShowToast("Your lives are full!");
+                ShowToast(LocalizationService.Get("toast.life.full"));
                 return;
             }
 
