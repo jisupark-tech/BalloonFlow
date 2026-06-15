@@ -739,7 +739,10 @@ namespace BalloonFlow
         //   PHASE3 = 외곽 contour 풍선 아웃라인 → 진행 시 EnableContourOutline_Phase3 = true.
         //   PHASE4 = 풍선 광택(_GLOSS) — 셰이더/머티리얼 별도(미구현).
         //   롤백: 두 플래그 false 로 두면 해당 단계 비활성(Pass 는 살아있어도 ON 오브젝트 없음 → batch 유지).
-        public static bool EnableDartOutline_Phase2 = false;
+        // ROLLBACK_DART_OUTLINE_BAKE_20260615: PHASE2(레일 다트 아웃라인) ON.
+        //   메커니즘을 MPB → 공유 머티리얼 베이크로 교체(DartIdentifier 참조)했으므로 배칭 유지된 채 활성.
+        //   롤백: 이 줄을 다시 `= false;` 로 두면 다트 아웃라인 비활성(배칭 영향 없음).
+        public static bool EnableDartOutline_Phase2 = true;
         // ROLLBACK_OUTLINE_PHASE3_ON_20260609: 풍선 contour(최외각) 아웃라인 ON (Option A 머티리얼 swap).
         //   contour 풍선만 ItemSharedOutline 머티리얼로 swap(MPB 아님) → 그 소수(~수십)만 multi-pass 개별 draw.
         //   내부 1500 은 ItemShared(single-pass) 유지 → SRP Batch. (과거 프레임드랍 = 공유 셰이더 multi-pass 였음 — 해결.)

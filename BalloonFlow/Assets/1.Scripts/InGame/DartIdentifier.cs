@@ -34,9 +34,8 @@ namespace BalloonFlow
         private static readonly Dictionary<int, Material> _dartMatCache = new Dictionary<int, Material>();
 
         private static Material _needleOutlineMat;
-        private static readonly int _propOutlineEnabled = Shader.PropertyToID("_OutlineEnabled");
-        private static readonly int _propOutlineColor = Shader.PropertyToID("_OutlineColor");
-        private MaterialPropertyBlock _mpb;
+        // ROLLBACK_DART_OUTLINE_HULL_20260615: 아웃라인을 OutlineHull material[1] 방식으로 전환하며
+        //   _propOutlineEnabled/_propOutlineColor/_mpb(구 MPB 토글용) 제거. 롤백 시 함께 복원.
 
         /// <summary>
         /// Distance from this prefab root to the needle tip along the current firing direction.
@@ -116,47 +115,46 @@ namespace BalloonFlow
 
             if (mat == null) return;
 
+            // ROLLBACK_DART_OUTLINE_HULL_20260615: START
+            // 다트 아웃라인 = 공유 OutlineHull 머티리얼을 material[1] 로 얹는 방식(HolderIdentifier PHASE1 동일).
+            //   왜: niddle/body 머티리얼은 Custom/ItemShared(=single-pass, outline 패스 없음)라 _OutlineEnabled
+            //       토글로는 외곽선이 안 나온다. 별도 단일 공유 hull 머티리얼(Custom/OutlineHull, inverted-hull)을
+            //       두 번째 서브머티리얼로 얹어 외곽선 패스를 그린다.
+            //   배칭: 모든 다트가 hull '하나'를 공유 → 외곽선들 한 배치, main[0]은 그대로 인스턴싱 유지.
+            //         (MPB 방식이 배칭을 깨던 2026-06-09 회귀를 피함.) EnableDartOutline_Phase2=false 면 hull=null
+            //         → 단일 머티리얼(외곽선 OFF).
+            //   롤백: hull 분기 제거하고 sharedMaterial 단일 setter 로 복원 + EnableDartOutline_Phase2=false.
+            Material hull = BalloonController.EnableDartOutline_Phase2
+                ? BalloonController.GetOutlineHullMaterial() : null;
+
             for (int i = 0; i < _colorRenderers.Length; i++)
             {
-                if (_colorRenderers[i] != null)
+                if (_colorRenderers[i] == null) continue;
+                if (hull != null)
+                    _colorRenderers[i].sharedMaterials = new Material[] { mat, hull };
+                else
                     _colorRenderers[i].sharedMaterial = mat;
             }
 
-            // Niddle: 은색 유지 + 아웃라인 활성화 (MPB)
-            if (_outlineOnlyRenderers != null)
+            // Niddle: 은색 유지 + 아웃라인(hull material[1])
+            if (_outlineOnlyRenderers != null && _needleBaseMaterial != null)
             {
-                // Niddle 기반 Material 적용 (처음 1회)
-                if (_needleBaseMaterial != null)
+                if (_needleOutlineMat == null)
                 {
-                    if (_needleOutlineMat == null)
-                    {
-                        _needleOutlineMat = new Material(_needleBaseMaterial);
-                        // [Optimization 2026-05-10 revert] GPU Instancing 채택.
-                        _needleOutlineMat.enableInstancing = true;
-                    }
-                    for (int i = 0; i < _outlineOnlyRenderers.Length; i++)
-                    {
-                        if (_outlineOnlyRenderers[i] != null)
-                            _outlineOnlyRenderers[i].sharedMaterial = _needleOutlineMat;
-                    }
+                    _needleOutlineMat = new Material(_needleBaseMaterial);
+                    // [Optimization 2026-05-10 revert] GPU Instancing 채택.
+                    _needleOutlineMat.enableInstancing = true;
                 }
-
-                // ROLLBACK_OUTLINE_PHASE2_DART_20260609: PHASE2 ON 일 때만 아웃라인 MPB 적용.
-                //   [2026-06-09 배칭 회귀] MPB(SetPropertyBlock) 자체가 SRP Batcher + GPU Resident Drawer 인스턴싱을 깸 →
-                //   OFF 동안엔 MPB 를 아예 안 찍어 다트 배칭 유지(200+ 개별 draw 방지). PHASE2 는 베이크 방식으로 재검토.
-                if (BalloonController.EnableDartOutline_Phase2)
+                for (int i = 0; i < _outlineOnlyRenderers.Length; i++)
                 {
-                    if (_mpb == null) _mpb = new MaterialPropertyBlock();
-                    for (int i = 0; i < _outlineOnlyRenderers.Length; i++)
-                    {
-                        if (_outlineOnlyRenderers[i] == null) continue;
-                        _outlineOnlyRenderers[i].GetPropertyBlock(_mpb);
-                        _mpb.SetFloat(_propOutlineEnabled, 1f);
-                        _mpb.SetColor(_propOutlineColor, Color.black); // Niddle 아웃라인은 모든 다트에서 검정 고정
-                        _outlineOnlyRenderers[i].SetPropertyBlock(_mpb);
-                    }
+                    if (_outlineOnlyRenderers[i] == null) continue;
+                    if (hull != null)
+                        _outlineOnlyRenderers[i].sharedMaterials = new Material[] { _needleOutlineMat, hull };
+                    else
+                        _outlineOnlyRenderers[i].sharedMaterial = _needleOutlineMat;
                 }
             }
+            // ROLLBACK_DART_OUTLINE_HULL_20260615: END
         }
     }
 }
