@@ -18,6 +18,7 @@ namespace BalloonFlow
     {
         private const int FLY_COUNT = 10;
         private const int ITEM_FLY_COUNT = 1;
+        private const float ITEM_FLY_START_DELAY = 1f; // FXGold 시작 후 FXItem 시작까지 stagger
 
         // [2026-05-15] Booster / Life / InfiniteHearts fly icon.
         // Inspector wire 필요 — Resources 안 아이콘 (예: booster_hand.png / heart.png) 를 직접 연결.
@@ -185,6 +186,8 @@ namespace BalloonFlow
             {
                 CurrencyManager.Instance.PublishCoinSync();
             }
+
+            if (coinsAdded > 0 && rewards != null) yield return new WaitForSecondsRealtime(ITEM_FLY_START_DELAY);
 
             // 3) Booster / Life / InfiniteHearts fly to LifePanel, then grant item rewards.
             if (rewards != null)
