@@ -2168,7 +2168,11 @@ namespace BalloonFlow
 
         public void UpdatePlayButton(int levelId, DifficultyPurpose difficulty)
         {
-            string levelStr = "Level " + levelId;
+            // PlayButton/TxtArea/TxtLevel(Outline): SuperHard 레벨은 'Super Hard'(ui.superhard) 로 표기,
+            // 그 외 난이도는 기존대로 "Level N". TxtLevel/TxtLevelOutline 모두 동일 적용.
+            string levelStr = difficulty == DifficultyPurpose.SuperHard
+                ? LocalizationService.Get("ui.superhard")
+                : "Level " + levelId;
             if (_txtPlay != null) _txtPlay.text = levelStr;
             if (_txtPlayOutline != null) _txtPlayOutline.text = levelStr;
 
