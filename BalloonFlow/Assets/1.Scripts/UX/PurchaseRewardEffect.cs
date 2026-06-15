@@ -246,7 +246,6 @@ namespace BalloonFlow
             _iconZap     = rm.UISpriteOr(Const.SPR_ICONZAP,    _iconZap);
             _iconBooster = rm.UISpriteOr(Const.SPR_ICONHAND,   _iconBooster);
             _iconLife    = rm.UISpriteOr(Const.SPR_ICONLIFE,   _iconLife);
-            _iconLife    = rm.UISpriteOr(Const.SPR_ICONHEARINFINITE, _iconLife);
         }
 
         private static void ApplyItemRewardsAfterFx(ShopRewards rewards)
