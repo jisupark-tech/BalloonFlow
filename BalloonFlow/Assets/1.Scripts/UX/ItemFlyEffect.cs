@@ -170,6 +170,7 @@ namespace BalloonFlow
         private const float SCALEUP_DURATION = 0.22f;
         private const float SCALEUP_PEAK_SCALE = 1.2f;
         private const float SCALEUP_PEAK_RATIO = 0.55f;
+        private const float SCALEUP_SETTLE_HOLD = 0.08f; // 스케일 1 도달 후 정착 hold (0.05~0.1초 범위 — 짧고 경쾌)
         private const float FADE_OUT_START = 0.85f;
 
         private static IEnumerator Fly(GameObject item, RectTransform rt, Image img,
@@ -206,6 +207,8 @@ namespace BalloonFlow
                     yield return null;
                 }
                 rt.localScale = baseScale;
+                if (SCALEUP_SETTLE_HOLD > 0f)
+                    yield return new WaitForSecondsRealtime(SCALEUP_SETTLE_HOLD);
             }
 
             float elapsed = 0f;
