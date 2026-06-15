@@ -173,6 +173,11 @@ namespace BalloonFlow
         [SerializeField] private Material _matPercentageOutlineHard;
         [SerializeField] private Material _matPercentageOutlineSuperHard;
 
+        // BottomPanel 아이템 수량 outline material 캐시 — Resources.Load 결과 보관용 (SerializeField 아님).
+        // HUDController.BindView/UIManager 재바인딩·prefab override 로 fontSharedMaterial 이 되돌려지는
+        // 케이스에도 ApplyItemCountOutlineMaterial 이 반복 호출되어 상태를 재적용한다.
+        private Material _matItemCountOutlineGreen;
+
         private bool _isMapMakerMode;
         private DifficultyPurpose _currentDifficulty = DifficultyPurpose.Normal;
         private readonly HashSet<string> _pendingItemRewardFx = new HashSet<string>();
@@ -454,12 +459,35 @@ namespace BalloonFlow
 
             // BottomPanel 아이템 수량 outline 텍스트는 prefab 바이너리라 YAML 편집 불가 →
             // 누적 도메인 원칙(색 직접 지정 금지)에 따라 TMP material preset 을 런타임에 교체.
-            var matItemOutline = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_GREEN_OUTLINE);
-            if (matItemOutline != null)
+            ApplyItemCountOutlineMaterial();
+        }
+
+        // PR #299 의 Awake 1회 적용만으로는 HUDController.BindView 재바인딩/prefab override 가
+        // fontSharedMaterial 을 prefab 기본값으로 되돌리는 경우 outline 이 화면에서 사라진다.
+        // 캐시 필드 비교로 idempotent — 반복 호출 시 no-op. ForceMeshUpdate 로 outline sub-mesh 강제 리빌드.
+        private void ApplyItemCountOutlineMaterial()
+        {
+            if (_matItemCountOutlineGreen == null)
+                _matItemCountOutlineGreen = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_GREEN_OUTLINE);
+            if (_matItemCountOutlineGreen == null) return;
+
+            if (_itemCountOutlineShuffle != null && _itemCountOutlineShuffle.fontSharedMaterial != _matItemCountOutlineGreen)
             {
-                if (_itemCountOutlineShuffle != null) _itemCountOutlineShuffle.fontSharedMaterial = matItemOutline;
-                if (_itemCountOutlineRemove  != null) _itemCountOutlineRemove.fontSharedMaterial  = matItemOutline;
-                if (_itemCountOutlineHand    != null) _itemCountOutlineHand.fontSharedMaterial    = matItemOutline;
+                _itemCountOutlineShuffle.fontSharedMaterial = _matItemCountOutlineGreen;
+                _itemCountOutlineShuffle.havePropertiesChanged = true;
+                _itemCountOutlineShuffle.ForceMeshUpdate();
+            }
+            if (_itemCountOutlineRemove != null && _itemCountOutlineRemove.fontSharedMaterial != _matItemCountOutlineGreen)
+            {
+                _itemCountOutlineRemove.fontSharedMaterial = _matItemCountOutlineGreen;
+                _itemCountOutlineRemove.havePropertiesChanged = true;
+                _itemCountOutlineRemove.ForceMeshUpdate();
+            }
+            if (_itemCountOutlineHand != null && _itemCountOutlineHand.fontSharedMaterial != _matItemCountOutlineGreen)
+            {
+                _itemCountOutlineHand.fontSharedMaterial = _matItemCountOutlineGreen;
+                _itemCountOutlineHand.havePropertiesChanged = true;
+                _itemCountOutlineHand.ForceMeshUpdate();
             }
         }
 
@@ -751,6 +779,11 @@ namespace BalloonFlow
 
         public void RefreshBoosterCounts()
         {
+            // HUDController.BindView/UIManager 재바인딩 또는 prefab override 로 fontSharedMaterial 이
+            // prefab 기본값으로 되돌려질 수 있어, 수량 갱신 진입마다 outline material 을 재확인한다.
+            // 캐시 필드 비교 덕분에 동일 material 이면 no-op (ForceMeshUpdate 도 호출 안 됨).
+            ApplyItemCountOutlineMaterial();
+
             if (_isMapMakerMode || GameManager.IsTestItemMode || GameManager.IsTestPlayMode)
             {
                 SetCountText(_itemCountShuffle, "\u221E"); // ∞
