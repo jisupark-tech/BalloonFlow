@@ -566,7 +566,7 @@ namespace BalloonFlow
             if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = mult;
             ResolveWsFxRefs();
             if (_wsMultiplier != null)
-                WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, curMultiplier);
+                WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, curMultiplier);
         }
 
         /// <summary>Gauge 하단 TextGauge/Outline 에 "{현재 포인트}/{필요 포인트}" 기록. stage 미준비 시 빈 문자열.</summary>
@@ -630,11 +630,11 @@ namespace BalloonFlow
                 _wsMultiplier.gameObject.SetActive(true);
 
             SetWsMultiplierX(WS_MULTIPLIER_HIDDEN_X);
-            WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, fromMultiplier);
+            WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, fromMultiplier);
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
 
             yield return new WaitForSecondsRealtime(0.6f);
-            WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, 1);
+            WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, 1);
             // [2026-06-11] '떨어지는' 펀치(덜컹거림) 비활성 — 사용자 요청. 롤백: 아래 2줄 주석 해제.
             // _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, -36f), 0.4f, 8, 0.7f).SetUpdate(true);
             // _wsMultiplier.DOPunchScale(new Vector3(-0.18f, -0.18f, 0f), 0.4f, 8, 0.7f).SetUpdate(true);
@@ -662,7 +662,7 @@ namespace BalloonFlow
             int fromMult = anim.startMultiplier > 0 ? anim.startMultiplier : WinningStreakUI.ResolveCurrentMultiplier();
             int toMult   = anim.endMultiplier   > 0 ? anim.endMultiplier   : WinningStreakUI.ResolveCurrentMultiplier();
             if (_wsMultiplier != null)
-                WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, fromMult);
+                WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, fromMult);
 
             int stageForFill = Mathf.Max(1, anim.startStage);
             float startRatio = ResolveWsStageRatio(stageForFill, anim.startPoints);
@@ -692,7 +692,7 @@ namespace BalloonFlow
             // [2026-06-11] 이전 배수(fromMult)로 등장한 뒤 새 배수(toMult)로 이동 — 배수 '증가' 연출.
             if (_wsMultiplier != null)
             {
-                WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, toMult);
+                WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, toMult);
                 // [2026-06-11] '오르는' 펀치(덜컹거림) 비활성 — 사용자 요청. SelectFrame 이동만 유지.
                 // 롤백: 아래 if 블록 주석 해제.
                 // if (toMult > fromMult)
@@ -1808,7 +1808,7 @@ namespace BalloonFlow
             if (_wsMultiplier.anchoredPosition.x < WS_MULTIPLIER_SHOWN_X - 1f)
                 yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
 
-            WinningStreakUI.PlayMultiplierSelect(_wsMultiplier, multiplier);
+            WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, multiplier);
         }
 #endif
 

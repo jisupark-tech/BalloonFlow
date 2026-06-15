@@ -25,6 +25,10 @@ namespace BalloonFlow
         private static readonly float[] HudSelectFrameX = { -338f, -150f,  30f,  210f,  390f };
         private static readonly float[] HudTextYellowX  = {  358f,  170f, -10f, -190f, -370f };
 
+        // UILobby WS — SelectFrame / TextYellow X 위치 (Mask 고정). 디자이너 명세 2026-06-15.
+        private static readonly float[] LobbySelectFrameX = { -338f, -150f,  30f,  210f,  390f };
+        private static readonly float[] LobbyTextYellowX  = {  358f,  170f, -10f, -190f, -370f };
+
         // PopupWinningStreak — 위치만, 애니메이션 없음.
         // ROLLBACK_WINNING_STREAK_MULTIPLIER_POS_20260605:
         // Popup/Lobby use the same designer-provided positions. Mask stays fixed.
@@ -145,6 +149,15 @@ namespace BalloonFlow
             var animator = multiplierRoot.GetComponentInChildren<Animator>(true);
             if (animator != null && animator.enabled) animator.enabled = false; // 코드 이동을 Animator 가 덮어쓰지 않게 차단
             ApplyPositions(multiplierRoot, multiplier, PopupSelectFrameX, PopupTextYellowX, MULTIPLIER_SELECT_MOVE_DURATION);
+        }
+
+        /// <summary>UILobby WS 의 Multiplier — SelectFrame / TextYellow 를 로비 명세 X 좌표로 동시 코드 트윈 이동. Animator 비활성화. Mask 미터치.</summary>
+        public static void PlayLobbyMultiplierSelect(Transform multiplierRoot, int multiplier)
+        {
+            if (multiplierRoot == null) return;
+            var animator = multiplierRoot.GetComponentInChildren<Animator>(true);
+            if (animator != null && animator.enabled) animator.enabled = false;
+            ApplyPositions(multiplierRoot, multiplier, LobbySelectFrameX, LobbyTextYellowX, MULTIPLIER_SELECT_MOVE_DURATION);
         }
 
         /// <summary>[미사용 2026-06-10 — Animator 방식 롤백용 보존] Multiplier 루트의 Animator 로 현재 배수 상태를 재생.
