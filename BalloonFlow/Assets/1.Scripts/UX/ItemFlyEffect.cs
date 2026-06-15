@@ -170,7 +170,7 @@ namespace BalloonFlow
         private const float SCALEUP_DURATION = 0.22f;
         private const float SCALEUP_PEAK_SCALE = 1.2f;
         private const float SCALEUP_PEAK_RATIO = 0.55f;
-        private const float FADE_OUT_START = 0.70f;
+        private const float FADE_OUT_START = 0.85f;
 
         private static IEnumerator Fly(GameObject item, RectTransform rt, Image img,
             Vector2 origin, Vector2 scatter, Vector2 mid, Vector2 target,
