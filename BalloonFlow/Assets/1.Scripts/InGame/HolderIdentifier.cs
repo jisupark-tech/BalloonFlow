@@ -29,6 +29,9 @@ namespace BalloonFlow
         private static readonly int _animStateBoxOpenIdle = Animator.StringToHash("BoxOpenIdle");
         private static readonly int _animStateBoxClick = Animator.StringToHash("BoxClick");
         private static readonly int _animStateBoxDefault = Animator.StringToHash("BoxDefault");
+        private static readonly int _animStateBoxClose = Animator.StringToHash("BoxClose");
+        private const float MAG_DECREASE_IDLE_TIMEOUT = 0.22f;
+        private const float BOX_STATE_CROSSFADE = 0.03f;
 
         [Header("[Dart Visuals — Inspector에서 할당]")]
         [SerializeField] private Transform[] _dartSlots;
@@ -866,44 +869,129 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>첫 다트가 레일에 배치되는 시점에 true → BoxOpenIdle로 강제 전환. 풀 반환/취소 시 false → BoxOpenDefault. BoxOpen.ani(뚜껑 원샷) 진행 중이면 완료될 때까지 코루틴으로 대기 후 Play — 컨트롤러 transition이 깨져도 강건.</summary>
-        public void SetDartsOnRail(bool onRail)
+        private Coroutine _magDecreaseRoutine;
+        private Coroutine _magDecreaseDecayRoutine;
+        private Coroutine _boxCloseRoutine;
+        private float _magDecreaseLastTick;
+
+        /// <summary>매거진 숫자가 감소 중임을 알림. openHold=true 로 두고 BoxOpenIdle 상태로 끌어올린 뒤
+        /// idle-decay 타이머를 재시작. 타임아웃 동안 추가 호출이 없으면 BoxOpenDefault 로 복귀(remaining>0 한정).</summary>
+        public void NotifyMagazineDecreasing()
         {
             if (_animator == null) return;
             if (!_animator.enabled) _animator.enabled = true;
-            _animator.SetBool(_animOpenHold, onRail);
-            if (_onRailRoutine != null) StopCoroutine(_onRailRoutine);
+            _animator.SetBool(_animOpenHold, true);
+            _magDecreaseLastTick = Time.unscaledTime;
+
+            if (_magDecreaseRoutine != null) StopCoroutine(_magDecreaseRoutine);
             if (isActiveAndEnabled)
-                _onRailRoutine = StartCoroutine(ApplyOnRailState(onRail));
+                _magDecreaseRoutine = StartCoroutine(EnterBoxOpenIdleWhenReady());
             else
-                _animator.Play(onRail ? _animStateBoxOpenIdle : _animStateBoxOpenDefault, 0, 0f);
+                _animator.Play(_animStateBoxOpenIdle, 0, 0f);
+
+            if (_magDecreaseDecayRoutine != null) StopCoroutine(_magDecreaseDecayRoutine);
+            if (isActiveAndEnabled)
+                _magDecreaseDecayRoutine = StartCoroutine(MagazineDecreaseIdleDecay());
         }
 
-        private Coroutine _onRailRoutine;
-
-        private System.Collections.IEnumerator ApplyOnRailState(bool onRail)
+        private System.Collections.IEnumerator EnterBoxOpenIdleWhenReady()
         {
-            int target = onRail ? _animStateBoxOpenIdle : _animStateBoxOpenDefault;
             float timeout = 2f;
             while (timeout > 0f && _animator != null)
             {
                 var info = _animator.GetCurrentAnimatorStateInfo(0);
-                if (info.shortNameHash == _animStateBoxOpenDefault || info.shortNameHash == _animStateBoxOpenIdle)
+                if (info.shortNameHash == _animStateBoxOpenIdle)
                 {
-                    if (info.shortNameHash != target)
-                        _animator.Play(target, 0);
-                    _onRailRoutine = null;
+                    _magDecreaseRoutine = null;
                     yield break;
                 }
+                if (info.shortNameHash == _animStateBoxOpenDefault)
+                {
+                    _animator.CrossFadeInFixedTime(_animStateBoxOpenIdle, BOX_STATE_CROSSFADE, 0);
+                    _magDecreaseRoutine = null;
+                    yield break;
+                }
+                // BoxOpen(뚜껑 원샷) 등 다른 state → 끝날 때까지 대기.
                 timeout -= Time.deltaTime;
                 yield return null;
             }
             if (_animator != null)
+                _animator.CrossFadeInFixedTime(_animStateBoxOpenIdle, BOX_STATE_CROSSFADE, 0);
+            _magDecreaseRoutine = null;
+        }
+
+        private System.Collections.IEnumerator MagazineDecreaseIdleDecay()
+        {
+            while (Time.unscaledTime - _magDecreaseLastTick < MAG_DECREASE_IDLE_TIMEOUT)
+                yield return null;
+
+            if (_animator != null)
             {
-                _animator.Play(target, 0, 0f);
-                _animator.Update(0f);
+                _animator.SetBool(_animOpenHold, false);
+                if (_remainingMagazine > 0)
+                {
+                    var info = _animator.GetCurrentAnimatorStateInfo(0);
+                    if (info.shortNameHash != _animStateBoxOpenDefault)
+                        _animator.CrossFadeInFixedTime(_animStateBoxOpenDefault, BOX_STATE_CROSSFADE, 0);
+                }
             }
-            _onRailRoutine = null;
+            _magDecreaseDecayRoutine = null;
+        }
+
+        /// <summary>매거진 0 도달 시 BoxClose 원샷 후 BoxDefault 로 복귀. idle-decay 코루틴은 중단.
+        /// 이미 BoxClose/BoxDefault 진행 중이면 idempotent — no-op.</summary>
+        public void PlayBoxCloseToDefault()
+        {
+            if (_animator == null) return;
+
+            var info = _animator.GetCurrentAnimatorStateInfo(0);
+            if (info.shortNameHash == _animStateBoxClose || info.shortNameHash == _animStateBoxDefault)
+                return;
+
+            if (_magDecreaseRoutine != null) { StopCoroutine(_magDecreaseRoutine); _magDecreaseRoutine = null; }
+            if (_magDecreaseDecayRoutine != null) { StopCoroutine(_magDecreaseDecayRoutine); _magDecreaseDecayRoutine = null; }
+            if (_boxCloseRoutine != null) { StopCoroutine(_boxCloseRoutine); _boxCloseRoutine = null; }
+
+            _animator.SetBool(_animOpenHold, false);
+
+            if (!isActiveAndEnabled)
+            {
+                if (!_animator.enabled) _animator.enabled = true;
+                _animator.Play(_animStateBoxDefault, 0, 0f);
+                return;
+            }
+
+            if (!_animator.enabled) _animator.enabled = true;
+            _animator.Play(_animStateBoxClose, 0, 0f);
+            _animator.Update(0f);
+            _boxCloseRoutine = StartCoroutine(BoxCloseToDefaultRoutine());
+        }
+
+        private System.Collections.IEnumerator BoxCloseToDefaultRoutine()
+        {
+            float length = _animator != null ? _animator.GetCurrentAnimatorStateInfo(0).length : 0.5f;
+            if (length <= 0f) length = 0.5f;
+            yield return new WaitForSeconds(length);
+            if (_animator != null)
+                _animator.Play(_animStateBoxDefault, 0, 0f);
+            _boxCloseRoutine = null;
+        }
+
+        /// <summary>호환 시그니처: onRail==true → NotifyMagazineDecreasing 으로 위임. onRail==false → idle-decay 강제 종료 후 BoxOpenDefault 복귀.</summary>
+        public void SetDartsOnRail(bool onRail)
+        {
+            if (_animator == null) return;
+            if (onRail)
+            {
+                NotifyMagazineDecreasing();
+                return;
+            }
+
+            if (_magDecreaseRoutine != null) { StopCoroutine(_magDecreaseRoutine); _magDecreaseRoutine = null; }
+            if (_magDecreaseDecayRoutine != null) { StopCoroutine(_magDecreaseDecayRoutine); _magDecreaseDecayRoutine = null; }
+            if (!_animator.enabled) _animator.enabled = true;
+            _animator.SetBool(_animOpenHold, false);
+            _animator.CrossFadeInFixedTime(_animStateBoxOpenDefault, BOX_STATE_CROSSFADE, 0);
         }
 
         /// <summary>배포 완료 — Deploy=false + end 트리거.</summary>
@@ -916,9 +1004,12 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>재사용 시 애니메이터 전체 리셋 (풀 반환 시 enabled 복원).</summary>
+        /// <summary>재사용 시 애니메이터 전체 리셋 (풀 반환 시 enabled 복원). 진행 중인 magazine FSM 코루틴 모두 중단.</summary>
         public void ResetAnimator()
         {
+            if (_magDecreaseRoutine != null) { StopCoroutine(_magDecreaseRoutine); _magDecreaseRoutine = null; }
+            if (_magDecreaseDecayRoutine != null) { StopCoroutine(_magDecreaseDecayRoutine); _magDecreaseDecayRoutine = null; }
+            if (_boxCloseRoutine != null) { StopCoroutine(_boxCloseRoutine); _boxCloseRoutine = null; }
             if (_animator != null)
             {
                 _animator.enabled = true;

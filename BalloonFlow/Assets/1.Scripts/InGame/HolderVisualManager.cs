@@ -1879,8 +1879,7 @@ namespace BalloonFlow
                     {
                         deployStarted = true;
                         rail.ActivateDeployPoint(visual.holderId);
-                        if (visual.identifier != null)
-                            visual.identifier.SetDartsOnRail(true);
+                        // 첫 placement 의 BoxOpenIdle 진입은 LaunchDartChild 의 NotifyMagazineDecreasing 으로 일원화됨.
                         if (visual.gameObject != null)
                         {
                             visual.gameObject.transform.localScale = Vector3.one;
@@ -1889,6 +1888,10 @@ namespace BalloonFlow
                     }
 
                     LaunchDartChild(visual, rail.GetPositionAtDistance(placementProgress));
+
+                    // 매거진 0 도달 순간 1회 — BoxClose → BoxDefault 시퀀스 시작. identifier 내부 idempotent.
+                    if (visual.magazineRemaining <= 0 && visual.identifier != null)
+                        visual.identifier.PlayBoxCloseToDefault();
 
                     if (visual.magazineText != null)
                         visual.magazineText.SetText("{0}", visual.magazineRemaining);
@@ -2019,6 +2022,7 @@ namespace BalloonFlow
 
         /// <summary>
         /// HolderIdentifier의 Dart 슬롯에서 하나를 꺼내 슬롯 위치로 날림.
+        /// 매거진 감소 시점을 박스 FSM에 알려 BoxOpenIdle 유지 + idle-decay 재시작.
         /// </summary>
         private void LaunchDartChild(HolderVisual visual, Vector3 slotWorldPos)
         {
@@ -2033,6 +2037,7 @@ namespace BalloonFlow
             float speedMult = RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f;
             if (speedMult > 0.001f) duration /= speedMult;
 
+            visual.identifier.NotifyMagazineDecreasing();
             visual.identifier.LaunchNextDart(slotWorldPos, duration);
         }
 
