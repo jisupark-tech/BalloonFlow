@@ -402,11 +402,30 @@ namespace BalloonFlow
                 gameObject.AddComponent<GraphicRaycaster>();
         }
 
+        // [Z-ORDER POLICY — 2026-06-15 #6 사이클, designer action required]
+        // 사용자 (신다희) 는 prefab 자체를 재정렬 해 달라고 요청. 그러나 Hermes 가 외부에서
+        // prefab/asset 을 수정할 수 없는 상태임을 다음 사실로 확인:
+        //   1) BalloonFlow/Assets/Resources/Popup/UseItem.prefab — header = 00 00 00 00 ... (Unity binary).
+        //      %YAML 1.1 헤더 아님 → 텍스트 편집 불가.
+        //   2) BalloonFlow/ProjectSettings/EditorSettings.asset — 역시 Unity binary header.
+        //      이는 m_SerializationMode != 2(ForceText) 임을 의미. 이 파일을 텍스트로 편집해
+        //      ForceText 로 전환하는 것도 불가 (binary 구조 손상 위험).
+        // 따라서 prefab hierarchy 를 자산 그대로 고치려면 반드시 Unity Editor 안에서 수행되어야 함:
+        //   STEP 1: Edit > Project Settings > Editor > Asset Serialization Mode → "Force Text" 선택,
+        //           프로젝트 전체 재직렬화 완료 대기 (대규모 변경, 별도 커밋 권장).
+        //   STEP 2: UseItem.prefab 을 Prefab Mode 로 열기.
+        //   STEP 3: Hierarchy 에서 ImageItem 을 FX_Light / FX_BackLightR / FX_Fire 보다 *아래* 로
+        //           드래그 (UGUI 는 sibling index 가 큰 자식이 위에 그려지므로 "아래로 옮긴다 = 위에 보인다").
+        //           (셋의 공통 부모 노드 안에서.)
+        //   STEP 4: Ctrl+S 저장.
+        // 이 작업이 완료되기 전까지 아래 EnsurePopupVisualsAboveCutout() 가 ImageItem-above-FX
+        // ordering 의 SSOT 로 동작한다 (Cycle #5 reviewer 승인). prefab 이 수정되면 이 메서드는
+        // dead-no-op 가 되지만 안전망으로 남겨 둔다 (제거는 별도 사이클).
         private void EnsurePopupVisualsAboveCutout()
         {
             // ROLLBACK_USEITEM_CUTOUT_SIBLING_GUARD:
             // Dim/Cutout 만 최후방 가드. 그 외 표시 순서(FX/Frame/ImgItem/Desc/Exit/_Top)는 Prefab Hierarchy 가 single source of truth — 코드에서 강제 재정렬하지 않는다.
-            // [SSOT 예외] UseItem.prefab 이 binary 직렬화이므로 prefab hierarchy 를 SSOT 로 둘 수 없는 단 하나의 ordering 관계(ImgItem > FX_Light/FX_BackLightR/FX_Fire)에 한해, 이 메서드가 SSOT 다. 그 외 모든 sibling 관계는 여전히 prefab 이 SSOT.
+            // [SSOT 예외 — 위 designer action 미완료 동안] ImgItem > FX_Light/FX_BackLightR/FX_Fire ordering 만 이 메서드가 SSOT.
             // [의도] ImageItem (아이템 아이콘) 은 파티클 FX 위에 렌더되어야 한다 (사용자 디자인 요구 2026-06-15).
             // [수정 2026-06-15 #4 사이클] BringDescriptionToFront 가 _imgItem 을 reparent 한 뒤에도 동작하도록 immediate-parent 비교를 popupRoot 직속 ancestor branch 비교로 교체.
             RectTransform dimRect = GetBaseDimRectTransform();
