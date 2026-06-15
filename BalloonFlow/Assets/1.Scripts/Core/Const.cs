@@ -234,6 +234,7 @@ namespace BalloonFlow
         // ── TMP font materials (Resources/TextMesh Pro/) ─────────
         public const string FONT_MAT_POPPINS_BOLD_GREEN_OUTLINE   = "Fonts & Materials/Poppins-Bold-GreenOutline";
         public const string FONT_MAT_POPPINS_BOLD_PURPLE_OUTLINE  = "Fonts & Materials/Poppins-Bold-PurpleOutline";
+        public const string FONT_MAT_POPPINS_BOLD_RED_OUTLINE     = "Fonts & Materials/Poppins-Bold-RedOutline";
         public const string SPR_FXZAP                                    = "Fxzap";
         public const string SPR_GAME_TOPUI_SETTING                       = "Game_TopUi_Setting";
         public const string SPR_GAME_TOPUI_STARBACKGROUND                = "Game_TopUi_StarBackground";

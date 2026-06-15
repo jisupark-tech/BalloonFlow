@@ -151,6 +151,11 @@ namespace BalloonFlow
         // 좌측 TextPrice 옆 골드 아이콘 (ImageGoldIcon). Awake 1회 캐시.
         private Image _imageGoldIcon;
 
+        // ShopListItem.prefab 이 바이너리 직렬화라 TxtTitleOutline Material Preset 을 텍스트 편집으로 교체 불가.
+        // Resources.Load 캐시 — PopupWinningStreak.EnsureStreakSprites 의 _fontMatGreenOutline/_fontMatPurpleOutline 패턴 미러.
+        private Material _resTitleOutlineNormalBundle;
+        private Material _resTitleOutlineSpecialBundle;
+
         private void Awake()
         {
             if (ResourceManager.HasInstance)
@@ -496,6 +501,13 @@ namespace BalloonFlow
 
         #endregion
 
+        private void EnsureTitleOutlineMaterials()
+        {
+            if (_resTitleOutlineNormalBundle == null)  _resTitleOutlineNormalBundle  = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_PURPLE_OUTLINE);
+            if (_resTitleOutlineSpecialBundle == null) _resTitleOutlineSpecialBundle = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_RED_OUTLINE);
+        }
+
+        // [SHOP_TITLE_OUTLINE_20260615] Starter=Red / Pop·Super·Mega·Giant·Ultimate=Purple. 프리팹이 바이너리 직렬화이므로 런타임 Resources.Load 로 강제. SerializeField 슬롯은 폴백.
         private void ApplyProductTypeVisual(bool isSpecial)
         {
             if (isSpecial)
@@ -515,7 +527,10 @@ namespace BalloonFlow
                 if (_imgSale != null) _imgSale.SetActive(false);
             }
 
-            Material titleOutlineMat = isSpecial ? _matTitleOutlineSpecialBundle : _matTitleOutlineNormalBundle;
+            EnsureTitleOutlineMaterials();
+            Material titleOutlineMat = isSpecial
+                ? (_resTitleOutlineSpecialBundle ?? _matTitleOutlineSpecialBundle)
+                : (_resTitleOutlineNormalBundle  ?? _matTitleOutlineNormalBundle);
             UIOutlineStyle.ApplyMaterialOrColor(_txtTitleOutline, titleOutlineMat, UIOutlineStyle.ForShopBundle(isSpecial));
         }
 
