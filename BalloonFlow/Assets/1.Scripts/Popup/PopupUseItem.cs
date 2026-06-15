@@ -393,25 +393,11 @@ namespace BalloonFlow
         private void EnsurePopupVisualsAboveCutout()
         {
             // ROLLBACK_USEITEM_CUTOUT_SIBLING_GUARD:
-            // Overlay/CutoutMask are background layers. If prefab sibling order drifts, the
-            // transparent hole can make field objects look like they render over popup content.
-            // 디자인 의도(bottom→top): Dim/Cutout → FX(Light/BackLightR/Fire) → Frame/ImgItem/Desc/Exit → _Top. FX는 cutout 위·content 아래.
+            // Dim/Cutout 만 최후방 가드. 그 외 표시 순서(FX/Frame/ImgItem/Desc/Exit/_Top)는 Prefab Hierarchy 가 single source of truth — 코드에서 강제 재정렬하지 않는다.
+            // ImageItem 이 FX 파티클 위로 보이도록 하려면 UseItem.prefab 의 자식 순서를 ImgItem 이 FX_Light/FX_BackLightR/FX_Fire 보다 아래(더 큰 sibling index)에 오도록 편집한다.
             RectTransform dimRect = GetBaseDimRectTransform();
             if (dimRect != null) dimRect.SetAsFirstSibling();
             if (_cutoutMask != null) _cutoutMask.SetAsFirstSibling();
-
-            if (_fxLight != null) _fxLight.transform.SetAsLastSibling();
-            if (_fxBackLightR != null) _fxBackLightR.transform.SetAsLastSibling();
-            if (_fxFire != null) _fxFire.transform.SetAsLastSibling();
-
-            if (_frame != null) _frame.transform.SetAsLastSibling();
-            if (_imgItem != null) _imgItem.transform.SetAsLastSibling();
-            if (_rtItemDescription != null) _rtItemDescription.SetAsLastSibling();
-            if (_btnExit != null) _btnExit.transform.SetAsLastSibling();
-            if (_BottomExit != null) _BottomExit.SetAsLastSibling();
-            else if (_btnBottomExit != null) _btnBottomExit.transform.SetAsLastSibling();
-
-            if (_Top != null) _Top.SetAsLastSibling();
         }
 
         private bool ApplyCutoutMaterialToOverlay()
@@ -688,12 +674,12 @@ namespace BalloonFlow
 
         private void BringDescriptionToFront()
         {
+            // Prefab Hierarchy 순서 보존 — cutoutMask 의 자식이면 stencil 클리핑 회피를 위해서만 reparent. sibling index 는 prefab 그대로.
             Transform popupRoot = transform;
             if (_rtItemDescription != null)
             {
                 if (_cutoutMask != null && _rtItemDescription.IsChildOf(_cutoutMask))
                     _rtItemDescription.SetParent(popupRoot, false);
-                _rtItemDescription.SetAsLastSibling();
             }
             if (_imgItem != null)
             {
@@ -702,7 +688,6 @@ namespace BalloonFlow
                 {
                     if (_cutoutMask != null && iconRT.IsChildOf(_cutoutMask))
                         iconRT.SetParent(popupRoot, false);
-                    iconRT.SetAsLastSibling();
                 }
             }
         }
