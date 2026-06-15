@@ -157,5 +157,15 @@ namespace BalloonFlow
             }
             return false;
         }
+
+        /// <summary>[2026-06-15] PopupQuit 닫힐 때 Multiplier 애니메이션을 MultiplierDefault 로 초기화 —
+        /// 다음 오픈에서 잔존 state 진입 방지. base.CloseUI() 의 SetActive(false) 전에 실행해야 animator.Play 가 적용됨.
+        /// 활성 체크는 OnDisable/CloseUI 중복 호출 및 LoseLife 단계에서 닫힌 케이스(WS view 미노출)에서 불필요한 작업을 막기 위함.</summary>
+        public override void CloseUI()
+        {
+            if (_winningStreakView != null && _winningStreakView.activeInHierarchy)
+                WinningStreakUI.ResetPopupQuitMultiplierAnimation(_winningStreakView);
+            base.CloseUI();
+        }
     }
 }
