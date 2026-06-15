@@ -157,7 +157,7 @@ namespace BalloonFlow
             {
                 _countTween?.Kill();
                 _displayedAmount = gainedPoints;
-                SetAmountText(gainedPoints.ToString());
+                SetAmountText($"+{gainedPoints}");
             }
 
             yield return new WaitForSecondsRealtime(OutroHoldSeconds);
@@ -200,12 +200,12 @@ namespace BalloonFlow
             if (from <= 0 || from >= amount)
             {
                 // 첫 표시(빈 값→1) 또는 비증가 보정 — 즉시 세팅.
-                SetAmountText(amount.ToString());
+                SetAmountText($"+{amount}");
             }
             else
             {
                 int rolling = from;
-                _countTween = DOTween.To(() => rolling, v => { rolling = v; SetAmountText(v.ToString()); },
+                _countTween = DOTween.To(() => rolling, v => { rolling = v; SetAmountText($"+{v}"); },
                         amount, CountUpSeconds)
                     .SetEase(Ease.OutCubic)
                     .SetUpdate(true);
