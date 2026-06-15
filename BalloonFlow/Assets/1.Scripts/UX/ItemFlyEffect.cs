@@ -166,29 +166,43 @@ namespace BalloonFlow
             return item;
         }
 
-        // [스케일 업 후 비행] 원점에서 작게→원래 크기로 팝(in place) 한 뒤 비행 시작 (스케일업·비행 동시 X).
-        private const float SCALEUP_FROM = 0.3f;
-        private const float SCALEUP_DURATION = 0.15f;
+        // [스케일 업 후 비행] 원점에서 0→피크→1로 오버슈트 팝(in place) 한 뒤 비행 시작 (스케일업·비행 동시 X).
+        private const float SCALEUP_DURATION = 0.22f;
+        private const float SCALEUP_PEAK_SCALE = 1.2f;
+        private const float SCALEUP_PEAK_RATIO = 0.55f;
         private const float FADE_OUT_START = 0.70f;
 
         private static IEnumerator Fly(GameObject item, RectTransform rt, Image img,
             Vector2 origin, Vector2 scatter, Vector2 mid, Vector2 target,
             float duration, Action onDone)
         {
-            // ── Phase 0: 스케일 업 (원점 고정, 비행 전) ──
+            // ── Phase 0: 스케일 등장 (원점 고정, 0 → 1.2 → 1 오버슈트) ──
             if (rt != null)
             {
                 rt.anchoredPosition = origin;
                 Vector3 baseScale = rt.localScale;
-                Vector3 fromScale = baseScale * SCALEUP_FROM;
-                rt.localScale = fromScale;
+                Vector3 peakScale = baseScale * SCALEUP_PEAK_SCALE;
+                rt.localScale = Vector3.zero;
                 float su = 0f;
+                float peakTime = SCALEUP_DURATION * SCALEUP_PEAK_RATIO;
+                float settleTime = SCALEUP_DURATION - peakTime;
                 while (su < SCALEUP_DURATION)
                 {
                     su += Time.unscaledDeltaTime;
-                    float k = Mathf.Clamp01(su / SCALEUP_DURATION);
-                    k = 1f - (1f - k) * (1f - k); // OutQuad — 톡 튀는 팝 느낌
-                    rt.localScale = Vector3.LerpUnclamped(fromScale, baseScale, k);
+                    if (su <= peakTime)
+                    {
+                        // Phase A: 0 → 1.2 (빠른 팝, OutQuad)
+                        float k = Mathf.Clamp01(su / peakTime);
+                        k = 1f - (1f - k) * (1f - k);
+                        rt.localScale = Vector3.LerpUnclamped(Vector3.zero, peakScale, k);
+                    }
+                    else
+                    {
+                        // Phase B: 1.2 → 1 (자연스러운 세틀, SmoothStep)
+                        float k = Mathf.Clamp01((su - peakTime) / settleTime);
+                        k = Mathf.SmoothStep(0f, 1f, k);
+                        rt.localScale = Vector3.LerpUnclamped(peakScale, baseScale, k);
+                    }
                     yield return null;
                 }
                 rt.localScale = baseScale;
