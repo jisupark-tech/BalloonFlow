@@ -29,6 +29,11 @@ namespace BalloonFlow
         private bool _initStarted;
         private bool _catalogSubscribed;
         private const float PurchaseInitWaitTimeoutSeconds = 20f;
+        // ROLLBACK_IAP_INIT_RETRY_20260615: init 실패 시 재시도용. 기존엔 1회 실패하면 _initStarted=true 로 남아
+        //   세션 내 IAP 영구 불능이었음(에디터 FakeStore 는 실패가 없어 미노출). 아래 OnInitializeFailed 참조.
+        private int _initRetryCount;
+        private const int MAX_INIT_RETRIES = 3;
+        private const float INIT_RETRY_DELAY_SECONDS = 3f;
         private readonly HashSet<string> _pendingInitPurchases = new HashSet<string>();
         private readonly Dictionary<string, string> _cachedPrices = new Dictionary<string, string>();
 
@@ -372,10 +377,44 @@ namespace BalloonFlow
         }
 
         public void OnInitializeFailed(InitializationFailureReason error)
-            => Debug.LogError($"{LOG_TAG} Store init 실패: {error}");
+            => HandleInitializeFailed(error, null);
 
         public void OnInitializeFailed(InitializationFailureReason error, string message)
-            => Debug.LogError($"{LOG_TAG} Store init 실패: {error} — {message}");
+            => HandleInitializeFailed(error, message);
+
+        // ROLLBACK_IAP_INIT_RETRY_20260615: START
+        // 기존엔 init 실패 시 LogError 만 하고 _initStarted=true 가 그대로 남아 TryStartInit/StartInit 이 영구 no-op
+        //   → 세션 내 IAP 영구 불능(모든 결제 실패). 디바이스 콜드부팅 Billing warmup 지연 / 네트워크 순간끊김 /
+        //   AAB 게시 직후 전파 지연 등 '일시적' 실패에도 복구 불가였다. 실패 시 _initStarted 리셋 + 제한 재시도.
+        //   (PurchasingUnavailable = Play 스토어 자체 부재 → 영구 불가라 재시도 무의미, skip.)
+        //   롤백: 이 핸들러/RetryInit 코루틴/관련 필드 제거하고 위 두 메서드를 LogError 단문으로 환원.
+        private void HandleInitializeFailed(InitializationFailureReason error, string message)
+        {
+            Debug.LogError($"{LOG_TAG} Store init 실패: {error}{(string.IsNullOrEmpty(message) ? "" : $" — {message}")}");
+
+            _initStarted = false;   // 재초기화 가능하도록 리셋 (이게 없으면 영구 불능)
+
+            if (error == InitializationFailureReason.PurchasingUnavailable)
+            {
+                Debug.LogWarning($"{LOG_TAG} PurchasingUnavailable — 재시도 안 함(스토어/결제 불가 기기·환경).");
+                return;
+            }
+            if (_initRetryCount >= MAX_INIT_RETRIES)
+            {
+                Debug.LogWarning($"{LOG_TAG} init 재시도 {MAX_INIT_RETRIES}회 모두 실패 — 중단. (구매 시 다시 시도됨)");
+                return;
+            }
+            _initRetryCount++;
+            Debug.Log($"{LOG_TAG} init 재시도 예약 {_initRetryCount}/{MAX_INIT_RETRIES} ({INIT_RETRY_DELAY_SECONDS}s 후)");
+            StartCoroutine(RetryInitAfterDelay());
+        }
+
+        private IEnumerator RetryInitAfterDelay()
+        {
+            yield return new WaitForSecondsRealtime(INIT_RETRY_DELAY_SECONDS);
+            if (!_isInitialized) TryStartInit();
+        }
+        // ROLLBACK_IAP_INIT_RETRY_20260615: END
 
         public PurchaseProcessingResult ProcessPurchase(PurchaseEventArgs args)
         {
