@@ -152,7 +152,7 @@ namespace BalloonFlow
                 _winningStreakView.SetActive(true);
                 _currentView = QuitView.WinningStreak;
                 if (_frame != null) _frame.SetDescription($"You will lose your x{multiplier} multiplier!");
-                WinningStreakUI.PlayMultiplierIdle(_winningStreakView, multiplier);
+                WinningStreakUI.PlayMultiplierAnimationForPopupQuit(_winningStreakView, multiplier);
                 return true;
             }
             return false;
