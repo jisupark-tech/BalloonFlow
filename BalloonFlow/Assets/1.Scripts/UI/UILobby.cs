@@ -166,6 +166,10 @@ namespace BalloonFlow
         [Header("[Home Page — Play Button Change Animator]")]
         [SerializeField] private Animator _animPlayBtn;
 
+        [Tooltip("PlayButton 자식 Sparks ParticleSystem 원본(템플릿). 자체 재생 X — PlayPlayButtonSparks() 호출마다 Instantiate. 미할당 시 _btnPlay 하위에서 'Sparks'/'FXSparks'/'FxSparks' 이름으로 자동 탐색.")]
+        [SerializeField] private GameObject _playButtonSparks;
+        private GameObject _activePlayButtonSparksInstance;
+
         [Header("[RightArea — Lobby Page]")]
         [SerializeField] private Button _btnNoAds;
         [SerializeField] private Button _btnProfilePanel;
@@ -344,6 +348,8 @@ namespace BalloonFlow
             DisableGoldPanelFxFireOnEnter();
             ResolveLifePanelFxFire();
             DisableLifePanelFxFireOnEnter();
+            ResolvePlayButtonSparks();
+            DisablePlayButtonSparksOnEnter();
             ResolveWsFxRefs();
             DisableWinningStreakFxOnEnter();
 
@@ -1061,6 +1067,66 @@ namespace BalloonFlow
 
             // 안전망 — stopAction 이 looping 등의 이유로 발동되지 않는 케이스 대비 강제 정리.
             if (maxLifetime > 0f) Destroy(_activeLifePanelFxFireInstance, maxLifetime + 1f);
+        }
+
+        private void ResolvePlayButtonSparks()
+        {
+            if (_playButtonSparks != null && !_playButtonSparks.scene.IsValid()) _playButtonSparks = null;
+            if (_playButtonSparks != null) return;
+            Transform root = _btnPlay != null ? _btnPlay.transform : null;
+            if (root == null) return;
+            _playButtonSparks = FindChildComponentByName<Transform>(root, "Sparks")?.gameObject
+                             ?? FindChildComponentByName<Transform>(root, "FXSparks")?.gameObject
+                             ?? FindChildComponentByName<Transform>(root, "FxSparks")?.gameObject;
+        }
+
+        private void DisablePlayButtonSparksOnEnter()
+        {
+            if (_playButtonSparks == null) return;
+            var systems = _playButtonSparks.GetComponentsInChildren<ParticleSystem>(true);
+            foreach (var ps in systems)
+            {
+                if (ps == null) continue;
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            }
+        }
+
+        private void PlayPlayButtonSparks()
+        {
+            ResolvePlayButtonSparks();
+            if (_playButtonSparks == null) return;
+
+            Transform parent = _playButtonSparks.transform.parent;
+            if (parent == null) return;
+
+            if (_activePlayButtonSparksInstance != null) return;
+
+            _activePlayButtonSparksInstance = Instantiate(_playButtonSparks, parent, false);
+            var srcTr = _playButtonSparks.transform;
+            var dstTr = _activePlayButtonSparksInstance.transform;
+            dstTr.localPosition = srcTr.localPosition;
+            dstTr.localRotation = srcTr.localRotation;
+            dstTr.localScale    = srcTr.localScale;
+            _activePlayButtonSparksInstance.SetActive(true);
+
+            var systems = _activePlayButtonSparksInstance.GetComponentsInChildren<ParticleSystem>(true);
+            float maxLifetime = 0f;
+            for (int i = 0; i < systems.Length; i++)
+            {
+                var ps = systems[i];
+                var main = ps.main;
+                if (i == 0) main.stopAction = ParticleSystemStopAction.Destroy;
+
+                float dur  = main.duration;
+                float life = main.startLifetime.constantMax > 0f ? main.startLifetime.constantMax : main.startLifetime.constant;
+                float total = dur + life;
+                if (total > maxLifetime) maxLifetime = total;
+
+                ps.Clear(true);
+                ps.Play(true);
+            }
+
+            if (maxLifetime > 0f) Destroy(_activePlayButtonSparksInstance, maxLifetime + 1f);
         }
 
         private void DisableWinningStreakFxOnEnter()
@@ -2116,6 +2182,8 @@ namespace BalloonFlow
         {
             Transform target = _btnPlay != null ? _btnPlay.transform : null;
             if (target == null) return;
+
+            PlayPlayButtonSparks();
 
             if (!_gameStartButtonOriginalCaptured)
             {
