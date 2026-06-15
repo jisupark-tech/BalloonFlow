@@ -166,69 +166,64 @@ namespace BalloonFlow
             return item;
         }
 
-        // [스케일 업 후 비행] 원점에서 0→피크→1로 오버슈트 팝(in place) 한 뒤 비행 시작 (스케일업·비행 동시 X).
-        private const float SCALEUP_DURATION = 0.22f;
-        private const float SCALEUP_PEAK_SCALE = 1.2f;
-        private const float SCALEUP_PEAK_RATIO = 0.55f;
-        private const float FADE_OUT_START = 0.70f;
+        // 분산 이동 + 1→1.15→1 스케일 동시 진행 구간 (피크 허용 ±0.05)
+        private const float SCATTER_SCALE_DURATION = 0.22f;
+        private const float SCATTER_PEAK_SCALE = 1.15f;
+        private const float SCATTER_PEAK_RATIO = 0.55f;
+        // 도착 직전 마지막 10% 구간에서만 fade out 시작 (자연스러운 흡수 연출)
+        private const float FADE_OUT_START = 0.90f;
+        // 아이템별 launch 지연 상한 — 동일 spawnInterval 이후에도 미세하게 어긋나 겹침 방지
+        private const float SCATTER_START_DELAY_MAX = 0.06f;
 
         private static IEnumerator Fly(GameObject item, RectTransform rt, Image img,
             Vector2 origin, Vector2 scatter, Vector2 mid, Vector2 target,
             float duration, Action onDone)
         {
-            // ── Phase 0: 스케일 등장 (원점 고정, 0 → 1.2 → 1 오버슈트) ──
+            yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(0f, SCATTER_START_DELAY_MAX));
+
+            // ── Phase 0: 분산 + 스케일 오버슈트 동시 연출 (origin→scatter, 1→1.15→1) ──
             if (rt != null)
             {
-                rt.anchoredPosition = origin;
                 Vector3 baseScale = rt.localScale;
-                Vector3 peakScale = baseScale * SCALEUP_PEAK_SCALE;
-                rt.localScale = Vector3.zero;
-                float su = 0f;
-                float peakTime = SCALEUP_DURATION * SCALEUP_PEAK_RATIO;
-                float settleTime = SCALEUP_DURATION - peakTime;
-                while (su < SCALEUP_DURATION)
+                Vector3 peakScale = baseScale * SCATTER_PEAK_SCALE;
+                rt.anchoredPosition = origin;
+                rt.localScale = baseScale;
+                float sp = 0f;
+                float peakTime = SCATTER_SCALE_DURATION * SCATTER_PEAK_RATIO;
+                float settleTime = SCATTER_SCALE_DURATION - peakTime;
+                while (sp < SCATTER_SCALE_DURATION)
                 {
-                    su += Time.unscaledDeltaTime;
-                    if (su <= peakTime)
+                    sp += Time.unscaledDeltaTime;
+                    float t = Mathf.Clamp01(sp / SCATTER_SCALE_DURATION);
+                    float posEase = 1f - (1f - t) * (1f - t) * (1f - t);
+                    rt.anchoredPosition = Vector2.Lerp(origin, scatter, posEase);
+                    if (sp <= peakTime)
                     {
-                        // Phase A: 0 → 1.2 (빠른 팝, OutQuad)
-                        float k = Mathf.Clamp01(su / peakTime);
+                        float k = Mathf.Clamp01(sp / peakTime);
                         k = 1f - (1f - k) * (1f - k);
-                        rt.localScale = Vector3.LerpUnclamped(Vector3.zero, peakScale, k);
+                        rt.localScale = Vector3.LerpUnclamped(baseScale, peakScale, k);
                     }
                     else
                     {
-                        // Phase B: 1.2 → 1 (자연스러운 세틀, SmoothStep)
-                        float k = Mathf.Clamp01((su - peakTime) / settleTime);
+                        float k = Mathf.Clamp01((sp - peakTime) / settleTime);
                         k = Mathf.SmoothStep(0f, 1f, k);
                         rt.localScale = Vector3.LerpUnclamped(peakScale, baseScale, k);
                     }
                     yield return null;
                 }
+                rt.anchoredPosition = scatter;
                 rt.localScale = baseScale;
             }
 
             float elapsed = 0f;
-            const float scatterPhase = 0.18f;
 
             while (elapsed < duration)
             {
                 elapsed += Time.unscaledDeltaTime;
                 float t = Mathf.Clamp01(elapsed / duration);
-
-                if (t < scatterPhase)
-                {
-                    float st = t / scatterPhase;
-                    float ease = 1f - (1f - st) * (1f - st);
-                    rt.anchoredPosition = Vector2.Lerp(origin, scatter, ease);
-                }
-                else
-                {
-                    float ct = (t - scatterPhase) / (1f - scatterPhase);
-                    float ease = ct * ct;
-                    float u = 1f - ease;
-                    rt.anchoredPosition = u * u * scatter + 2f * u * ease * mid + ease * ease * target;
-                }
+                float ease = t * t;
+                float u = 1f - ease;
+                rt.anchoredPosition = u * u * scatter + 2f * u * ease * mid + ease * ease * target;
 
                 if (t > FADE_OUT_START && img != null)
                 {

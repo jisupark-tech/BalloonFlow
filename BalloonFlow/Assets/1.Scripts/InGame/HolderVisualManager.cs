@@ -456,7 +456,7 @@ namespace BalloonFlow
         }
 
         /// <summary>Hand 부스터 하이라이트 대상 행 수 (각 column 의 앞쪽 N 행).</summary>
-        private const int HAND_HIGHLIGHT_TOP_ROWS = 3;
+        private const int HAND_HIGHLIGHT_TOP_ROWS = 5;
 
         // 부스터 토글 시점 외에는 사용되지 않는 재사용 풀. 매 호출 Clear 후 재충전.
         private readonly Dictionary<int, List<HolderVisual>> _tempHighlightByCol = new Dictionary<int, List<HolderVisual>>();
@@ -470,17 +470,7 @@ namespace BalloonFlow
         /// </summary>
         public void SetHandSelectionHighlightActive(bool active)
         {
-            if (!active)
-            {
-                foreach (var kvp in _holderVisuals)
-                {
-                    HolderVisual visual = kvp.Value;
-                    if (visual == null || visual.identifier == null) continue;
-                    visual.identifier.SetControlBoxStrokeActive(false);
-                }
-                return;
-            }
-
+            // column 별 버킷 재구성 (active/inactive 양쪽에서 동일 분류 사용).
             foreach (var bucket in _tempHighlightByCol.Values)
                 bucket.Clear();
 
@@ -499,6 +489,54 @@ namespace BalloonFlow
                 bucket.Add(visual);
             }
 
+            if (!active)
+            {
+                // Hand 부스터 종료 → row 기반 원상복구. 패턴: RepositionColumnHolders 행-스타일 (line 939-975).
+                // ROLLBACK: 본 분기의 행 복원 루프를 삭제하고 `foreach _holderVisuals → SetControlBoxStrokeActive(false)` 만 남기면 이전 동작 복원.
+                foreach (var bucket in _tempHighlightByCol.Values)
+                {
+                    if (bucket.Count == 0) continue;
+                    bucket.Sort(s_highlightZDescComparer);
+                    for (int i = 0; i < bucket.Count; i++)
+                    {
+                        HolderVisual visual = bucket[i];
+                        visual.identifier.SetControlBoxStrokeActive(false);
+
+                        bool isHidden = false;
+                        if (HolderManager.HasInstance)
+                        {
+                            var data = HolderManager.Instance.FindHolderPublic(visual.holderId);
+                            isHidden = data != null && data.isHidden;
+                        }
+
+                        if (i == 0)
+                            visual.identifier.SetActiveFrontRow();
+                        else
+                            visual.identifier.SetInactiveRow();
+
+                        if (visual.magazineText != null)
+                        {
+                            if (isHidden)
+                                visual.magazineText.color = HIDDEN_MAGAZINE_COLOR; // 명세: hidden 은 row 무관 alpha 1.0
+                            else
+                                visual.magazineText.color = i == 0
+                                    ? Color.white                          // row 0: 활성 alpha 1.0 (=255)
+                                    : new Color(1f, 1f, 1f, 0.5f);          // row 1+: 비활성 alpha 0.5
+                        }
+                    }
+                }
+
+                // 분류에서 제외된 visual (isDeploying/isMovingToRail) 의 잔여 stroke 도 정리.
+                foreach (var kvp in _holderVisuals)
+                {
+                    HolderVisual visual = kvp.Value;
+                    if (visual == null || visual.identifier == null) continue;
+                    if (!visual.isDeploying && !visual.isMovingToRail) continue;
+                    visual.identifier.SetControlBoxStrokeActive(false);
+                }
+                return;
+            }
+
             foreach (var bucket in _tempHighlightByCol.Values)
             {
                 if (bucket.Count == 0) continue;
@@ -506,7 +544,23 @@ namespace BalloonFlow
                 int limit = bucket.Count < HAND_HIGHLIGHT_TOP_ROWS ? bucket.Count : HAND_HIGHLIGHT_TOP_ROWS;
                 for (int i = 0; i < limit; i++)
                 {
-                    bucket[i].identifier.SetControlBoxStrokeActive(true);
+                    HolderVisual visual = bucket[i];
+                    visual.identifier.SetControlBoxStrokeActive(true);
+                    // ROLLBACK: 본 if 블록 내 SetActiveFrontRow + magazineText.color 라인 제거하면
+                    //   ControlBoxStroke 만 토글되는 이전 동작 복원.
+                    visual.identifier.SetActiveFrontRow(); // OutlineHull material swap + 검정 외곽선
+                    if (visual.magazineText != null)
+                    {
+                        bool isHidden = false;
+                        if (HolderManager.HasInstance)
+                        {
+                            var data = HolderManager.Instance.FindHolderPublic(visual.holderId);
+                            isHidden = data != null && data.isHidden;
+                        }
+                        // Hidden 은 HIDDEN_MAGAZINE_COLOR(alpha 1.0) 우선. 일반은 Color.white = RGBA(1,1,1,1) = alpha 255.
+                        visual.magazineText.color = isHidden ? HIDDEN_MAGAZINE_COLOR : Color.white;
+                    }
+                    // row<MAGAZINE_TEXT_VISIBLE_ROWS(5) 게이트는 이미 limit==HAND_HIGHLIGHT_TOP_ROWS(5)와 일치 → 토글 불필요.
                 }
             }
         }
