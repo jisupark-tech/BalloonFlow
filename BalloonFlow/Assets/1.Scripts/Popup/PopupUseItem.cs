@@ -304,6 +304,18 @@ namespace BalloonFlow
             return null;
         }
 
+        private static Transform FirstAncestorUnder(Transform t, Transform root)
+        {
+            if (t == null || root == null) return null;
+            Transform cur = t;
+            while (cur != null && cur != root)
+            {
+                if (cur.parent == root) return cur;
+                cur = cur.parent;
+            }
+            return null;
+        }
+
         private void OnDisable()
         {
             if (_activePopup == this)
@@ -396,28 +408,37 @@ namespace BalloonFlow
             // Dim/Cutout 만 최후방 가드. 그 외 표시 순서(FX/Frame/ImgItem/Desc/Exit/_Top)는 Prefab Hierarchy 가 single source of truth — 코드에서 강제 재정렬하지 않는다.
             // [SSOT 예외] UseItem.prefab 이 binary 직렬화이므로 prefab hierarchy 를 SSOT 로 둘 수 없는 단 하나의 ordering 관계(ImgItem > FX_Light/FX_BackLightR/FX_Fire)에 한해, 이 메서드가 SSOT 다. 그 외 모든 sibling 관계는 여전히 prefab 이 SSOT.
             // [의도] ImageItem (아이템 아이콘) 은 파티클 FX 위에 렌더되어야 한다 (사용자 디자인 요구 2026-06-15).
+            // [수정 2026-06-15 #4 사이클] BringDescriptionToFront 가 _imgItem 을 reparent 한 뒤에도 동작하도록 immediate-parent 비교를 popupRoot 직속 ancestor branch 비교로 교체.
             RectTransform dimRect = GetBaseDimRectTransform();
             if (dimRect != null) dimRect.SetAsFirstSibling();
             if (_cutoutMask != null) _cutoutMask.SetAsFirstSibling();
 
-            if (_imgItem != null)
+            if (_imgItem == null) return;
+            ResolveFxReferences();
+
+            Transform popupRoot = transform;
+            Transform imgBranch = FirstAncestorUnder(_imgItem.transform, popupRoot);
+            if (imgBranch == null) return;
+
+            int maxFxBranchIndex = -1;
+            if (_fxLight != null)
             {
-                Transform imgT = _imgItem.transform;
-                Transform parent = imgT.parent;
-                if (parent != null)
-                {
-                    ResolveFxReferences();
-                    int maxFxIndex = -1;
-                    if (_fxLight != null && _fxLight.transform.parent == parent)
-                        maxFxIndex = Mathf.Max(maxFxIndex, _fxLight.transform.GetSiblingIndex());
-                    if (_fxBackLightR != null && _fxBackLightR.transform.parent == parent)
-                        maxFxIndex = Mathf.Max(maxFxIndex, _fxBackLightR.transform.GetSiblingIndex());
-                    if (_fxFire != null && _fxFire.transform.parent == parent)
-                        maxFxIndex = Mathf.Max(maxFxIndex, _fxFire.transform.GetSiblingIndex());
-                    if (maxFxIndex >= 0 && imgT.GetSiblingIndex() <= maxFxIndex)
-                        imgT.SetSiblingIndex(maxFxIndex + 1);
-                }
+                Transform b = FirstAncestorUnder(_fxLight.transform, popupRoot);
+                if (b != null) maxFxBranchIndex = Mathf.Max(maxFxBranchIndex, b.GetSiblingIndex());
             }
+            if (_fxBackLightR != null)
+            {
+                Transform b = FirstAncestorUnder(_fxBackLightR.transform, popupRoot);
+                if (b != null) maxFxBranchIndex = Mathf.Max(maxFxBranchIndex, b.GetSiblingIndex());
+            }
+            if (_fxFire != null)
+            {
+                Transform b = FirstAncestorUnder(_fxFire.transform, popupRoot);
+                if (b != null) maxFxBranchIndex = Mathf.Max(maxFxBranchIndex, b.GetSiblingIndex());
+            }
+
+            if (maxFxBranchIndex >= 0 && imgBranch.GetSiblingIndex() <= maxFxBranchIndex)
+                imgBranch.SetSiblingIndex(maxFxBranchIndex + 1);
         }
 
         private bool ApplyCutoutMaterialToOverlay()
