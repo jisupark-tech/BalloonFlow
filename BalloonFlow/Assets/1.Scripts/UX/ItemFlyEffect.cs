@@ -169,6 +169,7 @@ namespace BalloonFlow
         // [스케일 업 후 비행] 원점에서 작게→원래 크기로 팝(in place) 한 뒤 비행 시작 (스케일업·비행 동시 X).
         private const float SCALEUP_FROM = 0.3f;
         private const float SCALEUP_DURATION = 0.15f;
+        private const float FADE_OUT_START = 0.70f;
 
         private static IEnumerator Fly(GameObject item, RectTransform rt, Image img,
             Vector2 origin, Vector2 scatter, Vector2 mid, Vector2 target,
@@ -215,9 +216,10 @@ namespace BalloonFlow
                     rt.anchoredPosition = u * u * scatter + 2f * u * ease * mid + ease * ease * target;
                 }
 
-                if (t > 0.85f && img != null)
+                if (t > FADE_OUT_START && img != null)
                 {
-                    float a = 1f - (t - 0.85f) / 0.15f;
+                    float ft = (t - FADE_OUT_START) / (1f - FADE_OUT_START);
+                    float a = 1f - Mathf.SmoothStep(0f, 1f, ft);
                     img.color = new Color(1f, 1f, 1f, a);
                 }
                 yield return null;
