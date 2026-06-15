@@ -676,6 +676,11 @@ namespace BalloonFlow
                     BalloonController.Instance.GetAdjustedCellSize(out float bCellX, out float bCellZ);
                     float cellAlong = axisZ ? bCellZ : bCellX;
                     float cellPerp  = axisZ ? bCellX : bCellZ;
+                    // ROLLBACK_BARRICADE_FOOTPRINT_INT_KEY_20260615: 그리드 키는 anchor 셀 + 정수 오프셋으로.
+                    // (기존: cell = WorldToGrid(cw) — 렌더 셀크기로 스텝한 월드좌표를 raw spacing 으로 재라운딩.
+                    //  스케일 보드에서 float 오차로 두 셀이 같은 키로 합쳐지거나 키를 건너뛰어 라인에 blocker 누락
+                    //  → 관통. 정수 오프셋은 그 위험을 구조적으로 제거하고 mult==1 에선 결과 동일.)
+                    Vector2Int bAnchorCell = WorldToGrid(bAnchor);
                     for (int a = 0; a < alongCount; a++)
                     {
                         for (int p = 0; p < 2; p++)   // 두께 2칸
@@ -684,12 +689,16 @@ namespace BalloonFlow
                             if (axisZ) { cw.z += a * sign * cellAlong; cw.x += p * cellPerp; }
                             else       { cw.x += a * sign * cellAlong; cw.z += p * cellPerp; }
                             cw.y = worldPos.y;
+                            // ROLLBACK_BARRICADE_FOOTPRINT_INT_KEY_20260615: 롤백 시 아래를 cell = WorldToGrid(cw) 로.
+                            Vector2Int cell = axisZ
+                                ? new Vector2Int(bAnchorCell.x + p, bAnchorCell.y + a * sign)
+                                : new Vector2Int(bAnchorCell.x + a * sign, bAnchorCell.y + p);
                             AddEdgeTarget(new EdgeTarget
                             {
                                 balloonId = balloon.balloonId,
                                 color = balloon.color,
                                 worldPos = cw,
-                                cell = WorldToGrid(cw),
+                                cell = cell,
                                 targetable = targetable
                             });
                         }
@@ -710,6 +719,9 @@ namespace BalloonFlow
                     int eggN = isEggBox ? balloon.eggColors.Length : 0;
                     Vector3 anchor = BalloonController.Instance.GetAdjustedBoardPosition(balloon.position);
                     BalloonController.Instance.GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ);
+                    // ROLLBACK_SIZED_FOOTPRINT_INT_KEY_20260615: 그리드 키는 anchor 셀 + 정수 오프셋으로
+                    // (바리케이드와 동일 이유 — 스케일 보드 재라운딩 관통 방지, mult==1 결과 동일).
+                    Vector2Int anchorCell = WorldToGrid(anchor);
                     for (int dx = 0; dx < width; dx++)
                     {
                         for (int dz = 0; dz < height; dz++)
@@ -733,7 +745,8 @@ namespace BalloonFlow
                                 balloonId = balloon.balloonId,
                                 color = cellColor,
                                 worldPos = cellWorld,
-                                cell = WorldToGrid(cellWorld),
+                                // ROLLBACK_SIZED_FOOTPRINT_INT_KEY_20260615: 롤백 시 cell = WorldToGrid(cellWorld) 로.
+                                cell = new Vector2Int(anchorCell.x + dx, anchorCell.y + dz),
                                 targetable = cellTargetable
                             });
                         }

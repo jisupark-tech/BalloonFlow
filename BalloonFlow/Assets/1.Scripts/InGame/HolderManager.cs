@@ -322,8 +322,33 @@ namespace BalloonFlow
             }
 
             int col = holder.column;
-            holder.isDeploying = true;
-            _deployingHolderId[col] = holder.holderId;
+
+            // ROLLBACK_HOLDER_FORCESELECT_COLUMN_GUARD_20260615: START
+            // 기존엔 컬럼 점유를 무시하고 _deployingHolderId[col] 을 무조건 덮어써서, 이미 deployer 가 있던
+            // 컬럼이면 그 deployer 슬롯이 누수(영구 점유) + 같은 컬럼 deploying holder 2개(더블파이어)였다.
+            // SelectHolder(472-484) 와 동일하게 컬럼 상태에 따라 분기한다:
+            //   deploying+waiting 둘 다 참 → 배치 불가(false). 인벤토리 환불은 호출측(BoosterExecutor) 책임.
+            //   deploying 만 참 → 이 holder 는 waiting 으로.  비어있음 → 즉시 deploying.
+            // (이벤트 OnHolderSelected 는 두 경우 모두 발행 — visual 이 isWaiting 으로 큐 배치 처리, SelectHolder 동일.)
+            // 롤백: 아래 START~END 를 다음 3줄로 교체:
+            //   holder.isDeploying = true;
+            //   _deployingHolderId[col] = holder.holderId;
+            if (_deployingHolderId[col] >= 0 && _waitingHolderId[col] >= 0)
+            {
+                return false; // 컬럼 가득 — 강제 배치 불가(슬롯 덮어쓰기 금지)
+            }
+            if (_deployingHolderId[col] >= 0)
+            {
+                holder.isWaiting = true;
+                _waitingHolderId[col] = holder.holderId;
+            }
+            else
+            {
+                holder.isDeploying = true;
+                holder.isMovingToRail = true;
+                _deployingHolderId[col] = holder.holderId;
+            }
+            // ROLLBACK_HOLDER_FORCESELECT_COLUMN_GUARD_20260615: END
 
             EventBus.Publish(new OnHolderSelected
             {
@@ -1127,31 +1152,53 @@ namespace BalloonFlow
                 }
             }
 
-            int col = evt.column;
-            _deployingHolderId[col] = -1;
+            // ROLLBACK_HOLDER_DEPLOYDONE_COLFROM_HOLDER_20260615: START
+            // evt.column 은 visual.column 인데, CompactColumns(Color-Remove의 RemoveRailAndQueueColor 경로)가
+            // 배포중 홀더의 data column 을 newCol 로 재배치하고 _deployingHolderId[newCol] 를 재구축(979)해도,
+            // RefreshAllPositions 가 배포중 visual 을 skip(606)해 visual.column 이 stale(oldCol)로 남는다.
+            // 그러면 done 이벤트가 oldCol 을 실어와 _deployingHolderId[newCol] 가 영영 해제 안 됨 → 컬럼 데드락.
+            // 홀더의 현재 data column 을 진실원본으로 사용(holder null 이면 evt.column 폴백).
+            // 정상 경로에선 holder.column == evt.column 이라 동작 동일 → 무회귀.
+            // 롤백: 아래 한 줄을  int col = evt.column;  으로 교체.
+            int col = (holder != null) ? holder.column : evt.column;
+            // ROLLBACK_HOLDER_DEPLOYDONE_COLFROM_HOLDER_20260615: END
 
-            // Promote waiting holder to deploying
-            if (_waitingHolderId[col] >= 0)
+            // ROLLBACK_HOLDER_DEPLOYDONE_OWNERSHIP_GUARD_20260615: START
+            // 기존엔 소유권 확인 없이 _deployingHolderId[col] = -1 했다. evt.holderId 가 현재 컬럼 deployer
+            // 가 아니면(이미 다른 holder 가 promotion 으로 점유) stale done 이벤트가 남의 예약을 지우고
+            // 곧이어 waiter 를 promotion → 같은 컬럼에 deploying holder 2개 → 병렬 디플로이(연속공격).
+            // UndoDeploy(714) 와 동일하게 owner 일치 시에만 clear+promotion 수행. 정상 동작 시엔 항상 일치하므로
+            // 동작 동일, 버그 경로(stale)에서만 skip. (위 holder-state/frozen/AllEmpty 처리는 evt.holderId
+            //  기준이라 가드 밖에서 항상 실행.)
+            // 롤백: 아래 if (_deployingHolderId[col] == evt.holderId) 래퍼 제거하고 본문을 무조건 실행.
+            if (_deployingHolderId[col] == evt.holderId)
             {
-                int waitId = _waitingHolderId[col];
-                _waitingHolderId[col] = -1;
+                _deployingHolderId[col] = -1;
 
-                HolderData waitHolder = FindHolder(waitId);
-                if (waitHolder != null && !waitHolder.isConsumed)
+                // Promote waiting holder to deploying
+                if (_waitingHolderId[col] >= 0)
                 {
-                    waitHolder.isWaiting = false;
-                    waitHolder.isDeploying = true;
-                    waitHolder.isMovingToRail = true;
-                    _deployingHolderId[col] = waitId;
+                    int waitId = _waitingHolderId[col];
+                    _waitingHolderId[col] = -1;
 
-                    EventBus.Publish(new OnHolderSelected
+                    HolderData waitHolder = FindHolder(waitId);
+                    if (waitHolder != null && !waitHolder.isConsumed)
                     {
-                        holderId = waitHolder.holderId,
-                        color = waitHolder.color,
-                        magazineCount = waitHolder.magazineCount
-                    });
+                        waitHolder.isWaiting = false;
+                        waitHolder.isDeploying = true;
+                        waitHolder.isMovingToRail = true;
+                        _deployingHolderId[col] = waitId;
+
+                        EventBus.Publish(new OnHolderSelected
+                        {
+                            holderId = waitHolder.holderId,
+                            color = waitHolder.color,
+                            magazineCount = waitHolder.magazineCount
+                        });
+                    }
                 }
             }
+            // ROLLBACK_HOLDER_DEPLOYDONE_OWNERSHIP_GUARD_20260615: END
 
             // Check if all holders are consumed
             if (AreAllHoldersEmpty())

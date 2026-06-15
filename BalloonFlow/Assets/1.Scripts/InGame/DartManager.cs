@@ -1785,24 +1785,44 @@ namespace BalloonFlow
         // '직전 발사 직후 같은 라인 재발사' 위험 창과 겹치지 않는다 (발사/비행 발생 즉시 타이머 리셋).
         private float _stallWatchTimer;
         private const float STALL_WATCHDOG_SECONDS = 1.5f;
+        // ROLLBACK_DART_STALL_WATCHDOG_WIDEN_20260615: 매치가 없을 때(또는 sweep scope 불일치)
+        // 발동하는 더 긴 타임아웃. belt 회전 지연/짧은 inter-fire 갭이 오발동하지 않도록 1.5s 보다 길게.
+        private const float STALL_WATCHDOG_SECONDS_NO_MATCH = 3.0f;
 
         private void UpdateStallWatchdog(RailManager rail, int committedFiresThisScan)
         {
+            // 실제 활동(발사/비행체/일시정지/점유0)이 있으면 절대 발동 안 함 — 타이머 리셋.
             if (committedFiresThisScan > 0 || _activeProjectiles.Count > 0 || PauseManager.IsPaused
-                || rail == null || rail.EffectiveOccupiedCount == 0
-                || !BoardStateManager.HasInstance || !BoardStateManager.Instance.HasOutermostMatchCached)
+                || rail == null || rail.EffectiveOccupiedCount == 0)
             {
                 _stallWatchTimer = 0f;
                 return;
             }
 
             _stallWatchTimer += Time.deltaTime;
-            if (_stallWatchTimer < STALL_WATCHDOG_SECONDS) return;
+
+            // ROLLBACK_DART_STALL_WATCHDOG_WIDEN_20260615: START
+            // 기존엔 HasOutermostMatchCached==true 일 때만 1.5s 후 발동했다. 그러나 그 sweep 은
+            // DirectionalTargeting 실제 타겟 선정과 다른 계산이라, 'sweep=매치없음 인데 실제론 타겟불가-잔존'
+            // scope 불일치 시 안전망이 영영 안 떠 silent 영구정지가 가능했다. → 매치 유무와 무관하게 발동하되,
+            // 매치 없을 땐 더 긴 타임아웃 사용. 최후 동작에 consumed-line lock clear 추가 — 위 guard 로
+            // 비행체 0 이 보장되므로(불변식: projectiles==0 ⇒ unresolvedConsumedLines==0, 1158-1160 동일 패턴)
+            // in-flight 라인 재개방으로 인한 더블어택 위험 없음.
+            // 롤백: 아래 START~END 를 다음 종전 코드로 교체:
+            //   if (!BoardStateManager.HasInstance || !BoardStateManager.Instance.HasOutermostMatchCached) { _stallWatchTimer = 0f; return; }
+            //   if (_stallWatchTimer < STALL_WATCHDOG_SECONDS) return;
+            //   _stallWatchTimer = 0f; InvalidateDartScanLines();
+            //   LogAttackIssue("DartStallWatchdog", $"no fire/projectile for {STALL_WATCHDOG_SECONDS:F1}s with match present — full scan-line invalidate");
+            bool matchPresent = BoardStateManager.HasInstance && BoardStateManager.Instance.HasOutermostMatchCached;
+            float threshold = matchPresent ? STALL_WATCHDOG_SECONDS : STALL_WATCHDOG_SECONDS_NO_MATCH;
+            if (_stallWatchTimer < threshold) return;
             _stallWatchTimer = 0f;
 
             InvalidateDartScanLines();
+            ClearConsumedLineLocks();   // 비행체 0 보장 하에서만 도달 → 라인 재개방 안전
             LogAttackIssue("DartStallWatchdog",
-                $"no fire/projectile for {STALL_WATCHDOG_SECONDS:F1}s with match present — full scan-line invalidate");
+                $"no fire/projectile for {threshold:F1}s (match={matchPresent}) — scan-line + consumed-lock clear");
+            // ROLLBACK_DART_STALL_WATCHDOG_WIDEN_20260615: END
         }
 
         // DEAD_HEAD_RELIEF (2026-06-10):

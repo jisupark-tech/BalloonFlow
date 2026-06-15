@@ -861,6 +861,24 @@ namespace BalloonFlow
             if (_deadlockHolderId < 0) return;
             int prevHolder = _deadlockHolderId;
             _deadlockHolderId = -1;
+
+            // ROLLBACK_DEADLOCK_EXIT_REACTIVATE_20260615: START
+            // 기존 주석은 suspended holder 가 "다음 placement 성공 시 자동 re-activate" 된다고 했으나,
+            // near-full 로 막힌 holder 는 placement 에 도달하지 못해 _activeDeployPoints 에서 빠진 채
+            // stale obstacle/비발사 blocker 로 잔존 → survivor 정지 가능. 여기서 명시적으로 복귀시킨다.
+            // 안전: _activeDeployPoints 는 HashSet(Add 멱등, 이중 obstacle 불가). 트리거 holder 와
+            //       이미 UnregisterDeployPoint 된 holder(_deployPoints 에서 제거됨)는 제외.
+            // 롤백: 아래 for 블록 전체 삭제(이 마커 START~END 사이) 하면 종전 동작 복원.
+            for (int i = 0; i < _deadlockSuspendedDeployPoints.Count; i++)
+            {
+                int hid = _deadlockSuspendedDeployPoints[i];
+                if (hid == prevHolder) continue;          // 트리거는 이미 처리됨
+                if (_deployPoints.ContainsKey(hid))        // 그사이 unregister 된 死 포인트 제외
+                    _activeDeployPoints.Add(hid);          // HashSet → 멱등
+            }
+            _deadlockSuspendedDeployPoints.Clear();
+            // ROLLBACK_DEADLOCK_EXIT_REACTIVATE_20260615: END
+
             Debug.Log($"[Deadlock] EXIT — trigger holder {prevHolder} done. " +
                       $"Occupancy: {_occupiedCount}/{_slotCount}");
             EventBus.Publish(new OnDeadlockExited { holderId = prevHolder });
@@ -1921,7 +1939,14 @@ namespace BalloonFlow
             if (_dartById.TryGetValue(dartId, out DartOnRail dart))
             {
                 dart.slotIndex = slotIndex;
-                dart.progress = GetPathDistanceForSlot(slotIndex);
+                // ROLLBACK_DART_SLOTINDEX_NO_PROGRESS_REWRITE_20260615: START
+                // dart.progress 가 시각/스캔/발사슬롯의 single source of truth 인데, 슬롯중심 거리로 덮어쓰면
+                // 렌더가 tween 없이 직접 대입하므로 순간이동 + scan line/fire-slot 교란(놓침/중복)이 된다.
+                // slotIndex 메타만 갱신하고 progress 는 belt(SyncSlotOccupancyFromDarts)가 단독 관리하게 둔다.
+                // (현재 유일 호출자 ShiftSlotsForward 는 死코드이므로 라이브 영향 없음 — 방어적 정정.)
+                // 롤백: 아래 한 줄 주석 해제.
+                // dart.progress = GetPathDistanceForSlot(slotIndex);
+                // ROLLBACK_DART_SLOTINDEX_NO_PROGRESS_REWRITE_20260615: END
             }
         }
 

@@ -253,6 +253,23 @@ namespace BalloonFlow
 
         private void HandleBoosterUsed(OnBoosterUsed evt)
         {
+            // ROLLBACK_BOOSTER_COLORREMOVE_DUP_REJECT_20260615: START
+            // Color-Remove 가 이미 진행/대기 중인데 또 활성화되면, 아래 IsPausedByBooster=true 가 다시 걸리지만
+            // PlayColorRemoveSequence 는 reentrancy 가드(490)로 즉시 yield break → ResumeRail(638) 미도달
+            // → 레일 영구정지(소프트락). IsPausedByBooster 는 ref-count 가 아닌 bool 이라 'early break 에서
+            // resume' 으로 고치면 도리어 첫(실행중) 시퀀스의 pause 를 풀어 다트 전진→놓침이 된다.
+            // 따라서 중복 활성화는 pause 를 걸기 '전에' 거부하고 선차감분을 환불한다.
+            // 롤백: 아래 START~END if 블록 전체 삭제.
+            if (evt.boosterType == BoosterManager.COLOR_REMOVE
+                && (_isColorRemoveSequenceRunning || _awaitingColorSelection || _awaitingBalloonClick))
+            {
+                if (BoosterManager.HasInstance)
+                    BoosterManager.Instance.AddBooster(BoosterManager.COLOR_REMOVE, 1); // 선차감 환불
+                Debug.LogWarning("[BoosterExecutor] COLOR_REMOVE already active — duplicate rejected & refunded.");
+                return;
+            }
+            // ROLLBACK_BOOSTER_COLORREMOVE_DUP_REJECT_20260615: END
+
             // Pause rail rotation while booster is active
             if (RailManager.HasInstance)
                 RailManager.Instance.IsPausedByBooster = true;
