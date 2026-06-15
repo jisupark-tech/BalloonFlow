@@ -900,27 +900,104 @@ namespace BalloonFlow
 
             if (_railWarningConfig == null)
             {
-                _railWarningConfig = new TutorialConfig
-                {
-                    tutorialId = RAIL_WARNING_TUTORIAL_ID,
-                    levelId = -1, // 글로벌 (특정 레벨 종속 X)
-                    tutorialName = "Rail Warning",
-                    steps = new TutorialStep[]
-                    {
-                        new TutorialStep
-                        {
-                            stepIndex = 0,
-                            // [#4] 1.0 EN-only — 한국어 글리프 미포함 폰트라 깨져 보임. 명세 §4-3 영문으로 교체.
-                            instruction = "Conveyor almost full!\nClear it or fail!",
-                            highlightTarget = string.Empty,
-                            requireAction = ACTION_TAP_ANYWHERE,
-                            isComplete = false,
-                            useTextTap = true
-                        }
-                    }
-                };
+                _railWarningConfig = BuildRailWarningConfigFromCatalog() ?? BuildRailWarningConfigFallback();
             }
             StartTutorial(RAIL_WARNING_TUTORIAL_ID);
+        }
+
+        /// <summary>
+        /// Resources/TutorialCatalog.asset에서 tutorialName == "tutorial_rail_warning" 엔트리를 찾아
+        /// Tutorial Editor에 저장된 모든 step 필드(레이아웃 좌표·크기·인디케이터·스프라이트 등)를 그대로 복제한다.
+        /// tutorialId/levelId만 글로벌 런타임 식별값으로 덮어쓴다. 카탈로그/엔트리 부재 시 null 반환.
+        /// </summary>
+        private TutorialConfig BuildRailWarningConfigFromCatalog()
+        {
+            TutorialCatalog catalog = Resources.Load<TutorialCatalog>(TutorialCatalog.RESOURCES_PATH);
+            if (catalog == null || catalog.Tutorials == null) return null;
+
+            TutorialConfig source = null;
+            for (int i = 0; i < catalog.Tutorials.Count; i++)
+            {
+                TutorialConfig candidate = catalog.Tutorials[i];
+                if (candidate != null && candidate.tutorialName == "tutorial_rail_warning")
+                {
+                    source = candidate;
+                    break;
+                }
+            }
+            if (source == null || source.steps == null || source.steps.Length == 0) return null;
+
+            TutorialStep[] clonedSteps = new TutorialStep[source.steps.Length];
+            for (int i = 0; i < source.steps.Length; i++)
+            {
+                TutorialStep src = source.steps[i];
+                if (src == null) continue;
+                clonedSteps[i] = new TutorialStep
+                {
+                    stepIndex = i,
+                    instruction = src.instruction,
+                    instructionKey = src.instructionKey,
+                    highlightTarget = src.highlightTarget,
+                    requireAction = src.requireAction,
+                    isComplete = false,
+                    overrideVisualLayout = src.overrideVisualLayout,
+                    useCutoutFrame = src.useCutoutFrame,
+                    cutoutFramePosition = src.cutoutFramePosition,
+                    cutoutFrameSize = src.cutoutFrameSize,
+                    cutoutFrameSprite = src.cutoutFrameSprite,
+                    instructionPanelPosition = src.instructionPanelPosition,
+                    instructionPanelSize = src.instructionPanelSize,
+                    useArrowIndicator = src.useArrowIndicator,
+                    arrowIndicatorPosition = src.arrowIndicatorPosition,
+                    useHandIndicator = src.useHandIndicator,
+                    handIndicatorPosition = src.handIndicatorPosition,
+                    handIndicatorSprite = src.handIndicatorSprite,
+                    handTweenType = src.handTweenType,
+                    handTweenMoveOffset = src.handTweenMoveOffset,
+                    handTweenScale = src.handTweenScale,
+                    handTweenRotation = src.handTweenRotation,
+                    handTweenDuration = src.handTweenDuration,
+                    cutoutMaskSprite = src.cutoutMaskSprite,
+                    cutoutWidth = src.cutoutWidth,
+                    cutoutHeight = src.cutoutHeight,
+                    useTextTap = src.useTextTap,
+                    textTapPosition = src.textTapPosition
+                };
+            }
+
+            return new TutorialConfig
+            {
+                tutorialId = RAIL_WARNING_TUTORIAL_ID,
+                levelId = -1, // 글로벌 (특정 레벨 종속 X)
+                tutorialName = source.tutorialName,
+                steps = clonedSteps
+            };
+        }
+
+        /// <summary>
+        /// Catalog 부재/엔트리 누락 시 안전망 — 기존 하드코딩 config. 1.0 EN-only.
+        /// </summary>
+        private TutorialConfig BuildRailWarningConfigFallback()
+        {
+            return new TutorialConfig
+            {
+                tutorialId = RAIL_WARNING_TUTORIAL_ID,
+                levelId = -1, // 글로벌 (특정 레벨 종속 X)
+                tutorialName = "Rail Warning",
+                steps = new TutorialStep[]
+                {
+                    new TutorialStep
+                    {
+                        stepIndex = 0,
+                        // [#4] 1.0 EN-only — 한국어 글리프 미포함 폰트라 깨져 보임. 명세 §4-3 영문으로 교체.
+                        instruction = "Conveyor almost full!\nClear it or fail!",
+                        highlightTarget = string.Empty,
+                        requireAction = ACTION_TAP_ANYWHERE,
+                        isComplete = false,
+                        useTextTap = true
+                    }
+                }
+            };
         }
 
         private IEnumerator StartTutorialAfterLoad(int levelId)
