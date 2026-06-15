@@ -32,6 +32,10 @@ namespace BalloonFlow
         private static readonly int _animStateBoxClose = Animator.StringToHash("BoxClose");
         private const float MAG_DECREASE_IDLE_TIMEOUT = 0.22f;
         private const float BOX_STATE_CROSSFADE = 0.03f;
+        // BoxOpen.anim m_StopTime 기준 — 변경 시 본 상수도 동기화 필요.
+        private const float BOX_OPEN_ANIM_DURATION = 0.333f;
+        // 명세(2026-06-15): 매거진 숫자 감소는 BoxOpen 진행률 60% 시점부터 시작.
+        private const float MAGAZINE_DECREMENT_START_RATIO = 0.6f;
 
         [Header("[Dart Visuals — Inspector에서 할당]")]
         [SerializeField] private Transform[] _dartSlots;
@@ -80,6 +84,9 @@ namespace BalloonFlow
 
         /// <summary>다음에 날릴 Dart 슬롯 인덱스</summary>
         private int _nextDartIndex;
+
+        // StartDeploy 호출 시각 — BoxOpen 진행률 게이트 기준점. -1f = 미시작.
+        private float _boxOpenStartTime = -1f;
 
         /// <summary>전체 매거진 수 (비율 계산용)</summary>
         private int _totalMagazine;
@@ -862,11 +869,19 @@ namespace BalloonFlow
         /// <summary>배포 시작 — Deploy=true.</summary>
         public void StartDeploy()
         {
+            _boxOpenStartTime = Time.unscaledTime;
             if (_animator != null)
             {
                 if (!_animator.enabled) _animator.enabled = true;
                 _animator.SetBool(_animDeploy, true);
             }
+        }
+
+        /// <summary>BoxOpen 애니메이션이 60% 이상 진행되었는지(=숫자 감소 시작 가능 시점). StartDeploy 미호출 시 false.</summary>
+        public bool IsReadyForMagazineDecrement()
+        {
+            if (_boxOpenStartTime < 0f) return false;
+            return (Time.unscaledTime - _boxOpenStartTime) >= BOX_OPEN_ANIM_DURATION * MAGAZINE_DECREMENT_START_RATIO;
         }
 
         private Coroutine _magDecreaseRoutine;
@@ -1016,6 +1031,7 @@ namespace BalloonFlow
                 _animator.Rebind(); // 모든 상태/파라미터 초기화 → Entry 상태로 복귀
                 _animator.Update(0f);
             }
+            _boxOpenStartTime = -1f;
         }
 
         #endregion
