@@ -113,7 +113,8 @@ namespace BalloonFlow
 
             if (ContinueBtn != null) ContinueBtn.onClick.AddListener(OnContinueClicked);
             if (DeclineBtn != null) DeclineBtn.onClick.AddListener(OnDeclineClicked);
-            if (ExitBtn != null) ExitBtn.onClick.AddListener(OnDeclineClicked);
+            // X(Exit) button: multiplier>=5인 경우 OnDeclineDuplicateClicked의 LoseLife→Multiplier→Lobby 2-stage 사용. multiplier==1이면 내부 fallback으로 OnDeclineClicked(=popup_fail02) 호출 — 기존 동작 보존.
+            if (ExitBtn != null) ExitBtn.onClick.AddListener(OnDeclineDuplicateClicked);
 
             CacheStateViews();
             CacheDeclineDuplicateButton();
