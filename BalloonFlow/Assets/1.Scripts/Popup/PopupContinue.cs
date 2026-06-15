@@ -379,7 +379,8 @@ namespace BalloonFlow
                 {
                     _winningStreakView.SetActive(true);
                     EnsureWinningStreakMultiplierFromQuitPrefab();
-                    WinningStreakUI.PlayMultiplierIdle(_winningStreakView, multiplier);
+                    // PopupQuit과 동일 — 노출 즉시 애니메이터 루프 진입
+                    WinningStreakUI.PlayMultiplierAnimationForPopupQuit(_winningStreakView, multiplier);
                 }
                 // [2026-06-11] 하드코딩 영어 → TextData 키 + {n} 치환 (placeholder 키는 반드시 Format 소비 룰).
                 if (_frame != null)
@@ -411,6 +412,14 @@ namespace BalloonFlow
             int cost = ContinueHandler.Instance.GetContinueCost();
             // [v1.2.40] 'FREE' 문구 제거 — 항상 동적 가격(코인)을 표기. cost<=0이면 빈 문자열.
             _costText.text = cost > 0 ? cost.ToString("N0") : string.Empty;
+        }
+
+        /// <summary>PopupQuit과 동일한 Multiplier reset 시퀀스. 닫힐 때 animator를 MultiplierDefault로 되돌려야 다음 노출 시 깨끗하게 시작됨.</summary>
+        public override void CloseUI()
+        {
+            if (_winningStreakView != null && _winningStreakView.activeInHierarchy)
+                WinningStreakUI.ResetPopupQuitMultiplierAnimation(_winningStreakView);
+            base.CloseUI();
         }
     }
 }

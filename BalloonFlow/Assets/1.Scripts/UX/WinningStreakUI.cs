@@ -166,6 +166,7 @@ namespace BalloonFlow
         ///        (3) 클립 loop=true 로 PopupQuit 닫힐 때까지 무한 재생. MultiplierDefault 복귀는 ResetPopupQuitMultiplierAnimation 가 담당.
         /// PauseManager 가 timeScale=0 으로 잡으므로 animator.updateMode=UnscaledTime 필수.
         /// 반드시 Multiplier5/10/25/100.anim 클립의 Loop Time 플래그가 Unity Inspector 에서 켜져 있어야 함 (바이너리 직렬화라 코드로 확인 불가).</summary>
+        /// <remarks>PopupQuit과 PopupContinue 양쪽에서 호출됨 (2026-06-15 PopupContinue 멀티플라이어 통일). 메서드명에 'PopupQuit' 이 남아있는 것은 호환성 유지 위함.</remarks>
         public static void PlayMultiplierAnimationForPopupQuit(GameObject winningStreakView, int multiplier)
         {
             if (winningStreakView == null || multiplier <= 1) return;
@@ -188,6 +189,7 @@ namespace BalloonFlow
             }
         }
 
+        /// <remarks>PopupQuit과 PopupContinue 양쪽에서 호출됨 (2026-06-15 PopupContinue 멀티플라이어 통일). 메서드명에 'PopupQuit' 이 남아있는 것은 호환성 유지 위함.</remarks>
         private static void PlayPopupQuitAnimatorStage(Transform multiplierRoot, int multiplier)
         {
             if (multiplierRoot == null) return;
@@ -204,6 +206,7 @@ namespace BalloonFlow
 
         /// <summary>[2026-06-15] PopupQuit.CloseUI 호출 직전 — base.CloseUI 가 SetActive(false) 하기 전에 animator state 초기화.
         /// 동일 instance 가 재오픈될 때 Multiplier{N} 잔존 방지. Loop 클립이라 자동 복귀가 없으므로 명시적으로 리셋.</summary>
+        /// <remarks>PopupQuit과 PopupContinue 양쪽에서 호출됨 (2026-06-15 PopupContinue 멀티플라이어 통일). 메서드명에 'PopupQuit' 이 남아있는 것은 호환성 유지 위함.</remarks>
         public static void ResetPopupQuitMultiplierAnimation(GameObject winningStreakView)
         {
             if (winningStreakView == null) return;
