@@ -458,11 +458,13 @@ namespace BalloonFlow
             bool hasBase = _customBaseMaterial != null;
             Debug.Log($"[HolderIdentifier] Holder {_holderId} ApplyColor: colorRenderers={colorCount}, customMatRenderers={customCount}, baseMat={hasBase}");
 
+            // BoxHiddenBody → BoxBodyShared 클론 전이 감지를 위해 shared 를 메서드 스코프로 끌어올림.
+            Material shared = null;
+
             // 일반 색상 Renderer — customMatRenderers에 포함된 것은 제외
             if (_colorRenderers != null && _colorRenderers.Length > 0)
             {
                 // 기반 Material이 지정되어 있으면 복제+색상변경 (Outline/Metallic 유지)
-                Material shared;
                 if (_colorBaseMaterial != null)
                     shared = GetOrCreateClonedVariant(_colorBaseMaterial, color);
                 else
@@ -493,10 +495,15 @@ namespace BalloonFlow
                 }
             }
 
-            if (wasHiddenMaterial)
+            // BoxHiddenBody → BoxBodyShared 클론으로 실제 교체된 순간에만 HiddenAppear 1회 재생.
+            if (wasHiddenMaterial && _colorBaseMaterial != null && shared != null)
             {
                 _isHidden = false;
-                // 파티클 재생은 TriggerHiddenEnd(해금 순간 단일 경로)로 일원화 — 여기서 중복 재생하지 않음.
+                PlayHiddenAppearEffect();
+            }
+            else if (wasHiddenMaterial)
+            {
+                _isHidden = false;
             }
         }
 
@@ -815,9 +822,6 @@ namespace BalloonFlow
                 _animator.SetBool(_animHidden, false);
                 _animator.SetTrigger(_animHiddenEnd);
             }
-            // 히든박스가 풀리는 순간 HiddenAppearParticle 1회 재생.
-            // reveal 단일 경로(HandleHolderRevealed→TriggerHiddenEnd)라 HasColorRenderers 유무와 무관하게 보장.
-            PlayHiddenAppearEffect();
         }
 
         /// <summary>현재 state 가 BoxDefault 일 때만 BoxClick state 를 Play.</summary>
