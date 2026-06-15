@@ -498,8 +498,8 @@ namespace BalloonFlow
                 }
             }
 
-            // BoxHiddenBody → BoxBodyShared 클론으로 실제 교체된 순간에만 HiddenAppear 1회 재생.
-            if (wasHiddenMaterial && _colorBaseMaterial != null && shared != null)
+            // _isHidden==true(게임 중 Hidden 상태였음) + 실제 material swap 발생 시에만 1회 재생. 풀 재사용으로 sharedMaterial이 stale인 경우 _isHidden=false라 차단됨.
+            if (_isHidden && wasHiddenMaterial && _colorBaseMaterial != null && shared != null)
             {
                 _isHidden = false;
                 PlayHiddenAppearEffect();
