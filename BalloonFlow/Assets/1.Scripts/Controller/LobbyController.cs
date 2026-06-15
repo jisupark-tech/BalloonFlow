@@ -348,7 +348,7 @@ namespace BalloonFlow
             // [2026-05-15] 무한 하트 → PopupMoreLive 안 띄움. 토스트로만 안내. (사용자 요구)
             if (LifeManager.Instance.IsInfiniteHeartsActive)
             {
-                ShowToast("Unlimited hearts!");
+                ShowToast(LocalizationService.Get("toast.life.unlimited"));
                 return;
             }
 
