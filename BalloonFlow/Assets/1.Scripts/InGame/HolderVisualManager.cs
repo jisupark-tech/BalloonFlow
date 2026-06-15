@@ -456,7 +456,7 @@ namespace BalloonFlow
         }
 
         /// <summary>Hand 부스터 하이라이트 대상 행 수 (각 column 의 앞쪽 N 행).</summary>
-        private const int HAND_HIGHLIGHT_TOP_ROWS = 3;
+        private const int HAND_HIGHLIGHT_TOP_ROWS = 5;
 
         // 부스터 토글 시점 외에는 사용되지 않는 재사용 풀. 매 호출 Clear 후 재충전.
         private readonly Dictionary<int, List<HolderVisual>> _tempHighlightByCol = new Dictionary<int, List<HolderVisual>>();
