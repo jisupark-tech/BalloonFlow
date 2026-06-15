@@ -407,9 +407,6 @@ namespace BalloonFlow
             else if (_btnBottomExit != null) _btnBottomExit.transform.SetAsLastSibling();
 
             if (_Top != null) _Top.SetAsLastSibling();
-            if (_fxLight != null) _fxLight.transform.SetAsLastSibling();
-            if (_fxBackLightR != null) _fxBackLightR.transform.SetAsLastSibling();
-            if (_fxFire != null) _fxFire.transform.SetAsLastSibling();
         }
 
         private bool ApplyCutoutMaterialToOverlay()
