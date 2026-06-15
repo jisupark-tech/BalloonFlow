@@ -375,8 +375,9 @@ namespace BalloonFlow
             RefreshNoAdsVisibility();
             DisableWinningStreakFxOnEnter();
             RefreshWinningStreakVisibility();
-            TriggerPendingWinningStreakLobbyFx();
+            // [2026-06-15] PopupWinningStreak(라운드 자동 팝업) 먼저 오픈 → 닫힌 뒤 Reward 연출 진행. 동시 2겹 노출 방지.
             TryAutoOpenWinningStreakPopup();
+            TriggerPendingWinningStreakLobbyFx();
         }
 
         /// <summary>대기 중인 WS 로비 연출 코루틴을 (재)시작. 진행 중이면 중단 후 재시작해 매 진입마다 확실히 발동.</summary>
@@ -586,6 +587,12 @@ namespace BalloonFlow
         {
             yield return null;
             yield return null;
+
+            // [2026-06-15] PopupWinningStreak(라운드 자동 팝업)이 열려 있으면 사용자가 닫을 때까지 대기.
+            //   둘이 동시 노출되던 문제 — PopupWinningStreak 먼저 보여주고 닫힘 후에 Reward(딤+카운터) 연출 시작.
+            //   동시 2겹 노출 방지.
+            while (UIManager.HasInstance && UIManager.Instance.IsOpenUI<PopupWinningStreak>())
+                yield return null;
 
             if (!WinningStreakManager.HasInstance) yield break;
 
