@@ -451,6 +451,16 @@ namespace BalloonFlow
             if (_txtLevel != null) _txtLevel.SetText("Level {0}", 1);
             if (_txtLevelOutline != null) _txtLevelOutline.SetText("Level {0}", 1);
             if (_goldText != null) _goldText.text = "0";
+
+            // BottomPanel 아이템 수량 outline 텍스트는 prefab 바이너리라 YAML 편집 불가 →
+            // 누적 도메인 원칙(색 직접 지정 금지)에 따라 TMP material preset 을 런타임에 교체.
+            var matItemOutline = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_GREEN_OUTLINE);
+            if (matItemOutline != null)
+            {
+                if (_itemCountOutlineShuffle != null) _itemCountOutlineShuffle.fontSharedMaterial = matItemOutline;
+                if (_itemCountOutlineRemove  != null) _itemCountOutlineRemove.fontSharedMaterial  = matItemOutline;
+                if (_itemCountOutlineHand    != null) _itemCountOutlineHand.fontSharedMaterial    = matItemOutline;
+            }
         }
 
         private void OnEnable()
