@@ -86,6 +86,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnCoinChanged>(HandleCoinChanged);
             EventBus.Subscribe<OnLifeChanged>(HandleLifeChanged);
             EventBus.Subscribe<OnCoinFlyLanded>(HandleCoinFlyLanded);
+            ItemFlyEffect.OnActiveStateChanged += HandleFxItemActiveChanged;
         }
 
         void OnDisable()
@@ -93,6 +94,7 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnCoinChanged>(HandleCoinChanged);
             EventBus.Unsubscribe<OnLifeChanged>(HandleLifeChanged);
             EventBus.Unsubscribe<OnCoinFlyLanded>(HandleCoinFlyLanded);
+            ItemFlyEffect.OnActiveStateChanged -= HandleFxItemActiveChanged;
 
             if (_lobby != null)
             {
@@ -130,6 +132,8 @@ namespace BalloonFlow
                     _lobby.BtnPlay.onClick.AddListener(OnPlayClicked);
                     // UIManager.OpenUI 가 캐시된 UILobby 를 재사용해 직전 진입 시 false 상태가 잔존하는 경우 방어.
                     _lobby.BtnPlay.interactable = true;
+                    // 씬 재진입 중 FX 잔존 케이스 안전망 — FX 진행 중이면 즉시 비활성화.
+                    if (ItemFlyEffect.IsAnyActive) _lobby.BtnPlay.interactable = false;
                 }
                 if (_lobby.BtnGoldPlus != null) _lobby.BtnGoldPlus.onClick.AddListener(OnGoToShop);
                 if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.AddListener(OnGoToShop);
@@ -410,6 +414,12 @@ namespace BalloonFlow
             // 시퀀스 종료 후 최종 정합성 보정 — CurrencyManager 의 실제 값과 동기화
             if (_lobby != null && CurrencyManager.HasInstance)
                 _lobby.SetGoldText(CurrencyManager.Instance.Coins);
+        }
+
+        void HandleFxItemActiveChanged(bool isActive)
+        {
+            if (_lobby == null || _lobby.BtnPlay == null) return;
+            _lobby.BtnPlay.interactable = !isActive;
         }
 
         void HandleLifeChanged(OnLifeChanged evt)

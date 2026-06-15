@@ -25,6 +25,13 @@ namespace BalloonFlow
         private static readonly Dictionary<GameObject, RectTransform> _rectCache = new Dictionary<GameObject, RectTransform>();
         private static readonly Dictionary<GameObject, Image> _imageCache = new Dictionary<GameObject, Image>();
 
+        // 동시 활성 Play() 세션 수. 0↔N 전이 시점에만 OnActiveStateChanged 발화.
+        // LobbyController 가 이 신호로 BtnPlay.interactable 을 게이팅한다 (SSOT).
+        private static int _activeSessionCount;
+
+        public static bool IsAnyActive => _activeSessionCount > 0;
+        public static event Action<bool> OnActiveStateChanged;
+
         public static void Play(Sprite icon, Vector2 screenFrom, Vector2 screenTo, int count,
             Action onEachLand = null, Action onAllComplete = null)
         {
@@ -34,9 +41,31 @@ namespace BalloonFlow
             Transform parent = GetParentTransform();
             if (parent == null) { onAllComplete?.Invoke(); return; }
 
+            BeginSession();
+            Action wrappedComplete = () =>
+            {
+                EndSession();
+                onAllComplete?.Invoke();
+            };
+
             EnsurePool();
             CoroutineRunner.Get().StartCoroutine(
-                RunFly(parent, icon, screenFrom, screenTo, count, onEachLand, onAllComplete));
+                RunFly(parent, icon, screenFrom, screenTo, count, onEachLand, wrappedComplete));
+        }
+
+        private static void BeginSession()
+        {
+            _activeSessionCount++;
+            if (_activeSessionCount == 1)
+                OnActiveStateChanged?.Invoke(true);
+        }
+
+        private static void EndSession()
+        {
+            if (_activeSessionCount <= 0) return;
+            _activeSessionCount--;
+            if (_activeSessionCount == 0)
+                OnActiveStateChanged?.Invoke(false);
         }
 
         private static Transform GetParentTransform()
