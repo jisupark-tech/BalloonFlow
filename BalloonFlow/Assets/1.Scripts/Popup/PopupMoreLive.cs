@@ -265,7 +265,6 @@ namespace BalloonFlow
             if (ResourceManager.HasInstance)
             {
                 icon = ResourceManager.Instance.UISpriteOr(Const.SPR_ICONLIFE, icon);
-                icon = ResourceManager.Instance.UISpriteOr(Const.SPR_ICONHEARINFINITE, icon);
             }
             return icon;
         }
