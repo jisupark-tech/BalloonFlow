@@ -588,10 +588,13 @@ namespace BalloonFlow
             yield return null;
             yield return null;
 
-            // [2026-06-15] PopupWinningStreak(라운드 자동 팝업)이 열려 있으면 사용자가 닫을 때까지 대기.
-            //   둘이 동시 노출되던 문제 — PopupWinningStreak 먼저 보여주고 닫힘 후에 Reward(딤+카운터) 연출 시작.
-            //   동시 2겹 노출 방지.
-            while (UIManager.HasInstance && UIManager.Instance.IsOpenUI<PopupWinningStreak>())
+            // [2026-06-15] WS 자동 팝업(PopupWinningStreak 회차 진입 / PopupWinningStreakInfo 최초 해금 안내)이
+            //   열려 있으면 닫힐 때까지 대기. 두 자동 팝업은 TryAutoOpenWinningStreakPopup() 내부에서 배타적이지만
+            //   각각 Reward(딤+카운터) 연출과 동시 트리거되어 2겹 노출되던 문제 — 게이트로 양쪽 모두 차단.
+            //   사용자가 PopupWinningStreak 내 BtnInfo로 Info를 수동 오픈한 동안에도 자연스럽게 Reward 연출이 대기.
+            while (UIManager.HasInstance &&
+                   (UIManager.Instance.IsOpenUI<PopupWinningStreak>() ||
+                    UIManager.Instance.IsOpenUI<PopupWinningStreakInfo>()))
                 yield return null;
 
             if (!WinningStreakManager.HasInstance) yield break;
