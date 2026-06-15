@@ -228,6 +228,9 @@ namespace BalloonFlow
 
             if (_frame != null)
             {
+                // [WS_TITLE_PURPLE_OUTLINE_20260615] TxtTitleOutline Material Preset 을 Blue → Poppins-Bold-PurpleOutline 으로 강제. 프리팹 바이너리 직렬화 이슈로 런타임 오버라이드.
+                EnsureStreakSprites();
+                if (_fontMatPurpleOutline != null) _frame.OverrideTitleOutlineNormalMaterial(_fontMatPurpleOutline);
                 // ROLLBACK_WINNING_STREAK_TITLE_USE_CSV_20260607: 이전 = SetTitle("Winning Streak"). 방침: CSV 영문 사용.
                 _frame.SetTitle(LocalizationService.Get("popupwinningstreak.txttitle"));
                 _frame.ShowExitButton(true);

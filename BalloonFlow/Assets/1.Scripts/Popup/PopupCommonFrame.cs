@@ -390,6 +390,18 @@ namespace BalloonFlow
             ApplyTitleOutline(difficulty);
         }
 
+        /// <summary>
+        /// [WS_TITLE_PURPLE_OUTLINE_20260615] Normal 난이도용 TitleOutline 머티리얼을 런타임에 교체.
+        /// 이전: prefab 직렬화 값 = Poppins-Bold-BlueOutline. 변경 사유: PopupWinningStreak 타이틀 보라 외곽선 적용. 프리팹이 바이너리 직렬화라 코드 오버라이드로 처리.
+        /// 호출 시점은 SetTitle/ApplyDifficulty 전이어도/후여도 무방 — 내부에서 즉시 재적용함.
+        /// </summary>
+        public void OverrideTitleOutlineNormalMaterial(Material mat)
+        {
+            if (mat == null) return;
+            _matTitleOutlineNormal = mat;
+            ApplyTitleOutline(_hasExplicitDifficulty ? _currentDifficulty : ResolveActiveDifficulty());
+        }
+
         private void ApplyTitleOutline(DifficultyPurpose difficulty)
         {
             Material mat = UIOutlineStyle.SelectDifficultyMaterial(
