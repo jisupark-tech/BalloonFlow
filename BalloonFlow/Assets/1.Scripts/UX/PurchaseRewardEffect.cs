@@ -221,16 +221,10 @@ namespace BalloonFlow
                     PlayItem(_iconZap != null ? _iconZap : _iconBooster, rewards.boosters.zap, "Zap", boosterTo, () => lobby.PulseGameStartButton());
                 }
 
-                // 무한 하트: 5개 가시화 (visual stand-in)
-                int lifeCount = rewards.infiniteHeartsSeconds > 0 ? 5 : 0;
-                // LifeManager.Current 는 ApplyItemRewardsAfterFx 까지 미증가 — 시각 펄스용 가상 증가값 전달.
-                int lifeBaseSnapshot = LifeManager.HasInstance ? LifeManager.Instance.CurrentLives : 0;
-                int lifeLandIndex = 0;
-                PlayItem(_iconLife, lifeCount, "InfiniteHearts", lifeTo, () =>
-                {
-                    lifeLandIndex++;
-                    lobby.PulseLifePanel(lifeBaseSnapshot + lifeLandIndex);
-                });
+                // LifeManager.CurrentLives 는 ApplyItemRewardsAfterFx 까지 미증가 — 시각 펄스용 가상 +1.
+                int lifeAfter = (LifeManager.HasInstance ? LifeManager.Instance.CurrentLives : 0) + 1;
+                PlayItem(_iconLife, rewards.infiniteHeartsSeconds > 0 ? 1 : 0, "InfiniteHearts", lifeTo,
+                    () => lobby.PulseLifePanel(lifeAfter));
 
                 while (pendingItemFly > 0)
                     yield return null;
