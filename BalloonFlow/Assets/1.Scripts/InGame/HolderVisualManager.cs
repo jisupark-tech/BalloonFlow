@@ -1534,6 +1534,16 @@ namespace BalloonFlow
             bool fixedGapBurstUnlocked = false;
             int fixedGapBurstPlaced = 0;
 
+            // [2026-06-15] 명세: Holder 매거진 숫자 감소 시작 시점을 BoxOpen 진행률 60% 지점으로 지연.
+            // 변경 범위는 '첫 발 타이밍만' — 이후 placement 페이싱은 distSinceLastPlacement 그대로.
+            // BoxOpen.anim m_StopTime(=0.333s) 기준: HolderIdentifier.BOX_OPEN_ANIM_DURATION 동기화 필요.
+            while (visual.identifier != null && !visual.identifier.IsReadyForMagazineDecrement())
+            {
+                if (visual.deployGeneration != gen) yield break;
+                if (_boardFinished) yield break;
+                yield return null;
+            }
+
             while (visual.magazineRemaining > 0 && visual.gameObject != null && !_boardFinished)
             {
                 // stale (NEW take-over). 이 시점엔 OLD가 이미 Phase 1.5에서 _colBusy=true 를 set 했고
