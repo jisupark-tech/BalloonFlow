@@ -276,6 +276,14 @@ namespace BalloonFlow
         #region Properties
 
         public Button BtnPlay => _btnPlay;
+
+        // ROLLBACK_LOBBY_PLAY_BLOCK_DURING_WSFX_20260615:
+        // WS 로비 연출 재생 중 여부 — PlayButton 인게임 진입 차단용.
+        //   _wsLobbyFxCoroutine != null  : FXItem 비행 → 게이지 채움 → 배수/보상 연출(PlayPendingWinningStreakLobbyFxDeferred) 진행 중
+        //   PopupWinningStreakReward.IsShowing : 0단계 Dim 보상 팝업(수 연산 카운터) 표시 중
+        //   둘 중 하나라도 true 면 연출 중 → 진입 금지. 모두 끝나면(둘 다 false) 진입 가능.
+        public bool IsWinningStreakFxPlaying => _wsLobbyFxCoroutine != null || PopupWinningStreakReward.IsShowing;
+
         public Button BtnGoldPlus => _btnGoldPlus;
         public Button BtnLifePlus => _btnLifePlus;
         public Button BtnLifeBar => _btnLifeBar;
@@ -2244,32 +2252,36 @@ namespace BalloonFlow
 
         public void UpdatePlayButton(int levelId, DifficultyPurpose difficulty)
         {
-            // PlayButton/TxtArea/TxtLevel(Outline): SuperHard 레벨은 'Super Hard'(ui.superhard) 로 표기,
-            // 그 외 난이도는 기존대로 "Level N". TxtLevel/TxtLevelOutline 모두 동일 적용.
-            string levelStr = difficulty == DifficultyPurpose.SuperHard
-                ? LocalizationService.Get("ui.superhard")
-                : "Level " + levelId;
+            // ROLLBACK_PLAYBUTTON_LEVEL_DIFFICULTY_SPLIT_20260615: START
+            // PlayButton 분리(사용자 지시 2026-06-15):
+            //   TxtPlay/TxtPlayOutline(=_txtPlay*)            → "Level {n}" (레벨 번호)
+            //   TxtLevelBalance/TxtLevelBalanceOutline(=_txtPlayLevel*) → 난이도 라벨(Normal/Hard/SuperHard, 항상 노출)
+            //   (오브젝트가 TxtPlayLevel→TxtLevelBalance 로 리네임됐어도 SerializeField 는 fileID 바인딩이라 그대로 유효.)
+            //   이전: TxtPlay 에 SuperHard 텍스트를 넣고 난이도라벨은 Normal 시 숨김. 롤백: 그 버전으로 환원.
+            string levelStr = "Level " + levelId;
             if (_txtPlay != null) _txtPlay.text = levelStr;
             if (_txtPlayOutline != null) _txtPlayOutline.text = levelStr;
 
+            // Normal 은 난이도 라벨 숨김(사용자 지시 2026-06-15). Hard/SuperHard 만 노출.
+            bool showBalance = difficulty == DifficultyPurpose.Hard || difficulty == DifficultyPurpose.SuperHard;
+            string balanceStr = difficulty == DifficultyPurpose.SuperHard
+                ? LocalizationService.Get("ui.superhard")
+                : LocalizationService.Get("ui.hard");
+            if (_txtPlayLevel != null) { _txtPlayLevel.gameObject.SetActive(showBalance); if (showBalance) _txtPlayLevel.text = balanceStr; }
+            if (_txtPlayLevelOutline != null) { _txtPlayLevelOutline.gameObject.SetActive(showBalance); if (showBalance) _txtPlayLevelOutline.text = balanceStr; }
+            // ROLLBACK_PLAYBUTTON_LEVEL_DIFFICULTY_SPLIT_20260615: END
+
+            // 버튼 배경 스프라이트(난이도별)
             switch (difficulty)
             {
                 case DifficultyPurpose.Hard:
                     if (_imgPlayButton != null && _sprBtnPurple != null) _imgPlayButton.sprite = _sprBtnPurple;
-                    if (_txtPlayLevel != null) { _txtPlayLevel.gameObject.SetActive(true); _txtPlayLevel.text = LocalizationService.Get("ui.lobby.hard_level"); }
-                    if (_txtPlayLevelOutline != null) { _txtPlayLevelOutline.gameObject.SetActive(true); _txtPlayLevelOutline.text = LocalizationService.Get("ui.lobby.hard_level"); }
                     break;
-
                 case DifficultyPurpose.SuperHard:
                     if (_imgPlayButton != null && _sprBtnRed != null) _imgPlayButton.sprite = _sprBtnRed;
-                    if (_txtPlayLevel != null) { _txtPlayLevel.gameObject.SetActive(true); _txtPlayLevel.text = LocalizationService.Get("ui.superhard"); }
-                    if (_txtPlayLevelOutline != null) { _txtPlayLevelOutline.gameObject.SetActive(true); _txtPlayLevelOutline.text = LocalizationService.Get("ui.superhard"); }
                     break;
-
                 default: // Normal, Tutorial, Rest, Intro
                     if (_imgPlayButton != null && _sprBtnGreen != null) _imgPlayButton.sprite = _sprBtnGreen;
-                    if (_txtPlayLevel != null) _txtPlayLevel.gameObject.SetActive(false);
-                    if (_txtPlayLevelOutline != null) _txtPlayLevelOutline.gameObject.SetActive(false);
                     break;
             }
 

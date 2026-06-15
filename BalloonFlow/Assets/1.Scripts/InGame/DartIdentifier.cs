@@ -127,17 +127,22 @@ namespace BalloonFlow
             Material hull = BalloonController.EnableDartOutline_Phase2
                 ? BalloonController.GetOutlineHullMaterial() : null;
 
-            // ROLLBACK_DART_OUTLINE_NEEDLE_ONLY_20260615: body(_colorRenderers)에는 아웃라인 미적용 — needle 전용.
-            //   L5(다트 최대 160) 부하 경감: body 까지 hull 을 얹으면 다트당 2 렌더러 = ~320 outline 서브메시였으나,
-            //   원 설계(_outlineOnlyRenderers=needle 전용 outline)대로 환원해 절반(~160)으로 줄임. body 는 단일 머티리얼(배칭 유지).
-            //   롤백: 아래 루프를 hull 분기(_colorRenderers[i].sharedMaterials = new[]{ mat, hull })로 복원.
+            // ROLLBACK_DART_OUTLINE_BODY_20260615: 아웃라인을 Body(_colorRenderers)에 적용(needle 아님 — 사용자 지시 2026-06-15).
+            //   공유 OutlineHull 머티리얼을 body 의 material[1] 로 → 모든 다트가 hull '하나'를 공유 → 한 배치.
+            //   [최적화 핵심] outline 이 다트마다 개별 draw 를 만들지 않음(SRP Batcher/GPU 인스턴싱 배칭 유지) →
+            //   다트가 몇 개든 outline 으로 인한 드로우콜 증가 0 → 프레임 드랍 방지. main[0]=색 머티리얼도 인스턴싱 유지.
+            //   EnableDartOutline_Phase2=false 면 hull=null → 단일 머티리얼(외곽선 OFF).
+            //   롤백: body 를 단일 setter 로, needle 을 hull material[1] 로 되돌림(needle-only 버전).
             for (int i = 0; i < _colorRenderers.Length; i++)
             {
-                if (_colorRenderers[i] != null)
+                if (_colorRenderers[i] == null) continue;
+                if (hull != null)
+                    _colorRenderers[i].sharedMaterials = new Material[] { mat, hull };
+                else
                     _colorRenderers[i].sharedMaterial = mat;
             }
 
-            // Niddle: 은색 유지 + 아웃라인(hull material[1])
+            // Niddle: 은색 유지 (아웃라인은 Body 로 이전 — needle 엔 미적용)
             if (_outlineOnlyRenderers != null && _needleBaseMaterial != null)
             {
                 if (_needleOutlineMat == null)
@@ -148,10 +153,7 @@ namespace BalloonFlow
                 }
                 for (int i = 0; i < _outlineOnlyRenderers.Length; i++)
                 {
-                    if (_outlineOnlyRenderers[i] == null) continue;
-                    if (hull != null)
-                        _outlineOnlyRenderers[i].sharedMaterials = new Material[] { _needleOutlineMat, hull };
-                    else
+                    if (_outlineOnlyRenderers[i] != null)
                         _outlineOnlyRenderers[i].sharedMaterial = _needleOutlineMat;
                 }
             }

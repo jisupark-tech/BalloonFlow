@@ -270,6 +270,15 @@ namespace BalloonFlow
 
         void OnPlayClicked()
         {
+            // ROLLBACK_LOBBY_PLAY_BLOCK_DURING_WSFX_20260615:
+            // WS 로비 연출(FXItem 비행 / Winning Streak 게이지·배수) 또는 0단계 보상 팝업 재생 중엔 인게임 진입 차단.
+            //   연출이 모두 끝난 후(IsWinningStreakFxPlaying=false)에만 진입 허용. 롤백: 아래 if 블록 제거.
+            if (_lobby != null && _lobby.IsWinningStreakFxPlaying)
+            {
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayDeny();
+                return;
+            }
+
             // 인게임 진입 연출 중복 트리거 방지 — onClick 코드 invoke / 연타 양쪽 모두 차단.
             if (_lobby != null && _lobby.BtnPlay != null && !_lobby.BtnPlay.interactable) return;
 

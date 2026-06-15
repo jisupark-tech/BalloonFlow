@@ -47,7 +47,12 @@ namespace BalloonFlow
                 visual.magazineText.gameObject.SetActive(show);
         }
         private static readonly Color HIDDEN_MAGAZINE_COLOR = new Color(1f, 1f, 1f, 1f); // 명세: opacity 255 고정
-        private const float DEPLOY_MOVE_SPEED = 12f;
+        // ROLLBACK_DEPLOY_MOVE_SPEED_FASTER_20260615: 12 → 24.
+        //   Hand 사용 시 홀더가 deploy point 로 상승하는 동안 카메라가 복귀(MoveBack 0.5s)하는데, 12 속도면
+        //   queue→rail 거리(~6+units)에서 0.5s+ 걸려 홀더가 카메라보다 늦게 도착. 속도를 2x 올려 카메라(0.5s)
+        //   보다 먼저 도착하게 함. (x2 모드에서 이미 24 로 스케일되던 값 = 검증된 속도.)
+        //   주의: 모든 deploy(일반 탭 포함)가 2x 빨라짐(더 스내피). 롤백: 12f 로 환원.
+        private const float DEPLOY_MOVE_SPEED = 24f;
         // ROLLBACK_DEPLOY_DEBUG_LOGS:
         // Set BALLOONFLOW_DEPLOY_DEBUG to restore verbose deploy/deadlock diagnostics. Keeping this
         // off in play builds prevents string formatting and logcat overhead during dense placement.

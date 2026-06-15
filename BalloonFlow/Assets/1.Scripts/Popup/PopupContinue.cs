@@ -16,6 +16,11 @@ namespace BalloonFlow
         private const string MULTIPLIER_NAME = "Multiplier";
         private const string POPUP_QUIT_RESOURCE_PATH = "Popup/PopupQuit";
 
+        // ROLLBACK_POPUP_CONTINUE_MULTIPLIER_X5_20260615:
+        // Multiplier(연승 배수) 경고 단계를 노출하는 최소 배수. x5 이상에서만 LoseLife→Multiplier→Lobby 플로우,
+        // x5 미만은 기존 종료 플로우(닫고 fail02) 유지. (기존 임계 <=1 → <5). 롤백: 사용처 조건을 multiplier <= 1 로 환원.
+        private const int MULTIPLIER_VIEW_MIN_MULTIPLIER = 5;
+
         private const int OVERLAY_SORT_ORDER = 260; // Tutorial(=250) 위에 항상 표시 — 사용자 요청 2026-06-04
         private Canvas _overrideCanvas;
 
@@ -368,9 +373,11 @@ namespace BalloonFlow
             if (_currentView == ContinueView.LoseLife)
             {
                 int multiplier = WinningStreakUI.ResolveCurrentMultiplier();
-                if (multiplier <= 1)
+                // ROLLBACK_POPUP_CONTINUE_MULTIPLIER_X5_20260615: x5 미만이면 Multiplier 경고 단계 skip → 기존 종료 플로우.
+                //   (기존: multiplier <= 1. 변경: x5 이상만 LoseLife→Multiplier→Lobby 노출.)
+                if (multiplier < MULTIPLIER_VIEW_MIN_MULTIPLIER)
                 {
-                    // 1배 → WinningStreak skip, 즉시 LoseLife 로직 (Give Up = 팝업 닫고 fail02)
+                    // x5 미만 → WinningStreak skip, 기존 종료 플로우 (Give Up = 팝업 닫고 fail02)
                     OnDeclineClicked();
                     return;
                 }
