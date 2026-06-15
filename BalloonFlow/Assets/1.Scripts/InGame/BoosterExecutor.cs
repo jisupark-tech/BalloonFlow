@@ -299,6 +299,8 @@ namespace BalloonFlow
                         if (handCam != null)
                             focusPosition = ComputeHandCameraPosition(handCam, focusPosition,
                                 HolderVisualManager.Instance.RowSpacing);
+                        // [HAND_CAMERA_Z_FIX 2026-06-15] Hand 진입 시 카메라 Z 목표를 -22로 고정(이전 계산값 -29.6426).
+                        focusPosition.z = -22f;
                         CameraManager.Instance.MoveToTarget(focusPosition);
                     }
 
