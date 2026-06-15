@@ -377,7 +377,14 @@ namespace BalloonFlow
             // 회전 속도: 남은 다트 수 기반 + 배치 중 감속 + 유저 가속(홀드/x2토글)
             UpdatePackingAssistState();
             float baseSpeedMult = GetSpeedMultiplier();
-            float beltDelta = _rotationSpeed * UserSpeedMultiplier * _slotSpacing * Time.deltaTime * baseSpeedMult * GetPackingAssistSpeedScale();
+            // ROLLBACK_DART_BELT_DT_CLAMP_20260615: 프레임 드랍(큰 deltaTime) 시 belt 가 한 프레임에 과도하게 진행해
+            //   다트가 catch-up 예산(MaxLineCatchUpPerHead) 보다 많은 라인을 건너뛰어 '놓침'(DartCatchUpClamped 로그) 발생.
+            //   per-frame belt 진행을 ~33ms(30fps) 상당으로 캡 → 라인 스킵을 예산 내로 유지(발사 스캔 프레임율 독립화).
+            //   프레임 드랍 중엔 다트가 real-time 으로 약간 느려질 뿐 놓침은 사라짐(미세 슬로우 << 미스).
+            //   롤백: dt 를 Time.deltaTime 으로 환원.
+            const float MAX_BELT_DELTA_TIME = 1f / 30f;
+            float dt = Mathf.Min(Time.deltaTime, MAX_BELT_DELTA_TIME);
+            float beltDelta = _rotationSpeed * UserSpeedMultiplier * _slotSpacing * dt * baseSpeedMult * GetPackingAssistSpeedScale();
             _rotationOffset += beltDelta;
 
             float pathLen = _totalPathLength;

@@ -37,7 +37,8 @@ namespace BalloonFlow
     {
         private const float IntroHoldSeconds = 0.6f;   // 등장 → 첫 비행까지
         private const float StepHoldSeconds  = 0.45f;  // 도착(수 연산) → 다음 비행까지 (카운트업 완료 대기 포함)
-        private const float OutroHoldSeconds = 1.1f;   // 마지막 연산 → 자동 닫힘까지
+        // ROLLBACK_WS_COEFF_OVERLAP_TIMELINE_20260615: 연출 단축 — 1.1f → 0.6f (마지막 카운트업 0.35s 커버 + 짧은 hold).
+        private const float OutroHoldSeconds = 0.6f;    // 마지막 연산 → 자동 닫힘까지
         private const float FlyDurationSeconds = 0.5f; // 포물선 비행 시간
         private const float FlyJumpPower = 150f;       // 포물선 정점 높이 (로컬/px)
         private const float CountUpSeconds = 0.35f;    // 수 연산 카운트업(이전 값→새 값 순차 증가) 시간
@@ -138,19 +139,21 @@ namespace BalloonFlow
             int amount = 1;
             yield return FlyAndApply(_fxItemFly, amount);
 
-            // 2) 난이도 배수 — Hard/SuperHard 클리어에서만 FXBadge 비행 → ×난이도.
-            if (showBadge && _fxBadge != null)
-            {
-                amount *= diffMult;
-                yield return FlyAndApply(_fxBadge, amount);
-            }
-
-            // 3) 연승 배수 — x1 초과일 때만 FXMultiple 비행 → ×배수.
-            if (flyMultiple && _fxMultiple != null)
-            {
-                amount *= streakMult;
-                yield return FlyAndApply(_fxMultiple, amount);
-            }
+            // ROLLBACK_WS_COEFF_OVERLAP_TIMELINE_20260615: START
+            // 2~3) 난이도배수(FXBadge) + 연승배수(FXMultiple) — 디자이너 키프레임(2026-06-15) 오버랩 타임라인.
+            //   기존 순차(FlyAndApply×2, ~1.9s)를 scale-up 등장 + 오버랩(~1.1s)으로 단축:
+            //   t0.0 뱃지 scale-up 등장 → t0.3 scale-down+비행 → t0.5 계수 등장(뱃지 비행 중) →
+            //   t0.6 뱃지 도착·×난이도·소멸 → t0.8 계수 scale-down+비행 → t1.1 계수 도착·×연승·소멸.
+            //   (뱃지 없이 계수만이면 계수가 t0.0 부터 단독 진행.)
+            //   롤백: 아래 블록을 종전 FlyAndApply 2블록(showBadge/flyMultiple)으로 복원.
+            bool flyBadge = showBadge && _fxBadge != null;
+            int afterBadge = flyBadge ? amount * diffMult : amount;
+            bool doMultiple = flyMultiple && _fxMultiple != null;
+            int afterMultiple = doMultiple ? afterBadge * streakMult : afterBadge;
+            if (flyBadge || doMultiple)
+                yield return PlayCoefficientOverlapFx(flyBadge, afterBadge, doMultiple, afterMultiple);
+            amount = afterMultiple;
+            // ROLLBACK_WS_COEFF_OVERLAP_TIMELINE_20260615: END
 
             // 최종 보정 — config 변경/미캡처 등으로 단계 곱과 실제 적립값이 어긋나면 적립값을 신뢰.
             if (gainedPoints > 0 && amount != gainedPoints)
@@ -165,6 +168,58 @@ namespace BalloonFlow
             IsFinished = true;
             Destroy(gameObject);
         }
+
+        // ROLLBACK_WS_COEFF_OVERLAP_TIMELINE_20260615: START — 뱃지/계수 오버랩 타임라인(디자이너 키프레임 2026-06-15).
+        /// <summary>난이도배수(FXBadge)+연승배수(FXMultiple) 오버랩 연출. 각 비행체: scale-up 등장 → scale-down 하며
+        /// 카운터로 포물선 비행 → 도착 순간 수 연산·소멸. 뱃지 t0.0, 계수 t0.5(뱃지 비행 중 오버랩) — 단독이면 t0.0.</summary>
+        private IEnumerator PlayCoefficientOverlapFx(bool badge, int badgeAmount, bool multiple, int multAmount)
+        {
+            const float APPEAR = 0.3f;      // scale-up 등장
+            const float MOVE   = 0.3f;      // 카운터로 비행
+            const float MULT_APPEAR_T = 0.5f; // 뱃지와 오버랩 등장 시각
+            const float MOVE_SCALE = 0.7f;  // 비행 중 축소 배율
+
+            Sequence seq = DOTween.Sequence().SetUpdate(true);
+            if (badge)
+                AddCoefficientFlyer(seq, _fxBadge, 0f, APPEAR, MOVE, MOVE_SCALE, badgeAmount);
+            if (multiple)
+                AddCoefficientFlyer(seq, _fxMultiple, badge ? MULT_APPEAR_T : 0f, APPEAR, MOVE, MOVE_SCALE, multAmount);
+            yield return seq.WaitForCompletion();
+        }
+
+        /// <summary>비행체 1개를 시퀀스에 키프레임 삽입: appearT 에 scale 0→full 등장 → (appearT+appear) 비행 시작
+        /// → (appearT+appear+move) 도착 시 ApplyAmount + 소멸. 스케일/위치는 도착 콜백에서 원복(풀/재사용 안전).</summary>
+        private void AddCoefficientFlyer(Sequence seq, GameObject flyer, float appearT, float appear, float move, float moveScale, int amount)
+        {
+            if (flyer == null || _txtAmountOutline == null) return;
+            Transform tr = flyer.transform;
+            Vector3 fullScale = tr.localScale;
+            if (fullScale == Vector3.zero) fullScale = Vector3.one;
+            tr.localScale = Vector3.zero;   // 등장 전까지 0 — DOScale 시작값을 콜백 순서와 무관하게 보장(비활성이라 비가시).
+            Vector3 startLocal = tr.localPosition;
+            Vector3 end = ResolveLocalPoint(tr.parent as RectTransform, (RectTransform)_txtAmountOutline.transform);
+            end.z = startLocal.z;
+            float moveStart = appearT + appear;
+
+            seq.InsertCallback(appearT, () =>
+            {
+                tr.localScale = Vector3.zero;
+                tr.localPosition = startLocal;
+                if (!flyer.activeSelf) flyer.SetActive(true);
+                PlayFxOnce(flyer);
+            });
+            seq.Insert(appearT, tr.DOScale(fullScale, appear).SetEase(Ease.OutBack).SetUpdate(true));
+            seq.Insert(moveStart, tr.DOScale(fullScale * moveScale, move).SetUpdate(true));
+            seq.Insert(moveStart, tr.DOLocalJump(end, FlyJumpPower, 1, move).SetEase(Ease.InOutSine).SetUpdate(true));
+            seq.InsertCallback(moveStart + move, () =>
+            {
+                ApplyAmount(amount);
+                flyer.SetActive(false);
+                tr.localScale = fullScale;
+                tr.localPosition = startLocal;
+            });
+        }
+        // ROLLBACK_WS_COEFF_OVERLAP_TIMELINE_20260615: END
 
         /// <summary>비행체를 아트 배치 위치에서 TxtAmountOutline 까지 포물선(DOLocalJump)으로 날린 뒤,
         /// 도착 순간 비행체 숨김 + 수 갱신 + 그린 강조 + 펀치 + FXReward 재생 (매 도착마다 — confirmed).</summary>

@@ -127,12 +127,13 @@ namespace BalloonFlow
             Material hull = BalloonController.EnableDartOutline_Phase2
                 ? BalloonController.GetOutlineHullMaterial() : null;
 
+            // ROLLBACK_DART_OUTLINE_NEEDLE_ONLY_20260615: body(_colorRenderers)에는 아웃라인 미적용 — needle 전용.
+            //   L5(다트 최대 160) 부하 경감: body 까지 hull 을 얹으면 다트당 2 렌더러 = ~320 outline 서브메시였으나,
+            //   원 설계(_outlineOnlyRenderers=needle 전용 outline)대로 환원해 절반(~160)으로 줄임. body 는 단일 머티리얼(배칭 유지).
+            //   롤백: 아래 루프를 hull 분기(_colorRenderers[i].sharedMaterials = new[]{ mat, hull })로 복원.
             for (int i = 0; i < _colorRenderers.Length; i++)
             {
-                if (_colorRenderers[i] == null) continue;
-                if (hull != null)
-                    _colorRenderers[i].sharedMaterials = new Material[] { mat, hull };
-                else
+                if (_colorRenderers[i] != null)
                     _colorRenderers[i].sharedMaterial = mat;
             }
 

@@ -21,10 +21,13 @@ namespace BalloonFlow
         private const float TITLE_AUTO_ENTER_DELAY = 1.0f;
 
         /// <summary>실제 작업이 너무 빠를 때 사용자가 볼 수 있도록 step 마다 보장하는 최소 시간 (초).</summary>
-        private const float MIN_STEP_DURATION = 0.4f;
+        // ROLLBACK_LOADTIME_STEP_MIN_20260615: 로딩 단축 — IAP/카탈로그 대기 제거 후 step 2·4 가 즉시 끝나
+        //   이 인위적 최소시간이 로딩 바닥(6 step × MIN + STEP_HOLD)으로 남는다. 0.4→0.2 / 0.12→0.06 으로
+        //   ~1.5s 추가 절감. (바 가시성은 유지.) 롤백: 0.4f / 0.12f 로 환원.
+        private const float MIN_STEP_DURATION = 0.2f;
 
         /// <summary>step 완료 후 100% 상태로 잠깐 보여주고 다음 단계로.</summary>
-        private const float STEP_HOLD_DURATION = 0.12f;
+        private const float STEP_HOLD_DURATION = 0.06f;
 
         /// <summary>로딩 단계 정의. 각 step 마다 progress bar 가 0→100% 채워진 뒤 다음으로.</summary>
         private static readonly string[] LoadingStepLabels = new[]
@@ -370,21 +373,16 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>IAPManager 초기화 까지 대기 — 5초 timeout. (AdManager 는 자체 비동기, 차단하지 않음.)</summary>
+        /// <summary>SDK 단계 — IAP/ShopCatalog 는 로비 진입을 차단하지 않는다(샵 전용, 클릭 시 retry).</summary>
         private IEnumerator WaitForSdkReady()
         {
-            const float TIMEOUT = 20f;
-            float t = 0f;
-            while (t < TIMEOUT)
-            {
-                if (IsIapReadyForShop()) yield break;
-                if (ShopCatalogService.HasInstance && !ShopCatalogService.Instance.IsLoaded)
-                    ShopCatalogService.Instance.RetryFetch();
-                t += Time.unscaledDeltaTime;
-                yield return null;
-            }
-
-            Debug.LogWarning("[TitleController] IAP init wait timeout. Shop purchase will retry on click.");
+            // ROLLBACK_LOADTIME_IAP_NONBLOCKING_20260615:
+            // IAP 는 '샵 전용'이고 구매 클릭 시 retry 하므로 로비 진입을 막을 이유가 없다(기존 최대 20s 대기 제거 → 로딩 −최대20s).
+            // SDK init 자체는 SdkBootstrap(BeforeSceneLoad)에서 이미 백그라운드로 진행 중. 여기선 catalog fetch 만 1회 nudge 후 즉시 통과.
+            // 롤백: 본문을 종전 20s polling 루프(while t<20: if IsIapReadyForShop() yield break; ...)로 복원.
+            if (ShopCatalogService.HasInstance && !ShopCatalogService.Instance.IsLoaded)
+                ShopCatalogService.Instance.RetryFetch();
+            yield break;
         }
 
         /// <summary>
@@ -403,14 +401,16 @@ namespace BalloonFlow
                 episodeTask = LevelEpisodeService.Instance.EnsureEpisodeForLevelAsync(nextLevel);
             }
 
-            const float TIMEOUT = 8f;
+            // ROLLBACK_LOADTIME_CATALOG_NONBLOCKING_20260615: START
+            // 로비 진입 게이트에서 ShopCatalog(13개)·IAP 를 제외(둘 다 샵 전용 — 백그라운드 init + 클릭 시 retry).
+            // 온보딩(Lv.5 미클리어)은 여기서 InGame 으로 직행하므로 '에피소드 prefetch' 만 대기한다(첫 레벨 데이터 필요).
+            // 타임아웃도 8s→5s. 효과: 로딩 −(카탈로그/IAP 대기분).
+            // 롤백: shopOk/iapOk 조건을 epOk 와 다시 AND 로 묶고 TIMEOUT 8f 로 복원.
+            const float TIMEOUT = 5f;
             float t = 0f;
             while (t < TIMEOUT)
             {
-                bool shopOk = !ShopCatalogService.HasInstance || ShopCatalogService.Instance.IsLoaded;
-                bool epOk   = episodeTask == null || episodeTask.IsCompleted;
-                bool iapOk  = IsIapReadyForShop();
-                if (shopOk && epOk && iapOk)
+                if (episodeTask == null || episodeTask.IsCompleted)
                 {
                     if (episodeTask != null && episodeTask.IsCompletedSuccessfully && !episodeTask.Result)
                         Debug.LogWarning($"[TitleController] 에피소드 prefetch 실패 (level {nextLevel}). 게임은 진행 — LevelManager 가 폴백 처리.");
@@ -419,6 +419,7 @@ namespace BalloonFlow
                 t += Time.unscaledDeltaTime;
                 yield return null;
             }
+            // ROLLBACK_LOADTIME_CATALOG_NONBLOCKING_20260615: END
 
             if (episodeTask != null && !episodeTask.IsCompleted)
                 Debug.LogWarning($"[TitleController] 에피소드 prefetch timeout (level {nextLevel}). 게임 진입 후 LevelManager 가 캐시 miss 시 다시 시도.");
