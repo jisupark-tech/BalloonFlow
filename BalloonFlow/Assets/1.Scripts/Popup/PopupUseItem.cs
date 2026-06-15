@@ -395,9 +395,14 @@ namespace BalloonFlow
             // ROLLBACK_USEITEM_CUTOUT_SIBLING_GUARD:
             // Overlay/CutoutMask are background layers. If prefab sibling order drifts, the
             // transparent hole can make field objects look like they render over popup content.
+            // 디자인 의도(bottom→top): Dim/Cutout → FX(Light/BackLightR/Fire) → Frame/ImgItem/Desc/Exit → _Top. FX는 cutout 위·content 아래.
             RectTransform dimRect = GetBaseDimRectTransform();
             if (dimRect != null) dimRect.SetAsFirstSibling();
             if (_cutoutMask != null) _cutoutMask.SetAsFirstSibling();
+
+            if (_fxLight != null) _fxLight.transform.SetAsLastSibling();
+            if (_fxBackLightR != null) _fxBackLightR.transform.SetAsLastSibling();
+            if (_fxFire != null) _fxFire.transform.SetAsLastSibling();
 
             if (_frame != null) _frame.transform.SetAsLastSibling();
             if (_imgItem != null) _imgItem.transform.SetAsLastSibling();
