@@ -84,7 +84,11 @@ namespace BalloonFlow
         [Range(0.10f, 100.00f)]
         // ROLLBACK_DART_FLIGHT_SPACING_TUNE_20260601:
         // Previous value: 60.00f. Bumped to 66 per design directive 2026-06-01.
-        public float dartFlightSpeedMultiplier = 0.00f;
+        // ROLLBACK_DART_DEADLOCK_FLIGHT_FALLBACK_20260616:
+        // A serialized/default 0 made projectiles fall back to an extremely slow multiplier, keeping
+        // _activeProjectiles alive and preventing the stall watchdog from clearing stale line locks.
+        // Rollback: restore 0.00f only if all build data explicitly overrides this value.
+        public float dartFlightSpeedMultiplier = 66.00f;
 
         // [ROLLBACK_DART_LAUNCH_INITIAL_PROGRESS]
         // 다트 발사 직후 시각 위치는 start 에서 시작하되 내부 elapsed 만 n초 앞당겨 진행.

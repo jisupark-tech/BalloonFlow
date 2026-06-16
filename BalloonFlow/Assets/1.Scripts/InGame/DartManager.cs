@@ -28,6 +28,7 @@ namespace BalloonFlow
         // private const float PROJECTILE_MAX_FLIGHT_TIME_SCALE = 20f;
         private const float PROJECTILE_MIN_FLIGHT_TIME = 0.015f;
         private const float PROJECTILE_MAX_FLIGHT_TIME = 5f;
+        private const float DEFAULT_DART_FLIGHT_SPEED_MULTIPLIER = 66f;
         private const int ADJACENT_EMPTY_LINE_RESCUE_RADIUS = 1;
         #endregion
 
@@ -64,24 +65,30 @@ namespace BalloonFlow
             // 이전: 등속 — duration = distance / (cellSpacing × mult × userSpeed × almostThere).
             // 변경: 속도(mult)가 start(dartFlightSpeedMultiplier=66) → DART_FLIGHT_MAX_MULT(120) 로 0.4초간 선형 가속 후 일정.
             //   distance 를 이 프로파일로 덮는 시간을 역함수(DartRampTimeForUnits)로 산출. userSpeed/almostThere 는 필요 이동량 q 를 줄여 가속.
-            float startMult = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightSpeedMultiplier : 66f;
-            if (startMult <= 0.001f) startMult = 1f;
+            float startMult = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightSpeedMultiplier : DEFAULT_DART_FLIGHT_SPEED_MULTIPLIER;
+            // ROLLBACK_DART_DEADLOCK_FLIGHT_FALLBACK_20260616:
+            // 0/NaN flight multipliers create very long or invalid projectiles. Those keep
+            // _activeProjectiles > 0, so the stall watchdog never clears stale scan/line locks.
+            // Rollback: change fallback to 1f if slow debug projectile travel is required.
+            if (!IsFinite(startMult) || startMult <= 0.001f) startMult = DEFAULT_DART_FLIGHT_SPEED_MULTIPLIER;
 
             float userSpeed = RailManager.HasInstance ? RailManager.Instance.UserSpeedMultiplier : 1f;
-            if (userSpeed <= 0.001f) userSpeed = 1f;
+            if (!IsFinite(userSpeed) || userSpeed <= 0.001f) userSpeed = 1f;
             float almostThere = RailManager.HasInstance ? RailManager.Instance.GetOccupancySpeedMultiplier() : 1f;
-            if (almostThere <= 0.001f) almostThere = 1f;
+            if (!IsFinite(almostThere) || almostThere <= 0.001f) almostThere = 1f;
             float scalars = userSpeed * almostThere;
 
             float cellSpacing = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
-            if (cellSpacing <= 0.01f) cellSpacing = 0.55f;
+            if (!IsFinite(cellSpacing) || cellSpacing <= 0.01f) cellSpacing = 0.55f;
 
             Vector3 flatFrom = new Vector3(from.x, 0f, from.z);
             Vector3 flatTo = new Vector3(to.x, 0f, to.z);
             float distance = Vector3.Distance(flatFrom, flatTo);
+            if (!IsFinite(distance)) distance = cellSpacing;
 
             float q = distance / (cellSpacing * scalars);          // 덮어야 할 누적 mult-units
             float duration = DartRampTimeForUnits(q, startMult);
+            if (!IsFinite(duration) || duration <= 0f) duration = PROJECTILE_MIN_FLIGHT_TIME;
             return Mathf.Clamp(duration, PROJECTILE_MIN_FLIGHT_TIME, PROJECTILE_MAX_FLIGHT_TIME);
         }
 
@@ -90,6 +97,11 @@ namespace BalloonFlow
         private const float DART_FLIGHT_MAX_MULT  = 150f;   // 천장(이전 ~100 → 120). 시작 = dartFlightSpeedMultiplier(66)
 
         /// <summary>속도가 startMult→MAX 로 RAMP_TIME 선형가속 후 일정일 때 0..t 누적 이동량(∫mult dt). cellSpacing/스칼라 제외(비율에서 상쇄).</summary>
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
         private static float DartRampDistanceUnits(float t, float startMult)
         {
             if (t <= 0f) return 0f;
@@ -3206,6 +3218,23 @@ namespace BalloonFlow
 
                 DartProjectile proj = _activeProjectiles[i];
                 proj.elapsed += Time.deltaTime;
+                // ROLLBACK_DART_DEADLOCK_PROJECTILE_GUARD_20260616:
+                // Invalid projectile timing can keep _activeProjectiles > 0 forever. That blocks the
+                // stall watchdog, leaving line locks/reservations stale and causing apparent deadlock.
+                // Rollback: remove this guard if projectile timing is guaranteed by authored data.
+                if (!IsFinite(proj.elapsed)) proj.elapsed = 0f;
+                if (!IsFinite(proj.duration) || proj.duration <= 0f)
+                {
+                    LogAttackIssue(
+                        "DartProjectileTimingGuard",
+                        $"target={proj.targetBalloonId} color={proj.color} duration={proj.duration} impact={proj.impactTime}");
+                    proj.duration = PROJECTILE_MIN_FLIGHT_TIME;
+                    proj.impactTime = 0f;
+                }
+                else if (!IsFinite(proj.impactTime))
+                {
+                    proj.impactTime = proj.duration;
+                }
 
                 if (proj.gameObject != null && proj.duration > 0f)
                 {
@@ -3221,8 +3250,8 @@ namespace BalloonFlow
                     // 변경: DOVirtual.EasedValue 로 GameManager.dartFlightEase 동적 반영. 롤백 시 위 두 줄 복원 + 아래 블록 주석.
                     // [이미지 속도 프로파일] 위치 보간을 등속이 아니라 가속→등속 누적이동량 비율로.
                     // ROLLBACK_DART_FLIGHT_VELOCITY_RAMP_20260608: 아래 ramp 블록 → moveT = Clamp01(proj.elapsed/proj.duration) 로 복원.
-                    float startMultRT = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightSpeedMultiplier : 66f;
-                    if (startMultRT <= 0.001f) startMultRT = 1f;
+                    float startMultRT = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightSpeedMultiplier : DEFAULT_DART_FLIGHT_SPEED_MULTIPLIER;
+                    if (!IsFinite(startMultRT) || startMultRT <= 0.001f) startMultRT = DEFAULT_DART_FLIGHT_SPEED_MULTIPLIER;
                     float rampDenom = DartRampDistanceUnits(proj.duration, startMultRT);
                     float moveT = rampDenom > 0.0001f
                         ? Mathf.Clamp01(DartRampDistanceUnits(proj.elapsed, startMultRT) / rampDenom)
@@ -3478,6 +3507,18 @@ namespace BalloonFlow
             // ROLLBACK_DART_PARTIAL_HIT_ACCEPTANCE:
             // Partial gimmick hits (Frozen thaw, Barricade/Pinata HP damage) consume the dart and
             // should not be reported as misses. PopProcessor scores only when the balloon is popped.
+            if (!result.success)
+            {
+                // ROLLBACK_DART_PARTIAL_HIT_CACHE_INVALIDATE_20260616:
+                // Pin/Barricade/TargetBox/FlexTube partial hits may change targetability or exposed
+                // colors without publishing OnBalloonPopped. Dirty shared caches so fail checks and
+                // dart targeting do not keep using stale outer-shell data.
+                // Rollback: remove this block if every partial gimmick publishes its own cache event.
+                DirectionalTargeting.InvalidateCache();
+                if (BoardStateManager.HasInstance)
+                    BoardStateManager.Instance.InvalidateOutermostCache();
+            }
+
             float __publishStamp = InGamePerfLogger.StartStampMs();
             EventBus.Publish(new OnDartHitBalloon
             {
