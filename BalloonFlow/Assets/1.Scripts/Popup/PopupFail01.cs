@@ -144,12 +144,11 @@ namespace BalloonFlow
             if (cost > 0 && (!CurrencyManager.HasInstance || !CurrencyManager.Instance.HasEnoughCoins(cost)))
             {
                 Debug.LogWarning($"[PopupFail01] Continue blocked by coins. have={coins}, need={cost}");
-                if (UIManager.HasInstance)
-                {
-                    var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
-                    if (err != null) err.ShowPaymentFailed("Not enough coins.");
-                }
-                Debug.Log("[PopupFail01] 골드 부족");
+                Debug.Log("[PopupFail01] 골드 부족 → GoldShop 안내");
+                // ROLLBACK_NOGOLD_GOLDSHOP_20260616: 골드 부족 시 PopupError(아래 팝업과 겹쳐 노출) 대신 GoldShop.
+                //   닫을 때 충전됐으면 이어하기(fail01) 재표시 / 미구매면 Retry(fail02). 롤백: 아래 한 줄을
+                //   `var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError"); err?.ShowPaymentFailed("Not enough coins.");` 로 환원.
+                OpenGoldShopThenContinueOrRetry(cost);
                 return;
             }
 
@@ -186,6 +185,29 @@ namespace BalloonFlow
                     if (PopupManager.HasInstance)
                         PopupManager.Instance.ShowPopup("popup_fail01", 50);
                 });
+            }
+        }
+
+        /// <summary>[ROLLBACK_NOGOLD_GOLDSHOP_20260616] 골드 부족(Continue) 시 GoldShop 안내.
+        /// 닫을 때 충전(잔액 재확인)됐으면 이어하기(fail01) 재표시, 미구매면 Retry 팝업(fail02).
+        /// GoldShop 미가용 시 Retry 폴백. (골드 충분한 정상 플로우는 호출되지 않음.)</summary>
+        private void OpenGoldShopThenContinueOrRetry(int cost)
+        {
+            if (PopupManager.HasInstance) PopupManager.Instance.ClosePopup("popup_fail01");
+
+            if (HUDController.HasInstance && HUDController.Instance.GoldShopPopup != null)
+            {
+                HUDController.Instance.GoldShopPopup.OpenWithCloseCallback(() =>
+                {
+                    bool nowEnough = CurrencyManager.HasInstance && CurrencyManager.Instance.HasEnoughCoins(cost);
+                    if (!PopupManager.HasInstance) return;
+                    if (nowEnough) PopupManager.Instance.ShowPopup("popup_fail01", 50);  // 충전 → 다시 이어하기
+                    else           PopupManager.Instance.ShowPopup("popup_fail02", 50);   // 미구매 → Retry
+                });
+            }
+            else if (PopupManager.HasInstance)
+            {
+                PopupManager.Instance.ShowPopup("popup_fail02", 50);                      // GoldShop 미가용 폴백
             }
         }
 
