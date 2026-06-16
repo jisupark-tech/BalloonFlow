@@ -25,6 +25,10 @@ namespace BalloonFlow
         private UILobby _lobby;
         private bool _isCoinFlyInFlight;
         private Coroutine _coinFlyResetCoroutine;
+        // ROLLBACK_WAIT_WSFX_BEFORE_BTN_CHANGE_20260616:
+        // RefreshDisplay 의 isLevelUp 분기에서 PlayLobbyBtnChangeAnim 을 WS 로비 연출 종료 후로 미루는 대기 코루틴 핸들.
+        // 씬 재진입/디스에이블 시 누적된 죽은 핸들러로 인한 leak/중복 콜백 방지를 위해 보관 후 정리한다.
+        private Coroutine _pendingBtnChangeAnimCoroutine;
         // [2026-05-19] 하트 증가 감지용 — currentLives 가 이전보다 커지면 LifePanel 펄스 트리거.
         // -1 sentinel: 첫 HandleLifeChanged 호출은 비교 skip (초기값 설정만).
         private int _lastDisplayedLives = -1;
@@ -104,6 +108,21 @@ namespace BalloonFlow
                 if (_lobby.BtnLifeBar != null) _lobby.BtnLifeBar.onClick.RemoveListener(OnLifeBarClicked);
                 if (_lobby.BtnNoAds != null) _lobby.BtnNoAds.onClick.RemoveListener(OnNoAdsClicked);
                 if (_lobby.BtnProfilePanel != null) _lobby.BtnProfilePanel.onClick.RemoveListener(OnProfileClicked);
+            }
+
+            if (_pendingBtnChangeAnimCoroutine != null)
+            {
+                StopCoroutine(_pendingBtnChangeAnimCoroutine);
+                _pendingBtnChangeAnimCoroutine = null;
+            }
+        }
+
+        void OnDestroy()
+        {
+            if (_pendingBtnChangeAnimCoroutine != null)
+            {
+                StopCoroutine(_pendingBtnChangeAnimCoroutine);
+                _pendingBtnChangeAnimCoroutine = null;
             }
         }
 
@@ -208,10 +227,11 @@ namespace BalloonFlow
 
                 int capturedNewLevel = newLevel;
                 int capturedHighest = highest;
-                _lobby.PlayLobbyBtnChangeAnim(newLevel, newDiff, () =>
-                {
-                    if (_lobby != null) _lobby.SetupLevelBoxes(capturedNewLevel, capturedHighest);
-                });
+                // WS 로비 보상 팝업/FX 가 같은 프레임 OpenUI 에서 트리거될 수 있어, 두 연출이 겹치지 않도록
+                // PlayLobbyBtnChangeAnim 을 IsWinningStreakFxPlaying 종료 시점 뒤로 미룬다.
+                if (_pendingBtnChangeAnimCoroutine != null) StopCoroutine(_pendingBtnChangeAnimCoroutine);
+                _pendingBtnChangeAnimCoroutine = StartCoroutine(
+                    WaitForWinningStreakFxThenPlayBtnChangeAnim(newLevel, newDiff, capturedNewLevel, capturedHighest));
             }
             else
             {
@@ -333,6 +353,23 @@ namespace BalloonFlow
             yield return new WaitForSecondsRealtime(PLAY_TO_LOADING_DELAY);
             if (GameManager.HasInstance)
                 GameManager.Instance.StartLevel(levelId);
+        }
+
+        /// <summary>WS 로비 연출(보상 팝업 + LobbyFx)이 끝난 뒤 PlayLobbyBtnChangeAnim 을 트리거.
+        /// 첫 yield 로 한 프레임 양보해 UILobby.OpenUI → TriggerPendingWinningStreakLobbyFx 가 armed 비트를 세팅할 시간을 확보.</summary>
+        System.Collections.IEnumerator WaitForWinningStreakFxThenPlayBtnChangeAnim(
+            int newLevel, DifficultyPurpose newDiff, int capturedNewLevel, int capturedHighest)
+        {
+            yield return null;
+            while (_lobby != null && _lobby.IsWinningStreakFxPlaying)
+                yield return null;
+
+            if (_lobby == null) yield break;
+            _lobby.PlayLobbyBtnChangeAnim(newLevel, newDiff, () =>
+            {
+                if (_lobby != null) _lobby.SetupLevelBoxes(capturedNewLevel, capturedHighest);
+            });
+            _pendingBtnChangeAnimCoroutine = null;
         }
 
         /// <summary>BtnGoldPlus / BtnLifePlus → Shop 페이지로 스와이프 이동</summary>
