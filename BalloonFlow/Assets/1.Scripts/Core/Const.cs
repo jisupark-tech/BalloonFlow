@@ -253,6 +253,7 @@ namespace BalloonFlow
         public const string SPR_ICONADBTN                                = "iconAdBtn";
         public const string SPR_ICONCANCEL                               = "iconCancel";
         public const string SPR_ICONCHECK                                = "iconCheck";
+        public const string SPR_ICONGIFT                                 = "iconGift1";   // [WS 복합보상 상자] 동적 로드용
         public const string SPR_ICONGOLD                                 = "iconGold";
         public const string SPR_ICONHAND                                 = "iconHand";
         public const string SPR_ICONHAPTIC                               = "iconHaptic";

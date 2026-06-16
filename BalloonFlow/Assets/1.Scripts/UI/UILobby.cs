@@ -184,6 +184,12 @@ namespace BalloonFlow
         [SerializeField] private GameObject _wsDisplayRoot;
         [Tooltip("현재 stage 대표 보상 — RewardItem 구조(내부 아이콘 Image + TextReward/Outline). root 를 할당.")]
         [SerializeField] private GameObject _wsRewardItem;
+        // ROLLBACK_WS_REWARD_VARIANT_SERIALIZE_20260616: 변형 GO 를 이름 탐색(FindDirectChildGO) 대신 직접 참조.
+        //   노드 리네임(RewardGold/RewardItem ↔ Gold/Item)에 깨지지 않음. 미할당 시 기존 이름 탐색으로 폴백(회귀 0).
+        [Tooltip("코인 보상 변형 GO (RewardItem>Gold). 미할당 시 이름 'Gold'/'RewardGold' 로 자동 탐색.")]
+        [SerializeField] private GameObject _wsRewardGoldVariant;
+        [Tooltip("아이템 보상 변형 GO (RewardItem>Item). 미할당 시 이름 'Item'/'RewardItem' 로 자동 탐색.")]
+        [SerializeField] private GameObject _wsRewardItemVariant;
 
         [Header("[WinningStreak — 로비 FX 연출 참조 (미할당 시 이름으로 자동 탐색)]")]
         [Tooltip("WinningStreak/FXFire — 게이지 위 불꽃. 펄스(커졌다 작아짐) 대상. 미할당 시 root 하위 'FxFire'/'FXFire' 탐색.")]
@@ -1356,8 +1362,14 @@ namespace BalloonFlow
             bool useItem = rewardEntryCount == 1 && !isCoin;
 
             Transform root = _wsRewardItem.transform;
-            GameObject goldVariant = FindDirectChildGO(root, "RewardGold");
-            GameObject itemVariant = FindDirectChildGO(root, "RewardItem");   // root 와 동명 → 직계 자식만 탐색
+            // ROLLBACK_WS_REWARD_VARIANT_SERIALIZE_20260616: 직접 참조(SerializeField) 우선 — 노드 리네임 무관.
+            //   미할당 시 이름 탐색 폴백(Gold/RewardGold, Item/RewardItem 양쪽 지원). 롤백: 직접참조 우항 제거.
+            GameObject goldVariant = _wsRewardGoldVariant != null
+                ? _wsRewardGoldVariant
+                : (FindDirectChildGO(root, "Gold") ?? FindDirectChildGO(root, "RewardGold"));
+            GameObject itemVariant = _wsRewardItemVariant != null
+                ? _wsRewardItemVariant
+                : (FindDirectChildGO(root, "Item") ?? FindDirectChildGO(root, "RewardItem"));
             // [2026-06-11 fix] ImageGift 는 직계가 아니라 RewardItem 내부에 중첩된 프리팹 구조
             // (PopupWinningStreak 슬롯과 동일). 전체 탐색 + 중첩 시 부모(RewardItem)도 함께 활성화.
             GameObject giftVariant = FindDirectChildGO(root, "ImageGift")
@@ -1391,6 +1403,9 @@ namespace BalloonFlow
                     if (go != null && go != giftVariant) go.SetActive(false);
                 }
                 SetWsItemFlagsActive(itemScope, false);
+                // ROLLBACK_WS_GIFT_HEART_DYNAMIC_SPRITE_20260616: ImageGift(상자) sprite 를 코드로 동적 로드 —
+                //   프리팹 정적 할당 의존 제거(부스터 아이콘 swap 과 동일 방식). 롤백: 이 한 줄 제거.
+                ApplyWsDynamicSprite(giftVariant, Const.SPR_ICONGIFT);
             }
             else if (useItem && isHeart)
             {
@@ -1401,6 +1416,9 @@ namespace BalloonFlow
                     if (go != null) go.SetActive(false);
                 }
                 SetWsItemFlagsActive(itemScope, true);
+                // ROLLBACK_WS_GIFT_HEART_DYNAMIC_SPRITE_20260616: ImageHeart sprite 를 코드로 동적 로드(무한하트 아이콘) —
+                //   프리팹 정적 할당 의존 제거. 롤백: 이 한 줄 제거.
+                ApplyWsDynamicSprite(imageHeartGo, Const.SPR_ICONHEARINFINITE);
             }
             else if (useItem)
             {
@@ -1526,6 +1544,24 @@ namespace BalloonFlow
         }
 
         /// <summary>stage 의 대표 보상(코인>핸드>셔플>잽>무한하트 우선) 아이콘 키 + 카운트 + 코인 여부.</summary>
+        // ROLLBACK_WS_GIFT_HEART_DYNAMIC_SPRITE_20260616: go 의 Image(자신→자식)에 키로 로드한 sprite 설정 + 활성화.
+        //   ImageGift(상자)·ImageHeart 를 프리팹 정적 할당 없이 코드로 채움(부스터 아이콘 swap 과 동일 방식).
+        private static void ApplyWsDynamicSprite(GameObject go, string spriteKey)
+        {
+            if (go == null || string.IsNullOrEmpty(spriteKey) || !ResourceManager.HasInstance) return;
+            Image img = go.GetComponent<Image>();
+            if (img == null) img = go.GetComponentInChildren<Image>(true);
+            var spr = ResourceManager.Instance.GetUISprite(spriteKey);
+            if (img == null || spr == null)
+            {
+                Debug.LogWarning($"[UILobby] WS 동적 sprite 실패 — img={(img != null)} spr={(spr != null)} key={spriteKey}");
+                return;
+            }
+            img.sprite = spr;
+            img.enabled = true;
+            if (!img.gameObject.activeSelf) img.gameObject.SetActive(true);
+        }
+
         private static void ResolveWsPrimaryReward(WinningStreakStage stage, out string spriteKey, out int count, out bool isCoin)
         {
             spriteKey = null; count = 0; isCoin = false;
