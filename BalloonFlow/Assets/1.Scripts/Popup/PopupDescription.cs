@@ -18,6 +18,7 @@ namespace BalloonFlow
         [SerializeField] private Image _imgInnerFrame;
 
         private System.Action _onConfirm;
+        private bool _exitClosesOnly;
 
         protected override void Awake()
         {
@@ -25,7 +26,7 @@ namespace BalloonFlow
             if (_frame != null)
             {
                 if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.AddListener(OnConfirm);
-                if (_frame.BtnExit != null) _frame.BtnExit.onClick.AddListener(OnConfirm);
+                if (_frame.BtnExit != null) _frame.BtnExit.onClick.AddListener(OnExitClicked);
             }
         }
 
@@ -49,7 +50,15 @@ namespace BalloonFlow
         public void Show(string title, string description, string buttonText,
                          System.Action onConfirm = null)
         {
+            Show(title, description, buttonText, onConfirm, false);
+        }
+
+        /// <summary>타이틀 + 설명 + 버튼 텍스트 + 콜백 + X버튼 동작 분리.</summary>
+        public void Show(string title, string description, string buttonText,
+                         System.Action onConfirm, bool exitClosesOnly)
+        {
             _onConfirm = onConfirm;
+            _exitClosesOnly = exitClosesOnly;
 
             if (_frame != null)
             {
@@ -68,6 +77,17 @@ namespace BalloonFlow
         {
             _onConfirm?.Invoke();
             CloseUI();
+        }
+
+        // X 버튼 = 취소(콜백 미발화), Single 버튼 = 확정
+        private void OnExitClicked()
+        {
+            if (_exitClosesOnly)
+            {
+                CloseUI();
+                return;
+            }
+            OnConfirm();
         }
     }
 }
