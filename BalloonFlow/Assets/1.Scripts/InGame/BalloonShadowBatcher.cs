@@ -31,6 +31,7 @@ namespace BalloonFlow
             public readonly List<Vector2> uvs = new List<Vector2>(1024);
             public readonly List<int> tris = new List<int>(1536);
             public readonly Dictionary<int, int> balloonToVertStart = new Dictionary<int, int>(256);
+            public bool dirty; // [SHADOW_HIDE_COALESCE] HideShadow 가 정점 collapse 후 마킹 → FlushDirty 가 1회 업로드
         }
 
         private readonly Dictionary<Material, Group> _groups = new Dictionary<Material, Group>(2);
@@ -96,6 +97,7 @@ namespace BalloonFlow
             foreach (var kvp in _groups)
             {
                 Group g = kvp.Value;
+                g.dirty = false; // 전체 재빌드 — 아래에서 mesh 통째 설정하므로 보류 중 flush 불필요
                 bool empty = g.verts.Count == 0;
                 if (g.go != null) g.go.SetActive(!empty);
                 if (empty) { if (g.mesh != null) g.mesh.Clear(); continue; }
@@ -108,7 +110,11 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>팝된 풍선의 그림자 쿼드를 degenerate 처리 — combined mesh 부분 갱신.</summary>
+        // ROLLBACK_SHADOW_HIDE_COALESCE_20260616: 팝마다 mesh.SetVertices(전체 결합버퍼) 재업로드는
+        //   O(전체 그림자 verts). zap/다트연쇄로 한 프레임 다수 팝 시 O(팝수 × N) GPU 버퍼 처닝이 부하.
+        //   → 정점 collapse 는 즉시 하되 실제 SetVertices 는 dirty 마킹 후 FlushDirty()(프레임당 1회)로 합친다.
+        //   롤백: 아래 dirty 마킹을 `if (g.mesh != null) g.mesh.SetVertices(g.verts);` 로 환원 + FlushDirty/dirty/LateUpdate 제거.
+        /// <summary>팝된 풍선의 그림자 쿼드를 degenerate 처리 — 실제 mesh 업로드는 FlushDirty 로 coalesce.</summary>
         public void HideShadow(int balloonId)
         {
             if (!_balloonToGroup.TryGetValue(balloonId, out Group g)) return;
@@ -120,7 +126,20 @@ namespace BalloonFlow
             if (vertStart >= end) return;
             Vector3 collapse = g.verts[vertStart];
             for (int i = vertStart + 1; i < end; i++) g.verts[i] = collapse;
-            if (g.mesh != null) g.mesh.SetVertices(g.verts); // bounds 유지 — 재계산 불필요
+            g.dirty = true; // 실제 업로드는 FlushDirty()(프레임당 1회)로 coalesce — bounds 는 collapse 가 기존 범위 내라 유지
+        }
+
+        /// <summary>[SHADOW_HIDE_COALESCE 2026-06-16] 한 프레임에 누적된 HideShadow 들을 그룹당 1회만 mesh 업로드.
+        /// BalloonController.LateUpdate 에서 매 프레임 호출 — 다중팝(zap/다트연쇄)의 O(팝수×N) 재업로드를 O(N)/프레임으로 축소.</summary>
+        public void FlushDirty()
+        {
+            foreach (var kvp in _groups)
+            {
+                Group g = kvp.Value;
+                if (!g.dirty) continue;
+                g.dirty = false;
+                if (g.mesh != null) g.mesh.SetVertices(g.verts);
+            }
         }
 
         // ROLLBACK_SHADOW_BATCH_BALLOON_THRESHOLD_20260616:
@@ -142,6 +161,7 @@ namespace BalloonFlow
             foreach (var kvp in _groups)
             {
                 Group g = kvp.Value;
+                g.dirty = false;
                 g.verts.Clear(); g.uvs.Clear(); g.tris.Clear(); g.balloonToVertStart.Clear();
                 if (g.mesh != null) g.mesh.Clear();
                 if (g.go != null) g.go.SetActive(false);

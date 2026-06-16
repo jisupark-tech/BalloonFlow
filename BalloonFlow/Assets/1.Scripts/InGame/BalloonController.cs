@@ -394,6 +394,15 @@ namespace BalloonFlow
         }
 #endif
 
+        // ROLLBACK_SHADOW_HIDE_COALESCE_20260616: 한 프레임에 누적된 그림자 HideShadow(정점 collapse)들을
+        //   그룹당 1회 mesh 업로드로 합친다. zap/다트연쇄 다중팝의 O(팝수×N) 그림자 버퍼 재업로드 → O(N)/프레임.
+        //   (런타임 전용 — Update 는 #if UNITY_EDITOR 라 별도 LateUpdate 사용. _shadowBatcher null-safe.)
+        //   롤백: 이 메서드 제거 + HideShadow 의 즉시 SetVertices 복원.
+        private void LateUpdate()
+        {
+            _shadowBatcher?.FlushDirty();
+        }
+
         #endregion
 
         #region Public Methods
