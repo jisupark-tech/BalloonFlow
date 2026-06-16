@@ -206,6 +206,12 @@ namespace BalloonFlow
         private bool _wsTextsResolved;
         private Coroutine _wsLobbyFxCoroutine;
         private Sequence _wsLobbyFxSequence;
+        // ROLLBACK_WS_FX_ARMED_20260616:
+        // TriggerPendingWinningStreakLobbyFx 가 _wsLobbyFxCoroutine 을 StartCoroutine 으로 띄운 직후라도
+        // 본문의 첫 yield 가 실행되기 전 한 프레임 동안은 외부에서 보면 '곧 시작될 예정' 상태다.
+        // 같은 프레임에 RefreshDisplay → PlayLobbyBtnChangeAnim 이 호출되면 코루틴 시작 윈도우에 끼어들어
+        // 두 연출(WS 보상 팝업 + LobbyBtn 변경)이 겹쳐 보였음. armed 비트로 '예약됨'을 노출해 외부에서 게이트.
+        private bool _wsLobbyFxArmed;
 
         [Header("[Profile Display — 좌상단 표시 sprite]")]
         [Tooltip("PopupProfile 과 동일한 ProfileAssets ScriptableObject. 아이콘/프레임 sprite 카탈로그.")]
@@ -279,10 +285,11 @@ namespace BalloonFlow
 
         // ROLLBACK_LOBBY_PLAY_BLOCK_DURING_WSFX_20260615:
         // WS 로비 연출 재생 중 여부 — PlayButton 인게임 진입 차단용.
+        //   _wsLobbyFxArmed             : 코루틴 StartCoroutine 직후 ~ 본문 첫 yield 사이의 한 프레임 윈도우 보정
         //   _wsLobbyFxCoroutine != null  : FXItem 비행 → 게이지 채움 → 배수/보상 연출(PlayPendingWinningStreakLobbyFxDeferred) 진행 중
         //   PopupWinningStreakReward.IsShowing : 0단계 Dim 보상 팝업(수 연산 카운터) 표시 중
-        //   둘 중 하나라도 true 면 연출 중 → 진입 금지. 모두 끝나면(둘 다 false) 진입 가능.
-        public bool IsWinningStreakFxPlaying => _wsLobbyFxCoroutine != null || PopupWinningStreakReward.IsShowing;
+        //   셋 중 하나라도 true 면 연출 중 → 진입 금지. 모두 끝나면 진입 가능.
+        public bool IsWinningStreakFxPlaying => _wsLobbyFxArmed || _wsLobbyFxCoroutine != null || PopupWinningStreakReward.IsShowing;
 
         public Button BtnGoldPlus => _btnGoldPlus;
         public Button BtnLifePlus => _btnLifePlus;
@@ -398,6 +405,7 @@ namespace BalloonFlow
         private void TriggerPendingWinningStreakLobbyFx()
         {
             if (_wsLobbyFxCoroutine != null) StopCoroutine(_wsLobbyFxCoroutine);
+            _wsLobbyFxArmed = true;
             _wsLobbyFxCoroutine = StartCoroutine(PlayPendingWinningStreakLobbyFxDeferred());
         }
 
@@ -599,33 +607,40 @@ namespace BalloonFlow
         /// root 미준비 시 resolved 를 유지하지 않아 다음 호출에서 재시도.</summary>
         private IEnumerator PlayPendingWinningStreakLobbyFxDeferred()
         {
-            yield return null;
-            yield return null;
-
-            // [2026-06-15] WS 자동 팝업(PopupWinningStreak 회차 진입 / PopupWinningStreakInfo 최초 해금 안내)이
-            //   열려 있으면 닫힐 때까지 대기. 두 자동 팝업은 TryAutoOpenWinningStreakPopup() 내부에서 배타적이지만
-            //   각각 Reward(딤+카운터) 연출과 동시 트리거되어 2겹 노출되던 문제 — 게이트로 양쪽 모두 차단.
-            //   사용자가 PopupWinningStreak 내 BtnInfo로 Info를 수동 오픈한 동안에도 자연스럽게 Reward 연출이 대기.
-            while (UIManager.HasInstance &&
-                   (UIManager.Instance.IsOpenUI<PopupWinningStreak>() ||
-                    UIManager.Instance.IsOpenUI<PopupWinningStreakInfo>()))
+            // try/finally 로 감싸 예외 / 조기 StopCoroutine / 씬 재진입 시에도 armed 비트가 늘 정리되도록 보장.
+            try
+            {
+                yield return null;
                 yield return null;
 
-            if (!WinningStreakManager.HasInstance) yield break;
+                // [2026-06-15] WS 자동 팝업(PopupWinningStreak 회차 진입 / PopupWinningStreakInfo 최초 해금 안내)이
+                //   열려 있으면 닫힐 때까지 대기. 두 자동 팝업은 TryAutoOpenWinningStreakPopup() 내부에서 배타적이지만
+                //   각각 Reward(딤+카운터) 연출과 동시 트리거되어 2겹 노출되던 문제 — 게이트로 양쪽 모두 차단.
+                //   사용자가 PopupWinningStreak 내 BtnInfo로 Info를 수동 오픈한 동안에도 자연스럽게 Reward 연출이 대기.
+                while (UIManager.HasInstance &&
+                       (UIManager.Instance.IsOpenUI<PopupWinningStreak>() ||
+                        UIManager.Instance.IsOpenUI<PopupWinningStreakInfo>()))
+                    yield return null;
 
-            var mgr = WinningStreakManager.Instance;
-            while (mgr.TryDequeuePendingLobbyAnimation(out var anim))
-            {
-                // [WS 0단계 2026-06-12] 로비 연출 앞에 Dim 보상 팝업(연승 수치 상승) 먼저 재생 — 승리 복귀에서만.
-                yield return PlayWinningStreakRewardPopup(anim);
-                yield return PlayWinningStreakLobbyFx(anim);
+                if (!WinningStreakManager.HasInstance) yield break;
+
+                var mgr = WinningStreakManager.Instance;
+                while (mgr.TryDequeuePendingLobbyAnimation(out var anim))
+                {
+                    // [WS 0단계 2026-06-12] 로비 연출 앞에 Dim 보상 팝업(연승 수치 상승) 먼저 재생 — 승리 복귀에서만.
+                    yield return PlayWinningStreakRewardPopup(anim);
+                    yield return PlayWinningStreakLobbyFx(anim);
+                }
+
+                // [WS quit-fail 2026-06-10] 실패(중도 이탈 포함)로 streak 이 리셋됐으면 배수 드롭 연출 1회 재생.
+                if (mgr.TryConsumePendingFailFx(out int failFromMultiplier))
+                    yield return PlayWsMultiplierFailFx(failFromMultiplier);
             }
-
-            // [WS quit-fail 2026-06-10] 실패(중도 이탈 포함)로 streak 이 리셋됐으면 배수 드롭 연출 1회 재생.
-            if (mgr.TryConsumePendingFailFx(out int failFromMultiplier))
-                yield return PlayWsMultiplierFailFx(failFromMultiplier);
-
-            _wsLobbyFxCoroutine = null;
+            finally
+            {
+                _wsLobbyFxArmed = false;
+                _wsLobbyFxCoroutine = null;
+            }
         }
 
         /// <summary>[WS 0단계 2026-06-12] PopupWinningStreakReward — Dim + 획득 포인트 수 연산 연출.
@@ -1776,6 +1791,7 @@ namespace BalloonFlow
                 StopCoroutine(_wsLobbyFxCoroutine);
                 _wsLobbyFxCoroutine = null;
             }
+            _wsLobbyFxArmed = false;
             _wsLobbyFxSequence?.Kill();
             _wsLobbyFxSequence = null;
         }
