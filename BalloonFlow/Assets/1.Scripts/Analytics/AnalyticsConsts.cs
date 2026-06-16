@@ -3,7 +3,9 @@ namespace BalloonFlow.Analytics
     /// <summary>
     /// BigQuery raw event schema v3.2 매핑용 상수.
     /// Event name + param key (snake_case) — schema 컬럼명과 1:1 일치.
-    /// Firebase Analytics LogEvent → BigQuery 자동 export 경로 가정.
+    /// [2026-06-16 BQ_DIRECT] Firebase Analytics 자동 export 폐기 → Cloud Function(ingestAnalyticsEvents)
+    ///   경유 BigQuery 직접 streaming 적재. 직접 적재라 GA4 의 이벤트당 25-param 제한 없음
+    ///   (extra_json overflow 우회는 더 이상 불필요 — 보내면 params(JSON) 에 그대로 들어감).
     /// </summary>
     public static class AnalyticsConsts
     {
@@ -50,6 +52,11 @@ namespace BalloonFlow.Analytics
         // ─── Play metrics (level_play_event 25-limit core) ───
         public const string P_MOVES_USED          = "moves_used";
         public const string P_PEAK_RESOURCE       = "peak_resource_usage_ratio";
+        // [BQ_DIRECT 2026-06-16] 직접 적재 — extra_json 해체분(play_event 테이블 개별 컬럼).
+        public const string P_PLAY_TIME_SEC       = "play_time_sec";
+        public const string P_BACKGROUND_TIME_SEC = "background_time_sec";
+        public const string P_SCORE               = "score";
+        public const string P_STAR_COUNT          = "star_count";
 
         // ─── Session ───
         public const string P_DURATION_SEC        = "duration_sec";
@@ -63,24 +70,28 @@ namespace BalloonFlow.Analytics
         // ─── purchase_event ───
         public const string P_PRODUCT_ID          = "product_id";
         public const string P_PRICE_USD           = "price_usd";
-        public const string P_CURRENCY            = "currency";
-        public const string P_STORE               = "store";                // google_play | app_store | editor
-        public const string P_TRANSACTION_ID      = "transaction_id";
-        public const string P_PRODUCT_CATEGORY    = "product_category";     // coin|bundle|noads|offer
+        public const string P_CURRENCY            = "currency";             // (BQ_DIRECT 후 미emit — currency_code 로 대체)
+        public const string P_STORE               = "store";                // (BQ_DIRECT 후 미emit — purchase 테이블에 컬럼 없음)
+        public const string P_TRANSACTION_ID      = "transaction_id";       // (BQ_DIRECT 후 미emit — receipt_id 로 대체)
+        public const string P_PRODUCT_CATEGORY    = "product_category";     // (BQ_DIRECT 후 미emit — purchase 테이블에 컬럼 없음)
+        public const string P_CURRENCY_CODE       = "currency_code";        // [BQ_DIRECT] purchase 테이블 컬럼
+        public const string P_RECEIPT_ID          = "receipt_id";           // [BQ_DIRECT] purchase 테이블(거래/영수증 ID)
 
         // item_use_event
         public const string P_ITEM_ID             = "item_id";
-        public const string P_ITEM_TYPE           = "item_type";            // booster|life|other
+        public const string P_ITEM_TYPE           = "item_type";            // booster|life|other (BQ_DIRECT 후 item_category 로 대체)
+        public const string P_ITEM_CATEGORY       = "item_category";        // [BQ_DIRECT] item_use 테이블 컬럼
         public const string P_ITEM_CONTEXT        = "item_context";         // in_level|lobby|shop|other
         public const string P_QUANTITY            = "quantity";
         public const string P_BALANCE_AFTER       = "balance_after";
 
         // economy_event
         public const string P_CURRENCY_TYPE       = "currency_type";        // coin|gem|life|booster
-        public const string P_FLOW_TYPE           = "flow_type";            // earn|spend
+        public const string P_FLOW_TYPE           = "flow_type";            // earn|spend (BQ_DIRECT 후 미emit — change_amount 부호로 대체)
         public const string P_SOURCE              = "source";
-        public const string P_SINK                = "sink";
-        public const string P_AMOUNT              = "amount";
+        public const string P_SINK                = "sink";                 // (BQ_DIRECT 후 미emit — source 컬럼으로 통합)
+        public const string P_AMOUNT              = "amount";               // (BQ_DIRECT 후 미emit — change_amount 로 대체)
+        public const string P_CHANGE_AMOUNT       = "change_amount";        // [BQ_DIRECT] economy 테이블 부호 단일(earn=+, spend=-)
 
         // ─── ad_event (impression-level revenue, MAX OnAdRevenuePaidEvent) ───
         public const string P_AD_TYPE             = "ad_type";              // interstitial|rewarded|banner|mrec

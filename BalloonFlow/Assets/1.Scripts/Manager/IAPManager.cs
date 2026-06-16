@@ -583,28 +583,18 @@ namespace BalloonFlow
             p[AnalyticsConsts.P_APP_VERSION]      = Application.version;
             p[AnalyticsConsts.P_GEO_COUNTRY]      = AnalyticsSessionTracker.ResolveGeoCountry();
             p[AnalyticsConsts.P_PLATFORM]         = AnalyticsSessionTracker.ResolvePlatform();
-            p[AnalyticsConsts.P_DEVICE_MODEL]     = SystemInfo.deviceModel;
             p[AnalyticsConsts.P_PRODUCT_ID]       = doc.productId ?? "";
             p[AnalyticsConsts.P_PRICE_USD]        = doc.priceUsd;
-            p[AnalyticsConsts.P_CURRENCY]         = string.IsNullOrEmpty(doc.currency) ? "USD" : doc.currency;
-            p[AnalyticsConsts.P_STORE]            = ResolveStore();
-            p[AnalyticsConsts.P_TRANSACTION_ID]   = txId;
-            p[AnalyticsConsts.P_PRODUCT_CATEGORY] = doc.category ?? "";
+            // [BQ_DIRECT 2026-06-16] purchase 테이블 컬럼에 정렬: currency→currency_code, transaction_id→receipt_id.
+            //   store / product_category / device_model 은 purchase 테이블에 컬럼 없음 → 미emit.
+            //   (product_name/product_type/price_local/coin_granted/is_verified 등은 추후 계측 보강 — 현재 NULL.)
+            p[AnalyticsConsts.P_CURRENCY_CODE]    = string.IsNullOrEmpty(doc.currency) ? "USD" : doc.currency;
+            p[AnalyticsConsts.P_RECEIPT_ID]       = txId;
 
             if (UserSnapshotCache.HasInstance)
                 UserSnapshotCache.Instance.Stamp(p);
 
             AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_PURCHASE, p);
-        }
-
-        private static string ResolveStore()
-        {
-            switch (Application.platform)
-            {
-                case RuntimePlatform.Android:      return "google_play";
-                case RuntimePlatform.IPhonePlayer: return "app_store";
-                default:                           return "editor";
-            }
         }
     }
 }

@@ -50,7 +50,9 @@ namespace BalloonFlow.Analytics
             while (waited < MAX_WAIT)
             {
                 bool analyticsHas = AnalyticsManager.HasInstance;
-                bool analyticsReady = analyticsHas && AnalyticsManager.Instance.FirebaseReady;
+                // [BQ_DIRECT 2026-06-16] 이벤트는 AnalyticsManager 가 버퍼링 후 BigQuery 로 직접 전송하므로
+                //   Firebase Analytics ready 대기 불필요 — 인스턴스 존재만으로 세션 시작 게이트 통과(uid 만 별도 대기).
+                bool analyticsReady = analyticsHas;
                 bool uidHas = UserDataService.HasInstance;
                 bool uidReady = uidHas && !string.IsNullOrEmpty(UserDataService.Instance.Uid);
 
@@ -189,15 +191,15 @@ namespace BalloonFlow.Analytics
         internal static void EmitEvent(string evtName, Dictionary<string, object> p)
         {
             bool hasInstance = AnalyticsManager.HasInstance;
-            bool firebaseReady = hasInstance && AnalyticsManager.Instance.FirebaseReady;
             if (hasInstance)
             {
+                // [BQ_DIRECT] 준비 전이어도 AnalyticsManager 가 버퍼링 → drop 없음.
                 AnalyticsManager.Instance.LogEvent(evtName, p);
                 LogEventToConsole(evtName, p);
             }
             else
             {
-                Debug.LogWarning($"[Analytics] {evtName} DROP — AnalyticsManager.HasInstance={hasInstance} FirebaseReady={firebaseReady}");
+                Debug.LogWarning($"[Analytics] {evtName} DROP — AnalyticsManager.HasInstance=false");
             }
         }
 
@@ -268,16 +270,16 @@ namespace BalloonFlow.Analytics
         {
             if (amount <= 0) return;
 
-            var p = BuildCommonParams(24);
+            var p = BuildCommonParams(20);
             p[AnalyticsConsts.P_CURRENCY_TYPE] = CURRENCY_COIN;
-            p[AnalyticsConsts.P_FLOW_TYPE] = flowType;
-            p[AnalyticsConsts.P_AMOUNT] = amount;
+            // [BQ_DIRECT 2026-06-16] economy 테이블은 부호 단일 change_amount 컬럼 — earn=+, spend=-.
+            //   (flow_type/amount/sink 컬럼 없음 → 미emit. source 컬럼 하나로 earn 출처/spend 대상 통합.)
+            p[AnalyticsConsts.P_CHANGE_AMOUNT] = flowType == FLOW_SPEND ? -amount : amount;
             p[AnalyticsConsts.P_BALANCE_AFTER] = balanceAfter;
 
-            if (!string.IsNullOrEmpty(source))
-                p[AnalyticsConsts.P_SOURCE] = source;
-            if (!string.IsNullOrEmpty(sink))
-                p[AnalyticsConsts.P_SINK] = sink;
+            string src = !string.IsNullOrEmpty(source) ? source : sink;
+            if (!string.IsNullOrEmpty(src))
+                p[AnalyticsConsts.P_SOURCE] = src;
 
             AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_ECONOMY, p);
         }
@@ -286,14 +288,13 @@ namespace BalloonFlow.Analytics
         {
             if (string.IsNullOrEmpty(evt.boosterType)) return;
 
-            var p = BuildCommonParams(24);
+            var p = BuildCommonParams(20);
             p[AnalyticsConsts.P_ITEM_ID] = evt.boosterType;
-            p[AnalyticsConsts.P_ITEM_TYPE] = ITEM_TYPE_BOOSTER;
-            p[AnalyticsConsts.P_ITEM_CONTEXT] = ITEM_CONTEXT_IN_LEVEL;
-            p[AnalyticsConsts.P_QUANTITY] = 1;
-
-            if (BoosterManager.HasInstance)
-                p[AnalyticsConsts.P_BALANCE_AFTER] = BoosterManager.Instance.GetBoosterCount(evt.boosterType);
+            // [BQ_DIRECT 2026-06-16] item_use 테이블 컬럼에 정렬: item_category(=booster).
+            //   item_type/item_context/quantity/balance_after 컬럼 없음 → 미emit.
+            //   acquisition_type/cost_amount/cost_currency_id 는 부스터 인벤토리 사용이라 사용시점 직접 비용 없음
+            //   (획득 시 차감은 economy_event 추적) → 미설정(NULL). 제품 정의 시 보강.
+            p[AnalyticsConsts.P_ITEM_CATEGORY] = ITEM_TYPE_BOOSTER;
 
             AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_ITEM_USE, p);
         }

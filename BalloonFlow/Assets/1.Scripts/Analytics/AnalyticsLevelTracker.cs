@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
 
 namespace BalloonFlow.Analytics
@@ -196,7 +195,12 @@ namespace BalloonFlow.Analytics
             if (UserSnapshotCache.HasInstance)
                 UserSnapshotCache.Instance.Stamp(p);
 
-            p[AnalyticsConsts.P_EXTRA_JSON] = BuildExtraJson(playTimeSec, bgSec, finalScore, starCount);
+            // [BQ_DIRECT 2026-06-16] 직접 적재라 GA4 25-param 제한 없음 → extra_json 통합 폐기,
+            //   play_event 테이블의 개별 컬럼으로 직접 emit. (롤백: 아래 4줄을 P_EXTRA_JSON=BuildExtraJson 로 환원)
+            p[AnalyticsConsts.P_PLAY_TIME_SEC]       = playTimeSec;
+            p[AnalyticsConsts.P_BACKGROUND_TIME_SEC] = bgSec;
+            p[AnalyticsConsts.P_SCORE]               = finalScore;
+            p[AnalyticsConsts.P_STAR_COUNT]          = starCount;
 
             AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_LEVEL_PLAY, p);
 
@@ -221,20 +225,5 @@ namespace BalloonFlow.Analytics
             }
         }
 
-        /// <summary>
-        /// 25-param overflow 회피용 통합 JSON. ETL 측에서 JSON_EXTRACT(...) 로 분해.
-        /// Firebase Analytics param value 100자 limit 준수 — BL 미사용 0 고정 필드 (deadlock/shuffle/hint)는
-        /// schema 기본값으로 처리하고 JSON 미포함. 최대 길이 약 80자.
-        /// </summary>
-        private string BuildExtraJson(int playTimeSec, int bgSec, int score, int starCount)
-        {
-            var sb = new StringBuilder(96);
-            sb.Append("{\"play_time_sec\":").Append(playTimeSec);
-            sb.Append(",\"background_time_sec\":").Append(bgSec);
-            sb.Append(",\"score\":").Append(score);
-            sb.Append(",\"star_count\":").Append(starCount);
-            sb.Append("}");
-            return sb.ToString();
-        }
     }
 }
