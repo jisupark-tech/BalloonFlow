@@ -84,7 +84,8 @@ namespace BalloonFlow
                 popup.Show(LocalizationService.Get("popup.txttitle.quit"),
                     LocalizationService.Get("popup.txtdescription.quit"),
                     LocalizationService.Get("ui.common.quit"),
-                    () => Application.Quit());
+                    () => Application.Quit(),
+                    exitClosesOnly: true);
         }
 
         private static void Haptic()
