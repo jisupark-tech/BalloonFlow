@@ -677,6 +677,10 @@ namespace BalloonFlow
             else
             {
                 Debug.LogWarning($"[BoosterExecutor] Select Tool: failed to deploy holder {holderId}.");
+                // ROLLBACK_BOOSTER_SELECTTOOL_REFUND_20260616: deploy 실패(컬럼 가득 등)인데 부스터는 선차감된
+                //   채라 통화 손실이던 것 → 실패 시 1개 환불. (HolderManager 주석 "환불은 호출측 책임" 충족.)
+                //   롤백: 아래 환불 한 줄 제거.
+                if (BoosterManager.HasInstance) BoosterManager.Instance.AddBooster(BoosterManager.SELECT_TOOL, 1);
             }
         }
 

@@ -783,7 +783,11 @@ namespace BalloonFlow
             _reusableOutermostColors.Clear();
             if (!BalloonController.HasInstance) return _reusableOutermostColors;
 
-            BalloonData[] allBalloons = BalloonController.Instance.GetAllBalloons();
+            // ROLLBACK_ALIVE_BALLOON_ITERATION_20260616: GetAllBalloons()(729 고정) → GetAliveBalloons(살아있는 수만).
+            //   팝마다 invalidate 되는 outermost 전수 빌드의 死엔트리 700+ skip 비용 제거. 롤백: 아래 2줄을
+            //   `BalloonData[] allBalloons = ...GetAllBalloons(); ... allBalloons.Length` 로 환원.
+            int aliveCount;
+            BalloonData[] allBalloons = BalloonController.Instance.GetAliveBalloons(out aliveCount);
             if (allBalloons == null) return _reusableOutermostColors;
 
             if (GameManager.HasInstance)
@@ -796,10 +800,10 @@ namespace BalloonFlow
 
             float cs = _cachedCellSpacing;
             // foreach → for index — IL2CPP 명시적 inline + array indexer 직접 사용
-            for (int i = 0; i < allBalloons.Length; i++)
+            for (int i = 0; i < aliveCount; i++)
             {
                 var b = allBalloons[i];
-                if (b == null || b.isPopped) continue;
+                if (b == null || b.isPopped) continue; // [alive-only] now no-op guard, 동작 불변용 유지
                 bool targetable = true;
                 if (BalloonController.Instance.IsBalloonConcealed(b.balloonId)) targetable = false;
                 if (b.gimmickType == BalloonController.GimmickWall) targetable = false;

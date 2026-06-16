@@ -632,7 +632,11 @@ namespace BalloonFlow
                 return;
             }
 
-            BalloonData[] all = BalloonController.Instance.GetAllBalloons();
+            // ROLLBACK_ALIVE_BALLOON_ITERATION_20260616: GetAllBalloons()(729 고정) → GetAliveBalloons(살아있는 수만).
+            //   팝마다 invalidate 되는 이 빌드가 死엔트리 700+ 를 매번 skip 하던 비용 제거. 롤백: 아래 2줄을
+            //   `BalloonData[] all = ...GetAllBalloons(); ... all.Length` 로 환원.
+            int aliveCount;
+            BalloonData[] all = BalloonController.Instance.GetAliveBalloons(out aliveCount);
             if (all == null)
             {
                 _edgeCacheFrame = currentFrame;
@@ -644,10 +648,10 @@ namespace BalloonFlow
             // Previous code rebuilt an outside flood-fill grid for every dirty contour cache.
             // Darts attack along four straight cardinal lines, so keep only each row/column's
             // first occupied blocker. Non-targetable cells remain in the maps as blockers.
-            for (int i = 0; i < all.Length; i++)
+            for (int i = 0; i < aliveCount; i++)
             {
                 BalloonData balloon = all[i];
-                if (balloon == null || balloon.isPopped) continue;
+                if (balloon == null || balloon.isPopped) continue; // [alive-only] now no-op guard, 동작 불변용 유지
 
                 Vector3 worldPos = BalloonController.Instance.GetBalloonWorldPositionCached(balloon.balloonId);
                 bool targetable = IsDirectlyTargetable(balloon);

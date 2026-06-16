@@ -367,9 +367,26 @@ namespace BalloonFlow
                     HolderData m = FindHolder(mid);
                     if (m != null && !m.isDeploying && !m.isWaiting && !m.isMovingToRail && !m.isConsumed)
                     {
+                        // ROLLBACK_FORCESELECT_CHAIN_COLUMN_GUARD_20260616: 멤버도 리더(위 324-351)와 동일하게 컬럼 점유 가드.
+                        //   기존엔 멤버가 _deployingHolderId 확인 없이 무조건 isDeploying=true → 같은 컬럼에 deployer 2개
+                        //   = 슬롯 누수/더블 디플로이. SelectHolder/리더와 동일 분기로 deploying/waiting 슬롯을 정확히 점유.
+                        //   롤백: 아래 분기를 m.isDeploying = true; 한 줄로 환원.
+                        int mcol = m.column;
+                        if (_deployingHolderId[mcol] >= 0 && _waitingHolderId[mcol] >= 0)
+                            continue; // 멤버 컬럼이 가득 — skip (슬롯 덮어쓰기 금지)
                         if (m.isFrozen) { m.isFrozen = false; EventBus.Publish(new OnHolderThawed { holderId = mid }); }
                         if (m.isHidden) { m.isHidden = false; EventBus.Publish(new OnHolderRevealed { holderId = mid }); }
-                        m.isDeploying = true;
+                        if (_deployingHolderId[mcol] >= 0)
+                        {
+                            m.isWaiting = true;
+                            _waitingHolderId[mcol] = m.holderId;
+                        }
+                        else
+                        {
+                            m.isDeploying = true;
+                            m.isMovingToRail = true;
+                            _deployingHolderId[mcol] = m.holderId;
+                        }
                         EventBus.Publish(new OnHolderSelected { holderId = mid, color = m.color, magazineCount = m.magazineCount });
                     }
                 }

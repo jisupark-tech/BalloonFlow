@@ -34,6 +34,8 @@ namespace BalloonFlow
 
         // Surprise tracking: balloonIds with hidden color (field balloon)
         private readonly HashSet<int> _surpriseBalloons = new HashSet<int>();
+        // ROLLBACK_SURPRISE_ORPHAN_REVEAL_20260616: orphan(팝가능 이웃 0) 공개 처리용 임시 버퍼.
+        private readonly List<int> _surpriseOrphanBuffer = new List<int>();
 
         // Color Curtain tracking: balloonId → required color, balloonId → counter
         private readonly Dictionary<int, int> _curtainColors = new Dictionary<int, int>();
@@ -199,10 +201,52 @@ namespace BalloonFlow
                     region.hp = maxHp > 0 ? maxHp : region.ids.Count; // 데이터 미지정 시 셀 수 fallback
                 }
                 region.maxHp = region.hp;
+
+                // ROLLBACK_ICE_HP_WINNABILITY_CLAMP_20260616: region HP 가 받을 수 있는 최대 감소량을 초과하면
+                //   영영 thaw 안 돼 ice 셀이 RemainingCount 에 영구 잔존 → 보드 언위너블. HP 를 그 상한으로 클램프.
+                //   [2026-06-16 cascade-fix] 이 region 의 최대 감소 = '자기 셀 제외 전체 팝가능' = RemainingCount - region 셀수.
+                //   (다른 region 의 ice 셀도 thaw 후 팝되어 이 region 을 감소시키므로 단순 non-ice 수가 아님 — 멀티 region
+                //    cascade 레벨 over-clamp 방지.) 정상 데이터(HP ≤ 상한)는 불변. 롤백: 아래 클램프 블록 제거.
+                if (BalloonController.HasInstance)
+                {
+                    int maxDecrements = BalloonController.Instance.RemainingCount - region.ids.Count;
+                    if (maxDecrements >= 0 && region.hp > maxDecrements)
+                    {
+                        Debug.LogWarning($"[GimmickProcessor] Ice region HP({region.hp}) > 최대 감소가능({maxDecrements}) — 언위너블 방지 클램프. 레벨 데이터 검토 권장.");
+                        region.hp = maxDecrements;
+                        region.maxHp = region.hp;
+                    }
+                }
+
                 CreateOrUpdateIceHpLabel(region);
                 _iceRegions.Add(region);
             }
             Debug.Log($"[GimmickProcessor] Ice 영역 {_iceRegions.Count}개 초기화 (총 {_iceBalloons.Count} 셀)");
+        }
+
+        // ROLLBACK_CURTAIN_WINNABILITY_CLAMP_20260616: 셋업 직후 1회 호출(InitIceRegions 와 동일 시점).
+        //   커튼 counter 가 '요구색 팝 가능 풍선 수'를 초과하면 그 색을 다 팝해도 counter 가 0 에 못 닿아
+        //   커튼이 RemainingCount 에 영구 잔존 → 언위너블. counter 를 요구색 팝가능 수로 클램프(정상 데이터는 불변).
+        //   롤백: 이 메서드 + BalloonController 의 호출부 제거.
+        public void ClampCurtainCounters()
+        {
+            if (_curtainCounters.Count == 0 || !BalloonController.HasInstance) return;
+            _curtainKeysBuffer.Clear();
+            foreach (var kvp in _curtainCounters) _curtainKeysBuffer.Add(kvp.Key);
+            for (int i = 0; i < _curtainKeysBuffer.Count; i++)
+            {
+                int id = _curtainKeysBuffer[i];
+                if (!_curtainColors.TryGetValue(id, out int reqColor)) continue;
+                // [2026-06-16 fix] GetBalloonsByColor 는 hidden/concealed 를 제외 → curtain+같은색 Surprise/Hidden 레벨에서
+                //   under-count 로 winnable 레벨을 변경. concealed 풍선도 공개+팝되면 커튼을 감소시키므로 hidden 포함 카운트 사용.
+                var sameColor = BalloonController.Instance.GetActiveBalloonsByColor(reqColor);
+                int avail = sameColor != null ? sameColor.Count : 0;
+                if (_curtainCounters.TryGetValue(id, out int c) && c > avail)
+                {
+                    Debug.LogWarning($"[GimmickProcessor] Curtain counter({c}) > 요구색({reqColor}) 팝가능(hidden포함 {avail}) — 언위너블 방지 클램프. 레벨 데이터 검토 권장.");
+                    _curtainCounters[id] = avail;
+                }
+            }
         }
 
         private void ClearIceHpLabels()
@@ -461,6 +505,40 @@ namespace BalloonFlow
                 }
                 if (POP_DEBUG)
                     Debug.Log($"[Reveal] popped={evt.balloonId} adjacent={adjacentIds.Count} concealed={concealedCount} revealed={revealedCount}");
+
+                // ROLLBACK_SURPRISE_ORPHAN_REVEAL_20260616: 팝 가능한 이웃이 하나도 없는 concealed Surprise 는
+                //   더는 '인접 팝 공개' 트리거가 올 수 없어 비타겟 채로 잔존 → 보드 언클리어. 즉시 공개(안전망).
+                //   poppable 이웃 = 미팝 && Wall 아님(Wall 은 영영 안 팝). 조기 공개는 무해(어차피 공개될 풍선).
+                //   롤백: 이 블록 제거. (주: 상호-concealed 고립 클러스터는 미커버 — 희귀 author 케이스.)
+                if (_surpriseBalloons.Count > 0)
+                {
+                    _surpriseOrphanBuffer.Clear();
+                    foreach (int sid in _surpriseBalloons)
+                    {
+                        var sdata = BalloonController.Instance.GetBalloon(sid);
+                        if (sdata == null) continue;
+                        var nbrs = BalloonController.Instance.GetAdjacentBalloonIdsForBalloonPublic(sid, sdata.position);
+                        bool hasPoppableNeighbor = false;
+                        if (nbrs != null)
+                        {
+                            for (int n = 0; n < nbrs.Count; n++)
+                            {
+                                var ndata = BalloonController.Instance.GetBalloon(nbrs[n]);
+                                if (ndata == null || ndata.isPopped) continue;
+                                if (ndata.gimmickType != BalloonController.GimmickWall) { hasPoppableNeighbor = true; break; }
+                            }
+                        }
+                        if (!hasPoppableNeighbor) _surpriseOrphanBuffer.Add(sid);
+                    }
+                    for (int i = 0; i < _surpriseOrphanBuffer.Count; i++)
+                    {
+                        int sid = _surpriseOrphanBuffer[i];
+                        Debug.LogWarning($"[GimmickProcessor] Surprise {sid} orphan(팝가능 이웃 0) — 언클리어 방지 자동공개.");
+                        RevealSurprise(sid);
+                        _surpriseBalloons.Remove(sid);
+                        BalloonController.Instance.RevealHiddenBalloon(sid);
+                    }
+                }
             }
         }
 

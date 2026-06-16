@@ -123,6 +123,18 @@ namespace BalloonFlow
             if (g.mesh != null) g.mesh.SetVertices(g.verts); // bounds 유지 — 재계산 불필요
         }
 
+        // ROLLBACK_SHADOW_BATCH_BALLOON_THRESHOLD_20260616:
+        //   고부하 레벨(풍선 1000+) 그림자 overdraw 억제용. 개별 Shadow GO 1개를 비활성.
+        //   combined mesh 는 호출측에서 Clear() 로 별도 정리. 롤백: 이 메서드 + 호출부 제거.
+        /// <summary>[고부하 억제] balloonGo 의 "Shadow" 자식을 비활성(이미 꺼졌으면 noop).</summary>
+        public void SuppressShadow(GameObject balloonGo)
+        {
+            if (balloonGo == null) return;
+            Transform shadowTr = FindShadowChild(balloonGo.transform);
+            if (shadowTr != null && shadowTr.gameObject.activeSelf)
+                shadowTr.gameObject.SetActive(false);
+        }
+
         /// <summary>레벨 정리 — combined mesh 비우기 (GO/Mesh 인스턴스는 재사용).</summary>
         public void Clear()
         {

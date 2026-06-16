@@ -460,7 +460,11 @@ namespace BalloonFlow
 
             // [#13/§11] Ice 영역(인접 연결 성분) 그룹핑 + 영역별 공유 HP 확정. ice 등록·위치 인덱스 완료 후.
             if (GimmickProcessor.HasInstance)
+            {
                 GimmickProcessor.Instance.InitIceRegions();
+                // ROLLBACK_CURTAIN_WINNABILITY_CLAMP_20260616: 셋업 완료(전 풍선 등록) 후 커튼 counter 클램프.
+                GimmickProcessor.Instance.ClampCurtainCounters();
+            }
 
             // 레벨별 안전 배율 계산 (벨트 초과 레벨만 축소)
             CalculateLevelSafeMult();
@@ -486,9 +490,30 @@ namespace BalloonFlow
             || gimmickType == GimmickSurprise
             || gimmickType == GimmickHidden;
 
+        // ROLLBACK_SHADOW_BATCH_BALLOON_THRESHOLD_20260616:
+        //   그림자는 메시결합으로 draw call 1개지만, 반투명 쿼터가 풍선마다 겹쳐 깔려 GPU fill(overdraw)은
+        //   풍선 수에 비례. 1000+ 초고밀도 보드(레벨 19=1240 / 118=1760 등)는 빌드(타일러 GPU)에서 이 overdraw 가
+        //   프레임 부하의 주범 → 임계 이상이면 그림자 전체 스킵. 일반 레벨은 기존 배칭 유지.
+        //   주의: 임계 경계 레벨 간 그림자 유/무가 바뀌는 시각 변화 존재(초고밀도라 그림자 가시성 낮아 수용 가능 판단).
+        //   롤백: 아래 상수 + suppress 분기 제거(기존 BeginBuild~EndBuild 만 남김).
+        private const int SHADOW_BATCH_MAX_BALLOONS = 1000;
+
         private void RebuildShadowBatch()
         {
             if (_shadowBatcher == null) _shadowBatcher = new BalloonShadowBatcher();
+
+            // [고부하 그림자 억제] 풍선 수가 임계 이상이면 combined mesh 비우고 개별 Shadow 도 끈다.
+            if (_balloons.Count >= SHADOW_BATCH_MAX_BALLOONS)
+            {
+                _shadowBatcher.Clear(); // 이전 레벨 combined mesh/그룹 GO 정리
+                foreach (var kvp in _balloonObjects)
+                {
+                    if (kvp.Value == null) continue;
+                    _shadowBatcher.SuppressShadow(kvp.Value);
+                }
+                return;
+            }
+
             _shadowBatcher.BeginBuild();
             foreach (var kvp in _balloonObjects)
             {
@@ -999,6 +1024,37 @@ namespace BalloonFlow
                 _reusableAllBalloons[i++] = d;
             }
             return _reusableAllBalloons;
+        }
+
+        /// <summary>재사용 배열 — GetAliveBalloons GC 방지 (GetAllBalloons 와 분리해 동일프레임 동시호출 안전)</summary>
+        private BalloonData[] _reusableAliveBalloons;
+
+        // ROLLBACK_ALIVE_BALLOON_ITERATION_20260616:
+        //   팝된 풍선은 _balloons 에서 제거되지 않아(isPopped=true 로 영구 잔존) _balloons.Count 가
+        //   레벨 내내 초기값(예: 729)에 고정된다. 매 팝마다 invalidate 되는 보드 전수 빌드
+        //   (DirectionalTargeting.BuildEdgeTargetCache / BoardStateManager.GetOutermostBalloonColors)는
+        //   살아있는 풍선이 50개여도 729 전체를 복사·순회하며 700+ 死엔트리를 매번 skip 한다.
+        //   이 메서드는 non-popped 만 앞쪽에 채워 반환(out aliveCount) → 소비처가 aliveCount 까지만 순회.
+        //   isPopped skip 가드는 소비처에 그대로 두어(now no-op) 동작 100% 불변, 순회량만 감소.
+        //   롤백: 이 메서드 제거 + 두 소비처를 GetAllBalloons()/all.Length 로 환원.
+        /// <summary>
+        /// Returns a reused array containing only non-popped balloons in [0, aliveCount).
+        /// Entries beyond aliveCount are stale — callers MUST iterate only up to aliveCount.
+        /// Additive sibling of GetAllBalloons (which still returns the full popped-inclusive set).
+        /// </summary>
+        public BalloonData[] GetAliveBalloons(out int aliveCount)
+        {
+            if (_reusableAliveBalloons == null || _reusableAliveBalloons.Length != _balloons.Count)
+                _reusableAliveBalloons = new BalloonData[_balloons.Count];
+
+            int i = 0;
+            foreach (BalloonData d in _balloons.Values)
+            {
+                if (d == null || d.isPopped) continue;
+                _reusableAliveBalloons[i++] = d;
+            }
+            aliveCount = i;
+            return _reusableAliveBalloons;
         }
 
         /// <summary>
@@ -1612,6 +1668,28 @@ namespace BalloonFlow
                 flexTubePartType      = entry.flexTubePartType
             };
 
+            // ROLLBACK_PINATABOX_EGG_CLAMP_20260616: eggColors 가 footprint 셀 수(sizeW*sizeH) 를 초과하면
+            //   초과 알은 타게팅 셀에 매핑 안 됨(eggIdx=(dz*W+dx)%eggN 의 인덱스 범위가 0..W*H-1) → 영원히 타격 불가
+            //   → 박스가 영영 안 터져 언위너블. 알 배열을 footprint 셀 수로 클램프. 정상(eggN ≤ W*H)은 불변.
+            //   롤백: 아래 if 블록 제거.
+            if (data.gimmickType == GimmickPinataBox && data.eggColors != null)
+            {
+                int maxEggs = Mathf.Max(1, data.sizeW * data.sizeH);
+                if (data.eggColors.Length > maxEggs)
+                {
+                    Debug.LogWarning($"[BalloonController] Pinata_Box eggColors({data.eggColors.Length}) > footprint({data.sizeW}x{data.sizeH}={maxEggs}) — 언위너블 방지 클램프. 레벨 데이터 검토 권장.");
+                    int[] clampedColors = new int[maxEggs];
+                    System.Array.Copy(data.eggColors, clampedColors, maxEggs);
+                    data.eggColors = clampedColors;
+                    if (data.eggHps != null)
+                    {
+                        int[] clampedHps = new int[maxEggs];
+                        System.Array.Copy(data.eggHps, clampedHps, Mathf.Min(maxEggs, data.eggHps.Length));
+                        data.eggHps = clampedHps;
+                    }
+                }
+            }
+
             _balloons[id] = data;
 
             // FlexTube cell — visual 은 BuildFlexTubes 가 spawn. 일반 풍선 풀에서 visual 가져오지 않음.
@@ -2178,8 +2256,12 @@ namespace BalloonFlow
 
         private bool UsesMultiCellOccupancy(BalloonData data)
         {
-            return data != null
-                && IsSizedFieldGimmick(data.gimmickType)
+            if (data == null) return false;
+            // ROLLBACK_BARRICADE_OCCUPANCY_FOOTPRINT_20260616: 다중셀 바리케이드는 sizeW/H 가 1 이어도
+            //   barricadeLength>1 방향 footprint 를 점유해야 인접 쿼리(Ice flood/Surprise reveal)가 body 셀을 본다.
+            //   (기존엔 sizeW/H>1 만 봐서 length 기반 바리케이드가 1셀로만 등록 → 인접 누락.) 롤백: 이 if 제거.
+            if (data.gimmickType == GimmickBarricade && data.barricadeLength > 1) return true;
+            return IsSizedFieldGimmick(data.gimmickType)
                 && (data.sizeW > 1 || data.sizeH > 1);
         }
 
@@ -2201,6 +2283,29 @@ namespace BalloonFlow
             if (data == null) return;
 
             Vector3Int anchor = ToGridKey(data.position);
+
+            // ROLLBACK_BARRICADE_OCCUPANCY_FOOTPRINT_20260616: 바리케이드는 barricadeDir/Length 방향 footprint(두께 2)로 점유.
+            //   DirectionalTargeting 의 타게팅 footprint 와 동일 키 규칙(axisZ: along=Z·perp=X / else: along=X·perp=Z).
+            //   full 길이로 등록(HP 축소분도 보수적으로 점유 유지 — 인접 쿼리엔 over-occupy 가 안전).
+            //   롤백: 이 if 블록 제거(아래 sizeW/H 루프만 남김).
+            if (data.gimmickType == GimmickBarricade && data.barricadeLength > 1)
+            {
+                int totalLen = Mathf.Max(3, data.barricadeLength);
+                int bdir = ((data.barricadeDir % 4) + 4) % 4;   // 0=N(+Z) 1=E(+X) 2=S(-Z) 3=W(-X)
+                bool axisZ = (bdir == 0 || bdir == 2);
+                int sign = (bdir == 0 || bdir == 1) ? 1 : -1;
+                for (int a = 0; a < totalLen; a++)
+                {
+                    for (int p = 0; p < 2; p++)   // 두께 2칸
+                    {
+                        int cx = axisZ ? anchor.x + p : anchor.x + a * sign;
+                        int cz = axisZ ? anchor.z + a * sign : anchor.z + p;
+                        output.Add(new Vector3Int(cx, 0, cz));
+                    }
+                }
+                return;
+            }
+
             int width = Mathf.Max(1, data.sizeW);
             int height = Mathf.Max(1, data.sizeH);
             for (int dx = 0; dx < width; dx++)
