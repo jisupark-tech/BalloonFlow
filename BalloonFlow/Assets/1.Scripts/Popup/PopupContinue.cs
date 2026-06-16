@@ -44,6 +44,10 @@ namespace BalloonFlow
 
         [Header("[코스트 텍스트]")]
         [SerializeField] private Text _costText;
+        // ROLLBACK_CONTINUE_GOLD_COST_TEXT_20260616: ContinueButton 내 이어하기 골드량(TxtContinueGold/Outline)이
+        //   코드로 안 채워져 프리팹 placeholder "{n}" 노출 → 비용 값으로 직접 세팅. 미할당 시 무시(기존 동작 유지).
+        [SerializeField] private TMP_Text _txtContinueGold;
+        [SerializeField] private TMP_Text _txtContinueGoldOutline;
 
         [Header("[골드 표시 — 보수적 보존(미사용). TopBar 잔액은 AnimatedCoinLabel 가 갱신.]")]
         [SerializeField] private TMP_Text _txtGold;
@@ -438,10 +442,14 @@ namespace BalloonFlow
 
         private void UpdateCostDisplay()
         {
-            if (_costText == null || !ContinueHandler.HasInstance) return;
+            if (!ContinueHandler.HasInstance) return;
             int cost = ContinueHandler.Instance.GetContinueCost();
             // [v1.2.40] 'FREE' 문구 제거 — 항상 동적 가격(코인)을 표기. cost<=0이면 빈 문자열.
-            _costText.text = cost > 0 ? cost.ToString("N0") : string.Empty;
+            string costStr = cost > 0 ? cost.ToString("N0") : string.Empty;
+            if (_costText != null) _costText.text = costStr;
+            // ROLLBACK_CONTINUE_GOLD_COST_TEXT_20260616: ContinueButton 골드량 텍스트(+아웃라인)도 비용으로 채움.
+            if (_txtContinueGold != null) _txtContinueGold.text = costStr;
+            if (_txtContinueGoldOutline != null) _txtContinueGoldOutline.text = costStr;
         }
 
         /// <summary>PopupQuit과 동일한 Multiplier reset 시퀀스. 닫힐 때 animator를 MultiplierDefault로 되돌려야 다음 노출 시 깨끗하게 시작됨.</summary>

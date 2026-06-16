@@ -762,6 +762,10 @@ namespace BalloonFlow
         private static readonly Dictionary<Material, Material> _outlinedTwins = new Dictionary<Material, Material>(); // (구 트윈 방식 — 미사용)
         private readonly HashSet<int> _outlinedBalloonIds = new HashSet<int>();
         private static readonly List<Material> _sharedMatBuffer = new List<Material>(4); // GetSharedMaterials 무할당 조회용
+        // ROLLBACK_OUTLINE_MATARRAY_SCRATCH_20260616: sharedMaterials 세터는 배열 '내용'을 복사하므로 공유 static
+        //   scratch 재사용이 안전 → outline enable/disable 전환마다의 new Material[] GC(히치) 제거. 롤백: new Material[]{...} 복원.
+        private static readonly Material[] _outlineMatScratch2 = new Material[2]; // [body, hull]
+        private static readonly Material[] _outlineMatScratch1 = new Material[1]; // [body] (hull 제거 복원)
         private readonly HashSet<int> _prevOutermostSet = new HashSet<int>();
         private readonly List<int> _outerDiffBuffer = new List<int>(64);
         private bool _hasAppliedOutermostOutline;
@@ -928,7 +932,9 @@ namespace BalloonFlow
                 {
                     var rend = bodyRenderers[r];
                     if (rend == null) continue;
-                    rend.sharedMaterials = new Material[] { rend.sharedMaterial, hull }; // material[1] 에 hull 추가
+                    _outlineMatScratch2[0] = rend.sharedMaterial; // [SCRATCH] new Material[2] 대신 공유 배열(세터가 내용 복사)
+                    _outlineMatScratch2[1] = hull;
+                    rend.sharedMaterials = _outlineMatScratch2;   // material[1] 에 hull 추가
                 }
             }
             else
@@ -948,7 +954,10 @@ namespace BalloonFlow
                 if (rend == null) continue;
                 rend.GetSharedMaterials(_sharedMatBuffer);
                 if (_sharedMatBuffer.Count > 1)
-                    rend.sharedMaterials = new Material[] { _sharedMatBuffer[0] };
+                {
+                    _outlineMatScratch1[0] = _sharedMatBuffer[0]; // [SCRATCH] new Material[1] 대신 공유 배열
+                    rend.sharedMaterials = _outlineMatScratch1;
+                }
             }
         }
 

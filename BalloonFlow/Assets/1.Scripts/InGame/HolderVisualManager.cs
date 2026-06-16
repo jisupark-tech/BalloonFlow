@@ -1073,6 +1073,12 @@ namespace BalloonFlow
             obj.SetActive(true);
             obj.transform.localScale = Vector3.one; // 풀 재사용 시 스케일 초기화
 
+            // ROLLBACK_HOLDER_MAGAZINE_DART_TRAIL_OFF_20260616: 홀더 매거진 다트(정지)의 FXDartTrail 은 게임상 미사용
+            //   (DartManager 가 비행 다트 트레일도 SetDartTrailActive(false) 로 항상 비활성). playOnAwake 라 홀더당 ~8개가
+            //   상시 파티클 시뮬+드로우콜(GPU-bound 프레임의 과다 ParticleSystem 주범, 73홀더 레벨 ≈ 584개) → 비활성화.
+            //   시각 변화 0(트레일은 어차피 안 보임), 게임플레이 무관. 롤백: 이 호출 제거.
+            DisableMagazineDartTrails(obj);
+
             if (isSpawner)
             {
                 obj.transform.localScale = Vector3.one * 0.7f;
@@ -1177,6 +1183,20 @@ namespace BalloonFlow
                 isClusterFrozen = false,
                 identifier = ident
             };
+        }
+
+        // ROLLBACK_HOLDER_MAGAZINE_DART_TRAIL_OFF_20260616: 홀더 하위 모든 FXDartTrail(매거진 다트 트레일) 비활성.
+        //   (홀더엔 비행 다트가 없어 매거진 트레일만 존재 — 전부 게임상 미사용.) 풀 재사용마다 idempotent 호출.
+        private static void DisableMagazineDartTrails(GameObject holder)
+        {
+            if (holder == null) return;
+            var trs = holder.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < trs.Length; i++)
+            {
+                var t = trs[i];
+                if (t != null && t.name == "FXDartTrail" && t.gameObject.activeSelf)
+                    t.gameObject.SetActive(false);
+            }
         }
 
         private static void ApplyColorToRenderers(GameObject obj, Color color)

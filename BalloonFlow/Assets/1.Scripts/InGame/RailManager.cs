@@ -479,6 +479,26 @@ namespace BalloonFlow
                 }
             }
 
+            // ROLLBACK_DEPLOY_BLOCK_HOIST_20260616: 활성 deploy 의 blockProgress 를 다트 루프 전에 1회 채움.
+            //   (GetDeployBlockProgress 는 순수함수라 다트마다 동일 → 루프 내 재열거/재계산 제거. 동작 불변.)
+            _deployBlockHolders.Clear();
+            _deployBlockProgress.Clear();
+            if (_activeDeployPoints.Count > 0)
+            {
+                var depPre = _deployPoints.GetEnumerator();
+                try
+                {
+                    while (depPre.MoveNext())
+                    {
+                        int hId = depPre.Current.Key;
+                        if (!_activeDeployPoints.Contains(hId)) continue;
+                        _deployBlockHolders.Add(hId);
+                        _deployBlockProgress.Add(GetDeployBlockProgress(depPre.Current.Value));
+                    }
+                }
+                finally { depPre.Dispose(); }
+            }
+
             for (int offset = 0; offset < dartCount; offset++)
             {
                 int p = headPosInSorted + offset;
@@ -514,27 +534,17 @@ namespace BalloonFlow
                 // same-color skip 없음 (사용자 명시: same-color 도 packing 정지, spacing physGap).
                 // 결과: cluster head 가 다른 holder 의 deploy block 직전 packing 정지 (stopDist=0).
                 // belt 회전 시 dart.progress 진행 (frozen 아님) → fire 검사 시 매칭 풍선 위치 도달 가능.
-                if (_activeDeployPoints.Count > 0)
+                // [DEPLOY_BLOCK_HOIST] 위에서 precompute 한 버퍼만 순회 (값/로직 동일, 재열거·재계산 제거).
+                for (int dpi = 0; dpi < _deployBlockHolders.Count; dpi++)
                 {
-                    var depEn = _deployPoints.GetEnumerator();
-                    try
+                    if (_deployBlockHolders[dpi] == dart.holderId) continue; // self skip
+                    float distToBlock = _deployBlockProgress[dpi] - dart.progress;
+                    if (hasWrap && distToBlock < 0f) distToBlock += pathLen;
+                    if (distToBlock > 0.001f && distToBlock < closest)
                     {
-                        while (depEn.MoveNext())
-                        {
-                            int deployHolderId = depEn.Current.Key;
-                            if (deployHolderId == dart.holderId) continue; // self skip
-                            if (!_activeDeployPoints.Contains(deployHolderId)) continue;
-                            float blockProgress = GetDeployBlockProgress(depEn.Current.Value);
-                            float distToBlock = blockProgress - dart.progress;
-                            if (hasWrap && distToBlock < 0f) distToBlock += pathLen;
-                            if (distToBlock > 0.001f && distToBlock < closest)
-                            {
-                                closest = distToBlock;
-                                closestRequiredGap = physGap;
-                            }
-                        }
+                        closest = distToBlock;
+                        closestRequiredGap = physGap;
                     }
-                    finally { depEn.Dispose(); }
                 }
 
                 float maxAdvance = beltDelta;
@@ -560,6 +570,10 @@ namespace BalloonFlow
 
         // Sort helpers for front-to-back dart iteration (packing physics 시 선두부터 처리)
         private readonly List<int> _sortedDartIndices = new List<int>(256);
+        // ROLLBACK_DEPLOY_BLOCK_HOIST_20260616: deploy block progress 는 다트 독립적(GetDeployBlockProgress 순수함수)
+        //   → 프레임당 1회 precompute 해 다트 루프의 O(darts×deploys) 재열거+재계산을 O(deploys)+O(darts×deploys 비교)로.
+        private readonly List<int> _deployBlockHolders = new List<int>(8);
+        private readonly List<float> _deployBlockProgress = new List<float>(8);
         private System.Comparison<int> _dartProgressDescending;
 
         private void AdvanceAllDarts(float distance, float pathLen)

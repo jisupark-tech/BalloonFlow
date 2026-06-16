@@ -1983,11 +1983,17 @@ namespace BalloonFlow
                 // ROLLBACK_DART_STUCK_LINE_KEYED_RELIEF:
                 // A holder head moves while the timer is running. If it reaches another direction
                 // or line, restart the timer instead of treating the new line as the same stuck lock.
+                // ROLLBACK_DART_STUCK_LINE_JITTER_TOLERANCE_20260616:
+                //   정지한 head 의 GetScanLine 이 .5 lattice 경계에서 N↔N±1 로 지터하면(부동소수/belt 미세 nudge)
+                //   기존 'stuckLine == line' 정확비교가 매 프레임 타이머를 리셋 → 0.4s 도달 불가 → pass-lock 영구
+                //   잔존(그 라인 영영 재스캔 X = 국소 데드락). 인접 ±1 을 같은 정지로 허용해 지터만 흡수한다.
+                //   (연속 advance >1 라인은 여전히 리셋되어 정상 이동과 구분 — 타게팅/발사 로직 불변, 놓침/연속공격 무영향.)
+                //   롤백: `Mathf.Abs(stuckLine - line) <= 1` 를 `stuckLine == line` 로 환원.
                 bool sameStuckLine =
                     _holderLineStuckDirection.TryGetValue(holderId, out var stuckDir)
                     && stuckDir == scanDir
                     && _holderLineStuckLine.TryGetValue(holderId, out int stuckLine)
-                    && stuckLine == line;
+                    && Mathf.Abs(stuckLine - line) <= 1;
                 if (!sameStuckLine)
                 {
                     SetHolderLineStuckState(holderId, scanDir, line, Time.unscaledTime);

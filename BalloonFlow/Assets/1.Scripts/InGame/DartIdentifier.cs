@@ -33,6 +33,11 @@ namespace BalloonFlow
         /// <summary>기반 Material 복제 캐시 (색상별)</summary>
         private static readonly Dictionary<int, Material> _dartMatCache = new Dictionary<int, Material>();
 
+        // ROLLBACK_DART_MATARRAY_SCRATCH_20260616: sharedMaterials 세터는 배열 '내용'을 복사하므로
+        //   공유 static scratch 재사용이 안전 → 다트 spawn/풀재사용마다의 new Material[2] GC(히치) 제거.
+        //   롤백: 사용처를 new Material[] { mat, hull } 로 복원 + 이 필드 제거.
+        private static readonly Material[] _bodyMatScratch = new Material[2];
+
         private static Material _needleOutlineMat;
         // ROLLBACK_DART_OUTLINE_HULL_20260615: 아웃라인을 OutlineHull material[1] 방식으로 전환하며
         //   _propOutlineEnabled/_propOutlineColor/_mpb(구 MPB 토글용) 제거. 롤백 시 함께 복원.
@@ -137,7 +142,11 @@ namespace BalloonFlow
             {
                 if (_colorRenderers[i] == null) continue;
                 if (hull != null)
-                    _colorRenderers[i].sharedMaterials = new Material[] { mat, hull };
+                {
+                    _bodyMatScratch[0] = mat;       // [SCRATCH] new Material[2] 대신 공유 배열 재사용(세터가 내용 복사)
+                    _bodyMatScratch[1] = hull;
+                    _colorRenderers[i].sharedMaterials = _bodyMatScratch;
+                }
                 else
                     _colorRenderers[i].sharedMaterial = mat;
             }
