@@ -535,6 +535,11 @@ namespace BalloonFlow
             _fireCandidates.Clear();
             _lastDeployPlacedFrameByHolder.Clear();
             _lastFiredHolderId = -1;
+            // ROLLBACK_DART_STALL_WATCHDOG_PROGRESS_DECOUPLE_20260617:
+            // 보드 리셋 시 진행 신호도 '지금' 으로 초기화 — 시작 직후 첫 pop 전에 워치독이 오발동하지 않도록.
+            _lastPopUnscaledTime = Time.unscaledTime;
+            _stallWatchLastPopSeen = _lastPopUnscaledTime;
+            _stallWatchTimer = 0f;
 
             _tempRemoveKeys.Clear();
             foreach (var kvp in _frozenVisuals)
@@ -1796,6 +1801,12 @@ namespace BalloonFlow
         // 연속공격 안전: 비행체 0 + 발사 0 이 STALL_WATCHDOG_SECONDS 지속된 뒤에만 발동하므로
         // '직전 발사 직후 같은 라인 재발사' 위험 창과 겹치지 않는다 (발사/비행 발생 즉시 타이머 리셋).
         private float _stallWatchTimer;
+        // ROLLBACK_DART_STALL_WATCHDOG_PROGRESS_DECOUPLE_20260617:
+        // 워치독 타이머를 '발사/비행체 유무'가 아니라 '실제 보드 진행(풍선 pop)' 기준으로 리셋하기
+        // 위한 신호. _lastPopUnscaledTime = 마지막 pop 시각(HandleBalloonPopped 에서 갱신),
+        // _stallWatchLastPopSeen = 워치독이 직전 tick 에 관측한 pop 시각. 두 값이 다르면 'pop 발생 = 진행'.
+        private float _lastPopUnscaledTime;
+        private float _stallWatchLastPopSeen = -1f;
         private const float STALL_WATCHDOG_SECONDS = 1.5f;
         // ROLLBACK_DART_STALL_WATCHDOG_WIDEN_20260615: 매치가 없을 때(또는 sweep scope 불일치)
         // 발동하는 더 긴 타임아웃. belt 회전 지연/짧은 inter-fire 갭이 오발동하지 않도록 1.5s 보다 길게.
@@ -1803,15 +1814,35 @@ namespace BalloonFlow
 
         private void UpdateStallWatchdog(RailManager rail, int committedFiresThisScan)
         {
-            // 실제 활동(발사/비행체/일시정지/점유0)이 있으면 절대 발동 안 함 — 타이머 리셋.
-            if (committedFiresThisScan > 0 || _activeProjectiles.Count > 0 || PauseManager.IsPaused
-                || rail == null || rail.EffectiveOccupiedCount == 0)
+            if (PauseManager.IsPaused || rail == null || rail.EffectiveOccupiedCount == 0)
+            {
+                _stallWatchTimer = 0f;
+                _stallWatchLastPopSeen = _lastPopUnscaledTime;
+                return;
+            }
+
+            // ROLLBACK_DART_STALL_WATCHDOG_PROGRESS_DECOUPLE_20260617: START
+            // 기존: 'committedFiresThisScan>0 || _activeProjectiles.Count>0' 이면 타이머 리셋.
+            // 다중배포/다중클러스터에서 '다른' 클러스터가 발사·비행 중이면, 국소 정지(한 head 가
+            // 패킹블록/라인락에 막힘)가 그 활동에 영구히 가려져 워치독이 영영 안 떠 데드락이 잔존했다.
+            // → 리셋 기준을 '실제 보드 진행(풍선 pop)' 으로 변경. pop 이 있으면 진행 중 → 리셋,
+            //   없으면 다른 클러스터의 발사/비행과 무관하게 누적. 단, 최후의 lock clear 는 아래에서
+            //   여전히 '_activeProjectiles==0' 일 때만 수행 → 전체 ClearConsumedLineLocks 안전성(연속공격
+            //   방지: in-flight 라인 재개방 없음)은 기존과 동일하게 보존. 비행체가 남아 있으면 타이머를
+            //   유지한 채 대기하다 비행체가 빠지는 순간(웨이브 사이) 즉시 발동한다.
+            // 롤백: 아래 START~END 를 다음으로 환원:
+            //   if (committedFiresThisScan > 0 || _activeProjectiles.Count > 0 || PauseManager.IsPaused
+            //       || rail == null || rail.EffectiveOccupiedCount == 0) { _stallWatchTimer = 0f; return; }
+            //   _stallWatchTimer += Time.deltaTime;
+            bool progressedSinceLastTick = _lastPopUnscaledTime > _stallWatchLastPopSeen;
+            _stallWatchLastPopSeen = _lastPopUnscaledTime;
+            if (progressedSinceLastTick)
             {
                 _stallWatchTimer = 0f;
                 return;
             }
-
             _stallWatchTimer += Time.deltaTime;
+            // ROLLBACK_DART_STALL_WATCHDOG_PROGRESS_DECOUPLE_20260617: END
 
             // ROLLBACK_DART_STALL_WATCHDOG_WIDEN_20260615: START
             // 기존엔 HasOutermostMatchCached==true 일 때만 1.5s 후 발동했다. 그러나 그 sweep 은
@@ -1828,12 +1859,20 @@ namespace BalloonFlow
             bool matchPresent = BoardStateManager.HasInstance && BoardStateManager.Instance.HasOutermostMatchCached;
             float threshold = matchPresent ? STALL_WATCHDOG_SECONDS : STALL_WATCHDOG_SECONDS_NO_MATCH;
             if (_stallWatchTimer < threshold) return;
+
+            // ROLLBACK_DART_STALL_WATCHDOG_PROGRESS_DECOUPLE_20260617:
+            // 타이머는 진행(pop) 기준으로 누적하지만, 전체 ClearConsumedLineLocks 는 in-flight 라인까지
+            // 비우므로 '비행체 0' 일 때만 수행해야 연속공격(비행 중 라인 재개방)이 없다. 비행체가 남아
+            // 있으면 타이머를 유지(리셋 X)한 채 대기 → 비행체가 빠지는 즉시 같은 frame 경로로 발동.
+            // (불변식: _activeProjectiles==0 ⇒ _unresolvedConsumedTargetLines==0, 1158-1160 동일 패턴)
+            if (_activeProjectiles.Count > 0)
+                return;
             _stallWatchTimer = 0f;
 
             InvalidateDartScanLines();
             ClearConsumedLineLocks();   // 비행체 0 보장 하에서만 도달 → 라인 재개방 안전
             LogAttackIssue("DartStallWatchdog",
-                $"no fire/projectile for {threshold:F1}s (match={matchPresent}) — scan-line + consumed-lock clear");
+                $"no board-progress(pop) for {threshold:F1}s (match={matchPresent}) — scan-line + consumed-lock clear");
             // ROLLBACK_DART_STALL_WATCHDOG_WIDEN_20260615: END
         }
 
@@ -1854,8 +1893,18 @@ namespace BalloonFlow
 
         private void RelieveDeadHeadStall(RailManager rail, int committedFiresThisScan)
         {
-            // 정상 발사가 있는 tick = 보드 진행 중 → head-only 규칙 그대로 유지.
-            if (committedFiresThisScan > 0) return;
+            // ROLLBACK_DART_DEADHEAD_PERHOLDER_UNGATE_20260617: START
+            // 기존: 'if (committedFiresThisScan > 0) return;' — 이 tick 에 '다른' 클러스터가 1발이라도
+            // 쏘면 dead-head 릴리프 전체를 스킵. 다중클러스터에서 '색이 외곽에 없는' head 가 영구히
+            // 릴리프를 못 받아 그 색 풍선이 간헐 놓침이 됐다. → 전역 게이트를 제거하고 per-holder 로 강등:
+            // 아래 루프에서 '이 tick 에 실제 발사한 holder' 만 스킵(+dead 타이머 리셋)한다. 기존 per-holder
+            // 안전장치(DEAD_HEAD_OBSERVE 0.4s 연속 dead + RELIEF_FIRE_INTERVAL 0.4s + IsTargetLineConsumed/
+            // IsHolderLineConsumed + target reservation + tick 당 전역 1발)가 그대로라, 진행 중인 클러스터의
+            // 스택을 즉시 벗기는 연속공격은 발생할 수 없다. (RelieveStuckHolderLineLocks 의 per-holder
+            // _firedHoldersThisTick 스킵과 동일한 패턴.)
+            // 롤백: 이 블록을 'if (committedFiresThisScan > 0) return;' 한 줄로 환원하고, 루프 상단의
+            //       ROLLBACK_DART_DEADHEAD_PERHOLDER_SKIP 블록도 제거.
+            // ROLLBACK_DART_DEADHEAD_PERHOLDER_UNGATE_20260617: END
             if (!BoardStateManager.HasInstance) return;
 
             // 스냅샷 복사 — BoardStateManager 의 재사용 set 은 pop 이벤트 처리 중 내용이 바뀔 수 있음.
@@ -1874,6 +1923,15 @@ namespace BalloonFlow
                 var head = _scanHeadDarts[i];
                 if (head == null || head.dartColor < 0) continue;
                 int holderId = head.holderId;
+
+                // ROLLBACK_DART_DEADHEAD_PERHOLDER_SKIP_20260617:
+                // 이 tick 에 실제 발사한 holder = 진행 중 → 릴리프 대상 아님 (제거된 전역 게이트의
+                // per-holder 대체). dead 타이머도 리셋해 정상 발사가 재개되면 자연 소멸.
+                if (_firedHoldersThisTick.Contains(holderId))
+                {
+                    _deadHeadSince.Remove(holderId);
+                    continue;
+                }
 
                 if (_deadHeadReachableColors.Contains(head.dartColor))
                 {
@@ -3593,6 +3651,9 @@ namespace BalloonFlow
         /// </summary>
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
+            // ROLLBACK_DART_STALL_WATCHDOG_PROGRESS_DECOUPLE_20260617:
+            // 보드 진행(풍선 pop) 시각 기록 — 워치독이 '발사/비행' 대신 '실제 진행' 으로 정지를 판정.
+            _lastPopUnscaledTime = Time.unscaledTime;
             _reservedTargets.Remove(evt.balloonId);
             // ROLLBACK_DART_POP_LINE_RESCAN:
             // BalloonController.ExecutePop already invalidates DirectionalTargeting's contour cache.

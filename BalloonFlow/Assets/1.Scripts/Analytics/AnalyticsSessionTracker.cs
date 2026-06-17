@@ -247,12 +247,20 @@ namespace BalloonFlow.Analytics
 
         protected override void OnSingletonAwake()
         {
-            EventBus.Subscribe<OnBoosterUsed>(HandleBoosterUsed);
+            // ROLLBACK_ANALYTICS_ITEMUSE_ON_EFFECT_APPLIED_20260617: START
+            //   기존엔 OnBoosterUsed(=UseBooster 선차감/arming 시점) 에 item_use 를 쐈다. 그런데 Hand/Zap 같은
+            //   타겟 지정형은 arming 후 타겟을 안 고르고 취소하면 환불되는데도 item_use 가 이미 나가, '클릭만 해도
+            //   프로토콜 발사' 가 됐다. → 실제 효과가 게임 상태에 적용된 OnBoosterEffectApplied(Shuffle/ColorRemove/
+            //   SelectTool 성공) 로 전환해 '진짜 사용' 에만 1회 emit. 취소/실패/중복거부는 미발행.
+            //   롤백: 아래 2줄 + HandleBoosterEffectApplied 시그니처를 OnBoosterUsed/HandleBoosterUsed 로 환원하고
+            //         BoosterExecutor 의 ROLLBACK_BOOSTER_SELECTTOOL_EFFECT_APPLIED_20260617 도 함께 환원.
+            EventBus.Subscribe<OnBoosterEffectApplied>(HandleBoosterEffectApplied);
+            // ROLLBACK_ANALYTICS_ITEMUSE_ON_EFFECT_APPLIED_20260617: END
         }
 
         protected override void OnDestroy()
         {
-            EventBus.Unsubscribe<OnBoosterUsed>(HandleBoosterUsed);
+            EventBus.Unsubscribe<OnBoosterEffectApplied>(HandleBoosterEffectApplied);
             base.OnDestroy();
         }
 
@@ -284,7 +292,9 @@ namespace BalloonFlow.Analytics
             AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_ECONOMY, p);
         }
 
-        private static void HandleBoosterUsed(OnBoosterUsed evt)
+        // ROLLBACK_ANALYTICS_ITEMUSE_ON_EFFECT_APPLIED_20260617:
+        //   OnBoosterUsed(arming) → OnBoosterEffectApplied(실제 사용 확정) 구독으로 변경. boosterType 필드 동일.
+        private static void HandleBoosterEffectApplied(OnBoosterEffectApplied evt)
         {
             if (string.IsNullOrEmpty(evt.boosterType)) return;
 

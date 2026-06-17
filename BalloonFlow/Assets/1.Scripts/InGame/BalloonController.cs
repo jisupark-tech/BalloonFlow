@@ -501,11 +501,16 @@ namespace BalloonFlow
 
         // ROLLBACK_SHADOW_BATCH_BALLOON_THRESHOLD_20260616:
         //   그림자는 메시결합으로 draw call 1개지만, 반투명 쿼터가 풍선마다 겹쳐 깔려 GPU fill(overdraw)은
-        //   풍선 수에 비례. 1000+ 초고밀도 보드(레벨 19=1240 / 118=1760 등)는 빌드(타일러 GPU)에서 이 overdraw 가
-        //   프레임 부하의 주범 → 임계 이상이면 그림자 전체 스킵. 일반 레벨은 기존 배칭 유지.
-        //   주의: 임계 경계 레벨 간 그림자 유/무가 바뀌는 시각 변화 존재(초고밀도라 그림자 가시성 낮아 수용 가능 판단).
+        //   풍선 수에 비례. 빌드(타일러 GPU)에서 이 overdraw 가 프레임 부하의 주범 → 임계 이상이면 그림자 전체 스킵.
+        //   주의: 임계 경계 레벨 간 그림자 유/무가 바뀌는 시각 변화 존재.
         //   롤백: 아래 상수 + suppress 분기 제거(기존 BeginBuild~EndBuild 만 남김).
-        private const int SHADOW_BATCH_MAX_BALLOONS = 1000;
+        // ROLLBACK_SHADOW_THRESHOLD_LOWEND_20260617: 저사양(최저 사양) 디바이스 대응으로 1000 → 600 하향.
+        //   근거: ① vSync=0 라 WaitForPresent 는 진짜 GPU 대기(GPU-bound 확정) ② 저사양 타일러 GPU 는 fill-rate
+        //   한계가 낮아 600 대에서도 그림자 overdraw 로 프레임드랍 ③ 밀집할수록 그림자는 풍선에 가려 거의 안 보임
+        //   → '시각 손실 최소 · 저사양 perf 최대'. 디바이스 감지가 없어(씬별 RPAsset 만 존재) 전역 보수값 사용.
+        //   [튜닝] 실기기 테스트로 조정 — 저사양서 더 드랍하면 낮추고(예: 450), 시각 우선이면 올린다(예: 800).
+        //   롤백: 600 → 1000 환원.
+        private const int SHADOW_BATCH_MAX_BALLOONS = 600;
 
         private void RebuildShadowBatch()
         {

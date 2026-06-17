@@ -673,6 +673,16 @@ namespace BalloonFlow
             if (result)
             {
                 Debug.Log($"[BoosterExecutor] Select Tool: deployed holder {holderId}.");
+                // ROLLBACK_BOOSTER_SELECTTOOL_EFFECT_APPLIED_20260617:
+                //   SelectTool(Hand) 도 deploy '성공' 시 OnBoosterEffectApplied 발행 — 기존 Shuffle/ColorRemove 와
+                //   동일 패턴으로 '실제 사용 확정' 신호를 통일. analytics item_use 가 arming(OnBoosterUsed) 이 아니라
+                //   진짜 사용에만 찍히게 하기 위함. 실패(else)는 환불 경로라 미발행.
+                //   롤백: 아래 Publish 한 줄 제거.
+                EventBus.Publish(new OnBoosterEffectApplied
+                {
+                    boosterType = BoosterManager.SELECT_TOOL,
+                    affectedCount = 1
+                });
             }
             else
             {
