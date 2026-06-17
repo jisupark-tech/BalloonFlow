@@ -524,6 +524,8 @@ namespace BalloonFlow
                 {
                     if (kvp.Value == null) continue;
                     _shadowBatcher.SuppressShadow(kvp.Value);
+                    // ROLLBACK_BALLOON_HIGHLIGHT_SUPPRESS_LOWEND_20260617: 그림자와 동일 임계에서 광택도 끔.
+                    SetBalloonHighlightActive(kvp.Value, false);
                 }
                 return;
             }
@@ -535,8 +537,20 @@ namespace BalloonFlow
                 bool batchable = _balloons.TryGetValue(kvp.Key, out BalloonData d)
                                  && !d.isPopped && IsShadowBatchable(d.gimmickType);
                 _shadowBatcher.AddOrRestore(kvp.Key, kvp.Value, batchable);
+                // ROLLBACK_BALLOON_HIGHLIGHT_SUPPRESS_LOWEND_20260617: 임계 미만 — 광택 복원(그림자 restore 와 동일 경로).
+                SetBalloonHighlightActive(kvp.Value, true);
             }
             _shadowBatcher.EndBuild();
+        }
+
+        // ROLLBACK_BALLOON_HIGHLIGHT_SUPPRESS_LOWEND_20260617:
+        //   풍선 GO 의 BalloonIdentifier 광택 렌더러 on/off. RebuildShadowBatch(비 per-frame, 풍선 set 변경 시) 에서만 호출.
+        //   롤백: 이 메서드 + 위 두 호출 제거.
+        private void SetBalloonHighlightActive(GameObject balloonGo, bool active)
+        {
+            if (balloonGo == null) return;
+            var id = balloonGo.GetComponent<BalloonIdentifier>();
+            if (id != null) id.SetHighlightActive(active);
         }
 
         /// <summary>
@@ -785,7 +799,15 @@ namespace BalloonFlow
         // ROLLBACK_DART_OUTLINE_BAKE_20260615: PHASE2(레일 다트 아웃라인) ON.
         //   메커니즘을 MPB → 공유 머티리얼 베이크로 교체(DartIdentifier 참조)했으므로 배칭 유지된 채 활성.
         //   롤백: 이 줄을 다시 `= false;` 로 두면 다트 아웃라인 비활성(배칭 영향 없음).
-        public static bool EnableDartOutline_Phase2 = true;
+        // ROLLBACK_DART_OUTLINE_OFF_PERFTEST_20260617: true → false (프레임드랍 원인 A/B 테스트).
+        //   증상: 풍선 많을 땐 정상, '레일에 다트 깔면' 일정수치 드랍. 분석: 다트 아웃라인은 contour 만 하는
+        //   풍선과 달리 ApplyColor 가 '모든 다트'에 hull material[1] 부착 → body 렌더러가 2머티리얼=메시 2회
+        //   렌더(색+법선확장 hull). 드로우콜은 배칭돼 0 증가지만 GPU 정점+outline fill 은 다트수(≤160)에 비례 →
+        //   GPU-bound 저사양서 '다트 깔수록 드랍'. 끄면 다트 렌더가 사실상 절반.
+        //   → false 로 빌드/측정해 드랍이 사라지면 '다트 아웃라인이 원인' 확정. 확정 후: 유지(off) 또는
+        //     '일부 다트만 아웃라인'(풍선 contour 처럼) 으로 비용 낮춰 부활 결정.
+        //   롤백: false → true (아웃라인 복원).
+        public static bool EnableDartOutline_Phase2 = false;
         // ROLLBACK_OUTLINE_PHASE3_ON_20260609: 풍선 contour(최외각) 아웃라인 ON (Option A 머티리얼 swap).
         //   contour 풍선만 ItemSharedOutline 머티리얼로 swap(MPB 아님) → 그 소수(~수십)만 multi-pass 개별 draw.
         //   내부 1500 은 ItemShared(single-pass) 유지 → SRP Batch. (과거 프레임드랍 = 공유 셰이더 multi-pass 였음 — 해결.)

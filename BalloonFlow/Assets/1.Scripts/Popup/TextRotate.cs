@@ -27,10 +27,40 @@ public class CurvedTextTMP : MonoBehaviour
         textMeshPro = GetComponent<TMP_Text>();
     }
 
+    // ROLLBACK_CURVEDTEXT_DIRTY_GUARD_20260617: START
+    // 기존 LateUpdate 는 매 프레임 ForceMeshUpdate + 전체 버텍스 재커브를 수행했다. 텍스트/폭/커브가
+    // 안 바뀌면 매번 '같은 결과'를 다시 만드는 낭비이고, 더 큰 문제는 이게 매 프레임 그 캔버스를 dirty 시켜
+    // UICamera(Overlay) 패스가 'UI 정지 상태'에서도 매 프레임 재렌더되게 만든다(프로파일 UICamera 2ms 상시).
+    // → 입력(텍스트/기준폭/TMP 재빌드 플래그)이 바뀐 프레임에만 재적용. 정적 타이틀/배너는 1회 bake 후 스킵.
+    //   OnEnable 에서 강제 1회 재적용(팝업 재활성·외부 ForceMeshUpdate 로 mesh 가 평평해진 경우 복구).
+    // 롤백: _applied/_appliedText/_appliedWidth 필드 + OnEnable + LateUpdate 상단 가드 제거(기존 무조건 실행).
+    private bool _applied;
+    private string _appliedText;
+    private float _appliedWidth = -1f;
+
+    private void OnEnable()
+    {
+        _applied = false; // 재활성 시 mesh 가 재생성됐을 수 있으므로 다음 LateUpdate 에서 강제 재적용.
+    }
+
     private void LateUpdate()
     {
         if (textMeshPro == null)
             return;
+
+        RectTransform guardRect = referenceRect != null ? referenceRect : textMeshPro.rectTransform;
+        float guardWidth = guardRect.rect.width;
+        if (_applied
+            && !textMeshPro.havePropertiesChanged
+            && _appliedText == textMeshPro.text
+            && Mathf.Approximately(_appliedWidth, guardWidth))
+        {
+            return; // 변경 없음 — 매 프레임 재커브/캔버스 dirty 스킵.
+        }
+        _applied = true;
+        _appliedText = textMeshPro.text;
+        _appliedWidth = guardWidth;
+        // ROLLBACK_CURVEDTEXT_DIRTY_GUARD_20260617: END
 
         textMeshPro.ForceMeshUpdate();
 

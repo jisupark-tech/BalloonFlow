@@ -104,8 +104,17 @@ Shader "Custom/ItemShared"
             SAMPLER(sampler_BumpMap);
             #endif
 
+            // ROLLBACK_ITEMSHARED_INSTANCING_20260617: START
+            //   _BaseColor/_OutlineEnabled/_OutlineColor 를 UnityPerMaterial CBUFFER → UNITY_INSTANCING_BUFFER 로 이동.
+            //   목적: ItemShared 를 'SRP Batcher 비호환'으로 만들어 GPU Instancing 활성화. (SRP Batcher 가 호환 셰이더에서
+            //   instancing 을 가로채, 풍선 1,377개가 색상별 공유 머티리얼인데도 각각 draw = 1.46k batches → draw-call
+            //   바운드였음. render scale 0.4 로도 GPU 안 떨어짐 = pixel 아닌 draw 바운드 확정.)
+            //   효과: 색상별 공유 머티리얼(enableInstancing=true)이 instancing 으로 묶여 풍선/다트 draw 급감(색상수만큼).
+            //   _OutlineEnabled/_OutlineColor 도 함께 instance 화 — SetOutline 이 MPB 로 설정하는데 MPB 의 비-instanced
+            //   프로퍼티는 instancing 을 깨므로, 같이 옮겨야 MPB 적용 풍선도 instance 됨(Outline 패스는 dead 라 frag 미사용).
+            //   롤백: 아래 INSTANCING_BUFFER 3개를 CBUFFER 안 원위치로 되돌리고, frag 의 UNITY_ACCESS_INSTANCED_PROP 를
+            //         `_BaseColor` 로 환원.
             CBUFFER_START(UnityPerMaterial)
-                half4 _BaseColor;
                 float4 _BaseMap_ST;
                 half _Metallic;
                 half _Smoothness;
@@ -113,11 +122,16 @@ Shader "Custom/ItemShared"
                 half4 _EmissionColor;
                 half _BlurAmount;
                 half4 _BlurColor;
-                half _OutlineEnabled;
-                half4 _OutlineColor;
                 half _OutlineWidth;
                 half _ShadowTintStrength;
             CBUFFER_END
+
+            UNITY_INSTANCING_BUFFER_START(Props)
+                UNITY_DEFINE_INSTANCED_PROP(half4, _BaseColor)
+                UNITY_DEFINE_INSTANCED_PROP(half, _OutlineEnabled)
+                UNITY_DEFINE_INSTANCED_PROP(half4, _OutlineColor)
+            UNITY_INSTANCING_BUFFER_END(Props)
+            // ROLLBACK_ITEMSHARED_INSTANCING_20260617: END
 
             Varyings vert(Attributes IN)
             {
@@ -141,7 +155,8 @@ Shader "Custom/ItemShared"
             {
                 UNITY_SETUP_INSTANCE_ID(IN);
                 half4 texColor = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.uv);
-                half4 baseColor = texColor * _BaseColor;
+                // ROLLBACK_ITEMSHARED_INSTANCING_20260617: _BaseColor 를 instancing buffer 에서 읽음(비-instanced 시 머티리얼 값).
+                half4 baseColor = texColor * UNITY_ACCESS_INSTANCED_PROP(Props, _BaseColor);
 
                 // [Optimization 2026-05-11] half 정밀도 — mobile FP16 더 빠름. 원본: float3 normalWS.
                 half3 normalWS = normalize(IN.normalWS);

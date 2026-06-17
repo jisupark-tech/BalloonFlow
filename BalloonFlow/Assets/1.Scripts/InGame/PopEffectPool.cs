@@ -20,7 +20,13 @@ namespace BalloonFlow
         private const float EFFECT_Y = 1f;
 
         /// <summary>CircleParticle active cap. 도달 시 LRU 정책으로 가장 오래된 active effect 를 강제 종료하여 신규 spawn 슬롯 확보 (silently drop 하지 않음).</summary>
-        private const int MAX_ACTIVE_EFFECTS = 60;
+        // ROLLBACK_POPFX_CAP_LOWEND_20260617: 60 → 40 (저사양 fill 절감).
+        //   pop FX(CircleParticle)는 additive 멀티 파티클이라 동시 다발 시 화면 중앙 overdraw 가 큼
+        //   (render scale 0.5 에서도 GPU fill-bound). 대형 콤보/Zap 전색 제거 때 화면 중앙에 수십 개가
+        //   겹쳐 깔리던 것을 40 으로 캡 → 최악 overdraw 완화. LRU 로 가장 오래된 것부터 종료라 갑작스런
+        //   누락 없이 자연 감소. 일반 플레이(동시 <40)엔 영향 0. [튜닝] 더 줄이려면 30, 연출 우선이면 60.
+        //   롤백: 40 → 60 환원.
+        private const int MAX_ACTIVE_EFFECTS = 40;
 
         /// <summary>[Optimization 2026-05-10] 풀 GameObject → ParticleSystem[] 캐시.
         /// 매 pop 마다 GetComponentsInChildren 으로 배열 alloc 하던 부분 제거 (콤보 시 GC 압력 큰 폭 감소).

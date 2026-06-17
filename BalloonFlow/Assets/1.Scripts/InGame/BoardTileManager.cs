@@ -573,6 +573,9 @@ namespace BalloonFlow
 
                 var sr = go.AddComponent<SpriteRenderer>();
                 sr.sortingOrder = 0; // 기본 타일(-1)보다 위
+                // ROLLBACK_BOARDTILE_OPAQUE_20260617: danger 오버레이도 불투명 타일 머티리얼(기존엔 미할당 →
+                //   기본 2D/Sprite-Unlit-Default 반투명이라 fill 1위 그룹의 핵심이었음).
+                sr.sharedMaterial = GetTileMat();
 
                 if (dangerSprite != null)
                 {
@@ -656,6 +659,28 @@ namespace BalloonFlow
         // [Optimization 2026-05-12] SRP Batcher 호환 sprite mat — SpriteSRPBatcherUtil 로 통합.
         // Balloon Shadow / Arrow / CSTile 등 SpriteRenderer 공유.
         private static Material GetSpriteSRPBatcherMat() => SpriteSRPBatcherUtil.GetSharedMat();
+
+        // ROLLBACK_BOARDTILE_OPAQUE_20260617: START
+        //   Scene Fill Audit 결과 보드 타일(CSTile/DangerTile, 2D/Sprite-Unlit-Default 반투명)이 fillAreaSum 549.6 =
+        //   전체 GPU fill 의 7할(2위의 7배) = overdraw 1위였다. 솔리드 타일이 불필요하게 Transparent blend 라
+        //   화면을 여러 겹 덧칠 + 뒤 배경까지 셰이딩. → 불투명 AlphaTest 머티리얼(Custom/SpriteOpaqueCutout,
+        //   ZWrite On, Blend 없음, clip)로 교체해 blend 제거 + early-Z 로 배경/하위타일 fill 제거.
+        //   타일은 서로 안 겹치게 깔리므로(타일링) ZWrite On Z-fight 없음. DangerTile(+0.005 위)은 base 위에 불투명.
+        //   ⚠ 빌드 검증: 바닥/컨베이어/danger 타일 외형(특히 반투명 의도였던 가장자리/틴트)과 깜빡임(Z-fight) 확인.
+        //   문제 시 UseOpaqueBoardTiles=false 로 즉시 롤백(기존 반투명).
+        public static bool UseOpaqueBoardTiles = true;
+        private static Material _opaqueTileMat;
+        private static Material GetOpaqueTileMat()
+        {
+            if (_opaqueTileMat != null) return _opaqueTileMat;
+            var sh = Shader.Find("Custom/SpriteOpaqueCutout");
+            if (sh == null) return GetSpriteSRPBatcherMat(); // 셰이더 없으면 기존 반투명 fallback
+            _opaqueTileMat = new Material(sh) { hideFlags = HideFlags.HideAndDontSave };
+            return _opaqueTileMat;
+        }
+        // 보드 타일 공용 머티리얼 — 플래그에 따라 불투명/반투명.
+        private static Material GetTileMat() => UseOpaqueBoardTiles ? GetOpaqueTileMat() : GetSpriteSRPBatcherMat();
+        // ROLLBACK_BOARDTILE_OPAQUE_20260617: END
         // ROLLBACK_CAVE_RENDER_OVER_RAIL_20260608:
         // Rail sprites use a transparent sprite material, so queue 2001 can draw Cave before Rail.
         // Draw Cave after Rail sprites, while keeping depth test so opaque 3D holders can still mask it.
@@ -696,7 +721,7 @@ namespace BalloonFlow
             if (sr == null) { Destroy(go); return; }
             sr.sprite = sprite;
             sr.sortingOrder = -1;
-            sr.sharedMaterial = GetSpriteSRPBatcherMat();
+            sr.sharedMaterial = GetTileMat(); // ROLLBACK_BOARDTILE_OPAQUE_20260617: 불투명 타일
 
             // Simple 모드 + localScale로 늘리기
             float sw = sprite.bounds.size.x;
@@ -805,7 +830,7 @@ namespace BalloonFlow
             if (sr == null) { Destroy(go); return; }
             sr.sprite = sprite;
             sr.sortingOrder = -1;
-            sr.sharedMaterial = GetSpriteSRPBatcherMat();
+            sr.sharedMaterial = GetTileMat(); // ROLLBACK_BOARDTILE_OPAQUE_20260617: 불투명 타일
 
             float sw = sprite.bounds.size.x;
             float sh = sprite.bounds.size.y;

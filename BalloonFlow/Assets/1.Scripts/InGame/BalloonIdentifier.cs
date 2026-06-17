@@ -37,6 +37,17 @@ namespace BalloonFlow
         [Tooltip("balloonHighlight SpriteRenderer. 비워두면 Init 에서 자식에서 자동 탐색.")]
         [SerializeField] private SpriteRenderer _highlightRenderer;
 
+        // ROLLBACK_BALLOON_HIGHLIGHT_SUPPRESS_LOWEND_20260617:
+        //   고밀도 보드(그림자 억제와 동일 임계)에서 풍선당 반투명 광택(balloonHighlight) 렌더러를 끈다.
+        //   광택은 풍선마다 깔리는 또 하나의 반투명 overdraw 층인데 그림자와 달리 억제가 없었다(저사양 fill 누수).
+        //   renderer.enabled 만 토글 — 색 틴트(ApplyColor) 상태는 보존하므로 복원 시 그대로 다시 보인다.
+        //   롤백: 이 메서드 + BalloonController.RebuildShadowBatch 의 SetHighlightActive 호출 제거.
+        public void SetHighlightActive(bool active)
+        {
+            if (_highlightRenderer != null && _highlightRenderer.enabled != active)
+                _highlightRenderer.enabled = active;
+        }
+
         /// <summary>Hidden 머테리얼 존재 여부.</summary>
         public bool HasHiddenMaterial => _hiddenMaterial != null;
 

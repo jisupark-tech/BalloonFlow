@@ -330,13 +330,22 @@ namespace BalloonFlow
                         var item = _stack[i] as Object;
                         if (item == null) _stack.RemoveAt(i);
                     }
-                    // 2) UICamera 가 이미 stack 안에 있으면 skip (중복 방지)
-                    bool already = false;
-                    for (int i = 0; i < _stack.Count; i++)
+                    // ROLLBACK_UICAMERA_STACK_REMOVE_20260617: START
+                    // 진단(Play 모드 인게임) 결과: 활성 루트 Canvas(Popup/Fade/Scene/Effect) 전부 ScreenSpaceOverlay,
+                    // ScreenSpaceCamera Canvas 0개, renderMode=ScreenSpaceCamera 나 worldCamera 를 set 하는 코드도 전무.
+                    // → UICamera(Overlay)는 아무 Canvas 도 렌더하지 않는 '빈 Overlay 패스'인데 Main stack 에 들어가
+                    //   per-camera RenderGraph(Cull/Record/Execute)만 매 프레임 수행 = 프로파일 UICamera ~2ms 순수 낭비.
+                    //   (과거 FXGold 가 ScreenSpaceCamera depth 에 의존했으나 현재 전부 Overlay 로 이전됨 — UIManager:95-99 주석은 무효.)
+                    // stack 에서 UICamera 를 제거 → Overlay 패스 자체가 사라져 2ms 회수. UICamera GO 는 그대로 두되
+                    // (다른 곳에서 SetActive 참조) Overlay 라 stack 밖에선 렌더 안 함 = 비용 0.
+                    // ⚠ 빌드 검증: 모든 UI + (혹시 UI 레이어 월드 오브젝트가 있다면) 정상 렌더 확인. 사라지면 즉시 롤백.
+                    // 롤백: 아래 제거 루프를 다음 종전 코드로 환원:
+                    //   bool already=false; for(int i=0;i<_stack.Count;i++){ if(ReferenceEquals(_stack[i],UICamera)){already=true;break;} } if(!already)_stack.Add(UICamera);
+                    for (int i = _stack.Count - 1; i >= 0; i--)
                     {
-                        if (ReferenceEquals(_stack[i], UICamera)) { already = true; break; }
+                        if (ReferenceEquals(_stack[i], UICamera)) _stack.RemoveAt(i);
                     }
-                    if (!already) _stack.Add(UICamera);
+                    // ROLLBACK_UICAMERA_STACK_REMOVE_20260617: END
                 }
             }
         }
