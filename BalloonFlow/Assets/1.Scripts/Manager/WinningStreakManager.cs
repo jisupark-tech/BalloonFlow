@@ -29,11 +29,31 @@ namespace BalloonFlow
 
         private readonly Queue<PendingLobbyAnimation> _pendingLobbyAnimations = new Queue<PendingLobbyAnimation>();
 
+        // ROLLBACK_WINNING_STREAK_DEFER_CLEAR_ANIM_20260617:
+        // If lobby reward animation regresses, remove _deferredLevelClears and restore OnLevelCleared
+        // to its previous direct-return behavior when State/Config is not ready.
+        private const int MAX_DEFERRED_LEVEL_CLEARS = 8;
+        private readonly Queue<DifficultyPurpose> _deferredLevelClears = new Queue<DifficultyPurpose>();
+
         protected override void OnSingletonAwake()
         {
             // Config service 가 fetch 끝나면 UI 자동 갱신.
             if (WinningStreakConfigService.HasInstance)
+            {
                 WinningStreakConfigService.Instance.OnConfigLoaded += HandleConfigLoaded;
+                if (WinningStreakConfigService.Instance.IsLoaded)
+                    HandleConfigLoaded();
+            }
+
+            // ROLLBACK_WINNING_STREAK_DEFER_CLEAR_ANIM_20260617:
+            // Device builds can complete a level before Firestore user data is ready. In that case
+            // OnLevelCleared used to return early, so the lobby had no PendingLobbyAnimation to play.
+            if (UserDataService.HasInstance)
+            {
+                UserDataService.Instance.OnUserDataReady += HandleUserDataReady;
+                if (UserDataService.Instance.IsReady)
+                    HandleUserDataReady();
+            }
 
             // 레벨 클리어/실패 이벤트 자동 hook.
             EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompletedEvent);
@@ -49,6 +69,8 @@ namespace BalloonFlow
             base.OnDestroy();
             if (WinningStreakConfigService.HasInstance)
                 WinningStreakConfigService.Instance.OnConfigLoaded -= HandleConfigLoaded;
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.OnUserDataReady -= HandleUserDataReady;
 
             EventBus.Unsubscribe<OnLevelCompleted>(HandleLevelCompletedEvent);
             EventBus.Unsubscribe<OnLevelFailed>(HandleLevelFailedEvent);
@@ -57,6 +79,14 @@ namespace BalloonFlow
         private void HandleConfigLoaded()
         {
             EnsureActiveRound();   // config 도착 시 회차 경계 판정 (새 회차면 상태 리셋)
+            FlushDeferredLevelClears();
+            OnStateChanged?.Invoke();
+        }
+
+        private void HandleUserDataReady()
+        {
+            EnsureActiveRound();
+            FlushDeferredLevelClears();
             OnStateChanged?.Invoke();
         }
 
@@ -120,9 +150,8 @@ namespace BalloonFlow
             get
             {
                 var cfg = Config;
-                var u = UserDataService.HasInstance ? UserDataService.Instance.CurrentUser : null;
-                if (cfg == null || u == null) return false;
-                int reachedLevel = Mathf.Max(1, u.highestClearedLevel + 1);
+                if (cfg == null) return false;
+                int reachedLevel = Mathf.Max(1, ResolveHighestClearedLevel() + 1);
                 return reachedLevel >= cfg.unlockLevel;
             }
         }
@@ -135,9 +164,8 @@ namespace BalloonFlow
             get
             {
                 var cfg = Config;
-                var u = UserDataService.HasInstance ? UserDataService.Instance.CurrentUser : null;
-                if (cfg == null || u == null) return false;
-                return u.highestClearedLevel >= cfg.unlockLevel;
+                if (cfg == null) return false;
+                return ResolveHighestClearedLevel() >= cfg.unlockLevel;
             }
         }
 
@@ -198,10 +226,26 @@ namespace BalloonFlow
         /// 이벤트가 해금돼 있지 않거나 이미 종료된 경우 streak 만 보존하고 포인트는 적용 안 함.</summary>
         public void OnLevelCleared(DifficultyPurpose difficulty)
         {
-            var s = State;
-            if (s == null) return;
+            OnLevelClearedInternal(difficulty, allowDefer: true);
+        }
 
+        private void OnLevelClearedInternal(DifficultyPurpose difficulty, bool allowDefer)
+        {
+            if (!CanProcessLevelClearNow(out string notReadyReason))
+            {
+                if (allowDefer)
+                    TryDeferLevelClear(difficulty, notReadyReason);
+                return;
+            }
+
+            var s = State;
             EnsureActiveRound();   // 회차 경계면 먼저 리셋 후 이번 클리어를 새 회차에 반영
+            if (!CanProcessLevelClearNow(out notReadyReason))
+            {
+                if (allowDefer)
+                    TryDeferLevelClear(difficulty, notReadyReason);
+                return;
+            }
 
             // [적립은 unlockLevel 클리어부터] IsScoringActive 게이트.
             //   - 노출(IsUnlocked)은 unlockLevel-1(=34) 클리어 시 켜져 로비에 WS UI 가 활성화되지만,
@@ -219,9 +263,9 @@ namespace BalloonFlow
             int startStreak = s.currentStreak;
             s.currentStreak += 1;
 
-            var svc = WinningStreakConfigService.Instance;
-            int streakMult = svc.ResolveStreakMultiplier(s.currentStreak);
-            int diffMult = svc.ResolveDifficultyMultiplier(difficulty);
+            var svc = WinningStreakConfigService.HasInstance ? WinningStreakConfigService.Instance : null;
+            int streakMult = svc != null ? svc.ResolveStreakMultiplier(s.currentStreak) : WinningStreakUI.TierFromStreak(s.currentStreak);
+            int diffMult = svc != null ? svc.ResolveDifficultyMultiplier(difficulty) : 1;
             int gained = Mathf.Max(0, streakMult * diffMult);
 
             if (gained > 0)
@@ -250,6 +294,92 @@ namespace BalloonFlow
 
             SaveProgressFireAndForget();
             OnStateChanged?.Invoke();
+        }
+
+        // ROLLBACK_WINNING_STREAK_DEFER_CLEAR_ANIM_20260617:
+        // The clear itself is already saved by LevelManager before OnLevelCompleted is published.
+        // If WS state/config is late, keep only the WS scoring request and replay it once ready.
+        private bool CanProcessLevelClearNow(out string reason)
+        {
+            reason = null;
+            if (State == null)
+            {
+                reason = "state_not_ready";
+                return false;
+            }
+
+            var cfg = Config;
+            if (cfg == null)
+            {
+                reason = "config_not_ready";
+                return false;
+            }
+
+            if (cfg.stages == null || cfg.stages.Count == 0)
+            {
+                reason = "config_stages_empty";
+                return false;
+            }
+
+            return true;
+        }
+
+        private void TryDeferLevelClear(DifficultyPurpose difficulty, string reason)
+        {
+            if (!ShouldDeferLevelClearForWinningStreak())
+            {
+                Debug.Log($"{LOG_TAG} Level clear skipped before WS scoring unlock. reason={reason}, highest={ResolveHighestClearedLevel()}, unlock={ResolveUnlockLevelFallback()}");
+                return;
+            }
+
+            if (_deferredLevelClears.Count >= MAX_DEFERRED_LEVEL_CLEARS)
+            {
+                _deferredLevelClears.Dequeue();
+                Debug.LogWarning($"{LOG_TAG} Deferred clear queue overflow. Dropped oldest clear.");
+            }
+
+            _deferredLevelClears.Enqueue(difficulty);
+            Debug.LogWarning($"{LOG_TAG} Level clear deferred for lobby animation. reason={reason}, pending={_deferredLevelClears.Count}, highest={ResolveHighestClearedLevel()}, unlock={ResolveUnlockLevelFallback()}");
+        }
+
+        private void FlushDeferredLevelClears()
+        {
+            if (_deferredLevelClears.Count == 0) return;
+            if (!CanProcessLevelClearNow(out string reason))
+            {
+                Debug.Log($"{LOG_TAG} Deferred clear flush waiting. reason={reason}, pending={_deferredLevelClears.Count}");
+                return;
+            }
+
+            int count = _deferredLevelClears.Count;
+            Debug.Log($"{LOG_TAG} Flushing deferred level clears. count={count}");
+            for (int i = 0; i < count; i++)
+            {
+                var difficulty = _deferredLevelClears.Dequeue();
+                OnLevelClearedInternal(difficulty, allowDefer: false);
+            }
+        }
+
+        private bool ShouldDeferLevelClearForWinningStreak()
+        {
+            return ResolveHighestClearedLevel() >= ResolveUnlockLevelFallback();
+        }
+
+        private static int ResolveHighestClearedLevel()
+        {
+            int localHighest = FtueGate.HighestClearedLevel;
+            int userHighest = 0;
+            if (UserDataService.HasInstance && UserDataService.Instance.CurrentUser != null)
+                userHighest = UserDataService.Instance.CurrentUser.highestClearedLevel;
+            return Mathf.Max(localHighest, userHighest);
+        }
+
+        private static int ResolveUnlockLevelFallback()
+        {
+            var cfg = WinningStreakConfigService.HasInstance ? WinningStreakConfigService.Instance.Config : null;
+            if (cfg != null && cfg.unlockLevel > 0)
+                return cfg.unlockLevel;
+            return FtueGate.WINNING_STREAK_UNLOCK_CLEAR_LEVEL;
         }
 
         /// <summary>레벨 실패 시 streak 리셋. 포인트는 보존.
@@ -376,6 +506,24 @@ namespace BalloonFlow
             OnStageClaimed?.Invoke(stage1Based);
             OnStateChanged?.Invoke();
             return true;
+        }
+
+        /// <summary>달성(currentStage 미만, eventFinished 면 전체)했으나 아직 미수령인 모든 stage 의 보상을 일괄 지급.
+        ///   ROLLBACK_WS_REWARD_RELIABLE_GRANT_20260618: 기존엔 ClaimStage 가 로비 보상 애니메이션(UILobby) 안에서만
+        ///   호출돼, 애니메이션이 hang/중단/skip/플레이어 이탈 시 '달성=영구 State(currentStage)' 인데도 보상이 영영
+        ///   미지급되던 문제. 로비 보상 연출 종료 시점에 이 메서드로 미수령 달성분을 확실히 지급한다.
+        ///   ClaimStage 내부의 IsStageAchieved/IsStageClaimed 가드로 멱등(미달성·기수령은 자동 no-op, 재지급 없음).
+        ///   명세 §11.4(stage 임계 도달 즉시 자동 지급) 부합. 달성이 영구 State 라 큐가 비어도 누락분 복구 가능.</summary>
+        public void ClaimAllAchievedStages()
+        {
+            if (State == null || !WinningStreakConfigService.HasInstance) return;
+            var svc = WinningStreakConfigService.Instance;
+            // 유효 stage 범위(config) 전체를 훑되 실제 지급 여부는 ClaimStage 가드가 결정.
+            for (int stage = 1; svc.GetStage(stage) != null; stage++)
+            {
+                if (IsStageAchieved(stage) && !IsStageClaimed(stage))
+                    ClaimStage(stage);
+            }
         }
 
         private void GrantRewards(ShopRewards rewards, string reason)

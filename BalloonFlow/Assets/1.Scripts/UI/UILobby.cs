@@ -651,6 +651,12 @@ namespace BalloonFlow
             }
             finally
             {
+                // ROLLBACK_WS_REWARD_RELIABLE_GRANT_20260618: 보상 지급 안전망.
+                //   정상 재생이면 PlayWinningStreakLobbyFx 의 per-stage ClaimStage(806)로 이미 지급됨 → 여기선 no-op.
+                //   reward 팝업 hang(워치독 경유)·예외·이전 진입에서 애니메이션이 ClaimStage 까지 못 간 경우엔
+                //   여기서 '달성했으나 미수령'인 stage 보상을 확실히 지급(멱등). 달성은 영구 State 라 큐가 비어도 복구됨.
+                if (WinningStreakManager.HasInstance)
+                    WinningStreakManager.Instance.ClaimAllAchievedStages();
                 _wsLobbyFxArmed = false;
                 _wsLobbyFxCoroutine = null;
             }
