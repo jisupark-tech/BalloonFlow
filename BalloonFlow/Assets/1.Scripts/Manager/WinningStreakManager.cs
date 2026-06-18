@@ -152,7 +152,7 @@ namespace BalloonFlow
                 var cfg = Config;
                 if (cfg == null) return false;
                 int reachedLevel = Mathf.Max(1, ResolveHighestClearedLevel() + 1);
-                return reachedLevel >= cfg.unlockLevel;
+                return reachedLevel >= ResolveUnlockLevelFallback();
             }
         }
 
@@ -165,7 +165,7 @@ namespace BalloonFlow
             {
                 var cfg = Config;
                 if (cfg == null) return false;
-                return ResolveHighestClearedLevel() >= cfg.unlockLevel;
+                return ResolveHighestClearedLevel() >= ResolveUnlockLevelFallback();
             }
         }
 
@@ -186,6 +186,12 @@ namespace BalloonFlow
             animation = null;
             return false;
         }
+
+        // ROLLBACK_WS_LOBBY_FX_PENDING_GATE_20260618:
+        // UILobby uses this to avoid arming the lobby FX coroutine when there is no actual
+        // reward/fail animation to play. Without this, an auto-open info popup could keep
+        // IsWinningStreakFxPlaying true and block the Play button even on the unlock-only entry.
+        public bool HasPendingLobbyFx => _pendingLobbyAnimations.Count > 0 || _pendingFailFxMultiplier > 1;
 
         /// <summary>현재 회차 종료 UTC 시각(타이머용).</summary>
         public System.DateTime RoundEndUtc => WinningStreakSchedule.GetCurrentRoundEndUtc();
@@ -377,8 +383,11 @@ namespace BalloonFlow
         private static int ResolveUnlockLevelFallback()
         {
             var cfg = WinningStreakConfigService.HasInstance ? WinningStreakConfigService.Instance.Config : null;
+            // ROLLBACK_WS_START_LEVEL_36_20260618:
+            // Treat client spec as a lower bound so a stale Firebase config value of 35 cannot
+            // make the event start at Lv.35 again. Higher server values still win.
             if (cfg != null && cfg.unlockLevel > 0)
-                return cfg.unlockLevel;
+                return Mathf.Max(cfg.unlockLevel, FtueGate.WINNING_STREAK_UNLOCK_CLEAR_LEVEL);
             return FtueGate.WINNING_STREAK_UNLOCK_CLEAR_LEVEL;
         }
 
@@ -528,20 +537,20 @@ namespace BalloonFlow
 
         private void GrantRewards(ShopRewards rewards, string reason)
         {
-            if (rewards == null || !UserDataService.HasInstance) return;
-            var uds = UserDataService.Instance;
+            if (rewards == null) return;
+            var uds = UserDataService.HasInstance ? UserDataService.Instance : null;
 
-            if (rewards.coins > 0)
+            if (rewards.coins > 0 && uds != null)
                 uds.AdjustCoins(rewards.coins, reason);
 
             if (rewards.boosters != null)
             {
                 if (rewards.boosters.hand > 0)
-                    uds.AdjustBooster("hand", rewards.boosters.hand, reason);
+                    GrantBoosterReward("hand", rewards.boosters.hand, reason);
                 if (rewards.boosters.shuffle > 0)
-                    uds.AdjustBooster("shuffle", rewards.boosters.shuffle, reason);
+                    GrantBoosterReward("shuffle", rewards.boosters.shuffle, reason);
                 if (rewards.boosters.zap > 0)
-                    uds.AdjustBooster("zap", rewards.boosters.zap, reason);
+                    GrantBoosterReward("zap", rewards.boosters.zap, reason);
             }
 
             if (rewards.infiniteHeartsSeconds > 0 && LifeManager.HasInstance)
@@ -549,6 +558,25 @@ namespace BalloonFlow
                 // LifeManager 가 잔여 시간 누적 + Firestore 동기화까지 일괄 처리.
                 LifeManager.Instance.ActivateInfiniteHearts(rewards.infiniteHeartsSeconds);
             }
+        }
+
+        private static void GrantBoosterReward(string boosterId, int count, string reason)
+        {
+            if (count <= 0) return;
+
+            // ROLLBACK_WS_BOOSTER_REWARD_LOCAL_SYNC_20260618:
+            // Direct UserDataService.AdjustBooster updates Firestore/user data, but it does not
+            // update BoosterManager's local PlayerPrefs inventory or publish OnBoosterInventoryChanged.
+            // Winning Streak rewards must be usable immediately in HUD, so go through BoosterManager
+            // when it exists; it will also sync the same delta to Firestore.
+            if (BoosterManager.HasInstance)
+            {
+                BoosterManager.Instance.AddBooster(boosterId, count);
+                return;
+            }
+
+            if (UserDataService.HasInstance)
+                UserDataService.Instance.AdjustBooster(boosterId, count, reason);
         }
 
         // ── Persistence ──────────────────────────────────────────

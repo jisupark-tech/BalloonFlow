@@ -320,18 +320,37 @@ namespace BalloonFlow
         /// HardOptionColor/텍스트가 안 바뀌던 원인. 프리팹 수정 없이 동작 보장.</summary>
         private void ResolveHardLevelOptionRefs()
         {
-            if (_hardLevelOption == null)
+            // ROLLBACK_POPUP_RESULT_HARD_OPTION_REBIND_20260618:
+            // PopupResult prefab revisions can keep stale serialized references after
+            // HardOptionColor moved under PopupCommonFrame/HardLevelOption. Rebind by
+            // transform name when the assigned reference is missing or points elsewhere.
+            if (_hardLevelOption == null || _hardLevelOption.name != "HardLevelOption")
             {
                 var t = FindDeepChild(transform, "HardLevelOption");
                 if (t != null) _hardLevelOption = t.gameObject;
             }
             Transform scope = _hardLevelOption != null ? _hardLevelOption.transform : transform;
-            if (_imageHardOptionColor == null)
+            if (_imageHardOptionColor == null || _imageHardOptionColor.name != "HardOptionColor")
                 _imageHardOptionColor = FindDeepChild(scope, "HardOptionColor")?.GetComponent<Image>();
+            // ROLLBACK_POPUP_RESULT_HARD_OPTION_GLOBAL_FALLBACK:
+            // Some prefab revisions keep HardOptionColor outside the serialized HardLevelOption
+            // reference, so a scoped lookup can silently leave the image unset. Fall back to the
+            // full popup tree to guarantee Hard/SuperHard frame swapping.
+            if (_imageHardOptionColor == null || _imageHardOptionColor.name != "HardOptionColor")
+                _imageHardOptionColor = FindDeepChild(transform, "HardOptionColor")?.GetComponent<Image>();
             if (_txtHardLevelOutline == null)
                 _txtHardLevelOutline = FindDeepChild(scope, "TxtHardLevelOutline")?.GetComponent<TMP_Text>();
             if (_txtHardLevel == null)
                 _txtHardLevel = FindDeepChild(scope, "TxtHardLevel")?.GetComponent<TMP_Text>();
+        }
+
+        private void ResolveHardOptionSprites()
+        {
+            if (!ResourceManager.HasInstance) return;
+
+            var rm = ResourceManager.Instance;
+            _sprHardOptionHard = rm.UISpriteOr(Const.SPR_FRAMEHARD, _sprHardOptionHard);
+            _sprHardOptionSuperHard = rm.UISpriteOr(Const.SPR_FRAMESUPERHARD, _sprHardOptionSuperHard);
         }
 
         private static Transform FindDeepChild(Transform root, string name)
@@ -407,8 +426,14 @@ namespace BalloonFlow
             if (show)
             {
                 // 텍스트는 TextData(LocalizationService)에서 — SuperHard→ui.superhard, Hard→ui.hard. (하드코딩 "Super Hard Level"/"Hard Level" 제거)
-                string label = LocalizationService.Get(
-                    difficulty == DifficultyPurpose.SuperHard ? "ui.superhard" : "ui.hardlevel");
+                // ROLLBACK_POPUP_RESULT_HARD_TEXT_KEY_SYNC:
+                // TxtHardLevel/TxtHardLevelOutline can have UIText prefab keys. Keep those keys in
+                // sync with the current difficulty so OnEnable/language refresh cannot overwrite
+                // SuperHard back to a Hard label.
+                string labelKey = difficulty == DifficultyPurpose.SuperHard ? "ui.superhard" : "ui.hardlevel";
+                SyncUITextKey(_txtHardLevel, labelKey);
+                SyncUITextKey(_txtHardLevelOutline, labelKey);
+                string label = LocalizationService.Get(labelKey);
                 if (_txtHardLevel != null) _txtHardLevel.text = label;
                 if (_txtHardLevelOutline != null) _txtHardLevelOutline.text = label;
 
@@ -429,6 +454,13 @@ namespace BalloonFlow
                     UIOutlineStyle.ApplyMaterialOrColor(_txtMultiplierOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
                 }
             }
+        }
+
+        private static void SyncUITextKey(TMP_Text text, string key)
+        {
+            if (text == null) return;
+            var uiText = text.GetComponent<UIText>();
+            if (uiText != null) uiText.Key = key;
         }
 
         /// <summary>
@@ -456,6 +488,7 @@ namespace BalloonFlow
         /// </summary>
         private void ApplyHardOptionColor(DifficultyPurpose difficulty)
         {
+            ResolveHardOptionSprites();
             if (_imageHardOptionColor == null) return;
 
             Sprite hardOptSpr;
@@ -479,6 +512,8 @@ namespace BalloonFlow
             else
             {
                 _imageHardOptionColor.sprite = hardOptSpr;
+                _imageHardOptionColor.enabled = true;
+                _imageHardOptionColor.color = Color.white;
                 _imageHardOptionColor.gameObject.SetActive(true);
             }
         }

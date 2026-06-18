@@ -418,6 +418,19 @@ namespace BalloonFlow
             // Previous behavior stopped the running coroutine on every OpenUI call. If the coroutine
             // had already dequeued a PendingLobbyAnimation, stopping it could lose the lobby FX.
             if (_wsLobbyFxCoroutine != null) return;
+
+            // ROLLBACK_WS_LOBBY_FX_PENDING_GATE_20260618:
+            // Lv.34 clear opens the unlock info only; scoring starts after Lv.35 clear.
+            // If there is no queued reward/fail FX, do not arm IsWinningStreakFxPlaying because
+            // that can keep the lobby Play button blocked while an unrelated info popup is open.
+            if (!WinningStreakManager.HasInstance || !WinningStreakManager.Instance.HasPendingLobbyFx)
+            {
+                if (WinningStreakManager.HasInstance)
+                    WinningStreakManager.Instance.ClaimAllAchievedStages();
+                _wsLobbyFxArmed = false;
+                return;
+            }
+
             _wsLobbyFxArmed = true;
             _wsLobbyFxCoroutine = StartCoroutine(PlayPendingWinningStreakLobbyFxDeferred());
         }
@@ -426,12 +439,16 @@ namespace BalloonFlow
         private const string WS_PREFS_UNLOCK_POPUP_SHOWN = "BF_WS_UnlockPopupShown";
         private const string WS_PREFS_ROUND_POPUP_SHOWN  = "BF_WS_RoundPopupShown";
 
-        /// <summary>Lv.35 적립 시작(IsScoringActive) 이후 로비 진입 시: 최초 1회 해금 안내(Info) → 이후 회차별 첫 진입 1회 메인 팝업 자동 노출.</summary>
+        /// <summary>WS 자동 팝업. 해금 안내는 Lv.34 클리어 후 다음 레벨이 35가 된 시점(IsUnlocked), 메인 회차 팝업은 실제 적립 시작 이후(IsScoringActive).</summary>
         private void TryAutoOpenWinningStreakPopup()
         {
             if (!WinningStreakManager.HasInstance || !UIManager.HasInstance) return;
             var wsm = WinningStreakManager.Instance;
-            if (!wsm.IsScoringActive) return;   // Lv.35 클리어(적립 시작) 시점부터. 이벤트 off 면 false.
+            // ROLLBACK_WS_UNLOCK_INFO_AT_REACHED_LEVEL_20260618:
+            // The first info popup must appear after clearing Lv.34, when the lobby's next level is Lv.35.
+            // IsScoringActive is intentionally later (after clearing Lv.35) and caused the popup to be
+            // delayed by one stage, colliding with the first reward animation.
+            if (!wsm.IsUnlocked) return;
 
             // 1) 최초 해금 안내(튜토리얼) 1회 — 영구 플래그
             if (PlayerPrefs.GetInt(WS_PREFS_UNLOCK_POPUP_SHOWN, 0) == 0)
@@ -442,7 +459,17 @@ namespace BalloonFlow
                 return;
             }
 
-            // 2) 회차 첫 로비 진입 1회 — activeRoundId 가 바뀌면(새 회차) 재노출
+            if (IsWinningStreakFxPlaying) return;
+
+            // ROLLBACK_WS_REWARD_FX_BEFORE_ROUND_POPUP_20260618:
+            // If a reward/fail lobby FX is waiting, let it play first. Auto-opening the round popup
+            // here makes the FX coroutine wait on the popup and keeps the Play button blocked.
+            if (wsm.HasPendingLobbyFx) return;
+
+            // 2) 회차 메인 팝업은 점수/보상 적립이 실제로 시작된 뒤부터만 자동 노출.
+            if (!wsm.IsScoringActive) return;
+
+            // 3) 회차 첫 로비 진입 1회 — activeRoundId 가 바뀌면(새 회차) 재노출
             string roundId = wsm.State != null ? wsm.State.activeRoundId : null;
             if (string.IsNullOrEmpty(roundId)) return;
             if (PlayerPrefs.GetString(WS_PREFS_ROUND_POPUP_SHOWN, "") == roundId) return;
@@ -478,21 +505,34 @@ namespace BalloonFlow
         private void HookWinningStreakEvents()
         {
             if (UserDataService.HasInstance)
-                UserDataService.Instance.OnUserDataReady += RefreshWinningStreakVisibility;
+                UserDataService.Instance.OnUserDataReady += HandleWinningStreakRuntimeChanged;
             if (WinningStreakConfigService.HasInstance)
-                WinningStreakConfigService.Instance.OnConfigLoaded += RefreshWinningStreakVisibility;
+                WinningStreakConfigService.Instance.OnConfigLoaded += HandleWinningStreakRuntimeChanged;
             if (WinningStreakManager.HasInstance)
-                WinningStreakManager.Instance.OnStateChanged += RefreshWinningStreakVisibility;
+                WinningStreakManager.Instance.OnStateChanged += HandleWinningStreakRuntimeChanged;
         }
 
         private void UnhookWinningStreakEvents()
         {
             if (UserDataService.HasInstance)
-                UserDataService.Instance.OnUserDataReady -= RefreshWinningStreakVisibility;
+                UserDataService.Instance.OnUserDataReady -= HandleWinningStreakRuntimeChanged;
             if (WinningStreakConfigService.HasInstance)
-                WinningStreakConfigService.Instance.OnConfigLoaded -= RefreshWinningStreakVisibility;
+                WinningStreakConfigService.Instance.OnConfigLoaded -= HandleWinningStreakRuntimeChanged;
             if (WinningStreakManager.HasInstance)
-                WinningStreakManager.Instance.OnStateChanged -= RefreshWinningStreakVisibility;
+                WinningStreakManager.Instance.OnStateChanged -= HandleWinningStreakRuntimeChanged;
+        }
+
+        private void HandleWinningStreakRuntimeChanged()
+        {
+            RefreshWinningStreakVisibility();
+            if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
+
+            // ROLLBACK_WS_LATE_READY_LOBBY_FX_20260618:
+            // Device builds can receive user data/config after UILobby.OpenUI already tried to
+            // trigger the WS popup/FX. Re-run the same gates on state/config readiness so the
+            // reward animation plays immediately instead of only after app restart/re-enter.
+            TryAutoOpenWinningStreakPopup();
+            TriggerPendingWinningStreakLobbyFx();
         }
 
         private bool IsWinningStreakUnlocked()

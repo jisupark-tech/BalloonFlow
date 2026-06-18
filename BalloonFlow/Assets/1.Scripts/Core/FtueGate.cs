@@ -16,7 +16,10 @@ namespace BalloonFlow
         public const int AD_UNLOCK_CLEAR_LEVEL = 20;
 
         /// <summary>Lv.35 클리어 후 WinningStreak 해금. Lv.36 클리어부터 Next → 로비.</summary>
-        public const int WINNING_STREAK_UNLOCK_CLEAR_LEVEL = 35;
+        // ROLLBACK_WS_START_LEVEL_36_20260618:
+        // Previous value was 35, which made Winning Streak start one level early.
+        // Lv.35 clear means the lobby now reaches Lv.36, where the event starts.
+        public const int WINNING_STREAK_UNLOCK_CLEAR_LEVEL = 36;
 
         /// <summary>현재 유저의 최고 클리어 레벨. 단일 진실 소스 = PlayerPrefs(LevelManager.PREFS_KEY_HIGHEST_LEVEL). LevelManager 인스턴스 유무와 무관하게 동작 — Title 씬(LevelManager 미배치)에서도 정확한 값 반환.</summary>
         public static int HighestClearedLevel

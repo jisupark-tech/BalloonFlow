@@ -27,7 +27,7 @@ namespace BalloonFlow
         #region Constants
 
         public const string ANDROID_CHANNEL_ID   = "balloonflow_default";
-        public const string ANDROID_CHANNEL_NAME = "BalloonFlow";
+        public const string ANDROID_CHANNEL_NAME = "Balloon Loop";
 
         private const string PREFS_INSTALL_UTC      = "BF_NotifInstallUtcTicks";
         private const string PREFS_FIRST_PERM_ASKED = "BF_NotifFirstPermAsked";
@@ -412,7 +412,7 @@ namespace BalloonFlow
                 Id          = ANDROID_CHANNEL_ID,
                 Name        = ANDROID_CHANNEL_NAME,
                 Importance  = Importance.Default,
-                Description = "BalloonFlow notifications",
+                Description = "Balloon Loop notifications",
             };
             AndroidNotificationCenter.RegisterNotificationChannel(channel);
 #endif

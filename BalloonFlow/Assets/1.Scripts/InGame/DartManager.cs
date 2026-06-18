@@ -203,6 +203,11 @@ namespace BalloonFlow
             public DirectionalTargeting.ScanDirection scanDir;
             public Vector3 selectedTargetPos;
             public string findTargetDiag;
+            // ROLLBACK_DART_COMMIT_INDEPENDENT_LINES_20260617:
+            // Normal scan candidates must still be the current cluster head at commit time.
+            // Dead-head relief intentionally fires a later dart when the visible head color cannot
+            // ever hit the current contour, so that path opts out of the head-only commit check.
+            public bool allowNonHeadCommit;
         }
 
         #endregion
@@ -1745,14 +1750,15 @@ namespace BalloonFlow
             // still decide whether a candidate is allowed to hit.
             SortFireCandidatesByRailOrder(rail);
             int firedThisScan = 0;
-            int maxFireAttemptsThisScan = Mathf.Max(1, _fireCandidates.Count * (1 + MAX_POST_FIRE_HEAD_RESCANS_PER_HOLDER));
-            // ROLLBACK_DART_PER_FRAME_FIRE_CAP_20260601:
-            // Previous loop used maxFireAttemptsThisScan as both attempt cap and success cap, so one
-            // scan tick could commit several normal dart hits. Keep the existing candidate ordering,
-            // reservations, line locks, and post-fire queue logic, but restore the Board-configured
-            // fire cap (default 1) for committed fires only. Candidates skipped by the cap are not
-            // marked as scanned, so line catch-up can retry them on the next frame instead of missing.
-            int maxCommittedFiresThisScan = Mathf.Max(1, MAX_FIRES_PER_FRAME);
+            int initialCandidateCount = _fireCandidates.Count;
+            int maxFireAttemptsThisScan = Mathf.Max(1, initialCandidateCount * (1 + MAX_POST_FIRE_HEAD_RESCANS_PER_HOLDER));
+            // ROLLBACK_DART_COMMIT_INDEPENDENT_LINES_20260617:
+            // A global one-fire cap makes every other valid holder wait until the next frame. On
+            // dense/large maps the waiting heads can move past their exact target line and become
+            // `behind`, which is the observed miss/deadlock path. Commit every independently valid
+            // holder head found in this scan, while FireDartCandidate still blocks same holder,
+            // same target, and same side-line. Rollback: restore MAX_FIRES_PER_FRAME here.
+            int maxCommittedFiresThisScan = Mathf.Max(1, initialCandidateCount);
             for (int attempts = 0; _fireCandidates.Count > 0 && attempts < maxFireAttemptsThisScan && firedThisScan < maxCommittedFiresThisScan; attempts++)
             {
                 SortFireCandidatesByRailOrder(rail);
@@ -1976,7 +1982,8 @@ namespace BalloonFlow
                     scanLine = targetLine,
                     scanDir = scanDir,
                     selectedTargetPos = targetPos,
-                    findTargetDiag = DirectionalTargeting.LastFindTargetDiag
+                    findTargetDiag = DirectionalTargeting.LastFindTargetDiag,
+                    allowNonHeadCommit = true
                 };
 
                 if (FireDartCandidate(rail, candidate))
@@ -2172,6 +2179,12 @@ namespace BalloonFlow
 
         private bool TryQueuePromotedHeadFireCandidate(RailManager rail, int holderId)
         {
+            // ROLLBACK_DART_COMMIT_INDEPENDENT_LINES_20260617:
+            // Same-scan promoted-head firing is the dangerous path for same-holder continuous
+            // peeling. The promotion seed already replays crossed lines on the next scan.
+            if (_firedHoldersThisTick.Contains(holderId))
+                return false;
+
             if (_postFireQueuedHoldersThisTick.Contains(holderId))
                 return false;
 
@@ -2265,7 +2278,8 @@ namespace BalloonFlow
                 scanLine = targetLine,
                 scanDir = targetScanDir,
                 selectedTargetPos = selectedTargetPos,
-                findTargetDiag = DirectionalTargeting.LastFindTargetDiag
+                findTargetDiag = DirectionalTargeting.LastFindTargetDiag,
+                allowNonHeadCommit = false
             };
 
             return true;
@@ -2274,6 +2288,46 @@ namespace BalloonFlow
         private bool FireDartCandidate(RailManager rail, DartFireCandidate candidate)
         {
             if (!BalloonController.HasInstance) return false;
+            if (rail == null) return false;
+
+            // ROLLBACK_DART_COMMIT_INDEPENDENT_LINES_20260617:
+            // This is the hard 1-dart-per-holder-per-scan gate. It prevents a promoted head from
+            // firing in the same scan that removed the previous head, which was the same-holder
+            // continuous-attack/penetration risk.
+            if (_firedHoldersThisTick.Contains(candidate.holderId))
+            {
+                LogAttackIssue(
+                    "DartFireBlocked",
+                    $"reason=holderAlreadyFiredAtCommit holder={candidate.holderId} dartId={candidate.dartId} " +
+                    $"target={candidate.targetId} scan={candidate.scanDir} line={candidate.scanLine}");
+                return false;
+            }
+
+            RailManager.DartOnRail liveDart = rail.FindDart(candidate.dartId);
+            if (liveDart == null || liveDart != candidate.dart)
+            {
+                LogAttackIssue(
+                    "DartMissBlocked",
+                    $"reason=staleCandidateDart holder={candidate.holderId} dartId={candidate.dartId} " +
+                    $"target={candidate.targetId} scan={candidate.scanDir} line={candidate.scanLine}");
+                InvalidateDartScanLineForHolder(candidate.holderId);
+                return false;
+            }
+
+            if (!candidate.allowNonHeadCommit)
+            {
+                var currentHead = rail.GetClusterHeadDart(candidate.holderId);
+                if (currentHead == null || currentHead.dartId != candidate.dartId)
+                {
+                    LogAttackIssue(
+                        "DartMissBlocked",
+                        $"reason=staleCandidateNotHead holder={candidate.holderId} dartId={candidate.dartId} " +
+                        $"head={(currentHead != null ? currentHead.dartId.ToString() : "null")} " +
+                        $"target={candidate.targetId} scan={candidate.scanDir} line={candidate.scanLine}");
+                    InvalidateDartScanLineForHolder(candidate.holderId);
+                    return false;
+                }
+            }
 
             if (_reservedTargets.Contains(candidate.targetId))
             {

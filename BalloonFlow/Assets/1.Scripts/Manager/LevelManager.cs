@@ -34,6 +34,7 @@ namespace BalloonFlow
         private LevelConfig _currentLevelConfig;
         private int         _currentLevelId;
         private bool        _levelActive;
+        private bool        _currentLevelEndedInClear;
         private int         _retryCount;
         private bool        _isLoading;
 
@@ -56,6 +57,11 @@ namespace BalloonFlow
         /// True while a level is active (loaded and not yet completed or failed).
         /// </summary>
         public bool IsLevelActive => _levelActive;
+
+        /// <summary>
+        /// True after the current level has ended by clear. Used by life consumption guards.
+        /// </summary>
+        public bool CurrentLevelEndedInClear => _currentLevelEndedInClear;
 
         /// <summary>True while LoadLevelCoroutine is in progress (cleanup + setup). GameManager가 fade-in 시점 동기화에 사용.</summary>
         public bool IsLoading => _isLoading;
@@ -148,6 +154,7 @@ namespace BalloonFlow
             _currentLevelId     = levelId;
             _currentLevelConfig = config;
             _levelActive        = true;
+            _currentLevelEndedInClear = false;
             _retryCount         = 0;
 
             // ── Setup (yields 분산) ──
@@ -216,6 +223,7 @@ namespace BalloonFlow
 
             _retryCount++;
             _levelActive = true;
+            _currentLevelEndedInClear = false;
             SetupLevel(_currentLevelConfig);
         }
 
@@ -255,6 +263,7 @@ namespace BalloonFlow
             // Even if FailLevel was called (e.g. NoMovesLeft triggered while last dart
             // was in flight), a board clear is the definitive win condition.
             _levelActive = false;
+            _currentLevelEndedInClear = true;
             SaveLevelProgress(_currentLevelId, stars);
 
             Debug.Log($"[LevelManager] Publishing OnLevelCompleted: level={_currentLevelId}, score={score}, stars={stars}");
@@ -281,6 +290,7 @@ namespace BalloonFlow
 
             Debug.Log($"[LevelManager] Publishing OnLevelFailed: level={_currentLevelId}");
             _levelActive = false;
+            _currentLevelEndedInClear = false;
 
             EventBus.Publish(new OnLevelFailed
             {

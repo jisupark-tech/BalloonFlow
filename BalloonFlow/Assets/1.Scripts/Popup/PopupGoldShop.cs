@@ -33,6 +33,12 @@ namespace BalloonFlow
 
         [Header("[상품 아이템 프리팹]")]
         [SerializeField] private GameObject _listItemPrefab;
+        [SerializeField] private GameObject _prefabGold;
+        [SerializeField] private GameObject _prefabGoldAlign;
+        [SerializeField] private GameObject _prefabGeneral;
+        [SerializeField] private GameObject _prefabAd;
+        [SerializeField] private bool _autoLoadFromResources = true;
+        [SerializeField] private float _itemHeightOverride = 0f;
 
         [Header("[상품 데이터]")]
         [SerializeField] private ShopProductData[] _products;
@@ -45,10 +51,22 @@ namespace BalloonFlow
 
         /// <summary>생성된 아이템 리스트 (무한 스크롤 풀링용).</summary>
         private readonly List<PopupShopListItem> _spawnedItems = new List<PopupShopListItem>();
+        private readonly List<GameObject> _spawnedRoots = new List<GameObject>();
 
         private System.Action _onCloseCallback;
         private bool _userExpandedMore;
         private bool _moreOffersAvailable;
+        private const float DEFAULT_ITEM_HEIGHT = 200f;
+
+        private GameObject MoreButtonRoot
+        {
+            get
+            {
+                if (_btnMoreProducts != null && _btnMoreProducts.transform.parent != null)
+                    return _btnMoreProducts.transform.parent.gameObject;
+                return _btnMoreProducts != null ? _btnMoreProducts.gameObject : null;
+            }
+        }
 
         private UserData CurrentUserOrNull =>
             (UserDataService.HasInstance && UserDataService.Instance.IsReady)
@@ -72,7 +90,17 @@ namespace BalloonFlow
             }
 
             if (_btnMoreProducts != null)
+            {
                 _btnMoreProducts.onClick.AddListener(OnMoreProductsClicked);
+                var moreTexts = _btnMoreProducts.GetComponentsInChildren<TMP_Text>(true);
+                for (int i = 0; i < moreTexts.Length; i++)
+                {
+                    if (moreTexts[i] != null) moreTexts[i].text = LocalizationService.Get("ui.shop.more_offers");
+                }
+            }
+
+            LoadShopPrefabs();
+            EnsureContentLayout();
 
             EnsureTopBarBinding();
             SubscribeToCatalog();
@@ -158,6 +186,84 @@ namespace BalloonFlow
             return null;
         }
 
+        private void LoadShopPrefabs()
+        {
+            if (_prefabGeneral == null) _prefabGeneral = _listItemPrefab;
+            if (!_autoLoadFromResources) return;
+
+            if (_prefabGold == null)
+                _prefabGold = LoadShopPrefab("ShopListGold");
+            if (_prefabGoldAlign == null)
+                _prefabGoldAlign = LoadShopPrefab("ShopListGoldAlign");
+            if (_prefabGeneral == null)
+                _prefabGeneral = LoadShopPrefab("ShopListItem");
+            if (_prefabAd == null)
+                _prefabAd = LoadShopPrefab("ShopListAd");
+
+            if (_listItemPrefab == null)
+                _listItemPrefab = _prefabGeneral;
+        }
+
+        private static GameObject LoadShopPrefab(string name)
+        {
+            return Resources.Load<GameObject>("UI/UIAssets/" + name)
+                ?? Resources.Load<GameObject>("UI/" + name);
+        }
+
+        private void EnsureContentLayout()
+        {
+            var contentRoot = _shopContent as RectTransform;
+            if (contentRoot == null) return;
+
+            contentRoot.anchorMin = new Vector2(0f, 1f);
+            contentRoot.anchorMax = new Vector2(1f, 1f);
+            contentRoot.pivot = new Vector2(0.5f, 1f);
+
+            var vlg = contentRoot.GetComponent<VerticalLayoutGroup>();
+            if (vlg == null) vlg = contentRoot.gameObject.AddComponent<VerticalLayoutGroup>();
+            vlg.childControlHeight = true;
+            vlg.childControlWidth = false;
+            vlg.childForceExpandHeight = false;
+            vlg.childForceExpandWidth = false;
+            vlg.childAlignment = TextAnchor.UpperCenter;
+            if (vlg.spacing < 1f) vlg.spacing = 20f;
+            if (vlg.padding.bottom < 500) vlg.padding.bottom = 500;
+
+            var csf = contentRoot.GetComponent<ContentSizeFitter>();
+            if (csf == null) csf = contentRoot.gameObject.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+            if (_scrollView != null)
+            {
+                _scrollView.horizontal = false;
+                _scrollView.vertical = true;
+                _scrollView.movementType = ScrollRect.MovementType.Elastic;
+                _scrollView.elasticity = 0.1f;
+                _scrollView.inertia = true;
+                _scrollView.decelerationRate = 0.135f;
+                if (_scrollView.scrollSensitivity < 30f) _scrollView.scrollSensitivity = 60f;
+            }
+
+            var moreRoot = MoreButtonRoot;
+            if (moreRoot != null && moreRoot.transform.parent == contentRoot)
+                moreRoot.transform.SetAsLastSibling();
+        }
+
+        private GameObject GetPrefabForCategory(ShopItemCategory category)
+        {
+            switch (category)
+            {
+                case ShopItemCategory.Gold:
+                    return _prefabGold != null ? _prefabGold : _prefabGeneral;
+                case ShopItemCategory.Ad:
+                    return _prefabAd != null ? _prefabAd : _prefabGeneral;
+                case ShopItemCategory.General:
+                default:
+                    return _prefabGeneral != null ? _prefabGeneral : _listItemPrefab;
+            }
+        }
+
         public void OpenWithCloseCallback(System.Action onClose)
         {
             _onCloseCallback = onClose;
@@ -185,6 +291,8 @@ namespace BalloonFlow
             }
             base.OpenUI();
             RefreshGold();
+            LoadShopPrefabs();
+            EnsureContentLayout();
             ResetAndLoadProducts(expanded: false);
         }
 
@@ -242,11 +350,26 @@ namespace BalloonFlow
             RefreshProductExposure();
 
             // 기존 아이템 제거
-            foreach (var item in _spawnedItems)
+            // ROLLBACK_POPUP_GOLD_SHOP_SHARED_LAYOUT_20260617:
+            // PopupGoldShop mirrors UILobby UIShop category layout. Restore the previous
+            // single _listItemPrefab destroy/spawn path if a separate in-game popup design is needed.
+            if (_spawnedRoots.Count > 0)
             {
-                if (item != null && item.gameObject != null)
-                    Destroy(item.gameObject);
+                for (int i = 0; i < _spawnedRoots.Count; i++)
+                {
+                    if (_spawnedRoots[i] != null)
+                        Destroy(_spawnedRoots[i]);
+                }
             }
+            else
+            {
+                foreach (var item in _spawnedItems)
+                {
+                    if (item != null && item.gameObject != null)
+                        Destroy(item.gameObject);
+                }
+            }
+            _spawnedRoots.Clear();
             _spawnedItems.Clear();
             _displayedCount = 0;
 
@@ -264,10 +387,16 @@ namespace BalloonFlow
 
         private void LoadMoreProducts(int loadOverride = -1)
         {
-            if (_products == null || _listItemPrefab == null || _shopContent == null) return;
+            if (_products == null || _shopContent == null) return;
 
             int remaining = _products.Length - _displayedCount;
             int loadCount = loadOverride > 0 ? Mathf.Min(loadOverride, remaining) : Mathf.Min(ITEMS_PER_PAGE, remaining);
+            if (UseSharedPopupShopLayout())
+            {
+                LoadMoreProductsShared(loadOverride);
+                return;
+            }
+            if (_listItemPrefab == null) return;
             for (int i = 0; i < loadCount; i++)
             {
                 int idx = _displayedCount + i;
@@ -292,16 +421,122 @@ namespace BalloonFlow
             UpdateMoreButton();
         }
 
+        private bool UseSharedPopupShopLayout()
+        {
+            return _prefabGeneral != null || _prefabGold != null || _prefabAd != null;
+        }
+
+        private void LoadMoreProductsShared(int loadOverride = -1)
+        {
+            int remaining = _products.Length - _displayedCount;
+            int loadCount = loadOverride > 0 ? Mathf.Min(loadOverride, remaining) : Mathf.Min(ITEMS_PER_PAGE, remaining);
+            GameObject goldContainer = null;
+
+            for (int i = 0; i < loadCount; i++)
+            {
+                int idx = _displayedCount + i;
+                var data = _products[idx];
+
+                if (data.category == ShopItemCategory.Gold && _prefabGoldAlign != null && _prefabGold != null)
+                {
+                    if (goldContainer == null)
+                    {
+                        goldContainer = Instantiate(_prefabGoldAlign, _shopContent);
+                        goldContainer.SetActive(true);
+                        _spawnedRoots.Add(goldContainer);
+
+                        var moreRoot = MoreButtonRoot;
+                        if (moreRoot != null && moreRoot.transform.parent == _shopContent)
+                            goldContainer.transform.SetSiblingIndex(moreRoot.transform.GetSiblingIndex());
+
+                        EnsurePreferredHeight(goldContainer);
+                        for (int c = goldContainer.transform.childCount - 1; c >= 0; c--)
+                            Destroy(goldContainer.transform.GetChild(c).gameObject);
+                    }
+
+                    var goldGo = Instantiate(_prefabGold, goldContainer.transform);
+                    goldGo.SetActive(true);
+                    UIButtonClickGuard.AttachToHierarchy(goldGo);
+
+                    var goldItem = goldGo.GetComponent<PopupShopListItem>();
+                    if (goldItem != null)
+                    {
+                        goldItem.Setup(data, OnProductBuy);
+                        _spawnedItems.Add(goldItem);
+                    }
+                    continue;
+                }
+
+                goldContainer = null;
+                GameObject prefab = GetPrefabForCategory(data.category);
+                if (prefab == null) continue;
+
+                var go = Instantiate(prefab, _shopContent);
+                go.SetActive(true);
+                _spawnedRoots.Add(go);
+                UIButtonClickGuard.AttachToHierarchy(go);
+                EnsurePreferredHeight(go);
+
+                var root = MoreButtonRoot;
+                if (root != null && root.transform.parent == _shopContent)
+                    go.transform.SetSiblingIndex(root.transform.GetSiblingIndex());
+
+                var item = go.GetComponent<PopupShopListItem>();
+                if (item != null)
+                {
+                    item.Setup(data, OnProductBuy);
+                    _spawnedItems.Add(item);
+                }
+            }
+
+            _displayedCount += loadCount;
+            var moreButtonRoot = MoreButtonRoot;
+            if (moreButtonRoot != null && moreButtonRoot.transform.parent == _shopContent)
+                moreButtonRoot.transform.SetAsLastSibling();
+
+            var contentRoot = _shopContent as RectTransform;
+            if (contentRoot != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(contentRoot);
+                Canvas.ForceUpdateCanvases();
+            }
+
+            UpdateMoreButton();
+        }
+
+        private void EnsurePreferredHeight(GameObject go)
+        {
+            if (go == null) return;
+            var rt = go.transform as RectTransform;
+            var le = go.GetComponent<LayoutElement>();
+            if (le == null) le = go.AddComponent<LayoutElement>();
+            if (le.preferredHeight > 0f) return;
+
+            if (_itemHeightOverride > 0f)
+                le.preferredHeight = _itemHeightOverride;
+            else if (rt != null && rt.rect.height > 1f)
+                le.preferredHeight = rt.rect.height;
+            else
+                le.preferredHeight = DEFAULT_ITEM_HEIGHT;
+        }
+
         private void UpdateMoreButton()
         {
-            if (_btnMoreProducts != null)
-                _btnMoreProducts.gameObject.SetActive(!_userExpandedMore && _moreOffersAvailable);
+            var root = MoreButtonRoot;
+            bool show = !_userExpandedMore && _moreOffersAvailable;
+            if (root != null && root.activeSelf != show)
+                root.SetActive(show);
+            if (root != null && root.transform.parent == _shopContent)
+                root.transform.SetAsLastSibling();
         }
 
         /// <summary>상품 구매 콜백.</summary>
         private void OnProductBuy(ShopProductData product)
         {
             Debug.Log($"[PopupGoldShop] Buy: {product.productId}, {product.title}, {product.price}");
+
+            if (UIManager.HasInstance)
+                UIManager.Instance.OpenUI<PopupLoadingSpinner>(Const.POPUP_LOADING_SPINNER);
 
             if (ShopManager.HasInstance)
                 ShopManager.Instance.PurchaseProduct(product.productId);

@@ -136,7 +136,7 @@ namespace BalloonFlow.EditorTools
             // FacebookSettings 는 보통 list 형 (multi-app 지원). [0] 만 채움.
             SetListProperty(t, null, "AppIds",       new List<string> { appId });
             SetListProperty(t, null, "ClientTokens", new List<string> { SdkConfig.FacebookClientToken ?? "" });
-            SetListProperty(t, null, "AppLabels",    new List<string> { "BalloonLoop" });
+            SetListProperty(t, null, "AppLabels",    new List<string> { "Balloon Loop" });
             SetStaticMember(t, "SelectedAppIndex", 0);
 
             // 커밋용 — FacebookSettings asset 이 SaveAsset 되도록 dirty 마크

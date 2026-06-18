@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -45,6 +46,7 @@ namespace BalloonFlow
         private bool _loadingComplete;
         private bool _entered;
         private float _watchdogTimer;
+        private float _loadingFlowStartTime;
         /// <summary>네트워크 대기 중일 때 watchdog 일시 정지 (오프라인이면 30s timeout 으로 Lobby 강제 진입 막기).</summary>
         private bool _isWaitingForNetwork;
         /// <summary>[#9] 로딩 완료 후 "Tap to Start" hint 노출 1회 가드 + 자동 진입 카운트다운.</summary>
@@ -98,7 +100,11 @@ namespace BalloonFlow
         /// <summary>[#3] 알림 권한 요청(로딩 전, 결정까지 대기) → 그 다음 로딩 진행.</summary>
         private IEnumerator StartupFlow()
         {
-            yield return RequestNotificationPermissionRoutine();
+            // ROLLBACK_RELEASE_TITLE_LOADTIME_20260616:
+            // Previously Title waited for the OS notification permission result before starting
+            // loading. On device this can stall first launch. Run it in parallel; restore the yield
+            // if permission must become a blocking first-run gate again.
+            StartCoroutine(RequestNotificationPermissionRoutine());
             yield return LoadingFlow();
         }
 
@@ -165,10 +171,12 @@ namespace BalloonFlow
         private IEnumerator LoadingFlow()
         {
             _loadingStarted = true;
+            _loadingFlowStartTime = Time.realtimeSinceStartup;
 
             for (int i = 0; i < LoadingStepLabels.Length; i++)
             {
                 string label = LoadingStepLabels[i];
+                float stepLogStart = Time.realtimeSinceStartup;
 
                 // 네트워크 필요한 단계 (Connecting server / Downloading data) 진입 전 연결 확인.
                 if (NeedsInternet(i))
@@ -186,8 +194,9 @@ namespace BalloonFlow
                 // 단계 작업 + UI progress 동기화 코루틴 동시 실행 — 작업 끝나면 progressDriver 종료
                 bool workDone = false;
                 StartCoroutine(StepProgressDriver(() => workDone));
-                yield return StartCoroutine(RunLoadingStep(i));
+                yield return StartCoroutine(RunLoadingStepRelease(i));
                 workDone = true;
+                LogLoadStepTiming(label, stepLogStart);
 
                 // 100% 도달 보장 + 잠깐 hold
                 _stepProgress = 1f;
@@ -196,11 +205,17 @@ namespace BalloonFlow
             }
 
             _loadingComplete = true;
+            Debug.Log($"[TitleLoad] complete total={(Time.realtimeSinceStartup - _loadingFlowStartTime):F2}s");
             if (_ui != null)
             {
                 _ui.SetProgress(1f);
                 _ui.SetStatus("Ready");
             }
+        }
+
+        private static void LogLoadStepTiming(string label, float startTime)
+        {
+            Debug.Log($"[TitleLoad] step='{label}' elapsed={(Time.realtimeSinceStartup - startTime):F2}s");
         }
 
         private static bool NeedsInternet(int stepIndex)
@@ -240,7 +255,21 @@ namespace BalloonFlow
         {
             // 다운로드 사이즈 확인 — 0 이면 cache hit, skip
             var sizeTask = AddressableSystem.GetDownloadSizeAsync(Const.ADDR_LABEL_CDM);
-            while (!sizeTask.IsCompleted) yield return null;
+            // ROLLBACK_RELEASE_TITLE_LOADTIME_20260616:
+            // Remote catalog/cache size checks can be slow on device. Do a short soft wait, then
+            // continue Title with local content and let CDM finish in the background.
+            const float SIZE_CHECK_SOFT_TIMEOUT = 1.0f;
+            float sizeWait = 0f;
+            while (!sizeTask.IsCompleted && sizeWait < SIZE_CHECK_SOFT_TIMEOUT)
+            {
+                sizeWait += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (!sizeTask.IsCompleted)
+            {
+                StartCoroutine(DownloadCdmInBackground(sizeTask));
+                yield break;
+            }
 
             long size = sizeTask.Result;
             if (size <= 0)
@@ -248,12 +277,28 @@ namespace BalloonFlow
                 yield break; // cache hit — StepProgressDriver 가 시간 기반으로 0→1 처리
             }
 
-            if (_ui != null) _ui.SetStatus($"Downloading data... ({FormatBytes(size)})");
+            StartCoroutine(DownloadCdmInBackground(sizeTask, size));
+            yield break;
+        }
 
-            var dlTask = AddressableSystem.DownloadDependenciesAsync(Const.ADDR_LABEL_CDM,
-                onProgress: p => _stepProgress = Mathf.Clamp01(p));
+        private IEnumerator DownloadCdmInBackground(Task<long> sizeTask, long knownSize = -1)
+        {
+            while (knownSize < 0 && sizeTask != null && !sizeTask.IsCompleted)
+                yield return null;
+
+            long size = knownSize;
+            if (size < 0 && sizeTask != null && sizeTask.Status == TaskStatus.RanToCompletion)
+                size = sizeTask.Result;
+            if (size <= 0) yield break;
+
+            Debug.Log($"[TitleLoad] CDM background download started ({FormatBytes(size)})");
+
+            var dlTask = AddressableSystem.DownloadDependenciesAsync(Const.ADDR_LABEL_CDM);
 
             while (!dlTask.IsCompleted) yield return null;
+
+            if (dlTask.Result)
+                Debug.Log("[TitleLoad] CDM background download complete");
 
             if (!dlTask.Result)
                 Debug.LogWarning("[TitleController] CDM 다운로드 실패 — 로컬 콘텐츠만 사용");
@@ -360,10 +405,85 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>UserDataService.IsReady 까지 대기 — 8초 timeout (Firestore 미연결이면 그냥 진행).</summary>
+        /// <summary>Release loading step runner.</summary>
+        // ROLLBACK_RELEASE_TITLE_LOADTIME_20260616:
+        // Release-friendly loading path. The old RunLoadingStep method is left above as a
+        // direct rollback reference; switch LoadingFlow back to RunLoadingStep(i) to restore.
+        private IEnumerator RunLoadingStepRelease(int index)
+        {
+            switch (index)
+            {
+                case 0:
+                    {
+                        var initTask = AddressableSystem.InitializeAsync();
+                        while (!initTask.IsCompleted) yield return null;
+                        if (!initTask.Result)
+                            Debug.LogWarning("[TitleController] Addressables init failed. Local build content may still be used.");
+
+                        if (ResourceManager.HasInstance)
+                        {
+                            var rm = ResourceManager.Instance;
+                            var atlasTask = rm.PreloadUIAtlasAsync();
+                            while (!atlasTask.IsCompleted) yield return null;
+
+                            // ROLLBACK_RELEASE_TITLE_LOADTIME_20260616:
+                            // Full core/ui prefab preload warms cache but can make device Title slow.
+                            // Keep the warm-up, but do not block first lobby entry on it.
+                            // Rollback: replace StartCoroutine(...) with the old wait loop.
+                            var prefabsTask = rm.PreloadAddressablePrefabsAsync();
+                            StartCoroutine(WaitForBackgroundTask(prefabsTask, "Addressable prefab preload"));
+                        }
+                    }
+                    break;
+
+                case 1:
+                    yield return WaitForUserDataReady();
+                    break;
+
+                case 2:
+                    yield return WaitForSdkReady();
+                    break;
+
+                case 3:
+                    yield return DownloadCdmStep();
+                    break;
+
+                case 4:
+                    yield return WaitForCatalogReady();
+                    break;
+
+                case 5:
+                    yield return null;
+                    break;
+
+                default:
+                    yield return null;
+                    break;
+            }
+        }
+
+        private IEnumerator WaitForBackgroundTask(Task task, string label)
+        {
+            while (task != null && !task.IsCompleted)
+                yield return null;
+
+            if (task == null) yield break;
+
+            if (task.IsFaulted)
+                Debug.LogWarning($"[TitleLoad] background {label} failed: {task.Exception?.GetBaseException().Message}");
+            else if (task.IsCanceled)
+                Debug.LogWarning($"[TitleLoad] background {label} cancelled");
+            else
+                Debug.Log($"[TitleLoad] background {label} complete");
+        }
+
         private IEnumerator WaitForUserDataReady()
         {
-            const float TIMEOUT = 8f;
+            // ROLLBACK_RELEASE_TITLE_LOADTIME_20260616:
+            // Firestore/UserData can be slow on cold launch. Lobby can enter with the local
+            // fallback and services finish in background, so keep this as a short soft wait.
+            // Rollback: restore TIMEOUT to 8f if server user data must block Title.
+            const float TIMEOUT = 2f;
             float t = 0f;
             while (t < TIMEOUT)
             {
@@ -406,7 +526,11 @@ namespace BalloonFlow
             // 온보딩(Lv.5 미클리어)은 여기서 InGame 으로 직행하므로 '에피소드 prefetch' 만 대기한다(첫 레벨 데이터 필요).
             // 타임아웃도 8s→5s. 효과: 로딩 −(카탈로그/IAP 대기분).
             // 롤백: shopOk/iapOk 조건을 epOk 와 다시 AND 로 묶고 TIMEOUT 8f 로 복원.
-            const float TIMEOUT = 5f;
+            // ROLLBACK_RELEASE_TITLE_LOADTIME_20260616:
+            // Episode prefetch is a convenience warm-up; if it misses, LevelManager retries
+            // when play starts. Keep Title responsive on release builds.
+            // Rollback: restore TIMEOUT to 5f for longer prefetch waiting.
+            const float TIMEOUT = 2f;
             float t = 0f;
             while (t < TIMEOUT)
             {

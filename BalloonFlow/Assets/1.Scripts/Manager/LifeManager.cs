@@ -161,6 +161,15 @@ namespace BalloonFlow
         /// </summary>
         public bool UseLive()
         {
+            // ROLLBACK_NO_LIFE_CONSUME_ON_CLEAR_20260618:
+            // A clear is the definitive successful end state. If a late fail popup/event path
+            // reaches UseLive after the stage has already been cleared, do not consume a heart.
+            if (LevelManager.HasInstance && LevelManager.Instance.CurrentLevelEndedInClear)
+            {
+                Debug.Log("[LifeManager] UseLive skipped because current level already ended in clear.");
+                return true;
+            }
+
             // Infinite hearts: always succeed without consuming
             if (IsInfiniteHeartsActive)
                 return true;

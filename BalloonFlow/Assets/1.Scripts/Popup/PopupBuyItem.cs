@@ -290,13 +290,13 @@ namespace BalloonFlow
             // [2026-06-12] Buy 버튼 내 가격 라벨 동적 적용 — 프리팹의 정적 숫자가 아이템과 무관하게
             // 노출되던 문제 (Hand 1900 / Shuffle 1500 / Zap 2900 은 호출부가 GetBoosterPrice 로 전달).
             // 버튼 하위 TMP 중 '숫자만'인 텍스트만 교체 — "Buy" 같은 라벨은 보존, 노드명 무관.
-            SetNumericTextsInChildren(_txtBtnBuyOutline, costStr);
+            SetNumericTextsInChildren(_txtBtnBuyOutline, costStr, replaceEmpty: true);
             if (_frame != null && _frame.BtnSingle != null)
-                SetNumericTextsInChildren(_frame.BtnSingle.gameObject, costStr);
+                SetNumericTextsInChildren(_frame.BtnSingle.gameObject, costStr, replaceEmpty: false);
         }
 
         /// <summary>root 하위 TMP 중 콤마 제거 시 정수로 파싱되는(=가격 표기) 텍스트만 value 로 교체.</summary>
-        private static void SetNumericTextsInChildren(GameObject root, string value)
+        private static void SetNumericTextsInChildren(GameObject root, string value, bool replaceEmpty)
         {
             if (root == null) return;
             TMP_Text[] labels = root.GetComponentsInChildren<TMP_Text>(true);
@@ -304,7 +304,14 @@ namespace BalloonFlow
             {
                 if (labels[i] == null) continue;
                 string t = labels[i].text != null ? labels[i].text.Replace(",", "").Trim() : null;
-                if (!string.IsNullOrEmpty(t) && int.TryParse(t, out _))
+                // ROLLBACK_BUYITEM_PRICE_PLACEHOLDER_FIX_20260618:
+                // Dynamic price labels can be raw "{n}" or be cleared by UIText on enable.
+                // Recover empty labels only for the dedicated price-outline root so full-button
+                // labels such as "Buy" are not overwritten.
+                bool isDynamicPlaceholder = !string.IsNullOrEmpty(t) && t.IndexOf('{') >= 0;
+                bool isNumeric = !string.IsNullOrEmpty(t) && int.TryParse(t, out _);
+                bool isRecoverableEmpty = replaceEmpty && string.IsNullOrEmpty(t);
+                if (isNumeric || isDynamicPlaceholder || isRecoverableEmpty)
                     labels[i].text = value;
             }
         }

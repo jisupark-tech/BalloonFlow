@@ -16,32 +16,49 @@ namespace BalloonFlow.Editor
     public static class ProjectConfigurator
     {
         private const string PREFS_KEY = "BalloonFlow_ProjectConfigured";
+        private const string COMPANY_NAME = "BalloonFlow Studio";
+        private const string PRODUCT_NAME = "Balloon Loop";
 
         static ProjectConfigurator()
         {
             EditorApplication.delayCall += () =>
             {
-                if (EditorPrefs.GetBool(PREFS_KEY, false))
+                if (EditorApplication.isPlayingOrWillChangePlaymode)
                 {
                     return;
                 }
 
-                if (EditorApplication.isPlayingOrWillChangePlaymode)
+                if (PlayerSettings.productName != PRODUCT_NAME)
+                {
+                    ApplyAppDisplayNameForBuild();
+                }
+
+                if (EditorPrefs.GetBool(PREFS_KEY, false))
                 {
                     return;
                 }
 
                 ConfigureProject();
                 EditorPrefs.SetBool(PREFS_KEY, true);
-                Debug.Log("[ProjectConfigurator] BalloonFlow project settings configured.");
+                Debug.Log("[ProjectConfigurator] Balloon Loop project settings configured.");
             };
+        }
+
+        public static void ApplyAppDisplayNameForBuild()
+        {
+            // ROLLBACK_APP_DISPLAY_NAME_BALLOON_LOOP:
+            // Android notification permission dialogs use the app label generated from
+            // PlayerSettings.productName unless a manifest label overrides it.
+            PlayerSettings.companyName = COMPANY_NAME;
+            PlayerSettings.productName = PRODUCT_NAME;
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[ProjectConfigurator] App display name applied: {PRODUCT_NAME}");
         }
 
         private static void ConfigureProject()
         {
             // ── Company & Product ──
-            PlayerSettings.companyName = "BalloonFlow Studio";
-            PlayerSettings.productName = "BalloonFlow";
+            ApplyAppDisplayNameForBuild();
 
             // ── Resolution / Orientation ──
             PlayerSettings.defaultScreenWidth = 1080;
