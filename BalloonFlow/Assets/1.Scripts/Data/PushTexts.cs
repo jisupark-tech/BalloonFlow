@@ -9,16 +9,17 @@ namespace BalloonFlow
     {
         // #1 하트 풀충전 — 로컬 알림 (Phase 1)
         public const string HEART_FULL_TITLE = "Hearts fully recharged!";
-        public const string HEART_FULL_BODY  = "💖 Lives are full! Time to pop some balloons.";
+        public const string HEART_FULL_BODY  = "💖 Lives are full! Time to pop some balloons!";
 
         // #2 이탈 복귀 D1~D7 — 서버 푸시 (Phase 2). 클라 참조용으로 보관.
-        public const string RETURN_D1 = "Take a break? Come pop some balloons!";
-        public const string RETURN_D2 = "🎈 Pop the day off! Hearts are ready, friends await.";
-        public const string RETURN_D3 = "🎈 Stress? Pop. Pop. Pop. Three taps to your daily smile.";
-        public const string RETURN_D4 = "🎈 Boredom won't pop itself — your balloons are waiting!";
-        public const string RETURN_D5 = "🎈 Pop! Pop! Don't you miss that sound? Come back and feel it again.";
-        public const string RETURN_D6 = "🎈 So many balloons left to pop! They won't pop themselves.";
-        public const string RETURN_D7 = "🎈 Remember the joy of popping balloons? It's time for one more round!";
+
+        public const string RETURN_D1 = "🎈 Your balloons are waiting! Come back and let's pop a few!";
+        public const string RETURN_D2 = "🎈 Got 3 minutes? That's all it takes to pop and unwind.";
+        public const string RETURN_D3 = "🎈 Your balloons are all lined up! Pop them and hear the pitch climb!";
+        public const string RETURN_D4 = "🎈 Busy day? Pop a balloon or two and let your mind float.";
+        public const string RETURN_D5 = "🎈 Pop! Pop! Each one rings higher! Don't you miss that feeling?";
+        public const string RETURN_D6 = "🎈 You've earned a break! Treat yourself to a few pops.";
+        public const string RETURN_D7 = "🎈 Remember how good that balloon pop felt? Let's do it again!";
 
         // #3 데일리 보상 미수령 — 서버 푸시 (Phase 2)
         public const string DAILY_REWARD = "⏰ Don't miss today's reward! Tap to collect before it's gone.";
