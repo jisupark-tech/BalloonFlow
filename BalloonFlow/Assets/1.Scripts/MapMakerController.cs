@@ -6625,6 +6625,15 @@ namespace BalloonFlow
         /// <summary>현재 레벨 저장 — [2026-06-12] AI/Transform 탭 폐기, Episode JSON 단일 경로.</summary>
         private void SaveToActiveDB()
         {
+            // ROLLBACK_MAPMAKER_OLD_SO_SAVE_20260618: Old(레거시 SO) 탭에서 로드/편집한 레벨은 SO 로 저장한다.
+            //   기존엔 탭 무관하게 항상 Episode JSON(=ori)으로 갔음(line 327). 이제 old 에서 save/test-play(복귀 auto-save 포함)
+            //   하면 ori(Episodes)로 새지 않고 old(SO)에만 저장. Epi 탭은 기존대로 Episode JSON. (사용자: old=SO 쓰기가능)
+            if (_activeDBTab == 1)
+            {
+                SaveToDB(LEGACY_SO_PATH, ref _targetDBLegacy);
+                RefreshLevelList();
+                return;
+            }
             SaveCurrentLevelToEpisode();
         }
 
@@ -7362,10 +7371,11 @@ namespace BalloonFlow
 
         private void SaveLevelToDatabase(int levelId)
         {
-            // [2026-06-12] AI/Transform 탭 폐기 — SO 저장 경로 제거, Episode JSON 저장으로 통일
-            // (Save to DB 와 동일 경로: 병합·백업·pkg1 StreamingAssets 동기화 포함).
+            // ROLLBACK_MAPMAKER_OLD_SO_SAVE_20260618: "Save This Level" 도 활성 탭 기준으로 저장한다.
+            //   기존엔 SaveCurrentLevelToEpisode() 직접 호출이라 Old(SO) 탭에서도 Ori(Episodes)로 저장되던 버그.
+            //   SaveToActiveDB() 로 라우팅 → Old=SO / Epi=Episodes 분기 적용. (Save to DB 버튼과 동일 경로)
             _levelId = levelId;
-            SaveCurrentLevelToEpisode();
+            SaveToActiveDB();
         }
 
         // ── Feature 3: Crop Tool ──

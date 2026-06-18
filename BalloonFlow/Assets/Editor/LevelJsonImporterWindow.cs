@@ -82,6 +82,9 @@ namespace BalloonFlow.Editor
             public bool         selected = true;
             public bool         conflict;       // 기존 DB에 동일 levelId 존재
             public string       error;
+            // ROLLBACK_IMPORTER_OLD_SO_TARGET_20260618: 이 레벨을 old(레거시 SO)로 import 할지. false=ori(Episodes JSON).
+            //   전역 토글(_globalTargetOld) 기본값 + 행별 개별 토글로 override. (특정 레벨만 old 로)
+            public bool         importToOld;
         }
 
         #endregion
@@ -95,6 +98,10 @@ namespace BalloonFlow.Editor
         private string  _statusMessage = "JSON 파일을 추가하세요";
         private bool    _overwriteConflicts = true;
         private float   _previewZoom = 1f;
+        // ROLLBACK_IMPORTER_OLD_SO_TARGET_20260618: import 대상 전역 기본값(true=old SO, false=ori Episodes).
+        //   새 entry 추가 시 이 값으로 초기화 + 행별 토글로 개별 override 가능.
+        private bool    _globalTargetOld;
+        private const string LEGACY_SO_PATH = "Assets/EditorData/LevelDatabase.asset";
 
         #endregion
 
@@ -161,8 +168,19 @@ namespace BalloonFlow.Editor
 
             GUILayout.Space(10);
 
+            // ROLLBACK_IMPORTER_OLD_SO_TARGET_20260618: 전역 import 대상 토글. 변경 시 모든 entry 에 일괄 적용(전역 선택).
+            //   행별 토글로 개별 override 가능. old=레거시 SO, ori=Episodes JSON.
+            bool prevTargetOld = _globalTargetOld;
+            _globalTargetOld = GUILayout.Toggle(_globalTargetOld,
+                _globalTargetOld ? "대상: Old(SO)" : "대상: Ori(Episode)",
+                EditorStyles.toolbarButton, GUILayout.Width(140));
+            if (_globalTargetOld != prevTargetOld)
+                foreach (var en in _entries) en.importToOld = _globalTargetOld;
+
+            GUILayout.Space(10);
+
             GUI.enabled = _entries.Any(e => e.selected && e.config != null && e.error == null);
-            if (GUILayout.Button("Episode 파일에 적용", EditorStyles.toolbarButton, GUILayout.Width(150)))
+            if (GUILayout.Button("적용 (Ori/Old)", EditorStyles.toolbarButton, GUILayout.Width(120)))
                 ApplyToEpisodes();
             GUI.enabled = true;
 
@@ -209,6 +227,10 @@ namespace BalloonFlow.Editor
                     ? new GUIStyle("selectionRect") : GUIStyle.none);
 
                 e.selected = EditorGUILayout.Toggle(e.selected, GUILayout.Width(18));
+
+                // ROLLBACK_IMPORTER_OLD_SO_TARGET_20260618: 행별 import 대상 토글 (Old=레거시 SO / Ori=Episodes). 전역 override.
+                e.importToOld = GUILayout.Toggle(e.importToOld, e.importToOld ? "Old" : "Ori",
+                    EditorStyles.miniButton, GUILayout.Width(34));
 
                 // Status icon
                 string icon = e.error != null ? "X " :
@@ -481,6 +503,7 @@ namespace BalloonFlow.Editor
                 entry.error = ex.Message;
             }
 
+            entry.importToOld = _globalTargetOld; // ROLLBACK_IMPORTER_OLD_SO_TARGET_20260618: 전역 기본 대상
             _entries.Add(entry);
         }
 
@@ -508,6 +531,7 @@ namespace BalloonFlow.Editor
                     sourceKind = "Episode",
                     config = level
                 };
+                entry.importToOld = _globalTargetOld; // ROLLBACK_IMPORTER_OLD_SO_TARGET_20260618: 전역 기본 대상
                 CheckConflict(entry);
                 _entries.Add(entry);
             }
@@ -539,6 +563,7 @@ namespace BalloonFlow.Editor
                 sourceKind = "LevelConfig",
                 config = level
             };
+            entry.importToOld = _globalTargetOld; // ROLLBACK_IMPORTER_OLD_SO_TARGET_20260618: 전역 기본 대상
             CheckConflict(entry);
             _entries.Add(entry);
             return true;
@@ -1287,8 +1312,25 @@ namespace BalloonFlow.Editor
 
         private void ApplyToEpisodes()
         {
-            var toApply = _entries.Where(e => e.selected && e.config != null && e.error == null).ToList();
-            if (toApply.Count == 0) { _statusMessage = "적용할 항목 없음"; Repaint(); return; }
+            var selected = _entries.Where(e => e.selected && e.config != null && e.error == null).ToList();
+            if (selected.Count == 0) { _statusMessage = "적용할 항목 없음"; Repaint(); return; }
+
+            // ROLLBACK_IMPORTER_OLD_SO_TARGET_20260618: old(레거시 SO) 대상은 SO 로, 나머지(ori)는 Episodes JSON 으로.
+            int soWritten = 0;
+            var oldEntries = selected.Where(e => e.importToOld).ToList();
+            if (oldEntries.Count > 0) soWritten = WriteLevelsToLegacySO(oldEntries);
+
+            var toApply = selected.Where(e => !e.importToOld).ToList();
+            if (toApply.Count == 0)
+            {
+                _episodeLevelIds.Clear();
+                foreach (var e in _entries) CheckConflict(e);
+                _statusMessage = $"완료 — old(SO) {soWritten}개 적용 (ori 대상 없음)";
+                Debug.Log($"[LevelJsonImporter] {_statusMessage}");
+                EditorUtility.DisplayDialog("적용 완료", $"old(LevelDatabase.asset SO)에 {soWritten}개 레벨 적용 완료.", "OK");
+                Repaint();
+                return;
+            }
 
             // 패키지(=에피소드)별 그룹. levelId 로 패키지/포지션 결정 (JSON 의 packageId 는 신뢰하지 않음).
             var byPkg = new Dictionary<int, List<LevelConfig>>();
@@ -1363,7 +1405,8 @@ namespace BalloonFlow.Editor
             bool needUpload = touchedPkgs.Any(p => p != BUNDLED_PACKAGE_ID);
 
             _statusMessage = $"완료 — 추가:{added} 덮어쓰기:{overwritten} 건너뜀:{skipped}" +
-                             (outOfRange > 0 ? $" 범위밖:{outOfRange}" : "") + $"  (episode {pkgList})";
+                             (outOfRange > 0 ? $" 범위밖:{outOfRange}" : "") + $"  (episode {pkgList})" +
+                             (soWritten > 0 ? $" · old(SO):{soWritten}" : ""); // ROLLBACK_IMPORTER_OLD_SO_TARGET_20260618
             Debug.Log($"[LevelJsonImporter] {_statusMessage}");
 
             EditorUtility.DisplayDialog("Episode 적용 완료",
@@ -1376,6 +1419,54 @@ namespace BalloonFlow.Editor
                 "OK");
 
             Repaint();
+        }
+
+        // ROLLBACK_IMPORTER_OLD_SO_TARGET_20260618: old 대상 entry 들을 레거시 SO(LevelDatabase.asset)에 병합·저장.
+        //   기존 importer 는 18MB SO 를 피해 Episodes JSON 만 썼지만, 사용자 요청(old=SO 쓰기가능 + 특정 레벨 old import)에
+        //   따라 old 지정 레벨만 SO 로 직접 기록한다(SetDirty+SaveAssets). _overwriteConflicts 동일 적용. 반환=적용 레벨 수.
+        private int WriteLevelsToLegacySO(List<ImportEntry> entries)
+        {
+            var db = AssetDatabase.LoadAssetAtPath<LevelDatabase>(LEGACY_SO_PATH);
+            if (db == null)
+            {
+                db = ScriptableObject.CreateInstance<LevelDatabase>();
+                AssetDatabase.CreateAsset(db, LEGACY_SO_PATH);
+                Debug.Log($"[Importer] old SO 신규 생성: {LEGACY_SO_PATH}");
+            }
+            BackupLegacySO();
+
+            var levels = db.levels != null ? new List<LevelConfig>(db.levels) : new List<LevelConfig>();
+            var idxById = new Dictionary<int, int>();
+            for (int i = 0; i < levels.Count; i++) if (levels[i] != null) idxById[levels[i].levelId] = i;
+
+            int applied = 0, skipped = 0;
+            foreach (var e in entries)
+            {
+                var lv = e.config;
+                if (lv == null) continue;
+                if (idxById.TryGetValue(lv.levelId, out int idx))
+                {
+                    if (_overwriteConflicts) { levels[idx] = lv; applied++; }
+                    else skipped++;
+                }
+                else { levels.Add(lv); idxById[lv.levelId] = levels.Count - 1; applied++; }
+            }
+            levels.Sort((a, b) => a.levelId.CompareTo(b.levelId));
+            db.levels = levels.ToArray();
+            EditorUtility.SetDirty(db);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[Importer] old(SO) {LEGACY_SO_PATH} ← 적용:{applied} 건너뜀:{skipped} (총 {levels.Count}레벨)");
+            return applied;
+        }
+
+        private void BackupLegacySO()
+        {
+            if (!File.Exists(LEGACY_SO_PATH)) return;
+            const string backupDir = "Assets/LevelBackups";
+            Directory.CreateDirectory(backupDir);
+            string ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            try { File.Copy(LEGACY_SO_PATH, $"{backupDir}/LevelDatabase_{ts}.asset", true); }
+            catch (Exception ex) { Debug.LogWarning($"[Importer] old SO 백업 실패: {ex.Message}"); }
         }
 
         private static string EpisodePath(int pkg) => $"{EPISODES_DIR}/episode_{pkg:D2}.json";
