@@ -130,14 +130,31 @@ namespace BalloonFlow
         private void OnEnable()
         {
             EventBus.Subscribe<OnBoosterUsed>(HandleBoosterUsed);
+            // ROLLBACK_BOOSTER_PAUSE_RESET_20260618: 새 레벨 로드 시 부스터 pending/awaiting 상태 정리.
+            //   부스터 arm 상태(타겟 선택 대기)에서 Retry/실패/점프로 보드가 바뀌면 _awaiting*/_pendingBoosterType 가
+            //   다음 보드까지 잔존 → 엉뚱한 탭이 stale 부스터 효과를 트리거할 수 있음. OnLevelLoaded 에 리셋.
+            //   (레일 정지 자체는 RailManager 가 IsPausedByBooster=false 로 끊음.) 롤백: 이 구독 + HandleLevelLoaded 제거.
+            EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
         }
 
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnBoosterUsed>(HandleBoosterUsed);
+            EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
             _handCamReturnSaved = false; // [HAND_CAMERA_5ROWS] 레벨 전환 시 보존 좌표 잔존 방지
             StopZapLineJiggle();
             _zapLineTargetWidths.Clear();
+        }
+
+        // ROLLBACK_BOOSTER_PAUSE_RESET_20260618: 보드 리셋 시 부스터 대기/진행 상태 강제 정리(환불 없음 — teardown).
+        //   _pendingBoosterType 환불은 하지 않는다(보드가 사라지는 상황이라 인벤토리 복원은 별도 정책). 잔존 플래그만 클리어.
+        private void HandleLevelLoaded(OnLevelLoaded evt)
+        {
+            _awaitingColorSelection = false;
+            _awaitingHolderSelection = false;
+            _awaitingBalloonClick = false;
+            _pendingBoosterType = null;
+            _isColorRemoveSequenceRunning = false;
         }
 
         #endregion

@@ -1179,6 +1179,12 @@ namespace BalloonFlow
             _deadlockBufferSize = 0; // V2 아키텍처: buffer 없음
             _slots = new SlotData[_slotCount];
             _deadlockHolderId = -1;
+            // ROLLBACK_BOOSTER_PAUSE_RESET_20260618: 새 보드 시작 시 부스터 일시정지 강제 해제.
+            //   IsPausedByBooster 는 ResumeRail(부스터 완료/취소) 에서만 false 가 되는데, 부스터 arm 상태에서
+            //   Retry/자동실패/광고중단/레벨점프로 보드가 리셋되면 true 인 채 남아 UpdateInternal(375) 이 매 프레임
+            //   return → 새 레일 영구정지(soft-lock). 보드 init 에서 무조건 false 로 끊는다. (QA HIGH)
+            //   롤백: 이 줄 제거.
+            IsPausedByBooster = false;
             _rotationOffset = 0f;
             _occupiedCount = 0;
             _nextDartId = 0;
@@ -2993,6 +2999,8 @@ namespace BalloonFlow
             _nextPlacedSeq = 0;
             _nextReservationOrder = 0;
             _boardFinished = false;
+            // ROLLBACK_BOOSTER_PAUSE_RESET_20260618: ResetAll 에서도 부스터 일시정지 해제 (soft-lock 방지). QA HIGH.
+            IsPausedByBooster = false;
             _darts.Clear();
             _dartById.Clear();
             _clusterHeadByHolder.Clear();

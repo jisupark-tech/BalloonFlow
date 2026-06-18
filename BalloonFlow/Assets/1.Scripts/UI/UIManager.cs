@@ -232,6 +232,24 @@ namespace BalloonFlow
                 if (ui != null) Destroy(ui.gameObject);
             }
             _openUIList.Clear();
+
+            // ROLLBACK_WS_ORPHAN_POPUP_FIX_20260618: CloseUIAll(씬 나갈 때)은 GameObject 를 SetActive(false)만 하고
+            //   _openUIList 를 비우므로, DontDestroyOnLoad 인 PopupTr/UiTr 아래에 '추적 안 되는 orphan UI' 가 남는다.
+            //   그게 다음 OpenUIInternal 의 FindAnyObjectByType(inactive 포함) 로 재입양되어 'PopupWinningStreak 가
+            //   인게임→로비 복귀 시 다시 열려 있음'(Bug3) 을 유발. 리스트 밖 stray UIBase 까지 전부 파괴해 orphan 제거.
+            //   DestroyAllUI 는 항상 새 씬 UI 생성 전(InitLobby/TitleController/GameBootstrap)에 호출되므로 안전.
+            //   롤백: 아래 2줄 + DestroyStrayUI 제거.
+            DestroyStrayUI(PopupTr);
+            DestroyStrayUI(UiTr);
+        }
+
+        // ROLLBACK_WS_ORPHAN_POPUP_FIX_20260618: 리스트에 없더라도 캔버스 하위의 모든 UIBase GameObject 를 파괴.
+        private void DestroyStrayUI(Transform root)
+        {
+            if (root == null) return;
+            var strays = root.GetComponentsInChildren<UIBase>(true);
+            for (int i = 0; i < strays.Length; i++)
+                if (strays[i] != null) Destroy(strays[i].gameObject);
         }
 
         /// <summary>

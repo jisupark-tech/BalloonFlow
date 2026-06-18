@@ -721,6 +721,8 @@ namespace BalloonFlow
                     bool isEggBox = balloon.gimmickType == BalloonController.GimmickPinataBox
                         && balloon.eggColors != null && balloon.eggColors.Length > 0;
                     int eggN = isEggBox ? balloon.eggColors.Length : 0;
+                    // ROLLBACK_PINATA_PER_CELL_20260618: plain Pinata(sized) per-cell — 셀마다 별도 hit.
+                    bool isPinataPerCell = BalloonController.IsPinataPerCell(balloon);
                     Vector3 anchor = BalloonController.Instance.GetAdjustedBoardPosition(balloon.position);
                     BalloonController.Instance.GetAdjustedCellSize(out float cellSizeX, out float cellSizeZ);
                     // ROLLBACK_SIZED_FOOTPRINT_INT_KEY_20260615: 그리드 키는 anchor 셀 + 정수 오프셋으로
@@ -739,6 +741,14 @@ namespace BalloonFlow
                                 // 죽은 알(hp 0) 색 셀은 비타겟(blocker) — 그 색 다트가 더는 조준 안 함.
                                 bool eggAlive = balloon.eggHps != null && eggIdx < balloon.eggHps.Length && balloon.eggHps[eggIdx] > 0;
                                 cellTargetable = targetable && eggAlive;
+                            }
+                            else if (isPinataPerCell)
+                            {
+                                // ROLLBACK_PINATA_PER_CELL_20260618: idx<hitCount = 이미 맞은 셀(blocker, 비타겟),
+                                //   idx>=hitCount = 아직 살아있는 셀(타겟). hit 마다 ProcessPinataHit 이 캐시 무효화 → 셀 1개씩 빠짐.
+                                //   색은 balloon.color 그대로(단색). egg 모델과 동일한 idx 순서·blocker 의미.
+                                int idx = dz * width + dx;
+                                cellTargetable = targetable && (idx >= balloon.hitCount);
                             }
                             Vector3 cellWorld = new Vector3(
                                 anchor.x + dx * cellSizeX,

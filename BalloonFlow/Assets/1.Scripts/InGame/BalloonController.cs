@@ -102,6 +102,22 @@ namespace BalloonFlow
         // FlexTube HP, cell occupancy, targeting, and hit logic still use the original cell data.
         private static readonly Vector3 FlexTubeSegmentVisualScale = new Vector3(0.5f, 0.35f, 0.86f);
         private const float FLEXTUBE_ENDCAP_CONNECTOR_INSET = 0.35f;
+        // ROLLBACK_FLEXTUBE_SEAMLESS_TILING_20260618: 세그먼트의 자연 길이(월드 Z).
+        //   측정: 유니티 (1,1,1) 박스 대비 세그먼트가 유닛당 3.5개일 때 1사이즈 = 1/3.5 ≈ 0.2857.
+        //   (FlexTube_Segment mesh × FlexTubeSegmentVisualScale.z(0.86) 의 실제 월드 길이.)
+        //   고정 5개 강제 대신, 셀마다 N=round(셀거리/이값) 로 계산 → visualStep ≈ 이값 → 겹침/틈 없이 타일링.
+        //   시각만 영향, HP/타게팅/셀점유 무관. 롤백: cellSegments → visualSegmentsPerCell 환원 + 이 상수 제거.
+        private const float FLEXTUBE_SEGMENT_WORLD_LENGTH = 1f / 3.5f;
+
+        // ROLLBACK_PINATA_PER_CELL_20260618:
+        //   plain Pinata(sized W×H>1)를 '칸당 1공격'으로 — 점유 셀마다 별도 hit 필요(총 W×H 회). 2×2=4회.
+        //   객체/비주얼은 단일 그대로 유지(분할 X). 메커니즘은 Pinata_Box egg 모델과 함수적으로 동일(idx>=hitCount).
+        //   타게팅: 셀 idx<hitCount = 제거됨(blocker), idx>=hitCount = 타겟. ProcessPinataHit: requiredHits=W×H +
+        //   partial hit 마다 타게팅 캐시 무효화(셀 1개씩 빠지게). 1×1 Pinata 는 영향 없음(W×H==1).
+        //   롤백: 이 플래그/헬퍼 + ProcessPinataHit 의 perCell 분기 + DirectionalTargeting 의 isPinataPerCell 분기 제거.
+        public static bool EnablePinataPerCell = true;
+        public static bool IsPinataPerCell(BalloonData d) =>
+            EnablePinataPerCell && d.gimmickType == GimmickPinata && d.sizeW * d.sizeH > 1;
 
         #endregion
 
@@ -1713,6 +1729,12 @@ namespace BalloonFlow
                 flexTubePartType      = entry.flexTubePartType
             };
 
+            // ROLLBACK_PINATA_PER_CELL_20260618: per-cell Pinata 는 maxHP 를 점유 셀수(W×H)로 강제한다.
+            //   → requiredHits(ProcessPinataHit) · GimmickIdentifier HP 비율 · UpdateHP 표시가 전부 셀수 기준 일치.
+            //   레벨 데이터의 entry.hp 는 sized Pinata 에서 무시됨(칸당 1공격 = 셀수). 롤백: 이 if 제거.
+            if (IsPinataPerCell(data))
+                data.maxHP = data.sizeW * data.sizeH;
+
             // ROLLBACK_PINATABOX_EGG_CLAMP_20260616: eggColors 가 footprint 셀 수(sizeW*sizeH) 를 초과하면
             //   초과 알은 타게팅 셀에 매핑 안 됨(eggIdx=(dz*W+dx)%eggN 의 인덱스 범위가 0..W*H-1) → 영원히 타격 불가
             //   → 박스가 영영 안 터져 언위너블. 알 배열을 footprint 셀 수로 클램프. 정상(eggN ≤ W*H)은 불변.
@@ -1976,11 +1998,10 @@ namespace BalloonFlow
                 int groupColor = _balloons[ids[0]].color;
                 int colorIdx = Mathf.Clamp(groupColor, 0, BalloonColors.Length - 1);
 
-                // visual segment count per cell — prefab mesh 가 cell 폭 1/N 이라는 전제. cell 폭이 visual 적으로 끊김 없이 채워짐.
-                // ROLLBACK_FLEXTUBE_FORCE_DENSE_SEGMENTS_20260608:
-                // The FlexTube prefab can serialize an older low segment count, so script defaults may not apply.
-                // Force enough runtime visual pieces per logical cell to avoid large block-looking hose chunks.
-                int visualSegmentsPerCell = Mathf.Max(5, tube.VisualSegmentsPerCell);
+                // ROLLBACK_FLEXTUBE_SEAMLESS_TILING_20260618: 실제 세그먼트 개수는 더 이상 이 값이 아니라 아래 루프에서
+                //   셀마다 '세그먼트 자연폭' 기준으로 계산한다(겹침/틈 없는 seamless 타일). 이 변수는 parts List 용량
+                //   추정 힌트로만 남는다(과/소추정 무해 — List 가 알아서 grow). 기존 FORCE_DENSE(5 강제)는 폐기.
+                int visualSegmentsPerCell = Mathf.Max(4, tube.VisualSegmentsPerCell); // 용량 추정 힌트 (≈ 유닛당 3.5)
                 // visualStep(1/N 폭 분산 간격)은 보정된 인접 셀 실제 거리 기반으로 cell 별 계산(아래 루프). raw cellSpacing 미사용.
 
                 // parts list 용량 = 2 Cap + (cells - 2) × N visual segment
@@ -2008,14 +2029,19 @@ namespace BalloonFlow
 
                     // visual segment 가 여러 개일 때 cell 안에서 tangent 방향으로 1/N step 으로 분산.
                     // Cap (Start/End) 은 분해 안 함 — 항상 cell center 1개.
-                    int visualCount = (partType == GimmickIdentifier.FlexTubePart.Segment) ? visualSegmentsPerCell : 1;
+                    // ROLLBACK_FLEXTUBE_SEAMLESS_TILING_20260618: 고정 N(5) 대신 '세그먼트 자연폭' 기준으로 셀마다 계산.
+                    //   N = round(셀거리 / 자연폭) → visualStep = 셀거리/N ≈ 자연폭 → 세그먼트가 겹침/틈 없이 딱 맞게 타일.
+                    //   대각/보드스케일로 셀거리가 달라도 각 셀이 항상 seamless. (위 visualSegmentsPerCell 는 List 용량 추정용만.)
+                    //   롤백: cellDist/cellSegments 를 AdjacentCellDistance/visualSegmentsPerCell 로 환원.
+                    float cellDist = AdjacentCellDistance(cellPositions, i);
+                    int cellSegments = Mathf.Max(1, Mathf.RoundToInt(cellDist / FLEXTUBE_SEGMENT_WORLD_LENGTH));
+                    int visualCount = (partType == GimmickIdentifier.FlexTubePart.Segment) ? cellSegments : 1;
                     Vector3 tangent = ComputeFlexTubeTangent(cellPositions, i); // cellPositions 기반 forward
                     bool useTangent = visualCount > 1 && tangent.sqrMagnitude > 0.0001f;
                     bool useCornerCurve = partType == GimmickIdentifier.FlexTubePart.Segment
                         && visualCount > 1
                         && IsFlexTubeCorner(cellPositions, i);
-                    // 1/N 폭 visual 이 보정된 cell 을 정확히 채우도록 — 보정된 인접 셀 거리 / N.
-                    float visualStep = AdjacentCellDistance(cellPositions, i) / visualSegmentsPerCell;
+                    float visualStep = cellDist / cellSegments; // ≈ FLEXTUBE_SEGMENT_WORLD_LENGTH → seamless
 
                     // cell center 에 있는 visual 을 _balloonObjects[id] 로 등록 — 다트 target 위치가 cell center 와 일치하도록.
                     // 끝쪽부터 사라지는 정책상 center visual 은 cell 죽기 직전까지 active 유지 → target lookup 안정.
@@ -3609,7 +3635,10 @@ namespace BalloonFlow
             _balloons[data.balloonId] = data;
 
             // HP 텍스트 + 피격/파괴 이펙트
-            int requiredHits = data.maxHP > 0 ? data.maxHP : PinataRequiredHits;
+            // ROLLBACK_PINATA_PER_CELL_20260618: per-cell 모드면 총 hit = 점유 셀수(W×H). 아니면 기존 maxHP.
+            int requiredHits = IsPinataPerCell(data)
+                ? data.sizeW * data.sizeH
+                : (data.maxHP > 0 ? data.maxHP : PinataRequiredHits);
             if (_balloonObjects.TryGetValue(data.balloonId, out GameObject hitObj) && hitObj != null)
             {
                 int remainHP = Mathf.Max(0, requiredHits - data.hitCount);
@@ -3624,6 +3653,11 @@ namespace BalloonFlow
 
             if (data.hitCount < requiredHits)
             {
+                // ROLLBACK_PINATA_PER_CELL_20260618: per-cell 모드는 hit 마다 셀 1개가 blocker 로 빠지므로
+                //   타게팅 캐시를 무효화해 다음 스캔이 줄어든 셀 집합(idx>=hitCount)을 반영하게 한다. (egg 모델 동일.)
+                if (IsPinataPerCell(data))
+                    DirectionalTargeting.InvalidateCache();
+
                 // Partial hit — not yet destroyed → 풍선 pop SFX 라우팅용 (isDestroyed=false)
                 EventBus.Publish(new OnGimmickTriggered
                 {

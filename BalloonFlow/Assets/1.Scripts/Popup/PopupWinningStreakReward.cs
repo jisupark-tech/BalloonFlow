@@ -81,6 +81,11 @@ namespace BalloonFlow
             if (parent == null) return null;
 
             var go = Instantiate(prefab, parent);
+            // ROLLBACK_WS_REWARD_POPUP_HANG_FIX_20260618: 프리팹이 비활성 상태로 저장돼 있으면 StartCoroutine 이
+            //   조용히 무시되어 RunSequence 가 영영 실행 안 됨 → IsFinished 가 false 로 고정 → 호출측(UILobby:679)
+            //   while(!IsFinished) 무한 대기 → 로비 FX 코루틴이 finally 도달 못 함 → PlayButton 영구 차단(Bug1/2).
+            //   인스턴스를 무조건 활성화해 코루틴이 실제로 돌도록 보장한다. 롤백: 이 줄 제거.
+            go.SetActive(true);
             var ctrl = go.AddComponent<PopupWinningStreakReward>();
             ctrl.WireRefs();
             ctrl.StartCoroutine(ctrl.RunSequence(
