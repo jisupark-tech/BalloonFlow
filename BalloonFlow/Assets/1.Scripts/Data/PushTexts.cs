@@ -22,7 +22,11 @@ namespace BalloonFlow
         public const string RETURN_D7 = "🎈 Remember how good that balloon pop felt? Let's do it again!";
 
         // #3 데일리 보상 미수령 — 서버 푸시 (Phase 2)
-        public const string DAILY_REWARD = "⏰ Don't miss today's reward! Tap to collect before it's gone.";
+        // ROLLBACK_DAILY_PUSH_DISABLED_20260618: 1.0 에는 데일리 리워드 기능이 없음(GameManager 부트스트랩 제거,
+        //   "[1.0 비포함] DailyReward 는 1.0 명세/문서에 없고 UI 진입점도 없음"). 보상이 없는데 '오늘의 보상 받으세요'
+        //   푸시가 나가면 안 되므로 데일리 리워드 푸시 텍스트를 비활성(주석)한다. 데일리 리워드 도입 시 주석 해제.
+        //   (클라 참조 0 = unused 라 주석 처리해도 컴파일 영향 없음.)
+        // public const string DAILY_REWARD = "⏰ Don't miss today's reward! Tap to collect before it's gone.";
 
         // #4 Winning Streak 이벤트 푸시 — 서버 푸시 (Phase 2). 클라 참조용으로 보관.
         // string.Format({0} ← WINNING_STREAK_EVENT_NAME) 으로 사용.

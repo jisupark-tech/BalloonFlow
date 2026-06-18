@@ -150,6 +150,10 @@ exports.pushReturnCron = onSchedule(
 // Exclude: dailyReward.lastClaimDate == 오늘. UserData 의 lastClaimDate 는
 // 디바이스 local TZ 기반이라 서버 UTC 기준과 약간 어긋날 수 있음 — TZ 보정은
 // 1.1+ 에서 서버 timestamp 동시 저장 후 보강. 1.0 은 UTC 단일 기준 send.
+// ROLLBACK_DAILY_PUSH_DISABLED_20260618: 1.0 에 데일리 리워드 기능 없음(클라 UI/부트스트랩 비활성, "[1.0 비포함]").
+//   보상이 없는데 '오늘의 보상 받으세요' 푸시가 나가면 안 되므로 데일리 cron 발송을 비활성(아래 export 전체 주석).
+//   ★ firebase deploy 재배포해야 기존 배포된 pushDailyRewardCron 함수가 제거됨. 도입 시 주석 해제 + 재배포.
+/*
 exports.pushDailyRewardCron = onSchedule(
   {
     schedule: '0 20 * * *',
@@ -192,6 +196,8 @@ exports.pushDailyRewardCron = onSchedule(
     console.log(`[pushDailyRewardCron] total=${snapshot.size} sent=${sent} skipped=${skipped} invalidToken=${invalidToken}`);
   }
 );
+*/
+// ROLLBACK_DAILY_PUSH_DISABLED_20260618: end — pushDailyRewardCron 주석 끝.
 
 // ── Analytics 직접 적재 엔드포인트 (Firebase Analytics→BQ export 대체) ────────
 //
