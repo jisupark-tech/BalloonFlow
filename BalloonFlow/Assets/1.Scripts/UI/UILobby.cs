@@ -144,6 +144,8 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtPlayOutline;
         [SerializeField] private TMP_Text _txtPlayLevel;
         [SerializeField] private TMP_Text _txtPlayLevelOutline;
+        private int _currentPlayLevelId;
+        private DifficultyPurpose _currentPlayDifficulty = DifficultyPurpose.Normal;
         [SerializeField] private Sprite _sprBtnGreen;
         [SerializeField] private Sprite _sprBtnPurple;
         [SerializeField] private Sprite _sprBtnRed;
@@ -320,6 +322,8 @@ namespace BalloonFlow
             _uiShop = _pageShop != null ? _pageShop.GetComponent<UIShop>() : null;
             CacheNavTextBaseY();
             ResolveRailRefs();
+            DisableDynamicPlayLevelLocalization();
+            LocalizationService.OnLanguageChanged += HandleLobbyLanguageChanged;
 
             // [2026-05-12] RemoveAllListeners — Inspector 의 onClick wire (의도되지 않은 prefab wire) + 코드 wire 중복 방지.
             // 증상: Shop 패널 열 때 연출 2번 발생 (Inspector + code 둘 다 GoToPage(0) 호출).
@@ -410,7 +414,10 @@ namespace BalloonFlow
         /// <summary>대기 중인 WS 로비 연출 코루틴을 (재)시작. 진행 중이면 중단 후 재시작해 매 진입마다 확실히 발동.</summary>
         private void TriggerPendingWinningStreakLobbyFx()
         {
-            if (_wsLobbyFxCoroutine != null) StopCoroutine(_wsLobbyFxCoroutine);
+            // ROLLBACK_WINNING_STREAK_KEEP_RUNNING_LOBBY_FX_20260617:
+            // Previous behavior stopped the running coroutine on every OpenUI call. If the coroutine
+            // had already dequeued a PendingLobbyAnimation, stopping it could lose the lobby FX.
+            if (_wsLobbyFxCoroutine != null) return;
             _wsLobbyFxArmed = true;
             _wsLobbyFxCoroutine = StartCoroutine(PlayPendingWinningStreakLobbyFxDeferred());
         }
@@ -669,8 +676,21 @@ namespace BalloonFlow
                 yield break;
 
             var popup = PopupWinningStreakReward.Play(diffMult, streakMult, anim.gainedPoints, showBadge);
-            while (popup != null && !popup.IsFinished)
+            // ROLLBACK_WS_REWARD_POPUP_HANG_FIX_20260618: IsFinished 가 어떤 이유로든(코루틴 미시작/예외) 안 떨어져도
+            //   최대 maxWait 초 후 강제 종료 — 이 while 이 영구 대기하면 상위 deferred 코루틴이 finally 에 못 가
+            //   _wsLobbyFxCoroutine 가 안 풀려 PlayButton 이 영구 차단됨(Bug1/2). 정상은 ~3s 내 종료. 롤백: 타이머/Destroy 제거.
+            const float maxWait = 6f;
+            float waited = 0f;
+            while (popup != null && !popup.IsFinished && waited < maxWait)
+            {
+                waited += Time.unscaledDeltaTime;
                 yield return null;
+            }
+            if (popup != null && !popup.IsFinished && popup.gameObject != null)
+            {
+                Debug.LogWarning("[UILobby] PopupWinningStreakReward 가 시간 내 종료 안 됨 — 강제 정리(버튼 차단 방지).");
+                Destroy(popup.gameObject);
+            }
         }
 
         /// <summary>[WS quit-fail 2026-06-10] 배수 드롭 실패 연출 — 이전 배수로 슬라이드 인 → 잠시 후 1 로 드롭(펀치) → 슬라이드 아웃.
@@ -1300,6 +1320,62 @@ namespace BalloonFlow
 
         /// <summary>WS 회차 남은 시간 표기 — [2026-06-12] "02:21" 형식이 의미 모호("2d 21h"로 요청) →
         /// 1d+: "{d}d {h}h", 1h+: "{h}h {m}m", &lt;1h: "{m}m {s}s".</summary>
+        // Dynamic play-level localization guard.
+        private void DisableDynamicPlayLevelLocalization()
+        {
+            // ROLLBACK_LOBBY_PLAY_LEVEL_TEXT_SYNC_20260616:
+            // TxtLevelBalance/TxtLevelBalanceOutline are runtime difficulty labels. Prefab-side
+            // UIText keys can re-apply different static keys (ex: ui.hard vs ui.hardlevel) after
+            // UILobby sets the value, so disable only these dynamic label localizers.
+            // Rollback: remove this method call if prefab UIText keys are manually unified.
+            DisableUIText(_txtPlayLevel);
+            DisableUIText(_txtPlayLevelOutline);
+        }
+
+        private static void DisableUIText(TMP_Text text)
+        {
+            if (text == null) return;
+            var uiText = text.GetComponent<UIText>();
+            if (uiText != null) uiText.enabled = false;
+        }
+
+        private void HandleLobbyLanguageChanged()
+        {
+            if (_currentPlayLevelId > 0)
+            {
+                string levelStr = "Level " + _currentPlayLevelId;
+                if (_txtPlay != null) _txtPlay.text = levelStr;
+                if (_txtPlayOutline != null) _txtPlayOutline.text = levelStr;
+            }
+            ApplyPlayLevelBalanceText(_currentPlayDifficulty);
+            ApplyStaticTextOverrides();
+        }
+
+        private void ApplyPlayLevelBalanceText(DifficultyPurpose difficulty)
+        {
+            bool showBalance = difficulty == DifficultyPurpose.Hard || difficulty == DifficultyPurpose.SuperHard;
+            string balanceStr = difficulty == DifficultyPurpose.SuperHard
+                ? LocalizationService.Get("ui.superhard")
+                : LocalizationService.Get("ui.hard");
+
+            SetTextPair(_txtPlayLevel, _txtPlayLevelOutline, balanceStr, showBalance);
+        }
+
+        private static void SetTextPair(TMP_Text text, TMP_Text outline, string value, bool visible)
+        {
+            if (text != null)
+            {
+                text.gameObject.SetActive(visible);
+                if (visible) text.text = value;
+            }
+
+            if (outline != null)
+            {
+                outline.gameObject.SetActive(visible);
+                if (visible) outline.text = value;
+            }
+        }
+
         private static string FormatWsRoundRemaining(System.TimeSpan r)
         {
             if (r.Ticks < 0) r = System.TimeSpan.Zero;
@@ -1814,6 +1890,7 @@ namespace BalloonFlow
         {
             if (_btnWinningStreak != null) _btnWinningStreak.onClick.RemoveAllListeners();
             base.OnDestroy();
+            LocalizationService.OnLanguageChanged -= HandleLobbyLanguageChanged;
             EventBus.Unsubscribe<OnAdsRemovedChanged>(HandleAdsRemovedChanged);
             UnhookProfileEvents();
             UnhookWinningStreakEvents();
@@ -2304,6 +2381,9 @@ namespace BalloonFlow
 
         public void UpdatePlayButton(int levelId, DifficultyPurpose difficulty)
         {
+            _currentPlayLevelId = levelId;
+            _currentPlayDifficulty = difficulty;
+
             // ROLLBACK_PLAYBUTTON_LEVEL_DIFFICULTY_SPLIT_20260615: START
             // PlayButton 분리(사용자 지시 2026-06-15):
             //   TxtPlay/TxtPlayOutline(=_txtPlay*)            → "Level {n}" (레벨 번호)
@@ -2315,12 +2395,7 @@ namespace BalloonFlow
             if (_txtPlayOutline != null) _txtPlayOutline.text = levelStr;
 
             // Normal 은 난이도 라벨 숨김(사용자 지시 2026-06-15). Hard/SuperHard 만 노출.
-            bool showBalance = difficulty == DifficultyPurpose.Hard || difficulty == DifficultyPurpose.SuperHard;
-            string balanceStr = difficulty == DifficultyPurpose.SuperHard
-                ? LocalizationService.Get("ui.superhard")
-                : LocalizationService.Get("ui.hard");
-            if (_txtPlayLevel != null) { _txtPlayLevel.gameObject.SetActive(showBalance); if (showBalance) _txtPlayLevel.text = balanceStr; }
-            if (_txtPlayLevelOutline != null) { _txtPlayLevelOutline.gameObject.SetActive(showBalance); if (showBalance) _txtPlayLevelOutline.text = balanceStr; }
+            ApplyPlayLevelBalanceText(difficulty);
             // ROLLBACK_PLAYBUTTON_LEVEL_DIFFICULTY_SPLIT_20260615: END
 
             // 버튼 배경 스프라이트(난이도별)
