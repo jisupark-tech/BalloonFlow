@@ -749,7 +749,34 @@ namespace BalloonFlow
         /// <summary>deploy point 활성화 (첫 다트 배치 후 → 장애물로 전환).</summary>
         public void ActivateDeployPoint(int holderId)
         {
+            // ① ROLLBACK_DEPLOY_CROSSED_DART_GUARD_20260618: deploy 지점을 다른 holder 다트가 이미 추월/점유한 상태면
+            //   block 을 그 다트 뒤에 만들지 않는다. block(=deploy progress, clearance 0)이 기존 다트보다 뒤에 생기면
+            //   packing wrap-math(541-543)상 그 다트의 distToBlock 이 음수→+pathLen(한 바퀴) 처리되어 영구 자유주행 →
+            //   gap 영영 안 열려 데드락. 추월 다트가 지나가면 다음 deploy 프레임 재호출 시 정상 활성화된다.
+            //   (정상 성공 경로는 직전 IsDeployProgressPhysicallyClear 통과라 추월 다트 없음 → 영향 없음.)
+            if (_deployPoints.TryGetValue(holderId, out float dpProgress)
+                && HasForeignDartAheadOfDeployPoint(holderId, dpProgress))
+                return;
             _activeDeployPoints.Add(holderId);
+        }
+
+        /// <summary>ROLLBACK_DEPLOY_CROSSED_DART_GUARD_20260618: deploy 지점 바로 앞(진행방향, physGap 내)에
+        /// 다른 holder 다트가 있으면 true = 그 다트가 deploy point 를 추월/점유한 상태. ①(활성화 보류) + ②(복구 트리거) 공용.</summary>
+        public bool HasForeignDartAheadOfDeployPoint(int holderId, float deployProgress)
+        {
+            float physGap = DartPhysicalGap;
+            if (physGap <= 0f) return false;
+            float pathLen = _totalPathLength;
+            NormalizeProgress(ref deployProgress);
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                DartOnRail d = _darts[i];
+                if (d.holderId == holderId) continue; // 같은 holder = 자기 cluster (정상적으로 deploy point 부터 자라남)
+                float ahead = d.progress - deployProgress;
+                if (pathLen > 0f && ahead < 0f) ahead += pathLen; // wrap: 진행방향 앞 거리
+                if (ahead >= 0f && ahead < physGap) return true;  // deploy 지점 바로 앞 physGap 내 점유 = 추월
+            }
+            return false;
         }
 
         public void DeactivateDeployPoint(int holderId)

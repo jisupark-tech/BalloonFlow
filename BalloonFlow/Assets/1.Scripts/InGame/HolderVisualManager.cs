@@ -1915,6 +1915,32 @@ namespace BalloonFlow
                                       $"Rail={rail.OccupiedCount}/{rail.SlotCount} active={rail.GetActiveDeployPointCount()} dlh={rail.DeadlockHolderId}");
                         }
 
+                        // ② ROLLBACK_DEPLOY_CROSSED_DART_DEADLOCK_RECOVERY_20260618: deploy 가 '추월한 타 holder 다트'
+                        //   (deploy 지점 앞 physGap 내)로 막힌 경우, near-full 이 아니어도(=TryEnterDeadlockIfNeeded 가
+                        //   못 잡는 중반 보드) DEPLOY_CROSS_BLOCK_DEADLOCK_SECONDS 연속 지속 시 DeadlockMode 진입 →
+                        //   belt force-advance 가 추월 다트를 밀어내 gap 오픈. 검증된 복구 경로 재사용(새 물리 X).
+                        if (rail.DeadlockHolderId < 0
+                            && rail.HasForeignDartAheadOfDeployPoint(visual.holderId, fixedDeployProgress))
+                        {
+                            float __crossNow = Time.unscaledTime;
+                            if (!_deployCrossBlockSince.TryGetValue(visual.holderId, out float __crossSince))
+                            {
+                                _deployCrossBlockSince[visual.holderId] = __crossNow;
+                                __crossSince = __crossNow;
+                            }
+                            if (__crossNow - __crossSince >= DEPLOY_CROSS_BLOCK_DEADLOCK_SECONDS)
+                            {
+                                LogDeployDebug($"[Deadlock] crossed-dart block recovery — holder {visual.holderId}(col{visual.column}) " +
+                                          $"forced DeadlockMode. rail={rail.OccupiedCount}/{rail.SlotCount} active={rail.GetActiveDeployPointCount()}");
+                                rail.EnterDeadlockMode(visual.holderId);
+                                _deployCrossBlockSince.Remove(visual.holderId);
+                            }
+                        }
+                        else
+                        {
+                            _deployCrossBlockSince.Remove(visual.holderId); // 추월 차단 아님 → 타이머 리셋
+                        }
+
                         TryEnterDeadlockIfNeeded(rail);
                         fixedGapBurstUnlocked = false;
                         fixedGapBurstPlaced = 0;
@@ -1929,6 +1955,9 @@ namespace BalloonFlow
                         TryEnterDeadlockIfNeeded(rail);
                         break;
                     }
+
+                    // ② ROLLBACK_DEPLOY_CROSSED_DART_DEADLOCK_RECOVERY_20260618: 배치 성공 = gap 정상 → 추월 차단 타이머 리셋.
+                    _deployCrossBlockSince.Remove(visual.holderId);
 
                     bool wasFirstPlacement = !deployStarted;
                     if (DEPLOY_DEBUG_ENABLED && (LOG_DEPLOY_GAP_DIAG || wasFirstPlacement || useDeadlockFallback))
@@ -2029,6 +2058,10 @@ namespace BalloonFlow
         private readonly Dictionary<int, float> _lastStuckLogTime = new Dictionary<int, float>();
         private readonly Dictionary<int, float> _lastGapBlockLogTime = new Dictionary<int, float>();
         private const float STUCK_LOG_INTERVAL = 1.0f;
+        // ② ROLLBACK_DEPLOY_CROSSED_DART_DEADLOCK_RECOVERY_20260618: deploy 가 '추월한 타 holder 다트'로 연속 막힌
+        //   시작 시각(holder별). 일정 시간 지속되면 near-full 아니어도 DeadlockMode 진입(belt force-advance 복구).
+        private readonly Dictionary<int, float> _deployCrossBlockSince = new Dictionary<int, float>();
+        private const float DEPLOY_CROSS_BLOCK_DEADLOCK_SECONDS = 1.0f;
         private const bool ENABLE_DEADLOCK_FALLBACK = false; // 기존 FindClearProgressNear 직접 배포 fallback은 비활성화.
         private const int DEADLOCK_FALLBACK_REMAINING_SLOTS = 1; // 199/200 같은 마지막 1칸 deadlock 보정 전용.
         // ROLLBACK_DART_RUNTIME_LOG_THROTTLE:
