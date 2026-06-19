@@ -455,7 +455,11 @@ namespace BalloonFlow
             {
                 PlayerPrefs.SetInt(WS_PREFS_UNLOCK_POPUP_SHOWN, 1);
                 PlayerPrefs.Save();
-                UIManager.Instance.OpenUI<PopupWinningStreakInfo>(Const.POPUP_WINNING_STREAK_INFO);
+                // ROLLBACK_WS_INTRO_SCROLL_THEN_INFO_20260619: 최초 해금 = PopupWinningStreak 오픈 → item1→25 자동
+                //   스크롤(2.5s, 입력잠금) → PopupWinningStreakInfo. Info 닫으면 둘 다 닫혀 로비 복귀.
+                var wsIntro = UIManager.Instance.OpenUI<PopupWinningStreak>(Const.POPUP_WINNING_STREAK);
+                if (wsIntro != null) wsIntro.PlayIntroScrollThenInfo();
+                else UIManager.Instance.OpenUI<PopupWinningStreakInfo>(Const.POPUP_WINNING_STREAK_INFO); // 폴백
                 return;
             }
 

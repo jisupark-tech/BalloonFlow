@@ -43,6 +43,22 @@ namespace BalloonFlow
 
         private Sequence _popSequence;
 
+        // ROLLBACK_WS_INTRO_SCROLL_THEN_INFO_20260619: 닫힐 때 1회 콜백 — 인트로 플로우에서 이 Info 를 닫으면
+        //   동반 PopupWinningStreak 도 함께 닫아 로비로 복귀시키기 위함. 일반 진입(Streak BtnInfo)에선 미설정.
+        private System.Action _onCloseCallback;
+        public void SetCloseCallback(System.Action onClose) => _onCloseCallback = onClose;
+
+        public override void CloseUI()
+        {
+            base.CloseUI();
+            if (_onCloseCallback != null)
+            {
+                var cb = _onCloseCallback;
+                _onCloseCallback = null;
+                cb.Invoke();
+            }
+        }
+
         protected override void Awake()
         {
             base.Awake();

@@ -222,6 +222,10 @@ namespace BalloonFlow
         public int SlotCount => _slotCount;
         public int OccupiedCount => _occupiedCount;
 
+        /// <summary>ROLLBACK_QUIT_MOVE_BASED_LIFE_20260619: 이번 레벨에서 다트가 1개라도 배치됐는지(=유저가 '무브'를
+        /// 1회라도 했는지). _nextPlacedSeq 는 매 배치마다 증가하고 레벨 로드 시 0 으로 리셋된다. Quit 시 하트 소모 판정용.</summary>
+        public bool HasAnyDartPlacedThisLevel => _nextPlacedSeq > 0;
+
         /// <summary>현재 데드락 모드의 leftmost holder ID. -1 = 정상 모드.</summary>
         public int DeadlockHolderId => _deadlockHolderId;
 

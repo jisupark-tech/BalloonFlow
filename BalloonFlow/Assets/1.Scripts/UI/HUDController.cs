@@ -229,6 +229,8 @@ namespace BalloonFlow
             }
 
             // 3) 온보딩 후 → Quit Level 확인 (Settings → Quit 과 동일 종착)
+            // ROLLBACK_QUIT_MOVE_BASED_LIFE_20260619: 무브 0 → 경고팝업 없이 즉시 종료(하트 0, WS 유지).
+            if (!HasUsedMoveThisLevel()) { QuitImmediateNoMove(); return; }
             if (_popupQuit != null) _popupQuit.OpenUI();
             else if (_popupSettings != null) _popupSettings.OpenUI();
         }
@@ -238,11 +240,30 @@ namespace BalloonFlow
             if (_popupSettings != null) _popupSettings.CloseUI();
         }
 
+        // ROLLBACK_QUIT_MOVE_BASED_LIFE_20260619: 이번 레벨에 '무브'(보관함 탭 → 다트 1개라도 레일 배치)가 있었는지.
+        private bool HasUsedMoveThisLevel()
+            => RailManager.HasInstance && RailManager.Instance.HasAnyDartPlacedThisLevel;
+
+        // ROLLBACK_QUIT_MOVE_BASED_LIFE_20260619: 무브 0 즉시 종료 — 경고/실패 팝업 없음, 하트 0,
+        //   WS 연승 유지(OnLevelAbandoned 미호출). 분석은 씬 재로드 시 quit_by_user 자동.
+        private void QuitImmediateNoMove()
+        {
+            if (_popupSettings != null) _popupSettings.CloseUI();
+            if (_popupQuit != null) _popupQuit.CloseUI();
+            if (!GameManager.HasInstance) return;
+            GameManager.Instance.ResumeGame();
+            if (GameManager.IsTestPlayMode) GameManager.Instance.GoToMapMaker();
+            else GameManager.Instance.GoToLobby();
+        }
+
         private void OnSettingsHomeClicked()
         {
             if (_popupSettings != null) _popupSettings.CloseUI();
 
-            // 나가기 확인 팝업이 있으면 표시, 없으면 바로 나가기
+            // ROLLBACK_QUIT_MOVE_BASED_LIFE_20260619: 무브 0 → 경고팝업 없이 즉시 종료(하트 0, WS 유지).
+            if (!HasUsedMoveThisLevel()) { QuitImmediateNoMove(); return; }
+
+            // 나가기 확인 팝업이 있으면 표시(무브 1+), 없으면 바로 나가기
             if (_popupQuit != null)
             {
                 _popupQuit.OpenUI();
@@ -284,20 +305,34 @@ namespace BalloonFlow
         {
             if (_popupQuit != null && _popupQuit.TryAdvanceHomeButton()) return;
 
-            if (_popupQuit != null) _popupQuit.CloseUI();
-            if (GameManager.HasInstance)
+            if (!GameManager.HasInstance) return;
+
+            // 테스트 플레이: 기존대로 MapMaker 복귀(하트 무관).
+            if (GameManager.IsTestPlayMode)
             {
+                if (_popupQuit != null) _popupQuit.CloseUI();
                 GameManager.Instance.ResumeGame();
-                if (GameManager.IsTestPlayMode)
-                {
-                    GameManager.Instance.GoToMapMaker();
-                }
-                else
-                {
-                    // [WS quit-fail 2026-06-10] 미클리어 중도 이탈 = 실패 — streak 리셋 + 로비 배수 드롭 연출 예약.
-                    if (WinningStreakManager.HasInstance) WinningStreakManager.Instance.OnLevelAbandoned();
-                    GameManager.Instance.GoToLobby();
-                }
+                GameManager.Instance.GoToMapMaker();
+                return;
+            }
+
+            // ROLLBACK_QUIT_MOVE_BASED_LIFE_20260619: 여기 도달 = 무브 1+ (무브 0 은 OnSettingsHomeClicked/HandleInGameBack
+            //   에서 PopupQuit 없이 즉시 종료). 정책: 무브 1+ Quit = 실패 처리 → WS 연승 끊김 + 하트 1 소모 + Level Failed 팝업.
+            //   ★PopupQuit 을 닫지 않는다★ — PauseManager pause 를 유지해 fail02 밑에서 board 가 진행(clear/fail)하는 것을 막는다.
+            //   fail02(OnEnable)가 하트 1 소모 + Retry/Exit 처리. Retry/Exit 의 scene 전환 시 PopupQuit 파괴 →
+            //   OnDisable→PauseManager.Resume 으로 pause 자동 균형. 분석은 씬 재로드 시 quit_by_user 자동.
+            // [WS quit-fail 2026-06-10] 미클리어 중도 이탈 = 실패 — streak 리셋 + 로비 배수 드롭 연출 예약.
+            if (WinningStreakManager.HasInstance) WinningStreakManager.Instance.OnLevelAbandoned();
+            if (PopupManager.HasInstance && PopupManager.Instance.HasPopup("popup_fail02"))
+            {
+                PopupManager.Instance.ShowPopup("popup_fail02", priority: 60);
+            }
+            else
+            {
+                // 폴백: fail02 미등록 시 기존 동작(하트 미소모, 즉시 로비).
+                if (_popupQuit != null) _popupQuit.CloseUI();
+                GameManager.Instance.ResumeGame();
+                GameManager.Instance.GoToLobby();
             }
         }
 

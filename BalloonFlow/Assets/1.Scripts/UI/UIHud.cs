@@ -983,14 +983,9 @@ namespace BalloonFlow
             if (!BoosterManager.Instance.IsBoosterUnlocked(boosterType))
             if (!BoosterManager.Instance.IsBoosterUnlocked(boosterType))
             {
-                int unlockLevel = boosterType switch
-                {
-                    BoosterManager.SELECT_TOOL  => 9,
-                    BoosterManager.SHUFFLE      => 12,
-                    BoosterManager.COLOR_REMOVE => 15,
-                    _                           => 1
-                };
-                ShowToast($"Unlocks at Level {unlockLevel}");
+                // ROLLBACK_LOCKED_ITEM_TOAST_TEXT_20260619:
+                // Locked item taps now use TextData instead of the previous level-based hardcoded toast.
+                ShowToast(LocalizationService.Get("toast.item.locked"));
                 return;
             }
 

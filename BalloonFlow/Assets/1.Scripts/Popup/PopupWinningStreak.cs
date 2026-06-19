@@ -250,6 +250,70 @@ namespace BalloonFlow
             UpdateRoundTimer();   // 열자마자 회차 카운트다운 즉시 표시 + 경계 체크
         }
 
+        // ── ROLLBACK_WS_INTRO_SCROLL_THEN_INFO_20260619 ─────────────────────────────
+        //   최초 해금 인트로: item1(bottom, vnp=0) → item25(top, vnp=1) 자동 스크롤(2.5s, 입력잠금) 후
+        //   PopupWinningStreakInfo 표시. Info 닫으면 콜백으로 이 팝업도 닫아 로비 복귀.
+        private const float IntroScrollDuration = 2.5f;
+        private bool _introPlaying;
+
+        public void PlayIntroScrollThenInfo()
+        {
+            if (_introPlaying) return;
+            _introPlaying = true;
+            StartCoroutine(IntroScrollThenInfoRoutine());
+        }
+
+        private System.Collections.IEnumerator IntroScrollThenInfoRoutine()
+        {
+            SetIntroInputLocked(true);
+
+            if (_scrollRect != null && _slotsBuilt)
+            {
+                _suppressScrollCallback = false;                 // 스크롤 중 슬롯 재활용 유지
+                _scrollRect.StopMovement();
+                _scrollRect.velocity = Vector2.zero;
+                _scrollRect.verticalNormalizedPosition = 0f;     // item1(bottom) 시작
+                Canvas.ForceUpdateCanvases();
+                RefreshVisibleSlots();
+                yield return null;
+
+                float t = 0f;
+                while (t < IntroScrollDuration)
+                {
+                    t += Time.unscaledDeltaTime;
+                    float v = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t / IntroScrollDuration));
+                    _scrollRect.verticalNormalizedPosition = v;  // → item25(top). onValueChanged 가 RefreshVisibleSlots 호출
+                    _scrollRect.velocity = Vector2.zero;
+                    yield return null;
+                }
+                _scrollRect.verticalNormalizedPosition = 1f;
+                _scrollRect.velocity = Vector2.zero;
+                RefreshVisibleSlots();
+            }
+
+            SetIntroInputLocked(false);
+            _introPlaying = false;
+
+            // PopupWinningStreakInfo 표시 + 닫힘 시 이 팝업도 닫아 로비 복귀.
+            if (UIManager.HasInstance)
+            {
+                var info = UIManager.Instance.OpenUI<PopupWinningStreakInfo>(Const.POPUP_WINNING_STREAK_INFO);
+                if (info != null) info.SetCloseCallback(CloseUI);
+                else CloseUI();
+            }
+            else CloseUI();
+        }
+
+        // 인트로 자동스크롤 중 사용자 입력 차단 — 버튼 비활성 + 스크롤 드래그 차단(프로그램적 vnp 설정은 계속 동작).
+        private void SetIntroInputLocked(bool locked)
+        {
+            bool interactable = !locked;
+            if (_frame != null && _frame.BtnSingle != null) _frame.BtnSingle.interactable = interactable;
+            if (_btnInfo != null) _btnInfo.interactable = interactable;
+            if (_frame != null && _frame.BtnExit != null) _frame.BtnExit.interactable = interactable;
+            if (_scrollRect != null) _scrollRect.vertical = interactable;
+        }
+
         // ── 회차 카운트다운 (클라 UTC 스케줄) ─────────────────────
         private float _timerTick;
 
