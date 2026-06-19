@@ -33,6 +33,10 @@ namespace BalloonFlow
         private const float ICON_Y_OFFSET = 25f; // 활성 +25, 비활성 -25
         private const float ICON_SCALE_DURATION = 0.2f;
         private const float WS_FIRE_FLY_DURATION = 0.55f;
+        // FXItem_WinningStreak_Fly 비행 동안 동일 duration 으로 4.0 → 2.0 축소.
+        // 이동 트윈과 Sequence.Join 으로 결합 — 시작/종료 시점 정확히 일치.
+        private const float WS_FIRE_FLY_SCALE_START = 4.0f;
+        private const float WS_FIRE_FLY_SCALE_END   = 2.0f;
         private const float WS_FIRE_PULSE_DURATION = 0.18f;
         private const float WS_SLIDER_FILL_DURATION = 0.45f;
         private const float WS_REWARD_RISE_DURATION = 0.55f;
@@ -993,14 +997,20 @@ namespace BalloonFlow
                     flyRt.anchorMin = flyRt.anchorMax = new Vector2(0.5f, 0.5f);
                     flyRt.pivot = new Vector2(0.5f, 0.5f);
                     flyRt.anchoredPosition = startLocal;
+                    flyRt.localScale = Vector3.one * WS_FIRE_FLY_SCALE_START;
                     _wsLobbyFxSequence.Append(flyRt.DOAnchorPos(targetLocal, WS_FIRE_FLY_DURATION)
                         .SetEase(Ease.InOutCubic));
+                    _wsLobbyFxSequence.Join(flyRt.DOScale(WS_FIRE_FLY_SCALE_END, WS_FIRE_FLY_DURATION)
+                        .SetEase(Ease.OutSine));
                 }
                 else
                 {
                     fly.transform.localPosition = startLocal;
+                    fly.transform.localScale = Vector3.one * WS_FIRE_FLY_SCALE_START;
                     _wsLobbyFxSequence.Append(fly.transform.DOLocalMove(targetLocal, WS_FIRE_FLY_DURATION)
                         .SetEase(Ease.InOutCubic));
+                    _wsLobbyFxSequence.Join(fly.transform.DOScale(WS_FIRE_FLY_SCALE_END, WS_FIRE_FLY_DURATION)
+                        .SetEase(Ease.OutSine));
                 }
                 yield return _wsLobbyFxSequence.WaitForCompletion();
                 Destroy(fly);
