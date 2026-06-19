@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
@@ -36,6 +37,8 @@ namespace BalloonFlow
     /// </summary>
     public class PopupWinningStreakReward : MonoBehaviour
     {
+        // deprecated — Overlay 페이드(2026-06-19 추가 지시)를 분리해 직렬화한 이후 미사용.
+        // 외부 참조 없음(grep 확인 — 본 파일 내 단일 사용처도 IconScaleT* 합으로 교체). 안전을 위해 상수만 남김.
         private const float IntroHoldSeconds = 0.6f;   // 등장 → 첫 비행까지
         private const float StepHoldSeconds  = 0.45f;  // 도착(수 연산) → 다음 비행까지 (카운트업 완료 대기 포함)
         // ROLLBACK_WS_COEFF_OVERLAP_TIMELINE_20260615: 연출 단축 — 1.1f → 0.6f (마지막 카운트업 0.35s 커버 + 짧은 hold).
@@ -43,6 +46,19 @@ namespace BalloonFlow
         private const float FlyDurationSeconds = 0.5f; // 포물선 비행 시간
         private const float FlyJumpPower = 150f;       // 포물선 정점 높이 (로컬/px)
         private const float CountUpSeconds = 0.35f;    // 수 연산 카운트업(이전 값→새 값 순차 증가) 시간
+        // 디자이너 등장 사양(2026-06-19): IntroHoldSeconds(0.6s) 내부에 자연스럽게 들어가도록 분할 — t1+t2+t3≈0.6s.
+        private const float IntroFadeDur = 0.25f;      // Overlay alpha 0→220/255 페이드 (Icon 1.3 도달과 정렬).
+        private const float IconScaleT1 = 0.25f;       // 0 → 1.3 (OutBack)
+        private const float IconScaleT2 = 0.18f;       // 1.3 → 0.9 (InOutSine).
+        private const float IconScaleT3 = 0.17f;       // 0.9 → 1.0 (OutSine)
+        private const float OverlayTargetAlpha = 220f / 255f;
+        // ROLLBACK_WS_FX_ITEM_SQUASH_HIT_20260619: FXItem(badge/multiple) 도착마다 _fxWinningStreakReward 루트에
+        //   Squash&Stretch 1회 — 사용자 추가 지시 2026-06-19. (1.08,0.92)→(0.96,1.04)→(1.0,1.0). 짧고 경쾌한 hit feedback.
+        //   사용자 v4 — 폭 축소로 더 부드러운 squash&stretch.
+        //   디자인 의도 확인 필요(owner): 각 도착마다 재생(현재) vs 최종 1회만 재생. 본 구현은 PlayFxOnce(_fxReward)/punch 와 동일하게 각 도착마다.
+        private const float WS_SquashT1 = 0.08f;  // base→(1.08,0.92): 가로 늘어남/세로 압축
+        private const float WS_SquashT2 = 0.08f;  // (1.08,0.92)→(0.96,1.04): 세로 늘어남/가로 압축
+        private const float WS_SquashT3 = 0.08f;  // (0.96,1.04)→(1.0,1.0): 안정화
         private static readonly Color32 GainColor = new Color32(0x6B, 0xFF, 0x8F, 0xFF);
         // TextMesh Pro/Resources 하위라 Resources.Load 가능.
         private const string GreenOutlineMaterialPath = "Fonts & Materials/Poppins-Bold-GreenOutline";
@@ -63,12 +79,17 @@ namespace BalloonFlow
         private Image _fxBadgeImage;
         private Transform _fxWinningStreakReward;
         private Vector3 _fxWinningStreakRewardBaseScale = Vector3.one;
+        private Image _overlay;
+        private Transform _icon;
+        private List<Transform> _fxGlows;
         private TextMeshProUGUI _txtGauge;
         private TextMeshProUGUI _txtGaugeOutline;
         private Material _greenOutlineMat;
         private Tween _punchTween;
         private Tween _countTween;
         private Tween _rewardRootPulseTween;
+        private Tween _squashStretchTween;
+        private Coroutine _particleLightCoroutine;
         private int _displayedAmount;   // 현재 카운터 표시 값 — 카운트업 시작점
 
         /// <summary>프리팹 스폰 + 시퀀스 시작. 프리팹/부모 미존재 시 null (호출측은 null 이면 대기 없이 진행).
@@ -114,6 +135,22 @@ namespace BalloonFlow
                     _fxWinningStreakRewardBaseScale = Vector3.one;
             }
 
+            // 디자이너 등장 사양(2026-06-19) — Overlay 페이드인 + Icon 3단 scale + FX_Glow scale.
+            // 와이어링 실패는 graceful 무시(로그 경고만): 기존 PopupWinningStreakReward 패턴.
+            _overlay = FindDeepComponent<Image>(transform, "Overlay");
+            Transform iconRoot = _fxWinningStreakReward != null ? _fxWinningStreakReward : transform;
+            _icon = FindDeep(iconRoot, "Icon");
+            // FX_Glow 노드는 3개로 동일 이름 — 단일 FindDeep 사용 금지(첫 번째만 잡힘). 트리 전체 순회로 모두 수집.
+            _fxGlows = new List<Transform>();
+            Transform[] allTrs = transform.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < allTrs.Length; i++)
+            {
+                if (allTrs[i] != null && allTrs[i].name == "FX_Glow")
+                    _fxGlows.Add(allTrs[i]);
+            }
+            if (_overlay == null) Debug.LogWarning("[PopupWinningStreakReward] Overlay Image not found — fade skipped.");
+            if (_icon == null) Debug.LogWarning("[PopupWinningStreakReward] Icon not found — scale intro skipped.");
+
             // FXItem 은 '그룹 노드'와 그 안의 '비행체' 이름이 동일 — 그룹(루트 직계)을 먼저 찾고 직계 자식으로 구분.
             Transform fxGroup = FindDirectChild(transform, "FXItem");
             if (fxGroup != null)
@@ -139,6 +176,10 @@ namespace BalloonFlow
         private IEnumerator RunSequence(int diffMult, int streakMult, int gainedPoints, bool showBadge, DifficultyPurpose clearedDifficulty)
         {
             IsShowing = true;
+            // 2026-06-19 추가 지시: ParticleLight 는 명시적으로 비활성화 상태에서 시작 — prefab 기본값이
+            //   바뀌더라도 회귀 방지. PlayParticleLightAndAutoDisable 가 활성화·재생·자연종료감지·비활성화
+            //   전 생애주기를 소유하므로 외부(이 함수 포함) 어디서도 별도 SetActive 호출 금지.
+            if (_particleLight != null) _particleLight.SetActive(false);
             _greenOutlineMat = Resources.Load<Material>(GreenOutlineMaterialPath);
 
             // 등장 — 카운터 빈 값, 비행체들은 출발 전 숨김 (FXBadge/FXMultiple 은 prefab 기본도 off).
@@ -147,7 +188,15 @@ namespace BalloonFlow
             // skipped so only difficulty/streak multiplier flyers animate into the counter.
             int amount = 1;
             SetBaseAmountText(amount);
-            StartRewardRootPulse();
+            // ROLLBACK_WS_REWARD_INTRO_DESIGN_20260619: 디자이너 등장 사양 — Overlay 페이드 + Icon 3단 scale +
+            //   FX_Glow scale. 루트 pulse(StartRewardRootPulse)는 디자이너 사양(2026-06-19) + 추가 지시에 미포함 —
+            //   의도된 제거(태스크 owner 추가 지시에서도 언급 없음). OnDestroy 의 StopRewardRootPulse 는 안전 유지.
+            //   ParticleLight lifecycle(ROLLBACK_WS_PARTICLELIGHT_OVERLAY220_20260619): RunSequence 진입 직후
+            //   명시적 SetActive(false) → Overlay 페이드 0→220/255 완료 직후 PlayParticleLightAndAutoDisable 호출
+            //   — 사용자 추가 지시 2026-06-19 v2. 이전 차수의 Icon 1.3 peak 동기화는 사용자가 명시적으로 폐기.
+            //   호출 이후 메서드 내부에서 활성화 후 모든 자식 ParticleSystem 1회 Play → IsAlive(true)=false 까지
+            //   매 프레임 폴링(활성 유지) → 자연 종료 후 SetActive(false). 재생 중 강제 비활성화/Stop 호출 금지(회귀 방지).
+            //   롤백: StartRewardRootPulse() 호출 복원 + 아래 Overlay/Icon/FX_Glow 시퀀스 제거.
             bool flyMultiple = streakMult > 1;
             if (_fxItemFly != null) _fxItemFly.SetActive(false);
             if (_fxBadge != null)
@@ -162,9 +211,64 @@ namespace BalloonFlow
                 if (_txtGaugeOutline != null) _txtGaugeOutline.text = multText;
                 if (_txtGauge != null) _txtGauge.text = multText;
             }
-            PlayFxOnce(_particleLight);
 
-            yield return new WaitForSecondsRealtime(IntroHoldSeconds);
+            // Icon/FX_Glow 초기 스케일 사전 세팅 — Overlay 페이드가 진행되는 동안 Icon 이 prefab 초기 크기로
+            // 한 프레임도 노출되지 않도록 미리 0/1 로 박제(2026-06-19 추가 지시).
+            if (_icon != null) _icon.localScale = Vector3.zero;
+            if (_fxGlows != null)
+            {
+                for (int i = 0; i < _fxGlows.Count; i++)
+                {
+                    if (_fxGlows[i] != null) _fxGlows[i].localScale = Vector3.one;
+                }
+            }
+
+            // Overlay: 기존 RGB 보존, alpha 만 0→220/255 페이드인. (Color 통째 덮어쓰기 금지 — prefab 색감 유지.)
+            // SetUpdate(true): 게임 일시정지(Time.timeScale=0) 중에도 재생 보장.
+            if (_overlay != null)
+            {
+                Color overlayColor = _overlay.color;
+                overlayColor.a = 0f;
+                _overlay.color = overlayColor;
+                _overlay.DOFade(OverlayTargetAlpha, IntroFadeDur).SetUpdate(true);
+            }
+
+            // 2026-06-19 추가 지시: Overlay alpha 가 220/255 에 도달한 '뒤'에야 Icon/FX_Glow/ParticleLight 시작.
+            // Overlay→Icon 직렬화의 핵심 — 이 wait 제거 시 다시 같은 프레임에 병렬 시작됨.
+            yield return new WaitForSecondsRealtime(IntroFadeDur);
+
+            // ROLLBACK_WS_PARTICLELIGHT_OVERLAY220_20260619: Overlay 페이드 0→220/255 도달 직후 1회 재생
+            //   (사용자 추가 지시 2026-06-19 v2). Icon 시퀀스와 분리 — Icon 와이어링 여부와 무관하게 항상 1회.
+            PlayParticleLightAndAutoDisable();
+
+            // Icon: 0 → 1.3(OutBack, 빠른 확대) → 0.9(InOutSine, 반동) → 1.0(OutSine, 안착) — 탄성 시퀀스.
+            if (_icon != null)
+            {
+                _icon.localScale = Vector3.zero;
+                Sequence iconSeq = DOTween.Sequence().SetUpdate(true);
+                iconSeq.Append(_icon.DOScale(1.3f, IconScaleT1).SetEase(Ease.OutBack));
+                iconSeq.Append(_icon.DOScale(0.9f, IconScaleT2).SetEase(Ease.InOutSine));
+                iconSeq.Append(_icon.DOScale(1.0f, IconScaleT3).SetEase(Ease.OutSine));
+            }
+
+            // FX_Glow 3개: Icon 1.3 peak 와 동시에 1.3 도달, Icon 1.0 복귀 와 동시에 1.0 복귀.
+            if (_fxGlows != null)
+            {
+                for (int i = 0; i < _fxGlows.Count; i++)
+                {
+                    Transform glow = _fxGlows[i];
+                    if (glow == null) continue;
+                    glow.localScale = Vector3.one;
+                    Sequence glowSeq = DOTween.Sequence().SetUpdate(true);
+                    glowSeq.Append(glow.DOScale(1.3f, IconScaleT1).SetEase(Ease.OutSine));
+                    glowSeq.Append(glow.DOScale(1.0f, IconScaleT2 + IconScaleT3).SetEase(Ease.InOutSine));
+                }
+            }
+
+            // Icon 시퀀스 총합(IconScaleT1+T2+T3 = 0.60s) 완료 시점까지 다음 FXItem 비행 시작을 보류.
+            // 기존 IntroHoldSeconds(0.6s) 는 '등장→첫 비행' 단일 버퍼였으나 이제 Overlay 페이드(0.25s)가 분리됐으므로
+            // Icon 시퀀스 길이로 직접 대기(2026-06-19 추가 지시 — Icon 마무리 전 비행 시작 금지).
+            yield return new WaitForSecondsRealtime(IconScaleT1 + IconScaleT2 + IconScaleT3);
 
             // 1) 기본 포인트 — FXItem 비행 → "1".
             // ROLLBACK_WS_COEFF_OVERLAP_TIMELINE_20260615: START
@@ -242,6 +346,7 @@ namespace BalloonFlow
             seq.InsertCallback(moveStart + move, () =>
             {
                 ApplyAmount(amount);
+                PlayFxWinningStreakRewardSquash();
                 flyer.SetActive(false);
                 tr.localScale = fullScale;
                 tr.localPosition = startLocal;
@@ -341,6 +446,31 @@ namespace BalloonFlow
                 _fxWinningStreakReward.localScale = _fxWinningStreakRewardBaseScale;
         }
 
+        // FXItem 도착=hit feedback. base→(1.08,0.92)→(0.96,1.04)→(1.0,1.0). 전체 0.24s — 사용자 v4 지시 "폭 축소로 더 부드럽게".
+        private void PlayFxWinningStreakRewardSquash()
+        {
+            if (_fxWinningStreakReward == null) return;
+            Vector3 baseScale = _fxWinningStreakRewardBaseScale;
+            if (baseScale == Vector3.zero) return;
+
+            // 동시 tween 충돌 방지 — 기존 squash/pulse 둘 다 정리.
+            _squashStretchTween?.Kill(false);
+            _rewardRootPulseTween?.Kill(false);
+
+            // z 는 baseScale.z 보존 — RectTransform 이라도 절대 1.0 하드코딩 금지.
+            Vector3 squash  = new Vector3(baseScale.x * 1.08f, baseScale.y * 0.92f, baseScale.z);
+            Vector3 stretch = new Vector3(baseScale.x * 0.96f, baseScale.y * 1.04f, baseScale.z);
+
+            // 확정 시작점 — 직전 squash 가 도중 Kill 됐을 때 잔존 scale 잔류 방지.
+            _fxWinningStreakReward.localScale = baseScale;
+
+            Sequence seq = DOTween.Sequence().SetUpdate(true);
+            seq.Append(_fxWinningStreakReward.DOScale(squash,  WS_SquashT1).SetEase(Ease.OutSine));
+            seq.Append(_fxWinningStreakReward.DOScale(stretch, WS_SquashT2).SetEase(Ease.InOutSine));
+            seq.Append(_fxWinningStreakReward.DOScale(baseScale, WS_SquashT3).SetEase(Ease.OutSine));
+            _squashStretchTween = seq;
+        }
+
         private void ApplyFxBadgeSprite(DifficultyPurpose difficulty)
         {
             if (_fxBadgeImage == null) return;
@@ -387,6 +517,57 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>ParticleLight 전용 재생 — 활성화 후 모든 자식 ParticleSystem 을 Stop(StopEmittingAndClear)→Clear→Play
+        /// 순서로 재시작, 자연 종료(IsAlive(true)=false) 시점까지 활성 유지, 종료 후 SetActive(false).
+        /// 2026-06-19 추가 지시: 외부에서의 강제 중단 금지(내부 재호출 시에는 이전 코루틴 정리 후 처음부터 재생).</summary>
+        // WHY: 사용자 v3 지시 — 연속 호출 시 항상 처음부터 정상 재생되도록 이전 코루틴 정리 + Stop(StopEmittingAndClear) 선행.
+        private void PlayParticleLightAndAutoDisable()
+        {
+            if (_particleLight == null) return;
+            if (_particleLightCoroutine != null)
+            {
+                StopCoroutine(_particleLightCoroutine);
+                _particleLightCoroutine = null;
+            }
+            _particleLight.SetActive(true);
+            var systems = _particleLight.GetComponentsInChildren<ParticleSystem>(true);
+            if (systems.Length == 0)
+            {
+                _particleLight.SetActive(false);
+                return;
+            }
+            for (int i = 0; i < systems.Length; i++)
+            {
+                if (systems[i] == null) continue;
+                systems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                systems[i].Clear(true);
+                systems[i].Play(true);
+            }
+            _particleLightCoroutine = StartCoroutine(WaitAndDisableParticleLight(systems));
+        }
+
+        /// <summary>모든 ParticleSystem 의 IsAlive(true) 가 false 가 될 때까지 매 프레임 폴링한 뒤 SetActive(false).
+        /// Stop/Clear 호출하지 않음 — 사용자 지시('재생 도중 강제 비활성화·중단 금지').</summary>
+        private IEnumerator WaitAndDisableParticleLight(ParticleSystem[] systems)
+        {
+            while (true)
+            {
+                bool anyAlive = false;
+                for (int i = 0; i < systems.Length; i++)
+                {
+                    if (systems[i] != null && systems[i].IsAlive(true))
+                    {
+                        anyAlive = true;
+                        break;
+                    }
+                }
+                if (!anyAlive) break;
+                yield return null;
+            }
+            if (_particleLight != null) _particleLight.SetActive(false);
+            _particleLightCoroutine = null;
+        }
+
         /// <summary>target 의 화면 위치를 parentRt 로컬 좌표로 변환 (포물선 도착점).</summary>
         private static Vector3 ResolveLocalPoint(RectTransform parentRt, RectTransform target)
         {
@@ -404,7 +585,9 @@ namespace BalloonFlow
             // 씬 전환 등 외부 파괴 시에도 대기측이 영원히 기다리지 않게.
             StopRewardRootPulse();
             _punchTween?.Kill();
+            _squashStretchTween?.Kill();
             _countTween?.Kill();
+            if (_particleLightCoroutine != null) { StopCoroutine(_particleLightCoroutine); _particleLightCoroutine = null; }
             IsShowing = false;
             IsFinished = true;
         }

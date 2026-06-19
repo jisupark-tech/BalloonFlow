@@ -33,6 +33,10 @@ namespace BalloonFlow
         private const float ICON_Y_OFFSET = 25f; // 활성 +25, 비활성 -25
         private const float ICON_SCALE_DURATION = 0.2f;
         private const float WS_FIRE_FLY_DURATION = 0.55f;
+        // FXItem_WinningStreak_Fly 비행 동안 동일 duration 으로 4.0 → 2.0 축소.
+        // 이동 트윈과 Sequence.Join 으로 결합 — 시작/종료 시점 정확히 일치.
+        private const float WS_FIRE_FLY_SCALE_START = 4.0f;
+        private const float WS_FIRE_FLY_SCALE_END   = 2.0f;
         private const float WS_FIRE_PULSE_DURATION = 0.18f;
         private const float WS_SLIDER_FILL_DURATION = 0.45f;
         private const float WS_REWARD_RISE_DURATION = 0.55f;
@@ -793,6 +797,16 @@ namespace BalloonFlow
             if (_wsMultiplier != null)
                 WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, fromMult);
 
+            // ROLLBACK_WS_HOLD_OLD_MULT_TEXT_20260619:
+            // Multiplier(SlideIn → SelectFrame fromMult→toMult → SlideOut) 연출이 진행되는 동안
+            // WinningIcon 하단 TextGauge/Outline 은 기존 배수(fromMult)를 유지. 연출 완전 종료 후
+            // L901 RefreshWinningStreakDisplay() 가 toMult 로 갱신. 사용자 피드백 2026-06-19.
+            // RefreshWinningStreakVisibility(L788) 가 _wsTxtGauge 를 이미 새 값으로 써버렸으므로 명시 복구.
+            ResolveWsTexts();
+            string fromMultText = $"x{fromMult}";
+            if (_wsTxtGauge != null) _wsTxtGauge.text = fromMultText;
+            if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = fromMultText;
+
             int stageForFill = Mathf.Max(1, anim.startStage);
             float startRatio = ResolveWsStageRatio(stageForFill, anim.startPoints);
             bool stageCompleted = anim.achievedStages != null && anim.achievedStages.Count > 0;
@@ -812,24 +826,6 @@ namespace BalloonFlow
             // 획득 포인트는 0단계 PopupWinningStreakReward 의 수 연산 카운터가 보여줌.
             // 롤백: 인자에 anim.gainedPoints 복원.
             yield return PlayWsFireFlyAndPulse();
-
-            // FxFire 가 커졌다 작아진 직후 → Multiplier 가 X=10 으로 튕기듯 슬라이드 인.
-            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
-            // ROLLBACK_WINNING_STREAK_MULTIPLIER_AFTER_ENTER_20260605:
-            // Designer spec: after the Multiplier entrance motion, move SelectFrame/TextYellow to the current value.
-            // [2026-06-10] Animator(PlayMultiplierState) → 코드 트윈(PlayMultiplierSelect) — Animator 가 위치를 덮어쓰던 문제 해소.
-            // [2026-06-11] 이전 배수(fromMult)로 등장한 뒤 새 배수(toMult)로 이동 — 배수 '증가' 연출.
-            if (_wsMultiplier != null)
-            {
-                WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, toMult);
-                // [2026-06-11] '오르는' 펀치(덜컹거림) 비활성 — 사용자 요청. SelectFrame 이동만 유지.
-                // 롤백: 아래 if 블록 주석 해제.
-                // if (toMult > fromMult)
-                // {
-                //     _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, 24f), 0.35f, 6, 0.6f).SetUpdate(true);
-                //     _wsMultiplier.DOPunchScale(new Vector3(0.12f, 0.12f, 0f), 0.35f, 6, 0.6f).SetUpdate(true);
-                // }
-            }
 
             if (_wsProgressSlider != null)
             {
@@ -886,6 +882,28 @@ namespace BalloonFlow
                     }
                 }
             }
+
+            // ROLLBACK_WS_MULTIPLIER_AFTER_GAUGE_AND_REWARD_20260619: 되돌리려면 아래 PlayWsMultiplierSlide(SHOWN_X)+PlayLobbyMultiplierSelect(toMult) 블록을 PlayWsFireFlyAndPulse 직후로 다시 이동.
+            // 게이지 채움/보상 등장 종료 후 → Multiplier 가 X=10 으로 튕기듯 슬라이드 인.
+            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
+            // ROLLBACK_WINNING_STREAK_MULTIPLIER_AFTER_ENTER_20260605:
+            // Designer spec: after the Multiplier entrance motion, move SelectFrame/TextYellow to the current value.
+            // [2026-06-10] Animator(PlayMultiplierState) → 코드 트윈(PlayMultiplierSelect) — Animator 가 위치를 덮어쓰던 문제 해소.
+            // [2026-06-11] 이전 배수(fromMult)로 등장한 뒤 새 배수(toMult)로 이동 — 배수 '증가' 연출.
+            if (_wsMultiplier != null)
+            {
+                WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, toMult);
+                // [2026-06-11] '오르는' 펀치(덜컹거림) 비활성 — 사용자 요청. SelectFrame 이동만 유지.
+                // 롤백: 아래 if 블록 주석 해제.
+                // if (toMult > fromMult)
+                // {
+                //     _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, 24f), 0.35f, 6, 0.6f).SetUpdate(true);
+                //     _wsMultiplier.DOPunchScale(new Vector3(0.12f, 0.12f, 0f), 0.35f, 6, 0.6f).SetUpdate(true);
+                // }
+            }
+
+            // SelectFrame fromMult→toMult 이동(0.18s) 완료 대기 — SlideOut 이 증가 연출을 덮지 않도록. ROLLBACK_WS_MULTIPLIER_SELECT_WAIT_20260619
+            yield return new WaitForSecondsRealtime(WinningStreakUI.MULTIPLIER_SELECT_MOVE_DURATION);
 
             // 나머지 연출이 끝나면 Multiplier 를 X=-725 로 슬라이드 아웃.
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
@@ -993,14 +1011,20 @@ namespace BalloonFlow
                     flyRt.anchorMin = flyRt.anchorMax = new Vector2(0.5f, 0.5f);
                     flyRt.pivot = new Vector2(0.5f, 0.5f);
                     flyRt.anchoredPosition = startLocal;
+                    flyRt.localScale = Vector3.one * WS_FIRE_FLY_SCALE_START;
                     _wsLobbyFxSequence.Append(flyRt.DOAnchorPos(targetLocal, WS_FIRE_FLY_DURATION)
                         .SetEase(Ease.InOutCubic));
+                    _wsLobbyFxSequence.Join(flyRt.DOScale(WS_FIRE_FLY_SCALE_END, WS_FIRE_FLY_DURATION)
+                        .SetEase(Ease.OutSine));
                 }
                 else
                 {
                     fly.transform.localPosition = startLocal;
+                    fly.transform.localScale = Vector3.one * WS_FIRE_FLY_SCALE_START;
                     _wsLobbyFxSequence.Append(fly.transform.DOLocalMove(targetLocal, WS_FIRE_FLY_DURATION)
                         .SetEase(Ease.InOutCubic));
+                    _wsLobbyFxSequence.Join(fly.transform.DOScale(WS_FIRE_FLY_SCALE_END, WS_FIRE_FLY_DURATION)
+                        .SetEase(Ease.OutSine));
                 }
                 yield return _wsLobbyFxSequence.WaitForCompletion();
                 Destroy(fly);
