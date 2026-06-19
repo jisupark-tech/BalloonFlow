@@ -11,7 +11,17 @@
   <!-- BalloonFlow 의 RuntimeInitializeOnLoadMethod (SdkBootstrap), EventBus reflection 등 -->
   <assembly fullname="Assembly-CSharp" preserve="all"/>
 
-  <!-- Unity IAP — IL2CPP stripping 회피 (재구매 / restore flow 보호) -->
+  <!-- Unity IAP 5.x — IL2CPP stripping 회피. ROLLBACK_IAP_LINKXML_ASMNAME_20260619:
+       기존 'UnityEngine.Purchasing'(구버전 어셈블리명)은 com.unity.purchasing 5.x 에 존재하지 않아 실제 런타임
+       어셈블리(Unity.Purchasing.*)가 스트립됨 → UnityPurchasing 정적 생성자 type-init 예외 = 구매 불가.
+       실제 어셈블리명으로 교체/보강. (구이름도 forwarding 대비 유지 — 없는 어셈블리는 링커가 무시.) -->
+  <assembly fullname="Unity.Purchasing" preserve="all"/>
+  <assembly fullname="Unity.Purchasing.Stores" preserve="all"/>
+  <assembly fullname="Unity.Purchasing.Security" preserve="all"/>
+  <assembly fullname="Unity.Purchasing.SecurityCore" preserve="all"/>
+  <assembly fullname="Unity.Purchasing.Codeless" preserve="all"/>
+  <assembly fullname="Unity.Purchasing.TransactionVerifier" preserve="all"/>
+  <assembly fullname="Unity.Purchasing.Utilities" preserve="all"/>
   <assembly fullname="UnityEngine.Purchasing" preserve="all"/>
 
   <!-- AppsFlyer / MAX / Facebook SDK 의 callback 매니저 보호 -->

@@ -346,8 +346,10 @@ namespace BalloonFlow
             _isTransitioning = false;
             _currentScene = SceneManager.GetActiveScene().name;
 
-            // 모바일 빌드: Debug.Log 비활성화 (프레임 드랍 주범)
-#if !UNITY_EDITOR
+            // 모바일 릴리스 빌드: Debug.Log 비활성화 (프레임 드랍 주범).
+            // ROLLBACK_DEVBUILD_KEEP_LOG_20260619: Development Build 는 제외(SdkBootstrap 이 켠 로그 유지). 디바이스에서
+            //   릴리스 빌드 로그가 필요하면 Scripting Define Symbols 에 BALLOONFLOW_FORCE_LOG 추가 시 이 비활성이 꺼진다.
+#if !UNITY_EDITOR && !DEVELOPMENT_BUILD && !BALLOONFLOW_FORCE_LOG
             Debug.unityLogger.logEnabled = false;
 #endif
 

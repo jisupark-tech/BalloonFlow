@@ -5,6 +5,11 @@ apply from: '../shared/common.gradle'
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
+    // ROLLBACK_IAP_BILLING_MANUAL_20260619: Unity IAP(com.unity.purchasing)가 Unity.SelfDeclaredAndroidDependencies
+    //   로 등록하는 Billing 의존성이, 커스텀 mainTemplate.gradle(EDM4U) 사용 시 자동 주입이 우회돼 빌드에서 누락됨
+    //   → UnityPurchasing type-init 예외 = 구매 불가. IAPAndroidDependencies.cs 와 동일 버전으로 수동 주입.
+    //   (EDM 'Android Resolver Dependencies' 마커 밖이라 Force Resolve 시 보존됨.)
+    implementation 'com.android.billingclient:billing:8.3.0'
 // Android Resolver Dependencies Start
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4' // Assets/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:12
     implementation 'androidx.lifecycle:lifecycle-process:2.6.2' // Assets/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:17

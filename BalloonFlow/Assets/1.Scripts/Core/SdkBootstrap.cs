@@ -29,7 +29,8 @@ namespace BalloonFlow
 
             // Development Build / Editor 에서 Debug.Log* 가 logcat 에 항상 출력되도록 강제.
             // Unity 6 default 가 일부 LogType 의 stack trace 를 None 으로 두면 logcat output 누락 케이스 있음.
-#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            // ROLLBACK_DEVBUILD_KEEP_LOG_20260619: BALLOONFLOW_FORCE_LOG define 추가 — 릴리스 빌드에서도 로그 강제(디바이스 진단용).
+#if DEVELOPMENT_BUILD || UNITY_EDITOR || BALLOONFLOW_FORCE_LOG
             Debug.unityLogger.logEnabled = true;
             Application.SetStackTraceLogType(LogType.Log,       StackTraceLogType.ScriptOnly);
             Application.SetStackTraceLogType(LogType.Warning,   StackTraceLogType.ScriptOnly);

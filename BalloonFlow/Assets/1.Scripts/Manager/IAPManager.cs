@@ -112,8 +112,21 @@ namespace BalloonFlow
                 registered++;
                 Debug.Log($"{LOG_TAG} IAP register product id={p.productId} category={p.category} type={productType} priceUsd={p.priceUsd:F2} maxPurchases={p.maxPurchases}");
             }
-            UnityPurchasing.Initialize(this, builder);
-            Debug.Log($"{LOG_TAG} Unity IAP init started — {registered} products registered.");
+            // ROLLBACK_IAP_INIT_FULL_LOG_20260619: UnityPurchasing type-init 예외의 inner/stack 전체를 로깅(진짜 원인 확정용).
+            //   기존엔 ShopCatalogService 가 e.Message 만 찍어 "type initializer ... threw" 까지만 보이고 원인이 안 보였음.
+            try
+            {
+                UnityPurchasing.Initialize(this, builder);
+                Debug.Log($"{LOG_TAG} Unity IAP init started — {registered} products registered.");
+            }
+            catch (System.Exception initEx)
+            {
+                Debug.LogError($"{LOG_TAG} ★UnityPurchasing.Initialize 예외(full)★: {initEx}");
+                if (initEx.InnerException != null)
+                    Debug.LogError($"{LOG_TAG} ★INNER★: {initEx.InnerException}");
+                _initStarted = false; // 재시도 허용
+                throw;                // 기존 흐름 유지 (상위에서 캐치/처리)
+            }
 #else
             // Simulation: catalog 가격 그대로 캐시. 결제 시 보상 즉시 지급
             _cachedPrices.Clear();

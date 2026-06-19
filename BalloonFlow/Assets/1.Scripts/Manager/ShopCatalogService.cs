@@ -101,7 +101,8 @@ namespace BalloonFlow
                     }
                     catch (Exception e)
                     {
-                        Debug.LogError($"{LOG_TAG} Fetch failed: {e.Message}");
+                        // ROLLBACK_IAP_INIT_FULL_LOG_20260619: e.Message 대신 e 전체(ToString → inner+stack) 로깅 — 원인 확정용.
+                        Debug.LogError($"{LOG_TAG} Fetch failed (full): {e}");
                         return;
                     }
                 }

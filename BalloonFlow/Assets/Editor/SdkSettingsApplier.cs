@@ -21,6 +21,7 @@ namespace BalloonFlow.EditorTools
         private const string LOG_TAG = "[SdkSettingsApplier]";
 
         // [2026-06-12 메뉴 정리] [MenuItem("BalloonFlow/SDK/Apply Settings From SdkConfig")]
+        [MenuItem("BalloonFlow/SDK/Apply Settings From SdkConfig")]
         public static void ApplyAll()
         {
             ApplyAdmob();

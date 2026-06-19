@@ -1,0 +1,12 @@
+# ROLLBACK_IAP_BILLING_KEEP_20260619
+# Google Play Billing 클래스는 Unity IAP 가 JNI/reflection 으로 접근하므로 R8/minify 가 '사용처 없음'으로 판단해
+# strip → 런타임 ClassNotFoundException(com.android.billingclient.api.PurchasesUpdatedListener) = 구매 불가.
+# 아래 keep 으로 Billing + Unity IAP 네이티브 바인딩을 보존한다.
+# (Player Settings → Publishing Settings → "Custom Proguard File" 체크 시 이 파일이 R8 에 적용됨.)
+-keep class com.android.billingclient.** { *; }
+-keep interface com.android.billingclient.** { *; }
+-dontwarn com.android.billingclient.**
+
+# Unity IAP 의 Android 측 wrapper / 콜백 (reflection 대상)
+-keep class com.unity.purchasing.** { *; }
+-keep class com.unity3d.plugin.** { *; }
