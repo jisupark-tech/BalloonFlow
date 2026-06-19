@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
@@ -43,6 +44,12 @@ namespace BalloonFlow
         private const float FlyDurationSeconds = 0.5f; // 포물선 비행 시간
         private const float FlyJumpPower = 150f;       // 포물선 정점 높이 (로컬/px)
         private const float CountUpSeconds = 0.35f;    // 수 연산 카운트업(이전 값→새 값 순차 증가) 시간
+        // 디자이너 등장 사양(2026-06-19): IntroHoldSeconds(0.6s) 내부에 자연스럽게 들어가도록 분할 — t1+t2+t3≈0.6s.
+        private const float IntroFadeDur = 0.25f;      // Overlay alpha 0→220/255 페이드 (Icon 1.3 도달과 정렬).
+        private const float IconScaleT1 = 0.25f;       // 0 → 1.3 (OutBack)
+        private const float IconScaleT2 = 0.18f;       // 1.3 → 0.9 (InOutSine) — 끝에서 ParticleLight 1회.
+        private const float IconScaleT3 = 0.17f;       // 0.9 → 1.0 (OutSine)
+        private const float OverlayTargetAlpha = 220f / 255f;
         private static readonly Color32 GainColor = new Color32(0x6B, 0xFF, 0x8F, 0xFF);
         // TextMesh Pro/Resources 하위라 Resources.Load 가능.
         private const string GreenOutlineMaterialPath = "Fonts & Materials/Poppins-Bold-GreenOutline";
@@ -63,6 +70,9 @@ namespace BalloonFlow
         private Image _fxBadgeImage;
         private Transform _fxWinningStreakReward;
         private Vector3 _fxWinningStreakRewardBaseScale = Vector3.one;
+        private Image _overlay;
+        private Transform _icon;
+        private List<Transform> _fxGlows;
         private TextMeshProUGUI _txtGauge;
         private TextMeshProUGUI _txtGaugeOutline;
         private Material _greenOutlineMat;
@@ -114,6 +124,22 @@ namespace BalloonFlow
                     _fxWinningStreakRewardBaseScale = Vector3.one;
             }
 
+            // 디자이너 등장 사양(2026-06-19) — Overlay 페이드인 + Icon 3단 scale + FX_Glow scale.
+            // 와이어링 실패는 graceful 무시(로그 경고만): 기존 PopupWinningStreakReward 패턴.
+            _overlay = FindDeepComponent<Image>(transform, "Overlay");
+            Transform iconRoot = _fxWinningStreakReward != null ? _fxWinningStreakReward : transform;
+            _icon = FindDeep(iconRoot, "Icon");
+            // FX_Glow 노드는 3개로 동일 이름 — 단일 FindDeep 사용 금지(첫 번째만 잡힘). 트리 전체 순회로 모두 수집.
+            _fxGlows = new List<Transform>();
+            Transform[] allTrs = transform.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < allTrs.Length; i++)
+            {
+                if (allTrs[i] != null && allTrs[i].name == "FX_Glow")
+                    _fxGlows.Add(allTrs[i]);
+            }
+            if (_overlay == null) Debug.LogWarning("[PopupWinningStreakReward] Overlay Image not found — fade skipped.");
+            if (_icon == null) Debug.LogWarning("[PopupWinningStreakReward] Icon not found — scale intro skipped.");
+
             // FXItem 은 '그룹 노드'와 그 안의 '비행체' 이름이 동일 — 그룹(루트 직계)을 먼저 찾고 직계 자식으로 구분.
             Transform fxGroup = FindDirectChild(transform, "FXItem");
             if (fxGroup != null)
@@ -147,7 +173,10 @@ namespace BalloonFlow
             // skipped so only difficulty/streak multiplier flyers animate into the counter.
             int amount = 1;
             SetBaseAmountText(amount);
-            StartRewardRootPulse();
+            // ROLLBACK_WS_REWARD_INTRO_DESIGN_20260619: 디자이너 등장 사양 교체 — Overlay 페이드 + Icon 3단 scale +
+            //   FX_Glow scale + Icon=0.9 도달 시 ParticleLight 1회. 루트 pulse(StartRewardRootPulse)는 사양서가
+            //   Icon/FX_Glow scale 만 명시하므로 의도 충돌 방지 차원에서 제거(OnDestroy 의 StopRewardRootPulse 는 안전 유지).
+            //   롤백: StartRewardRootPulse() 호출 복원 + 아래 Overlay/Icon/FX_Glow 시퀀스 제거.
             bool flyMultiple = streakMult > 1;
             if (_fxItemFly != null) _fxItemFly.SetActive(false);
             if (_fxBadge != null)
@@ -162,7 +191,48 @@ namespace BalloonFlow
                 if (_txtGaugeOutline != null) _txtGaugeOutline.text = multText;
                 if (_txtGauge != null) _txtGauge.text = multText;
             }
-            PlayFxOnce(_particleLight);
+
+            // Overlay: 기존 RGB 보존, alpha 만 0→220/255 페이드인. (Color 통째 덮어쓰기 금지 — prefab 색감 유지.)
+            // SetUpdate(true): 게임 일시정지(Time.timeScale=0) 중에도 재생 보장.
+            if (_overlay != null)
+            {
+                Color overlayColor = _overlay.color;
+                overlayColor.a = 0f;
+                _overlay.color = overlayColor;
+                _overlay.DOFade(OverlayTargetAlpha, IntroFadeDur).SetUpdate(true);
+            }
+
+            // Icon: 0 → 1.3(OutBack) → 0.9(InOutSine) → 1.0(OutSine).
+            // ParticleLight 는 Icon 이 0.9 에 도달하는 순간 1회 재생 — '눌렸다 펴지는' 임팩트와 라이트 플래시를
+            // 합치시키려는 디자이너 의도(WS 다단계 상태머신 UX 중 '보상 박힘' 박제 시점).
+            if (_icon != null)
+            {
+                _icon.localScale = Vector3.zero;
+                Sequence iconSeq = DOTween.Sequence().SetUpdate(true);
+                iconSeq.Append(_icon.DOScale(1.3f, IconScaleT1).SetEase(Ease.OutBack));
+                iconSeq.Append(_icon.DOScale(0.9f, IconScaleT2).SetEase(Ease.InOutSine));
+                iconSeq.AppendCallback(() => PlayFxOnce(_particleLight));
+                iconSeq.Append(_icon.DOScale(1.0f, IconScaleT3).SetEase(Ease.OutSine));
+            }
+            else
+            {
+                // Icon 와이어링 실패 폴백: ParticleLight 즉시 재생해 기존 등장 임팩트는 유지.
+                PlayFxOnce(_particleLight);
+            }
+
+            // FX_Glow 3개: Icon 1.3 peak 와 동시에 1.3 도달, Icon 1.0 복귀 와 동시에 1.0 복귀.
+            if (_fxGlows != null)
+            {
+                for (int i = 0; i < _fxGlows.Count; i++)
+                {
+                    Transform glow = _fxGlows[i];
+                    if (glow == null) continue;
+                    glow.localScale = Vector3.one;
+                    Sequence glowSeq = DOTween.Sequence().SetUpdate(true);
+                    glowSeq.Append(glow.DOScale(1.3f, IconScaleT1).SetEase(Ease.OutSine));
+                    glowSeq.Append(glow.DOScale(1.0f, IconScaleT2 + IconScaleT3).SetEase(Ease.InOutSine));
+                }
+            }
 
             yield return new WaitForSecondsRealtime(IntroHoldSeconds);
 
