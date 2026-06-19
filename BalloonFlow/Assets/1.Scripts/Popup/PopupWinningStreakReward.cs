@@ -53,11 +53,12 @@ namespace BalloonFlow
         private const float IconScaleT3 = 0.17f;       // 0.9 → 1.0 (OutSine)
         private const float OverlayTargetAlpha = 220f / 255f;
         // ROLLBACK_WS_FX_ITEM_SQUASH_HIT_20260619: FXItem(badge/multiple) 도착마다 _fxWinningStreakReward 루트에
-        //   Squash&Stretch 1회 — 사용자 추가 지시 2026-06-19. (1.1,0.9)→(0.9,1.1)→(1.0,1.0). 짧고 경쾌한 hit feedback.
+        //   Squash&Stretch 1회 — 사용자 추가 지시 2026-06-19. (1.08,0.92)→(0.96,1.04)→(1.0,1.0). 짧고 경쾌한 hit feedback.
+        //   사용자 v4 — 폭 축소로 더 부드러운 squash&stretch.
         //   디자인 의도 확인 필요(owner): 각 도착마다 재생(현재) vs 최종 1회만 재생. 본 구현은 PlayFxOnce(_fxReward)/punch 와 동일하게 각 도착마다.
-        private const float WS_SquashT1 = 0.08f;  // base→(1.1,0.9): 가로 늘어남/세로 압축
-        private const float WS_SquashT2 = 0.08f;  // (1.1,0.9)→(0.9,1.1): 세로 늘어남/가로 압축
-        private const float WS_SquashT3 = 0.08f;  // (0.9,1.1)→(1.0,1.0): 안정화
+        private const float WS_SquashT1 = 0.08f;  // base→(1.08,0.92): 가로 늘어남/세로 압축
+        private const float WS_SquashT2 = 0.08f;  // (1.08,0.92)→(0.96,1.04): 세로 늘어남/가로 압축
+        private const float WS_SquashT3 = 0.08f;  // (0.96,1.04)→(1.0,1.0): 안정화
         private static readonly Color32 GainColor = new Color32(0x6B, 0xFF, 0x8F, 0xFF);
         // TextMesh Pro/Resources 하위라 Resources.Load 가능.
         private const string GreenOutlineMaterialPath = "Fonts & Materials/Poppins-Bold-GreenOutline";
@@ -445,7 +446,7 @@ namespace BalloonFlow
                 _fxWinningStreakReward.localScale = _fxWinningStreakRewardBaseScale;
         }
 
-        // FXItem 도착=hit feedback. base→(1.1,0.9)→(0.9,1.1)→(1.0,1.0). 전체 0.24s — 사용자 v2 지시 "짧고 경쾌" 충족.
+        // FXItem 도착=hit feedback. base→(1.08,0.92)→(0.96,1.04)→(1.0,1.0). 전체 0.24s — 사용자 v4 지시 "폭 축소로 더 부드럽게".
         private void PlayFxWinningStreakRewardSquash()
         {
             if (_fxWinningStreakReward == null) return;
@@ -457,8 +458,8 @@ namespace BalloonFlow
             _rewardRootPulseTween?.Kill(false);
 
             // z 는 baseScale.z 보존 — RectTransform 이라도 절대 1.0 하드코딩 금지.
-            Vector3 squash  = new Vector3(baseScale.x * 1.1f, baseScale.y * 0.9f, baseScale.z);
-            Vector3 stretch = new Vector3(baseScale.x * 0.9f, baseScale.y * 1.1f, baseScale.z);
+            Vector3 squash  = new Vector3(baseScale.x * 1.08f, baseScale.y * 0.92f, baseScale.z);
+            Vector3 stretch = new Vector3(baseScale.x * 0.96f, baseScale.y * 1.04f, baseScale.z);
 
             // 확정 시작점 — 직전 squash 가 도중 Kill 됐을 때 잔존 scale 잔류 방지.
             _fxWinningStreakReward.localScale = baseScale;
