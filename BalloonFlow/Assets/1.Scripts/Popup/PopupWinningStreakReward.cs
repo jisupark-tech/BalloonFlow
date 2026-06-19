@@ -88,6 +88,7 @@ namespace BalloonFlow
         private Tween _countTween;
         private Tween _rewardRootPulseTween;
         private Tween _squashStretchTween;
+        private Coroutine _particleLightCoroutine;
         private int _displayedAmount;   // 현재 카운터 표시 값 — 카운트업 시작점
 
         /// <summary>프리팹 스폰 + 시퀀스 시작. 프리팹/부모 미존재 시 null (호출측은 null 이면 대기 없이 진행).
@@ -515,20 +516,33 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>ParticleLight 전용 재생 — 활성화 후 모든 자식 ParticleSystem 1회 Play, 자연 종료(IsAlive(true)=false)
-        /// 시점까지 활성 유지, 종료 후 SetActive(false). 2026-06-19 추가 지시: 재생 도중 강제 비활성화·중단 금지.</summary>
+        /// <summary>ParticleLight 전용 재생 — 활성화 후 모든 자식 ParticleSystem 을 Stop(StopEmittingAndClear)→Clear→Play
+        /// 순서로 재시작, 자연 종료(IsAlive(true)=false) 시점까지 활성 유지, 종료 후 SetActive(false).
+        /// 2026-06-19 추가 지시: 외부에서의 강제 중단 금지(내부 재호출 시에는 이전 코루틴 정리 후 처음부터 재생).</summary>
+        // WHY: 사용자 v3 지시 — 연속 호출 시 항상 처음부터 정상 재생되도록 이전 코루틴 정리 + Stop(StopEmittingAndClear) 선행.
         private void PlayParticleLightAndAutoDisable()
         {
             if (_particleLight == null) return;
-            if (!_particleLight.activeSelf) _particleLight.SetActive(true);
+            if (_particleLightCoroutine != null)
+            {
+                StopCoroutine(_particleLightCoroutine);
+                _particleLightCoroutine = null;
+            }
+            _particleLight.SetActive(true);
             var systems = _particleLight.GetComponentsInChildren<ParticleSystem>(true);
+            if (systems.Length == 0)
+            {
+                _particleLight.SetActive(false);
+                return;
+            }
             for (int i = 0; i < systems.Length; i++)
             {
                 if (systems[i] == null) continue;
+                systems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
                 systems[i].Clear(true);
                 systems[i].Play(true);
             }
-            StartCoroutine(WaitAndDisableParticleLight(systems));
+            _particleLightCoroutine = StartCoroutine(WaitAndDisableParticleLight(systems));
         }
 
         /// <summary>모든 ParticleSystem 의 IsAlive(true) 가 false 가 될 때까지 매 프레임 폴링한 뒤 SetActive(false).
@@ -550,6 +564,7 @@ namespace BalloonFlow
                 yield return null;
             }
             if (_particleLight != null) _particleLight.SetActive(false);
+            _particleLightCoroutine = null;
         }
 
         /// <summary>target 의 화면 위치를 parentRt 로컬 좌표로 변환 (포물선 도착점).</summary>
@@ -571,6 +586,7 @@ namespace BalloonFlow
             _punchTween?.Kill();
             _squashStretchTween?.Kill();
             _countTween?.Kill();
+            if (_particleLightCoroutine != null) { StopCoroutine(_particleLightCoroutine); _particleLightCoroutine = null; }
             IsShowing = false;
             IsFinished = true;
         }
