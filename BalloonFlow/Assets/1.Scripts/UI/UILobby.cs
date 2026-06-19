@@ -797,6 +797,16 @@ namespace BalloonFlow
             if (_wsMultiplier != null)
                 WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, fromMult);
 
+            // ROLLBACK_WS_HOLD_OLD_MULT_TEXT_20260619:
+            // Multiplier(SlideIn → SelectFrame fromMult→toMult → SlideOut) 연출이 진행되는 동안
+            // WinningIcon 하단 TextGauge/Outline 은 기존 배수(fromMult)를 유지. 연출 완전 종료 후
+            // L901 RefreshWinningStreakDisplay() 가 toMult 로 갱신. 사용자 피드백 2026-06-19.
+            // RefreshWinningStreakVisibility(L788) 가 _wsTxtGauge 를 이미 새 값으로 써버렸으므로 명시 복구.
+            ResolveWsTexts();
+            string fromMultText = $"x{fromMult}";
+            if (_wsTxtGauge != null) _wsTxtGauge.text = fromMultText;
+            if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = fromMultText;
+
             int stageForFill = Mathf.Max(1, anim.startStage);
             float startRatio = ResolveWsStageRatio(stageForFill, anim.startPoints);
             bool stageCompleted = anim.achievedStages != null && anim.achievedStages.Count > 0;
