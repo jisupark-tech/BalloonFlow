@@ -37,6 +37,8 @@ namespace BalloonFlow
     /// </summary>
     public class PopupWinningStreakReward : MonoBehaviour
     {
+        // deprecated — Overlay 페이드(2026-06-19 추가 지시)를 분리해 직렬화한 이후 미사용.
+        // 외부 참조 없음(grep 확인 — 본 파일 내 단일 사용처도 IconScaleT* 합으로 교체). 안전을 위해 상수만 남김.
         private const float IntroHoldSeconds = 0.6f;   // 등장 → 첫 비행까지
         private const float StepHoldSeconds  = 0.45f;  // 도착(수 연산) → 다음 비행까지 (카운트업 완료 대기 포함)
         // ROLLBACK_WS_COEFF_OVERLAP_TIMELINE_20260615: 연출 단축 — 1.1f → 0.6f (마지막 카운트업 0.35s 커버 + 짧은 hold).
@@ -173,9 +175,12 @@ namespace BalloonFlow
             // skipped so only difficulty/streak multiplier flyers animate into the counter.
             int amount = 1;
             SetBaseAmountText(amount);
-            // ROLLBACK_WS_REWARD_INTRO_DESIGN_20260619: 디자이너 등장 사양 교체 — Overlay 페이드 + Icon 3단 scale +
-            //   FX_Glow scale + Icon=0.9 도달 시 ParticleLight 1회. 루트 pulse(StartRewardRootPulse)는 사양서가
-            //   Icon/FX_Glow scale 만 명시하므로 의도 충돌 방지 차원에서 제거(OnDestroy 의 StopRewardRootPulse 는 안전 유지).
+            // ROLLBACK_WS_REWARD_INTRO_DESIGN_20260619: 디자이너 등장 사양 — Overlay 페이드 + Icon 3단 scale +
+            //   FX_Glow scale + Icon=0.9 도달 시 ParticleLight 1회. 루트 pulse(StartRewardRootPulse)는
+            //   디자이너 사양(2026-06-19) + 추가 지시에 미포함 — 의도된 제거(태스크 owner 추가 지시에서도 언급 없음).
+            //   OnDestroy 의 StopRewardRootPulse 는 안전 유지.
+            //   새 직렬화(2026-06-19 추가 지시): Overlay 페이드 '완료' → Icon/FX_Glow 스케일 + ParticleLight.
+            //   _particleLight 는 Play 후 자연 종료까지 활성 유지 — 강제 비활성화 금지(회귀 방지).
             //   롤백: StartRewardRootPulse() 호출 복원 + 아래 Overlay/Icon/FX_Glow 시퀀스 제거.
             bool flyMultiple = streakMult > 1;
             if (_fxItemFly != null) _fxItemFly.SetActive(false);
@@ -192,6 +197,17 @@ namespace BalloonFlow
                 if (_txtGauge != null) _txtGauge.text = multText;
             }
 
+            // Icon/FX_Glow 초기 스케일 사전 세팅 — Overlay 페이드가 진행되는 동안 Icon 이 prefab 초기 크기로
+            // 한 프레임도 노출되지 않도록 미리 0/1 로 박제(2026-06-19 추가 지시).
+            if (_icon != null) _icon.localScale = Vector3.zero;
+            if (_fxGlows != null)
+            {
+                for (int i = 0; i < _fxGlows.Count; i++)
+                {
+                    if (_fxGlows[i] != null) _fxGlows[i].localScale = Vector3.one;
+                }
+            }
+
             // Overlay: 기존 RGB 보존, alpha 만 0→220/255 페이드인. (Color 통째 덮어쓰기 금지 — prefab 색감 유지.)
             // SetUpdate(true): 게임 일시정지(Time.timeScale=0) 중에도 재생 보장.
             if (_overlay != null)
@@ -201,6 +217,10 @@ namespace BalloonFlow
                 _overlay.color = overlayColor;
                 _overlay.DOFade(OverlayTargetAlpha, IntroFadeDur).SetUpdate(true);
             }
+
+            // 2026-06-19 추가 지시: Overlay alpha 가 220/255 에 도달한 '뒤'에야 Icon/FX_Glow/ParticleLight 시작.
+            // Overlay→Icon 직렬화의 핵심 — 이 wait 제거 시 다시 같은 프레임에 병렬 시작됨.
+            yield return new WaitForSecondsRealtime(IntroFadeDur);
 
             // Icon: 0 → 1.3(OutBack) → 0.9(InOutSine) → 1.0(OutSine).
             // ParticleLight 는 Icon 이 0.9 에 도달하는 순간 1회 재생 — '눌렸다 펴지는' 임팩트와 라이트 플래시를
@@ -234,7 +254,10 @@ namespace BalloonFlow
                 }
             }
 
-            yield return new WaitForSecondsRealtime(IntroHoldSeconds);
+            // Icon 시퀀스 총합(IconScaleT1+T2+T3 = 0.60s) 완료 시점까지 다음 FXItem 비행 시작을 보류.
+            // 기존 IntroHoldSeconds(0.6s) 는 '등장→첫 비행' 단일 버퍼였으나 이제 Overlay 페이드(0.25s)가 분리됐으므로
+            // Icon 시퀀스 길이로 직접 대기(2026-06-19 추가 지시 — Icon 마무리 전 비행 시작 금지).
+            yield return new WaitForSecondsRealtime(IconScaleT1 + IconScaleT2 + IconScaleT3);
 
             // 1) 기본 포인트 — FXItem 비행 → "1".
             // ROLLBACK_WS_COEFF_OVERLAP_TIMELINE_20260615: START
