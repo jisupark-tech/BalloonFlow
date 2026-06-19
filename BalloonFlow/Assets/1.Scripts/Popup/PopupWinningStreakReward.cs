@@ -49,7 +49,7 @@ namespace BalloonFlow
         // 디자이너 등장 사양(2026-06-19): IntroHoldSeconds(0.6s) 내부에 자연스럽게 들어가도록 분할 — t1+t2+t3≈0.6s.
         private const float IntroFadeDur = 0.25f;      // Overlay alpha 0→220/255 페이드 (Icon 1.3 도달과 정렬).
         private const float IconScaleT1 = 0.25f;       // 0 → 1.3 (OutBack)
-        private const float IconScaleT2 = 0.18f;       // 1.3 → 0.9 (InOutSine). ParticleLight 1회는 이 구간 '시작'(=1.3 peak) 에 발화 — 2026-06-19 추가 지시.
+        private const float IconScaleT2 = 0.18f;       // 1.3 → 0.9 (InOutSine).
         private const float IconScaleT3 = 0.17f;       // 0.9 → 1.0 (OutSine)
         private const float OverlayTargetAlpha = 220f / 255f;
         private static readonly Color32 GainColor = new Color32(0x6B, 0xFF, 0x8F, 0xFF);
@@ -180,14 +180,13 @@ namespace BalloonFlow
             int amount = 1;
             SetBaseAmountText(amount);
             // ROLLBACK_WS_REWARD_INTRO_DESIGN_20260619: 디자이너 등장 사양 — Overlay 페이드 + Icon 3단 scale +
-            //   FX_Glow scale + Icon 1.3 peak 도달 시 ParticleLight 활성화·1회 재생. 루트 pulse(StartRewardRootPulse)는
-            //   디자이너 사양(2026-06-19) + 추가 지시에 미포함 — 의도된 제거(태스크 owner 추가 지시에서도 언급 없음).
-            //   OnDestroy 의 StopRewardRootPulse 는 안전 유지.
-            //   ParticleLight lifecycle(2026-06-19 추가 지시): RunSequence 진입 직후 명시적 SetActive(false) →
-            //   Icon scale 0→1.3 peak 도달 시 PlayParticleLightAndAutoDisable 가 활성화 후 모든 자식
-            //   ParticleSystem 1회 Play → 모든 ParticleSystem.IsAlive(true)=false 가 될 때까지 매 프레임 폴링
-            //   (활성 유지) → 자연 종료 후 SetActive(false). 재생 중 강제 비활성화/Stop 호출 금지(회귀 방지).
-            //   트리거 시점이 0.9 도달 후(이전 차수)였을 때 사용자 reject — 반드시 '1.3 peak' 정확한 시점 유지.
+            //   FX_Glow scale. 루트 pulse(StartRewardRootPulse)는 디자이너 사양(2026-06-19) + 추가 지시에 미포함 —
+            //   의도된 제거(태스크 owner 추가 지시에서도 언급 없음). OnDestroy 의 StopRewardRootPulse 는 안전 유지.
+            //   ParticleLight lifecycle(ROLLBACK_WS_PARTICLELIGHT_OVERLAY220_20260619): RunSequence 진입 직후
+            //   명시적 SetActive(false) → Overlay 페이드 0→220/255 완료 직후 PlayParticleLightAndAutoDisable 호출
+            //   — 사용자 추가 지시 2026-06-19 v2. 이전 차수의 Icon 1.3 peak 동기화는 사용자가 명시적으로 폐기.
+            //   호출 이후 메서드 내부에서 활성화 후 모든 자식 ParticleSystem 1회 Play → IsAlive(true)=false 까지
+            //   매 프레임 폴링(활성 유지) → 자연 종료 후 SetActive(false). 재생 중 강제 비활성화/Stop 호출 금지(회귀 방지).
             //   롤백: StartRewardRootPulse() 호출 복원 + 아래 Overlay/Icon/FX_Glow 시퀀스 제거.
             bool flyMultiple = streakMult > 1;
             if (_fxItemFly != null) _fxItemFly.SetActive(false);
@@ -229,24 +228,18 @@ namespace BalloonFlow
             // Overlay→Icon 직렬화의 핵심 — 이 wait 제거 시 다시 같은 프레임에 병렬 시작됨.
             yield return new WaitForSecondsRealtime(IntroFadeDur);
 
+            // ROLLBACK_WS_PARTICLELIGHT_OVERLAY220_20260619: Overlay 페이드 0→220/255 도달 직후 1회 재생
+            //   (사용자 추가 지시 2026-06-19 v2). Icon 시퀀스와 분리 — Icon 와이어링 여부와 무관하게 항상 1회.
+            PlayParticleLightAndAutoDisable();
+
             // Icon: 0 → 1.3(OutBack, 빠른 확대) → 0.9(InOutSine, 반동) → 1.0(OutSine, 안착) — 탄성 시퀀스.
-            // ParticleLight lifecycle: Icon 이 1.3 peak 에 도달하는 순간 PlayParticleLightAndAutoDisable 가
-            //   활성화·1회 재생을 시작 → IsAlive(true)=false 까지 활성 유지 → 자연 종료 후 SetActive(false).
-            //   '빠르게 확대된 peak' 와 라이트 플래시를 합치시키려는 디자이너 의도(2026-06-19 추가 지시:
-            //   '1.3에 도달하는 시점에 재생을 시작한다'). 재생 중 강제 비활성화/Stop 호출 금지.
             if (_icon != null)
             {
                 _icon.localScale = Vector3.zero;
                 Sequence iconSeq = DOTween.Sequence().SetUpdate(true);
                 iconSeq.Append(_icon.DOScale(1.3f, IconScaleT1).SetEase(Ease.OutBack));
-                iconSeq.AppendCallback(PlayParticleLightAndAutoDisable);
                 iconSeq.Append(_icon.DOScale(0.9f, IconScaleT2).SetEase(Ease.InOutSine));
                 iconSeq.Append(_icon.DOScale(1.0f, IconScaleT3).SetEase(Ease.OutSine));
-            }
-            else
-            {
-                // Icon 와이어링 실패 폴백: ParticleLight 즉시 재생해 기존 등장 임팩트는 유지(자연 종료까지 활성 유지).
-                PlayParticleLightAndAutoDisable();
             }
 
             // FX_Glow 3개: Icon 1.3 peak 와 동시에 1.3 도달, Icon 1.0 복귀 와 동시에 1.0 복귀.
