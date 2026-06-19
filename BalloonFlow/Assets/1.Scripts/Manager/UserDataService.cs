@@ -17,6 +17,7 @@ namespace BalloonFlow
     public class UserDataService : Singleton<UserDataService>
     {
         private const string LOG_TAG = "[UserDataService]";
+        private const string PREFS_DEBUG_RESET_REQUESTED = "BF_DebugResetUserDataRequested";
 
         private FirebaseAuth      _auth;
         private FirebaseFirestore _db;
@@ -82,6 +83,7 @@ namespace BalloonFlow
                 try
                 {
                     await LoadOrCreateUserAsync(_auth.CurrentUser.UserId);
+                    ApplyPendingDebugResetIfRequested();
                 }
                 catch (FirestoreException fe) when (fe.ErrorCode == FirestoreError.PermissionDenied)
                 {
@@ -93,6 +95,7 @@ namespace BalloonFlow
                     try
                     {
                         await LoadOrCreateUserAsync(_auth.CurrentUser.UserId);
+                        ApplyPendingDebugResetIfRequested();
                     }
                     catch (FirestoreException retryFe) when (retryFe.ErrorCode == FirestoreError.PermissionDenied)
                     {
@@ -255,22 +258,58 @@ namespace BalloonFlow
         }
 
         /// <summary>Debug/user reset path: overwrite current Firestore user doc and memory cache with fresh defaults.</summary>
-        public void ResetCurrentUserDataForDebug()
+        public void ResetCurrentUserDataForDebug(int coinsOverride = 0)
         {
-            if (_auth == null || _db == null || string.IsNullOrEmpty(Uid))
+            PlayerPrefs.DeleteKey(PREFS_DEBUG_RESET_REQUESTED);
+            PlayerPrefs.Save();
+
+            // ROLLBACK_RESET_INMEMORY_UNCONDITIONAL_20260619: in-memory _user 는 Firebase 준비 여부와 무관하게 항상 리셋.
+            //   골드(=CurrentUser.coins) · WS해금(=CurrentUser.highestClearedLevel) · 하트(=CurrentUser.lives) 가 모두
+            //   _user 백킹 → Editor 에서 Firebase 미준비(Auth 미완료)면 기존엔 early-return 해 _user 가 안 지워져
+            //   reset 후에도 골드/WS 가 잔존했다(레벨만 PlayerPrefs 라 리셋됨). 이제 _user 리셋은 항상 수행하고,
+            //   Firestore 영속화(SetAsync) + PersistAuthUid 만 Firebase 준비 시 수행한다.
+            string uid = !string.IsNullOrEmpty(Uid) ? Uid : (_user != null ? _user.uid : null);
+            if (string.IsNullOrEmpty(uid)) uid = string.Empty;
+            _user = UserData.CreateNewUser(uid);
+            // ROLLBACK_RESET_USERDATA_ZERO_COINS_20260619:
+            // Debug Reset UserData is a wipe, not a new-user grant. Keep production new-user
+            // defaults in UserData.CreateNewUser(), but force reset/debug balances to 0 so
+            // reinstall/reset QA does not inherit or re-grant gold.
+            _user.coins = Mathf.Max(0, coinsOverride);
+            _user.highestClearedLevel = 0;
+            _user.winningStreak = new WinningStreakState();
+            _user.infiniteHeartsUntil = default;
+            _user.ftueInfiniteHeartsPending = false;
+            _isReady = true;
+
+            bool firebaseReady = _auth != null && _db != null && !string.IsNullOrEmpty(Uid);
+            if (firebaseReady)
             {
-                Debug.LogWarning($"{LOG_TAG} ResetCurrentUserDataForDebug skipped - Firebase/Auth not ready.");
-                return;
+                PersistAuthUid(uid);
+                FireAndForget(_db.Document($"users/{uid}").SetAsync(_user), "ResetCurrentUserDataForDebug");
+            }
+            else
+            {
+                Debug.LogWarning($"{LOG_TAG} ResetCurrentUserDataForDebug — Firebase 미준비: in-memory _user 만 리셋, Firestore 영속화 skip (다음 Play 부팅 시 신규 유저로 진입).");
             }
 
-            string uid = Uid;
-            _user = UserData.CreateNewUser(uid);
-            _isReady = true;
-            PersistAuthUid(uid);
-
-            FireAndForget(_db.Document($"users/{uid}").SetAsync(_user), "ResetCurrentUserDataForDebug");
             OnUserDataReady?.Invoke();
-            Debug.Log($"{LOG_TAG} UserData reset to defaults. uid={uid} coins={_user.coins} lives={_user.lives}/{_user.maxLives}");
+            Debug.Log($"{LOG_TAG} UserData reset to defaults. uid={uid} coins={_user.coins} lives={_user.lives}/{_user.maxLives} highest={_user.highestClearedLevel}");
+        }
+
+        public static void RequestDebugResetOnNextBoot()
+        {
+            PlayerPrefs.SetInt(PREFS_DEBUG_RESET_REQUESTED, 1);
+            PlayerPrefs.Save();
+        }
+
+        private void ApplyPendingDebugResetIfRequested()
+        {
+            if (PlayerPrefs.GetInt(PREFS_DEBUG_RESET_REQUESTED, 0) == 0) return;
+            PlayerPrefs.DeleteKey(PREFS_DEBUG_RESET_REQUESTED);
+            PlayerPrefs.Save();
+            Debug.Log($"{LOG_TAG} Pending debug reset consumed on boot.");
+            ResetCurrentUserDataForDebug(0);
         }
 
         #region Public API — Atomic increments (서버 진실)

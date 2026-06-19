@@ -176,6 +176,17 @@ namespace BalloonFlow
 
             bool boosterAwaiting = awaitingHolderSelection;
 
+            // ROLLBACK_DEPLOYING_BOX_UNTOUCHABLE_20260619: 레일에 배치 중(isDeploying)/이동 중(isMovingToRail)인
+            //   다트 박스는 터치 무시. 배치 중 박스는 앞줄을 벗어나 있어 아래 IsInFrontRow=false 분기로 빠져
+            //   OnHolderClickAnim(TriggerClick)이 발행 → 박스 뚜껑이 다시 닫히는 버그. 배포 중엔 입력 자체를 막는다.
+            //   (부스터 선택 대기 중에는 ForceSelectHolder 가 자체적으로 isDeploying 을 거르므로 여기선 일반 터치만 차단.)
+            if (!boosterAwaiting && HolderManager.HasInstance)
+            {
+                HolderData __hData = HolderManager.Instance.FindHolderPublic(holder.HolderId);
+                if (__hData != null && (__hData.isDeploying || __hData.isMovingToRail))
+                    return;
+            }
+
             if (!boosterAwaiting
                 && HolderVisualManager.HasInstance
                 && !HolderVisualManager.Instance.IsInFrontRow(holder.HolderId))

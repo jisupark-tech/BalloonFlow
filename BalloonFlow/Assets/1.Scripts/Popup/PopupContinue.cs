@@ -14,7 +14,9 @@ namespace BalloonFlow
         private const string LOSELIFE_NAME = "LoseLife";
         private const string WINNINGSTREAK_NAME = "WinningStreak";
         private const string MULTIPLIER_NAME = "Multiplier";
+        private const string GOLD_PLUS_BUTTON_NAME = "GoldPlusBtn";
         private const string POPUP_QUIT_RESOURCE_PATH = "Popup/PopupQuit";
+        private const string POPUP_FAIL01_RESOURCE_PATH = "Popup/PopupFail01";
 
         // ROLLBACK_POPUP_CONTINUE_MULTIPLIER_X5_20260615:
         // Multiplier(연승 배수) 경고 단계를 노출하는 최소 배수. x5 이상에서만 LoseLife→Multiplier→Lobby 플로우,
@@ -36,11 +38,15 @@ namespace BalloonFlow
         private GameObject _winningStreakView;
         private bool _stateViewsSearched;
         private ContinueView _currentView = ContinueView.LoseLife;
+        private TMP_Text _txtContinueTitle;
+        private TMP_Text _txtContinueTitleOutline;
+        private bool _continueTitleSearched;
 
         [Header("[Buttons — 직접 할당]")]
         [SerializeField] private Button _btnContinue;
         [SerializeField] private Button _btnDecline;
         [SerializeField] private Button _btnExit;
+        [SerializeField] private Button _btnGoldPlus;
 
         [Header("[코스트 텍스트]")]
         [SerializeField] private Text _costText;
@@ -97,6 +103,7 @@ namespace BalloonFlow
                 _frame.SetHorizRedText("Give Up");
                 _frame.ShowExitButton(true);
             }
+            ApplyContinueTitleBlackOutline();
             ApplyContinuePanelDifficulty(diff);
         }
 
@@ -129,6 +136,9 @@ namespace BalloonFlow
             CacheDeclineDuplicateButton();
             if (_btnDeclineDuplicate != null)
                 _btnDeclineDuplicate.onClick.AddListener(OnDeclineDuplicateClicked);
+
+            EnsureGoldPlusButton();
+            if (_btnGoldPlus != null) _btnGoldPlus.onClick.AddListener(OnGoldPlusClicked);
 
             EnsureTopBarBinding();
         }
@@ -242,6 +252,7 @@ namespace BalloonFlow
             if (DeclineBtn != null) DeclineBtn.onClick.RemoveAllListeners();
             if (ExitBtn != null) ExitBtn.onClick.RemoveAllListeners();
             if (_btnDeclineDuplicate != null) _btnDeclineDuplicate.onClick.RemoveAllListeners();
+            if (_btnGoldPlus != null) _btnGoldPlus.onClick.RemoveAllListeners();
         }
 
         /// <summary>
@@ -268,6 +279,35 @@ namespace BalloonFlow
                 txt.gameObject.AddComponent<AnimatedCoinLabel>();
         }
 
+        private void EnsureGoldPlusButton()
+        {
+            if (_btnGoldPlus == null)
+            {
+                Transform found = FindChildRecursive(transform, GOLD_PLUS_BUTTON_NAME);
+                if (found != null) _btnGoldPlus = found.GetComponent<Button>();
+            }
+            if (_btnGoldPlus != null) return;
+
+            // ROLLBACK_POPUP_CONTINUE_GOLDPLUS_20260619:
+            // PopupContinue prefab is binary in this branch and currently has no GoldPlusBtn,
+            // so clone the same top-bar button from PopupFail01 at runtime.
+            Transform targetGoldPanel = FindChildRecursive(transform, "GoldPanel");
+            if (targetGoldPanel == null) return;
+
+            var failPrefab = Resources.Load<GameObject>(POPUP_FAIL01_RESOURCE_PATH);
+            if (failPrefab == null) return;
+
+            Transform source = FindChildRecursive(failPrefab.transform, GOLD_PLUS_BUTTON_NAME);
+            if (source == null) return;
+
+            GameObject clone = Instantiate(source.gameObject, targetGoldPanel, false);
+            clone.name = GOLD_PLUS_BUTTON_NAME;
+            if (source is RectTransform sourceRect && clone.transform is RectTransform cloneRect)
+                CopyRectTransform(sourceRect, cloneRect);
+
+            _btnGoldPlus = clone.GetComponent<Button>();
+        }
+
         private static Transform FindChildRecursive(Transform parent, string childName)
         {
             if (parent == null) return null;
@@ -279,6 +319,25 @@ namespace BalloonFlow
                 if (deep != null) return deep;
             }
             return null;
+        }
+
+        private void ApplyContinueTitleBlackOutline()
+        {
+            // ROLLBACK_BLACK_TITLE_OUTLINE_20260619:
+            // PopupContinue title is not serialized on this component in the current prefab, so
+            // resolve by hierarchy name and recolor only the paired outline text at popup enable/show.
+            if (!_continueTitleSearched)
+            {
+                _continueTitleSearched = true;
+
+                Transform title = FindChildRecursive(transform, "TxtContinueTitle");
+                if (title != null) _txtContinueTitle = title.GetComponent<TMP_Text>();
+
+                Transform titleOutline = FindChildRecursive(transform, "TxtContinueTitleOutline");
+                if (titleOutline != null) _txtContinueTitleOutline = titleOutline.GetComponent<TMP_Text>();
+            }
+
+            UIOutlineStyle.ApplyColor(_txtContinueTitleOutline, Color.black);
         }
 
         public void Show()
@@ -297,6 +356,7 @@ namespace BalloonFlow
                 _frame.SetHorizRedText("Give Up");
                 _frame.ShowExitButton(true);
             }
+            ApplyContinueTitleBlackOutline();
             ApplyContinuePanelDifficulty(diff);
             UpdateCostDisplay();
             ResetToLoseLife();
@@ -361,6 +421,21 @@ namespace BalloonFlow
         /// <summary>[ROLLBACK_NOGOLD_GOLDSHOP_20260616] 골드 부족 시 GoldShop 안내.
         /// 닫을 때 충전(잔액 재확인)됐으면 이어하기 팝업 재표시, 미구매면 Retry 팝업(fail02).
         /// GoldShop 미가용 시 Retry 폴백. (골드 충분한 정상 플로우는 호출되지 않음.)</summary>
+        private void OnGoldPlusClicked()
+        {
+            if (PopupManager.HasInstance)
+                PopupManager.Instance.ClosePopup("popup_continue");
+
+            if (HUDController.HasInstance && HUDController.Instance.GoldShopPopup != null)
+            {
+                HUDController.Instance.GoldShopPopup.OpenWithCloseCallback(() =>
+                {
+                    if (PopupManager.HasInstance)
+                        PopupManager.Instance.ShowPopup("popup_continue", 50);
+                });
+            }
+        }
+
         private void OpenGoldShopThenContinueOrRetry(int cost)
         {
             if (PopupManager.HasInstance) PopupManager.Instance.ClosePopup("popup_continue");

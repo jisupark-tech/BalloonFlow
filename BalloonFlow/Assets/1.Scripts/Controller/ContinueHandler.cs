@@ -50,12 +50,15 @@ namespace BalloonFlow
         {
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Subscribe<OnBoardFailed>(HandleBoardFailed);
+            EventBus.Subscribe<OnSceneTransitionStarted>(HandleSceneTransitionStarted);
         }
 
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Unsubscribe<OnBoardFailed>(HandleBoardFailed);
+            EventBus.Unsubscribe<OnSceneTransitionStarted>(HandleSceneTransitionStarted);
+            CancelFailPopupDelay();
         }
 
         #endregion
@@ -232,16 +235,31 @@ namespace BalloonFlow
             // 실패 흐름: [다트 탈선 흩어짐 연출] → PopupFail01 → PopupContinue → PopupFail02
             // [FAIL_DERAIL 2026-06-12] DartManager 가 같은 이벤트로 레일 다트 탈선 연출을 재생하므로,
             // 연출이 끝날 때까지(FailScatterPopupDelay) 기다렸다 팝업 표시. realtime — pause 무관.
-            if (_failPopupDelayCo != null) StopCoroutine(_failPopupDelayCo);
+            CancelFailPopupDelay();
             _failPopupDelayCo = StartCoroutine(ShowFailPopupAfterScatter());
         }
 
         private Coroutine _failPopupDelayCo;
 
+        private void HandleSceneTransitionStarted(OnSceneTransitionStarted evt)
+        {
+            // ROLLBACK_CONTINUE_FAIL_POPUP_SCENE_CANCEL_20260619:
+            // MapMaker test play can leave this delayed fail popup coroutine alive while
+            // the registered popup canvases are destroyed during scene transitions.
+            CancelFailPopupDelay();
+        }
+
+        private void CancelFailPopupDelay()
+        {
+            if (_failPopupDelayCo == null) return;
+            StopCoroutine(_failPopupDelayCo);
+            _failPopupDelayCo = null;
+        }
+
         private System.Collections.IEnumerator ShowFailPopupAfterScatter()
         {
             yield return new WaitForSecondsRealtime(DartManager.FailScatterPopupDelay);
-            if (PopupManager.HasInstance)
+            if (PopupManager.HasInstance && PopupManager.Instance.HasPopup("popup_fail01"))
                 PopupManager.Instance.ShowPopup("popup_fail01", priority: 50);
             Debug.Log($"[ContinueHandler] Board failed — showing PopupFail01 (after derail fx). ContinueCount={_continueCount}");
             _failPopupDelayCo = null;

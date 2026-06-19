@@ -57,6 +57,7 @@ namespace BalloonFlow
         private bool _userExpandedMore;
         private bool _moreOffersAvailable;
         private const float DEFAULT_ITEM_HEIGHT = 200f;
+        private RectTransform _viewport;
 
         private GameObject MoreButtonRoot
         {
@@ -101,6 +102,7 @@ namespace BalloonFlow
 
             LoadShopPrefabs();
             EnsureContentLayout();
+            CacheScrollViewport();
 
             EnsureTopBarBinding();
             SubscribeToCatalog();
@@ -138,10 +140,21 @@ namespace BalloonFlow
 
         private void SubscribeToCatalog()
         {
-            if (!ShopCatalogService.HasInstance) return;
+            if (!ShopCatalogService.HasInstance)
+            {
+                ClearProductsUntilCatalogReady();
+                return;
+            }
             ShopCatalogService.Instance.OnCatalogLoaded += OnCatalogReady;
             if (ShopCatalogService.Instance.IsLoaded)
+            {
                 RefreshProductExposure();
+            }
+            else
+            {
+                ClearProductsUntilCatalogReady();
+                ShopCatalogService.Instance.RetryFetch();
+            }
         }
 
         private void OnCatalogReady()
@@ -244,10 +257,21 @@ namespace BalloonFlow
                 _scrollView.decelerationRate = 0.135f;
                 if (_scrollView.scrollSensitivity < 30f) _scrollView.scrollSensitivity = 60f;
             }
+            CacheScrollViewport();
 
             var moreRoot = MoreButtonRoot;
             if (moreRoot != null && moreRoot.transform.parent == contentRoot)
                 moreRoot.transform.SetAsLastSibling();
+        }
+
+        private void CacheScrollViewport()
+        {
+            if (_scrollView == null)
+            {
+                _viewport = null;
+                return;
+            }
+            _viewport = _scrollView.viewport != null ? _scrollView.viewport : _scrollView.transform as RectTransform;
         }
 
         private GameObject GetPrefabForCategory(ShopItemCategory category)
@@ -293,7 +317,10 @@ namespace BalloonFlow
             RefreshGold();
             LoadShopPrefabs();
             EnsureContentLayout();
+            EnsureCatalogForOpen();
+            _userExpandedMore = false;
             ResetAndLoadProducts(expanded: false);
+            ApplyScrollTop();
         }
 
         /// <summary>보유 골드 즉시 스냅 — prefab 의 _txtGold 와이어링이 TopBar 가 아닌 다른 노드를
@@ -302,6 +329,7 @@ namespace BalloonFlow
         {
             if (!ShopCatalogService.HasInstance || !ShopCatalogService.Instance.IsLoaded)
             {
+                ClearProductsUntilCatalogReady();
                 _moreOffersAvailable = false;
                 return;
             }
@@ -321,19 +349,25 @@ namespace BalloonFlow
         private void HandlePurchaseCompleted(OnPurchaseCompleted evt)
         {
             if (evt.success && gameObject.activeInHierarchy)
+            {
                 ResetAndLoadProducts(_userExpandedMore);
+            }
         }
 
         private void HandlePurchaseRestored(OnPurchaseRestored evt)
         {
             if (gameObject.activeInHierarchy)
+            {
                 ResetAndLoadProducts(_userExpandedMore);
+            }
         }
 
         private void HandleAdsRemovedChanged(OnAdsRemovedChanged evt)
         {
             if (evt.removed && gameObject.activeInHierarchy)
+            {
                 ResetAndLoadProducts(_userExpandedMore);
+            }
         }
 
         private void RefreshGold()
@@ -374,6 +408,7 @@ namespace BalloonFlow
             _displayedCount = 0;
 
             LoadMoreProducts(_userExpandedMore ? (_products != null ? _products.Length : -1) : -1);
+            ForceRebuildAndRefresh();
 
             // 더 보기 버튼 상태
             UpdateMoreButton();
@@ -518,6 +553,66 @@ namespace BalloonFlow
                 le.preferredHeight = rt.rect.height;
             else
                 le.preferredHeight = DEFAULT_ITEM_HEIGHT;
+        }
+
+        private void EnsureCatalogForOpen()
+        {
+            if (!ShopCatalogService.HasInstance)
+            {
+                ClearProductsUntilCatalogReady();
+                return;
+            }
+
+            if (ShopCatalogService.Instance.IsLoaded)
+            {
+                RefreshProductExposure();
+                return;
+            }
+
+            // ROLLBACK_POPUP_GOLD_SHOP_OPEN_AS_LOBBY_SHOP_20260619:
+            // PopupGoldShop must behave like UILobby's Shop page when opened from in-game:
+            // no stale prefab products, retry catalog fetch, then rebuild through OnCatalogReady.
+            ClearProductsUntilCatalogReady();
+            ShopCatalogService.Instance.RetryFetch();
+        }
+
+        private void ClearProductsUntilCatalogReady()
+        {
+            _products = System.Array.Empty<ShopProductData>();
+            _moreOffersAvailable = false;
+        }
+
+        private void ForceRebuildAndRefresh()
+        {
+            var contentRoot = _shopContent as RectTransform;
+            if (contentRoot != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(contentRoot);
+                Canvas.ForceUpdateCanvases();
+            }
+            RefreshAllParticleLights();
+        }
+
+        private void RefreshAllParticleLights()
+        {
+            for (int i = 0; i < _spawnedItems.Count; i++)
+            {
+                var item = _spawnedItems[i];
+                if (item == null) continue;
+                item.RefreshParticleLightVisibility(_viewport);
+            }
+        }
+
+        private void ApplyScrollTop()
+        {
+            if (_scrollView != null)
+            {
+                _scrollView.StopMovement();
+                _scrollView.verticalNormalizedPosition = 1f;
+            }
+
+            if (_shopContent is RectTransform contentRoot)
+                contentRoot.anchoredPosition = Vector2.zero;
         }
 
         private void UpdateMoreButton()

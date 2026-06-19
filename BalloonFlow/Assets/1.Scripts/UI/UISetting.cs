@@ -101,6 +101,7 @@ namespace BalloonFlow
 
             // 항목 라벨 정합(Sound/Music/Haptic/Notifications) 은 RefreshAll() 내부에서 수행.
             RefreshAll();
+            ApplySettingBlackOutlines();
             EventBus.Subscribe<OnSettingsChanged>(HandleSettingsChanged);
         }
 
@@ -184,9 +185,9 @@ namespace BalloonFlow
                 ? "unknown"
                 : Application.version;
 
-            // ROLLBACK_SUPPORT_MAIL_FORMAT_20260609:
+            // ROLLBACK_SUPPORT_MAIL_GAME_NAME_20260619:
             // Support mail includes device/app context up front so CS can identify the user.
-            string subject = System.Uri.EscapeDataString($"Grand Games Car Match Support Ticket - 8 - {deviceId}");
+            string subject = System.Uri.EscapeDataString($"Balloon Loop Support Ticket - 8 - {deviceId}");
             string body = System.Uri.EscapeDataString(
                 $"DeviceID : {deviceId} Version {version}\r\n" +
                 "Please describe your issue here. We will get back to you as soon as possible.");
@@ -257,12 +258,26 @@ namespace BalloonFlow
 
             if (_txtNotificationOnOutline != null) _txtNotificationOnOutline.gameObject.SetActive(isOn);
             if (_txtNotificationOffOutline != null) _txtNotificationOffOutline.gameObject.SetActive(!isOn);
+            ApplyNotificationOnBlackOutline();
 
             if (_frameNotification != null)
             {
                 Sprite target = isOn ? _sprNotificationOn : _sprNotificationOff;
                 if (target != null) _frameNotification.sprite = target;
             }
+        }
+
+        private void ApplySettingBlackOutlines()
+        {
+            // ROLLBACK_BLACK_TITLE_OUTLINE_20260619:
+            // Keep the prefab TMP material/outline width intact. Only recolor outline texts.
+            UIOutlineStyle.ApplyColor(_txtTitleOutline, Color.black);
+            UIOutlineStyle.ApplyColor(_txtNotificationOnOutline, Color.black);
+        }
+
+        private void ApplyNotificationOnBlackOutline()
+        {
+            UIOutlineStyle.ApplyColor(_txtNotificationOnOutline, Color.black);
         }
 
         private static void EnsureToggleLabel(GameObject obj, string label)

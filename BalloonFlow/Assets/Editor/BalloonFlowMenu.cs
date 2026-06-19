@@ -56,6 +56,13 @@ namespace BalloonFlow.Editor
             // 키 enumerate 가 Unity API 에 없음 — DeleteAll 로 일괄 처리.
             // 부작용: BalloonFlow 외 다른 PlayerPrefs key 도 함께 삭제됨 (Editor 한정이라 무해).
             PlayerPrefs.DeleteAll();
+            // ROLLBACK_RESET_USERDATA_EXPLICIT_PROGRESS_KEYS_20260619:
+            // Keep critical reset truth sources explicit for the same Play session.
+            PlayerPrefs.SetInt(LevelManager.PREFS_KEY_HIGHEST_LEVEL, 0);
+            PlayerPrefs.SetInt("BalloonFlow_Coins", 0);
+            PlayerPrefs.DeleteKey("BF_WS_UnlockPopupShown");
+            PlayerPrefs.DeleteKey("BF_WS_RoundPopupShown");
+            UserDataService.RequestDebugResetOnNextBoot();
             PlayerPrefs.Save();
             Debug.Log("[BalloonFlow] PlayerPrefs.DeleteAll() 완료");
         }
@@ -64,15 +71,26 @@ namespace BalloonFlow.Editor
         private static void ResetRuntimeManagersFromPlayMode()
         {
             if (UserDataService.HasInstance)
-                UserDataService.Instance.ResetCurrentUserDataForDebug();
+                UserDataService.Instance.ResetCurrentUserDataForDebug(0);
             else
                 Debug.LogWarning("[BalloonFlow] UserDataService not ready - Firestore reset skipped");
 
             if (CurrencyManager.HasInstance)
-                CurrencyManager.Instance.ResetToInitial();
+            {
+                CurrencyManager.Instance.ResetForDebugWipe();
+                // ROLLBACK_RESET_INMEMORY_UNCONDITIONAL_20260619: _user 리셋(coins=initial) 후 캐시 재동기화 +
+                //   OnCoinChanged 재발행 → HUD 골드 라벨 즉시 갱신(잔존 골드 방지).
+                CurrencyManager.Instance.RefreshFromUserDataCache();
+            }
 
             if (LifeManager.HasInstance)
                 LifeManager.Instance.ResetToInitial();
+
+            // ROLLBACK_WS_DISPLAY_ROOT_HIDE_20260619: WinningStreak in-memory pending(FX/연출 큐) 정리 + OnStateChanged
+            //   발행 → 로비 RefreshWinningStreakVisibility 가 게이지 root/버튼을 숨김(레벨 진행도 0 → 미해금).
+            //   State(winningStreak)·highestClearedLevel 은 CreateNewUser + PlayerPrefs.DeleteAll 로 이미 0 으로 리셋됨.
+            if (WinningStreakManager.HasInstance)
+                WinningStreakManager.Instance.ResetForDebug();
         }
 
         private static async void TryDeleteFirestoreUserDocFromPlayMode()

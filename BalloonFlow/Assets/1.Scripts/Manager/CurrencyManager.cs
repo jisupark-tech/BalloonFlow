@@ -299,6 +299,24 @@ namespace BalloonFlow
             });
         }
 
+        /// <summary>Debug/user reset path: wipe local coins to zero without granting the new-user starter balance.</summary>
+        public void ResetForDebugWipe()
+        {
+            // ROLLBACK_RESET_USERDATA_ZERO_COINS_20260619:
+            // Reset UserData is used as a QA wipe. ResetToInitial() grants the configured
+            // starter balance, so keep that for real new-user flows and use this for debug reset.
+            _currentCoins = 0;
+            _pendingServerCoinDelta = 0;
+            _transactionHistory.Clear();
+            SaveCoins();
+
+            EventBus.Publish(new OnCoinChanged
+            {
+                currentCoins = _currentCoins,
+                delta = 0
+            });
+        }
+
         #endregion
 
         #region Private Methods — Persistence

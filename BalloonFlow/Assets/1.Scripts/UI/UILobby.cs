@@ -543,9 +543,15 @@ namespace BalloonFlow
 
         private void RefreshWinningStreakVisibility()
         {
-            if (_btnWinningStreak == null) return;
             bool unlocked = IsWinningStreakUnlocked();
-            if (_btnWinningStreak.gameObject.activeSelf != unlocked)
+
+            // ROLLBACK_WS_DISPLAY_ROOT_HIDE_20260619: 버튼뿐 아니라 WS 표시 root(로비 미니 게이지/FX 패널)도 unlock
+            //   게이트로 토글. 기존엔 버튼만 숨기고 root 는 안 건드려 → 미해금(UserData reset 등)에도 게이지/FX 가
+            //   그대로 남아 "WS 가 나옴". reset → OnUserDataReady → 이 메서드 호출 시 root 까지 숨겨 WS 완전 제거.
+            if (_wsDisplayRoot != null && _wsDisplayRoot.activeSelf != unlocked)
+                _wsDisplayRoot.SetActive(unlocked);
+
+            if (_btnWinningStreak != null && _btnWinningStreak.gameObject.activeSelf != unlocked)
                 _btnWinningStreak.gameObject.SetActive(unlocked);
 
             if (unlocked) RefreshWinningStreakDisplay();
@@ -721,7 +727,7 @@ namespace BalloonFlow
             if (!showBadge && streakMult <= 1)
                 yield break;
 
-            var popup = PopupWinningStreakReward.Play(diffMult, streakMult, anim.gainedPoints, showBadge);
+            var popup = PopupWinningStreakReward.Play(diffMult, streakMult, anim.gainedPoints, showBadge, anim.clearedDifficulty);
             // ROLLBACK_WS_REWARD_POPUP_HANG_FIX_20260618: IsFinished 가 어떤 이유로든(코루틴 미시작/예외) 안 떨어져도
             //   최대 maxWait 초 후 강제 종료 — 이 while 이 영구 대기하면 상위 deferred 코루틴이 finally 에 못 가
             //   _wsLobbyFxCoroutine 가 안 풀려 PlayButton 이 영구 차단됨(Bug1/2). 정상은 ~3s 내 종료. 롤백: 타이머/Destroy 제거.
@@ -996,6 +1002,10 @@ namespace BalloonFlow
                 Destroy(fly);
             }
 
+            // ROLLBACK_WS_FXFIRE_ON_MERGE_PULSE_20260618:
+            // Show/replay FXFire at the merge moment, while WinningIcon scales up.
+            SetWinningStreakFxActive(true);
+
             // 도착 후 target(ImageIcon) 펄스 — 커졌다 원래대로.
             if (target != null)
             {
@@ -1007,9 +1017,6 @@ namespace BalloonFlow
                 yield return _wsLobbyFxSequence.WaitForCompletion();
             }
 
-            // ROLLBACK_WINNING_STREAK_LOBBY_FX_ENTRY_OFF:
-            // Lobby entry keeps FXLight/FXFire off. Pending WS clear-return animation enables both.
-            SetWinningStreakFxActive(true);
         }
 
         /// <summary>보상 수령 연출 — RewardItem 위치에서 WinningStreakGetReward 프리팹을 스폰해 위로 상승시킨다.

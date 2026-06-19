@@ -93,6 +93,7 @@ namespace BalloonFlow
             base.Awake();
             if (_txtTitle != null) _txtTitle.text = LocalizationService.Get("ui.shop.title");
             if (_txtTitleOutline != null) _txtTitleOutline.text = LocalizationService.Get("ui.shop.title");
+            ApplyTitleShopBlackOutline();
 
             if (_btnMoreProducts != null)
             {
@@ -148,6 +149,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
             EventBus.Subscribe<OnPurchaseRestored>(HandlePurchaseRestored);
             EventBus.Subscribe<OnAdsRemovedChanged>(HandleAdsRemovedChanged);
+            ApplyTitleShopBlackOutline();
         }
 
         private void OnDisable()
@@ -155,6 +157,15 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnPurchaseCompleted>(HandlePurchaseCompleted);
             EventBus.Unsubscribe<OnPurchaseRestored>(HandlePurchaseRestored);
             EventBus.Unsubscribe<OnAdsRemovedChanged>(HandleAdsRemovedChanged);
+        }
+
+        /// <summary>Shop title outline color override.</summary>
+        private void ApplyTitleShopBlackOutline()
+        {
+            // ROLLBACK_BLACK_TITLE_OUTLINE_20260619:
+            // Keep the prefab TMP material/outline width intact. Only recolor the paired
+            // outline text so the title outline turns black without becoming thicker.
+            UIOutlineStyle.ApplyColor(_txtTitleOutline, Color.black);
         }
 
         /// <summary>ShopCatalogService 구독. 이미 로드 상태면 즉시 적용. 매니저 부재 시 fallback.</summary>

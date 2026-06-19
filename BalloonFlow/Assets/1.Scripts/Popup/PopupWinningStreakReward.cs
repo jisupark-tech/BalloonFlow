@@ -2,6 +2,7 @@ using System.Collections;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace BalloonFlow
 {
@@ -59,16 +60,21 @@ namespace BalloonFlow
         private GameObject _fxItemFly;
         private GameObject _fxBadge;
         private GameObject _fxMultiple;
+        private Image _fxBadgeImage;
+        private Transform _fxWinningStreakReward;
+        private Vector3 _fxWinningStreakRewardBaseScale = Vector3.one;
         private TextMeshProUGUI _txtGauge;
         private TextMeshProUGUI _txtGaugeOutline;
         private Material _greenOutlineMat;
         private Tween _punchTween;
         private Tween _countTween;
+        private Tween _rewardRootPulseTween;
         private int _displayedAmount;   // 현재 카운터 표시 값 — 카운트업 시작점
 
         /// <summary>프리팹 스폰 + 시퀀스 시작. 프리팹/부모 미존재 시 null (호출측은 null 이면 대기 없이 진행).
         /// diffMult/streakMult 는 1 이상으로 정규화. gainedPoints 는 최종 보정값(0 이면 보정 생략).</summary>
-        public static PopupWinningStreakReward Play(int diffMult, int streakMult, int gainedPoints, bool showBadge)
+        public static PopupWinningStreakReward Play(int diffMult, int streakMult, int gainedPoints, bool showBadge,
+            DifficultyPurpose clearedDifficulty = DifficultyPurpose.Normal)
         {
             if (!UIManager.HasInstance) return null;
             var prefab = Resources.Load<GameObject>(Const.POPUP_WINNING_STREAK_REWARD);
@@ -89,7 +95,7 @@ namespace BalloonFlow
             var ctrl = go.AddComponent<PopupWinningStreakReward>();
             ctrl.WireRefs();
             ctrl.StartCoroutine(ctrl.RunSequence(
-                Mathf.Max(1, diffMult), Mathf.Max(1, streakMult), gainedPoints, showBadge));
+                Mathf.Max(1, diffMult), Mathf.Max(1, streakMult), gainedPoints, showBadge, clearedDifficulty));
             return ctrl;
         }
 
@@ -99,6 +105,14 @@ namespace BalloonFlow
             _txtAmount        = FindDeepComponent<TextMeshProUGUI>(transform, "TxtAmount");
             _particleLight    = FindDeepGameObject(transform, "ParticleLight");
             _fxReward         = FindDeepGameObject(transform, "FXReward");
+            _fxWinningStreakReward = FindDeep(transform, "FxWinningStreakReward")
+                                   ?? FindDeep(transform, "FXWinningStreakReward");
+            if (_fxWinningStreakReward != null)
+            {
+                _fxWinningStreakRewardBaseScale = _fxWinningStreakReward.localScale;
+                if (_fxWinningStreakRewardBaseScale == Vector3.zero)
+                    _fxWinningStreakRewardBaseScale = Vector3.one;
+            }
 
             // FXItem 은 '그룹 노드'와 그 안의 '비행체' 이름이 동일 — 그룹(루트 직계)을 먼저 찾고 직계 자식으로 구분.
             Transform fxGroup = FindDirectChild(transform, "FXItem");
@@ -118,17 +132,29 @@ namespace BalloonFlow
                 _txtGaugeOutline = FindDeepComponent<TextMeshProUGUI>(_fxMultiple.transform, "TextGaugeOutline");
                 _txtGauge        = FindDeepComponent<TextMeshProUGUI>(_fxMultiple.transform, "TextGauge");
             }
+            if (_fxBadge != null)
+                _fxBadgeImage = _fxBadge.GetComponentInChildren<Image>(true);
         }
 
-        private IEnumerator RunSequence(int diffMult, int streakMult, int gainedPoints, bool showBadge)
+        private IEnumerator RunSequence(int diffMult, int streakMult, int gainedPoints, bool showBadge, DifficultyPurpose clearedDifficulty)
         {
             IsShowing = true;
             _greenOutlineMat = Resources.Load<Material>(GreenOutlineMaterialPath);
 
             // 등장 — 카운터 빈 값, 비행체들은 출발 전 숨김 (FXBadge/FXMultiple 은 prefab 기본도 off).
-            SetAmountText(string.Empty);
+            // ROLLBACK_WS_SKIP_BASE_PLUS_ONE_FLY_20260618:
+            // Lobby Winning Streak reward popup now starts at +1. The base FXItem flight is
+            // skipped so only difficulty/streak multiplier flyers animate into the counter.
+            int amount = 1;
+            SetBaseAmountText(amount);
+            StartRewardRootPulse();
             bool flyMultiple = streakMult > 1;
-            if (_fxBadge != null) _fxBadge.SetActive(false);
+            if (_fxItemFly != null) _fxItemFly.SetActive(false);
+            if (_fxBadge != null)
+            {
+                ApplyFxBadgeSprite(clearedDifficulty);
+                _fxBadge.SetActive(false);
+            }
             if (_fxMultiple != null)
             {
                 _fxMultiple.SetActive(false);
@@ -141,9 +167,6 @@ namespace BalloonFlow
             yield return new WaitForSecondsRealtime(IntroHoldSeconds);
 
             // 1) 기본 포인트 — FXItem 비행 → "1".
-            int amount = 1;
-            yield return FlyAndApply(_fxItemFly, amount);
-
             // ROLLBACK_WS_COEFF_OVERLAP_TIMELINE_20260615: START
             // 2~3) 난이도배수(FXBadge) + 연승배수(FXMultiple) — 디자이너 키프레임(2026-06-15) 오버랩 타임라인.
             //   기존 순차(FlyAndApply×2, ~1.9s)를 scale-up 등장 + 오버랩(~1.1s)으로 단축:
@@ -271,6 +294,7 @@ namespace BalloonFlow
                     .SetUpdate(true);
             }
             if (_txtAmount != null) _txtAmount.color = GainColor;
+            if (_txtAmountOutline != null) _txtAmountOutline.color = GainColor;
             if (_greenOutlineMat != null && _txtAmountOutline != null)
                 _txtAmountOutline.fontSharedMaterial = _greenOutlineMat;
 
@@ -282,6 +306,66 @@ namespace BalloonFlow
             }
 
             PlayFxOnce(_fxReward);
+        }
+
+        private void SetBaseAmountText(int amount)
+        {
+            // ROLLBACK_WS_BASE_AMOUNT_PREFAB_STYLE_20260618:
+            // Initial +1 must keep the prefab-authored TxtAmount/TxtAmountOutline style.
+            // The green gain color/material is applied only when a multiplier actually lands.
+            _displayedAmount = amount;
+            SetAmountText($"+{amount}");
+        }
+
+        private void StartRewardRootPulse()
+        {
+            if (_fxWinningStreakReward == null) return;
+
+            // ROLLBACK_WS_REWARD_ROOT_PULSE_20260618:
+            // While the coefficient popup is active, pulse the visual root between 1.0 and
+            // 1.1 scale. This is presentation-only and does not affect point calculation.
+            _rewardRootPulseTween?.Kill(false);
+            _fxWinningStreakReward.localScale = _fxWinningStreakRewardBaseScale;
+            _rewardRootPulseTween = _fxWinningStreakReward
+                .DOScale(_fxWinningStreakRewardBaseScale * 1.1f, 0.35f)
+                .SetEase(Ease.InOutSine)
+                .SetLoops(-1, LoopType.Yoyo)
+                .SetUpdate(true);
+        }
+
+        private void StopRewardRootPulse()
+        {
+            _rewardRootPulseTween?.Kill(false);
+            _rewardRootPulseTween = null;
+            if (_fxWinningStreakReward != null)
+                _fxWinningStreakReward.localScale = _fxWinningStreakRewardBaseScale;
+        }
+
+        private void ApplyFxBadgeSprite(DifficultyPurpose difficulty)
+        {
+            if (_fxBadgeImage == null) return;
+
+            string key = difficulty switch
+            {
+                DifficultyPurpose.SuperHard => Const.SPR_BADGEX5,
+                DifficultyPurpose.Hard      => Const.SPR_BADGEX3,
+                _                           => null
+            };
+            if (string.IsNullOrEmpty(key)) return;
+
+            Sprite sprite = ResourceManager.HasInstance
+                ? ResourceManager.Instance.UISpriteOr(key, null)
+                : null;
+
+            if (sprite == null)
+            {
+                Debug.LogWarning($"[PopupWinningStreakReward] badge sprite not found in atlas_ui: {key}");
+                return;
+            }
+
+            _fxBadgeImage.sprite = sprite;
+            _fxBadgeImage.enabled = true;
+            _fxBadgeImage.color = Color.white;
         }
 
         private void SetAmountText(string text)
@@ -318,6 +402,7 @@ namespace BalloonFlow
         private void OnDestroy()
         {
             // 씬 전환 등 외부 파괴 시에도 대기측이 영원히 기다리지 않게.
+            StopRewardRootPulse();
             _punchTween?.Kill();
             _countTween?.Kill();
             IsShowing = false;

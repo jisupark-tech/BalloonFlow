@@ -773,6 +773,12 @@ namespace BalloonFlow
             if (GUI.Button(new Rect(x, y, w, h), "RESET USER DATA", _debugBtnStyle))
             {
                 PlayerPrefs.DeleteAll();
+                // ROLLBACK_RESET_USERDATA_EXPLICIT_PROGRESS_KEYS_20260619:
+                // Keep critical reset truth sources explicit for the same Play session.
+                PlayerPrefs.SetInt(LevelManager.PREFS_KEY_HIGHEST_LEVEL, 0);
+                PlayerPrefs.SetInt("BalloonFlow_Coins", 0);
+                PlayerPrefs.DeleteKey("BF_WS_UnlockPopupShown");
+                PlayerPrefs.DeleteKey("BF_WS_RoundPopupShown");
                 PlayerPrefs.Save();
                 ResetRuntimeUserDataState();
                 // 다음 실행 시 모든 매니저가 초기값으로 로드 (골드, 하트, 레벨, 부스터 전부)
@@ -786,10 +792,10 @@ namespace BalloonFlow
         private void ResetRuntimeUserDataState()
         {
             if (UserDataService.HasInstance)
-                UserDataService.Instance.ResetCurrentUserDataForDebug();
+                UserDataService.Instance.ResetCurrentUserDataForDebug(0);
 
             if (CurrencyManager.HasInstance)
-                CurrencyManager.Instance.ResetToInitial();
+                CurrencyManager.Instance.ResetForDebugWipe();
 
             if (LifeManager.HasInstance)
                 LifeManager.Instance.ResetToInitial();

@@ -102,7 +102,7 @@ namespace BalloonFlow
                 return;
             }
 
-            if (!_popupMap.ContainsKey(popupId))
+            if (!TryGetLivePopup(popupId, out _))
             {
                 Debug.LogWarning($"[PopupManager] Popup '{popupId}' not found in registry.");
                 return;
@@ -195,7 +195,7 @@ namespace BalloonFlow
         /// </summary>
         public bool HasPopup(string popupId)
         {
-            return !string.IsNullOrEmpty(popupId) && _popupMap.ContainsKey(popupId);
+            return TryGetLivePopup(popupId, out _);
         }
 
         /// <summary>
@@ -244,9 +244,9 @@ namespace BalloonFlow
             ShowPopup(evt.popupId, evt.priority);
         }
 
-        private void ActivatePopup(string popupId)
+        private bool ActivatePopup(string popupId)
         {
-            if (_popupMap.TryGetValue(popupId, out CanvasGroup group))
+            if (TryGetLivePopup(popupId, out CanvasGroup group))
             {
                 // UIBase.CloseUI()가 SetActive(false)하므로 여기서 복원
                 group.gameObject.SetActive(true);
@@ -257,12 +257,15 @@ namespace BalloonFlow
                 // OnEnable 라이프사이클이 reopen 흐름에서 누락되는 케이스 방어 — 명시 호출
                 var frame = group.GetComponentInChildren<PopupCommonFrame>(true);
                 if (frame != null) frame.PlayPopAnimation();
+                return true;
             }
+
+            return false;
         }
 
         private void DeactivatePopup(string popupId)
         {
-            if (_popupMap.TryGetValue(popupId, out CanvasGroup group))
+            if (TryGetLivePopup(popupId, out CanvasGroup group))
             {
                 SetCanvasGroupVisible(group, false);
                 group.gameObject.SetActive(false);
@@ -290,15 +293,19 @@ namespace BalloonFlow
 
         private void TryShowNext()
         {
+            while (_queue.Count > 0)
+            {
+                QueuedPopup next = _queue[0];
+                _queue.RemoveAt(0);
+                if (ActivatePopup(next.popupId))
+                    return;
+            }
+
             if (_queue.Count == 0)
             {
                 SetOverlayVisible(false);
                 return;
             }
-
-            QueuedPopup next = _queue[0];
-            _queue.RemoveAt(0);
-            ActivatePopup(next.popupId);
         }
 
         private void SetCanvasGroupVisible(CanvasGroup group, bool visible)
@@ -311,6 +318,29 @@ namespace BalloonFlow
             group.alpha = visible ? 1f : 0f;
             group.interactable = visible;
             group.blocksRaycasts = visible;
+        }
+
+        private bool TryGetLivePopup(string popupId, out CanvasGroup group)
+        {
+            group = null;
+            if (string.IsNullOrEmpty(popupId)) return false;
+            if (!_popupMap.TryGetValue(popupId, out CanvasGroup cached)) return false;
+
+            // ROLLBACK_POPUPMANAGER_STALE_CANVASGROUP_GUARD_20260619:
+            // MapMaker test play can leave ContinueHandler's delayed fail-popup coroutine alive
+            // while UIManager.DestroyAllUI destroys the registered popup instance. Unity then
+            // leaves a destroyed fake-null CanvasGroup in the dictionary.
+            if (cached == null)
+            {
+                _popupMap.Remove(popupId);
+                _queue.RemoveAll(q => q.popupId == popupId);
+                if (_activePopupId == popupId) _activePopupId = null;
+                Debug.LogWarning($"[PopupManager] Removed stale popup registration: {popupId}");
+                return false;
+            }
+
+            group = cached;
+            return true;
         }
 
         private void SetOverlayVisible(bool visible)

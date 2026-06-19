@@ -150,6 +150,8 @@ namespace BalloonFlow
 
         // 좌측 TextPrice 옆 골드 아이콘 (ImageGoldIcon). Awake 1회 캐시.
         private Image _imageGoldIcon;
+        private Color _defaultPriceOutlineColor;
+        private bool _priceOutlineColorCaptured;
 
         // ShopListItem.prefab 이 바이너리 직렬화라 TxtTitleOutline Material Preset 을 텍스트 편집으로 교체 불가.
         // Resources.Load 캐시 — PopupWinningStreak.EnsureStreakSprites 의 _fontMatGreenOutline/_fontMatPurpleOutline 패턴 미러.
@@ -247,6 +249,7 @@ namespace BalloonFlow
                 ? FormatCoins(data.rewards.coins)
                 : string.Empty;
             SetTextWithOutline(_txtPrice, _txtPriceOutline, coinsText);
+            ApplyCoin1000PriceOutlineColor(data);
 
             // 좌측 ImageGoldIcon — Firestore goldIconKey 명시 시 atlas 교체, 미지정 시 Const.SPR_ICONGOLD 기본.
             ApplyGoldIcon(data);
@@ -489,6 +492,25 @@ namespace BalloonFlow
         }
 
         private static string FormatCoins(int coins) => coins.ToString("N0");
+
+        private void CapturePriceOutlineColorIfNeeded()
+        {
+            if (_priceOutlineColorCaptured) return;
+            _priceOutlineColorCaptured = true;
+
+            _defaultPriceOutlineColor = _txtPriceOutline != null ? _txtPriceOutline.color : Color.white;
+        }
+
+        private void ApplyCoin1000PriceOutlineColor(ShopProductData data)
+        {
+            // ROLLBACK_BLACK_1000_COIN_PRICE_OUTLINE_20260619:
+            // ShopListGold.prefab is shared by every coin product. Keep the prefab TMP
+            // material/outline width intact and recolor only the 1000 coin outline text.
+            CapturePriceOutlineColorIfNeeded();
+
+            bool isCoin1000 = data != null && data.productId == CoinProductId1000;
+            UIOutlineStyle.ApplyColor(_txtPriceOutline, isCoin1000 ? Color.black : _defaultPriceOutlineColor);
+        }
 
         private static string FormatHours(int seconds)
         {

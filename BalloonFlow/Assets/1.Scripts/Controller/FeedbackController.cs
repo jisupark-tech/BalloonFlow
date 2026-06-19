@@ -267,6 +267,14 @@ namespace BalloonFlow
 
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
+            // ROLLBACK_POP_FEEDBACK_COOLDOWN_ZAP_20260618: burst(Zap 대량팝) 시 햅틱(JNI 진동+AndroidJavaObject GC)/
+            //   보조 SFX(PlayOneShot)/보조 파티클이 쿨다운 없이 프레임당 3~4회 실행돼 프레임 드랍. 0.05s 게이트로 burst 시
+            //   프레임당 ~1회로 coalesce(AudioManager 50ms 팝 쿨다운과 동일 패턴). 단일/저속 팝(>50ms 간격)은 영향 없음.
+            //   ★실제 팝 비주얼(PopEffectPool CircleParticle)은 ReturnBalloonObject 에서 매 팝 그대로 재생 → 풍선은 항상 보이게 팝됨.
+            //   ★팝/클리어/실패 판정은 BoardStateManager/DartManager(별도, O(1))라 이 게이트와 무관. 롤백: 아래 2줄 제거.
+            if (Time.unscaledTime - _lastPopFeedbackTime < POP_FEEDBACK_COOLDOWN) return;
+            _lastPopFeedbackTime = Time.unscaledTime;
+
             float scaleMultiplier = evt.effectScaleMultiplier > 0f ? evt.effectScaleMultiplier : 1f;
             PlayPopFeedback(evt.position, evt.color, false, scaleMultiplier);
             // [2026-05-13] 골드 연출 동일 햅틱 (180ms, amp=38) — 이전: HapticLight() (40ms, amp=200).
@@ -471,6 +479,10 @@ namespace BalloonFlow
 
         private float _lastShakeTime;
         private const float SHAKE_COOLDOWN = 0.1f;
+        // ROLLBACK_POP_FEEDBACK_COOLDOWN_ZAP_20260618: 팝당 보조 파티클+SFX+햅틱(JNI 진동) 쿨다운. Zap 대량팝
+        //   (프레임당 3~4팝) 시 JNI 6~12회+오디오 보이스스틸로 프레임 드랍 → burst 시 프레임당 ~1회로 coalesce.
+        private float _lastPopFeedbackTime = -1f;
+        private const float POP_FEEDBACK_COOLDOWN = 0.05f;
 
         private void TriggerScreenShake(float intensity, float duration)
         {

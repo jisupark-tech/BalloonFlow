@@ -934,7 +934,7 @@ namespace BalloonFlow
             if (_speedToggleOnVisual != null) _speedToggleOnVisual.SetActive(on);
             if (_speedToggleOffVisual != null) _speedToggleOffVisual.SetActive(!on);
 
-            string speedTxt = on ? "X2" : "X1";
+            string speedTxt = on ? "x2" : "x1";
             if (_txtSpeed != null) _txtSpeed.text = speedTxt;
             if (_txtSpeedOutline != null) _txtSpeedOutline.text = speedTxt;
 

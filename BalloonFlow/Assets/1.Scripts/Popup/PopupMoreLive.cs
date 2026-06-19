@@ -25,6 +25,10 @@ namespace BalloonFlow
 
         [Header("[Timer — 다음 하트까지]")]
         [SerializeField] private TMP_Text _txtTimer;
+
+        // ROLLBACK_MORELIVE_CLOSE_ON_REFILL_COMPLETE_20260619: 팝업이 열린 동안 '비풀(<max)' 을 한 번이라도 관측했는지.
+        //   true 인 상태에서 풀(5/5)로 전환되면 = 충전 완료 → 00:00/full 표시 대신 팝업을 닫는다.
+        private bool _sawNonFullWhileOpen;
         [SerializeField] private Image _imgClock;
         [SerializeField] private Image _imgClockHand;
 
@@ -107,6 +111,7 @@ namespace BalloonFlow
                 _frame.ShowExitButton(true);
             }
 
+            _sawNonFullWhileOpen = false; // ROLLBACK_MORELIVE_CLOSE_ON_REFILL_COMPLETE_20260619: 오픈마다 전환 감지 리셋
             RefreshDisplay();
             base.OpenUI();
         }
@@ -160,11 +165,30 @@ namespace BalloonFlow
 
             if (LifeManager.Instance.IsFullLives())
             {
+                // ROLLBACK_MORELIVE_CLOSE_ON_REFILL_COMPLETE_20260619: 팝업이 열린 동안 비풀→풀(=4→5 충전 완료)로
+                //   전환되면 00:00/full 을 띄우지 말고 팝업을 닫는다. (풀 상태로 처음 열린 경우는 full 텍스트 유지.)
+                if (_sawNonFullWhileOpen)
+                {
+                    CloseUI();
+                    return;
+                }
                 if (_txtTimer != null) _txtTimer.text = LocalizationService.Get("ui.morelive.full");
                 return;
             }
 
+            _sawNonFullWhileOpen = true; // 비풀 상태 관측 — 이후 풀 전환 = 충전 완료
             var remaining = LifeManager.Instance.GetTimeToNextLife();
+
+            // ROLLBACK_MORELIVE_CLOSE_ON_REFILL_COMPLETE_20260619: 마지막 하트(maxLives-1 → max)가 곧 차서
+            //   잔여 < 1초(=다음 프레임에 "00:00" 으로 표시될 구간)면 00:00 을 띄우지 말고 팝업을 닫는다.
+            //   (3→4 같은 중간 하트 충전은 CurrentLives < max-1 이라 해당 안 됨 → 카운트다운 유지.)
+            if (LifeManager.Instance.CurrentLives >= LifeManager.Instance.MaxLives - 1
+                && remaining.TotalSeconds < 1.0)
+            {
+                CloseUI();
+                return;
+            }
+
             if (_txtTimer != null)
                 _txtTimer.text = $"{remaining.Minutes:D2}:{remaining.Seconds:D2}";
         }

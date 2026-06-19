@@ -420,6 +420,20 @@ namespace BalloonFlow
             return fromMultiplier > 1;
         }
 
+#if UNITY_EDITOR
+        /// <summary>[Editor 디버그 전용] ROLLBACK_WS_DISPLAY_ROOT_HIDE_20260619: UserData reset 시 WS in-memory 잔여
+        ///   정리. State(winningStreak)는 UserDataService.CreateNewUser 가 리셋하므로, 여기선 pending FX/연출 큐만
+        ///   비우고 OnStateChanged 로 로비 UI 에 갱신을 통지(→ RefreshWinningStreakVisibility 로 root/버튼 숨김).</summary>
+        public void ResetForDebug()
+        {
+            _pendingLobbyAnimations.Clear();
+            _deferredLevelClears.Clear();
+            _pendingFailFxMultiplier = 0;
+            OnStateChanged?.Invoke();
+            Debug.Log($"{LOG_TAG} ResetForDebug — pending FX/연출 큐 비움 + OnStateChanged 발행.");
+        }
+#endif
+
         // ── Points / overflow ─────────────────────────────────────
 
         private void AddPointsInternal(int amount, List<int> achievedStages)
