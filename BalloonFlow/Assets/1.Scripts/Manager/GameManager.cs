@@ -778,7 +778,7 @@ namespace BalloonFlow
                 // ROLLBACK_RESET_USERDATA_EXPLICIT_PROGRESS_KEYS_20260619:
                 // Keep critical reset truth sources explicit for the same Play session.
                 PlayerPrefs.SetInt(LevelManager.PREFS_KEY_HIGHEST_LEVEL, 0);
-                PlayerPrefs.SetInt("BalloonFlow_Coins", 0);
+                // ROLLBACK_RESET_USERDATA_STARTER_COINS_20260619: 코인 0 박지 않음(신규 유저 1000 을 덮어쓰는 버그).
                 PlayerPrefs.DeleteKey("BF_WS_UnlockPopupShown");
                 PlayerPrefs.DeleteKey("BF_WS_RoundPopupShown");
                 PlayerPrefs.Save();
@@ -794,10 +794,11 @@ namespace BalloonFlow
         private void ResetRuntimeUserDataState()
         {
             if (UserDataService.HasInstance)
-                UserDataService.Instance.ResetCurrentUserDataForDebug(0);
+                UserDataService.Instance.ResetCurrentUserDataForDebug(); // ROLLBACK_RESET_USERDATA_STARTER_COINS_20260619: 기본 1000골드
 
+            // ROLLBACK_RESET_USERDATA_STARTER_COINS_20260619: ResetForDebugWipe(0) → ResetToInitial(1000) 으로 일치.
             if (CurrencyManager.HasInstance)
-                CurrencyManager.Instance.ResetForDebugWipe();
+                CurrencyManager.Instance.ResetToInitial();
 
             if (LifeManager.HasInstance)
                 LifeManager.Instance.ResetToInitial();

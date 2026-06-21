@@ -59,7 +59,9 @@ namespace BalloonFlow.Editor
             // ROLLBACK_RESET_USERDATA_EXPLICIT_PROGRESS_KEYS_20260619:
             // Keep critical reset truth sources explicit for the same Play session.
             PlayerPrefs.SetInt(LevelManager.PREFS_KEY_HIGHEST_LEVEL, 0);
-            PlayerPrefs.SetInt("BalloonFlow_Coins", 0);
+            // ROLLBACK_RESET_USERDATA_STARTER_COINS_20260619: 코인 PlayerPrefs 를 0 으로 박지 않는다.
+            //   (박으면 다음 부팅 LoadCoins 가 0 을 읽어 신규 유저 1000 을 덮어씀.) CurrencyManager.ResetToInitial 이
+            //   1000 으로 재설정+저장하므로 여기서 강제 0 불필요. DeleteAll 로 키는 이미 지워져 LoadCoins 가 _initialCoins(1000) 사용.
             PlayerPrefs.DeleteKey("BF_WS_UnlockPopupShown");
             PlayerPrefs.DeleteKey("BF_WS_RoundPopupShown");
             UserDataService.RequestDebugResetOnNextBoot();
@@ -70,16 +72,17 @@ namespace BalloonFlow.Editor
         /// <summary>Play 중일 때 실행. FirebaseManager + UserDataService 가 살아있다고 가정하고 /users/{uid} doc 삭제.</summary>
         private static void ResetRuntimeManagersFromPlayMode()
         {
+            // ROLLBACK_RESET_USERDATA_STARTER_COINS_20260619: Reset = '처음 시작'(신규 유저) 재현 → 1000골드 지급.
             if (UserDataService.HasInstance)
-                UserDataService.Instance.ResetCurrentUserDataForDebug(0);
+                UserDataService.Instance.ResetCurrentUserDataForDebug(); // 기본 1000골드(신규 유저 동일)
             else
                 Debug.LogWarning("[BalloonFlow] UserDataService not ready - Firestore reset skipped");
 
             if (CurrencyManager.HasInstance)
             {
-                CurrencyManager.Instance.ResetForDebugWipe();
-                // ROLLBACK_RESET_INMEMORY_UNCONDITIONAL_20260619: _user 리셋(coins=initial) 후 캐시 재동기화 +
-                //   OnCoinChanged 재발행 → HUD 골드 라벨 즉시 갱신(잔존 골드 방지).
+                // ResetForDebugWipe(0) → ResetToInitial(1000) 로 변경. _user.coins=1000 과 일치.
+                CurrencyManager.Instance.ResetToInitial();
+                // _user 리셋(coins=1000) 후 캐시 재동기화 + OnCoinChanged 재발행 → HUD 골드 라벨 즉시 갱신.
                 CurrencyManager.Instance.RefreshFromUserDataCache();
             }
 

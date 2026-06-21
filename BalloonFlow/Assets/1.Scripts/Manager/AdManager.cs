@@ -53,6 +53,9 @@ namespace BalloonFlow
         public event Action                    OnInterstitialAdDisplayed;
         public event Action                    OnInterstitialAdHidden;
 
+        /// <summary>ROLLBACK_NOADS_AUTO_POPUP_20260619: 첫 전면광고 종료 직후 발화(문서 §9-0 A경로). 1회성.</summary>
+        public event Action                    OnFirstInterstitialEnded;
+
         #endregion
 
         #region Fields
@@ -65,6 +68,11 @@ namespace BalloonFlow
         private Action _pendingRewardCallback;
         // 마지막 전면 광고 노출 종료 시각 (realtime). 20초 공통 쿨다운 판정용.
         private float  _lastInterstitialShownRealtime = -9999f;
+        // ROLLBACK_NOADS_AUTO_POPUP_20260619: 첫 전면광고 NO ADS 자동팝업(A경로).
+        //   _firstInterstitialJustShown: 현재 노출이 '최초'였는지(Displayed 에서 set 전 상태 캡처).
+        //   _pendingFirstInterstitialNoAds: 종료 후 로비에서 1회 소비 대기(인게임 한복판 노출 방지).
+        private bool   _firstInterstitialJustShown;
+        private bool   _pendingFirstInterstitialNoAds;
 
         #endregion
 
@@ -311,6 +319,12 @@ namespace BalloonFlow
 
         private void OnInterstitialDisplayedCb(string adUnitId, MaxSdkBase.AdInfo info)
         {
+            // ROLLBACK_NOADS_AUTO_POPUP_20260619: SetFirstInterstitialShown 전에 '최초 노출' 여부 캡처
+            //   (set 후엔 항상 true 라 종료 시점에 최초인지 구분 불가).
+            _firstInterstitialJustShown = UserDataService.HasInstance
+                && UserDataService.Instance.CurrentUser != null
+                && !UserDataService.Instance.CurrentUser.firstInterstitialShown;
+
             if (UserDataService.HasInstance)
                 UserDataService.Instance.SetFirstInterstitialShown(true);
             OnInterstitialAdDisplayed?.Invoke();
@@ -321,8 +335,32 @@ namespace BalloonFlow
             _isShowingAd = false;
             // 노출 종료 시점에 쿨다운 타이머 시작 (명세: "show() end → last_shown_at = now → 20s cooldown").
             _lastInterstitialShownRealtime = Time.realtimeSinceStartup;
+
+            // ROLLBACK_NOADS_AUTO_POPUP_20260619: 첫 전면광고 종료 직후 NO ADS 팝업 1회 자동(문서 §9-0 A경로).
+            //   pending 으로 표시 → 로비 진입 시 UILobby 가 소비해 PopupNoAds 1회 노출
+            //   (ClearNext 직후 다음 레벨 인게임 한복판 노출 방지, PopupNoAds 는 로비 컨텍스트 팝업).
+            if (_firstInterstitialJustShown)
+            {
+                _firstInterstitialJustShown = false;
+                _pendingFirstInterstitialNoAds = true;
+                OnFirstInterstitialEnded?.Invoke();
+            }
+
             OnInterstitialAdHidden?.Invoke();
             LoadInterstitialAd();
+        }
+
+        /// <summary>ROLLBACK_NOADS_AUTO_POPUP_20260619: 첫 전면광고 후 NO ADS 자동팝업 대기 중인지(비소모 조회).</summary>
+        public bool HasPendingFirstInterstitialNoAds => _pendingFirstInterstitialNoAds;
+
+        /// <summary>ROLLBACK_NOADS_AUTO_POPUP_20260619: 첫 전면광고 후 NO ADS 자동팝업 대기 중이면 true 반환+소비(1회).
+        ///   로비 진입 시 호출 — A경로(noads_popup). 광고 제거 구매 유저는 대기 자체가 안 생기지만 방어적으로 차단.</summary>
+        public bool ConsumePendingFirstInterstitialNoAds()
+        {
+            if (!_pendingFirstInterstitialNoAds) return false;
+            if (IAPManager.HasInstance && IAPManager.Instance.AdsRemoved) { _pendingFirstInterstitialNoAds = false; return false; }
+            _pendingFirstInterstitialNoAds = false;
+            return true;
         }
 
         private void OnInterstitialDisplayFailedCb(string adUnitId, MaxSdkBase.ErrorInfo error, MaxSdkBase.AdInfo info)

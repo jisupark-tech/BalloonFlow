@@ -258,7 +258,7 @@ namespace BalloonFlow
         }
 
         /// <summary>Debug/user reset path: overwrite current Firestore user doc and memory cache with fresh defaults.</summary>
-        public void ResetCurrentUserDataForDebug(int coinsOverride = 0)
+        public void ResetCurrentUserDataForDebug(int coinsOverride = UserData.DEFAULT_INITIAL_COINS)
         {
             PlayerPrefs.DeleteKey(PREFS_DEBUG_RESET_REQUESTED);
             PlayerPrefs.Save();
@@ -271,10 +271,10 @@ namespace BalloonFlow
             string uid = !string.IsNullOrEmpty(Uid) ? Uid : (_user != null ? _user.uid : null);
             if (string.IsNullOrEmpty(uid)) uid = string.Empty;
             _user = UserData.CreateNewUser(uid);
-            // ROLLBACK_RESET_USERDATA_ZERO_COINS_20260619:
-            // Debug Reset UserData is a wipe, not a new-user grant. Keep production new-user
-            // defaults in UserData.CreateNewUser(), but force reset/debug balances to 0 so
-            // reinstall/reset QA does not inherit or re-grant gold.
+            // ROLLBACK_RESET_USERDATA_STARTER_COINS_20260619:
+            // Reset User Data = '처음 시작'(신규 유저) 재현. 기본 coinsOverride = DEFAULT_INITIAL_COINS(1000)
+            // 이라 신규 유저와 동일한 스타터 골드를 지급한다. (이전엔 0 으로 wipe 해 '처음 시작 1000골드'가 사라짐.)
+            // 0-wipe 가 필요하면 호출 측에서 coinsOverride: 0 명시.
             _user.coins = Mathf.Max(0, coinsOverride);
             _user.highestClearedLevel = 0;
             _user.winningStreak = new WinningStreakState();
@@ -309,7 +309,7 @@ namespace BalloonFlow
             PlayerPrefs.DeleteKey(PREFS_DEBUG_RESET_REQUESTED);
             PlayerPrefs.Save();
             Debug.Log($"{LOG_TAG} Pending debug reset consumed on boot.");
-            ResetCurrentUserDataForDebug(0);
+            ResetCurrentUserDataForDebug(); // ROLLBACK_RESET_USERDATA_STARTER_COINS_20260619: 기본 1000골드(신규 유저 동일)
         }
 
         #region Public API — Atomic increments (서버 진실)
