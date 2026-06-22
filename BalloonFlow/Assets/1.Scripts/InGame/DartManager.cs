@@ -545,6 +545,10 @@ namespace BalloonFlow
             _lastPopUnscaledTime = Time.unscaledTime;
             _stallWatchLastPopSeen = _lastPopUnscaledTime;
             _stallWatchTimer = 0f;
+            // ROLLBACK_NO_FIRE_FAIL_WATCHDOG_20260622: 레일 배수(=발사) 시각도 '지금' 으로 초기화 — 시작 직후 오발동 방지.
+            _lastFireUnscaledTime = Time.unscaledTime;
+            // ROLLBACK_DART_IDENTIFIER_CACHE_CLEAR_20260622: static 캐시가 멀티레벨 세션에 stale 엔트리 누적 → 레벨 리셋 시 정리.
+            _dartIdentifierCache.Clear();
 
             _tempRemoveKeys.Clear();
             foreach (var kvp in _frozenVisuals)
@@ -1678,6 +1682,7 @@ namespace BalloonFlow
                 // 새 head 가 같은 tick 에 발사되지 않도록 _firedHoldersThisTick 으로 차단.
 
                 _firedHoldersThisTick.Add(holderId);
+                _lastFireUnscaledTime = Time.unscaledTime; // ROLLBACK_NO_FIRE_FAIL_WATCHDOG_20260622: 레일 배수 진행 신호.
                 firesThisTick++;
                 _reservedTargets.Add(targetId);
 
@@ -1830,6 +1835,12 @@ namespace BalloonFlow
         // _stallWatchLastPopSeen = 워치독이 직전 tick 에 관측한 pop 시각. 두 값이 다르면 'pop 발생 = 진행'.
         private float _lastPopUnscaledTime;
         private float _stallWatchLastPopSeen = -1f;
+        // ROLLBACK_NO_FIRE_FAIL_WATCHDOG_20260622: 마지막으로 레일에서 다트가 '발사(=레일 배수)'된 시각.
+        //   pop(풍선 배수)과 달리 in-flight 비행체의 뒤늦은 pop 에 안 흔들리고, 다른 색의 pop 에도 리셋 안 됨 →
+        //   색 불균형 잼(레일이 못 빠지는데 다른 색만 pop) 에서 fail 워치독이 starve 되던 H1 차단용.
+        private float _lastFireUnscaledTime;
+        /// <summary>마지막 발사(레일 배수) 시각. BoardStateManager no-fire fail 워치독이 참조.</summary>
+        public float LastFireUnscaledTime => _lastFireUnscaledTime;
         private const float STALL_WATCHDOG_SECONDS = 1.5f;
         // ROLLBACK_DART_STALL_WATCHDOG_WIDEN_20260615: 매치가 없을 때(또는 sweep scope 불일치)
         // 발동하는 더 긴 타임아웃. belt 회전 지연/짧은 inter-fire 갭이 오발동하지 않도록 1.5s 보다 길게.
@@ -2528,6 +2539,7 @@ namespace BalloonFlow
             }
 
             _firedHoldersThisTick.Add(candidate.holderId);
+            _lastFireUnscaledTime = Time.unscaledTime; // ROLLBACK_NO_FIRE_FAIL_WATCHDOG_20260622: 레일 배수 진행 신호.
             MarkHolderLineConsumed(candidate.holderId, candidate.scanDir, candidate.scanLine);
             // ROLLBACK_DART_GLOBAL_CONSUMED_LINE_LOCK:
             // Reserve the whole side/line after a fire, not only the exact balloon id. This prevents

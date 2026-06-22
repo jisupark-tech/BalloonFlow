@@ -3978,6 +3978,9 @@ namespace BalloonFlow
                 // Ice 가 팝 없이 타격 가능해지므로 캐시 윤곽을 재구성.
                 DirectionalTargeting.InvalidateCache();
                 RefreshOutermostRendererState();
+                // ROLLBACK_BREAKICE_BSM_INVALIDATE_20260622: pop 없는 해동도 외곽 매칭이 바뀌므로 BoardStateManager
+                //   outermost 캐시도 명시적으로 무효화(RevealHiddenBalloon 과 동일 self-contained 패턴). 기존엔 구동 다트 hit 에 의존.
+                if (BoardStateManager.HasInstance) BoardStateManager.Instance.InvalidateOutermostCache();
             }
         }
 

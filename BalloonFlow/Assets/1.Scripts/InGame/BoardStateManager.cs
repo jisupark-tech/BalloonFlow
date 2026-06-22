@@ -66,6 +66,9 @@ namespace BalloonFlow
         //   pop 이 한 번이라도 나면(=배수 진행) 리셋되므로 정상/느린-진행 플레이는 오발동 X.
         private float _lastDrainUnscaledTime;
         private const float NO_DRAINAGE_FAIL_SECONDS = 10f; // 만석 무배수 지속 한계(벨트 1회전+grace 보다 충분히 큼)
+        // ROLLBACK_NO_FIRE_FAIL_WATCHDOG_20260622: 만석/강제회전인데 '레일 발사(배수)'가 이 시간 동안 0 이면 fail.
+        //   no-drainage(pop 기준)가 다른 색 pop 에 starve 되는 H1 을 fire 기준으로 차단. 느린 belt 의 정상 발사간격보다 충분히 큼.
+        private const float NO_FIRE_FAIL_SECONDS = 12f;
 
         // ROLLBACK_RAIL_FREEZE_DIAG_20260622: hard-freeze(전면정지) 진단 워치독 — fail 이 아니라 '디버그 덤프'.
         //   재현 불가한 완전정지(다트·레일·배포 모두 멈춤)의 원인을 로그로 포착하기 위함. 동작은 바꾸지 않음(no recovery).
@@ -307,6 +310,23 @@ namespace BalloonFlow
                 return;
             }
 
+            // ROLLBACK_NO_FIRE_FAIL_WATCHDOG_20260622: H1 차단 — '레일 배수(발사)' 기준 무진전 워치독.
+            //   문제(H1): no-drainage 는 pop(풍선 배수) 기준이라, 색 불균형 잼(죽은 색 다트가 레일 점유, 발사 불가)에서
+            //   '다른 색'의 in-flight pop 이 _lastDrainUnscaledTime 을 계속 리셋 → no-drainage starve → 영영 실패 안 함.
+            //   해결: pop 이 아니라 '레일에서 다트가 마지막으로 발사된 시각(DartManager.LastFireUnscaledTime)' 기준.
+            //   레일 만석/강제회전 + 풍선 잔존 + NO_FIRE_FAIL_SECONDS 간 발사 0 = 레일이 못 빠지는 진짜 잼 → RailOverflow fail.
+            //   발사가 한 번이라도 있으면(=레일 배수=진행) 리셋이라 정상/느린 진행 플레이엔 오발동 X. 다른 색 pop 엔 안 흔들림.
+            //   롤백: 이 블록 삭제.
+            if ((railFull || forceFullBeltAdvance) && _remainingBalloons > 0
+                && DartManager.HasInstance && DartManager.Instance.LastFireUnscaledTime > 0f
+                && Time.unscaledTime - DartManager.Instance.LastFireUnscaledTime >= NO_FIRE_FAIL_SECONDS)
+            {
+                if (_debugLogFail) DumpAttackState($"[Fail-DEBUG] no-fire watchdog — 만석 {NO_FIRE_FAIL_SECONDS}s 무발사(레일 배수 0) → 강제 RailOverflow fail");
+                _failConfirmed = true;
+                TriggerFail(FailReason.RailOverflow);
+                return;
+            }
+
             // 진단용 주기적 로그 — rail이 많이 차 있는데 stuck 미충족 시 어떤 조건이
             // 막고 있는지 출력 (false negative 케이스 분석용).
             if (_debugLogFail)
@@ -443,6 +463,10 @@ namespace BalloonFlow
         /// </summary>
         public void InitializeBoard(int levelId, int initialBalloonCount)
         {
+            // ROLLBACK_BSM_INIT_STOPCOROUTINES_20260622: 재도전/리로드 시 이전 보드의 코루틴(예: ContinuePopThenResume)이
+            //   살아남아 새 보드에 stale 색으로 force-pop 하던 레이스 차단. 보드 초기화 시점에 전부 정지.
+            StopAllCoroutines();
+
             _currentLevelId = levelId;
             _remainingBalloons = initialBalloonCount;
             _currentState = BoardState.Playing;
