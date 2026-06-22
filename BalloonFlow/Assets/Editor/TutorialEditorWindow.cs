@@ -78,6 +78,9 @@ namespace BalloonFlow.Editor
             public float handTweenRotation;
             public float handTweenDuration = 0.55f;
             public Sprite cutoutMaskSprite;
+            // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622: instruction 텍스트 색상 override.
+            public bool useInstructionColor;
+            public Color instructionColor = Color.white;
         }
 
         #endregion
@@ -280,6 +283,14 @@ namespace BalloonFlow.Editor
                 // Instruction text (multi-line)
                 EditorGUILayout.LabelField("Instruction:");
                 step.instruction = EditorGUILayout.TextArea(step.instruction, GUILayout.Height(40));
+
+                // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622: instruction 텍스트 색상.
+                //   체크 시 그 색 적용, 해제 시 프리팹 기본색 사용.
+                step.useInstructionColor = EditorGUILayout.Toggle(
+                    new GUIContent("Use Text Color", "ON: 아래 색을 instruction 텍스트에 적용. OFF: 프리팹 기본색."),
+                    step.useInstructionColor);
+                using (new EditorGUI.DisabledScope(!step.useInstructionColor))
+                    step.instructionColor = EditorGUILayout.ColorField("Text Color", step.instructionColor);
 
                 // Highlight target popup
                 int targetIdx = System.Array.IndexOf(HIGHLIGHT_TARGET_OPTIONS, step.highlightTarget);
@@ -494,6 +505,11 @@ namespace BalloonFlow.Editor
                     sb.AppendLine($"            highlightTarget = {target},");
                     sb.AppendLine($"            requireAction = {action},");
                     sb.AppendLine($"            hideSkipButton = {step.hideSkipButton.ToString().ToLowerInvariant()},"); // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622
+                    // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622: instruction 텍스트 색상.
+                    sb.AppendLine($"            useInstructionColor = {step.useInstructionColor.ToString().ToLowerInvariant()},");
+                    sb.AppendLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                        "            instructionColor = new Color({0}f, {1}f, {2}f, {3}f),",
+                        step.instructionColor.r, step.instructionColor.g, step.instructionColor.b, step.instructionColor.a));
                     sb.AppendLine("            isComplete = false,");
                     sb.AppendLine($"            overrideVisualLayout = {step.overrideVisualLayout.ToString().ToLowerInvariant()},");
                     sb.AppendLine($"            useCutoutFrame = {step.useCutoutFrame.ToString().ToLowerInvariant()},");
@@ -604,7 +620,9 @@ namespace BalloonFlow.Editor
                         handTweenScale = s.handTweenScale,
                         handTweenRotation = s.handTweenRotation,
                         handTweenDuration = s.handTweenDuration,
-                        cutoutMaskSprite = s.cutoutMaskSprite
+                        cutoutMaskSprite = s.cutoutMaskSprite,
+                        useInstructionColor = s.useInstructionColor, // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622
+                        instructionColor = s.instructionColor
                     };
                 }
                 list.Add(config);
@@ -674,7 +692,9 @@ namespace BalloonFlow.Editor
                             handTweenScale = s.handTweenScale,
                             handTweenRotation = s.handTweenRotation,
                             handTweenDuration = s.handTweenDuration,
-                            cutoutMaskSprite = s.cutoutMaskSprite
+                            cutoutMaskSprite = s.cutoutMaskSprite,
+                            useInstructionColor = s.useInstructionColor, // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622
+                            instructionColor = s.instructionColor
                         });
                     }
                 }

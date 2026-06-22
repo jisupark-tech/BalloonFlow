@@ -76,6 +76,8 @@ namespace BalloonFlow
         private GameObject _instructionPanel;
         private RectTransform _instructionPanelRect;
         private TextMeshProUGUI _instructionText;
+        // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622: 프리팹 기본 instruction 색상(override 안 하는 스텝 복원용).
+        private Color _defaultInstructionColor = Color.white;
         private Button _skipButton;
 
         // Tap-anywhere overlay (invisible button that covers the cutout hole area)
@@ -232,6 +234,8 @@ namespace BalloonFlow
                     _defaultHandSprite = _handImage.sprite;
 
                 _instructionText = popup.InstructionText;
+                // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622: 프리팹 기본 색상 보존 — override 안 하는 스텝에서 복원용.
+                if (_instructionText != null) _defaultInstructionColor = _instructionText.color;
                 // Prefab에서 InstructionPanel이 명시 지정되어 있으면 우선 사용 (디자이너가 위치 이동 가능).
                 // 없으면 기존처럼 InstructionText의 parent로 폴백.
                 _instructionPanelRect = popup.InstructionPanel;
@@ -1299,6 +1303,22 @@ namespace BalloonFlow
                     ShowCutoutForBoard();
                     HideArrow();
                 }
+                else if (highlightTarget.StartsWith("item_"))
+                {
+                    // ROLLBACK_TUTORIAL_ITEM_TARGET_20260622: UIHud 하단 아이템(부스터) 버튼 하이라이트.
+                    //   highlightTarget = "item_hand" / "item_shuffle" / "item_remove"(=zap). 컷아웃을 그 버튼에 맞춤.
+                    RectTransform itemRt = ResolveItemButtonRect(highlightTarget.Substring("item_".Length));
+                    if (itemRt != null)
+                    {
+                        ShowCutout(itemRt);
+                        HideArrow();
+                    }
+                    else
+                    {
+                        HideCutout();
+                        HideArrow();
+                    }
+                }
                 else
                 {
                     HideCutout();
@@ -1318,9 +1338,34 @@ namespace BalloonFlow
             // Show instruction
             ShowInstruction(evt.instruction);
 
+            // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622: 스텝별 instruction 텍스트 색상 적용.
+            //   useInstructionColor=true 면 그 색, 아니면 프리팹 기본색으로 복원(이전 스텝 override 잔존 방지).
+            if (_instructionText != null)
+                _instructionText.color = (currentStep != null && currentStep.useInstructionColor)
+                    ? currentStep.instructionColor
+                    : _defaultInstructionColor;
+
+            // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622: 스텝별 Skip(X) 노출 토글.
+            //   기본 노출, currentStep.hideSkipButton=true(튜토리얼 통한 아이템 사용 강제 스텝) 면 숨김.
+            if (_skipButton != null)
+                _skipButton.gameObject.SetActive(currentStep == null || !currentStep.hideSkipButton);
+
             // Handle tap_anywhere action
             bool isTapAnywhere = requireAction == "tap_anywhere";
             SetTapAnywherEnabled(isTapAnywhere);
+        }
+
+        /// <summary>ROLLBACK_TUTORIAL_ITEM_TARGET_20260622: UIHud 하단 아이템 버튼 RectTransform 해석 (hand/shuffle/remove|zap).
+        ///   UIHud 는 싱글톤이 아니라 FindAnyObjectByType 로 1회 조회(스텝 전환 시점 한정 호출이라 비용 무시).</summary>
+        private RectTransform ResolveItemButtonRect(string key)
+        {
+            var hud = UnityEngine.Object.FindAnyObjectByType<UIHud>();
+            if (hud == null) return null;
+            Button btn = key == "hand" ? hud.ItemBtnHand
+                : key == "shuffle" ? hud.ItemBtnShuffle
+                : (key == "remove" || key == "zap") ? hud.ItemBtnRemove
+                : null;
+            return btn != null ? btn.transform as RectTransform : null;
         }
 
         private void HandleTutorialCompleted(OnTutorialCompleted evt)

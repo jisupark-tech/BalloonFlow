@@ -75,6 +75,11 @@ namespace BalloonFlow
         // [2026-05-15] tap_anywhere 액션 시 TextTap/TextTapOutline 활성 + 위치 override.
         public bool useTextTap = true;
         public Vector2 textTapPosition;
+
+        // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622: instruction 텍스트 색상 override.
+        //   useInstructionColor=true 면 instructionColor 적용, false 면 프리팹 기본색 사용(기존 동작).
+        public bool useInstructionColor;
+        public Color instructionColor = Color.white;
     }
 
     /// <summary>
