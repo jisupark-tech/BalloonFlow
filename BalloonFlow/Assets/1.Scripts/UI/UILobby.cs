@@ -46,6 +46,8 @@ namespace BalloonFlow
         private const float WS_MULTIPLIER_HIDDEN_X = -725f;
         private const float WS_MULTIPLIER_SLIDE_IN_DURATION = 0.4f;
         private const float WS_MULTIPLIER_SLIDE_OUT_DURATION = 0.35f;
+        // [Multiplier 등장 띠용 완화 2026-06-22] DOTween OutBack 기본 1.70158 → 0.4 로 약화. owner 출처: 본 ProjectHub task [사용자 추가 지시] 2026-06-22 — 시작/최종 X 위치(WS_MULTIPLIER_HIDDEN_X / WS_MULTIPLIER_SHOWN_X)는 불변, overshoot 거리만 축소. 값 근거: OutBack overshoot 는 종점 초과 비율을 키우는 계수라 1.7 → 0.4 시 튀어나오는 정도가 약 4~5배 축소돼 '살짝 앞으로 이동 후 안착' 체감과 일치. (롤백: 1.7f 로 복원하면 직전 동작 재현. 0 으로 두면 OutQuad 수준이 됨.)
+        private const float WS_MULTIPLIER_SLIDE_IN_OVERSHOOT = 0.4f;
         // 왜 0.5초인가: 텍스트 갱신+FXFire+Scale punch(0.20s)가 끝난 직후 즉시 slide-out이 시작되면 플레이어가 새 배수를 인지하지 못함. owner 추가 피드백(2026-06-22, task 6a34e951 후속 코멘트) 반영.
         private const float WS_HOLD_AFTER_TEXT_FIRE_DURATION = 0.5f;
 
@@ -843,7 +845,8 @@ namespace BalloonFlow
 
             SetWsMultiplierX(WS_MULTIPLIER_HIDDEN_X);
             WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, fromMultiplier, fromMultiplier);
-            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
+            // [Multiplier 등장 띠용 완화 2026-06-22] OutBack overshoot=0.4 (기본 1.7) — 시작/최종 X 좌표 불변, 튀어나옴 거리만 축소.
+            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack, WS_MULTIPLIER_SLIDE_IN_OVERSHOOT);
 
             WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, 1, 1);
             // [2026-06-11] '떨어지는' 펀치(덜컹거림) 비활성 — 사용자 요청. 롤백: 아래 2줄 주석 해제.
@@ -969,7 +972,8 @@ namespace BalloonFlow
             {
                 // ROLLBACK_WS_MULTIPLIER_AFTER_GAUGE_AND_REWARD_20260619: 되돌리려면 아래 PlayWsMultiplierSlide(SHOWN_X)+PlayLobbyMultiplierSelect(toMult) 블록을 PlayWsFireFlyAndPulse 직후로 다시 이동.
                 // 게이지 채움/보상 등장 종료 후 → Multiplier 가 X=10 으로 튕기듯 슬라이드 인.
-                yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
+                // [Multiplier 등장 띠용 완화 2026-06-22] OutBack overshoot=0.4 (기본 1.7) — 시작/최종 X 좌표 불변, 튀어나옴 거리만 축소.
+                yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack, WS_MULTIPLIER_SLIDE_IN_OVERSHOOT);
                 // ROLLBACK_WINNING_STREAK_MULTIPLIER_AFTER_ENTER_20260605:
                 // Designer spec: after the Multiplier entrance motion, move SelectFrame/TextYellow to the current value.
                 // [2026-06-10] Animator(PlayMultiplierState) → 코드 트윈(PlayMultiplierSelect) — Animator 가 위치를 덮어쓰던 문제 해소.
@@ -1029,13 +1033,14 @@ namespace BalloonFlow
             _wsMultiplier.anchoredPosition = p;
         }
 
-        /// <summary>Multiplier 를 지정 X 로 슬라이드(anchoredPosition.x 트윈). 미할당 시 즉시 종료.</summary>
-        private IEnumerator PlayWsMultiplierSlide(float targetX, float duration, Ease ease)
+        /// <summary>Multiplier 를 지정 X 로 슬라이드(anchoredPosition.x 트윈). 미할당 시 즉시 종료.
+        /// [2026-06-22 추가] overshootOrAmplitude 기본 1f — OutBack/Elastic 한정으로 의미. 호출측이 명시할 때만 약화.</summary>
+        private IEnumerator PlayWsMultiplierSlide(float targetX, float duration, Ease ease, float overshootOrAmplitude = 1f)
         {
             if (_wsMultiplier == null) yield break;
             _wsLobbyFxSequence?.Kill();
             _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
-            _wsLobbyFxSequence.Append(_wsMultiplier.DOAnchorPosX(targetX, duration).SetEase(ease));
+            _wsLobbyFxSequence.Append(_wsMultiplier.DOAnchorPosX(targetX, duration).SetEase(ease, overshootOrAmplitude));
             yield return _wsLobbyFxSequence.WaitForCompletion();
         }
 
@@ -2220,8 +2225,9 @@ namespace BalloonFlow
                 _wsMultiplier.gameObject.SetActive(true);
 
             // 숨김 위치(-725 쪽)에 있으면 등장 슬라이드부터 — 등장 후 select 이동 순서 그대로 재현.
+            // [Multiplier 등장 띠용 완화 2026-06-22] OutBack overshoot=0.4 (기본 1.7) — 시작/최종 X 좌표 불변, 튀어나옴 거리만 축소.
             if (_wsMultiplier.anchoredPosition.x < WS_MULTIPLIER_SHOWN_X - 1f)
-                yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
+                yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack, WS_MULTIPLIER_SLIDE_IN_OVERSHOOT);
 
             WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, multiplier, multiplier);
         }
