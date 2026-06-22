@@ -827,9 +827,10 @@ namespace BalloonFlow
         private IEnumerator PlayWsMultiplierFailFx(int fromMultiplier)
         {
             ResolveWsFxRefs();
-            // [WS 배수 하락 텍스트 보류 2026-06-22] 사용자 피드백 — Multiplier 연출 진행 중에는
-            // TextGauge/Outline 을 fromMultiplier(이전 배수, 예: x100) 로 유지. 슬라이드-아웃 완료 시점에
-            // 한 번에 x1 로 갱신 + FXFire 1회 발화. 증가 측 PlayWinningStreakLobbyFx(line 818-826/951-952) 와 대칭.
+            // [WS 배수 하락 시퀀스 통일 2026-06-22] 사용자 추가 피드백(task 6a34e951): 상승/하락 무관 동일 시퀀스 —
+            // 기존 숫자 표시 → Multiplier 등장 → SelectFrame 이동 → 숫자 갱신+FXFire+Scale punch → 0.5초 유지 → slide-out.
+            // SUPERSEDES 직전 결정(slide-out 이후 텍스트 갱신, 0.6f/0.7f 임의 대기) — owner 출처: 본 ProjectHub 태스크
+            // [사용자 추가 지시] 블록 (2026-06-22). 상승측 PlayWinningStreakLobbyFx L988-1001 과 1:1 대응.
             string preFromText = $"x{Mathf.Max(1, fromMultiplier)}";
             ResolveWsTexts();
             if (_wsTxtGauge != null) _wsTxtGauge.text = preFromText;
@@ -844,16 +845,16 @@ namespace BalloonFlow
             WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, fromMultiplier);
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
 
-            yield return new WaitForSecondsRealtime(0.6f);
             WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, 1);
             // [2026-06-11] '떨어지는' 펀치(덜컹거림) 비활성 — 사용자 요청. 롤백: 아래 2줄 주석 해제.
             // _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, -36f), 0.4f, 8, 0.7f).SetUpdate(true);
             // _wsMultiplier.DOPunchScale(new Vector3(-0.18f, -0.18f, 0f), 0.4f, 8, 0.7f).SetUpdate(true);
 
-            yield return new WaitForSecondsRealtime(0.7f);
-            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
+            yield return new WaitForSecondsRealtime(WinningStreakUI.MULTIPLIER_SELECT_MOVE_DURATION);
             _wsHoldMultiplierTextDuringAnim = false;
             RefreshWinningStreakDisplay();
+            yield return new WaitForSecondsRealtime(WS_HOLD_AFTER_TEXT_FIRE_DURATION);
+            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
         }
 
         private IEnumerator PlayWinningStreakLobbyFx(WinningStreakManager.PendingLobbyAnimation anim, bool grantRewards = true, bool forceVisible = false)
