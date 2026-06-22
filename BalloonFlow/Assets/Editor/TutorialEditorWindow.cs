@@ -45,6 +45,8 @@ namespace BalloonFlow.Editor
             public string name = "New Tutorial";
             // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622: true 면 레벨 진입 시 자동 시작 X — 외부(아이템 언락 Claim 등)에서 명시 호출 시에만 시작.
             public bool manualTriggerOnly;
+            // ROLLBACK_POPUP_ITEM_DESC_TUTORIAL_GATE_20260622: true 면 PopupItemDescription 이 닫힐 때까지(ButtonSingle 클릭) 튜토리얼 시작 보류.
+            public bool waitForItemDescription;
             public List<EditableStep> steps = new List<EditableStep>();
             public bool isExpanded = true;
         }
@@ -228,6 +230,10 @@ namespace BalloonFlow.Editor
             tut.manualTriggerOnly = EditorGUILayout.Toggle(
                 new GUIContent("Manual Trigger Only", "ON: 레벨 진입 시 자동 시작 안 함. 아이템 언락 Claim 등 외부 트리거로만 시작."),
                 tut.manualTriggerOnly);
+            // ROLLBACK_POPUP_ITEM_DESC_TUTORIAL_GATE_20260622: 아이템 해금 레벨 — 설명 팝업 닫힌 뒤 튜토리얼 시작.
+            tut.waitForItemDescription = EditorGUILayout.Toggle(
+                new GUIContent("Wait For PopupItemDescription", "ON: PopupItemDescription 이 떠 있으면 그 ButtonSingle(X) 로 닫힌 뒤에 튜토리얼 시작(동시 노출 방지)."),
+                tut.waitForItemDescription);
 
             EditorGUILayout.Space(8);
 
@@ -471,6 +477,7 @@ namespace BalloonFlow.Editor
                 sb.AppendLine($"    levelId = {tut.levelId},");
                 sb.AppendLine($"    tutorialName = \"{EscapeString(tut.name)}\",");
                 sb.AppendLine($"    manualTriggerOnly = {tut.manualTriggerOnly.ToString().ToLowerInvariant()},"); // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622
+                sb.AppendLine($"    waitForItemDescription = {tut.waitForItemDescription.ToString().ToLowerInvariant()},"); // ROLLBACK_POPUP_ITEM_DESC_TUTORIAL_GATE_20260622
                 sb.AppendLine("    steps = new TutorialStep[]");
                 sb.AppendLine("    {");
 
@@ -566,6 +573,7 @@ namespace BalloonFlow.Editor
                     levelId = src.levelId,
                     tutorialName = src.name,
                     manualTriggerOnly = src.manualTriggerOnly, // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622
+                    waitForItemDescription = src.waitForItemDescription, // ROLLBACK_POPUP_ITEM_DESC_TUTORIAL_GATE_20260622
                     steps = new TutorialStep[src.steps.Count]
                 };
                 for (int i = 0; i < src.steps.Count; i++)
@@ -635,6 +643,7 @@ namespace BalloonFlow.Editor
                     levelId = src.levelId,
                     name = string.IsNullOrEmpty(src.tutorialName) ? "Untitled" : src.tutorialName,
                     manualTriggerOnly = src.manualTriggerOnly, // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622
+                    waitForItemDescription = src.waitForItemDescription, // ROLLBACK_POPUP_ITEM_DESC_TUTORIAL_GATE_20260622
                     steps = new List<EditableStep>()
                 };
                 if (src.steps != null)

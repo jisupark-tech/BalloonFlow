@@ -97,6 +97,12 @@ namespace BalloonFlow
         /// (예: 아이템 언락 Claim → 보상연출 종료 후 트리거하는 흐름.) 기본 false(=레벨 진입 시 자동 시작).</summary>
         public bool manualTriggerOnly;
 
+        /// <summary>ROLLBACK_POPUP_ITEM_DESC_TUTORIAL_GATE_20260622: true 면 PopupItemDescription 이 떠 있는 동안
+        /// 튜토리얼 시작을 보류하고, 그 팝업의 ButtonSingle(또는 X)로 닫힌 뒤에 시작한다.
+        /// 아이템 해금 레벨에서 "설명 팝업 → ButtonSingle 클릭 → 튜토리얼" 순서 보장(동시 노출 방지).
+        /// 기본 false. PopupItemDescription.IsShowing 으로 게이트.</summary>
+        public bool waitForItemDescription;
+
         /// <summary>Ordered list of steps in this tutorial.</summary>
         public TutorialStep[] steps;
     }
@@ -1043,6 +1049,8 @@ namespace BalloonFlow
                 _configByLevel[configFromData.levelId] = configFromData;
                 // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622: 수동 트리거 전용이면 자동 시작 안 함(외부 StartTutorialForLevel 대기).
                 if (configFromData.manualTriggerOnly) { Debug.Log("[TutorialDbg] manualTriggerOnly — 자동 시작 보류"); yield break; }
+                // ROLLBACK_POPUP_ITEM_DESC_TUTORIAL_GATE_20260622: PopupItemDescription 닫힐 때까지 대기 후 시작.
+                if (configFromData.waitForItemDescription) yield return WaitForItemDescriptionClosed();
                 StartTutorial(configFromData.tutorialId);
                 yield break;
             }
@@ -1059,7 +1067,23 @@ namespace BalloonFlow
             // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622: 수동 트리거 전용이면 자동 시작 안 함.
             if (config.manualTriggerOnly) { Debug.Log("[TutorialDbg] manualTriggerOnly — 자동 시작 보류"); yield break; }
 
+            // ROLLBACK_POPUP_ITEM_DESC_TUTORIAL_GATE_20260622: PopupItemDescription 닫힐 때까지 대기 후 시작.
+            if (config.waitForItemDescription) yield return WaitForItemDescriptionClosed();
+
             StartTutorial(config.tutorialId);
+        }
+
+        /// <summary>ROLLBACK_POPUP_ITEM_DESC_TUTORIAL_GATE_20260622: PopupItemDescription(아이템 설명 팝업)이
+        ///   ButtonSingle/Exit 로 닫힐 때까지 대기. 같은 OnLevelLoaded 프레임에 팝업이 뜨도록 1프레임 양보 후 검사.
+        ///   팝업이 아예 안 뜨면 IsShowing=false 라 즉시 통과(no-op). 타임아웃은 IsShowing 이 비정상적으로
+        ///   고착될 경우의 안전 백스톱(모달이라 실제론 유저 클릭으로 곧 닫힘).</summary>
+        private IEnumerator WaitForItemDescriptionClosed()
+        {
+            const float ITEM_DESC_WAIT_TIMEOUT = 120f;
+            yield return null; // 팝업이 OnLevelLoaded 동기 dispatch 에서 Show→IsShowing=true 하도록 한 프레임 양보.
+            float deadline = Time.unscaledTime + ITEM_DESC_WAIT_TIMEOUT;
+            while (PopupItemDescription.IsShowing && Time.unscaledTime < deadline)
+                yield return null;
         }
 
         /// <summary>ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622: 특정 레벨의 튜토리얼을 '명시적으로' 시작.
