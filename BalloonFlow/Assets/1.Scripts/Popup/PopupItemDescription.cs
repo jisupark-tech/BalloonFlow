@@ -43,6 +43,12 @@ namespace BalloonFlow
             }
         }
 
+        // ROLLBACK_POPUP_ITEM_DESC_TUTORIAL_GATE_20260622: 생명주기 기반 IsShowing —
+        //   오프너가 Show() 를 부르든(권장), OpenUI/SetActive 로 띄우든 '활성화되면 떠 있는 것'으로 간주.
+        //   → 컴포넌트 부착 + Common Frame 할당만으로도 게이트가 동작(오프너 방식 무관).
+        private void OnEnable() => IsShowing = true;
+        private void OnDisable() => IsShowing = false; // CloseUI(SetActive false)/풀 반납/씬 전환 모두 커버.
+
         protected override void OnDestroy()
         {
             base.OnDestroy();
