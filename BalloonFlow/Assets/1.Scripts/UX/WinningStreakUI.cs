@@ -152,6 +152,7 @@ namespace BalloonFlow
         }
 
         /// <summary>UILobby WS 의 Multiplier — SelectFrame / TextYellow 를 로비 명세 X 좌표로 동시 코드 트윈 이동. Animator 비활성화. Mask 미터치.
+        /// [2026-06-22 v4 — 사용자 추가 지시 3rd-pass] v3 floor 0.35/speed 1000 은 짧은 거리도 0.35s 강제·긴 거리 0.73s 로 user 예시(x5→x1≈0.1s / x100→x1≈0.5s) 대비 과함. floor=0.10, speed=1500 으로 재튜닝(supersede v3). 산식·콜러·상승 분기는 동일.
         /// [2026-06-22 v2 — 사용자 추가 지시] 배수 감소 시 SelectFrame 이동이 상승과 동일 duration(0.18s)이라 거리(x100→x1=728px)가 커도 시간이 같아 속도가 4x 빨라 인지 불가 → 거리 비례 duration 도입(상승은 v1 동작 유지, 감소만 시간 증가).
         /// v1 (2026-06-15): 코드 트윈으로 통일, Animator 비활성화 — 이 의도는 v2 에서도 유지(누적, supersede 아님).
         /// owner: 본 ProjectHub task [사용자 추가 지시] 2026-06-22.</summary>
@@ -164,21 +165,21 @@ namespace BalloonFlow
             ApplyPositions(multiplierRoot, toMultiplier, LobbySelectFrameX, LobbyTextYellowX, duration);
         }
 
-        /// <summary>[WS Multiplier 감소 연출 속도 보정 v3 — 2026-06-22 2nd-pass] 거리 비례 duration(약 1000px/s) 유지하되 최소 floor(0.35s) 추가 — 짧은 거리(x100→x25, 180px)에서도 인지 가능.
-        /// 본 변경은 직전 v2(2026-06-22 1st-pass: REF_STEP_DISTANCE=180px 기준 scale, floor 없음 → x100→x25=0.18s)를 '보강(supersede 아님)' — 거리 비례 의도는 그대로, 짧은 거리에 floor만 추가.
-        /// owner 출처: 본 ProjectHub 태스크 [사용자 추가 지시] 2026-06-22 2번째 피드백 (Hermes task 6a34e951) — "영상상 x100→x1 아직 너무 빠름, x100→x25 도 floor 필요".
-        /// 산식: speed=1000px/s, floor=0.35s → duration = max(0.35, distance / 1000).
-        /// 실제 거리(LobbySelectFrameX 기준): x100→x25=180px → 0.35s(floor 적용) / x100→x5=540px → 0.54s / x100→x1=728px → 0.728s. 사용자 예시 표(x25=0.35, x5≈0.50, x1≈0.70~0.80s)와 매핑됨.
-        /// 상승/동일(toIdx&gt;=fromIdx) 경로는 기존 0.18s(MULTIPLIER_SELECT_MOVE_DURATION) 유지 — 사용자 의도.
-        /// 롤백: floor 제거 후 v2 산식(REF_STEP_DISTANCE=180f, scale=Mathf.Max(1, distance/REF), return SELECT_MOVE_DURATION*scale)으로 복원.</summary>
+        /// <summary>[WS Multiplier 감소 연출 속도 보정 v4 — 2026-06-22 3rd-pass] 거리 비례 duration 유지, 상수만 재튜닝: speed 1000→1500 px/s, floor 0.35→0.10s.
+        /// 본 변경은 직전 v3(2026-06-22 2nd-pass: floor=0.35, speed=1000 → x100→x1=0.73s/x100→x25=0.35s)를 **supersede** — v3 는 짧은 거리도 floor 0.35s 로 강제하고 긴 거리는 0.73s 로 user 체감 대비 과도하게 느렸음.
+        /// owner 출처: 본 ProjectHub 태스크 [사용자 추가 지시] 2026-06-22 3rd-pass — "x5→x1 ≈ 0.10s, x100→x1 ≈ 0.50s 가 적정. v3 는 전체적으로 길다".
+        /// 산식: speed=1500px/s, floor=0.10s → duration = max(0.10, distance / 1500). 산식 형태(Mathf.Max(floor, distance/speed))는 v3 와 동일, 상수만 변경.
+        /// 검산표(LobbySelectFrameX 기준): x100→x1(728px)=0.49s / x5→x1(188px)=0.13s / x100→x25(180px)=0.12s — user 예시(x5→x1≈0.1s, x100→x1≈0.5s)와 매핑.
+        /// 상승/동일(toIdx&gt;=fromIdx) 경로는 기존 0.18s(MULTIPLIER_SELECT_MOVE_DURATION) 유지 — 사용자 의도(v2~v4 모두 동일).
+        /// 롤백: v3 상수(REDUCE_SPEED_PX_PER_SEC=1000f, MIN_REDUCE_DURATION=0.35f)로 복원.</summary>
         public static float ResolveLobbyMultiplierMoveDuration(int fromMultiplier, int toMultiplier)
         {
             int fromIdx = IndexForMultiplier(fromMultiplier);
             int toIdx   = IndexForMultiplier(toMultiplier);
             if (toIdx >= fromIdx) return MULTIPLIER_SELECT_MOVE_DURATION; // 상승/동일: 기존 유지
             float distance = Mathf.Abs(LobbySelectFrameX[toIdx] - LobbySelectFrameX[fromIdx]);
-            const float REDUCE_SPEED_PX_PER_SEC = 1000f;
-            const float MIN_REDUCE_DURATION = 0.35f;
+            const float REDUCE_SPEED_PX_PER_SEC = 1500f;
+            const float MIN_REDUCE_DURATION = 0.10f;
             return Mathf.Max(MIN_REDUCE_DURATION, distance / REDUCE_SPEED_PX_PER_SEC);
         }
 
