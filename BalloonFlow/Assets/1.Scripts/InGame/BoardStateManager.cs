@@ -278,20 +278,23 @@ namespace BalloonFlow
             bool allHoldersEmpty = HolderManager.HasInstance && HolderManager.Instance.AreAllHoldersEmpty();
             bool noMovesLeft = allHoldersEmpty && _remainingBalloons > 0 && !hasMatch;
             // [2026-05-13] 이전: bool stuck = (efc > 0) && _remainingBalloons > 0 && !hasMatch;
-            // ROLLBACK_FAIL_ON_FORCE_ADVANCE_NO_MATCH:
-            // Forced full-belt advance means the rail is already in recovery/full movement mode.
-            // If nothing can attack while this is active, enter the same grace-based fail flow.
-            bool stuck = _remainingBalloons > 0 && !hasMatch && (railFull || noMovesLeft || forceFullBeltAdvance);
+            // ROLLBACK_FAIL_REQUIRE_RAILFULL_20260622: 실패는 '공격 불가 + 레일 만석(railFull)' 또는 '다트 소진(noMovesLeft)'
+            //   일 때만. forceFullBeltAdvance(=deadlock 모드/강제회전, full 미만 cap-8~cap-1 에서도 true)는 '회복 윈도우'
+            //   이지 막다른 길이 아니므로 fail 기여에서 제외 — 레일이 임계치에 닿지 않았는데 조기 fail 나던 문제 수정.
+            //   (RailManager.IsForceFullBeltAdvanceActive 주석의 권장 동작과 일치. 만석 케이스는 railFull 이 그대로 커버.)
+            //   below-full deadlock 정지는 relief 안전망(per-holder/stuck-line/dead-head/booster-resume)이 복구 담당.
+            //   롤백: `(railFull || noMovesLeft)` 를 `(railFull || noMovesLeft || forceFullBeltAdvance)` 로 환원.
+            bool stuck = _remainingBalloons > 0 && !hasMatch && (railFull || noMovesLeft);
 
             // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: hasMatch 무관 무진전 워치독.
             //   레일 만석(railFull) + 풍선 잔존 + NO_DRAINAGE_FAIL_SECONDS 간 pop(배수) 0 이면 → RailOverflow fail 확정.
             //   색 불균형으로 dead-dart 가 영구 점유하는데 다른 색이 hasMatch=true 를 유지해 stuck 이 영영 false 인 hang 을 차단.
             //   pop 이 한 번이라도 나면 _lastDrainUnscaledTime 갱신 → 정상/느린-진행 플레이는 오발동 X.
-            // ROLLBACK_NO_DRAINAGE_WATCHDOG_BELOWFULL_20260622: railFull(efc>=cap-1) 만으로는 DeadlockMode 사각지대를 놓침.
-            //   DeadlockMode 는 efc >= cap - clamp(deploys+2,3,8) (= 최저 cap-8) 부터 진입하므로, cap-8 ~ cap-1 구간에서
-            //   다른 홀더가 PAUSE 된 채 hasMatch=true 라 stuck 미충족 → 영구 freeze. forceFullBeltAdvance(=DeadlockMode 활성/
-            //   강제회전) 도 arming 조건에 포함해 그 below-full 밴드를 덮는다. (pop 시 타이머 리셋이라 정상 플레이 오발동 X.)
-            if ((railFull || forceFullBeltAdvance) && _remainingBalloons > 0
+            // ROLLBACK_FAIL_REQUIRE_RAILFULL_20260622: no-drainage 워치독도 '레일 만석(railFull)' 일 때만 발동.
+            //   이전 BELOWFULL 확장(|| forceFullBeltAdvance)은 full 미만 deadlock 회복 윈도우에서 10s 후 강제 fail 시켜
+            //   "임계치 안 닿았는데 fail" 의 한 원인이었음. below-full 정지는 relief 안전망이 복구 담당.
+            //   롤백: `railFull` 를 `(railFull || forceFullBeltAdvance)` 로 환원.
+            if (railFull && _remainingBalloons > 0
                 && Time.unscaledTime - _lastDrainUnscaledTime >= NO_DRAINAGE_FAIL_SECONDS)
             {
                 if (_debugLogFail) DumpAttackState($"[Fail-DEBUG] no-drainage watchdog — 만석 {NO_DRAINAGE_FAIL_SECONDS}s 무배수 → 강제 RailOverflow fail");
