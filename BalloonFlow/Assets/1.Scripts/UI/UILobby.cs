@@ -226,6 +226,9 @@ namespace BalloonFlow
         private bool _wsTextsResolved;
         private Coroutine _wsLobbyFxCoroutine;
         private Sequence _wsLobbyFxSequence;
+        // [WS 배수 텍스트 펀치 2026-06-22] 별도 Sequence — _wsLobbyFxSequence 는 lobby FX 전 경로에서
+        // Kill/재할당되어 punch 가 clobber 될 수 있어 분리.
+        private Sequence _wsMultiplierTextPunchSeq;
         // ROLLBACK_WS_FX_ARMED_20260616:
         // TriggerPendingWinningStreakLobbyFx 가 _wsLobbyFxCoroutine 을 StartCoroutine 으로 띄운 직후라도
         // 본문의 첫 yield 가 실행되기 전 한 프레임 동안은 외부에서 보면 '곧 시작될 예정' 상태다.
@@ -676,6 +679,8 @@ namespace BalloonFlow
             if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = mult;
             _wsLastMultiplierText = mult;
             if (changed) PlayWsMultipleFxFire();
+            // [2026-06-22] 배수 텍스트 펀치 — PlayWsMultipleFxFire 와 동일 changed-edge 에서 호출 (1/1, INC+DEC 공용).
+            if (changed) PlayWsMultiplierTextPunch();
         }
 
         private void PlayWsMultipleFxFire()
@@ -690,6 +695,32 @@ namespace BalloonFlow
                 systems[i].Clear(true);
                 systems[i].Play(true);
             }
+        }
+
+        // [WS 배수 텍스트 펀치 2026-06-22] When: SetWinningIconMultiplierText 의 changed-edge (배수 텍스트가 실제로 다른 값으로 갱신되는 단 한 순간).
+        // What: _wsTxtGauge/_wsTxtGaugeOutline transform scale 1 → 1.1 → 1 (총 0.20s, 실시간).
+        // Why: 사용자 피드백 — 배수 변경 순간 텍스트 강조. INCREASE/DECREASE 양쪽 모두 hold-and-fire 패턴으로
+        //      RefreshWinningStreakDisplay() 후 changed=true 한 번에서 트리거되므로 양 케이스 자동 커버 (호출 1/1).
+        private void PlayWsMultiplierTextPunch()
+        {
+            ResolveWsTexts();
+            _wsMultiplierTextPunchSeq?.Kill();
+            if (_wsTxtGauge == null && _wsTxtGaugeOutline == null) return;
+
+            if (_wsTxtGauge != null) _wsTxtGauge.transform.localScale = Vector3.one;
+            if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.transform.localScale = Vector3.one;
+
+            _wsMultiplierTextPunchSeq = DOTween.Sequence().SetUpdate(true);
+            // up: 1 → 1.1 (0.08s) — 두 타겟을 동일 time slot 에 Append + Join.
+            if (_wsTxtGauge != null)
+                _wsMultiplierTextPunchSeq.Append(_wsTxtGauge.transform.DOScale(1.1f, 0.08f).SetEase(Ease.OutQuad));
+            if (_wsTxtGaugeOutline != null)
+                _wsMultiplierTextPunchSeq.Join(_wsTxtGaugeOutline.transform.DOScale(1.1f, 0.08f).SetEase(Ease.OutQuad));
+            // down: 1.1 → 1 (0.12s)
+            if (_wsTxtGauge != null)
+                _wsMultiplierTextPunchSeq.Append(_wsTxtGauge.transform.DOScale(1.0f, 0.12f).SetEase(Ease.OutQuad));
+            if (_wsTxtGaugeOutline != null)
+                _wsMultiplierTextPunchSeq.Join(_wsTxtGaugeOutline.transform.DOScale(1.0f, 0.12f).SetEase(Ease.OutQuad));
         }
 
         /// <summary>Gauge 하단 TextGauge/Outline 에 "{현재 포인트}/{필요 포인트}" 기록. stage 미준비 시 빈 문자열.</summary>
@@ -2052,6 +2083,8 @@ namespace BalloonFlow
             _wsLobbyFxArmed = false;
             _wsLobbyFxSequence?.Kill();
             _wsLobbyFxSequence = null;
+            _wsMultiplierTextPunchSeq?.Kill();
+            _wsMultiplierTextPunchSeq = null;
         }
 
         private void Update()
