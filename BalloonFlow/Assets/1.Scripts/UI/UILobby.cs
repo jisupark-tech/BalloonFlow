@@ -670,7 +670,7 @@ namespace BalloonFlow
             SetWinningIconMultiplierText(mult);
             ResolveWsFxRefs();
             if (_wsMultiplier != null)
-                WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, curMultiplier);
+                WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, curMultiplier, curMultiplier);
         }
 
         // 배수 텍스트 이전 값과 달라질 때마다 1회 발화.
@@ -842,10 +842,10 @@ namespace BalloonFlow
                 _wsMultiplier.gameObject.SetActive(true);
 
             SetWsMultiplierX(WS_MULTIPLIER_HIDDEN_X);
-            WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, fromMultiplier);
+            WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, fromMultiplier, fromMultiplier);
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
 
-            WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, 1);
+            WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, 1, 1);
             // [2026-06-11] '떨어지는' 펀치(덜컹거림) 비활성 — 사용자 요청. 롤백: 아래 2줄 주석 해제.
             // _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, -36f), 0.4f, 8, 0.7f).SetUpdate(true);
             // _wsMultiplier.DOPunchScale(new Vector3(-0.18f, -0.18f, 0f), 0.4f, 8, 0.7f).SetUpdate(true);
@@ -886,7 +886,7 @@ namespace BalloonFlow
             int fromMult = anim.startMultiplier > 0 ? anim.startMultiplier : WinningStreakUI.ResolveCurrentMultiplier();
             int toMult   = anim.endMultiplier   > 0 ? anim.endMultiplier   : WinningStreakUI.ResolveCurrentMultiplier();
             if (_wsMultiplier != null)
-                WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, fromMult);
+                WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, fromMult, fromMult);
 
             int stageForFill = Mathf.Max(1, anim.startStage);
             float startRatio = ResolveWsStageRatio(stageForFill, anim.startPoints);
@@ -976,7 +976,7 @@ namespace BalloonFlow
                 // [2026-06-11] 이전 배수(fromMult)로 등장한 뒤 새 배수(toMult)로 이동 — 배수 '증가' 연출.
                 if (_wsMultiplier != null)
                 {
-                    WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, toMult);
+                    WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, fromMult, toMult);
                     // [2026-06-11] '오르는' 펀치(덜컹거림) 비활성 — 사용자 요청. SelectFrame 이동만 유지.
                     // 롤백: 아래 if 블록 주석 해제.
                     // if (toMult > fromMult)
@@ -986,10 +986,10 @@ namespace BalloonFlow
                     // }
                 }
 
-                // SelectFrame fromMult→toMult 이동(0.18s) 완료 대기 — SlideOut 이 증가 연출을 덮지 않도록. ROLLBACK_WS_MULTIPLIER_SELECT_WAIT_20260619
-                yield return new WaitForSecondsRealtime(WinningStreakUI.MULTIPLIER_SELECT_MOVE_DURATION);
+                // SelectFrame fromMult→toMult 이동 완료 대기 — 감소 시 거리 비례 duration 사용(WinningStreakUI.ResolveLobbyMultiplierMoveDuration). SlideOut 이 이동을 자르지 않게 동기화. ROLLBACK_WS_MULTIPLIER_SELECT_WAIT_20260619
+                yield return new WaitForSecondsRealtime(WinningStreakUI.ResolveLobbyMultiplierMoveDuration(fromMult, toMult));
 
-                // WHY: 기획 시퀀스(2026-06-22) — SelectFrame move(0.18s) → hold release → TextGauge/FXFire/Scale punch(0.20s) → 0.5s 노출 유지(WS_HOLD_AFTER_TEXT_FIRE_DURATION) → multiplier slide-out.
+                // WHY: 기획 시퀀스(2026-06-22) — SelectFrame move(상승 0.18s / 감소 거리비례) → hold release → TextGauge/FXFire/Scale punch(0.20s) → 0.5s 노출 유지(WS_HOLD_AFTER_TEXT_FIRE_DURATION) → multiplier slide-out.
                 // SUPERSEDES 동일 일자(2026-06-22) 직전 결정 — 그 결정은 "PlayWsMultiplierSlide(HIDDEN_X) 완료 후 hold 해제 + FXFire" 였음. 본 변경의 owner 확인 출처: 본 ProjectHub 태스크의 [사용자 추가 지시] 블록 (2026-06-22) via Hermes task id 6a34e951. 핵심 조건(기획 명시): Multiplier가 먼저 사라지면 안 됨, TextGauge 숫자 갱신 후 Multiplier 슬라이드 아웃, 숫자 갱신과 동시에 FXFire 노출 — 상승/하락 모두 동일.
                 // SUPERSEDES [2026-06-22 직전 결정: 텍스트 갱신 직후 즉시 slide-out] — owner 추가 피드백: 플레이어가 새 배수 인지 못함, 0.5초 hold 추가.
                 _wsHoldMultiplierTextDuringAnim = false;
@@ -2223,7 +2223,7 @@ namespace BalloonFlow
             if (_wsMultiplier.anchoredPosition.x < WS_MULTIPLIER_SHOWN_X - 1f)
                 yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
 
-            WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, multiplier);
+            WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, multiplier, multiplier);
         }
 #endif
 

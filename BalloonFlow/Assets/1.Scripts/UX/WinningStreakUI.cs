@@ -151,13 +151,31 @@ namespace BalloonFlow
             ApplyPositions(multiplierRoot, multiplier, PopupSelectFrameX, PopupTextYellowX, MULTIPLIER_SELECT_MOVE_DURATION);
         }
 
-        /// <summary>UILobby WS 의 Multiplier — SelectFrame / TextYellow 를 로비 명세 X 좌표로 동시 코드 트윈 이동. Animator 비활성화. Mask 미터치.</summary>
-        public static void PlayLobbyMultiplierSelect(Transform multiplierRoot, int multiplier)
+        /// <summary>UILobby WS 의 Multiplier — SelectFrame / TextYellow 를 로비 명세 X 좌표로 동시 코드 트윈 이동. Animator 비활성화. Mask 미터치.
+        /// [2026-06-22 v2 — 사용자 추가 지시] 배수 감소 시 SelectFrame 이동이 상승과 동일 duration(0.18s)이라 거리(x100→x1=728px)가 커도 시간이 같아 속도가 4x 빨라 인지 불가 → 거리 비례 duration 도입(상승은 v1 동작 유지, 감소만 시간 증가).
+        /// v1 (2026-06-15): 코드 트윈으로 통일, Animator 비활성화 — 이 의도는 v2 에서도 유지(누적, supersede 아님).
+        /// owner: 본 ProjectHub task [사용자 추가 지시] 2026-06-22.</summary>
+        public static void PlayLobbyMultiplierSelect(Transform multiplierRoot, int fromMultiplier, int toMultiplier)
         {
             if (multiplierRoot == null) return;
             var animator = multiplierRoot.GetComponentInChildren<Animator>(true);
             if (animator != null && animator.enabled) animator.enabled = false;
-            ApplyPositions(multiplierRoot, multiplier, LobbySelectFrameX, LobbyTextYellowX, MULTIPLIER_SELECT_MOVE_DURATION);
+            float duration = ResolveLobbyMultiplierMoveDuration(fromMultiplier, toMultiplier);
+            ApplyPositions(multiplierRoot, toMultiplier, LobbySelectFrameX, LobbyTextYellowX, duration);
+        }
+
+        /// <summary>[WS Multiplier 감소 연출 속도 보정 2026-06-22] 배수 감소 시(toIdx&lt;fromIdx) 실제 거리에 비례해 duration 증가, 상승/동일 시 기존 0.18s 유지.
+        /// owner 출처: 본 ProjectHub 태스크 [사용자 추가 지시] 블록 (2026-06-22) — '감소 거리에 비례해 시간 증가, 상승과 유사한 체감 속도(약 1000px/s)' 명시.
+        /// 인접 tier 간 거리(약 180px)를 기준 step으로 사용 → x100→x25(180px)=0.18s, x100→x5(540px)=0.54s, x100→x1(728px)≈0.728s.</summary>
+        public static float ResolveLobbyMultiplierMoveDuration(int fromMultiplier, int toMultiplier)
+        {
+            int fromIdx = IndexForMultiplier(fromMultiplier);
+            int toIdx   = IndexForMultiplier(toMultiplier);
+            if (toIdx >= fromIdx) return MULTIPLIER_SELECT_MOVE_DURATION; // 상승/동일: 기존 유지
+            float distance = Mathf.Abs(LobbySelectFrameX[toIdx] - LobbySelectFrameX[fromIdx]);
+            const float REF_STEP_DISTANCE = 180f; // 인접 tier 평균 거리 (디자이너 좌표 기준)
+            float scale = Mathf.Max(1f, distance / REF_STEP_DISTANCE);
+            return MULTIPLIER_SELECT_MOVE_DURATION * scale;
         }
 
         /// <summary>[2026-06-15] PopupQuit 의 Multiplier 연출 — 노출 즉시 Animator state 진입 + 슬라이드인 동시 진행 + 닫힐 때까지 무한 Loop.
