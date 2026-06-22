@@ -792,6 +792,15 @@ namespace BalloonFlow
         private IEnumerator PlayWsMultiplierFailFx(int fromMultiplier)
         {
             ResolveWsFxRefs();
+            // [WS 배수 하락 텍스트 보류 2026-06-22] 사용자 피드백 — Multiplier 연출 진행 중에는
+            // TextGauge/Outline 을 fromMultiplier(이전 배수, 예: x100) 로 유지. 슬라이드-아웃 완료 시점에
+            // 한 번에 x1 로 갱신 + FXFire 1회 발화. 증가 측 PlayWinningStreakLobbyFx(line 818-826/951-952) 와 대칭.
+            string preFromText = $"x{Mathf.Max(1, fromMultiplier)}";
+            ResolveWsTexts();
+            if (_wsTxtGauge != null) _wsTxtGauge.text = preFromText;
+            if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = preFromText;
+            _wsLastMultiplierText = preFromText;
+            _wsHoldMultiplierTextDuringAnim = true;
             if (_wsMultiplier == null) yield break;
             if (!_wsMultiplier.gameObject.activeSelf)
                 _wsMultiplier.gameObject.SetActive(true);
@@ -808,6 +817,7 @@ namespace BalloonFlow
 
             yield return new WaitForSecondsRealtime(0.7f);
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
+            _wsHoldMultiplierTextDuringAnim = false;
             RefreshWinningStreakDisplay();
         }
 
