@@ -991,6 +991,7 @@ namespace BalloonFlow
                 }
 
                 // SelectFrame fromMult→toMult 이동 완료 대기 — 감소 시 거리 비례 duration 사용(WinningStreakUI.ResolveLobbyMultiplierMoveDuration). SlideOut 이 이동을 자르지 않게 동기화. ROLLBACK_WS_MULTIPLIER_SELECT_WAIT_20260619
+                // 2026-06-22 2nd-pass(v3): ResolveLobbyMultiplierMoveDuration 에 최소 0.35s floor 추가, 거리 비례 1000px/s 유지 — yield 라인은 그대로(헬퍼만 호출하므로 자동 반영).
                 yield return new WaitForSecondsRealtime(WinningStreakUI.ResolveLobbyMultiplierMoveDuration(fromMult, toMult));
 
                 // WHY: 기획 시퀀스(2026-06-22) — SelectFrame move(상승 0.18s / 감소 거리비례) → hold release → TextGauge/FXFire/Scale punch(0.20s) → 0.5s 노출 유지(WS_HOLD_AFTER_TEXT_FIRE_DURATION) → multiplier slide-out.
