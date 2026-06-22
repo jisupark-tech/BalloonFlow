@@ -517,10 +517,15 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>ParticleLight 전용 재생 — 활성화 후 모든 자식 ParticleSystem 을 Stop(StopEmittingAndClear)→Clear→Play
-        /// 순서로 재시작, 자연 종료(IsAlive(true)=false) 시점까지 활성 유지, 종료 후 SetActive(false).
-        /// 2026-06-19 추가 지시: 외부에서의 강제 중단 금지(내부 재호출 시에는 이전 코루틴 정리 후 처음부터 재생).</summary>
-        // WHY: 사용자 v3 지시 — 연속 호출 시 항상 처음부터 정상 재생되도록 이전 코루틴 정리 + Stop(StopEmittingAndClear) 선행.
+        /// <summary>ParticleLight 전용 재생 — 활성화 후 루트 ParticleSystem 1개에 withChildren=true 로
+        /// Stop(StopEmittingAndClear)→Clear→Play 호출, 자연 종료(IsAlive(true)=false) 시점까지 활성 유지, 종료 후 SetActive(false).
+        /// 2026-06-19 추가 지시: 외부에서의 강제 중단 금지(내부 재호출 시에는 이전 코루틴 정리 후 처음부터 재생).
+        /// 2026-06-22 사용자 v4: Looping=OFF 1회 재생 회귀 픽스. 루트 PS 1개에 withChildren=true 로 Stop/Clear/Play.</summary>
+        // WHY v4 (2026-06-22, owner 출처: ProjectHub 태스크 익명 코멘트 2026-06-22): 기존 'GetComponentsInChildren 전부 순회 Play'
+        //   구현은 Looping=ON 경우 매 프레임 emit 되어 가시화됐으나, 루트 PS 가 Looping=OFF + 단일 burst 인 경우
+        //   자식 순회 중 reset 순서가 어긋나 burst 가 소실되는 회귀 발생. 사용자 v4 지시: 루트 ParticleSystem 한 컴포넌트에
+        //   withChildren=true 로 SetActive→Stop(StopEmittingAndClear)→Clear→Play 를 그대로 호출.
+        // WHY v3 (유지, supersede 아님 — 동일 의도 누적): 연속 호출 시 항상 처음부터 정상 재생되도록 이전 코루틴 정리 + Stop(StopEmittingAndClear) 선행.
         private void PlayParticleLightAndAutoDisable()
         {
             if (_particleLight == null) return;
@@ -529,39 +534,23 @@ namespace BalloonFlow
                 StopCoroutine(_particleLightCoroutine);
                 _particleLightCoroutine = null;
             }
+            var rootPs = _particleLight.GetComponent<ParticleSystem>();
+            if (rootPs == null) rootPs = _particleLight.GetComponentInChildren<ParticleSystem>(true);
+            if (rootPs == null) { _particleLight.SetActive(false); return; }
+            // USER v4 2026-06-22: 루트 PS 1개에 withChildren=true 로 SetActive→Stop→Clear→Play (Looping=OFF 1회 재생 보장).
             _particleLight.SetActive(true);
-            var systems = _particleLight.GetComponentsInChildren<ParticleSystem>(true);
-            if (systems.Length == 0)
-            {
-                _particleLight.SetActive(false);
-                return;
-            }
-            for (int i = 0; i < systems.Length; i++)
-            {
-                if (systems[i] == null) continue;
-                systems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-                systems[i].Clear(true);
-                systems[i].Play(true);
-            }
-            _particleLightCoroutine = StartCoroutine(WaitAndDisableParticleLight(systems));
+            rootPs.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            rootPs.Clear(true);
+            rootPs.Play(true);
+            _particleLightCoroutine = StartCoroutine(WaitAndDisableParticleLight(rootPs));
         }
 
-        /// <summary>모든 ParticleSystem 의 IsAlive(true) 가 false 가 될 때까지 매 프레임 폴링한 뒤 SetActive(false).
+        /// <summary>루트 ParticleSystem 의 IsAlive(true) (withChildren=true) 가 false 가 될 때까지 매 프레임 폴링한 뒤 SetActive(false).
         /// Stop/Clear 호출하지 않음 — 사용자 지시('재생 도중 강제 비활성화·중단 금지').</summary>
-        private IEnumerator WaitAndDisableParticleLight(ParticleSystem[] systems)
+        private IEnumerator WaitAndDisableParticleLight(ParticleSystem root)
         {
-            while (true)
+            while (root != null && root.IsAlive(true))
             {
-                bool anyAlive = false;
-                for (int i = 0; i < systems.Length; i++)
-                {
-                    if (systems[i] != null && systems[i].IsAlive(true))
-                    {
-                        anyAlive = true;
-                        break;
-                    }
-                }
-                if (!anyAlive) break;
                 yield return null;
             }
             if (_particleLight != null) _particleLight.SetActive(false);
