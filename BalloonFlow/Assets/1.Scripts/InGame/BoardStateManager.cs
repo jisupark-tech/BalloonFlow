@@ -290,11 +290,15 @@ namespace BalloonFlow
             //   레일 만석(railFull) + 풍선 잔존 + NO_DRAINAGE_FAIL_SECONDS 간 pop(배수) 0 이면 → RailOverflow fail 확정.
             //   색 불균형으로 dead-dart 가 영구 점유하는데 다른 색이 hasMatch=true 를 유지해 stuck 이 영영 false 인 hang 을 차단.
             //   pop 이 한 번이라도 나면 _lastDrainUnscaledTime 갱신 → 정상/느린-진행 플레이는 오발동 X.
-            // ROLLBACK_FAIL_REQUIRE_RAILFULL_20260622: no-drainage 워치독도 '레일 만석(railFull)' 일 때만 발동.
-            //   이전 BELOWFULL 확장(|| forceFullBeltAdvance)은 full 미만 deadlock 회복 윈도우에서 10s 후 강제 fail 시켜
-            //   "임계치 안 닿았는데 fail" 의 한 원인이었음. below-full 정지는 relief 안전망이 복구 담당.
-            //   롤백: `railFull` 를 `(railFull || forceFullBeltAdvance)` 로 환원.
-            if (railFull && _remainingBalloons > 0
+            // ROLLBACK_NO_DRAINAGE_BELOWFULL_RESTORE_20260622: no-drainage 워치독 BELOWFULL 복구.
+            //   배경: REQUIRE_RAILFULL 에서 '빠른 오발동'(stuck 의 forceFullBeltAdvance, ~1.5s grace) 과 함께
+            //   '느린 안전망'(이 no-drainage, 10s) 의 belowfull 까지 같이 떼냈더니, deadlock 모드가 레일을 cap-1 미만
+            //   밴드에 묶어둔 상태(forceFullBeltAdvance=true, railFull=false)에서 공격 불가로 정지해도 fail 경로가
+            //   아예 없어 '영영 실패 안 함' 이 됐다. → 느린 안전망(10s 무배수)만 belowfull 로 복구.
+            //   stuck(빠른 grace) 은 railFull-only 유지하므로 조기 오발동은 재발 안 함(10s 는 진짜 정지의 최후 fail).
+            //   pop 한 번이면 _lastDrainUnscaledTime 리셋이라 정상/회복-진행 플레이는 오발동 X.
+            //   롤백: `(railFull || forceFullBeltAdvance)` 를 `railFull` 로 환원.
+            if ((railFull || forceFullBeltAdvance) && _remainingBalloons > 0
                 && Time.unscaledTime - _lastDrainUnscaledTime >= NO_DRAINAGE_FAIL_SECONDS)
             {
                 if (_debugLogFail) DumpAttackState($"[Fail-DEBUG] no-drainage watchdog — 만석 {NO_DRAINAGE_FAIL_SECONDS}s 무배수 → 강제 RailOverflow fail");
