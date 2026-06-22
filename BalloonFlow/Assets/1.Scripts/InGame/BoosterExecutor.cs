@@ -183,17 +183,24 @@ namespace BalloonFlow
             if (!_awaitingHolderSelection) return;
             _awaitingHolderSelection = false;
 
-            if (HolderVisualManager.HasInstance)
-                HolderVisualManager.Instance.SetHandSelectionHighlightActive(false);
+            // ROLLBACK_BOOSTER_RESUME_GUARANTEE_20260622: 중간에 예외가 나도 ResumeRail 보장 — IsPausedByBooster 가
+            //   true 로 고착돼 레일이 영구정지(완전 정지)되는 hard-freeze 를 구조적으로 차단. 롤백: try/finally 제거.
+            try
+            {
+                if (HolderVisualManager.HasInstance)
+                    HolderVisualManager.Instance.SetHandSelectionHighlightActive(false);
 
-            ConfirmPendingBooster();
-            //HideCancelButton();
-            CloseUseItemPopup(true);
-            ExecuteSelectTool(holderId);
+                ConfirmPendingBooster();
+                //HideCancelButton();
+                CloseUseItemPopup(true);
+                ExecuteSelectTool(holderId);
 
-            RestoreHandCameraOrMoveBack();
-
-            ResumeRail();
+                RestoreHandCameraOrMoveBack();
+            }
+            finally
+            {
+                ResumeRail();
+            }
         }
 
         // [HAND_CAMERA_5ROWS 원복 fix 2026-06-11] Hand 진입 시 보존한 좌표로 명시 복귀.
@@ -328,8 +335,9 @@ namespace BalloonFlow
                     break;
 
                 case BoosterManager.SHUFFLE:
-                    ExecuteShuffle();
-                    ResumeRail();
+                    // ROLLBACK_BOOSTER_RESUME_GUARANTEE_20260622: ExecuteShuffle 이 던져도 ResumeRail 보장(pause 고착 차단).
+                    try { ExecuteShuffle(); }
+                    finally { ResumeRail(); }
                     break;
 
                 case BoosterManager.COLOR_REMOVE:
@@ -409,6 +417,17 @@ namespace BalloonFlow
         {
             if (RailManager.HasInstance)
                 RailManager.Instance.IsPausedByBooster = false;
+        }
+
+        /// <summary>ROLLBACK_RAIL_FREEZE_DIAG_20260622: hard-freeze 진단용 — 부스터 await 상태 노출.
+        ///   RailManager.IsPausedByBooster=true 인데 아래 await 플래그가 걸린 채면 = 인터랙티브 부스터
+        ///   (Hand/Color-Remove) 상호작용이 완료/취소되지 못해 ResumeRail 미도달 → 레일 영구정지(소프트락).
+        ///   롤백: 이 메서드 삭제.</summary>
+        public string GetDebugState()
+        {
+            return $"pendingType={(_pendingBoosterType ?? "(none)")} awaitHolder={_awaitingHolderSelection} " +
+                   $"awaitColor={_awaitingColorSelection} awaitBalloon={_awaitingBalloonClick} " +
+                   $"colorRemoveRunning={_isColorRemoveSequenceRunning}";
         }
 
         /// <summary>Confirm deferred booster consumption after user completes interaction.</summary>
@@ -527,6 +546,30 @@ namespace BalloonFlow
                 yield break;
 
             _isColorRemoveSequenceRunning = true;
+
+            // ROLLBACK_BOOSTER_RESUME_GUARANTEE_20260622: Zap 시퀀스 중간에 예외/코루틴 중단이 나도
+            //   ResumeRail + 상태/HUD/카메라 복원을 finally 로 보장 — IsPausedByBooster 고착에 의한 완전 정지(hard-freeze)와,
+            //   _isColorRemoveSequenceRunning 이 true 로 남아 ColorRemove 가 영영 재실행 안 되는 이중 락을 동시에 차단.
+            //   롤백: 이 래퍼 제거하고 PlayColorRemoveSequenceBody 본문을 다시 인라인 + 말미 cleanup 복원.
+            try
+            {
+                yield return PlayColorRemoveSequenceBody(color);
+            }
+            finally
+            {
+                if (CameraManager.HasInstance)
+                    CameraManager.Instance.MoveBack();
+                SetHudBottomPanelHiddenForZap(false);
+                ResumeRail();
+                _zapTargets.Clear();
+                _isColorRemoveSequenceRunning = false;
+                _isZapAnimationPlaying = false;
+                _zapAnimator = null;
+            }
+        }
+
+        private IEnumerator PlayColorRemoveSequenceBody(int color)
+        {
             SetHudBottomPanelHiddenForZap(true);
 
             yield return new WaitForSeconds(ZapSelectionHighlightDelay);
@@ -667,15 +710,8 @@ namespace BalloonFlow
             // 롤백: 아래 줄을 `yield return StartCoroutine(...)` 으로 복원.
             StartCoroutine(WaitForZapFinishThenDestroyRoutine(zapObject));
 
-            if (CameraManager.HasInstance)
-                CameraManager.Instance.MoveBack();
-
-            SetHudBottomPanelHiddenForZap(false);
-            ResumeRail();
-            _zapTargets.Clear();
-            _isColorRemoveSequenceRunning = false;
-            _isZapAnimationPlaying = false;
-            _zapAnimator = null;
+            // ROLLBACK_BOOSTER_RESUME_GUARANTEE_20260622: 카메라 복귀/HUD 복원/ResumeRail/상태 리셋은
+            //   래퍼 PlayColorRemoveSequence 의 finally 로 이동(정상 완료/예외/중단 모두에서 1회 실행 보장).
         }
 
         /// <summary>

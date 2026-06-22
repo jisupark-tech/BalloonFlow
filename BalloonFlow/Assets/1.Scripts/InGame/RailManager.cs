@@ -616,6 +616,14 @@ namespace BalloonFlow
             return _almostThere ? ALMOST_THERE_SPEED_MULT : 1f;
         }
 
+        // ROLLBACK_CLEAR_IMMINENT_BOOSTER_NOOP_20260622:
+        // Public mirror of the Almost There trigger so HUD booster taps can no-op at the
+        // exact same moment as rail acceleration/toast.
+        public bool IsClearImminentForBoosterLock()
+        {
+            return IsAlmostThereImminent(PhysicalCapacity);
+        }
+
         /// <summary>홀더 미배포 magazine + 레일 위 다트의 합 = 레벨에 남은 총 다트 수.</summary>
         private int GetTotalRemainingDarts()
         {
@@ -632,9 +640,14 @@ namespace BalloonFlow
         }
 
         /// <summary>매 프레임 클리어 임박 상태 갱신 + 진입 순간(rising edge) "Almost There!" 토스트 1회.</summary>
+        private bool IsAlmostThereImminent(int capacity)
+        {
+            return capacity > 0 && _darts.Count > 0 && GetTotalRemainingDarts() < capacity;
+        }
+
         private void UpdateAlmostThereState(int capacity)
         {
-            bool imminent = capacity > 0 && _darts.Count > 0 && GetTotalRemainingDarts() < capacity;
+            bool imminent = IsAlmostThereImminent(capacity);
             _almostThere = imminent;
             if (imminent)
             {
@@ -842,6 +855,19 @@ namespace BalloonFlow
                    $"shouldFullAdvance={shouldAdvanceAsFullBelt} capacityFull={capacityFull} " +
                    $"deadlockNearFull={deadlockNearFull} deadlockActive={deadlockHolderActive} dlh={_deadlockHolderId} threshold={deadlockAdvanceThreshold} " +
                    $"activeDeploys={_activeDeployPoints.Count} frozen={_frozenDartInfos.Count} dirty={_slotOccupancyDirty}";
+        }
+
+        /// <summary>ROLLBACK_RAIL_FREEZE_DIAG_20260622: hard-freeze(전면정지) 진단용 — UpdateInternal early-return 류
+        ///   원인 후보를 한 줄로 노출. IsPausedByBooster(부스터 await 중 영구정지 1순위 용의자) / _boardFinished /
+        ///   deadlock mode / active·suspended deploy point 목록. 동작 변경 없음(읽기 전용).
+        ///   롤백: 이 메서드 + BoardStateManager 의 freeze 워치독 삭제.</summary>
+        public string GetFreezeDiagnostics()
+        {
+            return $"pausedByBooster={IsPausedByBooster} boardFinished={_boardFinished} " +
+                   $"rotationOffset={_rotationOffset:F3} occupied={_occupiedCount} " +
+                   $"activeDeployIds=[{string.Join(",", _activeDeployPoints)}] " +
+                   $"suspendedDeployIds=[{string.Join(",", _deadlockSuspendedDeployPoints)}] " +
+                   $"{GetAdvanceModeDebugInfo()}";
         }
 
         /// <summary>데드락 모드 진입 — leftmost holder 만 buffer slot 사용 가능, 다른 holder pause.

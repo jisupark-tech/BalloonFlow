@@ -1461,6 +1461,11 @@ namespace BalloonFlow
             // rebuild the contour cache immediately, otherwise it can stay invisible to darts.
             DirectionalTargeting.InvalidateCache();
             RefreshOutermostRendererState();
+            // ROLLBACK_REVEAL_BSM_OUTERMOST_INVALIDATE_20260622: pop 으로 트리거된 reveal 은 BoardStateManager 도 같은
+            //   OnBalloonPopped 로 outermost 캐시를 dirty 하지만, Hand 부스터 등 'pop 없는' 직접 reveal 경로에선 BSM
+            //   캐시가 stale 로 남아 fail/매칭 판정이 어긋난다(관통 아님 — 놓침/오판). 명시적으로 무효화해 보강.
+            if (BoardStateManager.HasInstance)
+                BoardStateManager.Instance.InvalidateOutermostCache();
 
             EventBus.Publish(new OnGimmickTriggered
             {

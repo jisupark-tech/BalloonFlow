@@ -211,6 +211,17 @@ namespace BalloonFlow
                 .OnComplete(() => onComplete?.Invoke());
         }
 
+        /// <summary>ROLLBACK_TUTORIAL_HIDE_EXIT_ON_ITEM_USE_20260622: Exit(취소/X) 버튼 일괄 표시/숨김.
+        ///   튜토리얼 강제 사용 스텝에서 false 로 호출해 BottomExit/_btnExit/_btnBottomExit 를 모두 숨긴다.
+        ///   숨길 때 진행 중인 BottomExit 슬라이드 tween 도 정리해 다시 떠오르지 않게 한다.</summary>
+        private void SetExitButtonsVisible(bool visible)
+        {
+            if (!visible) _btnBottomExitTween?.Kill();
+            if (_btnExit != null) _btnExit.gameObject.SetActive(visible);
+            if (_btnBottomExit != null) _btnBottomExit.gameObject.SetActive(visible);
+            if (_BottomExit != null) _BottomExit.gameObject.SetActive(visible);
+        }
+
         private void AnimateTopIn()
         {
             if (_Top == null) return;
@@ -686,6 +697,16 @@ namespace BalloonFlow
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.None);
                 _frame.ShowExitButton(false);
             }
+
+            // ROLLBACK_TUTORIAL_HIDE_EXIT_ON_ITEM_USE_20260622: 튜토리얼을 통한 강제 아이템 사용 스텝
+            //   (현재 스텝 hideSkipButton=true) 에선 X/취소(Exit) 버튼을 숨겨, 사용하지 않고 빠져나가지 못하게 한다.
+            //   일반(비튜토리얼) 사용이나 hideSkipButton=false 스텝은 기존대로 Exit 노출.
+            //   롤백: 아래 두 줄 + SetExitButtonsVisible 삭제.
+            bool tutorialForcedUse = TutorialController.HasInstance
+                && TutorialController.Instance.IsTutorialActive()
+                && TutorialController.Instance.GetCurrentStep() != null
+                && TutorialController.Instance.GetCurrentStep().hideSkipButton;
+            SetExitButtonsVisible(!tutorialForcedUse);
 
             if (_imgItem != null)
             {

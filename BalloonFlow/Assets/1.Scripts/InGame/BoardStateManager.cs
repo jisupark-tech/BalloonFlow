@@ -59,6 +59,29 @@ namespace BalloonFlow
         private float _criticalTimer;
         private bool _failConfirmed;
 
+        // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: 무진전 fail 워치독.
+        //   레벨 색 불균형(어떤 색 다트>풍선)으로 surplus dead-dart 가 레일을 영구 점유하면, 레일은 만석인데
+        //   HasOutermostMatch 는 '살아있는 다른 색'이 있어 계속 true → stuck 미충족 → fail 영영 미확정 → 영구 freeze.
+        //   이 워치독은 hasMatch 와 무관하게 "레일 만석 + 일정 시간 pop(=배수) 0" 이면 RailOverflow fail 확정.
+        //   pop 이 한 번이라도 나면(=배수 진행) 리셋되므로 정상/느린-진행 플레이는 오발동 X.
+        private float _lastDrainUnscaledTime;
+        private const float NO_DRAINAGE_FAIL_SECONDS = 10f; // 만석 무배수 지속 한계(벨트 1회전+grace 보다 충분히 큼)
+
+        // ROLLBACK_RAIL_FREEZE_DIAG_20260622: hard-freeze(전면정지) 진단 워치독 — fail 이 아니라 '디버그 덤프'.
+        //   재현 불가한 완전정지(다트·레일·배포 모두 멈춤)의 원인을 로그로 포착하기 위함. 동작은 바꾸지 않음(no recovery).
+        //   판정: 벨트 회전오프셋(RailManager.RotationOffset)과 점유수(efc)가 FREEZE_DEBUG_SECONDS 동안 전혀 변하지 않고,
+        //   in-flight 다트의 pop(=_lastDrainUnscaledTime) 도 없으면 → '움직임 0' 으로 보고 1회 전체 상태 덤프.
+        //   (벨트가 돌지만 발사만 안 되는 부류는 belt offset 이 계속 변하므로 여기 안 걸림 — 그건 기존 no-drainage/relief 담당.)
+        //   움직임 재개 시 재무장. 1순위 용의자는 IsPausedByBooster 가 부스터 await 중 영구 true 인 케이스.
+        //   롤백: 이 5개 필드 + Update 의 freeze 블록 + DumpFreezeState + RailManager.GetFreezeDiagnostics +
+        //         BoosterExecutor.GetDebugState 삭제.
+        [SerializeField] private bool _debugLogFreeze = true;
+        private const float FREEZE_DEBUG_SECONDS = 3f;
+        private float _freezeLastActivityTime;
+        private float _freezeLastBeltOffset = float.NaN;
+        private int _freezeLastEfc = -1;
+        private bool _freezeDumpedThisStall;
+
         /// <summary>이어하기 직후 fail 평가 일시 정지 기간 (초). player 가 행동할 시간 확보.</summary>
         private const float POST_CONTINUE_GRACE_DURATION = 3f;
         /// <summary>이어하기 grace 종료 시각 (Time.unscaledTime 기준). 0 이면 비활성.</summary>
@@ -222,6 +245,31 @@ namespace BalloonFlow
                 _criticalTimer = 0f;
             }
             _wasForceFullBeltAdvanceActive = forceFullBeltAdvance;
+
+            // ROLLBACK_RAIL_FREEZE_DIAG_20260622: 전면정지 진단 — 벨트오프셋·점유수 무변화 + pop 0 지속 시 1회 덤프.
+            //   fail 평가(아래)보다 먼저 평가해 강제 fail 직전 상태를 포착. 동작 변경 없음.
+            if (_debugLogFreeze && RailManager.HasInstance && _remainingBalloons > 0)
+            {
+                float beltOffset = RailManager.Instance.RotationOffset;
+                bool moved = float.IsNaN(_freezeLastBeltOffset)
+                             || Mathf.Abs(beltOffset - _freezeLastBeltOffset) > 0.0001f
+                             || efc != _freezeLastEfc;
+                _freezeLastBeltOffset = beltOffset;
+                _freezeLastEfc = efc;
+                if (moved) _freezeLastActivityTime = Time.unscaledTime;
+                // in-flight 다트의 pop(배수)도 진전 — 정지로 오인하지 않게 _lastDrainUnscaledTime 포함.
+                float lastActivity = Mathf.Max(_freezeLastActivityTime, _lastDrainUnscaledTime);
+                if (Time.unscaledTime - lastActivity < FREEZE_DEBUG_SECONDS)
+                {
+                    _freezeDumpedThisStall = false; // 움직임 재개 → 재무장
+                }
+                else if (!_freezeDumpedThisStall)
+                {
+                    _freezeDumpedThisStall = true;
+                    DumpFreezeState(efc, physCap);
+                }
+            }
+
             bool hasMatch = HasOutermostMatchCached;
             // ROLLBACK_FAIL_NO_MOVES_LEFT_WITH_RAIL_DARTS:
             // Previously no-move fail only triggered when all holders were empty AND rail was empty.
@@ -234,6 +282,23 @@ namespace BalloonFlow
             // Forced full-belt advance means the rail is already in recovery/full movement mode.
             // If nothing can attack while this is active, enter the same grace-based fail flow.
             bool stuck = _remainingBalloons > 0 && !hasMatch && (railFull || noMovesLeft || forceFullBeltAdvance);
+
+            // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: hasMatch 무관 무진전 워치독.
+            //   레일 만석(railFull) + 풍선 잔존 + NO_DRAINAGE_FAIL_SECONDS 간 pop(배수) 0 이면 → RailOverflow fail 확정.
+            //   색 불균형으로 dead-dart 가 영구 점유하는데 다른 색이 hasMatch=true 를 유지해 stuck 이 영영 false 인 hang 을 차단.
+            //   pop 이 한 번이라도 나면 _lastDrainUnscaledTime 갱신 → 정상/느린-진행 플레이는 오발동 X.
+            // ROLLBACK_NO_DRAINAGE_WATCHDOG_BELOWFULL_20260622: railFull(efc>=cap-1) 만으로는 DeadlockMode 사각지대를 놓침.
+            //   DeadlockMode 는 efc >= cap - clamp(deploys+2,3,8) (= 최저 cap-8) 부터 진입하므로, cap-8 ~ cap-1 구간에서
+            //   다른 홀더가 PAUSE 된 채 hasMatch=true 라 stuck 미충족 → 영구 freeze. forceFullBeltAdvance(=DeadlockMode 활성/
+            //   강제회전) 도 arming 조건에 포함해 그 below-full 밴드를 덮는다. (pop 시 타이머 리셋이라 정상 플레이 오발동 X.)
+            if ((railFull || forceFullBeltAdvance) && _remainingBalloons > 0
+                && Time.unscaledTime - _lastDrainUnscaledTime >= NO_DRAINAGE_FAIL_SECONDS)
+            {
+                if (_debugLogFail) DumpAttackState($"[Fail-DEBUG] no-drainage watchdog — 만석 {NO_DRAINAGE_FAIL_SECONDS}s 무배수 → 강제 RailOverflow fail");
+                _failConfirmed = true;
+                TriggerFail(FailReason.RailOverflow);
+                return;
+            }
 
             // 진단용 주기적 로그 — rail이 많이 차 있는데 stuck 미충족 시 어떤 조건이
             // 막고 있는지 출력 (false negative 케이스 분석용).
@@ -345,6 +410,21 @@ namespace BalloonFlow
                       $"  outermost colors=[{outerStr}]\n" +
                       $"  → matched=[{matchStr}]\n" +
                       $"  holders=[{holderStr}]");
+        }
+
+        /// <summary>ROLLBACK_RAIL_FREEZE_DIAG_20260622: hard-freeze(전면정지) 진단 1회 덤프 (fail 아님).
+        ///   early-return 류 정지 원인 후보(부스터 pause/await, deadlock mode, deploy point, 보드 종료, PauseManager)와
+        ///   공격 가능성 상태(DumpAttackState)를 함께 출력. 동작 변경 없음.</summary>
+        private void DumpFreezeState(int efc, int physCap)
+        {
+            string rail = RailManager.HasInstance ? RailManager.Instance.GetFreezeDiagnostics() : "(no RailManager)";
+            string booster = BoosterExecutor.HasInstance ? BoosterExecutor.Instance.GetDebugState() : "(no BoosterExecutor)";
+            Debug.LogWarning(
+                $"[Freeze-DEBUG] HARD FREEZE 감지 — {FREEZE_DEBUG_SECONDS}s 무진전(벨트오프셋·점유 불변·pop 0). " +
+                $"balloons={_remainingBalloons} efc={efc}/{physCap} pauseMgr={PauseManager.IsPaused}\n" +
+                $"  rail   : {rail}\n" +
+                $"  booster: {booster}");
+            DumpAttackState("[Freeze-DEBUG] attack-state");
         }
 
         #endregion
@@ -465,6 +545,7 @@ namespace BalloonFlow
             _outermostDirty = true;
             _awaitingPostContinuePlayerAction = false;
             _postContinueGraceUntil = 0f;
+            _lastDrainUnscaledTime = Time.unscaledTime; // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: 레벨 시작 시 리셋
         }
 
         private void HandleHolderTapped(OnHolderTapped evt)
@@ -476,6 +557,8 @@ namespace BalloonFlow
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
             _outermostDirty = true;
+            // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: pop = 배수 진행 → 무진전 타이머 리셋.
+            _lastDrainUnscaledTime = Time.unscaledTime;
             if (BalloonController.HasInstance)
             {
                 _remainingBalloons = BalloonController.Instance.GetRemainingCount();
@@ -1087,6 +1170,7 @@ namespace BalloonFlow
             // 이어하기 후 grace 시작 — rail 이 여전히 stuck 이어도 일정 시간 fail 평가 멈춤
             _awaitingPostContinuePlayerAction = true;
             _postContinueGraceUntil = Time.unscaledTime + POST_CONTINUE_GRACE_DURATION;
+            _lastDrainUnscaledTime = Time.unscaledTime; // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: 이어하기 직후 즉시 발동 방지
 
             if (evt.removedColor >= 0 && evt.dartsRemoved > 0)
             {

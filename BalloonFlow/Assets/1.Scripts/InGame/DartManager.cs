@@ -1286,6 +1286,9 @@ namespace BalloonFlow
                 int firstCatchUpLine = currentLine;
                 int catchUpStep = 0;
                 int catchUpCount = 1;
+                // ROLLBACK_DART_CATCHUP_BASELINE_ADVANCE_20260622: 이번 틱에 catch-up budget 초과로 클램프됐는지.
+                //   true 면 [firstCatchUpLine .. lastProbed] 만 probe되고 그 너머 ~ currentLine 은 미probe → 미발사 시 baseline 전진 필요.
+                bool catchUpClamped = false;
 
                 if (catchUpFromLastScan)
                 {
@@ -1296,6 +1299,7 @@ namespace BalloonFlow
                         int catchUpBudget = MaxLineCatchUpPerHead;
                         if (absDelta > catchUpBudget)
                         {
+                            catchUpClamped = true; // ROLLBACK_DART_CATCHUP_BASELINE_ADVANCE_20260622
                             LogAttackIssue(
                                 "DartCatchUpClamped",
                                 $"source=lastScan holder={holderId} dartId={dartId} scan={currentScanDir} " +
@@ -1570,6 +1574,18 @@ namespace BalloonFlow
                     {
                         ClearPromoSeedForHolder(holderId);
                     }
+                    // ROLLBACK_DART_CATCHUP_BASELINE_ADVANCE_20260622: lastScan catch-up 이 budget 초과로 클램프되어
+                    //   [firstCatchUpLine .. lastProbed] 만 probe하고 타겟을 못 찾았으면, baseline 을 '마지막 probe 라인'으로
+                    //   전진시킨다. 미전진(기존)이면 다음 틱도 currentLine 이 더 멀어진 채 같은 앞쪽 밴드만 재probe →
+                    //   [lastProbed+1 .. currentLine] 영구 스킵(놓침). 전진하면 다음 틱이 그 다음 밴드를 이어 probe → 수렴.
+                    //   클램프가 없을 땐(밴드 전체 probe 완료) 동작 불변. promo 경로는 seed 단발성이라 제외(위 주석 정책 유지).
+                    if (catchUpClamped && catchUpFromLastScan && catchUpStep != 0)
+                    {
+                        int lastProbedLine = firstCatchUpLine + (catchUpCount - 1) * catchUpStep;
+                        _lastScannedLineByHolder[holderId] = lastProbedLine;
+                        _lastScanDirectionByHolder[holderId] = currentScanDir;
+                        _lastScannedHeadIdByHolder[holderId] = dart.dartId;
+                    }
                     LogMissSuspectIfNeeded(holderId, dartId, color, dart.progress, scanDartPos, fireDir, currentScanDir, currentLine);
                     continue;
                 }
@@ -1796,6 +1812,7 @@ namespace BalloonFlow
             PruneConsumedTargetLinesForCurrentHeads(rail);
             RelieveDeadHeadStall(rail, firedThisScan);
             UpdateStallWatchdog(rail, firedThisScan);
+            RelievePerHolderStallTimeout(rail); // ROLLBACK_DART_PERHOLDER_STALL_RELIEF_20260622
         }
 
         // DART_STALL_WATCHDOG (2026-06-11):
@@ -1880,6 +1897,61 @@ namespace BalloonFlow
             LogAttackIssue("DartStallWatchdog",
                 $"no board-progress(pop) for {threshold:F1}s (match={matchPresent}) — scan-line + consumed-lock clear");
             // ROLLBACK_DART_STALL_WATCHDOG_WIDEN_20260615: END
+        }
+
+        // ROLLBACK_DART_PERHOLDER_STALL_RELIEF_20260622:
+        // 정적 감사 MED #2/#3 보완. 두 구멍을 메운다:
+        //   #3 starvation: 전역 Stall 워치독(_stallWatchTimer)은 '아무 클러스터의 pop' 에 리셋되므로, 한 클러스터가
+        //      계속 pop 하면 국소 정지된 다른 holder 가 영구히 lock 해제를 못 받아 그 색 풍선이 놓침이 된다.
+        //   #2 dead-head scope 불일치: RelieveDeadHeadStall 은 head 색이 'GetReachableOutermostColors(side-sweep 윤곽)'
+        //      에 있으면 "belt 가 곧 도달" 으로 보고 스킵하지만, 실제 DirectionalTargeting.TryFindTarget 이
+        //      은닉/Ice/Wall/예약 으로 거부하면 head 는 못 쏘는 채 남아 전역 워치독(=starvation 가능)에만 의존한다.
+        // 해결(per-holder, 최후 안전망): head 색이 board 도달가능 + 이 holder 가 PER_HOLDER_STALL_RELIEF_SECONDS 동안
+        //   미발사 + 비행체 0 + 외곽 매칭 존재 이면, 그 holder 의 라인락만 해제 + scan 라인 무효화.
+        // 연속공격 안전: (1) ClearConsumedLineLockForHolder 는 holder-local pass-lock 만 건드림 → 전역 in-flight 락
+        //   (_unresolvedConsumedTargetLines) 불변이라 비행 중 라인 재개방 없음. (2) _activeProjectiles==0 추가 가드.
+        //   (3) 임계 2.0s 는 stuck-line(0.4s)/dead-head(0.4s)/전역워치독(1.5s) 보다 길어 최후 발동 + 정상 발사 시 리셋.
+        // 트리거가 좁아(도달가능+2s 무발사+매칭존재) 정상 플레이엔 작동 안 함. 롤백: 이 메서드 + 아래 2 필드 + 1814 호출 제거.
+        private readonly Dictionary<int, float> _holderStallSince = new Dictionary<int, float>(16);
+        private const float PER_HOLDER_STALL_RELIEF_SECONDS = 2.0f;
+
+        private void RelievePerHolderStallTimeout(RailManager rail)
+        {
+            if (rail == null || _activeProjectiles.Count > 0) return;
+            if (!BoardStateManager.HasInstance || !BoardStateManager.Instance.HasOutermostMatchCached)
+            {
+                _holderStallSince.Clear(); // fail 영역/매칭 없음 — 타이머 리셋(오발동 방지).
+                return;
+            }
+
+            // 재사용 set 스냅샷 (pop 이벤트 중 내용 변동 방지 — RelieveDeadHeadStall 과 동일 패턴).
+            _deadHeadReachableColors.Clear();
+            foreach (int c in BoardStateManager.Instance.GetReachableOutermostColors())
+                _deadHeadReachableColors.Add(c);
+
+            rail.GetClusterHeadDarts(_scanHeadDarts);
+            float now = Time.unscaledTime;
+            for (int i = 0; i < _scanHeadDarts.Count; i++)
+            {
+                var head = _scanHeadDarts[i];
+                if (head == null || head.dartColor < 0) continue;
+                int holderId = head.holderId;
+
+                // 이 tick 발사 = 진행 중 → 타이머 리셋.
+                if (_firedHoldersThisTick.Contains(holderId)) { _holderStallSince.Remove(holderId); continue; }
+                // head 색이 외곽 도달불가 = RelieveDeadHeadStall 담당 영역 → 여기선 제외.
+                if (!_deadHeadReachableColors.Contains(head.dartColor)) { _holderStallSince.Remove(holderId); continue; }
+
+                if (!_holderStallSince.TryGetValue(holderId, out float since)) { _holderStallSince[holderId] = now; continue; }
+                if (now - since < PER_HOLDER_STALL_RELIEF_SECONDS) continue;
+
+                // 도달가능으로 보고된 색인데 2s 동안 못 쏨 → holder-local 락 해제 + scan 라인 무효화로 재스캔 강제.
+                ClearConsumedLineLockForHolder(holderId);
+                InvalidateDartScanLineForHolder(holderId);
+                _holderStallSince.Remove(holderId);
+                LogAttackIssue("DartPerHolderStallRelief",
+                    $"holder={holderId} headColor={head.dartColor} — reachable-but-no-fire {PER_HOLDER_STALL_RELIEF_SECONDS:F1}s → holder lock clear + scanline invalidate");
+            }
         }
 
         // DEAD_HEAD_RELIEF (2026-06-10):

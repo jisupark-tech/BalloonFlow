@@ -20,6 +20,8 @@ namespace BalloonFlow.Editor
             "holder_0", "holder_1", "holder_2", "holder_3", "holder_4",
             "holder_5", "holder_6", "holder_7", "holder_8", "holder_9",
             "board", "holder_queue",
+            // ROLLBACK_TUTORIAL_ITEM_TARGET_20260622: UIHud 하단 아이템(부스터) 버튼 하이라이트 타겟.
+            "item_hand", "item_shuffle", "item_remove",
             "gimmick_hidden", "gimmick_spawner", "gimmick_bigobject",
             "gimmick_chain", "gimmick_pin", "gimmick_lock_key",
             "gimmick_surprise", "gimmick_wall", "gimmick_ice",
@@ -41,6 +43,8 @@ namespace BalloonFlow.Editor
             public int tutorialId;
             public int levelId;
             public string name = "New Tutorial";
+            // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622: true 면 레벨 진입 시 자동 시작 X — 외부(아이템 언락 Claim 등)에서 명시 호출 시에만 시작.
+            public bool manualTriggerOnly;
             public List<EditableStep> steps = new List<EditableStep>();
             public bool isExpanded = true;
         }
@@ -51,6 +55,8 @@ namespace BalloonFlow.Editor
             public string instruction = "Tap here!";
             public string highlightTarget = "(none)";
             public string requireAction = "none";
+            // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622: 튜토리얼 통한 아이템 사용 강제 스텝에서 Skip(X) 숨김.
+            public bool hideSkipButton;
             public bool overrideVisualLayout;
             public bool useCutoutFrame = true;
             public Vector2 cutoutFramePosition = Vector2.zero;
@@ -217,6 +223,11 @@ namespace BalloonFlow.Editor
             tut.tutorialId = EditorGUILayout.IntField("Tutorial ID", tut.tutorialId);
             tut.levelId = EditorGUILayout.IntField("Level ID", tut.levelId);
             tut.name = EditorGUILayout.TextField("Name", tut.name);
+            // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622: ON 이면 레벨 진입 시 자동 시작하지 않고,
+            //   아이템 언락 Claim → 보상연출 종료 후처럼 외부 호출(StartTutorialForLevel)로만 시작.
+            tut.manualTriggerOnly = EditorGUILayout.Toggle(
+                new GUIContent("Manual Trigger Only", "ON: 레벨 진입 시 자동 시작 안 함. 아이템 언락 Claim 등 외부 트리거로만 시작."),
+                tut.manualTriggerOnly);
 
             EditorGUILayout.Space(8);
 
@@ -275,6 +286,12 @@ namespace BalloonFlow.Editor
                 if (actionIdx < 0) actionIdx = 0;
                 actionIdx = EditorGUILayout.Popup("Require Action", actionIdx, ACTION_OPTIONS);
                 step.requireAction = ACTION_OPTIONS[actionIdx];
+
+                // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622: 스텝 동안 Skip(X) 숨김 + PopupUseItem 의 X(취소) 버튼도 숨김.
+                //   강제 아이템 사용 스텝(아이템 해금 튜토리얼 등)에서 사용하지 않고 빠져나가지 못하게 한다.
+                step.hideSkipButton = EditorGUILayout.Toggle(
+                    new GUIContent("Hide Skip/UseItem X", "ON: 튜토리얼 Skip(X) + UseItem 팝업의 X(취소) 버튼을 함께 숨김. 강제 아이템 사용 스텝용."),
+                    step.hideSkipButton);
 
                 step.overrideVisualLayout = EditorGUILayout.Toggle("Override Visual Layout", step.overrideVisualLayout);
                 using (new EditorGUI.DisabledScope(!step.overrideVisualLayout))
@@ -453,6 +470,7 @@ namespace BalloonFlow.Editor
                 sb.AppendLine($"    tutorialId = {tut.tutorialId},");
                 sb.AppendLine($"    levelId = {tut.levelId},");
                 sb.AppendLine($"    tutorialName = \"{EscapeString(tut.name)}\",");
+                sb.AppendLine($"    manualTriggerOnly = {tut.manualTriggerOnly.ToString().ToLowerInvariant()},"); // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622
                 sb.AppendLine("    steps = new TutorialStep[]");
                 sb.AppendLine("    {");
 
@@ -468,6 +486,7 @@ namespace BalloonFlow.Editor
                     sb.AppendLine($"            instruction = \"{EscapeString(step.instruction)}\",");
                     sb.AppendLine($"            highlightTarget = {target},");
                     sb.AppendLine($"            requireAction = {action},");
+                    sb.AppendLine($"            hideSkipButton = {step.hideSkipButton.ToString().ToLowerInvariant()},"); // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622
                     sb.AppendLine("            isComplete = false,");
                     sb.AppendLine($"            overrideVisualLayout = {step.overrideVisualLayout.ToString().ToLowerInvariant()},");
                     sb.AppendLine($"            useCutoutFrame = {step.useCutoutFrame.ToString().ToLowerInvariant()},");
@@ -546,6 +565,7 @@ namespace BalloonFlow.Editor
                     tutorialId = src.tutorialId,
                     levelId = src.levelId,
                     tutorialName = src.name,
+                    manualTriggerOnly = src.manualTriggerOnly, // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622
                     steps = new TutorialStep[src.steps.Count]
                 };
                 for (int i = 0; i < src.steps.Count; i++)
@@ -557,6 +577,7 @@ namespace BalloonFlow.Editor
                         instruction = s.instruction,
                         highlightTarget = s.highlightTarget == "(none)" ? string.Empty : s.highlightTarget,
                         requireAction = s.requireAction,
+                        hideSkipButton = s.hideSkipButton, // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622
                         isComplete = false,
                         overrideVisualLayout = s.overrideVisualLayout,
                         useCutoutFrame = s.useCutoutFrame,
@@ -613,6 +634,7 @@ namespace BalloonFlow.Editor
                     tutorialId = src.tutorialId,
                     levelId = src.levelId,
                     name = string.IsNullOrEmpty(src.tutorialName) ? "Untitled" : src.tutorialName,
+                    manualTriggerOnly = src.manualTriggerOnly, // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622
                     steps = new List<EditableStep>()
                 };
                 if (src.steps != null)
@@ -625,6 +647,7 @@ namespace BalloonFlow.Editor
                             instruction = s.instruction ?? "",
                             highlightTarget = string.IsNullOrEmpty(s.highlightTarget) ? "(none)" : s.highlightTarget,
                             requireAction = string.IsNullOrEmpty(s.requireAction) ? "none" : s.requireAction,
+                            hideSkipButton = s.hideSkipButton, // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622
                             overrideVisualLayout = s.overrideVisualLayout,
                             useCutoutFrame = s.useCutoutFrame,
                             cutoutFramePosition = s.cutoutFramePosition,

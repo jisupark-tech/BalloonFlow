@@ -35,6 +35,10 @@ namespace BalloonFlow
         /// </summary>
         public string requireAction;
 
+        /// <summary>ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622: true 면 이 스텝 동안 Skip(X) 버튼을 숨긴다.
+        /// 튜토리얼을 통한 아이템 사용(강제 완료) 스텝에서 X 로 빠져나가지 못하게 함. 기본 false(=기존처럼 X 노출).</summary>
+        public bool hideSkipButton;
+
         /// <summary>Whether this step has been completed by the player.</summary>
         public bool isComplete;
 
@@ -87,6 +91,11 @@ namespace BalloonFlow
 
         /// <summary>Display name for this tutorial (for debugging).</summary>
         public string tutorialName;
+
+        /// <summary>ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622: true 면 levelId 진입 시 자동 시작하지 않고,
+        /// 외부에서 명시적으로 StartTutorialForLevel/StartTutorial 을 호출할 때만 시작한다.
+        /// (예: 아이템 언락 Claim → 보상연출 종료 후 트리거하는 흐름.) 기본 false(=레벨 진입 시 자동 시작).</summary>
+        public bool manualTriggerOnly;
 
         /// <summary>Ordered list of steps in this tutorial.</summary>
         public TutorialStep[] steps;
@@ -1013,6 +1022,15 @@ namespace BalloonFlow
             while (NewFeatureManager.HasInstance && NewFeatureManager.Instance.IsShowingPopup)
                 yield return null;
 
+            // ROLLBACK_TUTORIAL_WAIT_UNLOCK_FX_20260622: 부스터 언락 Claim 후 아이콘이 HUD 하단으로 날아가 펄스하는
+            //   보상 연출이 진행 중이면 끝날 때까지 대기 → "아이템 HUD 추가 + 연출 종료 → 튜토리얼" 순서 보장.
+            //   언락이 없으면 즉시 통과(no-op). 롤백: 이 while 블록 삭제.
+            {
+                UIHud hud = UnityEngine.Object.FindAnyObjectByType<UIHud>();
+                while (hud != null && hud.IsBoosterRewardFxPlaying)
+                    yield return null;
+            }
+
             Debug.Log($"[TutorialDbg] HandleLevelLoaded levelId={levelId}");
 
             // 1) LevelConfig에 tutorialSteps가 있으면 우선 사용
@@ -1023,6 +1041,8 @@ namespace BalloonFlow
                 Debug.Log($"[TutorialDbg] LevelData config found: tutorialId={configFromData.tutorialId} complete={complete1}");
                 if (complete1) yield break;
                 _configByLevel[configFromData.levelId] = configFromData;
+                // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622: 수동 트리거 전용이면 자동 시작 안 함(외부 StartTutorialForLevel 대기).
+                if (configFromData.manualTriggerOnly) { Debug.Log("[TutorialDbg] manualTriggerOnly — 자동 시작 보류"); yield break; }
                 StartTutorial(configFromData.tutorialId);
                 yield break;
             }
@@ -1036,7 +1056,35 @@ namespace BalloonFlow
             Debug.Log($"[TutorialDbg] tutorialId={config.tutorialId} alreadyComplete={complete2}");
             if (complete2) yield break;
 
+            // ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622: 수동 트리거 전용이면 자동 시작 안 함.
+            if (config.manualTriggerOnly) { Debug.Log("[TutorialDbg] manualTriggerOnly — 자동 시작 보류"); yield break; }
+
             StartTutorial(config.tutorialId);
+        }
+
+        /// <summary>ROLLBACK_TUTORIAL_MANUAL_TRIGGER_20260622: 특정 레벨의 튜토리얼을 '명시적으로' 시작.
+        ///   manualTriggerOnly 여부와 무관하게 시작한다(예: 아이템 언락 Claim → 보상연출 종료 콜백에서 호출).
+        ///   우선순위는 자동 흐름과 동일(LevelData override → Catalog/하드코딩). 이미 완료/진행 중이면 무시.</summary>
+        /// <returns>실제로 시작했으면 true.</returns>
+        public bool StartTutorialForLevel(int levelId)
+        {
+            if (_isTutorialActive) return false;
+
+            TutorialConfig config = TryBuildFromLevelData(levelId);
+            if (config != null)
+            {
+                _configByLevel[config.levelId] = config;
+            }
+            else if (!_configByLevel.TryGetValue(levelId, out config))
+            {
+                Debug.Log($"[TutorialDbg] StartTutorialForLevel({levelId}) — config 없음");
+                return false;
+            }
+
+            if (IsTutorialComplete(config.tutorialId)) return false;
+
+            StartTutorial(config.tutorialId);
+            return true;
         }
 
         private void HandleHolderTapped(OnHolderTapped evt)

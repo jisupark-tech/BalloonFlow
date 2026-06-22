@@ -182,6 +182,11 @@ namespace BalloonFlow
         private DifficultyPurpose _currentDifficulty = DifficultyPurpose.Normal;
         private readonly HashSet<string> _pendingItemRewardFx = new HashSet<string>();
 
+        /// <summary>ROLLBACK_TUTORIAL_WAIT_UNLOCK_FX_20260622: 부스터 언락 보상 비행 연출(아이콘이 HUD 하단으로
+        ///   날아가 펄스) 진행 중 여부. true 동안 TutorialController 가 튜토리얼 시작을 보류해
+        ///   "아이템 HUD 추가 + 연출 종료 → 튜토리얼" 순서를 보장한다. 롤백: 이 속성 삭제 + 대기 루프 제거.</summary>
+        public bool IsBoosterRewardFxPlaying => _pendingItemRewardFx.Count > 0;
+
         #region Accessors
 
         public Button SettingsButton => _settingsButton;
@@ -990,6 +995,17 @@ namespace BalloonFlow
             }
 
             // 재고 없음 → 구매 팝업
+            if (ShouldIgnoreBoosterTapForClearImminent())
+            {
+                // ROLLBACK_CLEAR_IMMINENT_BOOSTER_NOOP_20260622:
+                // Once Almost There is active, booster use is wasteful because the board is already
+                // guaranteed to clear. Keep the button tap feedback, but do not open STEP 1,
+                // spend inventory, or emit item_use_event.
+                VibrationManager.Vibrate(10L, 150);
+                Debug.Log($"[UIHud] Booster tap ignored during clear-imminent state: {boosterType}");
+                return;
+            }
+
             if (BoosterManager.Instance.GetBoosterCount(boosterType) <= 0)
             {
                 if (!BoosterManager.Instance.IsUnlockRewardClaimed(boosterType))
@@ -1012,6 +1028,11 @@ namespace BalloonFlow
 
             // Hand/Remove → UseItem 팝업 (Dim + Cutout)
             ShowUseItemPopup(boosterType);
+        }
+
+        private static bool ShouldIgnoreBoosterTapForClearImminent()
+        {
+            return RailManager.HasInstance && RailManager.Instance.IsClearImminentForBoosterLock();
         }
 
         private void ShowUseItemPopup(string boosterType)
@@ -1083,8 +1104,10 @@ namespace BalloonFlow
                     {
                         Debug.LogWarning($"[UIHud] Booster buy blocked by coins: type={boosterType}, price={price}, coins={coins}, serverCoins={serverCoins}");
                         if (CurrencyManager.HasInstance) CurrencyManager.Instance.PublishCoinSync();
-                        var errCoins = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
-                        if (errCoins != null) errCoins.ShowPaymentFailed("Not enough coins.");
+                        // ROLLBACK_NOCOIN_POPUP_TO_GOLDSHOP_20260622:
+                        // Not enough coins must open the shop instead of PopupError("Not enough coins").
+                        popup.CloseUI();
+                        OpenGoldShopForInsufficientCoins();
                         return false;
                     }
 
@@ -1114,6 +1137,18 @@ namespace BalloonFlow
                 description: GetBoosterBuyDescription(boosterType));
         }
 
+        private void OpenGoldShopForInsufficientCoins()
+        {
+            if (HUDController.HasInstance && HUDController.Instance.GoldShopPopup != null)
+            {
+                HUDController.Instance.GoldShopPopup.OpenUI();
+                return;
+            }
+
+            if (UIManager.HasInstance)
+                UIManager.Instance.OpenUI<PopupGoldShop>("Popup/PopupGoldShop");
+        }
+
         private void ShowUnlockPopup(string boosterType)
         {
             if (!UIManager.HasInstance) return;
@@ -1138,7 +1173,15 @@ namespace BalloonFlow
                         RefreshBoosterCounts();
                         RefreshLockState();
                         ShowToast("Item claimed!");
-                        PlayBoosterRewardFly(boosterType, BoosterManager.UNLOCK_REWARD_COUNT, spr, RefreshBoosterCounts);
+                        // ROLLBACK_TUTORIAL_START_AFTER_UNLOCK_20260622: 아이콘이 HUD 하단으로 날아가는 보상연출이 끝난 "후"
+                        //   해당 레벨의 튜토리얼(Tutorial Editor 에서 Manual Trigger Only 로 작성)을 시작 — "Claim → 연출 → 튜토리얼" 흐름.
+                        //   레벨에 튜토리얼 없거나 이미 완료면 StartTutorialForLevel 이 no-op. 롤백: afterAction 을 RefreshBoosterCounts 로 환원.
+                        PlayBoosterRewardFly(boosterType, BoosterManager.UNLOCK_REWARD_COUNT, spr, () =>
+                        {
+                            RefreshBoosterCounts();
+                            if (TutorialController.HasInstance && LevelManager.HasInstance)
+                                TutorialController.Instance.StartTutorialForLevel(LevelManager.Instance.CurrentLevelId);
+                        });
                     }
                 },
                 description: GetBoosterBuyDescription(boosterType));
