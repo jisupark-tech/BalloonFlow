@@ -93,6 +93,12 @@ namespace BalloonFlow
         private Transform _dangerOverlayRoot;
         private SpriteRenderer[] _dangerRenderers;
         private bool _dangerVisible;
+        // ROLLBACK_DANGER_TILE_MATERIAL_20260622: 알람(danger) 레일 타일에 쓸 머터리얼.
+        //   Inspector(BoardTileManager 오브젝트)에서 Assets/3.Material/Trail.mat 를 할당.
+        //   Trail.mat 은 Resources 밖이라 코드 로드 불가 → SerializeField 참조가 정석.
+        //   미할당(null)이면 기존 런타임 Sprite-Unlit-Default(GetDangerTileMat) 로 폴백 → 무회귀.
+        [Header("[Danger(알람) 레일 머터리얼 — Trail.mat 할당]")]
+        [SerializeField] private Material _dangerTileMaterial;
         private float _dangerBlinkTimer;
         private const float DANGER_BLINK_SPEED = 3f; // 깜빡임 속도
         private const float DANGER_ALPHA_MIN = 0.15f;
@@ -575,7 +581,11 @@ namespace BalloonFlow
                 sr.sortingOrder = 0; // 기본 타일(-1)보다 위
                 // ROLLBACK_BOARDTILE_OPAQUE_20260617: danger 오버레이도 불투명 타일 머티리얼(기존엔 미할당 →
                 //   기본 2D/Sprite-Unlit-Default 반투명이라 fill 1위 그룹의 핵심이었음).
-                sr.sharedMaterial = GetTileMat();
+                // ROLLBACK_RAIL_DANGER_BLINK_ALPHA_20260622:
+                // Danger overlay must use a transparent sprite material so UpdateDangerBlink's
+                // alpha animation is visible. Base rail tiles keep the opaque material.
+                // ROLLBACK_DANGER_TILE_MATERIAL_20260622: Inspector 에 할당된 Trail.mat 우선 사용, 미할당 시 기존 폴백.
+                sr.sharedMaterial = _dangerTileMaterial != null ? _dangerTileMaterial : GetDangerTileMat();
 
                 if (dangerSprite != null)
                 {
@@ -619,7 +629,14 @@ namespace BalloonFlow
         /// <summary>위급 알람 표시/숨김.</summary>
         public void SetDangerVisible(bool visible)
         {
+            if (visible && (_dangerOverlayRoot == null || _dangerRenderers == null || _dangerRenderers.Length == 0))
+                BuildDangerOverlay();
+
+            bool wasVisible = _dangerVisible;
             _dangerVisible = visible;
+            if (visible && !wasVisible)
+                _dangerBlinkTimer = 0f;
+
             if (_dangerOverlayRoot != null)
                 _dangerOverlayRoot.gameObject.SetActive(visible);
         }
@@ -680,6 +697,7 @@ namespace BalloonFlow
         }
         // 보드 타일 공용 머티리얼 — 플래그에 따라 불투명/반투명.
         private static Material GetTileMat() => UseOpaqueBoardTiles ? GetOpaqueTileMat() : GetSpriteSRPBatcherMat();
+        private static Material GetDangerTileMat() => GetSpriteSRPBatcherMat();
         // ROLLBACK_BOARDTILE_OPAQUE_20260617: END
         // ROLLBACK_CAVE_RENDER_OVER_RAIL_20260608:
         // Rail sprites use a transparent sprite material, so queue 2001 can draw Cave before Rail.
