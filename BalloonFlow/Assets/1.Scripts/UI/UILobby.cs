@@ -218,6 +218,11 @@ namespace BalloonFlow
         // WinningIcon 하단(배수 x{n}). 전역 단일 탐색은 첫 쌍에 배수를 써버려 포인트 표기가 없었음.
         private TMP_Text _wsTxtPoints, _wsTxtPointsOutline;
         private string _wsLastMultiplierText;
+        // PlayWinningStreakLobbyFx 진행 중 텍스트/FXFire 발화 보류 플래그.
+        // true 인 동안 SetWinningIconMultiplierText 는 _wsTxtGauge/Outline 쓰기와
+        // PlayWsMultipleFxFire 호출을 둘 다 skip — Multiplier 슬라이드 인/SelectFrame/슬라이드 아웃
+        // 연출이 완전히 끝난 뒤 한 번에 toMult 로 갱신 + FXFire 1회 발화 (사용자 피드백 2026-06-22).
+        private bool _wsHoldMultiplierTextDuringAnim;
         private bool _wsTextsResolved;
         private Coroutine _wsLobbyFxCoroutine;
         private Sequence _wsLobbyFxSequence;
@@ -664,6 +669,7 @@ namespace BalloonFlow
         // 배수 텍스트 이전 값과 달라질 때마다 1회 발화.
         private void SetWinningIconMultiplierText(string mult)
         {
+            if (_wsHoldMultiplierTextDuringAnim) return; // Multiplier 연출 중에는 텍스트/FXFire 모두 보류
             ResolveWsTexts();
             bool changed = _wsLastMultiplierText != null && _wsLastMultiplierText != mult;
             if (_wsTxtGauge != null) _wsTxtGauge.text = mult;
@@ -739,6 +745,7 @@ namespace BalloonFlow
                 if (WinningStreakManager.HasInstance)
                     WinningStreakManager.Instance.ClaimAllAchievedStages();
                 _wsLobbyFxArmed = false;
+                _wsHoldMultiplierTextDuringAnim = false;
                 _wsLobbyFxCoroutine = null;
             }
         }
@@ -808,6 +815,16 @@ namespace BalloonFlow
         {
             if (anim == null) yield break;
 
+            // [WS 텍스트 보류 2026-06-22] Multiplier 연출이 완전 종료될 때까지 TextGauge/Outline 갱신과
+            // FXFire 발화를 모두 보류. fromMult 텍스트를 1회 직접 시드(가드 우회)해 기존 게이지 숫자 표시 유지.
+            int preFromMult = anim.startMultiplier > 0 ? anim.startMultiplier : WinningStreakUI.ResolveCurrentMultiplier();
+            string preFromText = $"x{preFromMult}";
+            ResolveWsTexts();
+            if (_wsTxtGauge != null) _wsTxtGauge.text = preFromText;
+            if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = preFromText;
+            _wsLastMultiplierText = preFromText;
+            _wsHoldMultiplierTextDuringAnim = true;
+
             ResolveWsFxRefs();
 
             // forceVisible(에디터 프리뷰): unlock 게이트 무시하고 WS UI 무조건 활성화.
@@ -823,14 +840,6 @@ namespace BalloonFlow
             int toMult   = anim.endMultiplier   > 0 ? anim.endMultiplier   : WinningStreakUI.ResolveCurrentMultiplier();
             if (_wsMultiplier != null)
                 WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, fromMult);
-
-            // ROLLBACK_WS_HOLD_OLD_MULT_TEXT_20260619:
-            // Multiplier(SlideIn → SelectFrame fromMult→toMult → SlideOut) 연출이 진행되는 동안
-            // WinningIcon 하단 TextGauge/Outline 은 기존 배수(fromMult)를 유지. 연출 완전 종료 후
-            // L901 RefreshWinningStreakDisplay() 가 toMult 로 갱신. 사용자 피드백 2026-06-19.
-            // RefreshWinningStreakVisibility(L788) 가 _wsTxtGauge 를 이미 새 값으로 써버렸으므로 명시 복구.
-            string fromMultText = $"x{fromMult}";
-            SetWinningIconMultiplierText(fromMultText);
 
             int stageForFill = Mathf.Max(1, anim.startStage);
             float startRatio = ResolveWsStageRatio(stageForFill, anim.startPoints);
@@ -937,6 +946,9 @@ namespace BalloonFlow
                 yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
             }
 
+            // Multiplier 슬라이드-아웃 완료. 이제 RefreshWinningStreakDisplay 가 toMult 텍스트를 1회 갱신하면서
+            // SetWinningIconMultiplierText 가 changed 판정으로 PlayWsMultipleFxFire 를 1회 호출. (사용자 피드백 2026-06-22)
+            _wsHoldMultiplierTextDuringAnim = false;
             RefreshWinningStreakDisplay();
         }
 
