@@ -208,6 +208,8 @@ namespace BalloonFlow
         [SerializeField] private RectTransform _wsFxFireTarget;
         [Tooltip("WinningStreak/MultiplierMaskArea/Multiplier RectTransform. 연출 중 X=10 으로 튕겨 들어오고 종료 시 X=-725 로 빠짐. 미할당 시 'MultiplierMaskArea'→'Multiplier' 탐색.")]
         [SerializeField] private RectTransform _wsMultiplier;
+        [Tooltip("WinningIcon > Multiple > FXFire — 배수(TextGauge/Outline) 수치 변경 시 1회 재생. Loop=off. 미할당 시 root 하위 WinningIcon→Multiple→FXFire/FxFire 명시 경로 탐색.")]
+        [SerializeField] private GameObject _wsMultipleFxFire;
         private float _wsTimerTick;
 
         // 이름 기반 텍스트 쌍 캐시 (outline + main).
@@ -215,6 +217,7 @@ namespace BalloonFlow
         // [WS 게이지 텍스트 2026-06-11] 프리팹엔 TextGauge/Outline 쌍이 둘 — Gauge 하단(포인트 {n}/{n})과
         // WinningIcon 하단(배수 x{n}). 전역 단일 탐색은 첫 쌍에 배수를 써버려 포인트 표기가 없었음.
         private TMP_Text _wsTxtPoints, _wsTxtPointsOutline;
+        private string _wsLastMultiplierText;
         private bool _wsTextsResolved;
         private Coroutine _wsLobbyFxCoroutine;
         private Sequence _wsLobbyFxSequence;
@@ -652,11 +655,35 @@ namespace BalloonFlow
             ResolveWsTexts();
             int curMultiplier = WinningStreakUI.ResolveCurrentMultiplier();
             string mult = $"x{curMultiplier}";
-            if (_wsTxtGauge != null) _wsTxtGauge.text = mult;
-            if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = mult;
+            SetWinningIconMultiplierText(mult);
             ResolveWsFxRefs();
             if (_wsMultiplier != null)
                 WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, curMultiplier);
+        }
+
+        // 배수 텍스트 이전 값과 달라질 때마다 1회 발화.
+        private void SetWinningIconMultiplierText(string mult)
+        {
+            ResolveWsTexts();
+            bool changed = _wsLastMultiplierText != null && _wsLastMultiplierText != mult;
+            if (_wsTxtGauge != null) _wsTxtGauge.text = mult;
+            if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = mult;
+            _wsLastMultiplierText = mult;
+            if (changed) PlayWsMultipleFxFire();
+        }
+
+        private void PlayWsMultipleFxFire()
+        {
+            ResolveWsFxRefs();
+            if (_wsMultipleFxFire == null) return;
+            _wsMultipleFxFire.SetActive(true);
+            var systems = _wsMultipleFxFire.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < systems.Length; i++)
+            {
+                if (systems[i] == null) continue;
+                systems[i].Clear(true);
+                systems[i].Play(true);
+            }
         }
 
         /// <summary>Gauge 하단 TextGauge/Outline 에 "{현재 포인트}/{필요 포인트}" 기록. stage 미준비 시 빈 문자열.</summary>
@@ -802,10 +829,8 @@ namespace BalloonFlow
             // WinningIcon 하단 TextGauge/Outline 은 기존 배수(fromMult)를 유지. 연출 완전 종료 후
             // L901 RefreshWinningStreakDisplay() 가 toMult 로 갱신. 사용자 피드백 2026-06-19.
             // RefreshWinningStreakVisibility(L788) 가 _wsTxtGauge 를 이미 새 값으로 써버렸으므로 명시 복구.
-            ResolveWsTexts();
             string fromMultText = $"x{fromMult}";
-            if (_wsTxtGauge != null) _wsTxtGauge.text = fromMultText;
-            if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = fromMultText;
+            SetWinningIconMultiplierText(fromMultText);
 
             int stageForFill = Mathf.Max(1, anim.startStage);
             float startRatio = ResolveWsStageRatio(stageForFill, anim.startPoints);
@@ -1267,6 +1292,7 @@ namespace BalloonFlow
         {
             ResolveWsFxRefs();
             SetWinningStreakFxActive(false);
+            if (_wsMultipleFxFire != null) _wsMultipleFxFire.SetActive(false);
         }
 
         private void SetWinningStreakFxActive(bool active)
@@ -1311,6 +1337,7 @@ namespace BalloonFlow
             if (_wsFxLight != null && !_wsFxLight.scene.IsValid()) _wsFxLight = null;
             if (_wsFxReward != null && !_wsFxReward.scene.IsValid()) _wsFxReward = null;
             if (_wsFxFireTarget != null && !_wsFxFireTarget.gameObject.scene.IsValid()) _wsFxFireTarget = null;
+            if (_wsMultipleFxFire != null && !_wsMultipleFxFire.scene.IsValid()) _wsMultipleFxFire = null;
 
             if (_wsFxFire == null)
                 _wsFxFire = FindChildComponentByName<Transform>(root, "FxFire")?.gameObject
@@ -1329,6 +1356,17 @@ namespace BalloonFlow
             {
                 var maskArea = FindChildComponentByName<Transform>(root, "MultiplierMaskArea");
                 _wsMultiplier = FindChildComponentByName<RectTransform>(maskArea != null ? maskArea : root, "Multiplier");
+            }
+            if (_wsMultipleFxFire == null)
+            {
+                var winningIcon = FindChildComponentByName<Transform>(root, "WinningIcon");
+                var multiple = winningIcon != null ? FindChildComponentByName<Transform>(winningIcon, "Multiple") : null;
+                if (multiple != null)
+                {
+                    var fxFire = FindChildComponentByName<Transform>(multiple, "FXFire")
+                              ?? FindChildComponentByName<Transform>(multiple, "FxFire");
+                    if (fxFire != null) _wsMultipleFxFire = fxFire.gameObject;
+                }
             }
         }
 
