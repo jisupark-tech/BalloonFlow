@@ -92,6 +92,7 @@ spawner.magazinetext,0,
 tutorial.instructiontext,Tutorial instruction text,
 tutorial.text,SKIP,
 tutorial.texttap,Tap to anywhere,
+tutorial.textitem,Tap your item!,
 ingame_almost_there,Almost There!,
 txttoast.txttoast,"Your lives are unlimited!
 ",
