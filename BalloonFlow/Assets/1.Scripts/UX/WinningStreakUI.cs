@@ -165,20 +165,21 @@ namespace BalloonFlow
             ApplyPositions(multiplierRoot, toMultiplier, LobbySelectFrameX, LobbyTextYellowX, duration);
         }
 
-        /// <summary>[WS Multiplier 감소 연출 속도 보정 v4 — 2026-06-22 3rd-pass] 거리 비례 duration 유지, 상수만 재튜닝: speed 1000→1500 px/s, floor 0.35→0.10s.
-        /// 본 변경은 직전 v3(2026-06-22 2nd-pass: floor=0.35, speed=1000 → x100→x1=0.73s/x100→x25=0.35s)를 **supersede** — v3 는 짧은 거리도 floor 0.35s 로 강제하고 긴 거리는 0.73s 로 user 체감 대비 과도하게 느렸음.
-        /// owner 출처: 본 ProjectHub 태스크 [사용자 추가 지시] 2026-06-22 3rd-pass — "x5→x1 ≈ 0.10s, x100→x1 ≈ 0.50s 가 적정. v3 는 전체적으로 길다".
-        /// 산식: speed=1500px/s, floor=0.10s → duration = max(0.10, distance / 1500). 산식 형태(Mathf.Max(floor, distance/speed))는 v3 와 동일, 상수만 변경.
-        /// 검산표(LobbySelectFrameX 기준): x100→x1(728px)=0.49s / x5→x1(188px)=0.13s / x100→x25(180px)=0.12s — user 예시(x5→x1≈0.1s, x100→x1≈0.5s)와 매핑.
-        /// 상승/동일(toIdx&gt;=fromIdx) 경로는 기존 0.18s(MULTIPLIER_SELECT_MOVE_DURATION) 유지 — 사용자 의도(v2~v4 모두 동일).
-        /// 롤백: v3 상수(REDUCE_SPEED_PX_PER_SEC=1000f, MIN_REDUCE_DURATION=0.35f)로 복원.</summary>
+        /// <summary>[WS Multiplier 감소 연출 속도 보정 v5 — 2026-06-22 4th-pass] 거리 비례 duration 유지, speed 만 절반 감속: 1500→750 px/s. floor(0.10s)·산식·상승 분기는 v4 그대로.
+        /// 본 변경은 직전 v4(PR #366 머지: speed=1500, floor=0.10 → x100→x1=0.49s)를 **supersede** — v4 머지 후 사용자가 'x100→x1 현재 너무 빠름, 정확히 2배 느리게' 추가 피드백.
+        /// owner 출처: 본 ProjectHub 태스크 [사용자 추가 지시] 2026-06-22 4th-pass — "x100→x1 v4(0.49s)는 너무 빠름, 2배 느리게(≈0.98s) 요청".
+        /// 산식: speed=750px/s, floor=0.10s → duration = max(0.10, distance / 750). 산식 형태(Mathf.Max(floor, distance/speed))는 v4 와 동일, SPEED 상수만 절반.
+        /// 검산표(LobbySelectFrameX 기준): x100→x1(728px)=0.97s / x5→x1(188px)=0.25s / x100→x25(180px)=0.24s / x10→x5(180px)=0.24s — v4(0.49s) × 2 = 0.97s ≈ 사용자 요청 충족.
+        /// floor 0.10s 는 distance ≥ 75px (즉 LobbySelectFrameX 표상 모든 인접 단계 ≥ 180px) 에서 자연 무효화 — 짧은 거리도 0.20s 로 강제되지 않도록 floor 는 의도적으로 유지.
+        /// 상승/동일(toIdx&gt;=fromIdx) 경로는 기존 0.18s(MULTIPLIER_SELECT_MOVE_DURATION) 유지 — 사용자 의도(v2~v5 모두 동일).
+        /// 롤백: v4 상수(REDUCE_SPEED_PX_PER_SEC=1500f, MIN_REDUCE_DURATION=0.10f)로 복원.</summary>
         public static float ResolveLobbyMultiplierMoveDuration(int fromMultiplier, int toMultiplier)
         {
             int fromIdx = IndexForMultiplier(fromMultiplier);
             int toIdx   = IndexForMultiplier(toMultiplier);
             if (toIdx >= fromIdx) return MULTIPLIER_SELECT_MOVE_DURATION; // 상승/동일: 기존 유지
             float distance = Mathf.Abs(LobbySelectFrameX[toIdx] - LobbySelectFrameX[fromIdx]);
-            const float REDUCE_SPEED_PX_PER_SEC = 1500f;
+            const float REDUCE_SPEED_PX_PER_SEC = 750f;
             const float MIN_REDUCE_DURATION = 0.10f;
             return Mathf.Max(MIN_REDUCE_DURATION, distance / REDUCE_SPEED_PX_PER_SEC);
         }
