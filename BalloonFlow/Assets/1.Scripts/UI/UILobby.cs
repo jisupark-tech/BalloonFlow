@@ -46,6 +46,8 @@ namespace BalloonFlow
         private const float WS_MULTIPLIER_HIDDEN_X = -725f;
         private const float WS_MULTIPLIER_SLIDE_IN_DURATION = 0.4f;
         private const float WS_MULTIPLIER_SLIDE_OUT_DURATION = 0.35f;
+        // 왜 0.5초인가: 텍스트 갱신+FXFire+Scale punch(0.20s)가 끝난 직후 즉시 slide-out이 시작되면 플레이어가 새 배수를 인지하지 못함. owner 추가 피드백(2026-06-22, task 6a34e951 후속 코멘트) 반영.
+        private const float WS_HOLD_AFTER_TEXT_FIRE_DURATION = 0.5f;
 
         // Rail 슬라이드 인 연출 파라미터.
         // Top/Bottom Rail 모두 화면 위쪽 +120 에서 시작해 OutCubic 으로 제자리(0) 로 내려오는
@@ -986,10 +988,14 @@ namespace BalloonFlow
                 // SelectFrame fromMult→toMult 이동(0.18s) 완료 대기 — SlideOut 이 증가 연출을 덮지 않도록. ROLLBACK_WS_MULTIPLIER_SELECT_WAIT_20260619
                 yield return new WaitForSecondsRealtime(WinningStreakUI.MULTIPLIER_SELECT_MOVE_DURATION);
 
-                // WHY: 기획 시퀀스(2026-06-22) — TextGauge/Outline 갱신 + FXFire는 Multiplier 슬라이드-아웃 직전에 발생해야 한다. SelectFrame 이동(0.18s) 완료 직후 hold 해제 → 텍스트/FX 1회 발사 → 그 뒤에 multiplier 슬라이드 아웃.
+                // WHY: 기획 시퀀스(2026-06-22) — SelectFrame move(0.18s) → hold release → TextGauge/FXFire/Scale punch(0.20s) → 0.5s 노출 유지(WS_HOLD_AFTER_TEXT_FIRE_DURATION) → multiplier slide-out.
                 // SUPERSEDES 동일 일자(2026-06-22) 직전 결정 — 그 결정은 "PlayWsMultiplierSlide(HIDDEN_X) 완료 후 hold 해제 + FXFire" 였음. 본 변경의 owner 확인 출처: 본 ProjectHub 태스크의 [사용자 추가 지시] 블록 (2026-06-22) via Hermes task id 6a34e951. 핵심 조건(기획 명시): Multiplier가 먼저 사라지면 안 됨, TextGauge 숫자 갱신 후 Multiplier 슬라이드 아웃, 숫자 갱신과 동시에 FXFire 노출 — 상승/하락 모두 동일.
+                // SUPERSEDES [2026-06-22 직전 결정: 텍스트 갱신 직후 즉시 slide-out] — owner 추가 피드백: 플레이어가 새 배수 인지 못함, 0.5초 hold 추가.
                 _wsHoldMultiplierTextDuringAnim = false;
                 RefreshWinningStreakDisplay();
+
+                // 텍스트 갱신+FXFire+Scale punch 끝난 뒤 0.5초 노출 유지 → slide-out (인지 시간 확보, owner 2026-06-22 추가 피드백).
+                yield return new WaitForSecondsRealtime(WS_HOLD_AFTER_TEXT_FIRE_DURATION);
 
                 // 나머지 연출이 끝나면 Multiplier 를 X=-725 로 슬라이드 아웃.
                 yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
