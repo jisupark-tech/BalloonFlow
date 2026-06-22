@@ -193,6 +193,17 @@ namespace BalloonFlow
         // IsWinningStreakFxPlaying true and block the Play button even on the unlock-only entry.
         public bool HasPendingLobbyFx => _pendingLobbyAnimations.Count > 0 || _pendingFailFxMultiplier > 1;
 
+        public int PendingLobbyLevelClearCoins
+        {
+            get
+            {
+                int total = 0;
+                foreach (var anim in _pendingLobbyAnimations)
+                    if (anim != null) total += Mathf.Max(0, anim.levelClearCoins);
+                return total;
+            }
+        }
+
         /// <summary>현재 회차 종료 UTC 시각(타이머용).</summary>
         public System.DateTime RoundEndUtc => WinningStreakSchedule.GetCurrentRoundEndUtc();
 
@@ -301,7 +312,13 @@ namespace BalloonFlow
                     endMultiplier = ResolveMultiplierForStreak(s.currentStreak),
                     startStreak = startStreak,
                     endStreak = s.currentStreak,
-                    clearedDifficulty = difficulty
+                    clearedDifficulty = difficulty,
+                    // ROLLBACK_WS_LOBBY_LEVEL_CLEAR_GOLD_FX_20260621:
+                    // CurrencyManager already grants clear coins on OnLevelCompleted.
+                    // Carry only the visual amount so UILobby can replay the gold fly after WS FX.
+                    levelClearCoins = CurrencyManager.HasInstance
+                        ? CurrencyManager.Instance.GetCoinRewardForDifficulty(difficulty)
+                        : 0
                 });
             }
 
@@ -624,6 +641,7 @@ namespace BalloonFlow
             public int startStreak;
             public int endStreak;
             public DifficultyPurpose clearedDifficulty;
+            public int levelClearCoins;
         }
 
         /// <summary>streak 값의 배수 해석 — config 우선, 미준비 시 UI fallback 티어 (1/5/10/25/100).</summary>

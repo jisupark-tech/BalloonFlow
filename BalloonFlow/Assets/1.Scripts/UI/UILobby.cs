@@ -33,6 +33,7 @@ namespace BalloonFlow
         private const float ICON_Y_OFFSET = 25f; // 활성 +25, 비활성 -25
         private const float ICON_SCALE_DURATION = 0.2f;
         private const float WS_FIRE_FLY_DURATION = 0.55f;
+        private const float WS_FIRE_GAIN_OUTLINE_WIDTH = 0.08f;
         // FXItem_WinningStreak_Fly 비행 동안 동일 duration 으로 4.0 → 2.0 축소.
         // 이동 트윈과 Sequence.Join 으로 결합 — 시작/종료 시점 정확히 일치.
         private const float WS_FIRE_FLY_SCALE_START = 4.0f;
@@ -41,6 +42,7 @@ namespace BalloonFlow
         private const float WS_SLIDER_FILL_DURATION = 0.45f;
         private const float WS_REWARD_RISE_DURATION = 0.55f;
         private const float WS_REWARD_RISE_Y = 130f;
+        private const int WS_LEVEL_CLEAR_GOLD_FLY_COUNT = 10;
         // MultiplierMaskArea/Multiplier 슬라이드 — 연출 중 X=10 으로 튕겨 들어오고, 연출 종료 시 X=-725 로 빠짐.
         private const float WS_MULTIPLIER_SHOWN_X = 10f;
         private const float WS_MULTIPLIER_HIDDEN_X = -725f;
@@ -154,6 +156,7 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtPlayLevelOutline;
         private int _currentPlayLevelId;
         private DifficultyPurpose _currentPlayDifficulty = DifficultyPurpose.Normal;
+        private Material _wsFireGainTextMaterial;
         [SerializeField] private Sprite _sprBtnGreen;
         [SerializeField] private Sprite _sprBtnPurple;
         [SerializeField] private Sprite _sprBtnRed;
@@ -767,7 +770,11 @@ namespace BalloonFlow
                     // [WS 0단계 2026-06-12] 로비 연출 앞에 Dim 보상 팝업(연승 수치 상승) 먼저 재생 — 승리 복귀에서만.
                     yield return PlayWinningStreakRewardPopup(anim);
                     yield return PlayWinningStreakLobbyFx(anim);
+                    yield return PlayWinningStreakLevelClearGoldFx(anim);
                 }
+
+                if (CurrencyManager.HasInstance)
+                    SetGoldText(CurrencyManager.Instance.Coins);
 
                 // [WS quit-fail 2026-06-10] 실패(중도 이탈 포함)로 streak 이 리셋됐으면 배수 드롭 연출 1회 재생.
                 if (mgr.TryConsumePendingFailFx(out int failFromMultiplier))
@@ -909,7 +916,10 @@ namespace BalloonFlow
             // [2026-06-12] "+{n}" flame 라벨 폐기 (사용자 지시: FxItem 에 Text 안 씀) —
             // 획득 포인트는 0단계 PopupWinningStreakReward 의 수 연산 카운터가 보여줌.
             // 롤백: 인자에 anim.gainedPoints 복원.
-            yield return PlayWsFireFlyAndPulse();
+            // ROLLBACK_WS_LOBBY_GAIN_LABEL_20260621:
+            // x1 / +1 clears skip the Dim multiplier popup, but still need to show the
+            // actual gained point on the lobby WinningStreak fly effect.
+            yield return PlayWsFireFlyAndPulse(anim.gainedPoints);
 
             if (_wsProgressSlider != null)
             {
@@ -1014,6 +1024,47 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>Winning Streak lobby FX 이후, 이미 지급된 클리어 골드를 로비 GoldPanel로 날려 보이는 전용 연출.</summary>
+        private IEnumerator PlayWinningStreakLevelClearGoldFx(WinningStreakManager.PendingLobbyAnimation anim)
+        {
+            // ROLLBACK_WS_LOBBY_LEVEL_CLEAR_GOLD_FX_20260621:
+            // CurrencyManager already grants level-clear coins in-game. Winning Streak clears
+            // replay only the visual GoldPanel fly here after the WS lobby sequence.
+            int coinsAdded = anim != null ? Mathf.Max(0, anim.levelClearCoins) : 0;
+            if (coinsAdded <= 0 || !CurrencyManager.HasInstance) yield break;
+
+            int finalCoins = CurrencyManager.Instance.Coins;
+            int startCoins = Mathf.Min(_displayedCoins, Mathf.Max(0, finalCoins - coinsAdded));
+            int targetCoins = Mathf.Min(finalCoins, startCoins + coinsAdded);
+            SetGoldText(startCoins);
+
+            Vector2 from = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+            Vector2 to = GetGoldPanelScreenPos();
+            int count = Mathf.Max(1, WS_LEVEL_CLEAR_GOLD_FLY_COUNT);
+            int perCoinDelta = Mathf.Max(1, coinsAdded / count);
+            int remainder = coinsAdded - perCoinDelta * count;
+            int landed = 0;
+            bool complete = false;
+
+            CoinFlyEffect.Play(from, to, count,
+                onEachLand: () =>
+                {
+                    int delta = perCoinDelta + (landed == count - 1 ? remainder : 0);
+                    landed++;
+                    SetGoldText(Mathf.Min(targetCoins, _displayedCoins + delta));
+                    PulseGoldPanel();
+                    EventBus.Publish(new OnCoinFlyLanded());
+                },
+                onAllComplete: () =>
+                {
+                    SetGoldText(targetCoins);
+                    complete = true;
+                });
+
+            while (!complete)
+                yield return null;
+        }
+
         /// <summary>[배치7-2] 클리어 후 획득 Flame 을 "+{n}" 토스트로 표시.
         /// ROLLBACK_WINNING_STREAK_FLAME_GAIN_TOAST_20260607: 되돌리려면 호출부(PlayWinningStreakLobbyFx)의
         /// ShowWsFlameGainToast(...) 한 줄과 이 메서드를 삭제. (토스트 위치=화면 중앙, 디자인 확정 시 조정)</summary>
@@ -1094,6 +1145,7 @@ namespace BalloonFlow
                         label.font = _wsTxtGauge.font;
                         label.fontSharedMaterial = _wsTxtGauge.fontSharedMaterial;
                     }
+                    ApplyWsFireGainTextStyle(label);
                     var lrt = (RectTransform)labelGo.transform;
                     lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 0.5f);
                     lrt.pivot = new Vector2(0.5f, 0.5f);
@@ -1154,6 +1206,32 @@ namespace BalloonFlow
         /// <summary>보상 수령 연출 — RewardItem 위치에서 WinningStreakGetReward 프리팹을 스폰해 위로 상승시킨다.
         /// (이전: FXReward 빛 상승. 변경: 빛 대신 WinningStreakGetReward 가 RewardItem 에서 나와 올라감.)
         /// 상승+페이드는 프리팹 자체 Animator 가 처리하므로 여기선 스폰 후 재생 시간만 대기.</summary>
+        private void ApplyWsFireGainTextStyle(TextMeshProUGUI label)
+        {
+            if (label == null) return;
+
+            // ROLLBACK_WS_FIRE_GAIN_THIN_OUTLINE_20260622:
+            // TxtGain is a single TMP text created under FXItem_WinningStreak_Fly. It used to
+            // inherit the thick gauge outline material, making the flying "+N" look too heavy.
+            // Keep the same font/color family, but use a cached cloned material with a thinner outline.
+            Material source = label.fontSharedMaterial;
+            if (_wsFireGainTextMaterial == null && source != null)
+            {
+                _wsFireGainTextMaterial = new Material(source)
+                {
+                    name = $"{source.name}_WSFireGainThinOutline"
+                };
+                if (_wsFireGainTextMaterial.HasProperty(ShaderUtilities.ID_OutlineWidth))
+                    _wsFireGainTextMaterial.SetFloat(ShaderUtilities.ID_OutlineWidth, WS_FIRE_GAIN_OUTLINE_WIDTH);
+            }
+
+            if (_wsFireGainTextMaterial != null)
+            {
+                label.fontSharedMaterial = _wsFireGainTextMaterial;
+                label.UpdateMeshPadding();
+            }
+        }
+
         private IEnumerator PlayWsGetRewardSpawn(WinningStreakStage stage)
         {
             ResolveWsFxRefs();
@@ -2105,6 +2183,11 @@ namespace BalloonFlow
             _wsLobbyFxArmed = false;
             _wsLobbyFxSequence?.Kill();
             _wsLobbyFxSequence = null;
+            if (_wsFireGainTextMaterial != null)
+            {
+                Destroy(_wsFireGainTextMaterial);
+                _wsFireGainTextMaterial = null;
+            }
             _wsMultiplierTextPunchSeq?.Kill();
             _wsMultiplierTextPunchSeq = null;
         }
