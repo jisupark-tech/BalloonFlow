@@ -220,8 +220,10 @@ namespace BalloonFlow
         private string _wsLastMultiplierText;
         // PlayWinningStreakLobbyFx 진행 중 텍스트/FXFire 발화 보류 플래그.
         // true 인 동안 SetWinningIconMultiplierText 는 _wsTxtGauge/Outline 쓰기와
-        // PlayWsMultipleFxFire 호출을 둘 다 skip — Multiplier 슬라이드 인/SelectFrame/슬라이드 아웃
-        // 연출이 완전히 끝난 뒤 한 번에 toMult 로 갱신 + FXFire 1회 발화 (사용자 피드백 2026-06-22).
+        // PlayWsMultipleFxFire 호출을 둘 다 skip — 릴리즈 시점은 SelectFrame 이동(0.18s) 완료 직후
+        // → 텍스트/FX 1회 발사 → 이후 Multiplier 슬라이드 아웃. (기획 시퀀스: gauge → multiplier in
+        // → SelectFrame move → TextGauge/FXFire → multiplier out.)
+        // SUPERSEDES [2026-06-22 직전 결정: 슬라이드-아웃 완전 종료 후 FX] — 본 태스크 사용자 추가 지시 (2026-06-22, hermes task 6a34e951)로 변경.
         private bool _wsHoldMultiplierTextDuringAnim;
         private bool _wsTextsResolved;
         private Coroutine _wsLobbyFxCoroutine;
@@ -856,8 +858,9 @@ namespace BalloonFlow
         {
             if (anim == null) yield break;
 
-            // [WS 텍스트 보류 2026-06-22] Multiplier 연출이 완전 종료될 때까지 TextGauge/Outline 갱신과
-            // FXFire 발화를 모두 보류. fromMult 텍스트를 1회 직접 시드(가드 우회)해 기존 게이지 숫자 표시 유지.
+            // [WS 텍스트 보류 2026-06-22] SelectFrame 이동 완료 시점까지 TextGauge/Outline 갱신과 FXFire 발화를 보류
+            // — fromMult 텍스트를 1회 직접 시드(가드 우회)해 기존 게이지 숫자 표시 유지.
+            // SUPERSEDES 직전 2026-06-22 결정(슬라이드-아웃 후 FX) — 본 태스크 사용자 추가 지시로 변경 (hermes task 6a34e951, 2026-06-22).
             int preFromMult = anim.startMultiplier > 0 ? anim.startMultiplier : WinningStreakUI.ResolveCurrentMultiplier();
             string preFromText = $"x{preFromMult}";
             ResolveWsTexts();
@@ -984,6 +987,7 @@ namespace BalloonFlow
                 yield return new WaitForSecondsRealtime(WinningStreakUI.MULTIPLIER_SELECT_MOVE_DURATION);
 
                 // WHY: 기획 시퀀스(2026-06-22) — TextGauge/Outline 갱신 + FXFire는 Multiplier 슬라이드-아웃 직전에 발생해야 한다. SelectFrame 이동(0.18s) 완료 직후 hold 해제 → 텍스트/FX 1회 발사 → 그 뒤에 multiplier 슬라이드 아웃.
+                // SUPERSEDES 동일 일자(2026-06-22) 직전 결정 — 그 결정은 "PlayWsMultiplierSlide(HIDDEN_X) 완료 후 hold 해제 + FXFire" 였음. 본 변경의 owner 확인 출처: 본 ProjectHub 태스크의 [사용자 추가 지시] 블록 (2026-06-22) via Hermes task id 6a34e951. 핵심 조건(기획 명시): Multiplier가 먼저 사라지면 안 됨, TextGauge 숫자 갱신 후 Multiplier 슬라이드 아웃, 숫자 갱신과 동시에 FXFire 노출 — 상승/하락 모두 동일.
                 _wsHoldMultiplierTextDuringAnim = false;
                 RefreshWinningStreakDisplay();
 
