@@ -268,6 +268,13 @@ namespace BalloonFlow
             int startMultiplier = ResolveMultiplierForStreak(s.currentStreak);
             int startStreak = s.currentStreak;
             s.currentStreak += 1;
+            // [WS x1→x5 점프 규칙 2026-06-22]
+            // 현재 배수(startMultiplier)가 x1 인 상태에서 클리어로 보상을 획득하면,
+            // 다음 배수를 무조건 x5(=streak 2 tier)로 끌어올린다.
+            // 예시 시나리오: x100 → 실패로 x1 하락 → 클리어 → 게이지 상승 → x5 로 숫자 갱신.
+            // 적용 범위: 이 한 줄만으로 충분 — 후속 streakMult 계산(line 273) / endMultiplier 캡처(line 294) / gained 계산(line 275) 이 모두 새 currentStreak 을 따른다.
+            if (startMultiplier == 1)
+                s.currentStreak = Mathf.Max(s.currentStreak, 2);
 
             var svc = WinningStreakConfigService.HasInstance ? WinningStreakConfigService.Instance : null;
             int streakMult = svc != null ? svc.ResolveStreakMultiplier(s.currentStreak) : WinningStreakUI.TierFromStreak(s.currentStreak);
