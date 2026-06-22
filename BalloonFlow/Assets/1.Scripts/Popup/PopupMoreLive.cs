@@ -31,6 +31,9 @@ namespace BalloonFlow
         private bool _sawNonFullWhileOpen;
         [SerializeField] private Image _imgClock;
         [SerializeField] private Image _imgClockHand;
+        private Transform _topBarGoldPanel;
+        private const int OVERLAY_SORT_ORDER = 260;
+        private Canvas _overrideCanvas;
 
         [Header("[Description]")]
         [SerializeField] private TMP_Text _txtDescription;
@@ -51,6 +54,7 @@ namespace BalloonFlow
         protected override void Awake()
         {
             base.Awake();
+            EnsureOverlaySorting();
             // 버튼 연결은 Awake에서 (CloseUI 후에도 listener 유지)
             if (_frame != null)
             {
@@ -77,15 +81,52 @@ namespace BalloonFlow
         {
             Transform topBar = FindChildRecursive(transform, "TopBarArea");
             Transform gold = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
+            _topBarGoldPanel = gold;
             if (gold != null) GoldPanelFxFireUtil.DisableUnderGoldPanel(gold);
-            Transform txt = gold != null ? FindChildRecursive(gold, "TxtGold") : null;
-            if (txt != null && txt.GetComponent<AnimatedCoinLabel>() == null)
-                txt.gameObject.AddComponent<AnimatedCoinLabel>();
+
+            // ROLLBACK_MORELIVE_HIDE_LEFT_COIN_BAR_20260622:
+            // More Lives should not show the left/top balance coin bar. Keep the refill cost
+            // label inside the popup buttons, but hide TopBarArea/GoldPanel.
+            SetTopBarGoldPanelVisible(false);
         }
 
         private void OnEnable()
         {
+            EnsureOverlaySorting();
             GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
+            SetTopBarGoldPanelVisible(false);
+        }
+
+        private void EnsureOverlaySorting()
+        {
+            // ROLLBACK_MORELIVE_MODAL_SORTING_20260622:
+            // PopupFail02 keeps reward child canvases at 244~248 while it remains behind
+            // More Lives. Render More Lives above those children without changing retry flow.
+            Canvas parentCanvas = transform.parent != null ? transform.parent.GetComponentInParent<Canvas>() : null;
+            if (_overrideCanvas == null)
+                _overrideCanvas = GetComponent<Canvas>();
+            if (_overrideCanvas == null)
+                _overrideCanvas = gameObject.AddComponent<Canvas>();
+
+            _overrideCanvas.overrideSorting = true;
+            if (parentCanvas != null)
+                _overrideCanvas.sortingLayerName = parentCanvas.sortingLayerName;
+            _overrideCanvas.sortingOrder = OVERLAY_SORT_ORDER;
+
+            if (GetComponent<GraphicRaycaster>() == null)
+                gameObject.AddComponent<GraphicRaycaster>();
+        }
+
+        private void SetTopBarGoldPanelVisible(bool visible)
+        {
+            if (_topBarGoldPanel == null)
+            {
+                Transform topBar = FindChildRecursive(transform, "TopBarArea");
+                _topBarGoldPanel = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
+            }
+
+            if (_topBarGoldPanel != null && _topBarGoldPanel.gameObject.activeSelf != visible)
+                _topBarGoldPanel.gameObject.SetActive(visible);
         }
 
         private static Transform FindChildRecursive(Transform parent, string childName)
@@ -102,6 +143,7 @@ namespace BalloonFlow
 
         public override void OpenUI()
         {
+            EnsureOverlaySorting();
             if (_frame != null)
             {
                 _frame.SetTitle("More Lives");
@@ -112,6 +154,7 @@ namespace BalloonFlow
             }
 
             _sawNonFullWhileOpen = false; // ROLLBACK_MORELIVE_CLOSE_ON_REFILL_COMPLETE_20260619: 오픈마다 전환 감지 리셋
+            SetTopBarGoldPanelVisible(false);
             RefreshDisplay();
             base.OpenUI();
         }
@@ -209,11 +252,9 @@ namespace BalloonFlow
             if (!CurrencyManager.HasInstance || !CurrencyManager.Instance.HasEnoughCoins(cost))
             {
                 Debug.LogWarning($"[PopupMoreLive] Coin refill blocked by coins. have={coins}, need={cost}");
-                if (UIManager.HasInstance)
-                {
-                    var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
-                    if (err != null) err.ShowPaymentFailed("Not enough coins.");
-                }
+                // ROLLBACK_NOCOIN_POPUP_TO_GOLDSHOP_20260622:
+                // Not enough coins must open the shop instead of PopupError("Not enough coins").
+                OpenGoldShopForInsufficientCoins();
                 Debug.Log("[PopupMoreLive] 골드 부족 — GreenBtn 무동작");
                 return;
             }
@@ -227,13 +268,44 @@ namespace BalloonFlow
             else
             {
                 Debug.LogWarning($"[PopupMoreLive] Coin refill failed after precheck. have={(CurrencyManager.HasInstance ? CurrencyManager.Instance.Coins : -1)}, need={cost}");
-                if (UIManager.HasInstance)
+                bool stillNotEnough = !CurrencyManager.HasInstance || !CurrencyManager.Instance.HasEnoughCoins(cost);
+                if (stillNotEnough)
+                {
+                    OpenGoldShopForInsufficientCoins();
+                }
+                else if (UIManager.HasInstance)
                 {
                     var err = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
                     if (err != null) err.Show("Purchase Failed", "Purchase could not be completed. Please try again.");
                 }
                 Debug.Log("[PopupMoreLive] 골드 부족");
             }
+        }
+
+        private void OpenGoldShopForInsufficientCoins()
+        {
+            CloseUI();
+
+            // 인게임: HUD 의 PopupGoldShop (현 구조 유지 — 인게임 골드부족은 팝업).
+            if (HUDController.HasInstance && HUDController.Instance.GoldShopPopup != null)
+            {
+                HUDController.Instance.GoldShopPopup.OpenUI();
+                return;
+            }
+
+            // ROLLBACK_LOBBY_NOCOIN_TO_SHOPPAGE_20260622: 로비 골드부족은 PopupGoldShop 이 아니라
+            //   UILobby 상점 페이지(page 0)로 이동해야 한다(구조 규칙: 로비=상점 페이지, 인게임=PopupGoldShop).
+            //   롤백: 아래 UILobby 분기 제거하고 PopupGoldShop 오픈만 남김.
+            UILobby lobby = FindUILobby();
+            if (lobby != null)
+            {
+                lobby.GoToPage(0);
+                return;
+            }
+
+            // 폴백: UILobby 도 못 찾는 예외 케이스에만 PopupGoldShop.
+            if (UIManager.HasInstance)
+                UIManager.Instance.OpenUI<PopupGoldShop>("Popup/PopupGoldShop");
         }
 
         private void OnAdRewardClicked()

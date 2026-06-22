@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -82,6 +83,16 @@ namespace BalloonFlow
 
         [Header("[코인 연출 — Gold HUD 위치]")]
         [SerializeField] private RectTransform _goldTarget;
+
+        [Header("[GoldPanel - non Winning Streak clear only]")]
+        [SerializeField] private GameObject _goldPanel;
+        [SerializeField] private RectTransform _goldPanelFlyTarget;
+        [SerializeField] private TMP_Text _txtGoldPanel;
+        [SerializeField] private Transform _goldPanelPulseTarget;
+        private int _displayedGoldPanelCoins;
+        private Transform _cachedGoldPanelPulseTarget;
+        private Vector3 _cachedGoldPanelPulseBaseScale = Vector3.one;
+        private bool _hasGoldPanelPulseBaseScale;
 
         public Button NextButton => _btnNext != null ? _btnNext : (_frame != null ? _frame.BtnSingle : null);
         public Button RetryButton => null;
@@ -207,7 +218,7 @@ namespace BalloonFlow
                 _canvasGroup.blocksRaycasts = true;
             }
 
-            TriggerCoinFly(score);
+            TriggerCoinFly(score, difficulty);
         }
 
         #region Button Handlers
@@ -567,8 +578,12 @@ namespace BalloonFlow
                 ApplyRewardLayerOrder(rewardRoot);
             }
 
-            SetRewardText("TxtGold", reward);
-            SetRewardText("TxtGoldOutline", reward);
+            // ROLLBACK_POPUP_RESULT_REWARD_SCOPE_20260621:
+            // PopupResult also has GoldPanel/TxtGold. Reward amount must bind only inside the
+            // Reward/CommonFrame subtree, otherwise GoldPanel.TxtGold can be picked first.
+            Transform rewardTextRoot = rewardRoot != null ? rewardRoot : transform;
+            SetRewardText(rewardTextRoot, "TxtGold", reward);
+            SetRewardText(rewardTextRoot, "TxtGoldOutline", reward);
         }
 
         /// <summary>
@@ -722,9 +737,9 @@ namespace BalloonFlow
             _ => 1
         };
 
-        private void SetRewardText(string nodeName, int reward)
+        private void SetRewardText(Transform root, string nodeName, int reward)
         {
-            Transform node = FindChildRecursive(transform, nodeName);
+            Transform node = FindChildRecursive(root != null ? root : transform, nodeName);
             if (node == null) return;
 
             node.gameObject.SetActive(true);
@@ -750,28 +765,127 @@ namespace BalloonFlow
 
         #region Coin Fly
 
-        private void TriggerCoinFly(int score)
+        private void TriggerCoinFly(int score, DifficultyPurpose difficulty)
         {
-            RectTransform target = _goldTarget;
+            ResolveGoldPanelRefs();
+
+            bool deferToLobby = ShouldDeferGoldFxToLobbyForWinningStreak();
+            SetGoldPanelVisible(!deferToLobby);
+            if (deferToLobby) return;
+
+            int reward = CurrencyManager.HasInstance
+                ? CurrencyManager.Instance.GetCoinRewardForDifficulty(difficulty)
+                : 0;
+            if (reward <= 0) return;
+
+            RectTransform target = ResolveGoldPanelFlyTarget();
             if (target == null)
             {
-                var hud = FindAnyObjectByType<UIHud>();
-                if (hud != null && hud.GoldText != null) target = hud.GoldText.rectTransform;
+                Debug.LogWarning("[CoinFly] PopupResult GoldPanel target null");
+                return;
             }
-            if (target == null) { Debug.LogWarning("[CoinFly] target null"); return; }
 
-            int coinCount = RESULT_COIN_COUNT;
+            int finalCoins = CurrencyManager.HasInstance ? CurrencyManager.Instance.Coins : reward;
+            int startCoins = Mathf.Max(0, finalCoins - reward);
+            SetGoldPanelText(startCoins);
+
+            int coinCount = Mathf.Max(1, RESULT_COIN_COUNT);
+            int perCoinDelta = Mathf.Max(1, reward / coinCount);
+            int remainder = reward - perCoinDelta * coinCount;
+            int landed = 0;
+
             Vector2 screenCenter = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
-            // target의 screen 좌표 (어떤 Canvas에 있든 동작)
             Canvas targetCanvas = target.GetComponentInParent<Canvas>();
             Camera targetCam = (targetCanvas != null && targetCanvas.renderMode == RenderMode.ScreenSpaceCamera)
                 ? targetCanvas.worldCamera : null;
             Vector2 screenTarget = RectTransformUtility.WorldToScreenPoint(targetCam, target.position);
 
             CoinFlyEffect.Play(screenCenter, screenTarget, coinCount,
-                onEachLand: () => EventBus.Publish(new OnCoinFlyLanded()));
+                onEachLand: () =>
+                {
+                    int delta = perCoinDelta + (landed == coinCount - 1 ? remainder : 0);
+                    landed++;
+                    SetGoldPanelText(Mathf.Min(finalCoins, _displayedGoldPanelCoins + delta));
+                    PulseResultGoldPanel();
+                    EventBus.Publish(new OnCoinFlyLanded());
+                },
+                onAllComplete: () => SetGoldPanelText(finalCoins));
         }
 
+        private bool ShouldDeferGoldFxToLobbyForWinningStreak()
+        {
+            if (!WinningStreakManager.HasInstance) return false;
+            var mgr = WinningStreakManager.Instance;
+            return mgr.IsScoringActive || mgr.HasPendingLobbyFx;
+        }
+
+        private void ResolveGoldPanelRefs()
+        {
+            if (_goldPanel == null || _goldPanel.name != "GoldPanel")
+            {
+                Transform panel = FindChildRecursive(transform, "GoldPanel");
+                if (panel != null) _goldPanel = panel.gameObject;
+            }
+
+            Transform scope = _goldPanel != null ? _goldPanel.transform : transform;
+            if (_goldPanelFlyTarget == null)
+            {
+                _goldPanelFlyTarget =
+                    FindChildRecursive(scope, "Gold") as RectTransform
+                    ?? FindChildRecursive(scope, "IconGold") as RectTransform
+                    ?? FindChildRecursive(scope, "ImageGold") as RectTransform;
+            }
+
+            if (_txtGoldPanel == null || _txtGoldPanel.transform == null)
+                _txtGoldPanel =
+                    FindChildRecursive(scope, "TxtGoldPanel")?.GetComponent<TMP_Text>()
+                    ?? FindChildRecursive(scope, "TxtGold")?.GetComponent<TMP_Text>();
+
+            if (_goldPanelPulseTarget == null && _goldPanel != null)
+                _goldPanelPulseTarget = _goldPanel.transform;
+        }
+
+        private RectTransform ResolveGoldPanelFlyTarget()
+        {
+            ResolveGoldPanelRefs();
+            if (_goldPanelFlyTarget != null) return _goldPanelFlyTarget;
+            return _goldPanel != null ? _goldPanel.transform as RectTransform : _goldTarget;
+        }
+
+        private void SetGoldPanelVisible(bool visible)
+        {
+            ResolveGoldPanelRefs();
+            if (_goldPanel != null) _goldPanel.SetActive(visible);
+        }
+
+        private void SetGoldPanelText(int coins)
+        {
+            _displayedGoldPanelCoins = coins;
+            string text = coins.ToString("N0");
+            if (_txtGoldPanel != null) _txtGoldPanel.text = text;
+        }
+
+        private void PulseResultGoldPanel(float strength = 0.08f, float duration = 0.25f, int vibrato = 4)
+        {
+            Transform target = _goldPanelPulseTarget != null ? _goldPanelPulseTarget
+                : (_goldPanel != null ? _goldPanel.transform : null);
+            if (target == null) return;
+
+            target.DOKill();
+            if (!_hasGoldPanelPulseBaseScale || _cachedGoldPanelPulseTarget != target)
+            {
+                _cachedGoldPanelPulseTarget = target;
+                _cachedGoldPanelPulseBaseScale = target.localScale == Vector3.zero ? Vector3.one : target.localScale;
+                _hasGoldPanelPulseBaseScale = true;
+            }
+
+            Vector3 baseScale = _cachedGoldPanelPulseBaseScale;
+            target.localScale = baseScale;
+            target.DOPunchScale(baseScale * strength, duration, vibrato, elasticity: 0.35f)
+                .SetUpdate(true)
+                .OnComplete(() => target.localScale = baseScale)
+                .OnKill(() => target.localScale = baseScale);
+        }
         #endregion
     }
 
