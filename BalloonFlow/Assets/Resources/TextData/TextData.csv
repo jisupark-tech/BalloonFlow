@@ -125,6 +125,7 @@ ui.settings.sound,Sound,
 ui.settings.music,Music,
 ui.settings.haptic,Haptic,
 ui.settings.notifications,Notifications,
+ui.settings.deleteaccount,Delete Account,
 uisetting.txthaptic,Haptic,
 ui.hard,Hard,
 ui.hardlevel,Hard Level,
@@ -154,6 +155,7 @@ ui.common.quit,Quit,
 ui.common.on,On,
 ui.common.off,Off,
 ui.common.stay,Stay,
+ui.common.delete,Delete,
 ui.common.cliam,Claim,
 ui.common.resume,Resume,
 ui.common.retry,Retry,
@@ -171,6 +173,7 @@ popup.txttitle.lv,Level {n},Í≤∞Í≥º?ùÏóÖ ?±Í≥µ ?§Ìå® ???ôÏùº
 popup.txttitle.noads,NO ADS,Í¥ëÍ≥†?úÍ±∞ ?ùÏóÖ
 popup.txttitle.purchaseerror,Not Charged,Í≤∞Ï†ú?§Ìå® (PopupDescription)
 popup.txttitle.purchasesuccess,Success,PopupError
+popup.txttitle.deleteaccount,Are You Sure?,PopupError
 popup.txttitle.settingquit,Quit Level?,PopupQuit
 popup.txttitle.hand,Hand,PopupBuyItem
 popup.txttitle.suffle,Shuffle,PopupBuyItem
@@ -182,6 +185,9 @@ popup.txtdescription.quit,Do you really want to quit?,PopupDescription
 popup.txtdescription.networkerror,Your internet is\ndisconnected.,PopupDescription
 popup.txtdescription.purchaseerror,Your purchase\nwas canceled.,PopupDescription
 popup.txtdescription.purchasesuccess,Your purchase\nwas completed.,PopupDescription
+popup.txtdescription.deleteaccount,"If you delete your account you will lose all your game progress, coins, boosters and purchases!
+We will aim to complete your deletion request within 30 days of the request. Once your account is deleted, this action cannot be reversed.
+If you return to the game before your account is deleted, you can cancel the deletion process and restore your account.",PopupError
 popup.txtdescription.settingquit,You will lose a life!,PopupQuit
 popup.txtdescription.allclear,New Levels Coming Soon!,PopupDescription
 popup.txtdescription.hand,Place any box directly!,PopupBuyItem
