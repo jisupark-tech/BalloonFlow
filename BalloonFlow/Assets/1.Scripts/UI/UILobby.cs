@@ -33,7 +33,6 @@ namespace BalloonFlow
         private const float ICON_Y_OFFSET = 25f; // 활성 +25, 비활성 -25
         private const float ICON_SCALE_DURATION = 0.2f;
         private const float WS_FIRE_FLY_DURATION = 0.55f;
-        private const float WS_FIRE_GAIN_OUTLINE_WIDTH = 0.08f;
         // FXItem_WinningStreak_Fly 비행 동안 동일 duration 으로 4.0 → 2.0 축소.
         // 이동 트윈과 Sequence.Join 으로 결합 — 시작/종료 시점 정확히 일치.
         private const float WS_FIRE_FLY_SCALE_START = 4.0f;
@@ -156,7 +155,6 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtPlayLevelOutline;
         private int _currentPlayLevelId;
         private DifficultyPurpose _currentPlayDifficulty = DifficultyPurpose.Normal;
-        private Material _wsFireGainTextMaterial;
         [SerializeField] private Sprite _sprBtnGreen;
         [SerializeField] private Sprite _sprBtnPurple;
         [SerializeField] private Sprite _sprBtnRed;
@@ -913,13 +911,8 @@ namespace BalloonFlow
                 ? WinningStreakConfigService.Instance.GetStage(stageForFill) : null;
             SetWsPointsText(anim.startPoints, fillStageDoc);
 
-            // [2026-06-12] "+{n}" flame 라벨 폐기 (사용자 지시: FxItem 에 Text 안 씀) —
-            // 획득 포인트는 0단계 PopupWinningStreakReward 의 수 연산 카운터가 보여줌.
-            // 롤백: 인자에 anim.gainedPoints 복원.
-            // ROLLBACK_WS_LOBBY_GAIN_LABEL_20260621:
-            // x1 / +1 clears skip the Dim multiplier popup, but still need to show the
-            // actual gained point on the lobby WinningStreak fly effect.
-            yield return PlayWsFireFlyAndPulse(anim.gainedPoints);
+            // [사용자 추가 지시 2026-06-22] supersedes ROLLBACK_WS_LOBBY_GAIN_LABEL_20260621 — TxtGain 라벨 자체를 폐기. 획득 포인트는 PopupWinningStreakReward 카운터가 표시.
+            yield return PlayWsFireFlyAndPulse();
 
             if (_wsProgressSlider != null)
             {
@@ -1098,9 +1091,8 @@ namespace BalloonFlow
 
         /// <summary>FxItem(iconWinningStreak) 을 화면 중앙→target(ImageIcon) 으로 날린 뒤, target 이 커졌다 복귀하고,
         /// 마지막에 FxFire(반짝이 효과)를 활성화한다. (날아가는 것=FxItem, 도착지=ImageIcon, FxFire=반짝이 only)
-        /// [2026-06-12] "+{n}" 라벨은 폐기 (사용자 지시: FxItem 에 Text 안 씀 — 포인트는 0단계 팝업이 표시).
-        /// gainedPoints 인자는 롤백용으로만 유지, 기본 호출은 인자 없이(0).</summary>
-        private IEnumerator PlayWsFireFlyAndPulse(int gainedPoints = 0)
+        /// [사용자 추가 지시 2026-06-22] supersedes 이전 'gainedPoints 롤백용 잔존' 결정 — FXItem_WinningStreak_Fly의 TxtGain 자체를 제거하므로 gainedPoints 인자도 폐기.</summary>
+        private IEnumerator PlayWsFireFlyAndPulse()
         {
             RectTransform target = ResolveWsFireTarget();   // ImageIcon
             Transform parent = ResolveWsFxParent();
@@ -1122,35 +1114,6 @@ namespace BalloonFlow
                     }
                     flyImg.color = Color.white;
                     flyImg.raycastTarget = false;
-                }
-
-                // [2026-06-12] flame 에 "+{n}" 라벨 부착 — flame 과 함께 비행/소멸. 폰트는 WS 게이지 텍스트 재사용.
-                if (gainedPoints > 0)
-                {
-                    var labelGo = new GameObject("TxtGain", typeof(RectTransform));
-                    labelGo.transform.SetParent(fly.transform, false);
-                    var label = labelGo.AddComponent<TextMeshProUGUI>();
-                    label.text = $"+{gainedPoints}";
-                    label.fontSize = 46f;
-                    label.alignment = TextAlignmentOptions.Center;
-                    label.raycastTarget = false;
-                    ResolveWsTexts();
-                    if (_wsTxtGaugeOutline != null)
-                    {
-                        label.font = _wsTxtGaugeOutline.font;
-                        label.fontSharedMaterial = _wsTxtGaugeOutline.fontSharedMaterial;
-                    }
-                    else if (_wsTxtGauge != null)
-                    {
-                        label.font = _wsTxtGauge.font;
-                        label.fontSharedMaterial = _wsTxtGauge.fontSharedMaterial;
-                    }
-                    ApplyWsFireGainTextStyle(label);
-                    var lrt = (RectTransform)labelGo.transform;
-                    lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 0.5f);
-                    lrt.pivot = new Vector2(0.5f, 0.5f);
-                    lrt.anchoredPosition = Vector2.zero;
-                    lrt.sizeDelta = new Vector2(320f, 90f);
                 }
 
                 RectTransform flyRt = fly.GetComponent<RectTransform>();
@@ -1206,32 +1169,6 @@ namespace BalloonFlow
         /// <summary>보상 수령 연출 — RewardItem 위치에서 WinningStreakGetReward 프리팹을 스폰해 위로 상승시킨다.
         /// (이전: FXReward 빛 상승. 변경: 빛 대신 WinningStreakGetReward 가 RewardItem 에서 나와 올라감.)
         /// 상승+페이드는 프리팹 자체 Animator 가 처리하므로 여기선 스폰 후 재생 시간만 대기.</summary>
-        private void ApplyWsFireGainTextStyle(TextMeshProUGUI label)
-        {
-            if (label == null) return;
-
-            // ROLLBACK_WS_FIRE_GAIN_THIN_OUTLINE_20260622:
-            // TxtGain is a single TMP text created under FXItem_WinningStreak_Fly. It used to
-            // inherit the thick gauge outline material, making the flying "+N" look too heavy.
-            // Keep the same font/color family, but use a cached cloned material with a thinner outline.
-            Material source = label.fontSharedMaterial;
-            if (_wsFireGainTextMaterial == null && source != null)
-            {
-                _wsFireGainTextMaterial = new Material(source)
-                {
-                    name = $"{source.name}_WSFireGainThinOutline"
-                };
-                if (_wsFireGainTextMaterial.HasProperty(ShaderUtilities.ID_OutlineWidth))
-                    _wsFireGainTextMaterial.SetFloat(ShaderUtilities.ID_OutlineWidth, WS_FIRE_GAIN_OUTLINE_WIDTH);
-            }
-
-            if (_wsFireGainTextMaterial != null)
-            {
-                label.fontSharedMaterial = _wsFireGainTextMaterial;
-                label.UpdateMeshPadding();
-            }
-        }
-
         private IEnumerator PlayWsGetRewardSpawn(WinningStreakStage stage)
         {
             ResolveWsFxRefs();
@@ -2183,11 +2120,6 @@ namespace BalloonFlow
             _wsLobbyFxArmed = false;
             _wsLobbyFxSequence?.Kill();
             _wsLobbyFxSequence = null;
-            if (_wsFireGainTextMaterial != null)
-            {
-                Destroy(_wsFireGainTextMaterial);
-                _wsFireGainTextMaterial = null;
-            }
             _wsMultiplierTextPunchSeq?.Kill();
             _wsMultiplierTextPunchSeq = null;
         }
