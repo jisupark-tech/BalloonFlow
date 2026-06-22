@@ -883,30 +883,34 @@ namespace BalloonFlow
                 }
             }
 
-            // ROLLBACK_WS_MULTIPLIER_AFTER_GAUGE_AND_REWARD_20260619: 되돌리려면 아래 PlayWsMultiplierSlide(SHOWN_X)+PlayLobbyMultiplierSelect(toMult) 블록을 PlayWsFireFlyAndPulse 직후로 다시 이동.
-            // 게이지 채움/보상 등장 종료 후 → Multiplier 가 X=10 으로 튕기듯 슬라이드 인.
-            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
-            // ROLLBACK_WINNING_STREAK_MULTIPLIER_AFTER_ENTER_20260605:
-            // Designer spec: after the Multiplier entrance motion, move SelectFrame/TextYellow to the current value.
-            // [2026-06-10] Animator(PlayMultiplierState) → 코드 트윈(PlayMultiplierSelect) — Animator 가 위치를 덮어쓰던 문제 해소.
-            // [2026-06-11] 이전 배수(fromMult)로 등장한 뒤 새 배수(toMult)로 이동 — 배수 '증가' 연출.
-            if (_wsMultiplier != null)
+            // [WS 2026-06-22] x100 연속 유지(fromMult==toMult==100) 시 Multiplier 슬라이드/SelectFrame 이동 연출만 스킵. 게이지·보상·텍스트 갱신은 모두 정상 진행. 최초 x25→x100 진입은 fromMult=25/toMult=100 이므로 가드 통과해 정상 재생됨.
+            if (!(fromMult == 100 && toMult == 100))
             {
-                WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, toMult);
-                // [2026-06-11] '오르는' 펀치(덜컹거림) 비활성 — 사용자 요청. SelectFrame 이동만 유지.
-                // 롤백: 아래 if 블록 주석 해제.
-                // if (toMult > fromMult)
-                // {
-                //     _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, 24f), 0.35f, 6, 0.6f).SetUpdate(true);
-                //     _wsMultiplier.DOPunchScale(new Vector3(0.12f, 0.12f, 0f), 0.35f, 6, 0.6f).SetUpdate(true);
-                // }
+                // ROLLBACK_WS_MULTIPLIER_AFTER_GAUGE_AND_REWARD_20260619: 되돌리려면 아래 PlayWsMultiplierSlide(SHOWN_X)+PlayLobbyMultiplierSelect(toMult) 블록을 PlayWsFireFlyAndPulse 직후로 다시 이동.
+                // 게이지 채움/보상 등장 종료 후 → Multiplier 가 X=10 으로 튕기듯 슬라이드 인.
+                yield return PlayWsMultiplierSlide(WS_MULTIPLIER_SHOWN_X, WS_MULTIPLIER_SLIDE_IN_DURATION, Ease.OutBack);
+                // ROLLBACK_WINNING_STREAK_MULTIPLIER_AFTER_ENTER_20260605:
+                // Designer spec: after the Multiplier entrance motion, move SelectFrame/TextYellow to the current value.
+                // [2026-06-10] Animator(PlayMultiplierState) → 코드 트윈(PlayMultiplierSelect) — Animator 가 위치를 덮어쓰던 문제 해소.
+                // [2026-06-11] 이전 배수(fromMult)로 등장한 뒤 새 배수(toMult)로 이동 — 배수 '증가' 연출.
+                if (_wsMultiplier != null)
+                {
+                    WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, toMult);
+                    // [2026-06-11] '오르는' 펀치(덜컹거림) 비활성 — 사용자 요청. SelectFrame 이동만 유지.
+                    // 롤백: 아래 if 블록 주석 해제.
+                    // if (toMult > fromMult)
+                    // {
+                    //     _wsMultiplier.DOPunchAnchorPos(new Vector2(0f, 24f), 0.35f, 6, 0.6f).SetUpdate(true);
+                    //     _wsMultiplier.DOPunchScale(new Vector3(0.12f, 0.12f, 0f), 0.35f, 6, 0.6f).SetUpdate(true);
+                    // }
+                }
+
+                // SelectFrame fromMult→toMult 이동(0.18s) 완료 대기 — SlideOut 이 증가 연출을 덮지 않도록. ROLLBACK_WS_MULTIPLIER_SELECT_WAIT_20260619
+                yield return new WaitForSecondsRealtime(WinningStreakUI.MULTIPLIER_SELECT_MOVE_DURATION);
+
+                // 나머지 연출이 끝나면 Multiplier 를 X=-725 로 슬라이드 아웃.
+                yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
             }
-
-            // SelectFrame fromMult→toMult 이동(0.18s) 완료 대기 — SlideOut 이 증가 연출을 덮지 않도록. ROLLBACK_WS_MULTIPLIER_SELECT_WAIT_20260619
-            yield return new WaitForSecondsRealtime(WinningStreakUI.MULTIPLIER_SELECT_MOVE_DURATION);
-
-            // 나머지 연출이 끝나면 Multiplier 를 X=-725 로 슬라이드 아웃.
-            yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
 
             RefreshWinningStreakDisplay();
         }
