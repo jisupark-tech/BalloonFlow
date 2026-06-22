@@ -983,14 +983,19 @@ namespace BalloonFlow
                 // SelectFrame fromMult→toMult 이동(0.18s) 완료 대기 — SlideOut 이 증가 연출을 덮지 않도록. ROLLBACK_WS_MULTIPLIER_SELECT_WAIT_20260619
                 yield return new WaitForSecondsRealtime(WinningStreakUI.MULTIPLIER_SELECT_MOVE_DURATION);
 
+                // WHY: 기획 시퀀스(2026-06-22) — TextGauge/Outline 갱신 + FXFire는 Multiplier 슬라이드-아웃 직전에 발생해야 한다. SelectFrame 이동(0.18s) 완료 직후 hold 해제 → 텍스트/FX 1회 발사 → 그 뒤에 multiplier 슬라이드 아웃.
+                _wsHoldMultiplierTextDuringAnim = false;
+                RefreshWinningStreakDisplay();
+
                 // 나머지 연출이 끝나면 Multiplier 를 X=-725 로 슬라이드 아웃.
                 yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
             }
-
-            // Multiplier 슬라이드-아웃 완료. 이제 RefreshWinningStreakDisplay 가 toMult 텍스트를 1회 갱신하면서
-            // SetWinningIconMultiplierText 가 changed 판정으로 PlayWsMultipleFxFire 를 1회 호출. (사용자 피드백 2026-06-22)
-            _wsHoldMultiplierTextDuringAnim = false;
-            RefreshWinningStreakDisplay();
+            else
+            {
+                // Skip case (fromMult==toMult==100): Multiplier 슬라이드 연출이 스킵돼도 hold 해제와 표시 갱신은 1회 필요.
+                _wsHoldMultiplierTextDuringAnim = false;
+                RefreshWinningStreakDisplay();
+            }
         }
 
         /// <summary>[배치7-2] 클리어 후 획득 Flame 을 "+{n}" 토스트로 표시.
