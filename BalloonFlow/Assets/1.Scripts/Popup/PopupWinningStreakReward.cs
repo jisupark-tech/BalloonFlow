@@ -46,6 +46,10 @@ namespace BalloonFlow
         private const float FlyDurationSeconds = 0.5f; // 포물선 비행 시간
         private const float FlyJumpPower = 150f;       // 포물선 정점 높이 (로컬/px)
         private const float CountUpSeconds = 0.35f;    // 수 연산 카운트업(이전 값→새 값 순차 증가) 시간
+        private const float CountDownBaseSeconds = 0.35f;  // 감소 baseline (delta≤10에서 카운트업과 동일).
+        private const float CountDownMaxSeconds  = 1.10f;  // 감소 cap (delta=100에서 약 1.0s 수렴).
+        // 사용자 지시 2026-06-22 (owner 출처: ProjectHub 익명 코멘트 2026-06-22): TxtAmount 감소 폭이 클수록 카운트다운
+        // 시간이 길어져야 자연스러운 인지 가능. 디자이너 예시: delta 10 → 0.35s(기존 유지), delta 100 → 약 1.0~1.10s.
         // 디자이너 등장 사양(2026-06-19): IntroHoldSeconds(0.6s) 내부에 자연스럽게 들어가도록 분할 — t1+t2+t3≈0.6s.
         private const float IntroFadeDur = 0.25f;      // Overlay alpha 0→220/255 페이드 (Icon 1.3 도달과 정렬).
         private const float IconScaleT1 = 0.25f;       // 0 → 1.3 (OutBack)
@@ -287,12 +291,15 @@ namespace BalloonFlow
             amount = afterMultiple;
             // ROLLBACK_WS_COEFF_OVERLAP_TIMELINE_20260615: END
 
-            // 최종 보정 — config 변경/미캡처 등으로 단계 곱과 실제 적립값이 어긋나면 적립값을 신뢰.
+            // 최종 보정 — config 변경/미캡처 등으로 단계 곱이 실제 적립값과 어긋나면 적립값을 신뢰.
+            // 사용자 지시 2026-06-22 supersede (owner 출처: ProjectHub 익명 코멘트 2026-06-22):
+            //   이전: 즉시 스냅 → 카운터가 한 프레임에 튀어 큰 감소 시 보상이 줄어드는 과정을 못 봄.
+            //   이후: ApplyAmount 경유 카운트다운 연출 — 증가/감소 모두 ApplyAmount가 분기 처리하며
+            //         감소면 delta 비례 duration(ResolveCountAnimDuration)이 적용된다.
             if (gainedPoints > 0 && amount != gainedPoints)
             {
-                _countTween?.Kill();
-                _displayedAmount = gainedPoints;
-                SetAmountText($"+{gainedPoints}");
+                ApplyAmount(gainedPoints);
+                if (_countTween != null) yield return _countTween.WaitForCompletion();
             }
 
             yield return new WaitForSecondsRealtime(OutroHoldSeconds);
@@ -378,23 +385,32 @@ namespace BalloonFlow
             yield return new WaitForSecondsRealtime(StepHoldSeconds);
         }
 
-        /// <summary>도착 순간의 수 연산 반영 — 카운트업 + #6BFF8F + GreenOutline 머티리얼 + 펀치 + FXReward.
-        /// [2026-06-12] 한 번에 교체가 아니라 이전 값→새 값으로 순차 증가(롤링 카운터) — 사용자 지시.</summary>
+        /// <summary>도착 순간의 수 연산 반영 — 카운트업/카운트다운 + #6BFF8F + GreenOutline 머티리얼 + 펀치 + FXReward.
+        /// [2026-06-12] 한 번에 교체가 아니라 이전 값→새 값으로 순차 증가(롤링 카운터) — 사용자 지시.
+        /// [2026-06-22 supersede] (owner 출처: ProjectHub 익명 코멘트 2026-06-22) 감소 케이스도 즉시 스냅이 아니라
+        /// delta 비례 duration의 카운트다운 트윈으로 연출 — 큰 감소가 한 프레임에 사라지는 회귀 방지.</summary>
         private void ApplyAmount(int amount)
         {
             _countTween?.Kill();
             int from = _displayedAmount;
             _displayedAmount = amount;
-            if (from <= 0 || from >= amount)
+            if (from <= 0)
             {
-                // 첫 표시(빈 값→1) 또는 비증가 보정 — 즉시 세팅.
+                // 첫 표시(빈 값→1) — 즉시 세팅(카운트 트윈 없음).
+                SetAmountText($"+{amount}");
+            }
+            else if (from == amount)
+            {
+                // 동등 — no-op(텍스트 안정성 위해 한 번 다시 세팅).
                 SetAmountText($"+{amount}");
             }
             else
             {
+                // 증가/감소 모두 rolling 카운트 트윈. duration은 ResolveCountAnimDuration이 결정한다.
                 int rolling = from;
+                float dur = ResolveCountAnimDuration(from, amount);
                 _countTween = DOTween.To(() => rolling, v => { rolling = v; SetAmountText($"+{v}"); },
-                        amount, CountUpSeconds)
+                        amount, dur)
                     .SetEase(Ease.OutCubic)
                     .SetUpdate(true);
             }
@@ -411,6 +427,23 @@ namespace BalloonFlow
             }
 
             PlayFxOnce(_fxReward);
+        }
+
+        /// <summary>
+        /// TxtAmount 수 연산 트윈 duration 해석.
+        /// 사용자 지시 2026-06-22 (owner 출처: ProjectHub 익명 코멘트 2026-06-22, 이전 슬라이드-아웃 후 FX 의도 supersede):
+        ///   증가는 고정 CountUpSeconds(0.35s) 유지, 감소는 delta(=from-to)에 비례해 시간 증가 —
+        ///   10→0 baseline 0.35s, 100→0 약 1.0~1.10s.
+        /// 공식: 감소 시 sqrt(delta/10) 스케일 → 비례감 부드럽고 cap(CountDownMaxSeconds)으로 안전.
+        /// 변경 의도: '큰 감소가 한 프레임에 사라져 보상이 줄어드는 과정을 못 봄' → 보정.
+        /// </summary>
+        private static float ResolveCountAnimDuration(int from, int to)
+        {
+            if (to >= from) return CountUpSeconds;          // 증가/동등: 기존.
+            int delta = from - to;                          // 감소 폭.
+            if (delta <= 10) return CountDownBaseSeconds;   // 작은 감소: floor.
+            float scaled = CountDownBaseSeconds * Mathf.Sqrt(delta / 10f);
+            return Mathf.Min(CountDownMaxSeconds, scaled);  // cap.
         }
 
         private void SetBaseAmountText(int amount)
