@@ -79,6 +79,8 @@ namespace BalloonFlow
 
         /// <summary>[#2] TopBar 잔액 GoldPanel — 무료 제공(ShowUnlock) 시 숨기고, 유료 구매(ShowBuy) 시 노출.</summary>
         private Transform _topBarGoldPanel;
+        private TMP_Text _topBarTxtGold;
+        private TMP_Text _topBarTxtGoldOutline;
 
         private void EnsureTopBarBinding()
         {
@@ -87,8 +89,12 @@ namespace BalloonFlow
             _topBarGoldPanel = gold;
             if (gold != null) GoldPanelFxFireUtil.DisableUnderGoldPanel(gold);
             Transform txt = gold != null ? FindChildRecursive(gold, "TxtGold") : null;
+            _topBarTxtGold = txt != null ? txt.GetComponent<TMP_Text>() : null;
+            Transform outline = gold != null ? FindChildRecursive(gold, "TxtGoldOutline") : null;
+            _topBarTxtGoldOutline = outline != null ? outline.GetComponent<TMP_Text>() : null;
             if (txt != null && txt.GetComponent<AnimatedCoinLabel>() == null)
                 txt.gameObject.AddComponent<AnimatedCoinLabel>();
+            SyncTopBarGoldPanelText();
         }
 
         // InGame 중 BuyItem 열림 시 게임 일시 정지 (PopupSettings 패턴 동일).
@@ -141,6 +147,31 @@ namespace BalloonFlow
             if (_topBarGoldPanel == null) EnsureTopBarBinding();
             if (_topBarGoldPanel != null && _topBarGoldPanel.gameObject.activeSelf != visible)
                 _topBarGoldPanel.gameObject.SetActive(visible);
+            if (visible)
+                SyncTopBarGoldPanelText();
+        }
+
+        private void SyncTopBarGoldPanelText()
+        {
+            if (!CurrencyManager.HasInstance) return;
+
+            string coins = CurrencyManager.Instance.Coins.ToString("N0");
+            if (_topBarTxtGold != null) _topBarTxtGold.text = coins;
+            if (_topBarTxtGoldOutline != null) _topBarTxtGoldOutline.text = coins;
+        }
+
+        private bool IsTopBarGoldText(TMP_Text text)
+        {
+            if (text == null || _topBarGoldPanel == null) return false;
+
+            Transform current = text.transform;
+            while (current != null)
+            {
+                if (current == _topBarGoldPanel)
+                    return true;
+                current = current.parent;
+            }
+            return false;
         }
 
         private static Transform FindChildRecursive(Transform parent, string childName)
@@ -193,8 +224,8 @@ namespace BalloonFlow
 
             if (_txtItemAmount != null) _txtItemAmount.gameObject.SetActive(true);
             if (_txtItemAmountOutline != null) _txtItemAmountOutline.gameObject.SetActive(true);
-            if (_txtGold != null) _txtGold.gameObject.SetActive(true);
-            if (_txtGoldOutline != null) _txtGoldOutline.gameObject.SetActive(true);
+            if (_txtGold != null && !IsTopBarGoldText(_txtGold)) _txtGold.gameObject.SetActive(true);
+            if (_txtGoldOutline != null && !IsTopBarGoldText(_txtGoldOutline)) _txtGoldOutline.gameObject.SetActive(true);
             if (_imgCoin != null) _imgCoin.gameObject.SetActive(true);
             SetTopBarGoldPanelVisible(true);   // [#2] 유료 구매 — 잔액 노출
 
@@ -249,8 +280,8 @@ namespace BalloonFlow
                 _txtItemAmountOutline.gameObject.SetActive(true);
                 _txtItemAmountOutline.text = amount;
             }
-            if (_txtGold != null) _txtGold.gameObject.SetActive(false);
-            if (_txtGoldOutline != null) _txtGoldOutline.gameObject.SetActive(false);
+            if (_txtGold != null && !IsTopBarGoldText(_txtGold)) _txtGold.gameObject.SetActive(false);
+            if (_txtGoldOutline != null && !IsTopBarGoldText(_txtGoldOutline)) _txtGoldOutline.gameObject.SetActive(false);
             if (_imgCoin != null) _imgCoin.gameObject.SetActive(false);
             SetTopBarGoldPanelVisible(false);   // [#2] 무료 제공(해금/Claim) — TopBar 잔액 GoldPanel 숨김
 
@@ -284,8 +315,12 @@ namespace BalloonFlow
             if (_txtItemAmountOutline != null) _txtItemAmountOutline.text = amount;
 
             string costStr = goldCost.ToString("N0");
-            if (_txtGold != null) _txtGold.text = costStr;
-            if (_txtGoldOutline != null) _txtGoldOutline.text = costStr;
+            // ROLLBACK_BUYITEM_TOPBAR_BALANCE_FIX_20260622:
+            // TopBar GoldPanel must always show the player's current coins. Some prefabs have
+            // _txtGold wired to TopBar/GoldPanel/TxtGold, so do not write item prices there.
+            if (_txtGold != null && !IsTopBarGoldText(_txtGold)) _txtGold.text = costStr;
+            if (_txtGoldOutline != null && !IsTopBarGoldText(_txtGoldOutline)) _txtGoldOutline.text = costStr;
+            SyncTopBarGoldPanelText();
 
             // [2026-06-12] Buy 버튼 내 가격 라벨 동적 적용 — 프리팹의 정적 숫자가 아이템과 무관하게
             // 노출되던 문제 (Hand 1900 / Shuffle 1500 / Zap 2900 은 호출부가 GetBoosterPrice 로 전달).

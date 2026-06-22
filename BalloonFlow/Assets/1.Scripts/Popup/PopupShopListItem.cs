@@ -364,6 +364,8 @@ namespace BalloonFlow
 
             ClearArea(_itemArea);
             ClearArea(_boostArea);
+            SetRewardAreaVisible(_itemArea, false);
+            SetRewardAreaVisible(_boostArea, false);
 
             var prefab = GetShopItemPrefab();
             if (prefab == null)
@@ -373,12 +375,15 @@ namespace BalloonFlow
             }
 
             // ItemArea 선두 고정 노출 (rewards 무관, 기존 ShopItem보다 앞)
-            if (_iconNoAdsBig != null)
+            if (UseLegacyAlwaysOnNoAdsRewardIcon() && _iconNoAdsBig != null)
                 SpawnIconOnlyItem(prefab, _itemArea, _iconNoAdsBig);
-            else
+            else if (UseLegacyAlwaysOnNoAdsRewardIcon())
                 Debug.LogWarning("[PopupShopListItem] _iconNoAdsBig 미할당 — Inspector에서 noAdsBig 스프라이트 와이어 필요");
 
             if (rewards == null) return;
+
+            bool hasItemRewards = false;
+            bool hasBoostRewards = false;
 
             // ── ItemArea ──
             // 사용자 요구: RightArea 의 coin reward 표시 제거 — LeftArea 의 _txtPrice (TextPrice/Outline)
@@ -387,31 +392,48 @@ namespace BalloonFlow
             //     SpawnRewardItem(prefab, _itemArea, _iconCoin, FormatCoins(rewards.coins));
 
             if (rewards.infiniteHeartsSeconds > 0)
+            {
                 SpawnRewardItem(prefab, _itemArea, _iconInfiniteHearts, FormatHours(rewards.infiniteHeartsSeconds));
+                hasItemRewards = true;
+            }
 
-            if (rewards.removeAds)
+            if (UseLegacyAlwaysOnNoAdsRewardIcon() && rewards.removeAds)
                 SpawnRewardItem(prefab, _itemArea, _iconRemoveAds, ""); // 카운트 비움 — 아이콘만
 
             // ── BoostArea ──
             // BoostArea의 ImageItem만 축소 (사용자 요구). prefab 공유로 인해 ItemArea 쪽엔 적용 금지.
+            if (rewards.removeAds)
+            {
+                // ROLLBACK_SHOP_REWARD_AREA_VISIBILITY_20260622:
+                // Show ad-remove reward only when Firestore rewards.removeAds is true.
+                SpawnIconOnlyItem(prefab, _itemArea, _iconNoAdsBig != null ? _iconNoAdsBig : _iconRemoveAds);
+                hasItemRewards = true;
+            }
+
             if (rewards.boosters != null)
             {
                 if (rewards.boosters.hand > 0)
                 {
                     var view = SpawnRewardItem(prefab, _boostArea, _iconHand, $"x{rewards.boosters.hand}");
                     view?.ApplyIconScale(BoostIconScaleX, BoostIconScaleY);
+                    hasBoostRewards = true;
                 }
                 if (rewards.boosters.shuffle > 0)
                 {
                     var view = SpawnRewardItem(prefab, _boostArea, _iconShuffle, $"x{rewards.boosters.shuffle}");
                     view?.ApplyIconScale(BoostIconScaleX, BoostIconScaleY);
+                    hasBoostRewards = true;
                 }
                 if (rewards.boosters.zap > 0)
                 {
                     var view = SpawnRewardItem(prefab, _boostArea, _iconZap, $"x{rewards.boosters.zap}");
                     view?.ApplyIconScale(BoostIconScaleX, BoostIconScaleY);
+                    hasBoostRewards = true;
                 }
             }
+
+            SetRewardAreaVisible(_itemArea, hasItemRewards);
+            SetRewardAreaVisible(_boostArea, hasBoostRewards);
         }
 
         // 프리팹이 binary 직렬화라 Inspector 좌표가 외부에서 바뀔 수 있음 → 매번 강제 보장
@@ -468,6 +490,20 @@ namespace BalloonFlow
         }
 
         /// <summary>ShopItem prefab 미할당 시 Resources fallback.</summary>
+        private static void SetRewardAreaVisible(RectTransform area, bool visible)
+        {
+            if (area != null && area.gameObject.activeSelf != visible)
+                area.gameObject.SetActive(visible);
+        }
+
+        private static bool UseLegacyAlwaysOnNoAdsRewardIcon()
+        {
+            // ROLLBACK_SHOP_REWARD_AREA_VISIBILITY_20260622:
+            // Return true to restore the previous behavior where noAdsBig was shown regardless
+            // of Firestore rewards.removeAds. Current spec: show only when removeAds is true.
+            return false;
+        }
+
         private GameObject GetShopItemPrefab()
         {
             if (_shopItemPrefab != null) return _shopItemPrefab;

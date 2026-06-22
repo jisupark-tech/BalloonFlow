@@ -40,8 +40,13 @@ namespace BalloonFlow
             }
         }
 
-        private void Awake()
+        protected override void Awake()
         {
+            // ROLLBACK_POPUPQUIT_UIBASE_AWAKE_20260622:
+            // PopupQuit is preloaded/closed/reopened through UIBase. Without base.Awake(),
+            // UIBase never caches the CanvasGroup, so a previously closed popup can reopen
+            // with interactable/blocksRaycasts still false after repeated fail/quit flows.
+            base.Awake();
             CacheExitDuplicateButton();
             CacheStateViews();
         }

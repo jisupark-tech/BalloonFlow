@@ -35,6 +35,7 @@ namespace BalloonFlow
         private const int MAX_INIT_RETRIES = 3;
         private const float INIT_RETRY_DELAY_SECONDS = 3f;
         private readonly HashSet<string> _pendingInitPurchases = new HashSet<string>();
+        private readonly HashSet<string> _userInitiatedPurchases = new HashSet<string>();
         private readonly Dictionary<string, string> _cachedPrices = new Dictionary<string, string>();
 
 #if UNITY_IAP
@@ -176,6 +177,7 @@ namespace BalloonFlow
                 // 재fetch 성공 시 OnCatalogLoaded → StartInit → 이후 구매 가능. 이번 구매는 실패 처리.
                 if (ShopCatalogService.HasInstance) ShopCatalogService.Instance.RetryFetch();
                 TryStartInit();
+                MarkUserInitiatedPurchase(productId);
                 if (_pendingInitPurchases.Add(productId))
                     StartCoroutine(PurchaseAfterInit(productId));
                 else
@@ -187,6 +189,7 @@ namespace BalloonFlow
             if (product != null && product.availableToPurchase)
             {
                 LogProductDetails("PurchaseProduct-ready", product);
+                MarkUserInitiatedPurchase(productId);
                 _storeController.InitiatePurchase(product);
             }
             else
@@ -221,6 +224,7 @@ namespace BalloonFlow
             if (!_isInitialized)
             {
                 Debug.LogWarning($"{LOG_TAG} IAP init wait timed out. Purchase failed: {productId}");
+                ClearUserInitiatedPurchase(productId);
                 PublishPurchaseResult(productId, false);
                 yield break;
             }
@@ -435,6 +439,14 @@ namespace BalloonFlow
             string transactionId = args.purchasedProduct.transactionID ?? "";
             Debug.Log($"{LOG_TAG} 구매 성공: {productId} txId={transactionId}");
 
+            bool userInitiated = ConsumeUserInitiatedPurchase(productId);
+            var doc = ShopCatalogService.HasInstance ? ShopCatalogService.Instance.Get(productId) : null;
+            if (!userInitiated && IsNoAdsProduct(doc))
+            {
+                ApplyNoAdsRestoreWithoutRewardPopup(doc);
+                return PurchaseProcessingResult.Complete;
+            }
+
             ProcessPurchaseReward(productId, transactionId);
             PublishPurchaseResult(productId, true);
 
@@ -447,6 +459,7 @@ namespace BalloonFlow
             string productId = product != null && product.definition != null ? product.definition.id : "";
             Debug.LogWarning($"{LOG_TAG} Purchase failed: {productId} reason={failureReason}");
             LogProductDetails($"OnPurchaseFailed reason={failureReason}", product, productId);
+            ClearUserInitiatedPurchase(productId);
             if (product == null || product.definition == null)
             {
                 PublishPurchaseResult(productId, false);
@@ -461,6 +474,7 @@ namespace BalloonFlow
             string productId = product != null && product.definition != null ? product.definition.id : "";
             Debug.LogWarning($"{LOG_TAG} Purchase failed: {productId} reason={failureDescription.reason} message={failureDescription.message}");
             LogProductDetails($"OnPurchaseFailed reason={failureDescription.reason}", product, productId);
+            ClearUserInitiatedPurchase(productId);
             if (product == null || product.definition == null)
             {
                 PublishPurchaseResult(productId, false);
@@ -547,6 +561,49 @@ namespace BalloonFlow
         private static bool IsNoAdsProduct(ShopProductDoc doc)
         {
             return doc != null && string.Equals(doc.category, CAT_NOADS, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void MarkUserInitiatedPurchase(string productId)
+        {
+            if (!string.IsNullOrEmpty(productId))
+                _userInitiatedPurchases.Add(productId);
+        }
+
+        private bool ConsumeUserInitiatedPurchase(string productId)
+        {
+            if (string.IsNullOrEmpty(productId))
+                return false;
+
+            bool exists = _userInitiatedPurchases.Contains(productId);
+            if (exists) _userInitiatedPurchases.Remove(productId);
+            return exists;
+        }
+
+        private void ClearUserInitiatedPurchase(string productId)
+        {
+            if (!string.IsNullOrEmpty(productId))
+                _userInitiatedPurchases.Remove(productId);
+        }
+
+        private void ApplyNoAdsRestoreWithoutRewardPopup(ShopProductDoc doc)
+        {
+            if (doc == null) return;
+
+            // ROLLBACK_NOADS_RESTORE_SILENT_TITLE_20260622:
+            // Google Play can report an existing non-consumable no-ads receipt during
+            // Title/IAP initialization on a fresh install. That must restore the
+            // entitlement and hide no-ads UI, but it is not a user-initiated purchase
+            // in this session, so do not publish OnPurchaseRewardGranted or the success popup.
+            GrantRemoveAdsEntitlement(doc.productId, "restore-process-purchase");
+
+            if (doc.maxPurchases == 1
+                && UserDataService.HasInstance && UserDataService.Instance.IsReady)
+            {
+                UserDataService.Instance.SetPurchasedOnce(doc.productId, true);
+            }
+
+            EventBus.Publish(new OnPurchaseRestored { productId = doc.productId });
+            Debug.Log($"{LOG_TAG} NoAds receipt restored silently without purchase success popup. productId={doc.productId}");
         }
 
         private static void GrantRemoveAdsEntitlement(string productId, string reason)

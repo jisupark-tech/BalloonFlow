@@ -415,12 +415,28 @@ namespace BalloonFlow
                 return;
             }
 
-            CloseUI();
+            CloseForRetry();
 
             if (LevelManager.HasInstance)
                 LevelManager.Instance.RetryLevel();
 
             Debug.Log($"[PopupFail02] Retry — 클리어 시 보너스 {RETRY_BONUS_GOLD} 골드");
+        }
+
+        private void CloseForRetry()
+        {
+            // ROLLBACK_FAIL02_RETRY_POPUPMANAGER_CLOSE_20260622:
+            // popup_fail02 is usually opened by PopupManager. Calling UIBase.CloseUI()
+            // hides the GameObject but leaves PopupManager.ActivePopupId as popup_fail02,
+            // so a second fail can be queued behind an inactive popup and visible controls
+            // look dead. Close through PopupManager when it owns this popup.
+            if (PopupManager.HasInstance && PopupManager.Instance.ActivePopupId == "popup_fail02")
+            {
+                PopupManager.Instance.ClosePopup("popup_fail02");
+                return;
+            }
+
+            CloseUI();
         }
 
         private void OnHomeClicked()

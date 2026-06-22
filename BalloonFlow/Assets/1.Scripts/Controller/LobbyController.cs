@@ -183,7 +183,16 @@ namespace BalloonFlow
             if (_lobby == null) return;
 
             if (CurrencyManager.HasInstance)
-                _lobby.SetGoldText(CurrencyManager.Instance.Coins);
+            {
+                // ROLLBACK_WS_LOBBY_LEVEL_CLEAR_GOLD_FX_20260621:
+                // Clear coins are already granted before returning to lobby. If a Winning Streak
+                // lobby FX is queued, start the displayed balance before those clear coins so the
+                // delayed GoldPanel fly can count up instead of flashing final -> lower -> final.
+                int pendingWsClearCoins = WinningStreakManager.HasInstance
+                    ? WinningStreakManager.Instance.PendingLobbyLevelClearCoins
+                    : 0;
+                _lobby.SetGoldText(Mathf.Max(0, CurrencyManager.Instance.Coins - pendingWsClearCoins));
+            }
 
             if (LifeManager.HasInstance)
                 _lobby.SetLifeText(LifeManager.Instance.CurrentLives, LifeManager.Instance.MaxLives);

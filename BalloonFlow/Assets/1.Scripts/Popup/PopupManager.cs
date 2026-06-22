@@ -110,6 +110,8 @@ namespace BalloonFlow
 
             // [Leak fix 2026-05-11] 중복 활성 검사 — 이미 같은 popup 이 active 면 중복 호출 무시.
             // 롤백: 아래 if 라인 제거.
+            ClearInactiveActivePopupState();
+
             if (_activePopupId == popupId) return;
 
             if (!IsPopupActive)
@@ -341,6 +343,35 @@ namespace BalloonFlow
 
             group = cached;
             return true;
+        }
+
+        private void ClearInactiveActivePopupState()
+        {
+            if (string.IsNullOrEmpty(_activePopupId))
+                return;
+
+            // ROLLBACK_POPUPMANAGER_INACTIVE_ACTIVE_SELF_HEAL_20260622:
+            // Some legacy popup buttons call UIBase.CloseUI() directly even when the popup
+            // was opened by PopupManager. That hides the CanvasGroup/GameObject but leaves
+            // _activePopupId set, causing the next fail/quit popup to queue forever behind
+            // an inactive popup. Heal the stale active state before routing a new popup.
+            if (!TryGetLivePopup(_activePopupId, out CanvasGroup activeGroup))
+            {
+                _activePopupId = null;
+                if (_queue.Count == 0) SetOverlayVisible(false);
+                return;
+            }
+
+            bool actuallyVisible = activeGroup.gameObject.activeInHierarchy
+                && activeGroup.alpha > 0.001f
+                && activeGroup.blocksRaycasts;
+
+            if (actuallyVisible)
+                return;
+
+            Debug.LogWarning($"[PopupManager] Cleared inactive active popup state: {_activePopupId}");
+            _activePopupId = null;
+            if (_queue.Count == 0) SetOverlayVisible(false);
         }
 
         private void SetOverlayVisible(bool visible)
