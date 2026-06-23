@@ -58,6 +58,8 @@ namespace BalloonFlow
             }
 
             EnsurePool();
+            // [2026-06-23 사용자 피드백] FXGold 등장 시 Gold_Appear 1회 재생. Common_Coin_Gain.mp3 대체.
+            if (AudioManager.HasInstance) AudioManager.Instance.PlayGoldAppear();
             CoroutineRunner.Get().StartCoroutine(
                 RunFly(parent, screenFrom, screenTo, count, onEachLand, onAllComplete));
 
@@ -248,6 +250,8 @@ namespace BalloonFlow
                     Fly(coin, rt, from, scatterPos, mid, to, dur, () =>
                     {
                         landed++;
+                        // [2026-06-23 사용자 피드백] 첫 도착 시점 Gold_Get 연속 3회(코루틴). Common_Coin_Gain.mp3 대체.
+                        if (landed == 1 && AudioManager.HasInstance) AudioManager.Instance.PlayGoldGet();
                         onEachLand?.Invoke();
                         if (landed >= count) onAllComplete?.Invoke();
                     }));

@@ -29,7 +29,12 @@ namespace BalloonFlow
         [SerializeField] private AudioClip _sfxPopupTouch;
         [Tooltip("Common_Button_Touch — 전역 UI 버튼 탭 SFX (UIButtonClickGuard 후크).")]
         [SerializeField] private AudioClip _sfxButtonClick;
-        [SerializeField] private AudioClip _sfxCoinGain;
+
+        [Header("[SFX — FXGold (2026-06-23 사용자 피드백)]")]
+        [Tooltip("Gold_Appear — CoinFlyEffect.Play 시 1회 재생. 호출 위치: CoinFlyEffect.Play 진입부. 사용자 피드백 2026-06-23: FXGold 등장 시 1회.")]
+        [SerializeField] private AudioClip _sfxGoldAppear;
+        [Tooltip("Gold_Get — CoinFlyEffect 첫 코인 목적지 도착 시 연속 3회 재생. 호출 위치: CoinFlyEffect.RunFly landed==1 분기 → AudioManager.PlayGoldGet 코루틴. 사용자 피드백 2026-06-23: FXGold 목적지 도착 연속 3회. Common_Coin_Gain.mp3 대체.")]
+        [SerializeField] private AudioClip _sfxGoldGet;
 
         [Header("[SFX — InGame]")]
         [SerializeField] private AudioClip _sfxBalloonPop;
@@ -148,8 +153,9 @@ namespace BalloonFlow
             if (_sfxButtonClick == null)  _sfxButtonClick  = Resources.Load<AudioClip>("Sound/Effect/Common_Button_Touch")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Common_Normal_Touch")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Common_Popup_Touch");
-            if (_sfxCoinGain == null)     _sfxCoinGain     = Resources.Load<AudioClip>("Sound/Effect/coinearn")
-                ?? Resources.Load<AudioClip>("Sound/Effect/Common_Coin_Gain");
+            // [2026-06-23 사용자 피드백] Gold_Appear / Gold_Get — FXGold 등장/도착 SFX. 폴백 체인 없음(Zap_Appear 패턴).
+            if (_sfxGoldAppear == null)   _sfxGoldAppear   = Resources.Load<AudioClip>("Sound/Effect/Gold_Appear");
+            if (_sfxGoldGet == null)      _sfxGoldGet      = Resources.Load<AudioClip>("Sound/Effect/Gold_Get");
             if (_sfxBalloonPop == null)   _sfxBalloonPop   = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal");
             if (_sfxBalloonPop2 == null)  _sfxBalloonPop2  = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal_2");
             if (_sfxClear == null)        _sfxClear        = Resources.Load<AudioClip>("Sound/Effect/congratuation")
@@ -181,7 +187,6 @@ namespace BalloonFlow
             if (_sfxShortFail == null)    _sfxShortFail    = Resources.Load<AudioClip>("Sound/Effect/shortfail")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Fail");
             if (_sfxCoinUse == null)      _sfxCoinUse      = Resources.Load<AudioClip>("Sound/Effect/coinuse")
-                ?? Resources.Load<AudioClip>("Sound/Effect/Common_Coin_Gain")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Common_Normal_Touch");
             if (_sfxDeny == null)         _sfxDeny         = Resources.Load<AudioClip>("Sound/Effect/deny")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Common_Normal_Touch");
@@ -203,7 +208,8 @@ namespace BalloonFlow
             if (_sfxNormalTouch == null)       missing.Add("Common_Normal_Touch");
             if (_sfxPopupTouch == null)        missing.Add("Common_Popup_Touch");
             if (_sfxButtonClick == null)       missing.Add("Common_Button_Touch");
-            if (_sfxCoinGain == null)          missing.Add("coinearn");
+            if (_sfxGoldAppear == null)        missing.Add("Gold_Appear");
+            if (_sfxGoldGet == null)           missing.Add("Gold_Get");
             if (_sfxBalloonPop == null)        missing.Add("Stage_Match_Normal");
             if (_sfxBalloonPop2 == null)       missing.Add("Stage_Match_Normal_2");
             if (_sfxClear == null)             missing.Add("congratuation");
@@ -243,7 +249,6 @@ namespace BalloonFlow
             EventBus.Subscribe<OnHolderClickAnim>(HandleHolderClickAnim);
             EventBus.Subscribe<OnHolderRevealed>(HandleHolderRevealed);
             EventBus.Subscribe<OnHolderThawed>(HandleHolderThawed);
-            EventBus.Subscribe<OnCoinFlyLanded>(HandleCoinFlyLanded);
             EventBus.Subscribe<OnSettingsChanged>(HandleSettingsChanged);
             // [2026-05-31] 신규 사운드 라우팅
             EventBus.Subscribe<OnLevelFailed>(HandleLevelFailed);               // fail (최종 실패)
@@ -265,7 +270,6 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnHolderClickAnim>(HandleHolderClickAnim);
             EventBus.Unsubscribe<OnHolderRevealed>(HandleHolderRevealed);
             EventBus.Unsubscribe<OnHolderThawed>(HandleHolderThawed);
-            EventBus.Unsubscribe<OnCoinFlyLanded>(HandleCoinFlyLanded);
             EventBus.Unsubscribe<OnSettingsChanged>(HandleSettingsChanged);
             EventBus.Unsubscribe<OnLevelFailed>(HandleLevelFailed);
             EventBus.Unsubscribe<OnGimmickTriggered>(HandleGimmickTriggered);
@@ -425,6 +429,33 @@ namespace BalloonFlow
             PlaySFX(_sfxZapLine);
         }
 
+        /// <summary>Gold_Appear — FXGold(CoinFlyEffect) 등장 시 1회 재생.
+        /// 호출 위치: CoinFlyEffect.Play 진입부 (count>0 + UIManager.HasInstance 통과 직후).
+        /// 사용자 피드백 2026-06-23: FXGold 등장 1회. 기존 Common_Coin_Gain(coinearn) 대체.</summary>
+        public void PlayGoldAppear()
+        {
+            PlaySFX(_sfxGoldAppear);
+        }
+
+        /// <summary>Gold_Get — FXGold 첫 코인 목적지 도착 시 연속 3회 재생(코루틴).
+        /// 호출 위치: CoinFlyEffect.RunFly Fly 콜백, landed==1 시점 1회 호출.
+        /// 사용자 피드백 2026-06-23: FXGold 목적지 도착 연속 3회. WaitForSecondsRealtime 사용 — Time.timeScale 영향 차단.</summary>
+        public void PlayGoldGet()
+        {
+            if (_sfxGoldGet == null || !_sfxEnabled) return;
+            StartCoroutine(PlayGoldGetSequence());
+        }
+
+        private System.Collections.IEnumerator PlayGoldGetSequence()
+        {
+            const float GAP = 0.08f;
+            for (int i = 0; i < 3; i++)
+            {
+                PlaySFX(_sfxGoldGet);
+                if (i < 2) yield return new UnityEngine.WaitForSecondsRealtime(GAP);
+            }
+        }
+
         #endregion
 
         #region Event Handlers
@@ -523,7 +554,7 @@ namespace BalloonFlow
 
         private void HandleCoinChangedAudio(OnCoinChanged evt)
         {
-            // coinuse — 코인 사용(소비)만. 획득(delta>0)은 OnCoinFlyLanded 가 처리.
+            // coinuse — 코인 사용(소비)만. 획득(delta>0)은 CoinFlyEffect → AudioManager.PlayGoldAppear/PlayGoldGet 가 처리.
             if (evt.delta < 0) PlaySFX(_sfxCoinUse);
         }
 
@@ -568,13 +599,6 @@ namespace BalloonFlow
         private void HandleHolderThawed(OnHolderThawed evt)
         {
             PlaySFX(_sfxHolderFrozenBreak);
-        }
-
-        // [2026-05-12] 코인 흡수 사운드 1/3 감소 — count 별 매번 재생 시 청각 부담. 3 번째마다 1번 재생.
-        private int _coinSfxCounter;
-        private void HandleCoinFlyLanded(OnCoinFlyLanded evt)
-        {
-            if (_coinSfxCounter++ % 3 == 0) PlaySFX(_sfxCoinGain);
         }
 
         private void HandleSettingsChanged(OnSettingsChanged evt)
