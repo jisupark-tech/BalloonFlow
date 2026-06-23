@@ -45,6 +45,10 @@ namespace BalloonFlow
         [Tooltip("deny — 이동 불가 보관함 잘못 탭(덜컹/거부)")]
         [SerializeField] private AudioClip _sfxDeny;
 
+        [Header("[SFX — Result]")]
+        [Tooltip("Stage_Result — PopupResult 오픈 직후 재생되는 결과 화면 SFX.")]
+        [SerializeField] private AudioClip _sfxStageResult;
+
         [Header("[SFX — Booster]")]
         [SerializeField] private AudioClip _sfxItemHand;
         [SerializeField] private AudioClip _sfxItemShuffle;
@@ -139,6 +143,10 @@ namespace BalloonFlow
             if (_sfxDeny == null)         _sfxDeny         = Resources.Load<AudioClip>("Sound/Effect/deny")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Common_Normal_Touch");
 
+            // [2026-06-23] Stage_Result — PopupResult 오픈 직후 1회 재생.
+            // _sfxClear(congratuation)는 보드클리어 팡파레로 별개 트랙이라 폴백 체인에 두지 않음.
+            if (_sfxStageResult == null) _sfxStageResult = Resources.Load<AudioClip>("Sound/Effect/Stage_Result");
+
 #if UNITY_EDITOR
             // Editor 전용 진단 — 폴백조차 실패해 여전히 null 인 SFX 의 '원본 명세 파일명' 을 한 줄로 보고.
             // Runtime 빌드에서는 제외되어 로그 부담 없음.
@@ -162,6 +170,7 @@ namespace BalloonFlow
             if (_sfxShortFail == null)         missing.Add("shortfail");
             if (_sfxCoinUse == null)           missing.Add("coinuse");
             if (_sfxDeny == null)              missing.Add("deny");
+            if (_sfxStageResult == null)       missing.Add("Stage_Result");
             if (missing.Count > 0)
             {
                 Debug.LogWarning($"[AudioManager] Missing SFX clips (place files under Resources/Sound/Effect/): {string.Join(", ", missing)}");
@@ -259,6 +268,13 @@ namespace BalloonFlow
         public void PlayDeny()
         {
             PlaySFX(_sfxDeny);
+        }
+
+        /// <summary>Stage_Result — PopupResult 오픈 직후 1회 재생(태스크: 사운드 추가 2026-06-23).
+        /// PlayOneShot 이므로 호출당 1회 재생 보장. 팝업이 표시될 때마다 호출하면 됨.</summary>
+        public void PlayStageResult()
+        {
+            PlaySFX(_sfxStageResult);
         }
 
         #endregion
