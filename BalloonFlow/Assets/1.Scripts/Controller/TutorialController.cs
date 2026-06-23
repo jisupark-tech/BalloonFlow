@@ -157,6 +157,8 @@ namespace BalloonFlow
 
         // [2026-05-15] rail_warning 글로벌 튜토리얼 config — _configByLevel 안에 들어가지 않음.
         private TutorialConfig _railWarningConfig;
+        private bool _loadedTutorialCatalog;
+        private Coroutine _startTutorialForLevelCoroutine;
 
         #endregion
 
@@ -340,6 +342,7 @@ namespace BalloonFlow
         private void BuildTutorialConfigs()
         {
             _configByLevel.Clear();
+            _loadedTutorialCatalog = false;
 
             // Priority 1: TutorialCatalog SO (primary runtime source — edited via TutorialEditorWindow or Inspector).
             TutorialCatalog catalog = Resources.Load<TutorialCatalog>(TutorialCatalog.RESOURCES_PATH);
@@ -349,6 +352,7 @@ namespace BalloonFlow
                 {
                     RegisterConfig(catalog.Tutorials[i]);
                 }
+                _loadedTutorialCatalog = true;
                 return;
             }
 
@@ -685,6 +689,44 @@ namespace BalloonFlow
                     return config;
                 }
             }
+            return null;
+        }
+
+        private bool TryGetTutorialEditorConfig(int levelId, out TutorialConfig config)
+        {
+            // ROLLBACK_TUTORIAL_EDITOR_PRIORITY_20260622:
+            // Tutorial Editor saves TutorialCatalog.asset with sequence-level metadata
+            // such as manualTriggerOnly and waitForItemDescription. When that catalog is
+            // loaded, do not rebuild a metadata-less config from LevelData for the same level.
+            config = null;
+            return _loadedTutorialCatalog
+                   && _configByLevel.TryGetValue(levelId, out config)
+                   && config != null;
+        }
+
+        private TutorialConfig ResolveTutorialConfigForLevel(int levelId, out string source)
+        {
+            if (TryGetTutorialEditorConfig(levelId, out TutorialConfig editorConfig))
+            {
+                source = "TutorialCatalog";
+                return editorConfig;
+            }
+
+            TutorialConfig configFromData = TryBuildFromLevelData(levelId);
+            if (configFromData != null)
+            {
+                source = "LevelData";
+                _configByLevel[configFromData.levelId] = configFromData;
+                return configFromData;
+            }
+
+            if (_configByLevel.TryGetValue(levelId, out TutorialConfig fallbackConfig))
+            {
+                source = _loadedTutorialCatalog ? "TutorialCatalog" : "Hardcoded";
+                return fallbackConfig;
+            }
+
+            source = "None";
             return null;
         }
 
@@ -1044,7 +1086,31 @@ namespace BalloonFlow
 
             Debug.Log($"[TutorialDbg] HandleLevelLoaded levelId={levelId}");
 
+            // ROLLBACK_TUTORIAL_EDITOR_PRIORITY_20260622:
+            // Use Tutorial Editor/TutorialCatalog metadata first. The legacy block below
+            // is kept as rollback context but skipped by this resolved flow.
+            {
+                TutorialConfig resolvedConfig = ResolveTutorialConfigForLevel(levelId, out string source);
+                Debug.Log($"[TutorialDbg] Resolved config for level {levelId}: source={source} tutorialId={(resolvedConfig != null ? resolvedConfig.tutorialId.ToString() : "NONE")}");
+                if (resolvedConfig == null) yield break;
+
+                bool complete = IsTutorialComplete(resolvedConfig.tutorialId);
+                Debug.Log($"[TutorialDbg] tutorialId={resolvedConfig.tutorialId} alreadyComplete={complete} manualTriggerOnly={resolvedConfig.manualTriggerOnly} waitForItemDescription={resolvedConfig.waitForItemDescription}");
+                if (complete) yield break;
+
+                if (resolvedConfig.manualTriggerOnly)
+                {
+                    Debug.Log("[TutorialDbg] manualTriggerOnly - auto start deferred");
+                    yield break;
+                }
+
+                if (resolvedConfig.waitForItemDescription) yield return WaitForItemDescriptionClosed();
+                StartTutorial(resolvedConfig.tutorialId);
+                yield break;
+            }
+
             // 1) LevelConfig에 tutorialSteps가 있으면 우선 사용
+#if false // ROLLBACK_TUTORIAL_LEGACY_LEVELDATA_PRIORITY_20260622
             TutorialConfig configFromData = TryBuildFromLevelData(levelId);
             if (configFromData != null)
             {
@@ -1076,6 +1142,7 @@ namespace BalloonFlow
             if (config.waitForItemDescription) yield return WaitForItemDescriptionClosed();
 
             StartTutorial(config.tutorialId);
+#endif
         }
 
         /// <summary>ROLLBACK_POPUP_ITEM_DESC_TUTORIAL_GATE_20260622: PopupItemDescription(아이템 설명 팝업)이
@@ -1099,6 +1166,27 @@ namespace BalloonFlow
         {
             if (_isTutorialActive) return false;
 
+            // ROLLBACK_TUTORIAL_EDITOR_PRIORITY_20260622:
+            // Manual item-unlock starts must use the same Tutorial Editor/TutorialCatalog
+            // resolution as the auto-load path, including waitForItemDescription.
+            {
+                TutorialConfig resolvedConfig = ResolveTutorialConfigForLevel(levelId, out string source);
+                if (resolvedConfig == null)
+                {
+                    Debug.Log($"[TutorialDbg] StartTutorialForLevel({levelId}) - config not found");
+                    return false;
+                }
+
+                if (IsTutorialComplete(resolvedConfig.tutorialId)) return false;
+
+                Debug.Log($"[TutorialDbg] StartTutorialForLevel({levelId}) source={source} tutorialId={resolvedConfig.tutorialId} waitForItemDescription={resolvedConfig.waitForItemDescription}");
+                if (_startTutorialForLevelCoroutine != null)
+                    StopCoroutine(_startTutorialForLevelCoroutine);
+                _startTutorialForLevelCoroutine = StartCoroutine(StartTutorialForLevelDeferred(resolvedConfig));
+                return true;
+            }
+
+#if false // ROLLBACK_TUTORIAL_LEGACY_MANUAL_LEVELDATA_PRIORITY_20260622
             TutorialConfig config = TryBuildFromLevelData(levelId);
             if (config != null)
             {
@@ -1114,6 +1202,20 @@ namespace BalloonFlow
 
             StartTutorial(config.tutorialId);
             return true;
+#endif
+        }
+
+        private IEnumerator StartTutorialForLevelDeferred(TutorialConfig config)
+        {
+            // ROLLBACK_TUTORIAL_MANUAL_WAIT_ITEM_DESC_20260622:
+            // Manual starts must also honor Tutorial Editor's waitForItemDescription flag,
+            // and should never overlap PopupItemDescription if it is still open.
+            if (config.waitForItemDescription || PopupItemDescription.IsShowing)
+                yield return WaitForItemDescriptionClosed();
+
+            _startTutorialForLevelCoroutine = null;
+            if (_isTutorialActive || IsTutorialComplete(config.tutorialId)) yield break;
+            StartTutorial(config.tutorialId);
         }
 
         private void HandleHolderTapped(OnHolderTapped evt)

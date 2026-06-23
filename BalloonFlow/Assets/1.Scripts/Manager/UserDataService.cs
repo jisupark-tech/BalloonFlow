@@ -297,6 +297,126 @@ namespace BalloonFlow
             Debug.Log($"{LOG_TAG} UserData reset to defaults. uid={uid} coins={_user.coins} lives={_user.lives}/{_user.maxLives} highest={_user.highestClearedLevel}");
         }
 
+        /// <summary>
+        /// ROLLBACK_DELETE_ACCOUNT_RUNTIME_20260622:
+        /// Runtime account deletion path for Settings. This is intentionally separate from the
+        /// editor/debug reset above: debug reset keeps/overwrites the same uid, while account
+        /// deletion removes the current Firestore user doc, signs out/deletes Auth, clears local
+        /// state, and creates a fresh anonymous uid so Title can restart from FTUE.
+        /// </summary>
+        public async Task<bool> DeleteCurrentAccountAndCreateFreshUserAsync()
+        {
+            if (!await WaitForFirebaseReady())
+            {
+                Debug.LogError($"{LOG_TAG} Delete account failed: FirebaseManager not ready.");
+                return false;
+            }
+
+            _auth ??= FirebaseAuth.DefaultInstance;
+            _db ??= FirebaseEnvironment.GetFirestore();
+
+            FirebaseUser oldUser = _auth.CurrentUser;
+            string oldUid = oldUser?.UserId ?? Uid;
+            if (string.IsNullOrEmpty(oldUid))
+            {
+                Debug.LogWarning($"{LOG_TAG} Delete account requested without current uid. Local reset only.");
+            }
+
+            _isReady = false;
+
+            bool firestoreDeleted = true;
+            if (!string.IsNullOrEmpty(oldUid) && _db != null)
+            {
+                try
+                {
+                    await _db.Document($"users/{oldUid}").DeleteAsync();
+                    Debug.Log($"{LOG_TAG} Deleted Firestore user doc. uid={oldUid}");
+                }
+                catch (Exception e)
+                {
+                    firestoreDeleted = false;
+                    Debug.LogError($"{LOG_TAG} Delete Firestore user doc failed. uid={oldUid} msg={e.Message}");
+                }
+            }
+
+            bool authDeleted = true;
+            if (oldUser != null)
+            {
+                try
+                {
+                    await oldUser.TokenAsync(true);
+                    await oldUser.DeleteAsync();
+                    Debug.Log($"{LOG_TAG} Deleted Firebase Auth user. uid={oldUid}");
+                }
+                catch (Exception firstEx)
+                {
+                    try
+                    {
+                        await oldUser.DeleteAsync();
+                        Debug.Log($"{LOG_TAG} Deleted Firebase Auth user after retry. uid={oldUid}");
+                    }
+                    catch (Exception retryEx)
+                    {
+                        authDeleted = false;
+                        Debug.LogError($"{LOG_TAG} Delete Firebase Auth user failed. uid={oldUid} first={firstEx.Message} retry={retryEx.Message}");
+                    }
+                }
+            }
+
+            // Even if Auth deletion fails, sign out so the deleted/reset local client cannot reuse
+            // the old uid. Firestore deletion is the gameplay data deletion source of truth.
+            try { _auth.SignOut(); }
+            catch (Exception e) { Debug.LogWarning($"{LOG_TAG} SignOut after delete failed: {e.Message}"); }
+
+            ResetLocalClientStateForFreshAccount();
+
+            try
+            {
+                await EnsureSignedInAsync(forceFresh: true);
+                _db = FirebaseEnvironment.GetFirestore();
+                string newUid = _auth.CurrentUser?.UserId ?? string.Empty;
+                if (string.IsNullOrEmpty(newUid))
+                {
+                    Debug.LogError($"{LOG_TAG} Fresh anonymous sign-in failed after account delete.");
+                    return false;
+                }
+
+                await LoadOrCreateUserAsync(newUid);
+                RefreshRuntimeManagersAfterFreshAccount();
+                Debug.Log($"{LOG_TAG} Account delete flow completed. oldUid={oldUid} newUid={newUid} firestoreDeleted={firestoreDeleted} authDeleted={authDeleted}");
+                return firestoreDeleted;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"{LOG_TAG} Fresh user creation failed after account delete: {e}");
+                return false;
+            }
+        }
+
+        private static void ResetLocalClientStateForFreshAccount()
+        {
+            PlayerPrefs.DeleteAll();
+            PlayerPrefs.SetInt(LevelManager.PREFS_KEY_HIGHEST_LEVEL, 0);
+            PlayerPrefs.DeleteKey("BF_WS_UnlockPopupShown");
+            PlayerPrefs.DeleteKey("BF_WS_RoundPopupShown");
+            PlayerPrefs.Save();
+        }
+
+        private static void RefreshRuntimeManagersAfterFreshAccount()
+        {
+            if (CurrencyManager.HasInstance)
+            {
+                CurrencyManager.Instance.ResetToInitial();
+                CurrencyManager.Instance.RefreshFromUserDataCache();
+            }
+
+            if (LifeManager.HasInstance)
+                LifeManager.Instance.ResetToInitial();
+
+            if (WinningStreakManager.HasInstance)
+                WinningStreakManager.Instance.ResetTransientStateForFreshUser();
+        }
+
         public static void RequestDebugResetOnNextBoot()
         {
             PlayerPrefs.SetInt(PREFS_DEBUG_RESET_REQUESTED, 1);

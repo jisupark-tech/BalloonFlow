@@ -70,11 +70,16 @@ namespace BalloonFlow
         [SerializeField] private Button _btnTerms;
         [Tooltip("이메일 문의 (mailto:support@aimed.xyz)")]
         [SerializeField] private Button _btnSupports;
+        [Tooltip("Delete account confirmation popup opens before runtime account deletion.")]
+        [SerializeField] private Button _btnDeleteAccount;
+        [SerializeField] private TMP_Text _txtBtnDeleteAccount;
 
         // [TODO] 실제 정책 페이지 URL 로 교체 — 현재는 support 이메일 도메인(aimed.xyz) 기반 추정 placeholder.
         private const string URL_PRIVACY   = "https://aimed.xyz/privacy";
         private const string URL_TERMS     = "https://aimed.xyz/terms";
         private const string SUPPORT_EMAIL = "support@aimed.xyz";
+        private bool _deleteAccountInProgress;
+        private bool _deleteAccountRefsResolved;
 
         #endregion
 
@@ -83,6 +88,7 @@ namespace BalloonFlow
         protected override void Awake()
         {
             base.Awake();
+            ResolveDeleteAccountRefs();
 
             if (_btnSound != null) _btnSound.onClick.AddListener(OnSoundClicked);
             if (_btnMusic != null) _btnMusic.onClick.AddListener(OnMusicClicked);
@@ -92,6 +98,7 @@ namespace BalloonFlow
             if (_btnPrivacy != null) _btnPrivacy.onClick.AddListener(OnPrivacyClicked);
             if (_btnTerms != null) _btnTerms.onClick.AddListener(OnTermsClicked);
             if (_btnSupports != null) _btnSupports.onClick.AddListener(OnSupportsClicked);
+            if (_btnDeleteAccount != null) _btnDeleteAccount.onClick.AddListener(OnDeleteAccountClicked);
         }
 
         private void OnEnable()
@@ -120,6 +127,7 @@ namespace BalloonFlow
             if (_btnPrivacy != null) _btnPrivacy.onClick.RemoveListener(OnPrivacyClicked);
             if (_btnTerms != null) _btnTerms.onClick.RemoveListener(OnTermsClicked);
             if (_btnSupports != null) _btnSupports.onClick.RemoveListener(OnSupportsClicked);
+            if (_btnDeleteAccount != null) _btnDeleteAccount.onClick.RemoveListener(OnDeleteAccountClicked);
         }
 
         #endregion
@@ -194,6 +202,71 @@ namespace BalloonFlow
             OpenUrlSafe($"mailto:{SUPPORT_EMAIL}?subject={subject}&body={body}");
         }
 
+        private void OnDeleteAccountClicked()
+        {
+            if (_deleteAccountInProgress) return;
+
+            var popup = UIManager.HasInstance
+                ? UIManager.Instance.OpenUI<PopupError>("Popup/PopupError")
+                : null;
+
+            if (popup == null)
+            {
+                Debug.LogWarning("[UISetting] PopupError not available for delete-account confirmation.");
+                return;
+            }
+
+            popup.ShowDeleteAccountConfirm(DeleteAccountAndReturnToTitle);
+        }
+
+        private async void DeleteAccountAndReturnToTitle()
+        {
+            if (_deleteAccountInProgress) return;
+            _deleteAccountInProgress = true;
+            if (_btnDeleteAccount != null) _btnDeleteAccount.interactable = false;
+
+            bool ok = false;
+            if (UserDataService.HasInstance)
+                ok = await UserDataService.Instance.DeleteCurrentAccountAndCreateFreshUserAsync();
+            else
+                Debug.LogError("[UISetting] UserDataService missing - cannot delete account.");
+
+            if (!ok)
+            {
+                _deleteAccountInProgress = false;
+                if (_btnDeleteAccount != null) _btnDeleteAccount.interactable = true;
+                var error = UIManager.HasInstance
+                    ? UIManager.Instance.OpenUI<PopupError>("Popup/PopupError")
+                    : null;
+                error?.Show(LocalizationService.Get("popup.txttitle.networkerror"),
+                    LocalizationService.Get("popup.txtdescription.networkerror"));
+                return;
+            }
+
+            // ROLLBACK_DELETE_ACCOUNT_GOTO_TITLE_20260622:
+            // Account deletion creates a fresh uid before scene transition, then restarts Title so
+            // loading/UI/FTUE gates run exactly like a first launch.
+            if (GameManager.HasInstance)
+                GameManager.Instance.GoToTitle();
+        }
+
+        private void ResolveDeleteAccountRefs()
+        {
+            if (_deleteAccountRefsResolved) return;
+            _deleteAccountRefsResolved = true;
+            if (_btnDeleteAccount != null && _txtBtnDeleteAccount != null) return;
+
+            var all = GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                string n = all[i].name;
+                if (_btnDeleteAccount == null && n == "BtnDeleteAccount")
+                    _btnDeleteAccount = all[i].GetComponent<Button>();
+                else if (_txtBtnDeleteAccount == null && n == "TxtBtnDeleteAccount")
+                    _txtBtnDeleteAccount = all[i].GetComponent<TMP_Text>();
+            }
+        }
+
         private static void OpenUrlSafe(string url)
         {
             if (string.IsNullOrEmpty(url)) return;
@@ -207,6 +280,7 @@ namespace BalloonFlow
 
         private void RefreshAll()
         {
+            ResolveDeleteAccountRefs();
             // PopupTextInventory P0-27 — On/Off (title case) 로 통일.
             EnsureToggleLabel(_soundOn, "On");
             EnsureToggleLabel(_soundOff, "Off");
@@ -228,6 +302,7 @@ namespace BalloonFlow
             if (_txtSound != null) _txtSound.text = LocalizationService.Get("ui.settings.sound");
             if (_txtMusic != null) _txtMusic.text = LocalizationService.Get("ui.settings.music");
             if (_txtHaptic != null) _txtHaptic.text = LocalizationService.Get("ui.settings.haptic");
+            if (_txtBtnDeleteAccount != null) _txtBtnDeleteAccount.text = LocalizationService.Get("ui.settings.deleteaccount");
 
             if (!SettingsManager.HasInstance) return;
 

@@ -199,5 +199,65 @@ namespace BalloonFlow
 
             OpenUI();
         }
+
+        /// <summary>
+        /// ROLLBACK_DELETE_ACCOUNT_CONFIRM_20260622:
+        /// Delete-account confirmation uses the horizontal layout with Green=Stay and Red=Delete.
+        /// Restore to ShowConfirm(...) if the shared confirm button direction is standardized later.
+        /// </summary>
+        public void ShowDeleteAccountConfirm(System.Action onDelete)
+        {
+            if (_frame != null)
+            {
+                _frame.SetTitle(LocalizationService.Get("popup.txttitle.deleteaccount"));
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
+                _frame.SetHorizGreenText(LocalizationService.Get("ui.common.stay"));
+                _frame.SetHorizRedText(LocalizationService.Get("ui.common.delete"));
+                _frame.ShowExitButton(true);
+            }
+
+            if (_txtDescription != null)
+                _txtDescription.text = LocalizationService.Get("popup.txtdescription.deleteaccount");
+
+            if (_imgIcon != null)
+            {
+                if (_sprIconCancel != null)
+                {
+                    _imgIcon.sprite = _sprIconCancel;
+                    _imgIcon.gameObject.SetActive(true);
+                }
+                else
+                {
+                    _imgIcon.gameObject.SetActive(false);
+                }
+            }
+
+            if (_frame != null)
+            {
+                if (_frame.BtnHorizGreen != null)
+                {
+                    _frame.BtnHorizGreen.onClick.RemoveAllListeners();
+                    _frame.BtnHorizGreen.onClick.AddListener(CloseUI);
+                }
+
+                if (_frame.BtnHorizRed != null)
+                {
+                    _frame.BtnHorizRed.onClick.RemoveAllListeners();
+                    _frame.BtnHorizRed.onClick.AddListener(() =>
+                    {
+                        CloseUI();
+                        onDelete?.Invoke();
+                    });
+                }
+
+                if (_frame.BtnExit != null)
+                {
+                    _frame.BtnExit.onClick.RemoveAllListeners();
+                    _frame.BtnExit.onClick.AddListener(CloseUI);
+                }
+            }
+
+            OpenUI();
+        }
     }
 }
