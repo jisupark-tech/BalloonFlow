@@ -232,6 +232,10 @@ namespace BalloonFlow
         private bool _wsHoldMultiplierTextDuringAnim;
         private bool _wsTextsResolved;
         private Coroutine _wsLobbyFxCoroutine;
+        // [WS 슬라이드-OUT 동시 시작 2026-06-23] FXGold(PlayWinningStreakLevelClearGoldFx)를 LobbyFx slide-out 직전에 병렬 StartCoroutine 으로 띄운 핸들.
+        // deferred 루프 finally 가 _wsLobbyFxCoroutine 을 null 로 만들기 전에 FXGold 완료를 기다리고, 예외/StopCoroutine/씬 재진입 시 누수 방지용 안전망에서 정리한다.
+        // owner 확인 출처: 본 ProjectHub 태스크 6a3a33ef [사용자 추가 지시] 2026-06-23 — Multiplier 사라지기 시작 시점에 PlayButton+FXGold+slide-out 3중 동시 시작.
+        private Coroutine _wsGoldFxCoroutine;
         private Sequence _wsLobbyFxSequence;
         // [WS 배수 텍스트 펀치 2026-06-22] 별도 Sequence — _wsLobbyFxSequence 는 lobby FX 전 경로에서
         // Kill/재할당되어 punch 가 clobber 될 수 있어 분리.
@@ -778,11 +782,14 @@ namespace BalloonFlow
                     // [WS 0단계 2026-06-12] 로비 연출 앞에 Dim 보상 팝업(연승 수치 상승) 먼저 재생 — 승리 복귀에서만.
                     yield return PlayWinningStreakRewardPopup(anim);
                     yield return PlayWinningStreakLobbyFx(anim);
-                    // [WS 코어 연출 병렬화 2026-06-23] 코어(보상 팝업 + 게이지/배수) 종료 → 게이트 release.
-                    // 이 시점부터 LobbyController.WaitForWinningStreakFxThenPlayBtnChangeAnim 이 풀려 PlayLobbyBtnChangeAnim 이
-                    // 아래 PlayWinningStreakLevelClearGoldFx(FXGold) 와 병렬 실행된다. 기존 연출 duration 은 변경 없음.
-                    _wsCoreFxRunning = false;
-                    yield return PlayWinningStreakLevelClearGoldFx(anim);
+                    // [WS 슬라이드-OUT 동시 시작 2026-06-23] _wsCoreFxRunning release 와 FXGold(PlayWinningStreakLevelClearGoldFx) StartCoroutine 은
+                    // PlayWinningStreakLobbyFx 내부 — Multiplier slide-out 직전(또는 skip 분기 RefreshDisplay 직후) — 에서 처리된다.
+                    // PlayButton(레벨업 + 파티클) + FXGold + Multiplier slide-out 3개 연출이 같은 시점에 병렬 시작되는 구조.
+                    // 종료 동기화: 여기서는 병렬로 띄운 FXGold 코루틴이 끝날 때까지 대기 — finally{} 가 _wsLobbyFxCoroutine 을 null 로
+                    // 만들기 전에 FXGold 완료를 보장(상위 진입 차단 게이트 IsWinningStreakFxPlaying 의 의미 유지).
+                    // SUPERSEDES 2026-06-23 직전 결정(여기서 yield return PlayWinningStreakLevelClearGoldFx → 직렬 실행) — owner 확인 출처:
+                    // 본 ProjectHub 태스크 6a3a33ef [사용자 추가 지시] 2026-06-23 ('완전히 끝난 뒤가 아니라 사라지기 시작 시점').
+                    while (_wsGoldFxCoroutine != null) yield return null;
                 }
 
                 if (CurrencyManager.HasInstance)
@@ -800,6 +807,9 @@ namespace BalloonFlow
                 //   여기서 '달성했으나 미수령'인 stage 보상을 확실히 지급(멱등). 달성은 영구 State 라 큐가 비어도 복구됨.
                 if (WinningStreakManager.HasInstance)
                     WinningStreakManager.Instance.ClaimAllAchievedStages();
+                // [WS 슬라이드-OUT 동시 시작 2026-06-23] 예외/StopCoroutine/씬 재진입으로 위 while 대기를 통과 못한 경로의 핸들 누수 방지 안전망.
+                // 정상 경로에서는 PlayWinningStreakLevelClearGoldFx 가 완료된 후 자기 자신이 _wsGoldFxCoroutine = null 처리하므로 여기 분기는 no-op.
+                if (_wsGoldFxCoroutine != null) { StopCoroutine(_wsGoldFxCoroutine); _wsGoldFxCoroutine = null; }
                 _wsLobbyFxArmed = false;
                 _wsCoreFxRunning = false;
                 _wsHoldMultiplierTextDuringAnim = false;
@@ -1021,6 +1031,17 @@ namespace BalloonFlow
                 // 텍스트 갱신+FXFire+Scale punch 끝난 뒤 0.5초 노출 유지 → slide-out (인지 시간 확보, owner 2026-06-22 추가 피드백).
                 yield return new WaitForSecondsRealtime(WS_HOLD_AFTER_TEXT_FIRE_DURATION);
 
+                // [WS 슬라이드-OUT 동시 시작 2026-06-23] Multiplier 가 사라지기 시작하는 바로 이 시점에 3중 병렬 시작:
+                //   (a) _wsCoreFxRunning release → LobbyController.WaitForWinningStreakFxThenPlayBtnChangeAnim 풀려 PlayLobbyBtnChangeAnim(레벨업 + 파티클) 시작
+                //   (b) FXGold(PlayWinningStreakLevelClearGoldFx) StartCoroutine — 직렬 yield 아닌 병렬
+                //   (c) 아래 PlayWsMultiplierSlide(HIDDEN_X) 가 (a)(b) 와 동시 진행
+                // 종료 동기화: deferred 루프 finally 직전의 while (_wsGoldFxCoroutine != null) 대기에서 FXGold 완료를 기다린다.
+                // SUPERSEDES 2026-06-23 직전 결정(LobbyFx 완료 후 release + 직렬 FXGold) — owner 확인 출처: 본 ProjectHub 태스크 6a3a33ef
+                //   [사용자 추가 지시] 2026-06-23 ('완전히 끝난 뒤가 아니라 사라지기 시작 시점에 PlayButton+FXGold 동시 시작').
+                _wsCoreFxRunning = false;
+                if (_wsGoldFxCoroutine != null) { StopCoroutine(_wsGoldFxCoroutine); _wsGoldFxCoroutine = null; }
+                _wsGoldFxCoroutine = StartCoroutine(PlayLevelClearGoldFxAndClearHandle(anim));
+
                 // 나머지 연출이 끝나면 Multiplier 를 X=-725 로 슬라이드 아웃.
                 yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
             }
@@ -1029,7 +1050,25 @@ namespace BalloonFlow
                 // Skip case (fromMult==toMult==100): Multiplier 슬라이드 연출이 스킵돼도 hold 해제와 표시 갱신은 1회 필요.
                 _wsHoldMultiplierTextDuringAnim = false;
                 RefreshWinningStreakDisplay();
+                // [WS 슬라이드-OUT 동시 시작 2026-06-23] skip 분기는 Multiplier 등장/사라짐이 없으므로 '사라지기 시작 시점' 가 없음 →
+                //   RefreshDisplay 직후를 동일 트리거로 사용. (a) _wsCoreFxRunning release → PlayLobbyBtnChangeAnim 시작, (b) FXGold 병렬 StartCoroutine.
+                //   if 분기와 의미적으로 동일한 release point — 양 분기 모두 LobbyFx 의 마지막 visible 변화 직후로 통일.
+                // SUPERSEDES 2026-06-23 직전 결정(deferred 루프에서 직렬 release/FXGold) — owner 확인 출처: 본 ProjectHub 태스크 6a3a33ef [사용자 추가 지시] 2026-06-23.
+                _wsCoreFxRunning = false;
+                if (_wsGoldFxCoroutine != null) { StopCoroutine(_wsGoldFxCoroutine); _wsGoldFxCoroutine = null; }
+                _wsGoldFxCoroutine = StartCoroutine(PlayLevelClearGoldFxAndClearHandle(anim));
             }
+        }
+
+        // [WS 슬라이드-OUT 동시 시작 2026-06-23] PlayWinningStreakLevelClearGoldFx 래퍼 — 본문 종료 후 _wsGoldFxCoroutine 핸들을 스스로 null 로 정리.
+        // 병렬 시작 의도: PlayWinningStreakLobbyFx 의 slide-out 직전(또는 skip 분기 RefreshDisplay 직후) 에서 StartCoroutine 으로 띄워, slide-out + PlayLobbyBtnChangeAnim 과 동시 진행.
+        // 종료 동기화: deferred 루프가 while (_wsGoldFxCoroutine != null) 로 본 코루틴 완료를 대기한 뒤 finally 에 진입 → 상위 IsWinningStreakFxPlaying 게이트 의미 유지.
+        // 안전망: deferred finally / OnDisable 에서 StopCoroutine + 핸들 null 처리. 본문 시그니처/duration 은 PlayWinningStreakLevelClearGoldFx 원본을 그대로 유지.
+        // owner 확인 출처: 본 ProjectHub 태스크 6a3a33ef [사용자 추가 지시] 2026-06-23.
+        private IEnumerator PlayLevelClearGoldFxAndClearHandle(WinningStreakManager.PendingLobbyAnimation anim)
+        {
+            yield return PlayWinningStreakLevelClearGoldFx(anim);
+            _wsGoldFxCoroutine = null;
         }
 
         /// <summary>Winning Streak lobby FX 이후, 이미 지급된 클리어 골드를 로비 GoldPanel로 날려 보이는 전용 연출.</summary>
@@ -2131,6 +2170,12 @@ namespace BalloonFlow
             {
                 StopCoroutine(_wsLobbyFxCoroutine);
                 _wsLobbyFxCoroutine = null;
+            }
+            // [WS 슬라이드-OUT 동시 시작 2026-06-23] 병렬로 띄운 FXGold 코루틴도 OnDisable 시 정리 — 씬 재진입/오브젝트 disable 경로의 핸들 누수 방지.
+            if (_wsGoldFxCoroutine != null)
+            {
+                StopCoroutine(_wsGoldFxCoroutine);
+                _wsGoldFxCoroutine = null;
             }
             _wsLobbyFxArmed = false;
             _wsCoreFxRunning = false;
