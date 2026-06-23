@@ -385,11 +385,11 @@ namespace BalloonFlow
             foreach (Product product in _storeController.products.all)
             {
                 if (product == null || !product.hasReceipt) continue;
-                var doc = ShopCatalogService.Instance.Get(product.definition.id);
-                if (!IsNoAdsProduct(doc)) continue;
+                string productId = product.definition != null ? product.definition.id : "";
+                var doc = ShopCatalogService.Instance.Get(productId);
+                if (!IsRemoveAdsEntitlement(productId, doc)) continue;
 
-                GrantRemoveAdsEntitlement(doc.productId, "restore");
-                EventBus.Publish(new OnPurchaseRestored { productId = doc.productId });
+                ApplyNoAdsRestoreWithoutRewardPopup(productId, doc, "restore-owned-entitlement");
             }
         }
 
@@ -441,9 +441,12 @@ namespace BalloonFlow
 
             bool userInitiated = ConsumeUserInitiatedPurchase(productId);
             var doc = ShopCatalogService.HasInstance ? ShopCatalogService.Instance.Get(productId) : null;
-            if (!userInitiated && IsNoAdsProduct(doc))
+            bool removeAdsEntitlement = IsRemoveAdsEntitlement(productId, doc);
+            Debug.Log($"{LOG_TAG} ProcessPurchase route productId={productId} userInitiated={userInitiated} category={(doc != null ? doc.category : "<null>")} removeAdsReward={(doc != null && doc.rewards != null && doc.rewards.removeAds)} isRemoveAdsEntitlement={removeAdsEntitlement}");
+
+            if (!userInitiated && removeAdsEntitlement)
             {
-                ApplyNoAdsRestoreWithoutRewardPopup(doc);
+                ApplyNoAdsRestoreWithoutRewardPopup(productId, doc, "restore-process-purchase");
                 return PurchaseProcessingResult.Complete;
             }
 
@@ -563,6 +566,21 @@ namespace BalloonFlow
             return doc != null && string.Equals(doc.category, CAT_NOADS, System.StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsRemoveAdsEntitlement(string productId, ShopProductDoc doc)
+        {
+            // ROLLBACK_NOADS_RESTORE_MATCH_20260622:
+            // Startup receipts must restore silently even if Firestore category/rewards are temporarily
+            // inconsistent. User-initiated purchases still go through the normal reward popup path.
+            return IsNoAdsProduct(doc)
+                || IsNoAdsProductId(productId)
+                || (doc != null && doc.rewards != null && doc.rewards.removeAds);
+        }
+
+        private static bool IsNoAdsProductId(string productId)
+        {
+            return string.Equals(productId, "xyz.aimed.balloonloop.noads", System.StringComparison.OrdinalIgnoreCase);
+        }
+
         private void MarkUserInitiatedPurchase(string productId)
         {
             if (!string.IsNullOrEmpty(productId))
@@ -585,25 +603,27 @@ namespace BalloonFlow
                 _userInitiatedPurchases.Remove(productId);
         }
 
-        private void ApplyNoAdsRestoreWithoutRewardPopup(ShopProductDoc doc)
+        private void ApplyNoAdsRestoreWithoutRewardPopup(string productId, ShopProductDoc doc, string reason)
         {
-            if (doc == null) return;
+            string resolvedProductId = !string.IsNullOrEmpty(productId) ? productId : (doc != null ? doc.productId : "");
+            if (string.IsNullOrEmpty(resolvedProductId)) return;
 
             // ROLLBACK_NOADS_RESTORE_SILENT_TITLE_20260622:
             // Google Play can report an existing non-consumable no-ads receipt during
             // Title/IAP initialization on a fresh install. That must restore the
             // entitlement and hide no-ads UI, but it is not a user-initiated purchase
             // in this session, so do not publish OnPurchaseRewardGranted or the success popup.
-            GrantRemoveAdsEntitlement(doc.productId, "restore-process-purchase");
+            GrantRemoveAdsEntitlement(resolvedProductId, reason);
 
-            if (doc.maxPurchases == 1
+            if (doc != null
+                && doc.maxPurchases == 1
                 && UserDataService.HasInstance && UserDataService.Instance.IsReady)
             {
-                UserDataService.Instance.SetPurchasedOnce(doc.productId, true);
+                UserDataService.Instance.SetPurchasedOnce(resolvedProductId, true);
             }
 
-            EventBus.Publish(new OnPurchaseRestored { productId = doc.productId });
-            Debug.Log($"{LOG_TAG} NoAds receipt restored silently without purchase success popup. productId={doc.productId}");
+            EventBus.Publish(new OnPurchaseRestored { productId = resolvedProductId });
+            Debug.Log($"{LOG_TAG} NoAds receipt restored silently without purchase success popup. productId={resolvedProductId} reason={reason} category={(doc != null ? doc.category : "<null>")} removeAdsReward={(doc != null && doc.rewards != null && doc.rewards.removeAds)}");
         }
 
         private static void GrantRemoveAdsEntitlement(string productId, string reason)
