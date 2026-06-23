@@ -243,6 +243,11 @@ namespace BalloonFlow
         // 두 연출(WS 보상 팝업 + LobbyBtn 변경)이 겹쳐 보였음. armed 비트로 '예약됨'을 노출해 외부에서 게이트.
         private bool _wsLobbyFxArmed;
 
+        // [WS 코어 연출 병렬화 2026-06-23] PopupWinningStreakReward + PlayWinningStreakLobbyFx 만 가리키는 분리 게이트.
+        // IsWinningStreakFxPlaying(LevelClearGoldFx 포함) 보다 한 단계 일찍 풀려, LobbyController가 PlayLobbyBtnChangeAnim 을
+        // FXGold 와 병렬로 시작시킨다. OnPlayClicked 의 click block 은 그대로 IsWinningStreakFxPlaying 사용 → 안전성 유지.
+        private bool _wsCoreFxRunning;
+
         [Header("[Profile Display — 좌상단 표시 sprite]")]
         [Tooltip("PopupProfile 과 동일한 ProfileAssets ScriptableObject. 아이콘/프레임 sprite 카탈로그.")]
         [SerializeField] private ProfileAssets _profileAssets;
@@ -320,6 +325,10 @@ namespace BalloonFlow
         //   PopupWinningStreakReward.IsShowing : 0단계 Dim 보상 팝업(수 연산 카운터) 표시 중
         //   셋 중 하나라도 true 면 연출 중 → 진입 금지. 모두 끝나면 진입 가능.
         public bool IsWinningStreakFxPlaying => _wsLobbyFxArmed || _wsLobbyFxCoroutine != null || PopupWinningStreakReward.IsShowing;
+
+        /// <summary>[WS 코어 연출 게이트 2026-06-23] WS 보상 팝업 + 게이지/배수(PlayWinningStreakLobbyFx) 만 포함.
+        /// PlayWinningStreakLevelClearGoldFx(FXGold) 은 제외 — LobbyBtnChange 가 FXGold 와 병렬로 시작될 수 있게.</summary>
+        public bool IsWinningStreakCoreFxPlaying => _wsLobbyFxArmed || _wsCoreFxRunning || PopupWinningStreakReward.IsShowing;
 
         public Button BtnGoldPlus => _btnGoldPlus;
         public Button BtnLifePlus => _btnLifePlus;
@@ -454,6 +463,7 @@ namespace BalloonFlow
             }
 
             _wsLobbyFxArmed = true;
+            _wsCoreFxRunning = true;
             _wsLobbyFxCoroutine = StartCoroutine(PlayPendingWinningStreakLobbyFxDeferred());
         }
 
@@ -768,6 +778,10 @@ namespace BalloonFlow
                     // [WS 0단계 2026-06-12] 로비 연출 앞에 Dim 보상 팝업(연승 수치 상승) 먼저 재생 — 승리 복귀에서만.
                     yield return PlayWinningStreakRewardPopup(anim);
                     yield return PlayWinningStreakLobbyFx(anim);
+                    // [WS 코어 연출 병렬화 2026-06-23] 코어(보상 팝업 + 게이지/배수) 종료 → 게이트 release.
+                    // 이 시점부터 LobbyController.WaitForWinningStreakFxThenPlayBtnChangeAnim 이 풀려 PlayLobbyBtnChangeAnim 이
+                    // 아래 PlayWinningStreakLevelClearGoldFx(FXGold) 와 병렬 실행된다. 기존 연출 duration 은 변경 없음.
+                    _wsCoreFxRunning = false;
                     yield return PlayWinningStreakLevelClearGoldFx(anim);
                 }
 
@@ -787,6 +801,7 @@ namespace BalloonFlow
                 if (WinningStreakManager.HasInstance)
                     WinningStreakManager.Instance.ClaimAllAchievedStages();
                 _wsLobbyFxArmed = false;
+                _wsCoreFxRunning = false;
                 _wsHoldMultiplierTextDuringAnim = false;
                 _wsLobbyFxCoroutine = null;
             }
@@ -2118,6 +2133,7 @@ namespace BalloonFlow
                 _wsLobbyFxCoroutine = null;
             }
             _wsLobbyFxArmed = false;
+            _wsCoreFxRunning = false;
             _wsLobbyFxSequence?.Kill();
             _wsLobbyFxSequence = null;
             _wsMultiplierTextPunchSeq?.Kill();
