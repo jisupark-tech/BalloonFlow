@@ -218,7 +218,9 @@ namespace BalloonFlow
             if (AudioManager.HasInstance) AudioManager.Instance.StopStageResultFirework();
             // [2026-06-23 사용자 추가지시 task #377 후속] FinishLogo 구간 SE 화이트리스트 락 해제.
             if (AudioManager.HasInstance) AudioManager.Instance.EndResultIntroSfxLock();
-            // [2026-06-23 사용자 추가지시] PlayStageResult 호출은 GameBootstrap.PlayFinishLogoSequence 로 이동 — FinishLogo 구간 화이트리스트와 함께 시작.
+            // [2026-06-23 rework] Stage_Result 는 PopupResult 오픈 시점(여기) 에서만 1회 재생 — FinishLogo 구간으로의 이동을 사용자 지시로 revert.
+            // 반드시 EndResultIntroSfxLock 이후 호출(_sfxStageResult 가 화이트리스트에서 빠졌으므로 lock 활성 중엔 차단됨).
+            if (AudioManager.HasInstance) AudioManager.Instance.PlayStageResult();
             EnsureRewardVisible(starCount);
 
             // 애니메이션 상태와 무관하게 즉시 클릭 가능

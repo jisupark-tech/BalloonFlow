@@ -342,8 +342,9 @@ namespace BalloonFlow
             _loopSfxSource.clip = null;
         }
 
-        /// <summary>FinishLogo 표시 구간 동안 SE 화이트리스트(Stage_Result / Stage_Result_Firework) 외 SFX 차단 게이트.
-        /// 외부에서 읽기 전용(컨트롤러/뷰가 가드용으로 참조). 사용자 지시 2026-06-23 task #377 후속.</summary>
+        /// <summary>FinishLogo 표시 구간 동안 SE 화이트리스트(Stage_Result_Firework only) 외 SFX 차단 게이트.
+        /// 외부에서 읽기 전용(컨트롤러/뷰가 가드용으로 참조). 사용자 지시 2026-06-23 task #377 후속.
+        /// [2026-06-23 revert] Stage_Result 는 화이트리스트에서 제외 — PopupResult 오픈 시점에서만 재생되므로 lock 구간 통과 불필요.</summary>
         public bool IsResultIntroSfxLocked => _resultIntroSfxLock;
 
         /// <summary>
@@ -351,7 +352,7 @@ namespace BalloonFlow
         /// [트리거 시작: GameBootstrap.PlayFinishLogoSequence 진입
         ///  / 종료: PopupResult.ShowWin·ShowFail (다음 팝업 진입) — 사용자 지시 2026-06-23 task #377 후속]
         /// 이미 재생 중인 잔여 SE 즉시 정지(StopAllSfx) + 풍선 팝 콤보 카운터 리셋.
-        /// _loopSfxSource(Firework 루프)는 정지하지 않음 — 이 함수 직후 PlayStageResult/Firework 가 시작되는 순서 보호.
+        /// _loopSfxSource(Firework 루프)는 정지하지 않음 — 이 함수 직후 PlayStageResultFireworkLoop 가 시작되는 순서 보호.
         /// </summary>
         public void BeginResultIntroSfxLock()
         {
@@ -583,7 +584,7 @@ namespace BalloonFlow
 
         private void PlaySFX(AudioClip clip)
         {
-            if (_resultIntroSfxLock && clip != _sfxStageResult && clip != _sfxStageResultFirework) return;
+            if (_resultIntroSfxLock && clip != _sfxStageResultFirework) return;
             if (_sfxSource == null || clip == null || !_sfxEnabled) return;
             _sfxSource.PlayOneShot(clip);
         }
