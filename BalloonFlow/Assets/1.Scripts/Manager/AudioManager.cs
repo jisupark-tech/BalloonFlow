@@ -70,6 +70,10 @@ namespace BalloonFlow
         [Tooltip("Lobby_RailBox_Start — LobbyRailBox 오픈(BoxOpen Animator trigger) 연출 시작 시 1회 재생. 호출 위치: LobbyRailBox.PlayStartGameAnimation 진입점. PlayOneShot 이라 함수당 1회 보장.")]
         [SerializeField] private AudioClip _sfxLobbyRailBoxStart;
 
+        [Header("[SFX — Ingame Enter (2026-06-23 사용자 피드백)]")]
+        [Tooltip("Ingame_Start — 로비→인게임 진입 슬라이드-인 시작 시 1회 재생. 호출 위치: UIHud.PlayIngameEnterAnimation 진입부(HUD_Top tween Join 직후). PlayOneShot 이라 호출당 1회 보장 — HUD_Top anchoredPosition 이 tween 으로 매 프레임 갱신되어도 PlayIngameEnterAnimation 자체가 진입당 1회 호출이므로 자연 1회.")]
+        [SerializeField] private AudioClip _sfxIngameStart;
+
         [Header("[SFX — Booster]")]
         [SerializeField] private AudioClip _sfxItemHand;
         [SerializeField] private AudioClip _sfxItemShuffle;
@@ -200,6 +204,7 @@ namespace BalloonFlow
             // [2026-06-23] Lobby_Rail — UILobby Rail 이동 1회 재생 (사용자 추가 지시).
             if (_sfxLobbyRail == null) _sfxLobbyRail = Resources.Load<AudioClip>("Sound/Effect/Lobby_Rail");
             if (_sfxLobbyRailBoxStart == null) _sfxLobbyRailBoxStart = Resources.Load<AudioClip>("Sound/Effect/Lobby_RailBox_Start");
+            if (_sfxIngameStart == null) _sfxIngameStart = Resources.Load<AudioClip>("Sound/Effect/Ingame_Start");
 
 #if UNITY_EDITOR
             // Editor 전용 진단 — 폴백조차 실패해 여전히 null 인 SFX 의 '원본 명세 파일명' 을 한 줄로 보고.
@@ -231,6 +236,7 @@ namespace BalloonFlow
             if (_sfxStageResultFirework == null) missing.Add("Stage_Result_Firework");
             if (_sfxLobbyRail == null)         missing.Add("Lobby_Rail");
             if (_sfxLobbyRailBoxStart == null) missing.Add("Lobby_RailBox_Start");
+            if (_sfxIngameStart == null)       missing.Add("Ingame_Start");
             if (missing.Count > 0)
             {
                 Debug.LogWarning($"[AudioManager] Missing SFX clips (place files under Resources/Sound/Effect/): {string.Join(", ", missing)}");
@@ -411,6 +417,14 @@ namespace BalloonFlow
         public void PlayLobbyRailBoxStart()
         {
             PlaySFX(_sfxLobbyRailBoxStart);
+        }
+
+        /// <summary>Ingame_Start — 로비→인게임 진입 HUD 슬라이드-인 시작 시 1회 재생.
+        /// 호출 위치: UIHud.PlayIngameEnterAnimation 진입부.
+        /// PlayOneShot 이라 호출당 1회 보장 — HUD_Top tween 으로 위치가 여러 프레임 갱신되어도 PlayIngameEnterAnimation 자체가 진입당 1회.</summary>
+        public void PlayIngameStart()
+        {
+            PlaySFX(_sfxIngameStart);
         }
 
         /// <summary>Zap_Appear — ItemZap 등장 시 1회 재생.
