@@ -74,6 +74,10 @@ namespace BalloonFlow
         [Tooltip("Ingame_Start — 로비→인게임 진입 슬라이드-인 시작 시 1회 재생. 호출 위치: UIHud.PlayIngameEnterAnimation 진입부(HUD_Top tween Join 직후). PlayOneShot 이라 호출당 1회 보장 — HUD_Top anchoredPosition 이 tween 으로 매 프레임 갱신되어도 PlayIngameEnterAnimation 자체가 진입당 1회 호출이므로 자연 1회.")]
         [SerializeField] private AudioClip _sfxIngameStart;
 
+        [Header("[SFX — WinningStreak (2026-06-23 사용자 피드백)]")]
+        [Tooltip("GaugeUp — UILobby.PlayWinningStreakLobbyFx 코루틴 내 _wsProgressSlider.DOValue 시작 시점 1회 재생. 호출 위치: PlayWinningStreakLobbyFx 의 두 DOValue 호출 직전 (1차 endRatio 채움, 2차 다음 스테이지 carry 채움). PlayOneShot 이라 호출당 1회 보장 — 두 호출 모두 코루틴 1회 진입당 각각 1회씩만 발생함이 보장됨(while/for iteration 단위 = 슬라이더 증가 이벤트 단위). DOTween OnUpdate/OnStepComplete 콜백에 절대 넣지 말 것 — 프레임당 다발 호출되어 무한 중첩 잔향 됨.")]
+        [SerializeField] private AudioClip _sfxWsGaugeUp;
+
         [Header("[SFX — Booster]")]
         [SerializeField] private AudioClip _sfxItemHand;
         [SerializeField] private AudioClip _sfxItemShuffle;
@@ -205,6 +209,8 @@ namespace BalloonFlow
             if (_sfxLobbyRail == null) _sfxLobbyRail = Resources.Load<AudioClip>("Sound/Effect/Lobby_Rail");
             if (_sfxLobbyRailBoxStart == null) _sfxLobbyRailBoxStart = Resources.Load<AudioClip>("Sound/Effect/Lobby_RailBox_Start");
             if (_sfxIngameStart == null) _sfxIngameStart = Resources.Load<AudioClip>("Sound/Effect/Ingame_Start");
+            // [2026-06-23] GaugeUp — WinningStreak 슬라이더 증가 시작 시점 1회 재생. 폴백 체인 없이 단독 로드(Zap 패턴): 다른 클립 대체 시 의도 오염.
+            if (_sfxWsGaugeUp == null) _sfxWsGaugeUp = Resources.Load<AudioClip>("Sound/Effect/GaugeUp");
 
 #if UNITY_EDITOR
             // Editor 전용 진단 — 폴백조차 실패해 여전히 null 인 SFX 의 '원본 명세 파일명' 을 한 줄로 보고.
@@ -237,6 +243,7 @@ namespace BalloonFlow
             if (_sfxLobbyRail == null)         missing.Add("Lobby_Rail");
             if (_sfxLobbyRailBoxStart == null) missing.Add("Lobby_RailBox_Start");
             if (_sfxIngameStart == null)       missing.Add("Ingame_Start");
+            if (_sfxWsGaugeUp == null)         missing.Add("GaugeUp");
             if (missing.Count > 0)
             {
                 Debug.LogWarning($"[AudioManager] Missing SFX clips (place files under Resources/Sound/Effect/): {string.Join(", ", missing)}");
@@ -425,6 +432,15 @@ namespace BalloonFlow
         public void PlayIngameStart()
         {
             PlaySFX(_sfxIngameStart);
+        }
+
+        /// <summary>GaugeUp — WinningStreak 게이지 슬라이더 증가(_wsProgressSlider.DOValue) 시작 시점 1회 재생.
+        /// 호출 위치: UILobby.PlayWinningStreakLobbyFx 의 두 DOValue 호출 직전(① 메인 endRatio 채움, ② 다음 스테이지 carry 채움).
+        /// PlayOneShot 이라 호출당 1회 보장 — 두 호출 모두 코루틴 1회 진입당 각각 1회씩 (while/for iteration 단위 = 슬라이더 증가 이벤트 단위와 1:1).
+        /// 절대 DOTween OnUpdate/OnStepComplete 콜백 안에서 호출 금지 — 프레임당 다발 호출되어 무한 중첩 잔향이 됨.</summary>
+        public void PlayWsGaugeUp()
+        {
+            PlaySFX(_sfxWsGaugeUp);
         }
 
         /// <summary>Zap_Appear — ItemZap 등장 시 1회 재생.
