@@ -612,7 +612,9 @@ namespace BalloonFlow
             if (_sfxSource != null && _starEarnedClip != null)
             {
                 _sfxSource.pitch = _basePitch;
-                if (ResultIntroLocked()) return;
+                // ROLLBACK_FEEDBACK_ITERATOR_RETURN_FIX_20260623: 코루틴에선 return; 불가(CS1622) → yield break.
+                //   hermes "사운드 추가 #378"(565ba578)이 return 으로 넣어 origin 빌드가 깨져 있었음.
+                if (ResultIntroLocked()) yield break;
                 _sfxSource.PlayOneShot(_starEarnedClip);
             }
         }
