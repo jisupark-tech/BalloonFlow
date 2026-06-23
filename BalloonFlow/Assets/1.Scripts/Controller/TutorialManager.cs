@@ -75,6 +75,8 @@ namespace BalloonFlow
         // Instruction panel
         private GameObject _instructionPanel;
         private RectTransform _instructionPanelRect;
+        private Image _instructionPanelImage;
+        private Color _defaultInstructionPanelColor = INSTRUCTION_BG_COLOR;
         private TextMeshProUGUI _instructionText;
         // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622: 프리팹 기본 instruction 색상(override 안 하는 스텝 복원용).
         private Color _defaultInstructionColor = Color.white;
@@ -242,6 +244,9 @@ namespace BalloonFlow
                 if (_instructionPanelRect == null && _instructionText != null)
                     _instructionPanelRect = _instructionText.transform.parent as RectTransform;
                 _instructionPanel = _instructionPanelRect != null ? _instructionPanelRect.gameObject : null;
+                _instructionPanelImage = _instructionPanelRect != null ? _instructionPanelRect.GetComponent<Image>() : null;
+                if (_instructionPanelImage != null)
+                    _defaultInstructionPanelColor = _instructionPanelImage.color;
 
                 _skipButton = popup.SkipButton;
                 if (_skipButton != null)
@@ -990,6 +995,8 @@ namespace BalloonFlow
             var panelImage = panelGO.AddComponent<Image>();
             panelImage.color = INSTRUCTION_BG_COLOR;
             panelImage.raycastTarget = true;
+            _instructionPanelImage = panelImage;
+            _defaultInstructionPanelColor = panelImage.color;
 
             // Round corners via outline
             var panelOutline = panelGO.AddComponent<Outline>();
@@ -1345,6 +1352,8 @@ namespace BalloonFlow
                     ? currentStep.instructionColor
                     : _defaultInstructionColor;
 
+            ApplyInstructionPanelAlpha(requireAction == "tap_item");
+
             // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622: 스텝별 Skip(X) 노출 토글.
             //   기본 노출, currentStep.hideSkipButton=true(튜토리얼 통한 아이템 사용 강제 스텝) 면 숨김.
             if (_skipButton != null)
@@ -1368,6 +1377,21 @@ namespace BalloonFlow
             // tutorial text/dim and stop intercepting input.
             HideAllVisuals();
             SetTutorialRaycastBlocking(false);
+        }
+
+        private void ApplyInstructionPanelAlpha(bool transparent)
+        {
+            if (_instructionPanelImage == null)
+                return;
+
+            // ROLLBACK_TUTORIAL_ITEM_INSTRUCTION_PANEL_ALPHA_20260623:
+            // Item-use tutorial steps keep the text/layout alive but make only the
+            // InstructionPanel background image transparent. Other steps restore the
+            // prefab-authored alpha so Editor and player builds behave the same.
+            Color c = _defaultInstructionPanelColor;
+            if (transparent)
+                c.a = 0f;
+            _instructionPanelImage.color = c;
         }
 
         /// <summary>ROLLBACK_TUTORIAL_ITEM_TARGET_20260622: UIHud 하단 아이템 버튼 RectTransform 해석 (hand/shuffle/remove|zap).
@@ -1555,6 +1579,7 @@ namespace BalloonFlow
             ResetStepVisualOverrideState();
             HideCutout();
             HideArrow();
+            ApplyInstructionPanelAlpha(false);
             HideInstruction();
             SetTapAnywherEnabled(false);
         }

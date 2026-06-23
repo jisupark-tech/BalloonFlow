@@ -1151,6 +1151,17 @@ namespace BalloonFlow
                 Debug.Log($"[TutorialDbg] tutorialId={resolvedConfig.tutorialId} alreadyComplete={complete} manualTriggerOnly={resolvedConfig.manualTriggerOnly} waitForItemDescription={resolvedConfig.waitForItemDescription}");
                 if (complete) yield break;
 
+                // ROLLBACK_TUTORIAL_UNLOCK_AUTO_GUARD_20260623:
+                // Item unlock tutorials (Lv.9/12/15) must start only from the Claim -> HUD
+                // reward-fly callback. Player builds can race popup creation and tutorial
+                // auto-start by a frame, so block level-load auto start while the unlock
+                // reward is still unclaimed even if stale data says manualTriggerOnly=false.
+                if (IsPendingItemUnlockTutorial(levelId))
+                {
+                    Debug.Log($"[TutorialDbg] item unlock reward pending for level {levelId} - auto tutorial deferred");
+                    yield break;
+                }
+
                 if (resolvedConfig.manualTriggerOnly)
                 {
                     Debug.Log("[TutorialDbg] manualTriggerOnly - auto start deferred");
@@ -1217,10 +1228,26 @@ namespace BalloonFlow
             return hud != null && hud.IsBoosterRewardFxPlaying;
         }
 
-        private IEnumerator WaitForItemDescriptionClosed(bool waitForPotentialPopup)
+        private static bool IsPendingItemUnlockTutorial(int levelId)
+        {
+            if (!BoosterManager.HasInstance)
+                return false;
+
+            string boosterType = levelId switch
+            {
+                9 => BoosterManager.HAND,
+                12 => BoosterManager.SHUFFLE,
+                15 => BoosterManager.COLOR_REMOVE,
+                _ => null
+            };
+
+            return boosterType != null
+                   && !BoosterManager.Instance.IsUnlockRewardClaimed(boosterType);
+        }
+
+        private IEnumerator WaitForItemDescriptionClosed(bool waitForPotentialPopup, float appearTimeout = 5f)
         {
             const float ITEM_DESC_WAIT_TIMEOUT = 120f;
-            const float ITEM_DESC_APPEAR_TIMEOUT = 5f;
             yield return null; // 팝업이 OnLevelLoaded 동기 dispatch 에서 Show→IsShowing=true 하도록 한 프레임 양보.
             // ROLLBACK_TUTORIAL_WAIT_UNLOCK_POPUP_20260623:
             // PopupBuyItem.ShowUnlock can be scheduled by a sibling level-load coroutine.
@@ -1228,7 +1255,7 @@ namespace BalloonFlow
             // marked as "Wait For PopupItemDescription".
             if (waitForPotentialPopup)
             {
-                float appearDeadline = Time.unscaledTime + ITEM_DESC_APPEAR_TIMEOUT;
+                float appearDeadline = Time.unscaledTime + Mathf.Max(0f, appearTimeout);
                 while (!IsTutorialBlockingDescriptionShowing()
                        && !IsBoosterRewardFxPlaying()
                        && Time.unscaledTime < appearDeadline)
@@ -1295,7 +1322,13 @@ namespace BalloonFlow
             // Manual starts must also honor Tutorial Editor's waitForItemDescription flag,
             // and should never overlap PopupItemDescription if it is still open.
             if (config.waitForItemDescription || IsTutorialBlockingDescriptionShowing())
-                yield return WaitForItemDescriptionClosed(false);
+            {
+                // ROLLBACK_TUTORIAL_MANUAL_POPUP_RACE_20260623:
+                // In player builds PopupItemDescription/PopupBuyItem can be scheduled a frame
+                // after the manual trigger. Wait a short appearance window before starting the
+                // tutorial so the popup always owns the screen first.
+                yield return WaitForItemDescriptionClosed(config.waitForItemDescription, 0.75f);
+            }
 
             _startTutorialForLevelCoroutine = null;
             if (_isTutorialActive || IsTutorialComplete(config.tutorialId)) yield break;
