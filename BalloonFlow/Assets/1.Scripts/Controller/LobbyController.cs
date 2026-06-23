@@ -237,7 +237,8 @@ namespace BalloonFlow
                 int capturedNewLevel = newLevel;
                 int capturedHighest = highest;
                 // WS 로비 보상 팝업/FX 가 같은 프레임 OpenUI 에서 트리거될 수 있어, 두 연출이 겹치지 않도록
-                // PlayLobbyBtnChangeAnim 을 IsWinningStreakFxPlaying 종료 시점 뒤로 미룬다.
+                // PlayLobbyBtnChangeAnim 을 IsWinningStreakCoreFxPlaying 종료 시점 뒤로 미룬다.
+                // (Core 게이트는 FXGold 를 제외해 LobbyBtnChange 가 FXGold 와 병렬로 시작될 수 있도록 한다 — UILobby.cs:333 주석 참조)
                 if (_pendingBtnChangeAnimCoroutine != null) StopCoroutine(_pendingBtnChangeAnimCoroutine);
                 _pendingBtnChangeAnimCoroutine = StartCoroutine(
                     WaitForWinningStreakFxThenPlayBtnChangeAnim(newLevel, newDiff, capturedNewLevel, capturedHighest));
