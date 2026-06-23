@@ -88,6 +88,7 @@ namespace BalloonFlow
 
         private bool _sfxEnabled = true;
         private bool _bgmEnabled = true;
+        private bool _resultIntroSfxLock;
 
         protected override void OnSingletonAwake()
         {
@@ -341,6 +342,34 @@ namespace BalloonFlow
             _loopSfxSource.clip = null;
         }
 
+        /// <summary>FinishLogo 표시 구간 동안 SE 화이트리스트(Stage_Result / Stage_Result_Firework) 외 SFX 차단 게이트.
+        /// 외부에서 읽기 전용(컨트롤러/뷰가 가드용으로 참조). 사용자 지시 2026-06-23 task #377 후속.</summary>
+        public bool IsResultIntroSfxLocked => _resultIntroSfxLock;
+
+        /// <summary>
+        /// FinishLogo 표시 구간 SE 화이트리스트 락 시작.
+        /// [트리거 시작: GameBootstrap.PlayFinishLogoSequence 진입
+        ///  / 종료: PopupResult.ShowWin·ShowFail (다음 팝업 진입) — 사용자 지시 2026-06-23 task #377 후속]
+        /// 이미 재생 중인 잔여 SE 즉시 정지(StopAllSfx) + 풍선 팝 콤보 카운터 리셋.
+        /// _loopSfxSource(Firework 루프)는 정지하지 않음 — 이 함수 직후 PlayStageResult/Firework 가 시작되는 순서 보호.
+        /// </summary>
+        public void BeginResultIntroSfxLock()
+        {
+            _resultIntroSfxLock = true;
+            StopAllSfx();
+            _popComboCount = 0;
+            _lastPopClip = null;
+        }
+
+        /// <summary>
+        /// FinishLogo 표시 구간 SE 화이트리스트 락 종료.
+        /// 트리거: PopupResult.ShowWin / ShowFail (다음 팝업 진입). 사용자 지시 2026-06-23 task #377 후속.
+        /// </summary>
+        public void EndResultIntroSfxLock()
+        {
+            _resultIntroSfxLock = false;
+        }
+
         /// <summary>Lobby_Rail — UILobby Rail(Top/Bottom) 이동 시작 시 1회 재생.
         /// 호출 위치: UILobby.PlayRailEnterAnimation / PlayRailPullDownAnimation 진입점.
         /// PlayOneShot 이라 함수당 1회 보장 — Top/Bottom 동시 변경 케이스에서도 호출자가 1번만 부르면 1회 재생.</summary>
@@ -415,6 +444,7 @@ namespace BalloonFlow
             }
 
             _popSource.pitch = pitch;
+            if (_resultIntroSfxLock) return;
             _popSource.PlayOneShot(_lastPopClip);
         }
 
@@ -553,6 +583,7 @@ namespace BalloonFlow
 
         private void PlaySFX(AudioClip clip)
         {
+            if (_resultIntroSfxLock && clip != _sfxStageResult && clip != _sfxStageResultFirework) return;
             if (_sfxSource == null || clip == null || !_sfxEnabled) return;
             _sfxSource.PlayOneShot(clip);
         }

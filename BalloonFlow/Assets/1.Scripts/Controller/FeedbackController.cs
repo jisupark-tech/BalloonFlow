@@ -94,6 +94,10 @@ namespace BalloonFlow
         private bool _isShaking;
         private readonly Dictionary<GameObject, Vector3> _particleBaseScaleByObject = new Dictionary<GameObject, Vector3>();
 
+        // [2026-06-23 사용자 추가지시 task #377 후속] FinishLogo 표시 구간 SE 화이트리스트 락 검사.
+        // 락 활성 시 PopFeedback/Clear/Fail/Holder/Gauge/Booster/Coin/Star/RandomClip 등 모든 SFX 차단.
+        private bool ResultIntroLocked() => AudioManager.HasInstance && AudioManager.Instance.IsResultIntroSfxLocked;
+
         #endregion
 
         #region Lifecycle
@@ -177,6 +181,7 @@ namespace BalloonFlow
             if (_sfxSource != null && _clearClip != null)
             {
                 _sfxSource.pitch = _basePitch;
+                if (ResultIntroLocked()) return;
                 _sfxSource.PlayOneShot(_clearClip);
             }
 
@@ -199,6 +204,7 @@ namespace BalloonFlow
             if (_sfxSource != null && _failClip != null)
             {
                 _sfxSource.pitch = _basePitch * 0.8f;
+                if (ResultIntroLocked()) return;
                 _sfxSource.PlayOneShot(_failClip);
             }
         }
@@ -320,6 +326,7 @@ namespace BalloonFlow
                 if (_sfxSource != null && _holderDangerClip != null)
                 {
                     _sfxSource.pitch = _basePitch;
+                    if (ResultIntroLocked()) return;
                     _sfxSource.PlayOneShot(_holderDangerClip);
                 }
             }
@@ -329,6 +336,7 @@ namespace BalloonFlow
                 if (_sfxSource != null && _holderWarningClip != null)
                 {
                     _sfxSource.pitch = _basePitch * 1.2f;
+                    if (ResultIntroLocked()) return;
                     _sfxSource.PlayOneShot(_holderWarningClip);
                 }
             }
@@ -350,6 +358,7 @@ namespace BalloonFlow
                     if (_sfxSource != null && _gaugeWarningClip != null)
                     {
                         _sfxSource.pitch = _basePitch;
+                        if (ResultIntroLocked()) return;
                         _sfxSource.PlayOneShot(_gaugeWarningClip);
                     }
                     break;
@@ -360,6 +369,7 @@ namespace BalloonFlow
                     if (_sfxSource != null && _gaugeCriticalClip != null)
                     {
                         _sfxSource.pitch = _basePitch;
+                        if (ResultIntroLocked()) return;
                         _sfxSource.PlayOneShot(_gaugeCriticalClip);
                     }
                     break;
@@ -383,6 +393,7 @@ namespace BalloonFlow
             if (_sfxSource != null && _boosterActivateClip != null)
             {
                 _sfxSource.pitch = _basePitch;
+                if (ResultIntroLocked()) return;
                 _sfxSource.PlayOneShot(_boosterActivateClip);
             }
         }
@@ -396,6 +407,7 @@ namespace BalloonFlow
             if (_sfxSource != null && _coinEarnedClip != null)
             {
                 _sfxSource.pitch = _basePitch + 0.1f;
+                if (ResultIntroLocked()) return;
                 _sfxSource.PlayOneShot(_coinEarnedClip);
             }
         }
@@ -531,6 +543,7 @@ namespace BalloonFlow
             }
 
             _sfxSource.pitch = pitch;
+            if (ResultIntroLocked()) return;
             _sfxSource.PlayOneShot(clip);
         }
 
@@ -599,6 +612,7 @@ namespace BalloonFlow
             if (_sfxSource != null && _starEarnedClip != null)
             {
                 _sfxSource.pitch = _basePitch;
+                if (ResultIntroLocked()) return;
                 _sfxSource.PlayOneShot(_starEarnedClip);
             }
         }
