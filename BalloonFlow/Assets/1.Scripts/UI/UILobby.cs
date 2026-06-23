@@ -966,6 +966,8 @@ namespace BalloonFlow
             if (_wsProgressSlider != null)
             {
                 _wsLobbyFxSequence?.Kill();
+                // [WS GaugeUp SFX 2026-06-23] 슬라이더 증가 시작 시점 1회 재생. iteration 단위로 1회 보장 (DOValue per call).
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayWsGaugeUp();
                 _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
                 _wsLobbyFxSequence.Append(_wsProgressSlider.DOValue(endRatio, WS_SLIDER_FILL_DURATION)
                     .SetEase(Ease.OutCubic));
@@ -1010,6 +1012,8 @@ namespace BalloonFlow
                         _wsProgressSlider.value = 0f;
                         SetWsPointsText(0, carryDoc);
                         _wsLobbyFxSequence?.Kill();
+                        // [WS GaugeUp SFX 2026-06-23] 슬라이더 증가 시작 시점 1회 재생. iteration 단위로 1회 보장 (DOValue per call).
+                        if (AudioManager.HasInstance) AudioManager.Instance.PlayWsGaugeUp();
                         _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
                         _wsLobbyFxSequence.Append(_wsProgressSlider.DOValue(carryTarget, WS_SLIDER_FILL_DURATION)
                             .SetEase(Ease.OutCubic));
