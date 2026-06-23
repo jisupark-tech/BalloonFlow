@@ -185,9 +185,9 @@ popup.txtdescription.quit,Do you really want to quit?,PopupDescription
 popup.txtdescription.networkerror,Your internet is\ndisconnected.,PopupDescription
 popup.txtdescription.purchaseerror,Your purchase\nwas canceled.,PopupDescription
 popup.txtdescription.purchasesuccess,Your purchase\nwas completed.,PopupDescription
-popup.txtdescription.deleteaccount,"If you delete your account you will lose all your game progress, coins, boosters and purchases!
-We will aim to complete your deletion request within 30 days of the request. Once your account is deleted, this action cannot be reversed.
-If you return to the game before your account is deleted, you can cancel the deletion process and restore your account.",PopupError
+popup.txtdescription.deleteaccount1,"If you delete your account,\nyou will lose all your game progress, coins, boosters and purchases!",
+popup.txtdescription.deleteaccount2,"We will aim to complete your deletion request within 30 days. Once your account is deleted, this action cannot be reversed.",
+popup.txtdescription.deleteaccount3,"If you return to the game before your account is deleted, you can cancel the deletion process and restore your account.",
 popup.txtdescription.settingquit,You will lose a life!,PopupQuit
 popup.txtdescription.allclear,New Levels Coming Soon!,PopupDescription
 popup.txtdescription.hand,Place any box directly!,PopupBuyItem
