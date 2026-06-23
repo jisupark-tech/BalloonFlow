@@ -1837,6 +1837,28 @@ namespace BalloonFlow
         }
 
         /// <summary>이미지 픽셀을 분석하여 사용된 팔레트 색상을 자동 감지 → _selectedColors 갱신.</summary>
+        // ROLLBACK_MAPMAKER_CIEDE2000_20260623: 지각 거리 매칭 보조 (팔레트 Lab 캐시 / 고유색 키 / 표현불가 임계).
+        private const float IMPORT_GAP_THRESHOLD = 20f; // ΔE2000 ≳20 = 눈에 띄게 다른 색 (레퍼런스 gap_threshold 기본값)
+        private PerceptualColor.Lab[] _paletteLab;
+
+        /// <summary>PALETTE 28색의 CIELab 1회 캐시.</summary>
+        private void EnsurePaletteLab()
+        {
+            if (_paletteLab != null && _paletteLab.Length == PALETTE.Length) return;
+            _paletteLab = new PerceptualColor.Lab[PALETTE.Length];
+            for (int i = 0; i < PALETTE.Length; i++)
+                _paletteLab[i] = PerceptualColor.RgbToLab(PALETTE[i]);
+        }
+
+        /// <summary>Color(0~1) → 8bit RGB 정수 키(고유색 LUT 용).</summary>
+        private static int PackRgb(Color c)
+        {
+            int r = Mathf.Clamp((int)(c.r * 255f + 0.5f), 0, 255);
+            int g = Mathf.Clamp((int)(c.g * 255f + 0.5f), 0, 255);
+            int b = Mathf.Clamp((int)(c.b * 255f + 0.5f), 0, 255);
+            return (r << 16) | (g << 8) | b;
+        }
+
         private void AutoDetectPaletteFromImage(Texture2D img)
         {
             if (img == null) return;
@@ -1846,6 +1868,13 @@ namespace BalloonFlow
             int sampleStep = Mathf.Max(1, img.width * img.height / 10000); // 최대 10000 샘플
             var pixels = img.GetPixels();
 
+            // ROLLBACK_MAPMAKER_CIEDE2000_20260623: Redmean → CIEDE2000(지각 거리) 매칭.
+            //   팔레트 Lab 1회 캐시 + 고유색 LUT 로 픽셀당 재계산 회피. 표현불가(ΔE>임계) 경고 수집.
+            EnsurePaletteLab();
+            var labLut = new Dictionary<int, int>(256);  // packed RGB → 팔레트 인덱스
+            var labGap = new Dictionary<int, float>(256); // packed RGB → 매칭 ΔE
+            float worstGap = 0f; int worstColor = -1;
+
             for (int i = 0; i < pixels.Length; i += sampleStep)
             {
                 Color p = pixels[i];
@@ -1854,20 +1883,27 @@ namespace BalloonFlow
                 float brightness = p.r * 0.299f + p.g * 0.587f + p.b * 0.114f;
                 if (p.a < 0.5f || brightness < _importBgThreshold) continue;
 
-                // 28색 팔레트 중 가장 가까운 색상
-                int bestIdx = 0;
-                float bestDist = float.MaxValue;
-                for (int pi = 0; pi < PALETTE.Length; pi++)
+                int key = PackRgb(p);
+                int bestIdx;
+                if (!labLut.TryGetValue(key, out bestIdx))
                 {
-                    float dr = p.r - PALETTE[pi].r;
-                    float dg = p.g - PALETTE[pi].g;
-                    float db = p.b - PALETTE[pi].b;
-                    float rmean = (p.r + PALETTE[pi].r) * 0.5f;
-                    float dist = (2f + rmean) * dr * dr + 4f * dg * dg + (3f - rmean) * db * db;
-                    if (dist < bestDist) { bestDist = dist; bestIdx = pi; }
+                    var pLab = PerceptualColor.RgbToLab(p);
+                    bestIdx = 0; float bestDist = float.MaxValue;
+                    for (int pi = 0; pi < PALETTE.Length; pi++)
+                    {
+                        float d = PerceptualColor.DeltaE2000(pLab, _paletteLab[pi]);
+                        if (d < bestDist) { bestDist = d; bestIdx = pi; }
+                    }
+                    labLut[key] = bestIdx;
+                    labGap[key] = bestDist;
+                    if (bestDist > worstGap) { worstGap = bestDist; worstColor = bestIdx; }
                 }
                 colorHits.Add(bestIdx);
             }
+
+            // 표현불가 경고: 가장 나쁘게 스냅된 색의 ΔE 가 임계 초과면 알림 (기본 임계 20)
+            if (worstColor >= 0 && worstGap > IMPORT_GAP_THRESHOLD)
+                SetStatus($"[표현불가 주의] 일부 이미지 색이 28색으로 멀게 스냅됨 (최대 ΔE {worstGap:F1}, 가까운 색 #{worstColor}). 색 선택/원본 검토 권장.");
 
             if (colorHits.Count < 2)
             {
@@ -1899,15 +1935,12 @@ namespace BalloonFlow
             int srcH = _importedImage.height;
 
             // 1단계: 원본 해상도의 모든 픽셀을 팔레트 인덱스로 변환 (full-res quantize)
-            // 팔레트 색상을 미리 배열로 변환 (성능)
-            float[] palR = new float[selColorList.Count];
-            float[] palG = new float[selColorList.Count];
-            float[] palB = new float[selColorList.Count];
+            // ROLLBACK_MAPMAKER_CIEDE2000_20260623: 선택색 Lab 1회 캐시 + 고유색 LUT 로 CIEDE2000 매칭.
+            EnsurePaletteLab();
+            var selLab = new PerceptualColor.Lab[selColorList.Count];
             for (int si = 0; si < selColorList.Count; si++)
-            {
-                int pi = selColorList[si];
-                palR[si] = PALETTE[pi].r; palG[si] = PALETTE[pi].g; palB[si] = PALETTE[pi].b;
-            }
+                selLab[si] = _paletteLab[selColorList[si]];
+            var snapLut = new Dictionary<int, int>(512); // packed RGB → 팔레트 인덱스(selColorList 의 값)
 
             // 2단계: 그리드 셀별로 원본 픽셀 블록의 최빈 팔레트 색상 선택
             var colorVotes = new Dictionary<int, int>(); // paletteIndex → count
@@ -1940,21 +1973,21 @@ namespace BalloonFlow
                                 continue;
                             }
 
-                            // 이 픽셀의 가장 가까운 팔레트 색상 (원본 해상도에서 매칭)
-                            int bestSi = 0;
-                            float bestDist = float.MaxValue;
-                            for (int si = 0; si < selColorList.Count; si++)
+                            // 이 픽셀의 가장 가까운 팔레트 색상 (CIEDE2000, 고유색 LUT 캐시)
+                            int key = PackRgb(p);
+                            int palIdx;
+                            if (!snapLut.TryGetValue(key, out palIdx))
                             {
-                                float dr = p.r - palR[si];
-                                float dg = p.g - palG[si];
-                                float db = p.b - palB[si];
-                                // Redmean 가중 거리 (인간 시각 최적화)
-                                float rmean = (p.r + palR[si]) * 0.5f;
-                                float dist = (2f + rmean) * dr * dr + 4f * dg * dg + (3f - rmean) * db * db;
-                                if (dist < bestDist) { bestDist = dist; bestSi = si; }
+                                var pLab = PerceptualColor.RgbToLab(p);
+                                int bestSi = 0; float bestDist = float.MaxValue;
+                                for (int si = 0; si < selColorList.Count; si++)
+                                {
+                                    float d = PerceptualColor.DeltaE2000(pLab, selLab[si]);
+                                    if (d < bestDist) { bestDist = d; bestSi = si; }
+                                }
+                                palIdx = selColorList[bestSi];
+                                snapLut[key] = palIdx;
                             }
-
-                            int palIdx = selColorList[bestSi];
                             if (colorVotes.ContainsKey(palIdx)) colorVotes[palIdx]++;
                             else colorVotes[palIdx] = 1;
                         }
