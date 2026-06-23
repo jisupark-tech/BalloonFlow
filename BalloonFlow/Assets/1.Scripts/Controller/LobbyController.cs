@@ -370,7 +370,9 @@ namespace BalloonFlow
             int newLevel, DifficultyPurpose newDiff, int capturedNewLevel, int capturedHighest)
         {
             yield return null;
-            while (_lobby != null && _lobby.IsWinningStreakFxPlaying)
+            // [WS 코어 연출 병렬화 2026-06-23] FXGold(PlayWinningStreakLevelClearGoldFx)는 LobbyBtnChange 와 병렬 실행 허용.
+            // 코어 연출(보상 팝업 + 게이지/배수) 만 끝나면 release. click 차단은 OnPlayClicked 의 IsWinningStreakFxPlaying 가드가 별도로 유지.
+            while (_lobby != null && _lobby.IsWinningStreakCoreFxPlaying)
                 yield return null;
 
             if (_lobby == null) yield break;
