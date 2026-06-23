@@ -104,6 +104,9 @@ namespace BalloonFlow
         {
             // FinishLogo 루프 SFX 정지 보장 (코루틴 인터럽트/예외 시 폴백). 사용자 지시 2026-06-23.
             if (AudioManager.HasInstance) AudioManager.Instance.StopStageResultFirework();
+            // [2026-06-23 사용자 추가지시 task #377 후속] FinishLogo 구간 SE 화이트리스트 락 해제.
+            // Fail 경로는 FinishLogo 미통과지만 방어적 해제 — Win 도중 인터럽트로 ShowFail 호출되는 엣지 케이스 대비.
+            if (AudioManager.HasInstance) AudioManager.Instance.EndResultIntroSfxLock();
             if (PopupManager.HasInstance)
                 PopupManager.Instance.ShowPopup("popup_fail01", 50);
         }
@@ -213,10 +216,9 @@ namespace BalloonFlow
             OpenUI();
             // FinishLogo 루프 SFX 정지 보장 (코루틴 인터럽트/예외 시 폴백). 사용자 지시 2026-06-23.
             if (AudioManager.HasInstance) AudioManager.Instance.StopStageResultFirework();
-            // [2026-06-23] PopupResult 오픈 직후 결과 SFX 1회 재생 (Stage_Result.mp3).
-            // 태스크 명세: 팝업이 표시될 때마다 재생. PlayOneShot 이라 자동으로 1회.
-            // 보드클리어 시점의 _sfxClear(congratuation)와는 별개 트랙으로 레이어됨.
-            if (AudioManager.HasInstance) AudioManager.Instance.PlayStageResult();
+            // [2026-06-23 사용자 추가지시 task #377 후속] FinishLogo 구간 SE 화이트리스트 락 해제.
+            if (AudioManager.HasInstance) AudioManager.Instance.EndResultIntroSfxLock();
+            // [2026-06-23 사용자 추가지시] PlayStageResult 호출은 GameBootstrap.PlayFinishLogoSequence 로 이동 — FinishLogo 구간 화이트리스트와 함께 시작.
             EnsureRewardVisible(starCount);
 
             // 애니메이션 상태와 무관하게 즉시 클릭 가능

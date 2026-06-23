@@ -675,9 +675,16 @@ namespace BalloonFlow
                                                               : UIManager.Instance.UiTr);
             if (_parent == null) _parent = transform;
 
+            // [2026-06-23 사용자 추가지시] FinishLogo 표시 구간 SE 화이트리스트 락 시작 +
+            // Stage_Result(1-shot) + Stage_Result_Firework(loop) 동시 시작. 락 해제는 PopupResult.ShowWin/ShowFail 진입 시.
+            // 순서 중요(Lock → 1-shot → Loop) — PlayStageResult 는 Lock 후이지만 화이트리스트라 통과.
+            if (AudioManager.HasInstance)
+            {
+                AudioManager.Instance.BeginResultIntroSfxLock();
+                AudioManager.Instance.PlayStageResult();
+                AudioManager.Instance.PlayStageResultFireworkLoop();
+            }
             GameObject _logoGO = Instantiate(_finishLogoPrefab, _parent, false);
-            // SFX loop start/stop — 사용자 지시 2026-06-23 (task #370 comment). FinishLogo 표시 구간 한정.
-            if (AudioManager.HasInstance) AudioManager.Instance.PlayStageResultFireworkLoop();
             var _rt = _logoGO.transform as RectTransform;
             if (_rt != null)
             {
