@@ -1996,6 +1996,10 @@ namespace BalloonFlow
         /// </summary>
         public void PlayRailEnterAnimation()
         {
+            // [2026-06-23] Rail 이동 시작 SFX(Lobby_Rail) 1회. _railTop/_railBottom 둘 다 null 이면 실제 이동이 없으므로 침묵.
+            if ((_railTop != null || _railBottom != null) && AudioManager.HasInstance)
+                AudioManager.Instance.PlayLobbyRail();
+
             _railTopTween?.Kill();
             _railBottomTween?.Kill();
 
@@ -2024,6 +2028,10 @@ namespace BalloonFlow
         /// </summary>
         public void PlayRailPullDownAnimation()
         {
+            // [2026-06-23] Rail 이동 시작 SFX(Lobby_Rail) 1회. _railTop/_railBottom 둘 다 null 이면 실제 이동이 없으므로 침묵.
+            if ((_railTop != null || _railBottom != null) && AudioManager.HasInstance)
+                AudioManager.Instance.PlayLobbyRail();
+
             _railTopTween?.Kill();
             _railBottomTween?.Kill();
 
