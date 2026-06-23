@@ -448,7 +448,6 @@ namespace BalloonFlow
         public const string ADDR_PREFAB_WOODENBOARD                       = "prefab_WoodenBoard";
 
         // ── Audio keys (Remote_CDM / cdm) ───────────────
-        public const string ADDR_AUDIO_COMMON_COIN_GAIN                   = "audio_Common_Coin_Gain";
         public const string ADDR_AUDIO_COMMON_NORMAL_TOUCH                = "audio_Common_Normal_Touch";
         public const string ADDR_AUDIO_COMMON_POPUP_TOUCH                 = "audio_Common_Popup_Touch";
         public const string ADDR_AUDIO_INGAME                             = "audio_InGame";
