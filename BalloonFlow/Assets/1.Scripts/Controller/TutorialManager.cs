@@ -81,6 +81,8 @@ namespace BalloonFlow
         // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622: 프리팹 기본 instruction 색상(override 안 하는 스텝 복원용).
         private Color _defaultInstructionColor = Color.white;
         private Button _skipButton;
+        // ROLLBACK_TUTORIAL_HIDE_ALL_SKIP_20260623: 모든 튜토리얼 Skip 버튼 전역 비노출. false 로 두면 스텝별 동작.
+        private static readonly bool HIDE_ALL_SKIP_BUTTONS = true;
 
         // Tap-anywhere overlay (invisible button that covers the cutout hole area)
         private Button _tapAnywhereButton;
@@ -1356,8 +1358,11 @@ namespace BalloonFlow
 
             // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622: 스텝별 Skip(X) 노출 토글.
             //   기본 노출, currentStep.hideSkipButton=true(튜토리얼 통한 아이템 사용 강제 스텝) 면 숨김.
+            // ROLLBACK_TUTORIAL_HIDE_ALL_SKIP_20260623: 전역으로 모든 Skip 버튼 비노출(사용자 요구).
+            //   HIDE_ALL_SKIP_BUTTONS=true 면 스텝 무관 항상 숨김. false 로 두면 위 스텝별 동작으로 환원.
             if (_skipButton != null)
-                _skipButton.gameObject.SetActive(currentStep == null || !currentStep.hideSkipButton);
+                _skipButton.gameObject.SetActive(
+                    !HIDE_ALL_SKIP_BUTTONS && (currentStep == null || !currentStep.hideSkipButton));
 
             // Handle tap_anywhere action
             bool isTapAnywhere = requireAction == "tap_anywhere";

@@ -1746,6 +1746,8 @@ namespace BalloonFlow
         private InputField _importGridColsInput;
         private InputField _importGridRowsInput;
         private int _importRoundTo = 10;
+        // ROLLBACK_MAPMAKER_NUM_COLORS_20260623: 임포트 시 사용할 색 수(0=자동/전부). >0 이면 대표 N색만 선별.
+        private int _importNumColors = 0;
         private float _importBgThreshold = 0.15f; // 이 밝기 이하는 배경으로 인식 (0~1)
         private int[,] _importPreview; // color index grid from image
 
@@ -1820,6 +1822,14 @@ namespace BalloonFlow
             Lbl(r2, "H", w: 20);
             _importGridRowsInput = MakeIntField(r2, _importGridRows, 4, 100, v => { _importGridRows = v; UpdateImagePreview(); });
 
+            // ROLLBACK_MAPMAKER_NUM_COLORS_20260623: 임포트 전 사용할 색 수 입력(0=자동/전부). Load 전 미리 넣으면 적용.
+            var rN = Row(p); Lbl(rN, "Num Colors", w: 70);
+            MakeIntField(rN, _importNumColors, 0, 28, v =>
+            {
+                _importNumColors = v;
+                if (_importedImage != null) { AutoDetectPaletteFromImage(_importedImage); UpdateImagePreview(); }
+            });
+
             var r3 = Row(p); Lbl(r3, "Round To", w: 70);
             MakeIntField(r3, _importRoundTo, 0, 50, v => _importRoundTo = v);
 
@@ -1863,8 +1873,8 @@ namespace BalloonFlow
         {
             if (img == null) return;
 
-            // 전체 28색 팔레트에서 매칭
-            var colorHits = new HashSet<int>();
+            // 전체 28색 팔레트에서 매칭. ROLLBACK_MAPMAKER_NUM_COLORS_20260623: 빈도(픽셀수)도 집계 → 대표 N색 선별용.
+            var colorHits = new Dictionary<int, int>(32); // 팔레트 인덱스 → 히트 수
             int sampleStep = Mathf.Max(1, img.width * img.height / 10000); // 최대 10000 샘플
             var pixels = img.GetPixels();
 
@@ -1898,7 +1908,7 @@ namespace BalloonFlow
                     labGap[key] = bestDist;
                     if (bestDist > worstGap) { worstGap = bestDist; worstColor = bestIdx; }
                 }
-                colorHits.Add(bestIdx);
+                colorHits[bestIdx] = colorHits.TryGetValue(bestIdx, out int hc) ? hc + 1 : 1;
             }
 
             // 표현불가 경고: 가장 나쁘게 스냅된 색의 ΔE 가 임계 초과면 알림 (기본 임계 20)
@@ -1911,14 +1921,64 @@ namespace BalloonFlow
                 return;
             }
 
+            // ROLLBACK_MAPMAKER_NUM_COLORS_20260623: Num Colors 필드(>0)면 대표 N색만 선별, 0/초과면 전부.
+            //   선별 = 빈도×분산 그리디(CIEDE2000). _importNumColors=0 이면 기존 동작(전부 사용)과 동일.
+            List<int> chosen;
+            if (_importNumColors > 0 && _importNumColors < colorHits.Count)
+                chosen = SelectRepresentativeColors(colorHits, _importNumColors);
+            else
+                chosen = new List<int>(colorHits.Keys);
+
             // 팔레트 갱신
             _selectedColors.Clear(); _sortedColorsDirty = true;
-            foreach (int ci in colorHits) _selectedColors.Add(ci);
+            foreach (int ci in chosen) _selectedColors.Add(ci);
             _numColors = _selectedColors.Count;
             RebuildColorToggleGrid();
             RebuildPalette();
             _infoDirty = true;
-            SetStatus($"Auto-detect: {colorHits.Count} palette colors matched from image");
+            SetStatus(_importNumColors > 0 && _importNumColors < colorHits.Count
+                ? $"Auto-detect: {colorHits.Count} colors → {chosen.Count} 대표색 선별(Num Colors={_importNumColors})"
+                : $"Auto-detect: {chosen.Count} palette colors matched from image");
+        }
+
+        /// <summary>
+        /// ROLLBACK_MAPMAKER_NUM_COLORS_20260623: 대표 N색 선별 — 빈도×분산 그리디(CIEDE2000).
+        /// 자주 쓰이면서(weight=히트수) 서로 멀리 퍼진(min ΔE) 색을 골라 다채롭고 대표성 있게 N개 선택.
+        /// (레퍼런스 bl_palette_snap 의 select_representatives 와 동일 로직)
+        /// </summary>
+        private List<int> SelectRepresentativeColors(Dictionary<int, int> hits, int n)
+        {
+            EnsurePaletteLab();
+            var cand = new List<int>(hits.Keys);
+            var chosen = new List<int>(n);
+            if (cand.Count == 0) return chosen;
+
+            // 시드 = 빈도 최고 색
+            int seed = cand[0];
+            foreach (int c in cand) if (hits[c] > hits[seed]) seed = c;
+            chosen.Add(seed);
+
+            const float POWER = 1.5f; // 분산 가중(레퍼런스 dispersion 기본값)
+            while (chosen.Count < n && chosen.Count < cand.Count)
+            {
+                int best = -1; float bestScore = -1f;
+                foreach (int c in cand)
+                {
+                    if (chosen.Contains(c)) continue;
+                    // 이미 고른 색들과의 최소 ΔE (멀수록 다채로움)
+                    float minD = float.MaxValue;
+                    for (int j = 0; j < chosen.Count; j++)
+                    {
+                        float d = PerceptualColor.DeltaE2000(_paletteLab[c], _paletteLab[chosen[j]]);
+                        if (d < minD) minD = d;
+                    }
+                    float score = hits[c] * Mathf.Pow(minD, POWER);
+                    if (score > bestScore) { bestScore = score; best = c; }
+                }
+                if (best < 0) break;
+                chosen.Add(best);
+            }
+            return chosen;
         }
 
         private void UpdateImagePreview()
