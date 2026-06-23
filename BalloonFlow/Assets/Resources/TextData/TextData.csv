@@ -3,30 +3,30 @@ frozenlayer.magazinetext,0,
 holder.magazinetext,0,
 itembtn.txtlock,Lv.{n},
 newfeature.textunlock,Unlocked!,
-?�치 ?�금 ?�업 ,,
-newfeature.textname.HiddenDartBox,Hidden Dart Box,?�벨 11 ?�장 
+?�치 ?�금 ?�업 ,,
+newfeature.textname.HiddenDartBox,Hidden Dart Box,?�벨 11 ?�장 
 newfeature.textdesctiption.HiddenDartBox,Bring them to the front to reveal!,
-newfeature.textname.LinkedDartBox,Linked Dart Box,?�벨 21 ?�장
+newfeature.textname.LinkedDartBox,Linked Dart Box,?�벨 21 ?�장
 newfeature.textdesctiption.LinkedDartBox,They all move together!,
-newfeature.textname.Wooden Board,Wooden Board,?�벨 31 ?�장
+newfeature.textname.Wooden Board,Wooden Board,?�벨 31 ?�장
 newfeature.textdesctiption.Wooden Board,Shoot the same color to break it!,
-newfeature.textname.GlassPipe,Glass Pipe,?�벨 41 ?�장
+newfeature.textname.GlassPipe,Glass Pipe,?�벨 41 ?�장
 newfeature.textdesctiption.GlassPipe,Tap nearby boxes to release a new one!,
-newfeature.textname.Barricade,Barricade,?�벨 61 ?�장
+newfeature.textname.Barricade,Barricade,?�벨 61 ?�장
 newfeature.textdesctiption.Barricade,Shoot the same color to clear the path!,
-newfeature.textname.HiddenBalloon,HiddenBalloon,?�벨 81 ?�장
+newfeature.textname.HiddenBalloon,HiddenBalloon,?�벨 81 ?�장
 newfeature.textdesctiption.HiddenBalloon,Pop nearby balloons to reveal!,
-newfeature.textname.IronWall,Iron Wall,?�벨 101 ?�장 
+newfeature.textname.IronWall,Iron Wall,?�벨 101 ?�장 
 newfeature.textdesctiption.IronWall,It blocks darts' path!,
-newfeature.textname.Pipe,Pipe,?�벨 121 ?�장
+newfeature.textname.Pipe,Pipe,?�벨 121 ?�장
 newfeature.textdesctiption.Pipe,Tap nearby boxes to release a mystery one!,
-newfeature.textname.flextube,Flex Tube,?�벨 141 ?�장
+newfeature.textname.flextube,Flex Tube,?�벨 141 ?�장
 newfeature.textdesctiption.flextube,Shoot the same color to shrink the tube!,
-newfeature.textname.TargetBox,Target Box,?�벨 161 ?�장
+newfeature.textname.TargetBox,Target Box,?�벨 161 ?�장
 newfeature.textdesctiption.TargetBox,Shoot the same colors to break it all!,
-newfeature.textname.Ice,Ice,?�벨 201 ?�장
+newfeature.textname.Ice,Ice,?�벨 201 ?�장
 newfeature.textdesctiption.Ice,Pop any balloon to shatter the ice!,
-newfeature.textname.FrozenDartBox,Frozen Dart Box,?�벨 241 ?�장 
+newfeature.textname.FrozenDartBox,Frozen Dart Box,?�벨 241 ?�장 
 newfeature.textdesctiption.FrozenDartBox,Tap other boxes to shatter the ice!,
 popupcontinue.costlabel,Cost:,
 popupcontinue.txtcontinue,Play On,
@@ -74,7 +74,7 @@ popupwinningstreakinfo.textinfo1,"Win levels,\ncollect <color=#FFD700> Flames! <
 popupwinningstreakinfo.textinfo2,Multiply <color=#FFD700> Flames </color>\nup to x100!,
 popupwinningstreakinfo.textinfo3,Get <color=#FFD700>rewards!,
 shoplistitem.textsale,{n}% OFF,
-?�점 번들 ?�름 ,,
+?�점 번들 ?�름 ,,
 shop.bundle.tier1.title,Pop Pack,
 shop.bundle.tier2.title,Super Pack,
 shop.bundle.tier3.title,Mega Pack,
@@ -119,7 +119,7 @@ useitem.txtdescription.hand,"Tap any box to place it!
 ",UseItem
 useitem.txtdescription.zap,Tap any color to pop them all!,
 ,,
-popupcommonframe.txttitle.setting,Settings,?�정
+popupcommonframe.txttitle.setting,Settings,?�정
 ui.settings.title,Settings,
 ui.settings.sound,Sound,
 ui.settings.music,Music,
@@ -162,16 +162,16 @@ ui.common.retry,Retry,
 ,,
 uilobby.txtplay,,
 ,,
-?�업 ?�목 ,,
+?�업 ?�목 ,,
 popup.txttitle,,
 popup.txttitle.moreLives,More Lives,
-popup.txttitle.quit,Quit Game?,?�드로이??백버?????�장 (PopupDescription)
-popup.txttitle.networkerror,Not Connected,?�터???�결 (PopupError)
+popup.txttitle.quit,Quit Game?,?�드로이??백버?????�장 (PopupDescription)
+popup.txttitle.networkerror,Not Connected,?�터???�결 (PopupError)
 popup.txttitle.,,
-popup.txttitle.allclear,Congratulations!,Lv.300 ?�리?????�는 Lv.301 ?�치 ??(PopupDescription)
-popup.txttitle.lv,Level {n},결과?�업 ?�공 ?�패 ???�일
-popup.txttitle.noads,NO ADS,광고?�거 ?�업
-popup.txttitle.purchaseerror,Not Charged,결제?�패 (PopupDescription)
+popup.txttitle.allclear,Congratulations!,Lv.300 ?�리?????�는 Lv.301 ?�치 ??(PopupDescription)
+popup.txttitle.lv,Level {n},결과?�업 ?�공 ?�패 ???�일
+popup.txttitle.noads,NO ADS,광고?�거 ?�업
+popup.txttitle.purchaseerror,Not Charged,결제?�패 (PopupDescription)
 popup.txttitle.purchasesuccess,Success,PopupError
 popup.txttitle.deleteaccount,Are You Sure?,PopupError
 popup.txttitle.settingquit,Quit Level?,PopupQuit
@@ -180,17 +180,14 @@ popup.txttitle.suffle,Shuffle,PopupBuyItem
 popup.txttitle.zap,Zap,PopupBuyItem
 popup.txttitle.unlock,Unlock,PopupBuyItem
 ,,
-?�업 ?�명,,
+?�업 ?�명,,
 popup.txtdescription.quit,Do you really want to quit?,PopupDescription
 popup.txtdescription.networkerror,Your internet is\ndisconnected.,PopupDescription
 popup.txtdescription.purchaseerror,Your purchase\nwas canceled.,PopupDescription
 popup.txtdescription.purchasesuccess,Your purchase\nwas completed.,PopupDescription
-popup.txtdescription.deleteaccount,"If you delete your account you will lose all your game progress, coins, boosters and purchases!
-We will aim to complete your deletion request within 30 days of the request. Once your account is deleted, this action cannot be reversed.
-If you return to the game before your account is deleted, you can cancel the deletion process and restore your account.",PopupError
-popup.txtdescription.deleteaccount1,"If you delete your account you will lose all your game progress, coins, boosters and purchases!",PopupDeleteAccount
-popup.txtdescription.deleteaccount2,"We will aim to complete your deletion request within 30 days of the request. Once your account is deleted, this action cannot be reversed.",PopupDeleteAccount
-popup.txtdescription.deleteaccount3,"If you return to the game before your account is deleted, you can cancel the deletion process and restore your account.",PopupDeleteAccount
+popup.txtdescription.deleteaccount1,"If you delete your account,\nyou will lose all your game progress, coins, boosters and purchases!",
+popup.txtdescription.deleteaccount2,"We will aim to complete your deletion request within 30 days. Once your account is deleted, this action cannot be reversed.",
+popup.txtdescription.deleteaccount3,"If you return to the game before your account is deleted, you can cancel the deletion process and restore your account.",
 popup.txtdescription.settingquit,You will lose a life!,PopupQuit
 popup.txtdescription.allclear,New Levels Coming Soon!,PopupDescription
 popup.txtdescription.hand,Place any box directly!,PopupBuyItem
