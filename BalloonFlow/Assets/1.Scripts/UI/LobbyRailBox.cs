@@ -264,6 +264,9 @@ namespace BalloonFlow
         /// <summary>게임 시작 시 호출 — 박스 열림 연출, 0.5초 후 콜백.</summary>
         public void PlayStartGameAnimation(System.Action onComplete = null)
         {
+            // [2026-06-23] LobbyRailBox 오픈 연출 시작 SFX (Lobby_RailBox_Start). 호출자(LobbyController)가 BtnPlay.interactable=false 로 중복 트리거 차단, PlayOneShot 채널이라 호출당 1회.
+            if (AudioManager.HasInstance) AudioManager.Instance.PlayLobbyRailBoxStart();
+
             if (_animator != null)
                 _animator.SetTrigger(_animOpen);
 
