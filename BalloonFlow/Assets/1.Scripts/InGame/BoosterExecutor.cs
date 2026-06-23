@@ -194,6 +194,7 @@ namespace BalloonFlow
                 //HideCancelButton();
                 CloseUseItemPopup(true);
                 ExecuteSelectTool(holderId);
+                NotifyTutorialItemUseCompleted();
 
                 RestoreHandCameraOrMoveBack();
             }
@@ -423,6 +424,14 @@ namespace BalloonFlow
         ///   RailManager.IsPausedByBooster=true 인데 아래 await 플래그가 걸린 채면 = 인터랙티브 부스터
         ///   (Hand/Color-Remove) 상호작용이 완료/취소되지 못해 ResumeRail 미도달 → 레일 영구정지(소프트락).
         ///   롤백: 이 메서드 삭제.</summary>
+        private static void NotifyTutorialItemUseCompleted()
+        {
+            // ROLLBACK_TUTORIAL_COMPLETE_AFTER_ITEM_USE_20260623:
+            // Finish requireAction=tap_item only after the real booster effect is confirmed.
+            if (TutorialController.HasInstance)
+                TutorialController.Instance.NotifyItemUseCompleted();
+        }
+
         public string GetDebugState()
         {
             return $"pendingType={(_pendingBoosterType ?? "(none)")} awaitHolder={_awaitingHolderSelection} " +
@@ -561,6 +570,7 @@ namespace BalloonFlow
                     CameraManager.Instance.MoveBack();
                 SetHudBottomPanelHiddenForZap(false);
                 ResumeRail();
+                NotifyTutorialItemUseCompleted();
                 _zapTargets.Clear();
                 _isColorRemoveSequenceRunning = false;
                 _isZapAnimationPlaying = false;

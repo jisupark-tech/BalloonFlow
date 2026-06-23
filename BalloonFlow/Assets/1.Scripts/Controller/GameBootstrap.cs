@@ -546,6 +546,13 @@ namespace BalloonFlow
 
                         PlayerPrefs.SetInt(shownKey, 1);
                         PlayerPrefs.Save();
+
+                        // ROLLBACK_TUTORIAL_START_AFTER_UNLOCK_20260623:
+                        // Level-entry booster unlock must be "Claim -> HUD reward fly -> Tutorial".
+                        // Tutorial Editor can mark the sequence as Manual Trigger Only, so trigger it
+                        // here after the reward has actually landed in UIHud.
+                        if (TutorialController.HasInstance && LevelManager.HasInstance)
+                            TutorialController.Instance.StartTutorialForLevel(LevelManager.Instance.CurrentLevelId);
                     }
 
                     if (_hud != null)

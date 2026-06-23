@@ -702,11 +702,11 @@ namespace BalloonFlow
             //   (현재 스텝 hideSkipButton=true) 에선 X/취소(Exit) 버튼을 숨겨, 사용하지 않고 빠져나가지 못하게 한다.
             //   일반(비튜토리얼) 사용이나 hideSkipButton=false 스텝은 기존대로 Exit 노출.
             //   롤백: 아래 두 줄 + SetExitButtonsVisible 삭제.
-            bool tutorialForcedUse = TutorialController.HasInstance
-                && TutorialController.Instance.IsTutorialActive()
-                && TutorialController.Instance.GetCurrentStep() != null
-                && TutorialController.Instance.GetCurrentStep().hideSkipButton;
-            SetExitButtonsVisible(!tutorialForcedUse);
+            // ROLLBACK_TUTORIAL_HIDE_EXIT_ON_ITEM_USE_20260623:
+            // Hide UseItem exits during any active tutorial, not only hideSkipButton steps.
+            bool tutorialUseItemFlow = TutorialController.HasInstance
+                && TutorialController.Instance.IsTutorialActive();
+            SetExitButtonsVisible(!tutorialUseItemFlow);
 
             if (_imgItem != null)
             {

@@ -10,6 +10,8 @@ namespace BalloonFlow
     /// </summary>
     public class PopupDescription : UIBase
     {
+        public static bool IsShowing { get; private set; }
+
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
 
@@ -30,6 +32,9 @@ namespace BalloonFlow
             }
         }
 
+        private void OnEnable() => IsShowing = true;
+        private void OnDisable() => IsShowing = false;
+
         protected override void OnDestroy()
         {
             base.OnDestroy();
@@ -38,6 +43,7 @@ namespace BalloonFlow
                 if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.RemoveAllListeners();
                 if (_frame.BtnExit != null) _frame.BtnExit.onClick.RemoveAllListeners();
             }
+            IsShowing = false;
         }
 
         /// <summary>타이틀 + 설명 텍스트 설정 후 열기.</summary>
@@ -70,11 +76,13 @@ namespace BalloonFlow
 
             if (_txtDescription != null) _txtDescription.text = description;
 
+            IsShowing = true;
             OpenUI();
         }
 
         private void OnConfirm()
         {
+            IsShowing = false;
             _onConfirm?.Invoke();
             CloseUI();
         }
@@ -84,6 +92,7 @@ namespace BalloonFlow
         {
             if (_exitClosesOnly)
             {
+                IsShowing = false;
                 CloseUI();
                 return;
             }

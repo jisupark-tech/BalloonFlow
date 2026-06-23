@@ -1352,7 +1352,22 @@ namespace BalloonFlow
 
             // Handle tap_anywhere action
             bool isTapAnywhere = requireAction == "tap_anywhere";
+            bool isTapItem = requireAction == "tap_item";
+            // ROLLBACK_TUTORIAL_TAP_ITEM_PASS_THROUGH_20260623:
+            // For item button steps, keep the highlight visible but let the real UIHud button
+            // receive the click through the Tutorial canvas.
+            SetTutorialRaycastBlocking(!isTapItem);
             SetTapAnywherEnabled(isTapAnywhere);
+        }
+
+        public void HideVisualsForItemUse()
+        {
+            // ROLLBACK_TUTORIAL_HIDE_AFTER_TAP_ITEM_20260623:
+            // After the HUD item button is tapped, UseItem owns the dim/cutout experience.
+            // Keep TutorialController active so PopupUseItem can hide Exit, but remove
+            // tutorial text/dim and stop intercepting input.
+            HideAllVisuals();
+            SetTutorialRaycastBlocking(false);
         }
 
         /// <summary>ROLLBACK_TUTORIAL_ITEM_TARGET_20260622: UIHud 하단 아이템 버튼 RectTransform 해석 (hand/shuffle/remove|zap).
@@ -1396,6 +1411,17 @@ namespace BalloonFlow
                 // GraphicRaycaster.enabled 토글 — 비활성 시 Tutorial canvas 자체로 raycast 안 들어감.
                 _prefabRootRaycaster.enabled = active;
             }
+        }
+
+        private void SetTutorialRaycastBlocking(bool active)
+        {
+            if (_prefabRootCanvasGroup != null)
+            {
+                _prefabRootCanvasGroup.blocksRaycasts = active;
+                _prefabRootCanvasGroup.interactable = active;
+            }
+            if (_prefabRootRaycaster != null)
+                _prefabRootRaycaster.enabled = active;
         }
 
         #endregion

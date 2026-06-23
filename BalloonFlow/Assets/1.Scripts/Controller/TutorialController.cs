@@ -130,6 +130,7 @@ namespace BalloonFlow
 
         private const string PREFS_PREFIX = "BF_Tutorial_Complete_";
         private const string ACTION_TAP_HOLDER = "tap_holder";
+        private const string ACTION_TAP_ITEM = "tap_item";
         private const string ACTION_WAIT_POP = "wait_pop";
         private const string ACTION_TAP_ANYWHERE = "tap_anywhere";
         private const string ACTION_NONE = "none";
@@ -318,6 +319,58 @@ namespace BalloonFlow
             }
 
             return _activeTutorial.steps[_currentStepIndex];
+        }
+
+        public void NotifyItemTapped(string boosterType)
+        {
+            if (!_isTutorialActive)
+            {
+                return;
+            }
+
+            TutorialStep step = GetCurrentStep();
+            if (step == null || step.requireAction != ACTION_TAP_ITEM)
+            {
+                return;
+            }
+
+            string expectedTarget = BoosterTypeToItemTarget(boosterType);
+            string currentTarget = step.highlightTarget ?? string.Empty;
+            if (string.IsNullOrEmpty(currentTarget) || currentTarget == expectedTarget)
+            {
+                if (TutorialManager.HasInstance)
+                    TutorialManager.Instance.HideVisualsForItemUse();
+            }
+        }
+
+        public void NotifyItemUseCompleted()
+        {
+            if (!_isTutorialActive)
+            {
+                return;
+            }
+
+            TutorialStep step = GetCurrentStep();
+            if (step == null || step.requireAction != ACTION_TAP_ITEM)
+            {
+                return;
+            }
+
+            // ROLLBACK_TUTORIAL_COMPLETE_AFTER_ITEM_USE_20260623:
+            // tap_item holds the tutorial active after the HUD button click so PopupUseItem can
+            // hide Exit. Once the actual item effect is confirmed, finish the tutorial.
+            CompleteTutorial();
+        }
+
+        private static string BoosterTypeToItemTarget(string boosterType)
+        {
+            return boosterType switch
+            {
+                BoosterManager.HAND => "item_hand",
+                BoosterManager.SHUFFLE => "item_shuffle",
+                BoosterManager.COLOR_REMOVE => "item_remove",
+                _ => string.Empty
+            };
         }
 
         /// <summary>
@@ -825,7 +878,7 @@ namespace BalloonFlow
 
             // For action steps that require a holder tap, re-enable input briefly
             // so the player can actually perform the required action.
-            if (step.requireAction == ACTION_TAP_HOLDER || step.requireAction == ACTION_NONE)
+            if (step.requireAction == ACTION_TAP_HOLDER || step.requireAction == ACTION_TAP_ITEM || step.requireAction == ACTION_NONE)
             {
                 if (InputHandler.HasInstance)
                 {
@@ -1104,7 +1157,9 @@ namespace BalloonFlow
                     yield break;
                 }
 
-                if (resolvedConfig.waitForItemDescription) yield return WaitForItemDescriptionClosed();
+                if (resolvedConfig.waitForItemDescription || IsTutorialBlockingDescriptionShowing())
+                    yield return WaitForItemDescriptionClosed(resolvedConfig.waitForItemDescription);
+                if (_isTutorialActive || IsTutorialComplete(resolvedConfig.tutorialId)) yield break;
                 StartTutorial(resolvedConfig.tutorialId);
                 yield break;
             }
@@ -1149,12 +1204,41 @@ namespace BalloonFlow
         ///   ButtonSingle/Exit 로 닫힐 때까지 대기. 같은 OnLevelLoaded 프레임에 팝업이 뜨도록 1프레임 양보 후 검사.
         ///   팝업이 아예 안 뜨면 IsShowing=false 라 즉시 통과(no-op). 타임아웃은 IsShowing 이 비정상적으로
         ///   고착될 경우의 안전 백스톱(모달이라 실제론 유저 클릭으로 곧 닫힘).</summary>
-        private IEnumerator WaitForItemDescriptionClosed()
+        private static bool IsTutorialBlockingDescriptionShowing()
+        {
+            return PopupItemDescription.IsShowing
+                   || PopupDescription.IsShowing
+                   || PopupBuyItem.IsUnlockShowing;
+        }
+
+        private static bool IsBoosterRewardFxPlaying()
+        {
+            UIHud hud = UnityEngine.Object.FindAnyObjectByType<UIHud>();
+            return hud != null && hud.IsBoosterRewardFxPlaying;
+        }
+
+        private IEnumerator WaitForItemDescriptionClosed(bool waitForPotentialPopup)
         {
             const float ITEM_DESC_WAIT_TIMEOUT = 120f;
+            const float ITEM_DESC_APPEAR_TIMEOUT = 5f;
             yield return null; // 팝업이 OnLevelLoaded 동기 dispatch 에서 Show→IsShowing=true 하도록 한 프레임 양보.
+            // ROLLBACK_TUTORIAL_WAIT_UNLOCK_POPUP_20260623:
+            // PopupBuyItem.ShowUnlock can be scheduled by a sibling level-load coroutine.
+            // Wait briefly for that Claim popup before starting a Tutorial Editor sequence
+            // marked as "Wait For PopupItemDescription".
+            if (waitForPotentialPopup)
+            {
+                float appearDeadline = Time.unscaledTime + ITEM_DESC_APPEAR_TIMEOUT;
+                while (!IsTutorialBlockingDescriptionShowing()
+                       && !IsBoosterRewardFxPlaying()
+                       && Time.unscaledTime < appearDeadline)
+                {
+                    yield return null;
+                }
+            }
+
             float deadline = Time.unscaledTime + ITEM_DESC_WAIT_TIMEOUT;
-            while (PopupItemDescription.IsShowing && Time.unscaledTime < deadline)
+            while ((IsTutorialBlockingDescriptionShowing() || IsBoosterRewardFxPlaying()) && Time.unscaledTime < deadline)
                 yield return null;
         }
 
@@ -1210,8 +1294,8 @@ namespace BalloonFlow
             // ROLLBACK_TUTORIAL_MANUAL_WAIT_ITEM_DESC_20260622:
             // Manual starts must also honor Tutorial Editor's waitForItemDescription flag,
             // and should never overlap PopupItemDescription if it is still open.
-            if (config.waitForItemDescription || PopupItemDescription.IsShowing)
-                yield return WaitForItemDescriptionClosed();
+            if (config.waitForItemDescription || IsTutorialBlockingDescriptionShowing())
+                yield return WaitForItemDescriptionClosed(false);
 
             _startTutorialForLevelCoroutine = null;
             if (_isTutorialActive || IsTutorialComplete(config.tutorialId)) yield break;

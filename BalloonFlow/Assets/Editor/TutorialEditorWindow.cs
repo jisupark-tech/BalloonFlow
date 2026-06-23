@@ -30,7 +30,7 @@ namespace BalloonFlow.Editor
 
         private static readonly string[] ACTION_OPTIONS =
         {
-            "none", "tap_holder", "wait_pop", "tap_anywhere"
+            "none", "tap_holder", "tap_item", "wait_pop", "tap_anywhere"
         };
 
         #endregion

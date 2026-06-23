@@ -1023,16 +1023,33 @@ namespace BalloonFlow
             {
                 BoosterManager.Instance.UseBooster(boosterType);
                 RefreshBoosterCounts();
+                NotifyTutorialItemTapped(boosterType);
+                NotifyTutorialItemUseCompleted();
                 return;
             }
 
             // Hand/Remove → UseItem 팝업 (Dim + Cutout)
             ShowUseItemPopup(boosterType);
+            NotifyTutorialItemTapped(boosterType);
         }
 
         private static bool ShouldIgnoreBoosterTapForClearImminent()
         {
             return RailManager.HasInstance && RailManager.Instance.IsClearImminentForBoosterLock();
+        }
+
+        private static void NotifyTutorialItemTapped(string boosterType)
+        {
+            // ROLLBACK_TUTORIAL_TAP_ITEM_ACTION_20260623:
+            // Advance requireAction=tap_item only after a real usable booster path.
+            if (TutorialController.HasInstance)
+                TutorialController.Instance.NotifyItemTapped(boosterType);
+        }
+
+        private static void NotifyTutorialItemUseCompleted()
+        {
+            if (TutorialController.HasInstance)
+                TutorialController.Instance.NotifyItemUseCompleted();
         }
 
         private void ShowUseItemPopup(string boosterType)

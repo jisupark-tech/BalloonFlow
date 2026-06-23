@@ -12,6 +12,8 @@ namespace BalloonFlow
     /// </summary>
     public class PopupBuyItem : UIBase
     {
+        public static bool IsUnlockShowing { get; private set; }
+
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
 
@@ -50,6 +52,7 @@ namespace BalloonFlow
         private System.Action _onConfirm;
         private System.Func<bool> _onConfirmResult;
         private System.Action _onCancel;
+        private bool _isUnlockMode;
 
         protected override void Awake()
         {
@@ -109,6 +112,7 @@ namespace BalloonFlow
         private void OnDisable()
         {
             if (_paused) { PauseManager.Resume(); _paused = false; }
+            if (_isUnlockMode) IsUnlockShowing = false;
             StopIdleMotion();
         }
 
@@ -190,6 +194,7 @@ namespace BalloonFlow
         {
             base.OnDestroy();
             StopIdleMotion();
+            if (_isUnlockMode) IsUnlockShowing = false;
             if (_frame != null)
             {
                 if (_frame.BtnHorizGreen != null) _frame.BtnHorizGreen.onClick.RemoveAllListeners();
@@ -204,6 +209,8 @@ namespace BalloonFlow
                             System.Action onConfirm = null, System.Action onCancel = null,
                             string description = null)
         {
+            _isUnlockMode = false;
+            IsUnlockShowing = false;
             _onConfirm = onConfirm;
             _onConfirmResult = null;
             _onCancel = onCancel;
@@ -248,6 +255,11 @@ namespace BalloonFlow
                                System.Action onConfirm = null, System.Action onCancel = null,
                                string description = null)
         {
+            // ROLLBACK_TUTORIAL_WAIT_UNLOCK_POPUP_20260623:
+            // TutorialController must treat the booster-unlock Claim popup as the item
+            // description popup, otherwise the tutorial can appear above it on level entry.
+            _isUnlockMode = true;
+            IsUnlockShowing = true;
             _onConfirm = onConfirm;
             _onConfirmResult = null;
             _onCancel = onCancel;
@@ -366,12 +378,14 @@ namespace BalloonFlow
                 return;
 
             _onConfirm?.Invoke();
+            if (_isUnlockMode) IsUnlockShowing = false;
             CloseUI();
         }
 
         private void OnCancelClicked()
         {
             _onCancel?.Invoke();
+            if (_isUnlockMode) IsUnlockShowing = false;
             CloseUI();
         }
     }
