@@ -13,6 +13,10 @@ namespace BalloonFlow
         [SerializeField] private AudioSource _sfxSource;
         private AudioSource _popSource;
 
+        [Header("[Loop SFX Source]")]
+        [Tooltip("루프 재생용 별도 AudioSource. _sfxSource(PlayOneShot, 일회성) / _popSource(풍선 팝 피치 콤보)와 분리되어 FinishLogo 불꽃 등 장시간 SFX 루프를 안전하게 재생.")]
+        [SerializeField] private AudioSource _loopSfxSource;
+
         [Header("[BGM]")]
         [SerializeField] private AudioClip _bgmLobby;
         [SerializeField] private AudioClip _bgmInGame;
@@ -48,6 +52,8 @@ namespace BalloonFlow
         [Header("[SFX — Result]")]
         [Tooltip("Stage_Result — PopupResult 오픈 직후 재생되는 결과 화면 SFX.")]
         [SerializeField] private AudioClip _sfxStageResult;
+        [Tooltip("FinishLogo 연출 동안 루프 재생되는 불꽃 SFX. Stage_Result(1회)와는 별개 트랙.")]
+        [SerializeField] private AudioClip _sfxStageResultFirework;
 
         [Header("[SFX — Booster]")]
         [SerializeField] private AudioClip _sfxItemHand;
@@ -89,6 +95,15 @@ namespace BalloonFlow
 
             _popSource = gameObject.AddComponent<AudioSource>();
             _popSource.playOnAwake = false;
+
+            if (_loopSfxSource == null)
+            {
+                _loopSfxSource = gameObject.AddComponent<AudioSource>();
+            }
+            _loopSfxSource.loop = true;
+            _loopSfxSource.playOnAwake = false;
+            if (_sfxSource != null && _sfxSource.outputAudioMixerGroup != null)
+                _loopSfxSource.outputAudioMixerGroup = _sfxSource.outputAudioMixerGroup;
 
             AutoLoadClips();
 
@@ -146,6 +161,9 @@ namespace BalloonFlow
             // [2026-06-23] Stage_Result — PopupResult 오픈 직후 1회 재생.
             // _sfxClear(congratuation)는 보드클리어 팡파레로 별개 트랙이라 폴백 체인에 두지 않음.
             if (_sfxStageResult == null) _sfxStageResult = Resources.Load<AudioClip>("Sound/Effect/Stage_Result");
+            // [2026-06-23] Stage_Result_Firework — FinishLogo 연출 동안 _loopSfxSource 로 루프 재생.
+            // _sfxStageResult(1회 재생)와는 별개 트랙·별개 시점이므로 폴백 체인 없이 단독 로드.
+            if (_sfxStageResultFirework == null) _sfxStageResultFirework = Resources.Load<AudioClip>("Sound/Effect/Stage_Result_Firework");
 
 #if UNITY_EDITOR
             // Editor 전용 진단 — 폴백조차 실패해 여전히 null 인 SFX 의 '원본 명세 파일명' 을 한 줄로 보고.
@@ -171,6 +189,7 @@ namespace BalloonFlow
             if (_sfxCoinUse == null)           missing.Add("coinuse");
             if (_sfxDeny == null)              missing.Add("deny");
             if (_sfxStageResult == null)       missing.Add("Stage_Result");
+            if (_sfxStageResultFirework == null) missing.Add("Stage_Result_Firework");
             if (missing.Count > 0)
             {
                 Debug.LogWarning($"[AudioManager] Missing SFX clips (place files under Resources/Sound/Effect/): {string.Join(", ", missing)}");
@@ -275,6 +294,30 @@ namespace BalloonFlow
         public void PlayStageResult()
         {
             PlaySFX(_sfxStageResult);
+        }
+
+        /// <summary>FinishLogo 연출 동안 루프 재생. 트리거: GameBootstrap.PlayFinishLogoSequence 시작 /
+        /// 정지 트리거: 동 코루틴 종료 또는 PopupResult.ShowWin/ShowFail 진입(방어).
+        /// 사용자 지시 2026-06-23 (task 코멘트), 직전 PR #369(_sfxStageResult 1회 재생)와 별개 트랙.</summary>
+        public void PlayStageResultFireworkLoop()
+        {
+            if (_loopSfxSource == null || _sfxStageResultFirework == null || !_sfxEnabled) return;
+            if (_loopSfxSource.isPlaying && _loopSfxSource.clip == _sfxStageResultFirework) return;
+            _loopSfxSource.clip = _sfxStageResultFirework;
+            _loopSfxSource.loop = true;
+            _loopSfxSource.Play();
+        }
+
+        /// <summary>FinishLogo 연출 종료 또는 다음 팝업(PopupResult) 진입 시 정지.
+        /// 다른 루프 SFX 와의 오작동 방지를 위해 현재 재생 중 클립이 _sfxStageResultFirework 일 때만 정지.
+        /// 사용자 지시 2026-06-23 (task 코멘트).</summary>
+        public void StopStageResultFirework()
+        {
+            if (_loopSfxSource == null) return;
+            if (!_loopSfxSource.isPlaying) return;
+            if (_loopSfxSource.clip != _sfxStageResultFirework) return;
+            _loopSfxSource.Stop();
+            _loopSfxSource.clip = null;
         }
 
         #endregion
