@@ -413,6 +413,8 @@ namespace BalloonFlow
                 _hudTopOrigCached = true;
                 _hudTopRoot.anchoredPosition = new Vector2(startX, HUD_TOP_INGAME_HIDDEN_Y);
                 _popupOpenSeq.Join(_hudTopRoot.DOAnchorPosY(HUD_TOP_INGAME_REST_Y, POPUP_OPEN_TWEEN_DUR).SetEase(Ease.OutCubic));
+                // [2026-06-23 사용자 피드백] HUD_Top 슬라이드-인 시작 시 1회. 진입 메서드가 1회 호출이라 tween 매 프레임 위치 갱신과 무관하게 1회 보장. _hudTopRoot null 가드 안쪽에 두어 실제 이동이 있을 때만 재생.
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayIngameStart();
             }
             else Debug.LogWarning("[UIHud] PlayIngameEnterAnimation: _hudTopRoot 미할당.");
 
