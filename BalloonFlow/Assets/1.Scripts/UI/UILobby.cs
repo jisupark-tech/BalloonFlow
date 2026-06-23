@@ -330,9 +330,15 @@ namespace BalloonFlow
         //   셋 중 하나라도 true 면 연출 중 → 진입 금지. 모두 끝나면 진입 가능.
         public bool IsWinningStreakFxPlaying => _wsLobbyFxArmed || _wsLobbyFxCoroutine != null || PopupWinningStreakReward.IsShowing;
 
-        /// <summary>[WS 코어 연출 게이트 2026-06-23] WS 보상 팝업 + 게이지/배수(PlayWinningStreakLobbyFx) 만 포함.
-        /// PlayWinningStreakLevelClearGoldFx(FXGold) 은 제외 — LobbyBtnChange 가 FXGold 와 병렬로 시작될 수 있게.</summary>
-        public bool IsWinningStreakCoreFxPlaying => _wsLobbyFxArmed || _wsCoreFxRunning || PopupWinningStreakReward.IsShowing;
+        /// <summary>[WS 코어 연출 게이트 2026-06-23 갱신] WS 보상 팝업 + 게이지/배수(PlayWinningStreakLobbyFx) 만 포함.
+        /// PlayWinningStreakLevelClearGoldFx(FXGold) 은 제외 — LobbyBtnChange 가 FXGold 와 병렬로 시작될 수 있게.
+        /// armed 항 제외 이유: _wsCoreFxRunning 이 line 470 에서 StartCoroutine 호출 직전에 동기 set 되어 bridge gap(StartCoroutine 직후~첫 yield) 을 자력 커버한다.
+        /// SUPERSEDES 2026-06-23 직전 결정(armed 포함) — owner 확인 출처: 본 ProjectHub 태스크 [익명 사용자 추가 피드백] 2026-06-23
+        /// ('FXGold/PlayButton 아직 순차로 보임 → IsWinningStreakCoreFxPlaying 쪽이 안 풀려서'). armed 가 deferred 코루틴 finally 까지 true 로 남아
+        /// _wsCoreFxRunning=false 해제 후에도 Core 게이트가 풀리지 않아 LobbyController.WaitForWinningStreakFxThenPlayBtnChangeAnim 의 while 루프가
+        /// FXGold 완료(_wsLobbyFxCoroutine null) 시점까지 대기 → PlayLobbyBtnChangeAnim 직렬 실행으로 보이는 증상의 직접 원인.
+        /// 비대칭 의도: IsWinningStreakFxPlaying(line 331) 은 OnPlayClicked 클릭 가드용이므로 armed 항을 보존(1프레임 click 누수 방지). 두 프로퍼티의 역할이 다름.</summary>
+        public bool IsWinningStreakCoreFxPlaying => _wsCoreFxRunning || PopupWinningStreakReward.IsShowing;
 
         public Button BtnGoldPlus => _btnGoldPlus;
         public Button BtnLifePlus => _btnLifePlus;
