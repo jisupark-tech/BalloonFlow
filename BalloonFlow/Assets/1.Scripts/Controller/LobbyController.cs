@@ -239,6 +239,9 @@ namespace BalloonFlow
                 // WS 로비 보상 팝업/FX 가 같은 프레임 OpenUI 에서 트리거될 수 있어, 두 연출이 겹치지 않도록
                 // PlayLobbyBtnChangeAnim 을 IsWinningStreakCoreFxPlaying 종료 시점 뒤로 미룬다.
                 // (Core 게이트는 FXGold 를 제외해 LobbyBtnChange 가 FXGold 와 병렬로 시작될 수 있도록 한다 — UILobby.cs:333 주석 참조)
+                // [2026-06-23] 이벤트 기반 동시 시작 + 폴링 fallback — UILobby.OnWinningStreakCoreFxReleased 구독으로 release 와
+                // PlayLobbyBtnChangeAnim 을 같은 프레임에 동시 시작(폴링 1프레임 race 제거). 폴링은 미발화/예외 경로 안전망.
+                // SUPERSEDES 2026-06-23 PR #375 (poll-only) — owner 출처: 본 ProjectHub 태스크 [재시도 피드백] 2026-06-23 '동시에 시작'.
                 if (_pendingBtnChangeAnimCoroutine != null) StopCoroutine(_pendingBtnChangeAnimCoroutine);
                 _pendingBtnChangeAnimCoroutine = StartCoroutine(
                     WaitForWinningStreakFxThenPlayBtnChangeAnim(newLevel, newDiff, capturedNewLevel, capturedHighest));
@@ -366,22 +369,65 @@ namespace BalloonFlow
         }
 
         /// <summary>WS 로비 연출(보상 팝업 + LobbyFx)이 끝난 뒤 PlayLobbyBtnChangeAnim 을 트리거.
-        /// 첫 yield 로 한 프레임 양보해 UILobby.OpenUI → TriggerPendingWinningStreakLobbyFx 가 armed 비트를 세팅할 시간을 확보.</summary>
+        /// 첫 yield 로 한 프레임 양보해 UILobby.OpenUI → TriggerPendingWinningStreakLobbyFx 가 armed 비트를 세팅할 시간을 확보.
+        /// [2026-06-23] 이벤트(OnWinningStreakCoreFxReleased) 기반 동시 시작 + 폴링(IsWinningStreakCoreFxPlaying) fallback.
+        /// 정상 경로: 이벤트가 같은 프레임에 도착해 폴링이 한 번 더 yield 하기 전에 PlayLobbyBtnChangeAnim 을 실행 → frame N 동시 시작.
+        /// SUPERSEDES 2026-06-23 PR #375 (poll-only, frame N+1 race) — owner 출처: 본 ProjectHub 태스크 [재시도 피드백] 2026-06-23.</summary>
         System.Collections.IEnumerator WaitForWinningStreakFxThenPlayBtnChangeAnim(
             int newLevel, DifficultyPurpose newDiff, int capturedNewLevel, int capturedHighest)
         {
             yield return null;
-            // [WS 코어 연출 병렬화 2026-06-23] FXGold(PlayWinningStreakLevelClearGoldFx)는 LobbyBtnChange 와 병렬 실행 허용.
-            // 코어 연출(보상 팝업 + 게이지/배수) 만 끝나면 release. click 차단은 OnPlayClicked 의 IsWinningStreakFxPlaying 가드가 별도로 유지.
-            while (_lobby != null && _lobby.IsWinningStreakCoreFxPlaying)
-                yield return null;
 
-            if (_lobby == null) yield break;
-            _lobby.PlayLobbyBtnChangeAnim(newLevel, newDiff, () =>
+            if (_lobby == null) { _pendingBtnChangeAnimCoroutine = null; yield break; }
+
+            // Fallback 1: WS 코어 연출이 아예 시작되지 않은 케이스 (armed 도 false) → 즉시 실행.
+            if (!_lobby.IsWinningStreakCoreFxPlaying)
             {
-                if (_lobby != null) _lobby.SetupLevelBoxes(capturedNewLevel, capturedHighest);
-            });
-            _pendingBtnChangeAnimCoroutine = null;
+                _lobby.PlayLobbyBtnChangeAnim(newLevel, newDiff, () =>
+                {
+                    if (_lobby != null) _lobby.SetupLevelBoxes(capturedNewLevel, capturedHighest);
+                });
+                _pendingBtnChangeAnimCoroutine = null;
+                yield break;
+            }
+
+            // 이벤트 기반 동시 시작 + 폴링 fallback. 둘 중 먼저 도착하는 시그널로 1회 트리거.
+            bool playBtnTriggered = false;
+            UILobby subscribedLobby = _lobby;
+            System.Action handler = null;
+            handler = () =>
+            {
+                if (playBtnTriggered) return;
+                playBtnTriggered = true;
+                if (_lobby != null)
+                {
+                    _lobby.PlayLobbyBtnChangeAnim(newLevel, newDiff, () =>
+                    {
+                        if (_lobby != null) _lobby.SetupLevelBoxes(capturedNewLevel, capturedHighest);
+                    });
+                }
+            };
+            subscribedLobby.OnWinningStreakCoreFxReleased += handler;
+
+            try
+            {
+                // [WS 코어 연출 병렬화 2026-06-23] FXGold(PlayWinningStreakLevelClearGoldFx)는 LobbyBtnChange 와 병렬 실행 허용.
+                // 코어 연출(보상 팝업 + 게이지/배수) 만 끝나면 release. click 차단은 OnPlayClicked 의 IsWinningStreakFxPlaying 가드가 별도로 유지.
+                // 정상 경로에서는 이벤트가 release 사이트(UILobby L1047/L1063)에서 동기 발화 → handler 가 같은 프레임에 PlayLobbyBtnChangeAnim 호출 → 본 while 가 한 번 더 yield 하기 전 종료.
+                while (!playBtnTriggered && _lobby != null && _lobby.IsWinningStreakCoreFxPlaying)
+                    yield return null;
+
+                // Fallback 2: 이벤트 미도달 + 게이트는 풀린 경로(예외/StopCoroutine 으로 finally 안전망 미발화 등) — handler 미발화면 직접 호출.
+                if (!playBtnTriggered && _lobby != null)
+                    handler.Invoke();
+            }
+            finally
+            {
+                // 누수 시 다음 levelup 에 중복 발화 가능 → 모든 종료 경로(정상/yield break/예외)에서 unsubscribe.
+                if (subscribedLobby != null)
+                    subscribedLobby.OnWinningStreakCoreFxReleased -= handler;
+                _pendingBtnChangeAnimCoroutine = null;
+            }
         }
 
         /// <summary>BtnGoldPlus / BtnLifePlus → Shop 페이지로 스와이프 이동</summary>
