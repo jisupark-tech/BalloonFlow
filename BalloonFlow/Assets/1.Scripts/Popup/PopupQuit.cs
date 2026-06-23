@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -13,6 +14,10 @@ namespace BalloonFlow
         private const string EXIT_DUP_NAME = "ExitButton (1)";
         private const string LOSELIFE_NAME = "LoseLife";
         private const string WINNINGSTREAK_NAME = "WinningStreak";
+        private const string IMAGE_HEART_NAME = "ImageHeart";
+        private const string TXT_TITLE_KEY = "popup.txttitle.settingquit";
+        private const string TXT_DESC_LOSE_LIFE_KEY = "popup.txtdescription.settingquit";
+        private const string TXT_DESC_INFINITE_HEART_KEY = "popup.txtdescription.quit";
 
         private enum QuitView { LoseLife, WinningStreak }
 
@@ -26,6 +31,12 @@ namespace BalloonFlow
         private GameObject _winningStreakView;
         private bool _stateViewsSearched;
         private QuitView _currentView = QuitView.LoseLife;
+
+        private Image _imageHeart;
+        private bool _imageHeartSearched;
+        private Sprite _sprHeartInfinite;
+        private Sprite _sprHeartBreak;
+        private bool _inputDisabled;
 
         public Button HomeButton => _frame != null ? _frame.BtnHorizRed : null;
         public Button NextButton => _frame != null ? _frame.BtnHorizGreen : null;
@@ -49,6 +60,9 @@ namespace BalloonFlow
             base.Awake();
             CacheExitDuplicateButton();
             CacheStateViews();
+            CacheImageHeart();
+            LoadHeartSprites();
+            GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
         }
 
         // [2026-06-04] InGame 중 Quit 팝업 열림 시 게임 일시정지 + 보관함(Holder) 터치 차단.
@@ -56,13 +70,11 @@ namespace BalloonFlow
         private bool _paused;
         private void OnEnable()
         {
-            if (!_paused) { PauseManager.Pause(); _paused = true; }
-            if (InputHandler.HasInstance) InputHandler.Instance.DisableInput();
+            EnsureGamePaused();
         }
         private void OnDisable()
         {
-            if (_paused) { PauseManager.Resume(); _paused = false; }
-            if (InputHandler.HasInstance) InputHandler.Instance.EnableInput();
+            ReleaseGamePause();
         }
 
         private void CacheExitDuplicateButton()
@@ -118,18 +130,21 @@ namespace BalloonFlow
 
         public override void OpenUI()
         {
-            if (_frame != null)
-            {
-                _frame.SetTitle("Quit Level?");
-                _frame.SetDescription("You will lose a life.");
-                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
-                _frame.SetHorizGreenText("Stay");
-                _frame.SetHorizRedText("Quit");
-                _frame.ShowExitButton(true);
-            }
+            CoinFlyEffect.ClearActiveCoinsForPopup();
+            GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
+            EnsureGamePaused();
+            bool infiniteHearts = IsInfiniteHeartsActiveForQuitPopup();
+            ApplyQuitFrameText(infiniteHearts);
             ResetToLoseLife();
+            ApplyLoseLifeHeartVisual(infiniteHearts);
             base.OpenUI();
+
+            // ROLLBACK_POPUPQUIT_INFINITE_HEART_COPY_20260624:
+            // UIText components apply prefab keys during OnEnable. Reapply dynamic TextData
+            // after base.OpenUI() so infinite-heart copy is not overwritten by prefab defaults.
+            ApplyQuitFrameText(infiniteHearts);
             ResetToLoseLife();
+            ApplyLoseLifeHeartVisual(infiniteHearts);
         }
 
         /// <summary>
@@ -171,6 +186,126 @@ namespace BalloonFlow
             if (_winningStreakView != null && _winningStreakView.activeInHierarchy)
                 WinningStreakUI.ResetPopupQuitMultiplierAnimation(_winningStreakView);
             base.CloseUI();
+            ReleaseGamePause();
+        }
+
+        private static DifficultyPurpose ResolveCurrentDifficulty()
+        {
+            // ROLLBACK_QUIT_SETTINGS_DIFFICULTY_FRAME_20260623:
+            // Match PopupResult/PopupBuyItem frame color behavior for in-game quit popup.
+            if (!LevelManager.HasInstance) return DifficultyPurpose.Normal;
+            int levelId = LevelManager.Instance.CurrentLevelId;
+            return levelId > 0
+                ? LevelManager.Instance.GetLevelDifficulty(levelId)
+                : DifficultyPurpose.Normal;
+        }
+
+        private void ApplyQuitFrameText(bool infiniteHearts)
+        {
+            if (_frame == null) return;
+
+            _frame.ApplyDifficulty(ResolveCurrentDifficulty());
+            _frame.SetTitle(LocalizationService.Get(TXT_TITLE_KEY));
+            _frame.SetDescription(LocalizationService.Get(infiniteHearts ? TXT_DESC_INFINITE_HEART_KEY : TXT_DESC_LOSE_LIFE_KEY));
+            _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
+            _frame.SetHorizGreenText("Stay");
+            _frame.SetHorizRedText("Quit");
+            _frame.ShowExitButton(true);
+        }
+
+        private static bool IsInfiniteHeartsActiveForQuitPopup()
+        {
+            if (LifeManager.HasInstance && LifeManager.Instance.IsInfiniteHeartsActive)
+                return true;
+
+            if (UserDataService.HasInstance && UserDataService.Instance.IsReady)
+            {
+                var user = UserDataService.Instance.CurrentUser;
+                if (user != null)
+                {
+                    DateTime until = user.infiniteHeartsUntil.ToDateTime();
+                    if (until > DateTime.UtcNow)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void EnsureGamePaused()
+        {
+            if (!_paused)
+            {
+                // ROLLBACK_POPUPQUIT_OPENUI_PAUSE_20260624:
+                // PopupQuit can be preloaded/closed through CanvasGroup and reopened without a
+                // reliable OnEnable-only pause point. OpenUI must explicitly freeze gameplay.
+                PauseManager.Pause();
+                _paused = true;
+            }
+
+            if (!_inputDisabled && InputHandler.HasInstance)
+            {
+                InputHandler.Instance.DisableInput();
+                _inputDisabled = true;
+            }
+        }
+
+        private void ReleaseGamePause()
+        {
+            if (_paused)
+            {
+                PauseManager.Resume();
+                _paused = false;
+            }
+
+            if (_inputDisabled && InputHandler.HasInstance)
+            {
+                InputHandler.Instance.EnableInput();
+                _inputDisabled = false;
+            }
+        }
+
+        private void CacheImageHeart()
+        {
+            _imageHeartSearched = true;
+
+            Transform found = FindChildRecursive(transform, IMAGE_HEART_NAME);
+            if (found != null) _imageHeart = found.GetComponent<Image>();
+        }
+
+        private void LoadHeartSprites()
+        {
+            if (!ResourceManager.HasInstance) return;
+
+            var rm = ResourceManager.Instance;
+            _sprHeartInfinite = rm.UISpriteOr(Const.SPR_ICONHEARINFINITE, _sprHeartInfinite);
+            _sprHeartBreak = rm.UISpriteOr(Const.SPR_ICONHEARTBREAK, _sprHeartBreak);
+        }
+
+        private void ApplyLoseLifeHeartVisual(bool infiniteHearts)
+        {
+            if (!_imageHeartSearched) CacheImageHeart();
+            if (_sprHeartInfinite == null || _sprHeartBreak == null) LoadHeartSprites();
+
+            if (_imageHeart == null) return;
+
+            Sprite sprite = infiniteHearts ? _sprHeartInfinite : _sprHeartBreak;
+            if (sprite != null) _imageHeart.sprite = sprite;
+        }
+
+        private static Transform FindChildRecursive(Transform root, string childName)
+        {
+            if (root == null || string.IsNullOrEmpty(childName)) return null;
+
+            if (root.name == childName) return root;
+
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform found = FindChildRecursive(root.GetChild(i), childName);
+                if (found != null) return found;
+            }
+
+            return null;
         }
     }
 }

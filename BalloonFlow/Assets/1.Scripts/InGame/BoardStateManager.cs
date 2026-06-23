@@ -888,6 +888,20 @@ namespace BalloonFlow
         /// </summary>
         public void InvalidateOutermostCache() => _outermostDirty = true;
 
+        // ROLLBACK_TARGETBOX_LIVE_COLOR_MASK_20260623:
+        // BoardState does not keep a color mask per cell, but it should at least ignore TargetBox
+        // cells when every authored egg has already been destroyed.
+        private static bool HasAnyLiveEgg(BalloonData balloon)
+        {
+            if (balloon == null || balloon.eggHps == null) return false;
+            for (int i = 0; i < balloon.eggHps.Length; i++)
+            {
+                if (balloon.eggHps[i] > 0)
+                    return true;
+            }
+            return false;
+        }
+
         private HashSet<int> GetOutermostBalloonColors()
         {
             // dirty 아니면 직전 계산 결과 그대로 반환 (매 프레임 비용 0)
@@ -924,6 +938,39 @@ namespace BalloonFlow
                 if (b.gimmickType == BalloonController.GimmickIce) targetable = false;
                 if (b.gimmickType == BalloonController.GimmickColorCurtain) targetable = false;
 
+                // ROLLBACK_BARRICADE_LENGTH_SEGMENTS_20260623:
+                // Keep outermost-color/failure checks aligned with DirectionalTargeting. A
+                // Barricade length value is the remaining attackable footprint along its direction.
+                if (b.gimmickType == BalloonController.GimmickBarricade && b.barricadeLength > 1)
+                {
+                    int alongCount = BalloonController.GetBarricadeActiveLength(b);
+                    if (alongCount <= 0) continue;
+                    int bdir = ((b.barricadeDir % 4) + 4) % 4;
+                    bool axisZ = bdir == 0 || bdir == 2;
+                    int sign = (bdir == 0 || bdir == 1) ? 1 : -1;
+                    BalloonController.Instance.GetRawLatticePhase(out float phX, out float phZ);
+                    Vector2Int anchorCell = new Vector2Int(
+                        Mathf.RoundToInt((b.position.x - phX) / cs),
+                        Mathf.RoundToInt((b.position.z - phZ) / cs));
+
+                    for (int a = 0; a < alongCount; a++)
+                    {
+                        for (int p = 0; p < 2; p++)
+                        {
+                            Vector2Int occupiedCell = axisZ
+                                ? new Vector2Int(anchorCell.x + p, anchorCell.y + a * sign)
+                                : new Vector2Int(anchorCell.x + a * sign, anchorCell.y + p);
+                            _reusablePositionMap.Add(occupiedCell);
+                            if (targetable)
+                            {
+                                _reusableOccupancy[occupiedCell] = b.color;
+                                _reusableCellToBalloonId[occupiedCell] = b.balloonId;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
                 // ROLLBACK_BARRICADE_MULTI_CELL_OCCUPANCY:
                 // Keep outermost/match checks aligned with DirectionalTargeting's multi-cell sized gimmicks.
                 if (BalloonController.IsSizedFieldGimmick(b.gimmickType) && (b.sizeW > 1 || b.sizeH > 1))
@@ -933,7 +980,16 @@ namespace BalloonFlow
                     // Target Box 알 모델: footprint 셀에 egg 색 분배(modulo N) — N(명시 egg 수)은 W*H 와 무관.
                     bool isEggBox = b.gimmickType == BalloonController.GimmickPinataBox
                         && b.eggColors != null && b.eggColors.Length > 0;
-                    int eggN = isEggBox ? b.eggColors.Length : 0;
+                    int firstLiveEggColor = b.color;
+                    if (isEggBox && b.eggHps != null)
+                    {
+                        for (int egg = 0; egg < Mathf.Min(b.eggColors.Length, b.eggHps.Length); egg++)
+                        {
+                            if (b.eggHps[egg] <= 0) continue;
+                            firstLiveEggColor = b.eggColors[egg];
+                            break;
+                        }
+                    }
                     // [RAW_GRID_SPACE 2026-06-12] 멀티셀 footprint 는 원시 데이터 좌표(b.position) 기준 —
                     // 스케일 보드에서 보정 월드를 원시 spacing 으로 나누면 행/열이 합쳐지거나 어긋난다.
                     // [LATTICE_PHASE] 위상 기준 상대 라운딩 — DirectionalTargeting/DartManager 와 동일 키 공간.
@@ -942,6 +998,16 @@ namespace BalloonFlow
                     {
                         for (int dz = 0; dz < height; dz++)
                         {
+                            if (BalloonController.IsPinataPerCell(b))
+                            {
+                                int idx = dz * width + dx;
+                                // ROLLBACK_WOODENBOARD_DEPLETED_CELL_SKIP_20260623:
+                                // Match/fail checks must use the same live footprint as
+                                // DirectionalTargeting, so consumed Wooden Board cells do not
+                                // keep contributing blockers or colors.
+                                if (idx < b.hitCount)
+                                    continue;
+                            }
                             Vector2Int occupiedCell = new Vector2Int(
                                 Mathf.RoundToInt((b.position.x - phX + dx * cs) / cs),
                                 Mathf.RoundToInt((b.position.z - phZ + dz * cs) / cs));
@@ -951,10 +1017,11 @@ namespace BalloonFlow
                             bool cellTargetable = targetable;
                             if (isEggBox)
                             {
-                                int eggIdx = (dz * width + dx) % eggN;
-                                cellColor = b.eggColors[eggIdx];
-                                bool eggAlive = b.eggHps != null && eggIdx < b.eggHps.Length && b.eggHps[eggIdx] > 0;
-                                cellTargetable = targetable && eggAlive;
+                                // ROLLBACK_TARGETBOX_LIVE_COLOR_MASK_20260623:
+                                // BoardState stores one color per cell; use the first live egg
+                                // color so failure/outer-color checks do not keep dead egg colors.
+                                cellColor = firstLiveEggColor;
+                                cellTargetable = targetable && b.eggHps != null && HasAnyLiveEgg(b);
                             }
                             if (cellTargetable)
                             {

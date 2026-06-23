@@ -233,9 +233,9 @@ namespace BalloonFlow.Editor
             tut.manualTriggerOnly = EditorGUILayout.Toggle(
                 new GUIContent("Manual Trigger Only", "ON: 레벨 진입 시 자동 시작 안 함. 아이템 언락 Claim 등 외부 트리거로만 시작."),
                 tut.manualTriggerOnly);
-            // ROLLBACK_POPUP_ITEM_DESC_TUTORIAL_GATE_20260622: 아이템 해금 레벨 — 설명 팝업 닫힌 뒤 튜토리얼 시작.
+            // ROLLBACK_UNLOCK_POPUP_TO_BUYITEM_20260623: 해금 팝업 PopupBuyItem 일원화 — 라벨만 변경(필드명 waitForItemDescription 유지).
             tut.waitForItemDescription = EditorGUILayout.Toggle(
-                new GUIContent("Wait For PopupItemDescription", "ON: PopupItemDescription 이 떠 있으면 그 ButtonSingle(X) 로 닫힌 뒤에 튜토리얼 시작(동시 노출 방지)."),
+                new GUIContent("Wait For PopupBuyItem (Unlock)", "ON: 아이템 해금 팝업(PopupBuyItem)이 떠 있으면 Claim 으로 닫힌 뒤에 튜토리얼 시작(동시 노출 방지)."),
                 tut.waitForItemDescription);
 
             EditorGUILayout.Space(8);

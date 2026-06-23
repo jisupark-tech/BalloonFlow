@@ -221,18 +221,11 @@ namespace BalloonFlow
                 }
             }
 
-            // 2) 온보딩 중 → 인게임 세팅 팝업 (Quit 버튼은 PopupSettings 가 온보딩 여부로 숨김)
-            if (!FtueGate.IsOnboardingComplete)
-            {
-                if (_popupSettings != null) _popupSettings.OpenUI();
-                return;
-            }
-
-            // 3) 온보딩 후 → Quit Level 확인 (Settings → Quit 과 동일 종착)
-            // ROLLBACK_QUIT_MOVE_BASED_LIFE_20260619: 무브 0 → 경고팝업 없이 즉시 종료(하트 0, WS 유지).
-            if (!HasUsedMoveThisLevel()) { QuitImmediateNoMove(); return; }
-            if (_popupQuit != null) _popupQuit.OpenUI();
-            else if (_popupSettings != null) _popupSettings.OpenUI();
+            // 2) ROLLBACK_INGAME_BACK_TO_SETTINGS_20260623: 백/ESC → 항상 인게임 세팅 팝업(PopupSettings).
+            //    로비 직행/즉시 종료/Quit 팝업 직행 금지. Quit·Home 은 PopupSettings 내부 버튼으로 처리.
+            //    (이전: 온보딩 중=Settings / 온보딩 후 무브0=QuitImmediateNoMove 로비직행 / 무브1+=PopupQuit 직행)
+            //    QuitImmediateNoMove / _popupQuit / HasUsedMoveThisLevel 은 PopupSettings 의 Quit/Home 핸들러에서 계속 사용.
+            if (_popupSettings != null) _popupSettings.OpenUI();
         }
 
         private void OnSettingsCloseClicked()

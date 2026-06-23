@@ -191,7 +191,7 @@ namespace BalloonFlow
         private int _paintIceGroupId = 0;
         private int _paintIceGroupHp = 0;
         private int _paintIceGroupHpMode = 1;
-        private int _paintChainGroup = 0;  // 브러시용 Chain 그룹 ID
+        private int _paintChainGroup = 1;  // 브러시용 Chain 그룹 ID
         private int _nextChainGroupId = 1; // 자동 증가 Chain 그룹 ID
         private int _paintFrozenHP = 3;    // 브러시용 Frozen Dart 해동 체력
         private int _paintSpawnerHP = 3;   // 브러시용 Spawner 소환 횟수
@@ -1571,9 +1571,9 @@ namespace BalloonFlow
 
             // Chain 그룹 ID 설정
             var chainRow = Row(p); Lbl(chainRow, "Chain Group", w: 110);
-            MakeIntField(chainRow, _paintChainGroup, 0, 99, v => {
+            MakeIntField(chainRow, _paintChainGroup, 1, 99, v => {
                 _paintChainGroup = v;
-                SetStatus($"Chain Group: {v} (0=없음)");
+                SetStatus($"Chain Group: {v}");
             });
             Btn(chainRow, "New", () => {
                 _paintChainGroup = _nextChainGroupId++;
@@ -2448,7 +2448,7 @@ namespace BalloonFlow
         {
             Lbl(p, "Export / Import", 14, FontStyle.Bold);
             var row = Row(p);
-            Btn(row, "Save to DB", SaveToActiveDB);
+            Btn(row, "Save to DB", () => SaveToActiveDB());
             Btn(row, "Load Level", () => LoadLevelById(_levelId));
             // [2026-06-12] Importer 'Episode 파일에 적용' 후 MapMaker 캐시가 stale 하던 문제 —
             // 탭 전환(폐기됨) 대신 명시 Reload 버튼으로 episode 합본 캐시 재빌드.
@@ -6197,6 +6197,9 @@ namespace BalloonFlow
                 return;
             }
 
+            if (!ValidateCurrentLevelBeforeCommit("Test Play"))
+                return;
+
             var config = BuildLevelConfig();
             if (config.balloons == null || config.balloons.Length == 0)
             {
@@ -6210,7 +6213,7 @@ namespace BalloonFlow
             }
 
             // 테스트 플레이 전 자동 저장 (돌아올 때 데이터 유실 방지)
-            SaveToActiveDB();
+            SaveToActiveDB(skipValidation: true);
 
             string json = JsonUtility.ToJson(config, false);
             EditorPrefs.SetString("BalloonFlow_TestLevel", json);
@@ -6716,8 +6719,11 @@ namespace BalloonFlow
         }
 
         /// <summary>현재 레벨 저장 — [2026-06-12] AI/Transform 탭 폐기, Episode JSON 단일 경로.</summary>
-        private void SaveToActiveDB()
+        private void SaveToActiveDB(bool skipValidation = false)
         {
+            if (!skipValidation && !ValidateCurrentLevelBeforeCommit("Save"))
+                return;
+
             // ROLLBACK_MAPMAKER_OLD_SO_SAVE_20260618: Old(레거시 SO) 탭에서 로드/편집한 레벨은 SO 로 저장한다.
             //   기존엔 탭 무관하게 항상 Episode JSON(=ori)으로 갔음(line 327). 이제 old 에서 save/test-play(복귀 auto-save 포함)
             //   하면 ori(Episodes)로 새지 않고 old(SO)에만 저장. Epi 탭은 기존대로 Episode JSON. (사용자: old=SO 쓰기가능)
@@ -6880,6 +6886,284 @@ namespace BalloonFlow
             public LevelConfig[] levels;
         }
 
+        private bool ValidateCurrentLevelBeforeCommit(string actionName)
+        {
+            var errors = new List<string>();
+            var warnings = new List<string>();
+            // ROLLBACK_MAPMAKER_GIMMICK_VALIDATION_20260623:
+            // Block doc-defined Hard Rule violations before Save/Export/TestPlay.
+            // Soft guidance remains confirmable so valid designer-authored edge cases are not lost.
+            ValidateHolderGimmickRules(errors, warnings);
+            ValidateFieldGimmickRules(errors, warnings);
+
+            if (errors.Count == 0)
+            {
+                if (warnings.Count == 0)
+                    return true;
+
+                string warningMessage = $"Level {_levelId} has gimmick warning(s) before {actionName}:\n\n- {string.Join("\n- ", warnings)}\n\nContinue anyway?";
+                bool proceed = EditorUtility.DisplayDialog("MapMaker Validation", warningMessage, "Continue", "Cancel");
+                if (!proceed)
+                    SetStatus($"{actionName} canceled: gimmick warning");
+                else
+                    Debug.LogWarning($"[MapMakerValidation] {actionName} continued with warnings\n{warningMessage}");
+                return proceed;
+            }
+
+            string message = $"Level {_levelId} has invalid gimmick settings:\n\n- {string.Join("\n- ", errors)}";
+            EditorUtility.DisplayDialog("MapMaker Validation", message, "OK");
+            SetStatus($"{actionName} blocked: gimmick validation failed");
+            Debug.LogWarning($"[MapMakerValidation] {actionName} blocked\n{message}");
+            return false;
+        }
+
+        private void ValidateHolderGimmickRules(List<string> errors, List<string> warnings)
+        {
+            if (errors == null || _holderGimmicks == null || _holderChainGroups == null)
+                return;
+
+            int chainIndex = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, "Chain");
+            int hiddenIndex = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, "Hidden");
+            int glassPipeIndex = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, "Spawner_T");
+            int pipeIndex = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, "Spawner_O");
+            int frozenIndex = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, "Frozen_Dart");
+            int totalHolderSlots = Mathf.Max(1, _holderCols * _holderRows);
+            int activeHolderCount = 0;
+            bool hasGlassPipe = false;
+            bool hasPipe = false;
+            var groups = new Dictionary<int, List<Vector2Int>>();
+            for (int c = 0; c < _holderCols; c++)
+            {
+                for (int r = 0; r < _holderRows; r++)
+                {
+                    if (_holderColors != null && _holderColors[c, r] >= 0)
+                        activeHolderCount++;
+                }
+            }
+
+            for (int c = 0; c < _holderCols; c++)
+            {
+                for (int r = 0; r < _holderRows; r++)
+                {
+                    int gimmick = _holderGimmicks[c, r];
+                    if (gimmick <= 0)
+                        continue;
+
+                    string gimmickName = GetHolderGimmickName(gimmick);
+                    if (_holderColors != null && _holderColors[c, r] < 0)
+                    {
+                        errors.Add($"Holder gimmick {gimmickName} at ({c},{r}) is set on an empty holder cell.");
+                        continue;
+                    }
+
+                    int debutLevel = GetHolderGimmickDebutLevel(gimmickName);
+                    if (debutLevel > 0 && _levelId < debutLevel)
+                        errors.Add($"{gimmickName} is unlocked at level {debutLevel}, but current level is {_levelId}. Holder: ({c},{r}).");
+
+                    if (gimmick == hiddenIndex && r == 0)
+                        errors.Add($"Hidden Dart Box cannot be placed on front row 0. Holder: ({c},{r}).");
+
+                    if (gimmick == glassPipeIndex)
+                        hasGlassPipe = true;
+                    if (gimmick == pipeIndex)
+                        hasPipe = true;
+
+                    if (gimmick == frozenIndex)
+                    {
+                        int hp = _holderFrozenHP != null ? _holderFrozenHP[c, r] : 0;
+                        int hpMax = (activeHolderCount > 0 ? activeHolderCount : totalHolderSlots) - 1;
+                        if (hpMax < 2)
+                            errors.Add($"Frozen Dart Box at ({c},{r}) needs at least 3 active holder slots because HP must be 2..total_sh-1.");
+                        else if (hp < 2 || hp > hpMax)
+                            errors.Add($"Frozen Dart Box HP at ({c},{r}) is {hp}. Use 2..{hpMax}.");
+                    }
+
+                    if (gimmick != chainIndex)
+                        continue;
+
+                    int groupId = _holderChainGroups[c, r];
+                    if (groupId <= 0)
+                    {
+                        errors.Add($"Linked Dart Box at holder ({c},{r}) has Chain Group {groupId}. Use group 1 or higher.");
+                        continue;
+                    }
+
+                    if (!groups.TryGetValue(groupId, out var cells))
+                    {
+                        cells = new List<Vector2Int>();
+                        groups[groupId] = cells;
+                    }
+                    cells.Add(new Vector2Int(c, r));
+                }
+            }
+
+            if (hasGlassPipe && hasPipe)
+                errors.Add("Glass Pipe (Spawner_T) and Pipe (Spawner_O) cannot be mixed in the same level.");
+
+            ValidateLinkedDartBoxRules(groups, errors, warnings);
+        }
+
+        private void ValidateLinkedDartBoxRules(Dictionary<int, List<Vector2Int>> groups, List<string> errors, List<string> warnings)
+        {
+            var dependencyGroups = new List<List<int>>();
+            foreach (var kvp in groups)
+            {
+                int groupId = kvp.Key;
+                List<Vector2Int> cells = kvp.Value;
+                if (cells.Count < 2 || cells.Count > 5)
+                {
+                    errors.Add($"Linked Dart Box Chain Group {groupId} has {cells.Count} holder(s). Use 2..5.");
+                    continue;
+                }
+
+                if (cells.Count == 5 && _difficulty != DifficultyPurpose.SuperHard)
+                    warnings.Add($"Linked Dart Box Chain Group {groupId} uses 5 holders. Spec treats link_n=5 as SuperHard-only soft guidance.");
+
+                var sorted = new List<Vector2Int>(cells);
+                sorted.Sort((a, b) =>
+                {
+                    int col = a.x.CompareTo(b.x);
+                    return col != 0 ? col : a.y.CompareTo(b.y);
+                });
+
+                bool hasVerticalStep = false;
+                bool hasColumnStep = false;
+                int maxAnyColDiff = 0;
+                int maxAnyRowDiff = 0;
+                for (int i = 0; i < sorted.Count; i++)
+                {
+                    for (int j = i + 1; j < sorted.Count; j++)
+                    {
+                        maxAnyColDiff = Mathf.Max(maxAnyColDiff, Mathf.Abs(sorted[i].x - sorted[j].x));
+                        maxAnyRowDiff = Mathf.Max(maxAnyRowDiff, Mathf.Abs(sorted[i].y - sorted[j].y));
+                    }
+                }
+
+                for (int i = 1; i < sorted.Count; i++)
+                {
+                    Vector2Int prev = sorted[i - 1];
+                    Vector2Int cur = sorted[i];
+                    int colDiff = Mathf.Abs(prev.x - cur.x);
+                    int rowDiff = Mathf.Abs(prev.y - cur.y);
+
+                    if (colDiff > 1)
+                    {
+                        errors.Add($"Linked Dart Box Chain Group {groupId} has non-adjacent chain step ({prev.x},{prev.y}) -> ({cur.x},{cur.y}). Consecutive col diff must be <= 1.");
+                        continue;
+                    }
+
+                    if (colDiff == 0)
+                    {
+                        hasVerticalStep = true;
+                        if (rowDiff != 1)
+                            errors.Add($"Linked Dart Box Chain Group {groupId} same-column step ({prev.x},{prev.y}) -> ({cur.x},{cur.y}) must have row diff 1.");
+                        if (prev.y > 2 || cur.y > 2)
+                            errors.Add($"Linked Dart Box Chain Group {groupId} vertical part must stay within rows 0..2. Current step: ({prev.x},{prev.y}) -> ({cur.x},{cur.y}).");
+                    }
+                    else
+                    {
+                        hasColumnStep = true;
+                        if (rowDiff > 5)
+                            errors.Add($"Linked Dart Box Chain Group {groupId} adjacent-column step ({prev.x},{prev.y}) -> ({cur.x},{cur.y}) has row diff {rowDiff}. Max is 5.");
+                    }
+                }
+
+                if (hasVerticalStep && !hasColumnStep && sorted.Count > 3)
+                    errors.Add($"Linked Dart Box Chain Group {groupId} is a vertical chain with {sorted.Count} holders. Vertical chains allow max link_n=3.");
+
+                if (hasVerticalStep && hasColumnStep && sorted.Count > 4)
+                    errors.Add($"Linked Dart Box Chain Group {groupId} is a mixed chain with {sorted.Count} holders. Mixed chains allow max link_n=4.");
+
+                if (maxAnyRowDiff > 2)
+                    warnings.Add($"Linked Dart Box Chain Group {groupId} has max row distance {maxAnyRowDiff}. Spec marks row distance > 2 as soft-risk.");
+
+                if (maxAnyColDiff > 3)
+                    warnings.Add($"Linked Dart Box Chain Group {groupId} has max col distance {maxAnyColDiff}. Spec marks col distance > 3 as soft-risk.");
+
+                var sidGroup = new List<int>();
+                foreach (var p in cells)
+                    sidGroup.Add(p.y * _holderCols + p.x);
+                dependencyGroups.Add(sidGroup);
+            }
+
+            if (dependencyGroups.Count > 1 && HasCycle(BuildChainDependencyGraph(dependencyGroups, _holderCols, _holderCols * _holderRows)))
+                errors.Add("Linked Dart Box chain groups create a dependency cycle. Chain group dependency graph must be DAG.");
+        }
+
+        private void ValidateFieldGimmickRules(List<string> errors, List<string> warnings)
+        {
+            if (_balloonGimmicks == null)
+                return;
+
+            bool hasBarricade = false;
+            bool hasHiddenBalloon = false;
+            bool hasIronWall = false;
+            bool hasIce = false;
+            for (int c = 0; c < _gridCols; c++)
+            {
+                for (int r = 0; r < _gridRows; r++)
+                {
+                    int gimmick = _balloonGimmicks[c, r];
+                    if (gimmick <= 0 || gimmick >= FIELD_GIMMICK_NAMES.Length)
+                        continue;
+
+                    string gimmickName = FIELD_GIMMICK_NAMES[gimmick];
+                    int debutLevel = GetFieldGimmickDebutLevel(gimmickName);
+                    if (debutLevel > 0 && _levelId < debutLevel)
+                        errors.Add($"{gimmickName} is unlocked at level {debutLevel}, but current level is {_levelId}. Cell: ({c},{r}).");
+
+                    if (gimmickName == "Surprise")
+                        hasHiddenBalloon = true;
+                    else if (gimmickName == "Wall")
+                        hasIronWall = true;
+                    else if (gimmickName == "Barricade")
+                        hasBarricade = true;
+                    else if (gimmickName == "Ice")
+                        hasIce = true;
+                }
+            }
+
+            if (hasBarricade && hasHiddenBalloon)
+                errors.Add("Barricade and Hidden Balloon (Surprise) cannot coexist in the same level.");
+            if (hasHiddenBalloon && hasIronWall)
+                errors.Add("Hidden Balloon (Surprise) and Iron Wall (Wall) cannot coexist in the same level.");
+            if (hasIronWall && hasIce)
+                errors.Add("Iron Wall (Wall) and Ice cannot coexist in the same level because it can create deadlock.");
+        }
+
+        private static string GetHolderGimmickName(int index)
+        {
+            return index > 0 && index < HOLDER_GIMMICK_NAMES.Length ? HOLDER_GIMMICK_NAMES[index] : "(unknown)";
+        }
+
+        private static int GetHolderGimmickDebutLevel(string gimmickName)
+        {
+            switch (gimmickName)
+            {
+                case "Hidden": return 11;
+                case "Chain": return 21;
+                case "Spawner_T": return 41;
+                case "Spawner_O": return 121;
+                case "Frozen_Dart": return 241;
+                default: return 0;
+            }
+        }
+
+        private static int GetFieldGimmickDebutLevel(string gimmickName)
+        {
+            switch (gimmickName)
+            {
+                case "Pinata": return 31;
+                case "Barricade": return 61;
+                case "Surprise": return 81;
+                case "Wall": return 101;
+                case "Pinata_Box": return 161;
+                case "Ice": return 201;
+                case "Color_Curtain": return 301;
+                default: return 0;
+            }
+        }
+
         private void ExportEpisodeJson()
         {
             if (!_levelLoaded)
@@ -6887,6 +7171,9 @@ namespace BalloonFlow
                 SetStatus("Export failed: no level loaded");
                 return;
             }
+
+            if (!ValidateCurrentLevelBeforeCommit("Export Episode JSON"))
+                return;
 
             LevelEpisode episode = BuildCurrentEpisodeForExport();
             if (episode == null || episode.levels == null || episode.levels.Length == 0)
@@ -6910,6 +7197,9 @@ namespace BalloonFlow
                 SetStatus("Export failed: no level loaded");
                 return;
             }
+
+            if (!ValidateCurrentLevelBeforeCommit("Export Level JSON"))
+                return;
 
             LevelEpisode episode = BuildCurrentLevelEpisodeForExport();
             // [2026-06-12] 백업 컨벤션: 기본 저장 위치 = Assets/LevelBackups (Importer 의 episode 백업과

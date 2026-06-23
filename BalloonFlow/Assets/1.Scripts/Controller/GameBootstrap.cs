@@ -530,7 +530,8 @@ namespace BalloonFlow
             var popup = UIManager.Instance.OpenUI<PopupBuyItem>("Popup/PopupBuyItem");
             if (popup == null) return;
             Sprite spr = popup.GetBoosterSprite(boosterType);
-            popup.ShowUnlock("Unlock", spr, levelId, $"x{BoosterManager.UNLOCK_REWARD_COUNT}",
+            // ROLLBACK_UNLOCK_POPUP_TITLE_TEXTDATA_20260623: 해금 팝업 타이틀 = TextData "Item Unlocked!".
+            popup.ShowUnlock(LocalizationService.Get("popup.txttitle.itemunlocked"), spr, levelId, $"x{BoosterManager.UNLOCK_REWARD_COUNT}",
                 onConfirm: () =>
                 {
                     void ClaimAfterFx()

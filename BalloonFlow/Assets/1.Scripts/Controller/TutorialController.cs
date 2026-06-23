@@ -1217,8 +1217,9 @@ namespace BalloonFlow
         ///   고착될 경우의 안전 백스톱(모달이라 실제론 유저 클릭으로 곧 닫힘).</summary>
         private static bool IsTutorialBlockingDescriptionShowing()
         {
-            return PopupItemDescription.IsShowing
-                   || PopupDescription.IsShowing
+            // ROLLBACK_UNLOCK_POPUP_TO_BUYITEM_20260623: 아이템 해금 팝업을 PopupBuyItem 로 일원화.
+            //   기존 PopupItemDescription.IsShowing 참조 제거(해당 팝업은 미사용). 해금 대기는 PopupBuyItem.IsUnlockShowing 가 보장.
+            return PopupDescription.IsShowing
                    || PopupBuyItem.IsUnlockShowing;
         }
 

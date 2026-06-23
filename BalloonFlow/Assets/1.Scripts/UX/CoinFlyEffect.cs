@@ -33,6 +33,7 @@ namespace BalloonFlow
             = new Dictionary<GameObject, Vector3>();
         private static readonly Dictionary<GameObject, Vector2> _rootSizeDeltaCache
             = new Dictionary<GameObject, Vector2>();
+        private static int _clearVersion;
 
         /// <summary>[2026-05-11] 코인 사이 spawn 인터벌 (사용자 요청 0.2f).</summary>
         private const float SPAWN_INTERVAL = 0.12f;
@@ -60,8 +61,9 @@ namespace BalloonFlow
             EnsurePool();
             // [2026-06-23 사용자 피드백] FXGold 등장 시 Gold_Appear 1회 재생. Common_Coin_Gain.mp3 대체.
             if (AudioManager.HasInstance) AudioManager.Instance.PlayGoldAppear();
+            int clearVersion = _clearVersion;
             CoroutineRunner.Get().StartCoroutine(
-                RunFly(parent, screenFrom, screenTo, count, onEachLand, onAllComplete));
+                RunFly(parent, screenFrom, screenTo, count, onEachLand, onAllComplete, clearVersion));
 
             // [2026-05-12] 코인 흡수 동안 진동 4회 균등 분배 (intensity 0.3, duration 0.18s default).
             // count 1~3 코인 시도 4회 균등 분배 — count 의존 없는 일정한 햅틱 패턴.
@@ -130,6 +132,20 @@ namespace BalloonFlow
             _activeCoins.Clear();
         }
 
+        public static void ClearActiveCoinsForPopup()
+        {
+            // ROLLBACK_COIN_FLY_CLEAR_ON_POPUPQUIT_20260623:
+            // FXGold lives on EffectCanvas, above popup canvas. Clear active coins when Quit
+            // opens so a leftover fly coin cannot cover the Quit Level popup.
+            _clearVersion++;
+            if (_activeCoins.Count == 0) return;
+
+            var snapshot = new List<GameObject>(_activeCoins);
+            for (int i = 0; i < snapshot.Count; i++)
+                ReturnOrDestroyCoin(snapshot[i]);
+            _activeCoins.Clear();
+        }
+
         private static void EnsurePool()
         {
             if (_prefab == null)
@@ -155,7 +171,7 @@ namespace BalloonFlow
         }
 
         private static IEnumerator RunFly(Transform parent, Vector2 fromScreen, Vector2 toScreen, int count,
-            Action onEachLand, Action onAllComplete)
+            Action onEachLand, Action onAllComplete, int clearVersion)
         {
             if (parent == null) yield break;
             Canvas canvas = parent.GetComponentInParent<Canvas>();
@@ -196,6 +212,8 @@ namespace BalloonFlow
 
             for (int i = 0; i < count; i++)
             {
+                if (clearVersion != _clearVersion) yield break;
+
                 // 와르르 폭발: 360° 랜덤 방향으로 흩뿌림
                 float angle = UnityEngine.Random.Range(0f, 360f) * Mathf.Deg2Rad;
                 float radius = UnityEngine.Random.Range(scatterRadius * 0.4f, scatterRadius);
@@ -247,7 +265,7 @@ namespace BalloonFlow
                 float dur = UnityEngine.Random.Range(minDur, maxDur);
 
                 CoroutineRunner.Get().StartCoroutine(
-                    Fly(coin, rt, from, scatterPos, mid, to, dur, () =>
+                    Fly(coin, rt, from, scatterPos, mid, to, dur, clearVersion, () =>
                     {
                         landed++;
                         // [2026-06-23 사용자 피드백] 첫 도착 시점 Gold_Get 연속 3회(코루틴). Common_Coin_Gain.mp3 대체.
@@ -293,8 +311,10 @@ namespace BalloonFlow
 
         private static IEnumerator Fly(GameObject coin, RectTransform rt,
             Vector2 origin, Vector2 scatter, Vector2 mid, Vector2 target,
-            float duration, Action onDone)
+            float duration, int clearVersion, Action onDone)
         {
+            if (clearVersion != _clearVersion) yield break;
+
             // ── Phase 0: 스케일 업 (원점 고정, 비행 전) ──
             if (rt != null)
             {
@@ -310,6 +330,7 @@ namespace BalloonFlow
                     k = 1f - (1f - k) * (1f - k); // OutQuad
                     rt.localScale = Vector3.LerpUnclamped(fromScale, baseScale, k);
                     yield return null;
+                    if (clearVersion != _clearVersion) yield break;
                 }
                 rt.localScale = baseScale; // 비행 중엔 원래 스케일 (Light 등 자식 영향 최소화)
             }
@@ -340,19 +361,28 @@ namespace BalloonFlow
                 }
 
                 yield return null;
+                if (clearVersion != _clearVersion) yield break;
             }
 
             // Pool.Return 이 SetParent(_poolParent, worldPositionStays=false) 로 localScale 보존하며 분리.
             // 직접 SetParent(null) 호출하면 worldPositionStays=true(기본값) 라 캔버스 스케일이 localScale 로 흡수됨.
-            _activeCoins.Remove(coin);
+            if (_activeCoins.Remove(coin))
+                ReturnOrDestroyCoin(coin);
+            onDone?.Invoke();
+        }
+
+        private static void ReturnOrDestroyCoin(GameObject coin)
+        {
+            if (coin == null) return;
             if (ObjectPoolManager.HasInstance && ObjectPoolManager.Instance.HasPool(POOL_KEY))
             {
                 ResetPooledTransform(coin);
                 ObjectPoolManager.Instance.Return(POOL_KEY, coin);
             }
             else
+            {
                 UnityEngine.Object.Destroy(coin);
-            onDone?.Invoke();
+            }
         }
 
         private static void CacheInitialTransformState(GameObject root)

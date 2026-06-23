@@ -278,19 +278,15 @@ namespace BalloonFlow
             // [WS 배수 증가 연출 2026-06-11] 클리어 전/후 배수를 캡처 — 로비 FX 가 from→to 이동으로 표현.
             int startMultiplier = ResolveMultiplierForStreak(s.currentStreak);
             int startStreak = s.currentStreak;
-            s.currentStreak += 1;
-            // [WS x1→x5 점프 규칙 2026-06-22]
-            // 현재 배수(startMultiplier)가 x1 인 상태에서 클리어로 보상을 획득하면,
-            // 다음 배수를 무조건 x5(=streak 2 tier)로 끌어올린다.
-            // 예시 시나리오: x100 → 실패로 x1 하락 → 클리어 → 게이지 상승 → x5 로 숫자 갱신.
-            // 적용 범위: 이 한 줄만으로 충분 — 후속 streakMult 계산(line 273) / endMultiplier 캡처(line 294) / gained 계산(line 275) 이 모두 새 currentStreak 을 따른다.
-            if (startMultiplier == 1)
-                s.currentStreak = Mathf.Max(s.currentStreak, 2);
-
             var svc = WinningStreakConfigService.HasInstance ? WinningStreakConfigService.Instance : null;
-            int streakMult = svc != null ? svc.ResolveStreakMultiplier(s.currentStreak) : WinningStreakUI.TierFromStreak(s.currentStreak);
+            // ROLLBACK_WS_REWARD_MULTIPLIER_BEFORE_ADVANCE_20260623:
+            // Reward uses the multiplier that was active before this clear, then the state advances
+            // for the next clear. Spec: Lv36 clear grants 1 flame at x1 and animates x1 -> x5.
+            int rewardMultiplier = startMultiplier;
+            s.currentStreak = AdvanceStreakAfterScoredClear(s.currentStreak);
+            int endMultiplier = ResolveMultiplierForStreak(s.currentStreak);
             int diffMult = svc != null ? svc.ResolveDifficultyMultiplier(difficulty) : 1;
-            int gained = Mathf.Max(0, streakMult * diffMult);
+            int gained = Mathf.Max(0, rewardMultiplier * diffMult);
 
             if (gained > 0)
             {
@@ -309,7 +305,8 @@ namespace BalloonFlow
                     gainedPoints = gained,
                     achievedStages = achievedStages,
                     startMultiplier = startMultiplier,
-                    endMultiplier = ResolveMultiplierForStreak(s.currentStreak),
+                    endMultiplier = endMultiplier,
+                    rewardMultiplier = rewardMultiplier,
                     startStreak = startStreak,
                     endStreak = s.currentStreak,
                     clearedDifficulty = difficulty,
@@ -644,6 +641,9 @@ namespace BalloonFlow
             // [WS 배수 증가 연출 2026-06-11] 클리어 전/후 배수 (1/5/10/25/100). 0 = 미캡처(현재값 사용).
             public int startMultiplier;
             public int endMultiplier;
+            // Multiplier used for the actual reward calculation. It can differ from endMultiplier
+            // because the UI animates from the current multiplier to the next tier after granting.
+            public int rewardMultiplier;
             // [WS 0단계 보상 팝업 2026-06-12] 클리어 전/후 연승 수 + 클리어한 레벨 난이도 —
             // PopupWinningStreakReward 가 수치 상승(from→to)과 FXBadge(하드/슈퍼하드 한정) 노출에 사용.
             public int startStreak;
@@ -659,6 +659,13 @@ namespace BalloonFlow
             if (WinningStreakConfigService.HasInstance)
                 return WinningStreakConfigService.Instance.ResolveStreakMultiplier(streak);
             return WinningStreakUI.TierFromStreak(streak);
+        }
+
+        private static int AdvanceStreakAfterScoredClear(int currentStreak)
+        {
+            // currentStreak 0 is the first scored clear after unlock. Store tier 2 afterward so
+            // the next clear starts at x5: 0 -> 2 -> 3 -> 4 -> 5 -> 6...
+            return Mathf.Max(1, currentStreak) + 1;
         }
     }
 }

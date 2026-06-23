@@ -2344,7 +2344,10 @@ namespace BalloonFlow
             lrA.endWidth = CHAIN_LINE_WIDTH;
             lrA.useWorldSpace = true;
             lrA.alignment = LineAlignment.View;
-            lrA.numCapVertices = 4;
+            // ROLLBACK_CHAIN_LINE_CAP_VERTICES_20260623:
+            // Linked Dart Box lines should have flat ends. Rounded caps made the line look
+            // swollen at the holder connection points.
+            lrA.numCapVertices = 0;
             lrA.sortingOrder = 5;
             lrA.startColor = colorA;
             lrA.endColor = colorA;
@@ -2359,7 +2362,9 @@ namespace BalloonFlow
             lrB.endWidth = CHAIN_LINE_WIDTH;
             lrB.useWorldSpace = true;
             lrB.alignment = LineAlignment.View;
-            lrB.numCapVertices = 4;
+            // ROLLBACK_CHAIN_LINE_CAP_VERTICES_20260623:
+            // Keep the child overlay line flat-ended as well.
+            lrB.numCapVertices = 0;
             lrB.sortingOrder = 5;
             lrB.startColor = colorB;
             lrB.endColor = colorB;

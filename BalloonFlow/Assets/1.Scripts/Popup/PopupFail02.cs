@@ -256,10 +256,11 @@ namespace BalloonFlow
             Transform rewardRoot = FindChildRecursive(transform, "Reward");
             if (rewardRoot != null)
             {
-                if (!rewardRoot.gameObject.activeSelf) rewardRoot.gameObject.SetActive(true);
-                Canvas parentCanvas = GetComponentInParent<Canvas>();
-                string layer = parentCanvas != null ? parentCanvas.sortingLayerName : "Default";
-                ApplyRewardSortingOrder(rewardRoot, layer);
+                // ROLLBACK_FAIL02_HIDE_RESULT_REWARD_20260623:
+                // PopupFail02 can be opened from PopupSettings -> PopupQuit -> Quit. This
+                // prefab carries PopupResult-style Reward/Gold children, but failed/quit flow
+                // must not display the clear reward coin image.
+                rewardRoot.gameObject.SetActive(false);
             }
         }
 

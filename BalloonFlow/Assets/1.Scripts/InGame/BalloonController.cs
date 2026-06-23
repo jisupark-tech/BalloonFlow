@@ -101,7 +101,22 @@ namespace BalloonFlow
         // FlexTube_Segment authored visual scale requested by art/design. This is visual-only;
         // FlexTube HP, cell occupancy, targeting, and hit logic still use the original cell data.
         private static readonly Vector3 FlexTubeSegmentVisualScale = new Vector3(0.5f, 0.35f, 0.86f);
-        private const float FLEXTUBE_ENDCAP_CONNECTOR_INSET = 0.35f;
+        // ROLLBACK_FLEXTUBE_EDGE_CONNECT_20260623:
+        // Pull Start/End caps a full half-cell so the cap center lands exactly on the
+        // segment-row boundary (segment cells span center ± 0.5·cellDist). At 0.35 the
+        // cap stopped 0.15·cellDist short, leaving a visible gap between the tube and the
+        // Edge/Head caps. Visual-only — logical cell/HP/targeting unchanged.
+        private const float FLEXTUBE_ENDCAP_CONNECTOR_INSET = 0.5f;
+        // ROLLBACK_FLEXTUBE_SEAM_OVERLAP_20260624:
+        // Rib SPACING/density factor (NOT size — size is fixed to the grid cell). pitch = gridCell /
+        // this, so rings are spaced a bit under one cell and overlap slightly → never separate.
+        // 1.0 = one ring per cell butt-joined; higher = denser/more overlap. Visual-only.
+        private const float FLEXTUBE_SEGMENT_SEAM_OVERLAP = 1.1f;
+        // ROLLBACK_FLEXTUBE_GRID_SIZE_20260624:
+        // Overall rib size relative to the stage grid cell. 1.0 = ring thickness == one grid cell
+        // (≈ authored natural size, board-scale adaptive). Lower this to shrink the whole tube to fit
+        // the grid (e.g. 0.8 = 80%). Uniform (x=y=z), so it also thins the tube proportionally.
+        private const float FLEXTUBE_RIB_SIZE_SCALE = 1.0f;
         // ROLLBACK_FLEXTUBE_SEAMLESS_TILING_20260618: 세그먼트의 자연 길이(월드 Z).
         //   측정: 유니티 (1,1,1) 박스 대비 세그먼트가 유닛당 3.5개일 때 1사이즈 = 1/3.5 ≈ 0.2857.
         //   (FlexTube_Segment mesh × FlexTubeSegmentVisualScale.z(0.86) 의 실제 월드 길이.)
@@ -115,9 +130,24 @@ namespace BalloonFlow
         //   타게팅: 셀 idx<hitCount = 제거됨(blocker), idx>=hitCount = 타겟. ProcessPinataHit: requiredHits=W×H +
         //   partial hit 마다 타게팅 캐시 무효화(셀 1개씩 빠지게). 1×1 Pinata 는 영향 없음(W×H==1).
         //   롤백: 이 플래그/헬퍼 + ProcessPinataHit 의 perCell 분기 + DirectionalTargeting 의 isPinataPerCell 분기 제거.
+        // ROLLBACK_WOODEN_BOARD_SHARED_HP_20260623:
+        // Sized Wooden Board should keep the authored HP and expose all occupied cells as the
+        // same shared target. Previous per-cell mode forced HP=sizeW*sizeH, which made 2x2/3x3
+        // boards ignore MapMaker HP.
         public static bool EnablePinataPerCell = true;
         public static bool IsPinataPerCell(BalloonData d) =>
             EnablePinataPerCell && d.gimmickType == GimmickPinata && d.sizeW * d.sizeH > 1;
+
+        // ROLLBACK_BARRICADE_LENGTH_SEGMENTS_20260623:
+        // Shared source for Barricade's remaining attackable length. Visual placement,
+        // multi-cell occupancy, and DirectionalTargeting must use the same value so a
+        // length 3 Barricade exposes 3 cells, then 2 cells after one hit, then 1.
+        public static int GetBarricadeActiveLength(BalloonData data)
+        {
+            if (data == null) return 0;
+            int length = Mathf.Max(1, data.barricadeLength);
+            return Mathf.Max(0, length - Mathf.Max(0, data.hitCount));
+        }
 
         #endregion
 
@@ -140,6 +170,10 @@ namespace BalloonFlow
         [Header("[Barricade Visual]")]
         [SerializeField] private float _barricadeVisualY = 0.5f;
         [SerializeField] private Vector3 _barricadeVisualOffset = Vector3.zero;
+        // ROLLBACK_BARRICADE_Z_NUDGE_20260623:
+        // Visual-only world-Z nudge. The Barricade head is centered on its 2-cell thickness for
+        // targeting, but the authored art reads too centered on the board, so pull it slightly on Z.
+        [SerializeField] private float _barricadeVisualZCellNudge = 0.25f;
         [SerializeField] private float _barricadeLengthMultiplier = 1f;
         [SerializeField] private float _barricadeLengthPadding = 0f;
         [SerializeField] private Vector3 _barricadeBodyVisualOffset = Vector3.zero;
@@ -178,6 +212,7 @@ namespace BalloonFlow
         private readonly Dictionary<Transform, Quaternion> _barricadeHeadBaseRotations = new Dictionary<Transform, Quaternion>();
         // ROLLBACK_BARRICADE_ASSEMBLY_20260608: assembly("Baricade (1)") base 회전 + body base 길이(최장축) 캐시.
         private readonly Dictionary<Transform, Quaternion> _barricadeAssemblyBaseRot = new Dictionary<Transform, Quaternion>();
+        private readonly Dictionary<Transform, Vector3> _barricadeAssemblyBaseLocalPositions = new Dictionary<Transform, Vector3>();
         private readonly Dictionary<Transform, float> _barricadeBodyBaseLen = new Dictionary<Transform, float>();
         private readonly List<Vector3Int> _reusableOccupiedCells = new List<Vector3Int>(16);
 
@@ -1021,6 +1056,58 @@ namespace BalloonFlow
             return _reusableColorList.ToArray();
         }
 
+        // ROLLBACK_ZAP_GIMMICK_COLOR_TARGETS_20260623:
+        // Zap removes the selected color's live components, not always the whole object.
+        // TargetBox contributes one hit per live matching egg HP, and FlexTube contributes only
+        // logical Segment cells. Start/End caps are visual endpoints, not extra Zap HP.
+        public int GetZapHitCountForColor(BalloonData data, int color)
+        {
+            if (data == null || data.isPopped) return 0;
+            if (data.gimmickType == GimmickLockKey) return 0;
+
+            if (data.gimmickType == GimmickPinataBox && data.eggColors != null && data.eggHps != null)
+            {
+                int count = 0;
+                int n = Mathf.Min(data.eggColors.Length, data.eggHps.Length);
+                for (int i = 0; i < n; i++)
+                {
+                    if (data.eggColors[i] == color && data.eggHps[i] > 0)
+                        count += data.eggHps[i];
+                }
+                return count;
+            }
+
+            if (data.gimmickType == GimmickFlexTube)
+            {
+                if (data.color != color) return 0;
+                return GimmickIdentifier.FlexTubePartFromString(data.flexTubePartType) == GimmickIdentifier.FlexTubePart.Segment ? 1 : 0;
+            }
+
+            return data.color == color ? 1 : 0;
+        }
+
+        public bool TryApplyZapColorHit(int balloonId, int color)
+        {
+            if (!_balloons.TryGetValue(balloonId, out BalloonData data)) return false;
+            if (data == null || data.isPopped) return false;
+            if (GetZapHitCountForColor(data, color) <= 0) return false;
+
+            if (data.gimmickType == GimmickPinataBox && data.eggColors != null && data.eggHps != null)
+            {
+                PopResult result = ProcessPinataBoxEggHit(data, color);
+                return result.success || result.hitAccepted;
+            }
+
+            if (data.gimmickType == GimmickFlexTube)
+            {
+                PopResult result = PopBalloonWithDart(balloonId, color);
+                return result.success || result.hitAccepted;
+            }
+
+            ForcePopBalloon(balloonId);
+            return true;
+        }
+
         // 이어하기 랜덤 풍선 제거용 후보 id 버퍼 (재사용). balloonId 는 안정적이라
         // pop 중 발생하는 이벤트가 _reusableColorList 를 건드려도 영향 없음.
         private List<int> _continueColorBalloonIds;
@@ -1377,6 +1464,10 @@ namespace BalloonFlow
             // _pinSegments(=remaining) 가 진짜 HP. ApplyBarricadeVisualTransform 은 hitCount/maxHP 로 비율 계산하므로
             // hitCount 를 (maxHP - remaining) 으로 동기화한 뒤 재배치. maxHP==등록 hp 라 분모 일치.
             data.hitCount = Mathf.Clamp(data.maxHP - remaining, 0, data.maxHP);
+            // ROLLBACK_BARRICADE_LENGTH_SEGMENTS_20260623:
+            // Persist the reshaped hitCount before invalidating targeting. Without this,
+            // DirectionalTargeting reads the old BalloonData and keeps attacking the stale length.
+            _balloons[data.balloonId] = data;
             ApplyBarricadeVisualTransform(hitObj, data);
             // footprint(DirectionalTargeting) 도 hitCount 기반 → 재빌드해 막는/조준 범위 축소 반영.
             DirectionalTargeting.InvalidateCache();
@@ -1737,8 +1828,17 @@ namespace BalloonFlow
             // ROLLBACK_PINATA_PER_CELL_20260618: per-cell Pinata 는 maxHP 를 점유 셀수(W×H)로 강제한다.
             //   → requiredHits(ProcessPinataHit) · GimmickIdentifier HP 비율 · UpdateHP 표시가 전부 셀수 기준 일치.
             //   레벨 데이터의 entry.hp 는 sized Pinata 에서 무시됨(칸당 1공격 = 셀수). 롤백: 이 if 제거.
+            // ROLLBACK_BARRICADE_LENGTH_SEGMENTS_20260623:
+            // Barricade length is the number of attackable cells/segments. Keep the shared Pin
+            // segment counter, visual footprint, and targeting footprint on that same value.
+            // ROLLBACK_WOODENBOARD_PER_CELL_HP_20260623:
+            // Sized Wooden Board is attacked by exposed occupied cells. A 2x2 board therefore
+            // needs four cell hits total, with two cells immediately attackable when an outer
+            // side exposes two rows/columns.
             if (IsPinataPerCell(data))
-                data.maxHP = data.sizeW * data.sizeH;
+                data.maxHP = Mathf.Max(1, data.sizeW * data.sizeH);
+            if (data.gimmickType == GimmickBarricade && data.barricadeLength > 0)
+                data.maxHP = Mathf.Max(1, data.barricadeLength);
 
             // ROLLBACK_PINATABOX_EGG_CLAMP_20260616: eggColors 가 footprint 셀 수(sizeW*sizeH) 를 초과하면
             //   초과 알은 타게팅 셀에 매핑 안 됨(eggIdx=(dz*W+dx)%eggN 의 인덱스 범위가 0..W*H-1) → 영원히 타격 불가
@@ -1746,7 +1846,10 @@ namespace BalloonFlow
             //   롤백: 아래 if 블록 제거.
             if (data.gimmickType == GimmickPinataBox && data.eggColors != null)
             {
-                int maxEggs = Mathf.Max(1, data.sizeW * data.sizeH);
+                // ROLLBACK_TARGETBOX_AUTHORED_EGG_COUNT_20260623:
+                // Keep every egg authored in MapMaker. The footprint exposes live egg colors
+                // through DirectionalTargeting, so the egg list must not clamp to sizeW*sizeH.
+                int maxEggs = data.eggColors.Length;
                 if (data.eggColors.Length > maxEggs)
                 {
                     Debug.LogWarning($"[BalloonController] Pinata_Box eggColors({data.eggColors.Length}) > footprint({data.sizeW}x{data.sizeH}={maxEggs}) — 언위너블 방지 클램프. 레벨 데이터 검토 권장.");
@@ -1759,6 +1862,16 @@ namespace BalloonFlow
                         System.Array.Copy(data.eggHps, clampedHps, Mathf.Min(maxEggs, data.eggHps.Length));
                         data.eggHps = clampedHps;
                     }
+                }
+                if (data.eggHps == null || data.eggHps.Length < data.eggColors.Length)
+                {
+                    int[] normalizedHps = new int[data.eggColors.Length];
+                    for (int i = 0; i < normalizedHps.Length; i++)
+                    {
+                        int hp = data.eggHps != null && i < data.eggHps.Length ? data.eggHps[i] : 1;
+                        normalizedHps[i] = Mathf.Max(1, hp);
+                    }
+                    data.eggHps = normalizedHps;
                 }
             }
 
@@ -1955,6 +2068,23 @@ namespace BalloonFlow
                 return;
             }
 
+            // ROLLBACK_FLEXTUBE_MEASURE_RIB_LENGTH_20260624:
+            // Measure the Segment mesh's REAL length along its +z axis (at prefab scale 1). Ribs are
+            // scaled UNIFORMLY (x=y=z=s), so rendered length = rawMeshZ × s. Measuring removes the
+            // dependence on the stale hard-coded constant that under-sized ribs and left gaps.
+            float segMeshZ = FLEXTUBE_SEGMENT_WORLD_LENGTH / Mathf.Max(0.0001f, FlexTubeSegmentVisualScale.z); // fallback ≈ raw
+            if (TryGetLocalProjectedRendererLength(segmentPrefab.transform, Vector3.forward, out float measuredSegZ)
+                && measuredSegZ > 0.0001f)
+                segMeshZ = measuredSegZ;
+            // [FlexTube-DIAG] mesh shape — renderer count + local bounds reveal whether one Segment is
+            // a single ring or a multi-ring/graduated section (would explain interleaved big/small).
+            var segRenderers = segmentPrefab.GetComponentsInChildren<Renderer>(true);
+            string segBoundsStr = segRenderers.Length > 0 && segRenderers[0] != null
+                ? segRenderers[0].localBounds.size.ToString("F3") : "-";
+            string segType = segRenderers.Length > 0 && segRenderers[0] != null
+                ? segRenderers[0].GetType().Name : "-";
+            Debug.Log($"[FlexTube] segMeshZ(raw)={segMeshZ:F3} measured={measuredSegZ:F3} renderers={segRenderers.Length} type={segType} firstBounds={segBoundsStr}");
+
             foreach (var kv in groups)
             {
                 int groupId = kv.Key;
@@ -2003,140 +2133,162 @@ namespace BalloonFlow
                 int groupColor = _balloons[ids[0]].color;
                 int colorIdx = Mathf.Clamp(groupColor, 0, BalloonColors.Length - 1);
 
-                // ROLLBACK_FLEXTUBE_SEAMLESS_TILING_20260618: 실제 세그먼트 개수는 더 이상 이 값이 아니라 아래 루프에서
-                //   셀마다 '세그먼트 자연폭' 기준으로 계산한다(겹침/틈 없는 seamless 타일). 이 변수는 parts List 용량
-                //   추정 힌트로만 남는다(과/소추정 무해 — List 가 알아서 grow). 기존 FORCE_DENSE(5 강제)는 폐기.
-                int visualSegmentsPerCell = Mathf.Max(4, tube.VisualSegmentsPerCell); // 용량 추정 힌트 (≈ 유닛당 3.5)
-                // visualStep(1/N 폭 분산 간격)은 보정된 인접 셀 실제 거리 기반으로 cell 별 계산(아래 루프). raw cellSpacing 미사용.
-
-                // parts list 용량 = 2 Cap + (cells - 2) × N visual segment
+                // ROLLBACK_FLEXTUBE_NATURAL_RIB_TILING_20260624: 실제 rib 개수는 아래 루프에서 셀마다
+                //   N = round(셀거리 / 자연 rib 길이) 로 계산한다(자연 크기 rib 를 겹침/틈 없이 타일 → 연속 주름관).
+                //   이 값(3)은 parts List 용량 추정 힌트로만 남는다(과/소추정 무해 — List 가 알아서 grow).
+                int visualSegmentsPerCell = 3;
                 int segmentCellCount = Mathf.Max(0, ids.Count - 2);
+
+                // parts list 용량 = 2 Cap + (cells - 2) × N visual segment (rough hint)
                 int partsCapacity = 2 + segmentCellCount * visualSegmentsPerCell;
                 var parts = new List<FlexTubePart>(partsCapacity);
 
-                for (int i = 0; i < ids.Count; i++)
+                // ROLLBACK_FLEXTUBE_NATURAL_GRID_SIZE_20260624:
+                // Tile rings at NATURAL size, sized to the stage GRID (one ring per cell), full width.
+                // The fat-torus Segment mesh (thickness ≈ one cell) can't make 3 thin rings/cell with
+                // uniform scale without dips, so we use one ring per cell at grid size.
+                //  • ringScale = gridCell / meshThickness → ring thickness = one grid cell (board-scale
+                //    adaptive); uniform so width scales the same. Decoupled from overlap so overlap
+                //    does NOT inflate ring size (only spacing/density).
+                //  • pitch = gridCell / overlap → rings spaced just under one cell so they overlap a
+                //    little and never separate. HP/targeting still per-cell.
+                float globalCellLength = ComputeFlexTubeMedianCellLength(cellPositions);
+                float ringWorldSize = globalCellLength * FLEXTUBE_RIB_SIZE_SCALE;       // ring thickness target (grid-sized)
+                float ringScale = ringWorldSize / Mathf.Max(0.0001f, segMeshZ);          // uniform, grid-sized
+                Vector3 ribScaleVec = new Vector3(ringScale, ringScale, ringScale);
+                float ribPitchTarget = ringWorldSize / FLEXTUBE_SEGMENT_SEAM_OVERLAP;    // slight overlap
+
+                // ROLLBACK_FLEXTUBE_CONTINUOUS_PATH_TILING_20260624:
+                // Root cause of the irregular big/small/big rhythm: ribs were placed in PER-CELL
+                // groups of 3 (cellCenter ± step). The gap at every cell boundary (D − 2·step) only
+                // equals the in-cell gap (step) when each cell's spacing D is exactly 3·step. Any
+                // board-spacing variation made every 3rd boundary a different gap → ribs overlapped
+                // (look big) or separated (look small) in a period-3 beat, and the last cell's ribs
+                // never reached the EndCap (the gap the report shows). Fix: ignore cell boundaries
+                // and tile ribs at ONE uniform pitch along the whole cap-to-cap path. Every rib is
+                // identical and evenly spaced; HP/targeting still map each rib to its nearest cell.
+                int lastIdx = ids.Count - 1;
+
+                // cumulative arc length along the cell-center polyline (handles ㄴ/ㄷ/ㄹ bends)
+                var cumArc = new List<float>(ids.Count) { 0f };
+                for (int k = 1; k < ids.Count; k++)
+                    cumArc.Add(cumArc[k - 1] + Vector3.Distance(cellPositions[k - 1], cellPositions[k]));
+                float pathTotal = cumArc[lastIdx];
+
+                // shared instantiate/parent/color path for caps and ribs.
+                FlexTubePart SpawnFlexPart(GameObject prefab, Vector3 pos, Quaternion rot,
+                                           bool applyScale, Vector3 scale,
+                                           GimmickIdentifier.FlexTubePart pType, int cellId)
                 {
-                    int id = ids[i];
-                    var data = _balloons[id];
-
-                    bool isStart = (i == 0);
-                    bool isEnd   = (i == ids.Count - 1);
-                    GimmickIdentifier.FlexTubePart partType =
-                        isStart ? GimmickIdentifier.FlexTubePart.StartCap :
-                        isEnd   ? GimmickIdentifier.FlexTubePart.EndCap   :
-                                  GimmickIdentifier.FlexTubePart.Segment;
-
-                    GameObject prefab = partType == GimmickIdentifier.FlexTubePart.StartCap ? startCapPrefab
-                                       : partType == GimmickIdentifier.FlexTubePart.EndCap   ? endCapPrefab
-                                                                                              : segmentPrefab;
-
-                    Quaternion basePartRotation = CalculateFlexTubePartRotation(cellPositions, i) * extraRot;
-
-                    // visual segment 가 여러 개일 때 cell 안에서 tangent 방향으로 1/N step 으로 분산.
-                    // Cap (Start/End) 은 분해 안 함 — 항상 cell center 1개.
-                    // ROLLBACK_FLEXTUBE_SEAMLESS_TILING_20260618: 고정 N(5) 대신 '세그먼트 자연폭' 기준으로 셀마다 계산.
-                    //   N = round(셀거리 / 자연폭) → visualStep = 셀거리/N ≈ 자연폭 → 세그먼트가 겹침/틈 없이 딱 맞게 타일.
-                    //   대각/보드스케일로 셀거리가 달라도 각 셀이 항상 seamless. (위 visualSegmentsPerCell 는 List 용량 추정용만.)
-                    //   롤백: cellDist/cellSegments 를 AdjacentCellDistance/visualSegmentsPerCell 로 환원.
-                    float cellDist = AdjacentCellDistance(cellPositions, i);
-                    int cellSegments = Mathf.Max(1, Mathf.RoundToInt(cellDist / FLEXTUBE_SEGMENT_WORLD_LENGTH));
-                    int visualCount = (partType == GimmickIdentifier.FlexTubePart.Segment) ? cellSegments : 1;
-                    Vector3 tangent = ComputeFlexTubeTangent(cellPositions, i); // cellPositions 기반 forward
-                    bool useTangent = visualCount > 1 && tangent.sqrMagnitude > 0.0001f;
-                    bool useCornerCurve = partType == GimmickIdentifier.FlexTubePart.Segment
-                        && visualCount > 1
-                        && IsFlexTubeCorner(cellPositions, i);
-                    float visualStep = cellDist / cellSegments; // ≈ FLEXTUBE_SEGMENT_WORLD_LENGTH → seamless
-
-                    // cell center 에 있는 visual 을 _balloonObjects[id] 로 등록 — 다트 target 위치가 cell center 와 일치하도록.
-                    // 끝쪽부터 사라지는 정책상 center visual 은 cell 죽기 직전까지 active 유지 → target lookup 안정.
-                    int centerVisualIdx = visualCount / 2;
-
-                    for (int v = 0; v < visualCount; v++)
+                    var obj = Instantiate(prefab);
+                    if (obj == null)
                     {
-                        // visual segment center offset — 보정된 cell center 기준 -(N-1)/2 .. +(N-1)/2 × visualStep.
-                        Vector3 spawnPos = cellPositions[i];
-                        Quaternion visualRotation = basePartRotation;
-                        // ROLLBACK_FLEXTUBE_DENSE_CURVE_20260608:
-                        // Do not rotate multiple straight segment meshes along a corner curve. That creates a fan-shaped
-                        // broken U-turn. Keep visual pieces aligned to the cell tangent; only density changes, not path logic.
-                        if (useCornerCurve)
-                        {
-                            // ROLLBACK_FLEXTUBE_DENSE_CURVE_20260608:
-                            // Curved cells should be a fan-shaped bend. Put pieces on a local
-                            // quadratic curve and rotate each one to the curve tangent.
-                            // ROLLBACK_FLEXTUBE_CORNER_FULLSPAN_20260608: t 를 0..1 전체로 균등 분포(centers (v+0.5)/N).
-                            //   이전 0.15~0.85 는 코너 양끝(이웃 직선부와 만나는 mid 지점)에 안 닿아 끊겨 보였음.
-                            float t = (v + 0.5f) / visualCount;
-                            spawnPos = EvaluateFlexTubeCornerPosition(cellPositions, i, t);
-                            Vector3 curveTangent = EvaluateFlexTubeCornerTangent(cellPositions, i, t);
-                            if (curveTangent.sqrMagnitude > 0.0001f)
-                                visualRotation = Quaternion.LookRotation(curveTangent.normalized, Vector3.up) * extraRot;
-                        }
-                        else if (useTangent)
-                        {
-                            spawnPos += tangent * ((v - (visualCount - 1) * 0.5f) * visualStep);
-                        }
-                        else if (partType == GimmickIdentifier.FlexTubePart.EndCap && i > 0)
-                        {
-                            // ROLLBACK_FLEXTUBE_ENDCAP_CONNECT_20260608:
-                            // EndCap authored cell center leaves a visible gap to the last Segment.
-                            // Pull only the visual cap toward the previous segment; logical cell/HP stays unchanged.
-                            Vector3 toPrev = cellPositions[i - 1] - cellPositions[i];
-                            toPrev.y = 0f;
-                            if (toPrev.sqrMagnitude > 0.0001f)
-                                spawnPos += toPrev.normalized * (toPrev.magnitude * FLEXTUBE_ENDCAP_CONNECTOR_INSET);
-                        }
-
-                        var partObj = Instantiate(prefab);
-                        if (partObj == null)
-                        {
-                            Debug.LogWarning($"[FlexTube] Instantiate failed for group {groupId} seq {i} visual {v}.");
-                            continue;
-                        }
-                        partObj.transform.position = spawnPos;
-                        partObj.transform.rotation = visualRotation;
-                        partObj.transform.SetParent(tubeObj.transform, worldPositionStays: true);
-
-                        // [FlexTube] Segment visual 만 x,y 스케일 보정 (z=길이축 유지). 캡(Start/End)은 프리팹 기본 유지.
-                        if (partType == GimmickIdentifier.FlexTubePart.Segment)
-                        {
-                            // ROLLBACK_FLEXTUBE_SEGMENT_VISUAL_SCALE_20260608:
-                            // Use the authored segment size requested by design instead of
-                            // uniform x/y scaling plus prefab z.
-                            partObj.transform.localScale = FlexTubeSegmentVisualScale;
-                        }
-
-                        var part = partObj.GetComponent<FlexTubePart>();
-                        if (part == null) part = partObj.AddComponent<FlexTubePart>();
-                        if (part == null)
-                        {
-                            Debug.LogWarning($"[FlexTube] FlexTubePart AddComponent failed on prefab {prefab.name}.");
-                            continue;
-                        }
-                        part.SetPartType(partType);
-                        part.SetBalloonId(id);
-                        parts.Add(part);
-
-                        // _balloonObjects 는 cell 당 1 object 만 — center visual 등록 (위치=cell center, 죽기 직전까지 active).
-                        if (v == centerVisualIdx)
-                            _balloonObjects[id] = partObj;
-
-                        var partGi = partObj.GetComponent<GimmickIdentifier>();
-                        if (partGi != null)
-                        {
-                            partGi.Initialize();
-                            if (partGi.HasColorRenderers)
-                                partGi.ApplyColor(BalloonColors[colorIdx]);
-                        }
-                        // ROLLBACK_FLEXTUBE_TINT_ALL_RENDERERS_20260608:
-                        // FlexTube prefabs can contain child renderers not wired to GimmickIdentifier._colorRenderers.
-                        // Tint every child renderer so parts do not remain black/gray.
-                        ApplyTintToRenderersInChildren(partObj, BalloonColors[colorIdx]);
+                        Debug.LogWarning($"[FlexTube] Instantiate failed (group {groupId}, {pType}, cell {cellId}).");
+                        return null;
                     }
+                    obj.transform.position = pos;
+                    obj.transform.rotation = rot;
+                    obj.transform.SetParent(tubeObj.transform, worldPositionStays: true);
+                    if (applyScale) obj.transform.localScale = scale;
 
-                    Debug.Log($"[FlexTube]   spawned {partType} id={id} at ({data.position.x:F2},{data.position.z:F2}) rot.y={basePartRotation.eulerAngles.y:F0} color={colorIdx} visualCount={visualCount}");
+                    var p = obj.GetComponent<FlexTubePart>() ?? obj.AddComponent<FlexTubePart>();
+                    if (p == null) { Destroy(obj); return null; }
+                    p.SetPartType(pType);
+                    p.SetBalloonId(cellId);
+                    parts.Add(p);
+
+                    var gi = obj.GetComponent<GimmickIdentifier>();
+                    if (gi != null)
+                    {
+                        gi.Initialize();
+                        if (gi.HasColorRenderers) gi.ApplyColor(BalloonColors[colorIdx]);
+                    }
+                    // ROLLBACK_FLEXTUBE_TINT_ALL_RENDERERS_20260608: tint every child renderer so
+                    // parts not wired to GimmickIdentifier._colorRenderers don't stay black/gray.
+                    ApplyTintToRenderersInChildren(obj, BalloonColors[colorIdx]);
+                    return p;
                 }
+
+                // --- StartCap (logical cell 0), pulled toward the first rib so it meets the tube ---
+                Vector3 startCapPos = cellPositions[0];
+                Vector3 startToNext = cellPositions[1] - cellPositions[0]; startToNext.y = 0f;
+                if (startToNext.sqrMagnitude > 0.0001f)
+                    startCapPos += startToNext.normalized * (startToNext.magnitude * FLEXTUBE_ENDCAP_CONNECTOR_INSET);
+                Quaternion startCapRot = CalculateFlexTubePartRotation(cellPositions, 0) * extraRot;
+                var startCapPart = SpawnFlexPart(startCapPrefab, startCapPos, startCapRot,
+                                                 false, Vector3.one, GimmickIdentifier.FlexTubePart.StartCap, ids[0]);
+                if (startCapPart != null) _balloonObjects[ids[0]] = startCapPart.gameObject;
+
+                // --- Ribs: uniform tiling between the two cap connector points (no per-cell grouping) ---
+                int ribCount = 0;
+                float actualPitch = ribPitchTarget;
+                var nearestRibSqr = new Dictionary<int, float>();
+                if (segmentCellCount >= 1) // need at least one segment cell between the caps
+                {
+                float startArc = cumArc[1] * FLEXTUBE_ENDCAP_CONNECTOR_INSET;                       // inset into first segment
+                float endArc   = pathTotal - (pathTotal - cumArc[lastIdx - 1]) * FLEXTUBE_ENDCAP_CONNECTOR_INSET; // inset before EndCap
+                float ribSpan  = Mathf.Max(0.0001f, endArc - startArc);
+                ribCount   = Mathf.Max(1, Mathf.RoundToInt(ribSpan / ribPitchTarget));
+                actualPitch = ribSpan / ribCount;
+                Vector3 ribScale  = ribScaleVec; // fixed grid size — decoupled from spacing/overlap
+
+                // register the rib nearest each segment cell center for dart targeting
+                var ribWorldPos = new List<Vector3>(ribCount + 1); // [FlexTube-DIAG] gap uniformity check
+                for (int j = 0; j <= ribCount; j++)
+                {
+                    float arc = startArc + j * actualPitch;
+                    EvalFlexTubePath(cellPositions, cumArc, arc, out Vector3 ribPos, out Vector3 ribTan);
+                    ribWorldPos.Add(ribPos);
+                    Quaternion ribRot = ribTan.sqrMagnitude > 0.0001f
+                        ? Quaternion.LookRotation(ribTan, Vector3.up) * extraRot
+                        : startCapRot;
+
+                    // nearest logical segment cell (1..lastIdx-1) for HP/targeting mapping
+                    int nearestSeq = 1;
+                    float nearestSqr = float.MaxValue;
+                    for (int c = 1; c <= lastIdx - 1; c++)
+                    {
+                        float dc = (cellPositions[c] - ribPos).sqrMagnitude;
+                        if (dc < nearestSqr) { nearestSqr = dc; nearestSeq = c; }
+                    }
+                    int ribCellId = ids[nearestSeq];
+
+                    var ribPart = SpawnFlexPart(segmentPrefab, ribPos, ribRot,
+                                                true, ribScale, GimmickIdentifier.FlexTubePart.Segment, ribCellId);
+                    if (ribPart == null) continue;
+
+                    if (!nearestRibSqr.TryGetValue(ribCellId, out float best) || nearestSqr < best)
+                    {
+                        nearestRibSqr[ribCellId] = nearestSqr;
+                        _balloonObjects[ribCellId] = ribPart.gameObject;
+                    }
+                }
+
+                // [FlexTube-DIAG] rib spacing uniformity — if min≈max≈pitch the tiling is uniform
+                // (so any interleave is mesh/render, not spacing); if they differ the path is non-linear.
+                if (ribWorldPos.Count >= 2)
+                {
+                    float mn = float.MaxValue, mx = 0f, sum = 0f;
+                    for (int q = 1; q < ribWorldPos.Count; q++)
+                    {
+                        float d = Vector3.Distance(ribWorldPos[q - 1], ribWorldPos[q]);
+                        mn = Mathf.Min(mn, d); mx = Mathf.Max(mx, d); sum += d;
+                    }
+                    Debug.Log($"[FlexTube] Group {groupId} rib gaps min={mn:F3} max={mx:F3} avg={sum / (ribWorldPos.Count - 1):F3} pitch={actualPitch:F3} ringThickness≈{ringWorldSize:F3} ribs={ribWorldPos.Count}");
+                }
+                } // segmentCellCount >= 1
+
+                // --- EndCap (logical cell last), pulled toward the previous rib ---
+                Vector3 endCapPos = cellPositions[lastIdx];
+                Vector3 endToPrev = cellPositions[lastIdx - 1] - cellPositions[lastIdx]; endToPrev.y = 0f;
+                if (endToPrev.sqrMagnitude > 0.0001f)
+                    endCapPos += endToPrev.normalized * (endToPrev.magnitude * FLEXTUBE_ENDCAP_CONNECTOR_INSET);
+                Quaternion endCapRot = CalculateFlexTubePartRotation(cellPositions, lastIdx) * extraRot;
+                var endCapPart = SpawnFlexPart(endCapPrefab, endCapPos, endCapRot,
+                                               false, Vector3.one, GimmickIdentifier.FlexTubePart.EndCap, ids[lastIdx]);
+                if (endCapPart != null) _balloonObjects[ids[lastIdx]] = endCapPart.gameObject;
+
+                Debug.Log($"[FlexTube] Group {groupId}: ribs={ribCount + 1} pitch={actualPitch:F3} (target {ribPitchTarget:F3}) ringScale={ringScale:F3} gridCell={globalCellLength:F3} cells={ids.Count}");
 
                 // HP = segment cell 수(튜브 길이). cell 당 1히트로 파괴되고, visual segment(cell×N)는
                 // FlexTube 가 parts 에서 세어 HP 비율로 비례 감소시킨다(한 hit 당 N개씩).
@@ -2145,6 +2297,42 @@ namespace BalloonFlow
                 int color = _balloons[ids[0]].color;
                 tube.Initialize(flexTubeHp, color, groupId, parts);
             }
+        }
+
+        /// <summary>튜브 전체에서 대표(중앙값) 셀 중심 간격. 모든 rib 를 동일 크기로 만들기 위한 단일 pitch 산출용.
+        /// 중앙값이라 코너의 대각 거리/끝셀 편차 같은 outlier 에 흔들리지 않음.</summary>
+        private static float ComputeFlexTubeMedianCellLength(List<Vector3> cellPositions)
+        {
+            if (cellPositions == null || cellPositions.Count < 2)
+                return FLEXTUBE_SEGMENT_WORLD_LENGTH * 3f;
+
+            var dists = new List<float>(cellPositions.Count - 1);
+            for (int k = 0; k < cellPositions.Count - 1; k++)
+            {
+                float d = Vector3.Distance(cellPositions[k], cellPositions[k + 1]);
+                if (d > 0.0001f) dists.Add(d);
+            }
+            if (dists.Count == 0) return FLEXTUBE_SEGMENT_WORLD_LENGTH * 3f;
+            dists.Sort();
+            return dists[dists.Count / 2];
+        }
+
+        /// <summary>cell-center polyline 위 arc-length 위치의 좌표 + 진행 방향(y=0 평면). 연속 rib 타일링용.</summary>
+        private static void EvalFlexTubePath(List<Vector3> pts, List<float> cum, float arc, out Vector3 pos, out Vector3 tangent)
+        {
+            int n = pts != null ? pts.Count : 0;
+            if (n == 0) { pos = Vector3.zero; tangent = Vector3.forward; return; }
+            if (n == 1) { pos = pts[0]; tangent = Vector3.forward; return; }
+
+            float total = cum[n - 1];
+            arc = Mathf.Clamp(arc, 0f, total);
+            int k = 0;
+            while (k < n - 2 && cum[k + 1] < arc) k++;
+            float segLen = Mathf.Max(0.0001f, cum[k + 1] - cum[k]);
+            float t = Mathf.Clamp01((arc - cum[k]) / segLen);
+            pos = Vector3.Lerp(pts[k], pts[k + 1], t);
+            Vector3 dir = pts[k + 1] - pts[k]; dir.y = 0f;
+            tangent = dir.sqrMagnitude > 0.000001f ? dir.normalized : Vector3.forward;
         }
 
         /// <summary>cell index i 의 forward tangent (visual segment 분산 시 사용). 직선/대각 모두 정상 동작. y=0 평면 기준.</summary>
@@ -2171,9 +2359,119 @@ namespace BalloonFlow
                          + Vector3.Distance(cellPositions[i], cellPositions[i + 1]));
         }
 
+        private static float ResolveFlexTubeCellWorldLength(List<Vector3> cellPositions, int i)
+        {
+            // ROLLBACK_FLEXTUBE_CELL_BASED_THIRD_SCALE_20260623:
+            // One logical FlexTube cell must contain exactly three visual Segment meshes.
+            // Use the actual adjusted neighbour spacing of this cell; BuildFlexTubes divides
+            // this value by visualSegmentsPerCell.
+            float length = AdjacentCellDistance(cellPositions, i);
+            if (length > 0.0001f) return length;
+
+            if (cellPositions != null && cellPositions.Count >= 2)
+            {
+                for (int k = 0; k < cellPositions.Count - 1; k++)
+                {
+                    Vector3 d = cellPositions[k + 1] - cellPositions[k];
+                    d.y = 0f;
+                    if (d.sqrMagnitude > 0.0001f)
+                        return d.magnitude;
+                }
+            }
+
+            return 1f;
+        }
+
         /// <summary>FlexTube 부품의 회전 계산 — prefab forward = +z (Unity 기본) 가정. cell index i 의 이전/다음 위치로 방향 추론.</summary>
-        // ROLLBACK_FLEXTUBE_DENSE_CURVE_20260608:
-        // Visual-only corner smoothing. It does not alter FlexTube cell ids, HP, or targeting objects.
+        private static float ResolveFlexTubeSegmentTargetWorldSize(List<Vector3> cellPositions, int visualSegmentsPerCell)
+        {
+            int segmentCount = Mathf.Max(1, visualSegmentsPerCell);
+            if (cellPositions == null || cellPositions.Count < 2)
+                return FLEXTUBE_SEGMENT_WORLD_LENGTH * FLEXTUBE_SEGMENT_SEAM_OVERLAP;
+
+            float maxCellDistance = 0f;
+            int firstSegmentCell = Mathf.Min(1, cellPositions.Count - 1);
+            int lastSegmentCell = Mathf.Max(firstSegmentCell, cellPositions.Count - 2);
+
+            for (int i = firstSegmentCell; i <= lastSegmentCell; i++)
+            {
+                float cellDist = AdjacentCellDistance(cellPositions, i);
+                if (cellDist > maxCellDistance)
+                    maxCellDistance = cellDist;
+            }
+
+            if (maxCellDistance <= 0.0001f)
+                maxCellDistance = AdjacentCellDistance(cellPositions, 0);
+
+            return Mathf.Max(0.0001f, maxCellDistance / segmentCount) * FLEXTUBE_SEGMENT_SEAM_OVERLAP;
+        }
+
+        // ROLLBACK_FLEXTUBE_SEGMENT_XY_DECOUPLE_20260623:
+        // One logical grid cell must hold exactly 3 Segments that read as a CONTINUOUS tube,
+        // not fat per-cell "joints". Only the length axis (Z) is sized so the rendered length
+        // equals targetWorldLength (= cell / 3); the tube cross-section (X,Y) stays at the
+        // authored art scale, INDEPENDENT of cell spacing.
+        // Previous behaviour scaled X/Y by the same length factor, so on a normal/large cell
+        // each piece ended up wider than it was long → a knuckle/vertebra look (관절). Decoupling
+        // keeps a constant pipe diameter while three equal pieces tile the cell end-to-end.
+        private static Vector3 CalculateFlexTubeSegmentScale(float targetWorldLength, float rawMeshZLength)
+        {
+            if (targetWorldLength <= 0.0001f || rawMeshZLength <= 0.0001f) return Vector3.one;
+
+            // ROLLBACK_FLEXTUBE_TRUE_UNIFORM_SCALE_20260624:
+            // TRUE uniform scale (x = y = z = s). A non-uniform localScale combined with the rib's
+            // LookRotation sheared the mesh (child renderers rotated under a non-uniform parent scale),
+            // which made ribs look inconsistent — some touching, some apart. A single scalar removes
+            // the shear so every rib is identical. s is chosen so rendered length (rawMeshZ × s)
+            // = pitch · overlap → ribs touch/overlap evenly with no gaps.
+            float s = targetWorldLength * FLEXTUBE_SEGMENT_SEAM_OVERLAP / rawMeshZLength;
+            return new Vector3(s, s, s);
+        }
+
+        private static bool TryGetLocalProjectedRendererLength(Transform root, Vector3 localAxis, out float length)
+        {
+            length = 0f;
+            if (root == null || localAxis.sqrMagnitude < 0.0001f) return false;
+
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            if (renderers == null || renderers.Length == 0) return false;
+
+            Vector3 axis = localAxis.normalized;
+            float near = float.PositiveInfinity;
+            float far = float.NegativeInfinity;
+            bool hasBounds = false;
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null) continue;
+
+                Bounds bounds = renderer.localBounds;
+                Vector3 center = bounds.center;
+                Vector3 extents = bounds.extents;
+
+                for (int sx = -1; sx <= 1; sx += 2)
+                {
+                    for (int sy = -1; sy <= 1; sy += 2)
+                    {
+                        for (int sz = -1; sz <= 1; sz += 2)
+                        {
+                            Vector3 rendererLocal = center + new Vector3(extents.x * sx, extents.y * sy, extents.z * sz);
+                            Vector3 rootLocal = root.InverseTransformPoint(renderer.transform.TransformPoint(rendererLocal));
+                            float projected = Vector3.Dot(rootLocal, axis);
+                            if (projected < near) near = projected;
+                            if (projected > far) far = projected;
+                            hasBounds = true;
+                        }
+                    }
+                }
+            }
+
+            if (!hasBounds) return false;
+            length = Mathf.Max(0f, far - near);
+            return length > 0.0001f;
+        }
+
         private static void ClearFlexTubeTemplateChildren(GameObject tubeObj)
         {
             if (tubeObj == null) return;
@@ -2366,7 +2664,10 @@ namespace BalloonFlow
             //   롤백: 이 if 블록 제거(아래 sizeW/H 루프만 남김).
             if (data.gimmickType == GimmickBarricade && data.barricadeLength > 1)
             {
-                int totalLen = Mathf.Max(3, data.barricadeLength);
+                // ROLLBACK_BARRICADE_LENGTH_SEGMENTS_20260623:
+                // Occupancy follows remaining attackable length: length 3 -> 3, then 2, then 1.
+                int totalLen = GetBarricadeActiveLength(data);
+                if (totalLen <= 0) return;
                 int bdir = ((data.barricadeDir % 4) + 4) % 4;   // 0=N(+Z) 1=E(+X) 2=S(-Z) 3=W(-X)
                 bool axisZ = (bdir == 0 || bdir == 2);
                 int sign = (bdir == 0 || bdir == 1) ? 1 : -1;
@@ -2556,10 +2857,14 @@ namespace BalloonFlow
                 perpDir * (0.5f * (vertical ? cellSizeX : cellSizeZ));
             float baseUniform = _balloonScale * scaleMult;
             obj.transform.localScale = new Vector3(baseUniform, baseUniform, baseUniform);
+            // ROLLBACK_BARRICADE_Z_NUDGE_20260623:
+            // Only adjust the rendered art in world Z. Logical occupancy/targeting remains on
+            // the authored grid cells, so this cannot change attack reach or blocker behavior.
+            float zNudge = _barricadeVisualZCellNudge * cellSizeZ;
             obj.transform.position = new Vector3(
                 adjustedAnchor.x + headCenterOffset.x + _barricadeVisualOffset.x,
                 _barricadeVisualY + _barricadeVisualOffset.y,
-                adjustedAnchor.z + headCenterOffset.z + _barricadeVisualOffset.z);
+                adjustedAnchor.z + headCenterOffset.z + _barricadeVisualOffset.z + zNudge);
 
             // GimmickIdentifier 에 Head/Body/Edge 가 할당됨(사용자 확인). 미할당 시 이름 폴백.
             GimmickIdentifier gid = obj.GetComponent<GimmickIdentifier>();
@@ -2593,6 +2898,16 @@ namespace BalloonFlow
                 asmBase = assembly.localRotation;
                 _barricadeAssemblyBaseRot[assembly] = asmBase;
             }
+            // ROLLBACK_BARRICADE_ASSEMBLY_REBASE_20260623:
+            // ApplyBarricadeVisualTransform can run repeatedly after hits. Reset the authored
+            // assembly local position before head/body/edge fitting so the "move head to root"
+            // correction below does not accumulate and leave Head/Body/Edge slightly offset.
+            if (!_barricadeAssemblyBaseLocalPositions.TryGetValue(assembly, out Vector3 asmBaseLocalPos))
+            {
+                asmBaseLocalPos = assembly.localPosition;
+                _barricadeAssemblyBaseLocalPositions[assembly] = asmBaseLocalPos;
+            }
+            assembly.localPosition = asmBaseLocalPos;
             assembly.localRotation = asmBase * Quaternion.Euler(0f, (bdir - 1) * 90f + _barricadeHeadYawOffset, 0f);
             if (head != null)
                 assembly.position += (obj.transform.position - head.position);
@@ -2610,7 +2925,11 @@ namespace BalloonFlow
             }
 
             // 2) 레거시(length<=1)는 멀티셀 비활성 → head 만(body/edge 숨김).
-            if (data.barricadeLength <= 1)
+            // ROLLBACK_BARRICADE_LENGTH_SEGMENTS_20260623:
+            // Active visual length follows the same remaining segment count used by targeting.
+            float activeLengthCells = GetBarricadeActiveLength(data);
+
+            if (activeLengthCells <= 1f)
             {
                 body.gameObject.SetActive(false);
                 if (edge != null) edge.gameObject.SetActive(false);
@@ -2618,13 +2937,12 @@ namespace BalloonFlow
             }
 
             // 길이/HP → body 월드 길이. (충돌 footprint 와 동일 모델: total = head2 + body + edge1)
-            float lengthCells = Mathf.Max(3, data.barricadeLength);
-            int requiredHits = data.maxHP > 0 ? data.maxHP : 2;
-            int remainingHits = Mathf.Clamp(requiredHits - data.hitCount, 0, requiredHits);
-            float hpRatio = requiredHits > 0 ? remainingHits / (float)requiredHits : 1f;
-            float bodyCells = Mathf.Max(0f, lengthCells - 3f) * hpRatio;
+            // ROLLBACK_BARRICADE_LENGTH_SEGMENTS_20260623:
+            // A length value means occupied/attackable cells, not a separate body ratio.
+            // Head covers the first authored cells; body extends only the remaining live length.
+            float bodyCells = Mathf.Max(0f, activeLengthCells - BARRICADE_HEAD_CELLS);
             float cellAlong = vertical ? cellSizeZ : cellSizeX;
-            float bodyWorldLen = Mathf.Max(0f, bodyCells * cellAlong * _barricadeLengthMultiplier + _barricadeLengthPadding);
+            float bodyWorldLen = Mathf.Max(0f, bodyCells * cellAlong * _barricadeLengthMultiplier + (bodyCells > 0f ? _barricadeLengthPadding : 0f));
 
             // 3) body 늘리기 — 피벗 Head쪽·로컬 +X. base 최장축 길이 대비 비율로 localScale.x.
             if (!_barricadeBodyBaseScales.TryGetValue(body, out Vector3 baseScale))

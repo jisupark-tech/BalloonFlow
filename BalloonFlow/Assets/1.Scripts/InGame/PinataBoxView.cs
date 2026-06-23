@@ -102,14 +102,14 @@ namespace BalloonFlow
 
             // 격자 한 칸 = 영역 안쪽(_innerAreaRatio)을 cols×rows 로 나눈 크기. 테두리 여백 확보.
             float ir = Mathf.Clamp(_innerAreaRatio, 0.1f, 1f);
-            // ROLLBACK_TARGETBOX_CELL_EGG_SCALE_20260608:
-            // Keep egg/Cylinder size fixed to one board cell instead of deriving it from frame bounds.
-            float gridCellW = cellSizeX * ir;
-            float gridCellZ = cellSizeZ * ir;
+            // ROLLBACK_TARGETBOX_AUTHORED_EGG_SCALE_20260623:
+            // Eggs divide the actual inner paintbox area by authored egg count. This restores
+            // the previous TargetBox behavior where a 2x1 box with fewer eggs scales eggs up
+            // inside the box instead of clamping every egg to one board cell.
             float layoutCellW = (areaX * ir) / Mathf.Max(1, cols);
             float layoutCellZ = (areaZ * ir) / Mathf.Max(1, rows);
-            float eggCellW = Mathf.Min(gridCellW, layoutCellW);
-            float eggCellZ = Mathf.Min(gridCellZ, layoutCellZ);
+            float eggCellW = layoutCellW;
+            float eggCellZ = layoutCellZ;
 
             // 템플릿 월드 bounds 측정 → 격자 칸에 맞출 스케일 계수 산출. 측정 위해 잠깐 활성화.
             bool tplWasActive = _eggTemplate.activeSelf;

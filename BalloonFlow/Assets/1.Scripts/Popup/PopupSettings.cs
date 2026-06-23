@@ -87,6 +87,7 @@ namespace BalloonFlow
             bool onboarding = !FtueGate.IsOnboardingComplete;
             if (_frame != null)
             {
+                _frame.ApplyDifficulty(ResolveCurrentDifficulty());
                 _frame.SetTitle("Settings");
                 if (onboarding)
                 {
@@ -157,6 +158,17 @@ namespace BalloonFlow
         {
             if (onObj != null) onObj.SetActive(isOn);
             if (offObj != null) offObj.SetActive(!isOn);
+        }
+
+        private static DifficultyPurpose ResolveCurrentDifficulty()
+        {
+            // ROLLBACK_QUIT_SETTINGS_DIFFICULTY_FRAME_20260623:
+            // Match PopupResult/PopupBuyItem frame color behavior for in-game settings popup.
+            if (!LevelManager.HasInstance) return DifficultyPurpose.Normal;
+            int levelId = LevelManager.Instance.CurrentLevelId;
+            return levelId > 0
+                ? LevelManager.Instance.GetLevelDifficulty(levelId)
+                : DifficultyPurpose.Normal;
         }
     }
 }

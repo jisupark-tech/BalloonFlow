@@ -851,7 +851,9 @@ namespace BalloonFlow
                           || anim.clearedDifficulty == DifficultyPurpose.SuperHard;
             int diffMult = WinningStreakConfigService.HasInstance
                 ? WinningStreakConfigService.Instance.ResolveDifficultyMultiplier(anim.clearedDifficulty) : 1;
-            int streakMult = anim.endMultiplier > 0 ? anim.endMultiplier : WinningStreakUI.ResolveCurrentMultiplier();
+            int streakMult = anim.rewardMultiplier > 0
+                ? anim.rewardMultiplier
+                : (anim.startMultiplier > 0 ? anim.startMultiplier : WinningStreakUI.ResolveCurrentMultiplier());
 
             // ROLLBACK_WS_SKIP_X1_COEFF_FX_20260615: 계수가 실제로 곱해지지 않는 경우(노말 레벨 + 0/1연승 → flame +1 만)는
             //   '계수 적용 연출'(PopupWinningStreakReward) 을 생략한다. 난이도배수 미적용(!showBadge) AND 연승배수 ≤1 이면

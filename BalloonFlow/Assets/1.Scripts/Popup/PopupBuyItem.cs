@@ -217,6 +217,7 @@ namespace BalloonFlow
 
             if (_frame != null)
             {
+                _frame.ApplyDifficulty(ResolveCurrentDifficulty());
                 _frame.SetTitle(title);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
                 _frame.SetSingleButtonText(LocalizationService.Get("popup.txtbtnbuy"));
@@ -266,6 +267,7 @@ namespace BalloonFlow
 
             if (_frame != null)
             {
+                _frame.ApplyDifficulty(ResolveCurrentDifficulty());
                 _frame.SetTitle(title);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
                 _frame.SetSingleButtonText(LocalizationService.Get("ui.common.cliam"));
@@ -343,6 +345,17 @@ namespace BalloonFlow
         }
 
         /// <summary>root 하위 TMP 중 콤마 제거 시 정수로 파싱되는(=가격 표기) 텍스트만 value 로 교체.</summary>
+        private static DifficultyPurpose ResolveCurrentDifficulty()
+        {
+            // ROLLBACK_BUYITEM_DIFFICULTY_FRAME_20260623:
+            // Match PopupResult difficulty frame behavior for in-game item buy/unlock popups.
+            if (!LevelManager.HasInstance) return DifficultyPurpose.Normal;
+            int levelId = LevelManager.Instance.CurrentLevelId;
+            return levelId > 0
+                ? LevelManager.Instance.GetLevelDifficulty(levelId)
+                : DifficultyPurpose.Normal;
+        }
+
         private static void SetNumericTextsInChildren(GameObject root, string value, bool replaceEmpty)
         {
             if (root == null) return;
@@ -372,7 +385,10 @@ namespace BalloonFlow
                 labels[i].text = text;
         }
 
-        private void OnBuyClicked()
+        private void OnBuyClicked() => Claim();
+
+        // ROLLBACK_UNLOCK_POPUP_X_AS_CLAIM_20260623: Claim(확정) 동작 추출 — 해금 모드에선 X/안드로이드백도 이걸 호출.
+        private void Claim()
         {
             if (_onConfirmResult != null && !_onConfirmResult.Invoke())
                 return;
@@ -384,9 +400,18 @@ namespace BalloonFlow
 
         private void OnCancelClicked()
         {
+            // ROLLBACK_UNLOCK_POPUP_X_AS_CLAIM_20260623: 해금 모드에선 X(취소)도 Claim 과 동일 동작(보상 지급).
+            //   구매(유료) 모드는 기존 취소 유지 — 실수 결제/지급 방지.
+            if (_isUnlockMode) { Claim(); return; }
             _onCancel?.Invoke();
-            if (_isUnlockMode) IsUnlockShowing = false;
             CloseUI();
+        }
+
+        // ROLLBACK_UNLOCK_POPUP_X_AS_CLAIM_20260623: 해금 모드 안드로이드 백버튼 = Claim. 구매 모드는 기본 동작.
+        public override BackResult OnBackPressed()
+        {
+            if (_isUnlockMode) { Claim(); return BackResult.Handled; }
+            return base.OnBackPressed();
         }
     }
 }

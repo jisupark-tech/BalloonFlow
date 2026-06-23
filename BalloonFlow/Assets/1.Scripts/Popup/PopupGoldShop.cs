@@ -90,14 +90,29 @@ namespace BalloonFlow
                 BindExitClick(found.GetComponent<Button>(), bound);
             }
 
+            // ROLLBACK_GOLDSHOP_MORE_BUTTON_CLICKABLE_20260623: More 버튼이 미할당/비활성이면 텍스트만 보이고 클릭 불가.
+            //   UIShop 처럼 견고하게 — 미할당 시 이름으로 자동 해결 + interactable/raycast 보장 + 리스너 재바인딩.
+            if (_btnMoreProducts == null)
+            {
+                Transform mt = FindChildRecursive(transform, "BtnMoreProducts")
+                            ?? FindChildRecursive(transform, "BtnMoreProductsBlue");
+                if (mt != null) _btnMoreProducts = mt.GetComponent<Button>();
+            }
             if (_btnMoreProducts != null)
             {
+                _btnMoreProducts.interactable = true;
+                if (_btnMoreProducts.targetGraphic != null) _btnMoreProducts.targetGraphic.raycastTarget = true;
+                _btnMoreProducts.onClick.RemoveListener(OnMoreProductsClicked); // Awake 재진입 시 중복 방지
                 _btnMoreProducts.onClick.AddListener(OnMoreProductsClicked);
                 var moreTexts = _btnMoreProducts.GetComponentsInChildren<TMP_Text>(true);
                 for (int i = 0; i < moreTexts.Length; i++)
                 {
                     if (moreTexts[i] != null) moreTexts[i].text = LocalizationService.Get("ui.shop.more_offers");
                 }
+            }
+            else
+            {
+                Debug.LogWarning("[PopupGoldShop] _btnMoreProducts 미할당 — Inspector 에서 More 버튼(BtnMoreProducts) 드래그 필요.");
             }
 
             LoadShopPrefabs();

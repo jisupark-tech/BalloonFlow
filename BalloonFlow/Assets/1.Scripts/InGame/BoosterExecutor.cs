@@ -679,7 +679,7 @@ namespace BalloonFlow
                     if (lineLeadBeforePop > 0f)
                         yield return new WaitForSeconds(lineLeadBeforePop);
 
-                    if (TryPopZapTarget(target.balloonId))
+                    if (TryPopZapTarget(target.balloonId, color))
                         fieldRemoved++;
                 }
 
@@ -991,7 +991,7 @@ namespace BalloonFlow
             if (!BalloonController.HasInstance)
                 return;
 
-            BalloonData[] balloons = BalloonController.Instance.GetAllBalloonsByColor(color);
+            BalloonData[] balloons = BalloonController.Instance.GetAllBalloons();
             if (balloons == null)
                 return;
 
@@ -1001,11 +1001,19 @@ namespace BalloonFlow
                 if (data == null || data.isPopped)
                     continue;
 
-                _zapTargets.Add(new ZapTarget
+                int hitCount = BalloonController.Instance.GetZapHitCountForColor(data, color);
+                if (hitCount <= 0)
+                    continue;
+
+                Vector3 position = BalloonController.Instance.GetBalloonWorldPosition(data.balloonId);
+                for (int h = 0; h < hitCount; h++)
                 {
-                    balloonId = data.balloonId,
-                    position = BalloonController.Instance.GetBalloonWorldPosition(data.balloonId)
-                });
+                    _zapTargets.Add(new ZapTarget
+                    {
+                        balloonId = data.balloonId,
+                        position = position
+                    });
+                }
             }
 
             _zapTargets.Sort((a, b) =>
@@ -1016,7 +1024,7 @@ namespace BalloonFlow
             });
         }
 
-        private bool TryPopZapTarget(int balloonId)
+        private bool TryPopZapTarget(int balloonId, int color)
         {
             if (!BalloonController.HasInstance)
                 return false;
@@ -1025,8 +1033,7 @@ namespace BalloonFlow
             if (data == null || data.isPopped)
                 return false;
 
-            BalloonController.Instance.ForcePopBalloon(balloonId);
-            return true;
+            return BalloonController.Instance.TryApplyZapColorHit(balloonId, color);
         }
 
         private Vector3 GetZapSpawnPosition(Vector3 attackPosition)

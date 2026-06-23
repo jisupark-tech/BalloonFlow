@@ -47,6 +47,10 @@ namespace BalloonFlow
         {
             public int balloonId;
             public int color;
+            // ROLLBACK_TARGETBOX_LIVE_COLOR_MASK_20260623:
+            // TargetBox can contain an authored egg list whose count is independent from its
+            // footprint cells. Each exposed cell should accept any live egg color in that box.
+            public uint colorMask;
             public Vector3 worldPos;
             public Vector2Int cell;
             public bool targetable;
@@ -123,7 +127,7 @@ namespace BalloonFlow
                 bool reserved = excludeIds != null && excludeIds.Contains(edge.balloonId);
                 float firingDist = GetFiringAxisDistance(dartPosition, edge.worldPos, scanDir);
                 float perpDist = GetPerpendicularDistance(dartPosition, edge.worldPos, scanDir);
-                bool sameColor = edge.color == color;
+                bool sameColor = EdgeMatchesColor(edge, color);
                 bool ahead = firingDist >= 0f;
                 bool inTolerance = perpDist <= tolerance;
                 bool viableSameColor = sameColor && edge.targetable && !reserved && ahead;
@@ -220,6 +224,44 @@ namespace BalloonFlow
         // public static ScanDirection LastScanDir; public static Vector2Int LastDartCell;
         // public static string FormatLastDiag() => $"[FindTargetDiag] scan={LastScanDir} ...";
 
+        // ROLLBACK_TARGETBOX_LIVE_COLOR_MASK_20260623:
+        // Normal edge cells match one color. TargetBox edge cells can represent a shared box
+        // that contains multiple live egg colors, so use a small bit mask instead of per-cell
+        // modulo mapping.
+        private static bool EdgeMatchesColor(EdgeTarget edge, int color)
+        {
+            if (edge.color == color) return true;
+            if (color < 0 || color >= 32) return false;
+            return edge.colorMask != 0u && (edge.colorMask & (1u << color)) != 0u;
+        }
+
+        private static uint BuildLiveEggColorMask(BalloonData balloon)
+        {
+            if (balloon == null || balloon.eggColors == null || balloon.eggHps == null)
+                return 0u;
+
+            uint mask = 0u;
+            int count = Mathf.Min(balloon.eggColors.Length, balloon.eggHps.Length);
+            for (int i = 0; i < count; i++)
+            {
+                if (balloon.eggHps[i] <= 0) continue;
+                int eggColor = balloon.eggColors[i];
+                if (eggColor >= 0 && eggColor < 32)
+                    mask |= 1u << eggColor;
+            }
+            return mask;
+        }
+
+        private static int FirstColorFromMask(uint mask, int fallback)
+        {
+            for (int eggColor = 0; eggColor < 32; eggColor++)
+            {
+                if ((mask & (1u << eggColor)) != 0u)
+                    return eggColor;
+            }
+            return fallback;
+        }
+
         public static int FindTarget(Vector3 dartPosition, Vector3 firingDirection, int color, HashSet<int> excludeIds = null)
         {
             int targetId;
@@ -300,9 +342,9 @@ namespace BalloonFlow
                 int line = GetLineKey(scanDir, edge.cell);
                 float score = Mathf.Abs(offset) * _gridCellSize + perpDist;
 
-                if (!edge.targetable || edge.color != color || reserved)
+                if (!edge.targetable || !EdgeMatchesColor(edge, color) || reserved)
                 {
-                    string reason = !edge.targetable ? "blockedTargetable" : (edge.color != color ? "blockedColor" : "reservedFront");
+                    string reason = !edge.targetable ? "blockedTargetable" : (!EdgeMatchesColor(edge, color) ? "blockedColor" : "reservedFront");
                     AppendFindTargetCandidateDiag(offset, edge, true, false, reserved, firingDist, perpDist, line, score, reason);
                     if (score < blockerScore || (Mathf.Approximately(score, blockerScore) && firingDist < blockerFiringDist))
                     {
@@ -407,7 +449,7 @@ namespace BalloonFlow
                     continue;
 
                 bool reserved = excludeIds != null && excludeIds.Contains(edge.balloonId);
-                if (!edge.targetable || edge.color != color || reserved)
+                if (!edge.targetable || !EdgeMatchesColor(edge, color) || reserved)
                     continue;
 
                 float firingDist = GetFiringAxisDistance(dartPosition, edge.worldPos, scanDir);
@@ -570,7 +612,7 @@ namespace BalloonFlow
             foreach (var kvp in map)
             {
                 EdgeTarget edge = kvp.Value;
-                if (edge.color != color) continue;
+                if (!EdgeMatchesColor(edge, color)) continue;
 
                 if (_diagBuilder.Length > 0)
                     _diagBuilder.Append(" | ");
@@ -664,17 +706,16 @@ namespace BalloonFlow
                 //   레거시 바리케이드가 강제 3×2 확장되어 이웃 레인을 덮고 발사 차단되던 회귀 방지(2026-06-08).
                 if (balloon.gimmickType == BalloonController.GimmickBarricade && balloon.barricadeLength > 1)
                 {
-                    int reqHits = balloon.maxHP > 0 ? balloon.maxHP : 2;
-                    int remHits = Mathf.Clamp(reqHits - balloon.hitCount, 0, reqHits);
-                    float ratio = reqHits > 0 ? remHits / (float)reqHits : 1f;
+                    // ROLLBACK_BARRICADE_LENGTH_SEGMENTS_20260623:
+                    // Directional footprint uses the same remaining attackable length as
+                    // BalloonController occupancy/visuals. Length 3 exposes exactly 3 cells.
+                    int alongCount = BalloonController.GetBarricadeActiveLength(balloon);
+                    if (alongCount <= 0) continue;
                     // barricadeLength = 진행축 전체 칸 수(head2+body+edge1). body = max(0,length-3)×HP비율.
-                    int totalLen = Mathf.Max(3, balloon.barricadeLength);
-                    int bodyCells = Mathf.CeilToInt(Mathf.Max(0, totalLen - 3) * ratio);
                     int bdir = ((balloon.barricadeDir % 4) + 4) % 4;   // 0=N(+Z) 1=E(+X) 2=S(-Z) 3=W(-X)
                     bool axisZ = (bdir == 0 || bdir == 2);
                     int sign = (bdir == 0 || bdir == 1) ? 1 : -1;
                     // head2 + body + edge1. edge 항상 포함 → full HP 면 length 칸, HP=0(body=0)면 3칸(스펙: 3칸 차지 후 Pop).
-                    int alongCount = 2 + bodyCells + 1;
 
                     Vector3 bAnchor = BalloonController.Instance.GetAdjustedBoardPosition(balloon.position);
                     BalloonController.Instance.GetAdjustedCellSize(out float bCellX, out float bCellZ);
@@ -720,7 +761,10 @@ namespace BalloonFlow
                     // eggColors 길이 N 은 footprint 셀 수(W*H)와 무관(명시 egg 리스트).
                     bool isEggBox = balloon.gimmickType == BalloonController.GimmickPinataBox
                         && balloon.eggColors != null && balloon.eggColors.Length > 0;
-                    int eggN = isEggBox ? balloon.eggColors.Length : 0;
+                    // ROLLBACK_TARGETBOX_LIVE_COLOR_MASK_20260623:
+                    // Egg count is authored independently from footprint. Expose all live egg
+                    // colors on each occupied cell so the box can be attacked across its full area.
+                    uint eggColorMask = isEggBox ? BuildLiveEggColorMask(balloon) : 0u;
                     // ROLLBACK_PINATA_PER_CELL_20260618: plain Pinata(sized) per-cell — 셀마다 별도 hit.
                     bool isPinataPerCell = BalloonController.IsPinataPerCell(balloon);
                     Vector3 anchor = BalloonController.Instance.GetAdjustedBoardPosition(balloon.position);
@@ -736,11 +780,9 @@ namespace BalloonFlow
                             bool cellTargetable = targetable;
                             if (isEggBox)
                             {
-                                int eggIdx = (dz * width + dx) % eggN;
-                                cellColor = balloon.eggColors[eggIdx];
+                                cellColor = FirstColorFromMask(eggColorMask, balloon.color);
                                 // 죽은 알(hp 0) 색 셀은 비타겟(blocker) — 그 색 다트가 더는 조준 안 함.
-                                bool eggAlive = balloon.eggHps != null && eggIdx < balloon.eggHps.Length && balloon.eggHps[eggIdx] > 0;
-                                cellTargetable = targetable && eggAlive;
+                                cellTargetable = targetable && eggColorMask != 0u;
                             }
                             else if (isPinataPerCell)
                             {
@@ -748,7 +790,12 @@ namespace BalloonFlow
                                 //   idx>=hitCount = 아직 살아있는 셀(타겟). hit 마다 ProcessPinataHit 이 캐시 무효화 → 셀 1개씩 빠짐.
                                 //   색은 balloon.color 그대로(단색). egg 모델과 동일한 idx 순서·blocker 의미.
                                 int idx = dz * width + dx;
-                                cellTargetable = targetable && (idx >= balloon.hitCount);
+                                // ROLLBACK_WOODENBOARD_DEPLETED_CELL_SKIP_20260623:
+                                // Depleted cells should no longer block the line cache; otherwise
+                                // a 2x2 Wooden Board can take one hit and hide the next exposed cell.
+                                if (idx < balloon.hitCount)
+                                    continue;
+                                cellTargetable = targetable;
                             }
                             Vector3 cellWorld = new Vector3(
                                 anchor.x + dx * cellSizeX,
@@ -758,6 +805,7 @@ namespace BalloonFlow
                             {
                                 balloonId = balloon.balloonId,
                                 color = cellColor,
+                                colorMask = isEggBox ? eggColorMask : 0u,
                                 worldPos = cellWorld,
                                 // ROLLBACK_SIZED_FOOTPRINT_INT_KEY_20260615: 롤백 시 cell = WorldToGrid(cellWorld) 로.
                                 cell = new Vector2Int(anchorCell.x + dx, anchorCell.y + dz),
