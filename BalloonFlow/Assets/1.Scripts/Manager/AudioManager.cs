@@ -65,6 +65,10 @@ namespace BalloonFlow
         [SerializeField] private AudioClip _sfxItemHand;
         [SerializeField] private AudioClip _sfxItemShuffle;
         [SerializeField] private AudioClip _sfxItemZap;
+        [Tooltip("Zap_Appear — ItemZap 등장 시 1회 재생. 호출 위치: BoosterExecutor.CreateItemZap (Instantiate 성공 직후). PlayOneShot 이라 함수당 1회 보장.")]
+        [SerializeField] private AudioClip _sfxZapAppear;
+        [Tooltip("Zap_Line — FxZapLine 이 새 타겟으로 이동할 때마다 재생. 호출 위치: BoosterExecutor.PlayColorRemoveSequenceBody (ConfigureZapLineFan 호출 직후, 타겟 루프 매 iteration). stepDelay 가 최소 간격을 보장.")]
+        [SerializeField] private AudioClip _sfxZapLine;
 
         [Header("[Pop Combo Pitch]")]
         [Tooltip("연속 팝 SFX 피치 상승 사용 여부.")]
@@ -148,6 +152,10 @@ namespace BalloonFlow
             if (_sfxItemHand == null)     _sfxItemHand     = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Onedestroy");
             if (_sfxItemShuffle == null)  _sfxItemShuffle  = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Cross");
             if (_sfxItemZap == null)      _sfxItemZap      = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_ColorBomb");
+            // [2026-06-23] Zap_Appear / Zap_Line — ItemZap 등장 + FxZapLine 타겟 이동 SFX.
+            // 폴백 체인 없이 단독 로드: 다른 클립으로 대체되면 의도 오염 (Zap 전용 SFX 추가).
+            if (_sfxZapAppear == null)    _sfxZapAppear    = Resources.Load<AudioClip>("Sound/Effect/Zap_Appear");
+            if (_sfxZapLine == null)      _sfxZapLine      = Resources.Load<AudioClip>("Sound/Effect/Zap_Line");
 
             // [2026-05-31] 신규 사운드 — Resources/Sound/Effect/ 에 파일 배치 (이름 일치).
             // 파일이 아직 없는 동안에도 청취 가능한 폴백을 적용해 사일런트 회귀 방지.
@@ -192,6 +200,8 @@ namespace BalloonFlow
             if (_sfxItemHand == null)          missing.Add("Stage_ItemUse_Onedestroy");
             if (_sfxItemShuffle == null)       missing.Add("Stage_ItemUse_Cross");
             if (_sfxItemZap == null)           missing.Add("Stage_ItemUse_ColorBomb");
+            if (_sfxZapAppear == null)         missing.Add("Zap_Appear");
+            if (_sfxZapLine == null)           missing.Add("Zap_Line");
             if (_sfxWoodBreak == null)         missing.Add("woodbreak");
             if (_sfxAchieve == null)           missing.Add("achieve");
             if (_sfxShortFail == null)         missing.Add("shortfail");
@@ -345,6 +355,22 @@ namespace BalloonFlow
         public void PlayLobbyRailBoxStart()
         {
             PlaySFX(_sfxLobbyRailBoxStart);
+        }
+
+        /// <summary>Zap_Appear — ItemZap 등장 시 1회 재생.
+        /// 호출 위치: BoosterExecutor.CreateItemZap (Instantiate 성공 직후, zapObject != null 분기 안).
+        /// PlayOneShot 이라 함수당 1회 보장 — Zap 부스터 1회 사용당 1회 재생.</summary>
+        public void PlayZapAppear()
+        {
+            PlaySFX(_sfxZapAppear);
+        }
+
+        /// <summary>Zap_Line — FxZapLine 이 새 타겟으로 이동할 때마다 1회 재생.
+        /// 호출 위치: BoosterExecutor.PlayColorRemoveSequenceBody (ConfigureZapLineFan 호출 직후, 타겟 루프 매 iteration).
+        /// 추가 cooldown 없음 — stepDelay 자체가 최소 간격, PlayOneShot 이라 짧은 잔향만 중첩.</summary>
+        public void PlayZapLine()
+        {
+            PlaySFX(_sfxZapLine);
         }
 
         #endregion

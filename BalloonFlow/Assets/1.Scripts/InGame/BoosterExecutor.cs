@@ -669,6 +669,9 @@ namespace BalloonFlow
                     float lineVisibleDuration = Mathf.Max(ZapLineLifetime, stepDelay + lineLeadBeforePop);
                     Vector3 lineStartPosition = zapFixedPosition;
                     ConfigureZapLineFan(zapLineObjects, lineStartPosition, targetPosition, lineVisibleDuration);
+                    // Zap_Line — 라인 팬이 새 타겟으로 이동하는 매 iteration 1회 재생.
+                    // stepDelay 가 최소 간격 보장, PlayOneShot 이라 별도 cooldown 불필요.
+                    if (AudioManager.HasInstance) AudioManager.Instance.PlayZapLine();
 
                     // ROLLBACK_ZAP_LINE_PREPOP_LEAD:
                     // Give FxZapLine a rendered moment only when the total-time budget can afford
@@ -1138,6 +1141,8 @@ namespace BalloonFlow
                 {
                     _zapAnimator.keepAnimatorStateOnDisable = true;
                 }
+                // Zap_Appear — ItemZap Instantiate 성공 분기 안에서만 호출 → 함수당 1회 보장 (Zap 부스터 1회 사용당 1회 재생).
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayZapAppear();
             }
             return zapObject;
         }
