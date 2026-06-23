@@ -102,6 +102,8 @@ namespace BalloonFlow
 
         public void ShowFail()
         {
+            // FinishLogo 루프 SFX 정지 보장 (코루틴 인터럽트/예외 시 폴백). 사용자 지시 2026-06-23.
+            if (AudioManager.HasInstance) AudioManager.Instance.StopStageResultFirework();
             if (PopupManager.HasInstance)
                 PopupManager.Instance.ShowPopup("popup_fail01", 50);
         }
@@ -209,6 +211,8 @@ namespace BalloonFlow
             // GameObject.activeInHierarchy=false 일 때 silently 무시되기 때문 (Reward subtree 의 sub-canvas
             // 분리가 깨져 FX 파티클이 Gold/Text 위로 떠 보이는 회귀 발생).
             OpenUI();
+            // FinishLogo 루프 SFX 정지 보장 (코루틴 인터럽트/예외 시 폴백). 사용자 지시 2026-06-23.
+            if (AudioManager.HasInstance) AudioManager.Instance.StopStageResultFirework();
             // [2026-06-23] PopupResult 오픈 직후 결과 SFX 1회 재생 (Stage_Result.mp3).
             // 태스크 명세: 팝업이 표시될 때마다 재생. PlayOneShot 이라 자동으로 1회.
             // 보드클리어 시점의 _sfxClear(congratuation)와는 별개 트랙으로 레이어됨.

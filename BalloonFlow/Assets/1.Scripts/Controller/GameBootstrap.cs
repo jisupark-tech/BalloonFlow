@@ -676,6 +676,8 @@ namespace BalloonFlow
             if (_parent == null) _parent = transform;
 
             GameObject _logoGO = Instantiate(_finishLogoPrefab, _parent, false);
+            // SFX loop start/stop — 사용자 지시 2026-06-23 (task #370 comment). FinishLogo 표시 구간 한정.
+            if (AudioManager.HasInstance) AudioManager.Instance.PlayStageResultFireworkLoop();
             var _rt = _logoGO.transform as RectTransform;
             if (_rt != null)
             {
@@ -726,6 +728,8 @@ namespace BalloonFlow
 
             yield return new WaitForSecondsRealtime(_holdSeconds);
 
+            // SFX loop stop — 사용자 지시 2026-06-23 (task #370 comment). FinishLogo 종료 시 정지.
+            if (AudioManager.HasInstance) AudioManager.Instance.StopStageResultFirework();
             if (_logoGO != null) Destroy(_logoGO);
         }
 
