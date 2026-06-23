@@ -251,6 +251,10 @@ namespace BalloonFlow
         // IsWinningStreakFxPlaying(LevelClearGoldFx 포함) 보다 한 단계 일찍 풀려, LobbyController가 PlayLobbyBtnChangeAnim 을
         // FXGold 와 병렬로 시작시킨다. OnPlayClicked 의 click block 은 그대로 IsWinningStreakFxPlaying 사용 → 안전성 유지.
         private bool _wsCoreFxRunning;
+        // [WS 코어 연출 release 이벤트 가드 2026-06-23] OnWinningStreakCoreFxReleased 의 중복 발화 방지용 1회성 가드.
+        // 매 deferred 진입(TriggerPendingWinningStreakLobbyFx 의 StartCoroutine 직전) 시 false 로 리셋된다.
+        // 정상 경로(slide-out / skip 분기 release 사이트) 에서 한 번 set + Invoke 한 뒤, finally 안전망에서 이미 fired 면 skip.
+        private bool _wsCoreFxReleasedFired;
 
         [Header("[Profile Display — 좌상단 표시 sprite]")]
         [Tooltip("PopupProfile 과 동일한 ProfileAssets ScriptableObject. 아이콘/프레임 sprite 카탈로그.")]
@@ -339,6 +343,12 @@ namespace BalloonFlow
         /// FXGold 완료(_wsLobbyFxCoroutine null) 시점까지 대기 → PlayLobbyBtnChangeAnim 직렬 실행으로 보이는 증상의 직접 원인.
         /// 비대칭 의도: IsWinningStreakFxPlaying(line 331) 은 OnPlayClicked 클릭 가드용이므로 armed 항을 보존(1프레임 click 누수 방지). 두 프로퍼티의 역할이 다름.</summary>
         public bool IsWinningStreakCoreFxPlaying => _wsCoreFxRunning || PopupWinningStreakReward.IsShowing;
+
+        /// <summary>WS 코어 연출(보상 팝업 + LobbyFx) 종료 트리거 — _wsCoreFxRunning=false 와 같은 시점, FXGold StartCoroutine 직전에 발화.
+        /// LobbyController 가 구독해 PlayLobbyBtnChangeAnim 을 같은 프레임에 동시 시작 (폴링 게이트 1프레임 race 제거).
+        /// owner 확인 출처: 본 ProjectHub 태스크 [재시도 피드백] 2026-06-23 — 작업 요구 "동시에 시작" 의 frame-perfect 보장.
+        /// SUPERSEDES 2026-06-23 PR #375 (poll-only) — 폴링 게이트는 fallback 으로 보존.</summary>
+        public event System.Action OnWinningStreakCoreFxReleased;
 
         public Button BtnGoldPlus => _btnGoldPlus;
         public Button BtnLifePlus => _btnLifePlus;
@@ -474,6 +484,7 @@ namespace BalloonFlow
 
             _wsLobbyFxArmed = true;
             _wsCoreFxRunning = true;
+            _wsCoreFxReleasedFired = false;
             _wsLobbyFxCoroutine = StartCoroutine(PlayPendingWinningStreakLobbyFxDeferred());
         }
 
@@ -818,6 +829,13 @@ namespace BalloonFlow
                 if (_wsGoldFxCoroutine != null) { StopCoroutine(_wsGoldFxCoroutine); _wsGoldFxCoroutine = null; }
                 _wsLobbyFxArmed = false;
                 _wsCoreFxRunning = false;
+                // [WS frame-perfect 동시 시작 2026-06-23] 예외/StopCoroutine/조기 종료 등으로 정상 release 사이트(L1047/L1063 분기) 를
+                // 통과하지 못한 경로의 LobbyController 대기 누수 방지 안전망. 정상 경로에서는 _wsCoreFxReleasedFired=true 이므로 no-op.
+                if (!_wsCoreFxReleasedFired)
+                {
+                    _wsCoreFxReleasedFired = true;
+                    OnWinningStreakCoreFxReleased?.Invoke();
+                }
                 _wsHoldMultiplierTextDuringAnim = false;
                 _wsLobbyFxCoroutine = null;
             }
@@ -1045,6 +1063,13 @@ namespace BalloonFlow
                 // SUPERSEDES 2026-06-23 직전 결정(LobbyFx 완료 후 release + 직렬 FXGold) — owner 확인 출처: 본 ProjectHub 태스크 6a3a33ef
                 //   [사용자 추가 지시] 2026-06-23 ('완전히 끝난 뒤가 아니라 사라지기 시작 시점에 PlayButton+FXGold 동시 시작').
                 _wsCoreFxRunning = false;
+                // [WS frame-perfect 동시 시작 2026-06-23] 이벤트 발화 → 구독한 LobbyController 가 같은 프레임에 PlayLobbyBtnChangeAnim 시작.
+                // 가드: finally 안전망과의 이중 발화 방지. owner 출처: 본 태스크 [재시도 피드백] 2026-06-23 '동시에 시작'.
+                if (!_wsCoreFxReleasedFired)
+                {
+                    _wsCoreFxReleasedFired = true;
+                    OnWinningStreakCoreFxReleased?.Invoke();
+                }
                 if (_wsGoldFxCoroutine != null) { StopCoroutine(_wsGoldFxCoroutine); _wsGoldFxCoroutine = null; }
                 _wsGoldFxCoroutine = StartCoroutine(PlayLevelClearGoldFxAndClearHandle(anim));
 
@@ -1061,6 +1086,13 @@ namespace BalloonFlow
                 //   if 분기와 의미적으로 동일한 release point — 양 분기 모두 LobbyFx 의 마지막 visible 변화 직후로 통일.
                 // SUPERSEDES 2026-06-23 직전 결정(deferred 루프에서 직렬 release/FXGold) — owner 확인 출처: 본 ProjectHub 태스크 6a3a33ef [사용자 추가 지시] 2026-06-23.
                 _wsCoreFxRunning = false;
+                // [WS frame-perfect 동시 시작 2026-06-23] 이벤트 발화 → 구독한 LobbyController 가 같은 프레임에 PlayLobbyBtnChangeAnim 시작.
+                // skip 분기에서도 if 분기와 동일 시점(release point) 발화 — 양 분기 의미 통일.
+                if (!_wsCoreFxReleasedFired)
+                {
+                    _wsCoreFxReleasedFired = true;
+                    OnWinningStreakCoreFxReleased?.Invoke();
+                }
                 if (_wsGoldFxCoroutine != null) { StopCoroutine(_wsGoldFxCoroutine); _wsGoldFxCoroutine = null; }
                 _wsGoldFxCoroutine = StartCoroutine(PlayLevelClearGoldFxAndClearHandle(anim));
             }
