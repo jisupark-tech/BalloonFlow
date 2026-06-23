@@ -209,6 +209,10 @@ namespace BalloonFlow
             // GameObject.activeInHierarchy=false 일 때 silently 무시되기 때문 (Reward subtree 의 sub-canvas
             // 분리가 깨져 FX 파티클이 Gold/Text 위로 떠 보이는 회귀 발생).
             OpenUI();
+            // [2026-06-23] PopupResult 오픈 직후 결과 SFX 1회 재생 (Stage_Result.mp3).
+            // 태스크 명세: 팝업이 표시될 때마다 재생. PlayOneShot 이라 자동으로 1회.
+            // 보드클리어 시점의 _sfxClear(congratuation)와는 별개 트랙으로 레이어됨.
+            if (AudioManager.HasInstance) AudioManager.Instance.PlayStageResult();
             EnsureRewardVisible(starCount);
 
             // 애니메이션 상태와 무관하게 즉시 클릭 가능
