@@ -55,6 +55,10 @@ namespace BalloonFlow
         [Tooltip("FinishLogo 연출 동안 루프 재생되는 불꽃 SFX. Stage_Result(1회)와는 별개 트랙.")]
         [SerializeField] private AudioClip _sfxStageResultFirework;
 
+        [Header("[SFX — Lobby]")]
+        [Tooltip("Lobby_Rail — UILobby Top/Bottom Rail 이동 시작 시 1회 재생. PlayRailEnterAnimation/PlayRailPullDownAnimation 진입점에서 호출. PlayOneShot 이므로 호출당 1회 보장.")]
+        [SerializeField] private AudioClip _sfxLobbyRail;
+
         [Header("[SFX — Booster]")]
         [SerializeField] private AudioClip _sfxItemHand;
         [SerializeField] private AudioClip _sfxItemShuffle;
@@ -164,6 +168,8 @@ namespace BalloonFlow
             // [2026-06-23] Stage_Result_Firework — FinishLogo 연출 동안 _loopSfxSource 로 루프 재생.
             // _sfxStageResult(1회 재생)와는 별개 트랙·별개 시점이므로 폴백 체인 없이 단독 로드.
             if (_sfxStageResultFirework == null) _sfxStageResultFirework = Resources.Load<AudioClip>("Sound/Effect/Stage_Result_Firework");
+            // [2026-06-23] Lobby_Rail — UILobby Rail 이동 1회 재생 (사용자 추가 지시).
+            if (_sfxLobbyRail == null) _sfxLobbyRail = Resources.Load<AudioClip>("Sound/Effect/Lobby_Rail");
 
 #if UNITY_EDITOR
             // Editor 전용 진단 — 폴백조차 실패해 여전히 null 인 SFX 의 '원본 명세 파일명' 을 한 줄로 보고.
@@ -190,6 +196,7 @@ namespace BalloonFlow
             if (_sfxDeny == null)              missing.Add("deny");
             if (_sfxStageResult == null)       missing.Add("Stage_Result");
             if (_sfxStageResultFirework == null) missing.Add("Stage_Result_Firework");
+            if (_sfxLobbyRail == null)         missing.Add("Lobby_Rail");
             if (missing.Count > 0)
             {
                 Debug.LogWarning($"[AudioManager] Missing SFX clips (place files under Resources/Sound/Effect/): {string.Join(", ", missing)}");
@@ -318,6 +325,14 @@ namespace BalloonFlow
             if (_loopSfxSource.clip != _sfxStageResultFirework) return;
             _loopSfxSource.Stop();
             _loopSfxSource.clip = null;
+        }
+
+        /// <summary>Lobby_Rail — UILobby Rail(Top/Bottom) 이동 시작 시 1회 재생.
+        /// 호출 위치: UILobby.PlayRailEnterAnimation / PlayRailPullDownAnimation 진입점.
+        /// PlayOneShot 이라 함수당 1회 보장 — Top/Bottom 동시 변경 케이스에서도 호출자가 1번만 부르면 1회 재생.</summary>
+        public void PlayLobbyRail()
+        {
+            PlaySFX(_sfxLobbyRail);
         }
 
         #endregion
