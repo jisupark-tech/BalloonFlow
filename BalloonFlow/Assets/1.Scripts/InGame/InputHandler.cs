@@ -45,6 +45,12 @@ namespace BalloonFlow
         {
             if (!_inputEnabled) return;
             if (Time.unscaledTime < _suppressInputUntilUnscaled) return;
+            // ROLLBACK_INPUT_BLOCK_DURING_LOADING_20260623: 씬전환/스테이지클리어 로딩·페이드 중 홀더 입력 차단.
+            //   로딩 화면은 UI dim 인데 홀더는 3D 콜라이더 → 물리 Raycast 가 UI 를 무시해 로딩 중 탭이 먹던 버그.
+            //   LevelManager.IsLoading(레벨 로드 중) 또는 UIManager.IsFading(페이드 overlay 가시) 동안 입력 무시.
+            //   롤백: 이 if 블록 삭제.
+            if ((LevelManager.HasInstance && LevelManager.Instance.IsLoading)
+                || (UIManager.HasInstance && UIManager.Instance.IsFading)) return;
             var __sw = InGamePerfLogger.StartSection();
             try
             {
