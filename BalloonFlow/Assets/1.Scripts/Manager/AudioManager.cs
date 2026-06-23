@@ -17,6 +17,9 @@ namespace BalloonFlow
         [Tooltip("루프 재생용 별도 AudioSource. _sfxSource(PlayOneShot, 일회성) / _popSource(풍선 팝 피치 콤보)와 분리되어 FinishLogo 불꽃 등 장시간 SFX 루프를 안전하게 재생.")]
         [SerializeField] private AudioSource _loopSfxSource;
 
+        [Tooltip("FinishLogo congratuation 전용 AudioSource. _sfxSource(PlayOneShot 일회성, StopAllSfx 대상) 와 분리되어 BeginResultIntroSfxLock 의 StopAllSfx + _resultIntroSfxLock 화이트리스트 게이트 양쪽 모두 우회. 사용자 피드백 2026-06-23: congratuation 재생 중간 강제 정지 금지.")]
+        [SerializeField] private AudioSource _finishLogoSfxSource;
+
         [Header("[BGM]")]
         [SerializeField] private AudioClip _bgmLobby;
         [SerializeField] private AudioClip _bgmInGame;
@@ -31,6 +34,7 @@ namespace BalloonFlow
         [Header("[SFX — InGame]")]
         [SerializeField] private AudioClip _sfxBalloonPop;
         [SerializeField] private AudioClip _sfxBalloonPop2;
+        [Tooltip("congratuation — FinishLogo 등장 시점 1회 재생(태스크: 사운드 추가 2026-06-23, 사용자 피드백 반영). _finishLogoSfxSource(전용 채널)에서 PlayOneShot 되므로 BeginResultIntroSfxLock 의 StopAllSfx 및 _resultIntroSfxLock whitelist 게이트 양쪽 모두 우회 — 사용자가 명시한 '중간에 강제로 정지되지 않도록' 요구 충족.")]
         [SerializeField] private AudioClip _sfxClear;
         [SerializeField] private AudioClip _sfxFail;
         [SerializeField] private AudioClip _sfxHolderDeploy;
@@ -115,6 +119,15 @@ namespace BalloonFlow
             _loopSfxSource.playOnAwake = false;
             if (_sfxSource != null && _sfxSource.outputAudioMixerGroup != null)
                 _loopSfxSource.outputAudioMixerGroup = _sfxSource.outputAudioMixerGroup;
+
+            if (_finishLogoSfxSource == null)
+            {
+                _finishLogoSfxSource = gameObject.AddComponent<AudioSource>();
+            }
+            _finishLogoSfxSource.loop = false;
+            _finishLogoSfxSource.playOnAwake = false;
+            if (_sfxSource != null && _sfxSource.outputAudioMixerGroup != null)
+                _finishLogoSfxSource.outputAudioMixerGroup = _sfxSource.outputAudioMixerGroup;
 
             AutoLoadClips();
 
@@ -318,6 +331,15 @@ namespace BalloonFlow
             PlaySFX(_sfxStageResult);
         }
 
+        /// <summary>congratuation (FinishLogo 등장 1-shot). 트리거: GameBootstrap.PlayFinishLogoSequence — BeginResultIntroSfxLock + PlayStageResultFireworkLoop 와 동일 프레임에 호출.
+        /// 사용자 피드백 2026-06-23: 재생 중간에 강제로 정지되지 않아야 함 → 전용 _finishLogoSfxSource 사용으로 StopAllSfx(_sfxSource/_popSource 대상)·_resultIntroSfxLock 게이트(PlaySFX 내부) 양쪽 모두 우회.
+        /// Stage_Result_Firework 루프(_loopSfxSource) 와는 별개 채널이라 동시 재생/상호 비간섭 보장.</summary>
+        public void PlayFinishLogoCongratuation()
+        {
+            if (_finishLogoSfxSource == null || _sfxClear == null || !_sfxEnabled) return;
+            _finishLogoSfxSource.PlayOneShot(_sfxClear);
+        }
+
         /// <summary>FinishLogo 연출 동안 루프 재생. 트리거: GameBootstrap.PlayFinishLogoSequence 시작 /
         /// 정지 트리거: 동 코루틴 종료 또는 PopupResult.ShowWin/ShowFail 진입(방어).
         /// 사용자 지시 2026-06-23 (task 코멘트), 직전 PR #369(_sfxStageResult 1회 재생)와 별개 트랙.</summary>
@@ -453,7 +475,7 @@ namespace BalloonFlow
         {
             // congratuation (클리어 팡파레) + play BGM 정지
             StopBGM();
-            PlaySFX(_sfxClear);
+            // [2026-06-23 사용자 피드백] congratuation 트리거를 OnBoardCleared 에서 FinishLogo 진입(GameBootstrap.PlayFinishLogoSequence)으로 이동. 보드 클리어 시 BGM 정지만 수행.
         }
 
         private void HandleBoardFailed(OnBoardFailed evt)

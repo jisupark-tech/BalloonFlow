@@ -682,6 +682,8 @@ namespace BalloonFlow
             {
                 AudioManager.Instance.BeginResultIntroSfxLock();
                 AudioManager.Instance.PlayStageResultFireworkLoop();
+                // [2026-06-23 사용자 피드백] congratuation 1-shot — _finishLogoSfxSource 전용 채널 사용이라 직전 BeginResultIntroSfxLock 의 StopAllSfx 및 PlaySFX 화이트리스트 게이트 통과 안 받음. Firework 루프와 동시 시작.
+                AudioManager.Instance.PlayFinishLogoCongratuation();
             }
             GameObject _logoGO = Instantiate(_finishLogoPrefab, _parent, false);
             var _rt = _logoGO.transform as RectTransform;
