@@ -206,13 +206,28 @@ namespace BalloonFlow
         {
             if (_deleteAccountInProgress) return;
 
+            // ROLLBACK_POPUP_DELETE_ACCOUNT_DEDICATED_20260623: 전용 PopupDeleteAccount 우선 사용.
+            //   프리팹(Popup/PopupDeleteAccount)에 PopupDeleteAccount 컴포넌트가 부착돼 있어야 동작.
+            //   미부착/미연결이면 OpenUI 가 null → 기존 PopupError.ShowDeleteAccountConfirm 로 폴백(기능 유지).
+            //   롤백: 이 블록을 PopupError 단독 호출로 환원.
+            if (UIManager.HasInstance)
+            {
+                var dedicated = UIManager.Instance.OpenUI<PopupDeleteAccount>("Popup/PopupDeleteAccount");
+                if (dedicated != null)
+                {
+                    dedicated.Show(DeleteAccountAndReturnToTitle);
+                    return;
+                }
+            }
+
+            // 폴백: 전용 팝업 미연결 시 PopupError 로.
             var popup = UIManager.HasInstance
                 ? UIManager.Instance.OpenUI<PopupError>("Popup/PopupError")
                 : null;
 
             if (popup == null)
             {
-                Debug.LogWarning("[UISetting] PopupError not available for delete-account confirmation.");
+                Debug.LogWarning("[UISetting] Neither PopupDeleteAccount nor PopupError available for delete-account confirmation.");
                 return;
             }
 
