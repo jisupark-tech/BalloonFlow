@@ -217,6 +217,7 @@ namespace BalloonFlow
         }
 
         private bool _lifeConsumed;
+        private bool _sfxPlayed;
 
         private void OnEnable()
         {
@@ -262,11 +263,21 @@ namespace BalloonFlow
                 // must not display the clear reward coin image.
                 rewardRoot.gameObject.SetActive(false);
             }
+
+            // [2026-06-24 사용자 피드백] PopupFail02 등장 시 Fail SFX 1회 + BGM fade-out.
+            // OnEnable 다중 호출 가드 — 인스턴스 lifetime 당 1회만 발화 (OnDisable에서 리셋).
+            if (!_sfxPlayed && AudioManager.HasInstance)
+            {
+                AudioManager.Instance.StopBGMFadeOut(0.5f);
+                AudioManager.Instance.PlayPopupFail02Sfx();
+                _sfxPlayed = true;
+            }
         }
 
         private void OnDisable()
         {
             _lifeConsumed = false; // 다음 실패 시 다시 소모 가능
+            _sfxPlayed = false;    // 재진입(다음 실패) 시 재발화 보장
         }
 
         public void Show(DifficultyPurpose difficulty)
