@@ -594,7 +594,7 @@ namespace BalloonFlow
         /// <summary>Item_Get (단발) — FXItem(ItemFlyEffect) 개별 아이템이 목적지에 도착할 때 1회 재생.
         /// 클립: Item_Get.mp3 (Assets/Resources/Sound/Effect/Item_Get.mp3) — AutoLoadClips 에서 _sfxItemGet 로 단독 로드(line 233).
         /// owner 출처: ProjectHub 태스크 2026-06-24 익명 사용자 피드백 — FXItem 도착 시 Item_Get.mp3 1회 재생, Gold_Get 에서 교체.
-        /// 호출 위치(의미 고정 — 코드 라인이 아닌 이벤트 흐름 상의 위치로 정의): ItemFlyEffect.cs:152 per-item Fly() 완료 콜백 (landed++ 직후, onEachLand 직전) — per-arrival 자연 1회.
+        /// 호출 위치: ItemFlyEffect.cs RunFly() — 배치 첫 도착(landed==1)에서만 1회 재생. 호출자 3곳(PurchaseRewardEffect.cs, UIHud.cs, PopupMoreLive.cs) 모두 ItemFlyEffect.Play(count:N) 진입점 경유.
         /// 의미적 분리: PlayItemGet()(UILobby WS fire-fly/Multiplier changed-edge) 와 동일 클립 _sfxItemGet 을 공유하지만 caller/시점이 시간상 분리되어 overlap 없음. PlayGoldGet()(FXGold CoinFlyEffect 3x 시퀀스 _sfxGoldGet)와는 클립도 caller 도 별개.
         /// 절대 RunFly/Fly OnUpdate/매 프레임 lambda 안에서 호출 금지(과거 도메인 원칙 4: 잔향 무한 중첩 회귀 차단).</summary>
         public void PlayItemLand()
