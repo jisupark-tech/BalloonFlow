@@ -242,8 +242,11 @@ namespace BalloonFlow
                     _rectCache[coin] = rt;
                 }
                 rt.anchoredPosition = from;
-                // 프리팹의 localScale 그대로 사용 — 자식 Light 컴포넌트가 root 스케일 변동에 영향 안 받도록.
-                // (코인 사이즈는 FXGold.prefab 에서 직접 조절)
+                ApplyResolutionInvariantRootScale(coin, rt);
+                // ROLLBACK_FXGOLD_RESOLUTION_INVARIANT_SCALE_20260624:
+                // 프리팹의 authored scale에 Canvas.scaleFactor 역보정을 곱해 고해상도/Fold 캔버스에서
+                // 코인과 자식 Light/Particle이 더 커지고 강해지는 현상을 막는다.
+                // Rollback: ApplyResolutionInvariantRootScale 호출을 제거하면 기존 prefab localScale 그대로 사용.
 
                 // [Optimization 2026-05-11] ParticleSystem[] 캐시 — 매 spawn GetComponentsInChildren alloc 제거.
                 // 원본: var particles = coin.GetComponentsInChildren<ParticleSystem>(true);
@@ -421,6 +424,27 @@ namespace BalloonFlow
                 else if (_rootSizeDeltaCache.TryGetValue(root, out Vector2 sizeDelta))
                     rt.sizeDelta = sizeDelta;
             }
+        }
+
+        private static void ApplyResolutionInvariantRootScale(GameObject coin, RectTransform rt)
+        {
+            if (coin == null) return;
+
+            Vector3 scale = _prefab != null
+                ? _prefab.transform.localScale
+                : _rootScaleCache.TryGetValue(coin, out Vector3 cachedScale)
+                    ? cachedScale
+                    : Vector3.one;
+
+            float authoredScale = 1f;
+            if (GameManager.HasInstance)
+                authoredScale = Mathf.Max(0.01f, GameManager.Instance.Board.coinFlyScale);
+
+            scale *= authoredScale;
+            scale *= GoldPanelFxFireUtil.GetCanvasScaleCompensation(coin.transform);
+
+            coin.transform.localScale = scale;
+            if (rt != null) rt.localScale = scale;
         }
 
         private static Vector2 ScreenToLocal(RectTransform canvasRT, Camera cam, Vector2 screen)

@@ -14,6 +14,7 @@ namespace BalloonFlow
         public int color;
         public int magazineCount;
         public int column;            // queue column (0..queueColumns-1)
+        public int sourceRow;         // authored holder row in MapMaker queue grid.
         public bool isDeploying;      // currently at rail deploying darts
         public bool isWaiting;        // waiting behind a deploying holder (same column)
         public bool isMovingToRail;   // in transit from queue to rail
@@ -36,11 +37,20 @@ namespace BalloonFlow
         public int spawnerMag = 20;
         /// <summary>Spawner color sequence cursor. Keeps spawnerColors in authored order.</summary>
         public int spawnerSpawnedCount;
+        // ROLLBACK_PIPE_PAYLOAD_RELEASE_20260624:
+        // Pipe(Spawner_O) releases authored holders below the pipe anchor instead of
+        // creating new holders, preserving each payload holder's color/mag/gimmick data.
+        public int pipeOwnerId = -1;
+        public int pipeOrder = -1;
+        public bool isPipePayload;
+        public bool isPipePayloadReleased = true;
         /// <summary>Chain 그룹 ID. -1 = Chain 아님. 같은 ID끼리 연결 발동.</summary>
         public int chainGroupId = -1;
         public int lockPairId = -1;
         public bool isLocked;
         public bool isLockObject;
+
+        public bool IsQueueVisible => !isPipePayload || isPipePayloadReleased;
     }
 
     /// <summary>
@@ -136,6 +146,7 @@ namespace BalloonFlow
                     color = setup.color,
                     magazineCount = Mathf.Min(setup.magazineCount, _magazineMax),
                     column = col,
+                    sourceRow = i / _queueColumns,
                     isDeploying = false,
                     isWaiting = false,
                     isMovingToRail = false,
@@ -166,6 +177,7 @@ namespace BalloonFlow
                     color = setup.color,
                     magazineCount = Mathf.Min(setup.magazineCount, _magazineMax),
                     column = Mathf.Clamp(setup.column, 0, _queueColumns - 1),
+                    sourceRow = 0,
                     isDeploying = false,
                     isWaiting = false,
                     isMovingToRail = false,
@@ -206,6 +218,7 @@ namespace BalloonFlow
 
                 // position.x = MapMaker 그리드의 열 번호 (빈 칸 포함 원래 위치)
                 int col = Mathf.Clamp((int)setup.position.x, 0, _queueColumns - 1);
+                int row = Mathf.Max(0, Mathf.RoundToInt(setup.position.y));
 
                 string gimmick = setup.queueGimmick ?? "";
                 bool hidden = gimmick == GimmickManager.GIMMICK_HIDDEN;
@@ -219,6 +232,7 @@ namespace BalloonFlow
                     color = setup.color,
                     magazineCount = isSpawner ? 0 : Mathf.Min(setup.magazineCount, _magazineMax), // Spawner는 다트 없음
                     column = col,
+                    sourceRow = row,
                     isDeploying = false,
                     isWaiting = false,
                     isMovingToRail = false,
@@ -239,6 +253,8 @@ namespace BalloonFlow
                 };
                 _holders.Add(holder);
             }
+
+            BindAuthoredPipePayloads();
 
             // 초기 Spawner 소환은 SpawnWaitingHolders에서 처리 (풍선 생성 후 색상 참조 가능)
         }
@@ -276,7 +292,7 @@ namespace BalloonFlow
             if (chainGroupId < 0) return result;
             for (int i = 0; i < _holders.Count; i++)
             {
-                if (_holders[i].chainGroupId == chainGroupId && !_holders[i].isConsumed)
+                if (_holders[i].chainGroupId == chainGroupId && !_holders[i].isConsumed && _holders[i].IsQueueVisible)
                     result.Add(_holders[i].holderId);
             }
             return result;
@@ -297,7 +313,7 @@ namespace BalloonFlow
         public bool ForceSelectHolder(int holderId)
         {
             HolderData holder = FindHolder(holderId);
-            if (holder == null || holder.isDeploying || holder.isWaiting || holder.isMovingToRail || holder.isConsumed)
+            if (holder == null || !holder.IsQueueVisible || holder.isDeploying || holder.isWaiting || holder.isMovingToRail || holder.isConsumed)
                 return false;
             if (holder.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T ||
                 holder.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O)
@@ -404,7 +420,7 @@ namespace BalloonFlow
         public bool SelectHolder(int holderId)
         {
             HolderData holder = FindHolder(holderId);
-            if (holder == null || holder.isDeploying || holder.isWaiting || holder.isMovingToRail || holder.isConsumed)
+            if (holder == null || !holder.IsQueueVisible || holder.isDeploying || holder.isWaiting || holder.isMovingToRail || holder.isConsumed)
             {
                 return false;
             }
@@ -765,7 +781,7 @@ namespace BalloonFlow
             var result = new List<HolderData>();
             for (int i = 0; i < _holders.Count; i++)
             {
-                if (_holders[i].column == column && !_holders[i].isConsumed)
+                if (_holders[i].column == column && !_holders[i].isConsumed && _holders[i].IsQueueVisible)
                 {
                     result.Add(_holders[i]);
                 }
@@ -781,6 +797,7 @@ namespace BalloonFlow
             for (int i = 0; i < _holders.Count; i++)
             {
                 if (_holders[i].isConsumed) continue;
+                if (!_holders[i].IsQueueVisible) continue;
                 // Spawner는 HP 남아있으면 아직 끝 아님
                 if (_holders[i].spawnerHP > 0) return false;
                 // 일반 보관함은 탄창 남아있거나 배치 중이면 끝 아님
@@ -805,7 +822,7 @@ namespace BalloonFlow
             int count = 0;
             for (int i = 0; i < _holders.Count; i++)
             {
-                if (!_holders[i].isDeploying && !_holders[i].isWaiting && !_holders[i].isMovingToRail && !_holders[i].isConsumed)
+                if (_holders[i].IsQueueVisible && !_holders[i].isDeploying && !_holders[i].isWaiting && !_holders[i].isMovingToRail && !_holders[i].isConsumed)
                 {
                     count++;
                 }
@@ -846,6 +863,103 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>Pipe(Spawner_O) anchor below-row authored holders as sequential payloads.</summary>
+        private void BindAuthoredPipePayloads()
+        {
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                HolderData pipe = _holders[i];
+                if (pipe.queueGimmick != GimmickManager.GIMMICK_SPAWNER_O || pipe.spawnerHP <= 0)
+                    continue;
+
+                var payloads = new List<HolderData>();
+                for (int j = 0; j < _holders.Count; j++)
+                {
+                    HolderData candidate = _holders[j];
+                    if (candidate == pipe || candidate.isConsumed) continue;
+                    if (candidate.column != pipe.column) continue;
+                    if (candidate.sourceRow <= pipe.sourceRow) continue;
+                    if (candidate.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T ||
+                        candidate.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O)
+                        continue;
+                    payloads.Add(candidate);
+                }
+
+                payloads.Sort((a, b) =>
+                {
+                    int rowCompare = a.sourceRow.CompareTo(b.sourceRow);
+                    return rowCompare != 0 ? rowCompare : a.holderId.CompareTo(b.holderId);
+                });
+
+                int count = Mathf.Min(pipe.spawnerHP, payloads.Count);
+                if (count <= 0)
+                    continue; // Old Pipe data without authored payloads keeps generated spawner behavior.
+
+                pipe.spawnerHP = count;
+                pipe.spawnerSpawnedCount = 0;
+                for (int n = 0; n < count; n++)
+                {
+                    HolderData payload = payloads[n];
+                    payload.pipeOwnerId = pipe.holderId;
+                    payload.pipeOrder = n;
+                    payload.isPipePayload = true;
+                    payload.isPipePayloadReleased = false;
+                }
+            }
+        }
+
+        private bool HasAuthoredPipePayload(HolderData pipe)
+        {
+            if (pipe == null) return false;
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                HolderData holder = _holders[i];
+                if (holder.pipeOwnerId == pipe.holderId && holder.isPipePayload)
+                    return true;
+            }
+            return false;
+        }
+
+        private HolderData GetNextPipePayload(HolderData pipe)
+        {
+            if (pipe == null) return null;
+            HolderData best = null;
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                HolderData holder = _holders[i];
+                if (holder.isConsumed || !holder.isPipePayload || holder.isPipePayloadReleased) continue;
+                if (holder.pipeOwnerId != pipe.holderId) continue;
+                if (best == null || holder.pipeOrder < best.pipeOrder)
+                    best = holder;
+            }
+            return best;
+        }
+
+        private int CountVisibleNormalHoldersInColumn(int column)
+        {
+            int count = 0;
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                HolderData holder = _holders[i];
+                if (holder.column != column || holder.isConsumed || !holder.IsQueueVisible) continue;
+                if (holder.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T ||
+                    holder.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O)
+                    continue;
+                count++;
+            }
+            return count;
+        }
+
+        private void PublishSpawnerRemaining(HolderData spawner)
+        {
+            if (spawner == null) return;
+            EventBus.Publish(new OnFrozenHPChanged
+            {
+                holderId = spawner.holderId,
+                remainingHP = spawner.spawnerHP
+            });
+        }
+
         /// <summary>Spawner 자동 소환 처리. 매 프레임 또는 배치 완료 시 호출.</summary>
         public void ProcessSpawners()
         {
@@ -859,6 +973,10 @@ namespace BalloonFlow
 
                 // 같은 열에 소환된 일반 보관함이 몇 개인지 확인
                 // 1개까지 허용 (앞에 보관함 + Spawner 위치에 대기 보관함)
+                int normalCount = CountVisibleNormalHoldersInColumn(spawner.column);
+                /*
+                ROLLBACK_PIPE_PAYLOAD_RELEASE_20260624: previous generated-spawner count scanned
+                every non-spawner holder in the column, including hidden pipe payloads.
                 int normalCount = 0;
                 for (int j = 0; j < _holders.Count; j++)
                 {
@@ -871,9 +989,33 @@ namespace BalloonFlow
                         normalCount++;
                     }
                 }
+                */
 
                 // 앞 보관함(1) + Spawner 안 대기(1) = 최대 2개
                 if (normalCount >= 2) continue;
+
+                // ROLLBACK_PIPE_PAYLOAD_RELEASE_20260624:
+                // Pipe(Spawner_O) releases authored holders below the pipe anchor. Glass Pipe
+                // and old Pipe data without payloads keep the generated-spawner path below.
+                if (spawner.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O && HasAuthoredPipePayload(spawner))
+                {
+                    HolderData payload = GetNextPipePayload(spawner);
+                    if (payload == null)
+                    {
+                        spawner.spawnerHP = 0;
+                        spawner.isConsumed = true;
+                        PublishSpawnerRemaining(spawner);
+                        continue;
+                    }
+
+                    payload.isPipePayloadReleased = true;
+                    spawner.spawnerHP--;
+                    spawner.spawnerSpawnedCount++;
+                    PublishSpawnerRemaining(spawner);
+                    if (spawner.spawnerHP <= 0)
+                        spawner.isConsumed = true;
+                    continue;
+                }
 
                 // 소환!
                 spawner.spawnerHP--;
@@ -894,11 +1036,7 @@ namespace BalloonFlow
                 AddHolder(newColor, newMag, spawner.column);
 
                 // HP 텍스트 갱신
-                EventBus.Publish(new OnFrozenHPChanged
-                {
-                    holderId = spawner.holderId,
-                    remainingHP = spawner.spawnerHP
-                });
+                PublishSpawnerRemaining(spawner);
 
                 // HP 0이면 Spawner 소멸
                 if (spawner.spawnerHP <= 0)
@@ -913,6 +1051,11 @@ namespace BalloonFlow
         {
             var spawner = FindHolder(holderId);
             if (spawner == null || spawner.spawnerHP <= 0) return -1;
+            if (spawner.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O && HasAuthoredPipePayload(spawner))
+            {
+                HolderData payload = GetNextPipePayload(spawner);
+                return payload != null ? payload.color : -1;
+            }
             int spawnIndex = spawner.spawnerSpawnedCount;
             if (spawner.spawnerColors != null && spawnIndex >= 0 && spawnIndex < spawner.spawnerColors.Length)
                 return spawner.spawnerColors[spawnIndex];
@@ -975,7 +1118,7 @@ namespace BalloonFlow
             var active = new System.Collections.Generic.List<HolderData>();
             for (int i = 0; i < _holders.Count; i++)
             {
-                if (!_holders[i].isConsumed)
+                if (!_holders[i].isConsumed && _holders[i].IsQueueVisible)
                     active.Add(_holders[i]);
             }
 
@@ -1047,6 +1190,7 @@ namespace BalloonFlow
             {
                 if (_holders[i].column != h.column) continue;
                 if (_holders[i].isConsumed) continue;
+                if (!_holders[i].IsQueueVisible) continue;
                 if (_holders[i] == h) return pos;
                 pos++;
             }
@@ -1083,7 +1227,7 @@ namespace BalloonFlow
                 int count = 0;
                 for (int i = 0; i < _holders.Count; i++)
                 {
-                    if (_holders[i].column == col && !_holders[i].isConsumed)
+                    if (_holders[i].column == col && !_holders[i].isConsumed && _holders[i].IsQueueVisible)
                         count++;
                 }
                 if (count < minCount)

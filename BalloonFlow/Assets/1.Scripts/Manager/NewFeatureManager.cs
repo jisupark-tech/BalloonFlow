@@ -17,17 +17,22 @@ namespace BalloonFlow
         /// 미매핑 기믹은 팝업 안 띄움.</summary>
         private static readonly Dictionary<string, string> GimmickToFeatureKey = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
         {
-            { "Hidden",       "Hidden" },
-            { "Pinata",       "Pinata" },
+            // ROLLBACK_NEWFEATURE_TEXTDATA_KEYS_20260624:
+            // Use TextData feature keys as the popup key, not internal gimmick names.
+            // Internal gameplay names such as Pinata still stay in level data/runtime logic.
+            { "Hidden",       "HiddenDartBox" },
+            { "Chain",        "LinkedDartBox" },
+            { "Pinata",       "Wooden Board" },
             { "Pinata_Box",   "TargetBox" },
-            { "Spawner_T",    "Spawner" },
-            { "Spawner_O",    "Spawner" },
+            { "Spawner_T",    "GlassPipe" },
+            { "Spawner_O",    "Pipe" },
             { "Lock_Key",     "KeyLock" },
-            { "Wall",         "IronBox" },
-            { "Ice",          "FrozenLayer" },
-            { "Frozen_Dart",  "FrozenBox" },
-            { "Barricade",    "Baricade" }, // PopupNewFeature 측 typo 유지
-            { "FlexTube",     "FlexTube" }, // [2026-06-12] newFeatureFlexTube.png 추가에 맞춰 해금 팝업 활성화
+            { "Surprise",     "HiddenBalloon" },
+            { "Wall",         "IronWall" },
+            { "Ice",          "Ice" },
+            { "Frozen_Dart",  "FrozenDartBox" },
+            { "Barricade",    "Barricade" },
+            { "FlexTube",     "flextube" }, // [2026-06-12] newFeatureFlexTube.png 추가에 맞춰 해금 팝업 활성화
         };
 
         private readonly Queue<string> _pendingFeatures = new Queue<string>();

@@ -170,6 +170,15 @@ namespace BalloonFlow
                 return true;
             }
 
+            // ROLLBACK_NO_LIFE_CONSUME_ZERO_MOVE_20260624:
+            // Leaving/failing before the player places any dart is not a used move. Some popup paths
+            // can still route through UseLive, so guard the final life-consume point as well.
+            if (RailManager.HasInstance && !RailManager.Instance.HasAnyDartPlacedThisLevel)
+            {
+                Debug.Log("[LifeManager] UseLive skipped because no dart was placed this level.");
+                return true;
+            }
+
             // Infinite hearts: always succeed without consuming
             if (IsInfiniteHeartsActive)
                 return true;

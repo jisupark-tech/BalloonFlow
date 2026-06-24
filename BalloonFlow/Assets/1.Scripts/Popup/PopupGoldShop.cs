@@ -305,8 +305,13 @@ namespace BalloonFlow
 
         public void OpenWithCloseCallback(System.Action onClose)
         {
-            _onCloseCallback = onClose;
+            SetCloseCallback(onClose);
             OpenUI();
+        }
+
+        public void SetCloseCallback(System.Action onClose)
+        {
+            _onCloseCallback = onClose;
         }
 
         public override void CloseUI()

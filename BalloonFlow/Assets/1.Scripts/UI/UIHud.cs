@@ -992,8 +992,10 @@ namespace BalloonFlow
                 // ROLLBACK_LOCKED_ITEM_TOAST_TEXT_20260619:
                 // Locked item taps now use TextData instead of the previous level-based hardcoded toast.
                 // ROLLBACK_LOCKED_ITEM_TOAST_LEVEL_20260623: "Unlocks at Level {n}" 의 {n} 을 실제 해금 레벨로 치환.
-                ShowToast(LocalizationService.Get("toast.item.locked")
-                          .Replace("{n}", GetBoosterUnlockLevel(boosterType).ToString()));
+                ShowToast(LocalizationService.GetWith(
+                    "toast.item.locked",
+                    "n",
+                    GetBoosterUnlockLevel(boosterType)));
                 return;
             }
 
@@ -1172,10 +1174,11 @@ namespace BalloonFlow
         // ROLLBACK_LOCKED_ITEM_TOAST_LEVEL_20260623: 부스터 해금 레벨 (잠김 토스트 {n} 치환 + 해금 팝업 공용).
         private static int GetBoosterUnlockLevel(string boosterType) => boosterType switch
         {
-            BoosterManager.SELECT_TOOL  => 9,
-            BoosterManager.SHUFFLE      => 12,
-            BoosterManager.COLOR_REMOVE => 15,
-            _                           => 1
+            _ when BoosterManager.HasInstance => BoosterManager.Instance.GetBoosterUnlockLevel(boosterType),
+            BoosterManager.SELECT_TOOL        => 9,
+            BoosterManager.SHUFFLE            => 12,
+            BoosterManager.COLOR_REMOVE       => 15,
+            _                                 => 1
         };
 
         private void ShowUnlockPopup(string boosterType)
@@ -1262,10 +1265,11 @@ namespace BalloonFlow
         {
             return boosterType switch
             {
-                BoosterManager.SELECT_TOOL  => 9,
-                BoosterManager.SHUFFLE      => 12,
-                BoosterManager.COLOR_REMOVE => 15,
-                _                           => 1
+                _ when BoosterManager.HasInstance => BoosterManager.Instance.GetBoosterUnlockLevel(boosterType),
+                BoosterManager.SELECT_TOOL        => 9,
+                BoosterManager.SHUFFLE            => 12,
+                BoosterManager.COLOR_REMOVE       => 15,
+                _                                 => 1
             };
         }
 

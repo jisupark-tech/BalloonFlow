@@ -8,7 +8,22 @@ namespace BalloonFlow
     {
         // [#15] 이어하기 팝업(① Out of Space! / ② Continue?) — 백버튼 차단 (결제/광고 의사결정 보호, UX플로우 §5-3-0).
         // 명시적 [No thanks]/[X] 탭만 다음 단계 진행 가능.
-        public override BackResult OnBackPressed() => BackResult.Blocked;
+        // ROLLBACK_POPUP_CONTINUE_BACK_EXIT_20260624:
+        // Previously Android back/ESC returned BackResult.Blocked for the Out of Space / Continue popup.
+        // Back now follows the same path as the X button so PopupManager state and fail-flow transitions stay in sync.
+        // Rollback: restore `public override BackResult OnBackPressed() => BackResult.Blocked;`.
+        public override BackResult OnBackPressed()
+        {
+            Button exit = ExitBtn;
+            if (exit != null && exit.gameObject.activeInHierarchy && exit.interactable)
+            {
+                exit.onClick.Invoke();
+                return BackResult.Handled;
+            }
+
+            OnDeclineDuplicateClicked();
+            return BackResult.Handled;
+        }
 
         private const string DECLINE_DUP_NAME = "DeclineButton (1)";
         private const string LOSELIFE_NAME = "LoseLife";

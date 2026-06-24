@@ -83,7 +83,7 @@ namespace BalloonFlow
         /// </summary>
         private void HandleReward(OnPurchaseRewardGranted evt)
         {
-            string desc = BuildRewardDescription(evt);
+            string desc = GetPurchaseCompletedDescription();
             int coinsAdded = evt.coinsAdded;
             ShopRewards rewards = evt.rewards;
             Debug.Log($"[PurchaseRewardEffect] HandleReward productId={evt.productId} coinsAdded={coinsAdded}");
@@ -270,6 +270,14 @@ namespace BalloonFlow
         }
 
         /// <summary>구매 보상 구성을 사람이 읽을 수 있는 multi-line description 으로.</summary>
+        private static string GetPurchaseCompletedDescription()
+        {
+            // ROLLBACK_PURCHASE_SUCCESS_GENERIC_COPY_20260624:
+            // Purchase success popup must not list reward item details. Reward grants/fly effects
+            // still use the original ShopRewards data after the popup is confirmed.
+            return LocalizationService.Get("popup.txtdescription.purchasecompleted");
+        }
+
         private static string BuildRewardDescription(OnPurchaseRewardGranted evt)
         {
             var r = evt.rewards;

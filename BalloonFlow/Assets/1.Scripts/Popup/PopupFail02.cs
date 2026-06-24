@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -183,8 +184,10 @@ namespace BalloonFlow
                 if (particles[i] == null) continue;
                 if (!particles[i].gameObject.activeSelf)
                     particles[i].gameObject.SetActive(true);
-                if (!particles[i].isPlaying)
-                    particles[i].Play(true);
+                var main = particles[i].main;
+                main.useUnscaledTime = true;
+                particles[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                particles[i].Play(true);
             }
         }
 
@@ -217,9 +220,13 @@ namespace BalloonFlow
         }
 
         private bool _lifeConsumed;
+        private bool _paused;
+        private bool _inputDisabled;
+        private Coroutine _rewardRefreshCoroutine;
 
         private void OnEnable()
         {
+            EnsureGamePaused();
             GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
 
             // PopupManager가 SetActive(true) 할 때 호출됨
@@ -253,20 +260,18 @@ namespace BalloonFlow
 
             // Reward subtree sorting order 부여 — Canvas.overrideSorting 은 GameObject.activeInHierarchy=false 일 때
             // silently 무시되므로 호출 전 활성화 보장 (PopupResult.cs:197-199 동일 메커니즘).
-            Transform rewardRoot = FindChildRecursive(transform, "Reward");
-            if (rewardRoot != null)
-            {
-                // ROLLBACK_FAIL02_HIDE_RESULT_REWARD_20260623:
-                // PopupFail02 can be opened from PopupSettings -> PopupQuit -> Quit. This
-                // prefab carries PopupResult-style Reward/Gold children, but failed/quit flow
-                // must not display the clear reward coin image.
-                rewardRoot.gameObject.SetActive(false);
-            }
+            ScheduleRewardGoldPresentation();
         }
 
         private void OnDisable()
         {
-            _lifeConsumed = false; // 다음 실패 시 다시 소모 가능
+            _lifeConsumed = false;
+            if (_rewardRefreshCoroutine != null)
+            {
+                StopCoroutine(_rewardRefreshCoroutine);
+                _rewardRefreshCoroutine = null;
+            }
+            ReleaseGamePause();
         }
 
         public void Show(DifficultyPurpose difficulty)
@@ -285,6 +290,147 @@ namespace BalloonFlow
             }
             UpdateHardLevelOption(difficulty);
             OpenUI();
+            ScheduleRewardGoldPresentation();
+        }
+
+        private static void SetRewardText(Transform root, string nodeName, int reward)
+        {
+            Transform node = FindChildRecursive(root, nodeName);
+            if (node == null) return;
+            node.gameObject.SetActive(true);
+            TMP_Text text = node.GetComponent<TMP_Text>();
+            if (text != null) text.text = reward.ToString();
+        }
+
+        private void ScheduleRewardGoldPresentation()
+        {
+            if (!isActiveAndEnabled)
+                return;
+
+            if (_rewardRefreshCoroutine != null)
+                StopCoroutine(_rewardRefreshCoroutine);
+
+            _rewardRefreshCoroutine = StartCoroutine(RefreshRewardGoldPresentationNextFrame());
+        }
+
+        private IEnumerator RefreshRewardGoldPresentationNextFrame()
+        {
+            // ROLLBACK_FAIL02_REWARD_OPEN_TIMING_20260624:
+            // PopupManager opens popup_fail02 by SetActive(true) first, then makes the
+            // CanvasGroup visible. If Reward/Gold is started during OnEnable only, the
+            // start animation can be consumed before the popup is actually visible.
+            yield return null;
+            _rewardRefreshCoroutine = null;
+            RefreshRewardGoldPresentation();
+        }
+
+        private void RefreshRewardGoldPresentation()
+        {
+            Transform rewardRoot = FindChildRecursive(transform, "Reward");
+            if (rewardRoot == null)
+                return;
+
+            ActivateNodeWithAncestors(rewardRoot);
+            ForceVisibleSubtree(rewardRoot);
+
+            string layer = _overrideCanvas != null ? _overrideCanvas.sortingLayerName : "Default";
+            ApplyRewardSortingOrder(rewardRoot, layer);
+
+            SetRewardText(rewardRoot, "TxtGold", RETRY_BONUS_GOLD);
+            SetRewardText(rewardRoot, "TxtGoldOutline", RETRY_BONUS_GOLD);
+            RestartRewardAnimators(rewardRoot);
+        }
+
+        private void ActivateNodeWithAncestors(Transform node)
+        {
+            if (node == null) return;
+
+            Transform cursor = node;
+            while (cursor != null && cursor != transform)
+            {
+                if (!cursor.gameObject.activeSelf)
+                    cursor.gameObject.SetActive(true);
+
+                var cg = cursor.GetComponent<CanvasGroup>();
+                if (cg != null && cg.alpha < 1f) cg.alpha = 1f;
+
+                cursor = cursor.parent;
+            }
+        }
+
+        private static void ForceVisibleSubtree(Transform root)
+        {
+            var allTransforms = root.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < allTransforms.Length; i++)
+            {
+                var t = allTransforms[i];
+                if (t == null) continue;
+
+                if (!t.gameObject.activeSelf)
+                    t.gameObject.SetActive(true);
+
+                var cg = t.GetComponent<CanvasGroup>();
+                if (cg != null && cg.alpha < 1f) cg.alpha = 1f;
+
+                var img = t.GetComponent<Image>();
+                if (img != null && !img.enabled) img.enabled = true;
+
+                var tmp = t.GetComponent<TMP_Text>();
+                if (tmp != null && !tmp.enabled) tmp.enabled = true;
+            }
+        }
+
+        private static void RestartRewardAnimators(Transform rewardRoot)
+        {
+            var animators = rewardRoot.GetComponentsInChildren<Animator>(true);
+            for (int i = 0; i < animators.Length; i++)
+            {
+                Animator animator = animators[i];
+                if (animator == null || animator.runtimeAnimatorController == null)
+                    continue;
+
+                if (!animator.gameObject.activeSelf)
+                    animator.gameObject.SetActive(true);
+
+                animator.enabled = true;
+                animator.updateMode = AnimatorUpdateMode.UnscaledTime;
+                animator.keepAnimatorStateOnDisable = false;
+                animator.Rebind();
+                animator.Update(0f);
+            }
+        }
+
+        private void EnsureGamePaused()
+        {
+            if (!_paused)
+            {
+                // ROLLBACK_FAIL02_OWNS_PAUSE_AFTER_QUIT_CLOSE_20260624:
+                // PopupQuit now closes before PopupFail02 so fail heart/gold presentation is not blocked.
+                // PopupFail02 must therefore own the gameplay pause while it is visible.
+                PauseManager.Pause();
+                _paused = true;
+            }
+
+            if (!_inputDisabled && InputHandler.HasInstance)
+            {
+                InputHandler.Instance.DisableInput();
+                _inputDisabled = true;
+            }
+        }
+
+        private void ReleaseGamePause()
+        {
+            if (_paused)
+            {
+                PauseManager.Resume();
+                _paused = false;
+            }
+
+            if (_inputDisabled && InputHandler.HasInstance)
+            {
+                InputHandler.Instance.EnableInput();
+                _inputDisabled = false;
+            }
         }
 
         private void UpdateHardLevelOption(DifficultyPurpose difficulty)

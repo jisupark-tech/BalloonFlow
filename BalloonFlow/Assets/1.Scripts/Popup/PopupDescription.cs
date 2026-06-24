@@ -10,6 +10,8 @@ namespace BalloonFlow
     /// </summary>
     public class PopupDescription : UIBase
     {
+        private const string GOLD_ROTATE_NAME = "GoldRotate";
+
         public static bool IsShowing { get; private set; }
 
         [Header("[Common Frame]")]
@@ -61,10 +63,21 @@ namespace BalloonFlow
 
         /// <summary>타이틀 + 설명 + 버튼 텍스트 + 콜백 + X버튼 동작 분리.</summary>
         public void Show(string title, string description, string buttonText,
-                         System.Action onConfirm, bool exitClosesOnly)
+                         System.Action onConfirm, bool exitClosesOnly, bool clearOverlayCoins = false)
         {
             _onConfirm = onConfirm;
             _exitClosesOnly = exitClosesOnly;
+
+            if (clearOverlayCoins)
+            {
+                // ROLLBACK_POPUP_DESCRIPTION_CLEAR_OVERLAY_COINS_20260624:
+                // Lobby Quit Game uses PopupDescription, not PopupQuit. FXGold lives on EffectCanvas above popup canvas,
+                // so clear active coin visuals before opening this popup to prevent oversized idle coins showing over it.
+                // Rollback: remove this branch and the clearOverlayCoins argument from BackButtonRouter.ShowQuitGame().
+                CoinFlyEffect.ClearActiveCoinsForPopup();
+                GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
+                DisableNamedObjectRecursive(transform, GOLD_ROTATE_NAME);
+            }
 
             if (_frame != null)
             {
@@ -97,6 +110,24 @@ namespace BalloonFlow
                 return;
             }
             OnConfirm();
+        }
+
+        private static void DisableNamedObjectRecursive(Transform root, string objectName)
+        {
+            if (root == null || string.IsNullOrEmpty(objectName)) return;
+
+            var all = root.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                Transform t = all[i];
+                if (t == null || t.name != objectName) continue;
+
+                var animators = t.GetComponentsInChildren<Animator>(true);
+                for (int j = 0; j < animators.Length; j++)
+                    if (animators[j] != null) animators[j].enabled = false;
+
+                t.gameObject.SetActive(false);
+            }
         }
     }
 }

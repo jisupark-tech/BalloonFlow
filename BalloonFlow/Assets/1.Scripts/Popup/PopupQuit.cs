@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 namespace BalloonFlow
 {
@@ -18,6 +19,7 @@ namespace BalloonFlow
         private const string TXT_TITLE_KEY = "popup.txttitle.settingquit";
         private const string TXT_DESC_LOSE_LIFE_KEY = "popup.txtdescription.settingquit";
         private const string TXT_DESC_INFINITE_HEART_KEY = "popup.txtdescription.quit";
+        private const string TXT_DESC_INFINITE_HEART_FALLBACK = "Do you really want to quit?";
 
         private enum QuitView { LoseLife, WinningStreak }
 
@@ -142,8 +144,8 @@ namespace BalloonFlow
             // ROLLBACK_POPUPQUIT_INFINITE_HEART_COPY_20260624:
             // UIText components apply prefab keys during OnEnable. Reapply dynamic TextData
             // after base.OpenUI() so infinite-heart copy is not overwritten by prefab defaults.
-            ApplyQuitFrameText(infiniteHearts);
             ResetToLoseLife();
+            ApplyQuitFrameText(infiniteHearts);
             ApplyLoseLifeHeartVisual(infiniteHearts);
         }
 
@@ -204,13 +206,45 @@ namespace BalloonFlow
         {
             if (_frame == null) return;
 
+            string description = infiniteHearts
+                ? GetInfiniteHeartQuitDescription()
+                : LocalizationService.Get(TXT_DESC_LOSE_LIFE_KEY);
+
             _frame.ApplyDifficulty(ResolveCurrentDifficulty());
             _frame.SetTitle(LocalizationService.Get(TXT_TITLE_KEY));
-            _frame.SetDescription(LocalizationService.Get(infiniteHearts ? TXT_DESC_INFINITE_HEART_KEY : TXT_DESC_LOSE_LIFE_KEY));
+            _frame.SetDescription(description);
+            ApplyCommonPanelDescriptionFallback(description);
             _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
             _frame.SetHorizGreenText("Stay");
             _frame.SetHorizRedText("Quit");
             _frame.ShowExitButton(true);
+        }
+
+        private static string GetInfiniteHeartQuitDescription()
+        {
+            string text = LocalizationService.Get(TXT_DESC_INFINITE_HEART_KEY);
+            return string.IsNullOrEmpty(text) || text == TXT_DESC_INFINITE_HEART_KEY
+                ? TXT_DESC_INFINITE_HEART_FALLBACK
+                : text;
+        }
+
+        private void ApplyCommonPanelDescriptionFallback(string description)
+        {
+            // ROLLBACK_POPUPQUIT_COMMONPANEL_DESCRIPTION_20260624:
+            // PopupQuit prefab revisions can have the visible CommonPanel description wired
+            // differently from PopupCommonFrame._txtDescription. Keep only PopupQuit guarded,
+            // and mirror the resolved TextData copy into visible TxtDescription nodes.
+            Transform scope = FindChildRecursive(transform, "CommonPanel")
+                           ?? (_frame != null ? _frame.transform : transform);
+            var labels = scope.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < labels.Length; i++)
+            {
+                TMP_Text label = labels[i];
+                if (label == null) continue;
+                string n = label.name;
+                if (n == "TxtDescription" || n == "TxtDescriptionOutline")
+                    label.text = description;
+            }
         }
 
         private static bool IsInfiniteHeartsActiveForQuitPopup()

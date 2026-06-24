@@ -89,10 +89,17 @@ namespace BalloonFlow
         [SerializeField] private RectTransform _goldPanelFlyTarget;
         [SerializeField] private TMP_Text _txtGoldPanel;
         [SerializeField] private Transform _goldPanelPulseTarget;
+
+        [Header("[GoldPanel Button]")]
+        [SerializeField] private Button _btnGoldPanel;
+        [SerializeField] private Button _btnTopBarGoldPanel;
+
         private int _displayedGoldPanelCoins;
         private Transform _cachedGoldPanelPulseTarget;
         private Vector3 _cachedGoldPanelPulseBaseScale = Vector3.one;
         private bool _hasGoldPanelPulseBaseScale;
+        private Button _topBarGoldPanelButton;
+        private Button _resultGoldPanelButton;
 
         public Button NextButton => _btnNext != null ? _btnNext : (_frame != null ? _frame.BtnSingle : null);
         public Button RetryButton => null;
@@ -131,6 +138,9 @@ namespace BalloonFlow
             if (_btnExit != null) _btnExit.onClick.AddListener(OnHomeClicked);
             if (_frame != null && _frame.BtnExit != null)
                 _frame.BtnExit.onClick.AddListener(OnHomeClicked);
+
+            ResolveGoldPanelRefs();
+            BindGoldPanelShopButtons();
         }
 
         protected override void OnDestroy()
@@ -144,6 +154,10 @@ namespace BalloonFlow
                 if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.RemoveAllListeners();
                 if (_frame.BtnExit != null) _frame.BtnExit.onClick.RemoveAllListeners();
             }
+            if (_topBarGoldPanelButton != null)
+                _topBarGoldPanelButton.onClick.RemoveListener(OnGoldPanelClicked);
+            if (_resultGoldPanelButton != null && _resultGoldPanelButton != _topBarGoldPanelButton)
+                _resultGoldPanelButton.onClick.RemoveListener(OnGoldPanelClicked);
         }
 
         public void SetGoldTarget(RectTransform target) { _goldTarget = target; }
@@ -855,6 +869,98 @@ namespace BalloonFlow
 
             if (_goldPanelPulseTarget == null && _goldPanel != null)
                 _goldPanelPulseTarget = _goldPanel.transform;
+
+            BindGoldPanelShopButtons();
+        }
+
+        // ROLLBACK_GOLDPANEL_OPEN_GOLDSHOP_20260624:
+        // PopupResult GoldPanel/TopBar GoldPanel now open PopupGoldShop, matching the
+        // in-game shop entry. Remove this binding block to make them display-only again.
+        private void BindGoldPanelShopButtons()
+        {
+            Transform topBar = FindChildRecursive(transform, "TopBarArea");
+            Transform topBarGoldPanel = topBar != null ? FindChildRecursive(topBar, "GoldPanel") : null;
+            BindGoldPanelButton(ref _topBarGoldPanelButton, _btnTopBarGoldPanel, topBarGoldPanel);
+            BindGoldPanelButton(ref _resultGoldPanelButton, _btnGoldPanel, _goldPanel != null ? _goldPanel.transform : null);
+        }
+
+        private void BindGoldPanelButton(ref Button cachedButton, Button serializedButton, Transform goldPanel)
+        {
+            Button button = serializedButton != null ? serializedButton : ResolveGoldPanelButton(goldPanel);
+            if (cachedButton == button)
+            {
+                if (button != null)
+                {
+                    button.onClick.RemoveListener(OnGoldPanelClicked);
+                    button.onClick.AddListener(OnGoldPanelClicked);
+                }
+                return;
+            }
+
+            if (cachedButton != null)
+                cachedButton.onClick.RemoveListener(OnGoldPanelClicked);
+
+            cachedButton = button;
+            if (cachedButton != null)
+            {
+                cachedButton.onClick.RemoveListener(OnGoldPanelClicked);
+                cachedButton.onClick.AddListener(OnGoldPanelClicked);
+            }
+        }
+
+        private static Button ResolveGoldPanelButton(Transform goldPanel)
+        {
+            if (goldPanel == null) return null;
+
+            Button button = goldPanel.GetComponent<Button>();
+            if (button == null) button = goldPanel.GetComponentInChildren<Button>(true);
+            if (button != null) return button;
+
+            Graphic graphic = goldPanel.GetComponent<Graphic>();
+            if (graphic == null) return null;
+
+            graphic.raycastTarget = true;
+            return goldPanel.gameObject.AddComponent<Button>();
+        }
+
+        private void OnGoldPanelClicked()
+        {
+            OpenGoldShopAboveCurrentPopup();
+        }
+
+        private void OpenGoldShopAboveCurrentPopup()
+        {
+            // ROLLBACK_GOLDPANEL_SHOP_RESTORE_POPUP_20260624:
+            // Hide this result popup while PopupGoldShop is on top, then restore it when the shop closes.
+            // Previous behavior opened PopupGoldShop over PopupResult without guaranteeing visual order.
+            System.Action restore = () =>
+            {
+                if (this != null && gameObject != null)
+                    OpenUI();
+            };
+
+            CloseUI();
+            OpenGoldShopPopup(restore);
+        }
+
+        private static void OpenGoldShopPopup(System.Action onClose)
+        {
+            if (HUDController.HasInstance && HUDController.Instance.GoldShopPopup != null)
+            {
+                HUDController.Instance.GoldShopPopup.OpenWithCloseCallback(onClose);
+                return;
+            }
+
+            if (UIManager.HasInstance)
+            {
+                var popup = UIManager.Instance.OpenUI<PopupGoldShop>("Popup/PopupGoldShop");
+                if (popup != null) popup.SetCloseCallback(onClose);
+                else onClose?.Invoke();
+            }
+            else
+            {
+                onClose?.Invoke();
+            }
         }
 
         private RectTransform ResolveGoldPanelFlyTarget()

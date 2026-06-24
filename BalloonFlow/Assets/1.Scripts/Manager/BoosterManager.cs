@@ -281,6 +281,14 @@ namespace BalloonFlow
             return _boosterDefs.TryGetValue(boosterType, out var def) ? def.cost : 0;
         }
 
+        public int GetBoosterUnlockLevel(string boosterType)
+        {
+            // ROLLBACK_LOCKED_ITEM_TOAST_LEVEL_SOURCE_20260624:
+            // UI lock labels and locked-item toast must read the same unlock definition used
+            // by IsBoosterUnlocked, instead of duplicating level constants in UIHud.
+            return _boosterDefs.TryGetValue(boosterType, out var def) ? def.unlockLevel : 1;
+        }
+
         /// <summary>
         /// Returns true if the booster is unlocked based on player's reached level (entry to the unlock level counts).
         /// Design: Select Tool Lv.9, Shuffle Lv.12, Color Remove Lv.15.

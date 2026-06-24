@@ -1330,7 +1330,10 @@ namespace BalloonFlow
             var dstTr = _activeGoldPanelFxFireInstance.transform;
             dstTr.localPosition = srcTr.localPosition;
             dstTr.localRotation = srcTr.localRotation;
-            dstTr.localScale    = srcTr.localScale;
+            // ROLLBACK_LOBBY_PANEL_FX_RESOLUTION_INVARIANT_20260624:
+            // Panel FXFire inherits CanvasScaler scale. In Fold/high-scale resolutions this made light look stronger.
+            // Apply inverse canvas-scale compensation to transient cloned FX only. Rollback: restore `dstTr.localScale = srcTr.localScale;`.
+            GoldPanelFxFireUtil.ApplyResolutionInvariantScale(dstTr, srcTr.localScale);
             _activeGoldPanelFxFireInstance.SetActive(true);
 
             var systems = _activeGoldPanelFxFireInstance.GetComponentsInChildren<ParticleSystem>(true);
@@ -1391,7 +1394,7 @@ namespace BalloonFlow
             var dstTr = _activeLifePanelFxFireInstance.transform;
             dstTr.localPosition = srcTr.localPosition;
             dstTr.localRotation = srcTr.localRotation;
-            dstTr.localScale    = srcTr.localScale;
+            GoldPanelFxFireUtil.ApplyResolutionInvariantScale(dstTr, srcTr.localScale);
             _activeLifePanelFxFireInstance.SetActive(true);
 
             var systems = _activeLifePanelFxFireInstance.GetComponentsInChildren<ParticleSystem>(true);
@@ -1453,7 +1456,7 @@ namespace BalloonFlow
             var dstTr = _activePlayButtonSparksInstance.transform;
             dstTr.localPosition = srcTr.localPosition;
             dstTr.localRotation = srcTr.localRotation;
-            dstTr.localScale    = srcTr.localScale;
+            GoldPanelFxFireUtil.ApplyResolutionInvariantScale(dstTr, srcTr.localScale);
             _activePlayButtonSparksInstance.SetActive(true);
 
             var systems = _activePlayButtonSparksInstance.GetComponentsInChildren<ParticleSystem>(true);

@@ -139,6 +139,7 @@ namespace BalloonFlow
         // 일반 level 기반 tutorialId 와 충돌 없는 1000 사용. PlayerPrefs 영구 저장 (앱 단위 1회).
         private const int RAIL_WARNING_TUTORIAL_ID = 1000;
         private const string PREFS_RAIL_WARNING_SHOWN = "BF_RailWarningTutorialShown";
+        private const float RAIL_WARNING_TUTORIAL_OCCUPANCY = 0.8f;
 
         #endregion
 
@@ -160,6 +161,7 @@ namespace BalloonFlow
         private TutorialConfig _railWarningConfig;
         private bool _loadedTutorialCatalog;
         private Coroutine _startTutorialForLevelCoroutine;
+        private bool _pausedForRailWarningTutorial;
 
         #endregion
 
@@ -186,6 +188,7 @@ namespace BalloonFlow
             EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompletedForTutorial);
             // [2026-05-15] rail_warning — gauge stage Warning(>=90%) 진입 시 1회 트리거.
             EventBus.Subscribe<OnGaugeStageChanged>(HandleGaugeStageForRailWarning);
+            EventBus.Subscribe<OnRailOccupancyChanged>(HandleRailOccupancyForRailWarning);
         }
 
         private void OnDisable()
@@ -195,6 +198,8 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnBalloonPopped>(HandleBalloonPopped);
             EventBus.Unsubscribe<OnLevelCompleted>(HandleLevelCompletedForTutorial);
             EventBus.Unsubscribe<OnGaugeStageChanged>(HandleGaugeStageForRailWarning);
+            EventBus.Unsubscribe<OnRailOccupancyChanged>(HandleRailOccupancyForRailWarning);
+            ResumeRailWarningPauseIfNeeded(RAIL_WARNING_TUTORIAL_ID);
         }
 
         #endregion
@@ -937,9 +942,20 @@ namespace BalloonFlow
 
         private void StopActiveTutorial()
         {
+            int stoppedTutorialId = _activeTutorial != null ? _activeTutorial.tutorialId : -1;
             _activeTutorial = null;
             _currentStepIndex = 0;
             _isTutorialActive = false;
+            ResumeRailWarningPauseIfNeeded(stoppedTutorialId);
+        }
+
+        private void ResumeRailWarningPauseIfNeeded(int tutorialId)
+        {
+            if (tutorialId != RAIL_WARNING_TUTORIAL_ID) return;
+            if (!_pausedForRailWarningTutorial) return;
+
+            _pausedForRailWarningTutorial = false;
+            PauseManager.Resume();
         }
 
         private void SaveCompletion(int tutorialId)
@@ -1007,6 +1023,20 @@ namespace BalloonFlow
             StartRailWarningTutorial();
         }
 
+        private void HandleRailOccupancyForRailWarning(OnRailOccupancyChanged evt)
+        {
+            // ROLLBACK_RAIL_WARNING_TUTORIAL_PAUSE_80_20260624:
+            // Warning tutorial should trigger at the first fail-imminent rail state (80%+)
+            // and pause the belt like the Settings popup while the tutorial is visible.
+            if (PlayerPrefs.GetInt(PREFS_RAIL_WARNING_SHOWN, 0) == 1) return;
+            if (_isTutorialActive) return;
+            if (!LevelManager.HasInstance) return;
+            if (LevelManager.Instance.CurrentLevelId <= 1) return;
+            if (evt.totalSlots <= 0 || evt.occupancy < RAIL_WARNING_TUTORIAL_OCCUPANCY) return;
+
+            StartRailWarningTutorial();
+        }
+
         private void StartRailWarningTutorial()
         {
             // 즉시 영구 저장 — 시작했으면 본 것으로 간주 (skip 해도 동일).
@@ -1017,6 +1047,13 @@ namespace BalloonFlow
             {
                 _railWarningConfig = BuildRailWarningConfigFromCatalog() ?? BuildRailWarningConfigFallback();
             }
+
+            if (!_pausedForRailWarningTutorial)
+            {
+                PauseManager.Pause();
+                _pausedForRailWarningTutorial = true;
+            }
+
             StartTutorial(RAIL_WARNING_TUTORIAL_ID);
         }
 

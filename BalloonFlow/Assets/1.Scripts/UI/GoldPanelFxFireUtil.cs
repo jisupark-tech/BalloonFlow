@@ -6,6 +6,27 @@ namespace BalloonFlow
     /// <remarks>Project-wide convention: flat 'namespace BalloonFlow' — do not nest.</remarks>
     public static class GoldPanelFxFireUtil
     {
+        private const float MIN_CANVAS_SCALE_FACTOR = 0.01f;
+
+        public static float GetCanvasScaleCompensation(Transform root)
+        {
+            // ROLLBACK_UI_EFFECT_CANVAS_SCALE_COMPENSATION_20260624:
+            // UI effects under CanvasScaler used to inherit Canvas.scaleFactor directly. On high-scale
+            // devices such as Galaxy Fold this makes coin/light effects look larger and brighter.
+            // Use the inverse canvas scale for transient FX roots so authored prefab size is visually stable.
+            // Rollback: return 1f from this method.
+            if (root == null) return 1f;
+            Canvas canvas = root.GetComponentInParent<Canvas>();
+            if (canvas == null || canvas.scaleFactor <= MIN_CANVAS_SCALE_FACTOR) return 1f;
+            return 1f / canvas.scaleFactor;
+        }
+
+        public static void ApplyResolutionInvariantScale(Transform root, Vector3 authoredLocalScale)
+        {
+            if (root == null) return;
+            root.localScale = authoredLocalScale * GetCanvasScaleCompensation(root);
+        }
+
         public static void DisableUnderGoldPanel(Transform goldPanel)
         {
             if (goldPanel == null) return;

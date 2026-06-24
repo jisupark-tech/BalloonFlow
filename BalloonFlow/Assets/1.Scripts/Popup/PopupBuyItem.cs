@@ -29,6 +29,9 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtGoldOutline;
         [SerializeField] private Image _imgCoin;
 
+        [Header("[GoldPanel Button]")]
+        [SerializeField] private Button _btnGoldPanel;
+
         [Header("[Buy Outline — 구매 모드]")]
         [SerializeField] private GameObject _txtBtnBuyOutline;
 
@@ -84,6 +87,7 @@ namespace BalloonFlow
         private Transform _topBarGoldPanel;
         private TMP_Text _topBarTxtGold;
         private TMP_Text _topBarTxtGoldOutline;
+        private Button _topBarGoldPanelButton;
 
         private void EnsureTopBarBinding()
         {
@@ -95,9 +99,93 @@ namespace BalloonFlow
             _topBarTxtGold = txt != null ? txt.GetComponent<TMP_Text>() : null;
             Transform outline = gold != null ? FindChildRecursive(gold, "TxtGoldOutline") : null;
             _topBarTxtGoldOutline = outline != null ? outline.GetComponent<TMP_Text>() : null;
+            BindTopBarGoldPanelButton(gold);
             if (txt != null && txt.GetComponent<AnimatedCoinLabel>() == null)
                 txt.gameObject.AddComponent<AnimatedCoinLabel>();
             SyncTopBarGoldPanelText();
+        }
+
+        // ROLLBACK_GOLDPANEL_OPEN_GOLDSHOP_20260624:
+        // PopupBuyItem TopBar/GoldPanel behaves like the in-game shop entry. Remove this
+        // binding block to return GoldPanel to display-only.
+        private void BindTopBarGoldPanelButton(Transform goldPanel)
+        {
+            Button button = _btnGoldPanel != null ? _btnGoldPanel : ResolveGoldPanelButton(goldPanel);
+            if (_topBarGoldPanelButton == button)
+            {
+                if (button != null)
+                {
+                    button.onClick.RemoveListener(OnGoldPanelClicked);
+                    button.onClick.AddListener(OnGoldPanelClicked);
+                }
+                return;
+            }
+
+            if (_topBarGoldPanelButton != null)
+                _topBarGoldPanelButton.onClick.RemoveListener(OnGoldPanelClicked);
+
+            _topBarGoldPanelButton = button;
+            if (_topBarGoldPanelButton != null)
+            {
+                _topBarGoldPanelButton.onClick.RemoveListener(OnGoldPanelClicked);
+                _topBarGoldPanelButton.onClick.AddListener(OnGoldPanelClicked);
+            }
+        }
+
+        private static Button ResolveGoldPanelButton(Transform goldPanel)
+        {
+            if (goldPanel == null) return null;
+
+            Button button = goldPanel.GetComponent<Button>();
+            if (button == null) button = goldPanel.GetComponentInChildren<Button>(true);
+            if (button != null) return button;
+
+            Graphic graphic = goldPanel.GetComponent<Graphic>();
+            if (graphic == null) return null;
+
+            graphic.raycastTarget = true;
+            return goldPanel.gameObject.AddComponent<Button>();
+        }
+
+        private void OnGoldPanelClicked()
+        {
+            OpenGoldShopAboveCurrentPopup();
+        }
+
+        private void OpenGoldShopAboveCurrentPopup()
+        {
+            // ROLLBACK_GOLDPANEL_SHOP_RESTORE_POPUP_20260624:
+            // Hide this popup while PopupGoldShop is on top, then restore it when the shop closes.
+            // Previous behavior opened PopupGoldShop over the current popup without guaranteeing
+            // sibling order or blocking the hidden popup.
+            System.Action restore = () =>
+            {
+                if (this != null && gameObject != null)
+                    OpenUI();
+            };
+
+            CloseUI();
+            OpenGoldShopPopup(restore);
+        }
+
+        private static void OpenGoldShopPopup(System.Action onClose)
+        {
+            if (HUDController.HasInstance && HUDController.Instance.GoldShopPopup != null)
+            {
+                HUDController.Instance.GoldShopPopup.OpenWithCloseCallback(onClose);
+                return;
+            }
+
+            if (UIManager.HasInstance)
+            {
+                var popup = UIManager.Instance.OpenUI<PopupGoldShop>("Popup/PopupGoldShop");
+                if (popup != null) popup.SetCloseCallback(onClose);
+                else onClose?.Invoke();
+            }
+            else
+            {
+                onClose?.Invoke();
+            }
         }
 
         // InGame 중 BuyItem 열림 시 게임 일시 정지 (PopupSettings 패턴 동일).
@@ -202,6 +290,8 @@ namespace BalloonFlow
                 if (_frame.BtnSingle != null) _frame.BtnSingle.onClick.RemoveAllListeners();
                 if (_frame.BtnExit != null) _frame.BtnExit.onClick.RemoveAllListeners();
             }
+            if (_topBarGoldPanelButton != null)
+                _topBarGoldPanelButton.onClick.RemoveListener(OnGoldPanelClicked);
         }
 
         /// <summary>아이템 구매 팝업 표시 (Single 버튼 — Buy).</summary>

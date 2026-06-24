@@ -259,6 +259,8 @@ namespace BalloonFlow
 
         #endregion
 
+        private bool _difficultyRefsResolved;
+
         #region Properties — Buttons
 
         public Button BtnExit => _btnExit;
@@ -365,6 +367,8 @@ namespace BalloonFlow
         {
             _currentDifficulty = difficulty;
             _hasExplicitDifficulty = true;
+            EnsureDifficultyRefs();
+            EnsureDifficultySprites();
 
             Sprite frameSpr = difficulty switch
             {
@@ -388,6 +392,53 @@ namespace BalloonFlow
                 _rightTopSidePanel.sprite = sideSpr;
 
             ApplyTitleOutline(difficulty);
+        }
+
+        private void EnsureDifficultyRefs()
+        {
+            if (_difficultyRefsResolved) return;
+            _difficultyRefsResolved = true;
+
+            // ROLLBACK_COMMONFRAME_DIFFICULTY_REF_FALLBACK_20260624:
+            // PopupQuit/PopupSettings prefab revisions can miss serialized Image references,
+            // making ApplyDifficulty a no-op. Resolve common node names at runtime so they match
+            // PopupResult behavior without prefab-only dependency.
+            if (_frameImage == null)
+                _frameImage = FindImageByNames("Frame", "FrameBG", "ImageFrame", "PopupFrame", "CommonFrame", "CommpanFrame");
+            if (_leftTopSidePanel == null)
+                _leftTopSidePanel = FindImageByNames("LeftTopSidePanel", "LeftSidePanel", "ImageLeftTopSidePanel", "ImageLeftSidePanel");
+            if (_rightTopSidePanel == null)
+                _rightTopSidePanel = FindImageByNames("RightTopSidePanel", "RightSidePanel", "ImageRightTopSidePanel", "ImageRightSidePanel");
+        }
+
+        private void EnsureDifficultySprites()
+        {
+            if (!ResourceManager.HasInstance) return;
+
+            var rm = ResourceManager.Instance;
+            _sprFrameNormal    = rm.UISpriteOr(Const.SPR_FRAMEPOPUPNORMAL,    _sprFrameNormal);
+            _sprFrameHard      = rm.UISpriteOr(Const.SPR_FRAMEPOPUPHARD,      _sprFrameHard);
+            _sprFrameSuperHard = rm.UISpriteOr(Const.SPR_FRAMEPOPUPSUPERHARD, _sprFrameSuperHard);
+
+            _sprSideNormal     = rm.UISpriteOr(Const.SPR_FRAMERESULTNORMAL,    _sprSideNormal);
+            _sprSideHard       = rm.UISpriteOr(Const.SPR_FRAMERESULTHARD,      _sprSideHard);
+            _sprSideSuperHard  = rm.UISpriteOr(Const.SPR_FRAMERESULTSUPERHARD, _sprSideSuperHard);
+        }
+
+        private Image FindImageByNames(params string[] names)
+        {
+            var images = GetComponentsInChildren<Image>(true);
+            for (int n = 0; n < names.Length; n++)
+            {
+                string target = names[n];
+                for (int i = 0; i < images.Length; i++)
+                {
+                    Image image = images[i];
+                    if (image != null && image.name == target)
+                        return image;
+                }
+            }
+            return null;
         }
 
         /// <summary>

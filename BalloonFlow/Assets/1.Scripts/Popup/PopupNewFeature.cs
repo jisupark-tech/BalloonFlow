@@ -43,6 +43,8 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprLoop;
         [Tooltip("newFeaturePinata.png 드래그")]
         [SerializeField] private Sprite _sprPinata;
+        [Tooltip("newFeatureHiddenbox.png 드래그")]
+        [SerializeField] private Sprite _sprHiddenBox;
         [Tooltip("newFeatureHiddenBalloon.png 또는 newFeatureHiddenbox.png 드래그")]
         [SerializeField] private Sprite _sprHidden;
         [Tooltip("newFeatureIronBox.png 드래그")]
@@ -76,6 +78,7 @@ namespace BalloonFlow
                 var rm = ResourceManager.Instance;
                 _sprLoop        = rm.UISpriteOr("newFeatureLoop",          _sprLoop);
                 _sprPinata      = rm.UISpriteOr("newFeaturePinata",        _sprPinata);
+                _sprHiddenBox   = rm.UISpriteOr("newFeatureHiddenbox",     _sprHiddenBox);
                 _sprHidden      = rm.UISpriteOr("newFeatureHiddenBalloon", _sprHidden);
                 _sprIronBox     = rm.UISpriteOr("newFeatureIronBox",       _sprIronBox);
                 _sprSpawner     = rm.UISpriteOr("newFeatureSpawner",       _sprSpawner);
@@ -111,21 +114,8 @@ namespace BalloonFlow
         /// </summary>
         public void Show(string featureKey, string description = null)
         {
-            Sprite spr = featureKey switch
-            {
-                "Loop"        => _sprLoop,
-                "Pinata"      => _sprPinata,
-                "TargetBox"   => _sprPinata,
-                "Hidden"      => _sprHidden,
-                "IronBox"     => _sprIronBox,
-                "Spawner"     => _sprSpawner,
-                "KeyLock"     => _sprKeyLock,
-                "FrozenLayer" => _sprFrozenLayer,
-                "Baricade"    => _sprBaricade,
-                "FrozenBox"   => _sprFrozenBox,
-                "FlexTube"    => _sprFlexTube,
-                _             => null
-            };
+            string textDataFeatureKey = GetTextDataFeatureKey(featureKey);
+            Sprite spr = GetFeatureSprite(featureKey, textDataFeatureKey);
 
             if (spr == null)
             {
@@ -134,8 +124,9 @@ namespace BalloonFlow
                                  "(Assets/2.Sprite/UI/ 위치)");
             }
 
-            string displayName = GetDisplayName(featureKey);
-            ShowWithSprite(spr, displayName, description ?? GetDescription(featureKey) ?? $"New feature unlocked: {displayName}!");
+            string displayName = GetDisplayName(textDataFeatureKey);
+            string resolvedDescription = description ?? GetDescription(textDataFeatureKey) ?? $"New feature unlocked: {displayName}!";
+            ShowWithSprite(spr, displayName, resolvedDescription);
         }
 
         /// <summary>직접 Sprite 지정하여 팝업 표시.</summary>
@@ -143,9 +134,9 @@ namespace BalloonFlow
         {
             if (_frame != null)
             {
-                _frame.SetTitle("New Feature!");
+                _frame.SetTitle(LocalizationService.Get("newfeature.textunlock"));
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
-                _frame.SetSingleButtonText("OK");
+                _frame.SetSingleButtonText(LocalizationService.Get("ui.common.ok"));
                 _frame.ShowExitButton(true);
             }
 
@@ -212,36 +203,68 @@ namespace BalloonFlow
             _okDelayCo = null;
         }
 
-        private static string GetDisplayName(string featureKey)
+        private Sprite GetFeatureSprite(string featureKey, string textDataFeatureKey)
         {
-            return featureKey switch
+            string key = string.IsNullOrEmpty(textDataFeatureKey) ? featureKey : textDataFeatureKey;
+            return key switch
             {
-                "Loop"        => "Loop",
-                "Pinata"      => "Pinata",
-                "TargetBox"   => "Target Box",
-                "Hidden"      => "Hidden Balloon",
-                "IronBox"     => "Iron Box",
-                "Spawner"     => "Spawner",
-                "KeyLock"     => "Key & Lock",
-                "FrozenLayer" => "Frozen Layer",
-                "Baricade"    => "Barricade",
-                "FrozenBox"   => "Frozen Box",
-                "FlexTube"    => "Flex Tube",
-                _             => featureKey
+                "Loop"          => _sprLoop,
+                "Wooden Board"  => _sprPinata,
+                "TargetBox"     => _sprPinata,
+                "HiddenDartBox" => _sprHiddenBox != null ? _sprHiddenBox : _sprHidden,
+                "HiddenBalloon" => _sprHidden,
+                "IronWall"      => _sprIronBox,
+                "GlassPipe"     => _sprSpawner,
+                "Pipe"          => _sprSpawner,
+                "KeyLock"       => _sprKeyLock,
+                "Ice"           => _sprFrozenLayer,
+                "FrozenDartBox" => _sprFrozenBox,
+                "Barricade"     => _sprBaricade,
+                "Baricade"      => _sprBaricade,
+                "flextube"      => _sprFlexTube,
+                "FlexTube"      => _sprFlexTube,
+                _               => null
             };
+        }
+
+        private static string GetDisplayName(string textDataFeatureKey)
+        {
+            string key = $"newfeature.textname.{textDataFeatureKey}";
+            return LocalizationService.Has(key) ? LocalizationService.Get(key) : textDataFeatureKey;
         }
 
         /// <summary>
         /// 기믹별 튜토리얼 본문. 명세에 명시된 키만 채우고, 미명시 키는 null 반환하여
         /// 호출부에서 기존 generic fallback("New feature unlocked: {name}!")으로 폴백되도록 한다.
         /// </summary>
-        private static string GetDescription(string featureKey)
+        private static string GetDescription(string textDataFeatureKey)
         {
+            string key = $"newfeature.textdesctiption.{textDataFeatureKey}";
+            return LocalizationService.Has(key) ? LocalizationService.Get(key) : null;
+        }
+
+        private static string GetTextDataFeatureKey(string featureKey)
+        {
+            // ROLLBACK_NEWFEATURE_TEXTDATA_KEYS_20260624:
+            // Accept legacy popup/internal keys, then resolve to Resources/TextData/TextData.csv keys.
             return featureKey switch
             {
-                "Hidden" => "Bring them to the front to reveal!",
-                "Pinata" => "Shoot the same color to break it!",
-                _        => null
+                "Hidden"      => "HiddenDartBox",
+                "Chain"       => "LinkedDartBox",
+                "Pinata"      => "Wooden Board",
+                "Pinata_Box"  => "TargetBox",
+                "Spawner_T"   => "GlassPipe",
+                "Spawner_O"   => "Pipe",
+                "Spawner"     => "GlassPipe",
+                "Surprise"    => "HiddenBalloon",
+                "Wall"        => "IronWall",
+                "IronBox"     => "IronWall",
+                "FrozenLayer" => "Ice",
+                "FrozenBox"   => "FrozenDartBox",
+                "Frozen_Dart" => "FrozenDartBox",
+                "Baricade"    => "Barricade",
+                "FlexTube"    => "flextube",
+                _             => featureKey
             };
         }
     }

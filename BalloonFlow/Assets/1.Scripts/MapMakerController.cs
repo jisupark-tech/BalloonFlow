@@ -255,6 +255,8 @@ namespace BalloonFlow
         private RectTransform _holderGimmickChainRow;
         private RectTransform _holderGimmickFrozenRow;
         private RectTransform _holderGimmickSpawnerRow;
+        private RectTransform _holderSpawnerMagLabel;
+        private RectTransform _holderSpawnerMagField;
         private RectTransform _holderGimmickLockRow;
 
         // Auto-generated waypoints from path grid
@@ -1413,7 +1415,7 @@ namespace BalloonFlow
             bool isIce = gimmickName == "Ice";
             // ROLLBACK_BARRICADE_MAPMAKER_20260608: Barricade 는 HP(파괴 히트수) + 방향/길이 row 노출. W×H Size 는 없음.
             bool isBarricade = gimmickName == "Barricade";
-            if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(needsPinataHpSize || isIce || isBarricade);
+            if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(needsPinataHpSize || isIce || isBarricade || isFlexTube);
             if (_fieldGimmickSizeRow != null) _fieldGimmickSizeRow.gameObject.SetActive(needsPinataHpSize);
             if (_fieldGimmickWallSizeRow != null) _fieldGimmickWallSizeRow.gameObject.SetActive(isWall || isIce);
             if (_fieldGimmickIceGroupRow != null) _fieldGimmickIceGroupRow.gameObject.SetActive(isIce);
@@ -1437,10 +1439,13 @@ namespace BalloonFlow
             bool isChain = gimmickName == "Chain";
             bool isFrozen = gimmickName == "Frozen_Dart";
             bool isSpawner = gimmickName == "Spawner_T" || gimmickName == "Spawner_O";
+            bool isPipe = gimmickName == "Spawner_O";
             bool isLockKey = gimmickName == "Lock_Key";
             if (_holderGimmickChainRow != null) _holderGimmickChainRow.gameObject.SetActive(isChain);
             if (_holderGimmickFrozenRow != null) _holderGimmickFrozenRow.gameObject.SetActive(isFrozen);
             if (_holderGimmickSpawnerRow != null) _holderGimmickSpawnerRow.gameObject.SetActive(isSpawner);
+            if (_holderSpawnerMagLabel != null) _holderSpawnerMagLabel.gameObject.SetActive(isSpawner && !isPipe);
+            if (_holderSpawnerMagField != null) _holderSpawnerMagField.gameObject.SetActive(isSpawner && !isPipe);
             if (_holderGimmickLockRow != null) _holderGimmickLockRow.gameObject.SetActive(isLockKey);
         }
 
@@ -1592,8 +1597,8 @@ namespace BalloonFlow
             // Spawner HP + Mag
             var spawnerRow = Row(p); Lbl(spawnerRow, "Spawn Count", w: 100);
             MakeIntField(spawnerRow, _paintSpawnerHP, 1, 50, v => { _paintSpawnerHP = v; });
-            Lbl(spawnerRow, "Mag", w: 30);
-            MakeIntField(spawnerRow, _paintSpawnerMag, 10, 50, v => { _paintSpawnerMag = v; });
+            _holderSpawnerMagLabel = Lbl(spawnerRow, "Mag", w: 30).GetComponent<RectTransform>();
+            _holderSpawnerMagField = MakeIntField(spawnerRow, _paintSpawnerMag, 10, 50, v => { _paintSpawnerMag = v; }).GetComponent<RectTransform>();
             _holderGimmickSpawnerRow = spawnerRow.GetComponent<RectTransform>();
 
             // Lock_Key pair ID (Holder — Lock 보관함용)
@@ -2653,6 +2658,7 @@ namespace BalloonFlow
                     break;
             }
             UpdateHolderButton(cc, rr);
+            RefreshHolderPipeOutlines();
             // Generate 결과가 수동 변경됨 — Confirm 무효화 (§8 수동 조정 후 재검증)
             SetQueueConfirmReady(false);
             _infoDirty = true;
@@ -2673,6 +2679,8 @@ namespace BalloonFlow
                  || HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Spawner_O");
             _holderSpawnerHP[cc, rr] = isSpawnerGimmick ? _paintSpawnerHP : 0;
             _holderSpawnerMag[cc, rr] = isSpawnerGimmick ? _paintSpawnerMag : 20;
+            if (isSpawnerGimmick && HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Spawner_O")
+                _holderMags[cc, rr] = 0;
             bool isLockKeyHolder = _paintHolderGimmick > 0 && _paintHolderGimmick < HOLDER_GIMMICK_NAMES.Length
                 && HOLDER_GIMMICK_NAMES[_paintHolderGimmick] == "Lock_Key";
             _holderLockPairIds[cc, rr] = isLockKeyHolder ? _paintLockPairId : -1;
@@ -2698,13 +2706,73 @@ namespace BalloonFlow
             int gi = _holderGimmicks[c, r];
             Color cellBg = (ci >= 0 && ci < PALETTE.Length) ? PALETTE[ci] : new Color(0.22f, 0.22f, 0.26f);
             btn.GetComponent<Image>().color = cellBg;
+            ApplyPipePreviewOutline(btn, c, r);
             var t = btn.GetComponentInChildren<Text>();
             t.color = ContrastTextColor(cellBg);
             string gimmickMark = (gi > 0 && gi < HOLDER_GIMMICK_NAMES.Length) ? HOLDER_GIMMICK_NAMES[gi].Substring(0, System.Math.Min(2, HOLDER_GIMMICK_NAMES[gi].Length)) : "";
             int chainGrp = _holderChainGroups[c, r];
             string chainMark = chainGrp > 0 ? $"C{chainGrp}" : "";
             string mark = gimmickMark + (chainMark.Length > 0 ? " " + chainMark : "");
-            t.text = ci >= 0 ? $"{_holderMags[c, r]}{(mark.Length > 0 ? "\n" + mark : "")}" : ".";
+            if (ci >= 0 && IsPipeAnchorCell(c, r))
+                t.text = $"P{Mathf.Max(0, _holderSpawnerHP[c, r])}";
+            else
+                t.text = ci >= 0 ? $"{_holderMags[c, r]}{(mark.Length > 0 ? "\n" + mark : "")}" : ".";
+        }
+
+        private void ApplyPipePreviewOutline(GameObject btn, int c, int r)
+        {
+            if (btn == null) return;
+
+            bool isPipeAnchor = IsPipeAnchorCell(c, r);
+            bool isPipePayload = IsPipePayloadPreviewCell(c, r);
+            var outline = btn.GetComponent<Outline>();
+            if (!isPipeAnchor && !isPipePayload)
+            {
+                if (outline != null) outline.enabled = false;
+                return;
+            }
+
+            if (outline == null) outline = btn.AddComponent<Outline>();
+            outline.enabled = true;
+            outline.useGraphicAlpha = false;
+            outline.effectColor = isPipeAnchor
+                ? new Color(1f, 0.86f, 0.18f, 1f)
+                : new Color(0.12f, 0.95f, 1f, 1f);
+            outline.effectDistance = isPipeAnchor ? new Vector2(3f, -3f) : new Vector2(2f, -2f);
+        }
+
+        private bool IsPipeAnchorCell(int c, int r)
+        {
+            int pipeIndex = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, "Spawner_O");
+            return pipeIndex > 0
+                && _holderGimmicks != null
+                && c >= 0 && c < _holderCols
+                && r >= 0 && r < _holderRows
+                && _holderGimmicks[c, r] == pipeIndex;
+        }
+
+        private bool IsPipePayloadPreviewCell(int c, int r)
+        {
+            if (_holderGimmicks == null || _holderSpawnerHP == null) return false;
+            int pipeIndex = System.Array.IndexOf(HOLDER_GIMMICK_NAMES, "Spawner_O");
+            if (pipeIndex <= 0) return false;
+
+            for (int anchorRow = 0; anchorRow < _holderRows; anchorRow++)
+            {
+                if (_holderGimmicks[c, anchorRow] != pipeIndex) continue;
+                int count = Mathf.Max(0, _holderSpawnerHP[c, anchorRow]);
+                if (r > anchorRow && r <= anchorRow + count)
+                    return true;
+            }
+            return false;
+        }
+
+        private void RefreshHolderPipeOutlines()
+        {
+            if (_holderButtonPool == null) return;
+            for (int r = 0; r < _holderRows; r++)
+                for (int c = 0; c < _holderCols; c++)
+                    ApplyPipePreviewOutline(_holderButtonPool[c, r], c, r);
         }
 
         #endregion
@@ -3149,6 +3217,7 @@ namespace BalloonFlow
             var lr = go.AddComponent<LineRenderer>();
             lr.material = _gridLineMat;
             lr.startWidth = 0.02f; lr.endWidth = 0.02f;
+            lr.numCapVertices = 0;
             lr.positionCount = 2;
             lr.SetPosition(0, from);
             lr.SetPosition(1, to);
@@ -3662,6 +3731,7 @@ namespace BalloonFlow
                 lr.material = _waypointLineMat;
                 float lineWidth = _smoothCorners ? 0.04f : 0.08f;
                 lr.startWidth = lineWidth; lr.endWidth = lineWidth;
+                lr.numCapVertices = 0;
                 lr.loop = true;
                 lr.positionCount = _customWaypoints.Count;
                 for (int i = 0; i < _customWaypoints.Count; i++)
@@ -3678,6 +3748,7 @@ namespace BalloonFlow
                         var smoothLR = smoothLineGO.AddComponent<LineRenderer>();
                         smoothLR.material = MakeLitMaterial(FindLitShader(), new Color(0.2f, 0.8f, 1f));
                         smoothLR.startWidth = 0.1f; smoothLR.endWidth = 0.1f;
+                        smoothLR.numCapVertices = 0;
                         smoothLR.loop = true;
                         smoothLR.positionCount = smoothPoints.Count;
                         for (int i = 0; i < smoothPoints.Count; i++)
@@ -6966,7 +7037,10 @@ namespace BalloonFlow
                     if (gimmick == glassPipeIndex)
                         hasGlassPipe = true;
                     if (gimmick == pipeIndex)
+                    {
                         hasPipe = true;
+                        ValidatePipePayloadRules(c, r, pipeIndex, glassPipeIndex, errors);
+                    }
 
                     if (gimmick == frozenIndex)
                     {
@@ -7001,6 +7075,43 @@ namespace BalloonFlow
                 errors.Add("Glass Pipe (Spawner_T) and Pipe (Spawner_O) cannot be mixed in the same level.");
 
             ValidateLinkedDartBoxRules(groups, errors, warnings);
+        }
+
+        private void ValidatePipePayloadRules(int c, int anchorRow, int pipeIndex, int glassPipeIndex, List<string> errors)
+        {
+            if (_holderSpawnerHP == null || _holderColors == null || _holderGimmicks == null)
+                return;
+
+            int count = _holderSpawnerHP[c, anchorRow];
+            // ROLLBACK_PIPE_NOT_ON_RAIL_FRONT_20260624: Pipe must NOT sit on row 0 (directly in front of
+            // the rail). Otherwise its auto-released holder lands on the rail-front with no player-controlled
+            // buffer in between. Require row ≥ 1 so row 0 stays a normal deploy slot. (Payloads are still
+            // authored in the cells BELOW the anchor.) Was: forced anchorRow == 0.
+            if (anchorRow < 1)
+                errors.Add($"Pipe at holder ({c},{anchorRow}) cannot be on row 0 (directly in front of the rail) — its auto-released holder would go straight onto the rail. Place it at row 1 or higher.");
+
+            if (count <= 0)
+            {
+                errors.Add($"Pipe at holder ({c},{anchorRow}) has Count {count}. Use 1 or higher.");
+                return;
+            }
+
+            int lastRow = anchorRow + count;
+            if (lastRow >= _holderRows)
+            {
+                errors.Add($"Pipe at holder ({c},{anchorRow}) needs {count} authored holder(s) below it, but holder rows end at {_holderRows - 1}.");
+                return;
+            }
+
+            for (int r = anchorRow + 1; r <= lastRow; r++)
+            {
+                if (_holderColors[c, r] < 0)
+                    errors.Add($"Pipe at holder ({c},{anchorRow}) payload cell ({c},{r}) is empty. Fill all {count} cells below the Pipe.");
+
+                int gimmick = _holderGimmicks[c, r];
+                if (gimmick == pipeIndex || gimmick == glassPipeIndex)
+                    errors.Add($"Pipe at holder ({c},{anchorRow}) payload cell ({c},{r}) cannot contain another Pipe/Glass Pipe.");
+            }
         }
 
         private void ValidateLinkedDartBoxRules(Dictionary<int, List<Vector2Int>> groups, List<string> errors, List<string> warnings)
@@ -7540,7 +7651,8 @@ namespace BalloonFlow
                         flexTubeGroupId = ftGroupId,
                         flexTubeSequenceIndex = ftSeq,
                         flexTubePartType = ftPart,
-                        flexTubeRotation = 0   // 런타임 spawn 에서 인접 셀 위치로 계산
+                        flexTubeRotation = 0,  // 런타임 spawn 에서 인접 셀 위치로 계산
+                        flexTubeHp = (ftGroupId >= 0) ? _balloonGimmickHP[c, r] : 0   // FlexTube 셀이면 HP 브러시값
                     });
                 }
             config.balloons = balloons.ToArray();
@@ -7563,6 +7675,7 @@ namespace BalloonFlow
                     string hgName = (hgi > 0 && hgi < HOLDER_GIMMICK_NAMES.Length) ? HOLDER_GIMMICK_NAMES[hgi] : "";
                     int chainGrp = _holderChainGroups[c, r];
                     bool isSpawner = hgName == "Spawner_T" || hgName == "Spawner_O";
+                    bool isPipe = hgName == "Spawner_O";
                     holders.Add(new HolderSetup
                     { holderId = hid++, color = _holderColors[c, r], magazineCount = _holderMags[c, r],
                       position = new Vector2(c, r), queueGimmick = hgName,
@@ -7570,7 +7683,7 @@ namespace BalloonFlow
                       chainGroupId = (hgName == "Chain" && chainGrp > 0) ? chainGrp : -1,
                       frozenHP = _holderFrozenHP[c, r],
                       spawnerHP = isSpawner ? _holderSpawnerHP[c, r] : 0,
-                      spawnerMag = isSpawner ? (_holderSpawnerMag[c, r] > 0 ? _holderSpawnerMag[c, r] : 20) : 0,
+                      spawnerMag = isSpawner && !isPipe ? (_holderSpawnerMag[c, r] > 0 ? _holderSpawnerMag[c, r] : 20) : 0,
                       lockPairId = _holderLockPairIds != null && c < _holderLockPairIds.GetLength(0) && r < _holderLockPairIds.GetLength(1)
                           ? _holderLockPairIds[c, r] : -1 });
                 }

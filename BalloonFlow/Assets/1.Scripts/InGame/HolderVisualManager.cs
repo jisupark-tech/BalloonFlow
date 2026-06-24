@@ -366,6 +366,8 @@ namespace BalloonFlow
 
                 bool isSpawner = data.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
                               || data.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O;
+                if (!isSpawner && !data.IsQueueVisible)
+                    continue;
 
                 var target = isSpawner ? columnSpawners : columnQueues;
                 if (!target.ContainsKey(data.column))
@@ -921,6 +923,7 @@ namespace BalloonFlow
                 // Spawner 자체는 SpawnWaitingHolders에서 생성됨
                 if (hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
                  || hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O) continue;
+                if (!hd.IsQueueVisible) continue;
                 _tempLazyColumnData.Add(hd);
             }
             _tempLazyColumnData.Sort((a, b) => a.holderId.CompareTo(b.holderId));
@@ -958,6 +961,8 @@ namespace BalloonFlow
                         spawnerCount++;
                         continue;
                     }
+                    if (hData != null && !hData.IsQueueVisible)
+                        continue;
 
                     colHolders.Add(v);
                 }

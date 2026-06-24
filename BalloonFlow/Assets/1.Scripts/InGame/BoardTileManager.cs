@@ -697,6 +697,11 @@ namespace BalloonFlow
         }
         // 보드 타일 공용 머티리얼 — 플래그에 따라 불투명/반투명.
         private static Material GetTileMat() => UseOpaqueBoardTiles ? GetOpaqueTileMat() : GetSpriteSRPBatcherMat();
+        // ROLLBACK_RAIL_SHADOW_MATERIAL_20260624:
+        // Rail sprites keep their soft shadow alpha. Only rail uses this transparent material;
+        // the large board fill can still use the opaque cutout material for fill-rate savings.
+        // Rollback: assign GetTileMat() again in PlaceConveyorSprite*.
+        private static Material GetRailTileMat() => GetSpriteSRPBatcherMat();
         private static Material GetDangerTileMat() => GetSpriteSRPBatcherMat();
         // ROLLBACK_BOARDTILE_OPAQUE_20260617: END
         // ROLLBACK_CAVE_RENDER_OVER_RAIL_20260608:
@@ -739,7 +744,7 @@ namespace BalloonFlow
             if (sr == null) { Destroy(go); return; }
             sr.sprite = sprite;
             sr.sortingOrder = -1;
-            sr.sharedMaterial = GetTileMat(); // ROLLBACK_BOARDTILE_OPAQUE_20260617: 불투명 타일
+            sr.sharedMaterial = GetRailTileMat(); // ROLLBACK_RAIL_SHADOW_MATERIAL_20260624
 
             // Simple 모드 + localScale로 늘리기
             float sw = sprite.bounds.size.x;
@@ -848,7 +853,7 @@ namespace BalloonFlow
             if (sr == null) { Destroy(go); return; }
             sr.sprite = sprite;
             sr.sortingOrder = -1;
-            sr.sharedMaterial = GetTileMat(); // ROLLBACK_BOARDTILE_OPAQUE_20260617: 불투명 타일
+            sr.sharedMaterial = GetRailTileMat(); // ROLLBACK_RAIL_SHADOW_MATERIAL_20260624
 
             float sw = sprite.bounds.size.x;
             float sh = sprite.bounds.size.y;

@@ -179,12 +179,14 @@ popup.txttitle.hand,Hand,PopupBuyItem
 popup.txttitle.suffle,Shuffle,PopupBuyItem
 popup.txttitle.zap,Zap,PopupBuyItem
 popup.txttitle.unlock,Unlock,PopupBuyItem
+popup.txttitle.itemunlocked,Item Unlocked!,PopupItemDescription/PopupBuyItem
 ,,
 ?ùÏóÖ ?§Î™Ö,,
 popup.txtdescription.quit,Do you really want to quit?,PopupDescription
 popup.txtdescription.networkerror,Your internet is\ndisconnected.,PopupDescription
 popup.txtdescription.purchaseerror,Your purchase\nwas canceled.,PopupDescription
 popup.txtdescription.purchasesuccess,Your purchase\nwas completed.,PopupDescription
+popup.txtdescription.purchasecompleted,Your purchase was completed.,PopupError
 popup.txtdescription.deleteaccount1,"If you delete your account,\nyou will lose all your game progress, coins, boosters and purchases!",
 popup.txtdescription.deleteaccount2,"We will aim to complete your deletion request within 30 days. Once your account is deleted, this action cannot be reversed.",
 popup.txtdescription.deleteaccount3,"If you return to the game before your account is deleted, you can cancel the deletion process and restore your account.",
@@ -198,4 +200,4 @@ popup.txtdescription.zap,,
 popup.txtdescription.zap,,
 toast.life.unlimited,Your lives are unlimited!,
 toast.life.full,Your lives are full!,
-toast.item.locked,Item Unlocked!,
+toast.item.locked,Unlocks at Level {n},

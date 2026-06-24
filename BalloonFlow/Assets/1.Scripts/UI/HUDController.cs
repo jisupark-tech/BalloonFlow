@@ -318,6 +318,9 @@ namespace BalloonFlow
             if (WinningStreakManager.HasInstance) WinningStreakManager.Instance.OnLevelAbandoned();
             if (PopupManager.HasInstance && PopupManager.Instance.HasPopup("popup_fail02"))
             {
+                // ROLLBACK_QUIT_CLOSE_BEFORE_FAIL02_20260624:
+                // PopupQuit must close before PopupFail02 opens so fail heart/gold presentation is not blocked.
+                if (_popupQuit != null) _popupQuit.CloseUI();
                 PopupManager.Instance.ShowPopup("popup_fail02", priority: 60);
             }
             else
