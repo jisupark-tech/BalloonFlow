@@ -1249,6 +1249,12 @@ namespace BalloonFlow
 
             // ROLLBACK_WS_FXFIRE_ON_MERGE_PULSE_20260618:
             // Show/replay FXFire at the merge moment, while WinningIcon scales up.
+            // [WS WinningIcon FXFire SFX 2026-06-24] PopupWinningStreakReward 종료 → flame merge moment 에서 FXFire 가 '비활성→활성' 으로 전이하는 edge 에서만 Item_Get.mp3 1회 재생.
+            // 가드 사유(사용자 명시 요구): '파티클 재생 중 반복 X / 꺼졌다 다시 켜지면 새 1회'.
+            // _wsFxFire.activeSelf 가 false 일 때만 트리거 → 동일 코루틴이 재호출되어도 이미 active 면 무시(잔향 중첩 차단). 다음 DisableWinningStreakFxOnEnter() 사이클 후 재진입은 다시 inactive→active 가 되어 정상 1회.
+            // owner 출처: 본 ProjectHub 태스크 [사용자 추가 지시] 2026-06-24 — 'FXFire 활성화되는 순간 1회 재생, 켜진 동안 반복 X, 꺼졌다 다시 켜지면 1회 재생'.
+            if ((_wsFxFire == null || !_wsFxFire.activeSelf) && AudioManager.HasInstance)
+                AudioManager.Instance.PlayItemGet();
             SetWinningStreakFxActive(true);
 
             // 도착 후 target(ImageIcon) 펄스 — 커졌다 원래대로.
