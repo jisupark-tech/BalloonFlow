@@ -77,6 +77,8 @@ namespace BalloonFlow
         [Header("[SFX — WinningStreak (2026-06-23 사용자 피드백)]")]
         [Tooltip("GaugeUp — UILobby.PlayWinningStreakLobbyFx 코루틴 내 _wsProgressSlider.DOValue 시작 시점 1회 재생. 호출 위치: PlayWinningStreakLobbyFx 의 두 DOValue 호출 직전 (1차 endRatio 채움, 2차 다음 스테이지 carry 채움). PlayOneShot 이라 호출당 1회 보장 — 두 호출 모두 코루틴 1회 진입당 각각 1회씩만 발생함이 보장됨(while/for iteration 단위 = 슬라이더 증가 이벤트 단위). DOTween OnUpdate/OnStepComplete 콜백에 절대 넣지 말 것 — 프레임당 다발 호출되어 무한 중첩 잔향 됨.")]
         [SerializeField] private AudioClip _sfxWsGaugeUp;
+        [Tooltip("Common_Ding — PopupWinningStreakReward 카운터(TxtAmount/TxtAmountOutline) 증가 이벤트마다 1회 재생. (a) 호출 위치: PopupWinningStreakReward.ApplyAmount 의 amount>from(증가) 분기 직후 — _displayedAmount 갱신 직후 단 한 줄(if (from < amount) ...). (b) 1회 보장 근거: ApplyAmount 는 FXItem 비행체(FXBadge 도착 / FXMultiple 도착 / gainedPoints 최종 보정) 콜백/iteration 단위로 호출되므로 증가 이벤트 1회당 ApplyAmount 1회 = SFX 1회 → 사용자 요구 '2번 증가→2번 재생' 자동 충족. (c) 절대 DOTween.To 의 onUpdate 람다(PopupWinningStreakReward.cs:412 rolling-count `v => { rolling = v; SetAmountText(...) }`) 안에서 호출 금지 — 매 프레임 호출되어 잔향 무한 중첩(과거 도메인 원칙 4 회귀).")]
+        [SerializeField] private AudioClip _sfxWsRewardDing;
 
         [Header("[SFX — Booster]")]
         [SerializeField] private AudioClip _sfxItemHand;
@@ -211,6 +213,8 @@ namespace BalloonFlow
             if (_sfxIngameStart == null) _sfxIngameStart = Resources.Load<AudioClip>("Sound/Effect/Ingame_Start");
             // [2026-06-23] GaugeUp — WinningStreak 슬라이더 증가 시작 시점 1회 재생. 폴백 체인 없이 단독 로드(Zap 패턴): 다른 클립 대체 시 의도 오염.
             if (_sfxWsGaugeUp == null) _sfxWsGaugeUp = Resources.Load<AudioClip>("Sound/Effect/GaugeUp");
+            // [2026-06-24] Common_Ding — PopupWinningStreakReward.ApplyAmount 증가 분기 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp 패턴): 다른 클립 대체 시 의도 오염.
+            if (_sfxWsRewardDing == null) _sfxWsRewardDing = Resources.Load<AudioClip>("Sound/Effect/Common_Ding");
 
 #if UNITY_EDITOR
             // Editor 전용 진단 — 폴백조차 실패해 여전히 null 인 SFX 의 '원본 명세 파일명' 을 한 줄로 보고.
@@ -244,6 +248,7 @@ namespace BalloonFlow
             if (_sfxLobbyRailBoxStart == null) missing.Add("Lobby_RailBox_Start");
             if (_sfxIngameStart == null)       missing.Add("Ingame_Start");
             if (_sfxWsGaugeUp == null)         missing.Add("GaugeUp");
+            if (_sfxWsRewardDing == null)      missing.Add("Common_Ding");
             if (missing.Count > 0)
             {
                 Debug.LogWarning($"[AudioManager] Missing SFX clips (place files under Resources/Sound/Effect/): {string.Join(", ", missing)}");
@@ -441,6 +446,16 @@ namespace BalloonFlow
         public void PlayWsGaugeUp()
         {
             PlaySFX(_sfxWsGaugeUp);
+        }
+
+        /// <summary>Common_Ding — PopupWinningStreakReward 카운터(TxtAmount/TxtAmountOutline) 증가 이벤트마다 1회 재생.
+        /// 호출 위치: PopupWinningStreakReward.ApplyAmount 의 amount>from(증가) 분기 — _displayedAmount 갱신 직후 `if (from &lt; amount &amp;&amp; AudioManager.HasInstance) AudioManager.Instance.PlayWsRewardDing();` 단 한 줄.
+        /// 1회 보장 근거: ApplyAmount 는 FXBadge 도착 콜백 / FXMultiple 도착 콜백 / gainedPoints 최종 보정에서 각각 1회씩 호출되므로 증가 N번 → SFX N번 (사용자 요구 '2번 증가→2번 재생' 자동 충족).
+        /// 절대 DOTween.To 의 onUpdate 람다(PopupWinningStreakReward.cs:412 rolling-count tween) 안에서 호출 금지 — 매 프레임 호출되어 잔향 무한 중첩(과거 도메인 원칙 4 회귀).
+        /// PlayOneShot 이라 호출당 1회 보장.</summary>
+        public void PlayWsRewardDing()
+        {
+            PlaySFX(_sfxWsRewardDing);
         }
 
         /// <summary>Zap_Appear — ItemZap 등장 시 1회 재생.

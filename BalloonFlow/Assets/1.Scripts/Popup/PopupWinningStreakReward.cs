@@ -394,6 +394,12 @@ namespace BalloonFlow
             _countTween?.Kill();
             int from = _displayedAmount;
             _displayedAmount = amount;
+            // [2026-06-24 사용자 피드백] TxtAmount/TxtAmountOutline 수치 증가 이벤트마다 Common_Ding 1회.
+            // from < amount 일 때만 호출 — 감소(2026-06-22 카운트다운 연출)·동등은 제외. ApplyAmount 자체가
+            // (FXBadge 도착/FXMultiple 도착/gainedPoints 최종 보정) 각각 1회 호출되므로 증가 N번→소리 N번 자동 보장.
+            // 절대 아래 DOTween.To onUpdate 람다(라인 ~412) 안으로 옮기지 말 것 — 매 프레임 호출되어 잔향 무한 중첩(과거 도메인 원칙 4).
+            if (from < amount && AudioManager.HasInstance)
+                AudioManager.Instance.PlayWsRewardDing();
             if (from <= 0)
             {
                 // 첫 표시(빈 값→1) — 즉시 세팅(카운트 트윈 없음).
