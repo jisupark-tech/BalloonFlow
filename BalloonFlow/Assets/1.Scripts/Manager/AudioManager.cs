@@ -79,6 +79,8 @@ namespace BalloonFlow
         [SerializeField] private AudioClip _sfxWsGaugeUp;
         [Tooltip("Common_Ding — PopupWinningStreakReward 카운터(TxtAmount/TxtAmountOutline) 증가 이벤트마다 1회 재생. (a) 호출 위치: PopupWinningStreakReward.ApplyAmount 의 amount>from(증가) 분기 직후 — _displayedAmount 갱신 직후 단 한 줄(if (from < amount) ...). (b) 1회 보장 근거: ApplyAmount 는 FXItem 비행체(FXBadge 도착 / FXMultiple 도착 / gainedPoints 최종 보정) 콜백/iteration 단위로 호출되므로 증가 이벤트 1회당 ApplyAmount 1회 = SFX 1회 → 사용자 요구 '2번 증가→2번 재생' 자동 충족. (c) 절대 DOTween.To 의 onUpdate 람다(PopupWinningStreakReward.cs:412 rolling-count `v => { rolling = v; SetAmountText(...) }`) 안에서 호출 금지 — 매 프레임 호출되어 잔향 무한 중첩(과거 도메인 원칙 4 회귀).")]
         [SerializeField] private AudioClip _sfxWsRewardDing;
+        [Tooltip("Item_Get — UILobby.PlayWsFireFlyAndPulse 의 SetWinningStreakFxActive(true) 직전 _wsFxFire.activeSelf==false (inactive→active edge) 일 때 1회 재생. PopupWinningStreakReward 종료 → FXItem 비행체가 WinningIcon merge 도착 시점. 켜진 상태 재호출은 가드로 무시(파티클 재생 중 잔향 중첩 차단). 꺼졌다 다시 켜지는 next 호출에서는 정상 1회 재생. PlayOneShot 이라 호출당 1회 보장. 절대 PlayWsFireFlyAndPulse 매 프레임 lambda/Update 에서 호출 금지(과거 도메인 원칙 4 회귀).")]
+        [SerializeField] private AudioClip _sfxItemGet;
 
         [Header("[SFX — Booster]")]
         [SerializeField] private AudioClip _sfxItemHand;
@@ -215,6 +217,8 @@ namespace BalloonFlow
             if (_sfxWsGaugeUp == null) _sfxWsGaugeUp = Resources.Load<AudioClip>("Sound/Effect/GaugeUp");
             // [2026-06-24] Common_Ding — PopupWinningStreakReward.ApplyAmount 증가 분기 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp 패턴): 다른 클립 대체 시 의도 오염.
             if (_sfxWsRewardDing == null) _sfxWsRewardDing = Resources.Load<AudioClip>("Sound/Effect/Common_Ding");
+            // [2026-06-24] Item_Get — UILobby.PlayWsFireFlyAndPulse FXFire inactive→active edge 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding 패턴): 다른 클립 대체 시 의도 오염.
+            if (_sfxItemGet == null) _sfxItemGet = Resources.Load<AudioClip>("Sound/Effect/Item_Get");
 
 #if UNITY_EDITOR
             // Editor 전용 진단 — 폴백조차 실패해 여전히 null 인 SFX 의 '원본 명세 파일명' 을 한 줄로 보고.
@@ -249,6 +253,7 @@ namespace BalloonFlow
             if (_sfxIngameStart == null)       missing.Add("Ingame_Start");
             if (_sfxWsGaugeUp == null)         missing.Add("GaugeUp");
             if (_sfxWsRewardDing == null)      missing.Add("Common_Ding");
+            if (_sfxItemGet == null)           missing.Add("Item_Get");
             if (missing.Count > 0)
             {
                 Debug.LogWarning($"[AudioManager] Missing SFX clips (place files under Resources/Sound/Effect/): {string.Join(", ", missing)}");
@@ -456,6 +461,15 @@ namespace BalloonFlow
         public void PlayWsRewardDing()
         {
             PlaySFX(_sfxWsRewardDing);
+        }
+
+        /// <summary>Item_Get — UILobby.PlayWsFireFlyAndPulse 코루틴에서 SetWinningStreakFxActive(true) 직전 _wsFxFire 가 비활성→활성 edge 로 전이할 때 1회 재생.
+        /// 호출 위치: UILobby.PlayWsFireFlyAndPulse — SetWinningStreakFxActive(true) 직전, `(_wsFxFire == null || !_wsFxFire.activeSelf)` 가드 통과 분기.
+        /// 1회 보장 근거: (1) edge-detect 가드(_wsFxFire.activeSelf==false 일 때만 트리거)로 동일 코루틴 재호출/이미 켜진 상태 무시 → 잔향 중첩 차단, (2) PlayOneShot 으로 호출당 1회. 꺼졌다 다시 켜지는 next 호출에서는 정상 1회.
+        /// 절대 PlayWsFireFlyAndPulse 내부 매 프레임 lambda/Update/DOTween OnUpdate 콜백 안에서 호출 금지(과거 도메인 원칙 4 회귀).</summary>
+        public void PlayItemGet()
+        {
+            PlaySFX(_sfxItemGet);
         }
 
         /// <summary>Zap_Appear — ItemZap 등장 시 1회 재생.
