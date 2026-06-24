@@ -719,7 +719,7 @@ namespace BalloonFlow
             if (changed) PlayWsMultipleFxFire();
             // [2026-06-22] 배수 텍스트 펀치 — PlayWsMultipleFxFire 와 동일 changed-edge 에서 호출 (1/1, INC+DEC 공용).
             if (changed) PlayWsMultiplierTextPunch();
-            // [WS Multiple 텍스트 변경 SFX 2026-06-24 rework] 사용자 피드백 supersede 2026-06-24 이전 스펙(ImageIcon DOScale 시점). TextGauge/Outline 값이 실제로 달라지는 changed-edge 1회 발화 — PlayWsMultipleFxFire/PlayWsMultiplierTextPunch 와 동일 가드 공유(INC+DEC 1/1, 두 텍스트 동일 변경 시 SetWinningIconMultiplierText 1회 진입이므로 중복 재생 자연 방지, _wsHoldMultiplierTextDuringAnim 가드로 애니메이션 hold 중 호출 차단).
+            // [WS Multiple 텍스트 변경 SFX (B) 2026-06-24 rework v2] TextGauge/Outline 값이 실제로 달라지는 changed-edge 1회 발화 — PlayWsMultipleFxFire/PlayWsMultiplierTextPunch 와 동일 가드 공유(INC+DEC 1/1, 두 텍스트 동일 변경 시 SetWinningIconMultiplierText 1회 진입이므로 중복 재생 자연 방지, _wsHoldMultiplierTextDuringAnim 가드로 애니메이션 hold 중 호출 차단). coexists with (A) PlayWsFireFlyAndPulse ImageIcon DOScale 트리거(UILobby.cs:~1260) — owner 출처: ProjectHub 태스크 6a3a4dbc 2026-06-24 익명 사용자 피드백 (직전 'supersede' 해석을 정정, BOTH 사용).
             if (changed && AudioManager.HasInstance) AudioManager.Instance.PlayItemGet();
         }
 
@@ -1257,6 +1257,8 @@ namespace BalloonFlow
             if (target != null)
             {
                 Vector3 baseScale = target.localScale;
+                // [Item_Get SFX (A) — ImageIcon DOScale 펄스 시작 1회 2026-06-24] WinningIcon 의 ImageIcon 이 baseScale → 1.25배로 확대되는 트윈 시작 직전 1회 발화. if (target != null) 블록 안이므로 'ImageIcon 펄스가 실행되는 케이스'로 자연 게이팅 → 펄스 1회당 1회 보장. coexists (NOT supersedes) with (B) SetWinningIconMultiplierText changed-edge 호출(UILobby.cs:723) — 두 트리거 시간 분리(fire-fly + pulse + slider + multiplier slide-in + select move + hold ≈ 1.5s+ 간격) 이라 overlap/masking 없음. owner 출처: ProjectHub 태스크 6a3a4dbc 2026-06-24 익명 사용자 피드백 — 직전 2026-06-24 'supersede' 해석을 명시적으로 정정(BOTH trigger 사용).
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayItemGet();
                 _wsLobbyFxSequence?.Kill();
                 _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
                 _wsLobbyFxSequence.Append(target.DOScale(baseScale * 1.25f, WS_FIRE_PULSE_DURATION).SetEase(Ease.OutBack));
