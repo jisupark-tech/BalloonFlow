@@ -41,6 +41,9 @@ namespace BalloonFlow
             Transform parent = GetParentTransform();
             if (parent == null) { onAllComplete?.Invoke(); return; }
 
+            // [2026-06-24 사용자 피드백] Item_Fly SFX — session 1회당 1회 재생. early-return 통과 직후 = 실제 비행이 시작되는 시점. 절대 RunFly/Fly 코루틴 내부에서 호출 금지(잔향 중첩 회귀). 단일 진입점이므로 3개 caller(PurchaseRewardEffect/UIHud/PopupMoreLive) 모두 자동 커버. owner: ProjectHub 태스크 2026-06-24 익명 사용자 피드백.
+            if (AudioManager.HasInstance) AudioManager.Instance.PlayItemFly();
+
             BeginSession();
             Action wrappedComplete = () =>
             {
