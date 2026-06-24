@@ -264,9 +264,14 @@ namespace BalloonFlow
                 rewardRoot.gameObject.SetActive(false);
             }
 
-            // [2026-06-24 사용자 피드백] PopupFail02 등장 시 Fail SFX 1회 + BGM fade-out.
-            // OnEnable 다중 호출 가드 — 인스턴스 lifetime 당 1회만 발화 (OnDisable에서 리셋).
-            if (!_sfxPlayed && AudioManager.HasInstance)
+            // [2026-06-24 사용자 피드백 v2] PopupFail02 가 '실제 표시' 되는 시점에만 Fail SFX 1회 + BGM fade-out.
+            // GameBootstrap.OpenUISilent→CloseUISilent 사전 로드 흐름에서도 OnEnable 이 1회 발화되어
+            // 인게임 진입 직후 SFX/BGM 이 잘못 트리거되던 회귀를 차단. PopupManager.RegisterPopup 은
+            // 사전 로드 이후에 호출되므로, HasPopup("popup_fail02") 가 true 인 OnEnable 만 실제 표시 시점.
+            // (ShowPopup→ActivatePopup→SetActive(true) 경로에서는 RegisterPopup 이 이미 완료된 상태.)
+            bool isShownByPopupManager = PopupManager.HasInstance
+                                         && PopupManager.Instance.HasPopup("popup_fail02");
+            if (isShownByPopupManager && !_sfxPlayed && AudioManager.HasInstance)
             {
                 AudioManager.Instance.StopBGMFadeOut(0.5f);
                 AudioManager.Instance.PlayPopupFail02Sfx();
