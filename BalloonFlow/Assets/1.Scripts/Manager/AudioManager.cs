@@ -86,6 +86,10 @@ namespace BalloonFlow
         [Tooltip("Item_Fly — ItemFlyEffect.Play() 진입부에서 1회 재생. 호출 위치: ItemFlyEffect.Play 진입부(early-return 통과 직후, BeginSession 직전). PlayOneShot 이라 session 1회당 1회 보장 — 내부 코루틴 spawn N개와 무관하게 1회. 절대 RunFly/Fly 코루틴의 매 프레임 lambda 에 넣지 말 것(잔향 중첩 회귀). 새 Play() 호출 = 새 session = 새 SFX 1회 (사용자 요구 '연출마다 1회 재생' 자동 충족). owner: ProjectHub 태스크 2026-06-24 익명 사용자 피드백.")]
         [SerializeField] private AudioClip _sfxItemFly;
 
+        [Header("[SFX — Lobby PlayButton ButtonEffect (2026-06-24 사용자 피드백)]")]
+        [Tooltip("Levelup_Btn — UILobby PlayButton 의 'ButtonEffect' GameObject 가 활성화되는 시점에 1회 재생. 호출 위치: UILobby.PlayLobbyBtnChangeAnim 진입부(silent no-op guard 통과 직후, _animPlayBtn.Play(LOBBY_BTN_CHANGE_ANIM_NAME) 직전). LobbyBtnChange.anim 의 PlayButton/ButtonEffect.m_IsActive 키프레임이 ON 으로 토글되는 단일 경로 = PlayLobbyBtnChangeAnim 진입점이므로 1 호출 = 1 활성화 = 1 SFX 자연 보장. 동일 레벨/난이도 재호출은 PlayLobbyBtnChangeAnim 자체의 silent no-op 가드(UILobby.cs:2816-2820)가 SFX와 anim 양쪽을 함께 차단 — 별도 latch 불요. PlayOneShot 이라 호출당 1회 보장. 절대 OnLobbyBtnChangeFrameEvent / Animator OnStateUpdate / DOTween OnUpdate 람다 안에서 호출 금지(과거 도메인 원칙 4: 잔향 무한 중첩 회귀). owner 출처: ProjectHub 태스크 2026-06-24 익명 사용자 피드백 — 'ButtonEffect가 켜지는(활성화되는) 순간에 1회 재생'.")]
+        [SerializeField] private AudioClip _sfxLevelupBtn;
+
         [Header("[SFX — Booster]")]
         [SerializeField] private AudioClip _sfxItemHand;
         [SerializeField] private AudioClip _sfxItemShuffle;
@@ -225,6 +229,8 @@ namespace BalloonFlow
             if (_sfxItemGet == null) _sfxItemGet = Resources.Load<AudioClip>("Sound/Effect/Item_Get");
             // [2026-06-24] Item_Fly — ItemFlyEffect.Play() 진입 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding/Item_Get 패턴): 다른 클립 대체 시 의도 오염.
             if (_sfxItemFly == null) _sfxItemFly = Resources.Load<AudioClip>("Sound/Effect/Item_Fly");
+            // [2026-06-24] Levelup_Btn — UILobby PlayButton/ButtonEffect 활성화 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding/Item_Get/Item_Fly 패턴): 다른 클립 대체 시 의도 오염.
+            if (_sfxLevelupBtn == null) _sfxLevelupBtn = Resources.Load<AudioClip>("Sound/Effect/Levelup_Btn");
 
 #if UNITY_EDITOR
             // Editor 전용 진단 — 폴백조차 실패해 여전히 null 인 SFX 의 '원본 명세 파일명' 을 한 줄로 보고.
@@ -261,6 +267,7 @@ namespace BalloonFlow
             if (_sfxWsRewardDing == null)      missing.Add("Common_Ding");
             if (_sfxItemGet == null)           missing.Add("Item_Get");
             if (_sfxItemFly == null)           missing.Add("Item_Fly");
+            if (_sfxLevelupBtn == null)        missing.Add("Levelup_Btn");
             if (missing.Count > 0)
             {
                 Debug.LogWarning($"[AudioManager] Missing SFX clips (place files under Resources/Sound/Effect/): {string.Join(", ", missing)}");
@@ -490,6 +497,16 @@ namespace BalloonFlow
         public void PlayItemFly()
         {
             PlaySFX(_sfxItemFly);
+        }
+
+        /// <summary>Levelup_Btn — UILobby PlayButton 의 'ButtonEffect' GameObject 활성화 시점 1회 재생.
+        /// 호출 위치: UILobby.PlayLobbyBtnChangeAnim 진입부(silent no-op guard 통과 직후, _animPlayBtn.Play 직전).
+        /// 단일 entry point 라 LobbyController 의 두 caller(L386, L404) 자동 커버 — caller 추가/리네임에도 강건.
+        /// PlayOneShot + PlayLobbyBtnChangeAnim 자체의 no-op guard 로 1 anim 트리거 = 1 SFX 자연 보장.
+        /// owner 출처: ProjectHub 태스크 2026-06-24 익명 사용자 피드백 — 'ButtonEffect가 켜지는(활성화되는) 순간에 1회 재생'.</summary>
+        public void PlayLevelupBtn()
+        {
+            PlaySFX(_sfxLevelupBtn);
         }
 
         /// <summary>Zap_Appear — ItemZap 등장 시 1회 재생.
