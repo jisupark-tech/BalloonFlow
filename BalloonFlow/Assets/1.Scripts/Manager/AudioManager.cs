@@ -82,6 +82,10 @@ namespace BalloonFlow
         [Tooltip("Item_Get — 두 트리거 모두에서 1회씩 재생 (coexists, NOT supersede). (A) UILobby.PlayWsFireFlyAndPulse ImageIcon DOScale 펄스 시작 1회 — if (target != null) 블록 안 baseScale 캡처 직후 1회 발화, 펄스 1회당 1회 자연 게이팅. (B) UILobby.SetWinningIconMultiplierText changed-edge 1회 — WinningIcon Multiple 텍스트(TextGauge/TextGaugeOutline) 값이 이전과 다른 값으로 갱신되는 순간(INC/DEC 양방향), PlayWsMultipleFxFire/PlayWsMultiplierTextPunch 와 동일 가드 공유: (1) changed bool 가드, (2) _wsHoldMultiplierTextDuringAnim 으로 연출 hold 중 진입 자체 차단, (3) 두 텍스트(Gauge/Outline)는 동일 메서드 1회 호출 내 함께 갱신되므로 중복 발화 불가. (A)와 (B)는 시간상 분리(fire-fly + pulse + slider + multiplier slide-in 등 1.5s+ 간격) 되어 overlap/masking 없음. 절대 DOTween OnUpdate/매 프레임 lambda 에서 호출 금지(잔향 중첩 회귀 방지).")]
         [SerializeField] private AudioClip _sfxItemGet;
 
+        [Header("[SFX — FXItem Fly (2026-06-24 사용자 피드백)]")]
+        [Tooltip("Item_Fly — ItemFlyEffect.Play() 진입부에서 1회 재생. 호출 위치: ItemFlyEffect.Play 진입부(early-return 통과 직후, BeginSession 직전). PlayOneShot 이라 session 1회당 1회 보장 — 내부 코루틴 spawn N개와 무관하게 1회. 절대 RunFly/Fly 코루틴의 매 프레임 lambda 에 넣지 말 것(잔향 중첩 회귀). 새 Play() 호출 = 새 session = 새 SFX 1회 (사용자 요구 '연출마다 1회 재생' 자동 충족). owner: ProjectHub 태스크 2026-06-24 익명 사용자 피드백.")]
+        [SerializeField] private AudioClip _sfxItemFly;
+
         [Header("[SFX — Booster]")]
         [SerializeField] private AudioClip _sfxItemHand;
         [SerializeField] private AudioClip _sfxItemShuffle;
@@ -219,6 +223,8 @@ namespace BalloonFlow
             if (_sfxWsRewardDing == null) _sfxWsRewardDing = Resources.Load<AudioClip>("Sound/Effect/Common_Ding");
             // [2026-06-24] Item_Get — (A)+(B) 두 트리거 모두 owner 2026-06-24 명세 (coexists, NOT supersede): (A) UILobby.PlayWsFireFlyAndPulse ImageIcon DOScale 펄스 시작 1회 + (B) UILobby.SetWinningIconMultiplierText changed-edge 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding 패턴): 다른 클립 대체 시 의도 오염.
             if (_sfxItemGet == null) _sfxItemGet = Resources.Load<AudioClip>("Sound/Effect/Item_Get");
+            // [2026-06-24] Item_Fly — ItemFlyEffect.Play() 진입 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding/Item_Get 패턴): 다른 클립 대체 시 의도 오염.
+            if (_sfxItemFly == null) _sfxItemFly = Resources.Load<AudioClip>("Sound/Effect/Item_Fly");
 
 #if UNITY_EDITOR
             // Editor 전용 진단 — 폴백조차 실패해 여전히 null 인 SFX 의 '원본 명세 파일명' 을 한 줄로 보고.
@@ -254,6 +260,7 @@ namespace BalloonFlow
             if (_sfxWsGaugeUp == null)         missing.Add("GaugeUp");
             if (_sfxWsRewardDing == null)      missing.Add("Common_Ding");
             if (_sfxItemGet == null)           missing.Add("Item_Get");
+            if (_sfxItemFly == null)           missing.Add("Item_Fly");
             if (missing.Count > 0)
             {
                 Debug.LogWarning($"[AudioManager] Missing SFX clips (place files under Resources/Sound/Effect/): {string.Join(", ", missing)}");
@@ -472,6 +479,17 @@ namespace BalloonFlow
         public void PlayItemGet()
         {
             PlaySFX(_sfxItemGet);
+        }
+
+        /// <summary>Item_Fly — ItemFlyEffect.Play() 진입부 1회 재생.
+        /// 호출 위치: ItemFlyEffect.Play 진입부(count>0 + UIManager.HasInstance + parent!=null 통과 직후, BeginSession 직전).
+        /// PlayOneShot 이라 session 1회당 1회 보장 — 내부 RunFly/Fly 코루틴이 N개 spawn 하더라도 entry point 1회 호출이므로 항상 1회.
+        /// 새 Play() 호출 = 새 session = 새 SFX 1회 (사용자 요구 '연출마다 1회 재생' 자동 충족, '이동 중 반복 재생되지 않도록' 자동 충족).
+        /// owner 출처: ProjectHub 태스크 2026-06-24 익명 사용자 피드백 — 'FXItem 연출 시작 시 1회, 이동 중 비반복, 새 연출마다 1회'.
+        /// 절대 RunFly/Fly 코루틴의 OnUpdate/매 프레임 lambda 안에서 호출 금지(과거 도메인 원칙 4: 잔향 무한 중첩 회귀).</summary>
+        public void PlayItemFly()
+        {
+            PlaySFX(_sfxItemFly);
         }
 
         /// <summary>Zap_Appear — ItemZap 등장 시 1회 재생.
