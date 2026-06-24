@@ -719,6 +719,8 @@ namespace BalloonFlow
             if (changed) PlayWsMultipleFxFire();
             // [2026-06-22] 배수 텍스트 펀치 — PlayWsMultipleFxFire 와 동일 changed-edge 에서 호출 (1/1, INC+DEC 공용).
             if (changed) PlayWsMultiplierTextPunch();
+            // [WS Multiple 텍스트 변경 SFX (B) 2026-06-24 rework v3, owner 출처: ProjectHub 6a3a4dbc 익명 피드백] TextGauge/Outline 값이 실제로 달라지는 changed-edge 1회 발화 — PlayWsMultipleFxFire/PlayWsMultiplierTextPunch 와 동일 가드 공유(INC+DEC 1/1, 두 텍스트 동일 변경 시 SetWinningIconMultiplierText 1회 진입이므로 중복 재생 자연 방지, _wsHoldMultiplierTextDuringAnim 가드로 애니메이션 hold 중 호출 차단). Item_Get → Item_Up 교체 (2026-06-24 rework v3, owner 출처: ProjectHub 6a3a4dbc 익명 피드백). PlayItemGet 은 line 1265 fire-fly merge 펄스 (A trigger) 전용으로 유지 — 의미 분리 명시.
+            if (changed && AudioManager.HasInstance) AudioManager.Instance.PlayItemUp();
         }
 
         private void PlayWsMultipleFxFire()
@@ -855,13 +857,7 @@ namespace BalloonFlow
                 ? anim.rewardMultiplier
                 : (anim.startMultiplier > 0 ? anim.startMultiplier : WinningStreakUI.ResolveCurrentMultiplier());
 
-            // ROLLBACK_WS_SKIP_X1_COEFF_FX_20260615: 계수가 실제로 곱해지지 않는 경우(노말 레벨 + 0/1연승 → flame +1 만)는
-            //   '계수 적용 연출'(PopupWinningStreakReward) 을 생략한다. 난이도배수 미적용(!showBadge) AND 연승배수 ≤1 이면
-            //   곱셈 카운팅이 x1 무의미 연출이라 노출하지 않음 — 로비 flame 비행 FX 만으로 +1 이 게이지에 반영됨.
-            //   롤백: 아래 if 블록 제거.
-            if (!showBadge && streakMult <= 1)
-                yield break;
-
+            // [WS 0단계 +1 노출 정책 2026-06-24] 이전 ROLLBACK_WS_SKIP_X1_COEFF_FX_20260615 가드 제거 — +1 보상(노말+0/1연승)도 PopupWinningStreakReward 노출 (디자이너 지시). PopupWinningStreakReward 가 +1 케이스에서 SetBaseAmountText('+1')·PlayCoefficientOverlapFx skip·정상 IsFinished 종료로 안전.
             var popup = PopupWinningStreakReward.Play(diffMult, streakMult, anim.gainedPoints, showBadge, anim.clearedDifficulty);
             // ROLLBACK_WS_REWARD_POPUP_HANG_FIX_20260618: IsFinished 가 어떤 이유로든(코루틴 미시작/예외) 안 떨어져도
             //   최대 maxWait 초 후 강제 종료 — 이 while 이 영구 대기하면 상위 deferred 코루틴이 finally 에 못 가
@@ -1177,9 +1173,11 @@ namespace BalloonFlow
         }
 
         /// <summary>Multiplier 를 지정 X 로 슬라이드(anchoredPosition.x 트윈). 미할당 시 즉시 종료.
-        /// [2026-06-22 추가] overshootOrAmplitude 기본 1f — OutBack/Elastic 한정으로 의미. 호출측이 명시할 때만 약화.</summary>
+        /// [2026-06-22 추가] overshootOrAmplitude 기본 1f — OutBack/Elastic 한정으로 의미. 호출측이 명시할 때만 약화.
+        /// [2026-06-24 사용자 피드백] targetX==HIDDEN_X(슬라이드 아웃 = Multiplier가 원래 위치로 돌아가는 순간) 분기에서 single-entry-point으로 Multiplier_Move SFX 1회 재생 — 성공(L1085)/실패(L918) 두 caller 자동 커버.</summary>
         private IEnumerator PlayWsMultiplierSlide(float targetX, float duration, Ease ease, float overshootOrAmplitude = 1f)
         {
+            if (Mathf.Approximately(targetX, WS_MULTIPLIER_HIDDEN_X) && AudioManager.HasInstance) AudioManager.Instance.PlayMultiplierMove();
             if (_wsMultiplier == null) yield break;
             _wsLobbyFxSequence?.Kill();
             _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
@@ -1223,6 +1221,8 @@ namespace BalloonFlow
 
                 _wsLobbyFxSequence?.Kill();
                 _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
+                // [Item_Fly SFX 2026-06-24 익명 사용자 피드백] FXItem_WinningStreak_Fly 가 화면 중앙→target 으로 이동을 시작하는 순간 1회 발화. 위치 근거: (1) `if (flyPrefab != null && parent != null && target != null)` 가드 통과 직후 → 실제 fly 가 존재할 때만 발화(도메인 원칙: guard → SFX → 연출). (2) DOTween Sequence 가 호출당 1회 생성되므로 sequence 초기화 직후 = 모션 시작 직전 자연 1회. (3) Destroy(fly) 직전의 `yield return _wsLobbyFxSequence.WaitForCompletion();` 와 분리되어 종료음 아닌 시작음으로 명확. (4) PlayWsFireFlyAndPulse 자체가 PlayWinningStreakLobbyFx(UILobby.cs:968) 진입당 1회 호출되므로 '동일 연출 재발생 시 연출마다 1회 재생' 자동 충족. (5) PlayOneShot 채널이라 이동 중 매 프레임/파티클 단위 재반복 불가. 절대 DOTween OnUpdate/OnComplete 람다·flyRt 트윈 콜백 안에 넣지 말 것(과거 도메인 원칙 4: 잔향 무한 중첩 회귀).
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayItemFly();
                 if (flyRt != null)
                 {
                     flyRt.anchorMin = flyRt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -1255,6 +1255,8 @@ namespace BalloonFlow
             if (target != null)
             {
                 Vector3 baseScale = target.localScale;
+                // [Item_Get SFX (A) — ImageIcon DOScale 펄스 시작 1회 2026-06-24] WinningIcon 의 ImageIcon 이 baseScale → 1.25배로 확대되는 트윈 시작 직전 1회 발화. if (target != null) 블록 안이므로 'ImageIcon 펄스가 실행되는 케이스'로 자연 게이팅 → 펄스 1회당 1회 보장. coexists (NOT supersedes) with (B) SetWinningIconMultiplierText changed-edge 호출(UILobby.cs:723) — 두 트리거 시간 분리(fire-fly + pulse + slider + multiplier slide-in + select move + hold ≈ 1.5s+ 간격) 이라 overlap/masking 없음. owner 출처: ProjectHub 태스크 6a3a4dbc 2026-06-24 익명 사용자 피드백 — 직전 2026-06-24 'supersede' 해석을 명시적으로 정정(BOTH trigger 사용).
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayItemGet();
                 _wsLobbyFxSequence?.Kill();
                 _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
                 _wsLobbyFxSequence.Append(target.DOScale(baseScale * 1.25f, WS_FIRE_PULSE_DURATION).SetEase(Ease.OutBack));
@@ -2043,10 +2045,6 @@ namespace BalloonFlow
         /// </summary>
         public void PlayRailEnterAnimation()
         {
-            // [2026-06-23] Rail 이동 시작 SFX(Lobby_Rail) 1회. _railTop/_railBottom 둘 다 null 이면 실제 이동이 없으므로 침묵.
-            if ((_railTop != null || _railBottom != null) && AudioManager.HasInstance)
-                AudioManager.Instance.PlayLobbyRail();
-
             _railTopTween?.Kill();
             _railBottomTween?.Kill();
 
@@ -2075,10 +2073,6 @@ namespace BalloonFlow
         /// </summary>
         public void PlayRailPullDownAnimation()
         {
-            // [2026-06-23] Rail 이동 시작 SFX(Lobby_Rail) 1회. _railTop/_railBottom 둘 다 null 이면 실제 이동이 없으므로 침묵.
-            if ((_railTop != null || _railBottom != null) && AudioManager.HasInstance)
-                AudioManager.Instance.PlayLobbyRail();
-
             _railTopTween?.Kill();
             _railBottomTween?.Kill();
 
@@ -2825,6 +2819,8 @@ namespace BalloonFlow
 
             if (_animPlayBtn != null && _animPlayBtn.runtimeAnimatorController != null)
             {
+                // [2026-06-24 사용자 피드백] PlayButton/ButtonEffect 활성화는 LobbyBtnChange.anim 의 m_IsActive 키프레임으로만 일어나므로, anim 재생 직전에 1회 SFX 발화. silent no-op guard(상단)가 의미 없는 재호출 차단 + Animator 미할당 분기 skip = 실제 활성화 케이스에서만 재생.
+                AudioManager.Instance.PlayLevelupBtn();
                 _animPlayBtn.Play(LOBBY_BTN_CHANGE_ANIM_NAME, 0, 0f);
             }
 
@@ -2974,6 +2970,8 @@ namespace BalloonFlow
             _currentPageIndex = pageIndex;
             if (pageIndex == 1)
             {
+                // [2026-06-24] Shop/Setting → Lobby 가로 페이지 전환 시점 1회. Rail 위치 변경 자체와는 무관.
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayLobbyRail();
                 PlayRailEnterAnimation();
                 PlayLevelObjectEnterAnimation();
             }
@@ -3143,6 +3141,8 @@ namespace BalloonFlow
                 if (targetPage == 0 && prev != 0 && _uiShop != null) _uiShop.ResetView();
                 if (targetPage == 1 && prev != 1)
                 {
+                    // [2026-06-24] Shop/Setting → Lobby 가로 페이지 전환 시점 1회. Rail 위치 변경 자체와는 무관.
+                    if (AudioManager.HasInstance) AudioManager.Instance.PlayLobbyRail();
                     PlayRailEnterAnimation();
                     PlayLevelObjectEnterAnimation();
                 }
