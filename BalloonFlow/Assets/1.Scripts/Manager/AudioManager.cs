@@ -81,6 +81,8 @@ namespace BalloonFlow
         [SerializeField] private AudioClip _sfxWsRewardDing;
         [Tooltip("Item_Get — 두 트리거 모두에서 1회씩 재생 (coexists, NOT supersede). (A) UILobby.PlayWsFireFlyAndPulse ImageIcon DOScale 펄스 시작 1회 — if (target != null) 블록 안 baseScale 캡처 직후 1회 발화, 펄스 1회당 1회 자연 게이팅. (B) UILobby.SetWinningIconMultiplierText changed-edge 1회 — WinningIcon Multiple 텍스트(TextGauge/TextGaugeOutline) 값이 이전과 다른 값으로 갱신되는 순간(INC/DEC 양방향), PlayWsMultipleFxFire/PlayWsMultiplierTextPunch 와 동일 가드 공유: (1) changed bool 가드, (2) _wsHoldMultiplierTextDuringAnim 으로 연출 hold 중 진입 자체 차단, (3) 두 텍스트(Gauge/Outline)는 동일 메서드 1회 호출 내 함께 갱신되므로 중복 발화 불가. (A)와 (B)는 시간상 분리(fire-fly + pulse + slider + multiplier slide-in 등 1.5s+ 간격) 되어 overlap/masking 없음. 절대 DOTween OnUpdate/매 프레임 lambda 에서 호출 금지(잔향 중첩 회귀 방지).")]
         [SerializeField] private AudioClip _sfxItemGet;
+        [Tooltip("Item_Up — UILobby.SetWinningIconMultiplierText changed-edge 1회 — WinningIcon Multiple 텍스트(TextGauge/TextGaugeOutline) 값이 이전과 다른 값으로 갱신되는 순간(INC/DEC 양방향), `_wsLastMultiplierText != mult` changed bool + `_wsHoldMultiplierTextDuringAnim` hold guard + Gauge+Outline 단일 메서드 1회 진입으로 중복 발화 불가. 절대 DOTween OnUpdate / Update / 매 프레임 lambda 안에서 호출 금지(과거 도메인 원칙 4: 잔향 무한 중첩 회귀). owner 출처: ProjectHub 태스크 2026-06-24 익명 사용자 피드백 — 기존 Item_Get.mp3 호출(UILobby.cs:723) 교체 명세.")]
+        [SerializeField] private AudioClip _sfxItemUp;
 
         [Header("[SFX — FXItem Fly (2026-06-24 사용자 피드백)]")]
         [Tooltip("Item_Fly — 두 caller 모두에서 1회씩 재생 (coexists, NOT supersede). (A) ItemFlyEffect.Play() 진입부 1회(early-return guard 통과 직후, BeginSession 직전) — UX 보상 아이템 비행. (B) UILobby.PlayWsFireFlyAndPulse 코루틴 내 _wsLobbyFxSequence 초기화 직후, fly 모션 트윈 Append 직전 1회(if (flyPrefab && parent && target) 가드 통과 후) — WinningStreak FXItem_WinningStreak_Fly 비행. 두 caller 모두 PlayOneShot 채널, session 1회당 1회 보장 — 내부 코루틴/트윈 N개 spawn 와 무관. 절대 RunFly/Fly/DOTween OnUpdate 매 프레임 lambda 안에서 호출 금지(과거 도메인 원칙 4: 잔향 무한 중첩 회귀). owner 출처: ProjectHub 태스크 2026-06-24 익명 사용자 피드백 — FXItem 연출 시작 1회, 이동 중 비반복, 새 연출마다 1회.")]
@@ -231,6 +233,8 @@ namespace BalloonFlow
             if (_sfxWsRewardDing == null) _sfxWsRewardDing = Resources.Load<AudioClip>("Sound/Effect/Common_Ding");
             // [2026-06-24] Item_Get — (A)+(B) 두 트리거 모두 owner 2026-06-24 명세 (coexists, NOT supersede): (A) UILobby.PlayWsFireFlyAndPulse ImageIcon DOScale 펄스 시작 1회 + (B) UILobby.SetWinningIconMultiplierText changed-edge 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding 패턴): 다른 클립 대체 시 의도 오염.
             if (_sfxItemGet == null) _sfxItemGet = Resources.Load<AudioClip>("Sound/Effect/Item_Get");
+            // [2026-06-24] Item_Up — UILobby.SetWinningIconMultiplierText changed-edge 1회 (Item_Get 에서 교체). 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding/Item_Get/Item_Fly/Levelup_Btn/Multiplier_Move 패턴): 다른 클립 대체 시 의도 오염.
+            if (_sfxItemUp == null) _sfxItemUp = Resources.Load<AudioClip>("Sound/Effect/Item_Up");
             // [2026-06-24] Item_Fly — ItemFlyEffect.Play() 진입 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding/Item_Get 패턴): 다른 클립 대체 시 의도 오염.
             if (_sfxItemFly == null) _sfxItemFly = Resources.Load<AudioClip>("Sound/Effect/Item_Fly");
             // [2026-06-24] Levelup_Btn — UILobby PlayButton/ButtonEffect 활성화 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding/Item_Get/Item_Fly 패턴): 다른 클립 대체 시 의도 오염.
@@ -272,6 +276,7 @@ namespace BalloonFlow
             if (_sfxWsGaugeUp == null)         missing.Add("GaugeUp");
             if (_sfxWsRewardDing == null)      missing.Add("Common_Ding");
             if (_sfxItemGet == null)           missing.Add("Item_Get");
+            if (_sfxItemUp == null)            missing.Add("Item_Up");
             if (_sfxItemFly == null)           missing.Add("Item_Fly");
             if (_sfxLevelupBtn == null)        missing.Add("Levelup_Btn");
             if (_sfxMultiplierMove == null)    missing.Add("Multiplier_Move");
@@ -495,6 +500,19 @@ namespace BalloonFlow
         public void PlayItemGet()
         {
             PlaySFX(_sfxItemGet);
+        }
+
+        /// <summary>Item_Up — UILobby.SetWinningIconMultiplierText changed-edge 1회 재생 (기존 PlayItemGet 트리거 (B)에서 교체).
+        /// (1) 클립 경로: `Assets/Resources/Sound/Effect/Item_Up.mp3`.
+        /// (2) 호출 위치: UILobby.cs:723 SetWinningIconMultiplierText changed-edge (`if (changed && AudioManager.HasInstance) AudioManager.Instance.PlayItemUp();`) — single entry point.
+        /// (3) 1회/중복-방지 가드 3중: (a) `_wsLastMultiplierText != mult` changed bool — 이전 값과 다른 값으로 갱신되는 순간만 발화, (b) `_wsHoldMultiplierTextDuringAnim` hold guard — Multiplier 연출 hold 중 메서드 진입 자체 차단, (c) Gauge/Outline 두 텍스트가 SetWinningIconMultiplierText 1회 호출 내 함께 갱신되므로 호출 1회 = SFX 1회.
+        /// (4) INC/DEC 양방향 자동 커버: `_wsLastMultiplierText != mult` 는 string 비교이므로 INC(x2→x4)/DEC(x4→x2) 둘 다 changed-edge 로 감지 — 별도 분기 불요.
+        /// (5) PlayItemGet 과의 의미 분리: PlayItemGet 은 fire-fly merge ImageIcon 펄스 트리거(UILobby.cs:1265) 전용 — 본 메서드와 시간상 분리(fire-fly + pulse + slider + multiplier slide-in + select move + hold ≈ 1.5s+ 간격) 되어 overlap/masking 없음, 두 SFX 클립도 별개.
+        /// (6) owner 출처: ProjectHub 태스크 2026-06-24 익명 사용자 피드백 — 'WS Multiple 텍스트 changed-edge SFX 를 Item_Get.mp3 에서 Item_Up.mp3 로 교체'.
+        /// 절대 SetWinningIconMultiplierText 외부(매 프레임 lambda / Update / DOTween OnUpdate) 에서 호출 금지(과거 도메인 원칙 4: 잔향 무한 중첩 회귀).</summary>
+        public void PlayItemUp()
+        {
+            PlaySFX(_sfxItemUp);
         }
 
         /// <summary>Item_Fly — 두 caller 모두에서 1회씩 재생 (coexists, NOT supersede).
