@@ -857,13 +857,7 @@ namespace BalloonFlow
                 ? anim.rewardMultiplier
                 : (anim.startMultiplier > 0 ? anim.startMultiplier : WinningStreakUI.ResolveCurrentMultiplier());
 
-            // ROLLBACK_WS_SKIP_X1_COEFF_FX_20260615: 계수가 실제로 곱해지지 않는 경우(노말 레벨 + 0/1연승 → flame +1 만)는
-            //   '계수 적용 연출'(PopupWinningStreakReward) 을 생략한다. 난이도배수 미적용(!showBadge) AND 연승배수 ≤1 이면
-            //   곱셈 카운팅이 x1 무의미 연출이라 노출하지 않음 — 로비 flame 비행 FX 만으로 +1 이 게이지에 반영됨.
-            //   롤백: 아래 if 블록 제거.
-            if (!showBadge && streakMult <= 1)
-                yield break;
-
+            // [WS 0단계 +1 노출 정책 2026-06-24] 이전 ROLLBACK_WS_SKIP_X1_COEFF_FX_20260615 가드 제거 — +1 보상(노말+0/1연승)도 PopupWinningStreakReward 노출 (디자이너 지시). PopupWinningStreakReward 가 +1 케이스에서 SetBaseAmountText('+1')·PlayCoefficientOverlapFx skip·정상 IsFinished 종료로 안전.
             var popup = PopupWinningStreakReward.Play(diffMult, streakMult, anim.gainedPoints, showBadge, anim.clearedDifficulty);
             // ROLLBACK_WS_REWARD_POPUP_HANG_FIX_20260618: IsFinished 가 어떤 이유로든(코루틴 미시작/예외) 안 떨어져도
             //   최대 maxWait 초 후 강제 종료 — 이 while 이 영구 대기하면 상위 deferred 코루틴이 finally 에 못 가
