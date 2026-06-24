@@ -83,7 +83,7 @@ namespace BalloonFlow
         [SerializeField] private AudioClip _sfxItemGet;
 
         [Header("[SFX — FXItem Fly (2026-06-24 사용자 피드백)]")]
-        [Tooltip("Item_Fly — ItemFlyEffect.Play() 진입부에서 1회 재생. 호출 위치: ItemFlyEffect.Play 진입부(early-return 통과 직후, BeginSession 직전). PlayOneShot 이라 session 1회당 1회 보장 — 내부 코루틴 spawn N개와 무관하게 1회. 절대 RunFly/Fly 코루틴의 매 프레임 lambda 에 넣지 말 것(잔향 중첩 회귀). 새 Play() 호출 = 새 session = 새 SFX 1회 (사용자 요구 '연출마다 1회 재생' 자동 충족). owner: ProjectHub 태스크 2026-06-24 익명 사용자 피드백.")]
+        [Tooltip("Item_Fly — 두 caller 모두에서 1회씩 재생 (coexists, NOT supersede). (A) ItemFlyEffect.Play() 진입부 1회(early-return guard 통과 직후, BeginSession 직전) — UX 보상 아이템 비행. (B) UILobby.PlayWsFireFlyAndPulse 코루틴 내 _wsLobbyFxSequence 초기화 직후, fly 모션 트윈 Append 직전 1회(if (flyPrefab && parent && target) 가드 통과 후) — WinningStreak FXItem_WinningStreak_Fly 비행. 두 caller 모두 PlayOneShot 채널, session 1회당 1회 보장 — 내부 코루틴/트윈 N개 spawn 와 무관. 절대 RunFly/Fly/DOTween OnUpdate 매 프레임 lambda 안에서 호출 금지(과거 도메인 원칙 4: 잔향 무한 중첩 회귀). owner 출처: ProjectHub 태스크 2026-06-24 익명 사용자 피드백 — FXItem 연출 시작 1회, 이동 중 비반복, 새 연출마다 1회.")]
         [SerializeField] private AudioClip _sfxItemFly;
 
         [Header("[SFX — Lobby PlayButton ButtonEffect (2026-06-24 사용자 피드백)]")]
@@ -497,12 +497,13 @@ namespace BalloonFlow
             PlaySFX(_sfxItemGet);
         }
 
-        /// <summary>Item_Fly — ItemFlyEffect.Play() 진입부 1회 재생.
-        /// 호출 위치: ItemFlyEffect.Play 진입부(count>0 + UIManager.HasInstance + parent!=null 통과 직후, BeginSession 직전).
-        /// PlayOneShot 이라 session 1회당 1회 보장 — 내부 RunFly/Fly 코루틴이 N개 spawn 하더라도 entry point 1회 호출이므로 항상 1회.
-        /// 새 Play() 호출 = 새 session = 새 SFX 1회 (사용자 요구 '연출마다 1회 재생' 자동 충족, '이동 중 반복 재생되지 않도록' 자동 충족).
+        /// <summary>Item_Fly — 두 caller 모두에서 1회씩 재생 (coexists, NOT supersede).
+        /// (A) ItemFlyEffect.Play() 진입부 1회(count>0 + UIManager.HasInstance + parent!=null 통과 직후, BeginSession 직전) — UX 보상 아이템 비행.
+        /// (B) UILobby.PlayWsFireFlyAndPulse 코루틴 내 _wsLobbyFxSequence 초기화 직후, fly 모션 트윈 Append 직전 1회(if (flyPrefab && parent && target) 가드 통과 후) — WinningStreak FXItem_WinningStreak_Fly 비행.
+        /// 두 caller 모두 PlayOneShot 채널, session 1회당 1회 보장 — 내부 RunFly/Fly 코루틴/DOTween Sequence Append 가 N개 spawn 하더라도 entry point 1회 호출이므로 항상 1회.
+        /// 새 Play()/새 PlayWsFireFlyAndPulse 호출 = 새 session = 새 SFX 1회 (사용자 요구 '연출마다 1회 재생' 자동 충족, '이동 중 비반복' 자동 충족).
         /// owner 출처: ProjectHub 태스크 2026-06-24 익명 사용자 피드백 — 'FXItem 연출 시작 시 1회, 이동 중 비반복, 새 연출마다 1회'.
-        /// 절대 RunFly/Fly 코루틴의 OnUpdate/매 프레임 lambda 안에서 호출 금지(과거 도메인 원칙 4: 잔향 무한 중첩 회귀).</summary>
+        /// 절대 RunFly/Fly 코루틴/DOTween OnUpdate/OnComplete 매 프레임 lambda 안에서 호출 금지(과거 도메인 원칙 4: 잔향 무한 중첩 회귀).</summary>
         public void PlayItemFly()
         {
             PlaySFX(_sfxItemFly);

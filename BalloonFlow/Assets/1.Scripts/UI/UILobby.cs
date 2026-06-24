@@ -1227,6 +1227,8 @@ namespace BalloonFlow
 
                 _wsLobbyFxSequence?.Kill();
                 _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
+                // [Item_Fly SFX 2026-06-24 익명 사용자 피드백] FXItem_WinningStreak_Fly 가 화면 중앙→target 으로 이동을 시작하는 순간 1회 발화. 위치 근거: (1) `if (flyPrefab != null && parent != null && target != null)` 가드 통과 직후 → 실제 fly 가 존재할 때만 발화(도메인 원칙: guard → SFX → 연출). (2) DOTween Sequence 가 호출당 1회 생성되므로 sequence 초기화 직후 = 모션 시작 직전 자연 1회. (3) Destroy(fly) 직전의 `yield return _wsLobbyFxSequence.WaitForCompletion();` 와 분리되어 종료음 아닌 시작음으로 명확. (4) PlayWsFireFlyAndPulse 자체가 PlayWinningStreakLobbyFx(UILobby.cs:968) 진입당 1회 호출되므로 '동일 연출 재발생 시 연출마다 1회 재생' 자동 충족. (5) PlayOneShot 채널이라 이동 중 매 프레임/파티클 단위 재반복 불가. 절대 DOTween OnUpdate/OnComplete 람다·flyRt 트윈 콜백 안에 넣지 말 것(과거 도메인 원칙 4: 잔향 무한 중첩 회귀).
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayItemFly();
                 if (flyRt != null)
                 {
                     flyRt.anchorMin = flyRt.anchorMax = new Vector2(0.5f, 0.5f);
