@@ -148,8 +148,10 @@ namespace BalloonFlow
                     Fly(item, rt, img, from, scatterPos, mid, to, dur, () =>
                     {
                         landed++;
-                        // [2026-06-24 사용자 피드백] Item_Get 단발 — FXItem 개별 도착마다 1회. per-arrival Fly() 완료 콜백 = 자연 1회(OnUpdate 람다 아님). HasInstance 가드로 Scene 전환/도메인 리로드 NRE 방지. onEachLand 이전 호출 = 사용자 콜백이 SFX 차단/지연시키지 않도록 격리.
-                        if (AudioManager.HasInstance) AudioManager.Instance.PlayItemLand();
+                        // [2026-06-24 사용자 피드백] FXItem count>=2 일 때 Item_Get 중복 재생 금지.
+                        // 도착 연출 전체 기준 1회만 재생 — 첫 도착(landed==1) 콜백에서만 발화.
+                        // 호출자 3곳(PurchaseRewardEffect/UIHud/PopupMoreLive) 모두 이 진입점을 경유.
+                        if (landed == 1 && AudioManager.HasInstance) AudioManager.Instance.PlayItemLand();
                         onEachLand?.Invoke();
                         if (landed >= count) onAllComplete?.Invoke();
                     }));
