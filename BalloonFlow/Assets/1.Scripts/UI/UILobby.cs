@@ -1249,12 +1249,6 @@ namespace BalloonFlow
 
             // ROLLBACK_WS_FXFIRE_ON_MERGE_PULSE_20260618:
             // Show/replay FXFire at the merge moment, while WinningIcon scales up.
-            // [WS WinningIcon FXFire SFX 2026-06-24] PopupWinningStreakReward 종료 → flame merge moment 에서 FXFire 가 '비활성→활성' 으로 전이하는 edge 에서만 Item_Get.mp3 1회 재생.
-            // 가드 사유(사용자 명시 요구): '파티클 재생 중 반복 X / 꺼졌다 다시 켜지면 새 1회'.
-            // _wsFxFire.activeSelf 가 false 일 때만 트리거 → 동일 코루틴이 재호출되어도 이미 active 면 무시(잔향 중첩 차단). 다음 DisableWinningStreakFxOnEnter() 사이클 후 재진입은 다시 inactive→active 가 되어 정상 1회.
-            // owner 출처: 본 ProjectHub 태스크 [사용자 추가 지시] 2026-06-24 — 'FXFire 활성화되는 순간 1회 재생, 켜진 동안 반복 X, 꺼졌다 다시 켜지면 1회 재생'.
-            if ((_wsFxFire == null || !_wsFxFire.activeSelf) && AudioManager.HasInstance)
-                AudioManager.Instance.PlayItemGet();
             SetWinningStreakFxActive(true);
 
             // 도착 후 target(ImageIcon) 펄스 — 커졌다 원래대로.
@@ -1263,6 +1257,12 @@ namespace BalloonFlow
                 Vector3 baseScale = target.localScale;
                 _wsLobbyFxSequence?.Kill();
                 _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
+                // [WS ImageIcon 스케일 확대 SFX 2026-06-24 rework] 사용자 피드백: ImageIcon 의 스케일이 커지기 시작하는 시점에 Item_Get.mp3 1회 재생.
+                // 호출 위치: target.DOScale(baseScale * 1.25f, ...) 시퀀스 Append 직전 — 펄스 시각 효과의 '시작' 순간과 동기.
+                // 1회 보장 근거: (1) 본 호출이 코루틴 본문 1회 위치 (매 프레임 lambda/DOTween OnUpdate 콜백 외부) → 펄스 시퀀스 1회 = SFX 1회. (2) PlaySFX(PlayOneShot) 으로 호출당 1회. (3) 코루틴은 _wsLobbyFxCoroutine != null 가드로 동시 재진입 차단 → '진행 중 반복 X' 자동 충족. (4) 다음 PlayWsFireFlyAndPulse 진입(스케일 확대 연출 재발생) 시 다시 1회 재생 → 사용자 요구 '연출마다 1회' 충족.
+                // edge-detect 가드(_wsFxFire.activeSelf) 의도적 비채택: 사용자 명세는 'ImageIcon 스케일 확대 연출마다 1회'이며 FXFire 활성 상태와 무관 — 가드 추가 시 FXFire 가 켜진 채로 코루틴이 재진입되는 케이스에서 사용자 요구를 위반함.
+                // owner 출처: ProjectHub 태스크 [사용자 추가 지시 2026-06-24] — 'ImageIcon 의 스케일이 커지기 시작하는 시점에 1회 재생 / 스케일 애니메이션 진행 중 반복 재생되지 않도록 처리 / 스케일 확대 연출이 다시 발생하면 해당 연출마다 1회 재생'.
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayItemGet();
                 _wsLobbyFxSequence.Append(target.DOScale(baseScale * 1.25f, WS_FIRE_PULSE_DURATION).SetEase(Ease.OutBack));
                 _wsLobbyFxSequence.Append(target.DOScale(baseScale, WS_FIRE_PULSE_DURATION).SetEase(Ease.OutCubic));
                 yield return _wsLobbyFxSequence.WaitForCompletion();
