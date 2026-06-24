@@ -573,6 +573,16 @@ namespace BalloonFlow
             }
         }
 
+        /// <summary>Gold_Get (단발) — FXItem(ItemFlyEffect) 개별 아이템이 목적지에 도착할 때 1회 재생.
+        /// 호출 위치: ItemFlyEffect.RunFly() per-item Fly() 완료 콜백 (landed++ 직후, onEachLand 직전) — per-arrival 자연 1회.
+        /// PlayGoldGet() 의 3x 시퀀스(CoinFlyEffect 전용)와는 명세상 별개 — owner 2026-06-24: FXItem 도착은 단발.
+        /// 절대 RunFly/Fly OnUpdate/매 프레임 lambda 안에서 호출 금지(잔향 무한 중첩 회귀 차단).</summary>
+        public void PlayItemLand()
+        {
+            if (_sfxGoldGet == null || !_sfxEnabled) return;
+            PlaySFX(_sfxGoldGet);
+        }
+
         #endregion
 
         #region Event Handlers
