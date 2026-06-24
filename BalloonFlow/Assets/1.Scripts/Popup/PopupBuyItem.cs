@@ -23,6 +23,10 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtItemAmountOutline;
         [SerializeField] private TMP_Text _txtDescription;
         [SerializeField] private Image _imgInnerFrame;
+        [Header("[Item Description Frame Difficulty Sprites]")]
+        [SerializeField] private Sprite _sprInnerFrameNormal;
+        [SerializeField] private Sprite _sprInnerFrameHard;
+        [SerializeField] private Sprite _sprInnerFrameSuperHard;
 
         [Header("[Gold Display]")]
         [SerializeField] private TMP_Text _txtGold;
@@ -307,7 +311,9 @@ namespace BalloonFlow
 
             if (_frame != null)
             {
-                _frame.ApplyDifficulty(ResolveCurrentDifficulty());
+                DifficultyPurpose diff = ResolveCurrentDifficulty();
+                _frame.ApplyDifficulty(diff);
+                ApplyInnerFrameDifficulty(diff);
                 _frame.SetTitle(title);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
                 _frame.SetSingleButtonText(LocalizationService.Get("popup.txtbtnbuy"));
@@ -357,7 +363,9 @@ namespace BalloonFlow
 
             if (_frame != null)
             {
-                _frame.ApplyDifficulty(ResolveCurrentDifficulty());
+                DifficultyPurpose diff = ResolveCurrentDifficulty();
+                _frame.ApplyDifficulty(diff);
+                ApplyInnerFrameDifficulty(diff);
                 _frame.SetTitle(title);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
                 _frame.SetSingleButtonText(LocalizationService.Get("ui.common.cliam"));
@@ -444,6 +452,38 @@ namespace BalloonFlow
             return levelId > 0
                 ? LevelManager.Instance.GetLevelDifficulty(levelId)
                 : DifficultyPurpose.Normal;
+        }
+
+        private void ApplyInnerFrameDifficulty(DifficultyPurpose difficulty)
+        {
+            // ROLLBACK_BUYITEM_INNER_FRAME_DIFFICULTY_20260624:
+            // Popup frame was difficulty-aware, but the item description inner panel kept the
+            // prefab color. Match PopupResult-style difficulty colors for the item info box too.
+            EnsureInnerFrameSprites();
+            if (_imgInnerFrame == null) return;
+
+            Sprite target = difficulty switch
+            {
+                DifficultyPurpose.Hard => _sprInnerFrameHard,
+                DifficultyPurpose.SuperHard => _sprInnerFrameSuperHard,
+                _ => _sprInnerFrameNormal
+            };
+
+            if (target != null)
+            {
+                _imgInnerFrame.sprite = target;
+                _imgInnerFrame.color = Color.white;
+                _imgInnerFrame.enabled = true;
+            }
+        }
+
+        private void EnsureInnerFrameSprites()
+        {
+            if (!ResourceManager.HasInstance) return;
+            var rm = ResourceManager.Instance;
+            _sprInnerFrameNormal = rm.UISpriteOr(Const.SPR_FRAMEITEMNORMAL, _sprInnerFrameNormal);
+            _sprInnerFrameHard = rm.UISpriteOr(Const.SPR_FRAMEITEMHARD, _sprInnerFrameHard);
+            _sprInnerFrameSuperHard = rm.UISpriteOr(Const.SPR_FRAMEITEMSUPERHARD, _sprInnerFrameSuperHard);
         }
 
         private static void SetNumericTextsInChildren(GameObject root, string value, bool replaceEmpty)

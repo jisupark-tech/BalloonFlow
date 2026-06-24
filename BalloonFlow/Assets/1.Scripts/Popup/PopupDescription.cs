@@ -84,6 +84,14 @@ namespace BalloonFlow
                 _frame.SetTitle(title);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
                 _frame.SetSingleButtonText(buttonText);
+                if (clearOverlayCoins)
+                {
+                    // ROLLBACK_QUITGAME_BUTTON_RED_OUTLINE_20260624:
+                    // BackButtonRouter's Quit Game popup uses PopupDescription, so apply the red
+                    // button outline here instead of relying on PopupQuit-specific styling.
+                    Material redOutline = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_RED_OUTLINE);
+                    _frame.OverrideSingleButtonOutlineMaterial(redOutline, UIOutlineStyle.ForShopBundle(true));
+                }
                 _frame.ShowExitButton(true);
             }
 

@@ -16,6 +16,8 @@ namespace BalloonFlow
         [Header("[Loop SFX Source]")]
         [Tooltip("루프 재생용 별도 AudioSource. _sfxSource(PlayOneShot, 일회성) / _popSource(풍선 팝 피치 콤보)와 분리되어 FinishLogo 불꽃 등 장시간 SFX 루프를 안전하게 재생.")]
         [SerializeField] private AudioSource _loopSfxSource;
+        [Tooltip("Zap_Line 전용 루프 채널. 타겟/라인마다 PlayOneShot이 겹치던 문제를 막고 Zap 라인이 보이는 동안만 1개 루프로 재생.")]
+        [SerializeField] private AudioSource _zapLineLoopSource;
 
         [Tooltip("FinishLogo congratuation 전용 AudioSource. _sfxSource(PlayOneShot 일회성, StopAllSfx 대상) 와 분리되어 BeginResultIntroSfxLock 의 StopAllSfx + _resultIntroSfxLock 화이트리스트 게이트 양쪽 모두 우회. 사용자 피드백 2026-06-23: congratuation 재생 중간 강제 정지 금지.")]
         [SerializeField] private AudioSource _finishLogoSfxSource;
@@ -152,6 +154,15 @@ namespace BalloonFlow
             if (_sfxSource != null && _sfxSource.outputAudioMixerGroup != null)
                 _loopSfxSource.outputAudioMixerGroup = _sfxSource.outputAudioMixerGroup;
 
+            if (_zapLineLoopSource == null)
+            {
+                _zapLineLoopSource = gameObject.AddComponent<AudioSource>();
+            }
+            _zapLineLoopSource.loop = true;
+            _zapLineLoopSource.playOnAwake = false;
+            if (_sfxSource != null && _sfxSource.outputAudioMixerGroup != null)
+                _zapLineLoopSource.outputAudioMixerGroup = _sfxSource.outputAudioMixerGroup;
+
             if (_finishLogoSfxSource == null)
             {
                 _finishLogoSfxSource = gameObject.AddComponent<AudioSource>();
@@ -200,7 +211,10 @@ namespace BalloonFlow
                 ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Holder_FrozenBreak")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Onedestroy");
             if (_sfxItemHand == null)     _sfxItemHand     = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Onedestroy");
-            if (_sfxItemShuffle == null)  _sfxItemShuffle  = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Cross");
+            // ROLLBACK_SHUFFLE_SFX_SUFFLE_20260624:
+            // User-provided clip name is intentionally "Suffle" under Resources/Sound/Effect.
+            if (_sfxItemShuffle == null)  _sfxItemShuffle  = Resources.Load<AudioClip>("Sound/Effect/Suffle")
+                ?? Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Cross");
             if (_sfxItemZap == null)      _sfxItemZap      = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_ColorBomb");
             // [2026-06-23] Zap_Appear / Zap_Line — ItemZap 등장 + FxZapLine 타겟 이동 SFX.
             // 폴백 체인 없이 단독 로드: 다른 클립으로 대체되면 의도 오염 (Zap 전용 SFX 추가).
@@ -263,7 +277,7 @@ namespace BalloonFlow
             if (_sfxHolderReveal == null)      missing.Add("Stage_Holder_Reveal");
             if (_sfxHolderFrozenBreak == null) missing.Add("icebreak");
             if (_sfxItemHand == null)          missing.Add("Stage_ItemUse_Onedestroy");
-            if (_sfxItemShuffle == null)       missing.Add("Stage_ItemUse_Cross");
+            if (_sfxItemShuffle == null)       missing.Add("Suffle");
             if (_sfxItemZap == null)           missing.Add("Stage_ItemUse_ColorBomb");
             if (_sfxZapAppear == null)         missing.Add("Zap_Appear");
             if (_sfxZapLine == null)           missing.Add("Zap_Line");
@@ -608,12 +622,34 @@ namespace BalloonFlow
             PlaySFX(_sfxZapAppear);
         }
 
+        public void PlayItemShuffle()
+        {
+            PlaySFX(_sfxItemShuffle);
+        }
+
         /// <summary>Zap_Line — FxZapLine 이 새 타겟으로 이동할 때마다 1회 재생.
         /// 호출 위치: BoosterExecutor.PlayColorRemoveSequenceBody (ConfigureZapLineFan 호출 직후, 타겟 루프 매 iteration).
         /// 추가 cooldown 없음 — stepDelay 자체가 최소 간격, PlayOneShot 이라 짧은 잔향만 중첩.</summary>
         public void PlayZapLine()
         {
             PlaySFX(_sfxZapLine);
+        }
+
+        public void PlayZapLineLoop()
+        {
+            if (_zapLineLoopSource == null || _sfxZapLine == null || !_sfxEnabled) return;
+            if (_zapLineLoopSource.isPlaying && _zapLineLoopSource.clip == _sfxZapLine) return;
+            _zapLineLoopSource.clip = _sfxZapLine;
+            _zapLineLoopSource.loop = true;
+            _zapLineLoopSource.Play();
+        }
+
+        public void StopZapLineLoop()
+        {
+            if (_zapLineLoopSource == null) return;
+            if (!_zapLineLoopSource.isPlaying && _zapLineLoopSource.clip == null) return;
+            _zapLineLoopSource.Stop();
+            _zapLineLoopSource.clip = null;
         }
 
         /// <summary>Gold_Appear — FXGold(CoinFlyEffect) 등장 시 1회 재생.
@@ -809,6 +845,8 @@ namespace BalloonFlow
 
                 if (_bgmSource != null)
                     _bgmSource.mute = !_bgmEnabled;
+                if (!_sfxEnabled)
+                    StopZapLineLoop();
             }
         }
 
@@ -842,6 +880,7 @@ namespace BalloonFlow
         {
             if (_sfxSource != null) _sfxSource.Stop();
             if (_popSource != null) _popSource.Stop();
+            StopZapLineLoop();
         }
 
         #endregion

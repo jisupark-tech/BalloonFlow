@@ -140,6 +140,7 @@ namespace BalloonFlow
         private const int RAIL_WARNING_TUTORIAL_ID = 1000;
         private const string PREFS_RAIL_WARNING_SHOWN = "BF_RailWarningTutorialShown";
         private const float RAIL_WARNING_TUTORIAL_OCCUPANCY = 0.8f;
+        private const float RAIL_WARNING_PAUSE_DELAY = 0.35f;
 
         #endregion
 
@@ -162,6 +163,7 @@ namespace BalloonFlow
         private bool _loadedTutorialCatalog;
         private Coroutine _startTutorialForLevelCoroutine;
         private bool _pausedForRailWarningTutorial;
+        private Coroutine _railWarningPauseCoroutine;
 
         #endregion
 
@@ -952,6 +954,11 @@ namespace BalloonFlow
         private void ResumeRailWarningPauseIfNeeded(int tutorialId)
         {
             if (tutorialId != RAIL_WARNING_TUTORIAL_ID) return;
+            if (_railWarningPauseCoroutine != null)
+            {
+                StopCoroutine(_railWarningPauseCoroutine);
+                _railWarningPauseCoroutine = null;
+            }
             if (!_pausedForRailWarningTutorial) return;
 
             _pausedForRailWarningTutorial = false;
@@ -1048,13 +1055,30 @@ namespace BalloonFlow
                 _railWarningConfig = BuildRailWarningConfigFromCatalog() ?? BuildRailWarningConfigFallback();
             }
 
-            if (!_pausedForRailWarningTutorial)
-            {
-                PauseManager.Pause();
-                _pausedForRailWarningTutorial = true;
-            }
-
             StartTutorial(RAIL_WARNING_TUTORIAL_ID);
+            ScheduleRailWarningPause();
+        }
+
+        private void ScheduleRailWarningPause()
+        {
+            // ROLLBACK_RAIL_WARNING_PAUSE_AFTER_CURTAIN_20260624:
+            // Let the tutorial dim/cutout curtain finish its entrance before pausing the rail.
+            // Immediate pause freezes the board while the dark curtain is still moving in.
+            if (_railWarningPauseCoroutine != null)
+                StopCoroutine(_railWarningPauseCoroutine);
+            _railWarningPauseCoroutine = StartCoroutine(PauseRailWarningAfterDelay());
+        }
+
+        private IEnumerator PauseRailWarningAfterDelay()
+        {
+            yield return new WaitForSecondsRealtime(RAIL_WARNING_PAUSE_DELAY);
+            _railWarningPauseCoroutine = null;
+            if (!_isTutorialActive || _activeTutorial == null || _activeTutorial.tutorialId != RAIL_WARNING_TUTORIAL_ID)
+                yield break;
+            if (_pausedForRailWarningTutorial) yield break;
+
+            PauseManager.Pause();
+            _pausedForRailWarningTutorial = true;
         }
 
         /// <summary>

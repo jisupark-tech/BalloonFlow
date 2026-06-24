@@ -230,6 +230,10 @@ namespace BalloonFlow
         // → SelectFrame move → TextGauge/FXFire → multiplier out.)
         // SUPERSEDES [2026-06-22 직전 결정: 슬라이드-아웃 완전 종료 후 FX] — 본 태스크 사용자 추가 지시 (2026-06-22, hermes task 6a34e951)로 변경.
         private bool _wsHoldMultiplierTextDuringAnim;
+        // ROLLBACK_WS_MULTIPLIER_VISIBLE_HOLD_20260624:
+        // Keep the banner SelectFrame/TextYellow on the animation start multiplier while
+        // persisted WinningStreak state has already advanced to the next multiplier.
+        private int _wsHeldMultiplierDuringAnim;
         private bool _wsTextsResolved;
         private Coroutine _wsLobbyFxCoroutine;
         // [WS 슬라이드-OUT 동시 시작 2026-06-23] FXGold(PlayWinningStreakLevelClearGoldFx)를 LobbyFx slide-out 직전에 병렬 StartCoroutine 으로 띄운 핸들.
@@ -699,7 +703,7 @@ namespace BalloonFlow
         private void RefreshWsMultiplierDisplay()
         {
             ResolveWsTexts();
-            int curMultiplier = WinningStreakUI.ResolveCurrentMultiplier();
+            int curMultiplier = ResolveWsVisibleMultiplier();
             string mult = $"x{curMultiplier}";
             SetWinningIconMultiplierText(mult);
             ResolveWsFxRefs();
@@ -707,7 +711,45 @@ namespace BalloonFlow
                 WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, curMultiplier, curMultiplier);
         }
 
+        private int ResolveWsVisibleMultiplier()
+        {
+            if (_wsHoldMultiplierTextDuringAnim && _wsHeldMultiplierDuringAnim > 0)
+                return _wsHeldMultiplierDuringAnim;
+            if (WinningStreakManager.HasInstance
+                && WinningStreakManager.Instance.TryPeekPendingLobbyAnimation(out var pending)
+                && pending != null
+                && pending.startMultiplier > 0)
+                return pending.startMultiplier;
+            return WinningStreakUI.ResolveCurrentMultiplier();
+        }
+
+        private void HoldWsVisibleMultiplier(int multiplier)
+        {
+            _wsHeldMultiplierDuringAnim = Mathf.Max(1, multiplier);
+            _wsHoldMultiplierTextDuringAnim = true;
+            SeedWsMultiplierDisplayWithoutFx(_wsHeldMultiplierDuringAnim);
+        }
+
+        private void ReleaseWsVisibleMultiplierHold()
+        {
+            _wsHoldMultiplierTextDuringAnim = false;
+            _wsHeldMultiplierDuringAnim = 0;
+        }
+
         // 배수 텍스트 이전 값과 달라질 때마다 1회 발화.
+        private void SeedWsMultiplierDisplayWithoutFx(int multiplier)
+        {
+            ResolveWsTexts();
+            int safeMultiplier = Mathf.Max(1, multiplier);
+            string mult = $"x{safeMultiplier}";
+            if (_wsTxtGauge != null) _wsTxtGauge.text = mult;
+            if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = mult;
+            _wsLastMultiplierText = mult;
+            ResolveWsFxRefs();
+            if (_wsMultiplier != null)
+                WinningStreakUI.PlayLobbyMultiplierSelect(_wsMultiplier, safeMultiplier, safeMultiplier);
+        }
+
         private void SetWinningIconMultiplierText(string mult)
         {
             if (_wsHoldMultiplierTextDuringAnim) return; // Multiplier 연출 중에는 텍스트/FXFire 모두 보류
@@ -798,6 +840,8 @@ namespace BalloonFlow
                 var mgr = WinningStreakManager.Instance;
                 while (mgr.TryDequeuePendingLobbyAnimation(out var anim))
                 {
+                    if (anim != null && anim.startMultiplier > 0)
+                        HoldWsVisibleMultiplier(anim.startMultiplier);
                     // [WS 0단계 2026-06-12] 로비 연출 앞에 Dim 보상 팝업(연승 수치 상승) 먼저 재생 — 승리 복귀에서만.
                     yield return PlayWinningStreakRewardPopup(anim);
                     yield return PlayWinningStreakLobbyFx(anim);
@@ -838,7 +882,7 @@ namespace BalloonFlow
                     _wsCoreFxReleasedFired = true;
                     OnWinningStreakCoreFxReleased?.Invoke();
                 }
-                _wsHoldMultiplierTextDuringAnim = false;
+                ReleaseWsVisibleMultiplierHold();
                 _wsLobbyFxCoroutine = null;
             }
         }
@@ -890,8 +934,12 @@ namespace BalloonFlow
             if (_wsTxtGauge != null) _wsTxtGauge.text = preFromText;
             if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = preFromText;
             _wsLastMultiplierText = preFromText;
-            _wsHoldMultiplierTextDuringAnim = true;
-            if (_wsMultiplier == null) yield break;
+            HoldWsVisibleMultiplier(fromMultiplier);
+            if (_wsMultiplier == null)
+            {
+                ReleaseWsVisibleMultiplierHold();
+                yield break;
+            }
             if (!_wsMultiplier.gameObject.activeSelf)
                 _wsMultiplier.gameObject.SetActive(true);
 
@@ -906,7 +954,7 @@ namespace BalloonFlow
             // _wsMultiplier.DOPunchScale(new Vector3(-0.18f, -0.18f, 0f), 0.4f, 8, 0.7f).SetUpdate(true);
 
             yield return new WaitForSecondsRealtime(WinningStreakUI.MULTIPLIER_SELECT_MOVE_DURATION);
-            _wsHoldMultiplierTextDuringAnim = false;
+            ReleaseWsVisibleMultiplierHold();
             RefreshWinningStreakDisplay();
             yield return new WaitForSecondsRealtime(WS_HOLD_AFTER_TEXT_FIRE_DURATION);
             yield return PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X, WS_MULTIPLIER_SLIDE_OUT_DURATION, Ease.InCubic);
@@ -925,7 +973,7 @@ namespace BalloonFlow
             if (_wsTxtGauge != null) _wsTxtGauge.text = preFromText;
             if (_wsTxtGaugeOutline != null) _wsTxtGaugeOutline.text = preFromText;
             _wsLastMultiplierText = preFromText;
-            _wsHoldMultiplierTextDuringAnim = true;
+            HoldWsVisibleMultiplier(preFromMult);
 
             ResolveWsFxRefs();
 
@@ -1051,7 +1099,7 @@ namespace BalloonFlow
                 // WHY: 기획 시퀀스(2026-06-22) — SelectFrame move(상승 0.18s / 감소 거리비례) → hold release → TextGauge/FXFire/Scale punch(0.20s) → 0.5s 노출 유지(WS_HOLD_AFTER_TEXT_FIRE_DURATION) → multiplier slide-out.
                 // SUPERSEDES 동일 일자(2026-06-22) 직전 결정 — 그 결정은 "PlayWsMultiplierSlide(HIDDEN_X) 완료 후 hold 해제 + FXFire" 였음. 본 변경의 owner 확인 출처: 본 ProjectHub 태스크의 [사용자 추가 지시] 블록 (2026-06-22) via Hermes task id 6a34e951. 핵심 조건(기획 명시): Multiplier가 먼저 사라지면 안 됨, TextGauge 숫자 갱신 후 Multiplier 슬라이드 아웃, 숫자 갱신과 동시에 FXFire 노출 — 상승/하락 모두 동일.
                 // SUPERSEDES [2026-06-22 직전 결정: 텍스트 갱신 직후 즉시 slide-out] — owner 추가 피드백: 플레이어가 새 배수 인지 못함, 0.5초 hold 추가.
-                _wsHoldMultiplierTextDuringAnim = false;
+                ReleaseWsVisibleMultiplierHold();
                 RefreshWinningStreakDisplay();
 
                 // 텍스트 갱신+FXFire+Scale punch 끝난 뒤 0.5초 노출 유지 → slide-out (인지 시간 확보, owner 2026-06-22 추가 피드백).
@@ -1081,7 +1129,7 @@ namespace BalloonFlow
             else
             {
                 // Skip case (fromMult==toMult==100): Multiplier 슬라이드 연출이 스킵돼도 hold 해제와 표시 갱신은 1회 필요.
-                _wsHoldMultiplierTextDuringAnim = false;
+                ReleaseWsVisibleMultiplierHold();
                 RefreshWinningStreakDisplay();
                 // [WS 슬라이드-OUT 동시 시작 2026-06-23] skip 분기는 Multiplier 등장/사라짐이 없으므로 '사라지기 시작 시점' 가 없음 →
                 //   RefreshDisplay 직후를 동일 트리거로 사용. (a) _wsCoreFxRunning release → PlayLobbyBtnChangeAnim 시작, (b) FXGold 병렬 StartCoroutine.

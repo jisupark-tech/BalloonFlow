@@ -119,7 +119,10 @@ namespace BalloonFlow
             }
             _bqBatch.Add(new BqEvent { name = eventName, data = data });
 
-            if (_bqBatch.Count >= BQ_BATCH_FLUSH_COUNT)
+            // [ANALYTICS_PLAYEND_FLUSH 2026-06-24] 레벨 종료(play_end)는 즉시 flush.
+            // 패배→빠른 재시도(타이머 15s/카운트 20 임계 전) 시 씬 전환되면 적재가 다음 판까지 밀리던
+            // '한 판 지연' 버그 방지. 같이 대기 중이던 play_start 도 이때 함께 전송됨.
+            if (eventName == Analytics.AnalyticsConsts.EVT_LEVEL_PLAY || _bqBatch.Count >= BQ_BATCH_FLUSH_COUNT)
                 TryFlush();
         }
 

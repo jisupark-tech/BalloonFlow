@@ -104,7 +104,7 @@ namespace BalloonFlow
             {
                 if (_lobby.BtnPlay != null) _lobby.BtnPlay.onClick.RemoveListener(OnPlayClicked);
                 if (_lobby.BtnGoldPlus != null) _lobby.BtnGoldPlus.onClick.RemoveListener(OnGoToShop);
-                if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.RemoveListener(OnGoToShop);
+                if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.RemoveListener(OnLifeBarClicked);
                 if (_lobby.BtnLifeBar != null) _lobby.BtnLifeBar.onClick.RemoveListener(OnLifeBarClicked);
                 if (_lobby.BtnNoAds != null) _lobby.BtnNoAds.onClick.RemoveListener(OnNoAdsClicked);
                 if (_lobby.BtnProfilePanel != null) _lobby.BtnProfilePanel.onClick.RemoveListener(OnProfileClicked);
@@ -155,7 +155,7 @@ namespace BalloonFlow
                     if (ItemFlyEffect.IsAnyActive) _lobby.BtnPlay.interactable = false;
                 }
                 if (_lobby.BtnGoldPlus != null) _lobby.BtnGoldPlus.onClick.AddListener(OnGoToShop);
-                if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.AddListener(OnGoToShop);
+                if (_lobby.BtnLifePlus != null) _lobby.BtnLifePlus.onClick.AddListener(OnLifeBarClicked);
                 if (_lobby.BtnLifeBar != null) _lobby.BtnLifeBar.onClick.AddListener(OnLifeBarClicked);
                 if (_lobby.BtnNoAds != null) _lobby.BtnNoAds.onClick.AddListener(OnNoAdsClicked);
 

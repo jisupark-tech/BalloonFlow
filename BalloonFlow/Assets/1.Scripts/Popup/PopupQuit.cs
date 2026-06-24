@@ -18,6 +18,7 @@ namespace BalloonFlow
         private const string IMAGE_HEART_NAME = "ImageHeart";
         private const string TXT_TITLE_KEY = "popup.txttitle.settingquit";
         private const string TXT_DESC_LOSE_LIFE_KEY = "popup.txtdescription.settingquit";
+        private const string TXT_DESC_MULTIPLIER_KEY = "popup.txtdescription.settingquit.multiplier";
         private const string TXT_DESC_INFINITE_HEART_KEY = "popup.txtdescription.quit";
         private const string TXT_DESC_INFINITE_HEART_FALLBACK = "Do you really want to quit?";
 
@@ -173,7 +174,9 @@ namespace BalloonFlow
                 _loseLifeView.SetActive(false);
                 _winningStreakView.SetActive(true);
                 _currentView = QuitView.WinningStreak;
-                if (_frame != null) _frame.SetDescription($"You will lose your x{multiplier} multiplier!");
+                string description = LocalizationService.GetWith(TXT_DESC_MULTIPLIER_KEY, "n", multiplier);
+                if (_frame != null) _frame.SetDescription(description);
+                ApplyCommonPanelDescriptionFallback(description);
                 WinningStreakUI.PlayMultiplierAnimationForPopupQuit(_winningStreakView, multiplier);
                 return true;
             }

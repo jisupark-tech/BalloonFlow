@@ -30,6 +30,8 @@ namespace BalloonFlow
         [SerializeField] private ScrollRect _scrollView;
         [SerializeField] private Transform _shopContent;
         [SerializeField] private Button _btnMoreProducts;
+        [Tooltip("BtnMoreProductsBlue처럼 실제 Button이 래퍼 안에 있을 때 Scroll content에서 배치/숨김 처리할 루트. 미할당 시 Button 부모로 폴백.")]
+        [SerializeField] private GameObject _btnMoreProductsRoot;
 
         [Header("[상품 아이템 프리팹]")]
         [SerializeField] private GameObject _listItemPrefab;
@@ -63,8 +65,13 @@ namespace BalloonFlow
         {
             get
             {
+                if (_btnMoreProductsRoot != null) return _btnMoreProductsRoot;
                 if (_btnMoreProducts != null && _btnMoreProducts.transform.parent != null)
+                {
+                    if (_shopContent != null && _btnMoreProducts.transform.parent == _shopContent)
+                        return _btnMoreProducts.gameObject;
                     return _btnMoreProducts.transform.parent.gameObject;
+                }
                 return _btnMoreProducts != null ? _btnMoreProducts.gameObject : null;
             }
         }
@@ -109,6 +116,7 @@ namespace BalloonFlow
                 {
                     if (moreTexts[i] != null) moreTexts[i].text = LocalizationService.Get("ui.shop.more_offers");
                 }
+                EnsureMoreButtonLayout();
             }
             else
             {
@@ -275,8 +283,69 @@ namespace BalloonFlow
             CacheScrollViewport();
 
             var moreRoot = MoreButtonRoot;
+            EnsureMoreButtonLayout();
             if (moreRoot != null && moreRoot.transform.parent == contentRoot)
                 moreRoot.transform.SetAsLastSibling();
+        }
+
+        private void EnsureMoreButtonLayout()
+        {
+            // ROLLBACK_POPUP_GOLD_SHOP_MORE_BLUE_LAYOUT_20260624:
+            // BtnMoreProductsBlue can be the actual Button under a wrapper. The Scroll content's
+            // VerticalLayoutGroup lays out the wrapper, not the child Button, so the wrapper must
+            // have a stable preferred height or the button becomes invisible in-game.
+            var root = MoreButtonRoot;
+            if (root == null) return;
+            RestoreMoreButtonGraphics(root);
+
+            if (_btnMoreProducts != null)
+            {
+                _btnMoreProducts.gameObject.SetActive(true);
+                _btnMoreProducts.interactable = true;
+                if (_btnMoreProducts.targetGraphic != null)
+                    _btnMoreProducts.targetGraphic.raycastTarget = true;
+                RestoreMoreButtonGraphics(_btnMoreProducts.gameObject);
+            }
+
+            if (_shopContent == null || root.transform.parent != _shopContent)
+                return;
+
+            var le = root.GetComponent<LayoutElement>();
+            if (le == null) le = root.AddComponent<LayoutElement>();
+            le.ignoreLayout = false;
+
+            if (le.preferredHeight <= 0f)
+            {
+                float height = 0f;
+                if (root.transform is RectTransform rootRt && rootRt.rect.height > 1f)
+                    height = rootRt.rect.height;
+                else if (_btnMoreProducts != null && _btnMoreProducts.transform is RectTransform btnRt && btnRt.rect.height > 1f)
+                    height = btnRt.rect.height;
+
+                le.preferredHeight = height > 1f ? height : 120f;
+            }
+
+            root.transform.SetAsLastSibling();
+        }
+
+        private static void RestoreMoreButtonGraphics(GameObject root)
+        {
+            // ROLLBACK_POPUP_GOLD_SHOP_MORE_GRAPHICS_20260624:
+            // Some prefab variants leave only the TMP label visible after wiring BtnMoreProductsBlue.
+            // Re-enable decorative Images under the selected button/root without touching the text.
+            if (root == null) return;
+            var images = root.GetComponentsInChildren<Image>(true);
+            for (int i = 0; i < images.Length; i++)
+            {
+                Image image = images[i];
+                if (image == null) continue;
+                image.gameObject.SetActive(true);
+                image.enabled = true;
+                Color c = image.color;
+                if (c.a <= 0.01f) c.a = 1f;
+                image.color = c;
+                image.raycastTarget = true;
+            }
         }
 
         private void CacheScrollViewport()
@@ -638,9 +707,17 @@ namespace BalloonFlow
         private void UpdateMoreButton()
         {
             var root = MoreButtonRoot;
+            EnsureMoreButtonLayout();
             bool show = !_userExpandedMore && _moreOffersAvailable;
             if (root != null && root.activeSelf != show)
                 root.SetActive(show);
+            if (show && _btnMoreProducts != null)
+            {
+                _btnMoreProducts.gameObject.SetActive(true);
+                _btnMoreProducts.interactable = true;
+                if (_btnMoreProducts.targetGraphic != null)
+                    _btnMoreProducts.targetGraphic.raycastTarget = true;
+            }
             if (root != null && root.transform.parent == _shopContent)
                 root.transform.SetAsLastSibling();
         }

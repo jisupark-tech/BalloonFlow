@@ -222,11 +222,23 @@ namespace BalloonFlow
         private bool _lifeConsumed;
         private bool _paused;
         private bool _inputDisabled;
+        private bool _failSfxPlayed;
         private Coroutine _rewardRefreshCoroutine;
 
         private void OnEnable()
         {
             EnsureGamePaused();
+            // ROLLBACK_FAIL02_BGM_OFF_FAIL_SFX_20260624:
+            // Final fail popup owns the fail sting: stop gameplay BGM and play Fail once per popup show.
+            if (AudioManager.HasInstance)
+            {
+                AudioManager.Instance.StopBGM();
+                if (!_failSfxPlayed)
+                {
+                    AudioManager.Instance.PlayPopupFail02Sfx();
+                    _failSfxPlayed = true;
+                }
+            }
             GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
 
             // PopupManager가 SetActive(true) 할 때 호출됨
@@ -266,6 +278,7 @@ namespace BalloonFlow
         private void OnDisable()
         {
             _lifeConsumed = false;
+            _failSfxPlayed = false;
             if (_rewardRefreshCoroutine != null)
             {
                 StopCoroutine(_rewardRefreshCoroutine);

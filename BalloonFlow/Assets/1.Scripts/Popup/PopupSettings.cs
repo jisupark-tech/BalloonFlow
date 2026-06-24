@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -27,6 +28,11 @@ namespace BalloonFlow
         [SerializeField] private Button _btnHaptic;
         [SerializeField] private GameObject _hapticOn;
         [SerializeField] private GameObject _hapticOff;
+
+        [Header("[Difficulty Tint Targets]")]
+        [Tooltip("Sound/Music/Haptic을 감싸는 테두리/내부 이미지. 미할당 시 각 버튼 하위에서 이름 기반으로 자동 탐색.")]
+        [SerializeField] private Image[] _difficultyTintTargets;
+        private readonly List<Image> _runtimeDifficultyTintTargets = new List<Image>(16);
 
         public Button CloseButton => _frame != null ? _frame.BtnExit : null;
         public Button HomeButton => _frame != null ? _frame.BtnHorizRed : null;
@@ -87,7 +93,9 @@ namespace BalloonFlow
             bool onboarding = !FtueGate.IsOnboardingComplete;
             if (_frame != null)
             {
-                _frame.ApplyDifficulty(ResolveCurrentDifficulty());
+                DifficultyPurpose diff = ResolveCurrentDifficulty();
+                _frame.ApplyDifficulty(diff);
+                ApplyToggleDifficultyTint(diff);
                 _frame.SetTitle("Settings");
                 if (onboarding)
                 {
@@ -158,6 +166,79 @@ namespace BalloonFlow
         {
             if (onObj != null) onObj.SetActive(isOn);
             if (offObj != null) offObj.SetActive(!isOn);
+        }
+
+        private void ApplyToggleDifficultyTint(DifficultyPurpose difficulty)
+        {
+            // ROLLBACK_SETTINGS_TOGGLE_DIFFICULTY_TINT_20260624:
+            // The popup frame already follows difficulty, but the Sound/Music/Haptic toggle
+            // frames and fills stayed at prefab colors. Tint only decorative Image targets.
+            EnsureDifficultyTintTargets();
+            Color tint = difficulty switch
+            {
+                DifficultyPurpose.Hard => new Color32(0x7D, 0x43, 0xB3, 0xFF),
+                DifficultyPurpose.SuperHard => new Color32(0xD9, 0x4B, 0x38, 0xFF),
+                _ => new Color32(0x38, 0x72, 0xD8, 0xFF)
+            };
+
+            for (int i = 0; i < _runtimeDifficultyTintTargets.Count; i++)
+            {
+                Image image = _runtimeDifficultyTintTargets[i];
+                if (image == null) continue;
+                Color c = tint;
+                c.a = image.color.a;
+                image.color = c;
+            }
+        }
+
+        private void EnsureDifficultyTintTargets()
+        {
+            _runtimeDifficultyTintTargets.Clear();
+            if (_difficultyTintTargets != null)
+            {
+                for (int i = 0; i < _difficultyTintTargets.Length; i++)
+                    AddTintTarget(_difficultyTintTargets[i]);
+            }
+
+            CollectTintTargets(_btnSound != null ? _btnSound.transform : null);
+            CollectTintTargets(_btnMusic != null ? _btnMusic.transform : null);
+            CollectTintTargets(_btnHaptic != null ? _btnHaptic.transform : null);
+        }
+
+        private void CollectTintTargets(Transform root)
+        {
+            if (root == null) return;
+            Image[] images = root.GetComponentsInChildren<Image>(true);
+            for (int i = 0; i < images.Length; i++)
+            {
+                Image image = images[i];
+                if (image == null) continue;
+                if (!ShouldTintToggleImage(image.name)) continue;
+                AddTintTarget(image);
+            }
+        }
+
+        private void AddTintTarget(Image image)
+        {
+            if (image == null || _runtimeDifficultyTintTargets.Contains(image)) return;
+            _runtimeDifficultyTintTargets.Add(image);
+        }
+
+        private static bool ShouldTintToggleImage(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            string n = name.ToLowerInvariant();
+            if (n.Contains("icon") || n.Contains("txt") || n.Contains("text")) return false;
+            return n.Contains("frame")
+                || n.Contains("border")
+                || n.Contains("bg")
+                || n.Contains("background")
+                || n.Contains("panel")
+                || n.Contains("box")
+                || n.Contains("toggle")
+                || n.Contains("button")
+                || n == "on"
+                || n == "off";
         }
 
         private static DifficultyPurpose ResolveCurrentDifficulty()

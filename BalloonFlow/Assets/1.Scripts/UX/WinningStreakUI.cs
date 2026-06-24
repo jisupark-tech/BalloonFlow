@@ -40,6 +40,15 @@ namespace BalloonFlow
         {
             if (!WinningStreakManager.HasInstance) return 1;
             var mgr = WinningStreakManager.Instance;
+            if (mgr.TryPeekPendingLobbyAnimation(out var pending)
+                && pending != null
+                && pending.startMultiplier > 0)
+            {
+                // ROLLBACK_WS_GLOBAL_PENDING_MULTIPLIER_20260624:
+                // State.currentStreak is advanced on clear, but lobby UI must keep the pre-clear
+                // multiplier until the queued lobby multiplier animation has played.
+                return pending.startMultiplier;
+            }
             // [#1] WS 미해금/미활성(서버 config 미로드 포함) 시 배수 1 → Continue/Quit 팝업의 WS view 미노출.
             // (OnLevelCleared 는 미해금에서도 currentStreak 를 올리므로 여기서 게이트하지 않으면 비-WS 유저도 연승 UI 노출됨)
             if (!mgr.IsUnlocked) return 1;

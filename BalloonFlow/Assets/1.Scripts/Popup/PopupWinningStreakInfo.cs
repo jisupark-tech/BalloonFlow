@@ -82,6 +82,11 @@ namespace BalloonFlow
         {
             if (_frame != null)
             {
+                // ROLLBACK_WS_INFO_TITLE_PURPLE_OUTLINE_20260624:
+                // Keep Winning Streak Info title outline consistent with the main Winning Streak popup.
+                Material purpleOutline = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_PURPLE_OUTLINE);
+                if (purpleOutline != null)
+                    _frame.OverrideTitleOutlineAllDifficultyMaterials(purpleOutline);
                 _frame.SetTitle("Winning Streak Info");
                 _frame.ShowExitButton(true);
             }

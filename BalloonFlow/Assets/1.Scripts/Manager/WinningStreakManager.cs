@@ -187,6 +187,24 @@ namespace BalloonFlow
             return false;
         }
 
+        public bool TryPeekPendingLobbyAnimation(out PendingLobbyAnimation animation)
+        {
+            // ROLLBACK_WS_PENDING_MULTIPLIER_PEEK_20260624:
+            // Lobby UI must display the pre-clear multiplier until the queued multiplier animation
+            // has played, even though State.currentStreak is already advanced for the next clear.
+            foreach (var pending in _pendingLobbyAnimations)
+            {
+                if (pending != null && pending.gainedPoints > 0)
+                {
+                    animation = pending;
+                    return true;
+                }
+            }
+
+            animation = null;
+            return false;
+        }
+
         // ROLLBACK_WS_LOBBY_FX_PENDING_GATE_20260618:
         // UILobby uses this to avoid arming the lobby FX coroutine when there is no actual
         // reward/fail animation to play. Without this, an auto-open info popup could keep

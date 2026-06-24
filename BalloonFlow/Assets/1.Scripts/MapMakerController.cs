@@ -40,7 +40,7 @@ namespace BalloonFlow
             new Color(106/255f,  74/255f,  48/255f),  // 15: Brown
             new Color(254/255f, 227/255f, 169/255f),  // 16: Cream
             new Color(253/255f, 183/255f, 193/255f),  // 17: Pink
-            new Color(158/255f,  61/255f,  94/255f),  // 18: Wine
+            new Color(158/255f,  61/255f,  86/255f),  // 18: Wine — #9E3D56 (.py 레퍼런스 정합, 2026-06-24)
             new Color(167/255f, 221/255f, 148/255f),  // 19: Mint
             new Color( 89/255f,  46/255f, 126/255f),  // 20: Indigo
             new Color(220/255f, 120/255f, 129/255f),  // 21: Rose
@@ -49,7 +49,7 @@ namespace BalloonFlow
             new Color(252/255f,  56/255f, 165/255f),  // 24: Magenta
             new Color(253/255f, 180/255f,  88/255f),  // 25: Amber
             new Color(137/255f,  10/255f,   8/255f),  // 26: Crimson
-            new Color(111/255f, 175/255f, 177/255f),  // 27: Sage
+            new Color(111/255f, 175/255f, 184/255f),  // 27: Sage — #6FAFB8 (.py 레퍼런스 정합, 2026-06-24)
         };
 
         private static readonly string[] COLOR_LABELS =
@@ -1771,35 +1771,16 @@ namespace BalloonFlow
                 var raw = new Texture2D(2, 2);
                 raw.LoadImage(data);
 
-                // 해상도가 낮으면 600x600 이상으로 업스케일 (NearestNeighbor)
-                const int MIN_RES = 600;
-                if (raw.width < MIN_RES || raw.height < MIN_RES)
-                {
-                    float scale = Mathf.Max((float)MIN_RES / raw.width, (float)MIN_RES / raw.height);
-                    int newW = Mathf.CeilToInt(raw.width * scale);
-                    int newH = Mathf.CeilToInt(raw.height * scale);
-
-                    var rt = RenderTexture.GetTemporary(newW, newH, 0, RenderTextureFormat.ARGB32);
-                    rt.filterMode = FilterMode.Point; // NearestNeighbor
-                    Graphics.Blit(raw, rt);
-
-                    var upscaled = new Texture2D(newW, newH, TextureFormat.RGBA32, false);
-                    upscaled.filterMode = FilterMode.Point;
-                    RenderTexture.active = rt;
-                    upscaled.ReadPixels(new Rect(0, 0, newW, newH), 0, 0);
-                    upscaled.Apply();
-                    RenderTexture.active = null;
-                    RenderTexture.ReleaseTemporary(rt);
-                    Object.Destroy(raw);
-
-                    _importedImage = upscaled;
-                    SetStatus($"Image loaded: {raw.width}x{raw.height} → upscaled to {newW}x{newH}");
-                }
-                else
-                {
-                    _importedImage = raw;
-                    SetStatus($"Image loaded: {raw.width}x{raw.height}");
-                }
+                // ROLLBACK_MAPMAKER_RAWANALYZE_20260624: 색 분석은 원본 픽셀 그대로 사용(업스케일 제거).
+                //   [버그] 기존 Graphics.Blit 업스케일은 raw 의 기본 Bilinear 필터로 경계에 "원본에 없는"
+                //   보간색을 대량 생성(예: 두더지 40x48 1031색 → 60399색) → median-cut 이 빨강/와인 클러스터를
+                //   만들어 어두운 배경이 "붉게" 스냅됨. 로컬 .py 는 원본 픽셀만 분석해 멀쩡(= 로컬↔유니티 차이의 원인).
+                //   (+ Linear 컬러스페이스면 RT/ReadPixels 감마 시프트로 가중.) _importedImage 는 GetPixel 분석
+                //   전용(표시 안 함)이고 BuildCellSourceColors 가 블록 최빈(MODE)으로 임의 크기를 처리하므로
+                //   업스케일은 불필요·유해. 원본을 그대로 분석해 .py(원본 픽셀)와 결과 일치시킴.
+                raw.filterMode = FilterMode.Point;
+                _importedImage = raw;
+                SetStatus($"Image loaded: {raw.width}x{raw.height}");
                 // 색상 스냅(문서 파이프라인)은 UpdateImagePreview 에서 일괄 수행 → 팔레트 자동 선택 포함.
 
                 // 파일명에서 그리드 크기 파싱 (예: level_101_31x36.png → 31x36)
@@ -1809,10 +1790,17 @@ namespace BalloonFlow
                 {
                     _importGridCols = int.Parse(match.Groups[1].Value);
                     _importGridRows = int.Parse(match.Groups[2].Value);
-                    if (_importGridColsInput != null) _importGridColsInput.text = _importGridCols.ToString();
-                    if (_importGridRowsInput != null) _importGridRowsInput.text = _importGridRows.ToString();
                 }
-                // 파일명에 NxM 없으면 기존 수동 세팅 유지
+                else
+                {
+                    // ROLLBACK_MAPMAKER_RAWANALYZE_20260624: 파일명에 NxM 없으면 보드=이미지 크기로 1:1
+                    //   (.py 기본 "보드 크기 변경 없음"). 셀=픽셀이라 다운샘플 없이 .py 와 동일 결과.
+                    //   필요 시 designer 가 Grid W/H 로 조정 가능. (필드 범위 4~100 클램프.)
+                    _importGridCols = Mathf.Clamp(_importedImage.width, 4, 100);
+                    _importGridRows = Mathf.Clamp(_importedImage.height, 4, 100);
+                }
+                if (_importGridColsInput != null) _importGridColsInput.text = _importGridCols.ToString();
+                if (_importGridRowsInput != null) _importGridRowsInput.text = _importGridRows.ToString();
 
                 UpdateImagePreview();
             });
@@ -1983,14 +1971,25 @@ namespace BalloonFlow
             return chosen.ToArray();
         }
 
-        private static float ColorChannel(Color c, int ch) { return ch == 0 ? c.r : ch == 1 ? c.g : c.b; }
-
-        /// <summary>레퍼런스 median-cut 양자화(고유색>CAP 일 때). 가중 평균색 + 고유색→클러스터 매핑.</summary>
+        /// <summary>공유 median-cut 양자화(고유색>CAP). 레퍼런스 bl_palette_snap_base28.median_cut_shared 와 1:1 동일.
+        /// 박스 선택 = (최장축 길이)×(박스 총 빈도), 분할 = 채널 값 중앙(midrange, Heckbert),
+        /// 정렬 = (채널 정수값, packed RGB) 전순서, 대표색 = 빈도 가중 평균을 정수(0~255)로 반올림.
+        /// ROLLBACK_MAPMAKER_SHAREDQUANT_20260624: PIL quantize 대체 — .py 와 부동소수 차이 없애려 정수 RGB로만 계산.</summary>
         private static void MedianCutQuantize(List<Color> uniqueColors, int[] uniqueWeights, int K,
             out List<Color> clusterRgb, out int[] colorToCluster)
         {
             int U = uniqueColors.Count;
             colorToCluster = new int[U];
+            // 정수 RGB(0~255) 사전 계산 — 레퍼런스(.py)와 동일 도메인. packed = 정렬 동률 분리용 전순서 키.
+            var ir = new int[U]; var ig = new int[U]; var ib = new int[U]; var packed = new int[U];
+            for (int i = 0; i < U; i++)
+            {
+                int r = Mathf.Clamp((int)(uniqueColors[i].r * 255f + 0.5f), 0, 255);
+                int g = Mathf.Clamp((int)(uniqueColors[i].g * 255f + 0.5f), 0, 255);
+                int b = Mathf.Clamp((int)(uniqueColors[i].b * 255f + 0.5f), 0, 255);
+                ir[i] = r; ig[i] = g; ib[i] = b; packed[i] = (r << 16) | (g << 8) | b;
+            }
+
             var boxes = new List<List<int>>();
             var all = new List<int>(U);
             for (int i = 0; i < U; i++) all.Add(i);
@@ -1998,35 +1997,40 @@ namespace BalloonFlow
 
             while (boxes.Count < K)
             {
-                int bestBox = -1, bestChannel = 0; float bestRange = -1f;
+                long bestP = -1; int bestBox = -1, bestChannel = 0;
                 for (int b = 0; b < boxes.Count; b++)
                 {
-                    if (boxes[b].Count < 2) continue;
-                    float minr = 1, ming = 1, minb = 1, maxr = 0, maxg = 0, maxb = 0;
-                    foreach (int idx in boxes[b])
+                    var bx = boxes[b];
+                    if (bx.Count < 2) continue;
+                    int mnr = 255, mng = 255, mnb = 255, mxr = 0, mxg = 0, mxb = 0;
+                    long tw = 0;
+                    foreach (int i in bx)
                     {
-                        Color c = uniqueColors[idx];
-                        if (c.r < minr) minr = c.r; if (c.r > maxr) maxr = c.r;
-                        if (c.g < ming) ming = c.g; if (c.g > maxg) maxg = c.g;
-                        if (c.b < minb) minb = c.b; if (c.b > maxb) maxb = c.b;
+                        if (ir[i] < mnr) mnr = ir[i]; if (ir[i] > mxr) mxr = ir[i];
+                        if (ig[i] < mng) mng = ig[i]; if (ig[i] > mxg) mxg = ig[i];
+                        if (ib[i] < mnb) mnb = ib[i]; if (ib[i] > mxb) mxb = ib[i];
+                        tw += uniqueWeights[i];
                     }
-                    float rr = maxr - minr, rg = maxg - ming, rb = maxb - minb;
-                    float mx = Mathf.Max(rr, Mathf.Max(rg, rb));
+                    int rr = mxr - mnr, rg = mxg - mng, rb = mxb - mnb;
                     int ch = (rr >= rg && rr >= rb) ? 0 : (rg >= rb ? 1 : 2);
-                    if (mx > bestRange) { bestRange = mx; bestBox = b; bestChannel = ch; }
+                    int rng = Mathf.Max(rr, Mathf.Max(rg, rb));
+                    long p = (long)rng * tw;                     // 최장축 × 총빈도
+                    if (p > bestP) { bestP = p; bestBox = b; bestChannel = ch; }
                 }
                 if (bestBox < 0) break; // 더 쪼갤 박스 없음
 
                 var box = boxes[bestBox];
                 int channel = bestChannel;
-                box.Sort((x, y) => ColorChannel(uniqueColors[x], channel).CompareTo(ColorChannel(uniqueColors[y], channel)));
-                long total = 0; foreach (int idx in box) total += uniqueWeights[idx];
-                long acc = 0; int splitAt = 1;
-                for (int i = 0; i < box.Count; i++)
+                int[] chArr = channel == 0 ? ir : channel == 1 ? ig : ib;
+                box.Sort((x, y) =>
                 {
-                    acc += uniqueWeights[box[i]];
-                    if (acc * 2 >= total) { splitAt = Mathf.Clamp(i + 1, 1, box.Count - 1); break; }
-                }
+                    int d = chArr[x].CompareTo(chArr[y]);
+                    return d != 0 ? d : packed[x].CompareTo(packed[y]);   // 전순서 → .py 안정 정렬과 동일 결과
+                });
+                float thr = (chArr[box[0]] + chArr[box[box.Count - 1]]) * 0.5f;   // 채널 값 중앙
+                int splitAt = box.Count - 1;
+                for (int i = 0; i < box.Count; i++)
+                    if (chArr[box[i]] > thr) { splitAt = Mathf.Clamp(i, 1, box.Count - 1); break; }
                 var left = box.GetRange(0, splitAt);
                 var right = box.GetRange(splitAt, box.Count - splitAt);
                 boxes[bestBox] = left;
@@ -2036,15 +2040,18 @@ namespace BalloonFlow
             clusterRgb = new List<Color>(boxes.Count);
             for (int b = 0; b < boxes.Count; b++)
             {
-                double sr = 0, sg = 0, sb = 0; long sw = 0;
-                foreach (int idx in boxes[b])
+                long sr = 0, sg = 0, sb = 0, sw = 0;
+                foreach (int i in boxes[b])
                 {
-                    int w = uniqueWeights[idx];
-                    sr += uniqueColors[idx].r * w; sg += uniqueColors[idx].g * w; sb += uniqueColors[idx].b * w; sw += w;
-                    colorToCluster[idx] = b;
+                    int w = uniqueWeights[i];
+                    sr += (long)ir[i] * w; sg += (long)ig[i] * w; sb += (long)ib[i] * w; sw += w;
+                    colorToCluster[i] = b;
                 }
                 if (sw == 0) sw = 1;
-                clusterRgb.Add(new Color((float)(sr / sw), (float)(sg / sw), (float)(sb / sw)));
+                int rr = Mathf.Clamp((int)((double)sr / sw + 0.5), 0, 255);
+                int gg = Mathf.Clamp((int)((double)sg / sw + 0.5), 0, 255);
+                int bb = Mathf.Clamp((int)((double)sb / sw + 0.5), 0, 255);
+                clusterRgb.Add(new Color(rr / 255f, gg / 255f, bb / 255f));   // 정수 반올림 → .py 와 동일
             }
         }
 

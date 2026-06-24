@@ -453,6 +453,26 @@ namespace BalloonFlow
             ApplyTitleOutline(_hasExplicitDifficulty ? _currentDifficulty : ResolveActiveDifficulty());
         }
 
+        public void OverrideTitleOutlineAllDifficultyMaterials(Material mat)
+        {
+            // ROLLBACK_WS_TITLE_PURPLE_ALL_DIFFICULTIES_20260624:
+            // Winning Streak title must stay purple even when the active level difficulty is
+            // Hard/SuperHard. Normal-only override lets difficulty materials repaint it.
+            if (mat == null) return;
+            _matTitleOutlineNormal = mat;
+            _matTitleOutlineHard = mat;
+            _matTitleOutlineSuperHard = mat;
+            ApplyTitleOutline(_hasExplicitDifficulty ? _currentDifficulty : ResolveActiveDifficulty());
+        }
+
+        public void OverrideSingleButtonOutlineMaterial(Material mat, Color fallbackColor)
+        {
+            // ROLLBACK_QUITGAME_SINGLE_RED_OUTLINE_20260624:
+            // Lobby Quit Game uses PopupDescription's single red button. Its outline should match
+            // the red button style instead of the black title/shop override colors.
+            UIOutlineStyle.ApplyMaterialOrColor(_txtBtnSingleOutline, mat, fallbackColor);
+        }
+
         private void ApplyTitleOutline(DifficultyPurpose difficulty)
         {
             Material mat = UIOutlineStyle.SelectDifficultyMaterial(
