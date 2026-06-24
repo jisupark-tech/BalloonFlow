@@ -719,8 +719,8 @@ namespace BalloonFlow
             if (changed) PlayWsMultipleFxFire();
             // [2026-06-22] 배수 텍스트 펀치 — PlayWsMultipleFxFire 와 동일 changed-edge 에서 호출 (1/1, INC+DEC 공용).
             if (changed) PlayWsMultiplierTextPunch();
-            // [WS Multiple 텍스트 변경 SFX (B) 2026-06-24 rework v2] TextGauge/Outline 값이 실제로 달라지는 changed-edge 1회 발화 — PlayWsMultipleFxFire/PlayWsMultiplierTextPunch 와 동일 가드 공유(INC+DEC 1/1, 두 텍스트 동일 변경 시 SetWinningIconMultiplierText 1회 진입이므로 중복 재생 자연 방지, _wsHoldMultiplierTextDuringAnim 가드로 애니메이션 hold 중 호출 차단). coexists with (A) PlayWsFireFlyAndPulse ImageIcon DOScale 트리거(UILobby.cs:~1260) — owner 출처: ProjectHub 태스크 6a3a4dbc 2026-06-24 익명 사용자 피드백 (직전 'supersede' 해석을 정정, BOTH 사용).
-            if (changed && AudioManager.HasInstance) AudioManager.Instance.PlayItemGet();
+            // [WS Multiple 텍스트 변경 SFX (B) 2026-06-24 rework v3, owner 출처: ProjectHub 6a3a4dbc 익명 피드백] TextGauge/Outline 값이 실제로 달라지는 changed-edge 1회 발화 — PlayWsMultipleFxFire/PlayWsMultiplierTextPunch 와 동일 가드 공유(INC+DEC 1/1, 두 텍스트 동일 변경 시 SetWinningIconMultiplierText 1회 진입이므로 중복 재생 자연 방지, _wsHoldMultiplierTextDuringAnim 가드로 애니메이션 hold 중 호출 차단). Item_Get → Item_Up 교체 (2026-06-24 rework v3, owner 출처: ProjectHub 6a3a4dbc 익명 피드백). PlayItemGet 은 line 1265 fire-fly merge 펄스 (A trigger) 전용으로 유지 — 의미 분리 명시.
+            if (changed && AudioManager.HasInstance) AudioManager.Instance.PlayItemUp();
         }
 
         private void PlayWsMultipleFxFire()
