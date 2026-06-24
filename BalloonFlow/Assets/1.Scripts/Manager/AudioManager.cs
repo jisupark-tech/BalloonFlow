@@ -90,6 +90,10 @@ namespace BalloonFlow
         [Tooltip("Levelup_Btn — UILobby PlayButton 의 'ButtonEffect' GameObject 가 활성화되는 시점에 1회 재생. 호출 위치: UILobby.PlayLobbyBtnChangeAnim 진입부(silent no-op guard 통과 직후, _animPlayBtn.Play(LOBBY_BTN_CHANGE_ANIM_NAME) 직전). LobbyBtnChange.anim 의 PlayButton/ButtonEffect.m_IsActive 키프레임이 ON 으로 토글되는 단일 경로 = PlayLobbyBtnChangeAnim 진입점이므로 1 호출 = 1 활성화 = 1 SFX 자연 보장. 동일 레벨/난이도 재호출은 PlayLobbyBtnChangeAnim 자체의 silent no-op 가드(UILobby.cs:2816-2820)가 SFX와 anim 양쪽을 함께 차단 — 별도 latch 불요. PlayOneShot 이라 호출당 1회 보장. 절대 OnLobbyBtnChangeFrameEvent / Animator OnStateUpdate / DOTween OnUpdate 람다 안에서 호출 금지(과거 도메인 원칙 4: 잔향 무한 중첩 회귀). owner 출처: ProjectHub 태스크 2026-06-24 익명 사용자 피드백 — 'ButtonEffect가 켜지는(활성화되는) 순간에 1회 재생'.")]
         [SerializeField] private AudioClip _sfxLevelupBtn;
 
+        [Header("[SFX — WinningStreak Multiplier Slide-Out (2026-06-24 사용자 피드백)]")]
+        [Tooltip("Multiplier_Move — WinningStreak Multiplier 가 원래 위치(-725, HIDDEN_X)로 돌아가기 시작하는 순간 1회 재생. 호출 위치: UILobby.PlayWsMultiplierSlide 진입부 targetX == WS_MULTIPLIER_HIDDEN_X 분기 (single-entry-point). 이 분기는 (1) 성공 경로 PlayWinningStreakLobbyFx(UILobby.cs:1085) 와 (2) 실패 경로 PlayWsMultiplierFailFx(UILobby.cs:918) 두 caller 모두 PlayWsMultiplierSlide(HIDDEN_X, ...) 로 진입하므로 caller 측 SFX 추가 없이 양쪽 자동 커버 (caller 추가/리네임에도 강건). PlayOneShot 이라 호출당 1회 보장 — DOTween Sequence Append 가 슬라이드 트윈을 호출당 1회 생성하므로 자연 1회. Skip 분기(fromMult==toMult==100, UILobby.cs:1087-1106)는 Multiplier 가 등장하지 않아 슬라이드 자체 미발생 = SFX 자연 미발화 (사용자 요구 '등장 후 들어가는 연출' 정의에 해당 안 됨). 절대 DOTween OnUpdate / Sequence OnComplete 람다 / StartCoroutine 매 프레임 lambda 안에서 호출 금지 (과거 도메인 원칙 4: 잔향 무한 중첩 회귀). owner 출처: ProjectHub 태스크 2026-06-24 익명 사용자 피드백 — 'Multiplier가 등장한 후 원래 위치로 들어가기 시작하는 시점에 1회 재생'.")]
+        [SerializeField] private AudioClip _sfxMultiplierMove;
+
         [Header("[SFX — Booster]")]
         [SerializeField] private AudioClip _sfxItemHand;
         [SerializeField] private AudioClip _sfxItemShuffle;
@@ -231,6 +235,8 @@ namespace BalloonFlow
             if (_sfxItemFly == null) _sfxItemFly = Resources.Load<AudioClip>("Sound/Effect/Item_Fly");
             // [2026-06-24] Levelup_Btn — UILobby PlayButton/ButtonEffect 활성화 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding/Item_Get/Item_Fly 패턴): 다른 클립 대체 시 의도 오염.
             if (_sfxLevelupBtn == null) _sfxLevelupBtn = Resources.Load<AudioClip>("Sound/Effect/Levelup_Btn");
+            // [2026-06-24] Multiplier_Move — UILobby.PlayWsMultiplierSlide(WS_MULTIPLIER_HIDDEN_X) 진입 1회 (성공/실패 caller 자동 커버). 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding/Item_Get/Item_Fly/Levelup_Btn 패턴): 다른 클립 대체 시 의도 오염.
+            if (_sfxMultiplierMove == null) _sfxMultiplierMove = Resources.Load<AudioClip>("Sound/Effect/Multiplier_Move");
 
 #if UNITY_EDITOR
             // Editor 전용 진단 — 폴백조차 실패해 여전히 null 인 SFX 의 '원본 명세 파일명' 을 한 줄로 보고.
@@ -268,6 +274,7 @@ namespace BalloonFlow
             if (_sfxItemGet == null)           missing.Add("Item_Get");
             if (_sfxItemFly == null)           missing.Add("Item_Fly");
             if (_sfxLevelupBtn == null)        missing.Add("Levelup_Btn");
+            if (_sfxMultiplierMove == null)    missing.Add("Multiplier_Move");
             if (missing.Count > 0)
             {
                 Debug.LogWarning($"[AudioManager] Missing SFX clips (place files under Resources/Sound/Effect/): {string.Join(", ", missing)}");
@@ -507,6 +514,17 @@ namespace BalloonFlow
         public void PlayLevelupBtn()
         {
             PlaySFX(_sfxLevelupBtn);
+        }
+
+        /// <summary>Multiplier_Move — WinningStreak Multiplier 가 원래 위치(-725, HIDDEN_X)로 돌아가기 시작하는 순간 1회 재생.
+        /// 호출 위치: UILobby.PlayWsMultiplierSlide 진입부 `targetX == WS_MULTIPLIER_HIDDEN_X` 분기 (single-entry-point).
+        /// 단일 entry point 라 (1) 성공 경로 PlayWinningStreakLobbyFx(UILobby.cs:1085) + (2) 실패 경로 PlayWsMultiplierFailFx(UILobby.cs:918) 두 caller 자동 커버 — caller 측 SFX 직접 호출 추가 금지(도메인 원칙 회귀).
+        /// 1회 보장 근거: PlayWsMultiplierSlide 가 호출당 새 DOTween Sequence 1개를 Append 하므로 트윈 시작 = SFX 1회 = 슬라이드 1회 1:1. Skip 분기(fromMult==toMult==100)는 슬라이드 자체 미발생 → SFX 자연 미발화(사용자 요구 '등장 후 들어가는 연출' 해당 X).
+        /// PlayOneShot 이라 호출당 1회 보장. 절대 DOTween OnUpdate / Sequence OnComplete 람다 / 코루틴 매 프레임 lambda 안에서 호출 금지(과거 도메인 원칙 4: 잔향 무한 중첩 회귀).
+        /// owner 출처: ProjectHub 태스크 2026-06-24 익명 사용자 피드백 — 'Multiplier가 등장한 후 원래 위치로 들어가기 시작하는 시점에 1회 재생'.</summary>
+        public void PlayMultiplierMove()
+        {
+            PlaySFX(_sfxMultiplierMove);
         }
 
         /// <summary>Zap_Appear — ItemZap 등장 시 1회 재생.

@@ -1179,9 +1179,11 @@ namespace BalloonFlow
         }
 
         /// <summary>Multiplier 를 지정 X 로 슬라이드(anchoredPosition.x 트윈). 미할당 시 즉시 종료.
-        /// [2026-06-22 추가] overshootOrAmplitude 기본 1f — OutBack/Elastic 한정으로 의미. 호출측이 명시할 때만 약화.</summary>
+        /// [2026-06-22 추가] overshootOrAmplitude 기본 1f — OutBack/Elastic 한정으로 의미. 호출측이 명시할 때만 약화.
+        /// [2026-06-24 사용자 피드백] targetX==HIDDEN_X(슬라이드 아웃 = Multiplier가 원래 위치로 돌아가는 순간) 분기에서 single-entry-point으로 Multiplier_Move SFX 1회 재생 — 성공(L1085)/실패(L918) 두 caller 자동 커버.</summary>
         private IEnumerator PlayWsMultiplierSlide(float targetX, float duration, Ease ease, float overshootOrAmplitude = 1f)
         {
+            if (Mathf.Approximately(targetX, WS_MULTIPLIER_HIDDEN_X) && AudioManager.HasInstance) AudioManager.Instance.PlayMultiplierMove();
             if (_wsMultiplier == null) yield break;
             _wsLobbyFxSequence?.Kill();
             _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
