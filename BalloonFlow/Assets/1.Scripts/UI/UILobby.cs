@@ -2046,10 +2046,6 @@ namespace BalloonFlow
         /// </summary>
         public void PlayRailEnterAnimation()
         {
-            // [2026-06-23] Rail 이동 시작 SFX(Lobby_Rail) 1회. _railTop/_railBottom 둘 다 null 이면 실제 이동이 없으므로 침묵.
-            if ((_railTop != null || _railBottom != null) && AudioManager.HasInstance)
-                AudioManager.Instance.PlayLobbyRail();
-
             _railTopTween?.Kill();
             _railBottomTween?.Kill();
 
@@ -2078,10 +2074,6 @@ namespace BalloonFlow
         /// </summary>
         public void PlayRailPullDownAnimation()
         {
-            // [2026-06-23] Rail 이동 시작 SFX(Lobby_Rail) 1회. _railTop/_railBottom 둘 다 null 이면 실제 이동이 없으므로 침묵.
-            if ((_railTop != null || _railBottom != null) && AudioManager.HasInstance)
-                AudioManager.Instance.PlayLobbyRail();
-
             _railTopTween?.Kill();
             _railBottomTween?.Kill();
 
@@ -2979,6 +2971,8 @@ namespace BalloonFlow
             _currentPageIndex = pageIndex;
             if (pageIndex == 1)
             {
+                // [2026-06-24] Shop/Setting → Lobby 가로 페이지 전환 시점 1회. Rail 위치 변경 자체와는 무관.
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayLobbyRail();
                 PlayRailEnterAnimation();
                 PlayLevelObjectEnterAnimation();
             }
@@ -3148,6 +3142,8 @@ namespace BalloonFlow
                 if (targetPage == 0 && prev != 0 && _uiShop != null) _uiShop.ResetView();
                 if (targetPage == 1 && prev != 1)
                 {
+                    // [2026-06-24] Shop/Setting → Lobby 가로 페이지 전환 시점 1회. Rail 위치 변경 자체와는 무관.
+                    if (AudioManager.HasInstance) AudioManager.Instance.PlayLobbyRail();
                     PlayRailEnterAnimation();
                     PlayLevelObjectEnterAnimation();
                 }
