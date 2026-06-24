@@ -64,6 +64,20 @@ namespace BalloonFlow
         [Tooltip("색상 Renderer의 기반 Material (BalloonShared). 이것을 복제하여 색상만 변경")]
         [SerializeField] private Material _colorBaseMaterial;
 
+        // ROLLBACK_SPAWNER_MATERIAL_SWAP_20260624 (#6): Pipe(Spawner_O)=불투명 / Glass Pipe(Spawner_T)=투명.
+        // MPB 알파만으론 불투명 머티리얼이 안 비치므로 머티리얼 자체를 스왑한다. 인스펙터에서 할당:
+        [Header("[Spawner 머티리얼 — Pipe=불투명 / Glass Pipe=투명]")]
+        [Tooltip("Pipe(Spawner_O) 불투명 머티리얼 (SpawnerOriginal). 인스펙터 할당.")]
+        [SerializeField] private Material _spawnerOpaqueMat;
+        [Tooltip("Glass Pipe(Spawner_T) 투명 머티리얼 (SpawnerAlpha). 인스펙터 할당.")]
+        [SerializeField] private Material _spawnerTransparentMat;
+        [Tooltip("Spawner 소멸 이펙트 (EndParticle). 미할당 시 자식 'EndParticle' 자동 탐색.")]
+        [SerializeField] private GameObject _spawnerEndParticle;
+        // ROLLBACK_SPAWNER_MAGAZINE_TEXT_SERIALIZE_20260624: 카운트/탄창 텍스트를 인스펙터에서 명시 할당.
+        [Tooltip("카운트/탄창 텍스트 (MagazineText). 미할당 시 자식 TMP_Text 자동 탐색.")]
+        [SerializeField] private TMPro.TMP_Text _magazineText;
+        public TMPro.TMP_Text MagazineText => _magazineText;
+
         [Header("[별도 Material 대상 — Lid 등]")]
         [Tooltip("BoxLidShared 등 별도 Material을 유지하면서 색상만 바꿀 Renderer")]
         [SerializeField] private Renderer[] _customMatRenderers;
@@ -1038,33 +1052,41 @@ namespace BalloonFlow
 
         #region Spawner Visual
 
-        /// <summary>Spawner_T: 반투명으로 다음 색상 미리보기.</summary>
+        /// <summary>Spawner_T(Glass Pipe)=투명 / Spawner_O(Pipe)=불투명. 머티리얼 스왑.</summary>
         public void SetSpawnerTransparent(bool transparent)
         {
             if (_colorRenderers == null) return;
-            // [Leak fix 2026-05-11] material.color 직접 접근은 매 호출 unique material 인스턴스 복제 → leak.
-            // MaterialPropertyBlock 의 _BaseColor.a override 로 대체. 시각 동등 (alpha 만 변경).
-            // 원본:
-            // for (int i = 0; i < _colorRenderers.Length; i++) {
-            //     if (_colorRenderers[i] == null) continue;
-            //     Color c = _colorRenderers[i].material.color;
-            //     c.a = transparent ? 0.4f : 1f;
-            //     _colorRenderers[i].material.color = c;
-            // }
-            if (_sharedMPB == null) _sharedMPB = new MaterialPropertyBlock();
-            float alpha = transparent ? 0.4f : 1f;
+            // ROLLBACK_SPAWNER_MATERIAL_SWAP_20260624 (#6):
+            // 이전엔 MaterialPropertyBlock 으로 _BaseColor 알파만 0.4/1 로 바꿨으나, 불투명 URP 머티리얼은
+            // 알파만 낮춰도 렌더 상태(_Surface/_SrcBlend/_ZWrite)가 불투명이라 안 비친다. → 머티리얼 자체를 스왑.
+            //   transparent(Glass Pipe) → _spawnerTransparentMat(SpawnerAlpha, 투명)
+            //   opaque(Pipe)            → _spawnerOpaqueMat(SpawnerOriginal, 불투명)
+            // sharedMaterial 할당이라 인스턴스 복제 leak 없음. 풀 재사용 시 매 스폰마다 양 타입이 명시 set 하므로 안전.
+            Material target = transparent ? _spawnerTransparentMat : _spawnerOpaqueMat;
+            if (target == null) return; // 인스펙터 미할당이면 프리팹 원본 유지 (no-op).
             for (int i = 0; i < _colorRenderers.Length; i++)
             {
                 if (_colorRenderers[i] == null) continue;
-                _colorRenderers[i].GetPropertyBlock(_sharedMPB);
-                // sharedMaterial 의 _BaseColor 가져와서 alpha 만 override
-                Color baseCol = _colorRenderers[i].sharedMaterial != null
-                    ? _colorRenderers[i].sharedMaterial.GetColor(_propMainColor)
-                    : Color.white;
-                baseCol.a = alpha;
-                _sharedMPB.SetColor(_propMainColor, baseCol);
-                _colorRenderers[i].SetPropertyBlock(_sharedMPB);
+                _colorRenderers[i].sharedMaterial = target;
             }
+        }
+
+        /// <summary>ROLLBACK_SPAWNER_END_PARTICLE_20260624 (#4): Spawner 소멸 시 EndParticle 1회 재생.</summary>
+        public void PlaySpawnerEndParticle()
+        {
+            GameObject fx = _spawnerEndParticle;
+            if (fx == null)
+            {
+                // 인스펙터 미할당 폴백 — 계층에서 "EndParticle" 자동 탐색(비활성 포함).
+                var all = GetComponentsInChildren<Transform>(true);
+                for (int i = 0; i < all.Length; i++)
+                    if (all[i] != null && all[i].name == "EndParticle") { fx = all[i].gameObject; break; }
+            }
+            if (fx == null) return;
+            fx.SetActive(true);
+            var pss = fx.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < pss.Length; i++)
+                pss[i].Play(true);
         }
 
         #endregion

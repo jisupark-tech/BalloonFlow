@@ -775,9 +775,14 @@ namespace BalloonFlow
             var shuffleable = new List<HolderData>();
             for (int i = 0; i < holders.Length; i++)
             {
+                // ROLLBACK_PIPE_NO_ITEM_20260624 (#3): 아이템은 '파이프에서 꺼내진(released) 홀더 + 일반 홀더'에만.
+                // 파이프 자신(Spawner)·파이프 뒤 대기 홀더(IsHeldBehindPipe)는 제외.
+                bool _isSpawnerHolder = holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                                     || holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_O;
                 if (!holders[i].isDeploying && !holders[i].isWaiting &&
                     !holders[i].isMovingToRail && !holders[i].isConsumed &&
-                    holders[i].magazineCount > 0)
+                    holders[i].magazineCount > 0 &&
+                    !_isSpawnerHolder && !HolderManager.Instance.IsHeldBehindPipe(holders[i]))
                 {
                     shuffleable.Add(holders[i]);
                 }
@@ -929,7 +934,11 @@ namespace BalloonFlow
                 {
                     for (int i = 0; i < holders.Length; i++)
                     {
-                        if (holders[i].color == color && !holders[i].isConsumed && holders[i].magazineCount > 0)
+                        // ROLLBACK_PIPE_NO_ITEM_20260624 (#3): 파이프(Spawner)·파이프 뒤 대기 홀더는 색상 제거 대상에서 제외.
+                        bool _isSpawnerHolder = holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                                             || holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_O;
+                        if (holders[i].color == color && !holders[i].isConsumed && holders[i].magazineCount > 0
+                            && !_isSpawnerHolder && !HolderManager.Instance.IsHeldBehindPipe(holders[i]))
                         {
                             int hid = holders[i].holderId;
 

@@ -75,9 +75,13 @@ namespace BalloonFlow
             if (C1p * C2p == 0f) hbarp = h1p + h2p;
             else
             {
+                // 레퍼런스(bl_palette_snap_base28.deltaE2000) 정확 대응:
+                // hdiff>180 일 때 hsum<360 → (hsum+360)/2, 아니면 (hsum-360)/2.
                 float diff = Mathf.Abs(h1p - h2p);
-                if (diff <= 180f) hbarp = (h1p + h2p) * 0.5f;
-                else hbarp = (h1p + h2p + 360f) * 0.5f;
+                float sum = h1p + h2p;
+                if (diff <= 180f) hbarp = sum * 0.5f;
+                else if (sum < 360f) hbarp = (sum + 360f) * 0.5f;
+                else hbarp = (sum - 360f) * 0.5f;
             }
 
             float T = 1f

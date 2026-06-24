@@ -1753,7 +1753,9 @@ namespace BalloonFlow
         private int _importRoundTo = 10;
         // ROLLBACK_MAPMAKER_NUM_COLORS_20260623: 임포트 시 사용할 색 수(0=자동/전부). >0 이면 대표 N색만 선별.
         private int _importNumColors = 0;
-        private float _importBgThreshold = 0.15f; // 이 밝기 이하는 배경으로 인식 (0~1)
+        // ROLLBACK_MAPMAKER_DOCSNAP_20260624: 문서(bl_palette_snap_base28) 기준 = alpha 투명만 빈칸.
+        //   밝기 컷은 옵션(0=off, 문서 기본). 0보다 크게 주면 해당 밝기 이하를 추가로 배경 처리(어두운 색 보존을 위해 기본 off).
+        private float _importBgThreshold = 0f; // 이 밝기 이하는 배경으로 인식 (0~1). 0=off(문서 기본)
         private int[,] _importPreview; // color index grid from image
 
         private void BuildImageImportSection(Transform p)
@@ -1792,15 +1794,13 @@ namespace BalloonFlow
 
                     _importedImage = upscaled;
                     SetStatus($"Image loaded: {raw.width}x{raw.height} → upscaled to {newW}x{newH}");
-                    AutoDetectPaletteFromImage(_importedImage);
                 }
                 else
                 {
                     _importedImage = raw;
                     SetStatus($"Image loaded: {raw.width}x{raw.height}");
                 }
-                // 이미지 색상 자동 감지 → 팔레트 자동 선택
-                AutoDetectPaletteFromImage(_importedImage);
+                // 색상 스냅(문서 파이프라인)은 UpdateImagePreview 에서 일괄 수행 → 팔레트 자동 선택 포함.
 
                 // 파일명에서 그리드 크기 파싱 (예: level_101_31x36.png → 31x36)
                 string fileName = System.IO.Path.GetFileNameWithoutExtension(path);
@@ -1832,7 +1832,7 @@ namespace BalloonFlow
             MakeIntField(rN, _importNumColors, 0, 28, v =>
             {
                 _importNumColors = v;
-                if (_importedImage != null) { AutoDetectPaletteFromImage(_importedImage); UpdateImagePreview(); }
+                if (_importedImage != null) UpdateImagePreview();
             });
 
             var r3 = Row(p); Lbl(r3, "Round To", w: 70);
@@ -1874,144 +1874,191 @@ namespace BalloonFlow
             return (r << 16) | (g << 8) | b;
         }
 
-        private void AutoDetectPaletteFromImage(Texture2D img)
+        // ────────────────────────────────────────────────────────────────────────
+        // ROLLBACK_MAPMAKER_DOCSNAP_20260624: 색상 스냅을 레퍼런스 문서(bl_palette_snap_base28.py)
+        //   파이프라인과 1:1 로 재구현. 핵심 차이(기존 대비):
+        //     ① 픽셀을 곧장 팔레트에 argmin 스냅 → 폐기. 먼저 "소스 색 클러스터"를 만든다.
+        //     ② 대표색 선별을 소스 클러스터 Lab 거리로 수행(기존: 이미 스냅된 팔레트 거리 → 오류).
+        //     ③ 대표색 ↔ 팔레트 배정을 헝가리안 1:1(injective)로 → 서로 다른 색이 같은 팔레트로
+        //        뭉개지는 현상 제거(문서의 핵심 목적).
+        //     ④ 빈칸은 alpha 투명만(문서 기본). 밝기 컷은 옵션(_importBgThreshold>0).
+        //   흐름: 다운샘플(셀별 소스색) → 고유색≤64 직접 / 초과 median-cut → 가중(빈도)
+        //         → snap_clusters(select_representatives + hungarian) → 셀별 게임 색 인덱스.
+        // ────────────────────────────────────────────────────────────────────────
+        private const float IMPORT_DISPERSION = 1.5f; // 레퍼런스 dispersion(power) 기본값
+        private const int IMPORT_CLUSTER_CAP = 64;     // 레퍼런스 CAP — 고유색 ≤ 이 값이면 무손실
+        private const float IMPORT_EMPTY_ALPHA = 8f / 255f; // 레퍼런스: alpha < 8 → 빈칸
+
+        /// <summary>레퍼런스 hungarian — 정사각 패딩 후 O(N^3) 최소비용 1:1 배정. 행→열(-1=미배정).</summary>
+        private static int[] Hungarian(float[,] cost)
         {
-            if (img == null) return;
+            int n = cost.GetLength(0), m = cost.GetLength(1);
+            int N = Mathf.Max(n, m);
+            var C = new float[N, N];
+            for (int i = 0; i < N; i++)
+                for (int j = 0; j < N; j++)
+                    C[i, j] = (i < n && j < m) ? cost[i, j] : 0f;
 
-            // 전체 28색 팔레트에서 매칭. ROLLBACK_MAPMAKER_NUM_COLORS_20260623: 빈도(픽셀수)도 집계 → 대표 N색 선별용.
-            var colorHits = new Dictionary<int, int>(32); // 팔레트 인덱스 → 히트 수
-            int sampleStep = Mathf.Max(1, img.width * img.height / 10000); // 최대 10000 샘플
-            var pixels = img.GetPixels();
-
-            // ROLLBACK_MAPMAKER_CIEDE2000_20260623: Redmean → CIEDE2000(지각 거리) 매칭.
-            //   팔레트 Lab 1회 캐시 + 고유색 LUT 로 픽셀당 재계산 회피. 표현불가(ΔE>임계) 경고 수집.
-            EnsurePaletteLab();
-            var labLut = new Dictionary<int, int>(256);  // packed RGB → 팔레트 인덱스
-            var labGap = new Dictionary<int, float>(256); // packed RGB → 매칭 ΔE
-            float worstGap = 0f; int worstColor = -1;
-
-            for (int i = 0; i < pixels.Length; i += sampleStep)
+            const float INF = 1e18f;
+            var u = new float[N + 1];
+            var v = new float[N + 1];
+            var p = new int[N + 1];
+            var way = new int[N + 1];
+            for (int i = 1; i <= N; i++)
             {
-                Color p = pixels[i];
-
-                // 투명/어두운 배경 스킵
-                float brightness = p.r * 0.299f + p.g * 0.587f + p.b * 0.114f;
-                if (p.a < 0.5f || brightness < _importBgThreshold) continue;
-
-                int key = PackRgb(p);
-                int bestIdx;
-                if (!labLut.TryGetValue(key, out bestIdx))
+                p[0] = i;
+                int j0 = 0;
+                var minv = new float[N + 1];
+                var used = new bool[N + 1];
+                for (int j = 0; j <= N; j++) minv[j] = INF;
+                do
                 {
-                    var pLab = PerceptualColor.RgbToLab(p);
-                    bestIdx = 0; float bestDist = float.MaxValue;
-                    for (int pi = 0; pi < PALETTE.Length; pi++)
+                    used[j0] = true;
+                    int i0 = p[j0];
+                    float delta = INF;
+                    int j1 = -1;
+                    for (int j = 1; j <= N; j++)
                     {
-                        float d = PerceptualColor.DeltaE2000(pLab, _paletteLab[pi]);
-                        if (d < bestDist) { bestDist = d; bestIdx = pi; }
+                        if (!used[j])
+                        {
+                            float cur = C[i0 - 1, j - 1] - u[i0] - v[j];
+                            if (cur < minv[j]) { minv[j] = cur; way[j] = j0; }
+                            if (minv[j] < delta) { delta = minv[j]; j1 = j; }
+                        }
                     }
-                    labLut[key] = bestIdx;
-                    labGap[key] = bestDist;
-                    if (bestDist > worstGap) { worstGap = bestDist; worstColor = bestIdx; }
+                    for (int j = 0; j <= N; j++)
+                    {
+                        if (used[j]) { u[p[j]] += delta; v[j] -= delta; }
+                        else minv[j] -= delta;
+                    }
+                    j0 = j1;
+                } while (p[j0] != 0);
+                while (j0 != 0)
+                {
+                    int prev = way[j0];
+                    p[j0] = p[prev];
+                    j0 = prev;
                 }
-                colorHits[bestIdx] = colorHits.TryGetValue(bestIdx, out int hc) ? hc + 1 : 1;
             }
-
-            // 표현불가 경고: 가장 나쁘게 스냅된 색의 ΔE 가 임계 초과면 알림 (기본 임계 20)
-            if (worstColor >= 0 && worstGap > IMPORT_GAP_THRESHOLD)
-                SetStatus($"[표현불가 주의] 일부 이미지 색이 28색으로 멀게 스냅됨 (최대 ΔE {worstGap:F1}, 가까운 색 #{worstColor}). 색 선택/원본 검토 권장.");
-
-            if (colorHits.Count < 2)
-            {
-                SetStatus($"Auto-detect: {colorHits.Count} colors found (minimum 2 needed)");
-                return;
-            }
-
-            // ROLLBACK_MAPMAKER_NUM_COLORS_20260623: Num Colors 필드(>0)면 대표 N색만 선별, 0/초과면 전부.
-            //   선별 = 빈도×분산 그리디(CIEDE2000). _importNumColors=0 이면 기존 동작(전부 사용)과 동일.
-            List<int> chosen;
-            if (_importNumColors > 0 && _importNumColors < colorHits.Count)
-                chosen = SelectRepresentativeColors(colorHits, _importNumColors);
-            else
-                chosen = new List<int>(colorHits.Keys);
-
-            // 팔레트 갱신
-            _selectedColors.Clear(); _sortedColorsDirty = true;
-            foreach (int ci in chosen) _selectedColors.Add(ci);
-            _numColors = _selectedColors.Count;
-            RebuildColorToggleGrid();
-            RebuildPalette();
-            _infoDirty = true;
-            SetStatus(_importNumColors > 0 && _importNumColors < colorHits.Count
-                ? $"Auto-detect: {colorHits.Count} colors → {chosen.Count} 대표색 선별(Num Colors={_importNumColors})"
-                : $"Auto-detect: {chosen.Count} palette colors matched from image");
+            var res = new int[n];
+            for (int i = 0; i < n; i++) res[i] = -1;
+            for (int j = 1; j <= N; j++)
+                if (p[j] >= 1 && p[j] <= n && j <= m) res[p[j] - 1] = j - 1;
+            return res;
         }
 
-        /// <summary>
-        /// ROLLBACK_MAPMAKER_NUM_COLORS_20260623: 대표 N색 선별 — 빈도×분산 그리디(CIEDE2000).
-        /// 자주 쓰이면서(weight=히트수) 서로 멀리 퍼진(min ΔE) 색을 골라 다채롭고 대표성 있게 N개 선택.
-        /// (레퍼런스 bl_palette_snap 의 select_representatives 와 동일 로직)
-        /// </summary>
-        private List<int> SelectRepresentativeColors(Dictionary<int, int> hits, int n)
+        /// <summary>레퍼런스 select_representatives — 빈도×(고른 색들과의 최소 ΔE)^power 그리디.
+        /// 거리는 *소스 클러스터끼리* 측정(문서 그대로). 시드=빈도 최고.</summary>
+        private static int[] SelectRepresentatives(PerceptualColor.Lab[] labs, int[] weights, int N, float power)
         {
-            EnsurePaletteLab();
-            var cand = new List<int>(hits.Keys);
-            var chosen = new List<int>(n);
-            if (cand.Count == 0) return chosen;
-
-            // 시드 = 빈도 최고 색
-            int seed = cand[0];
-            foreach (int c in cand) if (hits[c] > hits[seed]) seed = c;
+            int K = labs.Length;
+            if (N >= K)
+            {
+                var all = new int[K];
+                for (int i = 0; i < K; i++) all[i] = i;
+                return all;
+            }
+            var chosen = new List<int>(N);
+            int seed = 0;
+            for (int i = 1; i < K; i++) if (weights[i] > weights[seed]) seed = i;
             chosen.Add(seed);
-
-            const float POWER = 1.5f; // 분산 가중(레퍼런스 dispersion 기본값)
-            while (chosen.Count < n && chosen.Count < cand.Count)
+            while (chosen.Count < N)
             {
                 int best = -1; float bestScore = -1f;
-                foreach (int c in cand)
+                for (int i = 0; i < K; i++)
                 {
-                    if (chosen.Contains(c)) continue;
-                    // 이미 고른 색들과의 최소 ΔE (멀수록 다채로움)
-                    float minD = float.MaxValue;
-                    for (int j = 0; j < chosen.Count; j++)
+                    if (chosen.Contains(i)) continue;
+                    float md = float.MaxValue;
+                    for (int c = 0; c < chosen.Count; c++)
                     {
-                        float d = PerceptualColor.DeltaE2000(_paletteLab[c], _paletteLab[chosen[j]]);
-                        if (d < minD) minD = d;
+                        float d = PerceptualColor.DeltaE2000(labs[i], labs[chosen[c]]);
+                        if (d < md) md = d;
                     }
-                    float score = hits[c] * Mathf.Pow(minD, POWER);
-                    if (score > bestScore) { bestScore = score; best = c; }
+                    float s = weights[i] * Mathf.Pow(md, power);
+                    if (s > bestScore) { bestScore = s; best = i; }
                 }
                 if (best < 0) break;
                 chosen.Add(best);
             }
-            return chosen;
+            return chosen.ToArray();
         }
 
-        private void UpdateImagePreview()
+        private static float ColorChannel(Color c, int ch) { return ch == 0 ? c.r : ch == 1 ? c.g : c.b; }
+
+        /// <summary>레퍼런스 median-cut 양자화(고유색>CAP 일 때). 가중 평균색 + 고유색→클러스터 매핑.</summary>
+        private static void MedianCutQuantize(List<Color> uniqueColors, int[] uniqueWeights, int K,
+            out List<Color> clusterRgb, out int[] colorToCluster)
         {
-            if (_importedImage == null) return;
+            int U = uniqueColors.Count;
+            colorToCluster = new int[U];
+            var boxes = new List<List<int>>();
+            var all = new List<int>(U);
+            for (int i = 0; i < U; i++) all.Add(i);
+            boxes.Add(all);
 
-            int gw = _importGridCols, gh = _importGridRows;
-            var selColorList = new List<int>(_selectedColors);
-            if (selColorList.Count == 0) return;
-            _importPreview = new int[gw, gh];
+            while (boxes.Count < K)
+            {
+                int bestBox = -1, bestChannel = 0; float bestRange = -1f;
+                for (int b = 0; b < boxes.Count; b++)
+                {
+                    if (boxes[b].Count < 2) continue;
+                    float minr = 1, ming = 1, minb = 1, maxr = 0, maxg = 0, maxb = 0;
+                    foreach (int idx in boxes[b])
+                    {
+                        Color c = uniqueColors[idx];
+                        if (c.r < minr) minr = c.r; if (c.r > maxr) maxr = c.r;
+                        if (c.g < ming) ming = c.g; if (c.g > maxg) maxg = c.g;
+                        if (c.b < minb) minb = c.b; if (c.b > maxb) maxb = c.b;
+                    }
+                    float rr = maxr - minr, rg = maxg - ming, rb = maxb - minb;
+                    float mx = Mathf.Max(rr, Mathf.Max(rg, rb));
+                    int ch = (rr >= rg && rr >= rb) ? 0 : (rg >= rb ? 1 : 2);
+                    if (mx > bestRange) { bestRange = mx; bestBox = b; bestChannel = ch; }
+                }
+                if (bestBox < 0) break; // 더 쪼갤 박스 없음
 
-            // PixelArtConverter 방식: 원본 해상도에서 팔레트 매칭 → 그리드 셀별 최빈값(MODE)
-            int srcW = _importedImage.width;
-            int srcH = _importedImage.height;
+                var box = boxes[bestBox];
+                int channel = bestChannel;
+                box.Sort((x, y) => ColorChannel(uniqueColors[x], channel).CompareTo(ColorChannel(uniqueColors[y], channel)));
+                long total = 0; foreach (int idx in box) total += uniqueWeights[idx];
+                long acc = 0; int splitAt = 1;
+                for (int i = 0; i < box.Count; i++)
+                {
+                    acc += uniqueWeights[box[i]];
+                    if (acc * 2 >= total) { splitAt = Mathf.Clamp(i + 1, 1, box.Count - 1); break; }
+                }
+                var left = box.GetRange(0, splitAt);
+                var right = box.GetRange(splitAt, box.Count - splitAt);
+                boxes[bestBox] = left;
+                boxes.Add(right);
+            }
 
-            // 1단계: 원본 해상도의 모든 픽셀을 팔레트 인덱스로 변환 (full-res quantize)
-            // ROLLBACK_MAPMAKER_CIEDE2000_20260623: 선택색 Lab 1회 캐시 + 고유색 LUT 로 CIEDE2000 매칭.
-            EnsurePaletteLab();
-            var selLab = new PerceptualColor.Lab[selColorList.Count];
-            for (int si = 0; si < selColorList.Count; si++)
-                selLab[si] = _paletteLab[selColorList[si]];
-            var snapLut = new Dictionary<int, int>(512); // packed RGB → 팔레트 인덱스(selColorList 의 값)
+            clusterRgb = new List<Color>(boxes.Count);
+            for (int b = 0; b < boxes.Count; b++)
+            {
+                double sr = 0, sg = 0, sb = 0; long sw = 0;
+                foreach (int idx in boxes[b])
+                {
+                    int w = uniqueWeights[idx];
+                    sr += uniqueColors[idx].r * w; sg += uniqueColors[idx].g * w; sb += uniqueColors[idx].b * w; sw += w;
+                    colorToCluster[idx] = b;
+                }
+                if (sw == 0) sw = 1;
+                clusterRgb.Add(new Color((float)(sr / sw), (float)(sg / sw), (float)(sb / sw)));
+            }
+        }
 
-            // 2단계: 그리드 셀별로 원본 픽셀 블록의 최빈 팔레트 색상 선택
-            var colorVotes = new Dictionary<int, int>(); // paletteIndex → count
+        /// <summary>소스 이미지를 그리드 셀로 다운샘플 — 셀별 대표 소스색(블록 최빈 MODE) + 빈칸 마스크.
+        /// 빈칸 = alpha 투명 과반(문서 기본) + (옵션) 밝기 컷 과반.</summary>
+        private void BuildCellSourceColors(int gw, int gh, out Color[,] cellColor, out bool[,] cellEmpty)
+        {
+            cellColor = new Color[gw, gh];
+            cellEmpty = new bool[gw, gh];
+            int srcW = _importedImage.width, srcH = _importedImage.height;
+            var votes = new Dictionary<int, int>();
+            var rep = new Dictionary<int, Color>();
 
             for (int c = 0; c < gw; c++)
-            {
                 for (int r = 0; r < gh; r++)
                 {
                     int x0 = (int)((float)c / gw * srcW);
@@ -2019,79 +2066,178 @@ namespace BalloonFlow
                     int y0 = (int)((float)r / gh * srcH);
                     int y1 = Mathf.Max(y0 + 1, (int)((float)(r + 1) / gh * srcH));
 
-                    colorVotes.Clear();
-                    int bgCount = 0;
-                    int totalPixels = 0;
-
+                    votes.Clear(); rep.Clear();
+                    int bg = 0, tot = 0;
                     for (int py = y0; py < y1 && py < srcH; py++)
-                    {
                         for (int px = x0; px < x1 && px < srcW; px++)
                         {
                             Color p = _importedImage.GetPixel(px, py);
-                            totalPixels++;
-
-                            // 투명 또는 어두운 배경
+                            tot++;
                             float brightness = p.r * 0.299f + p.g * 0.587f + p.b * 0.114f;
-                            if (p.a < 0.5f || brightness < _importBgThreshold)
-                            {
-                                bgCount++;
-                                continue;
-                            }
-
-                            // 이 픽셀의 가장 가까운 팔레트 색상 (CIEDE2000, 고유색 LUT 캐시)
+                            if (p.a < IMPORT_EMPTY_ALPHA || (_importBgThreshold > 0f && brightness < _importBgThreshold))
+                            { bg++; continue; }
                             int key = PackRgb(p);
-                            int palIdx;
-                            if (!snapLut.TryGetValue(key, out palIdx))
-                            {
-                                var pLab = PerceptualColor.RgbToLab(p);
-                                int bestSi = 0; float bestDist = float.MaxValue;
-                                for (int si = 0; si < selColorList.Count; si++)
-                                {
-                                    float d = PerceptualColor.DeltaE2000(pLab, selLab[si]);
-                                    if (d < bestDist) { bestDist = d; bestSi = si; }
-                                }
-                                palIdx = selColorList[bestSi];
-                                snapLut[key] = palIdx;
-                            }
-                            if (colorVotes.ContainsKey(palIdx)) colorVotes[palIdx]++;
-                            else colorVotes[palIdx] = 1;
+                            votes[key] = votes.TryGetValue(key, out int hc) ? hc + 1 : 1;
+                            if (!rep.ContainsKey(key)) rep[key] = p;
                         }
-                    }
 
-                    // 배경이 과반수면 빈 셀
-                    if (bgCount > totalPixels / 2 || colorVotes.Count == 0)
-                    {
-                        _importPreview[c, r] = -1;
-                        continue;
-                    }
-
-                    // 최빈 색상 (MODE) 선택
-                    int modeColor = selColorList[0];
-                    int modeCount = 0;
-                    foreach (var kvp in colorVotes)
-                    {
-                        if (kvp.Value > modeCount) { modeCount = kvp.Value; modeColor = kvp.Key; }
-                    }
-                    _importPreview[c, r] = modeColor;
+                    if (bg > tot / 2 || votes.Count == 0) { cellEmpty[c, r] = true; continue; }
+                    int modeKey = 0, modeCnt = 0;
+                    foreach (var kv in votes) if (kv.Value > modeCnt) { modeCnt = kv.Value; modeKey = kv.Key; }
+                    cellColor[c, r] = rep[modeKey];
                 }
+        }
+
+        /// <summary>레퍼런스 snap_clusters — 대표 선별 + 헝가리안 1:1 배정 + 비대표 상속 + 표현불가 flags.
+        /// 반환: 클러스터→팔레트 인덱스(0-base, MapMaker 팔레트 인덱스).</summary>
+        private int[] SnapClusters(List<Color> clusterRgb, int[] clusterWeight, int targetN,
+            float gapTh, float power, out List<string> flags)
+        {
+            EnsurePaletteLab();
+            int K = clusterRgb.Count;
+            int P = PALETTE.Length;
+            var cLab = new PerceptualColor.Lab[K];
+            for (int i = 0; i < K; i++) cLab[i] = PerceptualColor.RgbToLab(clusterRgb[i]);
+
+            int N = targetN > 0 ? Mathf.Min(targetN, K) : K;
+            int[] rep = SelectRepresentatives(cLab, clusterWeight, N, power);
+
+            var cost = new float[rep.Length, P];
+            for (int k = 0; k < rep.Length; k++)
+                for (int pi = 0; pi < P; pi++)
+                    cost[k, pi] = PerceptualColor.DeltaE2000(cLab[rep[k]], _paletteLab[pi]);
+
+            int[] col = new int[rep.Length];
+            if (N <= P)
+            {
+                col = Hungarian(cost);
+                // 안전망: 헝가리안이 미배정으로 남기면 최근접으로 보정.
+                for (int k = 0; k < rep.Length; k++)
+                    if (col[k] < 0) col[k] = ArgMinRow(cost, k, P);
+            }
+            else
+            {
+                for (int k = 0; k < rep.Length; k++) col[k] = ArgMinRow(cost, k, P);
             }
 
-            // 색상별 카운트를 10의 배수로 조정
+            var repToId = new Dictionary<int, int>(rep.Length);
+            for (int k = 0; k < rep.Length; k++) repToId[rep[k]] = col[k];
+
+            // 비대표 클러스터 → 가장 가까운 대표의 ID 상속 (클러스터끼리 ΔE)
+            var cl2id = new int[K];
+            for (int ci = 0; ci < K; ci++)
+            {
+                float best = float.MaxValue; int br = rep[0];
+                for (int k = 0; k < rep.Length; k++)
+                {
+                    float d = PerceptualColor.DeltaE2000(cLab[ci], cLab[rep[k]]);
+                    if (d < best) { best = d; br = rep[k]; }
+                }
+                cl2id[ci] = repToId[br];
+            }
+
+            flags = new List<string>();
+            for (int k = 0; k < rep.Length; k++)
+            {
+                float d = cost[k, col[k]];
+                if (d > gapTh) flags.Add($"#{rep[k]}→{COLOR_LABELS[col[k]]}(ΔE{d:F1})");
+            }
+            return cl2id;
+        }
+
+        private static int ArgMinRow(float[,] cost, int row, int cols)
+        {
+            int best = 0; float bd = float.MaxValue;
+            for (int p = 0; p < cols; p++) if (cost[row, p] < bd) { bd = cost[row, p]; best = p; }
+            return best;
+        }
+
+        // ROLLBACK_MAPMAKER_DOCSNAP_20260624: 문서 파이프라인 오케스트레이션.
+        //   [1] 다운샘플(셀별 소스색+빈칸) → [2] 소스 고유색 클러스터(≤64 직접 / 초과 median-cut)
+        //   → [3] 가중(빈도) → [4] snap_clusters(대표선별+헝가리안 1:1) → [5] 셀별 팔레트 인덱스.
+        private void UpdateImagePreview()
+        {
+            if (_importedImage == null) return;
+
+            int gw = _importGridCols, gh = _importGridRows;
+            _importPreview = new int[gw, gh];
+
+            // [1] 다운샘플 → 셀별 소스색 + 빈칸 마스크
+            BuildCellSourceColors(gw, gh, out Color[,] cellColor, out bool[,] cellEmpty);
+
+            // [2] 소스 고유색 수집(빈도=셀 수). 각 고유색 → 인덱스.
+            var uniqueList = new List<Color>();
+            var uniqueWeights = new List<int>();
+            var keyToUnique = new Dictionary<int, int>();
+            for (int c = 0; c < gw; c++)
+                for (int r = 0; r < gh; r++)
+                {
+                    if (cellEmpty[c, r]) continue;
+                    int key = PackRgb(cellColor[c, r]);
+                    if (keyToUnique.TryGetValue(key, out int ui)) uniqueWeights[ui]++;
+                    else { keyToUnique[key] = uniqueList.Count; uniqueList.Add(cellColor[c, r]); uniqueWeights.Add(1); }
+                }
+
+            if (uniqueList.Count == 0)
+            {
+                for (int c = 0; c < gw; c++) for (int r = 0; r < gh; r++) _importPreview[c, r] = -1;
+                ApplyPreviewToGrid(gw, gh);
+                SetStatus("Preview: 빈 이미지(전부 빈칸). 알파/배경 임계 확인.");
+                return;
+            }
+
+            // 고유색 ≤ CAP → 무손실 직접 클러스터 / 초과 → median-cut 축소
+            List<Color> clusterRgb;
+            int[] uniqueToCluster;
+            if (uniqueList.Count <= IMPORT_CLUSTER_CAP)
+            {
+                clusterRgb = new List<Color>(uniqueList);
+                uniqueToCluster = new int[uniqueList.Count];
+                for (int i = 0; i < uniqueList.Count; i++) uniqueToCluster[i] = i;
+            }
+            else
+            {
+                int K = Mathf.Min(IMPORT_CLUSTER_CAP, Mathf.Max((_importNumColors > 0 ? _importNumColors : 8) * 4, 32));
+                MedianCutQuantize(uniqueList, uniqueWeights.ToArray(), K, out clusterRgb, out uniqueToCluster);
+            }
+
+            // [3] 클러스터 가중 = 고유색 빈도 합
+            var clusterWeight = new int[clusterRgb.Count];
+            for (int i = 0; i < uniqueList.Count; i++) clusterWeight[uniqueToCluster[i]] += uniqueWeights[i];
+
+            // [4] snap_clusters → 클러스터별 팔레트 인덱스
+            int[] cl2id = SnapClusters(clusterRgb, clusterWeight, _importNumColors,
+                IMPORT_GAP_THRESHOLD, IMPORT_DISPERSION, out List<string> flags);
+
+            // [5] 셀 → 팔레트 인덱스
+            for (int c = 0; c < gw; c++)
+                for (int r = 0; r < gh; r++)
+                {
+                    if (cellEmpty[c, r]) { _importPreview[c, r] = -1; continue; }
+                    int u = keyToUnique[PackRgb(cellColor[c, r])];
+                    _importPreview[c, r] = cl2id[uniqueToCluster[u]];
+                }
+
+            // 색상별 카운트를 10의 배수로 조정 (색상 스냅과 별개 단계 — 문서 범위 밖, 기존 유지)
             if (_importRoundTo > 0)
                 RoundColorCounts(_importPreview, gw, gh, _importRoundTo);
 
-            // 프리뷰를 현재 그리드에 반영
-            _gridCols = gw;
-            _gridRows = gh;
-            InitGrid();
+            // 실제 사용된 팔레트 색 → _selectedColors (스냅이 자동 선택; 문서엔 사용자 서브셋 제약 없음)
+            var used = new HashSet<int>();
             for (int c = 0; c < gw; c++)
                 for (int r = 0; r < gh; r++)
-                    _balloonColors[c, r] = _importPreview[c, r];
+                    if (_importPreview[c, r] >= 0) used.Add(_importPreview[c, r]);
+            _selectedColors.Clear(); _sortedColorsDirty = true;
+            foreach (int id in used) _selectedColors.Add(id);
+            if (_selectedColors.Count < 1) _selectedColors.Add(0);
+            _numColors = _selectedColors.Count;
+            RebuildColorToggleGrid();
+            RebuildPalette();
+            _infoDirty = true;
 
-            _levelLoaded = true;
-            OnBalloonGridChanged();
+            ApplyPreviewToGrid(gw, gh);
 
-            // 색상별 카운트 로그
+            // 리포트(색별 카운트 + 표현불가 flags)
             var counts = new Dictionary<int, int>();
             int totalBalloons = 0;
             for (int c = 0; c < gw; c++)
@@ -2102,13 +2248,39 @@ namespace BalloonFlow
                         counts[ci] = counts.ContainsKey(ci) ? counts[ci] + 1 : 1;
                         totalBalloons++;
                     }
-            var sb = new System.Text.StringBuilder($"Preview: {gw}x{gh} {_numColors}C {totalBalloons}B — ");
-            foreach (var kvp in counts) sb.Append($"c{kvp.Key}={kvp.Value} ");
+            var sb = new System.Text.StringBuilder($"Preview: {gw}x{gh} {counts.Count}C {totalBalloons}B — ");
+            foreach (var kvp in counts) sb.Append($"{COLOR_LABELS[kvp.Key]}={kvp.Value} ");
+            if (flags != null && flags.Count > 0)
+                sb.Append($" | [표현불가 {flags.Count}] " + string.Join(", ", flags));
             SetStatus(sb.ToString());
         }
 
+        /// <summary>_importPreview 를 현재 그리드(_balloonColors)에 반영.</summary>
+        private void ApplyPreviewToGrid(int gw, int gh)
+        {
+            _gridCols = gw;
+            _gridRows = gh;
+            InitGrid();
+            for (int c = 0; c < gw; c++)
+                for (int r = 0; r < gh; r++)
+                    _balloonColors[c, r] = _importPreview[c, r];
+            _levelLoaded = true;
+            OnBalloonGridChanged();
+        }
+
+        // ROLLBACK_MAPMAKER_MOD10_20260624: ÷10(10배수) 보정은 검증된 Mod10 모듈로 위임.
+        //   Mod10 = 색매핑과 분리된 독립 단계(색은 안 건드림). STEP A(총합 ÷10, 구석 빈칸)
+        //   + STEP B~D(버퍼 흡수 + relay 다중홉 + 모티프 안전 배치)로 "전 색 ÷10" 수학적 보장.
+        //   기존 단순 반올림(MergeTinyColors+경계+ForceRound)은 multiple!=10 일 때만 fallback.
         private void RoundColorCounts(int[,] grid, int cols, int rows, int multiple)
         {
+            if (multiple == 10)
+            {
+                EnforceMod10OnColRowGrid(grid, cols, rows, Mod10.NO_FRAME);
+                return;
+            }
+
+            // ── 이하 fallback: multiple != 10 일 때만(일반 N배수 단순 반올림) ──
             // Pass 1: Merge colors with too few balloons into nearest palette color
             MergeTinyColors(grid, cols, rows, multiple);
 
@@ -4346,9 +4518,40 @@ namespace BalloonFlow
 
         private void RoundCurrentBalloonCountsToTen()
         {
-            RoundColorCounts(_balloonColors, _gridCols, _gridRows, 10);
+            var rep = EnforceMod10OnColRowGrid(_balloonColors, _gridCols, _gridRows, Mod10.NO_FRAME);
             OnBalloonGridChanged();
-            SetStatus("Rounded balloon color counts to x10");
+            if (rep == null) { SetStatus("Round x10: grid empty"); return; }
+            SetStatus(rep.AllMod10
+                ? $"Mod10 ✓ 전 색 ÷10 (총 {rep.Total}, 색 {rep.ColorCounts.Count}, 바뀐셀 {rep.ChangedCells}, 구석빈칸 {rep.EmptyCornerCells})"
+                : $"Mod10 ⚠ 일부 색 ÷10 미달 (총 {rep.Total}) — 연결 안 된 고립색 가능. 원본/색 검토 요망");
+        }
+
+        /// <summary>
+        /// ROLLBACK_MAPMAKER_MOD10_20260624: MapMaker [col,row] 그리드 ↔ Mod10 모듈 [row(H),col(W)] 브리지.
+        /// 전치 → Mod10.EnforceMod10(relay 다중홉으로 전 색 ÷10 보장) → 결과를 같은 그리드에 반영.
+        /// 색은 유지하고 카운트만 ÷10 (색 선택은 색매핑 단계 책임).
+        /// </summary>
+        private Mod10.Report EnforceMod10OnColRowGrid(int[,] grid, int cols, int rows, int frameColor)
+        {
+            if (grid == null || cols <= 0 || rows <= 0) return null;
+            var g = new int[rows, cols]; // [H=rows, W=cols] 행우선
+            int nonEmpty = 0;
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                {
+                    int v = grid[c, r];
+                    g[r, c] = v;
+                    if (v != Mod10.EMPTY) nonEmpty++;
+                }
+            // 비어있으면(색 없음) 이미 총합 0 = ÷10. Mod10 의 buffer 선택이 빈 후보로 터지는 것 방지.
+            if (nonEmpty == 0) return null;
+
+            var (outGrid, rep) = Mod10.EnforceMod10(g, frameColor);
+
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    grid[c, r] = outGrid[r, c];
+            return rep;
         }
 
         private void OnBalloonGridChanged()
@@ -7035,7 +7238,14 @@ namespace BalloonFlow
                         errors.Add($"Hidden Dart Box cannot be placed on front row 0. Holder: ({c},{r}).");
 
                     if (gimmick == glassPipeIndex)
+                    {
                         hasGlassPipe = true;
+                        // ROLLBACK_GLASSPIPE_NOT_ON_RAIL_FRONT_20260624: like Pipe, a Glass Pipe (Spawner_T)
+                        // must not sit on row 0 (directly in front of the rail) — its auto-spawned holder
+                        // would land on the rail-front with no player-controlled buffer. Place at row >= 1.
+                        if (r == 0)
+                            errors.Add($"Glass Pipe at holder ({c},{r}) cannot be on row 0 (directly in front of the rail). Place it at row 1 or higher.");
+                    }
                     if (gimmick == pipeIndex)
                     {
                         hasPipe = true;

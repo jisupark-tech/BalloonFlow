@@ -38,6 +38,9 @@ namespace BalloonFlow
         // 예외(즉시 스폰): Spawner(위치 앵커), Chain 그룹(연결선). 롤백: 게이트 2곳(초기 스폰/재배치) 제거.
         private const int VISIBLE_HOLDER_ROWS = 5;
         private readonly List<HolderData> _tempLazyColumnData = new List<HolderData>(16);
+        // ROLLBACK_PIPE_PAYLOAD_POP_20260624 (#3): released Pipe payload 가 파이프에서 팝업(Scale Up) 중인 동안
+        // RepositionColumnHolders 의 즉시 scale 세팅/DOKill 이 트윈을 끊지 않도록 추적.
+        private readonly HashSet<int> _poppingScale = new HashSet<int>();
 
         private static void ApplyMagazineTextRowVisibility(HolderVisual visual, int row)
         {
@@ -403,6 +406,10 @@ namespace BalloonFlow
                                         || hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O;
                     if (row >= VISIBLE_HOLDER_ROWS && !isSpawnerHolder && hd.chainGroupId < 0)
                         continue; // 지연 스폰 대상
+                    // ROLLBACK_PIPE_BEHIND_VISIBLE_20260624 (#2): '미방출 payload(파이프 안)'만 숨김.
+                    // 파이프에 맵핑 안 된 뒤 홀더는 일반 홀더처럼 보이고 5행까지 표시됨(아래 row 임계).
+                    if (!isSpawnerHolder && !hd.IsQueueVisible)
+                        continue;
 
                     Vector3 pos = CalculateQueuePosition(col, row);
                     HolderVisual visual = CreateHolderVisual(hd, pos, col);
@@ -897,6 +904,7 @@ namespace BalloonFlow
             // Spawner 위치 찾기
             Vector3 spawnerPos = CalculateQueuePosition(column, 1); // fallback
             bool columnHasSpawner = false;
+            int pipeSourceRow = int.MinValue; // [#2] authored row of the pipe; holders with sourceRow > this stay blocked behind it
             foreach (var kvp2 in _holderVisuals)
             {
                 if (kvp2.Value.column == column && kvp2.Value.gameObject != null)
@@ -907,6 +915,7 @@ namespace BalloonFlow
                     {
                         spawnerPos = kvp2.Value.gameObject.transform.position;
                         columnHasSpawner = true;
+                        pipeSourceRow = spData.sourceRow;
                         break;
                     }
                 }
@@ -923,7 +932,7 @@ namespace BalloonFlow
                 // Spawner 자체는 SpawnWaitingHolders에서 생성됨
                 if (hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
                  || hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O) continue;
-                if (!hd.IsQueueVisible) continue;
+                if (!hd.IsQueueVisible) continue; // 미방출 payload 만 숨김. 맵핑 안 된 뒤 홀더는 보임.
                 _tempLazyColumnData.Add(hd);
             }
             _tempLazyColumnData.Sort((a, b) => a.holderId.CompareTo(b.holderId));
@@ -938,10 +947,26 @@ namespace BalloonFlow
                 // 스폰 위치: Spawner 열은 기존처럼 Spawner 배출 위치(연출 유지),
                 // 일반 열의 지연 스폰분은 목표보다 한 행 뒤에서 등장 → 아래 리포지셔닝 트윈으로
                 // 다른 홀더와 같이 자연스럽게 당겨짐 (가시 경계 팝인 방지).
-                Vector3 startPos = columnHasSpawner ? spawnerPos : CalculateQueuePosition(column, row + 1);
+                // ROLLBACK_PIPE_HELD_BEHIND_20260624 (#2): 파이프에서 방출된 payload 만 파이프 위치에서 emerge.
+                // 파이프 소멸 후 풀린 일반 뒤 홀더는 '뿌려지는' 느낌 없이 자기 정상 큐 위치에 등장(다른 홀더와 동일, 5행까지).
+                bool emergeFromPipe = columnHasSpawner && hd.isPipePayload && hd.isPipePayloadReleased;
+                Vector3 startPos = emergeFromPipe ? spawnerPos : CalculateQueuePosition(column, row + 1);
                 HolderVisual newVisual = CreateHolderVisual(hd, startPos, column, false);
                 if (newVisual != null)
+                {
                     _holderVisuals[hd.holderId] = newVisual;
+                    // ROLLBACK_PIPE_PAYLOAD_POP_20260624 (#1): 방출된 payload 는 파이프에서 사이즈 0으로 시작 →
+                    // 앞으로 나아가는 동안엔 작게 유지되다가 '거의 도착했을 때' 원본 사이즈로 커짐(InQuad: 느린 시작
+                    // → 후반 급상승). 파이프 근처에서 정사이즈가 되어 파이프와 겹쳐 보이는 것 방지.
+                    if (emergeFromPipe && newVisual.gameObject != null)
+                    {
+                        int hid = hd.holderId;
+                        _poppingScale.Add(hid);
+                        newVisual.gameObject.transform.localScale = Vector3.zero;
+                        newVisual.gameObject.transform.DOScale(Vector3.one, 0.4f).SetEase(Ease.InQuad)
+                            .OnComplete(() => _poppingScale.Remove(hid));
+                    }
+                }
             }
 
 
@@ -962,7 +987,7 @@ namespace BalloonFlow
                         continue;
                     }
                     if (hData != null && !hData.IsQueueVisible)
-                        continue;
+                        continue; // 미방출 payload 만 큐에서 제외(숨김). 맵핑 안 된 뒤 홀더는 포함(보임).
 
                     colHolders.Add(v);
                 }
@@ -975,38 +1000,51 @@ namespace BalloonFlow
                 return b.gameObject.transform.position.z.CompareTo(a.gameObject.transform.position.z);
             });
 
-            // 일반 보관함 배치
+            // 일반 보관함 배치 — [#2] active(앞/방출됨)는 정상 큐로 전진, blocked(파이프 뒤 미방출)만 파이프에 고정
+            int activeRow = 0, blockedRow = 0;
             for (int row = 0; row < colHolders.Count; row++)
             {
                 if (colHolders[row].gameObject == null) continue;
 
-                Vector3 targetPos;
-                bool insideSpawner = row > 0 && spawnerCount > 0;
-                if (row == 0)
+                // ROLLBACK_PIPE_RELEASE_ADVANCE_20260624 (#2/#5): a holder is "held inside the pipe"
+                // (pinned + shrunk) ONLY if authored BEHIND the active pipe (sourceRow > pipe) AND not yet
+                // released. A released Pipe payload — and everything in front of the pipe — flows to the
+                // normal front queue (advances to row 0 = deployable) instead of clustering at the pipe.
+                // When the pipe is consumed/despawned spawnerCount→0 so nothing is blocked → behind holders advance.
+                bool insideSpawner = false;
+                if (spawnerCount > 0 && pipeSourceRow != int.MinValue && HolderManager.HasInstance)
                 {
-                    // 앞줄: 정상 위치
-                    targetPos = CalculateQueuePosition(column, 0);
-                }
-                else if (spawnerCount > 0)
-                {
-                    // Spawner보다 살짝 앞에 배치
-                    targetPos = spawnerPos + new Vector3(0f, 0f, 0.3f - PIPE_INNER_Z_OFFSET * (row - 1));
-                }
-                else
-                {
-                    targetPos = CalculateQueuePosition(column, row);
+                    var hdRow = HolderManager.Instance.FindHolderPublic(colHolders[row].holderId);
+                    bool releasedPayload = hdRow != null && hdRow.isPipePayload && hdRow.isPipePayloadReleased;
+                    insideSpawner = hdRow != null && hdRow.sourceRow > pipeSourceRow && !releasedPayload;
                 }
 
-                colHolders[row].gameObject.transform.DOKill(false);
-                colHolders[row].gameObject.transform.localScale = insideSpawner ? Vector3.one * PIPE_INNER_SCALE : Vector3.one;
+                Vector3 targetPos;
+                if (insideSpawner)
+                    // ROLLBACK_PIPE_BEHIND_VISIBLE_20260624 (#2): 파이프에 '맵핑 안 된' 뒤 홀더는 숨기지 않고
+                    // 파이프 뒤 정상 행(pipeRow+1, +2 …)에 고정 — 일반 홀더처럼 보이되 파이프 앞으론 못 넘어옴(5행까지).
+                    targetPos = CalculateQueuePosition(column, pipeSourceRow + 1 + blockedRow);
+                else
+                    targetPos = CalculateQueuePosition(column, activeRow);
+                // ROLLBACK_PIPE_FRONT_ACTIVE_20260624: '맨 앞(배포 가능)' = 첫 active 홀더(activeRow==0).
+                // 막힌 뒤 홀더는 앞이 비어도 Z정렬상 맨앞이 되어도 '앞줄(아웃라인/연출/Hidden공개)' 취급 안 함.
+                bool isFrontActive = !insideSpawner && activeRow == 0;
+                if (insideSpawner) blockedRow++; else activeRow++;
+
+                // #3: 팝업(Scale Up) 중인 holder 는 DOKill/즉시 scale 세팅 건너뜀(팝 트윈 보존, 이동은 허용).
+                bool popping = _poppingScale.Contains(colHolders[row].holderId);
+                if (!popping) colHolders[row].gameObject.transform.DOKill(false);
+                // 뒤 대기 홀더도 일반 홀더처럼 정상 크기(축소 X). 팝업 중인 방출 payload 만 0→1 트윈 보존.
+                if (!popping)
+                    colHolders[row].gameObject.transform.localScale = Vector3.one;
 
                 // Spawner 안 대기: TEXT 숨김 / 앞줄: TEXT 보이기
                 // [TMP 부하 2026-06-10] row 2+ 도 텍스트 비활성 (MAGAZINE_TEXT_VISIBLE_ROWS 게이트).
                 if (colHolders[row].magazineText != null)
                 {
-                    colHolders[row].magazineText.gameObject.SetActive(!insideSpawner && row < MAGAZINE_TEXT_VISIBLE_ROWS);
-                    // 비활성화(row 1+): 텍스트 투명도 50%
-                    if (!insideSpawner && colHolders[row].magazineText != null)
+                    // ROLLBACK_PIPE_FRONT_ACTIVE_20260624: 뒤 대기 홀더도 텍스트 보이게(insideSpawner 게이트 제거).
+                    // 흰색(앞줄 강조)은 '맨 앞 active' 만 — 막힌 뒤 홀더는 50% 반투명.
+                    colHolders[row].magazineText.gameObject.SetActive(row < MAGAZINE_TEXT_VISIBLE_ROWS);
                     {
                         bool hiddenGuard = false;
                         if (HolderManager.HasInstance)
@@ -1022,20 +1060,20 @@ namespace BalloonFlow
                         }
                         else
                         {
-                            colHolders[row].magazineText.color = row == 0
+                            colHolders[row].magazineText.color = isFrontActive
                                 ? Color.white
                                 : new Color(1f, 1f, 1f, 0.5f);
                         }
                     }
                 }
 
-                // 보관함 상태별 아웃라인
+                // 보관함 상태별 아웃라인 — 맨 앞 active 만 클릭가능 아웃라인. 막힌 뒤 홀더는 아웃라인 없음.
                 if (colHolders[row].identifier != null)
                 {
-                    if (row == 0)
-                        colHolders[row].identifier.SetActiveFrontRow(); // 검은 아웃라인
+                    if (isFrontActive)
+                        colHolders[row].identifier.SetActiveFrontRow(); // 검은 아웃라인(맨 앞 active 만)
                     else
-                        colHolders[row].identifier.SetInactiveRow(); // 아웃라인 없음
+                        colHolders[row].identifier.SetInactiveRow(); // 아웃라인 없음(뒤 대기 홀더 포함)
                 }
 
                 if (Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos) > 0.05f)
@@ -1046,7 +1084,7 @@ namespace BalloonFlow
 
                 colHolders[row].queuePosition = targetPos;
 
-                if (row == 0 && HolderManager.HasInstance)
+                if (isFrontActive && HolderManager.HasInstance)
                 {
                     var data = HolderManager.Instance.FindHolderPublic(colHolders[row].holderId);
                     if (data != null && data.isHidden)
@@ -1136,7 +1174,10 @@ namespace BalloonFlow
                 // Spawner/Lock: 색상 적용 안 함 (프리팹 원본 유지)
             }
 
-            TMP_Text textMesh = obj.GetComponentInChildren<TMP_Text>(true);
+            // ROLLBACK_SPAWNER_MAGAZINE_TEXT_SERIALIZE_20260624: 인스펙터 지정 MagazineText 우선, 미할당 시 자동 탐색.
+            TMP_Text textMesh = (ident != null && ident.MagazineText != null)
+                ? ident.MagazineText
+                : obj.GetComponentInChildren<TMP_Text>(true);
             if (textMesh != null)
             {
                 // [TMP 부하 2026-06-10] 풀 재사용 안전망 — row 2+ 비활성 상태로 반환된 홀더가 재사용될 때
@@ -2557,6 +2598,33 @@ namespace BalloonFlow
             if (visual.magazineText != null)
                 visual.magazineText.SetText("{0}", evt.remainingHP);
 
+            // ROLLBACK_SPAWNER_CONSUME_DESPAWN_20260624 (#4 + #5):
+            // The Spawner reuses this OnFrozenHPChanged channel for its remaining-count text. When a
+            // Spawner (Pipe/Glass Pipe) reaches 0 (all holders sent), play a disappear animation and
+            // return its visual to the pool — previously it just flipped isConsumed and lingered on screen.
+            // Removing the visual drops the column's spawnerCount to 0, so RepositionColumnHolders no longer
+            // pins the holders that were BEHIND the pipe → they advance to the front and become deployable
+            // like normal holders (#5). Gated to Spawner types so a Frozen holder hitting 0 is NOT affected.
+            if (evt.remainingHP <= 0 && HolderManager.HasInstance && visual.gameObject != null)
+            {
+                var sData = HolderManager.Instance.FindHolderPublic(evt.holderId);
+                if (sData != null && (sData.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                                   || sData.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O))
+                {
+                    int col = visual.column;
+                    // ROLLBACK_SPAWNER_END_PARTICLE_20260624 (#4): 사이즈 줄이는 연출 대신 EndParticle 활성화.
+                    if (visual.identifier != null) visual.identifier.PlaySpawnerEndParticle();
+                    visual.gameObject.transform.DOKill(false);
+                    DG.Tweening.DOVirtual.DelayedCall(0.6f, () =>
+                    {
+                        if (visual != null && visual.gameObject != null)
+                            ReturnHolderToPool(visual);
+                        _holderVisuals.Remove(evt.holderId);
+                        RepositionColumnHolders(col); // 뒤 홀더들이 정상 큐로 전진 → 사용 가능
+                        RebuildChainLines();
+                    });
+                }
+            }
         }
 
         private void HandleHolderUnlocked(OnHolderUnlocked evt)

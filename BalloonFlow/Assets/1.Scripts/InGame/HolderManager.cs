@@ -945,9 +945,30 @@ namespace BalloonFlow
                 if (holder.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T ||
                     holder.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O)
                     continue;
+                // ROLLBACK_PIPE_HELD_BEHIND_20260624: 파이프 뒤(미방출) 대기 홀더는 '앞 큐'가 아니므로 제외 —
+                // 안 그러면 파이프 아래 잔여 홀더가 앞을 찼다고 판단해 release 가 영영 안 됨(normalCount 과대).
+                if (IsHeldBehindPipe(holder)) continue;
                 count++;
             }
             return count;
+        }
+
+        /// <summary>ROLLBACK_PIPE_HELD_BEHIND_20260624: 활성 파이프보다 뒤(sourceRow 큰)에 있고 아직
+        /// 방출 안 된 홀더 = 파이프가 막고 있는 대기분. 화면 숨김 + 앞 카운트 제외 + 파이프 소멸 후 해제.</summary>
+        public bool IsHeldBehindPipe(HolderData h)
+        {
+            if (h == null || h.isConsumed) return false;
+            if (h.isPipePayload) return !h.isPipePayloadReleased; // 미방출 payload = 막힘 / 방출됨 = 자유
+            // 일반 홀더: 같은 열에 (비소비) 활성 파이프가 있고, 그 파이프보다 뒤면 막힘.
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                HolderData p = _holders[i];
+                if (p.isConsumed || p.column != h.column) continue;
+                if (p.queueGimmick != GimmickManager.GIMMICK_SPAWNER_O &&
+                    p.queueGimmick != GimmickManager.GIMMICK_SPAWNER_T) continue;
+                if (h.sourceRow > p.sourceRow) return true;
+            }
+            return false;
         }
 
         private void PublishSpawnerRemaining(HolderData spawner)
@@ -991,8 +1012,11 @@ namespace BalloonFlow
                 }
                 */
 
-                // 앞 보관함(1) + Spawner 안 대기(1) = 최대 2개
-                if (normalCount >= 2) continue;
+                // ROLLBACK_PIPE_HELD_BEHIND_20260624: 파이프 '앞 칸 수' 만큼만 채운다. 파이프가 row N 이면
+                // 앞(레일 쪽)에 0..N-1 = N 칸. 그만큼만 release 해야 방출분이 파이프를 안 덮고 앞에 안착.
+                // (normalCount 는 파이프 뒤 대기분 제외된 '앞 큐' 수.) 최소 1.
+                int frontCapacity = Mathf.Max(1, spawner.sourceRow);
+                if (normalCount >= frontCapacity) continue;
 
                 // ROLLBACK_PIPE_PAYLOAD_RELEASE_20260624:
                 // Pipe(Spawner_O) releases authored holders below the pipe anchor. Glass Pipe
