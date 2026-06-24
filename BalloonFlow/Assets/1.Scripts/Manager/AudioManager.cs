@@ -124,6 +124,7 @@ namespace BalloonFlow
         private bool _sfxEnabled = true;
         private bool _bgmEnabled = true;
         private bool _resultIntroSfxLock;
+        private Coroutine _bgmFadeCo;
 
         protected override void OnSingletonAwake()
         {
@@ -186,7 +187,10 @@ namespace BalloonFlow
             if (_sfxBalloonPop2 == null)  _sfxBalloonPop2  = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal_2");
             if (_sfxClear == null)        _sfxClear        = Resources.Load<AudioClip>("Sound/Effect/congratuation")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Clear");
-            if (_sfxFail == null)         _sfxFail         = Resources.Load<AudioClip>("Sound/Effect/fail")
+            // [2026-06-24 사용자 피드백] 사용자 명시 자산 경로 Assets/Resources/Sound/Effect/Fail.mp3(대문자 F) 를
+            // 1순위로 로드. 기존 소문자 fail.mp3 / 레거시 Stage_Fail 은 폴백으로 유지.
+            if (_sfxFail == null)         _sfxFail         = Resources.Load<AudioClip>("Sound/Effect/Fail")
+                ?? Resources.Load<AudioClip>("Sound/Effect/fail")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Fail");
             if (_sfxHolderDeploy == null) _sfxHolderDeploy = Resources.Load<AudioClip>("Sound/Effect/Stage_Object_Drop");
             if (_sfxHolderReveal == null) _sfxHolderReveal = Resources.Load<AudioClip>("Sound/Effect/Stage_Holder_Reveal")
@@ -345,6 +349,45 @@ namespace BalloonFlow
             if (_bgmSource != null) _bgmSource.Stop();
         }
 
+        /// <summary>호출 위치: PopupFail02.OnEnable. BGM 즉시 정지 대신 duration 동안 볼륨 0 으로 감쇠 후 Stop.
+        /// 표준 fail-flow 에서는 HandleBoardFailed 가 선행 StopBGM 하므로 자연 no-op 으로 끝남(early-return guard).
+        /// 진행 중 fade 코루틴이 살아있으면 StopCoroutine 후 재시작(idempotent). duration<=0 일 때 즉시 Stop + 볼륨 원복.
+        /// owner: 2026-06-24 사용자 피드백.</summary>
+        public void StopBGMFadeOut(float duration = 0.5f)
+        {
+            if (_bgmSource == null || !_bgmSource.isPlaying) return;
+            if (_bgmFadeCo != null)
+            {
+                StopCoroutine(_bgmFadeCo);
+                _bgmFadeCo = null;
+            }
+            _bgmFadeCo = StartCoroutine(BGMFadeOutCoroutine(duration));
+        }
+
+        private System.Collections.IEnumerator BGMFadeOutCoroutine(float duration)
+        {
+            float startVolume = _bgmSource.volume;
+            if (duration <= 0f)
+            {
+                _bgmSource.Stop();
+                _bgmSource.volume = startVolume;
+                _bgmFadeCo = null;
+                yield break;
+            }
+
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                _bgmSource.volume = Mathf.Lerp(startVolume, 0f, t);
+                yield return null;
+            }
+            _bgmSource.Stop();
+            _bgmSource.volume = startVolume;
+            _bgmFadeCo = null;
+        }
+
         #endregion
 
         #region Public — SFX
@@ -382,6 +425,15 @@ namespace BalloonFlow
         public void PlayStageResult()
         {
             PlaySFX(_sfxStageResult);
+        }
+
+        /// <summary>Fail SFX — PopupFail02 등장 시 1회 재생.
+        /// 호출 위치: PopupFail02.OnEnable (_sfxPlayed latch 가드, 인스턴스 lifetime 당 1회).
+        /// 재생 진입점 단일화 — HandleLevelFailed 의 PlaySFX(_sfxFail) 는 제거되어 double-play 차단.
+        /// owner: 2026-06-24 사용자 피드백.</summary>
+        public void PlayPopupFail02Sfx()
+        {
+            PlaySFX(_sfxFail);
         }
 
         /// <summary>congratuation (FinishLogo 등장 1-shot). 트리거: GameBootstrap.PlayFinishLogoSequence — BeginResultIntroSfxLock + PlayStageResultFireworkLoop 와 동일 프레임에 호출.
@@ -666,8 +718,8 @@ namespace BalloonFlow
 
         private void HandleLevelFailed(OnLevelFailed evt)
         {
-            // fail (최종 실패음, ~2-3s). BGM 은 이미 OnBoardFailed 에서 정지됨.
-            PlaySFX(_sfxFail);
+            // [2026-06-24 사용자 피드백] 재생 진입점을 PopupFail02.OnEnable 로 단일화 — double-play 회귀 차단.
+            // 기존 PlaySFX(_sfxFail) 호출은 제거. Subscribe/Unsubscribe 시그니처는 유지(다른 fail-flow 진단 훅 가능성 보존).
         }
 
         // 기믹 타격/파괴 사운드 — Ice(icebreak) / Pinata·Pin·PinataBox(woodbreak). 연속 셀 spam 쿨다운.
