@@ -65,7 +65,7 @@ namespace BalloonFlow
         [SerializeField] private AudioClip _sfxStageResultFirework;
 
         [Header("[SFX — Lobby]")]
-        [Tooltip("Lobby_Rail — UILobby Top/Bottom Rail 이동 시작 시 1회 재생. PlayRailEnterAnimation/PlayRailPullDownAnimation 진입점에서 호출. PlayOneShot 이므로 호출당 1회 보장.")]
+        [Tooltip("Lobby_Rail — Shop/Setting ↔ Lobby 가로 페이지 전환 시 1회 재생. 호출 위치: UILobby.GoToPage(pageIndex==1 분기) / UILobby.HandleSwipeDrag(targetPage==1 && prev!=1 분기). [도메인 원칙] Rail 위치 변경 자체와는 무관 — PlayRailEnterAnimation/PlayRailPullDownAnimation 내부에서 호출 금지(첫 진입·인게임 복귀·풀다운 제스처에서 오발화). PlayOneShot 채널이라 호출당 1회 보장.")]
         [SerializeField] private AudioClip _sfxLobbyRail;
         [Tooltip("Lobby_RailBox_Start — LobbyRailBox 오픈(BoxOpen Animator trigger) 연출 시작 시 1회 재생. 호출 위치: LobbyRailBox.PlayStartGameAnimation 진입점. PlayOneShot 이라 함수당 1회 보장.")]
         [SerializeField] private AudioClip _sfxLobbyRailBoxStart;
@@ -441,9 +441,11 @@ namespace BalloonFlow
             _resultIntroSfxLock = false;
         }
 
-        /// <summary>Lobby_Rail — UILobby Rail(Top/Bottom) 이동 시작 시 1회 재생.
-        /// 호출 위치: UILobby.PlayRailEnterAnimation / PlayRailPullDownAnimation 진입점.
-        /// PlayOneShot 이라 함수당 1회 보장 — Top/Bottom 동시 변경 케이스에서도 호출자가 1번만 부르면 1회 재생.</summary>
+        /// <summary>Lobby_Rail — Shop/Setting ↔ Lobby 가로 페이지 전환 진입점에서 1회 재생.
+        /// 호출 위치: UILobby.GoToPage (pageIndex==1 분기) / UILobby.HandleSwipeDrag (targetPage==1 && prev!=1 분기).
+        /// [도메인 원칙 — 회귀 차단] Rail 위치 변경(첫 진입 / 인게임 복귀 / 풀다운)에서는 호출 금지.
+        /// 'Lobby_Rail' 은 rail 애니메이션 사운드가 아니라 '가로 전환 연출 사운드'다 — caller context 기반 게이팅.
+        /// PlayOneShot 채널이라 호출당 1회 보장.</summary>
         public void PlayLobbyRail()
         {
             PlaySFX(_sfxLobbyRail);
