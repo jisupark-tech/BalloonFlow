@@ -2826,6 +2826,8 @@ namespace BalloonFlow
 
             if (_animPlayBtn != null && _animPlayBtn.runtimeAnimatorController != null)
             {
+                // [2026-06-24 사용자 피드백] PlayButton/ButtonEffect 활성화는 LobbyBtnChange.anim 의 m_IsActive 키프레임으로만 일어나므로, anim 재생 직전에 1회 SFX 발화. silent no-op guard(상단)가 의미 없는 재호출 차단 + Animator 미할당 분기 skip = 실제 활성화 케이스에서만 재생.
+                AudioManager.Instance.PlayLevelupBtn();
                 _animPlayBtn.Play(LOBBY_BTN_CHANGE_ANIM_NAME, 0, 0f);
             }
 
