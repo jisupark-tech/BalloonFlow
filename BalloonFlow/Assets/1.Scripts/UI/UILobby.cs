@@ -719,6 +719,8 @@ namespace BalloonFlow
             if (changed) PlayWsMultipleFxFire();
             // [2026-06-22] 배수 텍스트 펀치 — PlayWsMultipleFxFire 와 동일 changed-edge 에서 호출 (1/1, INC+DEC 공용).
             if (changed) PlayWsMultiplierTextPunch();
+            // [WS Multiple 텍스트 변경 SFX 2026-06-24 rework] 사용자 피드백 supersede 2026-06-24 이전 스펙(ImageIcon DOScale 시점). TextGauge/Outline 값이 실제로 달라지는 changed-edge 1회 발화 — PlayWsMultipleFxFire/PlayWsMultiplierTextPunch 와 동일 가드 공유(INC+DEC 1/1, 두 텍스트 동일 변경 시 SetWinningIconMultiplierText 1회 진입이므로 중복 재생 자연 방지, _wsHoldMultiplierTextDuringAnim 가드로 애니메이션 hold 중 호출 차단).
+            if (changed && AudioManager.HasInstance) AudioManager.Instance.PlayItemGet();
         }
 
         private void PlayWsMultipleFxFire()
@@ -1257,12 +1259,6 @@ namespace BalloonFlow
                 Vector3 baseScale = target.localScale;
                 _wsLobbyFxSequence?.Kill();
                 _wsLobbyFxSequence = DOTween.Sequence().SetUpdate(true);
-                // [WS ImageIcon 스케일 확대 SFX 2026-06-24 rework] 사용자 피드백: ImageIcon 의 스케일이 커지기 시작하는 시점에 Item_Get.mp3 1회 재생.
-                // 호출 위치: target.DOScale(baseScale * 1.25f, ...) 시퀀스 Append 직전 — 펄스 시각 효과의 '시작' 순간과 동기.
-                // 1회 보장 근거: (1) 본 호출이 코루틴 본문 1회 위치 (매 프레임 lambda/DOTween OnUpdate 콜백 외부) → 펄스 시퀀스 1회 = SFX 1회. (2) PlaySFX(PlayOneShot) 으로 호출당 1회. (3) 코루틴은 _wsLobbyFxCoroutine != null 가드로 동시 재진입 차단 → '진행 중 반복 X' 자동 충족. (4) 다음 PlayWsFireFlyAndPulse 진입(스케일 확대 연출 재발생) 시 다시 1회 재생 → 사용자 요구 '연출마다 1회' 충족.
-                // edge-detect 가드(_wsFxFire.activeSelf) 의도적 비채택: 사용자 명세는 'ImageIcon 스케일 확대 연출마다 1회'이며 FXFire 활성 상태와 무관 — 가드 추가 시 FXFire 가 켜진 채로 코루틴이 재진입되는 케이스에서 사용자 요구를 위반함.
-                // owner 출처: ProjectHub 태스크 [사용자 추가 지시 2026-06-24] — 'ImageIcon 의 스케일이 커지기 시작하는 시점에 1회 재생 / 스케일 애니메이션 진행 중 반복 재생되지 않도록 처리 / 스케일 확대 연출이 다시 발생하면 해당 연출마다 1회 재생'.
-                if (AudioManager.HasInstance) AudioManager.Instance.PlayItemGet();
                 _wsLobbyFxSequence.Append(target.DOScale(baseScale * 1.25f, WS_FIRE_PULSE_DURATION).SetEase(Ease.OutBack));
                 _wsLobbyFxSequence.Append(target.DOScale(baseScale, WS_FIRE_PULSE_DURATION).SetEase(Ease.OutCubic));
                 yield return _wsLobbyFxSequence.WaitForCompletion();

@@ -79,7 +79,7 @@ namespace BalloonFlow
         [SerializeField] private AudioClip _sfxWsGaugeUp;
         [Tooltip("Common_Ding — PopupWinningStreakReward 카운터(TxtAmount/TxtAmountOutline) 증가 이벤트마다 1회 재생. (a) 호출 위치: PopupWinningStreakReward.ApplyAmount 의 amount>from(증가) 분기 직후 — _displayedAmount 갱신 직후 단 한 줄(if (from < amount) ...). (b) 1회 보장 근거: ApplyAmount 는 FXItem 비행체(FXBadge 도착 / FXMultiple 도착 / gainedPoints 최종 보정) 콜백/iteration 단위로 호출되므로 증가 이벤트 1회당 ApplyAmount 1회 = SFX 1회 → 사용자 요구 '2번 증가→2번 재생' 자동 충족. (c) 절대 DOTween.To 의 onUpdate 람다(PopupWinningStreakReward.cs:412 rolling-count `v => { rolling = v; SetAmountText(...) }`) 안에서 호출 금지 — 매 프레임 호출되어 잔향 무한 중첩(과거 도메인 원칙 4 회귀).")]
         [SerializeField] private AudioClip _sfxWsRewardDing;
-        [Tooltip("Item_Get — UILobby.PlayWsFireFlyAndPulse 의 target(ImageIcon) DOScale 펄스 시작 직전 1회 재생. PopupWinningStreakReward 종료 → FXItem 비행체 도착 → ImageIcon 스케일 확대(x1.25 OutBack) 시작 순간. 코루틴 1회 진입 = 펄스 1회 = SFX 1회 (재진입 가드 _wsLobbyFxCoroutine != null). 절대 DOTween OnUpdate/매 프레임 lambda 에서 호출 금지 (잔향 중첩 회귀 방지).")]
+        [Tooltip("Item_Get — UILobby.SetWinningIconMultiplierText 의 changed-edge 1회 재생. WinningIcon Multiple 텍스트(TextGauge/TextGaugeOutline) 값이 이전과 다른 값으로 갱신되는 순간(INC/DEC 양방향). PlayWsMultipleFxFire/PlayWsMultiplierTextPunch 와 동일 가드 공유. 1회 보장: (1) changed bool 가드, (2) _wsHoldMultiplierTextDuringAnim 으로 연출 hold 중 진입 자체 차단, (3) 두 텍스트(Gauge/Outline)는 동일 메서드 1회 호출 내 함께 갱신되므로 중복 발화 불가. 절대 DOTween OnUpdate/매 프레임 lambda 에서 호출 금지(잔향 중첩 회귀 방지).")]
         [SerializeField] private AudioClip _sfxItemGet;
 
         [Header("[SFX — Booster]")]
@@ -217,7 +217,7 @@ namespace BalloonFlow
             if (_sfxWsGaugeUp == null) _sfxWsGaugeUp = Resources.Load<AudioClip>("Sound/Effect/GaugeUp");
             // [2026-06-24] Common_Ding — PopupWinningStreakReward.ApplyAmount 증가 분기 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp 패턴): 다른 클립 대체 시 의도 오염.
             if (_sfxWsRewardDing == null) _sfxWsRewardDing = Resources.Load<AudioClip>("Sound/Effect/Common_Ding");
-            // [2026-06-24] Item_Get — UILobby.PlayWsFireFlyAndPulse FXFire inactive→active edge 1회. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding 패턴): 다른 클립 대체 시 의도 오염.
+            // [2026-06-24] Item_Get — UILobby.SetWinningIconMultiplierText changed-edge 1회. WinningIcon Multiple 텍스트 값 변경 순간. 폴백 체인 없이 단독 로드(Zap_Appear/GaugeUp/Ding 패턴): 다른 클립 대체 시 의도 오염.
             if (_sfxItemGet == null) _sfxItemGet = Resources.Load<AudioClip>("Sound/Effect/Item_Get");
 
 #if UNITY_EDITOR
@@ -463,10 +463,10 @@ namespace BalloonFlow
             PlaySFX(_sfxWsRewardDing);
         }
 
-        /// <summary>Item_Get — UILobby.PlayWsFireFlyAndPulse 코루틴의 target(ImageIcon) DOScale 펄스 시작 직전 1회 재생.
-        /// 호출 위치: UILobby.PlayWsFireFlyAndPulse — `_wsLobbyFxSequence.Append(target.DOScale(baseScale * 1.25f, ...))` 직전 (ImageIcon 스케일 확대 OutBack 시퀀스 빌드 직전).
-        /// 1회 보장 근거: (1) 코루틴 본문 1회 위치 → 펄스 1회 = SFX 1회, (2) PlayOneShot 으로 호출당 1회, (3) 코루틴 재진입 가드(_wsLobbyFxCoroutine != null)로 진행 중 반복 X. 다음 PlayWsFireFlyAndPulse 진입 시 다시 1회 → 사용자 요구 '스케일 확대 연출마다 1회' 충족.
-        /// 절대 PlayWsFireFlyAndPulse 내부 매 프레임 lambda/Update/DOTween OnUpdate 콜백 안에서 호출 금지(과거 도메인 원칙 4 회귀).</summary>
+        /// <summary>Item_Get — UILobby.SetWinningIconMultiplierText 의 changed-edge (PlayWsMultipleFxFire / PlayWsMultiplierTextPunch 와 동일 가드 라인) 1회 재생.
+        /// 1회 보장 근거: (1) `_wsLastMultiplierText != mult` changed-edge — 이전 값과 다른 값으로 갱신되는 순간만 발화, (2) `_wsHoldMultiplierTextDuringAnim` 가드로 연출 hold 중 메서드 진입 자체 차단, (3) Gauge/Outline 두 텍스트는 SetWinningIconMultiplierText 1회 호출 내에서 함께 갱신되므로 호출 1회 = SFX 1회. 사용자 요구 'INC+DEC 양방향 1회 / 실제 값 변경 이벤트 1회당 1회 / 애니메이션 중 반복 방지 / 두 텍스트 동일 변경 중복 방지' 모두 충족.
+        /// owner 출처: ProjectHub 태스크 코멘트 2026-06-24 익명 사용자 피드백 — TextGauge/Outline 수치 변경 시점에 Item_Get.mp3 1회 재생. 직전 2026-06-24 'ImageIcon 스케일 확대 시점' 스펙을 명시적으로 supersede.
+        /// 절대 SetWinningIconMultiplierText 외부(매 프레임 lambda / Update / DOTween OnUpdate) 에서 호출 금지(과거 도메인 원칙 4 회귀).</summary>
         public void PlayItemGet()
         {
             PlaySFX(_sfxItemGet);
