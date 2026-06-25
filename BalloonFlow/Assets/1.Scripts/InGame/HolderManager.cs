@@ -646,17 +646,9 @@ namespace BalloonFlow
                 if (member.magazineCount <= 0 || member.isHidden || member.isFrozen)
                     return false;
 
-                if (HolderVisualManager.HasInstance && !HolderVisualManager.Instance.IsInFrontRow(member.holderId))
-                {
-                    Debug.Log($"[HolderManager] Chain blocked - member {member.holderId} not in front row (groupId={triggerHolder.chainGroupId})");
-                    EventBus.Publish(new OnHolderColumnBlocked
-                    {
-                        holderId = triggerHolder.holderId,
-                        column = triggerHolder.column
-                    });
-                    return false;
-                }
-
+                // ROLLBACK_VERTICAL_CHAIN_DEPLOY_20260625: 멤버별 '앞줄' 검증을 여기서 제거.
+                //   세로 체인은 같은 열에 스택돼 뒤 멤버(예: A-2 row1)가 앞줄이 아니므로 이 검증에 걸려 막혔다.
+                //   앞줄 검증은 아래 '열별 그룹화'에서 열마다 선두 1명 기준으로 처리한다(가로 체인 동작 동일).
                 members.Add(member);
             }
 
@@ -673,52 +665,75 @@ namespace BalloonFlow
                 return false;
             }
 
-            int[] chainMembersPerColumn = new int[MAX_QUEUE_COLUMNS];
+            // ROLLBACK_VERTICAL_CHAIN_DEPLOY_20260625: 세로 체인(같은 열에 스택된 멤버) 지원.
+            //   기존엔 (a) 모든 멤버가 앞줄이어야 하고, (b) 한 열에 멤버 2명 이상(chainMembersPerColumn>1)이면
+            //   무조건 차단 → 세로 체인(A-1 row0 / A-2 row1, 같은 열)이 정상 탭으로 배포 불가였다.
+            //   (가로 체인은 열당 1명·모두 앞줄이라 통과. Hand/ForceSelectHolder 는 순차 점유라 됐는데
+            //    정상 탭만 막혀 불일치였음.)
+            //   변경: 멤버를 열별로 묶어 각 열에서 '앞줄 선두 1명 = deploying, 바로 뒤 1명 = waiting' 으로
+            //   순차 점유(Hand 와 동일). 열 슬롯이 deploying+waiting 2개라 한 열당 최대 2명까지 동시 적재.
+            var membersByColumn = new Dictionary<int, List<HolderData>>();
             for (int i = 0; i < members.Count; i++)
             {
-                int col = members[i].column;
-                if (col < 0 || col >= _queueColumns)
-                    return false;
-                chainMembersPerColumn[col]++;
+                int mcol = members[i].column;
+                if (mcol < 0 || mcol >= _queueColumns) return false;
+                if (!membersByColumn.TryGetValue(mcol, out var list))
+                {
+                    list = new List<HolderData>(2);
+                    membersByColumn[mcol] = list;
+                }
+                list.Add(members[i]);
             }
 
-            for (int col = 0; col < _queueColumns; col++)
+            // 열별 검증: 열이 비어있어야 하고(분할 적재 방지), 열당 멤버 ≤ 2(슬롯 deploying+waiting), 앞줄 선두 멤버 존재.
+            foreach (var kvp in membersByColumn)
             {
-                if (chainMembersPerColumn[col] <= 0) continue;
+                int col = kvp.Key;
+                List<HolderData> colMembers = kvp.Value;
 
-                // Linked boxes are expected to load together. If any member would have to wait
-                // behind an already active holder, block the whole group instead of splitting it.
-                if (_deployingHolderId[col] >= 0 || _waitingHolderId[col] >= 0 || chainMembersPerColumn[col] > 1)
+                if (_deployingHolderId[col] >= 0 || _waitingHolderId[col] >= 0 || colMembers.Count > 2)
                 {
-                    EventBus.Publish(new OnHolderColumnBlocked
-                    {
-                        holderId = triggerHolder.holderId,
-                        column = col
-                    });
-                    EventBus.Publish(new OnHolderWarning
-                    {
-                        waitingCount = 2,
-                        maxSlots = 2,
-                        isDanger = true
-                    });
+                    EventBus.Publish(new OnHolderColumnBlocked { holderId = triggerHolder.holderId, column = col });
+                    EventBus.Publish(new OnHolderWarning { waitingCount = colMembers.Count, maxSlots = 2, isDanger = true });
+                    return false;
+                }
+
+                // 그 열에 앞줄(선두) 멤버가 있어야 배포 가능 — 가로=유일 멤버, 세로=맨 위(row0) 멤버.
+                bool hasFront = !HolderVisualManager.HasInstance; // visual 없으면 검증 스킵
+                if (HolderVisualManager.HasInstance)
+                    for (int i = 0; i < colMembers.Count; i++)
+                        if (HolderVisualManager.Instance.IsInFrontRow(colMembers[i].holderId)) { hasFront = true; break; }
+                if (!hasFront)
+                {
+                    Debug.Log($"[HolderManager] Chain blocked - column {col} has no front-row member (groupId={triggerHolder.chainGroupId})");
+                    EventBus.Publish(new OnHolderColumnBlocked { holderId = triggerHolder.holderId, column = col });
                     return false;
                 }
             }
 
-            for (int i = 0; i < members.Count; i++)
+            // 배포 등록: 열별로 앞줄 선두 = deploying, 나머지(최대 1명) = waiting(선두 끝나면 이어서 배포 → 레일에 함께 붙음).
+            foreach (var kvp in membersByColumn)
             {
-                HolderData member = members[i];
-                int col = member.column;
-                member.isDeploying = true;
-                member.isMovingToRail = true;
-                _deployingHolderId[col] = member.holderId;
+                int col = kvp.Key;
+                List<HolderData> colMembers = kvp.Value;
 
-                EventBus.Publish(new OnHolderSelected
+                HolderData front = colMembers[0];
+                if (HolderVisualManager.HasInstance)
+                    for (int i = 0; i < colMembers.Count; i++)
+                        if (HolderVisualManager.Instance.IsInFrontRow(colMembers[i].holderId)) { front = colMembers[i]; break; }
+
+                front.isDeploying = true;
+                front.isMovingToRail = true;
+                _deployingHolderId[col] = front.holderId;
+                EventBus.Publish(new OnHolderSelected { holderId = front.holderId, color = front.color, magazineCount = front.magazineCount });
+
+                for (int i = 0; i < colMembers.Count; i++)
                 {
-                    holderId = member.holderId,
-                    color = member.color,
-                    magazineCount = member.magazineCount
-                });
+                    if (colMembers[i] == front) continue;
+                    colMembers[i].isWaiting = true;
+                    _waitingHolderId[col] = colMembers[i].holderId;
+                    EventBus.Publish(new OnHolderSelected { holderId = colMembers[i].holderId, color = colMembers[i].color, magazineCount = colMembers[i].magazineCount });
+                }
             }
 
             return true;

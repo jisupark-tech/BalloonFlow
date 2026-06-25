@@ -223,13 +223,23 @@ namespace BalloonFlow
             HolderData holder = HolderManager.Instance.FindHolderPublic(holderId);
             if (holder == null || holder.chainGroupId < 0) return true;
 
+            // ROLLBACK_VERTICAL_CHAIN_DEPLOY_20260625: 기존엔 '그룹 전원 앞줄'(AND)이라 세로 체인(같은 열에
+            //   스택돼 뒤 멤버 A-2(row1)가 앞줄이 아님)이 영영 1차 차단됐다. → '그룹이 차지한 각 열마다 앞줄
+            //   선두 멤버가 하나 존재' 로 완화(HolderManager.TrySelectChainGroup 배포 규칙과 일치).
+            //   가로 체인은 열당 1명이라 동작 동일. 세로 체인은 맨 위(앞줄) 멤버가 그 열의 선두.
             var members = HolderManager.Instance.GetChainGroup(holder.chainGroupId);
+            var memberColumns = new System.Collections.Generic.HashSet<int>();
+            var frontColumns = new System.Collections.Generic.HashSet<int>();
             for (int i = 0; i < members.Count; i++)
             {
-                int mid = members[i];
-                if (mid == holderId) continue;
-                if (!HolderVisualManager.Instance.IsInFrontRow(mid)) return false;
+                HolderData m = HolderManager.Instance.FindHolderPublic(members[i]);
+                if (m == null) continue;
+                memberColumns.Add(m.column);
+                if (HolderVisualManager.Instance.IsInFrontRow(members[i]))
+                    frontColumns.Add(m.column);
             }
+            foreach (int col in memberColumns)
+                if (!frontColumns.Contains(col)) return false;
             return true;
         }
 
