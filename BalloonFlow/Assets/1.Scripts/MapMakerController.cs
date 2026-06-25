@@ -1308,8 +1308,9 @@ namespace BalloonFlow
                 SetStatus($"Barricade 방향: {v} (0=N/1=E/2=S/3=W), 길이 {_paintBarricadeLength}");
             });
             Lbl(barRow, "길이", w: 35);
-            MakeIntField(barRow, _paintBarricadeLength, 3, 12, v => {
-                _paintBarricadeLength = Mathf.Max(3, v);
+            // ROLLBACK_BARRICADE_MAXLEN50_20260625: 최대 길이 12 → 50(머리+꼬리 포함 진행축 전체 칸). 런타임/검증에 별도 캡 없음.
+            MakeIntField(barRow, _paintBarricadeLength, 3, 50, v => {
+                _paintBarricadeLength = Mathf.Clamp(v, 3, 50);
                 SetStatus($"Barricade 길이: {_paintBarricadeLength} (방향 {_paintBarricadeDir}, footprint {_paintBarricadeLength}×2)");
             });
             _fieldGimmickBarricadeRow = barRow.GetComponent<RectTransform>();
