@@ -989,13 +989,18 @@ namespace BalloonFlow
             // 미해금 → 토스트
             if (!BoosterManager.Instance.IsBoosterUnlocked(boosterType))
             {
-                // ROLLBACK_LOCKED_ITEM_TOAST_TEXT_20260619:
-                // Locked item taps now use TextData instead of the previous level-based hardcoded toast.
-                // ROLLBACK_LOCKED_ITEM_TOAST_LEVEL_20260623: "Unlocks at Level {n}" 의 {n} 을 실제 해금 레벨로 치환.
-                ShowToast(LocalizationService.GetWith(
-                    "toast.item.locked",
-                    "n",
-                    GetBoosterUnlockLevel(boosterType)));
+                // ROLLBACK_LOCKED_ITEM_TOAST_TEXT_20260619 / LEVEL_20260623:
+                //   "Unlocks at Level {n}" 의 {n} 을 실제 해금 레벨로 치환.
+                // ROLLBACK_LOCKED_ITEM_TOAST_ROBUST_20260625: {n} 치환이 데이터/케이스 변형·placeholder 차이 등
+                //   어떤 이유로든 누락돼도 raw placeholder 가 사용자에게 절대 노출되지 않게 방어:
+                //   1) 흔한 토큰 변형({n}/{N}/{0}/{level}) 직접 치환 → 2) 그래도 남은 {..} 는 레벨로 강제 치환.
+                string lvStr = GetBoosterUnlockLevel(boosterType).ToString();
+                string lockMsg = LocalizationService.Get("toast.item.locked")
+                    .Replace("{n}", lvStr).Replace("{N}", lvStr)
+                    .Replace("{0}", lvStr).Replace("{level}", lvStr);
+                if (lockMsg.IndexOf('{') >= 0) // 예상치 못한 placeholder 잔여 → raw 노출 차단
+                    lockMsg = System.Text.RegularExpressions.Regex.Replace(lockMsg, @"\{[^}]*\}", lvStr);
+                ShowToast(lockMsg);
                 return;
             }
 

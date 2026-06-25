@@ -141,6 +141,7 @@ namespace BalloonFlow
         // Normal: 색상+기믹 동시 / GimmickOnly: 기존 셀에 기믹만 덮어쓰기 / GimmickErase: 기믹만 제거.
         private enum GimmickPaintMode { Normal, GimmickOnly, GimmickErase }
         private GimmickPaintMode _holderPaintMode = GimmickPaintMode.Normal;
+        private bool _holderGridNeedsRebuildAfterPaint;
         private bool _fieldGimmickOnlyMode; // 필드: 색상 유지하고 기믹만 추가 (Surprise/Ice 등)
 
         private int _gridCols = 5;
@@ -2828,14 +2829,23 @@ namespace BalloonFlow
             {
                 if (TryInsertPipeAt(cc, rr))
                 {
-                    for (int r = 0; r < _holderRows; r++) UpdateHolderButton(cc, r);
-                    RefreshHolderPipeOutlines();
+                    RebuildHolderUI();
                     SetQueueConfirmReady(false);
                     _infoDirty = true;
                     return;
                 }
                 // 아래 빈 칸이 없어 밀 수 없음 — 손실 방지를 위해 덮어쓰지 않고 안내.
                 SetStatus("Pipe 아래에 빈 칸이 없어 홀더를 밀어넣을 수 없습니다. 컬럼 아래를 비우고 다시 시도하세요.");
+                return;
+            }
+
+            if (isPipeBrush)
+            {
+                ApplyPipeAnchorCell(cc, rr);
+                UpdateHolderButton(cc, rr);
+                RefreshHolderPipeOutlines();
+                SetQueueConfirmReady(false);
+                _infoDirty = true;
                 return;
             }
 
@@ -2859,8 +2869,16 @@ namespace BalloonFlow
                     else ClearHolderGimmick(cc, rr);
                     break;
             }
-            UpdateHolderButton(cc, rr);
-            RefreshHolderPipeOutlines();
+            if (_holderGridNeedsRebuildAfterPaint)
+            {
+                _holderGridNeedsRebuildAfterPaint = false;
+                RebuildHolderUI();
+            }
+            else
+            {
+                UpdateHolderButton(cc, rr);
+                RefreshHolderPipeOutlines();
+            }
             // Generate 결과가 수동 변경됨 — Confirm 무효화 (§8 수동 조정 후 재검증)
             SetQueueConfirmReady(false);
             _infoDirty = true;
@@ -2890,6 +2908,15 @@ namespace BalloonFlow
         }
 
         // ROLLBACK_PIPE_INSERT_20260625: 컬럼 셀의 모든 per-cell 데이터(색·개수·기믹 부속)를 src→dst 로 복사.
+        private void ApplyPipeAnchorCell(int cc, int rr)
+        {
+            // ROLLBACK_PIPE_COLORLESS_ANCHOR_20260625:
+            // Pipe/Glass Pipe is a queue gimmick anchor, not a colored dart holder.
+            _holderColors[cc, rr] = -1;
+            _holderMags[cc, rr] = 0;
+            ApplyHolderGimmick(cc, rr);
+        }
+
         private void CopyHolderCell(int c, int srcR, int dstR)
         {
             _holderColors[c, dstR]      = _holderColors[c, srcR];
@@ -2906,33 +2933,67 @@ namespace BalloonFlow
         /// <summary>ROLLBACK_PIPE_INSERT_20260625: Pipe/Glass Pipe 를 (cc,rr) 에 배치하되 클릭한 홀더를
         /// 소비하지 않고 한 칸 아래(payload #1)로 밀어넣는다. 아래 첫 빈 칸까지만 밀어 데이터 손실 방지.
         /// 아래에 빈 칸이 전혀 없으면 false(호출부에서 안내).</summary>
+        private void ClearHolderCell(int c, int r)
+        {
+            _holderColors[c, r] = -1;
+            _holderMags[c, r] = 0;
+            _holderGimmicks[c, r] = 0;
+            _holderChainGroups[c, r] = -1;
+            _holderFrozenHP[c, r] = 3;
+            _holderSpawnerHP[c, r] = 0;
+            _holderSpawnerMag[c, r] = 20;
+            if (_holderLockPairIds != null)
+                _holderLockPairIds[c, r] = -1;
+        }
+
+        private void CollapsePipeColumnAfterRemove(int c, int removedRow)
+        {
+            // ROLLBACK_PIPE_REMOVE_COLLAPSE_20260625:
+            // Removing a Pipe/Glass Pipe should undo the insert shift in this column only.
+            for (int r = removedRow; r < _holderRows - 1; r++)
+                CopyHolderCell(c, r + 1, r);
+            ClearHolderCell(c, _holderRows - 1);
+            _holderGridNeedsRebuildAfterPaint = true;
+        }
+
         private bool TryInsertPipeAt(int cc, int rr)
         {
             int emptyRow = -1;
             for (int r = rr + 1; r < _holderRows; r++)
                 if (_holderColors[cc, r] < 0) { emptyRow = r; break; }
-            if (emptyRow < 0) return false; // 아래 공간 없음 → 삽입 불가
+            if (emptyRow < 0)
+            {
+                // ROLLBACK_PIPE_AUTO_ROW_APPEND_20260625:
+                // Grow holder rows by one when a pipe insert needs a payload slot at the bottom.
+                _holderRows = Mathf.Max(1, _holderRows + 1);
+                InitGrid();
+                if (_holderRowsInput != null)
+                    _holderRowsInput.text = _holderRows.ToString();
+                emptyRow = _holderRows - 1;
+            }
 
             // rr..emptyRow-1 을 한 칸씩 아래로 — 클릭 홀더가 rr → rr+1(payload #1) 로 이동.
             for (int r = emptyRow; r > rr; r--)
                 CopyHolderCell(cc, r - 1, r);
 
-            // 앵커(rr)를 Pipe 로 — 색은 브러시 색(없으면 기존 색 유지), 기믹/Count/Mag 는 ApplyHolderGimmick.
-            if (_paintColor >= 0)
-                _holderColors[cc, rr] = _paintColor;
-            ApplyHolderGimmick(cc, rr); // gimmick=Pipe, spawnerHP=Count, mag=0, chain/lock clear
+            ApplyPipeAnchorCell(cc, rr); // gimmick=Pipe, colorless anchor, spawnerHP=Count, mag=0
             return true;
         }
 
         /// <summary>큐 셀의 기믹 부속 데이터를 기본값으로 리셋 (색상/개수는 유지).</summary>
         private void ClearHolderGimmick(int cc, int rr)
         {
+            bool wasPipeAnchor = IsPipeAnchorCell(cc, rr);
             _holderGimmicks[cc, rr] = 0;
             _holderChainGroups[cc, rr] = -1;
             _holderFrozenHP[cc, rr] = _paintFrozenHP;
             _holderSpawnerHP[cc, rr] = 0;
             _holderSpawnerMag[cc, rr] = 20;
             _holderLockPairIds[cc, rr] = -1;
+            if (wasPipeAnchor)
+            {
+                CollapsePipeColumnAfterRemove(cc, rr);
+            }
         }
 
         private void UpdateHolderButton(int c, int r)
@@ -2942,7 +3003,10 @@ namespace BalloonFlow
             if (btn == null) return;
             int ci = _holderColors[c, r];
             int gi = _holderGimmicks[c, r];
-            Color cellBg = (ci >= 0 && ci < PALETTE.Length) ? PALETTE[ci] : new Color(0.22f, 0.22f, 0.26f);
+            bool isPipeAnchor = IsPipeAnchorCell(c, r);
+            Color cellBg = isPipeAnchor
+                ? new Color(0.34f, 0.30f, 0.16f)
+                : ((ci >= 0 && ci < PALETTE.Length) ? PALETTE[ci] : new Color(0.22f, 0.22f, 0.26f));
             btn.GetComponent<Image>().color = cellBg;
             ApplyPipePreviewOutline(btn, c, r);
             var t = btn.GetComponentInChildren<Text>();
@@ -2951,7 +3015,7 @@ namespace BalloonFlow
             int chainGrp = _holderChainGroups[c, r];
             string chainMark = chainGrp > 0 ? $"C{chainGrp}" : "";
             string mark = gimmickMark + (chainMark.Length > 0 ? " " + chainMark : "");
-            if (ci >= 0 && IsPipeAnchorCell(c, r))
+            if (isPipeAnchor)
                 t.text = $"P{Mathf.Max(0, _holderSpawnerHP[c, r])}";
             else
                 t.text = ci >= 0 ? $"{_holderMags[c, r]}{(mark.Length > 0 ? "\n" + mark : "")}" : ".";
@@ -7296,7 +7360,8 @@ namespace BalloonFlow
                         continue;
 
                     string gimmickName = GetHolderGimmickName(gimmick);
-                    if (_holderColors != null && _holderColors[c, r] < 0)
+                    bool isPipeGimmick = gimmick == glassPipeIndex || gimmick == pipeIndex;
+                    if (_holderColors != null && _holderColors[c, r] < 0 && !isPipeGimmick)
                     {
                         errors.Add($"Holder gimmick {gimmickName} at ({c},{r}) is set on an empty holder cell.");
                         continue;
@@ -7947,15 +8012,15 @@ namespace BalloonFlow
             for (int r = 0; r < _holderRows; r++)
                 for (int c = 0; c < _holderCols; c++)
                 {
-                    if (_holderColors[c, r] < 0) continue;
                     int hgi = _holderGimmicks[c, r];
                     string hgName = (hgi > 0 && hgi < HOLDER_GIMMICK_NAMES.Length) ? HOLDER_GIMMICK_NAMES[hgi] : "";
                     int chainGrp = _holderChainGroups[c, r];
                     bool isSpawner = hgName == "Spawner_T" || hgName == "Spawner_O";
                     // GLASSPIPE_PARITY_20260625: Glass Pipe도 authored payload → spawnerMag 미사용(아래 :0).
                     bool isPipe = hgName == "Spawner_O" || hgName == "Spawner_T";
+                    if (_holderColors[c, r] < 0 && !isPipe) continue;
                     holders.Add(new HolderSetup
-                    { holderId = hid++, color = _holderColors[c, r], magazineCount = _holderMags[c, r],
+                    { holderId = hid++, color = isPipe ? -1 : _holderColors[c, r], magazineCount = isPipe ? 0 : _holderMags[c, r],
                       position = new Vector2(c, r), queueGimmick = hgName,
                       // [Chain fix] Chain(Linked) 기믹 holder 에만 chainGroupId 저장 — 비-Chain 의 stale 그룹값(구버전 데이터) 차단.
                       chainGroupId = (hgName == "Chain" && chainGrp > 0) ? chainGrp : -1,

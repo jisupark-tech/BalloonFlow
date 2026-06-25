@@ -41,6 +41,8 @@ namespace BalloonFlow
         // ROLLBACK_PIPE_PAYLOAD_POP_20260624 (#3): released Pipe payload 가 파이프에서 팝업(Scale Up) 중인 동안
         // RepositionColumnHolders 의 즉시 scale 세팅/DOKill 이 트윈을 끊지 않도록 추적.
         private readonly HashSet<int> _poppingScale = new HashSet<int>();
+        private readonly HashSet<int> _glassPipePreviewPayloads = new HashSet<int>();
+        private readonly List<int> _glassPipePreviewScratch = new List<int>(8);
 
         private static void ApplyMagazineTextRowVisibility(HolderVisual visual, int row)
         {
@@ -922,6 +924,85 @@ namespace BalloonFlow
         /// <summary>재사용 리스트 (GC 방지)</summary>
         private readonly List<HolderVisual> _tempColumnHolders = new List<HolderVisual>();
 
+        private void SyncGlassPipePreview(int column, HolderData pipeData, Vector3 pipePosition, HolderData[] allHolders)
+        {
+            // ROLLBACK_GLASS_PIPE_NEXT_PAYLOAD_PREVIEW_20260625:
+            // Glass Pipe shows only the next unreleased payload at half scale before it is released.
+            _glassPipePreviewScratch.Clear();
+            foreach (int holderId in _glassPipePreviewPayloads)
+                _glassPipePreviewScratch.Add(holderId);
+
+            for (int i = 0; i < _glassPipePreviewScratch.Count; i++)
+            {
+                int holderId = _glassPipePreviewScratch[i];
+                HolderData data = HolderManager.Instance.FindHolderPublic(holderId);
+                if (data == null || data.column != column)
+                    continue;
+
+                if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual) || visual == null || visual.gameObject == null)
+                {
+                    _glassPipePreviewPayloads.Remove(holderId);
+                    continue;
+                }
+
+                if (data.isConsumed)
+                {
+                    ReturnHolderToPool(visual);
+                    _holderVisuals.Remove(holderId);
+                    _glassPipePreviewPayloads.Remove(holderId);
+                    continue;
+                }
+
+                if (data.IsQueueVisible)
+                {
+                    visual.gameObject.transform.DOKill(false);
+                    visual.gameObject.transform.localScale = Vector3.one * 0.5f;
+                    _poppingScale.Add(holderId);
+                    visual.gameObject.transform.DOScale(Vector3.one, 0.4f).SetEase(Ease.InQuad)
+                        .OnComplete(() => _poppingScale.Remove(holderId));
+                    _glassPipePreviewPayloads.Remove(holderId);
+                }
+                else
+                {
+                    visual.gameObject.transform.position = pipePosition;
+                    visual.gameObject.transform.localScale = Vector3.one * 0.5f;
+                }
+            }
+
+            if (pipeData == null
+                || pipeData.isConsumed
+                || pipeData.queueGimmick != GimmickManager.GIMMICK_SPAWNER_T
+                || allHolders == null)
+                return;
+
+            HolderData nextPayload = null;
+            for (int i = 0; i < allHolders.Length; i++)
+            {
+                HolderData candidate = allHolders[i];
+                if (candidate == null || candidate.isConsumed) continue;
+                if (!candidate.isPipePayload || candidate.isPipePayloadReleased) continue;
+                if (candidate.pipeOwnerId != pipeData.holderId) continue;
+                if (nextPayload == null || candidate.pipeOrder < nextPayload.pipeOrder)
+                    nextPayload = candidate;
+            }
+
+            if (nextPayload == null || _glassPipePreviewPayloads.Contains(nextPayload.holderId))
+                return;
+
+            if (!_holderVisuals.TryGetValue(nextPayload.holderId, out HolderVisual preview) || preview == null || preview.gameObject == null)
+            {
+                preview = CreateHolderVisual(nextPayload, pipePosition, column, false);
+                if (preview == null || preview.gameObject == null)
+                    return;
+                _holderVisuals[nextPayload.holderId] = preview;
+            }
+
+            preview.gameObject.transform.DOKill(false);
+            preview.gameObject.transform.position = pipePosition;
+            preview.gameObject.transform.localScale = Vector3.one * 0.5f;
+            _glassPipePreviewPayloads.Add(nextPayload.holderId);
+        }
+
         private void RepositionColumnHolders(int column)
         {
             if (!HolderManager.HasInstance) return;
@@ -931,6 +1012,7 @@ namespace BalloonFlow
             Vector3 spawnerPos = CalculateQueuePosition(column, 1); // fallback
             bool columnHasSpawner = false;
             int pipeSourceRow = int.MinValue; // [#2] authored row of the pipe; holders with sourceRow > this stay blocked behind it
+            HolderData pipeData = null;
             foreach (var kvp2 in _holderVisuals)
             {
                 if (kvp2.Value.column == column && kvp2.Value.gameObject != null)
@@ -942,6 +1024,7 @@ namespace BalloonFlow
                         spawnerPos = kvp2.Value.gameObject.transform.position;
                         columnHasSpawner = true;
                         pipeSourceRow = spData.sourceRow;
+                        pipeData = spData;
                         break;
                     }
                 }
@@ -950,6 +1033,7 @@ namespace BalloonFlow
             // 비주얼 없는 일반 보관함 생성 — ① Spawner 소환분 ② [HOLDER_LAZY_SPAWN] 지연 스폰분.
             // 열 잔여(미소비·비스포너) 순번 = holderId 순(초기 배치 row 순서 보존) — 임계 안만 생성.
             HolderData[] allHolders = HolderManager.Instance.GetHolders();
+            SyncGlassPipePreview(column, pipeData, spawnerPos, allHolders);
             _tempLazyColumnData.Clear();
             for (int i = 0; i < allHolders.Length; i++)
             {
@@ -987,8 +1071,16 @@ namespace BalloonFlow
                     if (emergeFromPipe && newVisual.gameObject != null)
                     {
                         int hid = hd.holderId;
+                        HolderData pipeOwner = HolderManager.HasInstance
+                            ? HolderManager.Instance.FindHolderPublic(hd.pipeOwnerId)
+                            : null;
+                        bool emergeFromGlassPipe = pipeOwner != null
+                            && pipeOwner.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T;
+                        Vector3 startScale = emergeFromGlassPipe ? Vector3.one * 0.5f : Vector3.zero;
                         _poppingScale.Add(hid);
-                        newVisual.gameObject.transform.localScale = Vector3.zero;
+                        // ROLLBACK_GLASS_PIPE_PAYLOAD_PREVIEW_SCALE_20260625:
+                        // Glass Pipe is transparent, so the next holder should be partially readable before popping out.
+                        newVisual.gameObject.transform.localScale = startScale;
                         newVisual.gameObject.transform.DOScale(Vector3.one, 0.4f).SetEase(Ease.InQuad)
                             .OnComplete(() => _poppingScale.Remove(hid));
                     }
