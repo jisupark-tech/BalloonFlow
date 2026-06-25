@@ -14,7 +14,9 @@
       "queueColumns": 2,
       "targetClearRate": 0.0,
       "difficultyPurpose": 0,
-      "gimmickTypes": [],
+      "gimmickTypes": [
+        "Spawner_O"
+      ],
       "holders": [
         {
           "holderId": 0,
@@ -50,16 +52,16 @@
         },
         {
           "holderId": 2,
-          "color": 6,
-          "magazineCount": 10,
+          "color": -1,
+          "magazineCount": 0,
           "position": {
             "x": 0.0,
             "y": 1.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Spawner_O",
           "chainGroupId": -1,
           "frozenHP": 3,
-          "spawnerHP": 0,
+          "spawnerHP": 16,
           "spawnerColors": [],
           "spawnerMag": 0,
           "lockPairId": -1
@@ -82,8 +84,8 @@
         },
         {
           "holderId": 4,
-          "color": 26,
-          "magazineCount": 20,
+          "color": 6,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 2.0
@@ -98,24 +100,24 @@
         },
         {
           "holderId": 5,
-          "color": 6,
-          "magazineCount": 20,
+          "color": -1,
+          "magazineCount": 0,
           "position": {
             "x": 1.0,
             "y": 2.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Spawner_O",
           "chainGroupId": -1,
           "frozenHP": 3,
-          "spawnerHP": 0,
+          "spawnerHP": 15,
           "spawnerColors": [],
           "spawnerMag": 0,
           "lockPairId": -1
         },
         {
           "holderId": 6,
-          "color": 6,
-          "magazineCount": 10,
+          "color": 26,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 3.0
@@ -130,8 +132,8 @@
         },
         {
           "holderId": 7,
-          "color": 11,
-          "magazineCount": 10,
+          "color": 6,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 3.0
@@ -146,7 +148,7 @@
         },
         {
           "holderId": 8,
-          "color": 11,
+          "color": 6,
           "magazineCount": 10,
           "position": {
             "x": 0.0,
@@ -162,8 +164,8 @@
         },
         {
           "holderId": 9,
-          "color": 6,
-          "magazineCount": 20,
+          "color": 11,
+          "magazineCount": 10,
           "position": {
             "x": 1.0,
             "y": 4.0
@@ -178,7 +180,7 @@
         },
         {
           "holderId": 10,
-          "color": 26,
+          "color": 11,
           "magazineCount": 10,
           "position": {
             "x": 0.0,
@@ -194,8 +196,8 @@
         },
         {
           "holderId": 11,
-          "color": 3,
-          "magazineCount": 10,
+          "color": 6,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 5.0
@@ -226,7 +228,7 @@
         },
         {
           "holderId": 13,
-          "color": 15,
+          "color": 3,
           "magazineCount": 10,
           "position": {
             "x": 1.0,
@@ -242,8 +244,8 @@
         },
         {
           "holderId": 14,
-          "color": 11,
-          "magazineCount": 20,
+          "color": 26,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 7.0
@@ -258,8 +260,8 @@
         },
         {
           "holderId": 15,
-          "color": 26,
-          "magazineCount": 20,
+          "color": 15,
+          "magazineCount": 10,
           "position": {
             "x": 1.0,
             "y": 7.0
@@ -274,7 +276,7 @@
         },
         {
           "holderId": 16,
-          "color": 3,
+          "color": 11,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
@@ -306,8 +308,8 @@
         },
         {
           "holderId": 18,
-          "color": 15,
-          "magazineCount": 10,
+          "color": 3,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 9.0
@@ -322,8 +324,8 @@
         },
         {
           "holderId": 19,
-          "color": 6,
-          "magazineCount": 10,
+          "color": 26,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 9.0
@@ -338,7 +340,7 @@
         },
         {
           "holderId": 20,
-          "color": 26,
+          "color": 15,
           "magazineCount": 10,
           "position": {
             "x": 0.0,
@@ -354,8 +356,8 @@
         },
         {
           "holderId": 21,
-          "color": 15,
-          "magazineCount": 20,
+          "color": 6,
+          "magazineCount": 10,
           "position": {
             "x": 1.0,
             "y": 10.0
@@ -386,7 +388,7 @@
         },
         {
           "holderId": 23,
-          "color": 3,
+          "color": 15,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -402,8 +404,8 @@
         },
         {
           "holderId": 24,
-          "color": 3,
-          "magazineCount": 20,
+          "color": 26,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 12.0
@@ -418,7 +420,7 @@
         },
         {
           "holderId": 25,
-          "color": 26,
+          "color": 3,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -434,8 +436,8 @@
         },
         {
           "holderId": 26,
-          "color": 26,
-          "magazineCount": 10,
+          "color": 3,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 13.0
@@ -450,7 +452,7 @@
         },
         {
           "holderId": 27,
-          "color": 3,
+          "color": 26,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -498,7 +500,7 @@
         },
         {
           "holderId": 30,
-          "color": 3,
+          "color": 26,
           "magazineCount": 10,
           "position": {
             "x": 0.0,
@@ -514,7 +516,7 @@
         },
         {
           "holderId": 31,
-          "color": 26,
+          "color": 3,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -530,8 +532,8 @@
         },
         {
           "holderId": 32,
-          "color": 26,
-          "magazineCount": 20,
+          "color": 3,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 16.0
@@ -547,10 +549,42 @@
         {
           "holderId": 33,
           "color": 26,
-          "magazineCount": 10,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 16.0
+          },
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 34,
+          "color": 26,
+          "magazineCount": 20,
+          "position": {
+            "x": 0.0,
+            "y": 17.0
+          },
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 35,
+          "color": 26,
+          "magazineCount": 10,
+          "position": {
+            "x": 1.0,
+            "y": 17.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -14243,7 +14277,9 @@
       "queueColumns": 4,
       "targetClearRate": 0.0,
       "difficultyPurpose": 1,
-      "gimmickTypes": [],
+      "gimmickTypes": [
+        "Spawner_O"
+      ],
       "holders": [
         {
           "holderId": 0,
@@ -14407,32 +14443,32 @@
         },
         {
           "holderId": 10,
-          "color": 23,
-          "magazineCount": 10,
+          "color": -1,
+          "magazineCount": 0,
           "position": {
             "x": 2.0,
             "y": 2.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Spawner_O",
           "chainGroupId": -1,
           "frozenHP": 3,
-          "spawnerHP": 0,
+          "spawnerHP": 13,
           "spawnerColors": [],
           "spawnerMag": 0,
           "lockPairId": -1
         },
         {
           "holderId": 11,
-          "color": 23,
-          "magazineCount": 10,
+          "color": -1,
+          "magazineCount": 0,
           "position": {
             "x": 3.0,
             "y": 2.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Spawner_O",
           "chainGroupId": -1,
           "frozenHP": 3,
-          "spawnerHP": 0,
+          "spawnerHP": 13,
           "spawnerColors": [],
           "spawnerMag": 0,
           "lockPairId": -1
@@ -14471,7 +14507,7 @@
         },
         {
           "holderId": 14,
-          "color": 3,
+          "color": 23,
           "magazineCount": 10,
           "position": {
             "x": 2.0,
@@ -14488,7 +14524,7 @@
         {
           "holderId": 15,
           "color": 23,
-          "magazineCount": 20,
+          "magazineCount": 10,
           "position": {
             "x": 3.0,
             "y": 3.0
@@ -14535,8 +14571,8 @@
         },
         {
           "holderId": 18,
-          "color": 7,
-          "magazineCount": 20,
+          "color": 3,
+          "magazineCount": 10,
           "position": {
             "x": 2.0,
             "y": 4.0
@@ -14551,7 +14587,7 @@
         },
         {
           "holderId": 19,
-          "color": 8,
+          "color": 23,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
@@ -14599,7 +14635,7 @@
         },
         {
           "holderId": 22,
-          "color": 8,
+          "color": 7,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
@@ -14615,7 +14651,7 @@
         },
         {
           "holderId": 23,
-          "color": 7,
+          "color": 8,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
@@ -14663,7 +14699,7 @@
         },
         {
           "holderId": 26,
-          "color": 7,
+          "color": 8,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
@@ -14679,7 +14715,7 @@
         },
         {
           "holderId": 27,
-          "color": 8,
+          "color": 7,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
@@ -14727,7 +14763,7 @@
         },
         {
           "holderId": 30,
-          "color": 8,
+          "color": 7,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
@@ -14743,7 +14779,7 @@
         },
         {
           "holderId": 31,
-          "color": 23,
+          "color": 8,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
@@ -14791,8 +14827,8 @@
         },
         {
           "holderId": 34,
-          "color": 7,
-          "magazineCount": 10,
+          "color": 8,
+          "magazineCount": 20,
           "position": {
             "x": 2.0,
             "y": 8.0
@@ -14807,8 +14843,8 @@
         },
         {
           "holderId": 35,
-          "color": 7,
-          "magazineCount": 10,
+          "color": 23,
+          "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 8.0
@@ -14855,7 +14891,7 @@
         },
         {
           "holderId": 38,
-          "color": 8,
+          "color": 7,
           "magazineCount": 10,
           "position": {
             "x": 2.0,
@@ -14871,8 +14907,8 @@
         },
         {
           "holderId": 39,
-          "color": 23,
-          "magazineCount": 20,
+          "color": 7,
+          "magazineCount": 10,
           "position": {
             "x": 3.0,
             "y": 9.0
@@ -14919,7 +14955,7 @@
         },
         {
           "holderId": 42,
-          "color": 7,
+          "color": 8,
           "magazineCount": 10,
           "position": {
             "x": 2.0,
@@ -14983,8 +15019,8 @@
         },
         {
           "holderId": 46,
-          "color": 23,
-          "magazineCount": 20,
+          "color": 7,
+          "magazineCount": 10,
           "position": {
             "x": 2.0,
             "y": 11.0
@@ -14999,8 +15035,8 @@
         },
         {
           "holderId": 47,
-          "color": 8,
-          "magazineCount": 10,
+          "color": 23,
+          "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 11.0
@@ -15047,7 +15083,7 @@
         },
         {
           "holderId": 50,
-          "color": 5,
+          "color": 23,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
@@ -15111,7 +15147,7 @@
         },
         {
           "holderId": 54,
-          "color": 23,
+          "color": 5,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
@@ -15127,7 +15163,7 @@
         },
         {
           "holderId": 55,
-          "color": 23,
+          "color": 8,
           "magazineCount": 10,
           "position": {
             "x": 3.0,
@@ -15176,7 +15212,7 @@
         {
           "holderId": 58,
           "color": 23,
-          "magazineCount": 10,
+          "magazineCount": 20,
           "position": {
             "x": 2.0,
             "y": 14.0
@@ -15191,8 +15227,8 @@
         },
         {
           "holderId": 59,
-          "color": 7,
-          "magazineCount": 20,
+          "color": 23,
+          "magazineCount": 10,
           "position": {
             "x": 3.0,
             "y": 14.0
@@ -15211,6 +15247,38 @@
           "magazineCount": 20,
           "position": {
             "x": 0.0,
+            "y": 15.0
+          },
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 61,
+          "color": 23,
+          "magazineCount": 10,
+          "position": {
+            "x": 2.0,
+            "y": 15.0
+          },
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 62,
+          "color": 7,
+          "magazineCount": 20,
+          "position": {
+            "x": 3.0,
             "y": 15.0
           },
           "queueGimmick": "",
@@ -40679,12 +40747,12 @@
       "targetClearRate": 0.0,
       "difficultyPurpose": 1,
       "gimmickTypes": [
-        "Hidden"
+        "Spawner_O"
       ],
       "holders": [
         {
           "holderId": 0,
-          "color": 3,
+          "color": 11,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
@@ -40701,7 +40769,7 @@
         {
           "holderId": 1,
           "color": 3,
-          "magazineCount": 20,
+          "magazineCount": 10,
           "position": {
             "x": 1.0,
             "y": 0.0
@@ -40716,7 +40784,7 @@
         },
         {
           "holderId": 2,
-          "color": 11,
+          "color": 3,
           "magazineCount": 10,
           "position": {
             "x": 2.0,
@@ -40749,12 +40817,12 @@
         {
           "holderId": 4,
           "color": 3,
-          "magazineCount": 10,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 1.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -40765,12 +40833,12 @@
         {
           "holderId": 5,
           "color": 3,
-          "magazineCount": 10,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 1.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -40786,7 +40854,7 @@
             "x": 2.0,
             "y": 1.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -40796,13 +40864,13 @@
         },
         {
           "holderId": 7,
-          "color": 15,
+          "color": 4,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 1.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -40812,7 +40880,7 @@
         },
         {
           "holderId": 8,
-          "color": 11,
+          "color": 15,
           "magazineCount": 10,
           "position": {
             "x": 0.0,
@@ -40828,23 +40896,23 @@
         },
         {
           "holderId": 9,
-          "color": 3,
-          "magazineCount": 20,
+          "color": -1,
+          "magazineCount": 0,
           "position": {
             "x": 1.0,
             "y": 2.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "Spawner_O",
           "chainGroupId": -1,
           "frozenHP": 3,
-          "spawnerHP": 0,
+          "spawnerHP": 11,
           "spawnerColors": [],
           "spawnerMag": 0,
           "lockPairId": -1
         },
         {
           "holderId": 10,
-          "color": 6,
+          "color": 15,
           "magazineCount": 10,
           "position": {
             "x": 2.0,
@@ -40860,11 +40928,27 @@
         },
         {
           "holderId": 11,
-          "color": 15,
-          "magazineCount": 20,
+          "color": -1,
+          "magazineCount": 0,
           "position": {
             "x": 3.0,
             "y": 2.0
+          },
+          "queueGimmick": "Spawner_O",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 11,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 12,
+          "color": 3,
+          "magazineCount": 20,
+          "position": {
+            "x": 0.0,
+            "y": 3.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -40875,24 +40959,8 @@
           "lockPairId": -1
         },
         {
-          "holderId": 12,
-          "color": 15,
-          "magazineCount": 20,
-          "position": {
-            "x": 0.0,
-            "y": 3.0
-          },
-          "queueGimmick": "Hidden",
-          "chainGroupId": -1,
-          "frozenHP": 3,
-          "spawnerHP": 0,
-          "spawnerColors": [],
-          "spawnerMag": 0,
-          "lockPairId": -1
-        },
-        {
           "holderId": 13,
-          "color": 6,
+          "color": 15,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -40908,13 +40976,13 @@
         },
         {
           "holderId": 14,
-          "color": 6,
+          "color": 0,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
             "y": 3.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -40924,7 +40992,7 @@
         },
         {
           "holderId": 15,
-          "color": 15,
+          "color": 6,
           "magazineCount": 10,
           "position": {
             "x": 3.0,
@@ -40946,7 +41014,7 @@
             "x": 0.0,
             "y": 4.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -40956,7 +41024,7 @@
         },
         {
           "holderId": 17,
-          "color": 4,
+          "color": 15,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -40972,7 +41040,7 @@
         },
         {
           "holderId": 18,
-          "color": 6,
+          "color": 15,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
@@ -40988,13 +41056,13 @@
         },
         {
           "holderId": 19,
-          "color": 11,
-          "magazineCount": 20,
+          "color": 15,
+          "magazineCount": 10,
           "position": {
             "x": 3.0,
             "y": 4.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41004,8 +41072,8 @@
         },
         {
           "holderId": 20,
-          "color": 4,
-          "magazineCount": 20,
+          "color": 15,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 5.0
@@ -41020,13 +41088,13 @@
         },
         {
           "holderId": 21,
-          "color": 11,
+          "color": 0,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 5.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41036,7 +41104,7 @@
         },
         {
           "holderId": 22,
-          "color": 3,
+          "color": 6,
           "magazineCount": 10,
           "position": {
             "x": 2.0,
@@ -41052,7 +41120,7 @@
         },
         {
           "holderId": 23,
-          "color": 4,
+          "color": 11,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
@@ -41068,8 +41136,8 @@
         },
         {
           "holderId": 24,
-          "color": 15,
-          "magazineCount": 20,
+          "color": 11,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 6.0
@@ -41100,7 +41168,7 @@
         },
         {
           "holderId": 26,
-          "color": 15,
+          "color": 0,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
@@ -41132,13 +41200,13 @@
         },
         {
           "holderId": 28,
-          "color": 0,
+          "color": 15,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 7.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41148,8 +41216,8 @@
         },
         {
           "holderId": 29,
-          "color": 4,
-          "magazineCount": 20,
+          "color": 0,
+          "magazineCount": 10,
           "position": {
             "x": 1.0,
             "y": 7.0
@@ -41164,13 +41232,13 @@
         },
         {
           "holderId": 30,
-          "color": 0,
+          "color": 4,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
             "y": 7.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41180,13 +41248,13 @@
         },
         {
           "holderId": 31,
-          "color": 6,
-          "magazineCount": 20,
+          "color": 11,
+          "magazineCount": 10,
           "position": {
             "x": 3.0,
             "y": 7.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41196,13 +41264,13 @@
         },
         {
           "holderId": 32,
-          "color": 15,
-          "magazineCount": 20,
+          "color": 4,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 8.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41212,13 +41280,13 @@
         },
         {
           "holderId": 33,
-          "color": 6,
-          "magazineCount": 20,
+          "color": 0,
+          "magazineCount": 10,
           "position": {
             "x": 1.0,
             "y": 8.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41228,13 +41296,13 @@
         },
         {
           "holderId": 34,
-          "color": 15,
+          "color": 6,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
             "y": 8.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41245,7 +41313,7 @@
         {
           "holderId": 35,
           "color": 4,
-          "magazineCount": 10,
+          "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 8.0
@@ -41260,13 +41328,13 @@
         },
         {
           "holderId": 36,
-          "color": 6,
-          "magazineCount": 20,
+          "color": 4,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 9.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41276,8 +41344,8 @@
         },
         {
           "holderId": 37,
-          "color": 4,
-          "magazineCount": 10,
+          "color": 6,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 9.0
@@ -41293,7 +41361,7 @@
         {
           "holderId": 38,
           "color": 15,
-          "magazineCount": 20,
+          "magazineCount": 10,
           "position": {
             "x": 2.0,
             "y": 9.0
@@ -41308,13 +41376,13 @@
         },
         {
           "holderId": 39,
-          "color": 15,
+          "color": 6,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 9.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41324,13 +41392,13 @@
         },
         {
           "holderId": 40,
-          "color": 0,
+          "color": 15,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 10.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41346,7 +41414,7 @@
             "x": 1.0,
             "y": 10.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41356,13 +41424,13 @@
         },
         {
           "holderId": 42,
-          "color": 0,
+          "color": 15,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
             "y": 10.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41372,13 +41440,13 @@
         },
         {
           "holderId": 43,
-          "color": 6,
-          "magazineCount": 10,
+          "color": 15,
+          "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 10.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41388,13 +41456,13 @@
         },
         {
           "holderId": 44,
-          "color": 3,
-          "magazineCount": 10,
+          "color": 6,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 11.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41404,8 +41472,8 @@
         },
         {
           "holderId": 45,
-          "color": 4,
-          "magazineCount": 20,
+          "color": 6,
+          "magazineCount": 10,
           "position": {
             "x": 1.0,
             "y": 11.0
@@ -41420,13 +41488,13 @@
         },
         {
           "holderId": 46,
-          "color": 15,
+          "color": 4,
           "magazineCount": 10,
           "position": {
             "x": 2.0,
             "y": 11.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -41442,7 +41510,103 @@
             "x": 3.0,
             "y": 11.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 48,
+          "color": 6,
+          "magazineCount": 10,
+          "position": {
+            "x": 0.0,
+            "y": 12.0
+          },
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 49,
+          "color": 4,
+          "magazineCount": 10,
+          "position": {
+            "x": 1.0,
+            "y": 12.0
+          },
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 50,
+          "color": 4,
+          "magazineCount": 20,
+          "position": {
+            "x": 2.0,
+            "y": 12.0
+          },
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 51,
+          "color": 3,
+          "magazineCount": 20,
+          "position": {
+            "x": 3.0,
+            "y": 12.0
+          },
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 52,
+          "color": 6,
+          "magazineCount": 20,
+          "position": {
+            "x": 1.0,
+            "y": 13.0
+          },
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 53,
+          "color": 15,
+          "magazineCount": 10,
+          "position": {
+            "x": 3.0,
+            "y": 13.0
+          },
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90142,8 +90306,7 @@
       "targetClearRate": 0.0,
       "difficultyPurpose": 2,
       "gimmickTypes": [
-        "Chain",
-        "Hidden"
+        "Spawner_T"
       ],
       "holders": [
         {
@@ -90212,16 +90375,16 @@
         },
         {
           "holderId": 4,
-          "color": 27,
-          "magazineCount": 20,
+          "color": -1,
+          "magazineCount": 0,
           "position": {
             "x": 0.0,
             "y": 1.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 9,
+          "queueGimmick": "Spawner_T",
+          "chainGroupId": -1,
           "frozenHP": 3,
-          "spawnerHP": 0,
+          "spawnerHP": 15,
           "spawnerColors": [],
           "spawnerMag": 0,
           "lockPairId": -1
@@ -90234,7 +90397,7 @@
             "x": 1.0,
             "y": 1.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90250,8 +90413,8 @@
             "x": 2.0,
             "y": 1.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 7,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90266,7 +90429,7 @@
             "x": 3.0,
             "y": 1.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90276,14 +90439,14 @@
         },
         {
           "holderId": 8,
-          "color": 6,
-          "magazineCount": 10,
+          "color": 27,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 2.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 9,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90298,7 +90461,7 @@
             "x": 1.0,
             "y": 2.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90314,23 +90477,7 @@
             "x": 2.0,
             "y": 2.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 7,
-          "frozenHP": 3,
-          "spawnerHP": 0,
-          "spawnerColors": [],
-          "spawnerMag": 0,
-          "lockPairId": -1
-        },
-        {
-          "holderId": 11,
-          "color": 27,
-          "magazineCount": 20,
-          "position": {
-            "x": 3.0,
-            "y": 2.0
-          },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90339,15 +90486,31 @@
           "lockPairId": -1
         },
         {
+          "holderId": 11,
+          "color": -1,
+          "magazineCount": 0,
+          "position": {
+            "x": 3.0,
+            "y": 2.0
+          },
+          "queueGimmick": "Spawner_T",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 14,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
           "holderId": 12,
-          "color": 7,
-          "magazineCount": 20,
+          "color": 6,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 3.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 4,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90362,8 +90525,8 @@
             "x": 1.0,
             "y": 3.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 4,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90378,7 +90541,7 @@
             "x": 2.0,
             "y": 3.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90388,7 +90551,7 @@
         },
         {
           "holderId": 15,
-          "color": 3,
+          "color": 27,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
@@ -90410,8 +90573,8 @@
             "x": 0.0,
             "y": 4.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 2,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90426,7 +90589,7 @@
             "x": 1.0,
             "y": 4.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90452,13 +90615,13 @@
         },
         {
           "holderId": 19,
-          "color": 7,
+          "color": 3,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 4.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90468,13 +90631,13 @@
         },
         {
           "holderId": 20,
-          "color": 19,
+          "color": 7,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 5.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90490,8 +90653,8 @@
             "x": 1.0,
             "y": 5.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 2,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90506,8 +90669,8 @@
             "x": 2.0,
             "y": 5.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 12,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90522,7 +90685,7 @@
             "x": 3.0,
             "y": 5.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90532,14 +90695,14 @@
         },
         {
           "holderId": 24,
-          "color": 9,
-          "magazineCount": 40,
+          "color": 19,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 6.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 3,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90554,7 +90717,7 @@
             "x": 1.0,
             "y": 6.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90570,8 +90733,8 @@
             "x": 2.0,
             "y": 6.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 12,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90580,13 +90743,13 @@
         },
         {
           "holderId": 27,
-          "color": 9,
+          "color": 7,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 6.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90596,14 +90759,14 @@
         },
         {
           "holderId": 28,
-          "color": 3,
-          "magazineCount": 20,
+          "color": 9,
+          "magazineCount": 40,
           "position": {
             "x": 0.0,
             "y": 7.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 3,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90634,7 +90797,7 @@
             "x": 2.0,
             "y": 7.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90644,13 +90807,13 @@
         },
         {
           "holderId": 31,
-          "color": 7,
-          "magazineCount": 10,
+          "color": 9,
+          "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 7.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90660,14 +90823,14 @@
         },
         {
           "holderId": 32,
-          "color": 27,
+          "color": 3,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 8.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 14,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90708,14 +90871,14 @@
         },
         {
           "holderId": 35,
-          "color": 27,
-          "magazineCount": 40,
+          "color": 7,
+          "magazineCount": 10,
           "position": {
             "x": 3.0,
             "y": 8.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 10,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90724,14 +90887,14 @@
         },
         {
           "holderId": 36,
-          "color": 6,
-          "magazineCount": 10,
+          "color": 27,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 9.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 14,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90746,7 +90909,7 @@
             "x": 1.0,
             "y": 9.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90762,7 +90925,7 @@
             "x": 2.0,
             "y": 9.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90772,14 +90935,14 @@
         },
         {
           "holderId": 39,
-          "color": 22,
-          "magazineCount": 30,
+          "color": 27,
+          "magazineCount": 40,
           "position": {
             "x": 3.0,
             "y": 9.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 10,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90788,13 +90951,13 @@
         },
         {
           "holderId": 40,
-          "color": 7,
-          "magazineCount": 20,
+          "color": 6,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 10.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90826,7 +90989,7 @@
             "x": 2.0,
             "y": 10.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90836,13 +90999,13 @@
         },
         {
           "holderId": 43,
-          "color": 27,
-          "magazineCount": 20,
+          "color": 22,
+          "magazineCount": 30,
           "position": {
             "x": 3.0,
             "y": 10.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90852,7 +91015,7 @@
         },
         {
           "holderId": 44,
-          "color": 3,
+          "color": 7,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
@@ -90874,8 +91037,8 @@
             "x": 1.0,
             "y": 11.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 5,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90890,7 +91053,7 @@
             "x": 2.0,
             "y": 11.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90900,14 +91063,14 @@
         },
         {
           "holderId": 47,
-          "color": 7,
-          "magazineCount": 10,
+          "color": 27,
+          "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 11.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 11,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90916,14 +91079,14 @@
         },
         {
           "holderId": 48,
-          "color": 6,
+          "color": 3,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 12.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 6,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90938,8 +91101,8 @@
             "x": 1.0,
             "y": 12.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 5,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90954,8 +91117,8 @@
             "x": 2.0,
             "y": 12.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 11,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -90964,13 +91127,13 @@
         },
         {
           "holderId": 51,
-          "color": 3,
-          "magazineCount": 40,
+          "color": 7,
+          "magazineCount": 10,
           "position": {
             "x": 3.0,
             "y": 12.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -90980,8 +91143,8 @@
         },
         {
           "holderId": 52,
-          "color": 9,
-          "magazineCount": 10,
+          "color": 6,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 13.0
@@ -91002,8 +91165,8 @@
             "x": 1.0,
             "y": 13.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 6,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -91018,7 +91181,7 @@
             "x": 2.0,
             "y": 13.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -91034,7 +91197,7 @@
             "x": 3.0,
             "y": 13.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -91044,14 +91207,14 @@
         },
         {
           "holderId": 56,
-          "color": 7,
-          "magazineCount": 20,
+          "color": 9,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 14.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 1,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -91066,8 +91229,8 @@
             "x": 1.0,
             "y": 14.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 8,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -91082,8 +91245,8 @@
             "x": 2.0,
             "y": 14.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 8,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -91092,14 +91255,14 @@
         },
         {
           "holderId": 59,
-          "color": 23,
+          "color": 3,
           "magazineCount": 40,
           "position": {
             "x": 3.0,
             "y": 14.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 13,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -91108,14 +91271,14 @@
         },
         {
           "holderId": 60,
-          "color": 9,
-          "magazineCount": 40,
+          "color": 7,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 15.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 1,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -91146,8 +91309,8 @@
             "x": 2.0,
             "y": 15.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 13,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -91156,13 +91319,45 @@
         },
         {
           "holderId": 63,
-          "color": 9,
-          "magazineCount": 20,
+          "color": 23,
+          "magazineCount": 40,
           "position": {
             "x": 3.0,
             "y": 15.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 64,
+          "color": 9,
+          "magazineCount": 40,
+          "position": {
+            "x": 0.0,
+            "y": 16.0
+          },
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 65,
+          "color": 9,
+          "magazineCount": 20,
+          "position": {
+            "x": 3.0,
+            "y": 16.0
+          },
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -125115,7 +125310,9 @@
       "queueColumns": 2,
       "targetClearRate": 0.0,
       "difficultyPurpose": 4,
-      "gimmickTypes": [],
+      "gimmickTypes": [
+        "Chain"
+      ],
       "holders": [
         {
           "holderId": 0,
@@ -125157,8 +125354,8 @@
             "x": 0.0,
             "y": 1.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 11,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125173,8 +125370,8 @@
             "x": 1.0,
             "y": 1.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 11,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125189,8 +125386,8 @@
             "x": 0.0,
             "y": 2.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 2,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125205,8 +125402,8 @@
             "x": 1.0,
             "y": 2.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 2,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125237,8 +125434,8 @@
             "x": 1.0,
             "y": 3.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125253,8 +125450,8 @@
             "x": 0.0,
             "y": 4.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 7,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125269,8 +125466,8 @@
             "x": 1.0,
             "y": 4.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125285,8 +125482,8 @@
             "x": 0.0,
             "y": 5.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 7,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125333,8 +125530,8 @@
             "x": 1.0,
             "y": 6.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 6,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125349,8 +125546,8 @@
             "x": 0.0,
             "y": 7.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 6,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125445,8 +125642,8 @@
             "x": 0.0,
             "y": 10.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 5,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125477,8 +125674,8 @@
             "x": 0.0,
             "y": 11.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 5,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125493,8 +125690,8 @@
             "x": 1.0,
             "y": 11.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 10,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125509,8 +125706,8 @@
             "x": 0.0,
             "y": 12.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 8,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125525,8 +125722,8 @@
             "x": 1.0,
             "y": 12.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 10,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125541,8 +125738,8 @@
             "x": 0.0,
             "y": 13.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 9,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125557,8 +125754,8 @@
             "x": 1.0,
             "y": 13.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 8,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125589,8 +125786,8 @@
             "x": 1.0,
             "y": 14.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 9,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125605,8 +125802,8 @@
             "x": 0.0,
             "y": 15.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 4,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125621,8 +125818,8 @@
             "x": 1.0,
             "y": 15.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 4,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125637,8 +125834,8 @@
             "x": 0.0,
             "y": 16.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 12,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125653,8 +125850,8 @@
             "x": 1.0,
             "y": 16.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 3,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125669,8 +125866,8 @@
             "x": 0.0,
             "y": 17.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 12,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -125685,8 +125882,8 @@
             "x": 1.0,
             "y": 17.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 3,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -166326,12 +166523,14 @@
       "queueColumns": 3,
       "targetClearRate": 0.0,
       "difficultyPurpose": 1,
-      "gimmickTypes": [],
+      "gimmickTypes": [
+        "Hidden"
+      ],
       "holders": [
         {
           "holderId": 0,
           "color": 11,
-          "magazineCount": 20,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 0.0
@@ -166346,8 +166545,8 @@
         },
         {
           "holderId": 1,
-          "color": 11,
-          "magazineCount": 10,
+          "color": 22,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 0.0
@@ -166379,7 +166578,7 @@
         {
           "holderId": 3,
           "color": 22,
-          "magazineCount": 10,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 1.0
@@ -166427,12 +166626,12 @@
         {
           "holderId": 6,
           "color": 22,
-          "magazineCount": 10,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 2.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -166443,7 +166642,7 @@
         {
           "holderId": 7,
           "color": 11,
-          "magazineCount": 20,
+          "magazineCount": 40,
           "position": {
             "x": 1.0,
             "y": 2.0
@@ -166459,7 +166658,7 @@
         {
           "holderId": 8,
           "color": 11,
-          "magazineCount": 40,
+          "magazineCount": 10,
           "position": {
             "x": 2.0,
             "y": 2.0
@@ -166475,7 +166674,7 @@
         {
           "holderId": 9,
           "color": 1,
-          "magazineCount": 20,
+          "magazineCount": 40,
           "position": {
             "x": 0.0,
             "y": 3.0
@@ -166490,7 +166689,7 @@
         },
         {
           "holderId": 10,
-          "color": 1,
+          "color": 11,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -166512,7 +166711,7 @@
             "x": 2.0,
             "y": 3.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -166522,7 +166721,7 @@
         },
         {
           "holderId": 12,
-          "color": 11,
+          "color": 1,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
@@ -166538,7 +166737,7 @@
         },
         {
           "holderId": 13,
-          "color": 22,
+          "color": 7,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -166554,8 +166753,8 @@
         },
         {
           "holderId": 14,
-          "color": 7,
-          "magazineCount": 20,
+          "color": 23,
+          "magazineCount": 10,
           "position": {
             "x": 2.0,
             "y": 4.0
@@ -166570,7 +166769,7 @@
         },
         {
           "holderId": 15,
-          "color": 1,
+          "color": 22,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
@@ -166586,8 +166785,8 @@
         },
         {
           "holderId": 16,
-          "color": 22,
-          "magazineCount": 20,
+          "color": 1,
+          "magazineCount": 10,
           "position": {
             "x": 1.0,
             "y": 5.0
@@ -166603,7 +166802,7 @@
         {
           "holderId": 17,
           "color": 1,
-          "magazineCount": 20,
+          "magazineCount": 10,
           "position": {
             "x": 2.0,
             "y": 5.0
@@ -166618,13 +166817,13 @@
         },
         {
           "holderId": 18,
-          "color": 7,
-          "magazineCount": 40,
+          "color": 11,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 6.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -166634,13 +166833,13 @@
         },
         {
           "holderId": 19,
-          "color": 7,
+          "color": 6,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 6.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -166650,13 +166849,13 @@
         },
         {
           "holderId": 20,
-          "color": 6,
-          "magazineCount": 10,
+          "color": 11,
+          "magazineCount": 20,
           "position": {
             "x": 2.0,
             "y": 6.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -166667,7 +166866,7 @@
         {
           "holderId": 21,
           "color": 11,
-          "magazineCount": 20,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 7.0
@@ -166682,7 +166881,7 @@
         },
         {
           "holderId": 22,
-          "color": 11,
+          "color": 6,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -166698,7 +166897,7 @@
         },
         {
           "holderId": 23,
-          "color": 1,
+          "color": 6,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
@@ -166714,7 +166913,7 @@
         },
         {
           "holderId": 24,
-          "color": 11,
+          "color": 6,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
@@ -166730,7 +166929,7 @@
         },
         {
           "holderId": 25,
-          "color": 1,
+          "color": 11,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -166746,7 +166945,7 @@
         },
         {
           "holderId": 26,
-          "color": 22,
+          "color": 11,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
@@ -166763,12 +166962,12 @@
         {
           "holderId": 27,
           "color": 1,
-          "magazineCount": 20,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 9.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -166778,13 +166977,13 @@
         },
         {
           "holderId": 28,
-          "color": 7,
-          "magazineCount": 20,
+          "color": 6,
+          "magazineCount": 10,
           "position": {
             "x": 1.0,
             "y": 9.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -166795,7 +166994,7 @@
         {
           "holderId": 29,
           "color": 1,
-          "magazineCount": 10,
+          "magazineCount": 20,
           "position": {
             "x": 2.0,
             "y": 9.0
@@ -166810,7 +167009,7 @@
         },
         {
           "holderId": 30,
-          "color": 7,
+          "color": 6,
           "magazineCount": 10,
           "position": {
             "x": 0.0,
@@ -166826,7 +167025,7 @@
         },
         {
           "holderId": 31,
-          "color": 7,
+          "color": 1,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -166843,7 +167042,7 @@
         {
           "holderId": 32,
           "color": 6,
-          "magazineCount": 10,
+          "magazineCount": 20,
           "position": {
             "x": 2.0,
             "y": 10.0
@@ -166859,7 +167058,7 @@
         {
           "holderId": 33,
           "color": 6,
-          "magazineCount": 40,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 11.0
@@ -166874,8 +167073,8 @@
         },
         {
           "holderId": 34,
-          "color": 6,
-          "magazineCount": 10,
+          "color": 23,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 11.0
@@ -166890,7 +167089,7 @@
         },
         {
           "holderId": 35,
-          "color": 1,
+          "color": 6,
           "magazineCount": 10,
           "position": {
             "x": 2.0,
@@ -166906,13 +167105,13 @@
         },
         {
           "holderId": 36,
-          "color": 23,
+          "color": 1,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 12.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -166922,7 +167121,7 @@
         },
         {
           "holderId": 37,
-          "color": 1,
+          "color": 7,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -166939,12 +167138,12 @@
         {
           "holderId": 38,
           "color": 1,
-          "magazineCount": 10,
+          "magazineCount": 20,
           "position": {
             "x": 2.0,
             "y": 12.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -166955,12 +167154,12 @@
         {
           "holderId": 39,
           "color": 6,
-          "magazineCount": 20,
+          "magazineCount": 10,
           "position": {
             "x": 0.0,
             "y": 13.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -166970,8 +167169,8 @@
         },
         {
           "holderId": 40,
-          "color": 6,
-          "magazineCount": 40,
+          "color": 7,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 13.0
@@ -166987,7 +167186,7 @@
         {
           "holderId": 41,
           "color": 7,
-          "magazineCount": 20,
+          "magazineCount": 10,
           "position": {
             "x": 2.0,
             "y": 13.0
@@ -167002,13 +167201,13 @@
         },
         {
           "holderId": 42,
-          "color": 6,
+          "color": 7,
           "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 14.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -167018,13 +167217,13 @@
         },
         {
           "holderId": 43,
-          "color": 23,
+          "color": 7,
           "magazineCount": 10,
           "position": {
             "x": 1.0,
             "y": 14.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -167034,7 +167233,7 @@
         },
         {
           "holderId": 44,
-          "color": 6,
+          "color": 7,
           "magazineCount": 20,
           "position": {
             "x": 2.0,
@@ -167050,11 +167249,59 @@
         },
         {
           "holderId": 45,
-          "color": 7,
-          "magazineCount": 10,
+          "color": 1,
+          "magazineCount": 20,
           "position": {
             "x": 0.0,
             "y": 15.0
+          },
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 46,
+          "color": 6,
+          "magazineCount": 20,
+          "position": {
+            "x": 1.0,
+            "y": 15.0
+          },
+          "queueGimmick": "",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 47,
+          "color": 7,
+          "magazineCount": 20,
+          "position": {
+            "x": 2.0,
+            "y": 15.0
+          },
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 48,
+          "color": 7,
+          "magazineCount": 20,
+          "position": {
+            "x": 0.0,
+            "y": 16.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -190006,8 +190253,7 @@
       "targetClearRate": 0.0,
       "difficultyPurpose": 3,
       "gimmickTypes": [
-        "Hidden",
-        "Spawner_T"
+        "Chain"
       ],
       "holders": [
         {
@@ -190092,16 +190338,16 @@
         },
         {
           "holderId": 5,
-          "color": -1,
-          "magazineCount": 0,
+          "color": 26,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 1.0
           },
-          "queueGimmick": "Spawner_T",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
-          "spawnerHP": 12,
+          "spawnerHP": 0,
           "spawnerColors": [],
           "spawnerMag": 0,
           "lockPairId": -1
@@ -190114,7 +190360,7 @@
             "x": 2.0,
             "y": 1.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190124,16 +190370,16 @@
         },
         {
           "holderId": 7,
-          "color": -1,
-          "magazineCount": 0,
+          "color": 3,
+          "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 1.0
           },
-          "queueGimmick": "Spawner_T",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
-          "spawnerHP": 12,
+          "spawnerHP": 0,
           "spawnerColors": [],
           "spawnerMag": 0,
           "lockPairId": -1
@@ -190146,7 +190392,7 @@
             "x": 0.0,
             "y": 2.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190156,8 +190402,8 @@
         },
         {
           "holderId": 9,
-          "color": 26,
-          "magazineCount": 20,
+          "color": 16,
+          "magazineCount": 40,
           "position": {
             "x": 1.0,
             "y": 2.0
@@ -190178,7 +190424,7 @@
             "x": 2.0,
             "y": 2.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190188,7 +190434,7 @@
         },
         {
           "holderId": 11,
-          "color": 3,
+          "color": 7,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
@@ -190210,8 +190456,8 @@
             "x": 0.0,
             "y": 3.0
           },
-          "queueGimmick": "Hidden",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 9,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190220,13 +190466,13 @@
         },
         {
           "holderId": 13,
-          "color": 16,
-          "magazineCount": 40,
+          "color": 26,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 3.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190252,8 +190498,8 @@
         },
         {
           "holderId": 15,
-          "color": 7,
-          "magazineCount": 20,
+          "color": 26,
+          "magazineCount": 10,
           "position": {
             "x": 3.0,
             "y": 3.0
@@ -190274,8 +190520,8 @@
             "x": 0.0,
             "y": 4.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 4,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190284,14 +190530,14 @@
         },
         {
           "holderId": 17,
-          "color": 26,
+          "color": 7,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 4.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 9,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190306,7 +190552,7 @@
             "x": 2.0,
             "y": 4.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190316,13 +190562,13 @@
         },
         {
           "holderId": 19,
-          "color": 26,
-          "magazineCount": 10,
+          "color": 6,
+          "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 4.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190338,8 +190584,8 @@
             "x": 0.0,
             "y": 5.0
           },
-          "queueGimmick": "Hidden",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 4,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190348,14 +190594,14 @@
         },
         {
           "holderId": 21,
-          "color": 7,
-          "magazineCount": 20,
+          "color": 25,
+          "magazineCount": 10,
           "position": {
             "x": 1.0,
             "y": 5.0
           },
-          "queueGimmick": "Hidden",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 5,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190370,8 +190616,8 @@
             "x": 2.0,
             "y": 5.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190380,13 +190626,13 @@
         },
         {
           "holderId": 23,
-          "color": 6,
+          "color": 26,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 5.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190402,8 +190648,8 @@
             "x": 0.0,
             "y": 6.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 5,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190412,13 +190658,13 @@
         },
         {
           "holderId": 25,
-          "color": 25,
+          "color": 7,
           "magazineCount": 10,
           "position": {
             "x": 1.0,
             "y": 6.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190434,8 +190680,8 @@
             "x": 2.0,
             "y": 6.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190466,7 +190712,7 @@
             "x": 0.0,
             "y": 7.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190476,13 +190722,13 @@
         },
         {
           "holderId": 29,
-          "color": 7,
-          "magazineCount": 10,
+          "color": 16,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 7.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190498,7 +190744,7 @@
             "x": 2.0,
             "y": 7.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190514,8 +190760,8 @@
             "x": 3.0,
             "y": 7.0
           },
-          "queueGimmick": "Hidden",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 2,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190562,8 +190808,8 @@
             "x": 2.0,
             "y": 8.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 2,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190572,13 +190818,13 @@
         },
         {
           "holderId": 35,
-          "color": 26,
-          "magazineCount": 20,
+          "color": 16,
+          "magazineCount": 40,
           "position": {
             "x": 3.0,
             "y": 8.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190594,7 +190840,7 @@
             "x": 0.0,
             "y": 9.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190604,14 +190850,14 @@
         },
         {
           "holderId": 37,
-          "color": 16,
-          "magazineCount": 20,
+          "color": 7,
+          "magazineCount": 40,
           "position": {
             "x": 1.0,
             "y": 9.0
           },
-          "queueGimmick": "Hidden",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 7,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190626,8 +190872,8 @@
             "x": 2.0,
             "y": 9.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 6,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190637,7 +190883,7 @@
         {
           "holderId": 39,
           "color": 16,
-          "magazineCount": 40,
+          "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 9.0
@@ -190658,8 +190904,8 @@
             "x": 0.0,
             "y": 10.0
           },
-          "queueGimmick": "Hidden",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 7,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190669,12 +190915,12 @@
         {
           "holderId": 41,
           "color": 7,
-          "magazineCount": 40,
+          "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 10.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190690,8 +190936,8 @@
             "x": 2.0,
             "y": 10.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 6,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190700,14 +190946,14 @@
         },
         {
           "holderId": 43,
-          "color": 16,
-          "magazineCount": 20,
+          "color": 26,
+          "magazineCount": 10,
           "position": {
             "x": 3.0,
             "y": 10.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 3,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190722,7 +190968,7 @@
             "x": 0.0,
             "y": 11.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190754,8 +191000,8 @@
             "x": 2.0,
             "y": 11.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 3,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190764,14 +191010,14 @@
         },
         {
           "holderId": 47,
-          "color": 26,
-          "magazineCount": 10,
+          "color": 7,
+          "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 11.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 10,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190786,8 +191032,8 @@
             "x": 0.0,
             "y": 12.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 8,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190796,13 +191042,13 @@
         },
         {
           "holderId": 49,
-          "color": 7,
+          "color": 20,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
             "y": 12.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190818,7 +191064,7 @@
             "x": 2.0,
             "y": 12.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -190828,14 +191074,14 @@
         },
         {
           "holderId": 51,
-          "color": 7,
+          "color": 26,
           "magazineCount": 20,
           "position": {
             "x": 3.0,
             "y": 12.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 10,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -190850,40 +191096,8 @@
             "x": 0.0,
             "y": 13.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
-          "frozenHP": 3,
-          "spawnerHP": 0,
-          "spawnerColors": [],
-          "spawnerMag": 0,
-          "lockPairId": -1
-        },
-        {
-          "holderId": 53,
-          "color": 20,
-          "magazineCount": 20,
-          "position": {
-            "x": 1.0,
-            "y": 13.0
-          },
-          "queueGimmick": "Hidden",
-          "chainGroupId": -1,
-          "frozenHP": 3,
-          "spawnerHP": 0,
-          "spawnerColors": [],
-          "spawnerMag": 0,
-          "lockPairId": -1
-        },
-        {
-          "holderId": 54,
-          "color": 26,
-          "magazineCount": 20,
-          "position": {
-            "x": 3.0,
-            "y": 13.0
-          },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 8,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228589,7 +228803,7 @@
       "targetClearRate": 0.0,
       "difficultyPurpose": 1,
       "gimmickTypes": [
-        "Chain"
+        "Hidden"
       ],
       "holders": [
         {
@@ -228664,7 +228878,7 @@
             "x": 0.0,
             "y": 1.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -228680,8 +228894,8 @@
             "x": 1.0,
             "y": 1.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 12,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228696,8 +228910,8 @@
             "x": 2.0,
             "y": 1.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 10,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228712,7 +228926,7 @@
             "x": 3.0,
             "y": 1.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -228728,8 +228942,8 @@
             "x": 0.0,
             "y": 2.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 12,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228744,8 +228958,8 @@
             "x": 1.0,
             "y": 2.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 10,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228760,8 +228974,8 @@
             "x": 2.0,
             "y": 2.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 5,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228792,8 +229006,8 @@
             "x": 0.0,
             "y": 3.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 3,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228808,8 +229022,8 @@
             "x": 1.0,
             "y": 3.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 5,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228824,8 +229038,8 @@
             "x": 2.0,
             "y": 3.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 8,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228840,8 +229054,8 @@
             "x": 3.0,
             "y": 3.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 8,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228856,8 +229070,8 @@
             "x": 0.0,
             "y": 4.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 4,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228872,8 +229086,8 @@
             "x": 1.0,
             "y": 4.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 3,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228888,7 +229102,7 @@
             "x": 2.0,
             "y": 4.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -228904,7 +229118,7 @@
             "x": 3.0,
             "y": 4.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -228920,7 +229134,7 @@
             "x": 0.0,
             "y": 5.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -228936,8 +229150,8 @@
             "x": 1.0,
             "y": 5.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 4,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -228952,7 +229166,7 @@
             "x": 2.0,
             "y": 5.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -229000,8 +229214,8 @@
             "x": 1.0,
             "y": 6.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 9,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229016,7 +229230,7 @@
             "x": 2.0,
             "y": 6.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -229032,7 +229246,7 @@
             "x": 3.0,
             "y": 6.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -229048,8 +229262,8 @@
             "x": 0.0,
             "y": 7.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 9,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229064,8 +229278,8 @@
             "x": 1.0,
             "y": 7.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 1,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229080,8 +229294,8 @@
             "x": 2.0,
             "y": 7.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 13,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229096,7 +229310,7 @@
             "x": 3.0,
             "y": 7.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -229128,8 +229342,8 @@
             "x": 1.0,
             "y": 8.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 1,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229144,7 +229358,7 @@
             "x": 2.0,
             "y": 8.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -229160,8 +229374,8 @@
             "x": 3.0,
             "y": 8.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 13,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229176,7 +229390,7 @@
             "x": 0.0,
             "y": 9.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -229192,8 +229406,8 @@
             "x": 1.0,
             "y": 9.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 6,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229224,7 +229438,7 @@
             "x": 3.0,
             "y": 9.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -229240,8 +229454,8 @@
             "x": 0.0,
             "y": 10.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 2,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229256,8 +229470,8 @@
             "x": 1.0,
             "y": 10.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 6,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229272,7 +229486,7 @@
             "x": 2.0,
             "y": 10.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -229304,8 +229518,8 @@
             "x": 0.0,
             "y": 11.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 14,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229320,8 +229534,8 @@
             "x": 1.0,
             "y": 11.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 2,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229336,7 +229550,7 @@
             "x": 2.0,
             "y": 11.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -229352,8 +229566,8 @@
             "x": 3.0,
             "y": 11.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 11,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229368,8 +229582,8 @@
             "x": 0.0,
             "y": 12.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 7,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229384,8 +229598,8 @@
             "x": 1.0,
             "y": 12.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 14,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229416,8 +229630,8 @@
             "x": 3.0,
             "y": 12.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 11,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -229432,7 +229646,7 @@
             "x": 0.0,
             "y": 13.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -229448,8 +229662,8 @@
             "x": 1.0,
             "y": 13.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 7,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -298576,10 +298790,12 @@
       "numColors": 7,
       "balloonCount": 840,
       "balloonScale": 0.21214284002780914,
-      "queueColumns": 5,
+      "queueColumns": 3,
       "targetClearRate": 0.0,
       "difficultyPurpose": 1,
-      "gimmickTypes": [],
+      "gimmickTypes": [
+        "Chain"
+      ],
       "holders": [
         {
           "holderId": 0,
@@ -298631,14 +298847,14 @@
         },
         {
           "holderId": 3,
-          "color": 5,
-          "magazineCount": 10,
+          "color": 12,
+          "magazineCount": 20,
           "position": {
-            "x": 3.0,
-            "y": 0.0
+            "x": 0.0,
+            "y": 1.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 7,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -298650,8 +298866,8 @@
           "color": 12,
           "magazineCount": 20,
           "position": {
-            "x": 4.0,
-            "y": 0.0
+            "x": 1.0,
+            "y": 1.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298666,7 +298882,7 @@
           "color": 6,
           "magazineCount": 20,
           "position": {
-            "x": 0.0,
+            "x": 2.0,
             "y": 1.0
           },
           "queueGimmick": "",
@@ -298682,8 +298898,8 @@
           "color": 12,
           "magazineCount": 20,
           "position": {
-            "x": 1.0,
-            "y": 1.0
+            "x": 0.0,
+            "y": 2.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298698,11 +298914,11 @@
           "color": 12,
           "magazineCount": 20,
           "position": {
-            "x": 2.0,
-            "y": 1.0
+            "x": 1.0,
+            "y": 2.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 7,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -298714,11 +298930,11 @@
           "color": 12,
           "magazineCount": 10,
           "position": {
-            "x": 3.0,
-            "y": 1.0
+            "x": 2.0,
+            "y": 2.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 3,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -298730,8 +298946,8 @@
           "color": 5,
           "magazineCount": 20,
           "position": {
-            "x": 4.0,
-            "y": 1.0
+            "x": 0.0,
+            "y": 3.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298746,11 +298962,11 @@
           "color": 7,
           "magazineCount": 20,
           "position": {
-            "x": 0.0,
-            "y": 2.0
+            "x": 1.0,
+            "y": 3.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 3,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -298762,8 +298978,8 @@
           "color": 12,
           "magazineCount": 20,
           "position": {
-            "x": 1.0,
-            "y": 2.0
+            "x": 2.0,
+            "y": 3.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298778,8 +298994,8 @@
           "color": 5,
           "magazineCount": 20,
           "position": {
-            "x": 2.0,
-            "y": 2.0
+            "x": 0.0,
+            "y": 4.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298794,11 +299010,11 @@
           "color": 16,
           "magazineCount": 20,
           "position": {
-            "x": 3.0,
-            "y": 2.0
+            "x": 1.0,
+            "y": 4.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 10,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -298810,11 +299026,11 @@
           "color": 15,
           "magazineCount": 20,
           "position": {
-            "x": 4.0,
-            "y": 2.0
+            "x": 2.0,
+            "y": 4.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 10,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -298827,7 +299043,7 @@
           "magazineCount": 10,
           "position": {
             "x": 0.0,
-            "y": 3.0
+            "y": 5.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298843,7 +299059,7 @@
           "magazineCount": 20,
           "position": {
             "x": 1.0,
-            "y": 3.0
+            "y": 5.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298859,10 +299075,10 @@
           "magazineCount": 20,
           "position": {
             "x": 2.0,
-            "y": 3.0
+            "y": 5.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 11,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -298874,8 +299090,8 @@
           "color": 7,
           "magazineCount": 40,
           "position": {
-            "x": 3.0,
-            "y": 3.0
+            "x": 0.0,
+            "y": 6.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298890,11 +299106,11 @@
           "color": 15,
           "magazineCount": 20,
           "position": {
-            "x": 4.0,
-            "y": 3.0
+            "x": 1.0,
+            "y": 6.0
           },
-          "queueGimmick": "",
-          "chainGroupId": -1,
+          "queueGimmick": "Chain",
+          "chainGroupId": 11,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -298906,8 +299122,8 @@
           "color": 5,
           "magazineCount": 20,
           "position": {
-            "x": 0.0,
-            "y": 4.0
+            "x": 2.0,
+            "y": 6.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298922,8 +299138,8 @@
           "color": 7,
           "magazineCount": 20,
           "position": {
-            "x": 1.0,
-            "y": 4.0
+            "x": 0.0,
+            "y": 7.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298938,8 +299154,8 @@
           "color": 26,
           "magazineCount": 20,
           "position": {
-            "x": 2.0,
-            "y": 4.0
+            "x": 1.0,
+            "y": 7.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298954,8 +299170,8 @@
           "color": 15,
           "magazineCount": 20,
           "position": {
-            "x": 3.0,
-            "y": 4.0
+            "x": 2.0,
+            "y": 7.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298970,8 +299186,8 @@
           "color": 15,
           "magazineCount": 20,
           "position": {
-            "x": 4.0,
-            "y": 4.0
+            "x": 0.0,
+            "y": 8.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298986,8 +299202,8 @@
           "color": 7,
           "magazineCount": 20,
           "position": {
-            "x": 0.0,
-            "y": 5.0
+            "x": 1.0,
+            "y": 8.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -298999,11 +299215,11 @@
         },
         {
           "holderId": 26,
-          "color": 12,
-          "magazineCount": 20,
+          "color": 5,
+          "magazineCount": 10,
           "position": {
-            "x": 1.0,
-            "y": 5.0
+            "x": 2.0,
+            "y": 8.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299018,8 +299234,8 @@
           "color": 5,
           "magazineCount": 10,
           "position": {
-            "x": 2.0,
-            "y": 5.0
+            "x": 0.0,
+            "y": 9.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299034,8 +299250,8 @@
           "color": 7,
           "magazineCount": 20,
           "position": {
-            "x": 3.0,
-            "y": 5.0
+            "x": 1.0,
+            "y": 9.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299050,8 +299266,8 @@
           "color": 15,
           "magazineCount": 20,
           "position": {
-            "x": 4.0,
-            "y": 5.0
+            "x": 2.0,
+            "y": 9.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299067,7 +299283,7 @@
           "magazineCount": 10,
           "position": {
             "x": 0.0,
-            "y": 6.0
+            "y": 10.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299083,7 +299299,7 @@
           "magazineCount": 10,
           "position": {
             "x": 1.0,
-            "y": 6.0
+            "y": 10.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299099,7 +299315,7 @@
           "magazineCount": 20,
           "position": {
             "x": 2.0,
-            "y": 6.0
+            "y": 10.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299114,8 +299330,8 @@
           "color": 16,
           "magazineCount": 20,
           "position": {
-            "x": 3.0,
-            "y": 6.0
+            "x": 0.0,
+            "y": 11.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299127,11 +299343,11 @@
         },
         {
           "holderId": 34,
-          "color": 7,
-          "magazineCount": 20,
+          "color": 15,
+          "magazineCount": 40,
           "position": {
-            "x": 4.0,
-            "y": 6.0
+            "x": 1.0,
+            "y": 11.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299146,8 +299362,8 @@
           "color": 26,
           "magazineCount": 20,
           "position": {
-            "x": 0.0,
-            "y": 7.0
+            "x": 2.0,
+            "y": 11.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299159,11 +299375,11 @@
         },
         {
           "holderId": 36,
-          "color": 15,
-          "magazineCount": 40,
+          "color": 7,
+          "magazineCount": 20,
           "position": {
-            "x": 1.0,
-            "y": 7.0
+            "x": 0.0,
+            "y": 12.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299178,8 +299394,8 @@
           "color": 7,
           "magazineCount": 20,
           "position": {
-            "x": 2.0,
-            "y": 7.0
+            "x": 1.0,
+            "y": 12.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299194,8 +299410,8 @@
           "color": 5,
           "magazineCount": 10,
           "position": {
-            "x": 3.0,
-            "y": 7.0
+            "x": 2.0,
+            "y": 12.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299210,8 +299426,8 @@
           "color": 16,
           "magazineCount": 20,
           "position": {
-            "x": 4.0,
-            "y": 7.0
+            "x": 0.0,
+            "y": 13.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299226,8 +299442,8 @@
           "color": 26,
           "magazineCount": 10,
           "position": {
-            "x": 0.0,
-            "y": 8.0
+            "x": 1.0,
+            "y": 13.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299242,8 +299458,8 @@
           "color": 26,
           "magazineCount": 20,
           "position": {
-            "x": 1.0,
-            "y": 8.0
+            "x": 2.0,
+            "y": 13.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299258,8 +299474,8 @@
           "color": 5,
           "magazineCount": 10,
           "position": {
-            "x": 2.0,
-            "y": 8.0
+            "x": 0.0,
+            "y": 14.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -299274,8 +299490,8 @@
           "color": 26,
           "magazineCount": 20,
           "position": {
-            "x": 3.0,
-            "y": 8.0
+            "x": 1.0,
+            "y": 14.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -321479,11 +321695,10 @@
       "numColors": 5,
       "balloonCount": 640,
       "balloonScale": 0.17999999225139618,
-      "queueColumns": 4,
+      "queueColumns": 5,
       "targetClearRate": 0.0,
       "difficultyPurpose": 1,
       "gimmickTypes": [
-        "Chain",
         "Hidden"
       ],
       "holders": [
@@ -321556,11 +321771,11 @@
           "color": 17,
           "magazineCount": 20,
           "position": {
-            "x": 0.0,
-            "y": 1.0
+            "x": 4.0,
+            "y": 0.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 1,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -321570,6 +321785,22 @@
         {
           "holderId": 5,
           "color": 17,
+          "magazineCount": 20,
+          "position": {
+            "x": 0.0,
+            "y": 1.0
+          },
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
+          "frozenHP": 3,
+          "spawnerHP": 0,
+          "spawnerColors": [],
+          "spawnerMag": 0,
+          "lockPairId": -1
+        },
+        {
+          "holderId": 6,
+          "color": 0,
           "magazineCount": 20,
           "position": {
             "x": 1.0,
@@ -321584,27 +321815,11 @@
           "lockPairId": -1
         },
         {
-          "holderId": 6,
-          "color": 0,
-          "magazineCount": 20,
-          "position": {
-            "x": 2.0,
-            "y": 1.0
-          },
-          "queueGimmick": "Hidden",
-          "chainGroupId": -1,
-          "frozenHP": 3,
-          "spawnerHP": 0,
-          "spawnerColors": [],
-          "spawnerMag": 0,
-          "lockPairId": -1
-        },
-        {
           "holderId": 7,
           "color": 0,
           "magazineCount": 20,
           "position": {
-            "x": 3.0,
+            "x": 2.0,
             "y": 1.0
           },
           "queueGimmick": "Hidden",
@@ -321620,11 +321835,11 @@
           "color": 7,
           "magazineCount": 20,
           "position": {
-            "x": 0.0,
-            "y": 2.0
+            "x": 3.0,
+            "y": 1.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 1,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -321636,10 +321851,10 @@
           "color": 19,
           "magazineCount": 10,
           "position": {
-            "x": 1.0,
-            "y": 2.0
+            "x": 4.0,
+            "y": 1.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -321652,11 +321867,11 @@
           "color": 0,
           "magazineCount": 20,
           "position": {
-            "x": 2.0,
+            "x": 0.0,
             "y": 2.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 4,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -321668,11 +321883,11 @@
           "color": 17,
           "magazineCount": 20,
           "position": {
-            "x": 3.0,
+            "x": 1.0,
             "y": 2.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 4,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -321684,11 +321899,11 @@
           "color": 17,
           "magazineCount": 10,
           "position": {
-            "x": 0.0,
-            "y": 3.0
+            "x": 2.0,
+            "y": 2.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 2,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -321700,11 +321915,11 @@
           "color": 7,
           "magazineCount": 10,
           "position": {
-            "x": 1.0,
-            "y": 3.0
+            "x": 3.0,
+            "y": 2.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 2,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -321716,10 +321931,10 @@
           "color": 7,
           "magazineCount": 20,
           "position": {
-            "x": 2.0,
-            "y": 3.0
+            "x": 4.0,
+            "y": 2.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -321732,10 +321947,10 @@
           "color": 17,
           "magazineCount": 20,
           "position": {
-            "x": 3.0,
+            "x": 0.0,
             "y": 3.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -321748,8 +321963,8 @@
           "color": 17,
           "magazineCount": 10,
           "position": {
-            "x": 0.0,
-            "y": 4.0
+            "x": 1.0,
+            "y": 3.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -321764,11 +321979,11 @@
           "color": 17,
           "magazineCount": 10,
           "position": {
-            "x": 1.0,
-            "y": 4.0
+            "x": 2.0,
+            "y": 3.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 3,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -321780,8 +321995,8 @@
           "color": 0,
           "magazineCount": 40,
           "position": {
-            "x": 2.0,
-            "y": 4.0
+            "x": 3.0,
+            "y": 3.0
           },
           "queueGimmick": "Hidden",
           "chainGroupId": -1,
@@ -321796,11 +322011,11 @@
           "color": 0,
           "magazineCount": 40,
           "position": {
-            "x": 3.0,
-            "y": 4.0
+            "x": 4.0,
+            "y": 3.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 6,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -321813,10 +322028,10 @@
           "magazineCount": 20,
           "position": {
             "x": 0.0,
-            "y": 5.0
+            "y": 4.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 3,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -321829,7 +322044,7 @@
           "magazineCount": 10,
           "position": {
             "x": 1.0,
-            "y": 5.0
+            "y": 4.0
           },
           "queueGimmick": "Hidden",
           "chainGroupId": -1,
@@ -321845,7 +322060,7 @@
           "magazineCount": 20,
           "position": {
             "x": 2.0,
-            "y": 5.0
+            "y": 4.0
           },
           "queueGimmick": "Hidden",
           "chainGroupId": -1,
@@ -321861,10 +322076,10 @@
           "magazineCount": 10,
           "position": {
             "x": 3.0,
-            "y": 5.0
+            "y": 4.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 6,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -321876,8 +322091,8 @@
           "color": 17,
           "magazineCount": 20,
           "position": {
-            "x": 0.0,
-            "y": 6.0
+            "x": 4.0,
+            "y": 4.0
           },
           "queueGimmick": "",
           "chainGroupId": -1,
@@ -321892,10 +322107,10 @@
           "color": 17,
           "magazineCount": 40,
           "position": {
-            "x": 1.0,
-            "y": 6.0
+            "x": 0.0,
+            "y": 5.0
           },
-          "queueGimmick": "",
+          "queueGimmick": "Hidden",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -321908,8 +322123,8 @@
           "color": 0,
           "magazineCount": 10,
           "position": {
-            "x": 2.0,
-            "y": 6.0
+            "x": 1.0,
+            "y": 5.0
           },
           "queueGimmick": "Hidden",
           "chainGroupId": -1,
@@ -321924,11 +322139,11 @@
           "color": 19,
           "magazineCount": 40,
           "position": {
-            "x": 3.0,
-            "y": 6.0
+            "x": 2.0,
+            "y": 5.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 5,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -321940,10 +322155,10 @@
           "color": 17,
           "magazineCount": 10,
           "position": {
-            "x": 0.0,
-            "y": 7.0
+            "x": 3.0,
+            "y": 5.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -321956,10 +322171,10 @@
           "color": 15,
           "magazineCount": 20,
           "position": {
-            "x": 1.0,
-            "y": 7.0
+            "x": 4.0,
+            "y": 5.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -321972,11 +322187,11 @@
           "color": 15,
           "magazineCount": 10,
           "position": {
-            "x": 2.0,
-            "y": 7.0
+            "x": 0.0,
+            "y": 6.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 5,
+          "queueGimmick": "Hidden",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -321988,11 +322203,11 @@
           "color": 15,
           "magazineCount": 20,
           "position": {
-            "x": 3.0,
-            "y": 7.0
+            "x": 1.0,
+            "y": 6.0
           },
-          "queueGimmick": "Chain",
-          "chainGroupId": 5,
+          "queueGimmick": "",
+          "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
           "spawnerColors": [],
@@ -506745,9 +506960,7 @@
       "queueColumns": 3,
       "targetClearRate": 0.0,
       "difficultyPurpose": 4,
-      "gimmickTypes": [
-        "Hidden"
-      ],
+      "gimmickTypes": [],
       "holders": [
         {
           "holderId": 0,
@@ -506805,7 +507018,7 @@
             "x": 0.0,
             "y": 1.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -506837,7 +507050,7 @@
             "x": 2.0,
             "y": 1.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -506853,7 +507066,7 @@
             "x": 0.0,
             "y": 2.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -506885,7 +507098,7 @@
             "x": 2.0,
             "y": 2.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -506901,7 +507114,7 @@
             "x": 0.0,
             "y": 3.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -506933,7 +507146,7 @@
             "x": 2.0,
             "y": 3.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -506965,7 +507178,7 @@
             "x": 1.0,
             "y": 4.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -506981,7 +507194,7 @@
             "x": 2.0,
             "y": 4.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -506997,7 +507210,7 @@
             "x": 0.0,
             "y": 5.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -507029,7 +507242,7 @@
             "x": 2.0,
             "y": 5.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -507045,7 +507258,7 @@
             "x": 0.0,
             "y": 6.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -507061,7 +507274,7 @@
             "x": 1.0,
             "y": 6.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -507157,7 +507370,7 @@
             "x": 1.0,
             "y": 8.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -507173,7 +507386,7 @@
             "x": 2.0,
             "y": 8.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
@@ -507189,7 +507402,7 @@
             "x": 0.0,
             "y": 9.0
           },
-          "queueGimmick": "Hidden",
+          "queueGimmick": "",
           "chainGroupId": -1,
           "frozenHP": 3,
           "spawnerHP": 0,
