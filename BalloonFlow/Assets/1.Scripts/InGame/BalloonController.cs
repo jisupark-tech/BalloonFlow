@@ -146,13 +146,12 @@ namespace BalloonFlow
         // Sized Wooden Board should keep the authored HP and expose all occupied cells as the
         // same shared target. Previous per-cell mode forced HP=sizeW*sizeH, which made 2x2/3x3
         // boards ignore MapMaker HP.
-        // ROLLBACK_WOODENBOARD_PER_CELL_ON_20260624: per-cell mode ENABLED by design request —
-        // a sized Wooden Board is attacked one hit per exposed occupied cell (e.g. 2x2 with 2 cells
-        // exposed on the outer side = 2 hits for that side). requiredHits / maxHP / HP display are
-        // therefore W×H (footprint), and the on-board HP number shows the remaining cell count.
-        // (Trade-off acknowledged: in this mode the authored MapMaker HP is superseded by the footprint.)
-        // To revert to shared authored-HP behaviour, set this back to false.
-        public static bool EnablePinataPerCell = true;
+        // ROLLBACK_WOODENBOARD_PER_CELL_OFF_20260625: per-cell mode DISABLED (이전 설계 번복).
+        // WoodenBoard(sized Pinata) 는 어떤 크기든(1×1 / n×m) authored MapMaker HP 를 그대로 사용한다.
+        //   HP 만 hit 마다 감소 → 0 이면 통째로 소멸(바리케이드식 비율 축소 X, 셀 단위 소진 X).
+        // false 면 IsPinataPerCell 이 항상 false → maxHP=W×H override / requiredHits=W×H /
+        //   셀단위 타게팅(idx<hitCount)·매치 분기가 전부 우회되어 공유 authored-HP 동작으로 복귀.
+        public static bool EnablePinataPerCell = false;
         public static bool IsPinataPerCell(BalloonData d) =>
             EnablePinataPerCell && d.gimmickType == GimmickPinata && d.sizeW * d.sizeH > 1;
 
