@@ -7510,8 +7510,9 @@ namespace BalloonFlow
                         hasVerticalStep = true;
                         if (rowDiff != 1)
                             errors.Add($"Linked Dart Box Chain Group {groupId} same-column step ({prev.x},{prev.y}) -> ({cur.x},{cur.y}) must have row diff 1.");
-                        if (prev.y > 2 || cur.y > 2)
-                            errors.Add($"Linked Dart Box Chain Group {groupId} vertical part must stay within rows 0..2. Current step: ({prev.x},{prev.y}) -> ({cur.x},{cur.y}).");
+                        // ROLLBACK_VERTICAL_CHAIN_ROWRANGE_20260625: 세로 체인의 'rows 0..2' 위치 제한 제거.
+                        //   런타임이 세로 체인을 어느 행이든 배포하도록 수정됨(HolderManager/InputHandler).
+                        //   '연속 인접(rowDiff==1)'·'개수 제한(아래 max link_n)'만 유지하면 충분.
                     }
                     else
                     {
@@ -7521,8 +7522,18 @@ namespace BalloonFlow
                     }
                 }
 
-                if (hasVerticalStep && !hasColumnStep && sorted.Count > 3)
-                    errors.Add($"Linked Dart Box Chain Group {groupId} is a vertical chain with {sorted.Count} holders. Vertical chains allow max link_n=3.");
+                // ROLLBACK_VERTICAL_CHAIN_MAX2_20260625 (옵션 A): 한 열에 쌓인 체인 셀 ≤ 2.
+                //   런타임 한 열 활성 슬롯이 deploying+waiting=2 라, 한 열에 3+ 스택(세로 3개 또는 mixed 의
+                //   한 열 3 스택)은 인게임 배포 불가 → 저작 단계에서 차단(세로 연결 최대 2개).
+                var chainColCount = new Dictionary<int, int>();
+                foreach (var pc in cells)
+                {
+                    chainColCount.TryGetValue(pc.x, out int cc);
+                    chainColCount[pc.x] = cc + 1;
+                }
+                foreach (var kv in chainColCount)
+                    if (kv.Value > 2)
+                        errors.Add($"Linked Dart Box Chain Group {groupId} stacks {kv.Value} holders in one column (col {kv.Key}). A column deploys at most 2 (slot + 1 waiting) — keep vertical link ≤ 2.");
 
                 if (hasVerticalStep && hasColumnStep && sorted.Count > 4)
                     errors.Add($"Linked Dart Box Chain Group {groupId} is a mixed chain with {sorted.Count} holders. Mixed chains allow max link_n=4.");
