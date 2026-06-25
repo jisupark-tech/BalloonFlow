@@ -230,7 +230,10 @@ namespace BalloonFlow
                 {
                     holderId = _nextHolderId++,
                     color = setup.color,
-                    magazineCount = isSpawner ? 0 : Mathf.Min(setup.magazineCount, _magazineMax), // Spawner는 다트 없음
+                    // ROLLBACK_HOLDER_MAG_PREVIEW_MATCH_20260625: MapMaker 미리보기(저작값) 그대로 사용 —
+                    //   레일 capacity 상한(_magazineMax=30/40/50)으로 깎던 clamp 제거. Rail Overflow 모드라 초과 다트도 수용.
+                    //   (기존: Mathf.Min(setup.magazineCount, _magazineMax) → MapMaker 표시값보다 작게 배치됨.)
+                    magazineCount = isSpawner ? 0 : Mathf.Max(0, setup.magazineCount), // Spawner는 다트 없음
                     column = col,
                     sourceRow = row,
                     isDeploying = false,

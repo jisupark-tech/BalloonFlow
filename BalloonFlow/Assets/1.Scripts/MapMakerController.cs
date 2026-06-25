@@ -1517,7 +1517,10 @@ namespace BalloonFlow
 
             // Cols 행 — Auto/Manual 토글 + (Manual일 때만 입력 활성)
             var r1 = Row(p); Lbl(r1, "Columns", w: 90);
-            _holderColsInput = MakeIntField(r1, _holderCols, 1, 20, v =>
+            // ROLLBACK_HOLDER_COLS_PREVIEW_MATCH_20260625: 입력 범위를 런타임 큐 상한과 일치(2~5)시켜
+            //   미리보기 열 수가 실제 배치(queueColumns=Clamp(_holderCols,2,5), 런타임 MAX_QUEUE_COLUMNS=5)를
+            //   절대 초과하지 않게 한다. (기존 1~20 → 6열+ 저작 시 런타임이 5로 뭉개 미리보기와 달라졌음.)
+            _holderColsInput = MakeIntField(r1, _holderCols, 2, 5, v =>
             { _holderCols = v; InitGrid(); RebuildHolderUI(); _infoDirty = true; });
             // §2-3 — Auto 추천 토글
             Button togBtn = null;

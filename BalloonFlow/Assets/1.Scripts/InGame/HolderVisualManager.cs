@@ -412,6 +412,14 @@ namespace BalloonFlow
                 // holderId 순 (MapMaker 저장 순서 = row 순서 보존)
                 allInCol.Sort((a, b) => a.holderId.CompareTo(b.holderId));
 
+                // ROLLBACK_CHAIN_DEEP_EAGER_CONTIGUOUS_20260625: 깊은 행(≥VISIBLE_HOLDER_ROWS) Chain 은 즉시
+                //   스폰되는데 그 앞 lazy 일반 홀더가 안 생기면 RepositionColumnHolders 의 activeRow(스폰된
+                //   비주얼만 카운트)가 미스폰분을 누락 → Chain 이 앞으로 당겨져 순서가 꼬였다(세팅과 다르게 배치).
+                //   → 그 열에 행 R 의 Chain 이 있으면 R 까지 연속 스폰(중간 lazy 포함)해 activeRow 정합 보장.
+                int colVisibleRows = VISIBLE_HOLDER_ROWS;
+                for (int k = allInCol.Count - 1; k >= VISIBLE_HOLDER_ROWS; k--)
+                    if (allInCol[k].chainGroupId >= 0) { colVisibleRows = k + 1; break; }
+
                 for (int row = 0; row < allInCol.Count; row++)
                 {
                     // [HOLDER_LAZY_SPAWN 2026-06-11] 레벨 시작 시 앞 VISIBLE_HOLDER_ROWS 행만 비주얼 생성.
@@ -421,8 +429,8 @@ namespace BalloonFlow
                     HolderData hd = allInCol[row];
                     bool isSpawnerHolder = hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
                                         || hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O;
-                    if (row >= VISIBLE_HOLDER_ROWS && !isSpawnerHolder && hd.chainGroupId < 0)
-                        continue; // 지연 스폰 대상
+                    if (row >= colVisibleRows && !isSpawnerHolder && hd.chainGroupId < 0)
+                        continue; // 지연 스폰 대상 (colVisibleRows 가 깊은 Chain 까지 연속 보장)
                     // ROLLBACK_PIPE_BEHIND_VISIBLE_20260624 (#2): '미방출 payload(파이프 안)'만 숨김.
                     // 파이프에 맵핑 안 된 뒤 홀더는 일반 홀더처럼 보이고 5행까지 표시됨(아래 row 임계).
                     if (!isSpawnerHolder && !hd.IsQueueVisible)
@@ -1062,12 +1070,18 @@ namespace BalloonFlow
             }
             _tempLazyColumnData.Sort((a, b) => a.holderId.CompareTo(b.holderId));
 
+            // ROLLBACK_CHAIN_DEEP_EAGER_CONTIGUOUS_20260625: 초기 스폰과 동일 — 깊은 Chain 까지 연속 스폰해
+            //   activeRow 누락(미스폰 lazy 홀더)으로 인한 Chain 순서 꼬임 방지.
+            int colVisibleRows = VISIBLE_HOLDER_ROWS;
+            for (int k = _tempLazyColumnData.Count - 1; k >= VISIBLE_HOLDER_ROWS; k--)
+                if (_tempLazyColumnData[k].chainGroupId >= 0) { colVisibleRows = k + 1; break; }
+
             for (int row = 0; row < _tempLazyColumnData.Count; row++)
             {
                 var hd = _tempLazyColumnData[row];
                 if (_holderVisuals.ContainsKey(hd.holderId)) continue;
                 // 아직 임계 밖이면 지연 유지 (Chain 멤버는 연결선 때문에 항상 생성).
-                if (row >= VISIBLE_HOLDER_ROWS && hd.chainGroupId < 0) continue;
+                if (row >= colVisibleRows && hd.chainGroupId < 0) continue;
 
                 // 스폰 위치: Spawner 열은 기존처럼 Spawner 배출 위치(연출 유지),
                 // 일반 열의 지연 스폰분은 목표보다 한 행 뒤에서 등장 → 아래 리포지셔닝 트윈으로

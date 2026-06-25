@@ -140,7 +140,7 @@ namespace BalloonFlow
         private const int RAIL_WARNING_TUTORIAL_ID = 1000;
         private const string PREFS_RAIL_WARNING_SHOWN = "BF_RailWarningTutorialShown";
         private const float RAIL_WARNING_TUTORIAL_OCCUPANCY = 0.8f;
-        private const float RAIL_WARNING_PAUSE_DELAY = 0.35f;
+        private const float RAIL_WARNING_PAUSE_DELAY = 1.5f;
 
         #endregion
 
