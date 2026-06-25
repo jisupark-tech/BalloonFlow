@@ -1273,7 +1273,10 @@ namespace BalloonFlow
                 ident.ResetAnimator(); // 뚜껑 닫힌 상태로 초기화
                 ident.SetHolderId(data.holderId);
                 ident.ShowDarts(data.magazineCount);
-                ident.SetFrozen(data.isFrozen);
+                // ROLLBACK_PIPE_PAYLOAD_FROZEN_PARTICLE_OFF_20260625:
+                // Pipe/Glass Pipe payload 생성은 해동 이벤트가 아니므로 풀에 남은 Frozen break FX가 재생되지 않게 초기화한다.
+                ident.SetFrozen(data.isFrozen, playBreakEffect: false);
+                ident.StopFrozenBreakEffect();
                 if (data.isHidden)
                 {
                     ident.SetHidden(true);

@@ -306,6 +306,16 @@ namespace BalloonFlow.Analytics
             //   (획득 시 차감은 economy_event 추적) → 미설정(NULL). 제품 정의 시 보강.
             p[AnalyticsConsts.P_ITEM_CATEGORY] = ITEM_TYPE_BOOSTER;
 
+            // ROLLBACK_ANALYTICS_NULLFILL_20260625: item_use NULL 채우기 — 그 부스터의 마지막 획득정보(경량 추적).
+            //   BoosterManager 가 AddBooster 시 타입별로 acquisition_type/cost/currency 기록 → 사용 시점에 읽어 emit.
+            if (BoosterManager.HasInstance)
+            {
+                var acq = BoosterManager.Instance.ConsumeLastAcquisition(evt.boosterType);
+                p[AnalyticsConsts.P_ACQUISITION_TYPE] = acq.type;
+                p[AnalyticsConsts.P_COST_AMOUNT]      = acq.cost;
+                p[AnalyticsConsts.P_COST_CURRENCY_ID] = acq.currency;
+            }
+
             AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_ITEM_USE, p);
         }
 

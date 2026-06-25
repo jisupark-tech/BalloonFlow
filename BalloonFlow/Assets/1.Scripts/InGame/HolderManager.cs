@@ -959,6 +959,10 @@ namespace BalloonFlow
             {
                 HolderData holder = _holders[i];
                 if (holder.column != column || holder.isConsumed || !holder.IsQueueVisible) continue;
+                // ROLLBACK_PIPE_FAST_RELEASE_20260625: 배포 시작(레일로 이동 중)한 홀더는 이미 '앞 큐'를 떠난 것으로 보고
+                //   카운트에서 제외 → 파이프가 그 즉시 다음 payload 를 release(다트박스 이동과 동시에 생성).
+                //   (기존엔 레일 도착·소비될 때까지 앞칸을 차지해 다음 생성이 늦었음.)
+                if (holder.isDeploying || holder.isMovingToRail) continue;
                 if (holder.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T ||
                     holder.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O)
                     continue;
@@ -1321,6 +1325,13 @@ namespace BalloonFlow
             if (!selected)
             {
                 EventBus.Publish(new OnHolderClickAnim { holderId = evt.holderId });
+            }
+            else
+            {
+                // ROLLBACK_PIPE_FAST_RELEASE_20260625: 탭으로 배포가 시작되면 즉시 파이프 다음 payload release.
+                //   배포중 홀더는 CountVisibleNormalHoldersInColumn 에서 제외되므로 앞칸이 비어 다음이 바로 나옴
+                //   (= 다트박스 이동과 동시에 생성). 기존엔 배포 '완료'(HandleDeploymentDone) 때만 release 돼 느렸음.
+                ProcessSpawners();
             }
         }
 

@@ -626,7 +626,7 @@ namespace BalloonFlow
         /// Frozen 상태 설정. true면 BoxFrozen 활성 + Box 비활성.
         /// </summary>
         /// <summary>Frozen 상태 설정. frozen=true → BoxFrozen 활성, Box 비활성.</summary>
-        public void SetFrozen(bool frozen)
+        public void SetFrozen(bool frozen, bool playBreakEffect = true)
         {
             if (frozen && _boxFrozen == null)
                 Debug.LogWarning($"[HolderIdentifier] Holder {_holderId}: _boxFrozen 미할당! Inspector에서 BoxFrozen 오브젝트를 드래그하세요.");
@@ -634,7 +634,7 @@ namespace BalloonFlow
             bool wasFrozen = _isFrozenVisual || (_boxFrozen != null && _boxFrozen.activeSelf);
             _isFrozenVisual = frozen;
 
-            if (!frozen && wasFrozen)
+            if (playBreakEffect && !frozen && wasFrozen)
                 PlayFrozenBreakEffect();
 
             if (_box != null) _box.SetActive(!frozen || _boxFrozen == null);
@@ -661,10 +661,23 @@ namespace BalloonFlow
             RestoreFrozenEffectTransform();
             if (_box != null) _box.SetActive(true);
             if (_boxFrozen != null) _boxFrozen.SetActive(false);
-            if (_frozenExplosionEffect != null) _frozenExplosionEffect.SetActive(false);
+            StopFrozenBreakEffect();
             GameObject hiddenFx = ResolveHiddenAppearParticle();
             if (hiddenFx != null) hiddenFx.SetActive(false);
             SetControlBoxStrokeActive(false);
+        }
+
+        public void StopFrozenBreakEffect()
+        {
+            if (_frozenExplosionEffect == null) return;
+
+            var particles = _frozenExplosionEffect.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < particles.Length; i++)
+            {
+                if (particles[i] == null) continue;
+                particles[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            }
+            _frozenExplosionEffect.SetActive(false);
         }
 
         private void PlayFrozenBreakEffect()

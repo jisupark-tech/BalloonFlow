@@ -57,6 +57,15 @@ namespace BalloonFlow.Analytics
         public const string P_BACKGROUND_TIME_SEC = "background_time_sec";
         public const string P_SCORE               = "score";
         public const string P_STAR_COUNT          = "star_count";
+        // ROLLBACK_ANALYTICS_NULLFILL_20260625: play_event NULL 채우기 — 상세 지표 계측 컬럼.
+        public const string P_OBJECTIVE_TOTAL      = "objective_total";
+        public const string P_OBJECTIVE_DONE       = "objective_done";
+        public const string P_AVG_RESOURCE         = "avg_resource_usage_ratio";
+        public const string P_CONTINUE_POPUP_COUNT = "continue_popup_count";
+        public const string P_CONTINUE_COUNT       = "continue_count";
+        public const string P_COIN_EARNED          = "coin_earned";
+        public const string P_COIN_SPENT           = "coin_spent";
+        public const string P_FINAL_COIN_BALANCE   = "final_coin_balance";
 
         // ─── Session ───
         public const string P_DURATION_SEC        = "duration_sec";
@@ -84,6 +93,10 @@ namespace BalloonFlow.Analytics
         public const string P_ITEM_CONTEXT        = "item_context";         // in_level|lobby|shop|other
         public const string P_QUANTITY            = "quantity";
         public const string P_BALANCE_AFTER       = "balance_after";
+        // ROLLBACK_ANALYTICS_NULLFILL_20260625: item_use NULL 채우기 — 실제 획득/비용 추적 컬럼.
+        public const string P_ACQUISITION_TYPE    = "acquisition_type";
+        public const string P_COST_AMOUNT         = "cost_amount";
+        public const string P_COST_CURRENCY_ID    = "cost_currency_id";
 
         // economy_event
         public const string P_CURRENCY_TYPE       = "currency_type";        // coin|gem|life|booster

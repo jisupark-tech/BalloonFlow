@@ -36,6 +36,12 @@ namespace BalloonFlow.Analytics
         private float  _activeBackgroundSec;
         private DateTime? _bgEnteredUtc;
 
+        // ROLLBACK_ANALYTICS_NULLFILL_20260625: play_event NULL 채우기용 레벨당 누적기(가산만 — 기존 타이밍/구조 불변).
+        private int _movesUsed;          // 홀더 배포 횟수(OnHolderDeploymentDone)
+        private int _continuePopupCount; // 이어하기 팝업 표시 횟수(PopupContinue.OnEnable)
+        private int _coinEarned;         // 레벨 중 코인 획득 누적(CurrencyManager.AddCoins)
+        private int _coinSpent;          // 레벨 중 코인 사용 누적(CurrencyManager.SpendCoins)
+
         public string CurrentPlayId => _activePlayId ?? "";
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -52,7 +58,31 @@ namespace BalloonFlow.Analytics
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompleted);
             EventBus.Subscribe<OnLevelFailed>(HandleLevelFailed);
+            // ROLLBACK_ANALYTICS_NULLFILL_20260625: 홀더 배포 = moves_used 계측(가산만).
+            EventBus.Subscribe<OnHolderDeploymentDone>(HandleHolderDeploymentDone);
             DiagLog("LevelTracker.OnSingletonAwake — subscribed to OnLevelLoaded/Completed/Failed");
+        }
+
+        // ROLLBACK_ANALYTICS_NULLFILL_20260625: 홀더 1회 배포 = 1 move. 활성 play 중에만 누적.
+        private void HandleHolderDeploymentDone(OnHolderDeploymentDone evt)
+        {
+            if (!string.IsNullOrEmpty(_activePlayId)) _movesUsed++;
+        }
+
+        // ROLLBACK_ANALYTICS_NULLFILL_20260625: 외부(팝업/통화 매니저)에서 호출하는 누적 notify (활성 play 중에만).
+        public static void NotifyContinuePopupShown()
+        {
+            if (HasInstance && !string.IsNullOrEmpty(Instance._activePlayId)) Instance._continuePopupCount++;
+        }
+
+        public static void NotifyCoinEarned(int amount)
+        {
+            if (amount > 0 && HasInstance && !string.IsNullOrEmpty(Instance._activePlayId)) Instance._coinEarned += amount;
+        }
+
+        public static void NotifyCoinSpent(int amount)
+        {
+            if (amount > 0 && HasInstance && !string.IsNullOrEmpty(Instance._activePlayId)) Instance._coinSpent += amount;
         }
 
         [System.Diagnostics.Conditional("UNITY_EDITOR")]
@@ -64,6 +94,7 @@ namespace BalloonFlow.Analytics
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Unsubscribe<OnLevelCompleted>(HandleLevelCompleted);
             EventBus.Unsubscribe<OnLevelFailed>(HandleLevelFailed);
+            EventBus.Unsubscribe<OnHolderDeploymentDone>(HandleHolderDeploymentDone); // ROLLBACK_ANALYTICS_NULLFILL_20260625
             base.OnDestroy();
         }
 
@@ -101,6 +132,11 @@ namespace BalloonFlow.Analytics
             _activeStartedUtc = DateTime.UtcNow;
             _activeBackgroundSec = 0f;
             _bgEnteredUtc = null;
+            // ROLLBACK_ANALYTICS_NULLFILL_20260625: 신규 play 시작 시 누적기 리셋.
+            _movesUsed = 0;
+            _continuePopupCount = 0;
+            _coinEarned = 0;
+            _coinSpent = 0;
 
             // attempt_number: app_version 변경 시 reset (PlayerPrefs key 에 app_version 포함)
             string attemptKey = PREFS_ATTEMPT_PREFIX + Application.version + "_" + evt.levelId;
@@ -168,7 +204,7 @@ namespace BalloonFlow.Analytics
             int bgSec = (int)Math.Max(0, _activeBackgroundSec);
             int livesAfter = LifeManager.HasInstance ? LifeManager.Instance.GetLives() : -1;
 
-            var p = new Dictionary<string, object>(25);
+            var p = new Dictionary<string, object>(36);
             p[AnalyticsConsts.P_EVENT_ID]              = Guid.NewGuid().ToString("N");
             p[AnalyticsConsts.P_PLAY_ID]               = _activePlayId;
             p[AnalyticsConsts.P_SESSION_ID]            = AnalyticsSessionTracker.HasInstance
@@ -201,6 +237,19 @@ namespace BalloonFlow.Analytics
             p[AnalyticsConsts.P_BACKGROUND_TIME_SEC] = bgSec;
             p[AnalyticsConsts.P_SCORE]               = finalScore;
             p[AnalyticsConsts.P_STAR_COUNT]          = starCount;
+
+            // ROLLBACK_ANALYTICS_NULLFILL_20260625: play_event NULL 9개 채우기 — 누적기 + 매니저 getter 읽기(가산만).
+            p[AnalyticsConsts.P_MOVES_USED]          = _movesUsed;
+            // objective_total/done — BL=풍선 제거형. total = 종료 시점 (남은 + 터뜨린), done = 터뜨린 수.
+            p[AnalyticsConsts.P_OBJECTIVE_TOTAL]     = BalloonController.HasInstance
+                ? BalloonController.Instance.RemainingCount + BalloonController.Instance.PoppedCount : 0;
+            p[AnalyticsConsts.P_OBJECTIVE_DONE]      = BalloonController.HasInstance ? BalloonController.Instance.PoppedCount : 0;
+            p[AnalyticsConsts.P_AVG_RESOURCE]        = RailManager.HasInstance ? RailManager.Instance.AverageOccupancyRatio : 0f;
+            p[AnalyticsConsts.P_CONTINUE_POPUP_COUNT] = _continuePopupCount;
+            p[AnalyticsConsts.P_CONTINUE_COUNT]      = ContinueHandler.HasInstance ? ContinueHandler.Instance.GetContinueCount() : 0;
+            p[AnalyticsConsts.P_COIN_EARNED]         = _coinEarned;
+            p[AnalyticsConsts.P_COIN_SPENT]          = _coinSpent;
+            p[AnalyticsConsts.P_FINAL_COIN_BALANCE]  = CurrencyManager.HasInstance ? CurrencyManager.Instance.Coins : 0;
 
             AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_LEVEL_PLAY, p);
 

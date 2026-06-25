@@ -160,10 +160,26 @@ namespace BalloonFlow
             return _inventory.TryGetValue(boosterType, out int count) ? count : 0;
         }
 
+        // ROLLBACK_ANALYTICS_NULLFILL_20260625: item_use NULL 채우기 — 타입별 '마지막 획득' 정보(경량, 영속 큐 아님).
+        //   AddBooster 오버로드로 acquisition 기록 → 사용(item_use) 시 ConsumeLastAcquisition 으로 읽음.
+        private readonly Dictionary<string, (string type, int cost, string currency)> _lastAcq
+            = new Dictionary<string, (string, int, string)>();
+
+        /// <summary>ROLLBACK_ANALYTICS_NULLFILL_20260625: 해당 부스터의 마지막 획득 정보. 기록 없으면 inventory/0/"".</summary>
+        public (string type, int cost, string currency) ConsumeLastAcquisition(string boosterType)
+        {
+            if (boosterType != null && _lastAcq.TryGetValue(boosterType, out var info)) return info;
+            return ("inventory", 0, "");
+        }
+
         /// <summary>
         /// Directly adds boosters to inventory (e.g., from rewards or bundles).
         /// </summary>
         public void AddBooster(string boosterType, int count)
+            => AddBooster(boosterType, count, "unknown", 0, ""); // 기본(미상) 획득 — 기존 호출 호환
+
+        /// <summary>ROLLBACK_ANALYTICS_NULLFILL_20260625: 획득경로/비용 기록 오버로드. 동작은 기존과 동일 + _lastAcq 기록.</summary>
+        public void AddBooster(string boosterType, int count, string acquisitionType, int costAmount, string costCurrencyId)
         {
             if (!IsValidType(boosterType))
             {
@@ -172,6 +188,8 @@ namespace BalloonFlow
             }
 
             if (count <= 0) return;
+
+            _lastAcq[boosterType] = (acquisitionType ?? "unknown", costAmount, costCurrencyId ?? "");
 
             if (!_inventory.ContainsKey(boosterType)) _inventory[boosterType] = 0;
             _inventory[boosterType] += count;
@@ -204,7 +222,7 @@ namespace BalloonFlow
             if (IsUnlockRewardClaimed(boosterType))
                 return false;
 
-            AddBooster(boosterType, Mathf.Max(1, count));
+            AddBooster(boosterType, Mathf.Max(1, count), "unlock_reward", 0, ""); // ROLLBACK_ANALYTICS_NULLFILL_20260625
             PlayerPrefs.SetInt(UnlockClaimPrefsKeyPrefix + boosterType, 1);
             PlayerPrefs.Save();
             Debug.Log($"[BoosterManager] Claimed unlock reward {boosterType} x{count}.");
@@ -218,7 +236,7 @@ namespace BalloonFlow
         public bool PurchaseBooster(string boosterType)
         {
             if (!TrySpendBoosterPurchaseCost(boosterType)) return false;
-            AddBooster(boosterType, 3); // 명세: 구매 시 3개 충전
+            AddBooster(boosterType, 3, "purchase", GetBoosterPrice(boosterType), "coin"); // 명세: 구매 시 3개 충전 (ROLLBACK_ANALYTICS_NULLFILL_20260625)
             Debug.Log($"[BoosterManager] Purchased {boosterType} x3.");
             return true;
         }

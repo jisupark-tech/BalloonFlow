@@ -99,6 +99,9 @@ namespace BalloonFlow
 
         private void OnEnable()
         {
+            // ROLLBACK_ANALYTICS_NULLFILL_20260625: continue_popup_count 계측 — 팝업 표시마다 +1(내부에서 활성 play 가드).
+            BalloonFlow.Analytics.AnalyticsLevelTracker.NotifyContinuePopupShown();
+
             UpdateCostDisplay();
             GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
 

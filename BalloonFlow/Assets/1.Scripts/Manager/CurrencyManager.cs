@@ -146,6 +146,7 @@ namespace BalloonFlow
             // Firestore 동기화 (atomic increment). UserDataService 미준비 시 무시 (offline).
             SyncCoinsToFirestore(amount, $"src:{source}");
             Analytics.AnalyticsItemEconomyTracker.EmitCoinEarn(source.ToString(), amount, _currentCoins);
+            Analytics.AnalyticsLevelTracker.NotifyCoinEarned(amount); // ROLLBACK_ANALYTICS_NULLFILL_20260625: coin_earned 누적(활성 play 가드 내부)
 
             if (!suppressEvent)
             {
@@ -230,6 +231,7 @@ namespace BalloonFlow
             // Firestore 동기화 (atomic decrement)
             SyncCoinsToFirestore(-amount, $"sink:{sink}");
             Analytics.AnalyticsItemEconomyTracker.EmitCoinSpend(sink.ToString(), amount, _currentCoins);
+            Analytics.AnalyticsLevelTracker.NotifyCoinSpent(amount); // ROLLBACK_ANALYTICS_NULLFILL_20260625: coin_spent 누적(활성 play 가드 내부)
 
             EventBus.Publish(new OnCoinChanged
             {

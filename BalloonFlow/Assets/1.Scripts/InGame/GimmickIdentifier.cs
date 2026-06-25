@@ -172,6 +172,20 @@ namespace BalloonFlow
                 }
                 r.sharedMaterial = mat;
             }
+
+            // ROLLBACK_BARRICADE_EDGE_COLOR_20260625: 바리케이드 엣지도 몸통과 동일 색상으로.
+            //   엣지 렌더러가 _colorRenderers 에 없어 회색이 유지됐음 → 엣지에 _BaseColor 만 틴트(머티리얼/텍스처는 보존).
+            if (_barricadeEdge != null)
+            {
+                var er = _barricadeEdge.GetComponent<Renderer>();
+                if (er != null && !(er is ParticleSystemRenderer))
+                {
+                    var edgeMpb = new MaterialPropertyBlock();
+                    er.GetPropertyBlock(edgeMpb);
+                    edgeMpb.SetColor("_BaseColor", color);
+                    er.SetPropertyBlock(edgeMpb);
+                }
+            }
         }
 
         /// <summary>GimmickType enum → BalloonController 문자열 상수 변환.</summary>

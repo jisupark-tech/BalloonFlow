@@ -404,6 +404,9 @@ namespace BalloonFlow
             {
                 float occ = (float)EffectiveOccupiedCount / physicalCapacity;
                 if (occ > _peakOccupancyRatio) _peakOccupancyRatio = Mathf.Min(1f, occ);
+                // ROLLBACK_ANALYTICS_NULLFILL_20260625: avg_resource_usage_ratio 계측 — 샘플 합/카운트(peak 옆, 가산만).
+                _occupancySum += occ;
+                _occupancySampleCount++;
             }
             bool deadlockHolderActive = _deadlockHolderId >= 0 && _activeDeployPoints.Contains(_deadlockHolderId);
             bool deadlockNearFull = _deadlockHolderId >= 0 && dartCount >= Mathf.Max(0, physicalCapacity - DeadlockBeltAdvanceEmptySlots());
@@ -606,6 +609,12 @@ namespace BalloonFlow
         private float _peakOccupancyRatio;
         /// <summary>이번 레벨 동안 기록된 레일 최대 점유율(EffectiveOccupiedCount / PhysicalCapacity, 0~1).</summary>
         public float PeakOccupancyRatio => _peakOccupancyRatio;
+
+        // ROLLBACK_ANALYTICS_NULLFILL_20260625: avg_resource_usage_ratio — 점유율 샘플 평균.
+        private double _occupancySum;
+        private int _occupancySampleCount;
+        /// <summary>이번 레벨 동안의 레일 평균 점유율(0~1). 다트 진행 틱마다 샘플.</summary>
+        public float AverageOccupancyRatio => _occupancySampleCount > 0 ? (float)(_occupancySum / _occupancySampleCount) : 0f;
 
         /// <summary>
         /// 점유율 기반 속도 배율. 클리어 임박(총 잔여 다트 &lt; 레일 capacity) 시 1.8배, 그 외 1배.
@@ -1226,6 +1235,7 @@ namespace BalloonFlow
             _almostThere = false;            // [Almost There] 새 레벨 시 가속/토스트 상태 리셋
             _almostThereToastShown = false;
             _peakOccupancyRatio = 0f;        // [Analytics] 피크 점유율 리셋
+            _occupancySum = 0; _occupancySampleCount = 0; // ROLLBACK_ANALYTICS_NULLFILL_20260625: 평균 점유율 리셋
             _darts.Clear();
             _dartById.Clear();
             _clusterHeadByHolder.Clear();

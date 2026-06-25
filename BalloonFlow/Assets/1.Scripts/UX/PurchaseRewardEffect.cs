@@ -251,9 +251,10 @@ namespace BalloonFlow
 
             if (rewards.boosters != null && BoosterManager.HasInstance)
             {
-                if (rewards.boosters.hand    > 0) BoosterManager.Instance.AddBooster(BoosterManager.HAND,    rewards.boosters.hand);
-                if (rewards.boosters.shuffle > 0) BoosterManager.Instance.AddBooster(BoosterManager.SHUFFLE, rewards.boosters.shuffle);
-                if (rewards.boosters.zap     > 0) BoosterManager.Instance.AddBooster(BoosterManager.ZAP,     rewards.boosters.zap);
+                // ROLLBACK_ANALYTICS_NULLFILL_20260625: IAP/번들 보상 — 실금액 비용은 int 로 즉시 못 얻어 0(통화 표기만).
+                if (rewards.boosters.hand    > 0) BoosterManager.Instance.AddBooster(BoosterManager.HAND,    rewards.boosters.hand,    "iap_purchase", 0, "");
+                if (rewards.boosters.shuffle > 0) BoosterManager.Instance.AddBooster(BoosterManager.SHUFFLE, rewards.boosters.shuffle, "iap_purchase", 0, "");
+                if (rewards.boosters.zap     > 0) BoosterManager.Instance.AddBooster(BoosterManager.ZAP,     rewards.boosters.zap,     "iap_purchase", 0, "");
             }
 
             if (rewards.infiniteHeartsSeconds > 0 && LifeManager.HasInstance)

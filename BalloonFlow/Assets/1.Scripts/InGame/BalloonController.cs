@@ -242,6 +242,10 @@ namespace BalloonFlow
         private readonly Dictionary<Transform, Quaternion> _barricadeAssemblyBaseRot = new Dictionary<Transform, Quaternion>();
         private readonly Dictionary<Transform, Vector3> _barricadeAssemblyBaseLocalPositions = new Dictionary<Transform, Vector3>();
         private readonly Dictionary<Transform, float> _barricadeBodyBaseLen = new Dictionary<Transform, float>();
+        // ROLLBACK_BARRICADE_TILING/SMOOTH_20260625: body 원본 Tiling/Offset(_BaseMap_ST) 1회 캐시 + 재사용 MPB.
+        private readonly Dictionary<Transform, Vector4> _barricadeBodyBaseTileST = new Dictionary<Transform, Vector4>();
+        private MaterialPropertyBlock _barricadeBodyMpb;
+        private const float BARRICADE_RESHAPE_DUR = 0.22f; // 길이 줄어듦 트윈 시간(끊김 제거)
         private readonly List<Vector3Int> _reusableOccupiedCells = new List<Vector3Int>(16);
 
         // Key tracking: balloonId -> lockPairId (for path-based Key release)
@@ -1475,7 +1479,7 @@ namespace BalloonFlow
             // Persist the reshaped hitCount before invalidating targeting. Without this,
             // DirectionalTargeting reads the old BalloonData and keeps attacking the stale length.
             _balloons[data.balloonId] = data;
-            ApplyBarricadeVisualTransform(hitObj, data);
+            ApplyBarricadeVisualTransform(hitObj, data, animate: true); // 히트 시 길이 줄어듦 트윈(끊김 제거)
             // footprint(DirectionalTargeting) 도 hitCount 기반 → 재빌드해 막는/조준 범위 축소 반영.
             DirectionalTargeting.InvalidateCache();
 
@@ -2887,7 +2891,9 @@ namespace BalloonFlow
             FitRendererBoundsToFootprint(obj, visualCenter, cellSizeX * width, cellSizeZ * height);
         }
 
-        private void ApplyBarricadeVisualTransform(GameObject obj, BalloonData data)
+        // ROLLBACK_BARRICADE_SMOOTH_RESHAPE_20260625: animate=true(히트 경로)면 길이 변화를 트윈으로 보간(끊김 제거)
+        //   + Tiling Y 를 스케일 비율로 따라가게(패턴 유지). animate=false(스폰/풀재사용)는 즉시.
+        private void ApplyBarricadeVisualTransform(GameObject obj, BalloonData data, bool animate = false)
         {
             if (obj == null || data == null) return;
 
@@ -2956,6 +2962,13 @@ namespace BalloonFlow
                 return;
             }
 
+            // ROLLBACK_BARRICADE_SMOOTH_HIT_20260625:
+            // Partial hit reshapes should start from the currently visible body length, not jump
+            // back to the authored base before tweening. Cache the visible state before the pooled
+            // transform reset below, then restore only the X length for the visual tween.
+            Vector3 visibleBodyScale = body.localScale;
+            bool visibleBodyActive = body.gameObject.activeSelf;
+
             // ROLLBACK_BARRICADE_POOL_VISUAL_RESET_20260624:
             // Barricade body/edge are moved and scaled in world space below. Pooled reuse must
             // start from the authored child transforms, otherwise MapMaker re-play or Retry can
@@ -2999,19 +3012,30 @@ namespace BalloonFlow
             // ROLLBACK_BARRICADE_LENGTH_SEGMENTS_20260623:
             // Active visual length follows the same remaining segment count used by targeting.
             float activeLengthCells = GetBarricadeActiveLength(data);
+            int barricadeMaxHp = Mathf.Max(1, data.maxHP);
+            int barricadeRemainHp = Mathf.Clamp(barricadeMaxHp - Mathf.Max(0, data.hitCount), 0, barricadeMaxHp);
+            bool barricadeAlive = barricadeRemainHp > 0;
 
-            if (activeLengthCells <= 1f)
+            if (activeLengthCells <= 0f && !animate)
             {
                 body.gameObject.SetActive(false);
                 if (edge != null) edge.gameObject.SetActive(false);
                 return;
             }
 
-            // 길이/HP → body 월드 길이. (충돌 footprint 와 동일 모델: total = head2 + body + edge1)
+            // 길이/HP → body 월드 길이.
             // ROLLBACK_BARRICADE_LENGTH_SEGMENTS_20260623:
             // A length value means occupied/attackable cells, not a separate body ratio.
             // Head covers the first authored cells; body extends only the remaining live length.
-            float bodyCells = Mathf.Max(0f, activeLengthCells - BARRICADE_HEAD_CELLS);
+            // ROLLBACK_BARRICADE_VISUAL_BODY_UNTIL_HP0_20260625:
+            // Targeting may shrink to the head footprint while HP is still > 0 (ex: length 3, HP 2/3 -> activeLength 2).
+            // Visually, the Body must keep shrinking by HP ratio and disappear only at HP 0.
+            float fullBodyCells = Mathf.Max(0f, Mathf.Max(1, data.barricadeLength) - BARRICADE_HEAD_CELLS);
+            float logicalBodyCells = Mathf.Max(0f, activeLengthCells - BARRICADE_HEAD_CELLS);
+            float hpBodyCells = barricadeAlive && fullBodyCells > 0f
+                ? fullBodyCells * (barricadeRemainHp / (float)barricadeMaxHp)
+                : 0f;
+            float bodyCells = Mathf.Max(logicalBodyCells, hpBodyCells);
             float cellAlong = vertical ? cellSizeZ : cellSizeX;
             float bodyWorldLen = Mathf.Max(0f, bodyCells * cellAlong * _barricadeLengthMultiplier + (bodyCells > 0f ? _barricadeLengthPadding : 0f));
 
@@ -3032,26 +3056,93 @@ namespace BalloonFlow
                 body.localScale = prev;
             }
             bool hasBody = bodyWorldLen > 0.001f;
-            body.gameObject.SetActive(hasBody);
-            if (hasBody)
-                // 길이(X)만 늘림. 두께(Z)는 baseScale 유지 → 균일 obj 스케일에 의해 프리팹 비율 그대로(넓어지지 않음).
-                body.localScale = new Vector3(baseScale.x * (bodyWorldLen / baseLen), baseScale.y, baseScale.z);
-
-            // 4) edge 를 body 끝으로. body.position=피벗(Head쪽 끝=Head 연결점), body.right=월드 +X(assembly 회전 반영).
-            //    bodyWorldLen=0(length=3)이면 edge 가 head 바로 뒤(=body 피벗)로 옴. 회전은 assembly 가 담당하므로 edge 회전 별도 설정 안 함.
-            if (edge != null)
+            bool animateBody = animate && (hasBody || visibleBodyActive);
+            if (!hasBody && !animateBody)
             {
+                body.gameObject.SetActive(false);
+                if (edge != null) edge.gameObject.SetActive(false);
+                return;
+            }
+
+            body.gameObject.SetActive(hasBody || animateBody);
+            float targetScaleX = baseScale.x * (bodyWorldLen / baseLen);
+
+            // 4) edge 를 body 끝으로 붙이는 로컬 함수(instant/트윈 공용). bounds 실측 우선, 실패 시 수식 폴백.
+            //    body.position=피벗(Head쪽 끝), body.right=진행축 월드방향. 회전은 assembly 가 담당.
+            void PlaceEdgeAccurate()
+            {
+                if (edge == null) return;
                 edge.gameObject.SetActive(true);
-                // ROLLBACK_BARRICADE_EDGE_JOIN_20260608:
-                //   edge.near 면을 body.far 면에 실측으로 붙임(계산값 bodyWorldLen 대신 실제 렌더 bounds). body.right=진행축 월드방향.
-                //   body 없으면(length=3, 비활성→bounds 실패) head 바로 뒤(body 피벗)로 폴백.
                 Vector3 along = body.right;
-                if (hasBody && TryGetProjectedBounds(body, along, out _, out float bodyFar)
+                if (body.gameObject.activeSelf && TryGetProjectedBounds(body, along, out _, out float bodyFar)
                     && MoveProjectedNearTo(edge, along, bodyFar))
                     edge.position += _barricadeEdgeOffset;
                 else
                     edge.position = body.position + along.normalized * bodyWorldLen + _barricadeEdgeOffset;
             }
+
+            if (animateBody)
+            {
+                // ROLLBACK_BARRICADE_SMOOTH_RESHAPE_20260625: 길이(X) 즉시 대입 대신 DOScale 로 보간(끊김 제거).
+                //   OnUpdate 에서 현재 스케일 비율로 Tiling Y(#2 패턴 유지)·엣지 위치를 따라가게, OnComplete 에 정확 마감.
+                if (edge != null) edge.gameObject.SetActive(true);
+                body.DOKill();
+                if (visibleBodyActive)
+                    body.localScale = new Vector3(visibleBodyScale.x, baseScale.y, baseScale.z);
+                PlaceEdgeAccurate();
+                body.DOScale(new Vector3(targetScaleX, baseScale.y, baseScale.z), BARRICADE_RESHAPE_DUR)
+                    .SetEase(Ease.OutQuad)
+                    .OnUpdate(() =>
+                    {
+                        float r = baseScale.x > 0.0001f ? body.localScale.x / baseScale.x : 1f;
+                        SetBarricadeBodyTileY(body, r);
+                        PlaceEdgeAccurate();
+                    })
+                    .OnComplete(() =>
+                    {
+                        if (hasBody)
+                        {
+                            PlaceEdgeAccurate();
+                        }
+                        else
+                        {
+                            body.gameObject.SetActive(false);
+                            if (edge != null) edge.gameObject.SetActive(false);
+                        }
+                    });
+            }
+            else
+            {
+                if (hasBody)
+                {
+                    body.DOKill();
+                    // 길이(X)만. 두께(Z)는 baseScale 유지(균일 obj 스케일로 프리팹 비율 그대로).
+                    body.localScale = new Vector3(targetScaleX, baseScale.y, baseScale.z);
+                    SetBarricadeBodyTileY(body, bodyWorldLen / baseLen); // #2 패턴 유지
+                }
+                PlaceEdgeAccurate();
+            }
+        }
+
+        // ROLLBACK_BARRICADE_TILING_20260625: body 길이(스케일) 비율만큼 Tiling Y 조절 → 패턴 밀도 유지.
+        //   공유 머티리얼 안 건드리고 MaterialPropertyBlock 으로 per-instance 적용. baseST(원본 Tiling/Offset)는 1회 캡처.
+        private void SetBarricadeBodyTileY(Transform body, float ratio)
+        {
+            if (body == null) return;
+            var rend = body.GetComponent<Renderer>();
+            if (rend == null) return;
+            if (!_barricadeBodyBaseTileST.TryGetValue(body, out Vector4 baseST))
+            {
+                var m = rend.sharedMaterial;
+                Vector2 sc = m != null ? m.GetTextureScale("_BaseMap") : Vector2.one;
+                Vector2 of = m != null ? m.GetTextureOffset("_BaseMap") : Vector2.zero;
+                baseST = new Vector4(sc.x, sc.y, of.x, of.y);
+                _barricadeBodyBaseTileST[body] = baseST;
+            }
+            if (_barricadeBodyMpb == null) _barricadeBodyMpb = new MaterialPropertyBlock();
+            rend.GetPropertyBlock(_barricadeBodyMpb);
+            _barricadeBodyMpb.SetVector("_BaseMap_ST", new Vector4(baseST.x, baseST.y * Mathf.Max(0.0001f, ratio), baseST.z, baseST.w));
+            rend.SetPropertyBlock(_barricadeBodyMpb);
         }
 
         private void RestoreBarricadeAuthoredPartState(Transform body, Transform edge)
@@ -4142,7 +4233,12 @@ namespace BalloonFlow
                     if (remainHP <= 0) gi.PlayEndEffect();
                 }
 
-                ApplyBarricadeVisualTransform(hitObj, data);
+                // ROLLBACK_BARRICADE_PARTIAL_HIT_ANIMATE_20260625:
+                // Barricade already has a smooth reshape path, but partial hits were calling the
+                // default instant path. Animate only while still alive; the final hit keeps the
+                // current full visual for the 1 -> 1.1 -> 0 destroy tween in ReturnBalloonObject.
+                if (remainHP > 0)
+                    ApplyBarricadeVisualTransform(hitObj, data, animate: true);
             }
 
             if (data.hitCount < requiredHits)
@@ -4655,10 +4751,12 @@ namespace BalloonFlow
             float savedScale = _balloonScale;
             string returnKey = PoolKey;
             int popColorIdx = 0;
+            bool isBarricade = false;
             if (_balloons.TryGetValue(balloonId, out BalloonData retData))
             {
                 returnKey = ResolveGimmickPoolKey(retData.gimmickType);
                 popColorIdx = retData.color;
+                isBarricade = retData.gimmickType == GimmickBarricade; // #4 파괴 연출 분기
             }
 
             // FrozenLayer 오버레이가 붙어있다면 먼저 풀로 반환
@@ -4680,7 +4778,16 @@ namespace BalloonFlow
             //   pop 하므로, scaled tween 이면 시퀀스(스케일업→풀반환 콜백)가 정지해 풍선이 화면에 남는다.
             //   unscaled 로 돌려 timeScale=0 에서도 시각 제거가 완료되게 함. (timeScale=1 일반 플레이에선 동일 동작.)
             seq.SetUpdate(true);
-            seq.Append(obj.transform.DOScale(Vector3.one * savedScale * scaleUpMult, scaleUpDuration).SetEase(Ease.OutQuad));
+            if (isBarricade)
+            {
+                // ROLLBACK_BARRICADE_DESTROY_SCALE_20260625: 바리케이드 파괴 시 1 → 1.1 → 0 으로 팝 후 소멸.
+                seq.Append(obj.transform.DOScale(Vector3.one * savedScale * 1.1f, scaleUpDuration * 0.45f).SetEase(Ease.OutQuad));
+                seq.Append(obj.transform.DOScale(Vector3.zero, scaleUpDuration * 0.55f).SetEase(Ease.InQuad));
+            }
+            else
+            {
+                seq.Append(obj.transform.DOScale(Vector3.one * savedScale * scaleUpMult, scaleUpDuration).SetEase(Ease.OutQuad));
+            }
             seq.AppendCallback(() =>
             {
                 // 스케일업 완료 시점에 애니메이터 Pop 트리거 (파티클은 PopEffectPool 가 처리)

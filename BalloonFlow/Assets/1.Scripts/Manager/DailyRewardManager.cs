@@ -197,7 +197,7 @@ namespace BalloonFlow
         {
             if (BoosterManager.HasInstance)
             {
-                BoosterManager.Instance.AddBooster(boosterType, count);
+                BoosterManager.Instance.AddBooster(boosterType, count, "daily_reward", 0, ""); // ROLLBACK_ANALYTICS_NULLFILL_20260625
             }
 
             Debug.Log($"[DailyRewardManager] Granted {count}x booster: {boosterType}");

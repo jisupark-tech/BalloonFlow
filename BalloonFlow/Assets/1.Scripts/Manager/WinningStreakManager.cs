@@ -632,7 +632,7 @@ namespace BalloonFlow
             // when it exists; it will also sync the same delta to Firestore.
             if (BoosterManager.HasInstance)
             {
-                BoosterManager.Instance.AddBooster(boosterId, count);
+                BoosterManager.Instance.AddBooster(boosterId, count, "winning_streak", 0, ""); // ROLLBACK_ANALYTICS_NULLFILL_20260625
                 return;
             }
 

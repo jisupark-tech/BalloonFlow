@@ -1138,7 +1138,8 @@ namespace BalloonFlow
                         // [구매 fix 2026-06-10] 지급을 FX 완료 콜백에서 분리 — 차감 즉시 지급 (데이터 무결성).
                         //   기존: 차감 → FX 비행 완료 후 AddBooster. FX 가 죽으면 코인만 차감되고 지급 누락 + pending 영구 잠금.
                         //   변경: 차감 → 즉시 지급/표시 갱신/토스트, FX 는 연출 전용 (완료 시 카운트 펄스 겸 재갱신).
-                        BoosterManager.Instance.AddBooster(boosterType, 3);
+                        // ROLLBACK_ANALYTICS_NULLFILL_20260625: HUD 코인 구매 — 획득경로/비용 기록.
+                        BoosterManager.Instance.AddBooster(boosterType, 3, "purchase", BoosterManager.Instance.GetBoosterPrice(boosterType), "coin");
                         RefreshBoosterCounts();
                         ShowToast("Purchase successful!");
                         PlayBoosterRewardFly(boosterType, 3, spr, RefreshBoosterCounts);
