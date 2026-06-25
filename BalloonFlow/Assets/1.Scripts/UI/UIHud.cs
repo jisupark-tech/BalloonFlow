@@ -994,12 +994,7 @@ namespace BalloonFlow
                 // ROLLBACK_LOCKED_ITEM_TOAST_ROBUST_20260625: {n} 치환이 데이터/케이스 변형·placeholder 차이 등
                 //   어떤 이유로든 누락돼도 raw placeholder 가 사용자에게 절대 노출되지 않게 방어:
                 //   1) 흔한 토큰 변형({n}/{N}/{0}/{level}) 직접 치환 → 2) 그래도 남은 {..} 는 레벨로 강제 치환.
-                string lvStr = GetBoosterUnlockLevel(boosterType).ToString();
-                string lockMsg = LocalizationService.Get("toast.item.locked")
-                    .Replace("{n}", lvStr).Replace("{N}", lvStr)
-                    .Replace("{0}", lvStr).Replace("{level}", lvStr);
-                if (lockMsg.IndexOf('{') >= 0) // 예상치 못한 placeholder 잔여 → raw 노출 차단
-                    lockMsg = System.Text.RegularExpressions.Regex.Replace(lockMsg, @"\{[^}]*\}", lvStr);
+                string lockMsg = FormatLockedItemToast(GetBoosterUnlockLevel(boosterType));
                 ShowToast(lockMsg);
                 return;
             }
@@ -1296,6 +1291,37 @@ namespace BalloonFlow
             if (parent == null) return;
 
             TxtToast.Spawn(parent, message, new Vector2(0f, -1022f));
+        }
+
+        private static string FormatLockedItemToast(int unlockLevel)
+        {
+            // ROLLBACK_LOCKED_ITEM_TOAST_STRING_FORMAT_20260625:
+            // TextData는 "Unlocks at Level {n}"처럼 named placeholder를 쓰지만,
+            // string.Format은 "{0}" 같은 숫자 placeholder만 지원하므로 먼저 정규화한다.
+            string lvStr = unlockLevel > 0 ? unlockLevel.ToString() : "?";
+            string template = LocalizationService.Get("toast.item.locked");
+            if (string.IsNullOrEmpty(template)) template = "Unlocks at Level {0}";
+
+            string format = template
+                .Replace("{n}", "{0}")
+                .Replace("{N}", "{0}")
+                .Replace("{level}", "{0}");
+
+            try
+            {
+                string result = string.Format(System.Globalization.CultureInfo.InvariantCulture, format, lvStr);
+                return StripRemainingPlaceholders(result, lvStr);
+            }
+            catch (System.FormatException)
+            {
+                return StripRemainingPlaceholders(template, lvStr);
+            }
+        }
+
+        private static string StripRemainingPlaceholders(string text, string replacement)
+        {
+            if (string.IsNullOrEmpty(text) || text.IndexOf('{') < 0) return text;
+            return System.Text.RegularExpressions.Regex.Replace(text, @"\{[^}]*\}", replacement ?? string.Empty);
         }
 
         #endregion

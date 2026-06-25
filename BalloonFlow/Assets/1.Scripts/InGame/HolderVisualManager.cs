@@ -690,6 +690,16 @@ namespace BalloonFlow
             HolderData[] holders = HolderManager.Instance.GetHolders();
             if (holders == null) return;
 
+            // ROLLBACK_PIPE_SHUFFLE_ZAP_GUARD_20260625: 파이프(Spawner)가 있는 열은 포물선 재배치에서 제외하고
+            // 아래에서 파이프 인지 재배치(RepositionColumnHolders)에 위임한다. Shuffle/Zap 시 파이프 자신과
+            // 'pipe 안 대기 홀더'가 튀지(반응하지) 않게. (배포 끝난 holder 는 일반 열 취급되어 정상 재배치.)
+            var pipeColumns = new HashSet<int>();
+            for (int i = 0; i < holders.Length; i++)
+                if (!holders[i].isConsumed
+                    && (holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                     || holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_O))
+                    pipeColumns.Add(holders[i].column);
+
             // Sync visual column from data column + 포물선 이동
             var columnRows = new Dictionary<int, int>();
             for (int i = 0; i < holders.Length; i++)
@@ -698,6 +708,7 @@ namespace BalloonFlow
                 if (visual.isDeploying || visual.isMovingToRail || visual.gameObject == null) continue;
 
                 visual.column = holders[i].column;
+                if (pipeColumns.Contains(visual.column)) continue; // 파이프 열은 아래에서 일괄 처리
 
                 // 새 위치 계산
                 if (!columnRows.ContainsKey(visual.column)) columnRows[visual.column] = 0;
@@ -755,6 +766,10 @@ namespace BalloonFlow
                     ApplyMagazineTextRowVisibility(visual, row);
                 }
             }
+
+            // 파이프 열은 파이프 인지 재배치로 정리 — 파이프 고정 + 대기 홀더 핀(숨김) + 방출분만 전진.
+            foreach (int col in pipeColumns)
+                RepositionColumnHolders(col);
         }
 
         /// <summary>
