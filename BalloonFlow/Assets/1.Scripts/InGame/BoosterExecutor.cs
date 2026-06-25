@@ -324,10 +324,9 @@ namespace BalloonFlow
                         if (handCam != null)
                             focusPosition = ComputeHandCameraPosition(handCam, focusPosition,
                                 HolderVisualManager.Instance.RowSpacing);
-                        // [HAND_CAMERA_Z_FIX 2026-06-15] Hand 진입 시 카메라 Z 목표를 -22로 고정(이전 계산값 -29.6426).
-                        // ROLLBACK_USEITEM_CAMERA_Z_ONLY_20260625:
-                        // UseItem camera movement should only change depth. Keep current X/Y.
-                        focusPosition = BuildCameraTargetKeepingXY(-22f);
+                        // [HAND_CAMERA_Z_FIX 2026-06-15] Hand 진입 시 카메라 Z 목표를 -22로 고정.
+                        // ROLLBACK_USEITEM_CAMERA_X_ONLY_20260625: 'X 만' 현재값 유지, Y(포커스 높이)/Z(-22)는 의도값.
+                        focusPosition = BuildCameraTargetKeepingX(focusPosition.y, -22f);
                         CameraManager.Instance.MoveToTarget(focusPosition);
                     }
 
@@ -352,9 +351,9 @@ namespace BalloonFlow
                     // Move camera to field center
                     if (CameraManager.HasInstance && GameManager.HasInstance)
                     {
-                        // ROLLBACK_USEITEM_CAMERA_Z_ONLY_20260625:
-                        // Zap selection also moves only by Z/depth. X/Y remain stable.
-                        Vector3 fieldPosition = BuildCameraTargetKeepingXY(GameManager.Instance.Board.boardCenterZ);
+                        // ROLLBACK_USEITEM_CAMERA_X_ONLY_20260625: Zap 도 'X 만' 현재값 유지.
+                        // Y 는 기존값 0(이전엔 Y 유지돼 카메라가 안 내려가 떠 보였음), Z 는 보드 센터.
+                        Vector3 fieldPosition = BuildCameraTargetKeepingX(0f, GameManager.Instance.Board.boardCenterZ);
                         CameraManager.Instance.MoveToTarget(fieldPosition);
                     }
 
@@ -373,11 +372,14 @@ namespace BalloonFlow
         // 보이는 z-span 의 높이당 기울기를 구해, 5행 span(행 4간격 + 양끝 반행 여유)이 들어오는
         // 높이와 '5행 중심 = 화면 세로 중앙'이 되는 Z 를 닫힌식으로 계산한다.
         // 현재 높이로 이미 충분하면 높이 유지(줌인 방지). 카메라가 내려보지 않는 비정상 각도면 기존 동작 폴백.
-        private static Vector3 BuildCameraTargetKeepingXY(float targetZ)
+        // ROLLBACK_USEITEM_CAMERA_X_ONLY_20260625: UseItem 카메라 이동은 'X 만' 현재값 유지하고
+        // Y/Z 는 의도값으로 이동한다. (이전 KeepingXY 는 Y 까지 유지해 카메라가 안 내려가고 떠 보였음.)
+        private static Vector3 BuildCameraTargetKeepingX(float targetY, float targetZ)
         {
             Vector3 stable = CameraManager.HasInstance
                 ? CameraManager.Instance.CurrentStablePosition
                 : Vector3.zero;
+            stable.y = targetY;
             stable.z = targetZ;
             return stable;
         }

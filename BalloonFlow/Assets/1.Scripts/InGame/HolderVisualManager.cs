@@ -48,6 +48,19 @@ namespace BalloonFlow
             bool show = row < MAGAZINE_TEXT_VISIBLE_ROWS;
             if (visual.magazineText.gameObject.activeSelf != show)
                 visual.magazineText.gameObject.SetActive(show);
+            RestoreSpawnerTextMaterialPreset(visual);
+        }
+
+        // ROLLBACK_SPAWNER_TEXT_MATERIAL_PRESET_20260625:
+        // Spawner/Glass Pipe count text uses its authored TMP Material Preset on the prefab.
+        // Generic holder row styling/count updates must not replace that preset.
+        private static void RestoreSpawnerTextMaterialPreset(HolderVisual visual)
+        {
+            if (visual == null || !visual.isSpawnerVisual || visual.magazineText == null || visual.spawnerTextMaterialPreset == null)
+                return;
+
+            if (visual.magazineText.fontSharedMaterial != visual.spawnerTextMaterialPreset)
+                visual.magazineText.fontSharedMaterial = visual.spawnerTextMaterialPreset;
         }
         private static readonly Color HIDDEN_MAGAZINE_COLOR = new Color(1f, 1f, 1f, 1f); // 명세: opacity 255 고정
         // ROLLBACK_DEPLOY_MOVE_SPEED_FASTER_20260615: 12 → 24.
@@ -169,6 +182,8 @@ namespace BalloonFlow
             public GameObject gameObject;
             public Renderer meshRenderer;
             public TMP_Text magazineText;
+            public bool isSpawnerVisual;
+            public Material spawnerTextMaterialPreset;
             public Vector3 queuePosition;
             public bool isDeploying;     // at rail, deploying darts
             public bool isWaiting;       // just below deploying holder
@@ -530,7 +545,11 @@ namespace BalloonFlow
 
                         if (visual.magazineText != null)
                         {
-                            if (isHidden)
+                            if (visual.isSpawnerVisual)
+                            {
+                                RestoreSpawnerTextMaterialPreset(visual);
+                            }
+                            else if (isHidden)
                                 visual.magazineText.color = HIDDEN_MAGAZINE_COLOR; // 명세: hidden 은 row 무관 alpha 1.0
                             else
                                 visual.magazineText.color = i == 0
@@ -572,7 +591,10 @@ namespace BalloonFlow
                             isHidden = data != null && data.isHidden;
                         }
                         // Hidden 은 HIDDEN_MAGAZINE_COLOR(alpha 1.0) 우선. 일반은 Color.white = RGBA(1,1,1,1) = alpha 255.
-                        visual.magazineText.color = isHidden ? HIDDEN_MAGAZINE_COLOR : Color.white;
+                        if (visual.isSpawnerVisual)
+                            RestoreSpawnerTextMaterialPreset(visual);
+                        else
+                            visual.magazineText.color = isHidden ? HIDDEN_MAGAZINE_COLOR : Color.white;
                     }
                     // row<MAGAZINE_TEXT_VISIBLE_ROWS(5) 게이트는 이미 limit==HAND_HIGHLIGHT_TOP_ROWS(5)와 일치 → 토글 불필요.
                 }
@@ -711,7 +733,11 @@ namespace BalloonFlow
                 }
                 if (visual.magazineText != null)
                 {
-                    if (holders[i].isHidden)
+                    if (visual.isSpawnerVisual)
+                    {
+                        RestoreSpawnerTextMaterialPreset(visual);
+                    }
+                    else if (holders[i].isHidden)
                     {
                         // Hidden: row 무관, alpha 1.0 + fontSize 10 강제 (명세)
                         visual.magazineText.color = HIDDEN_MAGAZINE_COLOR;
@@ -1052,7 +1078,9 @@ namespace BalloonFlow
                             var holderData = HolderManager.Instance.FindHolderPublic(colHolders[row].holderId);
                             hiddenGuard = holderData != null && holderData.isHidden;
                         }
-                        if (hiddenGuard)
+                        if (colHolders[row].isSpawnerVisual)
+                            RestoreSpawnerTextMaterialPreset(colHolders[row]);
+                        else if (hiddenGuard)
                         {
                             // Hidden: row 무관, alpha 1.0 + fontSize 10 강제 (명세)
                             colHolders[row].magazineText.color = HIDDEN_MAGAZINE_COLOR;
@@ -1178,6 +1206,7 @@ namespace BalloonFlow
             TMP_Text textMesh = (ident != null && ident.MagazineText != null)
                 ? ident.MagazineText
                 : obj.GetComponentInChildren<TMP_Text>(true);
+            Material spawnerTextMaterialPreset = textMesh != null && isSpawner ? textMesh.fontSharedMaterial : null;
             if (textMesh != null)
             {
                 // [TMP 부하 2026-06-10] 풀 재사용 안전망 — row 2+ 비활성 상태로 반환된 홀더가 재사용될 때
@@ -1195,7 +1224,12 @@ namespace BalloonFlow
                 else
                     displayText = data.magazineCount.ToString();
                 textMesh.text = displayText;
-                if (data.isHidden)
+                if (isSpawner)
+                {
+                    if (spawnerTextMaterialPreset != null && textMesh.fontSharedMaterial != spawnerTextMaterialPreset)
+                        textMesh.fontSharedMaterial = spawnerTextMaterialPreset;
+                }
+                else if (data.isHidden)
                 {
                     // Hidden: alpha 1.0(=255) + fontSize 10 강제 고정 (명세)
                     textMesh.color = HIDDEN_MAGAZINE_COLOR;
@@ -1222,6 +1256,8 @@ namespace BalloonFlow
                 gameObject = obj,
                 meshRenderer = obj.GetComponent<Renderer>(),
                 magazineText = textMesh,
+                isSpawnerVisual = isSpawner,
+                spawnerTextMaterialPreset = spawnerTextMaterialPreset,
                 queuePosition = position,
                 isDeploying = false,
                 isWaiting = false,
@@ -1785,6 +1821,7 @@ namespace BalloonFlow
 
                     if (visual.magazineText != null)
                         visual.magazineText.SetText("{0}", visual.magazineRemaining);
+                        RestoreSpawnerTextMaterialPreset(visual);
 
                     if (HolderManager.HasInstance)
                         HolderManager.Instance.ConsumeMagazine(visual.holderId);
@@ -1838,7 +1875,11 @@ namespace BalloonFlow
                     Vector3 placedWorldPos = rail.GetDartWorldPosition(dartId);
                     if (placedWorldPos == Vector3.zero) placedWorldPos = rail.GetPositionAtDistance(dartProgress);
                     LaunchDartChild(visual, placedWorldPos);
-                    if (visual.magazineText != null) visual.magazineText.SetText("{0}", visual.magazineRemaining);
+                    if (visual.magazineText != null)
+                    {
+                        visual.magazineText.SetText("{0}", visual.magazineRemaining);
+                        RestoreSpawnerTextMaterialPreset(visual);
+                    }
                     if (HolderManager.HasInstance) HolderManager.Instance.ConsumeMagazine(visual.holderId);
                     EventBus.Publish(new OnDartPlaced { dartId = dartId, color = visual.color, holderId = visual.holderId, progress = dartProgress });
                 }
@@ -2032,6 +2073,7 @@ namespace BalloonFlow
 
                     if (visual.magazineText != null)
                         visual.magazineText.SetText("{0}", visual.magazineRemaining);
+                        RestoreSpawnerTextMaterialPreset(visual);
 
                     if (HolderManager.HasInstance)
                         HolderManager.Instance.ConsumeMagazine(visual.holderId);
@@ -2584,6 +2626,7 @@ namespace BalloonFlow
             // 해동 시 텍스트를 탄창 수로 복원
             if (visual.magazineText != null)
                 visual.magazineText.SetText("{0}", visual.magazineRemaining);
+                RestoreSpawnerTextMaterialPreset(visual);
 
             Color originalColor = GetColor(visual.color);
             if (visual.identifier != null && visual.identifier.HasColorRenderers)
@@ -2597,6 +2640,7 @@ namespace BalloonFlow
             if (!_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual)) return;
             if (visual.magazineText != null)
                 visual.magazineText.SetText("{0}", evt.remainingHP);
+                RestoreSpawnerTextMaterialPreset(visual);
 
             // ROLLBACK_SPAWNER_CONSUME_DESPAWN_20260624 (#4 + #5):
             // The Spawner reuses this OnFrozenHPChanged channel for its remaining-count text. When a
@@ -2656,6 +2700,7 @@ namespace BalloonFlow
 
             if (visual.magazineText != null)
                 visual.magazineText.SetText(string.Empty);
+                RestoreSpawnerTextMaterialPreset(visual);
 
             Transform tr = visual.gameObject != null ? visual.gameObject.transform : null;
             if (tr != null)

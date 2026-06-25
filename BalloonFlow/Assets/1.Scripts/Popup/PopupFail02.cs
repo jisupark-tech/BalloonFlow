@@ -223,27 +223,20 @@ namespace BalloonFlow
         private bool _paused;
         private bool _inputDisabled;
         private bool _failSfxPlayed;
+        private bool _directShowRequested;
+        private Coroutine _activationEffectsCoroutine;
         private Coroutine _rewardRefreshCoroutine;
 
         private void OnEnable()
         {
-            EnsureGamePaused();
-            // ROLLBACK_FAIL02_BGM_OFF_FAIL_SFX_20260624:
-            // Final fail popup owns the fail sting: stop gameplay BGM and play Fail once per popup show.
-            if (AudioManager.HasInstance)
-            {
-                AudioManager.Instance.StopBGM();
-                if (!_failSfxPlayed)
-                {
-                    AudioManager.Instance.PlayPopupFail02Sfx();
-                    _failSfxPlayed = true;
-                }
-            }
+            if (_activationEffectsCoroutine != null)
+                StopCoroutine(_activationEffectsCoroutine);
+            _activationEffectsCoroutine = StartCoroutine(ApplyActivationEffectsWhenActuallyShown());
             GoldPanelFxFireUtil.DisableUnderTopBarRoot(transform);
 
             // PopupManager가 SetActive(true) 할 때 호출됨
             // 실패 확정 시 하트 1개 소모
-            if (!_lifeConsumed && LifeManager.HasInstance)
+            if (_directShowRequested && !_lifeConsumed && LifeManager.HasInstance)
             {
                 LifeManager.Instance.UseLive();
                 _lifeConsumed = true;
@@ -277,14 +270,49 @@ namespace BalloonFlow
 
         private void OnDisable()
         {
+            if (_activationEffectsCoroutine != null)
+            {
+                StopCoroutine(_activationEffectsCoroutine);
+                _activationEffectsCoroutine = null;
+            }
             _lifeConsumed = false;
             _failSfxPlayed = false;
+            _directShowRequested = false;
             if (_rewardRefreshCoroutine != null)
             {
                 StopCoroutine(_rewardRefreshCoroutine);
                 _rewardRefreshCoroutine = null;
             }
             ReleaseGamePause();
+        }
+
+        private IEnumerator ApplyActivationEffectsWhenActuallyShown()
+        {
+            // PopupManager sets ActivePopupId after SetActive(true), so wait one frame before checking.
+            yield return null;
+            _activationEffectsCoroutine = null;
+            if (!isActiveAndEnabled) yield break;
+
+            bool shownByPopupManager = PopupManager.HasInstance && PopupManager.Instance.ActivePopupId == "popup_fail02";
+            if (!shownByPopupManager && !_directShowRequested) yield break;
+
+            EnsureGamePaused();
+
+            if (AudioManager.HasInstance)
+            {
+                AudioManager.Instance.StopBGM();
+                if (!_failSfxPlayed)
+                {
+                    AudioManager.Instance.PlayPopupFail02Sfx();
+                    _failSfxPlayed = true;
+                }
+            }
+
+            if (!_lifeConsumed && LifeManager.HasInstance)
+            {
+                LifeManager.Instance.UseLive();
+                _lifeConsumed = true;
+            }
         }
 
         public void Show(DifficultyPurpose difficulty)
@@ -302,6 +330,7 @@ namespace BalloonFlow
                 _frame.ShowExitButton(true);
             }
             UpdateHardLevelOption(difficulty);
+            _directShowRequested = true;
             OpenUI();
             ScheduleRewardGoldPresentation();
         }
