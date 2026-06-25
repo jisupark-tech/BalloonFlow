@@ -863,13 +863,15 @@ namespace BalloonFlow
             }
         }
 
-        /// <summary>Pipe(Spawner_O) anchor below-row authored holders as sequential payloads.</summary>
+        /// <summary>Pipe(Spawner_O)·Glass Pipe(Spawner_T) anchor below-row authored holders as sequential payloads.
+        /// ROLLBACK_GLASSPIPE_PARITY_20260625: 둘은 기능 동일(머티리얼만 다름) — bind 도 동일 적용.</summary>
         private void BindAuthoredPipePayloads()
         {
             for (int i = 0; i < _holders.Count; i++)
             {
                 HolderData pipe = _holders[i];
-                if (pipe.queueGimmick != GimmickManager.GIMMICK_SPAWNER_O || pipe.spawnerHP <= 0)
+                if ((pipe.queueGimmick != GimmickManager.GIMMICK_SPAWNER_O
+                  && pipe.queueGimmick != GimmickManager.GIMMICK_SPAWNER_T) || pipe.spawnerHP <= 0)
                     continue;
 
                 var payloads = new List<HolderData>();
@@ -1018,10 +1020,11 @@ namespace BalloonFlow
                 int frontCapacity = Mathf.Max(1, spawner.sourceRow);
                 if (normalCount >= frontCapacity) continue;
 
-                // ROLLBACK_PIPE_PAYLOAD_RELEASE_20260624:
-                // Pipe(Spawner_O) releases authored holders below the pipe anchor. Glass Pipe
-                // and old Pipe data without payloads keep the generated-spawner path below.
-                if (spawner.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O && HasAuthoredPipePayload(spawner))
+                // ROLLBACK_PIPE_PAYLOAD_RELEASE_20260624 / GLASSPIPE_PARITY_20260625:
+                // Pipe(Spawner_O)·Glass Pipe(Spawner_T) 둘 다 anchor 아래 authored holder 를 순서대로 release.
+                // payload 가 없는 (구버전) 데이터만 아래 generated-spawner 경로로 폴백.
+                if ((spawner.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O
+                  || spawner.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T) && HasAuthoredPipePayload(spawner))
                 {
                     HolderData payload = GetNextPipePayload(spawner);
                     if (payload == null)
@@ -1075,7 +1078,9 @@ namespace BalloonFlow
         {
             var spawner = FindHolder(holderId);
             if (spawner == null || spawner.spawnerHP <= 0) return -1;
-            if (spawner.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O && HasAuthoredPipePayload(spawner))
+            // GLASSPIPE_PARITY_20260625: Glass Pipe(Spawner_T)도 authored payload 미리보기 동일.
+            if ((spawner.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O
+              || spawner.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T) && HasAuthoredPipePayload(spawner))
             {
                 HolderData payload = GetNextPipePayload(spawner);
                 return payload != null ? payload.color : -1;

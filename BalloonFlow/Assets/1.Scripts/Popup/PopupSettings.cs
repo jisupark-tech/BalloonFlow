@@ -1,6 +1,6 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections.Generic;
 
 namespace BalloonFlow
 {
@@ -29,10 +29,12 @@ namespace BalloonFlow
         [SerializeField] private GameObject _hapticOn;
         [SerializeField] private GameObject _hapticOff;
 
-        [Header("[Difficulty Tint Targets]")]
-        [Tooltip("Sound/Music/Haptic을 감싸는 테두리/내부 이미지. 미할당 시 각 버튼 하위에서 이름 기반으로 자동 탐색.")]
-        [SerializeField] private Image[] _difficultyTintTargets;
-        private readonly List<Image> _runtimeDifficultyTintTargets = new List<Image>(16);
+        [Header("[Popup Setting Area Difficulty Sprites]")]
+        [SerializeField] private Image _imgPopupSettingArea;
+        [SerializeField] private Sprite _sprPopupInnerNormal;
+        [SerializeField] private Sprite _sprPopupInnerHard;
+        [SerializeField] private Sprite _sprPopupInnerSuperHard;
+        private readonly Dictionary<Image, Color> _toggleImageOriginalColors = new Dictionary<Image, Color>(32);
 
         public Button CloseButton => _frame != null ? _frame.BtnExit : null;
         public Button HomeButton => _frame != null ? _frame.BtnHorizRed : null;
@@ -44,6 +46,7 @@ namespace BalloonFlow
             if (_btnSound != null) _btnSound.onClick.AddListener(OnSoundClicked);
             if (_btnMusic != null) _btnMusic.onClick.AddListener(OnMusicClicked);
             if (_btnHaptic != null) _btnHaptic.onClick.AddListener(OnHapticClicked);
+            CacheToggleImageColors();
 
             // ExitButton 직접 바인딩 — HUDController.SetSettingsPopup가 호출 안 돼도 닫힘 동작 보장.
             // (HUDController는 추가 listener를 더 등록하지만, 중복 등록은 onClick.Invoke가 모두 호출해 안전.)
@@ -95,7 +98,8 @@ namespace BalloonFlow
             {
                 DifficultyPurpose diff = ResolveCurrentDifficulty();
                 _frame.ApplyDifficulty(diff);
-                ApplyToggleDifficultyTint(diff);
+                ApplyPopupSettingAreaDifficulty(diff);
+                RestoreToggleImageColors();
                 _frame.SetTitle("Settings");
                 if (onboarding)
                 {
@@ -168,77 +172,88 @@ namespace BalloonFlow
             if (offObj != null) offObj.SetActive(!isOn);
         }
 
-        private void ApplyToggleDifficultyTint(DifficultyPurpose difficulty)
+        private void CacheToggleImageColors()
         {
-            // ROLLBACK_SETTINGS_TOGGLE_DIFFICULTY_TINT_20260624:
-            // The popup frame already follows difficulty, but the Sound/Music/Haptic toggle
-            // frames and fills stayed at prefab colors. Tint only decorative Image targets.
-            EnsureDifficultyTintTargets();
-            Color tint = difficulty switch
-            {
-                DifficultyPurpose.Hard => new Color32(0x7D, 0x43, 0xB3, 0xFF),
-                DifficultyPurpose.SuperHard => new Color32(0xD9, 0x4B, 0x38, 0xFF),
-                _ => new Color32(0x38, 0x72, 0xD8, 0xFF)
-            };
-
-            for (int i = 0; i < _runtimeDifficultyTintTargets.Count; i++)
-            {
-                Image image = _runtimeDifficultyTintTargets[i];
-                if (image == null) continue;
-                Color c = tint;
-                c.a = image.color.a;
-                image.color = c;
-            }
+            // ROLLBACK_SETTINGS_BUTTON_COLOR_RESTORE_20260625:
+            // Earlier difficulty tinting touched Sound/Music/Haptic button child Images.
+            // Cache authored colors once and restore them whenever the popup opens so only
+            // PopupSettingArea changes by difficulty.
+            _toggleImageOriginalColors.Clear();
+            CacheToggleImageColors(_btnSound != null ? _btnSound.transform : null);
+            CacheToggleImageColors(_btnMusic != null ? _btnMusic.transform : null);
+            CacheToggleImageColors(_btnHaptic != null ? _btnHaptic.transform : null);
         }
 
-        private void EnsureDifficultyTintTargets()
-        {
-            _runtimeDifficultyTintTargets.Clear();
-            if (_difficultyTintTargets != null)
-            {
-                for (int i = 0; i < _difficultyTintTargets.Length; i++)
-                    AddTintTarget(_difficultyTintTargets[i]);
-            }
-
-            CollectTintTargets(_btnSound != null ? _btnSound.transform : null);
-            CollectTintTargets(_btnMusic != null ? _btnMusic.transform : null);
-            CollectTintTargets(_btnHaptic != null ? _btnHaptic.transform : null);
-        }
-
-        private void CollectTintTargets(Transform root)
+        private void CacheToggleImageColors(Transform root)
         {
             if (root == null) return;
             Image[] images = root.GetComponentsInChildren<Image>(true);
             for (int i = 0; i < images.Length; i++)
             {
                 Image image = images[i];
-                if (image == null) continue;
-                if (!ShouldTintToggleImage(image.name)) continue;
-                AddTintTarget(image);
+                if (image == null || _toggleImageOriginalColors.ContainsKey(image)) continue;
+                _toggleImageOriginalColors.Add(image, image.color);
             }
         }
 
-        private void AddTintTarget(Image image)
+        private void RestoreToggleImageColors()
         {
-            if (image == null || _runtimeDifficultyTintTargets.Contains(image)) return;
-            _runtimeDifficultyTintTargets.Add(image);
+            foreach (var kv in _toggleImageOriginalColors)
+            {
+                Image image = kv.Key;
+                if (image == null || image == _imgPopupSettingArea) continue;
+                image.color = kv.Value;
+            }
         }
 
-        private static bool ShouldTintToggleImage(string name)
+        private void ApplyPopupSettingAreaDifficulty(DifficultyPurpose difficulty)
         {
-            if (string.IsNullOrEmpty(name)) return false;
-            string n = name.ToLowerInvariant();
-            if (n.Contains("icon") || n.Contains("txt") || n.Contains("text")) return false;
-            return n.Contains("frame")
-                || n.Contains("border")
-                || n.Contains("bg")
-                || n.Contains("background")
-                || n.Contains("panel")
-                || n.Contains("box")
-                || n.Contains("toggle")
-                || n.Contains("button")
-                || n == "on"
-                || n == "off";
+            // ROLLBACK_SETTINGS_AREA_DIFFICULTY_SPRITE_20260625:
+            // Only PopupSettingArea changes by difficulty. Sound/Music/Haptic child images
+            // keep their authored colors while the inner area swaps popupInner sprites.
+            EnsurePopupSettingAreaResources();
+            if (_imgPopupSettingArea == null) return;
+
+            Sprite target = difficulty switch
+            {
+                DifficultyPurpose.Hard => _sprPopupInnerHard,
+                DifficultyPurpose.SuperHard => _sprPopupInnerSuperHard,
+                _ => _sprPopupInnerNormal
+            };
+
+            if (target == null) return;
+            _imgPopupSettingArea.sprite = target;
+            _imgPopupSettingArea.color = Color.white;
+            _imgPopupSettingArea.enabled = true;
+        }
+
+        private void EnsurePopupSettingAreaResources()
+        {
+            if (_imgPopupSettingArea == null)
+            {
+                Transform found = FindDeep(transform, "PopupSettingArea");
+                if (found != null) _imgPopupSettingArea = found.GetComponent<Image>();
+            }
+
+            if (!ResourceManager.HasInstance) return;
+            var rm = ResourceManager.Instance;
+            _sprPopupInnerNormal = rm.UISpriteOr(Const.SPR_POPUPINNERNORMAL, _sprPopupInnerNormal);
+            _sprPopupInnerHard = rm.UISpriteOr(Const.SPR_POPUPINNERHARD, _sprPopupInnerHard);
+            _sprPopupInnerSuperHard = rm.UISpriteOr(Const.SPR_POPUPINNERSUPURHARD, _sprPopupInnerSuperHard);
+        }
+
+        private static Transform FindDeep(Transform root, string name)
+        {
+            if (root == null) return null;
+            if (root.name == name) return root;
+
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform found = FindDeep(root.GetChild(i), name);
+                if (found != null) return found;
+            }
+
+            return null;
         }
 
         private static DifficultyPurpose ResolveCurrentDifficulty()

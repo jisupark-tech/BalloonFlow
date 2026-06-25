@@ -209,6 +209,10 @@ namespace BalloonFlow
             return key switch
             {
                 "Loop"          => _sprLoop,
+                // ROLLBACK_NEWFEATURE_LINKED_DART_BOX_SPRITE_20260625:
+                // Linked Dart Box uses the existing newFeatureLoop.png artwork.
+                "LinkedDartBox" => _sprLoop,
+                "Chain"         => _sprLoop,
                 "Wooden Board"  => _sprPinata,
                 "TargetBox"     => _sprPinata,
                 "HiddenDartBox" => _sprHiddenBox != null ? _sprHiddenBox : _sprHidden,
