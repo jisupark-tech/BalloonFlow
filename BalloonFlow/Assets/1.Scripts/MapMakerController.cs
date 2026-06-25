@@ -4822,6 +4822,13 @@ namespace BalloonFlow
             // Wall/Pin/Ice 는 직접 hit 불가 → 다트 0개. Wall 이 sized(multi-cell) 라도 HP 산정에선 제외하므로
             // IsSizedFieldGimmick HP 분기보다 먼저 처리한다 (Wall 편입 후 회귀 방지).
             if (g == "Wall" || g == "Pin" || g == "Ice") return 0;
+            // ROLLBACK_BALANCE_HP_MAP_20260625: Color_Curtain 은 counter(=hp, 기본 3=DEFAULT_CURTAIN_COUNTER)
+            //   만큼 자기색 pop 필요 → 1 이 아닌 HP 반영. (직접타격 아닌 간접이나, 보수적으로 자기색 수요로 계상.)
+            if (g == "Color_Curtain")
+            {
+                int chp = (col >= 0 && row >= 0) ? _balloonGimmickHP[col, row] : 3;
+                return chp > 0 ? chp : 3;
+            }
             if (IsSizedFieldGimmick(g))
             {
                 // 실제 HP 사용 (기본값 2)
@@ -4851,27 +4858,81 @@ namespace BalloonFlow
             var dartsNeededPerColor = new Dictionary<int, int>();
             var gimmickCounts = new Dictionary<string, int>();
 
+            // ROLLBACK_BALANCE_HP_MAP_20260625: FlexTube 그룹 중복 카운트 방지(그룹 id 1회만 집계).
+            var countedFlexTubeGroups = new System.Collections.Generic.HashSet<int>();
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] >= 0)
                     {
-                        // Piñata 비앵커 셀 스킵 (실제 풍선 아님). 단 Pinata_Box 는 알마다 색/HP 달라 각 셀 카운트.
                         int gi = _balloonGimmicks[c, r];
-                        bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
-                            && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
-                        bool countEggCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && FIELD_GIMMICK_NAMES[gi] == "Pinata_Box";
-                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0 && !countEggCell) continue;
+                        string gn = (gi > 0 && gi < FIELD_GIMMICK_NAMES.Length) ? FIELD_GIMMICK_NAMES[gi] : "";
+
+                        // 기믹 표시 카운트 — 사이즈 기믹(Pinata/Barricade/Wall) 비앵커 footprint 셀은 제외(기존 동작 유지).
+                        if (gn.Length > 0
+                            && !(IsSizedFieldGimmick(gn) && gn != "Pinata_Box" && _balloonPinataW[c, r] == 0))
+                        {
+                            gimmickCounts.TryGetValue(gn, out int gcOld); gimmickCounts[gn] = gcOld + 1;
+                        }
+
+                        // ROLLBACK_BALANCE_HP_MAP_20260625: Pinata_Box — 알별(색·HP)을 그 알 색에 1회 합산.
+                        //   (기존: 앵커 _balloonGimmickHP × 그리드 셀색 으로 수·색·HP 전부 틀렸음.) 알 config 는 anchor 키 저장.
+                        if (gn == "Pinata_Box")
+                        {
+                            var bkey = new Vector2Int(c, r);
+                            if (_boxEggConfigColors.TryGetValue(bkey, out int[] eggC) && eggC != null && eggC.Length > 0)
+                            {
+                                int[] eggH = (_boxEggConfigHps.TryGetValue(bkey, out int[] hArr) && hArr != null && hArr.Length == eggC.Length) ? hArr : null;
+                                for (int e = 0; e < eggC.Length; e++)
+                                {
+                                    int ec = eggC[e];
+                                    if (ec < 0) continue;
+                                    int eh = (eggH != null && eggH[e] > 0) ? eggH[e] : 1;
+                                    balloonCountPerColor.TryGetValue(ec, out int eb); balloonCountPerColor[ec] = eb + 1;
+                                    dartsNeededPerColor.TryGetValue(ec, out int ed); dartsNeededPerColor[ec] = ed + eh;
+                                }
+                                continue;
+                            }
+                            if (_balloonPinataW[c, r] == 0) continue; // config 없는 비앵커 박스 셀 스킵
+                            int ac = _balloonColors[c, r];
+                            int ah = _balloonGimmickHP[c, r] > 0 ? _balloonGimmickHP[c, r] : 2; // 폴백: 앵커색 단일 알
+                            balloonCountPerColor.TryGetValue(ac, out int ab); balloonCountPerColor[ac] = ab + 1;
+                            dartsNeededPerColor.TryGetValue(ac, out int ad); dartsNeededPerColor[ac] = ad + ah;
+                            continue;
+                        }
+
+                        // ROLLBACK_BALANCE_HP_MAP_20260625: FlexTube — 그룹 공유 HP → 그룹당 1회(그룹 max HP, 폴백 셀수), 자기색.
+                        //   (기존: 셀마다 1 더해 길이만큼 과다 계산.)
+                        if (gn == "FlexTube" && _balloonFlexTubeGroupId[c, r] >= 0)
+                        {
+                            int grp = _balloonFlexTubeGroupId[c, r];
+                            if (countedFlexTubeGroups.Contains(grp)) continue;
+                            countedFlexTubeGroups.Add(grp);
+                            int maxHp = 0, cellCnt = 0, tubeColor = _balloonColors[c, r];
+                            for (int cc = 0; cc < _gridCols; cc++)
+                                for (int rr = 0; rr < _gridRows; rr++)
+                                    if (_balloonFlexTubeGroupId[cc, rr] == grp)
+                                    {
+                                        cellCnt++;
+                                        if (_balloonGimmickHP[cc, rr] > maxHp) maxHp = _balloonGimmickHP[cc, rr];
+                                        if (_balloonColors[cc, rr] >= 0) tubeColor = _balloonColors[cc, rr];
+                                    }
+                            int tubeHp = maxHp > 0 ? maxHp : Mathf.Max(1, cellCnt);
+                            if (tubeColor >= 0)
+                            {
+                                balloonCountPerColor.TryGetValue(tubeColor, out int tb); balloonCountPerColor[tubeColor] = tb + 1;
+                                dartsNeededPerColor.TryGetValue(tubeColor, out int td); dartsNeededPerColor[tubeColor] = td + tubeHp;
+                            }
+                            continue;
+                        }
+
+                        // 사이즈 기믹 비앵커 셀(실제 풍선 아님) 스킵 — Pinata/Barricade/Wall
+                        bool isSizedFieldCell = gn.Length > 0 && IsSizedFieldGimmick(gn);
+                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
 
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
                         balloonCountPerColor.TryGetValue(ci, out int bcOld); balloonCountPerColor[ci] = bcOld + 1;
                         dartsNeededPerColor.TryGetValue(ci, out int dnOld); dartsNeededPerColor[ci] = dnOld + life;
-
-                        if (gi > 0 && gi < FIELD_GIMMICK_NAMES.Length)
-                        {
-                            string gn = FIELD_GIMMICK_NAMES[gi];
-                            gimmickCounts.TryGetValue(gn, out int gcOld); gimmickCounts[gn] = gcOld + 1;
-                        }
                     }
 
             var dartsProvidedPerColor = new Dictionary<int, int>();
