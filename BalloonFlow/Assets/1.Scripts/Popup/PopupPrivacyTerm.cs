@@ -13,9 +13,6 @@ namespace BalloonFlow
     /// </summary>
     public class PopupPrivacyTerm : UIBase
     {
-        private const string TERMS_URL = "https://aimed.xyz/terms";
-        private const string PRIVACY_URL = "https://aimed.xyz/privacy";
-
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
 
@@ -191,9 +188,9 @@ namespace BalloonFlow
                 TMP_LinkInfo link = _text.textInfo.linkInfo[linkIndex];
                 string id = link.GetLinkID();
                 if (string.Equals(id, "terms", StringComparison.OrdinalIgnoreCase))
-                    _openUrl(TERMS_URL);
+                    _openUrl(Const.GetTermsUrl());
                 else if (string.Equals(id, "privacy", StringComparison.OrdinalIgnoreCase))
-                    _openUrl(PRIVACY_URL);
+                    _openUrl(Const.GetPrivacyUrl());
             }
         }
     }
