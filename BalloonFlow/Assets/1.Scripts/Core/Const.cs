@@ -517,5 +517,30 @@ namespace BalloonFlow
         public const string PRIVACY_TERM_VERSION = "2026-06-26";
 
         #endregion
+
+        #region Legal URLs
+
+        public const string URL_TERMS_EN = "https://puzzle.aimed.xyz/terms_en.html";
+        public const string URL_TERMS_KR = "https://puzzle.aimed.xyz/terms_kr.html";
+        public const string URL_PRIVACY_EN = "https://puzzle.aimed.xyz/privacy_en.html";
+        public const string URL_PRIVACY_KR = "https://puzzle.aimed.xyz/privacy_kr.html";
+
+        public static string GetTermsUrl()
+        {
+            // ROLLBACK_LEGAL_URL_LANGUAGE_ROUTING_20260626:
+            // Currently legal pages are forced to EN. When country/language routing is approved,
+            // switch here based on LocalizationService.CurrentLanguageCode or a server/user country code.
+            return URL_TERMS_EN;
+        }
+
+        public static string GetPrivacyUrl()
+        {
+            // ROLLBACK_LEGAL_URL_LANGUAGE_ROUTING_20260626:
+            // Currently legal pages are forced to EN. When country/language routing is approved,
+            // switch here based on LocalizationService.CurrentLanguageCode or a server/user country code.
+            return URL_PRIVACY_EN;
+        }
+
+        #endregion
     }
 }

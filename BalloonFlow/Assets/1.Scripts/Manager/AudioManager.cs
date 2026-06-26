@@ -845,6 +845,14 @@ namespace BalloonFlow
         // PlayBGM 의 same-clip 가드 우회를 위해 Stop 후 Play 시퀀스.
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
+            // ROLLBACK_POP_SFX_UNLOCK_ON_LEVEL_LOAD_20260626:
+            // FinishLogo starts a result-intro SFX lock. Normal clear opens PopupResult, which releases it,
+            // but onboarding auto-advance skips PopupResult; without this guard the next stage inherits the
+            // lock and Stage_Match_Normal pop SFX is muted until app restart.
+            _resultIntroSfxLock = false;
+            EnsurePopClipsLoaded();
+            ConfigurePopSource();
+
             if (_bgmSource != null) _bgmSource.Stop();
             PlayInGameBGM();
         }

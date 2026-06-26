@@ -75,8 +75,6 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtBtnDeleteAccount;
 
         // [TODO] 실제 정책 페이지 URL 로 교체 — 현재는 support 이메일 도메인(aimed.xyz) 기반 추정 placeholder.
-        private const string URL_PRIVACY   = "https://aimed.xyz/privacy";
-        private const string URL_TERMS     = "https://aimed.xyz/terms";
         private const string SUPPORT_EMAIL = "support@aimed.xyz";
         private bool _deleteAccountInProgress;
         private bool _deleteAccountRefsResolved;
@@ -178,10 +176,10 @@ namespace BalloonFlow
         }
 
         /// <summary>개인정보처리방침 페이지를 외부 브라우저로 연다.</summary>
-        private void OnPrivacyClicked() => OpenUrlSafe(URL_PRIVACY);
+        private void OnPrivacyClicked() => OpenUrlSafe(Const.GetPrivacyUrl());
 
         /// <summary>이용약관 페이지를 외부 브라우저로 연다.</summary>
-        private void OnTermsClicked() => OpenUrlSafe(URL_TERMS);
+        private void OnTermsClicked() => OpenUrlSafe(Const.GetTermsUrl());
 
         /// <summary>support 이메일로 문의 메일 작성 화면을 연다 (mailto).</summary>
         private void OnSupportsClicked()
