@@ -19,6 +19,9 @@ namespace BalloonFlow
 
         [SerializeField]
         private Animator _animator;
+        [SerializeField]
+        [Tooltip("Frozen Dart Box 전용 Animator. 미할당 시 BoxFrozen 하위 Animator를 자동 탐색합니다.")]
+        private Animator _frozenAnimator;
         private static readonly int _animDeploy = Animator.StringToHash("Deploy");
         private static readonly int _animEnd = Animator.StringToHash("end");
         private static readonly int _animHidden = Animator.StringToHash("Hidden");
@@ -30,6 +33,7 @@ namespace BalloonFlow
         private static readonly int _animStateBoxClick = Animator.StringToHash("BoxClick");
         private static readonly int _animStateBoxDefault = Animator.StringToHash("BoxDefault");
         private static readonly int _animStateBoxClose = Animator.StringToHash("BoxClose");
+        private static readonly int _animBoxFrozenHit = Animator.StringToHash("BoxFrozenHit");
         private const float MAG_DECREASE_IDLE_TIMEOUT = 0.22f;
         private const float BOX_STATE_CROSSFADE = 0.03f;
         // BoxOpen.anim m_StopTime 기준 — 변경 시 본 상수도 동기화 필요.
@@ -122,6 +126,7 @@ namespace BalloonFlow
         private Vector3 _frozenEffectOriginalLocalPosition;
         private Quaternion _frozenEffectOriginalLocalRotation;
         private bool _frozenEffectTransformCached;
+        private Coroutine _frozenBreakFxRoutine;
 
         /// <summary>The unique identifier for this holder.</summary>
         public int HolderId => _holderId;
@@ -155,6 +160,8 @@ namespace BalloonFlow
                 var t = transform.Find("BoxFrozen") ?? FindDeep(transform, "BoxFrozen");
                 if (t != null) _boxFrozen = t.gameObject;
             }
+            if (_frozenAnimator == null && _boxFrozen != null)
+                _frozenAnimator = _boxFrozen.GetComponentInChildren<Animator>(true);
 
             // Dart Slots 미할당 시 자동 수집 (fallback)
             if (_dartSlots == null || _dartSlots.Length == 0)
@@ -671,6 +678,12 @@ namespace BalloonFlow
         {
             if (_frozenExplosionEffect == null) return;
 
+            if (_frozenBreakFxRoutine != null)
+            {
+                StopCoroutine(_frozenBreakFxRoutine);
+                _frozenBreakFxRoutine = null;
+            }
+
             var particles = _frozenExplosionEffect.GetComponentsInChildren<ParticleSystem>(true);
             for (int i = 0; i < particles.Length; i++)
             {
@@ -684,20 +697,63 @@ namespace BalloonFlow
         {
             if (_frozenExplosionEffect != null)
             {
+                // ROLLBACK_FROZEN_BOX_HIT_FX_20260626:
+                // Breaking a Frozen Dart Box must let ParticleFrozenExplosion finish naturally.
+                // StopFrozenBreakEffect remains for pool/reset cleanup only; this path never clears
+                // the particle after play until all child ParticleSystems report IsAlive(false).
+                if (_frozenBreakFxRoutine != null)
+                {
+                    StopCoroutine(_frozenBreakFxRoutine);
+                    _frozenBreakFxRoutine = null;
+                }
+
                 CacheFrozenEffectTransform();
                 Vector3 worldPosition = _frozenExplosionEffect.transform.position;
                 Quaternion worldRotation = _frozenExplosionEffect.transform.rotation;
                 _frozenExplosionEffect.transform.SetParent(transform, true);
                 _frozenExplosionEffect.transform.SetPositionAndRotation(worldPosition, worldRotation);
-                _frozenExplosionEffect.SetActive(false);
                 _frozenExplosionEffect.SetActive(true);
                 var particles = _frozenExplosionEffect.GetComponentsInChildren<ParticleSystem>(true);
                 for (int i = 0; i < particles.Length; i++)
+                {
+                    particles[i].Clear(true);
                     particles[i].Play(true);
+                }
+
+                if (isActiveAndEnabled)
+                    _frozenBreakFxRoutine = StartCoroutine(DisableFrozenBreakEffectWhenFinished(particles));
             }
 
             transform.DOPunchScale(Vector3.one * 0.14f, 0.26f, 8, 0.72f);
             transform.DOShakeRotation(0.22f, new Vector3(0f, 8f, 0f), 8, 55f);
+        }
+
+        private System.Collections.IEnumerator DisableFrozenBreakEffectWhenFinished(ParticleSystem[] particles)
+        {
+            bool anyAlive = true;
+            while (anyAlive)
+            {
+                anyAlive = false;
+                if (particles != null)
+                {
+                    for (int i = 0; i < particles.Length; i++)
+                    {
+                        if (particles[i] != null && particles[i].IsAlive(true))
+                        {
+                            anyAlive = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (anyAlive)
+                    yield return null;
+            }
+
+            if (_frozenExplosionEffect != null)
+                _frozenExplosionEffect.SetActive(false);
+            RestoreFrozenEffectTransform();
+            _frozenBreakFxRoutine = null;
         }
 
         private void PlayHiddenAppearEffect()
@@ -881,6 +937,35 @@ namespace BalloonFlow
             }
         }
 
+        public void TriggerFrozenHit()
+        {
+            Animator targetAnimator = _frozenAnimator != null ? _frozenAnimator : _animator;
+            if (targetAnimator == null) return;
+
+            // ROLLBACK_FROZEN_BOX_HIT_FX_20260626:
+            // Frozen hit is only used while frozen HP remains. Final thaw/break does not call this.
+            if (!HasAnimatorParameter(targetAnimator, _animBoxFrozenHit, AnimatorControllerParameterType.Trigger))
+                return;
+
+            if (!targetAnimator.enabled) targetAnimator.enabled = true;
+            targetAnimator.ResetTrigger(_animBoxFrozenHit);
+            targetAnimator.SetTrigger(_animBoxFrozenHit);
+        }
+
+        private static bool HasAnimatorParameter(Animator animator, int nameHash, AnimatorControllerParameterType type)
+        {
+            if (animator == null || animator.runtimeAnimatorController == null) return false;
+
+            var parameters = animator.parameters;
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                if (parameters[i].nameHash == nameHash && parameters[i].type == type)
+                    return true;
+            }
+
+            return false;
+        }
+
         private Coroutine _boxClickResetRoutine;
 
         private System.Collections.IEnumerator RestoreAnimatorAfterBoxClick()
@@ -1057,6 +1142,12 @@ namespace BalloonFlow
                 _animator.enabled = true;
                 _animator.Rebind(); // 모든 상태/파라미터 초기화 → Entry 상태로 복귀
                 _animator.Update(0f);
+            }
+            if (_frozenAnimator != null && _frozenAnimator != _animator)
+            {
+                _frozenAnimator.enabled = true;
+                _frozenAnimator.Rebind();
+                _frozenAnimator.Update(0f);
             }
             _boxOpenStartTime = -1f;
         }

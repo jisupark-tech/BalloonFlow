@@ -70,6 +70,43 @@ namespace BalloonFlow
         //   queue→rail 거리(~6+units)에서 0.5s+ 걸려 홀더가 카메라보다 늦게 도착. 속도를 2x 올려 카메라(0.5s)
         //   보다 먼저 도착하게 함. (x2 모드에서 이미 24 로 스케일되던 값 = 검증된 속도.)
         //   주의: 모든 deploy(일반 탭 포함)가 2x 빨라짐(더 스내피). 롤백: 12f 로 환원.
+        private static readonly Color INACTIVE_MAGAZINE_COLOR = new Color(1f, 1f, 1f, 0.5f);
+        private static readonly Color FROZEN_MAGAZINE_COLOR = new Color(1f, 1f, 1f, 128f / 255f);
+
+        private static bool IsFrozenHolderVisual(HolderVisual visual)
+        {
+            if (visual == null || visual.isSpawnerVisual || !HolderManager.HasInstance)
+                return false;
+
+            HolderData data = HolderManager.Instance.FindHolderPublic(visual.holderId);
+            return data != null && data.isFrozen;
+        }
+
+        private static void ApplyHolderMagazineTextStyle(HolderVisual visual, bool isFrontActive, bool isHidden)
+        {
+            if (visual == null || visual.magazineText == null) return;
+
+            if (visual.isSpawnerVisual)
+            {
+                RestoreSpawnerTextMaterialPreset(visual);
+                return;
+            }
+
+            if (isHidden)
+            {
+                visual.magazineText.color = HIDDEN_MAGAZINE_COLOR;
+                visual.magazineText.fontSize = HIDDEN_MAGAZINE_FONT_SIZE;
+                return;
+            }
+
+            // ROLLBACK_FROZEN_BOX_HIT_FX_20260626:
+            // Frozen Dart Box count text uses alpha 128/255 regardless of queue row.
+            visual.magazineText.color = IsFrozenHolderVisual(visual)
+                ? FROZEN_MAGAZINE_COLOR
+                : (isFrontActive ? Color.white : INACTIVE_MAGAZINE_COLOR);
+            visual.magazineText.fontSize = MAGAZINE_FONT_SIZE;
+        }
+
         private const float DEPLOY_MOVE_SPEED = 24f;
         // ROLLBACK_DEPLOY_DEBUG_LOGS:
         // Set BALLOONFLOW_DEPLOY_DEBUG to restore verbose deploy/deadlock diagnostics. Keeping this
@@ -547,7 +584,6 @@ namespace BalloonFlow
                             var data = HolderManager.Instance.FindHolderPublic(visual.holderId);
                             isHidden = data != null && data.isHidden;
                         }
-
                         if (i == 0)
                             visual.identifier.SetActiveFrontRow();
                         else
@@ -555,7 +591,10 @@ namespace BalloonFlow
 
                         if (visual.magazineText != null)
                         {
-                            if (visual.isSpawnerVisual)
+                            bool appliedSharedStyle = true;
+                            if (appliedSharedStyle)
+                                ApplyHolderMagazineTextStyle(visual, i == 0, isHidden);
+                            else if (visual.isSpawnerVisual)
                             {
                                 RestoreSpawnerTextMaterialPreset(visual);
                             }
@@ -604,7 +643,8 @@ namespace BalloonFlow
                         if (visual.isSpawnerVisual)
                             RestoreSpawnerTextMaterialPreset(visual);
                         else
-                            visual.magazineText.color = isHidden ? HIDDEN_MAGAZINE_COLOR : Color.white;
+                            visual.magazineText.color = isHidden ? HIDDEN_MAGAZINE_COLOR : (IsFrozenHolderVisual(visual) ? FROZEN_MAGAZINE_COLOR : Color.white);
+                            visual.magazineText.fontSize = isHidden ? HIDDEN_MAGAZINE_FONT_SIZE : MAGAZINE_FONT_SIZE;
                     }
                     // row<MAGAZINE_TEXT_VISIBLE_ROWS(5) 게이트는 이미 limit==HAND_HIGHLIGHT_TOP_ROWS(5)와 일치 → 토글 불필요.
                 }
@@ -754,7 +794,12 @@ namespace BalloonFlow
                 }
                 if (visual.magazineText != null)
                 {
-                    if (visual.isSpawnerVisual)
+                    bool appliedSharedStyle = true;
+                    if (appliedSharedStyle)
+                    {
+                        ApplyHolderMagazineTextStyle(visual, row == 0, holders[i].isHidden);
+                    }
+                    else if (visual.isSpawnerVisual)
                     {
                         RestoreSpawnerTextMaterialPreset(visual);
                     }
@@ -1199,7 +1244,10 @@ namespace BalloonFlow
                             var holderData = HolderManager.Instance.FindHolderPublic(colHolders[row].holderId);
                             hiddenGuard = holderData != null && holderData.isHidden;
                         }
-                        if (colHolders[row].isSpawnerVisual)
+                        bool appliedSharedStyle = true;
+                        if (appliedSharedStyle)
+                            ApplyHolderMagazineTextStyle(colHolders[row], isFrontActive, hiddenGuard);
+                        else if (colHolders[row].isSpawnerVisual)
                             RestoreSpawnerTextMaterialPreset(colHolders[row]);
                         else if (hiddenGuard)
                         {
@@ -1358,6 +1406,12 @@ namespace BalloonFlow
                     // Hidden: alpha 1.0(=255) + fontSize 10 강제 고정 (명세)
                     textMesh.color = HIDDEN_MAGAZINE_COLOR;
                     textMesh.fontSize = HIDDEN_MAGAZINE_FONT_SIZE;
+                }
+                else if (data.isFrozen)
+                {
+                    // ROLLBACK_FROZEN_BOX_HIT_FX_20260626: Frozen Dart Box count text alpha = 128.
+                    textMesh.color = FROZEN_MAGAZINE_COLOR;
+                    textMesh.fontSize = MAGAZINE_FONT_SIZE;
                 }
                 else
                 {
@@ -2749,8 +2803,12 @@ namespace BalloonFlow
 
             // 해동 시 텍스트를 탄창 수로 복원
             if (visual.magazineText != null)
+            {
                 visual.magazineText.SetText("{0}", visual.magazineRemaining);
+                visual.magazineText.color = Color.white;
+                visual.magazineText.fontSize = MAGAZINE_FONT_SIZE;
                 RestoreSpawnerTextMaterialPreset(visual);
+            }
 
             Color originalColor = GetColor(visual.color);
             if (visual.identifier != null && visual.identifier.HasColorRenderers)
@@ -2762,9 +2820,22 @@ namespace BalloonFlow
         private void HandleFrozenHPChanged(OnFrozenHPChanged evt)
         {
             if (!_holderVisuals.TryGetValue(evt.holderId, out HolderVisual visual)) return;
+            bool isFrozenHolder = IsFrozenHolderVisual(visual);
             if (visual.magazineText != null)
+            {
                 visual.magazineText.SetText("{0}", evt.remainingHP);
+                if (isFrozenHolder)
+                {
+                    visual.magazineText.color = FROZEN_MAGAZINE_COLOR;
+                    visual.magazineText.fontSize = MAGAZINE_FONT_SIZE;
+                }
                 RestoreSpawnerTextMaterialPreset(visual);
+            }
+
+            // ROLLBACK_FROZEN_BOX_HIT_FX_20260626:
+            // Only remaining HP ticks play BoxFrozenHit. Final thaw/break uses SetFrozen(false).
+            if (isFrozenHolder && evt.remainingHP > 0 && visual.identifier != null)
+                visual.identifier.TriggerFrozenHit();
 
             // ROLLBACK_SPAWNER_CONSUME_DESPAWN_20260624 (#4 + #5):
             // The Spawner reuses this OnFrozenHPChanged channel for its remaining-count text. When a
@@ -2847,7 +2918,7 @@ namespace BalloonFlow
                 {
                     // 해제 시 일반 표시 규칙 복귀: fontSize/color 원복 후 SetText
                     visual.magazineText.fontSize = MAGAZINE_FONT_SIZE;
-                    visual.magazineText.color = Color.white;
+                    visual.magazineText.color = IsFrozenHolderVisual(visual) ? FROZEN_MAGAZINE_COLOR : Color.white;
                     visual.magazineText.SetText("{0}", visual.magazineRemaining);
                 }
             });

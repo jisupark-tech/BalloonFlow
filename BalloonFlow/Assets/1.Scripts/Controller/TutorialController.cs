@@ -1079,6 +1079,13 @@ namespace BalloonFlow
 
             PauseManager.Pause();
             _pausedForRailWarningTutorial = true;
+
+            // ROLLBACK_DANGER_BLINK_UNSCALED_20260626: 빨간 Rail Warning(danger 오버레이)을 멈춘 경고 장면에서 재생.
+            //   이 튜토는 occupancy 0.8 로도 발동하나 게이지 Warning 임계는 0.90 이라, 0.8 진입 시 오버레이가 아직
+            //   꺼져 있다 → 강제로 켠다. 깜빡임은 BoardTileManager.UpdateDangerBlink 가 unscaledDeltaTime 으로
+            //   timeScale=0(pause) 중에도 진행. (튜토 후 occupancy 가 off 임계 이하면 UpdateDangerBlink 가 자동 OFF.)
+            if (BoardTileManager.HasInstance)
+                BoardTileManager.Instance.SetDangerVisible(true);
         }
 
         /// <summary>

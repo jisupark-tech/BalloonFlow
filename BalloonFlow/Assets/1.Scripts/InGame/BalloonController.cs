@@ -2398,9 +2398,33 @@ namespace BalloonFlow
             while (k < n - 2 && cum[k + 1] < arc) k++;
             float segLen = Mathf.Max(0.0001f, cum[k + 1] - cum[k]);
             float t = Mathf.Clamp01((arc - cum[k]) / segLen);
-            pos = Vector3.Lerp(pts[k], pts[k + 1], t);
-            Vector3 dir = pts[k + 1] - pts[k]; dir.y = 0f;
-            tangent = dir.sqrMagnitude > 0.000001f ? dir.normalized : Vector3.forward;
+
+            // ROLLBACK_FLEXTUBE_CORNER_SMOOTH_20260626: 코너(방향 전환) 셀 주변에서 직선 lerp 대신 2차 Bezier 라운딩 적용.
+            //   기존엔 EvaluateFlexTubeCornerPosition/Tangent 가 정의만 되고 호출처가 없어(dead) ㄴ/ㄷ/ㄹ 코너가
+            //   셀 중심 직선으로 직각 꺾였다. 각 코너 c 의 Bezier 는 mid(c-1,c)[bt0] → corner c[apex] → mid(c,c+1)[bt1]
+            //   를 잇는다(반경 ~0.5셀). segment k 의 뒷절반(t>=0.5)=다음 코너(k+1)로 진입(bt=t-0.5∈[0,0.5]),
+            //   앞절반(t<0.5)=이전 코너(k)에서 진출(bt=0.5+t∈[0.5,1)). t=0.5/세그먼트 경계에서 연속(양쪽 mid-edge/apex 일치).
+            //   코너가 아닌 구간은 기존 직선 보간 그대로(무회귀).
+            if (t >= 0.5f && IsFlexTubeCorner(pts, k + 1))
+            {
+                float bt = t - 0.5f;                            // [0.5,1] → [0,0.5] : start(mid-edge)→corner apex
+                pos = EvaluateFlexTubeCornerPosition(pts, k + 1, bt);
+                tangent = EvaluateFlexTubeCornerTangent(pts, k + 1, bt);
+            }
+            else if (t < 0.5f && IsFlexTubeCorner(pts, k))
+            {
+                float bt = 0.5f + t;                            // [0,0.5) → [0.5,1) : corner apex→end(mid-edge)
+                pos = EvaluateFlexTubeCornerPosition(pts, k, bt);
+                tangent = EvaluateFlexTubeCornerTangent(pts, k, bt);
+            }
+            else
+            {
+                pos = Vector3.Lerp(pts[k], pts[k + 1], t);
+                Vector3 dir = pts[k + 1] - pts[k]; dir.y = 0f;
+                tangent = dir.sqrMagnitude > 0.000001f ? dir.normalized : Vector3.forward;
+            }
+            tangent.y = 0f;
+            if (tangent.sqrMagnitude < 0.000001f) tangent = Vector3.forward;
         }
 
         /// <summary>cell index i 의 forward tangent (visual segment 분산 시 사용). 직선/대각 모두 정상 동작. y=0 평면 기준.</summary>

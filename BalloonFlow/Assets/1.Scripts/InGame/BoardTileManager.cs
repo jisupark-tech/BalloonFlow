@@ -646,7 +646,11 @@ namespace BalloonFlow
         {
             if (!_dangerVisible || _dangerRenderers == null) return;
 
-            _dangerBlinkTimer += Time.deltaTime * DANGER_BLINK_SPEED;
+            // ROLLBACK_DANGER_BLINK_UNSCALED_20260626: rail_warning 튜토리얼은 PauseManager.Pause()(Time.timeScale=0)
+            //   로 레일/배포를 멈춘 채 경고 장면을 보여준다. deltaTime(스케일드)이면 timeScale=0 동안 깜빡임이 얼어붙어
+            //   빨간 경고가 "재생"되지 않았다 → unscaledDeltaTime 으로 멈춤 중에도 깜빡임 유지.
+            //   (일반 플레이 timeScale=1 에선 unscaled≈scaled 라 무변화.)
+            _dangerBlinkTimer += Time.unscaledDeltaTime * DANGER_BLINK_SPEED;
 
             // 사이클 종료 시점에서만 OFF 판정 — 깜빡임 도중 갑자기 사라지지 않도록.
             if (_dangerBlinkTimer >= DANGER_CYCLE_LENGTH)
