@@ -5,29 +5,29 @@ itembtn.txtlock,Lv.{n},
 newfeature.textunlock,Unlocked!,
 ?•Ïπò ?¥Í∏à ?ùÏóÖ ,,
 newfeature.textname.HiddenDartBox,Hidden Dart Box,?àÎ≤® 11 ?±Ïû• 
-newfeature.textdesctiption.HiddenDartBox,Bring them to the front to reveal!,
+newfeature.textdesctiption.HiddenDartBox,Bring them to the front\nto reveal!,
 newfeature.textname.LinkedDartBox,Linked Dart Box,?àÎ≤® 21 ?±Ïû•
 newfeature.textdesctiption.LinkedDartBox,They all move together!,
 newfeature.textname.Wooden Board,Wooden Board,?àÎ≤® 31 ?±Ïû•
-newfeature.textdesctiption.Wooden Board,Shoot the same color to break it!,
+newfeature.textdesctiption.Wooden Board,Shoot the same color\nto break it!,
 newfeature.textname.GlassPipe,Glass Pipe,?àÎ≤® 41 ?±Ïû•
-newfeature.textdesctiption.GlassPipe,Tap nearby boxes to release a new one!,
+newfeature.textdesctiption.GlassPipe,Tap nearby boxes\nto release a new one!,
 newfeature.textname.Barricade,Barricade,?àÎ≤® 61 ?±Ïû•
-newfeature.textdesctiption.Barricade,Shoot the same color to clear the path!,
+newfeature.textdesctiption.Barricade,Shoot the same color\nto clear the path!,
 newfeature.textname.HiddenBalloon,HiddenBalloon,?àÎ≤® 81 ?±Ïû•
-newfeature.textdesctiption.HiddenBalloon,Pop nearby balloons to reveal!,
+newfeature.textdesctiption.HiddenBalloon,Pop nearby balloons\nto reveal!,
 newfeature.textname.IronWall,Iron Wall,?àÎ≤® 101 ?±Ïû• 
 newfeature.textdesctiption.IronWall,It blocks darts' path!,
 newfeature.textname.Pipe,Pipe,?àÎ≤® 121 ?±Ïû•
-newfeature.textdesctiption.Pipe,Tap nearby boxes to release a mystery one!,
+newfeature.textdesctiption.Pipe,Tap nearby boxes\nto release a mystery one!,
 newfeature.textname.flextube,Flex Tube,?àÎ≤® 141 ?±Ïû•
-newfeature.textdesctiption.flextube,Shoot the same color to shrink the tube!,
+newfeature.textdesctiption.flextube,Shoot the same color\nto shrink the tube!,
 newfeature.textname.TargetBox,Target Box,?àÎ≤® 161 ?±Ïû•
-newfeature.textdesctiption.TargetBox,Shoot the same colors to break it all!,
+newfeature.textdesctiption.TargetBox,Shoot the same colors\nto break it all!,
 newfeature.textname.Ice,Ice,?àÎ≤® 201 ?±Ïû•
-newfeature.textdesctiption.Ice,Pop any balloon to shatter the ice!,
+newfeature.textdesctiption.Ice,Pop any balloon\nto shatter the ice!,
 newfeature.textname.FrozenDartBox,Frozen Dart Box,?àÎ≤® 241 ?±Ïû• 
-newfeature.textdesctiption.FrozenDartBox,Tap other boxes to shatter the ice!,
+newfeature.textdesctiption.FrozenDartBox,Tap other boxes\nto shatter the ice!,
 popupcontinue.costlabel,Cost:,
 popupcontinue.txtcontinue,Play On,
 popupcontinue.txtcontinuetitle,Continue?,
