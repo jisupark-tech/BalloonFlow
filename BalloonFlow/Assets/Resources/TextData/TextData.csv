@@ -202,8 +202,8 @@ popup.txtdescription.zap,,
 toast.life.unlimited,Your lives are unlimited!,
 toast.life.full,Your lives are full!,
 toast.item.locked,Unlocks at Level {n},
-popup.privacyterm.title,We've updated our Terms,PopupPrivacyTerm
-popup.privacyterm.description,"To continue playing, you need to confirm that you agree to our Terms of Service and have read our Privacy Policy.",PopupPrivacyTerm
+popup.privacyterm.title,Welcome!,PopupPrivacyTerm
+popup.privacyterm.description,"This game uses third-party services for advertising and analytics.\nBy tapping ""Agree,"" you agree to our <link=""terms"">Terms of Service</link> and acknowledge our <link=""privacy"">Privacy Policy</link>.",PopupPrivacyTerm
 popup.privacyterm.terms,Terms of Service,PopupPrivacyTerm
 popup.privacyterm.privacy,Privacy Policy,PopupPrivacyTerm
 popup.privacyterm.accept,Accept,PopupPrivacyTerm

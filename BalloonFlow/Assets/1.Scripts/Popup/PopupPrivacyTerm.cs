@@ -1,6 +1,7 @@
 using System;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace BalloonFlow
@@ -25,6 +26,7 @@ namespace BalloonFlow
 
         private Action _onAccepted;
         private bool _resolved;
+        private InlineTextLinkHandler _descriptionLinkHandler;
 
         public override BackResult OnBackPressed() => BackResult.Blocked;
 
@@ -81,11 +83,19 @@ namespace BalloonFlow
             }
 
             if (_txtContentDescription != null)
-                _txtContentDescription.text = LocalizationService.Get("popup.privacyterm.description");
+            {
+                _txtContentDescription.text = LocalizationService.Get("popup.privacyterm.description").Replace("\\n", "\n");
+                _txtContentDescription.richText = true;
+                _txtContentDescription.raycastTarget = true;
+            }
+
+            // ROLLBACK_PRIVACY_TERM_INLINE_LINKS_20260626:
+            // Terms/Privacy are now inline links inside TxtContentDescription.
+            // Re-enable these two labels if the prefab returns to separate link buttons.
             if (_txtContentTerm != null)
-                _txtContentTerm.text = LocalizationService.Get("popup.privacyterm.terms");
+                _txtContentTerm.gameObject.SetActive(false);
             if (_txtContentPrivacy != null)
-                _txtContentPrivacy.text = LocalizationService.Get("popup.privacyterm.privacy");
+                _txtContentPrivacy.gameObject.SetActive(false);
         }
 
         private void BindButtons()
@@ -98,8 +108,7 @@ namespace BalloonFlow
                 _frame.BtnSingle.onClick.AddListener(Accept);
             }
 
-            BindTextButton(_txtContentTerm, () => OpenUrlSafe(TERMS_URL));
-            BindTextButton(_txtContentPrivacy, () => OpenUrlSafe(PRIVACY_URL));
+            BindDescriptionClickTarget();
         }
 
         private void RemoveAllRuntimeListeners()
@@ -109,6 +118,18 @@ namespace BalloonFlow
 
             RemoveTextButtonListener(_txtContentTerm);
             RemoveTextButtonListener(_txtContentPrivacy);
+            RemoveTextButtonListener(_txtContentDescription);
+        }
+
+        private void BindDescriptionClickTarget()
+        {
+            if (_txtContentDescription == null) return;
+
+            _txtContentDescription.raycastTarget = true;
+            _descriptionLinkHandler = _txtContentDescription.GetComponent<InlineTextLinkHandler>();
+            if (_descriptionLinkHandler == null)
+                _descriptionLinkHandler = _txtContentDescription.gameObject.AddComponent<InlineTextLinkHandler>();
+            _descriptionLinkHandler.Configure(_txtContentDescription, OpenUrlSafe);
         }
 
         private static void BindTextButton(TMP_Text label, UnityEngine.Events.UnityAction action)
@@ -147,6 +168,33 @@ namespace BalloonFlow
             if (string.IsNullOrEmpty(url)) return;
             try { Application.OpenURL(url); }
             catch (Exception ex) { Debug.LogWarning($"[PopupPrivacyTerm] OpenURL failed: {url} - {ex.Message}"); }
+        }
+
+        private sealed class InlineTextLinkHandler : MonoBehaviour, IPointerClickHandler
+        {
+            private TMP_Text _text;
+            private Action<string> _openUrl;
+
+            public void Configure(TMP_Text text, Action<string> openUrl)
+            {
+                _text = text;
+                _openUrl = openUrl;
+            }
+
+            public void OnPointerClick(PointerEventData eventData)
+            {
+                if (_text == null || eventData == null || _openUrl == null) return;
+
+                int linkIndex = TMP_TextUtilities.FindIntersectingLink(_text, eventData.position, eventData.pressEventCamera);
+                if (linkIndex < 0) return;
+
+                TMP_LinkInfo link = _text.textInfo.linkInfo[linkIndex];
+                string id = link.GetLinkID();
+                if (string.Equals(id, "terms", StringComparison.OrdinalIgnoreCase))
+                    _openUrl(TERMS_URL);
+                else if (string.Equals(id, "privacy", StringComparison.OrdinalIgnoreCase))
+                    _openUrl(PRIVACY_URL);
+            }
         }
     }
 }

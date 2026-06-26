@@ -1928,13 +1928,15 @@ namespace BalloonFlow
                     {
                         // ROLLBACK_WALL_IRONBOX_PREFAB:
                         // Wall/IronWall uses the IronBox visual; it is still indestructible.
-                        ApplyTintToObject(obj, WALL_COLOR);
+                        // ROLLBACK_IRONWALL_KEEP_IRONBOX_MATERIAL_20260626:
+                        // Keep the authored IronBox.prefab material (Assets/3.Material/IronBox.mat).
+                        // The old path called ApplyTintToObject/gi.ApplyColor(WALL_COLOR), which
+                        // replaced Renderer.sharedMaterial with a generated grey material.
+                        // Restore those calls if Iron Wall should return to flat runtime tinting.
                         var gi = obj.GetComponent<GimmickIdentifier>();
                         if (gi != null)
                         {
                             gi.Initialize();
-                            if (gi.HasColorRenderers)
-                                gi.ApplyColor(WALL_COLOR);
                         }
 
                         // multi-cell Wall(2×2/3×3) 만 footprint 에 맞춰 시각 스케일/중앙정렬.
@@ -2695,7 +2697,11 @@ namespace BalloonFlow
             // per-object 색상 변주 (같은 색이라도 톤이 약간씩 다름)
             int colorIdx = Mathf.Clamp(color, 0, BalloonColors.Length - 1);
             Color variedColor = GetVariedColor(colorIdx);
-            ApplyTintToObject(obj, variedColor);
+            // ROLLBACK_IRONWALL_KEEP_IRONBOX_MATERIAL_20260626: Wall=IronBox 는 authored IronBox.mat(색 무관) 유지 → 틴트 스킵.
+            //   (poolKey==IronBoxPoolKey ⟺ Wall. 이 '일반 틴트'가 GimmickWall override 전에 IronBox 를 색으로 칠해
+            //    IronBox.mat 이 덮이던 진짜 원인. override 분기의 틴트 제거만으론 부족했음.)
+            if (poolKey != IronBoxPoolKey)
+                ApplyTintToObject(obj, variedColor);
 
             // Initialize BalloonIdentifier for dart hit detection
             BalloonIdentifier identifier = obj.GetComponent<BalloonIdentifier>();

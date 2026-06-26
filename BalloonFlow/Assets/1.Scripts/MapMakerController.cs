@@ -4300,6 +4300,11 @@ namespace BalloonFlow
                         // ROLLBACK_BARRICADE_MAPMAKER_FOOTPRINT_20260608: 바리케이드는 dir+length 로 length×2 footprint 채움.
                         bool isBarricadeGimmick = _paintGimmick > 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length
                             && FIELD_GIMMICK_NAMES[_paintGimmick] == "Barricade";
+                        // ROLLBACK_IRONWALL_NOCOLOR_20260626: Wall(IronWall)은 색·공격 없는 불파괴 기믹 → 전용 분기에서
+                        //   _paintColor 게이트 없이(기믹만 클릭) 배치. (Wall 도 IsSizedFieldGimmick 이라 아래 sized 분기보다
+                        //   먼저 와야 함 — 그 분기는 _paintColor 를 요구해 Wall 에 색을 입히던 원인.)
+                        bool isWallGimmick = _paintGimmick > 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length
+                            && FIELD_GIMMICK_NAMES[_paintGimmick] == "Wall";
 
                         if (isFlexTubeGimmick && _paintColor >= 0)
                         {
@@ -4382,8 +4387,37 @@ namespace BalloonFlow
                                 }
                             _infoDirty = true;
                         }
+                        else if (isWallGimmick)
+                        {
+                            // ROLLBACK_IRONWALL_NOCOLOR_20260626: Wall = 색·공격 없는 불파괴 → 색 선택 없이(기믹만) 배치.
+                            //   _balloonColors 에는 저장 가능하도록 0(센티넬)만 넣는다(save 가 _balloonColors<0 셀을 스킵하므로
+                            //   반드시 >=0 이어야 함). 렌더는 GetPreviewColor 가 Wall 을 항상 GIMMICK_WALL_COLOR(iron-gray)로
+                            //   표시하고, 밸런스는 Wall 을 색 카운트에서 제외(아래 Iron 셀수만 집계)하므로 0 은 색에 영향 없음.
+                            int wsize = Mathf.Clamp(_paintWallSize, 1, 3);
+                            for (int dx = 0; dx < wsize; dx++)
+                                for (int dy = 0; dy < wsize; dy++)
+                                {
+                                    int cx = col + dx, cy = row + dy;
+                                    if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
+                                    _balloonColors[cx, cy] = 0;            // 센티넬(>=0 저장용). 렌더/카운트는 색 무시.
+                                    _balloonGimmicks[cx, cy] = _paintGimmick;
+                                    _balloonGimmickHP[cx, cy] = 0;          // 불파괴 — HP 무의미
+                                    _balloonPinataW[cx, cy] = 0;            // 비앵커 표시(앵커는 아래에서 size)
+                                    _balloonPinataH[cx, cy] = 0;
+                                    _balloonLockPairIds[cx, cy] = -1;
+                                    ApplyIceGroupBrushMeta(cx, cy, false);
+                                    _balloonFlexTubeGroupId[cx, cy] = -1;
+                                    _balloonFlexTubeSequenceIndex[cx, cy] = -1;
+                                    UpdatePreviewCell(cx, cy);
+                                }
+                            _balloonPinataW[col, row] = wsize;  // 앵커에만 사이즈 저장(save 가 앵커만 emit)
+                            _balloonPinataH[col, row] = wsize;
+                            _infoDirty = true;
+                        }
                         else if (isSizedFieldGimmick && _paintColor >= 0)
                         {
+                            // ROLLBACK_IRONWALL_NOCOLOR_20260626: Wall 은 위 isWallGimmick 분기에서 선처리되므로 여기 도달 안 함.
+                            //   (아래 isWallSized 잔재는 비-Wall sized 기믹에는 영향 없는 dead 분기.)
                             // Wall 은 정사각 _paintWallSize(1/2/3) 사용 — Pinata 자유 W×H 와 분리해 carryover 방지.
                             bool isWallSized = FIELD_GIMMICK_NAMES[_paintGimmick] == "Wall";
                             int pw = isWallSized ? _paintWallSize : _paintPinataW;
@@ -4860,6 +4894,33 @@ namespace BalloonFlow
 
             // ROLLBACK_BALANCE_HP_MAP_20260625: FlexTube 그룹 중복 카운트 방지(그룹 id 1회만 집계).
             var countedFlexTubeGroups = new System.Collections.Generic.HashSet<int>();
+            // ROLLBACK_IRONWALL_NOCOLOR_20260626: Wall(IronWall) 셀수 별도 집계(색상별 B/need 에는 미포함).
+            int ironCellCount = 0;
+            // ROLLBACK_BALANCE_GIMMICK_BREAKDOWN_20260626: 색상별 HP 기믹 분해 — (색,기믹표시명)→HP 합.
+            //   하단 Balance Check 에서 "Cy: 140 / Cy_Wooden: 20" 형태로 색 아래 기믹별 기여를 보여준다.
+            var hpByColorGimmick = new Dictionary<(int color, string gim), int>();
+            var seenIceRegions = new HashSet<(int grp, int color)>(); // Ice 영역 HP 중복 집계 방지.
+            void AddGimHp(int colr, string gimName, int amt)
+            {
+                if (colr < 0 || amt <= 0 || string.IsNullOrEmpty(gimName)) return;
+                var key = (colr, gimName);
+                hpByColorGimmick.TryGetValue(key, out int v);
+                hpByColorGimmick[key] = v + amt;
+            }
+            // 기믹 내부명 → 표시명. 분해 대상 아닌 것(Surprise/일반 풍선)은 null → 미표시.
+            string GimDisplay(string g)
+            {
+                switch (g)
+                {
+                    case "Pinata":        return "Wooden";
+                    case "Pinata_Box":    return "TargetBox";
+                    case "Barricade":     return "Barricade";
+                    case "FlexTube":      return "FlexTube";
+                    case "Color_Curtain": return "Curtain";
+                    case "Ice":           return "Ice";
+                    default:              return null;
+                }
+            }
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] >= 0)
@@ -4873,6 +4934,10 @@ namespace BalloonFlow
                         {
                             gimmickCounts.TryGetValue(gn, out int gcOld); gimmickCounts[gn] = gcOld + 1;
                         }
+
+                        // ROLLBACK_IRONWALL_NOCOLOR_20260626: Wall(IronWall)은 색·공격 없는 불파괴 → 색상별 B/need 에서 제외,
+                        //   Iron 셀수만 별도 집계(앵커+footprint 모든 Wall 셀). (기존엔 default 경로에서 색 풍선으로 잡혀 색 수가 부풀었음.)
+                        if (gn == "Wall") { ironCellCount++; continue; }
 
                         // ROLLBACK_BALANCE_HP_MAP_20260625: Pinata_Box — 알별(색·HP)을 그 알 색에 1회 합산.
                         //   (기존: 앵커 _balloonGimmickHP × 그리드 셀색 으로 수·색·HP 전부 틀렸음.) 알 config 는 anchor 키 저장.
@@ -4889,6 +4954,7 @@ namespace BalloonFlow
                                     int eh = (eggH != null && eggH[e] > 0) ? eggH[e] : 1;
                                     balloonCountPerColor.TryGetValue(ec, out int eb); balloonCountPerColor[ec] = eb + 1;
                                     dartsNeededPerColor.TryGetValue(ec, out int ed); dartsNeededPerColor[ec] = ed + eh;
+                                    AddGimHp(ec, "TargetBox", eh); // ROLLBACK_BALANCE_GIMMICK_BREAKDOWN_20260626: 알별 HP 분해
                                 }
                                 continue;
                             }
@@ -4897,6 +4963,7 @@ namespace BalloonFlow
                             int ah = _balloonGimmickHP[c, r] > 0 ? _balloonGimmickHP[c, r] : 2; // 폴백: 앵커색 단일 알
                             balloonCountPerColor.TryGetValue(ac, out int ab); balloonCountPerColor[ac] = ab + 1;
                             dartsNeededPerColor.TryGetValue(ac, out int ad); dartsNeededPerColor[ac] = ad + ah;
+                            AddGimHp(ac, "TargetBox", ah); // ROLLBACK_BALANCE_GIMMICK_BREAKDOWN_20260626
                             continue;
                         }
 
@@ -4921,6 +4988,7 @@ namespace BalloonFlow
                             {
                                 balloonCountPerColor.TryGetValue(tubeColor, out int tb); balloonCountPerColor[tubeColor] = tb + 1;
                                 dartsNeededPerColor.TryGetValue(tubeColor, out int td); dartsNeededPerColor[tubeColor] = td + tubeHp;
+                                AddGimHp(tubeColor, "FlexTube", tubeHp); // ROLLBACK_BALANCE_GIMMICK_BREAKDOWN_20260626
                             }
                             continue;
                         }
@@ -4933,6 +5001,43 @@ namespace BalloonFlow
                         int life = GetGimmickLife(gi, c, r);
                         balloonCountPerColor.TryGetValue(ci, out int bcOld); balloonCountPerColor[ci] = bcOld + 1;
                         dartsNeededPerColor.TryGetValue(ci, out int dnOld); dartsNeededPerColor[ci] = dnOld + life;
+
+                        // ROLLBACK_BALANCE_GIMMICK_BREAKDOWN_20260626: 색상별 기믹 분해 누적.
+                        if (gn == "Ice")
+                        {
+                            // Ice 는 런타임상 색무관 영역 공유 HP라 per-color need 엔 미포함(life=0). 단 표시용으로는
+                            //   cell 색 하단에 '영역 HP 1회'를 보여준다(그룹 중복 제거). mode2=override(_balloonIceGroupHp),
+                            //   그 외=영역 멤버 _balloonGimmickHP 합. 비그룹(groupId<0)은 셀별 HP.
+                            int igrp = _balloonIceGroupId[c, r];
+                            if (igrp >= 0)
+                            {
+                                if (seenIceRegions.Add((igrp, ci)))
+                                {
+                                    int ihp;
+                                    if (_balloonIceGroupHpMode[c, r] == 2 && _balloonIceGroupHp[c, r] > 0)
+                                        ihp = _balloonIceGroupHp[c, r];
+                                    else
+                                    {
+                                        ihp = 0;
+                                        for (int cc = 0; cc < _gridCols; cc++)
+                                            for (int rr = 0; rr < _gridRows; rr++)
+                                                if (_balloonIceGroupId[cc, rr] == igrp && _balloonGimmicks[cc, rr] == gi)
+                                                    ihp += Mathf.Max(1, _balloonGimmickHP[cc, rr]);
+                                    }
+                                    AddGimHp(ci, "Ice", ihp);
+                                }
+                            }
+                            else
+                            {
+                                AddGimHp(ci, "Ice", _balloonGimmickHP[c, r] > 0 ? _balloonGimmickHP[c, r] : 2);
+                            }
+                        }
+                        else
+                        {
+                            // Pinata→Wooden / Barricade / Color_Curtain→Curtain (Surprise·일반풍선은 GimDisplay=null → 미표시).
+                            string gd = GimDisplay(gn);
+                            if (gd != null) AddGimHp(ci, gd, life);
+                        }
                     }
 
             var dartsProvidedPerColor = new Dictionary<int, int>();
@@ -4959,6 +5064,7 @@ namespace BalloonFlow
                 var sb = new System.Text.StringBuilder(256);
                 sb.Append($"Level {_levelId}  |  {_gridCols}x{_gridRows}  |  {_numColors}C  |  {_difficulty}");
                 sb.Append($"\nBalloons: {totalBalloons}  |  Holders: {totalHolders}  |  Darts: {totalDartsProvided} (need {totalDartsNeeded})");
+                // ROLLBACK_IRONWALL_NOCOLOR_20260626: Wall 갯수는 하단 Balance check 에 "Wall: N" 으로 표시(아래로 이동).
 
                 if (gimmickCounts.Count > 0)
                 {
@@ -4990,6 +5096,8 @@ namespace BalloonFlow
                 if (allColors.Count > 0)
                 {
                     sb.Append("BALANCE CHECK (per color):\n");
+                    // ROLLBACK_BALANCE_GIMMICK_BREAKDOWN_20260626: 색 아래 기믹 분해 표시 순서.
+                    string[] breakdownOrder = { "Wooden", "TargetBox", "Barricade", "FlexTube", "Curtain", "Ice" };
                     foreach (int ci in allColors)
                     {
                         string label = ci < COLOR_LABELS.Length ? COLOR_LABELS[ci] : ci.ToString();
@@ -4999,6 +5107,10 @@ namespace BalloonFlow
                         string status = (have == need) ? "OK" : (have > need ? $"+{have - need}" : $"-{need - have} !!!");
                         if (have != need) hasIssue = true;
                         sb.Append($"  {label}: {bCount}B (need {need}D) / have {have}D  [{status}]\n");
+                        // ROLLBACK_BALANCE_GIMMICK_BREAKDOWN_20260626: 그 색에 기여한 HP 기믹 분해(예: "Cy_Wooden: 20").
+                        foreach (var gimName in breakdownOrder)
+                            if (hpByColorGimmick.TryGetValue((ci, gimName), out int gv) && gv > 0)
+                                sb.Append($"    {label}_{gimName}: {gv}\n");
                     }
                     if (!hasIssue) sb.Append("  All colors balanced!");
                 }
@@ -5006,6 +5118,11 @@ namespace BalloonFlow
                 {
                     sb.Append("No balloons placed.");
                 }
+
+                // ROLLBACK_IRONWALL_NOCOLOR_20260626: Wall(IronWall)은 색 무관 불파괴 → 색상별 카운트엔 당연히 미포함.
+                //   하단 Balance check 에 셀 갯수만 "Wall: N" 으로 별도 표시(색 없이도 표시).
+                if (ironCellCount > 0)
+                    sb.Append($"\nWall: {ironCellCount}");
 
                 _txtBalanceInfo.text = sb.ToString();
                 _txtBalanceInfo.color = hasIssue ? new Color(1f, 0.7f, 0.4f) : new Color(0.6f, 0.9f, 0.6f);
@@ -7018,6 +7135,12 @@ namespace BalloonFlow
                         }
                         else if (normalizedGimmick == "Barricade")
                         {
+                            // ROLLBACK_BARRICADE_LOAD_PINATAW_20260626: 앵커 마커(_balloonPinataW=1) 복원.
+                            //   ApplyLevelConfig 가 _balloonPinataW 를 new int[](전부 0)로 재할당하는데, 이 블록이
+                            //   앵커 pinataW 를 복원하지 않아(저장된 sizeW=1 무시), 로드된 Barricade 가 밸런스 루프
+                            //   (isSizedFieldCell && pinataW==0 → skip)·재저장(8008 동일 스킵)에서 '비앵커'로 오인돼
+                            //   HP 미카운트 + 재저장 시 누락됐다. paint 와 동일하게 앵커=1 로 복원 → 정상화.
+                            _balloonPinataW[col, row] = 1;
                             // ROLLBACK_BARRICADE_MAPMAKER_FOOTPRINT_20260608: 앵커 dir+length 로 length×2 footprint 비앵커 셀 재구성(GUI 표시).
                             int blen = Mathf.Max(3, _balloonBarricadeLength[col, row]);
                             int bdir = _balloonBarricadeDir[col, row];
