@@ -50,6 +50,7 @@ namespace BalloonFlow
         public const string POPUP_WINNING_STREAK_INFO = "Popup/PopupWinningStreakinfo";
         public const string POPUP_WINNING_STREAK_REWARD = "Popup/PopupWinningStreakReward";
         public const string POPUP_FINISH_LOGO     = "Popup/FinishLogo";
+        public const string POPUP_PRIVACY_TERM    = "Popup/PopupPrivacyTerm";
 
         #endregion
 
@@ -512,6 +513,8 @@ namespace BalloonFlow
         public const string PREFS_PENDING_LEVEL_ID  = "BF_PendingLevelId";
         /// <summary>마지막 성공한 Firebase Auth UID. 다음 부팅 시 UID 변경(데이터 손실 위험) 감지용.</summary>
         public const string PREFS_LAST_AUTH_UID     = "BF_LastAuthUid";
+        public const string PREFS_PRIVACY_TERM_VERSION = "BF_PrivacyTermConsentVersion";
+        public const string PRIVACY_TERM_VERSION = "2026-06-26";
 
         #endregion
     }

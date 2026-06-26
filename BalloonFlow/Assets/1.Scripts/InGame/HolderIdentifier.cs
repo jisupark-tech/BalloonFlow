@@ -1141,13 +1141,19 @@ namespace BalloonFlow
             {
                 _animator.enabled = true;
                 _animator.Rebind(); // 모든 상태/파라미터 초기화 → Entry 상태로 복귀
-                _animator.Update(0f);
+                // ROLLBACK_ANIMATOR_UPDATE_INACTIVE_GUARD_20260626: Animator.Update 는 active 오브젝트에서만 호출 가능.
+                //   비활성(Frozen 아닌 홀더의 frozen 오버레이, 풀 재사용 중 미활성 등)에서 호출 시 "Can't call Animator.Update
+                //   on inactive object" 에러 → 가드. 비활성은 렌더 안 되므로 스킵 무해(활성화 시 Rebind 상태 적용).
+                if (_animator.gameObject.activeInHierarchy)
+                    _animator.Update(0f);
             }
             if (_frozenAnimator != null && _frozenAnimator != _animator)
             {
                 _frozenAnimator.enabled = true;
                 _frozenAnimator.Rebind();
-                _frozenAnimator.Update(0f);
+                // ROLLBACK_ANIMATOR_UPDATE_INACTIVE_GUARD_20260626: 위와 동일 — 비활성 frozen 애니메이터 Update 가드.
+                if (_frozenAnimator.gameObject.activeInHierarchy)
+                    _frozenAnimator.Update(0f);
             }
             _boxOpenStartTime = -1f;
         }

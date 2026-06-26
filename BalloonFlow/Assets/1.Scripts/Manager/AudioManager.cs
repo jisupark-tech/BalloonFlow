@@ -144,6 +144,7 @@ namespace BalloonFlow
 
             _popSource = gameObject.AddComponent<AudioSource>();
             _popSource.playOnAwake = false;
+            ConfigurePopSource();
 
             if (_loopSfxSource == null)
             {
@@ -196,6 +197,7 @@ namespace BalloonFlow
             if (_sfxGoldGet == null)      _sfxGoldGet      = Resources.Load<AudioClip>("Sound/Effect/Gold_Get");
             if (_sfxBalloonPop == null)   _sfxBalloonPop   = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal");
             if (_sfxBalloonPop2 == null)  _sfxBalloonPop2  = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal_2");
+            EnsurePopClipsLoaded();
             if (_sfxClear == null)        _sfxClear        = Resources.Load<AudioClip>("Sound/Effect/congratuation")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Clear");
             // [2026-06-24 사용자 피드백] 사용자 명시 자산 경로 Assets/Resources/Sound/Effect/Fail.mp3(대문자 F) 를
@@ -303,6 +305,43 @@ namespace BalloonFlow
                 Debug.LogWarning($"[AudioManager] Missing SFX clips (place files under Resources/Sound/Effect/): {string.Join(", ", missing)}");
             }
 #endif
+        }
+
+        private void ConfigurePopSource()
+        {
+            if (_popSource == null) return;
+
+            // ROLLBACK_POP_SFX_DYNAMIC_LOAD_20260626:
+            // Pop SFX is runtime-created, so do not rely on prefab AudioSource settings.
+            // Keep it 2D and on the same mixer group as generic SFX for Android builds.
+            _popSource.playOnAwake = false;
+            _popSource.loop = false;
+            _popSource.spatialBlend = 0f;
+            _popSource.volume = 1f;
+            _popSource.mute = false;
+            if (_sfxSource != null && _sfxSource.outputAudioMixerGroup != null)
+                _popSource.outputAudioMixerGroup = _sfxSource.outputAudioMixerGroup;
+        }
+
+        private void EnsurePopClipsLoaded()
+        {
+            // ROLLBACK_POP_SFX_DYNAMIC_LOAD_20260626:
+            // Build/runtime path must not depend on FeedbackController inspector arrays.
+            // These clips live under Assets/Resources/Sound/Effect and are loaded on demand.
+            if (_sfxBalloonPop == null)
+                _sfxBalloonPop = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal");
+            if (_sfxBalloonPop2 == null)
+                _sfxBalloonPop2 = Resources.Load<AudioClip>("Sound/Effect/Stage_Match_Normal_2");
+
+            PreloadClipData(_sfxBalloonPop);
+            PreloadClipData(_sfxBalloonPop2);
+        }
+
+        private static void PreloadClipData(AudioClip clip)
+        {
+            if (clip == null) return;
+            if (clip.loadState == AudioDataLoadState.Unloaded)
+                clip.LoadAudioData();
         }
 
         private void OnEnable()
@@ -718,6 +757,8 @@ namespace BalloonFlow
             _lastPopTime = now;
             _popComboCount++;
 
+            EnsurePopClipsLoaded();
+            ConfigurePopSource();
             if (_popSource == null || !_sfxEnabled || _sfxBalloonPop == null) return;
 
             // 콤보 시작 시 한 번 50% 랜덤으로 클립을 정하고, 피치 상승 중엔 그 클립을 고정 재생.

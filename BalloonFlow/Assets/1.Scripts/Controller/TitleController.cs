@@ -102,6 +102,11 @@ namespace BalloonFlow
         /// <summary>로딩을 먼저 끝낸 뒤(바 100%), 씬 전환 직전에 알림 권한을 띄워 선택받고 진입.</summary>
         private IEnumerator StartupFlow()
         {
+            // ROLLBACK_PRIVACY_TERM_GATE_20260626:
+            // Terms/privacy consent must be accepted before the title loading bar starts.
+            // Rollback: remove this yield to restore the old direct LoadingFlow start.
+            yield return PrivacyTermConsentRoutine();
+
             // ROLLBACK_TITLE_PERMISSION_AFTER_LOADING_20260623:
             // 순서 = 로딩 먼저 → (씬 직전) 알림 권한 다이얼로그 + 응답 대기 → 그 결정 후 인게임 진입.
             //   이전(ROLLBACK_RELEASE_TITLE_LOADTIME_20260616)은 권한을 로딩과 병렬로 시작해
@@ -110,6 +115,36 @@ namespace BalloonFlow
             yield return LoadingFlow();                        // 1) 로딩 먼저 (바 채움, _loadingComplete=true)
             yield return RequestNotificationPermissionRoutine(); // 2) 씬 직전 권한 다이얼로그 + 응답 대기
             _permissionResolved = true;                        // 3) 권한 결정 후에야 진입 허용
+        }
+
+        private IEnumerator PrivacyTermConsentRoutine()
+        {
+            string acceptedVersion = PlayerPrefs.GetString(Const.PREFS_PRIVACY_TERM_VERSION, string.Empty);
+            if (acceptedVersion == Const.PRIVACY_TERM_VERSION)
+                yield break;
+
+            bool consentResolved = false;
+            PopupPrivacyTerm popup = null;
+
+            if (UIManager.HasInstance)
+            {
+                GameObject go = UIManager.Instance.LoadPrefab(Const.POPUP_PRIVACY_TERM, UIManager.Instance.PopupTr);
+                if (go != null)
+                {
+                    popup = go.GetComponent<PopupPrivacyTerm>();
+                    if (popup == null) popup = go.AddComponent<PopupPrivacyTerm>();
+                    popup.Show(() => consentResolved = true);
+                }
+            }
+
+            if (popup == null)
+            {
+                Debug.LogWarning("[TitleController] PopupPrivacyTerm load failed. Continuing title loading without consent popup.");
+                yield break;
+            }
+
+            while (!consentResolved)
+                yield return null;
         }
 
         private IEnumerator RequestNotificationPermissionRoutine()
