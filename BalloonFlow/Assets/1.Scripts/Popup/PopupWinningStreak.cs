@@ -263,7 +263,35 @@ namespace BalloonFlow
             StartCoroutine(IntroScrollThenInfoRoutine());
         }
 
+        // ROLLBACK_WS_SEASON_START_SCROLL_ONLY_20260626:
+        // Later Winning Streak seasons reuse the reward-scroll reveal without showing the how-to-play info popup again.
+        public void PlaySeasonStartScrollOnly()
+        {
+            if (_introPlaying) return;
+            _introPlaying = true;
+            StartCoroutine(SeasonStartScrollOnlyRoutine());
+        }
+
         private System.Collections.IEnumerator IntroScrollThenInfoRoutine()
+        {
+            yield return ScrollRewardsToGrandPrizeRoutine();
+
+            // First unlock flow: show the how-to-play info after the reward-scroll reveal.
+            if (UIManager.HasInstance)
+            {
+                var info = UIManager.Instance.OpenUI<PopupWinningStreakInfo>(Const.POPUP_WINNING_STREAK_INFO);
+                if (info != null) info.SetCloseCallback(CloseUI);
+                else CloseUI();
+            }
+            else CloseUI();
+        }
+
+        private System.Collections.IEnumerator SeasonStartScrollOnlyRoutine()
+        {
+            yield return ScrollRewardsToGrandPrizeRoutine();
+        }
+
+        private System.Collections.IEnumerator ScrollRewardsToGrandPrizeRoutine()
         {
             SetIntroInputLocked(true);
 
@@ -293,15 +321,6 @@ namespace BalloonFlow
 
             SetIntroInputLocked(false);
             _introPlaying = false;
-
-            // PopupWinningStreakInfo 표시 + 닫힘 시 이 팝업도 닫아 로비 복귀.
-            if (UIManager.HasInstance)
-            {
-                var info = UIManager.Instance.OpenUI<PopupWinningStreakInfo>(Const.POPUP_WINNING_STREAK_INFO);
-                if (info != null) info.SetCloseCallback(CloseUI);
-                else CloseUI();
-            }
-            else CloseUI();
         }
 
         // 인트로 자동스크롤 중 사용자 입력 차단 — 버튼 비활성 + 스크롤 드래그 차단(프로그램적 vnp 설정은 계속 동작).

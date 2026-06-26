@@ -674,17 +674,73 @@ namespace BalloonFlow
             p[AnalyticsConsts.P_GEO_COUNTRY]      = AnalyticsSessionTracker.ResolveGeoCountry();
             p[AnalyticsConsts.P_PLATFORM]         = AnalyticsSessionTracker.ResolvePlatform();
             p[AnalyticsConsts.P_PRODUCT_ID]       = doc.productId ?? "";
+            p[AnalyticsConsts.P_PRODUCT_NAME]     = ResolveProductAnalyticsName(doc);
+            p[AnalyticsConsts.P_PRODUCT_TYPE]     = ResolveProductAnalyticsType(doc);
             p[AnalyticsConsts.P_PRICE_USD]        = doc.priceUsd;
+            p[AnalyticsConsts.P_PRICE_LOCAL]      = doc.priceUsd;
             // [BQ_DIRECT 2026-06-16] purchase 테이블 컬럼에 정렬: currency→currency_code, transaction_id→receipt_id.
             //   store / product_category / device_model 은 purchase 테이블에 컬럼 없음 → 미emit.
             //   (product_name/product_type/price_local/coin_granted/is_verified 등은 추후 계측 보강 — 현재 NULL.)
             p[AnalyticsConsts.P_CURRENCY_CODE]    = string.IsNullOrEmpty(doc.currency) ? "USD" : doc.currency;
+            p[AnalyticsConsts.P_IAP_PLACEMENT]    = "shop_popup";
+            p[AnalyticsConsts.P_LEVEL_NUMBER]     = LevelManager.HasInstance ? LevelManager.Instance.GetCurrentLevelId() : 0;
+            p[AnalyticsConsts.P_COIN_GRANTED]     = doc.rewards != null ? doc.rewards.coins : 0;
+            p[AnalyticsConsts.P_ITEMS_GRANTED]    = BuildGrantedItemsJson(doc.rewards);
+            p[AnalyticsConsts.P_LIVES_GRANTED]    = 0;
             p[AnalyticsConsts.P_RECEIPT_ID]       = txId;
+            // ROLLBACK_BQ_PURCHASE_SCHEMA_V32_20260626:
+            // Current purchase_event is emitted from Unity IAP success. Move it to the
+            // server receipt-validation callback when that backend is available.
+            p[AnalyticsConsts.P_IS_VERIFIED]      = !txId.StartsWith("sim_");
 
             if (UserSnapshotCache.HasInstance)
                 UserSnapshotCache.Instance.Stamp(p);
 
             AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_PURCHASE, p);
+        }
+
+        private static string ResolveProductAnalyticsName(ShopProductDoc doc)
+        {
+            if (doc == null) return "";
+            if (!string.IsNullOrEmpty(doc.title_loc_key))
+            {
+                string text = LocalizationService.Get(doc.title_loc_key);
+                if (!string.IsNullOrEmpty(text)) return text;
+            }
+            return doc.productId ?? "";
+        }
+
+        private static string ResolveProductAnalyticsType(ShopProductDoc doc)
+        {
+            if (doc == null) return "standard";
+            string category = doc.category ?? "";
+            if (category == CAT_NOADS) return "one_shot";
+            if (doc.maxPurchases == 1 || category == "offer" || doc.hasTimeLimit) return "limited";
+            return "standard";
+        }
+
+        private static string BuildGrantedItemsJson(ShopRewards rewards)
+        {
+            if (rewards == null) return "";
+
+            var sb = new StringBuilder();
+            AppendItemJson(sb, "hand", rewards.boosters != null ? rewards.boosters.hand : 0);
+            AppendItemJson(sb, "shuffle", rewards.boosters != null ? rewards.boosters.shuffle : 0);
+            AppendItemJson(sb, "zap", rewards.boosters != null ? rewards.boosters.zap : 0);
+            AppendItemJson(sb, "infinite_hearts_seconds", rewards.infiniteHeartsSeconds);
+            AppendItemJson(sb, "remove_ads", rewards.removeAds ? 1 : 0);
+
+            if (sb.Length == 0) return "";
+            sb.Insert(0, "{");
+            sb.Append("}");
+            return sb.ToString();
+        }
+
+        private static void AppendItemJson(StringBuilder sb, string key, int value)
+        {
+            if (value <= 0) return;
+            if (sb.Length > 0) sb.Append(",");
+            sb.Append("\"").Append(key).Append("\":").Append(value);
         }
     }
 }

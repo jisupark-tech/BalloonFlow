@@ -39,6 +39,7 @@ namespace BalloonFlow
             RewardedAd,
             IAP,
             DailyReward,
+            WinningStreak, // ROLLBACK_WS_REWARD_LIVE_COIN_20260626
             Other
         }
 

@@ -146,6 +146,10 @@ namespace BalloonFlow
             EnsureOverlaySorting();
             if (_frame != null)
             {
+                // ROLLBACK_MORELIVE_NORMAL_FRAME_20260626:
+                // More Lives is a lobby/life popup, so it must not inherit the last in-game
+                // Hard/SuperHard level from PopupCommonFrame.ResolveActiveDifficulty().
+                _frame.ApplyDifficulty(DifficultyPurpose.Normal);
                 _frame.SetTitle("More Lives");
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Vertical);
                 // Vertical(Green+Blue) — Red 미사용, 빈 문자열 전달

@@ -24,6 +24,12 @@ namespace BalloonFlow
         [SerializeField] private TMP_Text _txtDescription;
         [SerializeField] private Image _imgInnerFrame;
 
+        [Header("[Description Background Difficulty]")]
+        [SerializeField] private Image _imgDescriptionBackground;
+        [SerializeField] private Sprite _sprDescriptionBgNormal;
+        [SerializeField] private Sprite _sprDescriptionBgHard;
+        [SerializeField] private Sprite _sprDescriptionBgSuperHard;
+
         [Header("[Gold Display]")]
         [SerializeField] private TMP_Text _txtGold;
         [SerializeField] private TMP_Text _txtGoldOutline;
@@ -57,6 +63,11 @@ namespace BalloonFlow
         private System.Action _onCancel;
         private bool _isUnlockMode;
 
+        // ROLLBACK_BUYITEM_SHOP_RESTORE_STATE_20260626: PopupBuyItem 은 공유 인스턴스(UIManager 캐시)라
+        //   골드패널→상점 동안 다른 ShowUnlock 이 들어오면 제목/모드/콜백이 덮여, 복귀 시 OpenUI()만으론
+        //   "Unlock" 등 잘못된 상태가 보였다. → buy 표시 시 재현 클로저를 저장해 두고 상점 복귀 때 그대로 재적용.
+        private System.Action _reshowBuy;
+
         protected override void Awake()
         {
             base.Awake();
@@ -75,6 +86,7 @@ namespace BalloonFlow
                 _sprHand    = rm.UISpriteOr("iconHand",    _sprHand);
                 _sprShuffle = rm.UISpriteOr("iconSuffle",  _sprShuffle);
                 _sprZap     = rm.UISpriteOr("iconZap",     _sprZap);
+                EnsureDescriptionBackgroundSprites();
             }
 
             // TopBar 잔액 라이브 갱신 — 누락 시 prefab 의 정적 "1900" 이 그대로 노출되어 사용자가
@@ -158,10 +170,16 @@ namespace BalloonFlow
             // Hide this popup while PopupGoldShop is on top, then restore it when the shop closes.
             // Previous behavior opened PopupGoldShop over the current popup without guaranteeing
             // sibling order or blocking the hidden popup.
+            // ROLLBACK_BUYITEM_SHOP_RESTORE_STATE_20260626: 상점 진입 시점의 buy 스냅샷을 로컬로 고정 —
+            //   도중 다른 Show 호출로 _reshowBuy 가 바뀌어도 이 복원은 원래 buy 상태를 재현.
+            System.Action buySnapshot = _reshowBuy;
             System.Action restore = () =>
             {
-                if (this != null && gameObject != null)
-                    OpenUI();
+                if (this == null || gameObject == null) return;
+                // 공유 인스턴스가 상점 도중 ShowUnlock 등으로 재구성됐을 수 있으므로, 단순 OpenUI() 대신
+                //   저장한 buy 스냅샷을 다시 적용해 제목/모드/콜백/내용을 복원한다. (스냅샷 없으면 폴백 OpenUI.)
+                if (buySnapshot != null) buySnapshot();
+                else OpenUI();
             };
 
             CloseUI();
@@ -304,11 +322,14 @@ namespace BalloonFlow
             _onConfirm = onConfirm;
             _onConfirmResult = null;
             _onCancel = onCancel;
+            // ROLLBACK_BUYITEM_SHOP_RESTORE_STATE_20260626: 상점 복귀용 재현 스냅샷(ShowBuyResult 가 덮어씀).
+            _reshowBuy = () => ShowBuy(title, itemSprite, amount, goldCost, onConfirm, onCancel, description);
 
             if (_frame != null)
             {
                 DifficultyPurpose diff = ResolveCurrentDifficulty();
                 _frame.ApplyDifficulty(diff);
+                ApplyDescriptionBackgroundDifficulty(diff);
                 _frame.SetTitle(title);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
                 _frame.SetSingleButtonText(LocalizationService.Get("popup.txtbtnbuy"));
@@ -339,6 +360,8 @@ namespace BalloonFlow
         {
             ShowBuy(title, itemSprite, amount, goldCost, onConfirm: null, onCancel: onCancel, description: description);
             _onConfirmResult = onConfirm;
+            // ROLLBACK_BUYITEM_SHOP_RESTORE_STATE_20260626: ShowBuy 가 세운 스냅샷을 Result 변형으로 교체 — 복귀 시 동일 재현.
+            _reshowBuy = () => ShowBuyResult(title, itemSprite, amount, goldCost, onConfirm, onCancel, description);
         }
 
         /// <summary>아이템 해금 팝업 표시 (Single 버튼).</summary>
@@ -360,6 +383,7 @@ namespace BalloonFlow
             {
                 DifficultyPurpose diff = ResolveCurrentDifficulty();
                 _frame.ApplyDifficulty(diff);
+                ApplyDescriptionBackgroundDifficulty(diff);
                 _frame.SetTitle(title);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
                 _frame.SetSingleButtonText(LocalizationService.Get("ui.common.cliam"));
@@ -446,6 +470,38 @@ namespace BalloonFlow
             return levelId > 0
                 ? LevelManager.Instance.GetLevelDifficulty(levelId)
                 : DifficultyPurpose.Normal;
+        }
+
+        // ROLLBACK_BUYITEM_DESCRIPTION_BG_DIFFICULTY_20260626:
+        // TxtDescription's background panel is independent from ItemInnerFrame and follows
+        // difficulty: Normal=shopBtnFrameBlue, Hard=shopBtnFramePurple, SuperHard=shopBtnFrameRed.
+        private void ApplyDescriptionBackgroundDifficulty(DifficultyPurpose difficulty)
+        {
+            EnsureDescriptionBackgroundSprites();
+            if (_imgDescriptionBackground == null) return;
+
+            Sprite sprite = difficulty switch
+            {
+                DifficultyPurpose.Hard => _sprDescriptionBgHard,
+                DifficultyPurpose.SuperHard => _sprDescriptionBgSuperHard,
+                _ => _sprDescriptionBgNormal
+            };
+
+            if (sprite != null)
+            {
+                _imgDescriptionBackground.sprite = sprite;
+                _imgDescriptionBackground.enabled = true;
+                _imgDescriptionBackground.color = Color.white;
+            }
+        }
+
+        private void EnsureDescriptionBackgroundSprites()
+        {
+            if (!ResourceManager.HasInstance) return;
+            var rm = ResourceManager.Instance;
+            _sprDescriptionBgNormal = rm.UISpriteOr(Const.SPR_SHOPBTNFRAMEBLUE, _sprDescriptionBgNormal);
+            _sprDescriptionBgHard = rm.UISpriteOr(Const.SPR_SHOPBTNFRAMEPURPLE, _sprDescriptionBgHard);
+            _sprDescriptionBgSuperHard = rm.UISpriteOr(Const.SPR_SHOPBTNFRAMERED, _sprDescriptionBgSuperHard);
         }
 
         private static void SetNumericTextsInChildren(GameObject root, string value, bool replaceEmpty)

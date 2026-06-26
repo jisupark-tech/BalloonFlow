@@ -385,8 +385,9 @@ namespace BalloonFlow
 
         private static void EmitAdEvent(string adUnitId, MaxSdkBase.AdInfo adInfo)
         {
-            var p = new System.Collections.Generic.Dictionary<string, object>(20);
-            p[AnalyticsConsts.P_EVENT_ID]       = System.Guid.NewGuid().ToString("N");
+            string eventId = System.Guid.NewGuid().ToString("N");
+            var p = new System.Collections.Generic.Dictionary<string, object>(32);
+            p[AnalyticsConsts.P_EVENT_ID]       = eventId;
             p[AnalyticsConsts.P_SESSION_ID]     = AnalyticsSessionTracker.HasInstance
                 ? AnalyticsSessionTracker.Instance.CurrentSessionId : "";
             p[AnalyticsConsts.P_GAME_ID]        = AnalyticsConsts.GAME_ID;
@@ -396,11 +397,16 @@ namespace BalloonFlow
             p[AnalyticsConsts.P_GEO_COUNTRY]    = AnalyticsSessionTracker.ResolveGeoCountry();
             p[AnalyticsConsts.P_PLATFORM]       = AnalyticsSessionTracker.ResolvePlatform();
             p[AnalyticsConsts.P_DEVICE_MODEL]   = SystemInfo.deviceModel;
+            p[AnalyticsConsts.P_AD_REQUEST_ID]  = eventId;
             p[AnalyticsConsts.P_AD_TYPE]        = ResolveAdType(adInfo.AdFormat);
             p[AnalyticsConsts.P_AD_PLACEMENT]   = adInfo.Placement ?? "";
             p[AnalyticsConsts.P_AD_REVENUE_USD] = adInfo.Revenue;
             p[AnalyticsConsts.P_AD_NETWORK]     = adInfo.NetworkName ?? "";
             p[AnalyticsConsts.P_AD_UNIT_ID]     = adUnitId ?? "";
+            p[AnalyticsConsts.P_MEDIATION_POSITION] = 0;
+            p[AnalyticsConsts.P_EVENT_PHASE]     = "impression";
+            p[AnalyticsConsts.P_REVENUE_PRECISION] = "";
+            p[AnalyticsConsts.P_LEVEL_NUMBER]    = LevelManager.HasInstance ? LevelManager.Instance.GetCurrentLevelId() : 0;
 
             if (UserSnapshotCache.HasInstance)
                 UserSnapshotCache.Instance.Stamp(p);

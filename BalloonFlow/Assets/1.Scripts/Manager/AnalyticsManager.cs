@@ -6,6 +6,7 @@ using UnityEngine.Networking;
 using Newtonsoft.Json;
 using Firebase.Auth;
 using Facebook.Unity;
+using BalloonFlow.Analytics;
 
 namespace BalloonFlow
 {
@@ -108,9 +109,7 @@ namespace BalloonFlow
         private void EnqueueBigQuery(string eventName, Dictionary<string, object> parameters)
         {
             // 호출자 dict 를 그대로 보관하면 이후 변형 위험 → 얕은 복사로 스냅샷.
-            var data = parameters != null
-                ? new Dictionary<string, object>(parameters)
-                : new Dictionary<string, object>(1);
+            var data = NormalizeBigQueryEvent(eventName, parameters);
 
             if (_bqBatch.Count >= BQ_MAX_BUFFER)
             {
@@ -258,6 +257,253 @@ namespace BalloonFlow
                 events.Add(new { name = sending[i].name, data = sending[i].data });
             return JsonConvert.SerializeObject(new { events });
         }
+
+        // ROLLBACK_BQ_SCHEMA_V32_20260626:
+        // Keep this normalization isolated to BigQuery. Facebook/Appsflyer still receive the original
+        // event payload, while the Cloud Function receives only columns from puzzle_game_data_schema_v3_2.
+        private static Dictionary<string, object> NormalizeBigQueryEvent(string eventName, Dictionary<string, object> parameters)
+        {
+            var source = parameters != null
+                ? new Dictionary<string, object>(parameters)
+                : new Dictionary<string, object>(16);
+
+            FillBigQueryCommonDefaults(source);
+            NormalizeBigQueryAliases(eventName, source);
+
+            string[] schema = GetBigQuerySchema(eventName);
+            if (schema == null) return source;
+
+            var filtered = new Dictionary<string, object>(schema.Length);
+            for (int i = 0; i < schema.Length; i++)
+            {
+                string key = schema[i];
+                if (source.TryGetValue(key, out object value))
+                    filtered[key] = value;
+            }
+            return filtered;
+        }
+
+        private static void FillBigQueryCommonDefaults(Dictionary<string, object> data)
+        {
+            if (!data.ContainsKey(AnalyticsConsts.P_EVENT_ID))
+                data[AnalyticsConsts.P_EVENT_ID] = System.Guid.NewGuid().ToString("N");
+            if (!data.ContainsKey(AnalyticsConsts.P_GAME_ID))
+                data[AnalyticsConsts.P_GAME_ID] = AnalyticsConsts.GAME_ID;
+            if (!data.ContainsKey(AnalyticsConsts.P_UID))
+                data[AnalyticsConsts.P_UID] = AnalyticsSessionTracker.ResolveUid();
+            if (!data.ContainsKey(AnalyticsConsts.P_EVENT_TS))
+                data[AnalyticsConsts.P_EVENT_TS] = System.DateTime.UtcNow.ToString("o");
+            if (!data.ContainsKey(AnalyticsConsts.P_SESSION_ID))
+                data[AnalyticsConsts.P_SESSION_ID] = AnalyticsSessionTracker.HasInstance ? AnalyticsSessionTracker.Instance.CurrentSessionId : "";
+            if (!data.ContainsKey(AnalyticsConsts.P_APP_VERSION))
+                data[AnalyticsConsts.P_APP_VERSION] = Application.version;
+            if (!data.ContainsKey(AnalyticsConsts.P_GEO_COUNTRY))
+                data[AnalyticsConsts.P_GEO_COUNTRY] = AnalyticsSessionTracker.ResolveGeoCountry();
+            if (!data.ContainsKey(AnalyticsConsts.P_PLATFORM))
+                data[AnalyticsConsts.P_PLATFORM] = AnalyticsSessionTracker.ResolvePlatform();
+            if (!data.ContainsKey(AnalyticsConsts.P_DEVICE_MODEL))
+                data[AnalyticsConsts.P_DEVICE_MODEL] = SystemInfo.deviceModel;
+
+            if (UserSnapshotCache.HasInstance
+                && (!data.ContainsKey(AnalyticsConsts.P_INSTALL_AT)
+                    || !data.ContainsKey(AnalyticsConsts.P_MAX_REACHED_LEVEL)
+                    || !data.ContainsKey(AnalyticsConsts.P_TOTAL_SPEND_USD)
+                    || !data.ContainsKey(AnalyticsConsts.P_TOTAL_AD_REVENUE_USD)))
+            {
+                UserSnapshotCache.Instance.Stamp(data);
+            }
+        }
+
+        private static void NormalizeBigQueryAliases(string eventName, Dictionary<string, object> data)
+        {
+            CopyAlias(data, "event_ts", AnalyticsConsts.P_EVENT_TS);
+            CopyAlias(data, AnalyticsConsts.P_TRANSACTION_ID, AnalyticsConsts.P_RECEIPT_ID);
+            CopyAlias(data, AnalyticsConsts.P_CURRENCY, AnalyticsConsts.P_CURRENCY_CODE);
+            CopyAlias(data, "ad_revenue_usd", AnalyticsConsts.P_REVENUE_USD);
+
+            if (eventName == AnalyticsConsts.EVT_SESSION_START)
+            {
+                CopyAlias(data, AnalyticsConsts.P_APP_VERSION, AnalyticsConsts.P_VERSION);
+                CopyAlias(data, AnalyticsConsts.P_GEO_COUNTRY, AnalyticsConsts.P_COUNTRY);
+            }
+
+            if (eventName == AnalyticsConsts.EVT_AD)
+            {
+                if (!data.ContainsKey(AnalyticsConsts.P_AD_REQUEST_ID))
+                    data[AnalyticsConsts.P_AD_REQUEST_ID] = data.TryGetValue(AnalyticsConsts.P_EVENT_ID, out object id) ? id : System.Guid.NewGuid().ToString("N");
+                if (!data.ContainsKey(AnalyticsConsts.P_EVENT_PHASE))
+                    data[AnalyticsConsts.P_EVENT_PHASE] = "impression";
+                SetDefaultIfNullOrEmpty(data, AnalyticsConsts.P_AD_TYPE, "unknown");
+                SetDefaultIfNullOrEmpty(data, AnalyticsConsts.P_AD_PLACEMENT, "unknown");
+                SetDefaultIfMissing(data, AnalyticsConsts.P_LEVEL_NUMBER, LevelManager.HasInstance ? LevelManager.Instance.GetCurrentLevelId() : 0);
+            }
+            else if (eventName == AnalyticsConsts.EVT_PURCHASE)
+            {
+                SetDefaultIfNullOrEmpty(data, AnalyticsConsts.P_PRODUCT_ID, "unknown");
+                SetDefaultIfNullOrEmpty(data, AnalyticsConsts.P_IAP_PLACEMENT, "shop_popup");
+                if (!data.ContainsKey(AnalyticsConsts.P_IS_VERIFIED))
+                    data[AnalyticsConsts.P_IS_VERIFIED] = false;
+            }
+            else if (eventName == AnalyticsConsts.EVT_ECONOMY)
+            {
+                if (!data.ContainsKey(AnalyticsConsts.P_REF_EVENT_ID) && data.TryGetValue(AnalyticsConsts.P_EVENT_ID, out object id))
+                    data[AnalyticsConsts.P_REF_EVENT_ID] = id;
+                if (!data.ContainsKey(AnalyticsConsts.P_ECONOMY_PLACEMENT) && data.TryGetValue(AnalyticsConsts.P_SOURCE, out object source))
+                    data[AnalyticsConsts.P_ECONOMY_PLACEMENT] = source;
+                SetDefaultIfNullOrEmpty(data, AnalyticsConsts.P_CURRENCY_TYPE, "unknown");
+                SetDefaultIfMissing(data, AnalyticsConsts.P_CHANGE_AMOUNT, 0);
+                SetDefaultIfNullOrEmpty(data, AnalyticsConsts.P_SOURCE, "unknown");
+            }
+            else if (eventName == AnalyticsConsts.EVT_ITEM_USE)
+            {
+                string activePlayId = AnalyticsLevelTracker.HasInstance ? AnalyticsLevelTracker.Instance.CurrentPlayId : "";
+                SetDefaultIfNullOrEmpty(data, AnalyticsConsts.P_PLAY_ID, string.IsNullOrEmpty(activePlayId) ? "unknown" : activePlayId);
+                SetDefaultIfMissing(data, AnalyticsConsts.P_LEVEL_NUMBER, LevelManager.HasInstance ? LevelManager.Instance.GetCurrentLevelId() : 0);
+                SetDefaultIfNullOrEmpty(data, AnalyticsConsts.P_ITEM_ID, "unknown");
+                SetDefaultIfNullOrEmpty(data, AnalyticsConsts.P_ITEM_CATEGORY, "unknown");
+            }
+            else if (eventName == AnalyticsConsts.EVT_LEVEL_PLAY_START || eventName == AnalyticsConsts.EVT_LEVEL_PLAY)
+            {
+                SetDefaultIfNullOrEmpty(data, AnalyticsConsts.P_PLAY_ID, "unknown");
+                SetDefaultIfMissing(data, AnalyticsConsts.P_LEVEL_NUMBER, LevelManager.HasInstance ? LevelManager.Instance.GetCurrentLevelId() : 0);
+                SetDefaultIfMissing(data, AnalyticsConsts.P_HARD_TIER, 0);
+                SetDefaultIfMissing(data, AnalyticsConsts.P_ATTEMPT_NUMBER, 0);
+                if (eventName == AnalyticsConsts.EVT_LEVEL_PLAY)
+                    SetDefaultIfNullOrEmpty(data, AnalyticsConsts.P_RESULT, "unknown");
+            }
+            else if (eventName == AnalyticsConsts.EVT_SESSION_END)
+            {
+                SetDefaultIfNullOrEmpty(data, AnalyticsConsts.P_END_REASON, "unknown");
+            }
+        }
+
+        private static void CopyAlias(Dictionary<string, object> data, string from, string to)
+        {
+            if (string.IsNullOrEmpty(from) || string.IsNullOrEmpty(to) || data.ContainsKey(to)) return;
+            if (data.TryGetValue(from, out object value)) data[to] = value;
+        }
+
+        private static void SetDefaultIfMissing(Dictionary<string, object> data, string key, object fallback)
+        {
+            if (!data.ContainsKey(key)) data[key] = fallback;
+        }
+
+        private static void SetDefaultIfNullOrEmpty(Dictionary<string, object> data, string key, object fallback)
+        {
+            if (!data.TryGetValue(key, out object value) || value == null || string.IsNullOrEmpty(value.ToString()))
+                data[key] = fallback;
+        }
+
+        private static string[] GetBigQuerySchema(string eventName)
+        {
+            switch (eventName)
+            {
+                case AnalyticsConsts.EVT_LEVEL_PLAY_START: return BqLevelPlayStartColumns;
+                case AnalyticsConsts.EVT_LEVEL_PLAY:       return BqLevelPlayColumns;
+                case AnalyticsConsts.EVT_ITEM_USE:         return BqItemUseColumns;
+                case AnalyticsConsts.EVT_PURCHASE:         return BqPurchaseColumns;
+                case AnalyticsConsts.EVT_ECONOMY:          return BqEconomyColumns;
+                case AnalyticsConsts.EVT_SESSION_START:    return BqSessionStartColumns;
+                case AnalyticsConsts.EVT_SESSION_END:      return BqSessionEndColumns;
+                case AnalyticsConsts.EVT_AD:               return BqAdColumns;
+                default: return null;
+            }
+        }
+
+        private static readonly string[] BqLevelPlayStartColumns =
+        {
+            AnalyticsConsts.P_EVENT_ID, AnalyticsConsts.P_PLAY_ID, AnalyticsConsts.P_SESSION_ID,
+            AnalyticsConsts.P_GAME_ID, AnalyticsConsts.P_UID, AnalyticsConsts.P_EVENT_TS,
+            AnalyticsConsts.P_APP_VERSION, AnalyticsConsts.P_INSTALL_VERSION, AnalyticsConsts.P_GEO_COUNTRY,
+            AnalyticsConsts.P_PLATFORM, AnalyticsConsts.P_DEVICE_MODEL, AnalyticsConsts.P_LEVEL_NUMBER,
+            AnalyticsConsts.P_IS_TUTORIAL, AnalyticsConsts.P_HARD_TIER, AnalyticsConsts.P_ATTEMPT_NUMBER,
+            AnalyticsConsts.P_IS_FIRST_PLAY, AnalyticsConsts.P_PRE_PLAY_ITEM_IDS, AnalyticsConsts.P_PRE_PLAY_ITEM_COUNT,
+            AnalyticsConsts.P_LIVES_BEFORE, AnalyticsConsts.P_IS_INFINITE_LIVES, AnalyticsConsts.P_INSTALL_AT,
+            AnalyticsConsts.P_MAX_REACHED_LEVEL, AnalyticsConsts.P_TOTAL_SPEND_USD, AnalyticsConsts.P_TOTAL_AD_REVENUE_USD
+        };
+
+        private static readonly string[] BqLevelPlayColumns =
+        {
+            AnalyticsConsts.P_EVENT_ID, AnalyticsConsts.P_PLAY_ID, AnalyticsConsts.P_SESSION_ID,
+            AnalyticsConsts.P_GAME_ID, AnalyticsConsts.P_UID, AnalyticsConsts.P_EVENT_TS,
+            AnalyticsConsts.P_APP_VERSION, AnalyticsConsts.P_INSTALL_VERSION, AnalyticsConsts.P_GEO_COUNTRY,
+            AnalyticsConsts.P_PLATFORM, AnalyticsConsts.P_DEVICE_MODEL, AnalyticsConsts.P_LEVEL_NUMBER,
+            AnalyticsConsts.P_IS_TUTORIAL, AnalyticsConsts.P_HARD_TIER, AnalyticsConsts.P_ATTEMPT_NUMBER,
+            AnalyticsConsts.P_IS_FIRST_PLAY, AnalyticsConsts.P_IS_REPLAY_AFTER_CLEAR, AnalyticsConsts.P_RESULT,
+            AnalyticsConsts.P_END_REASON, AnalyticsConsts.P_MOVES_USED, AnalyticsConsts.P_MOVES_GIVEN,
+            AnalyticsConsts.P_MOVES_REMAINING, AnalyticsConsts.P_UNDO_COUNT, AnalyticsConsts.P_DEADLOCK_COUNT,
+            AnalyticsConsts.P_OBJECTIVE_TOTAL, AnalyticsConsts.P_OBJECTIVE_DONE, AnalyticsConsts.P_PEAK_RESOURCE,
+            AnalyticsConsts.P_AVG_RESOURCE, AnalyticsConsts.P_FAIL_OUTERMOST_COLORS, AnalyticsConsts.P_FAIL_RAIL_COMPOSITION,
+            AnalyticsConsts.P_PLAY_TIME_SEC, AnalyticsConsts.P_BACKGROUND_TIME_SEC, AnalyticsConsts.P_SCORE,
+            AnalyticsConsts.P_STAR_COUNT, AnalyticsConsts.P_IN_PLAY_ITEM_IDS, AnalyticsConsts.P_IN_PLAY_ITEM_COUNT,
+            AnalyticsConsts.P_CONTINUE_POPUP_COUNT, AnalyticsConsts.P_CONTINUE_COUNT, AnalyticsConsts.P_COIN_EARNED,
+            AnalyticsConsts.P_COIN_SPENT, AnalyticsConsts.P_FINAL_COIN_BALANCE, AnalyticsConsts.P_SHUFFLE_COUNT,
+            AnalyticsConsts.P_HINT_COUNT, AnalyticsConsts.P_LIVES_AFTER
+        };
+
+        private static readonly string[] BqItemUseColumns =
+        {
+            AnalyticsConsts.P_EVENT_ID, AnalyticsConsts.P_PLAY_ID, AnalyticsConsts.P_GAME_ID,
+            AnalyticsConsts.P_UID, AnalyticsConsts.P_EVENT_TS, AnalyticsConsts.P_LEVEL_NUMBER,
+            AnalyticsConsts.P_ITEM_ID, AnalyticsConsts.P_ITEM_CATEGORY, AnalyticsConsts.P_ACQUISITION_TYPE,
+            AnalyticsConsts.P_COST_AMOUNT, AnalyticsConsts.P_COST_CURRENCY_ID, AnalyticsConsts.P_SESSION_ID,
+            AnalyticsConsts.P_INSTALL_AT, AnalyticsConsts.P_MAX_REACHED_LEVEL, AnalyticsConsts.P_TOTAL_SPEND_USD,
+            AnalyticsConsts.P_TOTAL_AD_REVENUE_USD
+        };
+
+        private static readonly string[] BqPurchaseColumns =
+        {
+            AnalyticsConsts.P_EVENT_ID, AnalyticsConsts.P_GAME_ID, AnalyticsConsts.P_UID,
+            AnalyticsConsts.P_EVENT_TS, AnalyticsConsts.P_APP_VERSION, AnalyticsConsts.P_GEO_COUNTRY,
+            AnalyticsConsts.P_PLATFORM, AnalyticsConsts.P_PRODUCT_ID, AnalyticsConsts.P_PRODUCT_NAME,
+            AnalyticsConsts.P_PRODUCT_TYPE, AnalyticsConsts.P_PRICE_USD, AnalyticsConsts.P_PRICE_LOCAL,
+            AnalyticsConsts.P_CURRENCY_CODE, AnalyticsConsts.P_IAP_PLACEMENT, AnalyticsConsts.P_LEVEL_NUMBER,
+            AnalyticsConsts.P_COIN_GRANTED, AnalyticsConsts.P_ITEMS_GRANTED, AnalyticsConsts.P_LIVES_GRANTED,
+            AnalyticsConsts.P_RECEIPT_ID, AnalyticsConsts.P_IS_VERIFIED, AnalyticsConsts.P_SESSION_ID,
+            AnalyticsConsts.P_INSTALL_AT, AnalyticsConsts.P_MAX_REACHED_LEVEL, AnalyticsConsts.P_TOTAL_SPEND_USD,
+            AnalyticsConsts.P_TOTAL_AD_REVENUE_USD
+        };
+
+        private static readonly string[] BqEconomyColumns =
+        {
+            AnalyticsConsts.P_EVENT_ID, AnalyticsConsts.P_GAME_ID, AnalyticsConsts.P_UID,
+            AnalyticsConsts.P_EVENT_TS, AnalyticsConsts.P_CURRENCY_TYPE, AnalyticsConsts.P_CHANGE_AMOUNT,
+            AnalyticsConsts.P_BALANCE_AFTER, AnalyticsConsts.P_SOURCE, AnalyticsConsts.P_REF_EVENT_ID,
+            AnalyticsConsts.P_ECONOMY_PLACEMENT, AnalyticsConsts.P_LEVEL_NUMBER, AnalyticsConsts.P_SESSION_ID,
+            AnalyticsConsts.P_INSTALL_AT, AnalyticsConsts.P_MAX_REACHED_LEVEL, AnalyticsConsts.P_TOTAL_SPEND_USD,
+            AnalyticsConsts.P_TOTAL_AD_REVENUE_USD
+        };
+
+        private static readonly string[] BqSessionStartColumns =
+        {
+            AnalyticsConsts.P_EVENT_ID, AnalyticsConsts.P_SESSION_ID, AnalyticsConsts.P_GAME_ID,
+            AnalyticsConsts.P_UID, AnalyticsConsts.P_EVENT_TS, AnalyticsConsts.P_VERSION,
+            AnalyticsConsts.P_COUNTRY, AnalyticsConsts.P_PLATFORM, AnalyticsConsts.P_DEVICE_MODEL,
+            AnalyticsConsts.P_INSTALL_AT, AnalyticsConsts.P_MAX_REACHED_LEVEL, AnalyticsConsts.P_TOTAL_SPEND_USD,
+            AnalyticsConsts.P_TOTAL_AD_REVENUE_USD
+        };
+
+        private static readonly string[] BqSessionEndColumns =
+        {
+            AnalyticsConsts.P_EVENT_ID, AnalyticsConsts.P_SESSION_ID, AnalyticsConsts.P_GAME_ID,
+            AnalyticsConsts.P_UID, AnalyticsConsts.P_EVENT_TS, AnalyticsConsts.P_END_REASON,
+            AnalyticsConsts.P_DURATION_SEC
+        };
+
+        private static readonly string[] BqAdColumns =
+        {
+            AnalyticsConsts.P_EVENT_ID, AnalyticsConsts.P_GAME_ID, AnalyticsConsts.P_UID,
+            AnalyticsConsts.P_SESSION_ID, AnalyticsConsts.P_EVENT_TS, AnalyticsConsts.P_AD_REQUEST_ID,
+            AnalyticsConsts.P_AD_TYPE, AnalyticsConsts.P_AD_PLACEMENT, AnalyticsConsts.P_AD_NETWORK,
+            AnalyticsConsts.P_AD_UNIT_ID, AnalyticsConsts.P_MEDIATION_POSITION, AnalyticsConsts.P_EVENT_PHASE,
+            AnalyticsConsts.P_ERROR_CODE, AnalyticsConsts.P_ERROR_MESSAGE, AnalyticsConsts.P_LATENCY_MS,
+            AnalyticsConsts.P_WATCH_DURATION_SEC, AnalyticsConsts.P_AD_DURATION_SEC, AnalyticsConsts.P_REVENUE_USD,
+            AnalyticsConsts.P_REVENUE_PRECISION, AnalyticsConsts.P_REWARD_TYPE, AnalyticsConsts.P_REWARD_AMOUNT,
+            AnalyticsConsts.P_REWARD_ITEM_ID, AnalyticsConsts.P_LEVEL_NUMBER, AnalyticsConsts.P_ATTEMPT_NUMBER,
+            AnalyticsConsts.P_APP_VERSION, AnalyticsConsts.P_GEO_COUNTRY, AnalyticsConsts.P_PLATFORM,
+            AnalyticsConsts.P_INSTALL_AT, AnalyticsConsts.P_MAX_REACHED_LEVEL, AnalyticsConsts.P_TOTAL_SPEND_USD,
+            AnalyticsConsts.P_TOTAL_AD_REVENUE_USD
+        };
 
         #endregion
 

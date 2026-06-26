@@ -601,8 +601,17 @@ namespace BalloonFlow
             if (rewards == null) return;
             var uds = UserDataService.HasInstance ? UserDataService.Instance : null;
 
-            if (rewards.coins > 0 && uds != null)
-                uds.AdjustCoins(rewards.coins, reason);
+            // ROLLBACK_WS_REWARD_LIVE_COIN_20260626: 로비 골드패널은 CurrencyManager(라이브 잔액)에 바인딩 →
+            //   UserDataService.AdjustCoins 만 하면 OnCoinChanged 미발행으로 상승 연출 후에도 패널이 안 움직임.
+            //   CurrencyManager.AddCoins 경유(내부서 Firestore 동기 + OnCoinChanged 발행, 이중적립 X) → 패널 +금액 애니.
+            //   (부스터가 GrantBoosterReward 에서 BoosterManager 경유하는 것과 동일 선례.)
+            if (rewards.coins > 0)
+            {
+                if (CurrencyManager.HasInstance)
+                    CurrencyManager.Instance.AddCoins(rewards.coins, CurrencyManager.CoinSource.WinningStreak);
+                else if (uds != null)
+                    uds.AdjustCoins(rewards.coins, reason);
+            }
 
             if (rewards.boosters != null)
             {

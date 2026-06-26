@@ -536,7 +536,10 @@ namespace BalloonFlow
             if (PlayerPrefs.GetString(WS_PREFS_ROUND_POPUP_SHOWN, "") == roundId) return;
             PlayerPrefs.SetString(WS_PREFS_ROUND_POPUP_SHOWN, roundId);
             PlayerPrefs.Save();
-            UIManager.Instance.OpenUI<PopupWinningStreak>(Const.POPUP_WINNING_STREAK);
+            // ROLLBACK_WS_SEASON_START_SCROLL_ONLY_20260626:
+            // New seasons should reveal rewards with the same upward scroll, but skip the first-time how-to-play popup.
+            var wsSeason = UIManager.Instance.OpenUI<PopupWinningStreak>(Const.POPUP_WINNING_STREAK);
+            if (wsSeason != null) wsSeason.PlaySeasonStartScrollOnly();
         }
 
         private void HookProfileEvents()

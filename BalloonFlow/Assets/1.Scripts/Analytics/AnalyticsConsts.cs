@@ -27,10 +27,12 @@ namespace BalloonFlow.Analytics
         public const string P_SESSION_ID          = "session_id";
         public const string P_GAME_ID             = "game_id";
         public const string P_UID                 = "uid";
-        public const string P_EVENT_TS            = "event_ts";          // ISO 8601 UTC
+        public const string P_EVENT_TS            = "event_timestamp";   // ISO 8601 UTC
         public const string P_APP_VERSION         = "app_version";
+        public const string P_VERSION             = "version";
         public const string P_INSTALL_VERSION     = "install_version";
         public const string P_GEO_COUNTRY         = "geo_country";
+        public const string P_COUNTRY             = "country";
         public const string P_PLATFORM            = "platform";
         public const string P_DEVICE_MODEL        = "device_model";
 
@@ -51,6 +53,10 @@ namespace BalloonFlow.Analytics
 
         // ─── Play metrics (level_play_event 25-limit core) ───
         public const string P_MOVES_USED          = "moves_used";
+        public const string P_MOVES_GIVEN         = "moves_given";
+        public const string P_MOVES_REMAINING     = "moves_remaining";
+        public const string P_UNDO_COUNT          = "undo_count";
+        public const string P_DEADLOCK_COUNT      = "deadlock_count";
         public const string P_PEAK_RESOURCE       = "peak_resource_usage_ratio";
         // [BQ_DIRECT 2026-06-16] 직접 적재 — extra_json 해체분(play_event 테이블 개별 컬럼).
         public const string P_PLAY_TIME_SEC       = "play_time_sec";
@@ -66,6 +72,14 @@ namespace BalloonFlow.Analytics
         public const string P_COIN_EARNED          = "coin_earned";
         public const string P_COIN_SPENT           = "coin_spent";
         public const string P_FINAL_COIN_BALANCE   = "final_coin_balance";
+        public const string P_FAIL_OUTERMOST_COLORS = "fail_outermost_colors";
+        public const string P_FAIL_RAIL_COMPOSITION = "fail_rail_composition";
+        public const string P_IN_PLAY_ITEM_IDS      = "in_play_item_ids";
+        public const string P_IN_PLAY_ITEM_COUNT    = "in_play_item_count";
+        public const string P_SHUFFLE_COUNT         = "shuffle_count";
+        public const string P_HINT_COUNT            = "hint_count";
+        public const string P_PRE_PLAY_ITEM_IDS     = "pre_play_item_ids";
+        public const string P_PRE_PLAY_ITEM_COUNT   = "pre_play_item_count";
 
         // ─── Session ───
         public const string P_DURATION_SEC        = "duration_sec";
@@ -78,7 +92,15 @@ namespace BalloonFlow.Analytics
 
         // ─── purchase_event ───
         public const string P_PRODUCT_ID          = "product_id";
+        public const string P_PRODUCT_NAME        = "product_name";
+        public const string P_PRODUCT_TYPE        = "product_type";
         public const string P_PRICE_USD           = "price_usd";
+        public const string P_PRICE_LOCAL         = "price_local";
+        public const string P_IAP_PLACEMENT       = "iap_placement";
+        public const string P_COIN_GRANTED        = "coin_granted";
+        public const string P_ITEMS_GRANTED       = "items_granted";
+        public const string P_LIVES_GRANTED       = "lives_granted";
+        public const string P_IS_VERIFIED         = "is_verified";
         public const string P_CURRENCY            = "currency";             // (BQ_DIRECT 후 미emit — currency_code 로 대체)
         public const string P_STORE               = "store";                // (BQ_DIRECT 후 미emit — purchase 테이블에 컬럼 없음)
         public const string P_TRANSACTION_ID      = "transaction_id";       // (BQ_DIRECT 후 미emit — receipt_id 로 대체)
@@ -102,16 +124,31 @@ namespace BalloonFlow.Analytics
         public const string P_CURRENCY_TYPE       = "currency_type";        // coin|gem|life|booster
         public const string P_FLOW_TYPE           = "flow_type";            // earn|spend (BQ_DIRECT 후 미emit — change_amount 부호로 대체)
         public const string P_SOURCE              = "source";
+        public const string P_REF_EVENT_ID        = "ref_event_id";
+        public const string P_ECONOMY_PLACEMENT   = "economy_placement";
         public const string P_SINK                = "sink";                 // (BQ_DIRECT 후 미emit — source 컬럼으로 통합)
         public const string P_AMOUNT              = "amount";               // (BQ_DIRECT 후 미emit — change_amount 로 대체)
         public const string P_CHANGE_AMOUNT       = "change_amount";        // [BQ_DIRECT] economy 테이블 부호 단일(earn=+, spend=-)
 
         // ─── ad_event (impression-level revenue, MAX OnAdRevenuePaidEvent) ───
         public const string P_AD_TYPE             = "ad_type";              // interstitial|rewarded|banner|mrec
+        public const string P_AD_REQUEST_ID       = "ad_request_id";
         public const string P_AD_PLACEMENT        = "ad_placement";         // MAX placement (있으면)
-        public const string P_AD_REVENUE_USD      = "ad_revenue_usd";
+        public const string P_AD_REVENUE_USD      = "revenue_usd";
         public const string P_AD_NETWORK          = "ad_network";           // mediated network name
         public const string P_AD_UNIT_ID          = "ad_unit_id";
+        public const string P_MEDIATION_POSITION  = "mediation_position";
+        public const string P_EVENT_PHASE         = "event_phase";
+        public const string P_ERROR_CODE          = "error_code";
+        public const string P_ERROR_MESSAGE       = "error_message";
+        public const string P_LATENCY_MS          = "latency_ms";
+        public const string P_WATCH_DURATION_SEC  = "watch_duration_sec";
+        public const string P_AD_DURATION_SEC     = "ad_duration_sec";
+        public const string P_REVENUE_USD         = "revenue_usd";
+        public const string P_REVENUE_PRECISION   = "revenue_precision";
+        public const string P_REWARD_TYPE         = "reward_type";
+        public const string P_REWARD_AMOUNT       = "reward_amount";
+        public const string P_REWARD_ITEM_ID      = "reward_item_id";
 
         // ─── 25-param overflow consolidation ───
         // level_play_event 44 컬럼 → 25 limit. extra_json 으로 통합:
