@@ -95,6 +95,9 @@ namespace BalloonFlow
         // Wall도 multi-cell footprint(정사각 1/2/3) 지원 — 런타임은 이미 multi-cell wall 처리(BalloonController.IsSizedFieldGimmick에 Wall 포함).
         private static bool IsSizedFieldGimmick(string gimmickName)
         {
+            // ROLLBACK_ICE_OVERLAY_UNDER_BALLOONS_20260626:
+            // Ice is not a single saved sized gimmick. 2x2/3x3 keeps 4/9 underlying balloon cells
+            // and renders one combined Ice overlay at runtime via iceBlockSize/region grouping.
             return gimmickName == "Pinata" || gimmickName == "Pinata_Box" || gimmickName == "Barricade" || gimmickName == "Wall";
         }
 
@@ -1434,6 +1437,64 @@ namespace BalloonFlow
         {
             if (_flexTubeStatusText == null) return;
             _flexTubeStatusText.text = $"FlexTube Group {_paintFlexTubeGroupId}: {_flexTubePaintOrder.Count} cells";
+        }
+
+        // ROLLBACK_FLEXTUBE_2THICK_20260626: FlexTube 2줄 두께용 'row-B'(수직 짝) 셀 칠하기.
+        //   row-A 와 같은 group/seq 공유 — _flexTubePaintOrder 에는 넣지 않음(순서는 row-A 만). 격자 밖이거나
+        //   이미 이 튜브 그룹이면 스킵(코너 2×2 겹침 방지). 런타임 BuildFlexTubes 가 같은 seq 쌍을 중점으로 평균.
+        private void PaintFlexTubeRowB(int c, int r, int seq)
+        {
+            if (c < 0 || c >= _gridCols || r < 0 || r >= _gridRows) return;
+            if (_balloonFlexTubeGroupId[c, r] == _paintFlexTubeGroupId) return; // 이미 이 튜브 셀 → 스킵(중복 방지)
+            _balloonColors[c, r] = _paintColor;
+            _balloonGimmicks[c, r] = _paintGimmick;
+            _balloonGimmickHP[c, r] = _paintPinataHP;
+            _balloonPinataW[c, r] = 1;
+            _balloonPinataH[c, r] = 1;
+            _balloonLockPairIds[c, r] = -1;
+            ApplyIceGroupBrushMeta(c, r, false);
+            _balloonFlexTubeGroupId[c, r] = _paintFlexTubeGroupId;
+            _balloonFlexTubeSequenceIndex[c, r] = seq;
+            UpdatePreviewCell(c, r);
+        }
+
+        // ROLLBACK_FLEXTUBE_HEADCORNER2X2_20260626: FlexTube row-A(경로 중심) 셀 칠하기 + (옵션)순서 등록.
+        //   row-B 와 달리 경로 셀이라 _flexTubePaintOrder 에 들어가며(addOrder), build 의 centerline/캡 매핑 기준이 된다.
+        private void PaintFlexTubeRowA(int c, int r, int seq, bool addOrder)
+        {
+            if (c < 0 || c >= _gridCols || r < 0 || r >= _gridRows) return;
+            _balloonColors[c, r] = _paintColor;
+            _balloonGimmicks[c, r] = _paintGimmick;
+            _balloonGimmickHP[c, r] = _paintPinataHP;
+            _balloonPinataW[c, r] = 1;
+            _balloonPinataH[c, r] = 1;
+            _balloonLockPairIds[c, r] = -1;
+            ApplyIceGroupBrushMeta(c, r, false);
+            _balloonFlexTubeGroupId[c, r] = _paintFlexTubeGroupId;
+            _balloonFlexTubeSequenceIndex[c, r] = seq;
+            if (addOrder) _flexTubePaintOrder.Add(new Vector2Int(c, r));
+            UpdatePreviewCell(c, r);
+        }
+
+        // ROLLBACK_FLEXTUBE_2X2_PARTS_20260626: FlexTube 파트 1개 = 축정렬 2×2 footprint 스탬프.
+        //   클릭 셀을 좌하단 앵커로 +1 col/+1 row 확장(격자 끝이면 안쪽으로 클램프해 항상 2×2 가 격자 안에 들어옴).
+        //   4셀 모두 같은 group/seq. 앵커 1셀만 paint 순서에 등록(RowA, addOrder=true), 나머지 3셀은 RowB(순서 X).
+        //   정사각이라 진행방향과 무관하게 두께 2 + 길이 2 가 동시에 성립 → Head/Segment/Edge 전부 2×2.
+        //   런타임은 같은 seq 4셀을 평균해 2×2 중심 1점으로 쓰므로 centerline/캡/rib 파이프라인 무변경.
+        private void PaintFlexTube2x2(int col, int row, int seq)
+        {
+            // ROLLBACK_FLEXTUBE_EVEN_GRID_SNAP_20260626: 2×2 파트를 짝수 그리드 블록에 스냅.
+            //   자유 위치로 찍으면 인접 파트의 2×2 가 부분 겹침(RowB 스킵)→ seq별 centroid 가 중심선에서 어긋나
+            //   중간 리브가 삐져나가고 캡 중심도 2×2 중심을 벗어났다. 짝수 스냅하면 모든 파트가 겹침/틈 없이
+            //   타일되어 centroid 가 항상 깨끗한 직선/코너 위 → 캡 중심 정확 + 리브 protrusion 제거.
+            //   (한 블록 안 아무 셀이나 클릭하면 그 블록이 칠해짐; 가드가 같은 블록 재클릭을 막아 블록 단위로 진행.)
+            int baseC = Mathf.Clamp((col / 2) * 2, 0, Mathf.Max(0, _gridCols - 2));
+            int baseR = Mathf.Clamp((row / 2) * 2, 0, Mathf.Max(0, _gridRows - 2));
+
+            PaintFlexTubeRowA(baseC, baseR, seq, true);          // 블록 앵커(좌하단) — paint 순서 등록
+            PaintFlexTubeRowB(baseC + 1, baseR, seq);
+            PaintFlexTubeRowB(baseC, baseR + 1, seq);
+            PaintFlexTubeRowB(baseC + 1, baseR + 1, seq);
         }
 
         private void UpdateHolderGimmickUI(string gimmickName)
@@ -4254,9 +4315,52 @@ namespace BalloonFlow
                     // 빈 셀(색상 없음)은 무시. sized/FlexTube 기믹은 단순 set (anchor 1×1).
                     if (_fieldGimmickOnlyMode && mouse.leftButton.isPressed)
                     {
+                        bool isIceGimmickBrush = _paintGimmick > 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length
+                            && FIELD_GIMMICK_NAMES[_paintGimmick] == "Ice";
+                        if (isIceGimmickBrush && _paintWallSize > 1)
+                        {
+                            int b = Mathf.Max(2, _paintWallSize);
+                            if (_balloonColors[col, row] < 0)
+                            {
+                                if (leftDown) SetStatus($"Ice {b}x{b}: anchor cell has no balloon ({col},{row})");
+                                return;
+                            }
+
+                            // ROLLBACK_ICE_OVERLAY_UNDER_BALLOONS_20260626:
+                            // Ice 2x2/3x3 keeps every footprint balloon as real data, but runtime
+                            // groups them by iceBlockSize and renders one combined Ice overlay.
+                            int anchorColor = _balloonColors[col, row];
+                            for (int dx = 0; dx < b; dx++)
+                                for (int dy = 0; dy < b; dy++)
+                                {
+                                    int cx = col + dx, cy = row + dy;
+                                    if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
+                                    _balloonColors[cx, cy] = anchorColor;
+                                    _balloonGimmicks[cx, cy] = _paintGimmick;
+                                    _balloonGimmickHP[cx, cy] = _paintPinataHP;
+                                    _balloonIceBlockSize[cx, cy] = b;
+                                    ApplyIceGroupBrushMeta(cx, cy, true);
+                                    _balloonPinataW[cx, cy] = 1;
+                                    _balloonPinataH[cx, cy] = 1;
+                                    _balloonLockPairIds[cx, cy] = -1;
+                                    _balloonFlexTubeGroupId[cx, cy] = -1;
+                                    _balloonFlexTubeSequenceIndex[cx, cy] = -1;
+                                    UpdatePreviewCell(cx, cy);
+                                }
+
+                            _infoDirty = true;
+                            SetStatus($"Ice {b}x{b}: authored as {b * b} underlying balloons with one overlay at ({col},{row})");
+                            return;
+                        }
+
                         if (_balloonColors[col, row] >= 0)
                         {
                             _balloonGimmicks[col, row] = _paintGimmick;
+                            _balloonGimmickHP[col, row] = _paintPinataHP;
+                            _balloonPinataW[col, row] = 1;
+                            _balloonPinataH[col, row] = 1;
+                            _balloonIceBlockSize[col, row] = isIceGimmickBrush ? Mathf.Max(1, _paintWallSize) : 1;
+                            ApplyIceGroupBrushMeta(col, row, isIceGimmickBrush);
                             _balloonLockPairIds[col, row] = -1;
                             _balloonFlexTubeGroupId[col, row] = -1;
                             _balloonFlexTubeSequenceIndex[col, row] = -1;
@@ -4313,27 +4417,27 @@ namespace BalloonFlow
                             if (mouse.leftButton.wasPressedThisFrame
                                 && _balloonFlexTubeGroupId[col, row] != _paintFlexTubeGroupId)
                             {
-                                _balloonColors[col, row] = _paintColor;
-                                _balloonGimmicks[col, row] = _paintGimmick;
-                                _balloonGimmickHP[col, row] = _paintPinataHP;
-                                _balloonPinataW[col, row] = 1;
-                                _balloonPinataH[col, row] = 1;
-                                _balloonLockPairIds[col, row] = -1;
-                                ApplyIceGroupBrushMeta(col, row, false);
-                                _balloonFlexTubeGroupId[col, row] = _paintFlexTubeGroupId;
-                                _balloonFlexTubeSequenceIndex[col, row] = _flexTubePaintOrder.Count;
-                                _flexTubePaintOrder.Add(new Vector2Int(col, row));
-                                UpdatePreviewCell(col, row);
+                                int fseq = _flexTubePaintOrder.Count;
+
+                                // ROLLBACK_FLEXTUBE_INPUT_ORDER_20260626:
+                                // Authoring order is fixed: first click = Head(seq0), middle clicks = Segment,
+                                // last/highest seq = Edge. Do not auto-create seq1 on the first click.
+                                // ROLLBACK_FLEXTUBE_2X2_PARTS_20260626:
+                                // 클릭 1회 = FlexTube 파트 1개 = 2×2 footprint (Barricade 처럼 두께 2 + 경로 방향으로도 2칸).
+                                // 클릭 순서가 역할: seq0=Head, 중간=Segment, 마지막=Edge (역할은 직렬화 시 max seq 로 결정).
+                                // 같은 seq 의 4셀은 런타임 BuildFlexTubes 가 한 centerline 점(2×2 중심)으로 평균 → 튜브가
+                                // 파트 중심들을 따라 2칸 두께로 렌더되고 코너는 Bezier 로 자연스럽게 휜다. 두께 방향 추측/코너
+                                // 특례 불필요(정사각 2×2 라 방향 무관). 프리뷰도 셀 4개가 칠해져 2×2 로 보인다.
+                                PaintFlexTube2x2(col, row, fseq);
                                 UpdateFlexTubeStatusText();
                                 _infoDirty = true;
                             }
                         }
                         else if (isIceBlockGimmick && _paintColor >= 0)
                         {
-                            // [Ice §11] B×B footprint 를 모두 개별 ice 셀로 채움 (흡수 X — 각 셀이 풍선).
-                            // ROLLBACK_ICE_CELL_BRUSH_20260609:
-                            // Ice size is a brush size, not a sized single object. Every covered
-                            // cell must stay as a real 1x1 Ice cell so the board is visibly filled.
+                            // ROLLBACK_ICE_OVERLAY_UNDER_BALLOONS_20260626:
+                            // Ice 2x2/3x3 is saved as 4/9 real underlying balloons. Runtime hides them
+                            // under one FrozenLayer overlay until the Ice region breaks.
                             int b = Mathf.Max(2, _paintWallSize);
                             for (int dx = 0; dx < b; dx++)
                                 for (int dy = 0; dy < b; dy++)
@@ -4853,9 +4957,14 @@ namespace BalloonFlow
         {
             if (gimmickIndex <= 0 || gimmickIndex >= FIELD_GIMMICK_NAMES.Length) return 1;
             string g = FIELD_GIMMICK_NAMES[gimmickIndex];
-            // Wall/Pin/Ice 는 직접 hit 불가 → 다트 0개. Wall 이 sized(multi-cell) 라도 HP 산정에선 제외하므로
+            // Wall/Pin 는 직접 hit 불가 → 다트 0개. Wall 이 sized(multi-cell) 라도 HP 산정에선 제외하므로
             // IsSizedFieldGimmick HP 분기보다 먼저 처리한다 (Wall 편입 후 회귀 방지).
-            if (g == "Wall" || g == "Pin" || g == "Ice") return 0;
+            if (g == "Wall" || g == "Pin") return 0;
+            // ROLLBACK_ICE_BALANCE_UNDERLYING_BALLOON_20260626:
+            // Ice is an overlay/status on top of an existing balloon, not a replacement object.
+            // The covered balloon still needs one matching dart after Ice breaks, so Balance/AutoBalance
+            // must keep the underlying balloon's 1 dart need. Ice HP is shown separately as gimmick HP.
+            if (g == "Ice") return 1;
             // ROLLBACK_BALANCE_HP_MAP_20260625: Color_Curtain 은 counter(=hp, 기본 3=DEFAULT_CURTAIN_COUNTER)
             //   만큼 자기색 pop 필요 → 1 이 아닌 HP 반영. (직접타격 아닌 간접이나, 보수적으로 자기색 수요로 계상.)
             if (g == "Color_Curtain")
@@ -4952,7 +5061,7 @@ namespace BalloonFlow
                                     int ec = eggC[e];
                                     if (ec < 0) continue;
                                     int eh = (eggH != null && eggH[e] > 0) ? eggH[e] : 1;
-                                    balloonCountPerColor.TryGetValue(ec, out int eb); balloonCountPerColor[ec] = eb + 1;
+                                    // ROLLBACK_BALANCE_GIMMICK_NOTBALLOON_20260626: Target Box 는 풍선이 아님 → B(풍선) 카운트 미포함(need/분해만).
                                     dartsNeededPerColor.TryGetValue(ec, out int ed); dartsNeededPerColor[ec] = ed + eh;
                                     AddGimHp(ec, "TargetBox", eh); // ROLLBACK_BALANCE_GIMMICK_BREAKDOWN_20260626: 알별 HP 분해
                                 }
@@ -4961,7 +5070,7 @@ namespace BalloonFlow
                             if (_balloonPinataW[c, r] == 0) continue; // config 없는 비앵커 박스 셀 스킵
                             int ac = _balloonColors[c, r];
                             int ah = _balloonGimmickHP[c, r] > 0 ? _balloonGimmickHP[c, r] : 2; // 폴백: 앵커색 단일 알
-                            balloonCountPerColor.TryGetValue(ac, out int ab); balloonCountPerColor[ac] = ab + 1;
+                            // ROLLBACK_BALANCE_GIMMICK_NOTBALLOON_20260626: Target Box 폴백도 B 카운트 미포함.
                             dartsNeededPerColor.TryGetValue(ac, out int ad); dartsNeededPerColor[ac] = ad + ah;
                             AddGimHp(ac, "TargetBox", ah); // ROLLBACK_BALANCE_GIMMICK_BREAKDOWN_20260626
                             continue;
@@ -4974,19 +5083,25 @@ namespace BalloonFlow
                             int grp = _balloonFlexTubeGroupId[c, r];
                             if (countedFlexTubeGroups.Contains(grp)) continue;
                             countedFlexTubeGroups.Add(grp);
-                            int maxHp = 0, cellCnt = 0, tubeColor = _balloonColors[c, r];
+                            // ROLLBACK_FLEXTUBE_2X2_PARTS_20260626: 각 파트가 2×2=4셀이라 raw cellCnt 는 파트수×4 로 부풀어
+                            //   런타임 auto-HP(=중간 파트 수)와 어긋난다. 폴백 HP 는 distinct seq(파트) 기준으로 센다.
+                            int maxHp = 0, tubeColor = _balloonColors[c, r];
+                            var ftSeqs = new System.Collections.Generic.HashSet<int>();
                             for (int cc = 0; cc < _gridCols; cc++)
                                 for (int rr = 0; rr < _gridRows; rr++)
                                     if (_balloonFlexTubeGroupId[cc, rr] == grp)
                                     {
-                                        cellCnt++;
                                         if (_balloonGimmickHP[cc, rr] > maxHp) maxHp = _balloonGimmickHP[cc, rr];
                                         if (_balloonColors[cc, rr] >= 0) tubeColor = _balloonColors[cc, rr];
+                                        int sq = _balloonFlexTubeSequenceIndex[cc, rr];
+                                        if (sq >= 0) ftSeqs.Add(sq);
                                     }
-                            int tubeHp = maxHp > 0 ? maxHp : Mathf.Max(1, cellCnt);
+                            // 런타임: HP = 작가 지정(maxHp>0) 아니면 segment 파트 수(전체 파트 - Head - Edge).
+                            int ftSegParts = Mathf.Max(1, ftSeqs.Count - 2);
+                            int tubeHp = maxHp > 0 ? maxHp : ftSegParts;
                             if (tubeColor >= 0)
                             {
-                                balloonCountPerColor.TryGetValue(tubeColor, out int tb); balloonCountPerColor[tubeColor] = tb + 1;
+                                // ROLLBACK_BALANCE_GIMMICK_NOTBALLOON_20260626: FlexTube 는 풍선이 아님 → B 카운트 미포함(need/분해만).
                                 dartsNeededPerColor.TryGetValue(tubeColor, out int td); dartsNeededPerColor[tubeColor] = td + tubeHp;
                                 AddGimHp(tubeColor, "FlexTube", tubeHp); // ROLLBACK_BALANCE_GIMMICK_BREAKDOWN_20260626
                             }
@@ -4994,12 +5109,23 @@ namespace BalloonFlow
                         }
 
                         // 사이즈 기믹 비앵커 셀(실제 풍선 아님) 스킵 — Pinata/Barricade/Wall
+                        // ROLLBACK_ICE_OVERLAY_UNDER_BALLOONS_20260626:
+                        // Ice is intentionally excluded from IsSizedFieldGimmick, so 2x2/3x3 Ice keeps
+                        // 4/9 real balloon cells for balance while only the visual overlay is merged.
                         bool isSizedFieldCell = gn.Length > 0 && IsSizedFieldGimmick(gn);
                         if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
 
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
-                        balloonCountPerColor.TryGetValue(ci, out int bcOld); balloonCountPerColor[ci] = bcOld + 1;
+                        // ROLLBACK_BALANCE_WOODEN_NOT_BALLOON_COUNT_20260628:
+                        // Wooden Box(Pinata) is a field gimmick layered on the board, not an extra
+                        // color balloon for the MapMaker "Balloons" total. Keep its HP in dart need
+                        // and breakdown, but do not make 200 yellow balloons display as 201B.
+                        if (gn != "Pinata")
+                        {
+                            balloonCountPerColor.TryGetValue(ci, out int bcOld);
+                            balloonCountPerColor[ci] = bcOld + 1;
+                        }
                         dartsNeededPerColor.TryGetValue(ci, out int dnOld); dartsNeededPerColor[ci] = dnOld + life;
 
                         // ROLLBACK_BALANCE_GIMMICK_BREAKDOWN_20260626: 색상별 기믹 분해 누적.
@@ -5176,8 +5302,12 @@ namespace BalloonFlow
                     if (_balloonColors[c, r] >= 0)
                     {
                         int gi = _balloonGimmicks[c, r];
-                        bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
-                            && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
+                        string autoGimmickName = (gi > 0 && gi < FIELD_GIMMICK_NAMES.Length) ? FIELD_GIMMICK_NAMES[gi] : "";
+                        // ROLLBACK_ICE_OVERLAY_UNDER_BALLOONS_20260626:
+                        // Ice 2x2/3x3 keeps the underlying 4/9 balloons, so AutoBalance must count those
+                        // cells. IsSizedFieldGimmick excludes Ice and this skip does not apply to it.
+                        bool isSizedFieldCell = autoGimmickName.Length > 0
+                            && IsSizedFieldGimmick(autoGimmickName);
                         bool countEggCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && FIELD_GIMMICK_NAMES[gi] == "Pinata_Box";
                         if (isSizedFieldCell && _balloonPinataW[c, r] == 0 && !countEggCell) continue;
                         int ci = _balloonColors[c, r];
@@ -7073,15 +7203,30 @@ namespace BalloonFlow
 
                         // Pinata_Box(Target Box): 알 config(anchor 별)를 복원. footprint 셀은 영역 표시용 uniform.
                         bool isTargetBox = normalizedGimmick == "Pinata_Box";
+                        // ROLLBACK_ICE_OVERLAY_UNDER_BALLOONS_20260626:
+                        // Older saved Ice may still have sizeW/sizeH on one anchor. Migrate it back to
+                        // real 1x1 underlying balloon cells; runtime renders one overlay by iceBlockSize.
                         bool isSizedIceLoad = normalizedGimmick == "Ice" && (bpw > 1 || bph > 1);
                         if (isSizedIceLoad)
                         {
-                            // ROLLBACK_ICE_CELL_BRUSH_20260609:
-                            // Old anchor-sized Ice becomes a normal 1x1 Ice cell on the anchor too.
-                            _balloonPinataW[col, row] = 1;
-                            _balloonPinataH[col, row] = 1;
+                            int blockSize = Mathf.Max(bpw, bph, b.iceBlockSize > 0 ? b.iceBlockSize : 1);
+                            for (int dx = 0; dx < bpw; dx++)
+                                for (int dy = 0; dy < bph; dy++)
+                                {
+                                    int cx = col + dx, cy = row + dy;
+                                    if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
+                                    _balloonColors[cx, cy] = b.color;
+                                    _balloonGimmicks[cx, cy] = gi;
+                                    _balloonGimmickHP[cx, cy] = b.hp > 0 ? b.hp : 2;
+                                    _balloonPinataW[cx, cy] = 1;
+                                    _balloonPinataH[cx, cy] = 1;
+                                    _balloonIceBlockSize[cx, cy] = blockSize;
+                                    _balloonIceGroupId[cx, cy] = b.iceGroupId;
+                                    _balloonIceGroupHp[cx, cy] = b.iceGroupHp;
+                                    _balloonIceGroupHpMode[cx, cy] = b.iceGroupHpMode == 2 ? 2 : 1;
+                                }
                         }
-                        if (isTargetBox)
+                        else if (isTargetBox)
                         {
                             if (b.eggColors != null && b.eggColors.Length > 0)
                             {
@@ -7119,17 +7264,6 @@ namespace BalloonFlow
                                         _balloonGimmickHP[cx, cy] = b.hp > 0 ? b.hp : 2;
                                         _balloonPinataW[cx, cy] = 0; // 비앵커 표시
                                         _balloonPinataH[cx, cy] = 0;
-                                        if (isSizedIceLoad)
-                                        {
-                                            // ROLLBACK_ICE_CELL_BRUSH_20260609:
-                                            // Migrate old anchor-sized Ice into real 1x1 Ice cells on load.
-                                            _balloonPinataW[cx, cy] = 1;
-                                            _balloonPinataH[cx, cy] = 1;
-                                            _balloonIceBlockSize[cx, cy] = Mathf.Max(1, b.iceBlockSize);
-                                            _balloonIceGroupId[cx, cy] = b.iceGroupId;
-                                            _balloonIceGroupHp[cx, cy] = b.iceGroupHp;
-                                            _balloonIceGroupHpMode[cx, cy] = b.iceGroupHpMode == 2 ? 2 : 1;
-                                        }
                                     }
                                 }
                         }
@@ -8073,27 +8207,59 @@ namespace BalloonFlow
                     SetStatus($"FlexTube G{gid}: incomplete ({cells.Count} cells)");
                     continue;
                 }
-                // sequenceIndex 가 0..N-1 연속이어야 함
+                // ROLLBACK_FLEXTUBE_2THICK_VALIDATION_20260626:
+                // FlexTube is now authored as a footprint: straight sections can have row-A/row-B
+                // with the same seq, and corners can have a 2x2 set for one seq. Validate the
+                // continuous unique sequence range instead of requiring exactly one cell per seq.
                 cells.Sort((a, b) => a.seq.CompareTo(b.seq));
-                bool seqOK = true;
+                int highestSeq = -1;
                 for (int i = 0; i < cells.Count; i++)
+                    if (cells[i].seq > highestSeq) highestSeq = cells[i].seq;
+
+                bool seqOK = highestSeq >= 0;
+                bool[] seenSeq = seqOK ? new bool[highestSeq + 1] : System.Array.Empty<bool>();
+                for (int i = 0; i < cells.Count && seqOK; i++)
                 {
-                    if (cells[i].seq != i) { seqOK = false; break; }
+                    int cellSeq = cells[i].seq;
+                    if (cellSeq < 0 || cellSeq > highestSeq)
+                    {
+                        seqOK = false;
+                        break;
+                    }
+                    seenSeq[cellSeq] = true;
                 }
+                for (int cellSeq = 0; cellSeq <= highestSeq && seqOK; cellSeq++)
+                    if (!seenSeq[cellSeq]) seqOK = false;
                 if (!seqOK)
                 {
                     Debug.LogWarning($"[MapMaker:FlexTube] Group {gid}: sequenceIndex 불연속 — paint 순서 손상");
                     SetStatus($"FlexTube G{gid}: sequence broken");
                 }
-                // 인접성 검증 — sequenceIndex i, i+1 이 4-방향(상하좌우) 인접해야 함
-                for (int i = 0; i < cells.Count - 1; i++)
+                // ROLLBACK_FLEXTUBE_2THICK_VALIDATION_20260626:
+                // Consecutive logical seqs are connected if any cell in seq N touches any
+                // cell in seq N+1. This supports two-thick tubes and 2x2 corner footprints.
+                for (int seqIndex = 0; seqIndex < highestSeq; seqIndex++)
                 {
-                    int dx = Mathf.Abs(cells[i + 1].c - cells[i].c);
-                    int dy = Mathf.Abs(cells[i + 1].r - cells[i].r);
-                    if (dx + dy != 1)
+                    bool connected = false;
+                    for (int ai = 0; ai < cells.Count && !connected; ai++)
                     {
-                        Debug.LogWarning($"[MapMaker:FlexTube] Group {gid}: seq {i}↔{i + 1} 셀 끊김 ({cells[i].c},{cells[i].r}) → ({cells[i + 1].c},{cells[i + 1].r})");
-                        SetStatus($"FlexTube G{gid}: cells disconnected at seq {i}→{i + 1}");
+                        if (cells[ai].seq != seqIndex) continue;
+                        for (int bi = 0; bi < cells.Count; bi++)
+                        {
+                            if (cells[bi].seq != seqIndex + 1) continue;
+                            int cellDx = Mathf.Abs(cells[bi].c - cells[ai].c);
+                            int cellDy = Mathf.Abs(cells[bi].r - cells[ai].r);
+                            if (cellDx + cellDy == 1)
+                            {
+                                connected = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!connected)
+                    {
+                        Debug.LogWarning($"[MapMaker:FlexTube] Group {gid}: seq {seqIndex} and {seqIndex + 1} are disconnected");
+                        SetStatus($"FlexTube G{gid}: cells disconnected at seq {seqIndex}-{seqIndex + 1}");
                     }
                 }
                 // 색상 일관성 — 그룹 내 모든 셀이 같은 색이어야 함

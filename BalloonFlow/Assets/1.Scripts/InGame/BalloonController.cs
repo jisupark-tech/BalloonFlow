@@ -111,19 +111,42 @@ namespace BalloonFlow
         // Rib SPACING/density factor (NOT size — size is fixed to the grid cell). pitch = gridCell /
         // this, so rings are spaced a bit under one cell and overlap slightly → never separate.
         // 1.0 = one ring per cell butt-joined; higher = denser/more overlap. Visual-only.
-        private const float FLEXTUBE_SEGMENT_SEAM_OVERLAP = 1.1f;
+        private const float FLEXTUBE_SEGMENT_SEAM_OVERLAP = 1.0f;
+        // ROLLBACK_FLEXTUBE_RIB_LENGTH_OVERLAP_20260626: 리브 렌더 LENGTH 를 pitch 보다 길게(겹치게) 만드는 배수.
+        //   기존엔 rib 길이=pitch(butt-join)라 메시 끝 여백/주름 neck 때문에 리브 사이에 틈이 보였다(사진의 끊긴 원통들).
+        //   1.0=정확히 맞닿음(틈 위험), >1=겹침. (시각만; pitch/타게팅 무관.)
+        // ROLLBACK_FLEXTUBE_RIB_OVERLAP_RAISE_20260628: 디스크 메시 가시부가 bounds(z=0.294)보다 짧아(끝 여백)
+        //   1.15 로는 직선부가 여러 통(barrel)으로 끊겨 보임. 가시부가 확실히 겹치도록 1.6 으로 올림.
+        private const float FLEXTUBE_RIB_LENGTH_OVERLAP = 1.6f;
         // ROLLBACK_FLEXTUBE_NONUNIFORM_PER_CELL_20260624:
         // SEGMENT DENSITY = segment LENGTH as a fraction of one grid cell (ringWorldSize = gridCell × this).
         // SMALLER = more segments per cell = finer ribbing = reads as a CONTINUOUS tube. The Hose_Segment
         // mesh has a built-in neck→bulge→neck shape; packing them tight makes the necks sub-visual. Too
         // large (1.0 = one long segment/cell) stretches each neck into a visible gap ("A....A"). ~0.2 ≈ 5
         // ribs/cell. Length(z) is pitch-locked (uniform size, no beat); diameter(x,y) is fixed separately.
-        private const float FLEXTUBE_RIB_SIZE_SCALE = 0.2f;
+        // ROLLBACK_FLEXTUBE_FEWER_RIBS_20260626: 셀당 3개(1/3) 불필요 — 디자이너가 더 적어도 된다고 함.
+        //   1/2 = 셀당 ~2개로 줄여 과한 촘촘함 완화. (얇아진 몸통이라 코너 facet 부담도 작음.) 더 줄이려면 값 키움.
+        private const float FLEXTUBE_RIB_SIZE_SCALE = 1f / 2f;
         // ROLLBACK_FLEXTUBE_NONUNIFORM_PER_CELL_20260624:
         // Tube DIAMETER as a fraction of one grid cell. Decoupled from segment length (non-uniform scale),
         // so the pipe keeps a constant thickness while one segment spans one cell. ~0.85 ≈ the previous
         // visual thickness; lower = thinner pipe, higher = fatter. Visual-only.
-        private const float FLEXTUBE_TUBE_DIAMETER_FRAC = 0.85f;
+        // ROLLBACK_FLEXTUBE_2THICK_20260626: Barricade 처럼 2줄 두께 — centerline 은 row-A/row-B 짝의 중점이라
+        //   메시 지름을 ~2칸으로 키워 두 줄을 시각적으로 덮는다. (0.85 → 1.8)
+        // ROLLBACK_FLEXTUBE_SLIM_BODY_20260626: 몸통(Segment) 지름을 2×2 의 둥근 튜브로. 캡(2×2)은 끝 피팅으로
+        //   2칸 두께 유지. "서로 끊김 없이 + 모서리에서도 부드럽게" — 얇을수록 코너 외곽 facet 이 작아 매끈.
+        // ROLLBACK_FLEXTUBE_BODY_PLUS20_20260626: 1.0 이 너무 얇다는 피드백 → 20% 증가(1.0→1.2).
+        private const float FLEXTUBE_TUBE_DIAMETER_FRAC = 1.2f;
+        // ROLLBACK_FLEXTUBE_CAP_2X_SIZE_20260626:
+        // Head/Edge caps should read as 2x2, but segments should not become huge. Scale caps
+        // against their own mesh width with this larger target, while segments use the slimmer
+        // FLEXTUBE_TUBE_DIAMETER_FRAC above.
+        private const float FLEXTUBE_CAP_DIAMETER_FRAC = 2.0f;
+        // ROLLBACK_FLEXTUBE_CAP_LENGTH_1CELL_20260626:
+        // 캡(Head/Edge)의 경로 방향 LENGTH = ~1 그리드 셀(자기 논리 셀 하나). 이전 코드가 길이축(z)에
+        // FLEXTUBE_CAP_DIAMETER_FRAC(=2) — '지름' 상수 — 을 곱해 캡을 2칸 길이로 늘여, Head 가 seq1 Segment 를
+        // 시각적으로 먹고 Edge 가 몸통을 침범했다. 지름(x,y)은 CAP_DIAMETER_FRAC(2칸 너비) 유지, 길이(z)만 1칸.
+        private const float FLEXTUBE_CAP_LENGTH_FRAC = 1.0f;
         // ROLLBACK_FLEXTUBE_NONUNIFORM_PER_CELL_20260624:
         // How far the segment tiling extends INTO each cap (as a fraction of that cap's scaled length), so
         // the segment row bridges right up to / slightly under the cap instead of stopping short → removes
@@ -509,6 +532,9 @@ namespace BalloonFlow
 
             foreach (BalloonSetupData entry in layout)
             {
+                // ROLLBACK_ICE_OVERLAY_UNDER_BALLOONS_20260626:
+                // Legacy authored Ice may still arrive as one sizeW/sizeH anchor. Split it into
+                // real underlying balloons; ApplyInitialIceState renders one region overlay.
                 if (TrySpawnSizedIceAsCellBrush(entry))
                     continue;
 
@@ -1090,10 +1116,31 @@ namespace BalloonFlow
             if (data.gimmickType == GimmickFlexTube)
             {
                 if (data.color != color) return 0;
-                return GimmickIdentifier.FlexTubePartFromString(data.flexTubePartType) == GimmickIdentifier.FlexTubePart.Segment ? 1 : 0;
+                if (GimmickIdentifier.FlexTubePartFromString(data.flexTubePartType) != GimmickIdentifier.FlexTubePart.Segment)
+                    return 0;
+                // ROLLBACK_FLEXTUBE_2X2_PARTS_20260626: 한 Segment 파트(seq)는 2×2 = 4셀이지만 튜브 HP/타격은
+                //   파트 단위(HP = 중간 파트 수). zap 도 파트당 1회만 세야 함 — 안 그러면 4셀×= HP 의 4배 타겟이
+                //   생겨 부스터 다트가 이미 죽은 튜브에 낭비된다. 그룹+seq 의 대표(최소 balloonId) 셀에서만 1 반환.
+                return IsFlexTubeSeqRepresentative(data) ? 1 : 0;
             }
 
             return data.color == color ? 1 : 0;
+        }
+
+        /// <summary>같은 group+seq 의 살아있는 FlexTube 셀 중 최소 balloonId 면 true — 파트(2×2) 당 1회 집계용.</summary>
+        private bool IsFlexTubeSeqRepresentative(BalloonData data)
+        {
+            int g = data.flexTubeGroupId, s = data.flexTubeSequenceIndex;
+            if (g < 0) return true;
+            int minId = data.balloonId;
+            foreach (var kv in _balloons)
+            {
+                BalloonData c = kv.Value;
+                if (c == null || c.isPopped || c.gimmickType != GimmickFlexTube) continue;
+                if (c.flexTubeGroupId == g && c.flexTubeSequenceIndex == s && c.balloonId < minId)
+                    minId = c.balloonId;
+            }
+            return minId == data.balloonId;
         }
 
         public bool TryApplyZapColorHit(int balloonId, int color)
@@ -1510,6 +1557,52 @@ namespace BalloonFlow
             if (!_balloons.TryGetValue(balloonId, out BalloonData data)) return;
             if (data.gimmickType != GimmickFlexTube) return;
             if (data.isPopped) return;
+
+            // ROLLBACK_FLEXTUBE_SEQ_FOOTPRINT_INACTIVE_20260626:
+            // A visible FlexTube part can represent a 2-cell-thick footprint, and a corner can
+            // occupy a 2x2 footprint. When one logical seq is depleted, every cell in the same
+            // group+seq must leave the targeting cache together. Otherwise row-B/corner cells stay
+            // attackable and the exposed edge does not shrink with HP.
+            int groupId = data.flexTubeGroupId;
+            int seq = data.flexTubeSequenceIndex;
+            var idsToDeactivate = new List<int>();
+            foreach (var kv in _balloons)
+            {
+                BalloonData candidate = kv.Value;
+                if (candidate.gimmickType != GimmickFlexTube || candidate.isPopped) continue;
+                if (candidate.flexTubeGroupId == groupId && candidate.flexTubeSequenceIndex == seq)
+                    idsToDeactivate.Add(kv.Key);
+            }
+
+            if (idsToDeactivate.Count > 0)
+            {
+                for (int i = 0; i < idsToDeactivate.Count; i++)
+                {
+                    int id = idsToDeactivate[i];
+                    if (!_balloons.TryGetValue(id, out BalloonData cellData)) continue;
+                    if (cellData.gimmickType != GimmickFlexTube || cellData.isPopped) continue;
+
+                    cellData.isPopped = true;
+                    _balloons[id] = cellData;
+                    _frameCachedPositions.Remove(id);
+
+                    Vector3Int? keyToRemoveForCell = null;
+                    foreach (var indexKv in _positionIndex)
+                    {
+                        if (indexKv.Value == id) { keyToRemoveForCell = indexKv.Key; break; }
+                    }
+                    if (keyToRemoveForCell.HasValue) _positionIndex.Remove(keyToRemoveForCell.Value);
+
+                    if (DartManager.HasInstance)
+                        DartManager.Instance.NotifySilentCellRemoved(GetAdjustedBoardPosition(cellData.position));
+                }
+
+                DirectionalTargeting.InvalidateCache();
+                if (BoardStateManager.HasInstance)
+                    BoardStateManager.Instance.InvalidateOutermostCache();
+                return;
+            }
+
             data.isPopped = true;
             _balloons[balloonId] = data;
             // _balloonObjects 는 유지 — PopBalloonWithDart FlexTube 분기가 stale target 일 때도 IDartHittable 위임 가능하게.
@@ -1740,9 +1833,9 @@ namespace BalloonFlow
             if (normalized != GimmickIce || (width <= 1 && height <= 1))
                 return false;
 
-            // ROLLBACK_ICE_CELL_BRUSH_20260609:
-            // Legacy levels may still contain one Ice layout with sizeW/sizeH > 1. Ice size is a
-            // brush footprint, not one scaled object, so split it into real 1x1 Ice cells at load.
+            // ROLLBACK_ICE_OVERLAY_UNDER_BALLOONS_20260626:
+            // Ice looks like one object, but the balloons under it must remain real cells:
+            // 2x2 = 4 balloons, 3x3 = 9 balloons. Visual merging happens later by region overlay.
             float spacing = _cellSpacing > 0.0001f ? _cellSpacing : 0.55f;
             for (int dx = 0; dx < width; dx++)
             {
@@ -2113,6 +2206,14 @@ namespace BalloonFlow
                 startCapMeshZ = msc;
             if (TryGetLocalProjectedRendererLength(endCapPrefab.transform, Vector3.forward, out float mec) && mec > 0.0001f)
                 endCapMeshZ = mec;
+            // ROLLBACK_FLEXTUBE_CAP_2X_SIZE_20260626:
+            // Cap meshes can have a different authored width than the rib segment. Measuring cap width
+            // separately prevents a 2x2 Head from rendering like a 1x1 cap.
+            float startCapMeshX = segMeshX, endCapMeshX = segMeshX;
+            if (TryGetLocalProjectedRendererLength(startCapPrefab.transform, Vector3.right, out float mscX) && mscX > 0.0001f)
+                startCapMeshX = mscX;
+            if (TryGetLocalProjectedRendererLength(endCapPrefab.transform, Vector3.right, out float mecX) && mecX > 0.0001f)
+                endCapMeshX = mecX;
             // [FlexTube-DIAG] mesh shape — renderer count + local bounds reveal whether one Segment is
             // a single ring or a multi-ring/graduated section (would explain interleaved big/small).
             var segRenderers = segmentPrefab.GetComponentsInChildren<Renderer>(true);
@@ -2164,8 +2265,24 @@ namespace BalloonFlow
 
                 // 다른 모든 필드 요소와 동일 좌표계로 정렬 — raw position 을 보드 보정(GetAdjustedBoardPosition)에 통과.
                 // 누락 시 보드가 스케일/오프셋된 레벨에서 튜브가 셀 그리드를 벗어남(캡 미정렬 포함).
+                // ROLLBACK_FLEXTUBE_2THICK_20260626: 2줄 두께 — 같은 flexTubeSequenceIndex 짝(row-A/row-B)을
+                //   centerline 한 점으로 평균(중점). ids 는 seq 정렬이라 같은 seq 가 연속 → 묶어서 평균.
+                //   (1줄 튜브는 seq 가 모두 유일 → 1:1 그대로.) 이후 rib/cap/Bezier 파이프라인은 centerline 기준이라 무변경.
                 var cellPositions = new List<Vector3>(ids.Count);
-                foreach (var id in ids) cellPositions.Add(GetAdjustedBoardPosition(_balloons[id].position));
+                // ROLLBACK_FLEXTUBE_2THICK_INDEXFIX_20260626: averaging 으로 cellPositions(seq당 1점)가 ids(2줄=2배)보다
+                //   짧아진다. 이후 모든 인덱스/캡·rib cellId 매핑은 ids 가 아니라 이 seqIds(seq당 대표 cell)·cellPositions.Count
+                //   기준이어야 한다(안 그러면 ids.Count 로 돌다 cellPositions[k] 범위 초과 → ArgumentOutOfRangeException).
+                var seqIds = new List<int>(ids.Count);
+                for (int fi = 0; fi < ids.Count; )
+                {
+                    int sq = _balloons[ids[fi]].flexTubeSequenceIndex;
+                    int repId = ids[fi]; // 이 seq 의 대표 cell(첫 셀)
+                    Vector3 sum = Vector3.zero; int cnt = 0;
+                    while (fi < ids.Count && _balloons[ids[fi]].flexTubeSequenceIndex == sq)
+                    { sum += GetAdjustedBoardPosition(_balloons[ids[fi]].position); cnt++; fi++; }
+                    cellPositions.Add(sum / cnt);
+                    seqIds.Add(repId);
+                }
 
                 int groupColor = _balloons[ids[0]].color;
                 int colorIdx = Mathf.Clamp(groupColor, 0, BalloonColors.Length - 1);
@@ -2174,7 +2291,9 @@ namespace BalloonFlow
                 //   N = round(셀거리 / 자연 rib 길이) 로 계산한다(자연 크기 rib 를 겹침/틈 없이 타일 → 연속 주름관).
                 //   이 값(3)은 parts List 용량 추정 힌트로만 남는다(과/소추정 무해 — List 가 알아서 grow).
                 int visualSegmentsPerCell = 3;
-                int segmentCellCount = Mathf.Max(0, ids.Count - 2);
+                // ROLLBACK_FLEXTUBE_2THICK_20260626: 2줄 두께라도 centerline 은 평균된 cellPositions 기준 → ids.Count(2배) 대신
+                //   cellPositions.Count 사용. rib 용량·auto-HP(셀수−2)가 자동으로 1줄 기준값 유지(난이도 불변).
+                int segmentCellCount = Mathf.Max(0, cellPositions.Count - 2);
 
                 // parts list 용량 = 2 Cap + (cells - 2) × N visual segment (rough hint)
                 int partsCapacity = 2 + segmentCellCount * visualSegmentsPerCell;
@@ -2207,6 +2326,8 @@ namespace BalloonFlow
                 float ribPitchTarget = ringWorldSize / FLEXTUBE_SEGMENT_SEAM_OVERLAP;    // density target → rib COUNT only
                 // diameter (x,y) scale — decoupled from length so the tube thickness is constant.
                 float ribDiameterScale = (tubeGridCell * FLEXTUBE_TUBE_DIAMETER_FRAC) / Mathf.Max(0.0001f, segMeshX);
+                float startCapDiameterScale = (tubeGridCell * FLEXTUBE_CAP_DIAMETER_FRAC) / Mathf.Max(0.0001f, startCapMeshX);
+                float endCapDiameterScale = (tubeGridCell * FLEXTUBE_CAP_DIAMETER_FRAC) / Mathf.Max(0.0001f, endCapMeshX);
 
                 // ROLLBACK_FLEXTUBE_CONTINUOUS_PATH_TILING_20260624:
                 // Root cause of the irregular big/small/big rhythm: ribs were placed in PER-CELL
@@ -2217,11 +2338,12 @@ namespace BalloonFlow
                 // never reached the EndCap (the gap the report shows). Fix: ignore cell boundaries
                 // and tile ribs at ONE uniform pitch along the whole cap-to-cap path. Every rib is
                 // identical and evenly spaced; HP/targeting still map each rib to its nearest cell.
-                int lastIdx = ids.Count - 1;
+                // ROLLBACK_FLEXTUBE_2THICK_INDEXFIX_20260626: centerline(cellPositions) 기준 — ids.Count(2배) 금지.
+                int lastIdx = cellPositions.Count - 1;
 
                 // cumulative arc length along the cell-center polyline (handles ㄴ/ㄷ/ㄹ bends)
-                var cumArc = new List<float>(ids.Count) { 0f };
-                for (int k = 1; k < ids.Count; k++)
+                var cumArc = new List<float>(cellPositions.Count) { 0f };
+                for (int k = 1; k < cellPositions.Count; k++)
                     cumArc.Add(cumArc[k - 1] + Vector3.Distance(cellPositions[k - 1], cellPositions[k]));
                 float pathTotal = cumArc[lastIdx];
 
@@ -2271,28 +2393,65 @@ namespace BalloonFlow
                 // Extend ~one rib-width into each cap (caps are z-matched to one rib, so this reaches the
                 // cap's outer edge without poking past it) → fills the cap↔segment junction with a segment.
                 float capBridge = ribPitchTarget * FLEXTUBE_CAP_SEGMENT_BRIDGE;
-                float startInset = cumArc[1] * FLEXTUBE_ENDCAP_CONNECTOR_INSET;
+                // ROLLBACK_FLEXTUBE_HEAD2X2_20260626: head(StartCap)를 경로 첫 2칸(seq0+seq1)으로 = 2칸 길이 × 2줄 두께 = 2×2.
+                //   centerline 점이 3개 이상일 때만(head 2칸 + tail 1칸 최소). 미만이면 기존 1칸 head 폴백(짧은 튜브 안전).
+                // ROLLBACK_FLEXTUBE_INPUT_ORDER_20260626:
+                // MapMaker input order is seq0=Head, seq1..max-1=Segment, max=Edge.
+                // Do not consume seq1 as part of the Head; the Head is visually 2x via cap scale below.
+                bool head2 = false;
+                // head2 면 body(rib)는 cell1 '다음'(cell1↔cell2 사이)에서 시작 → 2칸 head 와 겹치지 않음.
+                float startInset = head2
+                    ? cumArc[1] + (cumArc[2] - cumArc[1]) * FLEXTUBE_ENDCAP_CONNECTOR_INSET
+                    : cumArc[1] * FLEXTUBE_ENDCAP_CONNECTOR_INSET;
                 float endInset   = pathTotal - (pathTotal - cumArc[lastIdx - 1]) * FLEXTUBE_ENDCAP_CONNECTOR_INSET;
                 float startArc = Mathf.Max(0f, startInset - capBridge);
                 float endArc   = Mathf.Min(pathTotal, endInset + capBridge);
                 float ribSpan  = Mathf.Max(0.0001f, endArc - startArc);
                 int ribCount = (segmentCellCount >= 1) ? Mathf.Max(1, Mathf.RoundToInt(ribSpan / ribPitchTarget)) : 0;
                 float actualPitch = (ribCount > 0) ? ribSpan / ribCount : ribPitchTarget;
-                float zScale = actualPitch / Mathf.Max(0.0001f, segMeshZ);
+                // ROLLBACK_FLEXTUBE_RIB_LENGTH_OVERLAP_20260626: 리브 배치 간격은 actualPitch 그대로지만, 렌더 길이는
+                //   pitch×OVERLAP 로 늘려 이웃 리브와 겹치게 한다 → 메시 끝 여백/neck 으로 생기던 틈 제거(직선·곡선 공통).
+                float zScale = (actualPitch * FLEXTUBE_RIB_LENGTH_OVERLAP) / Mathf.Max(0.0001f, segMeshZ);
                 ringScale = zScale; // 진단 로그용
                 Vector3 ribScale = new Vector3(ribDiameterScale, ribDiameterScale, zScale);
-                Vector3 startCapScale = new Vector3(ribDiameterScale, ribDiameterScale, actualPitch / Mathf.Max(0.0001f, startCapMeshZ));
-                Vector3 endCapScale   = new Vector3(ribDiameterScale, ribDiameterScale, actualPitch / Mathf.Max(0.0001f, endCapMeshZ));
+                Vector3 startCapScale = new Vector3(startCapDiameterScale, startCapDiameterScale, actualPitch / Mathf.Max(0.0001f, startCapMeshZ));
+                Vector3 endCapScale   = new Vector3(endCapDiameterScale, endCapDiameterScale, actualPitch / Mathf.Max(0.0001f, endCapMeshZ));
 
                 // --- StartCap (logical cell 0) ---
-                Vector3 startCapPos = cellPositions[0];
-                Vector3 startToNext = cellPositions[1] - cellPositions[0]; startToNext.y = 0f;
-                if (startToNext.sqrMagnitude > 0.0001f)
-                    startCapPos += startToNext.normalized * (startToNext.magnitude * FLEXTUBE_ENDCAP_CONNECTOR_INSET);
+                Vector3 startCapPos;
                 Quaternion startCapRot = CalculateFlexTubePartRotation(cellPositions, 0) * extraRot;
+                if (head2)
+                {
+                    // ROLLBACK_FLEXTUBE_HEAD2X2_20260626: head 가 cell0→cell1 2칸을 덮도록 — 중점에 두고 길이(z)를
+                    //   [0]→[1] 거리 + bridge 로 확장(중심 pivot 이라 양쪽으로 뻗음). 두께(x,y=diameter 1.8)는 이미 2줄.
+                    Vector3 headCenter = (cellPositions[0] + cellPositions[1]) * 0.5f;
+                    Vector3 headDir = cellPositions[1] - cellPositions[0]; headDir.y = 0f;
+                    float headLen = cumArc[1] + capBridge;
+                    startCapPos = headCenter + (headDir.sqrMagnitude > 0.0001f ? headDir.normalized * (capBridge * 0.5f) : Vector3.zero);
+                    startCapScale = new Vector3(startCapDiameterScale, startCapDiameterScale, headLen / Mathf.Max(0.0001f, startCapMeshZ));
+                }
+                else
+                {
+                    // ROLLBACK_FLEXTUBE_CAP_LENGTH_1CELL_20260626: Head 는 첫 클릭 칸(seq0)에 그대로 앉는다.
+                    //   이전엔 INSET 0.5 로 seq0/seq1 경계까지 당겨져, 1칸 길이여도 seq1 절반을 덮었다(=Segment 먹음).
+                    //   셀 중심에 두면 [seq0±0.5] 만 차지하고, 리브는 capBridge 로 겹쳐 시작해 틈 없이 이어진다.
+                    startCapPos = cellPositions[0];
+                }
+                // ROLLBACK_FLEXTUBE_CAP_UNIFORM_SCALE_20260628:
+                // 캡을 균일 스케일(x=y=z=diameterScale)로 — 메시 비율 보존. 이전엔 길이(z)를 2칸으로 강제했는데,
+                // StartCap(메시 z≈0.87)과 EndCap(z≈0.227) 자연 길이가 크게 달라 EndCap 이 4.19배로 늘어나 찌그러졌다
+                // (Head/Edge 모양이 서로 다른 '이상함'의 원인). 균일 스케일이면 둘 다 2칸 너비 + 왜곡 없는 자기 모양.
+                startCapScale = new Vector3(startCapDiameterScale, startCapDiameterScale, startCapDiameterScale);
                 var startCapPart = SpawnFlexPart(startCapPrefab, startCapPos, startCapRot,
                                                  true, startCapScale, GimmickIdentifier.FlexTubePart.StartCap, ids[0]);
-                if (startCapPart != null) _balloonObjects[ids[0]] = startCapPart.gameObject;
+                if (startCapPart != null)
+                {
+                    // ROLLBACK_FLEXTUBE_CAP_RECENTER_WORLDBOUNDS_20260626: 캡 메시 pivot 이 끝/모서리라 위치만으론
+                    //   2×2 중심에 안 옴(클릭 셀에 쏠림). 스폰 후 실제 월드 renderer bounds 중심을 4셀 중심(cellPositions[0])에
+                    //   맞춰 평행이동 → pivot/메시 형태와 무관하게 geometry 가 2×2 정중앙에 앉는다.
+                    RecenterToWorldBounds(startCapPart.gameObject, cellPositions[0]);
+                    _balloonObjects[ids[0]] = startCapPart.gameObject;
+                }
 
                 // --- Ribs: uniform tiling across the cap-bridged span ---
                 var nearestRibSqr = new Dictionary<int, float>();
@@ -2316,7 +2475,7 @@ namespace BalloonFlow
                             float dc = (cellPositions[c] - ribPos).sqrMagnitude;
                             if (dc < nearestSqr) { nearestSqr = dc; nearestSeq = c; }
                         }
-                        int ribCellId = ids[nearestSeq];
+                        int ribCellId = seqIds[nearestSeq]; // ROLLBACK_FLEXTUBE_2THICK_INDEXFIX_20260626: centerline seq → 대표 cell
 
                         var ribPart = SpawnFlexPart(segmentPrefab, ribPos, ribRot,
                                                     true, ribScale, GimmickIdentifier.FlexTubePart.Segment, ribCellId);
@@ -2343,16 +2502,31 @@ namespace BalloonFlow
                 } // segmentCellCount >= 1
 
                 // --- EndCap (logical cell last) ---
+                // ROLLBACK_FLEXTUBE_CAP_LENGTH_1CELL_20260626: Edge 는 '마지막으로 찍은 칸'에 그대로 앉아야 한다.
+                //   INSET 0.5 로 당기면 마지막 셀이 아닌 last-1/last 경계에 앉아 "마지막 칸이 Edge" 의도와 어긋났다.
                 Vector3 endCapPos = cellPositions[lastIdx];
-                Vector3 endToPrev = cellPositions[lastIdx - 1] - cellPositions[lastIdx]; endToPrev.y = 0f;
-                if (endToPrev.sqrMagnitude > 0.0001f)
-                    endCapPos += endToPrev.normalized * (endToPrev.magnitude * FLEXTUBE_ENDCAP_CONNECTOR_INSET);
                 Quaternion endCapRot = CalculateFlexTubePartRotation(cellPositions, lastIdx) * extraRot;
+                // ROLLBACK_FLEXTUBE_CAP_UNIFORM_SCALE_20260628: Edge 도 균일 스케일 — 메시 비율 보존(4.19배 늘림 제거).
+                endCapScale = new Vector3(endCapDiameterScale, endCapDiameterScale, endCapDiameterScale);
                 var endCapPart = SpawnFlexPart(endCapPrefab, endCapPos, endCapRot,
-                                               true, endCapScale, GimmickIdentifier.FlexTubePart.EndCap, ids[lastIdx]);
-                if (endCapPart != null) _balloonObjects[ids[lastIdx]] = endCapPart.gameObject;
+                                               true, endCapScale, GimmickIdentifier.FlexTubePart.EndCap, seqIds[lastIdx]); // ROLLBACK_FLEXTUBE_2THICK_INDEXFIX_20260626
+                if (endCapPart != null)
+                {
+                    // ROLLBACK_FLEXTUBE_CAP_RECENTER_WORLDBOUNDS_20260626: Edge 도 실제 월드 bounds 중심을 마지막 4셀 중심에 맞춤.
+                    RecenterToWorldBounds(endCapPart.gameObject, cellPositions[lastIdx]);
+                    _balloonObjects[seqIds[lastIdx]] = endCapPart.gameObject;
+                }
 
                 Debug.Log($"[FlexTube] Group {groupId}: ribs={ribCount + 1} pitch={actualPitch:F3} ringScale={ringScale:F3} gridCell={tubeGridCell:F3} ringSize(=cell/3)={ringWorldSize:F3} subCellSpacing={globalCellLength:F3} cells={ids.Count}");
+                // [FlexTube-DIAG CAP] Head/Edge 최종 월드 pos·rot + 경로 방향 — 세로 튜브 캡 이상 진단용.
+                if (startCapPart != null && endCapPart != null)
+                {
+                    Vector3 dir0 = (cellPositions.Count > 1) ? (cellPositions[1] - cellPositions[0]) : Vector3.zero;
+                    bool vertical = Mathf.Abs(dir0.z) >= Mathf.Abs(dir0.x);
+                    Debug.Log($"[FlexTube-DIAG CAP] G{groupId} {(vertical ? "VERTICAL" : "HORIZONTAL")} dir0=({dir0.x:F2},{dir0.z:F2}) | "
+                        + $"HEAD target={cellPositions[0]:F2} pos={startCapPart.transform.position:F2} rotY={startCapPart.transform.eulerAngles.y:F1} scale={startCapPart.transform.localScale:F2} | "
+                        + $"EDGE target={cellPositions[lastIdx]:F2} pos={endCapPart.transform.position:F2} rotY={endCapPart.transform.eulerAngles.y:F1} scale={endCapPart.transform.localScale:F2} | extraY={tube.ExtraYRotation:F1}");
+                }
 
                 // HP — 작가 지정(flexTubeHp>0)이면 그 값, 아니면 segment cell 수(튜브 길이)로 자동.
                 //  • 자동: cell 당 1히트(기존 동작).
@@ -2566,6 +2740,54 @@ namespace BalloonFlow
             return length > 0.0001f;
         }
 
+        /// <summary>스폰된 오브젝트의 visible geometry(월드) 중심이 targetCenter 에 오도록 평행이동.
+        /// pivot/메시 형태와 무관하게 2×2 4셀 중심에 정확히 앉힌다.
+        /// renderer.bounds 는 Instantiate 직후 프레임 타이밍에 따라 stale 일 수 있어, MeshFilter.sharedMesh.bounds
+        /// (메시 로컬, 항상 유효)를 각 renderer 의 localToWorld 로 변환해 결정적으로 계산한다.</summary>
+        private static void RecenterToWorldBounds(GameObject obj, Vector3 targetCenter)
+        {
+            if (obj == null) return;
+            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>(true);
+            if (renderers == null || renderers.Length == 0) return;
+
+            Vector3 min = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+            Vector3 max = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+            bool hasBounds = false;
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null) continue;
+
+                var mf = renderer.GetComponent<MeshFilter>();
+                if (mf != null && mf.sharedMesh != null)
+                {
+                    Bounds lb = mf.sharedMesh.bounds;
+                    Vector3 c = lb.center, e = lb.extents;
+                    for (int sx = -1; sx <= 1; sx += 2)
+                        for (int sy = -1; sy <= 1; sy += 2)
+                            for (int sz = -1; sz <= 1; sz += 2)
+                            {
+                                Vector3 world = renderer.transform.TransformPoint(c + new Vector3(e.x * sx, e.y * sy, e.z * sz));
+                                min = Vector3.Min(min, world);
+                                max = Vector3.Max(max, world);
+                                hasBounds = true;
+                            }
+                }
+                else
+                {
+                    Bounds wb = renderer.bounds;
+                    min = Vector3.Min(min, wb.min);
+                    max = Vector3.Max(max, wb.max);
+                    hasBounds = true;
+                }
+            }
+            if (!hasBounds) return;
+
+            Vector3 center = (min + max) * 0.5f;
+            obj.transform.position += (targetCenter - center);
+        }
+
         private static void ClearFlexTubeTemplateChildren(GameObject tubeObj)
         {
             if (tubeObj == null) return;
@@ -2633,11 +2855,16 @@ namespace BalloonFlow
             if (fromPrev.sqrMagnitude < 0.0001f || toNext.sqrMagnitude < 0.0001f)
                 return self;
 
-            // ROLLBACK_FLEXTUBE_CORNER_CONTROL_20260608:
-            //   control = 코너 꼭짓점(self). start=mid(prev,self), end=mid(self,next) 와 함께 두 직선부에 접하는
-            //   깔끔한 2차 라운딩이 됨(삼각형 start-self-end 안에 머물러 elbow 밖으로 안 튀어나옴).
-            //   이전 self + (fromPrev+toNext)×0.18 은 바깥(외측 대각)으로 불룩해 segment 가 튀어나오던 원인.
-            return self;
+            // ROLLBACK_FLEXTUBE_CORNER_INWARD_20260628:
+            //   control=self(바깥 꼭짓점)면 곡선이 바깥 코너에 붙어, 폭 넓은 디스크가 회전하며 외측으로 삐져나옴("귀").
+            //   제어점을 회전 안쪽(두 변 방향의 이등분선)으로 당겨, 라운딩 곡선이 코너 안쪽을 지나게 한다 →
+            //   디스크 외측 edge 가 원래 elbow 선 안에 머물러 귀가 줄어든다. 당김량 = 짧은 변 절반의 일부(0.45).
+            Vector3 inward = fromPrev.normalized * -1f + toNext.normalized; // (self→prev) + (self→next) = 안쪽 이등분
+            inward.y = 0f;
+            if (inward.sqrMagnitude < 0.0001f) return self; // 일직선 — 코너 아님
+            inward.Normalize();
+            float halfEdge = 0.5f * Mathf.Min(fromPrev.magnitude, toNext.magnitude);
+            return self + inward * (halfEdge * 0.45f);
         }
 
         private static Quaternion CalculateFlexTubePartRotation(List<Vector3> cellPositions, int i)
@@ -2746,6 +2973,9 @@ namespace BalloonFlow
             return normalized == GimmickPinata
                 || normalized == GimmickPinataBox
                 || normalized == GimmickBarricade
+                // ROLLBACK_ICE_OVERLAY_UNDER_BALLOONS_20260626:
+                // Ice 2x2/3x3 is 4/9 real balloon cells covered by one visual overlay, so it must
+                // not be treated as one sized targeting/occupancy object here.
                 || normalized == GimmickWall;
         }
 
@@ -3455,6 +3685,22 @@ namespace BalloonFlow
             for (int r = 0; r < regions.Count; r++)
             {
                 var region = regions[r];
+                // ROLLBACK_ICE_OVERLAY_UNDER_BALLOONS_20260626:
+                // 2x2/3x3 Ice keeps 4/9 real balloon cells, but the region renders as one
+                // FrozenLayer block until the shared Ice HP breaks.
+                int blockSize = 1;
+                for (int i = 0; i < region.Count; i++)
+                {
+                    if (!_balloons.TryGetValue(region[i], out BalloonData d)) continue;
+                    blockSize = Mathf.Max(blockSize, d.iceBlockSize, d.sizeW, d.sizeH);
+                }
+                if (blockSize > 1)
+                {
+                    float cellSize = _cellSpacing > 0.0001f ? _cellSpacing : 0.55f;
+                    RenderIceRegionBlocks(region, blockSize, cellSize, cellSize);
+                    continue;
+                }
+
                 // ROLLBACK_ICE_CELL_BRUSH_20260609:
                 // Ice brush size paints multiple real 1x1 Ice cells. Render every authored cell.
                 {
@@ -3519,6 +3765,10 @@ namespace BalloonFlow
                 }
                 if (anchorId < 0) continue;
 
+                // ROLLBACK_ICE_OVERLAY_WORLD_BOUNDS_CENTER_20260626:
+                // Ice is one merged visual over real underlying balloons, so place the overlay from
+                // the measured world bounds of those balloons instead of guessing from the click anchor.
+
                 // 블록 내 모든 셀 본체 숨김 (얼음 블록만 보이게)
                 for (int i = 0; i < cells.Count; i++)
                 {
@@ -3532,11 +3782,40 @@ namespace BalloonFlow
                 // 앵커에 blockSize 배율 오버레이 — 블록 중앙으로 오프셋
                 if (_balloonObjects.TryGetValue(anchorId, out GameObject aobj) && aobj != null)
                 {
-                    int blockColBase = kv.Key.Item1 * blockSize;
-                    int blockRowBase = kv.Key.Item2 * blockSize;
-                    float offCellsX = (blockSize - 1) * 0.5f - (cellCol[anchorId] - blockColBase);
-                    float offCellsZ = (blockSize - 1) * 0.5f - (cellRow[anchorId] - blockRowBase);
-                    AttachIceBlockOverlay(anchorId, aobj, blockSize, offCellsX * cellSizeX, offCellsZ * cellSizeZ, cellSizeX, cellSizeZ);
+                    // ROLLBACK_ICE_OVERLAY_WORLD_BOUNDS_CENTER_20260626:
+                    // Place merged Ice from the real world bounds of its underlying balloon cells.
+                    float minBlockX = float.MaxValue;
+                    float maxBlockX = float.MinValue;
+                    float minBlockZ = float.MaxValue;
+                    float maxBlockZ = float.MinValue;
+                    float sumBlockY = 0f;
+                    int measuredCells = 0;
+                    Vector3 sumCellScale = Vector3.zero;
+                    int measuredScaleCells = 0;
+                    for (int j = 0; j < cells.Count; j++)
+                    {
+                        int cid = cells[j];
+                        if (!TryGetBalloonWorldPosition(cid, out Vector3 cellWorldPosition)) continue;
+                        minBlockX = Mathf.Min(minBlockX, cellWorldPosition.x);
+                        maxBlockX = Mathf.Max(maxBlockX, cellWorldPosition.x);
+                        minBlockZ = Mathf.Min(minBlockZ, cellWorldPosition.z);
+                        maxBlockZ = Mathf.Max(maxBlockZ, cellWorldPosition.z);
+                        sumBlockY += cellWorldPosition.y;
+                        measuredCells++;
+                        if (_balloonObjects.TryGetValue(cid, out GameObject cellObj) && cellObj != null)
+                        {
+                            sumCellScale += cellObj.transform.lossyScale;
+                            measuredScaleCells++;
+                        }
+                    }
+                    if (measuredCells <= 0) continue;
+
+                    Vector3 targetCenter = new Vector3(
+                        (minBlockX + maxBlockX) * 0.5f,
+                        sumBlockY / measuredCells,
+                        (minBlockZ + maxBlockZ) * 0.5f);
+                    Vector3 baseCellScale = measuredScaleCells > 0 ? sumCellScale / measuredScaleCells : Vector3.one;
+                    AttachIceBlockOverlay(anchorId, targetCenter, blockSize, baseCellScale);
                 }
             }
         }
@@ -3544,9 +3823,9 @@ namespace BalloonFlow
         /// <summary>
         /// [#13/§11] Ice 블록 앵커에 blockSize 배율 FrozenLayer 오버레이 부착 (블록 중앙 오프셋). 본체 숨김은 호출 측이 처리.
         /// </summary>
-        private void AttachIceBlockOverlay(int anchorId, GameObject anchor, int blockSize, float offsetX, float offsetZ, float cellSizeX, float cellSizeZ)
+        private void AttachIceBlockOverlay(int anchorId, Vector3 targetCenter, int blockSize, Vector3 baseCellScale)
         {
-            if (anchor == null || !ObjectPoolManager.HasInstance) return;
+            if (!ObjectPoolManager.HasInstance) return;
             if (_frozenOverlays.ContainsKey(anchorId)) return;
             if (!ObjectPoolManager.Instance.HasPool(FrozenLayerPoolKey)) return;
 
@@ -3555,30 +3834,32 @@ namespace BalloonFlow
 
             ResetFrozenOverlayMagazineText(overlay);
 
-            overlay.transform.SetParent(anchor.transform, false);
-            overlay.transform.localRotation = Quaternion.identity;
+            // ROLLBACK_ICE_OVERLAY_STANDALONE_FIELD_20260626:
+            // Merged 2x2/3x3 Ice is a field overlay, not a child of one hidden balloon.
+            // Keeping it outside the balloon hierarchy prevents parent scale/visibility from moving it.
+            overlay.transform.SetParent(null, false);
+            overlay.transform.rotation = Quaternion.identity;
 
             // 스케일: 1×1 은 FROZEN_OVERLAY_SCALE(여백 포함) 그대로. 블록은 셀 수만큼 확장하되 여백은 고정 →
             // (blockSize-1) + FROZEN_OVERLAY_SCALE. (1.3*B 는 여백이 B 배로 과대해져 footprint 를 벗어남)
-            overlay.transform.localScale = Vector3.one;
 
             // 위치 보정(Wall 패턴): 앵커=블록 코너 셀 → footprint 중앙으로 이동. localPosition 은 부모(_balloonScale)
             // 스케일에 곱해져 어긋나므로 월드 위치로 직접 설정 (offsetX/Z 는 이미 월드 단위 = (B-1)*0.5*cellSize).
-            Vector3 aw = anchor.transform.position;
-            overlay.transform.position = new Vector3(aw.x + offsetX, aw.y, aw.z + offsetZ);
+            overlay.transform.position = targetCenter;
+            // ROLLBACK_ICE_OVERLAY_DIRECT_BLOCK_SCALE_20260626:
+            // One FrozenLayer sits at the block center. X/Z scale by the block size (2x2/3x3),
+            // while Y keeps the visible balloon height scale instead of inheriting a balloon parent.
+            overlay.transform.localScale = GetFrozenOverlayWorldScale(baseCellScale, blockSize);
             overlay.SetActive(true);
 
-            // ROLLBACK_ICE_BLOCK_BOUNDS_SCALE_20260608:
-            // 1x1 Ice was tuned at FROZEN_OVERLAY_SCALE. Preserve that per-cell visual coverage
-            // for larger blocks by multiplying instead of additive growth or bounds fitting.
-            float s = blockSize * FROZEN_OVERLAY_SCALE;
-            overlay.transform.localScale = Vector3.one * s;
+            // ROLLBACK_ICE_OVERLAY_XZ_ONLY_SCALE_20260626:
+            // Ice block size is a board-footprint size, not height. A 3x3 Ice must cover X/Z 3x3
+            // cells while keeping the original 1x1 FrozenLayer height/thickness on Y.
 
             // ROLLBACK_ICE_BLOCK_FOOTPRINT_FIT_20260608:
             // FrozenLayer is authored as a 1x1 visual shell, but its renderer bounds are not
             // guaranteed to equal one board cell. Fit x/z bounds to the block footprint so
             // 2x2/3x3 Ice covers the same area as the hidden balloons beneath it.
-            FitRendererBoundsToFootprint(overlay, overlay.transform.position, cellSizeX * blockSize, cellSizeZ * blockSize);
 
             _frozenOverlays[anchorId] = overlay;
         }
@@ -3892,6 +4173,15 @@ namespace BalloonFlow
         /// 명세: "FrozenLayer 가 풍선보다 커보여야함."</summary>
         private const float FROZEN_OVERLAY_SCALE = 1.3f;
 
+        private static Vector3 GetFrozenOverlayWorldScale(Vector3 balloonWorldScale, int blockSize)
+        {
+            int size = Mathf.Max(1, blockSize);
+            float x = Mathf.Max(0.0001f, Mathf.Abs(balloonWorldScale.x));
+            float y = Mathf.Max(0.0001f, Mathf.Abs(balloonWorldScale.y));
+            float z = Mathf.Max(0.0001f, Mathf.Abs(balloonWorldScale.z));
+            return new Vector3(x * FROZEN_OVERLAY_SCALE * size, y, z * FROZEN_OVERLAY_SCALE * size);
+        }
+
         /// <summary>
         /// FrozenLayer 프리팹을 풍선의 자식으로 부착 (얼음 쉘 비주얼).
         /// Ice (Lv.201) / Frozen_Dart (Lv.241) 기믹용. 풍선 자체는 교체하지 않고 오버레이만 추가.
@@ -3910,11 +4200,18 @@ namespace BalloonFlow
 
             ResetFrozenOverlayMagazineText(overlay);
 
-            overlay.transform.SetParent(parentBalloon.transform, false);
-            overlay.transform.localPosition = Vector3.zero;
-            overlay.transform.localRotation = Quaternion.identity;
+            // ROLLBACK_FROZEN_OVERLAY_STANDALONE_FIELD_20260626:
+            // Do not put FrozenLayer under Balloon/Balloon_Pooled_*.
+            // It is a field overlay that covers the balloon from world space; parenting it to the
+            // balloon makes pooled hierarchy/balloon scale move the ice to the wrong place.
+            overlay.transform.SetParent(null, false);
+            overlay.transform.position = parentBalloon.transform.position;
+            overlay.transform.rotation = Quaternion.identity;
             // 풍선보다 크게 — 얼음이 풍선을 감싼 시각.
-            overlay.transform.localScale = Vector3.one * FROZEN_OVERLAY_SCALE;
+            // ROLLBACK_FROZEN_OVERLAY_DIRECT_SCALE_20260626:
+            // Standalone FrozenLayer no longer inherits the balloon scale, so apply the same world
+            // scale explicitly: X/Z use the ice margin, Y remains the balloon height.
+            overlay.transform.localScale = GetFrozenOverlayWorldScale(parentBalloon.transform.lossyScale, 1);
             overlay.SetActive(true);
 
             // 풍선 본체 숨김 (얼음만 보이게).
@@ -3927,6 +4224,11 @@ namespace BalloonFlow
         // ROLLBACK_ICE_MAGAZINE_TEXT_20260608:
         // Grouped Ice HP now uses the MagazineText child already authored inside FrozenLayer.prefab.
         // Remove these helpers and restore GimmickProcessor's legacy TextMesh label path to roll back.
+        // ROLLBACK_ICE_HP_TEXT_OFFSET_20260626:
+        // Keep the grouped Ice HP label at the authored local offset inside FrozenLayer/MagazineText.
+        // Roll back by restoring the previous world-center placement path.
+        private static readonly Vector3 ICE_HP_TEXT_LOCAL_POSITION = new Vector3(0f, 1.5f, 0.05f);
+
         public void SetIceRegionHpText(IEnumerable<int> ids, int hp)
         {
             if (ids == null) return;
@@ -3944,7 +4246,6 @@ namespace BalloonFlow
             if (count <= 0) return;
 
             center /= count;
-            center.y += 0.55f;
 
             GameObject selectedOverlay = null;
             float selectedDistance = float.MaxValue;
@@ -3983,7 +4284,7 @@ namespace BalloonFlow
 
             state.RestoreDefaults();
             state.Text.text = Mathf.Max(0, hp).ToString();
-            state.Text.transform.position = worldPosition;
+            state.Text.transform.localPosition = ICE_HP_TEXT_LOCAL_POSITION;
             state.Text.gameObject.SetActive(true);
             state.Text.ForceMeshUpdate();
         }
