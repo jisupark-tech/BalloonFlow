@@ -203,7 +203,7 @@ toast.life.unlimited,Your lives are unlimited!,
 toast.life.full,Your lives are full!,
 toast.item.locked,Unlocks at Level {n},
 popup.privacyterm.title,Welcome!,PopupPrivacyTerm
-popup.privacyterm.description,"This game uses third-party services for advertising and analytics.\nBy tapping ""Agree,"" you agree to our <link=""terms"">Terms of Service</link> and acknowledge our <link=""privacy"">Privacy Policy</link>.",PopupPrivacyTerm
+popup.privacyterm.description,"By tapping ""Accept,"" you agree\nto our <color=#0D49AD><link=""terms""><u>Terms of Service</u></link></color>\nand <color=#0D49AD><link=""privacy""><u>Privacy Policy</u></link></color>.",PopupPrivacyTerm
 popup.privacyterm.terms,Terms of Service,PopupPrivacyTerm
 popup.privacyterm.privacy,Privacy Policy,PopupPrivacyTerm
 popup.privacyterm.accept,Accept,PopupPrivacyTerm
