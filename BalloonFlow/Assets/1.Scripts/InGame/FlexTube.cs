@@ -99,14 +99,27 @@ namespace BalloonFlow
         /// <summary>다트 hit 진입점 — FlexTubePart 가 위임 호출.</summary>
         public void OnDartHit(int dartColor)
         {
-            if (_destroying) return;
-            if (_color >= 0 && dartColor != _color) return; // 색 불일치 → 무시
+            TryApplyDartHit(dartColor, -1);
+        }
+
+        // ROLLBACK_FLEXTUBE_CELL_TARGET_HIT_20260628:
+        // Targeting is cell based: each FlexTube footprint cell can be selected by DirectionalTargeting.
+        // Consume exactly the targeted logical cell so exposed sibling cells do not become stale misses.
+        public bool TryApplyDartHit(int dartColor, int targetBalloonId)
+        {
+            if (_destroying) return false;
+            if (_color >= 0 && dartColor != _color) return false; // 색 불일치 → 무시
+
+            int logicalCellId = ResolveLiveTargetCell(targetBalloonId);
+            if (logicalCellId < 0) return false;
 
             // 매 hit 마다 ZapAttack — Animator trigger 는 자체적으로 reset 되므로 overwrite 안전.
             if (_animator != null) _animator.SetTrigger(ANIM_TRIGGER_ATTACK);
 
-            if (_hp <= 0) { BeginFinish(); return; }
+            if (_hp <= 0) { BeginFinish(); return true; }
             _hp--;
+            if (BalloonController.HasInstance)
+                BalloonController.Instance.MarkFlexTubeSingleCellInactive(logicalCellId);
 
             // 남은 HP 비율에 맞춰 활성 visual Segment 수를 목표치까지 줄인다 (HP 1당 1개가 아니라 비율).
             // 예) HP=cell 수, totalSegments=cell 수×N → 한 hit 마다 N(=visualSegmentsPerCell)개씩 함께 사라짐.
@@ -127,13 +140,54 @@ namespace BalloonFlow
                 lastRemovedPos = part.transform.position;
                 anyRemoved = true;
                 ShrinkAndDeactivateSegment(part);
-                MarkCellInactiveIfDepleted(part);
             }
             if (anyRemoved) SlideEndCapTo(lastRemovedPos);
 
             // HP 0 또는 모든 segment 소진 → 종료.
-            if (_hp <= 0 || _removedSegmentCount >= _segmentsRemovalOrder.Count)
+            bool hasLiveLogicalCells = BalloonController.HasInstance
+                && BalloonController.Instance.HasLiveFlexTubeGroupCells(_groupId);
+            if (_hp <= 0 || !hasLiveLogicalCells || _removedSegmentCount >= _segmentsRemovalOrder.Count)
                 BeginFinish();
+
+            return true;
+        }
+
+        private int ResolveLiveTargetCell(int targetBalloonId)
+        {
+            if (IsLiveLogicalCell(targetBalloonId))
+                return targetBalloonId;
+
+            for (int i = 0; i < _parts.Count; i++)
+            {
+                var p = _parts[i];
+                if (p == null || !p.gameObject.activeSelf) continue;
+
+                int[] ids = p.BalloonIds;
+                if (ids == null || ids.Length == 0)
+                {
+                    if (IsLiveLogicalCell(p.BalloonId))
+                        return p.BalloonId;
+                    continue;
+                }
+
+                for (int k = 0; k < ids.Length; k++)
+                {
+                    if (IsLiveLogicalCell(ids[k]))
+                        return ids[k];
+                }
+            }
+
+            return -1;
+        }
+
+        private bool IsLiveLogicalCell(int balloonId)
+        {
+            if (!BalloonController.HasInstance || balloonId < 0) return false;
+            BalloonData data = BalloonController.Instance.GetBalloon(balloonId);
+            return data != null
+                && !data.isPopped
+                && data.gimmickType == BalloonController.GimmickFlexTube
+                && data.flexTubeGroupId == _groupId;
         }
 
         /// <summary>visual segment 1개 shrink → SetActive(false). _segmentShrinkDuration<=0 이면 즉시 비활성.</summary>

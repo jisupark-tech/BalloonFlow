@@ -511,6 +511,13 @@ namespace BalloonFlow
             if (PlayerPrefs.GetInt(WS_PREFS_UNLOCK_POPUP_SHOWN, 0) == 0)
             {
                 PlayerPrefs.SetInt(WS_PREFS_UNLOCK_POPUP_SHOWN, 1);
+                // WS_SUPPRESS_SAME_SEASON_SCROLL_20260628: 최초 해금 인트로가 이미 보상 테이블 상승 스크롤을
+                //   보여주므로, 해금이 일어난 '현재 회차'의 season-start 스크롤(아래 3번)이 같은 시즌에서 중복
+                //   노출되지 않도록 현재 activeRoundId 를 미리 기록한다. 다음 회차부터 정상적으로 노출된다.
+                //   (activeRoundId 는 config/userData 로드 시 EnsureActiveRound 로 채워져 해금 시점엔 유효.)
+                string unlockRoundId = wsm.State != null ? wsm.State.activeRoundId : null;
+                if (!string.IsNullOrEmpty(unlockRoundId))
+                    PlayerPrefs.SetString(WS_PREFS_ROUND_POPUP_SHOWN, unlockRoundId);
                 PlayerPrefs.Save();
                 // ROLLBACK_WS_INTRO_SCROLL_THEN_INFO_20260619: 최초 해금 = PopupWinningStreak 오픈 → item1→25 자동
                 //   스크롤(2.5s, 입력잠금) → PopupWinningStreakInfo. Info 닫으면 둘 다 닫혀 로비 복귀.

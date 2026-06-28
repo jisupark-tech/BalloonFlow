@@ -1155,7 +1155,10 @@ namespace BalloonFlow
                         // ROLLBACK_GLASS_PIPE_PAYLOAD_PREVIEW_SCALE_20260625:
                         // Glass Pipe is transparent, so the next holder should be partially readable before popping out.
                         newVisual.gameObject.transform.localScale = startScale;
-                        newVisual.gameObject.transform.DOScale(Vector3.one, 0.4f).SetEase(Ease.InQuad)
+                        // PIPE_EMERGE_FASTER_20260628: 배출 payload 가 더 빨리 보이도록 pop 시간 단축(0.4→0.25).
+                        //   탭과 동시에 data release 는 이미 즉시 일어나지만, InQuad 느린 시작이 박스를 0.2~0.3s 늦게
+                        //   보이게 해 '동시 생성' 느낌이 약했음. 파이프 겹침 방지를 위해 InQuad 는 유지하고 시간만 줄임.
+                        newVisual.gameObject.transform.DOScale(Vector3.one, 0.25f).SetEase(Ease.InQuad)
                             .OnComplete(() => _poppingScale.Remove(hid));
                     }
                 }

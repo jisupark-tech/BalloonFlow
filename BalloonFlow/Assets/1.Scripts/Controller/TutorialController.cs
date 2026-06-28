@@ -172,6 +172,16 @@ namespace BalloonFlow
         /// <summary>Whether a tutorial is currently running.</summary>
         public bool IsTutorialActive() => _isTutorialActive;
 
+        /// <summary>
+        /// 현재 스텝이 "아이템 버튼 탭" 대기(tap_item) 상태인지. 이 동안에는 강조된 아이템 UI 버튼만
+        /// 눌려야 하므로 InputHandler 가 홀더(월드 콜라이더) 터치를 차단하는 데 사용한다.
+        /// </summary>
+        public bool IsAwaitingItemTap()
+        {
+            TutorialStep step = GetCurrentStep();
+            return step != null && step.requireAction == ACTION_TAP_ITEM;
+        }
+
         #endregion
 
         #region Lifecycle

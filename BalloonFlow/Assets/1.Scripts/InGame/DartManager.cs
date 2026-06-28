@@ -1786,7 +1786,7 @@ namespace BalloonFlow
                 DartFireCandidate candidate = _fireCandidates[0];
                 _fireCandidates.RemoveAt(0);
 
-                if (_reservedTargets.Contains(candidate.targetId))
+                if (IsTargetReservedForCandidate(candidate))
                 {
                     LogAttackIssue(
                         "DartFireBlocked",
@@ -2412,7 +2412,7 @@ namespace BalloonFlow
                 }
             }
 
-            if (_reservedTargets.Contains(candidate.targetId))
+            if (IsTargetReservedForCandidate(candidate))
             {
                 LogAttackIssue(
                     "DartFireBlocked",
@@ -3067,6 +3067,19 @@ namespace BalloonFlow
         private bool IsTargetLineConsumed(DirectionalTargeting.ScanDirection scanDir, int line)
         {
             return _consumedTargetLines.Contains(GetConsumedLineKey(scanDir, line));
+        }
+
+        private bool IsTargetReservedForCandidate(DartFireCandidate candidate)
+        {
+            if (!_reservedTargets.Contains(candidate.targetId))
+                return false;
+
+            // ROLLBACK_WOODEN_MULTI_CELL_LINE_RESERVATION_20260628:
+            // A sized Wooden Board has shared HP/balloonId but several exposed cells. Let different
+            // scan lines fire at it in the same pass; IsTargetLineConsumed/IsHolderLineConsumed still
+            // block duplicate shots on the same line, preserving the anti-penetration guards.
+            return !BalloonController.HasInstance
+                || !BalloonController.Instance.AllowsConcurrentCellTargetReservation(candidate.targetId);
         }
 
         // ROLLBACK_DART_OUTER_PASS_LINE_LOCK:

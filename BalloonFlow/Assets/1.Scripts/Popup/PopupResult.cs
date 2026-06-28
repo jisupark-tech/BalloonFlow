@@ -98,6 +98,13 @@ namespace BalloonFlow
         private Transform _cachedGoldPanelPulseTarget;
         private Vector3 _cachedGoldPanelPulseBaseScale = Vector3.one;
         private bool _hasGoldPanelPulseBaseScale;
+
+        // RESULT_GOLDPANEL_FXFIRE_ON_COIN_LAND_20260628:
+        // GoldPanel 프리팹의 FXFire 파티클은 Play-On-Awake 라 패널이 SetActive 되는 순간(=등장 시) 자동 발화한다.
+        // 그래서 코인이 아직 도착하지 않았는데 도착 이펙트가 먼저 나오는 문제가 있었다. UILobby 와 동일하게
+        // 등장 시 템플릿 FXFire 를 정지/비활성화하고, 코인이 실제 도착하는 onEachLand 콜백에서 1회만 인스턴스 발화한다.
+        private GameObject _goldPanelFxFireTemplate;
+        private GameObject _activeGoldPanelFxFireInstance;
         private Button _topBarGoldPanelButton;
         private Button _resultGoldPanelButton;
 
@@ -833,6 +840,8 @@ namespace BalloonFlow
                     landed++;
                     SetGoldPanelText(Mathf.Min(finalCoins, _displayedGoldPanelCoins + delta));
                     PulseResultGoldPanel();
+                    // RESULT_GOLDPANEL_FXFIRE_ON_COIN_LAND_20260628: 코인이 실제 패널에 도착한 순간 발화(인스턴스 게이트로 1회).
+                    PlayResultGoldPanelFxFire();
                     EventBus.Publish(new OnCoinFlyLanded());
                 },
                 onAllComplete: () => SetGoldPanelText(finalCoins));
@@ -974,6 +983,64 @@ namespace BalloonFlow
         {
             ResolveGoldPanelRefs();
             if (_goldPanel != null) _goldPanel.SetActive(visible);
+
+            // RESULT_GOLDPANEL_FXFIRE_ON_COIN_LAND_20260628: 패널 등장과 동시에 FXFire 가 자동 발화하지 않도록 정지.
+            // 실제 발화는 PlayResultGoldPanelFxFire() 가 코인 도착 콜백에서 Instantiate 한 인스턴스에서만 일어난다.
+            if (visible && _goldPanel != null)
+            {
+                ResolveGoldPanelFxFire();
+                GoldPanelFxFireUtil.DisableUnderGoldPanel(_goldPanel.transform);
+            }
+        }
+
+        private void ResolveGoldPanelFxFire()
+        {
+            if (_goldPanelFxFireTemplate != null && !_goldPanelFxFireTemplate.scene.IsValid())
+                _goldPanelFxFireTemplate = null;
+            if (_goldPanelFxFireTemplate != null) return;
+
+            Transform scope = _goldPanel != null ? _goldPanel.transform : transform;
+            Transform fx = FindChildRecursive(scope, "FXFire") ?? FindChildRecursive(scope, "FxFire");
+            if (fx != null) _goldPanelFxFireTemplate = fx.gameObject;
+        }
+
+        // UILobby.PlayGoldPanelFxFire 와 동일 패턴 — 살아있는 인스턴스가 있으면 재발화 금지(코인 N개 도착해도 최초 1회만),
+        // 자연 종료(stopAction=Destroy) 후 다음 도착에서 재생성. 패널 닫히면 자식째 정리됨.
+        private void PlayResultGoldPanelFxFire()
+        {
+            ResolveGoldPanelFxFire();
+            if (_goldPanelFxFireTemplate == null) return;
+
+            Transform parent = _goldPanelFxFireTemplate.transform.parent;
+            if (parent == null) return;
+            if (_activeGoldPanelFxFireInstance != null) return;
+
+            _activeGoldPanelFxFireInstance = Instantiate(_goldPanelFxFireTemplate, parent, false);
+            var srcTr = _goldPanelFxFireTemplate.transform;
+            var dstTr = _activeGoldPanelFxFireInstance.transform;
+            dstTr.localPosition = srcTr.localPosition;
+            dstTr.localRotation = srcTr.localRotation;
+            GoldPanelFxFireUtil.ApplyResolutionInvariantScale(dstTr, srcTr.localScale);
+            _activeGoldPanelFxFireInstance.SetActive(true);
+
+            var systems = _activeGoldPanelFxFireInstance.GetComponentsInChildren<ParticleSystem>(true);
+            float maxLifetime = 0f;
+            for (int i = 0; i < systems.Length; i++)
+            {
+                var ps = systems[i];
+                var main = ps.main;
+                if (i == 0) main.stopAction = ParticleSystemStopAction.Destroy;
+
+                float dur  = main.duration;
+                float life = main.startLifetime.constantMax > 0f ? main.startLifetime.constantMax : main.startLifetime.constant;
+                float total = dur + life;
+                if (total > maxLifetime) maxLifetime = total;
+
+                ps.Clear(true);
+                ps.Play(true);
+            }
+
+            if (maxLifetime > 0f) Destroy(_activeGoldPanelFxFireInstance, maxLifetime + 1f);
         }
 
         private void SetGoldPanelText(int coins)

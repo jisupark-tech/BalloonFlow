@@ -124,7 +124,7 @@ namespace BalloonFlow
                     continue;
                 }
 
-                bool reserved = excludeIds != null && excludeIds.Contains(edge.balloonId);
+                bool reserved = IsEdgeTargetReserved(edge, excludeIds);
                 float firingDist = GetFiringAxisDistance(dartPosition, edge.worldPos, scanDir);
                 float perpDist = GetPerpendicularDistance(dartPosition, edge.worldPos, scanDir);
                 bool sameColor = EdgeMatchesColor(edge, color);
@@ -235,6 +235,20 @@ namespace BalloonFlow
             return edge.colorMask != 0u && (edge.colorMask & (1u << color)) != 0u;
         }
 
+        private static bool IsEdgeTargetReserved(EdgeTarget edge, HashSet<int> excludeIds)
+        {
+            if (excludeIds == null || !excludeIds.Contains(edge.balloonId))
+                return false;
+
+            // ROLLBACK_WOODEN_MULTI_CELL_LINE_RESERVATION_20260628:
+            // Sized Wooden Board shares one balloonId across all occupied cells. Global id
+            // reservation made a 3x3 board suppress the other exposed columns after the first dart.
+            // DartManager still reserves the concrete scan line, so only different exposed lines
+            // may fire concurrently.
+            return !BalloonController.HasInstance
+                || !BalloonController.Instance.AllowsConcurrentCellTargetReservation(edge.balloonId);
+        }
+
         private static uint BuildLiveEggColorMask(BalloonData balloon)
         {
             if (balloon == null || balloon.eggColors == null || balloon.eggHps == null)
@@ -324,7 +338,7 @@ namespace BalloonFlow
                     continue;
                 }
 
-                bool reserved = excludeIds != null && excludeIds.Contains(edge.balloonId);
+                bool reserved = IsEdgeTargetReserved(edge, excludeIds);
                 float firingDist = GetFiringAxisDistance(dartPosition, edge.worldPos, scanDir);
                 if (firingDist < 0f)
                 {
@@ -448,7 +462,7 @@ namespace BalloonFlow
                 if (!TryGetEdgeTarget(scanDir, dartCell, offset, out EdgeTarget edge))
                     continue;
 
-                bool reserved = excludeIds != null && excludeIds.Contains(edge.balloonId);
+                bool reserved = IsEdgeTargetReserved(edge, excludeIds);
                 if (!edge.targetable || !EdgeMatchesColor(edge, color) || reserved)
                     continue;
 

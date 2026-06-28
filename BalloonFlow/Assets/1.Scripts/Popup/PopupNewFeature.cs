@@ -61,6 +61,8 @@ namespace BalloonFlow
         [SerializeField] private Sprite _sprFrozenBox;
         [Tooltip("newFeatureFlexTube.png 드래그 (미할당 시 Awake 의 UISpriteOr 로 자동 로드)")]
         [SerializeField] private Sprite _sprFlexTube;
+        [Tooltip("newFeatureTargetBox.png 드래그 (레벨 161 등장. 미할당 시 _sprPinata 폴백)")]
+        [SerializeField] private Sprite _sprTargetBox;
 
         protected override void Awake()
         {
@@ -87,6 +89,7 @@ namespace BalloonFlow
                 _sprBaricade    = rm.UISpriteOr("newFeatureBaricade",      _sprBaricade);
                 _sprFrozenBox   = rm.UISpriteOr("newFeatureFrozenBox",     _sprFrozenBox);
                 _sprFlexTube    = rm.UISpriteOr("newFeatureFlexTube",      _sprFlexTube);
+                _sprTargetBox   = rm.UISpriteOr("newFeatureTargetBox",     _sprTargetBox);
             }
         }
 
@@ -214,7 +217,7 @@ namespace BalloonFlow
                 "LinkedDartBox" => _sprLoop,
                 "Chain"         => _sprLoop,
                 "Wooden Board"  => _sprPinata,
-                "TargetBox"     => _sprPinata,
+                "TargetBox"     => _sprTargetBox != null ? _sprTargetBox : _sprPinata,
                 "HiddenDartBox" => _sprHiddenBox != null ? _sprHiddenBox : _sprHidden,
                 "HiddenBalloon" => _sprHidden,
                 "IronWall"      => _sprIronBox,

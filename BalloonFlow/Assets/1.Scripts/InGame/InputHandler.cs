@@ -123,6 +123,16 @@ namespace BalloonFlow
             if (IsScreenPointOverBlockingUIControl(screenPosition))
                 return;
 
+            // ITEM_TUTORIAL_HOLDER_BLOCK_20260628:
+            // While a "tap the item button" tutorial step is waiting, only the highlighted item UI may be
+            // tapped. The holder is a world collider on this separate physics-raycast path, so it would
+            // otherwise stay clickable. Block it until the booster itself begins awaiting a world target
+            // (Hand/Zap), which is signalled by awaitingUseItemWorldSelection above.
+            if (!awaitingUseItemWorldSelection
+                && TutorialController.HasInstance
+                && TutorialController.Instance.IsAwaitingItemTap())
+                return;
+
             Ray ray = _gameCamera.ScreenPointToRay(screenPosition);
 
             // ROLLBACK_ZAP_UI_HOLE_INPUT:

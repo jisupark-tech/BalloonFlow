@@ -152,6 +152,14 @@ namespace BalloonFlow
         // the segment row bridges right up to / slightly under the cap instead of stopping short → removes
         // the cap↔segment gap. 0 = stop at the cap center (can gap); ~0.5 = reach the cap's outer edge.
         private const float FLEXTUBE_CAP_SEGMENT_BRIDGE = 0.5f;
+        // ROLLBACK_FLEXTUBE_SEQ_VISUAL_DOUBLE_SIZE_20260628:
+        // The current FlexTube prefabs have renderer bounds larger than the visible hose/cap body.
+        // Fitting those bounds to a 2x2 footprint still reads too small, so this visual-only path
+        // doubles the rendered part scale while leaving logical cells/HP/targeting unchanged.
+        private const float FLEXTUBE_SEQ_PART_VISUAL_MULTIPLIER = 2.0f;
+        // ROLLBACK_FLEXTUBE_SEQ_VISUAL_Z_OFFSET_20260628:
+        // Small board-Z visual lift requested for FlexTube readability over the balloon field.
+        private const float FLEXTUBE_SEQ_VISUAL_Z_OFFSET = 0.25f;
         // ROLLBACK_FLEXTUBE_SEAMLESS_TILING_20260618: 세그먼트의 자연 길이(월드 Z).
         //   측정: 유니티 (1,1,1) 박스 대비 세그먼트가 유닛당 3.5개일 때 1사이즈 = 1/3.5 ≈ 0.2857.
         //   (FlexTube_Segment mesh × FlexTubeSegmentVisualScale.z(0.86) 의 실제 월드 길이.)
@@ -177,6 +185,35 @@ namespace BalloonFlow
         public static bool EnablePinataPerCell = false;
         public static bool IsPinataPerCell(BalloonData d) =>
             EnablePinataPerCell && d.gimmickType == GimmickPinata && d.sizeW * d.sizeH > 1;
+
+        public bool AllowsConcurrentCellTargetReservation(int balloonId)
+        {
+            // ROLLBACK_SHARED_MULTI_CELL_LINE_RESERVATION_20260628:
+            // Some field gimmicks are one shared-HP object but occupy several exposed cells.
+            // A global balloonId reservation makes a 3-wide outer edge suppress the other two
+            // legal scan lines after the first dart. Let those shared multi-cell objects reserve
+            // by scan line instead; DartManager's same-line/holder locks still prevent duplicate
+            // fire or penetration on a single line.
+            if (!_balloons.TryGetValue(balloonId, out BalloonData data) || data == null || data.isPopped)
+                return false;
+
+            if (data.gimmickType == GimmickPinata
+                && !IsPinataPerCell(data)
+                && (data.sizeW > 1 || data.sizeH > 1))
+                return true;
+
+            if (data.gimmickType == GimmickPinataBox
+                && (data.sizeW > 1 || data.sizeH > 1)
+                && data.eggHps != null)
+                return true;
+
+            if (data.gimmickType == GimmickBarricade
+                && data.barricadeLength > 1
+                && GetBarricadeActiveLength(data) > 1)
+                return true;
+
+            return false;
+        }
 
         // ROLLBACK_BARRICADE_HP_INDEPENDENT_20260624:
         // Shared source for Barricade's remaining attackable length, computed as length × remainingHP/maxHP.
@@ -1362,37 +1399,32 @@ namespace BalloonFlow
             // FlexTube 가 _destroying / 활성 segment 유무 / 색 매칭 자체 판단. 다트는 hit 인정 후 소진.
             if (data.gimmickType == GimmickFlexTube)
             {
-                // _balloonObjects 에서 자식 GameObject 가 제거됐어도(MarkFlexTubeCellInactive),
-                // _flexTubeRoots 안 FlexTube 컴포넌트로 직접 위임 (groupId 매칭).
-                IDartHittable hittable = null;
-                if (_balloonObjects.TryGetValue(balloonId, out GameObject ftObj) && ftObj != null)
-                    hittable = ftObj.GetComponent<IDartHittable>();
-                if (hittable == null)
+                // ROLLBACK_FLEXTUBE_CELL_TARGET_HIT_20260628:
+                // Keep the target balloonId when delegating to the FlexTube owner. The previous
+                // IDartHittable fallback could pick the first active visual part in the group and
+                // remove a different logical cell/seq than the one DirectionalTargeting selected.
+                FlexTube flexTube = null;
+                for (int i = 0; i < _flexTubeRoots.Count; i++)
                 {
-                    // Fallback — _flexTubeRoots 안에서 같은 groupId 의 FlexTube 찾기.
-                    for (int i = 0; i < _flexTubeRoots.Count; i++)
+                    var root = _flexTubeRoots[i];
+                    if (root == null) continue;
+                    var ft = root.GetComponent<FlexTube>();
+                    if (ft != null && ft.GroupId == data.flexTubeGroupId)
                     {
-                        var root = _flexTubeRoots[i];
-                        if (root == null) continue;
-                        var ft = root.GetComponent<FlexTube>();
-                        if (ft != null && ft.GroupId == data.flexTubeGroupId)
-                        {
-                            hittable = ft as IDartHittable;
-                            // FlexTube 자체는 IDartHittable 안 구현. FlexTubePart 부품 중 활성된 것 하나 찾아서 위임.
-                            foreach (var p in ft.Parts)
-                            {
-                                if (p != null && p.gameObject.activeSelf)
-                                {
-                                    hittable = p;
-                                    break;
-                                }
-                            }
-                            break;
-                        }
+                        flexTube = ft;
+                        break;
                     }
                 }
-                if (hittable != null) hittable.OnDartHit(dartColor);
-                return new PopResult { success = false, hitAccepted = true, reason = "FlexTube: delegated to owner", balloonId = data.balloonId, gimmickType = GimmickFlexTube };
+
+                bool accepted = flexTube != null && flexTube.TryApplyDartHit(dartColor, balloonId);
+                return new PopResult
+                {
+                    success = false,
+                    hitAccepted = accepted,
+                    reason = accepted ? "FlexTube: target cell delegated to owner" : "FlexTube: no live target cell",
+                    balloonId = data.balloonId,
+                    gimmickType = GimmickFlexTube
+                };
             }
 
             if (data.isPopped)
@@ -1552,6 +1584,31 @@ namespace BalloonFlow
         /// FlexTube 의 비활성된 Segment cell 을 다트 target 후보에서 제외 — _balloons.isPopped=true 마킹 + _balloonObjects 에서 분리.
         /// Pop 점수/이벤트 발화 없이 silent 제거 (FlexTube 는 RemainingCount 영향 제외).
         /// </summary>
+        public void MarkFlexTubeSingleCellInactive(int balloonId)
+        {
+            // ROLLBACK_FLEXTUBE_CELL_TARGET_HIT_20260628:
+            // Regular dart hits consume the exact logical cell selected by DirectionalTargeting.
+            // Do not remove the whole same-seq 2x2 footprint here; sibling cells may already have
+            // darts flying toward them and must remain valid until they are individually hit.
+            if (!_balloons.TryGetValue(balloonId, out BalloonData data)) return;
+            if (data == null || data.gimmickType != GimmickFlexTube || data.isPopped) return;
+            MarkFlexTubeCellInactiveInternal(balloonId, data);
+            DirectionalTargeting.InvalidateCache();
+            if (BoardStateManager.HasInstance)
+                BoardStateManager.Instance.InvalidateOutermostCache();
+        }
+
+        public bool HasLiveFlexTubeGroupCells(int groupId)
+        {
+            foreach (var kv in _balloons)
+            {
+                BalloonData data = kv.Value;
+                if (data == null || data.isPopped || data.gimmickType != GimmickFlexTube) continue;
+                if (data.flexTubeGroupId == groupId) return true;
+            }
+            return false;
+        }
+
         public void MarkFlexTubeCellInactive(int balloonId)
         {
             if (!_balloons.TryGetValue(balloonId, out BalloonData data)) return;
@@ -1581,20 +1638,7 @@ namespace BalloonFlow
                     int id = idsToDeactivate[i];
                     if (!_balloons.TryGetValue(id, out BalloonData cellData)) continue;
                     if (cellData.gimmickType != GimmickFlexTube || cellData.isPopped) continue;
-
-                    cellData.isPopped = true;
-                    _balloons[id] = cellData;
-                    _frameCachedPositions.Remove(id);
-
-                    Vector3Int? keyToRemoveForCell = null;
-                    foreach (var indexKv in _positionIndex)
-                    {
-                        if (indexKv.Value == id) { keyToRemoveForCell = indexKv.Key; break; }
-                    }
-                    if (keyToRemoveForCell.HasValue) _positionIndex.Remove(keyToRemoveForCell.Value);
-
-                    if (DartManager.HasInstance)
-                        DartManager.Instance.NotifySilentCellRemoved(GetAdjustedBoardPosition(cellData.position));
+                    MarkFlexTubeCellInactiveInternal(id, cellData);
                 }
 
                 DirectionalTargeting.InvalidateCache();
@@ -1625,6 +1669,25 @@ namespace BalloonFlow
             // 같은 이유로 DartManager 의 head 스캔 수락 캐시도 라인 단위 재개방 — 팝 경로의
             // InvalidateDartScanLinesForPoppedBalloon 대응. 누락 시 같은 라인의 head 가
             // 새로 노출된 타겟을 영영 재스캔하지 않음 (홀더 선택 등 전체 무효화 전까지 공격 정지).
+            if (DartManager.HasInstance)
+                DartManager.Instance.NotifySilentCellRemoved(GetAdjustedBoardPosition(data.position));
+        }
+
+        private void MarkFlexTubeCellInactiveInternal(int balloonId, BalloonData data)
+        {
+            if (data == null || data.isPopped) return;
+
+            data.isPopped = true;
+            _balloons[balloonId] = data;
+            _frameCachedPositions.Remove(balloonId);
+
+            Vector3Int? keyToRemove = null;
+            foreach (var kv in _positionIndex)
+            {
+                if (kv.Value == balloonId) { keyToRemove = kv.Key; break; }
+            }
+            if (keyToRemove.HasValue) _positionIndex.Remove(keyToRemove.Value);
+
             if (DartManager.HasInstance)
                 DartManager.Instance.NotifySilentCellRemoved(GetAdjustedBoardPosition(data.position));
         }
@@ -2273,15 +2336,26 @@ namespace BalloonFlow
                 //   짧아진다. 이후 모든 인덱스/캡·rib cellId 매핑은 ids 가 아니라 이 seqIds(seq당 대표 cell)·cellPositions.Count
                 //   기준이어야 한다(안 그러면 ids.Count 로 돌다 cellPositions[k] 범위 초과 → ArgumentOutOfRangeException).
                 var seqIds = new List<int>(ids.Count);
+                // ROLLBACK_FLEXTUBE_CELL_TARGET_HIT_20260628:
+                // Store all logical cell ids per seq. The visual part uses the seq center, but
+                // exposed edge targeting still consumes individual cells.
+                var seqCellIds = new List<List<int>>(ids.Count);
                 for (int fi = 0; fi < ids.Count; )
                 {
                     int sq = _balloons[ids[fi]].flexTubeSequenceIndex;
                     int repId = ids[fi]; // 이 seq 의 대표 cell(첫 셀)
                     Vector3 sum = Vector3.zero; int cnt = 0;
+                    var cellsForSeq = new List<int>(4);
                     while (fi < ids.Count && _balloons[ids[fi]].flexTubeSequenceIndex == sq)
-                    { sum += GetAdjustedBoardPosition(_balloons[ids[fi]].position); cnt++; fi++; }
+                    {
+                        cellsForSeq.Add(ids[fi]);
+                        sum += GetAdjustedBoardPosition(_balloons[ids[fi]].position);
+                        cnt++;
+                        fi++;
+                    }
                     cellPositions.Add(sum / cnt);
                     seqIds.Add(repId);
+                    seqCellIds.Add(cellsForSeq);
                 }
 
                 int groupColor = _balloons[ids[0]].color;
@@ -2381,6 +2455,185 @@ namespace BalloonFlow
                     return p;
                 }
 
+                // ROLLBACK_FLEXTUBE_SEQ_FOOTPRINT_VISUAL_20260628:
+                // FlexTube visual parts must sit on the actual cells authored in MapMaker:
+                // seq0 = Head(Start), seqN = Edge(End), middle seqs = body/corner Segments.
+                // Previous rib/path tiling placed many small Segment clones on a centerline, so
+                // Head/Edge could be buried, part sizes drifted, and 2x2 authored footprints read
+                // as thin disconnected ribs. This block scales each prefab to the seq footprint
+                // bounds and recenters its visible renderer bounds on that footprint center.
+                Vector3 GetSeqTangent(int seqIndex)
+                {
+                    Vector3 dir;
+                    if (seqIndex <= 0)
+                        dir = cellPositions[Mathf.Min(1, lastIdx)] - cellPositions[0];
+                    else if (seqIndex >= lastIdx)
+                        dir = cellPositions[lastIdx] - cellPositions[Mathf.Max(0, lastIdx - 1)];
+                    else
+                    {
+                        Vector3 prev = cellPositions[seqIndex] - cellPositions[seqIndex - 1];
+                        Vector3 next = cellPositions[seqIndex + 1] - cellPositions[seqIndex];
+                        prev.y = 0f;
+                        next.y = 0f;
+                        dir = (prev.sqrMagnitude > 0.0001f && next.sqrMagnitude > 0.0001f)
+                            ? (prev.normalized + next.normalized)
+                            : (cellPositions[seqIndex + 1] - cellPositions[seqIndex - 1]);
+                    }
+                    dir.y = 0f;
+                    if (dir.sqrMagnitude < 0.0001f) dir = Vector3.forward;
+                    return dir.normalized;
+                }
+
+                float ProjectedCellExtent(Vector3 axis)
+                {
+                    axis.y = 0f;
+                    if (axis.sqrMagnitude < 0.0001f) return Mathf.Max(gridCellX, gridCellZ);
+                    axis.Normalize();
+                    return Mathf.Abs(axis.x) * gridCellX + Mathf.Abs(axis.z) * gridCellZ;
+                }
+
+                bool TryGetSeqFootprint(
+                    int seqIndex,
+                    Vector3 tangent,
+                    out Vector3 center,
+                    out float alongWorld,
+                    out float perpWorld)
+                {
+                    center = seqIndex >= 0 && seqIndex < cellPositions.Count ? cellPositions[seqIndex] : Vector3.zero;
+                    // ROLLBACK_FLEXTUBE_FORCE_2X2_PART_FOOTPRINT_20260628:
+                    // A FlexTube visual part is authored as a 2x2 footprint. New MapMaker data stamps
+                    // four cells with the same seq, but older/imported levels may still contain only
+                    // the clicked anchor cell. Do not let those legacy cells render as 1x1 pieces:
+                    // synthesize a minimum 2x2 board footprint at runtime for Head/Body/Edge.
+                    alongWorld = ProjectedCellExtent(tangent) * 2f;
+                    Vector3 perp = new Vector3(-tangent.z, 0f, tangent.x);
+                    perpWorld = ProjectedCellExtent(perp) * 2f;
+
+                    if (seqIndex < 0 || seqIndex >= seqCellIds.Count || seqCellIds[seqIndex] == null || seqCellIds[seqIndex].Count == 0)
+                        return false;
+
+                    float minAlong = float.PositiveInfinity, maxAlong = float.NegativeInfinity;
+                    float minPerp = float.PositiveInfinity, maxPerp = float.NegativeInfinity;
+                    Vector3 sum = Vector3.zero;
+                    int count = 0;
+                    for (int ci = 0; ci < seqCellIds[seqIndex].Count; ci++)
+                    {
+                        int cellId = seqCellIds[seqIndex][ci];
+                        if (!_balloons.TryGetValue(cellId, out BalloonData cellData)) continue;
+                        Vector3 p = GetAdjustedBoardPosition(cellData.position);
+                        sum += p;
+                        count++;
+                        float a = Vector3.Dot(p, tangent);
+                        float b = Vector3.Dot(p, perp);
+                        if (a < minAlong) minAlong = a;
+                        if (a > maxAlong) maxAlong = a;
+                        if (b < minPerp) minPerp = b;
+                        if (b > maxPerp) maxPerp = b;
+                    }
+
+                    if (count <= 0)
+                        return false;
+
+                    center = sum / count;
+                    if (count < 4)
+                    {
+                        // Legacy/sparse seq: treat the stored cell as the lower-left anchor of a
+                        // 2x2 stamp, matching MapMaker PaintFlexTube2x2(baseC, baseR, seq).
+                        center += new Vector3(gridCellX * 0.5f, 0f, gridCellZ * 0.5f);
+                    }
+
+                    alongWorld = Mathf.Max(alongWorld, (maxAlong - minAlong) + ProjectedCellExtent(tangent));
+                    perpWorld = Mathf.Max(perpWorld, (maxPerp - minPerp) + ProjectedCellExtent(perp));
+                    return true;
+                }
+
+                Vector3 BuildPartScale()
+                {
+                    // ROLLBACK_FLEXTUBE_SEQ_VISUAL_DOUBLE_SIZE_20260628:
+                    // Do not read prefab root scale here. The prefab asset currently carries a small
+                    // root scale (~0.225), so "prefab scale * 2" still instantiated as ~0.45.
+                    // The requested runtime visual is literal Transform scale (2,2,2).
+                    return Vector3.one * FLEXTUBE_SEQ_PART_VISUAL_MULTIPLIER;
+                }
+
+                int FindNearestSeqByArc(float arc)
+                {
+                    int nearest = 0;
+                    float best = float.PositiveInfinity;
+                    for (int i = 0; i < cumArc.Count; i++)
+                    {
+                        float d = Mathf.Abs(cumArc[i] - arc);
+                        if (d < best)
+                        {
+                            best = d;
+                            nearest = i;
+                        }
+                    }
+                    return Mathf.Clamp(nearest, 0, lastIdx);
+                }
+
+                void AttachPartToSeq(FlexTubePart part, int seq)
+                {
+                    if (part == null || seq < 0 || seq >= seqCellIds.Count) return;
+                    part.SetBalloonIds(seqCellIds[seq]);
+                    for (int cellIndex = 0; cellIndex < seqCellIds[seq].Count; cellIndex++)
+                        _balloonObjects[seqCellIds[seq][cellIndex]] = part.gameObject;
+                }
+
+                Vector3 fixedScale = BuildPartScale();
+
+                // ROLLBACK_FLEXTUBE_CONTINUOUS_SEGMENT_TILING_20260628:
+                // The previous seq-footprint pass spawned only one Segment clone per authored seq,
+                // which left visible gaps between parts. Keep Head/Edge as 2x2 caps, but fill the
+                // whole curved path with visual Segment clones using FlexTube.VisualSegmentsPerCell.
+                if (TryGetSeqFootprint(0, GetSeqTangent(0), out Vector3 startCenter, out _, out _))
+                {
+                    startCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
+                    Quaternion startRot = Quaternion.LookRotation(GetSeqTangent(0), Vector3.up) * extraRot;
+                    var startPart = SpawnFlexPart(startCapPrefab, startCenter, startRot,
+                                                  true, fixedScale, GimmickIdentifier.FlexTubePart.StartCap, seqIds[0]);
+                    if (startPart != null)
+                    {
+                        RecenterToWorldBounds(startPart.gameObject, startCenter);
+                        AttachPartToSeq(startPart, 0);
+                    }
+                }
+
+                float minCell = Mathf.Max(0.0001f, Mathf.Min(gridCellX, gridCellZ));
+                int visualPerCell = Mathf.Max(1, tube.VisualSegmentsPerCell);
+                float pitch = minCell / visualPerCell;
+                int bodyCount = Mathf.Max(1, Mathf.CeilToInt(pathTotal / Mathf.Max(0.0001f, pitch)));
+                for (int bi = 0; bi <= bodyCount; bi++)
+                {
+                    float arc = bodyCount <= 0 ? 0f : Mathf.Lerp(0f, pathTotal, bi / (float)bodyCount);
+                    EvalFlexTubePath(cellPositions, cumArc, arc, out Vector3 segPos, out Vector3 segTan);
+                    segPos.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
+                    if (segTan.sqrMagnitude < 0.0001f) segTan = GetSeqTangent(FindNearestSeqByArc(arc));
+                    Quaternion segRot = Quaternion.LookRotation(segTan.normalized, Vector3.up) * extraRot;
+                    int nearestSeq = FindNearestSeqByArc(arc);
+                    var segPart = SpawnFlexPart(segmentPrefab, segPos, segRot,
+                                                true, fixedScale, GimmickIdentifier.FlexTubePart.Segment, seqIds[nearestSeq]);
+                    if (segPart != null)
+                        AttachPartToSeq(segPart, nearestSeq);
+                }
+
+                if (TryGetSeqFootprint(lastIdx, GetSeqTangent(lastIdx), out Vector3 endCenter, out _, out _))
+                {
+                    endCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
+                    Quaternion endRot = Quaternion.LookRotation(GetSeqTangent(lastIdx), Vector3.up) * extraRot;
+                    var endPart = SpawnFlexPart(endCapPrefab, endCenter, endRot,
+                                                true, fixedScale, GimmickIdentifier.FlexTubePart.EndCap, seqIds[lastIdx]);
+                    if (endPart != null)
+                    {
+                        RecenterToWorldBounds(endPart.gameObject, endCenter);
+                        AttachPartToSeq(endPart, lastIdx);
+                    }
+                }
+
+                ringScale = 1f;
+                Debug.Log($"[FlexTube] Group {groupId} seqFootprint parts={parts.Count} seqs={cellPositions.Count} cells={ids.Count}");
+
+#if false // ROLLBACK_FLEXTUBE_UNIFIED_PATH_TILING_20260628
                 // --- Tube tiling params (computed BEFORE the caps so the caps can match the segment Z) ---
                 // ROLLBACK_FLEXTUBE_CAP_MATCH_BRIDGE_20260624:
                 //  • Segments fill the span between the caps. The span is EXTENDED toward each cap by a
@@ -2450,6 +2703,7 @@ namespace BalloonFlow
                     //   2×2 중심에 안 옴(클릭 셀에 쏠림). 스폰 후 실제 월드 renderer bounds 중심을 4셀 중심(cellPositions[0])에
                     //   맞춰 평행이동 → pivot/메시 형태와 무관하게 geometry 가 2×2 정중앙에 앉는다.
                     RecenterToWorldBounds(startCapPart.gameObject, cellPositions[0]);
+                    startCapPart.SetBalloonIds(seqCellIds[0]);
                     _balloonObjects[ids[0]] = startCapPart.gameObject;
                 }
 
@@ -2480,6 +2734,7 @@ namespace BalloonFlow
                         var ribPart = SpawnFlexPart(segmentPrefab, ribPos, ribRot,
                                                     true, ribScale, GimmickIdentifier.FlexTubePart.Segment, ribCellId);
                         if (ribPart == null) continue;
+                        ribPart.SetBalloonIds(seqCellIds[nearestSeq]);
 
                         if (!nearestRibSqr.TryGetValue(ribCellId, out float best) || nearestSqr < best)
                         {
@@ -2514,6 +2769,7 @@ namespace BalloonFlow
                 {
                     // ROLLBACK_FLEXTUBE_CAP_RECENTER_WORLDBOUNDS_20260626: Edge 도 실제 월드 bounds 중심을 마지막 4셀 중심에 맞춤.
                     RecenterToWorldBounds(endCapPart.gameObject, cellPositions[lastIdx]);
+                    endCapPart.SetBalloonIds(seqCellIds[lastIdx]);
                     _balloonObjects[seqIds[lastIdx]] = endCapPart.gameObject;
                 }
 
@@ -2533,11 +2789,17 @@ namespace BalloonFlow
                 //  • 작가 지정: 한 hit 당 (전체 visual segment / HP)개가 줄어 길이가 HP 비례로 축소되고,
                 //    cell 이 소진될 때마다 MarkFlexTubeCellInactive 로 공격 가능 셀도 같은 비율로 갱신됨.
                 //  그룹 내 셀들은 동일 HP 를 갖지만, 안전하게 그룹의 최댓값(>0)을 사용.
+#endif
+
                 int authoredHp = 0;
                 for (int ai = 0; ai < ids.Count; ai++)
                     if (_balloons.TryGetValue(ids[ai], out var bdHp) && bdHp.flexTubeHp > authoredHp)
                         authoredHp = bdHp.flexTubeHp;
-                int flexTubeHp = (authoredHp > 0) ? authoredHp : Mathf.Max(1, segmentCellCount);
+                // ROLLBACK_FLEXTUBE_CELL_TARGET_HIT_20260628:
+                // Auto HP follows the authored logical footprint cells, not the averaged centerline count.
+                // A 2x2 Head/Segment/Edge part occupies four targetable cells, so default HP must not
+                // collapse to one centerline point and finish the tube before exposed cells are hit.
+                int flexTubeHp = (authoredHp > 0) ? authoredHp : Mathf.Max(1, ids.Count);
                 int color = _balloons[ids[0]].color;
                 tube.Initialize(flexTubeHp, color, groupId, parts);
             }

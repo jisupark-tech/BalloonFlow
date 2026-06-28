@@ -782,6 +782,17 @@ namespace BalloonFlow
             HolderData[] holders = HolderManager.Instance.GetHolders();
             if (holders == null || holders.Length == 0) return;
 
+            // PIPE_SHUFFLE_EXCLUDE_COLUMN_20260628: 파이프(Spawner)가 있는 열의 홀더는 셔플 대상에서 통째로 제외한다.
+            // 기존엔 파이프에서 꺼내진(released) payload 와 파이프 열의 일반 홀더가 shuffleable 에 포함돼, column 이 바뀐 뒤
+            // HolderVisualManager.RefreshAllPositions 의 pipeColumns 판정(현재 column 기준)에서 빠져 포물선 비행으로
+            // 파이프 밖으로 튀어나가는 버그가 있었다. 시각 레이어와 동일하게 파이프 열을 보존(이동 안 함)한다.
+            var pipeColumns = new HashSet<int>();
+            for (int i = 0; i < holders.Length; i++)
+                if (!holders[i].isConsumed
+                    && (holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                     || holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_O))
+                    pipeColumns.Add(holders[i].column);
+
             // Collect non-active, non-consumed holders
             var shuffleable = new List<HolderData>();
             for (int i = 0; i < holders.Length; i++)
@@ -793,7 +804,8 @@ namespace BalloonFlow
                 if (!holders[i].isDeploying && !holders[i].isWaiting &&
                     !holders[i].isMovingToRail && !holders[i].isConsumed &&
                     holders[i].magazineCount > 0 &&
-                    !_isSpawnerHolder && !HolderManager.Instance.IsHeldBehindPipe(holders[i]))
+                    !_isSpawnerHolder && !HolderManager.Instance.IsHeldBehindPipe(holders[i]) &&
+                    !pipeColumns.Contains(holders[i].column))
                 {
                     shuffleable.Add(holders[i]);
                 }
@@ -968,6 +980,11 @@ namespace BalloonFlow
 
             if (HolderManager.HasInstance)
                 HolderManager.Instance.CompactColumns();
+            // PIPE_ZAP_RESPAWN_20260628: 색 제거로 파이프 열의 앞 슬롯이 비면 즉시 다음 payload 를 release 해야 한다.
+            // 기존엔 다음 탭/배포 전까지 ProcessSpawners 가 호출되지 않아(+CompactColumns 가 파이프 열을 흩뜨려)
+            // 제거된 박스 자리가 영영 안 채워지는 스폰 정지 버그가 있었다. CompactColumns 직후 1회 호출로 보충.
+            if (HolderManager.HasInstance)
+                HolderManager.Instance.ProcessSpawners();
             if (HolderVisualManager.HasInstance)
                 HolderVisualManager.Instance.RefreshAllPositions();
 

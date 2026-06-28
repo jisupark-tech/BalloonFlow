@@ -277,11 +277,13 @@ namespace BalloonFlow
             yield return ScrollRewardsToGrandPrizeRoutine();
 
             // First unlock flow: show the how-to-play info after the reward-scroll reveal.
+            // WS_INFO_CLOSE_ONLY_20260628: 인포(how-to-play)를 터치로 닫아도 메인 Winning Streak 팝업은 유지한다.
+            //   이전엔 SetCloseCallback(CloseUI) 로 인포 닫힘이 메인 팝업까지 닫아 로비로 복귀시켰음(터치 1번에 둘 다 닫힘).
+            //   이제 인포만 닫히고, 메인 팝업은 자체 OK/X 버튼으로 닫는다. 인포 오픈 실패 시에만 폴백으로 메인 닫음.
             if (UIManager.HasInstance)
             {
                 var info = UIManager.Instance.OpenUI<PopupWinningStreakInfo>(Const.POPUP_WINNING_STREAK_INFO);
-                if (info != null) info.SetCloseCallback(CloseUI);
-                else CloseUI();
+                if (info == null) CloseUI();
             }
             else CloseUI();
         }

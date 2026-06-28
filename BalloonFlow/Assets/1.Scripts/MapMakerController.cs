@@ -5121,7 +5121,10 @@ namespace BalloonFlow
                         // Wooden Box(Pinata) is a field gimmick layered on the board, not an extra
                         // color balloon for the MapMaker "Balloons" total. Keep its HP in dart need
                         // and breakdown, but do not make 200 yellow balloons display as 201B.
-                        if (gn != "Pinata")
+                        // ROLLBACK_BALANCE_BARRICADE_NOT_BALLOON_COUNT_20260628:
+                        // Barricade 도 보드 위에 얹는 필드 기믹(단일 오브젝트, 그 아래 실제 풍선 없음)이라
+                        // 색상별 풍선 수에 포함되면 안 됨. HP(need)·분해 표시는 유지하고 B 카운트만 제외.
+                        if (gn != "Pinata" && gn != "Barricade")
                         {
                             balloonCountPerColor.TryGetValue(ci, out int bcOld);
                             balloonCountPerColor[ci] = bcOld + 1;

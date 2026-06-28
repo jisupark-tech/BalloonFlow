@@ -1165,34 +1165,54 @@ namespace BalloonFlow
         /// </summary>
         public void CompactColumns()
         {
-            // Collect all non-consumed holders
+            // PIPE_COMPACT_PRESERVE_COLUMN_20260628: 파이프(Spawner)가 있는 열은 압축 재분배에서 제외하고 현재 열을 보존한다.
+            // 기존엔 파이프 자신(IsQueueVisible==true)도 round-robin 으로 다른 열로 옮겨졌고, 그 unreleased payload 들은
+            // IsQueueVisible==false 라 제자리에 남아 파이프-payload 가 분리됐다. 그 결과 ProcessSpawners 의
+            // CountVisibleNormalHoldersInColumn(spawner.column) 판정이 깨져 다음 payload 가 영영 release 되지 않는
+            // (스폰 정지) 버그가 있었다. 비-파이프 홀더만 비-파이프 열에 압축한다.
+            var pipeColumns = new System.Collections.Generic.HashSet<int>();
+            for (int i = 0; i < _holders.Count; i++)
+                if (!_holders[i].isConsumed
+                    && (_holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                     || _holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_O))
+                    pipeColumns.Add(_holders[i].column);
+
+            // 재분배 대상: 파이프 열에 속하지 않은, 큐에 보이는 비-소비 홀더만.
             var active = new System.Collections.Generic.List<HolderData>();
             for (int i = 0; i < _holders.Count; i++)
             {
-                if (!_holders[i].isConsumed && _holders[i].IsQueueVisible)
+                if (!_holders[i].isConsumed && _holders[i].IsQueueVisible
+                    && !pipeColumns.Contains(_holders[i].column))
                     active.Add(_holders[i]);
             }
 
-            if (active.Count == 0) return;
+            // 분배할 열 = 파이프가 없는 열만 (파이프 열은 통째로 보존).
+            var freeColumns = new System.Collections.Generic.List<int>();
+            for (int c = 0; c < _queueColumns; c++)
+                if (!pipeColumns.Contains(c)) freeColumns.Add(c);
 
-            // Re-distribute round-robin across columns
-            for (int i = 0; i < active.Count; i++)
+            // Re-distribute round-robin across non-pipe columns
+            if (active.Count > 0 && freeColumns.Count > 0)
             {
-                active[i].column = i % _queueColumns;
+                for (int i = 0; i < active.Count; i++)
+                    active[i].column = freeColumns[i % freeColumns.Count];
             }
 
-            // Reset column deploy/wait tracking and re-assign from current state
+            // Reset column deploy/wait tracking and re-assign from current state.
+            // 파이프 열 홀더도 deploy/wait 상태일 수 있어 모든 비-소비 홀더를 대상으로 재구성한다(파이프 없는 레벨은 기존과 동일).
             ResetColumnTracking();
-            for (int i = 0; i < active.Count; i++)
+            for (int i = 0; i < _holders.Count; i++)
             {
-                int col = active[i].column;
-                if (active[i].isDeploying && _deployingHolderId[col] < 0)
-                    _deployingHolderId[col] = active[i].holderId;
-                else if (active[i].isWaiting && _waitingHolderId[col] < 0)
-                    _waitingHolderId[col] = active[i].holderId;
+                if (_holders[i].isConsumed) continue;
+                int col = _holders[i].column;
+                if (col < 0 || col >= _queueColumns) continue;
+                if (_holders[i].isDeploying && _deployingHolderId[col] < 0)
+                    _deployingHolderId[col] = _holders[i].holderId;
+                else if (_holders[i].isWaiting && _waitingHolderId[col] < 0)
+                    _waitingHolderId[col] = _holders[i].holderId;
             }
 
-            Debug.Log($"[HolderManager] CompactColumns: {active.Count} holders redistributed across {_queueColumns} columns.");
+            Debug.Log($"[HolderManager] CompactColumns: {active.Count} holders redistributed across {freeColumns.Count} non-pipe columns (pipe columns: {pipeColumns.Count}).");
         }
 
         /// <summary>
