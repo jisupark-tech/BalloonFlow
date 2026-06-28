@@ -25,7 +25,13 @@ namespace BalloonFlow
         private bool _resolved;
         private InlineTextLinkHandler _descriptionLinkHandler;
 
-        public override BackResult OnBackPressed() => BackResult.Blocked;
+        public override BackResult OnBackPressed()
+        {
+            // ROLLBACK_PRIVACY_TERM_BACK_NOOP_20260626:
+            // Returning Blocked makes BackButtonRouter play haptics. This popup is shown on Title,
+            // where NotHandled falls through to no scene action, so Android Back/Escape does nothing.
+            return BackResult.NotHandled;
+        }
 
         protected override void Awake()
         {
