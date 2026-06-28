@@ -157,6 +157,11 @@ namespace BalloonFlow
         // Fitting those bounds to a 2x2 footprint still reads too small, so this visual-only path
         // doubles the rendered part scale while leaving logical cells/HP/targeting unchanged.
         private const float FLEXTUBE_SEQ_PART_VISUAL_MULTIPLIER = 2.0f;
+        // ROLLBACK_FLEXTUBE_SPAWN_DEBUG_20260628:
+        // Temporary spawn diagnostics requested for FlexTube visual QA. Logs exact Start/Segment/Edge
+        // positions, rotations, scales, bounds, and segment-to-segment gaps at runtime.
+        private const bool FLEXTUBE_SPAWN_DEBUG = true;
+        private const int FLEXTUBE_SPAWN_DEBUG_SEGMENT_LIMIT = 220;
         // ROLLBACK_FLEXTUBE_SEQ_VISUAL_Z_OFFSET_20260628:
         // Small board-Z visual lift requested for FlexTube readability over the balloon field.
         private const float FLEXTUBE_SEQ_VISUAL_Z_OFFSET = 0.25f;
@@ -2460,6 +2465,27 @@ namespace BalloonFlow
                     return p;
                 }
 
+                string Fmt(Vector3 v) => $"({v.x:F3},{v.y:F3},{v.z:F3})";
+
+                void LogFlexTubeSpawn(string kind, FlexTubePart part, int index, int seq, float distance, float prevGap, float targetPitch)
+                {
+                    if (!FLEXTUBE_SPAWN_DEBUG || part == null) return;
+
+                    Transform t = part.transform;
+                    string boundsInfo = "bounds=none";
+                    if (TryMeasureVisualRendererBounds(part.transform, out Bounds b))
+                        boundsInfo = $"boundsCenter={Fmt(b.center)} boundsSize={Fmt(b.size)}";
+
+                    int idsCount = part.BalloonIds != null ? part.BalloonIds.Length : 0;
+                    Debug.Log(
+                        $"[FlexTube-DIAG-SPAWN] G{groupId} {kind}#{index} seq={seq} cell={part.BalloonId} ids={idsCount} " +
+                        $"dist={distance:F3} gapPrev={prevGap:F3} pitch={targetPitch:F3} " +
+                        $"pos={Fmt(t.position)} rot={Fmt(t.eulerAngles)} scale={Fmt(t.localScale)} {boundsInfo}");
+
+                    Color rayColor = kind == "START" ? Color.green : kind == "EDGE" ? Color.red : Color.cyan;
+                    Debug.DrawRay(t.position, t.forward * Mathf.Max(0.1f, minCell * 0.6f), rayColor, 20f);
+                }
+
                 // ROLLBACK_FLEXTUBE_SEQ_FOOTPRINT_VISUAL_20260628:
                 // FlexTube visual parts must sit on the actual cells authored in MapMaker:
                 // seq0 = Head(Start), seqN = Edge(End), middle seqs = body/corner Segments.
@@ -2552,6 +2578,55 @@ namespace BalloonFlow
                     return true;
                 }
 
+                bool TryGetSeqWorldFootprintXZ(int seqIndex, out Vector3 center, out float sizeX, out float sizeZ)
+                {
+                    // ROLLBACK_FLEXTUBE_CAP_RENDERER_BOUNDS_FIT_20260628:
+                    // Final cap visuals must be fitted by actual renderer bounds in world X/Z, not only
+                    // by predicted local X/Z scale. The cap prefabs are binary/authored assets with child
+                    // meshes whose visible axis can differ from root local axes.
+                    center = seqIndex >= 0 && seqIndex < cellPositions.Count ? cellPositions[seqIndex] : Vector3.zero;
+                    sizeX = gridCellX * 2f;
+                    sizeZ = gridCellZ * 2f;
+
+                    if (seqIndex < 0 || seqIndex >= seqCellIds.Count || seqCellIds[seqIndex] == null || seqCellIds[seqIndex].Count == 0)
+                        return false;
+
+                    float minX = float.PositiveInfinity, maxX = float.NegativeInfinity;
+                    float minZ = float.PositiveInfinity, maxZ = float.NegativeInfinity;
+                    Vector3 sum = Vector3.zero;
+                    int count = 0;
+                    for (int ci = 0; ci < seqCellIds[seqIndex].Count; ci++)
+                    {
+                        int cellId = seqCellIds[seqIndex][ci];
+                        if (!_balloons.TryGetValue(cellId, out BalloonData cellData)) continue;
+                        Vector3 p = GetAdjustedBoardPosition(cellData.position);
+                        sum += p;
+                        count++;
+                        if (p.x < minX) minX = p.x;
+                        if (p.x > maxX) maxX = p.x;
+                        if (p.z < minZ) minZ = p.z;
+                        if (p.z > maxZ) maxZ = p.z;
+                    }
+
+                    if (count <= 0)
+                        return false;
+
+                    center = sum / count;
+                    if (count < 4)
+                    {
+                        center += new Vector3(gridCellX * 0.5f, 0f, gridCellZ * 0.5f);
+                        sizeX = gridCellX * 2f;
+                        sizeZ = gridCellZ * 2f;
+                    }
+                    else
+                    {
+                        sizeX = Mathf.Max(gridCellX * 2f, (maxX - minX) + gridCellX);
+                        sizeZ = Mathf.Max(gridCellZ * 2f, (maxZ - minZ) + gridCellZ);
+                    }
+
+                    return true;
+                }
+
                 Vector3 BuildPartScale(float naturalLocalX, float naturalLocalZ)
                 {
                     // ROLLBACK_FLEXTUBE_GRID_2CELL_SCALE_20260628:
@@ -2563,20 +2638,142 @@ namespace BalloonFlow
                     return Vector3.one * (targetWorld / natural);
                 }
 
-                int FindNearestSeqByArc(float arc)
+                Vector3 BuildFootprintPartScale(float naturalLocalX, float naturalLocalZ, float targetAlongWorld, float targetPerpWorld)
+                {
+                    // ROLLBACK_FLEXTUBE_CAP_FOOTPRINT_SCALE_20260628:
+                    // Start/Edge are single cap meshes that must occupy the authored 2x2 footprint.
+                    // A uniform max-axis scale made EndCap width correct but kept its short local-Z,
+                    // so it rendered like a tiny cap inside the footprint. Scale local X to the
+                    // footprint width and local Z to the footprint length; keep Y tied to X.
+                    float sx = targetPerpWorld / Mathf.Max(0.0001f, naturalLocalX);
+                    float sz = targetAlongWorld / Mathf.Max(0.0001f, naturalLocalZ);
+                    return new Vector3(sx, sx, sz);
+                }
+
+                int FindNearestSeqByPosition(Vector3 pos)
                 {
                     int nearest = 0;
                     float best = float.PositiveInfinity;
-                    for (int i = 0; i < cumArc.Count; i++)
+                    for (int i = 0; i < cellPositions.Count; i++)
                     {
-                        float d = Mathf.Abs(cumArc[i] - arc);
-                        if (d < best)
+                        Vector3 d = cellPositions[i] - pos;
+                        d.y = 0f;
+                        float sq = d.sqrMagnitude;
+                        if (sq < best)
                         {
-                            best = d;
+                            best = sq;
                             nearest = i;
                         }
                     }
                     return Mathf.Clamp(nearest, 0, lastIdx);
+                }
+
+                void BuildCurveSamples(out List<Vector3> curvePoints, out List<float> curveCum)
+                {
+                    // ROLLBACK_FLEXTUBE_ARCLENGTH_CURVE_SAMPLING_20260628:
+                    // EvalFlexTubePath bends corners with Bezier after the original straight-line arc is
+                    // chosen. Sampling directly by that straight-line arc makes corner spacing uneven.
+                    // Build a rendered curve polyline first, then place Segments by the curve's own
+                    // cumulative length so every Segment uses the same size and a predictable position.
+                    int samplesPerLogicalSpan = 12;
+                    int sampleCount = Mathf.Max(2, (cellPositions.Count - 1) * samplesPerLogicalSpan + 1);
+                    curvePoints = new List<Vector3>(sampleCount);
+                    curveCum = new List<float>(sampleCount);
+
+                    for (int si = 0; si < sampleCount; si++)
+                    {
+                        float t = sampleCount <= 1 ? 0f : si / (float)(sampleCount - 1);
+                        float sourceArc = Mathf.Lerp(0f, pathTotal, t);
+                        EvalFlexTubePath(cellPositions, cumArc, sourceArc, out Vector3 p, out _);
+
+                        if (curvePoints.Count == 0)
+                        {
+                            curvePoints.Add(p);
+                            curveCum.Add(0f);
+                            continue;
+                        }
+
+                        float step = Vector3.Distance(curvePoints[curvePoints.Count - 1], p);
+                        if (step <= 0.0001f)
+                            continue;
+
+                        curvePoints.Add(p);
+                        curveCum.Add(curveCum[curveCum.Count - 1] + step);
+                    }
+
+                    if (curvePoints.Count < 2)
+                    {
+                        curvePoints.Clear();
+                        curveCum.Clear();
+                        curvePoints.Add(cellPositions[0]);
+                        curvePoints.Add(cellPositions[lastIdx]);
+                        curveCum.Add(0f);
+                        curveCum.Add(Vector3.Distance(cellPositions[0], cellPositions[lastIdx]));
+                    }
+                }
+
+                void SampleCurveByDistance(List<Vector3> curvePoints, List<float> curveCum, float distance, float tangentWindow, out Vector3 pos, out Vector3 tangent)
+                {
+                    void SamplePositionOnly(float d, out Vector3 p)
+                    {
+                        int pn = curvePoints != null ? curvePoints.Count : 0;
+                        if (pn == 0)
+                        {
+                            p = Vector3.zero;
+                            return;
+                        }
+                        if (pn == 1)
+                        {
+                            p = curvePoints[0];
+                            return;
+                        }
+
+                        float pTotal = curveCum[curveCum.Count - 1];
+                        d = Mathf.Clamp(d, 0f, pTotal);
+                        int pk = 0;
+                        while (pk < pn - 2 && curveCum[pk + 1] < d) pk++;
+
+                        float pSpan = Mathf.Max(0.0001f, curveCum[pk + 1] - curveCum[pk]);
+                        float pt = Mathf.Clamp01((d - curveCum[pk]) / pSpan);
+                        p = Vector3.Lerp(curvePoints[pk], curvePoints[pk + 1], pt);
+                    }
+
+                    int n = curvePoints != null ? curvePoints.Count : 0;
+                    if (n == 0)
+                    {
+                        pos = Vector3.zero;
+                        tangent = Vector3.forward;
+                        return;
+                    }
+                    if (n == 1)
+                    {
+                        pos = curvePoints[0];
+                        tangent = Vector3.forward;
+                        return;
+                    }
+
+                    float total = curveCum[curveCum.Count - 1];
+                    distance = Mathf.Clamp(distance, 0f, total);
+                    SamplePositionOnly(distance, out pos);
+                    // ROLLBACK_FLEXTUBE_SEGMENT_TANGENT_SMOOTH_20260628:
+                    // Using only curvePoints[k] -> curvePoints[k+1] made the rotation jump at Bezier
+                    // branch seams, so one Segment near a corner looked smaller/off-position even
+                    // though its Transform scale was identical. Use a centered tangent window so the
+                    // rotation follows the same continuous sampled curve as the position.
+                    float window = Mathf.Max(0.0001f, tangentWindow);
+                    float before = Mathf.Max(0f, distance - window);
+                    float after = Mathf.Min(total, distance + window);
+                    SamplePositionOnly(before, out Vector3 beforePos);
+                    SamplePositionOnly(after, out Vector3 afterPos);
+                    tangent = afterPos - beforePos;
+                    tangent.y = 0f;
+                    // ROLLBACK_FLEXTUBE_DEGENERATE_TANGENT_ZERO_20260628:
+                    // 퇴화(before≈after) 시 Vector3.forward(크기 1)를 주면 호출부의 sqrMagnitude<0.0001 폴백을
+                    // 우회해 그 세그먼트가 +z 로 비틀린다. 0 을 반환해 호출부가 GetSeqTangent 로 보정하게 한다.
+                    if (tangent.sqrMagnitude < 0.000001f)
+                        tangent = Vector3.zero;
+                    else
+                        tangent.Normalize();
                 }
 
                 void AttachPartToSeq(FlexTubePart part, int seq)
@@ -2590,51 +2787,134 @@ namespace BalloonFlow
                 Vector3 startCapGridScale = BuildPartScale(startCapMeshX, startCapMeshZ);
                 Vector3 segmentGridScale = BuildPartScale(segMeshX, segMeshZ);
                 Vector3 endCapGridScale = BuildPartScale(endCapMeshX, endCapMeshZ);
+                if (FLEXTUBE_SPAWN_DEBUG)
+                {
+                    Debug.Log(
+                        $"[FlexTube-DIAG-CONFIG] G{groupId} cells={ids.Count} seqs={cellPositions.Count} " +
+                        $"grid=({gridCellX:F3},{gridCellZ:F3}) minCell={minCell:F3} pathTotal={pathTotal:F3} " +
+                        $"meshX/Z start=({startCapMeshX:F3},{startCapMeshZ:F3}) seg=({segMeshX:F3},{segMeshZ:F3}) edge=({endCapMeshX:F3},{endCapMeshZ:F3}) " +
+                        $"scale start={Fmt(startCapGridScale)} seg={Fmt(segmentGridScale)} edge={Fmt(endCapGridScale)}");
+                    for (int si = 0; si < cellPositions.Count; si++)
+                    {
+                        int seqCellCount = si < seqCellIds.Count && seqCellIds[si] != null ? seqCellIds[si].Count : 0;
+                        Debug.Log($"[FlexTube-DIAG-SEQ] G{groupId} seq={si} cells={seqCellCount} center={Fmt(cellPositions[si])} tangent={Fmt(GetSeqTangent(si))}");
+                    }
+                }
 
                 // ROLLBACK_FLEXTUBE_AUTHORED_SEQ_ONLY_20260628:
                 // Rollback: authored-seq-only generation made the tube too sparse. Restore the previous
                 // continuous path tiling so Segment count follows path length/pitch, while Head and Edge
                 // remain explicit cap parts.
-                if (TryGetSeqFootprint(0, GetSeqTangent(0), out Vector3 startCenter, out _, out _))
+                if (TryGetSeqFootprint(0, GetSeqTangent(0), out Vector3 startCenter, out float startAlongWorld, out float startPerpWorld))
                 {
                     startCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
                     Quaternion startRot = Quaternion.LookRotation(GetSeqTangent(0), Vector3.up) * extraRot;
+                    Vector3 startFootprintScale = BuildFootprintPartScale(startCapMeshX, startCapMeshZ, startAlongWorld, startPerpWorld);
                     var startPart = SpawnFlexPart(startCapPrefab, startCenter, startRot,
-                                                  true, startCapGridScale, GimmickIdentifier.FlexTubePart.StartCap, seqIds[0]);
+                                                  true, startFootprintScale, GimmickIdentifier.FlexTubePart.StartCap, seqIds[0]);
                     if (startPart != null)
                     {
-                        RecenterToWorldBounds(startPart.gameObject, startCenter);
+                        if (TryGetSeqWorldFootprintXZ(0, out Vector3 startFitCenter, out float startSizeX, out float startSizeZ))
+                        {
+                            startFitCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
+                            FitRendererBoundsToFootprint(startPart.gameObject, startFitCenter, startSizeX, startSizeZ);
+                        }
+                        else
+                        {
+                            RecenterToWorldBounds(startPart.gameObject, startCenter);
+                        }
                         AttachPartToSeq(startPart, 0);
+                        LogFlexTubeSpawn("START", startPart, 0, 0, 0f, -1f, 0f);
                     }
                 }
 
                 int visualPerCell = Mathf.Max(1, tube.VisualSegmentsPerCell);
                 float pitch = minCell / visualPerCell;
-                int bodyCount = Mathf.Max(1, Mathf.CeilToInt(pathTotal / Mathf.Max(0.0001f, pitch)));
+                BuildCurveSamples(out List<Vector3> curvePoints, out List<float> curveCum);
+                float curveTotal = curveCum[curveCum.Count - 1];
+                // ROLLBACK_FLEXTUBE_CAP_INSET_SEGMENTS_20260628:
+                // Cap inset made the first/last Segment stop one cell away from Start/Edge, so the caps
+                // looked disconnected and Start was effectively changed to match the broken Edge. Keep the
+                // body sampled through both cap centers so Edge uses the same visual connection rule as Start.
+                float capInset = 0f;
+                float bodyStart = 0f;
+                float bodyEnd = curveTotal;
+                float bodySpan = Mathf.Max(0f, bodyEnd - bodyStart);
+                int bodyCount = bodySpan > 0.0001f ? Mathf.Max(1, Mathf.CeilToInt(bodySpan / Mathf.Max(0.0001f, pitch))) : 0;
+                if (FLEXTUBE_SPAWN_DEBUG)
+                {
+                    Debug.Log(
+                        $"[FlexTube-DIAG-CURVE] G{groupId} curveSamples={curvePoints.Count} curveTotal={curveTotal:F3} " +
+                        $"capInset={capInset:F3} bodyStart={bodyStart:F3} bodyEnd={bodyEnd:F3} bodySpan={bodySpan:F3} " +
+                        $"pitch={pitch:F3} bodyCount={bodyCount}");
+                }
+                bool hasPrevSegment = false;
+                Vector3 prevSegmentPos = Vector3.zero;
+                float minSegGap = float.PositiveInfinity;
+                float maxSegGap = 0f;
+                float sumSegGap = 0f;
+                int segGapCount = 0;
                 for (int bi = 0; bi <= bodyCount; bi++)
                 {
-                    float arc = bodyCount <= 0 ? 0f : Mathf.Lerp(0f, pathTotal, bi / (float)bodyCount);
-                    EvalFlexTubePath(cellPositions, cumArc, arc, out Vector3 segPos, out Vector3 segTan);
+                    float curveDistance = bodyCount <= 0 ? bodyStart : Mathf.Lerp(bodyStart, bodyEnd, bi / (float)bodyCount);
+                    SampleCurveByDistance(curvePoints, curveCum, curveDistance, Mathf.Max(0.0001f, pitch), out Vector3 segPos, out Vector3 segTan);
                     segPos.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
-                    if (segTan.sqrMagnitude < 0.0001f) segTan = GetSeqTangent(FindNearestSeqByArc(arc));
+                    if (segTan.sqrMagnitude < 0.0001f) segTan = GetSeqTangent(FindNearestSeqByPosition(segPos));
                     Quaternion segRot = Quaternion.LookRotation(segTan.normalized, Vector3.up) * extraRot;
-                    int nearestSeq = FindNearestSeqByArc(arc);
+                    int nearestSeq = FindNearestSeqByPosition(segPos);
                     var segPart = SpawnFlexPart(segmentPrefab, segPos, segRot,
                                                 true, segmentGridScale, GimmickIdentifier.FlexTubePart.Segment, seqIds[nearestSeq]);
                     if (segPart != null)
+                    {
                         AttachPartToSeq(segPart, nearestSeq);
+                        float gap = -1f;
+                        if (hasPrevSegment)
+                        {
+                            gap = Vector3.Distance(prevSegmentPos, segPart.transform.position);
+                            minSegGap = Mathf.Min(minSegGap, gap);
+                            maxSegGap = Mathf.Max(maxSegGap, gap);
+                            sumSegGap += gap;
+                            segGapCount++;
+                            if (FLEXTUBE_SPAWN_DEBUG)
+                                Debug.DrawLine(prevSegmentPos, segPart.transform.position, Color.cyan, 20f);
+                        }
+
+                        if (FLEXTUBE_SPAWN_DEBUG && bi < FLEXTUBE_SPAWN_DEBUG_SEGMENT_LIMIT)
+                            LogFlexTubeSpawn("SEG", segPart, bi, nearestSeq, curveDistance, gap, pitch);
+
+                        prevSegmentPos = segPart.transform.position;
+                        hasPrevSegment = true;
+                    }
+                }
+                if (FLEXTUBE_SPAWN_DEBUG)
+                {
+                    float avgGap = segGapCount > 0 ? sumSegGap / segGapCount : 0f;
+                    string minGapText = segGapCount > 0 ? minSegGap.ToString("F3") : "-";
+                    Debug.Log(
+                        $"[FlexTube-DIAG-SEG-SUMMARY] G{groupId} segs={bodyCount + 1} loggedLimit={FLEXTUBE_SPAWN_DEBUG_SEGMENT_LIMIT} " +
+                        $"gapMin={minGapText} gapMax={maxSegGap:F3} gapAvg={avgGap:F3} pitch={pitch:F3}");
                 }
 
-                if (TryGetSeqFootprint(lastIdx, GetSeqTangent(lastIdx), out Vector3 endCenter, out _, out _))
+                if (TryGetSeqFootprint(lastIdx, GetSeqTangent(lastIdx), out Vector3 endCenter, out float endAlongWorld, out float endPerpWorld))
                 {
                     endCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
                     Quaternion endRot = Quaternion.LookRotation(GetSeqTangent(lastIdx), Vector3.up) * extraRot;
+                    Vector3 endFootprintScale = BuildFootprintPartScale(endCapMeshX, endCapMeshZ, endAlongWorld, endPerpWorld);
                     var endPart = SpawnFlexPart(endCapPrefab, endCenter, endRot,
-                                                true, endCapGridScale, GimmickIdentifier.FlexTubePart.EndCap, seqIds[lastIdx]);
+                                                true, endFootprintScale, GimmickIdentifier.FlexTubePart.EndCap, seqIds[lastIdx]);
                     if (endPart != null)
                     {
-                        RecenterToWorldBounds(endPart.gameObject, endCenter);
+                        if (TryGetSeqWorldFootprintXZ(lastIdx, out Vector3 endFitCenter, out float endSizeX, out float endSizeZ))
+                        {
+                            endFitCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
+                            FitRendererBoundsToFootprint(endPart.gameObject, endFitCenter, endSizeX, endSizeZ);
+                        }
+                        else
+                        {
+                            RecenterToWorldBounds(endPart.gameObject, endCenter);
+                        }
                         AttachPartToSeq(endPart, lastIdx);
+                        LogFlexTubeSpawn("EDGE", endPart, 0, lastIdx, curveTotal, -1f, 0f);
                     }
                 }
 
@@ -3125,16 +3405,12 @@ namespace BalloonFlow
             if (fromPrev.sqrMagnitude < 0.0001f || toNext.sqrMagnitude < 0.0001f)
                 return self;
 
-            // ROLLBACK_FLEXTUBE_CORNER_INWARD_20260628:
-            //   control=self(바깥 꼭짓점)면 곡선이 바깥 코너에 붙어, 폭 넓은 디스크가 회전하며 외측으로 삐져나옴("귀").
-            //   제어점을 회전 안쪽(두 변 방향의 이등분선)으로 당겨, 라운딩 곡선이 코너 안쪽을 지나게 한다 →
-            //   디스크 외측 edge 가 원래 elbow 선 안에 머물러 귀가 줄어든다. 당김량 = 짧은 변 절반의 일부(0.45).
-            Vector3 inward = fromPrev.normalized * -1f + toNext.normalized; // (self→prev) + (self→next) = 안쪽 이등분
-            inward.y = 0f;
-            if (inward.sqrMagnitude < 0.0001f) return self; // 일직선 — 코너 아님
-            inward.Normalize();
-            float halfEdge = 0.5f * Mathf.Min(fromPrev.magnitude, toNext.magnitude);
-            return self + inward * (halfEdge * 0.45f);
+            // ROLLBACK_FLEXTUBE_CORNER_CONTROL_SELF_20260628:
+            //   control=self(코너 꼭짓점). start=mid(prev,self), end=mid(self,next) 와 함께 두 직선부에 접하는
+            //   깔끔한 2차 라운딩 — 삼각형 start-self-end 안에 머물러 cusp/역전이 없다(tangent 항상 매끄러움).
+            //   이전 inward 당김(0.45×halfEdge)은 코너에서 곡선이 안쪽으로 꺾여 cusp 가 생기면 그 지점 세그먼트의
+            //   곡선-tangent 가 비틀리고(틀어진 방향) 겹쳐 작아 보이던 원인 → 제거하고 self 로 복원.
+            return self;
         }
 
         private static Quaternion CalculateFlexTubePartRotation(List<Vector3> cellPositions, int i)

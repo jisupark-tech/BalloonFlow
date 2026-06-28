@@ -709,7 +709,15 @@ namespace BalloonFlow
                 BalloonData balloon = all[i];
                 if (balloon == null || balloon.isPopped) continue; // [alive-only] now no-op guard, 동작 불변용 유지
 
-                Vector3 worldPos = BalloonController.Instance.GetBalloonWorldPositionCached(balloon.balloonId);
+                // ROLLBACK_FLEXTUBE_TARGETING_LOGICAL_POS_20260628:
+                // FlexTube 셀은 _balloonObjects 가 '곡선 위 재배치된 비주얼 파트'를 가리키고, 여러 논리 셀이
+                // 같은 파트를 공유한다(AttachPartToSeq). 그래서 캐시된 visual 위치로 cell 을 잡으면 FlexTube 의
+                // 타게팅 좌표가 실제 2×2 논리 격자와 어긋나 안쪽 풍선과 다른 라인이 되고, 링이 다트를 못 막아
+                // 'FlexTube 너머 풍선이 공격당하는' 관통이 생긴다. FlexTube 는 논리 position 으로 contour 에 넣는다.
+                // (일반 풍선은 비주얼이 논리 위치에 있으므로 캐시 그대로 — 동작 불변.)
+                Vector3 worldPos = balloon.gimmickType == BalloonController.GimmickFlexTube
+                    ? BalloonController.Instance.GetAdjustedBoardPosition(balloon.position)
+                    : BalloonController.Instance.GetBalloonWorldPositionCached(balloon.balloonId);
                 bool targetable = IsDirectlyTargetable(balloon);
 
                 // ROLLBACK_BARRICADE_DIR_FOOTPRINT_20260608:
