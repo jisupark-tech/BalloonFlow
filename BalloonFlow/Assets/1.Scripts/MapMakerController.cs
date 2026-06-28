@@ -4329,13 +4329,16 @@ namespace BalloonFlow
                             // ROLLBACK_ICE_OVERLAY_UNDER_BALLOONS_20260626:
                             // Ice 2x2/3x3 keeps every footprint balloon as real data, but runtime
                             // groups them by iceBlockSize and renders one combined Ice overlay.
-                            int anchorColor = _balloonColors[col, row];
+                            // ROLLBACK_ICE_GIMMICKONLY_KEEPCOLOR_20260628:
+                            // 기믹만 모드 — 기존 풍선 색을 '그대로' 유지하고 빈 셀엔 새 풍선을 만들지 않는다.
+                            // 기존엔 2×2 전체를 anchorColor 로 덮어써, 빈 셀/다른 색 셀까지 색이 칠해졌다(의도 위반).
                             for (int dx = 0; dx < b; dx++)
                                 for (int dy = 0; dy < b; dy++)
                                 {
                                     int cx = col + dx, cy = row + dy;
                                     if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
-                                    _balloonColors[cx, cy] = anchorColor;
+                                    if (_balloonColors[cx, cy] < 0) continue; // 빈 셀: 새 풍선 만들지 않음(색 미입힘)
+                                    // 색은 건드리지 않고 Ice 기믹/블록 메타만 입힌다.
                                     _balloonGimmicks[cx, cy] = _paintGimmick;
                                     _balloonGimmickHP[cx, cy] = _paintPinataHP;
                                     _balloonIceBlockSize[cx, cy] = b;
@@ -5299,20 +5302,69 @@ namespace BalloonFlow
 
         private void AutoBalanceHolders()
         {
+            // ROLLBACK_GENQUEUE_GIMMICK_NEED_MATCH_20260628: AutoBalance 도 GenerateQueue/Balance check 와 동일 수요 산정.
+            //   TargetBox=알(egg) 기준, FlexTube=그룹 기준 — footprint 셀 수(2×2)로 과다 카운트하던 것 교정.
             var needed = new Dictionary<int, int>();
+            var autoCountedFlexTubeGroups = new System.Collections.Generic.HashSet<int>();
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] >= 0)
                     {
                         int gi = _balloonGimmicks[c, r];
                         string autoGimmickName = (gi > 0 && gi < FIELD_GIMMICK_NAMES.Length) ? FIELD_GIMMICK_NAMES[gi] : "";
+
+                        // TargetBox(Pinata_Box): 알(egg) config 기준.
+                        if (autoGimmickName == "Pinata_Box")
+                        {
+                            var bkey = new Vector2Int(c, r);
+                            if (_boxEggConfigColors.TryGetValue(bkey, out int[] eggC) && eggC != null && eggC.Length > 0)
+                            {
+                                int[] eggH = (_boxEggConfigHps.TryGetValue(bkey, out int[] hArr) && hArr != null && hArr.Length == eggC.Length) ? hArr : null;
+                                for (int e = 0; e < eggC.Length; e++)
+                                {
+                                    int ec = eggC[e];
+                                    if (ec < 0) continue;
+                                    int eh = (eggH != null && eggH[e] > 0) ? eggH[e] : 1;
+                                    needed[ec] = (needed.ContainsKey(ec) ? needed[ec] : 0) + eh;
+                                }
+                                continue;
+                            }
+                            if (_balloonPinataW[c, r] == 0) continue;
+                            int ac = _balloonColors[c, r];
+                            int ah = _balloonGimmickHP[c, r] > 0 ? _balloonGimmickHP[c, r] : 2;
+                            needed[ac] = (needed.ContainsKey(ac) ? needed[ac] : 0) + ah;
+                            continue;
+                        }
+
+                        // FlexTube: 그룹당 1회(그룹 HP).
+                        if (autoGimmickName == "FlexTube" && _balloonFlexTubeGroupId[c, r] >= 0)
+                        {
+                            int grp = _balloonFlexTubeGroupId[c, r];
+                            if (autoCountedFlexTubeGroups.Contains(grp)) continue;
+                            autoCountedFlexTubeGroups.Add(grp);
+                            int maxHp = 0, tubeColor = _balloonColors[c, r];
+                            var ftSeqs = new System.Collections.Generic.HashSet<int>();
+                            for (int cc = 0; cc < _gridCols; cc++)
+                                for (int rr = 0; rr < _gridRows; rr++)
+                                    if (_balloonFlexTubeGroupId[cc, rr] == grp)
+                                    {
+                                        if (_balloonGimmickHP[cc, rr] > maxHp) maxHp = _balloonGimmickHP[cc, rr];
+                                        if (_balloonColors[cc, rr] >= 0) tubeColor = _balloonColors[cc, rr];
+                                        int sq = _balloonFlexTubeSequenceIndex[cc, rr];
+                                        if (sq >= 0) ftSeqs.Add(sq);
+                                    }
+                            int tubeHp = maxHp > 0 ? maxHp : Mathf.Max(1, ftSeqs.Count - 2);
+                            if (tubeColor >= 0)
+                                needed[tubeColor] = (needed.ContainsKey(tubeColor) ? needed[tubeColor] : 0) + tubeHp;
+                            continue;
+                        }
+
                         // ROLLBACK_ICE_OVERLAY_UNDER_BALLOONS_20260626:
                         // Ice 2x2/3x3 keeps the underlying 4/9 balloons, so AutoBalance must count those
                         // cells. IsSizedFieldGimmick excludes Ice and this skip does not apply to it.
                         bool isSizedFieldCell = autoGimmickName.Length > 0
                             && IsSizedFieldGimmick(autoGimmickName);
-                        bool countEggCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && FIELD_GIMMICK_NAMES[gi] == "Pinata_Box";
-                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0 && !countEggCell) continue;
+                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
                         needed[ci] = (needed.ContainsKey(ci) ? needed[ci] : 0) + life;
@@ -5433,16 +5485,67 @@ namespace BalloonFlow
                     }
 
             // ── 1. 필드 분석 (§1) ──
+            // ROLLBACK_GENQUEUE_GIMMICK_NEED_MATCH_20260628:
+            //   TargetBox/FlexTube 다트 수요를 Balance check(RefreshInfo)와 '동일'하게 센다.
+            //   기존엔 TargetBox 를 footprint 셀마다(2×2=4셀)×HP, FlexTube 를 셀마다(2×2=4셀×파트수) 세어
+            //   실제 알(egg)/그룹 수요보다 과다 생성됐다(예: pk 다트가 필요량보다 많음).
             var colorDarts = new Dictionary<int, int>();
+            var genCountedFlexTubeGroups = new System.Collections.Generic.HashSet<int>();
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                     if (_balloonColors[c, r] >= 0)
                     {
                         int gi = _balloonGimmicks[c, r];
-                        bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
-                            && IsSizedFieldGimmick(FIELD_GIMMICK_NAMES[gi]);
-                        bool countEggCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && FIELD_GIMMICK_NAMES[gi] == "Pinata_Box";
-                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0 && !countEggCell) continue;
+                        string gn = (gi > 0 && gi < FIELD_GIMMICK_NAMES.Length) ? FIELD_GIMMICK_NAMES[gi] : "";
+
+                        // TargetBox(Pinata_Box): 알(egg) config 기준 — 알별 색·HP 만큼만(footprint 셀 수 무관).
+                        if (gn == "Pinata_Box")
+                        {
+                            var bkey = new Vector2Int(c, r);
+                            if (_boxEggConfigColors.TryGetValue(bkey, out int[] eggC) && eggC != null && eggC.Length > 0)
+                            {
+                                int[] eggH = (_boxEggConfigHps.TryGetValue(bkey, out int[] hArr) && hArr != null && hArr.Length == eggC.Length) ? hArr : null;
+                                for (int e = 0; e < eggC.Length; e++)
+                                {
+                                    int ec = eggC[e];
+                                    if (ec < 0) continue;
+                                    int eh = (eggH != null && eggH[e] > 0) ? eggH[e] : 1;
+                                    colorDarts[ec] = (colorDarts.ContainsKey(ec) ? colorDarts[ec] : 0) + eh;
+                                }
+                                continue;
+                            }
+                            if (_balloonPinataW[c, r] == 0) continue; // config 없는 비앵커 박스 셀 스킵
+                            int ac = _balloonColors[c, r];
+                            int ah = _balloonGimmickHP[c, r] > 0 ? _balloonGimmickHP[c, r] : 2;
+                            colorDarts[ac] = (colorDarts.ContainsKey(ac) ? colorDarts[ac] : 0) + ah;
+                            continue;
+                        }
+
+                        // FlexTube: 그룹당 1회 — 그룹 HP(작가지정 or segment 파트 수). 셀 수(2×2) 무관.
+                        if (gn == "FlexTube" && _balloonFlexTubeGroupId[c, r] >= 0)
+                        {
+                            int grp = _balloonFlexTubeGroupId[c, r];
+                            if (genCountedFlexTubeGroups.Contains(grp)) continue;
+                            genCountedFlexTubeGroups.Add(grp);
+                            int maxHp = 0, tubeColor = _balloonColors[c, r];
+                            var ftSeqs = new System.Collections.Generic.HashSet<int>();
+                            for (int cc = 0; cc < _gridCols; cc++)
+                                for (int rr = 0; rr < _gridRows; rr++)
+                                    if (_balloonFlexTubeGroupId[cc, rr] == grp)
+                                    {
+                                        if (_balloonGimmickHP[cc, rr] > maxHp) maxHp = _balloonGimmickHP[cc, rr];
+                                        if (_balloonColors[cc, rr] >= 0) tubeColor = _balloonColors[cc, rr];
+                                        int sq = _balloonFlexTubeSequenceIndex[cc, rr];
+                                        if (sq >= 0) ftSeqs.Add(sq);
+                                    }
+                            int tubeHp = maxHp > 0 ? maxHp : Mathf.Max(1, ftSeqs.Count - 2);
+                            if (tubeColor >= 0)
+                                colorDarts[tubeColor] = (colorDarts.ContainsKey(tubeColor) ? colorDarts[tubeColor] : 0) + tubeHp;
+                            continue;
+                        }
+
+                        bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && IsSizedFieldGimmick(gn);
+                        if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
                         colorDarts[ci] = (colorDarts.ContainsKey(ci) ? colorDarts[ci] : 0) + life;

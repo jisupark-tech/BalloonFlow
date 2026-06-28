@@ -2420,6 +2420,7 @@ namespace BalloonFlow
                 for (int k = 1; k < cellPositions.Count; k++)
                     cumArc.Add(cumArc[k - 1] + Vector3.Distance(cellPositions[k - 1], cellPositions[k]));
                 float pathTotal = cumArc[lastIdx];
+                float minCell = Mathf.Max(0.0001f, Mathf.Min(gridCellX, gridCellZ));
 
                 // shared instantiate/parent/color path for caps and ribs.
                 FlexTubePart SpawnFlexPart(GameObject prefab, Vector3 pos, Quaternion rot,
@@ -2452,6 +2453,10 @@ namespace BalloonFlow
                     // ROLLBACK_FLEXTUBE_TINT_ALL_RENDERERS_20260608: tint every child renderer so
                     // parts not wired to GimmickIdentifier._colorRenderers don't stay black/gray.
                     ApplyTintToRenderersInChildren(obj, BalloonColors[colorIdx]);
+                    // ROLLBACK_FLEXTUBE_GRID_2CELL_SCALE_20260628:
+                    // GimmickIdentifier.Initialize/ApplyColor can touch child renderers after spawn.
+                    // Re-apply the grid-derived scale last so every part keeps the same final world size.
+                    if (applyScale) obj.transform.localScale = scale;
                     return p;
                 }
 
@@ -2547,13 +2552,15 @@ namespace BalloonFlow
                     return true;
                 }
 
-                Vector3 BuildPartScale()
+                Vector3 BuildPartScale(float naturalLocalX, float naturalLocalZ)
                 {
-                    // ROLLBACK_FLEXTUBE_SEQ_VISUAL_DOUBLE_SIZE_20260628:
-                    // Do not read prefab root scale here. The prefab asset currently carries a small
-                    // root scale (~0.225), so "prefab scale * 2" still instantiated as ~0.45.
-                    // The requested runtime visual is literal Transform scale (2,2,2).
-                    return Vector3.one * FLEXTUBE_SEQ_PART_VISUAL_MULTIPLIER;
+                    // ROLLBACK_FLEXTUBE_GRID_2CELL_SCALE_20260628:
+                    // The visual request is "2 balloon-grid cells", not "prefab transform scale x2".
+                    // Measure the prefab's natural visible local size and convert it to a uniform
+                    // Transform scale whose largest horizontal visible dimension becomes 2 grid cells.
+                    float targetWorld = minCell * FLEXTUBE_SEQ_PART_VISUAL_MULTIPLIER;
+                    float natural = Mathf.Max(0.0001f, Mathf.Max(naturalLocalX, naturalLocalZ));
+                    return Vector3.one * (targetWorld / natural);
                 }
 
                 int FindNearestSeqByArc(float arc)
@@ -2580,18 +2587,20 @@ namespace BalloonFlow
                         _balloonObjects[seqCellIds[seq][cellIndex]] = part.gameObject;
                 }
 
-                Vector3 fixedScale = BuildPartScale();
+                Vector3 startCapGridScale = BuildPartScale(startCapMeshX, startCapMeshZ);
+                Vector3 segmentGridScale = BuildPartScale(segMeshX, segMeshZ);
+                Vector3 endCapGridScale = BuildPartScale(endCapMeshX, endCapMeshZ);
 
-                // ROLLBACK_FLEXTUBE_CONTINUOUS_SEGMENT_TILING_20260628:
-                // The previous seq-footprint pass spawned only one Segment clone per authored seq,
-                // which left visible gaps between parts. Keep Head/Edge as 2x2 caps, but fill the
-                // whole curved path with visual Segment clones using FlexTube.VisualSegmentsPerCell.
+                // ROLLBACK_FLEXTUBE_AUTHORED_SEQ_ONLY_20260628:
+                // Rollback: authored-seq-only generation made the tube too sparse. Restore the previous
+                // continuous path tiling so Segment count follows path length/pitch, while Head and Edge
+                // remain explicit cap parts.
                 if (TryGetSeqFootprint(0, GetSeqTangent(0), out Vector3 startCenter, out _, out _))
                 {
                     startCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
                     Quaternion startRot = Quaternion.LookRotation(GetSeqTangent(0), Vector3.up) * extraRot;
                     var startPart = SpawnFlexPart(startCapPrefab, startCenter, startRot,
-                                                  true, fixedScale, GimmickIdentifier.FlexTubePart.StartCap, seqIds[0]);
+                                                  true, startCapGridScale, GimmickIdentifier.FlexTubePart.StartCap, seqIds[0]);
                     if (startPart != null)
                     {
                         RecenterToWorldBounds(startPart.gameObject, startCenter);
@@ -2599,7 +2608,6 @@ namespace BalloonFlow
                     }
                 }
 
-                float minCell = Mathf.Max(0.0001f, Mathf.Min(gridCellX, gridCellZ));
                 int visualPerCell = Mathf.Max(1, tube.VisualSegmentsPerCell);
                 float pitch = minCell / visualPerCell;
                 int bodyCount = Mathf.Max(1, Mathf.CeilToInt(pathTotal / Mathf.Max(0.0001f, pitch)));
@@ -2612,7 +2620,7 @@ namespace BalloonFlow
                     Quaternion segRot = Quaternion.LookRotation(segTan.normalized, Vector3.up) * extraRot;
                     int nearestSeq = FindNearestSeqByArc(arc);
                     var segPart = SpawnFlexPart(segmentPrefab, segPos, segRot,
-                                                true, fixedScale, GimmickIdentifier.FlexTubePart.Segment, seqIds[nearestSeq]);
+                                                true, segmentGridScale, GimmickIdentifier.FlexTubePart.Segment, seqIds[nearestSeq]);
                     if (segPart != null)
                         AttachPartToSeq(segPart, nearestSeq);
                 }
@@ -2622,7 +2630,7 @@ namespace BalloonFlow
                     endCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
                     Quaternion endRot = Quaternion.LookRotation(GetSeqTangent(lastIdx), Vector3.up) * extraRot;
                     var endPart = SpawnFlexPart(endCapPrefab, endCenter, endRot,
-                                                true, fixedScale, GimmickIdentifier.FlexTubePart.EndCap, seqIds[lastIdx]);
+                                                true, endCapGridScale, GimmickIdentifier.FlexTubePart.EndCap, seqIds[lastIdx]);
                     if (endPart != null)
                     {
                         RecenterToWorldBounds(endPart.gameObject, endCenter);
