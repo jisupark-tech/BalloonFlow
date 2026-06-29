@@ -44,7 +44,7 @@ namespace BalloonFlow
         private const float GIMMICK_HEIGHT_BARRICADE_RATIO = 2.321f;
         private const float GIMMICK_HEIGHT_TARGET_BOX_PAINT_RATIO = 2.857f;
         private const float GIMMICK_HEIGHT_FROZEN_LAYER_RATIO = 1.286f;
-        private const float WOODENBOARD_HIT_SCALE_Y = 1.05f;
+        private const float WOODENBOARD_HIT_SCALE_Y = 1.2f;
         private const float WOODENBOARD_DESTROY_SCALE = 1.1f;
         private const float FIELD_GIMMICK_HIT_SCALE_DURATION = 0.12f;
         // ROLLBACK_BARRICADE_BODY_PULL_IN_20260629: Edge 가 옆 칸을 살짝 침범 → Body 길이를 셀의 이 비율만큼

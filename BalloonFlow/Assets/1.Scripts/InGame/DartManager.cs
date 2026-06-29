@@ -323,6 +323,15 @@ namespace BalloonFlow
         /// Cleared when projectile hits or balloon is popped externally.
         /// </summary>
         private readonly HashSet<int> _reservedTargets = new HashSet<int>();
+        // ROLLBACK_PINATA_OVERSHOOT_INFLIGHT_CAP_20260629:
+        //   2×2 등 멀티셀 Pinata 는 인접 스캔라인에서 동시에 여러 발이 같은 balloonId 를 조준할 수 있다.
+        //   죽이는 한 발이 pop 시킨 뒤 나머지 발이 죽은 Pinata 에 도착하면 HP 크레딧 없이 버려진다
+        //   (DartProjectileResolve targetGoneBeforeImpact = 헛발). 잉여 0 레벨에선 이 헛발이 그 색(Pinata 색)
+        //   다트 부족 → Pinata 가 HP 남은 채 미완으로 이어진다.
+        //   해결: 타겟별 '동시 비행 다트 수' 를 추적하고, 그 수가 '남은 HP'(일반 풍선/기타는 1) 에 도달하면
+        //   _reservedTargets(=타게팅 제외/발사 금지) 에 넣어 추가 발사를 막는다.
+        //   → HP 만큼만 동시 발사(2×2 병렬 유지), 마지막 1HP 에선 1발만 → 오버슈트 차단.
+        private readonly Dictionary<int, int> _inflightDartsByTarget = new Dictionary<int, int>();
         // scan tick 안 이미 발사한 holder ID set. 같은 holder 의 다음 head (cache 자동 갱신 후) 가 같은 tick 발사하는 shotgun 차단.
         private readonly HashSet<int> _firedHoldersThisTick = new HashSet<int>();
         // ROLLBACK_DART_FRONT_ORDERED_FIRE_QUEUE:
@@ -532,6 +541,7 @@ namespace BalloonFlow
             }
             _activeProjectiles.Clear();
             _reservedTargets.Clear();
+            _inflightDartsByTarget.Clear();
             InvalidateDartScanLines();
             ClearConsumedLineLocks();
             _firedHoldersThisTick.Clear();
@@ -1023,7 +1033,7 @@ namespace BalloonFlow
                 BalloonData targetData = BalloonController.Instance.GetBalloon(targetId);
                 if (targetData == null || targetData.isPopped)
                 {
-                    _reservedTargets.Remove(targetId); // stale reservation cleanup
+                    ClearInflightDart(targetId); // stale (target gone before fire) — 비행수+예약 통째 제거
                     continue;
                 }
 
@@ -1049,8 +1059,8 @@ namespace BalloonFlow
                     color = color
                 });
 
-                // Reserve target so no other dart targets this balloon
-                _reservedTargets.Add(targetId);
+                // Reserve target — 비행 다트 수 +1 (Pinata 는 남은 HP 만큼만 동시 발사 허용)
+                RegisterInflightDart(targetId);
 
                 // Launch projectile visual (실제 월드 위치)
                 LaunchProjectile(slotIdx, slotPos, BalloonController.Instance.GetBalloonWorldPosition(targetId), targetId, color);
@@ -1684,7 +1694,7 @@ namespace BalloonFlow
                 _firedHoldersThisTick.Add(holderId);
                 _lastFireUnscaledTime = Time.unscaledTime; // ROLLBACK_NO_FIRE_FAIL_WATCHDOG_20260622: 레일 배수 진행 신호.
                 firesThisTick++;
-                _reservedTargets.Add(targetId);
+                RegisterInflightDart(targetId); // 비행 다트 수 +1 (Pinata 는 남은 HP 만큼만 동시 발사 허용)
 
                 // Transfer visual from belt to projectile
                 GameObject dartObj = null;
@@ -1748,12 +1758,13 @@ namespace BalloonFlow
                     // The old path had already removed the dart from the rail and reserved its target,
                     // but if no projectile visual was available it never resolved the hit. Resolve the
                     // original fire-time target immediately so this cannot become a silent miss.
-                    _reservedTargets.Remove(targetId);
+                    UnregisterInflightDart(targetId); // 비행 종료 — 비행수 -1
                     // ROLLBACK_DART_POP_SCAN_STATE_STABILITY:
                     // Visual fallback resolves the same fire-time target immediately. Do not clear the
                     // holder scan/promotion state here; ExecuteHit invalidates DirectionalTargeting's
                     // contour cache through BalloonController.ExecutePop.
                     ExecuteHit(targetId, color);
+                    SyncTargetExclusion(targetId); // ExecuteHit 로 줄어든 남은 HP 기준 재동기화(오버슈트 방지)
                 }
 
                 break; // Head-only scan fires at most one dart per scan tick.
@@ -2550,7 +2561,7 @@ namespace BalloonFlow
             // corner/tunnel. Keep only the holder-local last-fired line above.
             // _consumedTargetLines.Add(GetConsumedLineKey(candidate.scanDir, candidate.scanLine));
             MarkTargetLineConsumed(candidate.holderId, candidate.scanDir, candidate.scanLine);
-            _reservedTargets.Add(candidate.targetId);
+            RegisterInflightDart(candidate.targetId); // 비행 다트 수 +1 (Pinata 는 남은 HP 만큼만 동시 발사 허용)
             LogAttackIssue(
                 "DartFireCommitted",
                 $"holder={candidate.holderId} dartId={candidate.dartId} color={candidate.color} " +
@@ -2624,7 +2635,7 @@ namespace BalloonFlow
                 // The old path had already removed the dart from the rail and reserved its target,
                 // but if no projectile visual was available it never resolved the hit. Resolve the
                 // original fire-time target immediately so this cannot become a silent miss.
-                _reservedTargets.Remove(candidate.targetId);
+                UnregisterInflightDart(candidate.targetId); // 비행 종료 — 비행수 -1
                 // ROLLBACK_DART_POP_SCAN_STATE_STABILITY:
                 // No projectile visual means we resolve the original fire-time target immediately.
                 // Clearing all DartManager scan state here reopens same-line continuous fire and wipes
@@ -2638,6 +2649,7 @@ namespace BalloonFlow
                     $"reason=noVisualImmediateHit holder={candidate.holderId} dartId={candidate.dartId} " +
                     $"target={candidate.targetId} scan={candidate.scanDir} line={candidate.scanLine}");
                 ExecuteHit(candidate.targetId, candidate.color);
+                SyncTargetExclusion(candidate.targetId); // ExecuteHit 로 줄어든 남은 HP 기준 재동기화(오버슈트 방지)
             }
 
             return true;
@@ -3069,15 +3081,81 @@ namespace BalloonFlow
             return _consumedTargetLines.Contains(GetConsumedLineKey(scanDir, line));
         }
 
+        // ROLLBACK_PINATA_OVERSHOOT_INFLIGHT_CAP_20260629:
+        //   한 타겟으로 동시에 비행 가능한 최대 다트 수 = 남은 hit 수.
+        //   Pinata = 남은 HP(maxHP - hitCount), 그 외 풍선/기믹/소멸 = 1 (기존 1발 예약과 동일 동작).
+        private int MaxConcurrentDartsForTarget(int balloonId)
+        {
+            if (!BalloonController.HasInstance) return 1;
+            var data = BalloonController.Instance.GetBalloon(balloonId);
+            if (data == null || data.isPopped) return 1;
+            if (data.gimmickType == BalloonController.GimmickPinata)
+                return Mathf.Max(1, data.maxHP - data.hitCount);
+            return 1;
+        }
+
+        // 비행 다트 수와 남은 HP 를 비교해 '추가 발사 금지(_reservedTargets=타게팅 제외)' 여부를 동기화.
+        //   inflight >= 남은HP  → 필요한 만큼 다 날아감 → 제외(더 조준/발사 안 함, 오버슈트 방지).
+        //   inflight <  남은HP  → 아직 부족 → 발사 허용(2×2 등 멀티셀 병렬 유지).
+        private void SyncTargetExclusion(int balloonId)
+        {
+            _inflightDartsByTarget.TryGetValue(balloonId, out int inflight);
+            if (inflight >= MaxConcurrentDartsForTarget(balloonId))
+                _reservedTargets.Add(balloonId);
+            else
+                _reservedTargets.Remove(balloonId);
+        }
+
+        // 발사 시: 해당 타겟의 비행 다트 수 +1 후 제외 여부 갱신.
+        private void RegisterInflightDart(int balloonId)
+        {
+            _inflightDartsByTarget.TryGetValue(balloonId, out int c);
+            _inflightDartsByTarget[balloonId] = c + 1;
+            SyncTargetExclusion(balloonId);
+        }
+
+        // 비행 종료(임팩트/즉시해소) 시: 비행 다트 수 -1 후 제외 여부 갱신.
+        //   주의: Pinata 임팩트는 ExecuteHit 로 hitCount 가 바뀌므로, 호출부에서 ExecuteHit 후 한 번 더 SyncTargetExclusion 한다.
+        private void UnregisterInflightDart(int balloonId)
+        {
+            if (_inflightDartsByTarget.TryGetValue(balloonId, out int c))
+            {
+                if (c <= 1) _inflightDartsByTarget.Remove(balloonId);
+                else _inflightDartsByTarget[balloonId] = c - 1;
+            }
+            SyncTargetExclusion(balloonId);
+        }
+
+        // 타겟 소멸(외부 pop / fire 전 stale) 시: 비행 카운트와 예약을 통째로 제거.
+        private void ClearInflightDart(int balloonId)
+        {
+            _inflightDartsByTarget.Remove(balloonId);
+            _reservedTargets.Remove(balloonId);
+        }
+
         private bool IsTargetReservedForCandidate(DartFireCandidate candidate)
         {
             if (!_reservedTargets.Contains(candidate.targetId))
                 return false;
 
+            // ROLLBACK_PINATA_OVERSHOOT_INFLIGHT_CAP_20260629:
+            //   멀티셀 Pinata 가 _reservedTargets 에 있음 = inflight >= 남은 HP(SyncTargetExclusion) = 동시 발사 캡 도달.
+            //   아래 ROLLBACK_WOODEN_MULTI_CELL_LINE_RESERVATION_20260628 우회는 예약을 통째로 무시해 캡을
+            //   무력화 → 마지막 HP 에서 +1 발 오버슈트(죽은 뒤 도착 = targetGoneBeforeImpact 헛발)를 냈다.
+            //   Pinata 는 캡 도달 시 반드시 막는다. (캡 미만이면 _reservedTargets 에 없어 위에서 false 로 통과 =
+            //   멀티셀 동시 발사는 '남은 HP 만큼' 그대로 허용된다.)
+            if (BalloonController.HasInstance)
+            {
+                var data = BalloonController.Instance.GetBalloon(candidate.targetId);
+                if (data != null && !data.isPopped && data.gimmickType == BalloonController.GimmickPinata)
+                    return true; // capped Pinata → reserved(block)
+            }
+
             // ROLLBACK_WOODEN_MULTI_CELL_LINE_RESERVATION_20260628:
             // A sized Wooden Board has shared HP/balloonId but several exposed cells. Let different
             // scan lines fire at it in the same pass; IsTargetLineConsumed/IsHolderLineConsumed still
             // block duplicate shots on the same line, preserving the anti-penetration guards.
+            // (egg box 등 Pinata 가 아닌 멀티셀 동시발사 타겟은 기존 우회 유지)
             return !BalloonController.HasInstance
                 || !BalloonController.Instance.AllowsConcurrentCellTargetReservation(candidate.targetId);
         }
@@ -3517,13 +3595,21 @@ namespace BalloonFlow
                         : null;
                     if (impactData == null || impactData.isPopped)
                     {
+                        // ROLLBACK_PINATA_OVERSHOOT_INFLIGHT_CAP_20260629 (진단):
+                        //   오버슈트가 Pinata 캡 누수인지(gimmick=Pinata 이고 inflight 가 남은 HP 를 넘었나) /
+                        //   일반 풍선 외부 pop 인지 구분. inflight 는 '이 다트 차감 전' 값.
+                        _inflightDartsByTarget.TryGetValue(proj.targetBalloonId, out int dbgInflight);
+                        string dbgGimmick = impactData != null ? impactData.gimmickType : "gone";
+                        int dbgMax = impactData != null ? impactData.maxHP : -1;
+                        int dbgHit = impactData != null ? impactData.hitCount : -1;
                         LogAttackIssue(
                             "DartProjectileResolve",
                             $"reason=targetGoneBeforeImpact target={proj.targetBalloonId} color={proj.color} " +
                             $"popped={(impactData != null && impactData.isPopped)} scan={proj.scanDir} line={proj.scanLine} " +
-                            $"elapsed={proj.elapsed:F3}/{proj.duration:F3}");
+                            $"elapsed={proj.elapsed:F3}/{proj.duration:F3} " +
+                            $"gimmick={dbgGimmick} maxHP={dbgMax} hitCount={dbgHit} inflight={dbgInflight}");
                     }
-                    _reservedTargets.Remove(proj.targetBalloonId);
+                    UnregisterInflightDart(proj.targetBalloonId); // 비행 종료 — 비행수 -1 (ExecuteHit 후 재동기화)
                     int resolvedLineKey = GetConsumedLineKey(proj.scanDir, proj.scanLine);
                     _unresolvedConsumedTargetLines.Remove(resolvedLineKey);
                     // RESOLVED_LINE_DWELL_RELEASE: head 주차 라인 락의 dwell 해제 기준 시각 기록.
@@ -3544,6 +3630,9 @@ namespace BalloonFlow
 
                     float __hitStamp = InGamePerfLogger.StartStampMs();
                     ExecuteHit(proj.targetBalloonId, proj.color);
+                    // ExecuteHit 로 Pinata hitCount 증가(남은 HP 감소) 후 재동기화 → 다음 스캔이 갱신된 남은 HP 로
+                    // 동시 발사 수를 제한(마지막 1HP 면 1발만) → 오버슈트(헛발) 차단.
+                    SyncTargetExclusion(proj.targetBalloonId);
                     __executeHitMs += InGamePerfLogger.ElapsedMs(__hitStamp);
 
                     // ExecuteHit → OnBoardCleared → ClearAllDarts로 리스트가 비워질 수 있음
@@ -3805,7 +3894,7 @@ namespace BalloonFlow
             // ROLLBACK_DART_STALL_WATCHDOG_PROGRESS_DECOUPLE_20260617:
             // 보드 진행(풍선 pop) 시각 기록 — 워치독이 '발사/비행' 대신 '실제 진행' 으로 정지를 판정.
             _lastPopUnscaledTime = Time.unscaledTime;
-            _reservedTargets.Remove(evt.balloonId);
+            ClearInflightDart(evt.balloonId); // 외부 pop — 비행수+예약 통째 제거
             // ROLLBACK_DART_POP_LINE_RESCAN:
             // BalloonController.ExecutePop already invalidates DirectionalTargeting's contour cache.
             // Also reopen DartManager's accepted-line cache for the popped row/column only; otherwise

@@ -110,6 +110,24 @@ namespace BalloonFlow
             return gimmickName == "Pinata" || gimmickName == "Pinata_Box";
         }
 
+        private int GetCurrentPinataSizeMax()
+        {
+            string gimmickName = (_paintGimmick >= 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length)
+                ? FIELD_GIMMICK_NAMES[_paintGimmick]
+                : string.Empty;
+            return gimmickName == "Pinata" ? WOODEN_BOARD_SIZE_MAX : TARGET_BOX_SIZE_MAX;
+        }
+
+        private int GetCurrentFieldGimmickHpMax()
+        {
+            string gimmickName = (_paintGimmick >= 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length)
+                ? FIELD_GIMMICK_NAMES[_paintGimmick]
+                : string.Empty;
+            return (gimmickName == "FlexTube" || gimmickName == "Barricade")
+                ? FIELD_GIMMICK_HP_MAX_EXTENDED
+                : FIELD_GIMMICK_HP_MAX_DEFAULT;
+        }
+
         // 배경색 밝기 기반 가독 텍스트 색. White(6) 등 밝은 셀 위 흰 글자가 안 보이는 문제 해결.
         // Rec.601 luma > 0.6 이면 검정, 아니면 흰색.
         private static Color ContrastTextColor(Color bg)
@@ -120,6 +138,11 @@ namespace BalloonFlow
 
         private const float LEFT_PANEL_WIDTH = 240f;
         private const float RIGHT_PANEL_WIDTH = 400f;
+        // ROLLBACK_EXTENDED_GIMMICK_LIFE_MAX_20260629:
+        // FlexTube/Barricade life authoring max is raised from 50 to 400.
+        // Other field gimmicks keep the previous 50 cap to avoid accidental balance changes.
+        private const int FIELD_GIMMICK_HP_MAX_DEFAULT = 50;
+        private const int FIELD_GIMMICK_HP_MAX_EXTENDED = 400;
 
         #endregion
 
@@ -166,6 +189,9 @@ namespace BalloonFlow
 
         // ROLLBACK_MAPMAKER_HOLDER_ROWS_MAX_20260629: Holder authoring now allows up to 30 queue rows.
         private const int HOLDER_ROWS_MAX = 30;
+        // ROLLBACK_WOODENBOARD_SIZE_CAP_20260629: Wooden Board(Pinata) can be authored up to 8x8.
+        private const int WOODEN_BOARD_SIZE_MAX = 8;
+        private const int TARGET_BOX_SIZE_MAX = 6;
 
         private int _holderCols = 5;
         private int _holderRows = 1;
@@ -250,6 +276,7 @@ namespace BalloonFlow
 
         // Gimmick-specific UI rows (Balloon/Field brush)
         private RectTransform _fieldGimmickHPRow;
+        private InputField _fieldGimmickHPInput;
         private RectTransform _fieldGimmickSizeRow;
         private RectTransform _fieldGimmickWallSizeRow;
         private RectTransform _fieldGimmickIceGroupRow;
@@ -1231,22 +1258,23 @@ namespace BalloonFlow
 
             // Piñata HP (shown for Pinata/Pinata_Box)
             var hpRow = Row(p); Lbl(hpRow, "Piñata HP", w: 110);
-            MakeIntField(hpRow, _paintPinataHP, 1, 50, v => {
-                _paintPinataHP = v;
+            _fieldGimmickHPInput = MakeIntField(hpRow, _paintPinataHP, 1, FIELD_GIMMICK_HP_MAX_EXTENDED, v => {
+                _paintPinataHP = Mathf.Clamp(v, 1, GetCurrentFieldGimmickHpMax());
+                if (_fieldGimmickHPInput != null) _fieldGimmickHPInput.text = _paintPinataHP.ToString();
                 SetStatus($"Piñata HP: {v}");
             });
             _fieldGimmickHPRow = hpRow.GetComponent<RectTransform>();
 
             // Piñata Size (shown for Pinata/Pinata_Box)
             var sizeRow = Row(p); Lbl(sizeRow, "Piñata Size", w: 110);
-            MakeIntField(sizeRow, _paintPinataW, 1, 6, v => {
-                _paintPinataW = v;
+            MakeIntField(sizeRow, _paintPinataW, 1, WOODEN_BOARD_SIZE_MAX, v => {
+                _paintPinataW = Mathf.Clamp(v, 1, GetCurrentPinataSizeMax());
                 SetStatus($"Piñata Size: {_paintPinataW}x{_paintPinataH}");
                 UpdateBoxEggLabel(); // footprint 변경 → Egg 라벨의 W×H 기대치 갱신
             });
             Lbl(sizeRow, "x", w: 15);
-            MakeIntField(sizeRow, _paintPinataH, 1, 6, v => {
-                _paintPinataH = v;
+            MakeIntField(sizeRow, _paintPinataH, 1, WOODEN_BOARD_SIZE_MAX, v => {
+                _paintPinataH = Mathf.Clamp(v, 1, GetCurrentPinataSizeMax());
                 SetStatus($"Piñata Size: {_paintPinataW}x{_paintPinataH}");
                 UpdateBoxEggLabel();
             });
@@ -1423,6 +1451,14 @@ namespace BalloonFlow
             bool isIce = gimmickName == "Ice";
             // ROLLBACK_BARRICADE_MAPMAKER_20260608: Barricade 는 HP(파괴 히트수) + 방향/길이 row 노출. W×H Size 는 없음.
             bool isBarricade = gimmickName == "Barricade";
+            _paintPinataHP = Mathf.Clamp(_paintPinataHP, 1, GetCurrentFieldGimmickHpMax());
+            if (_fieldGimmickHPInput != null) _fieldGimmickHPInput.text = _paintPinataHP.ToString();
+            if (needsPinataHpSize)
+            {
+                int sizeMax = GetCurrentPinataSizeMax();
+                _paintPinataW = Mathf.Clamp(_paintPinataW, 1, sizeMax);
+                _paintPinataH = Mathf.Clamp(_paintPinataH, 1, sizeMax);
+            }
             if (_fieldGimmickHPRow != null) _fieldGimmickHPRow.gameObject.SetActive(needsPinataHpSize || isIce || isBarricade || isFlexTube);
             if (_fieldGimmickSizeRow != null) _fieldGimmickSizeRow.gameObject.SetActive(needsPinataHpSize);
             if (_fieldGimmickWallSizeRow != null) _fieldGimmickWallSizeRow.gameObject.SetActive(isWall || isIce);

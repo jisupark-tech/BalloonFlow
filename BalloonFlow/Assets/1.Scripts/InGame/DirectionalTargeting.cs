@@ -240,11 +240,23 @@ namespace BalloonFlow
             if (excludeIds == null || !excludeIds.Contains(edge.balloonId))
                 return false;
 
+            // ROLLBACK_PINATA_OVERSHOOT_INFLIGHT_CAP_20260629:
+            //   Pinata 가 excludeIds(=_reservedTargets) 에 있음 = DartManager 가 inflight >= 남은 HP(동시 발사 캡)
+            //   로 표시한 것. 아래 멀티셀 우회는 이를 무시해 캡 초과 발사 → 오버슈트(헛발)를 냈다.
+            //   Pinata 는 캡 도달 시 타게팅에서 제외해야 한다. (캡 미만이면 DartManager 가 excludeIds 에 넣지
+            //   않으므로 위에서 false 로 통과 = 남은 HP 만큼 멀티셀 동시 발사 허용)
+            if (BalloonController.HasInstance)
+            {
+                var data = BalloonController.Instance.GetBalloon(edge.balloonId);
+                if (data != null && !data.isPopped && data.gimmickType == BalloonController.GimmickPinata)
+                    return true; // capped Pinata → reserved(exclude)
+            }
+
             // ROLLBACK_WOODEN_MULTI_CELL_LINE_RESERVATION_20260628:
             // Sized Wooden Board shares one balloonId across all occupied cells. Global id
             // reservation made a 3x3 board suppress the other exposed columns after the first dart.
             // DartManager still reserves the concrete scan line, so only different exposed lines
-            // may fire concurrently.
+            // may fire concurrently. (egg box 등 Pinata 가 아닌 멀티셀 타겟은 기존 우회 유지)
             return !BalloonController.HasInstance
                 || !BalloonController.Instance.AllowsConcurrentCellTargetReservation(edge.balloonId);
         }
