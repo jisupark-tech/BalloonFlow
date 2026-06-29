@@ -3469,7 +3469,8 @@ namespace BalloonFlow
                 if (gn == "Pin") return GIMMICK_PIN_COLOR;
                 // Ice / Barricade 는 색상값 있는 기믹 — 풍선 색상 그대로 표시 (약자 라벨로 기믹 구분).
                 if (gn == "Hidden") return GIMMICK_HIDDEN_COLOR;
-                if (gn == "Pinata" || gn == "Pinata_Box") return GIMMICK_PINATA_COLOR;
+                // Pinata 는 인게임처럼 '지정된 셀 색상'을 미리보기에도 표시(아래 PALETTE 폴백). Pinata_Box 만 고정색.
+                if (gn == "Pinata_Box") return GIMMICK_PINATA_COLOR;
             }
             if (colorIndex >= 0 && colorIndex < PALETTE.Length)
                 return PALETTE[colorIndex];

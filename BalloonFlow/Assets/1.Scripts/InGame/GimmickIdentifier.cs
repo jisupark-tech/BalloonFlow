@@ -60,6 +60,12 @@ namespace BalloonFlow
         [Tooltip("Barricade edge transform.")]
         [SerializeField] private Transform _barricadeEdge;
 
+        [Header("[Barricade Materials — 앞/뒤 면 색 날아감 방지]")]
+        [Tooltip("BarricadeBody 에 적용할 머티리얼.")]
+        [SerializeField] private Material _barricadeBodyMaterial;
+        [Tooltip("Edge 와 Head 에 적용할 머티리얼 (BaricadeEdge).")]
+        [SerializeField] private Material _barricadeEdgeHeadMaterial;
+
         public GimmickType Type => _gimmickType;
         public Transform BarricadeHead => _barricadeHead;
         public Transform BarricadeBody => _barricadeBody;
@@ -370,6 +376,41 @@ namespace BalloonFlow
                     er.SetPropertyBlock(edgeMpb);
                 }
             }
+        }
+
+        // ROLLBACK_BARRICADE_FACE_MATERIAL_20260629: Barricade 앞/뒤 면 색 날아감 방지 —
+        //   Body / (Edge+Head) 에 전용 머티리얼을 적용하고 색을 틴트한다. 머티리얼 미할당 파트는 no-op
+        //   → ApplyColor 결과 유지. ApplyColor 직후(스폰 시) 호출.
+        public void ApplyBarricadeMaterials(Color color)
+        {
+            // Body·Head·Edge 모두 색 틴트 적용 (할당된 머티리얼을 색별로 클론·틴트).
+            ApplyBarricadePartMaterial(_barricadeBody, _barricadeBodyMaterial, color, tint: true);
+            ApplyBarricadePartMaterial(_barricadeEdge, _barricadeEdgeHeadMaterial, color, tint: true);
+            ApplyBarricadePartMaterial(_barricadeHead, _barricadeEdgeHeadMaterial, color, tint: true);
+        }
+
+        private static void ApplyBarricadePartMaterial(Transform part, Material baseMat, Color color, bool tint)
+        {
+            if (part == null || baseMat == null) return;
+            var rend = part.GetComponent<Renderer>();
+            if (rend == null || rend is ParticleSystemRenderer) return;
+
+            if (!tint)
+            {
+                // 색상 적용 안 함 — 세팅한 머티리얼 그대로. ApplyColor 가 남긴 MPB(_BaseColor) 틴트도 제거.
+                rend.sharedMaterial = baseMat;
+                rend.SetPropertyBlock(null);
+                return;
+            }
+
+            var key = (baseMat.GetInstanceID(), color); // 공유 머티리얼 오염 방지 — (머티리얼,색) 캐시
+            if (!_matCache.TryGetValue(key, out Material mat))
+            {
+                mat = new Material(baseMat);
+                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
+                _matCache[key] = mat;
+            }
+            rend.sharedMaterial = mat;
         }
 
         public static string ToGimmickString(GimmickType type)

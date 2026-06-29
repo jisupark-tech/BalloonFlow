@@ -47,6 +47,9 @@ namespace BalloonFlow
         private const float WOODENBOARD_HIT_SCALE_Y = 1.05f;
         private const float WOODENBOARD_DESTROY_SCALE = 1.1f;
         private const float FIELD_GIMMICK_HIT_SCALE_DURATION = 0.12f;
+        // ROLLBACK_BARRICADE_BODY_PULL_IN_20260629: Edge 가 옆 칸을 살짝 침범 → Body 길이를 셀의 이 비율만큼
+        //   아주 조금 줄여 Edge(body 끝에 따라붙음)를 당겨 들인다. (Edge 크기는 그대로) 값↑ = 더 당김.
+        private const float BARRICADE_BODY_PULL_IN_CELLS = 0.4f;
         // ROLLBACK_BARRICADE_BODY_1TO1_SCALE:
         // Updated Barricade/BarricadeBody art is authored at a 1:1 local scale per board cell.
         private const float BARRICADE_BODY_CELL_LOCAL_SCALE_X = 1f;
@@ -2171,6 +2174,7 @@ namespace BalloonFlow
                             int ci = Mathf.Clamp(data.color, 0, BalloonColors.Length - 1);
                             if (gi.HasColorRenderers)
                                 gi.ApplyColor(BalloonColors[ci]);
+                            gi.ApplyBarricadeMaterials(BalloonColors[ci]); // 앞/뒤 면 색 유지용 전용 머티리얼(할당 시)
                         }
 
                         ApplyBarricadeVisualTransform(obj, data);
@@ -4106,6 +4110,9 @@ namespace BalloonFlow
                 : 0f;
             float bodyCells = Mathf.Max(logicalBodyCells, hpBodyCells);
             float bodyWorldLen = Mathf.Max(0f, bodyCells * cellAlong * _barricadeLengthMultiplier + (bodyCells > 0f ? _barricadeLengthPadding : 0f));
+            // Edge 침범 방지: body 를 셀 기준 아주 조금 줄여 끝점을 당김(Edge 는 body 끝에 따라붙으므로 같이 들어옴).
+            if (bodyWorldLen > 0f)
+                bodyWorldLen = Mathf.Max(0.001f, bodyWorldLen - cellAlong * BARRICADE_BODY_PULL_IN_CELLS);
 
             // 3) body 늘리기 — 피벗 Head쪽·로컬 +X. base 최장축 길이 대비 비율로 localScale.x.
             if (!_barricadeBodyBaseScales.TryGetValue(body, out Vector3 baseScale))
@@ -4209,7 +4216,10 @@ namespace BalloonFlow
             }
             if (_barricadeBodyMpb == null) _barricadeBodyMpb = new MaterialPropertyBlock();
             rend.GetPropertyBlock(_barricadeBodyMpb);
-            _barricadeBodyMpb.SetVector("_BaseMap_ST", new Vector4(baseST.x, baseST.y * Mathf.Max(0.0001f, ratio), baseST.z, baseST.w));
+            // #2: Tiling Y = BarricadeBody localScale.x / 100 (길이비율 ratio 대신 직접 공식).
+            //   (예: ScaleX 1247.528 → 12.47528 / ScaleX 58 → 0.58). 트윈 중에도 live localScale 로 따라감.
+            float tileY = body.localScale.x / 100f;
+            _barricadeBodyMpb.SetVector("_BaseMap_ST", new Vector4(baseST.x, tileY, baseST.z, baseST.w));
             rend.SetPropertyBlock(_barricadeBodyMpb);
         }
 
@@ -6076,7 +6086,8 @@ namespace BalloonFlow
             if (isBarricade)
             {
                 // ROLLBACK_BARRICADE_DESTROY_SCALE_20260625: 바리케이드 파괴 시 1 → 1.1 → 0 으로 팝 후 소멸.
-                seq.Append(obj.transform.DOScale(Vector3.one * savedScale * 1.1f, scaleUpDuration * 0.45f).SetEase(Ease.OutQuad));
+                //   균일 풍선스케일이 아니라 '현재(늘어난) localScale' 기준으로 1.1배 → 0 (긴 모양 유지).
+                seq.Append(obj.transform.DOScale(savedLocalScale * 1.1f, scaleUpDuration * 0.45f).SetEase(Ease.OutQuad));
                 seq.Append(obj.transform.DOScale(Vector3.zero, scaleUpDuration * 0.55f).SetEase(Ease.InQuad));
             }
             else if (isWoodenBoard)
@@ -6099,7 +6110,8 @@ namespace BalloonFlow
                     identifier.MarkPopped();
 
                 int ci = Mathf.Clamp(popColorIdx, 0, BalloonColors.Length - 1);
-                if (!isWoodenBoard)
+                // #4: Barricade·WoodenBoard 는 Balloon(Pop) 파티클 미재생 (자체 연출/스케일만).
+                if (!isWoodenBoard && !isBarricade)
                     PopEffectPool.Play(popPos, BalloonColors[ci], this, effectScaleMultiplier);
 
                 if (obj != null && ObjectPoolManager.HasInstance)
