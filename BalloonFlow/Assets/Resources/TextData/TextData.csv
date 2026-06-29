@@ -17,7 +17,7 @@ newfeature.textdesctiption.Barricade,Shoot the same color\nto clear the path!,
 newfeature.textname.HiddenBalloon,HiddenBalloon,?ˆë²¨ 81 ?±ìž¥
 newfeature.textdesctiption.HiddenBalloon,Pop nearby balloons\nto reveal!,
 newfeature.textname.IronWall,Iron Wall,?ˆë²¨ 101 ?±ìž¥ 
-newfeature.textdesctiption.IronWall,It blocks darts' path!,
+newfeature.textdesctiption.IronWall,It blocks incoming darts!,
 newfeature.textname.Pipe,Pipe,?ˆë²¨ 121 ?±ìž¥
 newfeature.textdesctiption.Pipe,Tap nearby boxes\nto release a mystery one!,
 newfeature.textname.flextube,Flex Tube,?ˆë²¨ 141 ?±ìž¥
