@@ -164,6 +164,9 @@ namespace BalloonFlow
         private Text _boxEggStatusLabel;          // UI 상태 라벨
         private RectTransform _fieldGimmickEggRow; // Egg 패널 row (Target Box 일 때만 표시)
 
+        // ROLLBACK_MAPMAKER_HOLDER_ROWS_MAX_20260629: Holder authoring now allows up to 30 queue rows.
+        private const int HOLDER_ROWS_MAX = 30;
+
         private int _holderCols = 5;
         private int _holderRows = 1;
         private int _defaultMag = 3;
@@ -1597,7 +1600,7 @@ namespace BalloonFlow
             if (_holderColsInput != null) _holderColsInput.interactable = !_queueColsAuto;
 
             var r2 = Row(p); Lbl(r2, "Rows", w: 90);
-            _holderRowsInput = MakeIntField(r2, _holderRows, 1, 20, v =>
+            _holderRowsInput = MakeIntField(r2, _holderRows, 1, HOLDER_ROWS_MAX, v =>
             { _holderRows = v; InitGrid(); RebuildHolderUI(); _infoDirty = true; });
             var r3 = Row(p); Lbl(r3, "Default Mag", w: 90);
             MakeIntField(r3, _defaultMag, 1, 99, v => _defaultMag = v);
