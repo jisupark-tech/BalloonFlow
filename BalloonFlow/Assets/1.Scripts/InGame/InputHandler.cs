@@ -50,7 +50,12 @@ namespace BalloonFlow
             //   LevelManager.IsLoading(레벨 로드 중) 또는 UIManager.IsFading(페이드 overlay 가시) 동안 입력 무시.
             //   롤백: 이 if 블록 삭제.
             if ((LevelManager.HasInstance && LevelManager.Instance.IsLoading)
-                || (UIManager.HasInstance && UIManager.Instance.IsFading)) return;
+                || (UIManager.HasInstance && UIManager.Instance.IsFading)
+                // ROLLBACK_NEWFEATURE_WORLD_INPUT_BLOCK_20260629:
+                // NewFeature is a UI popup, but holder taps are physics raycasts. Block the world
+                // path explicitly while the feature popup queue is open so touches cannot deploy
+                // holders through the popup/loading transition.
+                || (NewFeatureManager.HasInstance && NewFeatureManager.Instance.IsShowingPopup)) return;
             var __sw = InGamePerfLogger.StartSection();
             try
             {

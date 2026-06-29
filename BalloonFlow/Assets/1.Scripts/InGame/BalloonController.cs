@@ -2843,10 +2843,22 @@ namespace BalloonFlow
                 // the thin body segments. If a cap's seq is adjacent to a DIFFERENT group's FlexTube cell,
                 // it is a joint, not a true end → skip the cap; the continuous body Segment (sampled through
                 // the cap center, capInset=0) already covers that cell, keeping the tube seamless.
-                bool IsSeqJointWithOtherGroup(int seq)
+                // ROLLBACK_FLEXTUBE_JOINT_DIRECTIONAL_20260629:
+                //   '진짜 조인트(한 튜브를 그룹으로 쪼개 다른 그룹으로 그대로 이어짐)' = 다른 그룹 셀이 캡의
+                //   '연장(outward)' 방향에 있을 때만이다 → 그때만 캡 생략(연속 유지). 단순히 옆을 '나란히'
+                //   지나가는 평행 튜브(예: 안쪽 세로 튜브가 바깥 루프 옆 1칸)는 옆(perp) 성분이 우세 →
+                //   조인트가 아니므로 캡을 그린다.
+                //   이전엔 outwardDir 없이 방향 무시 거리(1.5칸)만 봐서, 평행 인접 튜브의 Start/End 캡까지
+                //   지워 세로 직선 튜브가 캡 없이 안 보였다(parts=0).
+                bool IsSeqJointWithOtherGroup(int seq, Vector3 outwardDir)
                 {
                     if (seq < 0 || seq >= seqCellIds.Count || seqCellIds[seq] == null) return false;
-                    float thr = minCell * 1.5f;
+                    outwardDir.y = 0f;
+                    if (outwardDir.sqrMagnitude < 0.0001f) return false;
+                    outwardDir.Normalize();
+                    Vector3 sideDir = new Vector3(-outwardDir.z, 0f, outwardDir.x);
+                    Vector3 seqCenter = seq < cellPositions.Count ? cellPositions[seq] : Vector3.zero;
+                    float thr = minCell * 1.8f; // 연장 셀(캡 2칸 너머)까지 닿도록 약간 넉넉히
                     float thrSqr = thr * thr;
                     for (int ci = 0; ci < seqCellIds[seq].Count; ci++)
                     {
@@ -2859,7 +2871,12 @@ namespace BalloonFlow
                             if (od.flexTubeGroupId < 0 || od.flexTubeGroupId == groupId) continue;
                             Vector3 op = GetAdjustedBoardPosition(od.position);
                             Vector3 dd = op - capPos; dd.y = 0f;
-                            if (dd.sqrMagnitude <= thrSqr) return true;
+                            if (dd.sqrMagnitude > thrSqr) continue;
+                            // 연장(outward) 방향 성분이 양수 + 옆(side) 성분보다 우세할 때만 조인트로 본다.
+                            Vector3 rel = op - seqCenter; rel.y = 0f;
+                            float along = Vector3.Dot(rel, outwardDir);
+                            float side = Vector3.Dot(rel, sideDir);
+                            if (along > 0.05f && Mathf.Abs(along) >= Mathf.Abs(side)) return true;
                         }
                     }
                     return false;
@@ -2886,7 +2903,7 @@ namespace BalloonFlow
                 // Rollback: authored-seq-only generation made the tube too sparse. Restore the previous
                 // continuous path tiling so Segment count follows path length/pitch, while Head and Edge
                 // remain explicit cap parts.
-                if (!IsSeqJointWithOtherGroup(0)
+                if (!IsSeqJointWithOtherGroup(0, -GetSeqTangent(0)) // start 의 연장 방향 = seq1 반대쪽
                     && TryGetSeqFootprint(0, GetSeqTangent(0), out Vector3 startCenter, out float startAlongWorld, out float startPerpWorld))
                 {
                     startCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
@@ -3023,7 +3040,7 @@ namespace BalloonFlow
                         $"gapMin={minGapText} gapMax={maxSegGap:F3} gapAvg={avgGap:F3} pitch={pitch:F3}");
                 }
 
-                if (!IsSeqJointWithOtherGroup(lastIdx)
+                if (!IsSeqJointWithOtherGroup(lastIdx, GetSeqTangent(lastIdx)) // end 의 연장 방향 = 진행 방향 그대로
                     && TryGetSeqFootprint(lastIdx, GetSeqTangent(lastIdx), out Vector3 endCenter, out float endAlongWorld, out float endPerpWorld))
                 {
                     endCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;

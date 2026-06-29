@@ -19,6 +19,7 @@ namespace BalloonFlow
 
         private Coroutine _okDelayCo;
         private Tween _okRootTween;
+        private Image _inputBlocker;
 
         [Header("[Common Frame]")]
         [SerializeField] private PopupCommonFrame _frame;
@@ -67,6 +68,7 @@ namespace BalloonFlow
         protected override void Awake()
         {
             base.Awake();
+            EnsureInputBlocker();
             if (_btnOk != null) _btnOk.onClick.AddListener(CloseUI);
             if (_frame != null)
             {
@@ -135,6 +137,8 @@ namespace BalloonFlow
         /// <summary>직접 Sprite 지정하여 팝업 표시.</summary>
         public void ShowWithSprite(Sprite sprite, string itemName, string description)
         {
+            EnsureInputBlocker();
+
             if (_frame != null)
             {
                 _frame.SetTitle(LocalizationService.Get("newfeature.textunlock"));
@@ -177,6 +181,44 @@ namespace BalloonFlow
             if (_btnOk != null && _btnOk.transform.parent != null) return _btnOk.transform.parent;
             if (_btnOk != null) return _btnOk.transform;
             return null;
+        }
+
+        private void EnsureInputBlocker()
+        {
+            if (_inputBlocker != null) return;
+
+            Transform existing = transform.Find("__InputBlocker");
+            if (existing != null)
+            {
+                _inputBlocker = existing.GetComponent<Image>();
+                if (_inputBlocker != null)
+                {
+                    _inputBlocker.raycastTarget = true;
+                    existing.SetAsFirstSibling();
+                    return;
+                }
+            }
+
+            // ROLLBACK_NEWFEATURE_INPUT_BLOCKER_20260629:
+            // PopupNewFeature delays the OK button for a few seconds. During that time there may be
+            // no Selectable under the finger, so touches can leak through to UIHud buttons or holder
+            // physics raycasts. Add a transparent full-screen Graphic behind popup content to consume
+            // UI raycasts while keeping the visible popup buttons clickable above it.
+            var go = new GameObject("__InputBlocker", typeof(RectTransform), typeof(Image));
+            go.layer = gameObject.layer;
+            go.transform.SetParent(transform, false);
+            go.transform.SetAsFirstSibling();
+
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.localScale = Vector3.one;
+
+            _inputBlocker = go.GetComponent<Image>();
+            _inputBlocker.color = Color.clear;
+            _inputBlocker.raycastTarget = true;
         }
 
         private IEnumerator EnableOkButtonAfterDelay()

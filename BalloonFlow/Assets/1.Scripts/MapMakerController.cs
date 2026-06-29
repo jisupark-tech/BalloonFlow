@@ -169,6 +169,7 @@ namespace BalloonFlow
         private GimmickPaintMode _holderPaintMode = GimmickPaintMode.Normal;
         private bool _holderGridNeedsRebuildAfterPaint;
         private bool _fieldGimmickOnlyMode; // 필드: 색상 유지하고 기믹만 추가 (Surprise/Ice 등)
+        private bool _fieldGimmickEraseMode; // 필드: 색상 유지하고 기믹만 제거
 
         private int _gridCols = 5;
         private int _gridRows = 5;
@@ -1249,11 +1250,24 @@ namespace BalloonFlow
             // 필드 기믹만 모드 토글 — ON 이면 풍선 색상 유지하고 기믹만 덮어쓰기 (Surprise/Ice 등).
             var fieldModeRow = Row(p); Lbl(fieldModeRow, "Paint Mode", w: 110);
             Button fieldModeBtn = null;
+            Button fieldEraseModeBtn = null;
             fieldModeBtn = Btn(fieldModeRow, _fieldGimmickOnlyMode ? "기믹만 추가" : "색상+기믹", () => {
                 _fieldGimmickOnlyMode = !_fieldGimmickOnlyMode;
+                if (_fieldGimmickOnlyMode) _fieldGimmickEraseMode = false;
                 var tt = fieldModeBtn.GetComponentInChildren<Text>();
                 if (tt != null) tt.text = _fieldGimmickOnlyMode ? "기믹만 추가" : "색상+기믹";
+                var et = fieldEraseModeBtn != null ? fieldEraseModeBtn.GetComponentInChildren<Text>() : null;
+                if (et != null) et.text = _fieldGimmickEraseMode ? "제거 ON" : "기믹만 제거";
                 SetStatus(_fieldGimmickOnlyMode ? "필드: 기믹만 추가 (색상 유지)" : "필드: 색상+기믹");
+            });
+            fieldEraseModeBtn = Btn(fieldModeRow, _fieldGimmickEraseMode ? "제거 ON" : "기믹만 제거", () => {
+                _fieldGimmickEraseMode = !_fieldGimmickEraseMode;
+                if (_fieldGimmickEraseMode) _fieldGimmickOnlyMode = false;
+                var tt = fieldModeBtn != null ? fieldModeBtn.GetComponentInChildren<Text>() : null;
+                if (tt != null) tt.text = _fieldGimmickOnlyMode ? "기믹만 추가" : "색상+기믹";
+                var et = fieldEraseModeBtn.GetComponentInChildren<Text>();
+                if (et != null) et.text = _fieldGimmickEraseMode ? "제거 ON" : "기믹만 제거";
+                SetStatus(_fieldGimmickEraseMode ? "필드: 기믹만 제거 (색상 유지)" : "필드: 색상+기믹");
             });
 
             // Piñata HP (shown for Pinata/Pinata_Box)
@@ -4452,6 +4466,14 @@ namespace BalloonFlow
 
                     // 필드 기믹만 모드 — 기존 풍선 색상 유지하고 기믹만 추가 (Surprise/Ice 등).
                     // 빈 셀(색상 없음)은 무시. sized/FlexTube 기믹은 단순 set (anchor 1×1).
+                    if (_fieldGimmickEraseMode && mouse.leftButton.isPressed)
+                    {
+                        ClearFieldGimmickAt(col, row);
+                        _infoDirty = true;
+                        SetStatus($"Field gimmick removed at ({col}, {row})");
+                        return;
+                    }
+
                     if (_fieldGimmickOnlyMode && mouse.leftButton.isPressed)
                     {
                         bool isIceGimmickBrush = _paintGimmick > 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length
@@ -9031,10 +9053,67 @@ namespace BalloonFlow
             _flexTubePaintOrder.RemoveAll(p => p.x == col && p.y == row);
         }
 
+        private void ClearFieldGimmickAt(int col, int row)
+        {
+            if (col < 0 || col >= _gridCols || row < 0 || row >= _gridRows) return;
+
+            int flexGroup = _balloonFlexTubeGroupId[col, row];
+            if (flexGroup >= 0)
+            {
+                // ROLLBACK_FIELD_GIMMICK_ERASE_BUTTON_20260629:
+                // FlexTube is authored as a group. Removing only one cell leaves broken group data,
+                // so erase the whole matching group while preserving every cell color.
+                for (int c = 0; c < _gridCols; c++)
+                    for (int r = 0; r < _gridRows; r++)
+                        if (_balloonFlexTubeGroupId[c, r] == flexGroup)
+                            ClearFieldGimmickCell(c, r);
+                _flexTubePaintOrder.Clear();
+                UpdateFlexTubeStatusText();
+                return;
+            }
+
+            ClearFieldGimmickCell(col, row);
+        }
+
+        private void ClearFieldGimmickCell(int col, int row)
+        {
+            _balloonGimmicks[col, row] = 0;
+            _balloonGimmickHP[col, row] = 2;
+            _balloonPinataW[col, row] = 1;
+            _balloonPinataH[col, row] = 1;
+            _balloonIceBlockSize[col, row] = 1;
+            ApplyIceGroupBrushMeta(col, row, false);
+            _balloonLockPairIds[col, row] = -1;
+            _balloonBarricadeDir[col, row] = 1;
+            _balloonBarricadeLength[col, row] = 1;
+            _balloonFlexTubeGroupId[col, row] = -1;
+            _balloonFlexTubeSequenceIndex[col, row] = -1;
+            _boxEggConfigColors.Remove(new Vector2Int(col, row));
+            _boxEggConfigHps.Remove(new Vector2Int(col, row));
+            _flexTubePaintOrder.RemoveAll(p => p.x == col && p.y == row);
+            UpdatePreviewCell(col, row);
+        }
+
         private void FillBalloonCellWithBrush(int col, int row, int color)
         {
-            _balloonColors[col, row] = color;
-            _balloonGimmicks[col, row] = color >= 0 ? _paintGimmick : 0;
+            bool applyHiddenBalloonGimmick = color >= 0
+                && _paintGimmick > 0
+                && _paintGimmick < FIELD_GIMMICK_NAMES.Length
+                && FIELD_GIMMICK_NAMES[_paintGimmick] == "Surprise";
+
+            // ROLLBACK_FILL_NEIGHBOR_HIDDEN_ONLY_20260629:
+            // Fill Neighbor/Flood Fill should only copy the current field gimmick when it is
+            // Hidden Balloon(Surprise). Other footprint/group gimmicks keep the legacy color-only
+            // behavior to avoid breaking authored sizes, groups, or sequences.
+            if (_fieldGimmickOnlyMode && !applyHiddenBalloonGimmick)
+                return;
+
+            if (!_fieldGimmickOnlyMode)
+                _balloonColors[col, row] = color;
+            else if (_balloonColors[col, row] < 0)
+                return;
+
+            _balloonGimmicks[col, row] = applyHiddenBalloonGimmick ? _paintGimmick : 0;
             _balloonGimmickHP[col, row] = _paintPinataHP;
             _balloonPinataW[col, row] = 1;
             _balloonPinataH[col, row] = 1;

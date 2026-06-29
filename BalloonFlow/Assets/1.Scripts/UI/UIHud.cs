@@ -807,6 +807,7 @@ namespace BalloonFlow
             }
 
             if (!BoosterManager.HasInstance) return;
+            if (ShouldBlockHudItemInputForModalState()) return;
             int shuffleCount = BoosterManager.Instance.GetBoosterCount(BoosterManager.SHUFFLE);
             int removeCount  = BoosterManager.Instance.GetBoosterCount(BoosterManager.COLOR_REMOVE);
             int handCount    = BoosterManager.Instance.GetBoosterCount(BoosterManager.HAND);
@@ -1041,6 +1042,17 @@ namespace BalloonFlow
         private static bool ShouldIgnoreBoosterTapForClearImminent()
         {
             return RailManager.HasInstance && RailManager.Instance.IsClearImminentForBoosterLock();
+        }
+
+        private static bool ShouldBlockHudItemInputForModalState()
+        {
+            // ROLLBACK_HUD_ITEM_MODAL_INPUT_BLOCK_20260629:
+            // UI Button callbacks bypass InputHandler, so guard booster execution here too.
+            // This prevents item use through NewFeature/loading/fade overlays even if a prefab
+            // misses a raycast-blocking background.
+            return (LevelManager.HasInstance && LevelManager.Instance.IsLoading)
+                || (UIManager.HasInstance && UIManager.Instance.IsFading)
+                || (NewFeatureManager.HasInstance && NewFeatureManager.Instance.IsShowingPopup);
         }
 
         private static void NotifyTutorialItemTapped(string boosterType)
