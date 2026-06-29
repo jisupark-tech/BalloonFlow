@@ -5025,6 +5025,10 @@ namespace BalloonFlow
         // ROLLBACK_ICE_BLOCK_TEXT_DOUBLE_SCALE_20260629: sized Ice 블록 오버레이는 자체가 blockSize 배 스케일이라
         //   HP 숫자가 이미 큼 → footprint ×m 을 또 곱하면 이중. 블록 오버레이는 이 집합으로 구분해 ×m 을 상쇄한다.
         private readonly HashSet<GameObject> _iceBlockOverlays = new HashSet<GameObject>();
+        // ROLLBACK_GIMMICK_HIT_SCALE_DRIFT_20260629: Y 펀치(hit)가 DOKill(true) 로도 누적되는 문제 —
+        //   Sequence inner 트윈이 grow 단계에서 끊기면 hitScale(부푼 값)로 스냅되어 baseScale 이 점점 커진다(텍스트도 같이).
+        //   target 별 'rest 스케일'을 캐시해 매 펀치 전 복원 → 누적 차단.
+        private readonly Dictionary<Transform, Vector3> _fieldHitBaseScales = new Dictionary<Transform, Vector3>();
         private readonly List<GameObject> _iceHitOverlayCandidates = new List<GameObject>(8);
 
         /// <summary>풍선보다 커 보이게 하는 오버레이 스케일 배율 (얼음 쉘이 풍선을 감싼 모습).
@@ -5252,6 +5256,7 @@ namespace BalloonFlow
         {
             if (overlay == null) return;
             _iceBlockOverlays.Remove(overlay); // 풀 반환 시 블록 표시 해제 (재사용 시 오판 방지)
+            _fieldHitBaseScales.Remove(overlay.transform); // hit 펀치 rest 캐시 해제 (재사용 stale 방지)
             ResetFrozenOverlayMagazineText(overlay);
             overlay.transform.SetParent(null, false);
             if (ObjectPoolManager.HasInstance)
@@ -5294,6 +5299,8 @@ namespace BalloonFlow
                 ReturnFrozenOverlayInstance(overlay);
             }
             _frozenOverlays.Clear();
+            _iceBlockOverlays.Clear();
+            _fieldHitBaseScales.Clear(); // 레벨 정리 시 hit 펀치 rest 캐시도 비움 (다음 레벨 재캡처)
         }
 
         #endregion
@@ -5999,7 +6006,14 @@ namespace BalloonFlow
             // Hit feedback is Y-only: current scale -> Y*1.05 -> current scale. Completing the
             // previous tween first prevents repeated quick hits from drifting the stored scale.
             target.DOKill(true);
-            Vector3 baseScale = target.localScale;
+            // ROLLBACK_GIMMICK_HIT_SCALE_DRIFT_20260629: rest 스케일을 캐시(첫 펀치=rest 가정)하고 매 펀치 전 복원.
+            //   DOKill(true) 가 Sequence grow 중간에 끊기면 hitScale 로 스냅돼 baseScale 이 드리프트하므로 직접 복원한다.
+            if (!_fieldHitBaseScales.TryGetValue(target, out Vector3 baseScale))
+            {
+                baseScale = target.localScale;
+                _fieldHitBaseScales[target] = baseScale;
+            }
+            target.localScale = baseScale;
             Vector3 hitScale = new Vector3(baseScale.x, baseScale.y * WOODENBOARD_HIT_SCALE_Y, baseScale.z);
 
             Sequence seq = DOTween.Sequence();
