@@ -440,6 +440,11 @@ namespace BalloonFlow
                     }
                     else
                     {
+                        // ROLLBACK_ICE_GROUP_HIT_SCALE_20260629:
+                        // Shared Ice HP lost but region is still alive: punch one visible
+                        // FrozenLayer overlay at random. Break behavior at HP 0 stays unchanged.
+                        if (BalloonController.HasInstance)
+                            BalloonController.Instance.PlayRandomIceRegionHitScale(region.ids);
                         CreateOrUpdateIceHpLabel(region);
                     }
                 }

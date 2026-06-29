@@ -67,7 +67,7 @@ namespace BalloonFlow
         /// <summary>
         /// 알 배치 — eggColors 항목 수(N)만큼. Cylinder 만 색칠, texture 는 비활성으로 시작.
         /// </summary>
-        public void Build(int w, int h, int[] eggColors, int[] eggHps, float cellSizeX, float cellSizeZ)
+        public void Build(int w, int h, int[] eggColors, int[] eggHps, float cellSizeX, float cellSizeZ, float targetEggWorldScaleY = -1f)
         {
             Clear();
             ResolvePaintBoxLinks();
@@ -131,6 +131,15 @@ namespace BalloonFlow
                 fitK = Mathf.Min(eggCellW / tplSizeX, eggCellZ / tplSizeZ) * _eggFillRatio;
             // NOTE: eggScale(scaleMult)을 곱하지 않는다 — cellSizeX/Z 가 이미 widthMult/heightMult 를 포함하므로
             //       여기서 또 곱하면 이중 적용되어 알이 paintbox 를 벗어난다.
+            Vector3 eggScale = tplScale * fitK;
+            if (targetEggWorldScaleY > 0f)
+            {
+                // ROLLBACK_GIMMICK_HEIGHT_RATIO_20260629:
+                // Target Box paint/cylinder height is balloon scaleY * 2.857.
+                // Convert the requested world Y height to local scale. X/Z still use fitK.
+                float parentY = Mathf.Max(0.0001f, Mathf.Abs(transform.lossyScale.y));
+                eggScale.y = targetEggWorldScaleY / parentY;
+            }
 
             // 월드 격자 간격 → 로컬 단위(부모 스케일 보정).
             Vector3 ls = transform.lossyScale;
@@ -150,7 +159,7 @@ namespace BalloonFlow
                 GameObject egg = Instantiate(_eggTemplate, transform);
                 egg.SetActive(true);
                 egg.transform.localRotation = tplRot;
-                egg.transform.localScale = tplScale * fitK;
+                egg.transform.localScale = eggScale;
                 int rowStart = gr * cols;
                 int rowCount = Mathf.Min(cols, n - rowStart);
                 float ox = (gc - (rowCount - 1) * 0.5f) * localGridX;

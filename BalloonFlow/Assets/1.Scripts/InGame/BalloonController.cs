@@ -37,6 +37,16 @@ namespace BalloonFlow
         //   ex. 1레벨 scale.x≈0.5 → scale.y≈0.55. gridCols 미설정(0, 구버전 JSON)이면 기존 0.35 고정으로 폴백.
         private const int SMALL_BOARD_MAX_GRID_COLS = 26;
         private const float SMALL_BOARD_SCALE_Y_RATIO = 1.1f;
+        // ROLLBACK_GIMMICK_HEIGHT_RATIO_20260629:
+        // Art requested these gimmick heights as ratios of the active balloon scaleY.
+        // Roll back by removing these constants and restoring the previous _balloonScale/fitK Y paths.
+        private const float GIMMICK_HEIGHT_WOODEN_IRON_RATIO = 1.063f;
+        private const float GIMMICK_HEIGHT_BARRICADE_RATIO = 2.321f;
+        private const float GIMMICK_HEIGHT_TARGET_BOX_PAINT_RATIO = 2.857f;
+        private const float GIMMICK_HEIGHT_FROZEN_LAYER_RATIO = 1.286f;
+        private const float WOODENBOARD_HIT_SCALE_Y = 1.05f;
+        private const float WOODENBOARD_DESTROY_SCALE = 1.1f;
+        private const float FIELD_GIMMICK_HIT_SCALE_DURATION = 0.12f;
         // ROLLBACK_BARRICADE_BODY_1TO1_SCALE:
         // Updated Barricade/BarricadeBody art is authored at a 1:1 local scale per board cell.
         private const float BARRICADE_BODY_CELL_LOCAL_SCALE_X = 1f;
@@ -503,7 +513,7 @@ namespace BalloonFlow
                 }
 
                 if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickPinataBox
-                    || (data.gimmickType == GimmickWall && (data.sizeW > 1 || data.sizeH > 1)))
+                    || data.gimmickType == GimmickWall)
                 {
                     // multi-cell Wall(2×2/3×3) 도 footprint 스케일 유지 — 미포함 시 rest 스케일(1×)로 리셋되어 사이즈가 사라짐.
                     ApplySizedFieldVisualTransform(obj, data);
@@ -887,6 +897,11 @@ namespace BalloonFlow
                 ? xz * SMALL_BOARD_SCALE_Y_RATIO
                 : BALLOON_FIXED_SCALE_Y;
             return new Vector3(xz, y, xz);
+        }
+
+        private float GetGimmickReferenceBalloonScaleY(float scaleMult)
+        {
+            return GetBalloonRestScale(scaleMult).y;
         }
 
         /// <summary>
@@ -2122,10 +2137,10 @@ namespace BalloonFlow
                             gi.Initialize();
                         }
 
-                        // multi-cell Wall(2×2/3×3) 만 footprint 에 맞춰 시각 스케일/중앙정렬.
-                        // 1×1 은 기존 기본 배치를 유지해 기존 레벨 Wall 외형 회귀 방지.
-                        if (data.sizeW > 1 || data.sizeH > 1)
-                            ApplySizedFieldVisualTransform(obj, data);
+                        // ROLLBACK_GIMMICK_HEIGHT_RATIO_20260629:
+                        // Iron Wall uses the art-requested height ratio on every size, including 1x1.
+                        // X/Z footprint fitting remains visual-only and does not change targeting.
+                        ApplySizedFieldVisualTransform(obj, data);
                     }
                     else if (data.gimmickType == GimmickPin)
                     {
@@ -3845,7 +3860,7 @@ namespace BalloonFlow
             if (obj == null || data == null || view == null) return;
 
             GetFieldVisualMetrics(
-                out _, out _, out _,
+                out _, out _, out float scaleMult,
                 out float cellSizeX, out float cellSizeZ, out _);
 
             int width = Mathf.Max(1, data.sizeW);
@@ -3861,7 +3876,11 @@ namespace BalloonFlow
 
             // 알은 footprint 안쪽 격자 셀에 자동 맞춤(cellSize 기준). eggHps 로 초기 균열 상태 판단.
             // scaleMult 는 전달하지 않는다 — cellSizeX/Z 가 이미 field mult 를 포함하므로 알엔 재적용 불필요.
-            view.Build(width, height, data.eggColors, data.eggHps, cellSizeX, cellSizeZ);
+            // ROLLBACK_GIMMICK_HEIGHT_RATIO_20260629:
+            // Target Box paint/cylinder height follows balloon scaleY * 2.857 while X/Z layout
+            // still follows the authored paintbox footprint and egg count.
+            float targetPaintWorldY = GetGimmickReferenceBalloonScaleY(scaleMult) * GIMMICK_HEIGHT_TARGET_BOX_PAINT_RATIO;
+            view.Build(width, height, data.eggColors, data.eggHps, cellSizeX, cellSizeZ, targetPaintWorldY);
         }
 
         private void ApplySizedFieldVisualTransform(GameObject obj, BalloonData data)
@@ -3889,9 +3908,17 @@ namespace BalloonFlow
                 adjustedAnchor.x + (width - 1) * cellSizeX * 0.5f,
                 obj.transform.position.y,
                 adjustedAnchor.z + (height - 1) * cellSizeZ * 0.5f);
+            float visualScaleY = _balloonScale * scaleMult;
+            if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickWall)
+            {
+                // ROLLBACK_GIMMICK_HEIGHT_RATIO_20260629:
+                // Wooden Board and Iron Wall use balloon scaleY * 1.063 for visual height only.
+                visualScaleY = GetGimmickReferenceBalloonScaleY(scaleMult) * GIMMICK_HEIGHT_WOODEN_IRON_RATIO;
+            }
+
             obj.transform.localScale = new Vector3(
                 _balloonScale * widthMult * width,
-                _balloonScale * scaleMult,
+                visualScaleY,
                 _balloonScale * heightMult * height);
             obj.transform.position = visualCenter;
 
@@ -3900,6 +3927,11 @@ namespace BalloonFlow
             // one board cell. Fit the visible x/z bounds to the occupied footprint instead of
             // assuming localScale * sizeW/H fills the board cells.
             FitRendererBoundsToFootprint(obj, visualCenter, cellSizeX * width, cellSizeZ * height);
+
+            // ROLLBACK_GIMMICK_HP_TEXT_ASPECT_20260629: 비균일 footprint 스케일로 HP 숫자가 늘어나지 않게
+            //   '작은 축 기준' 카운터스케일 (피냐타 등 _hpTexts 없는 기믹은 no-op).
+            var sizedGi = obj.GetComponent<GimmickIdentifier>();
+            if (sizedGi != null) sizedGi.NormalizeHpTextForFootprint(width, height);
         }
 
         // ROLLBACK_BARRICADE_SMOOTH_RESHAPE_20260625: animate=true(히트 경로)면 길이 변화를 트윈으로 보간(끊김 제거)
@@ -3938,7 +3970,11 @@ namespace BalloonFlow
                 alongDir * ((BARRICADE_HEAD_CELLS - 1f) * 0.5f * (vertical ? cellSizeZ : cellSizeX)) +
                 perpDir * (0.5f * (vertical ? cellSizeX : cellSizeZ));
             float baseUniform = _balloonScale * scaleMult;
-            obj.transform.localScale = new Vector3(baseUniform, baseUniform, baseUniform);
+            // ROLLBACK_GIMMICK_HEIGHT_RATIO_20260629:
+            // Barricade height follows balloon scaleY * 2.321. X/Z keep the existing footprint
+            // fitting path so targeting, length, and body shrink behavior are not changed.
+            float barricadeScaleY = GetGimmickReferenceBalloonScaleY(scaleMult) * GIMMICK_HEIGHT_BARRICADE_RATIO;
+            obj.transform.localScale = new Vector3(baseUniform, barricadeScaleY, baseUniform);
             // ROLLBACK_BARRICADE_Z_NUDGE_20260623:
             // Only adjust the rendered art in world Z. Logical occupancy/targeting remains on
             // the authored grid cells, so this cannot change attack reach or blocker behavior.
@@ -3969,7 +4005,7 @@ namespace BalloonFlow
             if (body == null || assembly == null)
             {
                 obj.transform.localScale = new Vector3(
-                    _balloonScale * widthMult * width, _balloonScale * scaleMult, _balloonScale * heightMult * height);
+                    _balloonScale * widthMult * width, barricadeScaleY, _balloonScale * heightMult * height);
                 return;
             }
 
@@ -4016,7 +4052,7 @@ namespace BalloonFlow
                 float headThick = Mathf.Max(0.0001f, hFar - hNear);
                 float fUniform = (2f * cellPerp) / headThick;
                 float u = baseUniform * fUniform;
-                obj.transform.localScale = new Vector3(u, u, u);
+                obj.transform.localScale = new Vector3(u, barricadeScaleY, u);
                 assembly.position += (obj.transform.position - head.position); // 스케일 변경으로 head 가 움직였으니 재고정
             }
 
@@ -4679,6 +4715,7 @@ namespace BalloonFlow
             // 2x2/3x3 Ice covers the same area as the hidden balloons beneath it.
 
             _frozenOverlays[anchorId] = overlay;
+            _iceBlockOverlays.Add(overlay); // 블록 오버레이 표시 — HP 숫자 ×m 이중 스케일 방지용
         }
 
         /// <summary>
@@ -4985,6 +5022,10 @@ namespace BalloonFlow
 
         // FrozenLayer 오버레이 추적: balloonId → 자식으로 부착된 FrozenLayer GameObject
         private readonly Dictionary<int, GameObject> _frozenOverlays = new Dictionary<int, GameObject>();
+        // ROLLBACK_ICE_BLOCK_TEXT_DOUBLE_SCALE_20260629: sized Ice 블록 오버레이는 자체가 blockSize 배 스케일이라
+        //   HP 숫자가 이미 큼 → footprint ×m 을 또 곱하면 이중. 블록 오버레이는 이 집합으로 구분해 ×m 을 상쇄한다.
+        private readonly HashSet<GameObject> _iceBlockOverlays = new HashSet<GameObject>();
+        private readonly List<GameObject> _iceHitOverlayCandidates = new List<GameObject>(8);
 
         /// <summary>풍선보다 커 보이게 하는 오버레이 스케일 배율 (얼음 쉘이 풍선을 감싼 모습).
         /// 명세: "FrozenLayer 가 풍선보다 커보여야함."</summary>
@@ -4996,7 +5037,9 @@ namespace BalloonFlow
             float x = Mathf.Max(0.0001f, Mathf.Abs(balloonWorldScale.x));
             float y = Mathf.Max(0.0001f, Mathf.Abs(balloonWorldScale.y));
             float z = Mathf.Max(0.0001f, Mathf.Abs(balloonWorldScale.z));
-            return new Vector3(x * FROZEN_OVERLAY_SCALE * size, y, z * FROZEN_OVERLAY_SCALE * size);
+            // ROLLBACK_GIMMICK_HEIGHT_RATIO_20260629:
+            // FrozenLayer height follows balloon scaleY * 1.286. X/Z keep the existing ice margin.
+            return new Vector3(x * FROZEN_OVERLAY_SCALE * size, y * GIMMICK_HEIGHT_FROZEN_LAYER_RATIO, z * FROZEN_OVERLAY_SCALE * size);
         }
 
         /// <summary>
@@ -5044,7 +5087,8 @@ namespace BalloonFlow
         // ROLLBACK_ICE_HP_TEXT_OFFSET_20260626:
         // Keep the grouped Ice HP label at the authored local offset inside FrozenLayer/MagazineText.
         // Roll back by restoring the previous world-center placement path.
-        private static readonly Vector3 ICE_HP_TEXT_LOCAL_POSITION = new Vector3(0f, 1.5f, 0.05f);
+        // y=높이(위로 띄움), z=깊이(- 쪽으로 당김). 미세 조정용 — 보기 좋게 값만 바꾸면 됨.
+        private static readonly Vector3 ICE_HP_TEXT_LOCAL_POSITION = new Vector3(0f, 2.0f, -0.05f);
 
         public void SetIceRegionHpText(IEnumerable<int> ids, int hp)
         {
@@ -5052,17 +5096,29 @@ namespace BalloonFlow
 
             Vector3 center = Vector3.zero;
             int count = 0;
+            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
             foreach (int id in ids)
             {
                 if (TryGetBalloonWorldPosition(id, out Vector3 pos))
                 {
                     center += pos;
                     count++;
+                    if (pos.x < minX) minX = pos.x;
+                    if (pos.x > maxX) maxX = pos.x;
+                    if (pos.z < minZ) minZ = pos.z;
+                    if (pos.z > maxZ) maxZ = pos.z;
                 }
             }
             if (count <= 0) return;
 
             center /= count;
+
+            // ROLLBACK_ICE_HP_TEXT_ASPECT_20260629: Ice 숫자도 Pinata(Wooden Box)처럼 region footprint 의
+            //   '작은 축 min(w,h)' 기준으로 크기 조절. (오버레이는 균일 1칸 크기라 스트레치는 없고, 영역 크기에 맞춰 키움.)
+            GetFieldVisualMetrics(out _, out _, out _, out float cellSizeX, out float cellSizeZ, out _);
+            int regionW = Mathf.Max(1, Mathf.RoundToInt((maxX - minX) / Mathf.Max(0.0001f, cellSizeX)) + 1);
+            int regionH = Mathf.Max(1, Mathf.RoundToInt((maxZ - minZ) / Mathf.Max(0.0001f, cellSizeZ)) + 1);
+            int footprintMin = Mathf.Min(regionW, regionH);
 
             GameObject selectedOverlay = null;
             float selectedDistance = float.MaxValue;
@@ -5080,7 +5136,14 @@ namespace BalloonFlow
             }
 
             if (selectedOverlay != null && hp > 0)
-                ShowFrozenOverlayMagazineText(selectedOverlay, hp, center);
+            {
+                // 최대 텍스트 사이즈 5. 블록 오버레이는 이미 blockSize(=footprint) 배라 그만큼 나눠 상쇄 →
+                //   블록/그룹 모두 최종 숫자 크기 = min(footprint,5) 로 동일.
+                int capped = Mathf.Clamp(footprintMin, 1, 5);
+                bool isBlock = _iceBlockOverlays.Contains(selectedOverlay);
+                float textScaleMul = isBlock ? (float)capped / Mathf.Max(1, footprintMin) : capped;
+                ShowFrozenOverlayMagazineText(selectedOverlay, hp, center, textScaleMul);
+            }
         }
 
         public void ClearIceRegionHpText(IEnumerable<int> ids)
@@ -5094,7 +5157,7 @@ namespace BalloonFlow
             }
         }
 
-        private static void ShowFrozenOverlayMagazineText(GameObject overlay, int hp, Vector3 worldPosition)
+        private static void ShowFrozenOverlayMagazineText(GameObject overlay, int hp, Vector3 worldPosition, float textScaleMul)
         {
             FrozenOverlayMagazineTextState state = GetFrozenOverlayMagazineTextState(overlay);
             if (state == null || state.Text == null) return;
@@ -5102,6 +5165,16 @@ namespace BalloonFlow
             state.RestoreDefaults();
             state.Text.text = Mathf.Max(0, hp).ToString();
             state.Text.transform.localPosition = ICE_HP_TEXT_LOCAL_POSITION;
+
+            // ROLLBACK_ICE_HP_TEXT_CENTER_20260629: 숫자를 그룹(영역)의 정중앙(centroid)에 배치.
+            //   오버레이는 중심에 '가장 가까운 셀'에 붙어 있으므로, 그 셀 기준의 raise/depth 오프셋은 유지한 채
+            //   x,z 만 그룹 중심(worldPosition)으로 옮긴다. (홀수 영역=중앙 셀, 짝수 영역=셀 사이 정중앙)
+            Transform tt = state.Text.transform;
+            tt.position = worldPosition + (tt.position - overlay.transform.position);
+
+            // ROLLBACK_ICE_HP_TEXT_ASPECT_20260629: 작은 축 기준 크기(Pinata 와 일관, 최대 5). RestoreDefaults 직후
+            //   균일 배율 적용 → 누적 없음. 블록 오버레이는 자체가 blockSize 배라 textScaleMul 로 상쇄(이중 방지).
+            if (!Mathf.Approximately(textScaleMul, 1f)) tt.localScale *= textScaleMul;
             state.Text.gameObject.SetActive(true);
             state.Text.ForceMeshUpdate();
         }
@@ -5178,6 +5251,7 @@ namespace BalloonFlow
         private void ReturnFrozenOverlayInstance(GameObject overlay)
         {
             if (overlay == null) return;
+            _iceBlockOverlays.Remove(overlay); // 풀 반환 시 블록 표시 해제 (재사용 시 오판 방지)
             ResetFrozenOverlayMagazineText(overlay);
             overlay.transform.SetParent(null, false);
             if (ObjectPoolManager.HasInstance)
@@ -5318,8 +5392,9 @@ namespace BalloonFlow
                 {
                     gi.UpdateHP(remainHP);
                     gi.PlayHitEffect();
-                    if (remainHP <= 0) gi.PlayEndEffect();
                 }
+                if (remainHP > 0)
+                    PlayWoodenBoardHitScale(hitObj);
             }
 
             if (data.hitCount < requiredHits)
@@ -5885,6 +5960,62 @@ namespace BalloonFlow
             return empty;
         }
 
+        private void PlayWoodenBoardHitScale(GameObject obj)
+        {
+            if (obj == null) return;
+            PlayFieldGimmickYHitScale(obj.transform);
+        }
+
+        public void PlayRandomIceRegionHitScale(IEnumerable<int> ids)
+        {
+            // ROLLBACK_ICE_GROUP_HIT_SCALE_20260629:
+            // Grouped Ice loses shared HP through GimmickProcessor. Visually punch one live
+            // FrozenLayer overlay in the region at random, without changing HP/targeting.
+            if (ids == null) return;
+
+            _iceHitOverlayCandidates.Clear();
+            foreach (int id in ids)
+            {
+                if (_frozenOverlays.TryGetValue(id, out GameObject overlay)
+                    && overlay != null
+                    && overlay.activeInHierarchy)
+                {
+                    _iceHitOverlayCandidates.Add(overlay);
+                }
+            }
+
+            if (_iceHitOverlayCandidates.Count <= 0) return;
+
+            GameObject selected = _iceHitOverlayCandidates[Random.Range(0, _iceHitOverlayCandidates.Count)];
+            if (selected != null)
+                PlayFieldGimmickYHitScale(selected.transform);
+        }
+
+        private void PlayFieldGimmickYHitScale(Transform target)
+        {
+            if (target == null) return;
+
+            // ROLLBACK_WOODENBOARD_HIT_DESTROY_FX_20260629:
+            // Hit feedback is Y-only: current scale -> Y*1.05 -> current scale. Completing the
+            // previous tween first prevents repeated quick hits from drifting the stored scale.
+            target.DOKill(true);
+            Vector3 baseScale = target.localScale;
+            Vector3 hitScale = new Vector3(baseScale.x, baseScale.y * WOODENBOARD_HIT_SCALE_Y, baseScale.z);
+
+            Sequence seq = DOTween.Sequence();
+            seq.Append(target.DOScale(hitScale, FIELD_GIMMICK_HIT_SCALE_DURATION * 0.5f).SetEase(Ease.OutQuad));
+            seq.Append(target.DOScale(baseScale, FIELD_GIMMICK_HIT_SCALE_DURATION * 0.5f).SetEase(Ease.OutQuad));
+        }
+
+        private void PlayWoodenBoardEndParticleClone(GameObject obj)
+        {
+            if (obj == null) return;
+
+            GimmickIdentifier gi = obj.GetComponent<GimmickIdentifier>();
+            if (gi != null)
+                gi.PlayEndEffectCloneDetached(out _);
+        }
+
         private void ReturnBalloonObject(int balloonId, float effectScaleMultiplier)
         {
             float __totalStamp = InGamePerfLogger.StartStampMs();
@@ -5896,14 +6027,17 @@ namespace BalloonFlow
             var identifier = obj.GetComponent<BalloonIdentifier>();
 
             float savedScale = _balloonScale;
+            Vector3 savedLocalScale = obj.transform.localScale;
             string returnKey = PoolKey;
             int popColorIdx = 0;
             bool isBarricade = false;
+            bool isWoodenBoard = false;
             if (_balloons.TryGetValue(balloonId, out BalloonData retData))
             {
                 returnKey = ResolveGimmickPoolKey(retData.gimmickType);
                 popColorIdx = retData.color;
                 isBarricade = retData.gimmickType == GimmickBarricade; // #4 파괴 연출 분기
+                isWoodenBoard = retData.gimmickType == GimmickPinata;
             }
 
             // FrozenLayer 오버레이가 붙어있다면 먼저 풀로 반환
@@ -5931,6 +6065,15 @@ namespace BalloonFlow
                 seq.Append(obj.transform.DOScale(Vector3.one * savedScale * 1.1f, scaleUpDuration * 0.45f).SetEase(Ease.OutQuad));
                 seq.Append(obj.transform.DOScale(Vector3.zero, scaleUpDuration * 0.55f).SetEase(Ease.InQuad));
             }
+            else if (isWoodenBoard)
+            {
+                // ROLLBACK_WOODENBOARD_HIT_DESTROY_FX_20260629:
+                // WoodenBoard destroy uses its authored scale ratio: current scale -> 1.1x -> 0.
+                // The EndParticle clone is spawned before the root reaches zero scale.
+                seq.Append(obj.transform.DOScale(savedLocalScale * WOODENBOARD_DESTROY_SCALE, scaleUpDuration * 0.45f).SetEase(Ease.OutQuad));
+                seq.AppendCallback(() => PlayWoodenBoardEndParticleClone(obj));
+                seq.Append(obj.transform.DOScale(Vector3.zero, scaleUpDuration * 0.55f).SetEase(Ease.InQuad));
+            }
             else
             {
                 seq.Append(obj.transform.DOScale(Vector3.one * savedScale * scaleUpMult, scaleUpDuration).SetEase(Ease.OutQuad));
@@ -5942,11 +6085,12 @@ namespace BalloonFlow
                     identifier.MarkPopped();
 
                 int ci = Mathf.Clamp(popColorIdx, 0, BalloonColors.Length - 1);
-                PopEffectPool.Play(popPos, BalloonColors[ci], this, effectScaleMultiplier);
+                if (!isWoodenBoard)
+                    PopEffectPool.Play(popPos, BalloonColors[ci], this, effectScaleMultiplier);
 
                 if (obj != null && ObjectPoolManager.HasInstance)
                 {
-                    obj.transform.localScale = Vector3.one * savedScale;
+                    obj.transform.localScale = isWoodenBoard ? savedLocalScale : Vector3.one * savedScale;
                     ObjectPoolManager.Instance.Return(returnKey, obj);
                 }
             });
