@@ -428,7 +428,7 @@ namespace BalloonFlow
             HandlePaintInput();
             HandleKeyboard();
             HandleCameraControl();
-            if (_infoDirty) { _infoDirty = false; RefreshInfo(); }
+            if (_infoDirty) { _infoDirty = false; RefreshInfo(); RefreshFlexTubeOverlay(); }
         }
 
         private void OnDestroy()
@@ -3595,6 +3595,105 @@ namespace BalloonFlow
             lr.SetPosition(0, from);
             lr.SetPosition(1, to);
             lr.useWorldSpace = true;
+        }
+
+        // ROLLBACK_FLEXTUBE_AUTHOR_OVERLAY_20260628: MapMaker 에서 FlexTube 의 Start/End 와 클릭 순서를 시각화.
+        //   Start(seq0=첫 클릭) 칸 = 빨강 테두리, End(마지막 seq=Edge) 칸 = 흰색 테두리, 순서대로 seq 중심을 잇는 청록 선.
+        private Transform _flexTubeOverlayRoot;
+        private Material _overlayLineMat;
+
+        private void RefreshFlexTubeOverlay()
+        {
+            if (_flexTubeOverlayRoot) Destroy(_flexTubeOverlayRoot.gameObject);
+            if (_balloonFlexTubeGroupId == null || _balloonFlexTubeSequenceIndex == null) return;
+            _flexTubeOverlayRoot = new GameObject("FlexTubeOverlay").transform;
+
+            if (_overlayLineMat == null)
+            {
+                var sh = Shader.Find("Sprites/Default");
+                if (sh == null) sh = Shader.Find("Unlit/Color");
+                if (sh == null) sh = Shader.Find("Hidden/Internal-Colored");
+                _overlayLineMat = new Material(sh);
+            }
+
+            float spacing = CellSpacing;
+            const float y = 0.62f; // 셀 quad(y=0.5) 위에 보이도록
+            Vector3 CellPos(int c, int r) => new Vector3(
+                _boardCenter.x + (c - (_gridCols - 1) * 0.5f) * spacing, y,
+                _boardCenter.y + (r - (_gridRows - 1) * 0.5f) * spacing);
+
+            // group -> seq -> cells
+            var groups = new Dictionary<int, Dictionary<int, List<Vector2Int>>>();
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                {
+                    int g = _balloonFlexTubeGroupId[c, r];
+                    if (g < 0) continue;
+                    int s = _balloonFlexTubeSequenceIndex[c, r];
+                    if (s < 0) continue;
+                    if (!groups.TryGetValue(g, out var seqMap)) { seqMap = new Dictionary<int, List<Vector2Int>>(); groups[g] = seqMap; }
+                    if (!seqMap.TryGetValue(s, out var cells)) { cells = new List<Vector2Int>(); seqMap[s] = cells; }
+                    cells.Add(new Vector2Int(c, r));
+                }
+
+            foreach (var kv in groups)
+            {
+                var seqMap = kv.Value;
+                var seqs = new List<int>(seqMap.Keys); seqs.Sort();
+                if (seqs.Count == 0) continue;
+
+                // 순서 선 (seq 중심들을 순서대로)
+                var centers = new List<Vector3>(seqs.Count);
+                foreach (int s in seqs)
+                {
+                    var cells = seqMap[s];
+                    Vector3 sum = Vector3.zero;
+                    foreach (var cell in cells) sum += CellPos(cell.x, cell.y);
+                    centers.Add(sum / cells.Count);
+                }
+                if (centers.Count >= 2)
+                    CreateOverlayLine(centers.ToArray(), new Color(0.12f, 0.95f, 1f, 1f), spacing * 0.06f, false);
+
+                // Start(첫 seq)=빨강, End(마지막 seq)=흰색 테두리
+                DrawSeqFrame(seqMap[seqs[0]], new Color(1f, 0.16f, 0.12f, 1f), spacing, CellPos);
+                if (seqs.Count > 1)
+                    DrawSeqFrame(seqMap[seqs[seqs.Count - 1]], Color.white, spacing, CellPos);
+            }
+        }
+
+        private void DrawSeqFrame(List<Vector2Int> cells, Color col, float spacing, System.Func<int, int, Vector3> CellPos)
+        {
+            if (cells == null || cells.Count == 0) return;
+            int minC = int.MaxValue, maxC = int.MinValue, minR = int.MaxValue, maxR = int.MinValue;
+            foreach (var cell in cells)
+            {
+                minC = Mathf.Min(minC, cell.x); maxC = Mathf.Max(maxC, cell.x);
+                minR = Mathf.Min(minR, cell.y); maxR = Mathf.Max(maxR, cell.y);
+            }
+            float h = spacing * 0.5f;
+            Vector3 bl = CellPos(minC, minR) + new Vector3(-h, 0f, -h);
+            Vector3 br = CellPos(maxC, minR) + new Vector3(h, 0f, -h);
+            Vector3 tr = CellPos(maxC, maxR) + new Vector3(h, 0f, h);
+            Vector3 tl = CellPos(minC, maxR) + new Vector3(-h, 0f, h);
+            CreateOverlayLine(new[] { bl, br, tr, tl }, col, spacing * 0.07f, true);
+        }
+
+        private void CreateOverlayLine(Vector3[] pts, Color col, float width, bool loop)
+        {
+            var go = new GameObject("FTOverlayLine");
+            go.transform.SetParent(_flexTubeOverlayRoot, false);
+            var lr = go.AddComponent<LineRenderer>();
+            lr.material = _overlayLineMat;
+            lr.startColor = lr.endColor = col;
+            lr.startWidth = lr.endWidth = width;
+            lr.numCapVertices = 2;
+            lr.numCornerVertices = 2;
+            lr.loop = loop;
+            lr.positionCount = pts.Length;
+            lr.SetPositions(pts);
+            lr.useWorldSpace = true;
+            lr.textureMode = LineTextureMode.Stretch;
+            lr.sortingOrder = 200;
         }
 
         #endregion

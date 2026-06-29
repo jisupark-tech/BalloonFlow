@@ -117,7 +117,17 @@ namespace BalloonFlow
         //   1.0=정확히 맞닿음(틈 위험), >1=겹침. (시각만; pitch/타게팅 무관.)
         // ROLLBACK_FLEXTUBE_RIB_OVERLAP_RAISE_20260628: 디스크 메시 가시부가 bounds(z=0.294)보다 짧아(끝 여백)
         //   1.15 로는 직선부가 여러 통(barrel)으로 끊겨 보임. 가시부가 확실히 겹치도록 1.6 으로 올림.
-        private const float FLEXTUBE_RIB_LENGTH_OVERLAP = 1.6f;
+        // ROLLBACK_FLEXTUBE_RIB_OVERLAP_CORNER_POKE_20260628: 1.6 은 휘어진 코너에서 긴 직선 리브 끝이 곡선을
+        //   못 따라가 바깥으로 삐져나옴("작은 게 옆으로"). 직선부 연속성은 유지되는 선에서 1.3 으로 낮춤.
+        private const float FLEXTUBE_RIB_LENGTH_OVERLAP = 1.3f;
+        // ROLLBACK_FLEXTUBE_CORNER_FILLET_20260628: 각 굽힘(코너) 필렛 반경 = '인접 세그먼트(셀 간격) 길이 × 이 값'.
+        //   계단을 합치지 않고 각 굽힘 끝만 살짝 둥글게 — 값이 작을수록 단이 또렷(steppy), 클수록 둥글어짐.
+        //   0.35 = 세그먼트의 35%만 라운딩(나머지 직선 유지). 단을 더 또렷하게: ↓0.2, 더 둥글게: ↑0.5.
+        private const float FLEXTUBE_CORNER_FILLET_FRAC = 0.35f;
+        // ROLLBACK_FLEXTUBE_RENDER_MESH_20260628: true 면 디스크 리브(GameObject 수백 개) 대신 Hose 메시를 path 따라
+        //   결합한 '단일 메시'로 렌더(타일링). 기본 false = 기존 리브 유지 → 켜기 전엔 동작/성능 100% 동일.
+        //   shrink/HP/타게팅/hit 처리는 FlexTube.cs 의 mesh 모드가 담당(논리 셀 기반이라 게임플레이 동일).
+        private const bool FLEXTUBE_RENDER_MESH = true;
         // ROLLBACK_FLEXTUBE_NONUNIFORM_PER_CELL_20260624:
         // SEGMENT DENSITY = segment LENGTH as a fraction of one grid cell (ringWorldSize = gridCell × this).
         // SMALLER = more segments per cell = finer ribbing = reads as a CONTINUOUS tube. The Hose_Segment
@@ -302,6 +312,11 @@ namespace BalloonFlow
         private readonly Dictionary<Transform, Vector3> _barricadeEdgeBaseScales = new Dictionary<Transform, Vector3>();
         // ROLLBACK_BARRICADE_HEAD_ROTATION_20260608: head(Barricade) 방향(N/E/S/W) 회전용 base 캐시.
         private readonly Dictionary<Transform, Quaternion> _barricadeHeadBaseRotations = new Dictionary<Transform, Quaternion>();
+        // ROLLBACK_BARRICADE_HEAD_2X2_FIT_20260628:
+        // Head is fitted independently to a 2x2 footprint; cache authored state so pooled reuse,
+        // MapMaker replay, and retry do not inherit the previous direction/scale.
+        private readonly Dictionary<Transform, Vector3> _barricadeHeadBasePositions = new Dictionary<Transform, Vector3>();
+        private readonly Dictionary<Transform, Vector3> _barricadeHeadBaseScales = new Dictionary<Transform, Vector3>();
         // ROLLBACK_BARRICADE_ASSEMBLY_20260608: assembly("Baricade (1)") base 회전 + body base 길이(최장축) 캐시.
         private readonly Dictionary<Transform, Quaternion> _barricadeAssemblyBaseRot = new Dictionary<Transform, Quaternion>();
         private readonly Dictionary<Transform, Vector3> _barricadeAssemblyBaseLocalPositions = new Dictionary<Transform, Vector3>();
@@ -462,6 +477,13 @@ namespace BalloonFlow
                 BalloonData data = kvp.Value;
                 if (data.isPopped) continue;
                 if (!_balloonObjects.TryGetValue(data.balloonId, out GameObject obj) || obj == null) continue;
+
+                // ROLLBACK_FLEXTUBE_MESHFILTER_REAPPLY_SKIP_20260629:
+                // FlexTube mesh mode bakes the full tube path into one child mesh at local 0/0/0, scale 1/1/1.
+                // Do not treat that shared mesh object as a normal balloon here, or the last FlexTube cell
+                // in _balloonObjects will overwrite the whole tube's position/scale.
+                if (data.gimmickType == GimmickFlexTube)
+                    continue;
 
                 if (data.gimmickType == GimmickBarricade)
                 {
@@ -2675,16 +2697,27 @@ namespace BalloonFlow
                     // chosen. Sampling directly by that straight-line arc makes corner spacing uneven.
                     // Build a rendered curve polyline first, then place Segments by the curve's own
                     // cumulative length so every Segment uses the same size and a predictable position.
-                    int samplesPerLogicalSpan = 12;
-                    int sampleCount = Mathf.Max(2, (cellPositions.Count - 1) * samplesPerLogicalSpan + 1);
+                    // ROLLBACK_FLEXTUBE_CORNER_COLLAPSE_20260628: 시각 곡선은 '계단을 교차코너로 접은' control path
+                    //   기준으로 샘플 → 코너가 45° 대각선이 아니라 90° 라운드로 보인다. (로지컬/캡/타게팅은 cellPositions 유지.)
+                    List<Vector3> ctrl = BuildFlexTubeControlPath(cellPositions);
+                    if (ctrl == null || ctrl.Count < 2) ctrl = cellPositions;
+                    var ctrlCum = new List<float>(ctrl.Count) { 0f };
+                    for (int c = 1; c < ctrl.Count; c++)
+                        ctrlCum.Add(ctrlCum[c - 1] + Vector3.Distance(ctrl[c - 1], ctrl[c]));
+                    float ctrlTotal = ctrlCum[ctrlCum.Count - 1];
+
+                    // ROLLBACK_FLEXTUBE_CORNER_COLLAPSE_20260628: control 점이 적어(직선+코너만) span 기준 샘플은
+                    //   코너 필렛이 거칠다. 곡선 전체 길이를 고운 스텝(≈minCell/4)으로 샘플해 필렛을 매끄럽게.
+                    float sampleStep = Mathf.Max(0.0001f, minCell * 0.25f);
+                    int sampleCount = Mathf.Clamp(Mathf.CeilToInt(ctrlTotal / sampleStep) + 1, 2, 4096);
                     curvePoints = new List<Vector3>(sampleCount);
                     curveCum = new List<float>(sampleCount);
 
                     for (int si = 0; si < sampleCount; si++)
                     {
                         float t = sampleCount <= 1 ? 0f : si / (float)(sampleCount - 1);
-                        float sourceArc = Mathf.Lerp(0f, pathTotal, t);
-                        EvalFlexTubePath(cellPositions, cumArc, sourceArc, out Vector3 p, out _);
+                        float sourceArc = Mathf.Lerp(0f, ctrlTotal, t);
+                        EvalFlexTubePath(ctrl, ctrlCum, sourceArc, out Vector3 p, out _);
 
                         if (curvePoints.Count == 0)
                         {
@@ -2784,6 +2817,35 @@ namespace BalloonFlow
                         _balloonObjects[seqCellIds[seq][cellIndex]] = part.gameObject;
                 }
 
+                // ROLLBACK_FLEXTUBE_CAP_JOINT_AS_SEGMENT_20260628:
+                // A Head/Edge cap is a 2x2 end piece. When a designer splits one tube ring into multiple
+                // FlexTube groups, those groups MEET (one group's cap sits next to another group's cap),
+                // so a 2x2 cap lands in the MIDDLE of a straight run and reads as a wrong-size block among
+                // the thin body segments. If a cap's seq is adjacent to a DIFFERENT group's FlexTube cell,
+                // it is a joint, not a true end → skip the cap; the continuous body Segment (sampled through
+                // the cap center, capInset=0) already covers that cell, keeping the tube seamless.
+                bool IsSeqJointWithOtherGroup(int seq)
+                {
+                    if (seq < 0 || seq >= seqCellIds.Count || seqCellIds[seq] == null) return false;
+                    float thr = minCell * 1.5f;
+                    float thrSqr = thr * thr;
+                    for (int ci = 0; ci < seqCellIds[seq].Count; ci++)
+                    {
+                        if (!_balloons.TryGetValue(seqCellIds[seq][ci], out BalloonData capData)) continue;
+                        Vector3 capPos = GetAdjustedBoardPosition(capData.position);
+                        foreach (var kv in _balloons)
+                        {
+                            BalloonData od = kv.Value;
+                            if (od == null || od.isPopped || od.gimmickType != GimmickFlexTube) continue;
+                            if (od.flexTubeGroupId < 0 || od.flexTubeGroupId == groupId) continue;
+                            Vector3 op = GetAdjustedBoardPosition(od.position);
+                            Vector3 dd = op - capPos; dd.y = 0f;
+                            if (dd.sqrMagnitude <= thrSqr) return true;
+                        }
+                    }
+                    return false;
+                }
+
                 Vector3 startCapGridScale = BuildPartScale(startCapMeshX, startCapMeshZ);
                 Vector3 segmentGridScale = BuildPartScale(segMeshX, segMeshZ);
                 Vector3 endCapGridScale = BuildPartScale(endCapMeshX, endCapMeshZ);
@@ -2805,7 +2867,8 @@ namespace BalloonFlow
                 // Rollback: authored-seq-only generation made the tube too sparse. Restore the previous
                 // continuous path tiling so Segment count follows path length/pitch, while Head and Edge
                 // remain explicit cap parts.
-                if (TryGetSeqFootprint(0, GetSeqTangent(0), out Vector3 startCenter, out float startAlongWorld, out float startPerpWorld))
+                if (!IsSeqJointWithOtherGroup(0)
+                    && TryGetSeqFootprint(0, GetSeqTangent(0), out Vector3 startCenter, out float startAlongWorld, out float startPerpWorld))
                 {
                     startCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
                     Quaternion startRot = Quaternion.LookRotation(GetSeqTangent(0), Vector3.up) * extraRot;
@@ -2854,6 +2917,40 @@ namespace BalloonFlow
                 float maxSegGap = 0f;
                 float sumSegGap = 0f;
                 int segGapCount = 0;
+                // ROLLBACK_FLEXTUBE_RENDER_MESH_20260628: mesh 모드면 리브 GameObject 를 스폰하지 않고
+                //   (pos·rot·scale, cellId) 만 수집 → 루프 후 단일 결합 메시로 만든다. Hose 메시/머티리얼은 Segment 프리팹 재사용.
+                bool ftMeshMode = FLEXTUBE_RENDER_MESH;
+                List<Matrix4x4> ftMeshMatrices = ftMeshMode ? new List<Matrix4x4>(bodyCount + 1) : null;
+                List<int> ftMeshCellIds = ftMeshMode ? new List<int>(bodyCount + 1) : null;
+                // ROLLBACK_FLEXTUBE_MESHFILTER_SPACE_20260629:
+                // Store sampled segment centers separately from MeshFilter matrices. Prefab child pivots can
+                // shift matrix column 3, but gameplay shrink/end-cap movement must follow the tube centerline.
+                List<Vector3> ftMeshCenters = ftMeshMode ? new List<Vector3>(bodyCount + 1) : null;
+                Mesh ftHoseMesh = null; Material ftSegMat = null;
+                GameObject ftTmpRib = null; Transform ftTmpHose = null;
+                if (ftMeshMode)
+                {
+                    // 임시 리브 1개를 tubeObj 자식으로 인스턴스(렌더 끔) → 매 세그먼트마다 위치/회전/스케일만 바꿔
+                    //   '자식 메시(Hose)의 실제 localToWorldMatrix' 를 읽어 모은다. 직접 행렬 재구성은 자식 로컬
+                    //   오프셋/스케일을 빠뜨려 어긋나므로, 실제 인스턴스에서 읽으면 리브와 100% 동일한 변환이 된다.
+                    ftTmpRib = Instantiate(segmentPrefab);
+                    ftTmpRib.transform.SetParent(tubeObj.transform, true);
+                    // ⚠️ SetActive(false) 금지: 비활성 오브젝트는 transform 행렬이 갱신 안 돼 localToWorldMatrix 가
+                    //   위치 변경 전(원점) 값으로 읽힘 → 모든 인스턴스가 잘못된 한 곳에 뭉침. GameObject 는 active 유지하고
+                    //   렌더러만 꺼서 화면엔 안 보이게(transform 은 정상 갱신).
+                    foreach (var rend in ftTmpRib.GetComponentsInChildren<Renderer>(true)) rend.enabled = false;
+                    var tmpMf = ftTmpRib.GetComponentInChildren<MeshFilter>(true);
+                    var tmpMr = ftTmpRib.GetComponentInChildren<MeshRenderer>(true);
+                    ftHoseMesh = tmpMf != null ? tmpMf.sharedMesh : null;
+                    ftSegMat = tmpMr != null ? tmpMr.sharedMaterial : null;
+                    ftTmpHose = tmpMf != null ? tmpMf.transform : null;
+                    if (ftHoseMesh == null || ftTmpHose == null)
+                    {
+                        ftMeshMode = false;
+                        if (ftTmpRib != null) Destroy(ftTmpRib);
+                        Debug.LogWarning("[FlexTube] mesh 모드 준비 실패(Hose 메시 없음) — 리브 모드로 폴백.");
+                    }
+                }
                 for (int bi = 0; bi <= bodyCount; bi++)
                 {
                     float curveDistance = bodyCount <= 0 ? bodyStart : Mathf.Lerp(bodyStart, bodyEnd, bi / (float)bodyCount);
@@ -2862,6 +2959,18 @@ namespace BalloonFlow
                     if (segTan.sqrMagnitude < 0.0001f) segTan = GetSeqTangent(FindNearestSeqByPosition(segPos));
                     Quaternion segRot = Quaternion.LookRotation(segTan.normalized, Vector3.up) * extraRot;
                     int nearestSeq = FindNearestSeqByPosition(segPos);
+                    if (ftMeshMode)
+                    {
+                        // 임시 리브를 이 세그먼트의 변환으로 세팅(리브 모드 SpawnFlexPart 와 동일: world pos/rot + local scale)
+                        //   후, 자식 메시의 실제 월드 행렬을 그대로 수집. (Start→Edge 순; 루프 후 뒤집어 Edge-first 로.)
+                        ftTmpRib.transform.position = segPos;
+                        ftTmpRib.transform.rotation = segRot;
+                        ftTmpRib.transform.localScale = segmentGridScale;
+                        ftMeshMatrices.Add(ftTmpHose.localToWorldMatrix);
+                        ftMeshCellIds.Add(seqIds[nearestSeq]);
+                        ftMeshCenters.Add(segPos);
+                        continue;
+                    }
                     var segPart = SpawnFlexPart(segmentPrefab, segPos, segRot,
                                                 true, segmentGridScale, GimmickIdentifier.FlexTubePart.Segment, seqIds[nearestSeq]);
                     if (segPart != null)
@@ -2895,7 +3004,8 @@ namespace BalloonFlow
                         $"gapMin={minGapText} gapMax={maxSegGap:F3} gapAvg={avgGap:F3} pitch={pitch:F3}");
                 }
 
-                if (TryGetSeqFootprint(lastIdx, GetSeqTangent(lastIdx), out Vector3 endCenter, out float endAlongWorld, out float endPerpWorld))
+                if (!IsSeqJointWithOtherGroup(lastIdx)
+                    && TryGetSeqFootprint(lastIdx, GetSeqTangent(lastIdx), out Vector3 endCenter, out float endAlongWorld, out float endPerpWorld))
                 {
                     endCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
                     Quaternion endRot = Quaternion.LookRotation(GetSeqTangent(lastIdx), Vector3.up) * extraRot;
@@ -2920,7 +3030,6 @@ namespace BalloonFlow
 
                 ringScale = 1f;
                 Debug.Log($"[FlexTube] Group {groupId} seqFootprint parts={parts.Count} seqs={cellPositions.Count} cells={ids.Count}");
-
 #if false // ROLLBACK_FLEXTUBE_UNIFIED_PATH_TILING_20260628
                 // --- Tube tiling params (computed BEFORE the caps so the caps can match the segment Z) ---
                 // ROLLBACK_FLEXTUBE_CAP_MATCH_BRIDGE_20260624:
@@ -3089,7 +3198,53 @@ namespace BalloonFlow
                 // collapse to one centerline point and finish the tube before exposed cells are hit.
                 int flexTubeHp = (authoredHp > 0) ? authoredHp : Mathf.Max(1, ids.Count);
                 int color = _balloons[ids[0]].color;
-                tube.Initialize(flexTubeHp, color, groupId, parts);
+
+                if (ftTmpRib != null) Destroy(ftTmpRib); // 임시 리브 정리 (행렬 수집 끝)
+                if (ftMeshMode && ftHoseMesh != null && ftMeshMatrices.Count > 0)
+                {
+                    // ROLLBACK_FLEXTUBE_RENDER_MESH_20260628: 리브 대신 단일 결합 메시 GameObject 생성.
+                    //   FlexTube_Group(tubeObj)의 자식으로 두고 local transform 0/identity/1. 결합 메시는 tubeObj-local 좌표로 구워
+                    //   tubeObj 변환을 거쳐 필드(월드) 위치로 렌더된다.
+                    //   ⚠️ 이름은 Animator 가 애니메이션하는 자식 경로와 겹치지 않게 고유하게 둔다(겹치면 셋업 후 transform 이 덮임).
+                    var meshGO = new GameObject("FlexTubeBodyMesh_RT");
+                    meshGO.transform.SetParent(tubeObj.transform, false);
+                    meshGO.transform.localPosition = Vector3.zero;
+                    meshGO.transform.localRotation = Quaternion.identity;
+                    meshGO.transform.localScale = Vector3.one;
+                    var mf = meshGO.AddComponent<MeshFilter>();
+                    var mr = meshGO.AddComponent<MeshRenderer>();
+                    // Hose 머티리얼 인스턴스(공유 오염 방지)에 그룹색을 '속성으로만' 틴트 → 텍스처 유지.
+                    //   (ApplyTintToObject 는 fallback 에서 머티리얼을 단색으로 교체해 텍스처가 사라지므로 쓰지 않음.)
+                    if (ftSegMat != null)
+                    {
+                        var matInst = new Material(ftSegMat);
+                        Color tubeCol = BalloonColors[Mathf.Clamp(color, 0, BalloonColors.Length - 1)];
+                        if (matInst.HasProperty("_Color")) matInst.SetColor("_Color", tubeCol);
+                        if (matInst.HasProperty("_BaseColor")) matInst.SetColor("_BaseColor", tubeCol);
+                        if (matInst.HasProperty("_TintColor")) matInst.SetColor("_TintColor", tubeCol);
+                        mr.sharedMaterial = matInst;
+                    }
+                    // Edge→Start 제거를 위해 index0=Edge 가 되도록 뒤집어 전달 (수집은 Start→Edge 순이었음).
+                    ftMeshMatrices.Reverse();
+                    ftMeshCellIds.Reverse();
+                    ftMeshCenters.Reverse();
+                    // 모든 셀 → 메시 GO 등록 (소비처 dangling 방지; FlexTube 셀의 _balloonObjects 는 대부분 vestigial).
+                    for (int ai = 0; ai < ids.Count; ai++) _balloonObjects[ids[ai]] = meshGO;
+                    tube.InitializeMesh(flexTubeHp, color, groupId, parts, mf, ftHoseMesh, ftMeshMatrices, ftMeshCellIds, ftMeshCenters);
+                    // 진단: 실제 렌더 월드 위치(mr.bounds) + 행렬/셀 기준점 비교로 원인 확정.
+                    var dbgMesh = mf.sharedMesh;
+                    var m0c = ftMeshMatrices[0].GetColumn(3); // 첫 인스턴스 월드 좌표
+                    var c0 = ftMeshCenters[0];
+                    Debug.Log($"[FlexTube-MESH] G{groupId} instances={ftMeshMatrices.Count} verts={(dbgMesh != null ? dbgMesh.vertexCount : 0)} " +
+                              $"meshLocalBoundsCenter={(dbgMesh != null ? dbgMesh.bounds.center.ToString("F2") : "null")} meshLocalBoundsSize={(dbgMesh != null ? dbgMesh.bounds.size.ToString("F2") : "null")}\n" +
+                              $"  rendererWorldBoundsCenter={mr.bounds.center.ToString("F2")} rendererWorldBoundsSize={mr.bounds.size.ToString("F2")}\n" +
+                              $"  matrix0World=({m0c.x:F2},{m0c.y:F2},{m0c.z:F2}) center0={c0.ToString("F2")} cell0={cellPositions[0].ToString("F2")} cellLast={cellPositions[cellPositions.Count - 1].ToString("F2")}\n" +
+                              $"  tubeObjPos={tubeObj.transform.position.ToString("F2")} tubeObjScale={tubeObj.transform.lossyScale.ToString("F2")} meshGOlocalPos={meshGO.transform.localPosition.ToString("F2")} meshGOworldPos={meshGO.transform.position.ToString("F2")} meshGOlossyScale={meshGO.transform.lossyScale.ToString("F2")} mat={(mr.sharedMaterial != null ? mr.sharedMaterial.name : "NULL")}");
+                }
+                else
+                {
+                    tube.Initialize(flexTubeHp, color, groupId, parts);
+                }
             }
         }
 
@@ -3112,6 +3267,50 @@ namespace BalloonFlow
         }
 
         /// <summary>cell-center polyline 위 arc-length 위치의 좌표 + 진행 방향(y=0 평면). 연속 rib 타일링용.</summary>
+        // ROLLBACK_FLEXTUBE_CORNER_COLLAPSE_20260628:
+        // 짝수-스냅이 둥근 90° 코너를 45° 계단(staircase)으로 만든다. 시각 곡선이 계단 점을 그대로 따라가면
+        // (B-spline 이어도) 45° 대각선으로 보인다. 90° 라운드 코너(Image#7)가 되려면, 직선 변(run)들을 연장해
+        // 만나는 '교차 코너'로 계단을 접고 그 코너만 라운딩해야 한다. 여기서는 시각용 control path 만 단순화하고,
+        // 로지컬 셀/캡/타게팅은 원본 cellPositions 를 그대로 쓴다.
+        private static bool TryIntersectLinesXZ(Vector3 a, Vector3 da, Vector3 b, Vector3 db, out Vector3 hit)
+        {
+            float det = da.x * (-db.z) - (-db.x) * da.z;
+            if (Mathf.Abs(det) < 1e-6f) { hit = (a + b) * 0.5f; return false; } // 평행 — 접지 못함
+            float rx = b.x - a.x, rz = b.z - a.z;
+            float s = (rx * (-db.z) - (-db.x) * rz) / det;
+            hit = new Vector3(a.x + s * da.x, a.y, a.z + s * da.z);
+            return true;
+        }
+
+        private static List<Vector3> BuildFlexTubeControlPath(List<Vector3> pts)
+        {
+            int n = pts != null ? pts.Count : 0;
+            var outp = new List<Vector3>();
+            if (n < 3) { if (pts != null) outp.AddRange(pts); return outp; }
+
+            // ROLLBACK_FLEXTUBE_PER_CORNER_FILLET_NO_COLLAPSE_20260628:
+            // 저작된 셀 경로를 '그대로' 따라간다 — 계단/모서리를 직선·사각형으로 합치지(collapse) 않는다.
+            // 방향이 바뀌는 '각 굽힘 셀'에만 작은 필렛 [hNear, V(셀), vNear] 을 넣고, 직선(공선) 셀은 그대로 둔다.
+            // → 계단은 계단대로(각 단 끝만 둥글게), 한 번 꺾이는 ㄴ은 그 모서리만 둥글게. 세팅한 모서리 개수 보존.
+            outp.Add(pts[0]);
+            for (int idx = 1; idx < n - 1; idx++)
+            {
+                Vector3 din = pts[idx] - pts[idx - 1]; din.y = 0f;
+                Vector3 dout = pts[idx + 1] - pts[idx]; dout.y = 0f;
+                float lin = din.magnitude, lout = dout.magnitude;
+                if (lin < 1e-6f || lout < 1e-6f) { outp.Add(pts[idx]); continue; }
+                Vector3 dinN = din / lin, doutN = dout / lout;
+                if (Vector3.Dot(dinN, doutN) > 0.95f) { outp.Add(pts[idx]); continue; } // 직선(공선) — 셀 그대로
+                // 굽힘 → 셀(V)은 그대로 통과 지점, 양옆 짧은 구간만 라운딩(필렛 = 인접 세그먼트 길이의 일부, 작게).
+                float fillet = FLEXTUBE_CORNER_FILLET_FRAC * Mathf.Min(lin, lout);
+                outp.Add(pts[idx] - dinN * fillet);  // hNear
+                outp.Add(pts[idx]);                   // V = 저작 셀(굽힘) 위치
+                outp.Add(pts[idx] + doutN * fillet);  // vNear
+            }
+            outp.Add(pts[n - 1]);
+            return outp;
+        }
+
         private static void EvalFlexTubePath(List<Vector3> pts, List<float> cum, float arc, out Vector3 pos, out Vector3 tangent)
         {
             int n = pts != null ? pts.Count : 0;
@@ -3125,32 +3324,39 @@ namespace BalloonFlow
             float segLen = Mathf.Max(0.0001f, cum[k + 1] - cum[k]);
             float t = Mathf.Clamp01((arc - cum[k]) / segLen);
 
-            // ROLLBACK_FLEXTUBE_CORNER_SMOOTH_20260626: 코너(방향 전환) 셀 주변에서 직선 lerp 대신 2차 Bezier 라운딩 적용.
-            //   기존엔 EvaluateFlexTubeCornerPosition/Tangent 가 정의만 되고 호출처가 없어(dead) ㄴ/ㄷ/ㄹ 코너가
-            //   셀 중심 직선으로 직각 꺾였다. 각 코너 c 의 Bezier 는 mid(c-1,c)[bt0] → corner c[apex] → mid(c,c+1)[bt1]
-            //   를 잇는다(반경 ~0.5셀). segment k 의 뒷절반(t>=0.5)=다음 코너(k+1)로 진입(bt=t-0.5∈[0,0.5]),
-            //   앞절반(t<0.5)=이전 코너(k)에서 진출(bt=0.5+t∈[0.5,1)). t=0.5/세그먼트 경계에서 연속(양쪽 mid-edge/apex 일치).
-            //   코너가 아닌 구간은 기존 직선 보간 그대로(무회귀).
-            if (t >= 0.5f && IsFlexTubeCorner(pts, k + 1))
+            // ROLLBACK_FLEXTUBE_BSPLINE_PATH_20260628:
+            // Catmull-Rom(보간)은 계단(staircase) 점들을 '통과'해 여전히 계단을 따라가, 코너가 각져 보였다.
+            // 원하는 건 계단을 안쪽으로 깎아 매끈한 라운드 코너(quarter-arc) → '근사(approximating)' 스플라인 필요.
+            // 균일 3차 B-spline 으로 교체:
+            //  • 공선(직선) 구간은 직선 그대로(같은 위치 재현 — 직선부 변화 없음),
+            //  • 연속 코너/계단은 convex hull 안쪽으로 둥글게 깎여 매끄러운 라운드 코너가 된다(오버슈트 없음).
+            // (로지컬 셀/타게팅은 원래 2×2 footprint 유지 — 시각만 라운딩.)
+            // 끝 phantom 점은 반사(2·끝 - 안쪽)로 — B-spline 이 첫/마지막 점을 정확히 통과해 튜브 끝(그룹 이음매)이
+            //   안쪽으로 당겨져 틈이 생기지 않게 한다. 내부 코너는 그대로 둥글게 깎인다.
+            Vector3 p1 = pts[k];
+            Vector3 p2 = pts[k + 1];
+            Vector3 p0 = (k - 1 >= 0) ? pts[k - 1] : (2f * pts[0] - pts[1]);
+            Vector3 p3 = (k + 2 <= n - 1) ? pts[k + 2] : (2f * pts[n - 1] - pts[n - 2]);
+            float t2 = t * t;
+            float t3 = t2 * t;
+            float it = 1f - t;
+            float b0 = (it * it * it) / 6f;
+            float b1 = (3f * t3 - 6f * t2 + 4f) / 6f;
+            float b2 = (-3f * t3 + 3f * t2 + 3f * t + 1f) / 6f;
+            float b3 = t3 / 6f;
+            pos = b0 * p0 + b1 * p1 + b2 * p2 + b3 * p3;
+            float d0 = -(it * it) / 2f;
+            float d1 = (9f * t2 - 12f * t) / 6f;
+            float d2 = (-9f * t2 + 6f * t + 3f) / 6f;
+            float d3 = t2 / 2f;
+            tangent = d0 * p0 + d1 * p1 + d2 * p2 + d3 * p3;
+            tangent.y = 0f;
+            if (tangent.sqrMagnitude < 0.000001f)
             {
-                float bt = t - 0.5f;                            // [0.5,1] → [0,0.5] : start(mid-edge)→corner apex
-                pos = EvaluateFlexTubeCornerPosition(pts, k + 1, bt);
-                tangent = EvaluateFlexTubeCornerTangent(pts, k + 1, bt);
-            }
-            else if (t < 0.5f && IsFlexTubeCorner(pts, k))
-            {
-                float bt = 0.5f + t;                            // [0,0.5) → [0.5,1) : corner apex→end(mid-edge)
-                pos = EvaluateFlexTubeCornerPosition(pts, k, bt);
-                tangent = EvaluateFlexTubeCornerTangent(pts, k, bt);
-            }
-            else
-            {
-                pos = Vector3.Lerp(pts[k], pts[k + 1], t);
-                Vector3 dir = pts[k + 1] - pts[k]; dir.y = 0f;
+                Vector3 dir = p2 - p1; dir.y = 0f;
                 tangent = dir.sqrMagnitude > 0.000001f ? dir.normalized : Vector3.forward;
             }
-            tangent.y = 0f;
-            if (tangent.sqrMagnitude < 0.000001f) tangent = Vector3.forward;
+            else tangent.Normalize();
         }
 
         /// <summary>cell index i 의 forward tangent (visual segment 분산 시 사용). 직선/대각 모두 정상 동작. y=0 평면 기준.</summary>
@@ -3778,7 +3984,7 @@ namespace BalloonFlow
             // Barricade body/edge are moved and scaled in world space below. Pooled reuse must
             // start from the authored child transforms, otherwise MapMaker re-play or Retry can
             // inherit the previous direction's edge/body offsets and look rotated/misaligned.
-            RestoreBarricadeAuthoredPartState(body, edge);
+            RestoreBarricadeAuthoredPartState(head, body, edge);
 
             // 1) 방향 회전 + head 를 anchor 에 재고정.
             //    authored 기본 = +X = East = bdir1 → yaw=(bdir-1)*90. 머리 방향이 어긋나면 _barricadeHeadYawOffset 로 90° 단위 보정.
@@ -3804,6 +4010,7 @@ namespace BalloonFlow
             // ROLLBACK_BARRICADE_UNIFORM_SCALE_20260608: 두께 2칸 = head 두께가 2칸이 되도록 obj 를 "균일" 스케일 fit.
             //   → body/edge 는 같은 배율로 묶여 프리팹 비율 유지(독립 두께 보정 X, body 가 과하게 넓어지지 않음).
             float cellPerp = vertical ? cellSizeX : cellSizeZ;
+            float cellAlong = vertical ? cellSizeZ : cellSizeX;
             if (head != null && TryGetProjectedBounds(head, head.forward, out float hNear, out float hFar))
             {
                 float headThick = Mathf.Max(0.0001f, hFar - hNear);
@@ -3816,6 +4023,27 @@ namespace BalloonFlow
             // 2) 레거시(length<=1)는 멀티셀 비활성 → head 만(body/edge 숨김).
             // ROLLBACK_BARRICADE_LENGTH_SEGMENTS_20260623:
             // Active visual length follows the same remaining segment count used by targeting.
+            // ROLLBACK_BARRICADE_HEAD_2X2_FIT_20260628:
+            // The previous visual fit only guaranteed 2-cell thickness. Make the Head match the
+            // authored 2x2 footprint in both axes, like FlexTube StartCap/EndCap, without touching
+            // logical occupancy, targeting, HP, Body shrink, or Edge placement.
+            if (head != null)
+            {
+                FitBarricadePartProjectedBounds(head, head.right, head.forward, 2f * cellAlong, 2f * cellPerp);
+                if (TryMeasureVisualRendererBounds(head, out Bounds headBounds))
+                {
+                    Vector3 delta = new Vector3(
+                        obj.transform.position.x - headBounds.center.x,
+                        0f,
+                        obj.transform.position.z - headBounds.center.z);
+                    assembly.position += delta;
+                }
+                else
+                {
+                    assembly.position += (obj.transform.position - head.position);
+                }
+            }
+
             float activeLengthCells = GetBarricadeActiveLength(data);
             int barricadeMaxHp = Mathf.Max(1, data.maxHP);
             int barricadeRemainHp = Mathf.Clamp(barricadeMaxHp - Mathf.Max(0, data.hitCount), 0, barricadeMaxHp);
@@ -3841,7 +4069,6 @@ namespace BalloonFlow
                 ? fullBodyCells * (barricadeRemainHp / (float)barricadeMaxHp)
                 : 0f;
             float bodyCells = Mathf.Max(logicalBodyCells, hpBodyCells);
-            float cellAlong = vertical ? cellSizeZ : cellSizeX;
             float bodyWorldLen = Mathf.Max(0f, bodyCells * cellAlong * _barricadeLengthMultiplier + (bodyCells > 0f ? _barricadeLengthPadding : 0f));
 
             // 3) body 늘리기 — 피벗 Head쪽·로컬 +X. base 최장축 길이 대비 비율로 localScale.x.
@@ -3950,8 +4177,9 @@ namespace BalloonFlow
             rend.SetPropertyBlock(_barricadeBodyMpb);
         }
 
-        private void RestoreBarricadeAuthoredPartState(Transform body, Transform edge)
+        private void RestoreBarricadeAuthoredPartState(Transform head, Transform body, Transform edge)
         {
+            RestoreBarricadePartState(head, _barricadeHeadBasePositions, _barricadeHeadBaseRotations, _barricadeHeadBaseScales);
             RestoreBarricadePartState(body, _barricadeBodyBasePositions, _barricadeBodyBaseRotations, _barricadeBodyBaseScales);
             RestoreBarricadePartState(edge, _barricadeEdgeBasePositions, _barricadeEdgeBaseRotations, _barricadeEdgeBaseScales);
         }
@@ -4083,6 +4311,33 @@ namespace BalloonFlow
             t.localScale = ls;
         }
 
+        private void FitBarricadePartProjectedBounds(Transform t, Vector3 alongAxis, Vector3 perpAxis, float targetAlong, float targetPerp)
+        {
+            // ROLLBACK_BARRICADE_HEAD_2X2_FIT_20260628:
+            // Visual-only fit for Barricade Head. Body/Edge logic still uses the existing length/HP path.
+            // Head local X is authored along the barricade direction, local Z is the two-cell thickness.
+            if (t == null) return;
+
+            alongAxis.y = 0f;
+            perpAxis.y = 0f;
+            if (alongAxis.sqrMagnitude < 0.0001f || perpAxis.sqrMagnitude < 0.0001f) return;
+            alongAxis.Normalize();
+            perpAxis.Normalize();
+
+            Vector3 ls = t.localScale;
+            if (targetAlong > 0.0001f && TryGetProjectedBounds(t, alongAxis, out float aNear, out float aFar))
+            {
+                float alongLen = Mathf.Max(0.0001f, aFar - aNear);
+                ls.x *= targetAlong / alongLen;
+            }
+            if (targetPerp > 0.0001f && TryGetProjectedBounds(t, perpAxis, out float pNear, out float pFar))
+            {
+                float perpLen = Mathf.Max(0.0001f, pFar - pNear);
+                ls.z *= targetPerp / perpLen;
+            }
+            t.localScale = ls;
+        }
+
         private bool TryMeasureRendererBounds(Transform root, out Bounds bounds)
         {
             bounds = default;
@@ -4117,11 +4372,27 @@ namespace BalloonFlow
             if (obj == null) return;
             if (!TryMeasureVisualRendererBounds(obj.transform, out Bounds bounds)) return;
 
+            // ROLLBACK_FLEXTUBE_CAP_FIT_ROTATION_AWARE_20260628:
+            // 캡은 LookRotation(tangent) 로 회전한다. local +z = 캡 forward(=tangent), local x = perp.
+            // 기존엔 world AABB.x→localScale.x, AABB.z→localScale.z 로 '무조건' 매핑해, forward 가 world X 인
+            // 수평 캡(예: L/U 튜브의 한쪽 끝)은 local↔world 축이 뒤바뀌어 엉뚱한 축을 스케일 → Edge 가 작게 나왔다.
+            // forward 의 지배 축을 보고, forward 쪽 local z 는 그 world 축 목표로, perp 쪽 local x 는 나머지로 스케일.
+            // (이 프로젝트 FlexTube 는 ExtraYRotation=0 이라 transform.forward == tangent.)
+            Vector3 fwd = obj.transform.forward; fwd.y = 0f;
+            bool fwdAlongX = Mathf.Abs(fwd.x) > Mathf.Abs(fwd.z);
             Vector3 localScale = obj.transform.localScale;
-            if (bounds.size.x > 0.0001f)
-                localScale.x *= Mathf.Max(0.0001f, targetSizeX) / bounds.size.x;
-            if (bounds.size.z > 0.0001f)
-                localScale.z *= Mathf.Max(0.0001f, targetSizeZ) / bounds.size.z;
+            if (fwdAlongX)
+            {
+                // forward → world X : 길이(local z)=targetSizeX(AABB.x), 두께(local x)=targetSizeZ(AABB.z)
+                if (bounds.size.x > 0.0001f) localScale.z *= Mathf.Max(0.0001f, targetSizeX) / bounds.size.x;
+                if (bounds.size.z > 0.0001f) localScale.x *= Mathf.Max(0.0001f, targetSizeZ) / bounds.size.z;
+            }
+            else
+            {
+                // forward → world Z : 길이(local z)=targetSizeZ(AABB.z), 두께(local x)=targetSizeX(AABB.x)
+                if (bounds.size.x > 0.0001f) localScale.x *= Mathf.Max(0.0001f, targetSizeX) / bounds.size.x;
+                if (bounds.size.z > 0.0001f) localScale.z *= Mathf.Max(0.0001f, targetSizeZ) / bounds.size.z;
+            }
             obj.transform.localScale = localScale;
 
             if (TryMeasureVisualRendererBounds(obj.transform, out Bounds fitted))
