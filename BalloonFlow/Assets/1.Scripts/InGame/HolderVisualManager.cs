@@ -318,6 +318,13 @@ namespace BalloonFlow
 
         /// <summary>Chain 연결선: "id1_id2" → LineRenderer GameObject</summary>
         private readonly Dictionary<string, GameObject> _chainLines = new Dictionary<string, GameObject>();
+        // ROLLBACK_CHAIN_LINK_TOPOLOGY_STABLE_20260630:
+        //   체인 연결 토폴로지(어느 멤버끼리 잇는지)는 '초기 레이아웃'에서 한 번 정해 고정해야 한다.
+        //   이전엔 RebuildChainLines 가 이동할 때마다 '현재 위치' 로 MST 를 재계산해, 비-멤버 홀더가 빠져
+        //   체인 멤버가 당겨지면 새로 가까워진 엉뚱한 쌍(예: C1-1↔C1-3)을 이었다(대각 C1-2↔C1-3 누락).
+        //   groupId 별로 '경로 순서' 를 초기 1회 계산해 캐시하고, 이후엔 그 순서대로 연속한 멤버만 잇는다
+        //   → 멤버가 이동/소비돼도 시퀀스 유지(대각선 연결 정상). ClearAllVisuals 에서 캐시 초기화.
+        private readonly Dictionary<int, List<int>> _chainOrderByGroup = new Dictionary<int, List<int>>();
         private int _queueColumns = 5;
 
         /// <summary>동적 계산: 풍선 필드 너비에 맞춘 열 간격</summary>
@@ -666,6 +673,7 @@ namespace BalloonFlow
             }
             _holderVisuals.Clear();
             ClearChainLines();
+            _chainOrderByGroup.Clear(); // ROLLBACK_CHAIN_LINK_TOPOLOGY_STABLE_20260630: 새 레벨 → 토폴로지 캐시 초기화
         }
 
         /// <summary>
@@ -2474,7 +2482,7 @@ namespace BalloonFlow
                 if (!processedGroups.Add(hData.chainGroupId)) continue;
 
                 var members = HolderManager.Instance.GetChainGroup(hData.chainGroupId);
-                CreateMinimalChainLines(members);
+                CreateChainLinesForGroup(hData.chainGroupId, members);
             }
         }
 
@@ -2487,20 +2495,68 @@ namespace BalloonFlow
 
         private readonly List<HolderVisual> _chainGroupVisuals = new List<HolderVisual>();
         private readonly List<ChainEdge> _chainCandidateEdges = new List<ChainEdge>();
+        private readonly List<int> _chainConnectScratch = new List<int>();
 
-        private void CreateMinimalChainLines(List<int> members)
+        // ROLLBACK_CHAIN_LINK_TOPOLOGY_STABLE_20260630:
+        //   groupId 의 '경로 순서'(초기 1회 캐시)대로 연속한 '현재 살아있는' 멤버만 잇는다.
+        //   소비/미스폰된 멤버는 건너뛰어 그 이웃을 직접 연결(체인이 끊김 없이 이어짐).
+        private void CreateChainLinesForGroup(int groupId, List<int> members)
+        {
+            List<int> order = GetOrComputeChainOrder(groupId, members);
+
+            // 캐시 순서 + (혹시 캐시에 없는 현재 멤버는 뒤에 덧붙여 안전)
+            _chainConnectScratch.Clear();
+            _chainConnectScratch.AddRange(order);
+            for (int i = 0; i < members.Count; i++)
+                if (!_chainConnectScratch.Contains(members[i])) _chainConnectScratch.Add(members[i]);
+
+            HolderVisual prev = null;
+            int prevId = -1;
+            for (int i = 0; i < _chainConnectScratch.Count; i++)
+            {
+                int id = _chainConnectScratch[i];
+                if (!_holderVisuals.TryGetValue(id, out HolderVisual v) || v.gameObject == null) continue;
+                var hd = HolderManager.HasInstance ? HolderManager.Instance.FindHolderPublic(id) : null;
+                if (hd == null || hd.isConsumed) continue; // 소비된 멤버는 건너뛰고 다음 살아있는 멤버와 연결(브리지)
+
+                if (prev != null)
+                {
+                    string key = prevId < id ? $"{prevId}_{id}" : $"{id}_{prevId}";
+                    CreateChainLine(key, prev, v);
+                }
+                prev = v;
+                prevId = id;
+            }
+        }
+
+        // 초기 1회: 현재(=초기 레이아웃) 위치로 MST → 경로 끝점부터 순회해 '경로 순서' 를 구하고 캐시.
+        private List<int> GetOrComputeChainOrder(int groupId, List<int> members)
+        {
+            if (_chainOrderByGroup.TryGetValue(groupId, out List<int> cached)) return cached;
+            List<int> order = ComputeChainPathOrder(members);
+            _chainOrderByGroup[groupId] = order;
+            return order;
+        }
+
+        private List<int> ComputeChainPathOrder(List<int> members)
         {
             _chainGroupVisuals.Clear();
-            _chainCandidateEdges.Clear();
-
             for (int i = 0; i < members.Count; i++)
             {
                 int id = members[i];
                 if (_holderVisuals.TryGetValue(id, out HolderVisual visual) && visual.gameObject != null)
                     _chainGroupVisuals.Add(visual);
             }
-            if (_chainGroupVisuals.Count < 2) return;
 
+            var order = new List<int>(_chainGroupVisuals.Count);
+            if (_chainGroupVisuals.Count <= 2)
+            {
+                for (int i = 0; i < _chainGroupVisuals.Count; i++) order.Add(_chainGroupVisuals[i].holderId);
+                return order;
+            }
+
+            // 거리 기반 MST (Kruskal) — 초기 레이아웃에선 체인 = 경로라서 MST 가 곧 경로다.
+            _chainCandidateEdges.Clear();
             for (int i = 0; i < _chainGroupVisuals.Count; i++)
             {
                 for (int j = i + 1; j < _chainGroupVisuals.Count; j++)
@@ -2516,7 +2572,6 @@ namespace BalloonFlow
                     });
                 }
             }
-
             _chainCandidateEdges.Sort((a, b) =>
             {
                 int dist = a.sqrDistance.CompareTo(b.sqrDistance);
@@ -2528,22 +2583,53 @@ namespace BalloonFlow
             });
 
             var parent = new Dictionary<int, int>(_chainGroupVisuals.Count);
+            var adj = new Dictionary<int, List<int>>(_chainGroupVisuals.Count);
             for (int i = 0; i < _chainGroupVisuals.Count; i++)
-                parent[_chainGroupVisuals[i].holderId] = _chainGroupVisuals[i].holderId;
+            {
+                int id = _chainGroupVisuals[i].holderId;
+                parent[id] = id;
+                adj[id] = new List<int>(2);
+            }
 
             int created = 0;
             for (int i = 0; i < _chainCandidateEdges.Count && created < _chainGroupVisuals.Count - 1; i++)
             {
                 var edge = _chainCandidateEdges[i];
                 if (!UnionChain(parent, edge.idA, edge.idB)) continue;
-
-                if (!_holderVisuals.TryGetValue(edge.idA, out HolderVisual vA) || vA.gameObject == null) continue;
-                if (!_holderVisuals.TryGetValue(edge.idB, out HolderVisual vB) || vB.gameObject == null) continue;
-
-                string key = edge.idA < edge.idB ? $"{edge.idA}_{edge.idB}" : $"{edge.idB}_{edge.idA}";
-                CreateChainLine(key, vA, vB);
+                adj[edge.idA].Add(edge.idB);
+                adj[edge.idB].Add(edge.idA);
                 created++;
             }
+
+            // 경로 끝점(차수 1)부터 순회 → 순서. (끝점 없으면 첫 멤버부터)
+            int start = _chainGroupVisuals[0].holderId;
+            for (int i = 0; i < _chainGroupVisuals.Count; i++)
+            {
+                int id = _chainGroupVisuals[i].holderId;
+                if (adj[id].Count == 1) { start = id; break; }
+            }
+            var visited = new HashSet<int>();
+            int cur = start, prevNode = -1;
+            while (cur != -1 && !visited.Contains(cur))
+            {
+                order.Add(cur);
+                visited.Add(cur);
+                int next = -1;
+                List<int> ns = adj[cur];
+                for (int k = 0; k < ns.Count; k++)
+                {
+                    if (ns[k] != prevNode && !visited.Contains(ns[k])) { next = ns[k]; break; }
+                }
+                prevNode = cur;
+                cur = next;
+            }
+            // 분기/미연결로 누락된 멤버는 뒤에 덧붙임.
+            for (int i = 0; i < _chainGroupVisuals.Count; i++)
+            {
+                int id = _chainGroupVisuals[i].holderId;
+                if (!visited.Contains(id)) order.Add(id);
+            }
+            return order;
         }
 
         private static int FindChainRoot(Dictionary<int, int> parent, int id)

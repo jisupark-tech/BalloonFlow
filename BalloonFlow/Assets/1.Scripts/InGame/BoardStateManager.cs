@@ -222,7 +222,11 @@ namespace BalloonFlow
             {
                 int continueEfc = RailManager.HasInstance ? RailManager.Instance.EffectiveOccupiedCount : 0;
                 int continuePhysCap = RailManager.HasInstance ? RailManager.Instance.PhysicalCapacity : 0;
-                bool railStillHasSpace = !RailManager.HasInstance || continuePhysCap <= 0 || continueEfc < continuePhysCap - 1;
+                // ROLLBACK_CONTINUE_SPACE_GATE_20260630:
+                // Continue should protect the board while the rail has any real free slot.
+                // The previous capacity-1 buffer could re-fail even though the player could see
+                // rail space after continue.
+                bool railStillHasSpace = !RailManager.HasInstance || continuePhysCap <= 0 || continueEfc < continuePhysCap;
                 if (railStillHasSpace)
                 {
                     _isCritical = false;
@@ -518,7 +522,8 @@ namespace BalloonFlow
                 {
                     int postContinueOccupied = RailManager.Instance.EffectiveOccupiedCount;
                     int postContinueCapacity = RailManager.Instance.PhysicalCapacity;
-                    if (postContinueCapacity <= 0 || postContinueOccupied < postContinueCapacity - 1)
+                    // ROLLBACK_CONTINUE_SPACE_GATE_20260630: same rule as Update().
+                    if (postContinueCapacity <= 0 || postContinueOccupied < postContinueCapacity)
                         return new FailResult { isFail = false, reason = FailReason.None };
                 }
 

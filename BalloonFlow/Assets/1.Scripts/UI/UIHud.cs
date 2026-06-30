@@ -807,7 +807,10 @@ namespace BalloonFlow
             }
 
             if (!BoosterManager.HasInstance) return;
-            if (ShouldBlockHudItemInputForModalState()) return;
+            // ROLLBACK_HUD_COUNT_REFRESH_MODAL_20260630:
+            // RefreshBoosterCounts is display sync, not input execution. Modal/input guards belong
+            // in button handlers only; otherwise reward/use/purchase events that arrive during
+            // tutorial/loading/fade can be skipped and the HUD count remains stale.
             int shuffleCount = BoosterManager.Instance.GetBoosterCount(BoosterManager.SHUFFLE);
             int removeCount  = BoosterManager.Instance.GetBoosterCount(BoosterManager.COLOR_REMOVE);
             int handCount    = BoosterManager.Instance.GetBoosterCount(BoosterManager.HAND);
@@ -931,6 +934,8 @@ namespace BalloonFlow
 
         private void OnSpeedToggleClicked()
         {
+            if (ShouldBlockHudUtilityInputForModalState()) return;
+
             if (GameSpeedController.HasInstance)
                 GameSpeedController.Instance.ToggleSpeedBoost();
             RefreshSpeedToggleVisual();
@@ -1053,6 +1058,15 @@ namespace BalloonFlow
             return (LevelManager.HasInstance && LevelManager.Instance.IsLoading)
                 || (UIManager.HasInstance && UIManager.Instance.IsFading)
                 || (NewFeatureManager.HasInstance && NewFeatureManager.Instance.IsShowingPopup);
+        }
+
+        public static bool ShouldBlockHudUtilityInputForModalState()
+        {
+            // ROLLBACK_TUTORIAL_HUD_UTILITY_BLOCK_20260630:
+            // Tutorial visuals block world/booster paths, but top HUD utility buttons are normal
+            // Button callbacks. Block speed/settings/gold shortcuts while tutorial is visible.
+            return ShouldBlockHudItemInputForModalState()
+                || (TutorialController.HasInstance && TutorialController.Instance.IsTutorialActive());
         }
 
         private static void NotifyTutorialItemTapped(string boosterType)

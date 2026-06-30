@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DG.Tweening;
 
 namespace BalloonFlow
 {
@@ -62,6 +63,31 @@ namespace BalloonFlow
         private static readonly int CrackBaseMap = Shader.PropertyToID("_BaseMap");
         private MaterialPropertyBlock _crackMpb;
 
+        // ROLLBACK_PAINTBOX_FX_20260630:
+        //   1) 프레임(paintbox) 색 = #5E6998 (기존 머티리얼 유지, _BaseColor 만 MPB tint)
+        //   2) egg 색 = Cylinder 의 'PaintColor' 머티리얼 슬롯에만 _BaseColor tint (Paint/PaintColor 머티리얼·Base Map 유지)
+        //   4) 금 갈 때마다 위로 0.113 올라갔다 복귀 + HitParticle / 박스 제거 시 EndParticle (egg마다)
+        private static readonly Color PAINTBOX_FRAME_COLOR = new Color32(0x5E, 0x69, 0x98, 0xFF);
+        private const float EGG_HIT_RISE_Y = 0.113f;     // 금 갈 때 위로 이동량(로컬). 정확치 아닌 육안 연출용.
+        private const string PAINTCOLOR_MAT_HINT = "PaintColor"; // 셀 색을 입힐 머티리얼 슬롯 이름 힌트
+        private const string FX_HIT_NAME = "HitParticle";
+        private const string FX_END_NAME = "EndParticle";
+        private static readonly int EggBaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int EggColorId = Shader.PropertyToID("_Color");
+        private MaterialPropertyBlock _eggColorMpb;
+        private MaterialPropertyBlock _frameColorMpb;
+        private readonly List<Vector3> _eggBaseLocalPos = new List<Vector3>(); // 알 기준 localPosition (금연출 복귀 기준)
+        private const bool PAINTBOX_DEBUG = false; // ROLLBACK_PAINTBOX_DIAG_20260630: 배치 진단 로그(원인 확인용). 필요 시 true.
+
+        private static string DiagPath(Transform t)
+        {
+            if (t == null) return "null";
+            string p = t.name;
+            Transform c = t.parent;
+            while (c != null) { p = c.name + "/" + p; c = c.parent; }
+            return p;
+        }
+
         public int EggCount => _eggs.Count;
 
         /// <summary>
@@ -91,14 +117,14 @@ namespace BalloonFlow
             // 알 크기를 footprint(cellSize) 가 아니라 '틀의 실제 bounds' 기준으로 잡아야, 틀이 footprint 와
             // 다른 크기(아트가 더 작거나, _frame 미와이어로 스케일 안 됨)여도 알이 항상 틀 안에 들어간다.
             ScaleFrameToFootprint(w, h, cellSizeX, cellSizeZ);
+            ApplyFrameColor(); // req1: 프레임 색 #5E6998 (기존 머티리얼 유지)
 
-            // 알 격자가 들어갈 영역(월드 크기): 틀이 있으면 틀의 실제 bounds, 없으면 footprint 로 폴백.
-            float areaX, areaZ;
-            if (!TryGetFrameWorldSize(out areaX, out areaZ))
-            {
-                areaX = w * cellSizeX;
-                areaZ = h * cellSizeZ;
-            }
+            // ROLLBACK_PAINTBOX_EGG_AREA_FOOTPRINT_20260630:
+            //   알 배치 영역 = '오토링된 footprint(w×h 셀)'. 이전엔 프레임 실측 bounds 를 썼는데, 새 paintbox
+            //   메시가 world-Z 를 localScale.z 로 못 키워(평면/회전) 프레임 world 크기가 어긋나면 알이 그만큼
+            //   퍼져 범위를 벗어났다. footprint 기준으로 잡아 프레임 시각 상태와 무관하게 알이 정확한 칸에 놓이게.
+            float areaX = w * cellSizeX;
+            float areaZ = h * cellSizeZ;
 
             // 격자 한 칸 = 영역 안쪽(_innerAreaRatio)을 cols×rows 로 나눈 크기. 테두리 여백 확보.
             float ir = Mathf.Clamp(_innerAreaRatio, 0.1f, 1f);
@@ -146,6 +172,16 @@ namespace BalloonFlow
             float localGridX = layoutCellW / Mathf.Max(0.0001f, Mathf.Abs(ls.x));
             float localGridZ = layoutCellZ / Mathf.Max(0.0001f, Mathf.Abs(ls.z));
 
+            if (PAINTBOX_DEBUG)
+            {
+                Debug.Log($"[PaintBox-DIAG] root={DiagPath(transform)} eggTemplate={DiagPath(_eggTemplate.transform)} " +
+                          $"frame={(_frame != null ? DiagPath(_frame) : "null")} frameScale={(_frame != null ? _frame.localScale.ToString("F3") : "-")}\n" +
+                          $"  w={w} h={h} n={n} cols={cols} rows={rows} cell=({cellSizeX:F3},{cellSizeZ:F3}) area=({areaX:F3},{areaZ:F3}) " +
+                          $"layoutCell=({layoutCellW:F3},{layoutCellZ:F3})\n" +
+                          $"  tplSize=({tplSizeX:F3},{tplSizeZ:F3}) tplScale={tplScale.ToString("F3")} fitK={fitK:F3} eggScale={eggScale.ToString("F3")} " +
+                          $"localGrid=({localGridX:F3},{localGridZ:F3}) rootLossy={ls.ToString("F3")}", this);
+            }
+
             // 링크된 Cylinder/texture 의 템플릿 기준 자식 경로(인덱스) 미리 계산 — 클론에서 동일 경로로 해석.
             // 미링크면 null → 이름으로 fallback.
             var bodyPath = (_bodyOnTemplate != null) ? GetChildIndexPath(_eggTemplate.transform, _bodyOnTemplate) : null;
@@ -173,6 +209,7 @@ namespace BalloonFlow
                 SetupEggVisual(egg, color, bodyPath, texPath, out texChild);
 
                 _eggs.Add(egg);
+                _eggBaseLocalPos.Add(egg.transform.localPosition); // 금연출 Y 복귀 기준
                 _eggTextures.Add(texChild);
                 _eggMaxHps.Add(maxHp);
                 // [균열 단계] texture 자식의 Renderer 캐시 — HP 단계별 _BaseMap 텍스처 교체용.
@@ -219,6 +256,9 @@ namespace BalloonFlow
                 Transform child = transform.GetChild(i);
                 if (child == null || child.gameObject == _eggTemplate) continue;
                 if (_frame != null && (child == _frame || child.IsChildOf(_frame))) continue;
+                // ROLLBACK_PAINTBOX_NESTED_TEMPLATE_20260630: 프레임(paintbox)을 포함한 노드(래퍼)는 숨기면
+                //   프레임까지 사라지므로 제외. 안쪽 알 원본은 Build 의 _eggTemplate.SetActive(false) 로 이미 숨김.
+                if (_frame != null && _frame.IsChildOf(child)) continue;
 
                 if (LooksLikeEggSample(child))
                     child.gameObject.SetActive(false);
@@ -256,22 +296,27 @@ namespace BalloonFlow
                 {
                     _eggs[index].SetActive(false);
                 }
-                else if (index < _eggTextures.Count && _eggTextures[index] != null)
+                else
                 {
-                    // ROLLBACK_PINATABOX_CRACK_STAGE_20260608: 이전 = 절반 이하면 texture 단일 토글.
-                    // 변경(박지수 명세): 풀피=비활성(균열X), 데미지 받으면 paint0→paint1→paint2 (3등분, 저체력일수록 paint2).
-                    int maxHp = index < _eggMaxHps.Count && _eggMaxHps[index] > 0 ? _eggMaxHps[index] : currentHp;
-                    if (currentHp >= maxHp)
+                    if (index < _eggTextures.Count && _eggTextures[index] != null)
                     {
-                        _eggTextures[index].SetActive(false);   // 풀피 = 균열 없음
+                        // ROLLBACK_PINATABOX_CRACK_STAGE_20260608: 이전 = 절반 이하면 texture 단일 토글.
+                        // 변경(박지수 명세): 풀피=비활성(균열X), 데미지 받으면 paint0→paint1→paint2 (3등분, 저체력일수록 paint2).
+                        int maxHp = index < _eggMaxHps.Count && _eggMaxHps[index] > 0 ? _eggMaxHps[index] : currentHp;
+                        if (currentHp >= maxHp)
+                        {
+                            _eggTextures[index].SetActive(false);   // 풀피 = 균열 없음
+                        }
+                        else
+                        {
+                            float ratio = (float)currentHp / Mathf.Max(1, maxHp);
+                            int stage = Mathf.Clamp(Mathf.FloorToInt((1f - ratio) * 3f), 0, 2); // 데미지 시작=paint0
+                            _eggTextures[index].SetActive(true);
+                            ApplyCrackTexture(index, stage);
+                        }
                     }
-                    else
-                    {
-                        float ratio = (float)currentHp / Mathf.Max(1, maxHp);
-                        int stage = Mathf.Clamp(Mathf.FloorToInt((1f - ratio) * 3f), 0, 2); // 데미지 시작=paint0
-                        _eggTextures[index].SetActive(true);
-                        ApplyCrackTexture(index, stage);
-                    }
+                    // ROLLBACK_PAINTBOX_HIT_FX_20260630: 살아있는(금 가는) 히트마다 Y 0→0.113→0 + HitParticle
+                    PlayEggCrackFx(index);
                 }
             }
 
@@ -283,8 +328,9 @@ namespace BalloonFlow
         private void Clear()
         {
             for (int i = 0; i < _eggs.Count; i++)
-                if (_eggs[i] != null) Destroy(_eggs[i]);
+                if (_eggs[i] != null) { _eggs[i].transform.DOKill(); Destroy(_eggs[i]); }
             _eggs.Clear();
+            _eggBaseLocalPos.Clear();
             _eggTextures.Clear();
             _eggMaxHps.Clear();
             _eggTexRenderers.Clear();
@@ -314,11 +360,11 @@ namespace BalloonFlow
 
             Color c = BalloonController.BalloonColors[
                 Mathf.Clamp(colorIndex, 0, BalloonController.BalloonColors.Length - 1)];
-            Material mat = BalloonController.GetOrCreateSharedMaterial(c);
-
-            // 색은 Cylinder 에만 (못 찾으면 texture 제외한 알 전체 폴백).
-            if (body != null) ApplyMatToRenderers(body.gameObject, mat);
-            else if (mat != null) ApplyMatToRenderersExcept(egg, mat, tex, GetFrameNameForExclusion());
+            // ROLLBACK_PAINTBOX_PAINTCOLOR_MAT_20260630:
+            //   머티리얼 교체 금지(기존 PaintColor/Paint 유지 = Base Map 으로 색 날아감 방지).
+            //   Cylinder 의 'PaintColor' 머티리얼 슬롯에만 셀 색을 MPB(_BaseColor)로 tint. 흰색(Paint)은 그대로.
+            if (body != null) TintPaintColorSlots(body.gameObject, c);
+            else TintPaintColorSlots(egg, c);
 
             if (tex != null)
             {
@@ -384,13 +430,15 @@ namespace BalloonFlow
             sizeX = 0f; sizeZ = 0f;
             var rends = _eggTemplate.GetComponentsInChildren<Renderer>(true);
             if (rends == null || rends.Length == 0) return;
-            string frameName = GetFrameNameForExclusion();
             bool hasBounds = false;
             Bounds b = default;
             for (int i = 0; i < rends.Length; i++)
             {
                 if (rends[i] == null) continue;
-                if (!string.IsNullOrEmpty(frameName) && IsSelfOrParentNamed(rends[i].transform, frameName)) continue;
+                // ROLLBACK_PAINTBOX_FX_LAYOUT_EXCLUDE_20260630: 프레임 + 파티클(HitParticle/EndParticle)은
+                //   '실제 Paint 몸체' 가 아니므로 알 크기 측정에서 제외(파티클이 끼어 배치 깨지는 이슈 방지).
+                if (rends[i] is ParticleSystemRenderer) continue;
+                if (IsExcludedFromEggBounds(rends[i].transform)) continue;
 
                 if (!hasBounds)
                 {
@@ -418,7 +466,12 @@ namespace BalloonFlow
                 && _frame != null
                 && (_eggTemplate.transform == _frame || _eggTemplate.transform.IsChildOf(_frame));
 
-            if (_eggTemplate == null || templateIsFrame || _eggTemplate.transform == transform)
+            // ROLLBACK_PAINTBOX_NESTED_TEMPLATE_20260630:
+            //   _eggTemplate 이 프레임을 '포함' 하면(=래퍼 paint(1) 를 잘못 가리킴) 재해석한다.
+            bool templateContainsFrame = _eggTemplate != null && _frame != null
+                && _frame.IsChildOf(_eggTemplate.transform);
+
+            if (_eggTemplate == null || templateIsFrame || templateContainsFrame || _eggTemplate.transform == transform)
             {
                 Transform candidate = FindEggTemplateCandidate(transform);
                 if (candidate != null)
@@ -444,11 +497,23 @@ namespace BalloonFlow
                 if (child == null) continue;
                 if (_frame != null && (child == _frame || child.IsChildOf(_frame))) continue;
 
-                if (FindChildRecursive(child, _bodyChildName) != null
-                    || FindChildRecursive(child, _textureChildName) != null)
+                bool hasBody = FindChildRecursive(child, _bodyChildName) != null
+                            || FindChildRecursive(child, _textureChildName) != null;
+                if (!hasBody) continue;
+
+                // ROLLBACK_PAINTBOX_NESTED_TEMPLATE_20260630:
+                //   프리팹이 root → 래퍼(paint(1)) → {paintbox, egg} 처럼 한 겹 더 감싸면, child(=래퍼)가
+                //   프레임(paintbox)을 '포함' 한다. 그 경우 래퍼를 통째로 잡지 말고 더 내려가 '프레임을 포함하지
+                //   않는 안쪽 알' 을 템플릿으로 찾는다. (평면 구조면 그대로 child 반환 — 기존 동작 동일.)
+                bool containsFrame = _frame != null && _frame.IsChildOf(child);
+                if (containsFrame)
                 {
-                    return child;
+                    Transform inner = FindEggTemplateCandidate(child);
+                    if (inner != null) return inner;
+                    continue;
                 }
+
+                return child;
             }
 
             return null;
@@ -483,25 +548,166 @@ namespace BalloonFlow
             return false;
         }
 
-        // 틀의 renderer bounds → footprint(w*cellSizeX × h*cellSizeZ)에 맞춰 스케일.
+        // 틀의 renderer world bounds → footprint(w*cellSizeX × h*cellSizeZ)에 맞춰 스케일.
         private void ScaleFrameToFootprint(int w, int h, float cellSizeX, float cellSizeZ)
         {
             if (_frame == null) return;
-            var rends = _frame.GetComponentsInChildren<Renderer>(true);
-            if (rends == null || rends.Length == 0) return;
-
-            Bounds b = rends[0].bounds;
-            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
-            Vector3 cur = _frame.lossyScale;
-            float baseX = cur.x != 0f ? b.size.x / cur.x : b.size.x;
-            float baseZ = cur.z != 0f ? b.size.z / cur.z : b.size.z;
-            if (baseX <= 0.0001f || baseZ <= 0.0001f) return;
 
             float targetX = w * cellSizeX;
             float targetZ = h * cellSizeZ;
-            Vector3 ls = _frame.localScale;
-            _frame.localScale = new Vector3(targetX / baseX, ls.y, targetZ / baseZ);
+
+            // ROLLBACK_PAINTBOX_FRAME_FIT_ROBUST_20260630:
+            //   이전엔 'world크기 = localScale × base' 를 축별로 가정해 1회 스케일했는데, 새 paintbox 메시는
+            //   world-Z 가 localScale.z 에 반응하지 않아(평면 패널 — world-Z 가 local-Y 에서 옴) ① 박스 Z 가 안 맞고
+            //   ② 매 호출 base 재계산이 발산해 박스가 점점 얇아졌다.
+            //   → 어느 local 축이 world-Z 를 만드는지 'probe' 로 판별한 뒤, world 실측값을 목표에 맞추는 반복 핏.
+            //     정상 메시(world-Z↔local-Z)·평면 메시(world-Z↔local-Y) 모두 안전, 한 번 맞으면 즉시 종료(멱등).
+            if (!TryGetFrameWorldSize(out _, out float wzBase)) return;
+            Vector3 probeS = _frame.localScale;
+            _frame.localScale = new Vector3(probeS.x, probeS.y, probeS.z * 2f);
+            TryGetFrameWorldSize(out _, out float wzProbe);
+            bool zAxisDrivesWorldZ = wzBase > 0.0001f && Mathf.Abs(wzProbe - wzBase) > wzBase * 0.05f;
+            _frame.localScale = probeS; // 원복
+
+            for (int iter = 0; iter < 5; iter++)
+            {
+                if (!TryGetFrameWorldSize(out float wx, out float wz)) return;
+                bool okX = wx > 0.0001f && Mathf.Abs(wx - targetX) <= targetX * 0.01f;
+                bool okZ = wz > 0.0001f && Mathf.Abs(wz - targetZ) <= targetZ * 0.01f;
+                if (okX && okZ) break;
+
+                Vector3 s = _frame.localScale;
+                if (wx > 0.0001f && !okX) s.x *= targetX / wx;
+                if (wz > 0.0001f && !okZ)
+                {
+                    float r = targetZ / wz;
+                    if (zAxisDrivesWorldZ) s.z *= r; else s.y *= r; // world-Z 를 만드는 축만 스케일(compound 방지)
+                }
+                _frame.localScale = s;
+            }
             _frame.localPosition = Vector3.zero;
+
+            if (PAINTBOX_DEBUG && TryGetFrameWorldSize(out float fwx, out float fwz))
+                Debug.Log($"[PaintBox-DIAG-FRAME] frame={DiagPath(_frame)} target=({targetX:F3},{targetZ:F3}) " +
+                          $"→ world=({fwx:F3},{fwz:F3}) localScale={_frame.localScale.ToString("F3")}", this);
+        }
+
+        // ===== ROLLBACK_PAINTBOX_FX_20260630 — 색/연출 헬퍼 =====
+
+        // req1: 프레임(paintbox) 색 = #5E6998. 기존 머티리얼 유지, _BaseColor/_Color 만 MPB 로 덮음.
+        private void ApplyFrameColor()
+        {
+            if (_frame == null) return;
+            _frameColorMpb ??= new MaterialPropertyBlock();
+            var rends = _frame.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < rends.Length; i++)
+            {
+                if (rends[i] == null || rends[i] is ParticleSystemRenderer) continue;
+                rends[i].GetPropertyBlock(_frameColorMpb);
+                _frameColorMpb.SetColor(EggBaseColorId, PAINTBOX_FRAME_COLOR);
+                _frameColorMpb.SetColor(EggColorId, PAINTBOX_FRAME_COLOR);
+                rends[i].SetPropertyBlock(_frameColorMpb);
+            }
+        }
+
+        // req2: 'PaintColor' 머티리얼 슬롯에만 셀 색을 _BaseColor 로 tint (PaintColor/Paint 머티리얼·Base Map 유지).
+        //   흰색(Paint) 슬롯은 안 건드린다. PaintColor 슬롯을 못 찾고 단일 머티리얼이면 폴백으로 그 슬롯 tint.
+        private void TintPaintColorSlots(GameObject root, Color c)
+        {
+            if (root == null) return;
+            _eggColorMpb ??= new MaterialPropertyBlock();
+            var rends = root.GetComponentsInChildren<Renderer>(true);
+            for (int ri = 0; ri < rends.Length; ri++)
+            {
+                var r = rends[ri];
+                if (r == null || r is ParticleSystemRenderer) continue;
+                var mats = r.sharedMaterials;
+                bool tinted = false;
+                for (int m = 0; m < mats.Length; m++)
+                {
+                    if (mats[m] == null) continue;
+                    if (mats[m].name.IndexOf(PAINTCOLOR_MAT_HINT, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    r.GetPropertyBlock(_eggColorMpb, m);
+                    _eggColorMpb.SetColor(EggBaseColorId, c);
+                    _eggColorMpb.SetColor(EggColorId, c);
+                    r.SetPropertyBlock(_eggColorMpb, m);
+                    tinted = true;
+                }
+                if (!tinted && mats.Length == 1 && mats[0] != null)
+                {
+                    r.GetPropertyBlock(_eggColorMpb, 0);
+                    _eggColorMpb.SetColor(EggBaseColorId, c);
+                    _eggColorMpb.SetColor(EggColorId, c);
+                    r.SetPropertyBlock(_eggColorMpb, 0);
+                }
+            }
+        }
+
+        // req4: 금 갈 때마다 위로 EGG_HIT_RISE_Y 올라갔다 제자리 복귀 + HitParticle.
+        private void PlayEggCrackFx(int index)
+        {
+            if (index < 0 || index >= _eggs.Count) return;
+            GameObject egg = _eggs[index];
+            if (egg == null || !egg.activeSelf) return;
+
+            Transform t = egg.transform;
+            Vector3 baseP = (index < _eggBaseLocalPos.Count) ? _eggBaseLocalPos[index] : t.localPosition;
+            t.DOKill();
+            t.localPosition = baseP;
+            Sequence sq = DOTween.Sequence();
+            sq.Append(t.DOLocalMoveY(baseP.y + EGG_HIT_RISE_Y, 0.08f).SetEase(Ease.OutQuad));
+            sq.Append(t.DOLocalMoveY(baseP.y, 0.10f).SetEase(Ease.InQuad));
+
+            Transform hit = FindChildRecursive(egg.transform, FX_HIT_NAME);
+            if (hit != null) PlayParticle(hit.gameObject);
+        }
+
+        // req3: 박스 제거 시 각 egg 의 EndParticle 을 월드로 분리 클론해 재생 (박스가 0 스케일로 사라져도 정상 재생).
+        public void PlayEndParticleClones()
+        {
+            for (int i = 0; i < _eggs.Count; i++)
+            {
+                GameObject egg = _eggs[i];
+                if (egg == null) continue;
+                Transform end = FindChildRecursive(egg.transform, FX_END_NAME);
+                if (end == null) continue;
+
+                GameObject clone = Instantiate(end.gameObject, end.position, end.rotation);
+                clone.transform.localScale = end.lossyScale;
+                clone.SetActive(true);
+                float life = PlayParticle(clone);
+                Destroy(clone, Mathf.Max(0.5f, life) + 0.5f);
+            }
+        }
+
+        // 파티클 GameObject 재생. 반환 = 대략적 최대 수명(초).
+        private static float PlayParticle(GameObject go)
+        {
+            if (go == null) return 0f;
+            go.SetActive(true);
+            float life = 0f;
+            var systems = go.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < systems.Length; i++)
+            {
+                var ps = systems[i];
+                if (ps == null) continue;
+                var main = ps.main;
+                float l = main.duration + (main.startLifetime.mode == ParticleSystemCurveMode.TwoConstants
+                    ? main.startLifetime.constantMax : main.startLifetime.constant);
+                if (l > life) life = l;
+                ps.Clear(true);
+                ps.Play(true);
+            }
+            return life;
+        }
+
+        // req5: 프레임 + 파티클(HitParticle/EndParticle) = 알 bounds/배치 측정에서 제외 (실제 Paint 몸체만).
+        private bool IsExcludedFromEggBounds(Transform t)
+        {
+            string frameName = GetFrameNameForExclusion();
+            if (!string.IsNullOrEmpty(frameName) && IsSelfOrParentNamed(t, frameName)) return true;
+            if (IsSelfOrParentNamed(t, FX_HIT_NAME) || IsSelfOrParentNamed(t, FX_END_NAME)) return true;
+            return false;
         }
     }
 }

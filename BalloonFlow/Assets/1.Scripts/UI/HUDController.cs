@@ -197,6 +197,7 @@ namespace BalloonFlow
         private void OnSettingsClicked()
         {
             // PauseGame 제거 — timeScale=0이 UI 입력을 막을 수 있음
+            if (UIHud.ShouldBlockHudUtilityInputForModalState()) return;
             if (_popupSettings != null) _popupSettings.OpenUI();
         }
 
@@ -283,6 +284,7 @@ namespace BalloonFlow
 
         private void OnGoldPlusClicked()
         {
+            if (UIHud.ShouldBlockHudUtilityInputForModalState()) return;
             if (_popupGoldShop != null) _popupGoldShop.OpenUI();
             if (GameManager.HasInstance) GameManager.Instance.PauseGame();
         }

@@ -44,12 +44,19 @@ namespace BalloonFlow
         private const float GIMMICK_HEIGHT_BARRICADE_RATIO = 2.321f;
         private const float GIMMICK_HEIGHT_TARGET_BOX_PAINT_RATIO = 2.857f;
         private const float GIMMICK_HEIGHT_FROZEN_LAYER_RATIO = 1.286f;
+        // ROLLBACK_FROZEN_LAYER_TEXT_SCALE_20260630:
+        // FrozenLayer HP text keeps the computed footprint scale, but never grows beyond this cap.
+        private const float FROZEN_LAYER_MAGAZINE_TEXT_MAX_SCALE = 5f;
+        private const float FROZEN_LAYER_PARTICLE_RETURN_FALLBACK = 0.8f;
+        private const string FROZEN_LAYER_HIT_PARTICLE_NAME = "HitParticle";
+        private const string FROZEN_LAYER_BREAK_PARTICLE_NAME = "BreakParticle";
         private const float WOODENBOARD_HIT_SCALE_Y = 1.2f;
         private const float WOODENBOARD_DESTROY_SCALE = 1.1f;
         private const float FIELD_GIMMICK_HIT_SCALE_DURATION = 0.12f;
         // ROLLBACK_BARRICADE_BODY_PULL_IN_20260629: Edge 가 옆 칸을 살짝 침범 → Body 길이를 셀의 이 비율만큼
         //   아주 조금 줄여 Edge(body 끝에 따라붙음)를 당겨 들인다. (Edge 크기는 그대로) 값↑ = 더 당김.
-        private const float BARRICADE_BODY_PULL_IN_CELLS = 0.4f;
+        private const float BARRICADE_BODY_PULL_IN_CELLS = 0.25f;
+        private const bool BARRICADE_DEBUG = false; // ROLLBACK_BARRICADE_DIAG_20260630: 세로 body 길이 진단. 필요 시 true.
         // ROLLBACK_BARRICADE_BODY_1TO1_SCALE:
         // Updated Barricade/BarricadeBody art is authored at a 1:1 local scale per board cell.
         private const float BARRICADE_BODY_CELL_LOCAL_SCALE_X = 1f;
@@ -4128,8 +4135,15 @@ namespace BalloonFlow
             float bodyCells = Mathf.Max(logicalBodyCells, hpBodyCells);
             float bodyWorldLen = Mathf.Max(0f, bodyCells * cellAlong * _barricadeLengthMultiplier + (bodyCells > 0f ? _barricadeLengthPadding : 0f));
             // Edge 침범 방지: body 를 셀 기준 아주 조금 줄여 끝점을 당김(Edge 는 body 끝에 따라붙으므로 같이 들어옴).
+            float __barPrePull = bodyWorldLen;
             if (bodyWorldLen > 0f)
-                bodyWorldLen = Mathf.Max(0.001f, bodyWorldLen - cellAlong * BARRICADE_BODY_PULL_IN_CELLS);
+            {
+                // ROLLBACK_BARRICADE_PULLIN_SHORT_BODY_CAP_20260630:
+                //   고정 0.25칸 차감은 긴 body 엔 미미하지만 짧은 body(예: 1칸)엔 25%↓ → "세로 짧게" 보임.
+                //   pull-in 을 body 길이의 최대 10% 로 캡해 짧은 body 과다 단축 방지(Edge 침범 방지 효과는 유지).
+                float pullIn = Mathf.Min(cellAlong * BARRICADE_BODY_PULL_IN_CELLS, bodyWorldLen * 0.1f);
+                bodyWorldLen = Mathf.Max(0.001f, bodyWorldLen - pullIn);
+            }
 
             // 3) body 늘리기 — 피벗 Head쪽·로컬 +X. base 최장축 길이 대비 비율로 localScale.x.
             if (!_barricadeBodyBaseScales.TryGetValue(body, out Vector3 baseScale))
@@ -4158,6 +4172,11 @@ namespace BalloonFlow
 
             body.gameObject.SetActive(hasBody || animateBody);
             float targetScaleX = baseScale.x * (bodyWorldLen / baseLen);
+
+            if (BARRICADE_DEBUG)
+                Debug.Log($"[Barricade-DIAG] vertical={vertical} authoredLen={data.barricadeLength} active={activeLengthCells:F2} " +
+                          $"bodyCells={bodyCells:F2} cellAlong={cellAlong:F3} mult={_barricadeLengthMultiplier:F3} pad={_barricadeLengthPadding:F3} " +
+                          $"pullCells={BARRICADE_BODY_PULL_IN_CELLS} bodyLen {__barPrePull:F3}→{bodyWorldLen:F3} baseLen={baseLen:F3} targetScaleX={targetScaleX:F3}", obj);
 
             // 4) edge 를 body 끝으로 붙이는 로컬 함수(instant/트윈 공용). bounds 실측 우선, 실패 시 수식 폴백.
             //    body.position=피벗(Head쪽 끝), body.right=진행축 월드방향. 회전은 assembly 가 담당.
@@ -4712,6 +4731,7 @@ namespace BalloonFlow
             GameObject overlay = ObjectPoolManager.Instance.Get(FrozenLayerPoolKey);
             if (overlay == null) return;
 
+            SetFrozenLayerBodyRenderers(overlay, true);
             ResetFrozenOverlayMagazineText(overlay);
 
             // ROLLBACK_ICE_OVERLAY_STANDALONE_FIELD_20260626:
@@ -5089,6 +5109,7 @@ namespace BalloonFlow
             GameObject overlay = ObjectPoolManager.Instance.Get(FrozenLayerPoolKey);
             if (overlay == null) return;
 
+            SetFrozenLayerBodyRenderers(overlay, true);
             ResetFrozenOverlayMagazineText(overlay);
 
             // ROLLBACK_FROZEN_OVERLAY_STANDALONE_FIELD_20260626:
@@ -5203,9 +5224,10 @@ namespace BalloonFlow
             Transform tt = state.Text.transform;
             tt.position = worldPosition + (tt.position - overlay.transform.position);
 
-            // ROLLBACK_ICE_HP_TEXT_ASPECT_20260629: 작은 축 기준 크기(Pinata 와 일관, 최대 5). RestoreDefaults 직후
-            //   균일 배율 적용 → 누적 없음. 블록 오버레이는 자체가 blockSize 배라 textScaleMul 로 상쇄(이중 방지).
-            if (!Mathf.Approximately(textScaleMul, 1f)) tt.localScale *= textScaleMul;
+            // ROLLBACK_FROZEN_LAYER_TEXT_SCALE_20260630:
+            // Keep the existing computed text scale, but cap the final multiplier at 5 for large Ice regions.
+            float clampedTextScaleMul = Mathf.Min(Mathf.Max(0.01f, textScaleMul), FROZEN_LAYER_MAGAZINE_TEXT_MAX_SCALE);
+            if (!Mathf.Approximately(clampedTextScaleMul, 1f)) tt.localScale *= clampedTextScaleMul;
             state.Text.gameObject.SetActive(true);
             state.Text.ForceMeshUpdate();
         }
@@ -5284,12 +5306,47 @@ namespace BalloonFlow
             if (overlay == null) return;
             _iceBlockOverlays.Remove(overlay); // 풀 반환 시 블록 표시 해제 (재사용 시 오판 방지)
             _fieldHitBaseScales.Remove(overlay.transform); // hit 펀치 rest 캐시 해제 (재사용 stale 방지)
+            SetFrozenLayerBodyRenderers(overlay, true);
             ResetFrozenOverlayMagazineText(overlay);
             overlay.transform.SetParent(null, false);
             if (ObjectPoolManager.HasInstance)
                 ObjectPoolManager.Instance.Return(FrozenLayerPoolKey, overlay);
             else
                 overlay.SetActive(false);
+        }
+
+        private void ReturnFrozenOverlayWithBreakParticle(int balloonId)
+        {
+            if (!_frozenOverlays.TryGetValue(balloonId, out GameObject overlay)) return;
+            _frozenOverlays.Remove(balloonId);
+
+            if (_balloonObjects.TryGetValue(balloonId, out GameObject balloonObj) && balloonObj != null)
+            {
+                var bi = balloonObj.GetComponent<BalloonIdentifier>();
+                if (bi != null) bi.SetVisible(true);
+            }
+
+            // ROLLBACK_FROZEN_LAYER_BREAK_PARTICLE_20260630:
+            // Ice HP 0 uses the break path so every FrozenLayer overlay can play BreakParticle before pooling.
+            ResetFrozenOverlayMagazineText(overlay);
+            SetFrozenLayerBodyRenderers(overlay, false);
+            overlay.transform.SetParent(null, true);
+
+            float particleLife = PlayFrozenLayerParticle(overlay, FROZEN_LAYER_BREAK_PARTICLE_NAME);
+            if (particleLife <= 0f)
+            {
+                ReturnFrozenOverlayInstance(overlay);
+                return;
+            }
+
+            StartCoroutine(ReturnFrozenOverlayAfterParticle(overlay, particleLife));
+        }
+
+        private IEnumerator ReturnFrozenOverlayAfterParticle(GameObject overlay, float delay)
+        {
+            yield return new WaitForSeconds(Mathf.Max(FROZEN_LAYER_PARTICLE_RETURN_FALLBACK, delay));
+            if (overlay != null)
+                ReturnFrozenOverlayInstance(overlay);
         }
 
         private void ReturnFrozenOverlay(int balloonId)
@@ -5305,6 +5362,55 @@ namespace BalloonFlow
             }
 
             ReturnFrozenOverlayInstance(overlay);
+        }
+
+        private void SetFrozenLayerBodyRenderers(GameObject overlay, bool enabled)
+        {
+            if (overlay == null) return;
+
+            Renderer[] renderers = overlay.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null || r is ParticleSystemRenderer) continue;
+                if (r.GetComponent<TMP_Text>() != null || r.GetComponentInParent<TMP_Text>() != null) continue;
+                r.enabled = enabled;
+            }
+        }
+
+        private float PlayFrozenLayerParticle(GameObject overlay, string particleName)
+        {
+            if (overlay == null || string.IsNullOrEmpty(particleName)) return 0f;
+
+            Transform fx = FindChildRecursive(overlay.transform, particleName);
+            if (fx == null) return 0f;
+
+            fx.gameObject.SetActive(true);
+            ParticleSystem[] systems = fx.GetComponentsInChildren<ParticleSystem>(true);
+            if (systems == null || systems.Length == 0)
+                return FROZEN_LAYER_PARTICLE_RETURN_FALLBACK;
+
+            float maxLife = 0f;
+            for (int i = 0; i < systems.Length; i++)
+            {
+                ParticleSystem ps = systems[i];
+                if (ps == null) continue;
+
+                ps.gameObject.SetActive(true);
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+                ParticleSystem.MainModule main = ps.main;
+                float startLifetime = main.startLifetime.mode == ParticleSystemCurveMode.TwoConstants
+                    ? main.startLifetime.constantMax
+                    : main.startLifetime.constant;
+                float startDelay = main.startDelay.mode == ParticleSystemCurveMode.TwoConstants
+                    ? main.startDelay.constantMax
+                    : main.startDelay.constant;
+                maxLife = Mathf.Max(maxLife, main.duration + startDelay + startLifetime);
+                ps.Play(true);
+            }
+
+            return Mathf.Max(maxLife, FROZEN_LAYER_PARTICLE_RETURN_FALLBACK);
         }
 
         /// <summary>모든 FrozenLayer 오버레이를 풀로 반환 (보드 클리어 시).
@@ -5731,8 +5837,9 @@ namespace BalloonFlow
                 ice.gimmickType = GimmickNone;
                 _balloons[id] = ice;
 
-                // 얼음 쉘 오버레이 제거 → (앵커) 풍선 본체 재표시
-                ReturnFrozenOverlay(id);
+                // ROLLBACK_FROZEN_LAYER_BREAK_PARTICLE_20260630:
+                // Ice break should play BreakParticle on each FrozenLayer before it returns to the pool.
+                ReturnFrozenOverlayWithBreakParticle(id);
 
                 // Visual: 본체 강제 표시(블록 비앵커 셀은 오버레이 없이 숨겨져 있었음) → 원래 색 복원 + 노출 연출
                 if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
@@ -6022,7 +6129,12 @@ namespace BalloonFlow
 
             GameObject selected = _iceHitOverlayCandidates[Random.Range(0, _iceHitOverlayCandidates.Count)];
             if (selected != null)
+            {
+                // ROLLBACK_FROZEN_LAYER_HIT_PARTICLE_20260630:
+                // Only the randomly punched FrozenLayer plays HitParticle.
                 PlayFieldGimmickYHitScale(selected.transform);
+                PlayFrozenLayerParticle(selected, FROZEN_LAYER_HIT_PARTICLE_NAME);
+            }
         }
 
         private void PlayFieldGimmickYHitScale(Transform target)
@@ -6057,6 +6169,14 @@ namespace BalloonFlow
                 gi.PlayEndEffectCloneDetached(out _);
         }
 
+        // ROLLBACK_PAINTBOX_DESTROY_FX_20260630: Paint Box 제거 연출 — 각 egg 의 EndParticle 을 분리 클론 재생.
+        private void PlayPaintBoxEndParticles(GameObject obj)
+        {
+            if (obj == null) return;
+            var view = obj.GetComponentInChildren<PinataBoxView>(true);
+            if (view != null) view.PlayEndParticleClones();
+        }
+
         private void ReturnBalloonObject(int balloonId, float effectScaleMultiplier)
         {
             float __totalStamp = InGamePerfLogger.StartStampMs();
@@ -6073,12 +6193,14 @@ namespace BalloonFlow
             int popColorIdx = 0;
             bool isBarricade = false;
             bool isWoodenBoard = false;
+            bool isPaintBox = false; // ROLLBACK_PAINTBOX_DESTROY_FX_20260630
             if (_balloons.TryGetValue(balloonId, out BalloonData retData))
             {
                 returnKey = ResolveGimmickPoolKey(retData.gimmickType);
                 popColorIdx = retData.color;
                 isBarricade = retData.gimmickType == GimmickBarricade; // #4 파괴 연출 분기
                 isWoodenBoard = retData.gimmickType == GimmickPinata;
+                isPaintBox = retData.gimmickType == GimmickPinataBox;
             }
 
             // FrozenLayer 오버레이가 붙어있다면 먼저 풀로 반환
@@ -6116,6 +6238,14 @@ namespace BalloonFlow
                 seq.AppendCallback(() => PlayWoodenBoardEndParticleClone(obj));
                 seq.Append(obj.transform.DOScale(Vector3.zero, scaleUpDuration * 0.55f).SetEase(Ease.InQuad));
             }
+            else if (isPaintBox)
+            {
+                // ROLLBACK_PAINTBOX_DESTROY_FX_20260630: Paint Box 제거 = 1 → 1.1 → 0.
+                //   풍선 파티클 대신 각 egg 의 EndParticle(분리 클론) 재생 (1.1 피크에서 호출).
+                seq.Append(obj.transform.DOScale(savedLocalScale * 1.1f, scaleUpDuration * 0.45f).SetEase(Ease.OutQuad));
+                seq.AppendCallback(() => PlayPaintBoxEndParticles(obj));
+                seq.Append(obj.transform.DOScale(Vector3.zero, scaleUpDuration * 0.55f).SetEase(Ease.InQuad));
+            }
             else
             {
                 seq.Append(obj.transform.DOScale(Vector3.one * savedScale * scaleUpMult, scaleUpDuration).SetEase(Ease.OutQuad));
@@ -6127,13 +6257,13 @@ namespace BalloonFlow
                     identifier.MarkPopped();
 
                 int ci = Mathf.Clamp(popColorIdx, 0, BalloonColors.Length - 1);
-                // #4: Barricade·WoodenBoard 는 Balloon(Pop) 파티클 미재생 (자체 연출/스케일만).
-                if (!isWoodenBoard && !isBarricade)
+                // #4: Barricade·WoodenBoard·PaintBox 는 Balloon(Pop) 파티클 미재생 (자체 연출/EndParticle 만).
+                if (!isWoodenBoard && !isBarricade && !isPaintBox)
                     PopEffectPool.Play(popPos, BalloonColors[ci], this, effectScaleMultiplier);
 
                 if (obj != null && ObjectPoolManager.HasInstance)
                 {
-                    obj.transform.localScale = isWoodenBoard ? savedLocalScale : Vector3.one * savedScale;
+                    obj.transform.localScale = (isWoodenBoard || isPaintBox) ? savedLocalScale : Vector3.one * savedScale;
                     ObjectPoolManager.Instance.Return(returnKey, obj);
                 }
             });

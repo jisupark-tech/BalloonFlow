@@ -174,6 +174,16 @@ namespace BalloonFlow
 
             // 3) 풍선 제거는 새 API에서 직접 처리됨. 이벤트는 보드 상태 재개용.
             //    removedColor = -1 → BoardStateManager 가 추가 풍선 pop 을 시도하지 않음.
+            // ROLLBACK_CONTINUE_GRACE_ORDER_20260630:
+            // Reset the board before publishing OnContinueApplied. Publishing first let
+            // BoardStateManager enable post-continue grace, then InitializeBoard cleared it,
+            // causing an immediate re-fail even when the rail had visible space.
+            if (BoardStateManager.HasInstance)
+            {
+                int remaining = BoardStateManager.Instance.GetRemainingBalloons();
+                BoardStateManager.Instance.InitializeBoard(_currentLevelId, remaining);
+            }
+
             EventBus.Publish(new OnContinueApplied
             {
                 dartsRemoved = dartsRemoved,
@@ -184,11 +194,8 @@ namespace BalloonFlow
             });
 
             // 4) 보드 상태 리셋하여 게임플레이 재개
-            if (BoardStateManager.HasInstance)
-            {
-                int remaining = BoardStateManager.Instance.GetRemainingBalloons();
-                BoardStateManager.Instance.InitializeBoard(_currentLevelId, remaining);
-            }
+            // BoardStateManager was already reset before OnContinueApplied so its continue
+            // grace is not wiped after the event.
         }
 
         /// <summary>
