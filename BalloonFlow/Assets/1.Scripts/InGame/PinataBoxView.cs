@@ -77,6 +77,13 @@ namespace BalloonFlow
         private MaterialPropertyBlock _eggColorMpb;
         private MaterialPropertyBlock _frameColorMpb;
         private readonly List<Vector3> _eggBaseLocalPos = new List<Vector3>(); // 알 기준 localPosition (금연출 복귀 기준)
+        // ROLLBACK_PAINTBOX_EGG_ENDPARTICLE_20260630:
+        //   EndParticle 을 '박스 제거' 가 아니라 'egg 가 하나씩 죽을 때' 재생 + egg 색 적용. 박스 제거는 스케일만.
+        //   최적화: Instantiate 안 쓰고 egg 의 EndParticle 을 월드로 분리 재사용, 색/재생은 재사용 MPB·List·단일 패스.
+        private readonly List<Color> _eggColors = new List<Color>(); // egg 색(EndParticle tint 용)
+        private MaterialPropertyBlock _particleColorMpb;
+        private readonly List<ParticleSystem> _psScratch = new List<ParticleSystem>(8); // 비할당 재사용
+        private static readonly int ParticleTintColorId = Shader.PropertyToID("_TintColor");
         private const bool PAINTBOX_DEBUG = false; // ROLLBACK_PAINTBOX_DIAG_20260630: 배치 진단 로그(원인 확인용). 필요 시 true.
 
         private static string DiagPath(Transform t)
@@ -210,6 +217,8 @@ namespace BalloonFlow
 
                 _eggs.Add(egg);
                 _eggBaseLocalPos.Add(egg.transform.localPosition); // 금연출 Y 복귀 기준
+                _eggColors.Add(BalloonController.BalloonColors[
+                    Mathf.Clamp(color, 0, BalloonController.BalloonColors.Length - 1)]); // EndParticle tint 용
                 _eggTextures.Add(texChild);
                 _eggMaxHps.Add(maxHp);
                 // [균열 단계] texture 자식의 Renderer 캐시 — HP 단계별 _BaseMap 텍스처 교체용.
@@ -294,6 +303,8 @@ namespace BalloonFlow
             {
                 if (currentHp <= 0)
                 {
+                    // ROLLBACK_PAINTBOX_EGG_ENDPARTICLE_20260630: egg 죽을 때 그 egg 색의 EndParticle 재생 후 비활성.
+                    PlayEggEndParticle(index);
                     _eggs[index].SetActive(false);
                 }
                 else
@@ -331,6 +342,7 @@ namespace BalloonFlow
                 if (_eggs[i] != null) { _eggs[i].transform.DOKill(); Destroy(_eggs[i]); }
             _eggs.Clear();
             _eggBaseLocalPos.Clear();
+            _eggColors.Clear();
             _eggTextures.Clear();
             _eggMaxHps.Clear();
             _eggTexRenderers.Clear();
@@ -371,6 +383,13 @@ namespace BalloonFlow
                 tex.gameObject.SetActive(false); // 평소 비활성
                 textureChild = tex.gameObject;
             }
+
+            // ROLLBACK_PAINTBOX_EGG_ENDPARTICLE_20260630: HitParticle/EndParticle 은 스폰 시 비활성(자동재생 방지).
+            //   균열 시 HitParticle, 죽을 때 EndParticle 만 재생.
+            Transform hitFx = FindChildRecursive(egg.transform, FX_HIT_NAME);
+            if (hitFx != null) hitFx.gameObject.SetActive(false);
+            Transform endFx = FindChildRecursive(egg.transform, FX_END_NAME);
+            if (endFx != null) endFx.gameObject.SetActive(false);
         }
 
         // 클론에서 자식 해석: 인덱스 경로(링크) 우선 → 없으면 이름으로 Find.
@@ -659,42 +678,57 @@ namespace BalloonFlow
             sq.Append(t.DOLocalMoveY(baseP.y, 0.10f).SetEase(Ease.InQuad));
 
             Transform hit = FindChildRecursive(egg.transform, FX_HIT_NAME);
-            if (hit != null) PlayParticle(hit.gameObject);
+            if (hit != null) PlayParticle(hit.gameObject, Color.white, false); // HitParticle 은 색 적용 안 함
         }
 
-        // req3: 박스 제거 시 각 egg 의 EndParticle 을 월드로 분리 클론해 재생 (박스가 0 스케일로 사라져도 정상 재생).
-        public void PlayEndParticleClones()
+        // ROLLBACK_PAINTBOX_EGG_ENDPARTICLE_20260630:
+        //   egg 죽을 때 그 egg 의 EndParticle 을 'egg 색' 으로 재생. egg 가 곧 비활성화되고 박스도 스케일다운하므로
+        //   EndParticle 을 월드로 분리해 독립 재생한다. 최적화: Instantiate 클론 없이 egg 의 원본 EndParticle 을
+        //   reparent(detach)해 재사용 → 수명 후 Destroy (egg 클론은 어차피 Clear 에서 파괴되므로 분리해도 무방).
+        private void PlayEggEndParticle(int index)
         {
-            for (int i = 0; i < _eggs.Count; i++)
-            {
-                GameObject egg = _eggs[i];
-                if (egg == null) continue;
-                Transform end = FindChildRecursive(egg.transform, FX_END_NAME);
-                if (end == null) continue;
+            if (index < 0 || index >= _eggs.Count) return;
+            GameObject egg = _eggs[index];
+            if (egg == null) return;
+            Transform end = FindChildRecursive(egg.transform, FX_END_NAME);
+            if (end == null) return;
 
-                GameObject clone = Instantiate(end.gameObject, end.position, end.rotation);
-                clone.transform.localScale = end.lossyScale;
-                clone.SetActive(true);
-                float life = PlayParticle(clone);
-                Destroy(clone, Mathf.Max(0.5f, life) + 0.5f);
-            }
+            Color c = (index < _eggColors.Count) ? _eggColors[index] : Color.white;
+            end.SetParent(null, true);                 // 월드로 분리(world pose 유지) — 클론 garbage 없음
+            float life = PlayParticle(end.gameObject, c, true);
+            Destroy(end.gameObject, Mathf.Max(0.5f, life) + 0.5f);
         }
 
-        // 파티클 GameObject 재생. 반환 = 대략적 최대 수명(초).
-        private static float PlayParticle(GameObject go)
+        // 파티클 재생(+선택적 색 적용) — 단일 패스. 색은 startColor + 렌더러 머티리얼(_BaseColor/_Color/_TintColor, MPB) 둘 다.
+        //   재사용 List(_psScratch)·MPB(_particleColorMpb) 로 per-call 할당 0. 반환 = 대략 최대 수명(초).
+        private float PlayParticle(GameObject go, Color c, bool applyColor)
         {
             if (go == null) return 0f;
             go.SetActive(true);
+            go.GetComponentsInChildren(true, _psScratch); // 비할당 재사용
+            if (applyColor) _particleColorMpb ??= new MaterialPropertyBlock();
             float life = 0f;
-            var systems = go.GetComponentsInChildren<ParticleSystem>(true);
-            for (int i = 0; i < systems.Length; i++)
+            for (int i = 0; i < _psScratch.Count; i++)
             {
-                var ps = systems[i];
+                var ps = _psScratch[i];
                 if (ps == null) continue;
                 var main = ps.main;
+                if (applyColor) main.startColor = c;
                 float l = main.duration + (main.startLifetime.mode == ParticleSystemCurveMode.TwoConstants
                     ? main.startLifetime.constantMax : main.startLifetime.constant);
                 if (l > life) life = l;
+                if (applyColor)
+                {
+                    var r = ps.GetComponent<ParticleSystemRenderer>();
+                    if (r != null)
+                    {
+                        r.GetPropertyBlock(_particleColorMpb);
+                        _particleColorMpb.SetColor(EggBaseColorId, c);
+                        _particleColorMpb.SetColor(EggColorId, c);
+                        _particleColorMpb.SetColor(ParticleTintColorId, c);
+                        r.SetPropertyBlock(_particleColorMpb);
+                    }
+                }
                 ps.Clear(true);
                 ps.Play(true);
             }

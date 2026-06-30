@@ -6169,14 +6169,6 @@ namespace BalloonFlow
                 gi.PlayEndEffectCloneDetached(out _);
         }
 
-        // ROLLBACK_PAINTBOX_DESTROY_FX_20260630: Paint Box 제거 연출 — 각 egg 의 EndParticle 을 분리 클론 재생.
-        private void PlayPaintBoxEndParticles(GameObject obj)
-        {
-            if (obj == null) return;
-            var view = obj.GetComponentInChildren<PinataBoxView>(true);
-            if (view != null) view.PlayEndParticleClones();
-        }
-
         private void ReturnBalloonObject(int balloonId, float effectScaleMultiplier)
         {
             float __totalStamp = InGamePerfLogger.StartStampMs();
@@ -6240,10 +6232,10 @@ namespace BalloonFlow
             }
             else if (isPaintBox)
             {
-                // ROLLBACK_PAINTBOX_DESTROY_FX_20260630: Paint Box 제거 = 1 → 1.1 → 0.
-                //   풍선 파티클 대신 각 egg 의 EndParticle(분리 클론) 재생 (1.1 피크에서 호출).
+                // ROLLBACK_PAINTBOX_DESTROY_SCALE_ONLY_20260630: Paint Box 제거 = 스케일 1 → 1.1 → 0 '만'.
+                //   EndParticle 은 egg 가 하나씩 죽을 때(PinataBoxView.UpdateEggHp) 재생하므로 박스 제거 시엔
+                //   별도 파티클 없음(풍선 파티클도 억제). 마지막 egg 의 EndParticle + 박스 스케일다운으로 마무리.
                 seq.Append(obj.transform.DOScale(savedLocalScale * 1.1f, scaleUpDuration * 0.45f).SetEase(Ease.OutQuad));
-                seq.AppendCallback(() => PlayPaintBoxEndParticles(obj));
                 seq.Append(obj.transform.DOScale(Vector3.zero, scaleUpDuration * 0.55f).SetEase(Ease.InQuad));
             }
             else
