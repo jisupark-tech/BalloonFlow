@@ -100,7 +100,7 @@ namespace BalloonFlow
         /// <summary>
         /// 알 배치 — eggColors 항목 수(N)만큼. Cylinder 만 색칠, texture 는 비활성으로 시작.
         /// </summary>
-        public void Build(int w, int h, int[] eggColors, int[] eggHps, float cellSizeX, float cellSizeZ, float targetEggWorldScaleY = -1f)
+        public void Build(int w, int h, int[] eggColors, int[] eggHps, float cellSizeX, float cellSizeZ, float targetEggWorldScaleY = -1f, float targetEggWorldScaleXZ = -1f)
         {
             Clear();
             ResolvePaintBoxLinks();
@@ -165,11 +165,21 @@ namespace BalloonFlow
             // NOTE: eggScale(scaleMult)을 곱하지 않는다 — cellSizeX/Z 가 이미 widthMult/heightMult 를 포함하므로
             //       여기서 또 곱하면 이중 적용되어 알이 paintbox 를 벗어난다.
             Vector3 eggScale = tplScale * fitK;
+            // ROLLBACK_PAINTBOX_EGG_XZ_BALLOON_RATIO_20260630:
+            //   x,z 를 셀-맞춤(fitK) 대신 '풍선 scaleX × 1.736'(월드)로 고정 — Y(×2.857)와 동일 패턴, 박스를 채움.
+            //   (전달 안 되면 fitK 폴백.)
+            if (targetEggWorldScaleXZ > 0f)
+            {
+                float parentX = Mathf.Max(0.0001f, Mathf.Abs(transform.lossyScale.x));
+                float parentZ = Mathf.Max(0.0001f, Mathf.Abs(transform.lossyScale.z));
+                eggScale.x = targetEggWorldScaleXZ / parentX;
+                eggScale.z = targetEggWorldScaleXZ / parentZ;
+            }
             if (targetEggWorldScaleY > 0f)
             {
                 // ROLLBACK_GIMMICK_HEIGHT_RATIO_20260629:
                 // Target Box paint/cylinder height is balloon scaleY * 2.857.
-                // Convert the requested world Y height to local scale. X/Z still use fitK.
+                // Convert the requested world Y height to local scale.
                 float parentY = Mathf.Max(0.0001f, Mathf.Abs(transform.lossyScale.y));
                 eggScale.y = targetEggWorldScaleY / parentY;
             }

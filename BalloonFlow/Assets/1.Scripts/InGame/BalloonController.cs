@@ -43,6 +43,9 @@ namespace BalloonFlow
         private const float GIMMICK_HEIGHT_WOODEN_IRON_RATIO = 1.063f;
         private const float GIMMICK_HEIGHT_BARRICADE_RATIO = 2.321f;
         private const float GIMMICK_HEIGHT_TARGET_BOX_PAINT_RATIO = 2.857f;
+        // ROLLBACK_PAINTBOX_EGG_XZ_BALLOON_RATIO_20260630: Target Box egg(Cylinder)의 x,z 월드 스케일 = 풍선 scaleX × 이 값.
+        //   (Y 가 ×2.857 인 것과 동일 패턴 — 셀-맞춤 fitK 대신 풍선 기준 일정 크기로 박스를 채움.)
+        private const float GIMMICK_TARGET_BOX_PAINT_XZ_RATIO = 1.736f;
         private const float GIMMICK_HEIGHT_FROZEN_LAYER_RATIO = 1.286f;
         // ROLLBACK_FROZEN_LAYER_TEXT_SCALE_20260630:
         // FrozenLayer HP text keeps the computed footprint scale, but never grows beyond this cap.
@@ -3908,7 +3911,9 @@ namespace BalloonFlow
             // Target Box paint/cylinder height follows balloon scaleY * 2.857 while X/Z layout
             // still follows the authored paintbox footprint and egg count.
             float targetPaintWorldY = GetGimmickReferenceBalloonScaleY(scaleMult) * GIMMICK_HEIGHT_TARGET_BOX_PAINT_RATIO;
-            view.Build(width, height, data.eggColors, data.eggHps, cellSizeX, cellSizeZ, targetPaintWorldY);
+            // ROLLBACK_PAINTBOX_EGG_XZ_BALLOON_RATIO_20260630: egg x,z 도 '풍선 scaleX × 1.736' 로 고정(Y 와 동일 패턴).
+            float targetPaintWorldXZ = GetBalloonRestScale(scaleMult).x * GIMMICK_TARGET_BOX_PAINT_XZ_RATIO;
+            view.Build(width, height, data.eggColors, data.eggHps, cellSizeX, cellSizeZ, targetPaintWorldY, targetPaintWorldXZ);
         }
 
         private void ApplySizedFieldVisualTransform(GameObject obj, BalloonData data)

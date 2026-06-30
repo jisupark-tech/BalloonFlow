@@ -4657,10 +4657,11 @@ namespace BalloonFlow
                         }
                         else if (isWallGimmick)
                         {
-                            // ROLLBACK_IRONWALL_NOCOLOR_20260626: Wall = 색·공격 없는 불파괴 → 색 선택 없이(기믹만) 배치.
-                            //   _balloonColors 에는 저장 가능하도록 0(센티넬)만 넣는다(save 가 _balloonColors<0 셀을 스킵하므로
-                            //   반드시 >=0 이어야 함). 렌더는 GetPreviewColor 가 Wall 을 항상 GIMMICK_WALL_COLOR(iron-gray)로
-                            //   표시하고, 밸런스는 Wall 을 색 카운트에서 제외(아래 Iron 셀수만 집계)하므로 0 은 색에 영향 없음.
+                            // ROLLBACK_IRONWALL_NOCOLOR_20260626 / ROLLBACK_IRONWALL_COLOR_SENTINEL_MINUS1_20260630:
+                            //   Wall = 색·공격 없는 불파괴. 에디터 내부 _balloonColors 는 0(센티넬) 유지 — 에디터가
+                            //   color<0 셀을 '빈 칸' 으로 보므로(save 스킵·렌더·밸런스 등 다수) 내부는 반드시 >=0 이어야 함.
+                            //   '저장 포맷' 만 -1(무색) 로 기록하고, 로드 시 -1→0 으로 환원(BuildLevelConfig / config 로드부).
+                            //   렌더는 GetPreviewColor 가 Wall 을 항상 GIMMICK_WALL_COLOR(iron-gray), 밸런스는 색 카운트 제외.
                             int wsize = Mathf.Clamp(_paintWallSize, 1, 3);
                             for (int dx = 0; dx < wsize; dx++)
                                 for (int dy = 0; dy < wsize; dy++)
@@ -7435,11 +7436,14 @@ namespace BalloonFlow
                     int row = _impRowAnchor + Mathf.RoundToInt((b.gridPosition.y - _impMinY) / spacing);
                     if (col >= 0 && col < _gridCols && row >= 0 && row < _gridRows)
                     {
-                        _balloonColors[col, row] = b.color;
                         int gi = 0;
                         string normalizedGimmick = GimmickDisplayName.Normalize(b.gimmickType);
                         // [PIN_DEPRECATE] 레거시 Pin → Barricade (런타임 normalize 와 동일). Pin 은 드롭다운에서 제거됨.
                         if (normalizedGimmick == "Pin") normalizedGimmick = "Barricade";
+                        // ROLLBACK_IRONWALL_COLOR_SENTINEL_MINUS1_20260630: Wall 색 센티넬 = 저장 -1 → 내부 0.
+                        //   Wall 은 무색이지만 에디터가 color<0 셀을 '빈 칸' 으로 보므로 내부는 0 으로 둔다(앵커·footprint 공통).
+                        int loadColor = (normalizedGimmick == "Wall" && b.color < 0) ? 0 : b.color;
+                        _balloonColors[col, row] = loadColor;
                         if (!string.IsNullOrEmpty(normalizedGimmick))
                             for (int g = 0; g < FIELD_GIMMICK_NAMES.Length; g++)
                                 if (FIELD_GIMMICK_NAMES[g] == normalizedGimmick) { gi = g; break; }
@@ -7482,7 +7486,7 @@ namespace BalloonFlow
                                 {
                                     int cx = col + dx, cy = row + dy;
                                     if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
-                                    _balloonColors[cx, cy] = b.color;
+                                    _balloonColors[cx, cy] = loadColor;
                                     _balloonGimmicks[cx, cy] = gi;
                                     _balloonGimmickHP[cx, cy] = b.hp > 0 ? b.hp : 2;
                                     _balloonPinataW[cx, cy] = 1;
@@ -7509,7 +7513,7 @@ namespace BalloonFlow
                                     if (dx == 0 && dy == 0) continue;
                                     int cx = col + dx, cy = row + dy;
                                     if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
-                                    _balloonColors[cx, cy] = b.color;
+                                    _balloonColors[cx, cy] = loadColor;
                                     _balloonGimmicks[cx, cy] = gi;
                                     _balloonGimmickHP[cx, cy] = b.hp > 0 ? b.hp : 2;
                                     _balloonPinataW[cx, cy] = 0;
@@ -7526,7 +7530,7 @@ namespace BalloonFlow
                                     int cx = col + dx, cy = row + dy;
                                     if (cx >= 0 && cx < _gridCols && cy >= 0 && cy < _gridRows)
                                     {
-                                        _balloonColors[cx, cy] = b.color;
+                                        _balloonColors[cx, cy] = loadColor;
                                         _balloonGimmicks[cx, cy] = gi;
                                         _balloonGimmickHP[cx, cy] = b.hp > 0 ? b.hp : 2;
                                         _balloonPinataW[cx, cy] = 0; // 비앵커 표시
@@ -7556,7 +7560,7 @@ namespace BalloonFlow
                                     int cx = col + aCol * a + pCol * p;
                                     int cy = row + aRow * a + pRow * p;
                                     if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
-                                    _balloonColors[cx, cy] = b.color;
+                                    _balloonColors[cx, cy] = loadColor;
                                     _balloonGimmicks[cx, cy] = gi;
                                     _balloonGimmickHP[cx, cy] = b.hp > 0 ? b.hp : 2;
                                     _balloonPinataW[cx, cy] = 0;
@@ -8603,7 +8607,11 @@ namespace BalloonFlow
 
                     balloons.Add(new BalloonLayout
                     {
-                        balloonId = bid++, color = _balloonColors[c, r],
+                        // ROLLBACK_IRONWALL_COLOR_SENTINEL_MINUS1_20260630: Wall(무색) 은 -1 로 저장(0=실색 오해 방지).
+                        //   내부 _balloonColors 는 0(에디터 color<0=빈칸 로직 안전), 저장 포맷만 -1. 로드 시 -1→0 환원.
+                        balloonId = bid++,
+                        color = (gi > 0 && gi < FIELD_GIMMICK_NAMES.Length && FIELD_GIMMICK_NAMES[gi] == "Wall")
+                            ? -1 : _balloonColors[c, r],
                         gridPosition = new Vector2(
                             _boardCenter.x + (c - (_gridCols - 1) * 0.5f) * spacing,
                             _boardCenter.y + (r - (_gridRows - 1) * 0.5f) * spacing),

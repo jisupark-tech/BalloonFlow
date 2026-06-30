@@ -2482,7 +2482,45 @@ namespace BalloonFlow
                 if (!processedGroups.Add(hData.chainGroupId)) continue;
 
                 var members = HolderManager.Instance.GetChainGroup(hData.chainGroupId);
-                CreateChainLinesForGroup(hData.chainGroupId, members);
+                CreateChainLinesForSameColorBuckets(hData.chainGroupId, members);
+            }
+        }
+
+        private readonly Dictionary<int, List<int>> _chainVisualBucketsByColor = new Dictionary<int, List<int>>();
+
+        private void CreateChainLinesForSameColorBuckets(int groupId, List<int> members)
+        {
+            // ROLLBACK_CHAIN_LINE_SAME_COLOR_BUCKETS_20260630:
+            // Gameplay still uses the original chainGroupId, but visuals are split by holder color.
+            // This prevents a mixed-color group from drawing a purple half-line into a blue holder body.
+            if (members == null || members.Count <= 0) return;
+
+            _chainVisualBucketsByColor.Clear();
+            for (int i = 0; i < members.Count; i++)
+            {
+                int holderId = members[i];
+                var data = HolderManager.HasInstance ? HolderManager.Instance.FindHolderPublic(holderId) : null;
+                int color = data != null ? data.color : -1;
+                if (!_chainVisualBucketsByColor.TryGetValue(color, out List<int> bucket))
+                {
+                    bucket = new List<int>();
+                    _chainVisualBucketsByColor[color] = bucket;
+                }
+                bucket.Add(holderId);
+            }
+
+            foreach (var kvp in _chainVisualBucketsByColor)
+            {
+                if (kvp.Value.Count < 2) continue;
+                CreateChainLinesForGroup(GetChainVisualOrderKey(groupId, kvp.Key), kvp.Value);
+            }
+        }
+
+        private static int GetChainVisualOrderKey(int groupId, int color)
+        {
+            unchecked
+            {
+                return groupId * 1000 + Mathf.Clamp(color, 0, 999);
             }
         }
 
