@@ -660,7 +660,15 @@ namespace BalloonFlow
             _almostThere = imminent;
             if (imminent)
             {
-                if (!_almostThereToastShown) { _almostThereToastShown = true; ShowAlmostThereMessage(); }
+                if (!_almostThereToastShown)
+                {
+                    _almostThereToastShown = true;
+                    // ROLLBACK_CLEAR_IMMINENT_IRONWALL_REMOVE_20260630:
+                    // Use the exact Almost There rising edge for Iron Wall auto-removal.
+                    if (BalloonController.HasInstance)
+                        BalloonController.Instance.RemoveIronWallsForClearImminent();
+                    ShowAlmostThereMessage();
+                }
             }
             else
             {

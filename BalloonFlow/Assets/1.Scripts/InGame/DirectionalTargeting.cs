@@ -124,7 +124,7 @@ namespace BalloonFlow
                     continue;
                 }
 
-                bool reserved = IsEdgeTargetReserved(edge, excludeIds);
+                bool reserved = IsEdgeTargetReserved(edge, excludeIds, color);
                 float firingDist = GetFiringAxisDistance(dartPosition, edge.worldPos, scanDir);
                 float perpDist = GetPerpendicularDistance(dartPosition, edge.worldPos, scanDir);
                 bool sameColor = EdgeMatchesColor(edge, color);
@@ -235,8 +235,21 @@ namespace BalloonFlow
             return edge.colorMask != 0u && (edge.colorMask & (1u << color)) != 0u;
         }
 
-        private static bool IsEdgeTargetReserved(EdgeTarget edge, HashSet<int> excludeIds)
+        private static bool IsEdgeTargetReserved(EdgeTarget edge, HashSet<int> excludeIds, int color)
         {
+            // ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630:
+            //   Target Box 는 한 balloonId 에 여러 색 egg → balloonId 단위(excludeIds)로는 색을 못 가린다. 그래서 박스는
+            //   DartManager 가 _reservedTargets 에 넣지 않으며, excludeIds 멤버십과 무관하게 여기서 색별 캡을 먼저 검사한다.
+            //   이 다트 색이 캡(동시 비행 색 X 다트 >= 잔여 색 X egg HP) 도달이면 제외, 아니면 false(다른 색·캡 미만은
+            //   멀티셀 동시 발사 허용 — 기존 AllowsConcurrent 우회와 동일 효과).
+            if (BalloonController.HasInstance)
+            {
+                var boxData = BalloonController.Instance.GetBalloon(edge.balloonId);
+                if (boxData != null && !boxData.isPopped && boxData.gimmickType == BalloonController.GimmickPinataBox)
+                    return DartManager.HasInstance
+                        && DartManager.Instance.IsBoxColorCapped(edge.balloonId, color);
+            }
+
             if (excludeIds == null || !excludeIds.Contains(edge.balloonId))
                 return false;
 
@@ -350,7 +363,7 @@ namespace BalloonFlow
                     continue;
                 }
 
-                bool reserved = IsEdgeTargetReserved(edge, excludeIds);
+                bool reserved = IsEdgeTargetReserved(edge, excludeIds, color);
                 float firingDist = GetFiringAxisDistance(dartPosition, edge.worldPos, scanDir);
                 if (firingDist < 0f)
                 {
@@ -474,7 +487,7 @@ namespace BalloonFlow
                 if (!TryGetEdgeTarget(scanDir, dartCell, offset, out EdgeTarget edge))
                     continue;
 
-                bool reserved = IsEdgeTargetReserved(edge, excludeIds);
+                bool reserved = IsEdgeTargetReserved(edge, excludeIds, color);
                 if (!edge.targetable || !EdgeMatchesColor(edge, color) || reserved)
                     continue;
 

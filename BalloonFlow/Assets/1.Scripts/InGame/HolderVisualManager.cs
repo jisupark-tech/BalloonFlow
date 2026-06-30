@@ -1000,7 +1000,7 @@ namespace BalloonFlow
         /// <summary>재사용 리스트 (GC 방지)</summary>
         private readonly List<HolderVisual> _tempColumnHolders = new List<HolderVisual>();
 
-        private void SyncGlassPipePreview(int column, HolderData pipeData, Vector3 pipePosition, HolderData[] allHolders)
+        private void SyncGlassPipePreview(int column, HolderData pipeData, Vector3 pipePosition, HolderData[] allHolders, float emergeDuration)
         {
             // ROLLBACK_GLASS_PIPE_NEXT_PAYLOAD_PREVIEW_20260625:
             // Glass Pipe shows only the next unreleased payload at half scale before it is released.
@@ -1031,17 +1031,30 @@ namespace BalloonFlow
 
                 if (data.IsQueueVisible)
                 {
+                    // ROLLBACK_SPAWNER_EMERGE_SYNC_20260630: 방출 = 앞 홀더 전진과 동시에 emerge.
+                    //   스케일 0.4→1.0 + 텍스트 0→정상, 이동시간(emergeDuration)에 맞춰 함께 키움. 위치 이동은 colHolders 가 처리(popping).
                     visual.gameObject.transform.DOKill(false);
-                    visual.gameObject.transform.localScale = Vector3.one * 0.5f;
                     _poppingScale.Add(holderId);
-                    visual.gameObject.transform.DOScale(Vector3.one, 0.4f).SetEase(Ease.InQuad)
+                    visual.gameObject.transform.DOScale(Vector3.one, emergeDuration).SetEase(Ease.OutQuad)
                         .OnComplete(() => _poppingScale.Remove(holderId));
+                    if (visual.magazineText != null)
+                    {
+                        var tt = visual.magazineText.transform;
+                        Vector3 baseScale = tt.localScale == Vector3.zero ? Vector3.one : tt.localScale;
+                        visual.magazineText.gameObject.SetActive(true);
+                        tt.localScale = Vector3.zero;
+                        tt.DOScale(baseScale, emergeDuration).SetEase(Ease.OutQuad);
+                    }
                     _glassPipePreviewPayloads.Remove(holderId);
                 }
                 else
                 {
+                    // 미방출 = 파이프 안 고정(0.4) + 텍스트 숨김. 등장(0→0.4) 애니 중이면 스케일 건드리지 않음.
                     visual.gameObject.transform.position = pipePosition;
-                    visual.gameObject.transform.localScale = Vector3.one * 0.5f;
+                    if (!_poppingScale.Contains(holderId))
+                        visual.gameObject.transform.localScale = Vector3.one * 0.4f;
+                    if (visual.magazineText != null && visual.magazineText.gameObject.activeSelf)
+                        visual.magazineText.gameObject.SetActive(false);
                 }
             }
 
@@ -1073,10 +1086,17 @@ namespace BalloonFlow
                 _holderVisuals[nextPayload.holderId] = preview;
             }
 
+            // ROLLBACK_SPAWNER_INSIDE_APPEAR_20260630: 새 내부 홀더 = scale 0→0.4 팝 + 텍스트 숨김(겹침·즉시등장 인지난이 방지).
+            int previewId = nextPayload.holderId;
             preview.gameObject.transform.DOKill(false);
             preview.gameObject.transform.position = pipePosition;
-            preview.gameObject.transform.localScale = Vector3.one * 0.5f;
-            _glassPipePreviewPayloads.Add(nextPayload.holderId);
+            preview.gameObject.transform.localScale = Vector3.zero;
+            _poppingScale.Add(previewId);
+            preview.gameObject.transform.DOScale(Vector3.one * 0.4f, 0.2f).SetEase(Ease.OutBack)
+                .OnComplete(() => _poppingScale.Remove(previewId));
+            if (preview.magazineText != null)
+                preview.magazineText.gameObject.SetActive(false);
+            _glassPipePreviewPayloads.Add(previewId);
         }
 
         private void RepositionColumnHolders(int column)
@@ -1109,7 +1129,10 @@ namespace BalloonFlow
             // 비주얼 없는 일반 보관함 생성 — ① Spawner 소환분 ② [HOLDER_LAZY_SPAWN] 지연 스폰분.
             // 열 잔여(미소비·비스포너) 순번 = holderId 순(초기 배치 row 순서 보존) — 임계 안만 생성.
             HolderData[] allHolders = HolderManager.Instance.GetHolders();
-            SyncGlassPipePreview(column, pipeData, spawnerPos, allHolders);
+            // ROLLBACK_SPAWNER_EMERGE_SYNC_20260630: emerge 이동/스케일/텍스트를 '큐 한 칸 이동시간'(앞 홀더 전진과 동일)에 맞춤.
+            float queueStepDur = Mathf.Max(0.05f,
+                Vector3.Distance(CalculateQueuePosition(column, 0), CalculateQueuePosition(column, 1)) / 4f);
+            SyncGlassPipePreview(column, pipeData, spawnerPos, allHolders, queueStepDur);
             _tempLazyColumnData.Clear();
             for (int i = 0; i < allHolders.Length; i++)
             {
@@ -1158,7 +1181,8 @@ namespace BalloonFlow
                             : null;
                         bool emergeFromGlassPipe = pipeOwner != null
                             && pipeOwner.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T;
-                        Vector3 startScale = emergeFromGlassPipe ? Vector3.one * 0.5f : Vector3.zero;
+                        // ROLLBACK_SPAWNER_EMERGE_SYNC_20260630: 내부 대기 크기 0.4 에 맞춰 폴백(미리보기 없이 방출) 시작도 0.4.
+                        Vector3 startScale = emergeFromGlassPipe ? Vector3.one * 0.4f : Vector3.zero;
                         _poppingScale.Add(hid);
                         // ROLLBACK_GLASS_PIPE_PAYLOAD_PREVIEW_SCALE_20260625:
                         // Glass Pipe is transparent, so the next holder should be partially readable before popping out.
@@ -1287,7 +1311,10 @@ namespace BalloonFlow
                 if (Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos) > 0.05f)
                 {
                     float dist = Vector3.Distance(colHolders[row].gameObject.transform.position, targetPos);
-                    colHolders[row].gameObject.transform.DOMove(targetPos, dist / 4f).SetEase(Ease.OutQuad);
+                    // ROLLBACK_SPAWNER_EMERGE_SYNC_20260630: 막 방출된 payload(popping) 의 emerge 이동은
+                    //   큐 한 칸 이동시간으로 — 앞 홀더 전진과 동시·동일 시간. 일반 이동은 거리비례 유지.
+                    float moveDur = popping ? queueStepDur : (dist / 4f);
+                    colHolders[row].gameObject.transform.DOMove(targetPos, moveDur).SetEase(Ease.OutQuad);
                 }
 
                 colHolders[row].queuePosition = targetPos;
@@ -2482,45 +2509,7 @@ namespace BalloonFlow
                 if (!processedGroups.Add(hData.chainGroupId)) continue;
 
                 var members = HolderManager.Instance.GetChainGroup(hData.chainGroupId);
-                CreateChainLinesForSameColorBuckets(hData.chainGroupId, members);
-            }
-        }
-
-        private readonly Dictionary<int, List<int>> _chainVisualBucketsByColor = new Dictionary<int, List<int>>();
-
-        private void CreateChainLinesForSameColorBuckets(int groupId, List<int> members)
-        {
-            // ROLLBACK_CHAIN_LINE_SAME_COLOR_BUCKETS_20260630:
-            // Gameplay still uses the original chainGroupId, but visuals are split by holder color.
-            // This prevents a mixed-color group from drawing a purple half-line into a blue holder body.
-            if (members == null || members.Count <= 0) return;
-
-            _chainVisualBucketsByColor.Clear();
-            for (int i = 0; i < members.Count; i++)
-            {
-                int holderId = members[i];
-                var data = HolderManager.HasInstance ? HolderManager.Instance.FindHolderPublic(holderId) : null;
-                int color = data != null ? data.color : -1;
-                if (!_chainVisualBucketsByColor.TryGetValue(color, out List<int> bucket))
-                {
-                    bucket = new List<int>();
-                    _chainVisualBucketsByColor[color] = bucket;
-                }
-                bucket.Add(holderId);
-            }
-
-            foreach (var kvp in _chainVisualBucketsByColor)
-            {
-                if (kvp.Value.Count < 2) continue;
-                CreateChainLinesForGroup(GetChainVisualOrderKey(groupId, kvp.Key), kvp.Value);
-            }
-        }
-
-        private static int GetChainVisualOrderKey(int groupId, int color)
-        {
-            unchecked
-            {
-                return groupId * 1000 + Mathf.Clamp(color, 0, 999);
+                CreateChainLinesForGroup(hData.chainGroupId, members);
             }
         }
 
@@ -2533,38 +2522,40 @@ namespace BalloonFlow
 
         private readonly List<HolderVisual> _chainGroupVisuals = new List<HolderVisual>();
         private readonly List<ChainEdge> _chainCandidateEdges = new List<ChainEdge>();
-        private readonly List<int> _chainConnectScratch = new List<int>();
 
         // ROLLBACK_CHAIN_LINK_TOPOLOGY_STABLE_20260630:
         //   groupId 의 '경로 순서'(초기 1회 캐시)대로 연속한 '현재 살아있는' 멤버만 잇는다.
         //   소비/미스폰된 멤버는 건너뛰어 그 이웃을 직접 연결(체인이 끊김 없이 이어짐).
+        // ROLLBACK_CHAIN_LINK_ADJACENT_ONLY_20260630:
+        //   캐시된 '경로 순서'(초기 토폴로지)에서 '인접한' 쌍만 잇는다. 둘 다 살아있을 때만 연결하고,
+        //   소비/미스폰 멤버는 브리지하지 않는다 → 중간 멤버(B,C)가 빠져도 끝(A,D)이 엉뚱하게 이어지지 않음.
+        //   (색은 무관 — gameplay chainGroupId 기준 토폴로지 그대로. 혼색 링크는 각 반쪽이 제 색을 가짐.)
         private void CreateChainLinesForGroup(int groupId, List<int> members)
         {
             List<int> order = GetOrComputeChainOrder(groupId, members);
 
-            // 캐시 순서 + (혹시 캐시에 없는 현재 멤버는 뒤에 덧붙여 안전)
-            _chainConnectScratch.Clear();
-            _chainConnectScratch.AddRange(order);
-            for (int i = 0; i < members.Count; i++)
-                if (!_chainConnectScratch.Contains(members[i])) _chainConnectScratch.Add(members[i]);
-
-            HolderVisual prev = null;
-            int prevId = -1;
-            for (int i = 0; i < _chainConnectScratch.Count; i++)
+            for (int i = 0; i + 1 < order.Count; i++)
             {
-                int id = _chainConnectScratch[i];
-                if (!_holderVisuals.TryGetValue(id, out HolderVisual v) || v.gameObject == null) continue;
-                var hd = HolderManager.HasInstance ? HolderManager.Instance.FindHolderPublic(id) : null;
-                if (hd == null || hd.isConsumed) continue; // 소비된 멤버는 건너뛰고 다음 살아있는 멤버와 연결(브리지)
+                int idA = order[i];
+                int idB = order[i + 1];
+                if (!IsChainMemberLinkable(idA, out HolderVisual va)) continue;
+                if (!IsChainMemberLinkable(idB, out HolderVisual vb)) continue;
 
-                if (prev != null)
-                {
-                    string key = prevId < id ? $"{prevId}_{id}" : $"{id}_{prevId}";
-                    CreateChainLine(key, prev, v);
-                }
-                prev = v;
-                prevId = id;
+                // 색·위치 정합: key 는 작은id_큰id, CreateChainLine 의 a(=colorA) 도 작은id 로 맞춰 교차 방지.
+                int lo = Mathf.Min(idA, idB);
+                int hi = Mathf.Max(idA, idB);
+                HolderVisual loV = (idA < idB) ? va : vb;
+                HolderVisual hiV = (idA < idB) ? vb : va;
+                CreateChainLine($"{lo}_{hi}", loV, hiV);
             }
+        }
+
+        private bool IsChainMemberLinkable(int id, out HolderVisual v)
+        {
+            v = null;
+            if (!_holderVisuals.TryGetValue(id, out v) || v.gameObject == null) return false;
+            var hd = HolderManager.HasInstance ? HolderManager.Instance.FindHolderPublic(id) : null;
+            return hd != null && !hd.isConsumed;
         }
 
         // 초기 1회: 현재(=초기 레이아웃) 위치로 MST → 경로 끝점부터 순회해 '경로 순서' 를 구하고 캐시.

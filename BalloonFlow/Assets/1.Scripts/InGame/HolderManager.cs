@@ -1347,7 +1347,11 @@ namespace BalloonFlow
             // 배포 불가해도 Click 애니메이션만 재생 (3열 이후 등)
             if (!selected)
             {
-                EventBus.Publish(new OnHolderClickAnim { holderId = evt.holderId });
+                // ROLLBACK_SPAWNER_INSIDE_NO_CLICK_ANIM_20260630: Spawner(Glass Pipe) 안 미방출 payload 는 클릭해도 무반응.
+                HolderData tappedHd = FindHolder(evt.holderId);
+                bool insideSpawner = tappedHd != null && tappedHd.isPipePayload && !tappedHd.isPipePayloadReleased;
+                if (!insideSpawner)
+                    EventBus.Publish(new OnHolderClickAnim { holderId = evt.holderId });
             }
             else
             {

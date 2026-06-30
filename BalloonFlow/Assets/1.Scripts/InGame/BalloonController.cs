@@ -53,6 +53,9 @@ namespace BalloonFlow
         private const float FROZEN_LAYER_PARTICLE_RETURN_FALLBACK = 0.8f;
         private const string FROZEN_LAYER_HIT_PARTICLE_NAME = "HitParticle";
         private const string FROZEN_LAYER_BREAK_PARTICLE_NAME = "BreakParticle";
+        private const string FROZEN_LAYER_IDLE_PARTICLE_NAME = "ParticleFrozenIdle";
+        private const float IRON_WALL_CLEAR_IMMINENT_SINK_Y = 1.25f;
+        private const float IRON_WALL_CLEAR_IMMINENT_SINK_DURATION = 0.35f;
         private const float WOODENBOARD_HIT_SCALE_Y = 1.2f;
         private const float WOODENBOARD_DESTROY_SCALE = 1.1f;
         private const float FIELD_GIMMICK_HIT_SCALE_DURATION = 0.12f;
@@ -253,6 +256,27 @@ namespace BalloonFlow
             return false;
         }
 
+        // ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630:
+        //   Target Box(Pinata_Box)는 단일 balloonId 에 색·HP 가 다른 egg 들이 섞여 있다(eggColors/eggHps).
+        //   색 X 다트 1발 = 살아있는 색 X egg HP 1 소모(ProcessPinataBoxEggHit). 동시 비행 색 X 다트가 이 잔여 HP 를
+        //   넘으면 egg 가 죽은 뒤 잉여 다트가 도착해 헛발(targetGoneBeforeImpact) → 그 색 다트 부족 → 박스 미완
+        //   (= Pinata 오버슈트 버그와 동일하되 '색별'). DartManager 의 색별 동시발사 캡 분모로 사용.
+        //   반환: 살아있는 색 X egg HP 합(= 그 색으로 더 맞춰야 할 횟수).
+        public int GetPinataBoxColorRemainingHits(int balloonId, int color)
+        {
+            if (color < 0) return 0;
+            if (!_balloons.TryGetValue(balloonId, out BalloonData data) || data == null || data.isPopped)
+                return 0;
+            if (data.gimmickType != GimmickPinataBox || data.eggColors == null || data.eggHps == null)
+                return 0;
+            int count = 0;
+            int n = Mathf.Min(data.eggColors.Length, data.eggHps.Length);
+            for (int i = 0; i < n; i++)
+                if (data.eggColors[i] == color && data.eggHps[i] > 0)
+                    count += data.eggHps[i];
+            return count;
+        }
+
         // ROLLBACK_BARRICADE_HP_INDEPENDENT_20260624:
         // Shared source for Barricade's remaining attackable length, computed as length × remainingHP/maxHP.
         // HP and length are INDEPENDENT: a length-6 / HP-3 Barricade exposes 6→4→2→0 cells (2 per hit);
@@ -327,6 +351,8 @@ namespace BalloonFlow
         // ROLLBACK_BARRICADE_MULTI_CELL_OCCUPANCY:
         // Barricade is one object, but it can occupy multiple logical board cells.
         private readonly Dictionary<int, List<Vector3Int>> _multiCellOccupancy = new Dictionary<int, List<Vector3Int>>();
+        private readonly List<int> _clearImminentIronWallIds = new List<int>(16);
+        private bool _ironWallsRemovedForClearImminent;
         private readonly Dictionary<Transform, Vector3> _barricadeBodyBaseScales = new Dictionary<Transform, Vector3>();
         private readonly Dictionary<Transform, Quaternion> _barricadeBodyBaseRotations = new Dictionary<Transform, Quaternion>();
         private readonly Dictionary<Transform, Vector3> _barricadeBodyBasePositions = new Dictionary<Transform, Vector3>();
@@ -654,6 +680,7 @@ namespace BalloonFlow
             }
             RemainingCount = _balloons.Count - excludeCount;
             PoppedCount = 0;
+            _ironWallsRemovedForClearImminent = false;
             BuildPositionIndex();
 
             // Apply gimmick visual states after all balloons are placed
@@ -1362,6 +1389,64 @@ namespace BalloonFlow
             return RemainingCount;
         }
 
+        public void RemoveIronWallsForClearImminent()
+        {
+            // ROLLBACK_CLEAR_IMMINENT_IRONWALL_REMOVE_20260630:
+            // Almost There removes Iron Wall blockers without using PopBalloon, so no pop VFX/sound
+            // plays and hidden/exposed targeting updates immediately.
+            if (_ironWallsRemovedForClearImminent) return;
+            _ironWallsRemovedForClearImminent = true;
+
+            _clearImminentIronWallIds.Clear();
+            foreach (var kvp in _balloons)
+            {
+                BalloonData data = kvp.Value;
+                if (data == null || data.isPopped || data.gimmickType != GimmickWall) continue;
+                _clearImminentIronWallIds.Add(kvp.Key);
+            }
+
+            if (_clearImminentIronWallIds.Count <= 0) return;
+
+            for (int i = 0; i < _clearImminentIronWallIds.Count; i++)
+            {
+                int id = _clearImminentIronWallIds[i];
+                if (!_balloons.TryGetValue(id, out BalloonData data) || data == null) continue;
+                if (data.isPopped || data.gimmickType != GimmickWall) continue;
+
+                data.isPopped = true;
+                _balloons[id] = data;
+                RemovePositionIndexForBalloon(data);
+                SinkAndReturnIronWallVisual(id);
+            }
+
+            DirectionalTargeting.InvalidateCache();
+            if (BoardStateManager.HasInstance)
+                BoardStateManager.Instance.InvalidateOutermostCache();
+            RefreshOutermostRendererState();
+        }
+
+        private void SinkAndReturnIronWallVisual(int balloonId)
+        {
+            if (!_balloonObjects.TryGetValue(balloonId, out GameObject obj) || obj == null)
+                return;
+
+            Transform t = obj.transform;
+            t.DOKill();
+            Vector3 target = t.position - Vector3.up * IRON_WALL_CLEAR_IMMINENT_SINK_Y;
+            t.DOMove(target, IRON_WALL_CLEAR_IMMINENT_SINK_DURATION)
+                .SetEase(Ease.InQuad)
+                .OnComplete(() =>
+                {
+                    if (_balloonObjects.TryGetValue(balloonId, out GameObject current) && current == obj)
+                        _balloonObjects.Remove(balloonId);
+
+                    if (obj != null && ObjectPoolManager.HasInstance)
+                        ObjectPoolManager.Instance.Return(IronBoxPoolKey, obj);
+                    else if (obj != null)
+                        obj.SetActive(false);
+                });
+        }
+
         /// <summary>
         /// Attempts to pop a balloon by id. Applies gimmick behavior before/after pop.
         /// </summary>
@@ -1915,6 +2000,7 @@ namespace BalloonFlow
             _pinataGroup.Clear();
             _positionIndex.Clear();
             _multiCellOccupancy.Clear();
+            _clearImminentIronWallIds.Clear();
             _activeKeyPairIds.Clear();
             // [Leak fix 2026-05-11] _balloonRenderers / _prevOutermostSet / _frameCachedPositions 정리 추가.
             // 이전: ClearAllBalloons 가 _nextBalloonId=1 로 reset 하는데 이 dict 들이 stale entry 보유 →
@@ -1927,6 +2013,7 @@ namespace BalloonFlow
             _frameCachedPositionsFrame = -1;
             RemainingCount = 0;
             PoppedCount = 0;
+            _ironWallsRemovedForClearImminent = false;
             _nextBalloonId = 1;
 
             // ROLLBACK_GIMMICK_LEVEL_SAFE_RESET:
@@ -4737,6 +4824,7 @@ namespace BalloonFlow
             if (overlay == null) return;
 
             SetFrozenLayerBodyRenderers(overlay, true);
+            SetFrozenLayerIdleParticle(overlay, true);
             ResetFrozenOverlayMagazineText(overlay);
 
             // ROLLBACK_ICE_OVERLAY_STANDALONE_FIELD_20260626:
@@ -5115,6 +5203,7 @@ namespace BalloonFlow
             if (overlay == null) return;
 
             SetFrozenLayerBodyRenderers(overlay, true);
+            SetFrozenLayerIdleParticle(overlay, true);
             ResetFrozenOverlayMagazineText(overlay);
 
             // ROLLBACK_FROZEN_OVERLAY_STANDALONE_FIELD_20260626:
@@ -5312,6 +5401,7 @@ namespace BalloonFlow
             _iceBlockOverlays.Remove(overlay); // 풀 반환 시 블록 표시 해제 (재사용 시 오판 방지)
             _fieldHitBaseScales.Remove(overlay.transform); // hit 펀치 rest 캐시 해제 (재사용 stale 방지)
             SetFrozenLayerBodyRenderers(overlay, true);
+            SetFrozenLayerIdleParticle(overlay, true);
             ResetFrozenOverlayMagazineText(overlay);
             overlay.transform.SetParent(null, false);
             if (ObjectPoolManager.HasInstance)
@@ -5335,6 +5425,9 @@ namespace BalloonFlow
             // Ice HP 0 uses the break path so every FrozenLayer overlay can play BreakParticle before pooling.
             ResetFrozenOverlayMagazineText(overlay);
             SetFrozenLayerBodyRenderers(overlay, false);
+            // ROLLBACK_FROZEN_LAYER_IDLE_PARTICLE_OFF_20260630:
+            // When Ice breaks, stop only the always-on snowflake idle FX. BreakParticle still plays to completion.
+            SetFrozenLayerIdleParticle(overlay, false);
             overlay.transform.SetParent(null, true);
 
             float particleLife = PlayFrozenLayerParticle(overlay, FROZEN_LAYER_BREAK_PARTICLE_NAME);
@@ -5381,6 +5474,43 @@ namespace BalloonFlow
                 if (r.GetComponent<TMP_Text>() != null || r.GetComponentInParent<TMP_Text>() != null) continue;
                 r.enabled = enabled;
             }
+        }
+
+        private void SetFrozenLayerIdleParticle(GameObject overlay, bool active)
+        {
+            if (overlay == null) return;
+
+            Transform fx = FindChildRecursive(overlay.transform, FROZEN_LAYER_IDLE_PARTICLE_NAME);
+            if (fx == null) return;
+
+            ParticleSystem[] systems = fx.GetComponentsInChildren<ParticleSystem>(true);
+            if (active)
+            {
+                fx.gameObject.SetActive(true);
+                if (systems == null) return;
+
+                for (int i = 0; i < systems.Length; i++)
+                {
+                    ParticleSystem ps = systems[i];
+                    if (ps == null) continue;
+
+                    ps.gameObject.SetActive(true);
+                    if (!ps.isPlaying)
+                        ps.Play(true);
+                }
+                return;
+            }
+
+            if (systems != null)
+            {
+                for (int i = 0; i < systems.Length; i++)
+                {
+                    ParticleSystem ps = systems[i];
+                    if (ps == null) continue;
+                    ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                }
+            }
+            fx.gameObject.SetActive(false);
         }
 
         private float PlayFrozenLayerParticle(GameObject overlay, string particleName)

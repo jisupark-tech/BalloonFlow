@@ -332,6 +332,14 @@ namespace BalloonFlow
         //   _reservedTargets(=타게팅 제외/발사 금지) 에 넣어 추가 발사를 막는다.
         //   → HP 만큼만 동시 발사(2×2 병렬 유지), 마지막 1HP 에선 1발만 → 오버슈트 차단.
         private readonly Dictionary<int, int> _inflightDartsByTarget = new Dictionary<int, int>();
+        // ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630:
+        //   Target Box(Pinata_Box)는 한 balloonId 에 색이 다른 egg 들이 섞여 있어 위 balloonId 단위 캡으로는
+        //   색을 구분 못 한다. 박스는 (balloonId,color) 별로 동시 비행 다트를 추적하고, 그 색의 잔여 egg HP
+        //   (GetPinataBoxColorRemainingHits) 에 도달하면 그 색만 발사 금지(다른 색은 계속 허용 → 멀티셀 병렬 유지).
+        //   key = (balloonId << 8) | (color & 0xFF). color 는 0~31(BuildLiveEggColorMask 와 동일 범위)이라 8bit 로 충분.
+        private readonly Dictionary<long, int> _inflightBoxColorDarts = new Dictionary<long, int>();
+        private readonly List<long> _boxColorRemoveScratch = new List<long>(8);
+        private static long BoxColorKey(int balloonId, int color) => ((long)balloonId << 8) | (uint)(color & 0xFF);
         // scan tick 안 이미 발사한 holder ID set. 같은 holder 의 다음 head (cache 자동 갱신 후) 가 같은 tick 발사하는 shotgun 차단.
         private readonly HashSet<int> _firedHoldersThisTick = new HashSet<int>();
         // ROLLBACK_DART_FRONT_ORDERED_FIRE_QUEUE:
@@ -542,6 +550,7 @@ namespace BalloonFlow
             _activeProjectiles.Clear();
             _reservedTargets.Clear();
             _inflightDartsByTarget.Clear();
+            _inflightBoxColorDarts.Clear();
             InvalidateDartScanLines();
             ClearConsumedLineLocks();
             _firedHoldersThisTick.Clear();
@@ -1022,6 +1031,9 @@ namespace BalloonFlow
 
                 // Skip if another dart is already flying toward this balloon
                 if (_reservedTargets.Contains(targetId)) continue;
+                // ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630: 박스는 _reservedTargets 에 없으므로(SyncTargetExclusion
+                //   제외) 색별 캡을 여기서 직접 검사. 캡 도달 색이면 스킵(다른 색·캡 미만은 통과 → 멀티셀 병렬 유지).
+                if (IsBoxColorCapped(targetId, slot.dartColor)) continue;
 
                 if (!BalloonController.HasInstance) return;
                 // ROLLBACK_CONTOUR_TARGET_DIAG:
@@ -1059,8 +1071,8 @@ namespace BalloonFlow
                     color = color
                 });
 
-                // Reserve target — 비행 다트 수 +1 (Pinata 는 남은 HP 만큼만 동시 발사 허용)
-                RegisterInflightDart(targetId);
+                // Reserve target — 비행 다트 수 +1 (Pinata 는 남은 HP 만큼만 동시 발사 허용 / 박스는 색별)
+                RegisterInflightDart(targetId, color);
 
                 // Launch projectile visual (실제 월드 위치)
                 LaunchProjectile(slotIdx, slotPos, BalloonController.Instance.GetBalloonWorldPosition(targetId), targetId, color);
@@ -1694,7 +1706,7 @@ namespace BalloonFlow
                 _firedHoldersThisTick.Add(holderId);
                 _lastFireUnscaledTime = Time.unscaledTime; // ROLLBACK_NO_FIRE_FAIL_WATCHDOG_20260622: 레일 배수 진행 신호.
                 firesThisTick++;
-                RegisterInflightDart(targetId); // 비행 다트 수 +1 (Pinata 는 남은 HP 만큼만 동시 발사 허용)
+                RegisterInflightDart(targetId, color); // 비행 다트 수 +1 (Pinata 는 남은 HP 만큼만 / 박스는 색별)
 
                 // Transfer visual from belt to projectile
                 GameObject dartObj = null;
@@ -1758,7 +1770,7 @@ namespace BalloonFlow
                     // The old path had already removed the dart from the rail and reserved its target,
                     // but if no projectile visual was available it never resolved the hit. Resolve the
                     // original fire-time target immediately so this cannot become a silent miss.
-                    UnregisterInflightDart(targetId); // 비행 종료 — 비행수 -1
+                    UnregisterInflightDart(targetId, color); // 비행 종료 — 비행수 -1
                     // ROLLBACK_DART_POP_SCAN_STATE_STABILITY:
                     // Visual fallback resolves the same fire-time target immediately. Do not clear the
                     // holder scan/promotion state here; ExecuteHit invalidates DirectionalTargeting's
@@ -2561,7 +2573,7 @@ namespace BalloonFlow
             // corner/tunnel. Keep only the holder-local last-fired line above.
             // _consumedTargetLines.Add(GetConsumedLineKey(candidate.scanDir, candidate.scanLine));
             MarkTargetLineConsumed(candidate.holderId, candidate.scanDir, candidate.scanLine);
-            RegisterInflightDart(candidate.targetId); // 비행 다트 수 +1 (Pinata 는 남은 HP 만큼만 동시 발사 허용)
+            RegisterInflightDart(candidate.targetId, candidate.color); // 비행 다트 수 +1 (Pinata 는 남은 HP 만큼만 / 박스는 색별)
             LogAttackIssue(
                 "DartFireCommitted",
                 $"holder={candidate.holderId} dartId={candidate.dartId} color={candidate.color} " +
@@ -2635,7 +2647,7 @@ namespace BalloonFlow
                 // The old path had already removed the dart from the rail and reserved its target,
                 // but if no projectile visual was available it never resolved the hit. Resolve the
                 // original fire-time target immediately so this cannot become a silent miss.
-                UnregisterInflightDart(candidate.targetId); // 비행 종료 — 비행수 -1
+                UnregisterInflightDart(candidate.targetId, candidate.color); // 비행 종료 — 비행수 -1
                 // ROLLBACK_DART_POP_SCAN_STATE_STABILITY:
                 // No projectile visual means we resolve the original fire-time target immediately.
                 // Clearing all DartManager scan state here reopens same-line continuous fire and wipes
@@ -3099,6 +3111,11 @@ namespace BalloonFlow
         //   inflight <  남은HP  → 아직 부족 → 발사 허용(2×2 등 멀티셀 병렬 유지).
         private void SyncTargetExclusion(int balloonId)
         {
+            // ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630:
+            //   박스는 balloonId 단위로 _reservedTargets 에 넣지 않는다. 넣으면 하드 'Contains' 게이트(슬롯발사 1033,
+            //   IsTargetReservedForCandidate, IsEdgeTargetReserved)가 1발 후 모든 색을 통째로 막아 멀티셀/멀티색 병렬이
+            //   깨진다. 박스는 각 게이트에서 IsBoxColorCapped(색별)로 직접 검사한다.
+            if (TargetIsPinataBox(balloonId)) return;
             _inflightDartsByTarget.TryGetValue(balloonId, out int inflight);
             if (inflight >= MaxConcurrentDartsForTarget(balloonId))
                 _reservedTargets.Add(balloonId);
@@ -3107,34 +3124,96 @@ namespace BalloonFlow
         }
 
         // 발사 시: 해당 타겟의 비행 다트 수 +1 후 제외 여부 갱신.
-        private void RegisterInflightDart(int balloonId)
+        //   ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630: Pinata_Box 면 (balloonId,color) 색별 카운트도 +1.
+        private void RegisterInflightDart(int balloonId, int color)
         {
             _inflightDartsByTarget.TryGetValue(balloonId, out int c);
             _inflightDartsByTarget[balloonId] = c + 1;
+            if (color >= 0 && TargetIsPinataBox(balloonId))
+            {
+                long k = BoxColorKey(balloonId, color);
+                _inflightBoxColorDarts.TryGetValue(k, out int bc);
+                _inflightBoxColorDarts[k] = bc + 1;
+            }
             SyncTargetExclusion(balloonId);
         }
 
         // 비행 종료(임팩트/즉시해소) 시: 비행 다트 수 -1 후 제외 여부 갱신.
         //   주의: Pinata 임팩트는 ExecuteHit 로 hitCount 가 바뀌므로, 호출부에서 ExecuteHit 후 한 번 더 SyncTargetExclusion 한다.
-        private void UnregisterInflightDart(int balloonId)
+        //   ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630: 박스 색별 카운트는 register 와 같은 색으로 -1 (정합 필수).
+        //     박스의 색별 캡은 IsBoxColorCapped 가 매번 즉석 계산하므로 별도 SyncTargetExclusion 불필요(잔여 HP 는 ExecuteHit 가 갱신).
+        private void UnregisterInflightDart(int balloonId, int color)
         {
             if (_inflightDartsByTarget.TryGetValue(balloonId, out int c))
             {
                 if (c <= 1) _inflightDartsByTarget.Remove(balloonId);
                 else _inflightDartsByTarget[balloonId] = c - 1;
             }
+            if (color >= 0)
+            {
+                long k = BoxColorKey(balloonId, color);
+                if (_inflightBoxColorDarts.TryGetValue(k, out int bc))
+                {
+                    if (bc <= 1) _inflightBoxColorDarts.Remove(k);
+                    else _inflightBoxColorDarts[k] = bc - 1;
+                }
+            }
             SyncTargetExclusion(balloonId);
         }
 
         // 타겟 소멸(외부 pop / fire 전 stale) 시: 비행 카운트와 예약을 통째로 제거.
+        //   ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630: 박스가 통째로 사라지므로 그 balloonId 의 모든 색 엔트리 제거.
         private void ClearInflightDart(int balloonId)
         {
             _inflightDartsByTarget.Remove(balloonId);
             _reservedTargets.Remove(balloonId);
+            RemoveAllBoxColorEntries(balloonId);
+        }
+
+        private void RemoveAllBoxColorEntries(int balloonId)
+        {
+            if (_inflightBoxColorDarts.Count == 0) return;
+            long lo = (long)balloonId << 8;
+            long hi = lo + 256;
+            _boxColorRemoveScratch.Clear();
+            foreach (var kv in _inflightBoxColorDarts)
+                if (kv.Key >= lo && kv.Key < hi) _boxColorRemoveScratch.Add(kv.Key);
+            for (int i = 0; i < _boxColorRemoveScratch.Count; i++)
+                _inflightBoxColorDarts.Remove(_boxColorRemoveScratch[i]);
+        }
+
+        private bool TargetIsPinataBox(int balloonId)
+        {
+            if (!BalloonController.HasInstance) return false;
+            var d = BalloonController.Instance.GetBalloon(balloonId);
+            return d != null && !d.isPopped && d.gimmickType == BalloonController.GimmickPinataBox;
+        }
+
+        // ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630:
+        //   박스의 색 X 동시 비행 다트가 그 색 잔여 egg HP 에 도달했는가(= 더 쏘면 헛발/부족).
+        //   잔여 HP 가 0 이면(그 색 egg 가 이미 다 죽음) 무조건 캡(true) → 그 색으로 더 조준 금지.
+        public bool IsBoxColorCapped(int balloonId, int color)
+        {
+            if (color < 0 || !BalloonController.HasInstance) return false;
+            int remaining = BalloonController.Instance.GetPinataBoxColorRemainingHits(balloonId, color);
+            if (remaining <= 0)
+                return TargetIsPinataBox(balloonId); // 박스인데 그 색 egg 가 없음 → 캡(차단). 박스 아니면 false.
+            _inflightBoxColorDarts.TryGetValue(BoxColorKey(balloonId, color), out int inflight);
+            return inflight >= remaining;
         }
 
         private bool IsTargetReservedForCandidate(DartFireCandidate candidate)
         {
+            // ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630:
+            //   박스는 _reservedTargets 에 안 들어가므로(SyncTargetExclusion 제외) 아래 Contains early-return 전에
+            //   색별 캡을 직접 검사한다. 캡 도달 색 = 발사 금지, 미만 색 = 허용(멀티셀/멀티색 병렬 유지).
+            if (BalloonController.HasInstance)
+            {
+                var boxData = BalloonController.Instance.GetBalloon(candidate.targetId);
+                if (boxData != null && !boxData.isPopped && boxData.gimmickType == BalloonController.GimmickPinataBox)
+                    return IsBoxColorCapped(candidate.targetId, candidate.color);
+            }
+
             if (!_reservedTargets.Contains(candidate.targetId))
                 return false;
 
@@ -3609,7 +3688,7 @@ namespace BalloonFlow
                             $"elapsed={proj.elapsed:F3}/{proj.duration:F3} " +
                             $"gimmick={dbgGimmick} maxHP={dbgMax} hitCount={dbgHit} inflight={dbgInflight}");
                     }
-                    UnregisterInflightDart(proj.targetBalloonId); // 비행 종료 — 비행수 -1 (ExecuteHit 후 재동기화)
+                    UnregisterInflightDart(proj.targetBalloonId, proj.color); // 비행 종료 — 비행수 -1 (ExecuteHit 후 재동기화)
                     int resolvedLineKey = GetConsumedLineKey(proj.scanDir, proj.scanLine);
                     _unresolvedConsumedTargetLines.Remove(resolvedLineKey);
                     // RESOLVED_LINE_DWELL_RELEASE: head 주차 라인 락의 dwell 해제 기준 시각 기록.
