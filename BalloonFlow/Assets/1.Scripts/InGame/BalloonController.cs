@@ -56,6 +56,11 @@ namespace BalloonFlow
         private const string FROZEN_LAYER_IDLE_PARTICLE_NAME = "ParticleFrozenIdle";
         private const float IRON_WALL_CLEAR_IMMINENT_SINK_Y = 1.25f;
         private const float IRON_WALL_CLEAR_IMMINENT_SINK_DURATION = 0.35f;
+        private const float QA_BALLOON_WAVE_SCALE_MULT = 2f;
+        private const float QA_BALLOON_WAVE_UP_DURATION = 0.10f;
+        private const float QA_BALLOON_WAVE_DOWN_DURATION = 0.14f;
+        private const float QA_BALLOON_WAVE_DELAY_PER_UNIT = 0.035f;
+        private const float QA_BALLOON_WAVE_MAX_DELAY = 0.55f;
         private const float WOODENBOARD_HIT_SCALE_Y = 1.2f;
         private const float WOODENBOARD_DESTROY_SCALE = 1.1f;
         private const float FIELD_GIMMICK_HIT_SCALE_DURATION = 0.12f;
@@ -353,6 +358,9 @@ namespace BalloonFlow
         private readonly Dictionary<int, List<Vector3Int>> _multiCellOccupancy = new Dictionary<int, List<Vector3Int>>();
         private readonly List<int> _clearImminentIronWallIds = new List<int>(16);
         private bool _ironWallsRemovedForClearImminent;
+        private readonly Dictionary<Transform, Sequence> _qaBalloonWaveTweens = new Dictionary<Transform, Sequence>(128);
+        private readonly List<QaBalloonWaveTarget> _qaBalloonWaveTargets = new List<QaBalloonWaveTarget>(256);
+        private readonly HashSet<Transform> _qaBalloonWaveUniqueTransforms = new HashSet<Transform>();
         private readonly Dictionary<Transform, Vector3> _barricadeBodyBaseScales = new Dictionary<Transform, Vector3>();
         private readonly Dictionary<Transform, Quaternion> _barricadeBodyBaseRotations = new Dictionary<Transform, Quaternion>();
         private readonly Dictionary<Transform, Vector3> _barricadeBodyBasePositions = new Dictionary<Transform, Vector3>();
@@ -387,6 +395,20 @@ namespace BalloonFlow
 
         private int _nextBalloonId;
         private int _currentLevelId;
+
+        private readonly struct QaBalloonWaveTarget
+        {
+            public readonly Transform Transform;
+            public readonly Vector3 BaseScale;
+            public readonly float Distance;
+
+            public QaBalloonWaveTarget(Transform transform, Vector3 baseScale, float distance)
+            {
+                Transform = transform;
+                BaseScale = baseScale;
+                Distance = distance;
+            }
+        }
 
         #endregion
 
@@ -584,11 +606,20 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnBalloonPopped>(CheckKeysOnPop);
         }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
 #if UNITY_EDITOR
         /// <summary>에디터 전용: GameManager 배율 변경 시 풍선 위치/스케일 실시간 갱신.</summary>
         private float _prevWidthMult = 1f, _prevHeightMult = 1f, _prevZOffset = 0f;
+#endif
         private void Update()
         {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            var qaKeyboard = UnityEngine.InputSystem.Keyboard.current;
+            if (qaKeyboard != null && qaKeyboard.pKey.wasPressedThisFrame)
+                PlayQaBalloonWaveScalePulse();
+#endif
+
+#if UNITY_EDITOR
             if (!GameManager.HasInstance) return;
             float wm = GameManager.Instance.Board.balloonFieldWidthMult;
             float hm = GameManager.Instance.Board.balloonFieldHeightMult;
@@ -598,6 +629,7 @@ namespace BalloonFlow
             _prevHeightMult = hm;
             _prevZOffset = zo;
             RefreshAllBalloonTransforms();
+#endif
         }
 
         private void RefreshAllBalloonTransforms()
@@ -619,6 +651,86 @@ namespace BalloonFlow
         private void LateUpdate()
         {
             _shadowBatcher?.FlushDirty();
+        }
+
+        private void PlayQaBalloonWaveScalePulse()
+        {
+            // ROLLBACK_QA_BALLOON_WAVE_P_20260630:
+            // QA-only visual pulse. This must not mutate BalloonData, targeting caches, HP, pop state, or events.
+            _qaBalloonWaveTargets.Clear();
+            _qaBalloonWaveUniqueTransforms.Clear();
+
+            bool hasBounds = false;
+            Vector3 min = Vector3.zero;
+            Vector3 max = Vector3.zero;
+
+            foreach (KeyValuePair<int, GameObject> pair in _balloonObjects)
+            {
+                if (pair.Value == null) continue;
+                if (!_balloons.TryGetValue(pair.Key, out BalloonData data) || data == null || data.isPopped) continue;
+
+                Transform t = pair.Value.transform;
+                if (t == null || !_qaBalloonWaveUniqueTransforms.Add(t)) continue;
+
+                Vector3 pos = t.position;
+                if (!hasBounds)
+                {
+                    min = pos;
+                    max = pos;
+                    hasBounds = true;
+                }
+                else
+                {
+                    min = Vector3.Min(min, pos);
+                    max = Vector3.Max(max, pos);
+                }
+            }
+
+            if (!hasBounds) return;
+
+            Vector3 center = (min + max) * 0.5f;
+            foreach (Transform t in _qaBalloonWaveUniqueTransforms)
+            {
+                if (t == null) continue;
+
+                if (_qaBalloonWaveTweens.TryGetValue(t, out Sequence existing))
+                {
+                    if (existing != null && existing.IsActive())
+                        continue;
+                    _qaBalloonWaveTweens.Remove(t);
+                }
+
+                // Do not interrupt gameplay/pop/hit tweens already running on this Transform.
+                if (DOTween.IsTweening(t)) continue;
+
+                float distance = Vector3.Distance(t.position, center);
+                _qaBalloonWaveTargets.Add(new QaBalloonWaveTarget(t, t.localScale, distance));
+            }
+
+            _qaBalloonWaveTargets.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+
+            for (int i = 0; i < _qaBalloonWaveTargets.Count; i++)
+            {
+                QaBalloonWaveTarget target = _qaBalloonWaveTargets[i];
+                Transform t = target.Transform;
+                if (t == null || t.gameObject == null) continue;
+
+                float delay = Mathf.Min(QA_BALLOON_WAVE_MAX_DELAY, target.Distance * QA_BALLOON_WAVE_DELAY_PER_UNIT);
+                Vector3 baseScale = target.BaseScale;
+
+                Sequence seq = DOTween.Sequence()
+                    .SetLink(t.gameObject, LinkBehaviour.KillOnDisable);
+                seq.AppendInterval(delay);
+                seq.Append(t.DOScale(baseScale * QA_BALLOON_WAVE_SCALE_MULT, QA_BALLOON_WAVE_UP_DURATION).SetEase(Ease.OutQuad));
+                seq.Append(t.DOScale(baseScale, QA_BALLOON_WAVE_DOWN_DURATION).SetEase(Ease.OutSine));
+                seq.OnComplete(() =>
+                {
+                    if (t != null) t.localScale = baseScale;
+                    _qaBalloonWaveTweens.Remove(t);
+                });
+                seq.OnKill(() => _qaBalloonWaveTweens.Remove(t));
+                _qaBalloonWaveTweens[t] = seq;
+            }
         }
 
         #endregion
@@ -2001,6 +2113,9 @@ namespace BalloonFlow
             _positionIndex.Clear();
             _multiCellOccupancy.Clear();
             _clearImminentIronWallIds.Clear();
+            _qaBalloonWaveTweens.Clear();
+            _qaBalloonWaveTargets.Clear();
+            _qaBalloonWaveUniqueTransforms.Clear();
             _activeKeyPairIds.Clear();
             // [Leak fix 2026-05-11] _balloonRenderers / _prevOutermostSet / _frameCachedPositions 정리 추가.
             // 이전: ClearAllBalloons 가 _nextBalloonId=1 로 reset 하는데 이 dict 들이 stale entry 보유 →

@@ -77,6 +77,7 @@ namespace BalloonFlow
         #region Fields
 
         private readonly List<HolderData> _holders = new List<HolderData>();
+        private readonly List<int> _lastSpawnerChangedColumns = new List<int>(MAX_QUEUE_COLUMNS);
         private int _nextHolderId;
         private int _queueColumns = 5;
         private int _magazineMax = 50; // current level's magazine cap (set by rail capacity)
@@ -90,6 +91,7 @@ namespace BalloonFlow
         #region Properties
 
         public int QueueColumns => _queueColumns;
+        public IReadOnlyList<int> LastSpawnerChangedColumns => _lastSpawnerChangedColumns;
 
         #endregion
 
@@ -410,6 +412,11 @@ namespace BalloonFlow
                     }
                 }
             }
+
+            // ROLLBACK_SPAWNER_RELEASE_VISUAL_REFRESH_20260630:
+            // Force-selected holders also vacate the pipe front immediately, so release/spawn and redraw now.
+            if (ProcessSpawners() && HolderVisualManager.HasInstance)
+                HolderVisualManager.Instance.RefreshSpawnerChangedColumns(LastSpawnerChangedColumns);
 
             return true;
         }
@@ -1006,8 +1013,10 @@ namespace BalloonFlow
         }
 
         /// <summary>Spawner 자동 소환 처리. 매 프레임 또는 배치 완료 시 호출.</summary>
-        public void ProcessSpawners()
+        public bool ProcessSpawners()
         {
+            bool changed = false;
+            _lastSpawnerChangedColumns.Clear();
             for (int i = 0; i < _holders.Count; i++)
             {
                 var spawner = _holders[i];
@@ -1054,6 +1063,8 @@ namespace BalloonFlow
                         spawner.spawnerHP = 0;
                         spawner.isConsumed = true;
                         PublishSpawnerRemaining(spawner);
+                        MarkSpawnerColumnChanged(spawner.column);
+                        changed = true;
                         continue;
                     }
 
@@ -1063,6 +1074,8 @@ namespace BalloonFlow
                     PublishSpawnerRemaining(spawner);
                     if (spawner.spawnerHP <= 0)
                         spawner.isConsumed = true;
+                    MarkSpawnerColumnChanged(spawner.column);
+                    changed = true;
                     continue;
                 }
 
@@ -1083,6 +1096,8 @@ namespace BalloonFlow
 
                 int newMag = spawner.spawnerMag > 0 ? spawner.spawnerMag : 20;
                 AddHolder(newColor, newMag, spawner.column);
+                MarkSpawnerColumnChanged(spawner.column);
+                changed = true;
 
                 // HP 텍스트 갱신
                 PublishSpawnerRemaining(spawner);
@@ -1093,9 +1108,17 @@ namespace BalloonFlow
                     spawner.isConsumed = true;
                 }
             }
+            return changed;
         }
 
         /// <summary>Spawner의 다음 소환 색상 조회 (미리보기용). -1 = 소환 불가.</summary>
+        private void MarkSpawnerColumnChanged(int column)
+        {
+            if (column < 0) return;
+            if (!_lastSpawnerChangedColumns.Contains(column))
+                _lastSpawnerChangedColumns.Add(column);
+        }
+
         public int GetSpawnerNextColor(int holderId)
         {
             var spawner = FindHolder(holderId);
@@ -1358,7 +1381,11 @@ namespace BalloonFlow
                 // ROLLBACK_PIPE_FAST_RELEASE_20260625: 탭으로 배포가 시작되면 즉시 파이프 다음 payload release.
                 //   배포중 홀더는 CountVisibleNormalHoldersInColumn 에서 제외되므로 앞칸이 비어 다음이 바로 나옴
                 //   (= 다트박스 이동과 동시에 생성). 기존엔 배포 '완료'(HandleDeploymentDone) 때만 release 돼 느렸음.
-                ProcessSpawners();
+                // ROLLBACK_SPAWNER_RELEASE_VISUAL_REFRESH_20260630:
+                // When a front holder starts moving to rail, release/spawn the next Pipe holder and refresh
+                // visuals immediately so it emerges at that same timing.
+                if (ProcessSpawners() && HolderVisualManager.HasInstance)
+                    HolderVisualManager.Instance.RefreshSpawnerChangedColumns(LastSpawnerChangedColumns);
             }
         }
 

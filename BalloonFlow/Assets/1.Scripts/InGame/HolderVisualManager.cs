@@ -833,6 +833,17 @@ namespace BalloonFlow
                 RepositionColumnHolders(col);
         }
 
+        public void RefreshSpawnerChangedColumns(IReadOnlyList<int> columns)
+        {
+            if (columns == null) return;
+
+            // ROLLBACK_SPAWNER_RELEASE_VISUAL_REFRESH_20260630:
+            // Do not call RefreshAllPositions for Pipe timing. Only redraw the columns that actually
+            // released/spawned a holder, preserving the rest of the holder queue layout.
+            for (int i = 0; i < columns.Count; i++)
+                RepositionColumnHolders(columns[i]);
+        }
+
         /// <summary>
         /// IsRailFull is no longer relevant in Rail Overflow mode.
         /// Always returns false — dart deployment is gated by slot availability, not holder count.
