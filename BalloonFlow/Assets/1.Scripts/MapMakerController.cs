@@ -8157,10 +8157,9 @@ namespace BalloonFlow
             if (_balloonGimmicks == null)
                 return;
 
-            bool hasBarricade = false;
-            bool hasHiddenBalloon = false;
-            bool hasIronWall = false;
-            bool hasIce = false;
+            // ROLLBACK_ALLOW_ALL_FIELD_GIMMICK_COEXIST_20260701: 설계 변경 — 모든 필드 기믹 간 공존 허용.
+            //   기존 조합 차단 규칙(Surprise+Wall, Wall+Ice(데드락), Barricade+Hidden 등) 전부 제거.
+            //   (필드 기믹은 셀당 1개라 서로 다른 셀에 공존 가능.) debut-level(레벨 해금) 검증만 유지.
             for (int c = 0; c < _gridCols; c++)
             {
                 for (int r = 0; r < _gridRows; r++)
@@ -8173,26 +8172,8 @@ namespace BalloonFlow
                     int debutLevel = GetFieldGimmickDebutLevel(gimmickName);
                     if (debutLevel > 0 && _levelId < debutLevel)
                         errors.Add($"{gimmickName} is unlocked at level {debutLevel}, but current level is {_levelId}. Cell: ({c},{r}).");
-
-                    if (gimmickName == "Surprise")
-                        hasHiddenBalloon = true;
-                    else if (gimmickName == "Wall")
-                        hasIronWall = true;
-                    else if (gimmickName == "Barricade")
-                        hasBarricade = true;
-                    else if (gimmickName == "Ice")
-                        hasIce = true;
                 }
             }
-
-            // ROLLBACK_ALLOW_BARRICADE_HIDDEN_BALLOON_20260701: 설계 변경 — Barricade 와 Hidden Balloon(Surprise) 공존 허용.
-            //   (둘 다 필드 기믹이지만 셀당 1개라 다른 셀에 공존 가능. 기존 차단 규칙 제거.)
-            //   IronWall+Hidden / IronWall+Ice(데드락) 규칙은 유지.
-            _ = hasBarricade; // 조합 검증에서만 쓰이던 플래그 — 규칙 제거로 참조만 유지(경고 방지).
-            if (hasHiddenBalloon && hasIronWall)
-                errors.Add("Hidden Balloon (Surprise) and Iron Wall (Wall) cannot coexist in the same level.");
-            if (hasIronWall && hasIce)
-                errors.Add("Iron Wall (Wall) and Ice cannot coexist in the same level because it can create deadlock.");
         }
 
         private static string GetHolderGimmickName(int index)
