@@ -395,6 +395,8 @@ namespace BalloonFlow
 
         // Scale multiplier for balloon visuals (set from LevelConfig)
         private float _balloonScale = DEFAULT_BALLOON_SCALE;
+        // ROLLBACK_BALLOON_SCALE_Y_SEPARATE_20260701: 풍선 Y(높이) 스케일을 X/Z 와 별도 적용(GameManager.Board.balloonScaleY).
+        private float _balloonScaleY = BALLOON_FIXED_SCALE_Y;
 
         // Grid spacing for adjacency calculations (read from GameManager.Board)
         private float _cellSpacing = 0.55f;
@@ -466,6 +468,7 @@ namespace BalloonFlow
             {
                 _cellSpacing = GameManager.Instance.Board.cellSpacing;
                 _balloonScale = GameManager.Instance.Board.balloonScale;
+                _balloonScaleY = GameManager.Instance.Board.balloonScaleY; // ROLLBACK_BALLOON_SCALE_Y_SEPARATE_20260701
             }
         }
 
@@ -1056,9 +1059,9 @@ namespace BalloonFlow
         private Vector3 GetBalloonRestScale(float scaleMult)
         {
             float xz = _balloonScale * scaleMult;
-            float y = (_boardGridCols > 0 && _boardGridCols <= SMALL_BOARD_MAX_GRID_COLS)
-                ? xz * SMALL_BOARD_SCALE_Y_RATIO
-                : BALLOON_FIXED_SCALE_Y;
+            // ROLLBACK_BALLOON_SCALE_Y_SEPARATE_20260701: Y = balloonScaleY(GameManager.Board 에서 별도 지정, 레벨 크기와 무관한 고정 높이).
+            //   이전 소형보드(≤26칸) 자동 비례(xz×1.1)는 폐기 — 이제 balloonScaleY 로 수동 지정해 모든 보드 공통 적용(X/Z 와 완전 별도).
+            float y = _balloonScaleY;
             return new Vector3(xz, y, xz);
         }
 

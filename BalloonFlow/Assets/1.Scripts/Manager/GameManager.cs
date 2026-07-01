@@ -45,9 +45,14 @@ namespace BalloonFlow
         [Tooltip("풍선 간 월드 간격. 작을수록 빈틈 없음. (default: 0.55)")]
         public float cellSpacing = 0.55f;
 
-        [Tooltip("풍선 스케일. (default: 0.5, range: 0.2~1.0)")]
+        [Tooltip("풍선 스케일 X/Z(가로 footprint). (default: 0.5, range: 0.2~1.0)")]
         [Range(0.2f, 1.0f)]
         public float balloonScale = 0.5f;
+
+        // ROLLBACK_BALLOON_SCALE_Y_SEPARATE_20260701: 풍선 Y(높이) 스케일을 X/Z 와 별도 지정.
+        [Tooltip("풍선 스케일 Y(높이) — X/Z(balloonScale)와 별도 적용. 레벨 크기와 무관하게 고정 높이. (default: 0.35)")]
+        [Range(0.1f, 1.5f)]
+        public float balloonScaleY = 0.35f;
 
         [Tooltip("풍선 팝 시 스케일업 배율 (1=원본, 1.5=1.5배 부풀기). 동적 반영. (default: 2)")]
         [Range(1f, 3f)]
