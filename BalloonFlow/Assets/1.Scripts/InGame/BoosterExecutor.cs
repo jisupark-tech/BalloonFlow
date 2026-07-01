@@ -242,15 +242,20 @@ namespace BalloonFlow
         public void OnBalloonClicked(int balloonId)
         {
             if (!_awaitingBalloonClick) return;
+
+            // Get clicked balloon's data first
+            if (!BalloonController.HasInstance) return;
+            var data = BalloonController.Instance.GetBalloon(balloonId);
+            if (data == null) return;
+            // ROLLBACK_ZAP_BLOCK_GIMMICK_CLICK_20260701: Zap 색 선택 시 이 기믹들은 클릭 무시(계속 대기) —
+            //   Iron Wall/Barricade/FlexTube/TargetBox(PinataBox)/Ice. 반드시 일반 풍선으로 색을 골라야 한다.
+            if (IsZapBlockedGimmickForColorPick(data.gimmickType)) return;
+
             _awaitingBalloonClick = false;
             _awaitingColorSelection = false;
 
             ConfirmPendingBooster();
 
-            // Get clicked balloon's color
-            if (!BalloonController.HasInstance) return;
-            var data = BalloonController.Instance.GetBalloon(balloonId);
-            if (data == null) return;
             int selectedColor = data.color;
 
             // Highlight selected color with white outline, others stay black
@@ -260,6 +265,16 @@ namespace BalloonFlow
             //HideCancelButton();
             CloseUseItemPopup(false);
             StartCoroutine(PlayColorRemoveSequence(selectedColor));
+        }
+
+        // ROLLBACK_ZAP_BLOCK_GIMMICK_CLICK_20260701: Zap 색 선택에서 클릭 불가한 기믹(색 없음/간접/멀티셀).
+        private static bool IsZapBlockedGimmickForColorPick(string gimmickType)
+        {
+            return gimmickType == BalloonController.GimmickWall       // Iron Wall
+                || gimmickType == BalloonController.GimmickBarricade
+                || gimmickType == BalloonController.GimmickFlexTube
+                || gimmickType == BalloonController.GimmickPinataBox  // Target Box
+                || gimmickType == BalloonController.GimmickIce;
         }
 
         /// <summary>UseItem 팝업 닫기.</summary>
@@ -702,7 +717,7 @@ namespace BalloonFlow
                     yield return new WaitForSeconds(zapFastSmallCount ? ZapLineLifetime * 0.5f : ZapLineLifetime);
             }
 
-            int totalRemoved = fieldRemoved + RemoveRailAndQueueColor(color);
+            int totalRemoved = fieldRemoved + RemoveRailAndQueueColor(color, fieldRemoved);
             FinalizeColorRemove(color, totalRemoved);
 
             // Jiggle 코루틴을 먼저 정지한다 — Jiggle 의 baseline 덮어쓰기/Trigger 재호출이 FadeOut 의
@@ -909,8 +924,8 @@ namespace BalloonFlow
         /// </summary>
         private void ExecuteColorRemove(int color)
         {
-            int totalRemoved = PopFieldBalloonsImmediately(color);
-            totalRemoved += RemoveRailAndQueueColor(color);
+            int fieldRemoved = PopFieldBalloonsImmediately(color);
+            int totalRemoved = fieldRemoved + RemoveRailAndQueueColor(color, fieldRemoved);
             FinalizeColorRemove(color, totalRemoved);
         }
 
@@ -936,14 +951,34 @@ namespace BalloonFlow
             return removed;
         }
 
-        private int RemoveRailAndQueueColor(int color)
+        private int RemoveRailAndQueueColor(int color, int dartsToRemove)
         {
+            // ROLLBACK_ZAP_KEEP_GIMMICK_DARTS_20260701 (rev3): 남길 다트 = 그 색 기믹(Barricade/FlexTube/TargetBox) 잔여 HP(preserve).
+            //   removeTarget = total - preserve. surplus 레벨(다트>타겟)에서도 '정확히 기믹 HP 만' 남긴다.
+            //   (rev2 '풍선 몫만 제거' 는 surplus 레벨에서 잉여 다트까지 남겨 과다 → 폐기. dartsToRemove 는 진단 비교용으로만 로그.)
+            int preserve = BalloonController.HasInstance
+                ? BalloonController.Instance.GetZapPreservedDartCountForColor(color)
+                : 0;
+            HolderData[] holders = HolderManager.HasInstance ? HolderManager.Instance.GetHolders() : null;
+
+            int totalDarts = 0;
+            if (RailManager.HasInstance)
+            {
+                int sc = RailManager.Instance.SlotCount;
+                for (int i = 0; i < sc; i++)
+                    if (RailManager.Instance.GetSlot(i).dartColor == color) totalDarts++;
+            }
+            if (holders != null)
+                for (int i = 0; i < holders.Length; i++)
+                    if (IsRemovableColorHolder(holders[i], color)) totalDarts += Mathf.Max(1, holders[i].magazineCount);
+
+            int removeTarget = Mathf.Max(0, totalDarts - preserve);
             int removed = 0;
 
             if (RailManager.HasInstance)
             {
                 int slotCount = RailManager.Instance.SlotCount;
-                for (int i = 0; i < slotCount; i++)
+                for (int i = 0; i < slotCount && removed < removeTarget; i++)
                 {
                     var slot = RailManager.Instance.GetSlot(i);
                     if (slot.dartColor == color)
@@ -954,29 +989,32 @@ namespace BalloonFlow
                 }
             }
 
-            if (HolderManager.HasInstance)
+            if (holders != null)
             {
-                HolderData[] holders = HolderManager.Instance.GetHolders();
-                if (holders != null)
+                for (int i = 0; i < holders.Length && removed < removeTarget; i++)
                 {
-                    for (int i = 0; i < holders.Length; i++)
+                    if (!IsRemovableColorHolder(holders[i], color)) continue;
+                    int mag = Mathf.Max(1, holders[i].magazineCount);
+
+                    if (removed + mag <= removeTarget)
                     {
-                        // ROLLBACK_PIPE_NO_ITEM_20260624 (#3): 파이프(Spawner)·파이프 뒤 대기 홀더는 색상 제거 대상에서 제외.
-                        bool _isSpawnerHolder = holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
-                                             || holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_O;
-                        if (holders[i].color == color && !holders[i].isConsumed && holders[i].magazineCount > 0
-                            && !_isSpawnerHolder && !HolderManager.Instance.IsHeldBehindPipe(holders[i]))
-                        {
-                            int hid = holders[i].holderId;
-
-                            if (HolderVisualManager.HasInstance)
-                                HolderVisualManager.Instance.RemoveHolderVisual(hid);
-
-                            HolderManager.Instance.UndoDeploy(hid);
-                            holders[i].magazineCount = 0;
-                            holders[i].isConsumed = true;
-                            removed++;
-                        }
+                        // 전체 제거(홀더 통째).
+                        int hid = holders[i].holderId;
+                        if (HolderVisualManager.HasInstance)
+                            HolderVisualManager.Instance.RemoveHolderVisual(hid);
+                        HolderManager.Instance.UndoDeploy(hid);
+                        holders[i].magazineCount = 0;
+                        holders[i].isConsumed = true;
+                        removed += mag;
+                    }
+                    else
+                    {
+                        // 부분 제거: 경계 홀더는 딱 필요한 만큼만 magazine 감소(홀더 유지) → removed == removeTarget 정확히 → 남은 다트 == preserve.
+                        int reduce = removeTarget - removed;
+                        holders[i].magazineCount -= reduce;
+                        if (HolderVisualManager.HasInstance)
+                            HolderVisualManager.Instance.SyncHolderMagazineDisplay(holders[i].holderId, holders[i].magazineCount);
+                        removed += reduce;
                     }
                 }
             }
@@ -991,7 +1029,19 @@ namespace BalloonFlow
             if (HolderVisualManager.HasInstance)
                 HolderVisualManager.Instance.RefreshAllPositions();
 
+            // ROLLBACK_ZAP_DART_DEBUG_20260701: 숫자 진단(임시). '남은색다트'가 그 색 기믹 HP 합과 맞는지 확인 후 제거.
+            Debug.Log($"[Zap-Dart] color={color} total={totalDarts} 풍선팝={dartsToRemove} preserve(기믹HP)={preserve} removeTarget={removeTarget} removed={removed} → 남은색다트={totalDarts - removed}");
+
             return removed;
+        }
+
+        // ROLLBACK_ZAP_KEEP_GIMMICK_DARTS_20260701: 색상 제거 대상 홀더 판정(파이프/파이프 뒤 대기 홀더 제외).
+        private static bool IsRemovableColorHolder(HolderData h, int color)
+        {
+            bool isSpawner = h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                          || h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O;
+            return h.color == color && !h.isConsumed && h.magazineCount > 0
+                && !isSpawner && HolderManager.HasInstance && !HolderManager.Instance.IsHeldBehindPipe(h);
         }
 
         private void FinalizeColorRemove(int color, int totalRemoved)

@@ -62,6 +62,20 @@ namespace BalloonFlow
         [Range(0f, 1f)]
         public float popScaleDuration = 0.1f;
 
+        // ROLLBACK_POP_HIT_LIFT_20260701: 풍선 피격(팝) 시 Y축으로 살짝 띄우는 연출 — 높이/시간 조절.
+        [Tooltip("풍선 피격(팝) 시 Y축으로 띄우는 높이(월드). 0=안 띄움. (default: 0.3)")]
+        [Range(0f, 2f)]
+        public float popLiftHeight = 0.45f;
+
+        [Tooltip("풍선 피격(팝) 시 Y축으로 띄우는 시간(초). (default: 0.12)")]
+        [Range(0f, 1f)]
+        public float popLiftDuration = 0.12f;
+
+        // ROLLBACK_POP_HOLD_20260701: 스케일업(부풀기) 후 잠시 대기했다가 터지며 파티클. 대기 시간.
+        [Tooltip("풍선 피격 후 부푼 채로 잠시 대기하는 시간(초). 이후 터지며 파티클. 0=즉시. (default: 0.08)")]
+        [Range(0f, 1f)]
+        public float popHoldDuration = 0.08f;
+
         [Header("[풍선 타일 영역 — 동적 조정]")]
         [Tooltip("풍선 타일 영역 가로 배율. 1.0=기본, 인게임 동적 반영. (default: 1.39)")]
         [Range(0.5f, 2f)]

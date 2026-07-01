@@ -689,6 +689,10 @@ namespace BalloonFlow
             {
                 if (pair.Value == null) continue;
                 if (!_balloons.TryGetValue(pair.Key, out BalloonData data) || data == null || data.isPopped) continue;
+                // ROLLBACK_QA_WAVE_SKIP_GIMMICK_20260701: 파도 연출은 일반 풍선만 — Barricade/FlexTube/TargetBox 는 제외(스케일 pulse 부적합).
+                if (data.gimmickType == GimmickBarricade
+                    || data.gimmickType == GimmickFlexTube
+                    || data.gimmickType == GimmickPinataBox) continue;
 
                 Transform t = pair.Value.transform;
                 if (t == null || !_qaBalloonWaveUniqueTransforms.Add(t)) continue;
@@ -1361,39 +1365,84 @@ namespace BalloonFlow
             return _reusableColorList.ToArray();
         }
 
-        // ROLLBACK_ZAP_GIMMICK_COLOR_TARGETS_20260623:
-        // Zap removes the selected color's live components, not always the whole object.
-        // TargetBox contributes one hit per live matching egg HP, and FlexTube contributes only
-        // logical Segment cells. Start/End caps are visual endpoints, not extra Zap HP.
+        // ROLLBACK_ZAP_EXCLUDE_HP_GIMMICKS_20260701: Zap 은 '일반 색 풍선'만 제거한다. HP 기반 기믹
+        //   (Barricade/FlexTube/TargetBox)은 Zap 피격대상이 아니며(다트로만 파괴), 그 잔여 HP 만큼 다트를 남긴다.
         public int GetZapHitCountForColor(BalloonData data, int color)
         {
             if (data == null || data.isPopped) return 0;
             if (data.gimmickType == GimmickLockKey) return 0;
 
-            if (data.gimmickType == GimmickPinataBox && data.eggColors != null && data.eggHps != null)
-            {
-                int count = 0;
-                int n = Mathf.Min(data.eggColors.Length, data.eggHps.Length);
-                for (int i = 0; i < n; i++)
-                {
-                    if (data.eggColors[i] == color && data.eggHps[i] > 0)
-                        count += data.eggHps[i];
-                }
-                return count;
-            }
-
-            if (data.gimmickType == GimmickFlexTube)
-            {
-                if (data.color != color) return 0;
-                if (GimmickIdentifier.FlexTubePartFromString(data.flexTubePartType) != GimmickIdentifier.FlexTubePart.Segment)
-                    return 0;
-                // ROLLBACK_FLEXTUBE_2X2_PARTS_20260626: 한 Segment 파트(seq)는 2×2 = 4셀이지만 튜브 HP/타격은
-                //   파트 단위(HP = 중간 파트 수). zap 도 파트당 1회만 세야 함 — 안 그러면 4셀×= HP 의 4배 타겟이
-                //   생겨 부스터 다트가 이미 죽은 튜브에 낭비된다. 그룹+seq 의 대표(최소 balloonId) 셀에서만 1 반환.
-                return IsFlexTubeSeqRepresentative(data) ? 1 : 0;
-            }
+            // ROLLBACK_ZAP_EXCLUDE_HP_GIMMICKS_20260701: Barricade/FlexTube/TargetBox(PinataBox) 는 Zap 피격대상이 아니다
+            //   (같은 색 다트로만 파괴). Zap 대상 집계에서 제외 → Zap 이 직접 없애지 않고, 그 잔여 HP 만큼 색 다트를 남긴다
+            //   (GetZapPreservedDartCountForColor). 클릭 선택도 차단됨(BoosterExecutor.IsZapBlockedGimmickForColorPick).
+            if (data.gimmickType == GimmickFlexTube
+                || data.gimmickType == GimmickBarricade
+                || data.gimmickType == GimmickPinataBox)
+                return 0;
 
             return data.color == color ? 1 : 0;
+        }
+
+        // ROLLBACK_ZAP_EXCLUDE_BARRICADE_FLEXTUBE_20260701: Zap 색 제거 시 '남겨야 할' 색 다트 수.
+        //   Barricade/FlexTube 는 Zap 으로 안 없어지고 같은 색 다트로만 파괴되므로, 그 잔여 HP 만큼 다트를 남긴다.
+        //   Barricade: max(0, requiredHits - hitCount). FlexTube: 대표 Segment 파트당 1(= 남은 파트=HP).
+        public int GetZapPreservedDartCountForColor(int color)
+        {
+            int darts = 0;
+            int dBarr = 0, dFlex = 0, dBox = 0, nBarr = 0, nFlex = 0, nBox = 0; // ROLLBACK_ZAP_DART_DEBUG_20260701
+
+            // ROLLBACK_ZAP_FLEXTUBE_TUBE_HP_20260701: FlexTube 는 '튜브(groupId) 단위 HP' 로 센다(파트/셀당 1 아님).
+            //   튜브 HP = authored flexTubeHp(>0) 아니면 살아있는 셀 수(auto). 대표 파트당 1 로 세던 것이 실제 HP 와 어긋났음.
+            var flexHp = new Dictionary<int, int>();     // groupId -> authored flexTubeHp(max)
+            var flexCells = new Dictionary<int, int>();   // groupId -> 살아있는 셀 수(auto HP fallback)
+            var flexColor = new Dictionary<int, int>();   // groupId -> 색
+            foreach (var kv in _balloons)
+            {
+                BalloonData d = kv.Value;
+                if (d == null || d.isPopped || d.gimmickType != GimmickFlexTube) continue;
+                int g = d.flexTubeGroupId >= 0 ? d.flexTubeGroupId : (1000000 + d.balloonId);
+                if (!flexCells.ContainsKey(g)) { flexCells[g] = 0; flexHp[g] = 0; flexColor[g] = d.color; }
+                flexCells[g]++;
+                if (d.flexTubeHp > flexHp[g]) flexHp[g] = d.flexTubeHp;
+            }
+            foreach (var g in flexCells.Keys)
+            {
+                if (flexColor[g] != color) continue;
+                int hp = flexHp[g] > 0 ? flexHp[g] : flexCells[g];
+                darts += hp; dFlex += hp; nFlex++;
+                Debug.Log($"[Zap-Flex] group={g} color={flexColor[g]} authoredHp={flexHp[g]} aliveCells={flexCells[g]} → hp={hp}");
+            }
+
+            foreach (var kv in _balloons)
+            {
+                BalloonData d = kv.Value;
+                if (d == null || d.isPopped) continue;
+
+                // TargetBox(PinataBox): 박스 자체 color 가 아니라 egg 별 색 → 색 필터 전에 해당 색 살아있는 egg HP 합.
+                if (d.gimmickType == GimmickPinataBox && d.eggColors != null && d.eggHps != null)
+                {
+                    int n = Mathf.Min(d.eggColors.Length, d.eggHps.Length);
+                    int c0 = 0, hp0 = 0;
+                    for (int i = 0; i < n; i++)
+                        if (d.eggColors[i] == color && d.eggHps[i] > 0) { darts += d.eggHps[i]; dBox += d.eggHps[i]; c0++; hp0 += d.eggHps[i]; }
+                    nBox++;
+                    Debug.Log($"[Zap-Box] box={d.balloonId} sizeW×H={d.sizeW}×{d.sizeH} eggN={n} color{color}_eggs={c0} color{color}_HP={hp0} | eggColors=[{string.Join(",", d.eggColors)}] eggHps=[{string.Join(",", d.eggHps)}]");
+                    continue;
+                }
+
+                if (d.gimmickType == GimmickFlexTube) continue; // 위에서 튜브 단위로 처리
+                if (d.color != color) continue;
+
+                if (d.gimmickType == GimmickBarricade)
+                {
+                    int required = d.maxHP > 0 ? d.maxHP : 2;
+                    int add = Mathf.Max(0, required - d.hitCount);
+                    darts += add; dBarr += add; nBarr++;
+                }
+            }
+            // ROLLBACK_ZAP_DART_DEBUG_20260701: 색별 preserve breakdown(임시). 확인 후 제거.
+            Debug.Log($"[Zap-Preserve] color={color} total={darts} | Barricade={dBarr}(x{nBarr}) FlexTube={dFlex}(tubes x{nFlex}) TargetBox={dBox}(boxes x{nBox})");
+            return darts;
         }
 
         /// <summary>같은 group+seq 의 살아있는 FlexTube 셀 중 최소 balloonId 면 true — 파트(2×2) 당 1회 집계용.</summary>
@@ -1867,6 +1916,10 @@ namespace BalloonFlow
             if (data.isPopped) return;
             if (data.gimmickType == GimmickLockKey) return;
             if (data.gimmickType == GimmickFlexTube) return; // FlexTube 는 같은 색 다트로만 제거 가능 — indirect/force-pop 차단.
+            // ROLLBACK_ZAP_EXCLUDE_BARRICADE_FLEXTUBE_20260701: Barricade 도 HP 기반 — Zap/force-pop 즉사 차단(다트로만 파괴).
+            if (data.gimmickType == GimmickBarricade) return;
+            // ROLLBACK_ZAP_EXCLUDE_HP_GIMMICKS_20260701: TargetBox(PinataBox)도 egg HP 기반 — force-pop 즉사 차단(egg 다트로만 파괴).
+            if (data.gimmickType == GimmickPinataBox) return;
             ExecutePop(data);
         }
 
@@ -5545,8 +5598,9 @@ namespace BalloonFlow
                 int capped = Mathf.Clamp(footprintMin, 1, 5);
                 // ROLLBACK_ICE_BLOCK_HP_TEXT_FOOTPRINT_SCALE_20260701:
                 // Previous block overlays divided by footprint, so 2x2/3x3 HP text stayed at prefab size.
-                // Scale by footprint for both merged Ice blocks and legacy groups, with the final cap applied below.
-                float textScaleMul = capped;
+                // Do not scale linearly by footprint: 2x/3x makes the text spill outside the Ice visual.
+                // Use a square-root curve so larger Ice gets a readable, softer size increase.
+                float textScaleMul = Mathf.Sqrt(capped);
                 ShowFrozenOverlayMagazineText(selectedOverlay, hp, center, textScaleMul);
             }
         }
@@ -6639,6 +6693,15 @@ namespace BalloonFlow
                 seq.Append(obj.transform.DOScale(
                     new Vector3(savedScale * scaleUpMult, savedScale * scaleUpMultY, savedScale * scaleUpMult),
                     scaleUpDuration).SetEase(Ease.OutQuad));
+                // ROLLBACK_POP_HIT_LIFT_20260701: 피격(팝)과 동시에 Y축으로 살짝 띄움(병렬 Join). 높이/시간은 GameManager.Board.
+                float liftH = GameManager.Instance.Board.popLiftHeight;
+                float liftDur = GameManager.Instance.Board.popLiftDuration;
+                if (liftH > 0f && liftDur > 0f)
+                    seq.Join(obj.transform.DOMoveY(popPos.y + liftH, liftDur).SetEase(Ease.OutQuad));
+                // ROLLBACK_POP_HOLD_20260701: 부푼 채로 잠시 대기 후 터짐(아래 AppendCallback=파티클). 일반 풍선만.
+                float popHold = GameManager.Instance.Board.popHoldDuration;
+                if (popHold > 0f)
+                    seq.AppendInterval(popHold);
             }
             seq.AppendCallback(() =>
             {

@@ -736,6 +736,19 @@ namespace BalloonFlow
             RebuildChainLines();
         }
 
+        // ROLLBACK_ZAP_KEEP_GIMMICK_DARTS_20260701: 홀더의 남은 magazine 수를 비주얼에 동기화(부분 제거용).
+        //   Zap 이 홀더 magazine 을 부분 감소시킬 때 표시 숫자(magazineText)를 갱신한다.
+        public void SyncHolderMagazineDisplay(int holderId, int magazineRemaining)
+        {
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual) || visual == null) return;
+            visual.magazineRemaining = magazineRemaining;
+            if (visual.magazineText != null)
+            {
+                if (magazineRemaining > 0) visual.magazineText.SetText("{0}", magazineRemaining);
+                else visual.magazineText.SetText(string.Empty);
+            }
+        }
+
         /// <summary>
         /// Refreshes all visual positions from HolderData columns.
         /// Called after Shuffle booster changes column assignments.
