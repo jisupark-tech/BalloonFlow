@@ -5529,6 +5529,8 @@ namespace BalloonFlow
                         if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
+                        // ROLLBACK_GENQUEUE_WALL_NO_DART_20260701: Wall/Pin(life=0) 은 수요 색 목록에서 제외(0값 키 방지).
+                        if (life <= 0) continue;
                         needed[ci] = (needed.ContainsKey(ci) ? needed[ci] : 0) + life;
                     }
 
@@ -5710,6 +5712,9 @@ namespace BalloonFlow
                         if (isSizedFieldCell && _balloonPinataW[c, r] == 0) continue;
                         int ci = _balloonColors[c, r];
                         int life = GetGimmickLife(gi, c, r);
+                        // ROLLBACK_GENQUEUE_WALL_NO_DART_20260701: Wall/Pin 등 다트 불필요(life=0) 셀은 색 목록에 넣지 않는다.
+                        //   넣으면 colorDarts[색]=0 키가 생겨 이후 10배수 올림에서 0→10 으로 올라가 유령 홀더(예: 핑크)가 생성된다.
+                        if (life <= 0) continue;
                         colorDarts[ci] = (colorDarts.ContainsKey(ci) ? colorDarts[ci] : 0) + life;
                     }
 
