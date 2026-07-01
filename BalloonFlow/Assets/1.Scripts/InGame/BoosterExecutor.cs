@@ -343,6 +343,9 @@ namespace BalloonFlow
                     break;
 
                 case BoosterManager.COLOR_REMOVE:
+                    // ROLLBACK_ZAP_WAVE_FX_20260701: Zap(UIHud) 클릭 시 중앙 파도 연출 1회.
+                    if (BalloonController.HasInstance)
+                        BalloonController.Instance.PlayBalloonWaveEffect();
                     _pendingBoosterType = BoosterManager.COLOR_REMOVE;
                     //ShowCancelButton();
                     _awaitingColorSelection = true;

@@ -395,8 +395,6 @@ namespace BalloonFlow
 
         // Scale multiplier for balloon visuals (set from LevelConfig)
         private float _balloonScale = DEFAULT_BALLOON_SCALE;
-        // ROLLBACK_BALLOON_SCALE_Y_SEPARATE_20260701: 풍선 Y(높이) 스케일을 X/Z 와 별도 적용(GameManager.Board.balloonScaleY).
-        private float _balloonScaleY = BALLOON_FIXED_SCALE_Y;
 
         // Grid spacing for adjacency calculations (read from GameManager.Board)
         private float _cellSpacing = 0.55f;
@@ -468,7 +466,6 @@ namespace BalloonFlow
             {
                 _cellSpacing = GameManager.Instance.Board.cellSpacing;
                 _balloonScale = GameManager.Instance.Board.balloonScale;
-                _balloonScaleY = GameManager.Instance.Board.balloonScaleY; // ROLLBACK_BALLOON_SCALE_Y_SEPARATE_20260701
             }
         }
 
@@ -669,6 +666,10 @@ namespace BalloonFlow
         {
             _shadowBatcher?.FlushDirty();
         }
+
+        // ROLLBACK_ZAP_WAVE_FX_20260701: 게임플레이(Zap 클릭 등)에서 중앙 파도 연출 1회 재생(공개).
+        //   기존 P키(중앙) 연출과 동일. 순수 시각 pulse — BalloonData/타게팅/HP/pop/이벤트 불변.
+        public void PlayBalloonWaveEffect() => PlayQaBalloonWaveScalePulse(QaWaveDir.Center);
 
         // ROLLBACK_QA_BALLOON_WAVE_DIR_20260701: 파도 전파 방향(QA 전용).
         private enum QaWaveDir { Center, RightToLeft, LeftToRight, TopToBottom, BottomToTop }
@@ -1082,9 +1083,9 @@ namespace BalloonFlow
         private Vector3 GetBalloonRestScale(float scaleMult)
         {
             float xz = _balloonScale * scaleMult;
-            // ROLLBACK_BALLOON_SCALE_Y_SEPARATE_20260701: Y = balloonScaleY(GameManager.Board 에서 별도 지정, 레벨 크기와 무관한 고정 높이).
-            //   이전 소형보드(≤26칸) 자동 비례(xz×1.1)는 폐기 — 이제 balloonScaleY 로 수동 지정해 모든 보드 공통 적용(X/Z 와 완전 별도).
-            float y = _balloonScaleY;
+            float y = (_boardGridCols > 0 && _boardGridCols <= SMALL_BOARD_MAX_GRID_COLS)
+                ? xz * SMALL_BOARD_SCALE_Y_RATIO
+                : BALLOON_FIXED_SCALE_Y;
             return new Vector3(xz, y, xz);
         }
 
@@ -6633,7 +6634,11 @@ namespace BalloonFlow
             }
             else
             {
-                seq.Append(obj.transform.DOScale(Vector3.one * savedScale * scaleUpMult, scaleUpDuration).SetEase(Ease.OutQuad));
+                // ROLLBACK_POP_SCALE_Y_SEPARATE_20260701: 팝(터지는) 스케일업 Y 를 X/Z(popScaleMultiplier)와 별도(popScaleMultiplierY) 적용.
+                float scaleUpMultY = GameManager.Instance.Board.popScaleMultiplierY;
+                seq.Append(obj.transform.DOScale(
+                    new Vector3(savedScale * scaleUpMult, savedScale * scaleUpMultY, savedScale * scaleUpMult),
+                    scaleUpDuration).SetEase(Ease.OutQuad));
             }
             seq.AppendCallback(() =>
             {
