@@ -8180,8 +8180,10 @@ namespace BalloonFlow
                 }
             }
 
-            if (hasBarricade && hasHiddenBalloon)
-                errors.Add("Barricade and Hidden Balloon (Surprise) cannot coexist in the same level.");
+            // ROLLBACK_ALLOW_BARRICADE_HIDDEN_BALLOON_20260701: 설계 변경 — Barricade 와 Hidden Balloon(Surprise) 공존 허용.
+            //   (둘 다 필드 기믹이지만 셀당 1개라 다른 셀에 공존 가능. 기존 차단 규칙 제거.)
+            //   IronWall+Hidden / IronWall+Ice(데드락) 규칙은 유지.
+            _ = hasBarricade; // 조합 검증에서만 쓰이던 플래그 — 규칙 제거로 참조만 유지(경고 방지).
             if (hasHiddenBalloon && hasIronWall)
                 errors.Add("Hidden Balloon (Surprise) and Iron Wall (Wall) cannot coexist in the same level.");
             if (hasIronWall && hasIce)

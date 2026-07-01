@@ -28,7 +28,9 @@ namespace BalloonFlow
         private const int UNLOCK_LEVEL_SPAWNER_T     = 41;   // PKG3 Lv.41
         private const int UNLOCK_LEVEL_PIN           = 61;   // PKG4 Lv.61
         private const int UNLOCK_LEVEL_LOCK_KEY      = 81;   // PKG5 Lv.81
-        private const int UNLOCK_LEVEL_SURPRISE      = 101;  // PKG6 Lv.101
+        // ROLLBACK_SURPRISE_UNLOCK_81_20260701: 설계 변경 — Hidden Balloon(Surprise) 배치 Lv.101 → Lv.81.
+        //   (MapMaker.GetFieldGimmickDebutLevel 은 이미 81. 이 값이 런타임/커밋 검증의 101 게이트였음 → 일치시킴.)
+        private const int UNLOCK_LEVEL_SURPRISE      = 81;   // Lv.81 (기존 PKG6 Lv.101)
         private const int UNLOCK_LEVEL_WALL          = 121;  // PKG7 Lv.121
         private const int UNLOCK_LEVEL_SPAWNER_O     = 141;  // PKG8 Lv.141
         private const int UNLOCK_LEVEL_PINATA_BOX    = 161;  // PKG9 Lv.161

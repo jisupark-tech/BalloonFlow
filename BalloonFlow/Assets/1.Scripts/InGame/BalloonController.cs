@@ -361,25 +361,31 @@ namespace BalloonFlow
         private readonly Dictionary<Transform, Sequence> _qaBalloonWaveTweens = new Dictionary<Transform, Sequence>(128);
         private readonly List<QaBalloonWaveTarget> _qaBalloonWaveTargets = new List<QaBalloonWaveTarget>(256);
         private readonly HashSet<Transform> _qaBalloonWaveUniqueTransforms = new HashSet<Transform>();
-        private readonly Dictionary<Transform, Vector3> _barricadeBodyBaseScales = new Dictionary<Transform, Vector3>();
-        private readonly Dictionary<Transform, Quaternion> _barricadeBodyBaseRotations = new Dictionary<Transform, Quaternion>();
-        private readonly Dictionary<Transform, Vector3> _barricadeBodyBasePositions = new Dictionary<Transform, Vector3>();
-        private readonly Dictionary<Transform, Quaternion> _barricadeEdgeBaseRotations = new Dictionary<Transform, Quaternion>();
-        private readonly Dictionary<Transform, Vector3> _barricadeEdgeBasePositions = new Dictionary<Transform, Vector3>();
-        private readonly Dictionary<Transform, Vector3> _barricadeEdgeBaseScales = new Dictionary<Transform, Vector3>();
+        // ROLLBACK_BARRICADE_BASE_CACHE_STATIC_20260701: authored 기준 캐시는 static.
+        //   버그: 바리케이드 풀은 DontDestroyOnLoad(씬 전환에도 인스턴스 유지)라 이전 플레이에서 회전/스케일된 상태가 남는데,
+        //   BalloonController 는 SceneSingleton(씬마다 재생성)이라 이 캐시가 매 플레이 리셋됐다. → 재플레이(2회차)에서
+        //   '이미 회전된' 풀 인스턴스의 현재 localRotation 을 authored 기준으로 잘못 캐시 → asmBase*Euler 로 90° 이중 회전.
+        //   static 으로 두면 최초(fresh 인스턴스) 캡처한 진짜 authored 기준이 풀 수명 내내 유지되어 재플레이에도 정확.
+        //   (Transform 키라 인스턴스별 고유. 풀이 파괴되면 fake-null 키로 miss → fresh 재캡처 = self-healing.)
+        private static readonly Dictionary<Transform, Vector3> _barricadeBodyBaseScales = new Dictionary<Transform, Vector3>();
+        private static readonly Dictionary<Transform, Quaternion> _barricadeBodyBaseRotations = new Dictionary<Transform, Quaternion>();
+        private static readonly Dictionary<Transform, Vector3> _barricadeBodyBasePositions = new Dictionary<Transform, Vector3>();
+        private static readonly Dictionary<Transform, Quaternion> _barricadeEdgeBaseRotations = new Dictionary<Transform, Quaternion>();
+        private static readonly Dictionary<Transform, Vector3> _barricadeEdgeBasePositions = new Dictionary<Transform, Vector3>();
+        private static readonly Dictionary<Transform, Vector3> _barricadeEdgeBaseScales = new Dictionary<Transform, Vector3>();
         // ROLLBACK_BARRICADE_HEAD_ROTATION_20260608: head(Barricade) 방향(N/E/S/W) 회전용 base 캐시.
-        private readonly Dictionary<Transform, Quaternion> _barricadeHeadBaseRotations = new Dictionary<Transform, Quaternion>();
+        private static readonly Dictionary<Transform, Quaternion> _barricadeHeadBaseRotations = new Dictionary<Transform, Quaternion>();
         // ROLLBACK_BARRICADE_HEAD_2X2_FIT_20260628:
         // Head is fitted independently to a 2x2 footprint; cache authored state so pooled reuse,
         // MapMaker replay, and retry do not inherit the previous direction/scale.
-        private readonly Dictionary<Transform, Vector3> _barricadeHeadBasePositions = new Dictionary<Transform, Vector3>();
-        private readonly Dictionary<Transform, Vector3> _barricadeHeadBaseScales = new Dictionary<Transform, Vector3>();
+        private static readonly Dictionary<Transform, Vector3> _barricadeHeadBasePositions = new Dictionary<Transform, Vector3>();
+        private static readonly Dictionary<Transform, Vector3> _barricadeHeadBaseScales = new Dictionary<Transform, Vector3>();
         // ROLLBACK_BARRICADE_ASSEMBLY_20260608: assembly("Baricade (1)") base 회전 + body base 길이(최장축) 캐시.
-        private readonly Dictionary<Transform, Quaternion> _barricadeAssemblyBaseRot = new Dictionary<Transform, Quaternion>();
-        private readonly Dictionary<Transform, Vector3> _barricadeAssemblyBaseLocalPositions = new Dictionary<Transform, Vector3>();
-        private readonly Dictionary<Transform, float> _barricadeBodyBaseLen = new Dictionary<Transform, float>();
+        private static readonly Dictionary<Transform, Quaternion> _barricadeAssemblyBaseRot = new Dictionary<Transform, Quaternion>();
+        private static readonly Dictionary<Transform, Vector3> _barricadeAssemblyBaseLocalPositions = new Dictionary<Transform, Vector3>();
+        private static readonly Dictionary<Transform, float> _barricadeBodyBaseLen = new Dictionary<Transform, float>();
         // ROLLBACK_BARRICADE_TILING/SMOOTH_20260625: body 원본 Tiling/Offset(_BaseMap_ST) 1회 캐시 + 재사용 MPB.
-        private readonly Dictionary<Transform, Vector4> _barricadeBodyBaseTileST = new Dictionary<Transform, Vector4>();
+        private static readonly Dictionary<Transform, Vector4> _barricadeBodyBaseTileST = new Dictionary<Transform, Vector4>();
         private MaterialPropertyBlock _barricadeBodyMpb;
         private const float BARRICADE_RESHAPE_DUR = 0.22f; // 길이 줄어듦 트윈 시간(끊김 제거)
         private readonly List<Vector3Int> _reusableOccupiedCells = new List<Vector3Int>(16);

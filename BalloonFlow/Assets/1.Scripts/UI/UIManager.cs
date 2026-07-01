@@ -226,10 +226,15 @@ namespace BalloonFlow
         /// </summary>
         public void DestroyAllUI()
         {
+            // ROLLBACK_UI_DESTROY_IMMEDIATE_RACE_20260701: 지연 파괴(Destroy) vs 재사용 레이스 제거.
+            //   Destroy 는 프레임 끝 지연 실행이라, 직후 OpenUIInternal 의 FindAnyObjectByType(Include Inactive)
+            //   가 '아직 non-null 인 파괴 예정 orphan' 을 재입양 → 프레임 끝 지연 Destroy 가 그 재사용 인스턴스를 파괴
+            //   (MapMaker 2회차 재플레이 시 UIHud 소멸의 실제 원인). DestroyImmediate 로 FindAny 전에 확실히 제거.
+            //   DestroyAllUI 는 새 씬 UI 생성 직전(Start)에만 호출돼 DestroyImmediate 컨텍스트 안전.
             for (int i = _openUIList.Count - 1; i >= 0; i--)
             {
                 var ui = _openUIList[i];
-                if (ui != null) Destroy(ui.gameObject);
+                if (ui != null) DestroyImmediate(ui.gameObject);
             }
             _openUIList.Clear();
 
@@ -248,8 +253,9 @@ namespace BalloonFlow
         {
             if (root == null) return;
             var strays = root.GetComponentsInChildren<UIBase>(true);
+            // ROLLBACK_UI_DESTROY_IMMEDIATE_RACE_20260701: 지연 Destroy 재사용 레이스 제거 — 즉시 파괴.
             for (int i = 0; i < strays.Length; i++)
-                if (strays[i] != null) Destroy(strays[i].gameObject);
+                if (strays[i] != null) DestroyImmediate(strays[i].gameObject);
         }
 
         /// <summary>
