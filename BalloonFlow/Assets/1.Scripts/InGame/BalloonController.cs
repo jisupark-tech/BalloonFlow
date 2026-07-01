@@ -623,9 +623,17 @@ namespace BalloonFlow
         private void Update()
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+            // ROLLBACK_QA_BALLOON_WAVE_DIR_20260701: QA 전용 파도 연출(빌드 제외 — 이 블록은 #if UNITY_EDITOR||DEVELOPMENT_BUILD).
+            //   P=중앙 / O=오른→왼 / I=왼→오른 / U=위→아래 / Y=아래→위.
             var qaKeyboard = UnityEngine.InputSystem.Keyboard.current;
-            if (qaKeyboard != null && qaKeyboard.pKey.wasPressedThisFrame)
-                PlayQaBalloonWaveScalePulse();
+            if (qaKeyboard != null)
+            {
+                if (qaKeyboard.pKey.wasPressedThisFrame) PlayQaBalloonWaveScalePulse(QaWaveDir.Center);
+                else if (qaKeyboard.oKey.wasPressedThisFrame) PlayQaBalloonWaveScalePulse(QaWaveDir.RightToLeft);
+                else if (qaKeyboard.iKey.wasPressedThisFrame) PlayQaBalloonWaveScalePulse(QaWaveDir.LeftToRight);
+                else if (qaKeyboard.uKey.wasPressedThisFrame) PlayQaBalloonWaveScalePulse(QaWaveDir.TopToBottom);
+                else if (qaKeyboard.yKey.wasPressedThisFrame) PlayQaBalloonWaveScalePulse(QaWaveDir.BottomToTop);
+            }
 #endif
 
 #if UNITY_EDITOR
@@ -662,7 +670,10 @@ namespace BalloonFlow
             _shadowBatcher?.FlushDirty();
         }
 
-        private void PlayQaBalloonWaveScalePulse()
+        // ROLLBACK_QA_BALLOON_WAVE_DIR_20260701: 파도 전파 방향(QA 전용).
+        private enum QaWaveDir { Center, RightToLeft, LeftToRight, TopToBottom, BottomToTop }
+
+        private void PlayQaBalloonWaveScalePulse(QaWaveDir dir)
         {
             // ROLLBACK_QA_BALLOON_WAVE_P_20260630:
             // QA-only visual pulse. This must not mutate BalloonData, targeting caches, HP, pop state, or events.
@@ -698,6 +709,18 @@ namespace BalloonFlow
             if (!hasBounds) return;
 
             Vector3 center = (min + max) * 0.5f;
+            // ROLLBACK_QA_BALLOON_WAVE_DIR_20260701: 방향별 '파도 진행거리' — 시작 가장자리에서 각 풍선까지 거리(=delay 기준).
+            float WaveDist(Vector3 p)
+            {
+                switch (dir)
+                {
+                    case QaWaveDir.RightToLeft: return max.x - p.x;  // 오른쪽(maxX) 먼저 → 왼쪽으로 전파
+                    case QaWaveDir.LeftToRight: return p.x - min.x;  // 왼쪽(minX) 먼저 → 오른쪽으로
+                    case QaWaveDir.TopToBottom: return max.z - p.z;  // 위(maxZ) 먼저 → 아래로
+                    case QaWaveDir.BottomToTop: return p.z - min.z;  // 아래(minZ) 먼저 → 위로
+                    default:                    return Vector3.Distance(p, center); // 중앙(P): 반경
+                }
+            }
             foreach (Transform t in _qaBalloonWaveUniqueTransforms)
             {
                 if (t == null) continue;
@@ -712,7 +735,7 @@ namespace BalloonFlow
                 // Do not interrupt gameplay/pop/hit tweens already running on this Transform.
                 if (DOTween.IsTweening(t)) continue;
 
-                float distance = Vector3.Distance(t.position, center);
+                float distance = WaveDist(t.position);
                 _qaBalloonWaveTargets.Add(new QaBalloonWaveTarget(t, t.localScale, distance));
             }
 
@@ -5087,7 +5110,7 @@ namespace BalloonFlow
             // 2x2/3x3 Ice covers the same area as the hidden balloons beneath it.
 
             _frozenOverlays[anchorId] = overlay;
-            _iceBlockOverlays.Add(overlay); // 블록 오버레이 표시 — HP 숫자 ×m 이중 스케일 방지용
+            _iceBlockOverlays.Add(overlay); // Block overlay marker for pooled Ice cleanup/state checks.
         }
 
         /// <summary>
@@ -5394,8 +5417,9 @@ namespace BalloonFlow
 
         // FrozenLayer 오버레이 추적: balloonId → 자식으로 부착된 FrozenLayer GameObject
         private readonly Dictionary<int, GameObject> _frozenOverlays = new Dictionary<int, GameObject>();
-        // ROLLBACK_ICE_BLOCK_TEXT_DOUBLE_SCALE_20260629: sized Ice 블록 오버레이는 자체가 blockSize 배 스케일이라
-        //   HP 숫자가 이미 큼 → footprint ×m 을 또 곱하면 이중. 블록 오버레이는 이 집합으로 구분해 ×m 을 상쇄한다.
+        // ROLLBACK_ICE_BLOCK_TEXT_DOUBLE_SCALE_20260629: sized Ice block overlay tracking.
+        // ROLLBACK_ICE_BLOCK_HP_TEXT_FOOTPRINT_SCALE_20260701:
+        //   Old text compensation divided by footprint and made 2x2/3x3 Ice HP text too small.
         private readonly HashSet<GameObject> _iceBlockOverlays = new HashSet<GameObject>();
         // ROLLBACK_GIMMICK_HIT_SCALE_DRIFT_20260629: Y 펀치(hit)가 DOKill(true) 로도 누적되는 문제 —
         //   Sequence inner 트윈이 grow 단계에서 끊기면 hitScale(부푼 값)로 스냅되어 baseScale 이 점점 커진다(텍스트도 같이).
@@ -5518,8 +5542,10 @@ namespace BalloonFlow
                 // 최대 텍스트 사이즈 5. 블록 오버레이는 이미 blockSize(=footprint) 배라 그만큼 나눠 상쇄 →
                 //   블록/그룹 모두 최종 숫자 크기 = min(footprint,5) 로 동일.
                 int capped = Mathf.Clamp(footprintMin, 1, 5);
-                bool isBlock = _iceBlockOverlays.Contains(selectedOverlay);
-                float textScaleMul = isBlock ? (float)capped / Mathf.Max(1, footprintMin) : capped;
+                // ROLLBACK_ICE_BLOCK_HP_TEXT_FOOTPRINT_SCALE_20260701:
+                // Previous block overlays divided by footprint, so 2x2/3x3 HP text stayed at prefab size.
+                // Scale by footprint for both merged Ice blocks and legacy groups, with the final cap applied below.
+                float textScaleMul = capped;
                 ShowFrozenOverlayMagazineText(selectedOverlay, hp, center, textScaleMul);
             }
         }
