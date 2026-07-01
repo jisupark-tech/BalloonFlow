@@ -5165,6 +5165,7 @@ namespace BalloonFlow
 
             _frozenOverlays[anchorId] = overlay;
             _iceBlockOverlays.Add(overlay); // Block overlay marker for pooled Ice cleanup/state checks.
+            _iceBlockOverlaySize[overlay] = Mathf.Max(1, blockSize); // ROLLBACK_ICE_SINGLE_BLOCK_TEXT_SCALE_20260701
         }
 
         /// <summary>
@@ -5475,6 +5476,9 @@ namespace BalloonFlow
         // ROLLBACK_ICE_BLOCK_HP_TEXT_FOOTPRINT_SCALE_20260701:
         //   Old text compensation divided by footprint and made 2x2/3x3 Ice HP text too small.
         private readonly HashSet<GameObject> _iceBlockOverlays = new HashSet<GameObject>();
+        // ROLLBACK_ICE_SINGLE_BLOCK_TEXT_SCALE_20260701: 오버레이별 blockSize(단일 sized Ice=blockSize, per-cell/그룹=1).
+        //   블록 오버레이는 X/Z 가 blockSize 배 → 자식 HP 텍스트도 그만큼 커지므로, 텍스트 스케일에서 나눠 상쇄한다.
+        private readonly Dictionary<GameObject, int> _iceBlockOverlaySize = new Dictionary<GameObject, int>();
         // ROLLBACK_GIMMICK_HIT_SCALE_DRIFT_20260629: Y 펀치(hit)가 DOKill(true) 로도 누적되는 문제 —
         //   Sequence inner 트윈이 grow 단계에서 끊기면 hitScale(부푼 값)로 스냅되어 baseScale 이 점점 커진다(텍스트도 같이).
         //   target 별 'rest 스케일'을 캐시해 매 펀치 전 복원 → 누적 차단.
@@ -5535,6 +5539,7 @@ namespace BalloonFlow
             if (bi != null) bi.SetVisible(false);
 
             _frozenOverlays[balloonId] = overlay;
+            _iceBlockOverlaySize[overlay] = 1; // ROLLBACK_ICE_SINGLE_BLOCK_TEXT_SCALE_20260701: per-cell(그룹) 오버레이=1.
         }
 
         // ROLLBACK_ICE_MAGAZINE_TEXT_20260608:
@@ -5601,6 +5606,11 @@ namespace BalloonFlow
                 // Do not scale linearly by footprint: 2x/3x makes the text spill outside the Ice visual.
                 // Use a square-root curve so larger Ice gets a readable, softer size increase.
                 float textScaleMul = Mathf.Sqrt(capped);
+                // ROLLBACK_ICE_SINGLE_BLOCK_TEXT_SCALE_20260701: 단일 sized Ice 는 블록 오버레이가 blockSize 배로 스케일되어
+                //   자식 HP 텍스트도 그만큼 커진다 → 오버레이 blockSize 로 나눠 상쇄(그룹=per-cell=1 이라 영향 없음).
+                //   → 블록/그룹 최종 텍스트 크기 동일.
+                int overlayBlock = _iceBlockOverlaySize.TryGetValue(selectedOverlay, out int ob) ? Mathf.Max(1, ob) : 1;
+                textScaleMul /= overlayBlock;
                 ShowFrozenOverlayMagazineText(selectedOverlay, hp, center, textScaleMul);
             }
         }

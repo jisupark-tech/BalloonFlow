@@ -75,9 +75,13 @@ namespace BalloonFlow
                 mat.enableInstancing = true;
             }
 
-            mat.SetTexture("_BaseMap", sprite.texture);
-            mat.SetTexture("_MainTex", sprite.texture);
-            mat.SetColor("_BaseColor", tint);
+            // ROLLBACK_SPRITEINSTANCED_MAINTEX_HASPROP_20260701: 셰이더별 프로퍼티가 다르다
+            //   (Custom/SpriteInstanced = _BaseMap/_BaseColor, Sprites/Default 폴백 = _MainTex/_Color).
+            //   없는 프로퍼티에 Set 하면 "doesn't have a texture property '_MainTex'" 에러 → HasProperty 가드.
+            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", sprite.texture);
+            if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", sprite.texture);
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", tint);
+            else if (mat.HasProperty("_Color")) mat.SetColor("_Color", tint);
             mat.hideFlags = HideFlags.HideAndDontSave;
             _spriteMatCache[key] = mat;
             return mat;
