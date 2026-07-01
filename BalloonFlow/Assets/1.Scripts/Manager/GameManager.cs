@@ -43,7 +43,7 @@ namespace BalloonFlow
     {
         [Header("[풍선 — Balloon]")]
         [Tooltip("풍선 간 월드 간격. 작을수록 빈틈 없음. (default: 0.55)")]
-        public float cellSpacing = 0.55f;
+        public float cellSpacing = 0.275f;
 
         [Tooltip("풍선 스케일. (default: 0.5, range: 0.2~1.0)")]
         [Range(0.2f, 1.0f)]
@@ -51,12 +51,12 @@ namespace BalloonFlow
 
         [Tooltip("풍선 팝 시 스케일업 배율 X/Z. (1=원본, 1.5=1.5배 부풀기). 동적 반영. (default: 2)")]
         [Range(1f, 3f)]
-        public float popScaleMultiplier = 2f;
+        public float popScaleMultiplier = 1.8f;
 
         // ROLLBACK_POP_SCALE_Y_SEPARATE_20260701: 팝(터지는) 스케일업 배율 Y 를 X/Z 와 별도 지정 — 터지는 연출 세로 확인/튜닝용.
         [Tooltip("풍선 팝 시 스케일업 배율 Y(높이) — X/Z(popScaleMultiplier)와 별도. 터지는 연출 세로 조절. (default: 2)")]
         [Range(1f, 5f)]
-        public float popScaleMultiplierY = 2f;
+        public float popScaleMultiplierY = 2.25f;
 
         [Tooltip("풍선 팝 시 스케일업 시간(초). 이 시간 후 파티클 재생. 동적 반영. (default: 0.1)")]
         [Range(0f, 1f)]
@@ -65,16 +65,16 @@ namespace BalloonFlow
         // ROLLBACK_POP_HIT_LIFT_20260701: 풍선 피격(팝) 시 Y축으로 살짝 띄우는 연출 — 높이/시간 조절.
         [Tooltip("풍선 피격(팝) 시 Y축으로 띄우는 높이(월드). 0=안 띄움. (default: 0.3)")]
         [Range(0f, 2f)]
-        public float popLiftHeight = 0.45f;
+        public float popLiftHeight = 0.1f;
 
         [Tooltip("풍선 피격(팝) 시 Y축으로 띄우는 시간(초). (default: 0.12)")]
         [Range(0f, 1f)]
-        public float popLiftDuration = 0.12f;
+        public float popLiftDuration = 0.05f;
 
         // ROLLBACK_POP_HOLD_20260701: 스케일업(부풀기) 후 잠시 대기했다가 터지며 파티클. 대기 시간.
         [Tooltip("풍선 피격 후 부푼 채로 잠시 대기하는 시간(초). 이후 터지며 파티클. 0=즉시. (default: 0.08)")]
         [Range(0f, 1f)]
-        public float popHoldDuration = 0.08f;
+        public float popHoldDuration = 0.05f;
 
         [Header("[풍선 타일 영역 — 동적 조정]")]
         [Tooltip("풍선 타일 영역 가로 배율. 1.0=기본, 인게임 동적 반영. (default: 1.39)")]

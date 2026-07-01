@@ -669,10 +669,11 @@ namespace BalloonFlow
 
         // ROLLBACK_ZAP_WAVE_FX_20260701: 게임플레이(Zap 클릭 등)에서 중앙 파도 연출 1회 재생(공개).
         //   기존 P키(중앙) 연출과 동일. 순수 시각 pulse — BalloonData/타게팅/HP/pop/이벤트 불변.
-        public void PlayBalloonWaveEffect() => PlayQaBalloonWaveScalePulse(QaWaveDir.Center);
+        // ROLLBACK_ZAP_DIAGONAL_WAVE_20260701: Zap 클릭 → 좌상(min.x,max.z)→우하(max.x,min.z) 대각 파도 1회.
+        public void PlayBalloonWaveEffect() => PlayQaBalloonWaveScalePulse(QaWaveDir.TopLeftToBottomRight);
 
-        // ROLLBACK_QA_BALLOON_WAVE_DIR_20260701: 파도 전파 방향(QA 전용).
-        private enum QaWaveDir { Center, RightToLeft, LeftToRight, TopToBottom, BottomToTop }
+        // ROLLBACK_QA_BALLOON_WAVE_DIR_20260701: 파도 전파 방향(QA 전용). +TopLeftToBottomRight(Zap 대각).
+        private enum QaWaveDir { Center, RightToLeft, LeftToRight, TopToBottom, BottomToTop, TopLeftToBottomRight }
 
         private void PlayQaBalloonWaveScalePulse(QaWaveDir dir)
         {
@@ -723,6 +724,7 @@ namespace BalloonFlow
                     case QaWaveDir.LeftToRight: return p.x - min.x;  // 왼쪽(minX) 먼저 → 오른쪽으로
                     case QaWaveDir.TopToBottom: return max.z - p.z;  // 위(maxZ) 먼저 → 아래로
                     case QaWaveDir.BottomToTop: return p.z - min.z;  // 아래(minZ) 먼저 → 위로
+                    case QaWaveDir.TopLeftToBottomRight: return (p.x - min.x) + (max.z - p.z); // 좌상(minX,maxZ) 먼저 → 우하 대각 전파
                     default:                    return Vector3.Distance(p, center); // 중앙(P): 반경
                 }
             }
