@@ -383,7 +383,7 @@ namespace BalloonFlow
         // ROLLBACK_BARRICADE_ASSEMBLY_20260608: assembly("Baricade (1)") base 회전 + body base 길이(최장축) 캐시.
         private static readonly Dictionary<Transform, Quaternion> _barricadeAssemblyBaseRot = new Dictionary<Transform, Quaternion>();
         private static readonly Dictionary<Transform, Vector3> _barricadeAssemblyBaseLocalPositions = new Dictionary<Transform, Vector3>();
-        private static readonly Dictionary<Transform, float> _barricadeBodyBaseLen = new Dictionary<Transform, float>();
+        // ROLLBACK_BARRICADE_BASELEN_OBJSCALE_20260701: _barricadeBodyBaseLen 캐시 제거(매 호출 재측정) — obj 스케일 변동 시 어긋나던 버그 수정.
         // ROLLBACK_BARRICADE_TILING/SMOOTH_20260625: body 원본 Tiling/Offset(_BaseMap_ST) 1회 캐시 + 재사용 MPB.
         private static readonly Dictionary<Transform, Vector4> _barricadeBodyBaseTileST = new Dictionary<Transform, Vector4>();
         private MaterialPropertyBlock _barricadeBodyMpb;
@@ -772,14 +772,19 @@ namespace BalloonFlow
                 SpawnBalloonFromSetup(entry);
             }
 
-            // FlexTube 그룹 단위 prefab 인스턴스화 — 모든 BalloonData 등록 직후, 자식 부품 GameObject 를 _balloonObjects 에 매핑.
-            BuildFlexTubes(layout);
-
             // ROLLBACK_GIMMICK_LEVEL_METRICS_REAPPLY:
             // Level-specific safe multipliers require the full balloon data set. Spawn first,
             // calculate once, then re-apply visuals so sized gimmicks do not keep stale level
             // offsets/scales from the previous board.
             CalculateLevelSafeMult();
+
+            // ROLLBACK_FLEXTUBE_LEVELSAFE_METRICS_20260701: FlexTube 는 반드시 CalculateLevelSafeMult '이후'에 빌드.
+            //   이전엔 spawn 직후(level-safe 축소 배수 계산 전)에 unshrunk 셀크기로 baked mesh 가 굳었고,
+            //   ReapplyAllBalloonVisualTransforms 는 FlexTube(단일 baked mesh)를 skip 하므로 축소가 영영 반영 안 됐다.
+            //   → 필드가 level-safe 로 축소되면 FlexTube 만 14% 크게·어긋난 위치로 남음. 최종 메트릭으로 빌드하도록 이동.
+            //   (이 위치면 뒤 Reapply 가 이미 생성된 mesh 를 정상적으로 skip → 기존 skip 의미 유지.)
+            BuildFlexTubes(layout);
+
             ReapplyAllBalloonVisualTransforms();
             // [RAW_GRID_SPACE 2026-06-12] safe mult 재계산으로 렌더 그리드가 바뀌었으므로
             // 라인/셀 캐시를 1회 무효화 — 이전 mult 로 빌드된 키 잔존 방지.
@@ -2782,6 +2787,18 @@ namespace BalloonFlow
                     return Mathf.Abs(axis.x) * gridCellX + Mathf.Abs(axis.z) * gridCellZ;
                 }
 
+                void GetOrientedFootprintAabb(Vector3 tangent, float alongWorld, float perpWorld, out float sizeX, out float sizeZ)
+                {
+                    tangent.y = 0f;
+                    if (tangent.sqrMagnitude < 0.0001f)
+                        tangent = Vector3.forward;
+                    tangent.Normalize();
+
+                    Vector3 perp = new Vector3(-tangent.z, 0f, tangent.x);
+                    sizeX = Mathf.Abs(tangent.x) * alongWorld + Mathf.Abs(perp.x) * perpWorld;
+                    sizeZ = Mathf.Abs(tangent.z) * alongWorld + Mathf.Abs(perp.z) * perpWorld;
+                }
+
                 bool TryGetSeqFootprint(
                     int seqIndex,
                     Vector3 tangent,
@@ -3103,13 +3120,16 @@ namespace BalloonFlow
                 Vector3 startCapGridScale = BuildPartScale(startCapMeshX, startCapMeshZ);
                 Vector3 segmentGridScale = BuildPartScale(segMeshX, segMeshZ);
                 Vector3 endCapGridScale = BuildPartScale(endCapMeshX, endCapMeshZ);
+                bool startCapJointSkipWasRequested = IsSeqJointWithOtherGroup(0, -GetSeqTangent(0));
+                bool endCapJointSkipWasRequested = IsSeqJointWithOtherGroup(lastIdx, GetSeqTangent(lastIdx));
                 if (FLEXTUBE_SPAWN_DEBUG)
                 {
                     Debug.Log(
                         $"[FlexTube-DIAG-CONFIG] G{groupId} cells={ids.Count} seqs={cellPositions.Count} " +
                         $"grid=({gridCellX:F3},{gridCellZ:F3}) minCell={minCell:F3} pathTotal={pathTotal:F3} " +
                         $"meshX/Z start=({startCapMeshX:F3},{startCapMeshZ:F3}) seg=({segMeshX:F3},{segMeshZ:F3}) edge=({endCapMeshX:F3},{endCapMeshZ:F3}) " +
-                        $"scale start={Fmt(startCapGridScale)} seg={Fmt(segmentGridScale)} edge={Fmt(endCapGridScale)}");
+                        $"scale start={Fmt(startCapGridScale)} seg={Fmt(segmentGridScale)} edge={Fmt(endCapGridScale)} " +
+                        $"legacyJointSkip start={startCapJointSkipWasRequested} end={endCapJointSkipWasRequested}");
                     for (int si = 0; si < cellPositions.Count; si++)
                     {
                         int seqCellCount = si < seqCellIds.Count && seqCellIds[si] != null ? seqCellIds[si].Count : 0;
@@ -3121,6 +3141,33 @@ namespace BalloonFlow
                 // Rollback: authored-seq-only generation made the tube too sparse. Restore the previous
                 // continuous path tiling so Segment count follows path length/pitch, while Head and Edge
                 // remain explicit cap parts.
+                // ROLLBACK_FLEXTUBE_ENDPOINT_CAP_VISIBILITY_20260701:
+                // Always render the authored StartCap. The joint-skip heuristic could hide one end of a
+                // valid tube group, leaving only Start or only End visible while the logical footprint
+                // still existed. Gameplay/targeting still uses seqCellIds below.
+                if (TryGetSeqFootprint(0, GetSeqTangent(0), out Vector3 startCenter, out float startAlongWorld, out float startPerpWorld))
+                {
+                    startCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
+                    Quaternion startRot = Quaternion.LookRotation(GetSeqTangent(0), Vector3.up) * extraRot;
+                    Vector3 startFootprintScale = BuildFootprintPartScale(startCapMeshX, startCapMeshZ, startAlongWorld, startPerpWorld);
+                    var startPart = SpawnFlexPart(startCapPrefab, startCenter, startRot,
+                                                  true, startFootprintScale, GimmickIdentifier.FlexTubePart.StartCap, seqIds[0]);
+                    if (startPart != null)
+                    {
+                        if (TryGetSeqWorldFootprintXZ(0, out Vector3 startFitCenter, out float startSizeX, out float startSizeZ))
+                        {
+                            startFitCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
+                            FitRendererBoundsToFootprint(startPart.gameObject, startFitCenter, startSizeX, startSizeZ);
+                        }
+                        else
+                        {
+                            RecenterToWorldBounds(startPart.gameObject, startCenter);
+                        }
+                        AttachPartToSeq(startPart, 0);
+                        LogFlexTubeSpawn("START", startPart, 0, 0, 0f, -1f, 0f);
+                    }
+                }
+#if false // ROLLBACK_FLEXTUBE_ENDPOINT_CAP_VISIBILITY_20260701
                 if (!IsSeqJointWithOtherGroup(0, -GetSeqTangent(0)) // start 의 연장 방향 = seq1 반대쪽
                     && TryGetSeqFootprint(0, GetSeqTangent(0), out Vector3 startCenter, out float startAlongWorld, out float startPerpWorld))
                 {
@@ -3144,6 +3191,8 @@ namespace BalloonFlow
                         LogFlexTubeSpawn("START", startPart, 0, 0, 0f, -1f, 0f);
                     }
                 }
+
+#endif
 
                 int visualPerCell = Mathf.Max(1, tube.VisualSegmentsPerCell);
                 float pitch = minCell / visualPerCell;
@@ -3258,6 +3307,39 @@ namespace BalloonFlow
                         $"gapMin={minGapText} gapMax={maxSegGap:F3} gapAvg={avgGap:F3} pitch={pitch:F3}");
                 }
 
+                // ROLLBACK_FLEXTUBE_ENDPOINT_CAP_VISIBILITY_20260701:
+                // Always render the authored EndCap; do not let joint heuristics hide a valid endpoint.
+                if (TryGetSeqFootprint(lastIdx, GetSeqTangent(lastIdx), out Vector3 endCenter, out float endAlongWorld, out float endPerpWorld))
+                {
+                    Vector3 endTan = GetSeqTangent(lastIdx);
+                    endTan.y = 0f;
+                    if (endTan.sqrMagnitude < 0.0001f)
+                        endTan = Vector3.forward;
+                    endTan.Normalize();
+
+                    // ROLLBACK_FLEXTUBE_ENDCAP_VISUAL_1X2_20260701:
+                    // Keep the End logical footprint as 2x2 through AttachPartToSeq(seqCellIds[lastIdx]),
+                    // but render only the outer 1x2 half as EndCap. The inner half is filled by the body
+                    // mesh, so the visible layout reads [Segment][End] while targeting/HP remains 2x2.
+                    float endVisualAlongWorld = Mathf.Min(endAlongWorld, ProjectedCellExtent(endTan) * FLEXTUBE_CAP_LENGTH_FRAC);
+                    float endVisualPerpWorld = endPerpWorld;
+                    Vector3 endVisualCenter = endCenter + endTan * Mathf.Max(0f, endAlongWorld - endVisualAlongWorld) * 0.5f;
+                    endVisualCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
+
+                    Quaternion endRot = Quaternion.LookRotation(endTan, Vector3.up) * extraRot;
+                    Vector3 endFootprintScale = BuildFootprintPartScale(endCapMeshX, endCapMeshZ, endVisualAlongWorld, endVisualPerpWorld);
+                    var endPart = SpawnFlexPart(endCapPrefab, endVisualCenter, endRot,
+                                                true, endFootprintScale, GimmickIdentifier.FlexTubePart.EndCap, seqIds[lastIdx]);
+                    if (endPart != null)
+                    {
+                        GetOrientedFootprintAabb(endTan, endVisualAlongWorld, endVisualPerpWorld, out float endSizeX, out float endSizeZ);
+                        FitRendererBoundsToFootprint(endPart.gameObject, endVisualCenter, endSizeX, endSizeZ);
+                        AttachPartToSeq(endPart, lastIdx);
+                        LogFlexTubeSpawn("EDGE", endPart, 0, lastIdx, curveTotal, -1f, 0f);
+                    }
+                }
+#if false // ROLLBACK_FLEXTUBE_ENDPOINT_CAP_VISIBILITY_20260701
+
                 if (!IsSeqJointWithOtherGroup(lastIdx, GetSeqTangent(lastIdx)) // end 의 연장 방향 = 진행 방향 그대로
                     && TryGetSeqFootprint(lastIdx, GetSeqTangent(lastIdx), out Vector3 endCenter, out float endAlongWorld, out float endPerpWorld))
                 {
@@ -3281,6 +3363,8 @@ namespace BalloonFlow
                         LogFlexTubeSpawn("EDGE", endPart, 0, lastIdx, curveTotal, -1f, 0f);
                     }
                 }
+
+#endif
 
                 ringScale = 1f;
                 Debug.Log($"[FlexTube] Group {groupId} seqFootprint parts={parts.Count} seqs={cellPositions.Count} cells={ids.Count}");
@@ -4365,13 +4449,15 @@ namespace BalloonFlow
                 _barricadeBodyBaseScales[body] = baseScale;
             }
             // baseLen = body 의 "길이축(body.right)" 월드 길이 — 최장축(max size) 이 아니라 진행축으로 측정해야 5칸이 정확히 참.
-            if (!_barricadeBodyBaseLen.TryGetValue(body, out float baseLen))
+            // ROLLBACK_BARRICADE_BASELEN_OBJSCALE_20260701: baseLen 은 obj(부모) 스케일을 포함한 world 측정이라, level-safe 축소로
+            //   obj 스케일이 spawn↔reapply 사이 0.86배로 바뀌면 캐시된 baseLen 이 어긋나 body 가 0.86배 짧게 렌더됐다(큰 레벨만).
+            //   → 캐시하지 않고 '매 호출 현재 obj 스케일' 로 재측정(멱등). baseScale(로컬)은 static 유지, baseLen(월드)만 재측정.
+            float baseLen;
             {
                 Vector3 prev = body.localScale;
                 body.localScale = baseScale;
                 baseLen = TryGetProjectedBounds(body, body.right, out float bN, out float bF)
                     ? Mathf.Max(0.0001f, bF - bN) : 1f;
-                _barricadeBodyBaseLen[body] = baseLen;
                 body.localScale = prev;
             }
             bool hasBody = bodyWorldLen > 0.001f;
@@ -4387,9 +4473,19 @@ namespace BalloonFlow
             float targetScaleX = baseScale.x * (bodyWorldLen / baseLen);
 
             if (BARRICADE_DEBUG)
+            {
+                // ROLLBACK_BARRICADE_LEN_DIAG_20260701: head 의 실제 along(진행축) 길이를 칸으로 측정 —
+                //   'HEAD_CELLS=2' 를 body 에서 빼는데 head 비주얼 along 이 2칸이 아니면 총 길이가 세팅값과 어긋난다.
+                float headAlongCells = -1f;
+                if (head != null && TryGetProjectedBounds(head, alongDir, out float hn2, out float hf2) && cellAlong > 0.0001f)
+                    headAlongCells = (hf2 - hn2) / cellAlong;
+                float bodyCellsRendered = cellAlong > 0.0001f ? bodyWorldLen / cellAlong : -1f;
+                float totalCellsRendered = headAlongCells >= 0f && bodyCellsRendered >= 0f ? headAlongCells + bodyCellsRendered : -1f;
                 Debug.Log($"[Barricade-DIAG] vertical={vertical} authoredLen={data.barricadeLength} active={activeLengthCells:F2} " +
                           $"bodyCells={bodyCells:F2} cellAlong={cellAlong:F3} mult={_barricadeLengthMultiplier:F3} pad={_barricadeLengthPadding:F3} " +
-                          $"pullCells={BARRICADE_BODY_PULL_IN_CELLS} bodyLen {__barPrePull:F3}→{bodyWorldLen:F3} baseLen={baseLen:F3} targetScaleX={targetScaleX:F3}", obj);
+                          $"pullCells={BARRICADE_BODY_PULL_IN_CELLS} bodyLen {__barPrePull:F3}→{bodyWorldLen:F3} baseLen={baseLen:F3} targetScaleX={targetScaleX:F3} " +
+                          $"| headAlongCells={headAlongCells:F2} bodyCellsRendered={bodyCellsRendered:F2} TOTAL≈{totalCellsRendered:F2}(vs authored {data.barricadeLength})", obj);
+            }
 
             // 4) edge 를 body 끝으로 붙이는 로컬 함수(instant/트윈 공용). bounds 실측 우선, 실패 시 수식 폴백.
             //    body.position=피벗(Head쪽 끝), body.right=진행축 월드방향. 회전은 assembly 가 담당.
@@ -4445,6 +4541,18 @@ namespace BalloonFlow
                     SetBarricadeBodyTileY(body, bodyWorldLen / baseLen); // #2 패턴 유지
                 }
                 PlaceEdgeAccurate();
+            }
+
+            // ROLLBACK_BARRICADE_RENDER_DIAG_20260701: 실제 렌더 span(head near ~ edge far, 진행축)을 칸으로 측정 → authoredLen 과 비교.
+            //   renderedSpan << authoredLen → body 가 target 만큼 안 늘어난 '렌더 부족'. ≈ authoredLen → 데이터/그리드 기대 차이(바리케이드 데이터 길이가 그리드보다 짧음).
+            if (BARRICADE_DEBUG && head != null && edge != null && edge.gameObject.activeSelf && cellAlong > 0.0001f
+                && TryGetProjectedBounds(head, alongDir, out float _hN, out float _hF)
+                && TryGetProjectedBounds(edge, alongDir, out float _eN, out float _eF))
+            {
+                float renderedSpanCells = (Mathf.Max(_hF, _eF) - Mathf.Min(_hN, _eN)) / cellAlong;
+                float bodyRenderedCells = TryGetProjectedBounds(body, alongDir, out float _bN, out float _bF)
+                    ? (Mathf.Abs(_bF - _bN) / cellAlong) : -1f;
+                Debug.Log($"[Barricade-RENDER] authoredLen={data.barricadeLength} renderedSpan(head~edge)={renderedSpanCells:F2}칸 bodyRendered={bodyRenderedCells:F2}칸 (target body={bodyWorldLen / cellAlong:F2}칸)", obj);
             }
         }
 

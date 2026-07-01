@@ -22,8 +22,19 @@ namespace BalloonFlow
     public class PinataBoxView : MonoBehaviour
     {
         [Header("[Inspector 링크 — 드래그해서 연결]")]
-        [Tooltip("박스 틀(paintbox) Transform. footprint 크기에 맞춰 자동 스케일. 비워두면 스킵.")]
+        [Tooltip("박스 틀(paintbox) Transform. footprint 크기에 맞춰 자동 스케일. 비워두면 스킵.\n" +
+                 "ROLLBACK_PAINTBOX_RATIO_MODELS_20260701: 아래 비율별 모델(1x3/2x2/2x3)이 링크돼 있으면 Build 가 비율에 맞는 모델을 골라 이 필드에 런타임 대입한다. 셋 다 비면 이 _frame 을 그대로 폴백 사용.")]
         [SerializeField] private Transform _frame;
+        // ROLLBACK_PAINTBOX_RATIO_MODELS_20260701:
+        //   인게임 실사용 비율은 1×3 / 2×2 / 2×3 3종뿐. 단일 프레임을 임의 W×H 로 늘리면 테두리 아트가 왜곡되므로,
+        //   비율별 전용 모델을 링크해 MapMaker 에서 세팅한 paint 의 W×H(레벨데이터)에 맞는 모델을 선택한다.
+        //   ※ 모델은 '세로(portrait)' 방향 authoring(긴 축 = +Z). target 이 가로(w>h)면 Build 가 Y축 90° 회전.
+        [Tooltip("[비율 모델] 1×3 박스 모델(세로 authoring: 1칸 너비×3칸 길이, 긴 축 +Z).")]
+        [SerializeField] private Transform _box1x3;
+        [Tooltip("[비율 모델] 2×2 박스 모델(정사각).")]
+        [SerializeField] private Transform _box2x2;
+        [Tooltip("[비율 모델] 2×3 박스 모델(세로 authoring: 2칸 너비×3칸 길이, 긴 축 +Z).")]
+        [SerializeField] private Transform _box2x3;
         [Tooltip("알 1개 템플릿(paint) GameObject. Build 가 N개 복제. (자식: Cylinder=몸체, texture=균열)")]
         [SerializeField] private GameObject _eggTemplate;
 
@@ -120,9 +131,14 @@ namespace BalloonFlow
             // ROLLBACK_TARGETBOX_BALANCED_EGG_LAYOUT_20260608:
             // Egg count is authored in MapMaker; choose a balanced centered grid for that count.
             ChooseEggGrid(n, w, h, out int cols, out int rows);
+            // ROLLBACK_PAINTBOX_RATIO_MODELS_20260701: 레벨데이터 W×H 비율로 전용 박스 모델 선택 → _frame 에 대입(나머지 비활성).
+            //   모델은 세로 authoring(긴 축 +Z)이라, target 이 가로(w>h)면 아래 fit 에서 Y축 90° 회전으로 방향만 맞춘다.
+            SelectBoxModel(w, h);
             // 틀(paintbox)을 footprint 에 맞춰 먼저 스케일 → 이후 알을 '틀의 실제 안쪽 영역'에 맞춘다.
             // 알 크기를 footprint(cellSize) 가 아니라 '틀의 실제 bounds' 기준으로 잡아야, 틀이 footprint 와
             // 다른 크기(아트가 더 작거나, _frame 미와이어로 스케일 안 됨)여도 알이 항상 틀 안에 들어간다.
+            // ROLLBACK_PAINTBOX_RATIO_MODELS_20260701: 회전 방향은 ScaleFrameToFootprint 가 모델 실측 종횡비로 자동 판별
+            //   (portrait/landscape authoring 가정 없이 프레임 긴 축을 footprint 긴 축에 맞춤).
             ScaleFrameToFootprint(w, h, cellSizeX, cellSizeZ);
             ApplyFrameColor(); // req1: 프레임 색 #5E6998 (기존 머티리얼 유지)
 
@@ -578,46 +594,97 @@ namespace BalloonFlow
         }
 
         // 틀의 renderer world bounds → footprint(w*cellSizeX × h*cellSizeZ)에 맞춰 스케일.
+        // ROLLBACK_PAINTBOX_RATIO_MODELS_20260701:
+        //   레벨데이터 W×H 의 '종횡비(aspect = 짧은변/긴변)' 로 가장 가까운 전용 모델을 골라 _frame 에 대입, 나머지 비활성.
+        //   ※ 정확한 셀 수가 아니라 '비율' 매칭이라 크기 무관하게 확대 대응:
+        //     4×4(1:1)→2×2 확대 / 4×6·6×4(2:3)→2×3 확대(6×4 는 아래 fit 에서 자동 90° 회전) / 1×3·2×3 등도 동일.
+        //   방향(가로/세로)은 min/max 로 흡수 → 회전은 ScaleFrameToFootprint 가 모델 실측 종횡비로 자동 판별.
+        //   3모델 전부 미링크면 no-op → 기존 단일 _frame(paintbox) 폴백.
+        private void SelectBoxModel(int w, int h)
+        {
+            if (_box1x3 == null && _box2x2 == null && _box2x3 == null)
+                return; // 비율 모델 미사용 → 기존 단일 _frame 유지
+
+            // target 종횡비(짧은변/긴변). 4×4→1.0, 4×6/6×4→0.667, 1×3/3×1→0.333, 2×3→0.667 …
+            float targetAspect = (float)Mathf.Min(w, h) / Mathf.Max(1, Mathf.Max(w, h));
+            Transform sel = null;
+            float bestD = float.MaxValue;
+            void Consider(Transform t, float modelAspect)
+            {
+                if (t == null) return;
+                float d = Mathf.Abs(targetAspect - modelAspect);
+                if (d < bestD) { bestD = d; sel = t; }
+            }
+            Consider(_box1x3, 1f / 3f); // 0.333
+            Consider(_box2x2, 1f);      // 1.0
+            Consider(_box2x3, 2f / 3f); // 0.667
+
+            SetBoxActive(_box1x3, ReferenceEquals(_box1x3, sel));
+            SetBoxActive(_box2x2, ReferenceEquals(_box2x2, sel));
+            SetBoxActive(_box2x3, ReferenceEquals(_box2x3, sel));
+
+            if (sel != null)
+                _frame = sel; // 선택 모델을 _frame 으로 → 이하 스케일/색/균열/제외 로직 그대로 재사용
+
+            if (bestD > 0.12f) // 세 모델 어느 aspect 와도 꽤 멀면(비정상 비율) 경고 — fit 이 늘려 왜곡될 수 있음
+                Debug.LogWarning($"[PinataBoxView] 박스 비율 {w}×{h}(aspect {targetAspect:F2}) 이 1×3/2×2/2×3 어느 것과도 멀어 왜곡 가능.", this);
+        }
+
+        private static void SetBoxActive(Transform box, bool active)
+        {
+            if (box != null && box.gameObject.activeSelf != active)
+                box.gameObject.SetActive(active);
+        }
+
+        // ROLLBACK_PAINTBOX_UNIFORM_FIT_ROT_20260701: 모델 authored 회전(X=-90 로 눕힘)·스케일의 진짜 base 를 static 캐시(최초 fresh 캡처).
+        //   Target Box 풀(DontDestroyOnLoad) 재사용 시 이전 Build 의 Y회전/fit 스케일이 남아 현재 localRotation/Scale 이 오염되므로,
+        //   base 는 여기서만 읽고 매 Build 시작에 base 로 리셋한 뒤 맞춘다(재사용에도 정확).
+        private static readonly Dictionary<Transform, Quaternion> _modelAuthoredRot = new Dictionary<Transform, Quaternion>();
+        private static readonly Dictionary<Transform, Vector3> _modelAuthoredScale = new Dictionary<Transform, Vector3>();
+
         private void ScaleFrameToFootprint(int w, int h, float cellSizeX, float cellSizeZ)
         {
             if (_frame == null) return;
 
+            // ROLLBACK_PAINTBOX_UNIFORM_FIT_ROT_20260701:
+            //   모델은 X=-90 로 눕혀 authoring. 방향(가로/세로)이 target 과 어긋나면 '늘리기 대신' 세계-Y 90° 회전으로 눕힌 모델을
+            //   돌린 뒤, aspect 는 SelectBoxModel 로 이미 맞으므로 UNIFORM 스케일(배수)만 곱해 footprint 를 채운다.
+            //   → 세로 1×3 을 가로로 세팅하면 3배 늘리는 게 아니라 '회전 + 배수'로 정확히 나온다(사용자 명세). 2×6=가세로 2배 등도 동일.
             float targetX = w * cellSizeX;
             float targetZ = h * cellSizeZ;
 
-            // ROLLBACK_PAINTBOX_FRAME_FIT_ROBUST_20260630:
-            //   이전엔 'world크기 = localScale × base' 를 축별로 가정해 1회 스케일했는데, 새 paintbox 메시는
-            //   world-Z 가 localScale.z 에 반응하지 않아(평면 패널 — world-Z 가 local-Y 에서 옴) ① 박스 Z 가 안 맞고
-            //   ② 매 호출 base 재계산이 발산해 박스가 점점 얇아졌다.
-            //   → 어느 local 축이 world-Z 를 만드는지 'probe' 로 판별한 뒤, world 실측값을 목표에 맞추는 반복 핏.
-            //     정상 메시(world-Z↔local-Z)·평면 메시(world-Z↔local-Y) 모두 안전, 한 번 맞으면 즉시 종료(멱등).
-            if (!TryGetFrameWorldSize(out _, out float wzBase)) return;
-            Vector3 probeS = _frame.localScale;
-            _frame.localScale = new Vector3(probeS.x, probeS.y, probeS.z * 2f);
-            TryGetFrameWorldSize(out _, out float wzProbe);
-            bool zAxisDrivesWorldZ = wzBase > 0.0001f && Mathf.Abs(wzProbe - wzBase) > wzBase * 0.05f;
-            _frame.localScale = probeS; // 원복
+            // authored base(회전·스케일) — 최초 fresh 캡처(static) 후 매번 base 로 리셋.
+            if (!_modelAuthoredRot.TryGetValue(_frame, out Quaternion baseRot)) { baseRot = _frame.localRotation; _modelAuthoredRot[_frame] = baseRot; }
+            if (!_modelAuthoredScale.TryGetValue(_frame, out Vector3 baseScale)) { baseScale = _frame.localScale; _modelAuthoredScale[_frame] = baseScale; }
+            _frame.localRotation = baseRot;
+            _frame.localScale = baseScale;
 
-            for (int iter = 0; iter < 5; iter++)
+            // 방향 판별 — authored base 상태의 종횡비(world X vs Z)의 긴 축 vs target 긴 축.
+            bool rotate90 = false;
+            if (TryGetFrameWorldSize(out float ax, out float az) && ax > 0.0001f && az > 0.0001f)
+            {
+                bool modelLongX = ax > az * 1.05f;
+                bool modelLongZ = az > ax * 1.05f;
+                bool targetLongX = targetX > targetZ * 1.05f;
+                bool targetLongZ = targetZ > targetX * 1.05f;
+                rotate90 = (modelLongX && targetLongZ) || (modelLongZ && targetLongX);
+            }
+            if (rotate90)
+                _frame.localRotation = Quaternion.Euler(0f, 90f, 0f) * baseRot; // base(X=-90) 위에 방향 Y90°
+
+            // UNIFORM 스케일 — 긴 축을 target 에 정확히 맞춤(짧은 축은 aspect 일치로 자동 정합). 반복 수렴(멱등).
+            for (int iter = 0; iter < 6; iter++)
             {
                 if (!TryGetFrameWorldSize(out float wx, out float wz)) return;
-                bool okX = wx > 0.0001f && Mathf.Abs(wx - targetX) <= targetX * 0.01f;
-                bool okZ = wz > 0.0001f && Mathf.Abs(wz - targetZ) <= targetZ * 0.01f;
-                if (okX && okZ) break;
-
-                Vector3 s = _frame.localScale;
-                if (wx > 0.0001f && !okX) s.x *= targetX / wx;
-                if (wz > 0.0001f && !okZ)
-                {
-                    float r = targetZ / wz;
-                    if (zAxisDrivesWorldZ) s.z *= r; else s.y *= r; // world-Z 를 만드는 축만 스케일(compound 방지)
-                }
-                _frame.localScale = s;
+                if (wx < 0.0001f || wz < 0.0001f) return;
+                float f = (targetX >= targetZ) ? targetX / wx : targetZ / wz;
+                if (Mathf.Abs(f - 1f) < 0.005f) break;
+                _frame.localScale *= f;
             }
             _frame.localPosition = Vector3.zero;
 
             if (PAINTBOX_DEBUG && TryGetFrameWorldSize(out float fwx, out float fwz))
-                Debug.Log($"[PaintBox-DIAG-FRAME] frame={DiagPath(_frame)} target=({targetX:F3},{targetZ:F3}) " +
+                Debug.Log($"[PaintBox-DIAG-FRAME] frame={DiagPath(_frame)} rot90={rotate90} target=({targetX:F3},{targetZ:F3}) " +
                           $"→ world=({fwx:F3},{fwz:F3}) localScale={_frame.localScale.ToString("F3")}", this);
         }
 

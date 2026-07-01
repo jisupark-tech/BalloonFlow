@@ -1536,13 +1536,13 @@ namespace BalloonFlow
         //   런타임은 같은 seq 4셀을 평균해 2×2 중심 1점으로 쓰므로 centerline/캡/rib 파이프라인 무변경.
         private void PaintFlexTube2x2(int col, int row, int seq)
         {
-            // ROLLBACK_FLEXTUBE_EVEN_GRID_SNAP_20260626: 2×2 파트를 짝수 그리드 블록에 스냅.
-            //   자유 위치로 찍으면 인접 파트의 2×2 가 부분 겹침(RowB 스킵)→ seq별 centroid 가 중심선에서 어긋나
-            //   중간 리브가 삐져나가고 캡 중심도 2×2 중심을 벗어났다. 짝수 스냅하면 모든 파트가 겹침/틈 없이
-            //   타일되어 centroid 가 항상 깨끗한 직선/코너 위 → 캡 중심 정확 + 리브 protrusion 제거.
-            //   (한 블록 안 아무 셀이나 클릭하면 그 블록이 칠해짐; 가드가 같은 블록 재클릭을 막아 블록 단위로 진행.)
-            int baseC = Mathf.Clamp((col / 2) * 2, 0, Mathf.Max(0, _gridCols - 2));
-            int baseR = Mathf.Clamp((row / 2) * 2, 0, Mathf.Max(0, _gridRows - 2));
+            // ROLLBACK_FLEXTUBE_CLICK_ANCHOR_20260701: 짝수 그리드 스냅 폐기 → '클릭한 셀'을 2×2 앵커(좌하단)로.
+            //   요청: 클릭 위치가 어느 짝수 블록에 드느냐로 위/아래 점프하지 않고, 클릭 셀 기준으로 +col/+row 방향 2×2 를 찍는다.
+            //   ⚠ 타일 주의: 파트끼리는 '2칸 간격'으로 클릭해야 겹침 없이 깨끗이 이어짐(1칸 간격이면 RowB 겹침 스킵으로
+            //     리브 삐짐/캡 중심 어긋남 — 짝수 스냅이 자동으로 막아주던 부분을 이제 작성자가 지켜야 함).
+            //   가드(_balloonFlexTubeGroupId != _paintFlexTubeGroupId)가 이미 칠한 셀 재클릭을 막으므로 앵커 셀 재클릭은 무시됨.
+            int baseC = Mathf.Clamp(col, 0, Mathf.Max(0, _gridCols - 2));
+            int baseR = Mathf.Clamp(row, 0, Mathf.Max(0, _gridRows - 2));
 
             PaintFlexTubeRowA(baseC, baseR, seq, true);          // 블록 앵커(좌하단) — paint 순서 등록
             PaintFlexTubeRowB(baseC + 1, baseR, seq);

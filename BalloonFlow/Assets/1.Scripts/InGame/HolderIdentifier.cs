@@ -75,6 +75,10 @@ namespace BalloonFlow
         [SerializeField] private Material _spawnerOpaqueMat;
         [Tooltip("Glass Pipe(Spawner_T) 투명 머티리얼 (SpawnerAlpha). 인스펙터 할당.")]
         [SerializeField] private Material _spawnerTransparentMat;
+        // ROLLBACK_SPAWNER_OUTER_GLASS_MAT_20260701:
+        // OuterGlass can be excluded from _colorRenderers on the prefab, so bind it explicitly.
+        [Tooltip("Spawner/OuterGlass Renderer. Pipe(Spawner_O)=Opaque Mat, Glass Pipe(Spawner_T)=Transparent Mat.")]
+        [SerializeField] private Renderer _spawnerOuterGlassRenderer;
         [Tooltip("Spawner 소멸 이펙트 (EndParticle). 미할당 시 자식 'EndParticle' 자동 탐색.")]
         [SerializeField] private GameObject _spawnerEndParticle;
         // ROLLBACK_SPAWNER_MAGAZINE_TEXT_SERIALIZE_20260624: 카운트/탄창 텍스트를 인스펙터에서 명시 할당.
@@ -1165,7 +1169,6 @@ namespace BalloonFlow
         /// <summary>Spawner_T(Glass Pipe)=투명 / Spawner_O(Pipe)=불투명. 머티리얼 스왑.</summary>
         public void SetSpawnerTransparent(bool transparent)
         {
-            if (_colorRenderers == null) return;
             // ROLLBACK_SPAWNER_MATERIAL_SWAP_20260624 (#6):
             // 이전엔 MaterialPropertyBlock 으로 _BaseColor 알파만 0.4/1 로 바꿨으나, 불투명 URP 머티리얼은
             // 알파만 낮춰도 렌더 상태(_Surface/_SrcBlend/_ZWrite)가 불투명이라 안 비친다. → 머티리얼 자체를 스왑.
@@ -1174,14 +1177,40 @@ namespace BalloonFlow
             // sharedMaterial 할당이라 인스턴스 복제 leak 없음. 풀 재사용 시 매 스폰마다 양 타입이 명시 set 하므로 안전.
             Material target = transparent ? _spawnerTransparentMat : _spawnerOpaqueMat;
             if (target == null) return; // 인스펙터 미할당이면 프리팹 원본 유지 (no-op).
-            for (int i = 0; i < _colorRenderers.Length; i++)
+            if (_colorRenderers != null)
             {
-                if (_colorRenderers[i] == null) continue;
-                _colorRenderers[i].sharedMaterial = target;
+                for (int i = 0; i < _colorRenderers.Length; i++)
+                {
+                    if (_colorRenderers[i] == null) continue;
+                    _colorRenderers[i].sharedMaterial = target;
+                }
             }
+
+            // ROLLBACK_SPAWNER_OUTER_GLASS_MAT_20260701:
+            // Ensure OuterGlass specifically gets the selected material. This fixes Spawner_O when
+            // OuterGlass is not part of _colorRenderers and remains transparent after pooling.
+            Renderer outerGlass = ResolveSpawnerOuterGlassRenderer();
+            if (outerGlass != null)
+                outerGlass.sharedMaterial = target;
         }
 
         /// <summary>ROLLBACK_SPAWNER_END_PARTICLE_20260624 (#4): Spawner 소멸 시 EndParticle 1회 재생.</summary>
+        private Renderer ResolveSpawnerOuterGlassRenderer()
+        {
+            if (_spawnerOuterGlassRenderer != null)
+                return _spawnerOuterGlassRenderer;
+
+            Transform t = transform.Find("Spawner/Spawner/OuterGlass") ?? FindDeep(transform, "OuterGlass");
+            if (t != null)
+            {
+                _spawnerOuterGlassRenderer = t.GetComponent<Renderer>();
+                if (_spawnerOuterGlassRenderer == null)
+                    _spawnerOuterGlassRenderer = t.GetComponentInChildren<Renderer>(true);
+            }
+
+            return _spawnerOuterGlassRenderer;
+        }
+
         public void PlaySpawnerEndParticle()
         {
             GameObject fx = _spawnerEndParticle;
