@@ -1269,6 +1269,8 @@ namespace BalloonFlow
             if (BalloonController.HasInstance && BalloonController.Instance.IsBalloonConcealed(balloon.balloonId)) return false;
             if (balloon.gimmickType == BalloonController.GimmickWall) return false;
             if (balloon.gimmickType == BalloonController.GimmickIce) return false;
+            // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 얼음 오버레이가 씌워진 셀은 베이스가 기믹이어도 직접 공격 불가(깨질 때까지).
+            if (balloon.iceOverlay > 0) return false;
             if (balloon.gimmickType == BalloonController.GimmickColorCurtain) return false;
             return true;
         }

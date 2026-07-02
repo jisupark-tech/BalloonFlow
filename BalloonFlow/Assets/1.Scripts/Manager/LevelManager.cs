@@ -646,6 +646,7 @@ namespace BalloonFlow
                         iceGroupId = bl.iceGroupId,
                         iceGroupHp = bl.iceGroupHp,
                         iceGroupHpMode = bl.iceGroupHpMode,
+                        iceOverlay = bl.iceOverlay,
                         barricadeDir    = bl.barricadeDir,
                         barricadeLength = bl.barricadeLength > 0 ? bl.barricadeLength : 1,
                         eggColors   = bl.eggColors,

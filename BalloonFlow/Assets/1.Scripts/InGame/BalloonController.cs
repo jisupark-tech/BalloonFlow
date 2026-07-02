@@ -205,7 +205,9 @@ namespace BalloonFlow
         private const int FLEXTUBE_SPAWN_DEBUG_SEGMENT_LIMIT = 220;
         // ROLLBACK_FLEXTUBE_SEQ_VISUAL_Z_OFFSET_20260628:
         // Small board-Z visual lift requested for FlexTube readability over the balloon field.
-        private const float FLEXTUBE_SEQ_VISUAL_Z_OFFSET = 0.25f;
+        // ROLLBACK_FLEXTUBE_SEQ_VISUAL_Z_OFFSET_20260702: Previous value 0.25f.
+        // Keep FlexTube visual roots on the authored cell footprint instead of lifting them in +Z.
+        private const float FLEXTUBE_SEQ_VISUAL_Z_OFFSET = 0f;
         // ROLLBACK_FLEXTUBE_SEAMLESS_TILING_20260618: 세그먼트의 자연 길이(월드 Z).
         //   측정: 유니티 (1,1,1) 박스 대비 세그먼트가 유닛당 3.5개일 때 1사이즈 = 1/3.5 ≈ 0.2857.
         //   (FlexTube_Segment mesh × FlexTubeSegmentVisualScale.z(0.86) 의 실제 월드 길이.)
@@ -2280,6 +2282,7 @@ namespace BalloonFlow
                 iceGroupId = source.iceGroupId,
                 iceGroupHp = source.iceGroupHp,
                 iceGroupHpMode = source.iceGroupHpMode,
+                iceOverlay = source.iceOverlay,
                 barricadeDir = source.barricadeDir,
                 barricadeLength = source.barricadeLength,
                 eggColors = source.eggColors,
@@ -2331,6 +2334,7 @@ namespace BalloonFlow
                 iceGroupId = entry.iceGroupId,
                 iceGroupHp = entry.iceGroupHp,
                 iceGroupHpMode = entry.iceGroupHpMode,
+                iceOverlay = entry.iceOverlay,
                 barricadeDir    = entry.barricadeDir,
                 barricadeLength = entry.barricadeLength > 0 ? entry.barricadeLength : 1,
                 // 알 배열: eggHps 는 런타임 차감되므로 clone (레벨 에셋 원본 보호). eggColors 는 read-only 라 공유.
@@ -2552,7 +2556,8 @@ namespace BalloonFlow
                     data.maxHP,
                     data.iceGroupId,
                     data.iceGroupHp,
-                    data.iceGroupHpMode);
+                    data.iceGroupHpMode,
+                    data.iceOverlay);
             }
         }
 
@@ -4333,7 +4338,11 @@ namespace BalloonFlow
             // Multi-cell 1x1-authored prefabs such as Wall can have renderer bounds smaller than
             // one board cell. Fit the visible x/z bounds to the occupied footprint instead of
             // assuming localScale * sizeW/H fills the board cells.
-            FitRendererBoundsToFootprint(obj, visualCenter, cellSizeX * width, cellSizeZ * height);
+            // ROLLBACK_SIZED_FIELD_POSITION_RECENTER_20260702:
+            // WoodenBoard root should stay on the authored footprint center for Scene View/grid checks.
+            // Still fit scale to footprint, but do not move the root by renderer-bounds delta.
+            bool recenterVisualBounds = data.gimmickType != GimmickPinata;
+            FitRendererBoundsToFootprint(obj, visualCenter, cellSizeX * width, cellSizeZ * height, recenterVisualBounds);
 
             // ROLLBACK_GIMMICK_HP_TEXT_ASPECT_20260629: 비균일 footprint 스케일로 HP 숫자가 늘어나지 않게
             //   '작은 축 기준' 카운터스케일 (피냐타 등 _hpTexts 없는 기믹은 no-op).
@@ -4385,10 +4394,12 @@ namespace BalloonFlow
             // ROLLBACK_BARRICADE_Z_NUDGE_20260623:
             // Only adjust the rendered art in world Z. Logical occupancy/targeting remains on
             // the authored grid cells, so this cannot change attack reach or blocker behavior.
-            float zNudge = _barricadeVisualZCellNudge * cellSizeZ;
+            // ROLLBACK_BARRICADE_POSITION_RECENTER_20260702:
+            // Disable visual-only Y/Z offset so the root/head sits on the authored grid footprint.
+            float zNudge = 0f; // previous: _barricadeVisualZCellNudge * cellSizeZ
             obj.transform.position = new Vector3(
                 adjustedAnchor.x + headCenterOffset.x + _barricadeVisualOffset.x,
-                _barricadeVisualY + _barricadeVisualOffset.y,
+                BALLOON_FIXED_SPAWN_Y + _barricadeVisualOffset.y, // previous: _barricadeVisualY + offset
                 adjustedAnchor.z + headCenterOffset.z + _barricadeVisualOffset.z + zNudge);
 
             // GimmickIdentifier 에 Head/Body/Edge 가 할당됨(사용자 확인). 미할당 시 이름 폴백.
@@ -4852,7 +4863,7 @@ namespace BalloonFlow
         // ROLLBACK_SIZED_FIELD_BOUNDS_FIT_20260608:
         // Visual-only bounds fitting for 1x1-authored prefabs stretched to multi-cell footprints.
         // Excludes TMP and shadow renderers so labels/shadows do not shrink the actual obstacle art.
-        private void FitRendererBoundsToFootprint(GameObject obj, Vector3 targetCenter, float targetSizeX, float targetSizeZ)
+        private void FitRendererBoundsToFootprint(GameObject obj, Vector3 targetCenter, float targetSizeX, float targetSizeZ, bool recenterPosition = true)
         {
             if (obj == null) return;
             if (!TryMeasureVisualRendererBounds(obj.transform, out Bounds bounds)) return;
@@ -4880,7 +4891,7 @@ namespace BalloonFlow
             }
             obj.transform.localScale = localScale;
 
-            if (TryMeasureVisualRendererBounds(obj.transform, out Bounds fitted))
+            if (recenterPosition && TryMeasureVisualRendererBounds(obj.transform, out Bounds fitted))
             {
                 Vector3 delta = new Vector3(
                     targetCenter.x - fitted.center.x,
@@ -4982,6 +4993,7 @@ namespace BalloonFlow
             // [#13/§11] Ice 영역을 인접 연결 성분으로 묶고, 영역의 blockSize(2=2×2 등) 로 타일링 렌더.
             // blockSize<=1 이면 셀당 오버레이(기본·하위호환). >1 이면 블록당 1개 오버레이로 병합 렌더.
             var regions = GetIceRegions();
+            Debug.Log($"[Ice-DEBUG] ApplyInitialIceState: regions={regions.Count}");
             if (regions.Count == 0) return;
 
             for (int r = 0; r < regions.Count; r++)
@@ -4994,7 +5006,19 @@ namespace BalloonFlow
                 for (int i = 0; i < region.Count; i++)
                 {
                     if (!_balloons.TryGetValue(region[i], out BalloonData d)) continue;
-                    blockSize = Mathf.Max(blockSize, d.iceBlockSize, d.sizeW, d.sizeH);
+                    // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 오버레이는 '저작한 얼음 크기(iceOverlay)'만 사용(베이스 기믹 sizeW/H 무관).
+                    //   기존 Ice(iceOverlay=0)만 iceBlockSize/sizeW/sizeH 사용.
+                    if (d.iceOverlay > 0)
+                        blockSize = Mathf.Max(blockSize, d.iceOverlay);
+                    else
+                        blockSize = Mathf.Max(blockSize, d.iceBlockSize, d.sizeW, d.sizeH);
+                }
+                // [Ice-DEBUG] 영역 셀 상세 — 빈칸/FlexTube/obj유무/위치/색/기믹 진단.
+                for (int i = 0; i < region.Count; i++)
+                {
+                    if (!_balloons.TryGetValue(region[i], out BalloonData dd)) { Debug.Log($"[Ice-DEBUG]  region{r} cell id={region[i]} NOT in _balloons"); continue; }
+                    bool hasObj = _balloonObjects.TryGetValue(region[i], out GameObject oo) && oo != null;
+                    Debug.Log($"[Ice-DEBUG]  region{r} cell id={region[i]} gim={dd.gimmickType} color={dd.color} ovl={dd.iceOverlay} blk={dd.iceBlockSize} sizeW={dd.sizeW} hasObj={hasObj} pos=({dd.position.x:F2},{dd.position.z:F2}) blockSize={blockSize}");
                 }
                 if (blockSize > 1)
                 {
@@ -5005,16 +5029,13 @@ namespace BalloonFlow
 
                 // ROLLBACK_ICE_CELL_BRUSH_20260609:
                 // Ice brush size paints multiple real 1x1 Ice cells. Render every authored cell.
+                for (int i = 0; i < region.Count; i++)
                 {
-                    // 셀당 오버레이 (기본)
-                    for (int i = 0; i < region.Count; i++)
+                    int id = region[i];
+                    if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
                     {
-                        int id = region[i];
-                        if (_balloonObjects.TryGetValue(id, out GameObject obj) && obj != null)
-                        {
-                            ApplyTintToObject(obj, ICE_COLOR);
-                            AttachFrozenOverlay(id, obj);
-                        }
+                        ApplyTintToObject(obj, ICE_COLOR);
+                        AttachFrozenOverlay(id, obj);
                     }
                 }
             }
@@ -5081,8 +5102,9 @@ namespace BalloonFlow
                     }
                 }
 
-                // 앵커에 blockSize 배율 오버레이 — 블록 중앙으로 오프셋
-                if (_balloonObjects.TryGetValue(anchorId, out GameObject aobj) && aobj != null)
+                // 앵커에 blockSize 배율 오버레이 — 블록 중앙으로 오프셋.
+                // ROLLBACK_ICE_OVERLAY_FLEXTUBE_20260702: FlexTube 등 GameObject 없는 셀도 targetCenter(월드)로 부착
+                //   (기존 aobj != null 게이트 제거 — targetCenter/기본스케일로 렌더).
                 {
                     // ROLLBACK_ICE_OVERLAY_WORLD_BOUNDS_CENTER_20260626:
                     // Place merged Ice from the real world bounds of its underlying balloon cells.
@@ -5092,23 +5114,19 @@ namespace BalloonFlow
                     float maxBlockZ = float.MinValue;
                     float sumBlockY = 0f;
                     int measuredCells = 0;
-                    Vector3 sumCellScale = Vector3.zero;
-                    int measuredScaleCells = 0;
                     for (int j = 0; j < cells.Count; j++)
                     {
                         int cid = cells[j];
-                        if (!TryGetBalloonWorldPosition(cid, out Vector3 cellWorldPosition)) continue;
+                        // ROLLBACK_ICE_OVERLAY_DATAPOS_20260702: obj.position 대신 data.position(보정) 사용.
+                        //   FlexTube 는 obj 가 원점/미배치라 obj.position 이 (0,0) → 얼음이 원점에 뜬다. data.position 은 항상 정확.
+                        if (!_balloons.TryGetValue(cid, out BalloonData cd)) continue;
+                        Vector3 cellWorldPosition = GetAdjustedBoardPosition(cd.position);
                         minBlockX = Mathf.Min(minBlockX, cellWorldPosition.x);
                         maxBlockX = Mathf.Max(maxBlockX, cellWorldPosition.x);
                         minBlockZ = Mathf.Min(minBlockZ, cellWorldPosition.z);
                         maxBlockZ = Mathf.Max(maxBlockZ, cellWorldPosition.z);
-                        sumBlockY += cellWorldPosition.y;
+                        sumBlockY += cd.position.y;
                         measuredCells++;
-                        if (_balloonObjects.TryGetValue(cid, out GameObject cellObj) && cellObj != null)
-                        {
-                            sumCellScale += cellObj.transform.lossyScale;
-                            measuredScaleCells++;
-                        }
                     }
                     if (measuredCells <= 0) continue;
 
@@ -5116,8 +5134,48 @@ namespace BalloonFlow
                         (minBlockX + maxBlockX) * 0.5f,
                         sumBlockY / measuredCells,
                         (minBlockZ + maxBlockZ) * 0.5f);
-                    Vector3 baseCellScale = measuredScaleCells > 0 ? sumCellScale / measuredScaleCells : Vector3.one;
-                    AttachIceBlockOverlay(anchorId, targetCenter, blockSize, baseCellScale);
+                    // ROLLBACK_ICE_OVERLAY_CELLSCALE_20260702: 얼음 블록 크기는 '단일 셀' rest 스케일 × 배수. sized 기믹 lossyScale 은 footprint 크기라 제외.
+                    float _iceCellScaleMult = _levelSafeCalculated
+                        ? Mathf.Max(_levelSafeWm, _levelSafeHm)
+                        : (GameManager.HasInstance ? Mathf.Max(GameManager.Instance.Board.balloonFieldWidthMult, GameManager.Instance.Board.balloonFieldHeightMult) : 1f);
+                    Vector3 baseCellScale = GetBalloonRestScale(_iceCellScaleMult);
+                    bool __useRatio = _balloons.TryGetValue(anchorId, out BalloonData __ad2) && __ad2.iceOverlay > 0;
+
+                    // ROLLBACK_ICE_OVERLAY_GIMMICK_CENTER_20260702: 단일 anchor sized 기믹(box/barricade)은 footprint 셀이 등록 안 되므로
+                    //   data 좌표계에서 footprint 중앙 계산 후 board 보정. Barricade 는 footprint 전체(len×두께2)를 덮게 비균일 스케일 override.
+                    Vector3 __scaleOverride = Vector3.zero;
+                    if (cells.Count == 1 && _balloons.TryGetValue(anchorId, out BalloonData __anchorData) && __anchorData.iceOverlay > 0)
+                    {
+                        Vector3 centerData = __anchorData.position;
+                        bool centered = false;
+                        if (__anchorData.gimmickType == GimmickBarricade && __anchorData.barricadeLength > 1)
+                        {
+                            // Barricade footprint 중앙 + 전체 커버: along축 = (len-1)/2*sign / perp(두께 2) = +0.5.
+                            int bdir = ((__anchorData.barricadeDir % 4) + 4) % 4; // 0=N(+Z) 1=E(+X) 2=S(-Z) 3=W(-X)
+                            bool axisZ = (bdir == 0 || bdir == 2);
+                            int sign = (bdir == 0 || bdir == 1) ? 1 : -1;
+                            int len = __anchorData.barricadeLength;
+                            if (axisZ) { centerData.z += (len - 1) * 0.5f * sign * cellSizeZ; centerData.x += 0.5f * cellSizeX; }
+                            else       { centerData.x += (len - 1) * 0.5f * sign * cellSizeX; centerData.z += 0.5f * cellSizeZ; }
+                            centered = true;
+                        }
+                        else if (__anchorData.sizeW > 1 || __anchorData.sizeH > 1)
+                        {
+                            // Box/WoodenBoard footprint 중앙: anchor + (size-1)/2 셀(+X/+row=+Z).
+                            centerData.x += (__anchorData.sizeW - 1) * 0.5f * cellSizeX;
+                            centerData.z += (__anchorData.sizeH - 1) * 0.5f * cellSizeZ;
+                            centered = true;
+                        }
+                        if (centered)
+                        {
+                            Vector3 centerWorld = GetAdjustedBoardPosition(centerData);
+                            targetCenter.x = centerWorld.x;
+                            targetCenter.z = centerWorld.z;
+                        }
+                    }
+                    Vector3 __finalScale = __scaleOverride != Vector3.zero ? __scaleOverride : GetFrozenOverlayWorldScale(baseCellScale, blockSize, __useRatio);
+                    Debug.Log($"[Ice-DEBUG] block anchor={anchorId} cells={cells.Count} blockSize={blockSize} useRatio={__useRatio} targetCenter=({targetCenter.x:F2},{targetCenter.z:F2}) finalScale=({__finalScale.x:F2},{__finalScale.z:F2})");
+                    AttachIceBlockOverlay(anchorId, targetCenter, blockSize, baseCellScale, __useRatio, __scaleOverride);
                 }
             }
         }
@@ -5125,7 +5183,7 @@ namespace BalloonFlow
         /// <summary>
         /// [#13/§11] Ice 블록 앵커에 blockSize 배율 FrozenLayer 오버레이 부착 (블록 중앙 오프셋). 본체 숨김은 호출 측이 처리.
         /// </summary>
-        private void AttachIceBlockOverlay(int anchorId, Vector3 targetCenter, int blockSize, Vector3 baseCellScale)
+        private void AttachIceBlockOverlay(int anchorId, Vector3 targetCenter, int blockSize, Vector3 baseCellScale, bool useIceRatio = false, Vector3 scaleOverride = default)
         {
             if (!ObjectPoolManager.HasInstance) return;
             if (_frozenOverlays.ContainsKey(anchorId)) return;
@@ -5153,7 +5211,10 @@ namespace BalloonFlow
             // ROLLBACK_ICE_OVERLAY_DIRECT_BLOCK_SCALE_20260626:
             // One FrozenLayer sits at the block center. X/Z scale by the block size (2x2/3x3),
             // while Y keeps the visible balloon height scale instead of inheriting a balloon parent.
-            overlay.transform.localScale = GetFrozenOverlayWorldScale(baseCellScale, blockSize);
+            // scaleOverride (Barricade 등 비균일 footprint) 있으면 그걸, 없으면 blockSize 균일 스케일.
+            overlay.transform.localScale = scaleOverride != Vector3.zero
+                ? scaleOverride
+                : GetFrozenOverlayWorldScale(baseCellScale, blockSize, useIceRatio);
             overlay.SetActive(true);
 
             // ROLLBACK_ICE_OVERLAY_XZ_ONLY_SCALE_20260626:
@@ -5491,15 +5552,80 @@ namespace BalloonFlow
         /// 명세: "FrozenLayer 가 풍선보다 커보여야함."</summary>
         private const float FROZEN_OVERLAY_SCALE = 1.3f;
 
-        private static Vector3 GetFrozenOverlayWorldScale(Vector3 balloonWorldScale, int blockSize)
+        // ROLLBACK_ICE_BLOCK_SIZE_FACTOR_20260702: 얼음 블록 크기 배수 — 선형(2×/3×)이 아니라 지정 비율.
+        //   1×1=100%, 2×2=181.2%, 3×3=262.38%. (4+ 는 선형 확장.)
+        private static float IceBlockSizeFactor(int size)
+        {
+            if (size <= 1) return 1f;
+            if (size == 2) return 1.812f;
+            if (size == 3) return 2.6238f;
+            return 1f + (size - 1) * 0.8119f;
+        }
+
+        private static Vector3 GetFrozenOverlayWorldScale(Vector3 balloonWorldScale, int blockSize, bool useIceRatio = false)
         {
             int size = Mathf.Max(1, blockSize);
+            // ROLLBACK_ICE_BLOCK_SIZE_FACTOR_20260702: 오버레이 얼음만 비선형 비율(1.812/2.6238). 기존 sized 얼음은 ×size(원래대로) — 263 등 회귀 방지.
+            float f = useIceRatio ? IceBlockSizeFactor(size) : size;
             float x = Mathf.Max(0.0001f, Mathf.Abs(balloonWorldScale.x));
             float y = Mathf.Max(0.0001f, Mathf.Abs(balloonWorldScale.y));
             float z = Mathf.Max(0.0001f, Mathf.Abs(balloonWorldScale.z));
             // ROLLBACK_GIMMICK_HEIGHT_RATIO_20260629:
             // FrozenLayer height follows balloon scaleY * 1.286. X/Z keep the existing ice margin.
-            return new Vector3(x * FROZEN_OVERLAY_SCALE * size, y * GIMMICK_HEIGHT_FROZEN_LAYER_RATIO, z * FROZEN_OVERLAY_SCALE * size);
+            return new Vector3(x * FROZEN_OVERLAY_SCALE * f, y * GIMMICK_HEIGHT_FROZEN_LAYER_RATIO, z * FROZEN_OVERLAY_SCALE * f);
+        }
+
+        // ROLLBACK_ICE_OVERLAY_GIMMICK_BOUNDS_20260702: 오브젝트(+자식) 월드 렌더 bounds 합집합(파티클 제외).
+        private static bool TryGetObjectWorldBounds(GameObject go, out Bounds bounds)
+        {
+            bounds = new Bounds();
+            if (go == null) return false;
+            var rends = go.GetComponentsInChildren<Renderer>(true);
+            bool has = false;
+            for (int i = 0; i < rends.Length; i++)
+            {
+                var rd = rends[i];
+                if (rd == null || rd is ParticleSystemRenderer) continue;
+                if (!has) { bounds = rd.bounds; has = true; }
+                else bounds.Encapsulate(rd.bounds);
+            }
+            return has;
+        }
+
+        // ROLLBACK_ICE_OVERLAY_GIMMICK_BOUNDS_20260702: 멀티셀 기믹(FlexTube/Barricade/TargetBox/WoodenBox 등) 위 얼음 —
+        //   footprint 가 정사각이 아니거나 anchor 1셀만 등록되므로, 기믹 오브젝트의 실제 렌더 bounds 를 덮도록 FrozenLayer 배치/스케일.
+        private void AttachFrozenOverlayCoveringObject(int anchorId, GameObject gimmickObj)
+        {
+            if (gimmickObj == null || !ObjectPoolManager.HasInstance) return;
+            if (_frozenOverlays.ContainsKey(anchorId)) return;
+            if (!ObjectPoolManager.Instance.HasPool(FrozenLayerPoolKey)) return;
+            if (!TryGetObjectWorldBounds(gimmickObj, out Bounds gb)) return;
+
+            GameObject overlay = ObjectPoolManager.Instance.Get(FrozenLayerPoolKey);
+            if (overlay == null) return;
+            SetFrozenLayerBodyRenderers(overlay, true);
+            SetFrozenLayerIdleParticle(overlay, true);
+            ResetFrozenOverlayMagazineText(overlay);
+            overlay.transform.SetParent(null, false);
+            overlay.transform.rotation = Quaternion.identity;
+            overlay.transform.localScale = Vector3.one;
+            overlay.SetActive(true);
+
+            // FrozenLayer 기본 렌더 크기(scale 1) 측정 → 기믹 bounds × margin 으로 X/Z 스케일 맞춤.
+            float sx = FROZEN_OVERLAY_SCALE, sz = FROZEN_OVERLAY_SCALE;
+            if (TryGetObjectWorldBounds(overlay, out Bounds ob) && ob.size.x > 0.0001f && ob.size.z > 0.0001f)
+            {
+                sx = (gb.size.x * FROZEN_OVERLAY_SCALE) / ob.size.x;
+                sz = (gb.size.z * FROZEN_OVERLAY_SCALE) / ob.size.z;
+            }
+            float yScale = Mathf.Max(0.0001f, Mathf.Abs(gimmickObj.transform.lossyScale.y)) * GIMMICK_HEIGHT_FROZEN_LAYER_RATIO;
+            overlay.transform.localScale = new Vector3(sx, yScale, sz);
+            overlay.transform.position = new Vector3(gb.center.x, gimmickObj.transform.position.y, gb.center.z);
+
+            var bi = gimmickObj.GetComponent<BalloonIdentifier>();
+            if (bi != null) bi.SetVisible(false);
+            _frozenOverlays[anchorId] = overlay;
+            _iceBlockOverlaySize[overlay] = 1;
         }
 
         /// <summary>
@@ -6291,7 +6417,34 @@ namespace BalloonFlow
             foreach (int id in ids)
             {
                 if (!_balloons.TryGetValue(id, out BalloonData ice)) continue;
-                if (ice.isPopped || ice.gimmickType != GimmickIce) continue;
+                if (ice.isPopped) continue;
+
+                // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 얼음 오버레이 셀 → 베이스(기믹/풍선/빈칸)는 유지, 얼음만 제거.
+                if (ice.gimmickType != GimmickIce && ice.iceOverlay > 0)
+                {
+                    ice.iceOverlay = 0;
+                    _balloons[id] = ice;
+                    ReturnFrozenOverlayWithBreakParticle(id);
+                    if (ice.gimmickType == GimmickNone && ice.color < 0)
+                    {
+                        // 빈칸 위 얼음 — 밑에 아무것도 없음 → 셀 제거.
+                        ForcePopBalloon(id);
+                    }
+                    else if (_balloonObjects.TryGetValue(id, out GameObject bobj) && bobj != null)
+                    {
+                        // 베이스(풍선/기믹) 노출 — 기믹 고유 비주얼은 이미 생성돼 있으므로 본체만 표시.
+                        var bi2 = bobj.GetComponent<BalloonIdentifier>();
+                        if (bi2 != null) bi2.SetVisible(true);
+                        int cidx2 = Mathf.Clamp(ice.color, 0, BalloonColors.Length - 1);
+                        ApplyTintToObject(bobj, BalloonColors[cidx2]);
+                        PlayRevealEffect(bobj, cidx2, id);
+                    }
+                    EventBus.Publish(new OnGimmickTriggered { gimmickType = GimmickIce, targetId = id });
+                    thawedAny = true;
+                    continue;
+                }
+
+                if (ice.gimmickType != GimmickIce) continue;
 
                 // 얼음 해제: 일반 풍선으로 전환 (이제 다트로 타격 가능)
                 ice.gimmickType = GimmickNone;
@@ -6336,6 +6489,13 @@ namespace BalloonFlow
         /// 각 영역 = 공유 HP 단위. GimmickProcessor.InitIceRegions 가 셋업 직후 1회 호출.
         /// 4방향 인접(상하좌우) flood-fill 기준.
         /// </summary>
+        // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 셀이 '얼음 덮임' 상태인가 — 기존 Ice 기믹 또는 새 iceOverlay 레이어.
+        //   모든 Ice 로직(영역/타겟차단/HP/비주얼/break)이 이 판정을 공용으로 쓴다.
+        public static bool IsCellIced(BalloonData d)
+        {
+            return d != null && !d.isPopped && (d.gimmickType == GimmickIce || d.iceOverlay > 0);
+        }
+
         public List<List<int>> GetIceRegions()
         {
             var regions = new List<List<int>>();
@@ -6348,7 +6508,7 @@ namespace BalloonFlow
 
             foreach (var kvp in _balloons)
             {
-                if (kvp.Value.isPopped || kvp.Value.gimmickType != GimmickIce) continue;
+                if (!IsCellIced(kvp.Value)) continue; // ROLLBACK_ICE_OVERLAY_LAYER_20260702: Ice 기믹 또는 iceOverlay
                 if (kvp.Value.iceGroupId > 0)
                 {
                     if (!manualGroups.TryGetValue(kvp.Value.iceGroupId, out var manual))
@@ -6379,7 +6539,7 @@ namespace BalloonFlow
                         int nb = _adjCopyBuffer[i];
                         if (visited.Contains(nb)) continue;
                         if (!_balloons.TryGetValue(nb, out BalloonData nbData)) continue;
-                        if (nbData.isPopped || nbData.gimmickType != GimmickIce) continue;
+                        if (!IsCellIced(nbData)) continue; // ROLLBACK_ICE_OVERLAY_LAYER_20260702
                         if (nbData.iceGroupId > 0) continue;
                         visited.Add(nb);
                         stack.Push(nb);
@@ -7088,6 +7248,10 @@ namespace BalloonFlow
         public int iceGroupId = 0;
         public int iceGroupHp = 0;
         public int iceGroupHpMode = 0;
+        // ROLLBACK_ICE_OVERLAY_LAYER_20260702: Ice 를 gimmickType 과 독립된 '오버레이 레이어'로.
+        //   0=없음, >0=얼음 씌워짐(값=블록 변길이). 베이스(빈칸/풍선/기믹 — Wall·Curtain 제외)는 그대로 두고 위에 얼음.
+        //   IsCellIced = (gimmickType==Ice || iceOverlay>0). break 시 iceOverlay=0 → 베이스 노출/공격가능.
+        public int iceOverlay = 0;
 
         /// <summary>[Barricade] 방향 0=N/1=E/2=S/3=W (head→body). 회전·footprint 결정. sizeW/H 미사용.</summary>
         public int barricadeDir = 1;
@@ -7136,6 +7300,8 @@ namespace BalloonFlow
         public int iceGroupId = 0;
         public int iceGroupHp = 0;
         public int iceGroupHpMode = 0;
+        // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 얼음 오버레이(0=없음, >0=블록 변길이). gimmickType 과 독립.
+        public int iceOverlay = 0;
 
         /// <summary>[Barricade] 방향 0=N/1=E/2=S/3=W.</summary>
         public int barricadeDir = 1;

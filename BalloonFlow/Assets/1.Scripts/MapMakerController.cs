@@ -215,6 +215,9 @@ namespace BalloonFlow
         private int[,] _balloonIceGroupId;
         private int[,] _balloonIceGroupHp;
         private int[,] _balloonIceGroupHpMode; // 1=sum member HP, 2=override
+        // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 얼음 오버레이 레이어(0=없음, >0=블록 변길이). gimmickType 과 독립 —
+        //   빈칸/풍선/기믹(Wall·Curtain 제외) 위에 덧씌운다. 'Ice' 필드 기믹 선택 + 클릭으로 저작(베이스 유지).
+        private int[,] _balloonIceOverlay;
         // ROLLBACK_BARRICADE_MAPMAKER_20260608: 바리케이드 방향(0=N/1=E/2=S/3=W)+길이(셀) 셀별 저작. Barricade 셀에만 의미.
         private int[,] _balloonBarricadeDir;    // 바리케이드 방향 (기본 1=E)
         private int[,] _balloonBarricadeLength; // 바리케이드 길이(body 셀 수, 기본 1)
@@ -621,6 +624,7 @@ namespace BalloonFlow
             _balloonIceGroupId = ResizeGrid(_balloonIceGroupId, _gridCols, _gridRows, 0);
             _balloonIceGroupHp = ResizeGrid(_balloonIceGroupHp, _gridCols, _gridRows, 0);
             _balloonIceGroupHpMode = ResizeGrid(_balloonIceGroupHpMode, _gridCols, _gridRows, 1);
+            _balloonIceOverlay = ResizeGrid(_balloonIceOverlay, _gridCols, _gridRows, 0); // ROLLBACK_ICE_OVERLAY_LAYER_20260702
             _balloonBarricadeDir = ResizeGrid(_balloonBarricadeDir, _gridCols, _gridRows, 1);
             _balloonBarricadeLength = ResizeGrid(_balloonBarricadeLength, _gridCols, _gridRows, 1);
             _balloonLockPairIds = ResizeGrid(_balloonLockPairIds, _gridCols, _gridRows, -1);
@@ -3461,8 +3465,28 @@ namespace BalloonFlow
 
                     int ci = _balloonColors[c, r];
                     int gi = _balloonGimmicks[c, r];
+                    int iceOv = _balloonIceOverlay[c, r]; // ROLLBACK_ICE_OVERLAY_EMPTY_PREVIEW_20260702
 
-                    if (ci >= 0)
+                    if (iceOv > 0)
+                    {
+                        // 얼음 오버레이 셀 — 빈칸 위 얼음도 보이게(핑크 폴백 대신 얼음색).
+                        if (ci >= 0)
+                        {
+                            int iceIdx = System.Array.IndexOf(FIELD_GIMMICK_NAMES, "Ice");
+                            mr.sharedMaterial = GetCachedMaterial(ci, iceIdx > 0 ? iceIdx : gi);
+                        }
+                        else
+                        {
+                            if (!_gimmickMatCache.TryGetValue(GIMMICK_ICE_COLOR, out Material iceMat))
+                            {
+                                iceMat = MakeLitMaterial(FindLitShader(), GIMMICK_ICE_COLOR);
+                                _gimmickMatCache[GIMMICK_ICE_COLOR] = iceMat;
+                            }
+                            mr.sharedMaterial = iceMat;
+                        }
+                        go.SetActive(true);
+                    }
+                    else if (ci >= 0)
                     {
                         mr.sharedMaterial = GetCachedMaterial(ci, gi);
                         go.SetActive(true);
@@ -3539,8 +3563,30 @@ namespace BalloonFlow
 
             int ci = _balloonColors[c, r];
             int gi = _balloonGimmicks[c, r];
+            int iceOv = _balloonIceOverlay[c, r]; // ROLLBACK_ICE_OVERLAY_LAYER_20260702
 
-            if (ci >= 0)
+            if (iceOv > 0)
+            {
+                // 얼음 오버레이 — 얼음색으로 표시(베이스는 라벨 마크로 안내). 빈칸 위 얼음도 블록 보이게.
+                var mr = go.GetComponent<MeshRenderer>();
+                if (ci >= 0)
+                {
+                    int iceIdx = System.Array.IndexOf(FIELD_GIMMICK_NAMES, "Ice");
+                    mr.sharedMaterial = GetCachedMaterial(ci, iceIdx > 0 ? iceIdx : gi);
+                }
+                else
+                {
+                    // ROLLBACK_ICE_OVERLAY_EMPTY_PREVIEW_20260702: 빈칸 위 얼음은 color0(핑크) 폴백 대신 얼음색 전용 머티리얼.
+                    if (!_gimmickMatCache.TryGetValue(GIMMICK_ICE_COLOR, out Material iceMat))
+                    {
+                        iceMat = MakeLitMaterial(FindLitShader(), GIMMICK_ICE_COLOR);
+                        _gimmickMatCache[GIMMICK_ICE_COLOR] = iceMat;
+                    }
+                    mr.sharedMaterial = iceMat;
+                }
+                go.SetActive(true);
+            }
+            else if (ci >= 0)
             {
                 go.GetComponent<MeshRenderer>().sharedMaterial = GetCachedMaterial(ci, gi);
                 go.SetActive(true);
@@ -3556,7 +3602,8 @@ namespace BalloonFlow
             float wz = _boardCenter.y + (r - (_gridRows - 1) * 0.5f) * spacing;
 
             // Reuse existing label or create once; toggle visibility
-            bool needLabel = ci >= 0 && gi > 0 && gi < FIELD_GIMMICK_MARKS.Length && !string.IsNullOrEmpty(FIELD_GIMMICK_MARKS[gi]);
+            bool needLabel = (ci >= 0 && gi > 0 && gi < FIELD_GIMMICK_MARKS.Length && !string.IsNullOrEmpty(FIELD_GIMMICK_MARKS[gi]))
+                || iceOv > 0; // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 얼음 오버레이 셀은 항상 라벨(❄+베이스마크).
             if (needLabel)
             {
                 var tm = _previewLabels[c, r];
@@ -3576,7 +3623,7 @@ namespace BalloonFlow
                 tm.characterSize = BalloonScale * 0.35f;
                 // ROLLBACK_ICE_MANUAL_GROUP_20260608:
                 // Show explicit Ice group id in MapMaker preview. Group 0 keeps the legacy auto group label.
-                tm.text = GetFieldGimmickPreviewMark(c, r, gi);
+                tm.text = (iceOv > 0 ? "❄" : "") + GetFieldGimmickPreviewMark(c, r, gi); // ROLLBACK_ICE_OVERLAY_LAYER_20260702
                 tm.gameObject.SetActive(true);
             }
             else if (_previewLabels[c, r] != null)
@@ -4453,6 +4500,50 @@ namespace BalloonFlow
                         return;
                     _lastPaintCol = col;
                     _lastPaintRow = row;
+
+                    // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 'Ice' 필드 기믹을 선택하면 = 얼음 오버레이(베이스 유지, 통째 교체 아님).
+                    //   좌클릭=씌움(Wall Size=블록크기, 빈칸/풍선/기믹 위 모두), 우클릭=제거. Wall·Color_Curtain 베이스엔 금지.
+                    //   erase 모드일 때는 아래 erase 로 넘김.
+                    bool iceBrushSelected = _paintGimmick > 0 && _paintGimmick < FIELD_GIMMICK_NAMES.Length
+                        && FIELD_GIMMICK_NAMES[_paintGimmick] == "Ice";
+                    if (iceBrushSelected && !_fieldGimmickEraseMode && (leftDown || rightDown || mouse.leftButton.isPressed))
+                    {
+                        // b×b footprint 전체에 얼음(앵커=클릭 셀, +dx/+dy). Wall·Curtain 베이스 셀은 스킵.
+                        int b = Mathf.Max(1, _paintWallSize);
+                        if (rightDown)
+                        {
+                            for (int dx = 0; dx < b; dx++)
+                                for (int dy = 0; dy < b; dy++)
+                                {
+                                    int cx = col + dx, cy = row + dy;
+                                    if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
+                                    _balloonIceOverlay[cx, cy] = 0;
+                                    ApplyIceGroupBrushMeta(cx, cy, false);
+                                    UpdatePreviewCell(cx, cy);
+                                }
+                            _blockRightMousePanUntilRelease = true;
+                            _infoDirty = true;
+                            SetStatus($"Ice 제거 ({col},{row}) {b}x{b}");
+                            return;
+                        }
+                        int applied = 0;
+                        for (int dx = 0; dx < b; dx++)
+                            for (int dy = 0; dy < b; dy++)
+                            {
+                                int cx = col + dx, cy = row + dy;
+                                if (cx < 0 || cx >= _gridCols || cy < 0 || cy >= _gridRows) continue;
+                                int cellGi = _balloonGimmicks[cx, cy];
+                                string cellName = (cellGi > 0 && cellGi < FIELD_GIMMICK_NAMES.Length) ? FIELD_GIMMICK_NAMES[cellGi] : "";
+                                if (cellName == "Wall" || cellName == "Color_Curtain") continue; // 이 셀엔 얼음 안 씌움
+                                _balloonIceOverlay[cx, cy] = b; // 베이스(색/기믹) 유지, 얼음만 얹음. 빈칸도 세팅.
+                                ApplyIceGroupBrushMeta(cx, cy, true);
+                                UpdatePreviewCell(cx, cy);
+                                applied++;
+                            }
+                        _infoDirty = true;
+                        SetStatus($"Ice 씌움 ({col},{row}) {b}x{b} — {applied}칸 (베이스 유지)");
+                        return;
+                    }
 
                     if (rightDown)
                     {
@@ -7381,6 +7472,7 @@ namespace BalloonFlow
             _balloonIceGroupId = new int[_gridCols, _gridRows];
             _balloonIceGroupHp = new int[_gridCols, _gridRows];
             _balloonIceGroupHpMode = new int[_gridCols, _gridRows];
+            _balloonIceOverlay = new int[_gridCols, _gridRows]; // ROLLBACK_ICE_OVERLAY_LAYER_20260702
             _balloonBarricadeDir = new int[_gridCols, _gridRows];
             _balloonBarricadeLength = new int[_gridCols, _gridRows];
             _balloonLockPairIds = new int[_gridCols, _gridRows];
@@ -7441,6 +7533,13 @@ namespace BalloonFlow
                     int row = _impRowAnchor + Mathf.RoundToInt((b.gridPosition.y - _impMinY) / spacing);
                     if (col >= 0 && col < _gridCols && row >= 0 && row < _gridRows)
                     {
+                        // ROLLBACK_ICE_OVERLAY_FOOTPRINT_20260702: ice-only 엔트리는 iceOverlay 만 복원(베이스 기믹 footprint 손상 방지).
+                        if (b.iceOnly)
+                        {
+                            _balloonIceOverlay[col, row] = Mathf.Max(1, b.iceOverlay);
+                            if (b.iceBlockSize > 1) _balloonIceBlockSize[col, row] = b.iceBlockSize;
+                            continue;
+                        }
                         int gi = 0;
                         string normalizedGimmick = GimmickDisplayName.Normalize(b.gimmickType);
                         // [PIN_DEPRECATE] 레거시 Pin → Barricade (런타임 normalize 와 동일). Pin 은 드롭다운에서 제거됨.
@@ -7460,6 +7559,7 @@ namespace BalloonFlow
                         _balloonIceGroupId[col, row] = b.iceGroupId;
                         _balloonIceGroupHp[col, row] = b.iceGroupHp;
                         _balloonIceGroupHpMode[col, row] = b.iceGroupHpMode == 2 ? 2 : 1;
+                        _balloonIceOverlay[col, row] = Mathf.Max(0, b.iceOverlay); // ROLLBACK_ICE_OVERLAY_LAYER_20260702
                         // ROLLBACK_BARRICADE_MAPMAKER_20260608: 바리케이드 방향/길이 복원 (기본 dir=1=E, length=1).
                         _balloonBarricadeDir[col, row] = ((b.barricadeDir % 4) + 4) % 4;
                         _balloonBarricadeLength[col, row] = b.barricadeLength >= 3 ? b.barricadeLength : 3;
@@ -8539,7 +8639,8 @@ namespace BalloonFlow
             for (int c = 0; c < _gridCols; c++)
                 for (int r = 0; r < _gridRows; r++)
                 {
-                    if (_balloonColors[c, r] < 0) continue;
+                    // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 빈칸이어도 얼음 오버레이가 있으면 저장(빈칸 위 얼음).
+                    if (_balloonColors[c, r] < 0 && _balloonIceOverlay[c, r] <= 0) continue;
                     // Piñata 비앵커 셀(sizeW==0)은 스킵 — 앵커 1개만 생성
                     int gi = _balloonGimmicks[c, r];
                     // ROLLBACK_ICE_MANUAL_GROUP_20260608:
@@ -8553,7 +8654,35 @@ namespace BalloonFlow
                     // ROLLBACK_BARRICADE_MAPMAKER_FOOTPRINT_20260608: 바리케이드 비앵커 footprint 셀(sizeW==0)도 스킵 — 앵커만 emit.
                     bool isBarricadeCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
                         && FIELD_GIMMICK_NAMES[gi] == "Barricade";
-                    if ((isSizedFieldCell || isBarricadeCell) && _balloonPinataW[c, r] == 0) continue;
+                    if ((isSizedFieldCell || isBarricadeCell) && _balloonPinataW[c, r] == 0)
+                    {
+                        // ROLLBACK_ICE_OVERLAY_FOOTPRINT_20260702: sized 기믹 footprint 셀에 칠한 얼음은 'ice-only' 엔트리로 별도 저장
+                        //   (베이스 기믹은 anchor 가 emit). iceOnly=true → 로드 시 iceOverlay 만 복원(footprint 안 깨짐).
+                        //   런타임에선 color -1 + iceOverlay 로 empty-ice 셀 스폰 → 블록그리드가 per-cell 타일링.
+                        if (_balloonIceOverlay[c, r] > 0)
+                        {
+                            balloons.Add(new BalloonLayout
+                            {
+                                balloonId = bid++,
+                                color = -1,
+                                gridPosition = new Vector2(
+                                    _boardCenter.x + (c - (_gridCols - 1) * 0.5f) * spacing,
+                                    _boardCenter.y + (r - (_gridRows - 1) * 0.5f) * spacing),
+                                gimmickType = "",
+                                sizeW = 1, sizeH = 1, hp = 0,
+                                iceBlockSize = Mathf.Max(1, _balloonIceBlockSize[c, r]),
+                                iceGroupId = 0, iceGroupHp = 0, iceGroupHpMode = 0,
+                                iceOverlay = _balloonIceOverlay[c, r],
+                                iceOnly = true,
+                                barricadeDir = 0, barricadeLength = 0,
+                                eggColors = null, eggHps = null,
+                                lockPairId = -1,
+                                flexTubeGroupId = -1, flexTubeSequenceIndex = -1, flexTubePartType = "",
+                                flexTubeRotation = 0, flexTubeHp = 0
+                            });
+                        }
+                        continue;
+                    }
 
                     // FlexTube — sequenceIndex 로 partType 자동 결정. rotation 은 런타임 spawn 에서 계산(0 저장).
                     // 가드: 현재 _balloonGimmicks 가 FlexTube 인 cell 만 ftGroupId/Seq 유효 처리.
@@ -8611,6 +8740,7 @@ namespace BalloonFlow
                         iceGroupId = isIceCell ? _balloonIceGroupId[c, r] : 0,
                         iceGroupHp = isIceCell ? _balloonIceGroupHp[c, r] : 0,
                         iceGroupHpMode = isIceCell ? (_balloonIceGroupHpMode[c, r] == 2 ? 2 : 1) : 0,
+                        iceOverlay = _balloonIceOverlay[c, r], // ROLLBACK_ICE_OVERLAY_LAYER_20260702
                         // ROLLBACK_BARRICADE_MAPMAKER_20260608: 바리케이드 방향/길이 emit (Barricade 외 셀은 런타임 무시).
                         barricadeDir = _balloonBarricadeDir[c, r],
                         barricadeLength = _balloonBarricadeLength[c, r],
@@ -8827,6 +8957,9 @@ namespace BalloonFlow
                 SetStatus(_floodFillMode ? "Flood Fill ON — click a cell to fill" : "Flood Fill OFF");
             });
 
+            // ROLLBACK_ICE_OVERLAY_LAYER_20260702: Ice 는 별도 토글 없이 'Ice 필드 기믹 선택 + 클릭'으로 오버레이 저작.
+            //   (기믹만 추가 모드에서 Ice 선택 후 클릭 = 베이스 유지하고 얼음만 씌움. 우클릭=제거.)
+
             // ── Save This Level (Feature 1) ──
             var saveRow = Row(p);
             Btn(saveRow, "Save This Level", () => SaveLevelToDatabase(_levelId));
@@ -9042,6 +9175,7 @@ namespace BalloonFlow
             _balloonPinataW[col, row] = 1;
             _balloonPinataH[col, row] = 1;
             _balloonIceBlockSize[col, row] = 1;
+            _balloonIceOverlay[col, row] = 0; // ROLLBACK_ICE_OVERLAY_LAYER_20260702
             ApplyIceGroupBrushMeta(col, row, false);
             _balloonLockPairIds[col, row] = -1;
             _balloonFlexTubeGroupId[col, row] = -1;
@@ -9078,6 +9212,7 @@ namespace BalloonFlow
             _balloonPinataW[col, row] = 1;
             _balloonPinataH[col, row] = 1;
             _balloonIceBlockSize[col, row] = 1;
+            _balloonIceOverlay[col, row] = 0; // ROLLBACK_ICE_OVERLAY_LAYER_20260702
             ApplyIceGroupBrushMeta(col, row, false);
             _balloonLockPairIds[col, row] = -1;
             _balloonBarricadeDir[col, row] = 1;

@@ -268,6 +268,12 @@ namespace BalloonFlow
         public int iceGroupId = 0;
         public int iceGroupHp = 0;
         public int iceGroupHpMode = 0;
+        // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 얼음 오버레이 레이어(0=없음, >0=블록 변길이). gimmickType 과 독립 —
+        //   빈칸/풍선/기믹(Wall·Curtain 제외) 위에 얼음을 씌운다. 깨지면 iceOverlay=0 으로 베이스 노출.
+        public int iceOverlay = 0;
+        // ROLLBACK_ICE_OVERLAY_FOOTPRINT_20260702: sized 기믹(box/barricade) footprint 셀에만 얼음을 씌운 'ice-only' 엔트리 표식.
+        //   저장 시 베이스 기믹은 anchor 가 따로 emit → 이 엔트리는 얼음만. 로드 시 iceOverlay 만 복원(기믹 footprint 안 깨짐).
+        public bool iceOnly = false;
 
         /// <summary>[Barricade] 진행 방향 0=N(+Z)/1=E(+X)/2=S(-Z)/3=W(-X). head 에서 body 가 뻗는 방향.
         /// 바리케이드는 sizeW/H 미사용 — 방향(dir)+길이(barricadeLength)+HP(hp)로만 결정.</summary>

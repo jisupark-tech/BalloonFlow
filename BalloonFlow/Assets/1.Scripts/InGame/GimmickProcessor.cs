@@ -113,9 +113,20 @@ namespace BalloonFlow
         /// Call for each balloon with a gimmick type after BalloonController.SetupBalloons().
         /// </summary>
         public void RegisterBalloonGimmick(int balloonId, string gimmickType, int color, int hp = 0,
-            int iceGroupId = 0, int iceGroupHp = 0, int iceGroupHpMode = 0)
+            int iceGroupId = 0, int iceGroupHp = 0, int iceGroupHpMode = 0, int iceOverlay = 0)
         {
             gimmickType = GimmickDisplayName.Normalize(gimmickType);
+            // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 베이스 기믹 위에 얼음 오버레이가 있으면 ice 추적도 등록(베이스 등록과 공존).
+            //   per-cell ice HP=1 (영역 HP = 셀 수 fallback 또는 iceGroupHp 오버라이드 — 기존 Ice 와 동일 방식).
+            //   베이스 기믹 case 는 아래 switch 에서 그대로 등록되어, 얼음 깨진 뒤 정상 동작.
+            if (iceOverlay > 0 && gimmickType != BalloonController.GimmickIce)
+            {
+                _iceBalloons.Add(balloonId);
+                _iceBalloonHp[balloonId] = 1;
+                _iceBalloonGroupId[balloonId] = Mathf.Max(0, iceGroupId);
+                _iceBalloonGroupHp[balloonId] = Mathf.Max(0, iceGroupHp);
+                _iceBalloonGroupHpMode[balloonId] = iceGroupHpMode;
+            }
             switch (gimmickType)
             {
                 // Ice (기믹명세 §11): 영역 공유 HP. 각 ice 풍선과 셀별 maxHP 를 캡처만 해둔다.
@@ -284,6 +295,14 @@ namespace BalloonFlow
         public string CheckDartBlocker(int balloonId, string gimmickType, int dartColor)
         {
             gimmickType = GimmickDisplayName.Normalize(gimmickType);
+            // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 베이스 기믹 위에 얼음 오버레이가 씌워진 셀도 직접 타격 차단(깨질 때까지).
+            //   (gimmickType 은 베이스 타입이라 switch 로 안 잡히므로 여기서 balloon.iceOverlay 확인.)
+            if (BalloonController.HasInstance)
+            {
+                var bd = BalloonController.Instance.GetBalloon(balloonId);
+                if (bd != null && bd.iceOverlay > 0)
+                    return "Ice overlay: indirect removal only (region HP)";
+            }
             switch (gimmickType)
             {
                 case BalloonController.GimmickWall:

@@ -941,6 +941,7 @@ namespace BalloonFlow
                 if (BalloonController.Instance.IsBalloonConcealed(b.balloonId)) targetable = false;
                 if (b.gimmickType == BalloonController.GimmickWall) targetable = false;
                 if (b.gimmickType == BalloonController.GimmickIce) targetable = false;
+                if (b.iceOverlay > 0) targetable = false; // ROLLBACK_ICE_OVERLAY_LAYER_20260702: 얼음 덮인 기믹/셀 비타겟.
                 if (b.gimmickType == BalloonController.GimmickColorCurtain) targetable = false;
 
                 // ROLLBACK_BARRICADE_LENGTH_SEGMENTS_20260623:
