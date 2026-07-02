@@ -9301,10 +9301,27 @@ namespace BalloonFlow
                         _holderColors[c, r] = toColor;
                         holderCount++;
                     }
+            // ROLLBACK_SWAP_PINATABOX_EGG_20260702: 피냐타 박스(Target Box) egg 색상도 같이 swap.
+            //   박스 egg 색은 _balloonColors 가 아니라 별도 config(_boxEggConfigColors)라 기존 swap 에서 누락됐음.
+            //   (배열 원소를 in-place 교체 — dict 구조 변경 아님, GenerateQueue/AutoBalance 등이 같은 참조를 읽으므로 즉시 반영.)
+            int eggCount = 0;
+            if (_boxEggConfigColors != null)
+            {
+                foreach (int[] eggC in _boxEggConfigColors.Values)
+                {
+                    if (eggC == null) continue;
+                    for (int i = 0; i < eggC.Length; i++)
+                        if (eggC[i] == fromColor) { eggC[i] = toColor; eggCount++; }
+                }
+            }
+            // 편집 중 박스 egg 버퍼도 같이 swap — 박스 편집 오픈 상태에서 스왑 후 저장 시 되돌려지는 것 방지.
+            if (_boxEggColors != null)
+                for (int i = 0; i < _boxEggColors.Count; i++)
+                    if (_boxEggColors[i] == fromColor) _boxEggColors[i] = toColor;
             OnBalloonGridChanged();
             RebuildHolderUI();
             _infoDirty = true;
-            SetStatus($"Swapped color {fromColor} -> {toColor} (balloons:{balloonCount}, holders:{holderCount})");
+            SetStatus($"Swapped color {fromColor} -> {toColor} (balloons:{balloonCount}, holders:{holderCount}, box eggs:{eggCount})");
         }
 
         #endregion
