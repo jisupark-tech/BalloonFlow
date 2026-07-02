@@ -76,6 +76,24 @@ namespace BalloonFlow
         [Range(0f, 1f)]
         public float popHoldDuration = 0.05f;
 
+        // ROLLBACK_GIMMICK_VISUAL_OFFSET_20260702: 기믹 '본체' 비주얼 위치 보정(월드). 인스펙터에서 값을 바꾸면 인게임 중에도
+        //   실시간으로 기믹 본체가 이동함(동적). 얼음은 셀에 고정되고 기믹 본체만 이동. X/Y/Z 각각 튜닝.
+        [Header("[기믹 본체 위치 보정(월드, 동적) — 얼음 아님]")]
+        [Tooltip("FlexTube 본체 위치 보정(월드 X/Y/Z).")]
+        public Vector3 gimmickOffsetFlexTube = Vector3.zero;
+
+        [Tooltip("Barricade 본체 위치 보정(월드 X/Y/Z).")]
+        public Vector3 gimmickOffsetBarricade = Vector3.zero;
+
+        [Tooltip("WoodenBoard(Pinata) 본체 위치 보정(월드 X/Y/Z).")]
+        public Vector3 gimmickOffsetWoodenBoard = Vector3.zero;
+
+        [Tooltip("TargetBox(Pinata_Box) 본체 위치 보정(월드 X/Y/Z).")]
+        public Vector3 gimmickOffsetTargetBox = Vector3.zero;
+
+        [Tooltip("IronWall(Wall) 본체 위치 보정(월드 X/Y/Z).")]
+        public Vector3 gimmickOffsetIronWall = Vector3.zero;
+
         [Header("[풍선 타일 영역 — 동적 조정]")]
         [Tooltip("풍선 타일 영역 가로 배율. 1.0=기본, 인게임 동적 반영. (default: 1.39)")]
         [Range(0.5f, 2f)]

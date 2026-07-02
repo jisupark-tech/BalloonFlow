@@ -198,6 +198,12 @@ namespace BalloonFlow
                 eggScale.x = tplScale.x * fitKxz;
                 eggScale.z = tplScale.z * fitKxz;
             }
+            // ROLLBACK_PAINTBOX_EGG_CLAMP_BOX_20260702: Paint 실린더가 Box(외곽)를 넘지 않게 셀 fit(×plump) 상한으로 클램프.
+            //   위에서 targetEggWorldScaleXZ(풍선 지름 ×1.736)로 X/Z를 덮어쓰는데, 이 값이 셀보다 크면 실린더가 박스를 벗어난다.
+            //   → 셀 fit×EGG_PLUMP_MULT(=fitK) 까지만 허용. fitK=cell fit×fillRatio×1.1 이라 인접 실린더끼리 '조금 겹치는' 정도는
+            //   유지되면서(통통), 박스 밖으로는 안 나간다. (겹침을 더/덜 원하면 EGG_PLUMP_MULT 179 라인 조정.)
+            eggScale.x = Mathf.Min(eggScale.x, tplScale.x * fitK);
+            eggScale.z = Mathf.Min(eggScale.z, tplScale.z * fitK);
             if (targetEggWorldScaleY > 0f)
             {
                 // ROLLBACK_GIMMICK_HEIGHT_RATIO_20260629:

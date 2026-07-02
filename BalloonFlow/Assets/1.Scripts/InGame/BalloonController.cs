@@ -634,6 +634,8 @@ namespace BalloonFlow
 #endif
         private void Update()
         {
+            // ROLLBACK_GIMMICK_VISUAL_OFFSET_20260702: 인스펙터 기믹별 본체 오프셋 변경을 실시간 반영(동적).
+            UpdateGimmickVisualOffsets();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             // ROLLBACK_QA_BALLOON_WAVE_DIR_20260701: QA 전용 파도 연출(빌드 제외 — 이 블록은 #if UNITY_EDITOR||DEVELOPMENT_BUILD).
             //   P=중앙 / O=오른→왼 / I=왼→오른 / U=위→아래 / Y=아래→위.
@@ -2453,6 +2455,7 @@ namespace BalloonFlow
                 if (obj != null)
                 {
                     _balloonObjects[id] = obj;
+                    RegisterGimmickVisual(obj, data.gimmickType); // ROLLBACK_GIMMICK_VISUAL_OFFSET_20260702: 본체 동적 오프셋 추적(5종 필터)
 
                     // Override visuals for special gimmick types
                     if (data.gimmickType == GimmickWall)
@@ -2701,6 +2704,7 @@ namespace BalloonFlow
                 ClearFlexTubeTemplateChildren(tubeObj);
 
                 _flexTubeRoots.Add(tubeObj);
+                RegisterGimmickVisual(tubeObj, GimmickFlexTube); // ROLLBACK_GIMMICK_VISUAL_OFFSET_20260702: 튜브 루트 동적 오프셋
                 Quaternion extraRot = Quaternion.Euler(0f, tube.ExtraYRotation, 0f);
 
                 // 다른 모든 필드 요소와 동일 좌표계로 정렬 — raw position 을 보드 보정(GetAdjustedBoardPosition)에 통과.
@@ -5239,9 +5243,63 @@ namespace BalloonFlow
                             targetCenter.z = centerWorld.z;
                         }
                     }
+                    // ROLLBACK_ICE_GIMMICK_OFFSET_20260702: 블록의 기믹 타입 결정(있으면) → 위치 보정은 동적 적용(AttachIceBlockOverlay 저장 + Update 갱신).
+                    string __blockGimmick = null;
+                    for (int i = 0; i < cells.Count; i++)
+                        if (_balloons.TryGetValue(cells[i], out BalloonData gd2) && gd2.gimmickType != GimmickNone && gd2.gimmickType != GimmickIce)
+                        { __blockGimmick = gd2.gimmickType; break; }
                     Vector3 __finalScale = __scaleOverride != Vector3.zero ? __scaleOverride : GetFrozenOverlayWorldScale(baseCellScale, blockSize, __useRatio);
-                    Debug.Log($"[Ice-DEBUG] block anchor={anchorId} cells={cells.Count} blockSize={blockSize} useRatio={__useRatio} targetCenter=({targetCenter.x:F2},{targetCenter.z:F2}) finalScale=({__finalScale.x:F2},{__finalScale.z:F2})");
-                    AttachIceBlockOverlay(anchorId, targetCenter, blockSize, baseCellScale, __useRatio, __scaleOverride);
+                    Debug.Log($"[Ice-DEBUG] block anchor={anchorId} cells={cells.Count} blockSize={blockSize} useRatio={__useRatio} gim={__blockGimmick} targetCenter=({targetCenter.x:F2},{targetCenter.z:F2}) finalScale=({__finalScale.x:F2},{__finalScale.z:F2})");
+                    AttachIceBlockOverlay(anchorId, targetCenter, blockSize, baseCellScale, __useRatio, __scaleOverride, __blockGimmick);
+                }
+            }
+        }
+
+        // ROLLBACK_GIMMICK_VISUAL_OFFSET_20260702: 기믹 '본체' 비주얼 위치 보정 — 인스펙터에서 값을 바꾸면 Update 에서 실시간 반영(동적).
+        //   얼음은 셀에 고정되고, 기믹 본체만 이동한다(사용자 요청). delta 방식이라 base 위치를 몰라도 안전(변경분만 가감).
+        private class GimmickVisualEntry { public GameObject obj; public string gimmickType; public Vector3 lastOffset; }
+        private readonly List<GimmickVisualEntry> _gimmickVisuals = new List<GimmickVisualEntry>();
+
+        private Vector3 GetGimmickVisualOffset(string gimmickType)
+        {
+            if (string.IsNullOrEmpty(gimmickType) || !GameManager.HasInstance) return Vector3.zero;
+            var b = GameManager.Instance.Board;
+            switch (gimmickType)
+            {
+                case GimmickFlexTube:  return b.gimmickOffsetFlexTube;
+                case GimmickBarricade: return b.gimmickOffsetBarricade;
+                case GimmickPinata:    return b.gimmickOffsetWoodenBoard; // WoodenBoard 비주얼
+                case GimmickPinataBox: return b.gimmickOffsetTargetBox;
+                case GimmickWall:      return b.gimmickOffsetIronWall;
+                default:               return Vector3.zero;
+            }
+        }
+
+        // 기믹 본체 등록 — 스폰 시 호출. 5종 기믹만 추적.
+        private void RegisterGimmickVisual(GameObject obj, string gimmickType)
+        {
+            if (obj == null || string.IsNullOrEmpty(gimmickType)) return;
+            switch (gimmickType)
+            {
+                case GimmickFlexTube: case GimmickBarricade: case GimmickPinata: case GimmickPinataBox: case GimmickWall:
+                    _gimmickVisuals.Add(new GimmickVisualEntry { obj = obj, gimmickType = gimmickType, lastOffset = Vector3.zero });
+                    break;
+            }
+        }
+
+        // 인스펙터 오프셋 변경분(delta)을 기믹 본체에 적용(Update 호출). null 항목 정리.
+        private void UpdateGimmickVisualOffsets()
+        {
+            if (_gimmickVisuals.Count == 0) return;
+            for (int i = _gimmickVisuals.Count - 1; i >= 0; i--)
+            {
+                var e = _gimmickVisuals[i];
+                if (e.obj == null) { _gimmickVisuals.RemoveAt(i); continue; }
+                Vector3 cur = GetGimmickVisualOffset(e.gimmickType);
+                if (cur != e.lastOffset)
+                {
+                    e.obj.transform.position += (cur - e.lastOffset);
+                    e.lastOffset = cur;
                 }
             }
         }
@@ -5249,7 +5307,7 @@ namespace BalloonFlow
         /// <summary>
         /// [#13/§11] Ice 블록 앵커에 blockSize 배율 FrozenLayer 오버레이 부착 (블록 중앙 오프셋). 본체 숨김은 호출 측이 처리.
         /// </summary>
-        private void AttachIceBlockOverlay(int anchorId, Vector3 targetCenter, int blockSize, Vector3 baseCellScale, bool useIceRatio = false, Vector3 scaleOverride = default)
+        private void AttachIceBlockOverlay(int anchorId, Vector3 targetCenter, int blockSize, Vector3 baseCellScale, bool useIceRatio = false, Vector3 scaleOverride = default, string blockGimmickType = null)
         {
             if (!ObjectPoolManager.HasInstance) return;
             if (_frozenOverlays.ContainsKey(anchorId)) return;
@@ -5273,6 +5331,7 @@ namespace BalloonFlow
 
             // 위치 보정(Wall 패턴): 앵커=블록 코너 셀 → footprint 중앙으로 이동. localPosition 은 부모(_balloonScale)
             // 스케일에 곱해져 어긋나므로 월드 위치로 직접 설정 (offsetX/Z 는 이미 월드 단위 = (B-1)*0.5*cellSize).
+            // 얼음은 셀 중심에 고정(오프셋 없음). 기믹 본체 위치 보정은 별도(GimmickVisual 트래킹)에서 처리.
             overlay.transform.position = targetCenter;
             // ROLLBACK_ICE_OVERLAY_DIRECT_BLOCK_SCALE_20260626:
             // One FrozenLayer sits at the block center. X/Z scale by the block size (2x2/3x3),
@@ -5738,7 +5797,7 @@ namespace BalloonFlow
             // It is a field overlay that covers the balloon from world space; parenting it to the
             // balloon makes pooled hierarchy/balloon scale move the ice to the wrong place.
             overlay.transform.SetParent(null, false);
-            overlay.transform.position = parentBalloon.transform.position;
+            overlay.transform.position = parentBalloon.transform.position; // 얼음은 셀 고정
             overlay.transform.rotation = Quaternion.identity;
             // 풍선보다 크게 — 얼음이 풍선을 감싼 시각.
             // ROLLBACK_FROZEN_OVERLAY_DIRECT_SCALE_20260626:
@@ -6104,6 +6163,7 @@ namespace BalloonFlow
             }
             _frozenOverlays.Clear();
             _iceBlockOverlays.Clear();
+            _gimmickVisuals.Clear(); // ROLLBACK_GIMMICK_VISUAL_OFFSET_20260702
             _fieldHitBaseScales.Clear(); // 레벨 정리 시 hit 펀치 rest 캐시도 비움 (다음 레벨 재캡처)
         }
 
