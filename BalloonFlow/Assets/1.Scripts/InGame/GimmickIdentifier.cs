@@ -347,6 +347,10 @@ namespace BalloonFlow
             {
                 var r = _colorRenderers[i];
                 if (r == null) continue;
+                // ROLLBACK_FLEXTUBE_HOSE_START_NO_COLOR_20260702:
+                // FlexTube_StartCap/Hose_Start keeps its authored material. It must not be replaced
+                // by BalloonShared even if it was accidentally included in _colorRenderers.
+                if (IsFlexTubeHoseStartRenderer(r)) continue;
 
                 // ROLLBACK_GIMMICK_PARTICLE_TINT_KEEP_MATERIAL_20260612:
                 // Keep particle materials intact and tint via ParticleSystem startColor only.
@@ -381,6 +385,21 @@ namespace BalloonFlow
         // ROLLBACK_BARRICADE_FACE_MATERIAL_20260629: Barricade 앞/뒤 면 색 날아감 방지 —
         //   Body / (Edge+Head) 에 전용 머티리얼을 적용하고 색을 틴트한다. 머티리얼 미할당 파트는 no-op
         //   → ApplyColor 결과 유지. ApplyColor 직후(스폰 시) 호출.
+        private static bool IsFlexTubeHoseStartRenderer(Renderer renderer)
+        {
+            Transform t = renderer != null ? renderer.transform : null;
+            while (t != null)
+            {
+                string n = t.name;
+                if (!string.IsNullOrEmpty(n) &&
+                    (n.IndexOf("Hose_Start", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     n.IndexOf("HoseStart", System.StringComparison.OrdinalIgnoreCase) >= 0))
+                    return true;
+                t = t.parent;
+            }
+            return false;
+        }
+
         public void ApplyBarricadeMaterials(Color color)
         {
             // Body·Head·Edge 모두 색 틴트 적용 (할당된 머티리얼을 색별로 클론·틴트).

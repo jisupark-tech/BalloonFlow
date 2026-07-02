@@ -11,9 +11,16 @@ namespace BalloonFlow
     public class FlexTubePart : MonoBehaviour, IDartHittable
     {
         [SerializeField] private GimmickIdentifier.FlexTubePart _partType = GimmickIdentifier.FlexTubePart.Segment;
+        // ROLLBACK_FLEXTUBE_START_HOSE_MATERIAL_20260702:
+        // Link the StartCap/Hose_Start renderer here in the prefab. FlexTube spawn tints the full cap,
+        // then restores this renderer's material so the authored Hose_Start material can stay separate.
+        [Header("[FlexTube StartCap Material]")]
+        [SerializeField] private Renderer _hoseStartRenderer;
+        [SerializeField] private Material _hoseStartMaterialOverride;
         private FlexTube _owner;
         private int _balloonId = -1;
         private int[] _balloonIds;
+        private Material _capturedHoseStartMaterial;
 
         public GimmickIdentifier.FlexTubePart PartType => _partType;
         public FlexTube Owner => _owner;
@@ -56,6 +63,28 @@ namespace BalloonFlow
                 if (_balloonIds[i] == id)
                     return true;
             return false;
+        }
+
+        public void CaptureStartHoseMaterial()
+        {
+            if (_partType != GimmickIdentifier.FlexTubePart.StartCap || _hoseStartRenderer == null)
+                return;
+
+            _capturedHoseStartMaterial = _hoseStartMaterialOverride != null
+                ? _hoseStartMaterialOverride
+                : _hoseStartRenderer.sharedMaterial;
+        }
+
+        public void RestoreStartHoseMaterial()
+        {
+            if (_partType != GimmickIdentifier.FlexTubePart.StartCap || _hoseStartRenderer == null)
+                return;
+
+            Material material = _hoseStartMaterialOverride != null ? _hoseStartMaterialOverride : _capturedHoseStartMaterial;
+            if (material == null) return;
+
+            _hoseStartRenderer.sharedMaterial = material;
+            _hoseStartRenderer.SetPropertyBlock(null);
         }
 
         public void OnDartHit(int dartColor)

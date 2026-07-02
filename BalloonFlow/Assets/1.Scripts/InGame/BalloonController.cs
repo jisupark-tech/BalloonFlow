@@ -73,6 +73,10 @@ namespace BalloonFlow
         private const float BARRICADE_BODY_CELL_LOCAL_SCALE_X = 1f;
         // [Barricade] head(Barricade) 가 차지하는 축방향 칸 수(2). body 는 head 뒤에서 시작.
         private const float BARRICADE_HEAD_CELLS = 2f;
+        // ROLLBACK_BARRICADE_VISUAL_Z_NUDGE_20260702:
+        // Stage 146 review: Baricade_Pooled z 0.3169999 -> 0.336, about +0.095 cell at 0.2 cell size.
+        // Keep it cell-relative so other board sizes preserve the same visual relationship.
+        private const float BARRICADE_VISUAL_Z_OFFSET_CELLS = 0.095f;
 
         /// <summary>
         /// Color palette for balloon visualization. Index matches BalloonData.color.
@@ -208,6 +212,15 @@ namespace BalloonFlow
         // ROLLBACK_FLEXTUBE_SEQ_VISUAL_Z_OFFSET_20260702: Previous value 0.25f.
         // Keep FlexTube visual roots on the authored cell footprint instead of lifting them in +Z.
         private const float FLEXTUBE_SEQ_VISUAL_Z_OFFSET = 0f;
+        // ROLLBACK_FLEXTUBE_VISUAL_RELATIVE_POSE_20260702:
+        // Stage 146 review wanted Start/End y ~=0.46 and z ~=0.349. Keep this relative to the
+        // current balloon/grid scale instead of hard-coding absolute world values.
+        private const float FLEXTUBE_VISUAL_Y_BALLOON_SCALE_RATIO = 1.03f;
+        private const float FLEXTUBE_VISUAL_Z_OFFSET_CELLS = -0.595f;
+        // ROLLBACK_FLEXTUBE_BODY_DIAMETER_20260702:
+        // Shrink only the generated body rib diameter. Do not scale FlexTubeBodyMesh_RT itself,
+        // because its vertices are baked in world/tube-local space and object scaling moves the path.
+        private const float FLEXTUBE_BODY_DIAMETER_SCALE_MULTIPLIER = 0.75f;
         // ROLLBACK_FLEXTUBE_SEAMLESS_TILING_20260618: 세그먼트의 자연 길이(월드 Z).
         //   측정: 유니티 (1,1,1) 박스 대비 세그먼트가 유닛당 3.5개일 때 1사이즈 = 1/3.5 ≈ 0.2857.
         //   (FlexTube_Segment mesh × FlexTubeSegmentVisualScale.z(0.86) 의 실제 월드 길이.)
@@ -1100,6 +1113,14 @@ namespace BalloonFlow
         private float GetGimmickReferenceBalloonScaleY(float scaleMult)
         {
             return GetBalloonRestScale(scaleMult).y;
+        }
+
+        private float GetFlexTubeVisualY(float scaleMult)
+        {
+            // ROLLBACK_FLEXTUBE_VISUAL_RELATIVE_POSE_20260702:
+            // Default balloon height 0.35 resolves to about y=0.46, while larger/smaller fields
+            // still keep the same visual ratio against balloon height.
+            return BALLOON_FIXED_SPAWN_Y + GetGimmickReferenceBalloonScaleY(scaleMult) * FLEXTUBE_VISUAL_Y_BALLOON_SCALE_RATIO;
         }
 
         /// <summary>
@@ -2740,6 +2761,9 @@ namespace BalloonFlow
                 //    so the tube keeps a constant sensible thickness regardless of cell spacing.
                 //  HP/targeting still map each rib to its nearest logical cell.
                 GetAdjustedCellSize(out float gridCellX, out float gridCellZ);
+                GetFieldVisualMetrics(out _, out _, out float flexTubeScaleMult, out _, out _, out _);
+                float flexTubeVisualY = GetFlexTubeVisualY(flexTubeScaleMult);
+                float flexTubeVisualZOffset = gridCellZ * FLEXTUBE_VISUAL_Z_OFFSET_CELLS;
                 float ftMinX = float.MaxValue, ftMaxX = float.MinValue, ftMinZ = float.MaxValue, ftMaxZ = float.MinValue;
                 foreach (var cp in cellPositions)
                 {
@@ -2798,6 +2822,7 @@ namespace BalloonFlow
                     if (p == null) { Destroy(obj); return null; }
                     p.SetPartType(pType);
                     p.SetBalloonId(cellId);
+                    p.CaptureStartHoseMaterial();
                     parts.Add(p);
 
                     var gi = obj.GetComponent<GimmickIdentifier>();
@@ -2809,10 +2834,12 @@ namespace BalloonFlow
                     // ROLLBACK_FLEXTUBE_TINT_ALL_RENDERERS_20260608: tint every child renderer so
                     // parts not wired to GimmickIdentifier._colorRenderers don't stay black/gray.
                     ApplyTintToRenderersInChildren(obj, BalloonColors[colorIdx]);
+                    p.RestoreStartHoseMaterial();
                     // ROLLBACK_FLEXTUBE_GRID_2CELL_SCALE_20260628:
                     // GimmickIdentifier.Initialize/ApplyColor can touch child renderers after spawn.
                     // Re-apply the grid-derived scale last so every part keeps the same final world size.
                     if (applyScale) obj.transform.localScale = scale;
+                    p.RestoreStartHoseMaterial();
                     return p;
                 }
 
@@ -3013,6 +3040,17 @@ namespace BalloonFlow
                     return new Vector3(sx, sx, sz);
                 }
 
+                Vector3 ApplyFlexTubeBodyDiameterScale(Vector3 scale)
+                {
+                    // ROLLBACK_FLEXTUBE_BODY_DIAMETER_20260702:
+                    // Apply the requested body scale 1 -> 0.75 only on the hose cross-section.
+                    // Keep Z length intact so generated ribs still connect without opening gaps.
+                    return new Vector3(
+                        scale.x * FLEXTUBE_BODY_DIAMETER_SCALE_MULTIPLIER,
+                        scale.y * FLEXTUBE_BODY_DIAMETER_SCALE_MULTIPLIER,
+                        scale.z);
+                }
+
                 int FindNearestSeqByPosition(Vector3 pos)
                 {
                     int nearest = 0;
@@ -3205,7 +3243,7 @@ namespace BalloonFlow
                 }
 
                 Vector3 startCapGridScale = BuildPartScale(startCapMeshX, startCapMeshZ);
-                Vector3 segmentGridScale = BuildPartScale(segMeshX, segMeshZ);
+                Vector3 segmentGridScale = ApplyFlexTubeBodyDiameterScale(BuildPartScale(segMeshX, segMeshZ));
                 Vector3 endCapGridScale = BuildPartScale(endCapMeshX, endCapMeshZ);
                 bool startCapJointSkipWasRequested = IsSeqJointWithOtherGroup(0, -GetSeqTangent(0));
                 bool endCapJointSkipWasRequested = IsSeqJointWithOtherGroup(lastIdx, GetSeqTangent(lastIdx));
@@ -3234,7 +3272,8 @@ namespace BalloonFlow
                 // still existed. Gameplay/targeting still uses seqCellIds below.
                 if (TryGetSeqFootprint(0, GetSeqTangent(0), out Vector3 startCenter, out float startAlongWorld, out float startPerpWorld))
                 {
-                    startCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
+                    startCenter.y = flexTubeVisualY;
+                    startCenter.z += flexTubeVisualZOffset;
                     Quaternion startRot = Quaternion.LookRotation(GetSeqTangent(0), Vector3.up) * extraRot;
                     Vector3 startFootprintScale = BuildFootprintPartScale(startCapMeshX, startCapMeshZ, startAlongWorld, startPerpWorld);
                     var startPart = SpawnFlexPart(startCapPrefab, startCenter, startRot,
@@ -3243,7 +3282,8 @@ namespace BalloonFlow
                     {
                         if (TryGetSeqWorldFootprintXZ(0, out Vector3 startFitCenter, out float startSizeX, out float startSizeZ))
                         {
-                            startFitCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
+                            startFitCenter.y = flexTubeVisualY;
+                            startFitCenter.z += flexTubeVisualZOffset;
                             FitRendererBoundsToFootprint(startPart.gameObject, startFitCenter, startSizeX, startSizeZ);
                         }
                         else
@@ -3345,7 +3385,8 @@ namespace BalloonFlow
                 {
                     float curveDistance = bodyCount <= 0 ? bodyStart : Mathf.Lerp(bodyStart, bodyEnd, bi / (float)bodyCount);
                     SampleCurveByDistance(curvePoints, curveCum, curveDistance, Mathf.Max(0.0001f, pitch), out Vector3 segPos, out Vector3 segTan);
-                    segPos.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
+                    segPos.y = flexTubeVisualY;
+                    segPos.z += flexTubeVisualZOffset;
                     if (segTan.sqrMagnitude < 0.0001f) segTan = GetSeqTangent(FindNearestSeqByPosition(segPos));
                     Quaternion segRot = Quaternion.LookRotation(segTan.normalized, Vector3.up) * extraRot;
                     int nearestSeq = FindNearestSeqByPosition(segPos);
@@ -3411,7 +3452,8 @@ namespace BalloonFlow
                     float endVisualAlongWorld = Mathf.Min(endAlongWorld, ProjectedCellExtent(endTan) * FLEXTUBE_CAP_LENGTH_FRAC);
                     float endVisualPerpWorld = endPerpWorld;
                     Vector3 endVisualCenter = endCenter + endTan * Mathf.Max(0f, endAlongWorld - endVisualAlongWorld) * 0.5f;
-                    endVisualCenter.z += FLEXTUBE_SEQ_VISUAL_Z_OFFSET;
+                    endVisualCenter.y = flexTubeVisualY;
+                    endVisualCenter.z += flexTubeVisualZOffset;
 
                     Quaternion endRot = Quaternion.LookRotation(endTan, Vector3.up) * extraRot;
                     Vector3 endFootprintScale = BuildFootprintPartScale(endCapMeshX, endCapMeshZ, endVisualAlongWorld, endVisualPerpWorld);
@@ -4396,7 +4438,7 @@ namespace BalloonFlow
             // the authored grid cells, so this cannot change attack reach or blocker behavior.
             // ROLLBACK_BARRICADE_POSITION_RECENTER_20260702:
             // Disable visual-only Y/Z offset so the root/head sits on the authored grid footprint.
-            float zNudge = 0f; // previous: _barricadeVisualZCellNudge * cellSizeZ
+            float zNudge = cellSizeZ * BARRICADE_VISUAL_Z_OFFSET_CELLS;
             obj.transform.position = new Vector3(
                 adjustedAnchor.x + headCenterOffset.x + _barricadeVisualOffset.x,
                 BALLOON_FIXED_SPAWN_Y + _barricadeVisualOffset.y, // previous: _barricadeVisualY + offset
@@ -5048,36 +5090,60 @@ namespace BalloonFlow
         /// </summary>
         private void RenderIceRegionBlocks(List<int> region, int blockSize, float cellSizeX, float cellSizeZ)
         {
-            float invX = 1f / Mathf.Max(0.0001f, cellSizeX);
-            float invZ = 1f / Mathf.Max(0.0001f, cellSizeZ);
-
-            float minX = float.MaxValue, minZ = float.MaxValue;
+            // ROLLBACK_ICE_BLOCK_RANK_GREEDY_20260702: col/row 를 '영역 내 고유 X/Z 값 정렬 순위'로 산출 →
+            //   data 간격이 _cellSpacing 과 달라도 인접 셀이 항상 연속 정수. 그 뒤 min-corner greedy 로 blockSize 클레임
+            //   → 저작한 2×2 가 그리드 짝수 경계에 안 맞아도 하나의 블록으로 유지(쪼개짐/겹침 방지, 모든 기믹 공통).
+            float tolX = Mathf.Max(0.0001f, cellSizeX * 0.5f);
+            float tolZ = Mathf.Max(0.0001f, cellSizeZ * 0.5f);
+            var xs = new List<float>();
+            var zs = new List<float>();
             for (int i = 0; i < region.Count; i++)
-                if (_balloons.TryGetValue(region[i], out BalloonData d))
-                {
-                    if (d.position.x < minX) minX = d.position.x;
-                    if (d.position.z < minZ) minZ = d.position.z;
-                }
+            {
+                if (!_balloons.TryGetValue(region[i], out BalloonData d)) continue;
+                bool fx = false; for (int k = 0; k < xs.Count; k++) if (Mathf.Abs(xs[k] - d.position.x) < tolX) { fx = true; break; }
+                if (!fx) xs.Add(d.position.x);
+                bool fz = false; for (int k = 0; k < zs.Count; k++) if (Mathf.Abs(zs[k] - d.position.z) < tolZ) { fz = true; break; }
+                if (!fz) zs.Add(d.position.z);
+            }
+            xs.Sort(); zs.Sort();
 
             var cellCol = new Dictionary<int, int>();
             var cellRow = new Dictionary<int, int>();
-            var blocks  = new Dictionary<(int, int), List<int>>();
+            var posToId = new Dictionary<(int, int), int>();
+            var cellList = new List<int>(region.Count);
             for (int i = 0; i < region.Count; i++)
             {
                 int id = region[i];
                 if (!_balloons.TryGetValue(id, out BalloonData d)) continue;
-                int col = Mathf.RoundToInt((d.position.x - minX) * invX);
-                int row = Mathf.RoundToInt((d.position.z - minZ) * invZ);
+                int col = 0; for (int k = 0; k < xs.Count; k++) if (Mathf.Abs(xs[k] - d.position.x) < tolX) { col = k; break; }
+                int row = 0; for (int k = 0; k < zs.Count; k++) if (Mathf.Abs(zs[k] - d.position.z) < tolZ) { row = k; break; }
                 cellCol[id] = col;
                 cellRow[id] = row;
-                var key = (col / blockSize, row / blockSize);
-                if (!blocks.TryGetValue(key, out var list)) { list = new List<int>(); blocks[key] = list; }
-                list.Add(id);
+                posToId[(col, row)] = id;
+                cellList.Add(id);
+            }
+            // min-corner 부터 greedy 로 blockSize×blockSize 클레임.
+            cellList.Sort((a, b) => cellRow[a] != cellRow[b] ? cellRow[a] - cellRow[b] : cellCol[a] - cellCol[b]);
+            var claimed = new HashSet<int>();
+            var blockList = new List<List<int>>();
+            for (int i = 0; i < cellList.Count; i++)
+            {
+                int startId = cellList[i];
+                if (claimed.Contains(startId)) continue;
+                int bc = cellCol[startId], br = cellRow[startId];
+                var cellsIn = new List<int>();
+                for (int dr = 0; dr < blockSize; dr++)
+                    for (int dc = 0; dc < blockSize; dc++)
+                        if (posToId.TryGetValue((bc + dc, br + dr), out int nid) && !claimed.Contains(nid))
+                        {
+                            cellsIn.Add(nid);
+                            claimed.Add(nid);
+                        }
+                if (cellsIn.Count > 0) blockList.Add(cellsIn);
             }
 
-            foreach (var kv in blocks)
+            foreach (var cells in blockList)
             {
-                var cells = kv.Value;
                 // 앵커 = 블록 내 (row, col) 최소 셀
                 int anchorId = -1, best = int.MaxValue;
                 for (int i = 0; i < cells.Count; i++)
@@ -5505,8 +5571,27 @@ namespace BalloonFlow
                 Renderer renderer = renderers[i];
                 if (renderer == null) continue;
                 renderer.enabled = true;
+                // ROLLBACK_FLEXTUBE_HOSE_START_NO_COLOR_20260702:
+                // Hose_Start inside FlexTube_StartCap is a separate authored/linked material area.
+                // Do not replace it with the generated BalloonShared color material.
+                if (IsFlexTubeHoseStartRenderer(renderer)) continue;
                 renderer.sharedMaterial = shared;
             }
+        }
+
+        private static bool IsFlexTubeHoseStartRenderer(Renderer renderer)
+        {
+            Transform t = renderer != null ? renderer.transform : null;
+            while (t != null)
+            {
+                string n = t.name;
+                if (!string.IsNullOrEmpty(n) &&
+                    (n.IndexOf("Hose_Start", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     n.IndexOf("HoseStart", System.StringComparison.OrdinalIgnoreCase) >= 0))
+                    return true;
+                t = t.parent;
+            }
+            return false;
         }
 
         /// <summary>

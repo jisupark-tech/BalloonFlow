@@ -177,17 +177,27 @@ namespace BalloonFlow
             // 격자 칸(월드)에 맞춘 균일 스케일 계수 — 작은 축 기준으로 셀 안에 들어가게.
             // ROLLBACK_PAINTBOX_EGG_PLUMP_20260701: egg 를 조금 더 도톰하게(x,z 10% 확대). 셀을 살짝 넘겨 통통하게 채움.
             const float EGG_PLUMP_MULT = 1.1f;
+            // ROLLBACK_PAINTBOX_EGG_SPACING_20260702:
+            // Spread paint eggs slightly farther apart while keeping count/layout logic unchanged.
+            const float EGG_GRID_SPACING_MULT = 1.08f;
             float fitK = 1f;
             if (tplSizeX > 0.0001f && tplSizeZ > 0.0001f)
                 fitK = Mathf.Min(eggCellW / tplSizeX, eggCellZ / tplSizeZ) * _eggFillRatio * EGG_PLUMP_MULT;
             // NOTE: eggScale(scaleMult)을 곱하지 않는다 — cellSizeX/Z 가 이미 widthMult/heightMult 를 포함하므로
             //       여기서 또 곱하면 이중 적용되어 알이 paintbox 를 벗어난다.
             Vector3 eggScale = tplScale * fitK;
-            // ROLLBACK_PAINTBOX_EGG_FIT_CELL_20260701: egg(Cylinder) x,z 를 '박스 셀(layoutCell)에 맞춤(fitK)'으로.
-            //   이전 고정비(풍선 scaleX × 1.736)는 박스 크기(2×2/4×4/2×6 등)에 안 맞아 셀을 넘치거나 안 맞았다.
-            //   layoutCell = (footprint × innerAreaRatio) / (cols×rows) 라 박스가 커지면 셀도 커져 egg 도 같이 커진다(박스에 맞게).
-            //   _eggFillRatio 로 셀 대비 채움 비율 조절. (targetEggWorldScaleXZ 파라미터는 무시; Y 높이만 아래 비율 유지.)
-            _ = targetEggWorldScaleXZ;
+            // ROLLBACK_PAINTBOX_EGG_FIT_CELL_20260701:
+            // Start from the box cell fit, then optionally override X/Z with the requested balloon
+            // ratio below. Y height keeps the separate art ratio path.
+            // ROLLBACK_PAINTBOX_EGG_XZ_BALLOON_RATIO_20260702:
+            // Use BalloonController's requested world X/Z diameter (balloon scaleX * 1.736) instead of
+            // discarding targetEggWorldScaleXZ. Gameplay HP/targeting stays in BalloonData; this is visual-only.
+            if (targetEggWorldScaleXZ > 0f && tplSizeX > 0.0001f && tplSizeZ > 0.0001f)
+            {
+                float fitKxz = Mathf.Min(targetEggWorldScaleXZ / tplSizeX, targetEggWorldScaleXZ / tplSizeZ);
+                eggScale.x = tplScale.x * fitKxz;
+                eggScale.z = tplScale.z * fitKxz;
+            }
             if (targetEggWorldScaleY > 0f)
             {
                 // ROLLBACK_GIMMICK_HEIGHT_RATIO_20260629:
@@ -199,8 +209,8 @@ namespace BalloonFlow
 
             // 월드 격자 간격 → 로컬 단위(부모 스케일 보정).
             Vector3 ls = transform.lossyScale;
-            float localGridX = layoutCellW / Mathf.Max(0.0001f, Mathf.Abs(ls.x));
-            float localGridZ = layoutCellZ / Mathf.Max(0.0001f, Mathf.Abs(ls.z));
+            float localGridX = (layoutCellW * EGG_GRID_SPACING_MULT) / Mathf.Max(0.0001f, Mathf.Abs(ls.x));
+            float localGridZ = (layoutCellZ * EGG_GRID_SPACING_MULT) / Mathf.Max(0.0001f, Mathf.Abs(ls.z));
 
             if (PAINTBOX_DEBUG)
             {
