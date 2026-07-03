@@ -41,7 +41,9 @@ namespace BalloonFlow
         // Art requested these gimmick heights as ratios of the active balloon scaleY.
         // Roll back by removing these constants and restoring the previous _balloonScale/fitK Y paths.
         private const float GIMMICK_HEIGHT_WOODEN_IRON_RATIO = 1.063f;
-        private const float GIMMICK_HEIGHT_BARRICADE_RATIO = 2.321f;
+        // ROLLBACK_BARRICADE_HEIGHT_RATIO_20260703:
+        // Previous value: 2.321f. Art requested Barricade visual height = balloon scaleY * 1.86.
+        private const float GIMMICK_HEIGHT_BARRICADE_RATIO = 1.86f;
         private const float GIMMICK_HEIGHT_TARGET_BOX_PAINT_RATIO = 2.857f;
         // ROLLBACK_PAINTBOX_EGG_XZ_BALLOON_RATIO_20260630: Target Box egg(Cylinder)의 x,z 월드 스케일 = 풍선 scaleX × 이 값.
         //   (Y 가 ×2.857 인 것과 동일 패턴 — 셀-맞춤 fitK 대신 풍선 기준 일정 크기로 박스를 채움.)
@@ -4433,7 +4435,7 @@ namespace BalloonFlow
                 perpDir * (0.5f * (vertical ? cellSizeX : cellSizeZ));
             float baseUniform = _balloonScale * scaleMult;
             // ROLLBACK_GIMMICK_HEIGHT_RATIO_20260629:
-            // Barricade height follows balloon scaleY * 2.321. X/Z keep the existing footprint
+            // Barricade height follows balloon scaleY * 1.86. X/Z keep the existing footprint
             // fitting path so targeting, length, and body shrink behavior are not changed.
             float barricadeScaleY = GetGimmickReferenceBalloonScaleY(scaleMult) * GIMMICK_HEIGHT_BARRICADE_RATIO;
             obj.transform.localScale = new Vector3(baseUniform, barricadeScaleY, baseUniform);

@@ -80,19 +80,19 @@ namespace BalloonFlow
         //   실시간으로 기믹 본체가 이동함(동적). 얼음은 셀에 고정되고 기믹 본체만 이동. X/Y/Z 각각 튜닝.
         [Header("[기믹 본체 위치 보정(월드, 동적) — 얼음 아님]")]
         [Tooltip("FlexTube 본체 위치 보정(월드 X/Y/Z).")]
-        public Vector3 gimmickOffsetFlexTube = Vector3.zero;
+        public Vector3 gimmickOffsetFlexTube =new Vector3(0,0,0.25f);
 
         [Tooltip("Barricade 본체 위치 보정(월드 X/Y/Z).")]
-        public Vector3 gimmickOffsetBarricade = Vector3.zero;
+        public Vector3 gimmickOffsetBarricade = new Vector3(0,0.4f,0.05f);
 
         [Tooltip("WoodenBoard(Pinata) 본체 위치 보정(월드 X/Y/Z).")]
-        public Vector3 gimmickOffsetWoodenBoard = Vector3.zero;
+        public Vector3 gimmickOffsetWoodenBoard = new Vector3(0,0,0.05f);
 
         [Tooltip("TargetBox(Pinata_Box) 본체 위치 보정(월드 X/Y/Z).")]
-        public Vector3 gimmickOffsetTargetBox = Vector3.zero;
+        public Vector3 gimmickOffsetTargetBox = new Vector3(0,0,0.05f);
 
         [Tooltip("IronWall(Wall) 본체 위치 보정(월드 X/Y/Z).")]
-        public Vector3 gimmickOffsetIronWall = Vector3.zero;
+        public Vector3 gimmickOffsetIronWall = new Vector3(0,0,0.05f);
 
         [Header("[풍선 타일 영역 — 동적 조정]")]
         [Tooltip("풍선 타일 영역 가로 배율. 1.0=기본, 인게임 동적 반영. (default: 1.39)")]
