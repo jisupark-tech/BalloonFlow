@@ -78,6 +78,9 @@ namespace BalloonFlow
         public int Color => _color;
         public int GroupId => _groupId;
         public bool IsDestroying => _destroying;
+        // ROLLBACK_ZAP_GIMMICK_DAMAGE_20260705: 튜브의 살아있는 실제 HP(_hp). Zap preserve 다트 계산이
+        //   authored/셀수 heuristic 대신 이 값을 읽어 Zap 이 깎은 HP 를 정확히 반영한다.
+        public int RemainingHp => Mathf.Max(0, _hp);
         public IReadOnlyList<FlexTubePart> Parts => _parts;
 
         public void Initialize(int hp, int color, int groupId, List<FlexTubePart> parts)
@@ -134,6 +137,9 @@ namespace BalloonFlow
             }
 
             _hp--;
+            // ROLLBACK_GIMMICK_SFX_TABLE_20260703:
+            // FlexTube hit uses Stage_Match_Normal_2.mp3 only after a valid color/cell hit consumes HP.
+            if (AudioManager.HasInstance) AudioManager.Instance.PlayFlexTubeHit();
 
             int targetActive = (_maxHp > 0)
                 ? Mathf.CeilToInt((float)_hp / _maxHp * _totalSegments)
@@ -319,6 +325,9 @@ namespace BalloonFlow
         {
             if (_destroying) return;
             _destroying = true;
+            // ROLLBACK_GIMMICK_SFX_TABLE_20260703:
+            // FlexTube disappear uses woodbreak.mp3 once when finish starts.
+            if (AudioManager.HasInstance) AudioManager.Instance.PlayFlexTubeDisappear();
 
             PlayDetachedEndParticleOnce();
             HideVisualsForFinish();

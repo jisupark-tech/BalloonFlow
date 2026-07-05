@@ -340,9 +340,13 @@ namespace BalloonFlow
         {
             if (index >= 0 && index < _eggs.Count && _eggs[index] != null)
             {
+                // ROLLBACK_GIMMICK_SFX_TABLE_20260703:
+                // Paint hit SFX is per egg and is emitted only when runtime HP is updated by a dart hit.
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayPaintHit();
                 if (currentHp <= 0)
                 {
                     // ROLLBACK_PAINTBOX_EGG_ENDPARTICLE_20260630: egg 죽을 때 그 egg 색의 EndParticle 재생 후 비활성.
+                    if (AudioManager.HasInstance) AudioManager.Instance.PlayPaintDisappear();
                     PlayEggEndParticle(index);
                     _eggs[index].SetActive(false);
                 }

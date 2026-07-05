@@ -50,6 +50,12 @@ namespace BalloonFlow
 
         [Header("[SFX — InGame v2 (2026-05-31 사운드 추가)]")]
         [Tooltip("woodbreak — Wooden Board / Target Box / Pinata 나무 타격")]
+        // ROLLBACK_GIMMICK_SFX_TABLE_20260703:
+        // Device gimmick SFX are loaded by exact Resources/Sound/Effect file names from the QA sound table.
+        [SerializeField] private AudioClip _sfxBoxFrozenHit;
+        [SerializeField] private AudioClip _sfxBoxFrozenDisappear;
+        [SerializeField] private AudioClip _sfxPaintHit;
+        [SerializeField] private AudioClip _sfxPaintDisappear;
         [SerializeField] private AudioClip _sfxWoodBreak;
         [Tooltip("achieve — 인게임 진행도 100% / Play 버튼 레벨 갱신 성취감 chime")]
         [SerializeField] private AudioClip _sfxAchieve;
@@ -212,6 +218,10 @@ namespace BalloonFlow
             if (_sfxHolderFrozenBreak == null) _sfxHolderFrozenBreak = Resources.Load<AudioClip>("Sound/Effect/icebreak")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Stage_Holder_FrozenBreak")
                 ?? Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Onedestroy");
+            if (_sfxBoxFrozenHit == null) _sfxBoxFrozenHit = Resources.Load<AudioClip>("Sound/Effect/BoxFrozen_Hit");
+            if (_sfxBoxFrozenDisappear == null) _sfxBoxFrozenDisappear = Resources.Load<AudioClip>("Sound/Effect/BoxFrozen_Disappear");
+            if (_sfxPaintHit == null) _sfxPaintHit = Resources.Load<AudioClip>("Sound/Effect/Paint_Hit");
+            if (_sfxPaintDisappear == null) _sfxPaintDisappear = Resources.Load<AudioClip>("Sound/Effect/Paint_Disappear");
             if (_sfxItemHand == null)     _sfxItemHand     = Resources.Load<AudioClip>("Sound/Effect/Stage_ItemUse_Onedestroy");
             // ROLLBACK_SHUFFLE_SFX_SUFFLE_20260624:
             // User-provided clip name is intentionally "Suffle" under Resources/Sound/Effect.
@@ -278,6 +288,10 @@ namespace BalloonFlow
             if (_sfxHolderDeploy == null)      missing.Add("Stage_Object_Drop");
             if (_sfxHolderReveal == null)      missing.Add("Stage_Holder_Reveal");
             if (_sfxHolderFrozenBreak == null) missing.Add("icebreak");
+            if (_sfxBoxFrozenHit == null)      missing.Add("BoxFrozen_Hit");
+            if (_sfxBoxFrozenDisappear == null) missing.Add("BoxFrozen_Disappear");
+            if (_sfxPaintHit == null)          missing.Add("Paint_Hit");
+            if (_sfxPaintDisappear == null)    missing.Add("Paint_Disappear");
             if (_sfxItemHand == null)          missing.Add("Stage_ItemUse_Onedestroy");
             if (_sfxItemShuffle == null)       missing.Add("Suffle");
             if (_sfxItemZap == null)           missing.Add("Stage_ItemUse_ColorBomb");
@@ -669,6 +683,46 @@ namespace BalloonFlow
         /// <summary>Zap_Line — FxZapLine 이 새 타겟으로 이동할 때마다 1회 재생.
         /// 호출 위치: BoosterExecutor.PlayColorRemoveSequenceBody (ConfigureZapLineFan 호출 직후, 타겟 루프 매 iteration).
         /// 추가 cooldown 없음 — stepDelay 자체가 최소 간격, PlayOneShot 이라 짧은 잔향만 중첩.</summary>
+        public void PlayFrozenBoxHit()
+        {
+            PlaySFX(_sfxBoxFrozenHit);
+        }
+
+        public void PlayFrozenBoxDisappear()
+        {
+            PlaySFX(_sfxBoxFrozenDisappear);
+        }
+
+        public void PlayFrozenLayerHit()
+        {
+            PlaySFX(_sfxBoxFrozenHit);
+        }
+
+        public void PlayFrozenLayerDisappear()
+        {
+            PlaySFX(_sfxBoxFrozenDisappear);
+        }
+
+        public void PlayFlexTubeHit()
+        {
+            PlaySFX(_sfxBalloonPop2);
+        }
+
+        public void PlayFlexTubeDisappear()
+        {
+            PlaySFX(_sfxWoodBreak);
+        }
+
+        public void PlayPaintHit()
+        {
+            PlaySFX(_sfxPaintHit);
+        }
+
+        public void PlayPaintDisappear()
+        {
+            PlaySFX(_sfxPaintDisappear);
+        }
+
         public void PlayZapLine()
         {
             PlaySFX(_sfxZapLine);
@@ -810,11 +864,12 @@ namespace BalloonFlow
             if (now - _lastGimmickSfxTime < GIMMICK_SFX_COOLDOWN) return;
 
             AudioClip clip = null;
-            if (evt.gimmickType == BalloonController.GimmickIce)
+            // ROLLBACK_GIMMICK_SFX_TABLE_20260703:
+            // Ice/TargetBox now use explicit FrozenLayer/Paint calls at their actual hit/disappear sites.
+            if (evt.gimmickType == "__legacy_ice_sfx_disabled__")
                 clip = _sfxHolderFrozenBreak; // = icebreak (Ice 영역 해제 = 파괴)
             else if (evt.gimmickType == BalloonController.GimmickPinata
-                  || evt.gimmickType == BalloonController.GimmickPin
-                  || evt.gimmickType == BalloonController.GimmickPinataBox)
+                  || evt.gimmickType == BalloonController.GimmickPin)
                 clip = evt.isDestroyed ? _sfxWoodBreak : _sfxBalloonPop;
 
             if (clip == null) return; // 그 외 기믹(Spawner/Lock/Wall 등)은 무음
@@ -882,7 +937,7 @@ namespace BalloonFlow
 
         private void HandleHolderThawed(OnHolderThawed evt)
         {
-            PlaySFX(_sfxHolderFrozenBreak);
+            PlayFrozenBoxDisappear();
         }
 
         private void HandleSettingsChanged(OnSettingsChanged evt)

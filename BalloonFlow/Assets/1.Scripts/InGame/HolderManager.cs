@@ -1238,6 +1238,38 @@ namespace BalloonFlow
             Debug.Log($"[HolderManager] CompactColumns: {active.Count} holders redistributed across {freeColumns.Count} non-pipe columns (pipe columns: {pipeColumns.Count}).");
         }
 
+        // ROLLBACK_ZAP_ADVANCE_QUEUE_20260705: Zap(Color-Remove)이 배포중 홀더를 제거해 deploy 슬롯이 빈 열에서,
+        //   대기(waiting) 홀더를 배포로 승격시켜 큐가 '클릭 없이' 자동 전진하게 한다.
+        //   원인: UndoDeploy 는 deploy 슬롯만 비우고(_deployingHolderId[col]=-1) 승격을 하지 않아, Zap 후 배포중 홀더가
+        //   사라진 열의 대기 홀더가 다음 탭 전까지 레일로 안 나오던 버그. HandleDeploymentDone 의 wait→deploy 승격과 동일.
+        //   (정상 tap 배포로 채워둔 wait 슬롯만 승격 — 큐 뒷줄의 미탭 홀더까지 자동배포하진 않음: 탭-투-디플로이 유지.)
+        public void AdvanceEmptyDeploySlots()
+        {
+            for (int col = 0; col < _queueColumns; col++)
+            {
+                if (_deployingHolderId[col] >= 0) continue;   // 이미 배포중 홀더 있음
+                if (_waitingHolderId[col] < 0) continue;      // 승격할 대기 홀더 없음
+
+                int waitId = _waitingHolderId[col];
+                _waitingHolderId[col] = -1;
+
+                HolderData waitHolder = FindHolder(waitId);
+                if (waitHolder == null || waitHolder.isConsumed) continue;
+
+                waitHolder.isWaiting = false;
+                waitHolder.isDeploying = true;
+                waitHolder.isMovingToRail = true;
+                _deployingHolderId[col] = waitId;
+
+                EventBus.Publish(new OnHolderSelected
+                {
+                    holderId = waitHolder.holderId,
+                    color = waitHolder.color,
+                    magazineCount = waitHolder.magazineCount
+                });
+            }
+        }
+
         /// <summary>
         /// Resets all holder state for a new level.
         /// </summary>

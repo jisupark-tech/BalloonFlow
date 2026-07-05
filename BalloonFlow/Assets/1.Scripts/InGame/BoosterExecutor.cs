@@ -247,9 +247,9 @@ namespace BalloonFlow
             if (!BalloonController.HasInstance) return;
             var data = BalloonController.Instance.GetBalloon(balloonId);
             if (data == null) return;
-            // ROLLBACK_ZAP_BLOCK_GIMMICK_CLICK_20260701: Zap 색 선택 시 이 기믹들은 클릭 무시(계속 대기) —
-            //   Iron Wall/Barricade/FlexTube/TargetBox(PinataBox)/Ice. 반드시 일반 풍선으로 색을 골라야 한다.
-            if (IsZapBlockedGimmickForColorPick(data.gimmickType)) return;
+            // ROLLBACK_ZAP_GIMMICK_DAMAGE_20260705: 규칙1 — 색 선택 클릭은 '일반 풍선 + 히든(Surprise/Hidden)' 만 허용.
+            //   그 외 기믹/얼음 위 클릭은 전부 무시(계속 대기). 히든은 감춰진 실색(data.color)으로 그대로 선택된다.
+            if (!BalloonController.IsZapColorPickable(data)) return;
 
             _awaitingBalloonClick = false;
             _awaitingColorSelection = false;
@@ -265,16 +265,6 @@ namespace BalloonFlow
             //HideCancelButton();
             CloseUseItemPopup(false);
             StartCoroutine(PlayColorRemoveSequence(selectedColor));
-        }
-
-        // ROLLBACK_ZAP_BLOCK_GIMMICK_CLICK_20260701: Zap 색 선택에서 클릭 불가한 기믹(색 없음/간접/멀티셀).
-        private static bool IsZapBlockedGimmickForColorPick(string gimmickType)
-        {
-            return gimmickType == BalloonController.GimmickWall       // Iron Wall
-                || gimmickType == BalloonController.GimmickBarricade
-                || gimmickType == BalloonController.GimmickFlexTube
-                || gimmickType == BalloonController.GimmickPinataBox  // Target Box
-                || gimmickType == BalloonController.GimmickIce;
         }
 
         /// <summary>UseItem 팝업 닫기.</summary>
@@ -955,7 +945,8 @@ namespace BalloonFlow
         {
             // ROLLBACK_ZAP_KEEP_GIMMICK_DARTS_20260701 (rev3): 남길 다트 = 그 색 기믹(Barricade/FlexTube/TargetBox) 잔여 HP(preserve).
             //   removeTarget = total - preserve. surplus 레벨(다트>타겟)에서도 '정확히 기믹 HP 만' 남긴다.
-            //   (rev2 '풍선 몫만 제거' 는 surplus 레벨에서 잉여 다트까지 남겨 과다 → 폐기. dartsToRemove 는 진단 비교용으로만 로그.)
+            //   ROLLBACK_ZAP_GIMMICK_DAMAGE_20260705: preserve 는 Zap 이 기믹에 -1 을 넣은 뒤의 '현재 잔여 HP' 라 자동으로 -1 반영됨.
+            //   (dartsToRemove 파라미터는 이전 진단 로그용으로만 쓰였고 현재 미사용 — 호출부 시그니처 호환 위해 유지.)
             int preserve = BalloonController.HasInstance
                 ? BalloonController.Instance.GetZapPreservedDartCountForColor(color)
                 : 0;
@@ -974,6 +965,9 @@ namespace BalloonFlow
 
             int removeTarget = Mathf.Max(0, totalDarts - preserve);
             int removed = 0;
+            // ROLLBACK_ZAP_PRESERVE_DEBUG_20260705: 최종 다트 수지 실측(임시). '잔여다트(=preserve)'가 그 색 남은
+            //   풍선/기믹 수요와 맞는지, removeTarget 이 과다한지 확인용. 검증 후 이 로그 제거.
+            Debug.Log($"[Zap-Dart] color={color} 총다트(레일+탄창)={totalDarts} preserve(남길)={preserve} removeTarget(제거목표)={removeTarget} → 잔여다트={totalDarts - removeTarget}");
 
             if (RailManager.HasInstance)
             {
@@ -1026,11 +1020,12 @@ namespace BalloonFlow
             // 제거된 박스 자리가 영영 안 채워지는 스폰 정지 버그가 있었다. CompactColumns 직후 1회 호출로 보충.
             if (HolderManager.HasInstance)
                 HolderManager.Instance.ProcessSpawners();
+            // ROLLBACK_ZAP_ADVANCE_QUEUE_20260705: 배포중 홀더가 Zap 으로 제거돼 빈 deploy 슬롯에 대기 홀더를 승격
+            //   → 클릭 없이 뒤 홀더가 레일로 자동 전진(HandleDeploymentDone 승격과 동일). 원인: UndoDeploy 가 승격 미수행.
+            if (HolderManager.HasInstance)
+                HolderManager.Instance.AdvanceEmptyDeploySlots();
             if (HolderVisualManager.HasInstance)
                 HolderVisualManager.Instance.RefreshAllPositions();
-
-            // ROLLBACK_ZAP_DART_DEBUG_20260701: 숫자 진단(임시). '남은색다트'가 그 색 기믹 HP 합과 맞는지 확인 후 제거.
-            Debug.Log($"[Zap-Dart] color={color} total={totalDarts} 풍선팝={dartsToRemove} preserve(기믹HP)={preserve} removeTarget={removeTarget} removed={removed} → 남은색다트={totalDarts - removed}");
 
             return removed;
         }

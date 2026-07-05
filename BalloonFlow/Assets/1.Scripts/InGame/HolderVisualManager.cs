@@ -2977,7 +2977,12 @@ namespace BalloonFlow
             // ROLLBACK_FROZEN_BOX_HIT_FX_20260626:
             // Only remaining HP ticks play BoxFrozenHit. Final thaw/break uses SetFrozen(false).
             if (isFrozenHolder && evt.remainingHP > 0 && visual.identifier != null)
+            {
                 visual.identifier.TriggerFrozenHit();
+                // ROLLBACK_GIMMICK_SFX_TABLE_20260703:
+                // Frozen Dart Box hit uses BoxFrozen_Hit.mp3 on remaining-HP ticks only.
+                if (AudioManager.HasInstance) AudioManager.Instance.PlayFrozenBoxHit();
+            }
 
             // ROLLBACK_SPAWNER_CONSUME_DESPAWN_20260624 (#4 + #5):
             // The Spawner reuses this OnFrozenHPChanged channel for its remaining-count text. When a
