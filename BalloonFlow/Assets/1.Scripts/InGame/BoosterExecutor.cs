@@ -965,6 +965,7 @@ namespace BalloonFlow
 
             int removeTarget = Mathf.Max(0, totalDarts - preserve);
             int removed = 0;
+            int removedHolderCount = 0; // ROLLBACK_ZAP_FROZEN_HOLDER_THAW_20260706: Zap 으로 '사라진' 홀더 수(Frozen 홀더 해동 크레딧용).
             // ROLLBACK_ZAP_PRESERVE_DEBUG_20260705: 최종 다트 수지 실측(임시). '잔여다트(=preserve)'가 그 색 남은
             //   풍선/기믹 수요와 맞는지, removeTarget 이 과다한지 확인용. 검증 후 이 로그 제거.
             Debug.Log($"[Zap-Dart] color={color} 총다트(레일+탄창)={totalDarts} preserve(남길)={preserve} removeTarget(제거목표)={removeTarget} → 잔여다트={totalDarts - removeTarget}");
@@ -1000,6 +1001,7 @@ namespace BalloonFlow
                         holders[i].magazineCount = 0;
                         holders[i].isConsumed = true;
                         removed += mag;
+                        removedHolderCount++; // ROLLBACK_ZAP_FROZEN_HOLDER_THAW_20260706: 완전 제거된 홀더 수(부분 감소 제외).
                     }
                     else
                     {
@@ -1012,6 +1014,12 @@ namespace BalloonFlow
                     }
                 }
             }
+
+            // ROLLBACK_ZAP_FROZEN_HOLDER_THAW_20260706: Zap 으로 사라진 홀더도 '배포 완료'와 동일하게 Frozen(홀더 Ice)
+            //   해동 카운트에 반영. 안 하면 해동시킬 홀더가 Zap 으로 없어져 Frozen 홀더가 영영 안 풀림 → 게임 안 끝남.
+            //   롤백: 이 호출 한 줄 제거.
+            if (HolderManager.HasInstance && removedHolderCount > 0)
+                HolderManager.Instance.DecrementFrozenHoldersHP(removedHolderCount);
 
             if (HolderManager.HasInstance)
                 HolderManager.Instance.CompactColumns();
@@ -1026,6 +1034,11 @@ namespace BalloonFlow
                 HolderManager.Instance.AdvanceEmptyDeploySlots();
             if (HolderVisualManager.HasInstance)
                 HolderVisualManager.Instance.RefreshAllPositions();
+            // ROLLBACK_ZAP_QUEUE_LAZY_SPAWN_20260706: RefreshAllPositions 는 '이미 생성된 visual'만 재배치하고
+            //   일반(비-파이프) 열의 깊은 줄(임계 밖·미생성) 홀더를 lazy-spawn 하지 않아, Zap 후 뒤 홀더가 안 나오던 버그.
+            //   클릭 경로(RepositionColumnHolders)와 동일하게 비-파이프 열을 재배치해 뒤 홀더를 당겨 생성. 롤백: 이 호출 한 줄 제거.
+            if (HolderVisualManager.HasInstance)
+                HolderVisualManager.Instance.RepositionNonPipeColumnsForZap();
 
             return removed;
         }

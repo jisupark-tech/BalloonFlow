@@ -110,6 +110,8 @@ namespace BalloonFlow
 
             if (_animator == null)
                 _animator = GetComponentInChildren<Animator>();
+            // ROLLBACK_FLEXTUBE_ZAP_INSTANT_20260706: 애니메이터는 기본(scaled) 유지 — Zap pause(timeScale=0) 중엔 '얼려서'
+            //   ZapAttack recoil 이 재생돼 Body/End 를 Z 로 밀어 틀어지는 것을 막는다. (pause 중 히트는 recoil 스킵 + 즉시 스냅.)
         }
 
         public void OnDartHit(int dartColor)
@@ -127,7 +129,11 @@ namespace BalloonFlow
             int logicalCellId = ResolveLiveTargetCell(targetBalloonId);
             if (logicalCellId < 0) return false;
 
-            if (_animator != null)
+            // ROLLBACK_FLEXTUBE_ZAP_INSTANT_20260706: 부스터(Zap)는 timeScale=0. 이때 히트 반응(ZapAttack: Body/End 를 Z 로
+            //   움직이는 recoil 애니메이션)이 그 포즈에서 멈춰 '틀어짐'. pause 중엔 recoil 을 아예 트리거하지 않고, 아래 축소/EndCap 을
+            //   즉시 최종 상태로 스냅한다(_boosterPaused 분기). 일반 플레이(timeScale>0)는 기존대로 애니메이션.
+            bool _boosterPaused = Time.timeScale == 0f;
+            if (_animator != null && !_boosterPaused)
                 _animator.SetTrigger(ANIM_TRIGGER_ATTACK);
 
             if (_hp <= 0)
@@ -248,20 +254,19 @@ namespace BalloonFlow
             var t = part.transform;
             t.DOKill();
             FlexTubePart captured = part;
-            if (_segmentShrinkDuration > 0.001f)
-            {
-                t.DOScale(Vector3.zero, _segmentShrinkDuration)
-                    .SetEase(Ease.InQuad)
-                    .OnComplete(() =>
-                    {
-                        if (captured != null && captured.gameObject != null)
-                            captured.gameObject.SetActive(false);
-                    });
-            }
-            else
+            // ROLLBACK_FLEXTUBE_ZAP_INSTANT_20260706: 부스터 pause(timeScale=0) 중엔 tween 없이 즉시 비활성(틀어짐/잔상 방지).
+            if (Time.timeScale == 0f || _segmentShrinkDuration <= 0.001f)
             {
                 part.gameObject.SetActive(false);
+                return;
             }
+            t.DOScale(Vector3.zero, _segmentShrinkDuration)
+                .SetEase(Ease.InQuad)
+                .OnComplete(() =>
+                {
+                    if (captured != null && captured.gameObject != null)
+                        captured.gameObject.SetActive(false);
+                });
         }
 
         private void SlideEndCapTo(Vector3 targetPos)
@@ -284,6 +289,13 @@ namespace BalloonFlow
             }
 
             endCap.transform.DOKill();
+            // ROLLBACK_FLEXTUBE_ZAP_INSTANT_20260706: 부스터 pause(timeScale=0) 중엔 즉시 최종 위치/회전 스냅(틀어짐 방지).
+            if (Time.timeScale == 0f)
+            {
+                endCap.transform.position = targetPos;
+                endCap.transform.rotation = targetRot;
+                return;
+            }
             endCap.transform.DOMove(targetPos, _endCapMoveDuration).SetEase(_endCapMoveEase);
             endCap.transform.DORotateQuaternion(targetRot, _endCapMoveDuration).SetEase(_endCapMoveEase);
         }
@@ -532,6 +544,7 @@ namespace BalloonFlow
 
             if (_animator == null)
                 _animator = GetComponentInChildren<Animator>();
+            // ROLLBACK_FLEXTUBE_ZAP_INSTANT_20260706: 애니메이터 기본(scaled) 유지 — pause 중 recoil 재생으로 인한 틀어짐 방지.
 
             RebuildMesh();
         }
@@ -591,6 +604,16 @@ namespace BalloonFlow
                 return;
             }
 
+            // ROLLBACK_FLEXTUBE_ZAP_INSTANT_20260706: 부스터 pause(timeScale=0) 중엔 애니메이션 코루틴이 어긋나므로
+            //   즉시 최종 상태로 rebuild(스냅). 롤백: 이 if 블록 제거.
+            if (Time.timeScale == 0f)
+            {
+                if (_meshShrinkRoutine != null) { StopCoroutine(_meshShrinkRoutine); _meshShrinkRoutine = null; }
+                _meshVisibleRemovedSegmentCount = _removedSegmentCount;
+                RebuildMesh();
+                return;
+            }
+
             if (_meshShrinkRoutine != null)
                 StopCoroutine(_meshShrinkRoutine);
             _meshShrinkRoutine = StartCoroutine(AnimateMeshShrinkRoutine(_removedSegmentCount));
@@ -615,7 +638,7 @@ namespace BalloonFlow
             int lastVisibleRemoved = startRemoved;
             while (elapsed < duration)
             {
-                elapsed += Time.deltaTime;
+                elapsed += Time.deltaTime; // (부스터 pause 는 AnimateMeshShrinkToLogicalCursor 의 instant 분기가 처리 — 이 코루틴은 timeScale>0 에서만 구동)
                 float t = Mathf.Clamp01(elapsed / duration);
                 int nextRemoved = Mathf.Clamp(
                     Mathf.RoundToInt(Mathf.Lerp(startRemoved, targetRemoved, t)),
@@ -655,6 +678,13 @@ namespace BalloonFlow
             }
 
             endCap.transform.DOKill();
+            // ROLLBACK_FLEXTUBE_ZAP_INSTANT_20260706: 부스터 pause(timeScale=0) 중엔 tween 대신 즉시 최종 위치/회전 스냅(틀어짐 방지).
+            if (Time.timeScale == 0f)
+            {
+                endCap.transform.position = targetPos;
+                endCap.transform.rotation = targetRot;
+                return;
+            }
             // ROLLBACK_FLEXTUBE_MESH_EDGE_SYNC_20260629:
             // Match EndCap movement to mesh shrink so the cap does not detach from the body.
             float duration = _meshMode ? Mathf.Max(0.03f, _segmentShrinkDuration) : _endCapMoveDuration;

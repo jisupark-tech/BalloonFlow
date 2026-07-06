@@ -56,6 +56,8 @@ namespace BalloonFlow
             public int hp;
             public int maxHp;
             public int manualGroupId;
+            // ROLLBACK_ICE_OVERRIDE_NO_GROUP_20260706: 중앙 HP 라벨 표시 여부 — 수동 그룹 또는 override(그룹 id 무관) 일 때 표시.
+            public bool showHpLabel;
         }
         private readonly HashSet<int> _iceBalloons = new HashSet<int>();   // 아직 얼어있는(미해제) ice 풍선 전체
         private readonly Dictionary<int, int> _iceBalloonHp = new Dictionary<int, int>(); // 등록 시 캡처한 셀별 maxHP
@@ -185,8 +187,13 @@ namespace BalloonFlow
                 int maxHp = 0;
                 int sumHp = 0;
                 int manualGroupId = 0;
-                int manualGroupHp = 0;
-                int manualGroupHpMode = 0;
+                // ROLLBACK_ICE_OVERRIDE_NO_GROUP_20260706: override(HP 모드=2) 를 '수동 그룹 id' 유무와 무관하게 적용.
+                //   기존엔 group id>0 셀만 override 를 읽어(197), 자동 그룹(id=0)으로 배치한 ice 는 override 가 무시되고
+                //   adjacency 기본(maxHp/셀수)으로 떨어졌다 → "Override 안 됨". 모드/override HP 를 그룹 id 무관하게 캡처한다.
+                //   (Sum/legacy 는 기존 그대로 — 무회귀. 한 region 셀들은 같이 칠해져 동일 모드/값 가정.)
+                //   롤백: 아래 캡처 2줄 + region.hp 분기를, group id>0 안에서만 override/sum 하던 이전 방식으로 복원.
+                int regionHpMode = 0;
+                int regionOverrideHp = 0;
                 for (int i = 0; i < comp.Count; i++)
                 {
                     int id = comp[i];
@@ -194,23 +201,23 @@ namespace BalloonFlow
                     int h = _iceBalloonHp.TryGetValue(id, out int hp) ? Mathf.Max(0, hp) : 0;
                     if (h > maxHp) maxHp = h;
                     sumHp += h;
-                    if (manualGroupId <= 0 && _iceBalloonGroupId.TryGetValue(id, out int gid) && gid > 0)
+                    if (regionHpMode == 0 && _iceBalloonGroupHpMode.TryGetValue(id, out int m2) && m2 > 0)
                     {
-                        manualGroupId = gid;
-                        manualGroupHp = _iceBalloonGroupHp.TryGetValue(id, out int ghp) ? ghp : 0;
-                        manualGroupHpMode = _iceBalloonGroupHpMode.TryGetValue(id, out int mode) ? mode : 0;
+                        regionHpMode = m2;
+                        regionOverrideHp = _iceBalloonGroupHp.TryGetValue(id, out int oh) ? Mathf.Max(0, oh) : 0;
                     }
+                    if (manualGroupId <= 0 && _iceBalloonGroupId.TryGetValue(id, out int gid) && gid > 0)
+                        manualGroupId = gid;
                 }
                 region.manualGroupId = manualGroupId;
-                if (manualGroupId > 0)
-                {
-                    bool useOverride = manualGroupHpMode == 2 && manualGroupHp > 0;
-                    region.hp = useOverride ? manualGroupHp : (sumHp > 0 ? sumHp : region.ids.Count);
-                }
+                bool useOverride = regionHpMode == 2 && regionOverrideHp > 0;
+                region.showHpLabel = manualGroupId > 0 || useOverride; // ROLLBACK_ICE_OVERRIDE_NO_GROUP_20260706
+                if (useOverride)
+                    region.hp = regionOverrideHp;                                  // override — group id 무관
+                else if (manualGroupId > 0)
+                    region.hp = sumHp > 0 ? sumHp : region.ids.Count;              // sum (수동 그룹, 기존)
                 else
-                {
-                    region.hp = maxHp > 0 ? maxHp : region.ids.Count; // 데이터 미지정 시 셀 수 fallback
-                }
+                    region.hp = maxHp > 0 ? maxHp : region.ids.Count;              // legacy adjacency (기존)
                 region.maxHp = region.hp;
 
                 // ROLLBACK_ICE_HP_WINNABILITY_CLAMP_20260616: region HP 가 받을 수 있는 최대 감소량을 초과하면
@@ -276,7 +283,9 @@ namespace BalloonFlow
             // ROLLBACK_ICE_MANUAL_GROUP_20260608:
             // Only explicit MapMaker Ice groups get the shared center HP label. Legacy auto-adjacent
             // Ice regions keep their previous visual behavior.
-            if (region.manualGroupId <= 0) return;
+            // ROLLBACK_ICE_OVERRIDE_NO_GROUP_20260706: override(그룹 id 무관) 도 HP 라벨 표시 — showHpLabel 사용.
+            //   롤백: 아래 조건을  if (region.manualGroupId <= 0) return;  으로 복원.
+            if (!region.showHpLabel) return;
 
             // ROLLBACK_ICE_MAGAZINE_TEXT_20260608:
             // Do not create a standalone TextMesh. Activate one MagazineText from FrozenLayer.prefab

@@ -638,6 +638,7 @@ namespace BalloonFlow
         {
             // ROLLBACK_GIMMICK_VISUAL_OFFSET_20260702: 인스펙터 기믹별 본체 오프셋 변경을 실시간 반영(동적).
             UpdateGimmickVisualOffsets();
+            UpdateFrozenLayerVisualOffset();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             // ROLLBACK_QA_BALLOON_WAVE_DIR_20260701: QA 전용 파도 연출(빌드 제외 — 이 블록은 #if UNITY_EDITOR||DEVELOPMENT_BUILD).
             //   P=중앙 / O=오른→왼 / I=왼→오른 / U=위→아래 / Y=아래→위.
@@ -1407,11 +1408,15 @@ namespace BalloonFlow
             if (IsCellIced(data)) return 0;
 
             // 규칙3: 색 기믹 = HP -1 (선택색 일치 시). 중복 셀 방지:
-            //   Barricade=단일 데이터, FlexTube=튜브(groupId) 대표 셀만, TargetBox=단일 데이터(선택색 egg 보유 시).
+            //   Barricade=단일 데이터, TargetBox=단일 데이터(선택색 egg 보유 시).
             if (data.gimmickType == GimmickBarricade)
                 return data.color == color ? 1 : 0;
+            // ROLLBACK_ZAP_FLEXTUBE_EXCLUDE_20260706: FlexTube 는 Zap HP-1 대상에서 제외(0). Zap 이 FlexTube 를 히트하면
+            //   비례 메시 축소/EndCap 슬라이드가 timeScale=0(부스터 pause) 중 트리거돼 Body/End 가 Z 로 틀어지는 문제 때문.
+            //   대신 GetZapPreservedDartCountForColor 가 튜브 full RemainingHp 를 다트로 보존 → FlexTube 는 다트로만 파괴(원설계).
+            //   롤백: 아래 한 줄을  return (data.color==color && IsFlexTubeTubeRepresentative(data)) ? 1 : 0;  로 복원.
             if (data.gimmickType == GimmickFlexTube)
-                return (data.color == color && IsFlexTubeTubeRepresentative(data)) ? 1 : 0;
+                return 0;
             if (data.gimmickType == GimmickPinataBox)
                 return HasLiveEggOfColor(data, color) ? 1 : 0;
 
@@ -5351,6 +5356,13 @@ namespace BalloonFlow
             }
         }
 
+        private Vector3 GetFrozenLayerVisualOffset()
+        {
+            // ROLLBACK_FROZEN_LAYER_VISUAL_OFFSET_20260706:
+            // FrozenLayer is a standalone overlay. Apply only this visual offset; cells/HP/targeting stay unchanged.
+            return GameManager.HasInstance ? GameManager.Instance.Board.gimmickOffsetFrozenLayer : Vector3.zero;
+        }
+
         // 기믹 본체 등록 — 스폰 시 호출. 5종 기믹만 추적.
         private void RegisterGimmickVisual(GameObject obj, string gimmickType)
         {
@@ -5377,6 +5389,23 @@ namespace BalloonFlow
                     e.obj.transform.position += (cur - e.lastOffset);
                     e.lastOffset = cur;
                 }
+            }
+        }
+
+        private void UpdateFrozenLayerVisualOffset()
+        {
+            Vector3 cur = GetFrozenLayerVisualOffset();
+            if (cur == _lastFrozenLayerVisualOffset) return;
+
+            Vector3 delta = cur - _lastFrozenLayerVisualOffset;
+            _lastFrozenLayerVisualOffset = cur;
+            if (delta == Vector3.zero || _frozenOverlays.Count == 0) return;
+
+            foreach (var kvp in _frozenOverlays)
+            {
+                GameObject overlay = kvp.Value;
+                if (overlay == null) continue;
+                overlay.transform.position += delta;
             }
         }
 
@@ -5408,7 +5437,7 @@ namespace BalloonFlow
             // 위치 보정(Wall 패턴): 앵커=블록 코너 셀 → footprint 중앙으로 이동. localPosition 은 부모(_balloonScale)
             // 스케일에 곱해져 어긋나므로 월드 위치로 직접 설정 (offsetX/Z 는 이미 월드 단위 = (B-1)*0.5*cellSize).
             // 얼음은 셀 중심에 고정(오프셋 없음). 기믹 본체 위치 보정은 별도(GimmickVisual 트래킹)에서 처리.
-            overlay.transform.position = targetCenter;
+            overlay.transform.position = targetCenter + GetFrozenLayerVisualOffset();
             // ROLLBACK_ICE_OVERLAY_DIRECT_BLOCK_SCALE_20260626:
             // One FrozenLayer sits at the block center. X/Z scale by the block size (2x2/3x3),
             // while Y keeps the visible balloon height scale instead of inheriting a balloon parent.
@@ -5427,6 +5456,7 @@ namespace BalloonFlow
             // guaranteed to equal one board cell. Fit x/z bounds to the block footprint so
             // 2x2/3x3 Ice covers the same area as the hidden balloons beneath it.
 
+            if (_frozenOverlays.Count == 0) _lastFrozenLayerVisualOffset = GetFrozenLayerVisualOffset();
             _frozenOverlays[anchorId] = overlay;
             _iceBlockOverlays.Add(overlay); // Block overlay marker for pooled Ice cleanup/state checks.
             _iceBlockOverlaySize[overlay] = Mathf.Max(1, blockSize); // ROLLBACK_ICE_SINGLE_BLOCK_TEXT_SCALE_20260701
@@ -5762,6 +5792,7 @@ namespace BalloonFlow
         // ROLLBACK_ICE_SINGLE_BLOCK_TEXT_SCALE_20260701: 오버레이별 blockSize(단일 sized Ice=blockSize, per-cell/그룹=1).
         //   블록 오버레이는 X/Z 가 blockSize 배 → 자식 HP 텍스트도 그만큼 커지므로, 텍스트 스케일에서 나눠 상쇄한다.
         private readonly Dictionary<GameObject, int> _iceBlockOverlaySize = new Dictionary<GameObject, int>();
+        private Vector3 _lastFrozenLayerVisualOffset;
         // ROLLBACK_GIMMICK_HIT_SCALE_DRIFT_20260629: Y 펀치(hit)가 DOKill(true) 로도 누적되는 문제 —
         //   Sequence inner 트윈이 grow 단계에서 끊기면 hitScale(부푼 값)로 스냅되어 baseScale 이 점점 커진다(텍스트도 같이).
         //   target 별 'rest 스케일'을 캐시해 매 펀치 전 복원 → 누적 차단.
@@ -5846,10 +5877,11 @@ namespace BalloonFlow
             }
             float yScale = Mathf.Max(0.0001f, Mathf.Abs(gimmickObj.transform.lossyScale.y)) * GIMMICK_HEIGHT_FROZEN_LAYER_RATIO;
             overlay.transform.localScale = new Vector3(sx, yScale, sz);
-            overlay.transform.position = new Vector3(gb.center.x, gimmickObj.transform.position.y, gb.center.z);
+            overlay.transform.position = new Vector3(gb.center.x, gimmickObj.transform.position.y, gb.center.z) + GetFrozenLayerVisualOffset();
 
             var bi = gimmickObj.GetComponent<BalloonIdentifier>();
             if (bi != null) bi.SetVisible(false);
+            if (_frozenOverlays.Count == 0) _lastFrozenLayerVisualOffset = GetFrozenLayerVisualOffset();
             _frozenOverlays[anchorId] = overlay;
             _iceBlockOverlaySize[overlay] = 1;
         }
@@ -5879,7 +5911,7 @@ namespace BalloonFlow
             // It is a field overlay that covers the balloon from world space; parenting it to the
             // balloon makes pooled hierarchy/balloon scale move the ice to the wrong place.
             overlay.transform.SetParent(null, false);
-            overlay.transform.position = parentBalloon.transform.position; // 얼음은 셀 고정
+            overlay.transform.position = parentBalloon.transform.position + GetFrozenLayerVisualOffset(); // 얼음은 셀 고정
             overlay.transform.rotation = Quaternion.identity;
             // 풍선보다 크게 — 얼음이 풍선을 감싼 시각.
             // ROLLBACK_FROZEN_OVERLAY_DIRECT_SCALE_20260626:
@@ -5892,6 +5924,7 @@ namespace BalloonFlow
             var bi = parentBalloon.GetComponent<BalloonIdentifier>();
             if (bi != null) bi.SetVisible(false);
 
+            if (_frozenOverlays.Count == 0) _lastFrozenLayerVisualOffset = GetFrozenLayerVisualOffset();
             _frozenOverlays[balloonId] = overlay;
             _iceBlockOverlaySize[overlay] = 1; // ROLLBACK_ICE_SINGLE_BLOCK_TEXT_SCALE_20260701: per-cell(그룹) 오버레이=1.
         }

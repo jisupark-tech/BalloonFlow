@@ -857,6 +857,29 @@ namespace BalloonFlow
                 RepositionColumnHolders(columns[i]);
         }
 
+        // ROLLBACK_ZAP_QUEUE_LAZY_SPAWN_20260706: Zap 홀더 제거 후 호출. RefreshAllPositions 는 이미 생성된 visual 만
+        //   재배치하므로, 클릭 경로처럼 모든 비-파이프 열에 RepositionColumnHolders 를 돌려 깊은 줄 홀더를 당겨 lazy-spawn 한다.
+        //   (파이프 열은 RefreshAllPositions 가 이미 RepositionColumnHolders 로 처리하므로 제외. visual.column 동기화는
+        //    선행 RefreshAllPositions 가 수행하므로 이 호출은 그 뒤에 와야 함.) 롤백: 이 메서드 + 호출부 제거.
+        public void RepositionNonPipeColumnsForZap()
+        {
+            if (!HolderManager.HasInstance) return;
+            HolderData[] holders = HolderManager.Instance.GetHolders();
+            if (holders == null) return;
+
+            var pipeColumns = new HashSet<int>();
+            for (int i = 0; i < holders.Length; i++)
+                if (!holders[i].isConsumed
+                    && (holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                     || holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_O))
+                    pipeColumns.Add(holders[i].column);
+
+            int cols = HolderManager.Instance.QueueColumns;
+            for (int c = 0; c < cols; c++)
+                if (!pipeColumns.Contains(c))
+                    RepositionColumnHolders(c);
+        }
+
         /// <summary>
         /// IsRailFull is no longer relevant in Rail Overflow mode.
         /// Always returns false — dart deployment is gated by slot availability, not holder count.

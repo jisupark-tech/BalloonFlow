@@ -288,6 +288,32 @@ namespace BalloonFlow
             EventBus.Publish(new OnHolderThawed { holderId = holderId });
         }
 
+        // ROLLBACK_ZAP_FROZEN_HOLDER_THAW_20260706: Zap 등으로 홀더가 count 개 '사라질' 때, 배포 완료(HandleDeploymentDone)와
+        //   동일하게 남은 Frozen(홀더 Ice) 홀더의 frozenHP 를 count 만큼 차감(해동 크레딧). HP 0 → 해동.
+        //   원인: RemoveRailAndQueueColor 는 홀더를 UndoDeploy+isConsumed 로 제거하지만 OnHolderDeploymentDone 을 발행하지 않아
+        //   Frozen 해동 카운트가 안 깎임 → 해동시킬 홀더가 Zap 으로 없어지면 영영 해동 안 됨(언위너블). 롤백: 이 메서드 + 호출부 제거.
+        public void DecrementFrozenHoldersHP(int count)
+        {
+            if (count <= 0) return;
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                if (!_holders[i].isFrozen || _holders[i].isConsumed) continue; // 제거된 frozen 홀더 자신은 skip
+                _holders[i].frozenHP -= count;
+                if (_holders[i].frozenHP <= 0)
+                {
+                    ThawFrozenHolder(_holders[i].holderId);
+                }
+                else
+                {
+                    EventBus.Publish(new OnFrozenHPChanged
+                    {
+                        holderId = _holders[i].holderId,
+                        remainingHP = _holders[i].frozenHP
+                    });
+                }
+            }
+        }
+
         /// <summary>
         /// Chain 그룹에 속한 모든 보관함 ID 반환.
         /// </summary>
@@ -695,51 +721,72 @@ namespace BalloonFlow
                 list.Add(members[i]);
             }
 
-            // 열별 검증: 열이 비어있어야 하고(분할 적재 방지), 열당 멤버 ≤ 2(슬롯 deploying+waiting), 앞줄 선두 멤버 존재.
+            // ROLLBACK_CHAIN_PARTIAL_WAIT_DEPLOY_20260706: 체인 '부분 적재' 허용.
+            //   기존: 멤버 열 중 하나라도 슬롯(deploy/wait)이 차 있으면 체인 전체 차단(분할 적재 방지) → 배포중 홀더가 있는 열에
+            //   걸친 체인이 아예 배포 불가였다. 변경: 열별로 배포 슬롯이 비면 deploying, (비-체인) 배포중이 있고 대기 슬롯이 비면
+            //   waiting 으로 넣는다. 원자성(결정 1a): 멤버 중 하나라도 그 열에 빈 슬롯이 없으면(deploy·wait 둘 다 참) 체인 전체 차단.
+            //   앞줄(hasFront) 검증(결정 2): '배포로 들어가는 열(배포 슬롯 빈 열)'에만 적용 — 대기로만 들어가는 멤버는 앞줄 불필요.
+            //   롤백: 아래 검증/등록 두 루프를, (a) if(_deployingHolderId[col]>=0||_waitingHolderId[col]>=0||count>2) block + hasFront 무조건,
+            //         (b) front.isDeploying=true;_deployingHolderId[col]=front; 나머지 waiting  로 복원.
+            //   열별 검증
             foreach (var kvp in membersByColumn)
             {
                 int col = kvp.Key;
                 List<HolderData> colMembers = kvp.Value;
 
-                if (_deployingHolderId[col] >= 0 || _waitingHolderId[col] >= 0 || colMembers.Count > 2)
+                bool deployFree = _deployingHolderId[col] < 0;
+                bool waitFree = _waitingHolderId[col] < 0;
+                int freeSlots = (deployFree ? 1 : 0) + (waitFree ? 1 : 0);
+
+                // 원자성(결정 1a): 이 열의 체인 멤버 수가 빈 슬롯 수를 초과하면(둘 다 참 포함) 체인 전체 차단.
+                if (colMembers.Count > freeSlots || colMembers.Count > 2)
                 {
                     EventBus.Publish(new OnHolderColumnBlocked { holderId = triggerHolder.holderId, column = col });
                     EventBus.Publish(new OnHolderWarning { waitingCount = colMembers.Count, maxSlots = 2, isDanger = true });
                     return false;
                 }
 
-                // 그 열에 앞줄(선두) 멤버가 있어야 배포 가능 — 가로=유일 멤버, 세로=맨 위(row0) 멤버.
-                bool hasFront = !HolderVisualManager.HasInstance; // visual 없으면 검증 스킵
-                if (HolderVisualManager.HasInstance)
-                    for (int i = 0; i < colMembers.Count; i++)
-                        if (HolderVisualManager.Instance.IsInFrontRow(colMembers[i].holderId)) { hasFront = true; break; }
-                if (!hasFront)
+                // 앞줄(선두) 검증(결정 2): 배포 슬롯이 빈 열에서만 — 그 열의 배포 멤버는 앞줄이어야 한다.
+                //   배포 슬롯이 이미 (비-체인 배포중으로) 차 있으면 멤버는 대기로만 들어가므로 앞줄 검증 스킵.
+                if (deployFree)
                 {
-                    Debug.Log($"[HolderManager] Chain blocked - column {col} has no front-row member (groupId={triggerHolder.chainGroupId})");
-                    EventBus.Publish(new OnHolderColumnBlocked { holderId = triggerHolder.holderId, column = col });
-                    return false;
+                    bool hasFront = !HolderVisualManager.HasInstance; // visual 없으면 검증 스킵
+                    if (HolderVisualManager.HasInstance)
+                        for (int i = 0; i < colMembers.Count; i++)
+                            if (HolderVisualManager.Instance.IsInFrontRow(colMembers[i].holderId)) { hasFront = true; break; }
+                    if (!hasFront)
+                    {
+                        Debug.Log($"[HolderManager] Chain blocked - column {col} has no front-row member (groupId={triggerHolder.chainGroupId})");
+                        EventBus.Publish(new OnHolderColumnBlocked { holderId = triggerHolder.holderId, column = col });
+                        return false;
+                    }
                 }
             }
 
-            // 배포 등록: 열별로 앞줄 선두 = deploying, 나머지(최대 1명) = waiting(선두 끝나면 이어서 배포 → 레일에 함께 붙음).
+            // 배포 등록: 배포 슬롯이 비면 앞줄 선두 = deploying + 나머지 = waiting.
+            //   배포 슬롯이 (비-체인 배포중으로) 차 있으면 멤버는 waiting 으로만 등록(기존 배포중 홀더 보존).
             foreach (var kvp in membersByColumn)
             {
                 int col = kvp.Key;
                 List<HolderData> colMembers = kvp.Value;
 
-                HolderData front = colMembers[0];
-                if (HolderVisualManager.HasInstance)
-                    for (int i = 0; i < colMembers.Count; i++)
-                        if (HolderVisualManager.Instance.IsInFrontRow(colMembers[i].holderId)) { front = colMembers[i]; break; }
+                HolderData front = null; // deploy 슬롯이 빈 경우에만 설정.
+                if (_deployingHolderId[col] < 0)
+                {
+                    front = colMembers[0];
+                    if (HolderVisualManager.HasInstance)
+                        for (int i = 0; i < colMembers.Count; i++)
+                            if (HolderVisualManager.Instance.IsInFrontRow(colMembers[i].holderId)) { front = colMembers[i]; break; }
 
-                front.isDeploying = true;
-                front.isMovingToRail = true;
-                _deployingHolderId[col] = front.holderId;
-                EventBus.Publish(new OnHolderSelected { holderId = front.holderId, color = front.color, magazineCount = front.magazineCount });
+                    front.isDeploying = true;
+                    front.isMovingToRail = true;
+                    _deployingHolderId[col] = front.holderId;
+                    EventBus.Publish(new OnHolderSelected { holderId = front.holderId, color = front.color, magazineCount = front.magazineCount });
+                }
 
                 for (int i = 0; i < colMembers.Count; i++)
                 {
-                    if (colMembers[i] == front) continue;
+                    if (colMembers[i] == front) continue; // 이미 deploying 으로 등록됨(front 가 null 이면 전부 waiting).
                     colMembers[i].isWaiting = true;
                     _waitingHolderId[col] = colMembers[i].holderId;
                     EventBus.Publish(new OnHolderSelected { holderId = colMembers[i].holderId, color = colMembers[i].color, magazineCount = colMembers[i].magazineCount });
@@ -1209,17 +1256,13 @@ namespace BalloonFlow
                     active.Add(_holders[i]);
             }
 
-            // 분배할 열 = 파이프가 없는 열만 (파이프 열은 통째로 보존).
-            var freeColumns = new System.Collections.Generic.List<int>();
-            for (int c = 0; c < _queueColumns; c++)
-                if (!pipeColumns.Contains(c)) freeColumns.Add(c);
-
-            // Re-distribute round-robin across non-pipe columns
-            if (active.Count > 0 && freeColumns.Count > 0)
-            {
-                for (int i = 0; i < active.Count; i++)
-                    active[i].column = freeColumns[i % freeColumns.Count];
-            }
+            // ROLLBACK_ZAP_KEEP_COLUMN_20260706: Zap 제거 후 홀더가 '옆으로 밀리는' 문제 — 기존 round-robin 재분배는
+            //   남은 홀더를 열 무관하게 다시 흩뿌려(active[i].column 변경) 전 홀더가 다른 열로 포물선 비행 → 화면 혼란/사이드밀림.
+            //   요구사항: 각 홀더는 '자기 열 유지' + 앞으로 당김(4→3→2→1). row 는 시각 계층(RepositionColumnHolders)이
+            //   holderId 순으로 재부여하므로, 데이터는 열만 그대로 두면 자동으로 앞 당김이 된다. → 재분배 제거.
+            //   롤백: 아래 재분배 블록 복원.
+            //   var freeColumns = new List<int>(); for(c) if(!pipeColumns.Contains(c)) freeColumns.Add(c);
+            //   if (active.Count>0 && freeColumns.Count>0) for(i) active[i].column = freeColumns[i % freeColumns.Count];
 
             // Reset column deploy/wait tracking and re-assign from current state.
             // 파이프 열 홀더도 deploy/wait 상태일 수 있어 모든 비-소비 홀더를 대상으로 재구성한다(파이프 없는 레벨은 기존과 동일).
@@ -1235,7 +1278,8 @@ namespace BalloonFlow
                     _waitingHolderId[col] = _holders[i].holderId;
             }
 
-            Debug.Log($"[HolderManager] CompactColumns: {active.Count} holders redistributed across {freeColumns.Count} non-pipe columns (pipe columns: {pipeColumns.Count}).");
+            // ROLLBACK_ZAP_KEEP_COLUMN_20260706: 재분배 제거 — 홀더는 자기 열 유지(앞 당김만).
+            Debug.Log($"[HolderManager] CompactColumns(keep-column): {active.Count} holders kept in place (pipe columns: {pipeColumns.Count}).");
         }
 
         // ROLLBACK_ZAP_ADVANCE_QUEUE_20260705: Zap(Color-Remove)이 배포중 홀더를 제거해 deploy 슬롯이 빈 열에서,
