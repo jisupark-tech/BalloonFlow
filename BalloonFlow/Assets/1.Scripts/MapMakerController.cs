@@ -1619,6 +1619,9 @@ namespace BalloonFlow
             Btn(row2, "Fill Neighbor", () => { _fillNeighborMode = true; SetStatus("Click a cell to fill same-color neighbors"); });
             var row3 = Row(p);
             Btn(row3, "Round x10", RoundCurrentBalloonCountsToTen);
+            // ROLLBACK_MAPMAKER_MOD10_MICRO_20260706: Round x10 아래 'Assist x10'(mod10_micro 미세조정) 버튼.
+            var row3b = Row(p);
+            Btn(row3b, "Assist x10", AssistCurrentBalloonCountsToTen);
             Sep(p);
         }
 
@@ -5082,6 +5085,45 @@ namespace BalloonFlow
 
             var (outGrid, rep) = Mod10.EnforceMod10(g, frameColor);
 
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    grid[c, r] = outGrid[r, c];
+            return rep;
+        }
+
+        // ROLLBACK_MAPMAKER_MOD10_MICRO_20260706: Assist x10 — mod10_micro v4 미세조정(색 가짓수 줄이기).
+        //   Round x10(Mod10)과 달리 색은 그대로 두고 주제 경계·외곽을 invisible 하게 한 칸씩 조정.
+        //   못 푸는 색은 건드리지 않고 미해결로 남겨 사람에게 넘긴다. 롤백: 이 두 메서드 + 버튼 제거.
+        private void AssistCurrentBalloonCountsToTen()
+        {
+            var rep = EnforceMod10MicroOnColRowGrid(_balloonColors, _gridCols, _gridRows);
+            OnBalloonGridChanged();
+            if (rep == null) { SetStatus("Assist x10: grid empty"); return; }
+            string ColLbl(int c) => (c >= 0 && c < COLOR_LABELS.Length) ? COLOR_LABELS[c] : c.ToString();
+            string resolved = rep.InternalResolved.Count > 0 ? string.Join(",", rep.InternalResolved.ConvertAll(c => ColLbl(c))) : "-";
+            var unres = new List<string>();
+            foreach (var kv in rep.Unresolved) unres.Add($"{ColLbl(kv.Key)}({kv.Value})");
+            string unresolved = unres.Count > 0 ? string.Join(",", unres) : "없음";
+            SetStatus(rep.Unresolved.Count == 0
+                ? $"Assist x10 ✓ 전 색 ÷10 (바뀐셀 {rep.Shifted}, 해결 [{resolved}])"
+                : $"Assist x10: 바뀐셀 {rep.Shifted}, 해결 [{resolved}], 미해결 {rep.Unresolved.Count}색 [{unresolved}] — 사람 조정 필요");
+        }
+
+        /// <summary>ROLLBACK_MAPMAKER_MOD10_MICRO_20260706: [col,row] ↔ Mod10Micro [row(H),col(W)] 브리지(EnforceMod10OnColRowGrid 와 동일 패턴).</summary>
+        private Mod10Micro.Report EnforceMod10MicroOnColRowGrid(int[,] grid, int cols, int rows)
+        {
+            if (grid == null || cols <= 0 || rows <= 0) return null;
+            var g = new int[rows, cols];
+            int nonEmpty = 0;
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                {
+                    int v = grid[c, r];
+                    g[r, c] = v;
+                    if (v != Mod10Micro.EMPTY) nonEmpty++;
+                }
+            if (nonEmpty == 0) return null;
+            var (outGrid, rep) = Mod10Micro.MicroSolve(g);
             for (int r = 0; r < rows; r++)
                 for (int c = 0; c < cols; c++)
                     grid[c, r] = outGrid[r, c];

@@ -543,6 +543,11 @@ namespace BalloonFlow
         /// <summary>
         /// Fades the dim panels in or out.
         /// </summary>
+        // ROLLBACK_TUTORIAL_ITEM_FADE_HOLDER_BLOCK_20260706: dim(페이드) 가 아직 '적용 중'(페이드 인 진행)인지.
+        //   아이템 튜토리얼 진입 시 페이드가 다 적용되기 전엔 홀더가 클릭되면 안 됨(InputHandler 에서 사용).
+        //   SetDimOverlay(true) 로 시작해 FadeDimCoroutine 이 끝나면(_fadeDimCoroutine=null) false.
+        public bool IsDimFadeInProgress => _isDimActive && _fadeDimCoroutine != null;
+
         public void SetDimOverlay(bool active)
         {
             _isDimActive = active;

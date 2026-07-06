@@ -138,6 +138,15 @@ namespace BalloonFlow
                 && TutorialController.Instance.IsAwaitingItemTap())
                 return;
 
+            // ROLLBACK_TUTORIAL_ITEM_FADE_HOLDER_BLOCK_20260706:
+            // 아이템 튜토리얼 진입 시, dim 페이드가 '적용되기 전(페이드 인 중)' 에는 홀더(월드 콜라이더)가 터치되면 안 된다.
+            // (사용자 보고: 페이드 연출 전에 홀더가 눌려버리는 이슈.) 페이드가 다 적용된 뒤엔 각 스텝 규칙(tap_item 은 위 블록,
+            // tap_holder 는 정상 허용)이 이어받는다. 부스터가 월드 타겟 대기(Hand/Zap)면 예외적으로 통과.
+            if (!awaitingUseItemWorldSelection
+                && TutorialController.HasInstance && TutorialController.Instance.IsTutorialActive()
+                && TutorialManager.HasInstance && TutorialManager.Instance.IsDimFadeInProgress)
+                return;
+
             Ray ray = _gameCamera.ScreenPointToRay(screenPosition);
 
             // ROLLBACK_ZAP_UI_HOLE_INPUT:
