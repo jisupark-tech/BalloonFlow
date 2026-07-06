@@ -175,6 +175,20 @@ namespace BalloonFlow
             var __cheatKb = UnityEngine.InputSystem.Keyboard.current;
             if (__cheatKb != null && __cheatKb.digit0Key.wasPressedThisFrame)
                 ForceFailStage();
+            // ROLLBACK_DIAG_HOTKEY_20260706: 에디터 9 키 — 데드락 현장 무조건 전체 상태 덤프.
+            //   자동 [Freeze-DEBUG] 는 아래 early-return(상태!=Playing / PauseManager) 뒤라 일시정지 누수·상태
+            //   이탈형 데드락에선 영영 안 찍힘 → 게이트 앞에서 강제 덤프. 롤백: 이 블록 제거.
+            if (__cheatKb != null && __cheatKb.digit9Key.wasPressedThisFrame)
+            {
+                int __efc = RailManager.HasInstance ? RailManager.Instance.EffectiveOccupiedCount : -1;
+                int __cap = RailManager.HasInstance ? RailManager.Instance.PhysicalCapacity : -1;
+                Debug.LogWarning(
+                    $"[Diag-9] state={_currentState} failConfirmed={_failConfirmed} timeScale={Time.timeScale} " +
+                    $"pauseMgr={PauseManager.IsPaused} balloons={_remainingBalloons} " +
+                    $"hasMatch={HasOutermostMatchCached} lastDrainAgo={(Time.unscaledTime - _lastDrainUnscaledTime):F1}s " +
+                    $"lastFireAgo={(DartManager.HasInstance && DartManager.Instance.LastFireUnscaledTime > 0f ? (Time.unscaledTime - DartManager.Instance.LastFireUnscaledTime) : -1f):F1}s");
+                DumpFreezeState(__efc, __cap);
+            }
 #endif
             if (_currentState != BoardState.Playing) return;
             if (_failConfirmed) return;
@@ -582,6 +596,31 @@ namespace BalloonFlow
             _awaitingPostContinuePlayerAction = false;
             _postContinueGraceUntil = 0f;
             _lastDrainUnscaledTime = Time.unscaledTime; // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: 레벨 시작 시 리셋
+            // ROLLBACK_GAUGE_RESET_ON_LEVEL_LOAD_20260706: Retry(in-place) 시 위급(빨간) 게이지·타일 danger 가
+            //   잔상으로 남는 문제 — InitializeBoard(477) 는 _currentGaugeStage 만 Safe 로 되돌리고 시각 리셋
+            //   이벤트를 발행하지 않아(OnGaugeStageChanged 는 '변화 시'에만 발행) HUD/타일이 이전 판 표시를
+            //   유지했다. 레벨 로드 시 Safe 를 명시 발행 + danger 표시 OFF. 롤백: 아래 블록 제거.
+            EventBus.Publish(new OnGaugeStageChanged
+            {
+                previousStage = (int)_currentGaugeStage,
+                currentStage  = (int)GaugeStage.Safe,
+                occupancy     = 0f
+            });
+            _currentGaugeStage = GaugeStage.Safe;
+            if (BoardTileManager.HasInstance)
+                BoardTileManager.Instance.SetDangerVisible(false);
+        }
+
+        // ROLLBACK_APP_RESUME_WATCHDOG_REBASE_20260706: no-drainage/no-fire fail 워치독은 Time.unscaledTime
+        //   기반인데, 앱 서스펜드/에디터 포커스아웃 동안 unscaled 시계가 점프해 복귀 즉시 'N초 무배수'로
+        //   오판 → 레일 만석 근처에서 창 전환 후 복귀하면 매칭 가능한 다트가 있어도 즉시 실패했다.
+        //   복귀 시점에 활동 타임스탬프를 리베이스한다. 롤백: 아래 3개 메서드 제거.
+        private void OnApplicationPause(bool paused) { if (!paused) RebaseActivityTimersAfterSuspend(); }
+        private void OnApplicationFocus(bool focused) { if (focused) RebaseActivityTimersAfterSuspend(); }
+        private void RebaseActivityTimersAfterSuspend()
+        {
+            _lastDrainUnscaledTime  = Time.unscaledTime;
+            _freezeLastActivityTime = Time.unscaledTime;
         }
 
         private void HandleHolderTapped(OnHolderTapped evt)

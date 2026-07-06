@@ -146,9 +146,12 @@ namespace BalloonFlow
         private async Task<LevelEpisode> LoadBundledEpisodeAsync()
         {
             string path = Path.Combine(Application.streamingAssetsPath, BUNDLED_EP1_FILENAME);
+            // Android 는 jar:file:// URI 지만 macOS/에디터는 스킴 없는 절대경로 — UnityWebRequest 는
+            // 스킴 없는 경로를 호스트로 해석해 실패(Cannot connect to destination host)하므로 file:// 보정.
+            string url = path.Contains("://") ? path : "file://" + path;
             string json;
 
-            using (var req = UnityWebRequest.Get(path))
+            using (var req = UnityWebRequest.Get(url))
             {
                 var op = req.SendWebRequest();
                 while (!op.isDone) await Task.Yield();

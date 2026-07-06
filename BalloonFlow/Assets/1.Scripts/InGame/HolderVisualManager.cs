@@ -362,7 +362,34 @@ namespace BalloonFlow
         {
             if (_chainLines.Count > 0)
                 UpdateChainLines();
+
+            // ROLLBACK_DEADLOCK_FRAME_WATCH_20260706: 데드락 감지가 배포 코루틴의 '메인 placement 루프'
+            //   iteration(1951 부근 TryEnterDeadlockIfNeeded)에서만 돌던 구조적 구멍 수정.
+            //   실측(Diag-9): occ 75/80 = nearFull 임계 도달 + isDeploying 홀더 존재인데, 해당 코루틴들이
+            //   Phase1.5 열 대기(1814)/BoxOpen 대기(1910) 같은 inner-wait 에 갇혀 TryEnter 가 한 번도 호출되지
+            //   않음 → DeadlockMode 미진입 → deadlockNearFull 강제회전(full-belt advance)이 안 열려 벨트가
+            //   deploy-block 패킹에 눌린 채 완전 정지 → head 가 새 스캔라인을 못 넘어 매칭(matched=[4])이
+            //   있어도 발사 0 = 영구 데드락. (홀더=단색이라 dead-head 릴리프의 sub-dart 대체 발사도 구조적으로
+            //   무력: 도달가능 색 클러스터는 head 색 도달가능으로 skip, 나머지 클러스터엔 그 색이 없음.)
+            //   '홀더를 클릭하면 가끔 풀리던' 현상 = 새 배포 코루틴이 메인 루프에 도달해 TryEnter 를 대신
+            //   호출해준 것. → 코루틴 상태와 무관하게 프레임 레벨(0.25s 스로틀)에서 감시를 구동한다.
+            //   TryEnterDeadlockIfNeeded 는 진입/무진행-강제해제 양쪽을 처리하므로 그대로 호출.
+            //   롤백: 이 블록 + _dlFrameWatchNext 필드 제거.
+            if (!_boardFinished && Time.time >= _dlFrameWatchNext && RailManager.HasInstance)
+            {
+                _dlFrameWatchNext = Time.time + 0.25f;
+                bool anyDeploying = false;
+                foreach (var kv in _holderVisuals)
+                {
+                    if (kv.Value != null && kv.Value.isDeploying) { anyDeploying = true; break; }
+                }
+                if (anyDeploying)
+                    TryEnterDeadlockIfNeeded(RailManager.Instance);
+            }
         }
+
+        // ROLLBACK_DEADLOCK_FRAME_WATCH_20260706: 프레임 감시 스로틀.
+        private float _dlFrameWatchNext;
 
         private void OnEnable()
         {
@@ -407,6 +434,12 @@ namespace BalloonFlow
         {
             _boardFinished = false;
             _railBottomCached = false; // 새 레벨에서 레일 바닥 재계산
+            // ROLLBACK_HVM_SPAWN_RESET_QUEUES_20260706: _colBusy/_colQueues 는 board fail/clear/continue 핸들러의
+            //   ResetDeployQueues 에만 정리가 걸려 있어, fail 이벤트 없이 레벨이 재시작되면(무브1+ Quit→fail02→Retry)
+            //   배포 중이던 열의 _colBusy=true / 큐 head 잔존이 새 판으로 이월 → 그 열의 신규 배포가 Phase1.5
+            //   가드(1814)에서 60초 timeout 소프트락("timed out waiting for deploy turn"). 레벨 로드 시 무조건
+            //   초기화한다. 롤백: 아래 1줄 제거.
+            ResetDeployQueues();
             ClearAllVisuals();
 
             if (!HolderManager.HasInstance) return;
@@ -2383,6 +2416,11 @@ namespace BalloonFlow
         private readonly Dictionary<int, float> _lastGapBlockLogTime = new Dictionary<int, float>();
         private const float STUCK_LOG_INTERVAL = 1.0f;
         private const bool ENABLE_DEADLOCK_FALLBACK = false; // 기존 FindClearProgressNear 직접 배포 fallback은 비활성화.
+
+        // ROLLBACK_DEADLOCK_NO_PROGRESS_EXIT_20260706: 데드락 트리거 무진행 감시 (점유수 스냅샷 + 시각).
+        private int _dlWatchOccupied = -1;
+        private float _dlWatchSince;
+        private const float DEADLOCK_NO_PROGRESS_EXIT_SECONDS = 3f;
         private const int DEADLOCK_FALLBACK_REMAINING_SLOTS = 1; // 199/200 같은 마지막 1칸 deadlock 보정 전용.
         // ROLLBACK_DART_RUNTIME_LOG_THROTTLE:
         // Successful deploy logs allocate/format large strings during dense deployment and cause
@@ -2402,7 +2440,28 @@ namespace BalloonFlow
             {
                 if (_holderVisuals.TryGetValue(rail.DeadlockHolderId, out HolderVisual dlVisual)
                     && dlVisual != null && dlVisual.isDeploying)
-                    return; // 트리거 유효 — 정상 직렬화 유지.
+                {
+                    // ROLLBACK_DEADLOCK_NO_PROGRESS_EXIT_20260706: 트리거가 '살아 있으나'(isDeploying=true) 배치도
+                    //   fire 도 일어나지 않으면(점유수 무변화) 위 stale 가드가 영영 해제하지 못해 나머지 홀더가
+                    //   무한 pause 됐다(fallback 은 ENABLE_DEADLOCK_FALLBACK=false 로 봉인, 유일한 해소 신호가
+                    //   fire 뿐). 점유수가 N초간 무변화면 강제 Exit 후 다음 프레임 재평가(필요 시 재진입).
+                    //   Time.time(scaled) 기준이라 일시정지 중엔 누적되지 않음.
+                    //   롤백: 이 블록을 'return;' 한 줄로 환원 + 아래 _dlWatch* 필드/초기화 제거.
+                    int occNow = rail.OccupiedCount;
+                    if (occNow != _dlWatchOccupied)
+                    {
+                        _dlWatchOccupied = occNow;
+                        _dlWatchSince = Time.time;
+                        return;
+                    }
+                    if (Time.time - _dlWatchSince < DEADLOCK_NO_PROGRESS_EXIT_SECONDS) return;
+
+                    LogDeployDebug($"[Deadlock] no-progress {DEADLOCK_NO_PROGRESS_EXIT_SECONDS:F0}s (occ={occNow}) " +
+                                   $"→ force ExitDeadlockMode (trigger holder {rail.DeadlockHolderId})");
+                    rail.ExitDeadlockMode();
+                    _dlWatchOccupied = -1;
+                    return;
+                }
 
                 rail.ExitDeadlockMode(); // 트리거 stale → 해제. 다음 프레임 재평가에서 유효 트리거로 재진입 가능.
                 return;
@@ -2460,6 +2519,9 @@ namespace BalloonFlow
             LogDeployDebug($"[Deadlock] Detected. Leftmost = holder {leftmostHolderId} (col {leftmostCol}). " +
                       $"Rail {rail.OccupiedCount}/{rail.SlotCount}, active deploys = {activeCount}.");
             rail.EnterDeadlockMode(leftmostHolderId);
+            // ROLLBACK_DEADLOCK_NO_PROGRESS_EXIT_20260706: 진입 시점 점유수로 무진행 감시 초기화.
+            _dlWatchOccupied = rail.OccupiedCount;
+            _dlWatchSince = Time.time;
         }
 
         /// <summary>

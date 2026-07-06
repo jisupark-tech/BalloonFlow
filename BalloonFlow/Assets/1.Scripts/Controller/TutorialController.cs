@@ -1001,6 +1001,11 @@ namespace BalloonFlow
             // [2026-05-15] 이전 레벨에서 pending 완료가 있었지만 클리어 안 한 채 다음 레벨 진입 → pending discard.
             //   (해당 레벨 재진입이 아니라 LoadPendingLevel 등으로 넘어간 경우 클리어 안 한 거니까 pending 폐기.)
             _pendingCompletionTutorialId = -1;
+            // ROLLBACK_RAILWARNING_PAUSE_RESET_ON_LEVEL_LOAD_20260706: rail_warning 튜토가 건 PauseManager.Pause
+            //   (1090) 는 StopActiveTutorial/OnDisable 에만 해제가 걸려 있어, pause 상태에서 Fail/Quit→in-place
+            //   Retry 로 넘어가면 _pauseCount 누수 → Time.timeScale 0 고착(전체 정지, ForceReset 호출자 없음).
+            //   레벨 로드 시 무조건 해제한다(미pause 상태면 no-op). 롤백: 아래 1줄 제거.
+            ResumeRailWarningPauseIfNeeded(RAIL_WARNING_TUTORIAL_ID);
             // 로딩/fade 끝난 뒤 시작 — 튜토리얼이 로딩 화면 위로 떠 보이는 것 방지
             _startTutorialCoroutine = StartCoroutine(StartTutorialAfterLoad(evt.levelId));
         }

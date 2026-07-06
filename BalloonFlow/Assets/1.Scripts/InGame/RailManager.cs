@@ -1247,6 +1247,21 @@ namespace BalloonFlow
             _darts.Clear();
             _dartById.Clear();
             _clusterHeadByHolder.Clear();
+            // ROLLBACK_RAIL_INIT_RESIDUAL_RESET_20260706: Retry(SetRailLayout→InitializeSlots) 경로는 ResetAll 과
+            //   달리 아래 필드들을 리셋하지 않아 이전 판 상태가 새 판으로 이월됐다:
+            //   - _frozenDartInfos: EffectiveOccupiedCount(=_occupiedCount+_frozenDartInfos.Count) 를 유령 점유로
+            //     부풀려 새 판이 시작부터 만석/위급 오판(조기 fail·벨트 오동작·데드락).
+            //   - _deployPoints/_activeDeployPoints/_holderReservations: fail/clear 핸들러에만 정리가 걸려 있어
+            //     이벤트 없이 재시작하는 경로(무브1+ Quit→fail02→Retry)에서 팬텀 배포점/예약이 배치·전진을 차단.
+            //   - _activeDeploySlot/_activeDeployHolderId: stale holderId 가 신규 보드의 동결 로직을 오차단.
+            //   ResetAll(3034) 과 동일 수준으로 정리한다(이중 방어). 롤백: 이 블록 제거.
+            _deployPoints.Clear();
+            _activeDeployPoints.Clear();
+            _holderReservations.Clear();
+            _frozenDartInfos.Clear();
+            _nextReservationOrder = 0;
+            _activeDeploySlot = -1;
+            _activeDeployHolderId = -1;
 
             for (int i = 0; i < _slotCount; i++)
             {

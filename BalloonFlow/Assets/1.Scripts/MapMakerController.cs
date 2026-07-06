@@ -255,6 +255,8 @@ namespace BalloonFlow
         private float _railPadding = 1.5f;
         private float _railHeight = 0.5f;
         private int _railSlotCount = 200;
+        // ROLLBACK_MAPMAKER_CAPACITY_OVERRIDE_20260706: 수동 Capacity 후보정 (0=자동계산 사용, >0=강제 적용).
+        private int _railCapacityOverride = 0;
         private bool _smoothCorners = true;
         private float _cornerRadius = 2.5f; // 벨트 코너 타일 곡선에 맞춤
 
@@ -1821,8 +1823,20 @@ namespace BalloonFlow
             // 허용량은 총 다트 수에서 자동 결정 (읽기 전용)
             var r3 = Row(p); Lbl(r3, "Capacity", w: 90);
             int autoCapacity = RailManager.CalculateCapacity(CalcTotalDarts());
-            _railSlotCount = autoCapacity;
+            // ROLLBACK_MAPMAKER_CAPACITY_OVERRIDE_20260706: 수동 override(>0) 우선, 0=자동(기존 동작).
+            _railSlotCount = _railCapacityOverride > 0 ? _railCapacityOverride : autoCapacity;
             _railCapacityLabel = Lbl(r3, $"{autoCapacity}  ({RailManager.GetRailSideCount(autoCapacity)}면, 제거:{RailManager.GetContinueRemoveCount(autoCapacity)})", w: 200);
+            // ROLLBACK_MAPMAKER_CAPACITY_OVERRIDE_20260706: Capacity 후보정 입력 — 값 입력(>0) 시 자동계산을
+            //   무시하고 강제 적용(난이도 강제용 축소 포함), 비우면 자동으로 복귀. export 는 기존대로
+            //   config.railCapacity = _railSlotCount 라 override 가 그대로 저장되고, 미설정 레벨은 기존 동작 유지.
+            //   롤백: 이 Row 블록 + _railCapacityOverride 필드/참조 제거.
+            var r3o = Row(p); Lbl(r3o, "Cap Override", w: 90);
+            MakeInputField(r3o, _railCapacityOverride > 0 ? _railCapacityOverride.ToString() : "", s =>
+            {
+                _railCapacityOverride = (int.TryParse(s, out int v) && v > 0) ? v : 0;
+                _infoDirty = true;
+            });
+            Lbl(r3o, "(빈칸=자동)", w: 90);
 
             // Smooth corners toggle + radius
             var r4 = Row(p); Lbl(r4, "Smooth Corner", w: 100);
@@ -5290,9 +5304,12 @@ namespace BalloonFlow
 
             // 허용량 자동 갱신
             int autoCap = RailManager.CalculateCapacity(CalcTotalDarts());
-            _railSlotCount = autoCap;
+            // ROLLBACK_MAPMAKER_CAPACITY_OVERRIDE_20260706: 수동 override(>0) 우선, 0=자동(기존 동작).
+            _railSlotCount = _railCapacityOverride > 0 ? _railCapacityOverride : autoCap;
             if (_railCapacityLabel != null)
-                _railCapacityLabel.text = $"{autoCap}  ({RailManager.GetRailSideCount(autoCap)}면, 제거:{RailManager.GetContinueRemoveCount(autoCap)})";
+                _railCapacityLabel.text = _railCapacityOverride > 0
+                    ? $"{_railSlotCount} [수동, 자동:{autoCap}]  ({RailManager.GetRailSideCount(_railSlotCount)}면, 제거:{RailManager.GetContinueRemoveCount(_railSlotCount)})"
+                    : $"{autoCap}  ({RailManager.GetRailSideCount(autoCap)}면, 제거:{RailManager.GetContinueRemoveCount(autoCap)})";
 
             // === Build per-color stats ===
             var balloonCountPerColor = new Dictionary<int, int>();
@@ -7761,6 +7778,11 @@ namespace BalloonFlow
             // Load rail capacity: prefer LevelConfig.railCapacity, fallback to rail.slotCount
             if (config.railCapacity > 0) _railSlotCount = config.railCapacity;
             else if (config.rail.slotCount > 0) _railSlotCount = config.rail.slotCount;
+            // ROLLBACK_MAPMAKER_CAPACITY_OVERRIDE_20260706: 로드된 capacity 가 현재 데이터의 자동계산값과
+            //   다르면 저작자가 수동 후보정한 레벨로 간주해 override 를 복원, 같으면 자동(기존 동작) 유지.
+            //   (홀더 데이터는 위에서 이미 로드됨 → CalcTotalDarts 유효.) 롤백: 아래 2줄 제거.
+            int loadedAutoCap = RailManager.CalculateCapacity(CalcTotalDarts());
+            _railCapacityOverride = (_railSlotCount > 0 && _railSlotCount != loadedAutoCap) ? _railSlotCount : 0;
             _smoothCorners = config.rail.smoothCorners;
             _cornerRadius = config.rail.cornerRadius > 0f ? config.rail.cornerRadius : 2.5f;
             if (config.rail.waypoints != null && config.rail.waypoints.Length > 0)

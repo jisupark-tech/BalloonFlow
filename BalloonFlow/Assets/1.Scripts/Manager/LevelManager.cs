@@ -224,6 +224,13 @@ namespace BalloonFlow
             _retryCount++;
             _levelActive = true;
             _currentLevelEndedInClear = false;
+            // ROLLBACK_RETRY_FULL_CLEANUP_20260706: RetryLevel 은 LoadLevel(151) 과 달리 CleanupPreviousLevel()
+            //   을 건너뛰는 in-place 리셋이라, fail/clear 이벤트 없이 도달하면(무브1+ Quit→OnLevelAbandoned→fail02
+            //   →Retry — 이 경로는 OnBoardFailed 를 발행하지 않음) HolderVisualManager._colBusy/_colQueues 와
+            //   RailManager _deployPoints/_activeDeployPoints/_holderReservations/_frozenDartInfos 가 잔존 →
+            //   새 판에서 열 잠금/팬텀 예약/유령 점유(레일 위 다트·위급표시 잔상, 데드락)로 이어졌다.
+            //   LoadLevel 과 동일하게 전체 정리를 선행한다. 롤백: 아래 1줄 제거.
+            CleanupPreviousLevel();
             SetupLevel(_currentLevelConfig);
         }
 

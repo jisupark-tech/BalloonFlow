@@ -170,6 +170,9 @@ namespace BalloonFlow
             public Vector3 targetPosition;
             public int targetBalloonId;
             public int color;
+            // ROLLBACK_PERHOLDER_RELIEF_UNGATE_20260706: 발사 홀더 id — per-holder 릴리프의 in-flight 판정용.
+            // 풀 재사용 객체라 모든 생성 지점에서 반드시 재설정할 것. 롤백: 이 필드 + 두 대입 + helper 제거.
+            public int holderId;
             public DirectionalTargeting.ScanDirection scanDir;
             public int scanLine;
             public float elapsed;
@@ -471,6 +474,21 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnBoardCleared>(HandleBoardCleared);
             EventBus.Unsubscribe<OnBoardFailed>(HandleBoardFailed);
             EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);
+        }
+
+        // ROLLBACK_APP_RESUME_WATCHDOG_REBASE_20260706: 스톨/무발사 감시는 Time.unscaledTime 기반인데 앱
+        //   서스펜드/에디터 포커스아웃 동안 unscaled 시계가 점프해, 복귀 직후 워치독·릴리프가 오발동하거나
+        //   BoardStateManager no-fire fail 이 즉시 성립했다. 복귀 시점에 타이머를 리베이스한다.
+        //   롤백: 아래 3개 메서드 제거.
+        private void OnApplicationPause(bool paused) { if (!paused) RebaseStallTimersAfterSuspend(); }
+        private void OnApplicationFocus(bool focused) { if (focused) RebaseStallTimersAfterSuspend(); }
+        private void RebaseStallTimersAfterSuspend()
+        {
+            _lastFireUnscaledTime = Time.unscaledTime;
+            _stallWatchTimer = 0f;
+            _stallWatchLastPopSeen = _lastPopUnscaledTime;
+            _holderStallSince.Clear();
+            _deadHeadSince.Clear();
         }
 
         /// <summary>공격 스캔 주기 타이머 (dartFireInterval 기반)</summary>
@@ -1135,6 +1153,7 @@ namespace BalloonFlow
             proj.targetPosition = to;
             proj.targetBalloonId = targetBalloonId;
             proj.color = color;
+            proj.holderId = -1; // ROLLBACK_PERHOLDER_RELIEF_UNGATE_20260706: slot-legacy 경로 — holder 불명(풀 stale 방지 재설정)
             proj.scanDir = DirectionalTargeting.DetermineScanDirection(to - from);
             proj.scanLine = GetScanLine(from, proj.scanDir);
             // [ROLLBACK_DART_LAUNCH_INITIAL_PROGRESS]
@@ -1949,9 +1968,29 @@ namespace BalloonFlow
         private readonly Dictionary<int, float> _holderStallSince = new Dictionary<int, float>(16);
         private const float PER_HOLDER_STALL_RELIEF_SECONDS = 2.0f;
 
+        // ROLLBACK_PERHOLDER_RELIEF_UNGATE_20260706: holder 의 자기 비행체 존재 여부 (per-holder in-flight 판정).
+        private bool HasInflightProjectileForHolder(int holderId)
+        {
+            for (int i = 0; i < _activeProjectiles.Count; i++)
+            {
+                var p = _activeProjectiles[i];
+                if (p != null && p.holderId == holderId) return true;
+            }
+            return false;
+        }
+
         private void RelievePerHolderStallTimeout(RailManager rail)
         {
-            if (rail == null || _activeProjectiles.Count > 0) return;
+            // ROLLBACK_PERHOLDER_RELIEF_UNGATE_20260706: 기존 전역 게이트
+            //   'if (rail == null || _activeProjectiles.Count > 0) return;'
+            //   는 다중 클러스터에서 '다른' 홀더의 상시 비행 때문에 이 최후 릴리프가 영영 실행되지 않는
+            //   구멍이 있었다(위 #3 starvation 을 메우려던 이 메서드 자체가 같은 조건으로 무력화 — 레벨7 등
+            //   기믹 없는 순수 레벨의 '공격 가능한데 발사 정지' 데드락). in-flight 검사를 holder 단위로 강등.
+            //   연속공격 안전성 유지: (1) ClearConsumedLineLockForHolder 는 holder-local pass-lock 만 건드림 →
+            //   전역 in-flight 락(_unresolvedConsumedTargetLines) 불변. (2) 자기 비행체가 있는 홀더는 아래
+            //   per-holder 스킵으로 여전히 제외. 롤백: 이 줄을 위 기존 한 줄로 환원 + 루프 내
+            //   HasInflightProjectileForHolder 스킵 + helper 제거.
+            if (rail == null) return;
             if (!BoardStateManager.HasInstance || !BoardStateManager.Instance.HasOutermostMatchCached)
             {
                 _holderStallSince.Clear(); // fail 영역/매칭 없음 — 타이머 리셋(오발동 방지).
@@ -1973,6 +2012,9 @@ namespace BalloonFlow
 
                 // 이 tick 발사 = 진행 중 → 타이머 리셋.
                 if (_firedHoldersThisTick.Contains(holderId)) { _holderStallSince.Remove(holderId); continue; }
+                // ROLLBACK_PERHOLDER_RELIEF_UNGATE_20260706: 자기 비행체가 아직 비행 중 = 진행 중 →
+                //   릴리프 대상 아님 (제거된 전역 _activeProjectiles 게이트의 per-holder 대체).
+                if (HasInflightProjectileForHolder(holderId)) { _holderStallSince.Remove(holderId); continue; }
                 // head 색이 외곽 도달불가 = RelieveDeadHeadStall 담당 영역 → 여기선 제외.
                 if (!_deadHeadReachableColors.Contains(head.dartColor)) { _holderStallSince.Remove(holderId); continue; }
 
@@ -2619,6 +2661,7 @@ namespace BalloonFlow
                 proj.targetPosition = travelTarget;
                 proj.targetBalloonId = candidate.targetId;
                 proj.color = candidate.color;
+                proj.holderId = candidate.dart != null ? candidate.dart.holderId : -1; // ROLLBACK_PERHOLDER_RELIEF_UNGATE_20260706
                 proj.scanDir = candidate.scanDir;
                 proj.scanLine = candidate.scanLine;
                 // [ROLLBACK_DART_LAUNCH_INITIAL_PROGRESS]
