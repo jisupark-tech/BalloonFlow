@@ -7,6 +7,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using UnityEngine.Networking;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using BalloonFlow.Analytics;
 
 namespace BalloonFlow
@@ -14,6 +17,10 @@ namespace BalloonFlow
     /// <summary>
     /// Unity IAP wrapper. 상품 목록과 보상은 Firestore /products (ShopCatalogService) 가 진실 소스.
     /// ShopCatalogService 로드 완료 후 자동 init. UNITY_IAP 미정의 시 simulation 모드.
+    /// [2026-07-06 IAP_SERVER_VALIDATE] 방식 B — 디바이스 빌드는 ProcessPurchase 에서 Pending 반환 후
+    ///   Cloud Function(validatePurchase) 검증 통과 시에만 보상 지급 + ConfirmPendingPurchase.
+    ///   검증 불가(네트워크 등) 시 소비 보류 → 다음 실행 시 스토어가 재전달해 재검증(보상 소실 없음).
+    ///   Editor 는 FakeStore 라 purchaseToken 이 없어 기존 로컬 지급 유지.
     /// </summary>
     public class IAPManager : Singleton<IAPManager>
 #if UNITY_IAP
@@ -42,6 +49,16 @@ namespace BalloonFlow
         private IStoreController    _storeController;
         private IExtensionProvider  _extensionProvider;
         private readonly Dictionary<string, ProductType> _registeredProductTypes = new Dictionary<string, ProductType>();
+
+        // [2026-07-06 IAP_SERVER_VALIDATE] 영수증 서버 검증 (방식 B).
+        // 엔드포인트는 AnalyticsManager.INGEST_URL 과 동일 배포 규칙 — 배포 후 실제 URL 확인/교체.
+        private const string VALIDATE_URL =
+            "https://us-central1-balloonloop-d855d.cloudfunctions.net/validatePurchase";
+        private const int   VALIDATE_MAX_ATTEMPTS        = 3;
+        private const float VALIDATE_RETRY_DELAY_SECONDS = 5f;
+        private const float VALIDATE_AUTH_WAIT_TIMEOUT   = 30f;
+        // 스토어가 같은 미소비 구매를 세션 내 재전달할 때 검증 코루틴 중복 기동 방지.
+        private readonly HashSet<string> _validatingTokens = new HashSet<string>();
 #endif
 
         /// <summary>광고 영구 제거 여부. Firestore UserData.removedAds 가 진실 소스. 미준비 시 PlayerPrefs fallback.</summary>
@@ -202,7 +219,7 @@ namespace BalloonFlow
             }
 #else
             Debug.Log($"{LOG_TAG} Sim — {productId} 구매");
-            ProcessPurchaseReward(productId, transactionId: "");
+            ProcessPurchaseReward(productId, transactionId: "", verified: false);
             PublishPurchaseResult(productId, true);
 #endif
         }
@@ -450,12 +467,200 @@ namespace BalloonFlow
                 return PurchaseProcessingResult.Complete;
             }
 
-            ProcessPurchaseReward(productId, transactionId);
+#if UNITY_EDITOR
+            // Editor FakeStore — purchaseToken 이 없어 서버 검증 불가. 기존 로컬 지급(미검증) 유지.
+            ProcessPurchaseReward(productId, transactionId, verified: false);
             PublishPurchaseResult(productId, true);
-
-            // TODO: Phase 3 — Cloud Functions validatePurchase 호출 후 보상 지급으로 라우팅 변경 예정
             return PurchaseProcessingResult.Complete;
+#else
+            // [2026-07-06 IAP_SERVER_VALIDATE] 검증 완료 전 Complete 반환 금지 — Complete 는 트랜잭션을
+            // 즉시 소비 확정해 위조/검증실패 시 복구 불가. Pending 유지 후 검증 코루틴이 확정한다.
+            string purchaseToken = ExtractGooglePurchaseToken(args.purchasedProduct.receipt, out string orderId);
+            if (string.IsNullOrEmpty(purchaseToken))
+            {
+                Debug.LogWarning($"{LOG_TAG} purchaseToken 파싱 실패 — 소비 보류(다음 실행 재전달). productId={productId}");
+                if (userInitiated) PublishPurchaseResult(productId, false);
+                return PurchaseProcessingResult.Pending;
+            }
+            if (!_validatingTokens.Add(purchaseToken))
+            {
+                Debug.Log($"{LOG_TAG} 동일 토큰 검증 진행 중 — 재전달 무시. productId={productId}");
+                return PurchaseProcessingResult.Pending;
+            }
+            StartCoroutine(ValidateAndGrantRoutine(args.purchasedProduct, productId, purchaseToken,
+                string.IsNullOrEmpty(orderId) ? transactionId : orderId, userInitiated));
+            return PurchaseProcessingResult.Pending;
+#endif
         }
+
+#if !UNITY_EDITOR
+        /// <summary>
+        /// Cloud Function(validatePurchase) 검증 → 통과 시 보상 지급 + ConfirmPendingPurchase.
+        /// 검증 불가(네트워크/서버 일시 오류) 시 confirm 하지 않음 — 스토어가 다음 실행 시 재전달.
+        /// </summary>
+        private IEnumerator ValidateAndGrantRoutine(
+            Product product, string productId, string purchaseToken, string orderId, bool userInitiated)
+        {
+            try
+            {
+                // 1) Firebase Auth ID 토큰 대기 — UserDataService 가 부트에서 익명 로그인 수행.
+                string idToken = null;
+                float waited = 0f;
+                while (waited < VALIDATE_AUTH_WAIT_TIMEOUT)
+                {
+                    if (FirebaseManager.HasInstance && FirebaseManager.Instance.IsReady
+                        && FirebaseManager.Instance.Auth != null
+                        && FirebaseManager.Instance.Auth.CurrentUser != null)
+                    {
+                        var tokenTask = FirebaseManager.Instance.Auth.CurrentUser.TokenAsync(false);
+                        while (!tokenTask.IsCompleted) yield return null;
+                        if (!tokenTask.IsFaulted && !tokenTask.IsCanceled && !string.IsNullOrEmpty(tokenTask.Result))
+                        {
+                            idToken = tokenTask.Result;
+                            break;
+                        }
+                    }
+                    waited += 1f;
+                    yield return new WaitForSecondsRealtime(1f);
+                }
+
+                if (idToken == null)
+                {
+                    Debug.LogWarning($"{LOG_TAG} 검증용 Auth 토큰 확보 실패 — Pending 유지(다음 실행 재검증). productId={productId}");
+                    if (userInitiated) PublishPurchaseResult(productId, false);
+                    yield break;
+                }
+
+                string body = JsonConvert.SerializeObject(new { productId, purchaseToken, orderId });
+
+                for (int attempt = 1; attempt <= VALIDATE_MAX_ATTEMPTS; attempt++)
+                {
+                    long code;
+                    bool networkErr;
+                    string responseText;
+                    using (var req = new UnityWebRequest(VALIDATE_URL, "POST"))
+                    {
+                        req.uploadHandler   = new UploadHandlerRaw(Encoding.UTF8.GetBytes(body));
+                        req.downloadHandler = new DownloadHandlerBuffer();
+                        req.SetRequestHeader("Content-Type", "application/json");
+                        req.SetRequestHeader("Authorization", "Bearer " + idToken);
+                        req.timeout = 30;
+
+                        yield return req.SendWebRequest();
+
+                        code = req.responseCode;
+                        networkErr = req.result == UnityWebRequest.Result.ConnectionError
+                                  || req.result == UnityWebRequest.Result.DataProcessingError;
+                        responseText = req.downloadHandler.text;
+                    }
+
+                    if (!networkErr && code == 200)
+                    {
+                        bool valid = false, definitive = false, alreadyProcessed = false;
+                        string serverOrderId = orderId;
+                        try
+                        {
+                            var resp = JObject.Parse(responseText);
+                            valid            = resp.Value<bool?>("valid") ?? false;
+                            definitive       = resp.Value<bool?>("definitive") ?? false;
+                            alreadyProcessed = resp.Value<bool?>("alreadyProcessed") ?? false;
+                            string oid = resp.Value<string>("orderId");
+                            if (!string.IsNullOrEmpty(oid)) serverOrderId = oid;
+                        }
+                        catch (System.Exception e)
+                        {
+                            Debug.LogWarning($"{LOG_TAG} 검증 응답 파싱 실패: {e.Message}");
+                        }
+
+                        if (valid)
+                        {
+                            if (alreadyProcessed)
+                            {
+                                // 이전 세션에서 지급 후 confirm 전 종료 → 재전달 케이스. 중복 지급 방지, 소비만 확정.
+                                Debug.Log($"{LOG_TAG} 검증 OK(이미 지급됨) — confirm only. productId={productId}");
+                            }
+                            else
+                            {
+                                ProcessPurchaseReward(productId, serverOrderId, verified: true);
+                                PublishPurchaseResult(productId, true);
+                            }
+                            ConfirmPending(product);
+                            yield break;
+                        }
+
+                        if (definitive)
+                        {
+                            // 위조/취소 — 지급 없이 소비 확정(재전달 루프 방지).
+                            Debug.LogWarning($"{LOG_TAG} 영수증 검증 거부 — 지급 안 함. productId={productId} resp={responseText}");
+                            ConfirmPending(product);
+                            if (userInitiated) PublishPurchaseResult(productId, false);
+                            yield break;
+                        }
+                        // valid=false & definitive=false (결제 보류 등) — confirm 보류, 아래 재시도.
+                    }
+                    else if (!networkErr && code == 401)
+                    {
+                        // stale 토큰 가능성 — forceRefresh 후 재시도 (Firestore SDK quirk 과 동일 패턴).
+                        if (FirebaseManager.HasInstance && FirebaseManager.Instance.Auth?.CurrentUser != null)
+                        {
+                            var refreshTask = FirebaseManager.Instance.Auth.CurrentUser.TokenAsync(true);
+                            while (!refreshTask.IsCompleted) yield return null;
+                            if (!refreshTask.IsFaulted && !refreshTask.IsCanceled && !string.IsNullOrEmpty(refreshTask.Result))
+                                idToken = refreshTask.Result;
+                        }
+                    }
+                    // 그 외 4xx/5xx/네트워크 오류 — 재시도.
+
+                    if (attempt < VALIDATE_MAX_ATTEMPTS)
+                        yield return new WaitForSecondsRealtime(VALIDATE_RETRY_DELAY_SECONDS * attempt);
+                }
+
+                // 세션 내 검증 실패 — confirm 보류. 다음 실행 시 스토어가 ProcessPurchase 를 재전달해
+                // 재검증되므로 결제 자체가 소실되지는 않음 (유저에겐 이번 시도 실패로 안내).
+                Debug.LogWarning($"{LOG_TAG} 영수증 검증 {VALIDATE_MAX_ATTEMPTS}회 실패 — Pending 유지. productId={productId}");
+                if (userInitiated) PublishPurchaseResult(productId, false);
+            }
+            finally
+            {
+                _validatingTokens.Remove(purchaseToken);
+            }
+        }
+
+        private void ConfirmPending(Product product)
+        {
+            if (_storeController != null && product != null)
+                _storeController.ConfirmPendingPurchase(product);
+        }
+
+        /// <summary>
+        /// Unity IAP 영수증(JSON wrapper)에서 Google Play purchaseToken/orderId 추출.
+        /// 구조: { Store, TransactionID, Payload } → Payload{ json, signature } → json{ purchaseToken, orderId … }
+        /// </summary>
+        private static string ExtractGooglePurchaseToken(string unityReceipt, out string orderId)
+        {
+            orderId = "";
+            if (string.IsNullOrEmpty(unityReceipt)) return "";
+            try
+            {
+                var wrapper = JObject.Parse(unityReceipt);
+                if (!string.Equals(wrapper.Value<string>("Store"), "GooglePlay", System.StringComparison.OrdinalIgnoreCase))
+                    return "";
+                string payload = wrapper.Value<string>("Payload");
+                if (string.IsNullOrEmpty(payload)) return "";
+                var payloadObj = JObject.Parse(payload);
+                string innerJson = payloadObj.Value<string>("json");
+                if (string.IsNullOrEmpty(innerJson)) return "";
+                var purchase = JObject.Parse(innerJson);
+                orderId = purchase.Value<string>("orderId") ?? "";
+                return purchase.Value<string>("purchaseToken") ?? "";
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[IAPManager] 영수증 파싱 실패: {e.Message}");
+                return "";
+            }
+        }
+#endif
 
         public void OnPurchaseFailed(Product product, PurchaseFailureReason failureReason)
         {
@@ -489,12 +694,13 @@ namespace BalloonFlow
 #endif
 
         /// <summary>
-        /// ShopCatalogService 의 보상 정의를 읽어 매니저에 위임. 클라 단독 처리 (Phase 3 전).
+        /// ShopCatalogService 의 보상 정의를 읽어 매니저에 위임.
         /// 코인은 CurrencyManager.AddCoins(suppressEvent=true) 로 silent 지급 — UILobby 즉시 갱신 차단.
         /// 후속 OnPurchaseRewardGranted 이벤트로 PurchaseRewardEffect 가 success popup + FxGold 연출 처리.
-        /// transactionId 는 purchase_event 의 transaction_id 컬럼에 그대로 들어감 (sim 모드면 "").
+        /// transactionId 는 purchase_event 의 receipt_id 컬럼에 그대로 들어감 (sim 모드면 "").
+        /// verified: 서버(validatePurchase) 검증 통과 여부 — purchase_event.is_verified + af_purchase 발행 조건.
         /// </summary>
-        private void ProcessPurchaseReward(string productId, string transactionId)
+        private void ProcessPurchaseReward(string productId, string transactionId, bool verified)
         {
             var doc = ShopCatalogService.HasInstance ? ShopCatalogService.Instance.Get(productId) : null;
             if (doc == null)
@@ -507,7 +713,12 @@ namespace BalloonFlow
             if (UserSnapshotCache.HasInstance && doc.priceUsd > 0)
                 UserSnapshotCache.Instance.OnPurchaseVerified(doc.priceUsd);
 
-            EmitPurchaseEvent(doc, transactionId);
+            EmitPurchaseEvent(doc, transactionId, verified);
+
+            // [2026-07-06 AF_PURCHASE] AppsFlyer 표준 매출 이벤트 — ROAS/매출 리포트는 af_purchase
+            // (af_revenue/af_currency) 표준 키로만 집계됨. 서버 검증 통과 구매만 발행(위조·sim 오염 방지).
+            if (verified && AttributionManager.HasInstance)
+                AttributionManager.Instance.LogPurchase(doc.priceUsd, "USD", doc.productId, transactionId);
 
             var r = doc.rewards;
             int coinsAdded = 0;
@@ -520,8 +731,17 @@ namespace BalloonFlow
                     coinsAdded = r.coins;
                 }
 
-                // Item-type rewards are applied by PurchaseRewardEffect after FXItem lands.
-                // Rollback: restore the old immediate AddBooster/ActivateInfiniteHearts block here if needed.
+                // [2026-07-06 IAP_REWARD_IMMEDIATE] 부스터/무한하트 즉시 지급.
+                // 기존엔 PurchaseRewardEffect 가 성공 팝업 OK → FX 착지 후 지급했는데, 트랜잭션이 이미
+                // 확정된 상태에서 팝업 확인 전 앱 종료 시 보상이 영구 소실됐다. 연출은 그대로, 지급만 여기로.
+                if (r.boosters != null && BoosterManager.HasInstance)
+                {
+                    if (r.boosters.hand    > 0) BoosterManager.Instance.AddBooster(BoosterManager.HAND,    r.boosters.hand,    "iap_purchase", 0, "");
+                    if (r.boosters.shuffle > 0) BoosterManager.Instance.AddBooster(BoosterManager.SHUFFLE, r.boosters.shuffle, "iap_purchase", 0, "");
+                    if (r.boosters.zap     > 0) BoosterManager.Instance.AddBooster(BoosterManager.ZAP,     r.boosters.zap,     "iap_purchase", 0, "");
+                }
+                if (r.infiniteHeartsSeconds > 0 && LifeManager.HasInstance)
+                    LifeManager.Instance.ActivateInfiniteHearts(r.infiniteHeartsSeconds);
 
                 bool grantsRemoveAds = r.removeAds || IsNoAdsProduct(doc);
                 if (grantsRemoveAds)
@@ -653,9 +873,9 @@ namespace BalloonFlow
 
         /// <summary>
         /// purchase_event (BigQuery raw) emit. transactionId 가 비어 있으면 sim_<guid> 로 채움.
-        /// Phase 3 Cloud Functions validatePurchase 도입 시엔 verified 콜백 시점으로 이동 예정.
+        /// 디바이스 빌드는 validatePurchase 검증 통과 후 호출되므로 verified=true 로 적재됨.
         /// </summary>
-        private static void EmitPurchaseEvent(ShopProductDoc doc, string transactionId)
+        private static void EmitPurchaseEvent(ShopProductDoc doc, string transactionId, bool verified)
         {
             if (doc == null) return;
 
@@ -688,10 +908,9 @@ namespace BalloonFlow
             p[AnalyticsConsts.P_ITEMS_GRANTED]    = BuildGrantedItemsJson(doc.rewards);
             p[AnalyticsConsts.P_LIVES_GRANTED]    = 0;
             p[AnalyticsConsts.P_RECEIPT_ID]       = txId;
-            // ROLLBACK_BQ_PURCHASE_SCHEMA_V32_20260626:
-            // Current purchase_event is emitted from Unity IAP success. Move it to the
-            // server receipt-validation callback when that backend is available.
-            p[AnalyticsConsts.P_IS_VERIFIED]      = !txId.StartsWith("sim_");
+            // [2026-07-06 IAP_SERVER_VALIDATE] is_verified = validatePurchase 검증 결과.
+            // Editor/sim 경로는 false, 디바이스 구매는 검증 통과 후에만 emit 되므로 true.
+            p[AnalyticsConsts.P_IS_VERIFIED]      = verified;
 
             if (UserSnapshotCache.HasInstance)
                 UserSnapshotCache.Instance.Stamp(p);

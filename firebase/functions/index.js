@@ -17,10 +17,12 @@
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onRequest } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
 const { getAuth } = require('firebase-admin/auth');
 const { BigQuery } = require('@google-cloud/bigquery');
+const { GoogleAuth } = require('google-auth-library');
+const crypto = require('crypto');
 
 initializeApp();
 const db = getFirestore();
@@ -319,5 +321,139 @@ exports.ingestAnalyticsEvents = onRequest(
       return;
     }
     res.status(200).json({ inserted, skipped });
+  }
+);
+
+// ── IAP 영수증 검증 — 방식 B (아웃게임디렉션 §7, QA 블로커 #2 해소) ─────────────
+//
+// Unity IAPManager 가 ProcessPurchase 에서 Pending 을 반환한 뒤 이 엔드포인트로 영수증을 보낸다.
+// Google Play Developer API 로 구매 상태를 검증하고 Firestore(iap_receipts)에 멱등 기록 후
+// 지급 허가를 반환. 클라는 valid=true && !alreadyProcessed 일 때만 보상 지급 후
+// ConfirmPendingPurchase 로 트랜잭션을 확정한다.
+//
+// 응답 규약:
+//   200 { valid:true,  alreadyProcessed }        → 지급(최초) 또는 confirm only(재전달)
+//   200 { valid:false, definitive:true }         → 위조/취소 — 지급 없이 confirm (재시도 무의미)
+//   200 { valid:false, definitive:false }        → 결제 보류(pending) — confirm 보류, 클라 재시도
+//   401 / 5xx                                    → 일시 오류 — confirm 보류, 클라 재시도
+//
+// 1회 셋업 (배포 전):
+//   1) GCP 콘솔 → Google Play Android Developer API 활성화 (프로젝트 balloonloop-d855d).
+//   2) Play Console → 설정 → API 액세스 → 함수 런타임 SA
+//      (<project-number>-compute@developer.gserviceaccount.com) 초대,
+//      권한: '앱 정보 보기(읽기 전용)' + '주문 및 정기 결제 관리'.
+//   3) cd firebase/functions && npm install (google-auth-library 추가됨)
+//   4) firebase deploy --only functions:validatePurchase
+const ANDROID_PACKAGE_NAME = 'xyz.aimed.balloonloop';
+
+let _playAuthClientPromise = null;
+function getPlayAuthClient() {
+  if (!_playAuthClientPromise) {
+    _playAuthClientPromise = new GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/androidpublisher'],
+    }).getClient();
+  }
+  return _playAuthClientPromise;
+}
+
+exports.validatePurchase = onRequest(
+  {
+    region: 'us-central1',
+    memory: '256MiB',
+    timeoutSeconds: 30,
+    maxInstances: 10,
+    cors: false,
+  },
+  async (req, res) => {
+    if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return; }
+
+    // 1) 인증 — ingestAnalyticsEvents 와 동일하게 Firebase Auth ID 토큰(Bearer)
+    const authz = req.get('Authorization') || '';
+    const m = authz.match(/^Bearer (.+)$/);
+    if (!m) { res.status(401).json({ error: 'missing bearer token' }); return; }
+    let decoded;
+    try {
+      decoded = await getAuth().verifyIdToken(m[1]);
+    } catch (e) {
+      res.status(401).json({ error: 'invalid token' });
+      return;
+    }
+    const uid = decoded.uid;
+
+    const { productId, purchaseToken, orderId } = req.body || {};
+    if (!productId || !purchaseToken) {
+      res.status(400).json({ error: 'productId/purchaseToken required' });
+      return;
+    }
+
+    // 2) Google Play Developer API — purchases.products.get
+    let purchase;
+    try {
+      const client = await getPlayAuthClient();
+      const { token } = await client.getAccessToken();
+      const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${ANDROID_PACKAGE_NAME}`
+        + `/purchases/products/${encodeURIComponent(productId)}/tokens/${encodeURIComponent(purchaseToken)}`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+
+      if (r.status === 400 || r.status === 404) {
+        // 토큰/상품 불일치 — 위조 또는 무효 영수증. 정정 불가(definitive).
+        console.warn(`[validatePurchase] Play API ${r.status} — invalid receipt uid=${uid} product=${productId}`);
+        res.status(200).json({ valid: false, definitive: true, reason: `play_${r.status}` });
+        return;
+      }
+      if (!r.ok) {
+        // 401/403 = SA 미초대/권한 부족(셋업 문제), 5xx = Play 측 장애 — 클라 재시도 대상.
+        console.error(`[validatePurchase] Play API ${r.status} — SA 초대/권한 또는 일시 장애 확인 필요.`);
+        res.status(502).json({ error: `play_api_${r.status}` });
+        return;
+      }
+      purchase = await r.json();
+    } catch (e) {
+      console.error('[validatePurchase] Play API 호출 실패:', e);
+      res.status(502).json({ error: 'play_api_unreachable' });
+      return;
+    }
+
+    // 3) 구매 상태 — 0=구매완료 / 1=취소 / 2=결제보류(pending, 편의점 결제 등)
+    if (purchase.purchaseState === 2) {
+      res.status(200).json({ valid: false, definitive: false, reason: 'payment_pending' });
+      return;
+    }
+    if (purchase.purchaseState !== 0) {
+      console.warn(`[validatePurchase] purchaseState=${purchase.purchaseState} — 거부. uid=${uid} product=${productId}`);
+      res.status(200).json({ valid: false, definitive: true, reason: `state_${purchase.purchaseState}` });
+      return;
+    }
+
+    // 4) Firestore 멱등 기록 — purchaseToken 해시가 문서 키. 이미 지급 허가된 토큰이면 alreadyProcessed
+    //    (클라가 지급 후 confirm 전에 종료돼 스토어가 재전달한 케이스의 중복 지급 방지).
+    const docId = crypto.createHash('sha256').update(purchaseToken).digest('hex');
+    const ref = db.collection('iap_receipts').doc(docId);
+    let alreadyProcessed = false;
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (snap.exists) { alreadyProcessed = true; return; }
+        tx.set(ref, {
+          uid,
+          productId,
+          orderId: purchase.orderId || orderId || '',
+          purchaseTimeMillis: purchase.purchaseTimeMillis || null,
+          grantedAt: FieldValue.serverTimestamp(),
+        });
+      });
+    } catch (e) {
+      // 지급 허가 기록 전 실패 — 허가 자체를 내리지 않음(클라 재시도, Pending 유지).
+      console.error('[validatePurchase] Firestore 기록 실패:', e);
+      res.status(500).json({ error: 'receipt_store_failed' });
+      return;
+    }
+
+    res.status(200).json({
+      valid: true,
+      definitive: true,
+      alreadyProcessed,
+      orderId: purchase.orderId || orderId || '',
+    });
   }
 );

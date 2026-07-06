@@ -5,7 +5,9 @@ using UnityEngine;
 namespace BalloonFlow
 {
     /// <summary>
-    /// IAP 결제 성공 후 보상 시각 연출 컨트롤러.
+    /// IAP 결제 성공 후 보상 시각 연출 컨트롤러 (순수 연출 전용).
+    /// [2026-07-06 IAP_REWARD_IMMEDIATE] 실제 보상 지급(코인/부스터/무한하트)은 IAPManager.ProcessPurchaseReward
+    /// 가 이벤트 발행 전에 완료 — 여기서는 지급하지 않는다 (팝업 확인 전 앱 종료 시 소실 방지).
     /// OnPurchaseRewardGranted 이벤트를 받아:
     ///   1) PopupError.ShowPurchaseSuccess (iconCheck) 띄움 — 받은 보상 요약 표시
     ///   2) 사용자 확인 클릭 시 → Lobby 페이지(Home) 전환
@@ -150,7 +152,6 @@ namespace BalloonFlow
 
             // 2) Coin fly to GoldPanel — 기존 로직 그대로
             if (coinsAdded > 0 && lobby != null)
-            if (coinsAdded > 0 && lobby != null)
             {
                 Vector2 to = lobby.GetGoldPanelScreenPos();
                 Debug.Log($"[PurchaseRewardEffect] Coin fly from={from} to={to} count={FLY_COUNT}");
@@ -189,7 +190,7 @@ namespace BalloonFlow
 
             if (coinsAdded > 0 && rewards != null) yield return new WaitForSecondsRealtime(ITEM_FLY_START_DELAY);
 
-            // 3) Booster / Life / InfiniteHearts fly to LifePanel, then grant item rewards.
+            // 3) Booster / Life / InfiniteHearts fly — 연출만. 지급은 IAPManager 가 이미 완료.
             if (rewards != null)
             {
                 int pendingItemFly = 0;
@@ -221,15 +222,13 @@ namespace BalloonFlow
                     PlayItem(_iconZap != null ? _iconZap : _iconBooster, rewards.boosters.zap, "Zap", boosterTo, () => lobby.PulseGameStartButton());
                 }
 
-                // LifeManager.CurrentLives 는 ApplyItemRewardsAfterFx 까지 미증가 — 시각 펄스용 가상 +1.
-                int lifeAfter = (LifeManager.HasInstance ? LifeManager.Instance.CurrentLives : 0) + 1;
+                // 지급은 IAPManager 에서 이미 반영됨 — 현재 값 그대로 펄스.
+                int lifeAfter = Mathf.Max(1, LifeManager.HasInstance ? LifeManager.Instance.CurrentLives : 1);
                 PlayItem(_iconLife, rewards.infiniteHeartsSeconds > 0 ? 1 : 0, "InfiniteHearts", lifeTo,
                     () => lobby.PulseLifePanel(lifeAfter));
 
                 while (pendingItemFly > 0)
                     yield return null;
-
-                ApplyItemRewardsAfterFx(rewards);
             }
         }
 
@@ -243,22 +242,6 @@ namespace BalloonFlow
             _iconZap     = rm.UISpriteOr(Const.SPR_ICONZAP,    _iconZap);
             _iconBooster = rm.UISpriteOr(Const.SPR_ICONHAND,   _iconBooster);
             _iconLife    = rm.UISpriteOr(Const.SPR_ICONLIFE,   _iconLife);
-        }
-
-        private static void ApplyItemRewardsAfterFx(ShopRewards rewards)
-        {
-            if (rewards == null) return;
-
-            if (rewards.boosters != null && BoosterManager.HasInstance)
-            {
-                // ROLLBACK_ANALYTICS_NULLFILL_20260625: IAP/번들 보상 — 실금액 비용은 int 로 즉시 못 얻어 0(통화 표기만).
-                if (rewards.boosters.hand    > 0) BoosterManager.Instance.AddBooster(BoosterManager.HAND,    rewards.boosters.hand,    "iap_purchase", 0, "");
-                if (rewards.boosters.shuffle > 0) BoosterManager.Instance.AddBooster(BoosterManager.SHUFFLE, rewards.boosters.shuffle, "iap_purchase", 0, "");
-                if (rewards.boosters.zap     > 0) BoosterManager.Instance.AddBooster(BoosterManager.ZAP,     rewards.boosters.zap,     "iap_purchase", 0, "");
-            }
-
-            if (rewards.infiniteHeartsSeconds > 0 && LifeManager.HasInstance)
-                LifeManager.Instance.ActivateInfiniteHearts(rewards.infiniteHeartsSeconds);
         }
 
         private static UILobby FindUILobby()

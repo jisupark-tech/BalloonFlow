@@ -40,6 +40,28 @@ namespace BalloonFlow
             AppsFlyer.sendEvent(eventName, values);
         }
 
+        /// <summary>
+        /// [2026-07-06 AF_PURCHASE] AppsFlyer 표준 구매 이벤트(af_purchase).
+        /// 대시보드 매출/ROAS 리포트는 af_revenue/af_currency 표준 키로만 집계됨 —
+        /// 커스텀 purchase_event 로는 잡히지 않는다. 서버 영수증 검증 통과 시점에만 호출할 것.
+        /// af_order_id 로 AppsFlyer 측 중복 집계 제거.
+        /// </summary>
+        public void LogPurchase(double revenueUsd, string currencyCode, string productId, string orderId)
+        {
+            var values = new Dictionary<string, string>(5)
+            {
+                [AFInAppEvents.REVENUE]    = revenueUsd.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+                [AFInAppEvents.CURRENCY]   = string.IsNullOrEmpty(currencyCode) ? "USD" : currencyCode,
+                [AFInAppEvents.CONTENT_ID] = productId ?? "",
+                [AFInAppEvents.QUANTITY]   = "1",
+            };
+            if (!string.IsNullOrEmpty(orderId))
+                values[AFInAppEvents.ORDER_ID] = orderId;
+
+            AppsFlyer.sendEvent(AFInAppEvents.PURCHASE, values);
+            Debug.Log($"{LOG_TAG} af_purchase sent. product={productId} revenue={values[AFInAppEvents.REVENUE]} {values[AFInAppEvents.CURRENCY]}");
+        }
+
         #region IAppsFlyerConversionData callbacks
 
         public void onConversionDataSuccess(string conversionData)
