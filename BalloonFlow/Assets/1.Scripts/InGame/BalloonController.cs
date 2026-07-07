@@ -6524,7 +6524,12 @@ namespace BalloonFlow
                 {
                     gi.UpdateHP(remainHP);
                     gi.PlayHitEffect();
-                    if (remainHP <= 0) gi.PlayEndEffect();
+                    // ROLLBACK_BARRICADE_END_PARTICLE_DETACH_20260707: 기존 PlayEndEffect()는 풀 오브젝트의
+                    //   '자식' 파티클을 in-place 활성화 → 직후 ReturnBalloonObject 의 스케일다운(1→1.1→0)+풀 반환에
+                    //   부모와 함께 사라져 실제로 안 보였음(아트 리뷰 "제거 연출 활성화" 원인).
+                    //   WoodenBoard 와 동일하게 파괴 시퀀스(ReturnBalloonObject isBarricade)에서 detached clone 재생.
+                    //   롤백: 아래 주석 해제 + ReturnBalloonObject 의 barricade AppendCallback 제거.
+                    // if (remainHP <= 0) gi.PlayEndEffect();
                 }
 
                 // ROLLBACK_BARRICADE_PARTIAL_HIT_ANIMATE_20260625:
@@ -7211,6 +7216,9 @@ namespace BalloonFlow
                 // ROLLBACK_BARRICADE_DESTROY_SCALE_20260625: 바리케이드 파괴 시 1 → 1.1 → 0 으로 팝 후 소멸.
                 //   균일 풍선스케일이 아니라 '현재(늘어난) localScale' 기준으로 1.1배 → 0 (긴 모양 유지).
                 seq.Append(obj.transform.DOScale(savedLocalScale * 1.1f, scaleUpDuration * 0.45f).SetEase(Ease.OutQuad));
+                // ROLLBACK_BARRICADE_END_PARTICLE_DETACH_20260707: EndParticle 을 detached clone 으로 재생
+                //   (WoodenBoard 패턴). 루트가 0 으로 줄기 전, 1.1배 피크 시점에 발화.
+                seq.AppendCallback(() => PlayWoodenBoardEndParticleClone(obj));
                 seq.Append(obj.transform.DOScale(Vector3.zero, scaleUpDuration * 0.55f).SetEase(Ease.InQuad));
             }
             else if (isWoodenBoard)

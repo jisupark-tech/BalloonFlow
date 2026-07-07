@@ -3152,13 +3152,26 @@ namespace BalloonFlow
                                    || sData.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O))
                 {
                     int col = visual.column;
-                    // ROLLBACK_SPAWNER_END_PARTICLE_20260624 (#4): 사이즈 줄이는 연출 대신 EndParticle 활성화.
+                    // ROLLBACK_SPAWNER_END_PARTICLE_20260624 (#4): EndParticle 재생 (detached clone — HolderIdentifier).
                     if (visual.identifier != null) visual.identifier.PlaySpawnerEndParticle();
                     visual.gameObject.transform.DOKill(false);
-                    DG.Tweening.DOVirtual.DelayedCall(0.6f, () =>
+                    // ROLLBACK_SPAWNER_END_SCALE_20260707: 아트 리뷰 반영 — 소멸 시 스케일 1 → 1.1(잠깐 커짐) → 0.
+                    //   기존 0.6s 지연 후 즉시 소멸(연출 없음) → 커졌다 자연스럽게 사라지는 흐름.
+                    //   풀 재사용 대비 OnComplete 에서 baseScale 원복 후 반환. 롤백: 시퀀스 → DelayedCall(0.6f) 환원.
+                    UnityEngine.Vector3 spawnerBaseScale = visual.gameObject.transform.localScale;
+                    var endSeq = DG.Tweening.DOTween.Sequence();
+                    endSeq.Append(visual.gameObject.transform.DOScale(spawnerBaseScale * 1.1f, 0.15f)
+                        .SetEase(DG.Tweening.Ease.OutQuad));
+                    endSeq.Append(visual.gameObject.transform.DOScale(UnityEngine.Vector3.zero, 0.28f)
+                        .SetEase(DG.Tweening.Ease.InBack));
+                    endSeq.SetLink(visual.gameObject, DG.Tweening.LinkBehaviour.KillOnDisable);
+                    endSeq.OnComplete(() =>
                     {
                         if (visual != null && visual.gameObject != null)
+                        {
+                            visual.gameObject.transform.localScale = spawnerBaseScale; // 풀 재사용 대비 원복
                             ReturnHolderToPool(visual);
+                        }
                         _holderVisuals.Remove(evt.holderId);
                         RepositionColumnHolders(col); // 뒤 홀더들이 정상 큐로 전진 → 사용 가능
                         RebuildChainLines();

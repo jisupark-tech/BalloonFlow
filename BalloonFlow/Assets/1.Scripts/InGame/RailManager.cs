@@ -836,6 +836,11 @@ namespace BalloonFlow
         private int DeadlockBeltAdvanceEmptySlots()
             => Mathf.Clamp(_activeDeployPoints.Count + 2, DEADLOCK_BELT_ADVANCE_EMPTY_SLOTS, 8);
 
+        /// <summary>ROLLBACK_SUPPLY_QUEUE_CUTOFF_NEARFULL_20260707: near-full 밴드 빈칸 수의 공개 노출.
+        /// BoardStateManager 의 supply 판정이 '큐 공급 인정 컷오프'로 사용 — 데드락 강제회전이 개입하는
+        /// 임계(capacity-N)와 실패 판정의 '사실상 만석' 기준을 단일 소스로 정합시킨다.</summary>
+        public int NearFullBandEmptySlots => DeadlockBeltAdvanceEmptySlots();
+
         public bool ShouldUseFixedDeployPlacement(int holderId)
         {
             int physicalCapacity = PhysicalCapacity;

@@ -871,6 +871,11 @@ namespace BalloonFlow
             else if (evt.gimmickType == BalloonController.GimmickPinata
                   || evt.gimmickType == BalloonController.GimmickPin)
                 clip = evt.isDestroyed ? _sfxWoodBreak : _sfxBalloonPop;
+            // ROLLBACK_GIMMICK_REVEAL_SFX_20260707: 필드 Surprise/Hidden 공개가 파티클+펄스만 있고 무음이었음
+            //   (아트 리뷰 "제거 연출 활성화"). 홀더 공개(HandleHolderRevealed)와 동일 클립 재사용.
+            //   전용 클립 수령 시 이 라인만 교체. 롤백: 이 분기 제거.
+            else if (evt.gimmickType == BalloonController.GimmickSurprise)
+                clip = _sfxHolderReveal;
 
             if (clip == null) return; // 그 외 기믹(Spawner/Lock/Wall 등)은 무음
             _lastGimmickSfxTime = now;

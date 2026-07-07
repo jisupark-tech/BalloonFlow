@@ -439,7 +439,19 @@ namespace BalloonFlow
             //   pop 한 번이면 _lastDrainUnscaledTime 리셋이라 정상/회복-진행 플레이는 오발동 X.
             //   롤백: `(railFull || forceFullBeltAdvance)` 를 `railFull` 로 환원.
             // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: watchdogGateDwell 조건 추가 — '만석 상태로 N초' 를 함께 요구.
-            if ((railFull || forceFullBeltAdvance) && _remainingBalloons > 0
+            // ROLLBACK_WATCHDOG_BELOWFULL_SUPPLY_GATE_20260707: below-full 워치독은 supplyMatch=false 일 때만.
+            //   배경: 워치독 게이트는 railFull 외에 forceFullBeltAdvance(데드락 모드)로도 열리는데, 데드락은
+            //   레벨 초반 40/160 같은 below-full 에서도 배포 스톨로 진입한다(DEPLOY_STALL_DEADLOCK_TRIGGER).
+            //   이때 유저가 희귀색 홀더를 눌러 발사가 잠시 0 이면, WATCHDOG_FAST(4s/5s) + dwell 누적(rev2)으로
+            //   '큐에 매칭 색이 탭 가능하게 대기 중'(supplyMatch=true)인데도 시작 수 초 만에 fail
+            //   (2026-07-07 Level 167 재현: 840풍선, 홀더 2탭 직후 실패).
+            //   워치독의 전제("레일이 못 빠지고 아무것도 못 올라옴")는 만석에서만 성립 — below-full 에선 큐가
+            //   살아 있으므로, 필패 판정은 supply 상태 규칙(stuck 1.5s)이 담당하고 워치독은
+            //   ① 만석(railFull)이거나 ② 상태 모델도 필패 동의(!supplyMatch)일 때만 발동한다.
+            //   below-full + supplyMatch 오탐(모델이 매칭 과대평가) 잔여 리스크는 DartManager 정지 안전망
+            //   6종이 발사 재개로 해소 + 배포가 이어지면 결국 railFull 도달로 워치독 재무장.
+            //   롤백: 두 워치독의 `(railFull || !supplyMatch)` 항 제거.
+            if ((railFull || forceFullBeltAdvance) && (railFull || !supplyMatch) && _remainingBalloons > 0
                 && watchdogGateDwell >= NO_DRAINAGE_FAIL_SECONDS
                 && placementQuietDrain // ROLLBACK_WATCHDOG_PLACEMENT_QUIET_20260707
                 && Time.unscaledTime - _lastDrainUnscaledTime >= NO_DRAINAGE_FAIL_SECONDS)
@@ -458,7 +470,8 @@ namespace BalloonFlow
             //   발사가 한 번이라도 있으면(=레일 배수=진행) 리셋이라 정상/느린 진행 플레이엔 오발동 X. 다른 색 pop 엔 안 흔들림.
             //   롤백: 이 블록 삭제.
             // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: watchdogGateDwell 조건 추가 — '만석 상태로 N초' 를 함께 요구.
-            if ((railFull || forceFullBeltAdvance) && _remainingBalloons > 0
+            if ((railFull || forceFullBeltAdvance) && (railFull || !supplyMatch) // ROLLBACK_WATCHDOG_BELOWFULL_SUPPLY_GATE_20260707
+                && _remainingBalloons > 0
                 && watchdogGateDwell >= NO_FIRE_FAIL_SECONDS
                 && placementQuietFire // ROLLBACK_WATCHDOG_PLACEMENT_QUIET_20260707
                 && DartManager.HasInstance && DartManager.Instance.LastFireUnscaledTime > 0f
@@ -1066,8 +1079,19 @@ namespace BalloonFlow
             if (!RailManager.HasInstance || !HolderManager.HasInstance) return false;
             int physCap = RailManager.Instance.PhysicalCapacity;
             int efc = RailManager.Instance.EffectiveOccupiedCount;
-            // 빈 슬롯 = 0 이면 큐는 못 올라오므로 레일 매칭(false)이 그대로 결론.
-            if (physCap <= 0 || efc >= physCap) return false;
+            // ROLLBACK_SUPPLY_QUEUE_CUTOFF_NEARFULL_20260707 (사용자 결정 2026-07-07):
+            //   임계(near-full) 밴드부터는 홀더(큐) 공급을 인정하지 않는다 — 판정은 '레일 위에 올라온
+            //   다트'(배포 커밋 포함)만. 근거: "레일이 이 임계치까지 차서 공격할 게 없으면 죽게 처리.
+            //   배포중인 홀더에 공격 가능한 색이 있어도 그건 아직 홀더에 있는 것 — 신경 쓸 대상은
+            //   홀더가 이미 레일에 올려놓은 다트들." (Level 167 검증 로그: 158/160 + 레일 매칭 없음
+            //   상태가 앞줄 매칭 색 때문에 supplyMatch=true 로 30s+ 무한 대기하던 반례.)
+            //   컷오프 = NearFullBandEmptySlots(= 데드락 강제회전 개입 임계 capacity-N, N=5~8) —
+            //   게임 무브먼트 모델이 이미 '사실상 만석'으로 취급하는 지점과 단일 소스 정합.
+            //   이 밴드 밑에서는 기존 rev3 도달가능 깊이 규칙 그대로 (167/155 오탐 해소 유지).
+            //   기존 조건은 `efc >= physCap`(빈 슬롯 0일 때만 차단)이었음. 롤백: 아래를
+            //   `if (physCap <= 0 || efc >= physCap) return false;` 로 환원 + RailManager 노출 제거.
+            int nearFullCutoff = RailManager.Instance.NearFullBandEmptySlots;
+            if (physCap <= 0 || efc >= physCap - nearFullCutoff) return false;
             return QueueSupplyMatchesOutermost();
         }
 

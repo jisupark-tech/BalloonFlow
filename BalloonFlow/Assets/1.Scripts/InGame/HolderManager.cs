@@ -1056,58 +1056,88 @@ namespace BalloonFlow
         /// rev1 은 깊은 줄 큐 홀더 + 스포너 미래 시퀀스까지 포함했으나, 탭은 '앞줄만' 가능하고(InputHandler
         /// IsInFrontRow 게이트) 깊은 줄이 앞줄로 오려면 배포 완료(큐 전진)가 필요하다 — 잼 상태에선 영영
         /// 도달 불가한 공급을 '구원 가능'으로 오판해, 눈에 보이는 필패가 워치독(10s)까지 대기하는 원인.
-        /// rev2 포함 = ① 커밋(isDeploying/isWaiting/isMovingToRail — 이미 레일로 가는 중) +
-        ///            ② 앞줄 탭 가능 홀더(HolderVisualManager.IsInFrontRow).
-        /// 깊은 줄/스포너 미래분은 큐 전진으로 앞줄이 되는 '순간' 자동으로 공급에 들어온다(0.1s 재평가 +
-        /// critical recovery). '배포 진행 중엔 fail 억제' 균형추는 BoardStateManager 의
-        /// PLACEMENT_PROGRESS_QUIET_SECONDS 가드가 담당(진행 중 앞줄 미스매치 오판 방지).
+        ///
+        /// ROLLBACK_SUPPLY_REACHABLE_DEPTH_20260707 (rev3 — '도달 가능 깊이'로 재확장):
+        /// rev2(앞줄만)는 반대 방향 오판을 냈다 — Level 167 fail 덤프(2026-07-07): rail=[26,6],
+        /// 외곽=[1,7], 앞줄 공급=[23,22,6] → supplyMatch=false 로 1.5s 실패. 그러나 색1 홀더가 컬럼
+        /// 바로 다음 순번이었고 레일 여유가 130슬롯 — '앞의 비매칭 홀더를 레일에 버려 큐를 전진'시키면
+        /// 확실히 도달 가능했다(이건 정상 플레이 전략). Level 155 방치 중 사망도 동일 구조.
+        /// rev3 규칙: rev1/rev2 의 중간 지점 — 깊은 줄은 '레일 빈 슬롯 예산'으로 앞 홀더들을 전부
+        /// 밀어낼 수 있을 때만 도달 가능으로 인정. 컬럼별 앞→뒤 누적 잔여 탄창(cumAhead)이
+        /// freeSlots 이내인 홀더까지 색을 공급에 포함한다.
+        ///   · 만석 잼(freeSlots≈0)에선 앞줄만 남음 = rev2 와 동일(rev1 의 오판 재발 없음).
+        ///   · 여유 레일에선 깊은 매칭도 구원 가능으로 인정 = 167/155 오탐 해소.
+        /// 차단형(잠금/lock object/홀더 Ice/스포너 앵커)을 만나면 본인 제외 + 그 뒤는 도달 불가로 중단
+        /// (사용자 결정 2026-07-07 '해금 전 공격 불가' 원칙 유지). Hidden 은 색 미공개라 색은 제외하되
+        /// 통과는 허용(앞줄 도달 시 공개·탭 가능하므로 뒤 순번을 막지 않음). Chain 은 그룹 전원 앞줄
+        /// 조건이 있으나 일시적 제약이라 일반 홀더로 취급(억울한 fail 방지 우선).
+        /// sourceRow(데이터) 기반이라 front-row 시각 정보 의존이 사라짐 — rev2 의
+        /// ROLLBACK_SUPPLY_FRONTROW_FALLBACK(행 미준비 transient 보수 포함)도 자연 대체.
         ///
         /// 제외 (사용자 결정 2026-07-07 — "해금되지 않으면 어차피 공격 불가" 원칙):
         ///   frozen(홀더 Ice) / hidden(? 박스) / locked(자물쇠 — 해금에 key pop 필요 = 배수 전제) /
         ///   lock object(다트 아님) / 스포너 앵커(다트 아님) / consumed.
-        /// 롤백: rev1 = 깊은줄·스포너 시퀀스 포함 버전(git), 전체 = 이 메서드 + BoardStateManager supplyMatch 블록 제거.</summary>
+        /// 롤백: rev2 = 직전 리비전(git — committed ∪ front-row + FRONTROW_FALLBACK) 복원.</summary>
+        // rev3 재사용 버퍼 — 컬럼별 큐 정렬용 (GC 방지. 호출은 프레임 캐시로 ≤1회/frame).
+        private readonly Dictionary<int, List<HolderData>> _supplyWalkColumns = new Dictionary<int, List<HolderData>>();
+        private static readonly System.Comparison<HolderData> s_supplyRowAsc = (a, b) => a.sourceRow.CompareTo(b.sourceRow);
+
         public void CollectSupplyColors(HashSet<int> result)
         {
             if (result == null) return;
-            bool visualReady = HolderVisualManager.HasInstance;
 
-            // ROLLBACK_SUPPLY_FRONTROW_FALLBACK_20260707: 행(front-row) 정보가 아직 아무 홀더에도 서지 않은
-            //   순간(레벨 로드 직후 visual 배치 전 등)에 IsInFrontRow 전원 false 로 공급=∅ 오판 →
-            //   시작하자마자 critical 진입하는 transient 가 로그로 확인됨(occ=0/120 진입→회복).
-            //   비소비 홀더가 존재하는데 front-row 가 '하나도' 검출되지 않으면 행 미준비로 보고
-            //   탭 가능 후보 전체를 보수 포함(억울한 조기 fail 방지 우선). 행이 서면 자동으로 앞줄만으로 좁혀짐.
-            bool anyFrontDetected = false;
-            if (visualReady)
+            // 레일 빈 슬롯 = '앞 홀더들을 전부 레일로 밀어낼 수 있는가'의 예산.
+            int freeSlots = int.MaxValue;
+            if (RailManager.HasInstance)
             {
-                for (int i = 0; i < _holders.Count; i++)
-                {
-                    HolderData h = _holders[i];
-                    if (h == null || h.isConsumed) continue;
-                    if (HolderVisualManager.Instance.IsInFrontRow(h.holderId)) { anyFrontDetected = true; break; }
-                }
+                freeSlots = Mathf.Max(0,
+                    RailManager.Instance.PhysicalCapacity - RailManager.Instance.EffectiveOccupiedCount);
             }
-            bool frontRowsReady = visualReady && anyFrontDetected;
 
+            foreach (var kv in _supplyWalkColumns) kv.Value.Clear();
             for (int i = 0; i < _holders.Count; i++)
             {
                 HolderData h = _holders[i];
-                if (h == null || h.isConsumed) continue;
-                if (h.isLockObject) continue;
-                if (h.isFrozen) continue;
-                if (h.isHidden) continue;
-                if (h.isLocked) continue;
-                if (h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T ||
-                    h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O) continue;
-                if (h.magazineCount <= 0 || h.color < 0) continue;
+                if (h == null || h.isConsumed || !h.IsQueueVisible) continue;
 
-                // ① 커밋 — 이미 레일로 향하는 다트 (행 무관).
-                bool committed = h.isDeploying || h.isWaiting || h.isMovingToRail;
-                // ② 앞줄 탭 가능 — 플레이어가 '지금' 누를 수 있는 공급.
-                //    행 미준비(frontRowsReady=false) 시 보수적으로 전체 포함 (위 FALLBACK 주석 참조).
-                bool frontTappable = !frontRowsReady || HolderVisualManager.Instance.IsInFrontRow(h.holderId);
+                // ① 커밋 — 이미 레일로 향하는 다트 (행/깊이 무관). 큐 컬럼 계산에서는 이탈.
+                if (h.isDeploying || h.isWaiting || h.isMovingToRail)
+                {
+                    if (h.magazineCount > 0 && h.color >= 0) result.Add(h.color);
+                    continue;
+                }
 
-                if (committed || frontTappable)
-                    result.Add(h.color);
+                if (!_supplyWalkColumns.TryGetValue(h.column, out List<HolderData> list))
+                {
+                    list = new List<HolderData>(16);
+                    _supplyWalkColumns[h.column] = list;
+                }
+                list.Add(h);
+            }
+
+            // ② 도달 가능 깊이 — 컬럼별 앞→뒤 누적 탄창이 레일 빈 슬롯 이내인 홀더까지 공급 인정.
+            foreach (var kv in _supplyWalkColumns)
+            {
+                List<HolderData> col = kv.Value;
+                if (col.Count == 0) continue;
+                col.Sort(s_supplyRowAsc); // sourceRow 오름차순 = 큐 앞 순서
+
+                int cumAhead = 0;
+                for (int i = 0; i < col.Count; i++)
+                {
+                    HolderData h = col[i];
+                    // 차단형 — 본인 공급 제외 + 뒤 순번 도달 불가로 컬럼 중단.
+                    if (h.isLockObject || h.isLocked || h.isFrozen) break;
+                    if (h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T ||
+                        h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O) break;
+                    // 내 앞 누적 탄창이 빈 슬롯을 초과 — 앞을 다 못 밀어내므로 이하 도달 불가.
+                    if (cumAhead > freeSlots) break;
+
+                    // Hidden: 색 미공개 → 색은 공급 제외, 통과는 허용 (뒤 순번을 막지 않음).
+                    if (!h.isHidden && h.magazineCount > 0 && h.color >= 0)
+                        result.Add(h.color);
+                    cumAhead += Mathf.Max(0, h.magazineCount);
+                }
             }
         }
 
@@ -1381,13 +1411,26 @@ namespace BalloonFlow
         public int AddHolder(int color, int magazineCount, int column = -1)
         {
             if (column < 0) column = FindShortestColumn();
+            int clampedColumn = Mathf.Clamp(column, 0, _queueColumns - 1);
+
+            // ROLLBACK_SUPPLY_REACHABLE_DEPTH_20260707: 런타임 추가 홀더(스포너 소환 등)는 컬럼 '뒤'에 붙으므로
+            //   sourceRow 를 해당 컬럼 최대값+1 로 부여. 기존엔 기본 0 이라 CollectSupplyColors 의 큐 순서
+            //   정렬(sourceRow asc)에서 맨 앞으로 오인 — 도달 가능 깊이 계산이 어긋난다. 롤백: 이 블록 제거.
+            int maxRow = -1;
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                HolderData e = _holders[i];
+                if (e != null && !e.isConsumed && e.column == clampedColumn && e.sourceRow > maxRow)
+                    maxRow = e.sourceRow;
+            }
 
             var holder = new HolderData
             {
                 holderId = _nextHolderId++,
                 color = color,
                 magazineCount = Mathf.Min(magazineCount, _magazineMax),
-                column = Mathf.Clamp(column, 0, _queueColumns - 1),
+                column = clampedColumn,
+                sourceRow = maxRow + 1,
                 isDeploying = false,
                 isWaiting = false,
                 isMovingToRail = false,
@@ -1643,7 +1686,11 @@ namespace BalloonFlow
                 holder.isConsumed = true;
 
                 // Spawner 체크: 앞이 비면 소환
-                ProcessSpawners();
+                // ROLLBACK_SPAWNER_DEPLOYDONE_REFRESH_20260707: 이 경로만 데이터 release 후 비주얼 갱신이
+                //   없어서, 여기서 release 가 발생한 케이스는 다음 탭/배포까지 방출 홀더가 화면에 안 나타났음
+                //   (아트 리뷰 "간헐적으로 늦게 생성" 원인 후보 — 다른 3개 호출부는 전부 refresh 동반).
+                if (ProcessSpawners() && HolderVisualManager.HasInstance)
+                    HolderVisualManager.Instance.RefreshSpawnerChangedColumns(LastSpawnerChangedColumns);
             }
 
             // Frozen Dart: 글로벌 배치 완료 카운트 기반 해동

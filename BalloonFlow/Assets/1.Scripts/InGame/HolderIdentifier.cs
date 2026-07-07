@@ -1213,19 +1213,29 @@ namespace BalloonFlow
 
         public void PlaySpawnerEndParticle()
         {
-            GameObject fx = _spawnerEndParticle;
-            if (fx == null)
+            GameObject template = _spawnerEndParticle;
+            if (template == null)
             {
                 // 인스펙터 미할당 폴백 — 계층에서 "EndParticle" 자동 탐색(비활성 포함).
                 var all = GetComponentsInChildren<Transform>(true);
                 for (int i = 0; i < all.Length; i++)
-                    if (all[i] != null && all[i].name == "EndParticle") { fx = all[i].gameObject; break; }
+                    if (all[i] != null && all[i].name == "EndParticle") { template = all[i].gameObject; break; }
             }
-            if (fx == null) return;
+            if (template == null) return;
+
+            // ROLLBACK_SPAWNER_END_SCALE_20260707: in-place 활성화 → detached clone 재생으로 변경.
+            //   스포너 소멸에 스케일다운(1→1.1→0) 트윈이 추가되면서, 자식 파티클을 제자리에서 켜면
+            //   루트와 함께 0 으로 줄어들어 안 보임 + 풀 반환 시 활성 상태로 오염됨
+            //   (WoodenBoard PlayEndEffectCloneDetached 와 동일 원리). 롤백: clone 블록 → SetActive+Play 환원.
+            Transform source = template.transform;
+            GameObject fx = Instantiate(template, source.position, source.rotation);
+            fx.name = template.name + "_RT";
+            fx.transform.localScale = source.lossyScale;
             fx.SetActive(true);
             var pss = fx.GetComponentsInChildren<ParticleSystem>(true);
             for (int i = 0; i < pss.Length; i++)
                 pss[i].Play(true);
+            Destroy(fx, 2f);
         }
 
         #endregion
