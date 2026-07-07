@@ -410,6 +410,22 @@ namespace BalloonFlow
             //   엔 supply-fail 금지. 시작 후엔 기존 로직 그대로(진짜 잼/엔드게임 실패 유지).
             bool stuck = _remainingBalloons > 0 && !supplyMatch && !deployProgress && _boardEngagedThisLevel;
 
+            // ROLLBACK_WATCHDOG_PLACEMENT_QUIET_20260707: 워치독 활동 신호에 '레일 배치(placement)' 추가.
+            //   배경: 두 워치독(no-drainage/no-fire)은 hasMatch 무관 설계 + rev2 누적 dwell 이라, 만석 '전'에
+            //   쌓인 dwell·무배수·무발사 시간이 그대로 이월된다 — 매칭 색 홀더를 탭해 다트가 올라가는 중
+            //   레일이 (railFull||forceFullBeltAdvance) 에 닿는 순간 세 조건이 이미 충족돼 유예 0초 즉시 fail
+            //   (GATE_DWELL 도입 사유(위 :78-80)였던 그 증상이 rev2 누적식 + WATCHDOG_FAST 단축(4s/5s)으로
+            //   재발 — 2026-07-07 "배포 다트 올라가는 중 만석 → 공격 가능한데 즉시 실패" 리포트).
+            //   배치는 '보드가 아직 진행 중' 신호 — 마지막 배치 후 각 워치독의 임계시간까지는 발동을 억제해,
+            //   방금 올라온 다트가 벨트를 돌아 발사될 기회(주석 :71-72, 대형 레일 4s+)를 준다.
+            //   진짜 잼은 만석이라 배치가 정의상 멈추므로 억제는 임계시간 뒤 자동 해제 — 최후 안전망 역할은
+            //   최대 N초 지연될 뿐 보존. 롤백: 이 블록 + 두 워치독의 placementQuiet* 조건 제거.
+            float watchdogLastPlacement = RailManager.HasInstance ? RailManager.Instance.LastPlacementUnscaledTime : 0f;
+            bool placementQuietDrain = watchdogLastPlacement <= 0f
+                || Time.unscaledTime - watchdogLastPlacement >= NO_DRAINAGE_FAIL_SECONDS;
+            bool placementQuietFire = watchdogLastPlacement <= 0f
+                || Time.unscaledTime - watchdogLastPlacement >= NO_FIRE_FAIL_SECONDS;
+
             // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: hasMatch 무관 무진전 워치독.
             //   레일 만석(railFull) + 풍선 잔존 + NO_DRAINAGE_FAIL_SECONDS 간 pop(배수) 0 이면 → RailOverflow fail 확정.
             //   색 불균형으로 dead-dart 가 영구 점유하는데 다른 색이 hasMatch=true 를 유지해 stuck 이 영영 false 인 hang 을 차단.
@@ -425,6 +441,7 @@ namespace BalloonFlow
             // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: watchdogGateDwell 조건 추가 — '만석 상태로 N초' 를 함께 요구.
             if ((railFull || forceFullBeltAdvance) && _remainingBalloons > 0
                 && watchdogGateDwell >= NO_DRAINAGE_FAIL_SECONDS
+                && placementQuietDrain // ROLLBACK_WATCHDOG_PLACEMENT_QUIET_20260707
                 && Time.unscaledTime - _lastDrainUnscaledTime >= NO_DRAINAGE_FAIL_SECONDS)
             {
                 if (_debugLogFail) DumpAttackState($"[Fail-DEBUG] no-drainage watchdog — 만석 {NO_DRAINAGE_FAIL_SECONDS}s 무배수 → 강제 RailOverflow fail");
@@ -443,6 +460,7 @@ namespace BalloonFlow
             // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: watchdogGateDwell 조건 추가 — '만석 상태로 N초' 를 함께 요구.
             if ((railFull || forceFullBeltAdvance) && _remainingBalloons > 0
                 && watchdogGateDwell >= NO_FIRE_FAIL_SECONDS
+                && placementQuietFire // ROLLBACK_WATCHDOG_PLACEMENT_QUIET_20260707
                 && DartManager.HasInstance && DartManager.Instance.LastFireUnscaledTime > 0f
                 && Time.unscaledTime - DartManager.Instance.LastFireUnscaledTime >= NO_FIRE_FAIL_SECONDS)
             {
@@ -730,6 +748,7 @@ namespace BalloonFlow
         {
             _currentLevelId = evt.levelId;
             _outermostDirty = true;
+            _railSideColorsValid = false; // ROLLBACK_RAILSIDE_CACHE_EXPLICIT_INVALIDATE_20260707: 레벨 경계 이중 방어 — 이전 레벨 rail-side 색 잔존 금지
             _awaitingPostContinuePlayerAction = false;
             _postContinueGraceUntil = 0f;
             _lastDrainUnscaledTime = Time.unscaledTime; // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: 레벨 시작 시 리셋
@@ -1154,6 +1173,17 @@ namespace BalloonFlow
             // dirty 아니면 직전 계산 결과 그대로 반환 (매 프레임 비용 0)
             if (!_outermostDirty) return _reusableOutermostColors;
             _outermostDirty = false;
+            // ROLLBACK_RAILSIDE_CACHE_EXPLICIT_INVALIDATE_20260707: 하부 boundary/occupancy 가 재빌드되면
+            //   rail-side 색 캐시도 반드시 함께 무효화. 기존엔 GetRailSideOutermostBalloonColors 가 '진입 시점의
+            //   _outermostDirty 관찰'로만 무효화를 판단했는데, dirty 를 이 함수의 다른 직접 호출자(IsOutermost/
+            //   DumpAttackState 등)가 먼저 소비하면 rail-side 셋이 이전 상태(레벨 전환 직후엔 '이전 레벨'의 색)로
+            //   조용히 잔존 — 그리고 stale 셋이 "매칭 없음"이면 발사 0 → pop 0 → 새 dirty 이벤트가 없어 영영
+            //   자가회복 불가 → supplyMatch=false 로 stuck 1.5s 오탐 fail (클리어 후 다음 스테이지에서 한두 탭 뒤
+            //   실패 재현, 2026-07-07 리포트). 에디터 전용 검증기(ValidateRailSideColorsCache)가 이 불일치를
+            //   30프레임마다 self-heal 해와서 에디터에선 드물고 디바이스에서 지속되는 패턴과도 부합.
+            //   재빌드 시점에 무효화를 걸면 dirty 소비 순서와 무관하게 정합 보장. 롤백: 아래 1줄 제거 +
+            //   GetRailSideOutermostBalloonColors 의 outermostDirtyAtEntry 조건 복원.
+            _railSideColorsValid = false;
 
             _reusableOutermostColors.Clear();
             if (!BalloonController.HasInstance) return _reusableOutermostColors;
@@ -1283,7 +1313,17 @@ namespace BalloonFlow
                 // [RAW_GRID_SPACE 2026-06-12] FindTarget 과 동일하게 실제 위치를 쓰되, 역변환으로
                 // 원시 보드 공간에 정규화 후 위상 기준 상대 라운딩 — 스케일/짝수 그리드 모두 정합.
                 // (정적 풍선은 b.position 과 일치, 스포너/이동체는 실시간 위치 반영)
-                Vector3 worldPos = BalloonController.Instance.GetBalloonWorldPosition(b.balloonId);
+                // ROLLBACK_FLEXTUBE_FAILCHECK_LOGICAL_POS_20260707: FlexTube 는 논리 position 사용.
+                //   배경: FlexTube 셀의 _balloonObjects 는 '곡선 위 재배치된 비주얼 파트'를 가리키고 여러 논리
+                //   셀이 같은 파트를 공유(AttachPartToSeq) — 비주얼 위치로 cell 을 잡으면 fail 그리드에서 셀들이
+                //   한 키로 뭉개지고 격자에서 어긋나, 공격 가능한 FlexTube 색이 rail-side 외곽 집합에서 빠져
+                //   hasMatch=false 오탐 fail(또는 안쪽 풍선 오노출)이 난다. 타겟팅은 2026-06-28 에 동일 원인을
+                //   고쳤으나(DirectionalTargeting ROLLBACK_FLEXTUBE_TARGETING_LOGICAL_POS_20260628) fail 판정에
+                //   미포팅이었다. GetAdjustedBoardPosition↔WorldToRawBoardPosition 은 역변환 짝이라 결과적으로
+                //   원시 논리 격자 셀에 정착 — 타겟팅과 동일 키 공간. 롤백: 아래 분기를 GetBalloonWorldPosition 단일 호출로 환원.
+                Vector3 worldPos = b.gimmickType == BalloonController.GimmickFlexTube
+                    ? BalloonController.Instance.GetAdjustedBoardPosition(b.position)
+                    : BalloonController.Instance.GetBalloonWorldPosition(b.balloonId);
                 Vector3 rawPos = BalloonController.Instance.WorldToRawBoardPosition(worldPos);
                 BalloonController.Instance.GetRawLatticePhase(out float phaseX, out float phaseZ);
                 Vector2Int cell = new Vector2Int(
@@ -1336,7 +1376,8 @@ namespace BalloonFlow
 
                     if (isOuter)
                     {
-                        _reusableOutermostColors.Add(occEn.Current.Value);
+                        // ROLLBACK_TARGETBOX_ALL_LIVE_EGG_COLORS_20260707: 단일 색 대신 알 색 전체 수집 (헬퍼 주석 참조)
+                        AddCellMatchColors(cell, occEn.Current.Value, _reusableOutermostColors);
                         if (_reusableCellToBalloonId.TryGetValue(cell, out int bid))
                             _reusableOutermostBalloonIds.Add(bid);
                     }
@@ -1358,14 +1399,16 @@ namespace BalloonFlow
 
         private HashSet<int> GetRailSideOutermostBalloonColors()
         {
-            bool outermostDirtyAtEntry = _outermostDirty;
-            GetOutermostBalloonColors(); // boundary/occupancy 최신화 (+_outermostDirty 해제)
+            // ROLLBACK_RAILSIDE_CACHE_EXPLICIT_INVALIDATE_20260707: 'dirtyAtEntry 관찰' 폐기 — 재빌드가
+            //   _railSideColorsValid 를 직접 무효화하므로(GetOutermostBalloonColors 참조) 여기선 valid 플래그와
+            //   sideCount 키만 보면 된다. 다른 소비자가 dirty 를 먼저 소비해도 정합 유지.
+            GetOutermostBalloonColors(); // boundary/occupancy 최신화 (재빌드 시 _railSideColorsValid=false 동반)
 
             int sideCount = RailManager.HasInstance
                 ? RailManager.GetRailSideCount(RailManager.Instance.PhysicalCapacity)
                 : -1; // RailManager 부재도 캐시 키에 포함 (부재 시 결과 = 빈 집합)
 
-            if (!outermostDirtyAtEntry && _railSideColorsValid && sideCount == _railSideCachedSideCount)
+            if (_railSideColorsValid && sideCount == _railSideCachedSideCount)
             {
 #if UNITY_EDITOR
                 ValidateRailSideColorsCache(sideCount);
@@ -1420,6 +1463,37 @@ namespace BalloonFlow
         }
 #endif
 
+        // ROLLBACK_TARGETBOX_ALL_LIVE_EGG_COLORS_20260707: 외곽 셀 색 수집 공용 헬퍼 — TargetBox(알 박스)는
+        //   저장된 단일 색(첫 live egg 근사) 대신 '살아있는 알 색 전부'를 매칭 집합에 넣는다.
+        //   배경: 타겟팅(DirectionalTargeting.BuildLiveEggColorMask, ROLLBACK_TARGETBOX_LIVE_COLOR_MASK_20260623)은
+        //   각 점유 셀에 모든 live egg 색을 노출해 어느 색 다트든 조준 가능한데, fail 판정은 셀당 int 1개
+        //   (_reusableOccupancy)라 첫 live egg 색만 남아 두 번째 색부터 매칭에서 누락 — 그 색만 레일에 있으면
+        //   공격 가능한데 hasMatch=false → stuck 1.5s 오탐 fail. 점유 그리드 구조는 유지하고(지오메트리/차폐용
+        //   색은 뭐든 무방) '외곽 색 수집' 시점에만 알 색 전체로 치환한다. 경계 셀 수만큼의 GetBalloon 조회는
+        //   dirty 재빌드 시에만 발생. 롤백: 아래 3개 호출부를 output.Add(storedColor) 로 환원 + 이 헬퍼 제거.
+        private void AddCellMatchColors(Vector2Int cell, int storedColor, HashSet<int> output)
+        {
+            if (BalloonController.HasInstance
+                && _reusableCellToBalloonId.TryGetValue(cell, out int bid))
+            {
+                var b = BalloonController.Instance.GetBalloon(bid);
+                if (b != null && b.gimmickType == BalloonController.GimmickPinataBox
+                    && b.eggColors != null && b.eggColors.Length > 0 && b.eggHps != null)
+                {
+                    bool addedAny = false;
+                    int count = Mathf.Min(b.eggColors.Length, b.eggHps.Length);
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (b.eggHps[i] <= 0) continue;
+                        output.Add(b.eggColors[i]);
+                        addedAny = true;
+                    }
+                    if (addedAny) return; // live egg 없으면 storedColor 폴백 (cellTargetable 가드가 이미 거르지만 방어)
+                }
+            }
+            output.Add(storedColor);
+        }
+
         private void AddColumnBoundaryColors(Dictionary<int, int> colToY, HashSet<int> output)
         {
             var en = colToY.GetEnumerator();
@@ -1429,7 +1503,7 @@ namespace BalloonFlow
                 {
                     Vector2Int cell = new Vector2Int(en.Current.Key, en.Current.Value);
                     if (_reusableOccupancy.TryGetValue(cell, out int color))
-                        output.Add(color);
+                        AddCellMatchColors(cell, color, output); // ROLLBACK_TARGETBOX_ALL_LIVE_EGG_COLORS_20260707
                 }
             }
             finally { en.Dispose(); }
@@ -1444,7 +1518,7 @@ namespace BalloonFlow
                 {
                     Vector2Int cell = new Vector2Int(en.Current.Value, en.Current.Key);
                     if (_reusableOccupancy.TryGetValue(cell, out int color))
-                        output.Add(color);
+                        AddCellMatchColors(cell, color, output); // ROLLBACK_TARGETBOX_ALL_LIVE_EGG_COLORS_20260707
                 }
             }
             finally { en.Dispose(); }
