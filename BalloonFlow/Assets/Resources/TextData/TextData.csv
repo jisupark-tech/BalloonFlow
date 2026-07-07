@@ -31,7 +31,7 @@ newfeature.textdesctiption.FrozenDartBox,Tap other boxes\nto shatter the ice!,
 popupcontinue.costlabel,Cost:,
 popupcontinue.txtcontinue,Play On,
 popupcontinue.txtcontinuetitle,Continue?,
-popupcontinue.txtdescription,You will lose 1 Life!!,
+popupcontinue.txtdescription,You will lose a life!,
 popupcontinue.txtdescription.multiplier,You will lose your x{n} multiplier!,
 popupdescription.txtdescription,TxtDescriptionTxtDescriptionTxtDescriptionTxtDescriptionTxtDescription,
 popupdescription.txtsingleoutline,"Resume
@@ -40,8 +40,7 @@ popuperror.txtdescription,Item DescriptionItem DescriptionItem Description,
 popupfail01.continuetitle,Continue?,
 popupfail01.costlabel,Cost:,
 popupfail01.costtext,FREE,
-popupfail01.txtcontinue,"Add Space
-",
+popupfail01.txtcontinue,Play On,
 popupfail02.txtfail,Level Failed!,
 popupmorelive.txtbtnsingle,"Resume
 ",
