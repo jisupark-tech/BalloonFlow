@@ -2434,15 +2434,19 @@ namespace BalloonFlow
         // ROLLBACK_DEADLOCK_NO_PROGRESS_EXIT_20260706: 데드락 트리거 무진행 감시 (점유수 스냅샷 + 시각).
         private int _dlWatchOccupied = -1;
         private float _dlWatchSince;
-        private const float DEADLOCK_NO_PROGRESS_EXIT_SECONDS = 1.5f; // ROLLBACK_DEADLOCK_NOPROGRESS_15S_20260707: 3f→1.5f (무진행 데드락 더 빨리 해제·재시도). 되돌리려면 3f.
+        // ROLLBACK_DEADLOCK_SMOOTHING_RESTORE_20260707: 0.5f → 1.5f (HEAD 값 복원).
+        //   0.5f 실험은 무진행 데드락을 빨리 풀어 재시도하려던 것이나, 진입/해제 토글 빈도가 3배로 늘어
+        //   "HeadCluster 마다 데드락" 체감(뚝뚝 끊김)의 공범이었음. 데드락 상주 시간이 길수록 만석 근처가
+        //   full-belt advance 로 매끄럽게 유지됨(아래 진입부 주석의 '숨은 역할' 참조). 되돌리려면 0.5f.
+        private const float DEADLOCK_NO_PROGRESS_EXIT_SECONDS = 1.5f;
 
         // ROLLBACK_DEPLOY_STALL_DEADLOCK_TRIGGER_20260707: near-full '바로 아래'(임계-α)에서 배포 홀더가 못쏘는
         //   다트에 막혀 occ 가 N초간 전혀 안 변할 때, near-full 이 아니어도 데드락 버퍼를 걸어 잼을 깨는 stall 감시.
         private int _deployStallOccupied = -1;
         private float _deployStallSince;
-        private const float DEPLOY_STALL_DEADLOCK_SECONDS = 1.5f; // ROLLBACK_DEADLOCK_NOPROGRESS_15S_20260707: 3f→1.5f. occ 완전 무변화 지속 임계(정상 플레이는 매 프레임 변함). 되돌리려면 3f.
+        private const float DEPLOY_STALL_DEADLOCK_SECONDS = 1.5f; // ROLLBACK_DEADLOCK_SMOOTHING_RESTORE_20260707: 0.5f→1.5f (HEAD 복원, 위 주석 참조). occ 완전 무변화 지속 임계(정상 플레이는 매 프레임 변함). 되돌리려면 0.5f.
         private const int DEPLOY_STALL_NEARFULL_SLACK = 8;        // near-full 임계 - 이 값 이상일 때만(저점유 일시정지 제외)
-        private const int DEADLOCK_FALLBACK_REMAINING_SLOTS = 1; // 199/200 같은 마지막 1칸 deadlock 보정 전용.
+        private const int DEADLOCK_FALLBACK_REMAINING_SLOTS = 2; // 198/200 같은 마지막 2칸 deadlock 보정 전용.
         // ROLLBACK_DART_RUNTIME_LOG_THROTTLE:
         // Successful deploy logs allocate/format large strings during dense deployment and cause
         // visible frame drops. Re-enable only while capturing a short placement sample.
@@ -2528,6 +2532,16 @@ namespace BalloonFlow
                 _deployStallOccupied = occForStall;
                 _deployStallSince = Time.time;
             }
+            // ROLLBACK_DEADLOCK_SMOOTHING_RESTORE_20260707: 'nearFull + 배치 실패 → 즉시 진입'(HEAD 정책) 복원.
+            //   배경: rev5(stall-only 진입) + 발사 최근성 게이트가 만석 근처의 데드락 진입을 사실상 0 으로
+            //   만들었는데, git diff 정밀 대조로 데드락 모드의 '숨은 역할'이 드러남 — 진입 시
+            //   ⓐ 타 배포점 obstacle 해제 ⓑ full-belt advance(균일 회전, per-dart block 검사 우회)로
+            //   **만석 근처 흐름을 매끄럽게 유지**하고 있었다. 게이트로 진입을 막자 배포점 정지(킬링 포인트,
+            //   DEPLOY_POINT_BLOCKS_FLOW)가 클러스터마다 그대로 노출돼 stop-and-go 뚝뚝 끊김 발생.
+            //   → 진입 정책은 HEAD 로 복원(스무딩 상주), 발사 최근성 게이트는 제거.
+            //   유지하는 것: 아래 supplyMatch 게이트(필패 보드는 진입 대신 상태 실패 1.5s 가 결론 —
+            //   오늘의 원래 목표 '데드락이 실패를 유예하는 충돌' 해결은 그대로 유효).
+            //   롤백(rev5 재적용): 이 블록을 flowStalled 단일 트리거로 환원 + NO_FIRE 게이트 복원.
             bool deployStalled = !nearFull
                                  && isDeployingCount >= 1
                                  && occForStall >= nearFullThreshold - DEPLOY_STALL_NEARFULL_SLACK
@@ -2539,6 +2553,17 @@ namespace BalloonFlow
             if (!nearFull && !deployStalled) return;
             // 단일 holder 도 rail full 상태에서 ABABAB / cluster 정렬 깨짐 발생 → 자기 자신이 deadlock holder 되어 buffer 사용.
             if (activeCount < 1) return;
+
+            // ROLLBACK_DEADLOCK_ENTRY_SIGNALS_20260707 (게이트 ①만 존치): 필패 게이트 — 공급(레일 ∪ 큐)에
+            //   매칭 색이 없으면 회전시켜도 발사될 것이 없다. 진입하지 않고 BoardStateManager 의 상태 실패
+            //   (grace 1.5s)가 즉시 결론. 진행 중 데드락은 no-progress exit 후 재진입이 막혀 자연 종료.
+            //   (게이트 ② 발사 최근성은 SMOOTHING_RESTORE 에서 제거 — 스무딩 진입까지 막는 부작용.)
+            //   롤백: 이 블록 제거.
+            if (BoardStateManager.HasInstance && !BoardStateManager.Instance.HasReachableSupplyMatchCached)
+            {
+                LogDeployDebug("[Deadlock] entry skipped — no reachable supply match (필패 후보, 상태 실패 판정에 위임).");
+                return;
+            }
 
             int leftmostHolderId = -1;
             int leftmostCol = int.MaxValue;

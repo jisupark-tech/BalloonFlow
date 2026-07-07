@@ -326,7 +326,8 @@ namespace BalloonFlow
             }
 
             // 광고 시청 → 보상 콜백에서 하트 +1. Lives 충전은 outgame이라 ad protection 우회.
-            AdManager.Instance.ShowRewardedAd(GrantAdReward, ignoreAdProtection: true);
+            // ROLLBACK_AD_EVENT_FIELDS_20260707: ad_placement 규약 문자열 전달 (스키마 v3.2).
+            AdManager.Instance.ShowRewardedAd(GrantAdReward, ignoreAdProtection: true, placement: "morelives_popup");
         }
 
         private void GrantAdReward()

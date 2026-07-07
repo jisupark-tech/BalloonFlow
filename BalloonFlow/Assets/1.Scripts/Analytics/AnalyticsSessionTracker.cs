@@ -12,7 +12,8 @@ namespace BalloonFlow.Analytics
     ///   - 백그라운드 30분 초과 후 복귀 → 이전 세션 quit_by_user 종료 + 새 session_start
     ///   - 30분 이내 복귀 → 기존 세션 유지
     ///   - 명시 quit (앱 종료) → quit_by_user
-    ///   - 크래시/bg_kill → 서버 측 quit_by_system 소급 (클라 무관)
+    ///   - 크래시/bg_kill → 다음 실행 시 클라가 quit_by_system 소급 발행
+    ///     (미종료 세션 스냅샷을 PlayerPrefs 에 유지 — ROLLBACK_ANALYTICS_DISK_PERSIST_20260707)
     ///
     /// session_id: Guid (서버 fallback 없음, 클라 단독)
     /// </summary>
@@ -21,6 +22,14 @@ namespace BalloonFlow.Analytics
         private string _sessionId;
         private DateTime _sessionStartedUtc;
         private DateTime? _backgroundEnteredUtc;
+
+        // ROLLBACK_ANALYTICS_DISK_PERSIST_20260707: 미종료 세션 스냅샷 키.
+        // 프로세스 킬(스와이프킬/OS킬)은 session_end 가 생성조차 안 되던 문제 — start/end 카운트 이격의
+        // 최대 원인. 세션 시작 시 스냅샷 기록, pause 마다 last_seen 갱신, 정상 종료 시 삭제.
+        // 다음 부트에 스냅샷이 남아 있으면 quit_by_system 으로 소급 발행.
+        private const string PREFS_OPEN_SESSION_ID       = "BF_AN_OpenSessionId";
+        private const string PREFS_OPEN_SESSION_START    = "BF_AN_OpenSessionStart";
+        private const string PREFS_OPEN_SESSION_LASTSEEN = "BF_AN_OpenSessionLastSeen";
 
         public string CurrentSessionId => _sessionId ?? "";
 
@@ -71,6 +80,7 @@ namespace BalloonFlow.Analytics
             if (waited >= MAX_WAIT)
                 DiagLog("SessionTracker.WaitReady TIMEOUT — proceeding anyway, events may drop");
 
+            EmitOrphanSessionEnd();
             StartSession();
         }
 
@@ -81,6 +91,7 @@ namespace BalloonFlow.Analytics
             _backgroundEnteredUtc = null;
             DiagLog($"SessionTracker.StartSession — sessionId={_sessionId.Substring(0, 8)}...");
 
+            SaveOpenSessionSnapshot();
             FireSessionStartEvent();
         }
 
@@ -92,6 +103,56 @@ namespace BalloonFlow.Analytics
             FireSessionEndEvent(endReason, durationSec);
 
             _sessionId = null;
+            ClearOpenSessionSnapshot();
+        }
+
+        // ─── 미종료 세션 소급 처리 (ROLLBACK_ANALYTICS_DISK_PERSIST_20260707) ───
+
+        /// <summary>
+        /// 이전 실행이 세션을 정상 종료 못 하고 죽었으면(스냅샷 잔존) session_end 를 quit_by_system 으로
+        /// 소급 발행. event_ts/duration 은 마지막 pause 시각 기준(포그라운드 크래시는 과소 추정 허용).
+        /// </summary>
+        private void EmitOrphanSessionEnd()
+        {
+            string prevId = PlayerPrefs.GetString(PREFS_OPEN_SESSION_ID, "");
+            if (string.IsNullOrEmpty(prevId)) return;
+
+            string startStr = PlayerPrefs.GetString(PREFS_OPEN_SESSION_START, "");
+            string seenStr  = PlayerPrefs.GetString(PREFS_OPEN_SESSION_LASTSEEN, "");
+            ClearOpenSessionSnapshot();
+
+            if (!DateTime.TryParse(startStr, null, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime start))
+                return;
+            if (!DateTime.TryParse(seenStr, null, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime lastSeen)
+                || lastSeen < start)
+                lastSeen = start;
+
+            int durationSec = (int)Math.Max(0, (lastSeen - start).TotalSeconds);
+            FireSessionEndEventFor(prevId, lastSeen, AnalyticsConsts.END_QUIT_BY_SYSTEM, durationSec);
+            DiagLog($"Orphan session_end 소급 발행 — sessionId={prevId.Substring(0, Math.Min(8, prevId.Length))}... dur={durationSec}s");
+        }
+
+        private void SaveOpenSessionSnapshot()
+        {
+            PlayerPrefs.SetString(PREFS_OPEN_SESSION_ID, _sessionId);
+            PlayerPrefs.SetString(PREFS_OPEN_SESSION_START, _sessionStartedUtc.ToString("o"));
+            PlayerPrefs.SetString(PREFS_OPEN_SESSION_LASTSEEN, DateTime.UtcNow.ToString("o"));
+            PlayerPrefs.Save();
+        }
+
+        private void TouchOpenSessionLastSeen()
+        {
+            if (string.IsNullOrEmpty(_sessionId)) return;
+            PlayerPrefs.SetString(PREFS_OPEN_SESSION_LASTSEEN, DateTime.UtcNow.ToString("o"));
+            PlayerPrefs.Save();
+        }
+
+        private static void ClearOpenSessionSnapshot()
+        {
+            PlayerPrefs.DeleteKey(PREFS_OPEN_SESSION_ID);
+            PlayerPrefs.DeleteKey(PREFS_OPEN_SESSION_START);
+            PlayerPrefs.DeleteKey(PREFS_OPEN_SESSION_LASTSEEN);
+            PlayerPrefs.Save();
         }
 
         // ─── App lifecycle ───
@@ -101,6 +162,8 @@ namespace BalloonFlow.Analytics
             if (pause)
             {
                 _backgroundEnteredUtc = DateTime.UtcNow;
+                // 백그라운드에서 킬당하면 이 시각이 소급 session_end 의 event_ts/duration 기준이 됨.
+                TouchOpenSessionLastSeen();
             }
             else if (_backgroundEnteredUtc.HasValue)
             {
@@ -144,13 +207,17 @@ namespace BalloonFlow.Analytics
         }
 
         private void FireSessionEndEvent(string endReason, int durationSec)
+            => FireSessionEndEventFor(_sessionId, DateTime.UtcNow, endReason, durationSec);
+
+        /// <summary>세션 id/시각 명시 버전 — 이전 실행의 미종료 세션 소급 발행에도 사용.</summary>
+        private void FireSessionEndEventFor(string sessionId, DateTime eventTsUtc, string endReason, int durationSec)
         {
             var p = new Dictionary<string, object>(8);
             p[AnalyticsConsts.P_EVENT_ID]     = Guid.NewGuid().ToString("N");
-            p[AnalyticsConsts.P_SESSION_ID]   = _sessionId;
+            p[AnalyticsConsts.P_SESSION_ID]   = sessionId;
             p[AnalyticsConsts.P_GAME_ID]      = AnalyticsConsts.GAME_ID;
             p[AnalyticsConsts.P_UID]          = ResolveUid();
-            p[AnalyticsConsts.P_EVENT_TS]     = DateTime.UtcNow.ToString("o");
+            p[AnalyticsConsts.P_EVENT_TS]     = eventTsUtc.ToString("o");
             p[AnalyticsConsts.P_END_REASON]   = endReason;
             p[AnalyticsConsts.P_DURATION_SEC] = durationSec;
 

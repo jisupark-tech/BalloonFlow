@@ -42,6 +42,13 @@ namespace BalloonFlow.Analytics
         private int _coinEarned;         // 레벨 중 코인 획득 누적(CurrencyManager.AddCoins)
         private int _coinSpent;          // 레벨 중 코인 사용 누적(CurrencyManager.SpendCoins)
 
+        // ROLLBACK_ANALYTICS_FAIL_RESULT_20260707: result='fail' 이 BQ 에 전혀 안 찍히던 버그.
+        //   이어하기 무제한 설계로 ContinueHandler.CanContinue()==true 고정 → LevelManager.HandleBoardFailed 가
+        //   FailLevel 을 영구 유예 → OnLevelFailed 미발행. 실패 후 Retry/Home 은 레벨 리로드 경로라 직전 play 가
+        //   전부 quit 으로 종결됐다. 보드 실패(OnBoardFailed)를 pending 마킹, 이어하기(OnContinueApplied) 시 해제 —
+        //   pending 인 채 play 가 종결되면(리로드/앱종료) result=fail 로 발사. 이어하기 후 클리어는 기존대로 clear.
+        private bool _boardFailedPending;
+
         public string CurrentPlayId => _activePlayId ?? "";
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -58,6 +65,9 @@ namespace BalloonFlow.Analytics
             EventBus.Subscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Subscribe<OnLevelCompleted>(HandleLevelCompleted);
             EventBus.Subscribe<OnLevelFailed>(HandleLevelFailed);
+            // ROLLBACK_ANALYTICS_FAIL_RESULT_20260707: 보드 실패/이어하기 구독 — fail pending 마킹용.
+            EventBus.Subscribe<OnBoardFailed>(HandleBoardFailedForResult);
+            EventBus.Subscribe<OnContinueApplied>(HandleContinueApplied);
             // ROLLBACK_ANALYTICS_NULLFILL_20260625: 홀더 배포 = moves_used 계측(가산만).
             EventBus.Subscribe<OnHolderDeploymentDone>(HandleHolderDeploymentDone);
             DiagLog("LevelTracker.OnSingletonAwake — subscribed to OnLevelLoaded/Completed/Failed");
@@ -94,6 +104,8 @@ namespace BalloonFlow.Analytics
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Unsubscribe<OnLevelCompleted>(HandleLevelCompleted);
             EventBus.Unsubscribe<OnLevelFailed>(HandleLevelFailed);
+            EventBus.Unsubscribe<OnBoardFailed>(HandleBoardFailedForResult);   // ROLLBACK_ANALYTICS_FAIL_RESULT_20260707
+            EventBus.Unsubscribe<OnContinueApplied>(HandleContinueApplied);    // ROLLBACK_ANALYTICS_FAIL_RESULT_20260707
             EventBus.Unsubscribe<OnHolderDeploymentDone>(HandleHolderDeploymentDone); // ROLLBACK_ANALYTICS_NULLFILL_20260625
             base.OnDestroy();
         }
@@ -115,18 +127,51 @@ namespace BalloonFlow.Analytics
         private void OnApplicationQuit()
         {
             if (string.IsNullOrEmpty(_activePlayId)) return;
-            // 활성 play 가 있는 상태에서 종료 → quit_by_user
-            FirePlayEnd(AnalyticsConsts.RESULT_QUIT, AnalyticsConsts.END_QUIT_BY_USER, finalScore: 0, starCount: 0);
+            // 활성 play 가 있는 상태에서 종료 → quit_by_user (보드 실패 pending 이면 fail)
+            FireUnresolvedPlayEnd();
+        }
+
+        // ROLLBACK_ANALYTICS_FAIL_RESULT_20260707: 미종결 play 종결 — 보드 실패 후 이어하기 없이 떠난
+        //   케이스(Retry 리로드/홈/앱종료)는 비즈니스 결과가 'fail', 그 외 중도 이탈은 'quit'.
+        private void FireUnresolvedPlayEnd()
+        {
+            if (_boardFailedPending)
+                FirePlayEnd(AnalyticsConsts.RESULT_FAIL, AnalyticsConsts.END_FAIL_OUT_OF_RESOURCE, 0, 0);
+            else
+                FirePlayEnd(AnalyticsConsts.RESULT_QUIT, AnalyticsConsts.END_QUIT_BY_USER, 0, 0);
+        }
+
+        private void HandleBoardFailedForResult(OnBoardFailed evt)
+        {
+            if (!string.IsNullOrEmpty(_activePlayId)) _boardFailedPending = true;
+        }
+
+        private void HandleContinueApplied(OnContinueApplied evt)
+        {
+            _boardFailedPending = false; // 이어하기로 재개 — 이 판의 결과는 이후 clear/fail/quit 로 다시 결정
         }
 
         // ─── EventBus handlers ───
 
         private void HandleLevelLoaded(OnLevelLoaded evt)
         {
-            // 이전 미종결 play 가 있다면 (예: 씬 재로드) quit 으로 마무리 후 신규 시작
-            if (!string.IsNullOrEmpty(_activePlayId))
-                FirePlayEnd(AnalyticsConsts.RESULT_QUIT, AnalyticsConsts.END_QUIT_BY_USER, 0, 0);
+            // OnLevelLoaded 는 짧은 시간 내 다중 발화될 수 있음 (scene 전환/loadingFlow — TutorialController·
+            // GameBootstrap 도 각자 latch 로 방어 중). dedupe 없이는 같은 레벨에 play_start 2발 + attempt +2 +
+            // 직전 play 유령 quit 이 그대로 적재됨 (2026-07-07 BQ 실데이터로 확인). 같은 레벨의 2초 내 재발화는 무시.
+            if (!string.IsNullOrEmpty(_activePlayId)
+                && evt.levelId == _activeLevelNumber
+                && (DateTime.UtcNow - _activeStartedUtc).TotalSeconds < 2.0)
+            {
+                DiagLog($"LevelTracker duplicate OnLevelLoaded ignored — level={evt.levelId}");
+                return;
+            }
 
+            // 이전 미종결 play 가 있다면 (예: 씬 재로드) 종결 후 신규 시작
+            // (보드 실패 pending 이면 fail — 실패 후 Retry 가 이 경로로 리로드됨. ROLLBACK_ANALYTICS_FAIL_RESULT_20260707)
+            if (!string.IsNullOrEmpty(_activePlayId))
+                FireUnresolvedPlayEnd();
+
+            _boardFailedPending = false;
             _activePlayId = Guid.NewGuid().ToString("N");
             _activeLevelNumber = evt.levelId;
             _activeStartedUtc = DateTime.UtcNow;
@@ -226,7 +271,8 @@ namespace BalloonFlow.Analytics
             p[AnalyticsConsts.P_LIVES_AFTER]           = livesAfter;
             // peak_resource_usage_ratio (0.0~1.0) — RailManager 가 레벨 동안 기록한 레일 최대 점유율.
             // §20: ≥0.8 → narrow_clear. (RailManager.PeakOccupancyRatio = EffectiveOccupiedCount/PhysicalCapacity max)
-            p[AnalyticsConsts.P_PEAK_RESOURCE]         = RailManager.HasInstance ? RailManager.Instance.PeakOccupancyRatio : 0f;
+            // BQ NUMERIC(소수 9자리 상한)에 float 노이즈가 넘어가면 행 거절 → 라운딩 후 emit.
+            p[AnalyticsConsts.P_PEAK_RESOURCE]         = Math.Round(RailManager.HasInstance ? RailManager.Instance.PeakOccupancyRatio : 0.0, 4);
 
             if (UserSnapshotCache.HasInstance)
                 UserSnapshotCache.Instance.Stamp(p);
@@ -244,7 +290,7 @@ namespace BalloonFlow.Analytics
             p[AnalyticsConsts.P_OBJECTIVE_TOTAL]     = BalloonController.HasInstance
                 ? BalloonController.Instance.RemainingCount + BalloonController.Instance.PoppedCount : 0;
             p[AnalyticsConsts.P_OBJECTIVE_DONE]      = BalloonController.HasInstance ? BalloonController.Instance.PoppedCount : 0;
-            p[AnalyticsConsts.P_AVG_RESOURCE]        = RailManager.HasInstance ? RailManager.Instance.AverageOccupancyRatio : 0f;
+            p[AnalyticsConsts.P_AVG_RESOURCE]        = Math.Round(RailManager.HasInstance ? RailManager.Instance.AverageOccupancyRatio : 0.0, 4);
             p[AnalyticsConsts.P_CONTINUE_POPUP_COUNT] = _continuePopupCount;
             p[AnalyticsConsts.P_CONTINUE_COUNT]      = ContinueHandler.HasInstance ? ContinueHandler.Instance.GetContinueCount() : 0;
             p[AnalyticsConsts.P_COIN_EARNED]         = _coinEarned;

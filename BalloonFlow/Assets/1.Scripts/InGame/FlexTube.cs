@@ -70,6 +70,11 @@ namespace BalloonFlow
         // separately so hit shrink and EndCap movement do not read a shifted pivot.
         private readonly List<Vector3> _meshSegCenters = new List<Vector3>();
 
+        // ROLLBACK_FLEXTUBE_ENDCAP_FOLLOW_ROT_20260707: 세그먼트의 해석적 회전(segRot=LookRotation(tangent)*extraRot).
+        //   EndCap 슬라이드가 이산 센터차분 LookRotation(직선구간 흔들림) 대신 이 값을 그대로 채택 → 세그먼트를 정확히
+        //   따라가고 직선구간에서 회전하지 않는다(스폰 시 EndCap 회전 규약과 100% 일치).
+        private readonly List<Quaternion> _meshSegRotations = new List<Quaternion>();
+
         // ROLLBACK_FLEXTUBE_MESH_SMOOTH_SHRINK_20260629:
         // Logical removal commits immediately. This cursor only controls how much mesh is visible.
         private int _meshVisibleRemovedSegmentCount;
@@ -501,7 +506,8 @@ namespace BalloonFlow
         public void InitializeMesh(int hp, int color, int groupId, List<FlexTubePart> caps,
                                    MeshFilter meshFilter, Mesh hoseMesh,
                                    List<Matrix4x4> segWorldMatrices, List<int> segCellIds,
-                                   List<Vector3> segWorldCenters)
+                                   List<Vector3> segWorldCenters,
+                                   List<Quaternion> segWorldRotations = null)
         {
             _hp = Mathf.Max(1, hp);
             _maxHp = _hp;
@@ -514,14 +520,22 @@ namespace BalloonFlow
             _meshSegWorld.Clear();
             _meshSegCellId.Clear();
             _meshSegCenters.Clear();
+            _meshSegRotations.Clear();
             if (segWorldMatrices != null) _meshSegWorld.AddRange(segWorldMatrices);
             if (segCellIds != null) _meshSegCellId.AddRange(segCellIds);
             if (segWorldCenters != null) _meshSegCenters.AddRange(segWorldCenters);
+            if (segWorldRotations != null) _meshSegRotations.AddRange(segWorldRotations);
 
             while (_meshSegCenters.Count < _meshSegWorld.Count)
                 _meshSegCenters.Add(ColumnPos(_meshSegWorld[_meshSegCenters.Count]));
             if (_meshSegCenters.Count > _meshSegWorld.Count)
                 _meshSegCenters.RemoveRange(_meshSegWorld.Count, _meshSegCenters.Count - _meshSegWorld.Count);
+
+            // ROLLBACK_FLEXTUBE_ENDCAP_FOLLOW_ROT_20260707: 회전 리스트를 세그먼트 수에 맞춰 정렬(부족분은 행렬 회전으로 폴백).
+            while (_meshSegRotations.Count < _meshSegWorld.Count)
+                _meshSegRotations.Add(_meshSegWorld[_meshSegRotations.Count].rotation);
+            if (_meshSegRotations.Count > _meshSegWorld.Count)
+                _meshSegRotations.RemoveRange(_meshSegWorld.Count, _meshSegRotations.Count - _meshSegWorld.Count);
 
             _totalSegments = _meshSegWorld.Count;
             _removedSegmentCount = 0;
@@ -565,13 +579,18 @@ namespace BalloonFlow
                 return;
             }
 
-            Matrix4x4 w2l = _meshFilter.transform.worldToLocalMatrix;
+            // ROLLBACK_FLEXTUBE_HIT_OFFSET_SHIFT_20260707: 결합 변환을 '스폰 시(원점) meshGO 프레임' 기준으로 고정.
+            //   기존엔 live _meshFilter.worldToLocalMatrix 를 매 RebuildMesh 마다 곱해, 튜브가 gimmickOffsetFlexTube(루트
+            //   delta)로 이동한 뒤의 히트 RebuildMesh 가 그 오프셋을 상쇄 → 메시가 -offset 만큼 순간이동(피격 시 위치 변경).
+            //   _meshSegWorld 는 tubeObj@원점(=meshGO@원점, local identity)에서 캡처돼 그 자체가 meshGO-local 이다.
+            //   live w2l 곱을 제거하면 RebuildMesh 가 튜브 현재 위치와 무관하게 안정 — 메시는 항상 authored(+루트 오프셋)
+            //   로 렌더된다(스폰 시 w2l=identity 라 동작 불변, 오프셋 적용 후 히트에서만 교정). 롤백: w2l 곱 복원.
             var combines = new CombineInstance[count];
             for (int i = 0; i < count; i++)
             {
                 int idx = renderRemoved + i;
                 combines[i].mesh = _hoseMesh;
-                combines[i].transform = w2l * _meshSegWorld[idx];
+                combines[i].transform = _meshSegWorld[idx];
             }
 
             var m = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
@@ -669,12 +688,23 @@ namespace BalloonFlow
             Quaternion targetRot = endCap.transform.rotation;
             if (_removedSegmentCount < _meshSegWorld.Count)
             {
-                Vector3 newEndPos = SegmentCenter(_removedSegmentCount);
-                Vector3 dir = targetPos - newEndPos;
-                dir.y = 0f;
-                if (dir.sqrMagnitude > 0.0001f)
-                    targetRot = Quaternion.LookRotation(dir.normalized, Vector3.up)
-                                * Quaternion.Euler(0f, _extraYRotation, 0f);
+                // ROLLBACK_FLEXTUBE_ENDCAP_FOLLOW_ROT_20260707: 새 끝 세그먼트의 해석적 회전(segRot)을 그대로 채택 —
+                //   이산 센터차분 LookRotation 의 직선구간 흔들림/불일치 제거. segRot 는 스폰 EndCap 회전과 동일 규약
+                //   (LookRotation(tangent)*extraRot). 저장값은 tubeObj-local(스폰 시 루트 identity) → 현재 루트 회전을 실어 월드로.
+                //   회전 데이터가 없으면(폴백) 기존 센터차분 방식 유지.
+                if (_removedSegmentCount < _meshSegRotations.Count)
+                {
+                    targetRot = transform.rotation * _meshSegRotations[_removedSegmentCount];
+                }
+                else
+                {
+                    Vector3 newEndPos = SegmentCenter(_removedSegmentCount);
+                    Vector3 dir = targetPos - newEndPos;
+                    dir.y = 0f;
+                    if (dir.sqrMagnitude > 0.0001f)
+                        targetRot = Quaternion.LookRotation(dir.normalized, Vector3.up)
+                                    * Quaternion.Euler(0f, _extraYRotation, 0f);
+                }
             }
 
             endCap.transform.DOKill();
@@ -694,10 +724,13 @@ namespace BalloonFlow
 
         private Vector3 SegmentCenter(int index)
         {
+            // ROLLBACK_FLEXTUBE_HIT_OFFSET_SHIFT_20260707: 센터는 tubeObj@원점에서 캡처된 tubeObj-local 값 → 현재 루트
+            //   변환(gimmickOffsetFlexTube 반영)을 통과시켜 월드로 환산. EndCap 슬라이드 타겟이 오프셋된 튜브/메시와
+            //   일치해 피격 시 캡 위치 변경을 막는다. (스폰 시 tubeObj@원점 이면 TransformPoint 는 항등 → 동작 불변.)
             if (index >= 0 && index < _meshSegCenters.Count)
-                return _meshSegCenters[index];
+                return transform.TransformPoint(_meshSegCenters[index]);
             if (index >= 0 && index < _meshSegWorld.Count)
-                return ColumnPos(_meshSegWorld[index]);
+                return transform.TransformPoint(ColumnPos(_meshSegWorld[index]));
             return transform.position;
         }
 

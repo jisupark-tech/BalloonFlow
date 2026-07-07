@@ -238,6 +238,22 @@ function toBqDatetime(v) {
   return d.toISOString().replace('Z', ''); // e.g. 2026-06-16T05:25:40.123 (DATETIME·TIMESTAMP 모두 허용)
 }
 
+// NUMERIC 컬럼(소수 9자리 상한)에 들어가는 실수 필드. 클라 double 누적 노이즈
+// (예: total_spend_usd=115.94999999999999)가 오면 행 전체가 거절되고, 부분실패 500 →
+// 클라가 배치를 15초마다 무한 재전송하는 poison 루프가 된다 → insert 전 라운딩으로 차단.
+const NUMERIC_FIELDS = new Set([
+  'total_spend_usd', 'total_ad_revenue_usd',
+  'price_usd', 'price_local', 'revenue_usd',
+  'peak_resource_usage_ratio', 'avg_resource_usage_ratio',
+]);
+
+/** NUMERIC 필드 값 위생 처리 — 유한 실수는 소수 6자리 라운딩, 그 외(NaN/문자열 등)는 null. */
+function sanitizeNumeric(v) {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 1e6) / 1e6;
+}
+
 exports.ingestAnalyticsEvents = onRequest(
   {
     region: 'us-central1',
@@ -283,7 +299,7 @@ exports.ingestAnalyticsEvents = onRequest(
         if (k0 === 'uid') continue;
         if (k0 === 'event_ts') { row.event_timestamp = toBqDatetime(val); continue; }
         const k = rename[k0] || k0;
-        row[k] = val;
+        row[k] = NUMERIC_FIELDS.has(k) ? sanitizeNumeric(val) : val;
       }
       if (!row.event_timestamp) row.event_timestamp = fallbackTs;
 

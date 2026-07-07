@@ -119,8 +119,26 @@ namespace BalloonFlow
         // [Tooltip("다트 레일 이동 속도. 현재 미사용 (railRotationSpeed가 벨트 속도 담당). (default: 8)")]
         // public float dartRailSpeed = 8f;
 
-        [Tooltip("다트 발사→풍선 비행 DOTween Ease 곡선. Linear=등속, OutQuad=감속, InQuad=가속, InOutSine=완만한 가감속 등. 동적 반영. (default: Linear)")]
+        [Tooltip("다트 발사→풍선 비행 DOTween Ease 곡선. Linear=등속, OutQuad=감속, InQuad=가속, InOutSine=완만한 가감속, InBack=뒤로 살짝 빠졌다 발사(반동). 동적 반영. (default: Linear)")]
+        // ROLLBACK_DART_RECOIL_LERP_UNCLAMPED_20260707: InBack 계열 반동 연출은 DartManager 의
+        //   LerpUnclamped 전환과 세트 — easedT<0 구간(뒤로 빠짐)이 클램프로 소실되지 않게 함.
         public Ease dartFlightEase = Ease.Linear;
+
+        // ROLLBACK_DART_LAUNCH_RECOIL_20260707: 발사 반동 연출 토글 (prefix 방식).
+        //   ON = 발사 직후 dartLaunchRecoilTime 동안 제자리에서 뒤로 sin(0→1→0) 반동 후,
+        //   원래 가속→등속 프로파일을 '그대로' 재생 (전진 속도 압축 없음 — InBack ease 방식의 문제 해소).
+        //   반동 시간은 duration/impactTime 에 가산되므로 다트별 명중이 recoilTime 만큼 늦어짐.
+        //   OFF 면 recoilTime=0 → 기존 타이밍/이동 완전 동일.
+        [Tooltip("다트 발사 반동 연출. ON=발사 직후 살짝 뒤로 빠졌다가 '원래 속도 그대로' 비행 (명중이 반동 시간만큼 지연). OFF=기존 그대로. 발사 시점 캡처 — 비행 중 다트엔 소급 안 됨. (default: false)")]
+        public bool dartLaunchRecoil = false;
+
+        [Tooltip("반동 깊이 — 셀 간격(cellSpacing) 배수. 0.5 = 반 칸 뒤로. 동적 반영. (default: 0.50)")]
+        [Range(0f, 5f)]
+        public float dartLaunchRecoilDepth = 0.5f;
+
+        [Tooltip("반동 구간 길이(초) — 이 시간 안에 뒤로 나갔다 복귀 완료 후 전진 시작. 발사 시점 캡처. (default: 0.12)")]
+        [Range(0.02f, 0.5f)]
+        public float dartLaunchRecoilTime = 0.12f;
 
         [Tooltip("다트 비행 속도 배수 (셀/초). 1 = 1초당 1셀 이동, 10 = 0.1초당 1셀. 클수록 빠름. 동적 반영. (default: 10.00)")]
         [Range(0.10f, 100.00f)]

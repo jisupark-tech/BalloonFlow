@@ -73,6 +73,14 @@ namespace BalloonFlow
         //   _pendingFirstInterstitialNoAds: 종료 후 로비에서 1회 소비 대기(인게임 한복판 노출 방지).
         private bool   _firstInterstitialJustShown;
         private bool   _pendingFirstInterstitialNoAds;
+        // ROLLBACK_AD_EVENT_FIELDS_20260707: ad_event placement/watch_duration_sec 계측.
+        //   revenue 콜백(OnAdRevenuePaid)은 노출 '시작' 직후라 시청 시간을 알 수 없음 → 임프레션 정보를
+        //   보류했다가 노출 종료(Hidden/DisplayFailed)에 emit 해 watch_duration_sec 를 채운다.
+        //   (광고 도중 앱 강제종료 시 해당 임프레션 row 1건 유실 수용. ad_duration_sec 는 MAX SDK 가
+        //   크리에이티브 길이를 제공하지 않아 미emit=NULL 유지.)
+        private float             _adDisplayStartRealtime = -1f;
+        private string            _pendingAdEventUnitId;
+        private MaxSdkBase.AdInfo _pendingAdEventInfo;
 
         #endregion
 
@@ -143,7 +151,9 @@ namespace BalloonFlow
         /// Rewarded 광고 표시. 보상 시점에 callback 실행.
         /// Lv20 미만은 기본적으로 ad protection 적용. outgame UI(Lives 충전 등)에서는 ignoreAdProtection=true.
         /// </summary>
-        public void ShowRewardedAd(Action rewardCallback, bool ignoreAdProtection = false)
+        /// <param name="placement">ad_event.ad_placement 규약 문자열 (morelives_popup / continue_popup 등).
+        ///   MaxSdk.ShowRewardedAd 의 placement 로 전달되어 revenue 콜백의 AdInfo.Placement 로 회수된다.</param>
+        public void ShowRewardedAd(Action rewardCallback, bool ignoreAdProtection = false, string placement = null)
         {
             // [2026-05-13] 광고 제거 구매 유저는 보상형 포함 모든 광고 차단 (정책 결정).
             // 보상은 즉시 callback 으로 지급 — 광고 시청 없이 결과만 부여.
@@ -167,7 +177,8 @@ namespace BalloonFlow
 
             _pendingRewardCallback = rewardCallback;
             _isShowingAd = true;
-            MaxSdk.ShowRewardedAd(SdkConfig.AppLovinRewardedAdUnitId);
+            // ROLLBACK_AD_EVENT_FIELDS_20260707: placement 전달 — AdInfo.Placement 로 ad_event 에 적재.
+            MaxSdk.ShowRewardedAd(SdkConfig.AppLovinRewardedAdUnitId, placement);
         }
 
         /// <summary>
@@ -206,8 +217,20 @@ namespace BalloonFlow
 
             _isShowingAd = true;
             Debug.Log($"{LOG_TAG} Showing interstitial — placement={placement}");
-            MaxSdk.ShowInterstitial(SdkConfig.AppLovinInterstitialAdUnitId);
+            // ROLLBACK_AD_EVENT_FIELDS_20260707: placement 전달 — AdInfo.Placement 로 ad_event 에 적재.
+            MaxSdk.ShowInterstitial(SdkConfig.AppLovinInterstitialAdUnitId, ResolvePlacementName(placement));
             return true;
+        }
+
+        /// <summary>InterstitialPlacement → ad_event.ad_placement 규약 문자열 (스키마 v3.2 3도메인 placement).</summary>
+        private static string ResolvePlacementName(InterstitialPlacement placement)
+        {
+            switch (placement)
+            {
+                case InterstitialPlacement.ClearNext: return "interstitial_between_level";
+                case InterstitialPlacement.FailQuit:  return "interstitial_fail_quit";
+                default:                              return placement.ToString();
+            }
         }
 
         /// <summary>최고 클리어 레벨 (Lv.20 클리어 해금 판정용). LevelManager 미존재 시 0.</summary>
@@ -274,12 +297,16 @@ namespace BalloonFlow
         }
 
         private void OnRewardedDisplayedCb(string adUnitId, MaxSdkBase.AdInfo info)
-            => OnRewardedAdDisplayed?.Invoke();
+        {
+            _adDisplayStartRealtime = Time.realtimeSinceStartup; // ROLLBACK_AD_EVENT_FIELDS_20260707
+            OnRewardedAdDisplayed?.Invoke();
+        }
 
         private void OnRewardedHiddenCb(string adUnitId, MaxSdkBase.AdInfo info)
         {
             _isShowingAd = false;
             _pendingRewardCallback = null;
+            FlushPendingAdEvent(); // ROLLBACK_AD_EVENT_FIELDS_20260707: 노출 종료 — watch_duration 확정 후 emit
             OnRewardedAdHidden?.Invoke();
             LoadRewardedAd();
         }
@@ -295,6 +322,7 @@ namespace BalloonFlow
         {
             _isShowingAd = false;
             _pendingRewardCallback = null;
+            FlushPendingAdEvent(); // ROLLBACK_AD_EVENT_FIELDS_20260707
             OnRewardedAdFailedToShow?.Invoke(error.Message);
             LoadRewardedAd();
         }
@@ -319,6 +347,7 @@ namespace BalloonFlow
 
         private void OnInterstitialDisplayedCb(string adUnitId, MaxSdkBase.AdInfo info)
         {
+            _adDisplayStartRealtime = Time.realtimeSinceStartup; // ROLLBACK_AD_EVENT_FIELDS_20260707
             // ROLLBACK_NOADS_AUTO_POPUP_20260619: SetFirstInterstitialShown 전에 '최초 노출' 여부 캡처
             //   (set 후엔 항상 true 라 종료 시점에 최초인지 구분 불가).
             _firstInterstitialJustShown = UserDataService.HasInstance
@@ -333,6 +362,7 @@ namespace BalloonFlow
         private void OnInterstitialHiddenCb(string adUnitId, MaxSdkBase.AdInfo info)
         {
             _isShowingAd = false;
+            FlushPendingAdEvent(); // ROLLBACK_AD_EVENT_FIELDS_20260707: 노출 종료 — watch_duration 확정 후 emit
             // 노출 종료 시점에 쿨다운 타이머 시작 (명세: "show() end → last_shown_at = now → 20s cooldown").
             _lastInterstitialShownRealtime = Time.realtimeSinceStartup;
 
@@ -366,6 +396,7 @@ namespace BalloonFlow
         private void OnInterstitialDisplayFailedCb(string adUnitId, MaxSdkBase.ErrorInfo error, MaxSdkBase.AdInfo info)
         {
             _isShowingAd = false;
+            FlushPendingAdEvent(); // ROLLBACK_AD_EVENT_FIELDS_20260707
             LoadInterstitialAd();
         }
 
@@ -380,10 +411,26 @@ namespace BalloonFlow
             // 누적 광고 수익 먼저 갱신 → 이벤트의 total_ad_revenue_usd 가 post-impression 반영.
             if (UserSnapshotCache.HasInstance)
                 UserSnapshotCache.Instance.OnAdRevenueGranted(adInfo.Revenue);
-            EmitAdEvent(adUnitId, adInfo);
+            // ROLLBACK_AD_EVENT_FIELDS_20260707: 즉시 emit → 노출 종료 시 emit 으로 이연 (watch_duration_sec 확보).
+            //   같은 노출에서 revenue 콜백이 중복되면 마지막 값으로 덮어 단일 row 유지.
+            _pendingAdEventUnitId = adUnitId;
+            _pendingAdEventInfo   = adInfo;
         }
 
-        private static void EmitAdEvent(string adUnitId, MaxSdkBase.AdInfo adInfo)
+        /// <summary>ROLLBACK_AD_EVENT_FIELDS_20260707: 보류된 임프레션을 노출 종료 시점에 emit (시청 시간 포함).</summary>
+        private void FlushPendingAdEvent()
+        {
+            if (_pendingAdEventInfo == null) { _adDisplayStartRealtime = -1f; return; }
+            int watchSec = _adDisplayStartRealtime >= 0f
+                ? Mathf.Max(0, Mathf.RoundToInt(Time.realtimeSinceStartup - _adDisplayStartRealtime))
+                : 0;
+            EmitAdEvent(_pendingAdEventUnitId, _pendingAdEventInfo, watchSec);
+            _pendingAdEventUnitId   = null;
+            _pendingAdEventInfo     = null;
+            _adDisplayStartRealtime = -1f;
+        }
+
+        private static void EmitAdEvent(string adUnitId, MaxSdkBase.AdInfo adInfo, int watchDurationSec)
         {
             string eventId = System.Guid.NewGuid().ToString("N");
             var p = new System.Collections.Generic.Dictionary<string, object>(32);
@@ -405,7 +452,10 @@ namespace BalloonFlow
             p[AnalyticsConsts.P_AD_UNIT_ID]     = adUnitId ?? "";
             p[AnalyticsConsts.P_MEDIATION_POSITION] = 0;
             p[AnalyticsConsts.P_EVENT_PHASE]     = "impression";
-            p[AnalyticsConsts.P_REVENUE_PRECISION] = "";
+            // ROLLBACK_AD_EVENT_FIELDS_20260707: watch_duration_sec = Displayed→Hidden 실측(초).
+            //   ad_duration_sec 는 MAX SDK 미제공 → 미emit(NULL). revenue_precision 은 AdInfo 값 사용.
+            p[AnalyticsConsts.P_WATCH_DURATION_SEC] = watchDurationSec;
+            p[AnalyticsConsts.P_REVENUE_PRECISION] = adInfo.RevenuePrecision ?? "";
             p[AnalyticsConsts.P_LEVEL_NUMBER]    = LevelManager.HasInstance ? LevelManager.Instance.GetCurrentLevelId() : 0;
 
             if (UserSnapshotCache.HasInstance)

@@ -1049,6 +1049,68 @@ namespace BalloonFlow
             return false;
         }
 
+        /// <summary>ROLLBACK_SUPPLY_MATCH_FAIL_20260707: 상태 기반 실패 판정용 '도달 가능 공급' 색 수집.
+        /// BoardStateManager 가 "빈 슬롯 > 0 인데 레일에 매칭이 없을 때" 큐가 구원 가능한지 판단하는 데 사용.
+        ///
+        /// ROLLBACK_SUPPLY_ACTIONABLE_20260707 (rev2 — '지금 행동 가능'으로 축소):
+        /// rev1 은 깊은 줄 큐 홀더 + 스포너 미래 시퀀스까지 포함했으나, 탭은 '앞줄만' 가능하고(InputHandler
+        /// IsInFrontRow 게이트) 깊은 줄이 앞줄로 오려면 배포 완료(큐 전진)가 필요하다 — 잼 상태에선 영영
+        /// 도달 불가한 공급을 '구원 가능'으로 오판해, 눈에 보이는 필패가 워치독(10s)까지 대기하는 원인.
+        /// rev2 포함 = ① 커밋(isDeploying/isWaiting/isMovingToRail — 이미 레일로 가는 중) +
+        ///            ② 앞줄 탭 가능 홀더(HolderVisualManager.IsInFrontRow).
+        /// 깊은 줄/스포너 미래분은 큐 전진으로 앞줄이 되는 '순간' 자동으로 공급에 들어온다(0.1s 재평가 +
+        /// critical recovery). '배포 진행 중엔 fail 억제' 균형추는 BoardStateManager 의
+        /// PLACEMENT_PROGRESS_QUIET_SECONDS 가드가 담당(진행 중 앞줄 미스매치 오판 방지).
+        ///
+        /// 제외 (사용자 결정 2026-07-07 — "해금되지 않으면 어차피 공격 불가" 원칙):
+        ///   frozen(홀더 Ice) / hidden(? 박스) / locked(자물쇠 — 해금에 key pop 필요 = 배수 전제) /
+        ///   lock object(다트 아님) / 스포너 앵커(다트 아님) / consumed.
+        /// 롤백: rev1 = 깊은줄·스포너 시퀀스 포함 버전(git), 전체 = 이 메서드 + BoardStateManager supplyMatch 블록 제거.</summary>
+        public void CollectSupplyColors(HashSet<int> result)
+        {
+            if (result == null) return;
+            bool visualReady = HolderVisualManager.HasInstance;
+
+            // ROLLBACK_SUPPLY_FRONTROW_FALLBACK_20260707: 행(front-row) 정보가 아직 아무 홀더에도 서지 않은
+            //   순간(레벨 로드 직후 visual 배치 전 등)에 IsInFrontRow 전원 false 로 공급=∅ 오판 →
+            //   시작하자마자 critical 진입하는 transient 가 로그로 확인됨(occ=0/120 진입→회복).
+            //   비소비 홀더가 존재하는데 front-row 가 '하나도' 검출되지 않으면 행 미준비로 보고
+            //   탭 가능 후보 전체를 보수 포함(억울한 조기 fail 방지 우선). 행이 서면 자동으로 앞줄만으로 좁혀짐.
+            bool anyFrontDetected = false;
+            if (visualReady)
+            {
+                for (int i = 0; i < _holders.Count; i++)
+                {
+                    HolderData h = _holders[i];
+                    if (h == null || h.isConsumed) continue;
+                    if (HolderVisualManager.Instance.IsInFrontRow(h.holderId)) { anyFrontDetected = true; break; }
+                }
+            }
+            bool frontRowsReady = visualReady && anyFrontDetected;
+
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                HolderData h = _holders[i];
+                if (h == null || h.isConsumed) continue;
+                if (h.isLockObject) continue;
+                if (h.isFrozen) continue;
+                if (h.isHidden) continue;
+                if (h.isLocked) continue;
+                if (h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T ||
+                    h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O) continue;
+                if (h.magazineCount <= 0 || h.color < 0) continue;
+
+                // ① 커밋 — 이미 레일로 향하는 다트 (행 무관).
+                bool committed = h.isDeploying || h.isWaiting || h.isMovingToRail;
+                // ② 앞줄 탭 가능 — 플레이어가 '지금' 누를 수 있는 공급.
+                //    행 미준비(frontRowsReady=false) 시 보수적으로 전체 포함 (위 FALLBACK 주석 참조).
+                bool frontTappable = !frontRowsReady || HolderVisualManager.Instance.IsInFrontRow(h.holderId);
+
+                if (committed || frontTappable)
+                    result.Add(h.color);
+            }
+        }
+
         /// <summary>ROLLBACK_ZAP_SPAWNER_COLOR_PURGE_20260707: Zap(Color Remove) 이 제거한 색을
         /// Spawner(Pipe/Glass Pipe) 의 '미래 소환분'에서도 제거. 기존엔 IsRemovableColorHolder 가
         /// 스포너 앵커·미방출 payload 를 제외해, 사라진 색 홀더가 계속 소환되고 spawnerHP 잔존으로
@@ -1187,7 +1249,13 @@ namespace BalloonFlow
                 // 앞(레일 쪽)에 0..N-1 = N 칸. 그만큼만 release 해야 방출분이 파이프를 안 덮고 앞에 안착.
                 // (normalCount 는 파이프 뒤 대기분 제외된 '앞 큐' 수.) 최소 1.
                 int frontCapacity = Mathf.Max(1, spawner.sourceRow);
-                if (normalCount >= frontCapacity) continue;
+                // ROLLBACK_SPAWNER_FILL_DEFICIT_20260707: 기존엔 호출 1회당 스포너별 1개만 방출.
+                //   다트 배포(한 칸씩)는 문제 없지만 Zap 은 앞칸을 2개 이상 동시에 비워, 1개만 채워지고
+                //   나머지는 다음 탭/배포의 ProcessSpawners 까지 지연됐다(121레벨 Zap 파랑 제거 증상).
+                //   부족분(deficit)만큼 반복 방출 — 평상시(부족 1)는 기존 동작과 동일.
+                //   롤백: deficit 루프 2개를 단일 방출 + continue 로 환원.
+                int deficit = frontCapacity - normalCount;
+                if (deficit <= 0) continue;
 
                 // ROLLBACK_PIPE_PAYLOAD_RELEASE_20260624 / GLASSPIPE_PARITY_20260625:
                 // Pipe(Spawner_O)·Glass Pipe(Spawner_T) 둘 다 anchor 아래 authored holder 를 순서대로 release.
@@ -1195,55 +1263,64 @@ namespace BalloonFlow
                 if ((spawner.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O
                   || spawner.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T) && HasAuthoredPipePayload(spawner))
                 {
-                    HolderData payload = GetNextPipePayload(spawner);
-                    if (payload == null)
+                    while (deficit > 0 && spawner.spawnerHP > 0)
                     {
-                        spawner.spawnerHP = 0;
-                        spawner.isConsumed = true;
+                        // 매 반복 재조회 — pipeOrder 최솟값이 뽑혀 authored 순서 유지 (Zap 퍼지분은 isConsumed 로 자동 스킵).
+                        HolderData payload = GetNextPipePayload(spawner);
+                        if (payload == null)
+                        {
+                            spawner.spawnerHP = 0;
+                            spawner.isConsumed = true;
+                            PublishSpawnerRemaining(spawner);
+                            MarkSpawnerColumnChanged(spawner.column);
+                            changed = true;
+                            break;
+                        }
+
+                        payload.isPipePayloadReleased = true;
+                        spawner.spawnerHP--;
+                        spawner.spawnerSpawnedCount++;
                         PublishSpawnerRemaining(spawner);
+                        if (spawner.spawnerHP <= 0)
+                            spawner.isConsumed = true;
                         MarkSpawnerColumnChanged(spawner.column);
                         changed = true;
-                        continue;
+                        deficit--;
                     }
-
-                    payload.isPipePayloadReleased = true;
-                    spawner.spawnerHP--;
-                    spawner.spawnerSpawnedCount++;
-                    PublishSpawnerRemaining(spawner);
-                    if (spawner.spawnerHP <= 0)
-                        spawner.isConsumed = true;
-                    MarkSpawnerColumnChanged(spawner.column);
-                    changed = true;
                     continue;
                 }
 
-                // 소환!
-                spawner.spawnerHP--;
-
-                // 색상 결정: 명시 색상 → 인게임 풍선 색상에서 랜덤
-                // ROLLBACK_SPAWNER_COLOR_SEQUENCE:
-                // Keep explicit spawnerColors in authored order even when spawnerHP differs
-                // from the color array length.
-                int spawnIndex = spawner.spawnerSpawnedCount;
-                int newColor;
-                if (spawner.spawnerColors != null && spawnIndex >= 0 && spawnIndex < spawner.spawnerColors.Length)
-                    newColor = spawner.spawnerColors[spawnIndex];
-                else
-                    newColor = PickRandomBalloonColor();
-                spawner.spawnerSpawnedCount++;
-
-                int newMag = spawner.spawnerMag > 0 ? spawner.spawnerMag : 20;
-                AddHolder(newColor, newMag, spawner.column);
-                MarkSpawnerColumnChanged(spawner.column);
-                changed = true;
-
-                // HP 텍스트 갱신
-                PublishSpawnerRemaining(spawner);
-
-                // HP 0이면 Spawner 소멸
-                if (spawner.spawnerHP <= 0)
+                // 소환! (generated 폴백 — 부족분만큼 반복)
+                while (deficit > 0 && spawner.spawnerHP > 0)
                 {
-                    spawner.isConsumed = true;
+                    spawner.spawnerHP--;
+
+                    // 색상 결정: 명시 색상 → 인게임 풍선 색상에서 랜덤
+                    // ROLLBACK_SPAWNER_COLOR_SEQUENCE:
+                    // Keep explicit spawnerColors in authored order even when spawnerHP differs
+                    // from the color array length.
+                    int spawnIndex = spawner.spawnerSpawnedCount;
+                    int newColor;
+                    if (spawner.spawnerColors != null && spawnIndex >= 0 && spawnIndex < spawner.spawnerColors.Length)
+                        newColor = spawner.spawnerColors[spawnIndex];
+                    else
+                        newColor = PickRandomBalloonColor();
+                    spawner.spawnerSpawnedCount++;
+
+                    int newMag = spawner.spawnerMag > 0 ? spawner.spawnerMag : 20;
+                    AddHolder(newColor, newMag, spawner.column);
+                    MarkSpawnerColumnChanged(spawner.column);
+                    changed = true;
+
+                    // HP 텍스트 갱신
+                    PublishSpawnerRemaining(spawner);
+
+                    // HP 0이면 Spawner 소멸
+                    if (spawner.spawnerHP <= 0)
+                    {
+                        spawner.isConsumed = true;
+                    }
+                    deficit--;
                 }
             }
             return changed;

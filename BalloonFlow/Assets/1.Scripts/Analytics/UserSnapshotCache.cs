@@ -73,8 +73,10 @@ namespace BalloonFlow.Analytics
             if (p == null) return;
             p[AnalyticsConsts.P_INSTALL_AT]           = InstallAt;
             p[AnalyticsConsts.P_MAX_REACHED_LEVEL]    = MaxReachedLevel;
-            p[AnalyticsConsts.P_TOTAL_SPEND_USD]      = _totalSpendUsd;
-            p[AnalyticsConsts.P_TOTAL_AD_REVENUE_USD] = _totalAdRevenueUsd;
+            // BQ NUMERIC 은 소수 9자리 상한 — double 누적 노이즈(115.94999999999999)가 그대로 나가면
+            // 행 전체가 거절되므로 emit 경계에서 라운딩 (2026-07-07 android 적재 전면 차단 사고).
+            p[AnalyticsConsts.P_TOTAL_SPEND_USD]      = Math.Round(_totalSpendUsd, 6);
+            p[AnalyticsConsts.P_TOTAL_AD_REVENUE_USD] = Math.Round(_totalAdRevenueUsd, 6);
         }
 
         // ─── 누적 갱신 (Phase 1 wiring 시 호출) ───
@@ -82,7 +84,7 @@ namespace BalloonFlow.Analytics
         public void OnPurchaseVerified(double priceUsd)
         {
             if (priceUsd <= 0) return;
-            _totalSpendUsd += priceUsd;
+            _totalSpendUsd = Math.Round(_totalSpendUsd + priceUsd, 6);
             PlayerPrefsSetDouble(PREFS_TOTAL_SPEND_USD, _totalSpendUsd);
             PlayerPrefs.Save();
         }
@@ -90,7 +92,7 @@ namespace BalloonFlow.Analytics
         public void OnAdRevenueGranted(double revenueUsd)
         {
             if (revenueUsd <= 0) return;
-            _totalAdRevenueUsd += revenueUsd;
+            _totalAdRevenueUsd = Math.Round(_totalAdRevenueUsd + revenueUsd, 6);
             PlayerPrefsSetDouble(PREFS_TOTAL_AD_REV_USD, _totalAdRevenueUsd);
             PlayerPrefs.Save();
         }

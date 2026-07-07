@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -40,12 +41,23 @@ namespace BalloonFlow
         private bool  _flushing;
         private bool  _anonSignInInFlight;
 
+        // ROLLBACK_ANALYTICS_DISK_PERSIST_20260707: START — 전송 전 버퍼 디스크 영속화.
+        // 프로세스 킬(스와이프킬/OS킬/Editor 정지) 시 미전송 이벤트가 통째로 유실되던 문제.
+        // pause/quit 에 버퍼를 파일로 스냅샷 → 다음 실행 시 로드해 재전송. event_id 가 BQ insertId 라
+        // 재전송 중복은 서버 streaming dedup 이 흡수. 롤백: 이 필드/PersistBuffer/LoadPersistedEvents
+        // 및 호출부 제거.
+        private static string PendingFilePath => Path.Combine(Application.persistentDataPath, "bq_pending_events.json");
+        private bool _hasPersistedFile;
+        private bool _quitting;
+        // ROLLBACK_ANALYTICS_DISK_PERSIST_20260707: END (필드)
+
         private bool _facebookReady;
         public bool FacebookReady => _facebookReady;
 
         protected override void OnSingletonAwake()
         {
             InitFacebook();
+            LoadPersistedEvents();
         }
 
         #region Init (Facebook)
@@ -118,6 +130,14 @@ namespace BalloonFlow
             }
             _bqBatch.Add(new BqEvent { name = eventName, data = data });
 
+            // quit 진행 중 enqueue(SessionTracker 의 session_end 등) — OnApplicationQuit 호출 순서가
+            // 컴포넌트 간 비결정적이라, 늦게 들어온 이벤트도 파일에 반영되도록 즉시 재영속화.
+            if (_quitting)
+            {
+                PersistBuffer();
+                return;
+            }
+
             // [ANALYTICS_PLAYEND_FLUSH 2026-06-24] 레벨 종료(play_end)는 즉시 flush.
             // 패배→빠른 재시도(타이머 15s/카운트 20 임계 전) 시 씬 전환되면 적재가 다음 판까지 밀리던
             // '한 판 지연' 버그 방지. 같이 대기 중이던 play_start 도 이때 함께 전송됨.
@@ -135,12 +155,17 @@ namespace BalloonFlow
 
         private void OnApplicationPause(bool paused)
         {
-            if (paused) TryFlush(); // 백그라운드 전환 직전 best-effort (확실한 보장은 디스크 영속화 필요 — 1.1+)
+            if (!paused) return;
+            // 백그라운드에서 그대로 킬당해도 유실 없도록 먼저 영속화, 이후 best-effort 전송.
+            PersistBuffer();
+            TryFlush();
         }
 
         private void OnApplicationQuit()
         {
-            TryFlush();
+            _quitting = true;
+            PersistBuffer();
+            TryFlush(); // best-effort — 프로세스 종료 전 완료 보장 없음. 못 보낸 분량은 파일로 복구.
         }
 
         private void TryFlush()
@@ -230,6 +255,7 @@ namespace BalloonFlow
                 {
                     // 성공 — 보낸 만큼 앞에서 제거.
                     _bqBatch.RemoveRange(0, sendCount);
+                    SyncPersistedFile();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                     Debug.Log($"{LOG_TAG} BQ ingest OK — {sendCount}건 적재 (resp={code}, 잔여 {_bqBatch.Count}) {req.downloadHandler.text}");
 #endif
@@ -239,6 +265,7 @@ namespace BalloonFlow
                     // 클라 오류(스키마/인증 등) — 재시도해도 동일. 해당 배치 폐기(무한 재시도 방지).
                     Debug.LogWarning($"{LOG_TAG} BQ ingest 4xx({code}) — {sendCount}건 폐기. resp={req.downloadHandler.text}");
                     _bqBatch.RemoveRange(0, sendCount);
+                    SyncPersistedFile();
                 }
                 else
                 {
@@ -249,6 +276,64 @@ namespace BalloonFlow
 
             _flushing = false;
         }
+
+        // ROLLBACK_ANALYTICS_DISK_PERSIST_20260707: START (메서드)
+
+        /// <summary>현재 버퍼를 파일로 스냅샷. 비었으면 파일 삭제. pause/quit/quit-중-enqueue 에서 호출.</summary>
+        private void PersistBuffer()
+        {
+            try
+            {
+                if (_bqBatch.Count == 0)
+                {
+                    if (_hasPersistedFile && File.Exists(PendingFilePath)) File.Delete(PendingFilePath);
+                    _hasPersistedFile = false;
+                    return;
+                }
+                File.WriteAllText(PendingFilePath, JsonConvert.SerializeObject(_bqBatch));
+                _hasPersistedFile = true;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"{LOG_TAG} BQ 버퍼 영속화 실패: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// flush 로 버퍼가 줄었을 때 기존 스냅샷 파일을 동기화 — pause 영속화 후 복귀해 전송이
+        /// 성공한 케이스에서 stale 파일이 남아 다음 실행에 재전송(중복)되는 것 방지.
+        /// 파일이 없으면 아무것도 안 함(플레이 중 매 flush 마다 IO 하지 않도록).
+        /// </summary>
+        private void SyncPersistedFile()
+        {
+            if (_hasPersistedFile) PersistBuffer();
+        }
+
+        /// <summary>이전 실행에서 못 보낸 이벤트 로드(부트 1회). 읽는 즉시 파일 삭제 — 이후 pause 마다 재스냅샷.</summary>
+        private void LoadPersistedEvents()
+        {
+            try
+            {
+                if (!File.Exists(PendingFilePath)) return;
+                string json = File.ReadAllText(PendingFilePath);
+                File.Delete(PendingFilePath);
+
+                var restored = JsonConvert.DeserializeObject<List<BqEvent>>(json);
+                if (restored == null || restored.Count == 0) return;
+
+                // 복원분이 시간상 먼저 — 버퍼 앞에 삽입. cap 초과 시 oldest(복원분 앞쪽)부터 버림.
+                int room = BQ_MAX_BUFFER - _bqBatch.Count;
+                if (restored.Count > room && room >= 0)
+                    restored.RemoveRange(0, restored.Count - room);
+                _bqBatch.InsertRange(0, restored);
+                Debug.Log($"{LOG_TAG} 이전 실행 미전송 이벤트 {restored.Count}건 복원 — 다음 flush 에 재전송.");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"{LOG_TAG} BQ 버퍼 복원 실패(폐기): {e.Message}");
+            }
+        }
+        // ROLLBACK_ANALYTICS_DISK_PERSIST_20260707: END (메서드)
 
         private static string BuildBatchJson(List<BqEvent> sending)
         {

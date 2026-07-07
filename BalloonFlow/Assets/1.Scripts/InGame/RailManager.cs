@@ -490,7 +490,7 @@ namespace BalloonFlow
             //   (GetDeployBlockProgress 는 순수함수라 다트마다 동일 → 루프 내 재열거/재계산 제거. 동작 불변.)
             _deployBlockHolders.Clear();
             _deployBlockProgress.Clear();
-            if (_activeDeployPoints.Count > 0)
+            if (DEPLOY_POINT_BLOCKS_FLOW && _activeDeployPoints.Count > 0)
             {
                 var depPre = _deployPoints.GetEnumerator();
                 try
@@ -581,6 +581,15 @@ namespace BalloonFlow
         //   → 프레임당 1회 precompute 해 다트 루프의 O(darts×deploys) 재열거+재계산을 O(deploys)+O(darts×deploys 비교)로.
         private readonly List<int> _deployBlockHolders = new List<int>(8);
         private readonly List<float> _deployBlockProgress = new List<float>(8);
+        // ★ 게임 디자인 확정 (2026-07-07, 사용자 결정): 이 동작은 게임의 킬링 포인트 — 절대 끄지 말 것. ★
+        //   동작: 활성 배포점 앞(physGap 여유)에서 '다른 홀더'의 다트가 정지 — 배포 중인 홀더가 자기
+        //   다트를 연속 덩어리로 밀어 넣을 공간을 보장하고, 배포가 끝나면 멈췄던 행렬이 다시 흐른다.
+        //   ([배포1][다트][다트][배포2][다트] 상황에서 배포1 행렬이 배포2 앞에서 잠깐 멈추는 그 연출.)
+        //   이력: ROLLBACK_DEPLOY_NONBLOCKING_20260707 로 임계치 뚝뚝 끊김 완화를 위해 false(무정지 흐름,
+        //   빈칸 주입)로 바꿨다가, "킬링 포인트가 사라진다" 는 사용자 판단으로 당일 원복(true).
+        //   끊김 완화는 데드락 진입 게이트(ROLLBACK_DEADLOCK_ENTRY_SIGNALS/STALL_ONLY_ENTRY_20260707)가 담당.
+        //   static readonly (const 면 gated if 에 CS0162 unreachable 경고).
+        private static readonly bool DEPLOY_POINT_BLOCKS_FLOW = true;
         private System.Comparison<int> _dartProgressDescending;
 
         private void AdvanceAllDarts(float distance, float pathLen)
@@ -1227,6 +1236,7 @@ namespace BalloonFlow
             _deadlockBufferSize = 0; // V2 아키텍처: buffer 없음
             _slots = new SlotData[_slotCount];
             _deadlockHolderId = -1;
+            _lastPlacementUnscaledTime = 0f; // ROLLBACK_SUPPLY_ACTIONABLE_20260707: 새 보드 리셋
             // ROLLBACK_BOOSTER_PAUSE_RESET_20260618: 새 보드 시작 시 부스터 일시정지 강제 해제.
             //   IsPausedByBooster 는 ResumeRail(부스터 완료/취소) 에서만 false 가 되는데, 부스터 arm 상태에서
             //   Retry/자동실패/광고중단/레벨점프로 보드가 리셋되면 true 인 채 남아 UpdateInternal(375) 이 매 프레임
@@ -1398,10 +1408,17 @@ namespace BalloonFlow
             _dartById[dartId] = dart;
             UpdateClusterHeadCache(dart);
             _occupiedCount++;
+            _lastPlacementUnscaledTime = Time.unscaledTime; // ROLLBACK_SUPPLY_ACTIONABLE_20260707: 배포 진행 신호
 
             PublishOccupancyChanged();
             return dartId;
         }
+
+        // ROLLBACK_SUPPLY_ACTIONABLE_20260707: 마지막 레일 placement 시각 — BoardStateManager 의
+        //   '배포 진행 중' 가드용 (진행 중엔 앞줄 공급 미스매치로 오판 fail 하지 않게). 0 = 이번 보드 무배치.
+        private float _lastPlacementUnscaledTime;
+        /// <summary>마지막으로 다트가 레일에 배치된 시각(unscaled). BoardStateManager 배포 진행 가드가 참조.</summary>
+        public float LastPlacementUnscaledTime => _lastPlacementUnscaledTime;
 
         /// <summary>
         /// Removes the dart from a slot (dart was fired or cleared). Returns true if removed.
@@ -2172,6 +2189,10 @@ namespace BalloonFlow
             _dartById[id] = dart; // FindDart 캐시 동기화
             UpdateClusterHeadCache(dart);
             _occupiedCount = _darts.Count;
+            // ROLLBACK_SUPPLY_ACTIONABLE_20260707: progress 기반 배치도 배포 진행 신호 스탬프 —
+            //   실배포가 이 경로를 타는 레벨에서 스탬프 누락으로 deployProgress 가드가 항상 false 였음
+            //   (2026-07-07 Level 62 로그: 배치 진행 중인데 lastPlaceAgo=-1.0).
+            _lastPlacementUnscaledTime = Time.unscaledTime;
             SyncSlotOccupancyFromDarts();
             PublishOccupancyChanged();
             return id;

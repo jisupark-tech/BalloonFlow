@@ -65,18 +65,35 @@ namespace BalloonFlow
         //   이 워치독은 hasMatch 와 무관하게 "레일 만석 + 일정 시간 pop(=배수) 0" 이면 RailOverflow fail 확정.
         //   pop 이 한 번이라도 나면(=배수 진행) 리셋되므로 정상/느린-진행 플레이는 오발동 X.
         private float _lastDrainUnscaledTime;
-        private const float NO_DRAINAGE_FAIL_SECONDS = 10f; // 만석 무배수 지속 한계(벨트 1회전+grace 보다 충분히 큼)
+        // ROLLBACK_WATCHDOG_FAST_20260707: 10f/12f → 4f/5f (사용자 지정 — 실패 체감 9초→4초 목표).
+        //   근거: 필패 확정은 이제 SUPPLY_MATCH 상태 규칙이 grace 1.5s 로 즉시 처리하므로, 워치독은
+        //   '모델상 매칭이 있다는데 N초간 pop/발사가 전혀 없는' 잔여 케이스(오탐/frozen/지오메트리) 전용.
+        //   주의: 매칭 다트가 벨트를 길게 돌아 발사까지 4s+ 걸리는 대형 레일에서 오발동이 관찰되면
+        //   6f/7f 로 상향 (원값 10f/12f = 벨트 1회전+grace 기준). 롤백: 10f/12f 복원.
+        private const float NO_DRAINAGE_FAIL_SECONDS = 4f; // 만석 무배수 지속 한계
         // ROLLBACK_NO_FIRE_FAIL_WATCHDOG_20260622: 만석/강제회전인데 '레일 발사(배수)'가 이 시간 동안 0 이면 fail.
         //   no-drainage(pop 기준)가 다른 색 pop 에 starve 되는 H1 을 fire 기준으로 차단. 느린 belt 의 정상 발사간격보다 충분히 큼.
-        private const float NO_FIRE_FAIL_SECONDS = 12f;
+        private const float NO_FIRE_FAIL_SECONDS = 5f; // ROLLBACK_WATCHDOG_FAST_20260707: 12f→5f (위 주석 참조)
         // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: 두 워치독(no-drainage/no-fire)의 '만석 게이트 체류 시간' 요구.
         //   기존엔 '마지막 pop/발사 이후 경과'만 봐서, 만석이 되기 '전'에 쌓인 무-pop 시간이 그대로 인정 →
         //   매칭 색 다트가 배포로 올라가는 중 레일이 (railFull||forceFullBeltAdvance) 에 닿는 순간 유예 0초로
-        //   즉시 fail 하던 버그. 게이트가 false→true 전이된 시각을 찍고, '게이트 열린 상태로 N초 지속' 을
-        //   AND 조건으로 추가해 원 의도(만석에서 N초 진짜 무진전)만 남긴다.
-        //   롤백: 이 2개 필드 + Update 의 gate 추적 블록 + 두 워치독의 watchdogGateDwell 조건 제거.
-        private float _watchdogGateOpenSince = float.PositiveInfinity;
-        private bool _wasWatchdogGateOpen;
+        //   즉시 fail 하던 버그. '게이트 열린 상태로 N초 지속' 을 AND 조건으로 추가해 원 의도만 남긴다.
+        // rev2 (누적식, 2026-07-07): rev1 은 게이트 false→true 전이 시각(edge stamp) 기준이라, 데드락 무진행
+        //   exit→재진입 사이클(ROLLBACK_DEADLOCK_NO_PROGRESS_EXIT_20260706)로 forceFullBeltAdvance 가 깜빡이면
+        //   체류시간이 매번 0 리셋 → below-full 잼(railFull=false, 데드락 밴드)에서 워치독이 영영 발동 못 해
+        //   '영영 실패 안 함 + 벨트 무한 회전'(Level 38 영상 재현). → 열림 동안 evalDelta 를 누적하고,
+        //   닫힘이 WATCHDOG_GATE_CLOSE_RESET_SECONDS 이상 '지속'될 때만 리셋해 깜빡임에 면역.
+        //   롤백: 이 3개 필드 + Update 의 gate 추적 블록 + 두 워치독의 watchdogGateDwell 조건 제거.
+        private float _watchdogGateOpenAccum;
+        private float _watchdogGateClosedSince = float.NaN;
+        private const float WATCHDOG_GATE_CLOSE_RESET_SECONDS = 2f;
+
+        // ROLLBACK_SUPPLY_MATCH_FAIL_20260707: 상태 기반 실패용 필드 —
+        //   _forceAdvanceInactiveSince: force 상승에지 criticalTimer 리셋의 히스테리시스 기준
+        //     (연속 비활성 ≥ WATCHDOG_GATE_CLOSE_RESET_SECONDS 후의 상승만 '진짜 회복 윈도우'로 인정).
+        //   _reusableSupplyColors: HolderManager.CollectSupplyColors 결과 재사용 버퍼 (GC 방지).
+        private float _forceAdvanceInactiveSince = float.NaN;
+        private readonly HashSet<int> _reusableSupplyColors = new HashSet<int>();
 
         // ROLLBACK_RAIL_FREEZE_DIAG_20260622: hard-freeze(전면정지) 진단 워치독 — fail 이 아니라 '디버그 덤프'.
         //   재현 불가한 완전정지(다트·레일·배포 모두 멈춤)의 원인을 로그로 포착하기 위함. 동작은 바꾸지 않음(no recovery).
@@ -164,8 +181,23 @@ namespace BalloonFlow
         private float _stuckEvalTimer;
         private const float STUCK_EVAL_INTERVAL = 0.1f;
         private const float FAIL_RECHECK_MIN_DURATION = 0.5f;
-        private const float FORCE_ADVANCE_RECHECK_MIN_DURATION = 1.0f;
-        private const float FORCE_ADVANCE_RECHECK_MAX_DURATION = 2.0f;
+        private const float FORCE_ADVANCE_RECHECK_MIN_DURATION = 1.0f; // ROLLBACK_SUPPLY_FAIL_FAST_GRACE_20260707: 미사용(롤백용 유지)
+        private const float FORCE_ADVANCE_RECHECK_MAX_DURATION = 2.0f; // ROLLBACK_SUPPLY_FAIL_FAST_GRACE_20260707: 미사용(롤백용 유지)
+        // ROLLBACK_SUPPLY_FAIL_FAST_GRACE_20260707: 확정 신호(supply 규칙) 기반 fail 의 grace 상한 = 명세 1.5s.
+        private const float FAIL_GRACE_CAP_SECONDS = 1.5f;
+        // ROLLBACK_SUPPLY_ACTIONABLE_20260707: '배포 진행 중' 판정 창 — 최근 이 시간 내 레일 placement 가
+        //   있으면 stuck 을 억제(빈 슬롯 존재 시). 앞줄 공급으로 조인 대신, 배포가 진행되면 앞줄이 곧
+        //   갱신되므로(완료→큐 전진→새 앞줄) 진행 중 오판 fail 을 막는 균형추. 자세한 근거는 stuck 주석.
+        private const float PLACEMENT_PROGRESS_QUIET_SECONDS = 1.5f;
+
+        // ROLLBACK_SUPPLY_FAIL_ENGAGE_GATE_20260707: '보드 활동 게이트' — 상태기반 supply-match fail 은 보드가 실제로
+        //   시작(첫 다트가 레일에 배치되거나 첫 풍선 pop)한 뒤에만 허용한다. 배경: supply-match stuck 규칙은 레일 점유
+        //   게이트가 없어, 전판 클리어 후 넘어온 '신선한(빈 레일) 스테이지'를 가만히 둘 때, auto-deploy 램프업이 첫 배치를
+        //   내기 전/초반 gap 에서 supplyMatch=false && deployProgress=false 로 오탐 실패했다(2026-07-07 회귀). 활동 게이트로
+        //   '아직 시작도 안 한 보드'는 절대 supply-fail 안 나게 못박는다(auto-deploy 타이밍과 무관). 첫 배치/첫 pop 후엔
+        //   기존 판정 그대로 — 진짜 잼/엔드게임 실패는 유지. 레벨마다 InitializeBoard 에서 false 리셋.
+        //   롤백: 이 필드 + stuck 의 '&& _boardEngagedThisLevel' + Update/HandleBalloonPopped/InitializeBoard 세팅 제거.
+        private bool _boardEngagedThisLevel;
 
         private float EffectiveFailGraceDelay => Mathf.Max(_failGraceDelay, FAIL_RECHECK_MIN_DURATION);
         private bool _wasForceFullBeltAdvanceActive;
@@ -215,7 +247,10 @@ namespace BalloonFlow
                 _criticalTimer = 0f;
                 _stuckEvalTimer = 0f;
                 _wasForceFullBeltAdvanceActive = false;
-                _wasWatchdogGateOpen = false; // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: 재개 시 dwell 재측정
+                // ROLLBACK_WATCHDOG_GATE_DWELL_20260707 rev2: 재개 시 dwell 누적 리셋
+                _watchdogGateOpenAccum = 0f;
+                _watchdogGateClosedSince = float.NaN;
+                _forceAdvanceInactiveSince = float.NaN; // ROLLBACK_SUPPLY_MATCH_FAIL_20260707
             }
 
             // Throttle — fail evaluation 매 frame 안 함.
@@ -272,18 +307,40 @@ namespace BalloonFlow
                 // ROLLBACK_FAIL_FORCE_ADVANCE_RECHECK_TIMER:
                 // Force-full-belt advance is a recovery window. Reset any previously accumulated
                 // critical timer so the belt gets time to rotate and expose/fire possible matches.
-                _criticalTimer = 0f;
+                // ROLLBACK_SUPPLY_MATCH_FAIL_20260707 (히스테리시스): 데드락 무진행 exit→재진입 사이클
+                //   (ROLLBACK_DEADLOCK_NO_PROGRESS_EXIT_20260706)로 상승 에지가 반복되면 이 리셋이
+                //   criticalTimer 를 영영 0 으로 묶어 below-full stuck grace 가 안 참 — 워치독 rev2 와
+                //   동일하게 '연속 비활성 ≥ RESET_SECONDS 후의 상승'만 진짜 회복 윈도우로 인정.
+                if (float.IsNaN(_forceAdvanceInactiveSince)
+                    || Time.unscaledTime - _forceAdvanceInactiveSince >= WATCHDOG_GATE_CLOSE_RESET_SECONDS)
+                {
+                    _criticalTimer = 0f;
+                }
+            }
+            else if (!forceFullBeltAdvance && _wasForceFullBeltAdvanceActive)
+            {
+                _forceAdvanceInactiveSince = Time.unscaledTime; // 비활성 시작 시각 (히스테리시스 기준)
             }
             _wasForceFullBeltAdvanceActive = forceFullBeltAdvance;
 
-            // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: 게이트 false→true 전이 시각 기록 (필드 주석 참조).
+            // ROLLBACK_WATCHDOG_GATE_DWELL_20260707 rev2: 게이트 체류시간 '누적' (필드 주석 참조).
+            //   열림 → evalDelta 누적. 닫힘 → 즉시 리셋하지 않고, 닫힘이 RESET_SECONDS 이상 지속될 때만 리셋
+            //   (데드락 exit→재진입 깜빡임 면역. 진짜 회복은 게이트가 길게 닫히므로 정상 리셋됨).
             bool watchdogGateOpen = railFull || forceFullBeltAdvance;
-            if (watchdogGateOpen && !_wasWatchdogGateOpen)
-                _watchdogGateOpenSince = Time.unscaledTime;
-            else if (!watchdogGateOpen)
-                _watchdogGateOpenSince = float.PositiveInfinity;
-            _wasWatchdogGateOpen = watchdogGateOpen;
-            float watchdogGateDwell = Time.unscaledTime - _watchdogGateOpenSince; // 게이트 닫힘 = -Infinity
+            if (watchdogGateOpen)
+            {
+                _watchdogGateOpenAccum += evalDelta;
+                _watchdogGateClosedSince = float.NaN;
+            }
+            else if (float.IsNaN(_watchdogGateClosedSince))
+            {
+                _watchdogGateClosedSince = Time.unscaledTime;
+            }
+            else if (Time.unscaledTime - _watchdogGateClosedSince >= WATCHDOG_GATE_CLOSE_RESET_SECONDS)
+            {
+                _watchdogGateOpenAccum = 0f;
+            }
+            float watchdogGateDwell = _watchdogGateOpenAccum;
 
             // ROLLBACK_RAIL_FREEZE_DIAG_20260622: 전면정지 진단 — 벨트오프셋·점유수 무변화 + pop 0 지속 시 1회 덤프.
             //   fail 평가(아래)보다 먼저 평가해 강제 fail 직전 상태를 포착. 동작 변경 없음.
@@ -310,20 +367,48 @@ namespace BalloonFlow
             }
 
             bool hasMatch = HasOutermostMatchCached;
-            // ROLLBACK_FAIL_NO_MOVES_LEFT_WITH_RAIL_DARTS:
-            // Previously no-move fail only triggered when all holders were empty AND rail was empty.
-            // That missed the real dead state where rail still has darts, but none of their colors
-            // can attack any exposed balloon. Keep railFull for overflow, and add the no-supply path.
             bool allHoldersEmpty = HolderManager.HasInstance && HolderManager.Instance.AreAllHoldersEmpty();
-            bool noMovesLeft = allHoldersEmpty && _remainingBalloons > 0 && !hasMatch;
-            // [2026-05-13] 이전: bool stuck = (efc > 0) && _remainingBalloons > 0 && !hasMatch;
-            // ROLLBACK_FAIL_REQUIRE_RAILFULL_20260622: 실패는 '공격 불가 + 레일 만석(railFull)' 또는 '다트 소진(noMovesLeft)'
-            //   일 때만. forceFullBeltAdvance(=deadlock 모드/강제회전, full 미만 cap-8~cap-1 에서도 true)는 '회복 윈도우'
-            //   이지 막다른 길이 아니므로 fail 기여에서 제외 — 레일이 임계치에 닿지 않았는데 조기 fail 나던 문제 수정.
-            //   (RailManager.IsForceFullBeltAdvanceActive 주석의 권장 동작과 일치. 만석 케이스는 railFull 이 그대로 커버.)
-            //   below-full deadlock 정지는 relief 안전망(per-holder/stuck-line/dead-head/booster-resume)이 복구 담당.
-            //   롤백: `(railFull || noMovesLeft)` 를 `(railFull || noMovesLeft || forceFullBeltAdvance)` 로 환원.
-            bool stuck = _remainingBalloons > 0 && !hasMatch && (railFull || noMovesLeft);
+
+            // ROLLBACK_SUPPLY_MATCH_FAIL_20260707: 상태 기반 실패 — '도달 가능 공급' 단일 규칙.
+            //   배경: 기존 1차 판정(ROLLBACK_FAIL_REQUIRE_RAILFULL_20260622)은 railFull(cap-1) 이 게이트라,
+            //   데드락 회피가 레일을 cap-8~cap-1 밴드에 묶으면 상태 판정이 영영 미달 → below-full 잼은
+            //   전부 '시간 기반 워치독(10~12s) 대기'로 넘어가 실패 시점이 애매했다 (2026-07-07 Level 38 영상).
+            //   새 규칙 — 공급(supply) = 지금 또는 앞으로 레일에서 발사될 수 있는 다트의 색 집합:
+            //     · 빈 슬롯 > 0 : 레일 다트 ∪ 큐 공급(HolderManager.CollectSupplyColors — 배포중/대기 커밋 +
+            //                     탭 가능 잔여 홀더 + 스포너 미래분. frozen/hidden/locked 는 해금 전
+            //                     공격 불가 원칙으로 제외 — 사용자 결정 2026-07-07).
+            //     · 빈 슬롯 = 0 : 레일 다트만 (아무것도 못 올라오므로 큐 매칭은 무의미).
+            //   실패 = 풍선 잔존 && 공급 ∩ 공격가능 외곽색 = ∅  (grace 1.5~2s 는 기존 유지).
+            //   효과: ① 필패 보드는 below-full 밴드에서도 결정적으로 즉시(grace 후) 실패 — 애매한 회전 대기 제거.
+            //         ② 구원 가능(매칭 색이 올라오는 중/탭 가능) 보드는 만석 직전에도 실패하지 않음.
+            //         ③ 데드락 강제회전의 역할은 '실패 유예'가 아니라 '회복 시도'로 한정.
+            //   워치독(10~12s)은 상태모델이 오판하는 케이스(움직임-frozen 레일 다트가 매칭으로 잡히는 경우,
+            //   TargetBox 다중 live egg 의 첫색 근사 등)의 최후 안전망으로 유지.
+            //   롤백: supplyMatch 3줄을 삭제하고
+            //         `bool noMovesLeft = allHoldersEmpty && _remainingBalloons > 0 && !hasMatch;`
+            //         `bool stuck = _remainingBalloons > 0 && !hasMatch && (railFull || noMovesLeft);` 복원.
+            // ROLLBACK_DEADLOCK_ENTRY_SIGNALS_20260707: 데드락 진입 게이트와 동일 신호를 공유(프레임 캐시) —
+            //   판정 로직이 두 곳에서 갈라지지 않게 단일 소스(HasReachableSupplyMatchCached)로 일원화.
+            bool supplyMatch = HasReachableSupplyMatchCached;
+
+            // ROLLBACK_SUPPLY_ACTIONABLE_20260707: 배포 진행 가드 — 공급을 '앞줄 탭 가능'으로 조인 것의 균형추.
+            //   깊은 줄에만 매칭이 있어도 배포가 진행 중(최근 placement + 빈 슬롯 존재)이면 큐가 전진해 그
+            //   홀더가 앞줄로 올 수 있으므로 stuck 억제. 잼이면 placement 가 멎어 QUIET(1.5s) 후 가드 해제.
+            //   만석(efc>=physCap)은 placement 가 정의상 불가 — 가드 없이 즉시 평가(고전 만석 fail 속도 유지).
+            //   롤백: deployProgress 항 제거.
+            bool deployProgress = RailManager.HasInstance && physCap > 0 && efc < physCap
+                && RailManager.Instance.LastPlacementUnscaledTime > 0f
+                && Time.unscaledTime - RailManager.Instance.LastPlacementUnscaledTime < PLACEMENT_PROGRESS_QUIET_SECONDS;
+
+            // ROLLBACK_SUPPLY_FAIL_ENGAGE_GATE_20260707: 첫 다트가 레일에 배치되면 '보드 시작'으로 래치(첫 pop 은 HandleBalloonPopped).
+            if (!_boardEngagedThisLevel && RailManager.HasInstance && RailManager.Instance.LastPlacementUnscaledTime > 0f)
+                _boardEngagedThisLevel = true;
+
+            // noMovesLeft 는 FailReason 구분용(NoMovesLeft vs RailOverflow)으로만 유지 — 판정은 supplyMatch 가 담당.
+            bool noMovesLeft = allHoldersEmpty && _remainingBalloons > 0 && !supplyMatch;
+            // ROLLBACK_SUPPLY_FAIL_ENGAGE_GATE_20260707: '&& _boardEngagedThisLevel' — 보드가 실제로 시작하기 전(신선한 빈 레일)
+            //   엔 supply-fail 금지. 시작 후엔 기존 로직 그대로(진짜 잼/엔드게임 실패 유지).
+            bool stuck = _remainingBalloons > 0 && !supplyMatch && !deployProgress && _boardEngagedThisLevel;
 
             // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: hasMatch 무관 무진전 워치독.
             //   레일 만석(railFull) + 풍선 잔존 + NO_DRAINAGE_FAIL_SECONDS 간 pop(배수) 0 이면 → RailOverflow fail 확정.
@@ -378,7 +463,7 @@ namespace BalloonFlow
                     bool nearFull = physCap > 0 && efc >= physCap - 1;
                     if (nearFull)
                     {
-                        Debug.Log($"[Fail-DEBUG/Periodic] efc={efc}/{physCap} railFull={railFull} forceFullBeltAdvance={forceFullBeltAdvance} allHoldersEmpty={allHoldersEmpty} noMovesLeft={noMovesLeft} balloons={_remainingBalloons} hasMatch={hasMatch} stuck={stuck} isCritical={_isCritical} timer={_criticalTimer:F2}");
+                        Debug.Log($"[Fail-DEBUG/Periodic] efc={efc}/{physCap} railFull={railFull} forceFullBeltAdvance={forceFullBeltAdvance} allHoldersEmpty={allHoldersEmpty} noMovesLeft={noMovesLeft} balloons={_remainingBalloons} hasMatch={hasMatch} supplyMatch={supplyMatch} deployProgress={deployProgress} stuck={stuck} isCritical={_isCritical} timer={_criticalTimer:F2} gateDwell={watchdogGateDwell:F1}");
                         if (!stuck && nearFull)
                         {
                             DumpAttackState("[Fail-DEBUG/Periodic] stuck=false 상세");
@@ -422,7 +507,7 @@ namespace BalloonFlow
         }
 
         /// <summary>디버그 로그 활성 토글 — Inspector 에서 ON 가능. 기본 OFF (성능 영향 회피).</summary>
-        [SerializeField] private bool _debugLogFail = false;
+        [SerializeField] private bool _debugLogFail = true;
 
         /// <summary>
         /// 현재 공격 가능성 상태를 콘솔에 덤프. 외부 디버그 버튼/단축키에서도 호출 가능.
@@ -472,10 +557,39 @@ namespace BalloonFlow
                 holderStr = alive.Count == 0 ? "(empty)" : string.Join(" ", alive);
             }
 
+            // ROLLBACK_SUPPLY_DUMP_20260707: '실제 판정 입력' 표기 — 위의 outermost/matched 는 4방향 전체
+            //   집합과 레일-단독 교집합(참고용)이라, supplyMatch 가 왜 true/false 인지 이 덤프로 판별이
+            //   불가능했다(2026-07-07 Level 62 로그: matched=[8] 인데 10s 무발사 → 어느 항이 생존시켰는지
+            //   레일-side 필터/앞줄 공급/deployProgress 구분 불가). 판정과 동일한 소스에서 직접 출력.
+            string sideStr = "n/a", supplyStr = "n/a", verdictStr = "n/a";
+            if (BalloonController.HasInstance && RailManager.HasInstance)
+            {
+                var side = GetRailSideOutermostBalloonColors();
+                sideStr = side.Count == 0 ? "(empty)" : string.Join(",", side);
+            }
+            if (HolderManager.HasInstance)
+            {
+                var supply = new HashSet<int>(); // 디버그 전용 — 판정 버퍼(_reusableSupplyColors)와 분리
+                HolderManager.Instance.CollectSupplyColors(supply);
+                supplyStr = supply.Count == 0 ? "(empty)" : string.Join(",", supply);
+            }
+            {
+                bool sm = HasReachableSupplyMatchCached;
+                float lastPlace = RailManager.HasInstance ? RailManager.Instance.LastPlacementUnscaledTime : 0f;
+                float placeAgo = lastPlace > 0f ? Time.unscaledTime - lastPlace : -1f;
+                float lastFire = DartManager.HasInstance ? DartManager.Instance.LastFireUnscaledTime : 0f;
+                float fireAgo = lastFire > 0f ? Time.unscaledTime - lastFire : -1f;
+                verdictStr = $"supplyMatch={sm} lastPlaceAgo={placeAgo:F1}s lastFireAgo={fireAgo:F1}s " +
+                             $"gateDwell={_watchdogGateOpenAccum:F1}s dlHolder={(RailManager.HasInstance ? RailManager.Instance.DeadlockHolderId : -1)}";
+            }
+
             Debug.Log($"{tag} state={_currentState} balloons={_remainingBalloons} occ={occStr}\n" +
                       $"  rail colors=[{railStr}]\n" +
-                      $"  outermost colors=[{outerStr}]\n" +
-                      $"  → matched=[{matchStr}]\n" +
+                      $"  outermost colors(4방향 전체·참고)=[{outerStr}]\n" +
+                      $"  → rail-only matched(참고)=[{matchStr}]\n" +
+                      $"  [판정] railSide outermost=[{sideStr}]\n" +
+                      $"  [판정] queue supply(커밋+앞줄)=[{supplyStr}]\n" +
+                      $"  [판정] {verdictStr}\n" +
                       $"  holders=[{holderStr}]");
         }
 
@@ -516,6 +630,7 @@ namespace BalloonFlow
             _failConfirmed = false;
             _postContinueGraceUntil = 0f;
             _awaitingPostContinuePlayerAction = false;
+            _boardEngagedThisLevel = false; // ROLLBACK_SUPPLY_FAIL_ENGAGE_GATE_20260707: 신선 스테이지 활동 게이트 리셋
 
             PublishBoardStateChanged();
         }
@@ -618,8 +733,9 @@ namespace BalloonFlow
             _awaitingPostContinuePlayerAction = false;
             _postContinueGraceUntil = 0f;
             _lastDrainUnscaledTime = Time.unscaledTime; // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: 레벨 시작 시 리셋
-            _wasWatchdogGateOpen = false;               // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: 게이트 재무장
-            _watchdogGateOpenSince = float.PositiveInfinity;
+            _watchdogGateOpenAccum = 0f;                // ROLLBACK_WATCHDOG_GATE_DWELL_20260707 rev2: 레벨 로드 시 리셋
+            _watchdogGateClosedSince = float.NaN;
+            _forceAdvanceInactiveSince = float.NaN;     // ROLLBACK_SUPPLY_MATCH_FAIL_20260707
             // ROLLBACK_GAUGE_RESET_ON_LEVEL_LOAD_20260706: Retry(in-place) 시 위급(빨간) 게이지·타일 danger 가
             //   잔상으로 남는 문제 — InitializeBoard(477) 는 _currentGaugeStage 만 Safe 로 되돌리고 시각 리셋
             //   이벤트를 발행하지 않아(OnGaugeStageChanged 는 '변화 시'에만 발행) HUD/타일이 이전 판 표시를
@@ -645,7 +761,10 @@ namespace BalloonFlow
         {
             _lastDrainUnscaledTime  = Time.unscaledTime;
             _freezeLastActivityTime = Time.unscaledTime;
-            _wasWatchdogGateOpen    = false; // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: 서스펜드 시계 점프분 dwell 재측정
+            // ROLLBACK_WATCHDOG_GATE_DWELL_20260707 rev2: 서스펜드 복귀 시 누적 리셋(시계 점프 방어).
+            //   (누적식은 evalDelta 기반이라 suspend 중 자체 증가는 없지만, closedSince 의 unscaled 점프 오판 방지.)
+            _watchdogGateOpenAccum  = 0f;
+            _watchdogGateClosedSince = float.NaN;
         }
 
         private void HandleHolderTapped(OnHolderTapped evt)
@@ -657,6 +776,7 @@ namespace BalloonFlow
         private void HandleBalloonPopped(OnBalloonPopped evt)
         {
             _outermostDirty = true;
+            _boardEngagedThisLevel = true; // ROLLBACK_SUPPLY_FAIL_ENGAGE_GATE_20260707: pop = 보드 시작됨(활동 게이트 래치)
             // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: pop = 배수 진행 → 무진전 타이머 리셋.
             _lastDrainUnscaledTime = Time.unscaledTime;
             if (BalloonController.HasInstance)
@@ -739,7 +859,15 @@ namespace BalloonFlow
             // fail on the same frame the belt entered recovery, before rail darts had an interval to
             // advance/fire. Keep the optimized 0.1s Update throttle as the single fail evaluator.
             if (!RailManager.Instance.IsForceFullBeltAdvanceActive()) return;
-            EnterFailRecheckWindow("[Fail-DEBUG] Deadlock entered -> recheck window");
+
+            // ROLLBACK_SUPPLY_MATCH_FAIL_20260707 (히스테리시스): 데드락 무진행 exit→재진입 사이클마다
+            //   recheck 윈도우가 _criticalTimer 를 0 으로 되돌리면 below-full stuck grace 가 영영 안 참.
+            //   '연속 비활성 ≥ RESET_SECONDS 후의 첫 진입'만 진짜 회복 윈도우로 인정해 리셋. 사이클 중
+            //   재진입은 무시 — critical 진입/유지는 Update 의 stuck 평가가 담당. 롤백: if 가드 제거.
+            bool quietBeforeEntry = float.IsNaN(_forceAdvanceInactiveSince)
+                || Time.unscaledTime - _forceAdvanceInactiveSince >= WATCHDOG_GATE_CLOSE_RESET_SECONDS;
+            if (quietBeforeEntry)
+                EnterFailRecheckWindow("[Fail-DEBUG] Deadlock entered -> recheck window");
         }
 
         private GaugeStage EvaluateGaugeStage(float occupancy)
@@ -798,20 +926,17 @@ namespace BalloonFlow
 
         private float GetRequiredFailDelay(bool forceFullBeltAdvance)
         {
-            float requiredDelay = EffectiveFailGraceDelay;
-            if (!forceFullBeltAdvance || !RailManager.HasInstance)
-                return requiredDelay;
-
-            float beltSpeed = RailManager.Instance.GetBeltDistancePerSecond();
-            if (beltSpeed <= 0.001f)
-                return Mathf.Max(requiredDelay, FORCE_ADVANCE_RECHECK_MIN_DURATION);
-
-            float requiredTravel = Mathf.Max(
-                GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f,
-                RailManager.Instance.DartClusterAttackGap);
-            float travelDelay = requiredTravel / beltSpeed;
-            travelDelay = Mathf.Clamp(travelDelay, FORCE_ADVANCE_RECHECK_MIN_DURATION, FORCE_ADVANCE_RECHECK_MAX_DURATION);
-            return Mathf.Max(requiredDelay, travelDelay);
+            // ROLLBACK_SUPPLY_FAIL_FAST_GRACE_20260707: force 회전 연장 폐지 + grace 를 명세(1.5s)로 캡.
+            //   ① 연장 폐지 근거: stuck 이 SUPPLY_MATCH 규칙(색 '집합' 교집합)이 된 뒤로는 벨트 회전이
+            //      판정을 바꿀 수 없다 — 회전은 다트 '위치'만 바꾸고 색 집합은 불변. 회전 중 발사/pop 이
+            //      나면 supplyMatch 가 true 로 뒤집혀 recovery 가 즉시 해제하므로 연장은 순수 대기 손실.
+            //      (기존 travelDelay 1.0~2.0s 는 위치 기반 옛 모델의 "회전으로 매칭 노출" 가설용이었음.)
+            //   ② 캡 근거: Inspector failGraceDelay 의 과거 확장 튜닝(1.5→5→3s)은 옛 신호가 부정확해
+            //      회복 시간을 벌던 것 — supply 신호는 확정적이라 명세 1.5s 초과분은 대기 손실.
+            //      Inspector 로 '줄이는' 튜닝은 그대로 허용(Min).
+            //   롤백: 아래 1줄을 기존 본문(EffectiveFailGraceDelay + force 시 travelDelay clamp[1,2] Max)으로 환원.
+            _ = forceFullBeltAdvance; // 시그니처 유지용 (롤백 편의)
+            return Mathf.Min(EffectiveFailGraceDelay, FAIL_GRACE_CAP_SECONDS);
         }
 
         private void EvaluateClearCondition()
@@ -894,11 +1019,64 @@ namespace BalloonFlow
             }
         }
 
+        // ROLLBACK_DEADLOCK_ENTRY_SIGNALS_20260707: '도달 가능 공급 매칭' 신호의 공용 노출 (프레임 캐시).
+        //   소비처 ① Update 의 상태 실패 판정(supplyMatch) ② HolderVisualManager.TryEnterDeadlockIfNeeded 의
+        //   진입 게이트 — 필패(매칭 없음) 보드는 데드락 회전이 무의미하므로 진입을 건너뛰고 실패가 결론.
+        //   placement 실패마다 조회되므로 HasOutermostMatchCached 와 동일한 frameCount 캐시로 프레임당 1회 계산.
+        private int _supplyMatchCacheFrame = -1;
+        private bool _cachedSupplyMatch;
+
+        /// <summary>공급(레일 다트 ∪ 빈슬롯>0 이면 큐 공급) ∩ 공격가능 외곽색 ≠ ∅ 인지 — 프레임 캐시.
+        /// false = 지금 상태에서 어떤 발사도 영영 불가능(필패 후보). SUPPLY_MATCH_FAIL 규칙과 동일 정의.</summary>
+        public bool HasReachableSupplyMatchCached
+        {
+            get
+            {
+                if (_supplyMatchCacheFrame != Time.frameCount)
+                {
+                    _cachedSupplyMatch = ComputeReachableSupplyMatch();
+                    _supplyMatchCacheFrame = Time.frameCount;
+                }
+                return _cachedSupplyMatch;
+            }
+        }
+
+        private bool ComputeReachableSupplyMatch()
+        {
+            if (HasOutermostMatchCached) return true;
+            if (!RailManager.HasInstance || !HolderManager.HasInstance) return false;
+            int physCap = RailManager.Instance.PhysicalCapacity;
+            int efc = RailManager.Instance.EffectiveOccupiedCount;
+            // 빈 슬롯 = 0 이면 큐는 못 올라오므로 레일 매칭(false)이 그대로 결론.
+            if (physCap <= 0 || efc >= physCap) return false;
+            return QueueSupplyMatchesOutermost();
+        }
+
+        /// <summary>ROLLBACK_SUPPLY_MATCH_FAIL_20260707: 큐 공급(배포중/대기 커밋 + 탭 가능 잔여 홀더 +
+        /// 스포너 미래분, frozen/hidden/locked 제외) 색이 공격 가능 외곽색과 교집합 있는지.
+        /// 빈 슬롯 > 0 이고 레일 매칭(hasMatch)이 없을 때만 호출됨 (ComputeReachableSupplyMatch 참조).</summary>
+        private bool QueueSupplyMatchesOutermost()
+        {
+            HashSet<int> outermost = GetRailSideOutermostBalloonColors();
+            if (outermost.Count == 0) return false;
+
+            _reusableSupplyColors.Clear();
+            HolderManager.Instance.CollectSupplyColors(_reusableSupplyColors);
+            foreach (int c in _reusableSupplyColors)
+            {
+                if (outermost.Contains(c))
+                    return true;
+            }
+            return false;
+        }
+
         /// <summary>
         /// 공격 가능 여부 검사 — rail dart 색상 ∩ outermost ≠ ∅.
         /// 사용자 spec: "최외각에 공격가능한 풍선이 없으면 게임 종료" →
         /// rail dart 가 즉시 발사 가능한 매칭만 검사. holder magazine 색상은 user가 누르기
         /// 전엔 발사 못 하므로 매칭 검사에 포함하지 않음.
+        /// (2026-07-07 supply 규칙 도입 후: 이 함수는 '레일 위' 매칭 전용으로 유지 — 벨트 회전 판단
+        ///  (RailManager)과 fail 의 1차 검사에 공용. 큐 공급 매칭은 QueueSupplyMatchesOutermost 가 담당.)
         /// </summary>
         private bool HasOutermostMatch()
         {
@@ -1339,7 +1517,8 @@ namespace BalloonFlow
             _awaitingPostContinuePlayerAction = true;
             _postContinueGraceUntil = Time.unscaledTime + POST_CONTINUE_GRACE_DURATION;
             _lastDrainUnscaledTime = Time.unscaledTime; // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: 이어하기 직후 즉시 발동 방지
-            _wasWatchdogGateOpen = false;               // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: 이어하기 후 dwell 재측정
+            _watchdogGateOpenAccum = 0f;                // ROLLBACK_WATCHDOG_GATE_DWELL_20260707 rev2: 이어하기 후 누적 리셋
+            _watchdogGateClosedSince = float.NaN;
 
             if (evt.removedColor >= 0 && evt.dartsRemoved > 0)
             {

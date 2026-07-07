@@ -351,6 +351,12 @@ namespace BalloonFlow
 
             SetItemDisplay(itemSprite, amount, goldCost);
             OpenUI();
+            // ROLLBACK_BUYITEM_TITLE_AFTER_ENABLE_20260707:
+            // 타이틀 TMP(_txtTitle) 에 UIText(_key) 컴포넌트가 붙어 OnEnable(=OpenUI 의 SetActive(true)) 마다
+            // 프리팹 키('Unlock')로 텍스트를 덮는다. SetTitle 을 OpenUI '앞'에서만 하면, 팝업이 CloseUI 로 비활성
+            // 됐다가 재오픈되는 경로(예: 골드패널→상점→복귀)에서 OnEnable 이 SetTitle 을 덮어 제목이 아이템명(Hand)
+            // 대신 'Unlock' 으로 보인다. OpenUI 는 동기(SetActive→OnEnable) 이므로 그 '직후' 다시 세팅해 아이템명이 최종으로 남게 한다.
+            if (_frame != null) _frame.SetTitle(title);
         }
 
         /// <summary>Paid buy popup. Keeps the popup open when the confirm callback returns false.</summary>
@@ -417,6 +423,8 @@ namespace BalloonFlow
 
             if (_imgItem != null && itemSprite != null) _imgItem.sprite = itemSprite;
             OpenUI();
+            // ROLLBACK_BUYITEM_TITLE_AFTER_ENABLE_20260707: OpenUI(OnEnable→UIText 프리팹키 덮어씀) 직후 타이틀 재적용.
+            if (_frame != null) _frame.SetTitle(title);
         }
 
         /// <summary>boosterType에 맞는 아이콘 스프라이트 반환.</summary>

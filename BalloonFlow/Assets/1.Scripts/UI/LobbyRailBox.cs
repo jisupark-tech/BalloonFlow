@@ -204,9 +204,16 @@ namespace BalloonFlow
 
         private Sprite GetBoxSprite(DifficultyPurpose difficulty)
         {
-            return difficulty == DifficultyPurpose.SuperHard
-                ? (GetRedBoxSprite() ?? _originalBoxSprite)
-                : _originalBoxSprite;
+            // ROLLBACK_LOBBY_ACTIVE_HARD_PURPLE_BOX_20260707:
+            // Active rail boxes must use the same difficulty box color as inactive ones.
+            // Previous behavior only swapped SuperHard to RedBox, so an active Hard level
+            // such as 125 showed the prefab's blue box on first lobby entry.
+            return difficulty switch
+            {
+                DifficultyPurpose.SuperHard => GetRedBoxSprite() ?? _originalBoxSprite,
+                DifficultyPurpose.Hard      => GetPurpleBoxSprite() ?? _originalBoxSprite,
+                _                           => _originalBoxSprite
+            };
         }
 
         private Sprite GetDimBoxSprite(DifficultyPurpose difficulty, bool isLocked)

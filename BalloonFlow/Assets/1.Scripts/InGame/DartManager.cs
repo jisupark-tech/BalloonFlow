@@ -113,6 +113,22 @@ namespace BalloonFlow
             return atRamp + maxMult * (t - DART_FLIGHT_RAMP_TIME);
         }
 
+        // ROLLBACK_DART_LAUNCH_RECOIL_20260707: 발사 반동 prefix 적용 (스폰 시 1회, ConfigureNeedleTipImpactTiming 이후 호출).
+        //   InBack ease 방식은 총 비행시간이 고정이라 전진 구간이 압축(고속)돼 원래 속도감이 사라짐(사용자 확인 2026-07-07).
+        //   대신 반동 시간을 duration/impactTime 에 '가산' — 반동(제자리서 뒤로 sin 왕복)이 끝난 뒤
+        //   원래 가속→등속 프로파일을 온전히 재생한다. 다트별 지연 = recoilTime(기본 0.12s)만큼 명중이 늦어짐.
+        //   OFF(또는 0) 면 recoilTime=0 → 기존 타이밍/이동 완전 동일. 롤백: 이 메서드 + 호출 2곳 + recoilTime 필드 제거.
+        private static void ApplyLaunchRecoilPrefix(DartProjectile proj)
+        {
+            float recoil = GameManager.HasInstance && GameManager.Instance.Board.dartLaunchRecoil
+                ? Mathf.Max(0f, GameManager.Instance.Board.dartLaunchRecoilTime)
+                : 0f;
+            proj.recoilTime = recoil; // 풀 재사용 stale 방지 — OFF 여도 항상 재설정
+            if (recoil <= 0f) return;
+            proj.duration   += recoil;
+            proj.impactTime += recoil;
+        }
+
         /// <summary>DartRampDistanceUnits 역함수 — 누적 이동량 q 도달 시간(duration 산출용).</summary>
         private static float DartRampTimeForUnits(float q, float startMult)
         {
@@ -189,6 +205,11 @@ namespace BalloonFlow
             public Vector3 punchPeakScale;
             public float punchDuration;
             public float lerpStrength;       // Punch 종료 후 비행 보간 강도(0~1) — 풍선 사이즈 도달 제한용.
+
+            // ROLLBACK_DART_LAUNCH_RECOIL_20260707: 발사 반동 prefix(초). 스폰 시 duration/impactTime 에
+            // 가산돼 있어 전진 구간은 원래 가속→등속 프로파일 그대로 재생됨(압축 없음).
+            // 풀 재사용 객체 — 모든 생성 지점에서 ApplyLaunchRecoilPrefix 로 반드시 재설정할 것.
+            public float recoilTime;
         }
 
         private struct DartFireCandidate
@@ -1166,6 +1187,7 @@ namespace BalloonFlow
             proj.impactTime = ft;
             ConfigureLaunchScale(proj, launchStartScale, balloonScale);
             ConfigureNeedleTipImpactTiming(proj, dartObj, from, to, balloonScale);
+            ApplyLaunchRecoilPrefix(proj); // ROLLBACK_DART_LAUNCH_RECOIL_20260707
 
             _activeProjectiles.Add(proj);
 
@@ -2695,6 +2717,7 @@ namespace BalloonFlow
                 proj.impactTime = ft;
                 ConfigureLaunchScale(proj, launchStartScale, balloonScale);
                 ConfigureNeedleTipImpactTiming(proj, dartObj, launchPos, travelTarget, balloonScale);
+                ApplyLaunchRecoilPrefix(proj); // ROLLBACK_DART_LAUNCH_RECOIL_20260707
                 _activeProjectiles.Add(proj);
 
                 // [ROLLBACK_DART_FX_TRAIL] 발사 시에도 FXDartTrail 비활성 유지 (요청: 도중 활성화 금지, 외곽 fire path).
@@ -3690,13 +3713,43 @@ namespace BalloonFlow
                     // ROLLBACK_DART_FLIGHT_VELOCITY_RAMP_20260608: 아래 ramp 블록 → moveT = Clamp01(proj.elapsed/proj.duration) 로 복원.
                     float startMultRT = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightSpeedMultiplier : DEFAULT_DART_FLIGHT_SPEED_MULTIPLIER;
                     if (!IsFinite(startMultRT) || startMultRT <= 0.001f) startMultRT = DEFAULT_DART_FLIGHT_SPEED_MULTIPLIER;
-                    float rampDenom = DartRampDistanceUnits(proj.duration, startMultRT);
-                    float moveT = rampDenom > 0.0001f
-                        ? Mathf.Clamp01(DartRampDistanceUnits(proj.elapsed, startMultRT) / rampDenom)
-                        : Mathf.Clamp01(proj.elapsed / proj.duration);
+                    // ROLLBACK_DART_LAUNCH_RECOIL_20260707: 반동 prefix 를 제외한 '전진 타임라인'으로 프로파일 재생.
+                    //   스폰 시 duration/impactTime 에 recoilTime 이 가산돼 있으므로, 여기서 빼고 계산하면
+                    //   전진 구간은 반동이 없을 때와 정확히 같은 속도 프로파일(압축 없음 — InBack 방식의 문제 해소).
+                    //   recoilTime=0(토글 OFF) 이면 기존 식과 완전 동일.
+                    float fwdElapsed  = proj.elapsed - proj.recoilTime;
+                    float fwdDuration = Mathf.Max(0.0001f, proj.duration - proj.recoilTime);
+                    float rampDenom = DartRampDistanceUnits(fwdDuration, startMultRT);
+                    float moveT = fwdElapsed <= 0f ? 0f
+                        : (rampDenom > 0.0001f
+                            ? Mathf.Clamp01(DartRampDistanceUnits(fwdElapsed, startMultRT) / rampDenom)
+                            : Mathf.Clamp01(fwdElapsed / fwdDuration));
                     Ease lerpEase = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightEase : Ease.Linear;
                     float easedT = DOVirtual.EasedValue(0f, 1f, moveT, lerpEase);
-                    proj.gameObject.transform.position = Vector3.Lerp(proj.startPosition, proj.targetPosition, easedT);
+                    // ROLLBACK_DART_RECOIL_LERP_UNCLAMPED_20260707: Lerp → LerpUnclamped.
+                    //   InBack 계열 ease 실험 시 easedT<0 구간이 클램프로 소실되지 않게 함.
+                    //   Linear 등 기존 ease 는 easedT 가 [0,1] 을 벗어나지 않아 동작 완전 동일.
+                    Vector3 flightPos = Vector3.LerpUnclamped(proj.startPosition, proj.targetPosition, easedT);
+
+                    // ROLLBACK_DART_LAUNCH_RECOIL_20260707: 반동 구간(0..recoilTime) — 전진은 0 으로 고정된 채
+                    //   발사 위치에서 비행 방향 반대로 sin(0→1→0) 딥만 재생 → 끝나는 순간 원래 궤적 시작점으로
+                    //   자연 복귀 후 원래 프로파일 재생. 깊이 = dartLaunchRecoilDepth × cellSpacing (라이브 튜닝).
+                    if (proj.recoilTime > 0.001f && proj.elapsed < proj.recoilTime)
+                    {
+                        Vector3 flightDir = proj.targetPosition - proj.startPosition;
+                        flightDir.y = 0f;
+                        if (flightDir.sqrMagnitude > 0.0001f)
+                        {
+                            float rt = proj.elapsed / proj.recoilTime;             // 0..1
+                            float shape = Mathf.Sin(rt * Mathf.PI);                // 0→1→0 부드러운 왕복
+                            float cell = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
+                            if (!IsFinite(cell) || cell <= 0.01f) cell = 0.55f;
+                            float depth = (GameManager.HasInstance ? GameManager.Instance.Board.dartLaunchRecoilDepth : 0.5f) * cell;
+                            flightPos -= flightDir.normalized * (depth * shape);
+                        }
+                    }
+
+                    proj.gameObject.transform.position = flightPos;
 
                     Vector3 scale;
                     if (proj.punchDuration > 0f && proj.elapsed < proj.punchDuration)
@@ -3946,6 +3999,15 @@ namespace BalloonFlow
             bool hitAccepted = result != null && (result.success || result.hitAccepted);
             if (!hitAccepted)
             {
+                // ROLLBACK_FLEXTUBE_WASTE_DIAG_20260707: 임시 진단 — 낭비된(소모됐으나 효과 없는) 다트를 '플래그 무관'
+                //   무조건 로그. LogAttackIssue 는 Conditional 로 컴파일 제거돼 안 보이므로 별도 경고로 노출한다.
+                //   142레벨에서 [DartWaste] gimmick=FlexTube color=보라색 이 뜨는지 확인용. 검증 후 이 블록 제거.
+                {
+                    var __wd = BalloonController.HasInstance ? BalloonController.Instance.GetBalloon(balloonId) : null;
+                    Debug.LogWarning($"[DartWaste] balloonId={balloonId} color={color} " +
+                                     $"gimmick={(__wd != null ? __wd.gimmickType : "gone")} " +
+                                     $"reason={(result != null ? result.reason : "nullResult")}");
+                }
                 LogAttackIssue(
                     "DartHitFailed",
                     $"balloonId={balloonId} color={color} reason={(result != null ? result.reason : "nullResult")}");

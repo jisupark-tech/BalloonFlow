@@ -56,8 +56,12 @@ namespace BalloonFlow
         private const string FROZEN_LAYER_HIT_PARTICLE_NAME = "HitParticle";
         private const string FROZEN_LAYER_BREAK_PARTICLE_NAME = "BreakParticle";
         private const string FROZEN_LAYER_IDLE_PARTICLE_NAME = "ParticleFrozenIdle";
-        private const float IRON_WALL_CLEAR_IMMINENT_SINK_Y = 1.25f;
-        private const float IRON_WALL_CLEAR_IMMINENT_SINK_DURATION = 0.35f;
+        // ROLLBACK_IRONWALL_CLEAR_IMMINENT_SCALE_REMOVE_20260707:
+        // Clear-imminent Iron Wall removal uses Y-scale only: 1 -> 1.1 -> 0.
+        // Previous behavior moved position Y downward like sinking.
+        private const float IRON_WALL_CLEAR_IMMINENT_SCALE_UP_MULT = 1.1f;
+        private const float IRON_WALL_CLEAR_IMMINENT_SCALE_UP_DURATION = 0.10f;
+        private const float IRON_WALL_CLEAR_IMMINENT_SCALE_DOWN_DURATION = 0.25f;
         private const float QA_BALLOON_WAVE_SCALE_MULT = 2f;
         private const float QA_BALLOON_WAVE_UP_DURATION = 0.10f;
         private const float QA_BALLOON_WAVE_DOWN_DURATION = 0.14f;
@@ -1720,7 +1724,7 @@ namespace BalloonFlow
                 data.isPopped = true;
                 _balloons[id] = data;
                 RemovePositionIndexForBalloon(data);
-                SinkAndReturnIronWallVisual(id);
+                ScaleAndReturnIronWallVisual(id);
             }
 
             DirectionalTargeting.InvalidateCache();
@@ -1729,26 +1733,36 @@ namespace BalloonFlow
             RefreshOutermostRendererState();
         }
 
-        private void SinkAndReturnIronWallVisual(int balloonId)
+        private void ScaleAndReturnIronWallVisual(int balloonId)
         {
             if (!_balloonObjects.TryGetValue(balloonId, out GameObject obj) || obj == null)
                 return;
 
             Transform t = obj.transform;
             t.DOKill();
-            Vector3 target = t.position - Vector3.up * IRON_WALL_CLEAR_IMMINENT_SINK_Y;
-            t.DOMove(target, IRON_WALL_CLEAR_IMMINENT_SINK_DURATION)
-                .SetEase(Ease.InQuad)
-                .OnComplete(() =>
-                {
-                    if (_balloonObjects.TryGetValue(balloonId, out GameObject current) && current == obj)
-                        _balloonObjects.Remove(balloonId);
 
-                    if (obj != null && ObjectPoolManager.HasInstance)
-                        ObjectPoolManager.Instance.Return(IronBoxPoolKey, obj);
-                    else if (obj != null)
-                        obj.SetActive(false);
-                });
+            Vector3 baseScale = t.localScale;
+            Vector3 peakScale = new Vector3(
+                baseScale.x,
+                baseScale.y * IRON_WALL_CLEAR_IMMINENT_SCALE_UP_MULT,
+                baseScale.z);
+
+            Sequence seq = DOTween.Sequence();
+            seq.Append(t.DOScale(peakScale, IRON_WALL_CLEAR_IMMINENT_SCALE_UP_DURATION).SetEase(Ease.OutQuad));
+            seq.Append(t.DOScaleY(0f, IRON_WALL_CLEAR_IMMINENT_SCALE_DOWN_DURATION).SetEase(Ease.InQuad));
+            seq.OnComplete(() =>
+            {
+                if (_balloonObjects.TryGetValue(balloonId, out GameObject current) && current == obj)
+                    _balloonObjects.Remove(balloonId);
+
+                if (obj != null)
+                    obj.transform.localScale = baseScale;
+
+                if (obj != null && ObjectPoolManager.HasInstance)
+                    ObjectPoolManager.Instance.Return(IronBoxPoolKey, obj);
+                else if (obj != null)
+                    obj.SetActive(false);
+            });
         }
 
         /// <summary>
@@ -3441,6 +3455,9 @@ namespace BalloonFlow
                 // Store sampled segment centers separately from MeshFilter matrices. Prefab child pivots can
                 // shift matrix column 3, but gameplay shrink/end-cap movement must follow the tube centerline.
                 List<Vector3> ftMeshCenters = ftMeshMode ? new List<Vector3>(bodyCount + 1) : null;
+                // ROLLBACK_FLEXTUBE_ENDCAP_FOLLOW_ROT_20260707: 세그먼트의 해석적 회전(segRot)을 저장 → 런타임 EndCap 이
+                //   이산 센터차분 LookRotation(직선구간 흔들림) 대신 이 값을 그대로 채택해 세그먼트를 정확히 따라가게 한다.
+                List<Quaternion> ftMeshRotations = ftMeshMode ? new List<Quaternion>(bodyCount + 1) : null;
                 Mesh ftHoseMesh = null; Material ftSegMat = null;
                 GameObject ftTmpRib = null; Transform ftTmpHose = null;
                 if (ftMeshMode)
@@ -3485,6 +3502,7 @@ namespace BalloonFlow
                         ftMeshMatrices.Add(ftTmpHose.localToWorldMatrix);
                         ftMeshCellIds.Add(seqIds[nearestSeq]);
                         ftMeshCenters.Add(segPos);
+                        ftMeshRotations.Add(segRot); // ROLLBACK_FLEXTUBE_ENDCAP_FOLLOW_ROT_20260707
                         continue;
                     }
                     var segPart = SpawnFlexPart(segmentPrefab, segPos, segRot,
@@ -3780,9 +3798,10 @@ namespace BalloonFlow
                     ftMeshMatrices.Reverse();
                     ftMeshCellIds.Reverse();
                     ftMeshCenters.Reverse();
+                    ftMeshRotations.Reverse(); // ROLLBACK_FLEXTUBE_ENDCAP_FOLLOW_ROT_20260707: 센터/행렬과 동일 순서 유지
                     // 모든 셀 → 메시 GO 등록 (소비처 dangling 방지; FlexTube 셀의 _balloonObjects 는 대부분 vestigial).
                     for (int ai = 0; ai < ids.Count; ai++) _balloonObjects[ids[ai]] = meshGO;
-                    tube.InitializeMesh(flexTubeHp, color, groupId, parts, mf, ftHoseMesh, ftMeshMatrices, ftMeshCellIds, ftMeshCenters);
+                    tube.InitializeMesh(flexTubeHp, color, groupId, parts, mf, ftHoseMesh, ftMeshMatrices, ftMeshCellIds, ftMeshCenters, ftMeshRotations);
                     // 진단: 실제 렌더 월드 위치(mr.bounds) + 행렬/셀 기준점 비교로 원인 확정.
                     var dbgMesh = mf.sharedMesh;
                     var m0c = ftMeshMatrices[0].GetColumn(3); // 첫 인스턴스 월드 좌표

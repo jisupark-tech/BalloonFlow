@@ -152,6 +152,7 @@ namespace BalloonFlow
         private Image _imageGoldIcon;
         private Color _defaultPriceOutlineColor;
         private bool _priceOutlineColorCaptured;
+        private static readonly Color Coin1000PriceOutlineColor = new Color32(0x6A, 0x4A, 0x30, 0xFF);
 
         // ShopListItem.prefab 이 바이너리 직렬화라 TxtTitleOutline Material Preset 을 텍스트 편집으로 교체 불가.
         // Resources.Load 캐시 — PopupWinningStreak.EnsureStreakSprites 의 _fontMatGreenOutline/_fontMatPurpleOutline 패턴 미러.
@@ -539,13 +540,13 @@ namespace BalloonFlow
 
         private void ApplyCoin1000PriceOutlineColor(ShopProductData data)
         {
-            // ROLLBACK_BLACK_1000_COIN_PRICE_OUTLINE_20260619:
+            // ROLLBACK_BROWN_1000_COIN_PRICE_OUTLINE_20260707:
             // ShopListGold.prefab is shared by every coin product. Keep the prefab TMP
             // material/outline width intact and recolor only the 1000 coin outline text.
             CapturePriceOutlineColorIfNeeded();
 
             bool isCoin1000 = data != null && data.productId == CoinProductId1000;
-            UIOutlineStyle.ApplyColor(_txtPriceOutline, isCoin1000 ? Color.black : _defaultPriceOutlineColor);
+            UIOutlineStyle.ApplyColor(_txtPriceOutline, isCoin1000 ? Coin1000PriceOutlineColor : _defaultPriceOutlineColor);
         }
 
         private static string FormatHours(int seconds)

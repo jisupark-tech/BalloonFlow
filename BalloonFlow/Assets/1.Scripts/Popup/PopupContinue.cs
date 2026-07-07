@@ -121,7 +121,7 @@ namespace BalloonFlow
                 _frame.SetHorizRedText("Give Up");
                 _frame.ShowExitButton(true);
             }
-            ApplyContinueTitleBlackOutline();
+            ApplyContinueTitleDifficultyOutline(diff);
             ApplyContinuePanelDifficulty(diff);
         }
 
@@ -339,11 +339,12 @@ namespace BalloonFlow
             return null;
         }
 
-        private void ApplyContinueTitleBlackOutline()
+        private void ApplyContinueTitleDifficultyOutline(DifficultyPurpose difficulty)
         {
-            // ROLLBACK_BLACK_TITLE_OUTLINE_20260619:
+            // ROLLBACK_CONTINUE_TITLE_DIFFICULTY_OUTLINE_20260707:
             // PopupContinue title is not serialized on this component in the current prefab, so
             // resolve by hierarchy name and recolor only the paired outline text at popup enable/show.
+            // Previous behavior forced black; design now matches difficulty colors.
             if (!_continueTitleSearched)
             {
                 _continueTitleSearched = true;
@@ -355,7 +356,7 @@ namespace BalloonFlow
                 if (titleOutline != null) _txtContinueTitleOutline = titleOutline.GetComponent<TMP_Text>();
             }
 
-            UIOutlineStyle.ApplyColor(_txtContinueTitleOutline, Color.black);
+            UIOutlineStyle.ApplyDifficulty(_txtContinueTitleOutline, difficulty);
         }
 
         public void Show()
@@ -374,7 +375,7 @@ namespace BalloonFlow
                 _frame.SetHorizRedText("Give Up");
                 _frame.ShowExitButton(true);
             }
-            ApplyContinueTitleBlackOutline();
+            ApplyContinueTitleDifficultyOutline(diff);
             ApplyContinuePanelDifficulty(diff);
             UpdateCostDisplay();
             ResetToLoseLife();
