@@ -356,6 +356,10 @@ namespace BalloonFlow
         //   _reservedTargets(=타게팅 제외/발사 금지) 에 넣어 추가 발사를 막는다.
         //   → HP 만큼만 동시 발사(2×2 병렬 유지), 마지막 1HP 에선 1발만 → 오버슈트 차단.
         private readonly Dictionary<int, int> _inflightDartsByTarget = new Dictionary<int, int>();
+        // ROLLBACK_FLEXTUBE_GROUP_INFLIGHT_CAP_20260707: FlexTube 그룹 단위 동시 비행 다트 수(groupId → count).
+        //   FlexTube 데미지는 그룹 공유 HP + 엔드캡측 제거라, 셀 단위 캡(1)만으론 그룹이 죽은 뒤 도착하는 다트가
+        //   'no live target cell' 로 헛발됨(색 부족). 그룹 in-flight ≤ 그룹 남은 HP 로 캡해 오버커밋을 막는다.
+        private readonly Dictionary<int, int> _inflightDartsByFlexGroup = new Dictionary<int, int>();
         // ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630:
         //   Target Box(Pinata_Box)는 한 balloonId 에 색이 다른 egg 들이 섞여 있어 위 balloonId 단위 캡으로는
         //   색을 구분 못 한다. 박스는 (balloonId,color) 별로 동시 비행 다트를 추적하고, 그 색의 잔여 egg HP
@@ -591,6 +595,7 @@ namespace BalloonFlow
             _reservedTargets.Clear();
             _inflightDartsByTarget.Clear();
             _inflightBoxColorDarts.Clear();
+            _inflightDartsByFlexGroup.Clear(); // ROLLBACK_FLEXTUBE_GROUP_INFLIGHT_CAP_20260707
             InvalidateDartScanLines();
             ClearConsumedLineLocks();
             _firedHoldersThisTick.Clear();
@@ -1074,6 +1079,8 @@ namespace BalloonFlow
                 // ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630: 박스는 _reservedTargets 에 없으므로(SyncTargetExclusion
                 //   제외) 색별 캡을 여기서 직접 검사. 캡 도달 색이면 스킵(다른 색·캡 미만은 통과 → 멀티셀 병렬 유지).
                 if (IsBoxColorCapped(targetId, slot.dartColor)) continue;
+                // ROLLBACK_FLEXTUBE_GROUP_INFLIGHT_CAP_20260707: 그룹 비행수 == 남은 HP 면 그 FlexTube 셀 발사 금지(오버커밋 헛발 차단).
+                if (IsFlexGroupCapped(targetId)) continue;
 
                 if (!BalloonController.HasInstance) return;
                 // ROLLBACK_CONTOUR_TARGET_DIAG:
@@ -3218,6 +3225,13 @@ namespace BalloonFlow
         {
             _inflightDartsByTarget.TryGetValue(balloonId, out int c);
             _inflightDartsByTarget[balloonId] = c + 1;
+            // ROLLBACK_FLEXTUBE_GROUP_INFLIGHT_CAP_20260707: FlexTube 셀이면 그룹 비행수 +1.
+            int __fgidReg = GetFlexGroupId(balloonId);
+            if (__fgidReg >= 0)
+            {
+                _inflightDartsByFlexGroup.TryGetValue(__fgidReg, out int gc);
+                _inflightDartsByFlexGroup[__fgidReg] = gc + 1;
+            }
             if (color >= 0 && TargetIsPinataBox(balloonId))
             {
                 long k = BoxColorKey(balloonId, color);
@@ -3237,6 +3251,8 @@ namespace BalloonFlow
             {
                 if (c <= 1) _inflightDartsByTarget.Remove(balloonId);
                 else _inflightDartsByTarget[balloonId] = c - 1;
+                // ROLLBACK_FLEXTUBE_GROUP_INFLIGHT_CAP_20260707: 셀 차감과 짝으로 그룹 비행수 -1.
+                DecrementFlexGroup(GetFlexGroupId(balloonId), 1);
             }
             if (color >= 0)
             {
@@ -3254,9 +3270,44 @@ namespace BalloonFlow
         //   ROLLBACK_PINATABOX_OVERSHOOT_COLOR_CAP_20260630: 박스가 통째로 사라지므로 그 balloonId 의 모든 색 엔트리 제거.
         private void ClearInflightDart(int balloonId)
         {
+            // ROLLBACK_FLEXTUBE_GROUP_INFLIGHT_CAP_20260707: 셀 전체 카운트를 그룹에서도 차감(누수 방지).
+            if (_inflightDartsByTarget.TryGetValue(balloonId, out int __cc) && __cc > 0)
+                DecrementFlexGroup(GetFlexGroupId(balloonId), __cc);
             _inflightDartsByTarget.Remove(balloonId);
             _reservedTargets.Remove(balloonId);
             RemoveAllBoxColorEntries(balloonId);
+        }
+
+        // ROLLBACK_FLEXTUBE_GROUP_INFLIGHT_CAP_20260707: FlexTube 그룹 오버커밋 캡 헬퍼들.
+        private int GetFlexGroupId(int balloonId)
+        {
+            if (!BalloonController.HasInstance) return -1;
+            var d = BalloonController.Instance.GetBalloon(balloonId);
+            if (d == null || d.gimmickType != BalloonController.GimmickFlexTube) return -1;
+            return d.flexTubeGroupId;
+        }
+
+        private void DecrementFlexGroup(int groupId, int amount)
+        {
+            if (groupId < 0 || amount <= 0) return;
+            if (_inflightDartsByFlexGroup.TryGetValue(groupId, out int gc))
+            {
+                int n = gc - amount;
+                if (n <= 0) _inflightDartsByFlexGroup.Remove(groupId);
+                else _inflightDartsByFlexGroup[groupId] = n;
+            }
+        }
+
+        /// <summary>FlexTube 그룹 동시 비행 다트가 그룹 남은 HP 에 도달 → 더 쏘면 죽은 그룹에 헛발. 도달 시 그 그룹 셀 발사 금지.</summary>
+        public bool IsFlexGroupCapped(int balloonId)
+        {
+            int gid = GetFlexGroupId(balloonId);
+            if (gid < 0) return false;
+            _inflightDartsByFlexGroup.TryGetValue(gid, out int inflight);
+            int remaining = BalloonController.HasInstance
+                ? BalloonController.Instance.GetFlexTubeGroupRemainingHits(gid)
+                : 0;
+            return inflight >= remaining;
         }
 
         private void RemoveAllBoxColorEntries(int balloonId)
@@ -3302,6 +3353,9 @@ namespace BalloonFlow
                 if (boxData != null && !boxData.isPopped && boxData.gimmickType == BalloonController.GimmickPinataBox)
                     return IsBoxColorCapped(candidate.targetId, candidate.color);
             }
+
+            // ROLLBACK_FLEXTUBE_GROUP_INFLIGHT_CAP_20260707: FlexTube 그룹 캡 도달 = 발사 금지(죽은 그룹 헛발 차단).
+            if (IsFlexGroupCapped(candidate.targetId)) return true;
 
             if (!_reservedTargets.Contains(candidate.targetId))
                 return false;

@@ -259,6 +259,12 @@ namespace BalloonFlow
                         && DartManager.Instance.IsBoxColorCapped(edge.balloonId, color);
             }
 
+            // ROLLBACK_FLEXTUBE_GROUP_INFLIGHT_CAP_20260707: FlexTube 는 그룹 공유 HP → 셀 단위 excludeIds 로는 그룹
+            //   오버커밋을 못 막는다. 그룹 캡 도달(그룹 동시 비행 다트 >= 그룹 남은 HP)이면 타게팅에서 제외(헛발 차단).
+            //   (IsFlexGroupCapped 은 FlexTube 셀이 아니면 false 반환 → 다른 타겟엔 영향 없음.)
+            if (DartManager.HasInstance && DartManager.Instance.IsFlexGroupCapped(edge.balloonId))
+                return true;
+
             if (excludeIds == null || !excludeIds.Contains(edge.balloonId))
                 return false;
 

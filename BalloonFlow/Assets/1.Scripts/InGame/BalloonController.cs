@@ -2074,6 +2074,23 @@ namespace BalloonFlow
             return false;
         }
 
+        // ROLLBACK_FLEXTUBE_GROUP_INFLIGHT_CAP_20260707: 그룹이 앞으로 소화 가능한 hit 수(= 남은 HP; destroying/없음이면 0).
+        //   DartManager 가 한 FlexTube 그룹으로 동시에 비행하는 다트 수를 이 값으로 캡해, 그룹이 죽은 뒤 도착하는
+        //   '헛발(무시된 다트)' 오버커밋을 막는다(색 다트 부족 방지). Pinata 의 남은 HP 캡을 그룹 단위로 이식.
+        public int GetFlexTubeGroupRemainingHits(int groupId)
+        {
+            if (groupId < 0) return 0;
+            for (int i = 0; i < _flexTubeRoots.Count; i++)
+            {
+                var root = _flexTubeRoots[i];
+                if (root == null) continue;
+                var ft = root.GetComponent<FlexTube>();
+                if (ft != null && ft.GroupId == groupId)
+                    return ft.IsDestroying ? 0 : Mathf.Max(0, ft.RemainingHp);
+            }
+            return 0;
+        }
+
         public void MarkFlexTubeCellInactive(int balloonId)
         {
             if (!_balloons.TryGetValue(balloonId, out BalloonData data)) return;
