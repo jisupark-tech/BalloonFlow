@@ -1081,6 +1081,8 @@ namespace BalloonFlow
                 if (IsBoxColorCapped(targetId, slot.dartColor)) continue;
                 // ROLLBACK_FLEXTUBE_GROUP_INFLIGHT_CAP_20260707: 그룹 비행수 == 남은 HP 면 그 FlexTube 셀 발사 금지(오버커밋 헛발 차단).
                 if (IsFlexGroupCapped(targetId)) continue;
+                // ROLLBACK_BARRICADE_INFLIGHT_CAP_20260707: 바리케이드 비행수 >= 잔여 세그먼트 → 발사 금지(파괴 경계 헛발 차단).
+                if (IsBarricadeCapped(targetId)) continue;
 
                 if (!BalloonController.HasInstance) return;
                 // ROLLBACK_CONTOUR_TARGET_DIAG:
@@ -3310,6 +3312,25 @@ namespace BalloonFlow
             return inflight >= remaining;
         }
 
+        /// <summary>ROLLBACK_BARRICADE_INFLIGHT_CAP_20260707: 바리케이드 동시 비행 캡 — 비행수 >= 잔여 세그먼트면 발사 금지.
+        /// 배경: length>1 바리케이드는 AllowsConcurrentCellTargetReservation=true 로 글로벌 1발 예약이 우회되어
+        /// 여러 스캔 라인에서 병렬 발사되는데, Pinata(남은 HP)/Box(색별)/FlexTube(그룹)와 달리 '잔여 HP 대비'
+        /// 상한이 없어 파괴 경계(잔여 1~2)에서 초과 다트가 죽은 바리케이드에 도착 → AlreadyPopped 헛발 →
+        /// 잉여 0 밸런스 레벨(예: 175)에서 그 색 풍선 1개 잔존. 분모 = GimmickProcessor 잔여 pin 세그먼트
+        /// (Pin-Barricade merge: 세그먼트 1개 = 유효 타격 1회). 캡 미만이면 기존 멀티라인 병렬 그대로.
+        /// 롤백: 이 메서드 + 게이트 3곳(슬롯발사/IsTargetReservedForCandidate/DirectionalTargeting.IsEdgeTargetReserved)의 호출 제거.</summary>
+        public bool IsBarricadeCapped(int balloonId)
+        {
+            if (!BalloonController.HasInstance || !GimmickProcessor.HasInstance) return false;
+            var data = BalloonController.Instance.GetBalloon(balloonId);
+            if (data == null || data.isPopped || data.gimmickType != BalloonController.GimmickBarricade)
+                return false;
+            int remaining = GimmickProcessor.Instance.GetPinRemainingSegments(balloonId);
+            if (remaining <= 0) return true; // 이미 소진 — 어떤 추가 발사도 헛발
+            _inflightDartsByTarget.TryGetValue(balloonId, out int inflight);
+            return inflight >= remaining;
+        }
+
         private void RemoveAllBoxColorEntries(int balloonId)
         {
             if (_inflightBoxColorDarts.Count == 0) return;
@@ -3356,6 +3377,10 @@ namespace BalloonFlow
 
             // ROLLBACK_FLEXTUBE_GROUP_INFLIGHT_CAP_20260707: FlexTube 그룹 캡 도달 = 발사 금지(죽은 그룹 헛발 차단).
             if (IsFlexGroupCapped(candidate.targetId)) return true;
+
+            // ROLLBACK_BARRICADE_INFLIGHT_CAP_20260707: 바리케이드 캡 도달 = 발사 금지 — 멀티라인 병렬 우회
+            //   (아래 AllowsConcurrentCellTargetReservation)가 예약을 무시하므로 여기서 직접 차단해야 한다.
+            if (IsBarricadeCapped(candidate.targetId)) return true;
 
             if (!_reservedTargets.Contains(candidate.targetId))
                 return false;

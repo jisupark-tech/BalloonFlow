@@ -47,7 +47,7 @@ namespace BalloonFlow
             new Color(174/255f, 178/255f, 194/255f),  // 22: Silver — [2026-06-12] #D9D9E7→#AEB2C2, 흰색(6)과 구분 강화
             new Color(111/255f, 114/255f, 127/255f),  // 23: Gray
             new Color(252/255f,  56/255f, 165/255f),  // 24: Magenta
-            new Color(253/255f, 180/255f,  88/255f),  // 25: Amber
+            new Color(253/255f, 194/255f, 122/255f),  // 25: Amber (#FDC27A)
             new Color(137/255f,  10/255f,   8/255f),  // 26: Crimson
             new Color(111/255f, 175/255f, 184/255f),  // 27: Sage — #6FAFB8 (.py 레퍼런스 정합, 2026-06-24)
         };

@@ -265,6 +265,12 @@ namespace BalloonFlow
             if (DartManager.HasInstance && DartManager.Instance.IsFlexGroupCapped(edge.balloonId))
                 return true;
 
+            // ROLLBACK_BARRICADE_INFLIGHT_CAP_20260707: 바리케이드 비행수 >= 잔여 세그먼트면 타게팅 제외.
+            //   length>1 바리케이드는 아래 멀티셀 병렬 우회(AllowsConcurrentCellTargetReservation)로 excludeIds 가
+            //   무시되므로 여기서 직접 캡을 건다. (바리케이드가 아니면 false 반환 → 다른 타겟엔 영향 없음.)
+            if (DartManager.HasInstance && DartManager.Instance.IsBarricadeCapped(edge.balloonId))
+                return true;
+
             if (excludeIds == null || !excludeIds.Contains(edge.balloonId))
                 return false;
 
