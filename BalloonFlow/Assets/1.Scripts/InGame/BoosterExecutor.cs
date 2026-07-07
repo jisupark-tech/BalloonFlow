@@ -181,6 +181,21 @@ namespace BalloonFlow
         public void OnHolderSelected(int holderId)
         {
             if (!_awaitingHolderSelection) return;
+
+            // ROLLBACK_HAND_SPAWNER_INSIDE_IGNORE_20260707: Spawner(Pipe/Glass Pipe) 앵커·미방출 payload 는
+            //   Hand 선택 대상이 아님. 기존엔 ForceSelectHolder 가 거부하기 '전에' 하이라이트 해제/카메라 복귀/
+            //   차감→환불이 먼저 실행돼 'Hand 가 아무 효과 없이 종료'로 보였다. 탭을 무시하고 선택 대기를 유지해
+            //   플레이어가 다른 홀더를 고를 수 있게 한다. 롤백: 이 블록 제거.
+            if (HolderManager.HasInstance)
+            {
+                HolderData tapped = HolderManager.Instance.FindHolderPublic(holderId);
+                if (tapped != null
+                    && (tapped.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                     || tapped.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O
+                     || HolderManager.Instance.IsHeldBehindPipe(tapped)))
+                    return;
+            }
+
             _awaitingHolderSelection = false;
 
             // ROLLBACK_BOOSTER_RESUME_GUARANTEE_20260622: 중간에 예외가 나도 ResumeRail 보장 — IsPausedByBooster 가
@@ -1013,6 +1028,20 @@ namespace BalloonFlow
                         removed += reduce;
                     }
                 }
+            }
+
+            // ROLLBACK_ZAP_SPAWNER_COLOR_PURGE_20260707: Spawner(Pipe/Glass Pipe) 의 '미래 소환분'에서도 제거 색 퍼지.
+            //   기존엔 스포너 미래 소환(spawnerColors/미방출 payload)이 안 지워져 사라진 색 홀더가 계속 소환됐다.
+            //   spawnerKeepDarts = 기믹 preserve 가 레일+큐 잔여 다트(totalDarts - removed)로 못 채워진 부족분 —
+            //   그만큼 앞순서 소환을 남겨 언위너블 방지. 퍼지된 소환분도 '사라진 홀더'로 Frozen 해동 크레딧에
+            //   합산(아래 20260706 원칙 동일). 롤백: 이 블록 + HolderManager.PurgeSpawnerColor 제거.
+            if (HolderManager.HasInstance)
+            {
+                int spawnerKeepDarts = Mathf.Max(0, preserve - (totalDarts - removed));
+                int purgedFutureHolders = HolderManager.Instance.PurgeSpawnerColor(color, spawnerKeepDarts);
+                removedHolderCount += purgedFutureHolders;
+                if (purgedFutureHolders > 0)
+                    Debug.Log($"[Zap-Dart] color={color} 스포너 미래 소환분 퍼지 {purgedFutureHolders}개 (keepDarts={spawnerKeepDarts})");
             }
 
             // ROLLBACK_ZAP_FROZEN_HOLDER_THAW_20260706: Zap 으로 사라진 홀더도 '배포 완료'와 동일하게 Frozen(홀더 Ice)

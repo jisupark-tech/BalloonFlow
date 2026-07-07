@@ -1049,6 +1049,97 @@ namespace BalloonFlow
             return false;
         }
 
+        /// <summary>ROLLBACK_ZAP_SPAWNER_COLOR_PURGE_20260707: Zap(Color Remove) 이 제거한 색을
+        /// Spawner(Pipe/Glass Pipe) 의 '미래 소환분'에서도 제거. 기존엔 IsRemovableColorHolder 가
+        /// 스포너 앵커·미방출 payload 를 제외해, 사라진 색 홀더가 계속 소환되고 spawnerHP 잔존으로
+        /// 클리어 판정(AreAllHoldersEmpty)도 막혔다.
+        /// keepDarts: 기믹 preserve 부족분만큼 '앞순서' 그 색 소환을 남길 다트 수 (언위너블 방지 클램프).
+        /// 반환: 퍼지된 미래 홀더 수 — 호출측이 Frozen 해동 크레딧(DecrementFrozenHoldersHP)에 합산.
+        /// 롤백: 이 메서드 + BoosterExecutor.RemoveRailAndQueueColor 의 호출 블록 제거.</summary>
+        public int PurgeSpawnerColor(int color, int keepDarts)
+        {
+            int purgedCount = 0;
+            var payloadBuffer = new List<HolderData>(8);
+
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                HolderData spawner = _holders[i];
+                if (spawner.isConsumed) continue;
+                if (spawner.queueGimmick != GimmickManager.GIMMICK_SPAWNER_T &&
+                    spawner.queueGimmick != GimmickManager.GIMMICK_SPAWNER_O) continue;
+                if (spawner.spawnerHP <= 0) continue;
+
+                bool spawnerChanged = false;
+
+                if (HasAuthoredPipePayload(spawner))
+                {
+                    // Authored payload 파이프: 미방출 payload 중 해당 색을 pipeOrder(방출) 순으로 소비 처리.
+                    payloadBuffer.Clear();
+                    for (int j = 0; j < _holders.Count; j++)
+                    {
+                        HolderData candidate = _holders[j];
+                        if (candidate.isConsumed || !candidate.isPipePayload || candidate.isPipePayloadReleased) continue;
+                        if (candidate.pipeOwnerId != spawner.holderId) continue;
+                        payloadBuffer.Add(candidate);
+                    }
+                    payloadBuffer.Sort((a, b) => a.pipeOrder.CompareTo(b.pipeOrder));
+
+                    for (int n = 0; n < payloadBuffer.Count; n++)
+                    {
+                        HolderData payload = payloadBuffer[n];
+                        if (payload.color != color) continue;
+                        int mag = Mathf.Max(1, payload.magazineCount);
+                        if (keepDarts > 0) { keepDarts -= mag; continue; } // preserve 부족분 공급용으로 유지
+                        payload.isConsumed = true;
+                        payload.magazineCount = 0;
+                        spawner.spawnerHP = Mathf.Max(0, spawner.spawnerHP - 1);
+                        if (HolderVisualManager.HasInstance)
+                            HolderVisualManager.Instance.RemoveHolderVisual(payload.holderId);
+                        purgedCount++;
+                        spawnerChanged = true;
+                    }
+                }
+                else
+                {
+                    // Generated 스포너: 남은 소환 시퀀스(spawnerColors 잔여 + 초과분 fallback 자체색)를
+                    // 평탄화한 뒤 해당 색을 걸러내고 배열/커서/HP 를 재작성.
+                    int remaining = spawner.spawnerHP;
+                    var kept = new List<int>(remaining);
+                    for (int n = 0; n < remaining; n++)
+                    {
+                        int idx = spawner.spawnerSpawnedCount + n;
+                        int c = (spawner.spawnerColors != null && idx >= 0 && idx < spawner.spawnerColors.Length)
+                            ? spawner.spawnerColors[idx]
+                            : spawner.color;
+                        if (c == color)
+                        {
+                            int mag = Mathf.Max(1, spawner.spawnerMag);
+                            if (keepDarts > 0) { keepDarts -= mag; kept.Add(c); } // preserve 부족분 공급용으로 유지
+                            else purgedCount++;
+                        }
+                        else kept.Add(c);
+                    }
+                    if (kept.Count != remaining)
+                    {
+                        spawner.spawnerColors = kept.ToArray();
+                        spawner.spawnerSpawnedCount = 0;
+                        spawner.spawnerHP = kept.Count;
+                        spawnerChanged = true;
+                    }
+                }
+
+                if (spawnerChanged)
+                {
+                    if (spawner.spawnerHP <= 0)
+                        spawner.isConsumed = true;
+                    // HP 텍스트 갱신. 0 이면 HandleFrozenHPChanged 의 스포너 소멸 연출(파티클+풀 반환) 경로로 정리.
+                    PublishSpawnerRemaining(spawner);
+                }
+            }
+
+            return purgedCount;
+        }
+
         private void PublishSpawnerRemaining(HolderData spawner)
         {
             if (spawner == null) return;

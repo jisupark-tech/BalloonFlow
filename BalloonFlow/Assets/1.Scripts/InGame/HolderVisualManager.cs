@@ -667,6 +667,10 @@ namespace BalloonFlow
                 for (int i = 0; i < limit; i++)
                 {
                     HolderVisual visual = bucket[i];
+                    // ROLLBACK_HAND_SPAWNER_INSIDE_NO_HIGHLIGHT_20260707: Spawner 앵커·미방출 payload 는
+                    //   Hand 로 선택 불가(BoosterExecutor.OnHolderSelected 가드와 동일 조건) →
+                    //   BoxStroke + 흰 테두리(SetActiveFrontRow) 클릭 유도 연출에서 제외. 롤백: 이 if 제거.
+                    if (IsHandSelectionBlockedVisual(visual)) continue;
                     visual.identifier.SetControlBoxStrokeActive(true);
                     // ROLLBACK: 본 if 블록 내 SetActiveFrontRow + magazineText.color 라인 제거하면
                     //   ControlBoxStroke 만 토글되는 이전 동작 복원.
@@ -689,6 +693,16 @@ namespace BalloonFlow
                     // row<MAGAZINE_TEXT_VISIBLE_ROWS(5) 게이트는 이미 limit==HAND_HIGHLIGHT_TOP_ROWS(5)와 일치 → 토글 불필요.
                 }
             }
+        }
+
+        /// <summary>ROLLBACK_HAND_SPAWNER_INSIDE_NO_HIGHLIGHT_20260707: Hand 하이라이트 제외 판정 —
+        /// 스포너 앵커(isSpawnerVisual) 또는 파이프가 막고 있는 미방출 payload/뒤 홀더(IsHeldBehindPipe).</summary>
+        private static bool IsHandSelectionBlockedVisual(HolderVisual visual)
+        {
+            if (visual.isSpawnerVisual) return true;
+            if (!HolderManager.HasInstance) return false;
+            HolderData data = HolderManager.Instance.FindHolderPublic(visual.holderId);
+            return data != null && HolderManager.Instance.IsHeldBehindPipe(data);
         }
 
         /// <summary>
@@ -2420,7 +2434,14 @@ namespace BalloonFlow
         // ROLLBACK_DEADLOCK_NO_PROGRESS_EXIT_20260706: 데드락 트리거 무진행 감시 (점유수 스냅샷 + 시각).
         private int _dlWatchOccupied = -1;
         private float _dlWatchSince;
-        private const float DEADLOCK_NO_PROGRESS_EXIT_SECONDS = 3f;
+        private const float DEADLOCK_NO_PROGRESS_EXIT_SECONDS = 1.5f; // ROLLBACK_DEADLOCK_NOPROGRESS_15S_20260707: 3f→1.5f (무진행 데드락 더 빨리 해제·재시도). 되돌리려면 3f.
+
+        // ROLLBACK_DEPLOY_STALL_DEADLOCK_TRIGGER_20260707: near-full '바로 아래'(임계-α)에서 배포 홀더가 못쏘는
+        //   다트에 막혀 occ 가 N초간 전혀 안 변할 때, near-full 이 아니어도 데드락 버퍼를 걸어 잼을 깨는 stall 감시.
+        private int _deployStallOccupied = -1;
+        private float _deployStallSince;
+        private const float DEPLOY_STALL_DEADLOCK_SECONDS = 1.5f; // ROLLBACK_DEADLOCK_NOPROGRESS_15S_20260707: 3f→1.5f. occ 완전 무변화 지속 임계(정상 플레이는 매 프레임 변함). 되돌리려면 3f.
+        private const int DEPLOY_STALL_NEARFULL_SLACK = 8;        // near-full 임계 - 이 값 이상일 때만(저점유 일시정지 제외)
         private const int DEADLOCK_FALLBACK_REMAINING_SLOTS = 1; // 199/200 같은 마지막 1칸 deadlock 보정 전용.
         // ROLLBACK_DART_RUNTIME_LOG_THROTTLE:
         // Successful deploy logs allocate/format large strings during dense deployment and cause
@@ -2456,7 +2477,7 @@ namespace BalloonFlow
                     }
                     if (Time.time - _dlWatchSince < DEADLOCK_NO_PROGRESS_EXIT_SECONDS) return;
 
-                    LogDeployDebug($"[Deadlock] no-progress {DEADLOCK_NO_PROGRESS_EXIT_SECONDS:F0}s (occ={occNow}) " +
+                    LogDeployDebug($"[Deadlock] no-progress {DEADLOCK_NO_PROGRESS_EXIT_SECONDS:F1}s (occ={occNow}) " +
                                    $"→ force ExitDeadlockMode (trigger holder {rail.DeadlockHolderId})");
                     rail.ExitDeadlockMode();
                     _dlWatchOccupied = -1;
@@ -2494,7 +2515,28 @@ namespace BalloonFlow
                           $"deadlockHolder={rail.DeadlockHolderId}");
             }
 
-            if (!nearFull) return;
+            // ROLLBACK_DEPLOY_STALL_DEADLOCK_TRIGGER_20260707:
+            // 엔드게임 등에서 occ 가 near-full 임계 '바로 아래'(예: 155/160, 임계 157)에 멈춰, 배포 홀더가 '못 쏘는'
+            // body 다트에 막힌 채 fire/deploy 가 완전히 멈추는 케이스. near-full 이 아니라 데드락 버퍼가 안 걸려 영구 정지한다.
+            // occ 가 N초간 '전혀' 안 변하고(=완전 정지) 임계 근처이며 배포 홀더가 있으면, near-full 이 아니어도 데드락
+            // 버퍼를 걸어 leftmost 를 buffer 배포시켜 잼을 깬다(검증된 holder 4 케이스와 동일 경로 → shouldFullAdvance).
+            // 안전: 정상 플레이는 occ 가 매 프레임 변하므로 절대 발동 안 함(3초 완전 무변화 = 확실한 데드락).
+            //   임계 근처(occ >= 임계 - slack)로 한정해 저점유 일시정지엔 발동 안 함. 롤백: 이 블록 + 필드/const 제거.
+            int occForStall = rail.OccupiedCount;
+            if (occForStall != _deployStallOccupied)
+            {
+                _deployStallOccupied = occForStall;
+                _deployStallSince = Time.time;
+            }
+            bool deployStalled = !nearFull
+                                 && isDeployingCount >= 1
+                                 && occForStall >= nearFullThreshold - DEPLOY_STALL_NEARFULL_SLACK
+                                 && (Time.time - _deployStallSince) >= DEPLOY_STALL_DEADLOCK_SECONDS;
+            if (deployStalled)
+                LogDeployDebug($"[Deadlock] deploy-stall {DEPLOY_STALL_DEADLOCK_SECONDS:F1}s (occ={occForStall}/{rail.SlotCount}, " +
+                               $"nearFullThreshold={nearFullThreshold}, below near-full) → engage buffer to unblock stalled deploy.");
+
+            if (!nearFull && !deployStalled) return;
             // 단일 holder 도 rail full 상태에서 ABABAB / cluster 정렬 깨짐 발생 → 자기 자신이 deadlock holder 되어 buffer 사용.
             if (activeCount < 1) return;
 
@@ -2522,6 +2564,8 @@ namespace BalloonFlow
             // ROLLBACK_DEADLOCK_NO_PROGRESS_EXIT_20260706: 진입 시점 점유수로 무진행 감시 초기화.
             _dlWatchOccupied = rail.OccupiedCount;
             _dlWatchSince = Time.time;
+            // ROLLBACK_DEPLOY_STALL_DEADLOCK_TRIGGER_20260707: 진입 후 stall 타이머 리셋(exit 직후 즉시 재진입 루프 방지).
+            _deployStallOccupied = -1;
         }
 
         /// <summary>

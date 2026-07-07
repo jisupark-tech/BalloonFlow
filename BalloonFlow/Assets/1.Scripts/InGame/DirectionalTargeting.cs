@@ -185,6 +185,15 @@ namespace BalloonFlow
         // ROLLBACK_CONTOUR_TARGET_DIAG:
         public static string LastFindTargetDiag { get; private set; } = string.Empty;
 
+        // ROLLBACK_DART_FRONT_BLOCKER_STALL_OVERRIDE_20260707:
+        // 평시 false. 한 holder head 가 '외곽 도달가능(GetReachableOutermostColors) 인데 발사 정지' 로 N초
+        // 지속되면(DartManager.RelievePerHolderStallTimeout) 그 head 처리 동안에만 true 로 켜진다. true 인 동안
+        // TryFindTarget 은 front-blocker veto(관통 방지) 를 1회 무시하고 근처 같은색 타겟을 채택 → 정면에 다른색
+        // 풍선이 막고 있어 아무도 못 치우는 영구 데드락을 '최후의 penetration 1발' 로 깬다. DartManager 가
+        // head 루프에서 per-holder set/reset 하고 발사 성공 시 소비(one-shot)하므로 정상 플레이엔 영향 없음.
+        // 롤백: 이 필드 + 아래 TryFindTarget blockedByFront 의 '!AllowFrontBlockerOverride &&' 제거.
+        public static bool AllowFrontBlockerOverride = false;
+
         public enum ScanDirection
         {
             Right,
@@ -414,7 +423,9 @@ namespace BalloonFlow
             // if (bestId < 0 && !_contourColors.Contains(color))
             //     bestId = FindInnerFallback(dartCell, scanDir, color, excludeIds);
 
-            bool blockedByFront = blockerId >= 0 && (bestId < 0 || blockerScore <= bestScore + 0.0001f);
+            // ROLLBACK_DART_FRONT_BLOCKER_STALL_OVERRIDE_20260707: override 활성(최후수단) 시 front-blocker veto 무시.
+            bool blockedByFront = !AllowFrontBlockerOverride
+                && blockerId >= 0 && (bestId < 0 || blockerScore <= bestScore + 0.0001f);
             if (bestId >= 0 && !blockedByFront)
             {
                 _recentLineUseFrame[GetRecentLineKey(scanDir, bestLine)] = Time.frameCount;

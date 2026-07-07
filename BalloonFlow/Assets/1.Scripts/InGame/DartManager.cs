@@ -489,6 +489,7 @@ namespace BalloonFlow
             _stallWatchLastPopSeen = _lastPopUnscaledTime;
             _holderStallSince.Clear();
             _deadHeadSince.Clear();
+            _frontBlockerOverrideHolders.Clear(); // ROLLBACK_DART_FRONT_BLOCKER_STALL_OVERRIDE_20260707
         }
 
         /// <summary>공격 스캔 주기 타이머 (dartFireInterval 기반)</summary>
@@ -1201,6 +1202,8 @@ namespace BalloonFlow
             if (!RailManager.HasInstance || !BalloonController.HasInstance) return;
 
             RailManager rail = RailManager.Instance;
+            // ROLLBACK_DART_FRONT_BLOCKER_STALL_OVERRIDE_20260707: 진입 시 원복(누수·조기 return 대비). head 루프에서 per-holder 재설정.
+            DirectionalTargeting.AllowFrontBlockerOverride = false;
 
 
             // 사용자 요구: scan tick 안 holder 별 1발 제한. 매 tick 시작 시 fired-set 초기화.
@@ -1262,6 +1265,10 @@ namespace BalloonFlow
                 int color = dart.dartColor;
                 int dartId = dart.dartId;
                 int holderId = dart.holderId;
+                // ROLLBACK_DART_FRONT_BLOCKER_STALL_OVERRIDE_20260707: 이 head 가 최후수단 override 대상이면
+                //   TryFindTarget 이 front-blocker veto 를 무시(정면 다른색 막힘 데드락 해소). 루프 끝에서 reset.
+                DirectionalTargeting.AllowFrontBlockerOverride =
+                    _frontBlockerOverrideHolders.Count > 0 && _frontBlockerOverrideHolders.Contains(holderId);
                 // ROLLBACK_DART_LINE_CACHE_INVALIDATION:
                 // The line-driven scan cache must belong to the current head dart, not only to the
                 // holder. Otherwise a new head on the same row/column, or an outer contour exposed
@@ -1801,6 +1808,8 @@ namespace BalloonFlow
                 break; // Head-only scan fires at most one dart per scan tick.
 #endif
             }
+            // ROLLBACK_DART_FRONT_BLOCKER_STALL_OVERRIDE_20260707: head 루프 종료 → override 정적 플래그 원복(누수 방지).
+            DirectionalTargeting.AllowFrontBlockerOverride = false;
 
             // ROLLBACK_DART_FIRE_ALL_READY_HEADS:
             // Firing only one candidate per scan still lets another holder's valid line pass by while
@@ -1842,6 +1851,9 @@ namespace BalloonFlow
                 if (FireDartCandidate(rail, candidate))
                 {
                     firedThisScan++;
+                    // ROLLBACK_DART_FRONT_BLOCKER_STALL_OVERRIDE_20260707: 발사 성공 → 이 holder override 소비(one-shot).
+                    //   여전히 정지면 relief 가 2초 뒤 재부여. 상시 penetration 금지.
+                    _frontBlockerOverrideHolders.Remove(candidate.holderId);
                     // ROLLBACK_DART_POST_FIRE_HEAD_RESCAN:
                     // Re-enabled for x2 cases. Straight rails can move ~0.5+ balloon line per normal
                     // 60fps frame, so gating this only to long frames still misses newly promoted
@@ -1968,6 +1980,12 @@ namespace BalloonFlow
         private readonly Dictionary<int, float> _holderStallSince = new Dictionary<int, float>(16);
         private const float PER_HOLDER_STALL_RELIEF_SECONDS = 2.0f;
 
+        // ROLLBACK_DART_FRONT_BLOCKER_STALL_OVERRIDE_20260707:
+        // reachable-but-no-fire 로 PER_HOLDER_STALL_RELIEF_SECONDS 정지한 holder 들. 다음 scan tick 에서
+        // 그 head 처리 동안 DirectionalTargeting.AllowFrontBlockerOverride 를 켜 front-blocker veto 를 1회 무시
+        // (정면 다른색 풍선에 막혀 근처 같은색 타겟을 못 쏘는 영구 데드락 해소). 발사 성공 시 소비(one-shot).
+        private readonly HashSet<int> _frontBlockerOverrideHolders = new HashSet<int>(8);
+
         // ROLLBACK_PERHOLDER_RELIEF_UNGATE_20260706: holder 의 자기 비행체 존재 여부 (per-holder in-flight 판정).
         private bool HasInflightProjectileForHolder(int holderId)
         {
@@ -1994,6 +2012,7 @@ namespace BalloonFlow
             if (!BoardStateManager.HasInstance || !BoardStateManager.Instance.HasOutermostMatchCached)
             {
                 _holderStallSince.Clear(); // fail 영역/매칭 없음 — 타이머 리셋(오발동 방지).
+                _frontBlockerOverrideHolders.Clear(); // ROLLBACK_DART_FRONT_BLOCKER_STALL_OVERRIDE_20260707: 쏠 대상 없음 → override 무효.
                 return;
             }
 
@@ -2025,8 +2044,12 @@ namespace BalloonFlow
                 ClearConsumedLineLockForHolder(holderId);
                 InvalidateDartScanLineForHolder(holderId);
                 _holderStallSince.Remove(holderId);
+                // ROLLBACK_DART_FRONT_BLOCKER_STALL_OVERRIDE_20260707: 락 해제로도 안 풀리는 잔짜 원인은 대개
+                //   front-blocker(정면 다른색 풍선)라 재스캔해도 같은 veto. 다음 tick 이 head 만 front-blocker 를
+                //   무시하고 근처 같은색 타겟 발사하도록 override 부여(발사 성공 시 소비). 관통 1발로 데드락 해소.
+                _frontBlockerOverrideHolders.Add(holderId);
                 LogAttackIssue("DartPerHolderStallRelief",
-                    $"holder={holderId} headColor={head.dartColor} — reachable-but-no-fire {PER_HOLDER_STALL_RELIEF_SECONDS:F1}s → holder lock clear + scanline invalidate");
+                    $"holder={holderId} headColor={head.dartColor} — reachable-but-no-fire {PER_HOLDER_STALL_RELIEF_SECONDS:F1}s → holder lock clear + scanline invalidate + front-blocker override armed");
             }
         }
 

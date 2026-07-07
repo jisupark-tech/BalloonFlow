@@ -4408,6 +4408,12 @@ namespace BalloonFlow
                 anchor.x + (width - 1) * cellSizeX * 0.5f,
                 obj.transform.position.y,
                 anchor.z + (height - 1) * cellSizeZ * 0.5f);
+            // ROLLBACK_GIMMICK_OFFSET_BAKE_20260707: 오프셋 bake — ApplySizedFieldVisualTransform 과 동일 패턴
+            //   (x/z 절대식 가산, y 는 prev→cur 리베이스로 재호출 누적 방지).
+            Vector3 boxOffset = GetGimmickVisualOffsetBaked(obj, data.gimmickType, out Vector3 boxPrevOffset);
+            center.x += boxOffset.x;
+            center.z += boxOffset.z;
+            center.y += boxOffset.y - boxPrevOffset.y;
             obj.transform.position = center;
             obj.transform.localScale = Vector3.one; // 알/틀 크기는 view 가 제어 (루트 scale=1 가정)
 
@@ -4447,6 +4453,12 @@ namespace BalloonFlow
                 adjustedAnchor.x + (width - 1) * cellSizeX * 0.5f,
                 obj.transform.position.y,
                 adjustedAnchor.z + (height - 1) * cellSizeZ * 0.5f);
+            // ROLLBACK_GIMMICK_OFFSET_BAKE_20260707: 오프셋 bake — x/z 는 절대식이라 그대로 더하고,
+            //   y 는 '현재 위치 기반'이라 이전 적용분(prev)을 빼고 현재값(cur)을 더해(리베이스) 재호출 누적 방지.
+            Vector3 sizedOffset = GetGimmickVisualOffsetBaked(obj, data.gimmickType, out Vector3 sizedPrevOffset);
+            visualCenter.x += sizedOffset.x;
+            visualCenter.z += sizedOffset.z;
+            visualCenter.y += sizedOffset.y - sizedPrevOffset.y;
             float visualScaleY = _balloonScale * scaleMult;
             if (data.gimmickType == GimmickPinata || data.gimmickType == GimmickWall)
             {
@@ -4524,10 +4536,15 @@ namespace BalloonFlow
             // ROLLBACK_BARRICADE_POSITION_RECENTER_20260702:
             // Disable visual-only Y/Z offset so the root/head sits on the authored grid footprint.
             float zNudge = cellSizeZ * BARRICADE_VISUAL_Z_OFFSET_CELLS;
+            // ROLLBACK_GIMMICK_OFFSET_BAKE_20260707: gimmickOffsetBarricade 를 절대식에 bake.
+            //   기존엔 에디터 Update 의 delta 로만 적용돼, 히트 재배치(이 절대 대입)가 오프셋 성분을 지우며
+            //   피격 순간 -offset 순간이동 + 이후 복원 불가(delta 는 '변경 시'만 발동). 릴리즈는 미적용이었음.
+            //   이 좌표는 전 성분 절대식이라 prevApplied 리베이스 불필요(y 포함 전체 bake).
+            Vector3 gimmickOffset = GetGimmickVisualOffsetBaked(obj, GimmickBarricade, out _);
             obj.transform.position = new Vector3(
-                adjustedAnchor.x + headCenterOffset.x + _barricadeVisualOffset.x,
-                BALLOON_FIXED_SPAWN_Y + _barricadeVisualOffset.y, // previous: _barricadeVisualY + offset
-                adjustedAnchor.z + headCenterOffset.z + _barricadeVisualOffset.z + zNudge);
+                adjustedAnchor.x + headCenterOffset.x + _barricadeVisualOffset.x + gimmickOffset.x,
+                BALLOON_FIXED_SPAWN_Y + _barricadeVisualOffset.y + gimmickOffset.y, // previous: _barricadeVisualY + offset
+                adjustedAnchor.z + headCenterOffset.z + _barricadeVisualOffset.z + zNudge + gimmickOffset.z);
 
             // GimmickIdentifier 에 Head/Body/Edge 가 할당됨(사용자 확인). 미할당 시 이름 폴백.
             GimmickIdentifier gid = obj.GetComponent<GimmickIdentifier>();
@@ -5370,9 +5387,42 @@ namespace BalloonFlow
             switch (gimmickType)
             {
                 case GimmickFlexTube: case GimmickBarricade: case GimmickPinata: case GimmickPinataBox: case GimmickWall:
+                    // ROLLBACK_GIMMICK_OFFSET_BAKE_20260707: 풀 재사용 시 같은 obj 가 중복 등록되면
+                    //   인스펙터 변경 delta 가 엔트리 수만큼 중복 적용됨 → 기존 엔트리 재사용.
+                    for (int i = 0; i < _gimmickVisuals.Count; i++)
+                    {
+                        if (_gimmickVisuals[i].obj == obj)
+                        {
+                            _gimmickVisuals[i].gimmickType = gimmickType;
+                            _gimmickVisuals[i].lastOffset = Vector3.zero;
+                            return;
+                        }
+                    }
                     _gimmickVisuals.Add(new GimmickVisualEntry { obj = obj, gimmickType = gimmickType, lastOffset = Vector3.zero });
                     break;
             }
+        }
+
+        // ROLLBACK_GIMMICK_OFFSET_BAKE_20260707: 배치 함수가 인스펙터 기믹 오프셋을 '절대식에 포함(bake)' 하도록
+        //   현재 오프셋을 반환하고 추적 엔트리의 lastOffset 을 동기화한다. 배경: 오프셋 적용이 에디터/dev 전용
+        //   Update 의 delta 방식뿐이라 ① 히트/재배치 경로의 절대 대입이 오프셋 성분을 지워 바리케이드가 피격
+        //   순간 -offset 만큼 순간이동(복원 불가), ② 릴리즈 빌드는 Update 자체가 없어 오프셋 미적용(에디터와
+        //   화면 불일치). 동기화 없이 식에만 더하면 다음 인스펙터 변경 때 delta 가 이중 적용되므로 반드시 함께
+        //   갱신한다. prevApplied = 동기화 전 lastOffset (y 처럼 '현재값 기반' 좌표의 리베이스용).
+        //   롤백: 이 메서드 + 3개 배치 함수의 bake 항 + RegisterGimmickVisual 중복 가드 제거.
+        private Vector3 GetGimmickVisualOffsetBaked(GameObject obj, string gimmickType, out Vector3 prevApplied)
+        {
+            prevApplied = Vector3.zero;
+            Vector3 cur = GetGimmickVisualOffset(gimmickType);
+            bool prevCaptured = false;
+            for (int i = 0; i < _gimmickVisuals.Count; i++)
+            {
+                var e = _gimmickVisuals[i];
+                if (e.obj != obj) continue;
+                if (!prevCaptured) { prevApplied = e.lastOffset; prevCaptured = true; }
+                e.lastOffset = cur;
+            }
+            return cur;
         }
 
         // 인스펙터 오프셋 변경분(delta)을 기믹 본체에 적용(Update 호출). null 항목 정리.

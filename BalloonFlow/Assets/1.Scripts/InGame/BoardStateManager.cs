@@ -69,6 +69,14 @@ namespace BalloonFlow
         // ROLLBACK_NO_FIRE_FAIL_WATCHDOG_20260622: 만석/강제회전인데 '레일 발사(배수)'가 이 시간 동안 0 이면 fail.
         //   no-drainage(pop 기준)가 다른 색 pop 에 starve 되는 H1 을 fire 기준으로 차단. 느린 belt 의 정상 발사간격보다 충분히 큼.
         private const float NO_FIRE_FAIL_SECONDS = 12f;
+        // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: 두 워치독(no-drainage/no-fire)의 '만석 게이트 체류 시간' 요구.
+        //   기존엔 '마지막 pop/발사 이후 경과'만 봐서, 만석이 되기 '전'에 쌓인 무-pop 시간이 그대로 인정 →
+        //   매칭 색 다트가 배포로 올라가는 중 레일이 (railFull||forceFullBeltAdvance) 에 닿는 순간 유예 0초로
+        //   즉시 fail 하던 버그. 게이트가 false→true 전이된 시각을 찍고, '게이트 열린 상태로 N초 지속' 을
+        //   AND 조건으로 추가해 원 의도(만석에서 N초 진짜 무진전)만 남긴다.
+        //   롤백: 이 2개 필드 + Update 의 gate 추적 블록 + 두 워치독의 watchdogGateDwell 조건 제거.
+        private float _watchdogGateOpenSince = float.PositiveInfinity;
+        private bool _wasWatchdogGateOpen;
 
         // ROLLBACK_RAIL_FREEZE_DIAG_20260622: hard-freeze(전면정지) 진단 워치독 — fail 이 아니라 '디버그 덤프'.
         //   재현 불가한 완전정지(다트·레일·배포 모두 멈춤)의 원인을 로그로 포착하기 위함. 동작은 바꾸지 않음(no recovery).
@@ -207,6 +215,7 @@ namespace BalloonFlow
                 _criticalTimer = 0f;
                 _stuckEvalTimer = 0f;
                 _wasForceFullBeltAdvanceActive = false;
+                _wasWatchdogGateOpen = false; // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: 재개 시 dwell 재측정
             }
 
             // Throttle — fail evaluation 매 frame 안 함.
@@ -267,6 +276,15 @@ namespace BalloonFlow
             }
             _wasForceFullBeltAdvanceActive = forceFullBeltAdvance;
 
+            // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: 게이트 false→true 전이 시각 기록 (필드 주석 참조).
+            bool watchdogGateOpen = railFull || forceFullBeltAdvance;
+            if (watchdogGateOpen && !_wasWatchdogGateOpen)
+                _watchdogGateOpenSince = Time.unscaledTime;
+            else if (!watchdogGateOpen)
+                _watchdogGateOpenSince = float.PositiveInfinity;
+            _wasWatchdogGateOpen = watchdogGateOpen;
+            float watchdogGateDwell = Time.unscaledTime - _watchdogGateOpenSince; // 게이트 닫힘 = -Infinity
+
             // ROLLBACK_RAIL_FREEZE_DIAG_20260622: 전면정지 진단 — 벨트오프셋·점유수 무변화 + pop 0 지속 시 1회 덤프.
             //   fail 평가(아래)보다 먼저 평가해 강제 fail 직전 상태를 포착. 동작 변경 없음.
             if (_debugLogFreeze && RailManager.HasInstance && _remainingBalloons > 0)
@@ -319,7 +337,9 @@ namespace BalloonFlow
             //   stuck(빠른 grace) 은 railFull-only 유지하므로 조기 오발동은 재발 안 함(10s 는 진짜 정지의 최후 fail).
             //   pop 한 번이면 _lastDrainUnscaledTime 리셋이라 정상/회복-진행 플레이는 오발동 X.
             //   롤백: `(railFull || forceFullBeltAdvance)` 를 `railFull` 로 환원.
+            // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: watchdogGateDwell 조건 추가 — '만석 상태로 N초' 를 함께 요구.
             if ((railFull || forceFullBeltAdvance) && _remainingBalloons > 0
+                && watchdogGateDwell >= NO_DRAINAGE_FAIL_SECONDS
                 && Time.unscaledTime - _lastDrainUnscaledTime >= NO_DRAINAGE_FAIL_SECONDS)
             {
                 if (_debugLogFail) DumpAttackState($"[Fail-DEBUG] no-drainage watchdog — 만석 {NO_DRAINAGE_FAIL_SECONDS}s 무배수 → 강제 RailOverflow fail");
@@ -335,7 +355,9 @@ namespace BalloonFlow
             //   레일 만석/강제회전 + 풍선 잔존 + NO_FIRE_FAIL_SECONDS 간 발사 0 = 레일이 못 빠지는 진짜 잼 → RailOverflow fail.
             //   발사가 한 번이라도 있으면(=레일 배수=진행) 리셋이라 정상/느린 진행 플레이엔 오발동 X. 다른 색 pop 엔 안 흔들림.
             //   롤백: 이 블록 삭제.
+            // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: watchdogGateDwell 조건 추가 — '만석 상태로 N초' 를 함께 요구.
             if ((railFull || forceFullBeltAdvance) && _remainingBalloons > 0
+                && watchdogGateDwell >= NO_FIRE_FAIL_SECONDS
                 && DartManager.HasInstance && DartManager.Instance.LastFireUnscaledTime > 0f
                 && Time.unscaledTime - DartManager.Instance.LastFireUnscaledTime >= NO_FIRE_FAIL_SECONDS)
             {
@@ -596,6 +618,8 @@ namespace BalloonFlow
             _awaitingPostContinuePlayerAction = false;
             _postContinueGraceUntil = 0f;
             _lastDrainUnscaledTime = Time.unscaledTime; // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: 레벨 시작 시 리셋
+            _wasWatchdogGateOpen = false;               // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: 게이트 재무장
+            _watchdogGateOpenSince = float.PositiveInfinity;
             // ROLLBACK_GAUGE_RESET_ON_LEVEL_LOAD_20260706: Retry(in-place) 시 위급(빨간) 게이지·타일 danger 가
             //   잔상으로 남는 문제 — InitializeBoard(477) 는 _currentGaugeStage 만 Safe 로 되돌리고 시각 리셋
             //   이벤트를 발행하지 않아(OnGaugeStageChanged 는 '변화 시'에만 발행) HUD/타일이 이전 판 표시를
@@ -621,6 +645,7 @@ namespace BalloonFlow
         {
             _lastDrainUnscaledTime  = Time.unscaledTime;
             _freezeLastActivityTime = Time.unscaledTime;
+            _wasWatchdogGateOpen    = false; // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: 서스펜드 시계 점프분 dwell 재측정
         }
 
         private void HandleHolderTapped(OnHolderTapped evt)
@@ -1314,6 +1339,7 @@ namespace BalloonFlow
             _awaitingPostContinuePlayerAction = true;
             _postContinueGraceUntil = Time.unscaledTime + POST_CONTINUE_GRACE_DURATION;
             _lastDrainUnscaledTime = Time.unscaledTime; // ROLLBACK_NO_DRAINAGE_FAIL_WATCHDOG_20260622: 이어하기 직후 즉시 발동 방지
+            _wasWatchdogGateOpen = false;               // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: 이어하기 후 dwell 재측정
 
             if (evt.removedColor >= 0 && evt.dartsRemoved > 0)
             {
