@@ -302,6 +302,14 @@ namespace BalloonFlow
             const int FAIL_BUFFER = 1; // efc 가 physCap-1 도달 시 fail 평가 진입
             bool railFull = RailManager.HasInstance && physCap > 0 && efc >= physCap - FAIL_BUFFER;
             bool forceFullBeltAdvance = RailManager.HasInstance && RailManager.Instance.IsForceFullBeltAdvanceActive();
+            // ROLLBACK_FAIL_NEARFULL_GATE_20260708: '사실상 만석' 밴드 = 데드락 강제회전 개입 임계(cap-N, N=5~8).
+            //   supply 큐 컷오프(ComputeReachableSupplyMatch)와 동일 소스(NearFullBandEmptySlots).
+            //   실패 스펙 확정(2026-07-08): "실패 = 레일이 임계치(이 밴드)까지 참 + 공격할 것 없음".
+            //   below-full 에서 배치된 다트가 공격 불가(hasMatch=false)여도 유저가 탭할 홀더가 남아 있으면
+            //   실패 금지 — 기존엔 supply 오탐(Hidden 색 제외 등) 시 방치만으로 n초 뒤 실패했다(사용자 보고).
+            //   엔드게임(모든 홀더 소진)은 밴드 밖에서도 noMovesLeft 로 실패 유지(영영 무실패 소프트락 방지).
+            bool nearFullBand = RailManager.HasInstance && physCap > 0
+                && efc >= physCap - RailManager.Instance.NearFullBandEmptySlots;
             if (forceFullBeltAdvance && !_wasForceFullBeltAdvanceActive)
             {
                 // ROLLBACK_FAIL_FORCE_ADVANCE_RECHECK_TIMER:
@@ -326,7 +334,10 @@ namespace BalloonFlow
             // ROLLBACK_WATCHDOG_GATE_DWELL_20260707 rev2: 게이트 체류시간 '누적' (필드 주석 참조).
             //   열림 → evalDelta 누적. 닫힘 → 즉시 리셋하지 않고, 닫힘이 RESET_SECONDS 이상 지속될 때만 리셋
             //   (데드락 exit→재진입 깜빡임 면역. 진짜 회복은 게이트가 길게 닫히므로 정상 리셋됨).
-            bool watchdogGateOpen = railFull || forceFullBeltAdvance;
+            // ROLLBACK_FAIL_NEARFULL_GATE_20260708: 게이트 조건을 워치독 발동 조건과 동일하게 밴드로 한정 —
+            //   레벨 초반 low-occupancy 배포 스톨(forceFullBeltAdvance 만 true)의 dwell 이 누적 이월되어
+            //   밴드 도달 순간 유예 없이 발동하는 rev2 이월 문제 재발 방지. 롤백: `railFull || forceFullBeltAdvance`.
+            bool watchdogGateOpen = railFull || (forceFullBeltAdvance && nearFullBand);
             if (watchdogGateOpen)
             {
                 _watchdogGateOpenAccum += evalDelta;
@@ -404,11 +415,16 @@ namespace BalloonFlow
             if (!_boardEngagedThisLevel && RailManager.HasInstance && RailManager.Instance.LastPlacementUnscaledTime > 0f)
                 _boardEngagedThisLevel = true;
 
-            // noMovesLeft 는 FailReason 구분용(NoMovesLeft vs RailOverflow)으로만 유지 — 판정은 supplyMatch 가 담당.
+            // noMovesLeft 는 FailReason 구분용(NoMovesLeft vs RailOverflow) + 밴드 밖 엔드게임 실패 arm.
             bool noMovesLeft = allHoldersEmpty && _remainingBalloons > 0 && !supplyMatch;
             // ROLLBACK_SUPPLY_FAIL_ENGAGE_GATE_20260707: '&& _boardEngagedThisLevel' — 보드가 실제로 시작하기 전(신선한 빈 레일)
             //   엔 supply-fail 금지. 시작 후엔 기존 로직 그대로(진짜 잼/엔드게임 실패 유지).
-            bool stuck = _remainingBalloons > 0 && !supplyMatch && !deployProgress && _boardEngagedThisLevel;
+            // ROLLBACK_FAIL_NEARFULL_GATE_20260708: 빠른 실패(1.5s grace)는 ① near-full 밴드(사실상 만석 +
+            //   supply=레일만) 또는 ② 엔드게임(모든 홀더 소진 + 공급 없음)에서만. below-full + 홀더 잔존은
+            //   유저가 아직 행동할 수 있으므로 방치만으로 실패하지 않는다(진짜 잼이면 탭이 이어져 결국
+            //   밴드 도달 or 홀더 소진으로 수렴). 롤백: `&& (nearFullBand || noMovesLeft)` 항 제거.
+            bool stuck = _remainingBalloons > 0 && !supplyMatch && !deployProgress && _boardEngagedThisLevel
+                && (nearFullBand || noMovesLeft);
 
             // ROLLBACK_WATCHDOG_PLACEMENT_QUIET_20260707: 워치독 활동 신호에 '레일 배치(placement)' 추가.
             //   배경: 두 워치독(no-drainage/no-fire)은 hasMatch 무관 설계 + rev2 누적 dwell 이라, 만석 '전'에
@@ -451,7 +467,10 @@ namespace BalloonFlow
             //   below-full + supplyMatch 오탐(모델이 매칭 과대평가) 잔여 리스크는 DartManager 정지 안전망
             //   6종이 발사 재개로 해소 + 배포가 이어지면 결국 railFull 도달로 워치독 재무장.
             //   롤백: 두 워치독의 `(railFull || !supplyMatch)` 항 제거.
-            if ((railFull || forceFullBeltAdvance) && (railFull || !supplyMatch) && _remainingBalloons > 0
+            // ROLLBACK_FAIL_NEARFULL_GATE_20260708: below-full arm 을 데드락 밴드(nearFullBand)로 한정 —
+            //   레벨 초반 low-occupancy 배포 스톨 + supply 오탐 + 방치가 워치독으로 실패하던 경로 차단
+            //   (Level 38 belowfull 잼은 데드락 밴드 안이므로 안전망 유지). 롤백: `&& nearFullBand` 제거.
+            if ((railFull || (forceFullBeltAdvance && nearFullBand)) && (railFull || !supplyMatch) && _remainingBalloons > 0
                 && watchdogGateDwell >= NO_DRAINAGE_FAIL_SECONDS
                 && placementQuietDrain // ROLLBACK_WATCHDOG_PLACEMENT_QUIET_20260707
                 && Time.unscaledTime - _lastDrainUnscaledTime >= NO_DRAINAGE_FAIL_SECONDS)
@@ -470,7 +489,8 @@ namespace BalloonFlow
             //   발사가 한 번이라도 있으면(=레일 배수=진행) 리셋이라 정상/느린 진행 플레이엔 오발동 X. 다른 색 pop 엔 안 흔들림.
             //   롤백: 이 블록 삭제.
             // ROLLBACK_WATCHDOG_GATE_DWELL_20260707: watchdogGateDwell 조건 추가 — '만석 상태로 N초' 를 함께 요구.
-            if ((railFull || forceFullBeltAdvance) && (railFull || !supplyMatch) // ROLLBACK_WATCHDOG_BELOWFULL_SUPPLY_GATE_20260707
+            // ROLLBACK_FAIL_NEARFULL_GATE_20260708: below-full arm 을 데드락 밴드로 한정 (위 no-drainage 와 동일).
+            if ((railFull || (forceFullBeltAdvance && nearFullBand)) && (railFull || !supplyMatch) // ROLLBACK_WATCHDOG_BELOWFULL_SUPPLY_GATE_20260707
                 && _remainingBalloons > 0
                 && watchdogGateDwell >= NO_FIRE_FAIL_SECONDS
                 && placementQuietFire // ROLLBACK_WATCHDOG_PLACEMENT_QUIET_20260707

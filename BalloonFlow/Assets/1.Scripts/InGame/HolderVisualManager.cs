@@ -3334,6 +3334,20 @@ namespace BalloonFlow
             if (visual.identifier != null)
                 visual.identifier.SetDartsOnRail(false);
             if (HolderManager.HasInstance) HolderManager.Instance.UndoDeploy(holderId);
+
+            // ROLLBACK_CONTINUE_RETURN_EMPTY_HOLDER_20260708: 탄창 0 홀더는 큐 복귀 대신 즉시 제거 —
+            //   CancelDeployAndReturnToQueue(:751)와 동일 가드. 마지막 다트 배치 직후 fail 이 뜬 경합에서
+            //   '빈 박스'가 큐로 복귀해 재탭 대상처럼 잔존하는 것 방지. 롤백: 이 블록 제거.
+            if (visual.magazineRemaining <= 0)
+            {
+                int col = visual.column;
+                ReturnHolderToPool(visual);
+                _holderVisuals.Remove(holderId);
+                RepositionColumnHolders(col);
+                RebuildChainLines();
+                return;
+            }
+
             RepositionColumnHolders(visual.column);
         }
 
