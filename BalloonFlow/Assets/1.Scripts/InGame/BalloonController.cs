@@ -6112,9 +6112,9 @@ namespace BalloonFlow
                     //      (둘 다 12+ ⟺ 짧은 축 ≥ 12 — 판정은 짧은 축 단일 기준으로 충분.)
                     //   ② 그 외 → 짧은 축 비례(5 × 짧은축/12) × 전역 배율.
                     //      예) 1×5 와 1×15 는 짧은 축(1)이 같으므로 텍스트 크기 동일.
-                    //   ③ 맥스 사이즈 5 는 '배율 적용 전' 규칙값 상한 — 전역 배율은 12+ 균일 그룹을 포함한
-                    //      모든 그룹 텍스트에 곱해진다(rev4, 사용자 확정 "그룹에도 적용되게": 최종 = 규칙값(≤5) × 배율.
-                    //      12+ 그룹 기본 1.5 배율이면 화면상 7.5). 배율을 상한 뒤에 걸면 12+ 구간에서 무효였음.
+                    //   ③ rev5 (최종 확정 2026-07-08): 맥스 사이즈 5 = '최종값' 상한 — 배율을 곱한 뒤 5로 클램프.
+                    //      12+ 균일 그룹은 min(5×1.5, 5) = 5, 배율(1.5)은 12 미만 구간에서 체감
+                    //      (짧은축 8 이상부터 상한 도달). 인게임 확인 후 "맥스만 5로" 확정.
                     // ROLLBACK_FROZEN_TEXT_GM_MULT_20260708: 전역 배율 = GameManager.Board.frozenGroupTextScaleMult
                     //   (기본 1.5 = 아트 "50% 증가") — 인스펙터 동적 튜닝, HP 갱신(팝)마다 재적용.
                     const float FROZEN_TEXT_FULL_SCALE_CELLS = 12f;
@@ -6124,7 +6124,7 @@ namespace BalloonFlow
                     float gmMult = GameManager.HasInstance
                         ? Mathf.Max(0.01f, GameManager.Instance.Board.frozenGroupTextScaleMult)
                         : 1.5f;
-                    float absScale = baseScale * gmMult; // baseScale 이 이미 ≤5 (규칙 상한) — 배율은 전 구간 유효
+                    float absScale = Mathf.Min(baseScale * gmMult, FROZEN_LAYER_MAGAZINE_TEXT_MAX_SCALE); // rev5: 최종 맥스 5
                     ShowFrozenOverlayMagazineText(selectedOverlay, hp, center, absScale / overlayBlock, absoluteScale: true);
                 }
                 else
