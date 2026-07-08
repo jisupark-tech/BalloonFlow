@@ -36,6 +36,14 @@ namespace BalloonFlow
             if (AdManager.HasInstance && AdManager.Instance.IsShowingAd) return;
             if (UIManager.HasInstance && UIManager.Instance.IsFading) return;
 
+            // 1.5) ROLLBACK_ITEM_ACQUIRE_INPUT_LOCK_20260708: 아이템 획득(Claim→보상비행→튜토 시작 전) 구간
+            //   백버튼 차단. 우리 앱이 입력을 '차단 처리' 한 것이므로 §5-3-0 매트릭스에 따라 진동 O.
+            if (TutorialController.IsItemAcquisitionInputLocked)
+            {
+                Haptic();
+                return;
+            }
+
             // 2) 최상단 팝업 우선
             if (UIManager.HasInstance)
             {

@@ -1224,6 +1224,9 @@ namespace BalloonFlow
                     // [구매 fix 2026-06-10] 해금 보상도 즉시 지급 — FX 는 연출 전용 (구매 흐름과 동일 원칙).
                     if (BoosterManager.Instance.TryClaimUnlockReward(boosterType))
                     {
+                        // ROLLBACK_ITEM_ACQUIRE_INPUT_LOCK_20260708: Claim 확정 → 튜토("Tap your item!") 시작까지
+                        //   전역 입력 잠금(UI 레이캐스트/홀더 터치/백버튼). 해제는 StartTutorial 및 실패 경로들이 담당.
+                        TutorialController.BeginItemAcquisitionInputLock();
                         RefreshBoosterCounts();
                         RefreshLockState();
                         ShowToast("Item claimed!");
@@ -1233,8 +1236,10 @@ namespace BalloonFlow
                         PlayBoosterRewardFly(boosterType, BoosterManager.UNLOCK_REWARD_COUNT, spr, () =>
                         {
                             RefreshBoosterCounts();
-                            if (TutorialController.HasInstance && LevelManager.HasInstance)
-                                TutorialController.Instance.StartTutorialForLevel(LevelManager.Instance.CurrentLevelId);
+                            bool tutorialStarted = TutorialController.HasInstance && LevelManager.HasInstance
+                                && TutorialController.Instance.StartTutorialForLevel(LevelManager.Instance.CurrentLevelId);
+                            if (!tutorialStarted)
+                                TutorialController.EndItemAcquisitionInputLock(); // 튜토 없음 — 즉시 해제
                         });
                     }
                 },

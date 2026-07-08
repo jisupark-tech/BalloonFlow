@@ -225,6 +225,10 @@ namespace BalloonFlow
         /// <param name="tutorialId">ID of the tutorial to start.</param>
         public void StartTutorial(int tutorialId)
         {
+            // ROLLBACK_ITEM_ACQUIRE_INPUT_LOCK_20260708: 여기부터는 튜토리얼(dim/차단)이 화면을 소유하므로
+            //   아이템 획득 입력 잠금 해제. config 미발견으로 시작 실패해도 튜토가 없다는 뜻이라 함께 해제.
+            EndItemAcquisitionInputLock();
+
             TutorialConfig config = FindConfigById(tutorialId);
             if (config == null)
             {
@@ -1200,6 +1204,9 @@ namespace BalloonFlow
 
         private IEnumerator StartTutorialAfterLoad(int levelId)
         {
+            // ROLLBACK_ITEM_ACQUIRE_INPUT_LOCK_20260708: 새 레벨 로드 — 이전 씬/흐름의 잔여 획득 잠금 방어적 해제.
+            EndItemAcquisitionInputLock();
+
             while (LevelManager.HasInstance && LevelManager.Instance.IsLoading) yield return null;
             while (UIManager.HasInstance && UIManager.Instance.IsFading) yield return null;
 
@@ -1359,7 +1366,9 @@ namespace BalloonFlow
         /// <returns>실제로 시작했으면 true.</returns>
         public bool StartTutorialForLevel(int levelId)
         {
-            if (_isTutorialActive) return false;
+            // ROLLBACK_ITEM_ACQUIRE_INPUT_LOCK_20260708: false 반환 경로 = 튜토 없이 흐름 종료 → 잠금 해제
+            //   (_isTutorialActive 면 기존 튜토가 이미 화면 소유).
+            if (_isTutorialActive) { EndItemAcquisitionInputLock(); return false; }
 
             // ROLLBACK_TUTORIAL_EDITOR_PRIORITY_20260622:
             // Manual item-unlock starts must use the same Tutorial Editor/TutorialCatalog
@@ -1369,10 +1378,11 @@ namespace BalloonFlow
                 if (resolvedConfig == null)
                 {
                     Debug.Log($"[TutorialDbg] StartTutorialForLevel({levelId}) - config not found");
+                    EndItemAcquisitionInputLock(); // ROLLBACK_ITEM_ACQUIRE_INPUT_LOCK_20260708
                     return false;
                 }
 
-                if (IsTutorialComplete(resolvedConfig.tutorialId)) return false;
+                if (IsTutorialComplete(resolvedConfig.tutorialId)) { EndItemAcquisitionInputLock(); return false; }
 
                 Debug.Log($"[TutorialDbg] StartTutorialForLevel({levelId}) source={source} tutorialId={resolvedConfig.tutorialId} waitForItemDescription={resolvedConfig.waitForItemDescription}");
                 if (_startTutorialForLevelCoroutine != null)
@@ -1415,7 +1425,11 @@ namespace BalloonFlow
             }
 
             _startTutorialForLevelCoroutine = null;
-            if (_isTutorialActive || IsTutorialComplete(config.tutorialId)) yield break;
+            if (_isTutorialActive || IsTutorialComplete(config.tutorialId))
+            {
+                EndItemAcquisitionInputLock(); // ROLLBACK_ITEM_ACQUIRE_INPUT_LOCK_20260708: 튜토 없이 종료 → 잠금 해제
+                yield break;
+            }
             StartTutorial(config.tutorialId);
         }
 
@@ -1455,6 +1469,71 @@ namespace BalloonFlow
             {
                 AdvanceStep();
             }
+        }
+
+        #endregion
+
+        #region Item Acquisition Input Lock (static)
+
+        // ROLLBACK_ITEM_ACQUIRE_INPUT_LOCK_20260708 (아이템 획득 중 입력 잠금):
+        //   언락 Claim 확정 → 보상 비행 FX → (Deferred 대기) → StartTutorial("Tap your item!") 사이 구간은
+        //   화면을 아무도 소유하지 않아 UIHud 버튼(일시정지/아이템)·홀더 탭·안드로이드 백버튼이 그대로
+        //   들어갔다(사용자 보고). Begin~End 사이:
+        //     ① 투명 풀스크린 Image(최상위 sortingOrder)가 모든 uGUI 레이캐스트를 삼킴
+        //     ② InputHandler.TryRaycastInput 이 홀더(월드 물리 레이캐스트) 터치를 차단
+        //     ③ BackButtonRouter 가 백버튼을 차단(진동 O)
+        //   해제: StartTutorial(튜토가 화면 소유) / 튜토 없이 끝나는 모든 경로 / 새 레벨 로드(잔여 락 방어) /
+        //   타임아웃 백스톱(연출·코루틴이 죽어도 15s 후 자동 해제, 블로커는 자체 Update 로 자멸).
+        //   롤백: 이 region + Begin/End 호출부(UIHud/GameBootstrap/BackButtonRouter/InputHandler) 제거.
+        private const float ITEM_ACQUIRE_LOCK_MAX_SECONDS = 15f;
+        private static float _itemAcquireLockUntilUnscaled;
+        private static GameObject _itemAcquireBlocker;
+
+        public static bool IsItemAcquisitionInputLocked
+        {
+            get
+            {
+                if (_itemAcquireLockUntilUnscaled <= 0f) return false;
+                if (Time.unscaledTime >= _itemAcquireLockUntilUnscaled)
+                {
+                    EndItemAcquisitionInputLock(); // 타임아웃 백스톱 — 영구 잠금 방지
+                    return false;
+                }
+                return true;
+            }
+        }
+
+        public static void BeginItemAcquisitionInputLock()
+        {
+            _itemAcquireLockUntilUnscaled = Time.unscaledTime + ITEM_ACQUIRE_LOCK_MAX_SECONDS;
+            if (_itemAcquireBlocker != null) return;
+
+            _itemAcquireBlocker = new GameObject("ItemAcquireInputBlocker");
+            var canvas = _itemAcquireBlocker.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 32000; // 모든 인게임 UI 위
+            _itemAcquireBlocker.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+            var img = _itemAcquireBlocker.AddComponent<UnityEngine.UI.Image>();
+            img.color = Color.clear; // 시각 변화 없음 — 레이캐스트만 삼킴
+            img.raycastTarget = true;
+            _itemAcquireBlocker.AddComponent<ItemAcquireBlockerAutoExpire>();
+        }
+
+        public static void EndItemAcquisitionInputLock()
+        {
+            _itemAcquireLockUntilUnscaled = 0f;
+            if (_itemAcquireBlocker != null)
+            {
+                Destroy(_itemAcquireBlocker);
+                _itemAcquireBlocker = null;
+            }
+        }
+
+        /// <summary>블로커 자체 감시 — 락 소유 흐름(코루틴/콜백)이 죽어도 타임아웃이 지나면 스스로 사라진다
+        /// (getter 의 타임아웃 해제를 매 프레임 구동).</summary>
+        private sealed class ItemAcquireBlockerAutoExpire : MonoBehaviour
+        {
+            private void Update() { _ = IsItemAcquisitionInputLocked; }
         }
 
         #endregion

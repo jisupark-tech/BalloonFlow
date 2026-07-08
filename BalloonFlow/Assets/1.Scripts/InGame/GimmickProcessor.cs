@@ -220,6 +220,16 @@ namespace BalloonFlow
                     region.hp = maxHp > 0 ? maxHp : region.ids.Count;              // legacy adjacency (기존)
                 region.maxHp = region.hp;
 
+                // ROLLBACK_ICE_OVERRIDE_AUDIT_20260708: Override "HP 안 먹힘/1로 폭발" 원인 확정용 1회성 덤프.
+                //   판정법: useOverride=False → 데이터가 override(mode=2,hp>0)로 안 들어옴(저작/커밋 문제, 예: HP 필드
+                //   onEndEdit 미커밋으로 hp=0 저장). useOverride=True 인데 finalHp<preClampHp → 언위너블 클램프(보드에
+                //   얼음막 외 팝가능 풍선이 preClampHp 보다 적음). 원인 확정 후 이 블록 제거.
+                int _auditPreClampHp = region.hp;
+                int _auditRemaining = BalloonController.HasInstance ? BalloonController.Instance.RemainingCount : -1;
+                Debug.Log($"[Ice-AUDIT] cells={region.ids.Count} groupId={manualGroupId} mode={regionHpMode}(2=override) " +
+                          $"overrideHp={regionOverrideHp} useOverride={useOverride} sumHp={sumHp} maxHp={maxHp} " +
+                          $"preClampHp={_auditPreClampHp} Remaining={_auditRemaining} maxDecrements={_auditRemaining - region.ids.Count}");
+
                 // ROLLBACK_ICE_HP_WINNABILITY_CLAMP_20260616: region HP 가 받을 수 있는 최대 감소량을 초과하면
                 //   영영 thaw 안 돼 ice 셀이 RemainingCount 에 영구 잔존 → 보드 언위너블. HP 를 그 상한으로 클램프.
                 //   [2026-06-16 cascade-fix] 이 region 의 최대 감소 = '자기 셀 제외 전체 팝가능' = RemainingCount - region 셀수.

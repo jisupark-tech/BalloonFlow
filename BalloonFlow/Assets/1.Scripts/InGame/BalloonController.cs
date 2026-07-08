@@ -2063,6 +2063,19 @@ namespace BalloonFlow
                 BoardStateManager.Instance.InvalidateOutermostCache();
         }
 
+        /// <summary>ROLLBACK_FLEXTUBE_CLEAR_CONDITION_20260708: 살아있는 FlexTube 셀 존재 여부 —
+        /// 클리어 판정용(IsBoardClear). FlexTube 는 RemainingCount 제외라 별도 검사가 필요하다.
+        /// hp>0 인 튜브는 반드시 live 셀 ≥1 (segment 비례 제거 + BeginFinish 에서 전 셀 inactive).</summary>
+        public bool HasLiveFlexTubeCells()
+        {
+            foreach (var kv in _balloons)
+            {
+                BalloonData d = kv.Value;
+                if (d != null && !d.isPopped && d.gimmickType == GimmickFlexTube) return true;
+            }
+            return false;
+        }
+
         public bool HasLiveFlexTubeGroupCells(int groupId)
         {
             foreach (var kv in _balloons)
@@ -6056,9 +6069,11 @@ namespace BalloonFlow
 
             GameObject selectedOverlay = null;
             float selectedDistance = float.MaxValue;
+            int overlayCount = 0; // ROLLBACK_FROZEN_GROUP_TEXT_ABS_SCALE_20260708: 단일/그룹 판정용 (블록=anchor 1개만 등록되므로 블록당 1 카운트)
             foreach (int id in ids)
             {
                 if (!_frozenOverlays.TryGetValue(id, out GameObject overlay) || overlay == null) continue;
+                overlayCount++;
 
                 ResetFrozenOverlayMagazineText(overlay);
                 float distance = (overlay.transform.position - center).sqrMagnitude;
@@ -6071,20 +6086,42 @@ namespace BalloonFlow
 
             if (selectedOverlay != null && hp > 0)
             {
-                // 최대 텍스트 사이즈 5. 블록 오버레이는 이미 blockSize(=footprint) 배라 그만큼 나눠 상쇄 →
-                //   블록/그룹 모두 최종 숫자 크기 = min(footprint,5) 로 동일.
-                int capped = Mathf.Clamp(footprintMin, 1, 5);
-                // ROLLBACK_ICE_BLOCK_HP_TEXT_FOOTPRINT_SCALE_20260701:
-                // Previous block overlays divided by footprint, so 2x2/3x3 HP text stayed at prefab size.
-                // Do not scale linearly by footprint: 2x/3x makes the text spill outside the Ice visual.
-                // Use a square-root curve so larger Ice gets a readable, softer size increase.
-                float textScaleMul = Mathf.Sqrt(capped);
-                // ROLLBACK_ICE_SINGLE_BLOCK_TEXT_SCALE_20260701: 단일 sized Ice 는 블록 오버레이가 blockSize 배로 스케일되어
-                //   자식 HP 텍스트도 그만큼 커진다 → 오버레이 blockSize 로 나눠 상쇄(그룹=per-cell=1 이라 영향 없음).
-                //   → 블록/그룹 최종 텍스트 크기 동일.
                 int overlayBlock = _iceBlockOverlaySize.TryGetValue(selectedOverlay, out int ob) ? Mathf.Max(1, ob) : 1;
-                textScaleMul /= overlayBlock;
-                ShowFrozenOverlayMagazineText(selectedOverlay, hp, center, textScaleMul);
+
+                // ROLLBACK_FROZEN_GROUP_TEXT_ABS_SCALE_20260708 (아트 규칙, 옵션 A — 그룹만 절대 스케일):
+                //   그룹 HP 텍스트는 '프리팹 원본(localScale 1.3) × 배수'가 아니라 localScale 절대값으로.
+                //   규칙: 가로 혹은 세로 ≥ 12 → 5 고정 / 12 미만 → 짧은 축 개수 선형 비례(5 × min/12).
+                //   배경: ① 기존 sqrt 곡선은 실질 천장 √5≈2.24(죽은 클램프), ② 상대 배수라 원본 1.3 기준
+                //   "스케일 5"가 안 나옴. 임계 판정은 긴 축(가로 '혹은' 세로).
+                //   rev2 — 단일/그룹 판정은 overlayBlock 타입이 아니라 '영역의 오버레이 개수':
+                //   그룹이 2x2 sized 블록들로 구성되면 중심(선택) 오버레이가 블록형이라 overlayBlock 판정은
+                //   그룹을 단일로 오인 → sqrt(5)/2 × 1.3 = 1.45 실측(레벨 202) 원인. 블록은 anchor 1개만
+                //   _frozenOverlays 에 등록되므로 overlayCount>1 = 진짜 그룹.
+                //   rev3 — 절대값은 부모 블록 스케일 보정 없이 그대로 적용(아트 확정): 그룹이면 선택 오버레이가
+                //   블록형이어도 인스펙터 localScale = 5 그대로. (블록 부모가 blockSize 배라 화면상으론
+                //   per-cell 대비 blockSize 배 더 크게 보임 — 의도된 값.)
+                //   단일(오버레이 1개 = 낱개 셀/블록 하나)은 승인된 기존 sqrt 상대 배수 경로 유지.
+                //   롤백: grouped 분기 제거 + overlayCount 카운트 제거, sqrt 경로만 사용.
+                if (overlayCount > 1)
+                {
+                    const float FROZEN_TEXT_FULL_SCALE_CELLS = 12f;
+                    int footprintMax = Mathf.Max(regionW, regionH);
+                    float absScale = footprintMax >= FROZEN_TEXT_FULL_SCALE_CELLS
+                        ? FROZEN_LAYER_MAGAZINE_TEXT_MAX_SCALE
+                        : FROZEN_LAYER_MAGAZINE_TEXT_MAX_SCALE * footprintMin / FROZEN_TEXT_FULL_SCALE_CELLS;
+                    ShowFrozenOverlayMagazineText(selectedOverlay, hp, center, absScale, absoluteScale: true);
+                }
+                else
+                {
+                    // 단일(오버레이 1개 — 낱개 셀 또는 sized 블록 하나) 기존 경로 — sqrt 곡선 + 블록 오버레이 스케일 상쇄.
+                    // ROLLBACK_ICE_BLOCK_HP_TEXT_FOOTPRINT_SCALE_20260701: 선형 비례는 텍스트가 Ice 밖으로
+                    //   넘치므로 sqrt 로 완만하게 키움.
+                    // ROLLBACK_ICE_SINGLE_BLOCK_TEXT_SCALE_20260701: 블록 오버레이는 자체가 blockSize 배라
+                    //   자식 텍스트도 커짐 → blockSize 로 나눠 상쇄.
+                    int capped = Mathf.Clamp(footprintMin, 1, 5);
+                    float textScaleMul = Mathf.Sqrt(capped) / overlayBlock;
+                    ShowFrozenOverlayMagazineText(selectedOverlay, hp, center, textScaleMul);
+                }
             }
         }
 
@@ -6099,7 +6136,7 @@ namespace BalloonFlow
             }
         }
 
-        private static void ShowFrozenOverlayMagazineText(GameObject overlay, int hp, Vector3 worldPosition, float textScaleMul)
+        private static void ShowFrozenOverlayMagazineText(GameObject overlay, int hp, Vector3 worldPosition, float textScaleMul, bool absoluteScale = false)
         {
             FrozenOverlayMagazineTextState state = GetFrozenOverlayMagazineTextState(overlay);
             if (state == null || state.Text == null) return;
@@ -6117,7 +6154,12 @@ namespace BalloonFlow
             // ROLLBACK_FROZEN_LAYER_TEXT_SCALE_20260630:
             // Keep the existing computed text scale, but cap the final multiplier at 5 for large Ice regions.
             float clampedTextScaleMul = Mathf.Min(Mathf.Max(0.01f, textScaleMul), FROZEN_LAYER_MAGAZINE_TEXT_MAX_SCALE);
-            if (!Mathf.Approximately(clampedTextScaleMul, 1f)) tt.localScale *= clampedTextScaleMul;
+            // ROLLBACK_FROZEN_GROUP_TEXT_ABS_SCALE_20260708: absoluteScale=true(그룹) 는 프리팹 원본 스케일과
+            //   무관하게 localScale 절대값으로 세팅 — 인스펙터 기준 "스케일 5"와 1:1 일치. false(블록형)는 기존 배수.
+            if (absoluteScale)
+                tt.localScale = Vector3.one * clampedTextScaleMul;
+            else if (!Mathf.Approximately(clampedTextScaleMul, 1f))
+                tt.localScale *= clampedTextScaleMul;
             state.Text.gameObject.SetActive(true);
             state.Text.ForceMeshUpdate();
         }

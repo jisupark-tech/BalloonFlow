@@ -104,6 +104,10 @@ namespace BalloonFlow
         {
             if (_gameCamera == null) return;
 
+            // ROLLBACK_ITEM_ACQUIRE_INPUT_LOCK_20260708: 아이템 획득(Claim→보상비행→튜토 시작 전) 중 월드 터치 차단.
+            //   UI 는 투명 블로커가 삼키지만, 홀더는 물리 레이캐스트 경로라 여기서 별도 게이트.
+            if (TutorialController.IsItemAcquisitionInputLocked) return;
+
             // 팝업(Settings/GoldShop/BuyItem 등)이 열려 있는 동안 다트 보관함 등 인게임 오브젝트 터치 차단.
             bool awaitingHolderSelection = BoosterExecutor.HasInstance
                 && BoosterExecutor.Instance.IsAwaitingHolderSelection;

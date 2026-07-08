@@ -534,6 +534,10 @@ namespace BalloonFlow
             popup.ShowUnlock(LocalizationService.Get("popup.txttitle.itemunlocked"), spr, levelId, $"x{BoosterManager.UNLOCK_REWARD_COUNT}",
                 onConfirm: () =>
                 {
+                    // ROLLBACK_ITEM_ACQUIRE_INPUT_LOCK_20260708: Claim 확정 → 튜토("Tap your item!") 시작까지
+                    //   전역 입력 잠금(UI 레이캐스트/홀더 터치/백버튼). 해제는 StartTutorial 및 실패 경로들이 담당.
+                    TutorialController.BeginItemAcquisitionInputLock();
+
                     void ClaimAfterFx()
                     {
                         if (BoosterManager.Instance.TryClaimUnlockReward(boosterType))
@@ -552,8 +556,10 @@ namespace BalloonFlow
                         // Level-entry booster unlock must be "Claim -> HUD reward fly -> Tutorial".
                         // Tutorial Editor can mark the sequence as Manual Trigger Only, so trigger it
                         // here after the reward has actually landed in UIHud.
-                        if (TutorialController.HasInstance && LevelManager.HasInstance)
-                            TutorialController.Instance.StartTutorialForLevel(LevelManager.Instance.CurrentLevelId);
+                        bool tutorialStarted = TutorialController.HasInstance && LevelManager.HasInstance
+                            && TutorialController.Instance.StartTutorialForLevel(LevelManager.Instance.CurrentLevelId);
+                        if (!tutorialStarted)
+                            TutorialController.EndItemAcquisitionInputLock(); // ROLLBACK_ITEM_ACQUIRE_INPUT_LOCK_20260708
                     }
 
                     if (_hud != null)

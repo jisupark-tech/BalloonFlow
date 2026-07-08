@@ -686,7 +686,27 @@ namespace BalloonFlow
 
         public bool IsBoardClear()
         {
-            return _remainingBalloons <= 0;
+            if (_remainingBalloons > 0) return false;
+            // ROLLBACK_FLEXTUBE_CLEAR_CONDITION_20260708: FlexTube 는 RemainingCount 에서 제외되고
+            //   (Wall 과 함께 setup 시 excludeCount — 셀 제거가 silent 경로라 카운트 불변) 있어,
+            //   일반 풍선이 전부 팝되면 살아있는 튜브(잔여 HP)가 있어도 클리어가 떴다(레벨 215:
+            //   Sage 튜브 HP 20 + 미배포 홀더 상태 오클리어). FlexTube 는 파괴 대상 기믹이므로
+            //   살아있는 튜브 셀이 하나라도 있으면 클리어 아님. 튜브 파괴 완료(BeginFinish) 시점의
+            //   재평가는 ReevaluateClearAfterGimmickResolved 가 담당.
+            //   롤백: 아래 if 제거 (+ FlexTube.BeginFinish 의 재평가 호출, BalloonController.HasLiveFlexTubeCells 제거).
+            if (BalloonController.HasInstance && BalloonController.Instance.HasLiveFlexTubeCells()) return false;
+            return true;
+        }
+
+        /// <summary>ROLLBACK_FLEXTUBE_CLEAR_CONDITION_20260708: 팝 이벤트 없이 해소되는 기믹(FlexTube 파괴)
+        /// 완료 시점의 클리어 재평가 훅. 마지막 남은 것이 튜브였다면 OnBalloonPopped 가 더 안 오므로
+        /// 이 호출이 없으면 클리어가 영영 평가되지 않는다.</summary>
+        public void ReevaluateClearAfterGimmickResolved()
+        {
+            if (_currentState != BoardState.Playing && _currentState != BoardState.Failed) return;
+            if (BalloonController.HasInstance)
+                _remainingBalloons = BalloonController.Instance.GetRemainingCount();
+            EvaluateClearCondition();
         }
 
         /// <summary>

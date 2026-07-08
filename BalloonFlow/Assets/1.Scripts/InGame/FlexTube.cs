@@ -369,6 +369,13 @@ namespace BalloonFlow
                 }
             }
 
+            // ROLLBACK_FLEXTUBE_CLEAR_CONDITION_20260708: FlexTube 파괴는 OnBalloonPopped 를 발행하지
+            //   않으므로(silent 셀 제거), 마지막 남은 오브젝트가 튜브면 클리어 평가가 영영 안 돈다.
+            //   전 셀 inactive 마킹 '후' 재평가 — 이 튜브는 이미 dead 로 보이고, 다른 튜브가 살아 있으면
+            //   IsBoardClear 가 막는다. 롤백: 이 블록 제거.
+            if (BoardStateManager.HasInstance)
+                BoardStateManager.Instance.ReevaluateClearAfterGimmickResolved();
+
             StartCoroutine(DestroyAfterFinish());
         }
 

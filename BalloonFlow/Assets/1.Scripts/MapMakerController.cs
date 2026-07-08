@@ -1322,15 +1322,20 @@ namespace BalloonFlow
             // ROLLBACK_ICE_MANUAL_GROUP_20260608:
             // Ice-only explicit grouping. Group 0 uses legacy adjacency grouping.
             var iceGroupRow = Row(p); Lbl(iceGroupRow, "Ice Group", w: 110);
-            MakeIntField(iceGroupRow, _paintIceGroupId, 0, 999, v => {
+            var iceGroupIdField = MakeIntField(iceGroupRow, _paintIceGroupId, 0, 999, v => {
                 _paintIceGroupId = Mathf.Max(0, v);
                 SetStatus($"Ice Group: {_paintIceGroupId} (0=Auto)");
             });
             Lbl(iceGroupRow, "HP", w: 24);
-            MakeIntField(iceGroupRow, _paintIceGroupHp, 0, 999, v => {
+            var iceGroupHpField = MakeIntField(iceGroupRow, _paintIceGroupHp, 0, 999, v => {
                 _paintIceGroupHp = Mathf.Max(0, v);
                 SetStatus($"Ice Group HP Override: {_paintIceGroupHp}");
             });
+            // ROLLBACK_ICE_FIELD_LIVE_COMMIT_20260708: 기본 MakeInputField 는 onEndEdit(포커스 상실) 에서만 값을
+            //   커밋 → HP/그룹 타이핑 직후 맵을 바로 클릭하면 이전 값(0)으로 칠해져 override 미적용. 부작용 없는 두
+            //   필드만 타이핑 즉시 반영(onValueChanged). 롤백: 아래 두 리스너 제거.
+            iceGroupIdField.onValueChanged.AddListener(s => { if (int.TryParse(s, out int v)) _paintIceGroupId = Mathf.Clamp(v, 0, 999); });
+            iceGroupHpField.onValueChanged.AddListener(s => { if (int.TryParse(s, out int v)) _paintIceGroupHp = Mathf.Clamp(v, 0, 999); });
             var iceModeDD = DefaultControls.CreateDropdown(_uiRes);
             iceModeDD.transform.SetParent(iceGroupRow, false);
             var iceModeLE = iceModeDD.AddComponent<LayoutElement>(); iceModeLE.preferredWidth = 95; iceModeLE.preferredHeight = 24;
@@ -7597,6 +7602,11 @@ namespace BalloonFlow
                         {
                             _balloonIceOverlay[col, row] = Mathf.Max(1, b.iceOverlay);
                             if (b.iceBlockSize > 1) _balloonIceBlockSize[col, row] = b.iceBlockSize;
+                            // ROLLBACK_ICE_OVERLAY_GROUP_EMIT_20260708: iceOnly 엔트리의 group/HP/override 도 복원
+                            //   (기존엔 iceOverlay 만 복원하고 continue → 라운드트립에서 override 유실).
+                            _balloonIceGroupId[col, row] = b.iceGroupId;
+                            _balloonIceGroupHp[col, row] = b.iceGroupHp;
+                            _balloonIceGroupHpMode[col, row] = b.iceGroupHpMode == 2 ? 2 : 1;
                             continue;
                         }
                         int gi = 0;
@@ -8338,6 +8348,118 @@ namespace BalloonFlow
                         errors.Add($"{gimmickName} is unlocked at level {debutLevel}, but current level is {_levelId}. Cell: ({c},{r}).");
                 }
             }
+
+            // ROLLBACK_ICE_OVERRIDE_CLAMP_WARN_20260708: Frozen layer(Ice) Override HP 저작-시점 경고.
+            //   얼음막 영역 HP 는 인게임에서 '주변(비-얼음) 풍선이 팝될 때마다 -1'로만 감소한다
+            //   (GimmickProcessor.HandleAnyBalloonPopped). 따라서 실질 상한 = 보드의 얼음막 외 풍선 수.
+            //   Override 로 그 이상을 넣으면 언위너블 방지 클램프(InitIceRegions:
+            //   region.hp = min(hp, RemainingCount - region.cells))에 걸려 작게(희소 보드에선 1까지) 잘린다.
+            //   Sum 은 값이 작아 이 상한 밑이라 잘 동작 → "Sum OK, Override 안 됨"의 정체.
+            //   여기서 런타임 클램프 조건을 그대로 재현해 경고(진행은 가능). 롤백: 이 호출 + 헬퍼 제거.
+            WarnIceOverrideClamp(warnings);
+        }
+
+        /// <summary>ROLLBACK_ICE_OVERRIDE_CLAMP_WARN_20260708: Ice Override HP 가 인게임 언위너블
+        /// 방지 클램프에 걸릴 경우 저작 시점에 경고. 런타임 GetIceRegions(수동그룹 id>0 / 나머지 4-인접
+        /// flood-fill) + RemainingCount(Wall·FlexTube 제외) + 클램프(min(hp, Remaining - regionCells))를
+        /// MapMaker 그리드 기준으로 재현한다.</summary>
+        private void WarnIceOverrideClamp(List<string> warnings)
+        {
+            if (warnings == null || _balloonColors == null || _balloonGimmicks == null) return;
+
+            int iceIndex = System.Array.IndexOf(FIELD_GIMMICK_NAMES, "Ice");
+            int wallIndex = System.Array.IndexOf(FIELD_GIMMICK_NAMES, "Wall");
+
+            bool HasBalloon(int c, int r) =>
+                _balloonColors[c, r] >= 0 || (_balloonIceOverlay != null && _balloonIceOverlay[c, r] > 0);
+            bool IsIced(int c, int r) =>
+                (iceIndex > 0 && _balloonGimmicks[c, r] == iceIndex) ||
+                (_balloonIceOverlay != null && _balloonIceOverlay[c, r] > 0);
+
+            // 1) RemainingCount 근사 — clear 에 포함되는 풍선 총수(Wall·FlexTube·sized 비앵커 제외).
+            int totalPoppable = 0;
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                {
+                    if (!HasBalloon(c, r)) continue;
+                    if (wallIndex > 0 && _balloonGimmicks[c, r] == wallIndex) continue;      // Wall 은 clear 미포함
+                    if (_balloonFlexTubeGroupId != null && _balloonFlexTubeGroupId[c, r] >= 0) continue; // FlexTube 미포함
+                    if (_balloonPinataW != null && _balloonPinataW[c, r] == 0) continue;     // sized 기믹 비앵커(런타임 미생성)
+                    totalPoppable++;
+                }
+
+            // 2) 얼음 영역 그룹핑 — 런타임 GetIceRegions 와 동일.
+            var visited = new bool[_gridCols, _gridRows];
+            var manual = new Dictionary<int, List<Vector2Int>>();
+            var regions = new List<List<Vector2Int>>();
+            var stack = new Stack<Vector2Int>();
+            for (int c = 0; c < _gridCols; c++)
+                for (int r = 0; r < _gridRows; r++)
+                {
+                    if (visited[c, r] || !IsIced(c, r)) continue;
+                    int gid = _balloonIceGroupId != null ? _balloonIceGroupId[c, r] : 0;
+                    if (gid > 0)
+                    {
+                        if (!manual.TryGetValue(gid, out var mlist)) { mlist = new List<Vector2Int>(); manual[gid] = mlist; }
+                        mlist.Add(new Vector2Int(c, r));
+                        visited[c, r] = true;
+                        continue;
+                    }
+                    var region = new List<Vector2Int>();
+                    stack.Clear();
+                    stack.Push(new Vector2Int(c, r));
+                    visited[c, r] = true;
+                    while (stack.Count > 0)
+                    {
+                        var p = stack.Pop();
+                        region.Add(p);
+                        AddIcedNeighbor(p.x + 1, p.y, visited, stack);
+                        AddIcedNeighbor(p.x - 1, p.y, visited, stack);
+                        AddIcedNeighbor(p.x, p.y + 1, visited, stack);
+                        AddIcedNeighbor(p.x, p.y - 1, visited, stack);
+                    }
+                    regions.Add(region);
+                }
+            foreach (var kv in manual) regions.Add(kv.Value);
+
+            // 3) 영역별 override HP 캡처(런타임: 첫 mode>0 셀 채택) 후 클램프 판정.
+            foreach (var region in regions)
+            {
+                if (region.Count == 0) continue;
+                int regionMode = 0, overrideHp = 0;
+                foreach (var p in region)
+                {
+                    int m = _balloonIceGroupHpMode != null ? _balloonIceGroupHpMode[p.x, p.y] : 0;
+                    if (m > 0)
+                    {
+                        regionMode = m;
+                        overrideHp = _balloonIceGroupHp != null ? Mathf.Max(0, _balloonIceGroupHp[p.x, p.y]) : 0;
+                        break;
+                    }
+                }
+                if (regionMode != 2 || overrideHp <= 0) continue; // Override(2) + 값>0 만 대상
+
+                int cap = Mathf.Max(0, totalPoppable - region.Count);
+                if (overrideHp > cap)
+                {
+                    var f = region[0];
+                    warnings.Add($"Ice Override HP {overrideHp} (region near ({f.x},{f.y}), {region.Count} cells) > 팝 가능한 얼음막 외 풍선 {cap}개. 인게임에서 {cap}(으)로 클램프됨 — 얼음막 HP 는 다른 풍선이 팝될 때만 감소합니다. Override 값을 {cap} 이하로 낮추거나 보드에 다른 풍선을 더 배치하세요.");
+                }
+            }
+        }
+
+        /// <summary>WarnIceOverrideClamp 용 4-인접 flood-fill 헬퍼 (수동그룹 id>0 셀은 인접 병합 제외).</summary>
+        private void AddIcedNeighbor(int c, int r, bool[,] visited, Stack<Vector2Int> stack)
+        {
+            if (c < 0 || c >= _gridCols || r < 0 || r >= _gridRows) return;
+            if (visited[c, r]) return;
+            int iceIndex = System.Array.IndexOf(FIELD_GIMMICK_NAMES, "Ice");
+            bool iced = (iceIndex > 0 && _balloonGimmicks[c, r] == iceIndex) ||
+                        (_balloonIceOverlay != null && _balloonIceOverlay[c, r] > 0);
+            if (!iced) return;
+            if (_balloonIceGroupId != null && _balloonIceGroupId[c, r] > 0) return; // 수동그룹은 별도 처리
+            visited[c, r] = true;
+            stack.Push(new Vector2Int(c, r));
         }
 
         private static string GetHolderGimmickName(int index)
@@ -8711,6 +8833,12 @@ namespace BalloonFlow
                     // Persist explicit Ice grouping only on Ice cells. Group 0 preserves legacy adjacency grouping.
                     bool isIceCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
                         && FIELD_GIMMICK_NAMES[gi] == "Ice";
+                    // ROLLBACK_ICE_OVERLAY_GROUP_EMIT_20260708: Frozen Layer(iceOverlay) 셀도 group/HP/override 를
+                    //   emit. 기존엔 isIceCell("Ice" 기믹)만 iceGroup 을 기록해, 베이스 위에 얼음만 덧씌운 오버레이
+                    //   셀의 override/group 이 저장 시 전부 0 으로 버려졌다 → 런타임 mode=0 → legacy(per-cell HP=1)
+                    //   경로 → 풍선 하나에 폭발("Override 안 먹힘"의 진짜 원인). 런타임 RegisterBalloonGimmick 는
+                    //   iceOverlay 경로에서 이미 iceGroupId/Hp/HpMode 를 등록하므로, emit 만 열어주면 override 동작.
+                    bool iceGroupCarrier = isIceCell || _balloonIceOverlay[c, r] > 0;
                     // ROLLBACK_BARRICADE_SIZED_FIELD_GIMMICK:
                     // Sized field gimmick non-anchor cells(sizeW==0) are skipped; only the anchor emits layout data.
                     bool isSizedFieldCell = gi > 0 && gi < FIELD_GIMMICK_NAMES.Length
@@ -8735,7 +8863,11 @@ namespace BalloonFlow
                                 gimmickType = "",
                                 sizeW = 1, sizeH = 1, hp = 0,
                                 iceBlockSize = Mathf.Max(1, _balloonIceBlockSize[c, r]),
-                                iceGroupId = 0, iceGroupHp = 0, iceGroupHpMode = 0,
+                                // ROLLBACK_ICE_OVERLAY_GROUP_EMIT_20260708: ice-only(sized 기믹 footprint 위 얼음) 엔트리도
+                                //   group/HP/override emit (기존 하드코딩 0 → 오버레이 override 유실). 로드는 iceOnly 분기에서 복원.
+                                iceGroupId = _balloonIceGroupId[c, r],
+                                iceGroupHp = _balloonIceGroupHp[c, r],
+                                iceGroupHpMode = _balloonIceGroupHpMode[c, r] == 2 ? 2 : 1,
                                 iceOverlay = _balloonIceOverlay[c, r],
                                 iceOnly = true,
                                 barricadeDir = 0, barricadeLength = 0,
@@ -8801,9 +8933,10 @@ namespace BalloonFlow
                         sizeH = _balloonPinataH[c, r],
                         hp = _balloonGimmickHP[c, r],
                         iceBlockSize = _balloonIceBlockSize[c, r],
-                        iceGroupId = isIceCell ? _balloonIceGroupId[c, r] : 0,
-                        iceGroupHp = isIceCell ? _balloonIceGroupHp[c, r] : 0,
-                        iceGroupHpMode = isIceCell ? (_balloonIceGroupHpMode[c, r] == 2 ? 2 : 1) : 0,
+                        // ROLLBACK_ICE_OVERLAY_GROUP_EMIT_20260708: isIceCell → iceGroupCarrier(Ice 기믹 OR 오버레이).
+                        iceGroupId = iceGroupCarrier ? _balloonIceGroupId[c, r] : 0,
+                        iceGroupHp = iceGroupCarrier ? _balloonIceGroupHp[c, r] : 0,
+                        iceGroupHpMode = iceGroupCarrier ? (_balloonIceGroupHpMode[c, r] == 2 ? 2 : 1) : 0,
                         iceOverlay = _balloonIceOverlay[c, r], // ROLLBACK_ICE_OVERLAY_LAYER_20260702
                         // ROLLBACK_BARRICADE_MAPMAKER_20260608: 바리케이드 방향/길이 emit (Barricade 외 셀은 런타임 무시).
                         barricadeDir = _balloonBarricadeDir[c, r],
