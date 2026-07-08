@@ -88,6 +88,11 @@ namespace BalloonFlow
         private float _watchdogGateClosedSince = float.NaN;
         private const float WATCHDOG_GATE_CLOSE_RESET_SECONDS = 2f;
 
+        /// <summary>ROLLBACK_FAIL_NEARFULL_TUNE3_20260708: 실패용 near-full 임계 — 빈 슬롯 N개 이하 = 실패권.
+        /// 데드락 강제회전 임계(RailManager.NearFullBandEmptySlots, 5~8)와 별도의 튜닝 상수.
+        /// 160캡 기준 157부터 실패권. 하한 주의: 1로 내리면 Level 167 반례(158/160 무한대기) 재발.</summary>
+        private const int FAIL_NEARFULL_EMPTY_SLOTS = 3;
+
         // ROLLBACK_SUPPLY_MATCH_FAIL_20260707: 상태 기반 실패용 필드 —
         //   _forceAdvanceInactiveSince: force 상승에지 criticalTimer 리셋의 히스테리시스 기준
         //     (연속 비활성 ≥ WATCHDOG_GATE_CLOSE_RESET_SECONDS 후의 상승만 '진짜 회복 윈도우'로 인정).
@@ -308,8 +313,14 @@ namespace BalloonFlow
             //   below-full 에서 배치된 다트가 공격 불가(hasMatch=false)여도 유저가 탭할 홀더가 남아 있으면
             //   실패 금지 — 기존엔 supply 오탐(Hidden 색 제외 등) 시 방치만으로 n초 뒤 실패했다(사용자 보고).
             //   엔드게임(모든 홀더 소진)은 밴드 밖에서도 noMovesLeft 로 실패 유지(영영 무실패 소프트락 방지).
+            // ROLLBACK_FAIL_NEARFULL_TUNE3_20260708: 실패용 임계를 데드락 임계(NearFullBandEmptySlots,
+            //   빈슬롯 5~8·배포점 수 비례)에서 분리 — 그 밴드는 회복 무브먼트용이라 실패 판정엔 과하게 일렀다
+            //   (160캡에서 152부터 실패권, 사용자 "규제 너무 쎔" 2026-07-08). 고정 3 = 만석 직전 체감 +
+            //   Level 167 반례(158/160 무한대기) 커버 유지. supply 큐 컷오프도 동일 상수(아래
+            //   ComputeReachableSupplyMatch) — 실패 밴드와 함께 움직여야 정합. 데드락 강제회전은 기존 폭 유지.
+            //   롤백: 두 곳을 RailManager.Instance.NearFullBandEmptySlots 로 환원.
             bool nearFullBand = RailManager.HasInstance && physCap > 0
-                && efc >= physCap - RailManager.Instance.NearFullBandEmptySlots;
+                && efc >= physCap - FAIL_NEARFULL_EMPTY_SLOTS;
             if (forceFullBeltAdvance && !_wasForceFullBeltAdvanceActive)
             {
                 // ROLLBACK_FAIL_FORCE_ADVANCE_RECHECK_TIMER:
@@ -1130,8 +1141,8 @@ namespace BalloonFlow
             //   이 밴드 밑에서는 기존 rev3 도달가능 깊이 규칙 그대로 (167/155 오탐 해소 유지).
             //   기존 조건은 `efc >= physCap`(빈 슬롯 0일 때만 차단)이었음. 롤백: 아래를
             //   `if (physCap <= 0 || efc >= physCap) return false;` 로 환원 + RailManager 노출 제거.
-            int nearFullCutoff = RailManager.Instance.NearFullBandEmptySlots;
-            if (physCap <= 0 || efc >= physCap - nearFullCutoff) return false;
+            // ROLLBACK_FAIL_NEARFULL_TUNE3_20260708: 컷오프를 실패 밴드 상수(고정 3)로 — 데드락 임계(5~8)와 분리.
+            if (physCap <= 0 || efc >= physCap - FAIL_NEARFULL_EMPTY_SLOTS) return false;
             return QueueSupplyMatchesOutermost();
         }
 

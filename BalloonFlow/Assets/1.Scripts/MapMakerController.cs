@@ -3520,7 +3520,10 @@ namespace BalloonFlow
                     _previewObjs[c, r] = go;
 
                     // Gimmick label
-                    if (ci >= 0 && gi > 0 && gi < FIELD_GIMMICK_MARKS.Length && !string.IsNullOrEmpty(FIELD_GIMMICK_MARKS[gi]))
+                    // ROLLBACK_ICE_OVERLAY_PREVIEW_LABEL_20260708: 전체 재빌드(로드/그리드 변경 시)도 UpdatePreviewCell 과
+                    //   동일하게 iceOverlay 셀에 ❄ 라벨. 기존엔 이 조건에 `|| iceOv>0` 이 빠져, 레벨 로드 후 얼음 오버레이
+                    //   셀의 ❄ 표시가 사라짐 → "배치는 되는데 MapMaker 뷰에서 얼음이 안 보임/인식 안 됨" 증상. per-cell 과 정렬.
+                    if ((ci >= 0 && gi > 0 && gi < FIELD_GIMMICK_MARKS.Length && !string.IsNullOrEmpty(FIELD_GIMMICK_MARKS[gi])) || iceOv > 0)
                     {
                         var labelGO = new GameObject("GLabel");
                         labelGO.transform.SetParent(_previewRoot, false);
@@ -3529,7 +3532,7 @@ namespace BalloonFlow
                         var tm = labelGO.AddComponent<TextMesh>();
                         // ROLLBACK_ICE_MANUAL_GROUP_20260608:
                         // Show explicit Ice group id in MapMaker preview. Group 0 keeps the legacy auto group label.
-                        tm.text = GetFieldGimmickPreviewMark(c, r, gi);
+                        tm.text = (iceOv > 0 ? "❄" : "") + GetFieldGimmickPreviewMark(c, r, gi);
                         tm.fontSize = 32;
                         tm.characterSize = scale * 0.35f;
                         tm.alignment = TextAlignment.Center;
@@ -3657,10 +3660,10 @@ namespace BalloonFlow
         private string GetFieldGimmickPreviewMark(int c, int r, int gimmickIndex)
         {
             string mark = FIELD_GIMMICK_MARKS[gimmickIndex];
-            if (gimmickIndex > 0
-                && gimmickIndex < FIELD_GIMMICK_NAMES.Length
-                && FIELD_GIMMICK_NAMES[gimmickIndex] == "Ice"
-                && _balloonIceGroupId != null
+            // ROLLBACK_ICE_OVERLAY_PREVIEW_LABEL_20260708: 그룹 id 표시를 "Ice" 기믹뿐 아니라 iceOverlay 셀에도.
+            //   iceGroupId>0 은 iced 셀(Ice 기믹 or 오버레이)에서만 세팅되므로(ApplyIceGroupBrushMeta) 조건 완화 안전.
+            //   → 그룹핑한 Frozen Layer 오버레이도 프리뷰에서 G{n} 확인 가능.
+            if (_balloonIceGroupId != null
                 && c < _balloonIceGroupId.GetLength(0)
                 && r < _balloonIceGroupId.GetLength(1)
                 && _balloonIceGroupId[c, r] > 0)
