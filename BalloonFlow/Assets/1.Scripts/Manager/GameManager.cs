@@ -174,6 +174,15 @@ namespace BalloonFlow
         // Rollback: restore 0.00f only if all build data explicitly overrides this value.
         public float dartFlightSpeedMultiplier = 66.00f;
 
+        // ROLLBACK_DART_CONST_VELOCITY_20260708: 다트 등속도 비행 모드 — 가속 램프(66→150, 0.285s) 대신
+        //   고정 속도(셀/초) 등속. 비행 duration 산출과 위치 보간 둘 다 등속으로 전환, dartFlightEase 도
+        //   무시(Linear 강제)해 완전한 등속을 보장. OFF 면 기존 램프 프로파일 그대로. 동적 반영.
+        [Tooltip("다트 등속도 비행. ON=가속 램프 대신 아래 고정 속도(셀/초)로 등속 비행 + Ease 무시(Linear). 동적 반영. (default: false)")]
+        public bool dartConstantVelocity = false;
+
+        [Tooltip("등속 비행 속도(셀/초) — 위 토글 ON 일 때 적용. 참고: 램프 프로파일은 66→150. (default: 130)")]
+        public float dartConstantVelocitySpeed = 130f;
+
         // [ROLLBACK_DART_LAUNCH_INITIAL_PROGRESS]
         // 다트 발사 직후 시각 위치는 start 에서 시작하되 내부 elapsed 만 n초 앞당겨 진행.
         // 효과: 발사 직후 강한 가속처럼 보이며 비행 중 다트끼리 spacing 줄어듦.

@@ -87,9 +87,30 @@ namespace BalloonFlow
             if (!IsFinite(distance)) distance = cellSpacing;
 
             float q = distance / (cellSpacing * scalars);          // 덮어야 할 누적 mult-units
+
+            // ROLLBACK_DART_CONST_VELOCITY_20260708: 등속 모드 — 램프 역함수 대신 duration = q / 고정속도.
+            //   위치 보간도 UpdateProjectiles 에서 선형으로 전환(같은 마커) → 완전한 등속도 운동.
+            if (TryGetConstantDartVelocity(out float constMult))
+            {
+                float cvDuration = q / constMult;
+                if (!IsFinite(cvDuration) || cvDuration <= 0f) cvDuration = PROJECTILE_MIN_FLIGHT_TIME;
+                return Mathf.Clamp(cvDuration, PROJECTILE_MIN_FLIGHT_TIME, PROJECTILE_MAX_FLIGHT_TIME);
+            }
+
             float duration = DartRampTimeForUnits(q, startMult);
             if (!IsFinite(duration) || duration <= 0f) duration = PROJECTILE_MIN_FLIGHT_TIME;
             return Mathf.Clamp(duration, PROJECTILE_MIN_FLIGHT_TIME, PROJECTILE_MAX_FLIGHT_TIME);
+        }
+
+        /// <summary>ROLLBACK_DART_CONST_VELOCITY_20260708: 등속 모드 조회 — ON 이면 고정 속도(셀/초) 반환.
+        /// 0/NaN 방어(130 폴백). OFF 면 false → 기존 램프 프로파일.</summary>
+        private static bool TryGetConstantDartVelocity(out float cellsPerSec)
+        {
+            cellsPerSec = 0f;
+            if (!GameManager.HasInstance || !GameManager.Instance.Board.dartConstantVelocity) return false;
+            cellsPerSec = GameManager.Instance.Board.dartConstantVelocitySpeed;
+            if (!IsFinite(cellsPerSec) || cellsPerSec <= 0.001f) cellsPerSec = 130f;
+            return true;
         }
 
         // [이미지 속도 프로파일] 속도(mult): start → MAX 로 RAMP_TIME 선형 가속 후 일정.
@@ -3884,12 +3905,24 @@ namespace BalloonFlow
                     //   recoilTime=0(토글 OFF) 이면 기존 식과 완전 동일.
                     float fwdElapsed  = proj.elapsed - proj.recoilTime;
                     float fwdDuration = Mathf.Max(0.0001f, proj.duration - proj.recoilTime);
-                    float rampDenom = DartRampDistanceUnits(fwdDuration, startMultRT);
-                    float moveT = fwdElapsed <= 0f ? 0f
-                        : (rampDenom > 0.0001f
-                            ? Mathf.Clamp01(DartRampDistanceUnits(fwdElapsed, startMultRT) / rampDenom)
-                            : Mathf.Clamp01(fwdElapsed / fwdDuration));
-                    Ease lerpEase = GameManager.HasInstance ? GameManager.Instance.Board.dartFlightEase : Ease.Linear;
+                    // ROLLBACK_DART_CONST_VELOCITY_20260708: 등속 모드 — 램프 누적이동량 비율 대신 선형 진행
+                    //   + Ease 무시(Linear 강제). duration 이 이미 고정속도로 산출돼 있어 위치가 완전 등속이 된다.
+                    bool constVel = TryGetConstantDartVelocity(out _);
+                    float moveT;
+                    if (constVel)
+                    {
+                        moveT = fwdElapsed <= 0f ? 0f : Mathf.Clamp01(fwdElapsed / fwdDuration);
+                    }
+                    else
+                    {
+                        float rampDenom = DartRampDistanceUnits(fwdDuration, startMultRT);
+                        moveT = fwdElapsed <= 0f ? 0f
+                            : (rampDenom > 0.0001f
+                                ? Mathf.Clamp01(DartRampDistanceUnits(fwdElapsed, startMultRT) / rampDenom)
+                                : Mathf.Clamp01(fwdElapsed / fwdDuration));
+                    }
+                    Ease lerpEase = constVel ? Ease.Linear
+                        : (GameManager.HasInstance ? GameManager.Instance.Board.dartFlightEase : Ease.Linear);
                     float easedT = DOVirtual.EasedValue(0f, 1f, moveT, lerpEase);
                     // ROLLBACK_DART_RECOIL_LERP_UNCLAMPED_20260707: Lerp → LerpUnclamped.
                     //   InBack 계열 ease 실험 시 easedT<0 구간이 클램프로 소실되지 않게 함.
