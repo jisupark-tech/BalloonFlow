@@ -20,6 +20,9 @@ namespace BalloonFlow.Analytics
         public const string EVT_PURCHASE         = "purchase_event";
         public const string EVT_ECONOMY          = "economy_event";
         public const string EVT_AD               = "ad_event";
+        // ROLLBACK_USER_PROPERTY_PIPELINE_20260708: R_user_property (uid 당 1행, 서버 MERGE UPSERT).
+        //   다른 8개와 달리 스트리밍 append 가 아니라 Cloud Function 이 BQ DML MERGE 로 처리.
+        public const string EVT_USER_PROPERTY    = "user_property_event";
 
         // ─── Common params ───
         public const string P_EVENT_ID            = "event_id";
@@ -89,6 +92,24 @@ namespace BalloonFlow.Analytics
         public const string P_MAX_REACHED_LEVEL   = "max_reached_level";
         public const string P_TOTAL_SPEND_USD     = "total_spend_usd";
         public const string P_TOTAL_AD_REVENUE_USD = "total_ad_revenue_usd";
+
+        // ─── user_property (R_user_property v3.2 — uid 당 1행 UPSERT) ───
+        // ROLLBACK_USER_PROPERTY_PIPELINE_20260708. 미전송(NULL 유지): install_media_source/campaign/
+        //   adgroup/creative(MMP 연동 자동), idfa(iOS ATT), aid(GAID 네이티브 비동기 — 필요 시 후속).
+        public const string P_INSTALL_COUNTRY        = "install_country";
+        public const string P_INSTALL_PLATFORM       = "install_platform";
+        public const string P_INSTALL_DEVICE         = "install_device";
+        public const string P_LAST_ACTIVE_AT         = "last_active_at";
+        public const string P_LAST_ACTIVE_VERSION    = "last_active_version";
+        public const string P_LAST_ACTIVE_COUNTRY    = "last_active_country";
+        public const string P_LAST_PLAYED_AT         = "last_played_at";
+        public const string P_TOTAL_PLAY_COUNT       = "total_play_count";
+        public const string P_TOTAL_CLEAR_COUNT      = "total_clear_count";
+        public const string P_TOTAL_COIN_BALANCE     = "total_coin_balance";
+        public const string P_INFINITE_LIVES_EXPIRY  = "infinite_lives_expiry";
+        public const string P_IS_PAYER               = "is_payer";
+        public const string P_LAST_UPDATED_AT        = "last_updated_at";
+        public const string P_APPSFLYER_ID           = "appsflyer_id";
 
         // ─── purchase_event ───
         public const string P_PRODUCT_ID          = "product_id";

@@ -230,6 +230,122 @@ const FIELD_RENAME = {
   session_start: { app_version: 'version', geo_country: 'country' },
 };
 
+// ── user_property UPSERT — ROLLBACK_USER_PROPERTY_PIPELINE_20260708 ─────────────
+// R_user_property(v3.2)는 uid 당 1행 UPSERT 테이블 — 스트리밍 append 불가 → DML MERGE.
+// 클라 user_property_event(세션 시작/종료 시 발사)를 여기로 라우팅. 특성:
+//   · uid 는 토큰 검증값 사용(클라 값 무시 — 이벤트 테이블과 동일 원칙)
+//   · last_updated_at 게이트: 구본(재시도/역순 배치)이 신본을 덮지 않음 → 멱등, 클라 재전송 무해
+//   · install_* 는 불변(INSERT 시에만), 누적치(total_*)는 GREATEST 로 역행 방지
+//   · MMP 계열(install_media_source/campaign/adgroup/creative)·idfa/aid 는 클라 미전송 → NULL 유지
+//   · user_property 테이블은 DML 전용(스트리밍 버퍼 없음)이라 MERGE 충돌 없음
+// 비용/쿼터: 세션당 1~2회 소형 MERGE — 1.0 규모 무해. 스케일 시 스테이징 append + 주기 MERGE 로 전환.
+const USER_PROPERTY_EVENT = 'user_property_event';
+
+const USER_PROP_MERGE_SQL = `
+MERGE \`${BQ_DATASET}.user_property\` T
+USING (SELECT
+  @uid AS uid,
+  @game_id AS game_id,
+  CAST(@install_at AS DATETIME) AS install_at,
+  @install_version AS install_version,
+  @install_country AS install_country,
+  @install_platform AS install_platform,
+  @install_device AS install_device,
+  CAST(@last_active_at AS DATETIME) AS last_active_at,
+  @last_active_version AS last_active_version,
+  @last_active_country AS last_active_country,
+  CAST(@last_played_at AS DATETIME) AS last_played_at,
+  @max_reached_level AS max_reached_level,
+  @total_play_count AS total_play_count,
+  @total_clear_count AS total_clear_count,
+  @total_coin_balance AS total_coin_balance,
+  CAST(@total_spend_usd AS NUMERIC) AS total_spend_usd,
+  CAST(@total_ad_revenue_usd AS NUMERIC) AS total_ad_revenue_usd,
+  CAST(@infinite_lives_expiry AS DATETIME) AS infinite_lives_expiry,
+  @is_payer AS is_payer,
+  CAST(@last_updated_at AS DATETIME) AS last_updated_at,
+  @appsflyer_id AS appsflyer_id
+) S
+ON T.uid = S.uid
+WHEN MATCHED AND S.last_updated_at >= IFNULL(T.last_updated_at, DATETIME '1970-01-01') THEN UPDATE SET
+  last_active_at        = S.last_active_at,
+  last_active_version   = S.last_active_version,
+  last_active_country   = S.last_active_country,
+  last_played_at        = COALESCE(S.last_played_at, T.last_played_at),
+  max_reached_level     = GREATEST(IFNULL(T.max_reached_level, 0), IFNULL(S.max_reached_level, 0)),
+  total_play_count      = GREATEST(IFNULL(T.total_play_count, 0), IFNULL(S.total_play_count, 0)),
+  total_clear_count     = GREATEST(IFNULL(T.total_clear_count, 0), IFNULL(S.total_clear_count, 0)),
+  total_coin_balance    = S.total_coin_balance,
+  total_spend_usd       = GREATEST(IFNULL(T.total_spend_usd, CAST(0 AS NUMERIC)), IFNULL(S.total_spend_usd, CAST(0 AS NUMERIC))),
+  total_ad_revenue_usd  = GREATEST(IFNULL(T.total_ad_revenue_usd, CAST(0 AS NUMERIC)), IFNULL(S.total_ad_revenue_usd, CAST(0 AS NUMERIC))),
+  infinite_lives_expiry = S.infinite_lives_expiry,
+  is_payer              = IFNULL(T.is_payer, FALSE) OR IFNULL(S.is_payer, FALSE),
+  appsflyer_id          = COALESCE(S.appsflyer_id, T.appsflyer_id),
+  last_updated_at       = S.last_updated_at
+WHEN NOT MATCHED THEN INSERT (
+  game_id, uid, install_at, install_version, install_country, install_platform, install_device,
+  last_active_at, last_active_version, last_active_country, last_played_at,
+  max_reached_level, total_play_count, total_clear_count, total_coin_balance,
+  total_spend_usd, total_ad_revenue_usd, infinite_lives_expiry, is_payer, last_updated_at, appsflyer_id
+) VALUES (
+  S.game_id, S.uid, S.install_at, S.install_version, S.install_country, S.install_platform, S.install_device,
+  S.last_active_at, S.last_active_version, S.last_active_country, S.last_played_at,
+  S.max_reached_level, S.total_play_count, S.total_clear_count, S.total_coin_balance,
+  S.total_spend_usd, S.total_ad_revenue_usd, S.infinite_lives_expiry, S.is_payer, S.last_updated_at, S.appsflyer_id
+)`;
+
+function toIntOrNull(v) {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
+function toStrOrNull(v) {
+  if (v == null) return null;
+  const s = String(v);
+  return s.length > 0 ? s : null;
+}
+
+async function mergeUserProperty(uid, d) {
+  const params = {
+    uid,
+    game_id:               toStrOrNull(d.game_id) || 'balloonloop',
+    install_at:            toBqDatetime(d.install_at),
+    install_version:       toStrOrNull(d.install_version),
+    install_country:       toStrOrNull(d.install_country),
+    install_platform:      toStrOrNull(d.install_platform),
+    install_device:        toStrOrNull(d.install_device),
+    last_active_at:        toBqDatetime(d.last_active_at),
+    last_active_version:   toStrOrNull(d.last_active_version),
+    last_active_country:   toStrOrNull(d.last_active_country),
+    last_played_at:        toBqDatetime(d.last_played_at),
+    max_reached_level:     toIntOrNull(d.max_reached_level),
+    total_play_count:      toIntOrNull(d.total_play_count),
+    total_clear_count:     toIntOrNull(d.total_clear_count),
+    total_coin_balance:    toIntOrNull(d.total_coin_balance),
+    total_spend_usd:       sanitizeNumeric(d.total_spend_usd),
+    total_ad_revenue_usd:  sanitizeNumeric(d.total_ad_revenue_usd),
+    infinite_lives_expiry: toBqDatetime(d.infinite_lives_expiry),
+    is_payer:              d.is_payer === true,
+    last_updated_at:       toBqDatetime(d.last_updated_at) || toBqDatetime(new Date().toISOString()),
+    appsflyer_id:          toStrOrNull(d.appsflyer_id),
+  };
+  // null 파라미터는 타입 추론 불가 → 전 파라미터 명시 타입 (DATETIME 은 SQL 측 CAST, 여기선 STRING).
+  const types = {
+    uid: 'STRING', game_id: 'STRING',
+    install_at: 'STRING', install_version: 'STRING', install_country: 'STRING',
+    install_platform: 'STRING', install_device: 'STRING',
+    last_active_at: 'STRING', last_active_version: 'STRING', last_active_country: 'STRING',
+    last_played_at: 'STRING',
+    max_reached_level: 'INT64', total_play_count: 'INT64', total_clear_count: 'INT64',
+    total_coin_balance: 'INT64',
+    total_spend_usd: 'FLOAT64', total_ad_revenue_usd: 'FLOAT64',
+    infinite_lives_expiry: 'STRING', is_payer: 'BOOL', last_updated_at: 'STRING',
+    appsflyer_id: 'STRING',
+  };
+  // location 미지정 — 데이터셋 리전은 라이브러리가 잡 생성 시 해석 (US 외 리전이면 배포 후 1회 확인).
+  await bq.query({ query: USER_PROP_MERGE_SQL, params, types });
+}
+
 /** 클라 'o' 포맷(2026-..Z, 7프랙) → BQ DATETIME/TIMESTAMP 양립 형식(존 제거, ms). null 안전. */
 function toBqDatetime(v) {
   if (v == null) return null;
@@ -286,10 +402,12 @@ exports.ingestAnalyticsEvents = onRequest(
     // 3) 이벤트명 → 테이블별로 행 그룹화. event_ts→event_timestamp 매핑, 컬럼명 rename, uid 권위값.
     const fallbackTs = toBqDatetime(new Date().toISOString());
     const byTable = new Map();
+    const userPropEvents = []; // ROLLBACK_USER_PROPERTY_PIPELINE_20260708: MERGE 경로 (스트리밍 아님)
     let skipped = 0;
     for (const ev of events) {
       const name = ev && ev.name;
       const data = (ev && ev.data) || {};
+      if (name === USER_PROPERTY_EVENT) { userPropEvents.push(data); continue; }
       const table = EVENT_TABLE[name];
       if (!table) { skipped++; continue; }              // 알 수 없는 이벤트 스킵
 
@@ -307,7 +425,7 @@ exports.ingestAnalyticsEvents = onRequest(
       // insertId = event_id → streaming best-effort 중복제거(클라 재시도 중복 흡수)
       byTable.get(table).push({ insertId: row.event_id || undefined, json: row });
     }
-    if (byTable.size === 0) { res.status(400).json({ error: 'no valid events' }); return; }
+    if (byTable.size === 0 && userPropEvents.length === 0) { res.status(400).json({ error: 'no valid events' }); return; }
 
     // 4) 테이블별 BigQuery streaming insert. ignoreUnknownValues — 타겟에 없는 컬럼은 무시(클라/스키마 드리프트 내성).
     const tables = [...byTable.keys()];
@@ -330,6 +448,21 @@ exports.ingestAnalyticsEvents = onRequest(
       const detail = (err && err.errors) ? JSON.stringify(err.errors.slice(0, 3)) : (err && err.message);
       console.error(`[ingestAnalyticsEvents] insert failed table=${t} rows=${n} detail=${detail}`);
     });
+
+    // ROLLBACK_USER_PROPERTY_PIPELINE_20260708: user_property MERGE UPSERT.
+    //   요청 내 여러 건이면 last_updated_at 최신 1건만 반영(uid 는 토큰상 동일).
+    //   실패 시 failedTables 에 포함 → 5xx → 클라 배치 재시도(MERGE 는 last_updated_at 게이트로 멱등).
+    if (userPropEvents.length > 0) {
+      try {
+        const latest = userPropEvents.reduce((a, b) =>
+          String(b.last_updated_at || '') > String(a.last_updated_at || '') ? b : a);
+        await mergeUserProperty(uid, latest);
+        inserted += userPropEvents.length;
+      } catch (e) {
+        failedTables.push('user_property');
+        console.error(`[ingestAnalyticsEvents] user_property MERGE failed detail=${e && e.message}`);
+      }
+    }
 
     if (failedTables.length > 0) {
       // 일부 테이블 실패 — 클라가 배치 전체 재시도(insertId 로 성공분 중복 흡수). 5xx 로 응답.

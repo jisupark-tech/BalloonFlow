@@ -238,6 +238,10 @@ namespace BalloonFlow.Analytics
             if (UserSnapshotCache.HasInstance)
                 UserSnapshotCache.Instance.Stamp(p);
 
+            // ROLLBACK_USER_PROPERTY_PIPELINE_20260708: user_property 용 누적 판수/최근 플레이 시각 갱신.
+            if (UserSnapshotCache.HasInstance)
+                UserSnapshotCache.Instance.OnLevelPlayStarted();
+
             AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_LEVEL_PLAY_START, p);
         }
 

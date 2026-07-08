@@ -818,6 +818,8 @@ namespace BalloonFlow
             RailManager rail = RailManager.Instance;
             bool isOpen = !rail.IsClosedLoop;
             float pathLen = rail.TotalPathLength;
+            // ROLLBACK_DEADLOCK_WAVE_20260708: 활성 판정 루프 밖 1회 — 비활성 프레임 다트당 추가 비용 0.
+            bool slotWaveActive = TryGetDeadlockWaveElapsed(out float slotWaveElapsed);
 
             // Collect keys without allocation (reuse list)
             _tempSlotKeys.Clear();
@@ -877,8 +879,17 @@ namespace BalloonFlow
                 //     scale = Mathf.Clamp01(scale);
                 //     visual.gameObject.transform.localScale = visual.baseScale * scale;
                 // }
-                if (visual.gameObject.transform.localScale != visual.baseScale)
-                    visual.gameObject.transform.localScale = visual.baseScale;
+                // ROLLBACK_DEADLOCK_WAVE_20260708: 슬롯 기반 경로도 동일 웨이브 배율 적용 (경로거리 = 슬롯 간격 × idx + 회전 오프셋).
+                //   활성 판정은 루프 밖 1회(slotWaveActive) — 비활성 프레임엔 다트당 추가 비용 0.
+                Vector3 slotSyncScale = visual.baseScale;
+                if (slotWaveActive)
+                {
+                    float slotDist = slotIdx * rail.SlotSpacing + rail.RotationOffset;
+                    slotSyncScale = visual.baseScale
+                        * DeadlockWaveScaleMul(slotDist, rail.TotalPathLength, slotWaveElapsed);
+                }
+                if (visual.gameObject.transform.localScale != slotSyncScale)
+                    visual.gameObject.transform.localScale = slotSyncScale;
             }
 
             // Deferred removal
@@ -913,6 +924,75 @@ namespace BalloonFlow
             return inBL || inBR || inTL || inTR;
         }
 
+        #region Deadlock Wave — ROLLBACK_DEADLOCK_WAVE_20260708
+
+        // ROLLBACK_DEADLOCK_WAVE_20260708 rev2 (기획 명확화): 데드락 '진입 시'가 아니라, 배포 스톨 감시
+        //   (HolderVisualManager DEPLOY_STALL_DEADLOCK_TRIGGER)가 '걸림을 감지하고 → 1.5초 뒤 실패가 아니면
+        //   데드락 버퍼로 밀어주기(EnterDeadlockMode)' 하는 그 **대기 구간**에만 파도 연출.
+        //   시작/취소는 HolderVisualManager 스톨 감시가 호출(BeginDeadlockStallWave/Cancel) — 스톨이 깨지면
+        //   (occ 변화) 즉시 취소, 밀어주는 시점에 종료. 원점 = 걸린(leftmost 배포중) 홀더의 배포점.
+        //   반시계 방향, 파면이 남은 대기시간 동안 레일 한 바퀴.
+        //   구현 원칙: 스케일은 UpdatePerDartPositions/슬롯 sync 가 매 프레임 강제하는 단일 소스이므로,
+        //   외부 트윈이 아니라 그 sync 루프 안에서 배율(WaveScaleMul)로 적용 — 충돌 없음.
+        //   위치/회전/타게팅/발사 로직 무영향(스케일만). 발사 순간 launchStartScale 이 최대 +22% 로 시작할 수
+        //   있으나 발사 스케일 트윈이 즉시 수렴(시각적 무해). 풀 반환 시 scale 리셋 기존 로직 유지.
+        //   롤백: 이 region + 두 sync 루프의 waveMul 적용 + HolderVisualManager 의 Begin/Cancel 호출 제거.
+        private const float DEADLOCK_WAVE_AMPLITUDE = 0.22f;    // 최대 +22% (조금씩)
+        private const float DEADLOCK_WAVE_WIDTH_RATIO = 0.14f;  // 파도 폭 = 경로 길이의 14%
+        // 반시계 방향(사용자 지정). 경로 웨이포인트 저작 방향에 따라 화면상 시계로 보이면 -1f 로 뒤집을 것.
+        private const float DEADLOCK_WAVE_DIR = 1f;
+        private float _deadlockWaveDuration = 1.5f; // Begin 에서 '남은 스톨 대기시간'으로 설정 — 밀어주는 시점과 종료 동기
+        private float _deadlockWaveStartTime = -1f; // scaled time — 벨트/스톨 타이머와 같은 시간축 (2x 가속 포함 동기)
+        private float _deadlockWaveOriginDist;
+
+        /// <summary>스톨 대기 구간 시작 — origin(걸린 홀더 배포점의 경로거리)에서 파도 출발.
+        /// duration = 밀어주기까지 남은 시간(호출부가 스톨 타이머 잔여로 계산).</summary>
+        public void BeginDeadlockStallWave(float originPathDistance, float duration)
+        {
+            if (_boardFinished) return;
+            if (_deadlockWaveStartTime >= 0f) return; // 이미 진행 중 — 중복 시작 무시
+            _deadlockWaveOriginDist = originPathDistance;
+            _deadlockWaveDuration = Mathf.Max(0.2f, duration);
+            _deadlockWaveStartTime = Time.time;
+        }
+
+        /// <summary>스톨이 깨졌거나(점유 변화) 밀어주기가 발동된 시점 — 파도 즉시 종료.</summary>
+        public void CancelDeadlockStallWave()
+        {
+            _deadlockWaveStartTime = -1f;
+        }
+
+        /// <summary>이번 프레임 웨이브 활성 여부 + 경과. 만료 시 상태 해제. sync 루프 진입부에서 1회 호출.</summary>
+        private bool TryGetDeadlockWaveElapsed(out float elapsed)
+        {
+            elapsed = 0f;
+            if (_deadlockWaveStartTime < 0f) return false;
+            elapsed = Time.time - _deadlockWaveStartTime;
+            if (elapsed >= _deadlockWaveDuration)
+            {
+                _deadlockWaveStartTime = -1f;
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>경로거리 pathDist 다트의 웨이브 스케일 배율(1 ~ 1+AMP). 원점에서 DIR 방향으로
+        /// 대기시간 동안 한 바퀴 진행하는 파면(cos 종형 창)이 지나갈 때 부풀었다 복귀.</summary>
+        private float DeadlockWaveScaleMul(float pathDist, float pathLen, float elapsed)
+        {
+            if (pathLen <= 0f) return 1f;
+            float frontDist = (elapsed / _deadlockWaveDuration) * pathLen;
+            // 원점 기준, 파도 진행 방향으로 잰 이 다트까지의 거리 (0 ~ pathLen)
+            float along = Mathf.Repeat(DEADLOCK_WAVE_DIR * (pathDist - _deadlockWaveOriginDist), pathLen);
+            float halfWidth = Mathf.Max(0.0001f, pathLen * DEADLOCK_WAVE_WIDTH_RATIO * 0.5f);
+            float x = (along - frontDist) / halfWidth;
+            if (x < -1f || x > 1f) return 1f;
+            float bump = 0.5f * (1f + Mathf.Cos(Mathf.PI * x)); // 0→1→0 부드러운 종형
+            return 1f + DEADLOCK_WAVE_AMPLITUDE * bump;
+        }
+
+        #endregion
+
         private void UpdatePerDartPositions()
         {
             if (!RailManager.HasInstance || _dartVisuals.Count == 0) return;
@@ -920,6 +1000,7 @@ namespace BalloonFlow
             RailManager rail = RailManager.Instance;
             bool isOpen = !rail.IsClosedLoop;
             float pathLen = rail.TotalPathLength;
+            bool deadlockWave = TryGetDeadlockWaveElapsed(out float deadlockWaveElapsed); // ROLLBACK_DEADLOCK_WAVE_20260708
             RefreshFadeCache();
             float pathOffset = _cachedDartPathOffset;
             float dartScale = _cachedDartScale;
@@ -990,9 +1071,14 @@ namespace BalloonFlow
                 //     scale = Mathf.Clamp01(scale);
                 //     visual.gameObject.transform.localScale = normalScale * scale;
                 // }
-                if (visual.gameObject.transform.localScale != normalScale)
+                // ROLLBACK_DEADLOCK_WAVE_20260708: 웨이브 활성 시 sync 가 강제하는 스케일에 배율만 곱함
+                //   (이 루프가 스케일 단일 소스라 별도 트윈과 충돌 없음).
+                Vector3 targetSyncScale = deadlockWave
+                    ? normalScale * DeadlockWaveScaleMul(dart.progress, pathLen, deadlockWaveElapsed)
+                    : normalScale;
+                if (visual.gameObject.transform.localScale != targetSyncScale)
                 {
-                    visual.gameObject.transform.localScale = normalScale;
+                    visual.gameObject.transform.localScale = targetSyncScale;
                 }
             }
 
@@ -4267,6 +4353,7 @@ namespace BalloonFlow
         private void HandleBoardFailed(OnBoardFailed evt)
         {
             _boardFinished = true;
+            _deadlockWaveStartTime = -1f; // ROLLBACK_DEADLOCK_WAVE_20260708: 실패 시 웨이브 즉시 종료 (탈선 연출과 충돌 방지)
             // [FAIL_DERAIL 2026-06-12] 실패 인식 → 레일 다트 탈선 흩어짐 연출.
             // 실패 팝업은 ContinueHandler 가 FailScatterPopupDelay 만큼 기다렸다 띄운다.
             if (_failScatterCo != null) StopCoroutine(_failScatterCo);

@@ -93,6 +93,10 @@ namespace BalloonFlow.Analytics
 
             SaveOpenSessionSnapshot();
             FireSessionStartEvent();
+            // ROLLBACK_USER_PROPERTY_PIPELINE_20260708: 세션 시작 시에도 UPSERT — 스펙은 '세션 종료 시'지만
+            //   모바일에서 종료 이벤트는 유실 가능(프로세스 킬)하므로 시작 시 1회를 보험으로 함께 발사.
+            //   서버 MERGE 가 last_updated_at 게이트로 멱등 처리하므로 중복 무해.
+            FireUserPropertyEvent();
         }
 
         private void EndSession(string endReason)
@@ -101,6 +105,8 @@ namespace BalloonFlow.Analytics
 
             int durationSec = (int)Math.Max(0, (DateTime.UtcNow - _sessionStartedUtc).TotalSeconds);
             FireSessionEndEvent(endReason, durationSec);
+            // ROLLBACK_USER_PROPERTY_PIPELINE_20260708: 스키마 갱신주기 정의 지점 — 세션 종료 시 UPSERT.
+            FireUserPropertyEvent();
 
             _sessionId = null;
             ClearOpenSessionSnapshot();
@@ -222,6 +228,67 @@ namespace BalloonFlow.Analytics
             p[AnalyticsConsts.P_DURATION_SEC] = durationSec;
 
             EmitEvent(AnalyticsConsts.EVT_SESSION_END, p);
+        }
+
+        // ROLLBACK_USER_PROPERTY_PIPELINE_20260708: R_user_property UPSERT 페이로드.
+        //   서버(ingestAnalyticsEvents)가 이 이벤트만 스트리밍 insert 대신 BQ MERGE 로 처리한다.
+        //   uid 는 서버가 토큰 검증값으로 대체. 미포함(NULL 유지): install_media_source/campaign/
+        //   adgroup/creative(MMP 자동), idfa/aid(네이티브 비동기 — 후속). 롤백: 이 메서드 + 호출 2곳 제거.
+        private void FireUserPropertyEvent()
+        {
+            var p = new Dictionary<string, object>(24);
+            DateTime now = DateTime.UtcNow;
+            p[AnalyticsConsts.P_EVENT_ID]        = Guid.NewGuid().ToString("N");
+            p[AnalyticsConsts.P_GAME_ID]         = AnalyticsConsts.GAME_ID;
+            p[AnalyticsConsts.P_UID]             = ResolveUid();
+            p[AnalyticsConsts.P_EVENT_TS]        = now.ToString("o");
+            p[AnalyticsConsts.P_LAST_UPDATED_AT] = now.ToString("o");
+
+            p[AnalyticsConsts.P_LAST_ACTIVE_AT]      = _sessionStartedUtc.ToString("o");
+            p[AnalyticsConsts.P_LAST_ACTIVE_VERSION] = Application.version;
+            p[AnalyticsConsts.P_LAST_ACTIVE_COUNTRY] = ResolveGeoCountry();
+
+            if (UserSnapshotCache.HasInstance)
+            {
+                var c = UserSnapshotCache.Instance;
+                p[AnalyticsConsts.P_INSTALL_AT]           = c.InstallAt;
+                p[AnalyticsConsts.P_INSTALL_VERSION]      = c.InstallVersion;
+                p[AnalyticsConsts.P_INSTALL_COUNTRY]      = c.InstallCountry;
+                p[AnalyticsConsts.P_INSTALL_PLATFORM]     = c.InstallPlatform;
+                p[AnalyticsConsts.P_INSTALL_DEVICE]       = c.InstallDevice;
+                p[AnalyticsConsts.P_MAX_REACHED_LEVEL]    = c.MaxReachedLevel;
+                p[AnalyticsConsts.P_TOTAL_PLAY_COUNT]     = c.TotalPlayCount;
+                p[AnalyticsConsts.P_TOTAL_CLEAR_COUNT]    = c.TotalClearCount;
+                p[AnalyticsConsts.P_TOTAL_SPEND_USD]      = Math.Round(c.TotalSpendUsd, 6);
+                p[AnalyticsConsts.P_TOTAL_AD_REVENUE_USD] = Math.Round(c.TotalAdRevenueUsd, 6);
+                p[AnalyticsConsts.P_IS_PAYER]             = c.IsPayer;
+                if (!string.IsNullOrEmpty(c.LastPlayedAt))
+                    p[AnalyticsConsts.P_LAST_PLAYED_AT] = c.LastPlayedAt;
+            }
+
+            if (CurrencyManager.HasInstance)
+                p[AnalyticsConsts.P_TOTAL_COIN_BALANCE] = CurrencyManager.Instance.Coins;
+
+            if (LifeManager.HasInstance && LifeManager.Instance.IsInfiniteHeartsActive)
+                p[AnalyticsConsts.P_INFINITE_LIVES_EXPIRY] =
+                    now.AddSeconds(LifeManager.Instance.GetRemainingInfiniteSeconds()).ToString("o");
+
+            string afId = ResolveAppsFlyerId();
+            if (!string.IsNullOrEmpty(afId))
+                p[AnalyticsConsts.P_APPSFLYER_ID] = afId;
+
+            EmitEvent(AnalyticsConsts.EVT_USER_PROPERTY, p);
+        }
+
+        /// <summary>AppsFlyer 유저 키 — SDK 미초기화/에디터/예외 시 빈 문자열(NULL 유지).</summary>
+        private static string ResolveAppsFlyerId()
+        {
+#if UNITY_ANDROID || UNITY_IOS
+            try { return AppsFlyerSDK.AppsFlyer.getAppsFlyerId() ?? ""; }
+            catch { return ""; }
+#else
+            return "";
+#endif
         }
 
         // ─── Helpers ───

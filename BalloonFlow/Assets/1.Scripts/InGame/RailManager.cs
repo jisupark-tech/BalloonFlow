@@ -782,6 +782,11 @@ namespace BalloonFlow
         private readonly HashSet<int> _activeDeployPoints = new HashSet<int>();
 
         /// <summary>deploy point 등록 (대기 상태 — 아직 장애물 아님).</summary>
+        /// <summary>ROLLBACK_DEADLOCK_WAVE_20260708: 데드락 웨이브 연출용 — 배포점의 경로상 거리(progress) 조회.
+        /// 데드락 진입 시점의 '걸린 지점'(OnDeadlockEntered.holderId)을 파도 원점으로 쓰기 위해 노출.</summary>
+        public bool TryGetDeployPointProgress(int holderId, out float progress)
+            => _deployPoints.TryGetValue(holderId, out progress);
+
         public void RegisterDeployPoint(int holderId, float progress)
         {
             NormalizeProgress(ref progress);

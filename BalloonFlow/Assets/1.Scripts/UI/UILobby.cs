@@ -2587,13 +2587,50 @@ namespace BalloonFlow
         /// </summary>
         public Vector2 GetGoldPanelScreenPos()
         {
-            RectTransform rt = _goldFlyTargetOverride != null ? _goldFlyTargetOverride
-                : (_txtGold != null ? _txtGold.rectTransform : null);
+            // ROLLBACK_COINFLY_ICON_CENTER_20260708 (사용자 피드백: 코인이 코인바 이미지에 안 모이고 스침):
+            //   ① 목표를 골드 '텍스트' pivot → 코인 '아이콘(ImageGold)' 으로 변경 (override > 아이콘 > 텍스트 폴백).
+            //   ② rt.position(pivot) 대신 rect 기하 중심(TransformPoint(rect.center)) — pivot 이 (0.5,0.5)가
+            //      아니어도 항상 이미지 정중앙. 롤백: 기존 rt 선택식 + rt.position 환원.
+            RectTransform rt = _goldFlyTargetOverride != null ? _goldFlyTargetOverride : ResolveGoldIconFlyTarget();
+            if (rt == null) rt = _txtGold != null ? _txtGold.rectTransform : null;
             if (rt == null) return new Vector2(Screen.width * 0.85f, Screen.height * 0.92f);
             var canvas = rt.GetComponentInParent<Canvas>();
             Camera cam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
                 ? canvas.worldCamera : null;
-            return RectTransformUtility.WorldToScreenPoint(cam, rt.position);
+            return RectTransformUtility.WorldToScreenPoint(cam, rt.TransformPoint(rt.rect.center));
+        }
+
+        /// <summary>ROLLBACK_COINFLY_ICON_CENTER_20260708: TopBar 코인 아이콘(ImageGold) 탐색 캐시.
+        /// 골드 텍스트의 부모(패널)에서 위로 2단계까지 "ImageGold" 를 찾는다. 없으면 null → 텍스트 폴백.</summary>
+        private RectTransform _goldIconFlyTarget;
+        private RectTransform ResolveGoldIconFlyTarget()
+        {
+            if (_goldIconFlyTarget != null) return _goldIconFlyTarget;
+            Transform searchRoot = _txtGold != null ? _txtGold.transform.parent : null;
+            for (int hop = 0; searchRoot != null && hop < 2 && _goldIconFlyTarget == null; hop++, searchRoot = searchRoot.parent)
+            {
+                var icon = FindChildComponentByName<Transform>(searchRoot, "ImageGold");
+                if (icon != null)
+                    _goldIconFlyTarget = icon as RectTransform != null ? (RectTransform)icon : icon.GetComponent<RectTransform>();
+            }
+
+            // ROLLBACK_COINFLY_ICON_CENTER_20260708 rev3: "ImageGold" 이름 미일치 시 폴백 — GoldPanel 자식
+            //   Image 중 화면상 가장 왼쪽(코인 아이콘은 항상 패널 좌측)을 아이콘으로 간주. 패널 루트(배경)와
+            //   텍스트는 제외. 이름 검색 성공 시 이 블록은 스킵. 롤백: 이 블록 제거.
+            if (_goldIconFlyTarget == null && _txtGold != null && _txtGold.transform.parent != null)
+            {
+                Transform panel = _txtGold.transform.parent;
+                Image leftmost = null;
+                float leftmostX = float.MaxValue;
+                foreach (Image img in panel.GetComponentsInChildren<Image>(true))
+                {
+                    if (img == null || img.transform == panel) continue; // 패널 배경(루트) 제외
+                    float cx = img.rectTransform.TransformPoint(img.rectTransform.rect.center).x;
+                    if (cx < leftmostX) { leftmostX = cx; leftmost = img; }
+                }
+                if (leftmost != null) _goldIconFlyTarget = leftmost.rectTransform;
+            }
+            return _goldIconFlyTarget;
         }
 
         /// <summary>
@@ -2609,7 +2646,8 @@ namespace BalloonFlow
             var canvas = rt.GetComponentInParent<Canvas>();
             Camera cam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
                 ? canvas.worldCamera : null;
-            return RectTransformUtility.WorldToScreenPoint(cam, rt.position);
+            // ROLLBACK_COINFLY_ICON_CENTER_20260708: pivot 무관 rect 중심 (골드와 동일 정책).
+            return RectTransformUtility.WorldToScreenPoint(cam, rt.TransformPoint(rt.rect.center));
         }
 
         public Vector2 GetGameStartButtonScreenPos()

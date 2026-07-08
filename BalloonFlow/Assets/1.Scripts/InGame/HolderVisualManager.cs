@@ -2531,6 +2531,27 @@ namespace BalloonFlow
             {
                 _deployStallOccupied = occForStall;
                 _deployStallSince = Time.time;
+                // ROLLBACK_DEADLOCK_WAVE_20260708 rev2: 점유 변화 = 스톨 깨짐 → 진행 중이던 파도 취소.
+                if (_deadlockStallWaveStarted && DartManager.HasInstance)
+                    DartManager.Instance.CancelDeadlockStallWave();
+                _deadlockStallWaveStarted = false;
+            }
+
+            // ROLLBACK_DEADLOCK_WAVE_20260708 rev2: 스톨 게이트(시간 제외)가 성립한 순간부터 '밀어주기'까지의
+            //   대기 구간에 파도 연출 시작. duration = 스톨 타이머 잔여(밀어주는 시점과 종료 동기).
+            //   원점 = leftmost 배포중 홀더의 배포점(EnterDeadlockMode 의 트리거 선정과 동일 기준).
+            bool stallWavePending = !nearFull
+                                    && isDeployingCount >= 1
+                                    && occForStall >= nearFullThreshold - DEPLOY_STALL_NEARFULL_SLACK;
+            if (stallWavePending && !_deadlockStallWaveStarted && DartManager.HasInstance)
+            {
+                float stallRemaining = DEPLOY_STALL_DEADLOCK_SECONDS - (Time.time - _deployStallSince);
+                if (stallRemaining > 0.05f)
+                {
+                    _deadlockStallWaveStarted = true;
+                    DartManager.Instance.BeginDeadlockStallWave(
+                        ResolveLeftmostDeployingDeployProgress(), stallRemaining);
+                }
             }
             // ROLLBACK_DEADLOCK_SMOOTHING_RESTORE_20260707: 'nearFull + 배치 실패 → 즉시 진입'(HEAD 정책) 복원.
             //   배경: rev5(stall-only 진입) + 발사 최근성 게이트가 만석 근처의 데드락 진입을 사실상 0 으로
@@ -2591,6 +2612,30 @@ namespace BalloonFlow
             _dlWatchSince = Time.time;
             // ROLLBACK_DEPLOY_STALL_DEADLOCK_TRIGGER_20260707: 진입 후 stall 타이머 리셋(exit 직후 즉시 재진입 루프 방지).
             _deployStallOccupied = -1;
+            // ROLLBACK_DEADLOCK_WAVE_20260708 rev2: '밀어주는 시점' = 파도 종료 (대기 구간 전용 연출).
+            if (_deadlockStallWaveStarted && DartManager.HasInstance)
+                DartManager.Instance.CancelDeadlockStallWave();
+            _deadlockStallWaveStarted = false;
+        }
+
+        // ROLLBACK_DEADLOCK_WAVE_20260708 rev2: 스톨 대기 파도 상태 + 원점 산출.
+        private bool _deadlockStallWaveStarted;
+
+        /// <summary>leftmost 배포중 홀더의 배포점 경로거리 — 파도 원점. 미발견 시 0(경로 시작점).</summary>
+        private float ResolveLeftmostDeployingDeployProgress()
+        {
+            float origin = 0f;
+            int leftCol = int.MaxValue;
+            int leftId = -1;
+            foreach (var kvp in _holderVisuals)
+            {
+                HolderVisual v = kvp.Value;
+                if (v == null || !v.isDeploying) continue;
+                if (v.column < leftCol) { leftCol = v.column; leftId = v.holderId; }
+            }
+            if (leftId >= 0 && RailManager.HasInstance)
+                RailManager.Instance.TryGetDeployPointProgress(leftId, out origin);
+            return origin;
         }
 
         /// <summary>
@@ -3207,6 +3252,9 @@ namespace BalloonFlow
             if (visual.identifier != null)
                 visual.identifier.TriggerHiddenEnd();
 
+            // ROLLBACK_HIDDEN_APPEAR_PARTICLE_20260708: 히든 → 컬러 상자 공개 순간 분리 파티클(아트 요청).
+            PlayHiddenAppearParticle(visual);
+
             if (visual.magazineText != null)
                 visual.magazineText.SetText(string.Empty);
                 RestoreSpawnerTextMaterialPreset(visual);
@@ -3236,6 +3284,77 @@ namespace BalloonFlow
                     visual.magazineText.SetText("{0}", visual.magazineRemaining);
                 }
             });
+        }
+
+        // ROLLBACK_HIDDEN_APPEAR_PARTICLE_20260708: 히든 상자 공개 파티클 — 아트 분리 프리팹
+        //   (Assets/Resources/Prefabs/HiddenAppearParticle, art `f1a254e4`)을 공개 시점에 재생.
+        //   오브젝트 풀링 사용(요청) — FXGold(CoinFlyEffect) 패턴: lazy 풀 등록 + ParticleSystem[] 캐시 +
+        //   수명(최대 duration+lifetime) 1회 계산 캐시 후 DelayedCall 로 풀 반환. 풀 6개 = Chain 전파로
+        //   여러 히든이 같은 프레임에 동시 공개되는 케이스 대비. 롤백: 이 region + HandleHolderRevealed 호출 제거.
+        private const string HIDDEN_APPEAR_FX_POOL = "HiddenAppearParticle";
+        private const string HIDDEN_APPEAR_FX_PATH = "Prefabs/HiddenAppearParticle";
+        private static GameObject _hiddenAppearFxPrefab;
+        private float _hiddenAppearFxLifetime = -1f;
+        private readonly Dictionary<GameObject, ParticleSystem[]> _hiddenAppearFxParticles
+            = new Dictionary<GameObject, ParticleSystem[]>();
+
+        private void PlayHiddenAppearParticle(HolderVisual visual)
+        {
+            if (visual == null || visual.gameObject == null) return;
+
+            if (_hiddenAppearFxPrefab == null)
+                _hiddenAppearFxPrefab = Resources.Load<GameObject>(HIDDEN_APPEAR_FX_PATH);
+            if (_hiddenAppearFxPrefab == null) return; // 프리팹 미수령(pull 전) 빌드 방어 — 연출만 생략
+
+            GameObject fx;
+            if (ObjectPoolManager.HasInstance)
+            {
+                if (!ObjectPoolManager.Instance.HasPool(HIDDEN_APPEAR_FX_POOL))
+                    ObjectPoolManager.Instance.CreatePool(HIDDEN_APPEAR_FX_POOL, _hiddenAppearFxPrefab, 6);
+                fx = ObjectPoolManager.Instance.Get(HIDDEN_APPEAR_FX_POOL);
+            }
+            else
+            {
+                fx = Instantiate(_hiddenAppearFxPrefab);
+            }
+            if (fx == null) return;
+
+            fx.transform.position = visual.gameObject.transform.position;
+            fx.transform.rotation = _hiddenAppearFxPrefab.transform.rotation; // 프리팹 저작 방향 유지
+            fx.SetActive(true);
+
+            if (!_hiddenAppearFxParticles.TryGetValue(fx, out ParticleSystem[] systems) || systems == null
+                || (systems.Length > 0 && systems[0] == null))
+            {
+                systems = fx.GetComponentsInChildren<ParticleSystem>(true);
+                _hiddenAppearFxParticles[fx] = systems;
+            }
+
+            if (_hiddenAppearFxLifetime < 0f)
+            {
+                float life = 0.6f;
+                for (int i = 0; i < systems.Length; i++)
+                {
+                    if (systems[i] == null) continue;
+                    var main = systems[i].main;
+                    float d = main.duration + main.startLifetime.constantMax + main.startDelay.constantMax;
+                    if (main.loop) d = Mathf.Min(d, 2f); // 루프 시스템은 상한 (영영 반환 안 되는 것 방지)
+                    life = Mathf.Max(life, d);
+                }
+                _hiddenAppearFxLifetime = Mathf.Clamp(life + 0.2f, 0.4f, 4f);
+            }
+
+            for (int i = 0; i < systems.Length; i++)
+                if (systems[i] != null) { systems[i].Clear(true); systems[i].Play(true); }
+
+            DOVirtual.DelayedCall(_hiddenAppearFxLifetime, () =>
+            {
+                if (fx == null) return;
+                if (ObjectPoolManager.HasInstance && ObjectPoolManager.Instance.HasPool(HIDDEN_APPEAR_FX_POOL))
+                    ObjectPoolManager.Instance.Return(HIDDEN_APPEAR_FX_POOL, fx);
+                else
+                    Destroy(fx);
+            }).SetUpdate(true); // 팝업 pause(timeScale=0) 중에도 반환 보장
         }
 
         private void HandleHolderClickAnim(OnHolderClickAnim evt)

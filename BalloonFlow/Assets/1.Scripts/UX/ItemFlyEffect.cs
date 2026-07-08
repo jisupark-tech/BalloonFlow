@@ -32,8 +32,11 @@ namespace BalloonFlow
         public static bool IsAnyActive => _activeSessionCount > 0;
         public static event Action<bool> OnActiveStateChanged;
 
+        /// <param name="screenToProvider">ROLLBACK_ITEMFLY_LIVE_TARGET_20260708: 도착점 '실시간' 조회 콜백(옵션).
+        /// 지정 시 비행 중 매 프레임 재평가 — 도착 UI 가 언락 등장 연출로 이동 중이어도(AUDIT 로그: 클레임 시점
+        /// shuffle/zap 버튼 y=-152, 화면 밖) 도착 순간의 실제 위치에 꽂힌다. null 이면 기존 고정 좌표.</param>
         public static void Play(Sprite icon, Vector2 screenFrom, Vector2 screenTo, int count,
-            Action onEachLand = null, Action onAllComplete = null)
+            Action onEachLand = null, Action onAllComplete = null, Func<Vector2> screenToProvider = null)
         {
             if (count <= 0) { onAllComplete?.Invoke(); return; }
             if (!UIManager.HasInstance) { onAllComplete?.Invoke(); return; }
@@ -53,7 +56,7 @@ namespace BalloonFlow
 
             EnsurePool();
             CoroutineRunner.Get().StartCoroutine(
-                RunFly(parent, icon, screenFrom, screenTo, count, onEachLand, wrappedComplete));
+                RunFly(parent, icon, screenFrom, screenTo, count, onEachLand, wrappedComplete, screenToProvider));
         }
 
         private static void BeginSession()
@@ -103,15 +106,19 @@ namespace BalloonFlow
 
         private static IEnumerator RunFly(Transform parent, Sprite icon,
             Vector2 fromScreen, Vector2 toScreen, int count,
-            Action onEachLand, Action onAllComplete)
+            Action onEachLand, Action onAllComplete, Func<Vector2> screenToProvider = null)
         {
             Canvas canvas = parent.GetComponentInParent<Canvas>();
             Camera cam = (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera)
                 ? canvas.worldCamera : null;
             RectTransform canvasRT = canvas != null ? canvas.GetComponent<RectTransform>() : null;
 
-            Vector2 from = ScreenToLocal(canvasRT, cam, fromScreen);
-            Vector2 to = ScreenToLocal(canvasRT, cam, toScreen);
+            // ROLLBACK_COINFLY_COORD_NORMALIZE_20260708: 변환 기준을 캔버스 루트가 아니라 '실제 부모'(EffectTr)
+            //   rect 로 — 부모 rect 가 캔버스 루트와 어긋나 있어도 anchoredPosition(중앙 anchor)과 정확히 일치.
+            //   부모 pivot 보정(rect.center). CoinFlyEffect 와 동일 정책.
+            RectTransform parentRT = parent as RectTransform;
+            Vector2 from = ScreenToAnchoredInParent(parentRT, canvasRT, cam, fromScreen);
+            Vector2 to = ScreenToAnchoredInParent(parentRT, canvasRT, cam, toScreen);
             float cH = canvasRT != null ? canvasRT.rect.height : Screen.height;
             float cW = canvasRT != null ? canvasRT.rect.width : Screen.width;
 
@@ -145,7 +152,8 @@ namespace BalloonFlow
                 Image img = _imageCache[item];
                 float dur = UnityEngine.Random.Range(DURATION_MIN, DURATION_MAX);
                 CoroutineRunner.Get().StartCoroutine(
-                    Fly(item, rt, img, from, scatterPos, mid, to, dur, () =>
+                    Fly(item, rt, img, from, scatterPos, mid, to, dur,
+                        screenToProvider, parentRT, canvasRT, cam, () =>
                     {
                         landed++;
                         // [2026-06-24 사용자 피드백] FXItem count>=2 일 때 Item_Get 중복 재생 금지.
@@ -213,7 +221,8 @@ namespace BalloonFlow
 
         private static IEnumerator Fly(GameObject item, RectTransform rt, Image img,
             Vector2 origin, Vector2 scatter, Vector2 mid, Vector2 target,
-            float duration, Action onDone)
+            float duration, Func<Vector2> screenTargetProvider,
+            RectTransform parentRT, RectTransform canvasRT, Camera cam, Action onDone)
         {
             yield return new WaitForSecondsRealtime(UnityEngine.Random.Range(0f, SCATTER_START_DELAY_MAX));
 
@@ -259,16 +268,33 @@ namespace BalloonFlow
                 float t = Mathf.Clamp01(elapsed / duration);
                 float ease = t * t;
                 float u = 1f - ease;
+
+                // ROLLBACK_ITEMFLY_LIVE_TARGET_20260708: 도착 UI 가 이동 중(언락 등장 연출)이어도 꽂히도록
+                //   매 프레임 도착점 재평가 — 곡선이 자연스럽게 현재 버튼 위치로 휘어 들어간다. provider 미지정
+                //   호출부(상점 구매 등 정적 타겟)는 기존 고정 좌표 그대로.
+                if (screenTargetProvider != null)
+                    target = ScreenToAnchoredInParent(parentRT, canvasRT, cam, screenTargetProvider());
+
                 rt.anchoredPosition = u * u * scatter + 2f * u * ease * mid + ease * ease * target;
 
-                if (t > FADE_OUT_START && img != null)
+                // ROLLBACK_ITEMFLY_FADE_BY_DISTANCE_20260708 (사용자 재보고: 버튼을 '지나가는 느낌'):
+                //   기존 페이드 기준은 '시간 t' — 이동이 EaseIn(t²)이라 t=0.90(페이드 시작) 시점의 거리
+                //   진행률은 81%로, 경로 19%를 남기고 사라지기 시작해 목적지에 못 미친 채 증발했다
+                //   (경로가 긴 버튼일수록 두드러짐 — hand 만 멀쩡해 보인 이유).
+                //   기준을 거리 진행률(ease)로 교체 — 거리 90%부터 페이드, 알파 0 = 정확히 도착 지점.
+                //   롤백: 조건/분자를 t 로 환원.
+                if (ease > FADE_OUT_START && img != null)
                 {
-                    float ft = (t - FADE_OUT_START) / (1f - FADE_OUT_START);
+                    float ft = (ease - FADE_OUT_START) / (1f - FADE_OUT_START);
                     float a = 1f - Mathf.SmoothStep(0f, 1f, ft);
                     img.color = new Color(1f, 1f, 1f, a);
                 }
                 yield return null;
             }
+
+            // ROLLBACK_ITEMFLY_BUTTON_CENTER_20260708: EaseIn 종반 프레임 대이동으로 마지막 표시 위치가
+            //   target 직전일 수 있음 — 도착 스냅으로 정확히 목표 중심에서 종료.
+            if (rt != null) rt.anchoredPosition = target;
 
             _activeItems.Remove(item);
             onDone?.Invoke();
@@ -285,6 +311,17 @@ namespace BalloonFlow
                 RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRT, screen, cam, out Vector2 local))
                 return local;
             return screen;
+        }
+
+        /// <summary>ROLLBACK_COINFLY_COORD_NORMALIZE_20260708: 화면 좌표 → '중앙 anchor(0.5,0.5) 기준
+        /// anchoredPosition' 변환 (CoinFlyEffect 와 동일). 부모 rect local point 에서 rect.center 를 빼
+        /// 부모 pivot 무관 정확한 중앙 anchor 오프셋. 부모가 RectTransform 아니면 canvasRT 폴백.</summary>
+        private static Vector2 ScreenToAnchoredInParent(RectTransform parentRT, RectTransform canvasRT, Camera cam, Vector2 screen)
+        {
+            if (parentRT != null &&
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRT, screen, cam, out Vector2 local))
+                return local - parentRT.rect.center;
+            return ScreenToLocal(canvasRT, cam, screen);
         }
     }
 }

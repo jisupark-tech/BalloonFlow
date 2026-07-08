@@ -831,7 +831,8 @@ namespace BalloonFlow
             Canvas targetCanvas = target.GetComponentInParent<Canvas>();
             Camera targetCam = (targetCanvas != null && targetCanvas.renderMode == RenderMode.ScreenSpaceCamera)
                 ? targetCanvas.worldCamera : null;
-            Vector2 screenTarget = RectTransformUtility.WorldToScreenPoint(targetCam, target.position);
+            // ROLLBACK_COINFLY_ICON_CENTER_20260708: pivot 위치 → rect 기하 중심 (코인이 이미지 중앙에 수렴).
+            Vector2 screenTarget = RectTransformUtility.WorldToScreenPoint(targetCam, target.TransformPoint(target.rect.center));
 
             CoinFlyEffect.Play(screenCenter, screenTarget, coinCount,
                 onEachLand: () =>
@@ -976,7 +977,29 @@ namespace BalloonFlow
         {
             ResolveGoldPanelRefs();
             if (_goldPanelFlyTarget != null) return _goldPanelFlyTarget;
+
+            // ROLLBACK_COINFLY_ICON_CENTER_20260708 rev2: 패널 '루트'(아이콘+텍스트 전체) 중심은 코인
+            //   이미지에서 비껴 있다 — 코인 아이콘(ImageGold) 을 우선 타겟(로비 UILobby 와 동일 정책).
+            //   미발견 시 기존 패널 루트 폴백. 롤백: 이 블록 제거.
+            if (_goldIconFlyTargetCached == null && _goldPanel != null)
+                _goldIconFlyTargetCached = FindGoldIconRect(_goldPanel.transform);
+            if (_goldIconFlyTargetCached != null) return _goldIconFlyTargetCached;
+
             return _goldPanel != null ? _goldPanel.transform as RectTransform : _goldTarget;
+        }
+
+        // ROLLBACK_COINFLY_ICON_CENTER_20260708 rev2: 골드 아이콘 탐색 캐시 + 재귀 탐색 헬퍼.
+        private RectTransform _goldIconFlyTargetCached;
+        private static RectTransform FindGoldIconRect(Transform root)
+        {
+            if (root == null) return null;
+            if (root.name == "ImageGold") return root as RectTransform;
+            for (int i = 0; i < root.childCount; i++)
+            {
+                RectTransform found = FindGoldIconRect(root.GetChild(i));
+                if (found != null) return found;
+            }
+            return null;
         }
 
         private void SetGoldPanelVisible(bool visible)

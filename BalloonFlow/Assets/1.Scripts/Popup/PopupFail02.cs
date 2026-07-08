@@ -58,6 +58,16 @@ namespace BalloonFlow
 
         private const int RETRY_BONUS_GOLD = 20;
 
+        /// <summary>ROLLBACK_FAIL02_RETRY_BONUS_BY_DIFFICULTY_20260708: 실패 팝업 보너스 골드 '표기' 난이도별
+        /// (기획 2026-07-08) — Normal 20 / Hard 60 / SuperHard 100. 실제 지급 로직은 기존 20 표기 때와
+        /// 동일하게 별도 미구현(표기 전용). 지급 구현 시 이 함수를 단일 소스로 사용할 것.</summary>
+        private static int GetRetryBonusGold(DifficultyPurpose difficulty) => difficulty switch
+        {
+            DifficultyPurpose.Hard      => 60,
+            DifficultyPurpose.SuperHard => 100,
+            _                           => RETRY_BONUS_GOLD,
+        };
+
         private const int OVERLAY_SORT_ORDER = 200; // PopupCanvas 기본값과 동일 — 사용자 요청 2026-06-12 (이전 260 → 200, Tutorial 위 강제 표시 정책 철회)
         private Canvas _overrideCanvas;
 
@@ -378,8 +388,14 @@ namespace BalloonFlow
             string layer = _overrideCanvas != null ? _overrideCanvas.sortingLayerName : "Default";
             ApplyRewardSortingOrder(rewardRoot, layer);
 
-            SetRewardText(rewardRoot, "TxtGold", RETRY_BONUS_GOLD);
-            SetRewardText(rewardRoot, "TxtGoldOutline", RETRY_BONUS_GOLD);
+            // ROLLBACK_FAIL02_RETRY_BONUS_BY_DIFFICULTY_20260708: 고정 20 → 난이도별 표기(20/60/100).
+            //   난이도 소스는 OnEnable 자동 적용 경로와 동일(LevelManager.GetLevelDifficulty).
+            DifficultyPurpose rewardDiff = LevelManager.HasInstance
+                ? LevelManager.Instance.GetLevelDifficulty(LevelManager.Instance.CurrentLevelId)
+                : DifficultyPurpose.Normal;
+            int bonusGold = GetRetryBonusGold(rewardDiff);
+            SetRewardText(rewardRoot, "TxtGold", bonusGold);
+            SetRewardText(rewardRoot, "TxtGoldOutline", bonusGold);
             RestartRewardAnimators(rewardRoot);
         }
 
@@ -609,7 +625,11 @@ namespace BalloonFlow
             if (LevelManager.HasInstance)
                 LevelManager.Instance.RetryLevel();
 
-            Debug.Log($"[PopupFail02] Retry — 클리어 시 보너스 {RETRY_BONUS_GOLD} 골드");
+            // ROLLBACK_FAIL02_RETRY_BONUS_BY_DIFFICULTY_20260708: 로그도 난이도별 표기와 정합.
+            DifficultyPurpose logDiff = LevelManager.HasInstance
+                ? LevelManager.Instance.GetLevelDifficulty(LevelManager.Instance.CurrentLevelId)
+                : DifficultyPurpose.Normal;
+            Debug.Log($"[PopupFail02] Retry — 클리어 시 보너스 {GetRetryBonusGold(logDiff)} 골드 ({logDiff})");
         }
 
         private void CloseForRetry()

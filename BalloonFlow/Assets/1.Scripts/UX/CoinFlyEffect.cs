@@ -179,8 +179,12 @@ namespace BalloonFlow
                 ? canvas.worldCamera : null;
             RectTransform canvasRT = canvas != null ? canvas.GetComponent<RectTransform>() : null;
 
-            Vector2 from = ScreenToLocal(canvasRT, cam, fromScreen);
-            Vector2 to = ScreenToLocal(canvasRT, cam, toScreen);
+            // ROLLBACK_COINFLY_COORD_NORMALIZE_20260708: 변환 기준을 캔버스 루트가 아니라 '실제 부모'(EffectTr)
+            //   rect 로 — 부모가 캔버스 루트와 어긋난 rect 여도 anchoredPosition(중앙 anchor 기준)과 정확히 일치.
+            //   부모 pivot 이 중앙이 아닐 수 있으므로 rect.center 보정. 부모가 RectTransform 아니면 기존 canvasRT 폴백.
+            RectTransform parentRT = parent as RectTransform;
+            Vector2 from = ScreenToAnchoredInParent(parentRT, canvasRT, cam, fromScreen);
+            Vector2 to = ScreenToAnchoredInParent(parentRT, canvasRT, cam, toScreen);
             float cH = canvasRT != null ? canvasRT.rect.height : Screen.height;
             float cW = canvasRT != null ? canvasRT.rect.width : Screen.width;
 
@@ -241,8 +245,33 @@ namespace BalloonFlow
                     if (rt == null) rt = coin.AddComponent<RectTransform>();
                     _rectCache[coin] = rt;
                 }
+                // ROLLBACK_COINFLY_COORD_NORMALIZE_20260708 (사용자 재보고: 아이콘보다 '상단'에서 사라짐):
+                //   anchoredPosition 대입이 화면 좌표와 일치하려면 anchor/pivot 이 (0.5,0.5)여야 하는데
+                //   FXGold 프리팹 값을 그대로 써서 프리팹 anchor/pivot 만큼 일정하게 비껴 떴다.
+                //   ItemFlyEffect(GetItemInstance:192-193)와 동일하게 스폰 시 정규화 — 프리팹 값 무관 보장.
+                //   롤백: 아래 2줄 제거.
+                rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+                rt.pivot = new Vector2(0.5f, 0.5f);
                 rt.anchoredPosition = from;
                 ApplyResolutionInvariantRootScale(coin, rt);
+
+                // ROLLBACK_COINFLY_BODY_OFFSET_20260708 (스크린샷: 코인 무리가 아이콘에서 일정하게 비껴 소멸):
+                //   FXGold 의 '보이는 코인 본체'(자식 Image/파티클 루트)가 프리팹 저작상 루트 RT 에서 벗어나
+                //   있으면, 루트를 target 에 꽂아도 눈에 보이는 본체는 그 오프셋만큼 비껴 도착한다.
+                //   스폰 시 본체 중심의 루트 대비 오프셋(부모 좌표)을 측정해 이 코인의 목표를 역보정 —
+                //   프리팹 내부 저작과 무관하게 '본체'가 아이콘 중심에 꽂힌다. 본체(Image) 미발견 시 보정 0.
+                //   롤백: 이 블록 + coinTarget 사용부를 to 로 환원.
+                Vector2 bodyOffset = Vector2.zero;
+                {
+                    var bodyImg = coin.GetComponentInChildren<UnityEngine.UI.Image>(true);
+                    if (bodyImg != null)
+                    {
+                        Vector3 bodyWorld = bodyImg.rectTransform.TransformPoint(bodyImg.rectTransform.rect.center);
+                        Vector3 rootLocal = rt.InverseTransformPoint(bodyWorld);
+                        bodyOffset = new Vector2(rootLocal.x * rt.localScale.x, rootLocal.y * rt.localScale.y);
+                    }
+                }
+                Vector2 coinTarget = to - bodyOffset;
                 // ROLLBACK_FXGOLD_RESOLUTION_INVARIANT_SCALE_20260624:
                 // 프리팹의 authored scale에 Canvas.scaleFactor 역보정을 곱해 고해상도/Fold 캔버스에서
                 // 코인과 자식 Light/Particle이 더 커지고 강해지는 현상을 막는다.
@@ -268,7 +297,7 @@ namespace BalloonFlow
                 float dur = UnityEngine.Random.Range(minDur, maxDur);
 
                 CoroutineRunner.Get().StartCoroutine(
-                    Fly(coin, rt, from, scatterPos, mid, to, dur, clearVersion, () =>
+                    Fly(coin, rt, from, scatterPos, mid, coinTarget, dur, clearVersion, () =>
                     {
                         landed++;
                         // [2026-06-23 사용자 피드백] 첫 도착 시점 Gold_Get 연속 3회(코루틴). Common_Coin_Gain.mp3 대체.
@@ -367,11 +396,57 @@ namespace BalloonFlow
                 if (clearVersion != _clearVersion) yield break;
             }
 
+            // ROLLBACK_COINFLY_ARRIVAL_ABSORB_20260708 (사용자 피드백: 도착 시 범위로 흩뿌려지며 사라짐):
+            //   EaseIn(ct²) 곡선이라 마지막 20~30% 거리를 최종 1~2프레임에 이동 + 종료 즉시 풀 반환 →
+            //   화면에 마지막으로 보인 위치가 코인마다 target 못 미친 제각각 지점이었다.
+            //   ① target 스냅(도착 보장) + 콜백(텍스트 틱/펄스)을 '닿는 순간' 발화
+            //   ② 짧은 흡수(스케일→0, 0.07s) 후 반환 — 모든 코인이 정확히 한 점에서 소멸.
+            //   스케일은 풀 반환 시 ResetPooledTransform 이 원복. 롤백: 이 블록 제거 + 기존 즉시 반환 복원.
+            // rev2 (재보고 "몇 개는 목적지 주변에서 사라짐"): 원인 = 자식 트레일 파티클.
+            //   월드 시뮬레이션 파티클은 막판 스퍼트(EaseIn)를 못 따라와 경로 뒤에 남는데, 풀 반환 순간
+            //   통째로 증발해 '코인이 목적지 직전에 사라진' 인상을 준다(비행시간 랜덤 0.3~0.5s 라 빠른
+            //   코인일수록 두드러짐 = "몇 개만" 증상). 도착 시 ① 방출만 중단(StopEmitting — 기존 트레일은
+            //   자연 페이드) ② 본체 흡수(스케일→0) ③ 트레일 페이드 시간만큼 잠깐 잡아둔 뒤 반환.
+            //   재사용 시 RunFly 의 Clear()+Play() 가 파티클 상태 원복. 롤백: Stop/HOLD 블록 제거.
+            if (rt != null) rt.anchoredPosition = target;
+            onDone?.Invoke();
+
+            if (_particleCache.TryGetValue(coin, out var arrivalParticles) && arrivalParticles != null)
+            {
+                for (int i = 0; i < arrivalParticles.Length; i++)
+                    if (arrivalParticles[i] != null)
+                        arrivalParticles[i].Stop(true, ParticleSystemStopBehavior.StopEmitting);
+            }
+
+            if (rt != null)
+            {
+                const float ABSORB_DURATION = 0.07f;
+                Vector3 landScale = rt.localScale;
+                float ab = 0f;
+                while (ab < ABSORB_DURATION)
+                {
+                    ab += Time.unscaledDeltaTime;
+                    float k = Mathf.Clamp01(ab / ABSORB_DURATION);
+                    rt.localScale = Vector3.LerpUnclamped(landScale, Vector3.zero, k);
+                    yield return null;
+                    if (clearVersion != _clearVersion) yield break; // 중단 시 ClearActiveCoins 가 반환 처리
+                }
+            }
+
+            // rev2: 잔여 트레일이 자연 소멸할 시간 — 본체는 스케일 0 이라 안 보임. 풀(28) 대비 동시 체류 여유 충분.
+            const float TRAIL_FADE_HOLD = 0.25f;
+            float hold = 0f;
+            while (hold < TRAIL_FADE_HOLD)
+            {
+                hold += Time.unscaledDeltaTime;
+                yield return null;
+                if (clearVersion != _clearVersion) yield break;
+            }
+
             // Pool.Return 이 SetParent(_poolParent, worldPositionStays=false) 로 localScale 보존하며 분리.
             // 직접 SetParent(null) 호출하면 worldPositionStays=true(기본값) 라 캔버스 스케일이 localScale 로 흡수됨.
             if (_activeCoins.Remove(coin))
                 ReturnOrDestroyCoin(coin);
-            onDone?.Invoke();
         }
 
         private static void ReturnOrDestroyCoin(GameObject coin)
@@ -453,6 +528,17 @@ namespace BalloonFlow
                 RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRT, screen, cam, out Vector2 local))
                 return local;
             return screen;
+        }
+
+        /// <summary>ROLLBACK_COINFLY_COORD_NORMALIZE_20260708: 화면 좌표 → '중앙 anchor(0.5,0.5) 기준
+        /// anchoredPosition' 변환. 부모 rect 의 local point 에서 rect.center(부모 pivot 보정)를 빼면
+        /// 중앙 anchor 기준 오프셋이 된다. 부모가 RectTransform 아니면 canvasRT 폴백(기존 동작).</summary>
+        private static Vector2 ScreenToAnchoredInParent(RectTransform parentRT, RectTransform canvasRT, Camera cam, Vector2 screen)
+        {
+            if (parentRT != null &&
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRT, screen, cam, out Vector2 local))
+                return local - parentRT.rect.center;
+            return ScreenToLocal(canvasRT, cam, screen);
         }
     }
 }

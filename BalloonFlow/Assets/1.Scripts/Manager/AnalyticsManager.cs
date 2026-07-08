@@ -491,6 +491,7 @@ namespace BalloonFlow
                 case AnalyticsConsts.EVT_SESSION_START:    return BqSessionStartColumns;
                 case AnalyticsConsts.EVT_SESSION_END:      return BqSessionEndColumns;
                 case AnalyticsConsts.EVT_AD:               return BqAdColumns;
+                case AnalyticsConsts.EVT_USER_PROPERTY:    return BqUserPropertyColumns; // ROLLBACK_USER_PROPERTY_PIPELINE_20260708
                 default: return null;
             }
         }
@@ -573,6 +574,22 @@ namespace BalloonFlow
             AnalyticsConsts.P_EVENT_ID, AnalyticsConsts.P_SESSION_ID, AnalyticsConsts.P_GAME_ID,
             AnalyticsConsts.P_UID, AnalyticsConsts.P_EVENT_TS, AnalyticsConsts.P_END_REASON,
             AnalyticsConsts.P_DURATION_SEC
+        };
+
+        // ROLLBACK_USER_PROPERTY_PIPELINE_20260708: R_user_property v3.2 — 서버 MERGE 입력 컬럼.
+        //   event_id/event_ts 는 배치·재시도 식별용(테이블 컬럼 아님 — 서버가 소비).
+        private static readonly string[] BqUserPropertyColumns =
+        {
+            AnalyticsConsts.P_EVENT_ID, AnalyticsConsts.P_GAME_ID, AnalyticsConsts.P_UID,
+            AnalyticsConsts.P_EVENT_TS,
+            AnalyticsConsts.P_INSTALL_AT, AnalyticsConsts.P_INSTALL_VERSION, AnalyticsConsts.P_INSTALL_COUNTRY,
+            AnalyticsConsts.P_INSTALL_PLATFORM, AnalyticsConsts.P_INSTALL_DEVICE,
+            AnalyticsConsts.P_LAST_ACTIVE_AT, AnalyticsConsts.P_LAST_ACTIVE_VERSION, AnalyticsConsts.P_LAST_ACTIVE_COUNTRY,
+            AnalyticsConsts.P_LAST_PLAYED_AT, AnalyticsConsts.P_MAX_REACHED_LEVEL,
+            AnalyticsConsts.P_TOTAL_PLAY_COUNT, AnalyticsConsts.P_TOTAL_CLEAR_COUNT, AnalyticsConsts.P_TOTAL_COIN_BALANCE,
+            AnalyticsConsts.P_TOTAL_SPEND_USD, AnalyticsConsts.P_TOTAL_AD_REVENUE_USD,
+            AnalyticsConsts.P_INFINITE_LIVES_EXPIRY, AnalyticsConsts.P_IS_PAYER, AnalyticsConsts.P_LAST_UPDATED_AT,
+            AnalyticsConsts.P_APPSFLYER_ID
         };
 
         private static readonly string[] BqAdColumns =

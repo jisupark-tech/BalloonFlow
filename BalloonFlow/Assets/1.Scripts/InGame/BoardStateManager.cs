@@ -734,7 +734,9 @@ namespace BalloonFlow
         /// 이 호출이 없으면 클리어가 영영 평가되지 않는다.</summary>
         public void ReevaluateClearAfterGimmickResolved()
         {
-            if (_currentState != BoardState.Playing && _currentState != BoardState.Failed) return;
+            // ROLLBACK_FAIL_CLEAR_NO_FLIP_20260708: Failed 후 기믹 해소로도 clear 로 뒤집지 않음(위 HandleBalloonPopped 와 동일 정책).
+            //   롤백: 조건을  != Playing && != Failed  로 환원.
+            if (_currentState != BoardState.Playing) return;
             if (BalloonController.HasInstance)
                 _remainingBalloons = BalloonController.Instance.GetRemainingCount();
             EvaluateClearCondition();
@@ -873,8 +875,15 @@ namespace BalloonFlow
 
             PublishBoardStateChanged();
 
-            // Clear always wins, even from Failed state
-            if (_currentState == BoardState.Playing || _currentState == BoardState.Failed)
+            // ROLLBACK_FAIL_CLEAR_NO_FLIP_20260708: 실패 확정(Failed) 후엔 뒤늦은 팝으로 clear 로 뒤집지 않는다.
+            //   배경 = WS 진행 중 OUT OF SPACE 실패 → fail 팝업(fail01/continue/fail02)이 뜬 동안 보드는 pause 되지
+            //   않아(오직 fail02 OnEnable 이후만 pause) 비행 다트가 남은 풍선을 계속 팝 → Failed 상태에서 clear 평가가
+            //   통과(기존 "Clear always wins")하면 OnBoardCleared → WS 활성이라 GameBootstrap 이 자동 GoToLobby →
+            //   fail02 가 확인 전에 로딩으로 튕김. 이어하기 후에는 ResumeAfterContinue 가 상태를 Playing 으로 되돌리므로
+            //   그 경로의 clear 는 정상(무영향). 정상 클리어(Playing)도 무영향. 잃는 것 = '실패와 거의 동시 막판 팝'을
+            //   승리로 인정하던 grace 뿐(사용자 결정: OUT OF SPACE 는 실패 유지, 클릭 시에만 이동).
+            //   롤백: 조건을  == Playing || == Failed  로 환원(737 의 ReevaluateClearAfterGimmickResolved 게이트도 함께).
+            if (_currentState == BoardState.Playing)
             {
                 EvaluateClearCondition();
             }

@@ -26,9 +26,24 @@ namespace BalloonFlow.Analytics
         private const string PREFS_TOTAL_SPEND_USD  = "BF_Analytics_TotalSpendUsd";
         private const string PREFS_TOTAL_AD_REV_USD = "BF_Analytics_TotalAdRevUsd";
 
+        // ROLLBACK_USER_PROPERTY_PIPELINE_20260708: user_property 테이블용 추가 영속 필드.
+        //   install_*(버전/국가/플랫폼/디바이스)는 최초 1회 고정(불변), play 카운터/최근 플레이는 누적.
+        private const string PREFS_INSTALL_VERSION   = "BF_Analytics_InstallVersion";
+        private const string PREFS_INSTALL_COUNTRY   = "BF_Analytics_InstallCountry";
+        private const string PREFS_INSTALL_PLATFORM  = "BF_Analytics_InstallPlatform";
+        private const string PREFS_INSTALL_DEVICE    = "BF_Analytics_InstallDevice";
+        private const string PREFS_TOTAL_PLAY_COUNT  = "BF_Analytics_TotalPlayCount";
+        private const string PREFS_LAST_PLAYED_AT    = "BF_Analytics_LastPlayedAt";
+
         private string _installAtIso;
         private double _totalSpendUsd;
         private double _totalAdRevenueUsd;
+        private string _installVersion;
+        private string _installCountry;
+        private string _installPlatform;
+        private string _installDevice;
+        private int _totalPlayCount;
+        private string _lastPlayedAtIso;
 
         public string InstallAt => _installAtIso ?? "";
         public int MaxReachedLevel => LevelManager.HasInstance
@@ -36,6 +51,18 @@ namespace BalloonFlow.Analytics
             : 1;
         public double TotalSpendUsd => _totalSpendUsd;
         public double TotalAdRevenueUsd => _totalAdRevenueUsd;
+
+        // ROLLBACK_USER_PROPERTY_PIPELINE_20260708 accessors
+        public string InstallVersion  => _installVersion ?? "";
+        public string InstallCountry  => _installCountry ?? "";
+        public string InstallPlatform => _installPlatform ?? "";
+        public string InstallDevice   => _installDevice ?? "";
+        public int TotalPlayCount     => _totalPlayCount;
+        public string LastPlayedAt    => _lastPlayedAtIso ?? "";
+        /// <summary>스키마 비고: total_clear_count = max_reached_level - 1 (첫클리어 건수).</summary>
+        public int TotalClearCount    => Math.Max(0, MaxReachedLevel - 1);
+        /// <summary>결제자 라벨 — verified 결제 누적이 있으면 영구 TRUE (스키마 §20).</summary>
+        public bool IsPayer           => _totalSpendUsd > 0;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void AutoCreate()
@@ -59,6 +86,14 @@ namespace BalloonFlow.Analytics
 
             _totalSpendUsd     = PlayerPrefsGetDouble(PREFS_TOTAL_SPEND_USD, 0);
             _totalAdRevenueUsd = PlayerPrefsGetDouble(PREFS_TOTAL_AD_REV_USD, 0);
+
+            // ROLLBACK_USER_PROPERTY_PIPELINE_20260708: install_* 불변 필드 최초 1회 고정.
+            _installVersion  = GetOrInitPref(PREFS_INSTALL_VERSION,  Application.version);
+            _installCountry  = GetOrInitPref(PREFS_INSTALL_COUNTRY,  AnalyticsSessionTracker.ResolveGeoCountry());
+            _installPlatform = GetOrInitPref(PREFS_INSTALL_PLATFORM, AnalyticsSessionTracker.ResolvePlatform());
+            _installDevice   = GetOrInitPref(PREFS_INSTALL_DEVICE,   SystemInfo.deviceModel);
+            _totalPlayCount  = PlayerPrefs.GetInt(PREFS_TOTAL_PLAY_COUNT, 0);
+            _lastPlayedAtIso = PlayerPrefs.GetString(PREFS_LAST_PLAYED_AT, "");
 
             DiagLog($"UserSnapshotCache.OnSingletonAwake — installAt={_installAtIso} spend=${_totalSpendUsd:F2} adRev=${_totalAdRevenueUsd:F4}");
         }
@@ -87,6 +122,27 @@ namespace BalloonFlow.Analytics
             _totalSpendUsd = Math.Round(_totalSpendUsd + priceUsd, 6);
             PlayerPrefsSetDouble(PREFS_TOTAL_SPEND_USD, _totalSpendUsd);
             PlayerPrefs.Save();
+        }
+
+        /// <summary>ROLLBACK_USER_PROPERTY_PIPELINE_20260708: play_start 발사 시 호출 —
+        /// 누적 판 수(첫클리어까지 스펙이나 BL 은 재도전 없음 = 전 판) + 마지막 플레이 시각 갱신.</summary>
+        public void OnLevelPlayStarted()
+        {
+            _totalPlayCount++;
+            _lastPlayedAtIso = DateTime.UtcNow.ToString("o");
+            PlayerPrefs.SetInt(PREFS_TOTAL_PLAY_COUNT, _totalPlayCount);
+            PlayerPrefs.SetString(PREFS_LAST_PLAYED_AT, _lastPlayedAtIso);
+            PlayerPrefs.Save();
+        }
+
+        private static string GetOrInitPref(string key, string initValue)
+        {
+            string v = PlayerPrefs.GetString(key, "");
+            if (!string.IsNullOrEmpty(v)) return v;
+            v = initValue ?? "";
+            PlayerPrefs.SetString(key, v);
+            PlayerPrefs.Save();
+            return v;
         }
 
         public void OnAdRevenueGranted(double revenueUsd)

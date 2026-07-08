@@ -631,9 +631,31 @@ namespace BalloonFlow
 
             Vector2 from = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
             Vector2 to = GetBoosterButtonScreenPos(boosterType);
+            // ROLLBACK_ITEMFLY_BUTTON_CENTER_20260708 rev5: 도착 좌표 실측 로그 — 잔여 어긋남 재보고 시
+            //   이 값과 화면상 버튼 위치를 대조해 좌표/연출 어느 쪽 문제인지 즉시 확정. 검증 후 제거 예정.
+            Debug.Log($"[ItemFly-AUDIT] booster={boosterType} target={to} screen={Screen.width}x{Screen.height}");
+
+            // ROLLBACK_ITEMFLY_LIVE_TARGET_20260708 (AUDIT 확정 원인): 클레임 시점 shuffle/zap 버튼은 아직
+            //   화면 밖 아래(y≈-152)에 있고 등장 연출로 나중에 제자리에 온다 — 고정 좌표는 어떤 시점에 읽어도
+            //   레이스가 남는다. 비행 중 매 프레임 버튼의 '현재' 원형 중심을 추적해 도착 순간 실제 위치에 꽂는다.
+            //   리졸브(1회, 지연)는 비행 시작 후 첫 프레임 — 그 시점엔 버튼이 활성/정착 중이라 참조가 안정.
+            RectTransform liveRt = null;
+            Camera liveCam = null;
+            bool liveResolved = false;
+            System.Func<Vector2> liveTarget = () =>
+            {
+                if (!liveResolved)
+                {
+                    liveResolved = true;
+                    TryResolveBoosterButtonVisual(boosterType, out liveRt, out liveCam);
+                }
+                return liveRt != null ? ScreenPosOfRectCenter(liveRt, liveCam) : to;
+            };
+
             ItemFlyEffect.Play(flyIcon, from, to, 1,
                 onEachLand: () => PulseBoosterButton(boosterType),
-                onAllComplete: Complete);
+                onAllComplete: Complete,
+                screenToProvider: liveTarget);
         }
 
         private void ApplyItemPanelDifficulty(DifficultyPurpose difficulty)
@@ -1398,8 +1420,15 @@ namespace BalloonFlow
             };
         }
 
-        private Vector2 GetBoosterButtonScreenPos(string boosterType)
+        // ROLLBACK_ITEMFLY_BUTTON_CENTER_20260708 rev5/rev6: 도착 버튼의 '보이는 원형' rect + 카메라 해석.
+        //   rev5: 버튼 루트 rect 는 프리팹별 구성이 달라("+" 배지/여백) 하위 최대면적 Image(원형 본체)를 실측.
+        //   rev6(AUDIT 확정): 클레임 시점 shuffle/zap 버튼 트랜스폼이 화면 밖 아래(y=-152)였다가 등장 연출로
+        //   제자리에 옴 — 고정 좌표로는 시점 문제를 못 이김. 리졸버를 분리해 비행 중 실시간 추적에 사용.
+        private bool TryResolveBoosterButtonVisual(string boosterType, out RectTransform visualRt, out Camera cam)
         {
+            visualRt = null;
+            cam = null;
+
             Button button = boosterType switch
             {
                 BoosterManager.SHUFFLE      => _itemBtnShuffle,
@@ -1407,15 +1436,40 @@ namespace BalloonFlow
                 BoosterManager.SELECT_TOOL  => _itemBtnHand,
                 _                           => null
             };
-
             RectTransform rt = button != null ? button.transform as RectTransform : null;
-            if (rt == null) return new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+            if (rt == null) return false;
 
-            Canvas canvas = rt.GetComponentInParent<Canvas>();
-            Camera cam = canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera
+            // 레이아웃 재계산이 '예약'만 된 상태의 stale rect 방지 — 해석 시 1회 강제 리빌드.
+            Canvas.ForceUpdateCanvases();
+
+            visualRt = rt;
+            float bestArea = 0f;
+            Image[] images = button.GetComponentsInChildren<Image>(true);
+            for (int i = 0; i < images.Length; i++)
+            {
+                Image img = images[i];
+                if (img == null || !img.gameObject.activeInHierarchy) continue;
+                RectTransform irt = img.rectTransform;
+                Vector3 ls = irt.lossyScale;
+                float area = Mathf.Abs(irt.rect.width * ls.x) * Mathf.Abs(irt.rect.height * ls.y);
+                if (area > bestArea) { bestArea = area; visualRt = irt; }
+            }
+
+            Canvas canvas = visualRt.GetComponentInParent<Canvas>();
+            cam = canvas != null && canvas.renderMode == RenderMode.ScreenSpaceCamera
                 ? canvas.worldCamera
                 : null;
-            return RectTransformUtility.WorldToScreenPoint(cam, rt.position);
+            return true;
+        }
+
+        private static Vector2 ScreenPosOfRectCenter(RectTransform rt, Camera cam)
+            => RectTransformUtility.WorldToScreenPoint(cam, rt.TransformPoint(rt.rect.center));
+
+        private Vector2 GetBoosterButtonScreenPos(string boosterType)
+        {
+            if (!TryResolveBoosterButtonVisual(boosterType, out RectTransform rt, out Camera cam))
+                return new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+            return ScreenPosOfRectCenter(rt, cam);
         }
 
         private void PulseBoosterButton(string boosterType)
