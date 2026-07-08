@@ -3906,7 +3906,12 @@ namespace BalloonFlow
                         if (flightDir.sqrMagnitude > 0.0001f)
                         {
                             float rt = proj.elapsed / proj.recoilTime;             // 0..1
-                            float shape = Mathf.Sin(rt * Mathf.PI);                // 0→1→0 부드러운 왕복
+                            // ROLLBACK_DART_LAUNCH_RECOIL_SNAP_20260708: (B) 스냅 ON 이면 비대칭 곡선(느리게 당김→빠르게 release).
+                            //   power=1(OFF) 이면 Sin(rt·π) 로 기존과 완전 동일. power>1 이면 peak 가 뒤로 밀려 release 가 날카로워짐.
+                            float snapPow = (GameManager.HasInstance && GameManager.Instance.Board.dartLaunchRecoilSnap)
+                                ? Mathf.Max(1f, GameManager.Instance.Board.dartLaunchRecoilSnapPower)
+                                : 1f;
+                            float shape = Mathf.Sin(Mathf.Pow(rt, snapPow) * Mathf.PI); // 0→1→0 (스냅 시 비대칭)
                             float cell = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.55f;
                             if (!IsFinite(cell) || cell <= 0.01f) cell = 0.55f;
                             float depth = (GameManager.HasInstance ? GameManager.Instance.Board.dartLaunchRecoilDepth : 0.5f) * cell;
@@ -3939,6 +3944,21 @@ namespace BalloonFlow
                         // Punch 종료 후 lerpStrength로 풍선 사이즈에 도달하지 않게 제한 — 사용자 피드백 반영.
                         float t = Mathf.Clamp01(proj.elapsed / proj.duration);
                         scale = Vector3.Lerp(proj.startScale, proj.targetScale, Mathf.Clamp01(t * proj.lerpStrength));
+                    }
+                    // ROLLBACK_DART_LAUNCH_STRETCH_20260708: (A) 발사 방향성 스트레치 — 로컬 Z(=LookRotation 진행축) 신장.
+                    //   release(반동 후) 기준 fwdElapsed 로 0..stretchTime 동안 amount→1 감쇠(EaseOut). 순수 비주얼(위치·타이밍 무관).
+                    //   OFF 면 완전 무영향. 롤백: 이 블록 제거.
+                    if (GameManager.HasInstance && GameManager.Instance.Board.dartLaunchStretch)
+                    {
+                        var bStretch = GameManager.Instance.Board;
+                        float stTime = Mathf.Max(0.001f, bStretch.dartLaunchStretchTime);
+                        if (fwdElapsed >= 0f && fwdElapsed < stTime)
+                        {
+                            float sk = fwdElapsed / stTime;               // 0..1
+                            float sEase = 1f - (1f - sk) * (1f - sk);     // EaseOutQuad → 빠르게 원복
+                            float sf = Mathf.Lerp(Mathf.Max(1f, bStretch.dartLaunchStretchAmount), 1f, sEase);
+                            scale = new Vector3(scale.x, scale.y, scale.z * sf);
+                        }
                     }
                     proj.gameObject.transform.localScale = scale;
                     __moveScaleMs += InGamePerfLogger.ElapsedMs(__moveStamp);

@@ -140,6 +140,30 @@ namespace BalloonFlow
         [Range(0.02f, 0.5f)]
         public float dartLaunchRecoilTime = 0.12f;
 
+        // ROLLBACK_DART_LAUNCH_STRETCH_20260708: (A) 발사 방향성 스트레치 — 진행축(로컬 Z) 신장 → "쏘아진" 속도감.
+        //   순수 비주얼(위치·명중 타이밍 무관). release(반동 후) 시점부터 dartLaunchStretchTime 동안 amount→1 감쇠.
+        //   OFF 면 완전 무영향. 롤백: 이 3필드 + DartManager 스트레치 블록 제거.
+        [Tooltip("(A) 발사 방향성 스트레치. ON=발사 순간 다트가 진행 방향으로 늘어났다 원복(트레일 없이 속도감). 순수 비주얼—타이밍 무관. (default: false)")]
+        public bool dartLaunchStretch = false;
+
+        [Tooltip("스트레치 최대 배율(진행축 길이). 1.6 = 60% 길어졌다 원복. 동적 반영. (default: 1.60)")]
+        [Range(1f, 3f)]
+        public float dartLaunchStretchAmount = 1.6f;
+
+        [Tooltip("스트레치 지속(초) — release 직후 이 시간 동안 원복. 동적 반영. (default: 0.10)")]
+        [Range(0.02f, 0.5f)]
+        public float dartLaunchStretchTime = 0.1f;
+
+        // ROLLBACK_DART_LAUNCH_RECOIL_SNAP_20260708: (B) 반동 release 스냅 — 반동 dip 커브를 비대칭으로
+        //   (느리게 당김→빠르게 튕김). Sin(rt·π) → Sin(rt^power·π), power>1 이면 peak 가 뒤로 밀려 release 가 날카로워짐.
+        //   dartLaunchRecoil ON 일 때만 효과(반동 dip 성형). 위치·타이밍 무관(반동 창 내부). 롤백: 이 2필드 + shape 분기 제거.
+        [Tooltip("(B) 반동 release 스냅. ON=반동에서 '느리게 당겼다 탁 튕겨나가는' 비대칭 곡선. dartLaunchRecoil ON 필요. (default: false)")]
+        public bool dartLaunchRecoilSnap = false;
+
+        [Tooltip("스냅 강도 — 클수록 당김이 느리고 release 가 날카로움. 동적 반영. (default: 2.0)")]
+        [Range(1f, 4f)]
+        public float dartLaunchRecoilSnapPower = 2f;
+
         [Tooltip("다트 비행 속도 배수 (셀/초). 1 = 1초당 1셀 이동, 10 = 0.1초당 1셀. 클수록 빠름. 동적 반영. (default: 10.00)")]
         [Range(0.10f, 100.00f)]
         // ROLLBACK_DART_FLIGHT_SPACING_TUNE_20260601:
@@ -252,6 +276,11 @@ namespace BalloonFlow
         public float coinSpawnDelayMax = 0.02f;
         [Tooltip("코인 이펙트 스케일. (default: 1)")]
         public float coinFlyScale = 1f;
+
+        // ROLLBACK_FROZEN_TEXT_GM_MULT_20260708: 그룹 Frozen Layer HP 텍스트 전역 배율 — 인스펙터 튜닝용.
+        [Tooltip("그룹 Frozen Layer HP 텍스트 스케일 배율. 짧은축 규칙(12+→5, 미만→5×짧은축/12)에 곱해짐. " +
+                 "HP 갱신(팝)마다 재적용되어 플레이 중 변경도 다음 갱신부터 반영. (default: 1.5 — 아트 '50% 증가' 2026-07-08)")]
+        public float frozenGroupTextScaleMult = 1.5f;
 
         [Header("[레일 — Rail (컨베이어벨트)]")]
         [Tooltip("레일 슬롯 수. 다트가 점유하는 칸 수. 레벨 데이터에서 자동 계산됨. (default: 200)")]

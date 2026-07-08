@@ -6097,19 +6097,35 @@ namespace BalloonFlow
                 //   그룹이 2x2 sized 블록들로 구성되면 중심(선택) 오버레이가 블록형이라 overlayBlock 판정은
                 //   그룹을 단일로 오인 → sqrt(5)/2 × 1.3 = 1.45 실측(레벨 202) 원인. 블록은 anchor 1개만
                 //   _frozenOverlays 에 등록되므로 overlayCount>1 = 진짜 그룹.
-                //   rev3 — 절대값은 부모 블록 스케일 보정 없이 그대로 적용(아트 확정): 그룹이면 선택 오버레이가
-                //   블록형이어도 인스펙터 localScale = 5 그대로. (블록 부모가 blockSize 배라 화면상으론
-                //   per-cell 대비 blockSize 배 더 크게 보임 — 의도된 값.)
+                //   rev4 (레벨 222 실측 — 좌/우 영역이 같은 규칙인데 화면상 정확히 2배 차이): 텍스트가 붙는
+                //   '선택 오버레이'가 per-cell 이면 화면상 5, 2x2 블록이면 부모가 2배라 화면상 10으로 갈라진다
+                //   — 어떤 오버레이가 선택되느냐는 영역 중심 최근접이라 사실상 운. 절대값을 부모 blockSize 로
+                //   나눠 화면상 크기를 per-cell 기준 "5"로 통일한다(레벨 222 왼쪽 모양). 블록 밑에 붙은 경우
+                //   인스펙터 수치는 5/blockSize 로 보이지만 화면 크기는 5와 동일(부모 배율 곱).
+                //   rev3(보정 제거, "인스펙터 5" 요구)은 이 갈라짐 때문에 폐기 — 2026-07-08 좌우 비교 스샷 근거.
                 //   단일(오버레이 1개 = 낱개 셀/블록 하나)은 승인된 기존 sqrt 상대 배수 경로 유지.
                 //   롤백: grouped 분기 제거 + overlayCount 카운트 제거, sqrt 경로만 사용.
                 if (overlayCount > 1)
                 {
+                    // ROLLBACK_FROZEN_TEXT_MIN_AXIS_20260708 rev3 (기획 최종 확정 2026-07-08):
+                    //   ① 그룹의 총길이와 높이가 '둘 다' 12 이상 → 전부 동일 사이즈 = 맥스 5 (균일).
+                    //      (둘 다 12+ ⟺ 짧은 축 ≥ 12 — 판정은 짧은 축 단일 기준으로 충분.)
+                    //   ② 그 외 → 짧은 축 비례(5 × 짧은축/12) × 전역 배율.
+                    //      예) 1×5 와 1×15 는 짧은 축(1)이 같으므로 텍스트 크기 동일.
+                    //   ③ 맥스 사이즈 5 는 '배율 적용 전' 규칙값 상한 — 전역 배율은 12+ 균일 그룹을 포함한
+                    //      모든 그룹 텍스트에 곱해진다(rev4, 사용자 확정 "그룹에도 적용되게": 최종 = 규칙값(≤5) × 배율.
+                    //      12+ 그룹 기본 1.5 배율이면 화면상 7.5). 배율을 상한 뒤에 걸면 12+ 구간에서 무효였음.
+                    // ROLLBACK_FROZEN_TEXT_GM_MULT_20260708: 전역 배율 = GameManager.Board.frozenGroupTextScaleMult
+                    //   (기본 1.5 = 아트 "50% 증가") — 인스펙터 동적 튜닝, HP 갱신(팝)마다 재적용.
                     const float FROZEN_TEXT_FULL_SCALE_CELLS = 12f;
-                    int footprintMax = Mathf.Max(regionW, regionH);
-                    float absScale = footprintMax >= FROZEN_TEXT_FULL_SCALE_CELLS
+                    float baseScale = footprintMin >= FROZEN_TEXT_FULL_SCALE_CELLS
                         ? FROZEN_LAYER_MAGAZINE_TEXT_MAX_SCALE
                         : FROZEN_LAYER_MAGAZINE_TEXT_MAX_SCALE * footprintMin / FROZEN_TEXT_FULL_SCALE_CELLS;
-                    ShowFrozenOverlayMagazineText(selectedOverlay, hp, center, absScale, absoluteScale: true);
+                    float gmMult = GameManager.HasInstance
+                        ? Mathf.Max(0.01f, GameManager.Instance.Board.frozenGroupTextScaleMult)
+                        : 1.5f;
+                    float absScale = baseScale * gmMult; // baseScale 이 이미 ≤5 (규칙 상한) — 배율은 전 구간 유효
+                    ShowFrozenOverlayMagazineText(selectedOverlay, hp, center, absScale / overlayBlock, absoluteScale: true);
                 }
                 else
                 {
@@ -6153,7 +6169,12 @@ namespace BalloonFlow
 
             // ROLLBACK_FROZEN_LAYER_TEXT_SCALE_20260630:
             // Keep the existing computed text scale, but cap the final multiplier at 5 for large Ice regions.
-            float clampedTextScaleMul = Mathf.Min(Mathf.Max(0.01f, textScaleMul), FROZEN_LAYER_MAGAZINE_TEXT_MAX_SCALE);
+            // ROLLBACK_FROZEN_TEXT_GM_MULT_20260708: 절대 경로는 상한 5 클램프 제외 — 호출부 규칙
+            //   (짧은축 스케일 × GameManager 전역 배율, 예: 5 × 1.5 = 7.5)이 상한을 결정한다.
+            //   기존 클램프를 유지하면 전역 배율 증가가 12+ 영역에서 잘려 무효가 됨. 상대 경로는 기존 유지.
+            float clampedTextScaleMul = absoluteScale
+                ? Mathf.Max(0.01f, textScaleMul)
+                : Mathf.Min(Mathf.Max(0.01f, textScaleMul), FROZEN_LAYER_MAGAZINE_TEXT_MAX_SCALE);
             // ROLLBACK_FROZEN_GROUP_TEXT_ABS_SCALE_20260708: absoluteScale=true(그룹) 는 프리팹 원본 스케일과
             //   무관하게 localScale 절대값으로 세팅 — 인스펙터 기준 "스케일 5"와 1:1 일치. false(블록형)는 기존 배수.
             if (absoluteScale)
