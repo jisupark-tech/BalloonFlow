@@ -321,6 +321,14 @@ namespace BalloonFlow
             return Mathf.Clamp(_currentLevelId + 1, FIRST_LEVEL_ID, maxLevel);
         }
 
+        /// <summary>ROLLBACK_ALL_CLEAR_PLAY_BLOCK_20260708: 제공 가능한 총 레벨 수(에피소드 데이터 기준).
+        /// provider 미준비면 0 — 호출부는 0 이면 all-clear 판정을 건너뛴다(데이터 로딩 전 오차단 방지).</summary>
+        public int GetTotalLevelCount()
+        {
+            if (!ValidateProvider()) return 0;
+            return _levelDataProvider.GetLevelCount();
+        }
+
         /// <summary>
         /// Returns the difficulty of a specific level from the database.
         /// Returns Normal if level data is not available.

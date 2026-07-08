@@ -99,11 +99,14 @@ namespace BalloonFlow
         }
 
         /// <summary>
-        /// 게임 전체 레벨 수 = TOTAL_EPISODES * LEVELS_PER_EPISODE.
+        /// 게임 전체 레벨 수 = Firebase 실측 가용 에피소드 × LEVELS_PER_EPISODE.
+        /// ROLLBACK_ALL_CLEAR_PLAY_BLOCK_20260708: 설계 목표치(TOTAL_EPISODES) → 실측 상한으로 교체.
+        ///   업로드 안 된 에피소드(예: 15개 중 14개만 존재)를 포함하면 전량 클리어 진입 차단이 뚫린다
+        ///   (280 클리어 후 281 진입 시도 → 로드 실패). 롤백: TOTAL_EPISODES 환원.
         /// </summary>
         public int GetLevelCount()
         {
-            return LevelEpisodeService.TOTAL_EPISODES * LevelEpisodeService.LEVELS_PER_EPISODE;
+            return LevelEpisodeService.KnownAvailableEpisodes * LevelEpisodeService.LEVELS_PER_EPISODE;
         }
 
         #endregion

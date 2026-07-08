@@ -35,6 +35,34 @@ namespace BalloonFlow
         private Task<bool>   _inflightTask;
         private int          _inflightPackageId = -1;
 
+        // ROLLBACK_ALL_CLEAR_PLAY_BLOCK_20260708: Firebase 에 실제 존재가 '실측 확인'된 에피소드 상한.
+        //   TOTAL_EPISODES 는 설계 목표치일 뿐 업로드 안 된 에피소드가 있을 수 있다(예: 14개만 업로드).
+        //   원격 fetch 가 'doc 미존재'(snap.Exists=false — 네트워크/파싱 오류와 구분되는 결정적 신호)로
+        //   실패하면 직전 에피소드까지로 낮춰 PlayerPrefs 기록. 이후 업로드되어 fetch 성공하면 자동 상향.
+        //   GetLevelCount(전량 클리어 진입 차단 판정)의 실측 소스. 기본값 = TOTAL_EPISODES(낙관).
+        private const string PREFS_MAX_AVAILABLE_EP = "BF_MaxAvailableEpisodes";
+        private static int _knownAvailableEpisodes = -1;
+
+        public static int KnownAvailableEpisodes
+        {
+            get
+            {
+                if (_knownAvailableEpisodes < 0)
+                    _knownAvailableEpisodes = PlayerPrefs.GetInt(PREFS_MAX_AVAILABLE_EP, TOTAL_EPISODES);
+                return Mathf.Clamp(_knownAvailableEpisodes, 1, TOTAL_EPISODES);
+            }
+        }
+
+        private static void SetKnownAvailableEpisodes(int value)
+        {
+            value = Mathf.Clamp(value, 1, TOTAL_EPISODES);
+            if (value == KnownAvailableEpisodes) return;
+            _knownAvailableEpisodes = value;
+            PlayerPrefs.SetInt(PREFS_MAX_AVAILABLE_EP, value);
+            PlayerPrefs.Save();
+            Debug.Log($"{LOG_TAG} 가용 에피소드 상한(실측) 갱신 → {value} (총 레벨 {value * LEVELS_PER_EPISODE})");
+        }
+
         /// <summary>현재 캐시된 에피소드 (-1 = 없음).</summary>
         public int CurrentPackageId => _cachedPackageId;
 
@@ -125,6 +153,10 @@ namespace BalloonFlow
                 _cached = loaded;
                 _cachedPackageId = packageId;
                 Debug.Log($"{LOG_TAG} pkg {packageId} 캐시 완료 ({loaded.levels.Length}레벨 v{loaded.version}).");
+                // ROLLBACK_ALL_CLEAR_PLAY_BLOCK_20260708: 상한 이하로 기록돼 있던 에피소드가 실제로
+                //   존재(뒤늦게 업로드) → 실측 상한 자동 상향(전량 클리어 차단 자동 해제).
+                if (packageId > KnownAvailableEpisodes)
+                    SetKnownAvailableEpisodes(packageId);
                 return true;
             }
             catch (Exception e)
@@ -204,6 +236,9 @@ namespace BalloonFlow
             if (!snap.Exists)
             {
                 Debug.LogError($"{LOG_TAG} {docPath} doc 미존재 — 업로드 안 됐을 가능성.");
+                // ROLLBACK_ALL_CLEAR_PLAY_BLOCK_20260708: doc 미존재 = 콘텐츠 소진의 결정적 신호
+                //   (FirestoreException/파싱 실패 같은 일시 오류와 구분) → 실측 상한을 직전까지로 기록.
+                SetKnownAvailableEpisodes(packageId - 1);
                 return null;
             }
 

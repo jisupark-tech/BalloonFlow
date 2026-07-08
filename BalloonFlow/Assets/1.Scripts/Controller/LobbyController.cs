@@ -323,6 +323,36 @@ namespace BalloonFlow
 
             if (!GameManager.HasInstance) return;
 
+            // ROLLBACK_ALL_CLEAR_PLAY_BLOCK_20260708: Firebase 에피소드 전량 클리어 시 인게임 진입 차단.
+            //   다음 도전 레벨(최고 클리어+1)이 보유 총 레벨 수를 넘으면 콘텐츠 소진 — 안내 팝업만 표시,
+            //   라이프 소모/씬 전환 없음. 총 레벨 0(에피소드 데이터 미로딩)이면 판정 건너뜀(오차단 방지).
+            //   1.0 EN-only 정책으로 문구 하드코딩(TextData.csv 인코딩 리스크 회피). 롤백: 이 블록 + GetTotalLevelCount 제거.
+            if (LevelManager.HasInstance)
+            {
+                int totalLevels = LevelManager.Instance.GetTotalLevelCount();
+                int nextLevel = LevelManager.Instance.GetHighestCompletedLevel() + 1;
+                if (totalLevels > 0 && nextLevel > totalLevels)
+                {
+                    if (UIManager.HasInstance)
+                    {
+                        var allClearPopup = UIManager.Instance.OpenUI<PopupDescription>(Const.POPUP_DESCRIPTION);
+                        if (allClearPopup != null)
+                            allClearPopup.Show("All Levels Cleared!",
+                                "You've cleared every stage we've made so far.\nNew levels are coming soon!",
+                                LocalizationService.Get("ui.common.ok"));
+                    }
+
+                    // ROLLBACK_ALL_CLEAR_PLAY_BLOCK_20260708: 새 에피소드가 뒤늦게 업로드된 경우 자동 해제 —
+                    //   차단 중 다음 에피소드 존재를 백그라운드 재확인(성공 시 실측 상한 자동 상향 → 다음 클릭부터 진입).
+                    //   캐시(메모리 1개)가 잠시 교체될 수 있으나 StartLevel 의 prefetch 가 필요 에피소드를 재보장한다.
+                    if (LevelEpisodeService.HasInstance
+                        && LevelEpisodeService.KnownAvailableEpisodes < LevelEpisodeService.TOTAL_EPISODES)
+                        _ = LevelEpisodeService.Instance.EnsureEpisodeAsync(LevelEpisodeService.KnownAvailableEpisodes + 1);
+
+                    return;
+                }
+            }
+
             if (LifeManager.HasInstance && !LifeManager.Instance.HasLife())
             {
                 // 라이프 부족 → PopupMoreLive 표시
