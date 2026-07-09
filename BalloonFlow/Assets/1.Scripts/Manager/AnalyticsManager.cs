@@ -118,8 +118,20 @@ namespace BalloonFlow
 
         #region BigQuery — 배치 enqueue / flush
 
+        // ROLLBACK_ANALYTICS_EDITOR_INGEST_BLOCK_20260709: 에디터 세션의 BQ 적재 차단 토글.
+        //   에디터는 pause 콜백 부재 + 재생 중지 워크플로 특성으로 session end 유실이 구조적
+        //   (2026-07-09 실측: editor 진짜 누수 46건/16.9% vs android 5건/1.96%) → 지표 오염 원천 차단.
+        //   파이프라인 E2E 검증(에디터에서 BQ 적재 확인)이 필요할 때만 true 로 잠깐 변경.
+        private const bool ALLOW_EDITOR_BQ_INGEST = false;
+
         private void EnqueueBigQuery(string eventName, Dictionary<string, object> parameters)
         {
+#if UNITY_EDITOR
+            // ROLLBACK_ANALYTICS_EDITOR_INGEST_BLOCK_20260709: 에디터 → BQ 차단 (FB/AppsFlyer 경로는 무관).
+#pragma warning disable CS0162
+            if (!ALLOW_EDITOR_BQ_INGEST) return;
+#pragma warning restore CS0162
+#endif
             // 호출자 dict 를 그대로 보관하면 이후 변형 위험 → 얕은 복사로 스냅샷.
             var data = NormalizeBigQueryEvent(eventName, parameters);
 
@@ -137,6 +149,12 @@ namespace BalloonFlow
                 PersistBuffer();
                 return;
             }
+
+            // ROLLBACK_ANALYTICS_START_PERSIST_20260709: session_start 는 즉시 디스크 영속(세션당 1회 IO).
+            //   포그라운드 크래시(퍼즈 콜백 없이 사망) 시 15s 배치 창 안의 start 가 메모리에서 유실되어
+            //   orphan 소급 end 만 남는 역이격(2026-07-09 실측 9건) 방어. 롤백: 이 2줄 제거.
+            if (eventName == Analytics.AnalyticsConsts.EVT_SESSION_START)
+                PersistBuffer();
 
             // [ANALYTICS_PLAYEND_FLUSH 2026-06-24] 레벨 종료(play_end)는 즉시 flush.
             // 패배→빠른 재시도(타이머 15s/카운트 20 임계 전) 시 씬 전환되면 적재가 다음 판까지 밀리던
