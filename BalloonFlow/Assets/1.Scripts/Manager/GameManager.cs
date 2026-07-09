@@ -171,7 +171,7 @@ namespace BalloonFlow
         //   데드락 로직/실패 판정 불변 — 오직 배포 위치(비주얼)만. OFF(기본)=기존 완전 동일.
         //   롤백: 이 2필드 + HolderVisualManager 프로토 블록 + RailManager.FindClearProgressNearBounded 제거.
         [Tooltip("[프로토·비주얼] 배포 잼 위치 보정. ON=배포점 막히면 근처(N칸 내) 빈 슬롯에 스냅, 없으면 hold(비집기 제거). OFF=기존. (default: false)")]
-        public bool dartDeployJamVisualFix = false;
+        public bool dartDeployJamVisualFix = true;
 
         [Tooltip("잼 스냅 최대 반경(슬롯 수). 이 안의 빈칸만 스냅, 넘으면 hold. 동적 반영. (default: 3)")]
         [Range(1, 10)]
