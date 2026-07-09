@@ -2288,6 +2288,24 @@ namespace BalloonFlow
                             }
                         }
 
+                        // ROLLBACK_DEPLOY_JAM_VISUAL_FIX_20260709 (프로토, 비주얼): 배포점 슬롯이 막혔을 때
+                        //   (a) 근처(maxSlots 칸 이내) 빈 슬롯이 있으면 거기로 스냅 → 자연스러운 gap 채움.
+                        //   (b) 근처에 없으면 useDeadlockFallback=false 유지 → 아래 break 로 hold(비집기 시각 제거).
+                        //   먼 곳 순간이동 방지 위해 FindClearProgressNearBounded(반경 제한) 사용. 데드락 로직 불변.
+                        //   OFF(기본)면 이 블록 건너뜀 → 기존 동작. 롤백: 이 블록 제거.
+                        if (!useDeadlockFallback
+                            && GameManager.HasInstance && GameManager.Instance.Board.dartDeployJamVisualFix)
+                        {
+                            int __maxSlots = Mathf.Max(1, GameManager.Instance.Board.dartDeployJamSnapMaxSlots);
+                            float __snap = rail.FindClearProgressNearBounded(placementProgress, visual.holderId, rail.DartPhysicalGap * __maxSlots);
+                            if (__snap >= 0f)
+                            {
+                                placementProgress = __snap;   // (a) 근접 빈칸 스냅
+                                useDeadlockFallback = true;
+                            }
+                            // (b) __snap < 0 → 근처에 빈칸 없음(만석 근접) → 아래 break 로 hold.
+                        }
+
                         if (!useDeadlockFallback)
                         {
                             fixedGapBurstUnlocked = false;
@@ -2583,6 +2601,12 @@ namespace BalloonFlow
             if (BoardStateManager.HasInstance && !BoardStateManager.Instance.HasReachableSupplyMatchCached)
             {
                 LogDeployDebug("[Deadlock] entry skipped — no reachable supply match (필패 후보, 상태 실패 판정에 위임).");
+                // ROLLBACK_DEADLOCK_SUPPLY_DIAG_20260709: 시나리오 A(색 소진/기하오판 → 회복 봉인) 가시 로그. 0.5s 스로틀. 롤백: 이 블록 제거.
+                if (Time.unscaledTime - _diagDeadlockLogTime > 0.5f)
+                {
+                    _diagDeadlockLogTime = Time.unscaledTime;
+                    Debug.Log("[데드락-진단] entry BLOCKED (supplyMatch=false) → 회복 시도 안 함, 상태실패(1.5s) 대기 = 시나리오 A. 원인 1(색소진) vs 3(기하오판)은 [판정] 로그의 outer/supply/sideCount 로 판별.");
+                }
                 return;
             }
 
@@ -2607,6 +2631,12 @@ namespace BalloonFlow
             LogDeployDebug($"[Deadlock] Detected. Leftmost = holder {leftmostHolderId} (col {leftmostCol}). " +
                       $"Rail {rail.OccupiedCount}/{rail.SlotCount}, active deploys = {activeCount}.");
             rail.EnterDeadlockMode(leftmostHolderId);
+            // ROLLBACK_DEADLOCK_SUPPLY_DIAG_20260709: 시나리오 B(배포점 잼 → 회복 churn) 가시 로그. 0.5s 스로틀. 롤백: 이 블록 제거.
+            if (Time.unscaledTime - _diagDeadlockLogTime > 0.5f)
+            {
+                _diagDeadlockLogTime = Time.unscaledTime;
+                Debug.Log($"[데드락-진단] EnterDeadlockMode holder={leftmostHolderId} occ={rail.OccupiedCount}/{rail.SlotCount} = 시나리오 B(잼 회복 churn). 이게 반복되며 판이 안 끝나면 순수 배포점 잼(미관), 도중 [판정] supplyMatch=false 로 전환되면 A 로 넘어간 것.");
+            }
             // ROLLBACK_DEADLOCK_NO_PROGRESS_EXIT_20260706: 진입 시점 점유수로 무진행 감시 초기화.
             _dlWatchOccupied = rail.OccupiedCount;
             _dlWatchSince = Time.time;
@@ -2620,6 +2650,9 @@ namespace BalloonFlow
 
         // ROLLBACK_DEADLOCK_WAVE_20260708 rev2: 스톨 대기 파도 상태 + 원점 산출.
         private bool _deadlockStallWaveStarted;
+
+        // ROLLBACK_DEADLOCK_SUPPLY_DIAG_20260709: 시나리오 A/B 가시 로그 스로틀(테스트 전용). 롤백: 이 필드 + 2개 로그 블록 제거.
+        private float _diagDeadlockLogTime = -999f;
 
         /// <summary>leftmost 배포중 홀더의 배포점 경로거리 — 파도 원점. 미발견 시 0(경로 시작점).</summary>
         private float ResolveLeftmostDeployingDeployProgress()

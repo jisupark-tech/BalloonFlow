@@ -2233,6 +2233,31 @@ namespace BalloonFlow
             return -1f;
         }
 
+        /// <summary>ROLLBACK_DEPLOY_JAM_VISUAL_FIX_20260709: FindClearProgressNear 의 '근접 반경 제한'판 —
+        ///   targetProgress 로부터 maxDistance 이내(forward/backward)에서만 빈 progress 탐색. 없으면 -1.
+        ///   먼 곳 순간이동 방지용(배포 잼 시 근처 빈칸만 스냅, 넘으면 hold).</summary>
+        public float FindClearProgressNearBounded(float targetProgress, int holderId, float maxDistance)
+        {
+            if (_darts.Count >= _slotCount) return -1f;
+            if (IsProgressClear(targetProgress, holderId)) return targetProgress;
+
+            float pathLen = _totalPathLength;
+            if (pathLen <= 0f || maxDistance <= 0f) return -1f;
+
+            float step = DartPhysicalGap * 0.5f;
+            int maxIterations = Mathf.CeilToInt(maxDistance / step) + 1;
+            for (int i = 1; i <= maxIterations; i++)
+            {
+                float dist = i * step;
+                if (dist > maxDistance) break;
+                float forward = ((targetProgress + dist) % pathLen + pathLen) % pathLen;
+                if (IsProgressClear(forward, holderId)) return forward;
+                float backward = ((targetProgress - dist) % pathLen + pathLen) % pathLen;
+                if (IsProgressClear(backward, holderId)) return backward;
+            }
+            return -1f;
+        }
+
         /// <summary>Remove a dart by ID. O(1) dict lookup + O(N) list remove.
         /// 사용자 의도 B: 다트 발사 시점에 cluster unfreeze → 빈 공간 advance → 다음 frame PropagateFreezeChain 이 다시 cluster 형성.
         /// 매 frame UpdateInternal 호출 대신 발사 시점만 호출 — 부하 0 + cluster 흐름 자연.</summary>

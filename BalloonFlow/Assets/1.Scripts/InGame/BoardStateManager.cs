@@ -1133,7 +1133,71 @@ namespace BalloonFlow
             }
         }
 
+        // ROLLBACK_DEADLOCK_SUPPLY_DIAG_20260709: 데드락 시나리오 판별용 진단 wrapper (테스트 전용).
+        //   원래 로직은 ComputeReachableSupplyMatchInner 로 그대로 두고, 결과에 진단 덤프만 얹는다.
+        //   판독: supplyMatch=false = 실패 무장. outer[] 에 눈에 보이는 외곽색이 빠지고 sideCount 가 실제 변수와
+        //         불일치 → 시나리오3(기하 오판). outer[] 정상인데 supply[] 에 매칭 없음 → 시나리오1(색 진짜 소진).
+        //         supplyMatch=true 인데 화면이 churn → 시나리오B(배포점 잼, 미관 — HVM [데드락-진단] 로그로 확정).
+        //   롤백: 이 wrapper + DumpSupplyMatchDiag + 필드 3개 제거하고 Inner 를 원래 이름으로 환원.
+        private bool _diagLastSupplyMatch = true;
+        private float _diagLastSupplyLogTime = -999f;
+        private readonly System.Collections.Generic.HashSet<int> _diagSupplyBuf = new System.Collections.Generic.HashSet<int>();
         private bool ComputeReachableSupplyMatch()
+        {
+            bool result = ComputeReachableSupplyMatchInner();
+            DumpSupplyMatchDiag(result);
+            return result;
+        }
+
+        private void DumpSupplyMatchDiag(bool result)
+        {
+            bool transition = result != _diagLastSupplyMatch;
+            _diagLastSupplyMatch = result;
+            if (!transition)
+            {
+                if (result) return;                                                  // 정상(true) 지속은 로그 안 함(스팸 방지)
+                if (Time.unscaledTime - _diagLastSupplyLogTime < 0.5f) return;        // false(실패 무장) 지속은 0.5s 스로틀
+            }
+            _diagLastSupplyLogTime = Time.unscaledTime;
+
+            int physCap  = RailManager.HasInstance ? RailManager.Instance.PhysicalCapacity : -1;
+            int efc      = RailManager.HasInstance ? RailManager.Instance.EffectiveOccupiedCount : -1;
+            int sideCnt  = RailManager.HasInstance ? RailManager.GetRailSideCount(physCap) : -1;
+            var outer    = GetRailSideOutermostBalloonColors();
+            _diagSupplyBuf.Clear();
+            if (HolderManager.HasInstance) HolderManager.Instance.CollectSupplyColors(_diagSupplyBuf);
+            Debug.Log($"[판정] supplyMatch={result} efc={efc}/{physCap} sideCount={sideCnt} " +
+                      $"outer=[{string.Join(",", outer)}] supply=[{string.Join(",", _diagSupplyBuf)}] remain={_remainingBalloons}");
+
+            // ROLLBACK_DEADLOCK_SUPPLY_DIAG_20260709: 레일 색 클로그 진단 — 레일을 막은 색이 '진짜 죽었나(잔여 0)'
+            //   vs '깊은 줄에 생존(잔여>0)'. supplyMatch=false 일 때만. 판독: rail>0 인데 balloon=0 인 색이 많으면
+            //   dead-color 클로그(퍼지가 정답). 반대로 balloon>0 이면 깊은줄 생존(배포 순서/잼 문제, 퍼지 위험).
+            //   (GetActiveBalloonsByColor 는 hidden 포함 잔여수.) 롤백: 이 블록 제거.
+            if (!result && RailManager.HasInstance && BalloonController.HasInstance)
+            {
+                var hist = new System.Collections.Generic.Dictionary<int, int>();
+                int frozenOnRail = 0;
+                var darts = RailManager.Instance.GetAllDarts();
+                for (int i = 0; i < darts.Count; i++)
+                {
+                    var d = darts[i];
+                    if (d == null) continue;
+                    if (d.isFrozen) frozenOnRail++;
+                    hist.TryGetValue(d.dartColor, out int n);
+                    hist[d.dartColor] = n + 1;
+                }
+                var sb = new System.Text.StringBuilder();
+                foreach (var kv in hist)
+                {
+                    var bals = BalloonController.Instance.GetActiveBalloonsByColor(kv.Key);
+                    int remOfColor = bals != null ? bals.Count : 0;
+                    sb.Append($"c{kv.Key}:rail{kv.Value}/bal{remOfColor}  ");
+                }
+                Debug.Log($"[클로그] frozenOnRail={frozenOnRail} [색:레일다트수/잔여풍선수]= {sb}");
+            }
+        }
+
+        private bool ComputeReachableSupplyMatchInner()
         {
             if (HasOutermostMatchCached) return true;
             if (!RailManager.HasInstance || !HolderManager.HasInstance) return false;
