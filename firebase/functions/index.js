@@ -231,6 +231,8 @@ const FIELD_RENAME = {
 };
 
 // ── user_property UPSERT — ROLLBACK_USER_PROPERTY_PIPELINE_20260708 ─────────────
+// [2026-07-09] 시각 컬럼은 TIMESTAMP — 실존 테이블(6/23 셋업)이 xlsx(DATETIME)와 달리 TIMESTAMP 로
+//   생성돼 있음(bq show 실측). CAST 를 테이블에 맞춤. toBqDatetime 의 존-제거 문자열은 UTC 로 해석됨(정합).
 // R_user_property(v3.2)는 uid 당 1행 UPSERT 테이블 — 스트리밍 append 불가 → DML MERGE.
 // 클라 user_property_event(세션 시작/종료 시 발사)를 여기로 라우팅. 특성:
 //   · uid 는 토큰 검증값 사용(클라 값 무시 — 이벤트 테이블과 동일 원칙)
@@ -246,28 +248,28 @@ MERGE \`${BQ_DATASET}.user_property\` T
 USING (SELECT
   @uid AS uid,
   @game_id AS game_id,
-  CAST(@install_at AS DATETIME) AS install_at,
+  CAST(@install_at AS TIMESTAMP) AS install_at,
   @install_version AS install_version,
   @install_country AS install_country,
   @install_platform AS install_platform,
   @install_device AS install_device,
-  CAST(@last_active_at AS DATETIME) AS last_active_at,
+  CAST(@last_active_at AS TIMESTAMP) AS last_active_at,
   @last_active_version AS last_active_version,
   @last_active_country AS last_active_country,
-  CAST(@last_played_at AS DATETIME) AS last_played_at,
+  CAST(@last_played_at AS TIMESTAMP) AS last_played_at,
   @max_reached_level AS max_reached_level,
   @total_play_count AS total_play_count,
   @total_clear_count AS total_clear_count,
   @total_coin_balance AS total_coin_balance,
   CAST(@total_spend_usd AS NUMERIC) AS total_spend_usd,
   CAST(@total_ad_revenue_usd AS NUMERIC) AS total_ad_revenue_usd,
-  CAST(@infinite_lives_expiry AS DATETIME) AS infinite_lives_expiry,
+  CAST(@infinite_lives_expiry AS TIMESTAMP) AS infinite_lives_expiry,
   @is_payer AS is_payer,
-  CAST(@last_updated_at AS DATETIME) AS last_updated_at,
+  CAST(@last_updated_at AS TIMESTAMP) AS last_updated_at,
   @appsflyer_id AS appsflyer_id
 ) S
 ON T.uid = S.uid
-WHEN MATCHED AND S.last_updated_at >= IFNULL(T.last_updated_at, DATETIME '1970-01-01') THEN UPDATE SET
+WHEN MATCHED AND S.last_updated_at >= IFNULL(T.last_updated_at, TIMESTAMP '1970-01-01 00:00:00+00') THEN UPDATE SET
   last_active_at        = S.last_active_at,
   last_active_version   = S.last_active_version,
   last_active_country   = S.last_active_country,
