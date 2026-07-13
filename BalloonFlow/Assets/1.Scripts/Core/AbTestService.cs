@@ -8,7 +8,7 @@ namespace BalloonFlow
     ///   · 배정: 최초 1회 random 50:50 → PlayerPrefs 영속(불변). uid 비의존(타이틀 로딩 초기 uid 미확보 대비).
     ///   · 재현성: 서버 재계산이 아니라 user_property.ab_ep1_variant 기록값으로 확보(BQ 에서 A/B 분리).
     ///   · 로더: LevelEpisodeService 가 pkg1 로드 시 IsVariantB 면 episode_01_b.json 을 읽음(로컬 전용).
-    ///   · 종료: FORCE_VARIANT_A=true → 신규 전원 A(기존 영속 B 는 replay 시에만 노출).
+    ///   · 시작/종료: AB_TEST_ENABLED 게이팅. false(기본)=전원 A(B 미배정·미로드·미기록). B 데이터 번들 후 true.
     ///   ※ PlayerPrefs 접근이라 '메인스레드 전용'. 로더/분석 stamp 모두 메인스레드에서 호출됨.
     /// </summary>
     public static class AbTestService
@@ -17,8 +17,11 @@ namespace BalloonFlow
         public const string VARIANT_B = "B";
         private const string PREFS_KEY = "BF_AB_Ep1Variant";
 
-        // 테스트 종료 스위치: true 면 배정 무시하고 전원 A.
-        private const bool FORCE_VARIANT_A = false;
+        // ROLLBACK_AB_EP1_20260713: 테스트 마스터 스위치. ★ B 레벨 데이터(StreamingAssets/episode_01_b.json)를
+        //   빌드에 넣고 '테스트를 시작할 때'에만 true. 기본 false = 전원 A(B 미배정·미로드) →
+        //   B 데이터가 없어도 안전(변인 미준비 상태에서 B 배정으로 ep1 로드 실패 → Old 데이터 폴백되는 문제 방지).
+        //   테스트 종료 시에도 false 로 되돌리면 신규 전원 A.
+        private const bool AB_TEST_ENABLED = false;
 
         private static string _cached;
 
@@ -27,7 +30,7 @@ namespace BalloonFlow
         {
             get
             {
-                if (FORCE_VARIANT_A) return VARIANT_A;
+                if (!AB_TEST_ENABLED) return VARIANT_A;   // 테스트 비활성 → 전원 A(B 배정/로드 안 함)
                 if (_cached == VARIANT_A || _cached == VARIANT_B) return _cached;
 
                 string stored = PlayerPrefs.GetString(PREFS_KEY, string.Empty);
@@ -43,5 +46,8 @@ namespace BalloonFlow
 
         /// <summary>B variant 여부(= 에피소드1 을 episode_01_b.json 으로 로드).</summary>
         public static bool IsVariantB => Episode1Variant == VARIANT_B;
+
+        /// <summary>A/B 테스트 활성 여부. 비활성(기본)이면 분석에 variant 를 기록하지 않는다(전원 A → 오염 방지).</summary>
+        public static bool IsEnabled => AB_TEST_ENABLED;
     }
 }

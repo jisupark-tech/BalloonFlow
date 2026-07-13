@@ -384,6 +384,9 @@ namespace BalloonFlow
         private const string EDITOR_PREF_LAST_LEVEL = "BalloonFlow_LastEditedLevel";
         // [2026-06-12] 다량 episode 일괄 export 입력 ("1-15" / "1,5,6,7" / 혼합 "1-3,7").
         private string _bulkExportEpisodesInput = "1-15";
+        // ROLLBACK_MAPMAKER_AB_VARIANT_20260713: 레벨 A/B 테스트 — pkg1(ep1) 저장/편집 대상 variant.
+        //   B 면 episode_01_b.json 로 저장·로드(그 외 pkg 는 항상 A). LevelEpisodeService·AbTestService 파일명 규약 일치.
+        private bool _editVariantB;
 
         // Grid lines
         private Transform _gridLineRoot;
@@ -2796,6 +2799,14 @@ namespace BalloonFlow
             var bulkRow = Row(p);
             MakeInputField(bulkRow, _bulkExportEpisodesInput, s => _bulkExportEpisodesInput = s);
             Btn(bulkRow, "Export Episodes...", ExportEpisodesBulk);
+            // ROLLBACK_MAPMAKER_AB_VARIANT_20260713: pkg1(ep1) A/B 편집·저장 대상 토글. ep1 에만 적용.
+            var variantRow = Row(p);
+            Btn(variantRow, "A/B Variant 토글", () =>
+            {
+                _editVariantB = !_editVariantB;
+                ReloadEpisodeStore(); // 선택한 variant 의 ep1 로 스토어 재빌드
+                SetStatus($"편집 Variant = {(_editVariantB ? "B → episode_01_b.json" : "A → episode_01.json")}  (ep1 만 적용)");
+            });
             Sep(p);
 
             // ── Tutorial Steps ──
@@ -7926,15 +7937,25 @@ namespace BalloonFlow
                 System.Array.Sort(files);
                 foreach (string p in files)
                 {
+                    // ROLLBACK_MAPMAKER_AB_VARIANT_20260713: 변인 파일(_b)은 기본 병합에서 제외(A와 levelId 충돌 방지).
+                    //   B 편집 모드면 ep1 만 episode_01_b.json 로 대체 읽기(존재 시). 그 외 pkg 는 항상 A.
+                    string name = System.IO.Path.GetFileName(p);
+                    if (name.EndsWith("_b.json")) continue;
+                    string readPath = p;
+                    if (_editVariantB && name == "episode_01.json")
+                    {
+                        string bPath = $"{MM_EPISODES_DIR}/episode_01_b.json";
+                        if (System.IO.File.Exists(bPath)) readPath = bPath;
+                    }
                     try
                     {
-                        var ep = JsonUtility.FromJson<LevelEpisode>(System.IO.File.ReadAllText(p));
+                        var ep = JsonUtility.FromJson<LevelEpisode>(System.IO.File.ReadAllText(readPath));
                         if (ep?.levels != null)
                             foreach (var lv in ep.levels) if (lv != null) all.Add(lv);
                     }
                     catch (System.Exception e)
                     {
-                        Debug.LogError($"[MapMaker] {p} 읽기 실패: {e.Message}");
+                        Debug.LogError($"[MapMaker] {readPath} 읽기 실패: {e.Message}");
                     }
                 }
             }
@@ -7976,23 +7997,29 @@ namespace BalloonFlow
 
             LevelConfig config = BuildLevelConfig();
             int pkg = GetPackageIdForLevel(config.levelId);
-            string path = $"{MM_EPISODES_DIR}/episode_{pkg:D2}.json";
+            // ROLLBACK_MAPMAKER_AB_VARIANT_20260713: 변인은 pkg1(ep1)에만. B 편집 모드면 episode_01_b.json 로 저장.
+            bool saveB = _editVariantB && pkg == 1;
+            string fileName = saveB ? "episode_01_b" : $"episode_{pkg:D2}";
+            string path = $"{MM_EPISODES_DIR}/{fileName}.json";
 
-            // 기존 episode 로드(병합 기준).
+            // 기존 episode 로드(병합 기준). ROLLBACK_MAPMAKER_AB_VARIANT_20260713: B 최초 저장(파일 없음)이면
+            //   A(episode_01.json)를 베이스로 복제 → B가 20레벨 완본으로 시작(편집 1레벨만 든 반쪽 파일 방지).
+            string basePath = (saveB && !System.IO.File.Exists(path))
+                ? $"{MM_EPISODES_DIR}/episode_01.json" : path;
             var levels = new List<LevelConfig>();
-            if (System.IO.File.Exists(path))
+            if (System.IO.File.Exists(basePath))
             {
                 try
                 {
-                    var existing = JsonUtility.FromJson<LevelEpisode>(System.IO.File.ReadAllText(path));
+                    var existing = JsonUtility.FromJson<LevelEpisode>(System.IO.File.ReadAllText(basePath));
                     if (existing?.levels != null)
                         foreach (var lv in existing.levels) if (lv != null) levels.Add(lv);
                 }
-                catch (System.Exception e) { Debug.LogError($"[MapMaker] {path} 읽기 실패: {e.Message}"); }
+                catch (System.Exception e) { Debug.LogError($"[MapMaker] {basePath} 읽기 실패: {e.Message}"); }
             }
 
-            // 덮어쓰기 전 백업.
-            BackupEpisodeFileMM(pkg);
+            // 덮어쓰기 전 백업(저장 대상 파일 기준 — B면 episode_01_b).
+            BackupEpisodeFileMM(path);
 
             int idx = levels.FindIndex(l => l.levelId == config.levelId);
             if (idx >= 0) levels[idx] = config; else levels.Add(config);
@@ -8012,28 +8039,41 @@ namespace BalloonFlow
             System.IO.File.WriteAllText(path, json);
             AssetDatabase.ImportAsset(path);
 
-            if (pkg == 1)
-            {
-                string streamDir = System.IO.Path.GetDirectoryName(MM_STREAMING_EP1);
-                if (!string.IsNullOrEmpty(streamDir)) System.IO.Directory.CreateDirectory(streamDir);
-                System.IO.File.WriteAllText(MM_STREAMING_EP1, json);
-                AssetDatabase.ImportAsset(MM_STREAMING_EP1);
-            }
+            // ROLLBACK_MAPMAKER_AB_VARIANT_20260713 + 오프라인 번들 동기화: 모든 pkg 를 StreamingAssets 에 gzip
+            //   동기화(런타임 로더가 gzip 매직 자동 해제). 어느 레벨을 편집·저장해도 오프라인 번들이 최신 유지 +
+            //   용량 절감(평문 대비 ~10x). EditorData(위 path)는 평문 유지(저작/스토어/importer 용).
+            //   파일명 규약: episode_NN.json / B는 episode_01_b.json (= fileName). A/B·전 pkg 자동 처리.
+            string streamPath = $"Assets/StreamingAssets/{fileName}.json";
+            WriteGzipJson(streamPath, json);
+            AssetDatabase.ImportAsset(streamPath);
 
             _targetDB = null; // episode-backed 캐시 무효화 → 다음 로드 시 재빌드(저장 레벨 즉시 반영)
-            SetStatus($"Saved Level {config.levelId} → episode_{pkg:D2}.json ({levels.Count} levels)" +
-                      (pkg != 1 ? "  · Firestore 반영은 'Export & Upload' 필요" : "  · StreamingAssets 동기화"));
+            SetStatus($"Saved Level {config.levelId} → {fileName}.json ({levels.Count} levels) · StreamingAssets(gzip) 동기화"
+                      + (saveB ? " [Variant B]" : ""));
             RefreshLevelList();
         }
 
-        private void BackupEpisodeFileMM(int pkg)
+        // ROLLBACK_MAPMAKER_AB_VARIANT_20260713: JSON 을 gzip 으로 StreamingAssets 에 기록(런타임 로더가 자동 해제).
+        //   EditorData 는 평문, StreamingAssets 는 gzip — 오프라인 번들 용량 절감. using 불필요하게 전체 경로 사용.
+        private static void WriteGzipJson(string path, string json)
         {
-            string src = $"{MM_EPISODES_DIR}/episode_{pkg:D2}.json";
+            string dir = System.IO.Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
+            byte[] raw = System.Text.Encoding.UTF8.GetBytes(json);
+            using (var fs = System.IO.File.Create(path))
+            using (var gz = new System.IO.Compression.GZipStream(fs, System.IO.Compression.CompressionLevel.Optimal))
+                gz.Write(raw, 0, raw.Length);
+        }
+
+        // ROLLBACK_MAPMAKER_AB_VARIANT_20260713: pkg 대신 실제 저장 경로 기준 백업(B=episode_01_b 도 정확히 백업).
+        private void BackupEpisodeFileMM(string src)
+        {
             if (!System.IO.File.Exists(src)) return;
             const string backupDir = "Assets/LevelBackups";
             System.IO.Directory.CreateDirectory(backupDir);
             string ts = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            System.IO.File.Copy(src, $"{backupDir}/episode_{pkg:D2}_{ts}.json", true);
+            string baseName = System.IO.Path.GetFileNameWithoutExtension(src);
+            System.IO.File.Copy(src, $"{backupDir}/{baseName}_{ts}.json", true);
         }
 
         #endregion

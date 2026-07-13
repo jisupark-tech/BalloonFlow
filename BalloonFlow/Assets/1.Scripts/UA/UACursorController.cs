@@ -1,159 +1,165 @@
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 #endif
 
 namespace BalloonFlow.UA
 {
     /// <summary>
-    /// UA 크리에이티브 녹화 전용 — Editor 에서만 동작.
-    /// C : 기본 커서 ↔ 업로드 이미지 커서 토글 (cursor)
-    /// H : 커서 표시 On/Off 토글 (hide)
-    /// 방향키 : hotspot offset 픽셀 단위 실시간 보정(←→=x, ↑↓=y, Shift=10px). 인스펙터 _hotspotOffset 로도 입력 가능.
-    /// 화면 좌상단에 현재 상태(커스텀/표시/offset) 표시 — 보정값 읽어 인스펙터에 옮겨두면 영구 저장.
-    /// 빌드에서는 모든 로직이 #if UNITY_EDITOR 로 제거됨(no-op).
+    /// UA 크리에이티브 녹화 전용 — Editor Play 에서만 동작(빌드에선 #if UNITY_EDITOR 로 전부 제거).
+    /// ROLLBACK_UA_HAND_CURSOR_20260713:
+    ///   · Editor Play 시작 시 '자동 전역 소환'(DontDestroyOnLoad) → 씬에 수동 배치 없이 어디서든 C 로 사용.
+    ///   · OS 커서(Cursor.SetCursor)는 크기 상한(~128px)이 있어 256px 이미지가 안 뜬다 → UI 오버레이(RawImage).
+    ///   · C : 손 On/Off  ·  마우스 추종  ·  좌버튼 누름=HandClick / 떼면=Hand
+    ///   · 마우스 휠 : 크기 조정(Shift=크게)  ·  방향키 : 손끝 위치 보정(Shift=10px)  ·  H : OS 커서 표시 토글
+    ///   · 크기/위치는 EditorPrefs 에 영속(플레이 재시작해도 유지).
+    /// 이미지는 인스펙터 미할당 시 Assets/UA/Hand.png·HandClick.png 자동 로드. 오버레이는 런타임 생성.
     /// </summary>
     public class UACursorController : MonoBehaviour
     {
-        [Header("커서 이미지 (비우면 PlayerSettings.defaultCursor 사용)")]
-        [SerializeField] private Texture2D _cursorImage;
+        [Header("손 이미지 (비우면 Assets/UA/Hand·HandClick 자동 로드)")]
+        [SerializeField] private Texture2D _handImage;
+        [SerializeField] private Texture2D _handClickImage;
 
-        [Header("좌표 보정 (픽셀, + / - 입력)")]
-        [Tooltip("PlayerSettings hotspot 에 더해지는 보정값. x=오른쪽+, y=아래쪽+")]
+        [Header("초기값 (EditorPrefs 에 저장된 값이 우선)")]
+        [SerializeField] private Vector2 _size = new Vector2(256f, 256f);
         [SerializeField] private Vector2 _hotspotOffset = Vector2.zero;
-
-        [Header("옵션")]
-        [Tooltip("녹화에 잡히도록 기본 ForceSoftware(Unity 렌더). Auto 는 하드웨어 커서라 녹화 누락 가능.")]
-        [SerializeField] private CursorMode _cursorMode = CursorMode.ForceSoftware;
-        [SerializeField] private bool _startWithCustomCursor = false;
+        [SerializeField] private bool _hideSystemCursor = true;
 
 #if UNITY_EDITOR
-        private bool _customActive;
-        private bool _cursorVisible = true;
+        private const string HAND_PATH      = "Assets/UA/Hand.png";
+        private const string HANDCLICK_PATH = "Assets/UA/HandClick.png";
+        private const string PREF_SX = "UAHand_SizeX", PREF_SY = "UAHand_SizeY";
+        private const string PREF_OX = "UAHand_OffX",  PREF_OY = "UAHand_OffY";
+
+        private Canvas _canvas;
+        private RawImage _raw;
+        private Texture2D _handTex, _handClickTex;
+        private bool _active;
+        private bool _pressed;
+
+        // Editor Play 시작 시 자동 소환 — 씬에 수동 배치 불필요(어느 씬에서든 C 로 동작).
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void AutoBootstrap()
+        {
+            if (Object.FindFirstObjectByType<UACursorController>() != null) return; // 이미 있으면 skip
+            var go = new GameObject("[UAHandCursor]");
+            go.AddComponent<UACursorController>();
+            DontDestroyOnLoad(go);
+        }
 
         private void Start()
         {
-            if (_startWithCustomCursor) SetCustomCursor(true);
+            _handTex      = _handImage      != null ? _handImage      : UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(HAND_PATH);
+            _handClickTex = _handClickImage != null ? _handClickImage : UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(HANDCLICK_PATH);
+            if (_handTex == null)
+                Debug.LogWarning($"[UAHand] Hand 이미지 없음 — {HAND_PATH} 확인(또는 인스펙터 지정).");
+
+            // 저장된 크기/위치 복원(없으면 인스펙터 초기값).
+            _size.x         = UnityEditor.EditorPrefs.GetFloat(PREF_SX, _size.x);
+            _size.y         = UnityEditor.EditorPrefs.GetFloat(PREF_SY, _size.y);
+            _hotspotOffset.x = UnityEditor.EditorPrefs.GetFloat(PREF_OX, _hotspotOffset.x);
+            _hotspotOffset.y = UnityEditor.EditorPrefs.GetFloat(PREF_OY, _hotspotOffset.y);
+
+            BuildOverlay();
+            SetActive(false);
+        }
+
+        private void BuildOverlay()
+        {
+            var canvasGo = new GameObject("UAHandOverlay");
+            canvasGo.transform.SetParent(transform, false);
+            _canvas = canvasGo.AddComponent<Canvas>();
+            _canvas.renderMode   = RenderMode.ScreenSpaceOverlay;
+            _canvas.sortingOrder = 32760;                 // 최상단(게임 UI 위)
+
+            var handGo = new GameObject("Hand");
+            handGo.transform.SetParent(canvasGo.transform, false);
+            _raw = handGo.AddComponent<RawImage>();
+            _raw.raycastTarget = false;                   // ★ 실제 게임 클릭 안 막음(손은 장식)
+            _raw.texture = _handTex;
+            var rt = _raw.rectTransform;
+            rt.anchorMin = Vector2.zero;                  // 좌하단 기준 → anchoredPosition = 스크린 픽셀
+            rt.anchorMax = Vector2.zero;
+            rt.pivot     = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = _size;
         }
 
         private void Update()
         {
             var kb = Keyboard.current;
-            if (kb == null) return;
+            var mouse = Mouse.current;
+            bool shift = kb != null && (kb[Key.LeftShift].isPressed || kb[Key.RightShift].isPressed);
 
-            if (kb[Key.C].wasPressedThisFrame) SetCustomCursor(!_customActive);
-            if (kb[Key.H].wasPressedThisFrame) SetCursorVisible(!_cursorVisible);
-
-            // 좌표 보정 실시간 입력 — 방향키로 hotspot offset 픽셀 nudge (Shift=10px). x=오른쪽+, y=아래쪽+.
-            float step = (kb[Key.LeftShift].isPressed || kb[Key.RightShift].isPressed) ? 10f : 1f;
-            Vector2 d = Vector2.zero;
-            if (kb[Key.LeftArrow].wasPressedThisFrame)  d.x -= step;
-            if (kb[Key.RightArrow].wasPressedThisFrame) d.x += step;
-            if (kb[Key.UpArrow].wasPressedThisFrame)    d.y -= step;
-            if (kb[Key.DownArrow].wasPressedThisFrame)  d.y += step;
-            if (d != Vector2.zero)
+            if (kb != null)
             {
-                _hotspotOffset += d;
-                if (_customActive) SetCustomCursor(true);   // 보정 즉시 반영
+                if (kb[Key.C].wasPressedThisFrame) SetActive(!_active);
+                if (kb[Key.H].wasPressedThisFrame) { _hideSystemCursor = !_hideSystemCursor; ApplyCursorVisibility(); }
+
+                // 방향키 → 손끝 위치(offset) nudge
+                float step = shift ? 10f : 1f;
+                bool moved = false;
+                if (kb[Key.LeftArrow].wasPressedThisFrame)  { _hotspotOffset.x -= step; moved = true; }
+                if (kb[Key.RightArrow].wasPressedThisFrame) { _hotspotOffset.x += step; moved = true; }
+                if (kb[Key.UpArrow].wasPressedThisFrame)    { _hotspotOffset.y += step; moved = true; }
+                if (kb[Key.DownArrow].wasPressedThisFrame)  { _hotspotOffset.y -= step; moved = true; }
+                if (moved) SaveTuning();
             }
+
+            if (!_active || _raw == null || mouse == null) return;
+
+            // 마우스 휠 → 크기 조정
+            float scroll = mouse.scroll.ReadValue().y;
+            if (Mathf.Abs(scroll) > 0.01f)
+            {
+                float k = (shift ? 32f : 8f) * Mathf.Sign(scroll);
+                _size = new Vector2(Mathf.Max(16f, _size.x + k), Mathf.Max(16f, _size.y + k));
+                SaveTuning();
+            }
+
+            // press → HandClick, release → Hand
+            if (mouse.leftButton.wasPressedThisFrame)  { _pressed = true;  _raw.texture = _handClickTex != null ? _handClickTex : _handTex; }
+            if (mouse.leftButton.wasReleasedThisFrame) { _pressed = false; _raw.texture = _handTex; }
+
+            // 마우스 추종
+            Vector2 p = mouse.position.ReadValue();
+            _raw.rectTransform.sizeDelta        = _size;
+            _raw.rectTransform.anchoredPosition = p + _hotspotOffset;
         }
 
-        // 녹화 중 현재 상태/보정값 확인용 오버레이 (Editor 전용).
+        private void SaveTuning()
+        {
+            UnityEditor.EditorPrefs.SetFloat(PREF_SX, _size.x);
+            UnityEditor.EditorPrefs.SetFloat(PREF_SY, _size.y);
+            UnityEditor.EditorPrefs.SetFloat(PREF_OX, _hotspotOffset.x);
+            UnityEditor.EditorPrefs.SetFloat(PREF_OY, _hotspotOffset.y);
+        }
+
+        private void SetActive(bool on)
+        {
+            _active = on;
+            if (_canvas != null) _canvas.gameObject.SetActive(on);
+            ApplyCursorVisibility();
+        }
+
+        private void ApplyCursorVisibility()
+        {
+            Cursor.visible = !(_active && _hideSystemCursor);
+        }
+
         private void OnGUI()
         {
             var style = new GUIStyle(GUI.skin.label) { fontSize = 14, normal = { textColor = Color.white } };
-            GUI.Label(new Rect(12, 10, 560, 60),
-                $"[UA Cursor] C 커스텀={(_customActive ? "ON" : "OFF")}  |  H 표시={(_cursorVisible ? "ON" : "OFF")}\n" +
-                $"hotspot offset = ({_hotspotOffset.x}, {_hotspotOffset.y})   방향키 nudge (Shift=10px)", style);
+            GUI.Label(new Rect(12, 10, 720, 40),
+                $"[UA Hand] C={( _active ? "ON" : "OFF")} | {(_pressed ? "HandClick" : "Hand")} | " +
+                $"size={_size.x}x{_size.y}(휠) | offset=({_hotspotOffset.x},{_hotspotOffset.y})(방향키) | OS커서={( Cursor.visible ? "표시" : "숨김")}(H)", style);
         }
 
-        private void SetCustomCursor(bool on)
-        {
-            _customActive = on;
-
-            if (on)
-            {
-                Texture2D tex = ResolveCursorTexture();
-                if (tex == null)
-                {
-                    Debug.LogWarning("[UACursor] 커서 이미지가 없습니다. " +
-                        "_cursorImage 를 지정하거나 PlayerSettings > Default Cursor 에 추가하세요.");
-                    _customActive = false;
-                    return;
-                }
-                // Cursor.SetCursor 는 CPU 접근 가능한(Read/Write) RGBA32 텍스처만 받음.
-                // 인게임 스프라이트는 보통 압축/non-readable 이라 거부됨("not CPU accessible").
-                // → 읽기 가능한 RGBA32 사본을 런타임 생성해 사용(임포트 설정 무관, 어떤 텍스처든 OK).
-                Cursor.SetCursor(MakeCursorReadable(tex), ResolveHotspot(), _cursorMode);
-            }
-            else
-            {
-                Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
-            }
-        }
-
-        private Texture2D _readableCopy;   // MakeCursorReadable 캐시
-        private Texture2D _readableSource;
-
-        /// <summary>src 를 RGBA32 read/write 사본으로 변환(Blit→ReadPixels). 이미 만든 사본은 캐시 재사용.</summary>
-        private Texture2D MakeCursorReadable(Texture2D src)
-        {
-            if (src == null) return null;
-            if (_readableCopy != null && _readableSource == src) return _readableCopy;
-
-            RenderTexture rt = RenderTexture.GetTemporary(
-                src.width, src.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
-            RenderTexture prev = RenderTexture.active;
-            Graphics.Blit(src, rt);
-            RenderTexture.active = rt;
-
-            var copy = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false);
-            copy.ReadPixels(new Rect(0, 0, src.width, src.height), 0, 0);
-            copy.Apply(false, false);   // CPU 접근 유지(makeNoLongerReadable=false)
-
-            RenderTexture.active = prev;
-            RenderTexture.ReleaseTemporary(rt);
-
-            if (_readableCopy != null) Destroy(_readableCopy);   // 이전 사본 정리
-            _readableCopy = copy;
-            _readableSource = src;
-            copy.name = src.name + "_cursorReadable";
-            return copy;
-        }
-
-        private void SetCursorVisible(bool visible)
-        {
-            _cursorVisible = visible;
-            Cursor.visible = visible;
-        }
-
-        private Texture2D ResolveCursorTexture()
-        {
-            if (_cursorImage != null) return _cursorImage;
-            return UnityEditor.PlayerSettings.defaultCursor;
-        }
-
-        private Vector2 ResolveHotspot()
-        {
-            Vector2 baseHotspot = (_cursorImage != null)
-                ? Vector2.zero
-                : UnityEditor.PlayerSettings.cursorHotspot;
-            return baseHotspot + _hotspotOffset;
-        }
-
-        // 플레이 중 보정값/이미지를 바꾸면 즉시 반영.
-        private void OnValidate()
-        {
-            if (Application.isPlaying && _customActive)
-                SetCustomCursor(true);
-        }
-
-        // 녹화/플레이 종료 시 기본 커서 복원 + 생성한 읽기 사본 정리.
         private void OnDisable()
         {
-            Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
             Cursor.visible = true;
-            if (_readableCopy != null) { Destroy(_readableCopy); _readableCopy = null; _readableSource = null; }
+            if (_canvas != null) Destroy(_canvas.gameObject);
         }
 #endif
     }

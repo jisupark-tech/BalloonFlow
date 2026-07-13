@@ -2320,9 +2320,8 @@ namespace BalloonFlow
             // [에디터 전용] x 키 → 실패 연출 미리보기 (Multiplier 가 높은 배수에서 1 로 떨어지는 연출, 실제 state 변경 없음).
             if (Keyboard.current != null && Keyboard.current.xKey.wasPressedThisFrame)
                 StartWinningStreakFailPreview();
-            // [에디터 전용] c 키 → PopupWinningStreak 바로 오픈 (해금 게이트 무시 — 팝업 안에서 1~5 키로 배수 연출 프리뷰).
-            if (Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame && UIManager.HasInstance)
-                UIManager.Instance.OpenUI<PopupWinningStreak>(Const.POPUP_WINNING_STREAK);
+            // ROLLBACK_UA_HAND_CURSOR_20260713: C 키는 UA 손 커서(UACursorController) 토글용으로 양보 — WS c 프리뷰 제거.
+            //   (WS 팝업 프리뷰가 다시 필요하면 다른 키에 재배치. z=로비연출 / x=실패연출 / 1~5=배수 는 유지.)
             // [에디터 전용] 1~5 키 → 로비 WS Multiplier 배수 연출 프리뷰 (x1/x5/x10/x25/x100).
             //   숨김 상태면 슬라이드 인부터, 표시 중이면 SelectFrame/TextYellow 이동만. z 연출과 조합해 확인용.
             //   PopupWinningStreak 가 열려 있으면 팝업 쪽 1~5 키가 우선 — 로비는 무시.

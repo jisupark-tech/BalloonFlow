@@ -310,8 +310,10 @@ namespace BalloonFlow.Analytics
                     p[AnalyticsConsts.P_AID] = c.Aid;
             }
 
-            // ROLLBACK_AB_EP1_20260713: A/B 에피소드1 variant 기록(첫 읽기 시 lazy 배정+영속). BQ A/B 분리 분석용.
-            p[AnalyticsConsts.P_AB_EP1_VARIANT] = AbTestService.Episode1Variant;
+            // ROLLBACK_AB_EP1_20260713: A/B 활성 시에만 variant 기록(첫 읽기 시 lazy 배정+영속). BQ A/B 분리 분석용.
+            //   비활성(기본)이면 미기록 → 비테스트 유저 ab_ep1_variant=NULL(전원 A 를 'A'로 오염 안 시킴).
+            if (AbTestService.IsEnabled)
+                p[AnalyticsConsts.P_AB_EP1_VARIANT] = AbTestService.Episode1Variant;
 
             if (CurrencyManager.HasInstance)
                 p[AnalyticsConsts.P_TOTAL_COIN_BALANCE] = CurrencyManager.Instance.Coins;
