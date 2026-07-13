@@ -1,4 +1,4 @@
-Key,Text_EN,비고
+,Text_EN,비고
 frozenlayer.magazinetext,0,
 holder.magazinetext,0,
 itembtn.txtlock,Lv.{n},
@@ -187,7 +187,7 @@ popup.txtdescription.purchaseerror,Your purchase\nwas canceled.,PopupDescription
 popup.txtdescription.purchasesuccess,Your purchase\nwas completed.,PopupDescription
 popup.txtdescription.purchasecompleted,Your purchase was completed.,PopupError
 popup.txtdescription.deleteaccount1,"If you delete your account,\nyou will lose all your game progress, coins, boosters and purchases!",
-popup.txtdescription.deleteaccount2,"We will aim to complete your deletion request within 30 days. Once your account is deleted, this action cannot be reversed.",
+popup.txtdescription.deleteaccount2,"Your deletion request will be processed immediately. Once your account is deleted, this action cannot be reversed.",
 popup.txtdescription.deleteaccount3,"If you return to the game before your account is deleted, you can cancel the deletion process and restore your account.",
 popup.txtdescription.settingquit,You will lose a life!,PopupQuit
 popup.txtdescription.settingquit.multiplier,You will lose your x{n} multiplier!,PopupQuit
