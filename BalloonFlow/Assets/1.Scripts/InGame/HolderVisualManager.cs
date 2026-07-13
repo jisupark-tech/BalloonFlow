@@ -1047,6 +1047,16 @@ namespace BalloonFlow
             return new Vector3(x, 0.1f, z);
         }
 
+        // ROLLBACK_TOUCH_GUIDE_HINT_20260713: 특정 열의 1행(탭 가능한 앞줄, row 0) 슬롯 월드좌표.
+        //   터치 유도 핸드는 박스 실제 행과 무관하게 '그 열의 1행' 위에 뜨므로 이 좌표를 사용. 미준비 시 false.
+        public bool TryGetColumnFrontRowWorldPos(int column, out Vector3 worldPos)
+        {
+            worldPos = Vector3.zero;
+            if (_queueColumns <= 0 || column < 0 || column >= _queueColumns) return false;
+            worldPos = CalculateQueuePosition(column, 0);
+            return true;
+        }
+
         /// <summary>
         /// Returns the deploy point — where a holder attaches to the rail bottom edge
         /// to start deploying darts onto passing empty slots.

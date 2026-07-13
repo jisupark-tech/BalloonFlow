@@ -41,8 +41,18 @@ namespace BalloonFlow
                 _gameCamera = Camera.main;
         }
 
+        // ROLLBACK_TOUCH_GUIDE_IDLE_20260713: 터치 유도 힌트의 idle(무입력) 판정용 마지막 물리 입력 시각(unscaled).
+        //   입력 활성/억제/로딩 여부와 무관하게 '플레이어가 화면을 눌렀는가'만 기록(로우 프레스 기준).
+        //   롤백: 이 프로퍼티 + Update 상단 기록 블록 삭제.
+        public static float LastInputTime { get; private set; }
+
         private void Update()
         {
+            // ROLLBACK_TOUCH_GUIDE_IDLE_20260713: 어떤 게이트보다 먼저 물리 프레스를 감지해 기록(억제 중 탭도 '입력'으로 간주).
+            if ((Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
+                || (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame))
+                LastInputTime = Time.unscaledTime;
+
             if (!_inputEnabled) return;
             if (Time.unscaledTime < _suppressInputUntilUnscaled) return;
             // ROLLBACK_INPUT_BLOCK_DURING_LOADING_20260623: 씬전환/스테이지클리어 로딩·페이드 중 홀더 입력 차단.

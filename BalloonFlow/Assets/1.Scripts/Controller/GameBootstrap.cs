@@ -156,6 +156,14 @@ namespace BalloonFlow
                 Debug.Log("[GameBootstrap] Created GimmickProcessor (was missing — Surprise/Curtain reveal depends on it)");
             }
 
+            // ROLLBACK_TOUCH_GUIDE_HINT_20260713: 터치 유도(핸드) 힌트 — 1~5스테이지, 튜토 이후. SceneSingleton.
+            //   자체 게이트(레벨≤5·튜토비활성·grace)로 조건 미충족 시 no-op 이라 항상 생성해도 무해.
+            if (!TouchGuideHintManager.HasInstance)
+            {
+                var _go = new GameObject("TouchGuideHintManager");
+                _go.AddComponent<TouchGuideHintManager>();
+            }
+
             // UIManager (required for all UI: HUD, popups, fade transitions)
             if (!UIManager.HasInstance)
             {

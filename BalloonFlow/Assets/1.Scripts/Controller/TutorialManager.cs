@@ -68,6 +68,9 @@ namespace BalloonFlow
         private Sprite _defaultCutoutFrameSprite;
         private Color _defaultCutoutFrameColor;
         private Sprite _defaultHandSprite;
+        // ROLLBACK_TOUCH_GUIDE_HINT_20260713: 터치 유도 힌트가 튜토와 동일한 핸드 스프라이트를 재사용하도록 노출.
+        //   튜토 팝업 바인딩(_defaultHandSprite = _handImage.sprite) 이후에 유효. 롤백: 이 프로퍼티 삭제.
+        public Sprite HandSprite => _defaultHandSprite;
         private Vector3 _defaultHandScale = Vector3.one;
         private Vector3 _defaultHandRotation = Vector3.zero;
         private Tween _handTween;
@@ -1197,43 +1200,53 @@ namespace BalloonFlow
                 return;
 
             StopHandTween();
+            _handTween = BuildHandTweenSequence(
+                _handIndicator, step.handIndicatorPosition, _defaultHandScale, _defaultHandRotation,
+                step.handTweenType, step.handTweenMoveOffset, step.handTweenScale, step.handTweenRotation, step.handTweenDuration);
+        }
 
-            float duration = Mathf.Max(0.05f, step.handTweenDuration);
-            Vector2 basePosition = step.handIndicatorPosition;
-            Vector2 targetPosition = basePosition + step.handTweenMoveOffset;
-            Vector3 baseScale = _defaultHandScale;
-            Vector3 targetScale = baseScale * Mathf.Max(0.01f, step.handTweenScale);
-            Vector3 targetRotation = _defaultHandRotation + new Vector3(0f, 0f, step.handTweenRotation);
+        // ROLLBACK_TOUCH_GUIDE_HINT_20260713: 튜토 핸드 tween 시퀀스 생성 로직 추출 → 터치유도 힌트가 '그대로' 재사용.
+        //   기존 PlayHandTween 본문과 동일(Move/Pulse/Rotate Join + InOutSine + unscaled + yoyo 무한). 롤백: PlayHandTween 인라인 복원 + 이 메서드 삭제.
+        public static Sequence BuildHandTweenSequence(
+            RectTransform hand, Vector2 basePosition, Vector3 baseScale, Vector3 baseRotation,
+            TutorialHandTweenType type, Vector2 moveOffset, float scale, float rotation, float duration)
+        {
+            if (hand == null || type == TutorialHandTweenType.None) return null;
+
+            duration = Mathf.Max(0.05f, duration);
+            Vector2 targetPosition = basePosition + moveOffset;
+            Vector3 targetScale = baseScale * Mathf.Max(0.01f, scale);
+            Vector3 targetRotation = baseRotation + new Vector3(0f, 0f, rotation);
 
             Sequence sequence = DOTween.Sequence();
             sequence.SetUpdate(true);
             bool hasTween = false;
 
-            if (step.handTweenType == TutorialHandTweenType.Move || step.handTweenType == TutorialHandTweenType.MoveAndPulse)
+            if (type == TutorialHandTweenType.Move || type == TutorialHandTweenType.MoveAndPulse)
             {
-                sequence.Join(_handIndicator.DOAnchorPos(targetPosition, duration).SetEase(Ease.InOutSine));
+                sequence.Join(hand.DOAnchorPos(targetPosition, duration).SetEase(Ease.InOutSine));
                 hasTween = true;
             }
 
-            if (step.handTweenType == TutorialHandTweenType.Pulse || step.handTweenType == TutorialHandTweenType.MoveAndPulse)
+            if (type == TutorialHandTweenType.Pulse || type == TutorialHandTweenType.MoveAndPulse)
             {
-                sequence.Join(_handIndicator.DOScale(targetScale, duration).SetEase(Ease.InOutSine));
+                sequence.Join(hand.DOScale(targetScale, duration).SetEase(Ease.InOutSine));
                 hasTween = true;
             }
 
-            if (step.handTweenType == TutorialHandTweenType.Rotate || Mathf.Abs(step.handTweenRotation) > 0.001f)
+            if (type == TutorialHandTweenType.Rotate || Mathf.Abs(rotation) > 0.001f)
             {
-                sequence.Join(_handIndicator.DOLocalRotate(targetRotation, duration, RotateMode.Fast).SetEase(Ease.InOutSine));
+                sequence.Join(hand.DOLocalRotate(targetRotation, duration, RotateMode.Fast).SetEase(Ease.InOutSine));
                 hasTween = true;
             }
 
             if (!hasTween)
             {
                 sequence.Kill();
-                return;
+                return null;
             }
 
-            _handTween = sequence.SetLoops(-1, LoopType.Yoyo);
+            return sequence.SetLoops(-1, LoopType.Yoyo);
         }
 
         private void StopHandTween()
