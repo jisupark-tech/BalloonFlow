@@ -18,6 +18,14 @@ namespace BalloonFlow
         /// <summary>안전 timeout — 어떤 단계가 너무 오래 걸려도 결국 진입.</summary>
         private const float MAX_LOADING_TIME = 30.0f;
 
+        // ROLLBACK_TITLE_NET_GATE_20260713: 절대 하드캡 — 위 워치독은 네트워크 대기(_isWaitingForNetwork)
+        //   중 멈추므로, 어떤 단계가 네트워크에 매달려도 부팅 후 이 시간을 넘으면 '무조건' 강제 입장한다.
+        //   L1~20은 로컬(Episode1)이라 강제 입장해도 첫 레벨 플레이 가능. belt-and-suspenders 안전망.
+        private const float HARD_LOADING_CAP = 20.0f;
+
+        // ROLLBACK_BOOT_CHECKPOINTS_20260713: 부팅→첫플레이 퍼널 계측(어느 단계서 이탈하는지 진단). 필요 없어지면 false.
+        private const bool BOOT_CHECKPOINTS_ENABLED = true;
+
         /// <summary>[#9] 로딩 완료 후 "Tap to Start" 노출 시간 — 이 시간 내 탭하면 즉시 진입, 미탭 시 자동 진입(doc: 자동 진입 유지).</summary>
         private const float TITLE_AUTO_ENTER_DELAY = 1.0f;
 
@@ -48,6 +56,8 @@ namespace BalloonFlow
         private bool _permissionResolved;
         private bool _entered;
         private float _watchdogTimer;
+        // ROLLBACK_TITLE_NET_GATE_20260713: 절대 하드캡 타이머 — 네트워크 대기와 '무관하게' 증가.
+        private float _absLoadTimer;
         private float _loadingFlowStartTime;
         /// <summary>네트워크 대기 중일 때 watchdog 일시 정지 (오프라인이면 30s timeout 으로 Lobby 강제 진입 막기).</summary>
         private bool _isWaitingForNetwork;
@@ -187,6 +197,22 @@ namespace BalloonFlow
                     Debug.LogWarning("[TitleController] Loading watchdog timeout → 강제 입장");
                     if (_ui != null) _ui.SetProgress(1f);
                     Enter();
+                    return;
+                }
+            }
+
+            // ROLLBACK_TITLE_NET_GATE_20260713: 절대 하드캡 — _isWaitingForNetwork 여부와 '무관하게' 부팅 후
+            //   HARD_LOADING_CAP 초과 시 무조건 강제 입장. 위 워치독은 네트워크 대기 중 멈춰 무한 대기 위험이
+            //   있으므로, 어떤 단계가 네트워크에 매달려도 사용자가 타이틀에 갇히지 않도록 보장. Enter()는
+            //   _entered 가드로 멱등, L1~20 로컬이라 강제 입장해도 첫 레벨 플레이 가능.
+            if (_loadingStarted)
+            {
+                _absLoadTimer += Time.deltaTime;
+                if (_absLoadTimer >= HARD_LOADING_CAP)
+                {
+                    Debug.LogWarning("[TitleController] Absolute loading hard-cap → 강제 입장 (offline/slow network)");
+                    if (_ui != null) _ui.SetProgress(1f);
+                    Enter();
                 }
             }
         }
@@ -217,6 +243,7 @@ namespace BalloonFlow
             {
                 string label = LoadingStepLabels[i];
                 float stepLogStart = Time.realtimeSinceStartup;
+                EmitBootCp(label, i); // ROLLBACK_BOOT_CHECKPOINTS_20260713: step i 도달
 
                 // 네트워크 필요한 단계 (Connecting server / Downloading data) 진입 전 연결 확인.
                 if (NeedsInternet(i))
@@ -245,6 +272,7 @@ namespace BalloonFlow
             }
 
             _loadingComplete = true;
+            EmitBootCp("loading_complete", 6); // ROLLBACK_BOOT_CHECKPOINTS_20260713
             Debug.Log($"[TitleLoad] complete total={(Time.realtimeSinceStartup - _loadingFlowStartTime):F2}s");
             if (_ui != null)
             {
@@ -358,34 +386,41 @@ namespace BalloonFlow
         /// </summary>
         private IEnumerator EnsureInternet()
         {
-            while (Application.internetReachability == NetworkReachability.NotReachable)
+            // ROLLBACK_TITLE_NET_GATE_20260713: 오프라인 '영구 갇힘' 함정 제거 (P0 리텐션 최대 누수).
+            //   [배경] L1~20은 로컬(Episode1)이라 네트워크 없이도 첫 레벨 플레이 가능(Enter→FtueGate 로컬 경로).
+            //   그런데 과거엔 이 메서드가 NotReachable 인 동안 while 루프로 "No Internet" 팝업을 '무한' 재노출 +
+            //   그 사이 _isWaitingForNetwork=true 로 로딩 워치독까지 정지(Update) → 네트워크 없음/끊김이면
+            //   타이틀에 '영구히 갇힘' → 첫 레벨 진입 실패(BQ 실측: 설치 23%가 play_start 0, 그 유력 원인).
+            //   [수정] 팝업을 '1회'만 안내하고, 유저가 닫으면(또는 그 사이 연결되면) 오프라인이어도 '진행'한다.
+            //   network 단계(server/SDK/CDM)는 각자 soft-timeout(~2s)·백그라운드 폴백을 이미 가지므로 로컬
+            //   콘텐츠로 진입 가능하고, 재연결 시 백그라운드로 동기된다. (무한 재시도 while 루프 제거가 핵심.)
+            if (Application.internetReachability != NetworkReachability.NotReachable)
+                yield break; // 온라인 — 게이트 통과
+
+            _isWaitingForNetwork = true;
+            EmitBootCp("net_gate_offline", -1); // ROLLBACK_BOOT_CHECKPOINTS_20260713: 오프라인 게이트 진입(P0 측정 핵심)
+            if (_ui != null) _ui.SetStatus("Connecting to internet...");
+
+            PopupError popup = null;
+            if (UIManager.HasInstance)
             {
-                _isWaitingForNetwork = true;
-                if (_ui != null) _ui.SetStatus("Connecting to internet...");
-
-                PopupError popup = null;
-                if (UIManager.HasInstance)
-                {
-                    popup = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
-                    if (popup != null) popup.ShowNoInternet();
-                }
-
-                // 사용자가 OK 또는 X 로 popup 을 닫을 때까지 대기 — UIBase.CloseUI 가 SetActive(false) 처리.
-                if (popup != null)
-                {
-                    while (popup != null && popup.gameObject.activeSelf)
-                        yield return null;
-                }
-                else
-                {
-                    // popup 로드 실패 시 폴백 — 1초 간격 재시도
-                    yield return new WaitForSeconds(1f);
-                }
-
-                // 짧은 대기 후 재확인 (상태 갱신 시간 확보)
-                yield return new WaitForSeconds(0.5f);
+                popup = UIManager.Instance.OpenUI<PopupError>("Popup/PopupError");
+                if (popup != null) popup.ShowNoInternet();
             }
-            _isWaitingForNetwork = false;
+
+            // 팝업을 유저가 닫을 때까지 '한 번'만 대기 — 닫으면(또는 그 사이 연결되면) 오프라인이어도 진행.
+            //   (팝업 로드 실패 시 짧은 폴백 대기 후 진행.) 절대 하드캡(Update)도 이중 안전망으로 동작.
+            if (popup != null)
+            {
+                while (popup != null && popup.gameObject.activeSelf)
+                    yield return null;
+            }
+            else
+            {
+                yield return new WaitForSeconds(1f);
+            }
+
+            _isWaitingForNetwork = false; // 오프라인이어도 진행 — 로컬 L1~20 플레이 보장
         }
 
         /// <summary>
@@ -604,6 +639,7 @@ namespace BalloonFlow
 
             if (ShouldEnterFirstLevel())
             {
+                EmitBootCp("enter_firstlevel", 7); // ROLLBACK_BOOT_CHECKPOINTS_20260713
                 // 스플래시 유지: 스플래시 배경을 전환 오버레이로 그대로 이어 보여주며 InGame 진입.
                 // 별도 전환 이미지를 띄우지 않아 splash→레벨 사이 단색/이중 노출이 없음.
                 if (_ui != null && _ui.SplashSprite != null)
@@ -615,6 +651,7 @@ namespace BalloonFlow
             }
             else
             {
+                EmitBootCp("enter_lobby", 7); // ROLLBACK_BOOT_CHECKPOINTS_20260713
                 GameManager.Instance.LoadScene(GameManager.SCENE_LOBBY);
             }
         }
@@ -629,6 +666,17 @@ namespace BalloonFlow
         private static int GetHighestClearedLevel()
         {
             return FtueGate.HighestClearedLevel;
+        }
+
+        // ROLLBACK_BOOT_CHECKPOINTS_20260713: 부팅 체크포인트 1건 발화(경과 ms + 네트워크 도달 여부 포함).
+        //   session_start(앱 열기)→각 로딩step→loading_complete→enter→play_start(레벨 로드) 퍼널로,
+        //   "설치 후 첫 레벨 미도달" 유저가 어느 단계서 이탈하는지 BQ 에서 stage_index MAX 로 규명.
+        private void EmitBootCp(string stage, int stageIndex)
+        {
+            if (!BOOT_CHECKPOINTS_ENABLED) return;
+            int elapsedMs = Mathf.Max(0, Mathf.RoundToInt((Time.realtimeSinceStartup - _loadingFlowStartTime) * 1000f));
+            bool net = Application.internetReachability != NetworkReachability.NotReachable;
+            Analytics.AnalyticsSessionTracker.EmitBootCheckpoint(stage, stageIndex, elapsedMs, net);
         }
 
         static GameObject CreateCanvas(string name, int sortingOrder)

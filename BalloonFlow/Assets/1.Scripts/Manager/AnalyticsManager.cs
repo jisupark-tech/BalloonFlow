@@ -181,6 +181,10 @@ namespace BalloonFlow
         {
             if (!paused) return;
             // 백그라운드에서 그대로 킬당해도 유실 없도록 먼저 영속화, 이후 best-effort 전송.
+            // ROLLBACK_ANR_PAUSE_IO_DIET_20260713: PersistBuffer 는 pause 시점 '메인스레드'에서 배치를
+            //   동기 직렬화+File.WriteAllText 한다(GameActivity onPause 핸드셰이크 창 안에서 실행) → 배치가
+            //   크면 ANR 가중 요인. 크래시-세이프티(킬 전 유실 방지) 때문에 유지하되, 배치 상한/증분 저장으로
+            //   경량화 여지 있음(후속). TryFlush 는 코루틴(yield)이라 메인스레드 비블로킹 — OK.
             PersistBuffer();
             TryFlush();
         }
@@ -516,9 +520,20 @@ namespace BalloonFlow
                 case AnalyticsConsts.EVT_SESSION_END:      return BqSessionEndColumns;
                 case AnalyticsConsts.EVT_AD:               return BqAdColumns;
                 case AnalyticsConsts.EVT_USER_PROPERTY:    return BqUserPropertyColumns; // ROLLBACK_USER_PROPERTY_PIPELINE_20260708
+                case AnalyticsConsts.EVT_BOOT_CHECKPOINT:  return BqBootCheckpointColumns; // ROLLBACK_BOOT_CHECKPOINTS_20260713
                 default: return null;
             }
         }
+
+        // ROLLBACK_BOOT_CHECKPOINTS_20260713: boot_checkpoint 테이블 컬럼 화이트리스트.
+        private static readonly string[] BqBootCheckpointColumns =
+        {
+            AnalyticsConsts.P_EVENT_ID, AnalyticsConsts.P_SESSION_ID, AnalyticsConsts.P_GAME_ID,
+            AnalyticsConsts.P_UID, AnalyticsConsts.P_EVENT_TS, AnalyticsConsts.P_APP_VERSION,
+            AnalyticsConsts.P_GEO_COUNTRY, AnalyticsConsts.P_PLATFORM, AnalyticsConsts.P_DEVICE_MODEL,
+            AnalyticsConsts.P_STAGE, AnalyticsConsts.P_STAGE_INDEX, AnalyticsConsts.P_ELAPSED_MS,
+            AnalyticsConsts.P_NET_REACHABLE,
+        };
 
         private static readonly string[] BqLevelPlayStartColumns =
         {

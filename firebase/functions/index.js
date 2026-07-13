@@ -226,6 +226,12 @@ const EVENT_TABLE = {
   purchase_event:         'purchase',
   economy_event:          'economy',
   ad_event:               'ad_event',
+  // ROLLBACK_BOOT_CHECKPOINTS_20260713: 부팅→첫플레이 퍼널 계측. ⚠️ 활성화 순서 엄수 —
+  //   (1) firebase/bigquery/boot_checkpoint_ddl.sql 로 balloonloop_db.boot_checkpoint 테이블 생성
+  //   (2) 아래 줄 주석 해제  (3) firebase deploy --only functions:ingestAnalyticsEvents
+  //   테이블 부재 상태로 라우팅하면 insert 실패→500→클라 배치 무한 재시도(poison). 그 전까지는 클라가
+  //   이벤트를 보내도 이 맵에 없어 unknown 으로 안전 스킵(skipped++)되므로 무해.
+  // boot_checkpoint_event:  'boot_checkpoint',
 };
 
 // 테이블별 컬럼명이 공통과 다른 경우의 rename. (session_start 만 version/country 컬럼 사용)

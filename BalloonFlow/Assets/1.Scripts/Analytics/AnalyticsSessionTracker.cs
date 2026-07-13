@@ -156,11 +156,20 @@ namespace BalloonFlow.Analytics
             PlayerPrefs.Save();
         }
 
-        private void TouchOpenSessionLastSeen()
+        // ROLLBACK_ANR_PAUSE_IO_DIET_20260713: last_seen 갱신. persistToDisk=true 일 때만 디스크 커밋.
+        //   [배경] GameActivity onPause 핸드셰이크 ANR — 백그라운드 전환 시 GameActivity(네이티브 app-glue)가
+        //   Unity 게임 스레드의 pause ack 를 pthread_cond_wait 로 기다린다. 저사양기에서 그 순간 서드파티
+        //   SDK(FB/AppsFlyer/MAX)가 네트워크로 폭주하며 CPU/스케줄러를 포화시키면 Unity 스레드가 5s 안에
+        //   ack 를 못 내 ANR. 우리 메인스레드 동기 디스크 IO 는 그 여유를 갉아먹는 가중 요인이다.
+        //   PlayerPrefs.Save() 는 전체 prefs 를 디스크에 '동기' flush → 30초 포그라운드 하트비트마다 호출하면
+        //   상시 메인스레드 IO/잰크가 된다. 그래서 하트비트는 in-memory SetString 만(persistToDisk=false),
+        //   실제 Save 는 pause/quit 에서만 수행한다. orphan session_end 복구는 '백그라운드 킬 직전'의 디스크
+        //   값만 필요한데, OnApplicationPause(true) 에서 반드시 Save 하므로 그 보장은 유지된다.
+        private void TouchOpenSessionLastSeen(bool persistToDisk = true)
         {
             if (string.IsNullOrEmpty(_sessionId)) return;
             PlayerPrefs.SetString(PREFS_OPEN_SESSION_LASTSEEN, DateTime.UtcNow.ToString("o"));
-            PlayerPrefs.Save();
+            if (persistToDisk) PlayerPrefs.Save();
         }
 
         private static void ClearOpenSessionSnapshot()
@@ -174,6 +183,9 @@ namespace BalloonFlow.Analytics
         // ─── App lifecycle ───
 
         // ROLLBACK_SESSION_HEARTBEAT_20260713: 포그라운드 하트비트 — HEARTBEAT_INTERVAL_SEC 마다 last_seen 갱신.
+        // ROLLBACK_ANR_PAUSE_IO_DIET_20260713: 하트비트는 in-memory SetString 만(persistToDisk:false) — 매 틱
+        //   PlayerPrefs.Save()(전체 prefs 동기 디스크 flush)를 제거해 상시 메인스레드 IO/잰크 + ANR 가중 제거.
+        //   디스크 커밋은 OnApplicationPause(true)/OnApplicationQuit 에서만 (백그라운드 킬 직전 값이면 충분).
         private void Update()
         {
             if (string.IsNullOrEmpty(_sessionId)) return;
@@ -181,7 +193,7 @@ namespace BalloonFlow.Analytics
             if (_heartbeatTimer >= HEARTBEAT_INTERVAL_SEC)
             {
                 _heartbeatTimer = 0f;
-                TouchOpenSessionLastSeen();
+                TouchOpenSessionLastSeen(persistToDisk: false);
             }
         }
 
@@ -191,6 +203,8 @@ namespace BalloonFlow.Analytics
             {
                 _backgroundEnteredUtc = DateTime.UtcNow;
                 // 백그라운드에서 킬당하면 이 시각이 소급 session_end 의 event_ts/duration 기준이 됨.
+                // ROLLBACK_ANR_PAUSE_IO_DIET_20260713: 하트비트가 in-memory 만 하므로 last_seen 의 '유일한'
+                //   디스크 커밋 지점 = 여기(persistToDisk 기본 true). 백그라운드 킬 직전이라 orphan 복구 보장됨.
                 TouchOpenSessionLastSeen();
             }
             else if (_backgroundEnteredUtc.HasValue)
@@ -362,6 +376,27 @@ namespace BalloonFlow.Analytics
             {
                 Debug.LogWarning($"[Analytics] {evtName} DROP — AnalyticsManager.HasInstance=false");
             }
+        }
+
+        // ROLLBACK_BOOT_CHECKPOINTS_20260713: 부팅 퍼널 체크포인트 발화(공통 필드 스탬프 + boot 파라미터).
+        //   TitleController 등 비-트래커 컨텍스트에서 호출. 서버 라우팅 활성화 전엔 unknown 으로 안전 스킵.
+        internal static void EmitBootCheckpoint(string stage, int stageIndex, int elapsedMs, bool netReachable)
+        {
+            var p = new Dictionary<string, object>(13);
+            p[AnalyticsConsts.P_EVENT_ID]     = Guid.NewGuid().ToString("N");
+            p[AnalyticsConsts.P_SESSION_ID]   = HasInstance ? Instance.CurrentSessionId : "";
+            p[AnalyticsConsts.P_GAME_ID]      = AnalyticsConsts.GAME_ID;
+            p[AnalyticsConsts.P_UID]          = ResolveUid();
+            p[AnalyticsConsts.P_EVENT_TS]     = DateTime.UtcNow.ToString("o");
+            p[AnalyticsConsts.P_APP_VERSION]  = Application.version;
+            p[AnalyticsConsts.P_GEO_COUNTRY]  = ResolveGeoCountry();
+            p[AnalyticsConsts.P_PLATFORM]     = ResolvePlatform();
+            p[AnalyticsConsts.P_DEVICE_MODEL] = SystemInfo.deviceModel;
+            p[AnalyticsConsts.P_STAGE]        = stage;
+            p[AnalyticsConsts.P_STAGE_INDEX]  = stageIndex;
+            p[AnalyticsConsts.P_ELAPSED_MS]   = elapsedMs;
+            p[AnalyticsConsts.P_NET_REACHABLE] = netReachable;
+            EmitEvent(AnalyticsConsts.EVT_BOOT_CHECKPOINT, p);
         }
 
         [System.Diagnostics.Conditional("UNITY_EDITOR")]

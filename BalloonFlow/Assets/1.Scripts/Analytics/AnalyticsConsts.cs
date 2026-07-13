@@ -24,6 +24,11 @@ namespace BalloonFlow.Analytics
         //   다른 8개와 달리 스트리밍 append 가 아니라 Cloud Function 이 BQ DML MERGE 로 처리.
         public const string EVT_USER_PROPERTY    = "user_property_event";
 
+        // ROLLBACK_BOOT_CHECKPOINTS_20260713: 부팅→첫플레이 퍼널 계측(별도 타입드 테이블 boot_checkpoint).
+        //   ⚠️ 서버 EVENT_TABLE 라우팅은 BQ 테이블 생성(boot_checkpoint_ddl.sql) 후에만 활성화 — 테이블 부재 시
+        //   insert 실패→500→클라 배치 무한 재시도(poison) 위험. 미활성 동안은 서버가 unknown 이벤트로 안전 스킵.
+        public const string EVT_BOOT_CHECKPOINT  = "boot_checkpoint_event";
+
         // ─── Common params ───
         public const string P_EVENT_ID            = "event_id";
         public const string P_PLAY_ID             = "play_id";
@@ -38,6 +43,12 @@ namespace BalloonFlow.Analytics
         public const string P_COUNTRY             = "country";
         public const string P_PLATFORM            = "platform";
         public const string P_DEVICE_MODEL        = "device_model";
+
+        // ─── boot_checkpoint params (ROLLBACK_BOOT_CHECKPOINTS_20260713) ───
+        public const string P_STAGE               = "stage";          // 단계 라벨(예: "Connecting server...", "enter_firstlevel", "net_gate_offline")
+        public const string P_STAGE_INDEX         = "stage_index";     // 0~5 로딩step / 6 loading_complete / 7 enter / -1 net_gate
+        public const string P_ELAPSED_MS          = "elapsed_ms";      // 로딩 시작 후 경과(ms)
+        public const string P_NET_REACHABLE       = "net_reachable";   // 발화 시점 인터넷 도달 가능 여부
 
         // ─── Level params ───
         public const string P_LEVEL_NUMBER        = "level_number";

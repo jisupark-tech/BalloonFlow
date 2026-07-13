@@ -61,6 +61,8 @@ namespace BalloonFlow
         #region Fields
 
         private bool   _isInitialized;
+        // ROLLBACK_ANR_AD_PAUSE_GATE_20260713: 백그라운드 동안 광고 로드/재시도 억제 플래그.
+        private bool   _backgrounded;
         private int    _rewardedRetryAttempt;
         private int    _interstitialRetryAttempt;
         private int    _currentLevel = 1;
@@ -109,6 +111,32 @@ namespace BalloonFlow
         private void OnDisable()
         {
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
+        }
+
+        // ROLLBACK_ANR_AD_PAUSE_GATE_20260713: 백그라운드 전환 시 광고 로드/재시도 억제.
+        //   [배경] GameActivity onPause 핸드셰이크 ANR — 백그라운드 순간 FB/AppsFlyer/MAX 가 일제히 네트워크를
+        //   때려 저사양기 CPU/스케줄러가 포화되면 Unity 스레드가 pause ack 를 5s 내 못 내 ANR(스레드 덤프에서
+        //   MaxUnityAdManager.loadInterstitial 도 TLS handshake 블록 중이었음). 우리가 스케줄한 로드 실패
+        //   백오프 Invoke(LoadX) 가 백그라운드에서도 로드를 계속 재시도하므로, pause 시 재시도를 취소하고
+        //   로드 진입을 게이팅한다(네이티브 in-flight 는 못 막지만 '추가 부하 투입'을 멈춰 경합 감소).
+        //   foreground 복귀 시 준비 안 된 광고만 다시 로드해 광고 충전은 유지.
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused)
+            {
+                _backgrounded = true;
+                CancelInvoke(nameof(LoadRewardedAd));
+                CancelInvoke(nameof(LoadInterstitialAd));
+            }
+            else
+            {
+                _backgrounded = false;
+                if (_isInitialized && !_isShowingAd)
+                {
+                    if (!IsRewardedAdReady())     LoadRewardedAd();
+                    if (!IsInterstitialAdReady()) LoadInterstitialAd();
+                }
+            }
         }
 
         #endregion
@@ -259,6 +287,7 @@ namespace BalloonFlow
         private void LoadRewardedAd()
         {
             if (!_isInitialized) return;
+            if (_backgrounded) return; // ROLLBACK_ANR_AD_PAUSE_GATE_20260713: 백그라운드 중 로드 억제(재시도 콜백 포함)
             if (string.IsNullOrEmpty(SdkConfig.AppLovinRewardedAdUnitId))
             {
                 Debug.LogWarning($"{LOG_TAG} Rewarded Ad Unit ID is empty.");
@@ -270,6 +299,7 @@ namespace BalloonFlow
         private void LoadInterstitialAd()
         {
             if (!_isInitialized) return;
+            if (_backgrounded) return; // ROLLBACK_ANR_AD_PAUSE_GATE_20260713: 백그라운드 중 로드 억제(재시도 콜백 포함)
             if (string.IsNullOrEmpty(SdkConfig.AppLovinInterstitialAdUnitId))
             {
                 // Interstitial Ad Unit 미설정 — Rewarded만 사용 가능
