@@ -2465,6 +2465,12 @@ namespace BalloonFlow
         private const float DEPLOY_STALL_DEADLOCK_SECONDS = 1.5f; // ROLLBACK_DEADLOCK_SMOOTHING_RESTORE_20260707: 0.5f→1.5f (HEAD 복원, 위 주석 참조). occ 완전 무변화 지속 임계(정상 플레이는 매 프레임 변함). 되돌리려면 0.5f.
         private const int DEPLOY_STALL_NEARFULL_SLACK = 8;        // near-full 임계 - 이 값 이상일 때만(저점유 일시정지 제외)
         private const int DEADLOCK_FALLBACK_REMAINING_SLOTS = 2; // 198/200 같은 마지막 2칸 deadlock 보정 전용.
+        // ROLLBACK_DEADLOCK_WAVE_GATE_TIGHTEN_20260713: 파도 연출이 '임계치 전'에 오발동하던 문제 —
+        //   stallWavePending 이 진입 조건보다 헐거워(밴드 넓음 SLACK=8, 지속성 0, supplyMatch 게이트 없음) 잠깐
+        //   홀드·저점유에도 떴다. 파도 전용으로 밴드 축소 + 디바운스 + supplyMatch 게이트를 추가해 '진짜 임계 stall'
+        //   에만 뜨게 조인다. 파도는 여전히 1.5s 대기창을 예고(디바운스 후 잔여 ~1s 재생). 롤백: 이 2상수 + 아래 조건 환원.
+        private const int DEPLOY_STALL_WAVE_SLACK = 3;            // 파도는 진짜 임계 근처(SLACK 8→3)에서만
+        private const float DEPLOY_STALL_WAVE_DEBOUNCE = 0.5f;    // 이만큼 stall 지속 후에만 파도 시작(순간 홀드 제외)
         // ROLLBACK_DART_RUNTIME_LOG_THROTTLE:
         // Successful deploy logs allocate/format large strings during dense deployment and cause
         // visible frame drops. Re-enable only while capturing a short placement sample.
@@ -2558,9 +2564,13 @@ namespace BalloonFlow
             // ROLLBACK_DEADLOCK_WAVE_20260708 rev2: 스톨 게이트(시간 제외)가 성립한 순간부터 '밀어주기'까지의
             //   대기 구간에 파도 연출 시작. duration = 스톨 타이머 잔여(밀어주는 시점과 종료 동기).
             //   원점 = leftmost 배포중 홀더의 배포점(EnterDeadlockMode 의 트리거 선정과 동일 기준).
+            // ROLLBACK_DEADLOCK_WAVE_GATE_TIGHTEN_20260713: 진짜 임계 stall 에만 파도 — 밴드 축소(WAVE_SLACK) +
+            //   디바운스(순간 홀드 제외) + supplyMatch 게이트(필패 보드 제외, 진입 조건과 일치).
             bool stallWavePending = !nearFull
                                     && isDeployingCount >= 1
-                                    && occForStall >= nearFullThreshold - DEPLOY_STALL_NEARFULL_SLACK;
+                                    && occForStall >= nearFullThreshold - DEPLOY_STALL_WAVE_SLACK
+                                    && (Time.time - _deployStallSince) >= DEPLOY_STALL_WAVE_DEBOUNCE
+                                    && (!BoardStateManager.HasInstance || BoardStateManager.Instance.HasReachableSupplyMatchCached);
             if (stallWavePending && !_deadlockStallWaveStarted && DartManager.HasInstance)
             {
                 float stallRemaining = DEPLOY_STALL_DEADLOCK_SECONDS - (Time.time - _deployStallSince);

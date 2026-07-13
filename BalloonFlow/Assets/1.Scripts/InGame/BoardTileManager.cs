@@ -656,7 +656,12 @@ namespace BalloonFlow
             if (_dangerBlinkTimer >= DANGER_CYCLE_LENGTH)
             {
                 _dangerBlinkTimer -= DANGER_CYCLE_LENGTH;
-                if (RailManager.HasInstance && RailManager.Instance.Occupancy <= DANGER_OFF_THRESHOLD)
+                // ROLLBACK_DANGER_BLINK_LOOP_WHILE_PAUSED_20260713: 일시정지 중(=rail_warning 튜토 정지 장면)엔
+                //   auto-OFF 억제 → 빨간 점멸이 튜토 종료까지 반복. 트리거 occupancy(0.8) == DANGER_OFF_THRESHOLD(0.8)
+                //   이라, 억제 없으면 0.8 에서 멈춘 첫 사이클 경계에서 바로 꺼져 '한 번만' 깜빡였다.
+                //   정지 해제(튜토 종료) 후엔 정상 점유 기준 auto-OFF 복귀. 롤백: suppressAutoOff 조건 제거.
+                bool suppressAutoOff = PauseManager.IsPaused;
+                if (!suppressAutoOff && RailManager.HasInstance && RailManager.Instance.Occupancy <= DANGER_OFF_THRESHOLD)
                 {
                     SetDangerVisible(false);
                     _dangerBlinkTimer = 0f;

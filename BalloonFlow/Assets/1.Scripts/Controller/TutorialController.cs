@@ -1080,29 +1080,25 @@ namespace BalloonFlow
 
         private void ScheduleRailWarningPause()
         {
-            // ROLLBACK_RAIL_WARNING_PAUSE_AFTER_CURTAIN_20260624:
-            // Let the tutorial dim/cutout curtain finish its entrance before pausing the rail.
-            // Immediate pause freezes the board while the dark curtain is still moving in.
+            // ROLLBACK_RAIL_WARNING_IMMEDIATE_PAUSE_20260713: 커튼 후 1.5s 지연(WaitForSecondsRealtime) 폐기 —
+            //   임계 도달 순간 '즉시' 시간·회전 정지 + 빨간 오버레이 후 튜토 표시. (커튼-후-정지 의도
+            //   ROLLBACK_RAIL_WARNING_PAUSE_AFTER_CURTAIN_20260624 되돌림 — 사용자 요구: 딜레이 없이 바로 멈춤.)
+            //   롤백: 이 메서드를 지연 코루틴(WaitForSecondsRealtime(RAIL_WARNING_PAUSE_DELAY))으로 환원.
             if (_railWarningPauseCoroutine != null)
+            {
                 StopCoroutine(_railWarningPauseCoroutine);
-            _railWarningPauseCoroutine = StartCoroutine(PauseRailWarningAfterDelay());
-        }
-
-        private IEnumerator PauseRailWarningAfterDelay()
-        {
-            yield return new WaitForSecondsRealtime(RAIL_WARNING_PAUSE_DELAY);
-            _railWarningPauseCoroutine = null;
+                _railWarningPauseCoroutine = null;
+            }
             if (!_isTutorialActive || _activeTutorial == null || _activeTutorial.tutorialId != RAIL_WARNING_TUTORIAL_ID)
-                yield break;
-            if (_pausedForRailWarningTutorial) yield break;
+                return;
+            if (_pausedForRailWarningTutorial) return;
 
             PauseManager.Pause();
             _pausedForRailWarningTutorial = true;
 
             // ROLLBACK_DANGER_BLINK_UNSCALED_20260626: 빨간 Rail Warning(danger 오버레이)을 멈춘 경고 장면에서 재생.
-            //   이 튜토는 occupancy 0.8 로도 발동하나 게이지 Warning 임계는 0.90 이라, 0.8 진입 시 오버레이가 아직
-            //   꺼져 있다 → 강제로 켠다. 깜빡임은 BoardTileManager.UpdateDangerBlink 가 unscaledDeltaTime 으로
-            //   timeScale=0(pause) 중에도 진행. (튜토 후 occupancy 가 off 임계 이하면 UpdateDangerBlink 가 자동 OFF.)
+            //   0.8 진입 시 오버레이가 아직 꺼져 있어 강제로 켠다. 깜빡임은 UpdateDangerBlink 가 unscaledDeltaTime 으로
+            //   timeScale=0(pause) 중에도 진행(반복). auto-OFF 는 튜토 정지 중 억제됨(BoardTileManager, 아래 수정 참조).
             if (BoardTileManager.HasInstance)
                 BoardTileManager.Instance.SetDangerVisible(true);
         }

@@ -1652,7 +1652,11 @@ namespace BalloonFlow
 
             while (elapsed < FADE_DURATION)
             {
-                elapsed += Time.deltaTime;
+                // ROLLBACK_DIM_FADE_UNSCALED_20260713: dim 페이드를 unscaledDeltaTime 으로 — rail_warning 튜토가
+                //   임계 도달 즉시 PauseManager.Pause()(timeScale=0)로 정지하는데, scaled deltaTime 이면 페이드가
+                //   시작하자마자 얼어붙어 dim 이 '뿌옇게(낮은 alpha)' 고정됐다. unscaled 로 정지 중에도 페이드가
+                //   완료돼 풀 다크(찐)에 도달. 일반 튜토(timeScale=1)에선 unscaled≈scaled 라 무변화. 롤백: deltaTime 환원.
+                elapsed += Time.unscaledDeltaTime;
                 float t = Mathf.Clamp01(elapsed / FADE_DURATION);
                 float currentAlpha = Mathf.Lerp(startAlpha, targetAlpha, t);
                 SetDimColor(currentAlpha);
