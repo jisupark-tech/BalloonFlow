@@ -94,8 +94,13 @@ namespace BalloonFlow.Analytics
         public const string P_TOTAL_AD_REVENUE_USD = "total_ad_revenue_usd";
 
         // ─── user_property (R_user_property v3.2 — uid 당 1행 UPSERT) ───
-        // ROLLBACK_USER_PROPERTY_PIPELINE_20260708. 미전송(NULL 유지): install_media_source/campaign/
-        //   adgroup/creative(MMP 연동 자동), idfa(iOS ATT), aid(GAID 네이티브 비동기 — 필요 시 후속).
+        // ROLLBACK_USER_PROPERTY_PIPELINE_20260708. 미전송(NULL 유지): campaign/adgroup/creative(MMP 연동),
+        //   idfa(iOS ATT), aid(GAID 네이티브 비동기 — 필요 시 후속).
+        // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: install_media_source 캡처 파이프라인 추가(AppsFlyer
+        //   onConversionDataSuccess → UserSnapshotCache 영속 → 여기 stamp). ※ BqUserPropertyColumns 화이트리스트
+        //   등록은 서버 BQ 스키마(user_property 테이블 컬럼) + MERGE 반영 후 활성화 — 그 전엔 stamp 돼도 서버 전송 직전
+        //   normalize 에서 스트립되어 무해(적재 안전).
+        public const string P_INSTALL_MEDIA_SOURCE   = "install_media_source";
         public const string P_INSTALL_COUNTRY        = "install_country";
         public const string P_INSTALL_PLATFORM       = "install_platform";
         public const string P_INSTALL_DEVICE         = "install_device";

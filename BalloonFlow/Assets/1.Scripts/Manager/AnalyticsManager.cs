@@ -159,7 +159,13 @@ namespace BalloonFlow
             // [ANALYTICS_PLAYEND_FLUSH 2026-06-24] 레벨 종료(play_end)는 즉시 flush.
             // 패배→빠른 재시도(타이머 15s/카운트 20 임계 전) 시 씬 전환되면 적재가 다음 판까지 밀리던
             // '한 판 지연' 버그 방지. 같이 대기 중이던 play_start 도 이때 함께 전송됨.
-            if (eventName == Analytics.AnalyticsConsts.EVT_LEVEL_PLAY || _bqBatch.Count >= BQ_BATCH_FLUSH_COUNT)
+            // ROLLBACK_SESSION_END_FLUSH_20260713: session_end 도 즉시 flush 대상에 추가.
+            //   기존엔 15s 타이머/20개 임계까지 버퍼에 머물러, 백그라운드 진입/종료 직후 프로세스가
+            //   킬되면 디스크 영속에만 의존(다음 부트까지 미전송)했다 — session_end 유실의 한 축.
+            //   생성 즉시 flush + (호출부 pause/quit 의 PersistBuffer) 로 이중 방어. 롤백: EVT_SESSION_END 조건 제거.
+            if (eventName == Analytics.AnalyticsConsts.EVT_LEVEL_PLAY
+                || eventName == Analytics.AnalyticsConsts.EVT_SESSION_END
+                || _bqBatch.Count >= BQ_BATCH_FLUSH_COUNT)
                 TryFlush();
         }
 
@@ -607,7 +613,11 @@ namespace BalloonFlow
             AnalyticsConsts.P_TOTAL_PLAY_COUNT, AnalyticsConsts.P_TOTAL_CLEAR_COUNT, AnalyticsConsts.P_TOTAL_COIN_BALANCE,
             AnalyticsConsts.P_TOTAL_SPEND_USD, AnalyticsConsts.P_TOTAL_AD_REVENUE_USD,
             AnalyticsConsts.P_INFINITE_LIVES_EXPIRY, AnalyticsConsts.P_IS_PAYER, AnalyticsConsts.P_LAST_UPDATED_AT,
-            AnalyticsConsts.P_APPSFLYER_ID
+            AnalyticsConsts.P_APPSFLYER_ID,
+            // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: 서버 BQ user_property 테이블에 install_media_source 컬럼 +
+            //   MERGE 반영 후 아래 주석 해제해 활성화. 그 전에 등록하면 미지원 컬럼으로 적재 리스크 → 게이팅 유지.
+            //   (활성화 전에도 클라는 값을 캡처·영속 중이라, 켜는 순간 기존 설치분도 다음 UPSERT 부터 채워짐.)
+            // AnalyticsConsts.P_INSTALL_MEDIA_SOURCE,
         };
 
         private static readonly string[] BqAdColumns =

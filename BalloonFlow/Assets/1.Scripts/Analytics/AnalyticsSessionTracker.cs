@@ -23,6 +23,16 @@ namespace BalloonFlow.Analytics
         private DateTime _sessionStartedUtc;
         private DateTime? _backgroundEnteredUtc;
 
+        // ROLLBACK_SESSION_HEARTBEAT_20260713: 포그라운드 하트비트 — 열린 세션의 last_seen 을 주기적 갱신.
+        //   기존엔 last_seen 이 pause 시점에만 갱신돼, 포그라운드 크래시(퍼즈 콜백 없이 사망) 시 소급
+        //   orphan session_end 의 duration 이 세션 시작 시각으로 과소 추정됐다. N초마다 갱신해 복원 정확도 확보.
+        //   ※ '백그라운드 진입 시 즉시 session_end' 방식은 채택하지 않음 — 본 게임은 전면/보상 광고가
+        //     OnApplicationPause(true) 를 유발하므로 매 광고마다 세션이 쪼개져(과다 카운트) 회귀가 된다.
+        //     never-return 유저의 session_end 는 서버측 timeout_inferred(END_TIMEOUT_INFERRED) 잡으로 마감 권장.
+        //   롤백: 이 필드 + Update() + HEARTBEAT_INTERVAL_SEC 제거.
+        private float _heartbeatTimer;
+        private const float HEARTBEAT_INTERVAL_SEC = 30f;
+
         // ROLLBACK_ANALYTICS_DISK_PERSIST_20260707: 미종료 세션 스냅샷 키.
         // 프로세스 킬(스와이프킬/OS킬)은 session_end 가 생성조차 안 되던 문제 — start/end 카운트 이격의
         // 최대 원인. 세션 시작 시 스냅샷 기록, pause 마다 last_seen 갱신, 정상 종료 시 삭제.
@@ -163,6 +173,18 @@ namespace BalloonFlow.Analytics
 
         // ─── App lifecycle ───
 
+        // ROLLBACK_SESSION_HEARTBEAT_20260713: 포그라운드 하트비트 — HEARTBEAT_INTERVAL_SEC 마다 last_seen 갱신.
+        private void Update()
+        {
+            if (string.IsNullOrEmpty(_sessionId)) return;
+            _heartbeatTimer += Time.unscaledDeltaTime;
+            if (_heartbeatTimer >= HEARTBEAT_INTERVAL_SEC)
+            {
+                _heartbeatTimer = 0f;
+                TouchOpenSessionLastSeen();
+            }
+        }
+
         private void OnApplicationPause(bool pause)
         {
             if (pause)
@@ -264,6 +286,11 @@ namespace BalloonFlow.Analytics
                 p[AnalyticsConsts.P_IS_PAYER]             = c.IsPayer;
                 if (!string.IsNullOrEmpty(c.LastPlayedAt))
                     p[AnalyticsConsts.P_LAST_PLAYED_AT] = c.LastPlayedAt;
+                // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: 유입 미디어소스 stamp(값 있을 때만).
+                //   ※ BqUserPropertyColumns 미등록 상태면 서버 전송 직전 normalize 에서 스트립됨(무해).
+                //     서버 스키마 반영 후 화이트리스트 등록 시 실제 적재 시작.
+                if (!string.IsNullOrEmpty(c.InstallMediaSource))
+                    p[AnalyticsConsts.P_INSTALL_MEDIA_SOURCE] = c.InstallMediaSource;
             }
 
             if (CurrencyManager.HasInstance)

@@ -27,7 +27,10 @@ namespace BalloonFlow
         private const string FIRESTORE_COLLECTION  = "episodes";
         private const string BUNDLED_EP1_FILENAME  = "episode_01.json";
         public  const int    LEVELS_PER_EPISODE    = 20;
-        public  const int    TOTAL_EPISODES        = 15;
+        // ROLLBACK_TOTAL_EPISODES_14_20260713: 실제 저작 콘텐츠는 280레벨(14에피소드)까지 — ep15(281~300)는 미저작.
+        //   15(=300)로 두면 280 클리어 후 281 진입을 시도해 콘텐츠 소진 판정이 늦고 가짜 레벨이 노출됐다.
+        //   14 로 낮춰 GetLevelCount=280 → all-clear 가 정확히 280 에서 발동. ep15 저작·업로드 완료 시 15 로 환원.
+        public  const int    TOTAL_EPISODES        = 14;
         public  const int    BUNDLED_PACKAGE_ID    = 1;
 
         private LevelEpisode _cached;

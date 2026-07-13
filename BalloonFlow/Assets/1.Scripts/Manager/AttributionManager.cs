@@ -64,10 +64,36 @@ namespace BalloonFlow
 
         #region IAppsFlyerConversionData callbacks
 
+        // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: conversion JSON 최소 파싱용 — media_source/af_status 만 추출.
+        [System.Serializable]
+        private class ConversionPayload
+        {
+            public string af_status;    // "Organic" | "Non-organic"
+            public string media_source; // 유료 유입 시 네트워크명 (organic 이면 보통 부재)
+        }
+
         public void onConversionDataSuccess(string conversionData)
         {
             AppsFlyer.AFLog("onConversionDataSuccess", conversionData);
-            // TODO: deferred deeplink, organic vs paid 분기 등 처리
+
+            // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: 설치 유입 미디어소스 캡처 → UserSnapshotCache 영속.
+            //   기존엔 conversion 데이터를 로그만 찍고 버려 install_media_source 가 항상 NULL 이었다.
+            //   media_source 있으면 그 값, 없고 Organic 이면 "organic". 최초 1회만 저장(first-write-wins).
+            try
+            {
+                var cd = JsonUtility.FromJson<ConversionPayload>(conversionData);
+                string ms = cd != null && !string.IsNullOrEmpty(cd.media_source)
+                    ? cd.media_source
+                    : (cd != null && string.Equals(cd.af_status, "Organic", System.StringComparison.OrdinalIgnoreCase)
+                        ? "organic" : "");
+                if (!string.IsNullOrEmpty(ms) && Analytics.UserSnapshotCache.HasInstance)
+                    Analytics.UserSnapshotCache.Instance.SetInstallMediaSource(ms);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"{LOG_TAG} conversion 파싱 실패(media_source 미저장): {e.Message}");
+            }
+            // TODO: deferred deeplink, organic vs paid 세부 분기 등 처리
         }
 
         public void onConversionDataFail(string error)

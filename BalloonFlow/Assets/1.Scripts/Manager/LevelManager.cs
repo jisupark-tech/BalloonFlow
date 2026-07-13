@@ -201,11 +201,20 @@ namespace BalloonFlow
             if (config == null && ValidateProvider())
                 config = _levelDataProvider.GetLevelData(levelId);
 
+            // ROLLBACK_PROC_FALLBACK_EDITOR_ONLY_20260713: 절차적 LevelGenerator 폴백을 에디터/테스트 전용으로 제한.
+            //   [원인] 디바이스에서 authored 데이터가 없으면(=콘텐츠 소진, 예: 미업로드 에피소드) 이 폴백이 조용히
+            //   절차적 '가짜 레벨'을 생성해 유저에게 오류처럼 보이는 레벨(예: Lv.281)이 노출됐다.
+            //   [수정] 프로덕션 빌드는 폴백 없이 null 반환 → LoadLevel 이 로드를 중단(가짜 레벨 미노출).
+            //   콘텐츠 소진 판정/all-clear 팝업은 GetTotalLevelCount(KnownAvailableEpisodes 실측) + 호출부가 담당하며,
+            //   에피소드 fetch 실패가 KnownAvailableEpisodes 를 자동 하향해 다음 진입부터 all-clear 로 라우팅된다.
+            //   에디터/MapMaker 는 미저작 레벨 프리뷰를 위해 폴백 유지. 롤백: 아래 #if UNITY_EDITOR 가드 제거.
+#if UNITY_EDITOR
             if (config == null && LevelGenerator.HasInstance)
             {
-                Debug.Log($"[LevelManager] No pre-authored config for level {levelId}. Falling back to LevelGenerator.");
+                Debug.Log($"[LevelManager] No pre-authored config for level {levelId}. Falling back to LevelGenerator (EDITOR only).");
                 config = LevelGenerator.Instance.GenerateLevel(levelId);
             }
+#endif
 
             return config;
         }

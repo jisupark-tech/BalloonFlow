@@ -337,9 +337,13 @@ namespace BalloonFlow
                     {
                         var allClearPopup = UIManager.Instance.OpenUI<PopupDescription>(Const.POPUP_DESCRIPTION);
                         if (allClearPopup != null)
-                            allClearPopup.Show("All Levels Cleared!",
-                                "You've cleared every stage we've made so far.\nNew levels are coming soon!",
-                                LocalizationService.Get("ui.common.ok"));
+                            // ROLLBACK_ALLCLEAR_POPUP_UNIFY_20260713: 로비 all-clear 문구/버튼을 인게임(GameBootstrap/
+                            //   PopupResult)과 동일 로컬라이즈 키로 통일. 기존엔 하드코딩("All Levels Cleared!"/장문/OK)
+                            //   이라 인게임(Congratulations!/New Levels Coming Soon!/Continue)과 불일치했다.
+                            //   버튼 초록색은 PopupDescription 프리팹 기본값. 롤백: 아래 3줄을 하드코딩 원문으로 환원.
+                            allClearPopup.Show(LocalizationService.Get("popup.txttitle.allclear"),
+                                LocalizationService.Get("popup.txtdescription.allclear"),
+                                LocalizationService.Get("ui.common.continue"));
                     }
 
                     // ROLLBACK_ALL_CLEAR_PLAY_BLOCK_20260708: 새 에피소드가 뒤늦게 업로드된 경우 자동 해제 —

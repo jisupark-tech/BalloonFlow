@@ -35,6 +35,10 @@ namespace BalloonFlow.Analytics
         private const string PREFS_TOTAL_PLAY_COUNT  = "BF_Analytics_TotalPlayCount";
         private const string PREFS_LAST_PLAYED_AT    = "BF_Analytics_LastPlayedAt";
 
+        // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: AppsFlyer 미디어소스는 설치 첫 실행의 conversion 콜백이
+        //   유일한 진실원 → 최초 1회 영속(불변)해 이후 세션까지 생존. 콜백 타이밍이 늦어 처음엔 빈 값일 수 있음.
+        private const string PREFS_INSTALL_MEDIA_SOURCE = "BF_Analytics_InstallMediaSource";
+
         private string _installAtIso;
         private double _totalSpendUsd;
         private double _totalAdRevenueUsd;
@@ -44,6 +48,7 @@ namespace BalloonFlow.Analytics
         private string _installDevice;
         private int _totalPlayCount;
         private string _lastPlayedAtIso;
+        private string _installMediaSource; // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713
 
         public string InstallAt => _installAtIso ?? "";
         public int MaxReachedLevel => LevelManager.HasInstance
@@ -59,6 +64,8 @@ namespace BalloonFlow.Analytics
         public string InstallDevice   => _installDevice ?? "";
         public int TotalPlayCount     => _totalPlayCount;
         public string LastPlayedAt    => _lastPlayedAtIso ?? "";
+        // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: 유입 미디어소스(organic/네트워크명). 미수신 시 "".
+        public string InstallMediaSource => _installMediaSource ?? "";
         /// <summary>스키마 비고: total_clear_count = max_reached_level - 1 (첫클리어 건수).</summary>
         public int TotalClearCount    => Math.Max(0, MaxReachedLevel - 1);
         /// <summary>결제자 라벨 — verified 결제 누적이 있으면 영구 TRUE (스키마 §20).</summary>
@@ -94,6 +101,8 @@ namespace BalloonFlow.Analytics
             _installDevice   = GetOrInitPref(PREFS_INSTALL_DEVICE,   SystemInfo.deviceModel);
             _totalPlayCount  = PlayerPrefs.GetInt(PREFS_TOTAL_PLAY_COUNT, 0);
             _lastPlayedAtIso = PlayerPrefs.GetString(PREFS_LAST_PLAYED_AT, "");
+            // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: 저장된 미디어소스 복원(콜백 지연 대비 이전 세션 값 유지).
+            _installMediaSource = PlayerPrefs.GetString(PREFS_INSTALL_MEDIA_SOURCE, "");
 
             DiagLog($"UserSnapshotCache.OnSingletonAwake — installAt={_installAtIso} spend=${_totalSpendUsd:F2} adRev=${_totalAdRevenueUsd:F4}");
         }
@@ -133,6 +142,18 @@ namespace BalloonFlow.Analytics
             PlayerPrefs.SetInt(PREFS_TOTAL_PLAY_COUNT, _totalPlayCount);
             PlayerPrefs.SetString(PREFS_LAST_PLAYED_AT, _lastPlayedAtIso);
             PlayerPrefs.Save();
+        }
+
+        /// <summary>ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: AppsFlyer conversion 콜백에서 1회 호출.
+        /// 최초 비어있지 않은 값만 영속(불변) — 이후 콜백/세션에서 덮어쓰지 않음.</summary>
+        public void SetInstallMediaSource(string mediaSource)
+        {
+            if (string.IsNullOrEmpty(mediaSource)) return;
+            if (!string.IsNullOrEmpty(_installMediaSource)) return; // 이미 확정 — first-write-wins
+            _installMediaSource = mediaSource;
+            PlayerPrefs.SetString(PREFS_INSTALL_MEDIA_SOURCE, mediaSource);
+            PlayerPrefs.Save();
+            DiagLog($"UserSnapshotCache.SetInstallMediaSource → {mediaSource}");
         }
 
         private static string GetOrInitPref(string key, string initValue)

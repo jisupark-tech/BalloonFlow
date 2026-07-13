@@ -30,7 +30,10 @@ const fcm = getMessaging();
 const bq = new BigQuery(); // 런타임 서비스 계정 자격증명 자동 사용 (roles/bigquery.dataEditor 필요)
 
 // ── Push 텍스트 (Unity PushTexts.cs 와 동기 유지) ─────────────────────────
-const APP_TITLE = 'BalloonFlow';
+// ROLLBACK_PUSH_TITLE_20260713: 앱 정식명은 'Balloon Loop'인데 FCM cron 푸시 제목이 'BalloonFlow'로
+//   나가던 문제 수정. 클라 productName/알림채널명은 이미 'Balloon Loop'. 이 파일 수정 후
+//   `firebase deploy --only functions` 재배포 필요(배포 전까지 기기 푸시 제목은 계속 'BalloonFlow').
+const APP_TITLE = 'Balloon Loop';
 
 const RETURN_PUSH_BODY = {
   1: 'Take a break? Come pop some balloons!',
