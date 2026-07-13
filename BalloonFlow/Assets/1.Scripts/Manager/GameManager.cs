@@ -177,6 +177,16 @@ namespace BalloonFlow
         [Range(1, 10)]
         public int dartDeployJamSnapMaxSlots = 3;
 
+        // ROLLBACK_RAIL_PER_PIECE_HEADS_20260713: 클러스터 Head 를 '홀더당 1개'가 아니라 '연속 조각당 1개'로.
+        //   [원인] 기존 Head=holderId 당 min placedSeq 1개 → 배포/이동으로 홀더의 런이 두 조각으로 갈리면 나머지
+        //     조각은 Head 가 없어 영영 공격 불가(고아). [수정] 연속 같은-홀더 런마다 그 조각 선두를 Head 로 표시(isHead)
+        //     → 배포로 갈라진 양쪽, 정렬 중 끊긴 조각 모두 공격 가능. 색-분리 배포를 '막지 않고' 받아들이는 방향.
+        //   RailManager(RecomputeHeadsPerPiece/GetClusterHeadDarts/IsHeadDart) + DartManager(커밋 검증 IsHeadDart).
+        //   ※ 틱당 홀더 1발 게이트는 유지 → 한 홀더의 두 조각은 틱 교대로 발사(관통/연속공격 안전판 보존).
+        //   ⚠️ 발사 빈도/타겟 분산 이상 시 OFF → 기존 홀더당 단일 head. 롤백: 이 필드 + 관련 메서드 게이트 제거.
+        [Tooltip("[프로토] 조각별 Head. ON=배포/이동으로 갈라진 클러스터 조각도 각자 Head 얻어 공격(틱당 홀더1발 유지). OFF=홀더당 단일 Head. (default: true)")]
+        public bool railPerPieceHeads = true;
+
         [Tooltip("다트 비행 속도 배수 (셀/초). 1 = 1초당 1셀 이동, 10 = 0.1초당 1셀. 클수록 빠름. 동적 반영. (default: 10.00)")]
         [Range(0.10f, 100.00f)]
         // ROLLBACK_DART_FLIGHT_SPACING_TUNE_20260601:

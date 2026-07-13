@@ -49,6 +49,11 @@ namespace BalloonFlow
             // -1 = 미할당. 다트 점유 slot 의 array index. _slots[slotIndex].dartId == this.dartId 와 동기화.
             // 위치 계산: rail.GetPositionAtSlot(slotIndex) 사용 (progress 거리 비례 대체).
             public int slotIndex = -1;
+
+            // ROLLBACK_RAIL_PER_PIECE_HEADS_20260713: 조각별 Head 플래그. 연속 같은-홀더 런(=클러스터 조각)마다
+            //   1개(그 조각의 min placedSeq)가 true → 공격 후보. railPerPieceHeads ON 일 때만 유효(SyncSlotOccupancy
+            //   후 RecomputeHeadsPerPiece 가 재산정). 배포/이동/발사로 런이 갈리면 갈라진 조각도 head 를 얻어 공격 가능.
+            public bool isHead;
         }
 
         /// <summary>
@@ -1549,6 +1554,20 @@ namespace BalloonFlow
             if (results == null) return;
 
             results.Clear();
+            // ROLLBACK_RAIL_PER_PIECE_HEADS_20260713: ON → 조각별 head(isHead) 전부 반환(홀더당 여러 개 가능)
+            //   → 배포/이동으로 갈라진 조각도 공격 후보에 포함. OFF → 기존 holder 당 단일 head.
+            if (PerPieceHeadsEnabled)
+            {
+                EnsureSlotOccupancySynced(); // isHead 최신화(점유 dirty 면 sync→RecomputeHeadsPerPiece)
+                for (int i = 0; i < _darts.Count; i++)
+                {
+                    DartOnRail d = _darts[i];
+                    if (d == null || !d.isHead || d.dartColor < 0) continue;
+                    results.Add(d);
+                }
+                return;
+            }
+
             foreach (KeyValuePair<int, DartOnRail> kvp in _clusterHeadByHolder)
             {
                 DartOnRail head = kvp.Value;
@@ -2098,6 +2117,74 @@ namespace BalloonFlow
 
             _occupiedCount = _darts.Count;
             _slotOccupancyDirty = false;
+
+            // ROLLBACK_RAIL_PER_PIECE_HEADS_20260713: 점유가 갱신될 때마다(배포/이동/발사) 조각별 Head 재산정.
+            //   슬롯이 최신이라 여기서 연속 런을 정확히 판정. OFF 면 스킵(기존 _clusterHeadByHolder 단일 head 사용).
+            if (PerPieceHeadsEnabled) RecomputeHeadsPerPiece();
+        }
+
+        // ROLLBACK_RAIL_PER_PIECE_HEADS_20260713: 조각별 Head 시스템 ─────────────────────────────
+        //   [원인] 기존 Head 는 holderId 당 1개(min placedSeq) → 홀더의 런이 배포/이동으로 두 조각으로 갈리면
+        //     나머지 조각은 Head 가 없어 영영 공격 불가(고아). [수정] 연속 같은-홀더 런마다 그 조각의 min placedSeq
+        //     다트를 Head 로 표시(isHead) → 갈라진 조각도 공격 가능. 발사 커밋 검증은 IsHeadDart 로 조각 head 허용.
+        //   ※ 틱당 홀더 1발 게이트(DartManager)는 유지 → 한 홀더의 두 조각은 틱 교대로 발사(안전판=관통/연속공격 방지).
+        private bool PerPieceHeadsEnabled => GameManager.HasInstance && GameManager.Instance.Board.railPerPieceHeads;
+        private readonly List<DartOnRail> _pieceHeadScratch = new List<DartOnRail>(64);
+
+        /// <summary>슬롯 점유(_slots) 기준으로 연속 같은-홀더 런(=클러스터 조각)마다 min placedSeq 다트를 isHead 로.
+        ///   원형 레일 wrap 대응: 경계(빈칸/홀더 변경)에서 시작해 한 바퀴 순회. SyncSlotOccupancyFromDarts 직후 호출.</summary>
+        private void RecomputeHeadsPerPiece()
+        {
+            for (int i = 0; i < _darts.Count; i++)
+                if (_darts[i] != null) _darts[i].isHead = false;
+            if (_slots == null || _slotCount <= 0 || _darts.Count == 0) return;
+
+            // wrap 안전: 런이 slot 0 을 가로지르지 않도록 경계(빈칸 또는 홀더 변경) 슬롯에서 시작.
+            int start = -1;
+            for (int i = 0; i < _slotCount; i++)
+            {
+                int prev = (i - 1 + _slotCount) % _slotCount;
+                int h = _slots[i].holderId;
+                if (h < 0 || h != _slots[prev].holderId) { start = i; break; }
+            }
+            if (start < 0) start = 0; // 전 슬롯이 단일 홀더(경계 없음) → 하나의 wrap 런
+
+            _pieceHeadScratch.Clear();
+            int curHolder = -2;
+            for (int k = 0; k <= _slotCount; k++)
+            {
+                int idx = (start + k) % _slotCount;
+                int h = (k < _slotCount) ? _slots[idx].holderId : -999; // 마지막 런 flush 용 sentinel
+                if (h != curHolder)
+                {
+                    FlushPieceHead(_pieceHeadScratch); // 이전 런의 head 확정
+                    _pieceHeadScratch.Clear();
+                    curHolder = h;
+                }
+                if (h >= 0 && k < _slotCount
+                    && _dartById.TryGetValue(_slots[idx].dartId, out DartOnRail d) && d != null)
+                    _pieceHeadScratch.Add(d);
+            }
+        }
+
+        private static void FlushPieceHead(List<DartOnRail> run)
+        {
+            if (run.Count == 0) return;
+            DartOnRail head = null;
+            long min = long.MaxValue;
+            for (int i = 0; i < run.Count; i++)
+                if (run[i].placedSeq < min) { min = run[i].placedSeq; head = run[i]; }
+            if (head != null) head.isHead = true;
+        }
+
+        /// <summary>ROLLBACK_RAIL_PER_PIECE_HEADS_20260713: 이 dart 가 현재 공격 가능한 Head 인가?
+        ///   ON → isHead(조각 head). OFF → 기존 규칙(holder 당 단일 head 와 일치). DartManager 커밋 검증용.</summary>
+        public bool IsHeadDart(int dartId)
+        {
+            if (!_dartById.TryGetValue(dartId, out DartOnRail d) || d == null) return false;
+            if (PerPieceHeadsEnabled) return d.isHead;
+            DartOnRail head = GetClusterHeadDart(d.holderId);
+            return head != null && head.dartId == dartId;
         }
 
         private void MarkSlotOccupancyDirty()

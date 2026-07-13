@@ -29,6 +29,10 @@
     <meta-data android:name="com.facebook.sdk.ClientToken" android:value="53f07f7e98c3a23cf34a18a9bb58912c" />
     <meta-data android:name="com.facebook.sdk.AutoLogAppEventsEnabled" android:value="true" />
     <meta-data android:name="com.facebook.sdk.AdvertiserIDCollectionEnabled" android:value="true" />
+    <!-- ROLLBACK_ANR_FB_LOWEND_GATE_20260713: FB 자동 init 차단(ContentProvider 프로세스시작 자동초기화 방지).
+         저사양기 FB 비활성 게이트(AnalyticsManager.IsLowEndDevice)를 유효화하기 위해 필수. 일반 기기는
+         AnalyticsManager.InitFacebook 이 FB.Init 를 명시 호출해 정상 초기화(로그 유지). 롤백: 이 줄 제거. -->
+    <meta-data android:name="com.facebook.sdk.AutoInitEnabled" android:value="false" />
     <provider android:name="com.facebook.FacebookContentProvider" android:authorities="com.facebook.app.FacebookContentProvider979268717782525" android:exported="true" />
   </application>
 </manifest>

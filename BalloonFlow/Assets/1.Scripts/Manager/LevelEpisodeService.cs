@@ -13,8 +13,10 @@ namespace BalloonFlow
     /// <summary>
     /// 에피소드 단위 레벨 데이터 공급자.
     /// - 1 에피소드 = 20 레벨 (packageId 1..15, 총 300 레벨)
-    /// - Episode 1: StreamingAssets/episode_01.json (앱 번들, 오프라인 OK)
-    /// - Episode 2~: Firestore /episodes/{packageId} (online required)
+    /// - ROLLBACK_LEVEL_LOCAL_FIRST_20260713: 로컬 우선(오프라인 견고성) — StreamingAssets/episode_{NN}.json
+    ///   이 있으면 네트워크 0 으로 즉시 로드. 없으면(신규/미배치 에피소드) Firestore /episodes/{packageId} 폴백.
+    ///   저사양·불안정망 관객 대상 전 구간 오프라인 플레이 목적. (서버측 레벨 업데이트 반영은 앱 갱신 필요 —
+    ///   추후 version 게이트로 remote>local 시 원격 우선 옵션 가능.)
     /// - 동시에 1 에피소드만 메모리 보유 — 다음 에피소드 prefetch 시 이전 즉시 해제
     ///
     /// 사용 흐름:
@@ -25,7 +27,14 @@ namespace BalloonFlow
     {
         private const string LOG_TAG               = "[LevelEpisodeService]";
         private const string FIRESTORE_COLLECTION  = "episodes";
-        private const string BUNDLED_EP1_FILENAME  = "episode_01.json";
+        // ROLLBACK_LEVEL_LOCAL_FIRST_20260713: 에피소드 로컬 번들 파일명 규약 (episode_01.json .. episode_14.json).
+        // ROLLBACK_AB_EP1_20260713: pkg1 만 A/B variant 분기(B → episode_01_b.json). pkg2~ 는 항상 A.
+        private static string BundledFileName(int packageId)
+        {
+            if (packageId == BUNDLED_PACKAGE_ID && AbTestService.IsVariantB)
+                return "episode_01_b.json";
+            return $"episode_{packageId:D2}.json";
+        }
         public  const int    LEVELS_PER_EPISODE    = 20;
         // ROLLBACK_TOTAL_EPISODES_14_20260713: 실제 저작 콘텐츠는 280레벨(14에피소드)까지 — ep15(281~300)는 미저작.
         //   15(=300)로 두면 280 클리어 후 281 진입을 시도해 콘텐츠 소진 판정이 늦고 가짜 레벨이 노출됐다.
@@ -139,9 +148,23 @@ namespace BalloonFlow
         {
             try
             {
-                LevelEpisode loaded = (packageId == BUNDLED_PACKAGE_ID)
-                    ? await LoadBundledEpisodeAsync()
-                    : await LoadRemoteEpisodeAsync(packageId);
+                // ROLLBACK_LEVEL_LOCAL_FIRST_20260713: 로컬 우선(오프라인 견고성) → 없으면 Firestore 폴백.
+                //   StreamingAssets 에 episode_{NN}.json 이 있으면 네트워크 없이 즉시 로드. 미번들(신규 에피소드)만 원격.
+                LevelEpisode loaded = await LoadBundledEpisodeAsync(packageId);
+                if (loaded == null)
+                {
+                    // ROLLBACK_AB_EP1_20260713: pkg1 B variant 는 '로컬 전용' — 원격(/episodes/1=A) 폴백 시
+                    //   B 유저가 A 콘텐츠를 받아 코호트 오염(variant 누수). 폴백 금지, 빌드 파일 누락으로 처리.
+                    if (packageId == BUNDLED_PACKAGE_ID && AbTestService.IsVariantB)
+                    {
+                        Debug.LogError($"{LOG_TAG} pkg1 B variant(episode_01_b.json) 로컬 로드 실패 — 원격 폴백 금지(variant 누수 방지). 빌드에 파일 누락 의심.");
+                    }
+                    else
+                    {
+                        Debug.Log($"{LOG_TAG} pkg {packageId} 로컬 번들 없음 → Firestore 폴백.");
+                        loaded = await LoadRemoteEpisodeAsync(packageId);
+                    }
+                }
 
                 if (loaded == null || loaded.levels == null || loaded.levels.Length == 0)
                 {
@@ -178,13 +201,13 @@ namespace BalloonFlow
         /// StreamingAssets/episode_01.json 로드.
         /// Android 는 jar:file:// URI 라 UnityWebRequest 필요. 다른 플랫폼도 통일.
         /// </summary>
-        private async Task<LevelEpisode> LoadBundledEpisodeAsync()
+        private async Task<LevelEpisode> LoadBundledEpisodeAsync(int packageId)
         {
-            string path = Path.Combine(Application.streamingAssetsPath, BUNDLED_EP1_FILENAME);
+            string path = Path.Combine(Application.streamingAssetsPath, BundledFileName(packageId));
             // Android 는 jar:file:// URI 지만 macOS/에디터는 스킴 없는 절대경로 — UnityWebRequest 는
             // 스킴 없는 경로를 호스트로 해석해 실패(Cannot connect to destination host)하므로 file:// 보정.
             string url = path.Contains("://") ? path : "file://" + path;
-            string json;
+            byte[] bytes;
 
             using (var req = UnityWebRequest.Get(url))
             {
@@ -193,15 +216,41 @@ namespace BalloonFlow
 
                 if (req.result != UnityWebRequest.Result.Success)
                 {
-                    Debug.LogError($"{LOG_TAG} 번들 ep1 로드 실패: {req.error} (path={path})");
+                    // ROLLBACK_LEVEL_LOCAL_FIRST_20260713: 로컬 미번들(신규 에피소드)은 정상 케이스 — 상위에서
+                    //   Firestore 폴백하므로 Error 아님. (실제 오류는 폴백까지 실패하면 LoadEpisodeAsync 에서 드러남.)
+                    Debug.Log($"{LOG_TAG} 로컬 번들 없음 pkg {packageId}: {req.error} (path={path}) → 원격 폴백 예정");
                     return null;
                 }
-                json = req.downloadHandler.text;
+                bytes = req.downloadHandler.data;
             }
 
-            if (string.IsNullOrEmpty(json))
+            if (bytes == null || bytes.Length == 0)
             {
-                Debug.LogError($"{LOG_TAG} 번들 ep1 JSON 이 비어있음 (path={path}). Editor 로 export 하지 않은 듯.");
+                Debug.LogWarning($"{LOG_TAG} 로컬 번들 pkg {packageId} 비어있음 (path={path}) → 원격 폴백.");
+                return null;
+            }
+
+            // ROLLBACK_LEVEL_LOCAL_FIRST_20260713: 용량 절감을 위해 gzip 번들도 허용(평문 대비 ~10x 절감).
+            //   gzip 매직(0x1f 0x8b)이면 해제, 아니면 평문 UTF8 — 같은 episode_NN.json 이름으로 평문/gzip 둘 다 지원.
+            //   (평문 ep1 은 그대로 동작. 신흥시장 다운로드 용량 민감성 대응.)
+            string json;
+            try
+            {
+                if (bytes.Length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b)
+                {
+                    using var ms = new MemoryStream(bytes);
+                    using var gz = new GZipStream(ms, CompressionMode.Decompress);
+                    using var sr = new StreamReader(gz, Encoding.UTF8);
+                    json = sr.ReadToEnd();
+                }
+                else
+                {
+                    json = Encoding.UTF8.GetString(bytes);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LOG_TAG} 로컬 번들 pkg {packageId} 디코딩 실패: {e.Message} → 원격 폴백.");
                 return null;
             }
 

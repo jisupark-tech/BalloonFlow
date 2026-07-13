@@ -2625,13 +2625,13 @@ namespace BalloonFlow
 
             if (!candidate.allowNonHeadCommit)
             {
-                var currentHead = rail.GetClusterHeadDart(candidate.holderId);
-                if (currentHead == null || currentHead.dartId != candidate.dartId)
+                // ROLLBACK_RAIL_PER_PIECE_HEADS_20260713: 조각별 head 허용 — IsHeadDart 로 검증.
+                //   ON → 후보가 어느 조각의 head 든 통과(갈라진 조각도 공격). OFF → 기존과 동일(holder 당 단일 head 일치).
+                if (!rail.IsHeadDart(candidate.dartId))
                 {
                     LogAttackIssue(
                         "DartMissBlocked",
                         $"reason=staleCandidateNotHead holder={candidate.holderId} dartId={candidate.dartId} " +
-                        $"head={(currentHead != null ? currentHead.dartId.ToString() : "null")} " +
                         $"target={candidate.targetId} scan={candidate.scanDir} line={candidate.scanLine}");
                     InvalidateDartScanLineForHolder(candidate.holderId);
                     return false;
