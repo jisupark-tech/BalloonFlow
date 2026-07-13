@@ -1629,6 +1629,10 @@ namespace BalloonFlow
             // ROLLBACK_MAPMAKER_MOD10_MICRO_20260706: Round x10 아래 'Assist x10'(mod10_micro 미세조정) 버튼.
             var row3b = Row(p);
             Btn(row3b, "Assist x10", AssistCurrentBalloonCountsToTen);
+            // ROLLBACK_MAPMAKER_MOD10_RING_20260713: Assist x10 아래 'Warp x10'(mod10_ring 아웃라인 링) 버튼.
+            //   현재 브러시 색을 덩어리 바깥 테두리에 둘러 그 색만 10배수로. (난이도용, 사람 판단)
+            var row3c = Row(p);
+            Btn(row3c, "Warp x10", WarpCurrentColorRingToTen);
             Sep(p);
         }
 
@@ -5146,6 +5150,43 @@ namespace BalloonFlow
                 }
             if (nonEmpty == 0) return null;
             var (outGrid, rep) = Mod10Micro.MicroSolve(g);
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    grid[c, r] = outGrid[r, c];
+            return rep;
+        }
+
+        // ROLLBACK_MAPMAKER_MOD10_RING_20260713: Warp x10 — mod10_ring 아웃라인 링(현재 브러시 색 1종을
+        //   덩어리 바깥 테두리에 둘러 그 색만 10배수로). Round/Assist 와 달리 나머지 색은 안 건드림.
+        //   반복 클릭 시 이전 링 포함한 새 덩어리 바깥을 다시 감쌈(겹 쌓임). 롤백: 이 두 메서드 + 버튼 제거.
+        private void WarpCurrentColorRingToTen()
+        {
+            if (_paintColor < 0) { SetStatus("Warp x10: 색을 먼저 선택하세요 (지우개 상태)"); return; }
+            var rep = RingSolveOnColRowGrid(_balloonColors, _gridCols, _gridRows, _paintColor);
+            OnBalloonGridChanged();
+            if (rep == null) { SetStatus("Warp x10: grid empty"); return; }
+            string ColLbl(int c) => (c >= 0 && c < COLOR_LABELS.Length) ? COLOR_LABELS[c] : c.ToString();
+            string body = $"{ColLbl(rep.ColorId)} {rep.Before}→{rep.After} ({rep.Mode}, +{rep.Added}/-{rep.Removed})";
+            SetStatus(rep.TargetMult10
+                ? $"Warp x10 ✓ {body}"
+                : $"Warp x10 ⚠ {body} — {rep.Note}");
+        }
+
+        /// <summary>ROLLBACK_MAPMAKER_MOD10_RING_20260713: [col,row] ↔ Mod10Ring [row(H),col(W)] 브리지(EnforceMod10OnColRowGrid 와 동일 패턴).</summary>
+        private Mod10Ring.Report RingSolveOnColRowGrid(int[,] grid, int cols, int rows, int color)
+        {
+            if (grid == null || cols <= 0 || rows <= 0) return null;
+            var g = new int[rows, cols];
+            int nonEmpty = 0;
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                {
+                    int v = grid[c, r];
+                    g[r, c] = v;
+                    if (v != Mod10Ring.EMPTY) nonEmpty++;
+                }
+            if (nonEmpty == 0) return null;
+            var (outGrid, rep) = Mod10Ring.RingSolve(g, color);
             for (int r = 0; r < rows; r++)
                 for (int c = 0; c < cols; c++)
                     grid[c, r] = outGrid[r, c];
