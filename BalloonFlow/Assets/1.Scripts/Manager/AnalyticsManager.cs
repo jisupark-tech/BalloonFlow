@@ -62,8 +62,32 @@ namespace BalloonFlow
 
         #region Init (Facebook)
 
+        // ROLLBACK_ANR_FB_LOWEND_GATE_20260713: 저사양 기기에서만 FB SDK 비활성(ANR 완화, 로그는 일반기기 유지).
+        //   [배경] GameActivity onPause ANR 의 최다 오펜더 = Facebook GraphRequest 폭주(FetchedAppSettings/
+        //   GateKeepers/publishInstall/AppEvents). FB 는 이 앱에서 앱이벤트/어트리뷰션 용도만(로그인/공유 없음)
+        //   이라, 저사양기(RAM 낮음)에서 FB.Init 를 건너뛰면 그 네트워크 폭주를 원천 차단 → 백그라운드 전환 시
+        //   CPU 포화 완화. 일반 기기는 그대로 FB.Init → 로그 유지.
+        //   ※ 매니페스트 AutoInitEnabled=false 병행 필수 — 안 하면 FB ContentProvider 가 프로세스 시작 시
+        //     자동 init 해 이 게이트가 무력화됨. RAM 임계는 실측 ANR 분포 보고 튜닝.
+        private const int LOW_END_RAM_MB = 3072;
+
+        private static bool IsLowEndDevice()
+        {
+            int ram = SystemInfo.systemMemorySize; // 대략 디바이스 RAM(MB). 0/미확인이면 저사양 아님으로 취급.
+            return ram > 0 && ram < LOW_END_RAM_MB;
+        }
+
         private void InitFacebook()
         {
+            // ROLLBACK_ANR_FB_LOWEND_GATE_20260713: 저사양기 FB 비활성. FB.Init 미호출 → _facebookReady=false 유지
+            //   → LogToFacebook 이 자동 skip. AppsFlyer/BQ 로그는 그대로.
+            if (IsLowEndDevice())
+            {
+                _facebookReady = false;
+                Debug.Log($"{LOG_TAG} Low-end device (RAM={SystemInfo.systemMemorySize}MB < {LOW_END_RAM_MB}) — FB SDK 비활성(onPause ANR 완화). AppsFlyer/BQ 로그는 유지.");
+                return;
+            }
+
             if (FB.IsInitialized)
             {
                 FB.ActivateApp();
@@ -288,9 +312,18 @@ namespace BalloonFlow
                     Debug.Log($"{LOG_TAG} BQ ingest OK — {sendCount}건 적재 (resp={code}, 잔여 {_bqBatch.Count}) {req.downloadHandler.text}");
 #endif
                 }
+                // ROLLBACK_429_RETRYABLE_20260713: 429(rate-limit)/408(timeout)은 4xx지만 '일시적' — 폐기 대신 재시도.
+                //   기존엔 모든 4xx를 영구 폐기해, 순간 폭주/쿼터로 429가 뜨면 그 배치를 통째로 삭제했다(무성 손실).
+                //   [검수 Finding2 수정] 401 은 제외 — 지속적 401(서버 auth 오설정)은 배치가 영영 안 빠지고
+                //   매 주기 재POST 되는 poison(저사양 배터리/대역폭 낭비)이 된다. 401 은 아래 4xx-폐기로 전진.
+                //   (일시적 토큰 문제는 POST 전 auth-ready 게이트에서 이미 retain 처리됨.) 롤백: 아래 조건 제거.
+                else if (!networkErr && (code == 429 || code == 408))
+                {
+                    Debug.LogWarning($"{LOG_TAG} BQ ingest {code}(일시적) — {sendCount}건 재시도 대기. resp={req.downloadHandler.text}");
+                }
                 else if (!networkErr && code >= 400 && code < 500)
                 {
-                    // 클라 오류(스키마/인증 등) — 재시도해도 동일. 해당 배치 폐기(무한 재시도 방지).
+                    // 클라 오류(스키마/body 등) — 재시도해도 동일. 해당 배치 폐기(무한 재시도 방지).
                     Debug.LogWarning($"{LOG_TAG} BQ ingest 4xx({code}) — {sendCount}건 폐기. resp={req.downloadHandler.text}");
                     _bqBatch.RemoveRange(0, sendCount);
                     SyncPersistedFile();
@@ -629,10 +662,15 @@ namespace BalloonFlow
             AnalyticsConsts.P_TOTAL_SPEND_USD, AnalyticsConsts.P_TOTAL_AD_REVENUE_USD,
             AnalyticsConsts.P_INFINITE_LIVES_EXPIRY, AnalyticsConsts.P_IS_PAYER, AnalyticsConsts.P_LAST_UPDATED_AT,
             AnalyticsConsts.P_APPSFLYER_ID,
-            // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: 서버 BQ user_property 테이블에 install_media_source 컬럼 +
-            //   MERGE 반영 후 아래 주석 해제해 활성화. 그 전에 등록하면 미지원 컬럼으로 적재 리스크 → 게이팅 유지.
-            //   (활성화 전에도 클라는 값을 캡처·영속 중이라, 켜는 순간 기존 설치분도 다음 UPSERT 부터 채워짐.)
-            // AnalyticsConsts.P_INSTALL_MEDIA_SOURCE,
+            // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: 활성화 완료 — 라이브 BQ user_property 테이블에 컬럼 실재
+            //   확인(REST tables.get) + 서버 MERGE 반영(install_media_source COALESCE first-write). 다음 UPSERT부터 적재.
+            AnalyticsConsts.P_INSTALL_MEDIA_SOURCE,
+            // ROLLBACK_GAID_AID_20260713: Android GAID. 라이브 테이블 aid 컬럼 실재 + 서버 MERGE 반영.
+            AnalyticsConsts.P_AID,
+            // ROLLBACK_IDFA_20260713: iOS 대비 화이트리스트 정합. Android 는 미stamp → NULL 전송(서버 COALESCE 무해).
+            AnalyticsConsts.P_IDFA,
+            // ROLLBACK_AB_EP1_20260713: A/B 에피소드1 variant.
+            AnalyticsConsts.P_AB_EP1_VARIANT,
         };
 
         private static readonly string[] BqAdColumns =

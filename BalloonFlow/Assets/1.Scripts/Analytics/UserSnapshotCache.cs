@@ -38,6 +38,8 @@ namespace BalloonFlow.Analytics
         // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: AppsFlyer 미디어소스는 설치 첫 실행의 conversion 콜백이
         //   유일한 진실원 → 최초 1회 영속(불변)해 이후 세션까지 생존. 콜백 타이밍이 늦어 처음엔 빈 값일 수 있음.
         private const string PREFS_INSTALL_MEDIA_SOURCE = "BF_Analytics_InstallMediaSource";
+        // ROLLBACK_GAID_AID_20260713: Android 광고 ID(GAID). 네이티브 AdvertisingIdClient 비동기 조회 → 최초 1회 영속.
+        private const string PREFS_AID = "BF_Analytics_Aid";
 
         private string _installAtIso;
         private double _totalSpendUsd;
@@ -49,6 +51,8 @@ namespace BalloonFlow.Analytics
         private int _totalPlayCount;
         private string _lastPlayedAtIso;
         private string _installMediaSource; // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713
+        private string _aid;                // ROLLBACK_GAID_AID_20260713 (메인스레드에서만 write)
+        private volatile string _pendingAid; // 백그라운드 스레드→메인스레드 마샬용
 
         public string InstallAt => _installAtIso ?? "";
         public int MaxReachedLevel => LevelManager.HasInstance
@@ -66,6 +70,8 @@ namespace BalloonFlow.Analytics
         public string LastPlayedAt    => _lastPlayedAtIso ?? "";
         // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: 유입 미디어소스(organic/네트워크명). 미수신 시 "".
         public string InstallMediaSource => _installMediaSource ?? "";
+        // ROLLBACK_GAID_AID_20260713: Android GAID. 비동기 조회 완료 전/에디터/iOS 는 "".
+        public string Aid => _aid ?? "";
         /// <summary>스키마 비고: total_clear_count = max_reached_level - 1 (첫클리어 건수).</summary>
         public int TotalClearCount    => Math.Max(0, MaxReachedLevel - 1);
         /// <summary>결제자 라벨 — verified 결제 누적이 있으면 영구 TRUE (스키마 §20).</summary>
@@ -103,8 +109,73 @@ namespace BalloonFlow.Analytics
             _lastPlayedAtIso = PlayerPrefs.GetString(PREFS_LAST_PLAYED_AT, "");
             // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713: 저장된 미디어소스 복원(콜백 지연 대비 이전 세션 값 유지).
             _installMediaSource = PlayerPrefs.GetString(PREFS_INSTALL_MEDIA_SOURCE, "");
+            // ROLLBACK_GAID_AID_20260713: 저장된 GAID 복원. 없으면 네이티브 비동기 조회 착수(첫 실행/최초 수집).
+            _aid = PlayerPrefs.GetString(PREFS_AID, "");
+            if (string.IsNullOrEmpty(_aid))
+                BeginResolveAdvertisingId();
 
             DiagLog($"UserSnapshotCache.OnSingletonAwake — installAt={_installAtIso} spend=${_totalSpendUsd:F2} adRev=${_totalAdRevenueUsd:F4}");
+        }
+
+        // ─── GAID (ROLLBACK_GAID_AID_20260713) ───
+
+        /// <summary>백그라운드 스레드에서 마샬된 GAID 를 메인스레드에서 영속. PlayerPrefs 는 메인스레드 전용.</summary>
+        private void Update()
+        {
+            if (_pendingAid != null)
+            {
+                string v = _pendingAid;
+                _pendingAid = null;
+                SetAid(v);
+            }
+        }
+
+        private void SetAid(string aid)
+        {
+            if (string.IsNullOrEmpty(aid)) return;
+            if (!string.IsNullOrEmpty(_aid)) return;               // first-write-wins
+            if (aid == "00000000-0000-0000-0000-000000000000") return; // opt-out/limit ad tracking = 무효값
+            _aid = aid;
+            PlayerPrefs.SetString(PREFS_AID, aid);
+            PlayerPrefs.Save();
+            DiagLog($"UserSnapshotCache.SetAid → {aid}");
+        }
+
+        /// <summary>
+        /// Android GAID 를 Play Services AdvertisingIdClient 로 비동기 조회(블로킹 호출이라 워커 스레드).
+        /// 결과는 _pendingAid 로 넘겨 Update()가 메인스레드에서 영속. 실패/에디터/iOS 는 무동작(aid="").
+        /// AD_ID 권한은 SDK 매니페스트 머지로 이미 포함(targetSdk 35). 예외는 전부 삼켜 안전.
+        /// </summary>
+        private void BeginResolveAdvertisingId()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                bool attached = false;
+                try
+                {
+                    UnityEngine.AndroidJNI.AttachCurrentThread();
+                    attached = true;
+                    using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                    using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+                    using (var client = new AndroidJavaClass("com.google.android.gms.ads.identifier.AdvertisingIdClient"))
+                    using (var adInfo = client.CallStatic<AndroidJavaObject>("getAdvertisingIdInfo", activity))
+                    {
+                        bool limited = adInfo.Call<bool>("isLimitAdTrackingEnabled");
+                        string id = limited ? "" : adInfo.Call<string>("getId");
+                        if (!string.IsNullOrEmpty(id)) _pendingAid = id;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[Analytics] GAID 조회 실패(무시): {e.Message}");
+                }
+                finally
+                {
+                    if (attached) UnityEngine.AndroidJNI.DetachCurrentThread();
+                }
+            });
+#endif
         }
 
         [System.Diagnostics.Conditional("UNITY_EDITOR")]

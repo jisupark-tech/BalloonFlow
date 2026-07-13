@@ -226,12 +226,9 @@ const EVENT_TABLE = {
   purchase_event:         'purchase',
   economy_event:          'economy',
   ad_event:               'ad_event',
-  // ROLLBACK_BOOT_CHECKPOINTS_20260713: 부팅→첫플레이 퍼널 계측. ⚠️ 활성화 순서 엄수 —
-  //   (1) firebase/bigquery/boot_checkpoint_ddl.sql 로 balloonloop_db.boot_checkpoint 테이블 생성
-  //   (2) 아래 줄 주석 해제  (3) firebase deploy --only functions:ingestAnalyticsEvents
-  //   테이블 부재 상태로 라우팅하면 insert 실패→500→클라 배치 무한 재시도(poison). 그 전까지는 클라가
-  //   이벤트를 보내도 이 맵에 없어 unknown 으로 안전 스킵(skipped++)되므로 무해.
-  // boot_checkpoint_event:  'boot_checkpoint',
+  // ROLLBACK_BOOT_CHECKPOINTS_20260713: 부팅→첫플레이 퍼널 계측. [2026-07-13 활성화] 테이블 생성 완료
+  //   (boot_checkpoint_ddl.sql REST 실행 + tables.get 확인) → 라우트 활성화. poison salvage 도 병행 방어.
+  boot_checkpoint_event:  'boot_checkpoint',
 };
 
 // 테이블별 컬럼명이 공통과 다른 경우의 rename. (session_start 만 version/country 컬럼 사용)
@@ -262,6 +259,10 @@ USING (SELECT
   @install_country AS install_country,
   @install_platform AS install_platform,
   @install_device AS install_device,
+  @install_media_source AS install_media_source,
+  @aid AS aid,
+  @idfa AS idfa,
+  @ab_ep1_variant AS ab_ep1_variant,
   CAST(@last_active_at AS TIMESTAMP) AS last_active_at,
   @last_active_version AS last_active_version,
   @last_active_country AS last_active_country,
@@ -279,27 +280,39 @@ USING (SELECT
 ) S
 ON T.uid = S.uid
 WHEN MATCHED AND S.last_updated_at >= IFNULL(T.last_updated_at, TIMESTAMP '1970-01-01 00:00:00+00') THEN UPDATE SET
-  last_active_at        = S.last_active_at,
-  last_active_version   = S.last_active_version,
-  last_active_country   = S.last_active_country,
+  -- ROLLBACK_UP_NULL_CLOBBER_COALESCE_20260713: 직접 대입 컬럼이 클라 omit(값 없는 세션) 시 기존 정상값을
+  --   NULL 로 파괴하던 문제 → COALESCE(S, T). 예: CurrencyManager 미활성 세션의 user_property 가 코인잔액을
+  --   null 로 밀던 무성 데이터 손실. 값이 오면 최신(S) 사용, 없으면 기존(T) 보존. 롤백: 아래 5줄을 S.* 직접대입으로.
+  last_active_at        = COALESCE(S.last_active_at, T.last_active_at),
+  last_active_version   = COALESCE(S.last_active_version, T.last_active_version),
+  last_active_country   = COALESCE(S.last_active_country, T.last_active_country),
   last_played_at        = COALESCE(S.last_played_at, T.last_played_at),
   max_reached_level     = GREATEST(IFNULL(T.max_reached_level, 0), IFNULL(S.max_reached_level, 0)),
   total_play_count      = GREATEST(IFNULL(T.total_play_count, 0), IFNULL(S.total_play_count, 0)),
   total_clear_count     = GREATEST(IFNULL(T.total_clear_count, 0), IFNULL(S.total_clear_count, 0)),
-  total_coin_balance    = S.total_coin_balance,
+  total_coin_balance    = COALESCE(S.total_coin_balance, T.total_coin_balance),
   total_spend_usd       = GREATEST(IFNULL(T.total_spend_usd, CAST(0 AS NUMERIC)), IFNULL(S.total_spend_usd, CAST(0 AS NUMERIC))),
   total_ad_revenue_usd  = GREATEST(IFNULL(T.total_ad_revenue_usd, CAST(0 AS NUMERIC)), IFNULL(S.total_ad_revenue_usd, CAST(0 AS NUMERIC))),
-  infinite_lives_expiry = S.infinite_lives_expiry,
+  infinite_lives_expiry = COALESCE(S.infinite_lives_expiry, T.infinite_lives_expiry),
   is_payer              = IFNULL(T.is_payer, FALSE) OR IFNULL(S.is_payer, FALSE),
   appsflyer_id          = COALESCE(S.appsflyer_id, T.appsflyer_id),
+  -- ROLLBACK_INSTALL_MEDIA_SOURCE_20260713 / ROLLBACK_GAID_AID_20260713: 설치 귀속값은 비동기 도착 →
+  --   first-write-wins(기존값 우선, 없을 때만 채움). 클라는 최초 1회만 보내지만 서버도 방어적으로 COALESCE(T,S).
+  install_media_source  = COALESCE(T.install_media_source, S.install_media_source),
+  aid                   = COALESCE(T.aid, S.aid),
+  idfa                  = COALESCE(T.idfa, S.idfa),
+  -- ROLLBACK_AB_EP1_20260713: A/B variant 는 최초 배정 후 불변 → first-write-wins(COALESCE T,S).
+  ab_ep1_variant        = COALESCE(T.ab_ep1_variant, S.ab_ep1_variant),
   last_updated_at       = S.last_updated_at
 WHEN NOT MATCHED THEN INSERT (
   game_id, uid, install_at, install_version, install_country, install_platform, install_device,
+  install_media_source, aid, idfa, ab_ep1_variant,
   last_active_at, last_active_version, last_active_country, last_played_at,
   max_reached_level, total_play_count, total_clear_count, total_coin_balance,
   total_spend_usd, total_ad_revenue_usd, infinite_lives_expiry, is_payer, last_updated_at, appsflyer_id
 ) VALUES (
   S.game_id, S.uid, S.install_at, S.install_version, S.install_country, S.install_platform, S.install_device,
+  S.install_media_source, S.aid, S.idfa, S.ab_ep1_variant,
   S.last_active_at, S.last_active_version, S.last_active_country, S.last_played_at,
   S.max_reached_level, S.total_play_count, S.total_clear_count, S.total_coin_balance,
   S.total_spend_usd, S.total_ad_revenue_usd, S.infinite_lives_expiry, S.is_payer, S.last_updated_at, S.appsflyer_id
@@ -325,6 +338,10 @@ async function mergeUserProperty(uid, d) {
     install_country:       toStrOrNull(d.install_country),
     install_platform:      toStrOrNull(d.install_platform),
     install_device:        toStrOrNull(d.install_device),
+    install_media_source:  toStrOrNull(d.install_media_source), // ROLLBACK_INSTALL_MEDIA_SOURCE_20260713
+    aid:                   toStrOrNull(d.aid),                   // ROLLBACK_GAID_AID_20260713
+    idfa:                  toStrOrNull(d.idfa),                  // ROLLBACK_IDFA_20260713 (iOS ATT — 현 Android NULL)
+    ab_ep1_variant:        toStrOrNull(d.ab_ep1_variant),        // ROLLBACK_AB_EP1_20260713
     last_active_at:        toBqDatetime(d.last_active_at),
     last_active_version:   toStrOrNull(d.last_active_version),
     last_active_country:   toStrOrNull(d.last_active_country),
@@ -345,6 +362,7 @@ async function mergeUserProperty(uid, d) {
     uid: 'STRING', game_id: 'STRING',
     install_at: 'STRING', install_version: 'STRING', install_country: 'STRING',
     install_platform: 'STRING', install_device: 'STRING',
+    install_media_source: 'STRING', aid: 'STRING', idfa: 'STRING', ab_ep1_variant: 'STRING',
     last_active_at: 'STRING', last_active_version: 'STRING', last_active_country: 'STRING',
     last_played_at: 'STRING',
     max_reached_level: 'INT64', total_play_count: 'INT64', total_clear_count: 'INT64',
@@ -379,6 +397,36 @@ function sanitizeNumeric(v) {
   const n = typeof v === 'number' ? v : Number(v);
   if (!Number.isFinite(n)) return null;
   return Math.round(n * 1e6) / 1e6;
+}
+
+// ROLLBACK_POISON_BATCH_SALVAGE_20260713: 불량행 1개가 테이블 배치 전체를 거부(skipInvalidRows:false)→500→
+//   클라 15초 무한 재시도(poison)하던 구조 완화. 1차 실패 시 skipInvalidRows:true 로 재시도해 정상행은 적재하고
+//   불량행만 스킵(로그로 가시화). 2차도 per-row PartialFailure 면 정상행은 이미 적재됐으니 성공 처리(불량행 폐기).
+//   테이블 부재/권한 등 '구조적' 실패는 per-row 에러가 아니므로 rethrow → 상위서 failedTable → 5xx 재시도 유지.
+async function insertWithSalvage(table, rows) {
+  try {
+    await bq.dataset(BQ_DATASET).table(table).insert(rows, {
+      raw: true, skipInvalidRows: false, ignoreUnknownValues: true,
+    });
+  } catch (e1) {
+    const bad1 = (e1 && Array.isArray(e1.errors)) ? e1.errors.length : '?';
+    console.warn(`[ingestAnalyticsEvents] table=${table} 1차 insert 실패(bad~${bad1}) → skipInvalidRows 재시도`);
+    try {
+      await bq.dataset(BQ_DATASET).table(table).insert(rows, {
+        raw: true, skipInvalidRows: true, ignoreUnknownValues: true,
+      });
+    } catch (e2) {
+      // ROLLBACK_POISON_BATCH_SALVAGE_20260713 [검수 Finding1 수정]: per-row 실패만 삼킨다.
+      //   기존 `|| Array.isArray(e2.errors)` 는 너무 넓어 구조적 ApiError(404 테이블부재/403 권한/400 스키마 —
+      //   이들도 .errors 배열을 가짐)까지 성공으로 삼켜 무성 손실 + poison 순서보장 무력화했다.
+      //   PartialFailureError(진짜 per-row 부분실패)만 삼키고, 그 외 구조적 실패는 rethrow → 5xx 재시도.
+      const isPerRow = e2 && e2.name === 'PartialFailureError';
+      if (!isPerRow) throw e2; // 구조적 실패(테이블부재/권한/스키마) → 상위서 5xx (재시도 가치 있음)
+      const detail = JSON.stringify((e2.errors || []).slice(0, 5));
+      console.error(`[ingestAnalyticsEvents] table=${table} 불량행 폐기(salvage) — 정상행 적재됨. detail=${detail}`);
+      // 정상행은 이미 적재됨(skipInvalidRows). 불량행만 영구 폐기 → poison 루프 차단. 성공 처리(throw 안 함).
+    }
+  }
 }
 
 exports.ingestAnalyticsEvents = onRequest(
@@ -440,12 +488,9 @@ exports.ingestAnalyticsEvents = onRequest(
 
     // 4) 테이블별 BigQuery streaming insert. ignoreUnknownValues — 타겟에 없는 컬럼은 무시(클라/스키마 드리프트 내성).
     const tables = [...byTable.keys()];
+    // ROLLBACK_POISON_BATCH_SALVAGE_20260713: 테이블별 insert 를 salvage 래퍼로 — 불량행 poison 루프 차단.
     const settled = await Promise.allSettled(tables.map((t) =>
-      bq.dataset(BQ_DATASET).table(t).insert(byTable.get(t), {
-        raw: true,
-        skipInvalidRows: false,
-        ignoreUnknownValues: true,
-      })
+      insertWithSalvage(t, byTable.get(t))
     ));
 
     let inserted = 0;
@@ -481,6 +526,61 @@ exports.ingestAnalyticsEvents = onRequest(
       return;
     }
     res.status(200).json({ inserted, skipped });
+  }
+);
+
+// ── 미마감 세션 마감 cron (ROLLBACK_SESSION_TIMEOUT_INFERRED_20260713) ─────────────
+// session_start 는 있으나 session_end 가 없는 세션(주로 never-return 유저의 마지막 세션 — 프로세스 킬로
+// quit 미발생 + 다음 부팅 없어 orphan 소급도 불가)을 GRACE 경과 후 timeout_inferred 로 마감 → start/end
+// 카운트 이격 해소. 멱등(NOT EXISTS 가드) — 중복 삽입 없음. INSERT append 라 스트리밍 병행 안전.
+// (firebase/bigquery/session_timeout_inferred.sql 과 동일 로직. GRACE=6h, LOOKBACK=30d.)
+const CLOSE_STALE_SESSIONS_SQL = `
+INSERT INTO \`${BQ_DATASET}.session_end\`
+  (event_id, session_id, game_id, uid, event_timestamp, end_reason, duration_sec)
+SELECT
+  CONCAT('inferred_', s.session_id), s.session_id, s.game_id, s.uid, s.last_activity,
+  'timeout_inferred', GREATEST(0, TIMESTAMP_DIFF(s.last_activity, s.start_ts, SECOND))
+FROM (
+  SELECT ss.session_id, ANY_VALUE(ss.game_id) AS game_id, ANY_VALUE(ss.uid) AS uid,
+    MIN(ss.event_timestamp) AS start_ts,
+    GREATEST(MIN(ss.event_timestamp), IFNULL(MAX(act.act_ts), MIN(ss.event_timestamp))) AS last_activity
+  FROM \`${BQ_DATASET}.session_start\` ss
+  LEFT JOIN (
+    -- [검수 Finding2 수정] 각 UNION 브랜치에 파티션 날짜필터 — 없으면 매시간 대용량 테이블 풀스캔(비용 폭주).
+    SELECT session_id, event_timestamp AS act_ts FROM \`${BQ_DATASET}.play_event\`  WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+    UNION ALL SELECT session_id, event_timestamp AS act_ts FROM \`${BQ_DATASET}.play_start\` WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+    UNION ALL SELECT session_id, event_timestamp AS act_ts FROM \`${BQ_DATASET}.ad_event\`   WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+  ) act USING (session_id)
+  WHERE ss.event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+    AND ss.session_id IS NOT NULL AND ss.session_id != ''
+  GROUP BY ss.session_id
+) s
+-- [검수 Finding3 수정] start_ts 대신 last_activity 기준 — 8h 전 시작됐어도 최근 활동 있으면(아직 살아있는 세션)
+--   조기 마감 안 함 → 뒤늦은 진짜 session_end 와의 이중 마감 방지. 무활동 GRACE(6h) 지난 세션만 마감.
+WHERE s.last_activity < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 6 HOUR)
+  AND NOT EXISTS (SELECT 1 FROM \`${BQ_DATASET}.session_end\` e WHERE e.session_id = s.session_id)`;
+
+exports.closeStaleSessionsCron = onSchedule(
+  {
+    schedule: '0 * * * *',   // 매시 정각
+    timeZone: 'UTC',
+    region: 'us-central1',
+    memory: '256MiB',
+    timeoutSeconds: 120,
+  },
+  async () => {
+    try {
+      const [job] = await bq.createQueryJob({ query: CLOSE_STALE_SESSIONS_SQL, useLegacySql: false });
+      await job.getQueryResults();
+      const [meta] = await job.getMetadata();
+      const affected = meta && meta.statistics && meta.statistics.query
+        ? meta.statistics.query.dmlStats && meta.statistics.query.dmlStats.insertedRowCount
+        : undefined;
+      console.log(`[closeStaleSessionsCron] timeout_inferred 마감 완료 — inserted=${affected || 0}`);
+    } catch (e) {
+      console.error(`[closeStaleSessionsCron] 실패 detail=${e && e.message}`);
+      throw e; // 재시도(Cloud Scheduler)
+    }
   }
 );
 

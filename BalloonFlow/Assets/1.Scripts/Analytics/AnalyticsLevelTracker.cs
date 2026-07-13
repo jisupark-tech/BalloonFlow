@@ -49,6 +49,18 @@ namespace BalloonFlow.Analytics
         //   pending 인 채 play 가 종결되면(리로드/앱종료) result=fail 로 발사. 이어하기 후 클리어는 기존대로 clear.
         private bool _boardFailedPending;
 
+        // ROLLBACK_OBJECTIVE_DONE_ON_FAIL_20260713: 보드 실패 확정 시점의 달성도 스냅샷.
+        //   fail play_end 는 다음 레벨 로드 때 뒤늦게 발행(FireUnresolvedPlayEnd)돼, 그 시점엔 BalloonController 가
+        //   새 보드로 재빌드+PoppedCount=0 리셋된 뒤라 라이브 읽기 시 objective_done 이 항상 0이었다(1453/1454).
+        //   실패 순간의 popped/total 을 저장해 emit. -1 = 스냅샷 없음(라이브 읽기 fallback).
+        private int _failObjectiveDone = -1;
+        private int _failObjectiveTotal = -1;
+
+        // ROLLBACK_LAST_PLAYED_AT_EMIT_20260713 [검수 Finding1]: play 마다 user_property MERGE 발행은
+        //   볼륨/쿼터 과다(100판=100 DML) → 5분 스로틀. last_played_at 은 분 단위 신선도로 충분(첫 play 즉시 발행).
+        private DateTime _lastUserPropEmitUtc = DateTime.MinValue;
+        private const double USER_PROP_EMIT_THROTTLE_MIN = 5.0;
+
         public string CurrentPlayId => _activePlayId ?? "";
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -143,12 +155,22 @@ namespace BalloonFlow.Analytics
 
         private void HandleBoardFailedForResult(OnBoardFailed evt)
         {
-            if (!string.IsNullOrEmpty(_activePlayId)) _boardFailedPending = true;
+            if (string.IsNullOrEmpty(_activePlayId)) return;
+            _boardFailedPending = true;
+            // ROLLBACK_OBJECTIVE_DONE_ON_FAIL_20260713: 실패 순간(보드 리셋 전)의 달성도 스냅샷.
+            if (BalloonController.HasInstance)
+            {
+                _failObjectiveDone  = BalloonController.Instance.PoppedCount;
+                _failObjectiveTotal = BalloonController.Instance.RemainingCount + BalloonController.Instance.PoppedCount;
+            }
         }
 
         private void HandleContinueApplied(OnContinueApplied evt)
         {
             _boardFailedPending = false; // 이어하기로 재개 — 이 판의 결과는 이후 clear/fail/quit 로 다시 결정
+            // ROLLBACK_OBJECTIVE_DONE_ON_FAIL_20260713: 이어하기로 실패 무효화 → 스냅샷 폐기(재실패 시 새로 찍음).
+            _failObjectiveDone = -1;
+            _failObjectiveTotal = -1;
         }
 
         // ─── EventBus handlers ───
@@ -172,6 +194,10 @@ namespace BalloonFlow.Analytics
                 FireUnresolvedPlayEnd();
 
             _boardFailedPending = false;
+            // ROLLBACK_OBJECTIVE_DONE_ON_FAIL_20260713: 새 play 시작 → 이전 판 fail 스냅샷 초기화
+            //   (직전 미종결 play 는 위 FireUnresolvedPlayEnd 에서 이미 소비됨).
+            _failObjectiveDone = -1;
+            _failObjectiveTotal = -1;
             _activePlayId = Guid.NewGuid().ToString("N");
             _activeLevelNumber = evt.levelId;
             _activeStartedUtc = DateTime.UtcNow;
@@ -243,6 +269,17 @@ namespace BalloonFlow.Analytics
                 UserSnapshotCache.Instance.OnLevelPlayStarted();
 
             AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_LEVEL_PLAY_START, p);
+
+            // ROLLBACK_LAST_PLAYED_AT_EMIT_20260713: 방금 OnLevelPlayStarted 로 last_played_at 이 갱신됐으니
+            //   user_property UPSERT 를 발행 → 세션종료(모바일 유실多)를 안 기다리고 활성 세션 중 적재.
+            //   기존엔 last_played_at 이 세션시작(첫 세션 빈값)/세션종료(유실)에만 실려 63% null(249/392) 였다.
+            //   [검수 Finding1] 5분 스로틀 — 첫 play 는 즉시(_lastUserPropEmitUtc=MinValue), 이후 5분 간격.
+            if (AnalyticsSessionTracker.HasInstance
+                && (DateTime.UtcNow - _lastUserPropEmitUtc).TotalMinutes >= USER_PROP_EMIT_THROTTLE_MIN)
+            {
+                _lastUserPropEmitUtc = DateTime.UtcNow;
+                AnalyticsSessionTracker.Instance.EmitUserPropertySnapshot();
+            }
         }
 
         private void FirePlayEnd(string result, string endReason, int finalScore, int starCount)
@@ -291,9 +328,13 @@ namespace BalloonFlow.Analytics
             // ROLLBACK_ANALYTICS_NULLFILL_20260625: play_event NULL 9개 채우기 — 누적기 + 매니저 getter 읽기(가산만).
             p[AnalyticsConsts.P_MOVES_USED]          = _movesUsed;
             // objective_total/done — BL=풍선 제거형. total = 종료 시점 (남은 + 터뜨린), done = 터뜨린 수.
-            p[AnalyticsConsts.P_OBJECTIVE_TOTAL]     = BalloonController.HasInstance
-                ? BalloonController.Instance.RemainingCount + BalloonController.Instance.PoppedCount : 0;
-            p[AnalyticsConsts.P_OBJECTIVE_DONE]      = BalloonController.HasInstance ? BalloonController.Instance.PoppedCount : 0;
+            // ROLLBACK_OBJECTIVE_DONE_ON_FAIL_20260713: fail 은 실패 순간 스냅샷 우선(뒤늦은 발행 시 보드 리셋→0 방지).
+            //   clear/quit 및 스냅샷 없음(-1)은 기존대로 라이브 읽기. 라이브도 없으면 0.
+            bool useFailSnapshot = (result == AnalyticsConsts.RESULT_FAIL && _failObjectiveTotal >= 0);
+            p[AnalyticsConsts.P_OBJECTIVE_TOTAL]     = useFailSnapshot ? _failObjectiveTotal
+                : (BalloonController.HasInstance ? BalloonController.Instance.RemainingCount + BalloonController.Instance.PoppedCount : 0);
+            p[AnalyticsConsts.P_OBJECTIVE_DONE]      = useFailSnapshot ? _failObjectiveDone
+                : (BalloonController.HasInstance ? BalloonController.Instance.PoppedCount : 0);
             p[AnalyticsConsts.P_AVG_RESOURCE]        = Math.Round(RailManager.HasInstance ? RailManager.Instance.AverageOccupancyRatio : 0.0, 4);
             p[AnalyticsConsts.P_CONTINUE_POPUP_COUNT] = _continuePopupCount;
             p[AnalyticsConsts.P_CONTINUE_COUNT]      = ContinueHandler.HasInstance ? ContinueHandler.Instance.GetContinueCount() : 0;
@@ -307,6 +348,8 @@ namespace BalloonFlow.Analytics
             _activePlayId = null;
             _activeBackgroundSec = 0f;
             _bgEnteredUtc = null;
+            _failObjectiveDone = -1;   // ROLLBACK_OBJECTIVE_DONE_ON_FAIL_20260713
+            _failObjectiveTotal = -1;
         }
 
         // ─── Helpers ───

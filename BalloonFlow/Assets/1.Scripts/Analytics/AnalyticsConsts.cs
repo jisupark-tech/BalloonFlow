@@ -112,6 +112,14 @@ namespace BalloonFlow.Analytics
         //   등록은 서버 BQ 스키마(user_property 테이블 컬럼) + MERGE 반영 후 활성화 — 그 전엔 stamp 돼도 서버 전송 직전
         //   normalize 에서 스트립되어 무해(적재 안전).
         public const string P_INSTALL_MEDIA_SOURCE   = "install_media_source";
+        // ROLLBACK_GAID_AID_20260713: Android 광고 ID(GAID). aid 100% null(392/392) 실측 → 네이티브 수집 추가.
+        //   iOS idfa 는 ATT 동의 필요라 별도(현 Android 전용). 서버 user_property 테이블에 aid 컬럼 실재 확인됨.
+        public const string P_AID                    = "aid";
+        // ROLLBACK_IDFA_20260713: iOS Identifier For Advertisers. iOS ATT 동의 시 수집, Android 항상 NULL.
+        //   현 Android 전용이라 클라 미stamp(NULL)이나 서버 MERGE/BQ 컬럼/화이트리스트는 iOS 대비 정합 유지.
+        public const string P_IDFA                   = "idfa";
+        // ROLLBACK_AB_EP1_20260713: 레벨 A/B 테스트 에피소드1 variant("A"/"B"). uid당 1행 불변 기록(BQ 분리 분석).
+        public const string P_AB_EP1_VARIANT         = "ab_ep1_variant";
         public const string P_INSTALL_COUNTRY        = "install_country";
         public const string P_INSTALL_PLATFORM       = "install_platform";
         public const string P_INSTALL_DEVICE         = "install_device";

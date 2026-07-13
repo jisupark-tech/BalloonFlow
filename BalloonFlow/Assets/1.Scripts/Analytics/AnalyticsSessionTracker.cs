@@ -268,8 +268,8 @@ namespace BalloonFlow.Analytics
 
         // ROLLBACK_USER_PROPERTY_PIPELINE_20260708: R_user_property UPSERT 페이로드.
         //   서버(ingestAnalyticsEvents)가 이 이벤트만 스트리밍 insert 대신 BQ MERGE 로 처리한다.
-        //   uid 는 서버가 토큰 검증값으로 대체. 미포함(NULL 유지): install_media_source/campaign/
-        //   adgroup/creative(MMP 자동), idfa/aid(네이티브 비동기 — 후속). 롤백: 이 메서드 + 호출 2곳 제거.
+        //   uid 는 서버가 토큰 검증값으로 대체. 채우는 항목 추가(2026-07-13): install_media_source(conversion),
+        //   aid(GAID 네이티브). 미포함(NULL 유지): campaign/adgroup/creative(MMP 자동), idfa(iOS ATT — 후속).
         private void FireUserPropertyEvent()
         {
             var p = new Dictionary<string, object>(24);
@@ -305,7 +305,13 @@ namespace BalloonFlow.Analytics
                 //     서버 스키마 반영 후 화이트리스트 등록 시 실제 적재 시작.
                 if (!string.IsNullOrEmpty(c.InstallMediaSource))
                     p[AnalyticsConsts.P_INSTALL_MEDIA_SOURCE] = c.InstallMediaSource;
+                // ROLLBACK_GAID_AID_20260713: Android GAID stamp(비동기 수집 완료분만).
+                if (!string.IsNullOrEmpty(c.Aid))
+                    p[AnalyticsConsts.P_AID] = c.Aid;
             }
+
+            // ROLLBACK_AB_EP1_20260713: A/B 에피소드1 variant 기록(첫 읽기 시 lazy 배정+영속). BQ A/B 분리 분석용.
+            p[AnalyticsConsts.P_AB_EP1_VARIANT] = AbTestService.Episode1Variant;
 
             if (CurrencyManager.HasInstance)
                 p[AnalyticsConsts.P_TOTAL_COIN_BALANCE] = CurrencyManager.Instance.Coins;
@@ -319,6 +325,15 @@ namespace BalloonFlow.Analytics
                 p[AnalyticsConsts.P_APPSFLYER_ID] = afId;
 
             EmitEvent(AnalyticsConsts.EVT_USER_PROPERTY, p);
+        }
+
+        /// <summary>ROLLBACK_LAST_PLAYED_AT_EMIT_20260713: 외부(레벨 플레이 시작)에서 user_property UPSERT 강제.
+        //   last_played_at 등 플레이 중 갱신값이 세션종료(모바일 유실多)를 기다리지 않고 활성 세션 중 적재되게 함.
+        //   서버 MERGE 라 멱등 — 중복/빈번 호출 무해. 롤백: 이 메서드 + AnalyticsLevelTracker 호출부 제거.</summary>
+        public void EmitUserPropertySnapshot()
+        {
+            if (string.IsNullOrEmpty(_sessionId)) return; // 세션 미시작이면 skip(빈 uid 오염 방지)
+            FireUserPropertyEvent();
         }
 
         /// <summary>AppsFlyer 유저 키 — SDK 미초기화/에디터/예외 시 빈 문자열(NULL 유지).</summary>
