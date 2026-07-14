@@ -1,210 +1,204 @@
-,Text_EN,비고
-frozenlayer.magazinetext,0,
-holder.magazinetext,0,
-itembtn.txtlock,Lv.{n},
-newfeature.textunlock,Unlocked!,
-?�치 ?�금 ?�업 ,,
-newfeature.textname.HiddenDartBox,Hidden Dart Box,?�벨 11 ?�장 
-newfeature.textdesctiption.HiddenDartBox,Bring them to the front\nto reveal!,
-newfeature.textname.LinkedDartBox,Linked Dart Box,?�벨 21 ?�장
-newfeature.textdesctiption.LinkedDartBox,They all move together!,
-newfeature.textname.Wooden Board,Wooden Board,?�벨 31 ?�장
-newfeature.textdesctiption.Wooden Board,Shoot the same color\nto break it!,
-newfeature.textname.GlassPipe,Glass Pipe,?�벨 41 ?�장
-newfeature.textdesctiption.GlassPipe,Tap nearby boxes\nto release a new one!,
-newfeature.textname.Barricade,Barricade,?�벨 61 ?�장
-newfeature.textdesctiption.Barricade,Shoot the same color\nto clear the path!,
-newfeature.textname.HiddenBalloon,HiddenBalloon,?�벨 81 ?�장
-newfeature.textdesctiption.HiddenBalloon,Pop nearby balloons\nto reveal!,
-newfeature.textname.IronWall,Iron Wall,?�벨 101 ?�장 
-newfeature.textdesctiption.IronWall,It blocks incoming darts!,
-newfeature.textname.Pipe,Pipe,?�벨 121 ?�장
-newfeature.textdesctiption.Pipe,Tap nearby boxes\nto release a mystery one!,
-newfeature.textname.flextube,Flex Tube,?�벨 141 ?�장
-newfeature.textdesctiption.flextube,Shoot the same color\nto shrink the tube!,
-newfeature.textname.TargetBox,Target Box,?�벨 161 ?�장
-newfeature.textdesctiption.TargetBox,Shoot the same colors\nto break it all!,
-newfeature.textname.Ice,Ice,?�벨 201 ?�장
-newfeature.textdesctiption.Ice,Pop any balloon\nto shatter the ice!,
-newfeature.textname.FrozenDartBox,Frozen Dart Box,?�벨 241 ?�장 
-newfeature.textdesctiption.FrozenDartBox,Tap other boxes\nto shatter the ice!,
-popupcontinue.costlabel,Cost:,
-popupcontinue.txtcontinue,Play On,
-popupcontinue.txtcontinuetitle,Continue?,
-popupcontinue.txtdescription,You will lose a life!,
-popupcontinue.txtdescription.multiplier,You will lose your x{n} multiplier!,
-popupdescription.txtdescription,TxtDescriptionTxtDescriptionTxtDescriptionTxtDescriptionTxtDescription,
+﻿Key,Text_EN,Text_KO,비고
+frozenlayer.magazinetext,0,0,
+holder.magazinetext,0,0,
+itembtn.txtlock,Lv.{n},Lv.{n},
+newfeature.textunlock,Unlocked!,잠금 해제!,
+newfeature.textname.HiddenDartBox,Hidden Dart Box,숨겨진 다트 상자,레벨 11 등장
+newfeature.textdesctiption.HiddenDartBox,Bring them to the front\nto reveal!,앞으로 가져오면 모습이 드러나요!,
+newfeature.textname.LinkedDartBox,Linked Dart Box,연결된 다트 상자,레벨 21 등장
+newfeature.textdesctiption.LinkedDartBox,They all move together!,모두 함께 움직여요!,
+newfeature.textname.Wooden Board,Wooden Board,나무 보드,레벨 31 등장
+newfeature.textdesctiption.Wooden Board,Shoot the same color\nto break it!,같은 색을 쏘면 부술 수 있어요!,
+newfeature.textname.GlassPipe,Glass Pipe,투명 파이프,레벨 41 등장
+newfeature.textdesctiption.GlassPipe,Tap nearby boxes\nto release a new one!,근처 상자를 탭하면 새 상자가 나와요!,
+newfeature.textname.Barricade,Barricade,바리케이드,레벨 61 등장
+newfeature.textdesctiption.Barricade,Shoot the same color\nto clear the path!,같은 색을 쏘면 길이 열려요!,
+newfeature.textname.HiddenBalloon,HiddenBalloon,숨겨진 풍선,레벨 81 등장
+newfeature.textdesctiption.HiddenBalloon,Pop nearby balloons\nto reveal!,근처 풍선을 터뜨리면 모습이 드러나요!,
+newfeature.textname.IronWall,Iron Wall,철벽,레벨 101 등장
+newfeature.textdesctiption.IronWall,It blocks incoming darts!,다트가 지나가는 길을 막아요!,
+newfeature.textname.Pipe,Pipe,파이프,레벨 121 등장
+newfeature.textdesctiption.Pipe,Tap nearby boxes\nto release a mystery one!,근처 상자를 탭하면 새 상자가 나와요!,
+newfeature.textname.flextube,Flex Tube,주름 튜브,레벨 141 등장
+newfeature.textdesctiption.flextube,Shoot the same color\nto shrink the tube!,같은 색을 쏘면 튜브가 줄어들어요!,
+newfeature.textname.TargetBox,Target Box,과녁 상자,레벨 161 등장
+newfeature.textdesctiption.TargetBox,Shoot the same colors\nto break it all!,과녁과 같은 색을 쏘면 부술 수 있어요!,
+newfeature.textname.Ice,Ice,얼음,레벨 201 등장
+newfeature.textdesctiption.Ice,Pop any balloon\nto shatter the ice!,아무 풍선이나 터뜨리면 얼음이 깨져요!,
+newfeature.textname.FrozenDartBox,Frozen Dart Box,얼음 다트 상자,레벨 241 등장
+newfeature.textdesctiption.FrozenDartBox,Tap other boxes\nto shatter the ice!,다른 상자를 탭하면 얼음이 깨져요!,
+popupcontinue.costlabel,Cost:,비용:,
+popupcontinue.txtcontinue,Play On,이어하기,
+popupcontinue.txtcontinuetitle,Continue?,이어서 할까요?,
+popupcontinue.txtdescription,You will lose a life!,생명이 1개 줄어들어요!,
+popupcontinue.txtdescription.multiplier,You will lose your x{n} multiplier!,x{n} 배수가 사라져요!,
+popupdescription.txtdescription,TxtDescriptionTxtDescriptionTxtDescriptionTxtDescriptionTxtDescription,텍스트 설명 텍스트 설명 텍스트 설명 텍스트 설명,
 popupdescription.txtsingleoutline,"Resume
-",
-popuperror.txtdescription,Item DescriptionItem DescriptionItem Description,
-popupfail01.continuetitle,Continue?,
-popupfail01.costlabel,Cost:,
-popupfail01.costtext,FREE,
-popupfail01.txtcontinue,Play On,
-popupfail02.txtfail,Level Failed!,
+",계속하기,
+popuperror.txtdescription,Item DescriptionItem DescriptionItem Description,아이템 설명 아이템 설명 아이템 설명,
+popupfail01.continuetitle,Continue?,이어서 할까요?,
+popupfail01.costlabel,Cost:,비용:,
+popupfail01.costtext,FREE,무료,
+popupfail01.txtcontinue,Play On,이어하기,
+popupfail02.txtfail,Level Failed!,레벨 실패!,
 popupmorelive.txtbtnsingle,"Resume
-",
-popupmorelive.txtdescription,Next life in,
-popupmorelive.txtfree,Watch,
-popupmorelive.txtlife,{n},
+",계속하기,
+popupmorelive.txtdescription,Next life in,다음 생명까지,
+popupmorelive.txtfree,Watch,시청,
+popupmorelive.txtlife,{n},{n},
 popupmorelive.txtsingleoutline,"Resume
-",
-popupmorelive.txttitle,More Lives,
-popupnoads.txtdescription1,Remove forced\n<color=#FFD700>ads forever!,
-popupnoads.txtdescription2,Keep optional\n<color=#FFD700>bonus ads!,
-popupprofile.txtbtntapavatar,Avatar,
-popupprofile.txtbtntapavataroutline,Avatar,
-popupprofile.txtbtntapframe,Frame,
-popupprofile.txtbtntapname,Name,
-popupprofile.txtbtntapnameoutline,Name,
-popupprofile.txtbtntaptoken,Token,
-popupprofile.txtbtntaptokenoutline,Token,
-popupprofile.txttitle,Profile,
-popupprofile.txttitleoutline,Profile,
-popupresult.txtbtnsingle,Next,
-popup.txtbtnbuy,Buy,
-popupwinningstreak.txtbtnsingle,Play,
-popupwinningstreak.txtdescription,"Win levels to collect <color=#FFD700> Flames! </color>\nLonger streak, more rewards!",
-popupwinningstreak.txtdescriptionoutline,"Win levels to collect <color=#FFD700> Flames! </color>\nLonger streak, more rewards!",
-popupwinningstreak.txttitle,Winning Streak,
-popupwinningstreakinfo.textclose,Tap to Continue,
-popupwinningstreakinfo.textdescription,"If you <color=#e7656b>fail</color> a level,\nyour multiplier will reset!",
-popupwinningstreakinfo.textinfo1,"Win levels,\ncollect <color=#FFD700> Flames! </color>",
-popupwinningstreakinfo.textinfo2,Multiply <color=#FFD700> Flames </color>\nup to x100!,
-popupwinningstreakinfo.textinfo3,Get <color=#FFD700>rewards!,
-shoplistitem.textsale,{n}% OFF,
-?�점 번들 ?�름 ,,
-shop.bundle.tier1.title,Pop Bundle,
-shop.bundle.tier2.title,Super Bundle,
-shop.bundle.tier3.title,Mega Bundle,
-shop.bundle.tier4.title,Giant Bundle,
-shop.bundle.tier5.title,Ultimate Bundle,
-shoplistitem.t1,Pop Bundle,
-shoplistitem.t2,Super Bundle,
-shoplistitem.t3,Mega Bundle,
-shoplistitem.t4,Giant Bundle,
-shoplistitem.t5,Ultimate Bundle,
-shoplistitem.starter,Starter Bundle,
-shoplistitem.noads,NO ADS,
-slotwinningstreak.txtgrandprize,Grand Prize,
-spawner.magazinetext,0,
-tutorial.instructiontext,Tutorial instruction text,
-tutorial.text,SKIP,
-tutorial.texttap,Tap to anywhere,
-tutorial.textitem,Tap your item!,
-ingame_almost_there,Almost There!,
+",계속하기,
+popupmorelive.txttitle,More Lives,생명을 추가하세요,
+popupnoads.txtdescription1,Remove forced\n<color=#FFD700>ads forever!,강제 광고를\n<color=#FFD700>영원히 없애요!,
+popupnoads.txtdescription2,Keep optional\n<color=#FFD700>bonus ads!,보너스 광고는\n<color=#FFD700>그대로 볼 수 있어요!,
+popupprofile.txtbtntapavatar,Avatar,아바타,
+popupprofile.txtbtntapavataroutline,Avatar,아바타,
+popupprofile.txtbtntapframe,Frame,프레임,
+popupprofile.txtbtntapname,Name,이름,
+popupprofile.txtbtntapnameoutline,Name,이름,
+popupprofile.txtbtntaptoken,Token,토큰,
+popupprofile.txtbtntaptokenoutline,Token,토큰,
+popupprofile.txttitle,Profile,프로필,
+popupprofile.txttitleoutline,Profile,프로필,
+popupresult.txtbtnsingle,Next,다음,
+popup.txtbtnbuy,Buy,구매,
+popupwinningstreak.txtbtnsingle,Play,플레이,
+popupwinningstreak.txtdescription,"Win levels to collect <color=#FFD700> Flames! </color>\nLonger streak, more rewards!",레벨을 클리어하고 <color=#FFD700>불꽃</color>을 모으세요!\n연승이 길수록 보상도 커져요!,
+popupwinningstreak.txttitle,Winning Streak,불꽃 연승,
+popupwinningstreakinfo.textclose,Tap to Continue,계속하려면 탭하세요,
+popupwinningstreakinfo.textdescription,"If you <color=#e7656b>fail</color> a level,\nyour multiplier will reset!",레벨을 <color=#e7656b>실패</color>하면\n배수가 초기화돼요!,
+popupwinningstreakinfo.textinfo1,"Win levels,\ncollect <color=#FFD700> Flames! </color>",레벨을 클리어하고\n<color=#FFD700>불꽃</color>을 모으세요!,
+popupwinningstreakinfo.textinfo2,Multiply <color=#FFD700> Flames </color>\nup to x100!,<color=#FFD700>불꽃</color>을\n최대 x100까지 늘려 보세요!,
+popupwinningstreakinfo.textinfo3,Get <color=#FFD700>rewards!,<color=#FFD700>보상</color>을 받으세요!,
+shoplistitem.textsale,{n}% OFF,{n}% 할인,
+shop.bundle.tier1.title,Pop Bundle,팝 번들,
+shop.bundle.tier2.title,Super Bundle,슈퍼 번들,
+shop.bundle.tier3.title,Mega Bundle,메가 번들,
+shop.bundle.tier4.title,Giant Bundle,자이언트 번들,
+shop.bundle.tier5.title,Ultimate Bundle,얼티밋 번들,
+slotwinningstreak.txtgrandprize,Grand Prize,엄청난 보상,
+spawner.magazinetext,0,0,
+tutorial.instructiontext,Tutorial instruction text,튜토리얼 안내 문구,
+tutorial.text,SKIP,건너뛰기,
+tutorial.texttap,Tap to anywhere,아무 곳이나 탭하세요,
+tutorial.textitem,Tap your item!,아이템을 탭하세요!,
 txttoast.txttoast,"Your lives are unlimited!
-",
-uihud.holdertext,On Rail: 0/9,
-uihud.remainingtext,Balloons: --,
+",생명이 무제한이에요!,
+uihud.holdertext,On Rail: 0/9,레일 위: 0/9,
+uihud.remainingtext,Balloons: --,풍선: --,
 uilobby.text,"Home
-",
-uilobby.textgauge,{n}/{n},
-uilobby.multiplier,x{n},
+",홈,
+uilobby.textgauge,{n}/{n},{n}/{n},
+uilobby.multiplier,x{n},x{n},
 uilobby.texthome,"Home
-",
-uilobby.textshop,Shop,
-uilobby.texttimer,{}d {}h,
-uilobby.txtlife,Full,
-uilobby.txtnotification,Notifications,
-ui.lobby.noads,NO ADS,
-ui.lobby.hard_level,Hard Level,
-ui.lobby.super_hard,Super Hard,
-uisetting.textprivacy,Privacy,
-uisetting.textsupport,Support,
-uisetting.textterms,Terms,
-uititle.txtloading,Loading..,
+",홈,
+uilobby.textshop,Shop,상점,
+uilobby.texttimer,{}d {}h,{}일 {}시간,
+uilobby.txtlife,Full,가득 참,
+uilobby.txtnotification,Notifications,알림,
+uisetting.textprivacy,Privacy,개인정보 처리방침,
+uisetting.textsupport,Support,고객 지원,
+uisetting.textterms,Terms,이용약관,
+uititle.txtloading,Loading..,로딩 중..,
 useitem.txtdescription.hand,"Tap any box to place it!
-",UseItem
-useitem.txtdescription.zap,Tap any color to pop them all!,
-,,
-popupcommonframe.txttitle.setting,Settings,?�정
-ui.settings.title,Settings,
-ui.settings.sound,Sound,
-ui.settings.music,Music,
-ui.settings.haptic,Haptic,
-ui.settings.notifications,Notifications,
-ui.settings.deleteaccount,Delete Account,
-uisetting.txthaptic,Haptic,
-ui.hard,Hard,
-ui.hardlevel,Hard Level,
-ui.superhard,Super Hard,
-ui.normal,Normal,
-ui.shop.more_offers,More Offers,
-ui.shop.title,Shop,
-ui.morelive.free,Watch,
-ui.morelive.unlimited,UNLIMITED,
-ui.morelive.full,FULL,
-ui.tutorial.skip,SKIP,
-popup.title.level,Level {0},
-popup.title.level_failed,Level Failed,
-popup.title.level_clear,Level Clear!,
-error.network.title,Connection Error,
-error.network.desc,No internet connection. Please check your network.,
-error.payment.title,Error,
-error.payment.desc,Payment failed. Please try again.,
-error.success.title,Your Purchase was Completed,
-error.success.desc,Purchase successful!,
-popupgoldshop.txtdescription,"No Ads,\nJust Fun!",
-ui.common.ok,OK,
-ui.common.cancel,Cancel,
-ui.common.close,Close,
-ui.common.continue,Continue,
-ui.common.quit,Quit,
-ui.common.on,On,
-ui.common.off,Off,
-ui.common.stay,Stay,
-ui.common.delete,Delete,
-ui.common.cliam,Claim,
-ui.common.resume,Resume,
-ui.common.retry,Retry,
-,,
-uilobby.txtplay,,
-,,
-?�업 ?�목 ,,
-popup.txttitle,,
-popup.txttitle.moreLives,More Lives,
-popup.txttitle.quit,Quit Game?,?�드로이??백버?????�장 (PopupDescription)
-popup.txttitle.networkerror,Not Connected,?�터???�결 (PopupError)
-popup.txttitle.,,
-popup.txttitle.allclear,Congratulations!,Lv.300 ?�리?????�는 Lv.301 ?�치 ??(PopupDescription)
-popup.txttitle.lv,Level {n},결과?�업 ?�공 ?�패 ???�일
-popup.txttitle.noads,NO ADS,광고?�거 ?�업
-popup.txttitle.purchaseerror,Not Charged,결제?�패 (PopupDescription)
-popup.txttitle.purchasesuccess,Success,PopupError
-popup.txttitle.deleteaccount,Are You Sure?,PopupError
-popup.txttitle.settingquit,Quit Level?,PopupQuit
-popup.txttitle.hand,Hand,PopupBuyItem
-popup.txttitle.suffle,Shuffle,PopupBuyItem
-popup.txttitle.zap,Zap,PopupBuyItem
-popup.txttitle.unlock,Unlock,PopupBuyItem
-popup.txttitle.itemunlocked,Item Unlocked!,PopupItemDescription/PopupBuyItem
-,,
-?�업 ?�명,,
-popup.txtdescription.quit,Do you really want to quit?,PopupDescription
-popup.txtdescription.networkerror,Your internet is\ndisconnected.,PopupDescription
-popup.txtdescription.purchaseerror,Your purchase\nwas canceled.,PopupDescription
-popup.txtdescription.purchasesuccess,Your purchase\nwas completed.,PopupDescription
-popup.txtdescription.purchasecompleted,Your purchase was completed.,PopupError
-popup.txtdescription.deleteaccount1,"If you delete your account,\nyou will lose all your game progress, coins, boosters and purchases!",
-popup.txtdescription.deleteaccount2,"Your deletion request will be processed immediately. Once your account is deleted, this action cannot be reversed.",
-popup.txtdescription.deleteaccount3,"If you return to the game before your account is deleted, you can cancel the deletion process and restore your account.",
-popup.txtdescription.settingquit,You will lose a life!,PopupQuit
-popup.txtdescription.settingquit.multiplier,You will lose your x{n} multiplier!,PopupQuit
-popup.txtdescription.allclear,New Levels Coming Soon!,PopupDescription
-popup.txtdescription.hand,Place any box directly!,PopupBuyItem
-popup.txtdescription.suffle,Shuffle all boxes instantly!,PopupBuyItem
-popup.txtdescription.zap,Pop everything of one color!,PopupBuyItem
-popup.txtdescription.zap,,
-popup.txtdescription.zap,,
-popup.txtdescription.zap,,
-toast.life.unlimited,Your lives are unlimited!,
-toast.life.full,Your lives are full!,
-toast.item.locked,Unlocks at Level {n},
-popup.privacyterm.title,Welcome!,PopupPrivacyTerm
-popup.privacyterm.description,"By tapping ""Accept,"" you agree\nto our <color=#0D49AD><link=""terms""><u>Terms of Service</u></link></color>\nand <color=#0D49AD><link=""privacy""><u>Privacy Policy</u></link></color>.",PopupPrivacyTerm
-popup.privacyterm.terms,Terms of Service,PopupPrivacyTerm
-popup.privacyterm.privacy,Privacy Policy,PopupPrivacyTerm
-popup.privacyterm.accept,Accept,PopupPrivacyTerm
-popup.balloonpass.button,Activated!,
-popup.balloonpass.title,Balloon Pass,
+",원하는 상자를 탭해서 배치하세요!,UseItem
+useitem.txtdescription.zap,Tap any color to pop them all!,원하는 색을 탭해서 모두 제거하세요!,
+popupcommonframe.txttitle.setting,Settings,설정,설정
+ui.settings.sound,Sound,소리,
+ui.settings.music,Music,음악,
+uisetting.txthaptic,Haptic,진동,
+ui.hard,Hard,어려움,
+ui.hardlevel,Hard Level,어려운 레벨,
+ui.superhard,Super Hard,매우 어려움,
+ui.shop.more_offers,More Offers,더 보기,
+ui.morelive.free,Watch,시청,
+ui.morelive.unlimited,UNLIMITED,무제한,
+ui.morelive.full,FULL,가득 참,
+ui.tutorial.skip,SKIP,건너뛰기,
+popup.title.level,Level {0},레벨 {0},
+popup.title.level_failed,Level Failed,레벨 실패,
+popup.title.level_clear,Level Clear!,레벨 클리어!,
+error.network.title,Connection Error,연결 오류,
+error.network.desc,No internet connection. Please check your network.,인터넷에 연결되어 있지 않아요. 네트워크 상태를 확인해 주세요.,
+error.payment.title,Error,오류,
+error.payment.desc,Payment failed. Please try again.,결제에 실패했어요. 다시 시도해 주세요.,
+error.success.title,Your Purchase was Completed,구매가 완료되었어요,
+error.success.desc,Purchase successful!,구매가 완료되었어요!,
+popupgoldshop.txtdescription,"No Ads,\nJust Fun!","광고는 없이,\n재미만 가득!",
+ui.common.ok,OK,확인,
+ui.common.cancel,Cancel,취소,
+ui.common.close,Close,닫기,
+ui.common.continue,Continue,계속하기,
+ui.common.quit,Quit,종료,
+ui.common.on,On,켜기,
+ui.common.off,Off,끄기,
+ui.common.stay,Stay,머무르기,
+ui.common.cliam,Claim,받기,
+ui.common.resume,Resume,계속하기,
+ui.common.retry,Retry,재시도,
+uilobby.txtplay,,,
+popup.txttitle,,,
+popup.txttitle.moreLives,More Lives,생명을 추가하세요,
+popup.txttitle.quit,Quit Game?,게임을 종료할까요?,안드로이드 백버튼 시 등장 (PopupDescription)
+popup.txttitle.networkerror,Not Connected,연결 안 됨,인터넷 연결 (PopupError)
+popup.txttitle.,,,
+popup.txttitle.allclear,Congratulations!,축하해요!,Lv.300 클리어 후 또는 Lv.301 터치 시 (PopupDescription)
+popup.txttitle.lv,Level {n},레벨 {n},결과팝업 성공 실패 시 동일
+popup.txttitle.noads,NO ADS,광고 제거,광고제거 팝업
+popup.txttitle.purchaseerror,Not Charged,결제되지 않음,결제실패 (PopupDescription)
+popup.txttitle.purchasesuccess,Success,성공,PopupError
+popup.txttitle.settingquit,Quit Level?,레벨을 종료할까요?,PopupQuit
+popup.txttitle.hand,Hand,핸드,PopupBuyItem
+popup.txttitle.suffle,Shuffle,셔플,PopupBuyItem
+popup.txttitle.zap,Zap,번개,PopupBuyItem
+popup.txttitle.unlock,Unlock,잠금 해제,PopupBuyItem
+popup.txtdescription.quit,Do you really want to quit?,정말 종료하시겠어요?,PopupDescription
+popup.txtdescription.networkerror,Your internet is\ndisconnected.,인터넷 연결이 끊어졌어요.,PopupDescription
+popup.txtdescription.purchaseerror,Your purchase\nwas canceled.,구매가 취소되었어요.,PopupDescription
+popup.txtdescription.purchasesuccess,Your purchase\nwas completed.,구매가 완료되었어요.,PopupDescription
+popup.txtdescription.settingquit,You will lose a life!,생명이 1개 줄어들어요!,PopupQuit
+popup.txtdescription.allclear,New Levels Coming Soon!,새로운 레벨이 곧 출시돼요!,PopupDescription
+popup.txtdescription.hand,Place any box directly!,원하는 상자를 바로 배치해요!,PopupBuyItem
+ppopup.txtdescription.suffle,Shuffle all boxes instantly!,모든 상자를 즉시 섞어요!,PopupBuyItem / 최신 TextData에 없음
+popup.txtdescription.zap,Pop everything of one color!,한 가지 색을 전부 터뜨려요!,PopupBuyItem
+popup.txtdescription.zap,Pop everything of one color!,한 가지 색을 전부 터뜨려요!,
+popup.txtdescription.zap,Pop everything of one color!,한 가지 색을 전부 터뜨려요!,
+popup.txtdescription.zap,Pop everything of one color!,한 가지 색을 전부 터뜨려요!,
+toast.life.unlimited,Your lives are unlimited!,생명이 무제한이에요!,
+toast.life.full,Your lives are full!,생명이 가득 찼어요!,
+popupwinningstreak.txtdescriptionoutline,"Win levels to collect <color=#FFD700> Flames! </color>\nLonger streak, more rewards!",레벨을 클리어하고 <color=#FFD700>불꽃</color>을 모으세요!\n연승이 길수록 보상도 커져요!,신규
+shoplistitem.t1,Pop Bundle,팝 번들,신규
+shoplistitem.t2,Super Bundle,슈퍼 번들,신규
+shoplistitem.t3,Mega Bundle,메가 번들,신규
+shoplistitem.t4,Giant Bundle,자이언트 번들,신규
+shoplistitem.t5,Ultimate Bundle,얼티밋 번들,신규
+shoplistitem.starter,Starter Bundle,스타터 번들,신규
+shoplistitem.noads,NO ADS,광고 제거,신규
+ingame_almost_there,Almost There!,조금만 더!,신규
+ui.lobby.noads,NO ADS,광고 제거,신규
+ui.lobby.hard_level,Hard Level,어려운 레벨,신규
+ui.lobby.super_hard,Super Hard,매우 어려움,신규
+ui.settings.title,Settings,설정,신규
+ui.settings.haptic,Haptic,진동,신규
+ui.settings.notifications,Notifications,알림,신규
+ui.settings.deleteaccount,Delete Account,계정 삭제,신규
+ui.normal,Normal,보통,신규
+ui.shop.title,Shop,상점,신규
+ui.common.delete,Delete,삭제하기,신규
+popup.txttitle.deleteaccount,Are You Sure?,정말 삭제할까요?,신규
+popup.txttitle.itemunlocked,Item Unlocked!,아이템 잠금 해제!,신규
+popup.txtdescription.purchasecompleted,Your purchase was completed.,구매가 완료되었어요.,신규
+popup.txtdescription.deleteaccount1,"If you delete your account,\nyou will lose all your game progress, coins, boosters and purchases!","계정을 삭제하면\n게임 진행 상황, 코인, 부스터, 구매한 상품이 모두 사라져요!",신규
+popup.txtdescription.deleteaccount2,"Your deletion request will be processed immediately. Once your account is deleted, this action cannot be reversed.",삭제 요청은 즉시 처리돼요. 계정이 삭제된 후에는 되돌릴 수 없어요.,신규
+popup.txtdescription.deleteaccount3,"If you return to the game before your account is deleted, you can cancel the deletion process and restore your account.",계정이 삭제되기 전에 게임에 다시 접속하면 삭제를 취소하고 계정을 복구할 수 있어요.,사용 안 함
+popup.txtdescription.settingquit.multiplier,You will lose your x{n} multiplier!,x{n} 배수가 사라져요!,신규
+popup.txtdescription.suffle,Shuffle all boxes instantly!,모든 상자를 즉시 섞어요!,신규
+toast.item.locked,Unlocks at Level {n},레벨 {n}에서 잠금 해제,신규
+popup.privacyterm.title,Welcome!,환영해요!,신규
+popup.privacyterm.description,"By tapping ""Accept,"" you agree\nto our <color=#0D49AD><link=""terms""><u>Terms of Service</u></link></color>\nand <color=#0D49AD><link=""privacy""><u>Privacy Policy</u></link></color>.","""동의""버튼을 누르면\n<color=#0D49AD><link=""terms""><u>이용약관</u></link></color>과\n<color=#0D49AD><link=""privacy""><u>개인정보 처리방침</u></link></color>에 동의하게 됩니다.",신규
+popup.privacyterm.terms,Terms of Service,이용약관,신규
+popup.privacyterm.privacy,Privacy Policy,개인정보 처리방침,신규
+popup.privacyterm.accept,Accept,동의,신규
+tutorial.allmostfull.warning,Conveyor almost full! Clear it or fail!,컨베이어가 거의 다 찼어요! 비우지 못하면 실패해요!,
+tutorial.tap.dartbox,Tap a dart box to pop\nsame color balloons!,다트 박스를 탭해서\n같은 색 풍선을 터뜨리세요!,
+tutorial.continue.clearballoon,Keep popping the remaining\nballoons to clear the level!,남은 풍선을 계속 터뜨려서\n레벨을 클리어하세요!,

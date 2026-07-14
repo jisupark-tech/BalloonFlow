@@ -134,6 +134,10 @@ namespace BalloonFlow
         private const string ACTION_WAIT_POP = "wait_pop";
         private const string ACTION_TAP_ANYWHERE = "tap_anywhere";
         private const string ACTION_NONE = "none";
+        // ROLLBACK_TUTORIAL_WAIT_ATTACK_20260713: 배치된 다트가 풍선을 공격해 다 사라질 때까지 전체 터치 방어 후
+        //   자동으로 다음 스텝 진행. (holder 배포 → 발사체 flight → 풍선 pop 이 다 끝나면 advance.)
+        private const string ACTION_WAIT_ATTACK = "wait_attack_resolved";
+        private const float WAIT_ATTACK_DEADLINE = 30f; // 소프트락 방지 백스톱(unscaled)
 
         // [2026-05-15] rail_warning 글로벌 튜토리얼 — gauge stage Warning(>=90%) 진입 시 1회 등장.
         // 일반 level 기반 tutorialId 와 충돌 없는 1000 사용. PlayerPrefs 영구 저장 (앱 단위 1회).
@@ -164,6 +168,7 @@ namespace BalloonFlow
         private Coroutine _startTutorialForLevelCoroutine;
         private bool _pausedForRailWarningTutorial;
         private Coroutine _railWarningPauseCoroutine;
+        private Coroutine _waitAttackCoroutine; // ROLLBACK_TUTORIAL_WAIT_ATTACK_20260713
 
         #endregion
 
@@ -916,22 +921,39 @@ namespace BalloonFlow
             }
             else
             {
-                // wait_pop steps: disable input while waiting for animation
+                // wait_pop / wait_attack_resolved steps: disable input while waiting for animation
                 if (InputHandler.HasInstance)
                 {
                     InputHandler.Instance.DisableInput();
                 }
             }
 
+            // ROLLBACK_TUTORIAL_WAIT_ATTACK_20260713: 배치 다트가 풍선을 다 공격할 때까지 전체 터치 방어(위 else 에서
+            //   DisableInput) 후, 발사체 0(공격 완료)이 되면 자동으로 다음 스텝. 스텝 진입 시 코루틴 1회 시작.
+            if (step.requireAction == ACTION_WAIT_ATTACK)
+            {
+                if (_waitAttackCoroutine != null) StopCoroutine(_waitAttackCoroutine);
+                _waitAttackCoroutine = StartCoroutine(WaitForAttackResolvedThenAdvance(_currentStepIndex));
+            }
+
             EventBus.Publish(new OnTutorialStepChanged
             {
                 tutorialId = _activeTutorial.tutorialId,
                 stepIndex = step.stepIndex,
-                // instructionKey 지정 시 CSV 텍스트로 해석, 없으면 직접입력 instruction 사용(하위호환).
-                instruction = !string.IsNullOrEmpty(step.instructionKey)
-                    ? LocalizationService.Get(step.instructionKey)
-                    : step.instruction
+                instruction = ResolveInstructionText(step)
             });
+        }
+
+        // ROLLBACK_TUTORIAL_TEXTDATA_NEWLINE_20260713: 스텝 표시 텍스트 해석.
+        //   instructionKey 지정 시 LocalizationService.Get(국가별 TextData), 없으면 직접입력 instruction(폴백).
+        //   ※ CSV 값의 리터럴 "\n"(백슬래시+n 두 글자)을 실제 줄바꿈으로 변환 — 하드코딩 C# "\n"(진짜 줄바꿈)과
+        //   표시 일치. (직접입력 instruction 엔 리터럴 "\n"이 없어 무영향.)
+        private static string ResolveInstructionText(TutorialStep step)
+        {
+            string text = !string.IsNullOrEmpty(step.instructionKey)
+                ? LocalizationService.Get(step.instructionKey)
+                : step.instruction;
+            return string.IsNullOrEmpty(text) ? text : text.Replace("\\n", "\n");
         }
 
         private void CompleteTutorial()
@@ -1187,8 +1209,11 @@ namespace BalloonFlow
                     new TutorialStep
                     {
                         stepIndex = 0,
-                        // [#4] 1.0 EN-only — 한국어 글리프 미포함 폰트라 깨져 보임. 명세 §4-3 영문으로 교체.
+                        // ROLLBACK_TUTORIAL_TEXTDATA_KEY_20260713: instructionKey 지정 → 국가별 TextData 사용.
+                        //   (기존 [#4] EN-only 하드코딩은 폰트 한글글리프 부재 때문 — 폰트 스왑/로컬라이징 진행 중이라
+                        //   키로 전환. instruction 은 CSV 미로드/키 부재 시 폴백으로 유지.)
                         instruction = "Conveyor almost full!\nClear it or fail!",
+                        instructionKey = "tutorial.allmostfull.warning",
                         highlightTarget = string.Empty,
                         requireAction = ACTION_TAP_ANYWHERE,
                         isComplete = false,
@@ -1444,8 +1469,62 @@ namespace BalloonFlow
 
             if (step.requireAction == ACTION_TAP_HOLDER)
             {
-                AdvanceStep();
+                // ROLLBACK_TUTORIAL_HOLDER_TARGET_LOCK_20260713: highlightTarget="holder_N" 지정 시 그 홀더 탭에서만
+                //   진행(다른 홀더 탭은 무시). 미지정(-1)이면 기존대로 아무 홀더나 진행.
+                int target = ParseHolderTarget(step.highlightTarget);
+                if (target < 0 || evt.holderId == target)
+                    AdvanceStep();
             }
+        }
+
+        // ROLLBACK_TUTORIAL_HOLDER_TARGET_LOCK_20260713: "holder_N" → N(홀더 id), 그 외/미지정 → -1.
+        private static int ParseHolderTarget(string highlightTarget)
+        {
+            const string prefix = "holder_";
+            if (string.IsNullOrEmpty(highlightTarget) || !highlightTarget.StartsWith(prefix)) return -1;
+            return int.TryParse(highlightTarget.Substring(prefix.Length), out int idx) ? idx : -1;
+        }
+
+        /// <summary>ROLLBACK_TUTORIAL_HOLDER_TARGET_LOCK_20260713: 현재 스텝이 특정 홀더 탭 대기 중이면 true + 타겟 id.
+        ///   InputHandler 가 비타겟 홀더(월드 콜라이더)를 차단하는 데 사용(컷아웃은 UI만 막음).</summary>
+        public static bool IsAwaitingHolderTap(out int targetHolderId)
+        {
+            targetHolderId = -1;
+            if (!HasInstance) return false;
+            TutorialController inst = Instance;
+            if (!inst._isTutorialActive) return false;
+            TutorialStep step = inst.GetCurrentStep();
+            if (step == null || step.requireAction != ACTION_TAP_HOLDER) return false;
+            int t = ParseHolderTarget(step.highlightTarget);
+            if (t < 0) return false;
+            targetHolderId = t;
+            return true;
+        }
+
+        /// <summary>ROLLBACK_TUTORIAL_WAIT_ATTACK_20260713: 배치 다트의 공격이 다 끝날 때까지(발사체 0) 대기 후 다음 스텝.
+        ///   Phase1: 공격 시작(발사체 등장)까지 짧게 대기 → tap 직후 '아직 0'인 순간의 오조기-진행 방지.
+        ///   Phase2: 발사체가 모두 해소될 때까지 대기(=풍선 소멸). deadline 백스톱으로 소프트락 방지.</summary>
+        private IEnumerator WaitForAttackResolvedThenAdvance(int stepIndexAtStart)
+        {
+            // Phase 1 — 공격 시작 대기(최대 1s). 발사체가 뜨면 즉시 Phase 2.
+            float startDeadline = Time.unscaledTime + 1.0f;
+            while (Time.unscaledTime < startDeadline
+                   && !(DartManager.HasInstance && DartManager.Instance.HasActiveProjectiles))
+                yield return null;
+
+            // Phase 2 — 모든 발사체 해소까지.
+            float deadline = Time.unscaledTime + WAIT_ATTACK_DEADLINE;
+            while (Time.unscaledTime < deadline
+                   && DartManager.HasInstance && DartManager.Instance.HasActiveProjectiles)
+                yield return null;
+
+            // pop 애니메이션 정착 여유.
+            yield return new WaitForSecondsRealtime(0.25f);
+
+            _waitAttackCoroutine = null;
+            // 그 사이 스텝이 바뀌지 않았을 때만 진행(중복 advance 방지).
+            if (_isTutorialActive && _currentStepIndex == stepIndexAtStart)
+                AdvanceStep();
         }
 
         private void HandleBalloonPopped(OnBalloonPopped evt)

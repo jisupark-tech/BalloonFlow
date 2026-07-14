@@ -220,6 +220,15 @@ namespace BalloonFlow
 
             bool boosterAwaiting = awaitingHolderSelection;
 
+            // ROLLBACK_TUTORIAL_HOLDER_TARGET_LOCK_20260713: tap_holder 튜토가 특정 홀더(highlightTarget="holder_N")를
+            //   타겟팅하면 그 홀더만 허용 — 컷아웃은 UI만 막고 홀더는 월드 콜라이더라 여기서 별도 차단(IsAwaitingItemTap
+            //   이 모든 홀더 막는 패턴과 동형). 부스터 월드 선택 중엔 예외. 미타겟(-1)이면 통과.
+            if (!boosterAwaiting
+                && TutorialController.HasInstance
+                && TutorialController.IsAwaitingHolderTap(out int __tutTargetHolder)
+                && holder.HolderId != __tutTargetHolder)
+                return;
+
             // ROLLBACK_DEPLOYING_BOX_UNTOUCHABLE_20260619: 레일에 배치 중(isDeploying)/이동 중(isMovingToRail)인
             //   다트 박스는 터치 무시. 배치 중 박스는 앞줄을 벗어나 있어 아래 IsInFrontRow=false 분기로 빠져
             //   OnHolderClickAnim(TriggerClick)이 발행 → 박스 뚜껑이 다시 닫히는 버그. 배포 중엔 입력 자체를 막는다.

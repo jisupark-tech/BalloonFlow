@@ -30,7 +30,9 @@ namespace BalloonFlow.Editor
 
         private static readonly string[] ACTION_OPTIONS =
         {
-            "none", "tap_holder", "tap_item", "wait_pop", "tap_anywhere"
+            // ROLLBACK_TUTORIAL_WAIT_ATTACK_20260713: wait_attack_resolved — 배치 다트가 풍선을 다 공격(발사체 0)할
+            //   때까지 전체 터치 방어 후 자동 진행.
+            "none", "tap_holder", "tap_item", "wait_pop", "tap_anywhere", "wait_attack_resolved"
         };
 
         #endregion
@@ -55,6 +57,9 @@ namespace BalloonFlow.Editor
         private class EditableStep
         {
             public string instruction = "Tap here!";
+            // ROLLBACK_TUTORIAL_TEXTDATA_KEY_20260713: 지정 시 런타임이 LocalizationService.Get(instructionKey) 로
+            //   TextData(국가별) 텍스트 사용. 비면 위 instruction(직접입력) 폴백. (렌더/카탈로그 배선은 이미 존재.)
+            public string instructionKey = "";
             public string highlightTarget = "(none)";
             public string requireAction = "none";
             // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622: 튜토리얼 통한 아이템 사용 강제 스텝에서 Skip(X) 숨김.
@@ -119,6 +124,11 @@ namespace BalloonFlow.Editor
             GUI.backgroundColor = Color.white;
             if (GUILayout.Button("📂 Load Catalog", EditorStyles.toolbarButton, GUILayout.Width(110)))
                 LoadFromCatalog();
+
+            // ROLLBACK_TUTORIAL_TEXTDATA_LIVE_20260713: TextData.csv 를 다른 터미널/외부에서 수정한 뒤, 에디터가
+            //   옛 캐시(LocalizationService._byKey)를 들고 있어 키/미리보기가 갱신 안 되는 문제 — 강제 재임포트+Reload.
+            if (GUILayout.Button("↻ TextData", EditorStyles.toolbarButton, GUILayout.Width(90)))
+                ReloadTextData(force: true);
 
             GUILayout.Space(12);
 
@@ -283,6 +293,10 @@ namespace BalloonFlow.Editor
                 // Instruction text (multi-line)
                 EditorGUILayout.LabelField("Instruction:");
                 step.instruction = EditorGUILayout.TextArea(step.instruction, GUILayout.Height(40));
+
+                // ROLLBACK_TUTORIAL_TEXTDATA_KEY_20260713: TextData 키 선택(국가별 텍스트). 지정 시 런타임이
+                //   LocalizationService.Get(instructionKey) 사용, 비면 위 Instruction(직접입력) 폴백.
+                DrawInstructionKeyDropdown(step);
 
                 // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622: instruction 텍스트 색상.
                 //   체크 시 그 색 적용, 해제 시 프리팹 기본색 사용.
@@ -502,6 +516,9 @@ namespace BalloonFlow.Editor
                     sb.AppendLine("        {");
                     sb.AppendLine($"            stepIndex = {i},");
                     sb.AppendLine($"            instruction = \"{EscapeString(step.instruction)}\",");
+                    // ROLLBACK_TUTORIAL_TEXTDATA_KEY_20260713: 키도 codegen(비면 생략).
+                    if (!string.IsNullOrEmpty(step.instructionKey))
+                        sb.AppendLine($"            instructionKey = \"{EscapeString(step.instructionKey)}\",");
                     sb.AppendLine($"            highlightTarget = {target},");
                     sb.AppendLine($"            requireAction = {action},");
                     sb.AppendLine($"            hideSkipButton = {step.hideSkipButton.ToString().ToLowerInvariant()},"); // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622
@@ -572,6 +589,56 @@ namespace BalloonFlow.Editor
             return catalog;
         }
 
+        // ROLLBACK_TUTORIAL_TEXTDATA_LIVE_20260713: TextData 최신화 — 외부(다른 터미널) 수정분을 에디터에 즉시 반영.
+        private const string TEXTDATA_ASSET_PATH = "Assets/Resources/TextData/TextData.csv";
+        private void ReloadTextData(bool force)
+        {
+            // force: CSV 에셋 강제 재임포트(디스크→TextAsset 동기) 후 로컬라이제이션 캐시 리로드.
+            if (force)
+                AssetDatabase.ImportAsset(TEXTDATA_ASSET_PATH, ImportAssetOptions.ForceUpdate);
+            LocalizationService.Reload(); // _byKey/_langCodes 재로드 → 키 목록·미리보기 갱신
+            Repaint();
+        }
+
+        // 창에 포커스가 올 때마다 TextData 반영(Unity 가 포커스 시 CSV 를 auto-reimport 하므로 리로드만).
+        //   Play 중엔 런타임 로컬라이제이션을 흔들지 않도록 edit-mode 에서만(수동 ↻ TextData 는 언제나 가능).
+        private void OnFocus()
+        {
+            if (Application.isPlaying) return;
+            LocalizationService.Reload();
+            Repaint();
+        }
+
+        // ROLLBACK_TUTORIAL_TEXTDATA_KEY_20260713: TextData 키 드롭다운 — LocalizationService.AllKeys 로 목록 구성.
+        //   "(none)"=키 미사용(instruction 직접입력 폴백). 현재 값이 목록에 없어도(CSV 아직 미추가 등) 유지되게 추가.
+        //   ※ TextData.csv 는 별도 작업(다른 터미널)에서 채움 — 여기선 키 선택만.
+        private void DrawInstructionKeyDropdown(EditableStep step)
+        {
+            var keys = new System.Collections.Generic.List<string> { "(none)" };
+            try { keys.AddRange(LocalizationService.AllKeys); } catch { /* 에디터에서 CSV 로드 실패해도 무해 */ }
+            if (!string.IsNullOrEmpty(step.instructionKey) && !keys.Contains(step.instructionKey))
+                keys.Add(step.instructionKey); // 목록에 없는 현재 키 보존
+            string[] arr = keys.ToArray();
+            int cur = string.IsNullOrEmpty(step.instructionKey) ? 0 : System.Array.IndexOf(arr, step.instructionKey);
+            if (cur < 0) cur = 0;
+            int sel = EditorGUILayout.Popup(
+                new GUIContent("Text Key (TextData)", "지정 시 국가별 TextData 텍스트 사용(LocalizationService). (none)=위 Instruction 직접입력. TextData 수정 후 안 보이면 툴바 ↻ TextData."),
+                cur, arr);
+            step.instructionKey = sel <= 0 ? "" : arr[sel];
+
+            // ROLLBACK_TUTORIAL_TEXTDATA_LIVE_20260713: 선택 키의 실제 텍스트 미리보기(현재 언어). CSV 리터럴 "\n"→줄바꿈.
+            //   키가 TextData 에 없으면 경고(=CSV 미추가/미리로드). 툴바 ↻ TextData 로 즉시 갱신.
+            if (!string.IsNullOrEmpty(step.instructionKey))
+            {
+                bool has = LocalizationService.Has(step.instructionKey);
+                string preview = has
+                    ? LocalizationService.Get(step.instructionKey).Replace("\\n", "\n")
+                    : "(TextData 에 이 키 없음 — CSV 추가 후 ↻ TextData / 재임포트 필요)";
+                EditorGUILayout.HelpBox($"[{LocalizationService.CurrentLanguageCode}] {preview}",
+                    has ? MessageType.None : MessageType.Warning);
+            }
+        }
+
         private void SaveToCatalog()
         {
             var catalog = FindOrCreateCatalog();
@@ -599,6 +666,7 @@ namespace BalloonFlow.Editor
                     {
                         stepIndex = i,
                         instruction = s.instruction,
+                        instructionKey = s.instructionKey, // ROLLBACK_TUTORIAL_TEXTDATA_KEY_20260713
                         highlightTarget = s.highlightTarget == "(none)" ? string.Empty : s.highlightTarget,
                         requireAction = s.requireAction,
                         hideSkipButton = s.hideSkipButton, // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622
@@ -672,6 +740,7 @@ namespace BalloonFlow.Editor
                         edit.steps.Add(new EditableStep
                         {
                             instruction = s.instruction ?? "",
+                            instructionKey = s.instructionKey ?? "", // ROLLBACK_TUTORIAL_TEXTDATA_KEY_20260713
                             highlightTarget = string.IsNullOrEmpty(s.highlightTarget) ? "(none)" : s.highlightTarget,
                             requireAction = string.IsNullOrEmpty(s.requireAction) ? "none" : s.requireAction,
                             hideSkipButton = s.hideSkipButton, // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622

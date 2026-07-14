@@ -263,6 +263,11 @@ namespace BalloonFlow
         private readonly Dictionary<int, SlotDartVisual> _dartVisuals = new Dictionary<int, SlotDartVisual>();
         private readonly List<DartProjectile> _activeProjectiles = new List<DartProjectile>();
         private readonly Stack<DartProjectile> _projectilePool = new Stack<DartProjectile>(32);
+
+        // ROLLBACK_TUTORIAL_WAIT_ATTACK_20260713: 튜토 'wait_attack_resolved' 스텝이 공격 완료 판정에 사용 —
+        //   현재 날아가는(풍선 공격 중) 발사체가 있는가. 0 = 이번 배포의 공격이 다 끝남(idle 불변식과 동일 기준).
+        public bool HasActiveProjectiles => _activeProjectiles.Count > 0;
+        public int ActiveProjectileCount => _activeProjectiles.Count;
         // ROLLBACK_DART_RENDERER_LIST_CACHE:
         // Restore GetComponentsInChildren<Renderer>() array fallback in ApplyColor if this causes
         // prefab-specific renderer assignment issues.

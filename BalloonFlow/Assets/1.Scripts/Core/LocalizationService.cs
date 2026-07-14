@@ -85,6 +85,27 @@ namespace BalloonFlow
         public static string CurrentLanguageCode
             => (_langCodes != null && _lang >= 0 && _lang < _langCodes.Length) ? _langCodes[_lang] : "EN";
 
+        // ROLLBACK_LOCALIZATION_KO_20260713: 부팅 시 디바이스 언어로 초기 언어 선택.
+        //   지원 언어(CSV 의 Text_* 컬럼)에 있으면 전환, 없으면 EN 유지. UIText 는 씬 로드 후 OnEnable 에
+        //   현재 언어로 Apply 하므로, 씬 로드 전(BeforeSceneLoad)에 언어를 정해두면 첫 표시부터 반영된다.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void AutoSelectDeviceLanguage()
+        {
+            string code = DeviceLanguageToCode(Application.systemLanguage);
+            if (code != "EN") SetLanguageByCode(code); // EN 은 기본 슬롯 → no-op
+        }
+
+        /// <summary>디바이스 SystemLanguage → CSV 언어 코드(Text_&lt;CODE&gt;). 미지원은 EN.</summary>
+        private static string DeviceLanguageToCode(SystemLanguage lang)
+        {
+            switch (lang)
+            {
+                case SystemLanguage.Korean: return "KO";
+                // 향후 CSV 에 Text_JA / Text_ZH 등 추가 시 여기에 매핑만 늘리면 됨.
+                default: return "EN";
+            }
+        }
+
         // ─── CSV 로드/파싱 ─────────────────────────────────────────
 
         /// <summary>강제 재로드(에디터 마이그레이션 직후 등).</summary>
