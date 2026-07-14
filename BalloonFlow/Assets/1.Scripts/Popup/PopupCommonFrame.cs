@@ -493,17 +493,8 @@ namespace BalloonFlow
                 _matTitleOutlineNormal,
                 _matTitleOutlineHard,
                 _matTitleOutlineSuperHard);
-            // ROLLBACK_LOCALIZATION_HARDCODE_FIX_20260714: KO 면 아웃라인도 Chiron 폰트 + 동일 색/난이도 프리셋으로 매핑.
-            if (_txtTitleOutline != null &&
-                string.Equals(LocalizationService.CurrentLanguageCode, "KO", System.StringComparison.OrdinalIgnoreCase))
-            {
-                TMP_FontAsset ko = LocalizationFont.LoadKoFont();
-                if (ko != null)
-                {
-                    if (_txtTitleOutline.font != ko) _txtTitleOutline.font = ko;
-                    if (mat != null) mat = UIOutlineStyle.MaterialForFont(mat, ko, "ChironGoRoundTC-Black");
-                }
-            }
+            // ROLLBACK_FONT_SWAP_REMOVED_20260714: Chiron 폰트 스왑 제거 — 난이도 머티리얼/색만 적용.
+            //   폰트는 프리팹 Poppins 유지, 한글은 Poppins-Bold SDF 의 Chiron Fallback 으로 자동 렌더.
             UIOutlineStyle.ApplyMaterialOrColor(_txtTitleOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
         }
 

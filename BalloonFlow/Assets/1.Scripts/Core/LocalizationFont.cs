@@ -38,20 +38,10 @@ namespace BalloonFlow
         /// <summary>현재 언어가 KO 면 Poppins 계열 TMP 를 Chiron 으로 스왑(색/아웃라인 보존). 그 외/비-Poppins/이미 KO → no-op.</summary>
         public static void Apply(TMP_Text tmp)
         {
-            if (tmp == null) return;
-            if (!string.Equals(LocalizationService.CurrentLanguageCode, "KO", StringComparison.OrdinalIgnoreCase)) return;
-
-            TMP_FontAsset font = tmp.font;
-            if (font == null) return;
-            if (font.name.IndexOf(KO_FAMILY, StringComparison.OrdinalIgnoreCase) >= 0) return; // 이미 KO
-            if (font.name.IndexOf("Poppins", StringComparison.OrdinalIgnoreCase) < 0) return;  // Poppins 만 스왑(숫자/기타 폰트 보호)
-
-            TMP_FontAsset ko = LoadKoFont();
-            if (ko == null) return;
-
-            Material mat = tmp.fontSharedMaterial;
-            tmp.font = ko;                                                       // 폰트 먼저(setter 가 fontSharedMaterial 리셋)
-            tmp.fontSharedMaterial = UIOutlineStyle.MaterialForFont(mat, ko, KO_FAMILY);
+            // ROLLBACK_FONT_SWAP_REMOVED_20260714: Poppins-Bold SDF 에 ChironGoRoundTC-Black SDF Fallback 추가로
+            //   한글은 TMP fallback 이 자동 렌더 → 언어별 폰트 스왑 불필요(아웃라인/fill 이격도 사라짐). 이 메서드는 no-op.
+            //   (롤백: 아래 return 제거.)
+            // no-op (위 주석 참고).
         }
     }
 }

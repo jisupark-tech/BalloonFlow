@@ -1778,11 +1778,8 @@ namespace BalloonFlow
         private static string FormatWsRoundRemaining(System.TimeSpan r)
         {
             if (r.Ticks < 0) r = System.TimeSpan.Zero;
-            if (r.TotalDays >= 1.0)
-                return $"{(int)r.TotalDays}d {r.Hours}h";
-            if (r.TotalHours >= 1.0)
-                return $"{r.Hours}h {r.Minutes}m";
-            return $"{r.Minutes}m {r.Seconds}s";
+            // ROLLBACK_WS_TIME_LOCALIZE_20260714: CSV uilobby.texttimer ("{}d {}h" / "{}일 {}시간") 사용 — 일+시간.
+            return LocalizationService.GetFilled("uilobby.texttimer", (int)r.TotalDays, r.Hours);
         }
 
         private void ResolveWsTexts()

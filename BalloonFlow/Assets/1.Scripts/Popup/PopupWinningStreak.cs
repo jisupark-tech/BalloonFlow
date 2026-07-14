@@ -382,7 +382,8 @@ namespace BalloonFlow
             int days = (int)remaining.TotalDays;
             int hours = remaining.Hours;
             _frame.ShowTimer(true);
-            _frame.SetTimerText($"{days}d {hours:D2}h");
+            // ROLLBACK_WS_TIME_LOCALIZE_20260714: CSV uilobby.texttimer ("{}d {}h" / "{}일 {}시간") 사용 — 일+시간.
+            _frame.SetTimerText(LocalizationService.GetFilled("uilobby.texttimer", days, hours));
         }
 
         // BtnSingle(PLAY) — LobbyController.OnPlayClicked 패턴 모사. 라이프 부족 시 PopupMoreLive 분기.
@@ -1355,10 +1356,12 @@ namespace BalloonFlow
         private static string FormatInfiniteHearts(int seconds)
         {
             if (seconds <= 0) return "";
+            // ROLLBACK_WS_TIME_LOCALIZE_20260714: KO 보상 시간 단위(시간/분/초). 한글은 폰트 fallback 으로 렌더.
+            bool ko = LocalizationService.CurrentLanguageCode == "KO";
             int h = seconds / 3600;
-            if (h >= 1) return $"{h}h";
+            if (h >= 1) return ko ? $"{h}시간" : $"{h}h";
             int m = seconds / 60;
-            return m > 0 ? $"{m}m" : $"{seconds}s";
+            return m > 0 ? (ko ? $"{m}분" : $"{m}m") : (ko ? $"{seconds}초" : $"{seconds}s");
         }
 
         private static string BuildBoxRewardText(List<RewardEntry> rewards)

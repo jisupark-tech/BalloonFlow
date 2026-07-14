@@ -74,37 +74,9 @@ namespace BalloonFlow
         ///   그 외 = 프리팹 원본(Poppins). Poppins 기반 텍스트만 스왑(숫자/타 폰트는 원본 유지).</summary>
         private void ApplyFont(TMP_Text tmp)
         {
-            if (!_fontCaptured)
-            {
-                _origFont = tmp.font;
-                _origMat  = tmp.fontSharedMaterial;
-                _fontCaptured = true;
-            }
-            if (_origFont == null || _origFont.name.IndexOf("Poppins", System.StringComparison.OrdinalIgnoreCase) < 0)
-                return; // Poppins 아니면 스왑 안 함(숫자/기타 폰트 보호)
-
-            if (LocalizationService.CurrentLanguageCode == "KO")
-            {
-                var koFont = LoadKoFont();
-                if (koFont == null) return;                 // Chiron 없으면 원본 유지(크래시 방지)
-                tmp.font = koFont;                          // 폰트 먼저(머티리얼 리셋) → 머티리얼 지정
-                tmp.fontSharedMaterial = MapKoMaterial(_origMat, koFont);
-            }
-            else
-            {
-                tmp.font = _origFont;
-                if (_origMat != null) tmp.fontSharedMaterial = _origMat;
-            }
-
-            // ROLLBACK_LOCALIZATION_KO_FONT_20260714: 자식 TMP(아웃라인 밑 fill 등)도 같은 폰트로 → 아웃라인/fill 이격 방지.
-            //   fill 이 UIText/Adapter 를 안 달고 있어도(코드 세팅 타이틀 등) 여기서 폰트가 동기화됨.
-            var applied = tmp.font;
-            if (applied != null)
-            {
-                var kids = tmp.GetComponentsInChildren<TMP_Text>(true);
-                for (int i = 0; i < kids.Length; i++)
-                    if (kids[i] != null && kids[i] != tmp && kids[i].font != applied) kids[i].font = applied;
-            }
+            // ROLLBACK_FONT_SWAP_REMOVED_20260714: Poppins-Bold SDF 에 ChironGoRoundTC-Black SDF Fallback 추가로
+            //   한글은 TMP fallback 이 자동 렌더 → 언어별 폰트 스왑 불필요(아웃라인/fill 이격도 사라짐). no-op.
+            //   (텍스트 세팅은 Apply 가 계속 수행. 롤백: 이 메서드 본문을 이전 스왑 로직으로 복원.)
         }
 
         private static TMP_FontAsset LoadKoFont() => LocalizationFont.LoadKoFont();

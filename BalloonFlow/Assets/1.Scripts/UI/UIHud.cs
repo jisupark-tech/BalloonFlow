@@ -480,28 +480,18 @@ namespace BalloonFlow
                 _matItemCountOutlineGreen = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_GREEN_OUTLINE);
             if (_matItemCountOutlineGreen == null) return;
 
-            // ROLLBACK_OUTLINE_LANG_FONT_20260714 예외: 아이템 수량은 항상 영어 폰트(Poppins).
-            //   머티리얼(Poppins-Green)에 폰트를 맞춰 폰트↔머티리얼 불일치 깨짐 방지.
-            TMPro.TMP_FontAsset itemFont = UIOutlineStyle.FontAssetForMaterial(_matItemCountOutlineGreen);
-            ApplyFixedItemCountOutline(_itemCountOutlineShuffle, itemFont);
-            ApplyFixedItemCountOutline(_itemCountOutlineRemove, itemFont);
-            ApplyFixedItemCountOutline(_itemCountOutlineHand, itemFont);
-            // 수량 본문(fill)도 같은 영어 폰트로(fill 이 한국어로 남아 아웃라인과 어긋나는 문제).
-            if (itemFont != null)
-            {
-                if (_itemCountShuffle != null && _itemCountShuffle.font != itemFont) _itemCountShuffle.font = itemFont;
-                if (_itemCountRemove != null && _itemCountRemove.font != itemFont) _itemCountRemove.font = itemFont;
-                if (_itemCountHand != null && _itemCountHand.font != itemFont) _itemCountHand.font = itemFont;
-            }
+            // ROLLBACK_FONT_SWAP_REMOVED_20260714: 폰트 스왑 제거 — 머티리얼만 적용(한글은 fallback 렌더).
+            ApplyItemCountMat(_itemCountOutlineShuffle);
+            ApplyItemCountMat(_itemCountOutlineRemove);
+            ApplyItemCountMat(_itemCountOutlineHand);
         }
 
-        private void ApplyFixedItemCountOutline(TMPro.TMP_Text t, TMPro.TMP_FontAsset font)
+        private void ApplyItemCountMat(TMPro.TMP_Text t)
         {
-            if (t == null) return;
-            bool dirty = false;
-            if (font != null && t.font != font) { t.font = font; dirty = true; } // 폰트 먼저(setter 가 material 리셋)
-            if (t.fontSharedMaterial != _matItemCountOutlineGreen) { t.fontSharedMaterial = _matItemCountOutlineGreen; dirty = true; }
-            if (dirty) { t.havePropertiesChanged = true; t.ForceMeshUpdate(); }
+            if (t == null || t.fontSharedMaterial == _matItemCountOutlineGreen) return;
+            t.fontSharedMaterial = _matItemCountOutlineGreen;
+            t.havePropertiesChanged = true;
+            t.ForceMeshUpdate();
         }
 
         private void OnEnable()
@@ -727,9 +717,6 @@ namespace BalloonFlow
             // ROLLBACK_OUTLINE_LANG_FONT_20260714 예외: 배속(x1/x2)은 언어 무관 항상 영어 폰트.
             //   ApplyFixedOutline = 언어 스왑 안 하되 폰트를 머티리얼(영어) 패밀리에 맞춰 폰트↔머티리얼 불일치 깨짐 방지.
             UIOutlineStyle.ApplyFixedOutline(_txtSpeedOutline, speedOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
-            // 배속 본문(fill)도 아웃라인과 같은 영어 폰트로(fill 이 한국어로 남아 어긋나는 문제).
-            TMPro.TMP_FontAsset speedFillFont = UIOutlineStyle.FontAssetForMaterial(speedOutlineMat);
-            if (speedFillFont != null && _txtSpeed != null && _txtSpeed.font != speedFillFont) _txtSpeed.font = speedFillFont;
 
             // 배경 색상 (frameBottom)
             Sprite bgSpr = difficulty switch
@@ -790,15 +777,6 @@ namespace BalloonFlow
             UIOutlineStyle.ApplyFixedOutline(_txtLockRemoveOutline, lockOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
             UIOutlineStyle.ApplyFixedOutline(_txtLockHandOutline, lockOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
 
-            // ROLLBACK_OUTLINE_LANG_FONT_20260714 예외: Lock 본문(fill, 자식 TxtLock)도 아웃라인과 같은 영어 폰트로.
-            //   fill 이 한국어 폰트로 남으면 아웃라인(영어)과 글리프가 어긋남 → 아웃라인 머티리얼 패밀리 폰트로 강제.
-            TMPro.TMP_FontAsset lockFillFont = UIOutlineStyle.FontAssetForMaterial(lockOutlineMat);
-            if (lockFillFont != null)
-            {
-                if (_txtLockShuffle != null && _txtLockShuffle.font != lockFillFont) _txtLockShuffle.font = lockFillFont;
-                if (_txtLockRemove != null && _txtLockRemove.font != lockFillFont) _txtLockRemove.font = lockFillFont;
-                if (_txtLockHand != null && _txtLockHand.font != lockFillFont) _txtLockHand.font = lockFillFont;
-            }
 
             // Percentage 텍스트 아웃라인 머티리얼
             Material percentageOutlineMat = difficulty switch

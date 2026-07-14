@@ -51,6 +51,21 @@ namespace BalloonFlow
             return text.Replace("{" + token + "}", replacement);
         }
 
+        // ROLLBACK_WS_TIME_LOCALIZE_20260714: "{}" 빈 플레이스홀더를 values 순서대로 치환(예: "{}d {}h" → "3d 05h").
+        //   uilobby.texttimer 처럼 순차 "{}" 를 쓰는 키용.
+        public static string GetFilled(string key, params object[] values)
+        {
+            string s = Get(key);
+            if (values == null) return s;
+            for (int i = 0; i < values.Length; i++)
+            {
+                int idx = s.IndexOf("{}", System.StringComparison.Ordinal);
+                if (idx < 0) break;
+                s = s.Substring(0, idx) + (values[i] != null ? values[i].ToString() : string.Empty) + s.Substring(idx + 2);
+            }
+            return s;
+        }
+
         public static bool Has(string key)
         {
             if (string.IsNullOrEmpty(key)) return false;

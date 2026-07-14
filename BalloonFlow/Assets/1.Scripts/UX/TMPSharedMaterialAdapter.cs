@@ -54,30 +54,12 @@ namespace BalloonFlow.UX
             _captured = true;
         }
 
+        // ROLLBACK_FONT_SWAP_REMOVED_20260714: Poppins-Bold SDF 에 Chiron Fallback 추가로 언어별 폰트 스왑 불필요.
+        //   폰트/자식 스왑 제거 — _sharedBaseMaterial 을 fontSharedMaterial 에 핀만(배칭 유지, 원래 목적). 한글은 fallback 렌더.
         private void Apply()
         {
             if (_tmp == null) return;
-
-            Material baseMat = _sharedBaseMaterial != null ? _sharedBaseMaterial : _originalMaterial;
-
-            Material mat;
-            TMP_FontAsset font;
-            if (_ignoreLanguage)
-            {
-                // 언어 무관 고정: base 머티리얼 그대로 + 그 패밀리 폰트로 맞춤(폰트↔머티리얼 불일치 방지).
-                mat = baseMat;
-                font = UIOutlineStyle.FontAssetForMaterial(baseMat);
-            }
-            else
-            {
-                mat = UIOutlineStyle.ResolveLanguageOutline(baseMat, out font);
-            }
-
-            if (font != null && _tmp.font != font) _tmp.font = font; // 폰트 먼저(setter 가 material 리셋)
-
-            // 자식 fill 텍스트(아웃라인 밑 Txt)도 같은 폰트로 → 이격 방지. fill 이 UIText/Adapter 없어도 여기서 커버.
-            if (_syncChildrenFont && font != null) SyncChildrenFont(font);
-
+            Material mat = _sharedBaseMaterial;
             if (mat == null) return;
 
             Material cur = _tmp.fontSharedMaterial;
@@ -90,18 +72,6 @@ namespace BalloonFlow.UX
 
             _tmp.fontSharedMaterial = mat;
             _tmp.SetMaterialDirty();
-        }
-
-        // 자식 TMP 들의 폰트를 동일하게(자기 자신 제외). 머티리얼은 폰트 기본값을 따라감(fill 은 보통 plain).
-        private void SyncChildrenFont(TMP_FontAsset font)
-        {
-            var kids = GetComponentsInChildren<TMP_Text>(true);
-            for (int i = 0; i < kids.Length; i++)
-            {
-                var k = kids[i];
-                if (k == _tmp || k == null) continue;
-                if (k.font != font) k.font = font;
-            }
         }
     }
 }

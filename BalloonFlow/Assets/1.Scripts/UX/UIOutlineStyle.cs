@@ -41,29 +41,16 @@ namespace BalloonFlow
             return m != null ? m : baseMat;
         }
 
-        // 언어인지 아웃라인 적용: 폰트를 먼저 교체(setter 가 fontSharedMaterial 을 리셋)한 뒤 프리셋 머티리얼/색 적용.
+        // ROLLBACK_FONT_SWAP_REMOVED_20260714: Poppins-Bold SDF 에 Chiron Fallback 추가로 폰트 스왑 불필요.
+        //   아래 3개 헬퍼는 폰트를 건드리지 않고 머티리얼/색만 적용(프리팹 Poppins 유지, 한글은 fallback 렌더).
         public static void ApplyLanguageAwareOutline(TMP_Text text, Material baseMat, Color color)
         {
-            if (text == null) return;
-            Material mat = ResolveLanguageOutline(baseMat, out TMP_FontAsset font);
-            if (font != null && text.font != font) text.font = font;
-            ApplyMaterialOrColor(text, mat, color);
+            ApplyMaterialOrColor(text, baseMat, color);
         }
 
-        // 아웃라인 + fill 쌍에 언어인지 아웃라인 적용(폰트/머티리얼 일관 + fill 폰트 동기화 = 이격 방지).
-        //   코드가 난이도별 프리셋을 세팅하는 텍스트(레일박스·플레이버튼 등)용. font 해석 실패 시 폴백으로 최소한 폰트는 맞춤.
         public static void ApplyOutlineWithFill(TMP_Text outline, TMP_Text fill, Material baseMat, Color color)
         {
-            if (outline == null) return;
-            Material mat = ResolveLanguageOutline(baseMat, out TMP_FontAsset font);
-            if (font == null) font = FontAssetForMaterial(baseMat); // 로드 실패 시라도 패밀리 폰트 확보
-            if (font != null && outline.font != font) outline.font = font;
-            ApplyMaterialOrColor(outline, mat, color);
-            if (fill != null)
-            {
-                TMP_FontAsset target = font != null ? font : outline.font;
-                if (target != null && fill.font != target) fill.font = target;
-            }
+            ApplyMaterialOrColor(outline, baseMat, color);
         }
 
         // mat 이름의 폰트 패밀리 접두로 SDF 폰트 로드(mat 과 아틀라스가 맞는 폰트). 규약 밖이면 null.
@@ -77,13 +64,9 @@ namespace BalloonFlow
             return null;
         }
 
-        // 언어 무관 '고정' 적용: baseMat 을 그대로 쓰되 폰트를 baseMat 패밀리에 맞춰 교체(폰트↔머티리얼 불일치 깨짐 방지).
-        //   예: 배속(x1/x2) 처럼 항상 영어 폰트여야 하는 텍스트 — baseMat 이 Poppins 프리셋이면 폰트도 Poppins 로 강제.
+        // ROLLBACK_FONT_SWAP_REMOVED_20260714: 폰트 스왑 제거 — 머티리얼/색만 적용(폰트는 프리팹 Poppins 유지).
         public static void ApplyFixedOutline(TMP_Text text, Material baseMat, Color color)
         {
-            if (text == null) return;
-            TMP_FontAsset font = FontAssetForMaterial(baseMat);
-            if (font != null && text.font != font) text.font = font;
             ApplyMaterialOrColor(text, baseMat, color);
         }
 
