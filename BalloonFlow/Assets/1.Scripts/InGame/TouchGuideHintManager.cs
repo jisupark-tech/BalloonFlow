@@ -9,6 +9,8 @@ namespace BalloonFlow
     /// ROLLBACK_TOUCH_GUIDE_HINT_20260713: 터치 유도(핸드 포인터) 힌트.
     ///   1~5 스테이지 한정. 현재 터뜨려야 할 풍선(최외곽 색)과 같은 색의 대기 다트박스를 1~3행에서 찾아,
     ///   박스 실제 행과 무관하게 '그 열의 1행(탭 가능한 앞줄)' 위에 핸드 연출을 띄운다.
+    ///   - 타겟 색 확정(ROLLBACK_TOUCH_GUIDE_TARGETCOLOR_20260714): 최외곽 색이 여러 개면 '보드 전체 그 색 풍선 수'가
+    ///     가장 많은 색 하나를 타겟으로 확정(동률=색 id 작은 쪽) → 그 색 박스만 탐색. 확정 색 박스가 없으면 이번 사이클 힌트 없음.
     ///   - 우선순위: 가장 상단행(작은 row) → 동률이면 가장 우측열(큰 column). (터치 쉬운 것)
     ///   - Case2: 타겟이 2행이면 1행 위에 뜨고, 같은 열 비-타겟 탭으론 안 꺼짐(타겟이 1행으로 승격 후 탭돼야 종료).
     ///   - 종료: 타겟 holder 소멸(탭됨) / 다른 열 탭 / 1~3행 매칭 소멸.
@@ -30,11 +32,11 @@ namespace BalloonFlow
         //   선택해 인스펙터에서 조정(크기/회전/마진 즉시 반영). AddComponent 생성이라 Play 종료 시 코드 기본값 복귀 →
         //   확정되면 아래 기본값을 그 값으로 수정해 고정 사용.
         [Header("[Touch Hand — 튜닝값 (Play 중 조정 후 확정값을 기본값으로)]")]
-        [SerializeField, Tooltip("핸드 이미지 크기(px)")] private float _handSize = 120f;
-        [SerializeField, Tooltip("좌우 회전 각도(±도) — 까딱까딱 스윙 폭")] private float _rotAngle = 18f;
-        [SerializeField, Tooltip("한쪽 스윙 시간(초)")] private float _rotDuration = 0.5f;
-        [SerializeField, Tooltip("회전축 pivot(0~1) — 손끝/손목 기준")] private Vector2 _handPivot = new Vector2(0.75f, 0.1f);
-        [SerializeField, Tooltip("타겟 위치 대비 스크린 오프셋(px): +x 오른쪽, +y 위")] private Vector2 _positionMargin = Vector2.zero;
+        [SerializeField, Tooltip("핸드 이미지 크기(px)")] private float _handSize = 188f;
+        [SerializeField, Tooltip("좌우 회전 각도(±도) — 까딱까딱 스윙 폭")] private float _rotAngle = 10f;
+        [SerializeField, Tooltip("한쪽 스윙 시간(초)")] private float _rotDuration = 0.55f;
+        [SerializeField, Tooltip("회전축 pivot(0~1) — 손끝/손목 기준")] private Vector2 _handPivot = new Vector2(0.75f, -0.2f);
+        [SerializeField, Tooltip("타겟 위치 대비 스크린 오프셋(px): +x 오른쪽, +y 위")] private Vector2 _positionMargin = new Vector2(136,-188);
         private float _bobRotAngle = float.NaN, _bobRotDuration = float.NaN; // 라이브 회전 튜닝 반영용 캐시
 
         private int _targetHolderId = -1;
@@ -122,12 +124,30 @@ namespace BalloonFlow
 
         // ─── 타겟 선정 ───
 
+        // ROLLBACK_TOUCH_GUIDE_TARGETCOLOR_20260714: 최외곽 색이 여러 개일 때의 타겟 선정.
+        //   전체 순서: ① 타겟 색상 확정 → ② 박스 탐색 → ③ 존재 체크 → ④ 우선순위 선택 → ⑤ 연출 위치 결정.
+        //   ① 타겟 색상: 최외곽(공격 가능) 색들 중 '보드 전체 그 색 풍선 수'가 가장 많은 색. 동률이면 색 id 작은 쪽(결정론적).
+        //   ②~④ 박스: 확정된 타겟 색과 같은 대기 다트박스를 1~3행에서 탐색. 우선순위=상단행(작은 r)→동률 시 우측열(큰 c).
+        //   ⑤ 위치는 상위(ShowHintAtColumn)에서 해당 열 1행 기준으로 결정.
+        //   ※ 확정 색의 박스가 1~3행에 없으면(존재 체크 실패) 이번 사이클 힌트 없음(색 확정 우선 정책). 다음 idle 재획득.
         private bool TryAcquireTarget(out int holderId, out int column)
         {
             holderId = -1; column = -1;
             HashSet<int> colors = BoardStateManager.Instance.GetReachableOutermostColors();
             if (colors == null || colors.Count == 0) return false;
 
+            // ① 타겟 색상 확정 — 보드 전체 생존 풍선 수 최대 색(동률=색 id 작은 쪽).
+            if (!BalloonController.HasInstance) return false;
+            int targetColor = -1, bestCount = -1;
+            foreach (int c in colors)
+            {
+                int cnt = BalloonController.Instance.CountBalloonsByColor(c);
+                if (cnt > bestCount || (cnt == bestCount && (targetColor < 0 || c < targetColor)))
+                { bestCount = cnt; targetColor = c; }
+            }
+            if (targetColor < 0) return false;
+
+            // ②~④ 박스 탐색 → 존재 체크 → 우선순위 선택: 타겟 색과 같은 색 박스만.
             int cols = HolderManager.Instance.QueueColumns;
             int bestRow = int.MaxValue, bestCol = -1, bestId = -1;
             for (int c = 0; c < cols; c++)
@@ -139,13 +159,13 @@ namespace BalloonFlow
                 {
                     var h = list[r];
                     if (h == null || h.isDeploying || h.isMovingToRail || h.isConsumed) continue;
-                    if (!colors.Contains(h.color)) continue;
+                    if (h.color != targetColor) continue;   // 확정된 타겟 색만
                     // 우선순위: 상단행(작은 r) 우선, 동률이면 우측열(큰 c) 우선.
                     if (r < bestRow || (r == bestRow && c > bestCol))
                     { bestRow = r; bestCol = c; bestId = h.holderId; }
                 }
             }
-            if (bestId < 0) return false;
+            if (bestId < 0) return false;   // ③ 존재 체크 실패 → 힌트 없음
             holderId = bestId; column = bestCol; return true;
         }
 

@@ -1399,6 +1399,21 @@ namespace BalloonFlow
             return _reusableColorList.ToArray();
         }
 
+        // ROLLBACK_TOUCH_GUIDE_TARGETCOLOR_20260714: 색별 생존(비팝·비잠금) 풍선 수 — 무할당 카운트.
+        //   GetAllBalloonsByColor(color).Length 와 동일 집계지만 배열 생성 없음(터치 힌트 Update 매프레임 호출용).
+        public int CountBalloonsByColor(int color)
+        {
+            int n = 0;
+            foreach (KeyValuePair<int, BalloonData> pair in _balloons)
+            {
+                BalloonData data = pair.Value;
+                if (data.isPopped) continue;
+                if (data.gimmickType == GimmickLockKey) continue;
+                if (data.color == color) n++;
+            }
+            return n;
+        }
+
         // ROLLBACK_ZAP_GIMMICK_DAMAGE_20260705: Zap 한 번이 대상별로 몇 '발'의 히트를 넣는지.
         //   규칙2: 얼음 덮인 셀(Ice/iceOverlay)은 직접 대상 아님(0) — 밑 풍선 보호, 영역 HP 는 팝 이벤트로만 감소.
         //   규칙3: 색 기믹은 다트 1발처럼 HP -1 (선택색 일치 시). Barricade/FlexTube=튜브당 1, TargetBox=박스당 1(내부 배치처리).
