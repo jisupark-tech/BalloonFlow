@@ -15,7 +15,7 @@ namespace BalloonFlow.EditorTools
     public class EpisodeBuildBaker : IPreprocessBuildWithReport
     {
         private const string MasterDir    = "Assets/EditorData/Master";
-        private const string TestDir      = "Assets/EditorData/B";
+        private const string BDir      = "Assets/EditorData/B";
         private const string StreamingDir = "Assets/StreamingAssets";
 
         public int callbackOrder => 0;
@@ -53,9 +53,9 @@ namespace BalloonFlow.EditorTools
             }
 
             // Test → B variant (episode_XX_B.json) 만.
-            if (Directory.Exists(TestDir))
+            if (Directory.Exists(BDir))
             {
-                foreach (var f in Directory.GetFiles(TestDir, "episode_*_B.json"))
+                foreach (var f in Directory.GetFiles(BDir, "episode_*_B.json"))
                 {
                     File.Copy(f, Path.Combine(StreamingDir, Path.GetFileName(f)), true);
                     bN++;
@@ -65,7 +65,7 @@ namespace BalloonFlow.EditorTools
             // ROLLBACK_AB_EDITORDATA_20260714: 실측 최대 에피소드 번호를 Resources 매니페스트로 기록(빌드 런타임의
             //   전량-클리어 게이트 GetLevelCount 소스 — 빌드에선 StreamingAssets 디렉터리 열거가 불가하므로).
             int maxMaster = MaxEpisodeNum(MasterDir);                          // A(base) 상한
-            int maxBoth   = System.Math.Max(maxMaster, MaxEpisodeNum(TestDir)); // B 상한(Test 전용 신규 포함)
+            int maxBoth   = System.Math.Max(maxMaster, MaxEpisodeNum(BDir)); // B 상한(Test 전용 신규 포함)
             Directory.CreateDirectory("Assets/Resources");
             File.WriteAllText("Assets/Resources/episodes_max.txt", maxMaster.ToString());
             File.WriteAllText("Assets/Resources/episodes_max_b.txt", maxBoth.ToString());

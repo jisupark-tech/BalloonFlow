@@ -25,10 +25,17 @@ namespace BalloonFlow
         private const float IDLE_MIN = 5f;             // 튜토 종료 후 이만큼 무입력이어야 노출(하한)
         private const float IDLE_MAX = 10f;            // 〃 상한. 매 대기마다 [MIN,MAX] 랜덤(기계적 반복 방지)
         private const int HAND_SORTING_ORDER = 150;    // 게임 UI 위 / 팝업(200) 아래
-        private const float HAND_SIZE = 120f;
-        // 튜토 핸드 연출 = 좌우 회전(까딱까딱). +ANGLE↔-ANGLE 대칭 스윙, 스케일/이동 없음.
-        private const float ROT_ANGLE = 18f;       // 좌우 회전 각도(±). 튜토 대비 미세차 나면 이 값만 조정.
-        private const float ROT_DURATION = 0.5f;   // 한쪽 스윙 시간
+
+        // ROLLBACK_TOUCH_GUIDE_TUNE_20260714: 핸드 연출 튜닝값 — Play 중 런타임 GameObject(TouchGuideHintManager)를
+        //   선택해 인스펙터에서 조정(크기/회전/마진 즉시 반영). AddComponent 생성이라 Play 종료 시 코드 기본값 복귀 →
+        //   확정되면 아래 기본값을 그 값으로 수정해 고정 사용.
+        [Header("[Touch Hand — 튜닝값 (Play 중 조정 후 확정값을 기본값으로)]")]
+        [SerializeField, Tooltip("핸드 이미지 크기(px)")] private float _handSize = 120f;
+        [SerializeField, Tooltip("좌우 회전 각도(±도) — 까딱까딱 스윙 폭")] private float _rotAngle = 18f;
+        [SerializeField, Tooltip("한쪽 스윙 시간(초)")] private float _rotDuration = 0.5f;
+        [SerializeField, Tooltip("회전축 pivot(0~1) — 손끝/손목 기준")] private Vector2 _handPivot = new Vector2(0.75f, 0.1f);
+        [SerializeField, Tooltip("타겟 위치 대비 스크린 오프셋(px): +x 오른쪽, +y 위")] private Vector2 _positionMargin = Vector2.zero;
+        private float _bobRotAngle = float.NaN, _bobRotDuration = float.NaN; // 라이브 회전 튜닝 반영용 캐시
 
         private int _targetHolderId = -1;
         private int _targetColumn = -1;
@@ -181,8 +188,17 @@ namespace BalloonFlow
             if (cam == null) { HideHint(); return; }
             Vector3 screen = cam.WorldToScreenPoint(world);
             if (screen.z <= 0f) { HideHint(); return; } // 카메라 뒤
-            _handRoot.position = new Vector3(screen.x, screen.y, 0f);
+            // 위치 마진(스크린 오프셋) 적용.
+            _handRoot.position = new Vector3(screen.x + _positionMargin.x, screen.y + _positionMargin.y, 0f);
+            // 라이브 튜닝: 크기/피벗을 매 프레임 반영(인스펙터 변경 즉시).
+            if (_handImg != null)
+            {
+                var rt = _handImg.rectTransform;
+                if (rt.sizeDelta.x != _handSize) { rt.sizeDelta = new Vector2(_handSize, _handSize); _handRoot.sizeDelta = rt.sizeDelta; }
+                if (rt.pivot != _handPivot) rt.pivot = _handPivot;
+            }
             if (!_visible) { _visible = true; _canvas.enabled = true; PlayBob(); }
+            else if (_rotAngle != _bobRotAngle || _rotDuration != _bobRotDuration) PlayBob(); // 회전 튜닝 라이브 반영
         }
 
         private void HideHint()
@@ -202,11 +218,12 @@ namespace BalloonFlow
             RectTransform h = _handImg.rectTransform;
             h.anchoredPosition = Vector2.zero;
             h.localScale = Vector3.one;
-            h.localEulerAngles = new Vector3(0f, 0f, ROT_ANGLE); // 시작 = +ANGLE
+            h.localEulerAngles = new Vector3(0f, 0f, _rotAngle); // 시작 = +ANGLE
             // base=+ANGLE, rotation=-2*ANGLE → target=-ANGLE. yoyo 가 +ANGLE↔-ANGLE 대칭 스윙.
             _bobSeq = TutorialManager.BuildHandTweenSequence(
-                h, Vector2.zero, Vector3.one, new Vector3(0f, 0f, ROT_ANGLE),
-                TutorialHandTweenType.Rotate, Vector2.zero, 1f, -2f * ROT_ANGLE, ROT_DURATION);
+                h, Vector2.zero, Vector3.one, new Vector3(0f, 0f, _rotAngle),
+                TutorialHandTweenType.Rotate, Vector2.zero, 1f, -2f * _rotAngle, _rotDuration);
+            _bobRotAngle = _rotAngle; _bobRotDuration = _rotDuration; // 라이브 튜닝 반영 캐시
         }
 
         private void BuildHandUi()
@@ -222,16 +239,16 @@ namespace BalloonFlow
             var rootGo = new GameObject("HandRoot");
             rootGo.transform.SetParent(canvasGo.transform, false);
             _handRoot = rootGo.AddComponent<RectTransform>();
-            _handRoot.sizeDelta = new Vector2(HAND_SIZE, HAND_SIZE);
+            _handRoot.sizeDelta = new Vector2(_handSize, _handSize);
 
             var imgGo = new GameObject("Hand");
             imgGo.transform.SetParent(rootGo.transform, false);
             _handImg = imgGo.AddComponent<Image>();
             _handImg.raycastTarget = false;
             _handImg.preserveAspect = true;
-            _handImg.rectTransform.sizeDelta = new Vector2(HAND_SIZE, HAND_SIZE);
-            // 좌우 회전축 = 손목(하단 우측) 기준 → tutorialHand 에셋에 맞춘 pivot.
-            _handImg.rectTransform.pivot = new Vector2(0.75f, 0.1f);
+            _handImg.rectTransform.sizeDelta = new Vector2(_handSize, _handSize);
+            // 회전축 pivot — 인스펙터 튜닝값.
+            _handImg.rectTransform.pivot = _handPivot;
             if (_spriteIdle != null) _handImg.sprite = _spriteIdle;
             else _handImg.color = new Color(1f, 1f, 1f, 0.35f); // 스프라이트 미로드 시 최소 가시(에셋 배치 전 진단)
 

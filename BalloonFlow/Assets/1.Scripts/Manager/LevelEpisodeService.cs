@@ -36,7 +36,7 @@ namespace BalloonFlow
         // ROLLBACK_AB_EDITORDATA_20260714: 에디터 Play 는 EditorData 를 직접 읽어 저작 즉시 반영(빌드 bake 불필요).
         //   base=Master, B변형=Test. 빌드에서는 이 폴더가 스트립되므로 StreamingAssets(bake 결과)를 읽는다(#else 경로).
         public const string EDITORDATA_MASTER_DIR = "Assets/EditorData/Master";
-        public const string EDITORDATA_TEST_DIR   = "Assets/EditorData/B";
+        public const string EDITORDATA_B_DIR   = "Assets/EditorData/B";
 #endif
         public  const int    LEVELS_PER_EPISODE    = 20;
         // ROLLBACK_TOTAL_EPISODES_14_20260713: 실제 저작 콘텐츠는 280레벨(14에피소드)까지 — ep15(281~300)는 미저작.
@@ -89,7 +89,7 @@ namespace BalloonFlow
             if (_maxMaster > 0) return;
 #if UNITY_EDITOR
             _maxMaster = MaxEpisodeNumInDir(EDITORDATA_MASTER_DIR);
-            _maxBoth   = System.Math.Max(_maxMaster, MaxEpisodeNumInDir(EDITORDATA_TEST_DIR));
+            _maxBoth   = System.Math.Max(_maxMaster, MaxEpisodeNumInDir(EDITORDATA_B_DIR));
 #else
             _maxMaster = ReadManifestInt("episodes_max");     // Master 최대
             _maxBoth   = ReadManifestInt("episodes_max_b");   // Master∪Test 최대
@@ -262,7 +262,7 @@ namespace BalloonFlow
             byte[] bytes;
 
 #if UNITY_EDITOR
-            string filePath = System.IO.Path.Combine(variantB ? EDITORDATA_TEST_DIR : EDITORDATA_MASTER_DIR, fileName);
+            string filePath = System.IO.Path.Combine(variantB ? EDITORDATA_B_DIR : EDITORDATA_MASTER_DIR, fileName);
             if (!System.IO.File.Exists(filePath))
             {
                 Debug.Log($"{LOG_TAG} EditorData 없음: {filePath}");
