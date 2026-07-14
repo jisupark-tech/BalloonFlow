@@ -49,6 +49,20 @@ namespace BalloonFlow
             "Finalizing...",
         };
 
+        // ROLLBACK_LOADING_LOCALIZE_20260714: 로딩 라벨 지역화 키(LoadingStepLabels 와 1:1).
+        //   ★ 표시는 LocalizationService.Get(키) 로, EmitBootCp/로그는 계속 영어 LoadingStepLabels(식별자 안정 = 분석 오염 방지).
+        //   언어는 LocalizationService.AutoSelectDeviceLanguage([RuntimeInitializeOnLoadMethod(BeforeSceneLoad)])가
+        //   이 씬보다 먼저 세팅하므로 첫 표시부터 KO 반영. 한글은 Poppins-Bold SDF + ChironGoRoundTC fallback 으로 렌더.
+        private static readonly string[] LoadingStepKeys = new[]
+        {
+            "loading.init",
+            "loading.connect_server",
+            "loading.sdk",
+            "loading.data",
+            "loading.assets",
+            "loading.finalize",
+        };
+
         private UITitle _ui;
         private bool _loadingStarted;
         private bool _loadingComplete;
@@ -101,7 +115,7 @@ namespace BalloonFlow
             if (_ui != null)
             {
                 _ui.SetProgress(0f);
-                _ui.SetStatus(LoadingStepLabels[0]);
+                _ui.SetStatus(LocalizationService.Get(LoadingStepKeys[0])); // ROLLBACK_LOADING_LOCALIZE_20260714
                 _ui.SetTapHintVisible(false);
             }
 
@@ -263,7 +277,7 @@ namespace BalloonFlow
 
                 if (_ui != null)
                 {
-                    _ui.SetStatus(label);
+                    _ui.SetStatus(LocalizationService.Get(LoadingStepKeys[i])); // ROLLBACK_LOADING_LOCALIZE_20260714: 표시만 지역화(label 은 로그/체크포인트용 영어 유지)
                     _ui.SetProgress(0f);
                 }
 
@@ -289,7 +303,7 @@ namespace BalloonFlow
             if (_ui != null)
             {
                 _ui.SetProgress(1f);
-                _ui.SetStatus("Ready");
+                _ui.SetStatus(LocalizationService.Get("loading.ready")); // ROLLBACK_LOADING_LOCALIZE_20260714
             }
         }
 
@@ -411,7 +425,7 @@ namespace BalloonFlow
 
             _isWaitingForNetwork = true;
             EmitBootCp("net_gate_offline", -1); // ROLLBACK_BOOT_CHECKPOINTS_20260713: 오프라인 게이트 진입(P0 측정 핵심)
-            if (_ui != null) _ui.SetStatus("Connecting to internet...");
+            if (_ui != null) _ui.SetStatus(LocalizationService.Get("loading.connect_internet")); // ROLLBACK_LOADING_LOCALIZE_20260714
 
             PopupError popup = null;
             if (UIManager.HasInstance)
