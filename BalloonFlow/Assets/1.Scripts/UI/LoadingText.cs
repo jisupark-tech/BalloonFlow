@@ -14,7 +14,10 @@ public class LoadingDots : MonoBehaviour
 
     private IEnumerator AnimateDots()
     {
-        string[] states = { "LOADING", "LOADING.", "LOADING.." };
+        // ROLLBACK_LOADING_LOCALIZE_20260714: 단어만 지역화(EN "LOADING"/KO "로딩"), 점 애니메이션은 유지.
+        //   언어는 LocalizationService.AutoSelectDeviceLanguage(BeforeSceneLoad)가 씬보다 먼저 세팅됨.
+        string word = BalloonFlow.LocalizationService.Get("loading.dots");
+        string[] states = { word, word + ".", word + ".." };
         int index = 0;
 
         while (true)
