@@ -1307,7 +1307,7 @@ namespace BalloonFlow.Editor
         private const int    TOTAL_EPISODES     = 15;
         private const int    BUNDLED_PACKAGE_ID = 1;
         private const int    EPISODE_VERSION    = 1;
-        private const string EPISODES_DIR       = "Assets/EditorData/Episodes";
+        private const string EPISODES_DIR       = "Assets/EditorData/Master";
         private const string STREAMING_EP1      = "Assets/StreamingAssets/episode_01.json";
 
         private void ApplyToEpisodes()

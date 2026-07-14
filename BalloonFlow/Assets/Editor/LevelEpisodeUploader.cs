@@ -25,7 +25,7 @@ namespace BalloonFlow.Editor
     public static class LevelEpisodeUploader
     {
         private const string STREAMING_FILE  = "Assets/StreamingAssets/episode_01.json";
-        private const string EDITORDATA_DIR  = "Assets/EditorData/Episodes";
+        private const string EDITORDATA_DIR  = "Assets/EditorData/Master";
         private const string BACKUP_DIR      = "Assets/LevelBackups";
         private const int    LEVELS_PER_EP   = 20;
         private const int    TOTAL_EPISODES  = 15;

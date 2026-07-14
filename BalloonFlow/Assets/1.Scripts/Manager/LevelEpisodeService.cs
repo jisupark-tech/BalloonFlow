@@ -27,14 +27,17 @@ namespace BalloonFlow
     {
         private const string LOG_TAG               = "[LevelEpisodeService]";
         private const string FIRESTORE_COLLECTION  = "episodes";
-        // ROLLBACK_LEVEL_LOCAL_FIRST_20260713: 에피소드 로컬 번들 파일명 규약 (episode_01.json .. episode_14.json).
-        // ROLLBACK_AB_EP1_20260713: pkg1 만 A/B variant 분기(B → episode_01_b.json). pkg2~ 는 항상 A.
-        private static string BundledFileName(int packageId)
-        {
-            if (packageId == BUNDLED_PACKAGE_ID && AbTestService.IsVariantB)
-                return "episode_01_b.json";
-            return $"episode_{packageId:D2}.json";
-        }
+        // ROLLBACK_AB_EDITORDATA_20260714: 전역 A/B — B 유저는 전 에피소드에서 episode_XX_B.json(Test) 우선, 없으면 base(Master).
+        //   파일명 규약: base=episode_{NN}.json, B변형=episode_{NN}_B.json (대문자 _B, Android/iOS 대소문자 구분).
+        private static string EpisodeFileName(int packageId, bool variantB)
+            => variantB ? $"episode_{packageId:D2}_B.json" : $"episode_{packageId:D2}.json";
+
+#if UNITY_EDITOR
+        // ROLLBACK_AB_EDITORDATA_20260714: 에디터 Play 는 EditorData 를 직접 읽어 저작 즉시 반영(빌드 bake 불필요).
+        //   base=Master, B변형=Test. 빌드에서는 이 폴더가 스트립되므로 StreamingAssets(bake 결과)를 읽는다(#else 경로).
+        public const string EDITORDATA_MASTER_DIR = "Assets/EditorData/Master";
+        public const string EDITORDATA_TEST_DIR   = "Assets/EditorData/B";
+#endif
         public  const int    LEVELS_PER_EPISODE    = 20;
         // ROLLBACK_TOTAL_EPISODES_14_20260713: 실제 저작 콘텐츠는 280레벨(14에피소드)까지 — ep15(281~300)는 미저작.
         //   15(=300)로 두면 280 클리어 후 281 진입을 시도해 콘텐츠 소진 판정이 늦고 가짜 레벨이 노출됐다.
@@ -64,6 +67,60 @@ namespace BalloonFlow
                 return Mathf.Clamp(_knownAvailableEpisodes, 1, TOTAL_EPISODES);
             }
         }
+
+        // ROLLBACK_AB_EDITORDATA_20260714: 전량 클리어 게이트용 '실측 최대 에피소드'.
+        //   에디터: EditorData/{Master,Test} 파일에서 최대 번호. 빌드: Resources/episodes_max(빌드 baker 가 기록).
+        //   → GetLevelCount(=차단 기준)이 하드코딩 TOTAL_EPISODES 가 아니라 실제 보유 콘텐츠를 따른다.
+        //   코호트별: A(base) = Master 최대, B = Master∪Test 최대(Test 전용 신규 에피소드까지 도달 가능).
+        private static int _maxMaster = -1, _maxBoth = -1;
+        public static int DetectedMaxEpisode
+        {
+            get
+            {
+                EnsureMaxDetected();
+                bool wantB = AbTestService.IsEnabled && AbTestService.IsVariantB;
+                int m = wantB ? _maxBoth : _maxMaster;
+                return m > 0 ? m : TOTAL_EPISODES; // 폴백(탐지 실패 시 설계치)
+            }
+        }
+
+        private static void EnsureMaxDetected()
+        {
+            if (_maxMaster > 0) return;
+#if UNITY_EDITOR
+            _maxMaster = MaxEpisodeNumInDir(EDITORDATA_MASTER_DIR);
+            _maxBoth   = System.Math.Max(_maxMaster, MaxEpisodeNumInDir(EDITORDATA_TEST_DIR));
+#else
+            _maxMaster = ReadManifestInt("episodes_max");     // Master 최대
+            _maxBoth   = ReadManifestInt("episodes_max_b");   // Master∪Test 최대
+#endif
+            if (_maxMaster <= 0) _maxMaster = TOTAL_EPISODES;
+            if (_maxBoth < _maxMaster) _maxBoth = _maxMaster;
+        }
+
+#if !UNITY_EDITOR
+        private static int ReadManifestInt(string res)
+        {
+            var ta = Resources.Load<TextAsset>(res);
+            return (ta != null && int.TryParse(ta.text.Trim(), out int n)) ? n : 0;
+        }
+#endif
+
+#if UNITY_EDITOR
+        // episode_XX.json / episode_XX_B.json 파일명에서 최대 XX. 폴더 없으면 0.
+        private static int MaxEpisodeNumInDir(string dir)
+        {
+            if (!System.IO.Directory.Exists(dir)) return 0;
+            int max = 0;
+            foreach (var f in System.IO.Directory.GetFiles(dir, "episode_*.json"))
+            {
+                string name = System.IO.Path.GetFileNameWithoutExtension(f); // episode_14 or episode_14_B
+                string[] parts = name.Split('_');
+                if (parts.Length >= 2 && int.TryParse(parts[1], out int n)) max = System.Math.Max(max, n);
+            }
+            return max;
+        }
+#endif
 
         private static void SetKnownAvailableEpisodes(int value)
         {
@@ -148,27 +205,23 @@ namespace BalloonFlow
         {
             try
             {
-                // ROLLBACK_LEVEL_LOCAL_FIRST_20260713: 로컬 우선(오프라인 견고성) → 없으면 Firestore 폴백.
-                //   StreamingAssets 에 episode_{NN}.json 이 있으면 네트워크 없이 즉시 로드. 미번들(신규 에피소드)만 원격.
-                LevelEpisode loaded = await LoadBundledEpisodeAsync(packageId);
-                if (loaded == null)
+                // ROLLBACK_AB_EDITORDATA_20260714: 전역 A/B + 로컬 전용(Firebase 보류).
+                //   B 유저: episode_{NN}_B(Test/StreamingAssets) 우선, 없으면 base(Master) 폴백. A 유저: base.
+                //   원격(Firestore) 폴백 없음 — 모든 에피소드는 EditorData(→빌드 bake) 에서만.
+                bool wantB = AbTestService.IsEnabled && AbTestService.IsVariantB;
+                LevelEpisode loaded = null;
+                if (wantB)
                 {
-                    // ROLLBACK_AB_EP1_20260713: pkg1 B variant 는 '로컬 전용' — 원격(/episodes/1=A) 폴백 시
-                    //   B 유저가 A 콘텐츠를 받아 코호트 오염(variant 누수). 폴백 금지, 빌드 파일 누락으로 처리.
-                    if (packageId == BUNDLED_PACKAGE_ID && AbTestService.IsVariantB)
-                    {
-                        Debug.LogError($"{LOG_TAG} pkg1 B variant(episode_01_b.json) 로컬 로드 실패 — 원격 폴백 금지(variant 누수 방지). 빌드에 파일 누락 의심.");
-                    }
-                    else
-                    {
-                        Debug.Log($"{LOG_TAG} pkg {packageId} 로컬 번들 없음 → Firestore 폴백.");
-                        loaded = await LoadRemoteEpisodeAsync(packageId);
-                    }
+                    loaded = await LoadBundledEpisodeAsync(packageId, true);
+                    if (loaded == null)
+                        Debug.Log($"{LOG_TAG} pkg {packageId} B변형(_B) 없음 → base 폴백.");
                 }
+                if (loaded == null)
+                    loaded = await LoadBundledEpisodeAsync(packageId, false);
 
                 if (loaded == null || loaded.levels == null || loaded.levels.Length == 0)
                 {
-                    Debug.LogError($"{LOG_TAG} pkg {packageId} — 로드 실패 또는 빈 에피소드.");
+                    Debug.LogError($"{LOG_TAG} pkg {packageId} — 로컬 로드 실패 또는 빈 에피소드(원격 폴백 없음/Firebase 보류).");
                     return false;
                 }
 
@@ -201,32 +254,42 @@ namespace BalloonFlow
         /// StreamingAssets/episode_01.json 로드.
         /// Android 는 jar:file:// URI 라 UnityWebRequest 필요. 다른 플랫폼도 통일.
         /// </summary>
-        private async Task<LevelEpisode> LoadBundledEpisodeAsync(int packageId)
+        // ROLLBACK_AB_EDITORDATA_20260714: variantB=true 면 episode_{NN}_B, false 면 base episode_{NN}.
+        //   에디터: EditorData(Test/Master) 직접 읽기. 빌드: StreamingAssets(bake 결과). 없으면 null(상위에서 base 폴백/에러).
+        private async Task<LevelEpisode> LoadBundledEpisodeAsync(int packageId, bool variantB)
         {
-            string path = Path.Combine(Application.streamingAssetsPath, BundledFileName(packageId));
-            // Android 는 jar:file:// URI 지만 macOS/에디터는 스킴 없는 절대경로 — UnityWebRequest 는
-            // 스킴 없는 경로를 호스트로 해석해 실패(Cannot connect to destination host)하므로 file:// 보정.
-            string url = path.Contains("://") ? path : "file://" + path;
+            string fileName = EpisodeFileName(packageId, variantB);
             byte[] bytes;
 
+#if UNITY_EDITOR
+            string filePath = System.IO.Path.Combine(variantB ? EDITORDATA_TEST_DIR : EDITORDATA_MASTER_DIR, fileName);
+            if (!System.IO.File.Exists(filePath))
+            {
+                Debug.Log($"{LOG_TAG} EditorData 없음: {filePath}");
+                return null;
+            }
+            bytes = System.IO.File.ReadAllBytes(filePath);
+            await Task.Yield();
+#else
+            string path = Path.Combine(Application.streamingAssetsPath, fileName);
+            // Android 는 jar:file:// URI 지만 macOS 등은 스킴 없는 절대경로 → file:// 보정.
+            string url = path.Contains("://") ? path : "file://" + path;
             using (var req = UnityWebRequest.Get(url))
             {
                 var op = req.SendWebRequest();
                 while (!op.isDone) await Task.Yield();
-
                 if (req.result != UnityWebRequest.Result.Success)
                 {
-                    // ROLLBACK_LEVEL_LOCAL_FIRST_20260713: 로컬 미번들(신규 에피소드)은 정상 케이스 — 상위에서
-                    //   Firestore 폴백하므로 Error 아님. (실제 오류는 폴백까지 실패하면 LoadEpisodeAsync 에서 드러남.)
-                    Debug.Log($"{LOG_TAG} 로컬 번들 없음 pkg {packageId}: {req.error} (path={path}) → 원격 폴백 예정");
+                    Debug.Log($"{LOG_TAG} 번들 없음 {fileName}: {req.error} (path={path})");
                     return null;
                 }
                 bytes = req.downloadHandler.data;
             }
+#endif
 
             if (bytes == null || bytes.Length == 0)
             {
-                Debug.LogWarning($"{LOG_TAG} 로컬 번들 pkg {packageId} 비어있음 (path={path}) → 원격 폴백.");
+                Debug.LogWarning($"{LOG_TAG} 번들 {fileName} 비어있음.");
                 return null;
             }
 

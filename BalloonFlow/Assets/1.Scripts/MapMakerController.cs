@@ -379,7 +379,7 @@ namespace BalloonFlow
         private const int LEVEL_EPISODE_VERSION = 1;
         // ROLLBACK_MAPMAKER_EPISODE_STORE_20260609: LevelDatabase SO 폐기 → Episode JSON 직접 로드/저장.
         //   importer(LevelJsonImporterWindow) 와 같은 저장소를 보게 되어, import 한 레벨이 MapMaker 에 즉시 보임.
-        private const string MM_EPISODES_DIR = "Assets/EditorData/Episodes";
+        private const string MM_EPISODES_DIR = "Assets/EditorData/Master";
         private const string MM_STREAMING_EP1 = "Assets/StreamingAssets/episode_01.json";
         private const string EDITOR_PREF_LAST_LEVEL = "BalloonFlow_LastEditedLevel";
         // [2026-06-12] 다량 episode 일괄 export 입력 ("1-15" / "1,5,6,7" / 혼합 "1-3,7").

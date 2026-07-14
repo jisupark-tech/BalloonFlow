@@ -106,7 +106,10 @@ namespace BalloonFlow
         /// </summary>
         public int GetLevelCount()
         {
-            return LevelEpisodeService.KnownAvailableEpisodes * LevelEpisodeService.LEVELS_PER_EPISODE;
+            // ROLLBACK_AB_EDITORDATA_20260714: 하드코딩 TOTAL_EPISODES(KnownAvailableEpisodes) 대신
+            //   EditorData/{Master,Test}(에디터) 또는 빌드 매니페스트(빌드)에서 실측한 최대 에피소드 기반.
+            //   → 폴더의 최후 에피소드가 14 면 280, 15 면 300 에서 전량-클리어 차단.
+            return LevelEpisodeService.DetectedMaxEpisode * LevelEpisodeService.LEVELS_PER_EPISODE;
         }
 
         #endregion
