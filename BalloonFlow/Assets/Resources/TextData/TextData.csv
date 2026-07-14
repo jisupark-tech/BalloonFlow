@@ -30,8 +30,8 @@ newfeature.textdesctiption.FrozenDartBox,Tap other boxes\nto shatter the ice!,�
 popupcontinue.costlabel,Cost:,비용:,
 popupcontinue.txtcontinue,Play On,이어하기,
 popupcontinue.txtcontinuetitle,Continue?,이어서 할까요?,
-popupcontinue.txtdescription,You will lose a life!,생명을 1개 잃게 돼요!,
-popupcontinue.txtdescription.multiplier,You will lose your x{n} multiplier!,x{n} 배수가 사라져요!,
+popupcontinue.txtdescription,You will lose a life!,생명을 잃게 돼요!,
+popupcontinue.txtdescription.multiplier,You will lose your x{n} multiplier!,x{n} 배수를 잃게 돼요!,
 popupdescription.txtdescription,TxtDescriptionTxtDescriptionTxtDescriptionTxtDescriptionTxtDescription,텍스트 설명 텍스트 설명 텍스트 설명 텍스트 설명,
 popupdescription.txtsingleoutline,"Resume
 ",계속,
@@ -156,7 +156,7 @@ popup.txtdescription.quit,Do you really want to quit?,정말 종료하시겠어�
 popup.txtdescription.networkerror,Your internet is\ndisconnected.,인터넷 연결이 끊어졌어요.,PopupDescription
 popup.txtdescription.purchaseerror,Your purchase\nwas canceled.,구매가 취소되었어요.,PopupDescription
 popup.txtdescription.purchasesuccess,Your purchase\nwas completed.,구매가 완료되었어요.,PopupDescription
-popup.txtdescription.settingquit,You will lose a life!,생명이 1개 줄어들어요!,PopupQuit
+popup.txtdescription.settingquit,You will lose a life!,생명을 잃게 돼요!,PopupQuit
 popup.txtdescription.allclear,New levels coming soon!,새로운 레벨이 곧 출시돼요!,PopupDescription
 popup.txtdescription.hand,Place any box directly!,원하는 상자를 바로 배치해요!,PopupBuyItem
 ppopup.txtdescription.suffle,Shuffle all boxes instantly!,모든 상자를 즉시 섞어요!,PopupBuyItem / 최신 TextData에 없음
@@ -188,14 +188,14 @@ ui.common.delete,Delete,삭제,신규
 popup.txttitle.deleteaccount,Are You Sure?,정말 삭제할까요?,신규
 popup.txttitle.itemunlocked,Item Unlocked!,아이템 잠금 해제!,신규
 popup.txtdescription.purchasecompleted,Your purchase was completed.,구매가 완료되었어요.,신규
-popup.txtdescription.deleteaccount1,"If you delete your account,\nyou will lose all your game progress, coins, boosters and purchases!","계정을 삭제하면 게임 진행 상황, 코인,\n부스터, 구매한 상품이 모두 사라져요!",신규
+popup.txtdescription.deleteaccount1,"If you delete your account,\nyou will lose all your game progress, coins, boosters and purchases!","계정을 삭제하면 게임 진행 상황, 코인,\n부스터, 구매한 상품을 모두 잃게 돼요!",신규
 popup.txtdescription.deleteaccount2,"Your deletion request will be processed immediately. Once your account is deleted, this action cannot be reversed.",삭제 요청은 즉시 처리돼요. 계정이 삭제된 후에는 되돌릴 수 없어요.,신규
 popup.txtdescription.deleteaccount3,"If you return to the game before your account is deleted, you can cancel the deletion process and restore your account.",계정이 삭제되기 전에 게임에 다시 접속하면 삭제를 취소하고 계정을 복구할 수 있어요.,사용 안 함
-popup.txtdescription.settingquit.multiplier,You will lose your x{n} multiplier!,x{n} 배수가 사라져요!,신규
+popup.txtdescription.settingquit.multiplier,You will lose your x{n} multiplier!,x{n} 배수를 잃게 돼요!,신규
 popup.txtdescription.suffle,Shuffle all boxes instantly!,모든 상자를 즉시 섞어요!,신규
 toast.item.locked,Unlocks at Level {n},레벨 {n}에서 잠금 해제,신규
 popup.privacyterm.title,Welcome!,환영해요!,신규
-popup.privacyterm.description,"By tapping ""Accept,"" you agree\nto our <color=#0D49AD><link=""terms""><u>Terms of Service</u></link></color>\nand <color=#0D49AD><link=""privacy""><u>Privacy Policy</u></link></color>.","""동의""버튼을 누르면<color=#0D49AD><link=""terms""><u>이용약관</u></link></color>과\n<color=#0D49AD><link=""privacy""><u>\n개인정보 처리방침</u></link></color>에 동의하게 됩니다.",신규
+popup.privacyterm.description,"By tapping ""Accept,"" you agree\nto our <color=#0D49AD><link=""terms""><u>Terms of Service</u></link></color>\nand <color=#0D49AD><link=""privacy""><u>Privacy Policy</u></link></color>.","""동의""버튼을 누르면 <color=#0D49AD><link=""terms""><u>이용약관</u></link></color>과\n<color=#0D49AD><link=""privacy""><u>\n개인정보 처리방침</u></link></color>에 동의하게 됩니다.",신규
 popup.privacyterm.terms,Terms of Service,이용약관,신규
 popup.privacyterm.privacy,Privacy Policy,개인정보 처리방침,신규
 popup.privacyterm.accept,Accept,동의,신규
