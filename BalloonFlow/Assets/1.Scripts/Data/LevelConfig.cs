@@ -130,8 +130,11 @@ namespace BalloonFlow
         /// <summary>하이라이트 대상. "holder_0", "board", "gimmick_hidden" 등.</summary>
         public string highlightTarget;
 
-        /// <summary>진행 조건. "none", "tap_holder", "wait_pop", "tap_anywhere".</summary>
+        /// <summary>진행 조건. "none", "tap_holder", "wait_pop", "tap_anywhere", "wait_attack_resolved".</summary>
         public string requireAction;
+
+        /// <summary>ROLLBACK_TUTORIAL_WAIT_ATTACK_SECONDS_20260714: wait_attack_resolved 고정 대기 초(>0 이면 자동감지 대신 이 초만큼).</summary>
+        public float waitAttackSeconds;
 
         /// <summary>컷아웃/스포트라이트 크기 (화면 비율, 기본 200x200).</summary>
         public float cutoutWidth = 200f;

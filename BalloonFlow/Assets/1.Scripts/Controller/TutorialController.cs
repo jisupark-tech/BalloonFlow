@@ -80,6 +80,10 @@ namespace BalloonFlow
         //   useInstructionColor=true 면 instructionColor 적용, false 면 프리팹 기본색 사용(기존 동작).
         public bool useInstructionColor;
         public Color instructionColor = Color.white;
+
+        // ROLLBACK_TUTORIAL_WAIT_ATTACK_SECONDS_20260714: wait_attack_resolved 대기 방식.
+        //   > 0 이면 그 초만큼 고정 대기 후 진행(결정적). 0(기본)이면 자동감지(공격 시작 대기 + 발사체 해소 디바운스).
+        public float waitAttackSeconds;
     }
 
     /// <summary>
@@ -138,6 +142,9 @@ namespace BalloonFlow
         //   자동으로 다음 스텝 진행. (holder 배포 → 발사체 flight → 풍선 pop 이 다 끝나면 advance.)
         private const string ACTION_WAIT_ATTACK = "wait_attack_resolved";
         private const float WAIT_ATTACK_DEADLINE = 30f; // 소프트락 방지 백스톱(unscaled)
+        // ROLLBACK_TUTORIAL_WAIT_ATTACK_SECONDS_20260714: 자동감지 파라미터.
+        private const float WAIT_ATTACK_START_DEADLINE = 4f;  // 공격 시작(발사체 등장)까지 대기 상한 — 다트가 레일 타고 발사되는 시간 고려(기존 1s 는 너무 짧아 조기진행).
+        private const float WAIT_ATTACK_QUIET = 0.6f;         // 발사체 0 이 이만큼 유지돼야 '해소' 판정(다트 사이 공백에 조기종료 방지).
 
         // [2026-05-15] rail_warning 글로벌 튜토리얼 — gauge stage Warning(>=90%) 진입 시 1회 등장.
         // 일반 level 기반 tutorialId 와 충돌 없는 1000 사용. PlayerPrefs 영구 저장 (앱 단위 1회).
@@ -854,6 +861,7 @@ namespace BalloonFlow
                     instructionKey = src.instructionKey ?? "",
                     highlightTarget = src.highlightTarget ?? "",
                     requireAction = string.IsNullOrEmpty(src.requireAction) ? ACTION_NONE : src.requireAction,
+                    waitAttackSeconds = src.waitAttackSeconds,
                     isComplete = false,
                     // [2026-05-12] Visual override field 전달
                     overrideVisualLayout = src.overrideVisualLayout,
@@ -1159,6 +1167,7 @@ namespace BalloonFlow
                     instructionKey = src.instructionKey,
                     highlightTarget = src.highlightTarget,
                     requireAction = src.requireAction,
+                    waitAttackSeconds = src.waitAttackSeconds,
                     isComplete = false,
                     overrideVisualLayout = src.overrideVisualLayout,
                     useCutoutFrame = src.useCutoutFrame,
@@ -1506,20 +1515,38 @@ namespace BalloonFlow
         ///   Phase2: 발사체가 모두 해소될 때까지 대기(=풍선 소멸). deadline 백스톱으로 소프트락 방지.</summary>
         private IEnumerator WaitForAttackResolvedThenAdvance(int stepIndexAtStart)
         {
-            // Phase 1 — 공격 시작 대기(최대 1s). 발사체가 뜨면 즉시 Phase 2.
-            float startDeadline = Time.unscaledTime + 1.0f;
-            while (Time.unscaledTime < startDeadline
-                   && !(DartManager.HasInstance && DartManager.Instance.HasActiveProjectiles))
-                yield return null;
+            TutorialStep step = GetCurrentStep();
+            float fixedWait = step != null ? step.waitAttackSeconds : 0f;
 
-            // Phase 2 — 모든 발사체 해소까지.
-            float deadline = Time.unscaledTime + WAIT_ATTACK_DEADLINE;
-            while (Time.unscaledTime < deadline
-                   && DartManager.HasInstance && DartManager.Instance.HasActiveProjectiles)
-                yield return null;
+            if (fixedWait > 0f)
+            {
+                // 결정적 모드 — 에디터에서 지정한 초만큼 고정 대기(다트 타이밍 무관).
+                yield return new WaitForSecondsRealtime(fixedWait);
+            }
+            else
+            {
+                // 자동감지 모드.
+                // Phase 1 — 공격 시작(발사체 등장) 대기. 다트가 레일 타고 발사되는 데 시간이 걸리므로 상한 넉넉히.
+                float startDeadline = Time.unscaledTime + WAIT_ATTACK_START_DEADLINE;
+                while (Time.unscaledTime < startDeadline
+                       && !(DartManager.HasInstance && DartManager.Instance.HasActiveProjectiles))
+                    yield return null;
 
-            // pop 애니메이션 정착 여유.
-            yield return new WaitForSecondsRealtime(0.25f);
+                // Phase 2 — 발사체가 QUIET 동안 0 으로 유지될 때까지(다트 사이 공백에 조기종료 방지).
+                float deadline = Time.unscaledTime + WAIT_ATTACK_DEADLINE;
+                float quietUntil = -1f;
+                while (Time.unscaledTime < deadline)
+                {
+                    bool active = DartManager.HasInstance && DartManager.Instance.HasActiveProjectiles;
+                    if (active) quietUntil = -1f;                                   // 아직 공격 중 → 리셋
+                    else if (quietUntil < 0f) quietUntil = Time.unscaledTime + WAIT_ATTACK_QUIET; // 방금 0 → 관찰 시작
+                    else if (Time.unscaledTime >= quietUntil) break;               // QUIET 동안 계속 0 → 해소
+                    yield return null;
+                }
+
+                // pop 애니메이션 정착 여유.
+                yield return new WaitForSecondsRealtime(0.25f);
+            }
 
             _waitAttackCoroutine = null;
             // 그 사이 스텝이 바뀌지 않았을 때만 진행(중복 advance 방지).

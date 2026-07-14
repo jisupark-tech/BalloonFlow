@@ -62,6 +62,8 @@ namespace BalloonFlow.Editor
             public string instructionKey = "";
             public string highlightTarget = "(none)";
             public string requireAction = "none";
+            // ROLLBACK_TUTORIAL_WAIT_ATTACK_SECONDS_20260714: wait_attack_resolved 고정 대기 초(>0 이면 자동감지 대신 이 초). 0=자동.
+            public float waitAttackSeconds;
             // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622: 튜토리얼 통한 아이템 사용 강제 스텝에서 Skip(X) 숨김.
             public bool hideSkipButton;
             public bool overrideVisualLayout;
@@ -318,6 +320,15 @@ namespace BalloonFlow.Editor
                 actionIdx = EditorGUILayout.Popup("Require Action", actionIdx, ACTION_OPTIONS);
                 step.requireAction = ACTION_OPTIONS[actionIdx];
 
+                // ROLLBACK_TUTORIAL_WAIT_ATTACK_SECONDS_20260714: wait_attack_resolved 전용 — 고정 대기 초 설정.
+                if (step.requireAction == "wait_attack_resolved")
+                {
+                    step.waitAttackSeconds = EditorGUILayout.FloatField(
+                        new GUIContent("  Wait Seconds (0=auto)", "0 이면 배포 다트의 공격이 해소될 때까지 자동 대기. >0 이면 그 초만큼 고정 대기 후 진행."),
+                        step.waitAttackSeconds);
+                    if (step.waitAttackSeconds < 0f) step.waitAttackSeconds = 0f;
+                }
+
                 // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622: 스텝 동안 Skip(X) 숨김 + PopupUseItem 의 X(취소) 버튼도 숨김.
                 //   강제 아이템 사용 스텝(아이템 해금 튜토리얼 등)에서 사용하지 않고 빠져나가지 못하게 한다.
                 step.hideSkipButton = EditorGUILayout.Toggle(
@@ -521,6 +532,9 @@ namespace BalloonFlow.Editor
                         sb.AppendLine($"            instructionKey = \"{EscapeString(step.instructionKey)}\",");
                     sb.AppendLine($"            highlightTarget = {target},");
                     sb.AppendLine($"            requireAction = {action},");
+                    // ROLLBACK_TUTORIAL_WAIT_ATTACK_SECONDS_20260714: 고정 대기 초(>0 일 때만 codegen).
+                    if (step.waitAttackSeconds > 0f)
+                        sb.AppendLine($"            waitAttackSeconds = {FloatCode(step.waitAttackSeconds)},");
                     sb.AppendLine($"            hideSkipButton = {step.hideSkipButton.ToString().ToLowerInvariant()},"); // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622
                     // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622: instruction 텍스트 색상.
                     sb.AppendLine($"            useInstructionColor = {step.useInstructionColor.ToString().ToLowerInvariant()},");
@@ -669,6 +683,7 @@ namespace BalloonFlow.Editor
                         instructionKey = s.instructionKey, // ROLLBACK_TUTORIAL_TEXTDATA_KEY_20260713
                         highlightTarget = s.highlightTarget == "(none)" ? string.Empty : s.highlightTarget,
                         requireAction = s.requireAction,
+                        waitAttackSeconds = s.waitAttackSeconds,
                         hideSkipButton = s.hideSkipButton, // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622
                         isComplete = false,
                         overrideVisualLayout = s.overrideVisualLayout,
@@ -743,6 +758,7 @@ namespace BalloonFlow.Editor
                             instructionKey = s.instructionKey ?? "", // ROLLBACK_TUTORIAL_TEXTDATA_KEY_20260713
                             highlightTarget = string.IsNullOrEmpty(s.highlightTarget) ? "(none)" : s.highlightTarget,
                             requireAction = string.IsNullOrEmpty(s.requireAction) ? "none" : s.requireAction,
+                            waitAttackSeconds = s.waitAttackSeconds,
                             hideSkipButton = s.hideSkipButton, // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622
                             overrideVisualLayout = s.overrideVisualLayout,
                             useCutoutFrame = s.useCutoutFrame,
