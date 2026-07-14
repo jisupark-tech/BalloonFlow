@@ -277,6 +277,21 @@ namespace BalloonFlow
             var sending = new List<BqEvent>(sendCount);
             for (int i = 0; i < sendCount; i++) sending.Add(_bqBatch[i]);
 
+            // ROLLBACK_SESSION_START_UID_LATEBIND_20260714: enqueue 시 uid 미해결(첫 실행 pre-auth)로 빈 uid 로 굳은
+            //   이벤트를, 인증(CurrentUser)이 보장된 이 시점에서 현재 uid 로 backfill. 앱당 익명 uid 불변이라 안전.
+            //   → session_start 등 첫 세션 이벤트의 uid="" 미귀속(#5) 해소. (버퍼 dict 를 직접 갱신 → 재시도에도 유지)
+            string flushUid = auth.CurrentUser.UserId;
+            if (!string.IsNullOrEmpty(flushUid))
+            {
+                for (int i = 0; i < sending.Count; i++)
+                {
+                    var d = sending[i].data;
+                    if (d == null) continue;
+                    if (!d.TryGetValue(AnalyticsConsts.P_UID, out object u) || u == null || string.IsNullOrEmpty(u as string))
+                        d[AnalyticsConsts.P_UID] = flushUid;
+                }
+            }
+
             string json = BuildBatchJson(sending);
             byte[] body = Encoding.UTF8.GetBytes(json);
 

@@ -78,9 +78,14 @@ namespace BalloonFlow.Analytics
                 if (tickIdx % logEveryNTicks == 0)
                     DiagLog($"SessionTracker.WaitReady t={waited:F1}s — analyticsHas={analyticsHas} analyticsReady={analyticsReady} uidHas={uidHas} uidReady={uidReady}");
 
-                if (analyticsReady && uidReady)
+                // ROLLBACK_SESSION_START_UID_GATE_20260714: uid(익명인증=네트워크)를 세션시작 게이트에서 제외.
+                //   [배경] 첫 실행 시 uid 대기(≤15s)가 session_start 발화를 늦춰 event_ts 가 play_start 보다 역전되거나
+                //     "설치 몇시간 뒤 첫 세션 등장"으로 과소계측됐다(#5). AnalyticsManager(로컬 싱글턴)만 준비되면 즉시
+                //     세션 시작 → event_ts≈앱오픈. 빈 uid 는 flush 시점(인증 보장됨) backfill 로 채운다
+                //     (ROLLBACK_SESSION_START_UID_LATEBIND_20260714). 재실행 유저는 uid 가 이미 캐시돼 emit 시 바로 실림.
+                if (analyticsReady)
                 {
-                    DiagLog($"SessionTracker.WaitReady DONE at t={waited:F1}s — proceeding to StartSession");
+                    DiagLog($"SessionTracker.WaitReady DONE at t={waited:F1}s (uidReady={uidReady}) — proceeding to StartSession");
                     break;
                 }
                 yield return new WaitForSeconds(0.2f);
