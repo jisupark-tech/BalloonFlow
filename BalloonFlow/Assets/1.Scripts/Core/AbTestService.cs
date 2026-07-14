@@ -21,7 +21,9 @@ namespace BalloonFlow
         //   빌드에 넣고 '테스트를 시작할 때'에만 true. 기본 false = 전원 A(B 미배정·미로드) →
         //   B 데이터가 없어도 안전(변인 미준비 상태에서 B 배정으로 ep1 로드 실패 → Old 데이터 폴백되는 문제 방지).
         //   테스트 종료 시에도 false 로 되돌리면 신규 전원 A.
-        private const bool AB_TEST_ENABLED = false;
+        // ROLLBACK_AB_EDITORDATA_20260714: B 세트(EditorData/B/episode_XX_B.json) 번들 완료 → A/B 활성화.
+        //   true = 신규 유저 50:50 A/B 배정 + B 는 _B 로드 + user_property.ab_ep1_variant(BQ) 기록. 종료 시 false 로 환원.
+        private const bool AB_TEST_ENABLED = true;
 
         private static string _cached;
 
