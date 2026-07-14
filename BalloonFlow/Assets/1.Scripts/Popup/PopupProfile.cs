@@ -68,7 +68,7 @@ namespace BalloonFlow
         {
             if (_frame != null)
             {
-                _frame.SetTitle("Profile");
+                _frame.SetTitle(LocalizationService.Get("popupprofile.txttitle"));
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
                 _frame.ShowExitButton(true);
             }

@@ -1704,6 +1704,28 @@ namespace BalloonFlow
             // Rollback: remove this method call if prefab UIText keys are manually unified.
             DisableUIText(_txtPlayLevel);
             DisableUIText(_txtPlayLevelOutline);
+
+            // ROLLBACK_OUTLINE_LANG_FONT_20260714: Play/PlayLevel 아웃라인은 SetDifficulty(난이도+언어, ApplyOutlineWithFill)이 전담.
+            //   프리팹의 TMPSharedMaterialAdapter 가 폰트/머티리얼을 덮어 레이스(이격) 유발 → 비활성화.
+            DisableOutlineAdapter(_txtPlayOutline);
+            DisableOutlineAdapter(_txtPlayLevelOutline);
+        }
+
+        private static void DisableOutlineAdapter(TMP_Text text)
+        {
+            if (text == null) return;
+            var ad = text.GetComponent<BalloonFlow.UX.TMPSharedMaterialAdapter>();
+            if (ad != null) ad.enabled = false;
+        }
+
+        // ROLLBACK_PLAYBUTTON_LEVEL_LOCALIZE_20260714: 플레이버튼 레벨 텍스트 지역화(하드코딩 "Level N" → CSV 키).
+        //   popup.title.level = "Level {0}" / "레벨 {0}". 키 미로드/포맷토큰 없으면 영어 폴백.
+        private static string FormatPlayLevel(int levelId)
+        {
+            string tpl = LocalizationService.Get("popup.title.level");
+            if (string.IsNullOrEmpty(tpl) || tpl.IndexOf("{0}", System.StringComparison.Ordinal) < 0)
+                return "Level " + levelId;
+            return string.Format(tpl, levelId);
         }
 
         private static void DisableUIText(TMP_Text text)
@@ -1717,9 +1739,12 @@ namespace BalloonFlow
         {
             if (_currentPlayLevelId > 0)
             {
-                string levelStr = "Level " + _currentPlayLevelId;
+                string levelStr = FormatPlayLevel(_currentPlayLevelId);
                 if (_txtPlay != null) _txtPlay.text = levelStr;
                 if (_txtPlayOutline != null) _txtPlayOutline.text = levelStr;
+                // ROLLBACK_OUTLINE_LANG_FONT_20260714: 라이브 언어 전환 시 폰트도 맞춤(초기 진입은 SetDifficulty 가 처리).
+                LocalizationFont.Apply(_txtPlayOutline);
+                LocalizationFont.Apply(_txtPlay);
             }
             ApplyPlayLevelBalanceText(_currentPlayDifficulty);
             ApplyStaticTextOverrides();
@@ -2780,6 +2805,9 @@ namespace BalloonFlow
             bool hasTimer = !string.IsNullOrEmpty(timeText);
             if (_txtLifeTimer != null) _txtLifeTimer.text = hasTimer ? timeText : "";
             if (_txtLifeTimerOutline != null) _txtLifeTimerOutline.text = hasTimer ? timeText : "";
+            // ROLLBACK_LOCALIZATION_HARDCODE_FIX_20260714: '가득 참' 등 KO 문구가 Poppins 두부로 안 뜨게 폰트 스왑(숫자 타이머는 no-op 규약).
+            LocalizationFont.Apply(_txtLifeTimer);
+            LocalizationFont.Apply(_txtLifeTimerOutline);
             if (_imgLifeTimer != null) _imgLifeTimer.gameObject.SetActive(hasTimer);
         }
 
@@ -2811,7 +2839,7 @@ namespace BalloonFlow
             //   TxtLevelBalance/TxtLevelBalanceOutline(=_txtPlayLevel*) → 난이도 라벨(Normal/Hard/SuperHard, 항상 노출)
             //   (오브젝트가 TxtPlayLevel→TxtLevelBalance 로 리네임됐어도 SerializeField 는 fileID 바인딩이라 그대로 유효.)
             //   이전: TxtPlay 에 SuperHard 텍스트를 넣고 난이도라벨은 Normal 시 숨김. 롤백: 그 버전으로 환원.
-            string levelStr = "Level " + levelId;
+            string levelStr = FormatPlayLevel(levelId);
             if (_txtPlay != null) _txtPlay.text = levelStr;
             if (_txtPlayOutline != null) _txtPlayOutline.text = levelStr;
 
@@ -2840,7 +2868,8 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matPlayOutlineSuperHard,
                 _                           => _matPlayOutlineNormal
             };
-            UIOutlineStyle.ApplyMaterialOrColor(_txtPlayOutline, playOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+            // ROLLBACK_OUTLINE_LANG_FONT_20260714: 언어 인지 + fill 폰트 동기화(이격 방지). Adapter 는 아래 DisablePlayOutlineAdapters 로 비활성.
+            UIOutlineStyle.ApplyOutlineWithFill(_txtPlayOutline, _txtPlay, playOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
 
             // PlayLevel 텍스트 아웃라인 머티리얼
             Material playLevelOutlineMat = difficulty switch
@@ -2849,7 +2878,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matPlayLevelOutlineSuperHard,
                 _                           => _matPlayLevelOutlineNormal
             };
-            UIOutlineStyle.ApplyMaterialOrColor(_txtPlayLevelOutline, playLevelOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+            UIOutlineStyle.ApplyOutlineWithFill(_txtPlayLevelOutline, _txtPlayLevel, playLevelOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
 
             ApplyPlayBadge(difficulty);
         }

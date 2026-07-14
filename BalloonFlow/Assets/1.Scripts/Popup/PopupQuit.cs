@@ -218,8 +218,8 @@ namespace BalloonFlow
             _frame.SetDescription(description);
             ApplyCommonPanelDescriptionFallback(description);
             _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
-            _frame.SetHorizGreenText("Stay");
-            _frame.SetHorizRedText("Quit");
+            _frame.SetHorizGreenText(LocalizationService.Get("ui.common.stay"));
+            _frame.SetHorizRedText(LocalizationService.Get("ui.common.quit"));
             _frame.ShowExitButton(true);
         }
 

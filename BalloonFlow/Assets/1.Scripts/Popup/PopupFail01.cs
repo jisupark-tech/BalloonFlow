@@ -122,11 +122,11 @@ namespace BalloonFlow
             if (_frame != null)
             {
                 _frame.ApplyDifficulty(difficulty);
-                _frame.SetTitle("Continue?");
-                _frame.SetDescription("Spend coins to keep playing.");
+                _frame.SetTitle(LocalizationService.Get("popupfail01.continuetitle"));
+                _frame.SetDescription(LocalizationService.Get("popupcontinue.txtspendcoins"));
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
-                _frame.SetHorizGreenText("Continue");
-                _frame.SetHorizRedText("Give Up");
+                _frame.SetHorizGreenText(LocalizationService.Get("ui.common.continue"));
+                _frame.SetHorizRedText(LocalizationService.Get("ui.common.giveup"));
                 _frame.ShowExitButton(true);
             }
             UpdateCostDisplay();

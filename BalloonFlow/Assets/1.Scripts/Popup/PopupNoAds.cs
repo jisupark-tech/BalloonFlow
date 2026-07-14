@@ -44,7 +44,7 @@ namespace BalloonFlow
         {
             if (_frame != null)
             {
-                _frame.SetTitle("NO ADS");
+                _frame.SetTitle(LocalizationService.Get("popup.txttitle.noads"));
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
                 _frame.SetSingleButtonText("$4.99");
                 _frame.ShowExitButton(true);

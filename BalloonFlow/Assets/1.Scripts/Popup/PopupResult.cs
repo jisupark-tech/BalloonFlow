@@ -202,7 +202,7 @@ namespace BalloonFlow
                     : LocalizationService.Get("popup.title.level_clear");
                 _frame.SetTitle(clearTitle);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
-                _frame.SetSingleButtonText("Next");
+                _frame.SetSingleButtonText(LocalizationService.Get("popupresult.txtbtnsingle"));
                 // ExitButton은 직접 할당된 게 있으면 그걸 보이도록, 없으면 frame 것 표시
                 _frame.ShowExitButton(_btnExit == null);
             }

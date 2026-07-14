@@ -268,7 +268,7 @@ namespace BalloonFlow
                     : LocalizationService.Get("popup.title.level_failed");
                 _frame.SetTitle(failTitle);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
-                _frame.SetSingleButtonText("Retry");
+                _frame.SetSingleButtonText(LocalizationService.Get("ui.common.retry"));
                 _frame.ShowExitButton(true);
             }
             UpdateHardLevelOption(diff);
@@ -336,7 +336,7 @@ namespace BalloonFlow
                 _frame.SetTitle(failTitle);
                 // [#4] 명세 ③ Level Failed = [Retry] 단일버튼 + [X](나가기→로비). 단일버튼(BtnSingle) 레이아웃 사용.
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
-                _frame.SetSingleButtonText("Retry");
+                _frame.SetSingleButtonText(LocalizationService.Get("ui.common.retry"));
                 _frame.ShowExitButton(true);
             }
             UpdateHardLevelOption(difficulty);

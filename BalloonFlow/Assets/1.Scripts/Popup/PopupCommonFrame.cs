@@ -289,6 +289,8 @@ namespace BalloonFlow
         {
             if (_txtTitle != null) _txtTitle.text = text;
             if (_txtTitleOutline != null) _txtTitleOutline.text = text;
+            // ROLLBACK_LOCALIZATION_HARDCODE_FIX_20260714: 채움 타이틀 KO 폰트 스왑(아웃라인은 ApplyTitleOutline 이 언어 인지 처리).
+            LocalizationFont.Apply(_txtTitle);
             ApplyTitleOutline(_hasExplicitDifficulty ? _currentDifficulty : ResolveActiveDifficulty());
         }
 
@@ -297,6 +299,8 @@ namespace BalloonFlow
         {
             if (_txtDescription != null) _txtDescription.text = text;
             if (_txtDescriptionOutline != null) _txtDescriptionOutline.text = text;
+            LocalizationFont.Apply(_txtDescription);
+            LocalizationFont.Apply(_txtDescriptionOutline);
         }
 
         #endregion
@@ -320,6 +324,8 @@ namespace BalloonFlow
         {
             if (_txtBtnSingle != null) _txtBtnSingle.text = text;
             if (_txtBtnSingleOutline != null) _txtBtnSingleOutline.text = text;
+            LocalizationFont.Apply(_txtBtnSingle);
+            LocalizationFont.Apply(_txtBtnSingleOutline);
         }
 
         /// <summary>Horizontal Green 버튼 텍스트 설정.</summary>
@@ -327,6 +333,8 @@ namespace BalloonFlow
         {
             if (_txtHorizGreen != null) _txtHorizGreen.text = text;
             if (_txtHorizGreenOutline != null) _txtHorizGreenOutline.text = text;
+            LocalizationFont.Apply(_txtHorizGreen);
+            LocalizationFont.Apply(_txtHorizGreenOutline);
         }
 
         /// <summary>Horizontal Red 버튼 텍스트 설정.</summary>
@@ -334,6 +342,8 @@ namespace BalloonFlow
         {
             if (_txtHorizRed != null) _txtHorizRed.text = text;
             if (_txtHorizRedOutline != null) _txtHorizRedOutline.text = text;
+            LocalizationFont.Apply(_txtHorizRed);
+            LocalizationFont.Apply(_txtHorizRedOutline);
         }
 
         /// <summary>Vertical Green/Red/Blue 버튼 텍스트 일괄 설정.</summary>
@@ -345,6 +355,9 @@ namespace BalloonFlow
             if (_txtVertRedOutline != null) _txtVertRedOutline.text = red;
             if (_txtVertBlue != null) _txtVertBlue.text = blue;
             if (_txtVertBlueOutline != null) _txtVertBlueOutline.text = blue;
+            LocalizationFont.Apply(_txtVertGreen);   LocalizationFont.Apply(_txtVertGreenOutline);
+            LocalizationFont.Apply(_txtVertRed);     LocalizationFont.Apply(_txtVertRedOutline);
+            LocalizationFont.Apply(_txtVertBlue);    LocalizationFont.Apply(_txtVertBlueOutline);
         }
 
         #endregion
@@ -480,6 +493,17 @@ namespace BalloonFlow
                 _matTitleOutlineNormal,
                 _matTitleOutlineHard,
                 _matTitleOutlineSuperHard);
+            // ROLLBACK_LOCALIZATION_HARDCODE_FIX_20260714: KO 면 아웃라인도 Chiron 폰트 + 동일 색/난이도 프리셋으로 매핑.
+            if (_txtTitleOutline != null &&
+                string.Equals(LocalizationService.CurrentLanguageCode, "KO", System.StringComparison.OrdinalIgnoreCase))
+            {
+                TMP_FontAsset ko = LocalizationFont.LoadKoFont();
+                if (ko != null)
+                {
+                    if (_txtTitleOutline.font != ko) _txtTitleOutline.font = ko;
+                    if (mat != null) mat = UIOutlineStyle.MaterialForFont(mat, ko, "ChironGoRoundTC-Black");
+                }
+            }
             UIOutlineStyle.ApplyMaterialOrColor(_txtTitleOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
         }
 

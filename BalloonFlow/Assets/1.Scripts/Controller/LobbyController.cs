@@ -283,7 +283,7 @@ namespace BalloonFlow
             if (lm.IsFullLives())
             {
                 _lobby.SetLifeText(lm.MaxLives, lm.MaxLives);
-                _lobby.SetLifeTimerText("Full");
+                _lobby.SetLifeTimerText(LocalizationService.Get("uilobby.txtlife"));
                 _lobby.SetLifePlusButtonVisible(false);
                 return;
             }

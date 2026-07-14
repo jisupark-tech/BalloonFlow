@@ -54,6 +54,8 @@ namespace BalloonFlow
         private bool _loadingComplete;
         // ROLLBACK_TITLE_PERMISSION_AFTER_LOADING_20260623: 로딩 완료 후 알림 권한 응답까지 받은 뒤에야 씬 진입 허용.
         private bool _permissionResolved;
+        // ROLLBACK_PRIVACY_TERM_PARALLEL_20260714: 동의 팝업을 로딩과 병렬로 띄우되, 씬 전환은 동의 완료를 게이트로 요구.
+        private bool _consentResolved;
         private bool _entered;
         private float _watchdogTimer;
         // ROLLBACK_TITLE_NET_GATE_20260713: 절대 하드캡 타이머 — 네트워크 대기와 '무관하게' 증가.
@@ -112,26 +114,28 @@ namespace BalloonFlow
         /// <summary>로딩을 먼저 끝낸 뒤(바 100%), 씬 전환 직전에 알림 권한을 띄워 선택받고 진입.</summary>
         private IEnumerator StartupFlow()
         {
-            // ROLLBACK_PRIVACY_TERM_GATE_20260626:
-            // Terms/privacy consent must be accepted before the title loading bar starts.
-            // Rollback: remove this yield to restore the old direct LoadingFlow start.
-            yield return PrivacyTermConsentRoutine();
+            // ROLLBACK_PRIVACY_TERM_PARALLEL_20260714:
+            // 동의 팝업을 로딩과 '병렬'로 진행(로딩바가 뒤에서 채워짐). 단 씬 전환(Enter)은 동의 완료를 게이트로 요구.
+            //   이전(ROLLBACK_PRIVACY_TERM_GATE_20260626)은 동의 완료까지 로딩 시작을 막았음 → 체감 대기 증가.
+            //   롤백: 아래 StartCoroutine 을 `yield return PrivacyTermConsentRoutine();` 로 되돌리고 while 게이트 제거.
+            StartCoroutine(PrivacyTermConsentRoutine());       // 병렬 — 완료 시 _consentResolved=true
 
-            // ROLLBACK_TITLE_PERMISSION_AFTER_LOADING_20260623:
-            // 순서 = 로딩 먼저 → (씬 직전) 알림 권한 다이얼로그 + 응답 대기 → 그 결정 후 인게임 진입.
-            //   이전(ROLLBACK_RELEASE_TITLE_LOADTIME_20260616)은 권한을 로딩과 병렬로 시작해
-            //   권한이 먼저 떠 보였음. 복원하려면 아래를 권한 StartCoroutine 병렬 + yield LoadingFlow 로 환원.
+            // 순서: 로딩(병렬) → 로딩 완료 후에도 '동의' 전이면 대기 → (씬 직전) 알림 권한 → 진입.
             //   RequestPermissionAsync 는 OS 가 NotDetermined(첫 실행)일 때만 실제 다이얼로그 → 재실행 시 즉시 통과.
-            yield return LoadingFlow();                        // 1) 로딩 먼저 (바 채움, _loadingComplete=true)
-            yield return RequestNotificationPermissionRoutine(); // 2) 씬 직전 권한 다이얼로그 + 응답 대기
-            _permissionResolved = true;                        // 3) 권한 결정 후에야 진입 허용
+            yield return LoadingFlow();                        // 1) 로딩바 채움 (동의와 무관하게 즉시 진행)
+            while (!_consentResolved) yield return null;       // 2) 씬 전환 게이트 — 동의해야 통과(로딩 끝나도 대기)
+            yield return RequestNotificationPermissionRoutine(); // 3) 동의+로딩 후에만 권한 다이얼로그(팝업 겹침 방지)
+            _permissionResolved = true;                        // 4) 권한 결정 후에야 진입 허용
         }
 
         private IEnumerator PrivacyTermConsentRoutine()
         {
             string acceptedVersion = PlayerPrefs.GetString(Const.PREFS_PRIVACY_TERM_VERSION, string.Empty);
             if (acceptedVersion == Const.PRIVACY_TERM_VERSION)
+            {
+                _consentResolved = true;   // 재실행/기동의 유저 → 팝업 없이 즉시 게이트 통과
                 yield break;
+            }
 
             bool consentResolved = false;
             PopupPrivacyTerm popup = null;
@@ -150,11 +154,14 @@ namespace BalloonFlow
             if (popup == null)
             {
                 Debug.LogWarning("[TitleController] PopupPrivacyTerm load failed. Continuing title loading without consent popup.");
+                _consentResolved = true;   // 팝업 로드 실패 → 소프트락 방지(씬 전환 허용)
                 yield break;
             }
 
             while (!consentResolved)
                 yield return null;
+
+            _consentResolved = true;       // 동의 완료 → 씬 전환 게이트 해제
         }
 
         private IEnumerator RequestNotificationPermissionRoutine()
@@ -170,6 +177,11 @@ namespace BalloonFlow
         void Update()
         {
             if (_entered) return;
+
+            // ROLLBACK_PRIVACY_TERM_PARALLEL_20260714: 동의 전에는 어떤 경로로도 씬 전환 금지.
+            //   (완료진입·로딩 워치독·절대 하드캡까지 전부 스킵 — 로딩 코루틴은 계속 돌아 바는 채워진다.)
+            //   동의는 사용자 액션이라 시간 무제한 대기가 정상 → 하드캡 타임아웃이 동의를 우회하지 못하게 막는다.
+            if (!_consentResolved) return;
 
             // [#9] 로딩 완료 → "Tap to Start" 노출. 탭하면 즉시 진입, 미탭 시 짧은 지연 후 자동 진입(doc: 자동 진입 유지).
             // ROLLBACK_TITLE_PERMISSION_AFTER_LOADING_20260623: 알림 권한 응답 전엔 진입 보류(_permissionResolved 게이트).

@@ -460,8 +460,10 @@ namespace BalloonFlow
 
             // [PopupTextInventory P0-18 / P0-19a] prefab 정적 텍스트('level 00', '1000.0' 등) 잔재 1프레임 노출 차단.
             // SetLevel/SetGold 가 HUDController 에서 호출되기 전 단계에서 안전한 기본값으로 덮어쓴다.
-            if (_txtLevel != null) _txtLevel.SetText("Level {0}", 1);
-            if (_txtLevelOutline != null) _txtLevelOutline.SetText("Level {0}", 1);
+            if (_txtLevel != null) _txtLevel.SetText(LocalizationService.Get("popup.title.level"), 1);
+            if (_txtLevelOutline != null) _txtLevelOutline.SetText(LocalizationService.Get("popup.title.level"), 1);
+            LocalizationFont.Apply(_txtLevel);
+            LocalizationFont.Apply(_txtLevelOutline);
             if (_goldText != null) _goldText.text = "0";
 
             // BottomPanel 아이템 수량 outline 텍스트는 prefab 바이너리라 YAML 편집 불가 →
@@ -478,24 +480,28 @@ namespace BalloonFlow
                 _matItemCountOutlineGreen = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_GREEN_OUTLINE);
             if (_matItemCountOutlineGreen == null) return;
 
-            if (_itemCountOutlineShuffle != null && _itemCountOutlineShuffle.fontSharedMaterial != _matItemCountOutlineGreen)
+            // ROLLBACK_OUTLINE_LANG_FONT_20260714 예외: 아이템 수량은 항상 영어 폰트(Poppins).
+            //   머티리얼(Poppins-Green)에 폰트를 맞춰 폰트↔머티리얼 불일치 깨짐 방지.
+            TMPro.TMP_FontAsset itemFont = UIOutlineStyle.FontAssetForMaterial(_matItemCountOutlineGreen);
+            ApplyFixedItemCountOutline(_itemCountOutlineShuffle, itemFont);
+            ApplyFixedItemCountOutline(_itemCountOutlineRemove, itemFont);
+            ApplyFixedItemCountOutline(_itemCountOutlineHand, itemFont);
+            // 수량 본문(fill)도 같은 영어 폰트로(fill 이 한국어로 남아 아웃라인과 어긋나는 문제).
+            if (itemFont != null)
             {
-                _itemCountOutlineShuffle.fontSharedMaterial = _matItemCountOutlineGreen;
-                _itemCountOutlineShuffle.havePropertiesChanged = true;
-                _itemCountOutlineShuffle.ForceMeshUpdate();
+                if (_itemCountShuffle != null && _itemCountShuffle.font != itemFont) _itemCountShuffle.font = itemFont;
+                if (_itemCountRemove != null && _itemCountRemove.font != itemFont) _itemCountRemove.font = itemFont;
+                if (_itemCountHand != null && _itemCountHand.font != itemFont) _itemCountHand.font = itemFont;
             }
-            if (_itemCountOutlineRemove != null && _itemCountOutlineRemove.fontSharedMaterial != _matItemCountOutlineGreen)
-            {
-                _itemCountOutlineRemove.fontSharedMaterial = _matItemCountOutlineGreen;
-                _itemCountOutlineRemove.havePropertiesChanged = true;
-                _itemCountOutlineRemove.ForceMeshUpdate();
-            }
-            if (_itemCountOutlineHand != null && _itemCountOutlineHand.fontSharedMaterial != _matItemCountOutlineGreen)
-            {
-                _itemCountOutlineHand.fontSharedMaterial = _matItemCountOutlineGreen;
-                _itemCountOutlineHand.havePropertiesChanged = true;
-                _itemCountOutlineHand.ForceMeshUpdate();
-            }
+        }
+
+        private void ApplyFixedItemCountOutline(TMPro.TMP_Text t, TMPro.TMP_FontAsset font)
+        {
+            if (t == null) return;
+            bool dirty = false;
+            if (font != null && t.font != font) { t.font = font; dirty = true; } // 폰트 먼저(setter 가 material 리셋)
+            if (t.fontSharedMaterial != _matItemCountOutlineGreen) { t.fontSharedMaterial = _matItemCountOutlineGreen; dirty = true; }
+            if (dirty) { t.havePropertiesChanged = true; t.ForceMeshUpdate(); }
         }
 
         private void OnEnable()
@@ -510,6 +516,9 @@ namespace BalloonFlow
             // [2026-05-22] 씬 전환 시작 즉시 UIHud 강제 숨김 — Win/Fail Home, mid-game Settings→Quit 등 모든 로비 이탈 경로 커버.
             // latch off 경로에서 NotifyPopupClosed 가 PlayPopupCloseAnimation 으로 REST 복귀 연출을 트리거하던 재노출 차단.
             EventBus.Subscribe<OnSceneTransitionStarted>(HandleSceneTransitionStarted);
+            // ROLLBACK_OUTLINE_LANG_FONT_20260714: 언어 전환 시 아웃라인 폰트/프리셋을 현재 난이도로 재적용
+            //   (SetDifficulty 가 ApplyLanguageAwareOutline 을 타므로 언어에 맞는 폰트 패밀리로 갱신됨).
+            LocalizationService.OnLanguageChanged += HandleLanguageChanged;
         }
 
         private void OnDisable()
@@ -517,7 +526,11 @@ namespace BalloonFlow
             EventBus.Unsubscribe<OnLevelLoaded>(HandleLevelLoaded);
             EventBus.Unsubscribe<OnBoosterInventoryChanged>(HandleBoosterInventoryChanged);
             EventBus.Unsubscribe<OnSceneTransitionStarted>(HandleSceneTransitionStarted);
+            LocalizationService.OnLanguageChanged -= HandleLanguageChanged;
         }
+
+        // ROLLBACK_OUTLINE_LANG_FONT_20260714: 언어 변경 → 현재 난이도로 아웃라인 재적용(언어별 폰트/프리셋 반영).
+        private void HandleLanguageChanged() => SetDifficulty(_currentDifficulty);
 
         private void HandleLevelLoaded(OnLevelLoaded _)
         {
@@ -711,7 +724,12 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matSpeedOutlineSuperHard,
                 _                           => _matSpeedOutlineNormal
             };
-            UIOutlineStyle.ApplyMaterialOrColor(_txtSpeedOutline, speedOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+            // ROLLBACK_OUTLINE_LANG_FONT_20260714 예외: 배속(x1/x2)은 언어 무관 항상 영어 폰트.
+            //   ApplyFixedOutline = 언어 스왑 안 하되 폰트를 머티리얼(영어) 패밀리에 맞춰 폰트↔머티리얼 불일치 깨짐 방지.
+            UIOutlineStyle.ApplyFixedOutline(_txtSpeedOutline, speedOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+            // 배속 본문(fill)도 아웃라인과 같은 영어 폰트로(fill 이 한국어로 남아 어긋나는 문제).
+            TMPro.TMP_FontAsset speedFillFont = UIOutlineStyle.FontAssetForMaterial(speedOutlineMat);
+            if (speedFillFont != null && _txtSpeed != null && _txtSpeed.font != speedFillFont) _txtSpeed.font = speedFillFont;
 
             // 배경 색상 (frameBottom)
             Sprite bgSpr = difficulty switch
@@ -750,7 +768,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matLvOutlineSuperHard,
                 _                           => _matLvOutlineNormal
             };
-            UIOutlineStyle.ApplyMaterialOrColor(_txtLVOutline, lvOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+            UIOutlineStyle.ApplyLanguageAwareOutline(_txtLVOutline, lvOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
 
             // Number 텍스트 아웃라인 머티리얼
             Material numberOutlineMat = difficulty switch
@@ -759,7 +777,7 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matNumberOutlineSuperHard,
                 _                           => _matNumberOutlineNormal
             };
-            UIOutlineStyle.ApplyMaterialOrColor(_txtNumberOutline, numberOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+            UIOutlineStyle.ApplyLanguageAwareOutline(_txtNumberOutline, numberOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
 
             Material lockOutlineMat = difficulty switch
             {
@@ -768,9 +786,19 @@ namespace BalloonFlow
                 _                           => _matLockOutlineNormal
             };
             if (lockOutlineMat == null) lockOutlineMat = numberOutlineMat;
-            UIOutlineStyle.ApplyMaterialOrColor(_txtLockShuffleOutline, lockOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
-            UIOutlineStyle.ApplyMaterialOrColor(_txtLockRemoveOutline, lockOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
-            UIOutlineStyle.ApplyMaterialOrColor(_txtLockHandOutline, lockOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+            UIOutlineStyle.ApplyFixedOutline(_txtLockShuffleOutline, lockOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+            UIOutlineStyle.ApplyFixedOutline(_txtLockRemoveOutline, lockOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+            UIOutlineStyle.ApplyFixedOutline(_txtLockHandOutline, lockOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+
+            // ROLLBACK_OUTLINE_LANG_FONT_20260714 예외: Lock 본문(fill, 자식 TxtLock)도 아웃라인과 같은 영어 폰트로.
+            //   fill 이 한국어 폰트로 남으면 아웃라인(영어)과 글리프가 어긋남 → 아웃라인 머티리얼 패밀리 폰트로 강제.
+            TMPro.TMP_FontAsset lockFillFont = UIOutlineStyle.FontAssetForMaterial(lockOutlineMat);
+            if (lockFillFont != null)
+            {
+                if (_txtLockShuffle != null && _txtLockShuffle.font != lockFillFont) _txtLockShuffle.font = lockFillFont;
+                if (_txtLockRemove != null && _txtLockRemove.font != lockFillFont) _txtLockRemove.font = lockFillFont;
+                if (_txtLockHand != null && _txtLockHand.font != lockFillFont) _txtLockHand.font = lockFillFont;
+            }
 
             // Percentage 텍스트 아웃라인 머티리얼
             Material percentageOutlineMat = difficulty switch
@@ -779,13 +807,16 @@ namespace BalloonFlow
                 DifficultyPurpose.SuperHard => _matPercentageOutlineSuperHard,
                 _                           => _matPercentageOutlineNormal
             };
-            UIOutlineStyle.ApplyMaterialOrColor(_txtPercentageOutline, percentageOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
+            UIOutlineStyle.ApplyLanguageAwareOutline(_txtPercentageOutline, percentageOutlineMat, UIOutlineStyle.ForDifficulty(difficulty));
         }
 
         public void SetLevel(int _levelId)
         {
-            if (_txtLevel != null) _txtLevel.SetText("Level {0}", _levelId);
-            if (_txtLevelOutline != null) _txtLevelOutline.SetText("Level {0}", _levelId);
+            if (_txtLevel != null) _txtLevel.SetText(LocalizationService.Get("popup.title.level"), _levelId);
+            if (_txtLevelOutline != null) _txtLevelOutline.SetText(LocalizationService.Get("popup.title.level"), _levelId);
+            // ROLLBACK_LOCALIZATION_HARDCODE_FIX_20260714: '레벨 {n}' KO 폰트 스왑(EN/숫자 no-op).
+            LocalizationFont.Apply(_txtLevel);
+            LocalizationFont.Apply(_txtLevelOutline);
         }
 
         public void SetGold(int _amount)

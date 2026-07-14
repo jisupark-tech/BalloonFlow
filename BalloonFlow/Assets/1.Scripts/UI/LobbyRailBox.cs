@@ -89,6 +89,14 @@ namespace BalloonFlow
         {
             if (_imgBoxDim != null) _originalDimSprite = _imgBoxDim.sprite;
             if (_imgBox != null) _originalBoxSprite = _imgBox.sprite;
+
+            // ROLLBACK_OUTLINE_LANG_FONT_20260714: 레벨 아웃라인은 ApplyLevelOutline(난이도+언어)이 전담.
+            //   프리팹의 TMPSharedMaterialAdapter 가 OnEnable/OnLanguageChanged 로 폰트/머티리얼을 덮어 레이스(이격) 유발 → 비활성화.
+            if (_txtLevelOutline != null)
+            {
+                var ad = _txtLevelOutline.GetComponent<BalloonFlow.UX.TMPSharedMaterialAdapter>();
+                if (ad != null) ad.enabled = false;
+            }
         }
 
         /// <summary>
@@ -245,7 +253,9 @@ namespace BalloonFlow
                 _matLevelOutlineNormal,
                 _matLevelOutlineHard,
                 _matLevelOutlineSuperHard);
-            UIOutlineStyle.ApplyMaterialOrColor(_txtLevelOutline, mat, UIOutlineStyle.ForDifficulty(difficulty));
+            // ROLLBACK_OUTLINE_LANG_FONT_20260714: 언어 인지 + fill 폰트 동기화 일괄(아웃라인/fill 이격 방지).
+            //   기존 ApplyMaterialOrColor 는 Poppins 고정이라 Adapter 가 세팅한 Chiron 폰트와 불일치(font≠mat) → 활성 박스 깨짐.
+            UIOutlineStyle.ApplyOutlineWithFill(_txtLevelOutline, _txtLevel, mat, UIOutlineStyle.ForDifficulty(difficulty));
 
             Color color = _txtLevelOutline.color;
             color.a = alpha;

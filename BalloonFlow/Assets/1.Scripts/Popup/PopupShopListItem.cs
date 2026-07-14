@@ -590,7 +590,10 @@ namespace BalloonFlow
             Material titleOutlineMat = isSpecial
                 ? (_resTitleOutlineSpecialBundle ?? _matTitleOutlineSpecialBundle)
                 : (_resTitleOutlineNormalBundle  ?? _matTitleOutlineNormalBundle);
-            UIOutlineStyle.ApplyMaterialOrColor(_txtTitleOutline, titleOutlineMat, UIOutlineStyle.ForShopBundle(isSpecial));
+            // ROLLBACK_OUTLINE_LANG_FONT_20260714: 언어 인지(KO=Chiron 동일 색 프리셋 + 폰트) + fill 폰트 동기화(이격 방지).
+            UIOutlineStyle.ApplyLanguageAwareOutline(_txtTitleOutline, titleOutlineMat, UIOutlineStyle.ForShopBundle(isSpecial));
+            if (_txtTitle != null && _txtTitleOutline != null && _txtTitleOutline.font != null && _txtTitle.font != _txtTitleOutline.font)
+                _txtTitle.font = _txtTitleOutline.font;
         }
 
         private void Update()

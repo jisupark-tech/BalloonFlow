@@ -150,10 +150,10 @@ namespace BalloonFlow
                 // More Lives is a lobby/life popup, so it must not inherit the last in-game
                 // Hard/SuperHard level from PopupCommonFrame.ResolveActiveDifficulty().
                 _frame.ApplyDifficulty(DifficultyPurpose.Normal);
-                _frame.SetTitle("More Lives");
+                _frame.SetTitle(LocalizationService.Get("popupmorelive.txttitle"));
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Vertical);
                 // Vertical(Green+Blue) — Red 미사용, 빈 문자열 전달
-                _frame.SetVertButtonTexts("Refill", string.Empty, "Free");
+                _frame.SetVertButtonTexts(LocalizationService.Get("ui.common.refill"), string.Empty, LocalizationService.Get("ui.common.free"));
                 _frame.ShowExitButton(true);
             }
 

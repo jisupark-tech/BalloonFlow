@@ -88,11 +88,28 @@ namespace BalloonFlow
         // ROLLBACK_LOCALIZATION_KO_20260713: 부팅 시 디바이스 언어로 초기 언어 선택.
         //   지원 언어(CSV 의 Text_* 컬럼)에 있으면 전환, 없으면 EN 유지. UIText 는 씬 로드 후 OnEnable 에
         //   현재 언어로 Apply 하므로, 씬 로드 전(BeforeSceneLoad)에 언어를 정해두면 첫 표시부터 반영된다.
+        // ROLLBACK_LOCALIZATION_KO_20260713: QA/강제 언어 오버라이드 키(있으면 디바이스 언어보다 우선).
+        private const string PREFS_LANG_OVERRIDE = "BF_LangOverride";
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void AutoSelectDeviceLanguage()
         {
-            string code = DeviceLanguageToCode(Application.systemLanguage);
+            string forced = PlayerPrefs.GetString(PREFS_LANG_OVERRIDE, string.Empty);
+            string code = !string.IsNullOrEmpty(forced) ? forced : DeviceLanguageToCode(Application.systemLanguage);
+            // 빌드 검수용 로그(logcat) — 실기에서 systemLanguage 가 무엇으로 잡혀 어떤 코드로 선택됐는지 확인.
+            Debug.Log($"[Localization] systemLanguage={Application.systemLanguage}, override='{forced}' → code={code}");
             if (code != "EN") SetLanguageByCode(code); // EN 은 기본 슬롯 → no-op
+        }
+
+        /// <summary>QA/설정용 강제 언어 오버라이드. code 비우면 해제(디바이스 언어 사용). 즉시 적용 + PlayerPrefs 영속.
+        ///   빌드에서 디바이스 언어 변경 없이 KO 검수 가능(예: 디버그 콘솔/메뉴에서 SetLanguageOverride("KO")).</summary>
+        public static void SetLanguageOverride(string code)
+        {
+            if (string.IsNullOrEmpty(code)) PlayerPrefs.DeleteKey(PREFS_LANG_OVERRIDE);
+            else PlayerPrefs.SetString(PREFS_LANG_OVERRIDE, code);
+            PlayerPrefs.Save();
+            string apply = !string.IsNullOrEmpty(code) ? code : DeviceLanguageToCode(Application.systemLanguage);
+            SetLanguageByCode(string.IsNullOrEmpty(apply) ? "EN" : apply);
         }
 
         /// <summary>디바이스 SystemLanguage → CSV 언어 코드(Text_&lt;CODE&gt;). 미지원은 EN.</summary>

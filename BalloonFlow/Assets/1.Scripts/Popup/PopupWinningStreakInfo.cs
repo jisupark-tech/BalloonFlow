@@ -87,7 +87,7 @@ namespace BalloonFlow
                 Material purpleOutline = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_PURPLE_OUTLINE);
                 if (purpleOutline != null)
                     _frame.OverrideTitleOutlineAllDifficultyMaterials(purpleOutline);
-                _frame.SetTitle("Winning Streak Info");
+                _frame.SetTitle(LocalizationService.Get("popupwinningstreakinfo.texttitle"));
                 _frame.ShowExitButton(true);
             }
             base.OpenUI();

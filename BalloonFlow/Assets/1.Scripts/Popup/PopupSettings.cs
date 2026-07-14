@@ -100,17 +100,17 @@ namespace BalloonFlow
                 _frame.ApplyDifficulty(diff);
                 ApplyPopupSettingAreaDifficulty(diff);
                 RestoreToggleImageColors();
-                _frame.SetTitle("Settings");
+                _frame.SetTitle(LocalizationService.Get("ui.settings.title"));
                 if (onboarding)
                 {
                     _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
-                    _frame.SetSingleButtonText("Continue");
+                    _frame.SetSingleButtonText(LocalizationService.Get("ui.common.continue"));
                 }
                 else
                 {
                     _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
-                    _frame.SetHorizGreenText("Stay");
-                    _frame.SetHorizRedText("Quit");
+                    _frame.SetHorizGreenText(LocalizationService.Get("ui.common.stay"));
+                    _frame.SetHorizRedText(LocalizationService.Get("ui.common.quit"));
                 }
                 _frame.ShowExitButton(true);
             }

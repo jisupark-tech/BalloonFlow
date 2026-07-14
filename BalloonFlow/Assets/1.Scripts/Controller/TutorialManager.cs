@@ -485,7 +485,12 @@ namespace BalloonFlow
                 _instructionPanel.SetActive(true);
 
             if (_instructionText != null)
+            {
                 _instructionText.text = text ?? string.Empty;
+                // ROLLBACK_TUTORIAL_KO_FONT_20260714: 지시문은 코드로 .text 세팅(UIText 미부착)이라 폰트 스왑이 없어
+                //   KO 텍스트가 Poppins 로 tofu 가 됐다. 세팅 직후 언어 폰트 적용(KO=Chiron, 색/아웃라인 보존).
+                LocalizationFont.Apply(_instructionText);
+            }
         }
 
         /// <summary>

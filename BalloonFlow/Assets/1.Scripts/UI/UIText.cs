@@ -21,10 +21,7 @@ namespace BalloonFlow
         private Material _origMat;
         private bool _fontCaptured;
 
-        private const string KO_FONT_RES = "Fonts & Materials/ChironGoRoundTC-Black SDF";
-        private static TMP_FontAsset _koFont;
-        private static bool _koFontTried;
-        private static readonly Dictionary<string, Material> _koMatCache = new Dictionary<string, Material>();
+        // KO 폰트 로드는 LocalizationFont 로 일원화(코드-세팅 경로와 규약 공유).
 
         public string Key
         {
@@ -98,34 +95,25 @@ namespace BalloonFlow
                 tmp.font = _origFont;
                 if (_origMat != null) tmp.fontSharedMaterial = _origMat;
             }
-        }
 
-        private static TMP_FontAsset LoadKoFont()
-        {
-            if (!_koFontTried)
+            // ROLLBACK_LOCALIZATION_KO_FONT_20260714: 자식 TMP(아웃라인 밑 fill 등)도 같은 폰트로 → 아웃라인/fill 이격 방지.
+            //   fill 이 UIText/Adapter 를 안 달고 있어도(코드 세팅 타이틀 등) 여기서 폰트가 동기화됨.
+            var applied = tmp.font;
+            if (applied != null)
             {
-                _koFont = Resources.Load<TMP_FontAsset>(KO_FONT_RES);
-                _koFontTried = true;
-                if (_koFont == null) Debug.LogWarning($"[UIText] KO 폰트 없음: Resources/{KO_FONT_RES}");
+                var kids = tmp.GetComponentsInChildren<TMP_Text>(true);
+                for (int i = 0; i < kids.Length; i++)
+                    if (kids[i] != null && kids[i] != tmp && kids[i].font != applied) kids[i].font = applied;
             }
-            return _koFont;
         }
 
-        /// <summary>Poppins-Bold-{Outline} → ChironGoRoundTC-Black-{Outline} 매핑. 없으면 Chiron 기본 머티리얼.</summary>
+        private static TMP_FontAsset LoadKoFont() => LocalizationFont.LoadKoFont();
+
+        /// <summary>Poppins-Bold-{Outline} → ChironGoRoundTC-Black-{Outline} 매핑.
+        ///   ROLLBACK_OUTLINE_LANG_COLORKEEP_20260714: 공유 로직 위임 — 이름 규약 프리셋 우선,
+        ///   없으면 EN 색/아웃라인 유지한 채 아틀라스만 KO 폰트로 재타겟(색상 보존, 블랙 기본으로 안 떨어짐).</summary>
         private static Material MapKoMaterial(Material origMat, TMP_FontAsset koFont)
-        {
-            if (origMat != null && origMat.name.IndexOf("Poppins-Bold", System.StringComparison.Ordinal) >= 0)
-            {
-                string koName = origMat.name.Replace("Poppins-Bold", "ChironGoRoundTC-Black");
-                if (!_koMatCache.TryGetValue(koName, out var m))
-                {
-                    m = Resources.Load<Material>("Fonts & Materials/" + koName);
-                    _koMatCache[koName] = m;                 // null 도 캐시(반복 로드 방지)
-                }
-                if (m != null) return m;
-            }
-            return koFont.material;                          // 매핑 실패 → Chiron 기본
-        }
+            => UIOutlineStyle.MaterialForFont(origMat, koFont, "ChironGoRoundTC-Black");
 
 #if UNITY_EDITOR
         /// <summary>에디터에서 Key 변경/프리필 시 즉시 미리보기.</summary>

@@ -693,7 +693,7 @@ namespace BalloonFlow
 
             if (_frame != null)
             {
-                _frame.SetTitle("Use Item");
+                _frame.SetTitle(LocalizationService.Get("popupuseitem.txttitle"));
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.None);
                 _frame.ShowExitButton(false);
             }
