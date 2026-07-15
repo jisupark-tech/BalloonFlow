@@ -234,6 +234,8 @@ namespace BalloonFlow
 
         // ── TMP font materials (Resources/TextMesh Pro/) ─────────
         public const string FONT_MAT_POPPINS_BOLD_GREEN_OUTLINE   = "Fonts & Materials/Poppins-Bold-GreenOutline";
+        public const string FONT_MAT_POPPINS_BOLD_BROWN_OUTLINE   = "Fonts & Materials/Poppins-Bold-BrownOutline";
+        public const string FONT_MAT_POPPINS_BOLD_BLUE_OUTLINE    = "Fonts & Materials/Poppins-Bold-BlueOutline";
         public const string FONT_MAT_POPPINS_BOLD_PURPLE_OUTLINE  = "Fonts & Materials/Poppins-Bold-PurpleOutline";
         public const string FONT_MAT_POPPINS_BOLD_RED_OUTLINE     = "Fonts & Materials/Poppins-Bold-RedOutline";
         public const string SPR_FXZAP                                    = "Fxzap";
@@ -527,18 +529,15 @@ namespace BalloonFlow
 
         public static string GetTermsUrl()
         {
-            // ROLLBACK_LEGAL_URL_LANGUAGE_ROUTING_20260626:
-            // Currently legal pages are forced to EN. When country/language routing is approved,
-            // switch here based on LocalizationService.CurrentLanguageCode or a server/user country code.
-            return URL_TERMS_EN;
+            // ROLLBACK_LEGAL_URL_LANGUAGE_ROUTING_20260715: 한국어 로컬라이제이션(CurrentLanguageCode="KO") 시 KR 약관.
+            //   그 외(EN/기타)는 EN — 텍스트 로컬라이징과 동일 신호/규약. 게터 단일화라 환영팝업·세팅탭 자동 반영.
+            return LocalizationService.CurrentLanguageCode == "KO" ? URL_TERMS_KR : URL_TERMS_EN;
         }
 
         public static string GetPrivacyUrl()
         {
-            // ROLLBACK_LEGAL_URL_LANGUAGE_ROUTING_20260626:
-            // Currently legal pages are forced to EN. When country/language routing is approved,
-            // switch here based on LocalizationService.CurrentLanguageCode or a server/user country code.
-            return URL_PRIVACY_EN;
+            // ROLLBACK_LEGAL_URL_LANGUAGE_ROUTING_20260715: KO 시 KR 개인정보 처리방침. 그 외 EN.
+            return LocalizationService.CurrentLanguageCode == "KO" ? URL_PRIVACY_KR : URL_PRIVACY_EN;
         }
 
         #endregion

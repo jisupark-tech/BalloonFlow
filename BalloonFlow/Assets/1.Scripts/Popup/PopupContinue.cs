@@ -56,6 +56,9 @@ namespace BalloonFlow
         private TMP_Text _txtContinueTitle;
         private TMP_Text _txtContinueTitleOutline;
         private bool _continueTitleSearched;
+        // ROLLBACK_CONTINUE_TITLE_DIFFICULTY_OUTLINE_MAT_20260715: 난이도별 아웃라인 머티리얼(Normal=Blue/Hard=Purple/SuperHard=Red).
+        //   아웃라인 색은 vertex tint 가 아니라 머티리얼이 결정 → Poppins 아웃라인 머티리얼 스왑. Resources 1회 캐시.
+        private Material _matOutlineBlue, _matOutlinePurple, _matOutlineRed;
 
         [Header("[Buttons — 직접 할당]")]
         [SerializeField] private Button _btnContinue;
@@ -356,7 +359,37 @@ namespace BalloonFlow
                 if (titleOutline != null) _txtContinueTitleOutline = titleOutline.GetComponent<TMP_Text>();
             }
 
-            UIOutlineStyle.ApplyDifficulty(_txtContinueTitleOutline, difficulty);
+            // 스테이지 난이도색은 '아웃라인'(TxtContinueTitleOutline)에만 적용. 본문(TxtContinueTitle)은 프리팹 기본색 유지.
+            // ROLLBACK_CONTINUE_TITLE_DIFFICULTY_OUTLINE_MAT_20260715: tint(=인스펙터 값만 바뀜)가 아니라 '머티리얼 스왑'으로
+            //   실제 색 변경. Normal=Blue / Hard=Purple / SuperHard=Red. 폰트는 Poppins 유지(ChironGoRoundTC-Black fallback 이
+            //   폴백 서브메시에 메인 머티리얼 아웃라인 속성을 결합 → 한글도 같은 색). 폰트 강제 스왑 안 함.
+            if (_txtContinueTitleOutline != null)
+            {
+                if (_matOutlineBlue == null)   _matOutlineBlue   = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_BLUE_OUTLINE);
+                if (_matOutlinePurple == null) _matOutlinePurple = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_PURPLE_OUTLINE);
+                if (_matOutlineRed == null)    _matOutlineRed    = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_RED_OUTLINE);
+
+                Material baseMat = UIOutlineStyle.SelectDifficultyMaterial(
+                    difficulty, _matOutlineBlue, _matOutlinePurple, _matOutlineRed);
+                if (baseMat != null)
+                {
+                    // Poppins-Bold SDF 에 ChironGoRoundTC-Black fallback 이 등록돼 있어 한글은 폴백이 렌더하며,
+                    //   TMP 는 폴백 서브메시에 '메인 머티리얼의 아웃라인 속성'을 결합한 머티리얼을 부여한다 →
+                    //   폰트/머티리얼을 Chiron 으로 강제 스왑할 필요 없이 Poppins-{색}Outline 만 적용하면 한글도 그 색으로 나온다.
+                    //   ★단 이 아웃라인엔 TMPSharedMaterialAdapter(배칭 shared 머티리얼)가 붙어 있어 직접 대입 시
+                    //     OnEnable/언어전환에서 _sharedBaseMaterial(Poppins-Bold-OutlineShared)로 되돌린다(진단 확인). →
+                    //     어댑터의 base 자체를 이 머티리얼로 교체해 되돌림 차단. 어댑터 없으면 직접 대입.
+                    var adapter = _txtContinueTitleOutline.GetComponent<BalloonFlow.UX.TMPSharedMaterialAdapter>();
+                    if (adapter != null) adapter.SetBaseMaterial(baseMat);
+                    else _txtContinueTitleOutline.fontSharedMaterial = baseMat;
+                    _txtContinueTitleOutline.SetMaterialDirty();
+                }
+                else
+                {
+                    // 머티리얼 로드 실패 시 최소한 색 tint 폴백(회귀 방지).
+                    UIOutlineStyle.ApplyDifficulty(_txtContinueTitleOutline, difficulty);
+                }
+            }
         }
 
         public void Show()

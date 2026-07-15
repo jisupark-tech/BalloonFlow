@@ -215,6 +215,8 @@ namespace BalloonFlow
 
             _frame.ApplyDifficulty(ResolveCurrentDifficulty());
             _frame.SetTitle(LocalizationService.Get(TXT_TITLE_KEY));
+            // ROLLBACK_TITLE_NOWRAP_20260715: KR 은 한 줄 강제(No Wrap), EN 은 기본 유지.
+            _frame.SetTitleNoWrap(LocalizationService.CurrentLanguageCode == "KO");
             _frame.SetDescription(description);
             ApplyCommonPanelDescriptionFallback(description);
             _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);

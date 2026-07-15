@@ -56,6 +56,13 @@ namespace BalloonFlow
         [SerializeField] private Sprite _bgSpriteHard;
         [SerializeField] private Sprite _bgSpriteSuperHard;
 
+        // ROLLBACK_RESULT_KR_20260715: 언어별 결과 텍스트 그룹(EN=ImageTxt / KR=ImageTxtKR) + KR 난이도 BG(ImageBGKR).
+        //   무링크: 계층 이름으로 1회 resolve. KR BG 스프라이트는 UI 아틀라스에서 이름 로드(popupResult{Diff}KR, 2.Sprite=packable).
+        //   KR 그룹의 애니메이션(PopupResultKR Animator)은 그룹 active + OpenUI 로 자동 재생(EN 과 동일).
+        private GameObject _imageTxtGroup, _imageTxtKRGroup;
+        private Image _imageBGKR;
+        private bool _krRefsResolved;
+
         [Header("[Hard Level Option — Hard/SuperHard 전용]")]
         [SerializeField] private GameObject _hardLevelOption;
         [SerializeField] private Image _iconSkull;
@@ -230,6 +237,7 @@ namespace BalloonFlow
             UpdateHardLevelOption(difficulty);
             ApplyBadge(difficulty);
             ApplyDifficultyBackground(difficulty);
+            ApplyResultKRVisual(difficulty); // ROLLBACK_RESULT_KR_20260715: 언어 그룹 토글 + KR 난이도 BG (OpenUI 전 → KR Animator 정상 재생)
 
             // OpenUI() 가 EnsureRewardVisible 보다 먼저 와야 함 — Canvas.overrideSorting=true 는
             // GameObject.activeInHierarchy=false 일 때 silently 무시되기 때문 (Reward subtree 의 sub-canvas
@@ -348,6 +356,39 @@ namespace BalloonFlow
             };
 
             if (chosen != null) _imageBG.sprite = chosen;
+        }
+
+        // ROLLBACK_RESULT_KR_20260715: 언어별 결과 텍스트 그룹 토글 + KR 난이도 BG.
+        //   EN → ImageTxt 활성(기존 ImageBG), KR → ImageTxtKR 활성(ImageBGKR = popupResult{Diff}KR).
+        //   ShowWin 에서 OpenUI() 직전 호출 → 활성 그룹의 Animator(EN=PopupResult / KR=PopupResultKR)가 팝업 활성화 시 재생.
+        private void ApplyResultKRVisual(DifficultyPurpose difficulty)
+        {
+            EnsureKRRefs();
+            bool ko = LocalizationService.CurrentLanguageCode == "KO";
+            if (_imageTxtGroup   != null) _imageTxtGroup.SetActive(!ko);
+            if (_imageTxtKRGroup != null) _imageTxtKRGroup.SetActive(ko);
+
+            if (ko && _imageBGKR != null && ResourceManager.HasInstance)
+            {
+                string krName = difficulty switch
+                {
+                    DifficultyPurpose.Hard      => "popupResultHardKR",
+                    DifficultyPurpose.SuperHard => "popupResultSuperHardKR",
+                    _                           => "popupResultNormalKR"
+                };
+                Sprite kr = ResourceManager.Instance.GetUISprite(krName);
+                if (kr != null) _imageBGKR.sprite = kr;
+            }
+        }
+
+        private void EnsureKRRefs()
+        {
+            if (_krRefsResolved) return;
+            _krRefsResolved = true;
+            Transform t;
+            t = FindDeepChild(transform, "ImageTxt");   if (t != null) _imageTxtGroup   = t.gameObject;
+            t = FindDeepChild(transform, "ImageTxtKR"); if (t != null) _imageTxtKRGroup = t.gameObject;
+            t = FindDeepChild(transform, "ImageBGKR");  if (t != null) _imageBGKR       = t.GetComponent<Image>();
         }
 
         #endregion

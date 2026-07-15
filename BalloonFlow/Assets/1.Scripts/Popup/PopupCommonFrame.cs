@@ -294,6 +294,14 @@ namespace BalloonFlow
             ApplyTitleOutline(_hasExplicitDifficulty ? _currentDifficulty : ResolveActiveDifficulty());
         }
 
+        // ROLLBACK_TITLE_NOWRAP_20260715: 타이틀 줄바꿈 모드. noWrap=true → 한 줄 강제(Text Wrapping Mode=NoWrap),
+        //   false → 기본 워드랩. 호출한 팝업만 영향(예: PopupQuit KR "게임을 종료할까요?" 한 줄 표시). 양쪽 세팅해 재사용/언어전환 복원.
+        public void SetTitleNoWrap(bool noWrap)
+        {
+            if (_txtTitle != null) _txtTitle.enableWordWrapping = !noWrap;
+            if (_txtTitleOutline != null) _txtTitleOutline.enableWordWrapping = !noWrap;
+        }
+
         /// <summary>Description 텍스트 설정 (TxtDescription + Outline 동시). 미배선 시 null-safe로 skip.</summary>
         public void SetDescription(string text)
         {

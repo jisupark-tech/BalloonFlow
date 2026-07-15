@@ -1985,10 +1985,13 @@ namespace BalloonFlow
         private static string FormatWsInfiniteHearts(int seconds)
         {
             if (seconds <= 0) return "";
+            // ROLLBACK_WS_REWARD_TIME_LOCALIZE_20260715: 시간 단위 언어 인지(EN h/m/s, KO 시간/분/초). WS 컨벤션 동일.
+            bool ko = LocalizationService.CurrentLanguageCode == "KO";
             int h = seconds / 3600;
-            if (h >= 1) return $"{h}h";
+            if (h >= 1) return ko ? $"{h}시간" : $"{h}h";
             int m = seconds / 60;
-            return m > 0 ? $"{m}m" : $"{seconds}s";
+            if (m > 0) return ko ? $"{m}분" : $"{m}m";
+            return ko ? $"{seconds}초" : $"{seconds}s";
         }
 
         /// <summary>root 의 직계 자식 중 이름 일치하는 첫 GameObject (비활성 포함). root 와 동명인 변형 child 탐색용.</summary>

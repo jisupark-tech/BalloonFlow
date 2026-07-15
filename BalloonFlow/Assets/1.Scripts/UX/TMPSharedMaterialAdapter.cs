@@ -54,6 +54,16 @@ namespace BalloonFlow.UX
             _captured = true;
         }
 
+        // ROLLBACK_TMP_ADAPTER_SET_BASE_20260715: 런타임에 기준 프리셋 머티리얼 교체(즉시 재적용 + 언어전환에도 유지).
+        //   외부(예: 1000코인 가격 아웃라인 = Poppins-Bold-BrownOutline)에서 어댑터가 붙은 텍스트의 Material Preset 을
+        //   되돌림 없이 바꾸려면 fontSharedMaterial 직접 대입 대신 이 API 를 사용(어댑터가 다음 Apply 에서 안 덮음).
+        public void SetBaseMaterial(Material mat)
+        {
+            _sharedBaseMaterial = mat;
+            Capture();
+            Apply();
+        }
+
         // ROLLBACK_FONT_SWAP_REMOVED_20260714: Poppins-Bold SDF 에 Chiron Fallback 추가로 언어별 폰트 스왑 불필요.
         //   폰트/자식 스왑 제거 — _sharedBaseMaterial 을 fontSharedMaterial 에 핀만(배칭 유지, 원래 목적). 한글은 fallback 렌더.
         private void Apply()

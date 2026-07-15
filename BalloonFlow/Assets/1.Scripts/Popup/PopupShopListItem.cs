@@ -134,6 +134,9 @@ namespace BalloonFlow
         [Header("[가격 (왼쪽 골드 영역) — TextPrice / TextPriceOutline]")]
         [SerializeField] private TMP_Text _txtPrice;
         [SerializeField] private TMP_Text _txtPriceOutline;
+        [Tooltip("1000코인 전용 아웃라인(TextTitleOutline·TextPriceOutline 공용) Material Preset — Poppins-Bold-BrownOutline 할당(미할당 시 Resources 로드 폴백).")]
+        [FormerlySerializedAs("_matPriceOutlineBrown")]
+        [SerializeField] private Material _matBrownOutline1000;
 
         [Header("[보상 아이콘 — Inspector fallback. Awake 시 Addressable atlas 에서 override]")]
         [SerializeField] private Sprite _iconCoin;
@@ -153,6 +156,10 @@ namespace BalloonFlow
         private Color _defaultPriceOutlineColor;
         private bool _priceOutlineColorCaptured;
         private static readonly Color Coin1000PriceOutlineColor = new Color32(0x6A, 0x4A, 0x30, 0xFF);
+        // ROLLBACK_BROWN_1000_COIN_PRICE_OUTLINE_MAT_20260715: 1000코인 가격 아웃라인은 색 tint 대신
+        //   Material Preset(Poppins-Bold-BrownOutline) 자체를 사용. 원복용 기본 머티리얼 + 브라운 프리셋 캐시.
+        private Material _defaultPriceOutlineMat;
+        private Material _resPriceOutlineBrown;
 
         // ShopListItem.prefab 이 바이너리 직렬화라 TxtTitleOutline Material Preset 을 텍스트 편집으로 교체 불가.
         // Resources.Load 캐시 — PopupWinningStreak.EnsureStreakSprites 의 _fontMatGreenOutline/_fontMatPurpleOutline 패턴 미러.
@@ -250,7 +257,8 @@ namespace BalloonFlow
                 ? FormatCoins(data.rewards.coins)
                 : string.Empty;
             SetTextWithOutline(_txtPrice, _txtPriceOutline, coinsText);
-            ApplyCoin1000PriceOutlineColor(data);
+            ApplyPriceOutlineBrown(data);
+            ApplyCoin1000TitleOutlineColor(data);
 
             // 좌측 ImageGoldIcon — Firestore goldIconKey 명시 시 atlas 교체, 미지정 시 Const.SPR_ICONGOLD 기본.
             ApplyGoldIcon(data);
@@ -536,26 +544,105 @@ namespace BalloonFlow
             _priceOutlineColorCaptured = true;
 
             _defaultPriceOutlineColor = _txtPriceOutline != null ? _txtPriceOutline.color : Color.white;
+            _defaultPriceOutlineMat   = _txtPriceOutline != null ? _txtPriceOutline.fontSharedMaterial : null; // 비-골드 원복용
         }
 
-        private void ApplyCoin1000PriceOutlineColor(ShopProductData data)
+        private void ApplyPriceOutlineBrown(ShopProductData data)
         {
-            // ROLLBACK_BROWN_1000_COIN_PRICE_OUTLINE_20260707:
-            // ShopListGold.prefab is shared by every coin product. Keep the prefab TMP
-            // material/outline width intact and recolor only the 1000 coin outline text.
-            CapturePriceOutlineColorIfNeeded();
+            // ROLLBACK_BROWN_ALL_GOLD_PRICE_OUTLINE_20260715:
+            // 왼쪽 골드 표시는 아웃라인(TextPriceOutline) + fill(TextPrice, 자식) 2겹. 숫자의 '보이는 색'은 fill.
+            //   → 골드 가격 표시 상품(플레인 골드팩 + 골드 번들, coins>0)에 대해:
+            //      · 아웃라인: Poppins-Bold-BrownOutline 머티리얼(어댑터 되돌림 차단).
+            //      · fill(TextPrice): 플레인 머티리얼이라 vertex 색을 갈색으로 tint (진단 결과 fill 이 크림색이라 빨강처럼 보이던 것).
+            //   게이트는 coins>0 (dict 는 6종뿐이라 번들 누락 → coins>0 로 확대).
+            // ROLLBACK_PRICE_OUTLINE_NAME_FALLBACK_20260715: 프리팹(ShopListGold 등)에서 _txtPriceOutline SerializeField 가
+            //   미할당이면 이름으로 자동 resolve → 배선 누락된 프리팹(코인팩)도 동일 처리.
+            if (_txtPriceOutline == null)
+            {
+                foreach (var t in GetComponentsInChildren<TMP_Text>(true))
+                    if (t.name == "TextPriceOutline") { _txtPriceOutline = t; break; }
+            }
+            if (_txtPrice == null)
+            {
+                foreach (var t in GetComponentsInChildren<TMP_Text>(true))
+                    if (t.name == "TextPrice") { _txtPrice = t; break; }
+            }
 
-            bool isCoin1000 = data != null && data.productId == CoinProductId1000;
-            UIOutlineStyle.ApplyColor(_txtPriceOutline, isCoin1000 ? Coin1000PriceOutlineColor : _defaultPriceOutlineColor);
+            CapturePriceOutlineColorIfNeeded();
+            if (_txtPriceOutline == null) return;
+
+            bool showsGoldPrice = data != null && data.rewards != null && data.rewards.coins > 0;
+            if (showsGoldPrice)
+            {
+                // 번들 가격 아웃라인이 빨갛던 원인이 3중(머티리얼 Red + vertex gradient 빨강 + vertex color)이라
+                //   1000골드처럼 = 빨강 소스 3개 전부 제거:
+                //   ① 머티리얼: Red → Poppins-Bold-BrownOutline (어댑터 되돌림 차단)
+                //   ② vertex gradient: OFF (그라디언트 빨강이 흰색을 덮던 것)
+                //   ③ vertex color: 흰색(#FFFFFF)
+                //   fill(TextPrice)은 건드리지 않음.
+                Material brown = GetBrownOutlineMaterial();
+                if (brown != null)
+                {
+                    // 어댑터 base 갱신(shader 일치 시 어댑터가 적용/유지) + ★직접 대입(어댑터가 shader mismatch 가드로 skip 해도
+                    //   강제 적용 — RedOutline↔BrownOutline 의 셰이더가 달라 어댑터 Apply 가 skip 하던 게 원인).
+                    var adapter = _txtPriceOutline.GetComponent<BalloonFlow.UX.TMPSharedMaterialAdapter>();
+                    if (adapter != null) adapter.SetBaseMaterial(brown);
+                    _txtPriceOutline.fontSharedMaterial = brown;
+                }
+                _txtPriceOutline.enableVertexGradient = false;
+                UIOutlineStyle.ApplyColor(_txtPriceOutline, Color.white);
+                return;
+            }
+
+            // 골드 미표시 상품: vertex 색 기본 복원(공유 인스턴스 재사용 대비). 머티리얼/ fill 은 건드리지 않음.
+            UIOutlineStyle.ApplyColor(_txtPriceOutline, _defaultPriceOutlineColor);
         }
 
+        // ROLLBACK_BROWN_1000_COIN_TITLE_OUTLINE_MAT_20260715: 1000코인 '타이틀' 아웃라인 보라→갈색.
+        //   ★ 아웃라인 색은 머티리얼이 결정 → ApplyProductTypeVisual 이 건 퍼플 머티리얼은 vertex tint 로 안 바뀜.
+        //     반드시 Material Preset 자체를 Brown 으로 스왑(가격과 동일 경로).
+        private void ApplyCoin1000TitleOutlineColor(ShopProductData data)
+        {
+            if (data == null || data.productId != CoinProductId1000) return;
+            ApplyBrownOutlineMaterial(_txtTitleOutline);
+        }
+
+        // 1000코인 아웃라인(타이틀/가격 공용) → Poppins-Bold-BrownOutline Material Preset 적용.
+        //   직렬화 할당(프리팹) 우선 → Resources 폴백. 어댑터(TMPSharedMaterialAdapter) 있으면 그걸 통해(OnEnable/언어전환 되돌림 방지).
+        //   머티리얼 미확보 시에만 vertex tint 폴백(회귀 방지).
+        private Material GetBrownOutlineMaterial()
+        {
+            if (_matBrownOutline1000 != null) return _matBrownOutline1000;
+            if (_resPriceOutlineBrown == null)
+                _resPriceOutlineBrown = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_BROWN_OUTLINE);
+            return _resPriceOutlineBrown;
+        }
+
+        private void ApplyBrownOutlineMaterial(TMP_Text outlineText)
+        {
+            if (outlineText == null) return;
+            Material brown = GetBrownOutlineMaterial();
+            if (brown != null)
+            {
+                var adapter = outlineText.GetComponent<BalloonFlow.UX.TMPSharedMaterialAdapter>();
+                if (adapter != null) adapter.SetBaseMaterial(brown);   // 되돌림 방지
+                else outlineText.fontSharedMaterial = brown;           // ← Material Preset 교체
+                UIOutlineStyle.ApplyColor(outlineText, Color.white);   // 프리셋 브라운을 왜곡 없이 노출
+                return;
+            }
+            UIOutlineStyle.ApplyColor(outlineText, Coin1000PriceOutlineColor); // 폴백
+        }
+
+        // ROLLBACK_SHOP_REWARD_TIME_LOCALIZE_20260715: 보상 시간 단위 언어 인지(EN h/m, KO 시간/분).
+        //   PopupWinningStreak 1362-1364 컨벤션 미러링. (기존 하드코딩 "h"/"m" 가 한국어에서도 영어로 나오던 문제)
         private static string FormatHours(int seconds)
         {
             if (seconds <= 0) return "";
+            bool ko = LocalizationService.CurrentLanguageCode == "KO";
             float hours = seconds / 3600f;
-            if (hours >= 1f) return $"{Mathf.RoundToInt(hours)}h";
-            int minutes = Mathf.RoundToInt(seconds / 60f);
-            return $"{minutes}m";
+            if (hours >= 1f) { int h = Mathf.RoundToInt(hours); return ko ? $"{h}시간" : $"{h}h"; }
+            int m = Mathf.RoundToInt(seconds / 60f);
+            return ko ? $"{m}분" : $"{m}m";
         }
 
         #endregion

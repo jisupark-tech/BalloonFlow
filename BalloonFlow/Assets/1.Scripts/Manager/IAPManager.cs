@@ -278,6 +278,28 @@ namespace BalloonFlow
 #endif
         }
 
+        // ROLLBACK_SHOP_KRW_DISPLAY_20260715: 표시 가격 — 원화(KRW)는 "5,800 KRW" 형식(금액+통화코드),
+        //   그 외 통화는 스토어 기본 문자열($4.99, €3,99 …). 스토어 계정 지역 기준(앱 언어 무관).
+        //   미초기화/미조회 시 GetProductPrice 폴백($priceUsd).
+        public string GetDisplayPrice(string productId)
+        {
+            if (string.IsNullOrEmpty(productId)) return "$?.??";
+#if UNITY_IAP
+            if (_isInitialized && _storeController != null)
+            {
+                Product product = _storeController.products.WithID(productId);
+                if (product != null && product.availableToPurchase && product.metadata != null)
+                {
+                    var m = product.metadata;
+                    if (m.isoCurrencyCode == "KRW")
+                        return $"{m.localizedPrice:N0} KRW";   // 예: 5,800 KRW (원화는 소수점 없음)
+                    return m.localizedPriceString;             // 그 외: 스토어 기본($4.99 등)
+                }
+            }
+#endif
+            return GetProductPrice(productId);
+        }
+
         public string GetProductPrice(string productId)
         {
             if (string.IsNullOrEmpty(productId)) return "$?.??";

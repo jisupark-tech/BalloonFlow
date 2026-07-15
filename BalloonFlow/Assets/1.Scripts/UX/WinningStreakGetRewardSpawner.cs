@@ -190,11 +190,14 @@ namespace BalloonFlow
             {
                 case RewardKind.Coin: return entry.count.ToString();             // "5000", no x
                 case RewardKind.InfiniteHearts:
+                    // ROLLBACK_WS_REWARD_TIME_LOCALIZE_20260715: 시간 단위 언어 인지(EN h/m/s, KO 시간/분/초).
                     int s = entry.count;
+                    bool ko = LocalizationService.CurrentLanguageCode == "KO";
                     int h = s / 3600;
-                    if (h >= 1) return $"{h}h";
+                    if (h >= 1) return ko ? $"{h}시간" : $"{h}h";
                     int m = s / 60;
-                    return m > 0 ? $"{m}m" : $"{s}s";
+                    if (m > 0) return ko ? $"{m}분" : $"{m}m";
+                    return ko ? $"{s}초" : $"{s}s";
                 default: return $"x{entry.count}";                                // booster
             }
         }

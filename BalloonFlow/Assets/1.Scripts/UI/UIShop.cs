@@ -270,11 +270,20 @@ namespace BalloonFlow
             var category = MapCategory(doc.category);
             string title = ResolveProductTitleKey(doc, category);
 
+            // ROLLBACK_SHOP_KRW_DISPLAY_20260715: 표시 가격 — 원화(KRW)="5,800 KRW", 그 외=스토어 기본($4.99 …).
+            //   스토어 계정 지역 통화 기준(앱 언어 무관) + 실제 청구액과 일치. IAP 미초기화/미조회 시 $priceUsd 폴백.
+            string priceText = $"${doc.priceUsd:F2}";
+            if (IAPManager.HasInstance)
+            {
+                string localized = IAPManager.Instance.GetDisplayPrice(doc.productId);
+                if (!string.IsNullOrEmpty(localized) && localized != "$?.??") priceText = localized;
+            }
+
             return new ShopProductData
             {
                 productId        = doc.productId,
                 title            = title,
-                price            = $"${doc.priceUsd:F2}",
+                price            = priceText,
                 hasDiscount      = doc.discountPercent > 0,
                 discountPercent  = doc.discountPercent,
                 hasTimeLimit     = doc.hasTimeLimit,
