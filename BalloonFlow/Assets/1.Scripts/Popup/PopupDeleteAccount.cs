@@ -5,7 +5,7 @@ using TMPro;
 namespace BalloonFlow
 {
     /// <summary>
-    /// 계정 삭제(탈퇴) 확인 전용 팝업. Horizontal 레이아웃 — Green=Stay(취소), Red=Delete(삭제).
+    /// 계정 삭제(탈퇴) 확인 전용 팝업. Horizontal 레이아웃 — Green=Cancel(취소), Red=Delete(삭제).
     /// 기존 PopupError.ShowDeleteAccountConfirm 의 동작을 전용 프리팹(Popup/PopupDeleteAccount)으로 분리.
     /// UISetting.OnDeleteAccountClicked 가 OpenUI&lt;PopupDeleteAccount&gt; 후 Show(onDelete) 호출.
     /// onDelete 는 Red 버튼 클릭 시에만 발화(닫은 뒤 호출). Green/X 는 닫기만(탈퇴 안 함).
@@ -38,7 +38,7 @@ namespace BalloonFlow
             {
                 _frame.SetTitle(LocalizationService.Get("popup.txttitle.deleteaccount"));
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Horizontal);
-                _frame.SetHorizGreenText(LocalizationService.Get("ui.common.stay"));
+                _frame.SetHorizGreenText(LocalizationService.Get("ui.common.cancel")); // ROLLBACK_DELETEACCOUNT_CANCEL_20260715: Stay→Cancel(취소). 삭제 확인 팝업은 '취소'가 자연스러움
                 _frame.SetHorizRedText(LocalizationService.Get("ui.common.delete"));
                 _frame.ShowExitButton(true);
             }
