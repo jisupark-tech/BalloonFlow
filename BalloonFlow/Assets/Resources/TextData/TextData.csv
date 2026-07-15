@@ -81,7 +81,7 @@ spawner.magazinetext,0,0,
 tutorial.instructiontext,Tutorial instruction text,튜토리얼 안내 문구,
 tutorial.text,SKIP,건너뛰기,
 tutorial.texttap,Tap to Anywhere,아무 곳이나 탭하세요,
-tutorial.textitem,Tap your item!,아이템을 탭하세요!,
+tutorial.textitem,Tap your item!,아이템을\n탭하세요!,
 txttoast.txttoast,"Your lives are unlimited!
 ",생명이 무제한이에요!,
 uihud.holdertext,On Rail: 0/9,레일 위: 0/9,
