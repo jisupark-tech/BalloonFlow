@@ -1316,6 +1316,16 @@ namespace BalloonFlow
             return false;
         }
 
+        // ROLLBACK_FAIL_CONTEXT_20260715: 실패 시 외곽 노출 색상 CSV("c3,c5") — analytics fail_outermost_colors 용(읽기 전용).
+        public string GetOutermostColorsCsv()
+        {
+            var outer = GetOutermostBalloonColors();
+            if (outer == null || outer.Count == 0) return "";
+            var sb = new System.Text.StringBuilder();
+            foreach (int c in outer) { if (sb.Length > 0) sb.Append(','); sb.Append('c').Append(c); }
+            return sb.ToString();
+        }
+
         private HashSet<int> GetOutermostBalloonColors()
         {
             // dirty 아니면 직전 계산 결과 그대로 반환 (매 프레임 비용 0)

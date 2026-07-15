@@ -425,6 +425,9 @@ namespace BalloonFlow
             OpenUI();
             // ROLLBACK_BUYITEM_TITLE_AFTER_ENABLE_20260707: OpenUI(OnEnable→UIText 프리팹키 덮어씀) 직후 타이틀 재적용.
             if (_frame != null) _frame.SetTitle(title);
+            // ROLLBACK_ITEMUNLOCK_DESC_KEY_20260715: 설명 TMP 에도 UIText(_key='popup.txtdescription.hand') 프리팹 키가
+            //   붙어 OnEnable 마다 hand 로 덮으므로, 타이틀과 동일하게 OpenUI 직후 description 을 재적용한다.
+            if (_txtDescription != null && !string.IsNullOrEmpty(description)) _txtDescription.text = description;
         }
 
         /// <summary>boosterType에 맞는 아이콘 스프라이트 반환.</summary>

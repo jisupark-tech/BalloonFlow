@@ -286,14 +286,14 @@ namespace BalloonFlow.Analytics
             p[AnalyticsConsts.P_LAST_UPDATED_AT] = now.ToString("o");
 
             p[AnalyticsConsts.P_LAST_ACTIVE_AT]      = _sessionStartedUtc.ToString("o");
-            p[AnalyticsConsts.P_LAST_ACTIVE_VERSION] = Application.version;
+            p[AnalyticsConsts.P_LAST_ACTIVE_VERSION] = AbTestService.TagAppVersion(Application.version); // ROLLBACK_VERSION_AB_TAG_20260715
             p[AnalyticsConsts.P_LAST_ACTIVE_COUNTRY] = ResolveGeoCountry();
 
             if (UserSnapshotCache.HasInstance)
             {
                 var c = UserSnapshotCache.Instance;
                 p[AnalyticsConsts.P_INSTALL_AT]           = c.InstallAt;
-                p[AnalyticsConsts.P_INSTALL_VERSION]      = c.InstallVersion;
+                p[AnalyticsConsts.P_INSTALL_VERSION]      = AbTestService.TagAppVersion(c.InstallVersion); // ROLLBACK_VERSION_AB_TAG_20260715
                 p[AnalyticsConsts.P_INSTALL_COUNTRY]      = c.InstallCountry;
                 p[AnalyticsConsts.P_INSTALL_PLATFORM]     = c.InstallPlatform;
                 p[AnalyticsConsts.P_INSTALL_DEVICE]       = c.InstallDevice;
@@ -317,8 +317,10 @@ namespace BalloonFlow.Analytics
 
             // ROLLBACK_AB_EP1_20260713: A/B 활성 시에만 variant 기록(첫 읽기 시 lazy 배정+영속). BQ A/B 분리 분석용.
             //   비활성(기본)이면 미기록 → 비테스트 유저 ab_ep1_variant=NULL(전원 A 를 'A'로 오염 안 시킴).
+            // ROLLBACK_AB_EP1_VARIANT_LABEL_20260715: 분석 표기는 "Master"/"B" (내부 저장/에피소드 로딩은 "A"/"B" 불변 —
+            //   VARIANT_A 문자열 변경 시 기존 유저 PlayerPrefs 재배정 위험 → emit 라벨만 매핑). version 접미사와 동일 규약.
             if (AbTestService.IsEnabled)
-                p[AnalyticsConsts.P_AB_EP1_VARIANT] = AbTestService.Episode1Variant;
+                p[AnalyticsConsts.P_AB_EP1_VARIANT] = AbTestService.AnalyticsVersionSuffix; // "Master"/"B"
 
             if (CurrencyManager.HasInstance)
                 p[AnalyticsConsts.P_TOTAL_COIN_BALANCE] = CurrencyManager.Instance.Coins;

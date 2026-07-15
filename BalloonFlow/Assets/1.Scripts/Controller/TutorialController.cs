@@ -39,6 +39,14 @@ namespace BalloonFlow
         /// 튜토리얼을 통한 아이템 사용(강제 완료) 스텝에서 X 로 빠져나가지 못하게 함. 기본 false(=기존처럼 X 노출).</summary>
         public bool hideSkipButton;
 
+        /// <summary>ROLLBACK_TUTORIAL_MIN_DISPLAY_20260715: tap_anywhere 스텝 최소 표시 시간 게이트.
+        ///   true 면 팝업 표시 후 minDisplaySeconds 경과 전엔 탭해도 안 닫힘(오조작 방지). 기본 false=즉시 닫힘(기존).</summary>
+        public bool useMinDisplayTime;
+        public float minDisplaySeconds = 1f;
+        /// <summary>ROLLBACK_TUTORIAL_DELAY_TEXT_20260715: min 게이트 경과(탭 가능) 시 TextTap 에 표시할 TextData 키(추가 텍스트).
+        ///   비면 프리팹 기본 텍스트 유지. 위치=textTapPosition, 지연=minDisplaySeconds. 기존 즉시 TextTap 동작은 불변.</summary>
+        public string delayedTextKey;
+
         /// <summary>Whether this step has been completed by the player.</summary>
         public bool isComplete;
 

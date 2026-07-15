@@ -538,8 +538,19 @@ namespace BalloonFlow
             var popup = UIManager.Instance.OpenUI<PopupBuyItem>("Popup/PopupBuyItem");
             if (popup == null) return;
             Sprite spr = popup.GetBoosterSprite(boosterType);
+            // ROLLBACK_ITEMUNLOCK_DESC_KEY_20260715: 레벨 도달 자동 해금 팝업이 description 을 안 넘겨,
+            //   SHUFFLE/ZAP 도 프리팹 baked 키(popup.txtdescription.hand)를 그대로 노출하던 버그 수정.
+            //   boosterType 별 설명키를 명시 전달 (UIHud.GetBoosterBuyDescription 매핑과 동일).
+            string descKey = boosterType switch
+            {
+                BoosterManager.HAND         => "popup.txtdescription.hand",
+                BoosterManager.SHUFFLE      => "popup.txtdescription.suffle",
+                BoosterManager.COLOR_REMOVE => "popup.txtdescription.zap",
+                _                           => null
+            };
             // ROLLBACK_UNLOCK_POPUP_TITLE_TEXTDATA_20260623: 해금 팝업 타이틀 = TextData "Item Unlocked!".
             popup.ShowUnlock(LocalizationService.Get("popup.txttitle.itemunlocked"), spr, levelId, $"x{BoosterManager.UNLOCK_REWARD_COUNT}",
+                description: string.IsNullOrEmpty(descKey) ? null : LocalizationService.Get(descKey),
                 onConfirm: () =>
                 {
                     // ROLLBACK_ITEM_ACQUIRE_INPUT_LOCK_20260708: Claim 확정 → 튜토("Tap your item!") 시작까지

@@ -86,6 +86,8 @@ namespace BalloonFlow
         // ── Push Notification (Phase 2) ───────────────────────────
         /// <summary>FCM 등록 토큰. 빈 문자열 = 미등록 / 사용자 거부.</summary>
         [FirestoreProperty] public string fcmToken { get; set; } = "";
+        /// <summary>ROLLBACK_PUSH_KO_20260715: device 언어 코드("KO"/"EN"). 서버 이탈복귀 푸시 언어별 발송 라우팅용.</summary>
+        [FirestoreProperty] public string lang { get; set; } = "";
         /// <summary>D1~D7 이탈 복귀 푸시 최근 발송 일자 ("YYYY-MM-DD" UTC). 같은 날 중복 발송 방지.</summary>
         [FirestoreProperty] public string lastReturnPushSent { get; set; } = "";
         /// <summary>데일리 보상 미수령 푸시 최근 발송 일자 ("YYYY-MM-DD" UTC). 같은 날 중복 발송 방지.</summary>

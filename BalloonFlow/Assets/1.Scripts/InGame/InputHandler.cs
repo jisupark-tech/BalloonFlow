@@ -161,6 +161,11 @@ namespace BalloonFlow
                 && TutorialManager.HasInstance && TutorialManager.Instance.IsDimFadeInProgress)
                 return;
 
+            // ROLLBACK_TUTORIAL_MIN_DISPLAY_20260715: tap_anywhere 스텝의 최소 표시 시간(minDisplaySeconds) 동안은
+            //   팝업 닫기뿐 아니라 홀더(월드 콜라이더) 터치도 막는다 — 팝업을 다 읽기 전 게임 조작 방지.
+            if (TutorialManager.HasInstance && TutorialManager.Instance.IsMinDisplayBlocking())
+                return;
+
             Ray ray = _gameCamera.ScreenPointToRay(screenPosition);
 
             // ROLLBACK_ZAP_UI_HOLE_INPUT:
@@ -244,6 +249,9 @@ namespace BalloonFlow
                 && HolderVisualManager.HasInstance
                 && !HolderVisualManager.Instance.IsInFrontRow(holder.HolderId))
             {
+                // ROLLBACK_ONBOARDING_FRONTROW_TOAST_20260715: 1~5레벨 온보딩 — 앞줄이 아닌
+                //   (아직 못 움직이는 뒷줄) 홀더를 탭하면 "맨 앞줄 상자부터" 토스트로 유도한다.
+                MaybeShowFrontRowHint();
                 EventBus.Publish(new OnHolderClickAnim { holderId = holder.HolderId });
                 return;
             }
@@ -257,6 +265,31 @@ namespace BalloonFlow
             }
 
             EventBus.Publish(new OnHolderTapped { holderId = holder.HolderId });
+        }
+
+        // ROLLBACK_ONBOARDING_FRONTROW_TOAST_20260715: 온보딩 힌트 토스트 스팸 방지 쿨다운.
+        private static float _lastFrontRowHintTime = -10f;
+        private const float FRONT_ROW_HINT_COOLDOWN = 1.5f;
+
+        /// <summary>
+        /// 1~5레벨 온보딩 강화: 앞줄이 아닌(아직 못 움직이는 뒷줄) 홀더를 탭하면
+        /// "맨 앞줄 상자부터 탭하세요!" 토스트로 유도한다. 쿨다운으로 연타 스팸을 막는다.
+        /// </summary>
+        private static void MaybeShowFrontRowHint()
+        {
+            if (!LevelManager.HasInstance) return;
+            int lv = LevelManager.Instance.CurrentLevelId;
+            if (lv < 1 || lv > 5) return;
+            // ROLLBACK_TUTORIAL_MIN_DISPLAY_20260715: 튜토 최소 표시 시간(minDisplaySeconds) 창 동안엔
+            //   이 온보딩 토스트도 억제 — 홀더 입력 차단과 동일 구간(TryRaycastInput 조기 return 과 이중 안전).
+            if (TutorialManager.HasInstance && TutorialManager.Instance.IsMinDisplayBlocking()) return;
+            if (Time.time - _lastFrontRowHintTime < FRONT_ROW_HINT_COOLDOWN) return;
+            _lastFrontRowHintTime = Time.time;
+
+            if (!UIManager.HasInstance) return;
+            Transform parent = UIManager.Instance.PopupTr ?? UIManager.Instance.UiTr;
+            if (parent == null) return;
+            TxtToast.Spawn(parent, LocalizationService.Get("toast.tap.frontfirst"), new Vector2(0f, -1022f));
         }
 
         /// <summary>

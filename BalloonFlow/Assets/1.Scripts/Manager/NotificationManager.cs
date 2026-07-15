@@ -324,7 +324,7 @@ namespace BalloonFlow
         public void ScheduleHeartFull(DateTime fireAtUtc)
         {
             Schedule(NotificationKind.HeartFull, fireAtUtc,
-                PushTexts.HEART_FULL_TITLE, PushTexts.HEART_FULL_BODY,
+                PushTexts.HeartFullTitle, PushTexts.HeartFullBody, // ROLLBACK_PUSH_KO_20260715: device 언어 KO 면 KO
                 respectFirst24h: true);
         }
 

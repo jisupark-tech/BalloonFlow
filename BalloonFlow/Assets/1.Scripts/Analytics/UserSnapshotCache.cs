@@ -192,6 +192,10 @@ namespace BalloonFlow.Analytics
             // 행 전체가 거절되므로 emit 경계에서 라운딩 (2026-07-07 android 적재 전면 차단 사고).
             p[AnalyticsConsts.P_TOTAL_SPEND_USD]      = Math.Round(_totalSpendUsd, 6);
             p[AnalyticsConsts.P_TOTAL_AD_REVENUE_USD] = Math.Round(_totalAdRevenueUsd, 6);
+            // ROLLBACK_VERSION_AB_TAG_20260715: play_start/play_event 의 install_version 주입(누락 갭 수정) + A/B 태깅.
+            //   저장값(InstallVersion)은 raw, emit 시점 태깅 → 기존 유저(raw 저장)도 app_version 과 동일 접미사 → is_version_native 정합.
+            //   install_version 스키마 없는 이벤트(purchase/ad/economy/item_use)는 normalize 화이트리스트서 스트립(무해).
+            p[AnalyticsConsts.P_INSTALL_VERSION]      = AbTestService.TagAppVersion(InstallVersion);
         }
 
         // ─── 누적 갱신 (Phase 1 wiring 시 호출) ───

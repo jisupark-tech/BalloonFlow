@@ -90,6 +90,7 @@ namespace BalloonFlow
         // Tap-anywhere overlay (invisible button that covers the cutout hole area)
         private Button _tapAnywhereButton;
         private GameObject _tapAnywhereGO;
+        private float _tapAnywhereShownTime = -1f; // ROLLBACK_TUTORIAL_MIN_DISPLAY_20260715: 최소 표시 시간 게이트 기준
 
         // [2026-05-15] TextTap / TextTapOutline — tap_anywhere step 에서만 표시 + alpha yoyo 깜빡.
         private RectTransform _textTap;
@@ -99,6 +100,12 @@ namespace BalloonFlow
         private Vector2 _defaultTextTapPosition;
         private Vector2 _defaultTextTapOutlinePosition;
         private Tween _textTapBlinkTween;
+        // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715: 지연 텍스트 — TMP 캐시 + 프리팹 기본 내용(스텝 간 복원용) + 지연 표시 코루틴.
+        private TMPro.TMP_Text _textTapTmp;
+        private TMPro.TMP_Text _textTapOutlineTmp;
+        private string _defaultTextTapContent;
+        private string _defaultTextTapOutlineContent;
+        private Coroutine _delayedTextCo;
 
         // State
         private Coroutine _fadeDimCoroutine;
@@ -265,7 +272,10 @@ namespace BalloonFlow
                 if (_tapAnywhereButton != null)
                     _tapAnywhereButton.onClick.AddListener(() =>
                     {
-                        if (TutorialController.HasInstance) TutorialController.Instance.AdvanceStep();
+                        if (!TutorialController.HasInstance) return;
+                        // ROLLBACK_TUTORIAL_MIN_DISPLAY_20260715: 최소 표시 시간 게이트 — 경과 전 탭은 무시(닫힘 방지).
+                        if (IsMinDisplayBlocking()) return;
+                        TutorialController.Instance.AdvanceStep();
                     });
 
                 // [2026-05-15] TextTap / TextTapOutline 바인딩. CanvasGroup 없으면 부착 (alpha 제어용).
@@ -276,6 +286,8 @@ namespace BalloonFlow
                     _defaultTextTapPosition = _textTap.anchoredPosition;
                     _textTapGroup = _textTap.GetComponent<CanvasGroup>();
                     if (_textTapGroup == null) _textTapGroup = _textTap.gameObject.AddComponent<CanvasGroup>();
+                    _textTapTmp = _textTap.GetComponent<TMPro.TMP_Text>(); // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715
+                    if (_textTapTmp != null) _defaultTextTapContent = _textTapTmp.text;
                     _textTap.gameObject.SetActive(false);
                 }
                 if (_textTapOutline != null)
@@ -283,6 +295,8 @@ namespace BalloonFlow
                     _defaultTextTapOutlinePosition = _textTapOutline.anchoredPosition;
                     _textTapOutlineGroup = _textTapOutline.GetComponent<CanvasGroup>();
                     if (_textTapOutlineGroup == null) _textTapOutlineGroup = _textTapOutline.gameObject.AddComponent<CanvasGroup>();
+                    _textTapOutlineTmp = _textTapOutline.GetComponent<TMPro.TMP_Text>(); // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715
+                    if (_textTapOutlineTmp != null) _defaultTextTapOutlineContent = _textTapOutlineTmp.text;
                     _textTapOutline.gameObject.SetActive(false);
                 }
             }
@@ -586,24 +600,76 @@ namespace BalloonFlow
         /// [2026-05-15] TextTap/TextTapOutline 도 함께 ON/OFF + alpha 깜빡 yoyo.
         /// step.useTextTap=false 시 텍스트는 비활성 (overlay 만 enable).
         /// </summary>
+        /// <summary>
+        /// ROLLBACK_TUTORIAL_MIN_DISPLAY_20260715: 현재 tap_anywhere 스텝이 최소 표시 시간(minDisplaySeconds)
+        /// 창 안에 있는지 — 이 구간 동안 tap_anywhere 버튼 클릭과 홀더(월드) 클릭을 모두 무시한다.
+        /// (InputHandler 가 홀더 레이캐스트 전에 이 값을 조회.)
+        /// </summary>
+        public bool IsMinDisplayBlocking()
+        {
+            if (!TutorialController.HasInstance) return false;
+            TutorialStep s = TutorialController.Instance.GetCurrentStep();
+            return s != null && s.useMinDisplayTime && _tapAnywhereShownTime >= 0f
+                && (Time.unscaledTime - _tapAnywhereShownTime) < s.minDisplaySeconds;
+        }
+
         public void SetTapAnywherEnabled(bool enabled)
         {
             if (_tapAnywhereGO != null)
                 _tapAnywhereGO.SetActive(enabled);
 
+            // ROLLBACK_TUTORIAL_MIN_DISPLAY_20260715: 활성(=tap_anywhere 스텝 시작) 시점 기록 → 탭 게이트 기준.
+            //   비활성 전환 시 -1 로 리셋 — 이전 tap_anywhere 스텝의 잔여 기준시각으로 홀더가 오차단되지 않게.
+            _tapAnywhereShownTime = enabled ? Time.unscaledTime : -1f;
+
+            // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715: 이전 지연 텍스트 코루틴 정리(스텝 전환).
+            if (_delayedTextCo != null) { StopCoroutine(_delayedTextCo); _delayedTextCo = null; }
+
+            TutorialStep step = (enabled && TutorialController.HasInstance) ? TutorialController.Instance.GetCurrentStep() : null;
+
             // step.useTextTap 토글 — null 이면 default true.
-            bool wantText = enabled;
-            if (enabled && TutorialController.HasInstance)
+            bool wantText = enabled && (step == null || step.useTextTap);
+
+            // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715: TextTap 내용 — delayedTextKey 있으면 TextData, 없으면 프리팹 기본(스텝 간 복원).
+            ApplyTextTapContent(step != null ? step.delayedTextKey : null);
+
+            if (!wantText) { ShowTextTap(false); return; }
+
+            // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715: min 게이트면 minDisplaySeconds 후(탭 가능 시점)에 표시, 아니면 즉시(기존 동작).
+            if (step != null && step.useMinDisplayTime && step.minDisplaySeconds > 0f)
             {
-                TutorialStep step = TutorialController.Instance.GetCurrentStep();
-                if (step != null && !step.useTextTap) wantText = false;
+                ShowTextTap(false);
+                _delayedTextCo = StartCoroutine(ShowTextTapDelayed(step.minDisplaySeconds));
             }
+            else
+            {
+                ShowTextTap(true);
+            }
+        }
 
-            if (_textTap != null) _textTap.gameObject.SetActive(wantText);
-            if (_textTapOutline != null) _textTapOutline.gameObject.SetActive(wantText);
+        // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715: min 게이트 경과 후 TextTap 표시(탭 가능 시점과 일치). unscaled — 일시정지 무관.
+        private System.Collections.IEnumerator ShowTextTapDelayed(float delaySec)
+        {
+            yield return new WaitForSecondsRealtime(delaySec);
+            ShowTextTap(true);
+            _delayedTextCo = null;
+        }
 
-            if (wantText) StartTextTapBlink();
-            else StopTextTapBlink();
+        private void ShowTextTap(bool show)
+        {
+            if (_textTap != null) _textTap.gameObject.SetActive(show);
+            if (_textTapOutline != null) _textTapOutline.gameObject.SetActive(show);
+            if (show) StartTextTapBlink(); else StopTextTapBlink();
+        }
+
+        // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715: key 있으면 LocalizationService.Get, 없으면 프리팹 기본 복원(스텝 간 내용 누수 방지).
+        private void ApplyTextTapContent(string key)
+        {
+            bool useKey = !string.IsNullOrEmpty(key);
+            if (_textTapTmp != null)
+                _textTapTmp.text = useKey ? LocalizationService.Get(key) : _defaultTextTapContent;
+            if (_textTapOutlineTmp != null)
+                _textTapOutlineTmp.text = useKey ? LocalizationService.Get(key) : _defaultTextTapOutlineContent;
         }
 
         private const float TEXTTAP_BLINK_DURATION = 0.55f;

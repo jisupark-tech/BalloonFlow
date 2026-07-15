@@ -51,5 +51,14 @@ namespace BalloonFlow
 
         /// <summary>A/B 테스트 활성 여부. 비활성(기본)이면 분석에 variant 를 기록하지 않는다(전원 A → 오염 방지).</summary>
         public static bool IsEnabled => AB_TEST_ENABLED;
+
+        // ROLLBACK_VERSION_AB_TAG_20260715: 분석 version 필드 뒤에 A/B variant 접미사(.Master/.B).
+        //   A(master)/비활성 = "Master", B = "B". app_version/version/install_version/last_active_version 공용.
+        //   접미사만 부여 — base version 은 호출부가 넘김(install_version 은 '설치시 base + 현재(불변) variant').
+        //   ※ variant 는 first-write 로 불변이라 install/app 접미사가 항상 동일 → is_version_native(install==app) 정합 유지.
+        public static string AnalyticsVersionSuffix => IsVariantB ? "B" : "Master";
+
+        public static string TagAppVersion(string baseVersion)
+            => string.IsNullOrEmpty(baseVersion) ? baseVersion : baseVersion + "." + AnalyticsVersionSuffix;
     }
 }

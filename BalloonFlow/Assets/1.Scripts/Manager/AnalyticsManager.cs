@@ -456,8 +456,10 @@ namespace BalloonFlow
                 data[AnalyticsConsts.P_EVENT_TS] = System.DateTime.UtcNow.ToString("o");
             if (!data.ContainsKey(AnalyticsConsts.P_SESSION_ID))
                 data[AnalyticsConsts.P_SESSION_ID] = AnalyticsSessionTracker.HasInstance ? AnalyticsSessionTracker.Instance.CurrentSessionId : "";
-            if (!data.ContainsKey(AnalyticsConsts.P_APP_VERSION))
-                data[AnalyticsConsts.P_APP_VERSION] = Application.version;
+            // ROLLBACK_VERSION_AB_TAG_20260715: app_version 뒤에 A/B variant 접미사(.Master/.B) — 전 이벤트 A/B 세그먼트.
+            //   항상 override(명시 세팅 이벤트 포함) → session_start 의 version alias(app_version→version, NormalizeBigQueryAliases 가
+            //   FillDefaults 이후 실행)도 태깅값 자동 승계. install_version/last_active_version 은 각 emit 지점서 별도 태깅.
+            data[AnalyticsConsts.P_APP_VERSION] = AbTestService.TagAppVersion(Application.version);
             if (!data.ContainsKey(AnalyticsConsts.P_GEO_COUNTRY))
                 data[AnalyticsConsts.P_GEO_COUNTRY] = AnalyticsSessionTracker.ResolveGeoCountry();
             if (!data.ContainsKey(AnalyticsConsts.P_PLATFORM))
@@ -621,7 +623,8 @@ namespace BalloonFlow
             AnalyticsConsts.P_ITEM_ID, AnalyticsConsts.P_ITEM_CATEGORY, AnalyticsConsts.P_ACQUISITION_TYPE,
             AnalyticsConsts.P_COST_AMOUNT, AnalyticsConsts.P_COST_CURRENCY_ID, AnalyticsConsts.P_SESSION_ID,
             AnalyticsConsts.P_INSTALL_AT, AnalyticsConsts.P_MAX_REACHED_LEVEL, AnalyticsConsts.P_TOTAL_SPEND_USD,
-            AnalyticsConsts.P_TOTAL_AD_REVENUE_USD
+            AnalyticsConsts.P_TOTAL_AD_REVENUE_USD,
+            AnalyticsConsts.P_APP_VERSION // ROLLBACK_ITEMUSE_ECONOMY_APPVERSION_20260715: xlsx 7.15 추가(라이브 실재). FillDefaults 가 태깅값 stamp.
         };
 
         private static readonly string[] BqPurchaseColumns =
@@ -644,7 +647,8 @@ namespace BalloonFlow
             AnalyticsConsts.P_BALANCE_AFTER, AnalyticsConsts.P_SOURCE, AnalyticsConsts.P_REF_EVENT_ID,
             AnalyticsConsts.P_ECONOMY_PLACEMENT, AnalyticsConsts.P_LEVEL_NUMBER, AnalyticsConsts.P_SESSION_ID,
             AnalyticsConsts.P_INSTALL_AT, AnalyticsConsts.P_MAX_REACHED_LEVEL, AnalyticsConsts.P_TOTAL_SPEND_USD,
-            AnalyticsConsts.P_TOTAL_AD_REVENUE_USD
+            AnalyticsConsts.P_TOTAL_AD_REVENUE_USD,
+            AnalyticsConsts.P_APP_VERSION // ROLLBACK_ITEMUSE_ECONOMY_APPVERSION_20260715: xlsx 7.15 추가(라이브 실재). FillDefaults 가 태깅값 stamp.
         };
 
         private static readonly string[] BqSessionStartColumns =

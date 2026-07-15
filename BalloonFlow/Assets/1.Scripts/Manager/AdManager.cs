@@ -84,6 +84,13 @@ namespace BalloonFlow
         private string            _pendingAdEventUnitId;
         private MaxSdkBase.AdInfo _pendingAdEventInfo;
 
+        // ROLLBACK_AD_EVENT_FUNNEL_20260715: 퍼널 단계(request/loaded/load_failed/show_failed)·지연(latency)·에러·보상 계측.
+        //   기존 impression(revenue) 경로는 불변 — 아래는 additive. reward 는 OnReceivedReward 캡처 후 impression emit 에 실음.
+        private float  _reqTimeRewarded     = -1f;
+        private float  _reqTimeInterstitial = -1f;
+        private string _pendingRewardLabel;
+        private int    _pendingRewardAmount = -1;
+
         #endregion
 
         #region Lifecycle
@@ -293,6 +300,8 @@ namespace BalloonFlow
                 Debug.LogWarning($"{LOG_TAG} Rewarded Ad Unit ID is empty.");
                 return;
             }
+            _reqTimeRewarded = Time.realtimeSinceStartup; // ROLLBACK_AD_EVENT_FUNNEL_20260715
+            EmitAdPhaseEvent("rewarded", SdkConfig.AppLovinRewardedAdUnitId, "request");
             MaxSdk.LoadRewardedAd(SdkConfig.AppLovinRewardedAdUnitId);
         }
 
@@ -305,6 +314,8 @@ namespace BalloonFlow
                 // Interstitial Ad Unit 미설정 — Rewarded만 사용 가능
                 return;
             }
+            _reqTimeInterstitial = Time.realtimeSinceStartup; // ROLLBACK_AD_EVENT_FUNNEL_20260715
+            EmitAdPhaseEvent("interstitial", SdkConfig.AppLovinInterstitialAdUnitId, "request");
             MaxSdk.LoadInterstitial(SdkConfig.AppLovinInterstitialAdUnitId);
         }
 
@@ -315,12 +326,15 @@ namespace BalloonFlow
         private void OnRewardedLoadedCb(string adUnitId, MaxSdkBase.AdInfo info)
         {
             _rewardedRetryAttempt = 0;
+            EmitAdPhaseEvent("rewarded", adUnitId, "loaded",
+                _reqTimeRewarded >= 0f ? Mathf.Max(0, Mathf.RoundToInt((Time.realtimeSinceStartup - _reqTimeRewarded) * 1000f)) : -1);
             OnRewardedAdLoaded?.Invoke();
         }
 
         private void OnRewardedLoadFailedCb(string adUnitId, MaxSdkBase.ErrorInfo error)
         {
             _rewardedRetryAttempt++;
+            EmitAdPhaseEvent("rewarded", adUnitId, "load_failed", -1, error); // ROLLBACK_AD_EVENT_FUNNEL_20260715
             float retryDelay = (float)Math.Pow(2, Math.Min(MAX_RETRY_EXPONENT, _rewardedRetryAttempt));
             Invoke(nameof(LoadRewardedAd), retryDelay);
             OnRewardedAdFailedToLoad?.Invoke(error.Message);
@@ -345,6 +359,9 @@ namespace BalloonFlow
         {
             _pendingRewardCallback?.Invoke();
             _pendingRewardCallback = null;
+            // ROLLBACK_AD_EVENT_FUNNEL_20260715: 보상 캡처 → 노출 종료 시 impression emit 에 실림(Hidden→FlushPendingAdEvent).
+            _pendingRewardLabel  = reward.Label;
+            _pendingRewardAmount = reward.Amount;
             OnRewardedAdRewarded?.Invoke(reward);
         }
 
@@ -352,6 +369,7 @@ namespace BalloonFlow
         {
             _isShowingAd = false;
             _pendingRewardCallback = null;
+            EmitAdPhaseEvent("rewarded", adUnitId, "show_failed", -1, error); // ROLLBACK_AD_EVENT_FUNNEL_20260715
             FlushPendingAdEvent(); // ROLLBACK_AD_EVENT_FIELDS_20260707
             OnRewardedAdFailedToShow?.Invoke(error.Message);
             LoadRewardedAd();
@@ -364,12 +382,15 @@ namespace BalloonFlow
         private void OnInterstitialLoadedCb(string adUnitId, MaxSdkBase.AdInfo info)
         {
             _interstitialRetryAttempt = 0;
+            EmitAdPhaseEvent("interstitial", adUnitId, "loaded",
+                _reqTimeInterstitial >= 0f ? Mathf.Max(0, Mathf.RoundToInt((Time.realtimeSinceStartup - _reqTimeInterstitial) * 1000f)) : -1);
             OnInterstitialAdLoaded?.Invoke();
         }
 
         private void OnInterstitialLoadFailedCb(string adUnitId, MaxSdkBase.ErrorInfo error)
         {
             _interstitialRetryAttempt++;
+            EmitAdPhaseEvent("interstitial", adUnitId, "load_failed", -1, error); // ROLLBACK_AD_EVENT_FUNNEL_20260715
             float retryDelay = (float)Math.Pow(2, Math.Min(MAX_RETRY_EXPONENT, _interstitialRetryAttempt));
             Invoke(nameof(LoadInterstitialAd), retryDelay);
             OnInterstitialAdFailedToLoad?.Invoke(error.Message);
@@ -426,6 +447,7 @@ namespace BalloonFlow
         private void OnInterstitialDisplayFailedCb(string adUnitId, MaxSdkBase.ErrorInfo error, MaxSdkBase.AdInfo info)
         {
             _isShowingAd = false;
+            EmitAdPhaseEvent("interstitial", adUnitId, "show_failed", -1, error); // ROLLBACK_AD_EVENT_FUNNEL_20260715
             FlushPendingAdEvent(); // ROLLBACK_AD_EVENT_FIELDS_20260707
             LoadInterstitialAd();
         }
@@ -450,17 +472,53 @@ namespace BalloonFlow
         /// <summary>ROLLBACK_AD_EVENT_FIELDS_20260707: 보류된 임프레션을 노출 종료 시점에 emit (시청 시간 포함).</summary>
         private void FlushPendingAdEvent()
         {
-            if (_pendingAdEventInfo == null) { _adDisplayStartRealtime = -1f; return; }
+            if (_pendingAdEventInfo == null) { _adDisplayStartRealtime = -1f; _pendingRewardLabel = null; _pendingRewardAmount = -1; return; } // ROLLBACK_AD_EVENT_FUNNEL_20260715: reward 누수 방지
             int watchSec = _adDisplayStartRealtime >= 0f
                 ? Mathf.Max(0, Mathf.RoundToInt(Time.realtimeSinceStartup - _adDisplayStartRealtime))
                 : 0;
-            EmitAdEvent(_pendingAdEventUnitId, _pendingAdEventInfo, watchSec);
+            EmitAdEvent(_pendingAdEventUnitId, _pendingAdEventInfo, watchSec, _pendingRewardLabel, _pendingRewardAmount);
             _pendingAdEventUnitId   = null;
             _pendingAdEventInfo     = null;
             _adDisplayStartRealtime = -1f;
+            _pendingRewardLabel     = null;   // ROLLBACK_AD_EVENT_FUNNEL_20260715: 보상은 1 노출당 1회 소비
+            _pendingRewardAmount    = -1;
         }
 
-        private static void EmitAdEvent(string adUnitId, MaxSdkBase.AdInfo adInfo, int watchDurationSec)
+        // ROLLBACK_AD_EVENT_FUNNEL_20260715: impression 외 퍼널 단계(request/loaded/load_failed/show_failed) 이벤트.
+        //   revenue/impression 경로(EmitAdEvent)는 불변 — 여기서는 매출 없는 단계 카운트/지연/에러만 발행(M_ad_daily 퍼널·품질 지표).
+        //   placement 는 preload 단계라 미확정("") — 실제 지면은 impression 이벤트에 실림.
+        private static void EmitAdPhaseEvent(string adType, string adUnitId, string phase,
+                                             int latencyMs = -1, MaxSdkBase.ErrorInfo error = null)
+        {
+            string eventId = System.Guid.NewGuid().ToString("N");
+            var p = new System.Collections.Generic.Dictionary<string, object>(24);
+            p[AnalyticsConsts.P_EVENT_ID]     = eventId;
+            p[AnalyticsConsts.P_SESSION_ID]   = AnalyticsSessionTracker.HasInstance
+                ? AnalyticsSessionTracker.Instance.CurrentSessionId : "";
+            p[AnalyticsConsts.P_GAME_ID]      = AnalyticsConsts.GAME_ID;
+            p[AnalyticsConsts.P_UID]          = AnalyticsSessionTracker.ResolveUid();
+            p[AnalyticsConsts.P_EVENT_TS]     = System.DateTime.UtcNow.ToString("o");
+            p[AnalyticsConsts.P_GEO_COUNTRY]  = AnalyticsSessionTracker.ResolveGeoCountry();
+            p[AnalyticsConsts.P_PLATFORM]     = AnalyticsSessionTracker.ResolvePlatform();
+            p[AnalyticsConsts.P_DEVICE_MODEL] = SystemInfo.deviceModel;
+            p[AnalyticsConsts.P_AD_REQUEST_ID] = eventId;
+            p[AnalyticsConsts.P_AD_TYPE]      = adType;
+            p[AnalyticsConsts.P_AD_UNIT_ID]   = adUnitId ?? "";
+            p[AnalyticsConsts.P_AD_PLACEMENT] = "";      // preload 단계 — 지면 미확정(NOT NULL 만족용 빈문자)
+            p[AnalyticsConsts.P_EVENT_PHASE]  = phase;
+            p[AnalyticsConsts.P_LEVEL_NUMBER] = LevelManager.HasInstance ? LevelManager.Instance.GetCurrentLevelId() : 0;
+            if (latencyMs >= 0) p[AnalyticsConsts.P_LATENCY_MS] = latencyMs;
+            if (error != null)
+            {
+                p[AnalyticsConsts.P_ERROR_CODE]    = ((int)error.Code).ToString();
+                p[AnalyticsConsts.P_ERROR_MESSAGE] = error.Message ?? "";
+            }
+            if (UserSnapshotCache.HasInstance) UserSnapshotCache.Instance.Stamp(p);
+            AnalyticsSessionTracker.EmitEvent(AnalyticsConsts.EVT_AD, p);
+        }
+
+        private static void EmitAdEvent(string adUnitId, MaxSdkBase.AdInfo adInfo, int watchDurationSec,
+                                        string rewardLabel = null, int rewardAmount = -1)
         {
             string eventId = System.Guid.NewGuid().ToString("N");
             var p = new System.Collections.Generic.Dictionary<string, object>(32);
@@ -487,6 +545,9 @@ namespace BalloonFlow
             p[AnalyticsConsts.P_WATCH_DURATION_SEC] = watchDurationSec;
             p[AnalyticsConsts.P_REVENUE_PRECISION] = adInfo.RevenuePrecision ?? "";
             p[AnalyticsConsts.P_LEVEL_NUMBER]    = LevelManager.HasInstance ? LevelManager.Instance.GetCurrentLevelId() : 0;
+            // ROLLBACK_AD_EVENT_FUNNEL_20260715: 보상형 광고 보상(OnReceivedReward 캡처분). 인터스티셜/미수령이면 미emit(NULL).
+            if (!string.IsNullOrEmpty(rewardLabel)) p[AnalyticsConsts.P_REWARD_TYPE]   = rewardLabel;
+            if (rewardAmount >= 0)                  p[AnalyticsConsts.P_REWARD_AMOUNT] = rewardAmount;
 
             if (UserSnapshotCache.HasInstance)
                 UserSnapshotCache.Instance.Stamp(p);

@@ -1198,7 +1198,8 @@ namespace BalloonFlow
                         // ROLLBACK_ANALYTICS_NULLFILL_20260625: HUD 코인 구매 — 획득경로/비용 기록.
                         BoosterManager.Instance.AddBooster(boosterType, 3, "purchase", BoosterManager.Instance.GetBoosterPrice(boosterType), "coin");
                         RefreshBoosterCounts();
-                        ShowToast("Purchase successful!");
+                        // ROLLBACK_HUD_PURCHASE_TOAST_REMOVE_20260715: 인게임 아이템 구매 성공 토스트("Purchase successful!") 제거(사용자 요청).
+                        //   지급(AddBooster)·표시 갱신·보상 FX 비행은 유지 — 시각 피드백은 FX 로 충분.
                         PlayBoosterRewardFly(boosterType, 3, spr, RefreshBoosterCounts);
                         return true;
                     }

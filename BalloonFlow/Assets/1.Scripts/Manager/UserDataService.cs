@@ -179,6 +179,15 @@ namespace BalloonFlow
                 Debug.Log($"{LOG_TAG} New user created. uid={uid} coins={_user.coins}");
             }
 
+            // ROLLBACK_PUSH_KO_20260715: device 언어를 user 문서에 저장 → 서버 이탈복귀 푸시가 언어별(KO/EN) 발송.
+            //   매 로그인 갱신(언어 변경 반영). 실패해도 게임 진행 무관. LocalizationService 는 BeforeSceneLoad 에 언어 확정됨.
+            string curLang = LocalizationService.CurrentLanguageCode;
+            if (_user.lang != curLang)
+            {
+                _user.lang = curLang;
+                _ = docRef.UpdateAsync("lang", curLang);
+            }
+
             // 성공한 UID 캐시 — 다음 부팅 시 UID 변경 감지에 사용.
             PersistAuthUid(uid);
 

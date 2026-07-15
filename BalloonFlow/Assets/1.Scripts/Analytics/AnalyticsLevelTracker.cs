@@ -55,6 +55,10 @@ namespace BalloonFlow.Analytics
         //   실패 순간의 popped/total 을 저장해 emit. -1 = 스냅샷 없음(라이브 읽기 fallback).
         private int _failObjectiveDone = -1;
         private int _failObjectiveTotal = -1;
+        // ROLLBACK_FAIL_CONTEXT_20260715: 실패 순간(보드 리셋 전) 외곽 노출 색상 스냅샷 — fail_outermost_colors.
+        private string _failOutermostColors;
+        // ROLLBACK_FAIL_CONTEXT_20260715: 실패 순간 레일 색별 다트 분포 스냅샷 — fail_rail_composition (REPEATED RECORD{color,dart_count}).
+        private List<Dictionary<string, object>> _failRailComposition;
 
         // ROLLBACK_LAST_PLAYED_AT_EMIT_20260713 [검수 Finding1]: play 마다 user_property MERGE 발행은
         //   볼륨/쿼터 과다(100판=100 DML) → 5분 스로틀. last_played_at 은 분 단위 신선도로 충분(첫 play 즉시 발행).
@@ -162,6 +166,20 @@ namespace BalloonFlow.Analytics
             {
                 _failObjectiveDone  = BalloonController.Instance.PoppedCount;
                 _failObjectiveTotal = BalloonController.Instance.RemainingCount + BalloonController.Instance.PoppedCount;
+            }
+            // ROLLBACK_FAIL_CONTEXT_20260715: 실패 순간 외곽 노출 색상 스냅샷(보드 리셋 전). 색상 병목 진단용.
+            _failOutermostColors = BoardStateManager.HasInstance ? BoardStateManager.Instance.GetOutermostColorsCsv() : null;
+            // ROLLBACK_FAIL_CONTEXT_20260715: 실패 순간 레일 색분포 스냅샷 → REPEATED RECORD{color,dart_count} 형태로 사전 구성.
+            _failRailComposition = null;
+            if (RailManager.HasInstance)
+            {
+                var comp = RailManager.Instance.GetRailCompositionByColor();
+                if (comp.Count > 0)
+                {
+                    _failRailComposition = new List<Dictionary<string, object>>(comp.Count);
+                    foreach (var kv in comp)
+                        _failRailComposition.Add(new Dictionary<string, object> { { "color", "c" + kv.Key }, { "dart_count", kv.Value } });
+                }
             }
         }
 
@@ -336,6 +354,12 @@ namespace BalloonFlow.Analytics
             p[AnalyticsConsts.P_OBJECTIVE_DONE]      = useFailSnapshot ? _failObjectiveDone
                 : (BalloonController.HasInstance ? BalloonController.Instance.PoppedCount : 0);
             p[AnalyticsConsts.P_AVG_RESOURCE]        = Math.Round(RailManager.HasInstance ? RailManager.Instance.AverageOccupancyRatio : 0.0, 4);
+            // ROLLBACK_FAIL_CONTEXT_20260715: 실패 외곽 노출 색상(스냅샷 있을 때만). clear/quit 은 미stamp(NULL 유지).
+            if (useFailSnapshot && !string.IsNullOrEmpty(_failOutermostColors))
+                p[AnalyticsConsts.P_FAIL_OUTERMOST_COLORS] = _failOutermostColors;
+            // ROLLBACK_FAIL_CONTEXT_20260715: 실패 레일 색분포(REPEATED RECORD). clear/quit 은 미stamp(NULL).
+            if (useFailSnapshot && _failRailComposition != null && _failRailComposition.Count > 0)
+                p[AnalyticsConsts.P_FAIL_RAIL_COMPOSITION] = _failRailComposition;
             p[AnalyticsConsts.P_CONTINUE_POPUP_COUNT] = _continuePopupCount;
             p[AnalyticsConsts.P_CONTINUE_COUNT]      = ContinueHandler.HasInstance ? ContinueHandler.Instance.GetContinueCount() : 0;
             p[AnalyticsConsts.P_COIN_EARNED]         = _coinEarned;
@@ -350,6 +374,8 @@ namespace BalloonFlow.Analytics
             _bgEnteredUtc = null;
             _failObjectiveDone = -1;   // ROLLBACK_OBJECTIVE_DONE_ON_FAIL_20260713
             _failObjectiveTotal = -1;
+            _failOutermostColors = null; // ROLLBACK_FAIL_CONTEXT_20260715
+            _failRailComposition = null;
         }
 
         // ─── Helpers ───

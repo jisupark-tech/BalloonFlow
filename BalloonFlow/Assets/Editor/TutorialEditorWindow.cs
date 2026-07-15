@@ -66,6 +66,13 @@ namespace BalloonFlow.Editor
             public float waitAttackSeconds;
             // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622: 튜토리얼 통한 아이템 사용 강제 스텝에서 Skip(X) 숨김.
             public bool hideSkipButton;
+            // ROLLBACK_TUTORIAL_MIN_DISPLAY_20260715: tap_anywhere 스텝 최소 표시 시간 게이트(Boolean + 초, 기본 1).
+            public bool useMinDisplayTime;
+            public float minDisplaySeconds = 1f;
+            // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715: N초 후(탭 가능 시점) TextTap 에 표시할 추가 텍스트 키(TextData). 비면 프리팹 기본.
+            public string delayedTextKey = "";
+            // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715: 지연 텍스트 위치(0,0=프리팹 기본).
+            public Vector2 textTapPosition;
             public bool overrideVisualLayout;
             public bool useCutoutFrame = true;
             public Vector2 cutoutFramePosition = Vector2.zero;
@@ -335,6 +342,24 @@ namespace BalloonFlow.Editor
                     new GUIContent("Hide Skip/UseItem X", "ON: 튜토리얼 Skip(X) + UseItem 팝업의 X(취소) 버튼을 함께 숨김. 강제 아이템 사용 스텝용."),
                     step.hideSkipButton);
 
+                // ROLLBACK_TUTORIAL_MIN_DISPLAY_20260715: tap_anywhere 스텝 전용 — 최소 표시 시간 게이트(Boolean + 초).
+                if (step.requireAction == "tap_anywhere")
+                {
+                    step.useMinDisplayTime = EditorGUILayout.Toggle(
+                        new GUIContent("Min Display Time", "ON: 팝업 표시 후 지정 초 경과 전엔 탭해도 안 닫힘(오조작 방지). 기본 1초."),
+                        step.useMinDisplayTime);
+                    if (step.useMinDisplayTime)
+                    {
+                        step.minDisplaySeconds = EditorGUILayout.FloatField("  Seconds", step.minDisplaySeconds);
+                        if (step.minDisplaySeconds < 0f) step.minDisplaySeconds = 0f;
+                        // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715: N초 후 TextTap 에 표시할 추가 텍스트(TextData 키) + 위치.
+                        DrawDelayedTextKeyDropdown(step);
+                        step.textTapPosition = EditorGUILayout.Vector2Field(
+                            new GUIContent("  Tap Text Position", "TextTap 위치(0,0=프리팹 기본). 지연 텍스트가 표시될 위치.").text,
+                            step.textTapPosition);
+                    }
+                }
+
                 step.overrideVisualLayout = EditorGUILayout.Toggle("Override Visual Layout", step.overrideVisualLayout);
                 using (new EditorGUI.DisabledScope(!step.overrideVisualLayout))
                 {
@@ -536,6 +561,15 @@ namespace BalloonFlow.Editor
                     if (step.waitAttackSeconds > 0f)
                         sb.AppendLine($"            waitAttackSeconds = {FloatCode(step.waitAttackSeconds)},");
                     sb.AppendLine($"            hideSkipButton = {step.hideSkipButton.ToString().ToLowerInvariant()},"); // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622
+                    // ROLLBACK_TUTORIAL_MIN_DISPLAY_20260715: tap_anywhere 최소 표시 시간.
+                    sb.AppendLine($"            useMinDisplayTime = {step.useMinDisplayTime.ToString().ToLowerInvariant()},");
+                    if (step.useMinDisplayTime)
+                        sb.AppendLine($"            minDisplaySeconds = {FloatCode(step.minDisplaySeconds)},");
+                    // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715
+                    if (!string.IsNullOrEmpty(step.delayedTextKey))
+                        sb.AppendLine($"            delayedTextKey = \"{EscapeString(step.delayedTextKey)}\",");
+                    if (step.textTapPosition != Vector2.zero)
+                        sb.AppendLine($"            textTapPosition = {Vector2Code(step.textTapPosition)},");
                     // ROLLBACK_TUTORIAL_INSTRUCTION_COLOR_20260622: instruction 텍스트 색상.
                     sb.AppendLine($"            useInstructionColor = {step.useInstructionColor.ToString().ToLowerInvariant()},");
                     sb.AppendLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
@@ -623,6 +657,22 @@ namespace BalloonFlow.Editor
             Repaint();
         }
 
+        // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715: 지연 텍스트 TextData 키 드롭다운(DrawInstructionKeyDropdown 과 동일 패턴).
+        private void DrawDelayedTextKeyDropdown(EditableStep step)
+        {
+            var keys = new System.Collections.Generic.List<string> { "(none)" };
+            try { keys.AddRange(LocalizationService.AllKeys); } catch { /* CSV 미로드 무해 */ }
+            if (!string.IsNullOrEmpty(step.delayedTextKey) && !keys.Contains(step.delayedTextKey))
+                keys.Add(step.delayedTextKey);
+            string[] arr = keys.ToArray();
+            int cur = string.IsNullOrEmpty(step.delayedTextKey) ? 0 : System.Array.IndexOf(arr, step.delayedTextKey);
+            if (cur < 0) cur = 0;
+            int sel = EditorGUILayout.Popup(
+                new GUIContent("  Delayed Text Key", "N초 후(탭 가능) TextTap 에 표시할 TextData 키. (none)=프리팹 기본 텍스트 유지. 위치는 Tap Text Position."),
+                cur, arr);
+            step.delayedTextKey = sel <= 0 ? "" : arr[sel];
+        }
+
         // ROLLBACK_TUTORIAL_TEXTDATA_KEY_20260713: TextData 키 드롭다운 — LocalizationService.AllKeys 로 목록 구성.
         //   "(none)"=키 미사용(instruction 직접입력 폴백). 현재 값이 목록에 없어도(CSV 아직 미추가 등) 유지되게 추가.
         //   ※ TextData.csv 는 별도 작업(다른 터미널)에서 채움 — 여기선 키 선택만.
@@ -685,6 +735,10 @@ namespace BalloonFlow.Editor
                         requireAction = s.requireAction,
                         waitAttackSeconds = s.waitAttackSeconds,
                         hideSkipButton = s.hideSkipButton, // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622
+                        useMinDisplayTime = s.useMinDisplayTime, // ROLLBACK_TUTORIAL_MIN_DISPLAY_20260715
+                        minDisplaySeconds = s.minDisplaySeconds,
+                        delayedTextKey = s.delayedTextKey, // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715
+                        textTapPosition = s.textTapPosition, // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715
                         isComplete = false,
                         overrideVisualLayout = s.overrideVisualLayout,
                         useCutoutFrame = s.useCutoutFrame,
@@ -760,6 +814,10 @@ namespace BalloonFlow.Editor
                             requireAction = string.IsNullOrEmpty(s.requireAction) ? "none" : s.requireAction,
                             waitAttackSeconds = s.waitAttackSeconds,
                             hideSkipButton = s.hideSkipButton, // ROLLBACK_TUTORIAL_HIDE_SKIP_ON_ITEM_USE_20260622
+                            useMinDisplayTime = s.useMinDisplayTime, // ROLLBACK_TUTORIAL_MIN_DISPLAY_20260715
+                            minDisplaySeconds = s.minDisplaySeconds,
+                            delayedTextKey = s.delayedTextKey ?? "", // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715
+                            textTapPosition = s.textTapPosition, // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715
                             overrideVisualLayout = s.overrideVisualLayout,
                             useCutoutFrame = s.useCutoutFrame,
                             cutoutFramePosition = s.cutoutFramePosition,

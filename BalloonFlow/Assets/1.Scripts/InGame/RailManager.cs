@@ -2696,6 +2696,21 @@ namespace BalloonFlow
             return _reusableRailColors;
         }
 
+        // ROLLBACK_FAIL_CONTEXT_20260715: 레일 색별 다트 카운트(analytics fail_rail_composition — 색상 병목 진단).
+        //   GetRailDartColors 와 동일 필터(dartColor>=0). SUM ≈ EffectiveOccupiedCount. 매 프레임 아님(실패 순간 1회).
+        public Dictionary<int, int> GetRailCompositionByColor()
+        {
+            var comp = new Dictionary<int, int>();
+            for (int i = 0; i < _darts.Count; i++)
+            {
+                int c = _darts[i].dartColor;
+                if (c < 0) continue;
+                comp.TryGetValue(c, out int n);
+                comp[c] = n + 1;
+            }
+            return comp;
+        }
+
         /// <summary>
         /// Determines the appropriate rail capacity based on total dart count.
         /// Design: darts≤300→40, ≤500→80, ≤700→120, else→160.
