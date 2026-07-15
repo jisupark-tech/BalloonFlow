@@ -278,26 +278,22 @@ namespace BalloonFlow
 #endif
         }
 
-        // ROLLBACK_SHOP_KRW_DISPLAY_20260715: 표시 가격 — 원화(KRW)는 "5,800 KRW" 형식(금액+통화코드),
-        //   그 외 통화는 스토어 기본 문자열($4.99, €3,99 …). 스토어 계정 지역 기준(앱 언어 무관).
-        //   미초기화/미조회 시 GetProductPrice 폴백($priceUsd).
-        public string GetDisplayPrice(string productId)
+        // ROLLBACK_SHOP_KRW_DISPLAY_20260715: 스토어 통화가 '원화(KRW)'일 때만 "5,800 KRW" 문자열을 돌려준다.
+        //   그 외(달러 등)·미초기화·에디터 Fake Store($0.01 등 가짜값)에선 null → 호출측이 Firestore priceUsd($X.XX) 사용.
+        //   (요구: 디바이스 한국=KRW, 나머지=달러. IAP 가짜값 노출 방지.)
+        public string GetKrwPriceStringOrNull(string productId)
         {
-            if (string.IsNullOrEmpty(productId)) return "$?.??";
+            if (string.IsNullOrEmpty(productId)) return null;
 #if UNITY_IAP
             if (_isInitialized && _storeController != null)
             {
                 Product product = _storeController.products.WithID(productId);
-                if (product != null && product.availableToPurchase && product.metadata != null)
-                {
-                    var m = product.metadata;
-                    if (m.isoCurrencyCode == "KRW")
-                        return $"{m.localizedPrice:N0} KRW";   // 예: 5,800 KRW (원화는 소수점 없음)
-                    return m.localizedPriceString;             // 그 외: 스토어 기본($4.99 등)
-                }
+                if (product != null && product.availableToPurchase && product.metadata != null
+                    && product.metadata.isoCurrencyCode == "KRW" && product.metadata.localizedPrice > 0m)
+                    return $"{product.metadata.localizedPrice:N0} KRW";   // 예: 5,800 KRW
             }
 #endif
-            return GetProductPrice(productId);
+            return null;
         }
 
         public string GetProductPrice(string productId)

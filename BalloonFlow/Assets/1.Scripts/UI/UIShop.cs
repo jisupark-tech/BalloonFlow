@@ -270,13 +270,13 @@ namespace BalloonFlow
             var category = MapCategory(doc.category);
             string title = ResolveProductTitleKey(doc, category);
 
-            // ROLLBACK_SHOP_KRW_DISPLAY_20260715: 표시 가격 — 원화(KRW)="5,800 KRW", 그 외=스토어 기본($4.99 …).
-            //   스토어 계정 지역 통화 기준(앱 언어 무관) + 실제 청구액과 일치. IAP 미초기화/미조회 시 $priceUsd 폴백.
+            // ROLLBACK_SHOP_KRW_DISPLAY_20260715: 기본은 Firestore priceUsd($X.XX, 정상 달러). 스토어 통화가 KRW(디바이스 한국)일
+            //   때만 "5,800 KRW"로 교체. IAP Fake Store 가짜값($0.01)·미초기화에선 KRW 아님 → priceUsd 유지(달러 정상).
             string priceText = $"${doc.priceUsd:F2}";
             if (IAPManager.HasInstance)
             {
-                string localized = IAPManager.Instance.GetDisplayPrice(doc.productId);
-                if (!string.IsNullOrEmpty(localized) && localized != "$?.??") priceText = localized;
+                string krw = IAPManager.Instance.GetKrwPriceStringOrNull(doc.productId);
+                if (!string.IsNullOrEmpty(krw)) priceText = krw;
             }
 
             return new ShopProductData
