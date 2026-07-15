@@ -134,6 +134,27 @@ namespace BalloonFlow
         /// Yes (Horizontal Green): onYes 호출 후 닫힘. No (Horizontal Red) 또는 X: onNo 후 닫힘.
         /// 같은 prefab(PopupError) 재사용 — 별도 prefab 불필요.
         /// </summary>
+        // ROLLBACK_FORCE_UPDATE_20260715: 강제 업데이트 — 닫기 불가 단일버튼(업데이트→스토어).
+        //   X/취소 없음. 버튼 눌러 스토어로 가도 CloseUI 하지 않음(복귀 시 팝업 유지 = 계속 차단).
+        public void ShowForceUpdate(string title, string description, string buttonText, System.Action onUpdate)
+        {
+            if (_frame != null)
+            {
+                _frame.SetTitle(title);
+                _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
+                _frame.SetSingleButtonText(buttonText);
+                _frame.ShowExitButton(false); // 닫기 불가
+            }
+            if (_txtDescription != null) _txtDescription.text = description;
+            if (_imgIcon != null) _imgIcon.gameObject.SetActive(false);
+            if (_frame != null && _frame.BtnSingle != null)
+            {
+                _frame.BtnSingle.onClick.RemoveAllListeners();
+                _frame.BtnSingle.onClick.AddListener(() => onUpdate?.Invoke()); // CloseUI 없음 → 팝업 유지
+            }
+            OpenUI();
+        }
+
         public void ShowConfirm(
             string title,
             string description,

@@ -218,3 +218,6 @@ loading.ready,Ready,준비 완료,
 loading.connect_internet,Connecting to internet...,인터넷 연결 중...,
 loading.dots,LOADING,로딩,
 toast.tap.frontfirst,Tap the front boxes first!,맨 앞줄 상자부터 탭하세요!,신규
+forceupdate.title,Update Required,업데이트 필요,신규
+forceupdate.desc,Please update to the latest version to continue.,계속하려면 최신 버전으로 업데이트해 주세요.,신규
+ui.common.update,Update,업데이트,신규

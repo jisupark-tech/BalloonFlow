@@ -125,9 +125,62 @@ namespace BalloonFlow
             StartCoroutine(StartupFlow());
         }
 
+        // ROLLBACK_FORCE_UPDATE_20260715: 최소 지원 버전 게이트.
+        //   Firestore /config/app.minSupportedVersion 보다 앱 버전이 낮으면 강제 업데이트 팝업(닫기 불가) 후 로딩 진입 차단.
+        //   서버 미확인(오프라인/타임아웃/파싱실패) = 통과(오프라인 플레이 보장). Android 스토어(market://) 이동.
+        private bool _forceUpdateBlocked;
+
+        private IEnumerator ForceUpdateGate()
+        {
+            // Firebase 준비 대기(최대 ~4s — 로딩 게이트라 짧게). 미준비면 통과.
+            for (int i = 0; i < 40 && !(FirebaseManager.HasInstance && FirebaseManager.Instance.IsReady); i++)
+                yield return new WaitForSecondsRealtime(0.1f);
+            if (!FirebaseManager.HasInstance || !FirebaseManager.Instance.IsReady) yield break;
+
+            System.Threading.Tasks.Task<Firebase.Firestore.DocumentSnapshot> task = null;
+            // ※ catch 안에서는 yield break 불가(C# 반복자) → 예외 시 로그만, 이후 null 체크로 통과 처리.
+            try { task = FirebaseEnvironment.GetFirestore().Document("config/app").GetSnapshotAsync(); }
+            catch (System.Exception e) { Debug.LogWarning($"[ForceUpdate] fetch 예외 — 통과: {e.Message}"); }
+            if (task == null) yield break;
+
+            yield return new WaitUntil(() => task.IsCompleted);
+            if (task.IsFaulted || task.IsCanceled || task.Result == null || !task.Result.Exists) yield break;
+
+            string minVer = null;
+            try { minVer = task.Result.ConvertTo<AppConfigDoc>()?.minSupportedVersion; }
+            catch (System.Exception e) { Debug.LogWarning($"[ForceUpdate] convert 예외 — 통과: {e.Message}"); }
+            if (string.IsNullOrEmpty(minVer)) yield break;
+
+            // 버전 비교(System.Version). 파싱 실패 시 통과(오오판정 방지).
+            if (!System.Version.TryParse(Application.version, out var cur)) yield break;
+            if (!System.Version.TryParse(minVer, out var min)) yield break;
+            if (cur >= min) yield break;   // 최신/동일 → 통과
+
+            // 구버전 → 강제 업데이트(로딩 진입 차단).
+            _forceUpdateBlocked = true;
+            Debug.LogWarning($"[ForceUpdate] blocked: app={Application.version} < min={minVer}");
+            if (UIManager.HasInstance)
+            {
+                var popup = UIManager.Instance.OpenUI<PopupError>(Const.POPUP_ERROR);
+                if (popup != null)
+                {
+                    string url = "market://details?id=" + Application.identifier; // Android Play 스토어
+                    popup.ShowForceUpdate(
+                        LocalizationService.Get("forceupdate.title"),
+                        LocalizationService.Get("forceupdate.desc"),
+                        LocalizationService.Get("ui.common.update"),
+                        () => Application.OpenURL(url));
+                }
+            }
+        }
+
         /// <summary>로딩을 먼저 끝낸 뒤(바 100%), 씬 전환 직전에 알림 권한을 띄워 선택받고 진입.</summary>
         private IEnumerator StartupFlow()
         {
+            // ROLLBACK_FORCE_UPDATE_20260715: 로딩 전 강제 업데이트 게이트. 최소 지원 버전 미달이면 여기서 차단(로딩/진입 X).
+            yield return ForceUpdateGate();
+            if (_forceUpdateBlocked) yield break;
+
             // ROLLBACK_PRIVACY_TERM_PARALLEL_20260714:
             // 동의 팝업을 로딩과 '병렬'로 진행(로딩바가 뒤에서 채워짐). 단 씬 전환(Enter)은 동의 완료를 게이트로 요구.
             //   이전(ROLLBACK_PRIVACY_TERM_GATE_20260626)은 동의 완료까지 로딩 시작을 막았음 → 체감 대기 증가.
