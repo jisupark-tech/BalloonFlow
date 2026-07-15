@@ -106,6 +106,12 @@ namespace BalloonFlow
         private string _defaultTextTapContent;
         private string _defaultTextTapOutlineContent;
         private Coroutine _delayedTextCo;
+        // ROLLBACK_TUTORIAL_DELAY_STATIC_TEXT_20260715: 지연 텍스트는 정적(점멸/스케일 없음)으로 표시.
+        //   프리팹에 Animator(스케일 펄스 등)가 붙어 있을 수 있어 캐시해 두고 정적 표시 시 비활성 + 스케일 기본값 복원.
+        private Animator _textTapAnimator;
+        private Animator _textTapOutlineAnimator;
+        private Vector3 _defaultTextTapScale = Vector3.one;
+        private Vector3 _defaultTextTapOutlineScale = Vector3.one;
 
         // State
         private Coroutine _fadeDimCoroutine;
@@ -288,6 +294,8 @@ namespace BalloonFlow
                     if (_textTapGroup == null) _textTapGroup = _textTap.gameObject.AddComponent<CanvasGroup>();
                     _textTapTmp = _textTap.GetComponent<TMPro.TMP_Text>(); // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715
                     if (_textTapTmp != null) _defaultTextTapContent = _textTapTmp.text;
+                    _textTapAnimator = _textTap.GetComponent<Animator>();      // ROLLBACK_TUTORIAL_DELAY_STATIC_TEXT_20260715
+                    _defaultTextTapScale = _textTap.localScale;
                     _textTap.gameObject.SetActive(false);
                 }
                 if (_textTapOutline != null)
@@ -297,6 +305,8 @@ namespace BalloonFlow
                     if (_textTapOutlineGroup == null) _textTapOutlineGroup = _textTapOutline.gameObject.AddComponent<CanvasGroup>();
                     _textTapOutlineTmp = _textTapOutline.GetComponent<TMPro.TMP_Text>(); // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715
                     if (_textTapOutlineTmp != null) _defaultTextTapOutlineContent = _textTapOutlineTmp.text;
+                    _textTapOutlineAnimator = _textTapOutline.GetComponent<Animator>(); // ROLLBACK_TUTORIAL_DELAY_STATIC_TEXT_20260715
+                    _defaultTextTapOutlineScale = _textTapOutline.localScale;
                     _textTapOutline.gameObject.SetActive(false);
                 }
             }
@@ -651,15 +661,41 @@ namespace BalloonFlow
         private System.Collections.IEnumerator ShowTextTapDelayed(float delaySec)
         {
             yield return new WaitForSecondsRealtime(delaySec);
-            ShowTextTap(true);
+            ShowTextTap(true, animate: false); // ROLLBACK_TUTORIAL_DELAY_STATIC_TEXT_20260715: 지연 텍스트는 정적 표시
             _delayedTextCo = null;
         }
 
-        private void ShowTextTap(bool show)
+        // animate=false 면 점멸/스케일 없이 정적으로 표시(지연 텍스트용). true 면 기존 alpha yoyo 깜빡.
+        private void ShowTextTap(bool show, bool animate = true)
         {
             if (_textTap != null) _textTap.gameObject.SetActive(show);
             if (_textTapOutline != null) _textTapOutline.gameObject.SetActive(show);
-            if (show) StartTextTapBlink(); else StopTextTapBlink();
+
+            if (!show) { StopTextTapBlink(); return; }
+
+            if (animate)
+            {
+                SetTextTapStatic(false);   // Animator 등 재활성
+                StartTextTapBlink();
+            }
+            else
+            {
+                // ROLLBACK_TUTORIAL_DELAY_STATIC_TEXT_20260715: 지연 텍스트 — 점멸(alpha)·스케일 펄스 모두 제거.
+                StopTextTapBlink();        // alpha=1 고정
+                SetTextTapStatic(true);    // Animator 비활성 + 스케일 기본값 복원
+            }
+        }
+
+        // ROLLBACK_TUTORIAL_DELAY_STATIC_TEXT_20260715: 정적 표시 토글 — Animator(스케일 펄스 등) on/off + 스케일 리셋.
+        private void SetTextTapStatic(bool isStatic)
+        {
+            if (_textTapAnimator != null) _textTapAnimator.enabled = !isStatic;
+            if (_textTapOutlineAnimator != null) _textTapOutlineAnimator.enabled = !isStatic;
+            if (isStatic)
+            {
+                if (_textTap != null) _textTap.localScale = _defaultTextTapScale;
+                if (_textTapOutline != null) _textTapOutline.localScale = _defaultTextTapOutlineScale;
+            }
         }
 
         // ROLLBACK_TUTORIAL_DELAY_TEXT_20260715: key 있으면 LocalizationService.Get, 없으면 프리팹 기본 복원(스텝 간 내용 누수 방지).

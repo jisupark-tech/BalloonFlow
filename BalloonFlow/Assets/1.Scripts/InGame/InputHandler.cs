@@ -289,7 +289,8 @@ namespace BalloonFlow
             if (!UIManager.HasInstance) return;
             Transform parent = UIManager.Instance.PopupTr ?? UIManager.Instance.UiTr;
             if (parent == null) return;
-            TxtToast.Spawn(parent, LocalizationService.Get("toast.tap.frontfirst"), new Vector2(0f, -1022f));
+            // ROLLBACK_ONBOARDING_FRONTROW_TOAST_20260715: 위치는 "Almost There!" 토스트와 동일(Vector2.zero, RailManager.ShowAlmostThereMessage 참조).
+            TxtToast.Spawn(parent, LocalizationService.Get("toast.tap.frontfirst"), Vector2.zero);
         }
 
         /// <summary>
