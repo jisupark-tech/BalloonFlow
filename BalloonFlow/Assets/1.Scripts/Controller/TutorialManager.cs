@@ -661,29 +661,21 @@ namespace BalloonFlow
         private System.Collections.IEnumerator ShowTextTapDelayed(float delaySec)
         {
             yield return new WaitForSecondsRealtime(delaySec);
-            ShowTextTap(true, animate: false); // ROLLBACK_TUTORIAL_DELAY_STATIC_TEXT_20260715: 지연 텍스트는 정적 표시
+            ShowTextTap(true); // ROLLBACK_TUTORIAL_TEXTTAP_NO_BLINK_20260715: 정적 표시(점멸 없음)
             _delayedTextCo = null;
         }
 
-        // animate=false 면 점멸/스케일 없이 정적으로 표시(지연 텍스트용). true 면 기존 alpha yoyo 깜빡.
-        private void ShowTextTap(bool show, bool animate = true)
+        // ROLLBACK_TUTORIAL_TEXTTAP_NO_BLINK_20260715: TextTap 은 점멸(alpha yoyo)·스케일 펄스 없이 항상 정적으로 표시.
+        //   (스테이지 무관 — 즉시/지연 모두 정적.)
+        private void ShowTextTap(bool show)
         {
             if (_textTap != null) _textTap.gameObject.SetActive(show);
             if (_textTapOutline != null) _textTapOutline.gameObject.SetActive(show);
 
             if (!show) { StopTextTapBlink(); return; }
 
-            if (animate)
-            {
-                SetTextTapStatic(false);   // Animator 등 재활성
-                StartTextTapBlink();
-            }
-            else
-            {
-                // ROLLBACK_TUTORIAL_DELAY_STATIC_TEXT_20260715: 지연 텍스트 — 점멸(alpha)·스케일 펄스 모두 제거.
-                StopTextTapBlink();        // alpha=1 고정
-                SetTextTapStatic(true);    // Animator 비활성 + 스케일 기본값 복원
-            }
+            StopTextTapBlink();     // 점멸 제거(잔여 tween kill + alpha=1)
+            SetTextTapStatic(true); // 스케일 펄스 제거(Animator off + 스케일 기본값)
         }
 
         // ROLLBACK_TUTORIAL_DELAY_STATIC_TEXT_20260715: 정적 표시 토글 — Animator(스케일 펄스 등) on/off + 스케일 리셋.
@@ -1261,11 +1253,29 @@ namespace BalloonFlow
                     PlayHandTween(step);
             }
 
-            // [2026-05-15] TextTap 위치 override (step.textTapPosition!=zero 일 때만 적용 — zero 면 prefab default 유지).
-            if (_textTap != null && step.textTapPosition != Vector2.zero)
-                _textTap.anchoredPosition = step.textTapPosition;
-            if (_textTapOutline != null && step.textTapPosition != Vector2.zero)
-                _textTapOutline.anchoredPosition = step.textTapPosition;
+            // ROLLBACK_TUTORIAL_TEXTTAP_POS_PARENT_20260715: 계층 = TextTapOutline(부모) → TextTap(자식).
+            //   부모(Outline)만 위치를 조정하면 자식(TextTap)은 부모를 따라 함께 이동한다.
+            //   (이전엔 자식에도 custom 을 직접 넣어 부모 프레임 기준으로 어긋났던 것 — 자식은 로컬 기본값 유지.)
+            //   조부모 LayoutGroup 이 SetActive 시 부모 anchoredPosition 을 덮으므로 커스텀 위치일 때 LayoutElement.ignoreLayout 로 무시.
+            ApplyTextTapPosition(_textTapOutline, step.textTapPosition, _defaultTextTapOutlinePosition);
+            if (_textTap != null)
+            {
+                var childLe = _textTap.GetComponent<LayoutElement>();
+                if (childLe != null) childLe.ignoreLayout = false; // 자식은 부모 따라감 — 레이아웃 무시 해제
+                _textTap.anchoredPosition = _defaultTextTapPosition; // 부모 기준 로컬 기본 위치 유지(이전 offset 복원)
+            }
+        }
+
+        // ROLLBACK_TUTORIAL_TEXTTAP_POS_LAYOUT_20260715: 커스텀 위치(zero 아님)면 LayoutElement.ignoreLayout=true 로
+        //   부모 LayoutGroup 을 무시하고 anchoredPosition 을 그대로 반영. 기본(zero)이면 레이아웃 복귀 + prefab 기본 위치.
+        private void ApplyTextTapPosition(RectTransform rt, Vector2 custom, Vector2 def)
+        {
+            if (rt == null) return;
+            bool useCustom = custom != Vector2.zero;
+            var le = rt.GetComponent<LayoutElement>();
+            if (useCustom && le == null) le = rt.gameObject.AddComponent<LayoutElement>();
+            if (le != null) le.ignoreLayout = useCustom;
+            rt.anchoredPosition = useCustom ? custom : def;
         }
 
         private void ResetStepVisualOverrideState()
