@@ -200,7 +200,7 @@ popup.privacyterm.terms,Terms of Service,이용약관,신규
 popup.privacyterm.privacy,Privacy Policy,개인정보 처리방침,신규
 popup.privacyterm.accept,Accept,동의,신규
 tutorial.allmostfull.warning,Conveyor almost full! Clear it or fail!,컨베이어가 거의 다 찼어요!\n비우지 못하면 실패해요!,
-tutorial.tap.dartbox,Tap a dart box to pop\nsame color balloons!,다트 박스를 탭해서\n같은 색 풍선을 터뜨리세요!,
+tutorial.tap.dartbox,Tap a dart box to pop\nsame color balloons!,다트 상자를 탭해서\n같은 색 풍선을 터뜨리세요!,
 tutorial.continue.clearballoon,Keep popping the remaining\nballoons to clear the level!,남은 풍선을 계속 터뜨려서\n레벨을 클리어하세요!,
 ui.common.giveup,Give Up,포기하기,
 popupcontinue.txtspendcoins,Spend coins to keep playing.,코인을 사용해 계속 플레이하세요.,
