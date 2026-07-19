@@ -516,6 +516,19 @@ namespace BalloonFlow
             }
 #endif
 
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER_20260716: 레일 홀더 모드는 ㅁ자 폐루프 고정. 홀더가 4변을 등간격으로 순회하며
+            //   안쪽으로 쏘는 설계라 1~3면(개방 경로 = 끝에서 순간이동)은 성립하지 않는다.
+            //   side 수를 '여기 한 곳'에서 4로 강제하면 이후 전부가 일관되게 ㅁ자가 된다:
+            //     ① 컨베이어 벨트 비주얼(BuildConveyorBelt) ② 위험 오버레이 ③ 화살표(SpawnArrows)
+            //     ④ 레일 waypoint(사각형) ⑤ isLoop(폐루프).
+            //   (기존엔 ④⑤만 4면으로 강제하고 ①~③은 capacity 파생값을 써서 경로는 ㅁ인데 벨트 그림만
+            //    ㅡ/ㄴ/ㄷ 로 어긋났다 — 이 단일 강제로 그 불일치를 제거.)
+            //   ※ 이 코드는 _currentLevelId 세팅(LoadLevelCoroutine) 이후 실행되므로 게이트의 레벨 판정이 유효.
+            if (RailHolderController.ModeActiveForCurrentLevel)
+                railSideCount = 4;
+#endif
+
             // Initialize 2D floor tilemap and conveyor belt tiles BEFORE rail setup
             // so that BoardTileManager's fixed rail proportions are available for waypoint generation.
             float cellSpacing = GameManager.HasInstance
@@ -570,16 +583,8 @@ namespace BalloonFlow
                     float b = boardCZ - halfCH;
                     float t = boardCZ + halfCH;
 
+                    // side 수는 상단에서 확정됨(홀더 모드 1~10 → 4면 ㅁ, 그 외/define off → Master·_B 파생값 그대로).
                     int sides = btm.RailSideCount;
-
-#if BF_RAIL_HOLDER
-                    // PROTO_RAIL_HOLDER_20260716: 레일 홀더는 ㅁ자 폐루프 전제 —
-                    //   홀더가 경로를 등간격으로 순회하며 4변 전체에서 안쪽으로 쏘는 설계라 1~3면(끝에서 순간이동)은 성립 안 함.
-                    //   기존 모드의 capacity→면수 파생(GetRailSideCount: ≤40→1, ≤80→2, ≤120→3, else 4)을 무시하고 4면 고정.
-                    //   ※ 이 코드는 _currentLevelId 세팅(LoadLevelCoroutine:154) 이후 실행되므로 게이트의 레벨 판정이 유효.
-                    if (RailHolderController.ModeActiveForCurrentLevel)
-                        sides = 4;
-#endif
 
                     switch (sides)
                     {
@@ -623,13 +628,8 @@ namespace BalloonFlow
                 // 레벨 데이터의 cornerRadius는 의도적으로 무시 — 모든 레벨 1.5f 고정
                 float radius = 1.5f;
                 // 4면만 closedLoop (물리적 순환). 1~3면은 개방 경로 + 슬롯 래핑으로 순간이동
+                // railSideCount 는 상단에서 확정됨(홀더 모드 1~10 → 4 → 폐루프, 그 외 → 파생값 그대로).
                 int sideCount = railSideCount;
-#if BF_RAIL_HOLDER
-                // PROTO_RAIL_HOLDER_20260716: 위 waypoint 를 4면 고정으로 바꿨으므로 isLoop 도 같이 고정해야 한다.
-                //   (waypoint 는 사각형인데 isLoop=false 면 마지막 변이 경로에서 빠져 홀더가 좌상단에서 순간이동한다.)
-                if (RailHolderController.ModeActiveForCurrentLevel)
-                    sideCount = 4;
-#endif
                 bool isLoop = (sideCount >= 4);
                 RailManager.Instance.SetRailLayout(waypoints, slotCount, isLoop, smooth, radius);
 

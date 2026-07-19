@@ -16,12 +16,18 @@ namespace BalloonFlow.EditorTools
     /// BuildFailedException 으로 중단 → 혼입이 구조적으로 불가능.
     ///
     /// 프로토를 실기에서 보고 싶으면 Development Build 를 켜면 된다(그건 통과시킨다).
+    ///
+    /// <b>의도적 출시 혼입(이탈률/실기 검증 전용)</b>: 프로토를 출시 품질 AAB 에 실어 실유저에게 배포해야 할 때는
+    /// 2차 define <c>BF_RAIL_HOLDER_RELEASE_OK</c> 를 <b>함께</b> 켠다. 이 승인이 있으면 출시 빌드도 통과하되,
+    /// LogError 로 빌드 로그에 크게 남겨 '실수로 켜둔 것'과 구분된다. 1차 define 만 실수로 켜진 경우는 여전히 차단.
+    /// 검증이 끝나면 두 define 을 모두 제거할 것.
     /// </summary>
     public class RailHolderBuildGuard : IPreprocessBuildWithReport
     {
         public int callbackOrder => -10000; // 다른 전처리보다 먼저 — 실패시킬 거면 빨리 실패
 
         private const string DEFINE = "BF_RAIL_HOLDER";
+        private const string RELEASE_OK_DEFINE = "BF_RAIL_HOLDER_RELEASE_OK";
 
         public void OnPreprocessBuild(BuildReport report)
         {
@@ -35,6 +41,15 @@ namespace BalloonFlow.EditorTools
                 return;
             }
 
+#if BF_RAIL_HOLDER_RELEASE_OK
+            // 의도적 출시 혼입 승인 — 이탈률/실기 검증 전용. 조용히 통과시키지 않고 LogError 로 크게 남겨
+            // '실수로 켜둔 define'(차단됨)과 '의도적 승인'(통과)을 빌드 로그에서 명확히 구분한다.
+            Debug.LogError(
+                $"[RailHolderBuildGuard] ⚠️ 프로토 define '{DEFINE}' 이(가) '{RELEASE_OK_DEFINE}' 승인과 함께 " +
+                $"출시 빌드에 포함됩니다. 이탈률/실기 검증 전용 빌드입니다 — " +
+                $"검증이 끝나면 두 define('{DEFINE}', '{RELEASE_OK_DEFINE}')을 반드시 제거하세요.");
+            return;
+#else
             NamedBuildTarget namedTarget = NamedBuildTarget.FromBuildTargetGroup(report.summary.platformGroup);
             throw new BuildFailedException(
                 $"[RailHolderBuildGuard] 출시 빌드 차단 — 프로토 define '{DEFINE}' 이(가) " +
@@ -42,7 +57,10 @@ namespace BalloonFlow.EditorTools
                 $"이 define 은 '홀더가 레일을 탄다' 프로토타입 전용이며 출시 빌드에 포함되면 안 됩니다.\n" +
                 $"조치: Project Settings > Player > Other Settings > Scripting Define Symbols 에서 " +
                 $"'{DEFINE}' 를 제거한 뒤 다시 빌드하세요.\n" +
-                $"(실기에서 프로토를 확인하려는 것이라면 Build Settings 에서 Development Build 를 켜세요.)");
+                $"(실기에서 프로토를 확인하려는 것이라면 Build Settings 에서 Development Build 를 켜세요.)\n" +
+                $"(이탈률/실기 검증용으로 출시 품질 AAB 에 의도적으로 실어야 한다면 " +
+                $"'{RELEASE_OK_DEFINE}' 를 함께 추가하세요.)");
+#endif
 #else
             // define 이 꺼져 있으면 프로토 코드는 애초에 컴파일되지 않음 — 검사할 것 없음.
             return;
