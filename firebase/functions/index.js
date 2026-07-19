@@ -35,14 +35,26 @@ const bq = new BigQuery(); // 런타임 서비스 계정 자격증명 자동 사
 //   `firebase deploy --only functions` 재배포 필요(배포 전까지 기기 푸시 제목은 계속 'BalloonFlow').
 const APP_TITLE = 'Balloon Loop';
 
+// ROLLBACK_PUSH_KO_20260715: PushTexts.RETURN_D* 신규 copy 와 동기. EN 기본.
 const RETURN_PUSH_BODY = {
-  1: 'Take a break? Come pop some balloons!',
-  2: '🎈 Pop the day off! Hearts are ready, friends await.',
-  3: '🎈 Stress? Pop. Pop. Pop. Three taps to your daily smile.',
-  4: "🎈 Boredom won't pop itself — your balloons are waiting!",
-  5: "🎈 Pop! Pop! Don't you miss that sound? Come back and feel it again.",
-  6: "🎈 So many balloons left to pop! They won't pop themselves.",
-  7: "🎈 Remember the joy of popping balloons? It's time for one more round!",
+  1: "🎈 Your balloons are waiting! Come back and let's pop a few!",
+  2: "🎈 Got 3 minutes? That's all it takes to pop and unwind.",
+  3: "🎈 Your balloons are all lined up! Pop them and hear the pitch climb!",
+  4: "🎈 Busy day? Pop a balloon or two and let your mind float.",
+  5: "🎈 Pop! Pop! Each one rings higher! Don't you miss that feeling?",
+  6: "🎈 You've earned a break! Treat yourself to a few pops.",
+  7: "🎈 Remember how good that balloon pop felt? Let's do it again!",
+};
+
+// ROLLBACK_PUSH_KO_20260715: 한국어(u.lang==='KO') 세트. PushTexts.RETURN_D*_KO 와 동기.
+const RETURN_PUSH_BODY_KO = {
+  1: "🎈 풍선들이 기다리고 있어요! 돌아와서 몇 개만 터뜨려요!",
+  2: "🎈 3분이면 충분해요. 풍선 터뜨리며 잠깐 쉬어 가요.",
+  3: "🎈 풍선이 줄지어 기다려요! 터뜨릴수록 높아지는 소리를 들어보세요!",
+  4: "🎈 바쁜 하루였나요? 풍선 한두 개 터뜨리며 머리를 식혀요.",
+  5: "🎈 팡! 팡! 점점 높아지는 그 소리, 그립지 않으세요?",
+  6: "🎈 휴식이 필요한 순간이에요! 풍선 몇 개로 기분 전환해요.",
+  7: "🎈 풍선 터뜨리던 그 손맛, 기억나죠? 다시 한 판 해요!",
 };
 
 const DAILY_REWARD_BODY = "⏰ Don't miss today's reward! Tap to collect before it's gone.";
@@ -128,7 +140,9 @@ exports.pushReturnCron = onSchedule(
       const day = Math.floor(elapsedHours / 24);
       if (day < 1 || day > 7) { skipped++; continue; }
 
-      const body = RETURN_PUSH_BODY[day];
+      // ROLLBACK_PUSH_KO_20260715: 한국(device 언어 KO)만 KO, 나머지 EN. u.lang 은 클라 로그인 시 저장.
+      const table = (u.lang === 'KO') ? RETURN_PUSH_BODY_KO : RETURN_PUSH_BODY;
+      const body = table[day];
       if (!body) { skipped++; continue; }
 
       const result = await sendToToken(u.fcmToken, body);

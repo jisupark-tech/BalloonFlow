@@ -768,6 +768,29 @@ namespace BalloonFlow
         {
             if (!HolderManager.HasInstance) return;
 
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER_20260716: 레일 홀더 모드에선 '배치'가 없다 — 고른 홀더를 레일에 태운다.
+            //   성공/실패 처리는 아래 기존 경로와 동일(효과 발행 / 환불). 튜토리얼(Lv.9 Hand) 완료 신호는
+            //   호출측(OnHolderSelected)의 NotifyTutorialItemUseCompleted 가 그대로 발행하므로 자연히 진행된다.
+            if (RailHolderController.ModeActiveForCurrentLevel && RailHolderController.HasInstance)
+            {
+                bool mounted = RailHolderController.Instance.TryMountHolderByBoosterSelect(holderId);
+                if (mounted)
+                {
+                    EventBus.Publish(new OnBoosterEffectApplied
+                    {
+                        boosterType = BoosterManager.SELECT_TOOL,
+                        affectedCount = 1
+                    });
+                }
+                else if (BoosterManager.HasInstance)
+                {
+                    BoosterManager.Instance.AddBooster(BoosterManager.SELECT_TOOL, 1); // 실패 환불(기존과 동일)
+                }
+                return;
+            }
+#endif
+
             // Hand/SelectTool: 줄 순서 무시 — ForceSelectHolder 사용
             bool result = HolderManager.Instance.ForceSelectHolder(holderId);
             if (result)

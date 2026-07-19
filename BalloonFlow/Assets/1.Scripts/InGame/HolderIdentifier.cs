@@ -1135,6 +1135,17 @@ namespace BalloonFlow
             }
         }
 
+#if BF_RAIL_HOLDER
+        /// <summary>PROTO_RAIL_HOLDER_20260716: 발사 순간 상자 스케일 업/다운 펀치.
+        /// 기존 얼음깨짐 연출(line 731)과 동일한 DOPunchScale 패턴을 발사용으로 재사용.
+        /// 누적 방지: baseScale 기준 상대 펀치라 반복해도 커지지 않는다(DOPunchScale 는 원복 보장).</summary>
+        public void PlayFireRecoilScale()
+        {
+            transform.DOComplete();   // 진행 중 펀치가 있으면 원복 후 재시작 — 스케일 누적 차단
+            transform.DOPunchScale(Vector3.one * 0.18f, 0.14f, 6, 0.6f);
+        }
+#endif
+
         /// <summary>재사용 시 애니메이터 전체 리셋 (풀 반환 시 enabled 복원). 진행 중인 magazine FSM 코루틴 모두 중단.</summary>
         public void ResetAnimator()
         {

@@ -486,12 +486,35 @@ namespace BalloonFlow
             ApplyTitleOutline(_hasExplicitDifficulty ? _currentDifficulty : ResolveActiveDifficulty());
         }
 
+        // ROLLBACK_ALLCLEAR_GREEN_BUTTON_20260715: 단일버튼 아웃라인 프리팹 기본(초록) 캡처 — override 전 1회.
+        private Material _singleOutlineDefaultMat;
+        private Color _singleOutlineDefaultColor;
+        private bool _singleOutlineCaptured;
+
+        private void CaptureSingleOutlineDefaultIfNeeded()
+        {
+            if (_singleOutlineCaptured || _txtBtnSingleOutline == null) return;
+            _singleOutlineCaptured = true;
+            _singleOutlineDefaultMat   = _txtBtnSingleOutline.fontSharedMaterial;
+            _singleOutlineDefaultColor = _txtBtnSingleOutline.color;
+        }
+
         public void OverrideSingleButtonOutlineMaterial(Material mat, Color fallbackColor)
         {
             // ROLLBACK_QUITGAME_SINGLE_RED_OUTLINE_20260624:
             // Lobby Quit Game uses PopupDescription's single red button. Its outline should match
             // the red button style instead of the black title/shop override colors.
+            CaptureSingleOutlineDefaultIfNeeded(); // override 전 기본값 보존
             UIOutlineStyle.ApplyMaterialOrColor(_txtBtnSingleOutline, mat, fallbackColor);
+        }
+
+        // ROLLBACK_ALLCLEAR_GREEN_BUTTON_20260715: 단일버튼 아웃라인을 프리팹 기본(초록)으로 복원.
+        //   Quit Game 의 red override 가 풀링 재사용 시 all-clear 등 다른 팝업에 남던 것 되돌림.
+        public void ResetSingleButtonOutline()
+        {
+            CaptureSingleOutlineDefaultIfNeeded();
+            if (_txtBtnSingleOutline == null) return;
+            UIOutlineStyle.ApplyMaterialOrColor(_txtBtnSingleOutline, _singleOutlineDefaultMat, _singleOutlineDefaultColor);
         }
 
         private void ApplyTitleOutline(DifficultyPurpose difficulty)

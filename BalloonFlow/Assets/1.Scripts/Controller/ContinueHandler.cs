@@ -71,6 +71,12 @@ namespace BalloonFlow
         /// </summary>
         public bool CanContinue()
         {
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER_20260716: 레일 홀더 모드는 이어하기 미지원.
+            //   이어하기 복원은 '레일에서 다트 제거'인데 이 모드엔 레일 다트가 없다 → 탄약 복원 0.
+            //   허용하면 코인만 차감하고 즉시 재실패(+컨트롤러 정지)하므로 아예 막는다. false → 곧장 최종 실패 흐름.
+            if (RailHolderController.ModeActiveForCurrentLevel) return false;
+#endif
             return true;
         }
 
@@ -154,6 +160,61 @@ namespace BalloonFlow
 
         #region Private Methods
 
+        // ROLLBACK_CONTINUE_DEBUG_20260716: 이어하기 배포정지·다트/풍선 이격 진단 로그(순수 관측, 동작 변경 없음).
+        //   원인 확정 후 이 메서드와 호출부(ApplyContinueRestore 3곳)를 통째로 제거.
+        //   읽는 법: BEFORE/AFTER 를 '비교'해서 본다. 제거 대상 색만 darts/balloons 가 같은 수만큼 줄고,
+        //   나머지 색은 전혀 변하지 않아야 정상. 한 줄의 [+N]/[-N] 절대값 자체는 정상일 수 있다 —
+        //   Pinata/Ice 는 풍선 1개가 다트를 여러 개 먹으므로 count 기준으로는 원래 +N 이 뜬다.
+        private static void LogContinueSupply(string phase)
+        {
+            if (!RailManager.HasInstance || !BalloonController.HasInstance) return;
+
+            const int MAX_C = 16;
+            int[] railD = new int[MAX_C];
+            int[] magD = new int[MAX_C];
+            int[] balB = new int[MAX_C];
+
+            var darts = RailManager.Instance.GetAllDarts();
+            for (int i = 0; i < darts.Count; i++)
+            {
+                int c = darts[i] != null ? darts[i].dartColor : -1;
+                if (c >= 0 && c < MAX_C) railD[c]++;
+            }
+
+            if (HolderManager.HasInstance)
+            {
+                HolderData[] holders = HolderManager.Instance.GetHolders();
+                if (holders != null)
+                {
+                    for (int i = 0; i < holders.Length; i++)
+                    {
+                        HolderData h = holders[i];
+                        if (h == null || h.isConsumed || h.magazineCount <= 0) continue;
+                        if (h.color >= 0 && h.color < MAX_C) magD[h.color] += h.magazineCount;
+                    }
+                }
+            }
+
+            BalloonData[] alive = BalloonController.Instance.GetAliveBalloons(out int aliveCount);
+            for (int i = 0; i < aliveCount; i++)
+            {
+                BalloonData b = alive[i];
+                if (b != null && b.color >= 0 && b.color < MAX_C) balB[b.color]++;
+            }
+
+            var sb = new System.Text.StringBuilder(256);
+            sb.Append($"[Continue-DEBUG] supply {phase} — perColor: rail+mag=darts vs aliveBalloons\n");
+            for (int c = 0; c < MAX_C; c++)
+            {
+                int have = railD[c] + magD[c];
+                if (have == 0 && balB[c] == 0) continue;
+                int diff = have - balB[c];
+                string status = diff == 0 ? "0" : (diff > 0 ? $"+{diff}" : diff.ToString());
+                sb.Append($"  c{c}: {railD[c]}rail+{magD[c]}mag={have}D vs {balB[c]}B [{status}]\n");
+            }
+            Debug.LogWarning(sb.ToString());
+        }
+
         private void ApplyContinueRestore()
         {
             // 1) 최근 배치 다트 N개 + 같은 색 풍선 1:1 제거. 제거량은 레일 허용량 기준(4/8/12/16).
@@ -162,12 +223,21 @@ namespace BalloonFlow
             int targetColor = -1;
             if (RailManager.HasInstance)
             {
+                LogContinueSupply("BEFORE-remove");
+
                 // 레일에서 가장 많은 색 다트 전부 제거 + 그 수만큼 같은 색 필드 풍선 랜덤 제거.
                 var res = RailManager.Instance.RemoveMostCommonColorDartsAndRandomBalloons();
                 dartsRemoved = res.removedDarts;
                 balloonsRemoved = res.removedBalloons;
                 targetColor = res.targetColor;
                 Debug.Log($"[ContinueHandler] Continue removed {dartsRemoved} darts of most-common color({targetColor}) + {balloonsRemoved} random matching balloons.");
+
+                // ROLLBACK_CONTINUE_DEBUG_20260716: 다트:풍선 1:1 이 깨지는 순간을 즉시 표면화.
+                //   removedDarts 는 스냅샷 경로에서 '보고값'이라 실제 물리 제거와 다를 수 있음 → BEFORE/AFTER 로 교차검증.
+                if (dartsRemoved != balloonsRemoved)
+                    Debug.LogWarning($"[Continue-DEBUG] 1:1 MISMATCH — removedDarts={dartsRemoved} vs removedBalloons={balloonsRemoved} (color={targetColor})");
+
+                LogContinueSupply("AFTER-remove");
             }
 
             // 2) 보관함(holder): 제거된 색만 큐 복귀, 다른 색은 재구동(이어 배포). HolderVisualManager 가 처리.

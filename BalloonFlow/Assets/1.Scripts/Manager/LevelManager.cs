@@ -393,6 +393,14 @@ namespace BalloonFlow
             if (RailManager.HasInstance)
                 RailManager.Instance.ResetAll();
 
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER_20260716: Next/Retry/Continue 는 같은 씬에서 매니저를 재생성하지 않으므로
+            //   (GameManager.InitInGame: _inGameRoot!=null → return), 여기서 명시 리셋하지 않으면
+            //   _boardFinished/_carriages 가 잔존해 다음 레벨에서 레일이 안 돌고 탭이 무반응이 된다.
+            if (RailHolderController.HasInstance)
+                RailHolderController.Instance.ResetAll();
+#endif
+
             if (PopupManager.HasInstance)
                 PopupManager.Instance.CloseAllPopups();
         }
@@ -564,6 +572,15 @@ namespace BalloonFlow
 
                     int sides = btm.RailSideCount;
 
+#if BF_RAIL_HOLDER
+                    // PROTO_RAIL_HOLDER_20260716: 레일 홀더는 ㅁ자 폐루프 전제 —
+                    //   홀더가 경로를 등간격으로 순회하며 4변 전체에서 안쪽으로 쏘는 설계라 1~3면(끝에서 순간이동)은 성립 안 함.
+                    //   기존 모드의 capacity→면수 파생(GetRailSideCount: ≤40→1, ≤80→2, ≤120→3, else 4)을 무시하고 4면 고정.
+                    //   ※ 이 코드는 _currentLevelId 세팅(LoadLevelCoroutine:154) 이후 실행되므로 게이트의 레벨 판정이 유효.
+                    if (RailHolderController.ModeActiveForCurrentLevel)
+                        sides = 4;
+#endif
+
                     switch (sides)
                     {
                         case 1: // 하단만 (→)
@@ -607,6 +624,12 @@ namespace BalloonFlow
                 float radius = 1.5f;
                 // 4면만 closedLoop (물리적 순환). 1~3면은 개방 경로 + 슬롯 래핑으로 순간이동
                 int sideCount = railSideCount;
+#if BF_RAIL_HOLDER
+                // PROTO_RAIL_HOLDER_20260716: 위 waypoint 를 4면 고정으로 바꿨으므로 isLoop 도 같이 고정해야 한다.
+                //   (waypoint 는 사각형인데 isLoop=false 면 마지막 변이 경로에서 빠져 홀더가 좌상단에서 순간이동한다.)
+                if (RailHolderController.ModeActiveForCurrentLevel)
+                    sideCount = 4;
+#endif
                 bool isLoop = (sideCount >= 4);
                 RailManager.Instance.SetRailLayout(waypoints, slotCount, isLoop, smooth, radius);
 

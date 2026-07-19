@@ -1777,9 +1777,9 @@ namespace BalloonFlow
 
         private static string FormatWsRoundRemaining(System.TimeSpan r)
         {
-            if (r.Ticks < 0) r = System.TimeSpan.Zero;
-            // ROLLBACK_WS_TIME_LOCALIZE_20260714: CSV uilobby.texttimer ("{}d {}h" / "{}일 {}시간") 사용 — 일+시간.
-            return LocalizationService.GetFilled("uilobby.texttimer", (int)r.TotalDays, r.Hours);
+            // ROLLBACK_WS_TIME_SUBUNIT_20260716: 표기 정본은 WinningStreakManager.FormatRoundRemaining —
+            //   1일 미만이면 "0d 21h" 대신 "21h 10m" 로 한 단계 아래 단위까지 표기. PopupWinningStreak 와 공용.
+            return WinningStreakManager.FormatRoundRemaining(r);
         }
 
         private void ResolveWsTexts()

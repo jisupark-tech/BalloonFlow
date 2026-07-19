@@ -143,10 +143,14 @@ namespace BalloonFlow
                 _frame.SetTitle(title);
                 _frame.SetButtonLayout(PopupCommonFrame.ButtonLayout.Single);
                 _frame.SetSingleButtonText(buttonText);
-                _frame.ShowExitButton(false); // 닫기 불가
+                _frame.ShowExitButton(false); // 닫기 불가 — 버튼 비활성
+                // ExitButton 은 버튼만 꺼선 프레임/컨테이너가 남아 보임 → 부모까지 비활성해 완전 비표시.
+                //   (강제업뎃은 터미널 상태라 재사용 side-effect 없음)
+                if (_frame.BtnExit != null && _frame.BtnExit.transform.parent != null)
+                    _frame.BtnExit.transform.parent.gameObject.SetActive(false);
             }
             if (_txtDescription != null) _txtDescription.text = description;
-            if (_imgIcon != null) _imgIcon.gameObject.SetActive(false);
+            if (_imgIcon != null) _imgIcon.gameObject.SetActive(true); // 아이콘 표시(프리팹 스프라이트 사용)
             if (_frame != null && _frame.BtnSingle != null)
             {
                 _frame.BtnSingle.onClick.RemoveAllListeners();

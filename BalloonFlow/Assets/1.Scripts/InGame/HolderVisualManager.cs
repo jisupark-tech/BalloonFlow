@@ -221,6 +221,10 @@ namespace BalloonFlow
             public GameObject gameObject;
             public Renderer meshRenderer;
             public TMP_Text magazineText;
+#if BF_RAIL_HOLDER
+            /// <summary>PROTO_RAIL_HOLDER_20260716: 이 상자가 레일 위에 올라타 있다(위치 주인 = RailHolderController).</summary>
+            public bool isRailMounted;
+#endif
             public bool isSpawnerVisual;
             public Material spawnerTextMaterialPreset;
             public Vector3 queuePosition;
@@ -1057,6 +1061,24 @@ namespace BalloonFlow
             return true;
         }
 
+#if BF_RAIL_HOLDER
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716: 컬럼이 레일 아래변에 닿는 접점(= 기존 배포점)의 월드 좌표.
+        /// 레일 홀더 모드에서 이 지점은 "다트 투입구"가 아니라 <b>재장전 스테이션</b>으로 쓰인다 —
+        /// 빈 홀더가 이 지점을 지나갈 때 그 컬럼의 앞줄 상자를 흡수한다.
+        /// DeployCoroutine(HVM:1935-1938)과 <b>동일한 계산</b>을 재사용하므로 두 모드의 접점이 어긋나지 않는다.
+        /// </summary>
+        public bool TryGetColumnRailAttachWorldPos(int column, out Vector3 worldPos)
+        {
+            worldPos = Vector3.zero;
+            if (_queueColumns <= 0 || column < 0 || column >= _queueColumns) return false;
+            float totalWidth = (_queueColumns - 1) * _columnSpacing;
+            float startX = -totalWidth * 0.5f;
+            worldPos = new Vector3(startX + column * _columnSpacing, _cachedRailY, _cachedRailZ);
+            return true;
+        }
+#endif
+
         /// <summary>
         /// Returns the deploy point — where a holder attaches to the rail bottom edge
         /// to start deploying darts onto passing empty slots.
@@ -1242,6 +1264,11 @@ namespace BalloonFlow
             {
                 var hd = allHolders[i];
                 if (hd.column != column || hd.isConsumed) continue;
+#if BF_RAIL_HOLDER
+                // PROTO_RAIL_HOLDER_20260716: 레일에 올라탄 상자는 큐 행 계산에서 제외 —
+                //   포함되면 뒤 상자들이 한 칸 못 당겨지고, 아래 리포지셔닝이 이 상자를 큐로 도로 끌어내린다.
+                if (hd.isRailMounted) continue;
+#endif
                 // Spawner 자체는 SpawnWaitingHolders에서 생성됨
                 if (hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
                  || hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O) continue;
@@ -1308,6 +1335,11 @@ namespace BalloonFlow
             foreach (var kvp in _holderVisuals)
             {
                 HolderVisual v = kvp.Value;
+#if BF_RAIL_HOLDER
+                // PROTO_RAIL_HOLDER_20260716: 레일 위 상자는 RailHolderController 가 매 프레임 위치를 잡는다 —
+                //   여기서 큐 좌표로 트윈하면 두 주인이 좌표를 다투며 상자가 큐로 끌려 내려간다.
+                if (v.isRailMounted) continue;
+#endif
                 if (v.column == column && !v.isDeploying && !v.isMovingToRail && v.gameObject != null)
                 {
                     var hData = HolderManager.Instance.FindHolderPublic(v.holderId);
@@ -1881,7 +1913,15 @@ namespace BalloonFlow
 
             if (Time.unscaledTime - waitStart >= MAX_WAIT_SECONDS)
             {
-                Debug.LogWarning($"[HolderVisualManager] Holder {visual.holderId} timed out waiting for deploy turn.");
+                // ROLLBACK_CONTINUE_DEBUG_20260716: 이 timeout 이 "배포를 안 해서 진행 안 됨" 의 최종 증상.
+                //   busy=true 인데 qHead 가 나(또는 -1)면 = 앞 코루틴이 _colBusy 를 물고 죽은 것(BoxOpen-gate BARE-EXIT 로그와 짝).
+                //   busy=false 인데 qHead != 나 면 = 큐 순서 문제.
+                int dc = visual.column;
+                int qCount = _colQueues[dc] != null ? _colQueues[dc].Count : -1;
+                int qHead = (_colQueues[dc] != null && _colQueues[dc].Count > 0) ? _colQueues[dc].Peek() : -1;
+                Debug.LogWarning($"[HolderVisualManager] Holder {visual.holderId} timed out waiting for deploy turn."
+                               + $" [Continue-DEBUG] col={dc} colBusy={_colBusy[dc]} qCount={qCount} qHead={qHead}"
+                               + $" gen={gen}/{visual.deployGeneration} mag={visual.magazineRemaining} boardFinished={_boardFinished}");
                 AbortDeploy(visual, true);
                 yield break;
             }
@@ -1966,8 +2006,24 @@ namespace BalloonFlow
             // BoxOpen.anim m_StopTime(=0.333s) 기준: HolderIdentifier.BOX_OPEN_ANIM_DURATION 동기화 필요.
             while (visual.identifier != null && !visual.identifier.IsReadyForMagazineDecrement())
             {
-                if (visual.deployGeneration != gen) yield break;
-                if (_boardFinished) yield break;
+                // ROLLBACK_CONTINUE_DEBUG_20260716: 이 두 exit 은 bare yield break — 바로 아래 fire 루프의 동일
+                //   분기(:~2000)와 달리 _colBusy / isDeploying / deploy point 를 하나도 해제하지 않는다.
+                //   그 fire 루프 주석이 명시하듯 미해제 시 같은 열의 다음 holder 가 Phase 1.5 에서 60s timeout.
+                //   ※ 여기서는 동작을 바꾸지 않고 '실제로 발동하는지'만 관측한다. 해제를 추가하면 이미 _colBusy 를
+                //     잡은 NEW 코루틴의 소유권을 뺏을 수 있어 별도 판단 필요.
+                if (visual.deployGeneration != gen)
+                {
+                    Debug.LogWarning($"[Continue-DEBUG] BoxOpen-gate BARE-EXIT(gen) h={visual.holderId} col={visual.column}"
+                                   + $" gen={gen}->{visual.deployGeneration} leaked colBusy={_colBusy[visual.column]}"
+                                   + $" isDeploying={visual.isDeploying} mag={visual.magazineRemaining}");
+                    yield break;
+                }
+                if (_boardFinished)
+                {
+                    Debug.LogWarning($"[Continue-DEBUG] BoxOpen-gate BARE-EXIT(boardFinished) h={visual.holderId} col={visual.column}"
+                                   + $" leaked colBusy={_colBusy[visual.column]} isDeploying={visual.isDeploying} mag={visual.magazineRemaining}");
+                    yield break;
+                }
                 yield return null;
             }
 
@@ -2732,6 +2788,78 @@ namespace BalloonFlow
             rail.FreezeDart(checkSlot);
         }
 
+#if BF_RAIL_HOLDER
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716: 큐 상자를 레일에 태운다 — 상자 GameObject 는 그대로 살아서
+        /// RailHolderController 가 위치를 잡는다. 큐에서만 빠지고 뒤 상자들이 한 칸 당겨진다.
+        /// </summary>
+        public bool TryMountHolderVisualOnRail(int holderId, out Vector3 fromWorldPos)
+        {
+            fromWorldPos = Vector3.zero;
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual) || visual == null) return false;
+            if (visual.gameObject == null) return false;
+
+            int col = visual.column;
+
+            // 큐 전진 트윈이 살아 있으면 레일 위에서도 계속 큐 좌표로 끌고 간다 — 반드시 끊는다.
+            visual.gameObject.transform.DOKill();
+            // 비행 출발점 = 상자의 '지금' 큐 좌표(트윈 정지 직후).
+            fromWorldPos = visual.gameObject.transform.position;
+
+            visual.isRailMounted = true;
+            visual.isDeploying = false;
+            visual.isWaiting = false;
+            visual.isMovingToRail = false;
+            _colBusy[col] = false;
+
+            RepositionColumnHolders(col);   // 뒤 상자들 한 칸 전진
+            RebuildChainLines();
+            return true;
+        }
+
+        /// <summary>PROTO_RAIL_HOLDER_20260716: 레일 위 상자의 매 프레임 위치 갱신.</summary>
+        public void SetRailMountedHolderPosition(int holderId, Vector3 worldPos)
+        {
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual) || visual == null) return;
+            if (visual.gameObject == null) return;
+            visual.gameObject.transform.position = worldPos;
+        }
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716: 상자 안 다트 1발이 빠지는 연출 + 남은 수 표시 갱신.
+        /// 실제 풍선을 맞히는 다트는 DartManager 투사체이고, 여기 LaunchNextDart 는 <b>상자 슬롯을 비우는 연출 전용</b>
+        /// (짧은 거리로 튀어나와 사라짐) — 둘을 같은 타겟으로 날리면 다트가 두 개로 보인다.
+        /// </summary>
+        public void PlayRailHolderFireVisual(int holderId, int magazineRemaining, Vector3 muzzleWorldPos)
+        {
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual) || visual == null) return;
+
+            SyncHolderMagazineDisplay(holderId, magazineRemaining);   // 텍스트 감소
+            if (visual.identifier != null)
+            {
+                visual.identifier.PlayFireRecoilScale();              // 스케일 업/다운 펀치
+                visual.identifier.LaunchNextDart(muzzleWorldPos, 0.08f); // 상자 슬롯 비우는 연출
+            }
+        }
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716: 탄창을 다 쓴 레일 상자를 치운다.
+        /// CompleteDeployment(HVM:2777) 의 제거 부기만 발췌 — 배포/데드락 단계는 이 모드에 없다.
+        /// 이미 큐에서 빠져 있으므로 RepositionColumnHolders 는 불필요하지만, 체인선은 갱신한다.
+        /// </summary>
+        public void DespawnRailMountedHolder(int holderId)
+        {
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual) || visual == null) return;
+
+            if (visual.identifier != null)
+                visual.identifier.EndDeploy();
+
+            ReturnHolderToPool(visual);
+            _holderVisuals.Remove(holderId);
+            RebuildChainLines();
+        }
+#endif
+
         private void CompleteDeployment(HolderVisual visual)
         {
             int col = visual.column;
@@ -3449,9 +3577,29 @@ namespace BalloonFlow
         private readonly List<int> _continueReturnIds = new List<int>(8);
         private readonly List<int> _continueRedriveIds = new List<int>(8);
 
+        // ROLLBACK_CONTINUE_DEBUG_20260716: 컬럼 직렬화 상태 덤프(순수 관측). 원인 확정 후 제거.
+        //   읽는 법: busy=true 인데 그 열에 실제 배포중 holder 가 없으면 = 죽은 코루틴이 _colBusy 를 물고 죽은 것.
+        //   그 열은 이후 어떤 holder 도 Phase 1.5 의 (!_colBusy) 가드를 통과 못 해 60s timeout → "배포 안 함".
+        private void LogContinueColumns(string phase)
+        {
+            if (_colQueues == null || _colBusy == null) return;
+            var sb = new System.Text.StringBuilder(200);
+            sb.Append($"[Continue-DEBUG] columns {phase} —");
+            for (int i = 0; i < _colBusy.Length; i++)
+            {
+                int qn = _colQueues[i] != null ? _colQueues[i].Count : -1;
+                int head = (_colQueues[i] != null && _colQueues[i].Count > 0) ? _colQueues[i].Peek() : -1;
+                sb.Append($" col{i}(busy={_colBusy[i]},q={qn},head={head})");
+            }
+            Debug.LogWarning(sb.ToString());
+        }
+
         private void HandleContinueApplied(OnContinueApplied evt)
         {
             _boardFinished = false;
+
+            // ROLLBACK_CONTINUE_DEBUG_20260716: fail 이 남긴 컬럼 상태(_colBusy/큐)를 ResetDeployQueues 로 지우기 전에 기록.
+            LogContinueColumns("pre-reset");
 
             // fail 시 HandleBoardFailed 의 StopAllCoroutines 로 deploy 코루틴이 이미 죽은 상태.
             // 죽은 코루틴의 stale 큐 항목 제거 — 아래 재구동(StartDeploy)이 깨끗하게 재enqueue.
@@ -3465,13 +3613,30 @@ namespace BalloonFlow
             // 반복 중 StartDeploy 가 큐/코루틴을 건드리므로 ID 를 먼저 수집한 뒤 처리.
             _continueReturnIds.Clear();
             _continueRedriveIds.Clear();
+            // ROLLBACK_CONTINUE_DEBUG_20260716: 분류 결과 전수 덤프(순수 관측, 분기 자체는 원본 그대로).
+            var dbg = new System.Text.StringBuilder(320);
+            dbg.Append($"[Continue-DEBUG] classify resetColor={resetColor} visuals={_holderVisuals.Count}\n");
             foreach (var kvp in _holderVisuals)
             {
                 HolderVisual visual = kvp.Value;
-                if (!visual.isDeploying && !visual.isMovingToRail) continue; // 대기(미탭) holder 영향 X
+                bool active = visual.isDeploying || visual.isMovingToRail;
                 bool isTarget = resetColor < 0 || visual.color == resetColor;
+                HolderData hd = HolderManager.HasInstance ? HolderManager.Instance.FindHolderPublic(visual.holderId) : null;
+                bool dataActive = hd != null && (hd.isDeploying || hd.isWaiting || hd.isMovingToRail);
+                // ORPHAN: HolderManager 는 '배포중'인데 visual 이 idle → 여기서 SKIP 되어 재구동도 큐복귀도 못 받음.
+                //   = 재탭도 안 되고 배포도 안 되는 고아. Chain 정지 1순위 가설.
+                string decision = !active ? (dataActive ? "SKIP(idle) !!ORPHAN" : "SKIP(idle)")
+                                          : (isTarget ? "RETURN" : "REDRIVE");
+                dbg.Append($"  h{visual.holderId} col{visual.column} c{visual.color} mag={visual.magazineRemaining}"
+                         + $" vis(dep={visual.isDeploying},mov={visual.isMovingToRail},wait={visual.isWaiting})"
+                         + $" data(dep={(hd != null ? hd.isDeploying : false)},wait={(hd != null ? hd.isWaiting : false)}"
+                         + $",mov={(hd != null ? hd.isMovingToRail : false)},chain={(hd != null ? hd.chainGroupId : -99)}"
+                         + $",consumed={(hd != null ? hd.isConsumed : false)}) -> {decision}\n");
+                if (!active) continue; // 대기(미탭) holder 영향 X
                 (isTarget ? _continueReturnIds : _continueRedriveIds).Add(visual.holderId);
             }
+            dbg.Append($"  => return={_continueReturnIds.Count} redrive={_continueRedriveIds.Count}");
+            Debug.LogWarning(dbg.ToString());
 
             // 제거된 색 holder: 큐 복귀(재탭 대상) — 다트가 사라졌으니 즉시 재배포하지 않음.
             for (int i = 0; i < _continueReturnIds.Count; i++)
@@ -3543,6 +3708,13 @@ namespace BalloonFlow
             visual.isClusterFrozen = false;
             if (visual.gameObject != null) visual.gameObject.transform.DOKill();
             _cancelledHolders.Remove(holderId); // 직전 cancel 플래그 잔재 제거(즉시 yield break 방지)
+
+            // ROLLBACK_CONTINUE_DEBUG_20260716: ReturnActiveHolderToQueue(:~3560)/CancelDeployAndReturnToQueue(:751)
+            //   에는 있는 magazine<=0 가드가 이 경로에만 없다. 빈 홀더를 StartDeploy 하면 발사 없이 _colBusy 만
+            //   잡을 수 있음. 또 이 경로만 HolderManager.UndoDeploy 를 부르지 않아 data 플래그가 어긋난 채 남는다.
+            //   실제로 발동하는지 확인용 — 발동하면 위 두 항목이 유력 원인.
+            if (visual.magazineRemaining <= 0)
+                Debug.LogWarning($"[Continue-DEBUG] REDRIVE on EMPTY holder h={holderId} col={visual.column} c={visual.color} — magazine=0, 가드 없음");
 
             StartDeploy(holderId);          // 검증된 경로로 재배포 (move → 남은 magazine fire)
         }

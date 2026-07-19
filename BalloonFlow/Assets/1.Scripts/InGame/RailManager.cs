@@ -3543,6 +3543,21 @@ namespace BalloonFlow
         }
         */
 
+#if BF_RAIL_HOLDER
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716: progress(경로상 거리) 하나로 pose 를 뽑는다.
+        /// 레일 홀더는 DartOnRail 이 아니므로 GetDartCurrentPose 를 쓸 수 없다 —
+        /// 같은 계산을 점유자 타입 없이 노출하는 얇은 래퍼.
+        /// 기존 경로(GetPositionAndDirectionAtDistance + GetFiringDirectionFromMoveDir)를 그대로 재사용하므로
+        /// 다트 모드와 기하/발사방향이 100% 일치한다.
+        /// </summary>
+        public void GetPoseAtDistance(float distance, out Vector3 position, out Vector3 tangent, out Vector3 firingDirection)
+        {
+            GetPositionAndDirectionAtDistance(distance, out position, out tangent);
+            firingDirection = GetFiringDirectionFromMoveDir(tangent);
+        }
+#endif
+
         /// <summary>
         /// Derives the inward firing direction from a movement direction along the belt.
         /// Uses the same cardinal logic as GetSlotFiringDirection.

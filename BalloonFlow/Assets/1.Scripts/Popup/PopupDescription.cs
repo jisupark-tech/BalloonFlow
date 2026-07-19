@@ -92,6 +92,12 @@ namespace BalloonFlow
                     Material redOutline = Resources.Load<Material>(Const.FONT_MAT_POPPINS_BOLD_RED_OUTLINE);
                     _frame.OverrideSingleButtonOutlineMaterial(redOutline, UIOutlineStyle.ForShopBundle(true));
                 }
+                else
+                {
+                    // ROLLBACK_ALLCLEAR_GREEN_BUTTON_20260715: 비-Quit(all-clear/아이템설명 등)은 프리팹 기본(초록)으로 복원.
+                    //   풀링 재사용으로 이전 Quit 의 red 아웃라인이 남던 문제 해소.
+                    _frame.ResetSingleButtonOutline();
+                }
                 _frame.ShowExitButton(true);
             }
 

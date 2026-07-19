@@ -19,6 +19,12 @@ namespace BalloonFlow
         public bool isWaiting;        // waiting behind a deploying holder (same column)
         public bool isMovingToRail;   // in transit from queue to rail
         public bool isConsumed;       // magazine=0, removed
+#if BF_RAIL_HOLDER
+        /// <summary>PROTO_RAIL_HOLDER_20260716: 이 보관함이 큐를 떠나 레일 위에 올라타 있다.
+        /// 큐 소속에서 빠지되(행 계산·앞줄 판정 제외) 소진된 건 아니다 — magazineCount 는 발사마다 줄어들고
+        /// 0 이 되면 그때 isConsumed 로 넘어간다. 탄약 합산에는 계속 포함(레일 위 탄약도 총 탄약).</summary>
+        public bool isRailMounted;
+#endif
 
         // ── 큐 기믹 상태 ──
         /// <summary>큐 기믹 타입. 빈 문자열 = 없음.</summary>
@@ -828,6 +834,118 @@ namespace BalloonFlow
             return holder.magazineCount;
         }
 
+#if BF_RAIL_HOLDER
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716: 지정 열의 앞줄 상자를 <b>레일에 태운다</b>.
+        ///
+        /// 기존 배포(SelectHolder→DeployCoroutine→다트 N발 투입)를 대체하는 경로.
+        /// 상자는 소진되지 않는다 — 큐 소속에서만 빠지고(isRailMounted), 색/탄창을 그대로 들고
+        /// 레일 위로 올라가 거기서 발사할 때마다 magazineCount 가 줄어든다(ConsumeMagazine).
+        ///
+        /// 기믹 게이트는 기존과 동일한 의미로 유지 — Hidden(색 미공개)/Frozen(해동 전)/Pipe(미방출) 상자는 못 태운다.
+        /// </summary>
+        /// <returns>태웠으면 true. 열이 비었거나 앞줄이 기믹으로 막혀 있으면 false.</returns>
+        public bool TryMountFrontHolderOnRail(int column, out int holderId, out int color, out int magazine)
+        {
+            holderId = -1; color = -1; magazine = 0;
+            if (column < 0 || column >= _queueColumns) return false;
+
+            List<HolderData> colHolders = GetColumnHolders(column);   // isRailMounted/isConsumed 는 이미 걸러짐
+            if (colHolders == null || colHolders.Count == 0) return false;
+
+            // 앞줄 = holderId 순(초기 배치 row 순서 보존) 최소값 — RepositionColumnHolders 의 행 산정과 동일 기준.
+            HolderData front = null;
+            for (int i = 0; i < colHolders.Count; i++)
+            {
+                HolderData h = colHolders[i];
+                if (h == null) continue;
+                if (h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+                 || h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O) continue;  // 스포너 본체는 못 태움
+                if (front == null || h.holderId < front.holderId) front = h;
+            }
+
+            if (front == null) return false;
+            if (front.isFrozen) return false;      // Frozen_Dart — 해동 전에는 못 태움
+            if (front.isHidden) return false;      // Hidden — 색 공개 전에는 못 태움
+            if (front.magazineCount <= 0) return false;
+
+            holderId = front.holderId;
+            color = front.color;
+            magazine = front.magazineCount;
+
+            front.isRailMounted = true;
+            front.isDeploying = false;
+            front.isWaiting = false;
+            front.isMovingToRail = false;
+            if (_deployingHolderId[column] == holderId) _deployingHolderId[column] = -1;
+            if (_waitingHolderId[column] == holderId) _waitingHolderId[column] = -1;
+
+            return true;
+        }
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716: 지정 holderId 를 레일에 태운다(앞줄 무시) — Hand/Select Tool 부스터용.
+        /// ForceSelectHolder 와 같은 관용: Hidden/Frozen 도 강제 태움(해동/공개 연출 발행), Spawner 본체·Lock·빈 상자는 거부.
+        /// </summary>
+        public bool TryMountHolderOnRailById(int holderId, out int color, out int magazine)
+        {
+            color = -1; magazine = 0;
+            HolderData h = FindHolder(holderId);
+            if (h == null || h.isConsumed || h.isRailMounted) return false;
+            if (!h.IsQueueVisible) return false;                              // Pipe 미방출 payload
+            if (h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
+             || h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O) return false;
+            if (h.isLockObject) return false;
+            if (h.magazineCount <= 0) return false;
+
+            if (h.isFrozen) { h.isFrozen = false; EventBus.Publish(new OnHolderThawed { holderId = holderId }); }
+            if (h.isHidden) { h.isHidden = false; EventBus.Publish(new OnHolderRevealed { holderId = holderId }); }
+
+            color = h.color;
+            magazine = h.magazineCount;
+
+            h.isRailMounted = true;
+            h.isDeploying = false;
+            h.isWaiting = false;
+            h.isMovingToRail = false;
+            if (h.column >= 0 && h.column < _queueColumns)
+            {
+                if (_deployingHolderId[h.column] == holderId) _deployingHolderId[h.column] = -1;
+                if (_waitingHolderId[h.column] == holderId) _waitingHolderId[h.column] = -1;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716: 레일 위 보관함이 탄창을 다 쓰면 호출 — 소진 처리.
+        /// </summary>
+        public void MarkRailHolderConsumed(int holderId)
+        {
+            HolderData h = FindHolder(holderId);
+            if (h == null) return;
+            h.magazineCount = 0;
+            h.isRailMounted = false;
+            h.isConsumed = true;
+        }
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716: 총 탄약 = 큐 + 레일 위 보관함 전부.
+        /// 0 이고 풍선이 남으면 실패(= 기존 RailOverflow 대체). isRailMounted 도 소진 전까지 포함되므로
+        /// 레일 위 탄약이 이중 계산되거나 누락되지 않는다.
+        /// </summary>
+        public int GetTotalRemainingAmmo()
+        {
+            int sum = 0;
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                HolderData h = _holders[i];
+                if (h == null || h.isConsumed) continue;
+                sum += Mathf.Max(0, h.magazineCount);
+            }
+            return sum;
+        }
+#endif
+
         /// <summary>
         /// Reverts a holder's deploy state (e.g. when deploy was blocked).
         /// </summary>
@@ -853,6 +971,10 @@ namespace BalloonFlow
             var result = new List<HolderData>();
             for (int i = 0; i < _holders.Count; i++)
             {
+#if BF_RAIL_HOLDER
+                // PROTO_RAIL_HOLDER_20260716: 레일에 올라탄 보관함은 더 이상 그 열의 큐 멤버가 아니다.
+                if (_holders[i].isRailMounted) continue;
+#endif
                 if (_holders[i].column == column && !_holders[i].isConsumed && _holders[i].IsQueueVisible)
                 {
                     result.Add(_holders[i]);
@@ -1651,6 +1773,13 @@ namespace BalloonFlow
                 BoosterExecutor.Instance.OnHolderSelected(evt.holderId);
                 return;
             }
+
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER_20260716: 레일 홀더 모드에서 탭은 '배포'가 아니라 '컬럼 장전 예약'이다.
+            //   RailHolderController 가 같은 OnHolderTapped 를 따로 구독해 처리하므로 여기서는 손 뗀다.
+            //   (SelectHolder → DeployCoroutine 이 돌면 다트가 레일에 올라가 두 모드가 섞인다.)
+            if (RailHolderController.ModeActiveForCurrentLevel) return;
+#endif
 
             bool selected = SelectHolder(evt.holderId);
 

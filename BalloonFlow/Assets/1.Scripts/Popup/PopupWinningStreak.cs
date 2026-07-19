@@ -369,7 +369,8 @@ namespace BalloonFlow
         }
 #endif
 
-        /// <summary>회차 남은시간을 "Xd YYh" 로 Timer 에 표시. 경계 통과(남은시간 0) 시 CheckRoundBoundary 가 리셋.</summary>
+        /// <summary>회차 남은시간을 Timer 에 표시(1일+ "Xd Yh" / 1일 미만 "Xh Ym" / 1시간 미만 "Xm Ys").
+        /// 경계 통과(남은시간 0) 시 CheckRoundBoundary 가 리셋.</summary>
         private void UpdateRoundTimer()
         {
             if (_frame == null) return;
@@ -378,12 +379,10 @@ namespace BalloonFlow
 
             mgr.CheckRoundBoundary();   // 경계 넘었으면 리셋 + OnStateChanged → 헤더/슬롯 갱신
 
-            var remaining = mgr.RoundRemaining;
-            int days = (int)remaining.TotalDays;
-            int hours = remaining.Hours;
             _frame.ShowTimer(true);
-            // ROLLBACK_WS_TIME_LOCALIZE_20260714: CSV uilobby.texttimer ("{}d {}h" / "{}일 {}시간") 사용 — 일+시간.
-            _frame.SetTimerText(LocalizationService.GetFilled("uilobby.texttimer", days, hours));
+            // ROLLBACK_WS_TIME_SUBUNIT_20260716: 표기 정본은 WinningStreakManager.FormatRoundRemaining —
+            //   1일 미만이면 "0d 21h" 대신 "21h 10m" 로 한 단계 아래 단위까지 표기. UILobby 와 공용.
+            _frame.SetTimerText(WinningStreakManager.FormatRoundRemaining(mgr.RoundRemaining));
         }
 
         // BtnSingle(PLAY) — LobbyController.OnPlayClicked 패턴 모사. 라이프 부족 시 PopupMoreLive 분기.

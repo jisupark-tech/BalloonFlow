@@ -354,6 +354,51 @@ namespace BalloonFlow
 
         [Tooltip("실패 판정 비활성화. ON=레일 초과/교착 등 어떤 조건에서도 게임오버 트리거 안 됨. 경고 UI(게이지)는 그대로 표시. 동적 반영.")]
         public bool disableFail = false;
+
+#if BF_RAIL_HOLDER
+        // ══════════════════════════════════════════════════════════════════════════════
+        // PROTO_RAIL_HOLDER_20260716 — "홀더가 레일을 탄다" 프로토타입 (Pixel Flow 형)
+        //
+        //   [구조 역전] 기존: 홀더(큐)가 다트를 레일에 투입 → 다트가 레일을 돌며 발사(발사=레일에서 제거).
+        //              프로토: 홀더 N개가 레일을 등간격 순회하며 직접 발사(다트는 레일에 안 올라감).
+        //
+        //   [살아남는 것] 큐 격자/컬럼/앞줄 탭 게이트/큐 기믹 5종, 레일 기하(progress·벨트), 카디널 발사방향,
+        //     DirectionalTargeting(발사 주체 불문), 투사체 비행·명중 파이프라인.
+        //   [죽는 것]  클러스터/head 선출, 배포점 예약, 데드락 모드, 레일 만석(RailOverflow) 실패.
+        //   [대체]     패배 = 총 탄약 소진(레일 홀더 탄창 + 큐 탄창 = 0 인데 풍선 잔존).
+        //              입력 = 큐 앞줄 상자 탭으로 컬럼 장전 예약 → 빈 홀더가 그 컬럼 재장전점 통과 시 흡수.
+        //
+        //   ⚠️ 이 블록 전체가 BF_RAIL_HOLDER define 안에만 존재. 출시(비-development) 빌드에 define 이
+        //      켜져 있으면 RailHolderBuildGuard 가 빌드를 실패시킴 → 릴리즈 혼입 불가.
+        //   롤백: define 제거 시 코드가 컴파일 자체에서 사라짐(필드/참조 모두).
+        // ══════════════════════════════════════════════════════════════════════════════
+        [Header("[프로토 — 레일 홀더 모드 (BF_RAIL_HOLDER)]")]
+        [Tooltip("[프로토] ON=홀더가 레일 위를 돌며 직접 발사(Pixel Flow 형). OFF=기존 다트 배포 방식. 씬 재시작 필요. (default: false)")]
+        public bool railHolderMode = true;
+
+        [Tooltip("레일 홀더 모드 적용 레벨 상한. 현재 레벨이 1~이 값이면 활성, 초과하면 기존 다트 배포 메카닉. 동적 반영. (default: 10)")]
+        [Range(1, 300)]
+        public int railHolderMaxLevel = 10;
+
+        [Tooltip("레일 위 홀더 수. 경로를 이 수로 등분해 배치(간격 = 총길이/N). (default: 5)")]
+        [Range(1, 8)]
+        public int railHolderCount = 5;
+
+        [Tooltip("홀더 발사 쿨다운(초). 같은 홀더가 연속 발사하는 최소 간격. 작을수록 촘촘히 쏨(0.05=초당 20발). 동적 반영. (default: 0.05)")]
+        [Range(0.02f, 1f)]
+        public float railHolderFireCooldown = 0.05f;
+
+        [Tooltip("큐→레일 탑승 비행 시간(초). 빈 자리가 컬럼 접점을 지날 때 큐 상자가 이 시간동안 날아가 붙는다. 레일은 안 멈춤. 동적 반영. (default: 0.28)")]
+        [Range(0.05f, 1f)]
+        public float railHolderBoardFlightTime = 0.28f;
+
+        [Tooltip("탑승 트리거 반경(월드). 빈 자리 progress 가 컬럼 접점에서 이 거리 안에 들면 그 컬럼 상자가 날아오기 시작. 동적 반영. (default: 0.6)")]
+        [Range(0.05f, 3f)]
+        public float railHolderReloadRadius = 0.6f;
+
+        [Tooltip("[디버그] 레일 홀더 상태 로그(장전/발사/소진). 동적 반영. (default: false)")]
+        public bool railHolderDebugLog = false;
+#endif
     }
 
     /// <summary>
@@ -563,6 +608,12 @@ namespace BalloonFlow
             CreateChild<LevelGenerator>("Mgr_LevelGen");
             CreateChild<BoosterExecutor>("Mgr_BoosterExec");
             CreateChild<PopupManager>("Mgr_Popup");
+
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER_20260716: 항상 생성하되 Board.railHolderMode 가 OFF 면 Update 에서 즉시 return.
+            //   (매니저 생성은 씬 진입 시 1회뿐이라, 토글 후 씬 재시작하면 그대로 반영된다.)
+            CreateChild<RailHolderController>("Mgr_RailHolder");
+#endif
 
             // InputHandler에 MainCamera 연결
             var _input = _inGameRoot.GetComponentInChildren<InputHandler>();

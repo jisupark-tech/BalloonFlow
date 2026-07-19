@@ -228,6 +228,20 @@ namespace BalloonFlow
         /// <summary>현재 회차 종료까지 남은 시간(타이머용, 0 미만이면 0).</summary>
         public System.TimeSpan RoundRemaining => WinningStreakSchedule.GetRemaining();
 
+        /// <summary>
+        /// 회차 남은 시간 표기. 최상위 단위가 0이면 한 단계 아래 단위까지 내려 보여준다
+        /// ("0d 21h" 대신 "21h 10m"). 1일+ = uilobby.texttimer, 1시간+ = .hm, 그 미만 = .ms.
+        /// UILobby 헤더와 PopupWinningStreak 타이머 공용 — 표기를 바꿀 땐 여기만 고치면 된다.
+        /// </summary>
+        public static string FormatRoundRemaining(System.TimeSpan r)
+        {
+            if (r.Ticks < 0) r = System.TimeSpan.Zero;
+            int days = (int)r.TotalDays;
+            if (days > 0) return LocalizationService.GetFilled("uilobby.texttimer", days, r.Hours);
+            if (r.Hours > 0) return LocalizationService.GetFilled("uilobby.texttimer.hm", r.Hours, r.Minutes);
+            return LocalizationService.GetFilled("uilobby.texttimer.ms", r.Minutes, r.Seconds);
+        }
+
         /// <summary>회차 경계 통과 여부를 외부(로비/팝업 주기 체크)에서 트리거. 경계 넘었으면 리셋 후 UI 갱신 알림.</summary>
         public void CheckRoundBoundary()
         {

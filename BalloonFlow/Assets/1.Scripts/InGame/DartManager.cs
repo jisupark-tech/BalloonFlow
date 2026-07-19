@@ -543,6 +543,111 @@ namespace BalloonFlow
             _frontBlockerOverrideHolders.Clear(); // ROLLBACK_DART_FRONT_BLOCKER_STALL_OVERRIDE_20260707
         }
 
+#if BF_RAIL_HOLDER
+        #region PROTO_RAIL_HOLDER_20260716 — 레일 홀더 발사 진입점
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716: 레일 홀더 모드 활성 여부(마스터 토글 AND 레벨 1~상한).
+        /// 중앙 게이트(RailHolderController.ModeActiveForCurrentLevel) 하나만 참조 — 5곳이 어긋나지 않게.
+        /// </summary>
+        public static bool RailHolderModeActive => RailHolderController.ModeActiveForCurrentLevel;
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716: 레일 위 홀더가 자기 위치에서 직접 1발 발사한다.
+        ///
+        /// 기존 FireDartCandidate 와의 차이는 <b>단 두 가지</b>:
+        ///   ① origin 이 다트의 레일 progress 가 아니라 홀더의 월드 위치.
+        ///   ② 레일에서 다트를 빼지 않는다(RemoveDartById 없음) — 홀더는 소모되지 않고 탄창만 줄어든다.
+        /// 나머지(타겟 선정·카디널 스냅·비행·명중·타겟 예약)는 전부 기존 경로를 그대로 탄다 →
+        /// 다트 모드와 명중 판정/연출이 어긋날 수 없다.
+        ///
+        /// 시각 오브젝트는 풀에서 새로 꺼낸다. 다트 모드는 "레일 다트 GameObject 를 투사체로 넘겨받는" 방식이라
+        /// (_dartVisuals hand-off) 여기선 재현 불가 — 레일에 다트 시각이 존재하지 않기 때문.
+        /// </summary>
+        /// <param name="origin">홀더의 현재 월드 위치(레일 위).</param>
+        /// <param name="color">홀더 탄창 색.</param>
+        /// <param name="railHolderId">레일 홀더 식별자(라인락/구제 로직 키로 사용).</param>
+        /// <returns>발사에 성공했으면 true. 사거리 내 매칭 타겟이 없으면 false(탄창 소모 없음).</returns>
+        public bool TryFireFromRailHolder(Vector3 origin, int color, int railHolderId)
+        {
+            if (_boardFinished) return false;
+            if (color < 0) return false;
+            if (!BalloonController.HasInstance) return false;
+            if (!RailManager.HasInstance) return false;
+
+            RailManager rail = RailManager.Instance;
+            rail.GetPoseAtDistance(rail.GetProgressAtWorldPos(origin), out _, out _, out Vector3 fireDir);
+
+            if (!DirectionalTargeting.TryFindTarget(
+                    origin, fireDir, color, _reservedTargets,
+                    out int targetId, out DirectionalTargeting.ScanDirection scanDir,
+                    out int targetLine, out Vector3 targetPos))
+                return false;
+
+            if (targetId < 0) return false;
+
+            // 같은 풍선에 두 홀더가 겹쳐 쏘는 것 방지 — 다트 모드와 동일한 예약 규칙.
+            //   RegisterInflightDart 가 SyncTargetExclusion 으로 예약을 in-flight 수 기준 관리한다(HP N 풍선은 N발 병렬 허용).
+            //   여기서 _reservedTargets.Add 를 또 하면 HP2+ 풍선에 캐리지 병렬 발사가 1발로 막힌다 → 제거.
+            RegisterInflightDart(targetId, color);
+
+            GameObject dartObj = ObjectPoolManager.HasInstance
+                ? ObjectPoolManager.Instance.Get(DART_POOL_KEY, origin, Quaternion.identity)
+                : null;
+
+            if (dartObj == null)
+            {
+                // 시각이 없어도 게임플레이 판정은 반드시 해소 — 조용한 miss 금지(ROLLBACK_DART_STABLE_OUTER_HIT 와 동일 원칙).
+                UnregisterInflightDart(targetId, color);
+                ExecuteHit(targetId, color);
+                SyncTargetExclusion(targetId);
+                return true;
+            }
+
+            float ds = GameManager.HasInstance ? GameManager.Instance.Board.dartScale : 1f;
+            dartObj.transform.localScale = Vector3.one * ds;
+            dartObj.transform.DOKill();
+            ApplyColor(dartObj, color);
+
+            EventBus.Publish(new OnDartFired { dartId = -1, holderId = railHolderId, color = color });
+
+            Vector3 launchPos = CalculateCardinalLaunchPosition(origin, targetPos, scanDir);
+            dartObj.transform.position = launchPos;
+            Vector3 travelTarget = CalculateCardinalTarget(launchPos, targetPos, scanDir);
+            Vector3 dir = travelTarget - launchPos;
+            dir.y = 0f;
+            if (dir.sqrMagnitude > 0.001f)
+                dartObj.transform.rotation = Quaternion.LookRotation(dir.normalized);
+
+            float ft = CalculateProjectileFlightTime(launchPos, travelTarget);
+            Vector3 balloonScale = BalloonController.Instance.GetBalloonWorldScale(targetId);
+            Vector3 launchStartScale = dartObj.transform.localScale;
+
+            var proj = GetProjectile();
+            proj.gameObject = dartObj;
+            proj.startPosition = launchPos;
+            proj.targetPosition = travelTarget;
+            proj.targetBalloonId = targetId;
+            proj.color = color;
+            proj.holderId = railHolderId;
+            proj.scanDir = scanDir;
+            proj.scanLine = targetLine;
+            float initialProgress = GameManager.HasInstance ? GameManager.Instance.Board.dartLaunchInitialProgress : 0f;
+            proj.elapsed = Mathf.Clamp(initialProgress, 0f, Mathf.Max(0f, ft - 0.01f));
+            proj.duration = ft;
+            proj.impactTime = ft;
+            ConfigureLaunchScale(proj, launchStartScale, balloonScale);
+            ConfigureNeedleTipImpactTiming(proj, dartObj, launchPos, travelTarget, balloonScale);
+            ApplyLaunchRecoilPrefix(proj);
+            _activeProjectiles.Add(proj);
+
+            SetDartTrailActive(dartObj, false);
+            return true;
+        }
+
+        #endregion
+#endif
+
         /// <summary>공격 스캔 주기 타이머 (dartFireInterval 기반)</summary>
         private void Update()
         {
@@ -553,6 +658,20 @@ namespace BalloonFlow
             // [FAIL_DERAIL 2026-06-12] 이어하기 복귀 연출 중 — 위치 동기가 복귀 lerp 를 덮어쓰지 않게
             // 동기/스캔/발사 전체를 1프레임 단위로 보류 (복귀 코루틴이 끝나면 자동 재개).
             if (_continueRestoreActive) return;
+
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER_20260716: 레일 홀더 모드에서는 레일에 다트가 없다 →
+            //   위치 동기(UpdateSlotDartPositions/UpdatePerDartPositions)와 head 스캔(ScanAndFirePerDart)은 전부 무의미.
+            //   단 투사체 파이프라인(UpdateProjectiles)은 그대로 재사용하므로 이것만 돌린다.
+            //   발사 트리거는 RailHolderController 가 TryFireFromRailHolder 로 직접 호출.
+            if (RailHolderModeActive)
+            {
+                var __projSw = InGamePerfLogger.StartSection();
+                UpdateProjectiles();
+                InGamePerfLogger.EndSection(__projSw, "Dart.UpdateProjectiles");
+                return;
+            }
+#endif
 
             var __slotSw = InGamePerfLogger.StartSection();
             UpdateSlotDartPositions();

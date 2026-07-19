@@ -264,6 +264,17 @@ namespace BalloonFlow
             float evalDelta = _stuckEvalTimer;
             _stuckEvalTimer = 0f;
 
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER_20260716: 레일 홀더 모드에서는 레일 점유가 항상 N(홀더 수) 고정 →
+            //   만석/near-full/데드락 밴드가 전부 무의미하고, 아래 평가는 efc≈0 이라 영영 발동하지 않는다.
+            //   압력계를 '총 탄약'으로 갈아끼운다: 레일 홀더 탄창 + 큐 탄창 = 0 인데 풍선이 남으면 실패.
+            if (RailHolderController.ModeActiveForCurrentLevel)
+            {
+                EvaluateRailHolderAmmoFail(evalDelta);
+                return;
+            }
+#endif
+
             // 이어하기 직후 grace 기간 — fail 평가 일시 정지. 이어하기 후 rail 이 여전히 stuck 일 수 있는데
             // 즉시 fail 재트리거 방지. critical 도 강제로 풀어 시각 알람도 잠시 OFF.
             if (_postContinueGraceUntil > 0f && Time.unscaledTime < _postContinueGraceUntil)
@@ -1705,6 +1716,48 @@ namespace BalloonFlow
             }
             return true; // no blocker found → outermost
         }
+
+#if BF_RAIL_HOLDER
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716: 레일 홀더 모드 실패 판정 — '총 탄약 소진'.
+        ///
+        /// 기존 RailOverflow(레일이 다트로 차서 실패)를 대체한다. 레일 위 홀더는 소모되지 않으므로
+        /// 점유는 항상 N 고정 → 압력계가 될 수 없다. 대신 탄약이 유한 자원이고, 다 쓰면 끝난다.
+        ///
+        /// 실패 = ① 레일 위 상자 탄창 + 큐 탄창 = 0  ② 비행 중 투사체 없음  ③ 풍선 잔존.
+        ///   ②가 없으면 마지막 발이 날아가는 중에 실패가 먼저 떠서 클리어를 뺏는다.
+        /// grace(failGraceDelay)는 기존과 동일하게 적용 — 마지막 팝 연출/체인 반응이 끝날 시간을 준다.
+        /// </summary>
+        private void EvaluateRailHolderAmmoFail(float evalDelta)
+        {
+            if (_currentState != BoardState.Playing) return;
+
+            if (!RailHolderController.HasInstance || !BalloonController.HasInstance)
+            {
+                _isCritical = false;
+                _criticalTimer = 0f;
+                return;
+            }
+
+            BalloonController.Instance.GetAliveBalloons(out int aliveCount);
+            bool balloonsRemain = aliveCount > 0;
+            bool ammoGone = RailHolderController.Instance.TotalRemainingAmmo <= 0;
+            bool projectilesInFlight = DartManager.HasInstance && DartManager.Instance.HasActiveProjectiles;
+
+            bool doomed = ammoGone && balloonsRemain && !projectilesInFlight;
+            if (!doomed)
+            {
+                _isCritical = false;
+                _criticalTimer = 0f;
+                return;
+            }
+
+            _isCritical = true;
+            _criticalTimer += evalDelta;
+            if (_criticalTimer >= _failGraceDelay)
+                TriggerFail(FailReason.NoMovesLeft);
+        }
+#endif
 
         private void TriggerFail(FailReason reason)
         {
