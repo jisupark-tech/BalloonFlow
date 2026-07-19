@@ -178,7 +178,12 @@ namespace BalloonFlow
         {
             const float MAX_BELT_DELTA_TIME = 1f / 30f;   // RailManager.UpdateInternal 과 동일한 클램프
             float dt = Mathf.Min(Time.deltaTime, MAX_BELT_DELTA_TIME);
-            _travel += RailManager.Instance.GetBeltDistancePerSecond() * dt;
+            // 홀더 순회 속도 = 초당 레일 바퀴 수(laps/sec) × 경로 총길이. 레일 기하(slotCount/slotSpacing)에서
+            //   분리 — 기존엔 GetBeltDistancePerSecond(=rotationSpeed×slotSpacing)를 써서 순회 바퀴/초가
+            //   rotationSpeed/slotCount 에 반비례했고, slotCount(용량)가 스테이지마다 커져 '초반 초고속→후반
+            //   저속'으로 편차가 났다. laps/sec 는 보드 크기와 무관하게 모든 스테이지가 동일한 한 바퀴 시간을 준다.
+            float lapsPerSec = Mathf.Max(0f, GameManager.Instance.Board.railHolderLapsPerSecond);
+            _travel += _pathLength * lapsPerSec * dt;
             if (_travel >= _pathLength) _travel -= _pathLength;
         }
 

@@ -384,9 +384,13 @@ namespace BalloonFlow
         [Range(1, 8)]
         public int railHolderCount = 5;
 
+        [Tooltip("레일 위 홀더 순회 속도 = 초당 레일 바퀴 수(laps/sec). 보드 크기·슬롯수와 무관하게 모든 스테이지가 동일한 한 바퀴 시간. 0.15≈6.7초/바퀴. 클수록 빠름. 동적 반영. (default: 0.15)")]
+        [Range(0.02f, 1f)]
+        public float railHolderLapsPerSecond = 0.35f;
+
         [Tooltip("홀더 발사 쿨다운(초). 같은 홀더가 연속 발사하는 최소 간격. 작을수록 촘촘히 쏨(0.05=초당 20발). 동적 반영. (default: 0.05)")]
         [Range(0.02f, 1f)]
-        public float railHolderFireCooldown = 0.05f;
+        public float railHolderFireCooldown = 0.01f;
 
         [Tooltip("큐→레일 탑승 비행 시간(초). 빈 자리가 컬럼 접점을 지날 때 큐 상자가 이 시간동안 날아가 붙는다. 레일은 안 멈춤. 동적 반영. (default: 0.28)")]
         [Range(0.05f, 1f)]
