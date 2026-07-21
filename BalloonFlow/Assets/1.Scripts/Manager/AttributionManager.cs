@@ -31,6 +31,11 @@ namespace BalloonFlow
             AppsFlyer.initSDK(devKey, appId, this);
             AppsFlyer.startSDK();
             Debug.Log($"{LOG_TAG} AppsFlyer initialized. devKey=***{devKey.Substring(devKey.Length - 4)}");
+
+            // [AF_APP_OPEN_RELIABLE_20260722] 신뢰성 이벤트 큐 가동 — 아래 region 주석 참조.
+            _sdkReady = true;
+            LoadPendingAfEvents();
+            InvokeRepeating(nameof(FlushPendingAfEvents), 3f, AF_FLUSH_INTERVAL);
         }
 
         /// <summary>커스텀 이벤트 발행. Dictionary value는 string 변환됨.</summary>
@@ -61,6 +66,103 @@ namespace BalloonFlow
             AppsFlyer.sendEvent(AFInAppEvents.PURCHASE, values);
             Debug.Log($"{LOG_TAG} af_purchase sent. product={productId} revenue={values[AFInAppEvents.REVENUE]} {values[AFInAppEvents.CURRENCY]}");
         }
+
+        #region Reliable AF events — PlayerPrefs 재송신 큐
+
+        // [AF_APP_OPEN_RELIABLE_20260722] PH 등 저품질 회선에서 AF 리텐션 < BQ 리텐션(KR 정상) 관측.
+        //   원인: AF 리텐션은 SDK 세션(launch) 기록 의존인데, launch 요청은 in-app 이벤트와 달리 프로세스 킬 전
+        //   미전송분 보존이 약해 '짧은 세션 + 느린 회선'에서 유실된다. BQ 는 자체 체크포인트/재시도 파이프라인이라
+        //   생존 → 리텐션 이격. 세션 자체는 클라에서 재전송 불가 → 회선 무관하게 보존되는 커스텀 app_open 을 병행:
+        //     ① 세션 시작 시 PlayerPrefs 큐에 즉시 영속(Save) — 오프라인/프로세스 킬 생존
+        //     ② 인터넷 reachable + SDK 초기화 완료일 때만 sendEvent 핸드오프 — 이후 전달은 AF SDK 내부 캐시가 보장
+        //     ③ af_event_ts(원 발생 epoch)/af_seq(기기 누적 시퀀스)/af_late(60s+ 지연 발송 여부)로 지연분 구분
+        //   중복 정책: 핸드오프 시점에 큐에서 제거 — 유실보다 중복이 낫고(리텐션은 유저-일 dedup 집계) 캡 50개.
+        //   ※ 대시보드 리텐션/코호트를 이 app_open 이벤트 기준으로 집계하면 회선 유실 없는 지표가 된다.
+
+        [System.Serializable] private class PendingAfEvent { public string n; public long t; public int s; }
+        [System.Serializable] private class PendingAfEventList { public List<PendingAfEvent> items = new List<PendingAfEvent>(); }
+
+        private const string PREFS_AF_QUEUE = "BF_AF_PendingEvents";
+        private const string PREFS_AF_SEQ   = "BF_AF_EventSeq";
+        private const int    AF_QUEUE_CAP   = 50;
+        private const float  AF_FLUSH_INTERVAL = 5f;
+        private const long   AF_LATE_THRESHOLD_SEC = 60;
+        public  const string EVT_APP_OPEN = "app_open";
+
+        private bool _sdkReady;
+        private PendingAfEventList _pending;
+
+        /// <summary>세션 시작 시 호출(AnalyticsSessionTracker) — app_open 을 유실 없이 적재.</summary>
+        public void EnqueueAppOpen() => EnqueueReliableEvent(EVT_APP_OPEN);
+
+        /// <summary>유실 방지가 필요한 AF 이벤트 공용 적재 — 즉시 디스크 영속 후 플러시 시도.</summary>
+        public void EnqueueReliableEvent(string eventName)
+        {
+            if (string.IsNullOrEmpty(eventName)) return;
+            LoadPendingAfEvents();
+
+            int seq = PlayerPrefs.GetInt(PREFS_AF_SEQ, 0) + 1;
+            PlayerPrefs.SetInt(PREFS_AF_SEQ, seq);
+
+            _pending.items.Add(new PendingAfEvent
+            {
+                n = eventName,
+                t = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                s = seq
+            });
+            while (_pending.items.Count > AF_QUEUE_CAP)
+                _pending.items.RemoveAt(0);   // 캡 초과 시 오래된 것부터 드랍
+
+            SavePendingAfEvents();   // 즉시 커밋 — 이 직후 프로세스가 죽어도 다음 실행에서 재송신
+            FlushPendingAfEvents();  // 온라인이면 바로 핸드오프
+        }
+
+        private void LoadPendingAfEvents()
+        {
+            if (_pending != null) return;
+            string json = PlayerPrefs.GetString(PREFS_AF_QUEUE, "");
+            if (!string.IsNullOrEmpty(json))
+            {
+                try { _pending = JsonUtility.FromJson<PendingAfEventList>(json); }
+                catch { _pending = null; }
+            }
+            if (_pending == null || _pending.items == null)
+                _pending = new PendingAfEventList();
+        }
+
+        private void SavePendingAfEvents()
+        {
+            PlayerPrefs.SetString(PREFS_AF_QUEUE, JsonUtility.ToJson(_pending));
+            PlayerPrefs.Save();
+        }
+
+        /// <summary>주기 플러시(InvokeRepeating 5s) — SDK 준비 + 인터넷 reachable 일 때만 핸드오프.</summary>
+        private void FlushPendingAfEvents()
+        {
+            if (!_sdkReady) return;
+            if (Application.internetReachability == NetworkReachability.NotReachable) return;
+            LoadPendingAfEvents();
+            if (_pending.items.Count == 0) return;
+
+            long now = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            int sent = _pending.items.Count;
+            for (int i = 0; i < _pending.items.Count; i++)
+            {
+                PendingAfEvent e = _pending.items[i];
+                var values = new Dictionary<string, string>(3)
+                {
+                    ["af_event_ts"] = e.t.ToString(),
+                    ["af_seq"]      = e.s.ToString(),
+                    ["af_late"]     = (now - e.t > AF_LATE_THRESHOLD_SEC) ? "1" : "0"
+                };
+                AppsFlyer.sendEvent(e.n, values);
+            }
+            _pending.items.Clear();
+            SavePendingAfEvents();
+            Debug.Log($"{LOG_TAG} reliable AF events flushed: {sent}건");
+        }
+
+        #endregion
 
         #region IAppsFlyerConversionData callbacks
 

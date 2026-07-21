@@ -251,6 +251,12 @@ namespace BalloonFlow.Analytics
                 UserSnapshotCache.Instance.Stamp(p);
 
             EmitEvent(AnalyticsConsts.EVT_SESSION_START, p);
+
+            // [AF_APP_OPEN_RELIABLE_20260722] AF 신뢰성 app_open — BQ session_start 와 동일 주기
+            //   (부팅 + 30분 백그라운드 재세션). PlayerPrefs 큐 영속이라 오프라인/즉시 킬에도 유실 없음.
+            //   배경: PH 저품질 회선에서 AF SDK 세션(launch) 유실 → AF 리텐션 < BQ 리텐션 이격.
+            if (AttributionManager.HasInstance)
+                AttributionManager.Instance.EnqueueAppOpen();
         }
 
         private void FireSessionEndEvent(string endReason, int durationSec)

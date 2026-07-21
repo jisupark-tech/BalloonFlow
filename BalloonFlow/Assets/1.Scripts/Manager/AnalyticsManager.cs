@@ -49,6 +49,8 @@ namespace BalloonFlow
         private static string PendingFilePath => Path.Combine(Application.persistentDataPath, "bq_pending_events.json");
         private bool _hasPersistedFile;
         private bool _quitting;
+        // [AF/BQ 유실감사 2026-07-22] 마지막 영속 이후 버퍼 변경 여부 — flush 실패 시 불필요 IO 없이 영속.
+        private bool _dirtySincePersist;
         // ROLLBACK_ANALYTICS_DISK_PERSIST_20260707: END (필드)
 
         private bool _facebookReady;
@@ -174,10 +176,18 @@ namespace BalloonFlow
                 return;
             }
 
+            _dirtySincePersist = true; // [AF/BQ 유실감사 2026-07-22] 미영속 변경 추적 — flush 실패 시 영속 판단용.
+
             // ROLLBACK_ANALYTICS_START_PERSIST_20260709: session_start 는 즉시 디스크 영속(세션당 1회 IO).
             //   포그라운드 크래시(퍼즈 콜백 없이 사망) 시 15s 배치 창 안의 start 가 메모리에서 유실되어
             //   orphan 소급 end 만 남는 역이격(2026-07-09 실측 9건) 방어. 롤백: 이 2줄 제거.
-            if (eventName == Analytics.AnalyticsConsts.EVT_SESSION_START)
+            // [AF/BQ 유실감사 2026-07-22] 즉시 영속 대상 확대 — purchase(매출)/play_end(핵심 퍼널)/session_end.
+            //   이들은 세션·판당 1회 수준이라 IO 부담 미미한데, 기존엔 pause 콜백 운에 의존해 포그라운드
+            //   크래시/ANR킬 시 15s 배치 창 안의 이벤트가 유실됐다(다발성 ad/economy 는 아래 flush-실패 영속이 커버).
+            if (eventName == Analytics.AnalyticsConsts.EVT_SESSION_START
+                || eventName == Analytics.AnalyticsConsts.EVT_SESSION_END
+                || eventName == Analytics.AnalyticsConsts.EVT_LEVEL_PLAY
+                || eventName == Analytics.AnalyticsConsts.EVT_PURCHASE)
                 PersistBuffer();
 
             // [ANALYTICS_PLAYEND_FLUSH 2026-06-24] 레벨 종료(play_end)는 즉시 flush.
@@ -335,6 +345,8 @@ namespace BalloonFlow
                 else if (!networkErr && (code == 429 || code == 408))
                 {
                     Debug.LogWarning($"{LOG_TAG} BQ ingest {code}(일시적) — {sendCount}건 재시도 대기. resp={req.downloadHandler.text}");
+                    // [AF/BQ 유실감사 2026-07-22] 재시도 대기 배치를 디스크에 반영 — 대기 중 크래시/강제킬 유실 방지.
+                    if (_dirtySincePersist) PersistBuffer();
                 }
                 else if (!networkErr && code >= 400 && code < 500)
                 {
@@ -347,6 +359,10 @@ namespace BalloonFlow
                 {
                     // 네트워크/5xx — 버퍼 유지, 다음 주기 재시도.
                     Debug.LogWarning($"{LOG_TAG} BQ ingest 실패(code={code}, net={networkErr}) — {sendCount}건 재시도 대기.");
+                    // [AF/BQ 유실감사 2026-07-22] 오프라인/서버 장애 구간 동안 버퍼를 항상 디스크에 유지 —
+                    //   기존엔 pause 콜백 운에 의존해, 오프라인 중 크래시/ANR킬이면 15s 창 이벤트가 통째 유실됐다.
+                    //   dirty 게이트로 버퍼 무변경 시 재영속 IO 는 스킵(오프라인 장기화 시 15s당 1회 상한).
+                    if (_dirtySincePersist) PersistBuffer();
                 }
             }
 
@@ -364,10 +380,12 @@ namespace BalloonFlow
                 {
                     if (_hasPersistedFile && File.Exists(PendingFilePath)) File.Delete(PendingFilePath);
                     _hasPersistedFile = false;
+                    _dirtySincePersist = false; // 빈 버퍼 = 잃을 것 없음
                     return;
                 }
                 File.WriteAllText(PendingFilePath, JsonConvert.SerializeObject(_bqBatch));
                 _hasPersistedFile = true;
+                _dirtySincePersist = false; // [AF/BQ 유실감사 2026-07-22] 영속 완료 — dirty 해제
             }
             catch (System.Exception e)
             {
