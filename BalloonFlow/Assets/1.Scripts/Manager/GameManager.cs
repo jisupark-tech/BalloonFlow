@@ -376,17 +376,53 @@ namespace BalloonFlow
         [Tooltip("[프로토] ON=홀더가 레일 위를 돌며 직접 발사(Pixel Flow 형). OFF=기존 다트 배포 방식. 씬 재시작 필요. (default: false)")]
         public bool railHolderMode = true;
 
-        [Tooltip("레일 홀더 모드 적용 레벨 상한. 현재 레벨이 1~이 값이면 활성, 초과하면 기존 다트 배포 메카닉. 동적 반영. (default: 10)")]
+        [Tooltip("레일 홀더 모드 적용 레벨 상한. 현재 레벨이 1~이 값이면 활성, 초과하면 기존 다트 배포 메카닉. 정식 전환(2026-07-21) 기본 300=전 레벨. ⚠️씬에 10 등 옛값이 직렬화돼 있으면 인스펙터에서 300으로 올릴 것. 동적 반영. (default: 300)")]
         [Range(1, 300)]
-        public int railHolderMaxLevel = 10;
+        public int railHolderMaxLevel = 300;
 
-        [Tooltip("레일 위 홀더 수. 경로를 이 수로 등분해 배치(간격 = 총길이/N). (default: 5)")]
+        [Tooltip("레일 동시 탑승 상한. [Pixel Flow 정합 2026-07-21] 등분 배치가 아니라 '최소 간격(railHolderMinGap)만 유지하며 즉시 탑승' — 이 수까지 자유 간격으로 올라탄다. (default: 5)")]
         [Range(1, 8)]
         public int railHolderCount = 5;
 
-        [Tooltip("레일 위 홀더 순회 속도 = 초당 레일 바퀴 수(laps/sec). 보드 크기·슬롯수와 무관하게 모든 스테이지가 동일한 한 바퀴 시간. 0.15≈6.7초/바퀴. 클수록 빠름. 동적 반영. (default: 0.15)")]
+        [Tooltip("[Pixel Flow 정합] 레일 위 홀더 간 최소 간격(월드). 정거장 탑승 시 기존 라이더 전원과 이 거리 이상일 때만 즉시 탑승 — 연속 탭이면 이 간격씩 줄줄이 올라탄다. 전원 등속이라 탑승 후 간격 자동 보존. 동적 반영. (default: 1.2)")]
+        [Range(0.3f, 5f)]
+        public float railHolderMinGap = 1.2f;
+
+        [Tooltip("[3D 레일] 레일 위 홀더의 탑승 높이(월드 Y, 경로 y에 가산). 3D 레일 모델에 두께가 있어 0이면 홀더가 레일과 겹침 — 레일 윗면에 얹혀 보이게 올린다. 동적 반영. (default: 0.4)")]
+        [Range(0f, 2f)]
+        public float railHolderRideHeight = 0.4f;
+
+        [Tooltip("[3D 레일 화살표 정합] 화살표 경로 XZ 수축 비율 — 1=waypoint 사각형 그대로(이미지 레일 기준). 모델 트랙이 사각형보다 안쪽이라 축소 필요(110 배율이 맞았던 관측 → 1/1.1≈0.91). 동적 반영. (default: 0.91)")]
+        [Range(0.5f, 1.2f)]
+        public float railArrowPathFit = 0.91f;
+
+        [Tooltip("[3D 레일 화살표 정합] 화살표 높이(월드 Y). 이미지 레일은 바닥(-0.01)이었지만 3D 모델은 두께가 있어 윗면에 떠 보이게 올림. 동적 반영. (default: 0.45)")]
+        [Range(-0.1f, 2f)]
+        public float railArrowHeight = 0.45f;
+
+        [Tooltip("레일 위 홀더 순회 속도 = 초당 레일 바퀴 수(laps/sec). 보드 크기·슬롯수와 무관하게 모든 스테이지가 동일한 한 바퀴 시간. 0.245≈4.1초/바퀴. 클수록 빠름. ⚠️씬에 옛값(0.35 등)이 직렬화돼 있으면 인스펙터에서 갱신. 동적 반영. (default: 0.245 — 2026-07-21 30% 감속)")]
         [Range(0.02f, 1f)]
-        public float railHolderLapsPerSecond = 0.35f;
+        public float railHolderLapsPerSecond = 0.245f;
+
+        [Tooltip("[Step1 착지열] 큐 앞 가로 착지열 칸 수. 레일 홀더가 한 바퀴 완주하면 이 열의 빈 칸에 안착(탄창 남을 때). 만석에서 완주 복귀 시도 시 실패. railHolderCount 이상 권장(전원 복귀 여지). 씬 재시작 반영. (default: 5)")]
+        [Range(1, 8)]
+        public int railHolderLandingSlots = 5;
+
+        [Tooltip("[연출] 큐→레일 탑승 비행의 아치 높이(월드 Y). 0=직선(기존), 클수록 포물선으로 크게 떠서 날아감. 동적 반영. (default: 0.6)")]
+        [Range(0f, 2f)]
+        public float railHolderBoardArcHeight = 0.6f;
+
+        [Tooltip("[연출] 레일 위 홀더 모델 회전 속도(도/초). 코너에서 발사 방향(안쪽)을 향해 이 속도로 부드럽게 회전 — 낮으면 코너를 늦게 따라돌고, 높으면 즉각 스냅. 텍스트는 회전하지 않고 고정. 동적 반영. (default: 720)")]
+        [Range(90f, 1440f)]
+        public float railHolderTurnSpeedDeg = 720f;
+
+        [Tooltip("[Step3 커버리지] 홀더 발사 라인 탐색 반경(±셀). 코너 스무딩 사각지대(면 끝 ~1.6셀)의 코너 인접 풍선 구제용. 0=자기 라인만(다트 모드와 동일). 동적 반영. (default: 2)")]
+        [Range(0, 4)]
+        public int railHolderLineSearchRadius = 2;
+
+        [Tooltip("[Step3 커버리지] 홀더 발사 수직 허용(셀 배수). 다트 모드 0.9 대비 넓혀 코너 arc 구간에서도 정렬 인정. 동적 반영. (default: 2.0)")]
+        [Range(0.5f, 4f)]
+        public float railHolderPerpToleranceCells = 2.0f;
 
         [Tooltip("홀더 발사 쿨다운(초). 같은 홀더가 연속 발사하는 최소 간격. 작을수록 촘촘히 쏨(0.05=초당 20발). 동적 반영. (default: 0.05)")]
         [Range(0.02f, 1f)]
@@ -396,9 +432,16 @@ namespace BalloonFlow
         [Range(0.05f, 1f)]
         public float railHolderBoardFlightTime = 0.28f;
 
-        [Tooltip("탑승 트리거 반경(월드). 빈 자리 progress 가 컬럼 접점에서 이 거리 안에 들면 그 컬럼 상자가 날아오기 시작. 동적 반영. (default: 0.6)")]
-        [Range(0.05f, 3f)]
-        public float railHolderReloadRadius = 0.6f;
+        [Tooltip("[구모델·미사용] 등간격 캐리지 시절의 탑승 트리거 반경 — Pixel Flow 정합(2026-07-21, 즉시 탑승 + railHolderMinGap)으로 대체되어 더 이상 참조되지 않음. 롤백 대비 보존.")]
+        [Range(0.05f, 6f)]
+        public float railHolderReloadRadius = 2.5f;
+
+        [Tooltip("[정거장] 탑승 정거장 위치 — 레일 경로 정규화(0~1). 0=왼쪽아래 모서리(경로 시작점), 0.25=오른쪽아래 부근. 탭한 상자는 여기로 날아가 줄 서서 대기하다, 빈 자리가 지나갈 때 올라탄다. 동적 반영. (default: 0)")]
+        [Range(0f, 1f)]
+        public float railHolderBoardStation01 = 0f;
+
+        [Tooltip("[착지열] 착지 슬롯 바닥 마커 스프라이트 — Assets/2.Sprite/UI/squareGlow.png 를 여기 할당(비우면 Resources/UI/squareGlow 폴백 시도). 회색 틴트로 '한 바퀴 돈 상자가 여기 안착한다'는 대기칸 표시. 씬 재시작 반영.")]
+        public Sprite railHolderLandingSlotSprite;
 
         [Tooltip("[디버그] 레일 홀더 상태 로그(장전/발사/소진). 동적 반영. (default: false)")]
         public bool railHolderDebugLog = false;

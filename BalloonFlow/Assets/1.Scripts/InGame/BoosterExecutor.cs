@@ -847,6 +847,12 @@ namespace BalloonFlow
                 // 파이프 자신(Spawner)·파이프 뒤 대기 홀더(IsHeldBehindPipe)는 제외.
                 bool _isSpawnerHolder = holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
                                      || holders[i].queueGimmick == GimmickManager.GIMMICK_SPAWNER_O;
+#if BF_RAIL_HOLDER
+                // PROTO_RAIL_HOLDER (Step5 감사): 레일 순회 중/착지열 홀더는 큐 소속이 아니다 — 셔플에 포함되면
+                //   ① 캐리지의 색 캐시(c.color)와 desync(엉뚱한 색 발사) ② 셔플 시각 이동이 레일/착지 좌표를
+                //   큐 좌표로 끌고 감. 큐 홀더만 섞는다.
+                if (holders[i].isRailMounted || holders[i].isOnLandingRow) continue;
+#endif
                 if (!holders[i].isDeploying && !holders[i].isWaiting &&
                     !holders[i].isMovingToRail && !holders[i].isConsumed &&
                     holders[i].magazineCount > 0 &&

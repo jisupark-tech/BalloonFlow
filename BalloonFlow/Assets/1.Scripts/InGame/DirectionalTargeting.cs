@@ -182,6 +182,16 @@ namespace BalloonFlow
         private static readonly StringBuilder _missDiagBuilder = new StringBuilder(512);
         private static int _edgeCacheFrame = -1;
         private static bool _edgeCacheDirty = true;
+
+#if BF_RAIL_HOLDER
+        // PROTO_RAIL_HOLDER [최적화 2026-07-21]: 컨투어 재빌드 최소 간격(초). 홀더 모드는 연속 사격으로
+        //   거의 매 프레임 팝→InvalidateCache 가 일어나 '팝 1개 = 전체 풍선 flood-fill 재빌드'가 매 프레임
+        //   돌았다(프로파일 BuildEdgeTargetCache 10.5ms 주범). dirty 여도 이 간격 안엔 stale 컨투어를
+        //   유지하고, stale 기간의 죽은 풍선은 TryFindTarget 후보 단계에서 O(1) 로 스킵(낭비탄 없음).
+        //   0 = 즉시 재빌드(기존/다트 모드 동작 그대로). RailHolderController 가 모드 활성 시 0.1 로 설정.
+        public static float MinRebuildInterval = 0f;
+        private static float _lastEdgeBuildTime = -999f;
+#endif
         // ROLLBACK_CONTOUR_TARGET_DIAG:
         public static string LastFindTargetDiag { get; private set; } = string.Empty;
 
@@ -334,6 +344,12 @@ namespace BalloonFlow
             return -1;
         }
 
+        // PROTO_RAIL_HOLDER_20260721 (Step3 커버리지): 마지막 두 optional 파라미터는 레일 홀더 발사 전용 오버라이드.
+        //   기본값(-1)이면 기존 상수(LINE_SEARCH_RADIUS=0 / 0.9셀) 그대로 — 다트 모드 동작 완전 불변(추가 방식).
+        //   배경: 코너 스무딩 arc(radius 1.5)가 각 면의 끝 ~1.6셀 구간에서 홀더의 수직 정렬을 막아, 코너 인접
+        //   셀이 '어느 면에서도 정렬 불가'인 사각지대가 됨(공격 안 하는 풍선). 홀더는 라인 위가 아니라 연속
+        //   위치라 밴드/허용을 넓혀도 다트 모드의 cross-line peeling 문제가 없고, score(|offset|·cell + perp)가
+        //   여전히 정렬 라인을 우선하므로 직선 구간 행동은 사실상 동일 — 코너에서만 구제가 작동한다.
         public static bool TryFindTarget(
             Vector3 dartPosition,
             Vector3 firingDirection,
@@ -342,7 +358,9 @@ namespace BalloonFlow
             out int targetId,
             out ScanDirection scanDir,
             out int targetLine,
-            out Vector3 targetWorldPos)
+            out Vector3 targetWorldPos,
+            int lineSearchRadiusOverride = -1,
+            float perpToleranceOverride = -1f)
         {
             targetId = -1;
             targetLine = 0;
@@ -369,20 +387,34 @@ namespace BalloonFlow
             float blockerScore = float.MaxValue;
             float blockerFiringDist = float.MaxValue;
             string blockerReason = string.Empty;
-            float perpendicularTolerance = _gridCellSize * PERPENDICULAR_TOLERANCE_MULTIPLIER;
+            // [Step3] 오버라이드 미지정(-1) = 기존 상수 그대로 (다트 모드 불변).
+            int lineSearchRadius = lineSearchRadiusOverride >= 0 ? lineSearchRadiusOverride : LINE_SEARCH_RADIUS;
+            float perpendicularTolerance = perpToleranceOverride > 0f
+                ? perpToleranceOverride
+                : _gridCellSize * PERPENDICULAR_TOLERANCE_MULTIPLIER;
             if (TARGETING_DIAG)
                 _diagBuilder.Length = 0;
 
             // Check a narrow band around the aligned line. This keeps non-rectangular
             // motifs targetable when rail smoothing or mobile precision shifts the dart
             // slightly away from the exact grid line.
-            for (int offset = -LINE_SEARCH_RADIUS; offset <= LINE_SEARCH_RADIUS; offset++)
+            for (int offset = -lineSearchRadius; offset <= lineSearchRadius; offset++)
             {
                 if (!TryGetEdgeTarget(scanDir, dartCell, offset, out EdgeTarget edge))
                 {
                     AppendFindTargetCandidateDiag(offset, default, false, false, false, 0f, 0f, 0, 0f, "none");
                     continue;
                 }
+
+#if BF_RAIL_HOLDER
+                // [최적화] 재빌드 스로틀 중 stale 컨투어가 이미 팝된 풍선을 후보로 줄 수 있다 —
+                //   O(1) 조회로 스킵(낭비탄·1:1 밸런스 붕괴 방지). 그 라인은 다음 재빌드(≤0.1s)에 갱신.
+                if (MinRebuildInterval > 0f && BalloonController.HasInstance)
+                {
+                    BalloonData liveCheck = BalloonController.Instance.GetBalloon(edge.balloonId);
+                    if (liveCheck == null || liveCheck.isPopped) continue;
+                }
+#endif
 
                 bool reserved = IsEdgeTargetReserved(edge, excludeIds, color);
                 float firingDist = GetFiringAxisDistance(dartPosition, edge.worldPos, scanDir);
@@ -712,6 +744,11 @@ namespace BalloonFlow
             // differently without any board change. Contours only need rebuilding after a pop or
             // level reset, so use explicit invalidation and keep _edgeCacheFrame for diagnostics.
             if (!_edgeCacheDirty) return;
+#if BF_RAIL_HOLDER
+            // [최적화] dirty 여도 최소 간격 내엔 재빌드 보류(stale 유지) — 죽은 풍선은 후보 단계에서 스킵됨.
+            if (MinRebuildInterval > 0f && Time.unscaledTime - _lastEdgeBuildTime < MinRebuildInterval)
+                return;
+#endif
 
             float __buildStamp = InGamePerfLogger.StartStampMs();
             _occupiedCells.Clear();
@@ -725,6 +762,9 @@ namespace BalloonFlow
             _attackableContourIds.Clear(); // [Outline 2026-05-10]
             _contourColors.Clear();        // [2026-05-13]
             _edgeCacheDirty = false;
+#if BF_RAIL_HOLDER
+            _lastEdgeBuildTime = Time.unscaledTime;   // [최적화] 재빌드 스로틀 기준 시각
+#endif
 
             if (GameManager.HasInstance)
                 _gridCellSize = GameManager.Instance.Board.cellSpacing;

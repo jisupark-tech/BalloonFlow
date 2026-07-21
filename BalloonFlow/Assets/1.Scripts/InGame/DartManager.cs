@@ -567,8 +567,11 @@ namespace BalloonFlow
         /// <param name="origin">홀더의 현재 월드 위치(레일 위).</param>
         /// <param name="color">홀더 탄창 색.</param>
         /// <param name="railHolderId">레일 홀더 식별자(라인락/구제 로직 키로 사용).</param>
+        /// <param name="knownProgress">호출측(캐리지)이 이미 아는 경로 progress. 음수면 월드 좌표 역변환 폴백.
+        ///   [최적화 2026-07-21] GetProgressAtWorldPos 는 240샘플 브루트포스(샘플마다 이진탐색+Lerp)라
+        ///   매 프레임 캐리지×다발사격으로 호출 시 프레임당 수천 샘플 = 버벅임 주범. 캐리지 progress 직접 전달로 제거.</param>
         /// <returns>발사에 성공했으면 true. 사거리 내 매칭 타겟이 없으면 false(탄창 소모 없음).</returns>
-        public bool TryFireFromRailHolder(Vector3 origin, int color, int railHolderId)
+        public bool TryFireFromRailHolder(Vector3 origin, int color, int railHolderId, float knownProgress = -1f)
         {
             if (_boardFinished) return false;
             if (color < 0) return false;
@@ -576,12 +579,28 @@ namespace BalloonFlow
             if (!RailManager.HasInstance) return false;
 
             RailManager rail = RailManager.Instance;
-            rail.GetPoseAtDistance(rail.GetProgressAtWorldPos(origin), out _, out _, out Vector3 fireDir);
+            float fireProgress = knownProgress >= 0f ? knownProgress : rail.GetProgressAtWorldPos(origin);
+            rail.GetPoseAtDistance(fireProgress, out _, out _, out Vector3 fireDir);
+
+            // [Step3 커버리지] 홀더는 라인 위가 아닌 연속 위치 — 탐색 반경/수직 허용을 넓혀 코너 스무딩
+            //   사각지대(면 끝 ~1.6셀, 코너 인접 셀이 어느 면에서도 정렬 불가)의 풍선을 구제한다.
+            //   score 가 정렬 라인을 우선하므로 직선 구간 타겟팅은 기존과 사실상 동일.
+            float cell = GameManager.HasInstance ? GameManager.Instance.Board.cellSpacing : 0.275f;
+            int lineRadius = GameManager.HasInstance ? GameManager.Instance.Board.railHolderLineSearchRadius : 2;
+            float perpTol = cell * (GameManager.HasInstance ? GameManager.Instance.Board.railHolderPerpToleranceCells : 2f);
+
+            // [FPS 무관 커버리지 2026-07-21] 저FPS(프로파일러 Deep Profile 등)·가속 시 한 프레임에 여러 라인을
+            //   지나친다 — 프레임 이동량만큼 탐색 밴드/수직 허용을 동적으로 넓혀 지나친 라인도 이번 스캔에 잡는다.
+            float beltMove = RailHolderController.HasInstance ? RailHolderController.Instance.LastBeltDelta : 0f;
+            int passLines = cell > 0.0001f ? Mathf.CeilToInt(beltMove / cell) : 0;
+            lineRadius = Mathf.Clamp(lineRadius + passLines, lineRadius, 6);
+            perpTol = Mathf.Max(perpTol, (passLines + 1.5f) * cell);
 
             if (!DirectionalTargeting.TryFindTarget(
                     origin, fireDir, color, _reservedTargets,
                     out int targetId, out DirectionalTargeting.ScanDirection scanDir,
-                    out int targetLine, out Vector3 targetPos))
+                    out int targetLine, out Vector3 targetPos,
+                    lineSearchRadiusOverride: lineRadius, perpToleranceOverride: perpTol))
                 return false;
 
             if (targetId < 0) return false;

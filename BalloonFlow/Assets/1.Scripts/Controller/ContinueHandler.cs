@@ -72,10 +72,15 @@ namespace BalloonFlow
         public bool CanContinue()
         {
 #if BF_RAIL_HOLDER
-            // PROTO_RAIL_HOLDER_20260716: 레일 홀더 모드는 이어하기 미지원.
-            //   이어하기 복원은 '레일에서 다트 제거'인데 이 모드엔 레일 다트가 없다 → 탄약 복원 0.
-            //   허용하면 코인만 차감하고 즉시 재실패(+컨트롤러 정지)하므로 아예 막는다. false → 곧장 최종 실패 흐름.
-            if (RailHolderController.ModeActiveForCurrentLevel) return false;
+            // PROTO_RAIL_HOLDER (Step5 정식 전환): 실패 사유별 분기.
+            //   ① 착지열 만석(RailOverflow) — 이어하기 = 착지열 전원 큐 복귀(공간 구매). 탄약은 남아 있으므로
+            //      의미 있는 회생 → 허용. (릴리프는 RailHolderController.HandleContinueApplied)
+            //   ② 탄약 소진(NoMovesLeft) — 살 수 있는 자원이 없다(복귀시켜도 쏠 게 없음). 코인만 차감하고
+            //      즉시 재실패하므로 차단 → 곧장 최종 실패 흐름.
+            //   실패 후엔 컨트롤러 틱이 멈춰 LandingOverflowFailPending 이 실패 시점 값으로 보존된다.
+            if (RailHolderController.ModeActiveForCurrentLevel)
+                return RailHolderController.HasInstance
+                    && RailHolderController.Instance.LandingOverflowFailPending;
 #endif
             return true;
         }
@@ -217,6 +222,27 @@ namespace BalloonFlow
 
         private void ApplyContinueRestore()
         {
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER (Step5): 홀더 모드 이어하기 — 레일 다트 제거는 무의미(다트 없음).
+            //   보드 재초기화 + OnContinueApplied 발행만 공유하고, 실제 릴리프(착지열 큐 복귀)는
+            //   RailHolderController.HandleContinueApplied 가 이벤트로 수행한다.
+            if (RailHolderController.ModeActiveForCurrentLevel)
+            {
+                if (BoardStateManager.HasInstance)
+                {
+                    int remainingRH = BoardStateManager.Instance.GetRemainingBalloons();
+                    BoardStateManager.Instance.InitializeBoard(_currentLevelId, remainingRH);
+                }
+                EventBus.Publish(new OnContinueApplied
+                {
+                    dartsRemoved = 0,
+                    removedColor = -1,
+                    levelId = _currentLevelId,
+                    holderResetColor = -1
+                });
+                return;
+            }
+#endif
             // 1) 최근 배치 다트 N개 + 같은 색 풍선 1:1 제거. 제거량은 레일 허용량 기준(4/8/12/16).
             int dartsRemoved = 0;
             int balloonsRemoved = 0;

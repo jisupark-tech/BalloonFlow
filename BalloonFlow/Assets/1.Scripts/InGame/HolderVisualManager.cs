@@ -224,6 +224,14 @@ namespace BalloonFlow
 #if BF_RAIL_HOLDER
             /// <summary>PROTO_RAIL_HOLDER_20260716: 이 상자가 레일 위에 올라타 있다(위치 주인 = RailHolderController).</summary>
             public bool isRailMounted;
+
+            /// <summary>[연출] 레일 포즈 캐시 여부 — 첫 SetRailMountedHolderPose 에서 원래 회전/텍스트 회전을 캡처.
+            /// 착지/소멸 시 원복 + false 리셋(풀 재사용 오염 방지).</summary>
+            public bool railPoseCached;
+            /// <summary>[연출] 탑승 전 루트 회전(큐 기본 자세) — 착지/소멸 시 원복용.</summary>
+            public Quaternion railRootBaseRot;
+            /// <summary>[연출] 텍스트의 월드 회전 — 모델이 코너를 따라 돌아도 텍스트는 이 회전 고정(다트 로직과 동일 컨셉).</summary>
+            public Quaternion railTextWorldRot;
 #endif
             public bool isSpawnerVisual;
             public Material spawnerTextMaterialPreset;
@@ -456,6 +464,18 @@ namespace BalloonFlow
 
             // 보관함 가로폭 = 풍선 필드 가로폭에 맞춤
             ComputeDynamicLayout();
+
+#if BF_RAIL_HOLDER
+            // [착지열 마커] 생성 지점 = 레이아웃 확정 직후 '여기 단일 소스'.
+            //   기존(컨트롤러 TryInitialize, 첫 Update)은 로드 코루틴과 레이스 — 마커를 만들자마자
+            //   위 ClearAllVisuals 가 지워버려 화면에 안 보였고, 레이아웃 전이라 좌표도 이전 레벨 값이었다.
+            if (RailHolderController.ModeActiveForCurrentLevel)
+            {
+                int landingSlots = Mathf.Clamp(
+                    GameManager.HasInstance ? GameManager.Instance.Board.railHolderLandingSlots : 5, 1, 8);
+                EnsureLandingSlotMarkers(landingSlots);
+            }
+#endif
 
             // Group by column — Spawner는 열 맨 뒤에 배치 (관통 방지)
             var columnQueues = new Dictionary<int, List<HolderData>>();
@@ -717,6 +737,10 @@ namespace BalloonFlow
             SetHandSelectionHighlightActive(false);
             StopAllCoroutines();
             _cancelledHolders.Clear();
+#if BF_RAIL_HOLDER
+            ClearLandingSlotMarkers();   // [착지열 마커] 레벨 정리 시 함께 제거(컨트롤러 ResetAll 과 이중 안전망, idempotent)
+            _lastFireVisualTime.Clear(); // [진행형 부하 fix] 연출 캡 추적 초기화(홀더 id 재사용 대비)
+#endif
 
             foreach (var kvp in _holderVisuals)
             {
@@ -1038,6 +1062,15 @@ namespace BalloonFlow
             }
 
             _queueBaseZ = _cachedRailZ - railToQueue;
+
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER_20260716 (Step2): 홀더 모드는 큐 전체를 한 줄 뒤로 밀고, 비워진 원래 앞줄
+            //   자리(레일과 큐 사이)를 '착지열'(한 바퀴 완주한 홀더가 안착하는 가로 N칸)로 쓴다.
+            //   _landingRowZ 를 먼저 원래 앞줄 z 로 잡은 뒤 _queueBaseZ 를 한 행 내린다.
+            //   define off / 모드 비활성이면 이 블록이 없거나 실행 안 됨 → 기존 레이아웃 그대로.
+            if (RailHolderController.ModeActiveForCurrentLevel)
+                _queueBaseZ -= _rowSpacing;
+#endif
         }
 
         private Vector3 CalculateQueuePosition(int column, int row)
@@ -1267,7 +1300,8 @@ namespace BalloonFlow
 #if BF_RAIL_HOLDER
                 // PROTO_RAIL_HOLDER_20260716: 레일에 올라탄 상자는 큐 행 계산에서 제외 —
                 //   포함되면 뒤 상자들이 한 칸 못 당겨지고, 아래 리포지셔닝이 이 상자를 큐로 도로 끌어내린다.
-                if (hd.isRailMounted) continue;
+                // Step5 QA: 착지열 상자도 동일 — 큐 소속이 아니므로 행 계산에 넣으면 파킹 좌표가 큐로 끌려간다.
+                if (hd.isRailMounted || hd.isOnLandingRow) continue;
 #endif
                 // Spawner 자체는 SpawnWaitingHolders에서 생성됨
                 if (hd.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
@@ -1648,6 +1682,11 @@ namespace BalloonFlow
 
         private void ReturnHolderToPool(HolderVisual visual)
         {
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER (Step5 감사): 어떤 경로로 풀에 반환되든(Zap 색제거·클리어 정리 등)
+            //   레일 회전이 남아 있으면 다음 재사용 상자가 기울어 스폰된다 — 모든 반환 경로의 최종 안전망.
+            RestoreRailPose(visual);
+#endif
             if (visual.gameObject != null)
             {
                 // Dart + Box + 블러 + 애니메이터 원복 (풀 재사용 대비)
@@ -2810,6 +2849,7 @@ namespace BalloonFlow
             visual.isDeploying = false;
             visual.isWaiting = false;
             visual.isMovingToRail = false;
+            visual.railPoseCached = false;   // [연출] 탑승(재탑승 포함)마다 기본 자세를 새로 캡처
             _colBusy[col] = false;
 
             RepositionColumnHolders(col);   // 뒤 상자들 한 칸 전진
@@ -2826,6 +2866,86 @@ namespace BalloonFlow
         }
 
         /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716 [연출]: 레일 위 상자의 매 프레임 포즈 — 위치 + 모델 회전(코너 추종) + 텍스트 고정.
+        /// 다트 로직과 동일 컨셉: 모델은 발사 방향(레일 안쪽, inwardDir)을 바라보고, 코너에선 RotateTowards 로
+        /// 부드럽게 돌아 스냅(덜컹)이 없다. 텍스트(magazineText)는 첫 호출에 캡처한 월드 회전으로 매 프레임 고정 —
+        /// 모델이 어떻게 돌아도 숫자는 항상 같은 방향으로 읽힌다.
+        /// </summary>
+        public void SetRailMountedHolderPose(int holderId, Vector3 worldPos, Vector3 inwardDir, float turnSpeedDeg)
+        {
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual) || visual == null) return;
+            if (visual.gameObject == null) return;
+
+            Transform root = visual.gameObject.transform;
+            root.position = worldPos;
+
+            if (!visual.railPoseCached)
+            {
+                visual.railPoseCached = true;
+                visual.railRootBaseRot = root.rotation;
+                visual.railTextWorldRot = visual.magazineText != null
+                    ? visual.magazineText.transform.rotation
+                    : Quaternion.identity;
+            }
+
+            inwardDir.y = 0f;
+            if (inwardDir.sqrMagnitude > 0.001f)
+            {
+                Quaternion target = Quaternion.LookRotation(inwardDir.normalized) * visual.railRootBaseRot;
+                root.rotation = Quaternion.RotateTowards(root.rotation, target, turnSpeedDeg * Time.deltaTime);
+            }
+
+            // 텍스트는 모델 회전과 무관하게 월드 고정(다트 로직의 '숫자 항상 정방향' 컨셉).
+            if (visual.magazineText != null)
+                visual.magazineText.transform.rotation = visual.railTextWorldRot;
+        }
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716 [연출/Step1]: 한 바퀴 완주한 상자를 착지 슬롯에 파킹 — 회전을 큐 기본 자세로
+        /// 원복하고 DOJump 로 통통 뛰어 안착. 파킹 후 위치 주인은 착지열(레일 틱이 더 안 만짐)이라 트윈이 안전.
+        /// </summary>
+        public void ParkRailHolderAtLanding(int holderId, Vector3 landPos, float duration)
+        {
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual) || visual == null) return;
+            if (visual.gameObject == null) return;
+
+            Transform root = visual.gameObject.transform;
+            root.DOKill();
+            RestoreRailPose(visual);
+
+            if (duration <= 0.01f) { root.position = landPos; return; }
+            root.DOJump(landPos, 0.45f, 1, duration).SetEase(Ease.OutQuad);
+        }
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER (Step5 Continue): 착지열 상자를 큐 시각 소속으로 복귀 — 이어하기 릴리프.
+        /// visual.isRailMounted 를 내려 리포지셔닝 트윈 대상에 다시 포함시키고(내려두면 영영 안 움직임),
+        /// 회전 원복 후 그 컬럼을 재배치해 큐 맨뒤 좌표로 이동시킨다.
+        /// </summary>
+        public void ReturnLandingHolderVisualToQueue(int holderId, int column)
+        {
+            if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual) || visual == null) return;
+
+            if (visual.gameObject != null) visual.gameObject.transform.DOKill();
+            RestoreRailPose(visual);
+            visual.isRailMounted = false;
+            visual.column = column;
+
+            RepositionColumnHolders(column);
+            RebuildChainLines();
+        }
+
+        /// <summary>[연출] 레일 포즈 원복 — 루트 회전을 탑승 전(큐 기본)으로, 캐시 해제(풀 재사용 오염 방지).
+        /// 루트가 기본 자세로 돌아가면 자식 텍스트의 월드 회전도 자동으로 원위치라 텍스트는 따로 안 만진다.</summary>
+        private void RestoreRailPose(HolderVisual visual)
+        {
+            if (visual == null || !visual.railPoseCached) return;
+            if (visual.gameObject != null)
+                visual.gameObject.transform.rotation = visual.railRootBaseRot;
+            visual.railPoseCached = false;
+        }
+
+        /// <summary>
         /// PROTO_RAIL_HOLDER_20260716: 상자 안 다트 1발이 빠지는 연출 + 남은 수 표시 갱신.
         /// 실제 풍선을 맞히는 다트는 DartManager 투사체이고, 여기 LaunchNextDart 는 <b>상자 슬롯을 비우는 연출 전용</b>
         /// (짧은 거리로 튀어나와 사라짐) — 둘을 같은 타겟으로 날리면 다트가 두 개로 보인다.
@@ -2834,13 +2954,26 @@ namespace BalloonFlow
         {
             if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual) || visual == null) return;
 
-            SyncHolderMagazineDisplay(holderId, magazineRemaining);   // 텍스트 감소
+            SyncHolderMagazineDisplay(holderId, magazineRemaining);   // 텍스트는 매 발 정확히 갱신(무할당)
+
+            // [진행형 부하 fix 2026-07-21] 트윈 연출은 홀더당 최소 간격으로 캡 — LaunchNextDart 는 호출마다
+            //   경로 배열 + DOPath(CatmullRom) + OnComplete 클로저(GC) + 슬롯 전수 IsChildOf 스캔, PunchScale 도
+            //   트윈 할당. 후반(Almost There 가속·프리라이드)일수록 발사율이 치솟아 '진행할수록 부하'의 주범.
+            //   초당 ~11회 이상의 연출은 눈으로 구분 불가 — 그 이상은 스킵해 GC/트윈 churn 을 상수화한다.
+            if (_lastFireVisualTime.TryGetValue(holderId, out float last)
+                && Time.unscaledTime - last < FIRE_VISUAL_MIN_INTERVAL) return;
+            _lastFireVisualTime[holderId] = Time.unscaledTime;
+
             if (visual.identifier != null)
             {
                 visual.identifier.PlayFireRecoilScale();              // 스케일 업/다운 펀치
                 visual.identifier.LaunchNextDart(muzzleWorldPos, 0.08f); // 상자 슬롯 비우는 연출
             }
         }
+
+        // [진행형 부하 fix] 홀더별 마지막 발사 연출 시각 — 트윈 연출 빈도 캡용.
+        private readonly Dictionary<int, float> _lastFireVisualTime = new Dictionary<int, float>(16);
+        private const float FIRE_VISUAL_MIN_INTERVAL = 0.09f;
 
         /// <summary>
         /// PROTO_RAIL_HOLDER_20260716: 탄창을 다 쓴 레일 상자를 치운다.
@@ -2851,12 +2984,87 @@ namespace BalloonFlow
         {
             if (!_holderVisuals.TryGetValue(holderId, out HolderVisual visual) || visual == null) return;
 
+            RestoreRailPose(visual);   // [연출] 회전 원복 — 풀 재사용 시 다음 큐 상자가 기울어 스폰되는 오염 방지
+
             if (visual.identifier != null)
                 visual.identifier.EndDeploy();
 
             ReturnHolderToPool(visual);
             _holderVisuals.Remove(holderId);
             RebuildChainLines();
+        }
+
+        /// <summary>
+        /// [착지열 마커 2026-07-21] 착지 슬롯 바닥 표시 — squareGlow 를 회색 틴트로 바닥에 깔아
+        /// "한 바퀴 돈 상자가 여기 안착한다"는 대기칸을 상시 보여준다. 레벨 초기화 때 N개 생성, 정리 시 파괴.
+        /// </summary>
+        private readonly List<GameObject> _landingSlotMarkers = new List<GameObject>();
+        private static readonly Color LANDING_MARKER_GRAY = new Color(0.55f, 0.55f, 0.55f, 0.6f);
+        private const float LANDING_MARKER_Y = 0.05f;          // 바닥 타일 위, 상자(y=0.1) 아래
+        private const float LANDING_MARKER_FILL = 0.95f;       // 슬롯 폭(_columnSpacing) 대비 마커 크기 비율
+
+        public void EnsureLandingSlotMarkers(int totalSlots)
+        {
+            ClearLandingSlotMarkers();
+            if (totalSlots <= 0) return;
+
+            Sprite sprite = GameManager.HasInstance ? GameManager.Instance.Board.railHolderLandingSlotSprite : null;
+            if (sprite == null) sprite = Resources.Load<Sprite>("UI/squareGlow");   // 인스펙터 미할당 폴백
+            if (sprite == null)
+            {
+                Debug.LogWarning("[HolderVisualManager] 착지 슬롯 마커 스프라이트 없음 — " +
+                                 "GameManager Board 의 railHolderLandingSlotSprite 에 squareGlow 를 할당하세요.");
+                return;
+            }
+
+            float desired = _columnSpacing * LANDING_MARKER_FILL;
+            float native = Mathf.Max(0.0001f, sprite.bounds.size.x);
+            float scale = desired / native;
+
+            for (int i = 0; i < totalSlots; i++)
+            {
+                if (!TryGetLandingSlotWorldPos(i, totalSlots, out Vector3 pos)) continue;
+                pos.y = LANDING_MARKER_Y;
+
+                var go = new GameObject($"LandingSlotMarker_{i}");
+                go.transform.SetParent(transform, false);
+                go.transform.position = pos;
+                go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);   // 바닥 스프라이트 컨벤션(BoardTileManager 와 동일)
+                go.transform.localScale = Vector3.one * scale;
+
+                var sr = go.AddComponent<SpriteRenderer>();
+                sr.sprite = sprite;
+                sr.color = LANDING_MARKER_GRAY;
+                sr.sortingOrder = 0;   // 바닥 타일(-1) 위, 화살표/오버레이(1) 아래
+
+                _landingSlotMarkers.Add(go);
+            }
+        }
+
+        public void ClearLandingSlotMarkers()
+        {
+            for (int i = 0; i < _landingSlotMarkers.Count; i++)
+                if (_landingSlotMarkers[i] != null) Destroy(_landingSlotMarkers[i]);
+            _landingSlotMarkers.Clear();
+        }
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716 (Step2): 착지열의 slotIndex 번째 칸 월드 좌표.
+        /// 위치 = 큐 back-shift 로 비워진 원래 앞줄(_landingRowZ). N칸을 컬럼과 동일 간격(_columnSpacing)으로
+        /// 중앙 정렬 — 슬롯 수 == 컬럼 수면 큐 컬럼과 세로로 정확히 정렬된다. y 는 큐와 동일(0.1).
+        /// </summary>
+        public bool TryGetLandingSlotWorldPos(int slotIndex, int totalSlots, out Vector3 pos)
+        {
+            pos = Vector3.zero;
+            if (totalSlots <= 0 || slotIndex < 0 || slotIndex >= totalSlots) return false;
+
+            float totalWidth = (totalSlots - 1) * _columnSpacing;
+            float startX = -totalWidth * 0.5f;
+            float x = startX + slotIndex * _columnSpacing;
+            // z = 큐 앞줄 바로 앞 한 행 — back-shift(ComputeDynamicLayout) 적용 시 정확히 '원래 앞줄' 자리.
+            //   파생 계산이라 레이아웃 재계산 시점과 무관하게 항상 현재 _queueBaseZ 와 정합.
+            pos = new Vector3(x, 0.1f, _queueBaseZ + _rowSpacing);
+            return true;
         }
 #endif
 

@@ -1744,7 +1744,12 @@ namespace BalloonFlow
             bool ammoGone = RailHolderController.Instance.TotalRemainingAmmo <= 0;
             bool projectilesInFlight = DartManager.HasInstance && DartManager.Instance.HasActiveProjectiles;
 
-            bool doomed = ammoGone && balloonsRemain && !projectilesInFlight;
+            // Step1 착지열: 레일 홀더가 한 바퀴 완주 복귀하려는데 착지열이 만석 → 즉시 실패 사유(공간 초과, RailOverflow 부활).
+            //   탄약 소진(NoMovesLeft)과 별개 축. 풍선이 남아 있을 때만 실패(다 터졌으면 클리어가 우선).
+            bool landingOverflow = RailHolderController.Instance.LandingOverflowFailPending;
+
+            bool doomed = balloonsRemain
+                && (landingOverflow || (ammoGone && !projectilesInFlight));
             if (!doomed)
             {
                 _isCritical = false;
@@ -1755,7 +1760,7 @@ namespace BalloonFlow
             _isCritical = true;
             _criticalTimer += evalDelta;
             if (_criticalTimer >= _failGraceDelay)
-                TriggerFail(FailReason.NoMovesLeft);
+                TriggerFail(landingOverflow ? FailReason.RailOverflow : FailReason.NoMovesLeft);
         }
 #endif
 

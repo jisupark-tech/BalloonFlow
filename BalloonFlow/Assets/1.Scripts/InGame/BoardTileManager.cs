@@ -402,6 +402,18 @@ namespace BalloonFlow
         /// </summary>
         public void BuildConveyorBelt()
         {
+#if BF_RAIL_HOLDER
+            // [3D 레일 2026-07-22] 홀더 모드는 이미지 타일 컨베이어 대신 아트 3D 모델(Resources/Prefabs/Rail)을
+            //   깐다(RailRenderer.TryBuildModelRail — 사이즈 동일 제작이라 위치/핏만 맞추면 됨). 여기선 스프라이트를
+            //   만들지 않고 기존 것만 정리. 모델 프리팹이 없으면 기존 이미지 경로로 폴백(스킵 안 함).
+            //   캐시(_lastBuild*)도 무효화 — 이후 다트 모드 레벨이 같은 치수여도 재빌드가 스킵되지 않게.
+            if (RailHolderController.ModeActiveForCurrentLevel && RailRenderer.IsModelRailAvailable())
+            {
+                ClearConveyorSprites();
+                _lastBuildCols = -1;   // 치수 캐시 무효화(다음 이미지 빌드 강제)
+                return;
+            }
+#endif
             // 동일 dimensions 재빌드 스킵 (스테이지 전환 시 stutter 감소)
             float screenAspect = GetScreenAspect();
 
@@ -1100,6 +1112,34 @@ namespace BalloonFlow
             float pathLen = rail.TotalPathLength;
             if (pathLen <= 0f) return;
 
+#if BF_RAIL_HOLDER
+            // [3D 레일 화살표 정합 2026-07-22] 모델 트랙은 waypoint 사각형보다 안쪽 + 두께가 있음 —
+            //   화살표 위치를 레일 중심 기준 XZ 수축(railArrowPathFit) + 모델 윗면 높이(railArrowHeight)로 보정.
+            //   (110 배율 관측의 근본 수정 — 모델은 아트 원본 100 유지, 화살표가 트랙에 맞춰 이동.)
+            bool modelRailFit = RailHolderController.ModeActiveForCurrentLevel && RailRenderer.IsModelRailAvailable();
+            float arrowFit = 1f, arrowY = -0.01f;
+            Vector3 railCenter = Vector3.zero;
+            if (modelRailFit && GameManager.HasInstance)
+            {
+                arrowFit = GameManager.Instance.Board.railArrowPathFit;
+                arrowY = GameManager.Instance.Board.railArrowHeight;
+                Vector3[] wps = rail.GetRailPath();
+                if (wps != null && wps.Length > 0)
+                {
+                    float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+                    for (int w = 0; w < wps.Length; w++)
+                    {
+                        if (wps[w].x < minX) minX = wps[w].x;
+                        if (wps[w].x > maxX) maxX = wps[w].x;
+                        if (wps[w].z < minZ) minZ = wps[w].z;
+                        if (wps[w].z > maxZ) maxZ = wps[w].z;
+                    }
+                    railCenter = new Vector3((minX + maxX) * 0.5f, 0f, (minZ + maxZ) * 0.5f);
+                }
+                else modelRailFit = false;
+            }
+#endif
+
             // Arrow도 벨트 속도로 이동
             float delta = rail.RotationSpeed * rail.SlotSpacing * Time.deltaTime * 0.1f;
 
@@ -1128,7 +1168,21 @@ namespace BalloonFlow
 
                 // 경로상 위치 + 방향
                 Vector3 pos = rail.GetPositionAtDistance(_arrowProgresses[i]);
+#if BF_RAIL_HOLDER
+                if (modelRailFit)
+                {
+                    // 레일 중심 기준 XZ 수축 → 모델 트랙 위 + 모델 윗면 높이.
+                    pos.x = railCenter.x + (pos.x - railCenter.x) * arrowFit;
+                    pos.z = railCenter.z + (pos.z - railCenter.z) * arrowFit;
+                    pos.y = arrowY;
+                }
+                else
+                {
+                    pos.y = -0.01f; // 타일(-0.02) 위, cave(-0.01)와 같은 레벨
+                }
+#else
                 pos.y = -0.01f; // 타일(-0.02) 위, cave(-0.01)와 같은 레벨
+#endif
                 _arrowObjects[i].transform.position = pos;
 
                 float t = _arrowProgresses[i] / pathLen;

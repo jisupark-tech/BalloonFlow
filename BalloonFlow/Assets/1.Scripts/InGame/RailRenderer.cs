@@ -154,6 +154,17 @@ namespace BalloonFlow
 
             bool isLoop = rail.IsClosedLoop;
 
+#if BF_RAIL_HOLDER
+            // [3D 레일 2026-07-22] 홀더 모드: 이미지 타일 대신 아트 모델링(Resources/Prefabs/Rail) 배치.
+            //   (BoardTileManager.BuildConveyorBelt 는 같은 조건에서 이미지 빌드를 스킵 — 이중 비주얼 방지.)
+            //   모델 로드 실패 시 false → 기존 이미지 경로 폴백.
+            if (RailHolderController.ModeActiveForCurrentLevel && TryBuildModelRail(waypoints))
+            {
+                _isInitialized = true;
+                return;
+            }
+#endif
+
             // Sprite tile mode — BoardTileManager.ConveyorSprites가 처리하므로 여기서 생성하지 않음
             // 다중 생성 방지: RailRenderer는 타일 비주얼을 생성하지 않고 경로 데이터만 제공
             if (_visualType == VISUAL_SPRITE_TILE)
@@ -245,6 +256,91 @@ namespace BalloonFlow
 
             _isInitialized = true;
         }
+
+#if BF_RAIL_HOLDER
+        // ── [3D 레일 2026-07-22] 아트 모델링 레일 (Resources/Prefabs/Rail) ─────────────────────────
+        //   아트 기준: 기존 이미지 레일과 동일 사이즈 제작 → 기준 보드에선 scale≈1. 보드 치수가 다른
+        //   레벨은 waypoint 사각형(ㅁ자)에 XZ 오토핏(모델 bounds 실측 대비 비율). 위치는 bounds 중심을
+        //   사각형 중심에 정렬(피벗 어긋남 자동 보정), 바닥은 y=0(피벗 기준 아트 저작 그대로).
+        private static GameObject s_railModelPrefab;
+        private static bool s_railModelLoadTried;
+        /// <summary>프리팹 저작 스케일(100) 대비 X/Z 추가 배율. 1.0 = 아트 원본 그대로(100,100,100).
+        /// [2026-07-22 원복] 한때 1.1(110,100,110)로 키웠던 건 화살표 연출이 모델 트랙과 어긋나서였음 —
+        /// 근본 수정은 화살표 경로 정합(BoardTileManager.UpdateArrowPositions, railArrowPathFit/Height)으로 이동.</summary>
+        private const float RAIL_MODEL_SCALE_MULT_XZ = 1.0f;
+
+        /// <summary>모델 프리팹 로드 가능 여부(1회 로드 캐시). BoardTileManager 가 이미지 빌드 스킵 판단에 사용.</summary>
+        public static bool IsModelRailAvailable()
+        {
+            if (!s_railModelLoadTried)
+            {
+                s_railModelLoadTried = true;
+                s_railModelPrefab = Resources.Load<GameObject>("Prefabs/Rail");
+                if (s_railModelPrefab == null)
+                    Debug.LogWarning("[RailRenderer] Resources/Prefabs/Rail 로드 실패 — 이미지 타일 레일로 폴백합니다.");
+            }
+            return s_railModelPrefab != null;
+        }
+
+        private bool TryBuildModelRail(Vector3[] waypoints)
+        {
+            if (!IsModelRailAvailable()) return false;
+
+            // waypoint 사각형(ㅁ자) 치수 — 홀더 모드는 항상 4면 폐루프.
+            float minX = float.MaxValue, maxX = float.MinValue;
+            float minZ = float.MaxValue, maxZ = float.MinValue;
+            for (int i = 0; i < waypoints.Length; i++)
+            {
+                Vector3 w = waypoints[i];
+                if (w.x < minX) minX = w.x;
+                if (w.x > maxX) maxX = w.x;
+                if (w.z < minZ) minZ = w.z;
+                if (w.z > maxZ) maxZ = w.z;
+            }
+            float railW = maxX - minX;
+            float railD = maxZ - minZ;
+            if (railW < 0.1f || railD < 0.1f) return false;
+
+            GameObject model = Instantiate(s_railModelPrefab, transform);
+            model.name = "RailModel3D";
+            model.transform.position = Vector3.zero;
+            model.transform.rotation = Quaternion.identity;
+
+            // 스케일: 아트 저작 스케일(프리팹 루트 100,100,100) 보존 + X/Z 배율 1.1 → 110,100,110
+            //   (사용자 지정 2026-07-22). ※ 이전 오토핏은 루트 스케일을 비율값으로 '덮어써' 모델이
+            //   1/100 로 축소되는 버그 — 아트가 이미지 레일과 동일 사이즈로 저작했으므로 배율만 얹는다.
+            Vector3 baseScale = model.transform.localScale;
+            model.transform.localScale = new Vector3(
+                baseScale.x * RAIL_MODEL_SCALE_MULT_XZ,
+                baseScale.y,
+                baseScale.z * RAIL_MODEL_SCALE_MULT_XZ);
+
+            // 위치: 스케일 반영 bounds 중심을 레일 사각형 중심(XZ)에 정렬, 바닥 y=0.
+            Bounds scaled = CalcRendererBounds(model);
+            Vector3 center = new Vector3((minX + maxX) * 0.5f, 0f, (minZ + maxZ) * 0.5f);
+            Vector3 pos = model.transform.position;
+            pos.x += center.x - scaled.center.x;
+            pos.z += center.z - scaled.center.z;
+            pos.y = 0f;
+            model.transform.position = pos;
+
+            // 비주얼 전용 — 콜라이더 비활성(기존 세그먼트 정책과 동일).
+            var cols = model.GetComponentsInChildren<Collider>();
+            for (int c = 0; c < cols.Length; c++) cols[c].enabled = false;
+
+            _trackSegments.Add(model);   // ClearPath 가 함께 정리
+            return true;
+        }
+
+        private static Bounds CalcRendererBounds(GameObject go)
+        {
+            var renderers = go.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) return new Bounds(go.transform.position, Vector3.one);
+            Bounds b = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++) b.Encapsulate(renderers[i].bounds);
+            return b;
+        }
+#endif
 
         /// <summary>
         /// Destroys all track segment GameObjects and clears the list.

@@ -24,6 +24,14 @@ namespace BalloonFlow
         /// 큐 소속에서 빠지되(행 계산·앞줄 판정 제외) 소진된 건 아니다 — magazineCount 는 발사마다 줄어들고
         /// 0 이 되면 그때 isConsumed 로 넘어간다. 탄약 합산에는 계속 포함(레일 위 탄약도 총 탄약).</summary>
         public bool isRailMounted;
+
+        /// <summary>PROTO_RAIL_HOLDER_20260716 (Step1 착지열): 레일 한 바퀴를 완주하고 큐 앞 '가로 착지열'에
+        /// 안착해 있다. 큐에도 레일에도 속하지 않는 대기 상태 — 탭하면 레일로 재탑승. 탄창은 그대로 보존되며
+        /// 소진 전까지 총 탄약에 계속 포함. isRailMounted 와 상호배타(둘 중 하나만 true).</summary>
+        public bool isOnLandingRow;
+
+        /// <summary>PROTO_RAIL_HOLDER_20260716 (Step1): 착지열에서의 슬롯 인덱스(0~N-1). -1 = 착지열 아님.</summary>
+        public int landingSlotIndex = -1;
 #endif
 
         // ── 큐 기믹 상태 ──
@@ -844,16 +852,45 @@ namespace BalloonFlow
         ///
         /// 기믹 게이트는 기존과 동일한 의미로 유지 — Hidden(색 미공개)/Frozen(해동 전)/Pipe(미방출) 상자는 못 태운다.
         /// </summary>
-        /// <returns>태웠으면 true. 열이 비었거나 앞줄이 기믹으로 막혀 있으면 false.</returns>
-        public bool TryMountFrontHolderOnRail(int column, out int holderId, out int color, out int magazine)
+        /// <returns>태웠으면 true. 열이 비었거나 앞줄이 기믹으로 막혀 있으면 false.
+        /// chainGroupId: 앞줄이 체인 멤버(그룹 2+)라 단독 탑승 불가일 때 그 그룹 id (호출측이 그룹 일괄 경로로 라우팅). 그 외 -1.</returns>
+        public bool TryMountFrontHolderOnRail(int column, out int holderId, out int color, out int magazine, out int chainGroupId)
         {
-            holderId = -1; color = -1; magazine = 0;
+            holderId = -1; color = -1; magazine = 0; chainGroupId = -1;
             if (column < 0 || column >= _queueColumns) return false;
 
-            List<HolderData> colHolders = GetColumnHolders(column);   // isRailMounted/isConsumed 는 이미 걸러짐
-            if (colHolders == null || colHolders.Count == 0) return false;
+            HolderData front = PickFrontOfColumn(column);
+            if (front == null) return false;
+            // [기믹 감사 2026-07-21] Lock 게이트 — 다트 모드 SelectHolder 와 동일(잠긴 상자·락 뒤 차단 상자 탑승 금지).
+            //   기존엔 이 게이트가 없어 잠긴 상자가 탭으로 레일에 올라갔다.
+            if (front.isLockObject || IsBlockedByLock(front)) return false;
+            if (front.isFrozen) return false;      // Frozen_Dart — 해동 전에는 못 태움
+            if (front.isHidden) return false;      // Hidden — 색 공개 전에는 못 태움(앞줄 도달 시 자동 공개는 시각 레이어)
+            if (front.magazineCount <= 0) return false;
 
-            // 앞줄 = holderId 순(초기 배치 row 순서 보존) 최소값 — RepositionColumnHolders 의 행 산정과 동일 기준.
+            // [기믹 감사 2026-07-21] Chain — 멤버 단독 탑승 금지(분할 탑승 방지, 다트 모드 TrySelectChainGroup 관용).
+            //   그룹 전체 검증·일괄 탑승은 TryMountChainGroupOnRail 이 담당 — 호출측에 그룹 id 만 알린다.
+            if (front.chainGroupId >= 0 && GetChainGroup(front.chainGroupId).Count > 1)
+            {
+                chainGroupId = front.chainGroupId;
+                return false;
+            }
+
+            holderId = front.holderId;
+            color = front.color;
+            magazine = front.magazineCount;
+            MountQueueHolderOnRailInternal(front);
+            return true;
+        }
+
+        /// <summary>[기믹 감사 2026-07-21] 열의 앞줄 상자 선정 — holderId 최소값(초기 행 순서 보존,
+        /// RepositionColumnHolders 행 산정과 동일 기준). 스포너 본체·파이프 뒤 대기 홀더는 앞줄 후보에서 제외
+        /// (파이프 뒤 홀더가 data 상 id 가 빨라 앞줄로 오인되던 구멍 봉합).</summary>
+        private HolderData PickFrontOfColumn(int column)
+        {
+            List<HolderData> colHolders = GetColumnHolders(column);   // isRailMounted/착지열/isConsumed 는 이미 걸러짐
+            if (colHolders == null || colHolders.Count == 0) return null;
+
             HolderData front = null;
             for (int i = 0; i < colHolders.Count; i++)
             {
@@ -861,26 +898,68 @@ namespace BalloonFlow
                 if (h == null) continue;
                 if (h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_T
                  || h.queueGimmick == GimmickManager.GIMMICK_SPAWNER_O) continue;  // 스포너 본체는 못 태움
+                if (IsHeldBehindPipe(h)) continue;                                  // 파이프 뒤 대기 홀더 제외
                 if (front == null || h.holderId < front.holderId) front = h;
             }
+            return front;
+        }
 
-            if (front == null) return false;
-            if (front.isFrozen) return false;      // Frozen_Dart — 해동 전에는 못 태움
-            if (front.isHidden) return false;      // Hidden — 색 공개 전에는 못 태움
-            if (front.magazineCount <= 0) return false;
+        /// <summary>큐 홀더 → 레일 탑승 공통 상태 전환(단일/체인 공용).</summary>
+        private void MountQueueHolderOnRailInternal(HolderData h)
+        {
+            h.isRailMounted = true;
+            h.isDeploying = false;
+            h.isWaiting = false;
+            h.isMovingToRail = false;
+            if (h.column >= 0 && h.column < _queueColumns)
+            {
+                if (_deployingHolderId[h.column] == h.holderId) _deployingHolderId[h.column] = -1;
+                if (_waitingHolderId[h.column] == h.holderId) _waitingHolderId[h.column] = -1;
+            }
+        }
 
-            holderId = front.holderId;
-            color = front.color;
-            magazine = front.magazineCount;
+        /// <summary>
+        /// [기믹 감사 2026-07-21] Chain 그룹 일괄 탑승 — 다트 모드 TrySelectChainGroup 의 관용을 레일 홀더로 미러:
+        /// 전 멤버가 유효(락/히든/프로즌/파이프 뒤/탄창0 아님)하고 각자 자기 열의 앞줄일 때만 전원 탑승,
+        /// 하나라도 불가면 전체 불가(분할 탑승 금지). 성공 시 mounted 에 멤버 데이터 채움.
+        /// </summary>
+        public bool TryMountChainGroupOnRail(int chainGroupId, List<HolderData> mounted)
+        {
+            if (mounted == null) return false;
+            mounted.Clear();
 
-            front.isRailMounted = true;
-            front.isDeploying = false;
-            front.isWaiting = false;
-            front.isMovingToRail = false;
-            if (_deployingHolderId[column] == holderId) _deployingHolderId[column] = -1;
-            if (_waitingHolderId[column] == holderId) _waitingHolderId[column] = -1;
+            List<int> memberIds = GetChainGroup(chainGroupId);
+            if (memberIds.Count == 0) return false;
 
+            for (int i = 0; i < memberIds.Count; i++)
+            {
+                HolderData h = FindHolder(memberIds[i]);
+                if (h == null || h.isConsumed || h.isRailMounted || h.isOnLandingRow) return false;
+                if (h.isLockObject || IsBlockedByLock(h)) return false;
+                if (h.isHidden || h.isFrozen) return false;
+                if (h.magazineCount <= 0 || IsHeldBehindPipe(h)) return false;
+                if (PickFrontOfColumn(h.column) != h) return false;   // 전원 앞줄(다트 모드 front-row 규칙)
+                mounted.Add(h);
+            }
+
+            for (int i = 0; i < mounted.Count; i++)
+                MountQueueHolderOnRailInternal(mounted[i]);
             return true;
+        }
+
+        /// <summary>[체인 재결속 2026-07-21] 그룹에 잔탄이 남은 멤버(미소진)가 있는가 — 소진 대기 판정.
+        /// 탄창 0 체인 라이더는 이게 true 인 동안 레일에 남아 체인을 유지하고, false 가 되는 순간
+        /// 그룹 전원이 함께 하차한다(사용자 사양: 둘 다 소진해야 사라짐).</summary>
+        public bool ChainGroupHasRemainingAmmo(int chainGroupId)
+        {
+            if (chainGroupId < 0) return false;
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                HolderData h = _holders[i];
+                if (h == null || h.isConsumed || h.chainGroupId != chainGroupId) continue;
+                if (h.magazineCount > 0) return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -925,7 +1004,68 @@ namespace BalloonFlow
             if (h == null) return;
             h.magazineCount = 0;
             h.isRailMounted = false;
+            h.isOnLandingRow = false;
+            h.landingSlotIndex = -1;
             h.isConsumed = true;
+        }
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716 (Step1 착지열): 레일 한 바퀴를 완주한 보관함을 착지열로 옮긴다(데이터 상태만).
+        /// 탄창은 보존 — 소진된 게 아니라 대기. 이후 탭하면 TryMountLandingHolderOnRail 로 레일 재탑승.
+        /// </summary>
+        public bool MoveRailHolderToLanding(int holderId, int slotIndex)
+        {
+            HolderData h = FindHolder(holderId);
+            if (h == null || h.isConsumed) return false;
+            h.isRailMounted = false;
+            h.isOnLandingRow = true;
+            h.landingSlotIndex = slotIndex;
+            return true;
+        }
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER (Step5 Continue): 착지열 보관함을 큐 맨뒤로 복귀 — 이어하기 릴리프.
+        /// 착지열이 비면 만석으로 막혀 있던 레일 홀더가 착지할 수 있어 판이 재개된다.
+        /// 반환 = 복귀한 컬럼(시각 재배치용). 실패 시 -1.
+        /// </summary>
+        public int ReturnLandingHolderToQueue(int holderId)
+        {
+            HolderData h = FindHolder(holderId);
+            if (h == null || h.isConsumed || !h.isOnLandingRow) return -1;
+
+            h.isOnLandingRow = false;
+            h.landingSlotIndex = -1;
+
+            // 큐 맨뒤 합류 — AddHolder 와 동일하게 그 컬럼 최대 sourceRow + 1 (앞줄 오인 방지).
+            int maxRow = -1;
+            for (int i = 0; i < _holders.Count; i++)
+            {
+                HolderData e = _holders[i];
+                if (e != null && !e.isConsumed && e.column == h.column && e.sourceRow > maxRow)
+                    maxRow = e.sourceRow;
+            }
+            h.sourceRow = maxRow + 1;
+            return h.column;
+        }
+
+        /// <summary>
+        /// PROTO_RAIL_HOLDER_20260716 (Step1 착지열): 착지열의 보관함을 다시 레일에 태운다(재탑승).
+        /// TryMountFrontHolderOnRail 의 착지열 판(앞줄 대신 착지 홀더 지정).
+        /// </summary>
+        public bool TryMountLandingHolderOnRail(int holderId, out int color, out int magazine)
+        {
+            color = -1; magazine = 0;
+            HolderData h = FindHolder(holderId);
+            if (h == null || h.isConsumed || !h.isOnLandingRow) return false;
+            if (h.magazineCount <= 0) return false;
+
+            color = h.color;
+            magazine = h.magazineCount;
+
+            h.isOnLandingRow = false;
+            h.landingSlotIndex = -1;
+            h.isRailMounted = true;
+            return true;
         }
 
         /// <summary>
@@ -972,8 +1112,9 @@ namespace BalloonFlow
             for (int i = 0; i < _holders.Count; i++)
             {
 #if BF_RAIL_HOLDER
-                // PROTO_RAIL_HOLDER_20260716: 레일에 올라탄 보관함은 더 이상 그 열의 큐 멤버가 아니다.
-                if (_holders[i].isRailMounted) continue;
+                // PROTO_RAIL_HOLDER_20260716: 레일에 올라탔거나(isRailMounted) 착지열에 안착한(isOnLandingRow)
+                //   보관함은 더 이상 그 열의 큐 멤버가 아니다(행 계산·앞줄 판정 제외).
+                if (_holders[i].isRailMounted || _holders[i].isOnLandingRow) continue;
 #endif
                 if (_holders[i].column == column && !_holders[i].isConsumed && _holders[i].IsQueueVisible)
                 {

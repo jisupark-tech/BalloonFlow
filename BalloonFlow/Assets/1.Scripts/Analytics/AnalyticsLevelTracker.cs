@@ -331,7 +331,14 @@ namespace BalloonFlow.Analytics
             // peak_resource_usage_ratio (0.0~1.0) — RailManager 가 레벨 동안 기록한 레일 최대 점유율.
             // §20: ≥0.8 → narrow_clear. (RailManager.PeakOccupancyRatio = EffectiveOccupiedCount/PhysicalCapacity max)
             // BQ NUMERIC(소수 9자리 상한)에 float 노이즈가 넘어가면 행 거절 → 라운딩 후 emit.
-            p[AnalyticsConsts.P_PEAK_RESOURCE]         = Math.Round(RailManager.HasInstance ? RailManager.Instance.PeakOccupancyRatio : 0.0, 4);
+            double peakResource = RailManager.HasInstance ? RailManager.Instance.PeakOccupancyRatio : 0.0;
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER (Step5): 홀더 모드는 레일 점유가 항상 0(다트가 안 올라감) —
+            //   압력 지표를 착지열 최대 채움율로 대체(§20 narrow_clear ≥0.8 의미 보존).
+            if (RailHolderController.ModeActiveForCurrentLevel && RailHolderController.HasInstance)
+                peakResource = RailHolderController.Instance.PeakLandingFillRatio;
+#endif
+            p[AnalyticsConsts.P_PEAK_RESOURCE]         = Math.Round(peakResource, 4);
 
             if (UserSnapshotCache.HasInstance)
                 UserSnapshotCache.Instance.Stamp(p);
@@ -353,7 +360,13 @@ namespace BalloonFlow.Analytics
                 : (BalloonController.HasInstance ? BalloonController.Instance.RemainingCount + BalloonController.Instance.PoppedCount : 0);
             p[AnalyticsConsts.P_OBJECTIVE_DONE]      = useFailSnapshot ? _failObjectiveDone
                 : (BalloonController.HasInstance ? BalloonController.Instance.PoppedCount : 0);
-            p[AnalyticsConsts.P_AVG_RESOURCE]        = Math.Round(RailManager.HasInstance ? RailManager.Instance.AverageOccupancyRatio : 0.0, 4);
+            double avgResource = RailManager.HasInstance ? RailManager.Instance.AverageOccupancyRatio : 0.0;
+#if BF_RAIL_HOLDER
+            // PROTO_RAIL_HOLDER (Step5): peak 와 동일 — 착지열 평균 채움율로 대체.
+            if (RailHolderController.ModeActiveForCurrentLevel && RailHolderController.HasInstance)
+                avgResource = RailHolderController.Instance.AverageLandingFillRatio;
+#endif
+            p[AnalyticsConsts.P_AVG_RESOURCE]        = Math.Round(avgResource, 4);
             // ROLLBACK_FAIL_CONTEXT_20260715: 실패 외곽 노출 색상(스냅샷 있을 때만). clear/quit 은 미stamp(NULL 유지).
             if (useFailSnapshot && !string.IsNullOrEmpty(_failOutermostColors))
                 p[AnalyticsConsts.P_FAIL_OUTERMOST_COLORS] = _failOutermostColors;
