@@ -10,3 +10,18 @@
 # Unity IAP 의 Android 측 wrapper / 콜백 (reflection 대상)
 -keep class com.unity.purchasing.** { *; }
 -keep class com.unity3d.plugin.** { *; }
+
+# ROLLBACK_IAP_BILLING_KEEP_20260714: R8 재활성 대비 방어 보강.
+# reflection/JNI 바인딩 보존에 필요한 메타 속성 (없으면 시그니처/제네릭/애노테이션 소실로 콜백 매칭 실패).
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod, Exceptions
+# AppsFlyer PurchaseConnector — IAP 영수증→af_purchase 매출 연동(구매 리스너 reflection). strip 시 매출 로그 유실.
+-keep class com.appsflyer.internal.PurchaseConnector** { *; }
+-keep class com.appsflyer.PurchaseConnector** { *; }
+-dontwarn com.appsflyer.**
+
+# ROLLBACK_ANALYTICS_AID_KEEP_20260715: GAID(aid) 를 C# JNI(문자열)로 AdvertisingIdClient 호출(UserSnapshotCache).
+# Java 측 참조가 없어 R8 가 '미사용'으로 strip/rename → getAdvertisingIdInfo/getId 실패 = aid 재-null.
+# 방금 추가한 AD_ID 권한과 짝으로 keep 필수(minify ON 시).
+-keep class com.google.android.gms.ads.identifier.AdvertisingIdClient { *; }
+-keep class com.google.android.gms.ads.identifier.AdvertisingIdClient$Info { *; }
+-dontwarn com.google.android.gms.ads.identifier.**

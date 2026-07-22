@@ -1,6 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
   <uses-permission android:name="android.permission.VIBRATE" />
+  <!-- ROLLBACK_ANALYTICS_AD_ID_PERM_20260714: GAID(aid) 수집 보장 — Android 13+(targetSdk 33+)에서 이 권한이 없으면
+       AdvertisingIdClient.getId 가 zeros 반환(aid 100% null 후보). SDK 매니페스트 머지에 의존하지 않고 명시 선언. -->
+  <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
   <application>
     <!--Used when Application Entry is set to Activity, otherwise remove this activity block-->
     <activity android:name="com.unity3d.player.UnityPlayerActivity" android:theme="@style/UnityThemeSelector">
@@ -10,7 +13,11 @@
       </intent-filter>
       <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
     </activity>
-    <!--Used when Application Entry is set to GameActivity, otherwise remove this activity block-->
+    <!-- ROLLBACK_ANR_ENTRY_ACTIVITY_20260714: GameActivity onPause 네이티브 핸드셰이크 ANR 완화 —
+         진입점을 classic Activity(UnityPlayerActivity)로 고정. GameActivity 런처 블록 제거로
+         onPauseNative(pthread_cond_wait) 블로킹 경로 자체를 제거한다.
+         ※ Player Settings > Android > Application Entry 를 'Activity' 로 맞춰야 ProjectSettings 와 정합.
+         롤백: 아래 GameActivity <activity> 블록 복원 + Application Entry=GameActivity.
     <activity android:name="com.unity3d.player.UnityPlayerGameActivity" android:theme="@style/BaseUnityGameActivityTheme">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
@@ -19,6 +26,9 @@
       <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
       <meta-data android:name="android.app.lib_name" android:value="game" />
     </activity>
+    -->
+    <!-- ROLLBACK_ANR_ENTRY_ACTIVITY_20260714 end -->
+    <!--suppress AndroidDomInspection -->
     <activity android:name="com.facebook.unity.FBUnityLoginActivity" android:configChanges="fontScale|keyboard|keyboardHidden|locale|mnc|mcc|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode|touchscreen" android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen" />
     <activity android:name="com.facebook.unity.FBUnityDialogsActivity" android:configChanges="fontScale|keyboard|keyboardHidden|locale|mnc|mcc|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode|touchscreen" android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen" />
     <activity android:name="com.facebook.unity.FBUnityGamingServicesFriendFinderActivity" android:configChanges="fontScale|keyboard|keyboardHidden|locale|mnc|mcc|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode|touchscreen" android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen" />
@@ -27,7 +37,11 @@
     <activity android:name="com.facebook.unity.FBUnityGameRequestActivity" />
     <meta-data android:name="com.facebook.sdk.ApplicationId" android:value="fb979268717782525" />
     <meta-data android:name="com.facebook.sdk.ClientToken" android:value="53f07f7e98c3a23cf34a18a9bb58912c" />
-    <meta-data android:name="com.facebook.sdk.AutoLogAppEventsEnabled" android:value="true" />
+    <!-- ROLLBACK_ANR_FB_AUTOLOG_OFF_20260714: pause 시 AppEventQueue.flush→sendEventsToServer 폭주(ANR 기여) 차단.
+         ⚠️ 이 값의 실제 출처는 FacebookSettings.asset(바이너리). 지속 적용은 반드시 에디터
+            'Facebook > Edit Settings > Auto Logging App Events = OFF' 로 꺼야 함(안 그러면 FB SDK 가 빌드/리임포트 시 true 로 재기입).
+         롤백: value 를 true 로 복원 + 에디터 재체크. -->
+    <meta-data android:name="com.facebook.sdk.AutoLogAppEventsEnabled" android:value="false" />
     <meta-data android:name="com.facebook.sdk.AdvertiserIDCollectionEnabled" android:value="true" />
     <!-- ROLLBACK_ANR_FB_LOWEND_GATE_20260713: FB 자동 init 차단(ContentProvider 프로세스시작 자동초기화 방지).
          저사양기 FB 비활성 게이트(AnalyticsManager.IsLowEndDevice)를 유효화하기 위해 필수. 일반 기기는

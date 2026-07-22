@@ -86,12 +86,10 @@ txttoast.txttoast,"Your lives are unlimited!
 ",생명이 무제한이에요!,
 uihud.holdertext,On Rail: 0/9,레일 위: 0/9,
 uihud.remainingtext,Balloons: --,풍선: --,
-uilobby.text,"Home
-",홈,
+uilobby.text,Home,홈,
 uilobby.textgauge,{n}/{n},{n}/{n},
 uilobby.multiplier,x{n},x{n},
-uilobby.texthome,"Home
-",홈,
+uilobby.texthome,Home,홈,
 uilobby.textshop,Shop,상점,
 uilobby.texttimer,{}d {}h,{}일 {}시간,
 uilobby.txtlife,Full,가득 참,
@@ -157,7 +155,7 @@ popup.txtdescription.networkerror,Your internet is\ndisconnected.,인터넷 연�
 popup.txtdescription.purchaseerror,Your purchase\nwas canceled.,구매가 취소되었어요.,PopupDescription
 popup.txtdescription.purchasesuccess,Your purchase\nwas completed.,구매가 완료되었어요.,PopupDescription
 popup.txtdescription.settingquit,You will lose a life!,생명을 잃게 돼요!,PopupQuit
-popup.txtdescription.allclear,New levels coming soon!,새로운 레벨이 곧 출시돼요!,PopupDescription
+popup.txtdescription.allclear,New levels coming soon!,새로운 레벨이 \n곧 출시돼요!,PopupDescription
 popup.txtdescription.hand,Place any box directly!,원하는 상자를 바로 배치해요!,PopupBuyItem
 ppopup.txtdescription.suffle,Shuffle all boxes instantly!,모든 상자를 즉시 섞어요!,PopupBuyItem / 최신 TextData에 없음
 popup.txtdescription.zap,Pop everything of one color!,한 가지 색을 전부 터뜨려요!,PopupBuyItem
@@ -219,5 +217,7 @@ loading.connect_internet,Connecting to internet...,인터넷 연결 중...,
 loading.dots,LOADING,로딩,
 toast.tap.frontfirst,Tap the front boxes first!,맨 앞줄 상자부터 탭하세요!,신규
 forceupdate.title,Update Required,업데이트 필요,신규
-forceupdate.desc,Please update to the latest version to continue.,계속하려면 최신 버전으로 업데이트해 주세요.,신규
+forceupdate.desc,Please update to the latest version to continue.,최신 버전으로\n업데이트해 주세요.,신규
 ui.common.update,Update,업데이트,신규
+uilobby.texttimer.hm,{}h {}m,{}시간 {}분,신규
+uilobby.texttimer.ms,{}m {}s,{}분 {}초,신규

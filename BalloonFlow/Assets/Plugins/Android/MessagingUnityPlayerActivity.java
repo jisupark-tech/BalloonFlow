@@ -8,17 +8,17 @@ package com.google.firebase;
 import android.content.Intent;
 import android.os.Bundle;
 import com.google.firebase.messaging.MessageForwardingService;
-import com.unity3d.player.UnityPlayerGameActivity;
+import com.unity3d.player.UnityPlayerActivity;
 
 /**
- * MessagingUnityPlayerActivity is a UnityPlayerGameActivity that updates its intent when new intents
+ * MessagingUnityPlayerActivity is a UnityPlayerActivity that updates its intent when new intents
  * are sent to it.
  *
  * This is a workaround for a known issue that prevents Firebase Cloud Messaging from responding to
  * data payloads when both a data and notification payload are sent to the app while it is in the
  * background.
  */
-public class MessagingUnityPlayerActivity extends UnityPlayerGameActivity {
+public class MessagingUnityPlayerActivity extends UnityPlayerActivity {
   // The key in the intent's extras that maps to the incoming message's message ID. Only sent by
   // the server, GmsCore sends EXTRA_MESSAGE_ID_KEY below. Server can't send that as it would get
   // stripped by the client.

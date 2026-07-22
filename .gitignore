@@ -148,3 +148,6 @@ BalloonFlow/Assets/Plugins/Android/*.DISABLED.meta
 # Local manual-backup files (from rename to avoid pull conflicts)
 *.local-backup
 *.local-backup.meta
+
+# tools/ 하위 수제 도구 프로젝트는 Unity 생성 csproj 규칙에서 제외 (2026-07-22)
+!tools/**/*.csproj
