@@ -35,6 +35,22 @@ const bq = new BigQuery(); // 런타임 서비스 계정 자격증명 자동 사
 //   `firebase deploy --only functions` 재배포 필요(배포 전까지 기기 푸시 제목은 계속 'BalloonFlow').
 const APP_TITLE = 'Balloon Loop';
 
+// PUSH_GAME_SPLIT_20260806: Cube Crumble 이 이 Firebase 프로젝트(balloonloop-d855d)와 패키지명
+//   (xyz.aimed.balloonloop)을 그대로 재사용 중이라 FCM 기준으로 두 게임이 '같은 앱'이다 —
+//   토큰만으로는 구분이 안 돼 Cube Crumble 기기에도 제목 "Balloon Loop" 와 풍선(🎈) 문구가 도착했다.
+//   구분 근거는 클라가 user 문서에 기록하는 game 필드 하나뿐:
+//     game === 'cubecrumble' → Cube Crumble 제목/본문
+//     그 외(필드 없음 = 기존 BL 유저 전부)  → 기존 Balloon Loop 그대로 (BL 무영향이 최우선)
+//   ★ Cube Crumble 정식 출시 시 패키지명·Firebase 프로젝트를 분리하면 이 분기는 통째로 삭제한다.
+//   이 파일 수정 후 `firebase deploy --only functions` 재배포 필요.
+const GAME_CUBECRUMBLE = 'cubecrumble';
+const APP_TITLE_CUBECRUMBLE = 'Cube Crumble';
+
+/** 유저 문서의 game 필드로 푸시 제목 결정. 필드가 없으면 기존 BL 유저. */
+function resolveAppTitle(u) {
+  return u.game === GAME_CUBECRUMBLE ? APP_TITLE_CUBECRUMBLE : APP_TITLE;
+}
+
 // ROLLBACK_PUSH_KO_20260715: PushTexts.RETURN_D* 신규 copy 와 동기. EN 기본.
 const RETURN_PUSH_BODY = {
   1: "🎈 Your balloons are waiting! Come back and let's pop a few!",
@@ -57,6 +73,35 @@ const RETURN_PUSH_BODY_KO = {
   7: "🎈 풍선 터뜨리던 그 손맛, 기억나죠? 다시 한 판 해요!",
 };
 
+// PUSH_GAME_SPLIT_20260806: Cube Crumble 세트 — 풍선/pop 카피를 큐브/crumble 로 교체.
+//   CC 클라 PushTexts.RETURN_D*_CC(_KO) 와 1:1 동기. 한쪽만 고치면 또 어긋난다.
+const RETURN_PUSH_BODY_CC = {
+  1: "🧊 Your cubes are waiting! Come back and crumble a few!",
+  2: "🧊 Got 3 minutes? That's all it takes to crumble and unwind.",
+  3: "🧊 Your cubes are stacked and ready! Crumble them layer by layer!",
+  4: "🧊 Busy day? Crumble a cube or two and clear your mind.",
+  5: "🧊 Crack! Crumble! That satisfying crash — don't you miss it?",
+  6: "🧊 You've earned a break! Treat yourself to a satisfying crumble.",
+  7: "🧊 Remember how good that crumble felt? Let's do it again!",
+};
+
+const RETURN_PUSH_BODY_CC_KO = {
+  1: "🧊 큐브들이 기다리고 있어요! 돌아와서 몇 개만 부숴요!",
+  2: "🧊 3분이면 충분해요. 큐브 부수며 잠깐 쉬어 가요.",
+  3: "🧊 큐브가 차곡차곡 쌓여 있어요! 한 층씩 무너뜨려 보세요!",
+  4: "🧊 바쁜 하루였나요? 큐브 한두 개 부수며 머리를 식혀요.",
+  5: "🧊 와르르! 무너지는 그 손맛, 그립지 않으세요?",
+  6: "🧊 휴식이 필요한 순간이에요! 시원하게 한 판 무너뜨려요.",
+  7: "🧊 큐브 무너뜨리던 그 손맛, 기억나죠? 다시 한 판 해요!",
+};
+
+/** 게임 × 언어 → D1~D7 본문 테이블. game 필드가 없으면 기존 BL 세트. */
+function resolveReturnPushTable(u) {
+  const ko = u.lang === 'KO';
+  if (u.game === GAME_CUBECRUMBLE) return ko ? RETURN_PUSH_BODY_CC_KO : RETURN_PUSH_BODY_CC;
+  return ko ? RETURN_PUSH_BODY_KO : RETURN_PUSH_BODY;
+}
+
 const DAILY_REWARD_BODY = "⏰ Don't miss today's reward! Tap to collect before it's gone.";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -76,11 +121,11 @@ function isWithinFirst24Hours(userData, nowMs) {
 }
 
 /** Cloud Functions invalidate 시 토큰 비움. 그 외 실패는 단순 카운트. */
-async function sendToToken(token, body) {
+async function sendToToken(token, body, title = APP_TITLE) {
   try {
     const id = await fcm.send({
       token,
-      notification: { title: APP_TITLE, body },
+      notification: { title, body },
       android: { priority: 'high' },
       apns: { headers: { 'apns-priority': '10' } },
     });
@@ -141,11 +186,12 @@ exports.pushReturnCron = onSchedule(
       if (day < 1 || day > 7) { skipped++; continue; }
 
       // ROLLBACK_PUSH_KO_20260715: 한국(device 언어 KO)만 KO, 나머지 EN. u.lang 은 클라 로그인 시 저장.
-      const table = (u.lang === 'KO') ? RETURN_PUSH_BODY_KO : RETURN_PUSH_BODY;
+      // PUSH_GAME_SPLIT_20260806: 여기에 game 축이 하나 더 붙는다 (cubecrumble → 큐브 카피 + "Cube Crumble" 제목).
+      const table = resolveReturnPushTable(u);
       const body = table[day];
       if (!body) { skipped++; continue; }
 
-      const result = await sendToToken(u.fcmToken, body);
+      const result = await sendToToken(u.fcmToken, body, resolveAppTitle(u));
       if (!result.ok) {
         if (isInvalidTokenError(result.code)) {
           updates.push(doc.ref.update({ fcmToken: '' }));
@@ -197,7 +243,7 @@ exports.pushDailyRewardCron = onSchedule(
       if (isWithinFirst24Hours(u, nowMs)) { skipped++; continue; }
       if (u.dailyReward?.lastClaimDate === today) { skipped++; continue; }
 
-      const result = await sendToToken(u.fcmToken, DAILY_REWARD_BODY);
+      const result = await sendToToken(u.fcmToken, DAILY_REWARD_BODY, resolveAppTitle(u));
       if (!result.ok) {
         if (isInvalidTokenError(result.code)) {
           updates.push(doc.ref.update({ fcmToken: '' }));
